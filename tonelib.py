@@ -679,7 +679,7 @@ class ReedOrganProperties(OrganProperties):
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
-    chiff_max_vavle_time = 0.0
+    chiff_max_valve_time = 0.0
     odd_only = True
     inharmonicity_coefficient = 0.0
 
