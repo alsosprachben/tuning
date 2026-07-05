@@ -688,12 +688,12 @@ class ReedOrganProperties(OrganProperties):
 
 
 class BrassProperties(OrganProperties):
-    # narrowband growl rather than white sizzle, attack only
-    chiff_cycle = 0.3
-    chiff_volume = 1.5
+    # tongued attack: narrowband growl, attack only, quick valve
+    chiff_cycle = 0.35
+    chiff_volume = 2.6
     chiff_release = 0.0
-    chiff_min_valve_time = 0.05
-    chiff_max_valve_time = 0.15
+    chiff_min_valve_time = 0.04
+    chiff_max_valve_time = 0.10
     odd_only = True
 
 
