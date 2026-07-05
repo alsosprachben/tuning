@@ -67,7 +67,7 @@ class Comma:
 			
 			r = next(p)
 			if i % 1000 == 0:
-				print(r, self.n, self.d, best_r, best_n, best_d, abs(r - 2), best_diff)
+				print((r, self.n, self.d, best_r, best_n, best_d, abs(r - 2), best_diff))
 				
 			if abs(r - 2) < best_diff:
 				best_n = self.n
@@ -75,7 +75,7 @@ class Comma:
 				best_diff = abs(r - 2)
 				best_r = r
 				if best_diff < decimal.Decimal(1) / 1000:
-					print(best_n, best_d, best_r)
+					print((best_n, best_d, best_r))
 				
 			if best_diff < goal:
 				break
@@ -91,7 +91,7 @@ class Comma:
 		if self.n == 1 and self.d == 1: 
 			self.solve()
 		p = self.produce()
-		return dict((n, float(str(r)[:goal_digits + 1])) for n, r in zip(range(0, self.c + 1), sorted(next(p) for i in range(0, self.c + 1))))
+		return dict((n, float(str(r)[:goal_digits + 1])) for n, r in zip(list(range(0, self.c + 1)), sorted(next(p) for i in range(0, self.c + 1))))
 
 	def produce(self):
 		self._init_v()

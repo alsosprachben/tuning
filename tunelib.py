@@ -539,7 +539,7 @@ class Tuner:
                 
             return self.ratios
         
-        def noteFrequencies(self):
+        def noteFrequencies3(self):
             ratios = self.list_ratios()
             notes = sorted(self.node.tuner.notes)
             tuned = EvenTuner()
@@ -548,7 +548,7 @@ class Tuner:
 
         
 
-        def noteFrequencies2(self):
+        def noteFrequencies(self):
             ratios = self.list_ratios()
             notes = sorted(self.node.tuner.notes)
             
@@ -611,7 +611,7 @@ class Tuner:
             #    d.update(dict(sustained))
             #    tones = sorted(d.values())
             
-            return zip(notes, tones)
+            return list(zip(notes, tones))
             
             
         def __str__(self):
@@ -742,10 +742,10 @@ class Tuner:
     
     def generate_intervals(self):
         notes = self.generate_notes()
-        bottom = notes.next()
+        bottom = next(notes)
         try:
             while True:
-                top = notes.next()
+                top = next(notes)
                 
                 interval = top - bottom
                 ratios = self.harmonics.getRatios(interval)

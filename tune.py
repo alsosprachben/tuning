@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env pypy3
 
 """
 Copyright Ben Woolley 2010.
@@ -7,18 +7,17 @@ All rights reserved.
 
 from tunelib import *
         
-class SimpleArpeggio(BaseTone, BaseSampler):
+class SimpleArpeggio(SynthSampler):
     def __init__(self, rate, depth, packing, channel, tones, seconds):
-        BaseSampler.__init__(self, rate, depth, packing)
-
-        errlog(tones)
-        self.partials = []
+        SynthSampler.__init__(self, 0, rate, depth, packing)
 
         start = 0.0
-        for tone in tones:
-            synth = SynthTone(None, tone, self.nyquist, channel, start, seconds)
-            errlog(synth.properties.__dict__)
-            self.partials.extend(synth.partials)
+        for frequency in tones:
+            print("freq: ", frequency)
+            tone = self.newTone(6, frequency, 0.0, start, None, Steinway)
+            tone.updateFrequency(frequency)
+            tone.unrelease()
+            errlog(vars(tone))
             
             start += float(seconds) / 3 / len(tones)
         
@@ -62,11 +61,11 @@ def perform(q, tuner, chords, sample_rate, sample_depth, sample_packing, channel
             tuned.addNote(bass - 24 + note)
         tuned.tune(1000, max_i)
                     
-        errlog(tuned.noteFrequencies())
+        errlog(tuned.noteFrequencies()) 
         
         channel_sampler  = SimpleArpeggio(sample_rate, sample_depth, sample_packing, channel, [f for n, f in tuned.noteFrequencies()], seconds - (1.0/32))
         
-        for i in xrange(0, int(sample_rate * seconds)):
+        for i in range(0, int(sample_rate * seconds)):
             channel_sample = channel_sampler.sample(i)
             #q.put((channel, channel_sample))
             q.put(channel_sample)
@@ -139,7 +138,8 @@ if __name__ == '__main__':
         "just": JustTuner,
         "well": WellTuner,
         "pyth": PythTuner,
-        "bech": BechsteinTuner,        
+        "bech": BechsteinTuner,
+        "stretch": StretchTuner,
     }[tuning]
 
     #q = Queue()
@@ -157,7 +157,7 @@ if __name__ == '__main__':
 
         out = open(tuning + ".raw", "wb")
 
-        for i in xrange(0, int(sample_rate * seconds * len(chords))):
+        for i in range(0, int(sample_rate * seconds * len(chords))):
             out.write(left_q.get() + right_q.get())
             if i % 1024 == 0:
                 out.flush()
@@ -170,28 +170,7 @@ if __name__ == '__main__':
     finally:
         left_process.join()
         right_process.join()
-    
-    """
-    for i in xrange(0, int(sample_rate * seconds * 2)):
-        channel, sample = q.get()
-        {
-            0: left_d,
-            1: right_d,
-        }[channel].append(sample)
         
-        while left_d and right_d:
-            sample = left_d.popleft() + right_d.popleft()
-            out.write(sample)
-            if i % 1000 == 0:
-                out.flush()
-            
-    while left_d and right_d:
-        sample = left_d.popleft() + right_d.popleft()
-        out.write(sample)
-        if i % 1000 == 0:
-            out.flush()
-    """        
-    
     
 
         

@@ -13,6 +13,35 @@ All rights reserved.
 
 from patches import patches
 
+# Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
+# str. Accept both so the byte-level MIDI parsing below works unchanged.
+_builtin_ord = ord
+def ord(c):
+    return c if isinstance(c, int) else _builtin_ord(c)
+
+# Tuning system used for the adaptive retuning of sounding notes.
+# Select by name with set_tuner(); defaults to the stretch temperament.
+tuner_registry = {
+    "stretch": StretchTuner,
+    "even": EvenTuner,
+    "linear": LinearTuner,
+    "linear5": Linear5Tuner,
+    "pyth": PythTuner,
+    "just": JustTuner,
+    "well": WellTuner,
+    "linearwell": LinearWellTuner,
+    "bechstein": BechsteinTuner,
+}
+tuner_class = StretchTuner
+
+def set_tuner(name):
+    global tuner_class
+    key = name.lower()
+    if key not in tuner_registry:
+        raise ValueError("unknown tuner %r; choose from: %s"
+                         % (name, ", ".join(sorted(tuner_registry))))
+    tuner_class = tuner_registry[key]
+
 def notename(n):
     n = int(n + .5)
     o = n / 12
@@ -384,7 +413,7 @@ class Midi:
                             self.event_data = self.data.last_event_data
                             self.data.unread()
                             
-                        if self.event_data is 0xFF or self.event_data is 0xF7 or self.event_data is 0xF0:
+                        if self.event_data == 0xFF or self.event_data == 0xF7 or self.event_data == 0xF0:
                             self.meta_command = self.data.readByte()
                             self.field_len = self.data.readVarInt()
                             self.field_data = self.data.readBytes(self.field_len)
@@ -392,7 +421,7 @@ class Midi:
                             self.event_channel = 0
                             self.arg1 = 0
                             self.arg2 = 0
-                            if self.event_data is 0xFF:
+                            if self.event_data == 0xFF:
                                 self.event = MetaEvent(self.time, self.meta_command, self.field_data)
                             else:
                                 self.event = SysExEvent(self.time, self.meta_command, self.field_data)
@@ -417,9 +446,9 @@ class Midi:
                         self.end = self.data.pos
                         try:
                             self.hex = h(self.data.data[self.begin:self.end])
-                        except Exception, e:
+                        except Exception as e:
                             import sys
-                            print e, self.begin, self.end, len(self.data.data)
+                            print(e, self.begin, self.end, len(self.data.data))
                             sys.exit()
                         #print self.data.pos
                         
@@ -432,7 +461,8 @@ class Midi:
                     while True:
                         yield Midi.Chunk.TrackChunk.TrackData.Event(td)
                 except IndexError:
-                    raise StopIteration
+                    # PEP 479: end of track data must not raise StopIteration
+                    return
                         
 
             def __init__(self, contents):
@@ -487,7 +517,11 @@ class Midi:
     
     def parsechunks(self):
         while True:
-            yield Midi.Chunk(self.f)
+            try:
+                yield Midi.Chunk(self.f)
+            except StopIteration:
+                # PEP 479: StopIteration signaling EOF must not escape a generator
+                return
             
 
 class EventQueue:
@@ -584,12 +618,7 @@ class Channels:
         self.tunings = {}
         if self.on_notes:
             #print self.on_notes
-            #tuned = WellTuner()
-            #tuned = LinearWellTuner()
-            #tuned = Linear5Tuner()
-            tuned = StretchTuner()
-            #tuned = EvenTuner()
-            #tuned = Tuner(self.last_tuning)
+            tuned = tuner_class()
             for note in self.on_notes:
                 tuned.addNote(note - middle_c)
                 
@@ -698,14 +727,14 @@ class Channels:
         self.time_sign =  MetaEvent.TimeSignature()
         
         self.channels = dict(
-            zip(
-                range(0, 16),
+            list(zip(
+                list(range(0, 16)),
                 [
                     Channel(sampler, midi_channel)
                     for midi_channel
                     in range(0, 16)
                 ]
-            )
+            ))
         )
         
         self.pullEnqueuedEvents()
@@ -755,44 +784,51 @@ class Note:
         self.f = 0
         self.pan = pan
 
-       	property_class = PluckedStringProperties
+        property_class = PluckedStringProperties
 
-	program = self.channel.program + 1
+        program = self.channel.program + 1
 
-	# 1 - 8 Piano
-	# 25 - 32 Guitar
-	if (
-		(program >= 1 and program <= 8)
-	or	(program >= 25 and program <= 32)
-	):
-		property_class = PluckedStringProperties
+        # 1 - 6 (Hammered Keyboard) Piano
+        if (
+            (program >= 1 and program <= 6)
+        ):
+            property_class = Steinway
 
-	# 17 - 24 Organ
-	if (
-		(program >= 17 and program <= 24)
-	):
-		if program >= 20:
-			property_class = ReedOrganProperties
-		else:
-			property_class = FlueOrganProperties
+        # 7-8 Plucked Keyboard (harpsichord)
+        # 25 - 32 Guitar
+        if (
+            (program >= 7 and program <= 8)
+        or	(program >= 25 and program <= 32)
+        ):
+            property_class = PluckedStringProperties
 
-	# 57 - 64 Brass
- 	if (
-		(program >= 57 and program <= 64)
-	):
-		property_class = BrassProperties
-	# 65 - 72 Reed
- 	if (
-		(program >= 65 and program <= 72)
-	):
-		property_class = ReedOrganProperties
- 
+        # 17 - 24 Organ: flue pipes through Church Organ (20),
+        # reeds from Reed Organ (21) through Tango Accordion (24)
+        if (
+            (program >= 17 and program <= 24)
+        ):
+            if program >= 21:
+                property_class = ReedOrganProperties
+            else:
+                property_class = FlueOrganProperties
 
-	# 73 - 80 Pipe
-	if (
-		(program >= 74 and program <= 80)
-	):
-		property_class = BlownPipeProperties
+        # 57 - 64 Brass
+        if (
+            (program >= 57 and program <= 64)
+        ):
+            property_class = BrassProperties
+        # 65 - 72 Reed
+        if (
+            (program >= 65 and program <= 72)
+        ):
+            property_class = ReedOrganProperties
+
+
+        # 73 - 80 Pipe
+        if (
+            (program >= 74 and program <= 80)
+        ):
+            property_class = BlownPipeProperties
  
         self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None, property_class)
 
@@ -806,7 +842,7 @@ class Note:
         
         self.off_time = None
         self.off_velocity = 0
-        
+
     def __str__(self):
         return str(self.__dict__)
 
