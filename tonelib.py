@@ -328,6 +328,8 @@ class BasePartial:
                 jitter_fade = self.release_fade.fade_in(second)  # * self.release_fade.fade_out(second)
                 jitter_fade = jitter_fade ** 0.5
                 jitter_fade *= (1.0 - jitter_fade)
+                # scale release noise separately; brass valves do not hiss on note-off
+                jitter_fade *= self.properties.chiff_release
             else:
                 jitter_fade = 0.0
 
@@ -641,6 +643,7 @@ class BlownPipeProperties(SynthProperties):
 
     chiff_cycle = 1.0 / 5.0
     chiff_volume = 1.0
+    chiff_release = 1.0
     chiff_min_valve_time = 0.05
     chiff_max_valve_time = 0.3
 
@@ -685,8 +688,10 @@ class ReedOrganProperties(OrganProperties):
 
 
 class BrassProperties(OrganProperties):
-    chiff_cycle = 1.0
-    chiff_volume = 3.0
+    # narrowband growl rather than white sizzle, attack only
+    chiff_cycle = 0.3
+    chiff_volume = 1.5
+    chiff_release = 0.0
     chiff_min_valve_time = 0.05
     chiff_max_valve_time = 0.15
     odd_only = True
