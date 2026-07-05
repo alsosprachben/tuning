@@ -676,6 +676,10 @@ class OrganProperties(BlownPipeProperties):
 
 class FlueOrganProperties(OrganProperties):
     odd_only = False
+    # Principal pipes speak fast; keep the inherited chiff character but
+    # compress it into a tighter onset than the generic blown pipe's 0.3 s.
+    chiff_min_valve_time = 0.03
+    chiff_max_valve_time = 0.10
 
 
 class ReedOrganProperties(OrganProperties):
