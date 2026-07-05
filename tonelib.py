@@ -688,7 +688,7 @@ class BrassProperties(OrganProperties):
     chiff_cycle = 1.0
     chiff_volume = 3.0
     chiff_min_valve_time = 0.05
-    chiff_min_valve_time = 0.15
+    chiff_max_valve_time = 0.15
     odd_only = True
 
 
