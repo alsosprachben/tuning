@@ -4,6 +4,7 @@ from tunelib import *
 
 middle_c = 60
 
+import os
 import struct
 
 """
@@ -31,8 +32,19 @@ tuner_registry = {
     "well": WellTuner,
     "linearwell": LinearWellTuner,
     "bechstein": BechsteinTuner,
+    "dynamic": Tuner,
 }
 tuner_class = StretchTuner
+
+# Tonal center governor for the dynamic tuner. Common-tone anchoring alone
+# lets commas pump the pitch level without bound (a I-vi-ii-V cycle drifts
+# a syntonic comma per pass, and the anchor note changes chord to chord).
+# The governor measures each solution's implied center against a fixed
+# reference grid, follows it at a bounded rate so nothing jumps, and leaks
+# it back toward the grid a little every event, so sustained notes glide
+# by at most a few cents while the pitch level stays moored.
+TUNING_FOLLOW_CENTS = float(os.environ.get("TUNING_FOLLOW_CENTS", "3.0"))
+TUNING_RECENTER_CENTS = float(os.environ.get("TUNING_RECENTER_CENTS", "1.0"))
 
 def set_tuner(name):
     global tuner_class
@@ -614,21 +626,53 @@ class Channels:
                 if n in self.tunings:
                     note.updateTuning(self.sampler, self.tunings[n], self.s)
 
+    def recenterFrequencies(self, pairs):
+        # Gradual tonal-center correction for the dynamic tuner.
+        from math import log
+        if not pairs:
+            return pairs
+
+        def cents(ratio):
+            return 1200.0 * log(ratio) / log(2.0)
+
+        # Implied center: mean deviation from an equal grid on C = 256 Hz.
+        drift = sum(
+            cents(f / (256.0 * 2.0 ** (note / 12.0)))
+            for note, f in pairs
+        ) / len(pairs)
+
+        # Follow the solution's center at a bounded rate, then leak toward
+        # the grid; sustained notes move by at most FOLLOW + RECENTER cents
+        # per event, which reads as a slow glide rather than a jump.
+        delta = drift - self.tonal_center
+        delta = max(-TUNING_FOLLOW_CENTS, min(TUNING_FOLLOW_CENTS, delta))
+        self.tonal_center += delta
+        leak = max(-TUNING_RECENTER_CENTS, min(TUNING_RECENTER_CENTS, self.tonal_center))
+        self.tonal_center -= leak
+
+        shift = 2.0 ** ((self.tonal_center - drift) / 1200.0)
+        errlog("tonal center: drift %+.2fc, held at %+.2fc, shifting %+.2fc"
+               % (drift, self.tonal_center, cents(shift)))
+        return [(note, f * shift) for note, f in pairs]
+
     def tuneNotes(self):
         self.tunings = {}
         if self.on_notes:
             #print self.on_notes
-            tuned = tuner_class()
+            if tuner_class is Tuner:
+                tuned = Tuner(self.last_tuning)
+            else:
+                tuned = tuner_class()
             for note in self.on_notes:
                 tuned.addNote(note - middle_c)
                 
-            if tuned.in_cache():
-                self.last_tuning = tuned.noteFrequencies()
-                frequencies = dict(self.last_tuning)
-            else:
+            if not tuned.in_cache():
                 tuned.tune(1000, 30000)
-                self.last_tuning = tuned.noteFrequencies()
-                frequencies = dict(self.last_tuning)
+            pairs = tuned.noteFrequencies()
+            if isinstance(tuned, Tuner):
+                pairs = self.recenterFrequencies(pairs)
+            self.last_tuning = pairs
+            frequencies = dict(pairs)
                 
             for note in frequencies:
                 self.tunings[note + middle_c] = frequencies[note]
@@ -714,6 +758,7 @@ class Channels:
         
         self.on_notes = []
         self.last_tuning = None
+        self.tonal_center = 0.0
         
         events = []
         for track in self.midi.tracks:

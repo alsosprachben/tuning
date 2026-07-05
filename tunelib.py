@@ -460,13 +460,26 @@ class Tuner:
         
     _result_cache = {}
 
+    def _cache_key(self):
+        # Sustained notes anchor the solution, so identical note sets in
+        # different sustain contexts produce different frequencies; the key
+        # must include the intersecting sustain or cache hits teleport the
+        # whole chord to frequencies from an unrelated moment.
+        notes = tuple(self.generate_notes())
+        note_set = set(notes)
+        sustained = tuple(
+            (note, round(f, 4))
+            for note, f in (self.sustain or [])
+            if note in note_set
+        )
+        return (notes, sustained)
+
     def in_cache(self):
-        lookup_key = tuple(self.generate_notes())
-        return lookup_key in self._result_cache
-    
+        return self._cache_key() in self._result_cache
+
     def noteFrequencies(self):
-        lookup_key = tuple(self.generate_notes())
-        
+        lookup_key = self._cache_key()
+
         if lookup_key in self._result_cache:
             return self._result_cache[lookup_key]
         else:
