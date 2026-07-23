@@ -239,7 +239,11 @@ class MetaEvent:
         def __init__(self, t = 0, bytes = None):
             self.time = t
             if bytes:
-                self.key = struct.unpack('!b', bytes[0])[0]
+                # signed sharp/flat count; go through the ord shim (which
+                # tolerates both bytes-as-int and str) rather than
+                # struct.unpack, which requires a bytes-like object.
+                key = ord(bytes[0])
+                self.key = key - 256 if key > 127 else key
                 self.minor = bool(ord(bytes[1]))
             else:
                 self.key = 0
