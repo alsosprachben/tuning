@@ -200,6 +200,11 @@ class BasePartial:
         # static properties
         self.intensity = intensity
         if not release_floor_db:
+            # A one-shot voice (percussion) needs an audible floor so it
+            # actually finishes and gets cleaned up as its decay rings out;
+            # sustained voices use a very deep floor.
+            release_floor_db = getattr(properties, "release_floor_db", None)
+        if not release_floor_db:
             from math import log
             depth = 16
             release_floor_db = -(log(2 ** (2 * depth)) / log(10)) * 10
@@ -212,7 +217,9 @@ class BasePartial:
     # private
 
     def finished(self):
-        return self.state is self.Lifted and not self.pending_attack
+        # A one-shot voice is never released; it retires when its decay rings
+        # down past the floor (hit_floor is set in wave()).
+        return (self.state is self.Lifted and not self.pending_attack) or self.hit_floor
 
     def lift(self):
         errlog("lift %s %s %i - 1" % (id(self), self.state, self.ref_count))
@@ -501,6 +508,12 @@ class SynthProperties:
     # cymbal can splash fast yet ring out slowly. None = match the attack.
     release_valve_time = None
 
+    # One-shot voice: note-off is ignored; the strike rings out on its own
+    # exponential decay (struck percussion). Needs release_floor_db so it
+    # retires in finite time instead of decaying toward a 192 dB floor.
+    one_shot = False
+    release_floor_db = None
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
@@ -693,8 +706,10 @@ class BlownPipeProperties(SynthProperties):
     chiff_cycle = 1.0 / 5.0
     chiff_volume = 1.0
     chiff_release = 1.0
-    chiff_min_valve_time = 0.05
-    chiff_max_valve_time = 0.3
+    # Pipes are usually tongued, not softly blown: a quick onset, not the
+    # slow organ-style swell. (Organ/reed/brass override these anyway.)
+    chiff_min_valve_time = 0.015
+    chiff_max_valve_time = 0.05
 
     odd_only = True
     # Pipes (flute, recorder, whistle, ...) speak louder than the organ/reed/
@@ -825,7 +840,7 @@ class PercussionProperties(PluckedStringProperties):
 class MembraneDrumProperties(PercussionProperties):
     """Struck membrane (kick, tom, timpani): a strong low fundamental with a
     few mildly inharmonic modes and a fast body decay."""
-    initial_gain = 1.0 / 2     # +5 dB: drums were too quiet vs the mix (kick has headroom)
+    initial_gain = 1.0 / 1.3   # louder kick per feedback
     max_harmonic = 12
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
     tonal_dampening = 1.6
@@ -893,20 +908,23 @@ class CymbalProperties(PercussionProperties):
     max_harmonic = 80               # very bright, energy well up top
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 25.0
     tonal_dampening = 0.15          # near-flat: the modes don't stick out of the wash
-    decay_db = 5.0                  # slow: the ring
+
+    # One-shot: the splash rings out on its own exponential decay and ignores
+    # note-off, so a short crash note still rings and there is no linear-fade
+    # "cut". decay_db sets the ring length to the -50 dB floor (~2.5 s here).
+    one_shot = True
+    release_floor_db = -50.0
+    decay_db = 20.0
     harmonic_decay_db = 0.4
     harmonic_decay_dampening = 0.0
 
-    # Broadband wash via wide chiff, like the snare, but sustained through a
-    # long ring: fast splash attack, slow note-off fade so it rings out. Strong
-    # release noise keeps the hiss leading the modes the whole way down.
+    # Broadband wash via wide chiff, like the snare, sustained the whole ring.
     chiff_volume = 4.0
     chiff_cycle = 0.95
-    chiff_release = 2.5            # heavy hiss through the ring, not just modes
+    chiff_release = 0.0
     sustain_jitter = 1.0
     chiff_min_valve_time = 0.002
     chiff_max_valve_time = 0.02     # fast splash onset
-    release_valve_time = 1.4        # long ring-out on note-off
 
 
 class SynthTone(BaseTone):

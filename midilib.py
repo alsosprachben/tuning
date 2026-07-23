@@ -854,7 +854,11 @@ class Note:
     def release(self):
         self.off_time = self.event.time
         self.off_velocity = self.event.velocity
-        if self.tone:
+        # A one-shot voice (cymbal, struck percussion) ignores note-off and
+        # rings out on its own decay; releasing it would impose an unnatural
+        # linear fade cut. It still records off_time so cleanup can retire it
+        # once the decay reaches the floor.
+        if self.tone and not getattr(self.tone.property_class, "one_shot", False):
             self.tone.release()
 
     def unrelease(self):
