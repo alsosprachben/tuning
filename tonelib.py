@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.0")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-15.0")) / 20.0)
 
 
 class Decay:
@@ -355,7 +355,10 @@ class BasePartial:
                 # scale release noise separately; brass valves do not hiss on note-off
                 jitter_fade *= self.properties.chiff_release
             else:
-                jitter_fade = 0.0
+                # Held note: a small steady phase jitter broadens each partial
+                # into a band, the width of a section of slightly out-of-phase
+                # strings -- a sustained chiff, no beating or amplitude wobble.
+                jitter_fade = self.properties.sustain_jitter
 
             if jitter_fade > 0:
                 cycle_jitter = rand(second * frequency) * self.properties.chiff_cycle
@@ -481,6 +484,11 @@ class SynthProperties:
     # scaled by unison_gain. Empty = a single voice (no beating).
     unison_detune = ()
     unison_gain = 1.0
+
+    # Sustained phase jitter on a held note (fraction of the chiff amount that
+    # keeps running during the Pressed state). Broadens each partial into a
+    # band -- a section-of-strings shimmer from one voice. 0 = clean/static.
+    sustain_jitter = 0.0
 
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         self.channel_pan = channel_pan
@@ -763,12 +771,15 @@ class BowedStringProperties(BlownPipeProperties):
     cello, contrabass), string/synth ensembles, choir/voice pads, and
     sustained synth leads/pads as a broad bucket."""
     odd_only = False
-    initial_gain = 1.0 / 6700   # compensate the added unison voices
-    chiff_cycle = 0.0
-    chiff_volume = 0.0
+    initial_gain = 1.0 / 5000   # single voice again
+    # Section shimmer via a small sustained phase jitter (a running chiff),
+    # not many detuned voices: broader per-partial band, no amplitude wobble.
+    chiff_cycle = 0.06          # phase-deviation magnitude (small = subtle)
+    chiff_volume = 0.5
     chiff_release = 0.0
-    chiff_min_valve_time = 0.06
-    chiff_max_valve_time = 0.12
+    sustain_jitter = 0.3        # how much jitter persists on the held note
+    chiff_min_valve_time = 0.04
+    chiff_max_valve_time = 0.10
 
     max_harmonic = 40
     inharmonicity_coefficient = 0.0
@@ -778,12 +789,6 @@ class BowedStringProperties(BlownPipeProperties):
     octave_dampening = 0.05
     octave_modulo = False
 
-    # A section of many strings: detuned voices spread a few Hz wide beat and
-    # shimmer instead of locking into one static reed-organ tone. Kept quieter
-    # than the main voice and irregularly spaced so they never null in unison
-    # (which would warble); the result is a gentle shimmer, not tremolo.
-    unison_detune = (-3.1, -1.9, -0.7, 0.6, 1.5, 2.8)
-    unison_gain = 0.34
 
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---
