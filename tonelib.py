@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-12.0")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.0")) / 20.0)
 
 
 class Decay:
@@ -815,16 +815,16 @@ class NoiseDrumProperties(PercussionProperties):
 
 
 class SnareDrumProperties(PercussionProperties):
-    """Snare: broadband body over a short, punchy decay, and louder than the
-    generic noise bucket so the backbeat cuts through a full mix. The generic
-    NoiseDrum was too diffuse and low to survive against eight tonal voices;
-    this trades some wash for a harder, more present crack."""
-    initial_gain = 1.0 / 3          # ~+10 dB over the old noise-snare
+    """Snare: a short, punchy burst of broadband noise. The first version was
+    too tonal -- a strong low fundamental read as a high timpani -- so this
+    flattens the spectrum (near-white) and decorrelates the partials hard so
+    there is no perceived pitch, and sits just under the bass drum."""
+    initial_gain = 1.0 / 9          # under the kick, not over it
     max_harmonic = 56
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 30.0
-    tonal_dampening = 0.55          # broadband but with some midrange body
-    decay_db = 26.0                 # fast, punchy (dies in ~0.1 s)
-    harmonic_decay_db = 2.0
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 55.0
+    tonal_dampening = 0.2           # nearly flat = broadband hiss, no boom/pitch
+    decay_db = 28.0                 # fast, punchy (dies in ~0.1 s)
+    harmonic_decay_db = 1.5
     harmonic_decay_dampening = 0.0
 
 
