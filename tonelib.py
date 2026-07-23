@@ -788,7 +788,7 @@ class PercussionProperties(PluckedStringProperties):
 class MembraneDrumProperties(PercussionProperties):
     """Struck membrane (kick, tom, snare body, timpani): a strong low
     fundamental with a few mildly inharmonic modes and a fast body decay."""
-    initial_gain = 1.0 / 5
+    initial_gain = 1.0 / 2
     max_harmonic = 12
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
     tonal_dampening = 1.6
@@ -801,7 +801,7 @@ class NoiseDrumProperties(PercussionProperties):
     """Noise-dominated hit (snare, hi-hat, cymbal, shaker): a dense stack of
     strongly stretched partials approximating a band of colored noise, with
     a fast decay. decay_db sets how long the wash rings."""
-    initial_gain = 1.0 / 25
+    initial_gain = 1.0 / 10
     max_harmonic = 64
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 40.0
     tonal_dampening = 0.4          # nearly flat spectrum = broadband
@@ -813,7 +813,7 @@ class NoiseDrumProperties(PercussionProperties):
 class MetalPercussionProperties(PercussionProperties):
     """Struck metal that rings (ride/crash bell, cowbell, agogo, triangle,
     woodblock): bright inharmonic modes with a slow decay tail."""
-    initial_gain = 1.0 / 10
+    initial_gain = 1.0 / 4
     max_harmonic = 40
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
     tonal_dampening = 0.9
