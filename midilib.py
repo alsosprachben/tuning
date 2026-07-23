@@ -13,6 +13,7 @@ All rights reserved.
 """
 
 from patches import patches
+from patch_map import property_class_for_program
 
 # Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
 # str. Accept both so the byte-level MIDI parsing below works unchanged.
@@ -829,52 +830,10 @@ class Note:
         self.f = 0
         self.pan = pan
 
-        property_class = PluckedStringProperties
+        # Data-driven GM routing: every program maps to a physical-model
+        # bucket in patch_map (0-based program numbers).
+        property_class = property_class_for_program(self.channel.program)
 
-        program = self.channel.program + 1
-
-        # 1 - 6 (Hammered Keyboard) Piano
-        if (
-            (program >= 1 and program <= 6)
-        ):
-            property_class = Steinway
-
-        # 7-8 Plucked Keyboard (harpsichord)
-        # 25 - 32 Guitar
-        if (
-            (program >= 7 and program <= 8)
-        or	(program >= 25 and program <= 32)
-        ):
-            property_class = PluckedStringProperties
-
-        # 17 - 24 Organ: flue pipes through Church Organ (20),
-        # reeds from Reed Organ (21) through Tango Accordion (24)
-        if (
-            (program >= 17 and program <= 24)
-        ):
-            if program >= 21:
-                property_class = ReedOrganProperties
-            else:
-                property_class = FlueOrganProperties
-
-        # 57 - 64 Brass
-        if (
-            (program >= 57 and program <= 64)
-        ):
-            property_class = BrassProperties
-        # 65 - 72 Reed
-        if (
-            (program >= 65 and program <= 72)
-        ):
-            property_class = ReedOrganProperties
-
-
-        # 73 - 80 Pipe
-        if (
-            (program >= 74 and program <= 80)
-        ):
-            property_class = BlownPipeProperties
- 
         self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None, property_class)
 
         self.ref_count = 0

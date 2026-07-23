@@ -701,6 +701,50 @@ class BrassProperties(OrganProperties):
     odd_only = True
 
 
+# --- Broad melodic buckets (generic; specialize per-instrument later) ---
+
+class MalletProperties(PluckedStringProperties):
+    """Struck bar/bell: bright inharmonic onset, fast shimmer decay. Covers
+    the chromatic-percussion family (celesta, glockenspiel, vibraphone,
+    marimba, xylophone, tubular bells) and struck ethnic/percussive metal
+    (kalimba, steel drums, tinkle bell, agogo, woodblock). A first generic
+    voice; a true modal-bar model is the realism step."""
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 6.0
+    inharmonicity_dynamic = False
+
+    # struck bars ring in a few clangorous modes, not a full harmonic stack
+    max_harmonic = 24
+    plucked_harmonic = 4.0
+    pluck_dampening = 1.5
+
+    tonal_dampening = 1.4
+    # bright onset that decays fast: upper partials shed quickly
+    decay_db = 0.0
+    harmonic_decay_db = 4.0
+    harmonic_decay_dampening = 0.3
+
+
+class BowedStringProperties(BlownPipeProperties):
+    """Sustained bowed string: full harmonic series with a sawtooth-ish
+    1/n tilt, no chiff, gentle onset. Covers solo strings (violin, viola,
+    cello, contrabass), string/synth ensembles, choir/voice pads, and
+    sustained synth leads/pads as a broad bucket."""
+    odd_only = False
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    chiff_release = 0.0
+    chiff_min_valve_time = 0.06
+    chiff_max_valve_time = 0.12
+
+    max_harmonic = 40
+    inharmonicity_coefficient = 0.0
+
+    # 1/n-ish spectrum: brighter than an organ, no octave-modulo steps
+    tonal_dampening = 1.0
+    octave_dampening = 0.05
+    octave_modulo = False
+
+
 class SynthTone(BaseTone):
     synth_id = 0
 
