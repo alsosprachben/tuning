@@ -668,7 +668,9 @@ class BlownPipeProperties(SynthProperties):
     chiff_max_valve_time = 0.3
 
     odd_only = True
-    initial_gain = 1.0 / 5000
+    # Pipes (flute, recorder, whistle, ...) speak louder than the organ/reed/
+    # brass buckets that inherit from here; those pin the old level below.
+    initial_gain = 1.0 / 2500
 
     enharmonic_width = 0.0
 
@@ -689,6 +691,7 @@ class BlownPipeProperties(SynthProperties):
 
 
 class OrganProperties(BlownPipeProperties):
+    initial_gain = 1.0 / 5000   # keep organ/reed/brass at the pre-pipe level
     tonal_dampening = 1.4
     octave_dampening = 1.0 / 8
     octave_modulo = True
@@ -750,6 +753,7 @@ class BowedStringProperties(BlownPipeProperties):
     cello, contrabass), string/synth ensembles, choir/voice pads, and
     sustained synth leads/pads as a broad bucket."""
     odd_only = False
+    initial_gain = 1.0 / 5000   # not the louder pipe level
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_release = 0.0
@@ -786,9 +790,9 @@ class PercussionProperties(PluckedStringProperties):
 
 
 class MembraneDrumProperties(PercussionProperties):
-    """Struck membrane (kick, tom, snare body, timpani): a strong low
-    fundamental with a few mildly inharmonic modes and a fast body decay."""
-    initial_gain = 1.0 / 2
+    """Struck membrane (kick, tom, timpani): a strong low fundamental with a
+    few mildly inharmonic modes and a fast body decay."""
+    initial_gain = 1.0 / 3.5   # -5 dB from 1/2: was hot enough to distort
     max_harmonic = 12
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
     tonal_dampening = 1.6
@@ -798,14 +802,28 @@ class MembraneDrumProperties(PercussionProperties):
 
 
 class NoiseDrumProperties(PercussionProperties):
-    """Noise-dominated hit (snare, hi-hat, cymbal, shaker): a dense stack of
-    strongly stretched partials approximating a band of colored noise, with
-    a fast decay. decay_db sets how long the wash rings."""
+    """Noise-dominated hit (hi-hat, shaker, guiro): a dense stack of strongly
+    stretched partials approximating a band of colored noise, with a fast
+    decay. decay_db sets how long the wash rings."""
     initial_gain = 1.0 / 10
     max_harmonic = 64
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 40.0
     tonal_dampening = 0.4          # nearly flat spectrum = broadband
     decay_db = 20.0
+    harmonic_decay_db = 2.0
+    harmonic_decay_dampening = 0.0
+
+
+class SnareDrumProperties(PercussionProperties):
+    """Snare: broadband body over a short, punchy decay, and louder than the
+    generic noise bucket so the backbeat cuts through a full mix. The generic
+    NoiseDrum was too diffuse and low to survive against eight tonal voices;
+    this trades some wash for a harder, more present crack."""
+    initial_gain = 1.0 / 3          # ~+10 dB over the old noise-snare
+    max_harmonic = 56
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 30.0
+    tonal_dampening = 0.55          # broadband but with some midrange body
+    decay_db = 26.0                 # fast, punchy (dies in ~0.1 s)
     harmonic_decay_db = 2.0
     harmonic_decay_dampening = 0.0
 

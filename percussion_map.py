@@ -15,20 +15,22 @@ from tonelib import (
     MembraneDrumProperties,
     NoiseDrumProperties,
     MetalPercussionProperties,
+    SnareDrumProperties,
 )
 
 M = MembraneDrumProperties
 N = NoiseDrumProperties
 T = MetalPercussionProperties
+S = SnareDrumProperties
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
     35: ("Acoustic Bass Drum", M, 55.0),
     36: ("Bass Drum 1",        M, 62.0),
-    37: ("Side Stick",         N, 320.0),
-    38: ("Acoustic Snare",     N, 190.0),
+    37: ("Side Stick",         S, 320.0),
+    38: ("Acoustic Snare",     S, 185.0),
     39: ("Hand Clap",          N, 260.0),
-    40: ("Electric Snare",     N, 220.0),
+    40: ("Electric Snare",     S, 200.0),
     41: ("Low Floor Tom",      M, 87.0),
     42: ("Closed Hi-Hat",      N, 400.0),
     43: ("High Floor Tom",     M, 98.0),
