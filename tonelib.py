@@ -147,6 +147,10 @@ class Fade:
 class BasePartial:
     # public
 
+    # Upper bound on the attack/release fade in seconds, set per note from
+    # its duration so a fade can't outlast a short note. None = no cap.
+    max_fade = None
+
     def frequency(self, second):
         "stub input"
 
@@ -258,6 +262,11 @@ class BasePartial:
         fade_time = self.properties.chiff_min_valve_time + (
                     self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
 
+        if self.max_fade is not None:
+            # Short note: cap the onset transient so it fits, or a slow
+            # valve/breath fade would smear fast notes (trills, tonguing).
+            fade_time = min(fade_time, self.max_fade)
+
         self.release_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
 
     def hammer_down(self, frequency, second):
@@ -266,6 +275,9 @@ class BasePartial:
 
         fade_time = self.properties.chiff_min_valve_time + (
                     self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+
+        if self.max_fade is not None:
+            fade_time = min(fade_time, self.max_fade)
 
         self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
         self.sustain = Decay(self.decay_rate, Second(second + self.delay))
@@ -868,6 +880,15 @@ class SynthTone(BaseTone):
         self.ref_count = 0
         self.partials = []
 
+        # Per-note onset-fade cap (seconds); set from note duration so fast
+        # notes still articulate. None until the note-on supplies a length.
+        self.max_fade = None
+
+    def set_max_fade(self, max_fade):
+        self.max_fade = max_fade
+        for partial in self.partials:
+            partial.max_fade = max_fade
+
     def init_partials(self, frequency):
         self.properties = self.property_class(frequency, self.panning)
         if hrtf:
@@ -933,6 +954,11 @@ class SynthTone(BaseTone):
                                         self.delay, self.ref_count)
                 partial.frequency_offset = 0.3
                 self.partials.append(partial)
+
+        # Partials created after a note-on set a fade cap inherit it.
+        if self.max_fade is not None:
+            for partial in self.partials:
+                partial.max_fade = self.max_fade
 
 
 class SynthSampler(BaseSampler):

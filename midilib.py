@@ -794,8 +794,46 @@ class Channels:
                 ]
             ))
         )
-        
+
+        self.scanNoteDurations(events)
+
         self.pullEnqueuedEvents()
+
+    def scanNoteDurations(self, events):
+        """Pair note-ons with their note-offs to record each note's length in
+        seconds (tracking tempo), so an attack can cap its onset fade to the
+        note and fast notes still articulate. Stored per channel keyed by
+        (note, on_tick)."""
+        tpb = self.midi.head.ticks_per_beat
+        if not tpb:
+            return
+        tempo = 500000.0  # microseconds per beat (120 bpm) until a Tempo event
+        sec = 0.0
+        last_tick = 0
+        pending = {}  # (channel, note) -> [on_tick, on_sec] FIFO
+        for tick, ev in sorted(events, key=lambda te: te[0]):
+            sec += (tick - last_tick) / tpb * (tempo / 1e6)
+            last_tick = tick
+            inner = getattr(ev, "event", None)
+            if isinstance(ev, MetaEvent):
+                if isinstance(inner, MetaEvent.Tempo):
+                    tempo = float(inner.microseconds_per_beat)
+                continue
+            if not isinstance(ev, ChannelEvent):
+                continue
+            cls = inner.__class__
+            is_on = cls is ChannelEvent.NoteOn and inner.velocity > 0
+            is_off = cls is ChannelEvent.NoteOff or (
+                cls is ChannelEvent.NoteOn and inner.velocity == 0)
+            if is_on:
+                pending.setdefault((inner.midi_channel, inner.note), []).append((tick, sec))
+            elif is_off:
+                stack = pending.get((inner.midi_channel, inner.note))
+                if stack:
+                    on_tick, on_sec = stack.pop(0)
+                    ch = self.channels.get(inner.midi_channel)
+                    if ch is not None:
+                        ch.note_durations[(inner.note, on_tick)] = sec - on_sec
 
 
 class Note:
@@ -916,9 +954,17 @@ class Channel:
             self.notes[n.note] = e
         else:
             e = self.notes[n.note]
-            
+
         e.inc(n)
             #errlog("attackNote ref_count %i, %i" % (e.ref_count, e.tone.partials[0].ref_count))
+
+        # Cap this articulation's onset fade to a fraction of the note's
+        # length so short notes (trills, tonguing, rolls) don't smear under
+        # a long valve/breath fade. Partials made later by the tuner inherit
+        # the cap from the tone.
+        duration = self.note_durations.get((n.note, n.time))
+        if duration is not None and e.tone is not None:
+            e.tone.set_max_fade(0.45 * duration)
             
     
     def releaseNote(self, n, s):
@@ -1027,6 +1073,9 @@ class Channel:
         self.meta = []
         self.program = 0
         self.aftertouch = 0
+        # (note, on_tick) -> duration in seconds, filled by a load-time scan
+        # so attacks can cap their onset fade to the note length.
+        self.note_durations = {}
 
         self.controls = {
                           # MSB  LSB
