@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-15.0")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-18.0")) / 20.0)
 
 
 class Decay:
@@ -837,17 +837,27 @@ class NoiseDrumProperties(PercussionProperties):
 
 
 class SnareDrumProperties(PercussionProperties):
-    """Snare: a short, punchy burst of broadband noise. The first version was
-    too tonal -- a strong low fundamental read as a high timpani -- so this
-    flattens the spectrum (near-white) and decorrelates the partials hard so
-    there is no perceived pitch, and sits just under the bass drum."""
-    initial_gain = 1.0 / 5          # +5 dB with the kick; stays ~2 dB under it
-    max_harmonic = 56
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 55.0
-    tonal_dampening = 0.2           # nearly flat = broadband hiss, no boom/pitch
+    """Snare: a short burst of mostly noise. Discrete inharmonic partials
+    alone still read as pitched, so the noise comes primarily from a wide
+    running phase jitter (the chiff mechanism cranked up) that smears every
+    partial into broadband hiss -- the snare wires -- over a punchy decay."""
+    initial_gain = 1.0 / 9
+    max_harmonic = 48
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
+    tonal_dampening = 0.3
     decay_db = 28.0                 # fast, punchy (dies in ~0.1 s)
     harmonic_decay_db = 1.5
     harmonic_decay_dampening = 0.0
+
+    # Wide chiff = the wire noise. Large phase deviation with the jitter run
+    # at full through the whole hit makes each partial mostly noise, so the
+    # snare is a "shhh" crack, not a pitched tom.
+    chiff_volume = 3.0
+    chiff_cycle = 0.9               # near-full phase decorrelation -> noise
+    chiff_release = 0.0
+    sustain_jitter = 1.0            # jitter runs the entire (short) hit
+    chiff_min_valve_time = 0.002
+    chiff_max_valve_time = 0.012
 
 
 class MetalPercussionProperties(PercussionProperties):
