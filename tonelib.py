@@ -890,7 +890,11 @@ class SnareDrumProperties(PercussionProperties):
     max_harmonic = 48
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
     tonal_dampening = 0.3
-    decay_db = 28.0                 # fast, punchy (dies in ~0.1 s)
+    # One-shot, like the crash: the hit rings out its own decay (~1 s tail)
+    # regardless of how short the note is, instead of being cut at note-off.
+    one_shot = True
+    release_floor_db = -45.0
+    decay_db = 28.0                 # fast, punchy
     harmonic_decay_db = 1.5
     harmonic_decay_dampening = 0.0
 
