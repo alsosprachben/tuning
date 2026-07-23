@@ -78,8 +78,36 @@ PERCUSSION = {
 
 GM_PERCUSSION_CHANNEL = 9  # 0-based; GM drum channel is "10" one-based
 
+# Default stereo placement of each kit piece (drummer's perspective:
+# -1 = full left, 0 = center, +1 = full right), so a centered percussion
+# channel still spreads the kit across the image instead of stacking every
+# drum at one point. A channel pan (CC10) is added on top to rotate the
+# whole kit. Kick and snare sit near center; hats to the left, ride/toms
+# fanning to the right, crashes to the sides.
+DEFAULT_PAN = {
+    35: 0.0, 36: 0.0,                    # bass drums: center
+    37: -0.12, 38: -0.12, 40: -0.12,     # snare / stick: just left of center
+    39: -0.12,                           # hand clap
+    42: -0.45, 44: -0.45, 46: -0.45,     # hi-hats: left
+    41: 0.5, 43: 0.4, 45: 0.2, 47: 0.0, 48: -0.2, 50: -0.35,  # toms: low->high, R->L
+    49: -0.6, 55: -0.4, 52: -0.7,        # crash 1 / splash / china: left
+    57: 0.6,                             # crash 2: right
+    51: 0.5, 53: 0.5, 59: 0.5,           # ride / ride bell: right
+    54: 0.3,                             # tambourine
+    56: 0.0,                             # cowbell: center
+    60: 0.35, 61: 0.35, 62: 0.4, 63: 0.4, 64: 0.45,  # bongos/congas: right
+    65: 0.3, 66: 0.3,                    # timbales
+    67: 0.4, 68: 0.4,                    # agogo
+    69: 0.55, 70: -0.55,                 # cabasa / maracas: opposite sides
+    75: -0.3, 76: -0.3, 77: -0.35,       # claves / woodblocks: left
+}
+
 
 def percussion_for_note(note):
-    """Return (name, property_class, base_frequency) for a GM drum note, or
-    None if unmapped."""
-    return PERCUSSION.get(note)
+    """Return (name, property_class, base_frequency, default_pan) for a GM
+    drum note, or None if unmapped."""
+    entry = PERCUSSION.get(note)
+    if entry is None:
+        return None
+    name, cls, freq = entry
+    return name, cls, freq, DEFAULT_PAN.get(note, 0.0)

@@ -15,6 +15,7 @@ from tonelib import (
     PluckedStringProperties,
     MalletProperties,
     BowedStringProperties,
+    BowedStringSecondProperties,
     FlueOrganProperties,
     ReedOrganProperties,
     BrassProperties,
@@ -48,6 +49,7 @@ PROGRAM_CLASS[46] = PluckedStringProperties  # orchestral harp
 PROGRAM_CLASS[47] = MalletProperties         # timpani (pitched membrane; mallet for now)
 # 48-55  Ensemble (strings, choir, voices, orchestra hit)
 _fill(48, 55, BowedStringProperties)
+PROGRAM_CLASS[49] = BowedStringSecondProperties  # String Ensemble 2: darker section
 # 56-63  Brass
 _fill(56, 63, BrassProperties)
 # 64-71  Reed (saxes, oboe, english horn, bassoon, clarinet)

@@ -906,10 +906,13 @@ class Note:
             if drum is None:
                 self.tone = None
                 return
-            name, property_class, base_frequency = drum
+            name, property_class, base_frequency, default_pan = drum
             self.f = base_frequency
+            # Each drum has a default stereo position; the channel pan (CC10)
+            # rotates the whole kit around it. Clamp to the legal pan range.
+            drum_pan = max(-1.0, min(1.0, self.pan + default_pan))
             self.tone = self.channel.sampler.newTone(
-                self.channel.midi_channel, base_frequency, self.pan, seconds, None, property_class)
+                self.channel.midi_channel, base_frequency, drum_pan, seconds, None, property_class)
             self.tone.updateFrequency(base_frequency)
             return
 

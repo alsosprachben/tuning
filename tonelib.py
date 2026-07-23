@@ -795,9 +795,11 @@ class BowedStringProperties(BlownPipeProperties):
     """Sustained bowed string: full harmonic series with a sawtooth-ish
     1/n tilt, no chiff, gentle onset. Covers solo strings (violin, viola,
     cello, contrabass), string/synth ensembles, choir/voice pads, and
-    sustained synth leads/pads as a broad bucket."""
+    sustained synth leads/pads as a broad bucket. This is the brighter
+    'first' section; BowedStringSecond is the darker companion."""
     odd_only = False
-    initial_gain = 1.0 / 5000   # single voice again
+    initial_gain = 1.0 / 7000   # -3 dB: two hard-panned string channels were
+                                # a wall that buried the brass
     # Section shimmer via a small sustained phase jitter (a running chiff),
     # not many detuned voices: broader per-partial band, no amplitude wobble.
     chiff_cycle = 0.06          # phase-deviation magnitude (small = subtle)
@@ -814,6 +816,16 @@ class BowedStringProperties(BlownPipeProperties):
     tonal_dampening = 1.0
     octave_dampening = 0.05
     octave_modulo = False
+
+
+class BowedStringSecondProperties(BowedStringProperties):
+    """The 'second' string section (GM String Ensemble 2): darker and a
+    little rounder than the first, with a slightly wider shimmer, so the two
+    ensembles read as distinct sections rather than one doubled patch."""
+    tonal_dampening = 1.25      # darker: upper partials rolled off more
+    max_harmonic = 32
+    chiff_cycle = 0.045         # a subtly different shimmer texture
+    sustain_jitter = 0.38
 
 
 
