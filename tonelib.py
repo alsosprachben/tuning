@@ -745,6 +745,63 @@ class BowedStringProperties(BlownPipeProperties):
     octave_modulo = False
 
 
+# --- Percussion (channel 10): broad noise/membrane/metal buckets ---
+# The additive engine has no white-noise source, so "noise" is approximated
+# by a dense stack of strongly inharmonic partials whose stretched
+# frequencies decorrelate into colored noise. Each drum is struck at a
+# fixed base frequency from the percussion map, not a tuned pitch.
+
+class PercussionProperties(PluckedStringProperties):
+    """Base drum voice: struck onset, no chiff jitter, fast decay."""
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    chiff_min_valve_time = 0.002
+    chiff_max_valve_time = 0.010
+    odd_only = False
+    inharmonicity_dynamic = False
+    plucked_harmonic = 0.0     # no string comb/notching on a drum
+    octave_gain = 0.0
+    octave_dampening = 0.0
+    octave_modulo = False
+
+
+class MembraneDrumProperties(PercussionProperties):
+    """Struck membrane (kick, tom, snare body, timpani): a strong low
+    fundamental with a few mildly inharmonic modes and a fast body decay."""
+    initial_gain = 1.0 / 5
+    max_harmonic = 12
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
+    tonal_dampening = 1.6
+    decay_db = 12.0
+    harmonic_decay_db = 6.0
+    harmonic_decay_dampening = 0.2
+
+
+class NoiseDrumProperties(PercussionProperties):
+    """Noise-dominated hit (snare, hi-hat, cymbal, shaker): a dense stack of
+    strongly stretched partials approximating a band of colored noise, with
+    a fast decay. decay_db sets how long the wash rings."""
+    initial_gain = 1.0 / 25
+    max_harmonic = 64
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 40.0
+    tonal_dampening = 0.4          # nearly flat spectrum = broadband
+    decay_db = 20.0
+    harmonic_decay_db = 2.0
+    harmonic_decay_dampening = 0.0
+
+
+class MetalPercussionProperties(PercussionProperties):
+    """Struck metal that rings (ride/crash bell, cowbell, agogo, triangle,
+    woodblock): bright inharmonic modes with a slow decay tail."""
+    initial_gain = 1.0 / 10
+    max_harmonic = 40
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
+    tonal_dampening = 0.9
+    decay_db = 4.0
+    harmonic_decay_db = 1.5
+    harmonic_decay_dampening = 0.1
+
+
 class SynthTone(BaseTone):
     synth_id = 0
 

@@ -14,6 +14,7 @@ All rights reserved.
 
 from patches import patches
 from patch_map import property_class_for_program
+from percussion_map import percussion_for_note, GM_PERCUSSION_CHANNEL
 
 # Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
 # str. Accept both so the byte-level MIDI parsing below works unchanged.
@@ -607,11 +608,14 @@ class Channels:
     def onNotes(self):
         on = []
         for midi_channel in self.channels:
+            if midi_channel == GM_PERCUSSION_CHANNEL:
+                # Drums carry no pitch; keep them out of the tuning solve.
+                continue
             for n in self.channels[midi_channel].notes:
                 note = self.channels[midi_channel].notes[n]
                 if note.off_time is None:
                     on.append(n)
-                    
+
         return on
 
     def syncReleases(self):
@@ -622,6 +626,10 @@ class Channels:
 
     def syncTunings(self):
         for midi_channel in self.channels:
+            if midi_channel == GM_PERCUSSION_CHANNEL:
+                # Fixed-frequency drums; a colliding pitched note number on
+                # another channel must not retune them.
+                continue
             for n in self.channels[midi_channel].notes:
                 note = self.channels[midi_channel].notes[n]
                 if n in self.tunings:
@@ -792,7 +800,10 @@ class Note:
         self.tone.updateFrequency(self.f)
 
     def finished(self):
-        return self.off_time is not None and self.tone and self.tone.finished()
+        if self.tone is None:
+            # unmapped percussion note: nothing to play, retire immediately
+            return True
+        return self.off_time is not None and self.tone.finished()
 
     def cleanup(self):
         if self.tone:
@@ -829,23 +840,38 @@ class Note:
         
         self.f = 0
         self.pan = pan
+        self.percussion = (self.channel.midi_channel == GM_PERCUSSION_CHANNEL)
+
+        # Shared note state (set before tone creation so both the pitched
+        # and percussion paths, including early exits, have it).
+        self.ref_count = 0
+        self.on_time = None
+        self.on_velocity = 0
+        self.touch_time = None
+        self.aftertouch = 0
+        self.off_time = None
+        self.off_velocity = 0
+
+        if self.percussion:
+            # Channel 10: the note number selects a drum, not a pitch. Give
+            # it a fixed base frequency and drum timbre, and init the tone
+            # now -- the tuner never sees these notes, so nothing else will.
+            drum = percussion_for_note(n)
+            if drum is None:
+                self.tone = None
+                return
+            name, property_class, base_frequency = drum
+            self.f = base_frequency
+            self.tone = self.channel.sampler.newTone(
+                self.channel.midi_channel, base_frequency, self.pan, seconds, None, property_class)
+            self.tone.updateFrequency(base_frequency)
+            return
 
         # Data-driven GM routing: every program maps to a physical-model
         # bucket in patch_map (0-based program numbers).
         property_class = property_class_for_program(self.channel.program)
 
         self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None, property_class)
-
-        self.ref_count = 0
-        
-        self.on_time = None
-        self.on_velocity = 0
-        
-        self.touch_time = None
-        self.aftertouch = 0
-        
-        self.off_time = None
-        self.off_velocity = 0
 
     def __str__(self):
         return str(self.__dict__)
