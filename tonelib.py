@@ -904,22 +904,25 @@ class CymbalProperties(PercussionProperties):
     the snare's wide-chiff noise, but a fast splash that rings out over a
     second or two instead of a punchy die. A few inharmonic modes give the
     metallic edge under the hiss."""
-    initial_gain = 1.0 / 7
+    initial_gain = 1.0 / 10
     max_harmonic = 80               # very bright, energy well up top
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 25.0
     tonal_dampening = 0.15          # near-flat: the modes don't stick out of the wash
 
     # One-shot: the splash rings out on its own exponential decay and ignores
     # note-off, so a short crash note still rings and there is no linear-fade
-    # "cut". decay_db sets the ring length to the -50 dB floor (~2.5 s here).
+    # "cut". A slow decay_db is what makes it a crash and not a hi-hat -- long
+    # sustaining wash, not a quick tick.
     one_shot = True
     release_floor_db = -50.0
-    decay_db = 20.0
+    decay_db = 6.0
     harmonic_decay_db = 0.4
     harmonic_decay_dampening = 0.0
 
     # Broadband wash via wide chiff, like the snare, sustained the whole ring.
-    chiff_volume = 4.0
+    # Kept below the level that slams the per-tone ceiling so initial_gain
+    # actually controls how loud the crash is.
+    chiff_volume = 1.8
     chiff_cycle = 0.95
     chiff_release = 0.0
     sustain_jitter = 1.0
