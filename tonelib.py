@@ -151,6 +151,10 @@ class BasePartial:
     # its duration so a fade can't outlast a short note. None = no cap.
     max_fade = None
 
+    # Detune of this partial from the exact harmonic, in Hz. Nonzero for the
+    # extra unison voices of a chorus/ensemble so they beat against the main.
+    frequency_offset = 0.0
+
     def frequency(self, second):
         "stub input"
 
@@ -428,11 +432,10 @@ class SimplePartial(BasePartial):
         self.pan = p
 
     def frequency(self, second):
-        if hasattr(self.properties, "frequency_offset"):
-            errlog("offset: ", self.properties.frequency_offset)
-            return self.base_frequency * self.harmonic + self.properties.frequency_offset
-        else:
-            return self.base_frequency * self.harmonic
+        # Detune is stored on the partial (per unison voice), not on the
+        # shared properties; reading properties here silently disabled every
+        # chorus, so unison voices piled up at the same pitch with no beating.
+        return self.base_frequency * self.harmonic + self.frequency_offset
 
 
 class SquareWave(SimplePartial):
@@ -473,6 +476,11 @@ class SawtoothWave(SimplePartial):
 
 class SynthProperties:
     from inharmonicity import inharmonicity_coefficient_2nd_harmonic, inharmonicity_coefficient_3rd_harmonic
+
+    # Chorus/ensemble: extra unison voices detuned by these Hz offsets, each
+    # scaled by unison_gain. Empty = a single voice (no beating).
+    unison_detune = ()
+    unison_gain = 1.0
 
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         self.channel_pan = channel_pan
@@ -635,6 +643,7 @@ class PluckedStringProperties(SynthProperties):
 
 class TriplePluckedStringProperties(PluckedStringProperties):
     string_count = 3
+    unison_detune = (0.25, 0.3)   # triple-string beating
 
 
 class InharmonicStringProperties(PluckedStringProperties):
@@ -656,6 +665,7 @@ class Steinway(InharmonicStringProperties):
     e = 0.429601
 
     string_count = 3
+    unison_detune = (0.25, 0.3)   # triple-string beating
 
 
 class BlownPipeProperties(SynthProperties):
@@ -753,7 +763,7 @@ class BowedStringProperties(BlownPipeProperties):
     cello, contrabass), string/synth ensembles, choir/voice pads, and
     sustained synth leads/pads as a broad bucket."""
     odd_only = False
-    initial_gain = 1.0 / 5000   # not the louder pipe level
+    initial_gain = 1.0 / 6700   # compensate the added unison voices
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_release = 0.0
@@ -767,6 +777,13 @@ class BowedStringProperties(BlownPipeProperties):
     tonal_dampening = 1.0
     octave_dampening = 0.05
     octave_modulo = False
+
+    # A section of many strings: detuned voices spread a few Hz wide beat and
+    # shimmer instead of locking into one static reed-organ tone. Kept quieter
+    # than the main voice and irregularly spaced so they never null in unison
+    # (which would warble); the result is a gentle shimmer, not tremolo.
+    unison_detune = (-3.1, -1.9, -0.7, 0.6, 1.5, 2.8)
+    unison_gain = 0.34
 
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---
@@ -792,7 +809,7 @@ class PercussionProperties(PluckedStringProperties):
 class MembraneDrumProperties(PercussionProperties):
     """Struck membrane (kick, tom, timpani): a strong low fundamental with a
     few mildly inharmonic modes and a fast body decay."""
-    initial_gain = 1.0 / 3.5   # -5 dB from 1/2: was hot enough to distort
+    initial_gain = 1.0 / 2     # +5 dB: drums were too quiet vs the mix (kick has headroom)
     max_harmonic = 12
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
     tonal_dampening = 1.6
@@ -805,7 +822,7 @@ class NoiseDrumProperties(PercussionProperties):
     """Noise-dominated hit (hi-hat, shaker, guiro): a dense stack of strongly
     stretched partials approximating a band of colored noise, with a fast
     decay. decay_db sets how long the wash rings."""
-    initial_gain = 1.0 / 10
+    initial_gain = 1.0 / 5.6
     max_harmonic = 64
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 40.0
     tonal_dampening = 0.4          # nearly flat spectrum = broadband
@@ -819,7 +836,7 @@ class SnareDrumProperties(PercussionProperties):
     too tonal -- a strong low fundamental read as a high timpani -- so this
     flattens the spectrum (near-white) and decorrelates the partials hard so
     there is no perceived pitch, and sits just under the bass drum."""
-    initial_gain = 1.0 / 9          # under the kick, not over it
+    initial_gain = 1.0 / 5          # +5 dB with the kick; stays ~2 dB under it
     max_harmonic = 56
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 55.0
     tonal_dampening = 0.2           # nearly flat = broadband hiss, no boom/pitch
@@ -831,7 +848,7 @@ class SnareDrumProperties(PercussionProperties):
 class MetalPercussionProperties(PercussionProperties):
     """Struck metal that rings (ride/crash bell, cowbell, agogo, triangle,
     woodblock): bright inharmonic modes with a slow decay tail."""
-    initial_gain = 1.0 / 4
+    initial_gain = 1.0 / 2.25
     max_harmonic = 40
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
     tonal_dampening = 0.9
@@ -963,14 +980,16 @@ class SynthTone(BaseTone):
             self.partials.append(
                 SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay,
                               self.ref_count))
-            if hasattr(self.properties, "string_count") and self.properties.string_count == 3:
-                partial = SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay,
+            # Extra unison voices, each detuned by a few Hz, beat against the
+            # main partial: a couple for a piano's triple string, a wider
+            # spread for a section of many bowed strings. Each voice is a bit
+            # quieter so the ensemble does not simply scale the level.
+            detunes = getattr(self.properties, "unison_detune", ())
+            for offset in detunes:
+                partial = SimplePartial(self.properties, self.frequency, harmonic,
+                                        harmonic_volume * self.properties.unison_gain, harmonic_decay,
                                         self.delay, self.ref_count)
-                partial.frequency_offset = 0.25
-                self.partials.append(partial)
-                partial = SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay,
-                                        self.delay, self.ref_count)
-                partial.frequency_offset = 0.3
+                partial.frequency_offset = offset
                 self.partials.append(partial)
 
         # Partials created after a note-on set a fade cap inherit it.
