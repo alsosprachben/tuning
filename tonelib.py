@@ -876,10 +876,10 @@ class MembraneDrumProperties(PercussionProperties):
 class KickDrumProperties(MembraneDrumProperties):
     """Bass drum: a tight, dark low thump -- louder and shorter than a tom,
     a punchy body that dies in about half a second."""
-    initial_gain = 1.0 / 1.3   # louder kick per feedback
+    initial_gain = 1.0 / 1.05  # near the per-tone ceiling (cannot go higher clean)
     max_harmonic = 10
     tonal_dampening = 1.9      # darker/rounder: fundamental-dominant thump
-    decay_db = 55.0            # tight: ~0.55 s to -30 dB
+    decay_db = 24.0            # more body (louder-perceived); rings ~1.1 s
 
 
 class NoiseDrumProperties(PercussionProperties):
