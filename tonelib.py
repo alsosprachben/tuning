@@ -263,8 +263,15 @@ class BasePartial:
         self.state = self.Releasing
         errlog("hammer_up %s %s %s %s" % (frequency, second, id(self), self.state))
 
-        fade_time = self.properties.chiff_min_valve_time + (
-                    self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+        # A cymbal splashes fast but rings out slowly; release_valve_time lets
+        # the note-off fade differ from the attack fade. Defaults to the same
+        # valve fade as the attack when unset.
+        release_time = self.properties.release_valve_time
+        if release_time is None:
+            fade_time = self.properties.chiff_min_valve_time + (
+                        self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+        else:
+            fade_time = release_time
 
         if self.max_fade is not None:
             # Short note: cap the onset transient so it fits, or a slow
@@ -490,6 +497,10 @@ class SynthProperties:
     # band -- a section-of-strings shimmer from one voice. 0 = clean/static.
     sustain_jitter = 0.0
 
+    # Note-off fade time in seconds, decoupled from the attack fade so a
+    # cymbal can splash fast yet ring out slowly. None = match the attack.
+    release_valve_time = None
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
@@ -688,7 +699,7 @@ class BlownPipeProperties(SynthProperties):
     odd_only = True
     # Pipes (flute, recorder, whistle, ...) speak louder than the organ/reed/
     # brass buckets that inherit from here; those pin the old level below.
-    initial_gain = 1.0 / 2500
+    initial_gain = 1.0 / 1250
 
     enharmonic_width = 0.0
 
@@ -861,8 +872,9 @@ class SnareDrumProperties(PercussionProperties):
 
 
 class MetalPercussionProperties(PercussionProperties):
-    """Struck metal that rings (ride/crash bell, cowbell, agogo, triangle,
-    woodblock): bright inharmonic modes with a slow decay tail."""
+    """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
+    agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,
+    no noise wash -- these are meant to be tonal, unlike a cymbal."""
     initial_gain = 1.0 / 2.25
     max_harmonic = 40
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
@@ -870,6 +882,31 @@ class MetalPercussionProperties(PercussionProperties):
     decay_db = 4.0
     harmonic_decay_db = 1.5
     harmonic_decay_dampening = 0.1
+
+
+class CymbalProperties(PercussionProperties):
+    """Cymbal (crash, ride, splash, china): a bright broadband noise wash --
+    the snare's wide-chiff noise, but a fast splash that rings out over a
+    second or two instead of a punchy die. A few inharmonic modes give the
+    metallic edge under the hiss."""
+    initial_gain = 1.0 / 7
+    max_harmonic = 80               # very bright, energy well up top
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 25.0
+    tonal_dampening = 0.15          # near-flat: the modes don't stick out of the wash
+    decay_db = 5.0                  # slow: the ring
+    harmonic_decay_db = 0.4
+    harmonic_decay_dampening = 0.0
+
+    # Broadband wash via wide chiff, like the snare, but sustained through a
+    # long ring: fast splash attack, slow note-off fade so it rings out. Strong
+    # release noise keeps the hiss leading the modes the whole way down.
+    chiff_volume = 4.0
+    chiff_cycle = 0.95
+    chiff_release = 2.5            # heavy hiss through the ring, not just modes
+    sustain_jitter = 1.0
+    chiff_min_valve_time = 0.002
+    chiff_max_valve_time = 0.02     # fast splash onset
+    release_valve_time = 1.4        # long ring-out on note-off
 
 
 class SynthTone(BaseTone):

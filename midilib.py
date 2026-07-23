@@ -961,10 +961,12 @@ class Channel:
         # Cap this articulation's onset fade to a fraction of the note's
         # length so short notes (trills, tonguing, rolls) don't smear under
         # a long valve/breath fade. Partials made later by the tuner inherit
-        # the cap from the tone.
-        duration = self.note_durations.get((n.note, n.time))
-        if duration is not None and e.tone is not None:
-            e.tone.set_max_fade(0.45 * duration)
+        # the cap from the tone. Percussion is exempt: a struck drum or cymbal
+        # rings out on its own decay regardless of how briefly the key is held.
+        if not e.percussion:
+            duration = self.note_durations.get((n.note, n.time))
+            if duration is not None and e.tone is not None:
+                e.tone.set_max_fade(0.45 * duration)
             
     
     def releaseNote(self, n, s):
