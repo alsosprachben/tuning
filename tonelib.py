@@ -352,7 +352,12 @@ class BasePartial:
         from math import sin, pi
 
         if volume <= self.floor:
-            if not self.hit_floor:
+            # Latch hit_floor (used by one-shot voices to know they have rung
+            # out) only once past the onset: during Attacking/Reattacking the
+            # volume ramps up through zero, which must not read as "decayed".
+            if (not self.hit_floor
+                    and self.state is not self.Attacking
+                    and self.state is not self.Reattacking):
                 errlog("Dropping partial that hit the floor.")
                 self.hit_floor = True
             return 0.0
@@ -760,6 +765,8 @@ class ReedOrganProperties(OrganProperties):
 
 class BrassProperties(OrganProperties):
     # tongued attack: narrowband growl, attack only, quick valve
+    initial_gain = 1.0 / 2500   # +6 dB over the organ/reed level: the five
+                                # brass parts were buried under strings+flute
     chiff_cycle = 0.35
     chiff_volume = 2.6
     chiff_release = 0.0
