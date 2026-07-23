@@ -72,6 +72,14 @@ def db_ratio(db):
     return 10 ** (float(db) / 10)
 
 
+# Master output gain (amplitude), applied to the summed per-channel signal
+# just before clipping. Per-voice gains are tuned on 1-3 voice material, so
+# an 8-voice tutti sums well past full scale and clips; this gives global
+# headroom without disturbing the relative balance. Override in amplitude dB
+# with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-12.0")) / 20.0)
+
+
 class Decay:
 
     def __init__(self, dbps, start_second):
@@ -948,7 +956,7 @@ class SynthSampler(BaseSampler):
     def sum_values(self, seconds, nyquist):
         if self.tones:
             # errlog(sorted(tone.frequency for tone in self.tones.values()))
-            v = sum(tone.sum_values(seconds, nyquist) for tone in list(self.tones.values()))
+            v = sum(tone.sum_values(seconds, nyquist) for tone in list(self.tones.values())) * master_gain
             # for tone in self.tones.values():
             #    errlog(tone)
             #    errlog(tone.sum_values(seconds, nyquist))
