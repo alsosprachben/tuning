@@ -13,13 +13,15 @@ or None if the note is unmapped (silent).
 
 from tonelib import (
     MembraneDrumProperties,
+    KickDrumProperties,
     NoiseDrumProperties,
     MetalPercussionProperties,
     SnareDrumProperties,
     CymbalProperties,
 )
 
-M = MembraneDrumProperties
+M = MembraneDrumProperties      # pitched membranes: toms, congas, timbales
+K = KickDrumProperties          # bass drum: tight low thump
 N = NoiseDrumProperties
 T = MetalPercussionProperties   # pitched metal/wood (cowbell, agogo, block, ...)
 S = SnareDrumProperties
@@ -27,8 +29,8 @@ C = CymbalProperties            # crash/ride/splash/china: broadband wash
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
-    35: ("Acoustic Bass Drum", M, 55.0),
-    36: ("Bass Drum 1",        M, 62.0),
+    35: ("Acoustic Bass Drum", K, 55.0),
+    36: ("Bass Drum 1",        K, 62.0),
     37: ("Side Stick",         S, 340.0),
     38: ("Acoustic Snare",     S, 260.0),
     39: ("Hand Clap",          N, 260.0),

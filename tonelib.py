@@ -857,15 +857,29 @@ class PercussionProperties(PluckedStringProperties):
 
 
 class MembraneDrumProperties(PercussionProperties):
-    """Struck membrane (kick, tom, timpani): a strong low fundamental with a
-    few mildly inharmonic modes and a fast body decay."""
-    initial_gain = 1.0 / 1.3   # louder kick per feedback
+    """Struck membrane that rings with a pitch (toms, congas, timbales,
+    cuica): a strong low fundamental with a few mildly inharmonic modes.
+    One-shot, like the other struck percussion -- it rings out its own decay
+    (~0.8 s here) regardless of how short the note is. decay_db sets the
+    ring: higher = tighter."""
+    one_shot = True
+    release_floor_db = -40.0
+    initial_gain = 1.0 / 2.5
     max_harmonic = 12
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
     tonal_dampening = 1.6
-    decay_db = 12.0
+    decay_db = 34.0            # tom ring ~0.85 s to -30 dB
     harmonic_decay_db = 6.0
     harmonic_decay_dampening = 0.2
+
+
+class KickDrumProperties(MembraneDrumProperties):
+    """Bass drum: a tight, dark low thump -- louder and shorter than a tom,
+    a punchy body that dies in about half a second."""
+    initial_gain = 1.0 / 1.3   # louder kick per feedback
+    max_harmonic = 10
+    tonal_dampening = 1.9      # darker/rounder: fundamental-dominant thump
+    decay_db = 55.0            # tight: ~0.55 s to -30 dB
 
 
 class NoiseDrumProperties(PercussionProperties):
@@ -1111,6 +1125,13 @@ class SynthSampler(BaseSampler):
 
     def remaining(self):
         return not self.tones
+
+    def has_active_tones(self):
+        """True while any tone is still sounding (not decayed/released). Used
+        to keep the render running until a one-shot percussion tail rings out,
+        rather than stopping on the first zero-valued output sample (which a
+        clean tonal voice produces at every zero crossing)."""
+        return any(not tone.finished() for tone in self.tones.values())
 
     def sum_values(self, seconds, nyquist):
         if self.tones:

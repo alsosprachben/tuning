@@ -36,13 +36,24 @@ def perform(q, filename, sample_rate, sample_depth, sample_packing, channel, tun
     channels = Channels(filename, sampler)
 
     i = 0
+    silence = 0
+    silence_limit = int(sample_rate * 0.25)  # 0.25 s of true silence
     while True:
         channels.updateTime(float(i) / sample_rate)
         sample = sampler.sample(i)
         q.put(sample)
         p.inc()
-        if not channels.remaining() and not sampler.remaining() and sample == zero_sample:
-            break
+
+        # Consecutive zero samples: a real tail is nonzero between its zero
+        # crossings, so only sustained silence accumulates here.
+        silence = silence + 1 if sample == zero_sample else 0
+
+        if not channels.remaining():
+            # Stop once every voice has rung out (one-shot percussion tails
+            # included), or as a safety net after a long stretch of silence
+            # in case a note is left hanging.
+            if not sampler.has_active_tones() or silence >= silence_limit:
+                break
 
         i += 1
 
