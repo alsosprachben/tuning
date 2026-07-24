@@ -725,10 +725,12 @@ class BlownPipeProperties(SynthProperties):
     chiff_cycle = 1.0 / 5.0
     chiff_volume = 1.0
     chiff_release = 1.0
-    # Pipes are usually tongued, not softly blown: a quick onset, not the
-    # slow organ-style swell. (Organ/reed/brass override these anyway.)
-    chiff_min_valve_time = 0.015
-    chiff_max_valve_time = 0.05
+    # Pipes are tongued, not softly blown: a hard, fast onset. Kept short so
+    # fast notes (flute trills) finish their attack and reach full amplitude
+    # instead of living in a perpetual ramp -- an under-developed trill note
+    # reads as quiet no matter its gain. (Organ/reed/brass override these.)
+    chiff_min_valve_time = 0.006
+    chiff_max_valve_time = 0.018
 
     odd_only = True
     # Peak-normalized to the loudest orchestral voice (bowed string): a stored
@@ -738,7 +740,12 @@ class BlownPipeProperties(SynthProperties):
     # flat 1/5000 undercounted that: the pipe measured ~6 dB below the string's
     # rendered peak, so it sat too quiet. See the per-class gains below; the
     # ratios come from the real rendered peak of each voice at middle C.
-    initial_gain = 1.0 / 2400   # pipe/flute: +6.4 dB to equal-peak
+    # Equal-peak put the flute at 1/2400, but that leaves a lead voice merely
+    # tied with the accompaniment (horn/tuba) that shares its register; the
+    # normalization boosted those mid voices up to meet it, costing the flute
+    # the relative prominence it had before. A lead sits ABOVE the group, so
+    # push ~+4.5 dB past equal-peak -- clear of dark brass rather than tied.
+    initial_gain = 1.0 / 1400   # pipe/flute lead: equal-peak (1/2400) + ~4.5 dB
 
     enharmonic_width = 0.0
 
