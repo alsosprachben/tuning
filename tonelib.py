@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-9.0")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.0")) / 20.0)
 
 
 class Decay:
@@ -731,9 +731,14 @@ class BlownPipeProperties(SynthProperties):
     chiff_max_valve_time = 0.05
 
     odd_only = True
-    # Pipes (flute, recorder, whistle, ...) speak louder than the organ/reed/
-    # brass buckets that inherit from here; those pin the old level below.
-    initial_gain = 1.0 / 5000   # neutral; CC7 now balances the mix
+    # Peak-normalized to the loudest orchestral voice (bowed string): a stored
+    # wavetable is normalized so its waveform peaks at unity, and a sparse
+    # spectrum (odd-only pipe -- nearly a sine, crest ~2 dB) then carries far
+    # more RMS at that peak than a rich, spiky voice (brass crest ~9 dB). The
+    # flat 1/5000 undercounted that: the pipe measured ~6 dB below the string's
+    # rendered peak, so it sat too quiet. See the per-class gains below; the
+    # ratios come from the real rendered peak of each voice at middle C.
+    initial_gain = 1.0 / 2400   # pipe/flute: +6.4 dB to equal-peak
 
     enharmonic_width = 0.0
 
@@ -761,6 +766,7 @@ class OrganProperties(BlownPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
+    initial_gain = 1.0 / 3040   # +4.3 dB to equal-peak (moderate spectrum)
     odd_only = False
     # Principal pipes speak fast; keep the inherited chiff character but
     # compress it into a tighter onset than the generic blown pipe's 0.3 s.
@@ -769,6 +775,7 @@ class FlueOrganProperties(OrganProperties):
 
 
 class ReedOrganProperties(OrganProperties):
+    initial_gain = 1.0 / 2200   # +7.1 dB to equal-peak (odd-only reed: sparse)
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
@@ -779,7 +786,7 @@ class ReedOrganProperties(OrganProperties):
 
 class BrassProperties(OrganProperties):
     # tongued attack: narrowband growl, attack only, quick valve
-    initial_gain = 1.0 / 5000   # neutral; CC7 balances brass vs the rest
+    initial_gain = 1.0 / 3310   # +3.6 dB to equal-peak (rich but spiky, crest ~7 dB)
     chiff_cycle = 0.35
     chiff_volume = 2.6
     chiff_release = 0.0
@@ -806,6 +813,7 @@ class BrightBrassProperties(BrassProperties):
     """Cylindrical-bore brass (trumpet, trombone): the cylindrical tubing
     sustains strong upper harmonics, so these are bright and edgy with a
     pronounced attack 'rip' -- the brightness blooms hard then settles."""
+    initial_gain = 1.0 / 4880      # +0.2 dB to equal-peak (already near the loudest)
     tonal_dampening = 0.82         # slow rolloff = strong harmonics, bright
     harmonic_decay_db = 5.5        # strong brightness bloom on the attack
     decay_db = 20.0
@@ -819,6 +827,7 @@ class DarkBrassProperties(BrassProperties):
     """Conical-bore brass (French horn, tuba): the continuous flare damps the
     upper harmonics into a round, mellow tone, and conical instruments speak
     less abruptly -- a rounder, slower attack with a gentler bloom."""
+    initial_gain = 1.0 / 2320      # +6.7 dB to equal-peak (dark = sparse highs)
     tonal_dampening = 1.35         # fast rolloff = few highs, dark/round
     harmonic_decay_db = 2.0        # gentle brightness bloom
     decay_db = 13.0
@@ -881,6 +890,7 @@ class BowedStringSecondProperties(BowedStringProperties):
     """The 'second' string section (GM String Ensemble 2): darker and a
     little rounder than the first, with a slightly wider shimmer, so the two
     ensembles read as distinct sections rather than one doubled patch."""
+    initial_gain = 1.0 / 3560   # +2.9 dB to equal-peak (darker than first section)
     tonal_dampening = 1.25      # darker: upper partials rolled off more
     max_harmonic = 32
     chiff_cycle = 0.045         # a subtly different shimmer texture
