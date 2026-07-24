@@ -82,10 +82,14 @@ master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.0")) / 20.0
 
 class Decay:
 
-    def __init__(self, dbps, start_second):
+    def __init__(self, dbps, start_second, sustain_level=0.0):
         self.start_second = start_second
         self.dbps = dbps
         self.rate = db_ratio(dbps)
+        # Floor the decay approaches instead of zero: 0 = die away (plucked,
+        # struck), >0 = bloom to the attack peak then settle to this fraction
+        # and hold (the brass "front"; a sustaining voice with decay_db > 0).
+        self.sustain_level = sustain_level
         self.sample_decay = None
         self.sample_volume = 0.0
 
@@ -102,9 +106,10 @@ class Decay:
         else:
             if self.rate != 1.0:
                 try:
-                    return log(self.rate) / (log(self.rate) * self.rate ** (second - self.start_second.get()))
+                    base = log(self.rate) / (log(self.rate) * self.rate ** (second - self.start_second.get()))
                 except OverflowError:
-                    return 0.0
+                    base = 0.0
+                return self.sustain_level + (1.0 - self.sustain_level) * base
             else:
                 return 1.0
 
@@ -298,7 +303,8 @@ class BasePartial:
             fade_time = min(fade_time, self.max_fade)
 
         self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
-        self.sustain = Decay(self.decay_rate, Second(second + self.delay))
+        self.sustain = Decay(self.decay_rate, Second(second + self.delay),
+                             self.properties.sustain_level)
 
     def force(self, frequency, second):
         self.actuate(frequency, second)
@@ -508,6 +514,11 @@ class SynthProperties:
     # keeps running during the Pressed state). Broadens each partial into a
     # band -- a section-of-strings shimmer from one voice. 0 = clean/static.
     sustain_jitter = 0.0
+
+    # Amplitude-envelope sustain floor, with decay_db > 0: the note blooms to
+    # the attack peak then settles to this fraction and holds -- the brass
+    # "front". 0 (default) = the decay dies away, as for plucked/struck.
+    sustain_level = 0.0
 
     # Note-off fade time in seconds, decoupled from the attack fade so a
     # cymbal can splash fast yet ring out slowly. None = match the attack.
@@ -770,9 +781,23 @@ class BrassProperties(OrganProperties):
     chiff_cycle = 0.35
     chiff_volume = 2.6
     chiff_release = 0.0
-    chiff_min_valve_time = 0.04
-    chiff_max_valve_time = 0.10
-    odd_only = True
+    # Faster, more tongued attack than the organ's slow swell.
+    chiff_min_valve_time = 0.02
+    chiff_max_valve_time = 0.045
+
+    # Full harmonic series, not odd-only: odd-only is the hollow clarinet/reed
+    # signature; brass is bright and full.
+    odd_only = False
+    tonal_dampening = 1.0       # brighter than the organ's 1.4: brass buzz
+
+    # Brass "front": the note blooms to the attack peak, then settles ~4 dB
+    # into the sustain within ~0.15 s and holds, with the upper harmonics
+    # settling faster (the brightness blooms on the attack). This amplitude
+    # envelope is much of what separates a brass note from a held reed.
+    decay_db = 18.0
+    harmonic_decay_db = 4.0
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.6
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
