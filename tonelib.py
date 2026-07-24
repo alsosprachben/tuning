@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.5")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-9.0")) / 20.0)
 
 
 class Decay:
@@ -551,7 +551,10 @@ class SynthProperties:
         else:
             self.attack_dampening = self.tonal_dampening + self.octave_position * self.octave_dampening
 
-        self.gain = self.initial_gain * db_ratio(self.octave_gain * self.octave_position)
+        # attack_volume = per-note velocity gain, channel_volume = CC7*CC11
+        # channel gain, both already squared to the MIDI (V/127)^2 law.
+        self.gain = (self.initial_gain * db_ratio(self.octave_gain * self.octave_position)
+                     * self.attack_volume * self.channel_volume)
 
         self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4  # meters
         self.position_y = 0.2  # meters
@@ -730,7 +733,7 @@ class BlownPipeProperties(SynthProperties):
     odd_only = True
     # Pipes (flute, recorder, whistle, ...) speak louder than the organ/reed/
     # brass buckets that inherit from here; those pin the old level below.
-    initial_gain = 1.0 / 1250
+    initial_gain = 1.0 / 5000   # neutral; CC7 now balances the mix
 
     enharmonic_width = 0.0
 
@@ -776,8 +779,7 @@ class ReedOrganProperties(OrganProperties):
 
 class BrassProperties(OrganProperties):
     # tongued attack: narrowband growl, attack only, quick valve
-    initial_gain = 1.0 / 2500   # +6 dB over the organ/reed level: the five
-                                # brass parts were buried under strings+flute
+    initial_gain = 1.0 / 5000   # neutral; CC7 balances brass vs the rest
     chiff_cycle = 0.35
     chiff_volume = 2.6
     chiff_release = 0.0
@@ -856,8 +858,7 @@ class BowedStringProperties(BlownPipeProperties):
     sustained synth leads/pads as a broad bucket. This is the brighter
     'first' section; BowedStringSecond is the darker companion."""
     odd_only = False
-    initial_gain = 1.0 / 7000   # -3 dB: two hard-panned string channels were
-                                # a wall that buried the brass
+    initial_gain = 1.0 / 5000   # neutral; CC7 (79 in monocas2) holds strings back
     # Section shimmer via a small sustained phase jitter (a running chiff),
     # not many detuned voices: broader per-partial band, no amplitude wobble.
     chiff_cycle = 0.06          # phase-deviation magnitude (small = subtle)
@@ -1057,13 +1058,17 @@ class SynthTone(BaseTone):
         self.sampler.remove(self)
 
     def __init__(self, sampler, nyquist, audio_channel, midi_channel, panning=0.0, start=None, stop=None,
-                 property_class=SynthProperties):
+                 property_class=SynthProperties, attack_volume=1.0, channel_volume=1.0):
         self.sampler = sampler
         self.id = self.synth_id
         SynthTone.synth_id += 1
 
         self.frequency = None
         self.panning = panning
+        # Velocity gain and channel (CC7*CC11) gain, applied to the partials'
+        # amplitude when the tuner builds them in init_partials.
+        self.attack_volume = attack_volume
+        self.channel_volume = channel_volume
         self.nyquist = nyquist
         self.audio_channel = audio_channel
         self.midi_channel = midi_channel
@@ -1086,7 +1091,8 @@ class SynthTone(BaseTone):
             partial.max_fade = max_fade
 
     def init_partials(self, frequency):
-        self.properties = self.property_class(frequency, self.panning)
+        self.properties = self.property_class(frequency, self.panning,
+                                              self.attack_volume, self.channel_volume)
         if hrtf:
             # Delay from the spherical-head model; amplitude comes per
             # partial from the head-shadow gain instead of a flat pan.
@@ -1165,8 +1171,10 @@ class SynthSampler(BaseSampler):
         self.audio_channel = audio_channel
         self.tones = {}
 
-    def newTone(self, midi_channel, frequency, pan, start, stop=None, property_class=SynthProperties):
-        tone = SynthTone(self, self.nyquist, self.audio_channel, midi_channel, pan, start, stop, property_class)
+    def newTone(self, midi_channel, frequency, pan, start, stop=None, property_class=SynthProperties,
+                attack_volume=1.0, channel_volume=1.0):
+        tone = SynthTone(self, self.nyquist, self.audio_channel, midi_channel, pan, start, stop,
+                         property_class, attack_volume, channel_volume)
         self.tones[tone.id] = tone
         return tone
 

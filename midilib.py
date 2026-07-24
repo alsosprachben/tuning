@@ -879,7 +879,7 @@ class Note:
         self.event = n
         self.release()
 
-    def __init__(self, channel, f, n, pan, seconds):
+    def __init__(self, channel, f, n, pan, seconds, velocity=127):
         self.event = None
         self.channel = channel
         self.n = n
@@ -887,6 +887,14 @@ class Note:
         self.f = 0
         self.pan = pan
         self.percussion = (self.channel.midi_channel == GM_PERCUSSION_CHANNEL)
+
+        # MIDI amplitude standard (GM2 / DLS): velocity and the channel
+        # Volume (CC7) x Expression (CC11) each scale amplitude as (v/127)^2.
+        # Velocity is the per-note dynamic; CC7/CC11 are the channel/mix level.
+        vol = min(1.0, self.channel.getControl("volume"))
+        expr = min(1.0, self.channel.getControl("expression"))
+        self.attack_volume = (velocity / 127.0) ** 2
+        self.channel_volume = (vol * expr) ** 2
 
         # Shared note state (set before tone creation so both the pitched
         # and percussion paths, including early exits, have it).
@@ -912,7 +920,8 @@ class Note:
             # rotates the whole kit around it. Clamp to the legal pan range.
             drum_pan = max(-1.0, min(1.0, self.pan + default_pan))
             self.tone = self.channel.sampler.newTone(
-                self.channel.midi_channel, base_frequency, drum_pan, seconds, None, property_class)
+                self.channel.midi_channel, base_frequency, drum_pan, seconds, None, property_class,
+                self.attack_volume, self.channel_volume)
             self.tone.updateFrequency(base_frequency)
             return
 
@@ -920,7 +929,8 @@ class Note:
         # bucket in patch_map (0-based program numbers).
         property_class = property_class_for_program(self.channel.program)
 
-        self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None, property_class)
+        self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None,
+                                                 property_class, self.attack_volume, self.channel_volume)
 
     def __str__(self):
         return str(self.__dict__)
@@ -957,7 +967,7 @@ class Channel:
             return self.releaseNote(n, s)
         
         if n.note not in self.notes:
-            e = Note(self, None, n.note, self.getControl("pan"), s)
+            e = Note(self, None, n.note, self.getControl("pan"), s, n.velocity)
             self.notes[n.note] = e
         else:
             e = self.notes[n.note]
@@ -1093,10 +1103,10 @@ class Channel:
             "breath":     [0x00,0x00],
             "foot":       [0x00,0x00],
             "portamento": [0x00,0x00],
-            "volume":     [0xA0,0x00],
+            "volume":     [0x7F,0x7F],   # CC7 default full (GM100 is a convention; full = no attenuation)
             "balance":    [0x40,0x00],
             "pan":        [0x40,0x00],
-            "expression": [0x00,0x00],
+            "expression": [0x7F,0x7F],   # CC11 default full: unset expression must not silence the note
             
             "pitch":      [0x40,0x00],
         }
