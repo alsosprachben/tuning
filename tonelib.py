@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-18.0")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.0")) / 20.0)
 
 
 class Decay:
