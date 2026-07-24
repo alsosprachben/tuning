@@ -77,7 +77,7 @@ def db_ratio(db):
 # an 8-voice tutti sums well past full scale and clips; this gives global
 # headroom without disturbing the relative balance. Override in amplitude dB
 # with TUNING_MASTER_DB (0 = unity, -12 = quarter amplitude).
-master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.0")) / 20.0)
+master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-14.5")) / 20.0)
 
 
 class Decay:
@@ -798,6 +798,32 @@ class BrassProperties(OrganProperties):
     harmonic_decay_db = 4.0
     harmonic_decay_dampening = 0.0
     sustain_level = 0.6
+
+
+class BrightBrassProperties(BrassProperties):
+    """Cylindrical-bore brass (trumpet, trombone): the cylindrical tubing
+    sustains strong upper harmonics, so these are bright and edgy with a
+    pronounced attack 'rip' -- the brightness blooms hard then settles."""
+    tonal_dampening = 0.82         # slow rolloff = strong harmonics, bright
+    harmonic_decay_db = 5.5        # strong brightness bloom on the attack
+    decay_db = 20.0
+    sustain_level = 0.58           # pronounced front
+    chiff_volume = 2.9             # hard tongued attack
+    chiff_min_valve_time = 0.015
+    chiff_max_valve_time = 0.04    # fast, tight onset
+
+
+class DarkBrassProperties(BrassProperties):
+    """Conical-bore brass (French horn, tuba): the continuous flare damps the
+    upper harmonics into a round, mellow tone, and conical instruments speak
+    less abruptly -- a rounder, slower attack with a gentler bloom."""
+    tonal_dampening = 1.35         # fast rolloff = few highs, dark/round
+    harmonic_decay_db = 2.0        # gentle brightness bloom
+    decay_db = 13.0
+    sustain_level = 0.7            # subtle front
+    chiff_volume = 1.6             # soft tongue, rounder speech
+    chiff_min_valve_time = 0.03
+    chiff_max_valve_time = 0.075   # slower, rounder onset
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---

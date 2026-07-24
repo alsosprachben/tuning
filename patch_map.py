@@ -19,6 +19,8 @@ from tonelib import (
     FlueOrganProperties,
     ReedOrganProperties,
     BrassProperties,
+    BrightBrassProperties,
+    DarkBrassProperties,
     BlownPipeProperties,
 )
 
@@ -50,8 +52,13 @@ PROGRAM_CLASS[47] = MalletProperties         # timpani (pitched membrane; mallet
 # 48-55  Ensemble (strings, choir, voices, orchestra hit)
 _fill(48, 55, BowedStringProperties)
 PROGRAM_CLASS[49] = BowedStringSecondProperties  # String Ensemble 2: darker section
-# 56-63  Brass
-_fill(56, 63, BrassProperties)
+# 56-63  Brass, split by bore profile: cylindrical (bright) vs conical (dark)
+_fill(56, 63, BrassProperties)              # default (brass section, synth brass)
+PROGRAM_CLASS[56] = BrightBrassProperties   # Trumpet: cylindrical, bright
+PROGRAM_CLASS[57] = BrightBrassProperties   # Trombone: cylindrical, bright
+PROGRAM_CLASS[59] = BrightBrassProperties   # Muted Trumpet
+PROGRAM_CLASS[58] = DarkBrassProperties     # Tuba: conical, dark
+PROGRAM_CLASS[60] = DarkBrassProperties     # French Horn: conical, dark
 # 64-71  Reed (saxes, oboe, english horn, bassoon, clarinet)
 _fill(64, 71, ReedOrganProperties)
 # 72-79  Pipe (piccolo, flute, recorder, pan flute, bottle, shakuhachi, whistle, ocarina)
