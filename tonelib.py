@@ -322,6 +322,11 @@ class BasePartial:
         self.state = self.Attacking
         errlog("hammer_down %s %s %s %s" % (frequency, second, id(self), self.state))
 
+        # Per-note timing jitter: delay the whole strike (phase + envelope) by a
+        # small amount so doubled voices don't attack in lockstep. Shared across
+        # the note's partials (same properties), so the note stays coherent.
+        second = second + self.properties.attack_jitter
+
         # Reset the phase accumulator at the strike so the partial starts at
         # phase 0 here, regardless of when it was created. Without this a note
         # attacking at t>0 has last_second=0, so its first cycle() jumps to
@@ -511,8 +516,10 @@ class SimplePartial(BasePartial):
         # chorus, so unison voices piled up at the same pitch with no beating.
         # inharmonic_stretch pushes upper partials sharp (piano/plucked/mallet);
         # it is 1.0 for the air-column instruments, leaving them pure-harmonic.
-        # detune_ratio mistunes the whole string by a constant ratio (the dance).
-        f = (self.base_frequency * (1.0 + self.detune_ratio)
+        # detune_ratio mistunes the whole string by a constant ratio (the dance);
+        # pitch_jitter is a per-note micro-detune (shared by all partials) so two
+        # voices on the same pitch beat naturally instead of locking.
+        f = (self.base_frequency * (1.0 + self.properties.pitch_jitter) * (1.0 + self.detune_ratio)
              * self.harmonic * self.inharmonic_stretch + self.frequency_offset)
         # Tension modulation: a struck string starts sharp (large displacement =
         # more tension) and settles down to the tuned pitch. Modelled as an ATTACK
@@ -584,6 +591,16 @@ class SynthProperties:
     tension_settle_time = 0.28   # s: transient decays to the tuned pitch this fast
     tension_settle_cutoff = 1.8  # s: past this the bloom is spent; skip the math
 
+    # Per-note natural jitter (0 = off). Now that every strike is phase-coherent,
+    # two voices on the same pitch would align TOO perfectly (a machine-gun,
+    # electronic doubling). Real doublings sit at slightly different pitches (so
+    # they BEAT -- a living shimmer, never a persistent cancellation) and strike
+    # a hair apart. A random-but-fixed value is drawn PER NOTE in __init__ and
+    # shared by all its partials, so the note stays internally coherent (the
+    # phase fix is preserved) while different notes decorrelate.
+    pitch_jitter_cents = 0.0     # +/- this many cents, random per note (the beat)
+    timing_jitter_seconds = 0.0  # 0..this delay to the strike, random per note (stagger)
+
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
         detune_Hz, detune_ratio, decay_rate_dbps). Default: one voice per
@@ -642,6 +659,11 @@ class SynthProperties:
         # Register-dependent decay rate: < 1 slows the bass, > 1 speeds the treble
         # (heavy vs light, lightly- vs heavily-damped strings). 0 slope = flat.
         self.decay_register_factor = 2.0 ** (self.decay_register_slope * self.octave_position)
+
+        # Per-note jitter, drawn once here (shared by all the note's partials).
+        self.pitch_jitter = (2.0 ** (_random.uniform(-self.pitch_jitter_cents, self.pitch_jitter_cents) / 1200.0) - 1.0
+                             ) if self.pitch_jitter_cents else 0.0
+        self.attack_jitter = _random.uniform(0.0, self.timing_jitter_seconds) if self.timing_jitter_seconds else 0.0
 
         # Register-scale the tension pitch-drift: bass strings displace far more
         # for a given strike, so they bloom much sharper than the treble. Grows
@@ -891,6 +913,11 @@ class Steinway(InharmonicStringProperties):
     # a hard/low note blooms noticeably sharp then settles. tension_bend is the
     # fractional sharpening at full amplitude and velocity (0.008 ~ 14 cents).
     tension_bend = 0.008
+
+    # Natural per-note jitter so same-pitch doublings beat and stagger instead of
+    # locking into a machine-gun unison (now that every strike is phase-coherent).
+    pitch_jitter_cents = 1.0
+    timing_jitter_seconds = 0.002
 
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         super().__init__(frequency, channel_pan, attack_volume, channel_volume)
