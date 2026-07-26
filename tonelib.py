@@ -500,8 +500,16 @@ class SimplePartial(BasePartial):
         # inharmonic_stretch pushes upper partials sharp (piano/plucked/mallet);
         # it is 1.0 for the air-column instruments, leaving them pure-harmonic.
         # detune_ratio mistunes the whole string by a constant ratio (the dance).
-        return (self.base_frequency * (1.0 + self.detune_ratio)
-                * self.harmonic * self.inharmonic_stretch + self.frequency_offset)
+        f = (self.base_frequency * (1.0 + self.detune_ratio)
+             * self.harmonic * self.inharmonic_stretch + self.frequency_offset)
+        # Tension modulation: a struck string starts sharp (large displacement =
+        # more tension) and drifts down to pitch as it decays. Shift ~ amplitude^2
+        # (the current decay envelope) and scales with strike velocity.
+        tb = self.properties.tension_bend
+        if tb and self.sustain is not None:
+            env = self.sustain.decay(second)
+            f *= 1.0 + tb * self.properties.attack_volume * env * env
+        return f
 
 
 class SquareWave(SimplePartial):
@@ -547,6 +555,10 @@ class SynthProperties:
     # scaled by unison_gain. Empty = a single voice (no beating).
     unison_detune = ()
     unison_gain = 1.0
+
+    # Amplitude-dependent pitch drift (string tension modulation). 0 = off; the
+    # piano sets it so a note blooms sharp on the strike and settles as it decays.
+    tension_bend = 0.0
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
@@ -791,8 +803,27 @@ class Steinway(InharmonicStringProperties):
     aftersound_decay_ratio = 0.35      # slow tail decays this fraction as fast as the prompt
     aftersound_level_2 = 0.10          # slow-tail energy fraction, 2-string tenor
     aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
-    string_detune_cents = (-1.7, 2.6)  # mistuning of the 2nd, 3rd strings (asymmetric)
-    string_gain = (0.8, 0.7)           # extra strings a touch quieter than the struck main
+    string_detune_cents = (-0.85, 1.3)  # mistuning of the 2nd, 3rd strings (asymmetric)
+    string_gain = (0.8, 0.7)            # extra strings a touch quieter than the struck main
+
+    # --- Hammer excitation (vs a bright pluck) ---
+    # A felt hammer rests on the string for a few ms, so it cannot excite partials
+    # whose period is shorter than the contact time: it LOW-PASSES the strike
+    # spectrum. That soft top is what separates a struck piano from a plucked
+    # harpsichord. A harder/faster strike shortens the contact and raises the
+    # corner, so louder notes are brighter -- the piano's dynamic timbre. Model it
+    # as a soft low-pass on the harmonic amplitudes above hammer_corner_hz, the
+    # corner opening with velocity (attack_volume).
+    hammer_corner_hz = 4000.0    # low-pass corner at mid velocity; raise = brighter
+    hammer_order = 2.0           # rolloff steepness above the corner (~6*order dB/oct)
+
+    # --- Tension modulation (pitch drifts down as the note decays) ---
+    # A struck string's large initial displacement stretches it, raising tension
+    # and pitch; as the amplitude decays the tension relaxes and the pitch drifts
+    # back down. The shift goes as amplitude^2 and scales with strike velocity, so
+    # a hard/low note blooms noticeably sharp then settles. tension_bend is the
+    # fractional sharpening at full amplitude and velocity (0.008 ~ 14 cents).
+    tension_bend = 0.008
 
     def string_count_for_frequency(self, frequency):
         # Steinway B stringing: wound monochord bass, bichord tenor, trichord up.
@@ -814,6 +845,18 @@ class Steinway(InharmonicStringProperties):
             ratio = 2.0 ** (self.string_detune_cents[i] / 1200.0) - 1.0
             voices.append((self.string_gain[i], 0.0, ratio, harmonic_decay))
         return voices
+
+    def harmonic_volume(self, harmonic):
+        v = super().harmonic_volume(harmonic)
+        if v == 0.0:
+            return 0.0
+        # Hammer low-pass: attenuate partials above a velocity-dependent corner.
+        # attack_volume = (velocity/127)^2, so louder strikes open the corner and
+        # brighten the tone. (Note frequency is not stored raw; recover it from
+        # octave_position = log2(f0 / frequency_x).)
+        fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+        fc = self.hammer_corner_hz * (0.7 + 0.7 * self.attack_volume)
+        return v / (1.0 + (fn / fc) ** self.hammer_order)
 
 
 class BlownPipeProperties(SynthProperties):
