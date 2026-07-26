@@ -833,6 +833,7 @@ class Steinway(InharmonicStringProperties):
     #     never share a beat rate. The fundamental barely beats (slow, subtle);
     #     the interest climbs with the harmonic number, as on a real piano.
     aftersound_decay_ratio = 0.35      # slow tail decays this fraction as fast as the prompt
+    aftersound_level_1 = 0.18          # single wound bass string -- rings long/full (soundboard-coupled)
     aftersound_level_2 = 0.10          # slow-tail energy fraction, 2-string tenor
     aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
     # Per-note UNIQUE unison detune: each note's 2nd/3rd strings are mistuned by a
@@ -892,7 +893,7 @@ class Steinway(InharmonicStringProperties):
 
     def aftersound(self, frequency, decay_rate):
         n = self.string_count_for_frequency(frequency)
-        level = (0.0, 0.0, self.aftersound_level_2, self.aftersound_level_3)[n]
+        level = (0.0, self.aftersound_level_1, self.aftersound_level_2, self.aftersound_level_3)[n]
         return (level, decay_rate * self.aftersound_decay_ratio)
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
