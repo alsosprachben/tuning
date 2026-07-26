@@ -7,7 +7,7 @@ All rights reserved.
 
 import os
 import random as _random
-from math import exp as _exp
+from math import exp as _exp, log as _log
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
 # Spatialization uses the Brown-Duda spherical-head model by default:
@@ -74,20 +74,29 @@ def db_ratio(db):
     return 10 ** (float(db) / 10)
 
 
-# The tension pitch-bloom envelope exp(-t/tau) depends only on time-since-strike,
-# so tabulate it once (per tau/cutoff) and index by t instead of calling exp per
-# sample per partial -- the hot path where it was measurably expensive.
-_TENSION_RES = 2000  # table entries per second (0.5 ms; pitch glide is slow, so ample)
-_tension_tables = {}
+# Shared exp(-x) lookup for the per-sample amplitude decay and pitch-bloom
+# envelopes. rate**(-t) == exp(-t * ln(rate)), so with ln(rate) precomputed the
+# whole hot path becomes a table index instead of a pow/exp per sample per
+# partial. exp(-x) is already below the ~-96 dB partial floor by x ~ 11, so the
+# table only needs to reach 16 (beyond that -> 0).
+_EXP_RES = 8000       # entries per unit of exponent (~0.0001 amplitude steps)
+_EXP_XMAX = 16.0
+_neg_exp_table = [_exp(-i / _EXP_RES) for i in range(int(_EXP_XMAX * _EXP_RES) + 2)]
 
 
-def tension_env_table(tau, cutoff):
-    key = (tau, cutoff)
-    tbl = _tension_tables.get(key)
-    if tbl is None:
-        tbl = [_exp(-(i / _TENSION_RES) / tau) for i in range(int(cutoff * _TENSION_RES) + 2)]
-        _tension_tables[key] = tbl
-    return tbl
+def neg_exp(x):
+    """exp(-x) via linearly-interpolated lookup for x >= 0 (the decaying case).
+    Interpolation keeps the envelope continuous (piecewise-linear) rather than
+    stair-stepping between table entries. x < 0 (a rare bloom) falls back to an
+    exact exp; x past the table returns 0."""
+    if x <= 0.0:
+        return 1.0 if x == 0.0 else _exp(-x)
+    if x >= _EXP_XMAX:
+        return 0.0
+    xs = x * _EXP_RES
+    i = int(xs)
+    lo = _neg_exp_table[i]
+    return lo + (xs - i) * (_neg_exp_table[i + 1] - lo)
 
 
 # Master output gain (amplitude), applied to the summed per-channel signal
@@ -116,11 +125,14 @@ class Decay:
         # swell back, which sounds like a slow crescendo). 0 = plain single decay.
         self.aftersound_level = aftersound_level
         self.aftersound_rate = db_ratio(aftersound_dbps) if aftersound_dbps is not None else self.rate
+        # Precompute ln(rate) so the per-sample envelope is neg_exp(t*ln rate)
+        # (== rate**-t) -- a table index rather than a pow every sample.
+        self.log_rate = _log(self.rate)
+        self.log_aftersound_rate = _log(self.aftersound_rate)
         self.sample_decay = None
         self.sample_volume = 0.0
 
     def decay(self, second, last_second=None):
-        from math import log
         if last_second:
             if self.sample_decay:
                 self.sample_volume *= self.sample_decay
@@ -131,20 +143,11 @@ class Decay:
                 return self.sample_volume
         else:
             t = second - self.start_second.get()
-
-            def curve(rate):
-                if rate == 1.0:
-                    return 1.0
-                try:
-                    return rate ** (-t)      # == 1 / rate**t, monotonic decay for rate > 1
-                except OverflowError:
-                    return 0.0
-
             if self.aftersound_level > 0.0:
-                base = ((1.0 - self.aftersound_level) * curve(self.rate)
-                        + self.aftersound_level * curve(self.aftersound_rate))
+                base = ((1.0 - self.aftersound_level) * neg_exp(t * self.log_rate)
+                        + self.aftersound_level * neg_exp(t * self.log_aftersound_rate))
             else:
-                base = curve(self.rate)
+                base = neg_exp(t * self.log_rate)
             return self.sustain_level + (1.0 - self.sustain_level) * base
 
 
@@ -190,9 +193,6 @@ class BasePartial:
     # its duration so a fade can't outlast a short note. None = no cap.
     max_fade = None
 
-    # Precomputed tension-bloom envelope table, bound at hammer_down for voices
-    # with tension_bend > 0 (the piano). None = no pitch drift.
-    _tension_table = None
 
     # Detune of this partial from the exact harmonic, in Hz. Nonzero for the
     # extra unison voices of a chorus/ensemble so they beat against the main.
@@ -354,11 +354,6 @@ class BasePartial:
             getattr(self, "base_frequency", frequency), self.decay_rate)
         self.sustain = Decay(self.decay_rate, Second(second + self.delay),
                              self.properties.sustain_level, aftersound_level, aftersound_dbps)
-        # Bind the tension-bloom table once per strike (piano only), so frequency()
-        # indexes it instead of calling exp every sample.
-        if self.properties.tension_bend > 0.0:
-            self._tension_table = tension_env_table(
-                self.properties.tension_settle_time, self.properties.tension_settle_cutoff)
 
     def force(self, frequency, second):
         self.actuate(frequency, second)
@@ -535,10 +530,10 @@ class SimplePartial(BasePartial):
         # decay -- so the sustained portion, which the tuning is matched against,
         # rings at the tuned base_frequency rather than perpetually sharp.
         tb = self.properties.tension_bend
-        if tb and self._tension_table is not None:
+        if tb and self.sustain is not None:
             t = second - self.sustain.start_second.get()
             if 0.0 <= t < self.properties.tension_settle_cutoff:
-                env = self._tension_table[int(t * _TENSION_RES)]
+                env = neg_exp(t / self.properties.tension_settle_time)
                 f *= 1.0 + tb * self.properties.attack_volume * env
         return f
 
