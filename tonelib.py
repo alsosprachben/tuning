@@ -558,7 +558,11 @@ class SynthProperties:
 
     # Amplitude-dependent pitch drift (string tension modulation). 0 = off; the
     # piano sets it so a note blooms sharp on the strike and settles as it decays.
+    # Register-scaled in __init__: tension_bend is the value at tension_bend_ref_hz
+    # and grows toward the bass as (ref/f0) ** tension_bend_slope.
     tension_bend = 0.0
+    tension_bend_ref_hz = 262.0
+    tension_bend_slope = 1.0
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
@@ -606,6 +610,14 @@ class SynthProperties:
 
         from math import log
         self.octave_position = (log(float(frequency) / self.frequency_x) / log(2))
+
+        # Register-scale the tension pitch-drift: bass strings displace far more
+        # for a given strike, so they bloom much sharper than the treble. Grows
+        # toward low f0 (tension_bend is the value at tension_bend_ref_hz); capped
+        # so an extreme-bass fff can't bend absurdly.
+        if self.tension_bend > 0.0:
+            self.tension_bend = min(0.04, self.tension_bend
+                * (self.tension_bend_ref_hz / float(frequency)) ** self.tension_bend_slope)
 
         if self.inharmonicity_dynamic:
             self.inharmonicity_coefficient *= (1.0 + abs(self.octave_position))
