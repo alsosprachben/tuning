@@ -74,29 +74,10 @@ def db_ratio(db):
     return 10 ** (float(db) / 10)
 
 
-# Shared exp(-x) lookup for the per-sample amplitude decay and pitch-bloom
-# envelopes. rate**(-t) == exp(-t * ln(rate)), so with ln(rate) precomputed the
-# whole hot path becomes a table index instead of a pow/exp per sample per
-# partial. exp(-x) is already below the ~-96 dB partial floor by x ~ 11, so the
-# table only needs to reach 16 (beyond that -> 0).
-_EXP_RES = 8000       # entries per unit of exponent (~0.0001 amplitude steps)
-_EXP_XMAX = 16.0
-_neg_exp_table = [_exp(-i / _EXP_RES) for i in range(int(_EXP_XMAX * _EXP_RES) + 2)]
-
-
-def neg_exp(x):
-    """exp(-x) via linearly-interpolated lookup for x >= 0 (the decaying case).
-    Interpolation keeps the envelope continuous (piecewise-linear) rather than
-    stair-stepping between table entries. x < 0 (a rare bloom) falls back to an
-    exact exp; x past the table returns 0."""
-    if x <= 0.0:
-        return 1.0 if x == 0.0 else _exp(-x)
-    if x >= _EXP_XMAX:
-        return 0.0
-    xs = x * _EXP_RES
-    i = int(xs)
-    lo = _neg_exp_table[i]
-    return lo + (xs - i) * (_neg_exp_table[i + 1] - lo)
+# The per-sample decay/bloom envelope is rate**(-t) == exp(-t * ln(rate)). With
+# ln(rate) precomputed (see Decay), a direct exp() is both exact/continuous and
+# faster than pow (pow recomputes the log every call) -- and ~5x faster than a
+# Python lookup table, whose interpreter overhead dwarfs the C exp.
 
 
 # Master output gain (amplitude), applied to the summed per-channel signal
@@ -144,10 +125,10 @@ class Decay:
         else:
             t = second - self.start_second.get()
             if self.aftersound_level > 0.0:
-                base = ((1.0 - self.aftersound_level) * neg_exp(t * self.log_rate)
-                        + self.aftersound_level * neg_exp(t * self.log_aftersound_rate))
+                base = ((1.0 - self.aftersound_level) * _exp(-t * self.log_rate)
+                        + self.aftersound_level * _exp(-t * self.log_aftersound_rate))
             else:
-                base = neg_exp(t * self.log_rate)
+                base = _exp(-t * self.log_rate)
             return self.sustain_level + (1.0 - self.sustain_level) * base
 
 
@@ -533,7 +514,7 @@ class SimplePartial(BasePartial):
         if tb and self.sustain is not None:
             t = second - self.sustain.start_second.get()
             if 0.0 <= t < self.properties.tension_settle_cutoff:
-                env = neg_exp(t / self.properties.tension_settle_time)
+                env = _exp(-t / self.properties.tension_settle_time)
                 f *= 1.0 + tb * self.properties.attack_volume * env
         return f
 
