@@ -510,6 +510,15 @@ class SynthProperties:
     unison_detune = ()
     unison_gain = 1.0
 
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        """Extra detuned voices for this harmonic, as (gain_multiplier,
+        frequency_offset_Hz, decay_rate_dbps). Default: one voice per
+        unison_detune offset, at unison_gain and the same decay as the main
+        string -- a plain chorus. The piano overrides this to model
+        register-dependent string count and the coupled-string aftersound."""
+        return [(self.unison_gain, offset, harmonic_decay)
+                for offset in self.unison_detune]
+
     # Sustained phase jitter on a held note (fraction of the chiff amount that
     # keeps running during the Pressed state). Broadens each partial into a
     # band -- a section-of-strings shimmer from one voice. 0 = clean/static.
@@ -715,8 +724,33 @@ class Steinway(InharmonicStringProperties):
     d = -0.007927
     e = 0.429601
 
-    string_count = 3
-    unison_detune = (0.25, 0.3)   # triple-string beating
+    # --- Real string-count-per-note, with the coupled-string two-stage decay ---
+    # A piano strings each note with 1, 2, or 3 unison strings by register. The
+    # strings are mistuned a hair and coupled through the bridge, so per Weinreich
+    # the in-phase (symmetric) mode drives the bridge hard and decays fast -- the
+    # "prompt" -- while the antisymmetric modes barely load the bridge and ring on
+    # -- the "aftersound", the long singing tail. The normal modes are independent
+    # decaying sinusoids, so additive synthesis renders them exactly: the main
+    # partial is the prompt, and each extra string is an aftersound voice, detuned
+    # (for beating) and given a slower decay. More strings -> stronger aftersound;
+    # a single bass string has none. Tune by ear via the three knobs below.
+    unison_detune = (0.3, -0.35)       # mistuning of the 2 possible extra strings, Hz
+    aftersound_gain = 0.5              # antisymmetric-mode initial amplitude (< prompt)
+    aftersound_decay_ratio = 0.35      # aftersound decays this fraction as fast as the prompt
+
+    def string_count_for_frequency(self, frequency):
+        # Steinway B stringing: wound monochord bass, bichord tenor, trichord up.
+        if frequency < 65.0:    # below ~C2: single wound string
+            return 1
+        if frequency < 130.0:   # ~C2-C3: two strings
+            return 2
+        return 3                # ~C3 and up: three strings
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        n = self.string_count_for_frequency(frequency)
+        slow = harmonic_decay * self.aftersound_decay_ratio
+        return [(self.aftersound_gain, self.unison_detune[i], slow)
+                for i in range(min(n - 1, len(self.unison_detune)))]
 
 
 class BlownPipeProperties(SynthProperties):
@@ -1166,12 +1200,13 @@ class SynthTone(BaseTone):
                               self.ref_count))
             # Extra unison voices, each detuned by a few Hz, beat against the
             # main partial: a couple for a piano's triple string, a wider
-            # spread for a section of many bowed strings. Each voice is a bit
-            # quieter so the ensemble does not simply scale the level.
-            detunes = getattr(self.properties, "unison_detune", ())
-            for offset in detunes:
+            # spread for a section of many bowed strings. Each voice carries its
+            # own gain and decay -- the piano gives its aftersound strings a
+            # slower decay than the prompt (see SynthProperties.unison_voices).
+            for gain_mult, offset, unison_decay in self.properties.unison_voices(
+                    self.frequency, harmonic, harmonic_decay):
                 partial = SimplePartial(self.properties, self.frequency, harmonic,
-                                        harmonic_volume * self.properties.unison_gain, harmonic_decay,
+                                        harmonic_volume * gain_mult, unison_decay,
                                         self.delay, self.ref_count)
                 partial.frequency_offset = offset
                 self.partials.append(partial)
