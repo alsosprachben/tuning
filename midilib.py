@@ -615,18 +615,17 @@ class Channels:
             if midi_channel == GM_PERCUSSION_CHANNEL:
                 # Drums carry no pitch; keep them out of the tuning solve.
                 continue
-            for n in self.channels[midi_channel].notes:
-                note = self.channels[midi_channel].notes[n]
-                if note.off_time is None:
+            for n, voices in self.channels[midi_channel].notes.items():
+                if any(v.off_time is None for v in voices):
                     on.append(n)
 
         return on
 
     def syncReleases(self):
         for midi_channel in self.channels:
-            for n in self.channels[midi_channel].notes:
-                note = self.channels[midi_channel].notes[n]
-                note.syncRelease()
+            for voices in self.channels[midi_channel].notes.values():
+                for note in voices:
+                    note.syncRelease()
 
     def syncTunings(self):
         for midi_channel in self.channels:
@@ -634,10 +633,10 @@ class Channels:
                 # Fixed-frequency drums; a colliding pitched note number on
                 # another channel must not retune them.
                 continue
-            for n in self.channels[midi_channel].notes:
-                note = self.channels[midi_channel].notes[n]
+            for n, voices in self.channels[midi_channel].notes.items():
                 if n in self.tunings:
-                    note.updateTuning(self.sampler, self.tunings[n], self.s)
+                    for note in voices:
+                        note.updateTuning(self.sampler, self.tunings[n], self.s)
 
     def recenterFrequencies(self, pairs):
         # Gradual tonal-center correction for the dynamic tuner.
@@ -697,9 +696,12 @@ class Channels:
         notes = sorted(self.onNotes())
         if self.on_notes != notes:
             self.on_notes = notes
-            self.tuneNotes()
-        #self.syncReleases()
-        #print ", ".join(notename(n) for n in self.on_notes)
+            self.tuneNotes()          # re-solve the temperament and sync all voices
+        elif any(v.tone is not None and v.tone.frequency is None
+                 for ch in self.channels.values() for vs in ch.notes.values() for v in vs):
+            # voice-per-note added a new same-pitch voice; give the fresh tone its
+            # pitch/partials from the current tunings (the set didn't change).
+            self.syncTunings()
         
 
     def updateEvents(self, events):
@@ -869,16 +871,6 @@ class Note:
         if self.tone:
             self.tone.unrelease()
 
-    def inc(self, n):
-        self.ref_count += 1
-        self.event = n
-        self.unrelease()
-
-    def dec(self, n):
-        self.ref_count -= 1
-        self.event = n
-        self.release()
-
     def __init__(self, channel, f, n, pan, seconds, velocity=127):
         self.event = None
         self.channel = channel
@@ -961,25 +953,23 @@ class Channel:
     toggle_mask = 0x40
 
     def attackNote(self, n, s):
-        #print "attacking note", n.note, "on channel", self.midi_channel, "at", n.time, "with velocity", n.velocity
-
         if n.velocity == 0:
             return self.releaseNote(n, s)
-        
-        if n.note not in self.notes:
-            e = Note(self, None, n.note, self.getControl("pan"), s, n.velocity)
-            self.notes[n.note] = e
-        else:
-            e = self.notes[n.note]
 
-        e.inc(n)
-            #errlog("attackNote ref_count %i, %i" % (e.ref_count, e.tone.partials[0].ref_count))
+        # Voice-per-note (what good samplers do): every note-on gets its own
+        # independent Note/tone, kept in a per-pitch FIFO list. Overlapping
+        # same-pitch notes each ring in full; a later note-off retires the
+        # oldest still-sounding one (see releaseNote), so a stop that lands past
+        # the next note's start retires the old voice instead of cutting the new.
+        e = Note(self, None, n.note, self.getControl("pan"), s, n.velocity)
+        e.event = n
+        e.unrelease()   # strike this voice
+        self.notes.setdefault(n.note, []).append(e)
 
         # Cap this articulation's onset fade to a fraction of the note's
         # length so short notes (trills, tonguing, rolls) don't smear under
-        # a long valve/breath fade. Partials made later by the tuner inherit
-        # the cap from the tone. Percussion is exempt: a struck drum or cymbal
-        # rings out on its own decay regardless of how briefly the key is held.
+        # a long valve/breath fade. Percussion is exempt: a struck drum rings
+        # out on its own decay regardless of how briefly the key is held.
         if not e.percussion:
             duration = self.note_durations.get((n.note, n.time))
             if duration is not None and e.tone is not None:
@@ -987,23 +977,24 @@ class Channel:
             
     
     def releaseNote(self, n, s):
-        #print "releasing note", n.note, "on channel", self.midi_channel, "at", n.time, "with velocity", n.velocity
-        
-        if n.note in self.notes:
-            e = self.notes[n.note]
-            e.dec(n)
-        else:
-            errlog("PANIC !!! attempting to release a note already released")
+        # FIFO off-matching: retire the OLDEST voice of this pitch still
+        # sounding. If none is unreleased, the note-off is stale (its voice was
+        # already retired) -- swallow it rather than cut a live voice.
+        for e in self.notes.get(n.note, ()):
+            if e.off_time is None:
+                e.event = n
+                e.release()
+                return
+        errlog("PANIC !!! attempting to release a note already released")
 
             
     def updateNoteAftertouch(self, n, s):
         #print "pressing note", n.note, "on channel", self.midi_channel, "at", n.time, "with pressure", n.aftertouch
         
-        if n.note in self.notes:
-            e = self.notes[n.note]
-            e.touch_time = n.time
-            e.aftertouch = n.aftertouch
-        #print str(self)
+        for e in self.notes.get(n.note, ()):
+            if e.off_time is None:
+                e.touch_time = n.time
+                e.aftertouch = n.aftertouch
         
 
     def updateControl(self, c, s):
@@ -1041,23 +1032,21 @@ class Channel:
         self.switch[c.__class__](self, c, s)
         
     def cleanup_notes(self, t):
-        #return
-        #print "cleaning up at", t
-        to_remove = []
-        for n in self.notes:
-            note = self.notes[n]
-            """
-            if not (note.off_time is None):
-                #print "note %i is released" % n
-                if t - note.off_time and note.tone is not None and note.tone.finished():
-                """
-            if note.finished():
-                    #print "note %i is off" % n
+        # Retire finished voices per pitch; drop pitches whose list empties.
+        empty = []
+        for pitch, voices in list(self.notes.items()):
+            live = []
+            for note in voices:
+                if note.finished():
                     note.cleanup()
-                    to_remove.append(n)
-                    
-        for n in to_remove:
-            del self.notes[n]
+                else:
+                    live.append(note)
+            if live:
+                self.notes[pitch] = live
+            else:
+                empty.append(pitch)
+        for pitch in empty:
+            del self.notes[pitch]
         
     signed_controls = set(["balance", "pan", "pitch",])
     def getControl(self, name):
@@ -1082,7 +1071,7 @@ class Channel:
             self.aftertouch,
             "\n\t\t".join("%s: %s" % (name, str(self.getControl(name))) for name in self.controls),
             "\n\t\t".join("%s: %s" % (name, str(self.getToggle(name)))  for name in self.toggles),
-            "\n\t\t".join("%s: %s" % (note, notename(self.notes[note].n))  for note in self.notes),
+            "\n\t\t".join("%s: %s" % (note, ", ".join(notename(v.n) for v in self.notes[note])) for note in self.notes),
         )
 
     def __init__(self, sampler, midi_channel):
