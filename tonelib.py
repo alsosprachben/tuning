@@ -465,6 +465,13 @@ class SimplePartial(BasePartial):
         BasePartial.__init__(self, properties, v, db, delay)
         self.base_frequency = f
         self.harmonic = h
+        # Inharmonic stretch: a real string's nth partial sits sharp of n*f0 by
+        # sqrt-of-stiffness, here f0*n*(1 + 0.5*(n^2-1)*B). B is fixed for the
+        # note (properties.inharmonicity_coefficient is set per note-frequency in
+        # init_partials before the partials are built), so precompute the factor
+        # once rather than per sample. B == 0 (air columns) -> 1.0, pure harmonic.
+        B = properties.inharmonicity_coefficient
+        self.inharmonic_stretch = (1.0 + 0.5 * (h * h - 1) * B) if B > 0.0 else 1.0
         if ref_count > 0:
             for i in range(ref_count):
                 self.unlift()
@@ -483,7 +490,9 @@ class SimplePartial(BasePartial):
         # Detune is stored on the partial (per unison voice), not on the
         # shared properties; reading properties here silently disabled every
         # chorus, so unison voices piled up at the same pitch with no beating.
-        return self.base_frequency * self.harmonic + self.frequency_offset
+        # inharmonic_stretch pushes upper partials sharp (piano/plucked/mallet);
+        # it is 1.0 for the air-column instruments, leaving them pure-harmonic.
+        return self.base_frequency * self.harmonic * self.inharmonic_stretch + self.frequency_offset
 
 
 class SquareWave(SimplePartial):
@@ -819,7 +828,11 @@ class BlownPipeProperties(SynthProperties):
     enharmonic_width = 0.0
 
     max_harmonic = 32
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_3rd_harmonic
+    # Air columns (pipe/flute, and the organ/reed/brass buckets that inherit from
+    # here) are essentially harmonic: no stiffness inharmonicity. Now that the
+    # stretch actually reaches the oscillator, this must be 0 or the winds would
+    # inherit a piano-like stretch. (Was 3rd_harmonic but silently dropped.)
+    inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
 
     plucked_harmonic = 1000.0
