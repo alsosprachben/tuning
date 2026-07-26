@@ -828,11 +828,16 @@ class BlownPipeProperties(SynthProperties):
     enharmonic_width = 0.0
 
     max_harmonic = 32
-    # Air columns (pipe/flute, and the organ/reed/brass buckets that inherit from
-    # here) are essentially harmonic: no stiffness inharmonicity. Now that the
-    # stretch actually reaches the oscillator, this must be 0 or the winds would
-    # inherit a piano-like stretch. (Was 3rd_harmonic but silently dropped.)
-    inharmonicity_coefficient = 0.0
+    # Flue pipes are not perfectly harmonic: the mouth/end correction shifts the
+    # effective length with frequency (and scales with bore width), stretching the
+    # partials slightly. Use the fixed 2nd-harmonic coefficient -- NOT the piano's
+    # dynamic Steinway model -- which places the octave partial exactly on the
+    # "equal pythagorean" stretched octave (stretch_interval = 7th root of the
+    # Pythagorean comma, so 12 pure fifths = 7 stretched octaves; see
+    # inharmonicity.py). The pipe's spectrum then reinforces that temperament.
+    # Inherited by flue organ / pipe / flute / brass; reed organ and bowed
+    # strings override back to 0.
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
     inharmonicity_dynamic = False
 
     plucked_harmonic = 1000.0
