@@ -74,6 +74,22 @@ def db_ratio(db):
     return 10 ** (float(db) / 10)
 
 
+# The tension pitch-bloom envelope exp(-t/tau) depends only on time-since-strike,
+# so tabulate it once (per tau/cutoff) and index by t instead of calling exp per
+# sample per partial -- the hot path where it was measurably expensive.
+_TENSION_RES = 2000  # table entries per second (0.5 ms; pitch glide is slow, so ample)
+_tension_tables = {}
+
+
+def tension_env_table(tau, cutoff):
+    key = (tau, cutoff)
+    tbl = _tension_tables.get(key)
+    if tbl is None:
+        tbl = [_exp(-(i / _TENSION_RES) / tau) for i in range(int(cutoff * _TENSION_RES) + 2)]
+        _tension_tables[key] = tbl
+    return tbl
+
+
 # Master output gain (amplitude), applied to the summed per-channel signal
 # just before clipping. Per-voice gains are tuned on 1-3 voice material, so
 # an 8-voice tutti sums well past full scale and clips; this gives global
@@ -173,6 +189,10 @@ class BasePartial:
     # Upper bound on the attack/release fade in seconds, set per note from
     # its duration so a fade can't outlast a short note. None = no cap.
     max_fade = None
+
+    # Precomputed tension-bloom envelope table, bound at hammer_down for voices
+    # with tension_bend > 0 (the piano). None = no pitch drift.
+    _tension_table = None
 
     # Detune of this partial from the exact harmonic, in Hz. Nonzero for the
     # extra unison voices of a chorus/ensemble so they beat against the main.
@@ -334,6 +354,11 @@ class BasePartial:
             getattr(self, "base_frequency", frequency), self.decay_rate)
         self.sustain = Decay(self.decay_rate, Second(second + self.delay),
                              self.properties.sustain_level, aftersound_level, aftersound_dbps)
+        # Bind the tension-bloom table once per strike (piano only), so frequency()
+        # indexes it instead of calling exp every sample.
+        if self.properties.tension_bend > 0.0:
+            self._tension_table = tension_env_table(
+                self.properties.tension_settle_time, self.properties.tension_settle_cutoff)
 
     def force(self, frequency, second):
         self.actuate(frequency, second)
@@ -510,10 +535,10 @@ class SimplePartial(BasePartial):
         # decay -- so the sustained portion, which the tuning is matched against,
         # rings at the tuned base_frequency rather than perpetually sharp.
         tb = self.properties.tension_bend
-        if tb and self.sustain is not None:
+        if tb and self._tension_table is not None:
             t = second - self.sustain.start_second.get()
             if 0.0 <= t < self.properties.tension_settle_cutoff:
-                env = _exp(-t / self.properties.tension_settle_time)
+                env = self._tension_table[int(t * _TENSION_RES)]
                 f *= 1.0 + tb * self.properties.attack_volume * env
         return f
 
