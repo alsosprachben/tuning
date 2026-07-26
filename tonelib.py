@@ -322,6 +322,15 @@ class BasePartial:
         self.state = self.Attacking
         errlog("hammer_down %s %s %s %s" % (frequency, second, id(self), self.state))
 
+        # Reset the phase accumulator at the strike so the partial starts at
+        # phase 0 here, regardless of when it was created. Without this a note
+        # attacking at t>0 has last_second=0, so its first cycle() jumps to
+        # second*frequency -- a different offset per partial -- leaving the
+        # struck strings (and same-frequency string-group voices) incoherent and
+        # cancelling. A real strike excites all modes in phase; so must we.
+        self.last_cycle = 0.0
+        self.last_second = second
+
         fade_time = self.properties.chiff_min_valve_time + (
                     self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
 
