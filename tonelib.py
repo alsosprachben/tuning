@@ -82,7 +82,8 @@ master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-9.3")) / 20.0)
 
 class Decay:
 
-    def __init__(self, dbps, start_second, sustain_level=0.0):
+    def __init__(self, dbps, start_second, sustain_level=0.0,
+                 aftersound_level=0.0, aftersound_dbps=None):
         self.start_second = start_second
         self.dbps = dbps
         self.rate = db_ratio(dbps)
@@ -90,6 +91,13 @@ class Decay:
         # struck), >0 = bloom to the attack peak then settle to this fraction
         # and hold (the brass "front"; a sustaining voice with decay_db > 0).
         self.sustain_level = sustain_level
+        # Two-stage (piano) decay: a fraction `aftersound_level` of the energy
+        # decays at the slower `aftersound_dbps` rate. This is the coupled-string
+        # tail that rings on after the bright prompt sheds -- modelled as an
+        # ENVELOPE, not detuned voices (equal detuned voices beat to a null and
+        # swell back, which sounds like a slow crescendo). 0 = plain single decay.
+        self.aftersound_level = aftersound_level
+        self.aftersound_rate = db_ratio(aftersound_dbps) if aftersound_dbps is not None else self.rate
         self.sample_decay = None
         self.sample_volume = 0.0
 
@@ -104,14 +112,22 @@ class Decay:
                 self.sample_decay = self.decay(second) / self.decay(last_second)
                 return self.sample_volume
         else:
-            if self.rate != 1.0:
+            t = second - self.start_second.get()
+
+            def curve(rate):
+                if rate == 1.0:
+                    return 1.0
                 try:
-                    base = log(self.rate) / (log(self.rate) * self.rate ** (second - self.start_second.get()))
+                    return rate ** (-t)      # == 1 / rate**t, monotonic decay for rate > 1
                 except OverflowError:
-                    base = 0.0
-                return self.sustain_level + (1.0 - self.sustain_level) * base
+                    return 0.0
+
+            if self.aftersound_level > 0.0:
+                base = ((1.0 - self.aftersound_level) * curve(self.rate)
+                        + self.aftersound_level * curve(self.aftersound_rate))
             else:
-                return 1.0
+                base = curve(self.rate)
+            return self.sustain_level + (1.0 - self.sustain_level) * base
 
 
 class Fade:
@@ -303,8 +319,12 @@ class BasePartial:
             fade_time = min(fade_time, self.max_fade)
 
         self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
+        # base_frequency is the note fundamental (harmonic 1); use it, not this
+        # partial's harmonic frequency, to pick the string count / aftersound.
+        aftersound_level, aftersound_dbps = self.properties.aftersound(
+            getattr(self, "base_frequency", frequency), self.decay_rate)
         self.sustain = Decay(self.decay_rate, Second(second + self.delay),
-                             self.properties.sustain_level)
+                             self.properties.sustain_level, aftersound_level, aftersound_dbps)
 
     def force(self, frequency, second):
         self.actuate(frequency, second)
@@ -519,6 +539,12 @@ class SynthProperties:
         return [(self.unison_gain, offset, harmonic_decay)
                 for offset in self.unison_detune]
 
+    def aftersound(self, frequency, decay_rate):
+        """Two-stage decay parameters (slow-tail energy fraction, slow rate in
+        dbps) for a note at this fundamental. Default: none -- a single
+        exponential decay. The piano overrides this with its string count."""
+        return (0.0, decay_rate)
+
     # Sustained phase jitter on a held note (fraction of the chiff amount that
     # keeps running during the Pressed state). Broadens each partial into a
     # band -- a section-of-strings shimmer from one voice. 0 = clean/static.
@@ -729,14 +755,19 @@ class Steinway(InharmonicStringProperties):
     # strings are mistuned a hair and coupled through the bridge, so per Weinreich
     # the in-phase (symmetric) mode drives the bridge hard and decays fast -- the
     # "prompt" -- while the antisymmetric modes barely load the bridge and ring on
-    # -- the "aftersound", the long singing tail. The normal modes are independent
-    # decaying sinusoids, so additive synthesis renders them exactly: the main
-    # partial is the prompt, and each extra string is an aftersound voice, detuned
-    # (for beating) and given a slower decay. More strings -> stronger aftersound;
-    # a single bass string has none. Tune by ear via the three knobs below.
-    unison_detune = (0.3, -0.35)       # mistuning of the 2 possible extra strings, Hz
-    aftersound_gain = 0.5              # antisymmetric-mode initial amplitude (< prompt)
-    aftersound_decay_ratio = 0.35      # aftersound decays this fraction as fast as the prompt
+    # -- the "aftersound", the long singing tail. More strings -> stronger tail;
+    # a single bass string has none.
+    #
+    # The tail is modelled as an ENVELOPE (see Decay.aftersound_*), not as detuned
+    # voices: two equal voices tuned to opposite sides beat the fundamental to a
+    # null and swell back, which sounds like a slow crescendo. So string count
+    # drives the envelope's slow-tail fraction; a light, SAME-side chorus at low
+    # gain adds shimmer without ever nulling the fundamental. Tunable by ear.
+    aftersound_decay_ratio = 0.35      # slow tail decays this fraction as fast as the prompt
+    aftersound_level_2 = 0.10          # slow-tail energy fraction, 2-string tenor
+    aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
+    unison_detune = (0.5, 0.7)         # small SAME-side mistuning (Hz): gentle shimmer
+    chorus_gain = 0.06                 # subtle: too quiet to beat the fundamental to a null
 
     def string_count_for_frequency(self, frequency):
         # Steinway B stringing: wound monochord bass, bichord tenor, trichord up.
@@ -746,10 +777,14 @@ class Steinway(InharmonicStringProperties):
             return 2
         return 3                # ~C3 and up: three strings
 
+    def aftersound(self, frequency, decay_rate):
+        n = self.string_count_for_frequency(frequency)
+        level = (0.0, 0.0, self.aftersound_level_2, self.aftersound_level_3)[n]
+        return (level, decay_rate * self.aftersound_decay_ratio)
+
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         n = self.string_count_for_frequency(frequency)
-        slow = harmonic_decay * self.aftersound_decay_ratio
-        return [(self.aftersound_gain, self.unison_detune[i], slow)
+        return [(self.chorus_gain, self.unison_detune[i], harmonic_decay)
                 for i in range(min(n - 1, len(self.unison_detune)))]
 
 
