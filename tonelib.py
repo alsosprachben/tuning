@@ -616,6 +616,10 @@ class SynthProperties:
     # per instrument.
     octave_width = 0.165
 
+    # Decay rate scaling per octave (times harmonic_decay). 0 = register-flat; the
+    # piano sets it > 0 so the bass rings long and the treble decays fast.
+    decay_register_slope = 0.0
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
@@ -625,6 +629,10 @@ class SynthProperties:
 
         from math import log
         self.octave_position = (log(float(frequency) / self.frequency_x) / log(2))
+
+        # Register-dependent decay rate: < 1 slows the bass, > 1 speeds the treble
+        # (heavy vs light, lightly- vs heavily-damped strings). 0 slope = flat.
+        self.decay_register_factor = 2.0 ** (self.decay_register_slope * self.octave_position)
 
         # Register-scale the tension pitch-drift: bass strings displace far more
         # for a given strike, so they bloom much sharper than the treble. Grows
@@ -754,7 +762,11 @@ class SynthProperties:
         )
 
     def harmonic_decay(self, harmonic):
-        return self.decay_db + self.harmonic_decay_db * harmonic * (harmonic ** self.harmonic_decay_dampening)
+        base = self.decay_db + self.harmonic_decay_db * harmonic * (harmonic ** self.harmonic_decay_dampening)
+        # Register-dependent decay: heavy bass strings ring far longer than the
+        # light, heavily-damped treble. decay_register_factor (set in __init__ from
+        # decay_register_slope) is < 1 in the bass (slower) and > 1 in the treble.
+        return base * self.decay_register_factor
 
 
 class PluckedStringProperties(SynthProperties):
@@ -811,6 +823,9 @@ class Steinway(InharmonicStringProperties):
     # and the treble RIGHT (a player's-eye view). This is the default spread, so
     # no per-part (SATB) channel pan is needed.
     octave_width = -0.12
+
+    # Bass rings long, treble decays fast (heavy/undamped vs light/damped strings).
+    decay_register_slope = 0.7
 
     # --- Real string-count-per-note, with the coupled-string two-stage decay ---
     # A piano strings each note with 1, 2, or 3 unison strings by register. The
