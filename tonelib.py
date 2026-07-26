@@ -176,6 +176,13 @@ class BasePartial:
     # extra unison voices of a chorus/ensemble so they beat against the main.
     frequency_offset = 0.0
 
+    # Fractional (ratio) detune of the whole voice -- a real mistuned string is
+    # off by a constant ratio, so partial n is offset by ~n x the fundamental's
+    # Hz. This is what makes the upper partials of a piano's 2-3 strings beat
+    # progressively faster and "dance", where a fixed-Hz offset would beat every
+    # harmonic at the same rate. 0.0 = on pitch.
+    detune_ratio = 0.0
+
     def frequency(self, second):
         "stub input"
 
@@ -492,7 +499,9 @@ class SimplePartial(BasePartial):
         # chorus, so unison voices piled up at the same pitch with no beating.
         # inharmonic_stretch pushes upper partials sharp (piano/plucked/mallet);
         # it is 1.0 for the air-column instruments, leaving them pure-harmonic.
-        return self.base_frequency * self.harmonic * self.inharmonic_stretch + self.frequency_offset
+        # detune_ratio mistunes the whole string by a constant ratio (the dance).
+        return (self.base_frequency * (1.0 + self.detune_ratio)
+                * self.harmonic * self.inharmonic_stretch + self.frequency_offset)
 
 
 class SquareWave(SimplePartial):
@@ -541,11 +550,11 @@ class SynthProperties:
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
-        frequency_offset_Hz, decay_rate_dbps). Default: one voice per
-        unison_detune offset, at unison_gain and the same decay as the main
-        string -- a plain chorus. The piano overrides this to model
-        register-dependent string count and the coupled-string aftersound."""
-        return [(self.unison_gain, offset, harmonic_decay)
+        detune_Hz, detune_ratio, decay_rate_dbps). Default: one voice per
+        unison_detune offset, a fixed-Hz chorus at unison_gain and the same
+        decay -- fine for a bowed section. The piano overrides this with
+        ratio-detuned string groups (the dance)."""
+        return [(self.unison_gain, offset, 0.0, harmonic_decay)
                 for offset in self.unison_detune]
 
     def aftersound(self, frequency, decay_rate):
@@ -767,16 +776,23 @@ class Steinway(InharmonicStringProperties):
     # -- the "aftersound", the long singing tail. More strings -> stronger tail;
     # a single bass string has none.
     #
-    # The tail is modelled as an ENVELOPE (see Decay.aftersound_*), not as detuned
-    # voices: two equal voices tuned to opposite sides beat the fundamental to a
-    # null and swell back, which sounds like a slow crescendo. So string count
-    # drives the envelope's slow-tail fraction; a light, SAME-side chorus at low
-    # gain adds shimmer without ever nulling the fundamental. Tunable by ear.
+    # Two intertwined effects:
+    #  1. The SING -- the coupled-string aftersound -- is an amplitude ENVELOPE
+    #     (Decay.aftersound_*), driven by string count. Modelling it as detuned
+    #     voices would beat the fundamental to a null and swell (a crescendo).
+    #  2. The DANCE -- the upper-harmonic shimmer -- is real ratio-detuned string
+    #     GROUPS. Each extra string is mistuned by a constant cents ratio, so its
+    #     partial n sits ~n x further in Hz from the main string's; with the
+    #     inharmonic stretch now live, those per-partial beat rates are
+    #     incommensurate, so the upper partials sweep against each other and never
+    #     realign -- shimmer, not throb. The cents are ASYMMETRIC so 3 strings
+    #     never share a beat rate. The fundamental barely beats (slow, subtle);
+    #     the interest climbs with the harmonic number, as on a real piano.
     aftersound_decay_ratio = 0.35      # slow tail decays this fraction as fast as the prompt
     aftersound_level_2 = 0.10          # slow-tail energy fraction, 2-string tenor
     aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
-    unison_detune = (0.5, 0.7)         # small SAME-side mistuning (Hz): gentle shimmer
-    chorus_gain = 0.06                 # subtle: too quiet to beat the fundamental to a null
+    string_detune_cents = (-1.7, 2.6)  # mistuning of the 2nd, 3rd strings (asymmetric)
+    string_gain = (0.8, 0.7)           # extra strings a touch quieter than the struck main
 
     def string_count_for_frequency(self, frequency):
         # Steinway B stringing: wound monochord bass, bichord tenor, trichord up.
@@ -793,8 +809,11 @@ class Steinway(InharmonicStringProperties):
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         n = self.string_count_for_frequency(frequency)
-        return [(self.chorus_gain, self.unison_detune[i], harmonic_decay)
-                for i in range(min(n - 1, len(self.unison_detune)))]
+        voices = []
+        for i in range(min(n - 1, len(self.string_detune_cents))):
+            ratio = 2.0 ** (self.string_detune_cents[i] / 1200.0) - 1.0
+            voices.append((self.string_gain[i], 0.0, ratio, harmonic_decay))
+        return voices
 
 
 class BlownPipeProperties(SynthProperties):
@@ -1251,17 +1270,17 @@ class SynthTone(BaseTone):
             self.partials.append(
                 SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay,
                               self.ref_count))
-            # Extra unison voices, each detuned by a few Hz, beat against the
-            # main partial: a couple for a piano's triple string, a wider
-            # spread for a section of many bowed strings. Each voice carries its
-            # own gain and decay -- the piano gives its aftersound strings a
-            # slower decay than the prompt (see SynthProperties.unison_voices).
-            for gain_mult, offset, unison_decay in self.properties.unison_voices(
+            # Extra unison voices beat against the main partial: a couple of
+            # ratio-detuned strings for a piano (the dance), a fixed-Hz spread
+            # for a section of many bowed strings. Each voice carries its own
+            # gain, detune (Hz and/or ratio), and decay.
+            for gain_mult, offset_hz, detune_ratio, unison_decay in self.properties.unison_voices(
                     self.frequency, harmonic, harmonic_decay):
                 partial = SimplePartial(self.properties, self.frequency, harmonic,
                                         harmonic_volume * gain_mult, unison_decay,
                                         self.delay, self.ref_count)
-                partial.frequency_offset = offset
+                partial.frequency_offset = offset_hz
+                partial.detune_ratio = detune_ratio
                 self.partials.append(partial)
 
         # Partials created after a note-on set a fade cap inherit it.
