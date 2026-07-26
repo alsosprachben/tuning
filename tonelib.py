@@ -6,6 +6,8 @@ All rights reserved.
 """
 
 import os
+import random as _random
+from math import exp as _exp
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
 # Spatialization uses the Brown-Duda spherical-head model by default:
@@ -503,12 +505,16 @@ class SimplePartial(BasePartial):
         f = (self.base_frequency * (1.0 + self.detune_ratio)
              * self.harmonic * self.inharmonic_stretch + self.frequency_offset)
         # Tension modulation: a struck string starts sharp (large displacement =
-        # more tension) and drifts down to pitch as it decays. Shift ~ amplitude^2
-        # (the current decay envelope) and scales with strike velocity.
+        # more tension) and settles down to the tuned pitch. Modelled as an ATTACK
+        # TRANSIENT (fast exponential from the strike), not the slow amplitude
+        # decay -- so the sustained portion, which the tuning is matched against,
+        # rings at the tuned base_frequency rather than perpetually sharp.
         tb = self.properties.tension_bend
         if tb and self.sustain is not None:
-            env = self.sustain.decay(second)
-            f *= 1.0 + tb * self.properties.attack_volume * env * env
+            t = second - self.sustain.start_second.get()
+            if 0.0 <= t < self.properties.tension_settle_cutoff:
+                env = _exp(-t / self.properties.tension_settle_time)
+                f *= 1.0 + tb * self.properties.attack_volume * env
         return f
 
 
@@ -559,10 +565,14 @@ class SynthProperties:
     # Amplitude-dependent pitch drift (string tension modulation). 0 = off; the
     # piano sets it so a note blooms sharp on the strike and settles as it decays.
     # Register-scaled in __init__: tension_bend is the value at tension_bend_ref_hz
-    # and grows toward the bass as (ref/f0) ** tension_bend_slope.
+    # and grows toward the bass as (ref/f0) ** tension_bend_slope. The bloom is an
+    # ATTACK TRANSIENT (settle_time), decaying to the tuned pitch well within the
+    # sustained portion -- a tuner matches the sustain, so that must land on pitch.
     tension_bend = 0.0
     tension_bend_ref_hz = 262.0
     tension_bend_slope = 1.0
+    tension_settle_time = 0.28   # s: transient decays to the tuned pitch this fast
+    tension_settle_cutoff = 1.8  # s: past this the bloom is spent; skip the math
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
@@ -599,12 +609,16 @@ class SynthProperties:
     one_shot = False
     release_floor_db = None
 
+    # Metres of stereo spread per octave of pitch (times position_x). Positive =
+    # higher notes toward one side; the piano flips the sign so its keyboard reads
+    # low-left to high-right (a player's view). Class attribute so it can be set
+    # per instrument.
+    octave_width = 0.165
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
         self.channel_volume = channel_volume
-
-        self.octave_width = 0.165
 
         self.frequency_x = 415.0
 
@@ -792,6 +806,11 @@ class Steinway(InharmonicStringProperties):
     d = -0.007927
     e = 0.429601
 
+    # Keyboard pan: negative flips the pitch->position sign so the bass sits LEFT
+    # and the treble RIGHT (a player's-eye view). This is the default spread, so
+    # no per-part (SATB) channel pan is needed.
+    octave_width = -0.12
+
     # --- Real string-count-per-note, with the coupled-string two-stage decay ---
     # A piano strings each note with 1, 2, or 3 unison strings by register. The
     # strings are mistuned a hair and coupled through the bridge, so per Weinreich
@@ -815,8 +834,18 @@ class Steinway(InharmonicStringProperties):
     aftersound_decay_ratio = 0.35      # slow tail decays this fraction as fast as the prompt
     aftersound_level_2 = 0.10          # slow-tail energy fraction, 2-string tenor
     aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
-    string_detune_cents = (-0.85, 1.3)  # mistuning of the 2nd, 3rd strings (asymmetric)
+    # Per-note UNIQUE unison detune: each note's 2nd/3rd strings are mistuned by a
+    # random amount within this |cents| range, seeded deterministically per pitch
+    # in __init__ (so a given note is always the same, but no two notes share a
+    # detune -- avoiding the identical-every-note "wavetable" sound). One flat, one
+    # sharp, so the pair straddles the tuned pitch and the note stays in tune.
+    string_detune_range = (0.5, 1.7)    # min..max |cents| of the extra strings
     string_gain = (0.8, 0.7)            # extra strings a touch quieter than the struck main
+
+    # Damper: releasing the key drops the felt and stops the string over ~0.1 s
+    # (a fast decay with a soft thump), not the instant cut that a 0-length
+    # release gives. (The very top of a real piano has no damper; not modelled.)
+    release_valve_time = 0.12
 
     # --- Hammer excitation (vs a bright pluck) ---
     # A felt hammer rests on the string for a few ms, so it cannot excite partials
@@ -837,6 +866,21 @@ class Steinway(InharmonicStringProperties):
     # fractional sharpening at full amplitude and velocity (0.008 ~ 14 cents).
     tension_bend = 0.008
 
+    def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
+        super().__init__(frequency, channel_pan, attack_volume, channel_volume)
+        # Deterministic-per-pitch, unique-across-pitches unison detune: seed by the
+        # (rounded) MIDI note so a given key is always identical, but no two notes
+        # share a detune. Straddle the pitch (one flat string, one sharp) so the
+        # note stays in tune. Keyboard pan is automatic -- octave_position already
+        # spreads notes low-left to high-right via position_x (no channel pan
+        # needed), so the strings' physical uniqueness and register placement come
+        # for free per note.
+        from math import log
+        midi = int(round(69.0 + 12.0 * log(float(frequency) / 440.0) / log(2)))
+        rng = _random.Random(midi)
+        lo, hi = self.string_detune_range
+        self.note_detune_cents = (-rng.uniform(lo, hi), rng.uniform(lo, hi))
+
     def string_count_for_frequency(self, frequency):
         # Steinway B stringing: wound monochord bass, bichord tenor, trichord up.
         if frequency < 65.0:    # below ~C2: single wound string
@@ -853,8 +897,8 @@ class Steinway(InharmonicStringProperties):
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         n = self.string_count_for_frequency(frequency)
         voices = []
-        for i in range(min(n - 1, len(self.string_detune_cents))):
-            ratio = 2.0 ** (self.string_detune_cents[i] / 1200.0) - 1.0
+        for i in range(min(n - 1, len(self.note_detune_cents))):
+            ratio = 2.0 ** (self.note_detune_cents[i] / 1200.0) - 1.0
             voices.append((self.string_gain[i], 0.0, ratio, harmonic_decay))
         return voices
 
