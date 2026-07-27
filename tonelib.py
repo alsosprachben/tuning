@@ -888,7 +888,8 @@ class Steinway(InharmonicStringProperties):
     # detune -- avoiding the identical-every-note "wavetable" sound). One flat, one
     # sharp, so the pair straddles the tuned pitch and the note stays in tune.
     string_detune_range = (0.5, 1.7)    # min..max |cents| of the extra strings
-    string_gain = (0.8, 0.7)            # extra strings a touch quieter than the struck main
+    string_gain = (0.28, 0.20)          # extras well below the main so the unison beats
+                                        # shallowly (a shimmer) instead of to deep nulls (a phaser)
 
     # Damper: releasing the key drops the felt and stops the string over ~0.1 s
     # (a fast decay with a soft thump), not the instant cut that a 0-length
@@ -905,6 +906,20 @@ class Steinway(InharmonicStringProperties):
     # corner opening with velocity (attack_volume).
     hammer_corner_hz = 4000.0    # low-pass corner at mid velocity; raise = brighter
     hammer_order = 2.0           # rolloff steepness above the corner (~6*order dB/oct)
+
+    # --- Soundboard body response ---
+    # A fixed body filter applied per partial by absolute frequency (independent
+    # of velocity, unlike the hammer). It gives the tone its wooden body: a broad
+    # low-mid warmth resonance, a roll-off of the extreme top (the board does not
+    # radiate the highest partials efficiently), and a sub-bass radiation loss.
+    # It also darkens the upper-mid partials whose string-group beating reads as a
+    # phaser, so the shimmer sits under a fixed formant instead of sweeping bare.
+    board_body_hz = 240.0        # centre of the low-mid warmth boost
+    board_body_width = 1.05      # half-width in octaves (log-gaussian)
+    board_body_gain = 0.6        # peak boost (0.6 -> ~+4 dB) at board_body_hz
+    board_high_hz = 2600.0       # radiation roll-off corner up top
+    board_high_order = 1.6       # gentle (~10 dB/oct) high roll-off
+    board_low_hz = 55.0          # sub-bass radiation roll-off (6 dB/oct below)
 
     # --- Tension modulation (pitch drifts down as the note decays) ---
     # A struck string's large initial displacement stretches it, raising tension
@@ -965,7 +980,16 @@ class Steinway(InharmonicStringProperties):
         # octave_position = log2(f0 / frequency_x).)
         fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
         fc = self.hammer_corner_hz * (0.7 + 0.7 * self.attack_volume)
-        return v / (1.0 + (fn / fc) ** self.hammer_order)
+        return v / (1.0 + (fn / fc) ** self.hammer_order) * self.soundboard_gain(fn)
+
+    def soundboard_gain(self, fn):
+        # Body warmth (log-gaussian boost in the low-mid) x top radiation
+        # roll-off x sub-bass radiation loss. Fixed, velocity-independent.
+        body = 1.0 + self.board_body_gain * _exp(
+            -(_log(fn / self.board_body_hz) ** 2) / (2.0 * self.board_body_width ** 2))
+        high = 1.0 / (1.0 + (fn / self.board_high_hz) ** self.board_high_order)
+        low = 1.0 / (1.0 + (self.board_low_hz / fn) ** 2)
+        return body * high * low
 
 
 class BlownPipeProperties(SynthProperties):
