@@ -151,7 +151,10 @@ class Fade:
             elif second <= start:
                 return 0.0
             else:
-                return (second - start) / (end - start)
+                t = (second - start) / (end - start)
+                # Smoothstep: zero slope at both ends, so the onset has no corner
+                # (a linear ramp's derivative jump is itself an audible click).
+                return t * t * (3.0 - 2.0 * t)
 
     def fade_out(self, second):
         if self.start_second is None:
@@ -164,7 +167,8 @@ class Fade:
             elif second <= start:
                 return 1.0
             else:
-                return 1.0 - (second - start) / (end - start)
+                t = (second - start) / (end - start)
+                return 1.0 - t * t * (3.0 - 2.0 * t)
 
 
 class BasePartial:
@@ -336,8 +340,11 @@ class BasePartial:
         self.last_cycle = 0.0
         self.last_second = second
 
-        fade_time = self.properties.chiff_min_valve_time + (
-                    self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+        if self.properties.attack_time is not None:
+            fade_time = self.properties.attack_time
+        else:
+            fade_time = self.properties.chiff_min_valve_time + (
+                        self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
 
         if self.max_fade is not None:
             fade_time = min(fade_time, self.max_fade)
@@ -600,6 +607,13 @@ class SynthProperties:
     # phase fix is preserved) while different notes decorrelate.
     pitch_jitter_cents = 0.0     # +/- this many cents, random per note (the beat)
     timing_jitter_seconds = 0.0  # 0..this delay to the strike, random per note (stagger)
+
+    # Onset ramp in seconds. None = derive it from the chiff/valve time (winds).
+    # A struck string otherwise gets a 0-length ramp -> the amplitude steps 0->full
+    # in one sample, and with every partial phase-aligned at the strike that step
+    # is a bandlimited impulse: a digital click. A few ms of smoothstep ramp
+    # attenuates the first (loudest) impulse cycle and bandlimits the onset.
+    attack_time = None
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
@@ -906,6 +920,11 @@ class Steinway(InharmonicStringProperties):
     # corner opening with velocity (attack_volume).
     hammer_corner_hz = 4000.0    # low-pass corner at mid velocity; raise = brighter
     hammer_order = 2.0           # rolloff steepness above the corner (~6*order dB/oct)
+
+    # Hammer contact time: a few ms of onset ramp so the strike isn't a
+    # one-sample step (a click). Real contact runs ~1 ms treble to ~4 ms bass;
+    # a single mid value is a good first approximation.
+    attack_time = 0.003
 
     # --- Soundboard body response ---
     # A fixed body filter applied per partial by absolute frequency (independent
