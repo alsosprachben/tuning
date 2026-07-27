@@ -35,6 +35,12 @@ tuner_registry = {
     "linearwell": LinearWellTuner,
     "bechstein": BechsteinTuner,
     "dynamic": Tuner,
+    # Experimental path.py tree generators (fixed full-keyboard tunings whose
+    # octaves follow the Steinway-B inharmonicity to the 2nd partial).
+    "hybrid": HybridTuner,
+    "spiral": SpiralTuner,
+    "semi": SemiTuner,
+    "path": PathNotesTuner,
 }
 tuner_class = StretchTuner
 

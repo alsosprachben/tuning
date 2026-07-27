@@ -340,6 +340,102 @@ class BechsteinTuner(TwelveTuner):
     intervals = compute_intervals(comma_spread)
 
 
+# --- Experimental path.py tuning generators (../path/path.py) ---------------
+# The classes above are adaptive/parametric twelve-tone temperaments. These wrap
+# the tree-based generators in ../path/path.py (HybridNotes, SpiralNotes, ...) as
+# fixed full-keyboard tuners: the generator is built once and its per-MIDI-note
+# frequencies are served by lookup. HybridNotes and its kin stretch their octaves
+# along the empirical Steinway-B inharmonicity model -- the very model
+# tonelib.Steinway renders its partials with (identical a,b,c,d,e) -- so an octave
+# is placed exactly on the lower note's 2nd partial. Rendered with the piano
+# patch, the octave's fundamental then coincides with that partial and does not
+# beat. That alignment is the whole point of using these here.
+
+_PATH_MODULE = None
+
+
+def _load_path_module():
+    global _PATH_MODULE
+    if _PATH_MODULE is None:
+        import os, importlib.util
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "path", "path.py")
+        spec = importlib.util.spec_from_file_location("path_gen", p)
+        _PATH_MODULE = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_PATH_MODULE)
+    return _PATH_MODULE
+
+
+class PathTuner(BaseTuner):
+    """Fixed full-keyboard tuning read from a path.py generator class.
+
+    A = None keeps the generator's native pitch, so the synth computes each
+    note's inharmonicity from exactly the frequency the generator tuned against
+    (exact 2nd-partial/octave alignment). Set A to rescale the whole table so
+    A4 == A (e.g. 415 for baroque pitch), at the cost of a sub-cent alignment
+    drift, since the empirical coefficient is frequency-dependent.
+    """
+    A = None
+    generator_name = None
+    generator_args = ()
+    middle_c = 60
+    _table = None    # class-cached {absolute_midi: frequency}
+
+    def __init__(self, *args, **kwargs):
+        self.notes = []
+        cls = type(self)
+        if cls._table is None:
+            cls._table = cls._build_table()
+
+    @classmethod
+    def _build_table(cls):
+        gen = getattr(_load_path_module(), cls.generator_name)(*cls.generator_args)
+        table = {n: float(note.f) for n, note in enumerate(gen.notes)
+                 if getattr(note, "f", None)}
+        if cls.A is not None and table.get(69):
+            s = float(cls.A) / table[69]
+            table = {n: f * s for n, f in table.items()}
+        return table
+
+    def in_cache(self):
+        return True
+
+    def tune(self, step=1000, max_i=10000):
+        return
+
+    def _freq(self, midi):
+        t = type(self)._table
+        if midi in t:
+            return t[midi]
+        # Outside the generator's tuned range: extrapolate by pure 2:1 octaves
+        # from the nearest tuned note of the same pitch class.
+        for k in range(1, 10):
+            if midi - 12 * k in t:
+                return t[midi - 12 * k] * (2.0 ** k)
+            if midi + 12 * k in t:
+                return t[midi + 12 * k] / (2.0 ** k)
+        base = self.A or 440.0
+        return float(base) * 2.0 ** ((midi - 69) / 12.0)
+
+    def noteFrequencies(self):
+        mc = type(self).middle_c
+        return [(note, self._freq(note + mc)) for note in sorted(self.notes)]
+
+
+class HybridTuner(PathTuner):
+    generator_name = "HybridNotes"
+
+
+class SpiralTuner(PathTuner):
+    generator_name = "SpiralNotes"
+
+
+class SemiTuner(PathTuner):
+    generator_name = "SemiNotes"
+
+
+class PathNotesTuner(PathTuner):
+    generator_name = "PATHNotes"
+    generator_args = (True, True)   # use_inharmonicity, temper_thirds
 
 
 class PythagoreanRatio:
