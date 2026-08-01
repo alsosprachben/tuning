@@ -870,7 +870,24 @@ class Steinway(InharmonicStringProperties):
     octave_width = -0.12
 
     # Bass rings long, treble decays fast (heavy/undamped vs light/damped strings).
-    decay_register_slope = 0.7
+    # Register tilt: measured per-harmonic against the Iowa MIS samples, the bass
+    # tonal partials must ring FAR longer than the mid (C2 fundamental ~1.9 dB/s
+    # vs C4 ~3.9), while the treble decays a touch faster (C6 ~8.6). Mid (C4) sits
+    # at octave_position 0 so the slope leaves it untouched; steepening it slows
+    # the bass ring and speeds the treble to match the reference.
+    decay_register_slope = 0.85
+
+    # --- Prompt vs aftersound (Weinreich double decay) ---
+    # A real piano note FADES FAST at first (the in-phase string mode dumps energy
+    # hard into the bridge -- the "prompt"), then a small fraction rings on slowly
+    # (the coupled-string "aftersound"). Measured against the Iowa MIS samples the
+    # prompt is ~8 dB/s in the bass and ~20+ dB/s in the mid; the old decay_db=0
+    # gave the fundamental only ~1 dB/s -- an organ-like sustain with no fade.
+    # decay_db is that prompt floor (added to every partial before the register
+    # tilt); harmonic_decay_db keeps the top decaying faster still (tone darkens
+    # as it fades); the aftersound_* below carry the quiet, long tail.
+    decay_db = 13.0
+    harmonic_decay_db = 1.5
 
     # --- Real string-count-per-note, with the coupled-string two-stage decay ---
     # A piano strings each note with 1, 2, or 3 unison strings by register. The
@@ -892,9 +909,10 @@ class Steinway(InharmonicStringProperties):
     #     realign -- shimmer, not throb. The cents are ASYMMETRIC so 3 strings
     #     never share a beat rate. The fundamental barely beats (slow, subtle);
     #     the interest climbs with the harmonic number, as on a real piano.
-    aftersound_decay_ratio = 0.35      # slow tail decays this fraction as fast as the prompt
-    aftersound_level_1 = 0.18          # single wound bass string -- rings long/full (soundboard-coupled)
-    aftersound_level_2 = 0.10          # slow-tail energy fraction, 2-string tenor
+    aftersound_decay_ratio = 0.13      # slow tail decays this fraction as fast as the prompt
+                                       # (~0.12 measured: prompt ~20 dB/s, singing tail ~2.5 dB/s)
+    aftersound_level_1 = 0.28          # single wound bass string -- rings long/full (soundboard-coupled)
+    aftersound_level_2 = 0.18          # slow-tail energy fraction, 2-string tenor
     aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
     # Per-note UNIQUE unison detune: each note's 2nd/3rd strings are mistuned by a
     # random amount within this |cents| range, seeded deterministically per pitch
@@ -904,6 +922,36 @@ class Steinway(InharmonicStringProperties):
     string_detune_range = (0.5, 1.7)    # min..max |cents| of the extra strings
     string_gain = (0.28, 0.20)          # extras well below the main so the unison beats
                                         # shallowly (a shimmer) instead of to deep nulls (a phaser)
+
+    # Regulate the string-count breaks: a real piano is voiced so the monochord ->
+    # bichord (G1) and bichord -> trichord (B2) crossings are seamless. We can't
+    # have a fractional string, but we CAN fade each added string's gain in over a
+    # couple of semitones around its break (and blend the aftersound level the same
+    # way) so the shimmer and ring cross over smoothly instead of switching on hard.
+    string_break_hz = (48.0, 120.0)     # F#1|G1 and A#2|B2 boundaries (see string_count_for_frequency)
+    string_crossfade_semitones = 3.0    # width of the smoothstep crossfade at each break
+
+    # --- Phantom (longitudinal) partials: the wound-bass "clang" (Conklin,
+    # JASA 100, 1996) ---
+    # A struck string modulates its own tension at 2x the vibration frequency;
+    # that nonlinearity pumps the (much faster) longitudinal string modes and
+    # radiates SUM-TONES at f_i + f_j of the transverse partials -- inharmonic
+    # partials, NOT on the n*f0 series, that cluster where the longitudinal modes
+    # resonate (~1 kHz for the bottom octave) and give a real piano bass its
+    # metallic ring. Audible only in the wound register; they build on the strike
+    # (amplitude^2 -> gain ~ v_i*v_j) and decay ~2x as fast as their parents
+    # (rate d_i + d_j). Synthesized here as extra non-harmonic partials at the
+    # pair-sum frequencies. Measured against the Iowa MIS F1 sample: the loudest
+    # phantoms sit ~ -8 dB below the note peak, clustered 800-1400 Hz.
+    phantom_coupling = 30.0       # 0 = off; overall nonlinear gain (tuned by metric, unit at C2)
+    phantom_max_order = 30        # pair transverse partials up to this harmonic (reach ~1.3 kHz)
+    phantom_ref_hz = 65.0         # reference pitch (C2) at which coupling == phantom_coupling
+    phantom_register_power = 2.5  # phantoms taper CONTINUOUSLY as (ref/f)^power: strong on the bottom
+                                  # wound strings, fading smoothly to negligible by the mid so the
+                                  # top of the register stays clean (a gentler tilt, ~1.0, leaves
+                                  # audible clang up at C4). No floor -> a smooth taper, no cliff.
+    phantom_note_max_hz = 260.0   # hard safety cap only (coupling is already ~3% here); above it, none
+    phantom_gain_floor = 3e-3     # prune pair-sums quieter than this fraction of the peak partial
 
     # Damper: releasing the key drops the felt and stops the string over ~0.1 s
     # (a fast decay with a soft thump), not the instant cut that a 0-length
@@ -938,7 +986,7 @@ class Steinway(InharmonicStringProperties):
     board_body_gain = 0.6        # peak boost (0.6 -> ~+4 dB) at board_body_hz
     board_high_hz = 2600.0       # radiation roll-off corner up top
     board_high_order = 1.6       # gentle (~10 dB/oct) high roll-off
-    board_low_hz = 55.0          # sub-bass radiation roll-off (6 dB/oct below)
+    board_low_hz = 35.0          # sub-bass radiation roll-off (6 dB/oct below)
 
     # --- Tension modulation (pitch drifts down as the note decays) ---
     # A struck string's large initial displacement stretches it, raising tension
@@ -969,24 +1017,49 @@ class Steinway(InharmonicStringProperties):
         self.note_detune_cents = (-rng.uniform(lo, hi), rng.uniform(lo, hi))
 
     def string_count_for_frequency(self, frequency):
-        # Steinway B stringing: wound monochord bass, bichord tenor, trichord up.
-        if frequency < 65.0:    # below ~C2: single wound string
+        # Full-upright stringing (the owner's instrument): single wound monochord
+        # bass, two strings from G1, three from B2. Thresholds sit BETWEEN the
+        # boundary notes (F#1|G1 ~ 48 Hz, A#2|B2 ~ 120 Hz) so the hybrid tuning's
+        # slightly-sharp pitches still land on the right side of each break.
+        if frequency < 48.0:    # A0-F#1: single wound string
             return 1
-        if frequency < 130.0:   # ~C2-C3: two strings
+        if frequency < 120.0:   # G1-A#2: two strings (still wound)
             return 2
-        return 3                # ~C3 and up: three strings
+        return 3                # B2 and up: three strings
+
+    def _string_blend(self, frequency, break_hz):
+        # Smoothstep 0..1 as frequency rises through break_hz +/- half the crossfade
+        # width (log-symmetric), so an added string fades in over a few semitones
+        # instead of switching on at a single note -- the "regulation" of the break.
+        half = self.string_crossfade_semitones / 2.0
+        lo = break_hz * 2.0 ** (-half / 12.0)
+        hi = break_hz * 2.0 ** (half / 12.0)
+        if frequency <= lo:
+            return 0.0
+        if frequency >= hi:
+            return 1.0
+        t = (_log(frequency) - _log(lo)) / (_log(hi) - _log(lo))
+        return t * t * (3.0 - 2.0 * t)
 
     def aftersound(self, frequency, decay_rate):
-        n = self.string_count_for_frequency(frequency)
-        level = (0.0, self.aftersound_level_1, self.aftersound_level_2, self.aftersound_level_3)[n]
+        # Blend the ring level across both breaks instead of stepping per string count.
+        b1 = self._string_blend(frequency, self.string_break_hz[0])
+        b2 = self._string_blend(frequency, self.string_break_hz[1])
+        level = self.aftersound_level_1 + (self.aftersound_level_2 - self.aftersound_level_1) * b1
+        level += (self.aftersound_level_3 - level) * b2
         return (level, decay_rate * self.aftersound_decay_ratio)
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
-        n = self.string_count_for_frequency(frequency)
+        # Second string fades in across G1, third across B2 -- a crossfade, not a
+        # hard switch, so the unison shimmer regulates smoothly through the breaks.
+        gains = (self.string_gain[0] * self._string_blend(frequency, self.string_break_hz[0]),
+                 self.string_gain[1] * self._string_blend(frequency, self.string_break_hz[1]))
         voices = []
-        for i in range(min(n - 1, len(self.note_detune_cents))):
+        for i, g in enumerate(gains[:len(self.note_detune_cents)]):
+            if g < 1e-3:
+                continue
             ratio = 2.0 ** (self.note_detune_cents[i] / 1200.0) - 1.0
-            voices.append((self.string_gain[i], 0.0, ratio, harmonic_decay))
+            voices.append((g, 0.0, ratio, harmonic_decay))
         return voices
 
     def harmonic_volume(self, harmonic):
@@ -1436,6 +1509,7 @@ class SynthTone(BaseTone):
         self.partials = []
 
         volume = 0.0
+        transverse = []                       # (freq, raw gain, decay) for phantom-partial pairing
         max_partials = int(float(self.nyquist) / self.frequency)
         for harmonic in range(1, max_partials):
             if self.properties.inharmonicity_dynamic:
@@ -1451,7 +1525,8 @@ class SynthTone(BaseTone):
             if harmonic_frequency > self.nyquist:
                 break
 
-            harmonic_volume = self.properties.harmonic_volume(harmonic) * self.pan
+            harmonic_volume_raw = self.properties.harmonic_volume(harmonic)
+            harmonic_volume = harmonic_volume_raw * self.pan
             if hrtf:
                 harmonic_volume *= self.properties.hrtf_gain(harmonic_frequency, self.incidence)
             if harmonic_volume == 0.0:
@@ -1460,6 +1535,7 @@ class SynthTone(BaseTone):
             volume += harmonic_volume
 
             harmonic_decay = self.properties.harmonic_decay(harmonic)
+            transverse.append((harmonic_frequency, harmonic_volume_raw, harmonic_decay))
             errlog("SimplePartial(%s, %s, %s, %s, %s)" % (
                 self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
             self.partials.append(
@@ -1477,6 +1553,32 @@ class SynthTone(BaseTone):
                 partial.frequency_offset = offset_hz
                 partial.detune_ratio = detune_ratio
                 self.partials.append(partial)
+
+        # --- Phantom (longitudinal) partials for the wound bass (Conklin) ---
+        # Sum-tones f_i + f_j of the transverse partials, gain ~ coupling*v_i*v_j
+        # (the tension nonlinearity), decay d_i + d_j (a product of two decays).
+        # Gated to the wound register; off (coupling 0) for every other tuning.
+        coupling = getattr(self.properties, 'phantom_coupling', 0.0)
+        power = getattr(self.properties, 'phantom_register_power', 0.0)
+        if power > 0.0:                       # continuous taper: strong at the bottom, fading up
+            coupling *= (getattr(self.properties, 'phantom_ref_hz', 65.0) / self.frequency) ** power
+        if coupling > 0.0 and self.frequency <= getattr(self.properties, 'phantom_note_max_hz', 0.0) and transverse:
+            parents = transverse[:getattr(self.properties, 'phantom_max_order', 16)]
+            floor = getattr(self.properties, 'phantom_gain_floor', 3e-3) * max(v for _, v, _ in parents)
+            for a in range(len(parents)):
+                fa, va, da = parents[a]
+                for b in range(a, len(parents)):
+                    fb, vb, db_ = parents[b]
+                    f_ph = fa + fb
+                    if f_ph >= self.nyquist:
+                        break
+                    gain = coupling * va * vb * (1.0 if a == b else 2.0)
+                    if gain < floor:
+                        continue
+                    ph = SimplePartial(self.properties, self.frequency, f_ph / self.frequency,
+                                       gain * self.pan, da + db_, self.delay, self.ref_count)
+                    ph.inharmonic_stretch = 1.0    # already placed at the (stretched) sum frequency
+                    self.partials.append(ph)
 
         # Partials created after a note-on set a fade cap inherit it.
         if self.max_fade is not None:
