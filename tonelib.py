@@ -7,7 +7,7 @@ All rights reserved.
 
 import os
 import random as _random
-from math import exp as _exp, log as _log
+from math import exp as _exp, log as _log, sin as _sin, pi as _pi
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
 # Spatialization uses the Brown-Duda spherical-head model by default:
@@ -581,6 +581,14 @@ class SawtoothWave(SimplePartial):
 class SynthProperties:
     from inharmonicity import inharmonicity_coefficient_2nd_harmonic, inharmonicity_coefficient_3rd_harmonic
 
+    # Strike/pluck point as a fraction of the speaking length. When set, mode n is
+    # excited with amplitude |sin(n*pi*strike_point)| -- a comb that nulls the
+    # harmonics at multiples of 1/strike_point. None = no comb (uses the legacy
+    # plucked_volumes path; pipes etc.). The piano sets ~1/7 to soften the 7th.
+    strike_point = None
+    strike_depth = 1.0    # how deep the strike comb notches (1=point-strike null, 0=off); the
+                          # finite hammer width fills it in, so real pianos want it shallow.
+
     # Chorus/ensemble: extra unison voices detuned by these Hz offsets, each
     # scaled by unison_gain. Empty = a single voice (no beating).
     unison_detune = ()
@@ -796,15 +804,21 @@ class SynthProperties:
         if self.odd_only and harmonic % 2 != 1:
             return 0.0
 
-        return (
-                self.gain
-                # attack
-                / (harmonic ** self.attack_dampening)
-                # pluck dampening
-                * sum(tv for th, tv in self.plucked_volumes if harmonic % th)
-            # open pipe
-            # * ((3 - (harmonic % 2 + 1)) * 1)
-        )
+        if self.strike_point:
+            # Strike comb: a string struck at fraction p of its length feeds mode n with
+            # amplitude ~ |sin(n*pi*p)|, weakening n at multiples of 1/p (p~1/7 -> the sour
+            # 7th). A real hammer has WIDTH that fills the notch, and that width GROWS with
+            # force (harder blow -> felt compresses flatter -> wider contact patch -> notch
+            # fills). So the notch is deep when played softly and fills toward ff -- a
+            # velocity-dependent timbre, not just loudness. strike_depth is the depth at the
+            # softest blow; attack_volume = (vel/127)^2 fills it in as you play louder.
+            # (Matches the Iowa reference, an ff sample, whose 7th is already un-notched.)
+            depth = self.strike_depth * (1.0 - self.attack_volume)
+            comb = (1.0 - depth) + depth * abs(_sin(harmonic * _pi * self.strike_point))
+        else:
+            comb = sum(tv for th, tv in self.plucked_volumes if harmonic % th)   # legacy path (pipes)
+
+        return self.gain / (harmonic ** self.attack_dampening) * comb
 
     def harmonic_decay(self, harmonic):
         base = self.decay_db + self.harmonic_decay_db * harmonic * (harmonic ** self.harmonic_decay_dampening)
@@ -849,6 +863,14 @@ class TriplePluckedStringProperties(PluckedStringProperties):
 class InharmonicStringProperties(PluckedStringProperties):
     # http://daffy.uah.edu/piano/page4/page3/index.html
     inharmonicity_dynamic = True
+
+    # Hammer strike point ~1/7 of the speaking length: the |sin(n*pi*p)| comb nulls
+    # the 7th harmonic (and 14th, 21st) -- the flat, dissonant minor-7th partials a
+    # real piano's strike point is placed to suppress. Slightly off 1/7 (e.g. 0.135)
+    # would give a deep notch instead of a mathematically exact zero.
+    strike_point = 1.0 / 7
+    strike_depth = 0.65   # notch depth at the SOFTEST blow; fills toward 0 at ff (velocity
+                          # widens the felt contact). ~0 at ff matches the Iowa ff reference.
 
     inharmonicity_coefficient_func = lambda self, x, a, b, c, d, e: a + b * x + c * x * x + (d / x) + (e / (x * x))
 
