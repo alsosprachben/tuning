@@ -1139,15 +1139,26 @@ class BlownPipeProperties(SynthProperties):
     max_harmonic = 32
     # Flue pipes are not perfectly harmonic: the mouth/end correction shifts the
     # effective length with frequency (and scales with bore width), stretching the
-    # partials slightly. Use the fixed 2nd-harmonic coefficient -- NOT the piano's
-    # dynamic Steinway model -- which places the octave partial exactly on the
-    # "equal pythagorean" stretched octave (stretch_interval = 7th root of the
-    # Pythagorean comma, so 12 pure fifths = 7 stretched octaves; see
-    # inharmonicity.py). The pipe's spectrum then reinforces that temperament.
-    # Inherited by flue organ / pipe / flute / brass; reed organ and bowed
-    # strings override back to 0.
+    # partials slightly. The fixed 2nd-harmonic coefficient is the static base --
+    # it places the octave partial on the "equal pythagorean" stretched octave
+    # (stretch_interval = 7th root of the Pythagorean comma, so 12 pure fifths =
+    # 7 stretched octaves; see inharmonicity.py).
+    #
+    # With inharmonicity_dynamic = True, init_partials instead recomputes the
+    # coefficient per note from a frequency-dependent model
+    # (inharmonicity_coefficient_for_frequency). We borrow the canonical
+    # Steinway-B model below -- the SAME coefficients the hybrid tuner bends its
+    # octaves along -- so under the hybrid tuning the pipe's octave partial sits
+    # exactly on the tuner's stretched octave and the two lock instead of
+    # beating. (Reed organ overrides the coefficient to 0 and stays phase-locked;
+    # the OrganProperties family below pins this flag back to False, so neither
+    # the frequency-model nor the crash-prone lookup is reached for organs/brass
+    # -- only the bare blown pipe stretches dynamically.)
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
-    inharmonicity_dynamic = False
+    inharmonicity_dynamic = True
+    a, b, c, d, e = Steinway.a, Steinway.b, Steinway.c, Steinway.d, Steinway.e
+    inharmonicity_coefficient_func = InharmonicStringProperties.inharmonicity_coefficient_func
+    inharmonicity_coefficient_for_frequency = InharmonicStringProperties.inharmonicity_coefficient_for_frequency
 
     plucked_harmonic = 1000.0
     pluck_dampening = 1.0
@@ -1163,6 +1174,7 @@ class BlownPipeProperties(SynthProperties):
 
 class OrganProperties(BlownPipeProperties):
     initial_gain = 1.0 / 5000   # keep organ/reed/brass at the pre-pipe level
+    inharmonicity_dynamic = False   # organs/reeds/brass stay phase-locked; only the bare blown pipe stretches dynamically
     tonal_dampening = 1.4
     octave_dampening = 1.0 / 8
     octave_modulo = True
