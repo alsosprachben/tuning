@@ -1182,6 +1182,15 @@ class OrganProperties(BlownPipeProperties):
 
 class FlueOrganProperties(OrganProperties):
     initial_gain = 1.0 / 3040   # +4.3 dB to equal-peak (moderate spectrum)
+    # Flue pipes have pitched partials, so like the bare blown pipe they must
+    # track whatever tuning renders them or their octaves beat. Under the hybrid
+    # (Steinway-B) tuning -- the temperament for dense Baroque counterpoint --
+    # re-enable the dynamic model (inherited a,b,c,d,e + coefficient function
+    # from BlownPipeProperties) so the flue organ's octave partials lock to the
+    # tuner's stretched octaves. OrganProperties pins this False for the family;
+    # only the flue organ (pitched, like the pipe) opts back in. The reed organ
+    # keeps coefficient 0 and stays harmonic / phase-locked; brass stays locked.
+    inharmonicity_dynamic = True
     odd_only = False
     # Principal pipes speak fast; keep the inherited chiff character but
     # compress it into a tighter onset than the generic blown pipe's 0.3 s.
