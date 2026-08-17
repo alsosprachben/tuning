@@ -458,16 +458,14 @@ class BasePartial:
 
 class BaseTone:
     def sum_values(self, second, nyquist):
-        v = sum(p.value(second, nyquist) for p in self.partials)
-        if v > 1.0:
-            clipped(v)
-            v = 1.0
-
-        if v < -1.0:
-            clipped(v)
-            v = -1.0
-
-        return v
+        # Sum this voice's partials in full precision -- do NOT clamp per tone.
+        # A loud voice (e.g. a full-pleno organ note whose partials line up at the
+        # in-phase attack) legitimately exceeds +/-1 before it is mixed with the
+        # others; clamping here would distort and quiet that single voice. The one
+        # clip that belongs is at the output, after all voices are summed and
+        # scaled by master_gain (SynthSampler.sum_values). The block backend mixes
+        # the same way.
+        return sum(p.value(second, nyquist) for p in self.partials)
 
 
 class BaseSampler:
@@ -1570,12 +1568,8 @@ class SynthTone(BaseTone):
             if g <= 1e-4:
                 continue
             v += g * shutter(p.nom_freq, swell) * p.value(second, nyquist)
-        if v > 1.0:
-            clipped(v)
-            v = 1.0
-        elif v < -1.0:
-            clipped(v)
-            v = -1.0
+        # Full precision, no per-tone clamp: the pleno legitimately exceeds +/-1
+        # here and is clipped once at the output (see BaseTone.sum_values).
         return v
 
     def __init__(self, sampler, nyquist, audio_channel, midi_channel, panning=0.0, start=None, stop=None,
