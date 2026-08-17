@@ -167,7 +167,9 @@ def render(path, tuner='hybrid'):
 if __name__=="__main__":
     inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid'
     t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
-    st=np.empty(len(L)*2,np.float32); st[0::2]=L; st[1::2]=R
-    w=wave.open(outp,'wb'); w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR)
-    w.writeframes((np.clip(st,-1,1)*32767).astype('<i2').tobytes()); w.close()
+    st=np.empty(len(L)*2,np.float64); st[0::2]=L; st[1::2]=R
+    # 32-bit signed int: keep full dynamic range for the downstream reverb/normalise
+    # pipeline (16-bit at the low pre-normalisation peak would waste ~half the bits).
+    w=wave.open(outp,'wb'); w.setnchannels(2); w.setsampwidth(4); w.setframerate(SR)
+    w.writeframes((np.clip(st,-1,1)*2147483647.0).astype('<i4').tobytes()); w.close()
     print("blockrender: %.1fs audio, %d partials, kernel %.2fs, total %.2fs = %.1fx realtime -> %s"%(total,P,kdt,dt,total/dt,outp))
