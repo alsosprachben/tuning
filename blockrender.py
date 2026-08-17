@@ -65,12 +65,13 @@ def onepole_blocks(events, nblk, default):
     return out
 
 def registration_blocks(ch, prop, ccs, nblk):
-    ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [k for k,_,_ in ranks])
+    ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     ev = sorted(ccs.get(ch, [])); mask = 1; cres = 0.0; vol = 1.0
-    rank_ev = {k: [] for k,_,_ in ranks}; swell_ev = []
+    rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     def emit(t):
         nd = int(cres*len(order)+1e-9); drawn = set(order[:nd])
-        for i,(k,_,_) in enumerate(ranks): rank_ev[k].append((t, 1.0 if ((mask>>i)&1 or k in drawn) else 0.0))
+        for i, r in enumerate(ranks):
+            k = r[0]; rank_ev[k].append((t, 1.0 if ((mask>>i)&1 or k in drawn) else 0.0))
         swell_ev.append((t, vol))
     emit(0.0)
     for t, cc, val in ev:
@@ -79,7 +80,7 @@ def registration_blocks(ch, prop, ccs, nblk):
         elif cc==7: vol=val/127.0
         else: continue
         emit(t)
-    gate = {k: onepole_blocks(rank_ev[k][1:], nblk, rank_ev[k][0][1]) for k,_,_ in ranks}
+    gate = {r[0]: onepole_blocks(rank_ev[r[0]][1:], nblk, rank_ev[r[0]][0][1]) for r in ranks}
     swell = onepole_blocks(swell_ev[1:], nblk, swell_ev[0][1])
     return gate, swell, rank_ev   # rank_ev = per-rank [(t, target 0/1)] for draw-time (speak) lookup
 
@@ -114,7 +115,7 @@ def prepare(path, tuner='hybrid'):
         pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk)
         rankev_of[ch]=rev
         crow_of[ch]=len(Srows); Srows.append(s)
-        for k,_,_ in pr.stop_ranks: grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
+        for r in pr.stop_ranks: k=r[0]; grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
         sh=(pr.swell_floor,pr.swell_gain_power,pr.swell_hf_max,pr.swell_hf_ref_hz)
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
@@ -156,7 +157,9 @@ def prepare(path, tuner='hybrid'):
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
         stops = props.stop_ranks if organ else [("_",1.0,1.0)]
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
-        for key, ratio, gain in stops:
+        for key, ratio, gain, *rest in stops:
+            spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
+            hv_fn = spec_cls(f0, pan, (vel/127.0)**2, chan_vol).harmonic_volume if spec_cls else props.harmonic_volume
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
             # A drawn stop speaks (phase + attack fade start) at its draw time, not
             # the note onset -- a fresh pipe, matching the reference. Non-organ voices
@@ -169,7 +172,7 @@ def prepare(path, tuner='hybrid'):
             for m in range(1, props.max_harmonic+1):
                 h = ratio*m; stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0; hf = f0*h*stretch
                 if hf > SR/2: break
-                hv = props.harmonic_volume(m)
+                hv = hv_fn(m)
                 if hv == 0.0: continue
                 dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
                 aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0

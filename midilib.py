@@ -1048,7 +1048,7 @@ class Channel:
         if not getattr(prop, 'registerable', False):
             return
         ranks = prop.stop_ranks
-        order = getattr(prop, 'crescendo_order', [k for k, _, _ in ranks])
+        order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
 
         st = self.sampler.reg_state_for(self.midi_channel)
         swell_target = min(1.0, max(0.0, self.getControl("volume")))       # CC7
@@ -1058,8 +1058,8 @@ class Channel:
         drawn_by_cres = set(order[:ndrawn])
 
         targets = {}
-        for i, (key, _, _) in enumerate(ranks):
-            bit = 1.0 if (mask >> i) & 1 else 0.0
+        for i, r in enumerate(ranks):
+            key = r[0]; bit = 1.0 if (mask >> i) & 1 else 0.0
             targets[key] = 1.0 if (bit or key in drawn_by_cres) else 0.0
 
         k = 1.0 - _reg_exp(-dt / REG_SMOOTH_TAU) if dt > 0.0 else 1.0

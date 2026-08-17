@@ -1319,6 +1319,18 @@ class DarkBrassProperties(BrassProperties):
     chiff_max_valve_time = 0.075   # slower, rounder onset
 
 
+# --- Cross-family stops: a Flute on the flue (19) and a Trumpet on the reed (20).
+# A stop_ranks entry may carry a 4th field, a "spectrum" property class, whose
+# harmonic_volume shapes THAT rank's amplitudes -- borrowing only the timbre. The
+# inharmonicity (the grid the rank locks to), the envelope, and the decay stay the
+# BASE organ's: flue-dynamic (hybrid-lock) under the flute, reed-harmonic under the
+# trumpet. So a drawn flute/trumpet is a genuinely different colour that still locks
+# like every other stop. Appended here (not inline) because BrightBrass is defined
+# after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, BlownPipeProperties)]
+ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 2.50, BrightBrassProperties)]
+
+
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
 
 class MalletProperties(PluckedStringProperties):
@@ -1740,14 +1752,25 @@ class SynthTone(BaseTone):
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f)
         B = props.inharmonicity_coefficient
         maxm = getattr(props, 'max_harmonic', 64) or 64
-        for key, ratio, gain in props.stop_ranks:
+        spec_cache = {}
+        for rank in props.stop_ranks:
+            key, ratio, gain = rank[0], rank[1], rank[2]
+            spec_cls = rank[3] if len(rank) > 3 else None   # borrow this voice's SPECTRUM only
+            if spec_cls is not None:
+                sp = spec_cache.get(spec_cls)
+                if sp is None:
+                    sp = spec_cls(f, props.channel_pan, props.attack_volume, props.channel_volume)
+                    spec_cache[spec_cls] = sp
+                hv_fn = sp.harmonic_volume
+            else:
+                hv_fn = props.harmonic_volume
             for m in range(1, maxm + 1):
                 h = ratio * m
                 stretch = (1.0 + 0.5 * (h * h - 1.0) * B) if B > 0.0 else 1.0
                 hf = f * h * stretch
                 if hf > self.nyquist:
                     break
-                hv = props.harmonic_volume(m)
+                hv = hv_fn(m)
                 if hv == 0.0:
                     continue
                 vol = hv * self.pan
