@@ -159,7 +159,10 @@ def prepare(path, tuner='hybrid'):
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         for key, ratio, gain, *rest in stops:
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
-            hv_fn = spec_cls(f0, pan, (vel/127.0)**2, chan_vol).harmonic_volume if spec_cls else props.harmonic_volume
+            dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
+            spv = spec_cls(f0, pan, (vel/127.0)**2, chan_vol) if spec_cls else None
+            hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
+            rank_B = (spv or props).inharmonicity_coefficient_for_frequency(f0) if dyn else B
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
             # A drawn stop speaks (phase + attack fade start) at its draw time, not
             # the note onset -- a fresh pipe, matching the reference. Non-organ voices
@@ -170,7 +173,7 @@ def prepare(path, tuner='hybrid'):
             else:
                 non_r = non
             for m in range(1, props.max_harmonic+1):
-                h = ratio*m; stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0; hf = f0*h*stretch
+                h = ratio*m; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
                 if hf > SR/2: break
                 hv = hv_fn(m)
                 if hv == 0.0: continue

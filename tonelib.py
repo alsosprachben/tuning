@@ -1328,7 +1328,7 @@ class DarkBrassProperties(BrassProperties):
 # like every other stop. Appended here (not inline) because BrightBrass is defined
 # after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, BlownPipeProperties)]
-ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 2.50, BrightBrassProperties)]
+ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.90, BrightBrassProperties, True)]
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
@@ -1756,6 +1756,8 @@ class SynthTone(BaseTone):
         for rank in props.stop_ranks:
             key, ratio, gain = rank[0], rank[1], rank[2]
             spec_cls = rank[3] if len(rank) > 3 else None   # borrow this voice's SPECTRUM only
+            dyn = rank[4] if len(rank) > 4 else False        # force flue-dynamic inharmonicity (hybrid-lock)
+            sp = None
             if spec_cls is not None:
                 sp = spec_cache.get(spec_cls)
                 if sp is None:
@@ -1764,9 +1766,13 @@ class SynthTone(BaseTone):
                 hv_fn = sp.harmonic_volume
             else:
                 hv_fn = props.harmonic_volume
+            # A reed (harmonic base) drawn against the stretched flue beats -- a phaser.
+            # dyn=True gives this rank the flue dynamic (Steinway) stretch so it LOCKS
+            # to hybrid like the principals. Otherwise use the base voice's grid.
+            rank_B = (sp or props).inharmonicity_coefficient_for_frequency(f) if dyn else B
             for m in range(1, maxm + 1):
                 h = ratio * m
-                stretch = (1.0 + 0.5 * (h * h - 1.0) * B) if B > 0.0 else 1.0
+                stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
                 hf = f * h * stretch
                 if hf > self.nyquist:
                     break
@@ -1779,12 +1785,16 @@ class SynthTone(BaseTone):
                 vol *= gain
                 decay = props.harmonic_decay(m)
                 p = SimplePartial(props, f, h, vol, decay, self.delay, self.ref_count)
+                if dyn:
+                    p.inharmonic_stretch = stretch   # override the base-B stretch SimplePartial computed
                 p.rank = key
                 p.nom_freq = hf
                 self.partials.append(p)
                 for gain_mult, offset_hz, detune_ratio, unison_decay in props.unison_voices(f, m, decay):
                     up = SimplePartial(props, f, h, vol * gain_mult, unison_decay,
                                        self.delay, self.ref_count)
+                    if dyn:
+                        up.inharmonic_stretch = stretch
                     up.frequency_offset = offset_hz
                     up.detune_ratio = detune_ratio
                     up.rank = key
