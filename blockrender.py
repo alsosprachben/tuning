@@ -100,13 +100,15 @@ def render(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","logr","logrA","aft","sus","cv","cc","crl","sj","csc","gr","cr")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","gr","cr")}
     A = cols  # alias
+    _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr):
         A["om"].append(om); A["p0"].append(-om*non); A["aL"].append(ampL); A["aR"].append(ampR)
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
+        A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["gr"].append(gr); A["cr"].append(cr)
     for ch, note, on, off, vel, (v7, v11) in notes:
         pc = property_class_for_program(ch_prog.get(ch,0))
@@ -123,7 +125,11 @@ def render(path, tuner='hybrid'):
         li, ri = props.left_incidence, props.right_incidence
         cv = props.chiff_volume; cc = props.chiff_cycle
         crl = getattr(props,'chiff_release',1.0) or 0.0; sjit = props.sustain_jitter; csc = f0/440.0
+        _TB[0] = getattr(props,'tension_bend',0.0) * props.attack_volume
+        _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
+        _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
         stops = props.stop_ranks if organ else [("_",1.0,1.0)]
+        transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         for key, ratio, gain in stops:
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
             for m in range(1, props.max_harmonic+1):
@@ -136,12 +142,35 @@ def render(path, tuner='hybrid'):
                 gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
                 emit_partial(2*math.pi*hf/SR, gL, gR, hf, non, noff, fade, rel,
                              logr, logrA, aftL, props.sustain_level, cv, cc, crl, sjit, csc, gr, cr)
+                transverse.append((hf, hv, dbps))
                 for gm, off_hz, dr, ud in props.unison_voices(f0, m, dbps):
                     uf = hf*(1.0+dr) + off_hz
                     if uf <= 0 or uf > SR/2: continue
                     ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
                     emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non, noff, fade, rel,
                                  ulr, logrA, aftL, props.sustain_level, cv, cc, crl, sjit, csc, gr, cr)
+        # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
+        # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
+        # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano
+        # bass, note <= phantom_note_max_hz).
+        coupling = getattr(props,'phantom_coupling',0.0)
+        power = getattr(props,'phantom_register_power',0.0)
+        if power > 0.0: coupling *= (getattr(props,'phantom_ref_hz',65.0)/f0)**power
+        if coupling > 0.0 and f0 <= getattr(props,'phantom_note_max_hz',0.0) and transverse:
+            parents = transverse[:getattr(props,'phantom_max_order',16)]
+            floor = getattr(props,'phantom_gain_floor',3e-3)*max(v for _,v,_ in parents)
+            for a in range(len(parents)):
+                fa,va,da = parents[a]
+                for bb in range(a,len(parents)):
+                    fb,vb,db_ = parents[bb]
+                    fph = fa+fb
+                    if fph >= SR/2: break
+                    g = coupling*va*vb*(1.0 if a==bb else 2.0)
+                    if g < floor: continue
+                    dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
+                    aftp, adbp = props.aftersound(f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
+                    emit_partial(2*math.pi*fph/SR, g, g, fph, non, noff, fade, rel,
+                                 lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
     om=arr("om",np.float64); p0=arr("p0",np.float64)
@@ -149,6 +178,7 @@ def render(path, tuner='hybrid'):
     non=arr("non",np.int64); noff=arr("noff",np.int64); fa=arr("fa",np.float32); re=arr("re",np.float32)
     logr=arr("logr",np.float32); logrA=arr("logrA",np.float32); aft=arr("aft",np.float32); sus=arr("sus",np.float32)
     cv=arr("cv",np.float32); cc=arr("cc",np.float32); crl=arr("crl",np.float32); sj=arr("sj",np.float32); csc=arr("csc",np.float32)
+    tbav=arr("tbav",np.float32); tau=arr("tau",np.float32); tcut=arr("tcut",np.float32)
     gr=arr("gr",np.int32); cr=arr("cr",np.int32)
     ent=np.ascontiguousarray(np.array(T.entropy, np.float64))
     outL=np.zeros(N,np.float32); outR=np.zeros(N,np.float32)
@@ -158,6 +188,7 @@ def render(path, tuner='hybrid'):
     lib.synth_voice(fp(outL),fp(outR),ctypes.c_long(N),BLK,nblk,P,dp(om),dp(p0),dp(p0),fp(aL),fp(aR),fp(nf),
                     lp(non),lp(noff),fp(fa),fp(re),fp(logr),fp(logrA),fp(aft),fp(sus),
                     fp(cv),fp(cc),fp(crl),fp(sj),fp(csc),dp(ent),ctypes.c_long(len(ent)),
+                    fp(tbav),fp(tau),fp(tcut),
                     ip(gr),ip(cr),fp(G),fp(S),
                     ctypes.c_float(sh[0]),ctypes.c_float(sh[1]),ctypes.c_float(sh[2]),ctypes.c_float(sh[3]),ctypes.c_long(SR))
     kdt=time.time()-t0

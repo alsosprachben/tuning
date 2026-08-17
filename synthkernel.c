@@ -84,6 +84,7 @@ void synth_voice(
     const float* logr, const float* logrA, const float* aftL, const float* susL,
     const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
     const double* entropy, long gran,
+    const float* tbav, const float* tau, const float* tcut,
     const int* grow, const int* crow, const float* G, const float* S,
     float sfloor, float spow, float shmax, float shref, long CHUNK)
 {
@@ -121,9 +122,21 @@ void synth_voice(
                     else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=r*(1.f-r)*crl; }
                     else jf=sj;
                 }
-                double phL=ph0L[p]+w*(double)ns, phR=ph0R[p]+w*(double)ns;
+                // Tension bend (piano strike): frequency starts sharp by
+                // tbav*e^{-t/tau} and settles, cut off at tcut. Phase is the exact
+                // integral to the block start; the recurrence uses the block-start
+                // instantaneous frequency. tbav==0 -> plain constant-frequency phasor.
+                double bph=0.0; float winst=(float)w;
+                if(tbav[p]!=0.f){
+                    float tb=tbav[p], ts=tau[p], cut=tcut[p];
+                    float trel=(float)(ns-a)/44100.f;
+                    float integ = tb*ts*(1.f - expf(-(trel<cut?trel:cut)/ts));
+                    bph = (double)w*44100.0*(double)integ;
+                    winst = w*(1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f));
+                }
+                double phL=ph0L[p]+w*(double)ns+bph, phR=ph0R[p]+w*(double)ns+bph;
                 float zrL=cos(phL),ziL=sin(phL),zrR=cos(phR),ziR=sin(phR);
-                float rr=cosf(w),ri=sinf(w);
+                float rr=cosf(winst),ri=sinf(winst);
                 long len=ne-ns; float inv=len>0?1.f/(float)len:0.f;
                 float jfa=jf*cv*csc;
                 for(long n=ns;n<ne;n++){
