@@ -81,7 +81,21 @@ def registration_blocks(ch, prop, ccs, nblk):
         emit(t)
     gate = {k: onepole_blocks(rank_ev[k][1:], nblk, rank_ev[k][0][1]) for k,_,_ in ranks}
     swell = onepole_blocks(swell_ev[1:], nblk, swell_ev[0][1])
-    return gate, swell
+    return gate, swell, rank_ev   # rank_ev = per-rank [(t, target 0/1)] for draw-time (speak) lookup
+
+def rank_speak_sec(events, on_sec, aj):
+    """When a rank first speaks for a note starting at on_sec: the note attack if
+    the rank is already drawn, else the first draw after onset (matching the
+    reference, where hammer_down -- and so the phase + attack fade -- fires the
+    moment the gated-off partial is first summed). None if never drawn."""
+    cur = 0.0
+    for t, tg in events:
+        if t <= on_sec: cur = tg
+        else: break
+    if cur >= 0.5: return on_sec + aj
+    for t, tg in events:
+        if t > on_sec and tg >= 0.5: return t + aj
+    return None
 
 def render(path, tuner='hybrid'):
     lib = ensure_lib(); lib.synth_voice.restype = None
@@ -90,11 +104,12 @@ def render(path, tuner='hybrid'):
     ch_prog, notes, ccs, total = parse(path)
     N = int(total*SR) + SR; nblk = N // BLK + 2
     # organ registration rows
-    Grows=[]; Srows=[]; grow_of={}; crow_of={}; sh=(0.06,1.6,3.5,1500.0)
+    Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0)
     for ch, prog in ch_prog.items():
         pc = property_class_for_program(prog)
         if not getattr(pc,'registerable',False): continue
-        pr = pc(261.6,0,1,1); g,s = registration_blocks(ch, pr, ccs, nblk)
+        pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk)
+        rankev_of[ch]=rev
         crow_of[ch]=len(Srows); Srows.append(s)
         for k,_,_ in pr.stop_ranks: grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
         sh=(pr.swell_floor,pr.swell_gain_power,pr.swell_hf_max,pr.swell_hf_ref_hz)
@@ -140,6 +155,14 @@ def render(path, tuner='hybrid'):
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         for key, ratio, gain in stops:
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
+            # A drawn stop speaks (phase + attack fade start) at its draw time, not
+            # the note onset -- a fresh pipe, matching the reference. Non-organ voices
+            # always speak at note onset.
+            if organ:
+                sp = rank_speak_sec(rankev_of[ch][key], on, getattr(props,'attack_jitter',0.0))
+                non_r = sp*SR if sp is not None else non
+            else:
+                non_r = non
             for m in range(1, props.max_harmonic+1):
                 h = ratio*m; stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0; hf = f0*h*stretch
                 if hf > SR/2: break
@@ -148,14 +171,14 @@ def render(path, tuner='hybrid'):
                 dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
                 aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
                 gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
-                emit_partial(2*math.pi*hf/SR, gL, gR, hf, non, noff, fade, rel,
+                emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel,
                              logr, logrA, aftL, props.sustain_level, cv, cc, crl, sjit, csc, gr, cr)
                 transverse.append((hf, hv, dbps))
                 for gm, off_hz, dr, ud in props.unison_voices(f0, m, dbps):
                     uf = hf*(1.0+dr) + off_hz
                     if uf <= 0 or uf > SR/2: continue
                     ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
-                    emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non, noff, fade, rel,
+                    emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel,
                                  ulr, logrA, aftL, props.sustain_level, cv, cc, crl, sjit, csc, gr, cr)
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
         # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
