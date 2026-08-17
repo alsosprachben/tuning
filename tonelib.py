@@ -581,6 +581,14 @@ class SawtoothWave(SimplePartial):
 class SynthProperties:
     from inharmonicity import inharmonicity_coefficient_2nd_harmonic, inharmonicity_coefficient_3rd_harmonic
 
+    # Organ registration: True on the pipe-organ families (flue/reed), whose
+    # tones build a full stop-list of ranks (extra octave/fifth partial series)
+    # and read a LIVE per-channel gate (drawn stops / crescendo) and swell tilt
+    # at render time. False everywhere else -- those voices keep the frozen
+    # attack-time channel_volume and a single harmonic series (see init_partials
+    # and SynthTone.sum_values). Default off so nothing but organs changes.
+    registerable = False
+
     # Strike/pluck point as a fraction of the speaking length. When set, mode n is
     # excited with amplitude |sin(n*pi*strike_point)| -- a comb that nulls the
     # harmonics at multiples of 1/strike_point. None = no comb (uses the legacy
@@ -1179,6 +1187,27 @@ class OrganProperties(BlownPipeProperties):
     octave_dampening = 1.0 / 8
     octave_modulo = True
 
+    # --- Swell shutter (CC7, applied LIVE per partial in SynthTone.sum_values) ---
+    # A swell box is a shutter over the whole division: as it closes it drops the
+    # overall level AND muffles the highs (treble is more directional/absorbed).
+    # In an additive engine that is one per-partial spectral tilt, no filter. s in
+    # [0,1] from the smoothed CC7; s=1 (open) is exactly unity, so an organ with
+    # no swell automation renders identically to before. Only defined here; it is
+    # only ever called for registerable voices (flue/reed) that carry reg state.
+    swell_floor    = 0.06     # fully-closed box still radiates ~ -24 dB (never silent)
+    swell_gain_power = 1.6    # perceptual taper of overall level vs the pedal
+    swell_hf_ref_hz  = 1500.0 # frequency scale of the treble damping
+    swell_hf_max     = 3.5    # extra HF attenuation exponent at full close
+
+    def shutter(self, freq, s):
+        if s >= 1.0:
+            return 1.0
+        if s < 0.0:
+            s = 0.0
+        level = self.swell_floor + (1.0 - self.swell_floor) * (s ** self.swell_gain_power)
+        hf = _exp(-(1.0 - s) * self.swell_hf_max * (freq / self.swell_hf_ref_hz))
+        return level * hf
+
 
 class FlueOrganProperties(OrganProperties):
     initial_gain = 1.0 / 3040   # +4.3 dB to equal-peak (moderate spectrum)
@@ -1197,6 +1226,27 @@ class FlueOrganProperties(OrganProperties):
     chiff_min_valve_time = 0.03
     chiff_max_valve_time = 0.10
 
+    # --- Stop list (drawn via CC11 bitfield / CC4 crescendo) ---
+    # A principal chorus. Each rank is a full harmonic series placed a footage
+    # interval away on the note's OWN inharmonic-stretched grid (see
+    # init_partials): ratio is the frequency multiple (8'=1, 4'=octave up=2,
+    # 2'=+2 8ves=4, 2 2/3'=twelfth=3, 16'=octave down=0.5, 5 1/3'=fifth=1.5).
+    # Because a 4' fundamental (h=2) lands exactly on the 8's stretched 2nd
+    # partial, the ranks LOCK by construction under the hybrid tuning. gain is
+    # the pyramid weight (8' loudest, upperwork softer, quints softest). Bit i
+    # of the CC11 mask = stop_ranks[i]; default drawn set is 8'-only.
+    registerable = True
+    stop_ranks = [
+        ("8",     1.0, 1.00),
+        ("4",     2.0, 0.72),
+        ("2",     4.0, 0.55),
+        ("2-2/3", 3.0, 0.40),
+        ("16",    0.5, 0.80),
+        ("5-1/3", 1.5, 0.34),
+    ]
+    # Rollschweller draw order for the CC4 crescendo pedal: brighten, then weight.
+    crescendo_order = ["8", "4", "2", "2-2/3", "16", "5-1/3"]
+
 
 class ReedOrganProperties(OrganProperties):
     initial_gain = 1.0 / 2200   # +7.1 dB to equal-peak (odd-only reed: sparse)
@@ -1204,6 +1254,16 @@ class ReedOrganProperties(OrganProperties):
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
     chiff_max_valve_time = 0.0
+
+    # A reed chorus: 8' with a 16' for gravity and a 4' clairon on top. Same
+    # live-gate mechanism as the flue; bit i of the CC11 mask = stop_ranks[i].
+    registerable = True
+    stop_ranks = [
+        ("8",  1.0, 1.00),
+        ("16", 0.5, 0.72),
+        ("4",  2.0, 0.55),
+    ]
+    crescendo_order = ["8", "16", "4"]
     odd_only = True
     inharmonicity_coefficient = 0.0
 
@@ -1491,6 +1551,33 @@ class SynthTone(BaseTone):
     def remove(self):
         self.sampler.remove(self)
 
+    def sum_values(self, second, nyquist):
+        # Registerable (organ) tones scale each partial LIVE by its rank's gate
+        # (drawn stops / crescendo) times the swell shutter, both read from the
+        # per-channel RegState the MIDI layer steps each sample. A rank at gate ~0
+        # is skipped (no partial eval). swell == 1 makes shutter() return 1.0, so
+        # a fully-open 8'-only organ sums exactly like the base path. Non-organ
+        # tones fall through to the frozen single-series sum.
+        st = self.reg_state
+        if st is None:
+            return BaseTone.sum_values(self, second, nyquist)
+        gate = st.gate
+        swell = st.swell
+        shutter = self.properties.shutter
+        v = 0.0
+        for p in self.partials:
+            g = gate.get(p.rank, 0.0)
+            if g <= 1e-4:
+                continue
+            v += g * shutter(p.nom_freq, swell) * p.value(second, nyquist)
+        if v > 1.0:
+            clipped(v)
+            v = 1.0
+        elif v < -1.0:
+            clipped(v)
+            v = -1.0
+        return v
+
     def __init__(self, sampler, nyquist, audio_channel, midi_channel, panning=0.0, start=None, stop=None,
                  property_class=SynthProperties, attack_volume=1.0, channel_volume=1.0):
         self.sampler = sampler
@@ -1506,6 +1593,7 @@ class SynthTone(BaseTone):
         self.nyquist = nyquist
         self.audio_channel = audio_channel
         self.midi_channel = midi_channel
+        self.reg_state = None   # set in init_partials for registerable voices
         self.start = start
         self.stop = stop
         self.property_class = property_class
@@ -1550,6 +1638,19 @@ class SynthTone(BaseTone):
             }[self.audio_channel]
 
         self.partials = []
+
+        # Organ voices build a full stop-list of ranks and read a LIVE per-rank
+        # gate + swell tilt at render time (see _build_registered_partials and
+        # SynthTone.sum_values). Every other voice keeps the single harmonic
+        # series below, untouched.
+        if getattr(self.property_class, 'registerable', False):
+            self.reg_state = self.sampler.reg_state_for(self.midi_channel)
+            self._build_registered_partials()
+            if self.max_fade is not None:
+                for partial in self.partials:
+                    partial.max_fade = self.max_fade
+            return
+        self.reg_state = None
 
         volume = 0.0
         transverse = []                       # (freq, raw gain, decay) for phantom-partial pairing
@@ -1628,12 +1729,80 @@ class SynthTone(BaseTone):
             for partial in self.partials:
                 partial.max_fade = self.max_fade
 
+    def _build_registered_partials(self):
+        """Build every rank in the voice's stop list. Each rank is a full
+        harmonic series placed a footage interval away on the note's OWN
+        inharmonic-stretched grid: rank harmonic m sits at partial index
+        h = ratio*m, so its stretched frequency f*h*(1+0.5(h^2-1)B) coincides
+        with the 8' series wherever the grids meet (a 4' fundamental, h=2, lands
+        exactly on the 8's stretched 2nd partial) -- the ranks LOCK, no beating.
+        Every partial is tagged with its rank key and nominal frequency; the
+        live per-rank gate and swell tilt are applied in SynthTone.sum_values,
+        so a muted rank costs only a dict lookup. The 8' rank alone reproduces
+        the pre-registration single-series render exactly."""
+        props = self.properties
+        f = self.frequency
+        if props.inharmonicity_dynamic:
+            props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f)
+        B = props.inharmonicity_coefficient
+        maxm = getattr(props, 'max_harmonic', 64) or 64
+        for key, ratio, gain in props.stop_ranks:
+            for m in range(1, maxm + 1):
+                h = ratio * m
+                stretch = (1.0 + 0.5 * (h * h - 1.0) * B) if B > 0.0 else 1.0
+                hf = f * h * stretch
+                if hf > self.nyquist:
+                    break
+                hv = props.harmonic_volume(m)
+                if hv == 0.0:
+                    continue
+                vol = hv * self.pan
+                if hrtf:
+                    vol *= props.hrtf_gain(hf, self.incidence)
+                vol *= gain
+                decay = props.harmonic_decay(m)
+                p = SimplePartial(props, f, h, vol, decay, self.delay, self.ref_count)
+                p.rank = key
+                p.nom_freq = hf
+                self.partials.append(p)
+                for gain_mult, offset_hz, detune_ratio, unison_decay in props.unison_voices(f, m, decay):
+                    up = SimplePartial(props, f, h, vol * gain_mult, unison_decay,
+                                       self.delay, self.ref_count)
+                    up.frequency_offset = offset_hz
+                    up.detune_ratio = detune_ratio
+                    up.rank = key
+                    up.nom_freq = hf
+                    self.partials.append(up)
+
+
+class RegState:
+    """Live organ-registration state for one MIDI channel, shared between the
+    MIDI layer (which steps it toward the CC targets each sample) and the tones
+    (which read it at render time). `gate[rank]` in [0,1] is how far each drawn
+    stop is out; `swell` in [0,1] is how open the shutter is. Defaults reproduce
+    a single 8' rank, fully open -- i.e. today's organ sound."""
+    __slots__ = ('swell', 'gate')
+
+    def __init__(self):
+        self.swell = 1.0
+        self.gate = {"8": 1.0}
+
 
 class SynthSampler(BaseSampler):
     def __init__(self, audio_channel=0, sample_rate=48000, sample_depth=16, sample_packing="h"):
         BaseSampler.__init__(self, sample_rate, sample_depth, sample_packing)
         self.audio_channel = audio_channel
         self.tones = {}
+        # midi_channel -> RegState, created on demand. The MIDI layer's
+        # per-sample stepper writes here; registerable tones read it.
+        self.channel_state = {}
+
+    def reg_state_for(self, midi_channel):
+        st = self.channel_state.get(midi_channel)
+        if st is None:
+            st = RegState()
+            self.channel_state[midi_channel] = st
+        return st
 
     def newTone(self, midi_channel, frequency, pan, start, stop=None, property_class=SynthProperties,
                 attack_volume=1.0, channel_volume=1.0):

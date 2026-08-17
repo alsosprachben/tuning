@@ -54,6 +54,12 @@ tuner_class = StretchTuner
 TUNING_FOLLOW_CENTS = float(os.environ.get("TUNING_FOLLOW_CENTS", "3.0"))
 TUNING_RECENTER_CENTS = float(os.environ.get("TUNING_RECENTER_CENTS", "1.0"))
 
+# One-pole time constant (seconds) for smoothing the live organ registration
+# (swell CC7, drawn stops CC11, crescendo CC4) so coarse 7-bit steps don't
+# zipper. ~15 ms reads as an instant but glitch-free stop change / swell.
+from math import exp as _reg_exp
+REG_SMOOTH_TAU = float(os.environ.get("REG_SMOOTH_TAU", "0.015"))
+
 def set_tuner(name):
     global tuner_class
     key = name.lower()
@@ -607,10 +613,15 @@ class Channels:
         delta = s - self.s
         self.s = s
         self.t += delta * self.ticks_per_second()
-        
+
         self.q.update_time(self.t)
-    
+
         self.pullEnqueuedEvents()
+
+        # Advance the live organ registration (swell / drawn stops / crescendo)
+        # toward its CC targets. Runs every sample; organ channels only.
+        for channel in self.channels.values():
+            channel.stepRegistration(delta)
 
     def pullEnqueuedEvents(self):
         self.updateEvents(self.q.event_batch())
@@ -927,8 +938,15 @@ class Note:
         # bucket in patch_map (0-based program numbers).
         property_class = property_class_for_program(self.channel.program)
 
+        # Organ voices take their channel level from the LIVE swell (CC7), applied
+        # per partial at render time (SynthTone.sum_values), not baked here -- so
+        # pass a neutral channel volume and let RegState.swell shape held notes.
+        # (CC11 is repurposed as the stop bitfield for these voices, so it must
+        # not fold into the amplitude either.)
+        channel_volume = 1.0 if getattr(property_class, 'registerable', False) else self.channel_volume
+
         self.tone = self.channel.sampler.newTone(self.channel.midi_channel, f, self.pan, seconds, None,
-                                                 property_class, self.attack_volume, self.channel_volume)
+                                                 property_class, self.attack_volume, channel_volume)
 
     def __str__(self):
         return str(self.__dict__)
@@ -1015,7 +1033,42 @@ class Channel:
         
     def updateProgram(self, c, s):
         self.program = c.program
-        
+        # Selecting an organ voice defaults its registration to the 8' Principal
+        # (bit 0 of the CC11 stop bitfield). Expression otherwise defaults to full
+        # (0x7F) -- which as a bitmask would draw every stop -- so reset it here so
+        # an organ MIDI with no stop automation sounds as today's single 8' rank.
+        if getattr(property_class_for_program(self.program), 'registerable', False):
+            self.controls["expression"] = [0x01, 0x00]   # MSB=1 -> stop mask bit0 (8')
+
+    def stepRegistration(self, dt):
+        """Step this channel's live RegState toward its CC targets (organ voices
+        only). swell <- CC7; the per-rank gate <- max(CC11 stop bitfield, CC4
+        crescendo draw). One-pole smoothed so 7-bit steps don't zipper."""
+        prop = property_class_for_program(self.program)
+        if not getattr(prop, 'registerable', False):
+            return
+        ranks = prop.stop_ranks
+        order = getattr(prop, 'crescendo_order', [k for k, _, _ in ranks])
+
+        st = self.sampler.reg_state_for(self.midi_channel)
+        swell_target = min(1.0, max(0.0, self.getControl("volume")))       # CC7
+        mask = self.controls["expression"][0]                             # CC11 MSB = 7-bit stop bits
+        cres = min(1.0, max(0.0, self.getControl("foot")))                # CC4 crescendo pedal
+        ndrawn = int(cres * len(order) + 1e-9)                            # stops the pedal has rolled in
+        drawn_by_cres = set(order[:ndrawn])
+
+        targets = {}
+        for i, (key, _, _) in enumerate(ranks):
+            bit = 1.0 if (mask >> i) & 1 else 0.0
+            targets[key] = 1.0 if (bit or key in drawn_by_cres) else 0.0
+
+        k = 1.0 - _reg_exp(-dt / REG_SMOOTH_TAU) if dt > 0.0 else 1.0
+        st.swell += (swell_target - st.swell) * k
+        gate = st.gate
+        for key, target in targets.items():
+            cur = gate.get(key, 0.0)
+            gate[key] = cur + (target - cur) * k
+
     def updateAftertouch(self, c, s):
         self.aftertouch = c.pressure
         
