@@ -85,6 +85,7 @@ void synth_voice(
     const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
     const double* entropy, long gran,
     const float* tbav, const float* tau, const float* tcut,
+    const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
     float sfloor, float spow, float shmax, float shref, long CHUNK)
 {
@@ -101,11 +102,15 @@ void synth_voice(
             float cv=chVol[p], cc=chCyc[p], crl=chRel[p], sj=susJit[p], csc=chScale[p];
             int gr=grow[p]; const float* Grow = gr>=0 ? G+(long)gr*nblk : 0;
             const float* Srow = gr>=0 ? S+(long)crow[p]*nblk : 0;
-            // amplitude at absolute sample n (env * decay * gate * shutter)
-            #define AMP(nn, b) ({ \
-                float tt=(float)((nn)-a)/44100.f; \
+            // amplitude at absolute sample n (env * decay * gate * shutter). The
+            // envelope onset is shifted per ear by the HRTF path delay d (samples)
+            // -- the interaural time difference -- while the carrier phase (ph0)
+            // is not delayed, exactly as the reference does.
+            float dL=delL[p], dR=delR[p];
+            #define AMP(nn, b, d) ({ \
+                float tt=(float)((nn)-a-(d))/44100.f; \
                 float dc=sl+(1.f-sl)*((1.f-af)*expf(-tt*lr)+af*expf(-tt*lrA)); \
-                float e=sstep((float)((nn)-a)*invf)*(1.f-sstep((float)((nn)-off)*invr))*dc; \
+                float e=sstep((float)((nn)-a-(d))*invf)*(1.f-sstep((float)((nn)-off-(d))*invr))*dc; \
                 float gg=1.f, sh=1.f; \
                 if(Grow){ int bb=(b)<nblk?(b):nblk-1; gg=Grow[bb]; float sw=Srow[bb]; \
                     if(sw<1.f){ float lvl=sfloor+(1.f-sfloor)*powf(sw,spow); sh=lvl*expf(-(1.f-sw)*shmax*(nf/shref)); } } \
@@ -113,8 +118,8 @@ void synth_voice(
             long bstart=(cs>a?cs:a)/BLK, bend=(ce<zend?ce:zend+1)/BLK+1;
             for(long b=bstart;b<bend;b++){
                 long ns=b*BLK, ne=ns+BLK; if(ns<cs)ns=cs; if(ne>ce)ne=ce; if(ns>=ne)continue;
-                float m0=AMP(ns,b), m1=AMP(ne,b);
-                if(m0<=1e-7f && m1<=1e-7f) continue;
+                float mL0=AMP(ns,b,dL), mL1=AMP(ne,b,dL), mR0=AMP(ns,b,dR), mR1=AMP(ne,b,dR);
+                if(mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
                 // chiff fade for this block (state: attack/sustain/release)
                 float jf=0.f; long mid=(ns+ne)/2;
                 if(cv>0.f){
@@ -140,7 +145,7 @@ void synth_voice(
                 long len=ne-ns; float inv=len>0?1.f/(float)len:0.f;
                 float jfa=jf*cv*csc;
                 for(long n=ns;n<ne;n++){
-                    float t=(float)(n-ns)*inv; float mL=(m0+(m1-m0)*t)*aL, mR=(m0+(m1-m0)*t)*aR;
+                    float t=(float)(n-ns)*inv; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
                     float sL=zrL, sR=zrR;
                     if(jfa>0.f){
                         double sec=(double)n/44100.0;

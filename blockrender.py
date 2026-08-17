@@ -85,6 +85,7 @@ def registration_blocks(ch, prop, ccs, nblk):
 
 def render(path, tuner='hybrid'):
     lib = ensure_lib(); lib.synth_voice.restype = None
+    import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
     ch_prog, notes, ccs, total = parse(path)
     N = int(total*SR) + SR; nblk = N // BLK + 2
@@ -100,15 +101,19 @@ def render(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","gr","cr")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","delL","delR","gr","cr")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
+    _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
+    _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr):
+        om = om * _PJ[0]
         A["om"].append(om); A["p0"].append(-om*non); A["aL"].append(ampL); A["aR"].append(ampR)
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
+        A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
         A["gr"].append(gr); A["cr"].append(cr)
     for ch, note, on, off, vel, (v7, v11) in notes:
         pc = property_class_for_program(ch_prog.get(ch,0))
@@ -121,7 +126,10 @@ def render(path, tuner='hybrid'):
         at = props.attack_time if props.attack_time is not None else props.chiff_max_valve_time
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
         fade = max(1e-4, min(at, 0.45*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
-        non = on*SR; noff = off*SR
+        # per-note timing jitter delays the strike; pitch jitter detunes the whole note
+        non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
+        _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
+        _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         cv = props.chiff_volume; cc = props.chiff_cycle
         crl = getattr(props,'chiff_release',1.0) or 0.0; sjit = props.sustain_jitter; csc = f0/440.0
@@ -179,6 +187,7 @@ def render(path, tuner='hybrid'):
     logr=arr("logr",np.float32); logrA=arr("logrA",np.float32); aft=arr("aft",np.float32); sus=arr("sus",np.float32)
     cv=arr("cv",np.float32); cc=arr("cc",np.float32); crl=arr("crl",np.float32); sj=arr("sj",np.float32); csc=arr("csc",np.float32)
     tbav=arr("tbav",np.float32); tau=arr("tau",np.float32); tcut=arr("tcut",np.float32)
+    delL=arr("delL",np.float32); delR=arr("delR",np.float32)
     gr=arr("gr",np.int32); cr=arr("cr",np.int32)
     ent=np.ascontiguousarray(np.array(T.entropy, np.float64))
     outL=np.zeros(N,np.float32); outR=np.zeros(N,np.float32)
@@ -188,7 +197,7 @@ def render(path, tuner='hybrid'):
     lib.synth_voice(fp(outL),fp(outR),ctypes.c_long(N),BLK,nblk,P,dp(om),dp(p0),dp(p0),fp(aL),fp(aR),fp(nf),
                     lp(non),lp(noff),fp(fa),fp(re),fp(logr),fp(logrA),fp(aft),fp(sus),
                     fp(cv),fp(cc),fp(crl),fp(sj),fp(csc),dp(ent),ctypes.c_long(len(ent)),
-                    fp(tbav),fp(tau),fp(tcut),
+                    fp(tbav),fp(tau),fp(tcut),fp(delL),fp(delR),
                     ip(gr),ip(cr),fp(G),fp(S),
                     ctypes.c_float(sh[0]),ctypes.c_float(sh[1]),ctypes.c_float(sh[2]),ctypes.c_float(sh[3]),ctypes.c_long(SR))
     kdt=time.time()-t0
