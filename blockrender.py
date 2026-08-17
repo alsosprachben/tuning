@@ -39,9 +39,9 @@ def tuning_table(name):
 
 def parse(path):
     mid = mido.MidiFile(path); ch_prog = {}; notes = []; ccs = {}; on = {}; t = 0.0
-    ctrl = {}  # (ch)->{7:val,11:val} current, snapshotted at note-on for non-organ channel_volume
+    ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
-        c = ctrl.get(ch, {}); return (c.get(7,127)/127.0), (c.get(11,127)/127.0)
+        c = ctrl.get(ch, {}); return (c.get(7,127)/127.0, c.get(11,127)/127.0, (c.get(10,64)-64)/63.0)
     for msg in mid:
         t += msg.time
         if msg.type == 'program_change': ch_prog[msg.channel] = msg.program
@@ -133,11 +133,11 @@ def prepare(path, tuner='hybrid'):
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
         A["gr"].append(gr); A["cr"].append(cr)
-    for ch, note, on, off, vel, (v7, v11) in notes:
+    for ch, note, on, off, vel, (v7, v11, pan) in notes:
         pc = property_class_for_program(ch_prog.get(ch,0))
         organ = getattr(pc,'registerable',False)
         chan_vol = 1.0 if organ else (v7*v11)**2
-        f0 = FREQ[note]; props = pc(f0, 0.0, (vel/127.0)**2, chan_vol)
+        f0 = FREQ[note]; props = pc(f0, pan, (vel/127.0)**2, chan_vol)   # pan = CC10 -> HRTF placement
         if props.inharmonicity_dynamic:
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f0)
         B = props.inharmonicity_coefficient; dur = off-on
