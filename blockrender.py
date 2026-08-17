@@ -97,7 +97,10 @@ def rank_speak_sec(events, on_sec, aj):
         if t > on_sec and tg >= 0.5: return t + aj
     return None
 
-def render(path, tuner='hybrid'):
+def prepare(path, tuner='hybrid'):
+    """Parse + tune + build the full partial table (the one-time cost). Returns a
+    dict of contiguous arrays ready for synth_window(); reused by render() (one
+    full window) and play.py (streamed windows)."""
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
@@ -204,28 +207,38 @@ def render(path, tuner='hybrid'):
                                  lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
-    om=arr("om",np.float64); p0=arr("p0",np.float64)
-    aL=arr("aL",np.float32); aR=arr("aR",np.float32); nf=arr("nf",np.float32)
-    non=arr("non",np.int64); noff=arr("noff",np.int64); fa=arr("fa",np.float32); re=arr("re",np.float32)
-    logr=arr("logr",np.float32); logrA=arr("logrA",np.float32); aft=arr("aft",np.float32); sus=arr("sus",np.float32)
-    cv=arr("cv",np.float32); cc=arr("cc",np.float32); crl=arr("crl",np.float32); sj=arr("sj",np.float32); csc=arr("csc",np.float32)
-    tbav=arr("tbav",np.float32); tau=arr("tau",np.float32); tcut=arr("tcut",np.float32)
-    delL=arr("delL",np.float32); delR=arr("delR",np.float32)
-    gr=arr("gr",np.int32); cr=arr("cr",np.int32)
-    ent=np.ascontiguousarray(np.array(T.entropy, np.float64))
-    outL=np.zeros(N,np.float32); outR=np.zeros(N,np.float32)
-    dp=lambda a:a.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda a:a.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    lp=lambda a:a.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda a:a.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
-    t0=time.time()
-    lib.synth_voice(fp(outL),fp(outR),ctypes.c_long(N),BLK,nblk,P,dp(om),dp(p0),dp(p0),fp(aL),fp(aR),fp(nf),
-                    lp(non),lp(noff),fp(fa),fp(re),fp(logr),fp(logrA),fp(aft),fp(sus),
-                    fp(cv),fp(cc),fp(crl),fp(sj),fp(csc),dp(ent),ctypes.c_long(len(ent)),
-                    fp(tbav),fp(tau),fp(tcut),fp(delL),fp(delR),
-                    ip(gr),ip(cr),fp(G),fp(S),
-                    ctypes.c_float(sh[0]),ctypes.c_float(sh[1]),ctypes.c_float(sh[2]),ctypes.c_float(sh[3]),ctypes.c_long(SR))
-    kdt=time.time()-t0
-    outL*=T.master_gain; outR*=T.master_gain; np.clip(outL,-1,1,outL); np.clip(outR,-1,1,outR)
-    return outL,outR,total,P,kdt
+    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
+                ent=np.ascontiguousarray(np.array(T.entropy, np.float64)))
+    for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("nf","f4"),
+                 ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),
+                 ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
+                 ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),
+                 ("tbav","f4"),("tau","f4"),("tcut","f4"),("delL","f4"),("delR","f4"),
+                 ("gr","i4"),("cr","i4")):
+        prep[k] = arr(k, dt)
+    return prep
+
+def synth_window(prep, n0, winlen):
+    """Synthesise absolute samples [n0, n0+winlen) -> (L, R) float32, gained and
+    clipped. Stateless (analytic phase), so a player calls it per audio block."""
+    a=prep; lib=a['lib']
+    dp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    lp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
+    L=np.zeros(winlen,np.float32); R=np.zeros(winlen,np.float32)
+    lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],a['P'],
+                    dp(a['om']),dp(a['p0']),dp(a['p0']),fp(a['aL']),fp(a['aR']),fp(a['nf']),
+                    lp(a['non']),lp(a['noff']),fp(a['fa']),fp(a['re']),fp(a['logr']),fp(a['logrA']),fp(a['aft']),fp(a['sus']),
+                    fp(a['cv']),fp(a['cc']),fp(a['crl']),fp(a['sj']),fp(a['csc']),dp(a['ent']),ctypes.c_long(len(a['ent'])),
+                    fp(a['tbav']),fp(a['tau']),fp(a['tcut']),fp(a['delL']),fp(a['delR']),
+                    ip(a['gr']),ip(a['cr']),fp(a['G']),fp(a['S']),
+                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),ctypes.c_long(SR))
+    L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
+    return L,R
+
+def render(path, tuner='hybrid'):
+    prep = prepare(path, tuner)
+    t0=time.time(); L,R = synth_window(prep, 0, prep['N']); kdt=time.time()-t0
+    return L,R,prep['total'],prep['P'],kdt
 
 if __name__=="__main__":
     inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid'
