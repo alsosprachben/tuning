@@ -314,6 +314,8 @@ class BasePartial:
                         self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
         else:
             fade_time = release_time
+        fade_time = self.properties.speech_time(
+            fade_time, getattr(self, "base_frequency", frequency))
 
         if self.max_fade is not None:
             # Short note: cap the onset transient so it fits, or a slow
@@ -345,11 +347,25 @@ class BasePartial:
         else:
             fade_time = self.properties.chiff_min_valve_time + (
                         self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
+        fade_time = self.properties.speech_time(
+            fade_time, getattr(self, "base_frequency", frequency))
 
         if self.max_fade is not None:
             fade_time = min(fade_time, self.max_fade)
 
         self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
+        # The chiff burst has its OWN (short, capped) width, decoupled from the
+        # slow speech fade, and rolls off for the upper harmonics -- so a big
+        # pipe's chiff is a brief low chuff, not a long high hiss (see the chiff
+        # model on SynthProperties). Defaults reproduce the old behaviour exactly.
+        base_freq = getattr(self, "base_frequency", frequency)
+        chiff_fade_time = self.properties.chiff_time(base_freq, fade_time)
+        if self.max_fade is not None:
+            chiff_fade_time = min(chiff_fade_time, self.max_fade)
+        self.chiff_fade = Fade(Second(second + self.delay),
+                               Second(second + self.delay + chiff_fade_time))
+        self.chiff_hgain = self.properties.chiff_harmonic_gain(
+            frequency / base_freq if base_freq else 1.0)
         # base_frequency is the note fundamental (harmonic 1); use it, not this
         # partial's harmonic frequency, to pick the string count / aftersound.
         aftersound_level, aftersound_dbps = self.properties.aftersound(
@@ -421,7 +437,9 @@ class BasePartial:
 
         if self.properties.chiff_volume > 0.0:
             if self.state is self.Attacking:
-                jitter_fade = self.attack_fade.fade_in(second)  # * self.attack_fade.fade_out(second)
+                # chiff_fade (its own short, capped width) -- NOT attack_fade (the
+                # slow speech), so a big pipe's chiff is a brief burst, not a long hiss.
+                jitter_fade = self.chiff_fade.fade_in(second)  # * self.chiff_fade.fade_out(second)
                 jitter_fade = jitter_fade ** 0.5
                 jitter_fade *= (1.0 - jitter_fade)
             elif self.state is self.Releasing:
@@ -439,8 +457,10 @@ class BasePartial:
             if jitter_fade > 0:
                 cycle_jitter = rand(second * frequency) * self.properties.chiff_cycle
 
+                # base_frequency/440 scales chiff volume DOWN for big pipes; the
+                # per-partial chiff_hgain rolls off the upper harmonics (low chuff).
                 jitter = sin(pi * 2 * (self.cycle(second,
-                                                  frequency) + cycle_jitter)) * jitter_fade * self.properties.chiff_volume * self.base_frequency / 440
+                                                  frequency) + cycle_jitter)) * jitter_fade * self.properties.chiff_volume * self.base_frequency / 440 * getattr(self, "chiff_hgain", 1.0)
             else:
                 jitter = 0.0
         else:
@@ -628,6 +648,68 @@ class SynthProperties:
     # is a bandlimited impulse: a digital click. A few ms of smoothstep ramp
     # attenuates the first (loudest) impulse cycle and bandlimits the onset.
     attack_time = None
+
+    # Wavelength-scaled speech. A flue or reed PIPE speaks by building its
+    # standing wave over a roughly fixed number of periods, so the onset (and
+    # note-off) ramp grows with WAVELENGTH -- speech_cycles periods of the note
+    # fundamental (1/f), bass pipes speaking slowly and trebles promptly. Added
+    # on top of the fixed valve/attack floor. 0 (default) = frequency-independent
+    # (struck strings and brass, whose speech is set by the excitation, not the
+    # air column). See speech_time() and hammer_down/hammer_up.
+    speech_cycles = 0.0
+
+    def speech_time(self, fixed, frequency):
+        """Full onset/release ramp: the fixed valve/attack floor plus, for pipes,
+        speech_cycles wavelengths of the fundamental (bass speaks slowly)."""
+        if self.speech_cycles > 0.0 and frequency > 0.0:
+            return fixed + self.speech_cycles / frequency
+        return fixed
+
+    # --- Chiff shape vs pipe size ---------------------------------------------
+    # The chiff is the edge-tone "spit" at the ONSET -- distinct from the smooth,
+    # wavelength-scaled SPEECH (the amplitude build as the pipe fills). Tying the
+    # chiff to the speech time makes a big pipe's chiff a long HIGH hiss (all its
+    # partials jitter for the whole slow speech) -- obnoxious and unphysical. In a
+    # real pipe the big mouth/cutup makes the chiff a brief, LOW "chuff": short,
+    # and with its high harmonics attenuated. Two size-dependent knobs, both
+    # no-ops by default (struck/brass voices unchanged), let a pipe model that:
+    #   chiff_width        : chiff burst duration (s). None = use the speech fade,
+    #                        as before. A pipe sets a short, capped value so the
+    #                        chiff does NOT last the whole speech.
+    #   chiff_width_cycles : if > 0, the burst is this many periods of the
+    #                        fundamental, capped at chiff_width (bass a touch
+    #                        longer than treble, but bounded -- not the full speech).
+    #   chiff_harmonic_span/_power : the jet excites the LOW modes; harmonic h gets
+    #                        1/(1+((h-1)/span)**power) of the chiff. None = uniform
+    #                        (as before). A pipe rolls its highs off -> low chuff,
+    #                        so a big pipe's high-Hz partials no longer hiss.
+    # (Chiff volume already scales down with pipe size via the base_frequency/440
+    # factor in wave()/the kernel -- kept.)
+    chiff_width = None
+    chiff_width_cycles = 0.0
+    chiff_harmonic_span = None
+    chiff_harmonic_power = 2.0
+
+    def chiff_time(self, frequency, speech_fade):
+        """Chiff burst duration: the speech fade by default, or a short capped,
+        mildly wavelength-scaled burst when the voice sets chiff_width(_cycles)."""
+        if self.chiff_width is None and self.chiff_width_cycles <= 0.0:
+            return speech_fade
+        w = self.chiff_width if self.chiff_width is not None else speech_fade
+        if self.chiff_width_cycles > 0.0 and frequency > 0.0:
+            w = min(w, self.chiff_width_cycles / frequency)
+        return w
+
+    def chiff_harmonic_gain(self, harmonic):
+        """Per-partial chiff weight: 1 at the fundamental, rolling off for the
+        upper harmonics so a large pipe's high partials don't hiss. 1.0 (uniform)
+        unless chiff_harmonic_span is set."""
+        if self.chiff_harmonic_span is None:
+            return 1.0
+        x = (harmonic - 1.0) / self.chiff_harmonic_span
+        if x <= 0.0:
+            return 1.0
+        return 1.0 / (1.0 + x ** self.chiff_harmonic_power)
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
@@ -1219,10 +1301,29 @@ class FlueOrganProperties(OrganProperties):
     # keeps coefficient 0 and stays harmonic / phase-locked; brass stays locked.
     inharmonicity_dynamic = True
     odd_only = False
-    # Principal pipes speak fast; keep the inherited chiff character but
-    # compress it into a tighter onset than the generic blown pipe's 0.3 s.
-    chiff_min_valve_time = 0.03
-    chiff_max_valve_time = 0.10
+    # A flue pipe speaks by building its standing wave, so its onset is GRADUAL
+    # and scales with WAVELENGTH -- not the old fixed 0.10 s (which made trebles
+    # sluggish and the bass not gradual enough). A small fixed floor (jet transit)
+    # plus speech_cycles periods of the fundamental: low C (~65 Hz) speaks in
+    # ~70 ms, middle C in ~25 ms, the top in ~12 ms.
+    chiff_min_valve_time = 0.004
+    chiff_max_valve_time = 0.008
+    speech_cycles = 4.0
+
+    # The chiff, though, is a SHORT edge-tone burst -- NOT the whole slow speech.
+    # Cap it near 30 ms and taper it toward the treble (a couple of periods), so a
+    # big pipe gives a brief chuff rather than a long scrape. Roll the chiff off
+    # the upper harmonics (span 5) so a low pipe's HIGH partials -- the obnoxious
+    # hiss when the chiff was wavelength-long -- fall away to a low chuff, while a
+    # mid/treble principal keeps its bright Baroque "spit" (the chiff is physically
+    # a bright, upper-harmonic-rich transient; too steep a rolloff reads as a
+    # heavily-nicked Romantic voicing). chiff_volume 1.3 gives that spit presence.
+    # Tunables; render the chiff_test to audition bass vs treble.
+    chiff_width = 0.030
+    chiff_width_cycles = 2.0
+    chiff_harmonic_span = 5.0
+    chiff_harmonic_power = 2.0
+    chiff_volume = 1.3
 
     # --- Stop list (drawn via CC11 bitfield / CC4 crescendo) ---
     # A principal chorus. Each rank is a full harmonic series placed a footage
@@ -1247,11 +1348,32 @@ class FlueOrganProperties(OrganProperties):
 
 
 class ReedOrganProperties(OrganProperties):
-    initial_gain = 1.0 / 2200   # +7.1 dB to equal-peak (odd-only reed: sparse)
+    # A chorus reed is a BOLD stop -- as loud as or louder than the principal.
+    # Equal-PEAK calibration left it ~1-2 dB *under* the flue (the spiky odd-only
+    # waveform has a high crest factor, so equal peak == quieter perceived) and
+    # the bloom front settles it ~2 dB more. Voice it ~+3.3 dB hotter so an 8'
+    # reed sits ~+2.6 dB over the flue 8' (bolder toward the treble, as reeds are).
+    initial_gain = 1.0 / 1500   # bold reed (was 1/2200, unreasonably quiet)
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
     chiff_max_valve_time = 0.0
+
+    # A reed speaks promptly (the tongue, not a slow air column), but with a
+    # PRESSURE-BUILD swell: as the pallet opens, wind pressure in the boot rises,
+    # the tongue over-speaks for an instant, then settles as the pipe reaches
+    # steady state -- the reed's "front", like a gentle trumpet attack. Modelled
+    # as a short wavelength-scaled onset ramp (pressure building) plus a decay
+    # front that blooms to the peak and settles ~2 dB into the sustain and holds
+    # (pressure released), the upper harmonics settling a touch faster (the edge
+    # blooms on the attack). Without this the reed onset is an instant step -- the
+    # "fake" attack. Much gentler than the brass front (decay_db 18, sustain 0.6).
+    attack_time = 0.004         # jet/tongue floor; speech_cycles adds the wavelength term
+    speech_cycles = 2.0         # reeds speak ~half the flue's ramp
+    decay_db = 9.0              # the front settles at ~9 dB/s toward the sustain
+    harmonic_decay_db = 2.5     # upper harmonics bloom then settle a little faster
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.78        # blooms to the peak, releases ~2.2 dB, then holds
 
     # A reed chorus: 8' with a 16' for gravity and a 4' clairon on top. Same
     # live-gate mechanism as the flue; bit i of the CC11 mask = stop_ranks[i].
@@ -1328,7 +1450,9 @@ class DarkBrassProperties(BrassProperties):
 # like every other stop. Appended here (not inline) because BrightBrass is defined
 # after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, BlownPipeProperties)]
-ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.90, BrightBrassProperties, True)]
+# Trumpet rank gain 0.613 (was 0.90): the +3.3 dB reed voicing above would raise
+# the whole reed incl. this stop; 0.90/1.467 holds the Trumpet at its tuned level.
+ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.613, BrightBrassProperties, True)]
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---

@@ -120,15 +120,15 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","delL","delR","gr","cr")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","delL","delR","gr","cr")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
-    def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr):
+    def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr):
         om = om * _PJ[0]
         A["om"].append(om); A["p0"].append(-om*non); A["aL"].append(ampL); A["aR"].append(ampR)
-        A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re)
+        A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
@@ -144,7 +144,13 @@ def prepare(path, tuner='hybrid'):
         B = props.inharmonicity_coefficient; dur = off-on
         at = props.attack_time if props.attack_time is not None else props.chiff_max_valve_time
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
+        # Pipe speech scales with wavelength: add speech_cycles periods of the
+        # fundamental to the fixed floor (mirrors tonelib.speech_time -- bass
+        # pipes speak slowly, trebles promptly).
+        at = props.speech_time(at, f0); rt = props.speech_time(rt, f0)
         fade = max(1e-4, min(at, 0.45*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
+        # chiff burst width: short/capped, decoupled from the slow speech fade
+        chiff = max(1e-4, min(props.chiff_time(f0, at), 0.45*dur))*SR
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
         non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
         _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
@@ -180,15 +186,16 @@ def prepare(path, tuner='hybrid'):
                 dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
                 aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
                 gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
-                emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel,
-                             logr, logrA, aftL, props.sustain_level, cv, cc, crl, sjit, csc, gr, cr)
+                cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
+                emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel, chiff,
+                             logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
                 transverse.append((hf, hv, dbps))
                 for gm, off_hz, dr, ud in props.unison_voices(f0, m, dbps):
                     uf = hf*(1.0+dr) + off_hz
                     if uf <= 0 or uf > SR/2: continue
                     ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
-                    emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel,
-                                 ulr, logrA, aftL, props.sustain_level, cv, cc, crl, sjit, csc, gr, cr)
+                    emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel, chiff,
+                                 ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
         # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
         # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano
@@ -209,14 +216,14 @@ def prepare(path, tuner='hybrid'):
                     if g < floor: continue
                     dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
                     aftp, adbp = props.aftersound(f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
-                    emit_partial(2*math.pi*fph/SR, g, g, fph, non, noff, fade, rel,
+                    emit_partial(2*math.pi*fph/SR, g, g, fph, non, noff, fade, rel, chiff,
                                  lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
                 ent=np.ascontiguousarray(np.array(T.entropy, np.float64)))
     for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("nf","f4"),
-                 ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),
+                 ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),("delL","f4"),("delR","f4"),
@@ -233,7 +240,7 @@ def synth_window(prep, n0, winlen):
     L=np.zeros(winlen,np.float32); R=np.zeros(winlen,np.float32)
     lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],a['P'],
                     dp(a['om']),dp(a['p0']),dp(a['p0']),fp(a['aL']),fp(a['aR']),fp(a['nf']),
-                    lp(a['non']),lp(a['noff']),fp(a['fa']),fp(a['re']),fp(a['logr']),fp(a['logrA']),fp(a['aft']),fp(a['sus']),
+                    lp(a['non']),lp(a['noff']),fp(a['fa']),fp(a['re']),fp(a['ch']),fp(a['logr']),fp(a['logrA']),fp(a['aft']),fp(a['sus']),
                     fp(a['cv']),fp(a['cc']),fp(a['crl']),fp(a['sj']),fp(a['csc']),dp(a['ent']),ctypes.c_long(len(a['ent'])),
                     fp(a['tbav']),fp(a['tau']),fp(a['tcut']),fp(a['delL']),fp(a['delR']),
                     ip(a['gr']),ip(a['cr']),fp(a['G']),fp(a['S']),

@@ -83,7 +83,7 @@ void synth_voice(
     float* outL, float* outR, long n0, long winlen, int BLK, int nblk, int P,
     const double* omega, const double* ph0L, const double* ph0R,
     const float* ampL, const float* ampR, const float* nomfreq,
-    const long* non, const long* noff, const float* fadeS, const float* relS,
+    const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
     const float* logr, const float* logrA, const float* aftL, const float* susL,
     const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
     const double* entropy, long gran,
@@ -128,10 +128,12 @@ void synth_voice(
                 long ns=bs0<cs?cs:bs0, ne=bs1>ce?ce:bs1; if(ns>=ne)continue;
                 float mL0=AMP(bs0,b,dL), mL1=AMP(bs1,b,dL), mR0=AMP(bs0,b,dR), mR1=AMP(bs1,b,dR);
                 if(mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
-                // chiff fade for this block (state: attack/sustain/release)
-                float jf=0.f; long mid=bs0+BLK/2;
+                // chiff fade for this block (state: attack/sustain/release). The
+                // attack chiff rides chiffS -- its OWN short, capped width, NOT the
+                // slow speech fade fadeS -- so a big pipe chuffs briefly, no hiss.
+                float jf=0.f; long mid=bs0+BLK/2; float invch=1.f/chiffS[p];
                 if(cv>0.f){
-                    if(mid < a+(long)fadeS[p]){ float s=sstep((float)(mid-a)*invf); float r=sqrtf(s); jf=r*(1.f-r); }
+                    if(mid < a+(long)chiffS[p]){ float s=sstep((float)(mid-a)*invch); float r=sqrtf(s); jf=r*(1.f-r); }
                     else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=r*(1.f-r)*crl; }
                     else jf=sj;
                 }
