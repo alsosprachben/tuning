@@ -178,6 +178,11 @@ def prepare(path, tuner='hybrid'):
                 non_r = sp*SR if sp is not None else non
             else:
                 non_r = non
+            # Place this rank at its own case position (helix + offset + C/C# split),
+            # per-partial HRTF gain (li/ri) + ITD (_DL). Note-level otherwise.
+            if organ and getattr(props,'spiral_spatial',False):
+                li,ri,_ld,_rd = props.hrtf_at(props.rank_position_x(key))
+                _DL[0] = _ld*SR; _DL[1] = _rd*SR
             for m in range(1, props.max_harmonic+1):
                 h = ratio*m; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
                 if hf > SR/2: break

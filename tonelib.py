@@ -752,6 +752,12 @@ class SynthProperties:
     # per instrument.
     octave_width = 0.165
 
+    # Head/room geometry for the Woodworth ITD + Brown-Duda head-shadow model.
+    # Class attributes so hrtf_at() can place an arbitrary source (e.g. one organ
+    # rank) without rebuilding the note.
+    head_radius = 0.0875        # metres
+    listener_distance = 2.0     # metres (a stage image, not the 0.2 m soundboard)
+
     # Decay rate scaling per octave (times harmonic_decay). 0 = register-flat; the
     # piano sets it > 0 so the bass rings long and the treble decays fast.
     decay_register_slope = 0.0
@@ -820,30 +826,12 @@ class SynthProperties:
         self.left_pan, self.right_pan = self.pan(self.pan_position)
 
         if hrtf:
-            # Brown-Duda structural model, driven by the same source
-            # position: azimuth from the head (0 = front, + = right), a
-            # listener distance suited to a stage image rather than the
-            # legacy 0.2 m soundboard distance.
-            from math import atan2, sqrt, acos, cos
-            self.head_radius = 0.0875  # meters
+            # Brown-Duda structural model, driven by the source position via
+            # hrtf_at() (factored out so a registerable voice can place each rank
+            # independently -- see rank_position_x / _build_registered_partials).
             self.hrtf_beta = 2.0 * self.sound_speed / self.head_radius
-            listener_distance = 2.0  # meters
-            azimuth = atan2(self.position_x, listener_distance)
-            distance = max(sqrt(self.position_x ** 2 + listener_distance ** 2),
-                           self.head_radius)
-            base_delay = distance / self.sound_speed
-
-            def woodworth(ear_azimuth):
-                # incidence angle between the source ray and the ear axis
-                theta = acos(cos(azimuth - ear_azimuth))
-                if theta <= pi / 2:
-                    offset = -cos(theta)
-                else:
-                    offset = theta - pi / 2
-                return theta, base_delay + offset * self.head_radius / self.sound_speed
-
-            self.left_incidence, self.left_hrtf_delay = woodworth(-pi / 2)
-            self.right_incidence, self.right_hrtf_delay = woodworth(pi / 2)
+            (self.left_incidence, self.right_incidence,
+             self.left_hrtf_delay, self.right_hrtf_delay) = self.hrtf_at(self.position_x)
 
         # self.left_pan  = self.left_pan * self.left_intensity  / 20
         # self.right_pan = self.right_pan * self.right_intensity / 20
@@ -857,6 +845,24 @@ class SynthProperties:
             ]
         else:
             self.plucked_volumes = [(1000000, 1.0)]
+
+    def hrtf_at(self, position_x):
+        """Per-ear (left_inc, right_inc, left_delay, right_delay) for a source at
+        position_x metres (+ = right), via the Woodworth ITD on a spherical head.
+        Factored out of __init__ so a registerable voice can place each rank at
+        its own case position without rebuilding the note."""
+        from math import atan2, sqrt, acos, cos, pi
+        azimuth = atan2(position_x, self.listener_distance)
+        distance = max(sqrt(position_x ** 2 + self.listener_distance ** 2), self.head_radius)
+        base_delay = distance / self.sound_speed
+        def woodworth(ear_azimuth):
+            # incidence angle between the source ray and the ear axis
+            theta = acos(cos(azimuth - ear_azimuth))
+            offset = -cos(theta) if theta <= pi / 2 else (theta - pi / 2)
+            return theta, base_delay + offset * self.head_radius / self.sound_speed
+        li, ld = woodworth(-pi / 2)
+        ri, rd = woodworth(pi / 2)
+        return li, ri, ld, rd
 
     def hrtf_gain(self, frequency, incidence):
         # Brown-Duda head-shadow magnitude: single pole-zero sphere
@@ -1288,6 +1294,59 @@ class OrganProperties(BlownPipeProperties):
         hf = _exp(-(1.0 - s) * self.swell_hf_max * (freq / self.swell_hf_ref_hz))
         return level * hf
 
+    # --- Spatial layout: the pipe case, not a keyboard --------------------------
+    # A piano is one soundboard the listener faces, so its notes ride a straight
+    # low-left -> high-right line (octave_width). An organ's ranks are physical
+    # pipe rows SCATTERED around a room, and its chest is laid out C/C# (adjacent
+    # semitones on opposite sides), so a linear keyboard is wrong. Instead, for
+    # each RANK we place a source at position_x (metres, +right):
+    #
+    #   x = spiral_m * sin(2pi * octave_position + spiral_phase)   # helix: rotates
+    #     + drift_m  * octave_position                             #   once per octave,
+    #     + offset[rank]                                           #   drifts low->high
+    #     + split[rank] * (+1 even key / -1 odd key)               # C/C# antiphonal
+    #     + channel_pan * 4                                        # CC10 division pan
+    #
+    # sin(2pi*octave_position) IS the chroma circle (octave_position is log2 pitch,
+    # so 2pi*octave_position advances one turn per octave); octave-related notes
+    # land together (harmonically close = spatially close, the Shepard helix) while
+    # the drift keeps a gentle register climb. Each footage rank adds its own case
+    # offset (independent placement) and its own C/C# split depth -- 16' wide in the
+    # facade towers, 8' central, upperwork spread. Fed through hrtf_at() per rank.
+    spiral_spatial = True
+    spiral_m     = 0.9      # metres: half-width of the per-octave rotation
+    spiral_phase = 0.0
+    drift_m      = 0.12     # metres/octave: residual low->high climb (helix pitch)
+    # rank key -> (fixed case offset m, C/C# antiphonal depth m). The offset is the
+    # DOMINANT cue -- each footage is a physically separate pipe row, spread wide
+    # across the case (16' one flank, 8' centre, upperwork/mutations fanned out).
+    # The C/C# split is SUBTLE: the two chest halves are adjacent, a few degrees
+    # apart, so adjacent semitones only shimmer side to side, they don't alternate
+    # hard L<->R (that read as a gimmick).
+    rank_spatial = {
+        "16":     (-1.55, 0.22),   # pedal 16': far flank, a touch of tower width
+        "8":      (0.0,   0.12),   # foundation, central
+        "4":      (0.95,  0.12),
+        "2":      (-1.15, 0.10),
+        "2-2/3":  (1.60,  0.10),
+        "5-1/3":  (-1.70, 0.10),
+        "flute":  (1.25,  0.12),
+        "trumpet": (-1.35, 0.15),
+    }
+    rank_spatial_default = (0.0, 0.12)
+
+    def rank_position_x(self, rank_key):
+        """position_x (metres, +right) for one drawn rank of THIS note: the helix
+        by key + the rank's fixed case offset + its C/C# antiphonal side."""
+        from math import sin, pi
+        op = self.octave_position
+        offset, split = self.rank_spatial.get(rank_key, self.rank_spatial_default)
+        parity = 1.0 if (round(12.0 * op) % 2 == 0) else -1.0
+        return (self.spiral_m * sin(2.0 * pi * op + self.spiral_phase)
+                + self.drift_m * op
+                + offset + split * parity
+                + self.channel_pan * 4.0)
+
 
 class FlueOrganProperties(OrganProperties):
     initial_gain = 1.0 / 3040   # +4.3 dB to equal-peak (moderate spectrum)
@@ -1348,12 +1407,13 @@ class FlueOrganProperties(OrganProperties):
 
 
 class ReedOrganProperties(OrganProperties):
-    # A chorus reed is a BOLD stop -- as loud as or louder than the principal.
-    # Equal-PEAK calibration left it ~1-2 dB *under* the flue (the spiky odd-only
-    # waveform has a high crest factor, so equal peak == quieter perceived) and
-    # the bloom front settles it ~2 dB more. Voice it ~+3.3 dB hotter so an 8'
-    # reed sits ~+2.6 dB over the flue 8' (bolder toward the treble, as reeds are).
-    initial_gain = 1.0 / 1500   # bold reed (was 1/2200, unreasonably quiet)
+    # A chorus reed is present but should NOT dominate. Equal-PEAK calibration
+    # (1/2200) left the spiky odd-only reed reading ~1-2 dB *under* the flue on
+    # sustains, so it wanted lifting; but its high crest factor means a big lift
+    # makes the ATTACKS poke over the flue ("over-bold, trumpet-like"). 1/2000 is
+    # the balance point -- sustains close to the flue, peaks not jumping out --
+    # paired with a gentler front (below) so the per-note attack doesn't stab.
+    initial_gain = 1.0 / 2000   # balanced reed (1/1500 was over-bold; 1/2200 too shy)
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
@@ -1370,10 +1430,10 @@ class ReedOrganProperties(OrganProperties):
     # "fake" attack. Much gentler than the brass front (decay_db 18, sustain 0.6).
     attack_time = 0.004         # jet/tongue floor; speech_cycles adds the wavelength term
     speech_cycles = 2.0         # reeds speak ~half the flue's ramp
-    decay_db = 9.0              # the front settles at ~9 dB/s toward the sustain
+    decay_db = 5.0              # gentle front (was 9): a soft bloom, not a stab
     harmonic_decay_db = 2.5     # upper harmonics bloom then settle a little faster
     harmonic_decay_dampening = 0.0
-    sustain_level = 0.78        # blooms to the peak, releases ~2.2 dB, then holds
+    sustain_level = 0.86        # blooms to the peak, releases ~1.3 dB, then holds
 
     # A reed chorus: 8' with a 16' for gravity and a 4' clairon on top. Same
     # live-gate mechanism as the flue; bit i of the CC11 mask = stop_ranks[i].
@@ -1450,9 +1510,9 @@ class DarkBrassProperties(BrassProperties):
 # like every other stop. Appended here (not inline) because BrightBrass is defined
 # after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, BlownPipeProperties)]
-# Trumpet rank gain 0.613 (was 0.90): the +3.3 dB reed voicing above would raise
-# the whole reed incl. this stop; 0.90/1.467 holds the Trumpet at its tuned level.
-ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.613, BrightBrassProperties, True)]
+# Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
+# peroration crowns without blaring (also relieves the dense close's headroom).
+ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, BrightBrassProperties, True)]
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
@@ -1894,6 +1954,15 @@ class SynthTone(BaseTone):
             # dyn=True gives this rank the flue dynamic (Steinway) stretch so it LOCKS
             # to hybrid like the principals. Otherwise use the base voice's grid.
             rank_B = (sp or props).inharmonicity_coefficient_for_frequency(f) if dyn else B
+            # Place this rank at its own case position (helix + offset + C/C# split);
+            # falls back to the note-level HRTF for non-spiral voices / hrtf off.
+            if hrtf and getattr(props, 'spiral_spatial', False):
+                _li, _ri, _ld, _rd = props.hrtf_at(props.rank_position_x(key))
+                rank_incidence = _li if self.audio_channel == 0 else _ri
+                rank_delay = _ld if self.audio_channel == 0 else _rd
+            else:
+                rank_incidence = getattr(self, 'incidence', None)
+                rank_delay = self.delay
             for m in range(1, maxm + 1):
                 h = ratio * m
                 stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
@@ -1905,10 +1974,10 @@ class SynthTone(BaseTone):
                     continue
                 vol = hv * self.pan
                 if hrtf:
-                    vol *= props.hrtf_gain(hf, self.incidence)
+                    vol *= props.hrtf_gain(hf, rank_incidence)
                 vol *= gain
                 decay = props.harmonic_decay(m)
-                p = SimplePartial(props, f, h, vol, decay, self.delay, self.ref_count)
+                p = SimplePartial(props, f, h, vol, decay, rank_delay, self.ref_count)
                 if dyn:
                     p.inharmonic_stretch = stretch   # override the base-B stretch SimplePartial computed
                 p.rank = key
@@ -1916,7 +1985,7 @@ class SynthTone(BaseTone):
                 self.partials.append(p)
                 for gain_mult, offset_hz, detune_ratio, unison_decay in props.unison_voices(f, m, decay):
                     up = SimplePartial(props, f, h, vol * gain_mult, unison_decay,
-                                       self.delay, self.ref_count)
+                                       rank_delay, self.ref_count)
                     if dyn:
                         up.inharmonic_stretch = stretch
                     up.frequency_offset = offset_hz
