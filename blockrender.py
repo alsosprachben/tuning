@@ -66,16 +66,20 @@ def onepole_blocks(events, nblk, default):
 
 def registration_blocks(ch, prop, ccs, nblk):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
-    ev = sorted(ccs.get(ch, [])); mask = 1; cres = 0.0; vol = 1.0
+    # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
+    # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
+    ev = sorted(ccs.get(ch, [])); mlo = 1; mhi = 0; cres = 0.0; vol = 1.0
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     def emit(t):
+        mask = mlo | (mhi << 7)
         nd = int(cres*len(order)+1e-9); drawn = set(order[:nd])
         for i, r in enumerate(ranks):
             k = r[0]; rank_ev[k].append((t, 1.0 if ((mask>>i)&1 or k in drawn) else 0.0))
         swell_ev.append((t, vol))
     emit(0.0)
     for t, cc, val in ev:
-        if cc==11: mask=val
+        if cc==11: mlo=val
+        elif cc==43: mhi=val
         elif cc==4: cres=val/127.0
         elif cc==7: vol=val/127.0
         else: continue
@@ -178,29 +182,37 @@ def prepare(path, tuner='hybrid'):
                 non_r = sp*SR if sp is not None else non
             else:
                 non_r = non
-            # Place this rank at its own case position (helix + offset + C/C# split),
-            # per-partial HRTF gain (li/ri) + ITD (_DL). Note-level otherwise.
+            # Place this drawstop at its case position (shared across a compound rank).
             if organ and getattr(props,'spiral_spatial',False):
                 li,ri,_ld,_rd = props.hrtf_at(props.rank_position_x(key))
                 _DL[0] = _ld*SR; _DL[1] = _rd*SR
-            for m in range(1, props.max_harmonic+1):
-                h = ratio*m; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
-                if hf > SR/2: break
-                hv = hv_fn(m)
-                if hv == 0.0: continue
-                dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
-                aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
-                gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
-                cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
-                emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel, chiff,
-                             logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
-                transverse.append((hf, hv, dbps))
-                for gm, off_hz, dr, ud in props.unison_voices(f0, m, dbps):
-                    uf = hf*(1.0+dr) + off_hz
-                    if uf <= 0 or uf > SR/2: continue
-                    ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
-                    emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel, chiff,
-                                 ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
+            ceiling = getattr(props,'pipe_ceiling_hz',None); bmode = getattr(props,'pipe_break_mode','fold')
+            # Compound rank (Mixtur): ratio is a LIST of footages; else a scalar. Each
+            # sub-footage breaks back on the note's grid past the ceiling (mirrors
+            # tonelib._build_registered_partials); only upperwork (>=2) breaks.
+            for sub in (ratio if isinstance(ratio,(list,tuple)) else [ratio]):
+                eff_ratio = sub
+                if ceiling and sub >= 2.0 and f0*sub > ceiling:
+                    if bmode == 'truncate': continue
+                    while f0*eff_ratio > ceiling and eff_ratio >= 2.0: eff_ratio *= 0.5
+                for m in range(1, props.max_harmonic+1):
+                    h = eff_ratio*m; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
+                    if hf > SR/2: break
+                    hv = hv_fn(m)
+                    if hv == 0.0: continue
+                    dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
+                    aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
+                    gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
+                    cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
+                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel, chiff,
+                                 logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
+                    transverse.append((hf, hv, dbps))
+                    for gm, off_hz, dr, ud in props.unison_voices(f0, m, dbps):
+                        uf = hf*(1.0+dr) + off_hz
+                        if uf <= 0 or uf > SR/2: continue
+                        ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
+                        emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel, chiff,
+                                     ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
         # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
         # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano

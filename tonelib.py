@@ -1285,6 +1285,22 @@ class OrganProperties(BlownPipeProperties):
     swell_hf_ref_hz  = 1500.0 # frequency scale of the treble damping
     swell_hf_max     = 3.5    # extra HF attenuation exponent at full close
 
+    # An organ pipe cannot chiff on RELEASE. The chiff is the jet striking the lip
+    # when wind arrives; on note-off the pallet closes, the wind stops and the
+    # standing wave simply decays (release_fade already models that). Firing the
+    # chiff again at note-off (the inherited blown-pipe behaviour, where a player's
+    # breath does make a release noise) put a bright hiss on every release -- up to
+    # +41 dB of HF on a bass note-off, since the release fade is wavelength-long.
+    chiff_release = 0.0
+
+    # Pipe ceiling (Hz): above this a drawn rank has no pipes. None = full compass
+    # (today's behaviour). ~2.1 kHz caps the upperwork near c'' (MIDI 72). What
+    # happens there is pipe_break_mode: 'fold' = break back an octave (energy kept,
+    # the top re-colors -- authentic mixture behaviour but subtle); 'truncate' = the
+    # rank simply stops (energy removed, the top audibly THINS -- "misses the top rank").
+    pipe_ceiling_hz = None
+    pipe_break_mode = 'fold'
+
     def shutter(self, freq, s):
         if s >= 1.0:
             return 1.0
@@ -1369,20 +1385,23 @@ class FlueOrganProperties(OrganProperties):
     chiff_max_valve_time = 0.008
     speech_cycles = 4.0
 
-    # The chiff, though, is a SHORT edge-tone burst -- NOT the whole slow speech.
-    # Cap it near 30 ms and taper it toward the treble (a couple of periods), so a
-    # big pipe gives a brief chuff rather than a long scrape. Roll the chiff off
-    # the upper harmonics (span 5) so a low pipe's HIGH partials -- the obnoxious
-    # hiss when the chiff was wavelength-long -- fall away to a low chuff, while a
-    # mid/treble principal keeps its bright Baroque "spit" (the chiff is physically
-    # a bright, upper-harmonic-rich transient; too steep a rolloff reads as a
-    # heavily-nicked Romantic voicing). chiff_volume 1.3 gives that spit presence.
-    # Tunables; render the chiff_test to audition bass vs treble.
-    chiff_width = 0.030
-    chiff_width_cycles = 2.0
-    chiff_harmonic_span = 5.0
-    chiff_harmonic_power = 2.0
+    # Chiff = the pipe SPEAKING. A pipe can only radiate at the frequencies it
+    # resonates, so the onset transient is shaped by the same modes as the steady
+    # tone: we let the chiff follow the pipe's own harmonic_volume (it is already
+    # multiplied by each partial's amplitude) and impose NO extra rolloff. That is
+    # the physical model AND it self-voices per stop -- the dark Flute gets a dark
+    # chuff, a principal a brighter spit, the Mixtur brighter still, with no
+    # per-voice knobs. Because the chiff now matches the tone instead of being an
+    # independent hiss, it can also last the whole SPEECH (width = None/0 cycles):
+    # one transient blooming into steady tone, bass slow and treble prompt.
+    chiff_width = None
+    chiff_width_cycles = 0.0
+    chiff_harmonic_span = None
     chiff_volume = 1.3
+
+    # Upperwork breaks back near c'' -- the top of the manual loses the 2'/mixtures,
+    # so an ascending run re-colors at the peak instead of climbing (see OrganProperties).
+    pipe_ceiling_hz = 2100.0
 
     # --- Stop list (drawn via CC11 bitfield / CC4 crescendo) ---
     # A principal chorus. Each rank is a full harmonic series placed a footage
@@ -1418,6 +1437,12 @@ class ReedOrganProperties(OrganProperties):
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
     chiff_max_valve_time = 0.0
+
+    # Reed tongues top out lower than flue pipes (short high resonators go weak/
+    # unstable), so a reed's upperwork (a 4' clairon, a reed mixture) breaks back
+    # sooner. The 8'/16' foundation and a solo reed line keep full compass (only
+    # ratio >= 2 breaks -- see _build_registered_partials).
+    pipe_ceiling_hz = 1600.0
 
     # A reed speaks promptly (the tongue, not a slow air column), but with a
     # PRESSURE-BUILD swell: as the pallet opens, wind pressure in the boot rises,
@@ -1510,6 +1535,13 @@ class DarkBrassProperties(BrassProperties):
 # like every other stop. Appended here (not inline) because BrightBrass is defined
 # after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, BlownPipeProperties)]
+# Mixtur III -- one drawstop, several very high ranks (1 1/3' + 1' + 2/3'). They sit
+# far above the pipe ceiling, so the break-back folds them back constantly to stay
+# under it: THAT is a Mixtur's "composition", and why its shimmer re-colors up the
+# keyboard instead of turning shrill. A COMPOUND rank: ratio is a list of the ranks'
+# footages; the build loops expand it, each sub-rank breaking back on the note's grid
+# (so all stay hybrid-locked). Drawn by bit 7 (14-bit stop word: CC11 | CC43<<7).
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture", [6.0, 8.0, 12.0], 0.28)]
 # Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
 # peroration crowns without blaring (also relieves the dense close's headroom).
 ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, BrightBrassProperties, True)]
@@ -1954,8 +1986,8 @@ class SynthTone(BaseTone):
             # dyn=True gives this rank the flue dynamic (Steinway) stretch so it LOCKS
             # to hybrid like the principals. Otherwise use the base voice's grid.
             rank_B = (sp or props).inharmonicity_coefficient_for_frequency(f) if dyn else B
-            # Place this rank at its own case position (helix + offset + C/C# split);
-            # falls back to the note-level HRTF for non-spiral voices / hrtf off.
+            # Place this drawstop at its case position (shared across a compound rank's
+            # sub-footages -- one stop, one location).
             if hrtf and getattr(props, 'spiral_spatial', False):
                 _li, _ri, _ld, _rd = props.hrtf_at(props.rank_position_x(key))
                 rank_incidence = _li if self.audio_channel == 0 else _ri
@@ -1963,36 +1995,53 @@ class SynthTone(BaseTone):
             else:
                 rank_incidence = getattr(self, 'incidence', None)
                 rank_delay = self.delay
-            for m in range(1, maxm + 1):
-                h = ratio * m
-                stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
-                hf = f * h * stretch
-                if hf > self.nyquist:
-                    break
-                hv = hv_fn(m)
-                if hv == 0.0:
-                    continue
-                vol = hv * self.pan
-                if hrtf:
-                    vol *= props.hrtf_gain(hf, rank_incidence)
-                vol *= gain
-                decay = props.harmonic_decay(m)
-                p = SimplePartial(props, f, h, vol, decay, rank_delay, self.ref_count)
-                if dyn:
-                    p.inharmonic_stretch = stretch   # override the base-B stretch SimplePartial computed
-                p.rank = key
-                p.nom_freq = hf
-                self.partials.append(p)
-                for gain_mult, offset_hz, detune_ratio, unison_decay in props.unison_voices(f, m, decay):
-                    up = SimplePartial(props, f, h, vol * gain_mult, unison_decay,
-                                       rank_delay, self.ref_count)
+            ceiling = getattr(props, 'pipe_ceiling_hz', None)
+            mode = getattr(props, 'pipe_break_mode', 'fold')
+            # A Mixtur is a COMPOUND rank -- ratio is a LIST of footages, each built and
+            # broken back on its own. A plain stop has a single scalar ratio.
+            sub_ratios = ratio if isinstance(ratio, (list, tuple)) else [ratio]
+            for sub in sub_ratios:
+                # Rank break-back: past the pipe ceiling a high rank has no pipes, so it
+                # FOLDS an octave (repeats) -- a Mixtur's composition break, why the top
+                # re-colors instead of turning shrill. Fold the FOOTAGE and re-derive on
+                # the stretched grid, so it stays hybrid-LOCKED (not a naive freq halve).
+                # Only upperwork (>=2) breaks; the 8'/16'/quint foundation keeps its pipes.
+                eff_ratio = sub
+                if ceiling and sub >= 2.0 and f * sub > ceiling:
+                    if mode == 'truncate':
+                        continue                  # no pipes past the ceiling -> silent (top THINS)
+                    while f * eff_ratio > ceiling and eff_ratio >= 2.0:
+                        eff_ratio *= 0.5          # break back an octave (top RE-COLORS)
+                for m in range(1, maxm + 1):
+                    h = eff_ratio * m
+                    stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
+                    hf = f * h * stretch
+                    if hf > self.nyquist:
+                        break
+                    hv = hv_fn(m)
+                    if hv == 0.0:
+                        continue
+                    vol = hv * self.pan
+                    if hrtf:
+                        vol *= props.hrtf_gain(hf, rank_incidence)
+                    vol *= gain
+                    decay = props.harmonic_decay(m)
+                    p = SimplePartial(props, f, h, vol, decay, rank_delay, self.ref_count)
                     if dyn:
-                        up.inharmonic_stretch = stretch
-                    up.frequency_offset = offset_hz
-                    up.detune_ratio = detune_ratio
-                    up.rank = key
-                    up.nom_freq = hf
-                    self.partials.append(up)
+                        p.inharmonic_stretch = stretch   # override the base-B stretch SimplePartial computed
+                    p.rank = key
+                    p.nom_freq = hf
+                    self.partials.append(p)
+                    for gain_mult, offset_hz, detune_ratio, unison_decay in props.unison_voices(f, m, decay):
+                        up = SimplePartial(props, f, h, vol * gain_mult, unison_decay,
+                                           rank_delay, self.ref_count)
+                        if dyn:
+                            up.inharmonic_stretch = stretch
+                        up.frequency_offset = offset_hz
+                        up.detune_ratio = detune_ratio
+                        up.rank = key
+                        up.nom_freq = hf
+                        self.partials.append(up)
 
 
 class RegState:

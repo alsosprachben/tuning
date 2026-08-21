@@ -1052,7 +1052,7 @@ class Channel:
 
         st = self.sampler.reg_state_for(self.midi_channel)
         swell_target = min(1.0, max(0.0, self.getControl("volume")))       # CC7
-        mask = self.controls["expression"][0]                             # CC11 MSB = 7-bit stop bits
+        mask = self.controls["expression"][0] | (self.controls["expression"][1] << 7)  # CC11 low7 | CC43 high
         cres = min(1.0, max(0.0, self.getControl("foot")))                # CC4 crescendo pedal
         ndrawn = int(cres * len(order) + 1e-9)                            # stops the pedal has rolled in
         drawn_by_cres = set(order[:ndrawn])
