@@ -12,6 +12,7 @@ and editing this table -- the dispatch stays data-driven.
 
 from tonelib import (
     Steinway,
+    HarpsichordProperties,
     PluckedStringProperties,
     MalletProperties,
     BowedStringProperties,
@@ -35,6 +36,9 @@ def _fill(lo, hi, cls):
 
 # 0-7    Piano                         -> struck inharmonic strings
 _fill(0, 7, Steinway)
+# ...except the harpsichords (6 = Harpsichord, 7 = Clavi): PLUCKED, and registered
+# (choirs as stops via CC11), not struck. GM files that mean a harpsichord get one.
+_fill(6, 7, HarpsichordProperties)
 # 8-15   Chromatic Percussion          -> struck bars/bells
 _fill(8, 15, MalletProperties)
 # 16-23  Organ                         -> flue pipes; reeds/accordion from 20

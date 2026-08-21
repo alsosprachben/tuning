@@ -607,6 +607,21 @@ class SynthProperties:
     # and SynthTone.sum_values). Default off so nothing but organs changes.
     registerable = False
 
+    # No-swell defaults. These make the block kernel's shutter arithmetic exactly
+    # identity (level = 1, no HF tilt) so it agrees with shutter() below for any
+    # registerable voice without a swell box. OrganProperties overrides all four.
+    swell_floor      = 1.0
+    swell_gain_power = 1.0
+    swell_hf_max     = 0.0
+    swell_hf_ref_hz  = 1500.0
+
+    def shutter(self, freq, s):
+        """Swell shutter for a registerable voice: how much a partial at `freq` is
+        attenuated when the box is `s` open. Identity here -- an instrument with no
+        swell (a harpsichord, a Baroque organ without a box) passes everything.
+        OrganProperties overrides this with the real per-partial shutter tilt."""
+        return 1.0
+
     # Strike/pluck point as a fraction of the speaking length. When set, mode n is
     # excited with amplitude |sin(n*pi*strike_point)| -- a comb that nulls the
     # harmonics at multiples of 1/strike_point. None = no comb (uses the legacy
@@ -952,6 +967,59 @@ class PluckedStringProperties(SynthProperties):
 class TriplePluckedStringProperties(PluckedStringProperties):
     string_count = 3
     unison_detune = (0.25, 0.3)   # triple-string beating
+
+
+# --- Harpsichord -------------------------------------------------------------
+# A harpsichord is a REGISTERED instrument, exactly like the organ: the plectrum
+# plucks with a fixed force, so there are no dynamics -- you change the sound by
+# engaging whole CHOIRS of strings (registers), not by touch. So it reuses the
+# same registerable/stop_ranks machinery, and the CC11 stop bitfield becomes the
+# stop levers. COUPLING (the classic "both manuals" tutti) is simply drawing both
+# 8' choirs at once, which is what a coupler mechanically does.
+#
+# The two 8' choirs differ by PLUCKING POINT: the lower-manual jack plucks further
+# from the nut (rounder, fewer high harmonics), the upper-manual jack close to the
+# nut (nasal and bright). In this model the pluck spectrum is set by
+# plucked_harmonic (the harmonic where the pluck comb nulls), so each choir is a
+# spectrum class borrowed via the cross-family stop mechanism.
+class HarpsiUpperProperties(PluckedStringProperties):
+    """Upper-manual 8': plucked close to the nut -- nasal, bright, more harmonics."""
+    plucked_harmonic = 14.0
+    pluck_dampening = 0.8
+    tonal_dampening = 0.95
+
+
+class HarpsiLuteProperties(PluckedStringProperties):
+    """Lute (buff) stop: leather/felt pads damp the strings at the nut -- a dry,
+    dull, quickly-decaying pizzicato."""
+    plucked_harmonic = 4.0
+    pluck_dampening = 1.6
+    tonal_dampening = 1.6
+    decay_db = 9.0
+    harmonic_decay_db = 2.5
+
+
+class HarpsichordProperties(PluckedStringProperties):
+    initial_gain = 1.0 / 46
+    plucked_harmonic = 7.0        # lower-manual 8': plucked further from the nut, round
+    pluck_dampening = 1.0
+    tonal_dampening = 1.15
+    decay_db = 4.0                # a plucked string sings, then dies
+    harmonic_decay_db = 1.6
+
+    # Registers as stops (CC11 bitfield, bit i = stop_ranks[i]):
+    #   bit 0 = 8' lower manual      bit 1 = 8' upper manual (nasal)
+    #   bit 2 = 4' choir             bit 3 = lute/buff stop
+    # COUPLED tutti = 0b0011 (both 8's) or 0b0111 (both 8's + 4') -- the full
+    # "grand jeu". A single 8' (0b0001) is the plain one-choir sound.
+    registerable = True
+    stop_ranks = [
+        ("8",       1.0, 1.00),
+        ("8-upper", 1.0, 0.82, HarpsiUpperProperties),
+        ("4",       2.0, 0.58),
+        ("lute",    1.0, 0.50, HarpsiLuteProperties),
+    ]
+    crescendo_order = ["8", "8-upper", "4", "lute"]
 
 
 class InharmonicStringProperties(PluckedStringProperties):
