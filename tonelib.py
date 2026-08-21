@@ -627,6 +627,10 @@ class SynthProperties:
     # harmonics at multiples of 1/strike_point. None = no comb (uses the legacy
     # plucked_volumes path; pipes etc.). The piano sets ~1/7 to soften the 7th.
     strike_point = None
+    # True = a felt hammer, whose contact patch widens with force and fills the
+    # comb notch (velocity-dependent timbre). False = a hard narrow exciter at
+    # fixed force -- a plectrum -- whose notch never fills.
+    strike_fills_with_force = True
     strike_depth = 1.0    # how deep the strike comb notches (1=point-strike null, 0=off); the
                           # finite hammer width fills it in, so real pianos want it shallow.
 
@@ -922,7 +926,13 @@ class SynthProperties:
             # velocity-dependent timbre, not just loudness. strike_depth is the depth at the
             # softest blow; attack_volume = (vel/127)^2 fills it in as you play louder.
             # (Matches the Iowa reference, an ff sample, whose 7th is already un-notched.)
-            depth = self.strike_depth * (1.0 - self.attack_volume)
+            # A felt hammer's contact patch WIDENS with force, filling the notch --
+            # so the comb is velocity-dependent. A plectrum does not: a quill is
+            # narrow and hard and plucks with a fixed force (that is why a
+            # harpsichord has no dynamics), so its notch stays at full depth.
+            depth = self.strike_depth
+            if self.strike_fills_with_force:
+                depth *= (1.0 - self.attack_volume)
             comb = (1.0 - depth) + depth * abs(_sin(harmonic * _pi * self.strike_point))
         else:
             comb = sum(tv for th, tv in self.plucked_volumes if harmonic % th)   # legacy path (pipes)
@@ -982,30 +992,57 @@ class TriplePluckedStringProperties(PluckedStringProperties):
 # nut (nasal and bright). In this model the pluck spectrum is set by
 # plucked_harmonic (the harmonic where the pluck comb nulls), so each choir is a
 # spectrum class borrowed via the cross-family stop mechanism.
-class HarpsiUpperProperties(PluckedStringProperties):
-    """Upper-manual 8': plucked close to the nut -- nasal, bright, more harmonics."""
-    plucked_harmonic = 14.0
-    pluck_dampening = 0.8
-    tonal_dampening = 0.95
+class HarpsiBase(PluckedStringProperties):
+    """Shared harpsichord physics. A plucked string released from a triangular
+    displacement at fraction p of its length feeds mode n with amplitude
+    ~ |sin(n*pi*p)| / n^2: a 1/n^2 rolloff times a COMB that nulls every harmonic
+    at multiples of 1/p. The plucking point p is therefore the whole character of
+    a harpsichord -- and, because a quill is hard and narrow and plucks at fixed
+    force, the notch never fills the way a piano's felt hammer fills it
+    (strike_fills_with_force = False). That fixed force is also why the instrument
+    has no dynamics, which is what makes it a REGISTERED instrument.
+    """
+    strike_fills_with_force = False   # a quill, not a felt hammer: the comb stays deep
+    strike_depth = 1.0
+    tonal_dampening = 1.55            # toward the pluck's 1/n^2, kept a little bright
+    octave_dampening = 0.02
+    # Thin, low-tension brass/iron: much less inharmonicity than a piano's wound steel.
+    inharmonicity_dynamic = False
+    inharmonicity_coefficient = 0.00012
+    # Plucked strings sing then die; the treble dies faster than the bass.
+    decay_db = 3.2
+    harmonic_decay_db = 1.5
+    decay_register_slope = 0.42
+    # The jack: a short bright tick as the plectrum lets go, and -- unlike an organ,
+    # which cannot chiff on release -- a real THUD as the damper lands on note-off.
+    chiff_volume = 0.55
+    chiff_cycle = 0.30
+    chiff_release = 0.8
+    chiff_width = 0.012
+    chiff_harmonic_span = None        # the tick follows the string's own spectrum
+    attack_time = 0.002               # the pluck releases almost instantly
 
 
-class HarpsiLuteProperties(PluckedStringProperties):
-    """Lute (buff) stop: leather/felt pads damp the strings at the nut -- a dry,
-    dull, quickly-decaying pizzicato."""
-    plucked_harmonic = 4.0
-    pluck_dampening = 1.6
-    tonal_dampening = 1.6
-    decay_db = 9.0
-    harmonic_decay_db = 2.5
+class HarpsiUpperProperties(HarpsiBase):
+    """Upper-manual 8': the jack plucks very close to the nut, so the comb nulls
+    start high and the low harmonics are weak -- the classic nasal, reedy colour."""
+    strike_point = 0.045              # ~1/22 of the string
+    tonal_dampening = 1.30            # brighter still
 
 
-class HarpsichordProperties(PluckedStringProperties):
+class HarpsiLuteProperties(HarpsiBase):
+    """Lute (buff) stop: leather pads press the strings at the nut, killing the
+    upper partials and shortening the decay -- a dry, dull pizzicato."""
+    strike_point = 0.11
+    tonal_dampening = 2.4
+    decay_db = 11.0
+    harmonic_decay_db = 3.0
+    chiff_volume = 0.30
+
+
+class HarpsichordProperties(HarpsiBase):
     initial_gain = 1.0 / 46
-    plucked_harmonic = 7.0        # lower-manual 8': plucked further from the nut, round
-    pluck_dampening = 1.0
-    tonal_dampening = 1.15
-    decay_db = 4.0                # a plucked string sings, then dies
-    harmonic_decay_db = 1.6
+    strike_point = 0.115              # lower-manual 8': ~1/9, round and full
 
     # Registers as stops (CC11 bitfield, bit i = stop_ranks[i]):
     #   bit 0 = 8' lower manual      bit 1 = 8' upper manual (nasal)
