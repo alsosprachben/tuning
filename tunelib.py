@@ -156,6 +156,36 @@ class StretchTuner(TwelveTuner):
     ])
 
 
+class MeantoneTuner(TwelveTuner):
+    """Quarter-comma meantone -- the historical organ/harpsichord temperament,
+    and still the usual choice for this repertoire today.
+
+    Every fifth is narrowed by a quarter of the syntonic comma, so the fifth is
+    the GEOMETRIC MEAN 5^(1/4) (696.58 c, -5.38 c from pure) and four of them
+    stack to a PURE 5/4 major third. That is the trade: pure thirds bought by
+    tempering every single fifth, with the leftover comma dumped on one interval
+    -- the wolf between G# and Eb (~+35 c), which makes the remote keys unusable.
+
+    Contrast with HybridTuner, which keeps its fifths RATIONAL and instead
+    bridges separate fifth-chains with a rational third, absorbing the comma at
+    the bridges rather than smearing it across every fifth (no geometric mean),
+    and spreads the Pythagorean comma over stretched octaves. Octaves here are
+    pure 2:1, which is correct for mode-locked pipes.
+    """
+    A = 415
+    _fifth = 5.0 ** 0.25                       # quarter-comma tempered fifth
+    # chain position of each pitch class, Eb(-3) .. G#(+8); wolf falls G#->Eb
+    _chain = {0: 0, 7: 1, 2: 2, 9: 3, 4: 4, 11: 5, 6: 6, 1: 7, 8: 8,
+              5: -1, 10: -2, 3: -3}
+    intervals = {}
+    for _pc, _n in _chain.items():
+        _r = _fifth ** _n
+        while _r >= 2.0: _r /= 2.0
+        while _r < 1.0:  _r *= 2.0
+        intervals[_pc] = _r
+    del _pc, _n, _r
+
+
 class EvenTuner(TwelveTuner):
     A = 415
     

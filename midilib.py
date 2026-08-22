@@ -31,6 +31,7 @@ tuner_registry = {
     "linear5": Linear5Tuner,
     "pyth": PythTuner,
     "just": JustTuner,
+    "meantone": MeantoneTuner,   # quarter-comma: pure 3rds, every 5th tempered, wolf G#-Eb
     "well": WellTuner,
     "linearwell": LinearWellTuner,
     "bechstein": BechsteinTuner,
