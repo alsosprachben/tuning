@@ -165,6 +165,12 @@ def prepare(path, tuner='hybrid'):
         _TB[0] = getattr(props,'tension_bend',0.0) * props.attack_volume
         _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
+        _TBN = (_TB[0], _TB[1], _TB[2])   # note-level bend, restored per partial
+        # A pipe's passive modes start sharp and are pulled into lock by the drive
+        # (mirrors tonelib: mode_lock_offset_for / mode_lock_time). It reuses the
+        # kernel's per-partial pitch-bend slot -- a voice never needs both, since
+        # tension bend is a struck string and mode lock is a driven air column.
+        mls = getattr(props,'mode_lock_spread',0.0)
         stops = props.stop_ranks if organ else [("_",1.0,1.0)]
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         for key, ratio, gain, *rest in stops:
@@ -204,6 +210,10 @@ def prepare(path, tuner='hybrid'):
                     aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
                     gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
                     cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
+                    if mls > 0.0:
+                        mlo = props.mode_lock_offset_for(m)
+                        _TB[0], _TB[1], _TB[2] = (mlo, props.mode_lock_time, props.mode_lock_time*6.0) \
+                                                 if mlo else _TBN
                     emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))

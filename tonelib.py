@@ -190,6 +190,11 @@ class BasePartial:
     # harmonic at the same rate. 0.0 = on pitch.
     detune_ratio = 0.0
 
+    # Fractional pitch offset of THIS partial at onset, decaying to 0 as the pipe's
+    # drive mode-locks it to an exact harmonic (see SimplePartial.frequency and
+    # SynthProperties.mode_lock_offset_for). 0 = no speech transient.
+    mode_lock_offset = 0.0
+
     def frequency(self, second):
         "stub input"
 
@@ -557,6 +562,21 @@ class SimplePartial(BasePartial):
             if 0.0 <= t < self.properties.tension_settle_cutoff:
                 env = _exp(-t / self.properties.tension_settle_time)
                 f *= 1.0 + tb * self.properties.attack_volume * env
+        # Pipe speech transient: a pipe's PASSIVE resonances are mildly inharmonic
+        # (the open-end correction shrinks with frequency, so upper modes sit sharp),
+        # but a sounding pipe is a nonlinearly DRIVEN oscillator -- the jet (or reed
+        # tongue) mode-locks the modes into one exactly periodic waveform. So the
+        # partials start at their passive, inharmonic frequencies and are pulled to
+        # exact harmonics as the oscillation locks. That transient is a real part of
+        # how a pipe speaks; the steady tone is harmonic, which is why organs are
+        # NOT stretch-tuned. self.mode_lock_offset is the partial's fractional
+        # deviation at onset (0 for the fundamental, growing with mode number).
+        mo = self.mode_lock_offset
+        if mo and self.sustain is not None:
+            t = second - self.sustain.start_second.get()
+            tau = self.properties.mode_lock_time
+            if 0.0 <= t < tau * 6.0:
+                f *= 1.0 + mo * _exp(-t / tau)
         return f
 
 
@@ -718,6 +738,27 @@ class SynthProperties:
         if self.chiff_width_cycles > 0.0 and frequency > 0.0:
             w = min(w, self.chiff_width_cycles / frequency)
         return w
+
+    # --- Pipe speech: inharmonic onset, harmonic sustain -----------------------
+    # An open pipe's mode n sits at n*c/(2(L + 2*delta_n)). The end correction
+    # delta shrinks as the wavelength approaches the pipe's radius, so the
+    # effective length shortens with mode number and the upper PASSIVE resonances
+    # sit sharp. Unlike a string's stiffness (which grows as h^2 without bound),
+    # this SATURATES: once delta is negligible the deviation stops growing. Hence
+    #     offset(h) = mode_lock_spread * (1 - 1/(1 + (h/mode_lock_knee)^2))
+    # rising from ~0 at the fundamental to mode_lock_spread for high modes.
+    # The oscillation is then driven and mode-locks to exact harmonics within
+    # mode_lock_time, so this is purely an ONSET transient -- the steady tone is
+    # harmonic. 0 = off (strings, brass, anything already modelled another way).
+    mode_lock_spread = 0.0     # fractional sharpness of the high passive modes
+    mode_lock_knee = 3.0       # mode number at which half the deviation is reached
+    mode_lock_time = 0.035     # s: how fast the drive pulls the modes into lock
+
+    def mode_lock_offset_for(self, harmonic):
+        if self.mode_lock_spread <= 0.0 or harmonic <= 1:
+            return 0.0
+        x = (float(harmonic) / self.mode_lock_knee) ** 2
+        return self.mode_lock_spread * (x / (1.0 + x))
 
     def chiff_harmonic_gain(self, harmonic):
         """Per-partial chiff weight: 1 at the fundamental, rolling off for the
@@ -1479,7 +1520,18 @@ class FlueOrganProperties(OrganProperties):
     # tuner's stretched octaves. OrganProperties pins this False for the family;
     # only the flue organ (pitched, like the pipe) opts back in. The reed organ
     # keeps coefficient 0 and stays harmonic / phase-locked; brass stays locked.
-    inharmonicity_dynamic = True
+    # A SOUNDING pipe is a driven, mode-locked oscillator: its steady tone is
+    # exactly harmonic, which is why organs are tuned with PURE octaves and never
+    # stretch-tuned (a piano must stretch because its free-decaying stiff strings
+    # really do ring inharmonically). The pipe's mild passive inharmonicity lives
+    # in the ONSET instead -- see mode_lock_spread below.
+    inharmonicity_dynamic = False
+    inharmonicity_coefficient = 0.0
+    # Passive modes ~0.35% sharp at the top, locking within ~40 ms. This is the
+    # pipe "settling" into speech; the sustain is harmonic.
+    mode_lock_spread = 0.0035
+    mode_lock_knee = 3.0
+    mode_lock_time = 0.040
     odd_only = False
     # A flue pipe speaks by building its standing wave, so its onset is GRADUAL
     # and scales with WAVELENGTH -- not the old fixed 0.10 s (which made trebles
@@ -1560,6 +1612,11 @@ class ReedOrganProperties(OrganProperties):
     # "fake" attack. Much gentler than the brass front (decay_db 18, sustain 0.6).
     attack_time = 0.004         # jet/tongue floor; speech_cycles adds the wavelength term
     speech_cycles = 2.0         # reeds speak ~half the flue's ramp
+    # The tongue is a stiffer, more decisive driver than a flue jet: the modes lock
+    # sooner and from a smaller initial spread.
+    mode_lock_spread = 0.0020
+    mode_lock_knee = 3.0
+    mode_lock_time = 0.022
     decay_db = 5.0              # gentle front (was 9): a soft bloom, not a stab
     harmonic_decay_db = 2.5     # upper harmonics bloom then settle a little faster
     harmonic_decay_dampening = 0.0
@@ -2134,6 +2191,7 @@ class SynthTone(BaseTone):
                     p = SimplePartial(props, f, h, vol, decay, rank_delay, self.ref_count)
                     if dyn:
                         p.inharmonic_stretch = stretch   # override the base-B stretch SimplePartial computed
+                    p.mode_lock_offset = props.mode_lock_offset_for(m)   # speech transient
                     p.rank = key
                     p.nom_freq = hf
                     self.partials.append(p)

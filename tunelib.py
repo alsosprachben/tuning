@@ -425,6 +425,31 @@ class HybridTuner(PathTuner):
     generator_name = "HybridNotes"
 
 
+class HybridHarmonicTuner(HybridTuner):
+    """The hybrid temperament on PURE 2:1 octaves.
+
+    HybridTuner stretches its octaves to land on each note's sharp 2nd partial --
+    right for a piano, whose free-decaying stiff strings really are inharmonic.
+    A pipe is a driven, MODE-LOCKED oscillator: its steady tone is exactly
+    harmonic, so there is no sharp 2nd partial to chase and a stretched octave
+    would just beat with nothing to cancel it. This keeps the hybrid's
+    within-octave temperament (meantone-flavoured -- a pure C-E third) and
+    repeats it by exact 2:1, so pipes get pure thirds AND pure octaves.
+    Use this for organ; use HybridTuner for piano/harpsichord.
+    """
+    @classmethod
+    def _build_table(cls):
+        base = HybridTuner._build_table()
+        if 60 not in base:
+            return base
+        ref = {i: base[60 + i] / base[60] for i in range(12) if 60 + i in base}
+        if len(ref) < 12:
+            return base
+        c4 = base[60]
+        return {n: c4 * ref[(n - 60) % 12] * (2.0 ** ((n - 60 - ((n - 60) % 12)) // 12))
+                for n in range(128)}
+
+
 class SpiralTuner(PathTuner):
     generator_name = "SpiralNotes"
 

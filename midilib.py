@@ -38,6 +38,9 @@ tuner_registry = {
     # Experimental path.py tree generators (fixed full-keyboard tunings whose
     # octaves follow the Steinway-B inharmonicity to the 2nd partial).
     "hybrid": HybridTuner,
+    # ...and the same temperament on PURE 2:1 octaves, for mode-locked pipes
+    # (an organ has no sharp 2nd partial to chase, so a stretched octave beats).
+    "hybridharm": HybridHarmonicTuner,
     "spiral": SpiralTuner,
     "semi": SemiTuner,
     "path": PathNotesTuner,
