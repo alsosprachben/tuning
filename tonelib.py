@@ -1816,20 +1816,70 @@ class KickDrumProperties(MembraneDrumProperties):
     decay_db = 24.0            # more body (louder-perceived); rings ~1.1 s
 
 
-class NoiseDrumProperties(PercussionProperties):
+class NoisyPercussionMixin:
+    """A radiation roll-off for the percussion voices that carry a noise wash.
+
+    Adding broadband chiff to the hats, cymbals and wood blocks made them 40% of
+    their energy above 12 kHz and 16% above 18 kHz, because the wash runs flat
+    all the way to Nyquist. Nothing physical does that: a cymbal radiates poorly
+    at the extreme top, air absorbs what is left, and a microphone would not
+    capture it either. It reads as grit and fizz rather than as brightness, and
+    lossy encoding of that much ultrasonic energy adds artefacts of its own.
+
+    So the partials fall away above hf_corner_hz at hf_order * 6 dB/octave.
+    """
+    hf_corner_hz = 9000.0
+    hf_order = 1.5
+
+    def _hf_rolloff(self, harmonic):
+        fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+        return 1.0 / (1.0 + (fn / self.hf_corner_hz) ** self.hf_order)
+
+    def harmonic_volume(self, harmonic):
+        v = super().harmonic_volume(harmonic)
+        return 0.0 if v == 0.0 else v * self._hf_rolloff(harmonic)
+
+    def chiff_harmonic_gain(self, harmonic):
+        # The WASH needs the roll-off too, and it is the larger half of the
+        # problem: chiff_harmonic_gain returns 1.0 at every harmonic by default,
+        # so the noise ran flat to Nyquist while the tonal partials were already
+        # falling away. Rolling off only the partials moved the drums' energy
+        # above 12 kHz from 39.9% to 39.4% -- essentially nothing, because the
+        # noise was carrying nearly all of it.
+        return super().chiff_harmonic_gain(harmonic) * self._hf_rolloff(harmonic)
+
+
+class NoiseDrumProperties(NoisyPercussionMixin, PercussionProperties):
     """Noise-dominated hit (hi-hat, shaker, guiro): a dense stack of strongly
     stretched partials approximating a band of colored noise, with a fast
     decay. decay_db sets how long the wash rings."""
-    initial_gain = 1.0 / 5.6
+    # A struck instrument ignores note-off: nothing about lifting the stick
+    # stops a hi-hats, shakers, guiro, whistles. GM sequencers write arbitrary drum note lengths, so
+    # honouring them cut these off at whatever the file happened to say
+    # rather than letting them ring for their own time.
+    one_shot = True
+    release_floor_db = -50.0
+
+    initial_gain = 1.0 / 11.0   # hats sat above the kick; the added wash reads louder
     max_harmonic = 64
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 40.0
-    tonal_dampening = 0.4          # nearly flat spectrum = broadband
+    # A hi-hat is BROADBAND: two cymbals clamped together have no pitch. Measured
+    # on the RING rather than the strike, the open hat was putting 41% of its
+    # energy into a single 380 Hz partial by 400 ms and rising -- the noise died
+    # and left pure modes behind, so the later it got the more it sang. Flattened
+    # to the cymbal's value, with the wash sustained through the ring as a cymbal
+    # does, since that is physically the same instrument.
+    tonal_dampening = 0.15
+    chiff_volume = 2.0
+    chiff_cycle = 0.95
+    chiff_release = 0.0
+    sustain_jitter = 1.0           # the wash lasts as long as the hat does
     decay_db = 20.0
     harmonic_decay_db = 2.0
     harmonic_decay_dampening = 0.0
 
 
-class SnareDrumProperties(PercussionProperties):
+class SnareDrumProperties(NoisyPercussionMixin, PercussionProperties):
     """Snare: a short burst of mostly noise. Discrete inharmonic partials
     alone still read as pitched, so the noise comes primarily from a wide
     running phase jitter (the chiff mechanism cranked up) that smears every
@@ -1916,6 +1966,13 @@ class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
     agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,
     no noise wash -- these are meant to be tonal, unlike a cymbal."""
+    # A struck instrument ignores note-off: nothing about lifting the stick
+    # stops a cowbell, agogo, triangle. GM sequencers write arbitrary drum note lengths, so
+    # honouring them cut these off at whatever the file happened to say
+    # rather than letting them ring for their own time.
+    one_shot = True
+    release_floor_db = -50.0
+
     initial_gain = 1.0 / 2.25
     max_harmonic = 40
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
@@ -1925,7 +1982,57 @@ class MetalPercussionProperties(PercussionProperties):
     harmonic_decay_dampening = 0.1
 
 
-class CymbalProperties(PercussionProperties):
+class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
+    """Struck WOOD -- claves, woodblocks, guiro body: a hard, dry tock.
+
+    These were sharing MetalPercussionProperties with the cowbell, the agogo and
+    the triangle, whose ring is measured in seconds. A clave rings for about two
+    tenths of one. At the shared decay every stroke overlapped the next, so a
+    samba pattern accumulated into a sustained pitched drone instead of reading
+    as rhythm -- the more damaging because wood percussion is nearly always
+    keeping time, and time-keeping that holds a pitch competes with the tune.
+
+    So: a definite pitch, as wood has, but gone almost immediately.
+    """
+    # Level, measured against the rest of the kit: at 1/2.25 (inherited from the
+    # tonal-metal family) a clave peaked ABOVE the bass drum, which is not where
+    # a time-keeping click belongs. Broadband noise also reads louder than a
+    # tonal ping of the same peak, so the added wash needs paying for.
+    initial_gain = 1.0 / 5.0
+    max_harmonic = 44
+    # A block or a clave is mostly a CLICK. Its modes are wildly inharmonic --
+    # a short bar's bending modes sit near 1 : 2.76 : 5.4, nothing like a
+    # harmonic series -- so no pitch should stand out enough to sing. At x12
+    # stretch with tonal_dampening 0.8 the low partials were still close enough
+    # to harmonic, and prominent enough, to read as a note.
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 16.0
+    # A clave is a TUNED block -- it has a definite pitch, and burying it in
+    # wash turned the part into brushes. This sits between the two failures:
+    # tonal enough that the pitch is there, inharmonic and transient enough that
+    # it reads as a click keeping time rather than as a note.
+    tonal_dampening = 0.75
+    # The strike is broadband; the RING is modal. Sustaining the wash through the
+    # ring turned the part into brushes -- but a few decaying sinusoids is exactly
+    # what a clave is, once they last 0.2 s instead of the eleven seconds this
+    # voice originally inherited. The noise belongs at the onset only.
+    chiff_volume = 0.65
+    chiff_cycle = 0.5
+    chiff_release = 0.0
+    # The noise must persist through the (very short) ring, not just the onset --
+    # a cymbal does this too. With noise only at the attack, what was left after
+    # the first few milliseconds was a handful of decaying sinusoids, and that is
+    # a pitch no matter how quickly it dies.
+    sustain_jitter = 1.0
+    chiff_min_valve_time = 0.001
+    chiff_max_valve_time = 0.004
+    one_shot = True                 # a struck block ignores note-off; it is already gone
+    release_floor_db = -50.0
+    decay_db = 260.0                # ~0.23 s to -60 dB (metal percussion: 10.9 s)
+    harmonic_decay_db = 40.0        # the upper modes go first: a tock, not a ring
+    harmonic_decay_dampening = 0.0
+
+
+class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     """Cymbal (crash, ride, splash, china): a bright broadband noise wash --
     the snare's wide-chiff noise, but a fast splash that rings out over a
     second or two instead of a punchy die. A few inharmonic modes give the

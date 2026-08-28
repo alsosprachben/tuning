@@ -19,6 +19,7 @@ from tonelib import (
     SnareDrumProperties,
     CymbalProperties,
     RideBellProperties,
+    WoodPercussionProperties,
 )
 
 M = MembraneDrumProperties      # pitched membranes: toms, congas, timbales
@@ -28,6 +29,7 @@ T = MetalPercussionProperties   # pitched metal/wood (cowbell, agogo, block, ...
 S = SnareDrumProperties
 C = CymbalProperties            # crash/ride/splash/china: broadband wash
 R = RideBellProperties          # the ride's bell: pitch THROUGH the wash
+W = WoodPercussionProperties    # claves, woodblocks: a dry tock, gone at once
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
@@ -38,11 +40,11 @@ PERCUSSION = {
     39: ("Hand Clap",          N, 260.0),
     40: ("Electric Snare",     S, 275.0),
     41: ("Low Floor Tom",      M, 87.0),
-    42: ("Closed Hi-Hat",      N, 400.0),
+    42: ("Closed Hi-Hat",      N, 780.0),
     43: ("High Floor Tom",     M, 98.0),
-    44: ("Pedal Hi-Hat",       N, 360.0),
+    44: ("Pedal Hi-Hat",       N, 700.0),
     45: ("Low Tom",            M, 110.0),
-    46: ("Open Hi-Hat",        N, 380.0),
+    46: ("Open Hi-Hat",        N, 720.0),
     47: ("Low-Mid Tom",        M, 130.0),
     48: ("Hi-Mid Tom",         M, 150.0),
     49: ("Crash Cymbal 1",     C, 520.0),
@@ -71,9 +73,9 @@ PERCUSSION = {
     72: ("Long Whistle",       N, 880.0),
     73: ("Short Guiro",        N, 560.0),
     74: ("Long Guiro",         N, 520.0),
-    75: ("Claves",             T, 800.0),
-    76: ("Hi Wood Block",      T, 760.0),
-    77: ("Low Wood Block",     T, 620.0),
+    75: ("Claves",             W, 800.0),
+    76: ("Hi Wood Block",      W, 760.0),
+    77: ("Low Wood Block",     W, 620.0),
     78: ("Mute Cuica",         M, 340.0),
     79: ("Open Cuica",         M, 300.0),
     80: ("Mute Triangle",      T, 1040.0),
@@ -114,4 +116,165 @@ def percussion_for_note(note):
     if entry is None:
         return None
     name, cls, freq = entry
-    return name, cls, freq, DEFAULT_PAN.get(note, 0.0)
+    return name, _with_ring(cls, note), freq, DEFAULT_PAN.get(note, 0.0)
+
+# How long each instrument actually SOUNDS, in seconds to inaudibility (-60 dB).
+#
+# Ring time cannot be a property of the class: NoiseDrumProperties covers both a
+# closed hi-hat (0.12 s) and an open one (0.70 s), MetalPercussion covers a
+# cowbell (0.4 s) and an open triangle (1.5 s). Sharing one decay across a family
+# left 37 of these 47 notes ringing more than three times too long -- the cowbell
+# and the agogo for nearly eleven seconds -- so every stroke overlapped the next
+# and time-keeping parts accumulated into sustained pitched drones.
+#
+# These are the instruments' own ring times, and the engines set each drum's
+# decay from them at note construction.
+PERCUSSION_RING = {
+    35: 0.40, 36: 0.35, 37: 0.15, 38: 0.35, 39: 0.30, 40: 0.30, 41: 0.60,
+    42: 0.12, 43: 0.60, 44: 0.10, 45: 0.55, 46: 1.60, 47: 0.50, 48: 0.45,
+    49: 4.00, 50: 0.40, 51: 2.50, 52: 3.00, 53: 1.20, 54: 0.50, 55: 2.00,
+    56: 0.40, 57: 4.00, 58: 0.50, 59: 2.50, 60: 0.30, 61: 0.35, 62: 0.20,
+    63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
+    70: 0.25, 71: 0.60, 72: 0.80, 73: 0.035, 74: 0.035, 75: 0.20, 76: 0.20,
+    77: 0.25, 78: 0.30, 79: 0.50, 80: 0.60, 81: 1.50,
+}
+
+
+COMPOSITE_SLOWDOWN = 1.85    # measured across the kit; see _with_ring
+
+# Per-note level trim, as a multiplier on the family's gain.
+#
+# Level cannot be a property of the class either, for the same reason ring time
+# could not: NoiseDrumProperties carries both the hi-hats and the guiro, and
+# quietening the hats buried the guiro 16 dB under the kick. A scraped note is
+# also intrinsically quiet in this model -- its energy is spread over a train of
+# 35 ms ridges rather than concentrated in one hit -- so it needs the trim even
+# before the hats are touched.
+PERCUSSION_LEVEL = {
+    73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
+    # The open hat sat 9.4 dB above the closed one. An open hat IS louder -- more
+    # metal is free to move -- but not by that much; on a kit it is a few dB, and
+    # at nine the closed strokes vanish between the open ones.
+    # ...and both hats then sat too close to the crash -- the open one only 1.6 dB
+    # under it. A crash is the loudest thing a kit does; hats live well below it,
+    # nearer the ride. Both dropped 5 dB, keeping the 3.5 dB open/closed gap.
+    42: 0.87,                # closed
+    44: 0.87,                # pedal, to match
+    46: 0.47,                # open
+    # The crash family then stood ~10 dB over everything else that is made of
+    # metal. A crash IS the loudest cymbal, but at that distance it stops being
+    # an accent within the kit and becomes an interruption of it.
+    49: 0.56, 57: 0.56,      # crash 1 and 2: -5 dB
+    52: 0.56, 55: 0.56,      # china and splash, to match
+    # The kick's own class sits at 1/1.05, flagged as near a per-tone ceiling --
+    # but that is a limit on the CLASS gain, and the trim is applied on top, so
+    # the headroom question is simply whether the rendered tone stays clean.
+    # Measured below: it does.
+    35: 1.6, 36: 1.6,        # bass drum: +4 dB
+}
+_RING_CLASSES = {}
+
+
+def _with_ring(cls, note):
+    """A per-note subclass whose fundamental decays over the instrument's own
+    ring time, keeping the family's relative rolloff across the harmonics.
+
+    Specialising the CLASS rather than mutating the instance is what makes this
+    work in both engines: the partials are built inside the tone's constructor
+    from properties that do not exist yet when the note is created, so there is
+    no moment at which an instance could be adjusted in time.
+    """
+    ring = PERCUSSION_RING.get(note)
+    trim = PERCUSSION_LEVEL.get(note)
+    if not ring and not trim:
+        return cls
+    key = (cls.__name__, note)
+    if key not in _RING_CLASSES:
+        target = 60.0 / ((ring or 1.0) * COMPOSITE_SLOWDOWN)
+        # The audible ring is the whole sound dying away, not the fundamental
+        # alone: the upper partials decay faster, so total energy falls sooner
+        # than harmonic 1 does. Solving for harmonic_decay(1) = 60/ring made
+        # every drum about 0.55x its intended length when measured on the
+        # envelope. COMPOSITE_SLOWDOWN corrects for that, and is itself measured.
+
+        def harmonic_decay(self, harmonic, _cls=cls, _t=target):
+            base = _cls.harmonic_decay(self, harmonic)
+            first = _cls.harmonic_decay(self, 1)
+            return base * (_t / first) if first > 0 else _t
+
+        attrs = {}
+        if ring: attrs["harmonic_decay"] = harmonic_decay
+        if trim: attrs["initial_gain"] = cls.initial_gain * trim
+        _RING_CLASSES[key] = type("%s_n%d" % (cls.__name__, note), (cls,), attrs)
+    return _RING_CLASSES[key]
+
+# GM EXCLUSIVE CLASSES. Some percussion is mutually exclusive on one physical
+# instrument: closing the hi-hat pedal damps the cymbals, so a closed or pedal
+# stroke cuts off a ringing open hat. The same is true of the two whistles, the
+# two guiros, the two cuicas and the two triangles -- each pair is one object
+# that cannot make both sounds at once.
+#
+# Without this the open hat rings on underneath every closed stroke, which is
+# audible as soon as the open hat is given any real sustain: the pattern turns
+# into a wash instead of alternating open and shut.
+PERCUSSION_CHOKE = [
+    {42, 44, 46},        # hi-hat: closed / pedal / open
+    {71, 72},            # short / long whistle
+    {73, 74},            # short / long guiro
+    {78, 79},            # mute / open cuica
+    {80, 81},            # mute / open triangle
+]
+
+_CHOKE_OF = {}
+for _grp in PERCUSSION_CHOKE:
+    for _n in _grp:
+        _CHOKE_OF[_n] = _grp
+
+
+def choke_group(note):
+    """The set of notes this one silences (and is silenced by), or None."""
+    return _CHOKE_OF.get(note)
+
+# SCRAPED instruments. A guiro is not struck -- a stick is dragged across a
+# ridged gourd, and what you hear is the individual ridges going past. As one
+# broadband hit with a decay it is just a "shh"; the rasp IS the train of
+# impacts, and the ear reads the ridge rate as the character of the stroke.
+#
+# So a guiro note expands into its ridges, and PERCUSSION_RING gives the ring of
+# ONE ridge (35 ms) rather than of the whole gesture.
+# The ridges are CARVED INTO THE GOURD, so both strokes cross the same number of
+# them -- a short guiro is the same scrape done faster, not a shorter one. Giving
+# the short stroke fewer ridges made it a different instrument rather than a
+# quicker gesture, and lost the rising ridge-rate that is what actually
+# distinguishes the two.
+PERCUSSION_RASP = {
+    73: (0.130, 17),     # short guiro: the same 17 ridges, crossed in a third of the time
+    74: (0.420, 17),     # long guiro: a full, unhurried scrape
+}
+
+
+def rasp_strokes(note, on, off, rng=None):
+    """[(on, off, level)] for one scraped note, or None if it is not scraped.
+
+    The stroke is not even in LEVEL: a scrape starts hard, eases through the
+    middle and lifts at the end. The ridges themselves are, though -- they are
+    carved at a regular spacing, and only the hand varies -- so the timing
+    jitter is small. At +-9% it read as sloppy rather than human.
+    """
+    spec = PERCUSSION_RASP.get(note)
+    if spec is None:
+        return None
+    dur, n = spec
+    span = max(dur, (off - on) * 0.5) if off > on else dur
+    out = []
+    for i in range(n):
+        frac = i / float(n - 1) if n > 1 else 0.0
+        jitter = ((i * 2654435761) % 1000 / 1000.0 - 0.5) * 0.05   # deterministic, +-2.5%
+        t = on + span * (frac + jitter / n)
+        # hard at the start, easing, with a slight lift at the very end
+        level = 0.55 + 0.45 * (1.0 - frac) ** 0.7
+        if i == n - 1:
+            level *= 0.7
+        out.append((t, t + span / n * 0.9, level))
+    return out
+

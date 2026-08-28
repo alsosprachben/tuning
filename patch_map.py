@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    WoodPercussionProperties,
     SquareSynthProperties,
     SawtoothSynthProperties,
     Steinway,
@@ -88,6 +89,10 @@ PROGRAM_CLASS[110] = BowedStringProperties # fiddle
 PROGRAM_CLASS[111] = ReedOrganProperties   # shanai
 # 112-119 Percussive (tinkle bell, agogo, steel drums, woodblock, taiko, melodic tom, synth drum, reverse cymbal)
 _fill(112, 119, MalletProperties)
+# 115 Woodblock is a TIME-KEEPING voice even on a melodic channel -- a game cue
+# plays its samba pattern on five pitches. As a pitched mallet bar it rang for
+# 15 seconds a stroke and turned the rhythm into a drone.
+PROGRAM_CLASS[115] = WoodPercussionProperties
 # 120-127 Sound effects (fret noise, breath, seashore, bird, phone, helicopter, applause, gunshot)
 _fill(120, 127, MalletProperties)
 

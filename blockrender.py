@@ -21,7 +21,7 @@ import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import tonelib as T, midilib
 from patch_map import property_class_for_program
-from percussion_map import percussion_for_note, GM_PERCUSSION_CHANNEL
+from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
 
 SR = 44100; TAU = 0.015; BLK = 512
 HERE = os.path.dirname(os.path.abspath(__file__)); LIB = os.path.join(HERE, "libsynth.so")
@@ -139,7 +139,42 @@ def prepare(path, tuner='hybrid'):
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
         A["gr"].append(gr); A["cr"].append(cr)
+    # SCRAPED instruments expand into their individual ridge impacts before
+    # anything else looks at the note list, so the choke and the envelopes all
+    # see the real strokes.
+    expanded = []
+    inner_ridge = set()          # ridges after the first, which must not choke each other
+    for ev in notes:
+        ch, note, on, off, vel, rest = ev
+        strokes = rasp_strokes(note, on, off) if ch == GM_PERCUSSION_CHANNEL else None
+        if strokes is None:
+            expanded.append(ev); continue
+        for k, (t0, t1, lvl) in enumerate(strokes):
+            expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest))
+            if k: inner_ridge.add((note, t0))
+    notes = expanded
+
+    # EXCLUSIVE CLASSES: a closed hi-hat stroke damps a ringing open one. Applied
+    # here, on the note list, because it is a fact about the instrument rather
+    # than about the envelope -- the open hat simply stops.
+    drum_ons = {}
+    for ch, note, on, off, vel, _ in notes:
+        if ch == GM_PERCUSSION_CHANNEL and choke_group(note) is not None:
+            # A ridge WITHIN a scrape is not a new stroke: the gourd goes on
+            # ringing as the stick moves to the next ridge, so only the start of
+            # a scrape damps what came before it.
+            if (note, on) in inner_ridge: continue
+            drum_ons.setdefault(note, []).append(on)
+    choke_at = {}
+    for note, ons in drum_ons.items():
+        grp = choke_group(note)
+        later = sorted(t for n2, ts in drum_ons.items() if n2 in grp for t in ts)
+        choke_at[note] = later
+
     for ch, note, on, off, vel, (v7, v11, pan) in notes:
+        choked = None
+        if ch == GM_PERCUSSION_CHANNEL and note in choke_at:
+            choked = next((t for t in choke_at[note] if t > on + 1e-4), None)
         # PERCUSSION (GM channel 10). The note number selects a drum, not a
         # pitch: it takes a fixed base frequency and its own property class, and
         # the tuner never sees it. Without this the whole kit was routed through
@@ -164,6 +199,12 @@ def prepare(path, tuner='hybrid'):
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
             off = max(off, on + 8.0)
+        # ...but an exclusive class OVERRIDES the ring-out: the point of a choke
+        # is that the instrument is physically damped, so it stops even though
+        # nothing about its own decay would have stopped it. Applied after the
+        # one-shot extension, which would otherwise put the note-off back.
+        if choked is not None and choked < off:
+            off = choked
         if props.inharmonicity_dynamic:
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f0)
         B = props.inharmonicity_coefficient; dur = off-on
