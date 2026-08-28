@@ -31,17 +31,25 @@ max_v = 1.0
 rand_granularity = 100000
 
 
-def init_rand():
-    import random
-    global entropy
-    entropy = [random.random() for i in range(rand_granularity)]
-
-
-init_rand()
-
-
 def rand(second):
-    return entropy[int(second * rand_granularity) % rand_granularity]
+    """A stateless hash, not a table -- see hash01() in synthkernel.c.
+
+    This was a 100000-entry table read at index floor(x * granularity) MOD
+    granularity, and its one caller passes x = t * f -- so how random the chiff
+    was depended on how round the partial's frequency happened to be. At A=440,
+    A2 repeats every 200 ms and A3/A4 every 50 ms, while E4, C4, G3 and D4 do
+    not repeat inside a second. Under hybrid (A=441) the A octaves repeat at
+    exactly the partial's period, where the chiff stops being noise at all.
+    Same index, no wrap, run through splitmix64 -- so it never repeats, treats
+    every note alike, and the C kernel computes the identical value from the
+    identical index.
+    """
+    x = int(second * rand_granularity) & 0xFFFFFFFFFFFFFFFF
+    x = (x + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 31
+    return (x >> 11) * (1.0 / 9007199254740992.0)
 
 
 def clipped(v):
@@ -205,6 +213,15 @@ class Fade:
 
 class BasePartial:
     # public
+
+    # (depth_fraction, rate_hz, phase_rad) if this partial belongs to a player
+    # with their own vibrato; None for one-body voices. See voice_vibrato().
+    vibrato = None
+
+    # Where this partial's phase accumulator starts, in CYCLES, at the onset.
+    # 0 for everything struck or blown as one body; an ensemble's extra players
+    # each get their own (see BowedStringProperties.unison_voices).
+    start_phase = 0.0
 
     # Upper bound on the attack/release fade in seconds, set per note from
     # its duration so a fade can't outlast a short note. None = no cap.
@@ -376,7 +393,7 @@ class BasePartial:
         # second*frequency -- a different offset per partial -- leaving the
         # struck strings (and same-frequency string-group voices) incoherent and
         # cancelling. A real strike excites all modes in phase; so must we.
-        self.last_cycle = 0.0
+        self.last_cycle = self.start_phase
         self.last_second = second
 
         if self.properties.attack_time is not None:
@@ -588,6 +605,13 @@ class SimplePartial(BasePartial):
         # TRANSIENT (fast exponential from the strike), not the slow amplitude
         # decay -- so the sustained portion, which the tuning is matched against,
         # rings at the tuned base_frequency rather than perpetually sharp.
+        # Per-player vibrato: the frequency itself wanders, and cycle() integrates
+        # it sample by sample (the C kernel does the same integral analytically).
+        if self.vibrato is not None:
+            from math import sin as _sin
+            d, r, ph = self.vibrato
+            f *= 1.0 + d * _sin(6.283185307179586 * r * second + ph)
+
         tb = self.properties.tension_bend
         if tb and self.sustain is not None:
             t = second - self.sustain.start_second.get()
@@ -805,13 +829,23 @@ class SynthProperties:
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """Extra detuned voices for this harmonic, as (gain_multiplier,
-        detune_Hz, detune_ratio, decay_rate_dbps). Default: one voice per
-        unison_detune offset, a fixed-Hz chorus at unison_gain and the same
-        decay -- fine for a bowed section. The piano overrides this with
-        ratio-detuned string groups (the dance)."""
-        return [(self.unison_gain, offset, 0.0, harmonic_decay)
+        detune_Hz, detune_ratio, decay_rate_dbps, start_phase_cycles).
+
+        start_phase is 0 for a struck or plucked body, where every voice really
+        does start together -- see hammer_down(), which zeroes the accumulator
+        for exactly that reason. It is NOT 0 for an ensemble of separate players:
+        see BowedStringProperties.unison_voices().
+        """
+        return [(self.unison_gain, offset, 0.0, harmonic_decay, 0.0)
                 for offset in self.unison_detune]
 
+    def voice_vibrato(self, frequency, index):
+        """(depth_fraction, rate_hz, phase_rad) for one player, or None.
+
+        index 0 is the main voice; 1..n-1 are the extras from unison_voices().
+        None for anything that is one body rather than several people.
+        """
+        return None
     def aftersound(self, frequency, decay_rate):
         """Two-stage decay parameters (slow-tail energy fraction, slow rate in
         dbps) for a note at this fundamental. Default: none -- a single
@@ -1454,7 +1488,8 @@ class Steinway(InharmonicStringProperties):
             if g < 1e-3:
                 continue
             ratio = 2.0 ** (self.note_detune_cents[i] / 1200.0) - 1.0
-            voices.append((g, 0.0, ratio, harmonic_decay))
+            # phase 0: a hammer excites all three strings in the same instant.
+            voices.append((g, 0.0, ratio, harmonic_decay, 0.0))
         return voices
 
     def harmonic_volume(self, harmonic):
@@ -2008,18 +2043,95 @@ class BowedStringProperties(BlownPipeProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    initial_gain = 1.0 / 9381
-    # Section shimmer via a small sustained phase jitter (a running chiff),
-    # not many detuned voices: broader per-partial band, no amplitude wobble.
+    section_players = 7            # a section's character, not its headcount
+    section_spread_cents = 6.0     # +/- : an orchestral section's pitch spread
+    # /sqrt(players): the voices are at different pitches, so they are incoherent
+    # and add in POWER, not amplitude. Dividing here keeps the section at exactly
+    # the loudness the equal-velocity balance was calibrated to with one voice --
+    # and reads section_players, so raising the headcount cannot change the level.
+    initial_gain = 1.0 / 9381 / (section_players ** 0.5)
+    # A SECTION IS PLAYERS, NOT JITTER. This used to claim section shimmer from a
+    # small sustained phase jitter -- "broader per-partial band, no amplitude
+    # wobble" -- and measurement says it never did that. The jitter applies the
+    # SAME phase-deviation magnitude to every partial, but a section's spread is
+    # a spread in PITCH, so a player δ cents away puts partial n at n·δ: the band
+    # must grow with the partial, and this one did not. And the deviation is
+    # small (0.19 rad mean), so the jittered copy stayed nearly in phase with the
+    # partial it copied. Turning sustain_jitter from 0.3 to 0 moved the skirt
+    # around every partial by nothing at all and the loudness by 0.87 dB -- so
+    # the whole mechanism was a coherent level bump wearing a shimmer's name,
+    # and part of why the strings sat louder than the score asked for.
+    #
+    # The fast kernel makes the honest version affordable: render the players.
+    # Each is a full harmonic stack a few cents off its neighbours, so the
+    # detuning IS in pitch and every partial's spread scales with n for free,
+    # and the beating between them is real beating rather than a modulation
+    # applied to one voice. unison_voices() below is the piano's own machinery,
+    # which both renderers already understand.
     chiff_cycle = 0.06          # phase-deviation magnitude (small = subtle)
-    chiff_volume = 0.5
+    chiff_volume = 0.5          # still wanted on the ATTACK: bow scrape is real
     chiff_release = 0.0
-    sustain_jitter = 0.3        # how much jitter persists on the held note
+    sustain_jitter = 0.0        # the held note is the players now, not a jitter
     chiff_min_valve_time = 0.04
     chiff_max_valve_time = 0.10
 
     max_harmonic = 40
     inharmonicity_coefficient = 0.0
+
+    # ...AND THEY DO NOT HOLD THEIR PITCH. Static detunes beat at FIXED rates
+    # forever: seven voices held exactly apart form a comb whose notches march at
+    # constant speed, which is a phaser, and no starting phase can fix it because
+    # the rates themselves never change. Every real player has a vibrato, so the
+    # beat rates wander and never settle into a pattern. Narrow on purpose --
+    # this is a section's collective warmth, not a soloist's expressive vibrato.
+    section_vibrato_cents = 5.0        # +/- depth
+    section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
+
+    def voice_vibrato(self, frequency, index):
+        if not self.section_vibrato_cents:
+            return None
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        rng = _random.Random(0x71B0 + midi * 64 + index)
+        depth = (2.0 ** (self.section_vibrato_cents / 1200.0) - 1.0) * rng.uniform(0.7, 1.0)
+        return (depth, rng.uniform(*self.section_vibrato_hz),
+                rng.uniform(0.0, 6.283185307179586))
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        """The other players: section_players - 1 extra stacks, each a few cents
+        off. Seeded per note (as the piano seeds its unisons) so a given pitch is
+        always the same section but no two pitches share a spread -- otherwise
+        every note detunes identically and the section reads as one chorused
+        voice. The seed is per NOTE, so all of a note's partials agree on where
+        each player is, which is what makes the spread scale with the partial.
+        """
+        n = self.section_players
+        if n <= 1:
+            return super().unison_voices(frequency, harmonic, harmonic_decay)
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        rng = _random.Random(0x5EC0 + midi)
+        cents = [rng.uniform(-self.section_spread_cents, self.section_spread_cents)
+                 for _ in range(n - 1)]
+        # Straddle the written pitch. A free draw leaves the section's centre a
+        # cent or two off, which is the whole section playing flat against the
+        # winds; the main voice sits at 0, so the extras must average to it.
+        mean = sum(cents) / len(cents)
+        cents = [c - mean * (n - 1) / float(n) for c in cents]
+        # AND THEY DO NOT START IN PHASE. Seven equal voices launched from phase 0
+        # sum coherently at the onset -- 7x, not sqrt(7)x -- and only drift apart
+        # as the detuning accrues phase. Measured, that put a +9.3 dB spike on the
+        # front of every note (a single voice's peak-over-sustain is +0.3 dB, which
+        # is what a bowed string should be) and left the voices sweeping through a
+        # synchronised comb as they separated: an attack like a hammer and an
+        # audible phaser, neither of which is a string section. The piano's own
+        # note about its unisons says the same thing -- equal voices beating
+        # together go "to deep nulls (a phaser)" instead of shimmering.
+        #
+        # A hammer strikes three strings at one instant; seven players do not
+        # share an instant. Give each its own start and the sum is incoherent
+        # from the first sample -- the right attack and the right steady state.
+        #
+        return [(1.0, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, rng.random())
+                for c in cents]
 
     # 1/n-ish spectrum: brighter than an organ, no octave-modulo steps
     tonal_dampening = 1.0
@@ -2037,7 +2149,7 @@ class BowedStringSecondProperties(BowedStringProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    initial_gain = 1.0 / 8536
+    initial_gain = 1.0 / 8536 / (BowedStringProperties.section_players ** 0.5)   # as the first section
     tonal_dampening = 1.25      # darker: upper partials rolled off more
     max_harmonic = 32
     chiff_cycle = 0.045         # a subtly different shimmer texture
@@ -2523,20 +2635,23 @@ class SynthTone(BaseTone):
             transverse.append((harmonic_frequency, harmonic_volume_raw, harmonic_decay))
             errlog("SimplePartial(%s, %s, %s, %s, %s)" % (
                 self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
-            self.partials.append(
-                SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay,
-                              self.ref_count))
+            main = SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume,
+                                 harmonic_decay, self.delay, self.ref_count)
+            main.vibrato = self.properties.voice_vibrato(self.frequency, 0)   # player 0
+            self.partials.append(main)
             # Extra unison voices beat against the main partial: a couple of
             # ratio-detuned strings for a piano (the dance), a fixed-Hz spread
             # for a section of many bowed strings. Each voice carries its own
             # gain, detune (Hz and/or ratio), and decay.
-            for gain_mult, offset_hz, detune_ratio, unison_decay in self.properties.unison_voices(
-                    self.frequency, harmonic, harmonic_decay):
+            for ui, (gain_mult, offset_hz, detune_ratio, unison_decay, start_phase) in \
+                    enumerate(self.properties.unison_voices(self.frequency, harmonic, harmonic_decay)):
                 partial = SimplePartial(self.properties, self.frequency, harmonic,
                                         harmonic_volume * gain_mult, unison_decay,
                                         self.delay, self.ref_count)
                 partial.frequency_offset = offset_hz
                 partial.detune_ratio = detune_ratio
+                partial.start_phase = start_phase
+                partial.vibrato = self.properties.voice_vibrato(self.frequency, ui + 1)
                 self.partials.append(partial)
 
         # --- Phantom (longitudinal) partials for the wound bass (Conklin) ---
@@ -2652,14 +2767,18 @@ class SynthTone(BaseTone):
                     p.mode_lock_offset = props.mode_lock_offset_for(m)   # speech transient
                     p.rank = key
                     p.nom_freq = hf
+                    p.vibrato = props.voice_vibrato(f, 0)     # player 0
                     self.partials.append(p)
-                    for gain_mult, offset_hz, detune_ratio, unison_decay in props.unison_voices(f, m, decay):
+                    for ui, (gain_mult, offset_hz, detune_ratio, unison_decay, start_phase) in \
+                            enumerate(props.unison_voices(f, m, decay)):
                         up = SimplePartial(props, f, h, vol * gain_mult, unison_decay,
                                            rank_delay, self.ref_count)
                         if dyn:
                             up.inharmonic_stretch = stretch
                         up.frequency_offset = offset_hz
                         up.detune_ratio = detune_ratio
+                        up.start_phase = start_phase
+                        up.vibrato = props.voice_vibrato(f, ui + 1)
                         up.rank = key
                         up.nom_freq = hf
                         self.partials.append(up)

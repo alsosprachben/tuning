@@ -126,18 +126,20 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","delL","delR","gr","cr")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
+    _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
-    def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr):
+    def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
         om = om * _PJ[0]
-        A["om"].append(om); A["p0"].append(-om*non); A["aL"].append(ampL); A["aR"].append(ampR)
+        A["om"].append(om); A["p0"].append(-om*non + ph0); A["aL"].append(ampL); A["aR"].append(ampR)
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
+        A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
         A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
         A["gr"].append(gr); A["cr"].append(cr)
     # SCRAPED instruments expand into their individual ridge impacts before
@@ -289,15 +291,21 @@ def prepare(path, tuner='hybrid'):
                         mlo = props.mode_lock_offset_for(m)
                         _TB[0], _TB[1], _TB[2] = (mlo, props.mode_lock_time, props.mode_lock_time*6.0) \
                                                  if mlo else _TBN
+                    vb = props.voice_vibrato(f0, 0)
+                    _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
                     emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
-                    for gm, off_hz, dr, ud in props.unison_voices(f0, m, dbps):
+                    for ui, (gm, off_hz, dr, ud, uph) in enumerate(props.unison_voices(f0, m, dbps)):
+                        vb = props.voice_vibrato(f0, ui + 1)
+                        _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
                         uf = hf*(1.0+dr) + off_hz
                         if uf <= 0 or uf > SR/2: continue
                         ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
                         emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel, chiff,
-                                     ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
+                                     ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
+                                     2*math.pi*uph)
+                    _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
         # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
         # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano
@@ -322,13 +330,12 @@ def prepare(path, tuner='hybrid'):
                                  lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
-    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
-                ent=np.ascontiguousarray(np.array(T.entropy, np.float64)))
+    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S)
     for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),
-                 ("tbav","f4"),("tau","f4"),("tcut","f4"),("delL","f4"),("delR","f4"),
+                 ("tbav","f4"),("tau","f4"),("tcut","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
                  ("gr","i4"),("cr","i4")):
         prep[k] = arr(k, dt)
     return prep
@@ -343,8 +350,8 @@ def synth_window(prep, n0, winlen):
     lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],a['P'],
                     dp(a['om']),dp(a['p0']),dp(a['p0']),fp(a['aL']),fp(a['aR']),fp(a['nf']),
                     lp(a['non']),lp(a['noff']),fp(a['fa']),fp(a['re']),fp(a['ch']),fp(a['logr']),fp(a['logrA']),fp(a['aft']),fp(a['sus']),
-                    fp(a['cv']),fp(a['cc']),fp(a['crl']),fp(a['sj']),fp(a['csc']),dp(a['ent']),ctypes.c_long(len(a['ent'])),
-                    fp(a['tbav']),fp(a['tau']),fp(a['tcut']),fp(a['delL']),fp(a['delR']),
+                    fp(a['cv']),fp(a['cc']),fp(a['crl']),fp(a['sj']),fp(a['csc']),
+                    fp(a['tbav']),fp(a['tau']),fp(a['tcut']),fp(a['vd']),fp(a['vr']),fp(a['vp']),fp(a['delL']),fp(a['delR']),
                     ip(a['gr']),ip(a['cr']),fp(a['G']),fp(a['S']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),ctypes.c_long(SR))
     L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)

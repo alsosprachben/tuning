@@ -10,7 +10,35 @@
 // over disjoint time chunks so threads never share output samples.
 #include <math.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <omp.h>
+
+#define RAND_GRAN 100000.0
+
+// THE CHIFF'S RANDOMNESS, TWISTED. This used to read a 100000-entry table at
+// index floor(t * f * granularity) MOD granularity, and that index depends on
+// the NOTE: the sequence returns to its start at the smallest L samples where
+// L * f / 44100 is a whole number, so how random the chiff is depends on how
+// round the partial's frequency happens to be. Measured, at A=440: A2 (110 Hz)
+// repeats every 200 ms -- a 5 Hz flutter -- and A3 and A4 every 50 ms, while
+// E4, C4, G3 and D4 do not repeat inside a second at all. These renders use
+// hybrid at A=441, where the A octaves are 110.25 / 220.5 / 441 and repeat at
+// exactly the partial's own period: for those notes the chiff stops being noise
+// altogether and becomes a fixed periodic waveform, purely harmonic, while the
+// note a semitone away is still noisy. An inconsistency across the keyboard,
+// worst on whichever notes the tuning happens to make round.
+//
+// Same index, no wrap and no table -- run through a splitmix64 finaliser
+// instead. A stateless hash never repeats and treats every note alike, and any
+// renderer that computes the same index gets the same value with nothing to
+// carry between them.
+static inline double hash01(uint64_t x) {
+    x += 0x9E3779B97F4A7C15ULL;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+    x ^= x >> 31;
+    return (double)(x >> 11) * (1.0 / 9007199254740992.0);
+}
 
 static inline float smoothstep(float x) {
     if (x <= 0.f) return 0.f;
@@ -86,8 +114,8 @@ void synth_voice(
     const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
     const float* logr, const float* logrA, const float* aftL, const float* susL,
     const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
-    const double* entropy, long gran,
     const float* tbav, const float* tau, const float* tcut,
+    const float* vdep, const float* vrate, const float* vph,
     const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
     float sfloor, float spow, float shmax, float shref, long CHUNK)
@@ -142,6 +170,39 @@ void synth_voice(
                 // integral to the block start; the recurrence uses the block-start
                 // instantaneous frequency. tbav==0 -> plain constant-frequency phasor.
                 double bph=0.0; float winst=(float)w;
+                // PER-PLAYER VIBRATO. A section detuned to FIXED offsets beats at
+                // fixed rates forever: N voices held exactly apart are a comb whose
+                // notches march at constant speed, which is what a phaser is. Real
+                // players never hold a pitch -- each has its own vibrato, so the
+                // beat rates wander and never settle into a pattern.
+                //
+                // f(t) = fp*(1 + d*sin(2*pi*r*t + ph)), integrated ANALYTICALLY so
+                // the block stays stateless like every other path here:
+                //   phase(T) = 2*pi*fp*T + (fp*d/r)*(cos(ph) - cos(2*pi*r*T + ph))
+                // bph carries the second term to the block start; winst is the
+                // instantaneous frequency there, for the within-block recurrence.
+                if(vdep[p]!=0.f){
+                    // Absolute clock, not time-since-onset: a player does not
+                    // restart their vibrato for every note, and it keeps this
+                    // analytic integral on the same clock as the reference
+                    // renderer's sample-by-sample one. Integrated from note-on,
+                    // so the accumulated phase matches what the reference adds up.
+                    double d=vdep[p], r=vrate[p], vp0=vph[p];
+                    double fp=w*44100.0/6.283185307179586;
+                    double ta=(double)ns/44100.0, tb2=(double)ne/44100.0, ton=(double)a/44100.0;
+                    double w2=6.283185307179586*r;
+                    bph += (fp*d/r)*(cos(w2*ton+vp0)-cos(w2*ta+vp0));
+                    // The recurrence holds one frequency for the whole block, so
+                    // use the block's EXACT MEAN frequency, not its value at the
+                    // start: that lands the phase at the block end exactly where
+                    // the integral says, leaving only a bounded, non-accumulating
+                    // error mid-block (each block re-anchors from bph anyway).
+                    double dt=tb2-ta;
+                    double avg = dt > 0.0
+                        ? 1.0 + d*(cos(w2*ta+vp0)-cos(w2*tb2+vp0))/(w2*dt)
+                        : 1.0 + d*sin(w2*ta+vp0);
+                    winst = (float)(w*avg);
+                }
                 if(tbav[p]!=0.f){
                     float tb=tbav[p], ts=tau[p], cut=tcut[p];
                     float trel=(float)(ns-a)/44100.f;
@@ -159,8 +220,7 @@ void synth_voice(
                     float sL=zrL, sR=zrR;
                     if(jfa>0.f){
                         double sec=(double)n/44100.0;
-                        long idx=(long)(sec*(double)nf*(double)gran)%gran; if(idx<0)idx+=gran;
-                        float jit=6.2831853f*(float)entropy[idx]*cc;
+                        float jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
                         float cj=cosf(jit),sj2=sinf(jit);
                         sL += (zrL*cj - ziL*sj2)*jfa;
                         sR += (zrR*cj - ziR*sj2)*jfa;
