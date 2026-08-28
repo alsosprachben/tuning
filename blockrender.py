@@ -21,6 +21,7 @@ import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import tonelib as T, midilib
 from patch_map import property_class_for_program
+from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
 
 SR = 44100; TAU = 0.015; BLK = 512
@@ -194,6 +195,18 @@ def prepare(path, tuner='hybrid'):
             organ = getattr(pc,'registerable',False)
             chan_vol = 1.0 if organ else (v7*v11)**2
             f0 = FREQ[note]
+            # BRASS INTONATION FROM THE HORN, not from the temperament. The
+            # fingering a player would choose determines the tube length, and
+            # that tube does not sound the tempered pitch: valve combinations
+            # run sharp (1+3 by 30 cents, 1+2+3 by 54) because each slide is cut
+            # for the open horn, and the 5th and 7th partials sit flat of the
+            # scale. What survives after the player lips and slides is a
+            # tendency of a few cents -- which is part of why a brass section
+            # sounds like one and not like an organ.
+            kind = ('tuba' if 'Dark' in pc.__name__ else 'trumpet') \
+                   if pc.__name__.endswith('BrassProperties') else None
+            if kind:
+                f0 *= 2.0 ** (brass_cents(f0, kind) / 1200.0)
         props = pc(f0, pan, (vel/127.0)**2, chan_vol)   # pan = CC10 -> HRTF placement
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.

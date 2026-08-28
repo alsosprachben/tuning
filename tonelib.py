@@ -1636,6 +1636,23 @@ class ReedOrganProperties(OrganProperties):
 
 
 class BrassProperties(OrganProperties):
+    # A DRIVEN AIR COLUMN IS EXACTLY HARMONIC. The reed, or the lips, lock every
+    # mode to the fundamental -- the same reason FlueOrganProperties and
+    # ReedOrganProperties carry B = 0. Inheriting the piano's stretch put partial
+    # 8 sixty-nine cents sharp here (a hundred and two for the blown pipe), so the
+    # upper partials beat against each other and against the other players. That
+    # beating is heard as shimmer, and trimming the breath noise cannot remove it,
+    # because it is not noise.
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    # ...but the ONSET is not locked yet. Before the lips and the air column
+    # agree, the modes sit off their harmonic positions and pull in over the
+    # first few tens of milliseconds -- the same model the organ pipes use, and
+    # the reason a brass attack has its characteristic bite. The machinery was
+    # already here (knee and time set) with the spread left at zero, so the
+    # inharmonicity was being carried by a STATIC stretch on the sustain instead,
+    # which is where it does not belong.
+    mode_lock_spread = 0.0030
     # tongued attack: narrowband growl, attack only, quick valve
     initial_gain = 1.0 / 3310   # +3.6 dB to equal-peak (rich but spiky, crest ~7 dB)
     chiff_cycle = 0.35
@@ -1669,7 +1686,20 @@ class BrightBrassProperties(BrassProperties):
     harmonic_decay_db = 5.5        # strong brightness bloom on the attack
     decay_db = 20.0
     sustain_level = 0.58           # pronounced front
-    chiff_volume = 2.9             # hard tongued attack
+    chiff_volume = 0.06
+    # A brass attack is a transient, not a burst of noise. At 2.9 the first 50 ms
+    # measured as spectral flatness 0.41 -- essentially noise -- against 0.000 for
+    # the sustain, so the note began fuzzy and then turned into a pure tone. That
+    # gap IS the "difference between attack and sustain": not level (only 3 dB)
+    # and not brightness (the sustain is actually brighter), but character.
+    #
+    # A held note is not sterile, but sustain_jitter is the wrong instrument for
+    # that: it modulates each partial's PHASE, which reads as shimmer or chorus,
+    # where a real player's sustain noise is broadband breath. Measured against
+    # ~/Documents/trumpet.wav the real sustain is flatness 0.030 -- but reaching
+    # that number with phase jitter buys the number and the wrong sound. Kept to
+    # a trace.
+    sustain_jitter = 0.0050             # hard tongued attack
     chiff_min_valve_time = 0.015
     chiff_max_valve_time = 0.04    # fast, tight onset
 
@@ -1683,7 +1713,8 @@ class DarkBrassProperties(BrassProperties):
     harmonic_decay_db = 2.0        # gentle brightness bloom
     decay_db = 13.0
     sustain_level = 0.7            # subtle front
-    chiff_volume = 1.6             # soft tongue, rounder speech
+    chiff_volume = 0.05
+    sustain_jitter = 0.0045   # see BrightBrass: air keeps moving on a held note             # soft tongue, rounder speech
     chiff_min_valve_time = 0.03
     chiff_max_valve_time = 0.075   # slower, rounder onset
 
