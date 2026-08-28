@@ -1857,6 +1857,61 @@ class SnareDrumProperties(PercussionProperties):
     chiff_max_valve_time = 0.012
 
 
+class SawtoothSynthProperties(BowedStringProperties):
+    """An analogue-style SAWTOOTH lead: every harmonic present at exactly 1/n.
+
+    General MIDI's synth leads were routed to the flue organ, which is a real
+    pipe with an organ's own spectrum -- so a game cue's saw lead came out as
+    an 8' principal. A saw is trivial for an additive engine, being nothing but
+    the harmonic series at 1/n, so it is worth having as itself rather than as
+    the nearest acoustic neighbour.
+
+    Kept deliberately ideal: no inharmonicity (an oscillator has none) and no
+    chiff. The shimmer BowedString uses for section detune is switched off for
+    the same reason -- a single oscillator does not have a section.
+    """
+    odd_only = False
+    max_harmonic = 64
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    chiff_volume = 0.0
+    sustain_jitter = 0.0
+    # CALIBRATED against the pipe organ at the same note and velocity. A saw
+    # sums 64 partials at 1/n, so for the same initial_gain it lands ~20 dB
+    # hotter than a voice whose spectrum rolls off quickly -- enough to clip the
+    # mix of a General MIDI cue outright (Flat factor 18 on the first attempt).
+    # Sharing a gain constant with another family is not the same as sharing a
+    # level; the divisor has to be measured, not assumed.
+    initial_gain = 1.0 / 6.6
+
+    def harmonic_volume(self, harmonic):
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        # self.gain (which carries initial_gain and the octave tilt) is applied
+        # INSIDE harmonic_volume by the base class -- returning a bare 1/n
+        # discarded it, so these voices ignored their own initial_gain entirely
+        # and came out ~20 dB above every other family, clipping the mix.
+        return self.gain / harmonic
+
+
+class SquareSynthProperties(SawtoothSynthProperties):
+    """An analogue-style SQUARE/pulse lead: ODD harmonics only, at 1/n.
+
+    The odd-only series is what makes a square hollow where a saw is bright --
+    the same distinction the reed pipes already model, but here with no
+    inharmonicity and no breath.
+    """
+    odd_only = True
+    initial_gain = 1.0 / 6.5       # measured the same way; a square sits ~1 dB under a saw
+
+    def harmonic_volume(self, harmonic):
+        if harmonic % 2 != 1:
+            return 0.0
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        return self.gain / harmonic
+
+
 class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
     agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,
@@ -1899,6 +1954,26 @@ class CymbalProperties(PercussionProperties):
     sustain_jitter = 1.0
     chiff_min_valve_time = 0.002
     chiff_max_valve_time = 0.02     # fast splash onset
+
+
+class RideBellProperties(CymbalProperties):
+    """The BELL of a ride cymbal: struck on the raised centre, so a definite
+    pitch speaks THROUGH a cymbal's wash rather than instead of it.
+
+    It was mapped to MetalPercussion -- the tonal bucket with the cowbell, the
+    claves and the woodblock -- which gave it a clear pitch and NO wash at all,
+    so it read as a melodic ping. That matters more than it sounds: a ride bell
+    often carries the entire rhythm of a samba or a battle cue, and a rhythm
+    part with a definite pitch starts competing with the tune.
+
+    So: the cymbal family's broadband bed, but with the modes lifted well clear
+    of it, and a much shorter ring than a crash, because a ride articulates
+    where a crash washes.
+    """
+    tonal_dampening = 0.55      # modes stand out of the wash (a crash sits at 0.15)
+    chiff_volume = 0.9          # less hiss than a crash
+    decay_db = 11.0             # articulates instead of washing (a crash is 6.0)
+    max_harmonic = 60
 
 
 class SynthTone(BaseTone):

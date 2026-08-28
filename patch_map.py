@@ -11,6 +11,8 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    SquareSynthProperties,
+    SawtoothSynthProperties,
     Steinway,
     HarpsichordProperties,
     PluckedStringProperties,
@@ -69,6 +71,11 @@ _fill(64, 71, ReedOrganProperties)
 _fill(72, 79, BlownPipeProperties)
 # 80-87  Synth Lead                    -> bright sustained pipe
 _fill(80, 87, FlueOrganProperties)
+# ...except the two that name an actual waveform. An additive engine can BE a
+# saw or a square exactly (1/n over all harmonics, or over the odd ones), so
+# routing them to an organ pipe threw away the one thing they specify.
+PROGRAM_CLASS[80] = SquareSynthProperties        # Lead 1 (square)
+PROGRAM_CLASS[81] = SawtoothSynthProperties      # Lead 2 (sawtooth)
 # 88-95  Synth Pad                     -> soft sustained
 _fill(88, 95, BowedStringProperties)
 # 96-103 Synth FX                      -> sustained

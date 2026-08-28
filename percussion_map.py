@@ -18,6 +18,7 @@ from tonelib import (
     MetalPercussionProperties,
     SnareDrumProperties,
     CymbalProperties,
+    RideBellProperties,
 )
 
 M = MembraneDrumProperties      # pitched membranes: toms, congas, timbales
@@ -26,6 +27,7 @@ N = NoiseDrumProperties
 T = MetalPercussionProperties   # pitched metal/wood (cowbell, agogo, block, ...)
 S = SnareDrumProperties
 C = CymbalProperties            # crash/ride/splash/china: broadband wash
+R = RideBellProperties          # the ride's bell: pitch THROUGH the wash
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
@@ -47,7 +49,7 @@ PERCUSSION = {
     50: ("High Tom",           M, 175.0),
     51: ("Ride Cymbal 1",      C, 560.0),
     52: ("Chinese Cymbal",     C, 480.0),
-    53: ("Ride Bell",          T, 660.0),
+    53: ("Ride Bell",          R, 660.0),
     54: ("Tambourine",         N, 600.0),
     55: ("Splash Cymbal",      C, 620.0),
     56: ("Cowbell",            T, 540.0),
