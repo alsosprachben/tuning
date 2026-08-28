@@ -2078,6 +2078,26 @@ class BowedStringProperties(BlownPipeProperties):
     max_harmonic = 40
     inharmonicity_coefficient = 0.0
 
+    # THE BODY. A bowed string is a sawtooth -- amplitude ~ 1/n, forty partials of
+    # it -- but you never hear the string. You hear a wooden box radiating it, and
+    # a box with a bridge stops radiating efficiently above the bridge hill, a
+    # couple of kHz up. This voice had no body at all (bore_corner_hz = 0), so it
+    # radiated 13 kHz as perfectly as it radiated 330.
+    #
+    # That is fine for ONE string and ruinous for a section. A player d cents away
+    # puts harmonic n off by n*d, so at +/-6 cents the 16th partial is spread
+    # +/-96 cents and the 40th +/-240: measured, from the 16th up NONE of the
+    # energy is still within +/-7 cents of its partial. The top of the series
+    # stops being partials and becomes a continuous noise bed -- 5 to 13 kHz, only
+    # ~25 dB below the fundamental, sitting exactly where it masks everything else
+    # in the orchestra. Ben heard it as the strings obscuring the mix.
+    #
+    # Rolling the body off cuts that bed by 14 dB and costs no loudness at all
+    # (bore_gain is power-preserving: it is a colour, not a volume control), which
+    # is the point -- the strings were not too loud so much as too WIDE.
+    bore_corner_hz = 3000.0
+    bore_order = 2.0
+
     # ...AND THEY DO NOT HOLD THEIR PITCH. Static detunes beat at FIXED rates
     # forever: seven voices held exactly apart form a comb whose notches march at
     # constant speed, which is a phaser, and no starting phase can fix it because
