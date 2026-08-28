@@ -11,6 +11,8 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    TromboneProperties,
+    HornProperties,
     WoodPercussionProperties,
     SquareSynthProperties,
     SawtoothSynthProperties,
@@ -100,3 +102,10 @@ _fill(120, 127, MalletProperties)
 def property_class_for_program(program):
     """Return the property class for a 0-based GM program number."""
     return PROGRAM_CLASS.get(program & 0x7F, PluckedStringProperties)
+
+# Each brass instrument has its own comfortable register and its own bore, so
+# they cannot share one class: doing so boosted the trombone 3 dB through its
+# whole range (trumpet's centre) and the horn 2 dB through its (tuba's centre).
+PROGRAM_CLASS[57] = TromboneProperties     # Trombone
+PROGRAM_CLASS[60] = HornProperties         # French Horn
+PROGRAM_CLASS[61] = TromboneProperties     # Brass Section: tenor-ish weight

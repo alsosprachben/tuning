@@ -861,6 +861,7 @@ class SynthProperties:
         # attack_volume = per-note velocity gain, channel_volume = CC7*CC11
         # channel gain, both already squared to the MIDI (V/127)^2 law.
         self.gain = (self.initial_gain * db_ratio(self.octave_gain * self.octave_position)
+                     * db_ratio(self.register_effort() + self.projection_db)
                      * self.attack_volume * self.channel_volume)
 
         self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4  # meters
@@ -978,7 +979,44 @@ class SynthProperties:
         else:
             comb = sum(tv for th, tv in self.plucked_volumes if harmonic % th)   # legacy path (pipes)
 
-        return self.gain / (harmonic ** self.attack_dampening) * comb
+        return (self.gain / (harmonic ** self.attack_dampening) * comb
+                * self.bore_gain(self.frequency_x * (2.0 ** self.octave_position) * harmonic))
+
+    # --- effort across the register ------------------------------------------
+    # A wind player does not produce every note with the same ease. The comfortable
+    # middle of the instrument speaks on very little air; the extremes cost work --
+    # more pressure at the top, more volume of air at the bottom -- and a player
+    # who is reaching for a note pushes to get it. So the loudness curve across the
+    # compass is a U, not a flat line, and a model that makes every register equally
+    # easy sounds mid-heavy for exactly that reason.
+    #
+    # register_effort_db is the boost at the extremes of the useful range;
+    # register_center_hz is where the instrument is easiest. Off (0.0) by default:
+    # this is a wind-player behaviour, not a property of every sounding body.
+    projection_db = 0.0          # see HornProperties: off for everything else
+    register_effort_db = 0.0
+    register_center_hz = 440.0
+    register_half_octaves = 1.6      # how far from centre the full boost is reached
+
+    # A fixed radiation corner (bore/bell). Off by default: only voices whose
+    # body has a fixed geometry set it.
+    bore_corner_hz = 0.0
+    bore_order = 1.0
+
+    def bore_gain(self, partial_hz):
+        if not self.bore_corner_hz:
+            return 1.0
+        return 1.0 / (1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order)
+
+    def register_effort_at(self, frequency):
+        if not self.register_effort_db:
+            return 0.0
+        octaves = _log(float(frequency) / self.register_center_hz) / _log(2)
+        x = min(1.0, abs(octaves) / self.register_half_octaves)
+        return self.register_effort_db * (x * x)
+
+    def register_effort(self):
+        return self.register_effort_at(self.frequency_x * (2.0 ** self.octave_position))
 
     def harmonic_decay(self, harmonic):
         base = self.decay_db + self.harmonic_decay_db * harmonic * (harmonic ** self.harmonic_decay_dampening)
@@ -1082,7 +1120,12 @@ class HarpsiLuteProperties(HarpsiBase):
 
 
 class HarpsichordProperties(HarpsiBase):
-    initial_gain = 1.0 / 46
+    # Balance-normalised to the rest of the instrument set (K-weighted, equal
+    # velocity). Safe for the existing repertoire because every render ends in
+    # a peak normalise and these voices play alone -- and the organ family is
+    # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
+    # survives untouched.
+    initial_gain = 0.3142260371
     strike_point = 0.115              # lower-manual 8': ~1/9, round and full
 
     # Registers as stops (CC11 bitfield, bit i = stop_ranks[i]):
@@ -1119,6 +1162,12 @@ class InharmonicStringProperties(PluckedStringProperties):
 
 
 class Steinway(InharmonicStringProperties):
+    # Balance-normalised to the rest of the instrument set (K-weighted, equal
+    # velocity). Safe for the existing repertoire because every render ends in
+    # a peak normalise and these voices play alone -- and the organ family is
+    # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
+    # survives untouched.
+    initial_gain = 0.07178438693
     # empirical inharmonicity model for Steinway B
     a = 5.22964e-6
     b = 1.21012e-6
@@ -1347,6 +1396,12 @@ class Steinway(InharmonicStringProperties):
 
 
 class BlownPipeProperties(SynthProperties):
+    # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
+    # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
+    # over a trumpet. No score can correct that: the composer's velocities are
+    # supposed to set the balance, and they cannot if the voices are not level
+    # with each other to begin with. Normalised to the brass, which was the most
+    # recently calibrated (against a real trumpet recording).
     octave_gain = -0.0
 
     chiff_cycle = 1.0 / 5.0
@@ -1372,7 +1427,7 @@ class BlownPipeProperties(SynthProperties):
     # normalization boosted those mid voices up to meet it, costing the flute
     # the relative prominence it had before. A lead sits ABOVE the group, so
     # push ~+4.5 dB past equal-peak -- clear of dark brass rather than tied.
-    initial_gain = 1.0 / 1400   # pipe/flute lead: equal-peak (1/2400) + ~4.5 dB
+    initial_gain = 1.0 / 6784   # balance-normalised against the brass (see above)
 
     enharmonic_width = 0.0
 
@@ -1511,7 +1566,12 @@ class OrganProperties(BlownPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
-    initial_gain = 1.0 / 3040   # +4.3 dB to equal-peak (moderate spectrum)
+    # Balance-normalised to the rest of the instrument set (K-weighted, equal
+    # velocity). Safe for the existing repertoire because every render ends in
+    # a peak normalise and these voices play alone -- and the organ family is
+    # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
+    # survives untouched.
+    initial_gain = 0.0001294572617
     # Flue pipes have pitched partials, so like the bare blown pipe they must
     # track whatever tuning renders them or their octaves beat. Under the hybrid
     # (Steinway-B) tuning -- the temperament for dense Baroque counterpoint --
@@ -1589,7 +1649,12 @@ class ReedOrganProperties(OrganProperties):
     # makes the ATTACKS poke over the flue ("over-bold, trumpet-like"). 1/2000 is
     # the balance point -- sustains close to the flue, peaks not jumping out --
     # paired with a gentler front (below) so the per-note attack doesn't stab.
-    initial_gain = 1.0 / 2000   # balanced reed (1/1500 was over-bold; 1/2200 too shy)
+    # Balance-normalised to the rest of the instrument set (K-weighted, equal
+    # velocity). Safe for the existing repertoire because every render ends in
+    # a peak normalise and these voices play alone -- and the organ family is
+    # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
+    # survives untouched.
+    initial_gain = 0.0001967750377
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_min_valve_time = 0.0
@@ -1653,6 +1718,26 @@ class BrassProperties(OrganProperties):
     # inharmonicity was being carried by a STATIC stretch on the sustain instead,
     # which is where it does not belong.
     mode_lock_spread = 0.0030
+    # EFFORT ACROSS THE COMPASS. A player does not produce every note with the
+    # same ease: the middle of the horn speaks on very little air, while the top
+    # costs pressure and the bottom costs volume, and a player reaching for
+    # either pushes to get there. Modelling every register as equally easy makes
+    # the middle the loudest thing in the section, which is not what a section
+    # sounds like. Centre is the comfortable part of the trumpet's staff.
+    # THE BORE AND BELL ARE A FIXED FILTER. A brass instrument radiates through a
+    # bell whose behaviour is set by its geometry, not by the note being played,
+    # so the spectral envelope stays put while the harmonics move through it. Play
+    # higher and fewer partials fall under the corner -- the tone darkens by
+    # itself, which is exactly what a tuba does up high and why a big bore darkens
+    # sooner than a small one. Modelled as a fixed roll-off rather than an
+    # octave-dependent dampening, because the cause is the instrument's geometry
+    # and not the register.
+    bore_corner_hz = 2400.0
+    bore_order = 1.2
+
+    register_effort_db = 3.0
+    register_center_hz = 370.0
+    register_half_octaves = 1.5
     # tongued attack: narrowband growl, attack only, quick valve
     initial_gain = 1.0 / 3310   # +3.6 dB to equal-peak (rich but spiky, crest ~7 dB)
     chiff_cycle = 0.35
@@ -1708,13 +1793,23 @@ class DarkBrassProperties(BrassProperties):
     """Conical-bore brass (French horn, tuba): the continuous flare damps the
     upper harmonics into a round, mellow tone, and conical instruments speak
     less abruptly -- a rounder, slower attack with a gentler bloom."""
-    initial_gain = 1.0 / 2320      # +6.7 dB to equal-peak (dark = sparse highs)
+    # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
+    # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
+    # over a trumpet. No score can correct that: the composer's velocities are
+    # supposed to set the balance, and they cannot if the voices are not level
+    # with each other to begin with. Normalised to the brass, which was the most
+    # recently calibrated (against a real trumpet recording).
+    initial_gain = 1.0 / 5850
     tonal_dampening = 1.35         # fast rolloff = few highs, dark/round
     harmonic_decay_db = 2.0        # gentle brightness bloom
     decay_db = 13.0
     sustain_level = 0.7            # subtle front
     chiff_volume = 0.05
-    sustain_jitter = 0.0045   # see BrightBrass: air keeps moving on a held note             # soft tongue, rounder speech
+    sustain_jitter = 0.0045
+    bore_corner_hz = 700.0        # a huge bore and bell: darkens far sooner
+    register_effort_db = 3.5      # extremes still cost more air, but less steeply
+    register_center_hz = 130.0
+    register_half_octaves = 1.5   # see BrightBrass: air keeps moving on a held note             # soft tongue, rounder speech
     chiff_min_valve_time = 0.03
     chiff_max_valve_time = 0.075   # slower, rounder onset
 
@@ -1741,6 +1836,51 @@ ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
+
+class TromboneProperties(BrightBrassProperties):
+    # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
+    # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
+    # over a trumpet. No score can correct that: the composer's velocities are
+    # supposed to set the balance, and they cannot if the voices are not level
+    # with each other to begin with. Normalised to the brass, which was the most
+    # recently calibrated (against a real trumpet recording).
+    initial_gain = 1.0 / 5468
+    """Tenor trombone: the trumpet's bright brass, but an octave lower and with a
+    larger bore.
+
+    It had been sharing BrightBrassProperties outright, which put the TRUMPET's
+    comfortable centre (370 Hz) on an instrument that lives an octave below it --
+    so the trombone's ordinary register looked to the effort curve like a trumpet
+    straining at the bottom and was boosted 3 dB throughout. Its own centre and a
+    lower bore corner fix both the level and the colour.
+    """
+    register_center_hz = 175.0     # around F3, the middle of the tenor's staff
+    bore_corner_hz = 1600.0        # larger bore than a trumpet: darker
+
+
+class HornProperties(DarkBrassProperties):
+    # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
+    # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
+    # over a trumpet. No score can correct that: the composer's velocities are
+    # supposed to set the balance, and they cannot if the voices are not level
+    # with each other to begin with. Normalised to the brass, which was the most
+    # recently calibrated (against a real trumpet recording).
+    initial_gain = 1.0 / 4648
+    """French horn: dark like the tuba's family, but it plays where a trumpet does.
+
+    Sharing DarkBrassProperties gave it the TUBA's centre of 130 Hz, so the horn's
+    normal treble-staff register read as a tuba reaching high and was boosted by
+    2 dB. The horn is dark because of its narrow conical bore and backward bell,
+    not because it is low.
+    """
+    # No projection term. A horn's backward bell and its use in sections are real,
+    # but compensating for them on the voice put it ahead of the score: monocas4,
+    # which is balanced more evenly, and softorch both came out horn-heavy. The
+    # rest of the set is normalised to equal loudness at equal velocity and the
+    # horn now is too -- balance belongs in the CC7 of the piece, not here.
+    register_center_hz = 262.0     # around C4, the horn's comfortable middle
+    bore_corner_hz = 1100.0        # dark, but nothing like a tuba
+
 
 class MalletProperties(PluckedStringProperties):
     """Struck bar/bell: bright inharmonic onset, fast shimmer decay. Covers
@@ -1770,7 +1910,13 @@ class BowedStringProperties(BlownPipeProperties):
     sustained synth leads/pads as a broad bucket. This is the brighter
     'first' section; BowedStringSecond is the darker companion."""
     odd_only = False
-    initial_gain = 1.0 / 5000   # neutral; CC7 (79 in monocas2) holds strings back
+    # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
+    # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
+    # over a trumpet. No score can correct that: the composer's velocities are
+    # supposed to set the balance, and they cannot if the voices are not level
+    # with each other to begin with. Normalised to the brass, which was the most
+    # recently calibrated (against a real trumpet recording).
+    initial_gain = 1.0 / 9381
     # Section shimmer via a small sustained phase jitter (a running chiff),
     # not many detuned voices: broader per-partial band, no amplitude wobble.
     chiff_cycle = 0.06          # phase-deviation magnitude (small = subtle)
@@ -1793,7 +1939,13 @@ class BowedStringSecondProperties(BowedStringProperties):
     """The 'second' string section (GM String Ensemble 2): darker and a
     little rounder than the first, with a slightly wider shimmer, so the two
     ensembles read as distinct sections rather than one doubled patch."""
-    initial_gain = 1.0 / 3560   # +2.9 dB to equal-peak (darker than first section)
+    # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
+    # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
+    # over a trumpet. No score can correct that: the composer's velocities are
+    # supposed to set the balance, and they cannot if the voices are not level
+    # with each other to begin with. Normalised to the brass, which was the most
+    # recently calibrated (against a real trumpet recording).
+    initial_gain = 1.0 / 8536
     tonal_dampening = 1.25      # darker: upper partials rolled off more
     max_harmonic = 32
     chiff_cycle = 0.045         # a subtly different shimmer texture
