@@ -251,7 +251,7 @@ def prepare(path, tuner='hybrid'):
         for key, ratio, gain, *rest in stops:
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
             dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
-            spv = spec_cls(f0, pan, (vel/127.0)**2, chan_vol) if spec_cls else None
+            spv = T.rank_spectrum(spec_cls)(f0, pan, (vel/127.0)**2, chan_vol) if spec_cls else None
             hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
             rank_B = (spv or props).inharmonicity_coefficient_for_frequency(f0) if dyn else B
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0

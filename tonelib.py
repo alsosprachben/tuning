@@ -74,6 +74,38 @@ def db_ratio(db):
     return 10 ** (float(db) / 10)
 
 
+def db_amplitude(db):
+    # db_ratio above is a POWER ratio, which is what the decay envelopes want.
+    # Anything multiplied into a partial's AMPLITUDE needs the /20 form, or the
+    # knob lands at twice its stated value -- which is what had happened to
+    # register_effort_db: 3.5 dB on the horn was delivering 7, and that inflated
+    # U was most of why the brass measured 4 to 9 dB louder at the bottom of the
+    # compass than at the top.
+    return 10 ** (float(db) / 20)
+
+
+_RANK_SPECTRA = {}
+
+
+def rank_spectrum(cls):
+    """A borrowed spectrum class with the player's register behaviour removed.
+
+    A cross-family stop borrows an orchestral voice's harmonic_volume for its
+    COLOUR -- the organ Trumpet is a reed rank shaped like a trumpet, not a
+    trumpet. But harmonic_volume carries the note's gain, and that gain carries
+    register_effort/register_tilt, which model what a PLAYER does across the
+    compass. A pipe has no player: it is cut to a length and it speaks. Left in,
+    the trumpet's projection tilt would have leaned the rank's own balance up the
+    keyboard by several dB.
+    """
+    got = _RANK_SPECTRA.get(cls)
+    if got is None:
+        got = type(cls.__name__ + "Rank", (cls,),
+                   {"register_effort_db": 0.0, "register_tilt_db": 0.0, "projection_db": 0.0})
+        _RANK_SPECTRA[cls] = got
+    return got
+
+
 # The per-sample decay/bloom envelope is rate**(-t) == exp(-t * ln(rate)). With
 # ln(rate) precomputed (see Decay), a direct exp() is both exact/continuous and
 # faster than pow (pow recomputes the log every call) -- and ~5x faster than a
@@ -860,8 +892,8 @@ class SynthProperties:
 
         # attack_volume = per-note velocity gain, channel_volume = CC7*CC11
         # channel gain, both already squared to the MIDI (V/127)^2 law.
-        self.gain = (self.initial_gain * db_ratio(self.octave_gain * self.octave_position)
-                     * db_ratio(self.register_effort() + self.projection_db)
+        self.gain = (self.initial_gain * db_amplitude(self.octave_gain * self.octave_position)
+                     * db_amplitude(self.register_effort() + self.projection_db)
                      * self.attack_volume * self.channel_volume)
 
         self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4  # meters
@@ -952,7 +984,8 @@ class SynthProperties:
 
         return (left, right)
 
-    def harmonic_volume(self, harmonic):
+    def series_volume(self, harmonic):
+        """The harmonic series the vibrating body produces, before the bell."""
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
 
@@ -979,8 +1012,44 @@ class SynthProperties:
         else:
             comb = sum(tv for th, tv in self.plucked_volumes if harmonic % th)   # legacy path (pipes)
 
-        return (self.gain / (harmonic ** self.attack_dampening) * comb
-                * self.bore_gain(self.frequency_x * (2.0 ** self.octave_position) * harmonic))
+        return self.gain / (harmonic ** self.attack_dampening) * comb
+
+    def harmonic_volume(self, harmonic):
+        """What leaves the instrument: the body's series, shaped by the bore."""
+        v = self.series_volume(harmonic)
+        if v == 0.0 or not self.bore_corner_hz:
+            return v
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        return v * self.bore_gain(f0 * harmonic) * self._bore_norm()
+
+    def _bore_norm(self):
+        # THE BORE IS A COLOUR, NOT A VOLUME CONTROL. A fixed roll-off applied to a
+        # moving harmonic series takes energy out in proportion to how many partials
+        # sit above the corner -- and that count grows with pitch, so the filter was
+        # quietly imposing about 3 dB per octave of level slope on top of the
+        # darkening it is there to do. Measured, every brass voice was loudest at
+        # the bottom of its compass and fell 4 to 9 dB into the top; the horn was
+        # 8.8 dB down at F4, which is exactly where horn parts live. That is
+        # backwards -- a trumpet's high G is the loudest thing in the orchestra and
+        # its low G is a weak, fuzzy note -- and it was never a modelled effect,
+        # only a side effect.
+        #
+        # So the filter is renormalised to preserve the series' total power. It
+        # still darkens the tone up high, exactly as before, but it no longer
+        # decides how loud the note is. Loudness across the compass belongs to
+        # register_effort_at(), where a player's behaviour is modelled.
+        if self._bore_norm_cache is None:
+            f0 = self.frequency_x * (2.0 ** self.octave_position)
+            plain = shaped = 0.0
+            for h in range(1, (self.max_harmonic or 64) + 1):
+                a = self.series_volume(h)
+                if a == 0.0:
+                    continue
+                plain += a * a
+                g = a * self.bore_gain(f0 * h)
+                shaped += g * g
+            self._bore_norm_cache = (plain / shaped) ** 0.5 if shaped > 0.0 else 1.0
+        return self._bore_norm_cache
 
     # --- effort across the register ------------------------------------------
     # A wind player does not produce every note with the same ease. The comfortable
@@ -998,10 +1067,23 @@ class SynthProperties:
     register_center_hz = 440.0
     register_half_octaves = 1.6      # how far from centre the full boost is reached
 
+    # ...but the U is not symmetric, and modelling it as one leaves an instrument
+    # loudest at the bottom of its compass. Effort is what a note COSTS; it is not
+    # what the note gives back. At the top a brass player is pushing against a
+    # short, stiff air column and the bell radiates the result efficiently -- the
+    # note is loud because it is high. At the bottom the same work moves a lot of
+    # air slowly through a bell that radiates low frequencies poorly, and what
+    # comes out is big and soft. So a trumpet's high G is the loudest thing in the
+    # orchestra while its low G is weak and fuzzy, and the two are the SAME effort.
+    # register_tilt_db is that dB-per-octave rise, saturating at the same distance
+    # from centre the effort curve uses.
+    register_tilt_db = 0.0
+
     # A fixed radiation corner (bore/bell). Off by default: only voices whose
     # body has a fixed geometry set it.
     bore_corner_hz = 0.0
     bore_order = 1.0
+    _bore_norm_cache = None      # per-note, set on first use (see _bore_norm)
 
     def bore_gain(self, partial_hz):
         if not self.bore_corner_hz:
@@ -1009,11 +1091,13 @@ class SynthProperties:
         return 1.0 / (1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order)
 
     def register_effort_at(self, frequency):
-        if not self.register_effort_db:
+        if not self.register_effort_db and not self.register_tilt_db:
             return 0.0
         octaves = _log(float(frequency) / self.register_center_hz) / _log(2)
-        x = min(1.0, abs(octaves) / self.register_half_octaves)
-        return self.register_effort_db * (x * x)
+        span = self.register_half_octaves
+        x = min(1.0, abs(octaves) / span)
+        tilt = self.register_tilt_db * max(-span, min(span, octaves))
+        return self.register_effort_db * (x * x) + tilt
 
     def register_effort(self):
         return self.register_effort_at(self.frequency_x * (2.0 ** self.octave_position))
@@ -1736,6 +1820,7 @@ class BrassProperties(OrganProperties):
     bore_order = 1.2
 
     register_effort_db = 3.0
+    register_tilt_db = 1.8        # see register_tilt_db: brass projects as it rises
     register_center_hz = 370.0
     register_half_octaves = 1.5
     # tongued attack: narrowband growl, attack only, quick valve
@@ -1808,6 +1893,10 @@ class DarkBrassProperties(BrassProperties):
     sustain_jitter = 0.0045
     bore_corner_hz = 700.0        # a huge bore and bell: darkens far sooner
     register_effort_db = 3.5      # extremes still cost more air, but less steeply
+    # A tuba is the exception in the family: its power really does live at the
+    # bottom, and the top of the instrument thins rather than blooms. Tilted, but
+    # only half as far as the trumpet and the horn.
+    register_tilt_db = 1.0
     register_center_hz = 130.0
     register_half_octaves = 1.5   # see BrightBrass: air keeps moving on a held note             # soft tongue, rounder speech
     chiff_min_valve_time = 0.03
@@ -1878,6 +1967,9 @@ class HornProperties(DarkBrassProperties):
     # which is balanced more evenly, and softorch both came out horn-heavy. The
     # rest of the set is normalised to equal loudness at equal velocity and the
     # horn now is too -- balance belongs in the CC7 of the piece, not here.
+    # The horn is dark, not a tuba: it blooms upward like the rest of the brass,
+    # so it takes the family's tilt back off DarkBrass's tuba-shaped 1.0.
+    register_tilt_db = 1.8
     register_center_hz = 262.0     # around C4, the horn's comfortable middle
     bore_corner_hz = 1100.0        # dark, but nothing like a tuba
 
@@ -2504,7 +2596,8 @@ class SynthTone(BaseTone):
             if spec_cls is not None:
                 sp = spec_cache.get(spec_cls)
                 if sp is None:
-                    sp = spec_cls(f, props.channel_pan, props.attack_volume, props.channel_volume)
+                    sp = rank_spectrum(spec_cls)(f, props.channel_pan, props.attack_volume,
+                                                props.channel_volume)
                     spec_cache[spec_cls] = sp
                 hv_fn = sp.harmonic_volume
             else:
