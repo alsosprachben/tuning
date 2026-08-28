@@ -21,6 +21,7 @@ import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import tonelib as T, midilib
 from patch_map import property_class_for_program
+from percussion_map import percussion_for_note, GM_PERCUSSION_CHANNEL
 
 SR = 44100; TAU = 0.015; BLK = 512
 HERE = os.path.dirname(os.path.abspath(__file__)); LIB = os.path.join(HERE, "libsynth.so")
@@ -139,10 +140,30 @@ def prepare(path, tuner='hybrid'):
         A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
         A["gr"].append(gr); A["cr"].append(cr)
     for ch, note, on, off, vel, (v7, v11, pan) in notes:
-        pc = property_class_for_program(ch_prog.get(ch,0))
-        organ = getattr(pc,'registerable',False)
-        chan_vol = 1.0 if organ else (v7*v11)**2
-        f0 = FREQ[note]; props = pc(f0, pan, (vel/127.0)**2, chan_vol)   # pan = CC10 -> HRTF placement
+        # PERCUSSION (GM channel 10). The note number selects a drum, not a
+        # pitch: it takes a fixed base frequency and its own property class, and
+        # the tuner never sees it. Without this the whole kit was routed through
+        # property_class_for_program and played as PITCHED notes -- a Steinway
+        # sounding drum note-numbers -- which is what a GM game cue exposed.
+        # The reference (midilib) has always done this; only the block engine
+        # did not, so the two disagreed on any file with a drum track.
+        drum = percussion_for_note(note) if ch == GM_PERCUSSION_CHANNEL else None
+        if ch == GM_PERCUSSION_CHANNEL and drum is None:
+            continue                      # unmapped drum: the reference drops it
+        if drum is not None:
+            _, pc, f0, dpan = drum
+            organ = False; chan_vol = (v7*v11)**2
+            pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
+        else:
+            pc = property_class_for_program(ch_prog.get(ch,0))
+            organ = getattr(pc,'registerable',False)
+            chan_vol = 1.0 if organ else (v7*v11)**2
+            f0 = FREQ[note]
+        props = pc(f0, pan, (vel/127.0)**2, chan_vol)   # pan = CC10 -> HRTF placement
+        # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
+        # on its own decay; the reference skips release() for these.
+        if getattr(pc, 'one_shot', False):
+            off = max(off, on + 8.0)
         if props.inharmonicity_dynamic:
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f0)
         B = props.inharmonicity_coefficient; dur = off-on
