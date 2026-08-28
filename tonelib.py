@@ -2087,11 +2087,29 @@ class BowedStringProperties(BlownPipeProperties):
     section_vibrato_cents = 5.0        # +/- depth
     section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
 
+    def _section_salt(self):
+        """A stable per-voice-class number, so two SECTIONS are two sections.
+
+        The seeds below key on pitch, which is what makes a note's players the
+        same players every time it is played. But two different string patches
+        doubling the same note then drew the SAME spread, the same phases and the
+        same vibrato -- so the fourteen voices were seven exactly coincident
+        pairs. Coincident voices add coherently (+6 dB, not +3) and the second
+        section reinforces the first's comb instead of smearing it: louder than
+        the score asks, and still a phaser. Ben's two patches, "String marcado"
+        (prog 48) and "String dolce" (prog 49), double each other note for note.
+
+        crc32 of the class name, not hash(): hash() of a str is salted per
+        process, and this must be identical in both renderers and every run.
+        """
+        from zlib import crc32
+        return crc32(type(self).__name__.encode()) & 0xFFFF
+
     def voice_vibrato(self, frequency, index):
         if not self.section_vibrato_cents:
             return None
         midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
-        rng = _random.Random(0x71B0 + midi * 64 + index)
+        rng = _random.Random(0x71B0 + midi * 64 + index + self._section_salt() * 8191)
         depth = (2.0 ** (self.section_vibrato_cents / 1200.0) - 1.0) * rng.uniform(0.7, 1.0)
         return (depth, rng.uniform(*self.section_vibrato_hz),
                 rng.uniform(0.0, 6.283185307179586))
@@ -2108,7 +2126,7 @@ class BowedStringProperties(BlownPipeProperties):
         if n <= 1:
             return super().unison_voices(frequency, harmonic, harmonic_decay)
         midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
-        rng = _random.Random(0x5EC0 + midi)
+        rng = _random.Random(0x5EC0 + midi + self._section_salt() * 65537)
         cents = [rng.uniform(-self.section_spread_cents, self.section_spread_cents)
                  for _ in range(n - 1)]
         # Straddle the written pitch. A free draw leaves the section's centre a
