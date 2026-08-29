@@ -45,6 +45,7 @@ import numpy as np
 import mido
 import blockrender as B
 import tonelib as T
+from percussion_map import percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL
 
 # Columns of the partial table, in the order blockrender builds them.
 COLS_F8 = ("om", "p0")
@@ -71,6 +72,7 @@ class Slab:
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
         self.live = {}                  # (channel, note) -> [slot indices]
+        self.oneshot = {}               # keys whose note-off must be ignored
         # Non-organ voices never read G/S, but the kernel still wants pointers.
         self.G = np.ones((1, 1), np.float32)
         self.S = np.ones((1, 1), np.float32)
@@ -82,6 +84,12 @@ class Slab:
         self.aL0 = np.zeros(capacity, np.float32)
         self.aR0 = np.zeros(capacity, np.float32)
         self.hrel = np.ones(capacity, np.float32)   # partial freq / lowest partial
+        # LIVE HAS NO NORMALISE. Every offline render ends in a peak normalise to
+        # -1 dBFS, and the voice gains were calibrated on that assumption -- a
+        # single kick peaks at 0.568 on its own, so two of them clip. A stream
+        # cannot know its own peak in advance, so it needs headroom up front and
+        # a limiter behind. Set by Live from --headroom.
+        self.headroom = 1.0
 
     def prep(self):
         """The kernel takes pointers into these arrays, and the arrays never move
@@ -97,6 +105,8 @@ class Slab:
         """Place one note's partials at absolute sample n0. Returns False if the
         slab is full -- the caller decides what to do about that."""
         n = tmpl["P"]
+        if n == 0:
+            return True     # unmapped note: silent, but not a dropped note
         if len(self.free) < n:
             return False
         slots = [self.free.popleft() for _ in range(n)]
@@ -111,14 +121,23 @@ class Slab:
         # template's anchor from its build-time onset to this one.
         a["p0"][idx] = tmpl["p0"] + tmpl["om"] * (tmpl["non"] - n0)
         a["non"][idx] = n0
-        a["noff"][idx] = IDLE           # held until the key is released
+        # A sustaining voice is held until the key is released; a struck one
+        # already knows how long it rings and must not be cut short by note-off.
+        a["noff"][idx] = (n0 + tmpl["dur"]) if tmpl.get("oneshot") else IDLE
+        if tmpl.get("oneshot"):
+            self.retiring.append((idx, n0 + tmpl["dur"]))
         if vel_scale != 1.0:
             a["aL"][idx] = tmpl["aL"] * vel_scale
             a["aR"][idx] = tmpl["aR"] * vel_scale
+        if self.headroom != 1.0:
+            a["aL"][idx] *= self.headroom
+            a["aR"][idx] *= self.headroom
         self.aL0[idx] = a["aL"][idx]
         self.aR0[idx] = a["aR"][idx]
         self.hrel[idx] = tmpl["hrel"]
         self.live.setdefault(key, []).extend(slots)
+        if tmpl.get("oneshot"):
+            self.oneshot[key] = True
         return True
 
     def press(self, slots, pressure, gain_db, tilt):
@@ -194,6 +213,9 @@ class Slab:
         slots = self.live.pop(key, None)
         if not slots:
             return
+        if self.oneshot.get(key):
+            self.oneshot.pop(key, None)
+            return                      # struck: it rings out, note-off is not a stop
         idx = np.fromiter(slots, np.int64, len(slots))
         self.a["noff"][idx] = n
         self.retiring.append((idx, n))
@@ -213,10 +235,11 @@ class Slab:
 
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=8192,
-                 tuner="hybrid", verbose=True):
+                 tuner="hybrid", verbose=True, drums=False, headroom_db=4.0):
         B.set_sample_rate(rate)
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.program, self.tuner = rate, frames, program, tuner
+        self.drums = drums
         self.verbose = verbose
         self.slab = Slab(capacity)
         self.slab.lib = B.ensure_lib()
@@ -225,15 +248,19 @@ class Live:
         self.events = collections.deque()
         self.lock = threading.Lock()
         self.slab.rate = float(rate)
+        self.slab.headroom = 10.0 ** (-headroom_db / 20.0)
         self.bend = {}          # channel -> current pitch-bend ratio
         self.mod = {}           # channel -> current vibrato depth (fraction)
         self.pressure = {}      # channel -> aftertouch 0..1
         self.bend_range = 2.0   # semitones at full wheel, the GM convention
         self.mod_cents = 35.0   # cents of vibrato at full mod wheel
+        self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = 8.0     # crescendo at full aftertouch
         self.press_tilt = 0.30  # and it brightens as it swells: see Slab.press
         self.underruns = 0
         self.dropped = 0
+        self.errors = 0
+        self.last_error = None
         self.peak = 0.0
 
     # ---- templates ----------------------------------------------------------
@@ -241,27 +268,46 @@ class Live:
         """One note's partial table, built once through the offline code path."""
         t = self.templates.get(note)
         if t is None:
+            ch = GM_PERCUSSION_CHANNEL if self.drums else 0
             m = mido.MidiFile(type=1, ticks_per_beat=480)
             tr = mido.MidiTrack(); m.tracks.append(tr)
             tr.append(mido.MetaMessage("set_tempo", tempo=1000000, time=0))
-            tr.append(mido.Message("program_change", channel=0, program=self.program, time=0))
-            tr.append(mido.Message("note_on", channel=0, note=note, velocity=127, time=0))
-            tr.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=480))
-            tr.append(mido.MetaMessage("end_of_track", time=480))
+            if not self.drums:
+                tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
+            tr.append(mido.Message("note_on", channel=ch, note=note, velocity=127, time=0))
+            tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
+            # A struck drum ignores note-off and rings out on its own decay, so
+            # prepare() extends it to 8 s. The template has to be long enough to
+            # hold that, or the tail is cut at build time.
+            tr.append(mido.MetaMessage("end_of_track", time=480 * (18 if self.drums else 1)))
             p = B.prepare(m, self.tuner)
             t = {k: np.array(p[k]) for k in COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4}
             t["P"] = p["P"]
             nf = t["nf"].astype(np.float64)
-            t["hrel"] = (nf / max(nf.min(), 1e-9)).astype(np.float32)
+            # An unmapped drum note builds NOTHING: percussion_for_note has no
+            # voice for it and prepare() emits no partials. A zero-partial
+            # template is legal, not an error, and must not reach nf.min().
+            t["hrel"] = ((nf / max(nf.min(), 1e-9)).astype(np.float32)
+                         if len(nf) else np.zeros(0, np.float32))
+            # A one-shot voice's length is its own decay, decided at build time.
+            # Live, that means note-off must NOT truncate it -- see stamp/release.
+            t["oneshot"] = bool(self.drums and t["P"] and
+                                (t["noff"][0] - t["non"][0]) > 4.0 * B.SR)
+            t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
             self.templates[note] = t
         return t
 
-    def warm(self, lo=36, hi=84):
+    def warm(self, lo=None, hi=None):
         """Build templates up front so the first press of a key is not the one
         that costs 2 ms. Cheap enough to just do for the playable range."""
+        if lo is None:
+            lo, hi = (35, 81) if self.drums else (36, 84)   # the GM kit, or a keyboard
         t0 = time.time()
         for n in range(lo, hi + 1):
-            self.template(n)
+            try:
+                self.template(n)
+            except Exception:
+                pass                    # unmapped drum note: nothing to build
         if self.verbose:
             tot = sum(t["P"] for t in self.templates.values())
             sys.stderr.write("  %d templates, %d partials, %.2f s (%.2f ms/note)\n"
@@ -279,53 +325,74 @@ class Live:
         with self.lock:
             evs, self.events = self.events, collections.deque()
         for stamped, msg in evs:
-            ch = msg.channel
-            if msg.type == "pitchwheel":
-                # MIDI pitch bend is +/- 8192 over the wheel's range, which is
-                # +/- bend_range semitones by convention.
-                ratio = 2.0 ** (msg.pitch / 8192.0 * self.bend_range / 12.0)
-                prev = self.bend.get(ch, 1.0)
-                self.bend[ch] = ratio
-                if prev != ratio:
-                    self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
-            elif msg.type == "aftertouch":
-                self.pressure[ch] = msg.value / 127.0
-                self.slab.press(self._sounding(ch), self.pressure[ch],
-                                self.press_db, self.press_tilt)
-            elif msg.type == "polytouch":
-                self.slab.press(self.slab.live.get((ch, msg.note), []),
-                                msg.value / 127.0, self.press_db, self.press_tilt)
-            elif msg.type == "control_change":
-                if msg.control == 1:
-                    # THE MOD WHEEL IS VIBRATO. That is what it is for on a wind
-                    # or string patch, and it is the one control every library
-                    # agrees on after dynamics. The machinery already exists --
-                    # it is the per-player vibrato built for the string sections
-                    # -- so here it is simply driven by hand instead of by seed.
-                    depth = (2.0 ** (self.mod_cents * msg.value / 127.0 / 1200.0)) - 1.0
-                    self.mod[ch] = depth
-                    self.slab.retune(self._sounding(ch), n0, vd=depth)
-                elif msg.control == 123:                # all notes off
-                    for k in [k for k in self.slab.live if k[0] == ch]:
+            try:
+                self._one(n0, msg)
+            except Exception as e:
+                # One malformed or unhandleable message must never stop the
+                # audio. An unmapped drum note used to raise here and kill the
+                # stream mid-performance.
+                self.errors += 1
+                self.last_error = "%s: %s" % (type(e).__name__, e)
+
+    def _one(self, n0, msg):
+        ch = msg.channel
+        if msg.type == "pitchwheel":
+            # MIDI pitch bend is +/- 8192 over the wheel's range, which is
+            # +/- bend_range semitones by convention.
+            ratio = 2.0 ** (msg.pitch / 8192.0 * self.bend_range / 12.0)
+            prev = self.bend.get(ch, 1.0)
+            self.bend[ch] = ratio
+            if prev != ratio:
+                self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
+        elif msg.type == "aftertouch":
+            self.pressure[ch] = msg.value / 127.0
+            self.slab.press(self._sounding(ch), self.pressure[ch],
+                            self.press_db, self.press_tilt)
+        elif msg.type == "polytouch":
+            self.slab.press(self.slab.live.get((ch, msg.note), []),
+                            msg.value / 127.0, self.press_db, self.press_tilt)
+        elif msg.type == "control_change":
+            if msg.control == 1:
+                # THE MOD WHEEL IS VIBRATO. That is what it is for on a wind
+                # or string patch, and it is the one control every library
+                # agrees on after dynamics. The machinery already exists --
+                # it is the per-player vibrato built for the string sections
+                # -- so here it is simply driven by hand instead of by seed.
+                depth = (2.0 ** (self.mod_cents * msg.value / 127.0 / 1200.0)) - 1.0
+                self.mod[ch] = depth
+                self.slab.retune(self._sounding(ch), n0, vd=depth)
+            elif msg.control == 123:                # all notes off
+                for k in [k for k in self.slab.live if k[0] == ch]:
+                    self.slab.release(k, n0)
+        elif msg.type == "note_on" and msg.velocity > 0:
+            key = (ch, msg.note)
+            tmpl = self.template(msg.note)
+            scale = (msg.velocity / 127.0) ** 2
+            if not self.slab.stamp(tmpl, key, n0, scale):
+                self.dropped += 1
+                return                  # slab full: this note does not sound
+            # a note started while the wheel is up must join in progress
+            slots = self.slab.live.get(key)
+            if self.drums:
+                # CHOKE, live. Offline this is done by scanning FORWARD for
+                # the next strike in the exclusive class and truncating the
+                # earlier note to it. Live there is no forward to scan -- but
+                # the strike that does the choking is happening right now, so
+                # it is simply a note-off written into whatever is ringing.
+                grp = choke_group(msg.note)
+                if grp:
+                    for k in [k for k in self.slab.live if k[1] in grp and k[1] != msg.note]:
+                        self.slab.oneshot.pop(k, None)
                         self.slab.release(k, n0)
-            elif msg.type == "note_on" and msg.velocity > 0:
-                key = (ch, msg.note)
-                tmpl = self.template(msg.note)
-                scale = (msg.velocity / 127.0) ** 2
-                if not self.slab.stamp(tmpl, key, n0, scale):
-                    self.dropped += 1
-                    continue
-                # a note started while the wheel is up must join in progress
-                slots = self.slab.live.get(key)
-                pr = self.pressure.get(ch, 0.0)
-                if pr:
-                    self.slab.press(slots, pr, self.press_db, self.press_tilt)
-                b, v = self.bend.get(ch, 1.0), self.mod.get(ch, 0.0)
-                if b != 1.0 or v != 0.0:
-                    self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
-                                     vd=(v if v != 0.0 else None))
-            else:
-                self.slab.release((ch, msg.note), n0)
+            pr = self.pressure.get(ch, 0.0)
+            if pr:
+                self.slab.press(slots, pr, self.press_db, self.press_tilt)
+            b, v = self.bend.get(ch, 1.0), self.mod.get(ch, 0.0)
+            if b != 1.0 or v != 0.0:
+                self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
+                                 vd=(v if v != 0.0 else None))
+        else:
+            self.slab.release((ch, msg.note), n0)
 
     def _sounding(self, ch):
         out = []
@@ -334,16 +401,41 @@ class Live:
                 out.extend(slots)
         return out
 
+    def limit(self, x):
+        """Soft knee above `thresh`, straight through below it.
+
+        Stateless and per-sample, so it needs no lookahead and cannot pump; what
+        it costs is a little rounding of the loudest transients, which on drum
+        peaks is far preferable to the hard clip that synth_window would
+        otherwise apply. Below the threshold the signal is untouched.
+        """
+        t = self.thresh
+        a = np.abs(x)
+        over = a > t
+        if not over.any():
+            return x
+        y = x.copy()
+        y[over] = np.sign(x[over]) * (t + (1.0 - t) * np.tanh((a[over] - t) / (1.0 - t)))
+        return y
+
     # ---- audio --------------------------------------------------------------
     def callback(self, in_data, frame_count, time_info, status):
         import pyaudio
         if status:
             self.underruns += 1
         n0 = self.n
-        self.apply(n0)
-        self.slab.reap(n0)
-        L, R = B.synth_window(self.slab.prep(), n0, frame_count)
+        try:
+            self.apply(n0)
+            self.slab.reap(n0)
+            L, R = B.synth_window(self.slab.prep(), n0, frame_count)
+        except Exception as e:
+            # Last line of defence: emit silence for this block rather than let
+            # the exception propagate, which PortAudio answers by stopping.
+            self.errors += 1
+            self.last_error = "%s: %s" % (type(e).__name__, e)
+            L = R = np.zeros(frame_count, np.float32)
         self.n = n0 + frame_count
+        L, R = self.limit(L), self.limit(R)
         p = float(max(np.abs(L).max(), np.abs(R).max()))
         if p > self.peak:
             self.peak = p
@@ -360,6 +452,8 @@ def main():
     ap.add_argument("--frames", type=int, default=128,
                 help="audio block; also becomes the kernel control block (see docstring)")
     ap.add_argument("--tuner", default="hybrid")
+    ap.add_argument("--drums", action="store_true", help="GM percussion: notes are drums, not pitches")
+    ap.add_argument("--headroom", type=float, default=4.0, help="dB of headroom (live cannot normalise)")
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
     a = ap.parse_args()
 
@@ -373,10 +467,14 @@ def main():
     name = next((n for n in names if a.port and a.port.lower() in n.lower()), names[0])
 
     import pyaudio
-    live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner)
-    cls = __import__("patch_map").property_class_for_program(a.program).__name__
-    sys.stderr.write("  program %d -> %s at %d Hz, %d-frame blocks\n"
-                     % (a.program, cls, a.rate, a.frames))
+    live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner, drums=a.drums,
+                headroom_db=a.headroom)
+    if a.drums:
+        sys.stderr.write("  GM percussion at %d Hz, %d-frame blocks\n" % (a.rate, a.frames))
+    else:
+        cls = __import__("patch_map").property_class_for_program(a.program).__name__
+        sys.stderr.write("  program %d -> %s at %d Hz, %d-frame blocks\n"
+                         % (a.program, cls, a.rate, a.frames))
     live.warm()
 
     pa = pyaudio.PyAudio()
