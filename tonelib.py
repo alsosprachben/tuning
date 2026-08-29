@@ -673,6 +673,11 @@ class SawtoothWave(SimplePartial):
 
 
 class SynthProperties:
+    # dB of attenuation for EVEN harmonics, or None to use odd_only absolutely.
+    # See series_volume(): a real stopped pipe suppresses its even harmonics,
+    # it does not delete them -- measured 24 to 38 dB down on the Iowa clarinet.
+    even_harmonic_db = None
+
     from inharmonicity import inharmonicity_coefficient_2nd_harmonic, inharmonicity_coefficient_3rd_harmonic
 
     # Organ registration: True on the pipe-organ families (flue/reed), whose
@@ -1023,8 +1028,15 @@ class SynthProperties:
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
 
-        if self.odd_only and harmonic % 2 != 1:
-            return 0.0
+        if harmonic % 2 == 0:
+            # A cylindrical pipe stopped at one end resonates at odd multiples
+            # only -- but "only" is the ideal, not the instrument. Measured on
+            # the Iowa clarinet at C4 the evens are 24 to 38 dB down, not absent:
+            # the bore is not a perfect cylinder, the bell radiates, and the reed
+            # drives asymmetrically. even_harmonic_db carries that; odd_only
+            # stays as the absolute case an organ's stopped rank wants.
+            if self.even_harmonic_db is None and self.odd_only:
+                return 0.0
 
         if self.strike_point:
             # Strike comb: a string struck at fraction p of its length feeds mode n with
@@ -1046,7 +1058,10 @@ class SynthProperties:
         else:
             comb = sum(tv for th, tv in self.plucked_volumes if harmonic % th)   # legacy path (pipes)
 
-        return self.gain / (harmonic ** self.attack_dampening) * comb
+        v = self.gain / (harmonic ** self.attack_dampening) * comb
+        if harmonic % 2 == 0 and self.even_harmonic_db is not None:
+            v *= 10.0 ** (self.even_harmonic_db / 20.0)
+        return v
 
     def harmonic_volume(self, harmonic):
         """What leaves the instrument: the body's series, shaped by the bore."""
@@ -1072,17 +1087,29 @@ class SynthProperties:
         # still darkens the tone up high, exactly as before, but it no longer
         # decides how loud the note is. Loudness across the compass belongs to
         # register_effort_at(), where a player's behaviour is modelled.
+        # ...and the same argument applies to the SERIES, not only the filter.
+        # octave_dampening steepens the source's roll-off as the note rises --
+        # a brass player's buzz simplifies up high, which is real and measured --
+        # but a steeper roll-off is also less total power, so the voice quietly
+        # got softer up the compass for a reason that was meant to be timbral.
+        # Measured on the refitted bassoon: 9 dB between C3 and C4, none of it
+        # intended. So the reference here is the series at the voice's OWN
+        # tonal_dampening, with no octave term and no filter: colour may change
+        # with register, loudness may not, and what should change with register
+        # does so in register_effort_at() where it can be seen.
         if self._bore_norm_cache is None:
             f0 = self.frequency_x * (2.0 ** self.octave_position)
-            plain = shaped = 0.0
+            ref = shaped = 0.0
             for h in range(1, (self.max_harmonic or 64) + 1):
                 a = self.series_volume(h)
                 if a == 0.0:
                     continue
-                plain += a * a
+                # the same partial as it would be at the reference register
+                r = a * (h ** (self.attack_dampening - self.tonal_dampening))
+                ref += r * r
                 g = a * self.bore_gain(f0 * h)
                 shaped += g * g
-            self._bore_norm_cache = (plain / shaped) ** 0.5 if shaped > 0.0 else 1.0
+            self._bore_norm_cache = (ref / shaped) ** 0.5 if shaped > 0.0 else 1.0
         return self._bore_norm_cache
 
     # --- effort across the register ------------------------------------------
@@ -1119,10 +1146,28 @@ class SynthProperties:
     bore_order = 1.0
     _bore_norm_cache = None      # per-note, set on first use (see _bore_norm)
 
+    # THE OTHER HALF OF THE BELL. bore_corner_hz is the roll-off of the highs --
+    # wall losses inside the tube. But a bell is an acoustic horn, an impedance
+    # transformer, and below a cutoff set by its flare it cannot radiate at all:
+    # the wave reflects back down the tube instead of leaving it. So a bell is a
+    # BANDPASS, and the low side is why a horn's written fundamental is nearly
+    # absent while its 6th harmonic is the loudest thing in the note.
+    #
+    # Measured (Iowa horn, C2): the series rises 16.8 dB from h1 to h6 and then
+    # plateaus. A resonance cannot do that -- a peak wide enough to cover h6-h8
+    # still passes h1 -- but a second-order high-pass at the bell's cutoff does,
+    # and it is what is physically there. Off (0) for everything without a bell.
+    bell_cutoff_hz = 0.0
+    bell_order = 2.0
+
     def bore_gain(self, partial_hz):
-        if not self.bore_corner_hz:
-            return 1.0
-        return 1.0 / (1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order)
+        g = 1.0
+        if self.bore_corner_hz:
+            g /= 1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order
+        if self.bell_cutoff_hz:
+            x = (partial_hz / self.bell_cutoff_hz) ** self.bell_order
+            g *= x / (1.0 + x)
+        return g
 
     def register_effort_at(self, frequency):
         if not self.register_effort_db and not self.register_tilt_db:
@@ -1153,6 +1198,9 @@ class PluckedStringProperties(SynthProperties):
     chiff_max_valve_time = 0.0
 
     odd_only = False
+    # dB of attenuation for EVEN harmonics, or None to use odd_only absolutely.
+    # See series_volume(): a real stopped pipe suppresses them, it does not
+    # delete them (measured 24-38 dB down on the Iowa clarinet).
     initial_gain = 1.0 / 50
 
     max_harmonic = 64
@@ -1819,6 +1867,45 @@ class ReedOrganProperties(OrganProperties):
     inharmonicity_coefficient = 0.0
 
 
+class FormantBody:
+    """A body with fixed resonances: the harmonics slide through, the peaks stay.
+
+    A resonator does not care what note is being played. Its peaks sit at fixed
+    frequencies, so a partial is loud when it happens to land on one -- which is
+    why a bassoon's fourth harmonic can be 19 dB ABOVE its fundamental at C3 and
+    the same instrument sounds like a bassoon two octaves up. Any voice whose
+    spectrum peaks somewhere other than the fundamental needs this; a monotonic
+    1/n^d rolloff cannot express it at all, because it makes h1 the strongest
+    partial by construction.
+
+    Rides on bore_gain, so it inherits that filter's power normalisation: moving
+    a formant changes the colour, never the loudness. formants are
+    (centre Hz, bandwidth Hz, amplitude); formant_floor is what the body passes
+    between its resonances, and bore_corner_hz still rolls the top off above them.
+    """
+    formants = ()
+    formant_floor = 0.06
+
+    # ANTIRESONANCES. A tube with a side branch -- a tonehole, a register vent,
+    # the bassoon's long wing joint -- has frequencies it will NOT pass: the
+    # branch presents a short to ground and the partial that lands there is
+    # cancelled. Poles alone cannot make a dip; a formant list can only add.
+    # Measured on the Iowa bassoon at C3, the 5th harmonic sits 33 dB BELOW its
+    # neighbours (-13.7 between +19.3 and -2.1), which is a zero, not the gap
+    # between two peaks. (centre Hz, bandwidth Hz, depth 0..1).
+    antiformants = ()
+
+    def bore_gain(self, partial_hz):
+        g = self.formant_floor
+        for centre, bandwidth, amp in self.formants:
+            d = (partial_hz - centre) / (bandwidth * 0.5)
+            g += amp / (1.0 + d * d)
+        for centre, bandwidth, depth in self.antiformants:
+            d = (partial_hz - centre) / (bandwidth * 0.5)
+            g *= 1.0 - depth / (1.0 + d * d)
+        return g / (1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order)
+
+
 class BrassProperties(OrganProperties):
     # A DRIVEN AIR COLUMN IS EXACTLY HARMONIC. The reed, or the lips, lock every
     # mode to the fundamental -- the same reason FlueOrganProperties and
@@ -1927,6 +2014,9 @@ class DarkBrassProperties(BrassProperties):
     chiff_volume = 0.05
     sustain_jitter = 0.0045
     bore_corner_hz = 700.0        # a huge bore and bell: darkens far sooner
+    # Measured (Iowa tuba, C2): the series rises 15.6 dB to h5 (330 Hz). A tuba's
+    # bell is enormous but 65 Hz is still below what it radiates well.
+    bell_cutoff_hz = 390.0
     register_effort_db = 3.5      # extremes still cost more air, but less steeply
     # A tuba is the exception in the family: its power really does live at the
     # bottom, and the top of the instrument thins rather than blooms. Tilted, but
@@ -1961,6 +2051,33 @@ ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
 
+class TrumpetProperties(BrightBrassProperties):
+    """The Bb trumpet, fitted to the Iowa recordings across three registers.
+
+    BrightBrassProperties is left as it was, because it is also the spectrum the
+    organ's Trumpet stop borrows -- changing it would move the whole Bach corpus.
+    This class is GM 56/59 only.
+
+    The correction is large and it is a SIGN error, not a tuning error. The old
+    model had the series falling from the fundamental (-4.4 dB at h2, -12.4 by
+    h6); a real trumpet RISES (+4.5 at h2, +17.3 by h6 at E3). Mean error across
+    E3, C4 and C5 was 20.0 dB. The earlier calibration against Ben's own trumpet
+    recording was real, but it measured attack character, noise and brightness --
+    never the harmonic tilt, which was inverted the whole time.
+    #
+    Same two mechanisms as the horn: a bell that will not radiate below its
+    cutoff, and a source that simplifies as the player goes up. Fitted on E3 and
+    C5, the extremes, and checked against C4 in the middle: 4.3 dB mean across
+    all three, against 20.0 for the old model.
+    """
+    initial_gain = 1.0 / 4060    # re-levelled after the refit
+    bell_cutoff_hz = 1600.0
+    bell_order = 3.0
+    bore_corner_hz = 1800.0
+    tonal_dampening = 2.00
+    octave_dampening = 0.25
+
+
 class TromboneProperties(BrightBrassProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
@@ -1980,6 +2097,10 @@ class TromboneProperties(BrightBrassProperties):
     """
     register_center_hz = 175.0     # around F3, the middle of the tenor's staff
     bore_corner_hz = 1600.0        # larger bore than a trumpet: darker
+    # Measured (Iowa, C3): the 3rd harmonic at 393 Hz is 7.5 dB above the
+    # fundamental -- the same bell high-pass as the horn, at a higher cutoff
+    # because the bore is narrower.
+    bell_cutoff_hz = 230.0
 
 
 class HornProperties(DarkBrassProperties):
@@ -2007,6 +2128,29 @@ class HornProperties(DarkBrassProperties):
     register_tilt_db = 1.8
     register_center_hz = 262.0     # around C4, the horn's comfortable middle
     bore_corner_hz = 1100.0        # dark, but nothing like a tuba
+    # MEASURED, and the measurement overturned two guesses in a row.
+    #
+    # Iowa horn at C2: the series RISES 16.8 dB from h1 to h6 and then plateaus,
+    # where this model had it falling monotonically. A formant cannot do that --
+    # any peak wide enough to cover h6-h8 still passes h1 -- so the first fix was
+    # a bell high-pass, which is the real physics: below the flare's cutoff the
+    # wave reflects back down the tube instead of radiating.
+    #
+    # But fitted at C2 alone, that bell FAILED on held-out data: it predicted a
+    # rising series at C4 where the real horn at C4 falls away steeply (+1.5 at
+    # h2 down to -37.0 at h7), 23.6 dB rms wrong. A fixed filter cannot give two
+    # different tilts at the same frequencies, so the tilt is not all filter --
+    # the SOURCE changes with register. A player's buzz is harmonically rich down
+    # low and nearly sinusoidal up high, which is what octave_dampening is for.
+    #
+    # Fitted jointly to C2 and C4: 3.3 dB rms across BOTH, against 23.6 for the
+    # bell alone. Bell 650 Hz at 3rd order, and a source rolloff that steepens by
+    # 0.60 per octave.
+    bell_cutoff_hz = 650.0
+    bell_order = 3.0
+    bore_corner_hz = 900.0
+    tonal_dampening = 3.25
+    octave_dampening = 0.60
 
 
 class MalletProperties(PluckedStringProperties):
@@ -2223,6 +2367,22 @@ class MembraneDrumProperties(PercussionProperties):
     ring: higher = tighter."""
     one_shot = True
     release_floor_db = -40.0
+
+    # PITCH DRIFT FROM TENSION, the same effect the piano models and for the same
+    # reason: a head struck hard is stretched further, a stretched head is a
+    # tighter head, and a tighter head is sharper. So the note starts above its
+    # pitch and settles onto it as the amplitude falls -- and because the bend is
+    # scaled by attack_volume, a hard stroke drifts and a soft one barely does.
+    # On a tom this is the familiar downward "pyow"; it is why a drum hit hard
+    # does not merely sound louder.
+    #
+    # This belongs to the membranes and NOT to the bars: a bar's pitch is set by
+    # its stiffness and geometry, which a mallet does not change, so the struck
+    # bar voices correctly leave tension_bend at zero.
+    tension_bend = 0.030          # ~50 cents at full velocity
+    tension_settle_time = 0.20
+    tension_settle_cutoff = 1.2
+
     initial_gain = 1.0 / 2.5
     max_harmonic = 12
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
@@ -2236,9 +2396,257 @@ class KickDrumProperties(MembraneDrumProperties):
     """Bass drum: a tight, dark low thump -- louder and shorter than a tom,
     a punchy body that dies in about half a second."""
     initial_gain = 1.0 / 1.05  # near the per-tone ceiling (cannot go higher clean)
+    tension_bend = 0.045       # a kick drops hardest of all: a slack, wide head
+    tension_settle_time = 0.13
     max_harmonic = 10
     tonal_dampening = 1.9      # darker/rounder: fundamental-dominant thump
     decay_db = 24.0            # more body (louder-perceived); rings ~1.1 s
+
+
+# --- Struck bars and plates (GM 8-15) --------------------------------------
+# All eight of these shared one generic MalletProperties, whose inharmonicity put
+# the second partial at 2.02x the first -- essentially a harmonic series, which is
+# the one thing a struck bar is not. A bar free at both ends rings at
+# 1 : 2.756 : 5.404 : 8.933, and THAT ratio is why a glockenspiel sounds like
+# metal rather than like a flute.
+#
+# What separates the instruments in this family is whether the bar is undercut.
+# Carving an arch out of the underside lowers the second mode until it is a
+# musical interval above the first: two octaves (4:1) on a marimba and vibraphone,
+# a twelfth (3:1) on a xylophone. A glockenspiel is not undercut at all, so it
+# keeps the raw 2.756 and reads as a clangorous plate.
+#
+# The engine's stretch is r(n) = n * (1 + (n^2 - 1) * B / 2), with the fundamental
+# pinned, so B can place the SECOND mode exactly -- the one that matters -- and
+# the third then lands close for the undercut bars (marimba 11.0 against a real
+# 10.0, xylophone 7.0 against 6.0). For the un-undercut bar the third overshoots
+# (6.0 against 5.4), so those voices keep few modes.
+
+class StruckBarProperties(MalletProperties):
+    """A bar free at both ends, not undercut: 1 : 2.756 : ... See above.
+
+    ONE-SHOT, like the drums: nothing about lifting a key stops a struck bar.
+    Measured before this was set, every voice in the family rang for exactly the
+    length of the test note -- 0.49 s for a 0.49 s note -- so decay_db was
+    controlling nothing at all and a glockenspiel and a xylophone were
+    indistinguishable in duration. What ends the note is the bar's own decay.
+    """
+    one_shot = True
+    release_floor_db = -45.0
+    inharmonicity_coefficient = 0.252     # places mode 2 at 2.756
+    inharmonicity_dynamic = False
+    max_harmonic = 4
+
+
+class GlockenspielProperties(StruckBarProperties):
+    """Steel bars, no resonators: bright, clangorous and long-ringing.
+
+    MEASURED against the University of Iowa MIS recording (bells.plastic.mf,
+    C6-B6). Two corrections to what theory alone had given:
+
+      - the second partial sits at ~3.07x the fundamental, not the ideal free
+        bar's 2.756. Clear on the strokes where it is strong (3.095 at -8.5 dB,
+        3.065 at -23.7 dB). Real bars are not the uniform beam of the textbook.
+      - it rings far longer than assumed: T60 ~14.6 s against the ~3.7 s the
+        model produced. Orchestra bells are undamped steel and they sing.
+    """
+    bar_second_mode = 3.07
+    inharmonicity_coefficient = (3.07 / 2.0 - 1.0) / 1.5   # place mode 2 at 3.07
+    initial_gain = 1.0 / 2.8      # levelled to the orchestra at equal velocity
+    tonal_dampening = 0.9        # bright: the upper modes carry
+    decay_db = 1.27              # T60 ~14.6 s, measured
+    harmonic_decay_db = 0.6      # see TubularBell: this is what caps the ring
+
+
+class CelestaProperties(StruckBarProperties):
+    """Steel plates struck through felt, each over a wooden resonator. The felt
+    is what separates it from a glockenspiel -- a soft hammer cannot excite the
+    high modes, so it is the same bar sounding much gentler."""
+    initial_gain = 1.0 / 2.7
+    tonal_dampening = 1.7        # felt: the top is simply not excited
+    decay_db = 9.0
+    harmonic_decay_db = 5.0
+
+
+class MusicBoxProperties(StruckBarProperties):
+    """A plucked steel comb tooth: a bar fixed at ONE end rather than free at
+    both, plucked by a pin. Bright and short, and small -- the teeth are tiny,
+    so there is very little of it."""
+    initial_gain = 1.0 / 2.7
+    tonal_dampening = 1.1
+    decay_db = 17.5              # ~0.8 s
+    harmonic_decay_db = 6.0
+
+
+class TunedBarProperties(MalletProperties):
+    """A bar undercut so its overtones land on WHOLE-NUMBER ratios.
+
+    This is the real division in the family, and it is not metal-versus-wood.
+    Carving an arch from the underside of a bar lowers its first overtone until
+    it is a musical interval above the fundamental, and the makers tune it to an
+    exact harmonic: 4:1 (two octaves) on a marimba and a vibraphone, 3:1 (a
+    twelfth) on a xylophone. A glockenspiel bar is not undercut at all, so it
+    keeps the free bar's 1 : 2.756 : 5.404 and clangs. Which is why a xylophone
+    is hard and bright next to a marimba's roundness: both are tuned, but the
+    xylophone's tuned overtone sits an octave closer to the fundamental.
+
+    So these voices must NOT be stretched. Their modes are harmonic -- a sparse
+    subset of the series, with everything between simply absent, which is what a
+    bar is: a few discrete modes rather than a full series. Modelled directly as
+    the modes that sound, instead of bending a harmonic series into place.
+
+    (The first overtone is the one makers tune reliably; the second is less
+    consistent from instrument to instrument, so the upper mode here is a fair
+    representative rather than a specification.)
+    """
+    one_shot = True                       # see StruckBarProperties
+    release_floor_db = -45.0
+    inharmonicity_coefficient = 0.0       # harmonic by construction
+    inharmonicity_dynamic = False
+    # MEASURED (Iowa MIS): a vibraphone's partials come out 1 : 4.02 : 10.06 --
+    # the 4:1 undercut and the 10:1 second overtone, both exactly as tuned. A
+    # marimba shows 1 : 3.02 : 4.03, so it carries a further mode near 3 that
+    # this list omits; the 4:1 is confirmed on both.
+    bar_modes = ((1, 1.0), (4, 0.48), (10, 0.10))
+    max_harmonic = 10
+
+    def series_volume(self, harmonic):
+        """Only the bar's own modes sound; the rest of the series is silent."""
+        for n, g in self.bar_modes:
+            if harmonic == n:
+                return self.gain * g
+        return 0.0
+
+
+class UndercutBarProperties(TunedBarProperties):
+    """Undercut to two octaves (4:1): marimba and vibraphone."""
+
+
+class VibraphoneProperties(UndercutBarProperties):
+    """Aluminium bars over tuned resonators, with a damper pedal: mellow and
+    very long-ringing. (The motor-driven fans that give a vibraphone its name
+    modulate the resonators; that tremolo is not modelled here.)"""
+    initial_gain = 1.0 / 5.8
+    tonal_dampening = 1.5
+    decay_db = 3.2      # ~3.5 s: a vibraphone rings a long time
+    harmonic_decay_db = 4.0
+
+
+class MarimbaProperties(UndercutBarProperties):
+    """Rosewood, same 4:1 undercut as the vibraphone but wood instead of metal:
+    the same tuning, a far shorter ring and a much darker tone."""
+    initial_gain = 1.0 / 5.3
+    tonal_dampening = 2.0        # wood: dark, fundamental-dominant
+    # MEASURED (Iowa MIS, Marimba.yarn.mf, C4-B4): T60 1.56 s over 7 strokes,
+    # r2 0.992 -- about twice the ring the model had been given by guess. Wood
+    # does not ring like metal, but it rings more than I assumed.
+    decay_db = 5.1               # T60 ~1.56 s, measured
+    # The strike is already right (overtone -13.0 dB against a measured -12.5),
+    # but it lingered: -29.6 dB in the sustain where the real bar is at -57.5.
+    # A marimba's overtones die almost immediately and leave a near-pure tone,
+    # which is what makes it mellow.
+    harmonic_decay_db = 22.0
+
+
+class XylophoneProperties(TunedBarProperties):
+    """Rosewood undercut to a TWELFTH (3:1) rather than two octaves, which is
+    what makes a xylophone bright and hard where a marimba is round -- the tuned
+    overtone sits an octave closer to the fundamental. Short, dry, struck hard."""
+    # MEASURED (Iowa MIS, xylophone.hardrubber.mf, C5-B5): partials at
+    # 1 : 3.02 : 6.43, confirming both the twelfth undercut and a mode near 6.
+    #
+    # And the twelfth is LOUDER THAN THE FUNDAMENTAL at the strike -- measured
+    # +9.4 dB above it in the first 40 ms, against the -9.3 dB this model gave.
+    # That is the whole reason a xylophone reads as a hard bright clack rather
+    # than as a pitch: what you hear first is mostly the twelfth. It then falls
+    # away fast, to -29.5 dB by the sustain, so the note settles onto its
+    # fundamental almost at once.
+    bar_modes = ((1, 1.0), (3, 5.2), (6.43, 0.05))
+    max_harmonic = 7
+    initial_gain = 1.0 / 21.9   # the strong twelfth carries real energy
+    tonal_dampening = 1.2
+    decay_db = 15.0              # T60 ~0.69 s, measured (Iowa): dry, but not as
+                                 # dry as the 0.2 s I had asserted
+    harmonic_decay_db = 26.0     # the twelfth must fall ~39 dB in 0.35 s
+
+
+class TubularBellProperties(TunedBarProperties):
+    """Long brass tubes -- and the clearest missing-fundamental instrument in
+    the orchestra.
+
+    A tubular bell's tuned modes run 2 : 3 : 4 (: 5 : 6), and there is NO partial
+    at the pitch you hear: the ear reconstructs the fundamental an octave below
+    the lowest one. That is why a tubular bell's note is faintly ambiguous, and
+    why it does not sound like the bar instruments despite being hit with the
+    same mallet.
+
+    An earlier note here said the engine could not omit the first partial. That
+    was true before bar_modes existed; it simply starts at 2, so the written note
+    sounds as the fundamental the partials imply rather than as a partial itself.
+    """
+    bar_modes = ((2, 1.0), (3, 0.75), (4, 0.50), (5, 0.30), (6, 0.16))
+    max_harmonic = 6
+    release_floor_db = -60.0     # it must be allowed to ring out
+    initial_gain = 1.0 / 7.9
+    tonal_dampening = 1.0
+    decay_db = 0.55
+    # It is the PER-HARMONIC decay that sets a bell's ring, not decay_db: these
+    # modes are harmonics 2-6, so at 2.0 dB each the upper ones were gone in
+    # 3.5 s however slow the overall decay was -- lowering decay_db from 1.2 to
+    # 0.55 moved it by a third of a second. At 0.5 it rings ~7.5 s, a struck
+    # chime the player has not yet damped.
+    harmonic_decay_db = 0.5
+
+
+class TimpaniProperties(MembraneDrumProperties):
+    """A kettledrum: a large tuned membrane over a closed bowl.
+
+    GM 47 had been routed to MalletProperties -- a struck BAR, a quite different
+    body. But inheriting the tom was not enough either: a tom and a timpano have
+    the same *kind* of body and do not sound alike, and the reason is the bowl.
+
+    A free circular membrane's modes are 1 : 1.59 : 2.14 : 2.30 : 2.65 -- no
+    musical relationship at all, which is why a tom has no definite pitch.
+    Enclose the air behind it and the cavity loads the membrane, pulling the
+    useful modes into near-whole-number ratios: 1 : 1.5 : 2 : 2.5 : 3, i.e.
+    harmonics 2:3:4:5:6 of a fundamental an octave below the lowest of them. The
+    ear supplies that missing fundamental and hears a definite note. THAT is what
+    makes a timpano pitched, and it is the whole difference from a tom.
+
+    The engine's stretch cannot make a half-integer ratio, so the modes are
+    placed explicitly -- the integer one by the series, the rest as extra voices
+    at their own ratios, each decaying faster than the one below it, as the
+    higher modes of a head do.
+    """
+    # (ratio to the sounding pitch, relative amplitude)
+    membrane_modes = ((1.00, 0.55), (1.50, 1.00), (2.00, 0.70),
+                      (2.50, 0.42), (3.00, 0.22))
+    inharmonicity_coefficient = 0.0    # the ratios are set explicitly below
+    inharmonicity_dynamic = False
+    max_harmonic = 1                   # mode 1 only; the rest are unison voices
+
+    # Less drift than a tom: a timpano's head is already at high tension to be
+    # tuned at all, so the same stroke stretches it proportionally less -- and a
+    # big head settles more slowly.
+    tension_bend = 0.016       # ~27 cents at full velocity
+    tension_settle_time = 0.30
+
+    initial_gain = 1.0 / 7.3
+    tonal_dampening = 1.75
+    decay_db = 5.5                     # ~2 s: a kettle sings, it does not thump
+    harmonic_decay_db = 5.0
+    harmonic_decay_dampening = 0.25
+
+    def series_volume(self, harmonic):
+        return self.gain * self.membrane_modes[0][1] if harmonic == 1 else 0.0
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        if harmonic != 1:
+            return []
+        base = self.membrane_modes[0][1]
+        return [(g / base, 0.0, ratio - 1.0,
+                 harmonic_decay * (1.0 + 0.45 * (ratio - 1.0)), 0.0)
+                for ratio, g in self.membrane_modes[1:]]
 
 
 class NoisyPercussionMixin:
@@ -2506,6 +2914,280 @@ class RideBellProperties(CymbalProperties):
     chiff_volume = 0.9          # less hiss than a crash
     decay_db = 11.0             # articulates instead of washing (a crash is 6.0)
     max_harmonic = 60
+
+
+# --- The human voice -------------------------------------------------------
+
+class SynthLeadProperties(FlueOrganProperties):
+    """GM 82-87: synth leads that borrow the flue pipe's tone but have no stops.
+
+    Same fault as the woodwinds -- registerable makes CC11 a stop word, and a
+    Calliope lead has no drawbars. The flue timbre is a fair stand-in for these
+    simple waveform leads; the drawbars are not.
+    """
+    registerable = False
+
+
+class ReedPipeProperties(ReedOrganProperties):
+    """GM 109/111 (bagpipe, shanai): a reed driving a pipe, but one player's
+    instrument rather than a console. Reed tone, no drawbars."""
+    registerable = False
+
+
+class OrchestralFluteProperties(BlownPipeProperties):
+    """An OPEN pipe: flute, piccolo, recorder, whistle, shakuhachi.
+
+    BlownPipeProperties carries odd_only = True, which is right for the stopped
+    ranks our organ pipeline drives through it (a Gedackt is closed at one end
+    and resonates at odd multiples only). It is wrong for an orchestral flute,
+    which is open at both ends and has the full series. Measured against the
+    Iowa MIS flute (nonvib, mf, C5): h2 is 7.1 dB below the fundamental and h3
+    is 7.0 -- the second harmonic is as strong as the third, where this model
+    was rendering it at -134 dB, which is to say not at all.
+
+    The series also falls away faster above h3 than any single 1/n^d can follow
+    (real: -20.5 at h4, -35.7 at h6), so a radiation corner carries that.
+    """
+    odd_only = False
+    tonal_dampening = 1.0
+    bore_corner_hz = 2200.0
+    bore_order = 1.6
+
+
+class OrchestralReedProperties(ReedOrganProperties):
+    """A woodwind, borrowing the reed organ's timbre but NOT its drawbars.
+
+    GM 64-71 -- the saxophones, oboe, English horn, bassoon and clarinet -- route
+    here for their sound, and inherited registerable = True with it. That has one
+    real consequence: for a registerable voice CC11 is read as a 14-bit STOP WORD,
+    not as expression. An oboe part that shapes a phrase with expression was
+    therefore drawing and retiring stops instead. alright.mid does exactly this,
+    with eight distinct CC11 values across its sax section.
+
+    A drawbar is a physical control surface on an organ. A clarinet does not have
+    one, so this class does not pretend it does, and CC11 goes back to meaning
+    what GM says it means.
+    """
+    registerable = False
+
+
+class DoubleReedProperties(FormantBody, OrchestralReedProperties):
+    """Oboe, english horn, bassoon, and the saxophones: CONICAL bores.
+
+    A cone behaves like an open pipe -- full harmonic series -- not like the
+    stopped cylinder that odd_only describes. Measured on the Iowa oboe at C4,
+    h2 is +1.7 dB ABOVE the fundamental and h4 is +2.5; on the bassoon at C3,
+    h4 is +19.3. This model had every one of those at -130 dB.
+
+    What it still does not capture is that these instruments' strength lies in a
+    FORMANT well above the fundamental -- the oboe's near 1.4 kHz, the bassoon's
+    near 500 -- which no monotonic 1/n^d can produce. Getting the even harmonics
+    back is the larger half of the error; the formant is the remaining half.
+    """
+    odd_only = False
+    tonal_dampening = 0.75    # these are bright: the upper series carries
+    initial_gain = 1.0 / 8050   # levelled to the set after the formant refit
+    # FORMANT, measured. The Iowa oboe at C4 peaks at its 5th harmonic, 1295 Hz,
+    # 12.6 dB ABOVE the fundamental -- the oboe's characteristic resonance, and
+    # the reason it cuts through an orchestra. The bassoon peaks at its 4th,
+    # 524 Hz, 19.3 dB above. A conical reed is a resonator with a strong peak
+    # well up the series, which is exactly what a 1/n^d rolloff cannot be.
+    formants = ((1300.0, 700.0, 2.6), (3000.0, 1400.0, 0.6))
+    formant_floor = 0.30
+    bore_corner_hz = 5000.0
+    bore_order = 1.6
+
+
+class BassoonProperties(DoubleReedProperties):
+    """The bassoon's resonance sits far lower than the oboe's -- measured at its
+    4th harmonic, 524 Hz, 19.3 dB above the fundamental at C3. Same conical
+    family, an octave and a half lower formant, which is the whole difference
+    between the two voices."""
+    # Fitted to the Iowa bassoon at C3 AND C4: 7.9 dB rms across both, where a
+    # single resonance managed only 10.5 dB on one register alone.
+    #
+    # The reason it needed a ZERO: at C3 the 5th harmonic sits 33 dB below its
+    # neighbours (-13.7 between +19.3 and -2.1). Poles cannot make a dip that
+    # deep -- a formant list only adds -- and the notch is real, a side branch in
+    # the bore cancelling whatever partial lands on it. With the antiresonance
+    # the model reproduces it: +22.3 at h4 then -11.2 at h5.
+    # Levelled after the refit: a shallower source rolloff puts far more power in
+    # the series, and the bore normalisation only compensates for the FILTER.
+    initial_gain = 1.0 / 10000
+    formants = ((500.0, 180.0, 4.0),)
+    antiformants = ((660.0, 180.0, 0.95),)
+    formant_floor = 0.03
+    tonal_dampening = 0.5
+    octave_dampening = 0.4
+    bore_corner_hz = 3000.0
+
+
+class SaxophoneProperties(DoubleReedProperties):
+    """A big conical reed: the same open series, with a resonance between the
+    bassoon's and the oboe's. Not measured -- the Iowa saxophone samples were
+    not fetched -- so this is placed by bore size between two that were."""
+    formants = ((900.0, 450.0, 2.2), (2000.0, 1000.0, 0.6))
+    bore_corner_hz = 4000.0
+
+
+class ClarinetProperties(OrchestralReedProperties):
+    """A cylindrical bore stopped by the reed: the one orchestral wind whose
+    odd harmonics really do dominate.
+
+    Measured (Iowa, C4, mf): h3 is only 2.7 dB below the fundamental while h2 is
+    38.5 dB down, and h5 is -14.2 against h4's -23.9. So the evens are strongly
+    suppressed but PRESENT -- absolute odd_only put them at -130 dB, which loses
+    the reediness that the weak-but-audible evens carry.
+    """
+    even_harmonic_db = -26.5     # lands h2 near the measured -38.5 dB
+    tonal_dampening = 0.9        # strong odd series well up the spectrum
+    initial_gain = 1.0 / 6400    # levelled to the set
+
+
+class VocalProperties(FormantBody, BowedStringProperties):
+    """A sung vowel: a glottal source shaped by the fixed resonances of a
+    vocal tract.
+
+    GM 52-54 (Choir Aahs, Voice Oohs, Synth Voice) had been falling through to
+    the bowed-string bucket, which is 1950 notes across the collection -- and not
+    incidental notes, but the actual choral writing: a full SATB CANON.MID,
+    satb196, dimin, bwv196, djchp210. Strings were a reasonable stand-in for
+    "sustained and non-percussive" and wrong about the one thing that makes a
+    voice recognisable, which is not the source but the FILTER.
+
+    The vocal folds make a buzz -- roughly a pulse train, about -12 dB/octave,
+    which is what tonal_dampening says here. What identifies a vowel is where the
+    tract resonates: two or three formants at FIXED frequencies that do not move
+    when the pitch does, so a soprano and a bass singing "ah" share them. That is
+    exactly the shape bore_gain already models for a brass bell -- a fixed filter
+    the harmonics slide through -- so the formants go there and inherit its power
+    normalisation for free, which keeps a vowel change a change of colour and not
+    of loudness.
+
+    Inherits the string SECTION, deliberately: a choir is a number of people who
+    do not agree on the pitch and each carry their own vibrato, which is the same
+    machinery for the same reason. Singers agree rather less than string players,
+    hence the wider spread.
+    """
+    section_spread_cents = 8.0
+    section_vibrato_cents = 7.0
+    section_vibrato_hz = (4.8, 6.2)
+
+    # (centre Hz, bandwidth Hz, amplitude). Default is "ah".
+    formants = ((700.0, 130.0, 1.00), (1220.0, 90.0, 0.50), (2600.0, 130.0, 0.22))
+    formant_floor = 0.06        # the tract is not silent between resonances
+    tonal_dampening = 1.8       # glottal source, ~-12 dB/octave
+    max_harmonic = 48
+    bore_corner_hz = 4000.0     # the mouth stops radiating: also arms bore_gain
+    bore_order = 2.0
+
+
+
+
+class ChoirAahsProperties(VocalProperties):
+    """GM 52. An open "ah": the first formant high and the tract wide open."""
+    # BALANCE, per vowel: the formant filter is power-normalised, but the vowels
+    # still land differently because they weight the source's harmonics
+    # differently -- "oo" throws away everything above its low F2. Measured
+    # K-weighted at velocity 100 like the rest of the set and brought to the
+    # orchestra's level. /sqrt(players) as for any section.
+    initial_gain = 1.0 / 6875 / (VocalProperties.section_players ** 0.5)
+
+
+class VoiceOohsProperties(VocalProperties):
+    """GM 53. A rounded "oo": lips narrowed, so F1 and F2 drop a long way and
+    the vowel goes dark. The single biggest audible difference between vowels
+    is F2, and it moves by more than an octave between these two."""
+    formants = ((300.0, 90.0, 1.00), (870.0, 100.0, 0.42), (2240.0, 140.0, 0.12))
+    bore_corner_hz = 3000.0
+    initial_gain = 1.0 / 6127 / (VocalProperties.section_players ** 0.5)
+
+
+class SynthVoiceProperties(VocalProperties):
+    """GM 54. A synthesized voice: an "eh" between the other two, and steadier
+    than people are -- less spread, less vibrato, because the thing being
+    imitated is a synthesizer imitating a choir."""
+    formants = ((530.0, 110.0, 1.00), (1840.0, 110.0, 0.55), (2480.0, 140.0, 0.25))
+    section_spread_cents = 4.0
+    section_vibrato_cents = 3.0
+    initial_gain = 1.0 / 4542 / (VocalProperties.section_players ** 0.5)
+
+
+# --- Sound effects (GM 120-127) --------------------------------------------
+# The whole effects bank fell through to MalletProperties, a struck bar, so a
+# gunshot rang as a tuned bell. These are not pitched instruments at all: they
+# are bands of noise, built the way the percussion voices build theirs -- hard
+# inharmonicity to scatter the partials off the harmonic grid, a near-flat
+# tonal_dampening so no mode stands out of the wash, and a wide running phase
+# jitter (the chiff mechanism) to smear what is left into continuous noise.
+
+class BreathNoiseProperties(NoisyPercussionMixin, BlownPipeProperties):
+    """GM 121. Breath with no note in it: broadband, and it lasts as long as
+    the player holds it -- so this sustains rather than ringing out like the
+    struck percussion. 339 notes of it in bwx27c, which had been bells."""
+    odd_only = False
+    # BALANCE. Unmeasured, the wash came out 16 dB over a trumpet -- a broadband
+    # voice fills far more of the spectrum than a tone of the same peak does.
+    # Levelled to the orchestra like everything else.
+    initial_gain = 1.0 / 28395
+    max_harmonic = 64
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 45.0
+    inharmonicity_dynamic = False
+    tonal_dampening = 0.25         # near-flat: a hiss, not a chord
+    chiff_volume = 2.4
+    chiff_cycle = 0.95             # a full cycle of jitter = noise, not shimmer
+    chiff_release = 0.6
+    sustain_jitter = 1.0           # the breath keeps moving while it is held
+    hf_corner_hz = 7000.0
+    mode_lock_spread = 0.0
+
+
+class SeashoreProperties(BreathNoiseProperties):
+    """GM 122. Surf: the same noise, slower and darker -- it swells in and
+    ebbs out rather than starting, and the sea has far more low in it than a
+    breath does."""
+    initial_gain = 1.0 / 13071      # levelled: see BreathNoiseProperties
+    tonal_dampening = 0.5          # darker than breath: weighted low
+    hf_corner_hz = 3500.0
+    chiff_min_valve_time = 0.35    # swells in
+    chiff_max_valve_time = 0.9
+    chiff_release = 1.0
+
+
+class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
+    """GM 127. A crack: everything at once and then gone. One-shot, because
+    nothing about releasing a key stops a gunshot -- and the six of them in
+    A-Team are written as short notes, so honouring note-off would clip the
+    report to nothing."""
+    one_shot = True
+    release_floor_db = -50.0
+    # Levelled to sit ~6 dB OVER the orchestra rather than with it: a gunshot is
+    # supposed to be the loudest thing in the piece, but not to swamp it.
+    initial_gain = 1.0 / 13
+    max_harmonic = 72
+    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 60.0
+    tonal_dampening = 0.12         # flattest of all: no pitch survives
+    # A GUNSHOT IS AN IMPULSE, AND THE TAIL IS THE ROOM. Almost nothing you hear
+    # after the first few milliseconds comes from the gun: it comes from whatever
+    # the blast is standing in. So this voice is a click, and the hall the mix is
+    # rendered through supplies the decay -- which is what an impulse response IS.
+    #
+    # Measured: at decay_db 30 the voice made its own 0.54 s tail and the hall
+    # added essentially nothing on top of it (T40 0.539 s dry, 0.595 s wet) -- a
+    # synthetic decay with reverb painted over it. As a click the dry T40 is
+    # 48 ms and the wet T40 is 0.50 s, i.e. the decay now belongs entirely to the
+    # room. It also comes out the SAME 0.49-0.50 s whichever click length is
+    # used, which is the tell that the room is doing the work.
+    decay_db = 400.0               # dry T40 ~48 ms: a crack, not a ring
+    harmonic_decay_db = 3.0
+    harmonic_decay_dampening = 0.0
+    chiff_volume = 2.6
+    chiff_cycle = 0.95
+    chiff_release = 0.0
+    sustain_jitter = 1.0
+    chiff_min_valve_time = 0.001   # instantaneous
+    chiff_max_valve_time = 0.004
+    hf_corner_hz = 8000.0
 
 
 class SynthTone(BaseTone):
