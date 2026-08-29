@@ -269,6 +269,9 @@ class Live:
         # had and vanish from the only record that it was still down.
         self.down = set()
         self.stuck = 0
+        self.measure = False    # --latency: record MIDI-to-DAC for each note
+        self.lat = []
+        self._dac = self._cur = self._wall = 0.0
         self.pedal = {}         # channel -> sustain pedal down
         self.pedalled = set()   # keys whose damper the pedal is holding off
         self.nbuckets = 1
@@ -421,6 +424,13 @@ class Live:
         with self.lock:
             evs, self.events = self.events, collections.deque()
         for stamped, msg in evs:
+            if self.measure and msg.type == "note_on" and msg.velocity > 0 and self._dac:
+                # When will this note's first sample leave the DAC, in the same
+                # clock the MIDI message was stamped in?
+                # Two separable parts: how long the message waited to be picked
+                # up (USB + ALSA + rtmidi + our queue), and how far ahead of the
+                # DAC we are rendering (the audio buffer).
+                self.lat.append(((self._wall - stamped), (self._dac - self._cur)))
             try:
                 self._one(n0, msg)
             except Exception as e:
@@ -614,6 +624,13 @@ class Live:
         import pyaudio
         if status:
             self.underruns += 1
+        # PortAudio hands us its own clock plus the time this block will actually
+        # reach the DAC. Pin that to time.monotonic once per block so a MIDI
+        # arrival timestamp can be compared with when its sound leaves.
+        if time_info:
+            self._dac = time_info.get("output_buffer_dac_time", 0.0)
+            self._cur = time_info.get("current_time", 0.0)
+            self._wall = time.monotonic()
         n0 = self.n
         try:
             self.apply(n0)
@@ -774,6 +791,7 @@ def main():
     ap.add_argument("--headroom", type=float, default=4.0, help="dB of headroom (live cannot normalise)")
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
     ap.add_argument("--selftest", action="store_true", help="run the behaviour checks and exit")
+    ap.add_argument("--latency", action="store_true", help="measure MIDI-to-DAC latency while you play")
     a = ap.parse_args()
 
     if a.selftest:
@@ -808,6 +826,11 @@ def main():
     # instead of being killed silently.
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    live.measure = a.latency
+    if a.latency:
+        li = stream.get_output_latency()
+        sys.stderr.write("  PortAudio reports %.2f ms output latency; play some notes\n"
+                         % (li * 1000.0))
     stream.start_stream()
     last = time.monotonic()
     try:
@@ -829,6 +852,17 @@ def main():
         stream.stop_stream(); stream.close(); pa.terminate(); port.close()
         sys.stderr.write("\n  peak %.3f  underruns %d  dropped %d  errors %d  stuck %d\n"
                          % (live.peak, live.underruns, live.dropped, live.errors, live.stuck))
+        if live.lat:
+            def stat(vals):
+                v = sorted(x * 1000.0 for x in vals)
+                return (v[len(v) // 2], v[0], v[-1])
+            tot = stat([a + b for a, b in live.lat])
+            inq = stat([a for a, _ in live.lat])
+            buf = stat([b for _, b in live.lat])
+            sys.stderr.write("  MIDI-to-DAC over %d notes:\n" % len(live.lat))
+            sys.stderr.write("    midi in + queue  median %5.1f ms  (%.1f - %.1f)\n" % inq)
+            sys.stderr.write("    audio buffer     median %5.1f ms  (%.1f - %.1f)\n" % buf)
+            sys.stderr.write("    TOTAL            median %5.1f ms  (%.1f - %.1f)\n" % tot)
         if live.last_error:
             sys.stderr.write("  last error: %s\n" % live.last_error)
 
