@@ -104,7 +104,12 @@ class Slab:
     def stamp(self, tmpl, key, n0, vel_scale):
         """Place one note's partials at absolute sample n0. Returns False if the
         slab is full -- the caller decides what to do about that."""
-        n = tmpl["P"]
+        return self.stamp_cols(tmpl, tmpl["P"], key, n0, vel_scale,
+                               tmpl["hrel"], tmpl.get("dur", 0), tmpl.get("oneshot"))
+
+    def stamp_cols(self, tmpl, n, key, n0, vel_scale, hrel, dur, oneshot):
+        """As stamp(), but over an arbitrary column dict -- so one organ RANK can
+        be placed on its own, which is what drawing a stop mid-note means."""
         if n == 0:
             return True     # unmapped note: silent, but not a dropped note
         if len(self.free) < n:
@@ -116,6 +121,8 @@ class Slab:
             a[k][idx] = tmpl[k]
         for k in COLS_I4:
             a[k][idx] = tmpl[k]
+        a["gr"][idx] = -1     # ungated: a drawn rank is one we stamped
+        a["cr"][idx] = 0
         a["om"][idx] = tmpl["om"]
         # Phase is anchored to the note's own onset: p0 = -om*non + ph0. Shift the
         # template's anchor from its build-time onset to this one.
@@ -123,9 +130,9 @@ class Slab:
         a["non"][idx] = n0
         # A sustaining voice is held until the key is released; a struck one
         # already knows how long it rings and must not be cut short by note-off.
-        a["noff"][idx] = (n0 + tmpl["dur"]) if tmpl.get("oneshot") else IDLE
-        if tmpl.get("oneshot"):
-            self.retiring.append((idx, n0 + tmpl["dur"]))
+        a["noff"][idx] = (n0 + dur) if oneshot else IDLE
+        if oneshot:
+            self.retiring.append((idx, n0 + dur))
         if vel_scale != 1.0:
             a["aL"][idx] = tmpl["aL"] * vel_scale
             a["aR"][idx] = tmpl["aR"] * vel_scale
@@ -134,9 +141,9 @@ class Slab:
             a["aR"][idx] *= self.headroom
         self.aL0[idx] = a["aL"][idx]
         self.aR0[idx] = a["aR"][idx]
-        self.hrel[idx] = tmpl["hrel"]
+        self.hrel[idx] = hrel
         self.live.setdefault(key, []).extend(slots)
-        if tmpl.get("oneshot"):
+        if oneshot:
             self.oneshot[key] = True
         return True
 
@@ -240,6 +247,20 @@ class Live:
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.program, self.tuner = rate, frames, program, tuner
         self.drums = drums
+        pc = __import__("patch_map").property_class_for_program(program)
+        self.organ = (not drums) and getattr(pc, "registerable", False)
+        self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])]
+        # The order a crescendo pedal adds them in, which is the organ's own idea
+        # of how a registration should grow.
+        self.cres_order = list(getattr(pc, "crescendo_order", self.rank_names))
+        self.drawn = set(self.cres_order[:1])    # start on the 8' foundation
+        self.cres = 0.0
+        # WHICH KEYS ARE DOWN, tracked explicitly. It used to be inferred from
+        # what the slab was sounding, which is not the same thing: the crescendo
+        # retires ranks OUT of the slab, so a held note could lose every rank it
+        # had and vanish from the only record that it was still down.
+        self.down = set()
+        self.stuck = 0
         self.verbose = verbose
         self.slab = Slab(capacity)
         self.slab.lib = B.ensure_lib()
@@ -274,6 +295,12 @@ class Live:
             tr.append(mido.MetaMessage("set_tempo", tempo=1000000, time=0))
             if not self.drums:
                 tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
+            if self.organ:
+                # Draw everything so every rank emits partials AND speaks at the
+                # note's own onset. The live registration is then decided by which
+                # ranks we choose to stamp, not by a gate over ones already there.
+                tr.append(mido.Message("control_change", channel=ch, control=11, value=127, time=0))
+                tr.append(mido.Message("control_change", channel=ch, control=43, value=127, time=0))
             tr.append(mido.Message("note_on", channel=ch, note=note, velocity=127, time=0))
             tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
             # A struck drum ignores note-off and rings out on its own decay, so
@@ -294,6 +321,17 @@ class Live:
             t["oneshot"] = bool(self.drums and t["P"] and
                                 (t["noff"][0] - t["non"][0]) > 4.0 * B.SR)
             t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
+            if self.organ:
+                # gr is the rank index the offline gate would have used, so it is
+                # exactly the label needed to slice this template per stop.
+                gr = t["gr"]
+                t["ranks"] = {}
+                for i, nm in enumerate(self.rank_names):
+                    m = gr == i
+                    if not m.any():
+                        continue
+                    cols = {k: t[k][m] for k in COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4}
+                    t["ranks"][nm] = (cols, int(m.sum()), t["hrel"][m])
             self.templates[note] = t
         return t
 
@@ -352,7 +390,25 @@ class Live:
             self.slab.press(self.slab.live.get((ch, msg.note), []),
                             msg.value / 127.0, self.press_db, self.press_tilt)
         elif msg.type == "control_change":
-            if msg.control == 1:
+            if msg.control == 1 and self.organ:
+                # THE MOD WHEEL IS A CRESCENDO PEDAL. Rolling it up adds stops in
+                # the organ's own crescendo order; rolling it down retires them.
+                # A stop drawn while keys are held speaks AS A FRESH PIPE -- new
+                # partials stamped at this instant, with their own speech -- which
+                # is what actually happens when you pull a stop mid-chord. The
+                # offline renderer gets this from rank_speak_sec by scanning
+                # forward through future CC events; live it is simply now.
+                self.cres = msg.value / 127.0
+                n = int(self.cres * len(self.cres_order) + 1e-9)
+                want = set(self.cres_order[:max(1, n)])   # the 8' never retires
+                for rank in want - self.drawn:
+                    for (c, note) in self._held(ch):
+                        self._draw(self.template(note), c, note, rank, n0)
+                for rank in self.drawn - want:
+                    for k in [k for k in self.slab.live if len(k) == 3 and k[2] == rank]:
+                        self.slab.release(k, n0)
+                self.drawn = want
+            elif msg.control == 1:
                 # THE MOD WHEEL IS VIBRATO. That is what it is for on a wind
                 # or string patch, and it is the one control every library
                 # agrees on after dynamics. The machinery already exists --
@@ -362,12 +418,21 @@ class Live:
                 self.mod[ch] = depth
                 self.slab.retune(self._sounding(ch), n0, vd=depth)
             elif msg.control == 123:                # all notes off
+                self.down = {k for k in self.down if k[0] != ch}
                 for k in [k for k in self.slab.live if k[0] == ch]:
+                    self.slab.oneshot.pop(k, None)
                     self.slab.release(k, n0)
         elif msg.type == "note_on" and msg.velocity > 0:
             key = (ch, msg.note)
             tmpl = self.template(msg.note)
             scale = (msg.velocity / 127.0) ** 2
+            if self.organ:
+                # A pipe organ has no touch: a key is open or shut, and the wind
+                # does the rest. Velocity is deliberately ignored.
+                self.down.add((ch, msg.note))
+                for rank in self.drawn:
+                    self._draw(tmpl, ch, msg.note, rank, n0)
+                return
             if not self.slab.stamp(tmpl, key, n0, scale):
                 self.dropped += 1
                 return                  # slab full: this note does not sound
@@ -392,12 +457,55 @@ class Live:
                 self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
                                  vd=(v if v != 0.0 else None))
         else:
-            self.slab.release((ch, msg.note), n0)
+            if self.organ:
+                self.down.discard((ch, msg.note))
+                for k in [k for k in self.slab.live
+                          if len(k) == 3 and k[0] == ch and k[1] == msg.note]:
+                    self.slab.release(k, n0)
+            else:
+                self.slab.release((ch, msg.note), n0)
+
+    def _draw(self, tmpl, ch, note, rank, n0):
+        got = tmpl.get("ranks", {}).get(rank)
+        if not got:
+            return
+        cols, n, hrel = got
+        if not self.slab.stamp_cols(cols, n, (ch, note, rank), n0, 1.0, hrel, 0, False):
+            self.dropped += 1
+
+    def _held(self, ch):
+        """Notes actually down on this channel -- from the key state, not from
+        whatever happens to be sounding."""
+        return sorted(k for k in self.down if k[0] == ch)
+
+    def sweep(self, n):
+        """Release anything sounding whose key is not down.
+
+        A dropped note-off would otherwise drone forever, which is what a long
+        session produced: 221 partials held and never freed, with the audio
+        thread perfectly healthy underneath. Cheap, and it turns a lost message
+        into a note that ends slightly late rather than one that never ends.
+        """
+        if not self.organ:
+            return
+        for k in [k for k in self.slab.live
+                  if len(k) == 3 and (k[0], k[1]) not in self.down]:
+            self.slab.release(k, n)
+            self.stuck += 1
 
     def _sounding(self, ch):
+        """Every slot sounding on this channel.
+
+        Keys are (channel, note) for a normal voice but (channel, note, RANK) for
+        the organ, so this indexes rather than unpacks. Unpacking as a pair meant
+        pitch bend and aftertouch raised on every organ note -- caught by the
+        per-message guard, so the audio was fine and the controls simply did
+        nothing, which is exactly the kind of failure a guard can hide. It only
+        surfaced because the telemetry started reporting errors.
+        """
         out = []
-        for (c, _), slots in self.slab.live.items():
-            if c == ch:
+        for k, slots in self.slab.live.items():
+            if k[0] == ch:
                 out.extend(slots)
         return out
 
@@ -426,6 +534,7 @@ class Live:
         n0 = self.n
         try:
             self.apply(n0)
+            self.sweep(n0)
             self.slab.reap(n0)
             L, R = B.synth_window(self.slab.prep(), n0, frame_count)
         except Exception as e:
@@ -494,17 +603,21 @@ def main():
             if time.monotonic() - last >= 5.0:
                 last = time.monotonic()
                 sounding = sum(len(v) for v in live.slab.live.values())
-                sys.stderr.write("    %5.1f s  peak %.3f  sounding %4d partials  "
-                                 "free %5d  underruns %d  dropped %d\n"
+                sys.stderr.write("    %5.1f s  peak %.3f  sounding %4d  free %5d  "
+                                 "under %d  drop %d  err %d  stuck %d%s\n"
                                  % (live.n / live.rate, live.peak, sounding,
-                                    len(live.slab.free), live.underruns, live.dropped))
+                                    len(live.slab.free), live.underruns, live.dropped,
+                                    live.errors, live.stuck,
+                                    ("  last: " + live.last_error) if live.last_error else ""))
                 sys.stderr.flush()
     except KeyboardInterrupt:
         pass
     finally:
         stream.stop_stream(); stream.close(); pa.terminate(); port.close()
-        sys.stderr.write("\n  peak %.3f  underruns %d  dropped %d\n"
-                         % (live.peak, live.underruns, live.dropped))
+        sys.stderr.write("\n  peak %.3f  underruns %d  dropped %d  errors %d  stuck %d\n"
+                         % (live.peak, live.underruns, live.dropped, live.errors, live.stuck))
+        if live.last_error:
+            sys.stderr.write("  last error: %s\n" % live.last_error)
 
 
 if __name__ == "__main__":
