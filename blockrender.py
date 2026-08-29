@@ -59,7 +59,13 @@ def tuning_table(name):
     return {n: pairs[n - mc] for n in range(128) if (n - mc) in pairs}
 
 def parse(path):
-    mid = mido.MidiFile(path); ch_prog = {}; notes = []; ccs = {}; on = {}; t = 0.0
+    # `path` may also be an already-built mido.MidiFile, so a caller can hand in
+    # a MIDI object it constructed in memory. live.py builds its note templates
+    # that way, which keeps them on exactly this code path -- brass fingering,
+    # jitter, HRTF, unison voices and all -- rather than a second one that could
+    # drift from it.
+    mid = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
+    ch_prog = {}; notes = []; ccs = {}; on = {}; t = 0.0
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         c = ctrl.get(ch, {}); return (c.get(7,127)/127.0, c.get(11,127)/127.0, (c.get(10,64)-64)/63.0)
