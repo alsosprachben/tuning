@@ -24,14 +24,33 @@ from patch_map import property_class_for_program
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
 
-SR = 44100; TAU = 0.015; BLK = 512
+# SR is the engine's sample rate. It used to be hardcoded here AND as six literal
+# 44100s inside the kernel, so it could not actually be changed; the kernel now
+# takes it as a parameter. Offline rendering stays at 44100 (the whole corpus is
+# rendered there); a live front end sets it to match the audio device -- PipeWire
+# on this machine runs the graph at 48000, and resampling in the path is both
+# latency and a filter we did not choose.
+SR = 44100
+TAU = 0.015; BLK = 512
+
+
+def set_sample_rate(sr):
+    """Set the engine sample rate. Call before prepare(); everything downstream
+    (note-on/off sample indices, fades, the kernel's own time base) reads it."""
+    global SR
+    SR = int(sr)
 HERE = os.path.dirname(os.path.abspath(__file__)); LIB = os.path.join(HERE, "libsynth.so")
 
 def ensure_lib():
     src = os.path.join(HERE, "synthkernel.c")
-    if (not os.path.exists(LIB)) or os.path.getmtime(src) > os.path.getmtime(LIB):
-        subprocess.check_call(["gcc","-O3","-march=native","-ffast-math","-fopenmp","-shared","-fPIC",src,"-o",LIB,"-lm"])
-    return ctypes.CDLL(LIB)
+    # One .so per sample rate: SRATE is a compile-time constant in the kernel, so
+    # that -ffast-math can fold the divisions exactly as it always did (see the
+    # note above SRATE in synthkernel.c).
+    lib = os.path.join(HERE, "libsynth_%d.so" % SR)
+    if (not os.path.exists(lib)) or os.path.getmtime(src) > os.path.getmtime(lib):
+        subprocess.check_call(["gcc","-O3","-march=native","-ffast-math","-fopenmp","-shared","-fPIC",
+                               "-DSRATE=%d" % SR, src,"-o",lib,"-lm"])
+    return ctypes.CDLL(lib)
 
 def tuning_table(name):
     midilib.set_tuner(name); mc = midilib.middle_c; tuner = midilib.tuner_class()
@@ -353,7 +372,8 @@ def synth_window(prep, n0, winlen):
                     fp(a['cv']),fp(a['cc']),fp(a['crl']),fp(a['sj']),fp(a['csc']),
                     fp(a['tbav']),fp(a['tau']),fp(a['tcut']),fp(a['vd']),fp(a['vr']),fp(a['vp']),fp(a['delL']),fp(a['delR']),
                     ip(a['gr']),ip(a['cr']),fp(a['G']),fp(a['S']),
-                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),ctypes.c_long(SR))
+                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
+                    ctypes.c_long(SR))
     L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
     return L,R
 

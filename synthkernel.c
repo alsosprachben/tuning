@@ -13,12 +13,26 @@
 #include <stdint.h>
 #include <omp.h>
 
+// THE SAMPLE RATE, at compile time. It was six hardcoded 44100s, so it could not
+// be changed at all; a live front end has to match whatever the audio device runs
+// (PipeWire here is 48000, and resampling in the path is both latency and a filter
+// we did not choose). A compile-time constant rather than a parameter because
+// -ffast-math folds division by a literal into a reciprocal multiply: passing the
+// rate in at runtime measurably changed the output of the existing corpus, and
+// this way the 44100 build is byte-for-byte what it always was. blockrender caches
+// one .so per rate.
+#ifndef SRATE
+#define SRATE 44100
+#endif
+#define SRATE_D ((double)SRATE)
+#define SRATE_F ((float)SRATE)
+
 #define RAND_GRAN 100000.0
 
 // THE CHIFF'S RANDOMNESS, TWISTED. This used to read a 100000-entry table at
 // index floor(t * f * granularity) MOD granularity, and that index depends on
 // the NOTE: the sequence returns to its start at the smallest L samples where
-// L * f / 44100 is a whole number, so how random the chiff is depends on how
+// L * f / srate is a whole number, so how random the chiff is depends on how
 // round the partial's frequency happens to be. Measured, at A=440: A2 (110 Hz)
 // repeats every 200 ms -- a 5 Hz flutter -- and A3 and A4 every 50 ms, while
 // E4, C4, G3 and D4 do not repeat inside a second at all. These renders use
@@ -139,7 +153,7 @@ void synth_voice(
             // is not delayed, exactly as the reference does.
             float dL=delL[p], dR=delR[p];
             #define AMP(nn, b, d) ({ \
-                float tt=(float)((nn)-a-(d))/44100.f; \
+                float tt=(float)((nn)-a-(d))/SRATE_F; \
                 float dc=sl+(1.f-sl)*((1.f-af)*expf(-tt*lr)+af*expf(-tt*lrA)); \
                 float e=sstep((float)((nn)-a-(d))*invf)*(1.f-sstep((float)((nn)-off-(d))*invr))*dc; \
                 float gg=1.f, sh=1.f; \
@@ -188,8 +202,8 @@ void synth_voice(
                     // renderer's sample-by-sample one. Integrated from note-on,
                     // so the accumulated phase matches what the reference adds up.
                     double d=vdep[p], r=vrate[p], vp0=vph[p];
-                    double fp=w*44100.0/6.283185307179586;
-                    double ta=(double)ns/44100.0, tb2=(double)ne/44100.0, ton=(double)a/44100.0;
+                    double fp=w*SRATE_D/6.283185307179586;
+                    double ta=(double)ns/SRATE_D, tb2=(double)ne/SRATE_D, ton=(double)a/SRATE_D;
                     double w2=6.283185307179586*r;
                     bph += (fp*d/r)*(cos(w2*ton+vp0)-cos(w2*ta+vp0));
                     // The recurrence holds one frequency for the whole block, so
@@ -205,9 +219,9 @@ void synth_voice(
                 }
                 if(tbav[p]!=0.f){
                     float tb=tbav[p], ts=tau[p], cut=tcut[p];
-                    float trel=(float)(ns-a)/44100.f;
+                    float trel=(float)(ns-a)/SRATE_F;
                     float integ = tb*ts*(1.f - expf(-(trel<cut?trel:cut)/ts));
-                    bph = (double)w*44100.0*(double)integ;
+                    bph = (double)w*SRATE_D*(double)integ;
                     winst = w*(1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f));
                 }
                 double phL=ph0L[p]+w*(double)ns+bph, phR=ph0R[p]+w*(double)ns+bph;
@@ -219,7 +233,7 @@ void synth_voice(
                     float t=(float)(n-bs0)*invb; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
                     float sL=zrL, sR=zrR;
                     if(jfa>0.f){
-                        double sec=(double)n/44100.0;
+                        double sec=(double)n/SRATE_D;
                         float jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
                         float cj=cosf(jit),sj2=sinf(jit);
                         sL += (zrL*cj - ziL*sj2)*jfa;

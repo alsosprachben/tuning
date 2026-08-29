@@ -92,6 +92,48 @@ def db_amplitude(db):
     return 10 ** (float(db) / 20)
 
 
+from zlib import crc32 as _crc32
+
+# Per-note draws that the build was repeating per HARMONIC. All three are pure
+# functions of (class, note) or (class, note, player) and were being recomputed
+# tens of thousands of times per piece; see the docstrings at their use sites.
+_SECTION_SALT = {}
+_VIBRATO_CACHE = {}
+_SECTION_CACHE = {}
+
+_PLUCK_COMB = {}
+
+
+def _pluck_comb(plucked_harmonic, pluck_dampening, harmonic):
+    """The legacy pluck comb, memoised. Was 87% of the time to build a render.
+
+    series_volume() used to evaluate this inline as
+
+        sum(tv for th, tv in self.plucked_volumes if harmonic % th)
+
+    over a list that is 999 entries long for every pipe, wind, brass, string,
+    organ and vocal voice (BlownPipeProperties.plucked_harmonic = 1000). That is
+    an O(1000) Python generator per harmonic per rank per note: profiled on a
+    254-note organ fugue it was 50.8 million iterations and 87% of the whole
+    build.
+
+    It depends on nothing per-note -- not pitch, not velocity, not the note's
+    gain -- only on the two class constants and the harmonic index. So it is
+    computed once per (plucked_harmonic, pluck_dampening, harmonic) and kept.
+    The table is tiny: harmonics run to at most 80.
+    """
+    key = (plucked_harmonic, pluck_dampening, harmonic)
+    got = _PLUCK_COMB.get(key)
+    if got is None:
+        if plucked_harmonic:
+            got = sum(((plucked_harmonic - h) / plucked_harmonic) ** pluck_dampening
+                      for h in range(1, int(plucked_harmonic)) if harmonic % h)
+        else:
+            got = 1.0 if harmonic % 1000000 else 0.0
+        _PLUCK_COMB[key] = got
+    return got
+
+
 _RANK_SPECTRA = {}
 
 
@@ -1056,7 +1098,7 @@ class SynthProperties:
                 depth *= (1.0 - self.attack_volume)
             comb = (1.0 - depth) + depth * abs(_sin(harmonic * _pi * self.strike_point))
         else:
-            comb = sum(tv for th, tv in self.plucked_volumes if harmonic % th)   # legacy path (pipes)
+            comb = _pluck_comb(self.plucked_harmonic, self.pluck_dampening, harmonic)
 
         v = self.gain / (harmonic ** self.attack_dampening) * comb
         if harmonic % 2 == 0 and self.even_harmonic_db is not None:
@@ -2265,18 +2307,34 @@ class BowedStringProperties(BlownPipeProperties):
 
         crc32 of the class name, not hash(): hash() of a str is salted per
         process, and this must be identical in both renderers and every run.
+
+        Memoised per class, and crc32 imported at module scope: this used to do
+        the import and the checksum on every call, and it is called once per
+        player per harmonic -- 442856 times to build one four-minute piece.
         """
-        from zlib import crc32
-        return crc32(type(self).__name__.encode()) & 0xFFFF
+        cls = type(self)
+        got = _SECTION_SALT.get(cls)
+        if got is None:
+            got = _crc32(cls.__name__.encode()) & 0xFFFF
+            _SECTION_SALT[cls] = got
+        return got
 
     def voice_vibrato(self, frequency, index):
+        """Memoised per (class, note, player): it takes no harmonic argument and
+        never did, yet the build calls it once per harmonic per player -- 387499
+        times for one piece, each one seeding a fresh Mersenne Twister."""
         if not self.section_vibrato_cents:
             return None
         midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
-        rng = _random.Random(0x71B0 + midi * 64 + index + self._section_salt() * 8191)
-        depth = (2.0 ** (self.section_vibrato_cents / 1200.0) - 1.0) * rng.uniform(0.7, 1.0)
-        return (depth, rng.uniform(*self.section_vibrato_hz),
-                rng.uniform(0.0, 6.283185307179586))
+        key = (type(self), midi, index)
+        got = _VIBRATO_CACHE.get(key)
+        if got is None:
+            rng = _random.Random(0x71B0 + midi * 64 + index + self._section_salt() * 8191)
+            depth = (2.0 ** (self.section_vibrato_cents / 1200.0) - 1.0) * rng.uniform(0.7, 1.0)
+            got = (depth, rng.uniform(*self.section_vibrato_hz),
+                   rng.uniform(0.0, 6.283185307179586))
+            _VIBRATO_CACHE[key] = got
+        return got
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """The other players: section_players - 1 extra stacks, each a few cents
@@ -2290,6 +2348,13 @@ class BowedStringProperties(BlownPipeProperties):
         if n <= 1:
             return super().unison_voices(frequency, harmonic, harmonic_decay)
         midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        # The spread and the phases are per NOTE, not per harmonic -- that is the
+        # whole point of seeding on the pitch -- so they are drawn once and kept.
+        # Only harmonic_decay varies down the series, and it is passed in.
+        key = (type(self), midi)
+        cached = _SECTION_CACHE.get(key)
+        if cached is not None:
+            return [(1.0, 0.0, ratio, harmonic_decay, phase) for ratio, phase in cached]
         rng = _random.Random(0x5EC0 + midi + self._section_salt() * 65537)
         cents = [rng.uniform(-self.section_spread_cents, self.section_spread_cents)
                  for _ in range(n - 1)]
@@ -2312,8 +2377,9 @@ class BowedStringProperties(BlownPipeProperties):
         # share an instant. Give each its own start and the sum is incoherent
         # from the first sample -- the right attack and the right steady state.
         #
-        return [(1.0, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, rng.random())
-                for c in cents]
+        made = [(2.0 ** (c / 1200.0) - 1.0, rng.random()) for c in cents]
+        _SECTION_CACHE[key] = made
+        return [(1.0, 0.0, ratio, harmonic_decay, phase) for ratio, phase in made]
 
     # 1/n-ish spectrum: brighter than an organ, no octave-modulo steps
     tonal_dampening = 1.0
