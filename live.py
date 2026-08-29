@@ -346,6 +346,13 @@ class Live:
             self.templates[(note, b)] = t
         return t
 
+    def _voice_class(self, note):
+        """The property class this note will actually be rendered with."""
+        if self.drums:
+            got = percussion_for_note(note)
+            return got[1] if got else None
+        return __import__("patch_map").property_class_for_program(self.program)
+
     def _raw_template(self, note, vel):
         """Build one note at one velocity, with no bucket lookup in the way."""
         if True:
@@ -378,8 +385,16 @@ class Live:
                          if len(nf) else np.zeros(0, np.float32))
             # A one-shot voice's length is its own decay, decided at build time.
             # Live, that means note-off must NOT truncate it -- see stamp/release.
-            t["oneshot"] = bool(self.drums and t["P"] and
-                                (t["noff"][0] - t["non"][0]) > 4.0 * B.SR)
+            # ONE-SHOT IS A PROPERTY OF THE VOICE, not of drum mode. A celesta,
+            # glockenspiel, marimba, vibraphone, tubular bell, timpano or wood
+            # block is struck: it rings out its own decay and note-off means
+            # nothing to it, exactly as a snare does. Deciding this from
+            # `self.drums` cut every melodic struck voice at key-up -- and their
+            # release time is 0.1 ms, because offline the note is extended to 8 s
+            # and the release is never used, so the value was only ever the
+            # floor. Cutting a ringing bar in 0.1 ms is a click.
+            t["oneshot"] = bool(t["P"]) and getattr(self._voice_class(note),
+                                                    "one_shot", False)
             t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
             if self.organ:
                 # gr is the rank index the offline gate would have used, so it is
