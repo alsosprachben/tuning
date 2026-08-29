@@ -71,6 +71,11 @@ class Slab:
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
+        # A slot can be scheduled for retirement twice -- stamp() schedules a
+        # one-shot's natural end, and choking it pops `oneshot` and calls
+        # release(), which schedules it again -- so freeing has to be idempotent
+        # or the slot is handed out twice and the free list grows past capacity.
+        self.busy = np.zeros(capacity, bool)
         self.live = {}                  # (channel, note) -> [slot indices]
         self.oneshot = {}               # keys whose note-off must be ignored
         # Non-organ voices never read G/S, but the kernel still wants pointers.
@@ -116,6 +121,7 @@ class Slab:
             return False
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
+        self.busy[idx] = True
         a = self.a
         for k in COLS_F4:
             a[k][idx] = tmpl[k]
@@ -234,7 +240,9 @@ class Slab:
             tail = off + float(self.a["re"][idx].max()) + B.BLK
             if n > tail:
                 self.a["non"][idx] = IDLE
-                self.free.extend(int(i) for i in idx)
+                live = idx[self.busy[idx]]
+                self.busy[live] = False
+                self.free.extend(int(i) for i in live)
             else:
                 keep.append((idx, off))
         self.retiring = keep
@@ -261,10 +269,17 @@ class Live:
         # had and vanish from the only record that it was still down.
         self.down = set()
         self.stuck = 0
+        self.pedal = {}         # channel -> sustain pedal down
+        self.pedalled = set()   # keys whose damper the pedal is holding off
+        self.nbuckets = 1
         self.verbose = verbose
         self.slab = Slab(capacity)
         self.slab.lib = B.ensure_lib()
         self.templates = {}
+        # Measured, not assumed: 8 bands if this voice's timbre moves with
+        # velocity, 1 if velocity is pure gain. See _vel_dependent().
+        if not drums:
+            self.nbuckets = 8 if self._vel_dependent() else 1
         self.n = 0                       # absolute sample clock
         self.events = collections.deque()
         self.lock = threading.Lock()
@@ -285,10 +300,52 @@ class Live:
         self.peak = 0.0
 
     # ---- templates ----------------------------------------------------------
-    def template(self, note):
-        """One note's partial table, built once through the offline code path."""
-        t = self.templates.get(note)
+    def _vel_dependent(self):
+        """Does this voice's SPECTRUM change with velocity, or only its level?
+
+        Measured rather than assumed: build the same note soft and loud and see
+        whether the partial amplitudes differ by a constant factor. If they do,
+        velocity is pure gain and one template serves every dynamic. If they do
+        not -- a piano, whose hammer fills the strike comb as it is struck harder
+        -- the timbre has to be built per velocity band.
+        """
+        try:
+            loud = self._raw_template(60, 127)
+            soft = self._raw_template(60, 32)
+        except Exception:
+            return False
+        if loud["P"] != soft["P"] or loud["P"] == 0:
+            return True
+        r = soft["aL"] / np.maximum(loud["aL"], 1e-30)
+        r = r[np.isfinite(r) & (r > 0)]
+        return bool(len(r) and r.max() / max(r.min(), 1e-30) > 1.01)
+
+    def bucket(self, vel):
+        return min(self.nbuckets - 1, int(vel * self.nbuckets / 128.0))
+
+    def bucket_vel(self, b):
+        """The velocity a bucket is built at: the centre of its band."""
+        return int(min(127, (b + 0.5) * 128.0 / self.nbuckets))
+
+    def template(self, note, vel=127):
+        """One note's partial table, built once through the offline code path.
+
+        Keyed by (note, velocity bucket). Most voices scale linearly with
+        velocity, so one bucket serves them all. A piano does not: the hammer's
+        contact patch widens with force and fills the strike comb, and its
+        low-pass corner opens, so a template built fortissimo and merely turned
+        down is a fortissimo note played quietly. See _vel_dependent().
+        """
+        b = self.bucket(vel)
+        t = self.templates.get((note, b))
         if t is None:
+            t = self._raw_template(note, self.bucket_vel(b))
+            self.templates[(note, b)] = t
+        return t
+
+    def _raw_template(self, note, vel):
+        """Build one note at one velocity, with no bucket lookup in the way."""
+        if True:
             ch = GM_PERCUSSION_CHANNEL if self.drums else 0
             m = mido.MidiFile(type=1, ticks_per_beat=480)
             tr = mido.MidiTrack(); m.tracks.append(tr)
@@ -301,7 +358,7 @@ class Live:
                 # ranks we choose to stamp, not by a gate over ones already there.
                 tr.append(mido.Message("control_change", channel=ch, control=11, value=127, time=0))
                 tr.append(mido.Message("control_change", channel=ch, control=43, value=127, time=0))
-            tr.append(mido.Message("note_on", channel=ch, note=note, velocity=127, time=0))
+            tr.append(mido.Message("note_on", channel=ch, note=note, velocity=vel, time=0))
             tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
             # A struck drum ignores note-off and rings out on its own decay, so
             # prepare() extends it to 8 s. The template has to be long enough to
@@ -332,20 +389,21 @@ class Live:
                         continue
                     cols = {k: t[k][m] for k in COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4}
                     t["ranks"][nm] = (cols, int(m.sum()), t["hrel"][m])
-            self.templates[note] = t
-        return t
+            t["vel"] = vel
+            return t
 
     def warm(self, lo=None, hi=None):
         """Build templates up front so the first press of a key is not the one
         that costs 2 ms. Cheap enough to just do for the playable range."""
         if lo is None:
-            lo, hi = (35, 81) if self.drums else (36, 84)   # the GM kit, or a keyboard
+            lo, hi = (35, 81) if self.drums else (21, 96)   # the GM kit, or a keyboard
         t0 = time.time()
         for n in range(lo, hi + 1):
-            try:
-                self.template(n)
-            except Exception:
-                pass                    # unmapped drum note: nothing to build
+            for b in range(self.nbuckets):
+                try:
+                    self.template(n, self.bucket_vel(b))
+                except Exception:
+                    pass                # unmapped drum note: nothing to build
         if self.verbose:
             tot = sum(t["P"] for t in self.templates.values())
             sys.stderr.write("  %d templates, %d partials, %.2f s (%.2f ms/note)\n"
@@ -417,24 +475,43 @@ class Live:
                 depth = (2.0 ** (self.mod_cents * msg.value / 127.0 / 1200.0)) - 1.0
                 self.mod[ch] = depth
                 self.slab.retune(self._sounding(ch), n0, vd=depth)
+            elif msg.control == 64:                 # sustain pedal
+                downp = msg.value >= 64
+                was = self.pedal.get(ch, False)
+                self.pedal[ch] = downp
+                if was and not downp:
+                    # Pedal up: every damper falls at once.
+                    for k in [k for k in self.pedalled if k[0] == ch]:
+                        self.slab.release(k, n0)
+                    self.pedalled = {k for k in self.pedalled if k[0] != ch}
             elif msg.control == 123:                # all notes off
                 self.down = {k for k in self.down if k[0] != ch}
+                self.pedalled = {k for k in self.pedalled if k[0] != ch}
+                self.pedal[ch] = False
                 for k in [k for k in self.slab.live if k[0] == ch]:
                     self.slab.oneshot.pop(k, None)
                     self.slab.release(k, n0)
         elif msg.type == "note_on" and msg.velocity > 0:
             key = (ch, msg.note)
-            tmpl = self.template(msg.note)
-            scale = (msg.velocity / 127.0) ** 2
+            # Every voice records the key as down, not just the organ. The
+            # stuck-note sweep releases whatever is sounding without a key behind
+            # it, so a voice that never registered its key had every note swept
+            # a block after it started -- notes dying in a fraction of a second.
+            self.down.add((ch, msg.note))
+            tmpl = self.template(msg.note, msg.velocity)
+            # Timbre is quantised to the bucket, level is not: trim by the ratio
+            # of the actual velocity to the one the bucket was built at.
+            scale = ((msg.velocity / 127.0) ** 2 /
+                     max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9))
             if self.organ:
                 # A pipe organ has no touch: a key is open or shut, and the wind
                 # does the rest. Velocity is deliberately ignored.
-                self.down.add((ch, msg.note))
                 for rank in self.drawn:
                     self._draw(tmpl, ch, msg.note, rank, n0)
                 return
             if not self.slab.stamp(tmpl, key, n0, scale):
                 self.dropped += 1
+                self.down.discard((ch, msg.note))
                 return                  # slab full: this note does not sound
             # a note started while the wheel is up must join in progress
             slots = self.slab.live.get(key)
@@ -457,8 +534,14 @@ class Live:
                 self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
                                  vd=(v if v != 0.0 else None))
         else:
+            self.down.discard((ch, msg.note))
+            if self.pedal.get(ch, False) and not self.organ:
+                # The key is up but the damper is not: the string keeps ringing
+                # until the pedal is lifted. Recorded so the stuck-note sweep
+                # does not mistake it for a lost note-off and cut it.
+                self.pedalled.add((ch, msg.note))
+                return
             if self.organ:
-                self.down.discard((ch, msg.note))
                 for k in [k for k in self.slab.live
                           if len(k) == 3 and k[0] == ch and k[1] == msg.note]:
                     self.slab.release(k, n0)
@@ -486,10 +569,10 @@ class Live:
         thread perfectly healthy underneath. Cheap, and it turns a lost message
         into a note that ends slightly late rather than one that never ends.
         """
-        if not self.organ:
-            return
         for k in [k for k in self.slab.live
-                  if len(k) == 3 and (k[0], k[1]) not in self.down]:
+                  if (k[0], k[1]) not in self.down
+                  and (k[0], k[1]) not in self.pedalled
+                  and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1
 
@@ -553,6 +636,132 @@ class Live:
         return (st.tobytes(), pyaudio.paContinue)
 
 
+def selftest():
+    """Assert the live engine's behaviour without any audio or MIDI hardware.
+
+    Written after breaking the same area twice: generalising the stuck-note sweep
+    to every voice while leaving the key-down bookkeeping in the organ branch, so
+    every piano note was swept a block after it started. Both failures -- notes
+    that never stop and notes that stop instantly -- come from the same pair of
+    invariants, so both are asserted here rather than left to be noticed.
+    """
+    import random
+    fails = []
+
+    def check(name, ok, detail=""):
+        print("   %-46s %s%s" % (name, "ok" if ok else "FAIL", detail))
+        if not ok:
+            fails.append(name)
+
+    for prog, drums, label in ((0, False, "piano"), (56, False, "trumpet"),
+                               (19, False, "organ"), (0, True, "drums")):
+        lv = Live(program=prog, rate=48000, frames=128, drums=drums, verbose=False)
+        note = 38 if drums else 60
+
+        # 1. a held note keeps sounding
+        lv.on_midi(mido.Message("note_on", channel=0, note=note, velocity=100))
+        n = 0
+        for _ in range(int(1.5 * 48000) // 128):
+            lv.callback(None, 128, None, 0); n += 128
+        check("%s: held note still sounds after 1.5 s" % label,
+              sum(len(v) for v in lv.slab.live.values()) > 0 or drums)
+
+        # 2. note-off releases it (a struck drum ignores note-off by design)
+        lv.on_midi(mido.Message("note_off", channel=0, note=note, velocity=0))
+        lv.apply(n); lv.sweep(n)
+        held = sum(len(v) for v in lv.slab.live.values())
+        if drums:
+            # A struck drum rings on regardless of the key. The precise question
+            # is not "is it still audible" -- after 1.5 s a snare has decayed on
+            # its own -- but "did note-off CHANGE anything". So render the same
+            # strike twice, once with a note-off and once without, and require
+            # them to be identical.
+            def strike(send_off):
+                l2 = Live(program=prog, rate=48000, frames=128, drums=True, verbose=False)
+                l2.on_midi(mido.Message("note_on", channel=0, note=note, velocity=100))
+                buf = []
+                for i in range(int(1.2 * 48000) // 128):
+                    if send_off and i == 40:
+                        l2.on_midi(mido.Message("note_off", channel=0, note=note, velocity=0))
+                    b, _f = l2.callback(None, 128, None, 0)
+                    buf.append(np.frombuffer(b, np.float32))
+                return np.concatenate(buf)
+            a, b2 = strike(True), strike(False)
+            check("%s: note-off changes nothing (one-shot)" % label,
+                  float(np.abs(a - b2).max()) == 0.0)
+        else:
+            check("%s: note-off releases" % label, held == 0)
+
+        # 3. everything is returned once it has rung out
+        for k in range(20000):
+            lv.slab.reap(n + k * 128)
+        check("%s: all slots returned" % label,
+              len(lv.slab.free) == lv.slab.cap,
+              "" if len(lv.slab.free) == lv.slab.cap
+              else "  (%d leaked)" % (lv.slab.cap - len(lv.slab.free)))
+
+    # 4. the sustain pedal holds, and the sweep does not steal pedalled notes
+    lv = Live(program=0, rate=48000, frames=128, verbose=False)
+    lv.on_midi(mido.Message("control_change", channel=0, control=64, value=127))
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    lv.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+    lv.apply(4800); lv.sweep(4800)
+    check("pedal: holds the note after key-up",
+          sum(len(v) for v in lv.slab.live.values()) > 0)
+    lv.on_midi(mido.Message("control_change", channel=0, control=64, value=0))
+    lv.apply(9600); lv.sweep(9600)
+    check("pedal: releases on pedal-up",
+          sum(len(v) for v in lv.slab.live.values()) == 0)
+
+    # 5. a lost note-off is healed rather than droning
+    lv = Live(program=0, rate=48000, frames=128, verbose=False)
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    lv.down.clear()                       # the note-off never arrived
+    lv.sweep(4800)
+    check("lost note-off is swept", lv.stuck == 1 and
+          sum(len(v) for v in lv.slab.live.values()) == 0)
+
+    # 6. fuzz every mode: no errors, no leaks
+    for prog, drums, label in ((0, False, "piano"), (19, False, "organ"), (0, True, "drums")):
+        lv = Live(program=prog, rate=48000, frames=128, drums=drums, verbose=False)
+        random.seed(5); down = set(); n = 0
+        notes = [38, 42, 46, 49] if drums else [48, 55, 60, 64]
+        for _ in range(2500):
+            n += 128; r = random.random()
+            if r < 0.30:
+                v = random.choice(notes)
+                lv.on_midi(mido.Message("note_on", channel=0, note=v, velocity=random.randint(1, 127)))
+                down.add(v)
+            elif r < 0.55 and down:
+                v = random.choice(sorted(down))
+                lv.on_midi(mido.Message("note_off", channel=0, note=v, velocity=0)); down.discard(v)
+            elif r < 0.62 and down:
+                down.discard(random.choice(sorted(down)))          # a lost note-off
+            elif r < 0.75:
+                lv.on_midi(mido.Message("control_change", channel=0, control=1, value=random.randint(0, 127)))
+            elif r < 0.85:
+                lv.on_midi(mido.Message("pitchwheel", channel=0, pitch=random.randint(-8192, 8191)))
+            else:
+                lv.on_midi(mido.Message("aftertouch", channel=0, value=random.randint(0, 127)))
+            lv.apply(n)
+            lv.down &= {(0, x) for x in down}
+            lv.sweep(n); lv.slab.reap(n)
+        for v in sorted(down):
+            lv.on_midi(mido.Message("note_off", channel=0, note=v, velocity=0))
+        lv.apply(n); lv.down.clear(); lv.sweep(n)
+        for k in range(20000):
+            lv.slab.reap(n + k * 128)
+        check("%s: 2500 mixed events, no errors" % label, lv.errors == 0,
+              "" if lv.errors == 0 else "  (%s)" % lv.last_error)
+        check("%s: 2500 mixed events, no leak" % label,
+              len(lv.slab.free) == lv.slab.cap,
+              "" if len(lv.slab.free) == lv.slab.cap
+              else "  (%d leaked)" % (lv.slab.cap - len(lv.slab.free)))
+
+    print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
+    return 1 if fails else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--program", type=int, default=56, help="GM program (default 56, trumpet)")
@@ -564,7 +773,11 @@ def main():
     ap.add_argument("--drums", action="store_true", help="GM percussion: notes are drums, not pitches")
     ap.add_argument("--headroom", type=float, default=4.0, help="dB of headroom (live cannot normalise)")
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
+    ap.add_argument("--selftest", action="store_true", help="run the behaviour checks and exit")
     a = ap.parse_args()
+
+    if a.selftest:
+        sys.exit(selftest())
 
     names = mido.get_input_names()
     if a.list:
