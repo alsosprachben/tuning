@@ -2297,7 +2297,20 @@ class BowedStringProperties(BlownPipeProperties):
     # applied to one voice. unison_voices() below is the piano's own machinery,
     # which both renderers already understand.
     chiff_cycle = 0.06          # phase-deviation magnitude (small = subtle)
-    chiff_volume = 0.5          # still wanted on the ATTACK: bow scrape is real
+    # NO CHIFF. This class's own docstring has said "no chiff" since it was
+    # written; c9b648c kept chiff_volume at 0.5 on the strength of a comment --
+    # "still wanted on the ATTACK: bow scrape is real" -- that was an assertion,
+    # not a measurement. Measured: it adds a FLAT +0.3 to +0.5 dB in every band
+    # from 125 Hz to 8 kHz, which is not what a bow scrape looks like, and the
+    # difference signal sits 53 dB below the chord. It also cost the whole
+    # polyphonic attack: a six-note chord ran 2.5 ms a block against a 2.67 ms
+    # budget while it spoke, and 0.85 ms after -- the per-sample hash and
+    # sincosf in the kernel's jitter branch, on every partial. What it was
+    # standing in for -- the incoherence of several players not starting
+    # together -- is now modelled, by seven players with their own phases,
+    # vibratos and chairs. Voices where the noise IS the sound keep theirs:
+    # snare 3.0, brass 2.6, breath and seashore 2.4, flue organ 1.3.
+    chiff_volume = 0.0
     chiff_release = 0.0
     sustain_jitter = 0.0        # the held note is the players now, not a jitter
     chiff_min_valve_time = 0.04
@@ -2433,9 +2446,20 @@ class BowedStringProperties(BlownPipeProperties):
 
 
 class BowedStringSecondProperties(BowedStringProperties):
-    """The 'second' string section (GM String Ensemble 2): darker and a
-    little rounder than the first, with a slightly wider shimmer, so the two
-    ensembles read as distinct sections rather than one doubled patch."""
+    """The SLOW string section (GM String Ensemble 2).
+
+    General MIDI only gives the two ensembles names, so the reading everyone
+    actually implements is the Roland SC-55's, where 48 is `Strings` and 49 is
+    `SlowStr` -- the difference is the BOW, not the tone colour. 49 is the pad:
+    a slow draw you lay underneath something, where 48 speaks promptly enough to
+    play a line. This class used to differ only by being darker, with both
+    sections sharing an identical 40 ms onset, so the one distinction the name
+    carries was the one it did not make.
+
+    Darker AND slower is not two decisions: a slow bow puts less energy into the
+    upper partials, so the colour follows from the speed rather than standing on
+    its own.
+    """
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -2443,10 +2467,20 @@ class BowedStringSecondProperties(BowedStringProperties):
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
     initial_gain = 1.0 / 8536 / (BowedStringProperties.section_players ** 0.5)   # as the first section
-    tonal_dampening = 1.25      # darker: upper partials rolled off more
+    tonal_dampening = 1.25      # darker: the slow bow's own consequence
     max_harmonic = 32
-    chiff_cycle = 0.045         # a subtly different shimmer texture
-    sustain_jitter = 0.38
+    # THE SLOW BOW. chiff_max_valve_time is the onset ramp when attack_time is
+    # None (blockrender: `at = props.attack_time if ... else chiff_max_valve_time`;
+    # the reference agrees), and with release_valve_time unset it is the release
+    # too -- which is right, a slow draw stops slowly as well. 40 ms -> 300 ms.
+    # Both are capped at 0.45*duration, so a short note still speaks in time.
+    chiff_min_valve_time = 0.12
+    chiff_max_valve_time = 0.30
+    # sustain_jitter = 0.38 lived here until now: the leftover from before the
+    # section was seven real players. c9b648c took it to 0.0 on the parent --
+    # "the held note is the players now, not a jitter" -- and missed the
+    # subclass, so Ensemble 2 kept the noise the players were meant to replace.
+    # chiff_cycle went with it: it shaped a chiff whose volume is now zero.
 
 
 
