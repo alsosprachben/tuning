@@ -181,6 +181,7 @@ GLOBALS = (
     ("mod depth",  "cents",  0.0, 200.0, 5.0),
     ("aftertouch", "dB",     0.0, 24.0, 0.5),
     ("at tilt",    "",       0.0,  1.5, 0.05),
+    ("threads",    "x",      1.0,  8.0, 1.0),
 )
 
 
@@ -220,7 +221,8 @@ class TUI:
     def get_global(self, i):
         L = self.live
         return (self.master_db(), L.headroom_db, L.thresh, L.bend_range,
-                L.mod_cents, L.press_db, L.press_tilt)[i]
+                L.mod_cents, L.press_db, L.press_tilt,
+                float(L.renderer.K))[i]
 
     def set_global(self, i, v):
         L = self.live
@@ -243,8 +245,17 @@ class TUI:
             L.mod_cents = v
         elif i == 5:
             L.press_db = v
-        else:
+        elif i == 6:
             L.press_tilt = v
+        else:
+            # A new worker pool, swapped in by one atomic assignment. The old
+            # one is told to stop; its threads are daemons and exit on their own.
+            k = int(round(v))
+            if k != L.renderer.K:
+                old = L.renderer
+                L.renderer = LV.Renderer(L.slab, L.frames, k)
+                L.slab.dirty = True
+                old.close()
 
     # ---- edits that need a bank --------------------------------------------
     def rebuild(self, label, specs):
@@ -684,17 +695,16 @@ class TUI:
                 break
             v = self.get_global(i)
             here = (self.pane == 1 and i == self.grow)
-            col = 0 if i < 4 else (w // 2)
-            row = y + (i if i < 4 else i - 4)
-            if i >= 4:
-                row = y + i - 4
+            half = (len(GLOBALS) + 1) // 2
+            col = 0 if i < half else (w // 2)
+            row = y + (i if i < half else i - half)
             self.addstr(scr, row, col + 2, "%-11s" % name,
                         curses.A_REVERSE if here else 0)
             self.addstr(scr, row, col + 14, "%8s" % fmt(v, unit),
                         curses.A_BOLD if here else 0)
             self.addstr(scr, row, col + 24, bar(v, lo, hi, 14),
                         C("green") if here else C("dim"))
-        y += 4
+        y += (len(GLOBALS) + 1) // 2
 
         # meters
         self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
@@ -713,8 +723,9 @@ class TUI:
         lcol = "red" if load > 0.7 else ("yellow" if load > 0.4 else "dim")
         self.addstr(scr, y, 2, "cpu")
         self.addstr(scr, y, 6, bar(load, 0.0, 1.0, 22), C(lcol))
-        self.addstr(scr, y, 30, "%.2f/%.2f ms  max %.2f"
-                    % (s["render_ms"], s["budget_ms"], s["render_max"]), C(lcol))
+        self.addstr(scr, y, 30, "%.2f/%.2f ms  max %.2f%s"
+                    % (s["render_ms"], s["budget_ms"], s["render_max"],
+                       ("  x%d" % s["threads"]) if s["threads"] > 1 else ""), C(lcol))
         bad = s["under"] + s["drop"] + s["err"] + s["miss"]
         self.addstr(scr, y, 52, "under %d  drop %d  err %d  stuck %d  miss %d"
                     % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"]),
@@ -823,6 +834,9 @@ class TUI:
             "  master            capped at 0 dB: above unity the kernel hard-clips",
             "                    before the soft limiter can see the block",
             "  headroom          applies to NOTES STARTED AFTER IT, not to the mix",
+            "  threads           splits the partial table across cores. It only",
+            "                    engages when the block is big enough to be worth",
+            "                    it; 3 is usually best. Watch the cpu meter.",
             "",
             "presets",
             "  S save   L load   -- presets.json, data only; voices live in tonelib.py",
@@ -964,6 +978,8 @@ def patch_label(spec):
 
 
 def fmt(v, unit):
+    if unit == "x":
+        return "%d thread%s" % (int(v), "" if int(v) == 1 else "s")
     if unit == "dB":
         return "%+.1f dB" % v
     if unit == "cents":

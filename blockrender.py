@@ -368,20 +368,33 @@ def prepare(path, tuner='hybrid'):
 def synth_window(prep, n0, winlen):
     """Synthesise absolute samples [n0, n0+winlen) -> (L, R) float32, gained and
     clipped. Stateless (analytic phase), so a player calls it per audio block."""
+    L=np.zeros(winlen,np.float32); R=np.zeros(winlen,np.float32)
+    synth_partials(prep, n0, winlen, 0, prep['P'], L, R)
+    L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
+    return L,R
+
+def synth_partials(prep, n0, winlen, i0, i1, L, R):
+    """Render partials [i0,i1) of `prep` into L/R, with no master gain and no
+    clip. Partials are independent and the kernel accumulates into the buffers,
+    so a caller can split the table across threads and sum the results -- which
+    is what live.py does, because ctypes releases the GIL. Splitting changes the
+    ORDER of the float sum and so the last bits of the output; render() takes the
+    whole table in one call and is unaffected."""
     a=prep; lib=a['lib']
     dp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     lp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
-    L=np.zeros(winlen,np.float32); R=np.zeros(winlen,np.float32)
-    lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],a['P'],
-                    dp(a['om']),dp(a['p0']),dp(a['p0']),fp(a['aL']),fp(a['aR']),fp(a['nf']),
-                    lp(a['non']),lp(a['noff']),fp(a['fa']),fp(a['re']),fp(a['ch']),fp(a['logr']),fp(a['logrA']),fp(a['aft']),fp(a['sus']),
-                    fp(a['cv']),fp(a['cc']),fp(a['crl']),fp(a['sj']),fp(a['csc']),
-                    fp(a['tbav']),fp(a['tau']),fp(a['tcut']),fp(a['vd']),fp(a['vr']),fp(a['vp']),fp(a['delL']),fp(a['delR']),
-                    ip(a['gr']),ip(a['cr']),fp(a['G']),fp(a['S']),
+    if i0 or i1 != a['P']:
+        sl = lambda k: a[k][i0:i1]
+    else:
+        sl = lambda k: a[k]
+    lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],i1-i0,
+                    dp(sl('om')),dp(sl('p0')),dp(sl('p0')),fp(sl('aL')),fp(sl('aR')),fp(sl('nf')),
+                    lp(sl('non')),lp(sl('noff')),fp(sl('fa')),fp(sl('re')),fp(sl('ch')),fp(sl('logr')),fp(sl('logrA')),fp(sl('aft')),fp(sl('sus')),
+                    fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),
+                    fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),
+                    ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR))
-    L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
-    return L,R
 
 def render(path, tuner='hybrid'):
     prep = prepare(path, tuner)

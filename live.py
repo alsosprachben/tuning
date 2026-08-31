@@ -95,6 +95,11 @@ class Slab:
         # release(), which schedules it again -- so freeing has to be idempotent
         # or the slot is handed out twice and the free list grows past capacity.
         self.busy = np.zeros(capacity, bool)
+        # `busy` is the occupancy map, and it stays true through the release
+        # tail -- a slot is only cleared by reap(), once it has finished
+        # ringing. So it is exactly "might still make sound", which is what the
+        # renderer needs to know to split the table or to stop walking it.
+        self.dirty = True               # occupancy changed: recompute the split
         self.live = {}                  # key -> [slot indices]
         self.oneshot = {}               # keys whose note-off must be ignored
         # Non-organ voices never read G/S, but the kernel still wants pointers.
@@ -141,6 +146,7 @@ class Slab:
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
+        self.dirty = True
         a = self.a
         for k in COLS_F4:
             a[k][idx] = tmpl[k]
@@ -260,11 +266,129 @@ class Slab:
             if n > tail:
                 self.a["non"][idx] = IDLE
                 live = idx[self.busy[idx]]
-                self.busy[live] = False
+                if len(live):
+                    self.busy[live] = False
+                    self.dirty = True
                 self.free.extend(int(i) for i in live)
             else:
                 keep.append((idx, off))
         self.retiring = keep
+
+
+# Below this many occupied slots, waking threads costs more than it saves.
+# Measured, not guessed -- see Renderer.crossover() and the README table.
+PARALLEL_MIN = 700
+
+
+class Renderer:
+    """Render one block, optionally splitting the partial table across threads.
+
+    Partials are independent and the kernel ACCUMULATES into its output buffers,
+    so N threads can each take a slice of the table and the results add. ctypes
+    releases the GIL for the duration of the call, so this really is parallel
+    even though it is driven from Python.
+
+    Why it is worth doing: the chiff is a per-sample random phase on every
+    partial -- a hash plus a sincosf, inside the sample loop -- and it runs for
+    the whole attack. A six-note string chord costs 2.5 ms a block while the
+    chiff is speaking against a 2.67 ms budget, and 0.85 ms after it stops. The
+    voices where that bites are the ones where the noise IS the sound: snare
+    3.0, brass 2.6, breath and seashore 2.4, flue organ 1.3.
+
+    Why the kernel's own OpenMP does not do it: that parallelises over TIME
+    chunks, and synth_window passes CHUNK = SR, so a 128-frame block is a single
+    chunk and every core but one sits idle.
+
+    THE SPLIT MUST FOLLOW THE OCCUPANCY, not the capacity. Slots are handed out
+    from the front of the free list, so an even split of [0, capacity) gave
+    thread 0 every active partial and measured SLOWER than one thread. Splitting
+    by equal counts of occupied slots gives 2.30 -> 1.28 ms on 3 threads.
+
+    Splitting changes the ORDER of a float sum, so the output differs from the
+    single-threaded path in its last bits (measured 2e-6 relative, -114 dB).
+    Offline rendering never comes through here.
+    """
+
+    def __init__(self, slab, frames, nthreads=1):
+        self.slab = slab
+        self.frames = frames
+        self.K = max(1, int(nthreads))
+        self.n0 = 0
+        self.act = 0
+        self._b = None
+        self.stop = False
+        self.error = None
+        self.L = np.zeros(frames, np.float32)
+        self.R = np.zeros(frames, np.float32)
+        self.bufs = [(np.zeros(frames, np.float32), np.zeros(frames, np.float32))
+                     for _ in range(self.K)]
+        self.go = [threading.Event() for _ in range(self.K)]
+        self.done = [threading.Event() for _ in range(self.K)]
+        self.threads = []
+        for k in range(1, self.K):          # worker 0 is the calling thread
+            t = threading.Thread(target=self._work, args=(k,), daemon=True)
+            t.start()
+            self.threads.append(t)
+
+    def close(self):
+        self.stop = True
+        for e in self.go:
+            e.set()
+
+    def bounds(self):
+        """Split points with an equal number of OCCUPIED slots in each range,
+        recomputed only when occupancy has changed."""
+        sl = self.slab
+        if sl.dirty:
+            act = np.flatnonzero(sl.busy)
+            self.act = len(act)
+            if self.act == 0:
+                self._b = None
+            else:
+                hi = int(act[-1]) + 1
+                K = self.K
+                self._b = ([0] + [int(act[self.act * k // K]) for k in range(1, K)]
+                           + [hi])
+            sl.dirty = False
+        return self._b
+
+    def _work(self, k):
+        while True:
+            self.go[k].wait(); self.go[k].clear()
+            if self.stop:
+                return
+            try:
+                L, R = self.bufs[k]
+                L[:] = 0.0; R[:] = 0.0
+                b = self._b
+                B.synth_partials(self.slab.prep(), self.n0, self.frames,
+                                 b[k], b[k + 1], L, R)
+            except Exception as e:
+                self.error = "%s: %s" % (type(e).__name__, e)
+            finally:
+                self.done[k].set()
+
+    def render(self, n0, frames):
+        b = self.bounds()
+        L, R = self.L, self.R
+        L[:] = 0.0; R[:] = 0.0
+        if b is None:                       # nothing occupied: silence, cheaply
+            return L, R
+        if self.K == 1 or self.act < PARALLEL_MIN or frames != self.frames:
+            # One call over [0, hi). Slots past the high-water mark are idle and
+            # contribute exactly zero, so stopping there is bit-identical.
+            B.synth_partials(self.slab.prep(), n0, frames, 0, b[-1], L, R)
+        else:
+            self.n0 = n0
+            for k in range(1, self.K):
+                self.go[k].set()
+            B.synth_partials(self.slab.prep(), n0, frames, b[0], b[1], L, R)
+            for k in range(1, self.K):
+                self.done[k].wait(); self.done[k].clear()
+                L += self.bufs[k][0]; R += self.bufs[k][1]
+        L *= T.master_gain; R *= T.master_gain
+        np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
+        return L, R
 
 
 # ---- banks: the expensive, shareable half of a patch ------------------------
@@ -507,7 +631,7 @@ class Part:
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=16384,
                  tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
-                 parts=None):
+                 parts=None, threads=1):
         B.set_sample_rate(rate)
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.tuner = rate, frames, tuner
@@ -517,6 +641,7 @@ class Live:
         self.slab.rate = float(rate)
         self.headroom_db = headroom_db
         self.slab.headroom = 10.0 ** (-headroom_db / 20.0)
+        self.renderer = Renderer(self.slab, frames, threads)
         # The part set is swapped WHOLESALE by a single attribute assignment,
         # which is atomic under the GIL: the callback sees the old tuple or the
         # new one, never a half-built one. See set_parts().
@@ -862,13 +987,16 @@ class Live:
             self.apply(n0)
             self.sweep(n0)
             self.slab.reap(n0)
-            L, R = B.synth_window(self.slab.prep(), n0, frame_count)
+            L, R = self.renderer.render(n0, frame_count)
         except Exception as e:
             # Last line of defence: emit silence for this block rather than let
             # the exception propagate, which PortAudio answers by stopping.
             self.errors += 1
             self.last_error = "%s: %s" % (type(e).__name__, e)
             L = R = np.zeros(frame_count, np.float32)
+        if self.renderer.error:
+            self.errors += 1
+            self.last_error, self.renderer.error = self.renderer.error, None
         L, R = self.limit(L), self.limit(R)
         # Layering makes overload reachable, and the drop counter only reports it
         # AFTER notes are already lost. This reports it before.
@@ -898,6 +1026,7 @@ class Live:
                     under=self.underruns, drop=self.dropped, err=self.errors,
                     stuck=self.stuck, miss=self.misses,
                     render_ms=self.render_ms, render_max=self.render_max,
+                    threads=self.renderer.K, active=self.renderer.act,
                     budget_ms=self.frames * 1000.0 / self.rate,
                     last_error=self.last_error)
 
@@ -1112,7 +1241,71 @@ def selftest():
     finally:
         os.unlink(pth)
 
-    # 12. fuzz every mode: no errors, no leaks
+    # ---- the threaded renderer ---------------------------------------------
+    # 12. splitting the table across threads must not change what you hear
+    def chord(K):
+        lv = Live(rate=48000, frames=128, verbose=False, threads=K,
+                  parts=(Part(bank_for(48, False, "hybrid")),))
+        for nn in (48, 52, 55, 60, 64, 67):
+            lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
+        lv.apply(0)
+        buf = []
+        for _ in range(40):                       # right through the chiff
+            b, _f = lv.callback(None, 128, None, 0)
+            buf.append(np.frombuffer(b, np.float32))
+        out = np.concatenate(buf)
+        return lv, out
+    lv1, one = chord(1)
+    lv3, three = chord(3)
+    check("threaded render engages above PARALLEL_MIN",
+          lv3.renderer.act >= PARALLEL_MIN and lv3.renderer.K == 3,
+          "  (%d active)" % lv3.renderer.act)
+    rel = float(np.abs(three - one).max()) / max(float(np.abs(one).max()), 1e-30)
+    check("3 threads match 1 thread to the last bits", rel < 1e-4,
+          "  (%.1e relative, %.0f dB down)" % (rel, 20 * np.log10(max(rel, 1e-30))))
+    # the split follows OCCUPANCY, not capacity -- an even split of the whole
+    # slab gave thread 0 every active partial and measured slower than one
+    b = lv3.renderer.bounds()
+    per = [int(lv3.slab.busy[b[k]:b[k + 1]].sum()) for k in range(3)]
+    check("the split balances occupied slots, not slot indices",
+          max(per) <= 2 * max(min(per), 1), "  (%s)" % per)
+    lv1.down.clear(); lv3.down.clear(); lv1.sweep(lv1.n); lv3.sweep(lv3.n)
+    leak(lv3, "threaded: all slots returned")
+    lv1.renderer.close(); lv3.renderer.close()
+
+    # 13. a light block must NOT wake the pool -- below the threshold the
+    # wakeups cost more than the split saves (measured 0.96x at 560 partials)
+    lv = Live(program=56, rate=48000, frames=128, verbose=False, threads=4)
+    lv.warm()
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    lv.apply(0); lv.callback(None, 128, None, 0)
+    check("a light block takes the direct path", lv.renderer.act < PARALLEL_MIN,
+          "  (%d active)" % lv.renderer.act)
+    lv.renderer.close()
+
+    # 14. swapping the pool live, which is what the TUI's threads control does
+    lv = Live(rate=48000, frames=128, verbose=False, threads=1,
+              parts=(Part(bank_for(48, False, "hybrid")),))
+    for nn in (48, 52, 55, 60, 64, 67):
+        lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
+    lv.apply(0); lv.callback(None, 128, None, 0)
+    old = lv.renderer
+    lv.renderer = Renderer(lv.slab, lv.frames, 3)
+    lv.slab.dirty = True
+    old.close()
+    ok = True
+    for _ in range(20):
+        try:
+            lv.callback(None, 128, None, 0)
+        except Exception:
+            ok = False
+    check("the worker pool can be swapped while notes sound",
+          ok and lv.errors == 0, "" if lv.errors == 0 else "  (%s)" % lv.last_error)
+    lv.down.clear(); lv.sweep(lv.n)
+    leak(lv, "pool swap leaks no slots")
+    lv.renderer.close()
+
+    # 15. fuzz every mode: no errors, no leaks
     for prog, drums, label in ((0, False, "piano"), (19, False, "organ"), (0, True, "drums")):
         lv = Live(program=prog, rate=48000, frames=128, drums=drums, verbose=False)
         lv.warm()
@@ -1145,7 +1338,7 @@ def selftest():
               "" if lv.errors == 0 else "  (%s)" % lv.last_error)
         leak(lv, "%s: 2500 mixed events, no leak" % label)
 
-    # 13. a fuzzed LAYER + SPLIT, the configuration the TUI actually makes
+    # 16. a fuzzed LAYER + SPLIT, the configuration the TUI actually makes
     lv = Live(rate=48000, frames=128, verbose=False, parts=(
         Part(bank_for(0, True, "hybrid"), lo=21, hi=47, transpose=14),
         Part(bank_for(48, False, "hybrid"), lo=48, hi=96),
@@ -1205,6 +1398,9 @@ def main():
     ap.add_argument("--drums", action="store_true", help="GM percussion: notes are drums, not pitches")
     ap.add_argument("--headroom", type=float, default=4.0, help="dB of headroom (live cannot normalise)")
     ap.add_argument("--capacity", type=int, default=16384, help="partial slots (layering needs more)")
+    ap.add_argument("--threads", type=int, default=1,
+                help="split the partial table across N threads (3 is usually best; "
+                     "only engages above %d occupied slots)" % PARALLEL_MIN)
     ap.add_argument("--preset", default=None, help="load this preset from presets.json at startup")
     ap.add_argument("--tui", action="store_true", help="full-screen synthesiser interface")
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
@@ -1233,7 +1429,7 @@ def main():
 
     live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner,
                 drums=a.drums, headroom_db=a.headroom, capacity=a.capacity,
-                verbose=not a.tui)
+                threads=a.threads, verbose=not a.tui)
     if a.preset:
         pres = load_presets().get(a.preset)
         if not pres:
@@ -1282,6 +1478,7 @@ def main():
         pass
     finally:
         stream.stop_stream(); stream.close(); pa.terminate(); port.close()
+        live.renderer.close()
         s = live.stats()
         sys.stderr.write("\n  peak %.3f  underruns %d  dropped %d  errors %d  stuck %d  miss %d\n"
                          % (s["peak"], s["under"], s["drop"], s["err"], s["stuck"], s["miss"]))

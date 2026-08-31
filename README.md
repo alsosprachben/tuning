@@ -27,6 +27,7 @@ Then either open the panel:
 ```sh
 python3 live.py --tui --port "USB Midi" --frames 32
 python3 live.py --tui --port "USB Midi" --frames 32 --preset kit-and-strings
+python3 live.py --tui --port "USB Midi" --frames 32 --threads 3   # heavy polyphony
 ```
 
 or name one voice and play it straight away:
@@ -44,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 31 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 37 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -140,7 +141,7 @@ the soft limiter cannot help.
 
 ### How much will it carry
 
-One 128-frame block, measured with ten keys held (budget 2.67 ms):
+Steady state, one 128-frame block with ten keys held (budget 2.67 ms):
 
 | configuration | partials | median | load |
 |---|---|---|---|
@@ -150,11 +151,65 @@ One 128-frame block, measured with ten keys held (budget 2.67 ms):
 | 2× strings | 5 246 | 2.28 ms | 85% |
 | 3× strings | 7 869 | 3.36 ms | **126%** |
 
-So roughly **6 000 active partials** is the ceiling — two string sections
-layered, or a string section with anything else on top. Bigger blocks do not
-help: doubling `--frames` doubles the budget and the work together. The panel's
-`cpu` meter reports the real figure per block and turns red before notes start
-dropping, which the drop counter can only tell you afterwards.
+**But the attack costs far more than the steady state**, and that is where a
+click comes from. The chiff is a per-sample random phase on every partial — a
+hash plus a `sincosf`, inside the sample loop — and it runs for the whole
+attack. A six-note string chord:
+
+| | attack blocks | steady state |
+|---|---|---|
+| cost per block | **2.5 ms** | 0.85 ms |
+
+That is 92 ms spent at ~95% of budget while the chiff speaks, exactly when you
+have six keys down. It bites hardest on the voices where the noise *is* the
+sound: snare 3.0, brass 2.6, breath and seashore 2.4, flue organ 1.3.
+
+### Threads
+
+`--threads N` splits the partial table across cores and sums the results.
+Partials are independent, the kernel accumulates into its buffers, and `ctypes`
+releases the GIL, so it is genuinely parallel from Python.
+
+| active partials | 1 thread | 3 threads | gain |
+|---|---|---|---|
+| 280 | 0.72 ms | 0.72 ms | 1.00× |
+| 560 | 1.27 ms | 1.32 ms | 0.96× |
+| 840 | 1.91 ms | 1.52 ms | 1.25× |
+| 1 680 | 3.58 ms | 2.50 ms | 1.43× |
+| 2 415 | 5.05 ms | 3.41 ms | 1.48× |
+
+So it only engages above `PARALLEL_MIN` (700 occupied slots) — below that the
+thread wakeups cost more than the split saves. 3 is usually the best number; the
+panel has it as a live control, next to the `cpu` meter that tells you whether
+you need it.
+
+Two things this depends on. **The split must follow occupancy, not capacity**:
+slots come off the front of the free list, so an even split of `[0, capacity)`
+handed thread 0 every active partial and measured *slower* than one thread.
+And **splitting changes the order of a float sum**, so the output differs from
+the single-threaded path in its last bits — measured 2.5e-6 relative, −112 dB.
+Offline rendering never comes through this path and stays bit-identical.
+
+The kernel's own OpenMP does not help here: it parallelises over *time chunks*,
+and `synth_window` passes `CHUNK = SR`, so a 128-frame block is one chunk.
+
+### Real-time priority
+
+Worth checking before blaming the synth:
+
+```sh
+ulimit -r        # 0 means the audio thread cannot ask for real-time priority
+```
+
+PipeWire's own `pw-data-loop` runs `RR` priority 20, but a PortAudio stream
+going through the ALSA-compat shim lands on a plain `TS` thread. At 90% of
+budget that is enough to click whenever something else wants the core.
+`/etc/security/limits.d/25-pw-rlimits.conf` already grants `rtprio 95` to
+`@pipewire`, so joining that group is the fix:
+
+```sh
+sudo usermod -aG pipewire "$USER"     # then log out and back in
+```
 
 The slab holds 16384 partials by default (`--capacity`); a layered string section
 runs ~260 partials per key.
