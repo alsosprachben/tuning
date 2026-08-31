@@ -117,6 +117,14 @@ class Slab:
         self.aL0 = np.zeros(capacity, np.float32)
         self.aR0 = np.zeros(capacity, np.float32)
         self.hrel = np.ones(capacity, np.float32)   # partial freq / lowest partial
+        # The mod wheel DEEPENS a section's vibrato, it does not replace it.
+        # vbase is the vibrato this partial was built with -- the player's own,
+        # from voice_vibrato -- and vsc is that player's depth relative to their
+        # section's mean, so the wheel adds in proportion and the spread between
+        # players survives. Same shape as aL0/aR0 for aftertouch: recompute from
+        # a baseline, never scale what is already there.
+        self.vbase = np.zeros(capacity, np.float32)
+        self.vsc = np.ones(capacity, np.float32)
         # LIVE HAS NO NORMALISE. Every offline render ends in a peak normalise to
         # -1 dBFS, and the voice gains were calibrated on that assumption -- a
         # single kick peaks at 0.568 on its own, so two of them clip. A stream
@@ -178,6 +186,13 @@ class Slab:
         self.aL0[idx] = a["aL"][idx]
         self.aR0[idx] = a["aR"][idx]
         self.hrel[idx] = hrel
+        self.vbase[idx] = tmpl["vd"]
+        # Relative to this note's own mean, so a wheel of N cents means N cents
+        # of ADDED depth on an average player. A one-body voice has no spread
+        # (and often no vibrato at all), so it falls back to 1.0 and the wheel
+        # behaves exactly as it always did.
+        mv = float(np.mean(tmpl["vd"])) if n else 0.0
+        self.vsc[idx] = (tmpl["vd"] / mv) if mv > 1e-12 else 1.0
         self.live.setdefault(key, []).extend(slots)
         if oneshot:
             self.oneshot[key] = True
@@ -243,7 +258,9 @@ class Slab:
 
         before = extra(om0, vd0)
         om1 = om0 * om_scale if om_scale is not None else om0
-        vd1 = np.full(len(idx), float(vd)) if vd is not None else vd0
+        vd1 = ((self.vbase[idx].astype(np.float64)
+                + float(vd) * self.vsc[idx].astype(np.float64))
+               if vd is not None else vd0)
         after = extra(om1, vd1)
         # Both ears take the SAME increment. The interaural delay lives inside
         # each anchor already (p0 = -om*(non+d) + ph0), and continuity only asks
@@ -1251,6 +1268,48 @@ def selftest():
               shape(lv) == shape(lv2) and lv2.bend_range == 7.0)
     finally:
         os.unlink(pth)
+
+    # ---- the mod wheel on an ensemble --------------------------------------
+    # It should DEEPEN the section's vibrato, not flatten it. It used to write
+    # one depth over every player, so a wheel-up turned seven violinists into
+    # seven metronomes at exactly 35 cents.
+    lv = Live(program=48, rate=48000, frames=128, verbose=False); lv.warm()
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    idx = np.flatnonzero(lv.slab.busy)
+    def spread(a):
+        # exact, not rounded: the depths are ~0.002 apart in raw units and
+        # rounding to 5 places merged two of the seven players
+        return len(np.unique(a[idx]))
+    base = lv.slab.a["vd"][idx].copy()
+    check("section vibrato: 7 depths, 7 rates, 7 phases",
+          spread(lv.slab.a["vd"]) == 7 and spread(lv.slab.a["vr"]) == 7
+          and spread(lv.slab.a["vp"]) == 7)
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127))
+    lv.apply(128)
+    up = lv.slab.a["vd"][idx]
+    check("mod wheel deepens without flattening", spread(lv.slab.a["vd"]) == 7
+          and float(up.min()) > float(base.max()),
+          "  (%.1f-%.1f cents)" % tuple(np.log2(1 + np.array([up.min(), up.max()],
+                                                             dtype=np.float64)) * 1200))
+    check("...and leaves the rates and phases alone",
+          spread(lv.slab.a["vr"]) == 7 and spread(lv.slab.a["vp"]) == 7)
+    for v in (40, 100, 20, 127, 0):
+        lv.on_midi(mido.Message("control_change", channel=0, control=1, value=v))
+        lv.apply(256)
+    check("wheel back to 0 restores the baseline exactly (no compounding)",
+          float(np.abs(lv.slab.a["vd"][idx] - base).max()) == 0.0)
+    lv.renderer.close()
+
+    # a one-body voice has no spread to preserve and must behave as it always did
+    lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127)); lv.apply(128)
+    i2 = np.flatnonzero(lv.slab.busy)
+    cents = np.log2(1.0 + lv.slab.a["vd"][i2].astype(np.float64)) * 1200.0
+    check("one player: the wheel is still a flat 35 cents",
+          len(np.unique(lv.slab.a["vd"][i2])) == 1
+          and abs(cents[0] - lv.mod_cents) < 0.01)
+    lv.renderer.close()
 
     # ---- the threaded renderer ---------------------------------------------
     # 12. splitting the table across threads must not change what you hear
