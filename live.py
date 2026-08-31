@@ -43,6 +43,7 @@ instead of 10.7 ms, which is what keeps a struck attack from smearing.
 Usage:  live.py [--tui] [--program N] [--port SUBSTRING] [--rate HZ] [--frames N]
 """
 import sys, os, time, threading, argparse, collections, signal, itertools
+import random as _random
 
 # The kernel enters an OpenMP region per call. At a 256-frame window that is one
 # chunk -- no parallelism to gain -- and the default active wait policy spins,
@@ -67,7 +68,7 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "tbav", "tau", "tcut",
            "vd", "vr", "vp", "delL", "delR")
 COLS_I8 = ("non", "noff")
-COLS_I4 = ("gr", "cr")
+COLS_I4 = ("gr", "cr", "pl")
 ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
@@ -130,6 +131,13 @@ class Slab:
         # across the section has to survive that or seven players end up beating
         # at one speed again.
         self.vrbase = np.ones(capacity, np.float32) * 5.5
+        # Entry scatter is REDRAWN ON EVERY PRESS, which is the half of it the
+        # offline path cannot do: there the offsets are hashed off the pitch, so
+        # one pitch always scatters the same way (the reference renderer has no
+        # nominal note onset to key on -- its hammer_down is handed the moment
+        # each PARTIAL was struck). Live has a press, so repeated punches on one
+        # note land differently every time, which is what a section does.
+        self._rng = _random.Random(0x5CA7)
         # LIVE HAS NO NORMALISE. Every offline render ends in a peak normalise to
         # -1 dBFS, and the voice gains were calibrated on that assumption -- a
         # single kick peaks at 0.568 on its own, so two of them clip. A stream
@@ -174,9 +182,23 @@ class Slab:
         a["om"][idx] = tmpl["om"]
         # Phase is anchored to the note's own onset: p0 = -om*non + ph0. Shift the
         # template's anchor from its build-time onset to this one.
-        a["p0"][idx] = tmpl["p0"] + tmpl["om"] * (tmpl["non"] - n0)
-        a["p0R"][idx] = tmpl["p0R"] + tmpl["om"] * (tmpl["non"] - n0)
-        a["non"][idx] = n0
+        # Each player enters at their own instant, drawn fresh for this press.
+        # The template carries the offline scatter in its own `non`; that is
+        # discarded rather than added to.
+        scat = tmpl.get("scatter_ms", 0.0)
+        if scat and n:
+            pl = tmpl["pl"]
+            offs = np.array([self._rng.random() * scat * 0.001 * self.rate
+                             for _ in range(int(pl.max()) + 1)])
+            newnon = (n0 + offs[pl]).astype(np.int64)
+        else:
+            newnon = n0
+        # p0 = -om*(non + ear delay) + ph0, so moving the onset moves the phase
+        # anchor with it. Written against the template's OWN onsets, which makes
+        # it correct whether or not they differ from each other.
+        a["p0"][idx] = tmpl["p0"] + tmpl["om"] * (tmpl["non"] - newnon)
+        a["p0R"][idx] = tmpl["p0R"] + tmpl["om"] * (tmpl["non"] - newnon)
+        a["non"][idx] = newnon
         # A sustaining voice is held until the key is released; a struck one
         # already knows how long it rings and must not be cut short by note-off.
         a["noff"][idx] = (n0 + dur) if oneshot else IDLE
@@ -556,6 +578,7 @@ class Bank:
         t["oneshot"] = bool(t["P"]) and getattr(self._voice_class(note),
                                                 "one_shot", False)
         t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
+        t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
         t["ranks"] = {}
         if self.organ:
             # gr is the rank index the offline gate would have used, so it is
@@ -1411,6 +1434,35 @@ def selftest():
     check("one player: the wheel is still a flat 35 cents",
           len(np.unique(lv.slab.a["vd"][i2])) == 1
           and abs(cents[0] - lv.mod_cents) < 0.01)
+    lv.renderer.close()
+
+    # ---- entry scatter -----------------------------------------------------
+    lv = Live(program=61, rate=48000, frames=128, verbose=False); lv.warm()   # brass section
+    def press(l, note=55):
+        l.on_midi(mido.Message("note_on", channel=0, note=note, velocity=110)); l.apply(l.n)
+        ix = np.flatnonzero(l.slab.busy)
+        non = l.slab.a["non"][ix]; pl = l.slab.a["pl"][ix]
+        ent = tuple(sorted(int(non[pl == p].min()) - int(non.min())
+                           for p in np.unique(pl)))
+        l.on_midi(mido.Message("note_off", channel=0, note=note, velocity=0)); l.apply(l.n)
+        for _ in range(80):
+            l.callback(None, 128, None, 0)
+        return ent
+    e1 = press(lv); e2 = press(lv); e3 = press(lv)
+    check("a section's players enter at different instants",
+          len(set(e1)) == 5, "  (%s samples)" % (e1,))
+    check("and differently on every press", e1 != e2 and e2 != e3)
+    span = max(e1) / 48000.0 * 1000.0
+    check("scatter stays inside section_onset_ms", span <= 6.0 + 1e-6,
+          "  (%.2f ms of 6.0)" % span)
+    lv.down.clear(); lv.sweep(lv.n)
+    leak(lv, "entry scatter leaks no slots")
+    lv.renderer.close()
+
+    # a one-body voice must be untouched: every partial starts together
+    lv = Live(program=57, rate=48000, frames=128, verbose=False); lv.warm()   # one trombone
+    e = press(lv)
+    check("a single player still enters as one", e == (0,), "  (%s)" % (e,))
     lv.renderer.close()
 
     # ---- the threaded renderer ---------------------------------------------

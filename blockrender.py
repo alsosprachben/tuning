@@ -151,12 +151,13 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
+    _PL = [0]                # which player of a section this partial belongs to
     def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
         om = om * _PJ[0]
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
@@ -178,7 +179,7 @@ def prepare(path, tuner='hybrid'):
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
         A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
-        A["gr"].append(gr); A["cr"].append(cr)
+        A["gr"].append(gr); A["cr"].append(cr); A["pl"].append(_PL[0])
     # SCRAPED instruments expand into their individual ridge impacts before
     # anything else looks at the note list, so the choke and the envelopes all
     # see the real strokes.
@@ -279,6 +280,8 @@ def prepare(path, tuner='hybrid'):
         # aL/aR and delL/delR, so this costs nothing to render -- it is paid once
         # here, at build time. None for anything that is one body (a piano's
         # three strings share a hammer; a drum head's modes share a membrane).
+        onsets = (props.section_onsets_at(f0)
+                  if hasattr(props, 'section_onsets_at') else None)
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             li, ri, _sd0, _sd1 = seats[0]
@@ -339,7 +342,14 @@ def prepare(path, tuner='hybrid'):
                                                  if mlo else _TBN
                     vb = props.voice_vibrato(f0, 0)
                     _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
-                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_r, noff, fade, rel, chiff,
+                    # Each player enters at their own instant. `non` is already a
+                    # PER-PARTIAL column -- the organ has always used it that way,
+                    # giving each drawn rank its own speech time -- so a section's
+                    # entry scatter costs nothing but the offset. Capped at a
+                    # quarter of the note so a short one cannot start after it ends.
+                    _PL[0] = 0
+                    non_m = non_r + (min(onsets[0], 0.25*dur)*SR if onsets else 0.0)
+                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m, noff, fade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
                     for ui, (gm, off_hz, dr, ud, uph) in enumerate(props.unison_voices(f0, m, dbps)):
@@ -358,10 +368,14 @@ def prepare(path, tuner='hybrid'):
                             ugL = hv*gain*gm*props.hrtf_gain(hf, sli)
                             ugR = hv*gain*gm*props.hrtf_gain(hf, sri)
                             _DL[0] = sld*SR; _DL[1] = srd*SR
-                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_r, noff, fade, rel, chiff,
+                        _PL[0] = ui + 1
+                        non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
+                                         if (onsets and ui+1 < len(onsets)) else 0.0)
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_u, noff, fade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
+                    _PL[0] = 0
                     if seats:
                         _DL[0] = seats[0][2]*SR; _DL[1] = seats[0][3]*SR
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
@@ -394,7 +408,7 @@ def prepare(path, tuner='hybrid'):
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
-                 ("gr","i4"),("cr","i4"),("p0R","f8")):
+                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4")):
         prep[k] = arr(k, dt)
     return prep
 

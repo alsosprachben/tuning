@@ -31,6 +31,42 @@ max_v = 1.0
 rand_granularity = 100000
 
 
+def section_onset(salt, midi, index, width_ms):
+    """How late player `index` is, in seconds, 0..width_ms.
+
+    Stateless and keyed on the SECTION and the PITCH -- not on an RNG draw and
+    not on the clock. Both of those were tried and both are wrong here:
+
+      - An RNG draw in __init__, the way attack_jitter is done, desynchronises
+        the two renderers: the reference builds ONE TONE PER EAR, so it
+        constructs two properties per note where blockrender constructs one, and
+        the same player would get a different entry time in each ear.
+        (attack_jitter has that flaw today; only the piano sets it, and 0-2 ms
+        of it, so it surfaces as a small unintended ITD rather than anything
+        audible.)
+      - Keying on the note's start time gives a different scatter per entry,
+        which is what you actually want -- but the reference has no nominal
+        onset to key on. Its hammer_down receives the moment THAT PARTIAL was
+        struck, and those drift a millisecond or two apart within one note, so
+        every partial drew its own entry and the two renderers disagreed by
+        2 dB across the band.
+
+    So OFFLINE a given pitch scatters the same way every time it is played;
+    different pitches scatter differently. Live is not bound by this and redraws
+    on every key press -- see Slab.stamp_cols -- which is where repeated punches
+    on one pitch actually happen.
+    """
+    if not width_ms:
+        return 0.0
+    x = (int(salt) & 0xFFFFFFFF) * 0x9E3779B1
+    x = (x + (int(midi) << 20) + int(index)) & 0xFFFFFFFFFFFFFFFF
+    x = (x + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 30; x = (x * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 27; x = (x * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 31
+    return (x / 18446744073709551616.0) * (width_ms / 1000.0)
+
+
 def rand(second):
     """A stateless hash, not a table -- see hash01() in synthkernel.c.
 
@@ -260,6 +296,10 @@ class BasePartial:
     # with their own vibrato; None for one-body voices. See voice_vibrato().
     vibrato = None
 
+    # Which player of a section this partial belongs to, or None for a voice
+    # that is one body. Only used to look up that player's entry time.
+    player = None
+
     # Where this partial's phase accumulator starts, in CYCLES, at the onset.
     # 0 for everything struck or blown as one body; an ensemble's extra players
     # each get their own (see BowedStringProperties.unison_voices).
@@ -428,6 +468,22 @@ class BasePartial:
         # small amount so doubled voices don't attack in lockstep. Shared across
         # the note's partials (same properties), so the note stays coherent.
         second = second + self.properties.attack_jitter
+
+        # ENTRY SCATTER: this player's own start, on THIS entry. Shifting
+        # `second` is all it takes -- last_second is set from it below, so the
+        # phase accumulator starts late too, which is why the line above says
+        # attack_jitter delays "phase + envelope". blockrender does the same
+        # thing by moving the partial's `non`.
+        if self.player is not None:
+            # base_frequency, NOT `frequency`: hammer_down is handed THIS
+            # PARTIAL's frequency, so hashing the pitch off it gave every
+            # harmonic of a player its own entry time -- 32 entries per player
+            # instead of one, and 2 dB of disagreement with blockrender, which
+            # keys off the note's f0.
+            _o = self.properties.section_onsets_at(
+                getattr(self, 'base_frequency', frequency))
+            if _o and self.player < len(_o):
+                second = second + _o[self.player]
 
         # Reset the phase accumulator at the strike so the partial starts at
         # phase 0 here, regardless of when it was created. Without this a note
@@ -995,6 +1051,7 @@ class SynthProperties:
         self.pitch_jitter = (2.0 ** (_random.uniform(-self.pitch_jitter_cents, self.pitch_jitter_cents) / 1200.0) - 1.0
                              ) if self.pitch_jitter_cents else 0.0
         self.attack_jitter = _random.uniform(0.0, self.timing_jitter_seconds) if self.timing_jitter_seconds else 0.0
+
 
         # Register-scale the tension pitch-drift: bass strings displace far more
         # for a given strike, so they bloom much sharper than the treble. Grows
@@ -2013,6 +2070,23 @@ class SectionMixin:
     section_spread_cents = 0.0         # +/- pitch spread across the players
     section_vibrato_cents = 0.0        # +/- depth, per player (see the note above)
     section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
+    # Milliseconds of ENTRY SCATTER: players do not start together, and how far
+    # apart they are is set against the onset ramp they are scattering inside
+    # (40 ms for the brass section, 100 ms for the strings), not in the
+    # abstract. Drawn 0..this, never negative, as timing_jitter_seconds is --
+    # an early player would have to start before the note.
+    section_onset_ms = 0.0
+
+    def section_onsets_at(self, frequency):
+        """Per-player entry offsets in seconds. None when this voice is not a
+        section. See section_onset() for why it is keyed on the pitch."""
+        n = getattr(self, 'section_players', 1)
+        w = getattr(self, 'section_onset_ms', 0.0)
+        if n <= 1 or not w:
+            return None
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        salt = self._section_salt()
+        return [section_onset(salt, midi, i, w) for i in range(n)]
 
     def _section_salt(self):
         """A stable per-voice-class number, so two SECTIONS are two sections.
@@ -2383,6 +2457,10 @@ class BrassSectionProperties(SectionMixin, TromboneProperties):
     section_vibrato_cents = 2.5
     section_vibrato_hz = (5.0, 6.6)
     section_width_m = 0.9
+    # 6 ms inside a 40 ms onset -- about 15% of the ramp, which is a real entry
+    # rather than sloppiness. Brass scatter less than strings in absolute terms
+    # and it shows far more, because the ramp they scatter inside is 2.5x shorter.
+    section_onset_ms = 6.0
     # /sqrt(players), exactly as the string sections do it: the players are at
     # different pitches, so they are incoherent and add in POWER. This keeps a
     # brass SECTION at the same calibrated loudness as the single trombone it
@@ -2501,6 +2579,9 @@ class BowedStringProperties(SectionMixin, BlownPipeProperties):
     # Spread the desks. Wide on purpose: this is the cue that still works in the
     # bass, where the head-shadow one does not.
     section_width_m = 1.5
+    # 12 ms of entry scatter inside a 100 ms bow: a string section is looser
+    # than a brass one, but its slow onset hides most of it either way.
+    section_onset_ms = 12.0
     # KEEP THIS NON-ZERO. voice_vibrato() returns None when it is falsy, so at 0
     # a player has no depth, no rate and no phase of their own -- and the live
     # mod wheel takes its per-player proportions from exactly that, so a resting
@@ -3590,6 +3671,7 @@ class SynthTone(BaseTone):
             if hrtf:
                 main.start_phase = -harmonic_frequency * main_delay
             main.vibrato = self.properties.voice_vibrato(self.frequency, 0)   # player 0
+            main.player = 0
             self.partials.append(main)
             # Extra unison voices beat against the main partial: a couple of
             # ratio-detuned strings for a piano (the dance), a fixed-Hz spread
@@ -3618,6 +3700,7 @@ class SynthTone(BaseTone):
                     uf = harmonic_frequency * (1.0 + detune_ratio) + offset_hz
                     partial.start_phase = start_phase - uf * udelay
                 partial.vibrato = self.properties.voice_vibrato(self.frequency, ui + 1)
+                partial.player = ui + 1
                 self.partials.append(partial)
 
         # --- Phantom (longitudinal) partials for the wound bass (Conklin) ---
