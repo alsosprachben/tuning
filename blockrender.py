@@ -151,7 +151,7 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
@@ -159,7 +159,19 @@ def prepare(path, tuner='hybrid'):
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
         om = om * _PJ[0]
-        A["om"].append(om); A["p0"].append(-om*non + ph0); A["aL"].append(ampL); A["aR"].append(ampR)
+        # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
+        # delays the whole signal; delaying only the envelope leaves both ears
+        # with identical carrier phase, so a held note has no interaural time
+        # difference at all -- and below ~500 Hz, where the head casts no shadow
+        # (0.01 dB at C2), ITD is the ONLY cue there is. Measured on a C2 string
+        # chord, sustain-only peak IACC: 0.9978 as a point source, 0.9926 with
+        # the players seated but the carrier shared, 0.8382 with both. The seats
+        # supply the positions; this is what turns a position into an arrival.
+        # p0 = -om*(non + d) + ph0, i.e. exactly "this partial, delayed by d".
+        A["om"].append(om)
+        A["p0"].append(-om*(non + _DL[0]) + ph0)
+        A["p0R"].append(-om*(non + _DL[1]) + ph0)
+        A["aL"].append(ampL); A["aR"].append(ampR)
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -382,7 +394,7 @@ def prepare(path, tuner='hybrid'):
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
-                 ("gr","i4"),("cr","i4")):
+                 ("gr","i4"),("cr","i4"),("p0R","f8")):
         prep[k] = arr(k, dt)
     return prep
 
@@ -409,7 +421,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
     else:
         sl = lambda k: a[k]
     lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],i1-i0,
-                    dp(sl('om')),dp(sl('p0')),dp(sl('p0')),fp(sl('aL')),fp(sl('aR')),fp(sl('nf')),
+                    dp(sl('om')),dp(sl('p0')),dp(sl('p0R')),fp(sl('aL')),fp(sl('aR')),fp(sl('nf')),
                     lp(sl('non')),lp(sl('noff')),fp(sl('fa')),fp(sl('re')),fp(sl('ch')),fp(sl('logr')),fp(sl('logrA')),fp(sl('aft')),fp(sl('sus')),
                     fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),
                     fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),

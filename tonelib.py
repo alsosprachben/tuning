@@ -3478,6 +3478,11 @@ class SynthTone(BaseTone):
                 self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
             main = SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume,
                                  harmonic_decay, main_delay, self.ref_count)
+            # The ear delay moves the CARRIER too, not only the envelope -- see
+            # the note in blockrender.emit_partial. start_phase is in cycles, so
+            # a delay of d seconds is -f*d of them.
+            if hrtf:
+                main.start_phase = -harmonic_frequency * main_delay
             main.vibrato = self.properties.voice_vibrato(self.frequency, 0)   # player 0
             self.partials.append(main)
             # Extra unison voices beat against the main partial: a couple of
@@ -3501,6 +3506,11 @@ class SynthTone(BaseTone):
                 partial.frequency_offset = offset_hz
                 partial.detune_ratio = detune_ratio
                 partial.start_phase = start_phase
+                if hrtf:
+                    # this player's own arrival, at this player's own frequency
+                    # (blockrender uses the detuned om for the same reason)
+                    uf = harmonic_frequency * (1.0 + detune_ratio) + offset_hz
+                    partial.start_phase = start_phase - uf * udelay
                 partial.vibrato = self.properties.voice_vibrato(self.frequency, ui + 1)
                 self.partials.append(partial)
 

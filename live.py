@@ -58,7 +58,11 @@ import tonelib as T
 from percussion_map import percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL
 
 # Columns of the partial table, in the order blockrender builds them.
-COLS_F8 = ("om", "p0")
+# p0 is the LEFT ear's carrier phase and p0R the RIGHT one: the interaural
+# delay is folded into the phase anchor, p0 = -om*(non + d) + ph0, so an ear
+# really does receive the partial late rather than merely receiving its envelope
+# late. See blockrender.emit_partial.
+COLS_F8 = ("om", "p0", "p0R")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "tbav", "tau", "tcut",
            "vd", "vr", "vp", "delL", "delR")
@@ -158,6 +162,7 @@ class Slab:
         # Phase is anchored to the note's own onset: p0 = -om*non + ph0. Shift the
         # template's anchor from its build-time onset to this one.
         a["p0"][idx] = tmpl["p0"] + tmpl["om"] * (tmpl["non"] - n0)
+        a["p0R"][idx] = tmpl["p0R"] + tmpl["om"] * (tmpl["non"] - n0)
         a["non"][idx] = n0
         # A sustaining voice is held until the key is released; a struck one
         # already knows how long it rings and must not be cut short by note-off.
@@ -240,7 +245,13 @@ class Slab:
         om1 = om0 * om_scale if om_scale is not None else om0
         vd1 = np.full(len(idx), float(vd)) if vd is not None else vd0
         after = extra(om1, vd1)
-        a["p0"][idx] += (om0 - om1) * n - (after - before)
+        # Both ears take the SAME increment. The interaural delay lives inside
+        # each anchor already (p0 = -om*(non+d) + ph0), and continuity only asks
+        # that p0 + om*n be unbroken, so the difference between the ears carries
+        # through untouched -- the note bends without moving in the room.
+        step = (om0 - om1) * n - (after - before)
+        a["p0"][idx] += step
+        a["p0R"][idx] += step
         if om_scale is not None:
             a["om"][idx] = om1
         if vd is not None:
