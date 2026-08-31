@@ -1,0 +1,58 @@
+{
+  "brass-over-strings": {
+    "bend_range": 2.0,
+    "headroom_db": 8.0,
+    "master_db": -9.3,
+    "mod_cents": 35.0,
+    "parts": [
+      {"channel": null, "drawn": [], "drums": false, "hi": 96, "level_db": 0.0,
+       "lo": 21, "muted": false, "program": 48, "transpose": 0, "tuner": "hybrid"},
+      {"channel": null, "drawn": [], "drums": false, "hi": 96, "level_db": -6.0,
+       "lo": 55, "muted": false, "program": 56, "transpose": 0, "tuner": "hybrid"}
+    ],
+    "press_db": 8.0,
+    "press_tilt": 0.3,
+    "thresh": 0.7
+  },
+  "church-organ": {
+    "bend_range": 2.0,
+    "headroom_db": 8.0,
+    "master_db": -9.3,
+    "mod_cents": 35.0,
+    "parts": [
+      {"channel": null, "drawn": ["8"], "drums": false, "hi": 96, "level_db": 0.0,
+       "lo": 21, "muted": false, "program": 19, "transpose": 0, "tuner": "hybridharm"}
+    ],
+    "press_db": 8.0,
+    "press_tilt": 0.3,
+    "thresh": 0.7
+  },
+  "kit-and-strings": {
+    "bend_range": 2.0,
+    "headroom_db": 6.0,
+    "master_db": -9.3,
+    "mod_cents": 35.0,
+    "parts": [
+      {"channel": null, "drawn": [], "drums": true, "hi": 47, "level_db": 0.0,
+       "lo": 21, "muted": false, "program": 0, "transpose": 14, "tuner": "hybrid"},
+      {"channel": null, "drawn": [], "drums": false, "hi": 96, "level_db": -3.0,
+       "lo": 48, "muted": false, "program": 48, "transpose": 0, "tuner": "hybrid"}
+    ],
+    "press_db": 8.0,
+    "press_tilt": 0.3,
+    "thresh": 0.7
+  },
+  "trumpet": {
+    "bend_range": 2.0,
+    "headroom_db": 4.0,
+    "master_db": -9.3,
+    "mod_cents": 35.0,
+    "parts": [
+      {"channel": null, "drawn": [], "drums": false, "hi": 96, "level_db": 0.0,
+       "lo": 21, "muted": false, "program": 56, "transpose": 0, "tuner": "hybrid"}
+    ],
+    "press_db": 8.0,
+    "press_tilt": 0.3,
+    "thresh": 0.7
+  }
+}
