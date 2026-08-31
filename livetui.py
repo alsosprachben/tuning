@@ -179,6 +179,7 @@ GLOBALS = (
     ("limiter",    "",       0.10, 1.00, 0.02),
     ("bend range", "st",     0.0, 24.0, 0.5),
     ("mod depth",  "cents",  0.0, 200.0, 5.0),
+    ("mod rate",   "%",      0.0,  1.5, 0.05),
     ("aftertouch", "dB",     0.0, 24.0, 0.5),
     ("at tilt",    "",       0.0,  1.5, 0.05),
     ("threads",    "x",      1.0,  8.0, 1.0),
@@ -221,7 +222,7 @@ class TUI:
     def get_global(self, i):
         L = self.live
         return (self.master_db(), L.headroom_db, L.thresh, L.bend_range,
-                L.mod_cents, L.press_db, L.press_tilt,
+                L.mod_cents, L.mod_rate, L.press_db, L.press_tilt,
                 float(L.renderer.K))[i]
 
     def set_global(self, i, v):
@@ -244,8 +245,10 @@ class TUI:
         elif i == 4:
             L.mod_cents = v
         elif i == 5:
-            L.press_db = v
+            L.mod_rate = v
         elif i == 6:
+            L.press_db = v
+        elif i == 7:
             L.press_tilt = v
         else:
             # A new worker pool, swapped in by one atomic assignment. The old
@@ -984,6 +987,8 @@ def fmt(v, unit):
         return "%+.1f dB" % v
     if unit == "cents":
         return "%.0f c" % v
+    if unit == "%":
+        return "+%.0f%%" % (v * 100.0)
     if unit == "st":
         return "%.1f st" % v
     return "%.2f" % v

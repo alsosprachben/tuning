@@ -125,6 +125,11 @@ class Slab:
         # a baseline, never scale what is already there.
         self.vbase = np.zeros(capacity, np.float32)
         self.vsc = np.ones(capacity, np.float32)
+        # ...and the rate, which the wheel scales rather than sets: a player
+        # leaning into a vibrato widens AND quickens it, and the spread of rates
+        # across the section has to survive that or seven players end up beating
+        # at one speed again.
+        self.vrbase = np.ones(capacity, np.float32) * 5.5
         # LIVE HAS NO NORMALISE. Every offline render ends in a peak normalise to
         # -1 dBFS, and the voice gains were calibrated on that assumption -- a
         # single kick peaks at 0.568 on its own, so two of them clip. A stream
@@ -187,6 +192,7 @@ class Slab:
         self.aR0[idx] = a["aR"][idx]
         self.hrel[idx] = hrel
         self.vbase[idx] = tmpl["vd"]
+        self.vrbase[idx] = tmpl["vr"]
         # Relative to this note's own mean, so a wheel of N cents means N cents
         # of ADDED depth on an average player. A one-body voice has no spread
         # (and often no vibrato at all), so it falls back to 1.0 and the wheel
@@ -226,7 +232,7 @@ class Slab:
         self.a["aL"][idx] = self.aL0[idx] * shape
         self.a["aR"][idx] = self.aR0[idx] * shape
 
-    def retune(self, slots, n, om_scale=None, vd=None):
+    def retune(self, slots, n, om_scale=None, vd=None, vrs=None):
         """Change a sounding partial's pitch or vibrato WITHOUT a click.
 
         A partial's phase is ph = p0 + om*n, plus the vibrato's accumulated
@@ -246,22 +252,29 @@ class Slab:
         a = self.a
         om0 = a["om"][idx].copy()
         vd0 = a["vd"][idx].astype(np.float64)
-        vr = np.maximum(a["vr"][idx].astype(np.float64), 1e-6)
+        vr0 = np.maximum(a["vr"][idx].astype(np.float64), 1e-6)
         vp = a["vp"][idx].astype(np.float64)
         ton = a["non"][idx].astype(np.float64) / self.rate
         tn = n / self.rate
-        w2 = 2.0 * np.pi * vr
-        swing = np.cos(w2 * ton + vp) - np.cos(w2 * tn + vp)
 
-        def extra(om, vd):
-            return (om * self.rate / (2.0 * np.pi)) * vd / vr * swing
+        # The RATE is inside the accumulated extra phase too, not only the depth
+        # -- the kernel's term is (f*d/r)*(cos(2*pi*r*ton + p) - cos(2*pi*r*t + p))
+        # -- so a rate change has to be evaluated on both sides of the swap or it
+        # steps the phase and clicks. Hence r as an argument rather than a
+        # closure over one value.
+        def extra(om, vd, r):
+            w2 = 2.0 * np.pi * r
+            swing = np.cos(w2 * ton + vp) - np.cos(w2 * tn + vp)
+            return (om * self.rate / (2.0 * np.pi)) * vd / r * swing
 
-        before = extra(om0, vd0)
+        vr1 = (np.maximum(self.vrbase[idx].astype(np.float64) * float(vrs), 1e-6)
+               if vrs is not None else vr0)
+        before = extra(om0, vd0, vr0)
         om1 = om0 * om_scale if om_scale is not None else om0
         vd1 = ((self.vbase[idx].astype(np.float64)
                 + float(vd) * self.vsc[idx].astype(np.float64))
                if vd is not None else vd0)
-        after = extra(om1, vd1)
+        after = extra(om1, vd1, vr1)
         # Both ears take the SAME increment. The interaural delay lives inside
         # each anchor already (p0 = -om*(non+d) + ph0), and continuity only asks
         # that p0 + om*n be unbroken, so the difference between the ears carries
@@ -273,6 +286,8 @@ class Slab:
             a["om"][idx] = om1
         if vd is not None:
             a["vd"][idx] = vd1
+        if vrs is not None:
+            a["vr"][idx] = vr1
 
     def release(self, key, n):
         """Note-off: one write per partial. The kernel picks it up next block."""
@@ -696,6 +711,14 @@ class Live:
         self.pressure = {}      # channel -> aftertouch 0..1
         self.bend_range = 2.0   # semitones at full wheel, the GM convention
         self.mod_cents = 35.0   # cents of vibrato at full mod wheel
+        # ...and how much FASTER it gets there. Depth and rate move together on
+        # a real instrument: leaning into a vibrato widens and quickens it at
+        # once, and a wheel that only widens reads as a effect rather than a
+        # player. Proportional, so the section's spread of rates survives --
+        # 4.8-6.3 Hz at rest becomes 6.0-7.9 at full, which is where an intense
+        # string vibrato actually sits.
+        self.mod_rate = 0.25    # +25% rate at full wheel
+        self.modw = {}          # channel -> wheel position 0..1
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = 8.0     # crescendo at full aftertouch
         self.press_tilt = 0.30  # and it brightens as it swells: see Slab.press
@@ -794,10 +817,12 @@ class Live:
                     # agrees on after dynamics. The machinery already exists --
                     # it is the per-player vibrato built for the string sections
                     # -- so here it is simply driven by hand instead of by seed.
-                    depth = (2.0 ** (self.mod_cents * msg.value / 127.0 / 1200.0)) - 1.0
+                    w = msg.value / 127.0
+                    depth = (2.0 ** (self.mod_cents * w / 1200.0)) - 1.0
                     self.mod[ch] = depth
+                    self.modw[ch] = w
                     self.slab.retune(self._sounding(ch, pids={p.pid for p in others}),
-                                     n0, vd=depth)
+                                     n0, vd=depth, vrs=1.0 + self.mod_rate * w)
             elif msg.control == 64:                 # sustain pedal
                 downp = msg.value >= 64
                 was = self.pedal.get(ch, False)
@@ -885,9 +910,11 @@ class Live:
         if pr:
             self.slab.press(slots, pr, self.press_db, self.press_tilt)
         b, v = self.bend.get(ch, 1.0), self.mod.get(ch, 0.0)
-        if b != 1.0 or v != 0.0:
+        w = self.modw.get(ch, 0.0)
+        if b != 1.0 or v != 0.0 or w != 0.0:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
-                             vd=(v if v != 0.0 else None))
+                             vd=(v if v != 0.0 else None),
+                             vrs=(1.0 + self.mod_rate * w) if w != 0.0 else None)
 
     def _note_off(self, part, ch, note, n0):
         if part.organ:
@@ -1280,7 +1307,8 @@ def selftest():
         # exact, not rounded: the depths are ~0.002 apart in raw units and
         # rounding to 5 places merged two of the seven players
         return len(np.unique(a[idx]))
-    base = lv.slab.a["vd"][idx].copy()
+    base = lv.slab.a["vd"][idx].copy(); baser = lv.slab.a["vr"][idx].copy()
+    basep = lv.slab.a["vp"][idx].copy()
     check("section vibrato: 7 depths, 7 rates, 7 phases",
           spread(lv.slab.a["vd"]) == 7 and spread(lv.slab.a["vr"]) == 7
           and spread(lv.slab.a["vp"]) == 7)
@@ -1291,14 +1319,54 @@ def selftest():
           and float(up.min()) > float(base.max()),
           "  (%.1f-%.1f cents)" % tuple(np.log2(1 + np.array([up.min(), up.max()],
                                                              dtype=np.float64)) * 1200))
-    check("...and leaves the rates and phases alone",
-          spread(lv.slab.a["vr"]) == 7 and spread(lv.slab.a["vp"]) == 7)
+    check("...and leaves the players' PHASES alone",
+          spread(lv.slab.a["vp"]) == 7
+          and float(np.abs(lv.slab.a["vp"][idx] - basep).max()) == 0.0)
+    # EVERY player quickens, not merely the range as a whole -- the resting and
+    # raised ranges overlap (4.82-6.31 -> 6.02-7.89), so comparing the extremes
+    # proves nothing. Compare each player against their own resting rate.
+    check("mod wheel quickens as well as deepens, per player",
+          spread(lv.slab.a["vr"]) == 7
+          and bool((lv.slab.a["vr"][idx] > baser).all()),
+          "  (%.2f-%.2f -> %.2f-%.2f Hz)"
+          % (baser.min(), baser.max(),
+             lv.slab.a["vr"][idx].min(), lv.slab.a["vr"][idx].max()))
     for v in (40, 100, 20, 127, 0):
         lv.on_midi(mido.Message("control_change", channel=0, control=1, value=v))
         lv.apply(256)
     check("wheel back to 0 restores the baseline exactly (no compounding)",
-          float(np.abs(lv.slab.a["vd"][idx] - base).max()) == 0.0)
+          float(np.abs(lv.slab.a["vd"][idx] - base).max()) == 0.0
+          and float(np.abs(lv.slab.a["vr"][idx] - baser).max()) == 0.0)
     lv.renderer.close()
+
+    # THE RATE IS INSIDE THE ACCUMULATED PHASE, not only the depth: the kernel's
+    # vibrato term is (f*d/r)*(cos(2*pi*r*ton+vp) - cos(2*pi*r*t+vp)), so moving
+    # r without re-deriving the anchor steps the phase. Measured, that step is
+    # 53 radians -- eight cycles -- on every partial. Asserted here rather than
+    # left to the ear, because an audio-domain click test could not see it: an
+    # 8-sample slew window on an already-oscillating signal read 2.3x against
+    # 2.1x, indistinguishable, while the phase itself was out by 8 cycles.
+    def total_phase(slab, ix, n):
+        a = slab.a
+        om = a["om"][ix]; d = a["vd"][ix].astype(np.float64)
+        r = np.maximum(a["vr"][ix].astype(np.float64), 1e-6)
+        vp = a["vp"][ix].astype(np.float64)
+        ton = a["non"][ix].astype(np.float64) / slab.rate
+        f = om * slab.rate / (2 * np.pi); w2 = 2 * np.pi * r
+        return (a["p0"][ix] + om * n
+                + (f * d / r) * (np.cos(w2 * ton + vp) - np.cos(w2 * n / slab.rate + vp)))
+    for prog, label in ((48, "section"), (56, "one player")):
+        lv = Live(program=prog, rate=48000, frames=128, verbose=False); lv.warm()
+        lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+        for _ in range(40):
+            lv.callback(None, 128, None, 0)
+        ix = np.flatnonzero(lv.slab.busy); n = lv.n
+        was = total_phase(lv.slab, ix, n)
+        lv.slab.retune(list(ix), n, vd=0.0203, vrs=1.25)
+        jump = float(np.abs(total_phase(lv.slab, ix, n) - was).max())
+        check("%s: changing depth AND rate does not step the phase" % label,
+              jump < 1e-3, "  (%.1e rad)" % jump)
+        lv.renderer.close()
 
     # a one-body voice has no spread to preserve and must behave as it always did
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()

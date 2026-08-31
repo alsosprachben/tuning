@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 37 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 46 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -108,7 +108,7 @@ there is no sound the engine can make that the repo does not describe in code.
 |---|---|
 | velocity | loudness; on the piano also **timbre**, via eight velocity bands |
 | pitch bend | ±2 semitones (`bend_range`) |
-| mod wheel | vibrato, 35 cents at full (`mod_cents`) |
+| mod wheel | vibrato: 35 cents deeper **and 25% faster** at full (`mod_cents`, `mod_rate`) |
 | mod wheel *on the organ* | **draws stops** in crescendo order: 8′ 4′ 2′ 2⅔ 16′ 5⅓ |
 | aftertouch | crescendo, +8 dB and brighter together (`press_db`, `press_tilt`) |
 | mod wheel *with layers* | each part answers in its own way at once — the organ layer draws stops while the string layer vibrates |
@@ -117,7 +117,15 @@ there is no sound the engine can make that the repo does not describe in code.
 
 Pitch bend, mod wheel and aftertouch are all phase-continuous: they recompute the
 partial's total phase and put the difference back into its anchor, so nothing
-clicks. A stop drawn mid-chord speaks as a **fresh pipe**, with its own attack.
+clicks. That includes the vibrato RATE, which sits inside the accumulated phase
+as well as the depth — moving it without re-deriving the anchor steps every
+partial by about 53 radians, eight whole cycles.
+
+On a section the wheel **deepens and quickens what each player was already
+doing** rather than writing one value over all of them: seven violinists go from
+3.7–4.8 cents at 4.8–6.3 Hz to 35–45 cents at 6.0–7.9 Hz, keeping their spread.
+`section_vibrato_cents` must stay non-zero for that — at 0 a player has no depth,
+rate or phase of their own for the wheel to take proportions from. A stop drawn mid-chord speaks as a **fresh pipe**, with its own attack.
 
 ### Two settings that matter
 
