@@ -893,6 +893,48 @@ class SynthProperties:
         None for anything that is one body rather than several people.
         """
         return None
+
+    # Metres each side of the section's centre that its players occupy. 0 is one
+    # point source, which is RIGHT for a piano's three strings (one hammer, one
+    # bridge point) and a drum head's modes, and wrong for people in chairs --
+    # so it stays 0 here and only an actual ensemble turns it on.
+    section_width_m = 0.0
+
+    def section_position_x(self, index):
+        """Where player `index` sits, in metres (+ = right).
+
+        WHY THIS MATTERS MOST IN THE BASS. Below about 500 Hz the head casts no
+        shadow -- at C2 the level difference between the ears from a single
+        source is 0.01 dB -- so the only binaural cue left down there is arrival
+        TIME. Seven players sharing one position share one ITD exactly, and the
+        section collapses to a point source in precisely the register where the
+        level cue has already given up. Spread across the desks they get seven
+        different ITDs (about 460 us end to end at 1.5 m), which is the cue the
+        ear actually uses at those frequencies.
+
+        Players sit at FIXED DESKS: the seating depends on the section and the
+        player, never on the note, so the ensemble holds still while the music
+        moves through it. Seeded off _section_salt, so two string patches are two
+        different orchestras rather than the same one twice.
+        """
+        n = getattr(self, 'section_players', 1)
+        w = self.section_width_m
+        if n <= 1 or not w:
+            return self.position_x
+        # Spread across the desks, with a little jitter so they are not on a
+        # perfect grid -- a grid of equal spacings is its own kind of comb.
+        rng = _random.Random(0x5EA7 + index * 7919 + self._section_salt() * 65537)
+        span = (2.0 * index / float(n - 1)) - 1.0        # -1 .. +1
+        return self.position_x + w * (span + rng.uniform(-0.5, 0.5) / n)
+
+    def section_seats(self, channel=None):
+        """Per-player (left_inc, right_inc, left_delay, right_delay), or None if
+        this voice is one body rather than an ensemble. Once per note, never per
+        partial -- the kernel already carries per-partial ear gain and delay."""
+        if not self.section_width_m or getattr(self, 'section_players', 1) <= 1:
+            return None
+        return [self.hrtf_at(self.section_position_x(i))
+                for i in range(self.section_players)]
     def aftersound(self, frequency, decay_rate):
         """Two-stage decay parameters (slow-tail energy fraction, slow rate in
         dbps) for a note at this fundamental. Default: none -- a single
@@ -2290,6 +2332,9 @@ class BowedStringProperties(BlownPipeProperties):
     # the rates themselves never change. Every real player has a vibrato, so the
     # beat rates wander and never settle into a pattern. Narrow on purpose --
     # this is a section's collective warmth, not a soloist's expressive vibrato.
+    # Spread the desks. Wide on purpose: this is the cue that still works in the
+    # bass, where the head-shadow one does not.
+    section_width_m = 1.5
     section_vibrato_cents = 5.0        # +/- depth
     section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
 
@@ -3366,7 +3411,15 @@ class SynthTone(BaseTone):
                 1: self.properties.right_incidence,
             }[self.audio_channel]
             self.pan = 1.0
+            # A section's players sit at their own desks, so each gets its own
+            # incidence and its own arrival time -- for THIS ear. None for a
+            # voice that is one body. See SynthProperties.section_position_x.
+            _seats = self.properties.section_seats()
+            self.seats = (None if not _seats else
+                          [(li, ld) for li, ri, ld, rd in _seats] if self.audio_channel == 0
+                          else [(ri, rd) for li, ri, ld, rd in _seats])
         else:
+            self.seats = None
             self.delay = {
                 0: self.properties.left_delay,
                 1: self.properties.right_delay,
@@ -3409,9 +3462,11 @@ class SynthTone(BaseTone):
                 break
 
             harmonic_volume_raw = self.properties.harmonic_volume(harmonic)
+            main_inc, main_delay = (self.seats[0] if self.seats
+                                    else (getattr(self, 'incidence', 0.0), self.delay))
             harmonic_volume = harmonic_volume_raw * self.pan
             if hrtf:
-                harmonic_volume *= self.properties.hrtf_gain(harmonic_frequency, self.incidence)
+                harmonic_volume *= self.properties.hrtf_gain(harmonic_frequency, main_inc)
             if harmonic_volume == 0.0:
                 continue
 
@@ -3422,7 +3477,7 @@ class SynthTone(BaseTone):
             errlog("SimplePartial(%s, %s, %s, %s, %s)" % (
                 self.frequency, harmonic, harmonic_volume, harmonic_decay, self.delay))
             main = SimplePartial(self.properties, self.frequency, harmonic, harmonic_volume,
-                                 harmonic_decay, self.delay, self.ref_count)
+                                 harmonic_decay, main_delay, self.ref_count)
             main.vibrato = self.properties.voice_vibrato(self.frequency, 0)   # player 0
             self.partials.append(main)
             # Extra unison voices beat against the main partial: a couple of
@@ -3431,9 +3486,18 @@ class SynthTone(BaseTone):
             # gain, detune (Hz and/or ratio), and decay.
             for ui, (gain_mult, offset_hz, detune_ratio, unison_decay, start_phase) in \
                     enumerate(self.properties.unison_voices(self.frequency, harmonic, harmonic_decay)):
+                # This player's chair. The shadow is read at the NOMINAL
+                # harmonic, as the main voice's is: a few cents of detune moves
+                # it by nothing, and the two renderers have to agree.
+                uinc, udelay = (self.seats[ui + 1]
+                                if self.seats and ui + 1 < len(self.seats)
+                                else (main_inc, main_delay))
+                uvol = harmonic_volume_raw * self.pan
+                if hrtf:
+                    uvol *= self.properties.hrtf_gain(harmonic_frequency, uinc)
                 partial = SimplePartial(self.properties, self.frequency, harmonic,
-                                        harmonic_volume * gain_mult, unison_decay,
-                                        self.delay, self.ref_count)
+                                        uvol * gain_mult, unison_decay,
+                                        udelay, self.ref_count)
                 partial.frequency_offset = offset_hz
                 partial.detune_ratio = detune_ratio
                 partial.start_phase = start_phase

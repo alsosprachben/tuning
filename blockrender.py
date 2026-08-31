@@ -262,6 +262,15 @@ def prepare(path, tuner='hybrid'):
         _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
+        # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate
+        # source and gets its own ears; the kernel already carries per-partial
+        # aL/aR and delL/delR, so this costs nothing to render -- it is paid once
+        # here, at build time. None for anything that is one body (a piano's
+        # three strings share a hammer; a drum head's modes share a membrane).
+        seats = props.section_seats() if hasattr(props,'section_seats') else None
+        if seats:
+            li, ri, _sd0, _sd1 = seats[0]
+            _DL[0] = _sd0*SR; _DL[1] = _sd1*SR
         cv = props.chiff_volume; cc = props.chiff_cycle
         crl = getattr(props,'chiff_release',1.0) or 0.0; sjit = props.sustain_jitter; csc = f0/440.0
         _TB[0] = getattr(props,'tension_bend',0.0) * props.attack_volume
@@ -327,10 +336,22 @@ def prepare(path, tuner='hybrid'):
                         uf = hf*(1.0+dr) + off_hz
                         if uf <= 0 or uf > SR/2: continue
                         ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
-                        emit_partial(2*math.pi*uf/SR, gL*gm, gR*gm, uf, non_r, noff, fade, rel, chiff,
+                        ugL, ugR = gL*gm, gR*gm
+                        if seats and ui + 1 < len(seats):
+                            # this player's chair, not the section's centre. The
+                            # shadow is read at the NOMINAL harmonic, as the main
+                            # voice's is -- a few cents of detune moves it by
+                            # nothing, and the two renderers must agree.
+                            sli, sri, sld, srd = seats[ui + 1]
+                            ugL = hv*gain*gm*props.hrtf_gain(hf, sli)
+                            ugR = hv*gain*gm*props.hrtf_gain(hf, sri)
+                            _DL[0] = sld*SR; _DL[1] = srd*SR
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_r, noff, fade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
+                    if seats:
+                        _DL[0] = seats[0][2]*SR; _DL[1] = seats[0][3]*SR
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
         # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
         # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano
