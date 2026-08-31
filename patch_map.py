@@ -23,6 +23,11 @@ from tonelib import (
     MalletProperties,
     BowedStringProperties,
     BowedStringSecondProperties,
+    ViolinProperties,
+    ViolaProperties,
+    CelloProperties,
+    ContrabassProperties,
+    slow_bow,
     FlueOrganProperties,
     ReedOrganProperties,
     BrassProperties,
@@ -90,6 +95,10 @@ _fill(32, 39, PluckedStringProperties)
 # 40-47  Strings / orchestral
 _fill(40, 44, BowedStringProperties)   # violin, viola, cello, contrabass, tremolo
 PROGRAM_CLASS[45] = PluckedStringProperties  # pizzicato strings
+PROGRAM_CLASS[40] = ViolinProperties         # each instrument now has its own body
+PROGRAM_CLASS[41] = ViolaProperties
+PROGRAM_CLASS[42] = CelloProperties
+PROGRAM_CLASS[43] = ContrabassProperties
 PROGRAM_CLASS[46] = PluckedStringProperties  # orchestral harp
 PROGRAM_CLASS[47] = TimpaniProperties         # tuned membrane over a bowl, not a bar
 # 48-55  Ensemble (strings, choir, voices, orchestra hit)
@@ -164,6 +173,39 @@ PROGRAM_CLASS[127] = GunshotProperties       # A-Team "Gun Shot"
 def property_class_for_program(program):
     """Return the property class for a 0-based GM program number."""
     return PROGRAM_CLASS.get(program & 0x7F, PluckedStringProperties)
+
+
+# An ENSEMBLE patch is not one instrument, so a single note of it should be
+# played by whichever instrument actually plays that note -- basses at the
+# bottom, violins at the top -- each with its own body. Same shape as
+# percussion_map.percussion_for_note, which has always picked a voice class per
+# note rather than per program.
+#
+# The boundaries are where the sections hand over in ordinary scoring, not where
+# the instruments' ranges end (they overlap heavily): below C2 is bass
+# territory, C2-B2 is cello, C3-B3 is where violas sit, C4 and up is violins.
+BOWED_SPLIT = ((36, ContrabassProperties),      # below C2
+               (48, CelloProperties),           # C2 - B2
+               (60, ViolaProperties),           # C3 - B3
+               (128, ViolinProperties))         # C4 and up
+
+# Programs that are a whole section rather than a named instrument.
+BOWED_ENSEMBLE = {44, 48, 50, 51}
+BOWED_ENSEMBLE_SLOW = {49}
+
+
+def property_class_for_note(program, note):
+    """The voice class for one NOTE of one program.
+
+    Identical to property_class_for_program for everything except the bowed
+    ensembles, where it picks the instrument whose register the note is in.
+    """
+    prog = program & 0x7F
+    if prog in BOWED_ENSEMBLE or prog in BOWED_ENSEMBLE_SLOW:
+        for hi, cls in BOWED_SPLIT:
+            if note < hi:
+                return slow_bow(cls) if prog in BOWED_ENSEMBLE_SLOW else cls
+    return property_class_for_program(prog)
 
 # Each brass instrument has its own comfortable register and its own bore, so
 # they cannot share one class: doing so boosted the trombone 3 dB through its

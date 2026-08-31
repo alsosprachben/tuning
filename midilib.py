@@ -13,7 +13,7 @@ All rights reserved.
 """
 
 from patches import patches
-from patch_map import property_class_for_program
+from patch_map import property_class_for_program, property_class_for_note
 from percussion_map import percussion_for_note, GM_PERCUSSION_CHANNEL
 
 # Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
@@ -940,7 +940,9 @@ class Note:
 
         # Data-driven GM routing: every program maps to a physical-model
         # bucket in patch_map (0-based program numbers).
-        property_class = property_class_for_program(self.channel.program)
+        # per NOTE, so an ensemble patch routes to the instrument whose
+        # register the note is in -- see patch_map.property_class_for_note
+        property_class = property_class_for_note(self.channel.program, self.n)
 
         # Organ voices take their channel level from the LIVE swell (CC7), applied
         # per partial at render time (SynthTone.sum_values), not baked here -- so

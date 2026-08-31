@@ -20,7 +20,7 @@ Usage: python3 blockrender.py IN.mid OUT.wav [tuner]
 import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import tonelib as T, midilib
-from patch_map import property_class_for_program
+from patch_map import property_class_for_program, property_class_for_note
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
 
@@ -231,7 +231,7 @@ def prepare(path, tuner='hybrid'):
             organ = False; chan_vol = (v7*v11)**2
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
-            pc = property_class_for_program(ch_prog.get(ch,0))
+            pc = property_class_for_note(ch_prog.get(ch,0), note)
             organ = getattr(pc,'registerable',False)
             chan_vol = 1.0 if organ else (v7*v11)**2
             f0 = FREQ[note]

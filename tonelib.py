@@ -2044,7 +2044,18 @@ class FormantBody:
         for centre, bandwidth, depth in self.antiformants:
             d = (partial_hz - centre) / (bandwidth * 0.5)
             g *= 1.0 - depth / (1.0 + d * d)
-        return g / (1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order)
+        g /= 1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order
+        # A BODY THAT SMALL CANNOT RADIATE THAT LOW. Below its lowest air mode a
+        # violin family box stops coupling to the room, and the fundamental goes
+        # with it: the Iowa cello's low C has its fundamental 11.2 dB BELOW its
+        # strongest partial, where a monotonic model makes h1 the strongest by
+        # construction. Same highpass SynthProperties.bore_gain uses for a brass
+        # bell, which FormantBody had been dropping. No-op at 0, which is what
+        # every voice that had formants before this line was written has.
+        if self.bell_cutoff_hz:
+            x = (partial_hz / self.bell_cutoff_hz) ** self.bell_order
+            g *= x / (1.0 + x)
+        return g
 
 
 class SectionMixin:
@@ -2607,6 +2618,102 @@ class BowedStringProperties(SectionMixin, BlownPipeProperties):
     tonal_dampening = 1.0
     octave_dampening = 0.05
     octave_modulo = False
+
+
+# --- The violin family, one class per instrument -----------------------------
+#
+# Until now violin, viola, cello and contrabass shared ONE class with no body at
+# all -- a 3 kHz lowpass and octave_dampening -- and the Iowa recordings say a
+# single body cannot serve them. Pooling every harmonic of every note by ABSOLUTE
+# frequency (a body resonance is a boost at a fixed frequency whatever harmonic
+# lands on it, so it survives the pooling and the 1/n tilt does not):
+#
+#   violin   1.9-2.7 kHz  +7.7 dB   <- the bridge hill
+#   cello      168-240 Hz +5.5 dB, 800-950 Hz +7.4 dB, 1.9-2.3 kHz +4.5 dB
+#
+# Different boxes, in different places. The old shared class matched the CELLO
+# within 1.5 dB over h2-h12 and was 6.0 dB too dark on the VIOLIN, which is what
+# you would expect of a model with no bridge hill in it.
+#
+# Viola and contrabass were NOT recorded here. Their resonances are scaled from
+# the measured neighbours by body length -- a viola box is about 1.15x a violin's
+# so its modes sit about 0.85x as high, a contrabass about 0.55x a cello's --
+# which is a defensible guess and not a measurement. Marked as such.
+
+class ViolinProperties(FormantBody, BowedStringProperties):
+    """MEASURED: Iowa Violin.arco.mf, sulD and sulG, 15 notes."""
+    formants = ((2300.0, 1400.0, 0.55),)     # the bridge hill
+    # FITTED, not carried over. A body doing part of the rolloff means the
+    # SOURCE must do less of it or the two compound -- carrying the old
+    # tonal_dampening = 1.0 across left the violin 2.5 dB too bright. Grid search
+    # over (tonal_dampening, formant_floor) against the Iowa violin, h1-h12:
+    # RMS 2.03 dB, h2-h12 mean -0.4.
+    formant_floor = 0.05
+    tonal_dampening = 1.6
+    bore_corner_hz = 4000.0                  # above the hill, not through it
+    bore_order = 2.0
+    # Its lowest string is G3 = 196 Hz and the Iowa D4 fundamental is the
+    # strongest partial in the note, so the box radiates its whole range: the
+    # cutoff sits below the instrument rather than inside it.
+    bell_cutoff_hz = 150.0
+    bell_order = 1.5
+
+
+class ViolaProperties(FormantBody, BowedStringProperties):
+    """INTERPOLATED from the violin by body length (~0.85x its frequencies)."""
+    formants = ((1950.0, 1300.0, 0.55), (600.0, 400.0, 0.30))
+    formant_floor = 0.05
+    tonal_dampening = 1.7       # interpolated between the fitted violin and cello
+    bore_corner_hz = 3600.0
+    bore_order = 2.0
+    bell_cutoff_hz = 300.0
+    bell_order = 2.0
+
+
+class CelloProperties(FormantBody, BowedStringProperties):
+    """MEASURED: Iowa Cello.arco.mf, sulC and sulD, 14 notes."""
+    formants = ((190.0, 90.0, 0.45), (870.0, 500.0, 0.60), (2050.0, 900.0, 0.35))
+    formant_floor = 0.05        # fitted: RMS 4.95 dB over the D3 and C2 files
+    tonal_dampening = 1.8
+    bore_corner_hz = 3000.0
+    bore_order = 2.0
+    # Measured: the low C's fundamental sits 11.2 dB under the strongest partial.
+    # 240 Hz / order 2 puts ours at -12.9 with h3 strongest, against Iowa's -11.2
+    # with h2 strongest -- the same shape, which a monotonic model cannot make at
+    # all because it puts h1 on top by construction.
+    bell_cutoff_hz = 240.0
+    bell_order = 2.0
+
+
+class ContrabassProperties(FormantBody, BowedStringProperties):
+    """INTERPOLATED from the cello by body length (~0.55x its frequencies)."""
+    formants = ((105.0, 55.0, 0.45), (480.0, 300.0, 0.60), (1150.0, 600.0, 0.35))
+    formant_floor = 0.05
+    tonal_dampening = 1.9       # extrapolated below the fitted cello
+    bore_corner_hz = 2400.0
+    bore_order = 2.0
+    bell_cutoff_hz = 135.0
+    bell_order = 2.0
+
+
+_SLOW_BOW = {}
+
+
+def slow_bow(cls):
+    """The same instrument, drawn slowly -- GM 49, `SlowStr`. Cached per class,
+    the way percussion_map._with_ring makes its per-note ring subclasses, so the
+    second ensemble gets the same four bodies rather than losing them."""
+    got = _SLOW_BOW.get(cls)
+    if got is None:
+        got = type(cls.__name__.replace("Properties", "") + "SlowProperties", (cls,), {
+            "chiff_min_valve_time": 0.12,
+            "chiff_max_valve_time": 0.30,
+            "tonal_dampening": cls.tonal_dampening + 0.25,
+            "max_harmonic": 32,
+            "__doc__": "%s with the slow bow of GM 49." % cls.__name__,
+        })
+        _SLOW_BOW[cls] = got
+    return got
 
 
 class BowedStringSecondProperties(BowedStringProperties):
