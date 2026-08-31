@@ -12,6 +12,7 @@ and editing this table -- the dispatch stays data-driven.
 
 from tonelib import (
     TromboneProperties,
+    BrassSectionProperties,
     HornProperties,
     WoodPercussionProperties,
     SquareSynthProperties,
@@ -169,4 +170,4 @@ def property_class_for_program(program):
 # whole range (trumpet's centre) and the horn 2 dB through its (tuba's centre).
 PROGRAM_CLASS[57] = TromboneProperties     # Trombone
 PROGRAM_CLASS[60] = HornProperties         # French Horn
-PROGRAM_CLASS[61] = TromboneProperties     # Brass Section: tenor-ish weight
+PROGRAM_CLASS[61] = BrassSectionProperties  # Brass Section: five players, tenor-ish weight

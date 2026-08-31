@@ -1990,6 +1990,119 @@ class FormantBody:
         return g / (1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order)
 
 
+class SectionMixin:
+    """Several PLAYERS on one part, rather than one player made wide.
+
+    Factored out of BowedStringProperties so it is not bolted to a bowed
+    spectrum. A section is a way of being played, not a timbre: massed brass and
+    massed strings share the arithmetic -- N stacks a few cents apart, each with
+    its own start phase, its own vibrato and its own chair -- and share none of
+    the bore, bell or excitation. Mix it into whatever voice is doing the
+    playing.
+
+    Neutral by default (one player, no spread), so mixing it in changes nothing
+    until a class sets its numbers.
+
+    section_vibrato_cents MUST STAY NON-ZERO on any class that turns this on.
+    voice_vibrato() returns None when it is falsy, so at 0 a player has no depth,
+    rate OR phase of their own -- and the live mod wheel takes its per-player
+    proportions from exactly that, so a resting depth of 0 makes a wheel-up write
+    one flat value over the whole section. Shallow is fine, absent is not.
+    """
+    section_players = 1                # 1 = not a section; nothing below applies
+    section_spread_cents = 0.0         # +/- pitch spread across the players
+    section_vibrato_cents = 0.0        # +/- depth, per player (see the note above)
+    section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
+
+    def _section_salt(self):
+        """A stable per-voice-class number, so two SECTIONS are two sections.
+
+        The seeds below key on pitch, which is what makes a note's players the
+        same players every time it is played. But two different string patches
+        doubling the same note then drew the SAME spread, the same phases and the
+        same vibrato -- so the fourteen voices were seven exactly coincident
+        pairs. Coincident voices add coherently (+6 dB, not +3) and the second
+        section reinforces the first's comb instead of smearing it: louder than
+        the score asks, and still a phaser. Ben's two patches, "String marcado"
+        (prog 48) and "String dolce" (prog 49), double each other note for note.
+
+        crc32 of the class name, not hash(): hash() of a str is salted per
+        process, and this must be identical in both renderers and every run.
+
+        Memoised per class, and crc32 imported at module scope: this used to do
+        the import and the checksum on every call, and it is called once per
+        player per harmonic -- 442856 times to build one four-minute piece.
+        """
+        cls = type(self)
+        got = _SECTION_SALT.get(cls)
+        if got is None:
+            got = _crc32(cls.__name__.encode()) & 0xFFFF
+            _SECTION_SALT[cls] = got
+        return got
+
+    def voice_vibrato(self, frequency, index):
+        """Memoised per (class, note, player): it takes no harmonic argument and
+        never did, yet the build calls it once per harmonic per player -- 387499
+        times for one piece, each one seeding a fresh Mersenne Twister."""
+        if not self.section_vibrato_cents:
+            return None
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        key = (type(self), midi, index)
+        got = _VIBRATO_CACHE.get(key)
+        if got is None:
+            rng = _random.Random(0x71B0 + midi * 64 + index + self._section_salt() * 8191)
+            depth = (2.0 ** (self.section_vibrato_cents / 1200.0) - 1.0) * rng.uniform(0.7, 1.0)
+            got = (depth, rng.uniform(*self.section_vibrato_hz),
+                   rng.uniform(0.0, 6.283185307179586))
+            _VIBRATO_CACHE[key] = got
+        return got
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        """The other players: section_players - 1 extra stacks, each a few cents
+        off. Seeded per note (as the piano seeds its unisons) so a given pitch is
+        always the same section but no two pitches share a spread -- otherwise
+        every note detunes identically and the section reads as one chorused
+        voice. The seed is per NOTE, so all of a note's partials agree on where
+        each player is, which is what makes the spread scale with the partial.
+        """
+        n = self.section_players
+        if n <= 1:
+            return super().unison_voices(frequency, harmonic, harmonic_decay)
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        # The spread and the phases are per NOTE, not per harmonic -- that is the
+        # whole point of seeding on the pitch -- so they are drawn once and kept.
+        # Only harmonic_decay varies down the series, and it is passed in.
+        key = (type(self), midi)
+        cached = _SECTION_CACHE.get(key)
+        if cached is not None:
+            return [(1.0, 0.0, ratio, harmonic_decay, phase) for ratio, phase in cached]
+        rng = _random.Random(0x5EC0 + midi + self._section_salt() * 65537)
+        cents = [rng.uniform(-self.section_spread_cents, self.section_spread_cents)
+                 for _ in range(n - 1)]
+        # Straddle the written pitch. A free draw leaves the section's centre a
+        # cent or two off, which is the whole section playing flat against the
+        # winds; the main voice sits at 0, so the extras must average to it.
+        mean = sum(cents) / len(cents)
+        cents = [c - mean * (n - 1) / float(n) for c in cents]
+        # AND THEY DO NOT START IN PHASE. Seven equal voices launched from phase 0
+        # sum coherently at the onset -- 7x, not sqrt(7)x -- and only drift apart
+        # as the detuning accrues phase. Measured, that put a +9.3 dB spike on the
+        # front of every note (a single voice's peak-over-sustain is +0.3 dB, which
+        # is what a bowed string should be) and left the voices sweeping through a
+        # synchronised comb as they separated: an attack like a hammer and an
+        # audible phaser, neither of which is a string section. The piano's own
+        # note about its unisons says the same thing -- equal voices beating
+        # together go "to deep nulls (a phaser)" instead of shimmering.
+        #
+        # A hammer strikes three strings at one instant; seven players do not
+        # share an instant. Give each its own start and the sum is incoherent
+        # from the first sample -- the right attack and the right steady state.
+        #
+        made = [(2.0 ** (c / 1200.0) - 1.0, rng.random()) for c in cents]
+        _SECTION_CACHE[key] = made
+        return [(1.0, 0.0, ratio, harmonic_decay, phase) for ratio, phase in made]
+
+
 class BrassProperties(OrganProperties):
     # A DRIVEN AIR COLUMN IS EXACTLY HARMONIC. The reed, or the lips, lock every
     # mode to the fundamental -- the same reason FlueOrganProperties and
@@ -2237,6 +2350,46 @@ class HornProperties(DarkBrassProperties):
     octave_dampening = 0.60
 
 
+class BrassSectionProperties(SectionMixin, TromboneProperties):
+    """GM 61, Brass Section: several players, not one player made loud.
+
+    It was mapped to a single TromboneProperties -- the right weight, but one
+    instrument. A section is a way of being played, so the same machinery the
+    string sections use applies here over a brass spectrum: N stacks a few cents
+    apart, each with its own start phase, its own vibrato and its own chair.
+
+    Not the same numbers as the strings, though, because it is not the same
+    ensemble:
+
+      - FIVE players, not seven. A GM brass section is a punchy unison of a few
+        trumpets and trombones, not a desk-doubled orchestral body.
+      - TIGHTER pitch spread. Brass players hear beats against each other very
+        strongly on a sustained tone and lock to them; a string section, spread
+        across more desks and bowing rather than buzzing, stays looser.
+      - MUCH less vibrato. Orchestral brass plays a section passage nearly
+        straight, where a string section never does. 2.5 cents is a shimmer that
+        keeps the beat rates wandering, which is what it is there for -- and it
+        must not be zero (see SectionMixin).
+      - NARROWER on the stage. Brass sit in a block; strings spread across the
+        front.
+
+    Known gap: the players share an attack instant. A real section's entries
+    scatter by a few milliseconds, and brass scatter more than strings, but
+    attack_jitter is per NOTE rather than per player and there is no per-player
+    time offset in the partial table to hang it on.
+    """
+    section_players = 5
+    section_spread_cents = 5.0
+    section_vibrato_cents = 2.5
+    section_vibrato_hz = (5.0, 6.6)
+    section_width_m = 0.9
+    # /sqrt(players), exactly as the string sections do it: the players are at
+    # different pitches, so they are incoherent and add in POWER. This keeps a
+    # brass SECTION at the same calibrated loudness as the single trombone it
+    # replaces, so the equal-velocity balance across the orchestra survives.
+    initial_gain = TromboneProperties.initial_gain / (section_players ** 0.5)
+
+
 class MalletProperties(PluckedStringProperties):
     """Struck bar/bell: bright inharmonic onset, fast shimmer decay. Covers
     the chromatic-percussion family (celesta, glockenspiel, vibraphone,
@@ -2258,7 +2411,7 @@ class MalletProperties(PluckedStringProperties):
     harmonic_decay_dampening = 0.3
 
 
-class BowedStringProperties(BlownPipeProperties):
+class BowedStringProperties(SectionMixin, BlownPipeProperties):
     """Sustained bowed string: full harmonic series with a sawtooth-ish
     1/n tilt, no chiff, gentle onset. Covers solo strings (violin, viola,
     cello, contrabass), string/synth ensembles, choir/voice pads, and
@@ -2357,94 +2510,6 @@ class BowedStringProperties(BlownPipeProperties):
     # to 35-45, which is where real expressive string vibrato sits.
     section_vibrato_cents = 5.0        # +/- depth
     section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
-
-    def _section_salt(self):
-        """A stable per-voice-class number, so two SECTIONS are two sections.
-
-        The seeds below key on pitch, which is what makes a note's players the
-        same players every time it is played. But two different string patches
-        doubling the same note then drew the SAME spread, the same phases and the
-        same vibrato -- so the fourteen voices were seven exactly coincident
-        pairs. Coincident voices add coherently (+6 dB, not +3) and the second
-        section reinforces the first's comb instead of smearing it: louder than
-        the score asks, and still a phaser. Ben's two patches, "String marcado"
-        (prog 48) and "String dolce" (prog 49), double each other note for note.
-
-        crc32 of the class name, not hash(): hash() of a str is salted per
-        process, and this must be identical in both renderers and every run.
-
-        Memoised per class, and crc32 imported at module scope: this used to do
-        the import and the checksum on every call, and it is called once per
-        player per harmonic -- 442856 times to build one four-minute piece.
-        """
-        cls = type(self)
-        got = _SECTION_SALT.get(cls)
-        if got is None:
-            got = _crc32(cls.__name__.encode()) & 0xFFFF
-            _SECTION_SALT[cls] = got
-        return got
-
-    def voice_vibrato(self, frequency, index):
-        """Memoised per (class, note, player): it takes no harmonic argument and
-        never did, yet the build calls it once per harmonic per player -- 387499
-        times for one piece, each one seeding a fresh Mersenne Twister."""
-        if not self.section_vibrato_cents:
-            return None
-        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
-        key = (type(self), midi, index)
-        got = _VIBRATO_CACHE.get(key)
-        if got is None:
-            rng = _random.Random(0x71B0 + midi * 64 + index + self._section_salt() * 8191)
-            depth = (2.0 ** (self.section_vibrato_cents / 1200.0) - 1.0) * rng.uniform(0.7, 1.0)
-            got = (depth, rng.uniform(*self.section_vibrato_hz),
-                   rng.uniform(0.0, 6.283185307179586))
-            _VIBRATO_CACHE[key] = got
-        return got
-
-    def unison_voices(self, frequency, harmonic, harmonic_decay):
-        """The other players: section_players - 1 extra stacks, each a few cents
-        off. Seeded per note (as the piano seeds its unisons) so a given pitch is
-        always the same section but no two pitches share a spread -- otherwise
-        every note detunes identically and the section reads as one chorused
-        voice. The seed is per NOTE, so all of a note's partials agree on where
-        each player is, which is what makes the spread scale with the partial.
-        """
-        n = self.section_players
-        if n <= 1:
-            return super().unison_voices(frequency, harmonic, harmonic_decay)
-        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
-        # The spread and the phases are per NOTE, not per harmonic -- that is the
-        # whole point of seeding on the pitch -- so they are drawn once and kept.
-        # Only harmonic_decay varies down the series, and it is passed in.
-        key = (type(self), midi)
-        cached = _SECTION_CACHE.get(key)
-        if cached is not None:
-            return [(1.0, 0.0, ratio, harmonic_decay, phase) for ratio, phase in cached]
-        rng = _random.Random(0x5EC0 + midi + self._section_salt() * 65537)
-        cents = [rng.uniform(-self.section_spread_cents, self.section_spread_cents)
-                 for _ in range(n - 1)]
-        # Straddle the written pitch. A free draw leaves the section's centre a
-        # cent or two off, which is the whole section playing flat against the
-        # winds; the main voice sits at 0, so the extras must average to it.
-        mean = sum(cents) / len(cents)
-        cents = [c - mean * (n - 1) / float(n) for c in cents]
-        # AND THEY DO NOT START IN PHASE. Seven equal voices launched from phase 0
-        # sum coherently at the onset -- 7x, not sqrt(7)x -- and only drift apart
-        # as the detuning accrues phase. Measured, that put a +9.3 dB spike on the
-        # front of every note (a single voice's peak-over-sustain is +0.3 dB, which
-        # is what a bowed string should be) and left the voices sweeping through a
-        # synchronised comb as they separated: an attack like a hammer and an
-        # audible phaser, neither of which is a string section. The piano's own
-        # note about its unisons says the same thing -- equal voices beating
-        # together go "to deep nulls (a phaser)" instead of shimmering.
-        #
-        # A hammer strikes three strings at one instant; seven players do not
-        # share an instant. Give each its own start and the sum is incoherent
-        # from the first sample -- the right attack and the right steady state.
-        #
-        made = [(2.0 ** (c / 1200.0) - 1.0, rng.random()) for c in cents]
-        _SECTION_CACHE[key] = made
-        return [(1.0, 0.0, ratio, harmonic_decay, phase) for ratio, phase in made]
 
     # 1/n-ish spectrum: brighter than an organ, no octave-modulo steps
     tonal_dampening = 1.0
