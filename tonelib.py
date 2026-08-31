@@ -2548,6 +2548,17 @@ class BowedStringProperties(SectionMixin, BlownPipeProperties):
     chiff_max_valve_time = 0.10
 
     max_harmonic = 40
+    # A BOWED STRING IS HARMONIC. The bow's Helmholtz motion forces the string
+    # into exact periodicity -- stiffness inharmonicity is a FREE-vibration
+    # effect, which is why it belongs to the piano and not here. The 0.0 below
+    # has been dead since it was written: BlownPipeProperties sets
+    # inharmonicity_dynamic = True, and blockrender (and the reference) answer
+    # that by OVERWRITING the coefficient with
+    # inharmonicity_coefficient_for_frequency(f0). Measured on a rendered D4,
+    # the partials came out at ratios 5.02, 8.10, 11.27, 13.45, 19.20 -- a
+    # quadratic stretch of B ~ 4e-4, which is a piano bass string. The Iowa
+    # violin's partials sit inside a +/-3% window at every harmonic up to 16.
+    inharmonicity_dynamic = False
     inharmonicity_coefficient = 0.0
 
     # THE BODY. A bowed string is a sawtooth -- amplitude ~ 1/n, forty partials of
