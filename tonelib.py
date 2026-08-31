@@ -2348,6 +2348,13 @@ class BowedStringProperties(BlownPipeProperties):
     # Spread the desks. Wide on purpose: this is the cue that still works in the
     # bass, where the head-shadow one does not.
     section_width_m = 1.5
+    # KEEP THIS NON-ZERO. voice_vibrato() returns None when it is falsy, so at 0
+    # a player has no depth, no rate and no phase of their own -- and the live
+    # mod wheel takes its per-player proportions from exactly that, so a resting
+    # depth of 0 makes a wheel-up write one flat value over the whole section
+    # again (measured: 7 distinct depths at any rest > 0, 1 at rest = 0). Shallow
+    # is fine, absent is not. 5 cents rests as a shimmer and the wheel deepens it
+    # to 35-45, which is where real expressive string vibrato sits.
     section_vibrato_cents = 5.0        # +/- depth
     section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
 
