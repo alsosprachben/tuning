@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 46 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 50 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -119,7 +119,13 @@ Pitch bend, mod wheel and aftertouch are all phase-continuous: they recompute th
 partial's total phase and put the difference back into its anchor, so nothing
 clicks. That includes the vibrato RATE, which sits inside the accumulated phase
 as well as the depth — moving it without re-deriving the anchor steps every
-partial by about 53 radians, eight whole cycles.
+partial by about 53 radians, eight whole cycles — **and the vibrato's own LFO
+phase**, which is `2πr·t + vp` in absolute time, so a rate change moves it by
+`2π(r1−r0)·t`. That one grows with the note's age (0.35 rad for one MIDI step on
+a 5 s note, 44 rad for a full sweep) and lands on every partial of every player
+at the same instant, which is audible as a shared lurch in an ensemble that is
+built on never having one. `vp` is rotated so the LFO changes speed and carries
+on from where it was.
 
 On a section the wheel **deepens and quickens what each player was already
 doing** rather than writing one value over all of them: seven violinists go from

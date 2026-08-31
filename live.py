@@ -262,19 +262,31 @@ class Slab:
         # -- so a rate change has to be evaluated on both sides of the swap or it
         # steps the phase and clicks. Hence r as an argument rather than a
         # closure over one value.
-        def extra(om, vd, r):
+        def extra(om, vd, r, ph):
             w2 = 2.0 * np.pi * r
-            swing = np.cos(w2 * ton + vp) - np.cos(w2 * tn + vp)
+            swing = np.cos(w2 * ton + ph) - np.cos(w2 * tn + ph)
             return (om * self.rate / (2.0 * np.pi)) * vd / r * swing
 
         vr1 = (np.maximum(self.vrbase[idx].astype(np.float64) * float(vrs), 1e-6)
                if vrs is not None else vr0)
-        before = extra(om0, vd0, vr0)
+        # THE VIBRATO'S OWN PHASE HAS TO SURVIVE A RATE CHANGE TOO. Its argument
+        # is 2*pi*r*t + vp in ABSOLUTE time, so moving r moves that argument by
+        # 2*pi*(r1-r0)*t -- and t is time since the note began, so the jump GROWS
+        # the longer the note is held: 0.35 rad for one MIDI step on a 5 s note,
+        # 44 rad (7 cycles) for a full sweep. Correcting only the carrier left
+        # every partial of every player lurching at the same instant, which is a
+        # shared, correlated event in an ensemble built entirely on not having
+        # any. Ben heard it before I had a test for it.
+        #
+        # Rotate vp so the LFO simply changes speed and carries on from where it
+        # was: 2*pi*r1*tn + vp1 == 2*pi*r0*tn + vp.
+        vp1 = vp + 2.0 * np.pi * (vr0 - vr1) * tn if vrs is not None else vp
+        before = extra(om0, vd0, vr0, vp)
         om1 = om0 * om_scale if om_scale is not None else om0
         vd1 = ((self.vbase[idx].astype(np.float64)
                 + float(vd) * self.vsc[idx].astype(np.float64))
                if vd is not None else vd0)
-        after = extra(om1, vd1, vr1)
+        after = extra(om1, vd1, vr1, vp1)
         # Both ears take the SAME increment. The interaural delay lives inside
         # each anchor already (p0 = -om*(non+d) + ph0), and continuity only asks
         # that p0 + om*n be unbroken, so the difference between the ears carries
@@ -288,6 +300,7 @@ class Slab:
             a["vd"][idx] = vd1
         if vrs is not None:
             a["vr"][idx] = vr1
+            a["vp"][idx] = vp1
 
     def release(self, key, n):
         """Note-off: one write per partial. The kernel picks it up next block."""
@@ -1308,7 +1321,7 @@ def selftest():
         # rounding to 5 places merged two of the seven players
         return len(np.unique(a[idx]))
     base = lv.slab.a["vd"][idx].copy(); baser = lv.slab.a["vr"][idx].copy()
-    basep = lv.slab.a["vp"][idx].copy()
+
     check("section vibrato: 7 depths, 7 rates, 7 phases",
           spread(lv.slab.a["vd"]) == 7 and spread(lv.slab.a["vr"]) == 7
           and spread(lv.slab.a["vp"]) == 7)
@@ -1319,9 +1332,13 @@ def selftest():
           and float(up.min()) > float(base.max()),
           "  (%.1f-%.1f cents)" % tuple(np.log2(1 + np.array([up.min(), up.max()],
                                                              dtype=np.float64)) * 1200))
-    check("...and leaves the players' PHASES alone",
-          spread(lv.slab.a["vp"]) == 7
-          and float(np.abs(lv.slab.a["vp"][idx] - basep).max()) == 0.0)
+    # vp itself MOVES on a rate change -- it is rotated so the LFO keeps its
+    # place -- so the invariant is the LFO's phase, 2*pi*r*t + vp, not the
+    # stored offset. The players stay distinct either way.
+    def lfo(sl, ix, n):
+        return (2 * np.pi * sl.a["vr"][ix].astype(np.float64) * (n / sl.rate)
+                + sl.a["vp"][ix].astype(np.float64))
+    check("...and the players stay distinct", spread(lv.slab.a["vp"]) == 7)
     # EVERY player quickens, not merely the range as a whole -- the resting and
     # raised ranges overlap (4.82-6.31 -> 6.02-7.89), so comparing the extremes
     # proves nothing. Compare each player against their own resting rate.
@@ -1361,11 +1378,28 @@ def selftest():
         for _ in range(40):
             lv.callback(None, 128, None, 0)
         ix = np.flatnonzero(lv.slab.busy); n = lv.n
-        was = total_phase(lv.slab, ix, n)
+        was = total_phase(lv.slab, ix, n); wasl = lfo(lv.slab, ix, n)
         lv.slab.retune(list(ix), n, vd=0.0203, vrs=1.25)
         jump = float(np.abs(total_phase(lv.slab, ix, n) - was).max())
-        check("%s: changing depth AND rate does not step the phase" % label,
+        ljump = float(np.abs(lfo(lv.slab, ix, n) - wasl).max())
+        check("%s: depth AND rate change without stepping the carrier" % label,
               jump < 1e-3, "  (%.1e rad)" % jump)
+        # The one Ben's ear found and the carrier test could not: the LFO's own
+        # phase is 2*pi*r*t + vp in absolute time, so a rate change moved it by
+        # 2*pi*(r1-r0)*t -- growing with the note's age, 44 rad on a 5 s note --
+        # simultaneously on every partial of every player.
+        check("%s: ...or the vibrato's own phase" % label,
+              ljump < 1e-3, "  (%.1e rad)" % ljump)
+        # and it must still be true for a note that has been held a long time,
+        # since the error was proportional to elapsed time
+        for _ in range(3000):
+            lv.callback(None, 128, None, 0)
+        ix = np.flatnonzero(lv.slab.busy); n = lv.n
+        wasl = lfo(lv.slab, ix, n)
+        lv.slab.retune(list(ix), n, vd=0.0, vrs=1.0)
+        lj2 = float(np.abs(lfo(lv.slab, ix, n) - wasl).max())
+        check("%s: ...still, after 8 s of holding" % label, lj2 < 1e-3,
+              "  (%.1e rad)" % lj2)
         lv.renderer.close()
 
     # a one-body voice has no spread to preserve and must behave as it always did
