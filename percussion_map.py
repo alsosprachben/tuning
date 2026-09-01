@@ -162,7 +162,21 @@ PERCUSSION_RING = {
     49: 4.00, 50: 0.40, 51: 2.50, 52: 3.00, 53: 1.20, 54: 0.50, 55: 2.00,
     56: 0.40, 57: 4.00, 58: 0.50, 59: 2.50, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
-    70: 0.25, 71: 0.60, 72: 0.80, 73: 0.035, 74: 0.035, 75: 0.20, 76: 0.15,
+    70: 0.25, 71: 0.60, 72: 0.80,
+    # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
+    # fairly closed. Measured on the Iowa guiro, the envelope after the last
+    # ridge falls 10 dB in 3-5 ms and 20 dB in 15-21 ms, against a woodblock's
+    # 26 and 50 ms and a clave's 53 and 62. It is the SHORTEST wooden sound in
+    # the kit, not a middling one.
+    #
+    # This matters more here than anywhere else because the ridges are 13 ms
+    # apart: any ring that outlives that spacing stacks nine strokes into a held
+    # tone at the body pitch. At 0.035 the tail still reached -40 dB only after
+    # 49 ms, four ridges later.
+    #
+    # (0.012 and below overflow db_ratio in tonelib -- 60/ring becomes a decay
+    # rate that 10**(db/10) cannot represent. 0.020 is comfortably clear of it.)
+    73: 0.020, 74: 0.020, 75: 0.20, 76: 0.15,
     77: 0.18, 78: 0.30, 79: 0.50,
     # A TRIANGLE RINGS FOR A VERY LONG TIME, and 0.60/1.50 was not close.
     # Measured T60 on the Iowa triangles: 12.8 s on the 8" and 30.0 s on the 6".
