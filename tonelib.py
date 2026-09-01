@@ -3597,26 +3597,36 @@ class BassoonProperties(DoubleReedProperties):
 
 
 class SaxophoneProperties(DoubleReedProperties):
-    """A big conical reed: the same open series, with a resonance between the
-    bassoon's and the oboe's. Not measured -- the Iowa saxophone samples were
-    not fetched -- so this is placed by bore size between two that were."""
-    formants = ((900.0, 450.0, 2.2), (2000.0, 1000.0, 0.6))
-    bore_corner_hz = 4000.0
-    # PINNED, not fitted. These three used to be inherited from
-    # DoubleReedProperties, which has just been fitted to the Iowa oboe -- and
-    # there is no saxophone recording here, so letting a measured fit for one
-    # instrument silently redefine an unmeasured one would be the wrong kind of
-    # quiet. Held at the values the sax had before that fit; the formants above
-    # remain an assertion either way.
-    tonal_dampening = 0.75
-    octave_dampening = 0.125
-    formant_floor = 0.30
-    # ...and the gain too, for the same reason. As a LITERAL, not a reference to
-    # DoubleReedProperties.initial_gain: this class is defined after that one, so
-    # a reference would pick up the oboe's trim and hand the saxophone a 2.56 dB
-    # rise it never asked for. (It did, the first time.)
-    initial_gain = 1.24224e-04
+    """A big conical reed. MEASURED now: Iowa SopSax.NoVib.mf (Ab3B3, C4B4,
+    C5B5) and AltoSax.NoVib.mf (Db3B3, C4B4, C5Ab5).
 
+    The asserted formant POSITIONS turned out well judged -- 900 and 2000 Hz
+    guessed against real peaks at ~870 (+8.0 dB) and ~1850 (+4.4). What was wrong
+    was the tilt, which ran 7-10 dB hot through h2-h12. Two features were also
+    missing: a third resonance near 3100 (+5.1), and a DIP at 1200-1427 (-7.6)
+    that a list of poles cannot make and an antiformant can.
+
+    FITTED ON BOTH INSTRUMENTS TOGETHER, not on one and validated against the
+    other. Fitting the soprano alone gave soprano 3.07 dB and alto 6.07; fitting
+    both gives 3.78 and 4.77. One class covers programs 64-67, so the compromise
+    that serves the family beats the fit that serves one member -- and the corpus
+    only plays the soprano (1121 notes, one file), so 65-67 would otherwise have
+    inherited a soprano wholesale.
+    """
+    formants = ((870.0, 400.0, 1.0), (1850.0, 700.0, 0.6), (3100.0, 900.0, 0.1))
+    antiformants = ((1300.0, 400.0, 0.3),)
+    tonal_dampening = 1.40
+    octave_dampening = 0.00
+    formant_floor = 0.65
+    bore_corner_hz = 5500.0
+    bore_order = 2.6
+    # Its own gain, as a LITERAL rather than a reference to
+    # DoubleReedProperties.initial_gain: this class is defined after that one, so
+    # a reference picks up the oboe's trim and hands the saxophone a rise it
+    # never asked for. (It did, 2.56 dB of it, the first time.)
+    # ...trimmed +2.21 dB, the energy the fit moved, so this changes COLOUR and
+    # not LEVEL.
+    initial_gain = 1.24224e-04 * 1.2891
 
 class ClarinetProperties(OrchestralReedProperties):
     """A cylindrical bore stopped by the reed: the one orchestral wind whose
