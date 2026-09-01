@@ -777,6 +777,22 @@ class SynthProperties:
     # it does not delete them -- measured 24 to 38 dB down on the Iowa clarinet.
     even_harmonic_db = None
 
+    # ...AND HOW MUCH IT SUPPRESSES THEM DEPENDS ON THE PITCH. A stopped
+    # cylinder is only stopped while the tonehole lattice below the first open
+    # hole is long enough to act like one; play higher and the lattice is wide
+    # open, the bore stops behaving like a closed pipe, and the evens come back.
+    # Measured across the whole Iowa clarinet FAMILY -- Bb, Eb and bass, 124
+    # notes from C#2 to B6 -- the even-minus-odd balance runs -25.3 dB below C3
+    # to +8.1 dB above C6 and crosses zero near 480 Hz. A 33 dB swing: no single
+    # constant can describe it, which is why the clarinet's residual used to sit
+    # near 6-7 dB in every register at once.
+    #
+    # It tracks ABSOLUTE frequency, not the instrument's own register break --
+    # the bass clarinet crosses zero at the same concert pitch as the Bb rather
+    # than an octave lower, which is the one thing a single instrument could not
+    # have shown. dB per octave of octave_position; 0.0 is the old behaviour.
+    even_harmonic_db_per_octave = 0.0
+
     from inharmonicity import inharmonicity_coefficient_2nd_harmonic, inharmonicity_coefficient_3rd_harmonic
 
     # Organ registration: True on the pipe-organ families (flue/reed), whose
@@ -1159,6 +1175,13 @@ class SynthProperties:
             self.attack_dampening = self.tonal_dampening + floor(self.octave_position) * self.octave_dampening
         else:
             self.attack_dampening = self.tonal_dampening + self.octave_position * self.octave_dampening
+
+        # Per-note even-harmonic balance (see even_harmonic_db_per_octave).
+        # Instance attribute, so series_volume picks it up without the class
+        # attribute moving underneath every other note.
+        if self.even_harmonic_db is not None and self.even_harmonic_db_per_octave:
+            self.even_harmonic_db = (self.even_harmonic_db
+                                     + self.even_harmonic_db_per_octave * self.octave_position)
 
         # attack_volume = per-note velocity gain, channel_volume = CC7*CC11
         # channel gain, both already squared to the MIDI (V/127)^2 law.
@@ -3724,31 +3747,75 @@ class SaxophoneProperties(DoubleReedProperties):
 
 class ClarinetProperties(OrchestralReedProperties):
     """A cylindrical bore stopped by the reed: the one orchestral wind whose
-    odd harmonics really do dominate.
+    odd harmonics really do dominate -- but only in the low register.
 
-    Measured (Iowa, C4, mf): h3 is only 2.7 dB below the fundamental while h2 is
-    38.5 dB down, and h5 is -14.2 against h4's -23.9. So the evens are strongly
-    suppressed but PRESENT -- absolute odd_only put them at -130 dB, which loses
-    the reediness that the weak-but-audible evens carry.
+    MEASURED across the whole Iowa clarinet FAMILY: Bb, Eb and bass, four
+    registers each, 133 notes from concert C#2 to B6. The noise floor comes from
+    Iowa's own `ambient.silence` recordings, not from the analysis window.
+
+    THE OLD MODEL'S DEFECT WAS REAL AND THIS IS THE FIX. A single
+    even_harmonic_db cannot describe a clarinet, and the docstring here used to
+    say so and stop there. Measuring the even-minus-odd balance directly:
+
+        below C3   -25.3 dB        C5-C6      +4.5 dB
+        C3-C4      -14.9           above C6   +8.1
+        C4-C5       -5.9           +8.33 dB per octave
+
+    A 33 dB swing that CHANGES SIGN -- above C5 the evens are stronger than the
+    odds. The old constant -8.0 dB is right only around C4-C5, and it left the
+    model +14.8 dB out at the bottom and -11.1 dB out at the top: a 26 dB
+    sign-reversing error that no constant could have removed.
+
+    The physics is that a stopped cylinder is only stopped while the tonehole
+    lattice below the first open hole is long enough to act like one. Play
+    higher, the lattice is wide open, the bore stops behaving like a closed pipe,
+    and the evens come back. So the suppression belongs on a per-octave slope --
+    see even_harmonic_db_per_octave on SynthProperties.
+
+    IT TRACKS ABSOLUTE FREQUENCY, NOT EACH INSTRUMENT'S OWN REGISTER BREAK, and
+    that is the one thing a single instrument could not have shown: the bass
+    clarinet crosses zero at the same concert pitch as the Bb (~480 Hz) rather
+    than an octave lower, where its own chalumeau/clarion break sits.
+
+    FITTED ON THE Bb ALONE, because GM 71 is a Bb clarinet and a measured fit
+    must not let other instruments redefine it -- the Bb spans 3.3 octaves and
+    four registers by itself. The Eb and bass were HELD OUT ENTIRELY, and are
+    the evidence that this is physics rather than a curve fit:
+
+                              shape      HF   even/odd
+        Bb          before     8.55   13.45      9.21
+        Bb          after      8.45    4.16      5.10
+        Eb + bass   before     8.54   22.09     10.06     <- never seen
+        Eb + bass   after      9.65   10.70      5.16
+
+    Both quantities the fit targets roughly HALVE on two instruments it never
+    saw. The register error is now within +/-2.4 dB everywhere, against the old
+    +14.8 to -11.1. Aggregate shape drifts 1.1 dB on the held-out pair, which is
+    expected: the bore and its cutoff were tuned to the Bb, and a bass clarinet
+    is a bigger instrument.
+
+    The even/odd balance is in the OBJECTIVE explicitly. A first attempt left it
+    to an aggregate shape RMS, which barely feels it: that fit flattened the
+    slope correctly and then sat 6 dB biased, fixing the register error and
+    replacing it with a uniform one. If a quantity is the point of the fit, it
+    has to be in the objective -- the same lesson the guitar's top end taught.
     """
-    # FITTED across four registers -- D3B3, C4B4, C5B5, C6B6 -- RMS 16.10 ->
-    # 6.61 dB. -26.5 came from ONE register (C4B4), where the even harmonics
-    # really are 24-38 dB down; the same constant left the clarion and altissimo
-    # 12 dB too bright and 20 dB out overall.
-    #
-    # It cannot be right everywhere. A clarinet overblows at the TWELFTH, so what
-    # is an even harmonic of the sounding pitch in the chalumeau is an odd
-    # harmonic of the tube in the clarion -- one number cannot describe both
-    # registers, and -8.0 is the compromise the fit lands on. That is why the
-    # residual sits near 6-7 dB in EVERY register rather than being large in one:
-    # the shape is the limit here, not the tuning.
-    even_harmonic_db = -8.0
-    tonal_dampening = 1.5        # fitted
-    octave_dampening = 0.4
-    bore_corner_hz = 900.0       # it had NO lowpass at all, hence the bright top
-    bore_order = 1.0
-    # Trimmed +1.00 dB so the fit changes COLOUR and not LEVEL.
-    initial_gain = (1.0 / 6400) * 1.1220
+    even_harmonic_db = -7.161
+    even_harmonic_db_per_octave = 6.794
+    tonal_dampening = 1.386       # fitted
+    octave_dampening = 0.1078
+    bore_corner_hz = 859.1        # it had NO lowpass at all, hence the bright top
+    bore_order = 1.002
+    # The bore stops radiating below its own lowest resonance, as the guitar box
+    # does; without it the model kept a fundamental the instrument does not.
+    bell_cutoff_hz = 269.2
+    bell_order = 2.767
+    # h32 was only 2.6 kHz on the bass clarinet's bottom notes, where the
+    # recording carries 39 harmonics clear of the floor.
+    max_harmonic = 64
+    # Trimmed so the fit changes COLOUR and not LEVEL: +1.00 dB from the first
+    # fit, then -0.30 dB more when the register law moved this voice's energy.
+    initial_gain = (1.0 / 6400) * 1.0841
 
 
 class VocalProperties(FormantBody, BowedStringProperties):
