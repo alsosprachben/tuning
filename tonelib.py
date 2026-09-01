@@ -149,7 +149,7 @@ def _pluck_comb(plucked_harmonic, pluck_dampening, harmonic):
         sum(tv for th, tv in self.plucked_volumes if harmonic % th)
 
     over a list that is 999 entries long for every pipe, wind, brass, string,
-    organ and vocal voice (BlownPipeProperties.plucked_harmonic = 1000). That is
+    organ and vocal voice (StoppedPipeProperties.plucked_harmonic = 1000). That is
     an O(1000) Python generator per harmonic per rank per note: profiled on a
     254-note organ fugue it was 50.8 million iterations and 87% of the whole
     build.
@@ -1581,7 +1581,7 @@ class InharmonicStringProperties(PluckedStringProperties):
         return self.inharmonicity_coefficient_func(float(frequency), self.a, self.b, self.c, self.d, self.e)
 
 
-class Steinway(InharmonicStringProperties):
+class GrandPianoProperties(InharmonicStringProperties):
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
     # a peak normalise and these voices play alone -- and the organ family is
@@ -1816,7 +1816,7 @@ class Steinway(InharmonicStringProperties):
         return body * high * low
 
 
-class BlownPipeProperties(SynthProperties):
+class StoppedPipeProperties(SynthProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -1872,7 +1872,9 @@ class BlownPipeProperties(SynthProperties):
     # -- only the bare blown pipe stretches dynamically.)
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
     inharmonicity_dynamic = True
-    a, b, c, d, e = Steinway.a, Steinway.b, Steinway.c, Steinway.d, Steinway.e
+    a, b, c, d, e = (GrandPianoProperties.a, GrandPianoProperties.b,
+                 GrandPianoProperties.c, GrandPianoProperties.d,
+                 GrandPianoProperties.e)
     inharmonicity_coefficient_func = InharmonicStringProperties.inharmonicity_coefficient_func
     inharmonicity_coefficient_for_frequency = InharmonicStringProperties.inharmonicity_coefficient_for_frequency
 
@@ -1888,7 +1890,7 @@ class BlownPipeProperties(SynthProperties):
     harmonic_decay_dampening = 0.0
 
 
-class OrganProperties(BlownPipeProperties):
+class OrganProperties(StoppedPipeProperties):
     initial_gain = 1.0 / 5000   # keep organ/reed/brass at the pre-pipe level
     inharmonicity_dynamic = False   # organs/reeds/brass stay phase-locked; only the bare blown pipe stretches dynamically
     tonal_dampening = 1.4
@@ -1997,7 +1999,7 @@ class FlueOrganProperties(OrganProperties):
     # track whatever tuning renders them or their octaves beat. Under the hybrid
     # (Steinway-B) tuning -- the temperament for dense Baroque counterpoint --
     # re-enable the dynamic model (inherited a,b,c,d,e + coefficient function
-    # from BlownPipeProperties) so the flue organ's octave partials lock to the
+    # from StoppedPipeProperties) so the flue organ's octave partials lock to the
     # tuner's stretched octaves. OrganProperties pins this False for the family;
     # only the flue organ (pitched, like the pipe) opts back in. The reed organ
     # keeps coefficient 0 and stays harmonic / phase-locked; brass stays locked.
@@ -2327,7 +2329,7 @@ class BrassProperties(OrganProperties):
     sustain_level = 0.6
 
 
-class BrightBrassProperties(BrassProperties):
+class CylindricalBrassProperties(BrassProperties):
     """Cylindrical-bore brass (trumpet, trombone): the cylindrical tubing
     sustains strong upper harmonics, so these are bright and edgy with a
     pronounced attack 'rip' -- the brightness blooms hard then settles."""
@@ -2354,7 +2356,7 @@ class BrightBrassProperties(BrassProperties):
     chiff_max_valve_time = 0.04    # fast, tight onset
 
 
-class DarkBrassProperties(BrassProperties):
+class ConicalBrassProperties(BrassProperties):
     """Conical-bore brass (French horn, tuba): the continuous flare damps the
     upper harmonics into a round, mellow tone, and conical instruments speak
     less abruptly -- a rounder, slower attack with a gentler bloom."""
@@ -2411,7 +2413,7 @@ class DarkBrassProperties(BrassProperties):
 # trumpet. So a drawn flute/trumpet is a genuinely different colour that still locks
 # like every other stop. Appended here (not inline) because BrightBrass is defined
 # after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
-FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, BlownPipeProperties)]
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, StoppedPipeProperties)]
 # Mixtur III -- one drawstop, several very high ranks (1 1/3' + 1' + 2/3'). They sit
 # far above the pipe ceiling, so the break-back folds them back constantly to stay
 # under it: THAT is a Mixtur's "composition", and why its shimmer re-colors up the
@@ -2421,15 +2423,15 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture", [6.0, 8.0, 12.0], 0.28)]
 # Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
 # peroration crowns without blaring (also relieves the dense close's headroom).
-ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, BrightBrassProperties, True)]
+ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, CylindricalBrassProperties, True)]
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
 
-class TrumpetProperties(BrightBrassProperties):
+class TrumpetProperties(CylindricalBrassProperties):
     """The Bb trumpet, fitted to the Iowa recordings across three registers.
 
-    BrightBrassProperties is left as it was, because it is also the spectrum the
+    CylindricalBrassProperties is left as it was, because it is also the spectrum the
     organ's Trumpet stop borrows -- changing it would move the whole Bach corpus.
     This class is GM 56/59 only.
 
@@ -2466,7 +2468,7 @@ class TrumpetProperties(BrightBrassProperties):
     octave_dampening = -0.1
 
 
-class TromboneProperties(BrightBrassProperties):
+class TromboneProperties(CylindricalBrassProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -2480,7 +2482,7 @@ class TromboneProperties(BrightBrassProperties):
     """Tenor trombone: the trumpet's bright brass, but an octave lower and with a
     larger bore.
 
-    It had been sharing BrightBrassProperties outright, which put the TRUMPET's
+    It had been sharing CylindricalBrassProperties outright, which put the TRUMPET's
     comfortable centre (370 Hz) on an instrument that lives an octave below it --
     so the trombone's ordinary register looked to the effort curve like a trumpet
     straining at the bottom and was boosted 3 dB throughout. Its own centre and a
@@ -2511,7 +2513,7 @@ class TromboneProperties(BrightBrassProperties):
     octave_dampening = -0.1
 
 
-class HornProperties(DarkBrassProperties):
+class HornProperties(ConicalBrassProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -2524,7 +2526,7 @@ class HornProperties(DarkBrassProperties):
     initial_gain = (1.0 / 4648) * 0.9672
     """French horn: dark like the tuba's family, but it plays where a trumpet does.
 
-    Sharing DarkBrassProperties gave it the TUBA's centre of 130 Hz, so the horn's
+    Sharing ConicalBrassProperties gave it the TUBA's centre of 130 Hz, so the horn's
     normal treble-staff register read as a tuba reaching high and was boosted by
     2 dB. The horn is dark because of its narrow conical bore and backward bell,
     not because it is low.
@@ -2637,7 +2639,7 @@ class MalletProperties(PluckedStringProperties):
     harmonic_decay_dampening = 0.3
 
 
-class BowedStringProperties(SectionMixin, BlownPipeProperties):
+class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     """Sustained bowed string: full harmonic series with a sawtooth-ish
     1/n tilt, no chiff, gentle onset. Covers solo strings (violin, viola,
     cello, contrabass), string/synth ensembles, choir/voice pads, and
@@ -2699,7 +2701,7 @@ class BowedStringProperties(SectionMixin, BlownPipeProperties):
     # A BOWED STRING IS HARMONIC. The bow's Helmholtz motion forces the string
     # into exact periodicity -- stiffness inharmonicity is a FREE-vibration
     # effect, which is why it belongs to the piano and not here. The 0.0 below
-    # has been dead since it was written: BlownPipeProperties sets
+    # has been dead since it was written: StoppedPipeProperties sets
     # inharmonicity_dynamic = True, and blockrender (and the reference) answer
     # that by OVERWRITING the coefficient with
     # inharmonicity_coefficient_for_frequency(f0). Measured on a rendered D4,
@@ -2888,7 +2890,7 @@ def slow_bow(cls):
     return got
 
 
-class BowedStringSecondProperties(BowedStringProperties):
+class SlowBowedStringProperties(BowedStringProperties):
     """The SLOW string section (GM String Ensemble 2).
 
     General MIDI only gives the two ensembles names, so the reading everyone
@@ -3616,10 +3618,10 @@ class ReedPipeProperties(ReedOrganProperties):
     registerable = False
 
 
-class OrchestralFluteProperties(BlownPipeProperties):
+class OpenPipeProperties(StoppedPipeProperties):
     """An OPEN pipe: flute, piccolo, recorder, whistle, shakuhachi.
 
-    BlownPipeProperties carries odd_only = True, which is right for the stopped
+    StoppedPipeProperties carries odd_only = True, which is right for the stopped
     ranks our organ pipeline drives through it (a Gedackt is closed at one end
     and resonates at odd multiples only). It is wrong for an orchestral flute,
     which is open at both ends and has the full series. Measured against the
@@ -3669,9 +3671,9 @@ class OrchestralFluteProperties(BlownPipeProperties):
     odd_only = False
     # FITTED across B3B4, C5B5 and C6B6: RMS 9.27 -> 3.28 dB.
     # Its own gain, trimmed for the fit: it used to inherit
-    # BlownPipeProperties', and trimming that would have moved every pipe voice.
+    # StoppedPipeProperties', and trimming that would have moved every pipe voice.
     # +1.03 dB from the first fit, then -0.24 dB more for this one.
-    initial_gain = BlownPipeProperties.initial_gain * 1.0952
+    initial_gain = StoppedPipeProperties.initial_gain * 1.0952
     tonal_dampening = 1.256
     # ZERO, and measured to be: see the class docstring. It was 0.3.
     octave_dampening = -0.0131
@@ -3683,7 +3685,7 @@ class OrchestralFluteProperties(BlownPipeProperties):
     bell_order = 2.638
 
 
-class OrchestralReedProperties(ReedOrganProperties):
+class CylindricalReedProperties(ReedOrganProperties):
     """A woodwind, borrowing the reed organ's timbre but NOT its drawbars.
 
     GM 64-71 -- the saxophones, oboe, English horn, bassoon and clarinet -- route
@@ -3700,7 +3702,7 @@ class OrchestralReedProperties(ReedOrganProperties):
     registerable = False
 
 
-class DoubleReedProperties(FormantBody, OrchestralReedProperties):
+class ConicalReedProperties(FormantBody, CylindricalReedProperties):
     """Oboe, english horn, bassoon, and the saxophones: CONICAL bores.
 
     A cone behaves like an open pipe -- full harmonic series -- not like the
@@ -3730,7 +3732,7 @@ class DoubleReedProperties(FormantBody, OrchestralReedProperties):
     bore_order = 1.6
 
 
-class BassoonProperties(DoubleReedProperties):
+class BassoonProperties(ConicalReedProperties):
     """The bassoon's resonance sits far lower than the oboe's -- measured at its
     4th harmonic, 524 Hz, 19.3 dB above the fundamental at C3. Same conical
     family, an octave and a half lower formant, which is the whole difference
@@ -3754,7 +3756,7 @@ class BassoonProperties(DoubleReedProperties):
     bore_corner_hz = 3000.0
 
 
-class SaxophoneProperties(DoubleReedProperties):
+class SaxophoneProperties(ConicalReedProperties):
     """A big conical reed. MEASURED now: Iowa SopSax.NoVib.mf (Ab3B3, C4B4,
     C5B5) and AltoSax.NoVib.mf (Db3B3, C4B4, C5Ab5).
 
@@ -3779,14 +3781,14 @@ class SaxophoneProperties(DoubleReedProperties):
     bore_corner_hz = 5500.0
     bore_order = 2.6
     # Its own gain, as a LITERAL rather than a reference to
-    # DoubleReedProperties.initial_gain: this class is defined after that one, so
+    # ConicalReedProperties.initial_gain: this class is defined after that one, so
     # a reference picks up the oboe's trim and hands the saxophone a rise it
     # never asked for. (It did, 2.56 dB of it, the first time.)
     # ...trimmed +2.21 dB, the energy the fit moved, so this changes COLOUR and
     # not LEVEL.
     initial_gain = 1.24224e-04 * 1.2891
 
-class ClarinetProperties(OrchestralReedProperties):
+class ClarinetProperties(CylindricalReedProperties):
     """A cylindrical bore stopped by the reed: the one orchestral wind whose
     odd harmonics really do dominate -- but only in the low register.
 
@@ -3936,7 +3938,7 @@ class SynthVoiceProperties(VocalProperties):
 # tonal_dampening so no mode stands out of the wash, and a wide running phase
 # jitter (the chiff mechanism) to smear what is left into continuous noise.
 
-class BreathNoiseProperties(NoisyPercussionMixin, BlownPipeProperties):
+class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):
     """GM 121. Breath with no note in it: broadband, and it lasts as long as
     the player holds it -- so this sustains rather than ringing out like the
     struck percussion. 339 notes of it in bwx27c, which had been bells."""

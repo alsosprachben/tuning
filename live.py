@@ -1473,7 +1473,7 @@ def selftest():
     # were all run on strings and brass.
     for cls, lab in ((_T.ClarinetProperties, "clarinet"),
                      (_T.TrumpetProperties, "trumpet"),
-                     (_T.Steinway, "piano"),
+                     (_T.GrandPianoProperties, "piano"),
                      (_T.ViolinProperties, "violin (a section)")):
         p = cls(261.63, 0.0, 1.0, 1.0)
         got = p.section_onsets_at(261.63)

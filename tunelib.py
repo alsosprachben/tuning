@@ -376,7 +376,7 @@ class BechsteinTuner(TwelveTuner):
 # fixed full-keyboard tuners: the generator is built once and its per-MIDI-note
 # frequencies are served by lookup. HybridNotes and its kin stretch their octaves
 # along the empirical Steinway-B inharmonicity model -- the very model
-# tonelib.Steinway renders its partials with (identical a,b,c,d,e) -- so an octave
+# tonelib.GrandPianoProperties renders its partials with (identical a,b,c,d,e) -- so an octave
 # is placed exactly on the lower note's 2nd partial. Rendered with the piano
 # patch, the octave's fundamental then coincides with that partial and does not
 # beat. That alignment is the whole point of using these here.

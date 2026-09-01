@@ -14,7 +14,7 @@ class SimpleArpeggio(SynthSampler):
         start = 0.0
         for frequency in tones:
             print("freq: ", frequency)
-            tone = self.newTone(6, frequency, 0.0, start, None, Steinway)
+            tone = self.newTone(6, frequency, 0.0, start, None, GrandPianoProperties)
             tone.updateFrequency(frequency)
             tone.unrelease()
             errlog(vars(tone))

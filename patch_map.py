@@ -17,13 +17,13 @@ from tonelib import (
     WoodPercussionProperties,
     SquareSynthProperties,
     SawtoothSynthProperties,
-    Steinway,
+    GrandPianoProperties,
     HarpsichordProperties,
     PluckedStringProperties,
     NylonGuitarProperties,
     MalletProperties,
     BowedStringProperties,
-    BowedStringSecondProperties,
+    SlowBowedStringProperties,
     ViolinProperties,
     ViolaProperties,
     CelloProperties,
@@ -32,13 +32,13 @@ from tonelib import (
     FlueOrganProperties,
     ReedOrganProperties,
     BrassProperties,
-    BrightBrassProperties,
+    CylindricalBrassProperties,
     TrumpetProperties,
-    DarkBrassProperties,
-    BlownPipeProperties,
-    OrchestralReedProperties,
-    OrchestralFluteProperties,
-    DoubleReedProperties,
+    ConicalBrassProperties,
+    StoppedPipeProperties,
+    CylindricalReedProperties,
+    OpenPipeProperties,
+    ConicalReedProperties,
     ClarinetProperties,
     BassoonProperties,
     SaxophoneProperties,
@@ -70,7 +70,7 @@ def _fill(lo, hi, cls):
 
 
 # 0-7    Piano                         -> struck inharmonic strings
-_fill(0, 7, Steinway)
+_fill(0, 7, GrandPianoProperties)
 # ...except the harpsichords (6 = Harpsichord, 7 = Clavi): PLUCKED, and registered
 # (choirs as stops via CC11), not struck. GM files that mean a harpsichord get one.
 _fill(6, 7, HarpsichordProperties)
@@ -112,7 +112,7 @@ PROGRAM_CLASS[46] = PluckedStringProperties  # orchestral harp
 PROGRAM_CLASS[47] = TimpaniProperties         # tuned membrane over a bowl, not a bar
 # 48-55  Ensemble (strings, choir, voices, orchestra hit)
 _fill(48, 55, BowedStringProperties)
-PROGRAM_CLASS[49] = BowedStringSecondProperties  # String Ensemble 2: darker section
+PROGRAM_CLASS[49] = SlowBowedStringProperties  # String Ensemble 2: darker section
 # 52-54 are PEOPLE, not strings. A voice is a glottal buzz through a tract whose
 # fixed formants are what make a vowel a vowel; the bowed-string bucket got the
 # "sustained, not percussive" part right and the identifying part wrong. 1950
@@ -124,26 +124,26 @@ PROGRAM_CLASS[54] = SynthVoiceProperties     # an "eh", steadier than people are
 # 56-63  Brass, split by bore profile: cylindrical (bright) vs conical (dark)
 _fill(56, 63, BrassProperties)              # default (brass section, synth brass)
 PROGRAM_CLASS[56] = TrumpetProperties        # fitted to the Iowa trumpet, 3 registers
-PROGRAM_CLASS[57] = BrightBrassProperties   # Trombone: cylindrical, bright
+PROGRAM_CLASS[57] = CylindricalBrassProperties   # Trombone: cylindrical, bright
 PROGRAM_CLASS[59] = TrumpetProperties        # Muted Trumpet (mute not modelled)
-PROGRAM_CLASS[58] = DarkBrassProperties     # Tuba: conical, dark
-PROGRAM_CLASS[60] = DarkBrassProperties     # French Horn: conical, dark
+PROGRAM_CLASS[58] = ConicalBrassProperties     # Tuba: conical, dark
+PROGRAM_CLASS[60] = ConicalBrassProperties     # French Horn: conical, dark
 # 64-71  Reed (saxes, oboe, english horn, bassoon, clarinet). The reed ORGAN's
 # timbre, but not its drawbars: registerable makes CC11 a stop word, and a
-# clarinet has no stops to draw. See OrchestralReedProperties.
-_fill(64, 71, DoubleReedProperties)      # saxes and double reeds: CONICAL = open
+# clarinet has no stops to draw. See CylindricalReedProperties.
+_fill(64, 71, ConicalReedProperties)      # saxes and double reeds: CONICAL = open
 PROGRAM_CLASS[71] = ClarinetProperties   # the one cylindrical stopped bore
 PROGRAM_CLASS[70] = BassoonProperties    # formant an octave and a half below the oboe's
 for _p in (64, 65, 66, 67):
     PROGRAM_CLASS[_p] = SaxophoneProperties
 # 72-79  Pipe (piccolo, flute, recorder, pan flute, bottle, shakuhachi, whistle, ocarina)
-_fill(72, 79, BlownPipeProperties)
+_fill(72, 79, StoppedPipeProperties)
 # ...but the OPEN pipes among them have the full harmonic series, not the odd-only
 # one a stopped organ rank wants. 75 (pan flute) and 79 (ocarina) keep the stopped
 # voice: a pan pipe IS closed at the bottom, and 79 is how our organ pipeline
 # writes flue ranks -- 26735 notes across the Bach corpus depend on it.
 for _p in (72, 73, 74, 77, 78):
-    PROGRAM_CLASS[_p] = OrchestralFluteProperties
+    PROGRAM_CLASS[_p] = OpenPipeProperties
 # 80-87  Synth Lead                    -> bright sustained pipe, but no drawbars:
 # a synth lead has no stops to draw, and registerable would make CC11 a stop word
 # instead of the expression GM says it is. See SynthLeadProperties.
@@ -209,7 +209,7 @@ BOWED_SPLIT = ((36, ContrabassProperties),      # below C2
 # (C4-B4) the Iowa horn's spectral centroid is 492 Hz against the Iowa
 # trombone's 891, so a real horn is 45% darker than a real trombone. Correct for
 # a horn, wrong for the middle of a brass section.
-BRASS_SPLIT = ((40, DarkBrassProperties),       # below E2: tuba weight
+BRASS_SPLIT = ((40, ConicalBrassProperties),       # below E2: tuba weight
                (60, TromboneProperties),        # E2 - B3
                (128, TrumpetProperties))        # C4 and up
 BRASS_ENSEMBLE = {61}
