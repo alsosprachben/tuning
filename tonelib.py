@@ -3694,9 +3694,10 @@ class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
     """
     # Level, measured against the rest of the kit: at 1/2.25 (inherited from the
     # tonal-metal family) a clave peaked ABOVE the bass drum, which is not where
-    # a time-keeping click belongs. Broadband noise also reads louder than a
-    # tonal ping of the same peak, so the added wash needs paying for.
-    initial_gain = 1.0 / 5.0
+    # a time-keeping click belongs. Part of 1/5.0 was paying for a broadband
+    # wash that is now gone -- removing it dropped this voice 4.59 dB -- so the
+    # trim comes back to 1/2.95 and the balance against the kit is preserved.
+    initial_gain = 1.0 / 2.95
     max_harmonic = 44
     # A block or a clave is mostly a CLICK. Its modes are wildly inharmonic --
     # a short bar's bending modes sit near 1 : 2.76 : 5.4, nothing like a
@@ -3713,14 +3714,31 @@ class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
     # ring turned the part into brushes -- but a few decaying sinusoids is exactly
     # what a clave is, once they last 0.2 s instead of the eleven seconds this
     # voice originally inherited. The noise belongs at the onset only.
-    chiff_volume = 0.65
+    # MEASURED, and this was the "static" on every clave and guiro ridge.
+    # Spectral flatness of one stroke (1.0 = white noise, 0 = pure tone):
+    #
+    #     Iowa clave      0.0002        ours at chiff 0.65   0.2442
+    #     Iowa woodblock  0.0000        ours at chiff 0.10   0.0158
+    #     Iowa guiro      0.0044        ours now             0.0010
+    #
+    # Struck wood is a PITCHED BOX, not a wash. The old 0.65 with a full
+    # sustain_jitter made every stroke a burst of broadband noise -- three
+    # orders of magnitude flatter than the recording -- and on a guiro, where a
+    # single note is nine of those strokes in a tenth of a second, it read as
+    # static rather than as a scrape. Reducing the partial count does not help:
+    # the wash, not the harmonic stack, is what was flat.
+    #
+    # A little is kept for the stick's contact transient, which is real.
+    chiff_volume = 0.10
     chiff_cycle = 0.5
     chiff_release = 0.0
     # The noise must persist through the (very short) ring, not just the onset --
     # a cymbal does this too. With noise only at the attack, what was left after
     # the first few milliseconds was a handful of decaying sinusoids, and that is
     # a pitch no matter how quickly it dies.
-    sustain_jitter = 1.0
+    # A struck body is a DECAYING RESONANCE, not a breath that keeps moving.
+    # 1.0 kept the noise alive through the whole stroke.
+    sustain_jitter = 0.20
     chiff_min_valve_time = 0.001
     chiff_max_valve_time = 0.004
     one_shot = True                 # a struck block ignores note-off; it is already gone

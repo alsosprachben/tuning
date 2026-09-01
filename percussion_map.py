@@ -73,9 +73,16 @@ PERCUSSION = {
     70: ("Maracas",            N, 680.0),
     71: ("Short Whistle",      N, 900.0),
     72: ("Long Whistle",       N, 880.0),
-    # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560.
-    73: ("Short Guiro",        N, 1175.0),
-    74: ("Long Guiro",         N, 1175.0),
+    # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560 -- and it is a
+    # STRUCK WOODEN BODY, not noise. Spectral flatness on one ridge is 0.0044
+    # (away) and 0.0056 (toward), against a clave's 0.0002 and a woodblock's
+    # 0.0000, where white noise is 1.0. It was on NoiseDrumProperties, which
+    # builds a dense inharmonic stack to approximate a hiss, so every ridge
+    # arrived as a burst of static instead of a tock. A guiro is a notched gourd
+    # and the stick catching a notch excites the body: much closer to a small
+    # woodblock struck very fast than to a rattle.
+    73: ("Short Guiro",        W, 1175.0),
+    74: ("Long Guiro",         W, 1175.0),
     # MEASURED (Iowa hand percussion, mf). Claves ring at 908, 993 and 1216 Hz
     # across the three pairs; 990 is the middle one.
     75: ("Claves",             W, 990.0),
