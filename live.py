@@ -841,11 +841,11 @@ class Live:
                 self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
         elif msg.type == "aftertouch":
             self.pressure[ch] = msg.value / 127.0
-            self.slab.press(self._sounding(ch), self.pressure[ch],
-                            self.press_db, self.press_tilt)
+            for slots, tilt in self._press_groups(ch):
+                self.slab.press(slots, self.pressure[ch], self.press_db, tilt)
         elif msg.type == "polytouch":
-            self.slab.press(self._sounding(ch, note=msg.note),
-                            msg.value / 127.0, self.press_db, self.press_tilt)
+            for slots, tilt in self._press_groups(ch, note=msg.note):
+                self.slab.press(slots, msg.value / 127.0, self.press_db, tilt)
         elif msg.type == "control_change":
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
@@ -1029,6 +1029,54 @@ class Live:
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1
+
+    def _press_groups(self, ch, note=None):
+        """Sounding slots on this channel, grouped by how much their voice
+        BRIGHTENS under aftertouch. Usually one or two groups.
+
+        Per NOTE, not per part, because SOLO_SPLIT means one part can be two
+        instruments: a clarinet patch is a bass clarinet below D3, and the two
+        do not open up by the same amount.
+        """
+        groups = {}
+        for k, slots in self.slab.live.items():
+            if k[1] != ch:
+                continue
+            if note is not None and k[2] != note:
+                continue
+            groups.setdefault(self._press_tilt(k[0], k[2]), []).extend(slots)
+        return [(v, t) for t, v in groups.items()]
+
+    def _press_tilt(self, pid, note):
+        """How much this voice brightens per unit of aftertouch. MEASURED.
+
+        Slab.press scales each partial by (f/f0)^(tilt*p), which is 6.02*tilt dB
+        per doubling of harmonic at full pressure, against press_db of level --
+        so 6.02*tilt/press_db is exactly the quantity measured on the Iowa
+        recordings across pp/mf/ff:
+
+            tenor trombone  +0.68 dB of tilt per dB of level
+            French horn     +0.44
+            Bb clarinet     +0.13
+
+        One global press_tilt of 0.30 made that ratio 0.226 for every voice --
+        less than half a trombone's and nearly double a clarinet's. Leaning on a
+        brass note should open it far more than leaning on a clarinet, and the
+        difference is most of what makes brass sound like brass.
+
+        Voices with no measurement keep the old constant rather than losing the
+        effect: effort_tilt is 0.0 until someone measures that family, and 0.0
+        here would mean aftertouch stopped colouring them at all.
+        """
+        for p in self.parts:
+            if p.pid != pid:
+                continue
+            try:
+                et = getattr(p.bank._voice_class(note), "effort_tilt", 0.0)
+            except Exception:
+                return self.press_tilt
+            return (et * self.press_db / 6.0206) if et else self.press_tilt
+        return self.press_tilt
 
     def _sounding(self, ch, pids=None, note=None):
         """Every slot sounding on this channel, optionally narrowed to a set of

@@ -1139,7 +1139,12 @@ class SynthProperties:
     # piano sets it > 0 so the bass rings long and the treble decays fast.
     decay_register_slope = 0.0
 
-    def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
+    def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
+                 effort=0.0):
+        # effort must be known BEFORE attack_dampening is computed below, which
+        # is why it is a constructor argument and not an attribute set after.
+        if effort:
+            self.effort = effort
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
         self.channel_volume = channel_volume
@@ -1175,6 +1180,13 @@ class SynthProperties:
             self.attack_dampening = self.tonal_dampening + floor(self.octave_position) * self.octave_dampening
         else:
             self.attack_dampening = self.tonal_dampening + self.octave_position * self.octave_dampening
+
+        # Effort flattens the ladder (see effort_tilt). Subtracted, because a
+        # SMALLER attack_dampening is a brighter voice. attack_dampening is in
+        # units of dB-per-doubling / 6.02, and both effort and effort_tilt are
+        # in dB, so the conversion happens here.
+        if self.effort_tilt and self.effort:
+            self.attack_dampening -= (self.effort_tilt * self.effort) / 6.0206
 
         # Per-note even-harmonic balance (see even_harmonic_db_per_octave).
         # Instance attribute, so series_volume picks it up without the class
@@ -1393,6 +1405,50 @@ class SynthProperties:
     # register_tilt_db is that dB-per-octave rise, saturating at the same distance
     # from centre the effort curve uses.
     register_tilt_db = 0.0
+
+    # EFFORT: HOW HARD THE PLAYER IS WORKING, AS A TIMBRE AND NOT A LEVEL.
+    #
+    # Blow harder and a brass instrument does not merely get louder, it gets
+    # BRIGHTER -- the nonlinear steepening in the bore feeds the upper harmonics
+    # far faster than the fundamental. Until now velocity was a pure gain for
+    # every wind, brass and bowed voice in this file (only the piano's hammer
+    # changed colour with force), so a trumpet at velocity 127 was the identical
+    # timbre to one at velocity 20.
+    #
+    # MEASURED on the Iowa tenor trombone across pp/mf/ff, 33 notes with all
+    # three dynamics. The harmonic ladder FLATTENS with effort:
+    #
+    #     pp -> mf   +12.32 dB louder, tilt +7.71 dB   0.63 dB per dB
+    #     mf -> ff    +7.98 dB louder, tilt +4.55 dB   0.57 dB per dB
+    #     pooled      tilt = 0.80 x level - 2.01,  r = 0.65
+    #
+    # so roughly 0.6 dB of ladder flattening per dB of loudness. effort_tilt IS
+    # that slope, in dB of flattening per dB of level, and `effort` is the level
+    # deviation in dB from the dynamic this class was fitted at. Both are in dB;
+    # attack_dampening is dB-per-doubling / 6.02, so __init__ converts.
+    #
+    # IT IS A FAMILY PROPERTY, NOT A UNIVERSAL ONE. Measured the same way:
+    #
+    #     tenor trombone   +0.68 dB/dB   r 0.66
+    #     French horn      +0.44         r 0.35
+    #     Bb clarinet      +0.13         r 0.29
+    #
+    # which is the difference every player knows -- brass blooms with effort and
+    # a clarinet very nearly does not. So this belongs on the family base.
+    #
+    # WHAT DRIVES IT IS A RELATIVE SIGNAL, NEVER ABSOLUTE VELOCITY. In real MIDI
+    # a track's velocities are largely set to balance that instrument against
+    # the others, so mapping brightness to raw velocity makes every
+    # conservatively mixed brass track permanently dull. Effort comes from
+    # DEVIATION -- velocity against a running per-channel baseline, aftertouch
+    # (which is a deviation by construction), CC1/CC11, and register position
+    # past the comfortable centre. Absolute level stays in channel_volume and
+    # attack_volume, where it already is.
+    #
+    # 0.0 is the old behaviour, and every voice fitted at mf keeps its fit:
+    # effort 0 means "the dynamic this class was measured at".
+    effort_tilt = 0.0
+    effort = 0.0
 
     # A fixed radiation corner (bore/bell). Off by default: only voices whose
     # body has a fixed geometry set it.
@@ -1732,8 +1788,9 @@ class GrandPianoProperties(InharmonicStringProperties):
     pitch_jitter_cents = 1.0
     timing_jitter_seconds = 0.002
 
-    def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0):
-        super().__init__(frequency, channel_pan, attack_volume, channel_volume)
+    def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
+                 effort=0.0):
+        super().__init__(frequency, channel_pan, attack_volume, channel_volume, effort)
         # Deterministic-per-pitch, unique-across-pitches unison detune: seed by the
         # (rounded) MIDI note so a given key is always identical, but no two notes
         # share a detune. Straddle the pitch (one flat string, one sharp) so the
@@ -2274,6 +2331,13 @@ class BrassProperties(OrganProperties):
     # upper partials beat against each other and against the other players. That
     # beating is heard as shimmer, and trimming the breath noise cannot remove it,
     # because it is not noise.
+    # EFFORT. Measured on the Iowa tenor trombone and French horn across
+    # pp/mf/ff: +0.68 and +0.44 dB of harmonic-ladder flattening per dB of
+    # level. Brass blooms with effort -- this is the family that does it most,
+    # and until now velocity was a pure gain here. 0.55 is the pair's centre,
+    # carried by the trumpet and tuba which were not themselves measured; the
+    # trombone and horn override it with their own numbers below.
+    effort_tilt = 0.55
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     # ...but the ONSET is not locked yet. Before the lips and the air column
@@ -2478,6 +2542,8 @@ class TromboneProperties(CylindricalBrassProperties):
     # Trimmed +2.93 dB so the spectral fit changes COLOUR and not LEVEL: the
     # equal-velocity balance across the orchestra was calibrated before it,
     # and the fit moved this voice's total energy by that much.
+    # EFFORT, measured directly on Iowa TenorTrombone pp/mf/ff, 66 pairs, r 0.66.
+    effort_tilt = 0.68
     initial_gain = (1.0 / 5468) * 1.4012
     """Tenor trombone: the trumpet's bright brass, but an octave lower and with a
     larger bore.
@@ -2566,10 +2632,14 @@ class HornProperties(ConicalBrassProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    # Trimmed -0.29 dB so the spectral fit changes COLOUR and not LEVEL: the
-    # equal-velocity balance across the orchestra was calibrated before it,
-    # and the fit moved this voice's total energy by that much.
-    initial_gain = (1.0 / 4648) * 0.9672
+    # Trimmed so the spectral fit changes COLOUR and not LEVEL: the
+    # equal-velocity balance across the orchestra was calibrated before it, and
+    # each fit moved this voice's total energy by that much. -0.29 dB from the
+    # first fit, then +0.32 dB back when the four-register one raised the
+    # harmonic ceiling.
+    initial_gain = (1.0 / 4648) * 1.0032
+    # EFFORT, measured directly on Iowa Horn pp/mf/ff, 46 pairs, r 0.35.
+    effort_tilt = 0.44
     """French horn: dark like the tuba's family, but it plays where a trumpet does.
 
     Sharing ConicalBrassProperties gave it the TUBA's centre of 130 Hz, so the horn's
@@ -2585,7 +2655,20 @@ class HornProperties(ConicalBrassProperties):
     # The horn is dark, not a tuba: it blooms upward like the rest of the brass,
     # so it takes the family's tilt back off DarkBrass's tuba-shaped 1.0.
     register_tilt_db = 1.8
-    register_center_hz = 262.0     # around C4, the horn's comfortable middle
+    register_center_hz = 299.7# around C4, the horn's comfortable middle
+    # RE-MEASURED across four registers of Iowa Horn.mf -- Bb1B1, C2B2, C4B4,
+    # C5F5, 32 notes from Bb1 to F5. The previous fit used TWO registers and was
+    # the weakest brass fit on record at 4.79 dB.
+    #
+    # HF error 17.24 -> 4.75 dB; shape 6.32 -> 6.75, which is the usual price of
+    # a top end that is actually there. Most of the win is the harmonic ceiling
+    # (17.24 -> 7.78 from that alone) and the rest is the bore: keeping the old
+    # 800 Hz roll-off while taking every other fitted value leaves HF at 13.58.
+    #
+    # NOTE C3-B3 HAS NO mf TAKE at Iowa -- only pp and ff -- so the fit
+    # interpolates across the middle of the range rather than measuring it.
+    # Mixing an ff take in would have brought a different dynamic's spectrum
+    # into an mf fit, which is a worse error than the gap.
     # MEASURED, and the measurement overturned two guesses in a row.
     #
     # Iowa horn at C2: the series RISES 16.8 dB from h1 to h6 and then plateaus,
@@ -2605,8 +2688,8 @@ class HornProperties(ConicalBrassProperties):
     # bell alone. Bell 650 Hz at 3rd order, and a source rolloff that steepens by
     # 0.60 per octave.
     # FITTED to Iowa Horn.mf.C2B2 over h1-h12: RMS 8.01 -> 1.65 dB.
-    bell_cutoff_hz = 390.0
-    bell_order = 4.0
+    bell_cutoff_hz = 338.8
+    bell_order = 5.037
     # JOINTLY FITTED across Iowa Horn.mf C2B2 + C4B4.
     # One register is not enough, and this project already knew it: fitting
     # each brass voice to a SINGLE file left the horn 13.5 dB wrong at C4 and
@@ -2614,9 +2697,23 @@ class HornProperties(ConicalBrassProperties):
     # carries a voice from one register to another, and only a multi-register
     # fit can see it -- it comes out NEGATIVE for the trombone and trumpet,
     # which is a brass instrument getting brighter with pitch and effort.
-    tonal_dampening = 3.0
-    bore_corner_hz = 800.0
-    octave_dampening = 0.4
+    tonal_dampening = 2.990
+    bore_corner_hz = 6000.0
+    # SQRT(F), NOT A CORNER. Viscothermal wall losses in a tube scale as the
+    # square root of frequency (Kirchhoff), and a horn is 5.5 m of tubing, so
+    # wall loss is what shapes its top -- not a resonant roll-off. The fit drove
+    # bore_order to its lower bound looking for exactly that law; 0.5 IS the law,
+    # and the error surface is flat between 0.4 and 0.5 (HF 4.42 vs 4.48), so
+    # the physical value costs nothing. The other brass keep their steeper
+    # exponents because nobody has measured them this way yet.
+    bore_order = 0.50
+    # 32 came from StoppedPipeProperties, an ORGAN PIPE base, and at Bb1 that is
+    # a hard ceiling at 1.9 kHz. The ceiling is chosen so each instrument reaches
+    # about the same ABSOLUTE frequency: the tenor trombone's 96 at E2 reaches
+    # 7.9 kHz, and a horn at Bb1 needs 128 for the same. HF by ceiling:
+    #     32 -> 14.91   64 -> 9.35   96 -> 6.66   128 -> 4.75   192 -> 3.85 dB
+    max_harmonic = 128
+    octave_dampening = 0.1409
 
 
 _BRASS_SECTION = {}
@@ -3924,6 +4021,14 @@ class ClarinetProperties(CylindricalReedProperties):
     replacing it with a uniform one. If a quantity is the point of the fit, it
     has to be in the objective -- the same lesson the guitar's top end taught.
     """
+    # EFFORT. Measured the same way as the brass, and the answer is the
+    # difference every player knows: +0.13 dB of flattening per dB of level
+    # against a trombone's +0.68. A clarinet is famously stable in colour across
+    # its dynamic range; it gets louder far more than it gets brighter. Set here
+    # rather than on CylindricalReedProperties because this is where it was
+    # measured -- the saxophones and double reeds keep the 0.0 default until
+    # someone measures them.
+    effort_tilt = 0.13
     even_harmonic_db = -7.161
     even_harmonic_db_per_octave = 6.794
     tonal_dampening = 1.386       # fitted

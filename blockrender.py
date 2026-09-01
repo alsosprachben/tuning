@@ -212,6 +212,16 @@ def prepare(path, tuner='hybrid'):
         later = sorted(t for n2, ts in drum_ons.items() if n2 in grp for t in ts)
         choke_at[note] = later
 
+    # EFFORT BASELINE, PER CHANNEL. Velocity in a real file is largely used to
+    # BALANCE one instrument against the others, not to say how hard the player
+    # is blowing -- so absolute velocity is the wrong signal. What carries effort
+    # is the DEVIATION: this note against how this part is normally played. The
+    # median is used rather than the mean so a few accents do not move the
+    # reference they are supposed to be measured against.
+    _vbase = {}
+    for _ch in {n[0] for n in notes}:
+        _vs = sorted(n[4] for n in notes if n[0] == _ch)
+        if _vs: _vbase[_ch] = _vs[len(_vs)//2]
     for ch, note, on, off, vel, (v7, v11, pan) in notes:
         choked = None
         if ch == GM_PERCUSSION_CHANNEL and note in choke_at:
@@ -247,7 +257,15 @@ def prepare(path, tuner='hybrid'):
                    if pc.__name__.endswith('BrassProperties') else None
             if kind:
                 f0 *= 2.0 ** (brass_cents(f0, kind) / 1200.0)
-        props = pc(f0, pan, (vel/127.0)**2, chan_vol)   # pan = CC10 -> HRTF placement
+        # attack_volume is (vel/127)^2, so the level deviation in dB is
+        # 40*log10(vel/baseline) -- effort in the units effort_tilt expects.
+        # Clamped to the range a real dynamic covers (Iowa's pp..ff spans about
+        # 20 dB): past that a MIDI velocity is expressing something else.
+        _vb = _vbase.get(ch) or vel
+        _eff = 0.0
+        if getattr(pc, 'effort_tilt', 0.0) and vel and _vb:
+            _eff = max(-12.0, min(12.0, 40.0*math.log10(vel/float(_vb))))
+        props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
