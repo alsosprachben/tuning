@@ -20,6 +20,7 @@ from tonelib import (
     Steinway,
     HarpsichordProperties,
     PluckedStringProperties,
+    NylonGuitarProperties,
     MalletProperties,
     BowedStringProperties,
     BowedStringSecondProperties,
@@ -90,6 +91,14 @@ _fill(16, 19, FlueOrganProperties)
 _fill(20, 23, ReedOrganProperties)
 # 24-31  Guitar                        -> plucked strings
 _fill(24, 31, PluckedStringProperties)
+# 24 alone is MEASURED (Iowa's guitar is a nylon classical; see
+# NylonGuitarProperties). 25-31 keep the body-less family base deliberately: a
+# steel-string is a measurably different instrument -- brighter, with plain
+# steel trebles where the nylon's are its darkest strings -- and 26-31 are
+# electrics, whose colour is an amplifier's, not a box's. A fit for one
+# instrument should not silently redefine an unmeasured one (the trap the
+# saxophone hit when it inherited the oboe's).
+PROGRAM_CLASS[24] = NylonGuitarProperties
 # 32-39  Bass                          -> plucked strings
 _fill(32, 39, PluckedStringProperties)
 # 40-47  Strings / orchestral

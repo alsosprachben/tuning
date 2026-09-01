@@ -2903,6 +2903,81 @@ class BowedStringSecondProperties(BowedStringProperties):
     # chiff_cycle went with it: it shaped a chiff whose volume is now zero.
 
 
+# --- The guitar box (GM 24) --------------------------------------------------
+
+class NylonGuitarProperties(FormantBody, PluckedStringProperties):
+    """MEASURED: Iowa Guitar.mf, all six strings, 35 notes G2-A#5.
+
+    THE INSTRUMENT IS NYLON, and that was measured, not read off the page --
+    Iowa documents nothing about it. Two independent lines agree. The files are
+    named in classical `sul` notation, six strings at 19 frets each; and the
+    brightness gradient runs the wrong way for steel. Over the six OPEN strings
+    (full length, so no fret confound) the h2-h8 energy relative to h1 runs
+    E2 +25.2, A2 -3.5, D3 +3.7, G3 +0.4, B3 -6.0, E4 -9.8 dB, with nothing above
+    8 kHz anywhere (-46 to -61 dB). The top two strings are the DARKEST on the
+    instrument. Plain steel trebles are the brightest strings on a steel-string
+    acoustic and its bronze basses put real energy past 8 kHz; dark
+    fundamental-dominant trebles over rich wound basses is the classical guitar.
+
+    (The obvious test -- where the wound/plain boundary sits, D->G on a classical
+    and G->B on a steel-string -- does NOT work. At a fixed pitch the lower
+    string is fretted further up the neck, which dulls it whatever it is wound
+    with, and that confound is the same size as the effect.)
+
+    WHAT THIS CLASS ADDS IS A BODY. PluckedStringProperties has none: its
+    spectrum is a function of harmonic NUMBER alone, so it produced the same
+    ladder at every pitch, varying 1 dB from E2 to E4 --
+
+        E2  +0 -10 -13 -19 -16 -26 -18 -25
+        E4  +0 -10 -14 -21 -18 -28 -20 -28
+
+    -- where the real instrument moves enormously across its range, because its
+    resonances stay put while the harmonics slide through them. Iowa's open E2
+    has h2 and h3 twenty dB ABOVE its fundamental (a box that size cannot
+    radiate 82 Hz), and its E4 has h2 thirteen dB below. Pooling every harmonic
+    of every note by ABSOLUTE frequency, the model was up to 19.7 dB too quiet
+    at 216 Hz and 10 dB too loud above 7 kHz: a missing body and too much top.
+
+    Jointly fitted across all six strings, RMS 12.48 -> 7.73 dB over h1-h20,
+    per-note gain removed so this measures COLOUR and not level. HELD OUT by
+    register: fitting the low half alone and testing on the high scores 9.00 dB
+    against the joint fit's 8.34, and fitting high and testing low 8.11 against
+    7.18 -- the joint fit wins on both halves, so this is not one register's
+    accident (the trap the brass fell into).
+
+    THE PLUCK COMB IS PINNED, NOT FITTED. Letting plucked_harmonic and
+    pluck_dampening float reached 6.64 dB -- close to the 6.27 dB floor of any
+    gain x source(harmonic) x body(frequency) model -- but it got there by
+    driving plucked_harmonic to 20.7, which pushes the comb null past the last
+    fitted harmonic and so deletes the comb. That is an artefact of the
+    measurement, not a fact about guitars: a player working up a chromatic scale
+    moves the plucking point from note to note, so pooling AVERAGES the comb
+    away. The 1.1 dB is left on the table to keep the physics.
+
+    The remaining residual is per-note plucking variation, which no
+    pitch-independent model can follow -- the unconstrained 32-bin body reaches
+    only 6.27 dB itself.
+    """
+    # 220 Hz is the top plate (real classical guitars: 195-215), 425 the next
+    # plate mode, then two broad upper body resonances.
+    formants = ((220.0, 55.0, 0.414), (425.0, 118.0, 0.280),
+                (1109.0, 658.0, 0.171), (2258.0, 573.0, 0.084))
+    formant_floor = 0.0356
+    # FITTED, not carried over: a body doing part of the rolloff means the
+    # source must do less of it, exactly as on the violin.
+    tonal_dampening = 1.121
+    octave_dampening = -0.350
+    bore_corner_hz = 2869.0
+    bore_order = 2.252
+    # The box stops coupling below its air resonance, which is what strips the
+    # low E of its fundamental.
+    bell_cutoff_hz = 205.0
+    bell_order = 0.3
+    # Trimmed -0.08 dB so the fit changes COLOUR and not LEVEL -- the
+    # equal-velocity balance predates it, and the fit moved this voice's total
+    # energy by that much.
+    initial_gain = PluckedStringProperties.initial_gain * 0.9912
+
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---
 # The additive engine has no white-noise source, so "noise" is approximated
