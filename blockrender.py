@@ -65,22 +65,40 @@ def parse(path):
     # jitter, HRTF, unison voices and all -- rather than a second one that could
     # drift from it.
     mid = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
-    ch_prog = {}; notes = []; ccs = {}; on = {}; t = 0.0
+    ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; on = {}; t = 0.0
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         c = ctrl.get(ch, {}); return (c.get(7,127)/127.0, c.get(11,127)/127.0, (c.get(10,64)-64)/63.0)
     for msg in mid:
         t += msg.time
-        if msg.type == 'program_change': ch_prog[msg.channel] = msg.program
+        if msg.type == 'program_change':
+            ch_prog[msg.channel] = msg.program
+            ch_progs.setdefault(msg.channel, []).append(msg.program)
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
         elif msg.type == 'note_on' and msg.velocity > 0:
-            on.setdefault((msg.channel, msg.note), []).append((t, msg.velocity, cv(msg.channel)))
+            # THE PATCH IS SNAPSHOTTED AT NOTE-ON, like the CCs beside it. It
+            # used to be read from ch_prog at render time, which holds only the
+            # LAST program change on each channel -- so a file that changes
+            # patch mid-piece rendered every note with whatever it happened to
+            # end on. passac.mid cycles channel 0 through strings, recorder,
+            # clarinet, trumpet, organ and music box, and all 2161 notes came
+            # out as strings.
+            on.setdefault((msg.channel, msg.note), []).append(
+                (t, msg.velocity, cv(msg.channel), ch_prog.get(msg.channel, 0)))
         elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
             q = on.get((msg.channel, msg.note))
-            if q: s, v, cvv = q.pop(0); notes.append((msg.channel, msg.note, s, t, v, cvv))
-    return ch_prog, notes, ccs, t
+            if q:
+                s, v, cvv, pg = q.pop(0)
+                notes.append((msg.channel, msg.note, s, t, v, cvv, pg))
+    # ch_progs is EVERY program a channel used, which the organ registration
+    # pass needs: a channel that is an organ only part of the way through still
+    # needs its registration rows built, and ch_prog alone (the last program)
+    # would miss it -- a KeyError at render time once notes carry their own
+    # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
+    for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
+    return ch_prog, ch_progs, notes, ccs, t
 
 def onepole_blocks(events, nblk, default):
     bc = (np.arange(nblk) + 0.5) * BLK / SR
@@ -136,13 +154,15 @@ def prepare(path, tuner='hybrid'):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
-    ch_prog, notes, ccs, total = parse(path)
+    ch_prog, ch_progs, notes, ccs, total = parse(path)
     N = int(total*SR) + SR; nblk = N // BLK + 2
     # organ registration rows
     Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0)
-    for ch, prog in ch_prog.items():
+    for ch, _plist in ch_progs.items():
+        prog = next((q for q in dict.fromkeys(_plist)
+                     if getattr(property_class_for_program(q), 'registerable', False)), None)
+        if prog is None: continue
         pc = property_class_for_program(prog)
-        if not getattr(pc,'registerable',False): continue
         pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk)
         rankev_of[ch]=rev
         crow_of[ch]=len(Srows); Srows.append(s)
@@ -186,12 +206,12 @@ def prepare(path, tuner='hybrid'):
     expanded = []
     inner_ridge = set()          # ridges after the first, which must not choke each other
     for ev in notes:
-        ch, note, on, off, vel, rest = ev
+        ch, note, on, off, vel, rest, pg = ev
         strokes = rasp_strokes(note, on, off) if ch == GM_PERCUSSION_CHANNEL else None
         if strokes is None:
             expanded.append(ev); continue
         for k, (t0, t1, lvl) in enumerate(strokes):
-            expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest))
+            expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
             if k: inner_ridge.add((note, t0))
     notes = expanded
 
@@ -199,7 +219,7 @@ def prepare(path, tuner='hybrid'):
     # here, on the note list, because it is a fact about the instrument rather
     # than about the envelope -- the open hat simply stops.
     drum_ons = {}
-    for ch, note, on, off, vel, _ in notes:
+    for ch, note, on, off, vel, _, _pg in notes:
         if ch == GM_PERCUSSION_CHANNEL and choke_group(note) is not None:
             # A ridge WITHIN a scrape is not a new stroke: the gourd goes on
             # ringing as the stick moves to the next ridge, so only the start of
@@ -222,7 +242,7 @@ def prepare(path, tuner='hybrid'):
     for _ch in {n[0] for n in notes}:
         _vs = sorted(n[4] for n in notes if n[0] == _ch)
         if _vs: _vbase[_ch] = _vs[len(_vs)//2]
-    for ch, note, on, off, vel, (v7, v11, pan) in notes:
+    for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         choked = None
         if ch == GM_PERCUSSION_CHANNEL and note in choke_at:
             choked = next((t for t in choke_at[note] if t > on + 1e-4), None)
@@ -241,7 +261,7 @@ def prepare(path, tuner='hybrid'):
             organ = False; chan_vol = (v7*v11)**2
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
-            pc = property_class_for_note(ch_prog.get(ch,0), note)
+            pc = property_class_for_note(prog, note)
             organ = getattr(pc,'registerable',False)
             chan_vol = 1.0 if organ else (v7*v11)**2
             f0 = FREQ[note]
