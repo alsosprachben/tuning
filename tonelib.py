@@ -2329,17 +2329,26 @@ class DarkBrassProperties(BrassProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    initial_gain = 1.0 / 5850
-    tonal_dampening = 1.35         # fast rolloff = few highs, dark/round
+    # Trimmed +0.83 dB so the spectral fit changes COLOUR and not LEVEL: the
+    # equal-velocity balance across the orchestra was calibrated before it,
+    # and the fit moved this voice's total energy by that much.
+    initial_gain = (1.0 / 5850) * 1.1003
+    # FITTED to Iowa Tuba.mf.C2B2 over h1-h12: RMS 11.56 -> 1.25 dB. It was the
+    # brightest voice in the brass by a distance -- -8.9 dB at h12 where the
+    # recording says -29.8, 21 dB of upper harmonic that is not there. That is
+    # why Ben heard the TROMBONE as mellow: the trombone was the closest to right
+    # of the four, next to a tuba and a horn that were not.
+    tonal_dampening = 3.75
     harmonic_decay_db = 2.0        # gentle brightness bloom
     decay_db = 13.0
     sustain_level = 0.7            # subtle front
     chiff_volume = 0.05
     sustain_jitter = 0.0045
-    bore_corner_hz = 700.0        # a huge bore and bell: darkens far sooner
+    bore_corner_hz = 500.0         # fitted; a huge bore and bell darkens sooner
     # Measured (Iowa tuba, C2): the series rises 15.6 dB to h5 (330 Hz). A tuba's
     # bell is enormous but 65 Hz is still below what it radiates well.
     bell_cutoff_hz = 390.0
+    bell_order = 5.0
     register_effort_db = 3.5      # extremes still cost more air, but less steeply
     # A tuba is the exception in the family: its power really does live at the
     # bottom, and the top of the instrument thins rather than blooms. Tilted, but
@@ -2393,11 +2402,17 @@ class TrumpetProperties(BrightBrassProperties):
     C5, the extremes, and checked against C4 in the middle: 4.3 dB mean across
     all three, against 20.0 for the old model.
     """
-    initial_gain = 1.0 / 4060    # re-levelled after the refit
+    # Trimmed +0.37 dB so the spectral fit changes COLOUR and not LEVEL: the
+    # equal-velocity balance across the orchestra was calibrated before it,
+    # and the fit moved this voice's total energy by that much.
+    initial_gain = (1.0 / 4060) * 1.0435
+    # FITTED to Iowa Trumpet.novib.mf.C4B4 over h1-h12: RMS 5.29 -> 1.06 dB.
+    # The bell was already right; the SOURCE behind it was too fundamental-heavy,
+    # so h1 landed 13.3 dB over the recording even with 40 dB of bell on it.
     bell_cutoff_hz = 1600.0
-    bell_order = 3.0
-    bore_corner_hz = 1800.0
-    tonal_dampening = 2.00
+    bell_order = 5.0
+    bore_corner_hz = 900.0
+    tonal_dampening = 2.75
     octave_dampening = 0.25
 
 
@@ -2408,7 +2423,10 @@ class TromboneProperties(BrightBrassProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    initial_gain = 1.0 / 5468
+    # Trimmed +2.93 dB so the spectral fit changes COLOUR and not LEVEL: the
+    # equal-velocity balance across the orchestra was calibrated before it,
+    # and the fit moved this voice's total energy by that much.
+    initial_gain = (1.0 / 5468) * 1.4012
     """Tenor trombone: the trumpet's bright brass, but an octave lower and with a
     larger bore.
 
@@ -2419,11 +2437,20 @@ class TromboneProperties(BrightBrassProperties):
     lower bore corner fix both the level and the colour.
     """
     register_center_hz = 175.0     # around F3, the middle of the tenor's staff
-    bore_corner_hz = 1600.0        # larger bore than a trumpet: darker
+    bore_corner_hz = 900.0         # fitted; larger bore than a trumpet
     # Measured (Iowa, C3): the 3rd harmonic at 393 Hz is 7.5 dB above the
     # fundamental -- the same bell high-pass as the horn, at a higher cutoff
     # because the bore is narrower.
-    bell_cutoff_hz = 230.0
+    # FITTED to Iowa TenorTrombone.mf.C3B3 over h1-h12: RMS 3.55 -> 1.02 dB.
+    # 230 Hz came from ONE observation -- h3 at 393 Hz sitting 7.5 dB over the
+    # fundamental -- and three free knobs can satisfy one number in many wrong
+    # ways. It also put the trombone's bell cutoff BELOW the tuba's 390, when a
+    # trombone bell is half a tuba's diameter and its cutoff must be HIGHER. The
+    # family now runs in the order its bells do: trumpet 1600 > trombone 900 >
+    # horn and tuba 390.
+    bell_cutoff_hz = 900.0
+    bell_order = 4.0
+    tonal_dampening = 3.00
 
 
 class HornProperties(DarkBrassProperties):
@@ -2433,7 +2460,10 @@ class HornProperties(DarkBrassProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    initial_gain = 1.0 / 4648
+    # Trimmed -0.29 dB so the spectral fit changes COLOUR and not LEVEL: the
+    # equal-velocity balance across the orchestra was calibrated before it,
+    # and the fit moved this voice's total energy by that much.
+    initial_gain = (1.0 / 4648) * 0.9672
     """French horn: dark like the tuba's family, but it plays where a trumpet does.
 
     Sharing DarkBrassProperties gave it the TUBA's centre of 130 Hz, so the horn's
@@ -2469,10 +2499,11 @@ class HornProperties(DarkBrassProperties):
     # Fitted jointly to C2 and C4: 3.3 dB rms across BOTH, against 23.6 for the
     # bell alone. Bell 650 Hz at 3rd order, and a source rolloff that steepens by
     # 0.60 per octave.
-    bell_cutoff_hz = 650.0
-    bell_order = 3.0
-    bore_corner_hz = 900.0
-    tonal_dampening = 3.25
+    # FITTED to Iowa Horn.mf.C2B2 over h1-h12: RMS 8.01 -> 1.65 dB.
+    bell_cutoff_hz = 390.0
+    bell_order = 4.0
+    bore_corner_hz = 500.0
+    tonal_dampening = 3.75
     octave_dampening = 0.60
 
 
