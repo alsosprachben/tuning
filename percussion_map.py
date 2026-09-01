@@ -73,8 +73,9 @@ PERCUSSION = {
     70: ("Maracas",            N, 680.0),
     71: ("Short Whistle",      N, 900.0),
     72: ("Long Whistle",       N, 880.0),
-    73: ("Short Guiro",        N, 560.0),
-    74: ("Long Guiro",         N, 520.0),
+    # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560.
+    73: ("Short Guiro",        N, 1175.0),
+    74: ("Long Guiro",         N, 1175.0),
     # MEASURED (Iowa hand percussion, mf). Claves ring at 908, 993 and 1216 Hz
     # across the three pairs; 990 is the middle one.
     75: ("Claves",             W, 990.0),
@@ -272,9 +273,18 @@ def choke_group(note):
 # the short stroke fewer ridges made it a different instrument rather than a
 # quicker gesture, and lost the rising ridge-rate that is what actually
 # distinguishes the two.
+# MEASURED (Iowa guiro.away and guiro.toward, mf): 9 ridges over 0.11 s, a
+# median gap of 13 ms, and a body that rings at 1175 Hz.
+#
+# THE SPACING IS THE INSTRUMENT AND THE DURATION IS THE GESTURE. The ridges are
+# carved at a fixed pitch along the gourd, so a longer scrape crosses MORE of
+# them at the same rate -- it does not cross the same seventeen more slowly.
+# This table held the count fixed at 17 and stretched the time, which made the
+# short guiro 8 ms per ridge (nearly twice too fast) and the long one 26 ms
+# (twice too slow). Both are 13 ms now.
 PERCUSSION_RASP = {
-    73: (0.130, 17),     # short guiro: the same 17 ridges, crossed in a third of the time
-    74: (0.420, 17),     # long guiro: a full, unhurried scrape
+    73: (0.11, 9),       # short guiro: one quick scrape, as Iowa recorded it
+    74: (0.42, 32),      # long guiro: the same ridges, more of them
 }
 
 
