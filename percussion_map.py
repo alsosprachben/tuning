@@ -330,25 +330,59 @@ PERCUSSION_RASP = {
 def rasp_strokes(note, on, off, rng=None):
     """[(on, off, level)] for one scraped note, or None if it is not scraped.
 
-    The stroke is not even in LEVEL: a scrape starts hard, eases through the
-    middle and lifts at the end. The ridges themselves are, though -- they are
-    carved at a regular spacing, and only the hand varies -- so the timing
-    jitter is small. At +-9% it read as sloppy rather than human.
+    THE STROKE IS NOT EVEN, and both of the ways it is uneven are MEASURED off
+    the Iowa guiro rather than asserted. Ben, who was taught to play one: "I was
+    taught to speed up as I swipe, by flicking to the side."
+
+    Pooled across guiro.away and guiro.toward, by position through the stroke:
+
+        position   gap / median   level
+         0.0-0.2       1.227      0.348
+         0.2-0.4       1.077      0.398
+         0.4-0.6       0.998      0.442
+         0.6-0.8       0.985      0.605
+         0.8-1.0       1.132      0.505
+
+    The hand ACCELERATES and the stroke GETS LOUDER as it goes, then both ease
+    over the last fifth as the flick lifts away. The coefficients below are set
+    to reproduce those five buckets rather than a least-squares line through
+    them: a line fitted across the whole stroke is pulled flat by the lift at
+    the end, and understates the acceleration by two thirds.
+
+    This used to say "a scrape starts hard, eases through the middle and lifts
+    at the end" and implement the level exactly backwards. The ridges are carved
+    at a regular spacing and only the hand varies, so the residual timing jitter
+    stays small -- at +-9% it read as sloppy rather than human.
     """
     spec = PERCUSSION_RASP.get(note)
     if spec is None:
         return None
     dur, n = spec
     span = max(dur, (off - on) * 0.5) if off > on else dur
-    out = []
-    for i in range(n):
-        frac = i / float(n - 1) if n > 1 else 0.0
-        jitter = ((i * 2654435761) % 1000 / 1000.0 - 0.5) * 0.05   # deterministic, +-2.5%
-        t = on + span * (frac + jitter / n)
-        # hard at the start, easing, with a slight lift at the very end
-        level = 0.55 + 0.45 * (1.0 - frac) ** 0.7
-        if i == n - 1:
-            level *= 0.7
-        out.append((t, t + span / n * 0.9, level))
-    return out
+    if n < 2:
+        return [(on, on + span, 1.0)]
 
+    # Gap WEIGHTS through the stroke: narrowing as the hand speeds up, then
+    # opening again over the last fifth as it lifts. Normalised so the ridges
+    # fill exactly `span` however the shape is tuned.
+    w = []
+    for k in range(n - 1):
+        frac = k / float(n - 1)
+        g = 1.260 - 0.330 * frac
+        if frac > 0.80:
+            g += 0.62 * (frac - 0.80) / 0.20
+        w.append(g)
+    scale = span / sum(w)
+
+    out = []
+    t = on
+    for k in range(n):
+        frac = k / float(n - 1)
+        jitter = ((k * 2654435761) % 1000 / 1000.0 - 0.5) * 0.05
+        level = (0.318 + 0.400 * frac) / 0.638
+        if frac > 0.80:
+            level *= 1.0 - 0.30 * (frac - 0.80) / 0.20
+        step = (w[k] if k < n - 1 else w[-1]) * scale
+        out.append((t + step * jitter, t + step * 0.9, level))
+        t += step
+    return out
