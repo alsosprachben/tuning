@@ -3397,6 +3397,44 @@ class XylophoneProperties(TunedBarProperties):
     harmonic_decay_db = 26.0     # the twelfth must fall ~39 dB in 0.35 s
 
 
+class CrotaleProperties(TunedBarProperties):
+    """A crotale: a thick tuned DISC, and the only PLATE in the mallet family.
+
+    MEASURED: Iowa crotales, ff, the full chromatic set C6-C8, 25 notes.
+
+    Everything else here is a BAR -- a glockenspiel, a marimba, a vibraphone --
+    and a bar and a plate have different mode families. A free circular plate
+    runs 1 : 2.08 : 3.41, where a free bar runs 1 : 2.76 : 5.40. Measured across
+    the set the crotale gives median 1 : 2.03 : 3.38, which is the plate law and
+    not the bar's.
+
+    So this cannot use bar_modes alone: those pick whole-numbered harmonics, and
+    3.41 is not one. Modes 1, 2 and 3 are selected and the inharmonicity stretch
+    bends them out to 1 : 2.12 : 3.40, which is within the spread of the
+    measurement (f2/f1 runs 2.14 at C6 down to 1.90 at C8).
+
+    THE RING TIME HALVES EVERY 10.3 SEMITONES, from 12.4 s at C6 to 2.5 s at C8
+    -- fitted across the set. decay_register_slope carries that: it is the same
+    knob the piano uses for the same reason, a small light body losing its
+    energy faster than a large heavy one.
+
+    The set also sounds consistently SHARP of its nominal pitch, +6 to +32 cents
+    with a mean near +17. That is left alone: it is this particular set's tuning
+    and not a property of crotales, and our pitch comes from the tuner.
+
+    General MIDI has no crotale, so nothing routes here by program. GM
+    percussion note 84 (Belltree) does -- a belltree is a stack of small tuned
+    discs, the same object in a different mounting -- and it was unmapped.
+    """
+    bar_modes = ((1, 1.0), (2, 0.72), (3, 0.55))
+    max_harmonic = 3
+    # bends modes 2 and 3 to the plate's 2.08 and 3.41 rather than 2 and 3
+    inharmonicity_coefficient = 0.0316
+    inharmonicity_dynamic = False
+    # 12.4 s at C6 down to 2.5 s at C8: halves every 10.3 semitones
+    decay_register_slope = 1.17
+
+
 class TubularBellProperties(TunedBarProperties):
     """Long brass tubes -- and the clearest missing-fundamental instrument in
     the orchestra.
