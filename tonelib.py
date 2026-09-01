@@ -2938,45 +2938,64 @@ class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     of every note by ABSOLUTE frequency, the model was up to 19.7 dB too quiet
     at 216 Hz and 10 dB too loud above 7 kHz: a missing body and too much top.
 
-    Jointly fitted across all six strings, RMS 12.48 -> 7.73 dB over h1-h20,
-    per-note gain removed so this measures COLOUR and not level. HELD OUT by
-    register: fitting the low half alone and testing on the high scores 9.00 dB
-    against the joint fit's 8.34, and fitting high and testing low 8.11 against
-    7.18 -- the joint fit wins on both halves, so this is not one register's
-    accident (the trap the brass fell into).
+    FITTED ON TWO MEASUREMENTS AT ONCE, and it needs both. A harmonic ladder
+    alone does not constrain this instrument, because the harmonics run out long
+    before the instrument does: on the low E, h32 is still only 2.6 kHz, so
+    everything above that was pure extrapolation. The first fit here scored well
+    on the ladder and was WRONG -- it rolled the top off so hard that the energy
+    above 4 kHz fell 19 dB below the recording. That is audible at once, and it
+    was caught BY EAR, not by the metric. So the objective also carries the
+    BROADBAND energy above 2, 4 and 8 kHz, measured over 100 ms from the pluck
+    on the six open strings, where the integral has the signal-to-noise that the
+    individual high harmonics do not.
 
-    THE PLUCK COMB IS PINNED, NOT FITTED. Letting plucked_harmonic and
-    pluck_dampening float reached 6.64 dB -- close to the 6.27 dB floor of any
-    gain x source(harmonic) x body(frequency) model -- but it got there by
-    driving plucked_harmonic to 20.7, which pushes the comb null past the last
-    fitted harmonic and so deletes the comb. That is an artefact of the
-    measurement, not a fact about guitars: a player working up a chromatic scale
-    moves the plucking point from note to note, so pooling AVERAGES the comb
-    away. The 1.1 dB is left on the table to keep the physics.
+        vs the Iowa guitar        h1-h32 shape     >2/4/8 kHz energy
+          no body (as it was)        15.78 dB          14.17 dB
+          ladder-only fit            10.13             17.68     <- worse
+          this                       11.38              4.79
 
-    The remaining residual is per-note plucking variation, which no
-    pitch-independent model can follow -- the unconstrained 32-bin body reaches
-    only 6.27 dB itself.
+    1.25 dB of ladder given up for 12.9 dB of top end, and the >8 kHz error
+    comes out at 0.30 dB. Per-note gain is removed throughout, so the shape
+    column measures COLOUR and never level.
+
+    The reference had to be rebuilt to see any of this. The noise floor was
+    being estimated from the analysis window itself, which on a decaying pluck
+    is the signal -- it masked out real harmonics and left ~18 per note. Iowa's
+    true floor is -92 to -133 dBFS and its SNR above 8 kHz is +52 to +85 dB, so
+    that content is real; measured against it, a median of 32 harmonics per note
+    survive.
+
+    THE PLUCK COMB IS PINNED, NOT FITTED, for a related reason. Letting
+    plucked_harmonic and pluck_dampening float scored better by driving
+    plucked_harmonic past the last fitted harmonic, which DELETES the comb
+    rather than fitting it -- and a player working up a chromatic scale moves
+    the plucking point from note to note, so pooling AVERAGES the comb away.
+    That is a fact about the measurement, not about guitars.
+
+    What is left is per-note plucking variation, which no pitch-independent
+    model can follow: an unconstrained 32-bin body fitted straight to the
+    recording still leaves 6.27 dB.
     """
-    # 220 Hz is the top plate (real classical guitars: 195-215), 425 the next
-    # plate mode, then two broad upper body resonances.
-    formants = ((220.0, 55.0, 0.414), (425.0, 118.0, 0.280),
-                (1109.0, 658.0, 0.171), (2258.0, 573.0, 0.084))
-    formant_floor = 0.0356
+    # The two low poles are narrow (Q ~ 15 and 12) and carry the body; the two
+    # broad upper ones carry its top. b1 sits on the search's lower bound, so
+    # the recording would take a narrower resonance still than this allows.
+    formants = ((291.5, 20.0, 0.486), (399.0, 33.3, 0.667),
+                (1029.5, 665.5, 0.191), (1982.9, 533.5, 0.114))
+    formant_floor = 0.0576
     # FITTED, not carried over: a body doing part of the rolloff means the
     # source must do less of it, exactly as on the violin.
-    tonal_dampening = 1.121
-    octave_dampening = -0.350
-    bore_corner_hz = 2869.0
-    bore_order = 2.252
+    tonal_dampening = 0.971
+    octave_dampening = -0.263
+    bore_corner_hz = 3334.7
+    bore_order = 1.412
     # The box stops coupling below its air resonance, which is what strips the
     # low E of its fundamental.
-    bell_cutoff_hz = 205.0
-    bell_order = 0.3
-    # Trimmed -0.08 dB so the fit changes COLOUR and not LEVEL -- the
+    bell_cutoff_hz = 308.9
+    bell_order = 0.533
+    # Trimmed -0.05 dB so the fit changes COLOUR and not LEVEL -- the
     # equal-velocity balance predates it, and the fit moved this voice's total
     # energy by that much.
-    initial_gain = PluckedStringProperties.initial_gain * 0.9912
+    initial_gain = PluckedStringProperties.initial_gain * 0.9947
 
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---
