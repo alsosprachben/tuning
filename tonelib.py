@@ -3629,17 +3629,58 @@ class OrchestralFluteProperties(BlownPipeProperties):
 
     The series also falls away faster above h3 than any single 1/n^d can follow
     (real: -20.5 at h4, -35.7 at h6), so a radiation corner carries that.
+
+    RE-MEASURED against the whole Iowa flute FAMILY -- concert (nonvib), alto
+    and bass, 110 notes from concert C3 to C7, four octaves. The first fit here
+    used three registers of the concert flute alone.
+
+    THE HEADLINE IS A NEGATIVE RESULT, and it is why octave_dampening is now
+    zero. The same test that found the clarinet's register law -- measure the
+    quantity across three instruments of one family and see whether it tracks
+    absolute pitch -- comes back FLAT for the flute. Spectral tilt sits near
+    -15 dB per doubling of harmonic across the whole four octaves, the three
+    instruments agree closely at the same concert pitch (at 261.6 Hz: bass
+    -15.5, alto -15.5, concert -12.5), and the slope against pitch is only
+    -0.45 dB/octave with the three instruments disagreeing on its SIGN.
+
+    That is physically what you would expect. The clarinet's law comes from a
+    stopped cylinder ceasing to be stopped as the tonehole lattice opens; a
+    flute is open at both ends in every register and has no such transition. So
+    the octave_dampening = 0.3 this class used to carry was a register
+    dependence in the MODEL that is not in the INSTRUMENT. The fit, run
+    independently, put it at -0.013.
+
+    Fitted on the CONCERT flute alone, since GM 73 is a concert flute, with the
+    alto and bass HELD OUT ENTIRELY:
+
+                              shape      HF
+        concert     before     5.62    7.39
+        concert     after      5.75    3.63
+        alto+bass   before     7.36   12.11    <- never seen
+        alto+bass   after      6.52    6.68
+
+    The broadband error halves on the fitted instrument and on both held-out
+    ones, and the held-out shape improves too. Shape on the concert flute itself
+    goes 0.13 dB the wrong way, which is the price of the top end being right.
+
+    max_harmonic 32 -> 49: h32 is only 4.2 kHz on the bass flute's low C, where
+    the recording still carries 24 harmonics clear of its noise floor.
     """
     odd_only = False
     # FITTED across B3B4, C5B5 and C6B6: RMS 9.27 -> 3.28 dB.
-    # Its own gain, trimmed +1.03 dB for the fit: it used to inherit
+    # Its own gain, trimmed for the fit: it used to inherit
     # BlownPipeProperties', and trimming that would have moved every pipe voice.
-    initial_gain = BlownPipeProperties.initial_gain * 1.1262
-    tonal_dampening = 1.4
-    octave_dampening = 0.3
-    bore_corner_hz = 2200.0
-    bore_order = 1.6
-    bell_cutoff_hz = 260.0
+    # +1.03 dB from the first fit, then -0.24 dB more for this one.
+    initial_gain = BlownPipeProperties.initial_gain * 1.0952
+    tonal_dampening = 1.256
+    # ZERO, and measured to be: see the class docstring. It was 0.3.
+    octave_dampening = -0.0131
+    bore_corner_hz = 1580.8
+    bore_order = 1.310
+    max_harmonic = 49
+    # The tube stops radiating below its own lowest resonance.
+    bell_cutoff_hz = 319.9
+    bell_order = 2.638
 
 
 class OrchestralReedProperties(ReedOrganProperties):
