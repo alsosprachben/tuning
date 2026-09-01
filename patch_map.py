@@ -21,6 +21,10 @@ from tonelib import (
     HarpsichordProperties,
     PluckedStringProperties,
     NylonGuitarProperties,
+    BassTromboneProperties,
+    BassClarinetProperties,
+    AltoFluteProperties,
+    BassFluteProperties,
     MalletProperties,
     BowedStringProperties,
     SlowBowedStringProperties,
@@ -219,11 +223,75 @@ BOWED_ENSEMBLE = {44, 48, 50, 51}
 BOWED_ENSEMBLE_SLOW = {49}
 
 
+# A SOLO patch is a family too, and below a certain note it is a DIFFERENT
+# INSTRUMENT. General MIDI gives one "Clarinet" and one "Trombone", but a
+# clarinet part written below sounding D3 is a BASS clarinet part -- a Bb
+# clarinet cannot play those notes at all -- and a trombone part below E2 is a
+# bass trombone's. The old model answered by extrapolating the small instrument
+# into a register it does not have, which is exactly the register a composer
+# reaches for the big one.
+#
+# Same machinery as BOWED_SPLIT, and the same standard of evidence: each low
+# voice here is fitted to its OWN Iowa recording, not guessed from its sibling.
+#
+# COVERAGE IS OF THE KEYBOARD, NOT OF THE COLLECTION. It is tempting to size
+# this table by how many notes the 168-file corpus actually writes below each
+# instrument's bottom -- which says clarinet 240, trombone 59, flute ZERO. That
+# is the wrong question now that live.py exists: a player can select any patch
+# and play the whole keyboard, so every program has to be right over its whole
+# range whether or not a file in the collection happens to go there. A corpus is
+# a sample; an instrument is a promise.
+# Boundaries are the low instrument's REAL bottom sounding note, so the switch
+# happens exactly where the small instrument runs out. That makes it a hard
+# change of instrument mid-keyboard rather than a crossfade -- which is what an
+# orchestrator gets too, and it is audible on a line that crosses it.
+SOLO_SPLIT = {
+    # --- bowed strings. BOWED_SPLIT already does this for the ENSEMBLES; the
+    # solo patches never did, so a violin patch below its open G string was a
+    # violin model extrapolated under the instrument.
+    40: ((36, ContrabassProperties),     # Violin, bottom G3
+         (48, CelloProperties),
+         (55, ViolaProperties),
+         (128, ViolinProperties)),
+    41: ((36, ContrabassProperties),     # Viola, bottom C3
+         (48, CelloProperties),
+         (128, ViolaProperties)),
+    42: ((36, ContrabassProperties),     # Cello, bottom C2
+         (128, CelloProperties)),
+    # --- brass. Same reasoning as BRASS_SPLIT, applied to the solo patches.
+    56: ((40, ConicalBrassProperties),      # Trumpet, bottom E3
+         (52, TromboneProperties),
+         (128, TrumpetProperties)),
+    60: ((34, ConicalBrassProperties),      # French horn, bottom Bb1
+         (128, HornProperties)),
+    # --- a tenor trombone with an F attachment reaches C2, and parts are
+    # routinely written there, so the tenor keeps everything down to C2 even
+    # though Iowa only recorded it to E2. Four semitones of extrapolation on a
+    # fitted model beats changing instrument where a player would not.
+    57: ((36, BassTromboneProperties),
+         (128, TromboneProperties)),
+    # --- below sounding D3 a Bb clarinet has no notes at all. The collection
+    # writes down to MIDI 24, two octaves under it.
+    71: ((50, BassClarinetProperties),
+         (128, ClarinetProperties)),
+    # --- a piccolo cannot play below D5; below that it is simply a flute, and
+    # the flute's own cascade continues underneath.
+    72: ((55, BassFluteProperties),
+         (59, AltoFluteProperties),
+         (128, OpenPipeProperties)),
+    73: ((55, BassFluteProperties),      # Flute, bottom B3 (C4 without a B foot)
+         (59, AltoFluteProperties),
+         (128, OpenPipeProperties)),
+}
+
+
 def property_class_for_note(program, note):
     """The voice class for one NOTE of one program.
 
-    Identical to property_class_for_program for everything except the bowed
-    ensembles, where it picks the instrument whose register the note is in.
+    Identical to property_class_for_program except where a program is really a
+    FAMILY: the bowed and brass ensembles, which pick the instrument whose
+    register the note is in, and the solo winds and brass whose bottom octave
+    belongs to a bigger instrument entirely (SOLO_SPLIT).
     """
     prog = program & 0x7F
     if prog in BRASS_ENSEMBLE:
@@ -234,6 +302,11 @@ def property_class_for_note(program, note):
         for hi, cls in BOWED_SPLIT:
             if note < hi:
                 return slow_bow(cls) if prog in BOWED_ENSEMBLE_SLOW else cls
+    split = SOLO_SPLIT.get(prog)
+    if split is not None:
+        for hi, cls in split:
+            if note < hi:
+                return cls
     return property_class_for_program(prog)
 
 # Each brass instrument has its own comfortable register and its own bore, so

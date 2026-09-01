@@ -2488,8 +2488,9 @@ class TromboneProperties(CylindricalBrassProperties):
     straining at the bottom and was boosted 3 dB throughout. Its own centre and a
     lower bore corner fix both the level and the colour.
     """
-    register_center_hz = 175.0     # around F3, the middle of the tenor's staff
-    bore_corner_hz = 2800.0
+    register_center_hz = 149.0
+    bore_corner_hz = 1932.1
+    bore_order = 1.074
     # Measured (Iowa, C3): the 3rd harmonic at 393 Hz is 7.5 dB above the
     # fundamental -- the same bell high-pass as the horn, at a higher cutoff
     # because the bore is narrower.
@@ -2500,8 +2501,25 @@ class TromboneProperties(CylindricalBrassProperties):
     # trombone bell is half a tuba's diameter and its cutoff must be HIGHER. The
     # family now runs in the order its bells do: trumpet 1600 > trombone 900 >
     # horn and tuba 390.
-    bell_cutoff_hz = 900.0
-    bell_order = 4.0
+    bell_cutoff_hz = 1072.8
+    bell_order = 3.972
+    # A trombone is not an organ pipe. This class inherited 32 from
+    # StoppedPipeProperties, which at E2 is a hard ceiling at 2.6 kHz --
+    # the register Ben heard as too mellow. Partials above Nyquist are
+    # dropped in blockrender, so this only costs where it is real.
+    # A trombone is not an organ pipe. This class inherited 32 from
+    # StoppedPipeProperties, and at E2 that is a hard ceiling at 2.6 kHz -- the
+    # register that sounded too mellow. Partials above Nyquist are dropped in
+    # blockrender, so this only costs where the harmonics are real.
+    #
+    # 96 rather than the 128 the fit wanted, because live.py has to play this:
+    #     maxh   HF err   partials   x realtime
+    #       32    11.72      19712       105.9
+    #       64     6.71      39409        54.8
+    #       96     4.63      57666        36.8
+    #      128     4.15      69431        29.2
+    # 128 buys 0.48 dB for another 20% of the CPU. The knee is at 96.
+    max_harmonic = 96
     # JOINTLY FITTED across Iowa TenorTrombone.mf E2B2 + C3B3 + C4B4.
     # One register is not enough, and this project already knew it: fitting
     # each brass voice to a SINGLE file left the horn 13.5 dB wrong at C4 and
@@ -2509,9 +2527,37 @@ class TromboneProperties(CylindricalBrassProperties):
     # carries a voice from one register to another, and only a multi-register
     # fit can see it -- it comes out NEGATIVE for the trombone and trumpet,
     # which is a brass instrument getting brighter with pitch and effort.
-    tonal_dampening = 2.75
-    octave_dampening = -0.1
+    tonal_dampening = 2.901
+    octave_dampening = -0.0715
 
+
+
+class BassTromboneProperties(TromboneProperties):
+    """The instrument that actually plays a trombone part below C2.
+
+    MEASURED: Iowa BassTrombone.mf, four registers, C#1-G4, 43 notes.
+
+    Routed from SOLO_SPLIT[57] below C2, which is where a tenor with an F
+    attachment finally runs out. It is a real instrument doing a real job rather
+    than a transposed tenor: judged on the Iowa bass trombone with BOTH classes
+    given enough harmonics, the tenor scores HF 5.90 dB and this scores 4.11.
+
+    max_harmonic is 256 against the tenor's 96, because THE CEILING HAS TO SCALE
+    WITH HOW LOW THE INSTRUMENT PLAYS. At C#1 (34.6 Hz) even 96 harmonics stop at
+    3.3 kHz while the recording carries past 8 kHz; the sweep runs HF 10.62 ->
+    7.62 -> 5.50 -> 4.11 dB at 96/128/192/256 and then flattens. The tenor does
+    NOT get 256 -- there it buys 0.49 dB for 43 per cent more partials, the same
+    trade already rejected when its own ceiling was set. Here the notes are both
+    rare and genuinely that low.
+    """
+    tonal_dampening = 2.854
+    octave_dampening = 0.1446
+    bore_corner_hz = 826.6
+    bore_order = 1.022
+    bell_cutoff_hz = 950.3
+    bell_order = 3.442
+    register_center_hz = 175.9
+    max_harmonic = 256
 
 class HornProperties(ConicalBrassProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
@@ -3685,6 +3731,41 @@ class OpenPipeProperties(StoppedPipeProperties):
     bell_order = 2.638
 
 
+
+class AltoFluteProperties(OpenPipeProperties):
+    """A flute part below B3 is an alto flute part. MEASURED: Iowa AltoFlute.mf,
+    four registers, G3-G6.
+
+    NARROW FIT, deliberately. The family measurement found no register law and
+    near-identical spectral tilt across all three flutes, so what separates them
+    is SIZE and not physics: only the radiation corner, the low cutoff and the
+    harmonic ceiling are fitted, and the tilt is inherited from the concert
+    flute. Turning six parameters loose on data that says the rest is shared is
+    how a fit ends up describing its measurement instead of its instrument.
+
+    The gain is small and honest -- concert class 6.62/5.75 dB, this 6.60/5.37 --
+    which is what "they share their physics" predicts. It is here because it is
+    the right instrument for G3-A#3, not because it rescues the numbers.
+    """
+    bore_corner_hz = 1947.7
+    bell_cutoff_hz = 205.1
+    bell_order = 3.635
+    max_harmonic = 59
+
+
+class BassFluteProperties(OpenPipeProperties):
+    """Below G3 an alto flute runs out too. MEASURED: Iowa BassFlute.mf, three
+    registers, C3-A#5.
+
+    Same narrow fit as the alto, and it earns more: concert class 6.40/7.67 dB,
+    this 5.54/5.27. A bigger tube radiates less top, which is the one thing the
+    concert flute's corner cannot express when simply transposed down.
+    """
+    bore_corner_hz = 1156.9
+    bell_cutoff_hz = 160.4
+    bell_order = 3.135
+    max_harmonic = 82
+
 class CylindricalReedProperties(ReedOrganProperties):
     """A woodwind, borrowing the reed organ's timbre but NOT its drawbars.
 
@@ -3860,6 +3941,39 @@ class ClarinetProperties(CylindricalReedProperties):
     # fit, then -0.30 dB more when the register law moved this voice's energy.
     initial_gain = (1.0 / 6400) * 1.0841
 
+
+
+class BassClarinetProperties(ClarinetProperties):
+    """The instrument that actually plays a clarinet part below D3.
+
+    MEASURED: Iowa BassClarinet.mf, four registers, C#2-A#5, 43 notes.
+
+    Routed from SOLO_SPLIT[71] below D3, the Bb clarinet's lowest sounding note.
+    A Bb clarinet cannot play below it at all, and the collection writes down to
+    MIDI 24 -- two octaves under the instrument the patch names. Those notes were
+    a Bb clarinet extrapolated into a register it does not have.
+
+    It earns its own class: judged on the Iowa bass clarinet, the shipped Bb
+    class scores shape 11.27 / HF 16.37 dB, this scores 9.95 / 3.72.
+
+    THE REGISTER LAW HOLDS ON A SECOND INSTRUMENT. Fitted independently, this
+    wants even_harmonic_db_per_octave = 7.331 against the Bb clarinet's 6.794 --
+    and that is the strongest evidence yet that the law is physics rather than a
+    curve through one instrument's data.
+
+    max_harmonic 128 by the bass trombone's argument: at its lowest note 64
+    harmonics stop at 4.4 kHz (HF 10.66 dB) where 128 reaches 8.9 kHz (3.72),
+    and 192 is no better.
+    """
+    even_harmonic_db = -6.261
+    even_harmonic_db_per_octave = 7.331
+    tonal_dampening = 0.975
+    octave_dampening = 0.0438
+    bore_corner_hz = 2719.3
+    bore_order = 1.935
+    bell_cutoff_hz = 398.8
+    bell_order = 1.719
+    max_harmonic = 128
 
 class VocalProperties(FormantBody, BowedStringProperties):
     """A sung vowel: a glottal source shaped by the fixed resonances of a
