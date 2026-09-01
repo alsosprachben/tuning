@@ -83,10 +83,11 @@ PERCUSSION = {
     # arrived as a burst of static instead of a tock. A guiro is a notched gourd
     # and the stick catching a notch excites the body: much closer to a small
     # woodblock struck very fast than to a rattle.
-    # 744 Hz is the LOWEST measured mode, which is what mode_ratios[0] means.
-    # (1175 was an earlier peak-pick that landed on a different mode.)
-    73: ("Short Guiro",        G, 744.0),
-    74: ("Long Guiro",         G, 744.0),
+    # 1099 Hz is the lowest mode present in BOTH Iowa takes, measured from the
+    # free tail. (744 came from a scrape-spectrum measurement that was reading
+    # the ridge-rate comb; 1175 before that was a single mis-picked peak.)
+    73: ("Short Guiro",        G, 1099.0),
+    74: ("Long Guiro",         G, 1099.0),
     # MEASURED (Iowa hand percussion, mf). Claves ring at 908, 993 and 1216 Hz
     # across the three pairs; 990 is the middle one.
     75: ("Claves",             W, 990.0),

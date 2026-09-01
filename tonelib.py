@@ -3840,21 +3840,26 @@ class GuiroProperties(WoodPercussionProperties):
     not. Raising the inharmonicity pushes partials past Nyquist and thins the
     spectrum instead of filling it. That would want a real modal model.
     """
-    # THE MEASURED MODE SET. Iowa guiro.away and guiro.toward, whole scrape,
-    # peaks above -30 dB, anchored on the strongest mode and pooled across both
-    # directions. Fourteen modes at ratios that are not multiples of anything --
-    # which is the point: a gourd with a slot cut in it has a two-dimensional
-    # boundary, and its modes fall where they fall.
+    # THE MEASURED MODE SET -- FROM THE FREE TAIL, NOT THE SCRAPE.
     #
-    # This is what the harmonic model could not reach. Stretching a series put
-    # 66% of the energy in the top 20 spectral bins against the recording's 25%,
-    # and raising the inharmonicity to spread it only pushed partials past
-    # Nyquist and thinned the spectrum instead.
-    mode_ratios = (1.000, 1.068, 1.179, 1.273, 2.002, 2.159, 2.362,
-                   2.687, 2.955, 3.292, 3.639, 4.079, 4.657, 8.542)
-    mode_gains  = (0.165, 0.156, 0.239, 0.386, 1.000, 0.186, 0.242,
-                   0.209, 0.838, 0.325, 0.357, 0.285, 0.348, 0.148)
-    max_harmonic = 14
+    # A scrape is a periodic impulse train at about 230 Hz, so the spectrum of
+    # the scrape ITSELF is the body's response convolved with a comb at
+    # multiples of the ridge rate. Measuring modes there measures the comb as
+    # much as the gourd: the first attempt gave 1.000 1.068 1.179 1.273 and then
+    # nothing until 2.002, and that gap is where a comb null sits, not where the
+    # body is quiet.
+    #
+    # So these come from the 50 ms of free decay AFTER the last ridge, where
+    # there is no repetition to alias -- and only from modes present in BOTH
+    # guiro.away and guiro.toward within 3%. A mode in one take is that scrape's
+    # excitation; a mode in both is the body. 19 of 30 peaks survived that.
+    mode_ratios = (1.000, 1.072, 1.235, 1.309, 1.537, 1.627, 1.710, 1.928,
+                   1.958, 2.156, 2.315, 2.476, 2.619, 2.658, 2.759, 2.998,
+                   3.047, 3.235, 3.395)
+    mode_gains  = (0.241, 0.605, 0.090, 0.103, 0.202, 1.000, 0.185, 0.435,
+                   0.356, 0.127, 0.121, 0.990, 0.190, 0.300, 0.162, 0.076,
+                   0.077, 0.290, 0.084)
+    max_harmonic = 19
     # the modes are measured absolutely; nothing left to stretch
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
