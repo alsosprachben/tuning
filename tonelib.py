@@ -115,7 +115,14 @@ class Second:
 
 
 def db_ratio(db):
-    return 10 ** (float(db) / 10)
+    # SATURATE RATHER THAN OVERFLOW. A decay rate is dB per second, and above
+    # about 3080 dB/s the exponent leaves the range of a double -- which raised
+    # OverflowError rather than producing a very fast decay. It bit twice: a
+    # PERCUSSION_RING under about 12 ms, and a measured mode set whose upper
+    # modes are indexed far enough out to be solved to a huge rate. 3000 dB/s
+    # is a partial gone in 20 ms; nothing above it is audibly different, and
+    # nothing should crash for asking.
+    return 10 ** (min(float(db), 3000.0) / 10)
 
 
 def db_amplitude(db):
@@ -674,6 +681,14 @@ class SimplePartial(BasePartial):
         # once rather than per sample. B == 0 (air columns) -> 1.0, pure harmonic.
         B = properties.inharmonicity_coefficient
         self.inharmonic_stretch = (1.0 + 0.5 * (h * h - 1) * B) if B > 0.0 else 1.0
+        # A MEASURED MODE SET rides the same factor. frequency() computes
+        # base * harmonic * inharmonic_stretch, and the partial stores the
+        # integer INDEX -- so placing mode m at its measured ratio is exactly
+        # a stretch of ratio/m. Doing it here rather than by handing the ratio
+        # in as `harmonic` keeps every other use of the index intact.
+        mr = properties.mode_ratio(h)
+        if mr != h and h:
+            self.inharmonic_stretch *= mr / float(h)
         if ref_count > 0:
             for i in range(ref_count):
                 self.unlift()
@@ -776,6 +791,33 @@ class SynthProperties:
     # See series_volume(): a real stopped pipe suppresses its even harmonics,
     # it does not delete them -- measured 24 to 38 dB down on the Iowa clarinet.
     even_harmonic_db = None
+
+    # AN IRREGULAR MODE SET: partials at MEASURED frequencies, not at multiples
+    # of anything.
+    #
+    # Everything else in this file builds a harmonic series and then bends it --
+    # inharmonicity_coefficient stretches it, bar_modes picks whole-numbered
+    # members out of it. Both assume the body's modes are RELATED to each other.
+    # A struck plate, a slotted gourd, a cymbal, a tam-tam: their modes are set
+    # by a two-dimensional boundary and fall where they fall. No stretch of a
+    # series reaches them, and pushing the inharmonicity up to try only drives
+    # the upper partials past Nyquist, thinning the spectrum instead of filling
+    # it -- measured on the guiro, where the top 20 spectral bins held 66% of
+    # the energy against the recording's 25%.
+    #
+    # So: mode_ratios is a tuple of multiples of the fundamental, one per
+    # partial, taken from a recording. Partial m sits at f0 * mode_ratios[m-1]
+    # rather than at f0 * m. Everything indexed by m -- series_volume,
+    # harmonic_decay, chiff_harmonic_gain, unison_voices -- keeps working
+    # unchanged, because m stays the mode INDEX and only the frequency it maps
+    # to changes.
+    #
+    # None means the old behaviour, which is every voice that has one.
+    mode_ratios = None
+
+    # The measured LEVEL of each of those modes, one per entry in mode_ratios.
+    # None means the ordinary series_volume applies.
+    mode_gains = None
 
     # ...AND HOW MUCH IT SUPPRESSES THEM DEPENDS ON THE PITCH. A stopped
     # cylinder is only stopped while the tonehole lattice below the first open
@@ -1294,6 +1336,12 @@ class SynthProperties:
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
 
+        # A measured mode set answers directly: no series, no comb, no tilt.
+        if self.mode_gains is not None:
+            if 1 <= harmonic <= len(self.mode_gains):
+                return self.gain * self.mode_gains[harmonic - 1]
+            return 0.0
+
         if harmonic % 2 == 0:
             # A cylindrical pipe stopped at one end resonates at odd multiples
             # only -- but "only" is the ideal, not the instrument. Measured on
@@ -1335,7 +1383,10 @@ class SynthProperties:
         if v == 0.0 or not self.bore_corner_hz:
             return v
         f0 = self.frequency_x * (2.0 ** self.octave_position)
-        return v * self.bore_gain(f0 * harmonic) * self._bore_norm()
+        # mode_ratio, not `harmonic`: with a measured mode set the partial does
+        # NOT sit at f0*m, and the bore filter has to be evaluated where the
+        # partial actually is. Identity for every harmonic voice.
+        return v * self.bore_gain(f0 * self.mode_ratio(harmonic)) * self._bore_norm()
 
     def _bore_norm(self):
         # THE BORE IS A COLOUR, NOT A VOLUME CONTROL. A fixed roll-off applied to a
@@ -1478,6 +1529,17 @@ class SynthProperties:
             x = (partial_hz / self.bell_cutoff_hz) ** self.bell_order
             g *= x / (1.0 + x)
         return g
+
+    def mode_ratio(self, m):
+        """Where partial m actually sits, as a multiple of the fundamental.
+
+        m for a harmonic series; the measured ratio for a body whose modes are
+        not related to each other (see mode_ratios).
+        """
+        r = self.mode_ratios
+        if r is None:
+            return float(m)
+        return r[m - 1] if 1 <= m <= len(r) else 0.0
 
     def register_effort_at(self, frequency):
         if not self.register_effort_db and not self.register_tilt_db:
@@ -3535,7 +3597,11 @@ class NoisyPercussionMixin:
 
     def harmonic_volume(self, harmonic):
         v = super().harmonic_volume(harmonic)
-        return 0.0 if v == 0.0 else v * self._hf_rolloff(harmonic)
+        # mode_ratio: _hf_rolloff wants WHERE the partial is, and with a measured
+        # mode set that is not f0*m. (chiff_harmonic_gain below is already handed
+        # a ratio by both renderers, so it needs no conversion.) Identity for
+        # every harmonic voice.
+        return 0.0 if v == 0.0 else v * self._hf_rolloff(self.mode_ratio(harmonic))
 
     def chiff_harmonic_gain(self, harmonic):
         # The WASH needs the roll-off too, and it is the larger half of the
@@ -3774,12 +3840,26 @@ class GuiroProperties(WoodPercussionProperties):
     not. Raising the inharmonicity pushes partials past Nyquist and thins the
     spectrum instead of filling it. That would want a real modal model.
     """
+    # THE MEASURED MODE SET. Iowa guiro.away and guiro.toward, whole scrape,
+    # peaks above -30 dB, anchored on the strongest mode and pooled across both
+    # directions. Fourteen modes at ratios that are not multiples of anything --
+    # which is the point: a gourd with a slot cut in it has a two-dimensional
+    # boundary, and its modes fall where they fall.
+    #
+    # This is what the harmonic model could not reach. Stretching a series put
+    # 66% of the energy in the top 20 spectral bins against the recording's 25%,
+    # and raising the inharmonicity to spread it only pushed partials past
+    # Nyquist and thinned the spectrum instead.
+    mode_ratios = (1.000, 1.068, 1.179, 1.273, 2.002, 2.159, 2.362,
+                   2.687, 2.955, 3.292, 3.639, 4.079, 4.657, 8.542)
+    mode_gains  = (0.165, 0.156, 0.239, 0.386, 1.000, 0.186, 0.242,
+                   0.209, 0.838, 0.325, 0.357, 0.285, 0.348, 0.148)
+    max_harmonic = 14
+    # the modes are measured absolutely; nothing left to stretch
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
     chiff_volume = 0.20
     sustain_jitter = 0.30
-    tonal_dampening = 0.40
-    max_harmonic = 64
-    inharmonicity_coefficient = 0.10
-    inharmonicity_dynamic = False
 
 class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     """Cymbal (crash, ride, splash, china): a bright broadband noise wash --
@@ -4545,11 +4625,14 @@ class SynthTone(BaseTone):
                 self.properties.inharmonicity_coefficient = self.properties.inharmonicity_coefficient_for_frequency(
                     frequency)
 
+            hr = self.properties.mode_ratio(harmonic)
+            if hr <= 0.0:
+                break
             if self.properties.inharmonicity_coefficient > 0.0:
-                harmonic_frequency = self.frequency * harmonic * (
-                            1.0 + 0.5 * (harmonic ** 2 - 1) * self.properties.inharmonicity_coefficient)
+                harmonic_frequency = self.frequency * hr * (
+                            1.0 + 0.5 * (hr ** 2 - 1) * self.properties.inharmonicity_coefficient)
             else:
-                harmonic_frequency = self.frequency * harmonic
+                harmonic_frequency = self.frequency * hr
 
             if harmonic_frequency > self.nyquist:
                 break

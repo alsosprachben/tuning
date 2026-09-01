@@ -366,7 +366,9 @@ def prepare(path, tuner='hybrid'):
                     if bmode == 'truncate': continue
                     while f0*eff_ratio > ceiling and eff_ratio >= 2.0: eff_ratio *= 0.5
                 for m in range(1, props.max_harmonic+1):
-                    h = eff_ratio*m; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
+                    mr = props.mode_ratio(m)
+                    if mr <= 0.0: break
+                    h = eff_ratio*mr; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
                     if hf > SR/2: break
                     hv = hv_fn(m)
                     if hv == 0.0: continue
