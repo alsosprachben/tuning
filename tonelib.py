@@ -2476,48 +2476,49 @@ class HornProperties(DarkBrassProperties):
     octave_dampening = 0.60
 
 
-class BrassSectionProperties(SectionMixin, TromboneProperties):
-    """GM 61, Brass Section: several players, not one player made loud.
+_BRASS_SECTION = {}
 
-    It was mapped to a single TromboneProperties -- the right weight, but one
-    instrument. A section is a way of being played, so the same machinery the
-    string sections use applies here over a brass spectrum: N stacks a few cents
-    apart, each with its own start phase, its own vibrato and its own chair.
 
-    Not the same numbers as the strings, though, because it is not the same
-    ensemble:
+def brass_section(cls):
+    """One brass instrument, played by five of them.
 
-      - FIVE players, not seven. A GM brass section is a punchy unison of a few
-        trumpets and trombones, not a desk-doubled orchestral body.
-      - TIGHTER pitch spread. Brass players hear beats against each other very
-        strongly on a sustained tone and lock to them; a string section, spread
-        across more desks and bowing rather than buzzing, stays looser.
-      - MUCH less vibrato. Orchestral brass plays a section passage nearly
-        straight, where a string section never does. 2.5 cents is a shimmer that
-        keeps the beat rates wandering, which is what it is there for -- and it
-        must not be zero (see SectionMixin).
-      - NARROWER on the stage. Brass sit in a block; strings spread across the
-        front.
+    GM 61 used to be a single class over the whole range -- five trombones at
+    every pitch -- and patch_map has said since it was written that the brass
+    instruments "cannot share one class: doing so boosted the trombone 3 dB
+    through its whole range (trumpet's centre) and the horn 2 dB through its
+    (tuba's centre)". A section made of one of them breaks that rule at every
+    note outside its register. The bodies really are different: trumpet's bell
+    cuts at 1600 Hz and its bore at 1800, a trombone's at 230 and 1600.
 
-    Known gap: the players share an attack instant. A real section's entries
-    scatter by a few milliseconds, and brass scatter more than strings, but
-    attack_jitter is per NOTE rather than per player and there is no per-player
-    time offset in the partial table to hang it on.
+    So the ensemble routes by range like the strings do, and this wraps whichever
+    instrument the note landed on in a section. Cached per class, the way
+    slow_bow and percussion_map._with_ring are.
+
+    Not the strings' numbers: FIVE players not seven (a GM brass section is a
+    punchy unison of a few trumpets and trombones, not a desk-doubled body), a
+    tighter pitch spread (brass hear beats against each other strongly on a
+    sustained tone and lock to them), much less vibrato (orchestral brass plays a
+    section passage nearly straight), and a narrower stage (brass sit in a block).
     """
-    section_players = 5
-    section_spread_cents = 5.0
-    section_vibrato_cents = 2.5
-    section_vibrato_hz = (5.0, 6.6)
-    section_width_m = 0.9
-    # 6 ms inside a 40 ms onset -- about 15% of the ramp, which is a real entry
-    # rather than sloppiness. Brass scatter less than strings in absolute terms
-    # and it shows far more, because the ramp they scatter inside is 2.5x shorter.
-    section_onset_ms = 6.0
-    # /sqrt(players), exactly as the string sections do it: the players are at
-    # different pitches, so they are incoherent and add in POWER. This keeps a
-    # brass SECTION at the same calibrated loudness as the single trombone it
-    # replaces, so the equal-velocity balance across the orchestra survives.
-    initial_gain = TromboneProperties.initial_gain / (section_players ** 0.5)
+    got = _BRASS_SECTION.get(cls)
+    if got is None:
+        n = 5
+        got = type(cls.__name__.replace("Properties", "") + "SectionProperties",
+                   (SectionMixin, cls), {
+            "section_players": n,
+            "section_spread_cents": 5.0,
+            "section_vibrato_cents": 2.5,
+            "section_vibrato_hz": (5.0, 6.6),
+            "section_width_m": 0.9,
+            "section_onset_ms": 6.0,
+            # /sqrt(players), as the string sections do it: the players are at
+            # different pitches, so they are incoherent and add in POWER. Keeps
+            # a section at the loudness the one instrument was calibrated to.
+            "initial_gain": cls.initial_gain / (n ** 0.5),
+            "__doc__": "Five %s, routed here by register." % cls.__name__,
+        })
+        _BRASS_SECTION[cls] = got
+    return got
 
 
 class MalletProperties(PluckedStringProperties):

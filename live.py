@@ -530,11 +530,18 @@ class Bank:
         return int(min(127, (b + 0.5) * 128.0 / self.nbuckets))
 
     def _voice_class(self, note):
-        """The property class this note will actually be rendered with."""
+        """The property class this note will actually be rendered with.
+
+        Per NOTE, not per program: an ensemble patch routes each note to the
+        instrument whose register it is in, so one_shot and section_onset_ms have
+        to be read off the class that note actually got. Asking by program gave a
+        routed brass section the un-sectioned trombone and silently lost its
+        entry scatter.
+        """
         if self.drums:
             got = percussion_for_note(note)
             return got[1] if got else None
-        return __import__("patch_map").property_class_for_program(self.program)
+        return __import__("patch_map").property_class_for_note(self.program, note)
 
     def _raw_template(self, note, vel):
         """Build one note at one velocity. Costs 1.4-10 ms: off-thread only."""

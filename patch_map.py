@@ -12,7 +12,7 @@ and editing this table -- the dispatch stays data-driven.
 
 from tonelib import (
     TromboneProperties,
-    BrassSectionProperties,
+    brass_section,
     HornProperties,
     WoodPercussionProperties,
     SquareSynthProperties,
@@ -189,6 +189,16 @@ BOWED_SPLIT = ((36, ContrabassProperties),      # below C2
                (60, ViolaProperties),           # C3 - B3
                (128, ViolinProperties))         # C4 and up
 
+# A brass section is scored the same way a string one is -- tuba at the bottom,
+# then trombones, horns, trumpets on top -- and the instruments' bodies differ
+# more than the strings' do (trumpet's bell cuts at 1600 Hz, a trombone's at
+# 230). Same handover-in-scoring boundaries rather than range limits.
+BRASS_SPLIT = ((40, DarkBrassProperties),       # below E2: tuba weight
+               (52, TromboneProperties),        # E2 - D#3
+               (64, HornProperties),            # E3 - D#4
+               (128, TrumpetProperties))        # E4 and up
+BRASS_ENSEMBLE = {61}
+
 # Programs that are a whole section rather than a named instrument.
 BOWED_ENSEMBLE = {44, 48, 50, 51}
 BOWED_ENSEMBLE_SLOW = {49}
@@ -201,6 +211,10 @@ def property_class_for_note(program, note):
     ensembles, where it picks the instrument whose register the note is in.
     """
     prog = program & 0x7F
+    if prog in BRASS_ENSEMBLE:
+        for hi, cls in BRASS_SPLIT:
+            if note < hi:
+                return brass_section(cls)
     if prog in BOWED_ENSEMBLE or prog in BOWED_ENSEMBLE_SLOW:
         for hi, cls in BOWED_SPLIT:
             if note < hi:
@@ -212,4 +226,4 @@ def property_class_for_note(program, note):
 # whole range (trumpet's centre) and the horn 2 dB through its (tuba's centre).
 PROGRAM_CLASS[57] = TromboneProperties     # Trombone
 PROGRAM_CLASS[60] = HornProperties         # French Horn
-PROGRAM_CLASS[61] = BrassSectionProperties  # Brass Section: five players, tenor-ish weight
+PROGRAM_CLASS[61] = TromboneProperties     # Brass Section: routed per note, see BRASS_SPLIT
