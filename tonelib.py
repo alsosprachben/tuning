@@ -2762,14 +2762,31 @@ class ViolinProperties(FormantBody, BowedStringProperties):
 
 
 class ViolaProperties(FormantBody, BowedStringProperties):
-    """INTERPOLATED from the violin by body length (~0.85x its frequencies)."""
-    formants = ((1950.0, 1300.0, 0.55), (600.0, 400.0, 0.30))
-    formant_floor = 0.05
-    tonal_dampening = 1.7       # interpolated between the fitted violin and cello
+    """MEASURED: Iowa Viola.arco.mf, sulC C3B3 and C4B4, sulA C5B5.
+
+    It used to be the violin's resonances scaled down by body length, and the
+    recording says that guess was half right. The bridge hill was close -- 1950
+    Hz guessed against a real peak at 1920-2283, +10.7 dB. The low body was not:
+    600 Hz guessed where 480-679 is in fact a DIP, with the real peaks at 430 and
+    1030.
+
+    Everything below jointly fitted across all three registers, formant
+    AMPLITUDES included -- fitting only the shape left it at 7.6 dB, because the
+    amplitudes I read off the pooled spectrum are in the wrong scale for a model
+    that has its own tilt underneath them. RMS 7.56 -> 4.65 dB over h1-h12.
+    """
+    formants = ((430.0, 220.0, 0.16), (1030.0, 450.0, 0.10), (2100.0, 1000.0, 0.60))
+    # Trimmed -0.52 dB so the fit changes COLOUR and not LEVEL -- the
+    # equal-velocity balance predates it, and the fit moved this voice's
+    # total energy by that much.
+    initial_gain = BowedStringProperties.initial_gain * 0.9419
+    formant_floor = 0.10
+    tonal_dampening = 1.50
+    octave_dampening = -0.30
     bore_corner_hz = 3600.0
     bore_order = 2.0
-    bell_cutoff_hz = 300.0
-    bell_order = 2.0
+    bell_cutoff_hz = 350.0
+    bell_order = 3.0
 
 
 class CelloProperties(FormantBody, BowedStringProperties):
@@ -2788,14 +2805,32 @@ class CelloProperties(FormantBody, BowedStringProperties):
 
 
 class ContrabassProperties(FormantBody, BowedStringProperties):
-    """INTERPOLATED from the cello by body length (~0.55x its frequencies)."""
-    formants = ((105.0, 55.0, 0.45), (480.0, 300.0, 0.60), (1150.0, 600.0, 0.35))
+    """MEASURED: Iowa Bass.arco.mf, sulE E1B1, sulA C2B2, sulG C3B3.
+
+    It used to be the cello's resonances scaled down, and only the lowest one
+    survived contact with the recording: 105 Hz guessed against a real peak at
+    85-101, +8.4 dB. The other two were wrong -- 480-571 is a DIP rather than the
+    peak I put there, and 1142-1358 is flat. The real ones sit at 190 (+8.4) and
+    1750 (+6.6).
+
+    The fit then reduced the 190 and 880 poles to almost nothing (0.06 and 0.03),
+    so what carries this instrument is the 93 Hz body and the 1750 Hz upper
+    resonance. They are kept because they were measured, not because they earn
+    much. Jointly fitted across all three registers: RMS 7.77 -> 4.24 dB.
+    """
+    formants = ((93.0, 45.0, 0.90), (190.0, 100.0, 0.06),
+                (880.0, 400.0, 0.03), (1750.0, 800.0, 0.60))
+    # Trimmed +1.01 dB so the fit changes COLOUR and not LEVEL -- the
+    # equal-velocity balance predates it, and the fit moved this voice's
+    # total energy by that much.
+    initial_gain = BowedStringProperties.initial_gain * 1.1233
     formant_floor = 0.05
-    tonal_dampening = 1.9       # extrapolated below the fitted cello
-    bore_corner_hz = 2400.0
+    tonal_dampening = 2.00
+    octave_dampening = 0.00
+    bore_corner_hz = 5500.0
     bore_order = 2.0
     bell_cutoff_hz = 135.0
-    bell_order = 2.0
+    bell_order = 3.0
 
 
 _SLOW_BOW = {}
