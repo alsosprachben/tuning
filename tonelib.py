@@ -3829,6 +3829,41 @@ class OpenPipeProperties(StoppedPipeProperties):
 
 
 
+class VesselFluteProperties(OpenPipeProperties):
+    """An ocarina or a blown bottle: a HELMHOLTZ RESONATOR, not a pipe.
+
+    A vessel flute has no standing wave along a tube. The air in its neck moves
+    as a lump against the springiness of the air in the cavity, which is a mass
+    on a spring -- ONE resonance, and no harmonic series above it. That is why
+    an ocarina is famously close to a pure tone, and why the harmonics it does
+    have come from the jet rather than from the body.
+
+    So it is neither of the two voices this family had. It is not an open pipe
+    (a full series, which is a flute) and it is not a stopped pipe (odd
+    harmonics only, which is a pan pipe -- correctly, since a pan pipe IS closed
+    at the bottom). Programs 76 and 79 had been falling through to the stopped
+    voice, which gave a bottle and an ocarina the odd-harmonic spectrum of an
+    organ rank.
+
+    NOT MEASURED. Iowa has no ocarina and no bottle, so unlike every other class
+    in this file the numbers here are asserted from the physics rather than
+    fitted to a recording: a steep tonal_dampening for the fast harmonic
+    fall-off a resonator gives, and a low ceiling because there is nothing up
+    there to render. If a reference ever turns up, this is the class to fit.
+    """
+    odd_only = False
+    even_harmonic_db = None
+    # Steep: a Helmholtz resonance does not feed a series the way a tube does.
+    tonal_dampening = 3.4
+    octave_dampening = 0.0
+    max_harmonic = 12
+    # The cavity radiates from a small mouth, so there is no bell high-pass and
+    # the top rolls off early.
+    bore_corner_hz = 2200.0
+    bore_order = 2.0
+    bell_cutoff_hz = 0.0
+
+
 class AltoFluteProperties(OpenPipeProperties):
     """A flute part below B3 is an alto flute part. MEASURED: Iowa AltoFlute.mf,
     four registers, G3-G6.

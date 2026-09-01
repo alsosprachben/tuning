@@ -25,6 +25,7 @@ from tonelib import (
     BassClarinetProperties,
     AltoFluteProperties,
     BassFluteProperties,
+    VesselFluteProperties,
     MalletProperties,
     BowedStringProperties,
     SlowBowedStringProperties,
@@ -142,12 +143,21 @@ for _p in (64, 65, 66, 67):
     PROGRAM_CLASS[_p] = SaxophoneProperties
 # 72-79  Pipe (piccolo, flute, recorder, pan flute, bottle, shakuhachi, whistle, ocarina)
 _fill(72, 79, StoppedPipeProperties)
-# ...but the OPEN pipes among them have the full harmonic series, not the odd-only
-# one a stopped organ rank wants. 75 (pan flute) and 79 (ocarina) keep the stopped
-# voice: a pan pipe IS closed at the bottom, and 79 is how our organ pipeline
-# writes flue ranks -- 26735 notes across the Bach corpus depend on it.
+# ...but they are three different bodies, not one. The OPEN pipes have the full
+# harmonic series; a PAN PIPE is closed at the bottom and really is odd-only; and
+# an ocarina or a bottle is a HELMHOLTZ RESONATOR with no series at all.
+#
+# 79 used to keep the stopped voice because the Bach files in this collection
+# write program 79 for organ flue ranks -- 7714 notes across 15 files. That is
+# now deliberately NOT honoured. BE A SUPERSET OF GENERAL MIDI: if a file
+# orchestrates an organ out of wind patches, let it, because whoever made it
+# chose those patches knowing how they sound on real GM gear. An ocarina is a
+# soft pure tone, which is exactly why it reads as a flue rank -- so giving them
+# a real ocarina serves that intent better than lending them our organ.
 for _p in (72, 73, 74, 77, 78):
     PROGRAM_CLASS[_p] = OpenPipeProperties
+PROGRAM_CLASS[76] = VesselFluteProperties   # blown bottle: a Helmholtz resonator
+PROGRAM_CLASS[79] = VesselFluteProperties   # ocarina: the same, and now its own
 # 80-87  Synth Lead                    -> bright sustained pipe, but no drawbars:
 # a synth lead has no stops to draw, and registerable would make CC11 a stop word
 # instead of the expression GM says it is. See SynthLeadProperties.
@@ -274,11 +284,22 @@ SOLO_SPLIT = {
     # writes down to MIDI 24, two octaves under it.
     71: ((50, BassClarinetProperties),
          (128, ClarinetProperties)),
-    # --- a piccolo cannot play below D5; below that it is simply a flute, and
-    # the flute's own cascade continues underneath.
+    # --- a piccolo cannot play below D5, and below that it is simply a FLUTE.
+    # The boundary is the PICCOLO's own bottom, not the flute's -- the whole
+    # point of the rule is that each instrument keeps the notes it can play, and
+    # writing the flute's B3 here made 72 and 73 the same mapping, which left
+    # program 72 with no meaning of its own. The flute's cascade continues
+    # underneath, so a low piccolo part descends piccolo -> flute -> alto ->
+    # bass rather than jumping straight to a bass flute two octaves down.
+    #
+    # (The piccolo and the concert flute still share OpenPipeProperties, so
+    # above D5 this changes nothing audible today. It changes what the routing
+    # MEANS, and it is what a fitted PiccoloProperties would hang from -- Iowa
+    # has no piccolo, so there is nothing to fit yet.)
     72: ((55, BassFluteProperties),
          (59, AltoFluteProperties),
-         (128, OpenPipeProperties)),
+         (74, OpenPipeProperties),       # below D5: a flute, not a piccolo
+         (128, OpenPipeProperties)),     # D5 and up: the piccolo's own range
     73: ((55, BassFluteProperties),      # Flute, bottom B3 (C4 without a B foot)
          (59, AltoFluteProperties),
          (128, OpenPipeProperties)),
