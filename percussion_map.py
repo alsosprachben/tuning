@@ -110,6 +110,11 @@ PERCUSSION = {
     # crotale in a different mounting -- MEASURED across Iowa's chromatic set,
     # see CrotaleProperties. 1055 Hz is its C6, the bottom of that set.
     84: ("Belltree",           P, 1055.0),
+    # 86 and 87 were unmapped too. A surdo is the big Brazilian bass drum that
+    # carries a samba -- a large membrane, deeper than a floor tom, and the
+    # muted stroke is the same head with a hand on it.
+    86: ("Mute Surdo",         M, 70.0),
+    87: ("Open Surdo",         M, 66.0),
 }
 
 GM_PERCUSSION_CHANNEL = 9  # 0-based; GM drum channel is "10" one-based
@@ -189,6 +194,8 @@ PERCUSSION_RING = {
     80: 2.00, 81: 6.00,
     # castanets are a dry clack; a belltree rings like the crotale it is
     85: 0.25, 84: 8.00,
+    # a surdo rings long open and is stopped dead by the hand
+    86: 0.25, 87: 0.90,
 }
 
 
@@ -204,6 +211,11 @@ COMPOSITE_SLOWDOWN = 1.85    # measured across the kit; see _with_ring
 # before the hats are touched.
 PERCUSSION_LEVEL = {
     73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
+    # A surdo is the biggest drum in a samba and carries the whole groove, but
+    # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
+    # UNDER the kick. Open surdo now sits a little above it, muted a little
+    # below -- which is the relationship the two have on a real bateria.
+    86: 3.0, 87: 3.0,
     # The open hat sat 9.4 dB above the closed one. An open hat IS louder -- more
     # metal is free to move -- but not by that much; on a kit it is a few dB, and
     # at nine the closed strokes vanish between the open ones.

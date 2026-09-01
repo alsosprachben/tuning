@@ -3273,8 +3273,39 @@ class MembraneDrumProperties(PercussionProperties):
     tension_settle_cutoff = 1.2
 
     initial_gain = 1.0 / 2.5
+    # THE MODES OF A CIRCULAR MEMBRANE ARE THE BESSEL ZEROS. This is the one
+    # body in the file whose mode set needs no recording: it is analytic, and it
+    # is the ratio of j(m,n) to j(0,1) for a clamped circular head --
+    #
+    #   (0,1) 1.000  (1,1) 1.593  (2,1) 2.136  (0,2) 2.295  (3,1) 2.653
+    #   (1,2) 2.917  (4,1) 3.155  (2,2) 3.500  (0,3) 3.599  (5,1) 3.647
+    #
+    # -- and this class had been building a mildly stretched HARMONIC series
+    # instead: 1.000 2.031 3.124 4.310 5.620 7.085. Its own docstring already
+    # said "a free circular membrane's modes are 1 : 1.59 : 2.14 : 2.30 : 2.65
+    # -- no musical relationship at all, which is why a tom has no definite
+    # pitch" (see TimpaniProperties, which places its kettle-loaded modes
+    # explicitly for exactly this reason). The engine simply had no way to
+    # express it until mode_ratios existed.
+    #
+    # It matters more here than almost anywhere: a harmonic series HAS a pitch.
+    # Modelling a tom as one is modelling the single thing that distinguishes a
+    # drum from a note.
+    #
+    # THE RATIOS ARE PHYSICS; THE GAINS ARE JUDGEMENT. There is no drum kit in
+    # the Iowa collection -- no snare, no bass drum, no toms -- so unlike the
+    # guiro nothing here is fitted to a recording. The amplitudes fall as
+    # 1/ratio**1.6, which reproduces the roll-off this class already had through
+    # tonal_dampening (mode_gains bypasses that path). Same footing as the
+    # ocarina and the blown bottle, and labelled the same way.
+    mode_ratios = (1.000, 1.593, 2.136, 2.295, 2.653, 2.917,
+                   3.155, 3.500, 3.599, 3.647, 4.059, 4.132)
+    mode_gains  = (1.000, 0.475, 0.297, 0.265, 0.210, 0.180,
+                   0.159, 0.135, 0.129, 0.126, 0.106, 0.103)
     max_harmonic = 12
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0
+    # the mode set is absolute; there is no series left to stretch
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
     tonal_dampening = 1.6
     decay_db = 34.0            # tom ring ~0.85 s to -30 dB
     harmonic_decay_db = 6.0
