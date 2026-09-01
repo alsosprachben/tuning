@@ -26,6 +26,8 @@ from tonelib import (
     AltoFluteProperties,
     BassFluteProperties,
     VesselFluteProperties,
+    OcarinaProperties,
+    BlownBottleProperties,
     MalletProperties,
     BowedStringProperties,
     SlowBowedStringProperties,
@@ -156,8 +158,10 @@ _fill(72, 79, StoppedPipeProperties)
 # a real ocarina serves that intent better than lending them our organ.
 for _p in (72, 73, 74, 77, 78):
     PROGRAM_CLASS[_p] = OpenPipeProperties
-PROGRAM_CLASS[76] = VesselFluteProperties   # blown bottle: a Helmholtz resonator
-PROGRAM_CLASS[79] = VesselFluteProperties   # ocarina: the same, and now its own
+# Same Helmholtz body, different EDGE: an ocarina has a fipple and sings, a
+# bottle has none and is mostly breath. See the two classes.
+PROGRAM_CLASS[76] = BlownBottleProperties
+PROGRAM_CLASS[79] = OcarinaProperties
 # 80-87  Synth Lead                    -> bright sustained pipe, but no drawbars:
 # a synth lead has no stops to draw, and registerable would make CC11 a stop word
 # instead of the expression GM says it is. See SynthLeadProperties.

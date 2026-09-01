@@ -3845,6 +3845,9 @@ class VesselFluteProperties(OpenPipeProperties):
     voice, which gave a bottle and an ocarina the odd-harmonic spectrum of an
     organ rank.
 
+    This is the shared BODY. What separates an ocarina from a blown bottle is
+    not the resonator, it is the EDGE that drives it -- see the two subclasses.
+
     NOT MEASURED. Iowa has no ocarina and no bottle, so unlike every other class
     in this file the numbers here are asserted from the physics rather than
     fitted to a recording: a steep tonal_dampening for the fast harmonic
@@ -3863,6 +3866,47 @@ class VesselFluteProperties(OpenPipeProperties):
     bore_order = 2.0
     bell_cutoff_hz = 0.0
 
+
+
+class OcarinaProperties(VesselFluteProperties):
+    """GM 79. A vessel flute with a FIPPLE: a moulded windway aims the breath at
+    a sharp labium, the way a recorder does. That is an efficient edge, so most
+    of the air goes into driving the resonance and the tone dominates the
+    breath. Hence a modest chiff, and the pure singing quality the instrument is
+    known for."""
+    chiff_volume = 1.0
+    chiff_cycle = 0.2
+
+
+class BlownBottleProperties(VesselFluteProperties):
+    """GM 76. The same Helmholtz body, driven by a MUCH WORSE EDGE.
+
+    Blowing across a bottle top has no windway and no labium -- you aim a
+    turbulent jet across an opening and hope. Most of the energy never couples
+    into the resonance at all; it stays as broadband turbulence. So a bottle is
+    mostly BREATH with a weak tone inside it, which is the opposite balance to
+    an ocarina even though the resonator is the same shape of thing.
+
+    The chiff therefore carries the sound rather than starting it. It sits
+    between the ocarina's 1.0 and BreathNoiseProperties' 2.4 (GM 121, which is
+    breath with no note in it at all), and it SUSTAINS: you keep blowing, and
+    the noise keeps moving while the note is held. A wider chiff_cycle makes it
+    noise rather than shimmer, the same reason GM 121 uses 0.95.
+
+    Also darker and weaker in the tone than an ocarina: a jet that couples badly
+    feeds the resonance badly.
+
+    NOT MEASURED, like its parent -- asserted from how the instrument is played.
+    """
+    chiff_volume = 2.0
+    chiff_cycle = 0.7
+    chiff_release = 0.8
+    # the breath keeps moving while the note is held (cf. BreathNoiseProperties)
+    sustain_jitter = 0.5
+    # a badly coupled jet drives the resonance weakly: even less series than an
+    # ocarina, and a softer top.
+    tonal_dampening = 3.9
+    bore_corner_hz = 1600.0
 
 class AltoFluteProperties(OpenPipeProperties):
     """A flute part below B3 is an alto flute part. MEASURED: Iowa AltoFlute.mf,
