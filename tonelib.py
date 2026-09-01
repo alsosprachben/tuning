@@ -3748,6 +3748,39 @@ class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
     harmonic_decay_dampening = 0.0
 
 
+
+class GuiroProperties(WoodPercussionProperties):
+    """The guiro's body: struck wood, but the NOISIEST wood in the kit.
+
+    A guiro is a notched gourd and the stick catching a notch excites the body,
+    so it belongs with the claves and woodblocks rather than with the rattles --
+    it was on NoiseDrumProperties and every ridge arrived as a burst of static.
+    But it is measurably not as PURE as a clave either, and tuning it to the
+    clave's target made it sing: nine strokes in a tenth of a second, each one a
+    clean pitched tock, sum into a held tone at the body pitch.
+
+    Spectral flatness over a whole scrape (1.0 = white noise):
+
+        Iowa guiro    0.0036 - 0.0107      Iowa clave   0.0002
+        this          0.0065               a clave here 0.0011
+
+    so it sits where the recording does, an order of magnitude noisier than the
+    clave beside it.
+
+    WHAT IS STILL WRONG, and the knobs here cannot fix it: the recording spreads
+    its energy across many modes -- the top 20 spectral bins hold about 25% of
+    it -- where this holds 66%. A gourd with a slot cut in it has an irregular
+    mode set, and everything in this file builds a harmonic series, stretched or
+    not. Raising the inharmonicity pushes partials past Nyquist and thins the
+    spectrum instead of filling it. That would want a real modal model.
+    """
+    chiff_volume = 0.20
+    sustain_jitter = 0.30
+    tonal_dampening = 0.40
+    max_harmonic = 64
+    inharmonicity_coefficient = 0.10
+    inharmonicity_dynamic = False
+
 class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     """Cymbal (crash, ride, splash, china): a bright broadband noise wash --
     the snare's wide-chiff noise, but a fast splash that rings out over a

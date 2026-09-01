@@ -21,6 +21,7 @@ from tonelib import (
     RideBellProperties,
     WoodPercussionProperties,
     CrotaleProperties,
+    GuiroProperties,
 )
 
 M = MembraneDrumProperties      # pitched membranes: toms, congas, timbales
@@ -32,6 +33,7 @@ C = CymbalProperties            # crash/ride/splash/china: broadband wash
 R = RideBellProperties          # the ride's bell: pitch THROUGH the wash
 W = WoodPercussionProperties    # claves, woodblocks: a dry tock, gone at once
 P = CrotaleProperties           # tuned discs: the only PLATE here, 1 : 2.08 : 3.41
+G = GuiroProperties             # struck wood, but the noisiest of it
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
@@ -81,8 +83,8 @@ PERCUSSION = {
     # arrived as a burst of static instead of a tock. A guiro is a notched gourd
     # and the stick catching a notch excites the body: much closer to a small
     # woodblock struck very fast than to a rattle.
-    73: ("Short Guiro",        W, 1175.0),
-    74: ("Long Guiro",         W, 1175.0),
+    73: ("Short Guiro",        G, 1175.0),
+    74: ("Long Guiro",         G, 1175.0),
     # MEASURED (Iowa hand percussion, mf). Claves ring at 908, 993 and 1216 Hz
     # across the three pairs; 990 is the middle one.
     75: ("Claves",             W, 990.0),
