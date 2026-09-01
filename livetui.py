@@ -729,6 +729,14 @@ class TUI:
         self.addstr(scr, y, 30, "%.2f/%.2f ms  max %.2f%s"
                     % (s["render_ms"], s["budget_ms"], s["render_max"],
                        ("  x%d" % s["threads"]) if s["threads"] > 1 else ""), C(lcol))
+        ws = L.wheel_state()
+        if ws:
+            self.addstr(scr, y + 1, 2, "mod")
+            self.addstr(scr, y + 1, 6,
+                        "wheel %3d%%  vibrato %5.1f-%5.1f c at %4.2f-%4.2f Hz   cc1 x%d last %d"
+                        % (int(ws["wheel"] * 100), ws["cents_lo"], ws["cents_hi"],
+                           ws["rate_lo"], ws["rate_hi"], ws["cc1"], ws["cc1_last"]),
+                        C("cyan") if ws["wheel"] > 0 else C("dim"))
         bad = s["under"] + s["drop"] + s["err"] + s["miss"]
         self.addstr(scr, y, 52, "under %d  drop %d  err %d  stuck %d  miss %d"
                     % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"]),

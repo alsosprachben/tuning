@@ -755,6 +755,8 @@ class Live:
         # string vibrato actually sits.
         self.mod_rate = 0.25    # +25% rate at full wheel
         self.modw = {}          # channel -> wheel position 0..1
+        self.cc1_count = 0      # how many mod-wheel messages have arrived
+        self.cc1_last = -1      # and the last value, so a monitor can see them
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = 8.0     # crescendo at full aftertouch
         self.press_tilt = 0.30  # and it brightens as it swells: see Slab.press
@@ -839,6 +841,7 @@ class Live:
                             msg.value / 127.0, self.press_db, self.press_tilt)
         elif msg.type == "control_change":
             if msg.control == 1:
+                self.cc1_count += 1; self.cc1_last = msg.value
                 # THE MOD WHEEL IS A CRESCENDO PEDAL on an organ part and
                 # VIBRATO on everything else, and with layers it can be both at
                 # once -- so each part is asked separately rather than the whole
@@ -1108,6 +1111,24 @@ class Live:
         return (st.tobytes(), pyaudio.paContinue)
 
     # ---- telemetry ----------------------------------------------------------
+    def wheel_state(self):
+        """What the mod wheel is actually doing right now: the last value seen
+        per channel, and the vibrato depth/rate the sounding partials carry. Put
+        on screen because a wheel that "keeps getting pulled back to 0" is not
+        something the offline path can reproduce -- the value has to be watched
+        while the hardware is sending."""
+        sl = self.slab
+        idx = np.flatnonzero(sl.busy)
+        if not len(idx):
+            return None
+        vd = sl.a["vd"][idx].astype(np.float64)
+        vr = sl.a["vr"][idx].astype(np.float64)
+        cents = np.log2(np.maximum(1.0 + vd, 1e-9)) * 1200.0
+        w = max(self.modw.values()) if self.modw else 0.0
+        return dict(wheel=w, cents_lo=float(cents.min()), cents_hi=float(cents.max()),
+                    rate_lo=float(vr.min()), rate_hi=float(vr.max()),
+                    cc1=self.cc1_count, cc1_last=self.cc1_last)
+
     def stats(self):
         return dict(t=self.n / self.rate, peak=self.peak,
                     last_peak=self.last_peak,
@@ -1434,6 +1455,38 @@ def selftest():
     check("one player: the wheel is still a flat 35 cents",
           len(np.unique(lv.slab.a["vd"][i2])) == 1
           and abs(cents[0] - lv.mod_cents) < 0.01)
+    lv.renderer.close()
+
+    # ---- vibrato must reach a voice that also SPEAKS ------------------------
+    # The kernel's mode-lock transient and its vibrato shared one slot and the
+    # second one to run threw the first away. 31 of a trumpet's 32 partials carry
+    # a mode-lock term, so the mod wheel reached the FUNDAMENTAL ONLY: measured,
+    # h1 swung 33.4 cents while h2, h4 and h8 swung 0.3, 0.1 and 0.1.
+    lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
+    tb = lv.parts[0].bank.get(60, 100)["tbav"]
+    check("a trumpet's partials do carry a mode-lock term",
+          int((tb != 0).sum()) >= len(tb) - 1, "  (%d of %d)" % (int((tb != 0).sum()), len(tb)))
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    buf = []
+    for i in range(int(2.2 * 48000) // 128):
+        if i == 30:
+            lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127))
+        b, _f = lv.callback(None, 128, None, 0)
+        buf.append(np.frombuffer(b, np.float32)[0::2])
+    x = np.concatenate(buf).astype(np.float64); sr = 48000.0
+    def swing(h):
+        f = 261.63 * h; N = len(x)
+        S = np.fft.fft(x); fr = np.fft.fftfreq(N, 1 / sr)
+        H = np.zeros(N, complex); bd = (fr > f * 0.93) & (fr < f * 1.07); H[bd] = 2 * S[bd]
+        ph = np.unwrap(np.angle(np.fft.ifft(H)))
+        inst = np.diff(ph) / (2 * np.pi) * sr
+        seg = inst[int(1.2 * sr):int(2.0 * sr)]
+        c = 1200 * np.log2(np.maximum(seg, 1e-6) / np.median(seg)); c -= c.mean()
+        return float(np.percentile(np.abs(c), 95))
+    h1, h2, h4 = swing(1), swing(2), swing(4)
+    check("the mod wheel reaches the HARMONICS, not just the fundamental",
+          h2 > 20.0 and h4 > 20.0,
+          "  (h1 %.0f, h2 %.0f, h4 %.0f cents)" % (h1, h2, h4))
     lv.renderer.close()
 
     # ---- entry scatter -----------------------------------------------------

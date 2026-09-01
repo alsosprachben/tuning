@@ -183,7 +183,17 @@ void synth_voice(
                 // tbav*e^{-t/tau} and settles, cut off at tcut. Phase is the exact
                 // integral to the block start; the recurrence uses the block-start
                 // instantaneous frequency. tbav==0 -> plain constant-frequency phasor.
-                double bph=0.0; float winst=(float)w;
+                // A partial can be BOTH vibrating and speaking. These two used to
+                // ASSIGN bph and winst, so whichever ran second threw the other
+                // away: mode lock is a driven air column (brass, mode_lock_spread
+                // = 0.003) and it silently deleted the mod wheel's vibrato for the
+                // whole life of the note -- after the transient it wrote back a
+                // plain w. Ben, playing: "the modulation value keeps getting
+                // pulled back to 0 ... on violin it is persisting, but not
+                // trumpet." Violin has mode_lock_spread = 0 and never entered the
+                // branch. They compose now: the phases add and the frequency
+                // factors multiply.
+                double bph=0.0, vibfac=1.0; float bendfac=1.f;
                 // PER-PLAYER VIBRATO. A section detuned to FIXED offsets beats at
                 // fixed rates forever: N voices held exactly apart are a comb whose
                 // notches march at constant speed, which is what a phaser is. Real
@@ -215,15 +225,20 @@ void synth_voice(
                     double avg = dt > 0.0
                         ? 1.0 + d*(cos(w2*ta+vp0)-cos(w2*tb2+vp0))/(w2*dt)
                         : 1.0 + d*sin(w2*ta+vp0);
-                    winst = (float)(w*avg);
+                    vibfac = avg;
                 }
                 if(tbav[p]!=0.f){
                     float tb=tbav[p], ts=tau[p], cut=tcut[p];
                     float trel=(float)(ns-a)/SRATE_F;
                     float integ = tb*ts*(1.f - expf(-(trel<cut?trel:cut)/ts));
-                    bph = (double)w*SRATE_D*(double)integ;
-                    winst = w*(1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f));
+                    bph += (double)w*SRATE_D*(double)integ;
+                    // kept in float, and summed in float, so a voice with only
+                    // this term rounds exactly as it did before it was factored out
+                    bendfac = 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
                 }
+                // With either term absent its factor is 1 and its phase 0, so a
+                // voice that has only one of them renders exactly as before.
+                float winst=(float)(w*vibfac*(double)bendfac);
                 double phL=ph0L[p]+w*(double)ns+bph, phR=ph0R[p]+w*(double)ns+bph;
                 float zrL=cos(phL),ziL=sin(phL),zrR=cos(phR),ziR=sin(phR);
                 float rr=cosf(winst),ri=sinf(winst);
