@@ -2338,13 +2338,21 @@ class DarkBrassProperties(BrassProperties):
     # recording says -29.8, 21 dB of upper harmonic that is not there. That is
     # why Ben heard the TROMBONE as mellow: the trombone was the closest to right
     # of the four, next to a tuba and a horn that were not.
-    tonal_dampening = 3.75
+    # JOINTLY FITTED across Iowa Tuba.mf C1B1 + C2B2 + C3C4.
+    # One register is not enough, and this project already knew it: fitting
+    # each brass voice to a SINGLE file left the horn 13.5 dB wrong at C4 and
+    # put a hole in the middle of the brass section. octave_dampening is what
+    # carries a voice from one register to another, and only a multi-register
+    # fit can see it -- it comes out NEGATIVE for the trombone and trumpet,
+    # which is a brass instrument getting brighter with pitch and effort.
+    tonal_dampening = 3.5
+    octave_dampening = 0.1
     harmonic_decay_db = 2.0        # gentle brightness bloom
     decay_db = 13.0
     sustain_level = 0.7            # subtle front
     chiff_volume = 0.05
     sustain_jitter = 0.0045
-    bore_corner_hz = 500.0         # fitted; a huge bore and bell darkens sooner
+    bore_corner_hz = 800.0
     # Measured (Iowa tuba, C2): the series rises 15.6 dB to h5 (330 Hz). A tuba's
     # bell is enormous but 65 Hz is still below what it radiates well.
     bell_cutoff_hz = 390.0
@@ -2411,9 +2419,16 @@ class TrumpetProperties(BrightBrassProperties):
     # so h1 landed 13.3 dB over the recording even with 40 dB of bell on it.
     bell_cutoff_hz = 1600.0
     bell_order = 5.0
-    bore_corner_hz = 900.0
-    tonal_dampening = 2.75
-    octave_dampening = 0.25
+    bore_corner_hz = 1700.0
+    # JOINTLY FITTED across Iowa Trumpet.novib.mf E3B3 + C4B4 + C5B5.
+    # One register is not enough, and this project already knew it: fitting
+    # each brass voice to a SINGLE file left the horn 13.5 dB wrong at C4 and
+    # put a hole in the middle of the brass section. octave_dampening is what
+    # carries a voice from one register to another, and only a multi-register
+    # fit can see it -- it comes out NEGATIVE for the trombone and trumpet,
+    # which is a brass instrument getting brighter with pitch and effort.
+    tonal_dampening = 3.0
+    octave_dampening = -0.1
 
 
 class TromboneProperties(BrightBrassProperties):
@@ -2437,7 +2452,7 @@ class TromboneProperties(BrightBrassProperties):
     lower bore corner fix both the level and the colour.
     """
     register_center_hz = 175.0     # around F3, the middle of the tenor's staff
-    bore_corner_hz = 900.0         # fitted; larger bore than a trumpet
+    bore_corner_hz = 2800.0
     # Measured (Iowa, C3): the 3rd harmonic at 393 Hz is 7.5 dB above the
     # fundamental -- the same bell high-pass as the horn, at a higher cutoff
     # because the bore is narrower.
@@ -2450,7 +2465,15 @@ class TromboneProperties(BrightBrassProperties):
     # horn and tuba 390.
     bell_cutoff_hz = 900.0
     bell_order = 4.0
-    tonal_dampening = 3.00
+    # JOINTLY FITTED across Iowa TenorTrombone.mf E2B2 + C3B3 + C4B4.
+    # One register is not enough, and this project already knew it: fitting
+    # each brass voice to a SINGLE file left the horn 13.5 dB wrong at C4 and
+    # put a hole in the middle of the brass section. octave_dampening is what
+    # carries a voice from one register to another, and only a multi-register
+    # fit can see it -- it comes out NEGATIVE for the trombone and trumpet,
+    # which is a brass instrument getting brighter with pitch and effort.
+    tonal_dampening = 2.75
+    octave_dampening = -0.1
 
 
 class HornProperties(DarkBrassProperties):
@@ -2480,7 +2503,6 @@ class HornProperties(DarkBrassProperties):
     # so it takes the family's tilt back off DarkBrass's tuba-shaped 1.0.
     register_tilt_db = 1.8
     register_center_hz = 262.0     # around C4, the horn's comfortable middle
-    bore_corner_hz = 1100.0        # dark, but nothing like a tuba
     # MEASURED, and the measurement overturned two guesses in a row.
     #
     # Iowa horn at C2: the series RISES 16.8 dB from h1 to h6 and then plateaus,
@@ -2502,9 +2524,16 @@ class HornProperties(DarkBrassProperties):
     # FITTED to Iowa Horn.mf.C2B2 over h1-h12: RMS 8.01 -> 1.65 dB.
     bell_cutoff_hz = 390.0
     bell_order = 4.0
-    bore_corner_hz = 500.0
-    tonal_dampening = 3.75
-    octave_dampening = 0.60
+    # JOINTLY FITTED across Iowa Horn.mf C2B2 + C4B4.
+    # One register is not enough, and this project already knew it: fitting
+    # each brass voice to a SINGLE file left the horn 13.5 dB wrong at C4 and
+    # put a hole in the middle of the brass section. octave_dampening is what
+    # carries a voice from one register to another, and only a multi-register
+    # fit can see it -- it comes out NEGATIVE for the trombone and trumpet,
+    # which is a brass instrument getting brighter with pitch and effort.
+    tonal_dampening = 3.0
+    bore_corner_hz = 800.0
+    octave_dampening = 0.4
 
 
 _BRASS_SECTION = {}

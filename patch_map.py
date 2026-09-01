@@ -12,8 +12,8 @@ and editing this table -- the dispatch stays data-driven.
 
 from tonelib import (
     TromboneProperties,
-    brass_section,
     HornProperties,
+    brass_section,
     WoodPercussionProperties,
     SquareSynthProperties,
     SawtoothSynthProperties,
@@ -193,10 +193,16 @@ BOWED_SPLIT = ((36, ContrabassProperties),      # below C2
 # then trombones, horns, trumpets on top -- and the instruments' bodies differ
 # more than the strings' do (trumpet's bell cuts at 1600 Hz, a trombone's at
 # 230). Same handover-in-scoring boundaries rather than range limits.
+# NO FRENCH HORN. GM 61 is the pop/big-band brass stab -- trumpets and
+# trombones -- and horns are an orchestral colour with their own program at 60.
+# Putting one in the middle of the section also put a HOLE there, and measurement
+# says that is the horn being right rather than wrong: at the same register
+# (C4-B4) the Iowa horn's spectral centroid is 492 Hz against the Iowa
+# trombone's 891, so a real horn is 45% darker than a real trombone. Correct for
+# a horn, wrong for the middle of a brass section.
 BRASS_SPLIT = ((40, DarkBrassProperties),       # below E2: tuba weight
-               (52, TromboneProperties),        # E2 - D#3
-               (64, HornProperties),            # E3 - D#4
-               (128, TrumpetProperties))        # E4 and up
+               (60, TromboneProperties),        # E2 - B3
+               (128, TrumpetProperties))        # C4 and up
 BRASS_ENSEMBLE = {61}
 
 # Programs that are a whole section rather than a named instrument.
