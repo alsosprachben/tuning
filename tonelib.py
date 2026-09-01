@@ -1050,6 +1050,29 @@ class SynthProperties:
         span = (2.0 * index / float(n - 1)) - 1.0        # -1 .. +1
         return self.position_x + w * (span + rng.uniform(-0.5, 0.5) / n)
 
+    def section_onsets_at(self, frequency):
+        """Per-player entry offsets in seconds. None when this voice is not a
+        section. See section_onset() for why it is keyed on the pitch.
+
+
+        On SynthProperties, NOT SectionMixin. It was on the mixin, and the
+        reference renderer's hammer_down calls it whenever a partial carries a
+        player index -- which every partial does, since the build sets
+        `main.player = 0` for one-body voices too. So every NON-section voice
+        crashed the reference renderer outright, and the parity checks missed
+        it because they were all run on strings and brass, which are sections.
+        blockrender guards with hasattr and was unaffected.
+
+        """
+        n = getattr(self, 'section_players', 1)
+        w = getattr(self, 'section_onset_ms', 0.0)
+        if n <= 1 or not w:
+            return None
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        salt = self._section_salt()
+        return [section_onset(salt, midi, i, w) for i in range(n)]
+
+
     def section_seats(self, channel=None):
         """Per-player (left_inc, right_inc, left_delay, right_delay), or None if
         this voice is one body rather than an ensemble. Once per note, never per
@@ -2154,17 +2177,6 @@ class SectionMixin:
     # abstract. Drawn 0..this, never negative, as timing_jitter_seconds is --
     # an early player would have to start before the note.
     section_onset_ms = 0.0
-
-    def section_onsets_at(self, frequency):
-        """Per-player entry offsets in seconds. None when this voice is not a
-        section. See section_onset() for why it is keyed on the pitch."""
-        n = getattr(self, 'section_players', 1)
-        w = getattr(self, 'section_onset_ms', 0.0)
-        if n <= 1 or not w:
-            return None
-        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
-        salt = self._section_salt()
-        return [section_onset(salt, midi, i, w) for i in range(n)]
 
     def voice_vibrato(self, frequency, index):
         """Memoised per (class, note, player): it takes no harmonic argument and
@@ -3502,9 +3514,15 @@ class OrchestralFluteProperties(BlownPipeProperties):
     (real: -20.5 at h4, -35.7 at h6), so a radiation corner carries that.
     """
     odd_only = False
-    tonal_dampening = 1.0
+    # FITTED across B3B4, C5B5 and C6B6: RMS 9.27 -> 3.28 dB.
+    # Its own gain, trimmed +1.03 dB for the fit: it used to inherit
+    # BlownPipeProperties', and trimming that would have moved every pipe voice.
+    initial_gain = BlownPipeProperties.initial_gain * 1.1262
+    tonal_dampening = 1.4
+    octave_dampening = 0.3
     bore_corner_hz = 2200.0
     bore_order = 1.6
+    bell_cutoff_hz = 260.0
 
 
 class OrchestralReedProperties(ReedOrganProperties):
@@ -3538,15 +3556,18 @@ class DoubleReedProperties(FormantBody, OrchestralReedProperties):
     back is the larger half of the error; the formant is the remaining half.
     """
     odd_only = False
-    tonal_dampening = 0.75    # these are bright: the upper series carries
-    initial_gain = 1.0 / 8050   # levelled to the set after the formant refit
+    # FITTED across Bb3B3, C4B4 and C5B5: RMS 10.14 -> 4.55 dB.
+    tonal_dampening = 1.6
+    octave_dampening = 0.3
+    # Trimmed +2.56 dB so the fit changes COLOUR and not LEVEL.
+    initial_gain = (1.0 / 8050) * 1.3428
     # FORMANT, measured. The Iowa oboe at C4 peaks at its 5th harmonic, 1295 Hz,
     # 12.6 dB ABOVE the fundamental -- the oboe's characteristic resonance, and
     # the reason it cuts through an orchestra. The bassoon peaks at its 4th,
     # 524 Hz, 19.3 dB above. A conical reed is a resonator with a strong peak
     # well up the series, which is exactly what a 1/n^d rolloff cannot be.
-    formants = ((1300.0, 700.0, 2.6), (3000.0, 1400.0, 0.6))
-    formant_floor = 0.30
+    formants = ((1300.0, 700.0, 3.0), (3000.0, 1400.0, 0.6))
+    formant_floor = 0.18
     bore_corner_hz = 5000.0
     bore_order = 1.6
 
@@ -3581,6 +3602,20 @@ class SaxophoneProperties(DoubleReedProperties):
     not fetched -- so this is placed by bore size between two that were."""
     formants = ((900.0, 450.0, 2.2), (2000.0, 1000.0, 0.6))
     bore_corner_hz = 4000.0
+    # PINNED, not fitted. These three used to be inherited from
+    # DoubleReedProperties, which has just been fitted to the Iowa oboe -- and
+    # there is no saxophone recording here, so letting a measured fit for one
+    # instrument silently redefine an unmeasured one would be the wrong kind of
+    # quiet. Held at the values the sax had before that fit; the formants above
+    # remain an assertion either way.
+    tonal_dampening = 0.75
+    octave_dampening = 0.125
+    formant_floor = 0.30
+    # ...and the gain too, for the same reason. As a LITERAL, not a reference to
+    # DoubleReedProperties.initial_gain: this class is defined after that one, so
+    # a reference would pick up the oboe's trim and hand the saxophone a 2.56 dB
+    # rise it never asked for. (It did, the first time.)
+    initial_gain = 1.24224e-04
 
 
 class ClarinetProperties(OrchestralReedProperties):
@@ -3592,9 +3627,24 @@ class ClarinetProperties(OrchestralReedProperties):
     suppressed but PRESENT -- absolute odd_only put them at -130 dB, which loses
     the reediness that the weak-but-audible evens carry.
     """
-    even_harmonic_db = -26.5     # lands h2 near the measured -38.5 dB
-    tonal_dampening = 0.9        # strong odd series well up the spectrum
-    initial_gain = 1.0 / 6400    # levelled to the set
+    # FITTED across four registers -- D3B3, C4B4, C5B5, C6B6 -- RMS 16.10 ->
+    # 6.61 dB. -26.5 came from ONE register (C4B4), where the even harmonics
+    # really are 24-38 dB down; the same constant left the clarion and altissimo
+    # 12 dB too bright and 20 dB out overall.
+    #
+    # It cannot be right everywhere. A clarinet overblows at the TWELFTH, so what
+    # is an even harmonic of the sounding pitch in the chalumeau is an odd
+    # harmonic of the tube in the clarion -- one number cannot describe both
+    # registers, and -8.0 is the compromise the fit lands on. That is why the
+    # residual sits near 6-7 dB in EVERY register rather than being large in one:
+    # the shape is the limit here, not the tuning.
+    even_harmonic_db = -8.0
+    tonal_dampening = 1.5        # fitted
+    octave_dampening = 0.4
+    bore_corner_hz = 900.0       # it had NO lowpass at all, hence the bright top
+    bore_order = 1.0
+    # Trimmed +1.00 dB so the fit changes COLOUR and not LEVEL.
+    initial_gain = (1.0 / 6400) * 1.1220
 
 
 class VocalProperties(FormantBody, BowedStringProperties):

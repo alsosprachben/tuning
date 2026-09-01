@@ -1205,6 +1205,7 @@ def apply_preset(live, preset, progress=None):
 
 
 def selftest():
+    import tonelib as _T
     """Assert the live engine's behaviour without any audio or MIDI hardware.
 
     Written after breaking the same area twice: generalising the stuck-note sweep
@@ -1464,6 +1465,22 @@ def selftest():
           and abs(cents[0] - lv.mod_cents) < 0.01)
     lv.renderer.close()
 
+    # ---- the reference renderer must survive a NON-section voice ------------
+    # hammer_down asks every partial that carries a player index for its entry
+    # offset, and the build gives one-body voices `player = 0` too. While
+    # section_onsets_at lived on SectionMixin that call raised AttributeError for
+    # every non-section voice, and the parity checks never saw it because they
+    # were all run on strings and brass.
+    for cls, lab in ((_T.ClarinetProperties, "clarinet"),
+                     (_T.TrumpetProperties, "trumpet"),
+                     (_T.Steinway, "piano"),
+                     (_T.ViolinProperties, "violin (a section)")):
+        p = cls(261.63, 0.0, 1.0, 1.0)
+        got = p.section_onsets_at(261.63)
+        want_none = not getattr(cls, "section_onset_ms", 0.0) or getattr(cls, "section_players", 1) <= 1
+        check("%s: section_onsets_at answers without raising" % lab,
+              (got is None) == want_none, "  (%s)" % ("None" if got is None else "%d players" % len(got)))
+
     # ---- a chord on a solo voice is several players -------------------------
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
     for nn in (60, 64, 67, 72):
@@ -1484,7 +1501,6 @@ def selftest():
 
     # and the locked behaviour is still reachable, which is the right answer for
     # a synth lead and makes the wheel a tempo control
-    import tonelib as _T
     was = _T.TrumpetProperties.solo_vibrato_spread
     _T.TrumpetProperties.solo_vibrato_spread = 0.0
     _T._SOLO_VIBRATO.clear(); _BANKS.clear()
