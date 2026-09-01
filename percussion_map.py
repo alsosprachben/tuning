@@ -308,8 +308,21 @@ def choke_group(note):
 # short guiro 8 ms per ridge (nearly twice too fast) and the long one 26 ms
 # (twice too slow). Both are 13 ms now.
 PERCUSSION_RASP = {
-    73: (0.11, 9),       # short guiro: one quick scrape, as Iowa recorded it
-    74: (0.42, 32),      # long guiro: the same ridges, more of them
+    # MEASURED (Iowa guiro.away and guiro.toward, mf): 27 and 33 ridges over
+    # 126 and 151 ms -- a median gap of 4.2 and 4.5 ms, so about 230 ridges per
+    # SECOND. A guiro is a fast dense rasp, not a clatter.
+    #
+    # This was 9 ridges at 13.8 ms, a third of the real density, and that is why
+    # it did not sound like anything in particular: the ear hears a scrape as a
+    # RATE, and at 72 ridges per second it is a stutter rather than a rip. An
+    # earlier count found 13 ms by peak-picking a 64-sample envelope at a high
+    # threshold, which sees every third ridge; a 2 ms impact envelope finds them
+    # all.
+    #
+    # The spacing is the instrument and the duration is the gesture, so a long
+    # scrape crosses proportionally more of them at the same rate.
+    73: (0.13, 30),      # short guiro: one quick rip, as Iowa recorded it
+    74: (0.42, 98),      # long guiro: the same 4.3 ms spacing, further along
 }
 
 
