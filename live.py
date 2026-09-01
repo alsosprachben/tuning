@@ -1457,6 +1457,41 @@ def selftest():
           and abs(cents[0] - lv.mod_cents) < 0.01)
     lv.renderer.close()
 
+    # ---- a chord on a solo voice is several players -------------------------
+    lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
+    for nn in (60, 64, 67, 72):
+        lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
+    lv.apply(0)
+    ix = np.flatnonzero(lv.slab.busy)
+    rest = float(np.abs(lv.slab.a["vd"][ix]).max())
+    check("a trumpet is dead straight until the wheel moves", rest == 0.0)
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127)); lv.apply(128)
+    nph = len(np.unique(lv.slab.a["vp"][ix])); nrt = len(np.unique(lv.slab.a["vr"][ix]))
+    check("a four-note chord vibrates as four players, not one",
+          nph == 4 and nrt == 4, "  (%d phases, %d rates)" % (nph, nrt))
+    # depth stays common: they are copies of one instrument, not a string desk
+    c = np.log2(1.0 + lv.slab.a["vd"][ix].astype(np.float64)) * 1200.0
+    check("...at one depth, since they are the same instrument",
+          float(c.max() - c.min()) < 0.01, "  (%.1f-%.1f cents)" % (c.min(), c.max()))
+    lv.renderer.close()
+
+    # and the locked behaviour is still reachable, which is the right answer for
+    # a synth lead and makes the wheel a tempo control
+    import tonelib as _T
+    was = _T.TrumpetProperties.solo_vibrato_spread
+    _T.TrumpetProperties.solo_vibrato_spread = 0.0
+    _T._SOLO_VIBRATO.clear(); _BANKS.clear()
+    lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
+    for nn in (60, 64, 67, 72):
+        lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127)); lv.apply(0)
+    ix = np.flatnonzero(lv.slab.busy)
+    check("spread = 0 locks the chord back together",
+          len(np.unique(lv.slab.a["vp"][ix])) == 1 and len(np.unique(lv.slab.a["vr"][ix])) == 1)
+    lv.renderer.close()
+    _T.TrumpetProperties.solo_vibrato_spread = was
+    _T._SOLO_VIBRATO.clear(); _BANKS.clear()
+
     # ---- vibrato must reach a voice that also SPEAKS ------------------------
     # The kernel's mode-lock transient and its vibrato shared one slot and the
     # second one to run threw the first away. 31 of a trumpet's 32 partials carry

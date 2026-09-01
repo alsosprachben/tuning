@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 57 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 61 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -126,6 +126,13 @@ a 5 s note, 44 rad for a full sweep) and lands on every partial of every player
 at the same instant, which is audible as a shared lurch in an ensemble that is
 built on never having one. `vp` is rotated so the LFO changes speed and carries
 on from where it was.
+
+On a **solo** voice the wheel gives each note of a chord its own vibrato phase
+and rate (`solo_vibrato_spread`, ±3.5%), because a player can only sound one note
+at a time — four notes on a trumpet patch are four trumpeters, and four
+trumpeters do not lock. Resting depth stays 0, so it plays dead straight until
+the wheel moves. Set the spread to **0** for one locked vibrato across
+everything: right for a synth lead, and it turns the wheel into a tempo control.
 
 On a section the wheel **deepens and quickens what each player was already
 doing** rather than writing one value over all of them: seven violinists go from

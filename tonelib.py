@@ -136,6 +136,7 @@ from zlib import crc32 as _crc32
 _SECTION_SALT = {}
 _VIBRATO_CACHE = {}
 _SECTION_CACHE = {}
+_SOLO_VIBRATO = {}
 
 _PLUCK_COMB = {}
 
@@ -942,13 +943,79 @@ class SynthProperties:
         return [(self.unison_gain, offset, 0.0, harmonic_decay, 0.0)
                 for offset in self.unison_detune]
 
+    def _section_salt(self):
+        """A stable per-voice-class number, so two SECTIONS are two sections.
+
+        The seeds below key on pitch, which is what makes a note's players the
+        same players every time it is played. But two different string patches
+        doubling the same note then drew the SAME spread, the same phases and the
+        same vibrato -- so the fourteen voices were seven exactly coincident
+        pairs. Coincident voices add coherently (+6 dB, not +3) and the second
+        section reinforces the first's comb instead of smearing it: louder than
+        the score asks, and still a phaser. Ben's two patches, "String marcado"
+        (prog 48) and "String dolce" (prog 49), double each other note for note.
+
+        crc32 of the class name, not hash(): hash() of a str is salted per
+        process, and this must be identical in both renderers and every run.
+
+        Memoised per class, and crc32 imported at module scope: this used to do
+        the import and the checksum on every call, and it is called once per
+        player per harmonic -- 442856 times to build one four-minute piece.
+        """
+        cls = type(self)
+        got = _SECTION_SALT.get(cls)
+        if got is None:
+            got = _crc32(cls.__name__.encode()) & 0xFFFF
+            _SECTION_SALT[cls] = got
+        return got
+
+    # A PLAYER CAN ONLY SOUND ONE NOTE AT A TIME, so notes that OVERLAP belong to
+    # different players -- and different players do not share a vibrato phase.
+    # That is the same argument unison_voices makes for a section: voices launched
+    # from phase 0 sum coherently and sweep a synchronised comb, "which is what a
+    # phaser is". A trumpet patch playing a four-note chord is four trumpeters
+    # whether or not it was modelled, and until this it gave them ONE phase and
+    # ONE rate. Measured on a chord with the wheel up: trumpet 1 distinct phase,
+    # violin 28.
+    #
+    # DEPTH STAYS 0. A trumpet at rest plays dead straight -- orchestral brass
+    # barely vibrates at all -- and the kernel skips the whole vibrato branch on
+    # vdep == 0, so this costs nothing until the wheel asks for depth. What it
+    # hands out is only WHERE in its cycle each note is and HOW FAST, so when the
+    # wheel does add depth the notes of a chord are already apart.
+    #
+    # Keyed on PITCH, as the sections are: a chord decorrelates because its
+    # pitches differ, while a repeated or held note keeps its phase and a
+    # sustained line stays continuous. The cost is a phase discontinuity when a
+    # melodic line changes pitch, where a real player would carry theirs through;
+    # it sits under the attack transient, and it is the same approximation the
+    # sections already make.
+    #
+    # Set the spread to 0 for one locked vibrato across everything, which is the
+    # right answer for a synth lead and makes the mod wheel a tempo control.
+    solo_vibrato_hz = 5.5           # rate the mod wheel vibrates at
+    solo_vibrato_spread = 0.035     # +/- fraction of it; 0 = every note locked
+
     def voice_vibrato(self, frequency, index):
         """(depth_fraction, rate_hz, phase_rad) for one player, or None.
 
         index 0 is the main voice; 1..n-1 are the extras from unison_voices().
-        None for anything that is one body rather than several people.
+        A section overrides this with real depth (see SectionMixin); one body
+        gets rate and phase only, at zero depth.
         """
-        return None
+        if not self.solo_vibrato_spread:
+            return None
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        key = (type(self), midi, index)
+        got = _SOLO_VIBRATO.get(key)
+        if got is None:
+            rng = _random.Random(0x5010 + midi * 64 + index + self._section_salt() * 8191)
+            spread = self.solo_vibrato_spread
+            got = (0.0,
+                   self.solo_vibrato_hz * (1.0 + rng.uniform(-spread, spread)),
+                   rng.uniform(0.0, 6.283185307179586))
+            _SOLO_VIBRATO[key] = got
+        return got
 
     # Metres each side of the section's centre that its players occupy. 0 is one
     # point source, which is RIGHT for a piano's three strings (one hammer, one
@@ -2098,32 +2165,6 @@ class SectionMixin:
         midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
         salt = self._section_salt()
         return [section_onset(salt, midi, i, w) for i in range(n)]
-
-    def _section_salt(self):
-        """A stable per-voice-class number, so two SECTIONS are two sections.
-
-        The seeds below key on pitch, which is what makes a note's players the
-        same players every time it is played. But two different string patches
-        doubling the same note then drew the SAME spread, the same phases and the
-        same vibrato -- so the fourteen voices were seven exactly coincident
-        pairs. Coincident voices add coherently (+6 dB, not +3) and the second
-        section reinforces the first's comb instead of smearing it: louder than
-        the score asks, and still a phaser. Ben's two patches, "String marcado"
-        (prog 48) and "String dolce" (prog 49), double each other note for note.
-
-        crc32 of the class name, not hash(): hash() of a str is salted per
-        process, and this must be identical in both renderers and every run.
-
-        Memoised per class, and crc32 imported at module scope: this used to do
-        the import and the checksum on every call, and it is called once per
-        player per harmonic -- 442856 times to build one four-minute piece.
-        """
-        cls = type(self)
-        got = _SECTION_SALT.get(cls)
-        if got is None:
-            got = _crc32(cls.__name__.encode()) & 0xFFFF
-            _SECTION_SALT[cls] = got
-        return got
 
     def voice_vibrato(self, frequency, index):
         """Memoised per (class, note, player): it takes no harmonic argument and
