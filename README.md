@@ -283,8 +283,17 @@ peak-normalised downstream, so it mainly matters live.
 Sample rate defaults to 44100 and is set with `blockrender.set_sample_rate()`;
 the kernel compiles one `.so` per rate, so 48000 costs a one-off rebuild.
 
-## Caveat
+## Render the corpus
 
-The batch scripts used to render the ~168-file corpus (`rb.sh`, `renderlist.txt`)
-currently live in a session scratchpad and will not survive. They should move
-into this repo if that corpus is to be rebuilt again.
+```sh
+./render-corpus.sh                # everything in corpus.txt, to ~/Downloads/bwx-renders
+./render-corpus.sh a.mid b.mid    # just these
+```
+
+168 files, one at a time, to MP3. `corpus.txt` is the list. `TUNING_MASTER_DB=-14`
+leaves room for the reverb and the final -1 dBFS normalise, and the reverb is one
+hall for the whole set on purpose — these are comparison renders, and per-voice
+spaces would make the survey uneven.
+
+Serial rather than parallel: a parallel run was killed part-way once, and an even
+survey matters more here than speed. About five seconds for a 90-second piece.
