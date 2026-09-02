@@ -21,6 +21,9 @@ from tonelib import (
     RideBellProperties,
     WoodPercussionProperties,
     CrotaleProperties,
+    ClosedHiHatProperties,
+    PedalHiHatProperties,
+    OpenHiHatProperties,
     GuiroProperties,
 )
 
@@ -44,11 +47,11 @@ PERCUSSION = {
     39: ("Hand Clap",          N, 260.0),
     40: ("Electric Snare",     S, 275.0),
     41: ("Low Floor Tom",      M, 87.0),
-    42: ("Closed Hi-Hat",      N, 780.0),
+    42: ("Closed Hi-Hat",   ClosedHiHatProperties, 221.6),
     43: ("High Floor Tom",     M, 98.0),
-    44: ("Pedal Hi-Hat",       N, 700.0),
+    44: ("Pedal Hi-Hat",    PedalHiHatProperties, 152.3),
     45: ("Low Tom",            M, 110.0),
-    46: ("Open Hi-Hat",        N, 720.0),
+    46: ("Open Hi-Hat",     OpenHiHatProperties, 542.8),
     47: ("Low-Mid Tom",        M, 130.0),
     48: ("Hi-Mid Tom",         M, 150.0),
     49: ("Crash Cymbal 1",     C, 520.0),
@@ -168,7 +171,15 @@ def percussion_for_note(note):
 # decay from them at note construction.
 PERCUSSION_RING = {
     35: 0.40, 36: 0.35, 37: 0.15, 38: 0.35, 39: 0.30, 40: 0.30, 41: 0.60,
-    42: 0.12, 43: 0.60, 44: 0.10, 45: 0.55, 46: 1.60, 47: 0.50, 48: 0.45,
+    43: 0.60, 45: 0.55, 47: 0.50, 48: 0.45,
+    # MEASURED (Iowa hihat, mf): -40 dB at 0.30 s for a stick on closed hats,
+    # 0.53 for the pedal chick, 7.25 for a foot splash. The first two are taken
+    # as measured. The open hat is CAPPED at 2.0 against a measured ~10.9 s T60,
+    # because Iowa's only long hi-hat take is a foot splash -- hats opened and
+    # left free -- where GM 46 means a stick on hats that are still loosely
+    # together and damp each other. Same kind of cap as the triangle, and for
+    # the same reason: the measurement is of a different gesture.
+    42: 0.45, 44: 0.80, 46: 2.00,
     49: 4.00, 50: 0.40, 51: 2.50, 52: 3.00,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 4.00, 54: 0.50, 55: 2.00,

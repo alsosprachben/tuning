@@ -3940,6 +3940,86 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     chiff_max_valve_time = 0.02     # fast splash onset
 
 
+class HiHatProperties(CymbalProperties):
+    """Two cymbals on a stand, and GM asks for three quite different sounds
+    from them. MEASURED: Iowa hihat.normal, hihat.footclose and
+    hihat.footsplash at pp, mf and ff.
+
+    The three were sharing NoiseDrumProperties at 780, 700 and 720 Hz -- one
+    voice at almost one pitch -- and the recordings say they are not alike at
+    all. Which take is which was settled by decay, not by name:
+
+        normal      -40 dB at 0.30 s   a stick on closed hats
+        footclose   -40 dB at 0.53 s   the pedal chick
+        footsplash  -40 dB at 7.25 s   the hats opened and left ringing
+
+    Modes come from the free decay after the strike, never the attack, and only
+    where they appear in at least two of the three dynamics within 1.5% -- the
+    method the guiro cost four rounds to arrive at.
+
+    Above about 1 kHz a cymbal has hundreds of closely spaced modes with
+    nonlinear coupling and no list of ratios will ever be that; what a mode set
+    carries is the discrete structure that gives each articulation its
+    identity, and the dense top stays a noise wash.
+    """
+    inharmonicity_coefficient = 0.0    # the modes are measured absolutely
+    inharmonicity_dynamic = False
+
+
+class ClosedHiHatProperties(HiHatProperties):
+    """GM 42. A stick on clamped hats: short, and BRIGHT.
+
+    The strongest mode is at 4697 Hz -- ratio 21.2 of the lowest -- which is the
+    tick a drummer is actually playing. A closed hat is almost all top end, and
+    the model had it at 780 Hz with a stretched harmonic series.
+    """
+    mode_ratios = (1.000, 2.560, 2.641, 10.231, 13.429, 16.367, 19.901,
+                   21.190, 22.435, 26.265, 28.918, 32.013, 38.498, 39.586,
+                   45.827, 53.354, 54.533, 64.545)
+    mode_gains  = (0.160, 0.153, 0.139, 0.121, 0.126, 0.304, 0.137,
+                   1.000, 0.147, 0.518, 0.142, 0.205, 0.131, 0.119,
+                   0.156, 0.166, 0.172, 0.139)
+    max_harmonic = 18
+
+
+class PedalHiHatProperties(HiHatProperties):
+    """GM 44. The foot closing the hats: a low CHICK, not a tick.
+
+    Its strongest mode is 211 Hz and its whole structure is dense and low --
+    1.000 1.085 1.222 1.292 1.388 -- which is two cymbals clamping together
+    rather than a stick striking one. That is the opposite end of the spectrum
+    from the closed hat above, and both used to be the same voice 80 Hz apart.
+    """
+    mode_ratios = (1.000, 1.085, 1.222, 1.292, 1.388, 1.666, 1.929, 2.015,
+                   2.103, 2.239, 2.326, 2.449, 2.673, 3.164, 3.251, 30.846,
+                   38.204, 46.575)
+    mode_gains  = (0.380, 0.360, 0.420, 0.767, 1.000, 0.641, 0.426, 0.796,
+                   0.976, 0.353, 0.389, 0.370, 0.339, 0.368, 0.346, 0.772,
+                   0.678, 0.373)
+    max_harmonic = 18
+
+
+class OpenHiHatProperties(HiHatProperties):
+    """GM 46. Hats apart and ringing: the body speaks.
+
+    Unlike the other two the LOWEST mode is the strongest, at 543 Hz, with 571
+    and 648 beside it -- a real plate ringing rather than a contact noise.
+
+    MEASURED FROM A FOOT SPLASH, which is the only long hi-hat take Iowa has,
+    and it is not quite the gesture GM 46 means: a splash opens the hats and
+    lets them ring for 7.25 s to -40 dB, where a stick on open hats is damped by
+    the hats still being loosely together. The modes are the same plate either
+    way; the ring is capped well below the measurement for that reason.
+    """
+    mode_ratios = (1.000, 1.053, 1.193, 3.852, 4.054, 5.511, 5.634, 6.280,
+                   7.040, 7.429, 7.741, 7.851, 8.664, 10.055, 10.333, 10.708,
+                   12.077, 13.038)
+    mode_gains  = (1.000, 0.903, 0.798, 0.561, 0.566, 0.866, 0.755, 0.744,
+                   0.451, 0.500, 0.559, 0.491, 0.639, 0.625, 0.645, 0.587,
+                   0.636, 0.535)
+    max_harmonic = 18
+
+
 class RideBellProperties(CymbalProperties):
     """The bell of a ride cymbal: the one cymbal sound with a PITCH in it.
 
