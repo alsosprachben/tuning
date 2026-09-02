@@ -1554,7 +1554,21 @@ class SynthProperties:
         return self.register_effort_at(self.frequency_x * (2.0 ** self.octave_position))
 
     def harmonic_decay(self, harmonic):
-        base = self.decay_db + self.harmonic_decay_db * harmonic * (harmonic ** self.harmonic_decay_dampening)
+        # DAMPING SCALES WITH FREQUENCY, NOT WITH AN INDEX. For a harmonic
+        # series those are the same number, which is why this took `harmonic`
+        # directly. With a measured mode set they are not: a closed hi-hat's
+        # modes run from ratio 1 to ratio 64, and indexing gave its 222 Hz mode
+        # a T60 of 0.83 s against 0.40 for its 14 kHz one -- a 2:1 spread where
+        # a real cymbal is ten times that, so the weak low mode outlived the
+        # strong 4.7 kHz one that actually carries the sound. Measured against
+        # the recording it put 10 dB too much energy below 500 Hz and 7 dB too
+        # little above 3 kHz: a bright tick rendered as a dull one.
+        #
+        # The fourth place in this file that assumed f = f0 * m, after the
+        # partial-frequency computation, harmonic_volume and _hf_rolloff.
+        # Identity for every harmonic voice.
+        h = self.mode_ratio(harmonic) if self.mode_ratios is not None else harmonic
+        base = self.decay_db + self.harmonic_decay_db * h * (h ** self.harmonic_decay_dampening)
         # Register-dependent decay: heavy bass strings ring far longer than the
         # light, heavily-damped treble. decay_register_factor (set in __init__ from
         # decay_register_slope) is < 1 in the bass (slower) and > 1 in the treble.
@@ -3308,7 +3322,16 @@ class MembraneDrumProperties(PercussionProperties):
     inharmonicity_dynamic = False
     tonal_dampening = 1.6
     decay_db = 34.0            # tom ring ~0.85 s to -30 dB
-    harmonic_decay_db = 6.0
+    # 36, not the 6 this was set to, because harmonic_decay now scales by mode
+    # RATIO and not by mode index (see SynthProperties.harmonic_decay). A drum's
+    # twelve Bessel modes span ratios 1.00-4.13, not indices 1-12, so the same
+    # number spread the decay three times less far and left the toms up to 11 dB
+    # bright in 0.5-1.5 kHz. Solved to hold the previous sound: band drift 5.98
+    # -> 1.02 dB, with the -10/-20/-40 dB times unmoved. It cannot go to zero --
+    # the correction compresses the range rather than scaling it -- and the
+    # membranes were never fitted to a recording, so holding what has been heard
+    # is the most this can honestly claim.
+    harmonic_decay_db = 36.0
     harmonic_decay_dampening = 0.2
 
 
@@ -3903,6 +3926,11 @@ class GuiroProperties(WoodPercussionProperties):
                    0.356, 0.127, 0.121, 0.990, 0.190, 0.300, 0.162, 0.076,
                    0.077, 0.290, 0.084)
     max_harmonic = 19
+    # 120 against the 40 it inherits from the wood, for the mode-ratio
+    # correction in harmonic_decay: the guiro's 19 modes span ratios 1.00-3.40.
+    # Band drift 1.53 -> 0.89 dB. The other wood has no mode set and so is not
+    # affected, which is why this is set here and not on the parent.
+    harmonic_decay_db = 120.0
     # the modes are measured absolutely; nothing left to stretch
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
@@ -3969,34 +3997,99 @@ class HiHatProperties(CymbalProperties):
 class ClosedHiHatProperties(HiHatProperties):
     """GM 42. A stick on clamped hats: short, and BRIGHT.
 
-    The strongest mode is at 4697 Hz -- ratio 21.2 of the lowest -- which is the
-    tick a drummer is actually playing. A closed hat is almost all top end, and
-    the model had it at 780 Hz with a stretched harmonic series.
+    MEASURED OVER 10-130 ms, which is the hat's own life. The first take of this
+    read the modes from 40-240 ms -- the window that suits a cymbal -- and a
+    closed hat is already -20 dB by 75 ms, so most of that window was its noise
+    floor, where only the low modes are left. Read there the hat looks like a
+    222 Hz body with a little top on it. Read over its life it is the opposite:
+    15 of its 18 modes are above 2.9 kHz and the strongest is 4696 Hz, which is
+    the tick a drummer is actually playing. The same error as the guiro's, in
+    the same place -- the right quantity in the wrong window.
+
+    THE HAT IS THE BRIGHTEST THING IN THE KIT and the family roll-off was fitted
+    for the whole kit. In the 150 ms after the strike the recording puts 51.5%
+    of its energy above 12 kHz and 39.0% above 16 kHz -- a 9 kHz corner costs
+    6 dB at 16 kHz and cannot reach that -- so the corner fits to the top of the
+    band instead. That is not the fizz the roll-off exists to stop: fitted, we
+    sit *below* the recording up there rather than above it.
+
+    LEVEL IS THE OTHER HALF, and it was the complaint. The three Iowa takes
+    share a mic and a gain, so they set the balance between the articulations:
+    at mf the closed hat is +6.4 dB peak and +2.1 dB rms on the open one. Ours
+    was 11.5 dB *under* the open -- an 18 dB error. initial_gain is solved for
+    the recorded ratio with the open hat, which is the one already judged right,
+    as the anchor; it lands at +5.7 and +2.1.
+
+    THE WASH DID NOT NEED RAISING. The first attempt at this fixed the band
+    profile by scaling the low modes to a quarter and lifting chiff_volume from
+    the family's 1.8 to 4.5, which is tuning two knobs to a curve rather than
+    measuring the instrument. Fitted honestly against the six-band profile and
+    the -10/-20/-40 dB decay times, with the wash pinned at 1.8: band rms error
+    4.99 dB as shipped -> 1.20 dB. Freeing chiff_volume as a seventh parameter
+    moves it to 1.93 and buys 0.01 dB, so the recording says the family value
+    was right all along -- the 4.5 was standing in for a mode set read in the
+    wrong window and a voice 18 dB too quiet.
     """
-    mode_ratios = (1.000, 2.560, 2.641, 10.231, 13.429, 16.367, 19.901,
-                   21.190, 22.435, 26.265, 28.918, 32.013, 38.498, 39.586,
-                   45.827, 53.354, 54.533, 64.545)
-    mode_gains  = (0.160, 0.153, 0.139, 0.121, 0.126, 0.304, 0.137,
-                   1.000, 0.147, 0.518, 0.142, 0.205, 0.131, 0.119,
-                   0.156, 0.166, 0.172, 0.139)
+    mode_ratios = (1.000, 1.477, 1.698, 13.185, 15.949, 16.083, 20.833,
+                   22.026, 25.767, 26.035, 31.337, 38.821, 44.869, 45.675,
+                   49.922, 52.611, 54.233, 62.013)
+    mode_gains  = (0.269, 0.380, 0.425, 0.271, 0.415, 0.438, 1.000,
+                   0.301, 0.734, 0.526, 0.460, 0.299, 0.333, 0.275,
+                   0.283, 0.292, 0.288, 0.324)
     max_harmonic = 18
+    # 365 dB/s: the clamp damps the whole plate at once, which is also why
+    # harmonic_decay_db is near zero -- the modes die together rather than the
+    # top going first.
+    decay_db = 431.5
+    harmonic_decay_db = 0.00105
+    hf_corner_hz = 23998.3
+    hf_order = 4.000
+    tonal_dampening = 0.274
+    initial_gain = 0.3586
 
 
 class PedalHiHatProperties(HiHatProperties):
-    """GM 44. The foot closing the hats: a low CHICK, not a tick.
+    """GM 44. The foot closing the hats.
 
-    Its strongest mode is 211 Hz and its whole structure is dense and low --
-    1.000 1.085 1.222 1.292 1.388 -- which is two cymbals clamping together
-    rather than a stick striking one. That is the opposite end of the spectrum
-    from the closed hat above, and both used to be the same voice 80 Hz apart.
+    MEASURED OVER 8-108 ms. This one was read in the same wrong window as the
+    closed hat and it came out worse: the chick is -40 dB by 164 ms, so 40-240 ms
+    was almost entirely its noise floor, and it measured as a low CHICK at
+    152 Hz with 15 of its 18 modes under 500 Hz and two above 3 kHz. Over its
+    real life it is nearly as bright as the closed hat -- 49.1% of its energy
+    above 12 kHz against the closed hat's 51.5% -- with 15 modes above 2 kHz.
+    Two cymbals clapping together is a broadband contact, not a pitch.
+
+    ITS GAINS COME FROM THE ENERGY EACH PARTIAL STANDS IN FOR, not from peak
+    height. Picking the tallest peaks systematically under-weights the top of a
+    cymbal, where the modes are dense and one partial has to represent many:
+    each peak is low even though the region carries most of the sound. Splitting
+    the spectrum at the geometric midpoints between neighbouring modes and
+    giving each partial its region's energy took the band error from 3.33 to
+    2.17 dB. The closed hat is sparse enough up top that peak height still wins
+    there, so each is measured the way its own spectrum supports.
+
+    Level solved against the open hat, which the recordings put at 7.9 dB peak
+    and 4.8 dB rms below this one at mf.
+
+    Its ring was 0.80 s, and that alone was most of the error on its envelope:
+    decay_db moved the decay not at all, because over that length the WASH
+    regenerates for the note's whole life and it, not the modes, was the sound.
+    Band rms error 4.33 dB as shipped -> 2.17, wash at the family's 1.8 (freed,
+    the fit picks 1.61 and buys 0.02 dB).
     """
-    mode_ratios = (1.000, 1.085, 1.222, 1.292, 1.388, 1.666, 1.929, 2.015,
-                   2.103, 2.239, 2.326, 2.449, 2.673, 3.164, 3.251, 30.846,
-                   38.204, 46.575)
-    mode_gains  = (0.380, 0.360, 0.420, 0.767, 1.000, 0.641, 0.426, 0.796,
-                   0.976, 0.353, 0.389, 0.370, 0.339, 0.368, 0.346, 0.772,
-                   0.678, 0.373)
+    mode_ratios = (1.000, 1.317, 2.923, 10.592, 18.444, 23.894, 25.085,
+                   25.570, 27.496, 29.606, 35.082, 35.922, 55.662, 56.871,
+                   57.711, 61.214, 67.823, 80.664)
+    mode_gains  = (0.315, 0.989, 0.361, 0.229, 0.283, 0.311, 0.158,
+                   0.172, 0.158, 0.330, 0.196, 0.305, 0.352, 0.133,
+                   0.175, 0.293, 0.348, 1.000)
     max_harmonic = 18
+    decay_db = 455.2
+    harmonic_decay_db = 0.03115
+    hf_corner_hz = 21389.4
+    hf_order = 3.999
+    tonal_dampening = 0.0158
+    initial_gain = 0.8644
 
 
 class OpenHiHatProperties(HiHatProperties):

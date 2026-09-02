@@ -47,9 +47,9 @@ PERCUSSION = {
     39: ("Hand Clap",          N, 260.0),
     40: ("Electric Snare",     S, 275.0),
     41: ("Low Floor Tom",      M, 87.0),
-    42: ("Closed Hi-Hat",   ClosedHiHatProperties, 221.6),
+    42: ("Closed Hi-Hat",   ClosedHiHatProperties, 225.4),
     43: ("High Floor Tom",     M, 98.0),
-    44: ("Pedal Hi-Hat",    PedalHiHatProperties, 152.3),
+    44: ("Pedal Hi-Hat",    PedalHiHatProperties, 196.4),
     45: ("Low Tom",            M, 110.0),
     46: ("Open Hi-Hat",     OpenHiHatProperties, 542.8),
     47: ("Low-Mid Tom",        M, 130.0),
@@ -179,7 +179,12 @@ PERCUSSION_RING = {
     # left free -- where GM 46 means a stick on hats that are still loosely
     # together and damp each other. Same kind of cap as the triangle, and for
     # the same reason: the measurement is of a different gesture.
-    42: 0.45, 44: 0.80, 46: 2.00,
+    # MEASURED: the closed hat is -40 dB by 0.28 s and the pedal chick by
+    # 0.16 s, and their rings were set before either was measured. The pedal's
+    # 0.80 s was the whole of the error on its envelope: decay_db moved it not
+    # at all, because for that length the WASH regenerates for the note's life
+    # and it, not the modes, was the sound.
+    42: 0.35, 44: 0.21, 46: 2.00,
     49: 4.00, 50: 0.40, 51: 2.50, 52: 3.00,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 4.00, 54: 0.50, 55: 2.00,
