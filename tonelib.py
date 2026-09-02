@@ -899,6 +899,17 @@ class SynthProperties:
     pitch_jitter_cents = 0.0     # +/- this many cents, random per note (the beat)
     timing_jitter_seconds = 0.0  # 0..this delay to the strike, random per note (stagger)
 
+    # A PLATE STRUCK HARDER IS NOISIER. Measured on the Iowa cymbals: spectral
+    # flatness rises by +0.081 on average from mf to ff -- roughly doubling --
+    # on every one of the seven plates. Nothing in this file expressed that: a
+    # cymbal's timbre, its wash and its wobble were identical at velocity 30 and
+    # at 127, so every crash was the same event at a different level. That is
+    # what a listener hears as a strike rather than a hit.
+    #
+    # chiff_volume scales as attack_volume ** strike_noise_slope. 0 (the default)
+    # is the old behaviour exactly, so only the voices that set it are affected.
+    strike_noise_slope = 0.0
+
     # Onset ramp in seconds. None = derive it from the chiff/valve time (winds).
     # A struck string otherwise gets a 0-length ramp -> the amplitude steps 0->full
     # in one sample, and with every partial phase-aligned at the strike that step
@@ -1190,6 +1201,13 @@ class SynthProperties:
         self.channel_pan = channel_pan
         self.attack_volume = attack_volume
         self.channel_volume = channel_volume
+
+        # Strike force -> noise. See strike_noise_slope above. attack_volume is
+        # already the GM2/DLS square-law velocity, so this is per NOTE, not a
+        # class-wide setting, and it is why it has to happen in the constructor.
+        if self.strike_noise_slope and self.chiff_volume:
+            self.chiff_volume = self.chiff_volume * (
+                max(float(attack_volume), 1e-3) ** self.strike_noise_slope)
 
         self.frequency_x = 415.0
 
@@ -3961,6 +3979,13 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     # Kept below the level that slams the per-tone ceiling so initial_gain
     # actually controls how loud the crash is.
     chiff_volume = 1.8
+    # THE PLATE BENDS WHEN IT IS HIT. tension_bend is the mechanism the membranes
+    # use -- a head struck hard is stretched, and a stretched head is sharper --
+    # and it was zero here, so a cymbal's pitch was the same however it was
+    # struck. MEASURED on the 17" crash: +7.8 cents of drift through the ring at
+    # ff against -2.0 at mf, and -24.9 on the hardest-hit take in the set. Scaled
+    # by attack_volume by construction, so a soft stroke barely moves.
+    tension_bend = 0.007
     chiff_cycle = 0.95
     chiff_release = 0.0
     sustain_jitter = 1.0
@@ -4203,9 +4228,12 @@ class CrashCymbal1Properties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 3.959
+    chiff_volume = 4.475
     sustain_jitter = 0.01216
     chiff_width = 0.1141
+    # how much noisier this plate gets as it is struck harder, fitted so the
+    # flatness at the mf velocity matches the mf recording.
+    strike_noise_slope = 0.1362
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4256,9 +4284,12 @@ class CrashCymbal2Properties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 3.858
+    chiff_volume = 4.936
     sustain_jitter = 0.03956
     chiff_width = 0.3109
+    # how much noisier this plate gets as it is struck harder, fitted so the
+    # flatness at the mf velocity matches the mf recording.
+    strike_noise_slope = 0.2505
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4316,6 +4347,9 @@ class SplashCymbalProperties(CymbalProperties):
     chiff_volume = 1.27
     sustain_jitter = 0.07474
     chiff_width = 0.1684
+    # how much noisier this plate gets as it is struck harder, fitted so the
+    # flatness at the mf velocity matches the mf recording.
+    strike_noise_slope = 0.9917
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4369,6 +4403,9 @@ class ChineseCymbalProperties(CymbalProperties):
     chiff_volume = 1.658
     sustain_jitter = 0.003951
     chiff_width = 0.2792
+    # how much noisier this plate gets as it is struck harder, fitted so the
+    # flatness at the mf velocity matches the mf recording.
+    strike_noise_slope = 0.2271
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4421,6 +4458,9 @@ class RideCymbalProperties(CymbalProperties):
     chiff_volume = 3.947
     sustain_jitter = 0.005949
     chiff_width = 0.2752
+    # how much noisier this plate gets as it is struck harder, fitted so the
+    # flatness at the mf velocity matches the mf recording.
+    strike_noise_slope = 0.2534
     # LEVEL, from the one comparison the recordings can actually settle. Levels
     # between different cymbals are not measurable here -- Iowa's ff varies 10 dB
     # between crash takes, so it records how hard that cymbal was hit that day,
@@ -4499,6 +4539,9 @@ class CrashRideProperties(CymbalProperties):
     chiff_volume = 5.621
     sustain_jitter = 0.01331
     chiff_width = 0.2967
+    # how much noisier this plate gets as it is struck harder, fitted so the
+    # flatness at the mf velocity matches the mf recording.
+    strike_noise_slope = 0.1714
     # solved to hold note 59 at exactly the loudness it had while it was
     # borrowing the 21" ride, so this changes the plate and not the balance.
     initial_gain = 0.051562
