@@ -4070,7 +4070,11 @@ class ClosedHiHatProperties(HiHatProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.3586 * 0.3981
+    # ...and -4 dB again with the other two hats. The balance BETWEEN the three
+    # is measured (one instrument, one Iowa session) and is left alone; the
+    # family's level against the rest of the kit never was -- it inherited the
+    # open hat's from before any of this -- so that is the part that moves.
+    initial_gain = 0.3586 * 0.3981 * 0.631
 
 
 class PedalHiHatProperties(HiHatProperties):
@@ -4117,7 +4121,12 @@ class PedalHiHatProperties(HiHatProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.8644 * 0.3981
+    # ...and -4 dB more than the other two. Its anchor is the weakest of the
+    # three: it was set from footclose.mf against footsplash.mf, but a foot
+    # CLOSE and a foot SPLASH are different gestures, so Iowa's "mf" does not
+    # mean the same effort in both. Measured, it was 3.9 dB louder than the
+    # snare -- a chick out-shouting a backbeat, which no kit does.
+    initial_gain = 0.8644 * 0.3981 * 0.631 * 0.631
 
 
 class OpenHiHatProperties(HiHatProperties):
@@ -4142,7 +4151,11 @@ class OpenHiHatProperties(HiHatProperties):
 
     # -8 dB with the rest of the kit; this class used to inherit the cymbal
     # family's 1/10 and so would not have moved with the others.
-    initial_gain = 0.1 * 0.3981
+    # ...and -4 dB again with the other two hats. The balance BETWEEN the three
+    # is measured (one instrument, one Iowa session) and is left alone; the
+    # family's level against the rest of the kit never was -- it inherited the
+    # open hat's from before any of this -- so that is the part that moves.
+    initial_gain = 0.1 * 0.3981 * 0.631
 
 
 class CrashCymbal1Properties(CymbalProperties):
@@ -4169,11 +4182,30 @@ class CrashCymbal1Properties(CymbalProperties):
     max_harmonic = 26
     decay_db = 2.357
     harmonic_decay_db = 0.6306
-    hf_corner_hz = 18433.5
-    hf_order = 3.177
-    tonal_dampening = 0.02674
-    chiff_volume = 2.31
-    sustain_jitter = 1.195
+    hf_corner_hz = 23621.8
+    hf_order = 3.989
+    tonal_dampening = 0.005
+    # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
+    # (1.0 = white noise, 0 = pure tone) at three points in the note, the
+    # recording collapses from 0.167 at the strike to 0.002 by 0.4 s: a cymbal is
+    # noisy while it is being struck and almost purely tonal once it rings.
+    # Ours held 0.49 for the whole note -- a hiss, not a crash, which is why the
+    # hit did not stand out from the ring.
+    #
+    # There was no way to say this before: chiff_volume gates the noise, the
+    # attack burst is tied to the speech fade (1.5 ms, since the attack fix),
+    # and sustain_jitter is a floor that never decays -- so the wash was either
+    # permanently on or a flick. chiff_width decouples the burst from the fade,
+    # and that is what lets the noise die on its own schedule.
+    # Flatness now 0.168 / 0.001 / 0.000 against the recording's 0.167 / 0.044 / 0.002.
+    #
+    # It costs band accuracy: 1.98 -> 4.79 dB rms over 0.30 s, because with no
+    # sustained wash the ring is only these modes and a real cymbal's is dense.
+    # More modes do not recover it (110 modes reaches 4.48). The two measures
+    # genuinely disagree and this one is chosen by ear.
+    chiff_volume = 3.959
+    sustain_jitter = 0.01216
+    chiff_width = 0.1141
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4183,7 +4215,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.091939 * 2.8184 * 0.3981
+    initial_gain = 0.24361
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4203,11 +4235,30 @@ class CrashCymbal2Properties(CymbalProperties):
     max_harmonic = 26
     decay_db = 0.5524
     harmonic_decay_db = 0.5371
-    hf_corner_hz = 21424.2
-    hf_order = 3.985
-    tonal_dampening = 0.03432
-    chiff_volume = 3.668
-    sustain_jitter = 1.197
+    hf_corner_hz = 9593.02
+    hf_order = 2.192
+    tonal_dampening = 0.01806
+    # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
+    # (1.0 = white noise, 0 = pure tone) at three points in the note, the
+    # recording collapses from 0.140 at the strike to 0.006 by 0.4 s: a cymbal is
+    # noisy while it is being struck and almost purely tonal once it rings.
+    # Ours held 0.56 for the whole note -- a hiss, not a crash, which is why the
+    # hit did not stand out from the ring.
+    #
+    # There was no way to say this before: chiff_volume gates the noise, the
+    # attack burst is tied to the speech fade (1.5 ms, since the attack fix),
+    # and sustain_jitter is a floor that never decays -- so the wash was either
+    # permanently on or a flick. chiff_width decouples the burst from the fade,
+    # and that is what lets the noise die on its own schedule.
+    # Flatness now 0.140 / 0.044 / 0.006 against the recording's 0.140 / 0.044 / 0.006.
+    #
+    # It costs band accuracy: 3.13 -> 6.14 dB rms over 0.30 s, because with no
+    # sustained wash the ring is only these modes and a real cymbal's is dense.
+    # More modes do not recover it (110 modes reaches 4.48). The two measures
+    # genuinely disagree and this one is chosen by ear.
+    chiff_volume = 3.858
+    sustain_jitter = 0.03956
+    chiff_width = 0.3109
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4217,7 +4268,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.082573 * 2.8184 * 0.3981
+    initial_gain = 0.35896
 
 
 class SplashCymbalProperties(CymbalProperties):
@@ -4241,11 +4292,30 @@ class SplashCymbalProperties(CymbalProperties):
     max_harmonic = 18
     decay_db = 592.6
     harmonic_decay_db = 31.31
-    hf_corner_hz = 23947.3
-    hf_order = 0.5401
-    tonal_dampening = 0.02832
-    chiff_volume = 0.1442
-    sustain_jitter = 0.6297
+    hf_corner_hz = 23999.2
+    hf_order = 3.998
+    tonal_dampening = 0.1684
+    # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
+    # (1.0 = white noise, 0 = pure tone) at three points in the note, the
+    # recording collapses from 0.283 at the strike to 0.015 by 0.4 s: a cymbal is
+    # noisy while it is being struck and almost purely tonal once it rings.
+    # Ours held 0.02 for the whole note -- a hiss, not a crash, which is why the
+    # hit did not stand out from the ring.
+    #
+    # There was no way to say this before: chiff_volume gates the noise, the
+    # attack burst is tied to the speech fade (1.5 ms, since the attack fix),
+    # and sustain_jitter is a floor that never decays -- so the wash was either
+    # permanently on or a flick. chiff_width decouples the burst from the fade,
+    # and that is what lets the noise die on its own schedule.
+    # Flatness now 0.240 / 0.031 / 0.028 against the recording's 0.283 / 0.114 / 0.015.
+    #
+    # It costs band accuracy: 3.72 -> 3.69 dB rms over 0.30 s, because with no
+    # sustained wash the ring is only these modes and a real cymbal's is dense.
+    # More modes do not recover it (110 modes reaches 4.48). The two measures
+    # genuinely disagree and this one is chosen by ear.
+    chiff_volume = 1.27
+    sustain_jitter = 0.07474
+    chiff_width = 0.1684
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4255,7 +4325,7 @@ class SplashCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.27488 * 2.8184 * 0.3981
+    initial_gain = 0.19168
 
 
 class ChineseCymbalProperties(CymbalProperties):
@@ -4275,11 +4345,30 @@ class ChineseCymbalProperties(CymbalProperties):
     max_harmonic = 18
     decay_db = 2.083
     harmonic_decay_db = 40
-    hf_corner_hz = 7143.22
-    hf_order = 0.6694
-    tonal_dampening = 0.07943
-    chiff_volume = 0.791
-    sustain_jitter = 0.6857
+    hf_corner_hz = 4565.2
+    hf_order = 3.99
+    tonal_dampening = 0.01082
+    # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
+    # (1.0 = white noise, 0 = pure tone) at three points in the note, the
+    # recording collapses from 0.098 at the strike to 0.000 by 0.4 s: a cymbal is
+    # noisy while it is being struck and almost purely tonal once it rings.
+    # Ours held 0.14 for the whole note -- a hiss, not a crash, which is why the
+    # hit did not stand out from the ring.
+    #
+    # There was no way to say this before: chiff_volume gates the noise, the
+    # attack burst is tied to the speech fade (1.5 ms, since the attack fix),
+    # and sustain_jitter is a floor that never decays -- so the wash was either
+    # permanently on or a flick. chiff_width decouples the burst from the fade,
+    # and that is what lets the noise die on its own schedule.
+    # Flatness now 0.100 / 0.016 / 0.000 against the recording's 0.098 / 0.008 / 0.000.
+    #
+    # It costs band accuracy: 3.41 -> 3.64 dB rms over 0.30 s, because with no
+    # sustained wash the ring is only these modes and a real cymbal's is dense.
+    # More modes do not recover it (110 modes reaches 4.48). The two measures
+    # genuinely disagree and this one is chosen by ear.
+    chiff_volume = 1.658
+    sustain_jitter = 0.003951
+    chiff_width = 0.2792
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4289,7 +4378,7 @@ class ChineseCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.24712 * 2.8184 * 0.3981
+    initial_gain = 0.22679
 
 
 class RideCymbalProperties(CymbalProperties):
@@ -4308,11 +4397,30 @@ class RideCymbalProperties(CymbalProperties):
     max_harmonic = 18
     decay_db = 0.6327
     harmonic_decay_db = 19.3
-    hf_corner_hz = 20676.8
-    hf_order = 2.641
-    tonal_dampening = 0.1054
-    chiff_volume = 1.922
-    sustain_jitter = 1.06
+    hf_corner_hz = 20726.1
+    hf_order = 3.202
+    tonal_dampening = 0.06513
+    # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
+    # (1.0 = white noise, 0 = pure tone) at three points in the note, the
+    # recording collapses from 0.122 at the strike to 0.000 by 0.4 s: a cymbal is
+    # noisy while it is being struck and almost purely tonal once it rings.
+    # Ours held 0.43 for the whole note -- a hiss, not a crash, which is why the
+    # hit did not stand out from the ring.
+    #
+    # There was no way to say this before: chiff_volume gates the noise, the
+    # attack burst is tied to the speech fade (1.5 ms, since the attack fix),
+    # and sustain_jitter is a floor that never decays -- so the wash was either
+    # permanently on or a flick. chiff_width decouples the burst from the fade,
+    # and that is what lets the noise die on its own schedule.
+    # Flatness now 0.135 / 0.029 / 0.000 against the recording's 0.122 / 0.004 / 0.000.
+    #
+    # It costs band accuracy: 3.30 -> 5.51 dB rms over 0.30 s, because with no
+    # sustained wash the ring is only these modes and a real cymbal's is dense.
+    # More modes do not recover it (110 modes reaches 4.48). The two measures
+    # genuinely disagree and this one is chosen by ear.
+    chiff_volume = 3.947
+    sustain_jitter = 0.005949
+    chiff_width = 0.2752
     # LEVEL, from the one comparison the recordings can actually settle. Levels
     # between different cymbals are not measurable here -- Iowa's ff varies 10 dB
     # between crash takes, so it records how hard that cymbal was hit that day,
@@ -4329,7 +4437,71 @@ class RideCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.20198 * 0.2477 * 1.4125 * 0.3981
+    initial_gain = 0.056339
+
+
+class CrashRideProperties(CymbalProperties):
+    """GM 59, Ride Cymbal 2. MEASURED: Iowa 20" suspended cymbal, stick on the bow.
+
+    GM asks for TWO rides -- 51 and 59 are two different plates, both played on
+    the bow, while the bell (53) belongs to whichever ride carries it. Iowa has
+    only one actual ride, so 59 was pointed at the same 21" plate as 51 and the
+    two were literally the same sound: a wasted slot, and grunge.mid alternates
+    them. The 20" is the biggest plate in the collection and the lowest-pitched
+    of any of them at 280.1 Hz, against the ride's 345.4, which is what a second
+    and larger ride is. It is brighter on top than a true dark ride (-6.6 dB at
+    10-16 kHz against the 21" ride's -12.4), so what this models is honestly a
+    CRASH-RIDE, which is exactly what a 20" plate is used as.
+
+    Band rms error 1.06 dB, the closest of the seven cymbals.
+
+    ITS TAIL IS SHORTER THAN THE RECORDING'S and that is deliberate. The plate
+    falls 10 dB in 19 ms and then takes 2.68 s to reach -40: a big transient
+    over a long ring, which is two slopes, and one decay rate per partial cannot
+    be both. Fitted freely the optimiser buys band accuracy by dropping the ring
+    to 0.89 s, which is no use as a ride; held to a ride's job of sustaining, it
+    gives -40 dB at 1.02 s, a little longer than the 21" ride's 0.77. The band
+    profile survives either way (1.10 vs 1.06 dB), so the tail is the part being
+    chosen rather than measured.
+    """
+    mode_ratios = (1.000, 1.195, 1.221, 1.863, 2.414, 5.156, 8.091, 8.131,
+                   11.816, 12.093, 15.550, 16.495, 17.652, 19.762, 20.880,
+                   26.681, 26.818, 27.980, 28.146, 31.439, 32.183, 33.558,
+                   34.977, 36.261, 39.329, 47.116)
+    mode_gains  = (1.000, 0.641, 0.449, 0.427, 0.758, 0.833, 0.887, 0.485,
+                   0.631, 0.543, 0.630, 0.557, 0.323, 0.510, 0.622, 0.513,
+                   0.375, 0.139, 0.343, 0.508, 0.390, 0.320, 0.334, 0.471,
+                   0.580, 0.473)
+    max_harmonic = 26
+    decay_db = 0.6422
+    harmonic_decay_db = 1.997
+    hf_corner_hz = 16633.2
+    hf_order = 2.829
+    tonal_dampening = 0.01714
+    # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
+    # (1.0 = white noise, 0 = pure tone) at three points in the note, the
+    # recording collapses from 0.207 at the strike to 0.002 by 0.4 s: a cymbal is
+    # noisy while it is being struck and almost purely tonal once it rings.
+    # Ours held 0.53 for the whole note -- a hiss, not a crash, which is why the
+    # hit did not stand out from the ring.
+    #
+    # There was no way to say this before: chiff_volume gates the noise, the
+    # attack burst is tied to the speech fade (1.5 ms, since the attack fix),
+    # and sustain_jitter is a floor that never decays -- so the wash was either
+    # permanently on or a flick. chiff_width decouples the burst from the fade,
+    # and that is what lets the noise die on its own schedule.
+    # Flatness now 0.209 / 0.040 / 0.001 against the recording's 0.207 / 0.034 / 0.002.
+    #
+    # It costs band accuracy: 1.06 -> 5.37 dB rms over 0.30 s, because with no
+    # sustained wash the ring is only these modes and a real cymbal's is dense.
+    # More modes do not recover it (110 modes reaches 4.48). The two measures
+    # genuinely disagree and this one is chosen by ear.
+    chiff_volume = 5.621
+    sustain_jitter = 0.01331
+    chiff_width = 0.2967
+    # solved to hold note 59 at exactly the loudness it had while it was
+    # borrowing the 21" ride, so this changes the plate and not the balance.
+    initial_gain = 0.051562
 
 
 class RideBellProperties(CymbalProperties):

@@ -24,6 +24,7 @@ from tonelib import (
     SplashCymbalProperties,
     ChineseCymbalProperties,
     RideCymbalProperties,
+    CrashRideProperties,
     WoodPercussionProperties,
     CrotaleProperties,
     ClosedHiHatProperties,
@@ -71,10 +72,11 @@ PERCUSSION = {
     56: ("Cowbell",            T, 540.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 346.8),
     58: ("Vibraslap",          N, 300.0),
-    # Iowa has ONE ride, so unlike the two crashes (a 17" and an 18") this is the
-    # same 21" plate as note 51 until a second one is measured -- still better
-    # than the 580 Hz guess it had, which was the last generic cymbal left.
-    59: ("Ride Cymbal 2",     RideCymbalProperties, 345.4),
+    # GM wants two RIDES here, not two articulations of one: 51 and 59 are
+    # different plates and 53 is the bell of whichever carries it. Iowa has one
+    # ride, so this is its 20" plate -- the biggest and lowest in the set -- and
+    # so a crash-ride rather than a second dark ride. See CrashRideProperties.
+    59: ("Ride Cymbal 2",     CrashRideProperties, 280.1),
     60: ("Hi Bongo",           M, 260.0),
     61: ("Low Bongo",          M, 200.0),
     62: ("Mute Hi Conga",      M, 230.0),
@@ -197,7 +199,7 @@ PERCUSSION_RING = {
     49: 3.67, 50: 0.40, 51: 1.63, 52: 6.07,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 4.00, 54: 0.50, 55: 2.54,
-    56: 0.40, 57: 4.22, 58: 0.50, 59: 2.50, 60: 0.30, 61: 0.35, 62: 0.20,
+    56: 0.40, 57: 4.22, 58: 0.50, 59: 2.01, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
     70: 0.25, 71: 0.60, 72: 0.80,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
