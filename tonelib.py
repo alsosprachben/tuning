@@ -992,6 +992,11 @@ class SynthProperties:
     # more. So the bloom is an extra, later copy of the mid partials, and the
     # partials themselves are never delayed. 0 = no late copy.
     bloom_gain = 0.0
+    # How long the late copy takes to swell in, as a multiple of its own delay.
+    # The kernel already times each partial's decay from its own onset (a =
+    # non[p]), so the copy decays from when it arrives; what it lacked was a rise
+    # slow enough not to read as a second strike.
+    bloom_swell = 1.0
 
     def bloom_delay_for(self, frequency):
         """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.

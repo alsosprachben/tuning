@@ -404,8 +404,15 @@ def prepare(path, tuner='hybrid'):
                     # See SynthProperties.bloom_gain.
                     if pdelay > 0.0 and props.bloom_gain > 0.0:
                         bg = props.bloom_gain
+                        # It SWELLS, it does not spike. Given the same fast onset
+                        # as the partial it accompanies, a copy loud enough to
+                        # matter simply becomes the loudest thing in the note and
+                        # the envelope's peak moves off the hit -- the laggy start
+                        # again. Fading it in over its own arrival time lets it
+                        # add energy late without ever being an event of its own.
+                        bfade = max(1e-4, min(props.bloom_swell*pdelay/SR, 0.45*dur))*SR
                         emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hf, non_m+pdelay, noff,
-                                     pfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
+                                     bfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
                                      cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
                     for ui, (gm, off_hz, dr, ud, uph) in enumerate(props.unison_voices(f0, m, dbps)):
