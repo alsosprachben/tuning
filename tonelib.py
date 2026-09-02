@@ -4486,6 +4486,21 @@ class CrashCymbal1Properties(CymbalProperties):
                    0.1883, 0.1712, 0.1636, 0.1613, 0.1612, 0.1586, 0.1554, 0.1529,
                    0.1529, 0.1529, 0.1522, 0.1403)
     max_harmonic = 300
+    # THE MODES CARRY THE TOP. The refit before this chose hf_corner_hz = 3153 at
+    # order 5, which annihilates modal energy above 3 kHz -- 0.03 of it left at
+    # 6.3 kHz, 0.0003 at 15.9 -- so nothing up there was a mode and the WASH was
+    # the whole top of the instrument. The fit was free to do that because the
+    # chiff is a phase-randomised copy of each partial and so spreads broadband
+    # whatever its partial's frequency: turn the modes off up top and the wash
+    # covers, and no measure of the spectrum alone can tell the difference.
+    #
+    # It matters because a wash cannot decay per band and cannot arrive late.
+    # Both of the last two commits -- the ring law, and the bloom -- were being
+    # smothered by it. Refitted with the roll-off held gentle and well above the
+    # band, so the modes reach 16 kHz on their own:
+    #
+    #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
+    #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
     ring_peak_hz = 5999.41
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
@@ -4495,13 +4510,13 @@ class CrashCymbal1Properties(CymbalProperties):
     bloom_seconds = 0.205
     bloom_center_hz = 3200.0
     bloom_octaves = 1.25
-    ring_decay_floor = 20.9
-    ring_decay_below = 4.018
-    ring_decay_above = 1.251
+    ring_decay_floor = 11.9268
+    ring_decay_below = 0.602854
+    ring_decay_above = 1.11665
     decay_db = 108.636
     harmonic_decay_db = 0.0200571
-    hf_corner_hz = 3153.13
-    hf_order = 4.99957
+    hf_corner_hz = 12305.2
+    hf_order = 1.17111
     tonal_dampening = 0.005
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
@@ -4541,9 +4556,9 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     # Fitted to the clash trajectory at full velocity. The mode set is still this
     # plate's own recording; only how hard it is hit comes from the clash.
-    chiff_volume = 11.3012
-    sustain_jitter = 0.0963158
-    chiff_width = 0.14715
+    chiff_volume = 3.99359
+    sustain_jitter = 0.22016
+    chiff_width = 0.25078
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
     strike_noise_slope = 0.8321
@@ -4562,7 +4577,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.067067
+    initial_gain = 0.0623443
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4714,6 +4729,21 @@ class CrashCymbal2Properties(CymbalProperties):
                    0.1050, 0.1027, 0.1002, 0.0971, 0.0945, 0.0874, 0.0856, 0.0783,
                    0.0771, 0.0751, 0.0734, 0.0738)
     max_harmonic = 300
+    # THE MODES CARRY THE TOP. The refit before this chose hf_corner_hz = 3153 at
+    # order 5, which annihilates modal energy above 3 kHz -- 0.03 of it left at
+    # 6.3 kHz, 0.0003 at 15.9 -- so nothing up there was a mode and the WASH was
+    # the whole top of the instrument. The fit was free to do that because the
+    # chiff is a phase-randomised copy of each partial and so spreads broadband
+    # whatever its partial's frequency: turn the modes off up top and the wash
+    # covers, and no measure of the spectrum alone can tell the difference.
+    #
+    # It matters because a wash cannot decay per band and cannot arrive late.
+    # Both of the last two commits -- the ring law, and the bloom -- were being
+    # smothered by it. Refitted with the roll-off held gentle and well above the
+    # band, so the modes reach 16 kHz on their own:
+    #
+    #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
+    #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
     ring_peak_hz = 2672.65
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
@@ -4723,13 +4753,13 @@ class CrashCymbal2Properties(CymbalProperties):
     bloom_seconds = 0.205
     bloom_center_hz = 3200.0
     bloom_octaves = 1.25
-    ring_decay_floor = 119.3
-    ring_decay_below = 11.84
-    ring_decay_above = 12.85
+    ring_decay_floor = 77.7368
+    ring_decay_below = 6.55429
+    ring_decay_above = 39.453
     decay_db = 5.69981
     harmonic_decay_db = 0.325081
-    hf_corner_hz = 2267.2
-    hf_order = 4.97648
+    hf_corner_hz = 38680.9
+    hf_order = 1.00984
     tonal_dampening = 0.01806
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
@@ -4769,9 +4799,9 @@ class CrashCymbal2Properties(CymbalProperties):
     #
     # Fitted to the clash trajectory at full velocity. The mode set is still this
     # plate's own recording; only how hard it is hit comes from the clash.
-    chiff_volume = 23.4819
-    sustain_jitter = 0.0154181
-    chiff_width = 0.388939
+    chiff_volume = 3.99984
+    sustain_jitter = 0.0113248
+    chiff_width = 0.367686
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
     strike_noise_slope = 0.6763
@@ -4790,7 +4820,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.113717
+    initial_gain = 0.0575773
 
 
 class SplashCymbalProperties(CymbalProperties):
