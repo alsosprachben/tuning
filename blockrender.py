@@ -372,6 +372,13 @@ def prepare(path, tuner='hybrid'):
                     if hf > SR/2: break
                     hv = hv_fn(m)
                     if hv == 0.0: continue
+                    # PER-PARTIAL ARRIVAL. A struck plate's middle spectrum
+                    # arrives hundreds of ms after the strike (see
+                    # SynthProperties.bloom_delay_for). This DELAYS the partial --
+                    # its fade and its decay together -- rather than stretching
+                    # its fade, which would leave it decaying while it faded in.
+                    pdelay = props.bloom_delay_for(hf)*SR
+                    pfade = fade
                     dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
                     aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
                     gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
@@ -389,7 +396,7 @@ def prepare(path, tuner='hybrid'):
                     # quarter of the note so a short one cannot start after it ends.
                     _PL[0] = 0
                     non_m = non_r + (min(onsets[0], 0.25*dur)*SR if onsets else 0.0)
-                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m, noff, fade, rel, chiff,
+                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m+pdelay, noff, pfade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
                     for ui, (gm, off_hz, dr, ud, uph) in enumerate(props.unison_voices(f0, m, dbps)):
@@ -411,7 +418,7 @@ def prepare(path, tuner='hybrid'):
                         _PL[0] = ui + 1
                         non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
-                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_u, noff, fade, rel, chiff,
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_u+pdelay, noff, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic

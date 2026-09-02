@@ -509,11 +509,16 @@ class BasePartial:
                         self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
         fade_time = self.properties.speech_time(
             fade_time, getattr(self, "base_frequency", frequency))
+        # The bloom delays this partial's whole envelope, decay included. LOCAL,
+        # not self.delay: hammer_down can fire more than once on the same object
+        # and a mutation here would accumulate, and hammer_up (the release) must
+        # not see it at all.
+        bd = self.delay + self.properties.bloom_delay_for(frequency)
 
         if self.max_fade is not None:
             fade_time = min(fade_time, self.max_fade)
 
-        self.attack_fade = Fade(Second(second + self.delay), Second(second + self.delay + fade_time))
+        self.attack_fade = Fade(Second(second + bd), Second(second + bd + fade_time))
         # The chiff burst has its OWN (short, capped) width, decoupled from the
         # slow speech fade, and rolls off for the upper harmonics -- so a big
         # pipe's chiff is a brief low chuff, not a long high hiss (see the chiff
@@ -522,15 +527,15 @@ class BasePartial:
         chiff_fade_time = self.properties.chiff_time(base_freq, fade_time)
         if self.max_fade is not None:
             chiff_fade_time = min(chiff_fade_time, self.max_fade)
-        self.chiff_fade = Fade(Second(second + self.delay),
-                               Second(second + self.delay + chiff_fade_time))
+        self.chiff_fade = Fade(Second(second + bd),
+                               Second(second + bd + chiff_fade_time))
         self.chiff_hgain = self.properties.chiff_harmonic_gain(
             frequency / base_freq if base_freq else 1.0)
         # base_frequency is the note fundamental (harmonic 1); use it, not this
         # partial's harmonic frequency, to pick the string count / aftersound.
         aftersound_level, aftersound_dbps = self.properties.aftersound(
             getattr(self, "base_frequency", frequency), self.decay_rate)
-        self.sustain = Decay(self.decay_rate, Second(second + self.delay),
+        self.sustain = Decay(self.decay_rate, Second(second + bd),
                              self.properties.sustain_level, aftersound_level, aftersound_dbps)
 
     def force(self, frequency, second):
@@ -943,6 +948,51 @@ class SynthProperties:
     # air column). See speech_time() and hammer_down/hammer_up.
     speech_cycles = 0.0
 
+    # THE BLOOM. A struck plate does not put all its energy in at the strike: it
+    # is driven hard enough to go nonlinear, and energy cascades UPWARD out of
+    # the low modes over the following few hundred milliseconds. MEASURED on the
+    # Iowa clash pair, when each band reaches its own maximum after the strike:
+    #
+    #     150-400 Hz    0 ms      1.6-3.2 kHz   347 ms
+    #     400-800       0          3.2-6.4      416
+    #     800-1600     21          6.4-16         0
+    #
+    # -- the middle of the spectrum arrives a THIRD OF A SECOND late. Ours put
+    # every band in at 0-16 ms, which is a strike; that late arrival is what Ben
+    # first described as "a hit with follow-through" and heard the absence of.
+    #
+    # Modelled as a per-partial onset: partials near bloom_center_hz take
+    # bloom_seconds longer to reach full amplitude, falling off over
+    # bloom_octaves either side. That is not the cascade's physics -- no energy
+    # actually leaves the low modes here -- but it is its audible consequence,
+    # and both renderers already carry a per-partial attack (synthkernel's
+    # fadeS[] array, and hammer_down below, which is handed each partial's
+    # frequency). 0.0 = off, which is every other voice in this file.
+    #
+    # It is the ATTACK only: hammer_up (the release) deliberately does not use it.
+    bloom_seconds = 0.0
+    bloom_center_hz = 3000.0
+    bloom_octaves = 1.2
+    bloom_slope = 1.5      # how fast it appears with strike force; 0 = always on
+
+    def bloom_delay_for(self, frequency):
+        """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.
+
+        A DELAY, not a longer fade, and the difference is the whole mechanism.
+        Lengthening the fade leaves the partial's decay clock running from
+        note-on, so it is already dying while it fades in and the two cancel:
+        measured, a 205 ms fade left LESS energy at 0.35 s than no bloom at all
+        (-6.3 dB against -4.7). Delaying the partial moves its fade and its decay
+        together, which is what arriving late actually means. Both renderers
+        already carry a per-partial start -- blockrender's non_m, which the string
+        sections use so the players do not enter together.
+        """
+        if self.bloom_seconds <= 0.0 or frequency <= 0.0:
+            return 0.0
+        from math import log, exp
+        d = log(frequency / self.bloom_center_hz) / log(2.0) / self.bloom_octaves
+        return self.bloom_seconds * exp(-0.5 * d * d)
+
     def speech_time(self, fixed, frequency):
         """Full onset/release ramp: the fixed valve/attack floor plus, for pipes,
         speech_cycles wavelengths of the fundamental (bass speaks slowly)."""
@@ -1236,6 +1286,16 @@ class SynthProperties:
         # Strike force -> wobble. One extra voice per partial, offset by a couple
         # of Hz so it beats in the measured band; its gain, which is what sets the
         # depth of the beat, follows the strike. See strike_wobble_hz above.
+        # Strike force -> bloom. The cascade is a NONLINEAR effect: it only
+        # happens when the plate is driven hard enough to leave the linear
+        # regime, so a soft stroke should not bloom at all. Measured across the
+        # nine crash takes the mid-band delay is 139, 267, 139, 53 and 416 ms --
+        # real, but only two of nine over 150 -- so this is sized to the median
+        # of the crashes and left to the top of the velocity range.
+        if self.bloom_seconds > 0.0 and self.bloom_slope:
+            self.bloom_seconds = self.bloom_seconds * (
+                max(float(attack_volume), 1e-3) ** self.bloom_slope)
+
         if self.strike_wobble_hz > 0.0 and self.strike_wobble_gain > 0.0:
             self.unison_detune = (self.strike_wobble_hz,)
             self.unison_gain = self.strike_wobble_gain * (
@@ -4427,6 +4487,14 @@ class CrashCymbal1Properties(CymbalProperties):
                    0.1529, 0.1529, 0.1522, 0.1403)
     max_harmonic = 300
     ring_peak_hz = 5999.41
+    # The bloom. Sized from the takes that actually bloom rather than the median
+    # of all of them: at the median 139 ms the strike transient still outranks it
+    # and no delayed peak appears at all, which is a threshold, not a gradient.
+    # 205 ms puts the 3.2-6.4 kHz peak at 427 ms against the 18" clash's 416,
+    # and it is scaled by strike force, so a soft crash does not bloom.
+    bloom_seconds = 0.205
+    bloom_center_hz = 3200.0
+    bloom_octaves = 1.25
     ring_decay_floor = 20.9
     ring_decay_below = 4.018
     ring_decay_above = 1.251
@@ -4494,7 +4562,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0599754
+    initial_gain = 0.067067
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4647,6 +4715,14 @@ class CrashCymbal2Properties(CymbalProperties):
                    0.0771, 0.0751, 0.0734, 0.0738)
     max_harmonic = 300
     ring_peak_hz = 2672.65
+    # The bloom. Sized from the takes that actually bloom rather than the median
+    # of all of them: at the median 139 ms the strike transient still outranks it
+    # and no delayed peak appears at all, which is a threshold, not a gradient.
+    # 205 ms puts the 3.2-6.4 kHz peak at 427 ms against the 18" clash's 416,
+    # and it is scaled by strike force, so a soft crash does not bloom.
+    bloom_seconds = 0.205
+    bloom_center_hz = 3200.0
+    bloom_octaves = 1.25
     ring_decay_floor = 119.3
     ring_decay_below = 11.84
     ring_decay_above = 12.85
@@ -4714,7 +4790,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.108522
+    initial_gain = 0.113717
 
 
 class SplashCymbalProperties(CymbalProperties):
