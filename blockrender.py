@@ -396,8 +396,17 @@ def prepare(path, tuner='hybrid'):
                     # quarter of the note so a short one cannot start after it ends.
                     _PL[0] = 0
                     non_m = non_r + (min(onsets[0], 0.25*dur)*SR if onsets else 0.0)
-                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m+pdelay, noff, pfade, rel, chiff,
+                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m, noff, pfade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
+                    # THE LATE ARRIVAL. A second copy of this partial, quieter
+                    # and starting pdelay later: the cascade adds energy to the
+                    # middle of the spectrum rather than holding the middle back.
+                    # See SynthProperties.bloom_gain.
+                    if pdelay > 0.0 and props.bloom_gain > 0.0:
+                        bg = props.bloom_gain
+                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hf, non_m+pdelay, noff,
+                                     pfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
+                                     cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
                     for ui, (gm, off_hz, dr, ud, uph) in enumerate(props.unison_voices(f0, m, dbps)):
                         vb = props.voice_vibrato(f0, ui + 1)
@@ -418,7 +427,7 @@ def prepare(path, tuner='hybrid'):
                         _PL[0] = ui + 1
                         non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
-                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_u+pdelay, noff, pfade, rel, chiff,
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_u, noff, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic

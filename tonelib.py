@@ -509,11 +509,11 @@ class BasePartial:
                         self.properties.chiff_max_valve_time - self.properties.chiff_min_valve_time) * 1.0
         fade_time = self.properties.speech_time(
             fade_time, getattr(self, "base_frequency", frequency))
-        # The bloom delays this partial's whole envelope, decay included. LOCAL,
-        # not self.delay: hammer_down can fire more than once on the same object
-        # and a mutation here would accumulate, and hammer_up (the release) must
-        # not see it at all.
-        bd = self.delay + self.properties.bloom_delay_for(frequency)
+        # The partial itself is NOT delayed -- see bloom_gain. blockrender emits
+        # the late arrival as a separate quieter copy; the reference renderer
+        # builds its partials elsewhere and simply does not model it, which is a
+        # known gap between the two and is noted in the class.
+        bd = self.delay
 
         if self.max_fade is not None:
             fade_time = min(fade_time, self.max_fade)
@@ -974,6 +974,24 @@ class SynthProperties:
     bloom_center_hz = 3000.0
     bloom_octaves = 1.2
     bloom_slope = 1.5      # how fast it appears with strike force; 0 = always on
+    # HOW STEEP THE SKIRTS ARE. 2.0 is a plain gaussian and was the first shape;
+    # its tails reach everywhere, so at 84 ms of bloom it delayed 200 Hz by 15 ms
+    # and 16 kHz by 17 -- the whole spectrum late, which softens the attack
+    # instead of blooming the middle. A real plate delays its MIDDLE while the
+    # low and the high still arrive at once. Higher exponents flatten the top and
+    # steepen the sides, so the delay is confined to a band.
+    bloom_shape = 2.0
+    # HOW LOUD THE LATE ARRIVAL IS, relative to the partial it arrives beside.
+    # The cascade ADDS energy to the middle of the spectrum over time; it does
+    # not withhold what was there at the strike. Delaying the partial itself
+    # withholds -- and since a crash's strike energy IS its middle, that softens
+    # the attack by construction: measured, steepening the skirt so the delay
+    # landed more squarely on 800-3200 Hz made the attack WORSE, 64 ms -> 100,
+    # because the band being delayed is the band that defines the onset. The
+    # real plate has its middle at full strength immediately and then gains
+    # more. So the bloom is an extra, later copy of the mid partials, and the
+    # partials themselves are never delayed. 0 = no late copy.
+    bloom_gain = 0.0
 
     def bloom_delay_for(self, frequency):
         """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.
@@ -990,8 +1008,8 @@ class SynthProperties:
         if self.bloom_seconds <= 0.0 or frequency <= 0.0:
             return 0.0
         from math import log, exp
-        d = log(frequency / self.bloom_center_hz) / log(2.0) / self.bloom_octaves
-        return self.bloom_seconds * exp(-0.5 * d * d)
+        d = abs(log(frequency / self.bloom_center_hz) / log(2.0) / self.bloom_octaves)
+        return self.bloom_seconds * exp(-0.5 * d ** self.bloom_shape)
 
     def speech_time(self, fixed, frequency):
         """Full onset/release ramp: the fixed valve/attack floor plus, for pipes,
@@ -4527,7 +4545,32 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     # (crash 2's target attack is 26 ms and its bloom_seconds now 16 -- which is
     # its recording saying it does not bloom, rather than a knob turned down.)
+    # THE BLOOM IS AN ADDED LATE COPY, not a delayed partial, and getting that
+    # backwards is what made monocas2's crash lag. Ben: "The crash in
+    # monocas2.mid... has a weird laggy start" -- that file plays note 49, forty
+    # five hits at velocity 127, so it was getting the full delay.
+    #
+    # Delaying the partial WITHHOLDS the middle of the spectrum, and a crash's
+    # strike energy IS its middle, so the attack softens by construction. The
+    # first attempt at a fix -- a steeper skirt, to confine the delay to a band --
+    # made it worse, 64 ms -> 100, because a tighter delay lands more squarely on
+    # the band that defines the onset. The real plate has its middle at full
+    # strength immediately and then gains MORE: the cascade adds, it does not
+    # withhold. So the partials keep their own onset and a second, quieter copy
+    # of each mid partial arrives late beside it.
+    #
+    #                     attack        bloom depth
+    #     delayed partial   64 ms          +8.1 dB
+    #     late copy          7 ms          +4.2      <- this
+    #     no bloom at all    7 ms          -7.5
+    #
+    # The depth is short of the clash's +8.1 and that is a deliberate stop: past
+    # bloom_gain 3.2 the late copy outgrows the strike, the envelope's peak
+    # becomes the bloom rather than the hit, and the laggy start comes straight
+    # back (86 ms at gain 3.6). Reaching +8 dB honestly needs the late copy to
+    # decay from its own arrival rather than share the partial's envelope.
     bloom_seconds = 0.0840485
+    bloom_gain = 3.2
     bloom_center_hz = 1834.48
     bloom_octaves = 1.73876
     ring_decay_floor = 26.6214
@@ -4597,7 +4640,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0585733
+    initial_gain = 0.0184827
 
 
 class CrashCymbal2Properties(CymbalProperties):
