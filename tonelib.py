@@ -4135,6 +4135,148 @@ class OpenHiHatProperties(HiHatProperties):
     max_harmonic = 18
 
 
+class CrashCymbal1Properties(CymbalProperties):
+    """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
+    the bow, pp/mf/ff -- the kit gesture. (Iowa's "orchcrash" files are the
+    orchestral CLASH pair, two plates struck together, which is a different
+    instrument.)
+
+    This and the other four kit cymbals shared one CymbalProperties with a
+    stretched harmonic series on a GUESSED base frequency -- 520 Hz here against
+    a measured 313.8 -- so every mode sat about a sixth too high and the plate
+    had no low end: 100-500 Hz came out 7.6 dB under the recording while
+    10-16 kHz ran 2 dB over. Thin and fizzy where the recording is full.
+    Band rms error 3.61 -> 1.98 dB.
+    """
+    mode_ratios = (1.000, 1.032, 1.254, 2.680, 2.759, 5.241, 6.561, 8.423,
+                   10.053, 11.390, 11.623, 14.158, 15.833, 20.010, 24.510,
+                   26.091, 27.437, 28.665, 30.402, 30.591, 31.169, 32.838,
+                   34.303, 35.926, 38.942, 41.748)
+    mode_gains  = (0.935, 0.524, 0.928, 0.607, 0.994, 0.896, 0.745, 0.894,
+                   0.511, 0.638, 0.766, 0.582, 0.809, 0.720, 0.819, 0.452,
+                   0.374, 0.590, 0.364, 0.414, 0.483, 0.506, 0.487, 0.596,
+                   0.618, 1.000)
+    max_harmonic = 26
+    decay_db = 2.357
+    harmonic_decay_db = 0.6306
+    hf_corner_hz = 18433.5
+    hf_order = 3.177
+    tonal_dampening = 0.02674
+    chiff_volume = 2.31
+    sustain_jitter = 1.195
+    initial_gain = 0.091939
+
+
+class CrashCymbal2Properties(CymbalProperties):
+    """GM 57, Crash Cymbal 2. MEASURED: Iowa 18" suspended crash. GM asks
+    for two crashes and they were the same voice 20 Hz apart; these are two
+    different cymbals, and the 18" is the darker and longer of the pair.
+    Band rms error 4.17 -> 3.13 dB.
+    """
+    mode_ratios = (1.000, 1.107, 1.161, 2.274, 6.537, 6.718, 6.857, 6.880,
+                   7.429, 8.510, 8.762, 8.888, 10.456, 10.701, 13.158, 13.984,
+                   14.070, 14.697, 15.009, 15.695, 16.488, 18.101, 20.892,
+                   21.046, 22.201, 35.294)
+    mode_gains  = (0.598, 0.441, 0.556, 0.276, 0.663, 0.356, 0.352, 0.280,
+                   0.288, 0.438, 0.337, 0.413, 0.695, 0.350, 0.275, 1.000,
+                   0.764, 0.303, 0.292, 0.292, 0.332, 0.266, 0.275, 0.268,
+                   0.267, 0.371)
+    max_harmonic = 26
+    decay_db = 0.5524
+    harmonic_decay_db = 0.5371
+    hf_corner_hz = 21424.2
+    hf_order = 3.985
+    tonal_dampening = 0.03432
+    chiff_volume = 3.668
+    sustain_jitter = 1.197
+    initial_gain = 0.082573
+
+
+class SplashCymbalProperties(CymbalProperties):
+    """GM 55, Splash Cymbal. MEASURED: Iowa splash, stick on the bow.
+
+    A splash is SMALL -- its lowest mode is 1243 Hz, four times the 17" crash's
+    313.8 -- and the recording has essentially nothing below 500 Hz (-33.6 dB).
+    Ours had -17.6 there, 16 dB too much, and it could not have come from the
+    modes because the lowest one is above the band: it was the NOISE WASH, which
+    is broadband and so ran an octave and a half below the plate's own
+    fundamental. Fitting chiff_volume against the recording takes it from the
+    family's 1.8 to 0.14 and the band from -17.6 to -32.6.
+    Band rms error 7.19 -> 3.63 dB.
+    """
+    mode_ratios = (1.000, 1.013, 1.030, 1.034, 1.052, 1.067, 1.204, 1.764,
+                   2.475, 2.520, 2.572, 2.596, 2.654, 2.758, 3.506, 3.601,
+                   4.736, 5.697)
+    mode_gains  = (0.816, 0.395, 0.751, 0.663, 0.877, 0.706, 0.970, 1.000,
+                   0.628, 0.514, 0.419, 0.471, 0.530, 0.521, 0.424, 0.875,
+                   0.640, 0.848)
+    max_harmonic = 18
+    decay_db = 592.6
+    harmonic_decay_db = 31.31
+    hf_corner_hz = 23947.3
+    hf_order = 0.5401
+    tonal_dampening = 0.02832
+    chiff_volume = 0.1442
+    sustain_jitter = 0.6297
+    initial_gain = 0.27488
+
+
+class ChineseCymbalProperties(CymbalProperties):
+    """GM 52, Chinese Cymbal. MEASURED: Iowa 16" chinese, stick on the bow.
+
+    The china is the DARKEST of the set -- it rolls off hard above 6 kHz
+    (-16.8 dB at 10-16k, against the 17" crash's -7.3) which is what makes it
+    read as trashy rather than bright -- so it takes the lowest hf_corner_hz
+    here by a wide margin. Band rms error 5.24 -> 3.41 dB.
+    """
+    mode_ratios = (1.000, 1.791, 1.798, 1.836, 1.856, 2.906, 3.212, 3.255,
+                   3.619, 3.634, 3.670, 5.213, 5.242, 5.690, 5.715, 6.939,
+                   7.490, 7.521)
+    mode_gains  = (0.618, 0.746, 0.609, 0.935, 0.626, 0.710, 0.176, 0.816,
+                   0.730, 1.000, 0.729, 0.529, 0.187, 0.599, 0.251, 0.675,
+                   0.471, 0.835)
+    max_harmonic = 18
+    decay_db = 2.083
+    harmonic_decay_db = 40
+    hf_corner_hz = 7143.22
+    hf_order = 0.6694
+    tonal_dampening = 0.07943
+    chiff_volume = 0.791
+    sustain_jitter = 0.6857
+    initial_gain = 0.24712
+
+
+class RideCymbalProperties(CymbalProperties):
+    """GM 51, Ride Cymbal 1. MEASURED: Iowa 21" ride, stick on the bow --
+    the same cymbal as RideBellProperties below, struck in the other place.
+    Its nine lowest modes lie between 345 and 815 Hz where the bell's strongest
+    is at 2795: a ride's bow is the plate speaking and its bell is a ping.
+    Band rms error 5.07 -> 3.23 dB.
+    """
+    mode_ratios = (1.000, 1.369, 1.430, 1.495, 1.695, 1.714, 1.855, 1.983,
+                   2.360, 7.204, 9.635, 10.762, 13.896, 18.108, 22.165,
+                   22.483, 26.562, 30.954)
+    mode_gains  = (0.696, 0.408, 0.490, 0.406, 0.385, 0.297, 0.671, 0.612,
+                   1.000, 0.557, 0.538, 0.620, 0.582, 0.446, 0.466, 0.360,
+                   0.624, 0.432)
+    max_harmonic = 18
+    decay_db = 0.6327
+    harmonic_decay_db = 19.3
+    hf_corner_hz = 20676.8
+    hf_order = 2.641
+    tonal_dampening = 0.1054
+    chiff_volume = 1.922
+    sustain_jitter = 1.06
+    # LEVEL, from the one comparison the recordings can actually settle. Levels
+    # between different cymbals are not measurable here -- Iowa's ff varies 10 dB
+    # between crash takes, so it records how hard that cymbal was hit that day,
+    # not how loud a crash is against a ride. But the bow and the BELL are the
+    # same 21" plate in the same take, and there the recording is unambiguous:
+    # the bell is 5.6 dB louder, K-weighted. Ours had the bow 6.5 dB louder than
+    # the bell -- the relationship inverted, by 12.1 dB. That is the -12.1 here.
+    initial_gain = 0.20198 * 0.2477
+
+
 class RideBellProperties(CymbalProperties):
     """The bell of a ride cymbal: the one cymbal sound with a PITCH in it.
 

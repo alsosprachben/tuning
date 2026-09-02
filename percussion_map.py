@@ -19,6 +19,11 @@ from tonelib import (
     SnareDrumProperties,
     CymbalProperties,
     RideBellProperties,
+    CrashCymbal1Properties,
+    CrashCymbal2Properties,
+    SplashCymbalProperties,
+    ChineseCymbalProperties,
+    RideCymbalProperties,
     WoodPercussionProperties,
     CrotaleProperties,
     ClosedHiHatProperties,
@@ -32,7 +37,7 @@ K = KickDrumProperties          # bass drum: tight low thump
 N = NoiseDrumProperties
 T = MetalPercussionProperties   # pitched metal/wood (cowbell, agogo, block, ...)
 S = SnareDrumProperties
-C = CymbalProperties            # crash/ride/splash/china: broadband wash
+C = CymbalProperties            # the family; the four kit plates below are measured
 R = RideBellProperties          # the ride's bell: pitch THROUGH the wash
 W = WoodPercussionProperties    # claves, woodblocks: a dry tock, gone at once
 P = CrotaleProperties           # tuned discs: the only PLATE here, 1 : 2.08 : 3.41
@@ -54,17 +59,17 @@ PERCUSSION = {
     46: ("Open Hi-Hat",     OpenHiHatProperties, 542.8),
     47: ("Low-Mid Tom",        M, 130.0),
     48: ("Hi-Mid Tom",         M, 150.0),
-    49: ("Crash Cymbal 1",     C, 520.0),
+    49: ("Crash Cymbal 1",     CrashCymbal1Properties, 313.8),
     50: ("High Tom",           M, 175.0),
-    51: ("Ride Cymbal 1",      C, 560.0),
-    52: ("Chinese Cymbal",     C, 480.0),
+    51: ("Ride Cymbal 1",     RideCymbalProperties, 345.4),
+    52: ("Chinese Cymbal",     ChineseCymbalProperties, 649.7),
     # MEASURED: Iowa 21ride.stick.bell. 345 Hz is the LOWEST mode; the ping a
     # drummer hears is the strongest one, at ratio 8.1 = 2795 Hz. It was 660.
     53: ("Ride Bell",         R, 345.0),
     54: ("Tambourine",         N, 600.0),
-    55: ("Splash Cymbal",      C, 620.0),
+    55: ("Splash Cymbal",      SplashCymbalProperties, 1243.3),
     56: ("Cowbell",            T, 540.0),
-    57: ("Crash Cymbal 2",     C, 500.0),
+    57: ("Crash Cymbal 2",     CrashCymbal2Properties, 346.8),
     58: ("Vibraslap",          N, 300.0),
     59: ("Ride Cymbal 2",      C, 580.0),
     60: ("Hi Bongo",           M, 260.0),
@@ -185,10 +190,11 @@ PERCUSSION_RING = {
     # at all, because for that length the WASH regenerates for the note's life
     # and it, not the modes, was the sound.
     42: 0.35, 44: 0.21, 46: 2.00,
-    49: 4.00, 50: 0.40, 51: 2.50, 52: 3.00,
+    # MEASURED rings, fitted with each plate's mode set against its recording.
+    49: 3.67, 50: 0.40, 51: 1.63, 52: 6.07,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
-    53: 4.00, 54: 0.50, 55: 2.00,
-    56: 0.40, 57: 4.00, 58: 0.50, 59: 2.50, 60: 0.30, 61: 0.35, 62: 0.20,
+    53: 4.00, 54: 0.50, 55: 2.54,
+    56: 0.40, 57: 4.22, 58: 0.50, 59: 2.50, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
     70: 0.25, 71: 0.60, 72: 0.80,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
