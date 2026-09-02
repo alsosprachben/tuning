@@ -3571,17 +3571,22 @@ class TimpaniProperties(MembraneDrumProperties):
     ear supplies that missing fundamental and hears a definite note. THAT is what
     makes a timpano pitched, and it is the whole difference from a tom.
 
-    The engine's stretch cannot make a half-integer ratio, so the modes are
-    placed explicitly -- the integer one by the series, the rest as extra voices
-    at their own ratios, each decaying faster than the one below it, as the
-    higher modes of a head do.
+    NOT QUITE WHOLE NUMBERS, though. Measured on real kettledrums the (1,1) to
+    (5,1) modes come out near 1.00 : 1.50 : 1.97 : 2.44 : 2.90 -- the upper ones
+    sit slightly FLAT of 2, 2.5 and 3. That small compression is part of why a
+    timpano still reads as a drum and not as a pitched pipe; exactly harmonic
+    ratios are the idealisation, not the instrument. This class used to carry
+    the idealisation.
+
+    Iowa has no timpani, so neither set is fitted to a recording here. These are
+    the standard measured ratios rather than the textbook ones -- better
+    sourced, still not verified against a reference in this collection.
     """
-    # (ratio to the sounding pitch, relative amplitude)
-    membrane_modes = ((1.00, 0.55), (1.50, 1.00), (2.00, 0.70),
-                      (2.50, 0.42), (3.00, 0.22))
-    inharmonicity_coefficient = 0.0    # the ratios are set explicitly below
+    mode_ratios = (1.00, 1.50, 1.97, 2.44, 2.90)
+    mode_gains  = (0.55, 1.00, 0.70, 0.42, 0.22)
+    inharmonicity_coefficient = 0.0    # the ratios are absolute
     inharmonicity_dynamic = False
-    max_harmonic = 1                   # mode 1 only; the rest are unison voices
+    max_harmonic = 5
 
     # Less drift than a tom: a timpano's head is already at high tension to be
     # tuned at all, so the same stroke stretches it proportionally less -- and a
@@ -3591,20 +3596,14 @@ class TimpaniProperties(MembraneDrumProperties):
 
     initial_gain = 1.0 / 7.3
     tonal_dampening = 1.75
-    decay_db = 5.5                     # ~2 s: a kettle sings, it does not thump
-    harmonic_decay_db = 5.0
-    harmonic_decay_dampening = 0.25
-
-    def series_volume(self, harmonic):
-        return self.gain * self.membrane_modes[0][1] if harmonic == 1 else 0.0
-
-    def unison_voices(self, frequency, harmonic, harmonic_decay):
-        if harmonic != 1:
-            return []
-        base = self.membrane_modes[0][1]
-        return [(g / base, 0.0, ratio - 1.0,
-                 harmonic_decay * (1.0 + 0.45 * (ratio - 1.0)), 0.0)
-                for ratio, g in self.membrane_modes[1:]]
+    # A kettle sings rather than thumps, and its higher modes go first. The old
+    # implementation smuggled the modes in as unison voices and scaled each
+    # one's decay by its RATIO -- 10.5 12.9 15.1 17.3 19.5 dB/s. mode_ratios
+    # indexes decay by mode NUMBER instead, so these coefficients are
+    # re-derived to land on the same profile: 10.5 12.8 15.1 17.4 19.7.
+    decay_db = 8.2
+    harmonic_decay_db = 2.3
+    harmonic_decay_dampening = 0.0
 
 
 class NoisyPercussionMixin:
