@@ -3967,6 +3967,28 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     chiff_min_valve_time = 0.002
     chiff_max_valve_time = 0.02     # fast splash onset
 
+    # A STRUCK CYMBAL ARRIVES AT ONCE. attack_time was left None here, which
+    # makes blockrender derive the onset ramp from chiff_max_valve_time above --
+    # 20 ms, chosen as a "fast splash onset" and about fifteen times too slow for
+    # a stick hitting a plate. MEASURED on the Iowa suspended-cymbal stick takes,
+    # time from the strike to within 3 dB of peak:
+    #
+    #   13/17/18/20" crash ff   1.33  1.33  1.67  1.67 ms
+    #   16" chinese ff          1.33 ms      splash ff   3.67 ms
+    #
+    # against 17.0 ms for this class as it stood. That is the whole of "realistic,
+    # but lightly touched": the plate and the ring were right and the crack at the
+    # front was being ramped away, so every crash read as a soft one no matter how
+    # hard the part asked for it. Velocity was not the problem -- between mf and ff
+    # a real cymbal's brightness moves by a median 0.02 dB per dB of level, so it
+    # genuinely is the same sound louder.
+    #
+    # NOTE THE FAST RENDERER CANNOT FULLY HONOUR THIS. synthkernel interpolates
+    # the amplitude envelope across BLK = 512 samples = 10.7 ms, so no attack
+    # shorter than one block survives it; this takes the crash from 17.0 to 9.3 ms
+    # there, and the reference renderer, which has no such grid, gets the 1.5 ms.
+    attack_time = 0.0015
+
 
 class HiHatProperties(CymbalProperties):
     """Two cymbals on a stand, and GM asks for three quite different sounds
