@@ -57,7 +57,7 @@ PERCUSSION = {
     43: ("High Floor Tom",     M, 98.0),
     44: ("Pedal Hi-Hat",    PedalHiHatProperties, 196.4),
     45: ("Low Tom",            M, 110.0),
-    46: ("Open Hi-Hat",     OpenHiHatProperties, 542.8),
+    46: ("Open Hi-Hat",     OpenHiHatProperties, 400.0),
     47: ("Low-Mid Tom",        M, 130.0),
     48: ("Hi-Mid Tom",         M, 150.0),
     49: ("Crash Cymbal 1",     CrashCymbal1Properties, 288.3),

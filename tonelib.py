@@ -4344,13 +4344,56 @@ class OpenHiHatProperties(HiHatProperties):
     the hats still being loosely together. The modes are the same plate either
     way; the ring is capped well below the measurement for that reason.
     """
-    mode_ratios = (1.000, 1.053, 1.193, 3.852, 4.054, 5.511, 5.634, 6.280,
-                   7.040, 7.429, 7.741, 7.851, 8.664, 10.055, 10.333, 10.708,
-                   12.077, 13.038)
-    mode_gains  = (1.000, 0.903, 0.798, 0.561, 0.566, 0.866, 0.755, 0.744,
-                   0.451, 0.500, 0.559, 0.491, 0.639, 0.625, 0.645, 0.587,
-                   0.636, 0.535)
-    max_harmonic = 18
+    # DENSE, like the crashes, and for the same reason. At 18 modes this was the
+    # sparsest voice left in the kit: its lines stood 20.2 dB above the continuum
+    # where the recording's stand 10, which is the line-spectrum-with-a-wash that
+    # made the crashes sound tinny. 90 modes -- measured peaks where they resolve,
+    # the rest filled to the density a plate has, gains read off the recording's
+    # STRIKE (2-32 ms, not its ring; see CrashCymbal1Properties) -- and the ring
+    # law on, so the tail darkens on its own instead of the wash holding it up.
+    #
+    #                      grid   line excess   band rms   partials
+    #     18 modes         9.40         20.2       1.99         18
+    #     90 modes         6.45         10.0       3.65         90
+    #
+    # THE BAND RMS IS WORSE AND THAT IS THE TRADE. It is a single 0.15 s window,
+    # and the crashes are the reason not to trust it alone -- it cannot tell a
+    # dense continuum from a handful of loud modes with a hiss over them. The
+    # time evolution and the density are both much closer. Ben chose this after
+    # seeing both numbers rather than having it swapped underneath him.
+    mode_ratios = (1.0000, 1.0644, 1.0989, 1.1328, 1.2115, 1.2524, 1.3569, 1.3686,
+                   1.4289, 1.4894, 1.5077, 1.5618, 1.6188, 1.7103, 1.7931, 1.8722,
+                   1.9018, 2.0675, 2.1907, 2.2336, 2.3802, 2.3836, 2.5651, 2.6502,
+                   2.9530, 3.0001, 3.3349, 3.4987, 3.5351, 3.6412, 3.9905, 4.2760,
+                   4.5045, 4.5297, 4.9228, 5.0952, 5.2269, 5.3989, 5.5010, 5.9904,
+                   6.0714, 6.4833, 7.0518, 7.0559, 7.4781, 7.5559, 7.6450, 8.0210,
+                   8.4350, 8.4929, 8.5216, 9.3627, 9.5529, 9.8142, 10.0807, 10.3148,
+                   10.5041, 10.6533, 11.2460, 11.5429, 11.7565, 11.8390, 13.5684,
+                   13.6440, 13.6784, 13.7968, 14.0213, 14.5301, 14.9435, 16.0196,
+                   16.3878, 16.4278, 17.6918, 17.8400, 18.3049, 19.7827, 20.9411,
+                   21.4078, 22.7469, 23.4076, 25.1708, 25.3211, 27.2450, 29.0853,
+                   31.8333, 32.6761, 33.8214, 35.0618, 37.3040, 38.8428)
+    mode_gains  = (0.7082, 0.2097, 0.1739, 0.2622, 0.4545, 0.6106, 0.9875, 1.0000,
+                   0.8675, 0.5744, 0.4866, 0.2431, 0.1308, 0.1562, 0.1703, 0.1642,
+                   0.1571, 0.0903, 0.1141, 0.1544, 0.1806, 0.1803, 0.0933, 0.0641,
+                   0.0582, 0.0641, 0.0988, 0.1038, 0.0999, 0.0831, 0.1185, 0.1304,
+                   0.1197, 0.1214, 0.1968, 0.2275, 0.2284, 0.2136, 0.1986, 0.0993,
+                   0.0975, 0.0533, 0.1613, 0.1617, 0.1634, 0.1637, 0.1661, 0.1575,
+                   0.1572, 0.1632, 0.1668, 0.1794, 0.1714, 0.1416, 0.1852, 0.1804,
+                   0.1778, 0.1762, 0.1241, 0.1233, 0.1350, 0.1388, 0.1846, 0.1814,
+                   0.1799, 0.1748, 0.1648, 0.1690, 0.1938, 0.1875, 0.1883, 0.1883,
+                   0.1741, 0.1710, 0.1485, 0.1056, 0.1910, 0.1951, 0.2015, 0.1712,
+                   0.2488, 0.2492, 0.2087, 0.2040, 0.1933, 0.1841, 0.1785, 0.1616,
+                   0.1522, 0.1605)
+    max_harmonic = 90
+    ring_peak_hz = 929.542
+    ring_decay_floor = 5.85853
+    ring_decay_below = 21.7508
+    ring_decay_above = 1.75409
+    chiff_volume = 7.99982
+    chiff_width = 0.240611
+    sustain_jitter = 0.0113426
+    hf_corner_hz = 39990.7
 
     # -8 dB with the rest of the kit; this class used to inherit the cymbal
     # family's 1/10 and so would not have moved with the others.
@@ -4358,14 +4401,7 @@ class OpenHiHatProperties(HiHatProperties):
     # is measured (one instrument, one Iowa session) and is left alone; the
     # family's level against the rest of the kit never was -- it inherited the
     # open hat's from before any of this -- so that is the part that moves.
-    # +1.5 dB: Ben, "the open hit of the hi-hat seems too quiet", and the
-    # recording agrees. The three Iowa hat takes share a mic and a gain, so they
-    # set the balance between the articulations: the open hat sits 1.6 dB under
-    # the closed one there, and ours sat 3.1 under. Measured at 44100, which is
-    # what blockrender actually renders -- the earlier reading of this said
-    # 1.4 dB because it was analysed at 48000.
-    initial_gain = 0.1 * 0.3981 * 0.631 * 1.189
-
+    initial_gain = 0.0407083
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
