@@ -15,7 +15,7 @@ its amplitude. Omitted (documented, small): the piano tension-bend attack pitch
 transient, per-note pitch/timing jitter, and the ~0.06 ms onset ITD. Verify by
 spectrum, not byte-diff.
 
-Usage: python3 blockrender.py IN.mid OUT.wav [tuner]
+Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 """
 import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
@@ -515,12 +515,33 @@ def render(path, tuner='hybrid'):
     t0=time.time(); L,R = synth_window(prep, 0, prep['N']); kdt=time.time()-t0
     return L,R,prep['total'],prep['P'],kdt
 
-if __name__=="__main__":
-    inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid'
-    t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
+def write_wav(path, L, R):
+    """Write a stereo render to WAV **at the rate it was rendered at**.
+
+    Use this rather than saving raw and naming the rate by hand. SR is 44100
+    offline and 48000 only when a live front end has set it, and the two are
+    8.8% apart -- a semitone and a half of pitch, an eighth of every duration.
+    Saved through here the rate travels with the file and cannot be got wrong.
+    """
     st=np.empty(len(L)*2,np.float64); st[0::2]=L; st[1::2]=R
     # 32-bit signed int: keep full dynamic range for the downstream reverb/normalise
     # pipeline (16-bit at the low pre-normalisation peak would waste ~half the bits).
-    w=wave.open(outp,'wb'); w.setnchannels(2); w.setsampwidth(4); w.setframerate(SR)
+    w=wave.open(path,'wb'); w.setnchannels(2); w.setsampwidth(4); w.setframerate(SR)
     w.writeframes((np.clip(st,-1,1)*2147483647.0).astype('<i4').tobytes()); w.close()
+
+
+if __name__=="__main__":
+    inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid'
+    # Optional 4th argument sets the pitch everything tunes to: "a=432" names the
+    # frequency of A4, "c=256" the frequency of middle C. Which end you give
+    # matters -- a temperament's own A-to-C ratio is not equal temperament's, so
+    # c=256 lands on a different A in each one. Omit it to keep each
+    # temperament's own reference. See tunelib.set_reference.
+    if len(sys.argv)>4:
+        k,_,v = sys.argv[4].partition('=')
+        if k.strip().lower() not in ('a','c') or not v:
+            raise SystemExit("pitch reference must be a=<hz> or c=<hz>, e.g. a=432")
+        midilib.set_reference(**{k.strip().lower(): float(v)})
+    t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
+    write_wav(outp, L, R)
     print("blockrender: %.1fs audio, %d partials, kernel %.2fs, total %.2fs = %.1fx realtime -> %s"%(total,P,kdt,dt,total/dt,outp))

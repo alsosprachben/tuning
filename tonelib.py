@@ -654,7 +654,15 @@ class BaseTone:
 
 
 class BaseSampler:
-    def __init__(self, sample_rate=48000, sample_depth=16, sample_packing="h"):
+    # 44100 IS THE PROJECT'S OFFLINE RATE, not a preference. midi.py renders at
+    # 44100 and blockrender.SR is 44100; only live.py moves the block engine to
+    # 48000, to match the audio device. This default used to be 48000, which no
+    # caller ever hit -- midi.py passes the rate explicitly -- but it sat here as
+    # a trap for the next one: a sampler built without an argument would have run
+    # 8.8% off, which is a semitone and a half of pitch and an eighth of every
+    # duration. That is exactly the error that reached Ben's ears as a fast,
+    # sharp monocas2, from the same mistake made in an analysis script.
+    def __init__(self, sample_rate=44100, sample_depth=16, sample_packing="h"):
         from struct import Struct
         self.rate = sample_rate
         self.depth = sample_depth
@@ -6338,7 +6346,7 @@ class RegState:
 
 
 class SynthSampler(BaseSampler):
-    def __init__(self, audio_channel=0, sample_rate=48000, sample_depth=16, sample_packing="h"):
+    def __init__(self, audio_channel=0, sample_rate=44100, sample_depth=16, sample_packing="h"):
         BaseSampler.__init__(self, sample_rate, sample_depth, sample_packing)
         self.audio_channel = audio_channel
         self.tones = {}

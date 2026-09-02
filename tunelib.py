@@ -50,6 +50,58 @@ def ratio2EqualNote(npo, r):
     return log(float(r)) * npo / log(2)
 
 
+# THE PITCH THE WHOLE SYNTH TUNES TO. Every tuner here carries its own A -- 440
+# for the modern ones, 415 for the baroque -- and derives middle C from it, and
+# the path-generated tuners rescale their whole table so A4 lands there. That is
+# a per-temperament decision baked into each class, which is right for what a
+# temperament IS but leaves no way to say "play this at A=432" or "at C=256"
+# without editing the classes.
+#
+# set_reference() overrides all of them at once, and takes either end of the
+# question: a= names the frequency of A4 (midi 69), c= the frequency of middle C
+# (midi 60). They are the same statement from different ends -- C=256 is
+# A=430.54 in equal temperament and something else in every other one, which is
+# exactly why it has to be expressed as a note and a frequency rather than
+# converted to an A behind the caller's back.
+_REFERENCE = None            # (midi_note, frequency) or None to leave tuners alone
+
+
+def set_reference(a=None, c=None):
+    """Tune everything to a= (the pitch of A4) or c= (the pitch of middle C).
+
+    Call with neither to go back to each temperament's own reference. Returns
+    the (midi_note, frequency) pair in force. Invalidates the cached tables, so
+    it can be called between renders.
+    """
+    global _REFERENCE
+    if a is not None and c is not None:
+        raise ValueError("set_reference: give a= or c=, not both")
+    if a is None and c is None:
+        _REFERENCE = None
+    else:
+        _REFERENCE = (69, float(a)) if a is not None else (60, float(c))
+    _invalidate_tables()
+    return _REFERENCE
+
+
+def reference():
+    """The (midi_note, frequency) reference in force, or None."""
+    return _REFERENCE
+
+
+def _invalidate_tables():
+    """PathTuner caches its table per class; the reference scales that table."""
+    seen = set()
+    def walk(cls):
+        if cls in seen: return
+        seen.add(cls)
+        if hasattr(cls, "_table"): cls._table = None
+        for sub in cls.__subclasses__(): walk(sub)
+    for name in list(globals()):
+        obj = globals()[name]
+        if isinstance(obj, type) and hasattr(obj, "_table"): walk(obj)
+
+
 class BaseTuner:
     A = 440
 
@@ -58,7 +110,14 @@ class BaseTuner:
 
     def __init__(self, sustain = None, notes_per_octave = 12, min_octaves = 5):
         self.npo = float(notes_per_octave)
-        self.C = float(self.A) / self.note2Ratio(9)
+        # The reference is a NOTE and a frequency, so A=432 and C=256 are the
+        # same mechanism: divide out this temperament's own ratio for that note.
+        # A4 is 9 semitones above middle C, which is where the bare 9 came from.
+        ref = _REFERENCE
+        if ref is None:
+            self.C = float(self.A) / self.note2Ratio(9)
+        else:
+            self.C = float(ref[1]) / self.note2Ratio(ref[0] - 60)
         
         self.notes = []
 
@@ -421,8 +480,10 @@ class PathTuner(BaseTuner):
         gen = getattr(_load_path_module(), cls.generator_name)(*cls.generator_args)
         table = {n: float(note.f) for n, note in enumerate(gen.notes)
                  if getattr(note, "f", None)}
-        if cls.A is not None and table.get(69):
-            s = float(cls.A) / table[69]
+        ref = _REFERENCE if _REFERENCE is not None else (
+              (69, cls.A) if cls.A is not None else None)
+        if ref is not None and table.get(ref[0]):
+            s = float(ref[1]) / table[ref[0]]
             table = {n: f * s for n, f in table.items()}
         return table
 
@@ -443,6 +504,8 @@ class PathTuner(BaseTuner):
                 return t[midi - 12 * k] * (2.0 ** k)
             if midi + 12 * k in t:
                 return t[midi + 12 * k] / (2.0 ** k)
+        if _REFERENCE is not None:
+            return float(_REFERENCE[1]) * 2.0 ** ((midi - _REFERENCE[0]) / 12.0)
         base = self.A or 440.0
         return float(base) * 2.0 ** ((midi - 69) / 12.0)
 

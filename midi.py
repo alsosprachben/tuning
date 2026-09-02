@@ -69,12 +69,16 @@ if __name__ == '__main__':
     args = sys.argv[1:]
     if len(args) < 2 or args[0] in ("-h", "--help"):
         sys.stderr.write(
-            "usage: midi.py <input.mid> <output-base> [tuner]\n"
+            "usage: midi.py <input.mid> <output-base> [tuner] [a=432|c=256]\n"
             "\n"
             "Renders <input.mid> to <output-base>.raw: headerless stereo audio,\n"
             "32-bit signed integer, 44100 Hz. Convert to WAV with:\n"
             "  sox -t raw -r 44100 -b 32 -c 2 -e signed-integer <output-base>.raw <output-base>.wav\n"
             "\n"
+            "An optional 4th argument sets the pitch: a=432 names the frequency of\n"
+            "A4, c=256 the frequency of middle C. A temperament's own A-to-C ratio is\n"
+            "not equal temperament's, so c=256 lands on a different A in each one.\n"
+            "Omit it to keep each temperament's own reference.\n\n"
             "tuner selects the adaptive tuning temperament (default: stretch):\n"
             "  %s\n" % ", ".join(sorted(midilib.tuner_registry)))
         sys.exit(2)
@@ -83,6 +87,12 @@ if __name__ == '__main__':
     wavfile = args[1]
     tuner = args[2] if len(args) > 2 else "stretch"
     midilib.set_tuner(tuner)  # validate the name before spawning workers
+    if len(args) > 3:
+        k, _, v = args[3].partition("=")
+        if k.strip().lower() not in ("a", "c") or not v:
+            sys.stderr.write("pitch reference must be a=<hz> or c=<hz>, e.g. a=432\n")
+            sys.exit(2)
+        midilib.set_reference(**{k.strip().lower(): float(v)})
 
     sample_rate = 44100
     #sample_rate = 8000
