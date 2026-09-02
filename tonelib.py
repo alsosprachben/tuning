@@ -4164,7 +4164,13 @@ class CrashCymbal1Properties(CymbalProperties):
     tonal_dampening = 0.02674
     chiff_volume = 2.31
     sustain_jitter = 1.195
-    initial_gain = 0.091939
+    # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
+    # the kit and the reference here): "The hi-hat sounds the loudest. The ride
+    # could probably be another 3 dB louder, and the other cymbals more like 9."
+    # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
+    # varies 10 dB between crash takes -- so this one is a mix decision and is
+    # labelled as one. The band profiles above are the measurement.
+    initial_gain = 0.091939 * 2.8184
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4189,7 +4195,13 @@ class CrashCymbal2Properties(CymbalProperties):
     tonal_dampening = 0.03432
     chiff_volume = 3.668
     sustain_jitter = 1.197
-    initial_gain = 0.082573
+    # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
+    # the kit and the reference here): "The hi-hat sounds the loudest. The ride
+    # could probably be another 3 dB louder, and the other cymbals more like 9."
+    # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
+    # varies 10 dB between crash takes -- so this one is a mix decision and is
+    # labelled as one. The band profiles above are the measurement.
+    initial_gain = 0.082573 * 2.8184
 
 
 class SplashCymbalProperties(CymbalProperties):
@@ -4218,7 +4230,13 @@ class SplashCymbalProperties(CymbalProperties):
     tonal_dampening = 0.02832
     chiff_volume = 0.1442
     sustain_jitter = 0.6297
-    initial_gain = 0.27488
+    # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
+    # the kit and the reference here): "The hi-hat sounds the loudest. The ride
+    # could probably be another 3 dB louder, and the other cymbals more like 9."
+    # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
+    # varies 10 dB between crash takes -- so this one is a mix decision and is
+    # labelled as one. The band profiles above are the measurement.
+    initial_gain = 0.27488 * 2.8184
 
 
 class ChineseCymbalProperties(CymbalProperties):
@@ -4243,7 +4261,13 @@ class ChineseCymbalProperties(CymbalProperties):
     tonal_dampening = 0.07943
     chiff_volume = 0.791
     sustain_jitter = 0.6857
-    initial_gain = 0.24712
+    # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
+    # the kit and the reference here): "The hi-hat sounds the loudest. The ride
+    # could probably be another 3 dB louder, and the other cymbals more like 9."
+    # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
+    # varies 10 dB between crash takes -- so this one is a mix decision and is
+    # labelled as one. The band profiles above are the measurement.
+    initial_gain = 0.24712 * 2.8184
 
 
 class RideCymbalProperties(CymbalProperties):
@@ -4274,7 +4298,13 @@ class RideCymbalProperties(CymbalProperties):
     # same 21" plate in the same take, and there the recording is unambiguous:
     # the bell is 5.6 dB louder, K-weighted. Ours had the bow 6.5 dB louder than
     # the bell -- the relationship inverted, by 12.1 dB. That is the -12.1 here.
-    initial_gain = 0.20198 * 0.2477
+    # +3 dB by ear (Ben, against the hi-hat, which is the loudest thing in
+    # the kit and the reference here): "The hi-hat sounds the loudest. The ride
+    # could probably be another 3 dB louder, and the other cymbals more like 9."
+    # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
+    # varies 10 dB between crash takes -- so this one is a mix decision and is
+    # labelled as one. The band profiles above are the measurement.
+    initial_gain = 0.20198 * 0.2477 * 1.4125
 
 
 class RideBellProperties(CymbalProperties):
