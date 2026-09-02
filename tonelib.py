@@ -4358,7 +4358,13 @@ class OpenHiHatProperties(HiHatProperties):
     # is measured (one instrument, one Iowa session) and is left alone; the
     # family's level against the rest of the kit never was -- it inherited the
     # open hat's from before any of this -- so that is the part that moves.
-    initial_gain = 0.1 * 0.3981 * 0.631
+    # +1.5 dB: Ben, "the open hit of the hi-hat seems too quiet", and the
+    # recording agrees. The three Iowa hat takes share a mic and a gain, so they
+    # set the balance between the articulations: the open hat sits 1.6 dB under
+    # the closed one there, and ours sat 3.1 under. Measured at 44100, which is
+    # what blockrender actually renders -- the earlier reading of this said
+    # 1.4 dB because it was analysed at 48000.
+    initial_gain = 0.1 * 0.3981 * 0.631 * 1.189
 
 
 class CrashCymbal1Properties(CymbalProperties):
