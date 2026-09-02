@@ -4228,19 +4228,63 @@ class CrashCymbal1Properties(CymbalProperties):
     10-16 kHz ran 2 dB over. Thin and fizzy where the recording is full.
     Band rms error 3.61 -> 1.98 dB.
     """
-    mode_ratios = (1.000, 1.032, 1.254, 2.680, 2.759, 5.241, 6.561, 8.423,
-                   10.053, 11.390, 11.623, 14.158, 15.833, 20.010, 24.510,
-                   26.091, 27.437, 28.665, 30.402, 30.591, 31.169, 32.838,
-                   34.303, 35.926, 38.942, 41.748)
-    mode_gains  = (0.935, 0.524, 0.928, 0.607, 0.994, 0.896, 0.745, 0.894,
-                   0.511, 0.638, 0.766, 0.582, 0.809, 0.720, 0.819, 0.452,
-                   0.374, 0.590, 0.364, 0.414, 0.483, 0.506, 0.487, 0.596,
-                   0.618, 1.000)
-    max_harmonic = 26
+    # A CRASH IS A CONTINUUM, NOT A LINE SPECTRUM, and half our energy was one
+    # low tone. Ben, on the A/B against the clash: "our crashes sound completely
+    # different... a lot of it seems to be the jitter amount, both bandwidth and
+    # volume, is still an order of magnitude off." The jitter itself turned out
+    # to be fine -- the kernel redraws its phase every sample, so it is already
+    # full-bandwidth white -- but it was being buried. Measured 0.1-0.3 s after
+    # the strike, band by band, against the clash:
+    #
+    #                       300-700   700-1.5k   1.5-3k    3-6k
+    #     energy, clash       -24.1      -13.7     -5.7    -3.2
+    #     energy, ours         -3.0      -12.1     -8.7   -11.4
+    #     peak/median, clash    10.4       20.0     24.8    20.2
+    #     peak/median, ours     35.4       25.1     32.1    25.2
+    #
+    # Half the energy sat in a 300-700 Hz tone the clash barely has, so the wash
+    # was spread thin under it, and the partials stood 24-35 dB above the floor
+    # between them where a real crash's stand 10-25. That is what "an order of
+    # magnitude of jitter" sounds like from the outside; the fix is where the
+    # energy is, not how much noise there is.
+    #
+    # Two changes. The mode gains carry a high-pass shelf so the plate's own low
+    # modes stop dominating -- fitted, not chosen -- and the mode set goes from 26
+    # to 100, because a sparse set cannot be a continuum however it is weighted.
+    # Denser is measurably better on both counts (crash 2's energy error 4.61 ->
+    # 1.33 dB, its line-excess 8.0 -> 5.7). It costs partials: 78 per hit.
+    mode_ratios = (1.000, 1.089, 1.121, 1.219, 1.365, 1.502, 1.999, 2.170,
+                   2.307, 2.594, 2.918, 2.992, 3.178, 3.186, 4.859, 4.956,
+                   5.024, 5.599, 5.685, 7.056, 7.129, 7.186, 7.325, 7.869,
+                   8.341, 8.878, 9.111, 10.888, 11.078, 12.202, 12.246,
+                   12.310, 12.375, 12.592, 12.687, 12.822, 13.287, 14.042,
+                   15.384, 15.997, 16.029, 16.640, 16.778, 17.238, 17.309,
+                   17.933, 20.467, 21.697, 21.737, 24.350, 25.058, 25.264,
+                   25.346, 25.706, 26.226, 26.445, 26.614, 26.974, 28.046,
+                   28.206, 29.784, 29.871, 31.052, 31.208, 31.315, 31.785,
+                   32.225, 32.558, 32.812, 33.037, 33.525, 33.935, 34.260,
+                   34.566, 35.211, 35.411, 35.921, 36.710, 36.951, 37.347,
+                   38.228, 38.331, 38.468, 38.990, 39.113, 39.758, 40.035,
+                   40.375, 40.720, 40.858, 42.099, 42.396, 43.258, 45.452,
+                   45.569, 45.804, 45.920, 47.174, 47.588, 53.104)
+    mode_gains  = (0.001, 0.002, 0.001, 0.001, 0.005, 0.004, 0.038, 0.026,
+                   0.041, 0.052, 0.172, 0.462, 0.100, 0.291, 0.686, 0.311,
+                   0.429, 0.358, 0.670, 0.285, 0.516, 0.485, 0.501, 0.311,
+                   0.363, 0.352, 1.000, 0.633, 0.306, 0.347, 0.145, 0.305,
+                   0.667, 0.256, 0.786, 0.435, 0.349, 0.399, 0.546, 0.280,
+                   0.403, 0.247, 0.446, 0.249, 0.774, 0.504, 0.520, 0.374,
+                   0.653, 0.716, 0.286, 0.294, 0.177, 0.417, 0.283, 0.287,
+                   0.439, 0.430, 0.203, 0.551, 0.424, 0.336, 0.409, 0.529,
+                   0.235, 0.347, 0.239, 0.258, 0.342, 0.072, 0.569, 0.300,
+                   0.543, 0.213, 0.252, 0.505, 0.302, 0.286, 0.327, 0.468,
+                   0.262, 0.118, 0.270, 0.309, 0.383, 0.308, 0.144, 0.273,
+                   0.298, 0.509, 0.317, 0.439, 0.417, 0.592, 0.228, 0.040,
+                   0.332, 0.412, 0.587, 0.909)
+    max_harmonic = 100
     decay_db = 2.357
     harmonic_decay_db = 0.6306
-    hf_corner_hz = 23621.8
-    hf_order = 3.989
+    hf_corner_hz = 19145.1
+    hf_order = 3.04252
     tonal_dampening = 0.005
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
@@ -4301,7 +4345,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.17406
+    initial_gain = 0.196005
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4310,19 +4354,63 @@ class CrashCymbal2Properties(CymbalProperties):
     different cymbals, and the 18" is the darker and longer of the pair.
     Band rms error 4.17 -> 3.13 dB.
     """
-    mode_ratios = (1.000, 1.107, 1.161, 2.274, 6.537, 6.718, 6.857, 6.880,
-                   7.429, 8.510, 8.762, 8.888, 10.456, 10.701, 13.158, 13.984,
-                   14.070, 14.697, 15.009, 15.695, 16.488, 18.101, 20.892,
-                   21.046, 22.201, 35.294)
-    mode_gains  = (0.598, 0.441, 0.556, 0.276, 0.663, 0.356, 0.352, 0.280,
-                   0.288, 0.438, 0.337, 0.413, 0.695, 0.350, 0.275, 1.000,
-                   0.764, 0.303, 0.292, 0.292, 0.332, 0.266, 0.275, 0.268,
-                   0.267, 0.371)
-    max_harmonic = 26
+    # A CRASH IS A CONTINUUM, NOT A LINE SPECTRUM, and half our energy was one
+    # low tone. Ben, on the A/B against the clash: "our crashes sound completely
+    # different... a lot of it seems to be the jitter amount, both bandwidth and
+    # volume, is still an order of magnitude off." The jitter itself turned out
+    # to be fine -- the kernel redraws its phase every sample, so it is already
+    # full-bandwidth white -- but it was being buried. Measured 0.1-0.3 s after
+    # the strike, band by band, against the clash:
+    #
+    #                       300-700   700-1.5k   1.5-3k    3-6k
+    #     energy, clash       -24.1      -13.7     -5.7    -3.2
+    #     energy, ours         -3.0      -12.1     -8.7   -11.4
+    #     peak/median, clash    10.4       20.0     24.8    20.2
+    #     peak/median, ours     35.4       25.1     32.1    25.2
+    #
+    # Half the energy sat in a 300-700 Hz tone the clash barely has, so the wash
+    # was spread thin under it, and the partials stood 24-35 dB above the floor
+    # between them where a real crash's stand 10-25. That is what "an order of
+    # magnitude of jitter" sounds like from the outside; the fix is where the
+    # energy is, not how much noise there is.
+    #
+    # Two changes. The mode gains carry a high-pass shelf so the plate's own low
+    # modes stop dominating -- fitted, not chosen -- and the mode set goes from 26
+    # to 100, because a sparse set cannot be a continuum however it is weighted.
+    # Denser is measurably better on both counts (crash 2's energy error 4.61 ->
+    # 1.33 dB, its line-excess 8.0 -> 5.7). It costs partials: 90 per hit.
+    mode_ratios = (1.000, 1.039, 1.151, 1.206, 1.230, 1.860, 2.068, 2.354,
+                   2.446, 2.662, 3.320, 3.760, 3.767, 4.638, 4.650, 5.047,
+                   5.512, 6.707, 6.780, 6.877, 6.925, 7.019, 7.060, 7.149,
+                   7.192, 7.718, 8.607, 8.897, 9.049, 9.133, 9.206, 9.255,
+                   10.330, 10.830, 11.119, 11.290, 11.886, 12.145, 12.804,
+                   13.617, 13.643, 14.020, 14.462, 14.490, 14.577, 15.272,
+                   15.597, 15.649, 16.247, 17.134, 18.132, 18.775, 19.117,
+                   19.162, 19.627, 20.642, 21.684, 21.881, 22.856, 22.922,
+                   23.042, 24.209, 25.174, 25.308, 25.502, 26.241, 26.544,
+                   26.870, 27.494, 27.714, 27.766, 29.982, 30.098, 30.837,
+                   30.937, 31.167, 31.882, 32.146, 32.459, 33.842, 34.033,
+                   34.979, 35.067, 35.157, 35.939, 36.042, 36.419, 37.340,
+                   37.437, 37.802, 38.809, 40.086, 40.276, 40.443, 40.800,
+                   42.919, 43.122, 43.362, 44.238, 45.985)
+    mode_gains  = (0.001, 0.002, 0.002, 0.003, 0.002, 0.019, 0.024, 0.062,
+                   0.057, 0.106, 0.294, 0.225, 0.226, 0.287, 0.302, 0.534,
+                   0.333, 0.316, 0.534, 0.829, 0.227, 0.383, 0.567, 0.491,
+                   0.481, 0.489, 0.468, 0.674, 0.358, 0.695, 0.569, 0.509,
+                   0.508, 0.799, 0.441, 0.325, 0.405, 0.522, 0.284, 0.382,
+                   0.394, 0.322, 0.288, 1.000, 0.920, 0.410, 0.317, 0.245,
+                   0.465, 0.558, 0.407, 0.369, 0.202, 0.256, 0.335, 0.494,
+                   0.432, 0.367, 0.273, 0.159, 0.406, 0.359, 0.243, 0.218,
+                   0.257, 0.281, 0.251, 0.326, 0.224, 0.193, 0.309, 0.334,
+                   0.227, 0.154, 0.289, 0.302, 0.186, 0.175, 0.335, 0.342,
+                   0.192, 0.212, 0.154, 0.152, 0.168, 0.099, 0.485, 0.259,
+                   0.151, 0.255, 0.431, 0.134, 0.209, 0.210, 0.258, 0.270,
+                   0.189, 0.152, 0.304, 0.697)
+    max_harmonic = 100
     decay_db = 0.5524
     harmonic_decay_db = 0.5371
-    hf_corner_hz = 9593.02
-    hf_order = 2.192
+    hf_corner_hz = 3069.34
+    hf_order = 2.22494
     tonal_dampening = 0.01806
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
@@ -4383,7 +4471,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.28089
+    initial_gain = 0.348025
 
 
 class SplashCymbalProperties(CymbalProperties):

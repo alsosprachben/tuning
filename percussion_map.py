@@ -60,7 +60,7 @@ PERCUSSION = {
     46: ("Open Hi-Hat",     OpenHiHatProperties, 542.8),
     47: ("Low-Mid Tom",        M, 130.0),
     48: ("Hi-Mid Tom",         M, 150.0),
-    49: ("Crash Cymbal 1",     CrashCymbal1Properties, 313.8),
+    49: ("Crash Cymbal 1",     CrashCymbal1Properties, 288.3),
     50: ("High Tom",           M, 175.0),
     51: ("Ride Cymbal 1",     RideCymbalProperties, 345.4),
     52: ("Chinese Cymbal",     ChineseCymbalProperties, 649.7),
@@ -70,7 +70,7 @@ PERCUSSION = {
     54: ("Tambourine",         N, 600.0),
     55: ("Splash Cymbal",      SplashCymbalProperties, 1243.3),
     56: ("Cowbell",            T, 540.0),
-    57: ("Crash Cymbal 2",     CrashCymbal2Properties, 346.8),
+    57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
     58: ("Vibraslap",          N, 300.0),
     # GM wants two RIDES here, not two articulations of one: 51 and 59 are
     # different plates and 53 is the bell of whichever carries it. Iowa has one
