@@ -68,7 +68,7 @@ PERCUSSION = {
     # drummer hears is the strongest one, at ratio 8.1 = 2795 Hz. It was 660.
     53: ("Ride Bell",         R, 345.0),
     54: ("Tambourine",         N, 600.0),
-    55: ("Splash Cymbal",      SplashCymbalProperties, 1243.3),
+    55: ("Splash Cymbal",      SplashCymbalProperties, 400.0),
     56: ("Cowbell",            T, 540.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
     58: ("Vibraslap",          N, 300.0),
