@@ -3941,23 +3941,41 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
 
 
 class RideBellProperties(CymbalProperties):
-    """The BELL of a ride cymbal: struck on the raised centre, so a definite
-    pitch speaks THROUGH a cymbal's wash rather than instead of it.
+    """The bell of a ride cymbal: the one cymbal sound with a PITCH in it.
 
-    It was mapped to MetalPercussion -- the tonal bucket with the cowbell, the
-    claves and the woodblock -- which gave it a clear pitch and NO wash at all,
-    so it read as a melodic ping. That matters more than it sounds: a ride bell
-    often carries the entire rhythm of a samba or a battle cue, and a rhythm
-    part with a definite pitch starts competing with the tune.
+    MEASURED: Iowa 21ride.stick.bell at pp, mf and ff, modes taken from the free
+    decay 0.25 s after the strike and kept only where they appear in at least
+    two of the three dynamics within 1.5%. 44 modes survived that; the strongest
+    20 are here.
 
-    So: the cymbal family's broadband bed, but with the modes lifted well clear
-    of it, and a much shorter ring than a crash, because a ride articulates
-    where a crash washes.
+    The lowest is 345 Hz and the STRONGEST is at 2795 Hz -- ratio 8.1 -- which is
+    the ping a drummer is actually playing when they hit the bell. This class had
+    a single base frequency of 660 Hz and a stretched harmonic series, so the one
+    thing that identifies the sound was not in it.
+
+    A cymbal above about 1 kHz has hundreds of closely spaced modes with
+    nonlinear coupling between them, and no list of ratios will ever be that.
+    What a mode set CAN carry is the discrete low structure, which is where a
+    cymbal's identity lives -- it is what separates a 21" ride's bell from a 13"
+    crash. The dense top stays a noise wash, so this is a hybrid and not a full
+    modal model.
+
+    Measured decay: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69, so a T60 near
+    4 s; the ring was 1.20. Per-mode T60 runs 3-4 s across the strong modes.
     """
+    mode_ratios = (1.000, 1.135, 1.438, 1.753, 1.873, 2.612, 3.833, 4.389,
+                   5.334, 5.518, 7.193, 7.367, 8.102, 9.159, 9.634, 10.765,
+                   11.917, 12.400, 12.623, 12.934)
+    mode_gains  = (0.133, 0.238, 0.117, 0.113, 0.435, 0.265, 0.329, 0.411,
+                   0.257, 0.184, 0.798, 0.255, 1.000, 0.562, 0.534, 0.480,
+                   0.141, 0.144, 0.101, 0.192)
+    max_harmonic = 20
+    inharmonicity_coefficient = 0.0    # the modes are measured absolutely
+    inharmonicity_dynamic = False
+
     tonal_dampening = 0.55      # modes stand out of the wash (a crash sits at 0.15)
     chiff_volume = 0.9          # less hiss than a crash
     decay_db = 11.0             # articulates instead of washing (a crash is 6.0)
-    max_harmonic = 60
 
 
 # --- The human voice -------------------------------------------------------
