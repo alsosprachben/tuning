@@ -71,7 +71,10 @@ PERCUSSION = {
     56: ("Cowbell",            T, 540.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 346.8),
     58: ("Vibraslap",          N, 300.0),
-    59: ("Ride Cymbal 2",      C, 580.0),
+    # Iowa has ONE ride, so unlike the two crashes (a 17" and an 18") this is the
+    # same 21" plate as note 51 until a second one is measured -- still better
+    # than the 580 Hz guess it had, which was the last generic cymbal left.
+    59: ("Ride Cymbal 2",     RideCymbalProperties, 345.4),
     60: ("Hi Bongo",           M, 260.0),
     61: ("Low Bongo",          M, 200.0),
     62: ("Mute Hi Conga",      M, 230.0),

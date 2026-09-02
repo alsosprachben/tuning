@@ -4067,7 +4067,10 @@ class ClosedHiHatProperties(HiHatProperties):
     hf_corner_hz = 23998.3
     hf_order = 4.000
     tonal_dampening = 0.274
-    initial_gain = 0.3586
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.3586 * 0.3981
 
 
 class PedalHiHatProperties(HiHatProperties):
@@ -4111,7 +4114,10 @@ class PedalHiHatProperties(HiHatProperties):
     hf_corner_hz = 21389.4
     hf_order = 3.999
     tonal_dampening = 0.0158
-    initial_gain = 0.8644
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.8644 * 0.3981
 
 
 class OpenHiHatProperties(HiHatProperties):
@@ -4133,6 +4139,10 @@ class OpenHiHatProperties(HiHatProperties):
                    0.451, 0.500, 0.559, 0.491, 0.639, 0.625, 0.645, 0.587,
                    0.636, 0.535)
     max_harmonic = 18
+
+    # -8 dB with the rest of the kit; this class used to inherit the cymbal
+    # family's 1/10 and so would not have moved with the others.
+    initial_gain = 0.1 * 0.3981
 
 
 class CrashCymbal1Properties(CymbalProperties):
@@ -4170,7 +4180,10 @@ class CrashCymbal1Properties(CymbalProperties):
     # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
     # varies 10 dB between crash takes -- so this one is a mix decision and is
     # labelled as one. The band profiles above are the measurement.
-    initial_gain = 0.091939 * 2.8184
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.091939 * 2.8184 * 0.3981
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4201,7 +4214,10 @@ class CrashCymbal2Properties(CymbalProperties):
     # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
     # varies 10 dB between crash takes -- so this one is a mix decision and is
     # labelled as one. The band profiles above are the measurement.
-    initial_gain = 0.082573 * 2.8184
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.082573 * 2.8184 * 0.3981
 
 
 class SplashCymbalProperties(CymbalProperties):
@@ -4236,7 +4252,10 @@ class SplashCymbalProperties(CymbalProperties):
     # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
     # varies 10 dB between crash takes -- so this one is a mix decision and is
     # labelled as one. The band profiles above are the measurement.
-    initial_gain = 0.27488 * 2.8184
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.27488 * 2.8184 * 0.3981
 
 
 class ChineseCymbalProperties(CymbalProperties):
@@ -4267,7 +4286,10 @@ class ChineseCymbalProperties(CymbalProperties):
     # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
     # varies 10 dB between crash takes -- so this one is a mix decision and is
     # labelled as one. The band profiles above are the measurement.
-    initial_gain = 0.24712 * 2.8184
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.24712 * 2.8184 * 0.3981
 
 
 class RideCymbalProperties(CymbalProperties):
@@ -4304,7 +4326,10 @@ class RideCymbalProperties(CymbalProperties):
     # Levels BETWEEN cymbals are not measurable from the Iowa set -- its ff
     # varies 10 dB between crash takes -- so this one is a mix decision and is
     # labelled as one. The band profiles above are the measurement.
-    initial_gain = 0.20198 * 0.2477 * 1.4125
+    # ...then the whole group down 8 dB together, so the balance above is kept
+    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
+    # "The bass is now too quiet, so I think the whole kit needs to go lower."
+    initial_gain = 0.20198 * 0.2477 * 1.4125 * 0.3981
 
 
 class RideBellProperties(CymbalProperties):
@@ -4346,6 +4371,10 @@ class RideBellProperties(CymbalProperties):
 
 
 # --- The human voice -------------------------------------------------------
+    # -8 dB with the rest of the kit; this class used to inherit the cymbal
+    # family's 1/10 and so would not have moved with the others.
+    initial_gain = 0.1 * 0.3981
+
 
 class SynthLeadProperties(FlueOrganProperties):
     """GM 82-87: synth leads that borrow the flue pipe's tone but have no stops.
