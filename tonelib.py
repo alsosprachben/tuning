@@ -910,6 +910,23 @@ class SynthProperties:
     # is the old behaviour exactly, so only the voices that set it are affected.
     strike_noise_slope = 0.0
 
+    # THE WOBBLE. Ben, on why a hard crash reads as a hit and not a strike: "the
+    # cymbal is literally wobbling around from the drum stick pushing through it
+    # vertically." A plate driven that far is nonlinear -- its modes split and
+    # shift -- and closely spaced pairs beat. MEASURED in the ring: 7-32% of the
+    # envelope at 0.7-3 Hz, and on the same 17" crash the ff take's depth is
+    # about DOUBLE the mf's (10.8/16.2/24.2% against 4.9/9.0/13.8% by band).
+    #
+    # Ours had modulation of about the right depth, from fixed modes beating,
+    # but identical at every velocity -- byte-identical at 70 and 127 -- so it
+    # could never be the thing that says "hit hard". This adds one detuned voice
+    # per partial, beating at strike_wobble_hz, whose GAIN (and so the depth of
+    # the beat) scales with how hard the note was struck. 0.0 = off, which is
+    # every other voice in this file.
+    strike_wobble_hz = 0.0
+    strike_wobble_gain = 0.0
+    strike_wobble_slope = 1.0
+
     # Onset ramp in seconds. None = derive it from the chiff/valve time (winds).
     # A struck string otherwise gets a 0-length ramp -> the amplitude steps 0->full
     # in one sample, and with every partial phase-aligned at the strike that step
@@ -1206,8 +1223,23 @@ class SynthProperties:
         # already the GM2/DLS square-law velocity, so this is per NOTE, not a
         # class-wide setting, and it is why it has to happen in the constructor.
         if self.strike_noise_slope and self.chiff_volume:
-            self.chiff_volume = self.chiff_volume * (
-                max(float(attack_volume), 1e-3) ** self.strike_noise_slope)
+            av = max(float(attack_volume), 1e-3) ** self.strike_noise_slope
+            self.chiff_volume = self.chiff_volume * av
+            # AND THE JITTER WITH IT. Ben: "Not just a wobble, but jitter would
+            # increase, yes?" -- yes: a plate driven hard has its modes decohere,
+            # not merely swing, so the RING gets noisier too and not just the
+            # strike. MEASURED: the hard-struck takes carry 1.49x the ring
+            # flatness of the soft ones. sustain_jitter is that floor, and it was
+            # a fixed number, so the ring was equally coherent however it was hit.
+            self.sustain_jitter = self.sustain_jitter * av
+
+        # Strike force -> wobble. One extra voice per partial, offset by a couple
+        # of Hz so it beats in the measured band; its gain, which is what sets the
+        # depth of the beat, follows the strike. See strike_wobble_hz above.
+        if self.strike_wobble_hz > 0.0 and self.strike_wobble_gain > 0.0:
+            self.unison_detune = (self.strike_wobble_hz,)
+            self.unison_gain = self.strike_wobble_gain * (
+                max(float(attack_volume), 1e-3) ** self.strike_wobble_slope)
 
         self.frequency_x = 415.0
 
@@ -4228,12 +4260,18 @@ class CrashCymbal1Properties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 4.475
+    chiff_volume = 9.026
     sustain_jitter = 0.01216
     chiff_width = 0.1141
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
-    strike_noise_slope = 0.1362
+    strike_noise_slope = 0.8321
+    # The wobble, scaled by how hard it was struck: one voice per partial
+    # offset 1.6 Hz, beating in the measured 0.7-3 Hz band. Depth comes out
+    # 19.3% at velocity 127 and 9.5% at 70, against the 17" crash's measured
+    # 16.2% at ff and 9.0% at mf.
+    strike_wobble_hz = 1.6
+    strike_wobble_gain = 0.3
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4243,7 +4281,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.24361
+    initial_gain = 0.19473
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4284,12 +4322,18 @@ class CrashCymbal2Properties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 4.936
+    chiff_volume = 6.914
     sustain_jitter = 0.03956
     chiff_width = 0.3109
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
-    strike_noise_slope = 0.2505
+    strike_noise_slope = 0.6763
+    # The wobble, scaled by how hard it was struck: one voice per partial
+    # offset 1.6 Hz, beating in the measured 0.7-3 Hz band. Depth comes out
+    # 19.3% at velocity 127 and 9.5% at 70, against the 17" crash's measured
+    # 16.2% at ff and 9.0% at mf.
+    strike_wobble_hz = 1.6
+    strike_wobble_gain = 0.3
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4299,7 +4343,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.35896
+    initial_gain = 0.29733
 
 
 class SplashCymbalProperties(CymbalProperties):
@@ -4349,7 +4393,13 @@ class SplashCymbalProperties(CymbalProperties):
     chiff_width = 0.1684
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
-    strike_noise_slope = 0.9917
+    strike_noise_slope = 0.9312
+    # The wobble, scaled by how hard it was struck: one voice per partial
+    # offset 1.6 Hz, beating in the measured 0.7-3 Hz band. Depth comes out
+    # 19.3% at velocity 127 and 9.5% at 70, against the 17" crash's measured
+    # 16.2% at ff and 9.0% at mf.
+    strike_wobble_hz = 1.6
+    strike_wobble_gain = 0.3
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4359,7 +4409,7 @@ class SplashCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.19168
+    initial_gain = 0.18266
 
 
 class ChineseCymbalProperties(CymbalProperties):
@@ -4405,7 +4455,13 @@ class ChineseCymbalProperties(CymbalProperties):
     chiff_width = 0.2792
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
-    strike_noise_slope = 0.2271
+    strike_noise_slope = 0.2204
+    # The wobble, scaled by how hard it was struck: one voice per partial
+    # offset 1.6 Hz, beating in the measured 0.7-3 Hz band. Depth comes out
+    # 19.3% at velocity 127 and 9.5% at 70, against the 17" crash's measured
+    # 16.2% at ff and 9.0% at mf.
+    strike_wobble_hz = 1.6
+    strike_wobble_gain = 0.3
     # +9 dB by ear (Ben, against the hi-hat, which is the loudest thing in
     # the kit and the reference here): "The hi-hat sounds the loudest. The ride
     # could probably be another 3 dB louder, and the other cymbals more like 9."
@@ -4415,7 +4471,7 @@ class ChineseCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.22679
+    initial_gain = 0.20231
 
 
 class RideCymbalProperties(CymbalProperties):
@@ -4460,7 +4516,13 @@ class RideCymbalProperties(CymbalProperties):
     chiff_width = 0.2752
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
-    strike_noise_slope = 0.2534
+    strike_noise_slope = 0.1637
+    # The wobble, scaled by how hard it was struck: one voice per partial
+    # offset 1.6 Hz, beating in the measured 0.7-3 Hz band. Depth comes out
+    # 19.3% at velocity 127 and 9.5% at 70, against the 17" crash's measured
+    # 16.2% at ff and 9.0% at mf.
+    strike_wobble_hz = 1.6
+    strike_wobble_gain = 0.3
     # LEVEL, from the one comparison the recordings can actually settle. Levels
     # between different cymbals are not measurable here -- Iowa's ff varies 10 dB
     # between crash takes, so it records how hard that cymbal was hit that day,
@@ -4477,7 +4539,7 @@ class RideCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.056339
+    initial_gain = 0.04938
 
 
 class CrashRideProperties(CymbalProperties):
@@ -4541,10 +4603,16 @@ class CrashRideProperties(CymbalProperties):
     chiff_width = 0.2967
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
-    strike_noise_slope = 0.1714
+    strike_noise_slope = 0.1637
+    # The wobble, scaled by how hard it was struck: one voice per partial
+    # offset 1.6 Hz, beating in the measured 0.7-3 Hz band. Depth comes out
+    # 19.3% at velocity 127 and 9.5% at 70, against the 17" crash's measured
+    # 16.2% at ff and 9.0% at mf.
+    strike_wobble_hz = 1.6
+    strike_wobble_gain = 0.3
     # solved to hold note 59 at exactly the loudness it had while it was
     # borrowing the 21" ride, so this changes the plate and not the balance.
-    initial_gain = 0.051562
+    initial_gain = 0.046729
 
 
 class RideBellProperties(CymbalProperties):
