@@ -3594,14 +3594,20 @@ class TimpaniProperties(MembraneDrumProperties):
     tension_bend = 0.016       # ~27 cents at full velocity
     tension_settle_time = 0.30
 
-    # Trimmed +1.39 dB when the modes moved off exact whole numbers. Nothing
-    # about the ENERGY changed -- short-term loudness moved 0.34 dB and
-    # K-weighted 0.19 -- but the PEAK fell 1.39 dB, because 1 : 1.5 : 2 : 2.5 : 3
-    # re-align in phase at every strike and 1 : 1.5 : 1.97 : 2.44 : 2.90 do not.
-    # That phase incoherence is the physics working, and it is also most of what
-    # a struck drum's loudness is: the attack. So the level comes back by peak,
-    # not by RMS, and a timpano sits where it did in the orchestra.
-    initial_gain = (1.0 / 7.3) * 1.174
+    # +4.39 dB over the old 1/7.3, in two parts.
+    #
+    # 1.39 of it is restoring what the ratio change cost. Nothing about the
+    # ENERGY moved -- short-term loudness fell 0.34 dB, K-weighted 0.19 -- but
+    # the PEAK fell 1.39, because 1 : 1.5 : 2 : 2.5 : 3 re-align in phase at
+    # every strike and 1 : 1.5 : 1.97 : 2.44 : 2.90 never quite do. That phase
+    # incoherence is the physics working, and the attack is most of what a
+    # struck drum's loudness is, so the level came back by peak rather than RMS.
+    #
+    # The other 3 dB is Ben's ear against the rest of the orchestra, not a
+    # measurement. A timpano is a big drum and the balance here was set before
+    # any of the percussion was measured; if the kit is ever levelled as a whole
+    # this is the first number to revisit.
+    initial_gain = (1.0 / 7.3) * 1.659
     tonal_dampening = 1.75
     # A kettle sings rather than thumps, and its higher modes go first. The old
     # implementation smuggled the modes in as unison voices and scaled each
