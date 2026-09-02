@@ -410,8 +410,12 @@ def prepare(path, tuner='hybrid'):
                         # the envelope's peak moves off the hit -- the laggy start
                         # again. Fading it in over its own arrival time lets it
                         # add energy late without ever being an event of its own.
-                        bfade = max(1e-4, min(props.bloom_swell*pdelay/SR, 0.45*dur))*SR
-                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hf, non_m+pdelay, noff,
+                        # Each late arrival on its own schedule: a band that
+                        # rises together is a filter sweep, not a cascade.
+                        sc = props.bloom_scatter
+                        pd = pdelay*(1.0 - sc + 2.0*sc*random.random()) if sc > 0.0 else pdelay
+                        bfade = max(1e-4, min(props.bloom_swell*pd/SR, 0.45*dur))*SR
+                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hf, non_m+pd, noff,
                                      bfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
                                      cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
