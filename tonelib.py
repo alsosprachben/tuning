@@ -4507,12 +4507,32 @@ class CrashCymbal1Properties(CymbalProperties):
     # and no delayed peak appears at all, which is a threshold, not a gradient.
     # 205 ms puts the 3.2-6.4 kHz peak at 427 ms against the 18" clash's 416,
     # and it is scaled by strike force, so a soft crash does not bloom.
-    bloom_seconds = 0.205
-    bloom_center_hz = 3200.0
-    bloom_octaves = 1.25
-    ring_decay_floor = 11.9268
-    ring_decay_below = 0.602854
-    ring_decay_above = 1.11665
+    # FITTED AGAINST T60 AND THE ATTACK, not through the band grid. The ring
+    # coefficients had been coming along for the ride in a fit that optimised
+    # band energy, and the bloom was set by hand to one number for both crashes.
+    # Ben, listening to grunge.mid: "one of them has a weirdly gradual attack...
+    # positioned on the right" -- which is crash 2, panned +0.6, playing eight
+    # hits at velocity 127 and so getting the full bloom.
+    #
+    # THE BLOOM WAS ON A CRASH WHOSE OWN RECORDING DOES NOT BLOOM. The 18" clash
+    # has a 416 ms mid-band delay and the 17" has 32 ms; I measured that, wrote
+    # it down, and then set both crashes to 205 ms anyway. Measured as the time
+    # to reach 3 dB below peak, ours took 187-191 ms where the real clashes take
+    # 26-35: a real plate blooms in the MIDDLE while its low and high still
+    # arrive at once, so delaying too wide a slice softens the whole attack.
+    #
+    #                 attack        bloom depth        T60 error
+    #     crash 1   191 -> 63 ms   +8.1 vs +8.1 dB    1.35 octaves
+    #     crash 2   187 -> 24 ms   -6.9 vs -3.4       0.87 octaves
+    #
+    # (crash 2's target attack is 26 ms and its bloom_seconds now 16 -- which is
+    # its recording saying it does not bloom, rather than a knob turned down.)
+    bloom_seconds = 0.0840485
+    bloom_center_hz = 1834.48
+    bloom_octaves = 1.73876
+    ring_decay_floor = 26.6214
+    ring_decay_below = 0.771893
+    ring_decay_above = 4.04418
     decay_db = 108.636
     harmonic_decay_db = 0.0200571
     hf_corner_hz = 12305.2
@@ -4577,7 +4597,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0623443
+    initial_gain = 0.0585733
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4750,12 +4770,32 @@ class CrashCymbal2Properties(CymbalProperties):
     # and no delayed peak appears at all, which is a threshold, not a gradient.
     # 205 ms puts the 3.2-6.4 kHz peak at 427 ms against the 18" clash's 416,
     # and it is scaled by strike force, so a soft crash does not bloom.
-    bloom_seconds = 0.205
-    bloom_center_hz = 3200.0
-    bloom_octaves = 1.25
-    ring_decay_floor = 77.7368
-    ring_decay_below = 6.55429
-    ring_decay_above = 39.453
+    # FITTED AGAINST T60 AND THE ATTACK, not through the band grid. The ring
+    # coefficients had been coming along for the ride in a fit that optimised
+    # band energy, and the bloom was set by hand to one number for both crashes.
+    # Ben, listening to grunge.mid: "one of them has a weirdly gradual attack...
+    # positioned on the right" -- which is crash 2, panned +0.6, playing eight
+    # hits at velocity 127 and so getting the full bloom.
+    #
+    # THE BLOOM WAS ON A CRASH WHOSE OWN RECORDING DOES NOT BLOOM. The 18" clash
+    # has a 416 ms mid-band delay and the 17" has 32 ms; I measured that, wrote
+    # it down, and then set both crashes to 205 ms anyway. Measured as the time
+    # to reach 3 dB below peak, ours took 187-191 ms where the real clashes take
+    # 26-35: a real plate blooms in the MIDDLE while its low and high still
+    # arrive at once, so delaying too wide a slice softens the whole attack.
+    #
+    #                 attack        bloom depth        T60 error
+    #     crash 1   191 -> 63 ms   +8.1 vs +8.1 dB    1.35 octaves
+    #     crash 2   187 -> 24 ms   -6.9 vs -3.4       0.87 octaves
+    #
+    # (crash 2's target attack is 26 ms and its bloom_seconds now 16 -- which is
+    # its recording saying it does not bloom, rather than a knob turned down.)
+    bloom_seconds = 0.0161662
+    bloom_center_hz = 5661.91
+    bloom_octaves = 1.70142
+    ring_decay_floor = 44.2985
+    ring_decay_below = 6.65704
+    ring_decay_above = 151.364
     decay_db = 5.69981
     harmonic_decay_db = 0.325081
     hf_corner_hz = 38680.9
@@ -4820,7 +4860,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0575773
+    initial_gain = 0.0567918
 
 
 class SplashCymbalProperties(CymbalProperties):
