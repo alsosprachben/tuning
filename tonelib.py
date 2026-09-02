@@ -3994,7 +3994,23 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     metallic edge under the hiss."""
     initial_gain = 1.0 / 10
     max_harmonic = 80               # very bright, energy well up top
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 25.0
+    # A MEASURED MODE SET MUST NOT BE STRETCHED AGAIN. This was 25x the 2nd-
+    # harmonic coefficient, from when a cymbal was a stretched harmonic series
+    # and the stretch WAS the model. Every cymbal below now carries a measured
+    # mode set, and both renderers apply the stretch on top of mode_ratios --
+    # so the modes were landing nowhere near where they were measured:
+    #
+    #     mode  60   948 Hz measured  ->  1099 Hz rendered   (x1.16)
+    #     mode 120  2319 Hz           ->  4706 Hz            (x2.03)
+    #     mode 171  4488 Hz           -> 21982 Hz            (x4.90)
+    #     mode 200  6430 Hz           -> 57979 Hz, past Nyquist and DROPPED
+    #
+    # So a 300-mode crash rendered 171 of them, nothing above 4.5 kHz was a mode
+    # at all, and everything up there was wash -- which is why the top could not
+    # be made to decay per band, and why adding modes kept giving less than it
+    # should have. HiHatProperties and RideBellProperties already set this to
+    # zero, for exactly this reason; the six classes added after them did not.
+    inharmonicity_coefficient = 0.0
     tonal_dampening = 0.15          # near-flat: the modes don't stick out of the wash
 
     # One-shot: the splash rings out on its own exponential decay and ignores
@@ -4045,6 +4061,45 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     # shorter than one block survives it; this takes the crash from 17.0 to 9.3 ms
     # there, and the reference renderer, which has no such grid, gets the 1.5 ms.
     attack_time = 0.0015
+
+    # A CYMBAL'S RING TIME PEAKS IN THE MIDDLE, and no setting of the inherited
+    # law can say that. harmonic_decay is decay_db + harmonic_decay_db * h * (h **
+    # harmonic_decay_dampening) -- monotonic in h, so the top either always dies
+    # faster than the bottom or always slower. MEASURED, T60 by band on the two
+    # orchestral clashes (mean), against what we were rendering:
+    #
+    #      275 Hz  600   1200   2400   4800   8700  13500
+    #       1.16   3.33  4.21   3.29   2.94   1.91   0.87   the clash
+    #       1.92   1.82  2.40   2.27   2.29   2.46   2.45   ours, near enough flat
+    #
+    # The plate rings longest around 1.2 kHz and both ends fall away -- the bass
+    # modes are heavily damped by the mount and the air, the top by radiation and
+    # internal loss. That is a parabola in log frequency, not a slope, and it is
+    # why our late spectrum came out flat at -18 dB across when the recording is
+    # mid-focused with a dead top.
+    #
+    # Asymmetric, because the low side falls faster than the high side: a single
+    # symmetric parabola leaves 10.4 dB/s of residual, most of it at 275 Hz.
+    # OFF by default (0.0 = use the inherited law), because every cymbal voice
+    # here was fitted under the old one. Switch it on per class as each is
+    # refitted; the numbers below are what the clash measures.
+    ring_peak_hz = 0.0
+    ring_decay_floor = 14.4        # dB/s at the peak
+    ring_decay_below = 12.0        # dB/s per octave^2 under the peak
+    ring_decay_above = 4.0         # dB/s per octave^2 over it
+
+    def harmonic_decay(self, harmonic):
+        """Decay rate for one partial, from where it sits rather than its index."""
+        if self.ring_peak_hz <= 0.0:
+            return super().harmonic_decay(harmonic)
+        f = self.frequency_x * (2.0 ** self.octave_position) * self.mode_ratio(harmonic)
+        if f <= 0.0:
+            return super().harmonic_decay(harmonic)
+        from math import log
+        oct_from_peak = log(f / self.ring_peak_hz) / log(2.0)
+        k = self.ring_decay_below if oct_from_peak < 0.0 else self.ring_decay_above
+        base = self.ring_decay_floor + k * oct_from_peak * oct_from_peak
+        return base * self.decay_register_factor
 
 
 class HiHatProperties(CymbalProperties):
