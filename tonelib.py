@@ -4260,9 +4260,29 @@ class CrashCymbal1Properties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 9.026
-    sustain_jitter = 0.01216
-    chiff_width = 0.1141
+    # WET, from the ORCHESTRAL CLASH. Ben: "Real crash cymbals have noise, and
+    # the noise is not wet enough by an order of magnitude. Compare with the
+    # orchestra crash?" He is right and the factor is literal. Iowa's five clash
+    # takes -- two plates slammed together, the one thing in the collection that
+    # is properly hit -- against the 17" suspended crash struck with a stick:
+    #
+    #                        strike   0.1-0.3s     ring
+    #     orchestral clash    0.323      0.135    0.020
+    #     17" stick crash     0.167      0.044    0.002
+    #                          1.9x       3.1x      10x
+    #
+    # and the clash is 12 dB louder besides. The stick takes are a percussionist
+    # controlling a suspended cymbal; a crash in a kit is the clash gesture. What
+    # makes it "wet" is not the strike -- that was only 1.9x -- but that the noise
+    # LASTS: 0.135 still at a third of a second, where our fit had it collapsing
+    # to nothing by then. chiff_width carries that, and it is why this needed
+    # three parameters and not a louder wash.
+    #
+    # Fitted to the clash trajectory at full velocity. The mode set is still this
+    # plate's own recording; only how hard it is hit comes from the clash.
+    chiff_volume = 7.66
+    sustain_jitter = 0.04766
+    chiff_width = 0.3322
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
     strike_noise_slope = 0.8321
@@ -4281,7 +4301,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.19473
+    initial_gain = 0.17406
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4322,9 +4342,29 @@ class CrashCymbal2Properties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 6.914
-    sustain_jitter = 0.03956
-    chiff_width = 0.3109
+    # WET, from the ORCHESTRAL CLASH. Ben: "Real crash cymbals have noise, and
+    # the noise is not wet enough by an order of magnitude. Compare with the
+    # orchestra crash?" He is right and the factor is literal. Iowa's five clash
+    # takes -- two plates slammed together, the one thing in the collection that
+    # is properly hit -- against the 17" suspended crash struck with a stick:
+    #
+    #                        strike   0.1-0.3s     ring
+    #     orchestral clash    0.323      0.135    0.020
+    #     17" stick crash     0.167      0.044    0.002
+    #                          1.9x       3.1x      10x
+    #
+    # and the clash is 12 dB louder besides. The stick takes are a percussionist
+    # controlling a suspended cymbal; a crash in a kit is the clash gesture. What
+    # makes it "wet" is not the strike -- that was only 1.9x -- but that the noise
+    # LASTS: 0.135 still at a third of a second, where our fit had it collapsing
+    # to nothing by then. chiff_width carries that, and it is why this needed
+    # three parameters and not a louder wash.
+    #
+    # Fitted to the clash trajectory at full velocity. The mode set is still this
+    # plate's own recording; only how hard it is hit comes from the clash.
+    chiff_volume = 7.336
+    sustain_jitter = 0.04373
+    chiff_width = 0.3524
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
     strike_noise_slope = 0.6763
@@ -4343,7 +4383,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.29733
+    initial_gain = 0.28089
 
 
 class SplashCymbalProperties(CymbalProperties):
