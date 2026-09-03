@@ -13,6 +13,9 @@ or None if the note is unmapped (silent).
 
 from tonelib import (
     MembraneDrumProperties,
+    TomTomProperties,
+    FloorTomProperties,
+    HighTomProperties,
     KickDrumProperties,
     NoiseDrumProperties,
     MetalPercussionProperties,
@@ -34,7 +37,10 @@ from tonelib import (
     GuiroProperties,
 )
 
-M = MembraneDrumProperties      # pitched membranes: toms, congas, timbales
+M = MembraneDrumProperties      # single head, open shell: congas, timbales, bongos
+TF = FloorTomProperties         # two heads over a closed shell: see TomTomProperties
+TR = TomTomProperties
+TH = HighTomProperties
 K = KickDrumProperties          # bass drum: tight low thump
 N = NoiseDrumProperties
 T = MetalPercussionProperties   # pitched metal/wood (cowbell, agogo, block, ...)
@@ -53,16 +59,16 @@ PERCUSSION = {
     38: ("Acoustic Snare",     S, 260.0),
     39: ("Hand Clap",          N, 260.0),
     40: ("Electric Snare",     S, 275.0),
-    41: ("Low Floor Tom",      M, 87.0),
+    41: ("Low Floor Tom",      TF, 87.0),
     42: ("Closed Hi-Hat",   ClosedHiHatProperties, 248.4),
-    43: ("High Floor Tom",     M, 98.0),
+    43: ("High Floor Tom",     TF, 98.0),
     44: ("Pedal Hi-Hat",    PedalHiHatProperties, 248.4),
-    45: ("Low Tom",            M, 110.0),
+    45: ("Low Tom",            TR, 110.0),
     46: ("Open Hi-Hat",     OpenHiHatProperties, 248.4),
-    47: ("Low-Mid Tom",        M, 130.0),
-    48: ("Hi-Mid Tom",         M, 150.0),
+    47: ("Low-Mid Tom",        TR, 130.0),
+    48: ("Hi-Mid Tom",         TH, 150.0),
     49: ("Crash Cymbal 1",     CrashCymbal1Properties, 288.3),
-    50: ("High Tom",           M, 175.0),
+    50: ("High Tom",           TH, 175.0),
     51: ("Ride Cymbal 1",     RideCymbalProperties, 147.5),
     52: ("Chinese Cymbal",     ChineseCymbalProperties, 181.9),
     # MEASURED: Iowa 21ride.stick.bell. 345 Hz is the LOWEST mode; the ping a
@@ -276,7 +282,11 @@ PERCUSSION_LEVEL = {
     # but that is a limit on the CLASS gain, and the trim is applied on top, so
     # the headroom question is simply whether the rendered tone stays clean.
     # Measured below: it does.
-    35: 1.6, 36: 1.6,        # bass drum: +4 dB
+    # ...and +0.94 dB more with the ported cavity: the same energy now sits in
+    # two resonances instead of one Bessel cluster, so the same class gain is
+    # slightly quieter. The class itself is at its ceiling, and the trim is
+    # where the headroom note above says this belongs.
+    35: 1.783, 36: 1.783,      # bass drum
 }
 _RING_CLASSES = {}
 

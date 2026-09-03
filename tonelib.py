@@ -3540,13 +3540,144 @@ class MembraneDrumProperties(PercussionProperties):
     harmonic_decay_dampening = 0.2
 
 
+class TomTomProperties(MembraneDrumProperties):
+    """A tom: TWO heads over a closed shell, which the bare Bessel set is not.
+
+    MembraneDrumProperties carries the modes of a circular membrane IN VACUO --
+    1 : 1.593 : 2.136 : ... -- and that is the textbook idealisation of a head
+    with no air on either side. A conga or a timbale is close to it, because the
+    shell is open at the bottom and there is no cavity to speak of. A tom is not:
+    it has a second head, and the air trapped between them couples the two.
+
+    ONLY THE MODES THAT CHANGE THE ENCLOSED VOLUME FEEL THAT SPRING, and for a
+    circular membrane that is exactly the axisymmetric (0,n) family. Any mode
+    with a nodal diameter has equal and opposite lobes whose volume displacement
+    cancels, so (1,1), (2,1), (3,1) and the rest do not compress the air and do
+    not move at all. Each (0,n) mode instead becomes a DOUBLET: the heads moving
+    in the same spatial direction leave the volume alone and stay put, while the
+    heads moving oppositely compress the air and rise to f*sqrt(1+k).
+
+    Treating the mode as a piston of effective area 2*pi*a^2*J1(j0n)/j0n against
+    an adiabatic volume pi*a^2*L, with modal mass sigma*pi*a^2*J1(j0n)^2:
+
+        k_n = 8*rho*c^2 / (L * sigma * omega_n^2 * j0n^2)
+
+    and since omega_n scales as j0n, k falls as 1/j0n^4 -- so the fundamental
+    splits hugely and (0,2) and (0,3) barely at all. For a 12x8 rack tom at
+    130 Hz with a 7.5 mil head (sigma 0.26 kg/m^2): the (0,1) partner lands at
+    2.556, (0,2) at 2.513 and (0,3) at 3.658.
+
+    CROSS-CHECK, because there is no drum recording anywhere in this collection
+    to fit against. The same formula applied to a kettledrum says its (0,1) mode
+    is pushed far up and radiates strongly -- which is precisely why a timpano's
+    pitch comes from (1,1) to (5,1) and never from its fundamental, as
+    TimpaniProperties already describes. That account falls out of this rather
+    than being put into it.
+
+    STILL PHYSICS, NOT MEASUREMENT, and on the same footing as the Bessel zeros
+    it extends: the ratios are derived, the geometry is stated, and nothing here
+    has been checked against a tom. Two effects are knowingly left out. Air MASS
+    loading lowers every mode, the low ones most, which would compress the whole
+    set slightly. And the air modes are the only ones that move net air, so they
+    radiate efficiently and should decay faster than their neighbours -- the
+    engine's decay is a function of frequency alone, so it cannot single them
+    out. A real shell is also vented, which relieves the spring below the vent's
+    own resonance; this is the sealed-cavity limit.
+    """
+    mode_ratios = (1.000, 1.593, 2.136, 2.295, 2.513, 2.556, 2.653, 2.917,
+                   3.155, 3.500, 3.599, 3.647, 3.658, 4.059, 4.132)
+    mode_gains  = (1.000, 0.475, 0.297, 0.265, 0.229, 0.223, 0.210, 0.180,
+                   0.159, 0.135, 0.129, 0.126, 0.126, 0.106, 0.103)
+    max_harmonic = 15
+    # the three air partners add a little energy; trimmed back so the family
+    # sits exactly where it did before this class existed
+    initial_gain = (1.0 / 2.5) * 0.9772
+
+
+class FloorTomProperties(TomTomProperties):
+    """GM 41 and 43: a 16x16 floor tom at 87 Hz. Deeper shell and a lower head,
+    which pull k in opposite directions -- more depth is a softer air spring,
+    a lower fundamental a weaker membrane one -- and the fundamental wins, so a
+    floor tom's air partner sits HIGHER than a rack tom's, at 2.679."""
+    mode_ratios = (1.000, 1.593, 2.136, 2.295, 2.538, 2.653, 2.679, 2.917,
+                   3.155, 3.500, 3.599, 3.647, 3.665, 4.059, 4.132)
+    mode_gains  = (1.000, 0.475, 0.297, 0.265, 0.225, 0.210, 0.207, 0.180,
+                   0.159, 0.135, 0.129, 0.126, 0.125, 0.106, 0.103)
+
+
+class HighTomProperties(TomTomProperties):
+    """GM 48 and 50: a 10x7 rack tom at 165 Hz. The tightest head in the family
+    and the shallowest shell, and here the head wins: the air partner is the
+    lowest of the three at 2.219, close enough to (0,2) at 2.295 to beat with
+    it, which is the small tom's characteristic tightness."""
+    mode_ratios = (1.000, 1.593, 2.136, 2.219, 2.295, 2.452, 2.653, 2.917,
+                   3.155, 3.500, 3.599, 3.641, 3.647, 4.059, 4.132)
+    mode_gains  = (1.000, 0.475, 0.297, 0.279, 0.265, 0.238, 0.210, 0.180,
+                   0.159, 0.135, 0.129, 0.126, 0.126, 0.106, 0.103)
+
+
 class KickDrumProperties(MembraneDrumProperties):
-    """Bass drum: a tight, dark low thump -- louder and shorter than a tom,
-    a punchy body that dies in about half a second."""
-    initial_gain = 1.0 / 1.05  # near the per-tone ceiling (cannot go higher clean)
+    """A bass drum: a PORTED cavity, which is a bass-reflex box with a drumhead
+    for a driver.
+
+    This was a tom with the decay turned up and tonal_dampening raised, on the
+    bare Bessel set -- a membrane in vacuo. A kick is not that. Its front head is
+    normally ported, and a port is not a leak: the plug of air in the hole has
+    mass, the cavity behind it has compliance, and together they are a Helmholtz
+    resonator coupled to the batter head exactly as a reflex port couples to a
+    loudspeaker cone.
+
+        head    M_as = sigma*pi*a^2*J1(j01)^2 / A_eff^2,  A_eff = 2*pi*a^2*J1(j01)/j01
+        cavity  C_ab = V/(rho*c^2)
+        port    M_ap = rho*L_eff/A_p,  L_eff ~ 1.7*r for a flanged hole
+        alpha = C_as/C_ab,   h = omega_port/omega_head
+
+    and the roots of u^2 - u(1 + h^2 + alpha*h^2) + h^2 = 0 are the drum's two
+    resonances. For a 22x16 shell with a 5" port and a 10 mil head whose own
+    (0,1) is 62 Hz: the port resonates at 59.2 Hz, alpha is 4.52, and the roots
+    are 0.394 and 2.424 of the head -- 24 Hz and 150 Hz.
+
+    SO THE THUMP IS THE PORT, NOT THE HEAD. That is the whole point of the
+    model, and it is why a kick reads as a thump plus a knock rather than as a
+    low tom: the head's own modes are pushed up into a cluster from 250 Hz, and
+    what you hear at the bottom is the cavity breathing through the hole. The
+    ratios below are normalised to the AIR mode rather than to the head, so the
+    base frequency still means what it always did -- the drum's sounding
+    fundamental, 62 Hz for GM 36 -- and the pitch tuned by ear does not move.
+    What changes is everything above it:
+
+        band            30-60  60-120  120-250  250-500  500-1k
+        bare Bessel      -8.7    -0.7    -19.9    -50.7   -70.5
+        ported cavity    -8.4    -0.7    -47.9    -42.1   -59.4
+
+    The thump is untouched and the 120-250 Hz shelf -- the boxy region, where a
+    real kick is cut and where the old model put the whole Bessel cluster --
+    drops 28 dB, reappearing an octave up as knock.
+
+    The (0,2) and (0,3) modes sit far above the port's own resonance, where the
+    plug is inertial and the cavity is effectively SEALED, so they take the
+    closed-cavity split instead (see TomTomProperties). Modes with a nodal
+    diameter move no net air and are untouched.
+
+    NO REFERENCE, and one omission that matters more here than in the toms. A
+    real kick is damped with a pillow or a felt strip against the head, which
+    kills the 250-650 Hz head cluster -- the boxy region -- while barely
+    touching the port mode, because that is a cavity resonance and not a head
+    one. This engine's decay is a function of frequency alone, so it cannot damp
+    the head modes selectively; the 1/ratio**1.6 gain law already puts that
+    cluster about 20 dB down, which stands in for the pillow without being it.
+    If this reads as boxy, that is the missing piece, and the honest fix is
+    per-mode damping rather than a gain tweak.
+    """
+    # air/port mode first, then the head's own modes above it
+    mode_ratios = (1.000, 4.044, 5.423, 5.826, 6.153, 6.708, 6.735, 7.405,
+                   8.009, 8.885, 9.137, 9.258, 9.379, 10.304, 10.490)
+    mode_gains  = (1.000, 0.106, 0.069, 0.063, 0.058, 0.051, 0.051, 0.044,
+                   0.039, 0.033, 0.032, 0.031, 0.031, 0.026, 0.026)
+    max_harmonic = 15
+    initial_gain = 0.952381  # solved to hold the level the ear had set
     tension_bend = 0.045       # a kick drops hardest of all: a slack, wide head
     tension_settle_time = 0.13
-    max_harmonic = 10
     tonal_dampening = 1.9      # darker/rounder: fundamental-dominant thump
     decay_db = 24.0            # more body (louder-perceived); rings ~1.1 s
 
