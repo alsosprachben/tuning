@@ -69,7 +69,7 @@ PERCUSSION = {
     # drummer hears is the strongest one, at ratio 8.1 = 2795 Hz. It was 660.
     53: ("Ride Bell",         R, 147.5),
     54: ("Tambourine",         N, 600.0),
-    55: ("Splash Cymbal",      SplashCymbalProperties, 400.0),
+    55: ("Splash Cymbal",      SplashCymbalProperties, 143.3),
     56: ("Cowbell",            T, 540.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
     58: ("Vibraslap",          N, 300.0),
@@ -209,7 +209,7 @@ PERCUSSION_RING = {
     # MEASURED rings, fitted with each plate's mode set against its recording.
     49: 3.67, 50: 0.40, 51: 1.25, 52: 1.00,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
-    53: 0.84, 54: 0.50, 55: 2.54,
+    53: 0.84, 54: 0.50, 55: 1.60,
     56: 0.40, 57: 4.22, 58: 0.50, 59: 1.19, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
     70: 0.25, 71: 0.60, 72: 0.80,
