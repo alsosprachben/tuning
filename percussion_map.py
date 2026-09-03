@@ -188,7 +188,11 @@ PERCUSSION_RING = {
     # uniform part of the contact damping -- how hard the articulation holds the
     # plate. Fitted against each take's own envelope with everything else held:
     #
-    #     closed   0.47 s      pedal   0.57 s      open   0.64 s
+    #     closed   1.38 s      pedal   2.65 s      open   0.71 s
+    #
+    # These are long because the plate's TOP now dies with the strike (see
+    # ring_decay_above): what rings for seconds is a middle that is already
+    # 25 dB down by 100 ms, not an audible hat hanging over the next beat.
     #
     # The open hat's is FAR below the foot splash's own ~10.9 s T60, and
     # deliberately: Iowa's only long hi-hat take is a splash -- hats opened and
@@ -201,7 +205,7 @@ PERCUSSION_RING = {
     # rendered 49 dB apart where the recordings sit within 6.8, which is what
     # Ben heard as "the hi-hat tonality seems to differ too much between the 3
     # modes."
-    42: 0.4716, 44: 0.5686, 46: 0.6361,
+    42: 1.38, 44: 2.65, 46: 0.71,
     # MEASURED rings, fitted with each plate's mode set against its recording.
     49: 3.67, 50: 0.40, 51: 1.63, 52: 6.07,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
