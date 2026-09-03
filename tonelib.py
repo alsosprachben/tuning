@@ -981,7 +981,8 @@ class SynthProperties:
     bloom_seconds = 0.0
     bloom_center_hz = 3000.0
     bloom_octaves = 1.2
-    bloom_slope = 1.5      # how fast it appears with strike force; 0 = always on
+    bloom_slope = 0.5      # how much a softer stroke stretches it; 0 = fixed
+    bloom_stretch_max = 4.0    # a ghost note blooms at most this much slower
     # HOW STEEP THE SKIRTS ARE. 2.0 is a plain gaussian and was the first shape;
     # its tails reach everywhere, so at 84 ms of bloom it delayed 200 Hz by 15 ms
     # and 16 kHz by 17 -- the whole spectrum late, which softens the attack
@@ -1351,8 +1352,18 @@ class SynthProperties:
         # real, but only two of nine over 150 -- so this is sized to the median
         # of the crashes and left to the top of the velocity range.
         if self.bloom_seconds > 0.0 and self.bloom_slope:
-            self.bloom_seconds = self.bloom_seconds * (
-                max(float(attack_volume), 1e-3) ** self.bloom_slope)
+            # A HARDER STRIKE BLOOMS FASTER, not slower. Ben: "the bloom length
+            # should be shorter in proportion to attack velocity." The cascade is
+            # nonlinear, so the harder the plate is driven the quicker energy
+            # finds its way up -- a stick hit cascades almost at once, a soft
+            # mallet stroke swells. This was the wrong way round: bloom_seconds
+            # was MULTIPLIED by attack_volume**1.5, so a full-velocity crash got
+            # the longest swell of all, which is why crash 1 sounded mallet-struck
+            # at velocity 127. bloom_seconds is now the delay at FULL velocity --
+            # the shortest it ever is -- and softer strokes stretch it, capped so
+            # a ghost note does not arrive a second late.
+            av = max(float(attack_volume), 1e-3) ** -abs(self.bloom_slope)
+            self.bloom_seconds = self.bloom_seconds * min(av, self.bloom_stretch_max)
 
         if self.strike_wobble_hz > 0.0 and self.strike_wobble_gain > 0.0:
             self.unison_detune = (self.strike_wobble_hz,)
@@ -4677,7 +4688,7 @@ class CrashCymbal1Properties(CymbalProperties):
     max_harmonic = 300
     # Each mode gets its own strike sign (see strike_phase_spread): with 300
     # modes all starting in phase the note peaked 16.0 dB above its own loudness against the 18" clash's 14.7.
-    strike_phase_spread = 0.35
+    strike_phase_spread = 0.5
     # THE MODES CARRY THE TOP. The refit before this chose hf_corner_hz = 3153 at
     # order 5, which annihilates modal energy above 3 kHz -- 0.03 of it left at
     # 6.3 kHz, 0.0003 at 15.9 -- so nothing up there was a mode and the WASH was
@@ -4693,7 +4704,7 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
     #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
-    ring_peak_hz = 5999.41
+    ring_peak_hz = 2000
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
     # and no delayed peak appears at all, which is a threshold, not a gradient.
@@ -4743,13 +4754,49 @@ class CrashCymbal1Properties(CymbalProperties):
     # becomes the bloom rather than the hit, and the laggy start comes straight
     # back (86 ms at gain 3.6). Reaching +8 dB honestly needs the late copy to
     # decay from its own arrival rather than share the partial's envelope.
-    bloom_seconds = 0.0840485
+    # THE BLOOM IS SHORT, AND SHORTEST WHEN HIT HARDEST. Ben, on the two crashes
+    # side by side: "Why does the crash on the right not have a wah, and the
+    # crash on the left does", then "Crash 1 sounds like it is being hit by a
+    # mallet, not a stick", then "the bloom length should be shorter in
+    # proportion to attack velocity."
+    #
+    # He is right and the scaling was inverted. A cascade is nonlinear, so the
+    # harder the plate is driven the FASTER energy finds its way up: a stick hit
+    # cascades almost at once, a soft mallet stroke swells. bloom_seconds was
+    # multiplied by attack_volume**1.5, so a full-velocity crash got the longest
+    # swell of all -- 84 ms of late mid arriving under the hit, which is a mallet
+    # by construction. It is now the delay at FULL velocity, the shortest it ever
+    # is, and softer strokes stretch it:
+    #
+    #     velocity   127    100     70     40
+    #     bloom     25.0   31.8   45.4   79.4 ms
+    #     attack    30.8   35.6   53.0   83.8 ms   (the clash's attack is 35.3)
+    #
+    # At 25 ms the bloom brings the attack TOWARD the recording rather than away
+    # from it: with the bloom off entirely this crash starts in 7.6 ms, far
+    # sharper than any real clash. Short, it is the difference between a crack
+    # and a click; long, it was a mallet.
+    #
+    # AND THE DECAY UNDERNEATH WAS WRONG, which the long bloom had been masking.
+    # ring_peak_hz sat at 5999 against a fit bound of 6000 -- the frequency that
+    # rang LONGEST was 6 kHz -- with coefficients so small the decay was nearly
+    # flat across frequency. The spectral centroid, which is what "wah" measures:
+    #
+    #     as it was      6655 -> 4765 -> 4866 Hz   plateaus, then climbs
+    #     bloom off only 4993 -> 4766 -> 5525      rises outright
+    #     now            5440 -> 4213 -> 3696      falls
+    #     the clash      8129 -> 4351 -> 3428
+    #
+    # A rising centroid is a filter sweep, which is what a wah is. Still 0.6
+    # octaves dim at the strike, and that is the 6.4-16 kHz shortfall noted
+    # earlier rather than anything the decay can reach.
+    bloom_seconds = 0.025
     bloom_gain = 3.2
     bloom_center_hz = 1834.48
     bloom_octaves = 1.73876
-    ring_decay_floor = 26.6214
-    ring_decay_below = 0.771893
-    ring_decay_above = 4.04418
+    ring_decay_floor = 20
+    ring_decay_below = 8
+    ring_decay_above = 8
     decay_db = 108.636
     harmonic_decay_db = 0.0200571
     hf_corner_hz = 12305.2
@@ -4794,7 +4841,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # Fitted to the clash trajectory at full velocity. The mode set is still this
     # plate's own recording; only how hard it is hit comes from the clash.
     chiff_volume = 3.99359
-    sustain_jitter = 0.22016
+    sustain_jitter = 0.02
     chiff_width = 0.25078
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
@@ -4814,7 +4861,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0203578
+    initial_gain = 0.017381
 
 
 class CrashCymbal2Properties(CymbalProperties):
