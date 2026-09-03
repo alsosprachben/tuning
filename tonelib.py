@@ -67,7 +67,7 @@ def section_onset(salt, midi, index, width_ms):
     return (x / 18446744073709551616.0) * (width_ms / 1000.0)
 
 
-def rand(second):
+def rand(second, granularity=None):
     """A stateless hash, not a table -- see hash01() in synthkernel.c.
 
     This was a 100000-entry table read at index floor(x * granularity) MOD
@@ -80,7 +80,7 @@ def rand(second):
     every note alike, and the C kernel computes the identical value from the
     identical index.
     """
-    x = int(second * rand_granularity) & 0xFFFFFFFFFFFFFFFF
+    x = int(second * (rand_granularity if granularity is None else granularity)) & 0xFFFFFFFFFFFFFFFF
     x = (x + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
     x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
     x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
@@ -620,7 +620,8 @@ class BasePartial:
                 jitter_fade = self.properties.sustain_jitter
 
             if jitter_fade > 0:
-                cycle_jitter = rand(second * frequency) * self.properties.chiff_cycle
+                cycle_jitter = rand(second * frequency,
+                                    self.properties.chiff_bandwidth) * self.properties.chiff_cycle
 
                 # base_frequency/440 scales chiff volume DOWN for big pipes; the
                 # per-partial chiff_hgain rolls off the upper harmonics (low chuff).
@@ -1081,6 +1082,31 @@ class SynthProperties:
     # factor in wave()/the kernel -- kept.)
     chiff_width = None
     chiff_width_cycles = 0.0
+    # HOW WIDE THE WASH IS, as a fraction of the partial's own frequency.
+    # rand() is indexed by t*f*granularity, so the phase is redrawn that many
+    # times per cycle and the noise it makes is that wide. At the default
+    # (rand_granularity, 100000) it is redrawn every sample and the wash is
+    # WHITE: every partial's noise is spread flat across the whole spectrum,
+    # with nothing left of where it came from. That is fine for a chuff on a
+    # pipe, and wrong for a plate -- turning a cymbal's wash up far enough to
+    # fill between its modes then fills the notches between its bands too, so
+    # the spectrum flattens exactly as fast as the line spectrum fills in.
+    # Measured on the closed hat: at chiff_volume 60 the line excess comes right
+    # (0.99 dB rms against the recording) and the band profile goes from 1.65 to
+    # 5.00 dB wrong, and no setting of the two escapes that trade.
+    #
+    # A small value keeps each partial's noise AROUND that partial, so the sum
+    # over the mode set is a continuum with the plate's own shape. It is also
+    # what the physics says: a cymbal's modes are broadened into bands by
+    # nonlinear coupling, they are not replaced by hiss.
+    #
+    # None = the module default, i.e. white, i.e. exactly as every voice
+    # rendered before this existed.
+    chiff_bandwidth = None
+    # The same width expressed in Hz rather than as a fraction of the
+    # partial's frequency. Which of the two is right is a physics question
+    # -- see the measurement in HiHatProperties.
+    chiff_bandwidth_hz = None
     chiff_harmonic_span = None
     chiff_harmonic_power = 2.0
 
@@ -4410,7 +4436,41 @@ class HiHatProperties(CymbalProperties):
     # continuum, so noise had to be one. At 224.0 there is: the mode gains alone,
     # with no wash and no roll-off, hold every band of every take to 1.9 dB. So
     # it goes back to the cymbal family's value and stays there.
-    chiff_volume = 1.8
+    # THE WASH IS A BAND AROUND EACH MODE, NOT A HISS UNDER ALL OF THEM, and
+    # that is what let the spectrum and the continuum stop fighting. Ben, on the
+    # waterfall of the previous commit: "the modal shape is better, but there
+    # needs to be more jitter/noise/wash in between. You can see how very tonal
+    # it is." Measured -- how far the peaks stand above the continuum between
+    # them, over the strike:
+    #
+    #                        0.3-0.8k  0.8-2k    2-5k   5-10k  10-20k
+    #     the recording           1.9     3.4     5.6     6.8     7.6
+    #     224 modes, wash 1.8     3.5     5.6    24.0    28.3    26.9
+    #
+    # 24-30 dB of line spectrum where the recording has 6-8. Density cannot fix
+    # it: in a 150 ms window a partial is 6.7 Hz wide and these sit 95 Hz apart,
+    # fourteen Rayleigh widths, fully resolved; merging them would want ~2800
+    # modes. A real cymbal has them, so the wash has to stand in -- and with the
+    # wash WHITE, turning it up far enough to fill between the modes fills the
+    # notches between the bands just as fast:
+    #
+    #     closed hat, chiff 150        line excess err   band err
+    #     white                               0.41 dB      5.82 dB
+    #     banded, 0.05 of f                   0.54         1.19
+    #     banded, 0.15 of f                   0.20         1.45
+    #     banded, 400 Hz absolute             0.39         1.68
+    #
+    # See chiff_bandwidth. The width is a FRACTION of each partial's frequency,
+    # which is both what fits better and what the physics nominates: of the
+    # three things that broaden a mode, damping gives a Lorentzian of alpha/pi
+    # (1-7 Hz here, set by the decay rate, not by f) and unresolved neighbours
+    # give the mode spacing (constant in Hz for a plate), but the one that
+    # dominates a struck cymbal is nonlinear frequency modulation -- the plate is
+    # driven hard enough that its modes wobble by a fraction of their own
+    # frequency -- and that scales with f.
+    #
+    # chiff_volume is per articulation below, because how hard the plate is
+    # driven into that nonlinearity is exactly what the three gestures differ in.
     sustain_jitter = 0.05
     strike_phase_spread = 1.0
     strike_noise_slope = 0.6
@@ -4439,25 +4499,25 @@ class ClosedHiHatProperties(HiHatProperties):
     it is iterated to a fixed point (four passes). It bought both errors at
     once: band 1.95 -> 1.65 dB and envelope 10.65 -> 9.12.
     """
-    mode_gains = (0.1599, 0.1411, 0.0579, 0.0607, 0.0610, 0.0159, 0.0234, 0.0230,
-                   0.0186, 0.0070, 0.0150, 0.0142, 0.0144, 0.0283, 0.0253, 0.0195,
-                   0.0265, 0.0187, 0.0444, 0.0481, 0.0409, 0.0305, 0.0376, 0.0481,
-                   0.0233, 0.0218, 0.0066, 0.0133, 0.0149, 0.0217, 0.0203, 0.0150,
-                   0.0145, 0.0221, 0.0473, 0.0818, 0.0457, 0.0408, 0.0265, 0.0232,
-                   0.0221, 0.0290, 0.1607, 0.0292, 0.0220, 0.0258, 0.0320, 0.0339,
-                   0.0204, 0.0225, 0.0285, 0.0475, 0.0445, 0.0317, 0.0233, 0.0236,
-                   0.0396, 0.0481, 0.0739, 0.0401, 0.0361, 0.0839, 0.0188, 0.0368,
-                   0.1517, 0.0469, 0.0278, 0.0405, 0.0608, 0.0486, 0.0354, 0.0645,
-                   0.0532, 0.0429, 0.3723, 0.0508, 0.0475, 0.0401, 0.0408, 0.0424,
-                   0.0547, 0.0640, 0.0849, 0.0598, 0.0279, 0.0392, 0.0550, 0.0587,
-                   0.0611, 0.0690, 0.1605, 0.0358, 0.0227, 0.0414, 0.0340, 0.0305,
-                   0.0351, 0.0385, 0.0264, 0.0359, 0.0213, 0.0207, 0.0348, 0.0265,
-                   0.0378, 0.0389, 0.0516, 0.0513, 0.0597, 0.0551, 0.0806, 0.0349,
-                   0.1000, 0.1109, 0.0655, 0.0408, 0.0432, 0.0295, 0.0652, 0.0439,
-                   0.0419, 0.0359, 0.0564, 0.0863, 0.0869, 0.1211, 0.1682, 0.1100,
-                   0.0875, 0.0962, 0.0898, 0.0488, 0.0632, 0.0335, 0.0604, 0.1045,
-                   0.1007, 0.0612, 0.0511, 0.1009, 0.0622, 0.1263, 0.1001, 0.0534,
-                   0.1136, 0.1354, 0.1188, 0.1033, 0.0634, 0.0937, 0.0551, 0.0998,
+    mode_gains = (0.1503, 0.1327, 0.0486, 0.0509, 0.0512, 0.0133, 0.0210, 0.0207,
+                   0.0167, 0.0063, 0.0135, 0.0128, 0.0129, 0.0254, 0.0163, 0.0125,
+                   0.0170, 0.0120, 0.0285, 0.0309, 0.0263, 0.0196, 0.0242, 0.0309,
+                   0.0150, 0.0140, 0.0042, 0.0085, 0.0096, 0.0139, 0.0130, 0.0096,
+                   0.0093, 0.0142, 0.0304, 0.0526, 0.0294, 0.0309, 0.0201, 0.0176,
+                   0.0168, 0.0220, 0.1219, 0.0221, 0.0167, 0.0196, 0.0243, 0.0257,
+                   0.0155, 0.0171, 0.0216, 0.0360, 0.0338, 0.0240, 0.0177, 0.0179,
+                   0.0300, 0.0365, 0.0560, 0.0304, 0.0274, 0.0636, 0.0143, 0.0279,
+                   0.1151, 0.0356, 0.0211, 0.0307, 0.0461, 0.0369, 0.0268, 0.0489,
+                   0.0403, 0.0325, 0.2824, 0.0385, 0.0360, 0.0304, 0.0309, 0.0322,
+                   0.0415, 0.0518, 0.0687, 0.0484, 0.0226, 0.0317, 0.0445, 0.0475,
+                   0.0495, 0.0559, 0.1299, 0.0290, 0.0184, 0.0335, 0.0275, 0.0247,
+                   0.0284, 0.0312, 0.0214, 0.0291, 0.0172, 0.0168, 0.0282, 0.0215,
+                   0.0306, 0.0315, 0.0418, 0.0415, 0.0483, 0.0446, 0.0652, 0.0282,
+                   0.0809, 0.0898, 0.0530, 0.0330, 0.0350, 0.0239, 0.0528, 0.0355,
+                   0.0339, 0.0291, 0.0457, 0.0699, 0.0703, 0.0980, 0.1361, 0.0890,
+                   0.0708, 0.0779, 0.0727, 0.0395, 0.0512, 0.0271, 0.0489, 0.0846,
+                   0.0815, 0.0495, 0.0414, 0.0817, 0.0503, 0.1022, 0.0810, 0.0432,
+                   0.0920, 0.1096, 0.0962, 0.0836, 0.0634, 0.0937, 0.0551, 0.0998,
                    0.1036, 0.0441, 0.0564, 0.0999, 0.0674, 0.0739, 0.0570, 0.0694,
                    0.0836, 0.0654, 0.0861, 0.0591, 0.0591, 0.0664, 0.0816, 0.0624,
                    0.0856, 0.0580, 0.0576, 0.0738, 0.1034, 0.0898, 0.0993, 0.0529,
@@ -4468,12 +4528,14 @@ class ClosedHiHatProperties(HiHatProperties):
                    0.1618, 0.0760, 0.1328, 0.1480, 0.0831, 0.1117, 0.2077, 0.1221,
                    0.1958, 0.1457, 0.1561, 0.1493, 0.1945, 0.1631, 0.2151, 1.0000)
     ring_decay_above = 1.92932
+    chiff_volume = 100.0
+    chiff_bandwidth = 0.15
     # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
     # them before the rebuild -- the open hat 1.2 dB over the closed one --
     # and initial_gain is solved to hold each voice's K-weighted loudness
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
-    initial_gain = 0.110770
+    initial_gain = 0.056374
 
 
 class PedalHiHatProperties(HiHatProperties):
@@ -4488,25 +4550,25 @@ class PedalHiHatProperties(HiHatProperties):
     footclose.mf against footsplash.mf, and a foot CLOSE and a foot SPLASH are
     not the same effort, so Iowa's "mf" does not mean the same thing in both.
     """
-    mode_gains = (0.6451, 0.3510, 0.1288, 0.0975, 0.1232, 0.0563, 0.0548, 0.0381,
-                   0.0252, 0.0236, 0.0225, 0.0352, 0.0394, 0.0419, 0.0190, 0.0336,
-                   0.0149, 0.0422, 0.0492, 0.0329, 0.0494, 0.0281, 0.0162, 0.0138,
-                   0.0149, 0.0216, 0.0160, 0.0153, 0.0327, 0.0303, 0.0187, 0.0197,
-                   0.0124, 0.0273, 0.0343, 0.0385, 0.0359, 0.0291, 0.0218, 0.0374,
-                   0.0250, 0.0406, 0.1087, 0.0812, 0.0358, 0.0258, 0.0415, 0.0240,
-                   0.0353, 0.0147, 0.0205, 0.0283, 0.0583, 0.0435, 0.0087, 0.0307,
-                   0.0398, 0.0250, 0.0304, 0.0345, 0.0353, 0.2541, 0.0302, 0.0863,
-                   0.1311, 0.0971, 0.0290, 0.0347, 0.0535, 0.0492, 0.0321, 0.0429,
-                   0.0450, 0.0488, 0.2209, 0.0776, 0.0421, 0.0718, 0.0569, 0.0761,
-                   0.0641, 0.0419, 0.0322, 0.0398, 0.0343, 0.0441, 0.0148, 0.0488,
-                   0.0618, 0.0710, 0.1433, 0.0696, 0.0351, 0.0353, 0.0266, 0.0380,
-                   0.0561, 0.0415, 0.0252, 0.0380, 0.0434, 0.0576, 0.0309, 0.0568,
-                   0.0339, 0.0192, 0.0363, 0.0193, 0.0405, 0.0439, 0.0595, 0.0486,
-                   0.0610, 0.0467, 0.0558, 0.0699, 0.0264, 0.0264, 0.0362, 0.0485,
-                   0.0558, 0.0726, 0.0452, 0.0659, 0.0634, 0.0857, 0.1032, 0.0888,
-                   0.0754, 0.0706, 0.0502, 0.0543, 0.0592, 0.0874, 0.0705, 0.0909,
-                   0.0980, 0.0584, 0.0593, 0.0643, 0.0761, 0.0648, 0.0861, 0.1024,
-                   0.2028, 0.0887, 0.0926, 0.0799, 0.0313, 0.0692, 0.0301, 0.0873,
+    mode_gains = (0.4403, 0.2396, 0.1127, 0.0853, 0.1078, 0.0493, 0.0723, 0.0502,
+                   0.0332, 0.0311, 0.0297, 0.0464, 0.0520, 0.0553, 0.0145, 0.0257,
+                   0.0114, 0.0323, 0.0376, 0.0251, 0.0378, 0.0215, 0.0124, 0.0105,
+                   0.0114, 0.0165, 0.0122, 0.0117, 0.0250, 0.0232, 0.0143, 0.0151,
+                   0.0095, 0.0209, 0.0262, 0.0294, 0.0274, 0.0230, 0.0172, 0.0295,
+                   0.0197, 0.0321, 0.0858, 0.0641, 0.0283, 0.0204, 0.0328, 0.0190,
+                   0.0279, 0.0116, 0.0162, 0.0223, 0.0460, 0.0343, 0.0069, 0.0242,
+                   0.0314, 0.0197, 0.0240, 0.0272, 0.0279, 0.2006, 0.0238, 0.0681,
+                   0.1035, 0.0767, 0.0229, 0.0274, 0.0422, 0.0389, 0.0253, 0.0339,
+                   0.0355, 0.0385, 0.1744, 0.0613, 0.0332, 0.0567, 0.0449, 0.0601,
+                   0.0506, 0.0351, 0.0270, 0.0334, 0.0288, 0.0370, 0.0124, 0.0409,
+                   0.0518, 0.0596, 0.1202, 0.0584, 0.0294, 0.0296, 0.0223, 0.0319,
+                   0.0471, 0.0348, 0.0211, 0.0319, 0.0364, 0.0483, 0.0259, 0.0476,
+                   0.0284, 0.0161, 0.0305, 0.0162, 0.0340, 0.0368, 0.0499, 0.0408,
+                   0.0512, 0.0392, 0.0468, 0.0586, 0.0221, 0.0221, 0.0304, 0.0407,
+                   0.0468, 0.0609, 0.0379, 0.0553, 0.0532, 0.0719, 0.0866, 0.0745,
+                   0.0633, 0.0592, 0.0421, 0.0456, 0.0497, 0.0733, 0.0591, 0.0763,
+                   0.0822, 0.0490, 0.0497, 0.0539, 0.0638, 0.0544, 0.0722, 0.0859,
+                   0.1701, 0.0744, 0.0777, 0.0670, 0.0313, 0.0692, 0.0301, 0.0873,
                    0.0919, 0.0808, 0.0587, 0.0791, 0.0855, 0.0774, 0.0687, 0.0559,
                    0.0572, 0.0504, 0.0699, 0.0637, 0.0856, 0.0599, 0.0546, 0.0623,
                    0.0612, 0.0299, 0.0549, 0.0679, 0.0806, 0.0618, 0.0501, 0.0448,
@@ -4517,12 +4579,14 @@ class PedalHiHatProperties(HiHatProperties):
                    0.1344, 0.1700, 0.1766, 0.1267, 0.2122, 0.1891, 0.1782, 0.1314,
                    0.1597, 0.1669, 0.3073, 0.1261, 0.1208, 0.1978, 0.2188, 1.0000)
     ring_decay_above = 3.13576
+    chiff_volume = 220.0
+    chiff_bandwidth = 0.06
     # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
     # them before the rebuild -- the open hat 1.2 dB over the closed one --
     # and initial_gain is solved to hold each voice's K-weighted loudness
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
-    initial_gain = 0.107207
+    initial_gain = 0.027535
 
 
 class OpenHiHatProperties(HiHatProperties):
@@ -4544,25 +4608,25 @@ class OpenHiHatProperties(HiHatProperties):
     above the closed one. That is also what a kit does: more of the cymbal is
     free to move, so it speaks louder for the same stroke.
     """
-    mode_gains = (0.1556, 0.1620, 0.1083, 0.1873, 0.1022, 0.0466, 0.0294, 0.0557,
-                   0.0422, 0.0239, 0.0110, 0.0338, 0.0422, 0.0274, 0.0367, 0.0313,
-                   0.0152, 0.0336, 0.0447, 0.0560, 0.0960, 0.0555, 0.0366, 0.0533,
-                   0.0421, 0.0288, 0.0162, 0.0097, 0.0118, 0.0350, 0.0282, 0.0439,
-                   0.0332, 0.0252, 0.0604, 0.1579, 0.0604, 0.0474, 0.0539, 0.0235,
-                   0.0689, 0.0495, 0.0478, 0.0177, 0.0179, 0.0409, 0.0897, 0.0830,
-                   0.0603, 0.0461, 0.0424, 0.0326, 0.0287, 0.0499, 0.0875, 0.0453,
-                   0.0568, 0.0224, 0.0545, 0.0533, 0.0608, 0.2366, 0.0291, 0.0635,
-                   0.1318, 0.0736, 0.0661, 0.0954, 0.0715, 0.0755, 0.0343, 0.1595,
-                   0.0507, 0.0677, 0.1756, 0.0424, 0.0510, 0.0561, 0.0634, 0.1120,
-                   0.0963, 0.1316, 0.0481, 0.1273, 0.0900, 0.0321, 0.0364, 0.0652,
-                   0.0677, 0.0986, 0.3245, 0.0359, 0.0363, 0.0636, 0.0779, 0.0320,
-                   0.0764, 0.1041, 0.0354, 0.0246, 0.0243, 0.0220, 0.0736, 0.0271,
-                   0.0358, 0.0265, 0.0545, 0.0585, 0.0777, 0.0622, 0.0794, 0.0741,
-                   0.1157, 0.1076, 0.0728, 0.0892, 0.0512, 0.0474, 0.0979, 0.0970,
-                   0.0688, 0.0590, 0.0870, 0.0984, 0.1060, 0.1045, 0.1671, 0.1391,
-                   0.1254, 0.1426, 0.1304, 0.0802, 0.0866, 0.1161, 0.0800, 0.0566,
-                   0.0626, 0.0874, 0.0691, 0.0521, 0.0918, 0.1146, 0.0632, 0.0657,
-                   0.1991, 0.1528, 0.1299, 0.0675, 0.1011, 0.1484, 0.0660, 0.1092,
+    mode_gains = (0.1940, 0.2020, 0.1022, 0.1768, 0.0965, 0.0440, 0.0448, 0.0849,
+                   0.0643, 0.0364, 0.0168, 0.0515, 0.0643, 0.0417, 0.0267, 0.0228,
+                   0.0111, 0.0245, 0.0326, 0.0408, 0.0699, 0.0404, 0.0267, 0.0388,
+                   0.0307, 0.0210, 0.0118, 0.0071, 0.0086, 0.0255, 0.0205, 0.0320,
+                   0.0242, 0.0184, 0.0440, 0.1150, 0.0440, 0.0361, 0.0410, 0.0179,
+                   0.0525, 0.0377, 0.0364, 0.0135, 0.0136, 0.0311, 0.0683, 0.0632,
+                   0.0459, 0.0351, 0.0323, 0.0248, 0.0218, 0.0380, 0.0666, 0.0345,
+                   0.0432, 0.0171, 0.0415, 0.0406, 0.0463, 0.1801, 0.0222, 0.0483,
+                   0.1003, 0.0560, 0.0503, 0.0726, 0.0544, 0.0575, 0.0261, 0.1214,
+                   0.0386, 0.0515, 0.1337, 0.0323, 0.0388, 0.0427, 0.0483, 0.0853,
+                   0.0733, 0.1142, 0.0417, 0.1105, 0.0781, 0.0279, 0.0316, 0.0566,
+                   0.0588, 0.0856, 0.2816, 0.0312, 0.0315, 0.0552, 0.0676, 0.0278,
+                   0.0663, 0.0904, 0.0307, 0.0214, 0.0211, 0.0191, 0.0639, 0.0235,
+                   0.0311, 0.0230, 0.0473, 0.0508, 0.0674, 0.0540, 0.0689, 0.0643,
+                   0.1004, 0.0934, 0.0632, 0.0774, 0.0444, 0.0411, 0.0850, 0.0842,
+                   0.0597, 0.0512, 0.0755, 0.0854, 0.0920, 0.0907, 0.1450, 0.1207,
+                   0.1088, 0.1238, 0.1132, 0.0696, 0.0752, 0.1008, 0.0694, 0.0491,
+                   0.0543, 0.0759, 0.0600, 0.0452, 0.0797, 0.0995, 0.0549, 0.0570,
+                   0.1728, 0.1326, 0.1127, 0.0586, 0.1011, 0.1484, 0.0660, 0.1092,
                    0.1257, 0.0732, 0.1210, 0.1215, 0.1207, 0.0817, 0.0595, 0.0849,
                    0.1499, 0.1502, 0.1018, 0.0469, 0.0808, 0.0973, 0.1008, 0.0973,
                    0.1125, 0.0565, 0.0406, 0.0664, 0.1244, 0.1115, 0.1898, 0.0593,
@@ -4573,12 +4637,14 @@ class OpenHiHatProperties(HiHatProperties):
                    0.1359, 0.1280, 0.2141, 0.2437, 0.1577, 0.1213, 0.1151, 0.1671,
                    0.1729, 0.2742, 0.1725, 0.1713, 0.1910, 0.2179, 0.2278, 1.0000)
     ring_decay_above = 2.14922
+    chiff_volume = 60.0
+    chiff_bandwidth = 0.10
     # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
     # them before the rebuild -- the open hat 1.2 dB over the closed one --
     # and initial_gain is solved to hold each voice's K-weighted loudness
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
-    initial_gain = 0.180078
+    initial_gain = 0.130850
 
 
 class CrashCymbal1Properties(CymbalProperties):

@@ -128,6 +128,7 @@ void synth_voice(
     const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
     const float* logr, const float* logrA, const float* aftL, const float* susL,
     const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
+    const float* chBW,
     const float* tbav, const float* tau, const float* tcut,
     const float* vdep, const float* vrate, const float* vph,
     const float* delL, const float* delR,
@@ -249,7 +250,28 @@ void synth_voice(
                     float sL=zrL, sR=zrR;
                     if(jfa>0.f){
                         double sec=(double)n/SRATE_D;
-                        float jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
+                        // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per
+                        // second, so gran IS the noise's bandwidth as a fraction of
+                        // the partial's own frequency: at RAND_GRAN it is redrawn
+                        // every sample and the noise is white, spread flat over the
+                        // whole spectrum no matter which partial it came from. That
+                        // is why turning the wash up far enough to fill between a
+                        // cymbal's modes also fills the notches BETWEEN its bands.
+                        // A smaller gran keeps each partial's noise around the
+                        // partial, so the wash inherits the plate's own shape.
+                        double gbw=(double)chBW[p];
+                        // Two spellings, not a ternary: a voice that does not set
+                        // chiff_bandwidth must take the IDENTICAL expression it took
+                        // before this column existed. -ffast-math folds a constant
+                        // differently from a loaded value, and the index runs to
+                        // ~1e9, so a 1-ULP shift reseeds the hash completely --
+                        // same loudness and same spectrum to 0.01 dB, but not the
+                        // same samples, and every render in the corpus would move.
+                        float jit;
+                        if(gbw==(double)RAND_GRAN)
+                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
+                        else
+                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*gbw))*cc;
                         float cj=cosf(jit),sj2=sinf(jit);
                         sL += (zrL*cj - ziL*sj2)*jfa;
                         sR += (zrR*cj - ziR*sj2)*jfa;

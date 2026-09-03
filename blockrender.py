@@ -20,6 +20,11 @@ Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import tonelib as T, midilib
+
+# Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
+# times the partial's frequency per second, which at 100000 is every sample --
+# a white wash. See chiff_bandwidth.
+RAND_GRAN = 100000.0
 from patch_map import property_class_for_program, property_class_for_note
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
@@ -171,13 +176,14 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
+    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     _PL = [0]                # which player of a section this partial belongs to
+    _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
         om = om * _PJ[0]
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
@@ -196,6 +202,9 @@ def prepare(path, tuner='hybrid'):
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
+        # index is t*f*gran, so gran IS the fractional width; an absolute
+        # width in Hz is that same number divided by where the partial sits.
+        A["cbw"].append(_CBW[1]/max(1e-6,nomf) if _CBW[1] > 0.0 else _CBW[0])
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
         A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
@@ -326,6 +335,8 @@ def prepare(path, tuner='hybrid'):
             _DL[0] = _sd0*SR; _DL[1] = _sd1*SR
         cv = props.chiff_volume; cc = props.chiff_cycle
         crl = getattr(props,'chiff_release',1.0) or 0.0; sjit = props.sustain_jitter; csc = f0/440.0
+        _CBW[0] = getattr(props,'chiff_bandwidth',None) or RAND_GRAN
+        _CBW[1] = getattr(props,'chiff_bandwidth_hz',None) or 0.0
         _TB[0] = getattr(props,'tension_bend',0.0) * props.attack_volume
         _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
@@ -478,7 +489,7 @@ def prepare(path, tuner='hybrid'):
     for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
-                 ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),
+                 ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
                  ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4")):
         prep[k] = arr(k, dt)
@@ -509,7 +520,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
     lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],i1-i0,
                     dp(sl('om')),dp(sl('p0')),dp(sl('p0R')),fp(sl('aL')),fp(sl('aR')),fp(sl('nf')),
                     lp(sl('non')),lp(sl('noff')),fp(sl('fa')),fp(sl('re')),fp(sl('ch')),fp(sl('logr')),fp(sl('logrA')),fp(sl('aft')),fp(sl('sus')),
-                    fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),
+                    fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),fp(sl('cbw')),
                     fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
