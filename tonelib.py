@@ -5468,13 +5468,98 @@ class SplashCymbalProperties(CymbalProperties):
 
 
 class ChineseCymbalProperties(CymbalProperties):
-    """GM 52, Chinese Cymbal. MEASURED: Iowa 16" chinese, stick on the bow.
+    """GM 52, Chinese Cymbal: a 16" china.
 
-    The china is the DARKEST of the set -- it rolls off hard above 6 kHz
-    (-16.8 dB at 10-16k, against the 17" crash's -7.3) which is what makes it
-    read as trashy rather than bright -- so it takes the lowest hf_corner_hz
-    here by a wide margin. Band rms error 5.24 -> 3.41 dB.
+    Dense rebuild, and the plate now reaches its own bottom. The first
+    extraction was floored at 400 Hz and its lowest confirmed mode came out at
+    497, which cut the cymbal off ABOVE its fundamental -- a china rings down
+    into the low 200s, and the recording has real energy there, 21 dB above its
+    own room floor in the tail where we had nothing. Confirmed modes go down to
+    182 Hz once the floor is lowered.
+
+    THE WASH IS BANDED, not white -- see chiff_bandwidth. THE LOSS CURVE IS
+    FITTED ON BOTH WINDOWS, the strike and the tail, because the decay is what
+    the spectrum does between them and an envelope alone cannot say which
+    partials should have gone.
     """
+    mode_ratios = (1.0000, 1.0134, 1.0809, 1.2804, 1.5828, 1.6595, 1.9859, 2.0233,
+                   2.7330, 2.9089, 3.1662, 3.2425, 3.3946, 3.5712, 3.8916, 3.9341,
+                   3.9669, 4.4762, 4.8671, 4.8890, 4.9237, 4.9942, 5.1761, 5.3190,
+                   5.4734, 5.6713, 5.7256, 5.7968, 5.9947, 6.0550, 6.4489, 6.5307,
+                   6.5714, 6.6535, 7.1093, 7.1993, 7.3530, 7.9286, 8.1475, 8.3137,
+                   8.3502, 8.6512, 8.6933, 8.7402, 8.9547, 9.1294, 9.2000, 9.3548,
+                   9.4614, 9.5758, 9.6313, 9.8259, 10.0548, 10.3793, 10.4281, 10.6995,
+                   10.7471, 10.9466, 11.0395, 11.3881, 11.5691, 11.6373, 11.7404, 11.8675,
+                   12.1170, 12.3195, 12.4404, 12.6227, 12.9417, 13.0055, 13.1521, 13.3955,
+                   13.7649, 14.0673, 14.1942, 14.4103, 14.5046, 15.3084, 15.5009, 15.6930,
+                   15.8077, 16.2425, 16.4787, 16.6879, 16.9503, 17.3981, 17.7328, 17.8463,
+                   18.1052, 18.2559, 18.5865, 18.8608, 18.9713, 19.0620, 19.1412, 19.5169,
+                   19.6798, 20.3155, 20.6049, 20.7725, 21.0497, 21.2441, 21.5975, 21.8500,
+                   22.0086, 22.4988, 22.6246, 23.1304, 23.5215, 24.2545, 24.5936, 24.8740,
+                   25.1489, 25.6875, 25.8941, 26.1697, 26.4101, 26.7175, 26.9191, 27.1856,
+                   28.0455, 28.3828, 28.7887, 29.3331, 29.5187, 29.6375, 29.9857, 30.2718,
+                   30.5703, 30.7638, 31.2298, 31.8509, 32.4674, 32.6056, 32.8534, 33.4260,
+                   33.8858, 34.0975, 34.2450, 34.6745, 35.4760, 35.6995, 36.1743, 36.3347,
+                   36.9378, 37.7596, 38.4528, 38.8946, 39.5044, 39.7011, 40.3174, 40.5730,
+                   40.8058, 40.9868, 41.6574, 42.3280, 43.1794, 43.4549, 43.9905, 44.4089,
+                   44.9919, 45.5748, 46.1577, 46.7406, 47.4367, 48.1801, 49.1956, 49.9898,
+                   50.6389, 51.2880, 51.9371, 52.5862, 53.1535, 53.7208, 54.2880, 55.0733,
+                   55.7767, 56.4911, 57.2055, 57.6093, 58.1866, 58.7638, 59.3410, 59.9183,
+                   60.4955, 61.0727, 61.6500, 62.2272, 62.8044, 63.4461, 64.0877, 64.7293,
+                   65.5134, 66.2975, 66.8569, 67.4162, 67.9756, 68.5349, 69.0943, 69.6536,
+                   70.2130, 70.7723, 71.3317, 71.8910, 72.4504, 73.0098, 73.5691, 74.1285,
+                   74.6878, 75.2472, 75.8065, 76.3659, 76.9252, 77.4846, 78.0439, 78.6033,
+                   79.1626, 79.7220, 80.2814, 80.8407, 81.4001, 81.9594, 82.5188, 83.0781,
+                   83.6375, 84.1968, 84.7562, 85.3155, 85.8749, 86.4342, 86.9936, 87.5530,
+                   88.1123, 88.6717, 89.2310, 89.7904, 90.3497, 90.9091, 91.4684, 92.0278,
+                   92.5871, 93.1465, 93.7058, 94.2652, 94.8246, 95.3839, 95.9433, 96.5026,
+                   97.0620, 97.6213, 98.1807, 98.7400, 99.2994, 99.8587, 100.4181, 100.9774,
+                   101.5368, 102.0962, 102.6555, 103.2149, 103.7742, 104.3336, 104.8929, 105.4523,
+                   106.0116, 106.5710, 107.1303, 107.6897, 108.2490, 108.8084, 109.3678)
+    mode_gains  = (0.0090, 0.0013, 0.0113, 0.0001, 0.0005, 0.0016, 0.0002, 0.0004,
+                   0.0059, 0.0005, 0.0002, 0.0004, 0.0008, 0.0248, 0.0012, 0.0020,
+                   0.0014, 0.0034, 0.0065, 0.0022, 0.0028, 0.0015, 0.0017, 0.0031,
+                   0.0109, 0.0010, 0.0009, 0.0012, 0.0029, 0.0008, 0.0358, 0.0219,
+                   0.0299, 0.0319, 0.0123, 0.0105, 0.0030, 0.0026, 0.0059, 0.0045,
+                   0.0055, 0.0060, 0.0047, 0.0074, 0.0039, 0.0051, 0.0026, 0.0019,
+                   0.0007, 0.0005, 0.0014, 0.0005, 0.0011, 0.0080, 0.0039, 0.0007,
+                   0.0008, 0.0009, 0.0007, 0.0053, 0.0081, 0.0054, 0.0016, 0.0027,
+                   0.0011, 0.0054, 0.0026, 0.0010, 0.0072, 0.0118, 0.0090, 0.0018,
+                   0.0047, 0.0032, 0.0055, 0.0058, 0.0065, 0.0045, 0.0043, 0.0024,
+                   0.0021, 0.0032, 0.0014, 0.0010, 0.0008, 0.0020, 0.0013, 0.0022,
+                   0.0108, 0.0122, 0.0277, 0.0036, 0.0011, 0.0067, 0.0036, 0.0067,
+                   0.0154, 0.0438, 0.0049, 0.0053, 0.0017, 0.0017, 0.0030, 0.0200,
+                   0.0042, 0.0070, 0.0178, 0.0039, 0.0077, 0.0132, 0.0136, 0.0192,
+                   0.0235, 0.0150, 0.0038, 0.0161, 0.0028, 0.0460, 0.0329, 0.0283,
+                   0.0033, 0.0152, 0.0142, 0.0145, 0.0019, 0.0038, 0.0051, 0.0098,
+                   0.0031, 0.0222, 0.0041, 0.0078, 0.0335, 0.0074, 0.0227, 0.0069,
+                   0.0065, 0.0235, 0.0138, 0.0440, 0.0277, 0.0279, 0.0217, 0.0044,
+                   0.0478, 0.0514, 0.0502, 0.0158, 0.0547, 0.1247, 0.0070, 0.0708,
+                   0.0848, 0.0582, 0.0493, 0.0832, 0.0330, 0.0786, 0.0055, 0.0285,
+                   0.0501, 0.0260, 0.0299, 0.0341, 0.1266, 0.0340, 0.0629, 0.0471,
+                   0.0713, 0.0154, 0.0342, 0.0557, 0.0375, 0.0147, 0.0794, 0.0207,
+                   0.0405, 0.0511, 0.0529, 0.0336, 0.0304, 0.0531, 0.0127, 0.0426,
+                   0.0225, 0.0201, 0.0298, 0.0178, 0.0381, 0.0199, 0.0168, 0.0760,
+                   0.0280, 0.0421, 0.0108, 0.0130, 0.0458, 0.0230, 0.2525, 0.1163,
+                   0.1065, 0.5865, 0.2008, 0.3462, 0.4574, 0.4471, 0.1997, 0.8864,
+                   0.0964, 0.2418, 0.2729, 0.3652, 0.1690, 0.2671, 0.0724, 0.3012,
+                   0.9389, 0.4558, 0.5233, 0.3211, 0.0986, 0.2864, 1.0000, 0.3545,
+                   0.5573, 0.7787, 0.0455, 0.3002, 0.2756, 0.1674, 0.2197, 0.2495,
+                   0.1116, 0.1395, 0.2599, 0.2164, 0.2053, 0.9081, 0.2118, 0.2888,
+                   0.1695, 0.1443, 0.0381, 0.4527, 0.1069, 0.0288, 0.2194, 0.1279,
+                   0.0437, 0.2648, 0.1680, 0.0425, 0.1423, 0.1412, 0.0949, 0.0397,
+                   0.0528, 0.0320, 0.0338, 0.0431, 0.0238, 0.0346, 0.0606, 0.0449,
+                   0.0206, 0.0254, 0.0222, 0.0385, 0.0250, 0.0234, 0.2260)
+    max_harmonic = 271
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    strike_phase_spread = 1.0
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 12.0
+    chiff_volume = 2.00
+    chiff_bandwidth = 1.50
     # REFITTED on honest frequencies. Everything above was fitted while the
     # measured modes were being stretched by the family's inharmonicity (see
     # CymbalProperties), so every gain, decay, wash and level was compensating
@@ -5486,25 +5571,8 @@ class ChineseCymbalProperties(CymbalProperties):
     # The ring law is ON here (see CymbalProperties.harmonic_decay): a plate's
     # ring time peaks in the middle and dies at both ends, which the inherited
     # monotonic law cannot express.
-    mode_ratios = (1.0000, 1.7910, 1.7980, 1.8360, 1.8560, 2.9060, 3.2120, 3.2550,
-                   3.6190, 3.6340, 3.6700, 5.2130, 5.2420, 5.6900, 5.7150, 6.9390,
-                   7.4900, 7.5210)
-    mode_gains  = (0.6180, 0.7460, 0.6090, 0.9350, 0.6260, 0.7100, 0.1760, 0.8160,
-                   0.7300, 1.0000, 0.7290, 0.5290, 0.1870, 0.5990, 0.2510, 0.6750,
-                   0.4710, 0.8350)
-    max_harmonic = 18
     # Each mode gets its own strike sign (see strike_phase_spread): with 18
     # modes all starting in phase the note peaked far above what the recording does.
-    strike_phase_spread = 1.0
-    ring_peak_hz = 300.773
-    ring_decay_floor = 31.97
-    ring_decay_below = 3.602
-    ring_decay_above = 1.915
-    decay_db = 2.083
-    harmonic_decay_db = 40
-    hf_corner_hz = 4565.2
-    hf_order = 3.99
-    tonal_dampening = 0.01082
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
     # recording collapses from 0.098 at the strike to 0.000 by 0.4 s: a cymbal is
@@ -5523,7 +5591,6 @@ class ChineseCymbalProperties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 3.59401
     sustain_jitter = 0.0142437
     chiff_width = 0.290963
     # how much noisier this plate gets as it is struck harder, fitted so the
@@ -5544,16 +5611,121 @@ class ChineseCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.134334
+    initial_gain = 0.923712
 
 
 class RideCymbalProperties(CymbalProperties):
-    """GM 51, Ride Cymbal 1. MEASURED: Iowa 21" ride, stick on the bow --
-    the same cymbal as RideBellProperties below, struck in the other place.
-    Its nine lowest modes lie between 345 and 815 Hz where the bell's strongest
-    is at 2795: a ride's bow is the plate speaking and its bell is a ping.
-    Band rms error 5.07 -> 3.23 dB.
+    """GM 51, Ride Cymbal 1: the stick on the bow of a 21" ride.
+
+    DENSE, at last. This kept the 18-mode set from the first measurement pass
+    long after the crashes went to 300 and the hats to 224, and 18 modes cannot
+    be a plate: only 4 of them sat between 2 and 5 kHz and one above 10, so most
+    of the spectrum had no mode in it at all and everything up there was wash.
+    Measured against the recording -- how far the peaks stand above the
+    continuum, which is the one thing a band profile cannot see:
+
+                          2-5k   5-10k  10-20k
+        the recording     15.1    19.8    16.2
+        ours, 18 modes     4.8     6.5     7.7
+        ours, dense       14.7    18.4    15.6
+
+    A ride's ping is resolvable modes. Ours was white noise standing in for
+    them, which is why it read as mush rather than as a stick on a bell-bronze
+    plate.
+
+    THE WASH IS BANDED, not white -- see chiff_bandwidth. THE LOSS CURVE IS
+    FITTED ON BOTH WINDOWS, the strike and the tail, because the decay is what
+    the spectrum does between them and an envelope alone cannot say which
+    partials should have gone.
     """
+    mode_ratios = (1.0000, 1.0071, 1.3312, 1.3757, 1.3877, 1.7965, 2.0003, 2.3401,
+                   2.5516, 2.6545, 2.9726, 3.2871, 3.3170, 3.3649, 3.4963, 3.9609,
+                   4.3814, 4.4116, 4.6420, 5.1742, 5.2377, 5.2816, 5.5239, 5.8478,
+                   5.9550, 6.0553, 6.5291, 6.6186, 7.1964, 7.3244, 7.5593, 7.9336,
+                   7.9954, 8.2557, 8.4860, 8.7377, 8.9438, 9.3030, 9.5219, 9.5944,
+                   10.2731, 10.3412, 10.4860, 10.6377, 11.0519, 11.4279, 11.8042, 12.4792,
+                   12.6055, 12.9048, 12.9818, 13.3623, 13.4302, 13.6918, 13.9173, 14.2235,
+                   14.5633, 14.8709, 15.3027, 15.6457, 15.7905, 16.5536, 16.8304, 16.8994,
+                   17.5550, 17.8894, 18.0433, 18.5242, 18.7489, 18.9552, 19.6725, 19.9607,
+                   20.3552, 20.9490, 21.4313, 21.7129, 21.9698, 22.2107, 22.5547, 22.8617,
+                   23.2893, 23.6950, 23.7925, 24.0180, 24.5562, 25.1708, 25.4461, 25.6668,
+                   26.4279, 26.6665, 27.1842, 27.5716, 27.9236, 28.2503, 28.4604, 29.1930,
+                   29.4895, 30.0026, 30.2694, 30.5821, 31.0430, 31.2979, 31.5536, 31.9758,
+                   32.5296, 33.0103, 33.4151, 33.6306, 34.1388, 34.3213, 35.0143, 35.3204,
+                   35.6759, 36.1602, 36.4504, 37.0955, 37.4344, 37.8763, 38.2052, 38.6135,
+                   38.8558, 39.0998, 39.8261, 40.1083, 40.4273, 40.6736, 40.8469, 41.3766,
+                   42.2551, 42.6183, 42.8780, 43.5621, 43.9681, 44.6836, 45.0519, 45.4245,
+                   45.8677, 46.1585, 46.6271, 47.0416, 47.2970, 47.5533, 48.1428, 48.7375,
+                   49.3321, 49.8951, 50.1078, 50.9823, 51.8845, 52.0949, 52.6973, 53.2910,
+                   53.8848, 54.3883, 55.3039, 55.8132, 56.3225, 56.8318, 57.4332, 58.0345,
+                   58.7782, 59.5219, 59.8287, 60.7708, 61.4756, 62.1804, 62.5952, 62.8461,
+                   63.1574, 63.5257, 63.8387, 64.5616, 65.1090, 65.6564, 66.2038, 66.7739,
+                   67.3792, 67.9845, 68.5897, 69.1950, 69.7982, 70.3040, 70.8099, 71.3158,
+                   71.8216, 72.3275, 72.8333, 73.3392, 73.8451, 74.3509, 74.8568, 75.3626,
+                   75.8685, 76.3744, 76.8802, 77.3861, 77.8919, 78.3978, 78.9037, 79.4095,
+                   79.9154, 80.4212, 80.9271, 81.4330, 81.9388, 82.4447, 82.9506, 83.4564,
+                   83.9623, 84.4681, 84.9740, 85.4799, 85.9857, 86.4916, 86.9974, 87.5033,
+                   88.0092, 88.5150, 89.0209, 89.5267, 90.0326, 90.5385, 91.0443, 91.5502,
+                   92.0560, 92.5619, 93.0678, 93.5736, 94.0795, 94.5853, 95.0912, 95.5971,
+                   96.1029, 96.6088, 97.1146, 97.6205, 98.1264, 98.6322, 99.1381, 99.6440,
+                   100.1498, 100.6557, 101.1615, 101.6674, 102.1733, 102.6791, 103.1850, 103.6908,
+                   104.1967, 104.7026, 105.2084, 105.7143, 106.2201, 106.7260, 107.2319, 107.7377,
+                   108.2436, 108.7494, 109.2553, 109.7612, 110.2670, 110.7729, 111.2787, 111.7846,
+                   112.2905, 112.7963, 113.3022, 113.8080, 114.3139, 114.8198, 115.3256, 115.8315,
+                   116.3374, 116.8432, 117.3491, 117.8549, 118.3608, 118.8667, 119.3725, 119.8784,
+                   120.3842, 120.8901, 121.3960, 121.9018, 122.4077, 122.9135, 123.4194, 123.9253,
+                   124.4311, 124.9370, 125.4428, 125.9487, 126.4546, 126.9604, 127.4663, 127.9721,
+                   128.4780, 128.9839, 129.4897, 129.9956, 130.5014, 131.0073, 131.5132, 132.0190,
+                   132.5249, 133.0308, 133.5366, 134.0425, 134.5483, 135.0542)
+    mode_gains  = (0.0036, 0.0040, 0.0103, 0.0072, 0.0067, 0.0075, 0.0512, 0.4552,
+                   0.3570, 0.3472, 0.2305, 0.5735, 0.1782, 0.4165, 0.1450, 0.7120,
+                   0.4549, 0.1928, 0.2693, 0.0767, 0.0507, 0.0834, 0.8912, 0.0640,
+                   0.0548, 0.2579, 0.1020, 0.1133, 0.0220, 0.0762, 0.0195, 0.0770,
+                   0.0540, 0.0672, 0.0309, 0.1023, 0.2705, 0.0272, 0.0959, 0.0594,
+                   0.1337, 0.0671, 0.0354, 0.0425, 0.0088, 0.0292, 0.0080, 0.1416,
+                   0.0742, 0.0345, 0.0206, 0.0120, 0.0101, 0.0050, 0.0449, 0.0390,
+                   0.0190, 0.0110, 0.2350, 0.0202, 0.0099, 0.2601, 0.0859, 0.1678,
+                   0.0258, 0.0472, 0.0932, 0.0372, 0.0746, 0.1031, 0.0171, 0.0151,
+                   0.0290, 0.0067, 0.2309, 0.2284, 0.1168, 0.3959, 0.5358, 0.2843,
+                   0.1350, 0.0597, 0.0303, 0.3296, 0.1182, 0.5938, 0.5037, 0.0697,
+                   0.0199, 0.0481, 0.0970, 0.0200, 0.0209, 0.0554, 0.0662, 0.1437,
+                   0.0370, 0.0683, 0.0755, 0.0745, 0.2033, 0.1971, 0.0275, 0.1358,
+                   0.4207, 0.2671, 0.4018, 0.1060, 0.0806, 0.1496, 0.0423, 0.0853,
+                   0.1139, 0.1028, 0.1280, 0.1540, 0.0327, 0.1446, 0.1849, 0.0234,
+                   0.0840, 0.1434, 0.0615, 0.2430, 0.2304, 0.0264, 0.2834, 0.4448,
+                   0.4170, 0.1573, 0.2959, 0.1920, 0.0718, 0.0991, 0.0471, 0.0326,
+                   0.0569, 0.0554, 0.0408, 0.2968, 0.1330, 0.1271, 0.1719, 0.0138,
+                   0.1656, 0.2334, 0.3527, 0.1682, 0.3440, 0.0954, 0.4358, 0.2650,
+                   0.0361, 0.0461, 0.3063, 0.0446, 0.1083, 0.1898, 0.2070, 0.7214,
+                   0.2340, 0.6332, 0.5480, 0.7444, 0.1974, 0.5865, 0.0193, 0.2490,
+                   0.1157, 0.1214, 0.1395, 0.1109, 0.3736, 0.1506, 0.1607, 0.1915,
+                   0.2114, 0.0672, 0.1624, 0.3390, 0.2173, 0.5363, 0.0863, 0.3331,
+                   0.3349, 0.7428, 0.1941, 0.3402, 0.0491, 0.1950, 0.3508, 0.1727,
+                   0.1182, 0.1401, 0.0488, 0.0420, 0.2215, 0.0304, 0.0504, 0.0195,
+                   0.0295, 0.0225, 0.0373, 0.0193, 0.0524, 0.0468, 0.0149, 0.0756,
+                   0.0490, 0.0258, 0.0691, 0.0432, 0.0638, 0.0314, 0.0732, 0.0645,
+                   0.2013, 0.1233, 0.1603, 0.0814, 0.0389, 0.0769, 0.0191, 0.0838,
+                   0.3069, 0.1528, 0.3217, 0.3665, 0.0270, 0.0736, 0.0635, 0.2766,
+                   0.0490, 0.1271, 0.0927, 0.1424, 0.1237, 0.1465, 0.2269, 0.0641,
+                   0.4625, 0.2118, 0.3538, 0.0912, 0.1479, 0.1382, 0.3345, 0.1720,
+                   0.0457, 0.1814, 0.0771, 0.1328, 0.1859, 0.3646, 0.1947, 0.0273,
+                   0.1210, 0.1300, 0.1725, 0.1012, 0.3978, 0.3517, 0.0543, 0.1265,
+                   0.0660, 0.1269, 0.0157, 0.1251, 0.2366, 0.2199, 0.0839, 0.1155,
+                   0.3592, 0.0965, 0.1783, 0.3026, 0.1528, 0.1646, 0.0699, 0.1602,
+                   0.4917, 0.2595, 0.1288, 0.3480, 0.2157, 0.1023, 0.2387, 0.0739,
+                   0.0169, 0.1060, 0.2675, 0.1571, 0.0356, 0.0963, 0.2678, 0.0436,
+                   0.1815, 0.1966, 0.1309, 0.1473, 0.1317, 0.5301, 0.1626, 0.1480,
+                   0.1203, 0.0594, 0.1009, 0.1290, 0.2236, 1.0000)
+    max_harmonic = 310
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    strike_phase_spread = 1.0
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 12.0
+    chiff_volume = 2.00
+    chiff_bandwidth = 0.05
     # REFITTED on honest frequencies. Everything above was fitted while the
     # measured modes were being stretched by the family's inharmonicity (see
     # CymbalProperties), so every gain, decay, wash and level was compensating
@@ -5565,25 +5737,8 @@ class RideCymbalProperties(CymbalProperties):
     # The ring law is ON here (see CymbalProperties.harmonic_decay): a plate's
     # ring time peaks in the middle and dies at both ends, which the inherited
     # monotonic law cannot express.
-    mode_ratios = (1.0000, 1.3690, 1.4300, 1.4950, 1.6950, 1.7140, 1.8550, 1.9830,
-                   2.3600, 7.2040, 9.6350, 10.7620, 13.8960, 18.1080, 22.1650,
-                   22.4830, 26.5620, 30.9540)
-    mode_gains  = (0.6960, 0.4080, 0.4900, 0.4060, 0.3850, 0.2970, 0.6710, 0.6120,
-                   1.0000, 0.5570, 0.5380, 0.6200, 0.5820, 0.4460, 0.4660, 0.3600,
-                   0.6240, 0.4320)
-    max_harmonic = 18
     # Each mode gets its own strike sign (see strike_phase_spread): with 18
     # modes all starting in phase the note peaked far above what the recording does.
-    strike_phase_spread = 1.0
-    ring_peak_hz = 2864.95
-    ring_decay_floor = 14.35
-    ring_decay_below = 8.836
-    ring_decay_above = 45.76
-    decay_db = 0.6327
-    harmonic_decay_db = 19.3
-    hf_corner_hz = 20726.1
-    hf_order = 3.202
-    tonal_dampening = 0.06513
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
     # recording collapses from 0.122 at the strike to 0.000 by 0.4 s: a cymbal is
@@ -5602,7 +5757,6 @@ class RideCymbalProperties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 1.77177
     sustain_jitter = 0.00127826
     chiff_width = 0.31383
     # how much noisier this plate gets as it is struck harder, fitted so the
@@ -5630,33 +5784,101 @@ class RideCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0250759
+    initial_gain = 0.027861
 
 
 class CrashRideProperties(CymbalProperties):
-    """GM 59, Ride Cymbal 2. MEASURED: Iowa 20" suspended cymbal, stick on the bow.
+    """GM 59, Ride Cymbal 2: the 20" crash played as a ride.
 
-    GM asks for TWO rides -- 51 and 59 are two different plates, both played on
-    the bow, while the bell (53) belongs to whichever ride carries it. Iowa has
-    only one actual ride, so 59 was pointed at the same 21" plate as 51 and the
-    two were literally the same sound: a wasted slot, and grunge.mid alternates
-    them. The 20" is the biggest plate in the collection and the lowest-pitched
-    of any of them at 280.1 Hz, against the ride's 345.4, which is what a second
-    and larger ride is. It is brighter on top than a true dark ride (-6.6 dB at
-    10-16 kHz against the 21" ride's -12.4), so what this models is honestly a
-    CRASH-RIDE, which is exactly what a 20" plate is used as.
+    Dense rebuild, 26 modes to 282.
 
-    Band rms error 1.06 dB, the closest of the seven cymbals.
-
-    ITS TAIL IS SHORTER THAN THE RECORDING'S and that is deliberate. The plate
-    falls 10 dB in 19 ms and then takes 2.68 s to reach -40: a big transient
-    over a long ring, which is two slopes, and one decay rate per partial cannot
-    be both. Fitted freely the optimiser buys band accuracy by dropping the ring
-    to 0.89 s, which is no use as a ride; held to a ride's job of sustaining, it
-    gives -40 dB at 1.02 s, a little longer than the 21" ride's 0.77. The band
-    profile survives either way (1.10 vs 1.06 dB), so the tail is the part being
-    chosen rather than measured.
+    THE WASH IS BANDED, not white -- see chiff_bandwidth. THE LOSS CURVE IS
+    FITTED ON BOTH WINDOWS, the strike and the tail, because the decay is what
+    the spectrum does between them and an envelope alone cannot say which
+    partials should have gone.
     """
+    mode_ratios = (1.0000, 1.3397, 1.3525, 1.8469, 2.2119, 2.5496, 3.2088, 3.4426,
+                   3.5319, 3.8408, 4.0385, 4.1814, 4.3380, 4.4897, 4.7845, 5.4581,
+                   5.4809, 5.7862, 6.0746, 6.1570, 6.4418, 6.7160, 6.8539, 6.9318,
+                   7.3195, 7.4273, 7.5150, 7.6464, 7.7535, 8.0011, 8.0743, 8.2377,
+                   8.6986, 9.0094, 9.5602, 9.8744, 10.1489, 10.4265, 10.5211, 10.7726,
+                   10.9132, 10.9942, 11.1999, 11.4742, 11.5427, 11.9382, 12.7024, 12.7812,
+                   13.4182, 13.7202, 13.9814, 14.0591, 14.4806, 14.8394, 14.9079, 15.1342,
+                   15.7770, 16.2260, 16.4309, 16.5011, 16.6869, 17.0380, 17.1450, 17.6226,
+                   17.7823, 17.9010, 18.0710, 18.3350, 18.4814, 19.0458, 19.4340, 19.6861,
+                   20.3292, 20.6359, 20.7621, 20.9032, 21.2626, 21.8275, 21.9509, 22.2163,
+                   23.2576, 23.5374, 23.9032, 24.2299, 24.6259, 24.7443, 25.0402, 25.2696,
+                   25.4903, 26.3813, 26.7069, 26.9889, 27.2909, 27.5596, 27.8317, 28.0485,
+                   28.4343, 28.7915, 29.3974, 29.6694, 29.8869, 30.3489, 30.7035, 30.8458,
+                   31.0593, 31.3882, 32.0469, 32.2557, 32.6015, 33.4599, 34.3184, 34.5297,
+                   35.0424, 35.9224, 36.5427, 37.1531, 37.7634, 38.1608, 38.7160, 39.7474,
+                   40.1755, 40.5358, 41.1812, 41.8267, 42.3774, 42.9770, 43.5682, 44.0031,
+                   44.3957, 44.6850, 44.9834, 45.3062, 45.5865, 45.8722, 46.1750, 46.8611,
+                   47.2438, 47.5749, 47.9881, 48.7230, 49.0485, 49.2629, 49.5710, 50.4742,
+                   51.2881, 51.6889, 51.9018, 52.8924, 53.5103, 53.9670, 54.4434, 55.4271,
+                   55.7720, 56.1822, 56.5080, 57.2937, 58.0793, 58.3613, 58.8134, 59.1500,
+                   59.4268, 60.4146, 60.6988, 61.5177, 61.9778, 62.7765, 63.5623, 64.3480,
+                   65.1642, 65.5535, 66.5211, 67.0585, 67.5926, 68.3888, 68.7316, 69.0699,
+                   69.9659, 70.6420, 71.3181, 71.6969, 72.8114, 73.3977, 73.9839, 74.5702,
+                   75.1528, 75.6772, 76.2757, 76.8742, 77.4728, 78.0713, 78.6491, 79.2269,
+                   79.8048, 80.3826, 80.9604, 81.5383, 82.1169, 82.6955, 83.2741, 83.8526,
+                   84.4312, 85.0098, 85.5884, 86.1670, 86.7456, 87.3242, 87.9028, 88.4814,
+                   89.0600, 89.6386, 90.2172, 90.7958, 91.3744, 91.9530, 92.5316, 93.1101,
+                   93.6887, 94.2673, 94.8459, 95.4245, 96.0031, 96.5817, 97.1603, 97.7389,
+                   98.3175, 98.8961, 99.4747, 100.0533, 100.6319, 101.2105, 101.7891, 102.3677,
+                   102.9462, 103.5248, 104.1034, 104.6820, 105.2606, 105.8392, 106.4178, 106.9964,
+                   107.5750, 108.1536, 108.7322, 109.3108, 109.8894, 110.4680, 111.0466, 111.6252,
+                   112.2038, 112.7823, 113.3609, 113.9395, 114.5181, 115.0967, 115.6753, 116.2539,
+                   116.8325, 117.4111, 117.9897, 118.5683, 119.1469, 119.7255, 120.3041, 120.8827,
+                   121.4613, 122.0399, 122.6184, 123.1970, 123.7756, 124.3542, 124.9328, 125.5114,
+                   126.0900, 126.6686, 127.2472, 127.8258, 128.4044, 128.9830, 129.5616, 130.1402,
+                   130.7188, 131.2974)
+    mode_gains  = (0.0225, 0.0116, 0.0197, 0.6035, 0.4098, 0.4905, 0.1763, 0.2035,
+                   0.1466, 0.0402, 0.0193, 0.0774, 0.1141, 0.3430, 0.1100, 0.1805,
+                   0.1691, 0.0277, 0.0645, 0.0713, 0.0392, 0.0424, 0.1822, 0.1056,
+                   0.0984, 0.0514, 0.0452, 0.1382, 0.2907, 0.1915, 0.0611, 0.0272,
+                   0.2039, 0.0378, 0.3129, 0.0352, 0.0428, 0.0656, 0.1057, 0.0209,
+                   0.0302, 0.0148, 0.0219, 0.0380, 0.0485, 0.0463, 0.0215, 0.0352,
+                   0.1305, 0.0787, 0.0511, 0.0389, 0.0228, 0.0871, 0.3301, 0.0470,
+                   0.0207, 0.1112, 0.0183, 0.0155, 0.0352, 0.0060, 0.0110, 0.0761,
+                   0.0943, 0.2293, 0.1070, 0.0219, 0.0192, 0.0694, 0.3379, 0.0503,
+                   0.0729, 0.0160, 0.0214, 0.0133, 0.2443, 0.4564, 0.2477, 0.3841,
+                   0.1838, 0.2071, 0.0544, 0.1336, 0.0967, 0.0593, 0.0158, 0.1808,
+                   0.1555, 0.1498, 0.0396, 0.0435, 0.2938, 0.2091, 0.0118, 0.0191,
+                   0.2231, 0.3361, 0.2123, 0.0207, 0.2941, 0.3611, 0.0520, 0.2112,
+                   0.1712, 0.3395, 0.1711, 0.2501, 0.2605, 0.0393, 0.1636, 0.1979,
+                   0.1121, 0.2545, 0.2050, 0.3544, 0.0610, 0.2322, 0.6413, 0.2795,
+                   0.2037, 0.2090, 0.0964, 0.1427, 0.2121, 0.3973, 0.0693, 0.1349,
+                   0.0586, 0.1374, 0.1188, 0.3309, 0.0347, 0.0332, 0.1946, 0.4005,
+                   0.3090, 0.4772, 0.2338, 0.2332, 0.1455, 0.1521, 0.6646, 0.2652,
+                   0.1823, 0.1019, 0.4145, 0.3558, 0.2631, 0.2707, 0.2845, 0.1813,
+                   0.2355, 0.0686, 0.3077, 0.3995, 0.9144, 0.1548, 0.2794, 0.3322,
+                   0.7197, 0.1574, 0.1148, 0.2054, 0.6150, 0.1971, 0.2177, 1.0000,
+                   0.1255, 0.2674, 0.2697, 0.5011, 0.3334, 0.3682, 0.0261, 0.4581,
+                   0.7498, 0.3644, 0.4137, 0.1544, 0.4958, 0.4116, 0.1314, 0.4040,
+                   0.6577, 0.3628, 0.6471, 0.5080, 0.4408, 0.5849, 0.4222, 0.2191,
+                   0.4612, 0.4639, 0.2170, 0.4546, 0.0966, 0.4310, 0.2747, 0.7390,
+                   0.8211, 0.3830, 0.4993, 0.1236, 0.9369, 0.8761, 0.5817, 0.2210,
+                   0.3484, 0.4124, 0.5451, 0.8204, 0.2976, 0.4548, 0.8226, 0.7122,
+                   0.6654, 0.2069, 0.0419, 0.3213, 0.3137, 0.3666, 0.2694, 0.0897,
+                   0.2233, 0.1766, 0.1540, 0.2617, 0.0533, 0.1407, 0.2743, 0.1191,
+                   0.0754, 0.1091, 0.0821, 0.0873, 0.2280, 0.0846, 0.1449, 0.3111,
+                   0.0568, 0.0580, 0.1999, 0.1965, 0.0879, 0.0896, 0.1408, 0.0220,
+                   0.1517, 0.0888, 0.0770, 0.1123, 0.0500, 0.0519, 0.0776, 0.0722,
+                   0.3906, 0.0813, 0.1583, 0.1084, 0.1409, 0.1271, 0.1165, 0.0906,
+                   0.1063, 0.0633, 0.0556, 0.0911, 0.0753, 0.2006, 0.0416, 0.0348,
+                   0.0789, 0.0336, 0.0411, 0.1405, 0.0875, 0.0193, 0.0711, 0.0733,
+                   0.0874, 0.6452)
+    max_harmonic = 282
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    strike_phase_spread = 1.0
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 12.0
+    chiff_volume = 2.00
+    chiff_bandwidth = 0.50
     # REFITTED on honest frequencies. Everything above was fitted while the
     # measured modes were being stretched by the family's inharmonicity (see
     # CymbalProperties), so every gain, decay, wash and level was compensating
@@ -5668,27 +5890,8 @@ class CrashRideProperties(CymbalProperties):
     # The ring law is ON here (see CymbalProperties.harmonic_decay): a plate's
     # ring time peaks in the middle and dies at both ends, which the inherited
     # monotonic law cannot express.
-    mode_ratios = (1.0000, 1.1950, 1.2210, 1.8630, 2.4140, 5.1560, 8.0910, 8.1310,
-                   11.8160, 12.0930, 15.5500, 16.4950, 17.6520, 19.7620, 20.8800,
-                   26.6810, 26.8180, 27.9800, 28.1460, 31.4390, 32.1830, 33.5580,
-                   34.9770, 36.2610, 39.3290, 47.1160)
-    mode_gains  = (1.0000, 0.6410, 0.4490, 0.4270, 0.7580, 0.8330, 0.8870, 0.4850,
-                   0.6310, 0.5430, 0.6300, 0.5570, 0.3230, 0.5100, 0.6220, 0.5130,
-                   0.3750, 0.1390, 0.3430, 0.5080, 0.3900, 0.3200, 0.3340, 0.4710,
-                   0.5800, 0.4730)
-    max_harmonic = 26
     # Each mode gets its own strike sign (see strike_phase_spread): with 26
     # modes all starting in phase the note peaked far above what the recording does.
-    strike_phase_spread = 1.0
-    ring_peak_hz = 1041.85
-    ring_decay_floor = 18.44
-    ring_decay_below = 15.47
-    ring_decay_above = 5.132
-    decay_db = 0.6422
-    harmonic_decay_db = 1.997
-    hf_corner_hz = 16633.2
-    hf_order = 2.829
-    tonal_dampening = 0.01714
     # THE NOISE IS A TRANSIENT, NOT A SUSTAIN. Measured as spectral flatness
     # (1.0 = white noise, 0 = pure tone) at three points in the note, the
     # recording collapses from 0.207 at the strike to 0.002 by 0.4 s: a cymbal is
@@ -5707,7 +5910,6 @@ class CrashRideProperties(CymbalProperties):
     # sustained wash the ring is only these modes and a real cymbal's is dense.
     # More modes do not recover it (110 modes reaches 4.48). The two measures
     # genuinely disagree and this one is chosen by ear.
-    chiff_volume = 7.67328
     sustain_jitter = 0.00145763
     chiff_width = 0.310107
     # how much noisier this plate gets as it is struck harder, fitted so the
@@ -5721,53 +5923,128 @@ class CrashRideProperties(CymbalProperties):
     strike_wobble_gain = 0.3
     # solved to hold note 59 at exactly the loudness it had while it was
     # borrowing the 21" ride, so this changes the plate and not the balance.
-    initial_gain = 0.0208606
+    initial_gain = 0.041194
 
 
 class RideBellProperties(CymbalProperties):
-    """The bell of a ride cymbal: the one cymbal sound with a PITCH in it.
+    """GM 53, Ride Bell: the same 21" ride, struck on the cup.
 
-    MEASURED: Iowa 21ride.stick.bell at pp, mf and ff, modes taken from the free
-    decay 0.25 s after the strike and kept only where they appear in at least
-    two of the three dynamics within 1.5%. 44 modes survived that; the strongest
-    20 are here.
+    ONE CYMBAL, TWO STRIKE POINTS -- the same argument as the three hi-hats, and
+    tested rather than assumed. Confirmed modes from the bell's own free ring,
+    matched against the bow's within 0.3%:
 
-    The lowest is 345 Hz and the STRONGEST is at 2795 Hz -- ratio 8.1 -- which is
-    the ping a drummer is actually playing when they hit the bell. This class had
-    a single base frequency of 660 Hz and a stretched harmonic series, so the one
-    thing that identifies the sound was not in it.
+        300-800 Hz   65% match against 8% by chance    7.8x
+        800-1600     79% against 18%                   4.4x
+        1600-3200    76% against 26%                   2.9x
+        3200-6400    84% against 42%                   2.0x
+        6400-12000   83% against 31%                   2.7x
 
-    A cymbal above about 1 kHz has hundreds of closely spaced modes with
-    nonlinear coupling between them, and no list of ratios will ever be that.
-    What a mode set CAN carry is the discrete low structure, which is where a
-    cymbal's identity lives -- it is what separates a 21" ride's bell from a 13"
-    crash. The dense top stays a noise wash, so this is a hybrid and not a full
-    modal model.
+    Shared in every band, most decisively at the bottom where the modes need the
+    whole plate to move. So the bell inherits the ride's plate and differs by
+    what the cup excites -- its gains, read off its own recording by energy
+    partition -- and by its own damping. (An earlier aggregate version of this
+    test read 2.0x overall and looked negative; it pooled bands whose chance
+    rates differ fivefold and was swamped by the high ones.)
 
-    Measured decay: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69, so a T60 near
-    4 s; the ring was 1.20. Per-mode T60 runs 3-4 s across the strong modes.
+    THE WASH IS BANDED, not white -- see chiff_bandwidth. THE LOSS CURVE IS
+    FITTED ON BOTH WINDOWS, the strike and the tail, because the decay is what
+    the spectrum does between them and an envelope alone cannot say which
+    partials should have gone.
     """
-    mode_ratios = (1.000, 1.135, 1.438, 1.753, 1.873, 2.612, 3.833, 4.389,
-                   5.334, 5.518, 7.193, 7.367, 8.102, 9.159, 9.634, 10.765,
-                   11.917, 12.400, 12.623, 12.934)
-    mode_gains  = (0.133, 0.238, 0.117, 0.113, 0.435, 0.265, 0.329, 0.411,
-                   0.257, 0.184, 0.798, 0.255, 1.000, 0.562, 0.534, 0.480,
-                   0.141, 0.144, 0.101, 0.192)
-    max_harmonic = 20
-    inharmonicity_coefficient = 0.0    # the modes are measured absolutely
+    mode_ratios = (1.0000, 1.0071, 1.3312, 1.3757, 1.3877, 1.7965, 2.0003, 2.3401,
+                   2.5516, 2.6545, 2.9726, 3.2871, 3.3170, 3.3649, 3.4963, 3.9609,
+                   4.3814, 4.4116, 4.6420, 5.1742, 5.2377, 5.2816, 5.5239, 5.8478,
+                   5.9550, 6.0553, 6.5291, 6.6186, 7.1964, 7.3244, 7.5593, 7.9336,
+                   7.9954, 8.2557, 8.4860, 8.7377, 8.9438, 9.3030, 9.5219, 9.5944,
+                   10.2731, 10.3412, 10.4860, 10.6377, 11.0519, 11.4279, 11.8042, 12.4792,
+                   12.6055, 12.9048, 12.9818, 13.3623, 13.4302, 13.6918, 13.9173, 14.2235,
+                   14.5633, 14.8709, 15.3027, 15.6457, 15.7905, 16.5536, 16.8304, 16.8994,
+                   17.5550, 17.8894, 18.0433, 18.5242, 18.7489, 18.9552, 19.6725, 19.9607,
+                   20.3552, 20.9490, 21.4313, 21.7129, 21.9698, 22.2107, 22.5547, 22.8617,
+                   23.2893, 23.6950, 23.7925, 24.0180, 24.5562, 25.1708, 25.4461, 25.6668,
+                   26.4279, 26.6665, 27.1842, 27.5716, 27.9236, 28.2503, 28.4604, 29.1930,
+                   29.4895, 30.0026, 30.2694, 30.5821, 31.0430, 31.2979, 31.5536, 31.9758,
+                   32.5296, 33.0103, 33.4151, 33.6306, 34.1388, 34.3213, 35.0143, 35.3204,
+                   35.6759, 36.1602, 36.4504, 37.0955, 37.4344, 37.8763, 38.2052, 38.6135,
+                   38.8558, 39.0998, 39.8261, 40.1083, 40.4273, 40.6736, 40.8469, 41.3766,
+                   42.2551, 42.6183, 42.8780, 43.5621, 43.9681, 44.6836, 45.0519, 45.4245,
+                   45.8677, 46.1585, 46.6271, 47.0416, 47.2970, 47.5533, 48.1428, 48.7375,
+                   49.3321, 49.8951, 50.1078, 50.9823, 51.8845, 52.0949, 52.6973, 53.2910,
+                   53.8848, 54.3883, 55.3039, 55.8132, 56.3225, 56.8318, 57.4332, 58.0345,
+                   58.7782, 59.5219, 59.8287, 60.7708, 61.4756, 62.1804, 62.5952, 62.8461,
+                   63.1574, 63.5257, 63.8387, 64.5616, 65.1090, 65.6564, 66.2038, 66.7739,
+                   67.3792, 67.9845, 68.5897, 69.1950, 69.7982, 70.3040, 70.8099, 71.3158,
+                   71.8216, 72.3275, 72.8333, 73.3392, 73.8451, 74.3509, 74.8568, 75.3626,
+                   75.8685, 76.3744, 76.8802, 77.3861, 77.8919, 78.3978, 78.9037, 79.4095,
+                   79.9154, 80.4212, 80.9271, 81.4330, 81.9388, 82.4447, 82.9506, 83.4564,
+                   83.9623, 84.4681, 84.9740, 85.4799, 85.9857, 86.4916, 86.9974, 87.5033,
+                   88.0092, 88.5150, 89.0209, 89.5267, 90.0326, 90.5385, 91.0443, 91.5502,
+                   92.0560, 92.5619, 93.0678, 93.5736, 94.0795, 94.5853, 95.0912, 95.5971,
+                   96.1029, 96.6088, 97.1146, 97.6205, 98.1264, 98.6322, 99.1381, 99.6440,
+                   100.1498, 100.6557, 101.1615, 101.6674, 102.1733, 102.6791, 103.1850, 103.6908,
+                   104.1967, 104.7026, 105.2084, 105.7143, 106.2201, 106.7260, 107.2319, 107.7377,
+                   108.2436, 108.7494, 109.2553, 109.7612, 110.2670, 110.7729, 111.2787, 111.7846,
+                   112.2905, 112.7963, 113.3022, 113.8080, 114.3139, 114.8198, 115.3256, 115.8315,
+                   116.3374, 116.8432, 117.3491, 117.8549, 118.3608, 118.8667, 119.3725, 119.8784,
+                   120.3842, 120.8901, 121.3960, 121.9018, 122.4077, 122.9135, 123.4194, 123.9253,
+                   124.4311, 124.9370, 125.4428, 125.9487, 126.4546, 126.9604, 127.4663, 127.9721,
+                   128.4780, 128.9839, 129.4897, 129.9956, 130.5014, 131.0073, 131.5132, 132.0190,
+                   132.5249, 133.0308, 133.5366, 134.0425, 134.5483, 135.0542)
+    mode_gains  = (0.0001, 0.0002, 0.0003, 0.0001, 0.0003, 0.0006, 0.0007, 0.1497,
+                   0.1044, 0.0966, 0.0059, 0.1145, 0.0326, 0.0631, 0.0070, 0.0798,
+                   0.1987, 0.1151, 0.0234, 0.0016, 0.0022, 0.0015, 0.0607, 0.0019,
+                   0.0083, 0.3163, 0.1097, 0.0085, 0.0014, 0.0019, 0.0012, 0.0345,
+                   0.0241, 0.0048, 0.0023, 0.0072, 0.4482, 0.0575, 0.0303, 0.0245,
+                   0.4578, 0.1897, 0.0275, 0.0026, 0.0010, 0.0024, 0.0013, 0.0483,
+                   0.0059, 0.0349, 0.0213, 0.0107, 0.0031, 0.0022, 0.0033, 0.0081,
+                   0.0017, 0.0007, 0.0099, 0.0014, 0.0023, 0.1286, 0.5967, 0.1958,
+                   0.0729, 0.0044, 0.0045, 0.0049, 0.2803, 0.2709, 0.0145, 0.0070,
+                   0.0080, 0.0028, 0.6440, 0.0888, 0.1439, 0.9668, 0.6928, 0.2145,
+                   0.0285, 0.0022, 0.0021, 0.0214, 0.0065, 0.6448, 0.8188, 0.0491,
+                   0.0060, 0.0584, 0.1193, 0.0852, 0.1309, 0.0238, 0.0127, 0.1554,
+                   0.2071, 0.0512, 0.2380, 0.0197, 0.0454, 0.0098, 0.0115, 0.1680,
+                   0.1141, 0.2723, 0.0084, 0.0139, 0.0325, 0.0061, 0.0379, 0.0753,
+                   0.0194, 0.0062, 0.0508, 0.3230, 0.0554, 0.0103, 0.0115, 0.0291,
+                   0.0116, 0.0788, 0.1224, 0.0097, 0.0130, 0.0089, 0.0424, 0.0946,
+                   0.0102, 0.0055, 0.0431, 0.6247, 0.0528, 0.0292, 0.0931, 0.0830,
+                   0.1057, 0.1249, 0.1928, 0.0647, 0.0307, 0.0573, 0.5838, 0.0292,
+                   0.0234, 0.0247, 0.0616, 0.5434, 0.1479, 0.0213, 0.3772, 0.1612,
+                   0.1205, 0.8504, 0.2499, 0.1576, 0.1219, 0.0880, 0.5890, 0.3281,
+                   0.0403, 0.0085, 0.1250, 0.3276, 0.8662, 0.0204, 0.0069, 0.0294,
+                   0.1508, 0.0673, 0.0349, 1.0000, 0.2949, 0.4742, 0.1162, 0.0660,
+                   0.1486, 0.0944, 0.2432, 0.2178, 0.0546, 0.0209, 0.0250, 0.0541,
+                   0.0476, 0.1153, 0.3107, 0.0528, 0.0195, 0.0263, 0.2089, 0.0391,
+                   0.0772, 0.1172, 0.0319, 0.0373, 0.0347, 0.0136, 0.0080, 0.0108,
+                   0.0146, 0.0182, 0.0700, 0.0230, 0.0153, 0.0105, 0.0094, 0.0308,
+                   0.0378, 0.1259, 0.5712, 0.1524, 0.1099, 0.0258, 0.1615, 0.0462,
+                   0.1594, 0.0452, 0.0847, 0.2052, 0.1178, 0.0331, 0.0484, 0.1310,
+                   0.0574, 0.0443, 0.1428, 0.2925, 0.0676, 0.0479, 0.0459, 0.0140,
+                   0.0213, 0.0619, 0.1583, 0.1598, 0.0953, 0.0538, 0.0623, 0.0287,
+                   0.0835, 0.0308, 0.0653, 0.0248, 0.2058, 0.2011, 0.0478, 0.0381,
+                   0.0273, 0.1746, 0.0622, 0.0526, 0.0493, 0.0759, 0.0760, 0.0249,
+                   0.0959, 0.0307, 0.0770, 0.0239, 0.1069, 0.0530, 0.1348, 0.1421,
+                   0.1773, 0.0579, 0.0520, 0.0483, 0.0108, 0.0478, 0.0337, 0.0161,
+                   0.0773, 0.0284, 0.1015, 0.0780, 0.1853, 0.2142, 0.0454, 0.0126,
+                   0.1521, 0.0576, 0.1562, 0.1307, 0.2277, 0.1373, 0.0368, 0.0648,
+                   0.0078, 0.0696, 0.0393, 0.0837, 0.0262, 0.0632, 0.1704, 0.2574,
+                   0.2204, 0.2737, 0.0706, 0.1706, 0.2236, 0.0621, 0.1485, 0.1532,
+                   0.1347, 0.1056, 0.1534, 0.0371, 0.0749, 0.6312)
+    max_harmonic = 310
+    inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
-
-    tonal_dampening = 0.55      # modes stand out of the wash (a crash sits at 0.15)
-    chiff_volume = 0.9          # less hiss than a crash
-    decay_db = 11.0             # articulates instead of washing (a crash is 6.0)
+    strike_phase_spread = 1.0
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 15.0
+    chiff_volume = 0.22
+    chiff_bandwidth = 0.05
+    # -8 dB with the rest of the kit; this class used to inherit the cymbal
+    # family's 1/10 and so would not have moved with the others.
+    initial_gain = 0.050430
 
 
 # --- The human voice -------------------------------------------------------
-    # -8 dB with the rest of the kit; this class used to inherit the cymbal
-    # family's 1/10 and so would not have moved with the others.
-    initial_gain = 0.1 * 0.3981
-
-
 class SynthLeadProperties(FlueOrganProperties):
     """GM 82-87: synth leads that borrow the flue pipe's tone but have no stops.
 

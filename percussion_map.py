@@ -63,11 +63,11 @@ PERCUSSION = {
     48: ("Hi-Mid Tom",         M, 150.0),
     49: ("Crash Cymbal 1",     CrashCymbal1Properties, 288.3),
     50: ("High Tom",           M, 175.0),
-    51: ("Ride Cymbal 1",     RideCymbalProperties, 345.4),
-    52: ("Chinese Cymbal",     ChineseCymbalProperties, 649.7),
+    51: ("Ride Cymbal 1",     RideCymbalProperties, 147.5),
+    52: ("Chinese Cymbal",     ChineseCymbalProperties, 181.9),
     # MEASURED: Iowa 21ride.stick.bell. 345 Hz is the LOWEST mode; the ping a
     # drummer hears is the strongest one, at ratio 8.1 = 2795 Hz. It was 660.
-    53: ("Ride Bell",         R, 345.0),
+    53: ("Ride Bell",         R, 147.5),
     54: ("Tambourine",         N, 600.0),
     55: ("Splash Cymbal",      SplashCymbalProperties, 400.0),
     56: ("Cowbell",            T, 540.0),
@@ -77,7 +77,7 @@ PERCUSSION = {
     # different plates and 53 is the bell of whichever carries it. Iowa has one
     # ride, so this is its 20" plate -- the biggest and lowest in the set -- and
     # so a crash-ride rather than a second dark ride. See CrashRideProperties.
-    59: ("Ride Cymbal 2",     CrashRideProperties, 280.1),
+    59: ("Ride Cymbal 2",     CrashRideProperties, 151.7),
     60: ("Hi Bongo",           M, 260.0),
     61: ("Low Bongo",          M, 200.0),
     62: ("Mute Hi Conga",      M, 230.0),
@@ -207,10 +207,10 @@ PERCUSSION_RING = {
     # modes."
     42: 1.38, 44: 2.65, 46: 0.71,
     # MEASURED rings, fitted with each plate's mode set against its recording.
-    49: 3.67, 50: 0.40, 51: 1.63, 52: 6.07,
+    49: 3.67, 50: 0.40, 51: 1.25, 52: 1.00,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
-    53: 4.00, 54: 0.50, 55: 2.54,
-    56: 0.40, 57: 4.22, 58: 0.50, 59: 2.01, 60: 0.30, 61: 0.35, 62: 0.20,
+    53: 0.84, 54: 0.50, 55: 2.54,
+    56: 0.40, 57: 4.22, 58: 0.50, 59: 1.19, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
     70: 0.25, 71: 0.60, 72: 0.80,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
