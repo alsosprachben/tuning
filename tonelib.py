@@ -4300,247 +4300,286 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
 
 
 class HiHatProperties(CymbalProperties):
-    """Two cymbals on a stand, and GM asks for three quite different sounds
-    from them. MEASURED: Iowa hihat.normal, hihat.footclose and
-    hihat.footsplash at pp, mf and ff.
+    """Two cymbals on a stand, and GM asks for three sounds from them -- but
+    there is only ONE PLATE, and a plate's modes do not move when you clamp it.
+    MEASURED: Iowa hihat.normal, hihat.footclose and hihat.footsplash at pp, mf
+    and ff.
 
-    The three were sharing NoiseDrumProperties at 780, 700 and 720 Hz -- one
-    voice at almost one pitch -- and the recordings say they are not alike at
-    all. Which take is which was settled by decay, not by name:
+    The three used to carry three DIFFERENT mode sets, measured separately: the
+    closed hat an 18-mode body based at 225.4 Hz with its strongest line at
+    4696, the pedal 18 more based at 196.4 with its strongest at 15842, the open
+    hat 90 modes based at 400 whose strongest were 543 and 547. Three pitches
+    from one pair of cymbals, which is what Ben heard: "the hi-hat tonality
+    seems to differ too much between the 3 modes."
 
-        normal      -40 dB at 0.30 s   a stick on closed hats
-        footclose   -40 dB at 0.53 s   the pedal chick
-        footsplash  -40 dB at 7.25 s   the hats opened and left ringing
+    TWO OF THE THREE WERE NEVER MEASURABLE. A mode is a line; a stick on clamped
+    hats is a contact noise. How far the peaks stand above the local continuum,
+    by band:
 
-    Modes come from the free decay after the strike, never the attack, and only
-    where they appear in at least two of the three dynamics within 1.5% -- the
-    method the guiro cost four rounds to arrive at.
+                                200-800  800-2k    2-5k   5-10k  10-20k
+        closed, its own 0-130 ms    1.9     3.1     5.5     6.4     7.4
+        pedal,  its own 0-108 ms    2.4     2.6     5.6     5.2     6.1
+        open,   its own 0-150 ms    2.3     4.5     7.0     8.3     8.3
+        open,   its RING 0.3-2 s   15.9    31.1    39.9    41.5    23.4
 
-    Above about 1 kHz a cymbal has hundreds of closely spaced modes with
-    nonlinear coupling and no list of ratios will ever be that; what a mode set
-    carries is the discrete structure that gives each articulation its
-    identity, and the dense top stays a noise wash.
+    The first 130 ms IS the whole life of the closed and pedal takes, and 2-7 dB
+    is the Rayleigh ripple of a noise spectrum -- there is nothing there to
+    measure. Only the free ring has lines. Nor do the peaks repeat: 60 strongest
+    peaks, ff against mf, against a null made by detuning one set by an
+    irrational factor (density and count preserved, correspondence destroyed):
+
+                             tol%   real   chance
+        closed 0-130 ms       0.2      9      6.2     1.5x -- noise
+        open RING 0.3-2 s     0.2     32      5.5     5.8x -- real lines
+
+    AND THE OLD CRITERION ADMITTED NOISE. The three sets were kept where two
+    dynamics agreed within 1.5%; at that tolerance chance alone gives 29 of 60.
+
+    So there is one mode set, taken where the plate rings free, and the
+    articulations differ by DAMPING. Confirmed peaks (ff and mf within 0.2%)
+    give 136 modes from 465 to 14085 Hz, and their density per octave runs
+    2, 7, 18, 37, 59 -- doubling, which is what a 2D plate does. Filled to that
+    measured density (0.0105 modes/Hz) the set is 224.0 modes.
+
+    THE TOP OCTAVE IS THE STRIKE, NOT THE RING. It carries -1.8 to -2.4 dB of
+    the total energy in all three strikes -- about two thirds of the sound --
+    and by 0.3 s it is at -36.2 dB, which is why the ring could not show those
+    modes and the first set stopped at 15.9 kHz. Continuing the density law to
+    20 kHz gives them back; ring_decay_above is what makes them die fast.
+
+    BELOW 400 Hz IS NOT A MODE. Line excess there is 1.1-1.6 dB and the peak
+    wanders between dynamics -- 295 Hz at ff against 386 at mf on the closed
+    hat, 268 against 80 on the splash. It is the contact and the mechanism, not
+    the plate. Those partials are in the set because the wash is emitted per
+    partial and so needs something to ride on; how much each articulation uses
+    is read off its own recording, which is why the foot-close has 10 dB more
+    down there than the other two.
+
+    THE PLATE RINGS LONGEST AT 1.2 kHz, fitted on all three takes at once. The
+    orchestral clash measures its longest ring at 1.2 kHz too, and that number
+    was not used here -- it comes out of three hi-hat recordings on its own.
     """
     inharmonicity_coefficient = 0.0    # the modes are measured absolutely
     inharmonicity_dynamic = False
+
+    mode_ratios = (1.0000, 1.4365, 1.8730, 2.0219, 2.5687, 3.1155, 3.3017, 3.7451,
+                   4.1145, 4.7115, 5.0438, 5.3486, 5.7674, 6.1862, 6.7643, 7.2706,
+                   7.3016, 7.6454, 7.8316, 8.2433, 8.6550, 8.8920, 9.3540, 9.5981,
+                   9.6431, 9.9741, 10.2031, 10.2783, 10.4107, 10.8078, 10.9676, 11.1745,
+                   11.3417, 11.5119, 11.7807, 12.1179, 12.6446, 12.8270, 13.2902, 13.4808,
+                   13.7227, 14.0647, 14.4456, 14.8190, 15.0445, 15.3120, 15.5300, 15.8186,
+                   16.1103, 16.2713, 16.3482, 16.5068, 16.8284, 17.0278, 17.1783, 17.3588,
+                   17.7317, 17.9567, 18.1456, 18.3271, 18.5587, 18.9846, 19.3178, 19.5058,
+                   19.8969, 20.2879, 20.4474, 20.6876, 20.9119, 21.2684, 21.6524, 22.0363,
+                   22.4202, 22.8042, 23.3840, 23.5974, 23.7337, 24.4137, 24.6534, 24.8395,
+                   25.1708, 25.4147, 25.5799, 25.9786, 26.3847, 26.6921, 26.8577, 27.0552,
+                   27.4556, 27.7495, 28.4177, 28.9876, 29.1933, 29.3552, 29.5791, 29.7247,
+                   30.2094, 30.5440, 30.8049, 31.0023, 31.2056, 31.3598, 31.6659, 31.8460,
+                   32.0314, 32.3181, 32.6853, 33.0892, 33.4439, 33.8516, 34.2594, 34.6671,
+                   35.0067, 35.4338, 35.8424, 36.2510, 36.9559, 37.1746, 37.5243, 38.0295,
+                   38.2462, 38.7344, 38.9577, 39.5009, 40.2226, 40.5586, 40.9872, 41.2445,
+                   41.8467, 42.5502, 43.0565, 43.4825, 43.9084, 44.1669, 44.5457, 44.9940,
+                   45.4105, 45.8270, 46.2435, 46.6600, 47.0765, 47.4930, 48.0151, 48.3433,
+                   48.6902, 49.2884, 49.7147, 50.1492, 50.5836, 51.0416, 51.4996, 51.9575,
+                   52.3688, 52.7801, 53.1915, 53.7238, 54.2561, 54.6415, 55.0268, 55.4122,
+                   55.7976, 56.1763, 56.6960, 57.0800, 57.4639, 57.8479, 58.2319, 58.6159,
+                   58.9998, 59.3838, 59.7678, 60.1518, 60.5357, 60.9197, 61.3037, 61.6877,
+                   62.0716, 62.4556, 62.8396, 63.2236, 63.6075, 63.9915, 64.3755, 64.7595,
+                   65.1434, 65.5274, 65.9114, 66.2954, 66.6793, 67.0633, 67.4473, 67.8313,
+                   68.2152, 68.5992, 68.9832, 69.3672, 69.7511, 70.1351, 70.5191, 70.9031,
+                   71.2870, 71.6710, 72.0550, 72.4390, 72.8229, 73.2069, 73.5909, 73.9749,
+                   74.3588, 74.7428, 75.1268, 75.5108, 75.8947, 76.2787, 76.6627, 77.0467,
+                   77.4306, 77.8146, 78.1986, 78.5826, 78.9665, 79.3505, 79.7345, 80.1185)
+    max_harmonic = 224
+
+    # One plate, one loss curve. ring_decay_above is the only part of it that
+    # varies, because contact damping is not uniform: where the plates touch,
+    # friction kills the short-wavelength modes fastest while the long ones
+    # still swing the whole plate and survive.
+    ring_peak_hz = 1200.0
+    ring_decay_below = 6.0
+    ring_decay_floor = 14.4
+    hf_corner_hz = 45000.0
+    hf_order = 4.0
+    tonal_dampening = 0.15
+
+    # THE WASH IS NOT A FREE PARAMETER ANY MORE. Every round of the refit ran
+    # chiff_volume to its bound and then paid for it in the spectrum, because a
+    # big enough noise can imitate any band profile badly. It was only ever
+    # there to stand in for a sparse mode set -- at 18 modes there is no
+    # continuum, so noise had to be one. At 224.0 there is: the mode gains alone,
+    # with no wash and no roll-off, hold every band of every take to 1.9 dB. So
+    # it goes back to the cymbal family's value and stays there.
+    chiff_volume = 1.8
+    sustain_jitter = 0.05
+    strike_phase_spread = 1.0
+    strike_noise_slope = 0.6
 
 
 class ClosedHiHatProperties(HiHatProperties):
     """GM 42. A stick on clamped hats: short, and BRIGHT.
 
-    MEASURED OVER 10-130 ms, which is the hat's own life. The first take of this
-    read the modes from 40-240 ms -- the window that suits a cymbal -- and a
-    closed hat is already -20 dB by 75 ms, so most of that window was its noise
-    floor, where only the low modes are left. Read there the hat looks like a
-    222 Hz body with a little top on it. Read over its life it is the opposite:
-    15 of its 18 modes are above 2.9 kHz and the strongest is 4696 Hz, which is
-    the tick a drummer is actually playing. The same error as the guiro's, in
-    the same place -- the right quantity in the wrong window.
+    Its gains are the plate's, weighted by what THIS gesture excites. Reading
+    them by energy partition -- splitting the spectrum at the geometric
+    midpoints between neighbouring modes and giving each partial its region's
+    energy -- puts the clamped hat's weight +4.6 dB toward the top against the
+    open hat's +2.0: the clamp kills the whole-plate modes and leaves the dense
+    short-wavelength top, which is the tick a drummer is actually playing.
 
-    THE HAT IS THE BRIGHTEST THING IN THE KIT and the family roll-off was fitted
-    for the whole kit. In the 150 ms after the strike the recording puts 51.5%
-    of its energy above 12 kHz and 39.0% above 16 kHz -- a 9 kHz corner costs
-    6 dB at 16 kHz and cannot reach that -- so the corner fits to the top of the
-    band instead. That is not the fizz the roll-off exists to stop: fitted, we
-    sit *below* the recording up there rather than above it.
-
-    LEVEL IS THE OTHER HALF, and it was the complaint. The three Iowa takes
-    share a mic and a gain, so they set the balance between the articulations:
-    at mf the closed hat is +6.4 dB peak and +2.1 dB rms on the open one. Ours
-    was 11.5 dB *under* the open -- an 18 dB error. initial_gain is solved for
-    the recorded ratio with the open hat, which is the one already judged right,
-    as the anchor; it lands at +5.7 and +2.1.
-
-    THE WASH DID NOT NEED RAISING. The first attempt at this fixed the band
-    profile by scaling the low modes to a quarter and lifting chiff_volume from
-    the family's 1.8 to 4.5, which is tuning two knobs to a curve rather than
-    measuring the instrument. Fitted honestly against the six-band profile and
-    the -10/-20/-40 dB decay times, with the wash pinned at 1.8: band rms error
-    4.99 dB as shipped -> 1.20 dB. Freeing chiff_volume as a seventh parameter
-    moves it to 1.93 and buys 0.01 dB, so the recording says the family value
-    was right all along -- the 4.5 was standing in for a mode set read in the
-    wrong window and a voice 18 dB too quiet.
+    THE GAINS ARE STRIKE AMPLITUDES, NOT WINDOW AVERAGES, and getting that
+    wrong is what made every earlier fit choose between a top that decays
+    (right in time, short in the band profile) and one that does not (right in
+    the profile, wrong in time). Energy partition over 0-130 ms gives each mode
+    its energy across the WHOLE window, so a mode that dies inside the window
+    contributes less than one that does not -- which under-states exactly the
+    modes that decay fastest. For a partial decaying at d dB/s its energy over
+    [0,T] relative to no decay is (1-e^(-2aT))/(2aT), a = d*ln10/20; dividing
+    that out turns the partition back into the amplitude at the strike. The
+    correction depends on the decay and the decay fit depends on the gains, so
+    it is iterated to a fixed point (four passes). It bought both errors at
+    once: band 1.95 -> 1.65 dB and envelope 10.65 -> 9.12.
     """
-    mode_ratios = (1.000, 1.477, 1.698, 13.185, 15.949, 16.083, 20.833,
-                   22.026, 25.767, 26.035, 31.337, 38.821, 44.869, 45.675,
-                   49.922, 52.611, 54.233, 62.013)
-    mode_gains  = (0.269, 0.380, 0.425, 0.271, 0.415, 0.438, 1.000,
-                   0.301, 0.734, 0.526, 0.460, 0.299, 0.333, 0.275,
-                   0.283, 0.292, 0.288, 0.324)
-    max_harmonic = 18
-    # 365 dB/s: the clamp damps the whole plate at once, which is also why
-    # harmonic_decay_db is near zero -- the modes die together rather than the
-    # top going first.
-    decay_db = 431.5
-    harmonic_decay_db = 0.00105
-    hf_corner_hz = 23998.3
-    hf_order = 4.000
-    tonal_dampening = 0.274
-    # ...then the whole group down 8 dB together, so the balance above is kept
-    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
-    # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    # ...and -4 dB again with the other two hats. The balance BETWEEN the three
-    # is measured (one instrument, one Iowa session) and is left alone; the
-    # family's level against the rest of the kit never was -- it inherited the
-    # open hat's from before any of this -- so that is the part that moves.
-    initial_gain = 0.3586 * 0.3981 * 0.631
+    mode_gains = (0.1599, 0.1411, 0.0579, 0.0607, 0.0610, 0.0159, 0.0234, 0.0230,
+                   0.0186, 0.0070, 0.0150, 0.0142, 0.0144, 0.0283, 0.0253, 0.0195,
+                   0.0265, 0.0187, 0.0444, 0.0481, 0.0409, 0.0305, 0.0376, 0.0481,
+                   0.0233, 0.0218, 0.0066, 0.0133, 0.0149, 0.0217, 0.0203, 0.0150,
+                   0.0145, 0.0221, 0.0473, 0.0818, 0.0457, 0.0408, 0.0265, 0.0232,
+                   0.0221, 0.0290, 0.1607, 0.0292, 0.0220, 0.0258, 0.0320, 0.0339,
+                   0.0204, 0.0225, 0.0285, 0.0475, 0.0445, 0.0317, 0.0233, 0.0236,
+                   0.0396, 0.0481, 0.0739, 0.0401, 0.0361, 0.0839, 0.0188, 0.0368,
+                   0.1517, 0.0469, 0.0278, 0.0405, 0.0608, 0.0486, 0.0354, 0.0645,
+                   0.0532, 0.0429, 0.3723, 0.0508, 0.0475, 0.0401, 0.0408, 0.0424,
+                   0.0547, 0.0640, 0.0849, 0.0598, 0.0279, 0.0392, 0.0550, 0.0587,
+                   0.0611, 0.0690, 0.1605, 0.0358, 0.0227, 0.0414, 0.0340, 0.0305,
+                   0.0351, 0.0385, 0.0264, 0.0359, 0.0213, 0.0207, 0.0348, 0.0265,
+                   0.0378, 0.0389, 0.0516, 0.0513, 0.0597, 0.0551, 0.0806, 0.0349,
+                   0.1000, 0.1109, 0.0655, 0.0408, 0.0432, 0.0295, 0.0652, 0.0439,
+                   0.0419, 0.0359, 0.0564, 0.0863, 0.0869, 0.1211, 0.1682, 0.1100,
+                   0.0875, 0.0962, 0.0898, 0.0488, 0.0632, 0.0335, 0.0604, 0.1045,
+                   0.1007, 0.0612, 0.0511, 0.1009, 0.0622, 0.1263, 0.1001, 0.0534,
+                   0.1136, 0.1354, 0.1188, 0.1033, 0.0634, 0.0937, 0.0551, 0.0998,
+                   0.1036, 0.0441, 0.0564, 0.0999, 0.0674, 0.0739, 0.0570, 0.0694,
+                   0.0836, 0.0654, 0.0861, 0.0591, 0.0591, 0.0664, 0.0816, 0.0624,
+                   0.0856, 0.0580, 0.0576, 0.0738, 0.1034, 0.0898, 0.0993, 0.0529,
+                   0.0494, 0.0883, 0.0962, 0.0823, 0.1029, 0.1025, 0.1056, 0.0439,
+                   0.0973, 0.0742, 0.0949, 0.1728, 0.1555, 0.0861, 0.0974, 0.0956,
+                   0.1335, 0.1033, 0.0936, 0.1312, 0.1055, 0.0803, 0.1218, 0.0588,
+                   0.0874, 0.0764, 0.1483, 0.1020, 0.2101, 0.1127, 0.1015, 0.1199,
+                   0.1618, 0.0760, 0.1328, 0.1480, 0.0831, 0.1117, 0.2077, 0.1221,
+                   0.1958, 0.1457, 0.1561, 0.1493, 0.1945, 0.1631, 0.2151, 1.0000)
+    ring_decay_above = 1.92932
+    # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
+    # them before the rebuild -- the open hat 1.2 dB over the closed one --
+    # and initial_gain is solved to hold each voice's K-weighted loudness
+    # exactly where it was, so this commit changes the timbre and the decay
+    # and nothing about the mix.
+    initial_gain = 0.110770
 
 
 class PedalHiHatProperties(HiHatProperties):
-    """GM 44. The foot closing the hats.
+    """GM 44. The foot closing the hats: two plates clapping together.
 
-    MEASURED OVER 8-108 ms. This one was read in the same wrong window as the
-    closed hat and it came out worse: the chick is -40 dB by 164 ms, so 40-240 ms
-    was almost entirely its noise floor, and it measured as a low CHICK at
-    152 Hz with 15 of its 18 modes under 500 Hz and two above 3 kHz. Over its
-    real life it is nearly as bright as the closed hat -- 49.1% of its energy
-    above 12 kHz against the closed hat's 51.5% -- with 15 modes above 2 kHz.
-    Two cymbals clapping together is a broadband contact, not a pitch.
+    Its weight runs the other way from the closed hat's, -6.0 dB toward the
+    BOTTOM, and it has 10 dB more below 400 Hz than either of the others. That
+    is the mechanism, not the plate -- the pedal, the rod and the seat -- and it
+    is why a chick reads as a low broadband contact rather than as a pitch.
 
-    ITS GAINS COME FROM THE ENERGY EACH PARTIAL STANDS IN FOR, not from peak
-    height. Picking the tallest peaks systematically under-weights the top of a
-    cymbal, where the modes are dense and one partial has to represent many:
-    each peak is low even though the region carries most of the sound. Splitting
-    the spectrum at the geometric midpoints between neighbouring modes and
-    giving each partial its region's energy took the band error from 3.33 to
-    2.17 dB. The closed hat is sparse enough up top that peak height still wins
-    there, so each is measured the way its own spectrum supports.
-
-    Level solved against the open hat, which the recordings put at 7.9 dB peak
-    and 4.8 dB rms below this one at mf.
-
-    Its ring was 0.80 s, and that alone was most of the error on its envelope:
-    decay_db moved the decay not at all, because over that length the WASH
-    regenerates for the note's whole life and it, not the modes, was the sound.
-    Band rms error 4.33 dB as shipped -> 2.17, wash at the family's 1.8 (freed,
-    the fit picks 1.61 and buys 0.02 dB).
+    Its old anchor was the weakest of the three and still is: it was set from
+    footclose.mf against footsplash.mf, and a foot CLOSE and a foot SPLASH are
+    not the same effort, so Iowa's "mf" does not mean the same thing in both.
     """
-    mode_ratios = (1.000, 1.317, 2.923, 10.592, 18.444, 23.894, 25.085,
-                   25.570, 27.496, 29.606, 35.082, 35.922, 55.662, 56.871,
-                   57.711, 61.214, 67.823, 80.664)
-    mode_gains  = (0.315, 0.989, 0.361, 0.229, 0.283, 0.311, 0.158,
-                   0.172, 0.158, 0.330, 0.196, 0.305, 0.352, 0.133,
-                   0.175, 0.293, 0.348, 1.000)
-    max_harmonic = 18
-    decay_db = 455.2
-    harmonic_decay_db = 0.03115
-    hf_corner_hz = 21389.4
-    hf_order = 3.999
-    tonal_dampening = 0.0158
-    # ...then the whole group down 8 dB together, so the balance above is kept
-    # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
-    # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    # ...and -4 dB more than the other two. Its anchor is the weakest of the
-    # three: it was set from footclose.mf against footsplash.mf, but a foot
-    # CLOSE and a foot SPLASH are different gestures, so Iowa's "mf" does not
-    # mean the same effort in both. Measured, it was 3.9 dB louder than the
-    # snare -- a chick out-shouting a backbeat, which no kit does.
-    initial_gain = 0.8644 * 0.3981 * 0.631 * 0.631
+    mode_gains = (0.6451, 0.3510, 0.1288, 0.0975, 0.1232, 0.0563, 0.0548, 0.0381,
+                   0.0252, 0.0236, 0.0225, 0.0352, 0.0394, 0.0419, 0.0190, 0.0336,
+                   0.0149, 0.0422, 0.0492, 0.0329, 0.0494, 0.0281, 0.0162, 0.0138,
+                   0.0149, 0.0216, 0.0160, 0.0153, 0.0327, 0.0303, 0.0187, 0.0197,
+                   0.0124, 0.0273, 0.0343, 0.0385, 0.0359, 0.0291, 0.0218, 0.0374,
+                   0.0250, 0.0406, 0.1087, 0.0812, 0.0358, 0.0258, 0.0415, 0.0240,
+                   0.0353, 0.0147, 0.0205, 0.0283, 0.0583, 0.0435, 0.0087, 0.0307,
+                   0.0398, 0.0250, 0.0304, 0.0345, 0.0353, 0.2541, 0.0302, 0.0863,
+                   0.1311, 0.0971, 0.0290, 0.0347, 0.0535, 0.0492, 0.0321, 0.0429,
+                   0.0450, 0.0488, 0.2209, 0.0776, 0.0421, 0.0718, 0.0569, 0.0761,
+                   0.0641, 0.0419, 0.0322, 0.0398, 0.0343, 0.0441, 0.0148, 0.0488,
+                   0.0618, 0.0710, 0.1433, 0.0696, 0.0351, 0.0353, 0.0266, 0.0380,
+                   0.0561, 0.0415, 0.0252, 0.0380, 0.0434, 0.0576, 0.0309, 0.0568,
+                   0.0339, 0.0192, 0.0363, 0.0193, 0.0405, 0.0439, 0.0595, 0.0486,
+                   0.0610, 0.0467, 0.0558, 0.0699, 0.0264, 0.0264, 0.0362, 0.0485,
+                   0.0558, 0.0726, 0.0452, 0.0659, 0.0634, 0.0857, 0.1032, 0.0888,
+                   0.0754, 0.0706, 0.0502, 0.0543, 0.0592, 0.0874, 0.0705, 0.0909,
+                   0.0980, 0.0584, 0.0593, 0.0643, 0.0761, 0.0648, 0.0861, 0.1024,
+                   0.2028, 0.0887, 0.0926, 0.0799, 0.0313, 0.0692, 0.0301, 0.0873,
+                   0.0919, 0.0808, 0.0587, 0.0791, 0.0855, 0.0774, 0.0687, 0.0559,
+                   0.0572, 0.0504, 0.0699, 0.0637, 0.0856, 0.0599, 0.0546, 0.0623,
+                   0.0612, 0.0299, 0.0549, 0.0679, 0.0806, 0.0618, 0.0501, 0.0448,
+                   0.0588, 0.0686, 0.0584, 0.0909, 0.0696, 0.0587, 0.0663, 0.0634,
+                   0.0621, 0.0815, 0.1337, 0.1552, 0.1416, 0.0889, 0.1198, 0.1239,
+                   0.1449, 0.1323, 0.2093, 0.0952, 0.0844, 0.1170, 0.1354, 0.1838,
+                   0.1735, 0.1057, 0.2484, 0.1401, 0.1566, 0.1408, 0.2047, 0.1553,
+                   0.1344, 0.1700, 0.1766, 0.1267, 0.2122, 0.1891, 0.1782, 0.1314,
+                   0.1597, 0.1669, 0.3073, 0.1261, 0.1208, 0.1978, 0.2188, 1.0000)
+    ring_decay_above = 3.13576
+    # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
+    # them before the rebuild -- the open hat 1.2 dB over the closed one --
+    # and initial_gain is solved to hold each voice's K-weighted loudness
+    # exactly where it was, so this commit changes the timbre and the decay
+    # and nothing about the mix.
+    initial_gain = 0.107207
 
 
 class OpenHiHatProperties(HiHatProperties):
-    """GM 46. Hats apart and ringing: the body speaks.
+    """GM 46. Hats apart and ringing: the plate speaks.
 
-    Unlike the other two the LOWEST mode is the strongest, at 543 Hz, with 571
-    and 648 beside it -- a real plate ringing rather than a contact noise.
+    This is the take the whole mode set comes from -- the only long hi-hat
+    recording Iowa has -- and it is not quite the gesture GM 46 means: a splash
+    opens the hats and lets them ring for 7.25 s to -40 dB, where a stick on
+    open hats is damped by the hats still being loosely together. The modes are
+    the same plate either way; the ring is capped well below the measurement for
+    that reason.
 
-    MEASURED FROM A FOOT SPLASH, which is the only long hi-hat take Iowa has,
-    and it is not quite the gesture GM 46 means: a splash opens the hats and
-    lets them ring for 7.25 s to -40 dB, where a stick on open hats is damped by
-    the hats still being loosely together. The modes are the same plate either
-    way; the ring is capped well below the measurement for that reason.
+    ITS REFERENCE WAS PLAYED SOFT, which is measurable rather than a guess.
+    Where each hat's mf sits inside its OWN pp/mf/ff range: the open hat's is
+    12.5 dB under its ff, the closed hat's 8.6, the pedal's 8.3. So this voice
+    is anchored to a take about 4 dB softer, in its own terms, than the takes
+    the other two are anchored to. 2.4 dB of that is taken -- Ben's ear set the
+    last 1.5 ("now just a little too loud") -- which puts the open hat 0.8 dB
+    above the closed one. That is also what a kit does: more of the cymbal is
+    free to move, so it speaks louder for the same stroke.
     """
-    # DENSE, like the crashes, and for the same reason. At 18 modes this was the
-    # sparsest voice left in the kit: its lines stood 20.2 dB above the continuum
-    # where the recording's stand 10, which is the line-spectrum-with-a-wash that
-    # made the crashes sound tinny. 90 modes -- measured peaks where they resolve,
-    # the rest filled to the density a plate has, gains read off the recording's
-    # STRIKE (2-32 ms, not its ring; see CrashCymbal1Properties) -- and the ring
-    # law on, so the tail darkens on its own instead of the wash holding it up.
-    #
-    #                      grid   line excess   band rms   partials
-    #     18 modes         9.40         20.2       1.99         18
-    #     90 modes         6.45         10.0       3.65         90
-    #
-    # THE BAND RMS IS WORSE AND THAT IS THE TRADE. It is a single 0.15 s window,
-    # and the crashes are the reason not to trust it alone -- it cannot tell a
-    # dense continuum from a handful of loud modes with a hiss over them. The
-    # time evolution and the density are both much closer. Ben chose this after
-    # seeing both numbers rather than having it swapped underneath him.
-    # ITS REFERENCE WAS PLAYED SOFT, and that is measurable rather than a guess.
-    # Ben: "the open hi-hat still seems out of place. Maybe it also needs a bit
-    # more velocity behind it. I think the recording was lower velocity than
-    # normal." Where each hat's mf sits inside its OWN pp/mf/ff range:
-    #
-    #     open  (footsplash)   mf is 12.5 dB under its ff
-    #     closed (normal)      mf is  8.6 dB under
-    #     pedal (footclose)    mf is  8.3 dB under
-    #
-    # So the take this voice is anchored to is about 4 dB softer, in its own
-    # terms, than the takes the other two are anchored to -- and a foot splash is
-    # a gentler gesture than a stick on open hats in the first place. The level
-    # is lifted by 2.4 dB of that, which puts the open hat 0.8 dB ABOVE the
-    # closed one rather than 1.6 below. That is also what a kit does: more of the
-    # cymbal is free to move, so it speaks louder for the same stroke.
-    #
-    # The full 3.9 was a shade much by ear ("now just a little too loud"), which
-    # is fair -- the 4 dB assumed the three ff takes were equal effort, and the
-    # open hat's ff is a foot splash too, so it was an upper bound rather than a
-    # figure. Ben's ear sets the last 1.5 dB.
-    #
-    # AND IT HAD NO STROKE AT ALL. strike_noise_slope was 0, so its flatness was
-    # 0.458 at velocity 40 and 0.482 at 127 -- the same sound at every dynamic.
-    # The recording is not: 0.278 at mf against 0.390 at ff. Fitted to that:
-    #
-    #     velocity   40      70      100     127
-    #     flatness   0.080   0.200   0.322   0.403
-    #
-    # a nearly clean plate when brushed and a full sizzle when hit.
-    mode_ratios = (1.0000, 1.0644, 1.0989, 1.1328, 1.2115, 1.2524, 1.3569, 1.3686,
-                   1.4289, 1.4894, 1.5077, 1.5618, 1.6188, 1.7103, 1.7931, 1.8722,
-                   1.9018, 2.0675, 2.1907, 2.2336, 2.3802, 2.3836, 2.5651, 2.6502,
-                   2.9530, 3.0001, 3.3349, 3.4987, 3.5351, 3.6412, 3.9905, 4.2760,
-                   4.5045, 4.5297, 4.9228, 5.0952, 5.2269, 5.3989, 5.5010, 5.9904,
-                   6.0714, 6.4833, 7.0518, 7.0559, 7.4781, 7.5559, 7.6450, 8.0210,
-                   8.4350, 8.4929, 8.5216, 9.3627, 9.5529, 9.8142, 10.0807, 10.3148,
-                   10.5041, 10.6533, 11.2460, 11.5429, 11.7565, 11.8390, 13.5684,
-                   13.6440, 13.6784, 13.7968, 14.0213, 14.5301, 14.9435, 16.0196,
-                   16.3878, 16.4278, 17.6918, 17.8400, 18.3049, 19.7827, 20.9411,
-                   21.4078, 22.7469, 23.4076, 25.1708, 25.3211, 27.2450, 29.0853,
-                   31.8333, 32.6761, 33.8214, 35.0618, 37.3040, 38.8428)
-    mode_gains  = (0.7082, 0.2097, 0.1739, 0.2622, 0.4545, 0.6106, 0.9875, 1.0000,
-                   0.8675, 0.5744, 0.4866, 0.2431, 0.1308, 0.1562, 0.1703, 0.1642,
-                   0.1571, 0.0903, 0.1141, 0.1544, 0.1806, 0.1803, 0.0933, 0.0641,
-                   0.0582, 0.0641, 0.0988, 0.1038, 0.0999, 0.0831, 0.1185, 0.1304,
-                   0.1197, 0.1214, 0.1968, 0.2275, 0.2284, 0.2136, 0.1986, 0.0993,
-                   0.0975, 0.0533, 0.1613, 0.1617, 0.1634, 0.1637, 0.1661, 0.1575,
-                   0.1572, 0.1632, 0.1668, 0.1794, 0.1714, 0.1416, 0.1852, 0.1804,
-                   0.1778, 0.1762, 0.1241, 0.1233, 0.1350, 0.1388, 0.1846, 0.1814,
-                   0.1799, 0.1748, 0.1648, 0.1690, 0.1938, 0.1875, 0.1883, 0.1883,
-                   0.1741, 0.1710, 0.1485, 0.1056, 0.1910, 0.1951, 0.2015, 0.1712,
-                   0.2488, 0.2492, 0.2087, 0.2040, 0.1933, 0.1841, 0.1785, 0.1616,
-                   0.1522, 0.1605)
-    max_harmonic = 90
-    strike_noise_slope = 0.6
-    # Each mode gets its own strike sign (see strike_phase_spread): with 90
-    # modes all starting in phase the note peaked 14.2 dB above its own loudness against the foot splash's 15.7.
-    strike_phase_spread = 1.0
-    ring_peak_hz = 929.542
-    ring_decay_floor = 5.85853
-    ring_decay_below = 21.7508
-    ring_decay_above = 1.75409
-    chiff_volume = 6
-    chiff_width = 0.240611
-    sustain_jitter = 0.0113426
-    hf_corner_hz = 39990.7
+    mode_gains = (0.1556, 0.1620, 0.1083, 0.1873, 0.1022, 0.0466, 0.0294, 0.0557,
+                   0.0422, 0.0239, 0.0110, 0.0338, 0.0422, 0.0274, 0.0367, 0.0313,
+                   0.0152, 0.0336, 0.0447, 0.0560, 0.0960, 0.0555, 0.0366, 0.0533,
+                   0.0421, 0.0288, 0.0162, 0.0097, 0.0118, 0.0350, 0.0282, 0.0439,
+                   0.0332, 0.0252, 0.0604, 0.1579, 0.0604, 0.0474, 0.0539, 0.0235,
+                   0.0689, 0.0495, 0.0478, 0.0177, 0.0179, 0.0409, 0.0897, 0.0830,
+                   0.0603, 0.0461, 0.0424, 0.0326, 0.0287, 0.0499, 0.0875, 0.0453,
+                   0.0568, 0.0224, 0.0545, 0.0533, 0.0608, 0.2366, 0.0291, 0.0635,
+                   0.1318, 0.0736, 0.0661, 0.0954, 0.0715, 0.0755, 0.0343, 0.1595,
+                   0.0507, 0.0677, 0.1756, 0.0424, 0.0510, 0.0561, 0.0634, 0.1120,
+                   0.0963, 0.1316, 0.0481, 0.1273, 0.0900, 0.0321, 0.0364, 0.0652,
+                   0.0677, 0.0986, 0.3245, 0.0359, 0.0363, 0.0636, 0.0779, 0.0320,
+                   0.0764, 0.1041, 0.0354, 0.0246, 0.0243, 0.0220, 0.0736, 0.0271,
+                   0.0358, 0.0265, 0.0545, 0.0585, 0.0777, 0.0622, 0.0794, 0.0741,
+                   0.1157, 0.1076, 0.0728, 0.0892, 0.0512, 0.0474, 0.0979, 0.0970,
+                   0.0688, 0.0590, 0.0870, 0.0984, 0.1060, 0.1045, 0.1671, 0.1391,
+                   0.1254, 0.1426, 0.1304, 0.0802, 0.0866, 0.1161, 0.0800, 0.0566,
+                   0.0626, 0.0874, 0.0691, 0.0521, 0.0918, 0.1146, 0.0632, 0.0657,
+                   0.1991, 0.1528, 0.1299, 0.0675, 0.1011, 0.1484, 0.0660, 0.1092,
+                   0.1257, 0.0732, 0.1210, 0.1215, 0.1207, 0.0817, 0.0595, 0.0849,
+                   0.1499, 0.1502, 0.1018, 0.0469, 0.0808, 0.0973, 0.1008, 0.0973,
+                   0.1125, 0.0565, 0.0406, 0.0664, 0.1244, 0.1115, 0.1898, 0.0593,
+                   0.0612, 0.0904, 0.1208, 0.1249, 0.1240, 0.1281, 0.0676, 0.0553,
+                   0.0854, 0.0859, 0.1147, 0.1804, 0.2048, 0.0932, 0.1050, 0.1394,
+                   0.1331, 0.1238, 0.2490, 0.1310, 0.0960, 0.1374, 0.1513, 0.1192,
+                   0.1298, 0.1048, 0.1817, 0.1970, 0.0950, 0.1250, 0.1440, 0.0836,
+                   0.1359, 0.1280, 0.2141, 0.2437, 0.1577, 0.1213, 0.1151, 0.1671,
+                   0.1729, 0.2742, 0.1725, 0.1713, 0.1910, 0.2179, 0.2278, 1.0000)
+    ring_decay_above = 2.14922
+    # THE BALANCE IS NOT RE-DERIVED HERE. The three sit where Ben's ear put
+    # them before the rebuild -- the open hat 1.2 dB over the closed one --
+    # and initial_gain is solved to hold each voice's K-weighted loudness
+    # exactly where it was, so this commit changes the timbre and the decay
+    # and nothing about the mix.
+    initial_gain = 0.180078
 
-    # -8 dB with the rest of the kit; this class used to inherit the cymbal
-    # family's 1/10 and so would not have moved with the others.
-    # ...and -4 dB again with the other two hats. The balance BETWEEN the three
-    # is measured (one instrument, one Iowa session) and is left alone; the
-    # family's level against the rest of the kit never was -- it inherited the
-    # open hat's from before any of this -- so that is the part that moves.
-    initial_gain = 0.06148
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on

@@ -54,11 +54,11 @@ PERCUSSION = {
     39: ("Hand Clap",          N, 260.0),
     40: ("Electric Snare",     S, 275.0),
     41: ("Low Floor Tom",      M, 87.0),
-    42: ("Closed Hi-Hat",   ClosedHiHatProperties, 225.4),
+    42: ("Closed Hi-Hat",   ClosedHiHatProperties, 248.4),
     43: ("High Floor Tom",     M, 98.0),
-    44: ("Pedal Hi-Hat",    PedalHiHatProperties, 196.4),
+    44: ("Pedal Hi-Hat",    PedalHiHatProperties, 248.4),
     45: ("Low Tom",            M, 110.0),
-    46: ("Open Hi-Hat",     OpenHiHatProperties, 400.0),
+    46: ("Open Hi-Hat",     OpenHiHatProperties, 248.4),
     47: ("Low-Mid Tom",        M, 130.0),
     48: ("Hi-Mid Tom",         M, 150.0),
     49: ("Crash Cymbal 1",     CrashCymbal1Properties, 288.3),
@@ -183,19 +183,25 @@ def percussion_for_note(note):
 PERCUSSION_RING = {
     35: 0.40, 36: 0.35, 37: 0.15, 38: 0.35, 39: 0.30, 40: 0.30, 41: 0.60,
     43: 0.60, 45: 0.55, 47: 0.50, 48: 0.45,
-    # MEASURED (Iowa hihat, mf): -40 dB at 0.30 s for a stick on closed hats,
-    # 0.53 for the pedal chick, 7.25 for a foot splash. The first two are taken
-    # as measured. The open hat is CAPPED at 2.0 against a measured ~10.9 s T60,
-    # because Iowa's only long hi-hat take is a foot splash -- hats opened and
-    # left free -- where GM 46 means a stick on hats that are still loosely
-    # together and damp each other. Same kind of cap as the triangle, and for
-    # the same reason: the measurement is of a different gesture.
-    # MEASURED: the closed hat is -40 dB by 0.28 s and the pedal chick by
-    # 0.16 s, and their rings were set before either was measured. The pedal's
-    # 0.80 s was the whole of the error on its envelope: decay_db moved it not
-    # at all, because for that length the WASH regenerates for the note's life
-    # and it, not the modes, was the sound.
-    42: 0.35, 44: 0.21, 46: 2.00,
+    # ONE PLATE, THREE DAMPINGS. These are no longer three separately measured
+    # decays: the hats share a mode set and a loss curve, and the ring is the
+    # uniform part of the contact damping -- how hard the articulation holds the
+    # plate. Fitted against each take's own envelope with everything else held:
+    #
+    #     closed   0.47 s      pedal   0.57 s      open   0.64 s
+    #
+    # The open hat's is FAR below the foot splash's own ~10.9 s T60, and
+    # deliberately: Iowa's only long hi-hat take is a splash -- hats opened and
+    # left free -- where GM 46 is a stick on hats still loosely together, which
+    # damp each other. Same kind of cap as the triangle, and for the same
+    # reason: the measurement is of a different gesture.
+    #
+    # The three used to be 0.35 / 0.21 / 2.00, measured on three different mode
+    # sets. The spread mattered more than the values: at 150-400 ms the three
+    # rendered 49 dB apart where the recordings sit within 6.8, which is what
+    # Ben heard as "the hi-hat tonality seems to differ too much between the 3
+    # modes."
+    42: 0.4716, 44: 0.5686, 46: 0.6361,
     # MEASURED rings, fitted with each plate's mode set against its recording.
     49: 3.67, 50: 0.40, 51: 1.63, 52: 6.07,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
