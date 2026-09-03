@@ -396,8 +396,13 @@ def prepare(path, tuner='hybrid'):
                     # quarter of the note so a short one cannot start after it ends.
                     _PL[0] = 0
                     non_m = non_r + (min(onsets[0], 0.25*dur)*SR if onsets else 0.0)
+                    # Each mode's sign comes from where the stick landed relative
+                    # to its nodes; see SynthProperties.strike_phase_spread.
+                    sps = props.strike_phase_spread
+                    mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
                     emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m, noff, pfade, rel, chiff,
-                                 logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr)
+                                 logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc,
+                                 gr, cr, ph0=mph)
                     # THE LATE ARRIVAL. A second copy of this partial, quieter
                     # and starting pdelay later: the cascade adds energy to the
                     # middle of the spectrum rather than holding the middle back.

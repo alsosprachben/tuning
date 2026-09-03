@@ -1014,6 +1014,25 @@ class SynthProperties:
     # sweep back into a swell.
     bloom_scatter = 0.0
 
+    # WHERE THE STICK LANDS DECIDES EACH MODE'S SIGN. A strike excites mode n in
+    # proportion to that mode's shape AT THE STRIKE POINT, and a mode shape has
+    # nodes and antinodes -- so some modes start pushing and some start pulling.
+    # Everything here has always started every partial at phase 0, which is right
+    # for an ideal impulse and is why hammer_down resets the accumulator. With a
+    # handful of partials it barely matters. With three hundred it matters a lot:
+    # they all add at t=0 and the note gets a spike that is an artefact of the
+    # synthesis, not of the plate.
+    #
+    # MEASURED as crest factor -- peak above K-weighted loudness -- against the
+    # recordings: the 17" clash is 13.1 dB and our crash 2 was 21.5; the Iowa
+    # splash is 14.0 and ours was 20.9. Both are dense sets. Crash 1, which
+    # carries a bloom whose late copies raise loudness without raising the peak,
+    # was already close at 16.0 against 14.7.
+    #
+    # 0.0 keeps every partial in phase, which is every other voice in this file.
+    # 1.0 gives each mode its own sign, drawn once and deterministically.
+    strike_phase_spread = 0.0
+
     def bloom_delay_for(self, frequency):
         """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.
 
@@ -4394,6 +4413,9 @@ class OpenHiHatProperties(HiHatProperties):
                    0.2488, 0.2492, 0.2087, 0.2040, 0.1933, 0.1841, 0.1785, 0.1616,
                    0.1522, 0.1605)
     max_harmonic = 90
+    # Each mode gets its own strike sign (see strike_phase_spread): with 90
+    # modes all starting in phase the note peaked 14.2 dB above its own loudness against the foot splash's 15.7.
+    strike_phase_spread = 1.0
     ring_peak_hz = 929.542
     ring_decay_floor = 5.85853
     ring_decay_below = 21.7508
@@ -4409,7 +4431,7 @@ class OpenHiHatProperties(HiHatProperties):
     # is measured (one instrument, one Iowa session) and is left alone; the
     # family's level against the rest of the kit never was -- it inherited the
     # open hat's from before any of this -- so that is the part that moves.
-    initial_gain = 0.0407083
+    initial_gain = 0.0366665
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
@@ -4585,6 +4607,9 @@ class CrashCymbal1Properties(CymbalProperties):
                    0.9350, 0.9865, 1.0000, 0.9155, 0.9144, 0.8943, 0.8454, 0.7422,
                    0.7285, 0.6776, 0.6402, 0.6331)
     max_harmonic = 300
+    # Each mode gets its own strike sign (see strike_phase_spread): with 300
+    # modes all starting in phase the note peaked 16.0 dB above its own loudness against the 18" clash's 14.7.
+    strike_phase_spread = 0.35
     # THE MODES CARRY THE TOP. The refit before this chose hf_corner_hz = 3153 at
     # order 5, which annihilates modal energy above 3 kHz -- 0.03 of it left at
     # 6.3 kHz, 0.0003 at 15.9 -- so nothing up there was a mode and the WASH was
@@ -4721,7 +4746,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0196168
+    initial_gain = 0.0203578
 
 
 class CrashCymbal2Properties(CymbalProperties):
@@ -4891,6 +4916,9 @@ class CrashCymbal2Properties(CymbalProperties):
                    0.7452, 0.7396, 0.7333, 0.7259, 0.7196, 0.6879, 0.6665, 0.5924,
                    0.5831, 0.5692, 0.5522, 0.4841)
     max_harmonic = 300
+    # Each mode gets its own strike sign (see strike_phase_spread): with 300
+    # modes all starting in phase the note peaked 21.5 dB above its own loudness against the 17" clash's 13.1.
+    strike_phase_spread = 1.0
     # THE MODES CARRY THE TOP. The refit before this chose hf_corner_hz = 3153 at
     # order 5, which annihilates modal energy above 3 kHz -- 0.03 of it left at
     # 6.3 kHz, 0.0003 at 15.9 -- so nothing up there was a mode and the WASH was
@@ -5002,7 +5030,7 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0540587
+    initial_gain = 0.0580485
 
 
 class SplashCymbalProperties(CymbalProperties):
@@ -5081,6 +5109,9 @@ class SplashCymbalProperties(CymbalProperties):
                    0.0742, 0.0724, 0.0733, 0.0770, 0.0803, 0.0828, 0.0864, 0.0880,
                    0.0897, 0.0898, 0.0755, 0.0593, 0.0598, 0.0607, 0.0614, 0.0619)
     max_harmonic = 200
+    # Each mode gets its own strike sign (see strike_phase_spread): with 200
+    # modes all starting in phase the note peaked 20.9 dB above its own loudness against the Iowa splash's 14.0.
+    strike_phase_spread = 1.0
     ring_peak_hz = 1836.66
     ring_decay_floor = 11.47
     ring_decay_below = 0.5002
@@ -5129,7 +5160,7 @@ class SplashCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.115469
+    initial_gain = 0.131597
 
 
 class ChineseCymbalProperties(CymbalProperties):
@@ -5158,6 +5189,9 @@ class ChineseCymbalProperties(CymbalProperties):
                    0.7300, 1.0000, 0.7290, 0.5290, 0.1870, 0.5990, 0.2510, 0.6750,
                    0.4710, 0.8350)
     max_harmonic = 18
+    # Each mode gets its own strike sign (see strike_phase_spread): with 18
+    # modes all starting in phase the note peaked far above what the recording does.
+    strike_phase_spread = 1.0
     ring_peak_hz = 300.773
     ring_decay_floor = 31.97
     ring_decay_below = 3.602
@@ -5206,7 +5240,7 @@ class ChineseCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.127613
+    initial_gain = 0.134334
 
 
 class RideCymbalProperties(CymbalProperties):
@@ -5234,6 +5268,9 @@ class RideCymbalProperties(CymbalProperties):
                    1.0000, 0.5570, 0.5380, 0.6200, 0.5820, 0.4460, 0.4660, 0.3600,
                    0.6240, 0.4320)
     max_harmonic = 18
+    # Each mode gets its own strike sign (see strike_phase_spread): with 18
+    # modes all starting in phase the note peaked far above what the recording does.
+    strike_phase_spread = 1.0
     ring_peak_hz = 2864.95
     ring_decay_floor = 14.35
     ring_decay_below = 8.836
@@ -5289,7 +5326,7 @@ class RideCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.0245915
+    initial_gain = 0.0250759
 
 
 class CrashRideProperties(CymbalProperties):
@@ -5336,6 +5373,9 @@ class CrashRideProperties(CymbalProperties):
                    0.3750, 0.1390, 0.3430, 0.5080, 0.3900, 0.3200, 0.3340, 0.4710,
                    0.5800, 0.4730)
     max_harmonic = 26
+    # Each mode gets its own strike sign (see strike_phase_spread): with 26
+    # modes all starting in phase the note peaked far above what the recording does.
+    strike_phase_spread = 1.0
     ring_peak_hz = 1041.85
     ring_decay_floor = 18.44
     ring_decay_below = 15.47
@@ -5377,7 +5417,7 @@ class CrashRideProperties(CymbalProperties):
     strike_wobble_gain = 0.3
     # solved to hold note 59 at exactly the loudness it had while it was
     # borrowing the 21" ride, so this changes the plate and not the balance.
-    initial_gain = 0.0192417
+    initial_gain = 0.0208606
 
 
 class RideBellProperties(CymbalProperties):
