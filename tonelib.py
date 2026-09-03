@@ -3963,7 +3963,7 @@ class SnareDrumProperties(NoisyPercussionMixin, PercussionProperties):
     # Twelve modes, and the strike point still sets each one's sign.
     strike_phase_spread = 1.0
 
-    initial_gain = 0.235216
+    initial_gain = 0.190312
     tonal_dampening = 0.3
     one_shot = True
     release_floor_db = -45.0
@@ -3987,8 +3987,30 @@ class SnareDrumProperties(NoisyPercussionMixin, PercussionProperties):
     sustain_jitter = 0.03           # a floor, not the sound
     chiff_min_valve_time = 0.002
     chiff_max_valve_time = 0.012
-    # Ghost note to rimshot: the wires are what changes, not the head.
-    strike_noise_slope = 1.3
+    # Ghost note to rimshot: the wires are what changes, not the head. But not
+    # by THIS much -- at 1.3 the buzz scaled by attack_volume**1.3, which is
+    # 26 dB from ff down to pp, and the wires simply left. What remained was the
+    # Bessel head alone, and that head spans 260 to 1074 Hz, so below about
+    # forte this voice was a small tom. Ben, hearing two hits at velocity 58 in
+    # a jazz pattern: "The snare sounds like a bass drum?"
+    #
+    #     slope      v40      v58      v80     v100     v127   (centroid)
+    #      1.30   335 Hz   490 Hz  1225 Hz  2815 Hz  5812 Hz
+    #      0.35  2175 Hz  3141 Hz  4188 Hz  4941 Hz  5812 Hz
+    #
+    # at 1.30, 92% of a ghost note's energy sat in 200-500 Hz and 0.2% above
+    # 2 kHz. A ghost note is QUIET, not toneless: the wires still rattle, which
+    # is the whole reason a ghost note reads as a snare at all. The docstring
+    # above used to say "a ghost note barely rattles" and that judgement was the
+    # error -- nothing measured it, because Iowa has no drum kit.
+    #
+    # 0.35 keeps the wires at every dynamic and still opens the drum up with the
+    # stroke. For scale, the one dynamic-brightness figure in this file that IS
+    # measured -- the Iowa suspended cymbals, mf to ff -- is a median 0.02 dB of
+    # brightening per dB of level. Struck metal and membrane hardly brighten at
+    # all; 26 dB across the dynamic was never defensible. Still judgement, and
+    # still Ben's ear as the outer loop.
+    strike_noise_slope = 0.35
 
 
 class SawtoothSynthProperties(BowedStringProperties):
