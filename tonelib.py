@@ -3878,31 +3878,80 @@ class NoiseDrumProperties(NoisyPercussionMixin, PercussionProperties):
 
 
 class SnareDrumProperties(NoisyPercussionMixin, PercussionProperties):
-    """Snare: a short burst of mostly noise. Discrete inharmonic partials
-    alone still read as pitched, so the noise comes primarily from a wide
-    running phase jitter (the chiff mechanism cranked up) that smears every
-    partial into broadband hiss -- the snare wires -- over a punchy decay."""
-    initial_gain = 1.0 / 9
-    max_harmonic = 48
-    inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 20.0
+    """Snare: a membrane with wires rattling against its underside.
+
+    THIS HAD NO MODE SET. It was a harmonic series stretched by 20x the
+    2nd-harmonic coefficient with the chiff cranked to 3.0 and sustain_jitter at
+    1.0 -- a few loud partials under a permanent hiss, which is exactly the
+    construction the crashes proved wrong, and for the same reason: a hiss can
+    neither decay per band nor change with the stroke.
+
+    A SNARE IS TWO THINGS AND ONLY ONE OF THEM IS NOISE.
+
+    The batter head is a clamped circular membrane, so its modes are the Bessel
+    zeros -- analytic, no recording needed, the same set the toms use. That is
+    the pitched half, and it is why a snare with the wires thrown off is just a
+    high tom. inharmonicity_coefficient goes to 0 with it: the mode set is
+    absolute and both renderers stretch mode_ratios on top of it otherwise, which
+    is the bug that had every measured cymbal landing in the wrong place.
+
+    The wires are the other half, and they ARE aperiodic -- unlike a cymbal,
+    whose apparent noise turned out to be hundreds of resolvable modes, a snare's
+    buzz is genuinely broadband, so here a wash is the right model. What was
+    wrong was its shape in time: the wires rattle only while the head is moving
+    hard enough to throw them against it, so the buzz dies well before the head
+    does. chiff_width carries that; sustain_jitter drops to a floor rather than
+    running the whole note.
+
+    AND IT IS THE MOST VELOCITY-DEPENDENT THING IN THE KIT. A ghost note barely
+    rattles; a rimshot is almost all wires. strike_noise_slope makes the buzz
+    follow the stroke, which the old fixed chiff could not do at all.
+
+    NO REFERENCE. Iowa has no drum kit -- no snare, no bass drum, no toms -- so
+    unlike the cymbals none of this is fitted to a recording. The Bessel ratios
+    are physics; the gains, the wire balance and the decays are judgement, and
+    are marked as such rather than dressed up as measurement.
+    """
+    # The batter head. Bessel zeros j(m,n)/j(0,1) for a clamped circular
+    # membrane -- see MembraneDrumProperties, which derives the same set.
+    mode_ratios = (1.000, 1.593, 2.136, 2.295, 2.653, 2.917,
+                   3.155, 3.500, 3.599, 3.647, 4.059, 4.132)
+    # 1/ratio**1.6, as the toms use: a struck head puts most of its energy in
+    # the fundamental and the upper modes fall away fast.
+    mode_gains  = (1.000, 0.475, 0.297, 0.265, 0.210, 0.180,
+                   0.159, 0.135, 0.129, 0.126, 0.106, 0.103)
+    max_harmonic = 12
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    # Twelve modes, and the strike point still sets each one's sign.
+    strike_phase_spread = 1.0
+
+    initial_gain = 0.235216
     tonal_dampening = 0.3
-    # One-shot, like the crash: the hit rings out its own decay (~1 s tail)
-    # regardless of how short the note is, instead of being cut at note-off.
     one_shot = True
     release_floor_db = -45.0
-    decay_db = 28.0                 # fast, punchy
-    harmonic_decay_db = 1.5
+    # A snare head is small, tight and heavily damped -- much shorter than a tom
+    # at 34 dB/s, and the upper modes go first.
+    decay_db = 46.0
+    harmonic_decay_db = 22.0
     harmonic_decay_dampening = 0.0
 
-    # Wide chiff = the wire noise. Large phase deviation with the jitter run
-    # at full through the whole hit makes each partial mostly noise, so the
-    # snare is a "shhh" crack, not a pitched tom.
-    chiff_volume = 3.0
-    chiff_cycle = 0.9               # near-full phase decorrelation -> noise
+    # A head struck hard is stretched, so it starts sharp and settles: the same
+    # mechanism the toms use, smaller here because a snare head is already tight.
+    tension_bend = 0.018
+    tension_settle_time = 0.14
+
+    # THE WIRES. A burst that dies with the head's motion rather than a hiss that
+    # runs the whole note: ~90 ms of rattle under a head that rings ~300.
+    chiff_volume = 12.0
+    chiff_width = 0.090
+    chiff_cycle = 0.9               # near-full phase decorrelation -> broadband
     chiff_release = 0.0
-    sustain_jitter = 1.0            # jitter runs the entire (short) hit
+    sustain_jitter = 0.03           # a floor, not the sound
     chiff_min_valve_time = 0.002
     chiff_max_valve_time = 0.012
+    # Ghost note to rimshot: the wires are what changes, not the head.
+    strike_noise_slope = 1.3
 
 
 class SawtoothSynthProperties(BowedStringProperties):
@@ -4048,6 +4097,25 @@ class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
     harmonic_decay_dampening = 0.0
 
 
+
+class SideStickProperties(WoodPercussionProperties):
+    """GM 37, side stick: the shaft of the stick on the RIM, no wires at all.
+
+    It shared SnareDrumProperties, which gave a rim click a set of snare wires
+    it does not have and a membrane it barely excites. A cross-stick is wood
+    against wood and metal -- short, dry and pitched by the shell, much closer to
+    a woodblock than to the drum it is played on. Judgement, like the snare
+    above: there is no Iowa reference for any of this.
+    """
+    one_shot = True
+    release_floor_db = -50.0
+    decay_db = 150.0                # a click, gone in well under a tenth
+    harmonic_decay_db = 30.0
+    chiff_volume = 0.35             # a trace of shell rattle, not a buzz
+    chiff_width = 0.012
+    sustain_jitter = 0.02
+    strike_noise_slope = 0.8
+    initial_gain = 0.323326
 
 class GuiroProperties(WoodPercussionProperties):
     """The guiro's body: struck wood, but the NOISIEST wood in the kit.

@@ -25,6 +25,7 @@ from tonelib import (
     ChineseCymbalProperties,
     RideCymbalProperties,
     CrashRideProperties,
+    SideStickProperties,
     WoodPercussionProperties,
     CrotaleProperties,
     ClosedHiHatProperties,
@@ -48,7 +49,7 @@ G = GuiroProperties             # struck wood, but the noisiest of it
 PERCUSSION = {
     35: ("Acoustic Bass Drum", K, 55.0),
     36: ("Bass Drum 1",        K, 62.0),
-    37: ("Side Stick",         S, 340.0),
+    37: ("Side Stick",      SideStickProperties, 340.0),
     38: ("Acoustic Snare",     S, 260.0),
     39: ("Hand Clap",          N, 260.0),
     40: ("Electric Snare",     S, 275.0),
