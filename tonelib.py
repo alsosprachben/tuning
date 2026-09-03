@@ -2678,6 +2678,7 @@ class CylindricalBrassProperties(BrassProperties):
     """Cylindrical-bore brass (trumpet, trombone): the cylindrical tubing
     sustains strong upper harmonics, so these are bright and edgy with a
     pronounced attack 'rip' -- the brightness blooms hard then settles."""
+
     initial_gain = 1.0 / 4880      # +0.2 dB to equal-peak (already near the loudest)
     tonal_dampening = 0.82         # slow rolloff = strong harmonics, bright
     harmonic_decay_db = 5.5        # strong brightness bloom on the attack
@@ -6243,12 +6244,46 @@ class OpenPipeProperties(StoppedPipeProperties):
     max_harmonic 32 -> 49: h32 is only 4.2 kHz on the bass flute's low C, where
     the recording still carries 24 harmonics clear of its noise floor.
     """
+    # A BLOWN INSTRUMENT IS NEVER SILENT BETWEEN ITS HARMONICS, and this was 0.
+    # sustain_jitter is the wash's SUSTAINED level in the kernel, so with it at
+    # zero the chiff was an attack transient only and the held note was pure
+    # sinusoids: the region midway between harmonics measured 138 dB below them,
+    # which is numerical silence. The Iowa flute's sits 65 and 57 dB below its
+    # first two, with its own room subtracted and only counted where the
+    # recording stands at least 6 dB clear of that room. Fitted white (1.9 dB
+    # rms) against banded (2.2); a flute's turbulence radiates from the
+    # embouchure as well as through the tube, so it is not a plate's wash.
+    #
+    # WHAT THAT REFERENCE ENERGY IS HAS NOT BEEN ESTABLISHED, and the number
+    # above should be read with that caveat. Its spectral flatness is 0.0008 --
+    # very peaky, where broadband breath would be near 1 -- so some or most of
+    # it may be vibrato sidebands, room reflections, or the skirts of the
+    # harmonics leaking into the window rather than breath. An attempt to
+    # separate them by tracking the fundamental's instantaneous frequency failed
+    # (it returned 42% rms pitch wobble, which is the tracker breaking, not the
+    # player). What IS certain is that zero is wrong: a flute's breath is a
+    # defining part of its sound and this voice had none of it.
+    #
+    # The brass are deliberately NOT changed to match. TrumpetProperties already
+    # argues that sustain_jitter modulates each partial's phase and so buys the
+    # number with the wrong sound, and nothing measured here refutes that -- so
+    # its trace value stands. (That note's stated cause, a chiff table that
+    # repeated for round frequencies, is gone; its conclusion may not be.) The
+    # organ, pan flute, ocarina and blown bottle are left alone for the same
+    # reason: same physics, no reference, and the organ corpus is already
+    # approved by ear.
+    sustain_jitter = 0.2
+
     odd_only = False
     # FITTED across B3B4, C5B5 and C6B6: RMS 9.27 -> 3.28 dB.
     # Its own gain, trimmed for the fit: it used to inherit
     # StoppedPipeProperties', and trimming that would have moved every pipe voice.
     # +1.03 dB from the first fit, then -0.24 dB more for this one.
-    initial_gain = StoppedPipeProperties.initial_gain * 1.0952
+    # ...and held against it, since the wash is real energy. The kernel scales
+    # the chiff by f0/440, so a piccolo picks up more of it than a flute -- 2.9
+    # dB against 1.5 -- and one class-level number cannot hold both. The mean,
+    # -2.23 dB, leaves each 0.7 dB from where it was.
+    initial_gain = StoppedPipeProperties.initial_gain * 1.0952 * 0.7732
     tonal_dampening = 1.256
     # ZERO, and measured to be: see the class docstring. It was 0.3.
     octave_dampening = -0.0131
