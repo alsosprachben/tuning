@@ -4479,9 +4479,14 @@ class OpenHiHatProperties(HiHatProperties):
     # So the take this voice is anchored to is about 4 dB softer, in its own
     # terms, than the takes the other two are anchored to -- and a foot splash is
     # a gentler gesture than a stick on open hats in the first place. The level
-    # is lifted by that 3.9 dB, which puts the open hat 2.3 dB ABOVE the closed
-    # one rather than 1.6 below. That is also what a kit does: more of the cymbal
-    # is free to move, so it speaks louder for the same stroke.
+    # is lifted by 2.4 dB of that, which puts the open hat 0.8 dB ABOVE the
+    # closed one rather than 1.6 below. That is also what a kit does: more of the
+    # cymbal is free to move, so it speaks louder for the same stroke.
+    #
+    # The full 3.9 was a shade much by ear ("now just a little too loud"), which
+    # is fair -- the 4 dB assumed the three ff takes were equal effort, and the
+    # open hat's ff is a foot splash too, so it was an upper bound rather than a
+    # figure. Ben's ear sets the last 1.5 dB.
     #
     # AND IT HAD NO STROKE AT ALL. strike_noise_slope was 0, so its flatness was
     # 0.458 at velocity 40 and 0.482 at 127 -- the same sound at every dynamic.
@@ -4535,7 +4540,7 @@ class OpenHiHatProperties(HiHatProperties):
     # is measured (one instrument, one Iowa session) and is left alone; the
     # family's level against the rest of the kit never was -- it inherited the
     # open hat's from before any of this -- so that is the part that moves.
-    initial_gain = 0.0730691
+    initial_gain = 0.06148
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
