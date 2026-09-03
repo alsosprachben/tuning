@@ -4994,50 +4994,64 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     # The same window mistake as the hi-hat's mode set and the guiro's, in the
     # third place: measuring the right quantity over the wrong span of the note.
-    mode_gains  = (1.0000, 0.3693, 0.3501, 0.5027, 0.5793, 0.0685, 0.0685, 0.0836,
-                   0.0852, 0.0860, 0.0986, 0.0987, 0.1045, 0.1062, 0.1044, 0.1018,
-                   0.0931, 0.0833, 0.0808, 0.0772, 0.0727, 0.0614, 0.0571, 0.0532,
-                   0.0390, 0.0377, 0.0359, 0.0356, 0.0253, 0.0252, 0.0244, 0.0238,
-                   0.0205, 0.0191, 0.0187, 0.0178, 0.0148, 0.0146, 0.0149, 0.0153,
-                   0.0172, 0.0181, 0.0182, 0.0227, 0.0433, 0.0466, 0.0622, 0.0626,
-                   0.0677, 0.1605, 0.1626, 0.1633, 0.1610, 0.1604, 0.1545, 0.1520,
-                   0.1473, 0.1437, 0.1302, 0.1284, 0.1095, 0.1072, 0.1072, 0.1100,
-                   0.1230, 0.2543, 0.2907, 0.3200, 0.3431, 0.3441, 0.3320, 0.3259,
-                   0.2641, 0.2336, 0.1060, 0.0978, 0.0861, 0.0845, 0.0619, 0.0608,
-                   0.0796, 0.1270, 0.1968, 0.2058, 0.2078, 0.2077, 0.2065, 0.2059,
-                   0.2063, 0.2019, 0.2003, 0.1758, 0.1482, 0.1488, 0.1693, 0.1761,
-                   0.1762, 0.1783, 0.2020, 0.2098, 0.2073, 0.2038, 0.1904, 0.1885,
-                   0.1863, 0.1727, 0.1229, 0.1183, 0.0952, 0.0889, 0.0835, 0.0695,
-                   0.0771, 0.0857, 0.0868, 0.1183, 0.1396, 0.1576, 0.1579, 0.1603,
-                   0.1619, 0.1610, 0.1601, 0.1551, 0.1521, 0.1480, 0.1273, 0.1271,
-                   0.1258, 0.1521, 0.1786, 0.1820, 0.1695, 0.1704, 0.1814, 0.1715,
-                   0.1651, 0.1470, 0.1429, 0.1416, 0.1413, 0.1610, 0.1601, 0.1522,
-                   0.1505, 0.1430, 0.1415, 0.1512, 0.1627, 0.1658, 0.1702, 0.1745,
-                   0.2014, 0.2090, 0.2130, 0.2137, 0.2266, 0.2272, 0.2275, 0.2286,
-                   0.2404, 0.2418, 0.2421, 0.2438, 0.2479, 0.2451, 0.2300, 0.2039,
-                   0.1979, 0.1790, 0.1836, 0.1883, 0.1832, 0.1818, 0.1785, 0.1754,
-                   0.1508, 0.1579, 0.1840, 0.1839, 0.1830, 0.1822, 0.1817, 0.1791,
-                   0.2065, 0.2079, 0.2277, 0.2736, 0.2727, 0.2717, 0.2711, 0.2677,
-                   0.2661, 0.1797, 0.2106, 0.2088, 0.2086, 0.2082, 0.2065, 0.3522,
-                   0.3421, 0.3409, 0.3414, 0.2403, 0.2310, 0.2310, 0.2315, 0.2316,
-                   0.2251, 0.2196, 0.2185, 0.2188, 0.2203, 0.2208, 0.2232, 0.2317,
-                   0.2384, 0.2434, 0.2481, 0.2490, 0.2545, 0.2639, 0.2738, 0.2792,
-                   0.2818, 0.2839, 0.2843, 0.2819, 0.2761, 0.2749, 0.3272, 0.3319,
-                   0.3320, 0.3350, 0.3393, 0.3426, 0.3484, 0.3484, 0.3465, 0.3445,
-                   0.3437, 0.3448, 0.3449, 0.3475, 0.3477, 0.3478, 0.3425, 0.3378,
-                   0.3373, 0.3325, 0.3227, 0.2831, 0.2675, 0.2429, 0.2562, 0.2726,
-                   0.2766, 0.2747, 0.2746, 0.2763, 0.2951, 0.2975, 0.3027, 0.3095,
-                   0.3127, 0.3480, 0.3519, 0.3532, 0.3584, 0.3607, 0.3653, 0.3724,
-                   0.3744, 0.3752, 0.3859, 0.4123, 0.4315, 0.4500, 0.4698, 0.4781,
-                   0.7654, 0.7864, 0.7970, 0.7973, 0.7994, 0.8023, 0.8125, 0.8153,
-                   0.8174, 0.8624, 0.8742, 0.8003, 0.7994, 0.7818, 0.7390, 0.6488,
-                   0.6368, 0.5923, 0.5597, 0.5534)
+    mode_gains  = (0.7397, 0.2732, 0.2590, 0.3719, 0.4285, 0.0854, 0.0854, 0.1043,
+                   0.1063, 0.1073, 0.1230, 0.1231, 0.1303, 0.1325, 0.1302, 0.1270,
+                   0.1161, 0.1039, 0.1008, 0.0963, 0.0907, 0.0766, 0.0712, 0.0664,
+                   0.0486, 0.0470, 0.0448, 0.0444, 0.0316, 0.0314, 0.0304, 0.0297,
+                   0.0256, 0.0238, 0.0233, 0.0222, 0.0185, 0.0182, 0.0186, 0.0191,
+                   0.0215, 0.0226, 0.0227, 0.0283, 0.0540, 0.0581, 0.0776, 0.0781,
+                   0.0844, 0.1230, 0.1246, 0.1251, 0.1234, 0.1229, 0.1184, 0.1165,
+                   0.1129, 0.1101, 0.0998, 0.0984, 0.0839, 0.0822, 0.0822, 0.0843,
+                   0.0943, 0.1949, 0.2228, 0.2452, 0.2629, 0.2637, 0.2544, 0.2498,
+                   0.2024, 0.1790, 0.0812, 0.0749, 0.0660, 0.0648, 0.0474, 0.0466,
+                   0.0610, 0.0973, 0.1508, 0.1577, 0.1592, 0.1592, 0.1583, 0.1578,
+                   0.1581, 0.1547, 0.1535, 0.1347, 0.1505, 0.1511, 0.1720, 0.1789,
+                   0.1790, 0.1811, 0.2052, 0.2131, 0.2106, 0.2070, 0.1934, 0.1915,
+                   0.1892, 0.1754, 0.1248, 0.1202, 0.0967, 0.0903, 0.0848, 0.0706,
+                   0.0783, 0.0871, 0.0882, 0.1202, 0.1418, 0.1601, 0.1604, 0.1628,
+                   0.1645, 0.1635, 0.1626, 0.1575, 0.1545, 0.1503, 0.1293, 0.1291,
+                   0.1278, 0.1545, 0.1814, 0.1849, 0.1722, 0.1731, 0.1843, 0.1742,
+                   0.1677, 0.1493, 0.1452, 0.1438, 0.1435, 0.1690, 0.1680, 0.1597,
+                   0.1580, 0.1501, 0.1485, 0.1587, 0.1708, 0.1740, 0.1786, 0.1832,
+                   0.2114, 0.2194, 0.2236, 0.2243, 0.2378, 0.2385, 0.2388, 0.2399,
+                   0.2523, 0.2538, 0.2541, 0.2559, 0.2602, 0.2573, 0.2414, 0.2140,
+                   0.2077, 0.1879, 0.1927, 0.1976, 0.1923, 0.1908, 0.1874, 0.1841,
+                   0.1583, 0.1657, 0.1931, 0.1930, 0.1921, 0.1912, 0.1907, 0.1880,
+                   0.2167, 0.2182, 0.2390, 0.2872, 0.2862, 0.2852, 0.2845, 0.2810,
+                   0.2793, 0.1886, 0.2210, 0.2192, 0.2189, 0.2185, 0.2167, 0.3765,
+                   0.3657, 0.3645, 0.3650, 0.2569, 0.2470, 0.2470, 0.2475, 0.2476,
+                   0.2407, 0.2348, 0.2336, 0.2339, 0.2355, 0.2361, 0.2386, 0.2477,
+                   0.2549, 0.2602, 0.2652, 0.2662, 0.2721, 0.2821, 0.2927, 0.2985,
+                   0.3013, 0.3035, 0.3039, 0.3014, 0.2952, 0.2939, 0.3498, 0.3548,
+                   0.3549, 0.3581, 0.3627, 0.3663, 0.3725, 0.3725, 0.3704, 0.3683,
+                   0.3674, 0.3686, 0.3687, 0.3715, 0.3717, 0.3718, 0.3662, 0.3611,
+                   0.3606, 0.3555, 0.3450, 0.3027, 0.2860, 0.2597, 0.2739, 0.2914,
+                   0.2957, 0.2937, 0.2936, 0.2954, 0.3155, 0.3181, 0.3236, 0.3309,
+                   0.3343, 0.3720, 0.3762, 0.3776, 0.3832, 0.3856, 0.3905, 0.3981,
+                   0.4003, 0.4011, 0.4126, 0.4408, 0.4613, 0.4811, 0.5023, 0.5111,
+                   0.8755, 0.8996, 0.9117, 0.9120, 0.9144, 0.9178, 0.9294, 0.9326,
+                   0.9350, 0.9865, 1.0000, 0.9155, 0.9144, 0.8943, 0.8453, 0.7422,
+                   0.7284, 0.6775, 0.6402, 0.6330)
     max_harmonic = 300
     aftersound_fraction = 0.08
     aftersound_ratio = 0.06
     # Each mode gets its own strike sign (see strike_phase_spread): with 300
     # modes all starting in phase the note peaked 16.0 dB above its own loudness against the 18" clash's 14.7.
-    strike_phase_spread = 0.5
+    # AND ITS PARTIALS WERE HALF IN PHASE. At 0.5 the mode signs are only
+    # half decorrelated, so 300 partials stack at the strike: the raw sum peaked
+    # at 4.436 for a K-weighted -16.91, a crest factor of 29.8 dB, which no
+    # cymbal has. It did not matter while the bloom carried most of the note's
+    # energy; with the bloom cut to a trace the level has to come back onto the
+    # strike, and at 0.5 that clipped -- 1.520 after the default -9.3 dB master.
+    #
+    #     spread   raw peak     LKFS   crest
+    #       0.50      4.436   -16.91   29.8 dB
+    #       0.75      2.535   -17.53   25.6
+    #       1.00      1.427   -18.05   21.1
+    #
+    # Full spread costs 1.1 dB of loudness and buys 9.9 dB of peak. Every other
+    # measured plate in this file already uses 1.0.
+    strike_phase_spread = 1.0
     # THE MODES CARRY THE TOP. The refit before this chose hf_corner_hz = 3153 at
     # order 5, which annihilates modal energy above 3 kHz -- 0.03 of it left at
     # 6.3 kHz, 0.0003 at 15.9 -- so nothing up there was a mode and the WASH was
@@ -5139,8 +5153,28 @@ class CrashCymbal1Properties(CymbalProperties):
     # A rising centroid is a filter sweep, which is what a wah is. Still 0.6
     # octaves dim at the strike, and that is the 6.4-16 kHz shortfall noted
     # earlier rather than anything the decay can reach.
-    bloom_seconds = 0.025
-    bloom_gain = 3.2
+    # THE BLOOM WAS THREE TIMES THE PARTIAL IT FOLLOWED. bloom_gain 3.2 means
+    # the late copy of each partial arrives 25 ms behind it at 3.2x its
+    # amplitude, so the note got LOUDER after the strike: at velocity 127 the
+    # 30-80 ms window sat +3.2 dB where the recording falls 5.3, and that swell
+    # is what a mallet sounds like. (Crash 2, the same family, carries
+    # bloom_gain 0.0 and only a delay -- which is why Ben heard the difference
+    # between them as "hit by a mallot, not a stick".)
+    #
+    # Refitted at velocity 127 against the envelope, with the mode gains
+    # re-solved inside each candidate so only the time shape moves:
+    #
+    #     gain 3.20 sec 0.025   env 5.78  total 13.46   as shipped
+    #     gain 0.15 sec 0.008   env 3.54  total  9.61   fitted
+    #     gain 0.00             env 3.54  total  9.79   no bloom at all
+    #
+    # AND THAT LAST ROW IS THE HONEST PART: the bloom is now worth 0.18 dB. It
+    # survives as a trace rather than as an audible mechanism, because the
+    # measurement cannot tell 0.15 from 0 and a real crash does take tens of
+    # milliseconds to spread energy through the plate. If it should be audible
+    # again that is an ear call, not a fit -- the fit says it earns nothing.
+    bloom_seconds = 0.008
+    bloom_gain = 0.15
     bloom_center_hz = 1834.48
     bloom_octaves = 1.73876
     ring_decay_floor = 20
@@ -5210,7 +5244,7 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.066469
+    initial_gain = 0.196926
 
 class CrashCymbal2Properties(CymbalProperties):
     """GM 57, Crash Cymbal 2. MEASURED: Iowa 18" suspended crash. GM asks
