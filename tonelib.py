@@ -4467,6 +4467,30 @@ class OpenHiHatProperties(HiHatProperties):
     # dense continuum from a handful of loud modes with a hiss over them. The
     # time evolution and the density are both much closer. Ben chose this after
     # seeing both numbers rather than having it swapped underneath him.
+    # ITS REFERENCE WAS PLAYED SOFT, and that is measurable rather than a guess.
+    # Ben: "the open hi-hat still seems out of place. Maybe it also needs a bit
+    # more velocity behind it. I think the recording was lower velocity than
+    # normal." Where each hat's mf sits inside its OWN pp/mf/ff range:
+    #
+    #     open  (footsplash)   mf is 12.5 dB under its ff
+    #     closed (normal)      mf is  8.6 dB under
+    #     pedal (footclose)    mf is  8.3 dB under
+    #
+    # So the take this voice is anchored to is about 4 dB softer, in its own
+    # terms, than the takes the other two are anchored to -- and a foot splash is
+    # a gentler gesture than a stick on open hats in the first place. The level
+    # is lifted by that 3.9 dB, which puts the open hat 2.3 dB ABOVE the closed
+    # one rather than 1.6 below. That is also what a kit does: more of the cymbal
+    # is free to move, so it speaks louder for the same stroke.
+    #
+    # AND IT HAD NO STROKE AT ALL. strike_noise_slope was 0, so its flatness was
+    # 0.458 at velocity 40 and 0.482 at 127 -- the same sound at every dynamic.
+    # The recording is not: 0.278 at mf against 0.390 at ff. Fitted to that:
+    #
+    #     velocity   40      70      100     127
+    #     flatness   0.080   0.200   0.322   0.403
+    #
+    # a nearly clean plate when brushed and a full sizzle when hit.
     mode_ratios = (1.0000, 1.0644, 1.0989, 1.1328, 1.2115, 1.2524, 1.3569, 1.3686,
                    1.4289, 1.4894, 1.5077, 1.5618, 1.6188, 1.7103, 1.7931, 1.8722,
                    1.9018, 2.0675, 2.1907, 2.2336, 2.3802, 2.3836, 2.5651, 2.6502,
@@ -4492,6 +4516,7 @@ class OpenHiHatProperties(HiHatProperties):
                    0.2488, 0.2492, 0.2087, 0.2040, 0.1933, 0.1841, 0.1785, 0.1616,
                    0.1522, 0.1605)
     max_harmonic = 90
+    strike_noise_slope = 0.6
     # Each mode gets its own strike sign (see strike_phase_spread): with 90
     # modes all starting in phase the note peaked 14.2 dB above its own loudness against the foot splash's 15.7.
     strike_phase_spread = 1.0
@@ -4499,7 +4524,7 @@ class OpenHiHatProperties(HiHatProperties):
     ring_decay_floor = 5.85853
     ring_decay_below = 21.7508
     ring_decay_above = 1.75409
-    chiff_volume = 7.99982
+    chiff_volume = 6
     chiff_width = 0.240611
     sustain_jitter = 0.0113426
     hf_corner_hz = 39990.7
@@ -4510,7 +4535,7 @@ class OpenHiHatProperties(HiHatProperties):
     # is measured (one instrument, one Iowa session) and is left alone; the
     # family's level against the rest of the kit never was -- it inherited the
     # open hat's from before any of this -- so that is the part that moves.
-    initial_gain = 0.0366665
+    initial_gain = 0.0730691
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
