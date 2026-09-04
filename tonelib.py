@@ -4456,7 +4456,12 @@ class HandClapProperties(NoiseDrumProperties):
                    0.5457, 0.5176, 0.4910, 0.4659, 0.4424, 0.4207, 0.4006, 0.3822,
                    0.3655, 0.3504, 0.3368, 0.3246)
     max_harmonic = 52
-    initial_gain = 0.043380  # holds the level it had before the rebuild
+    # AND IT WAS SWELLING. attack_time was None, so the onset ramp came from
+    # chiff_max_valve_time at 10 ms and the clap took 23.6 ms to reach its own
+    # peak -- a swell, not a slap. Ben: "side stick has too much of an
+    # envelope? They both do." Pinned at 2 ms it peaks at 5.1.
+    attack_time = 0.002
+    initial_gain = 0.069836
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
 
@@ -4505,6 +4510,12 @@ class SideStickProperties(WoodPercussionProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     chiff_volume = 4.0
+    # A CLICK HAS NO ENVELOPE TO SPEAK OF. attack_time was None, which makes
+    # blockrender derive the onset ramp from chiff_max_valve_time -- the trap
+    # that had every crash sounding lightly touched. Here that is 4 ms and so
+    # the attack was already sharp, but it is pinned rather than inherited so a
+    # later change to the chiff cannot slow the click down.
+    attack_time = 0.0015
     sustain_jitter = 0.30
 
     one_shot = True
@@ -4515,7 +4526,7 @@ class SideStickProperties(WoodPercussionProperties):
     #  wash is what fills between 52 modes so the click has no gaps to ring in)
     chiff_width = 0.012
     strike_noise_slope = 0.8
-    initial_gain = 0.106397
+    initial_gain = 0.252227
 
 class GuiroProperties(WoodPercussionProperties):
     """The guiro's body: struck wood, but the NOISIEST wood in the kit.

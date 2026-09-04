@@ -211,7 +211,7 @@ def percussion_for_note(note):
 # These are the instruments' own ring times, and the engines set each drum's
 # decay from them at note construction.
 PERCUSSION_RING = {
-    35: 0.40, 36: 0.35, 37: 0.15, 38: 0.35, 39: 0.30, 40: 0.30, 41: 0.60,
+    35: 0.40, 36: 0.35, 37: 0.055, 38: 0.35, 39: 0.100, 40: 0.30, 41: 0.60,
     43: 0.60, 45: 0.55, 47: 0.50, 48: 0.45,
     # ONE PLATE, THREE DAMPINGS. These are no longer three separately measured
     # decays: the hats share a mode set and a loss curve, and the ring is the
