@@ -6622,11 +6622,52 @@ class WhistleProperties(OcarinaProperties):
     tonal_dampening = 3.4
     sustain_jitter = 3.0           # a whistle is mostly air
     chiff_volume = 6.0
-    strike_wobble_hz = 24.0        # the pea
-    strike_wobble_gain = 0.45
     one_shot = False
     initial_gain = OcarinaProperties.initial_gain
 
+    # THE PEA CHOPS THE JET, IT DOES NOT WOBBLE THE PITCH. Ben: "Isn't the fipple
+    # in the small chamber just a low frequency with a lot of harmonics over the
+    # whistle tone?" -- which is the mechanism. A ball circulating in the chamber
+    # interrupts the airflow abruptly and repeatedly, and an abrupt periodic
+    # interruption at 25 Hz is a low fundamental with a long harmonic series.
+    # Multiplied against the tone it puts a COMB of sidebands either side of the
+    # resonance at 25, 50, 75, 100 Hz and on, which is most of why a whistle
+    # sounds shrill and rough rather than like a very high recorder.
+    #
+    # strike_wobble_hz, which this used, adds ONE detuned voice -- a single
+    # sideband pair, i.e. a vibrato. That is the wrong shape: it modulates
+    # smoothly where a pea interrupts. unison_detune takes as many offsets as it
+    # is given, so the comb is written out directly, with the partner gains
+    # falling as 1/k the way a pulse train's harmonics do.
+    # A generator expression in a class body cannot see class-level names, so the
+    # comb is written out rather than built from PEA_HZ in a comprehension.
+    # 25 Hz and its first seven harmonics, either side of every partial.
+    unison_detune = (25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 175.0)
+    unison_gain = 0.55
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        """The pea's comb: partners at +-k*25 Hz with gains falling as 1/k,
+        which is the harmonic series of a pulse train."""
+        out = []
+        for k, offset in enumerate(self.unison_detune, start=1):
+            g = self.unison_gain / float(k)
+            out.append((g, offset, 0.0, harmonic_decay, 0.0))
+            out.append((g, -offset, 0.0, harmonic_decay, 0.0))
+        return out
+
+    # AND IT ARRIVES FROM BELOW. Ben: "And the low frequency grows quickly to the
+    # sustained pitch?" -- yes, and it is the most recognisable thing about a
+    # blown whistle. The chamber will not hold its note until the jet is fully
+    # established, so the tone starts flat and sweeps up into place in a few tens
+    # of milliseconds: the "wheep" at the front of every whistle blast.
+    #
+    # tension_bend is the mechanism, running backwards. On a drum it is positive
+    # -- a head struck hard is stretched, so the note starts SHARP and settles --
+    # and the kernel computes f*(1 + tbav*e^(-t/tau)). A negative value starts it
+    # flat and lets it rise, which is what a pressure-driven resonator does.
+    tension_bend = -0.045          # ~80 cents flat at the attack, at full blow
+    tension_settle_time = 0.045    # and up into place inside 50 ms
+    tension_settle_cutoff = 3.0
 
 class BlownBottleProperties(VesselFluteProperties):
     """GM 76. The same Helmholtz body, driven by a MUCH WORSE EDGE.

@@ -273,8 +273,8 @@ PERCUSSION_LEVEL = {
     54: 1.200, # tambourine +1.6 dB
     69: 28.013, # cabasa +28.9 dB
     70: 32.612, # maracas +30.3 dB
-    71: 94.992, # whistle short +12.3 dB
-    72: 44.024, # whistle long +5.7 dB
+    71: 79.552, # whistle short +12.3 dB
+    72: 34.574, # whistle long +5.7 dB
     # A surdo is the biggest drum in a samba and carries the whole groove, but
     # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
     # UNDER the kick. Open surdo now sits a little above it, muted a little
