@@ -6551,6 +6551,45 @@ class OcarinaProperties(VesselFluteProperties):
     chiff_cycle = 0.2
 
 
+class WhistleProperties(OcarinaProperties):
+    """GM 71 and 72: the samba/referee whistle.
+
+    THESE WERE DRUMS. Both sat on NoiseDrumProperties with a tuned base of 900
+    and 880 Hz -- a struck membrane standing in for a blown resonator, which is
+    the wrong family entirely, not a wrong number. A whistle is a fipple over a
+    small chamber: air is blown across an edge and the chamber resonates, which
+    is an ocarina with a mouthpiece, so it inherits one.
+
+    A whistle is HIGH and NEARLY PURE. It sits around 2.4 kHz with very little
+    above its fundamental -- the ocarina's tonal_dampening of 3.4 is already the
+    right shape -- and it is very breathy, because the player is forcing a lot of
+    air through a small hole. sustain_jitter carries that, higher than the
+    ocarina's since a whistle is nothing but breath and one resonance.
+
+    AND IT WARBLES, because of the pea. A cork or plastic ball rattling around
+    the chamber interrupts the jet a few dozen times a second, which is the sound
+    that makes a whistle a whistle rather than a high recorder. strike_wobble_hz
+    beats one detuned voice per partial against the original, which is the
+    closest mechanism this engine has; at 24 Hz it reads as the pea.
+
+    ONE WHISTLE, TWO BLASTS: GM 71 is a short toot and 72 a long one, so they
+    share this class and differ only in PERCUSSION_RING -- the pattern the hats,
+    the ride bell and the triangle all follow.
+
+    NO REFERENCE. Iowa has no whistle, so the frequency, the breath and the pea
+    rate are physics and judgement. What is not judgement is that it belongs in
+    the pipe family rather than the drum family.
+    """
+    tonal_dampening = 3.4
+    max_harmonic = 8
+    sustain_jitter = 0.6           # nothing but breath and one resonance
+    chiff_volume = 1.6
+    strike_wobble_hz = 24.0        # the pea
+    strike_wobble_gain = 0.45
+    one_shot = False
+    initial_gain = OcarinaProperties.initial_gain
+
+
 class BlownBottleProperties(VesselFluteProperties):
     """GM 76. The same Helmholtz body, driven by a MUCH WORSE EDGE.
 

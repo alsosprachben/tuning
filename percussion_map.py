@@ -30,6 +30,7 @@ from tonelib import (
     CrashRideProperties,
     SideStickProperties,
     WoodPercussionProperties,
+    WhistleProperties,
     ClavesProperties,
     WoodBlockHiProperties,
     WoodBlockLoProperties,
@@ -100,8 +101,8 @@ PERCUSSION = {
     68: ("Low Agogo",          T, 560.0),
     69: ("Cabasa",             N, 640.0),
     70: ("Maracas",            N, 680.0),
-    71: ("Short Whistle",      N, 900.0),
-    72: ("Long Whistle",       N, 880.0),
+    71: ("Short Whistle",      WhistleProperties, 2400.0),
+    72: ("Long Whistle",       WhistleProperties, 2400.0),
     # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560 -- and it is a
     # STRUCK WOODEN BODY, not noise. Spectral flatness on one ridge is 0.0044
     # (away) and 0.0056 (toward), against a clave's 0.0002 and a woodblock's
@@ -220,10 +221,10 @@ PERCUSSION_RING = {
     # MEASURED rings, fitted with each plate's mode set against its recording.
     49: 0.61, 50: 0.40, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
-    53: 0.34, 54: 0.50, 55: 0.41,
+    53: 0.34, 54: 0.180, 55: 0.41,
     56: 0.40, 57: 1.69, 58: 0.50, 59: 0.48, 60: 0.30, 61: 0.35, 62: 0.20,
-    63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.25,
-    70: 0.25, 71: 0.60, 72: 0.80,
+    63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.010,
+    70: 0.012, 71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
     # fairly closed. Measured on the Iowa guiro, the envelope after the last
     # ridge falls 10 dB in 3-5 ms and 20 dB in 15-21 ms, against a woodblock's
@@ -264,6 +265,16 @@ COMPOSITE_SLOWDOWN = 1.85    # measured across the kit; see _with_ring
 # before the hats are touched.
 PERCUSSION_LEVEL = {
     73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
+    # ...and the rattles for the same reason: a shake is now a burst of impacts,
+    # each ringing 10-12 ms instead of one 250 ms hit, so the energy is spread
+    # across dozens of them. The whistles moved from the drum family to the pipe
+    # family, which changes their level too; each is trimmed back to exactly
+    # where it sat before, so this commit changes what they ARE and not the mix.
+    54: 1.200, # tambourine +1.6 dB
+    69: 28.013, # cabasa +28.9 dB
+    70: 32.612, # maracas +30.3 dB
+    71: 4.141, # whistle short +12.3 dB
+    72: 1.920, # whistle long +5.7 dB
     # A surdo is the biggest drum in a samba and carries the whole groove, but
     # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
     # UNDER the kick. Open surdo now sits a little above it, muted a little
@@ -396,6 +407,31 @@ PERCUSSION_RASP = {
 }
 
 
+# SHAKEN instruments. A rattle is not one hit either, and it is not a scrape:
+# it is a BURST OF MANY SMALL IMPACTS -- seeds against a gourd, ball chain against
+# a cylinder, jingles against their pins -- densest just after the shake and
+# thinning as the contents settle. Modelled as one broadband hit with a decay it
+# is a "chh" with a pitch, which is what these three were: NoiseDrumProperties on
+# a tuned base of 600 to 680 Hz. A rattle has no pitch at all.
+#
+# The difference from a guiro is that a guiro's ridges are CARVED, so its train
+# is regular and speeds up as the hand does. A rattle's contents are loose: the
+# gaps grow as the burst dies, and the impacts land where they land.
+#
+# (span seconds, impacts). PERCUSSION_RING then gives the ring of ONE impact,
+# exactly as it gives the ring of one guiro ridge.
+#
+# NO REFERENCE. Iowa has no rattle of any kind, so the counts and spans below are
+# physics and judgement, not measurement -- the same footing as the membranes.
+# What is not judgement is the STRUCTURE: a burst of impacts rather than a single
+# pitched stroke, which is the part that was wrong.
+PERCUSSION_RATTLE = {
+    54: (0.24, 14),      # tambourine: a dozen or so jingle pairs, each ringing on
+    69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
+    70: (0.10, 18),      # maracas: seeds in a gourd, a short dry burst
+}
+
+
 def rasp_strokes(note, on, off, rng=None):
     """[(on, off, level)] for one scraped note, or None if it is not scraped.
 
@@ -423,6 +459,34 @@ def rasp_strokes(note, on, off, rng=None):
     at a regular spacing and only the hand varies, so the residual timing jitter
     stays small -- at +-9% it read as sloppy rather than human.
     """
+    rattle = PERCUSSION_RATTLE.get(note)
+    if rattle is not None:
+        span, n = rattle
+        # The RATE is the instrument and the duration is the gesture -- the same
+        # argument the guiro table makes about carved ridges. A longer shake is
+        # more impacts at the same rate, not the same few spread thinner.
+        if off > on:
+            want = max(span, (off - on) * 0.5)
+            n = max(2, min(400, int(round(n * want / span))))
+            span = want
+        if n < 2:
+            return [(on, on + span, 1.0)]
+        # Gaps OPEN as the burst dies -- the contents are loose and settling,
+        # which is the opposite of the guiro's carved ridges closing up as the
+        # hand accelerates. Level falls with them.
+        w = [1.0 + 1.9 * (k / float(n - 1)) for k in range(n)]
+        scale = span / sum(w)
+        out = []
+        t = on
+        for k in range(n):
+            frac = k / float(n - 1)
+            jitter = ((k * 2654435761) % 1000 / 1000.0 - 0.5) * 0.55
+            level = (1.0 - 0.75 * frac) ** 1.4
+            step = w[k] * scale
+            out.append((max(on, t + step * jitter), t + step * 0.9, level))
+            t += step
+        return out
+
     spec = PERCUSSION_RASP.get(note)
     if spec is None:
         return None
