@@ -38,6 +38,8 @@ from tonelib import (
     CastanetsProperties,
     TriangleProperties,
     CrotaleProperties,
+    AgogoProperties,
+    CowbellProperties,
     ClosedHiHatProperties,
     PedalHiHatProperties,
     OpenHiHatProperties,
@@ -83,7 +85,7 @@ PERCUSSION = {
     53: ("Ride Bell",         R, 147.5),
     54: ("Tambourine",         N, 600.0),
     55: ("Splash Cymbal",      SplashCymbalProperties, 143.3),
-    56: ("Cowbell",            T, 540.0),
+    56: ("Cowbell",            CowbellProperties, 540.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
     58: ("Vibraslap",          N, 300.0),
     # GM wants two RIDES here, not two articulations of one: 51 and 59 are
@@ -98,8 +100,8 @@ PERCUSSION = {
     64: ("Low Conga",          M, 160.0),
     65: ("High Timbale",       M, 270.0),
     66: ("Low Timbale",        M, 220.0),
-    67: ("High Agogo",         T, 700.0),
-    68: ("Low Agogo",          T, 560.0),
+    67: ("High Agogo",         AgogoProperties, 700.0),
+    68: ("Low Agogo",          AgogoProperties, 560.0),
     69: ("Cabasa",             N, 640.0),
     70: ("Maracas",            N, 680.0),
     # ROLAND NAMES THE PITCH, not just the length. GM calls 71 and 72 "Short

@@ -3879,10 +3879,38 @@ class CrotaleProperties(TunedBarProperties):
     percussion note 84 (Belltree) does -- a belltree is a stack of small tuned
     discs, the same object in a different mounting -- and it was unmapped.
     """
+    # MEASURED at last, on twenty-five Iowa crotale takes that had been sitting
+    # unused. This was a stretched harmonic series with three partials.
+    #
+    # Twenty-five pitches is what makes it checkable: a real mode set is the same
+    # RATIOS at every pitch, so a ratio that recurs across the set is the
+    # instrument and one that does not is that disc. Anchored on the SOUNDING
+    # partial rather than the loudest, because on most of these the loudest is
+    # the octave. Clustered at 40 cents, over the sixteen takes in the octave
+    # that resolves well (the 7th-octave ones are short and near Nyquist):
+    #
+    #     ratio   in takes   spread   gain
+    #     1.000     16/16      0.0     0.437
+    #     2.006     14/16      2.0     0.131
+    #     2.058      8/16      2.1     0.832   <- the loudest partial
+    #     2.132      9/16      2.7     0.419
+    #     3.061      9/16      1.7     0.017
+    #     3.522      7/16      1.9     0.287
+    #     4.091      9/16      2.1     0.002
+    #
+    # THREE PARTIALS CROWD THE OCTAVE -- 2.006, 2.058 and 2.132 -- and the
+    # strongest of all is 2.058 rather than the fundamental. That cluster beating
+    # against itself is what a crotale sounds like, and it is why the ear hears a
+    # shimmer over the note rather than a clean bell. Spreads of about 2 per cent
+    # across sixteen different discs is the measurement agreeing with itself.
+    mode_ratios = (1.0000, 2.0059, 2.0578, 2.1324, 3.0606, 3.5218, 4.0912)
+    mode_gains  = (0.4372, 0.1309, 0.8323, 0.4194, 0.0168, 0.2867, 0.0100)
+    max_harmonic = 7
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
     bar_modes = ((1, 1.0), (2, 0.72), (3, 0.55))
-    max_harmonic = 3
     # bends modes 2 and 3 to the plate's 2.08 and 3.41 rather than 2 and 3
-    inharmonicity_coefficient = 0.0316
     inharmonicity_dynamic = False
     # 12.4 s at C6 down to 2.5 s at C8: halves every 10.3 semitones
     decay_register_slope = 1.17
@@ -4218,6 +4246,62 @@ class MetalPercussionProperties(PercussionProperties):
     decay_db = 4.0
     harmonic_decay_db = 1.5
     harmonic_decay_dampening = 0.1
+
+
+class CowbellProperties(MetalPercussionProperties):
+    """GM 56. A folded steel plate, not a bell.
+
+    It was a stretched harmonic series -- mode 2 at 2.05x, mode 3 at 3.1x --
+    which is a pitched note with a bit of edge on it. A cowbell is a sheet bent
+    into a box and welded: its walls are plates, its modes are plate modes, and
+    they have no musical relationship to each other. That clash is the whole
+    character -- it is why a cowbell cuts through a mix at any pitch and why two
+    of them a semitone apart still sound like "a cowbell" rather than two notes.
+
+    Two strong low partials about a fifth apart, then a clangy inharmonic spray
+    thinning upward.
+
+    JUDGEMENT, NOT MEASUREMENT. Iowa has no cowbell, and unlike the agogos there
+    is no near relative in the collection to borrow from -- a crotale and a
+    cowbell are not the same body in any useful sense. What IS defensible is
+    that the ratios are inharmonic: a folded plate cannot produce a harmonic
+    series, whatever the exact numbers turn out to be.
+    """
+    mode_ratios = (1.0000, 1.4820, 2.1470, 2.6180, 3.3110, 3.9400, 4.6170, 5.4020,
+                   6.1150, 7.0330, 8.2160, 9.4700)
+    mode_gains  = (1.0000, 0.7600, 0.4800, 0.3600, 0.2500, 0.2000, 0.1500, 0.1200,
+                   0.1000, 0.0800, 0.0650, 0.0500)
+    max_harmonic = 12
+    initial_gain = 0.392225  # holds the level it had before the rebuild
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+
+class AgogoProperties(MetalPercussionProperties):
+    """GM 67 and 68: the two bells of an agogo.
+
+    They were a stretched harmonic series -- mode 2 at 2.05x and mode 3 at 3.1x,
+    which is very nearly harmonic and so very nearly a pitched note. A small
+    struck bronze bell is not that: its partials crowd the octave and beat.
+
+    NO AGOGO IN THE COLLECTION, so this borrows the CROTALE's measured set --
+    the nearest measured relative, small struck bronze with the same octave
+    cluster, twenty-five takes behind it. It is a transplant and not a
+    measurement of an agogo: a crotale is a thick flat disc where an agogo bell
+    is a cone, and their modes will not be identical. It is a far better
+    starting point than a harmonic series, and it is labelled for what it is.
+
+    ONE INSTRUMENT, TWO BELLS: 67 and 68 are the high and low bells of the same
+    handle, so they share this class and differ in base frequency and ring --
+    the pattern the hats, the ride bell, the triangle and the whistles follow.
+    The interval between them is left where it was: nothing measured it.
+    """
+    mode_ratios = (1.0000, 2.0059, 2.0578, 2.1324, 3.0606, 3.5218, 4.0912)
+    mode_gains  = (0.4372, 0.1309, 0.8323, 0.4194, 0.0168, 0.2867, 0.0100)
+    max_harmonic = 7
+    initial_gain = 0.759108  # holds the level it had before the rebuild
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
 
 
 class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
