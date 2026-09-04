@@ -216,7 +216,7 @@ PERCUSSION_RING = {
     # rendered 49 dB apart where the recordings sit within 6.8, which is what
     # Ben heard as "the hi-hat tonality seems to differ too much between the 3
     # modes."
-    42: 1.38, 44: 2.65, 46: 0.71,
+    42: 1.38, 44: 2.11, 46: 0.23,
     # MEASURED rings, fitted with each plate's mode set against its recording.
     49: 0.61, 50: 0.40, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
