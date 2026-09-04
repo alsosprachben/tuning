@@ -4289,6 +4289,143 @@ class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
 
 
 
+class ClavesProperties(WoodPercussionProperties):
+    """GM 75. MEASURED: Iowa hp_clave1.mf.
+
+    A clave is a solid wooden cylinder and rings as a BAR, not as a harmonic
+    series -- 1 : 1.08 : 1.14 : 1.23 : 1.35 : 1.66 : 1.78 : 2.61 : 2.95 : 8.84,
+    with the loudest mode the seventh at 1612 Hz rather than the lowest. That
+    cluster of near-unison low modes is what gives a clave its crack: they beat
+    against each other for the few milliseconds they last.
+
+    WEAK EVIDENCE, and marked as such. Iowa has three clave takes and their mode
+    sets do NOT reproduce -- f0 comes out 905, 635 and 728 Hz with different
+    ratios -- so they are three different pairs rather than three strikes of one,
+    and there is nothing to cross-check against. This is take 1 alone.
+    """
+    mode_ratios = (1.0000, 1.1647, 1.2954, 1.5972, 1.8736, 2.0788, 2.2994, 2.4965,
+                   2.6695, 2.7878, 3.0396, 3.1742, 3.3511, 3.5265, 3.7414, 3.8866,
+                   4.3605, 4.5330, 5.2271, 5.7371, 6.4959, 7.4619, 8.5071, 9.9413,
+                   11.3101, 12.9919, 14.9237, 17.1429, 19.6237, 22.4635, 25.7143)
+    mode_gains = (0.01401, 0.01295, 0.24615, 0.09827, 0.01576, 0.01367, 1.00000, 0.05383,
+                   0.02522, 0.02902, 0.02165, 0.02033, 0.03318, 0.01823, 0.02411, 0.02788,
+                   0.04665, 0.01894, 0.02059, 0.05080, 0.01358, 0.01390, 0.02288, 0.06846,
+                   0.03515, 0.03829, 0.03876, 0.04046, 0.09581, 0.09151, 0.11902)
+    max_harmonic = 31
+    initial_gain = 0.635204  # holds the level this voice had before it was measured
+    tonal_dampening = 0.15
+    hf_corner_hz = 45000.0
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+
+class WoodBlockHiProperties(WoodPercussionProperties):
+    """GM 76. MEASURED: Iowa hp_5.5wb.mf, a 5.5 inch block.
+
+    A woodblock is a HOLLOW BOX, so unlike the clave it is dominated by one
+    resonance -- the cavity -- with a couple of weak body modes above it. Four
+    modes survive at all once anything under 2% of the peak is dropped, and the
+    top two are 0.11 and 0.03. That sparseness is the instrument, not a failure
+    to measure: it is why a woodblock has a definite pitch where a clave has a
+    crack.
+
+    It is also the SHORTEST sound in the collection -- 40 dB down in 26 ms.
+    """
+    mode_ratios = (1.0000, 1.1855, 1.3807, 1.6477, 1.8728, 2.1811, 2.5055, 2.8780,
+                   3.3060, 3.7976, 4.3623, 5.0109, 5.6844, 6.5303, 7.5951, 9.0753,
+                   9.6018, 9.9090, 10.1859, 12.4927, 14.3410, 16.9031, 17.9985, 19.3386,
+                   19.8371, 21.6776, 22.9599, 24.5616, 25.5695)
+    mode_gains = (0.00012, 0.00000, 0.00000, 0.00000, 0.00000, 1.00000, 0.38541, 0.02482,
+                   0.01355, 0.00885, 0.01412, 0.05924, 0.00995, 0.00614, 0.00934, 0.00002,
+                   0.00000, 0.00000, 0.00001, 0.00001, 0.00001, 0.00000, 0.00000, 0.00000,
+                   0.00000, 0.00000, 0.00000, 0.00000, 0.00000)
+    max_harmonic = 29
+    initial_gain = 2.881338  # holds the level this voice had before it was measured
+    tonal_dampening = 0.15
+    hf_corner_hz = 45000.0
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+
+class WoodBlockLoProperties(WoodBlockHiProperties):
+    """GM 77. MEASURED: Iowa hp_10wb.mf, a 10 inch block -- a different
+    instrument from the 5.5, not the same one played lower, so it gets its own
+    set. Two modes: the cavity at 778 Hz and one body mode 3.3 octaves up at 2%.
+    """
+    mode_ratios = (1.0000, 1.2206, 1.4216, 1.5415, 1.6557, 1.7790, 1.9996, 2.0835,
+                   2.2150, 2.4113, 2.6830, 2.8620, 3.3010, 3.4018, 3.7452, 4.0190,
+                   4.4909, 4.7413, 4.9563, 5.1804, 5.3785, 5.5774, 5.7933, 6.5065)
+    mode_gains = (1.00000, 0.01062, 0.00381, 0.00093, 0.00125, 0.00064, 0.01318, 0.03928,
+                   0.00179, 0.03061, 0.00097, 0.00929, 0.07052, 0.02087, 0.00180, 0.00000,
+                   0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000)
+    max_harmonic = 24
+    initial_gain = 0.550465  # holds the level this voice had before it was measured
+    tonal_dampening = 0.15
+    hf_corner_hz = 9000.0
+
+
+class CastanetsProperties(WoodPercussionProperties):
+    """GM 85. MEASURED: Iowa hp_castanet2.mf.
+
+    Two shells clapping, and the spectrum says so: twelve modes packed between
+    1.0 and 2.0 with the loudest at 4713 Hz, nearly two octaves above the lowest.
+    The centroid is 6110 Hz -- brighter than any of the wooden voices -- which is
+    the clack of shell on shell rather than a body ringing.
+
+    Two takes, not reproducing, so this is take 2 alone.
+    """
+    mode_ratios = (1.0000, 1.0800, 1.3237, 1.4494, 1.6791, 1.9451, 2.2534, 2.6104,
+                   3.0403, 3.5409, 3.9448, 4.3237, 4.5646, 5.1066, 5.5107, 5.7227,
+                   6.6901, 7.3810, 8.4786, 9.7393, 11.1875, 12.8511, 13.9159, 15.1619,
+                   17.2396, 18.0088, 19.0251, 19.7001, 22.3751, 25.7022, 30.4768, 31.4529,
+                   33.7152, 41.1656, 43.4768, 51.2261, 58.6393, 67.1252)
+    mode_gains = (0.00303, 0.00165, 0.00265, 0.00072, 0.00246, 0.00192, 0.00186, 0.00154,
+                   0.00317, 0.00502, 0.00561, 0.00588, 0.00854, 0.00907, 0.00932, 0.06393,
+                   0.06485, 0.01219, 0.01042, 0.00812, 0.01035, 0.03273, 0.05509, 0.04268,
+                   0.18240, 0.09581, 0.15768, 0.05541, 0.04480, 0.11795, 0.25493, 0.21793,
+                   0.24209, 0.17305, 0.16562, 1.00000, 0.57068, 0.70579)
+    max_harmonic = 38
+    initial_gain = 2.704684  # holds the level this voice had before it was measured
+    tonal_dampening = 0.15
+    hf_corner_hz = 45000.0
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+
+class TriangleProperties(MetalPercussionProperties):
+    """GM 80 and 81. MEASURED: Iowa hp_8triangle.mf.
+
+    A bent steel rod, and the best-measured of the hand percussion: sixteen modes
+    from 1519 Hz up, the loudest at 5585, a centroid of 6417 Hz and a ring of
+    4.36 s to -40 dB. Nothing about that is a harmonic series, which is what this
+    voice carried -- a stretched one at inharmonicity 0.026.
+
+    A triangle has no strong low mode at all. Its lowest is 16% of the loudest,
+    and the ear hears the cluster around 5-7 kHz, which is why a triangle cuts
+    through an orchestra at any dynamic and why it has no definite pitch.
+
+    ONE BAR, TWO ARTICULATIONS -- the pattern the hi-hats and the ride bell
+    already follow. GM 80 is the triangle held (muted) and 81 is it left to ring;
+    same modes, and PERCUSSION_RING carries the difference.
+    """
+    mode_ratios = (1.0000, 1.1457, 1.2369, 1.3343, 1.5540, 1.8634, 1.9215, 2.1352,
+                   2.4214, 2.7814, 3.1950, 3.4804, 3.9433, 4.2158, 4.4908, 4.8427,
+                   5.6643, 5.9054, 6.1589, 7.3402, 8.0312, 9.6922, 10.0359, 10.9305,
+                   11.6265, 12.7800, 14.6803, 15.6988, 17.5721, 18.2799, 20.7863, 22.0972,
+                   25.2949)
+    mode_gains = (0.00130, 0.00021, 0.00202, 0.00022, 0.00027, 0.00740, 0.00280, 0.01500,
+                   0.00021, 0.00022, 0.00020, 0.00389, 0.00871, 0.00016, 0.02641, 0.00359,
+                   0.14419, 0.06561, 0.02209, 0.00144, 0.17804, 0.29622, 0.12492, 0.08790,
+                   0.19017, 0.02428, 0.00636, 0.02722, 1.00000, 0.62983, 0.45883, 0.25814,
+                   0.26973)
+    max_harmonic = 33
+    initial_gain = 1.847336  # holds the level this voice had before it was measured
+    tonal_dampening = 0.15
+    hf_corner_hz = 9000.0
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+
 class SideStickProperties(WoodPercussionProperties):
     """GM 37, side stick: the shaft of the stick on the RIM, no wires at all.
 

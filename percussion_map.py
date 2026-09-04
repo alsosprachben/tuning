@@ -30,6 +30,11 @@ from tonelib import (
     CrashRideProperties,
     SideStickProperties,
     WoodPercussionProperties,
+    ClavesProperties,
+    WoodBlockHiProperties,
+    WoodBlockLoProperties,
+    CastanetsProperties,
+    TriangleProperties,
     CrotaleProperties,
     ClosedHiHatProperties,
     PedalHiHatProperties,
@@ -112,22 +117,22 @@ PERCUSSION = {
     74: ("Long Guiro",         G, 1099.0),
     # MEASURED (Iowa hand percussion, mf). Claves ring at 908, 993 and 1216 Hz
     # across the three pairs; 990 is the middle one.
-    75: ("Claves",             W, 990.0),
+    75: ("Claves",             ClavesProperties, 700.0),
     # The four Iowa woodblocks give f1 x size = 7700 Hz-inches almost exactly
     # (10" 778, 8.5" 853, 6.5" 1234, 5.5" 1406), so HI is the small block and
     # LOW the large one. They were 760 and 620, which is the large block twice.
-    76: ("Hi Wood Block",      W, 1400.0),
-    77: ("Low Wood Block",     W, 780.0),
+    76: ("Hi Wood Block",      WoodBlockHiProperties, 687.7),
+    77: ("Low Wood Block",     WoodBlockLoProperties, 777.9),
     78: ("Mute Cuica",         M, 340.0),
     79: ("Open Cuica",         M, 300.0),
     # MEASURED: the Iowa 6" triangle sounds 1927 Hz and the 8" 1497 -- a
     # triangle is a bent BAR and rings far higher than 1000. Its upper modes
     # come out at 2.0, 3.2, 4.2 and 5.3 x f1, dense and inharmonic as a bent bar
     # should be.
-    80: ("Mute Triangle",      T, 1900.0),
-    81: ("Open Triangle",      T, 1500.0),
+    80: ("Mute Triangle",      TriangleProperties, 711.6),
+    81: ("Open Triangle",      TriangleProperties, 711.6),
     # GM 85 was simply missing. Iowa's two castanet pairs sound 1247 and 1323 Hz.
-    85: ("Castanets",          W, 1290.0),
+    85: ("Castanets",          CastanetsProperties, 268.2),
     # ...and so was 84. A belltree is a stack of small tuned DISCS, which is a
     # crotale in a different mounting -- MEASURED across Iowa's chromatic set,
     # see CrotaleProperties. 1055 Hz is its C6, the bottom of that set.
@@ -232,16 +237,16 @@ PERCUSSION_RING = {
     #
     # (0.012 and below overflow db_ratio in tonelib -- 60/ring becomes a decay
     # rate that 10**(db/10) cannot represent. 0.020 is comfortably clear of it.)
-    73: 0.020, 74: 0.020, 75: 0.20, 76: 0.15,
-    77: 0.18, 78: 0.30, 79: 0.50,
+    73: 0.020, 74: 0.020, 75: 0.184, 76: 0.026,
+    77: 0.115, 78: 0.30, 79: 0.50,
     # A TRIANGLE RINGS FOR A VERY LONG TIME, and 0.60/1.50 was not close.
     # Measured T60 on the Iowa triangles: 12.8 s on the 8" and 30.0 s on the 6".
     # Held to 6.0 and 2.0 rather than the measured figures: the open triangle is
     # the longest ring in the kit by a wide margin either way, and a 30 s tail
     # on a note that repeats is a slab full of partials that never release.
-    80: 2.00, 81: 6.00,
+    80: 2.10, 81: 4.357,
     # castanets are a dry clack; a belltree rings like the crotale it is
-    85: 0.25, 84: 8.00,
+    85: 0.163, 84: 8.00,
     # a surdo rings long open and is stopped dead by the hand
     86: 0.25, 87: 0.90,
 }
