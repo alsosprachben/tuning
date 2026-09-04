@@ -6594,11 +6594,18 @@ class WhistleProperties(OcarinaProperties):
     # Everything else is there to carry air. Measured as the share of energy
     # OUTSIDE the two resonance bands:
     #
-    #     ocarina-like, as first shipped     25 per cent air
-    #     weak modes 0.12, chiff 6           62
-    #     weak modes 0.40, chiff 12          93   (the pitch is swamped)
+    #     weak 0.120   short 27 per cent tonal, long 37   -- barely pitched
+    #     weak 0.080         44                      55
+    #     weak 0.050         64                      72
+    #     weak 0.035         77                      82   -- the air is gone
     #
-    # 62 -- clearly noise-driven, with the resonance still defining a note.
+    # Ben, on 0.120: "Just a little bit more tonality. The high one is still
+    # barely tonal. The lower one is a little more, but not enough." Which is
+    # what the table says, including the asymmetry: the high whistle is the
+    # airier of the two by about nine points at any setting, because its
+    # resonance sits higher up the same fixed comb of weak modes.
+    #
+    # 0.050: clearly pitched, and still half air.
     mode_ratios = (1.0000, 1.0588, 1.1210, 1.1869, 1.2567, 1.3305, 1.4087, 1.4916,
                    1.5792, 1.6721, 1.7703, 1.8744, 1.9846, 2.1012, 2.2247, 2.3555,
                    2.4940, 2.6406, 2.7958, 2.9601, 3.1341, 3.3183, 3.5134, 3.7199,
@@ -6607,14 +6614,14 @@ class WhistleProperties(OcarinaProperties):
                    9.8225, 10.3999, 11.0112, 11.6584, 12.3437, 13.0692, 13.8374, 14.6508,
                    15.5120, 16.4238, 17.3891, 18.4113, 19.4935, 20.6393, 21.8525, 23.1369,
                    24.4969, 25.9368, 27.4614, 29.0756, 30.7846, 32.5941, 34.5100, 36.5385)
-    mode_gains  = (0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200,
-                   0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200,
-                   0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200,
-                   0.1200, 0.1200, 0.1200, 1.0000, 0.1200, 0.1200, 0.1200, 0.1200,
-                   0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.2200,
-                   0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200,
-                   0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200,
-                   0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200, 0.1200)
+    mode_gains = (0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
+                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
+                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
+                   0.0500, 0.0500, 0.0500, 1.0000, 0.0500, 0.0500, 0.0500, 0.0500,
+                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.2200,
+                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
+                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
+                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500)
     max_harmonic = 64
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
