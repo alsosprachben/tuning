@@ -101,8 +101,8 @@ PERCUSSION = {
     68: ("Low Agogo",          T, 560.0),
     69: ("Cabasa",             N, 640.0),
     70: ("Maracas",            N, 680.0),
-    71: ("Short Whistle",      WhistleProperties, 2400.0),
-    72: ("Long Whistle",       WhistleProperties, 2400.0),
+    71: ("Short Whistle",      WhistleProperties, 520.0),
+    72: ("Long Whistle",       WhistleProperties, 520.0),
     # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560 -- and it is a
     # STRUCK WOODEN BODY, not noise. Spectral flatness on one ridge is 0.0044
     # (away) and 0.0056 (toward), against a clave's 0.0002 and a woodblock's
@@ -222,7 +222,7 @@ PERCUSSION_RING = {
     49: 0.61, 50: 0.40, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 0.34, 54: 0.180, 55: 0.41,
-    56: 0.40, 57: 1.69, 58: 0.50, 59: 0.48, 60: 0.30, 61: 0.35, 62: 0.20,
+    56: 0.40, 57: 1.69, 58: 0.020, 59: 0.48, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.010,
     70: 0.012, 71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
@@ -273,8 +273,8 @@ PERCUSSION_LEVEL = {
     54: 1.200, # tambourine +1.6 dB
     69: 28.013, # cabasa +28.9 dB
     70: 32.612, # maracas +30.3 dB
-    71: 4.141, # whistle short +12.3 dB
-    72: 1.920, # whistle long +5.7 dB
+    71: 94.992, # whistle short +12.3 dB
+    72: 44.024, # whistle long +5.7 dB
     # A surdo is the biggest drum in a samba and carries the whole groove, but
     # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
     # UNDER the kick. Open surdo now sits a little above it, muted a little
@@ -303,6 +303,8 @@ PERCUSSION_LEVEL = {
     # slightly quieter. The class itself is at its ceiling, and the trim is
     # where the headroom note above says this belongs.
     35: 1.783, 36: 1.783,      # bass drum
+    58: 12.496,        # vibraslap +21.9 dB: the burst spreads the energy
+
 }
 _RING_CLASSES = {}
 
@@ -429,6 +431,10 @@ PERCUSSION_RATTLE = {
     54: (0.24, 14),      # tambourine: a dozen or so jingle pairs, each ringing on
     69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
     70: (0.10, 18),      # maracas: seeds in a gourd, a short dry burst
+    # A VIBRASLAP IS ALL RATTLE. A wooden ball on a rod strikes a box of loose
+    # metal pins and they clatter for over a second, thinning as they settle --
+    # the longest and densest burst of the four, and it was a single hit.
+    58: (1.10, 80),      # vibraslap: pins in a resonator box, ~73/s
 }
 
 
