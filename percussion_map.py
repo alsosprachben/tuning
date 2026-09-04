@@ -322,6 +322,7 @@ PERCUSSION_LEVEL = {
     # where the headroom note above says this belongs.
     35: 1.783, 36: 1.783,      # bass drum
     58: 12.496,        # vibraslap +21.9 dB: the burst spreads the energy
+    84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
 
 }
 _RING_CLASSES = {}
@@ -456,6 +457,27 @@ PERCUSSION_RATTLE = {
 }
 
 
+# SWEPT instruments. A bell tree is not struck at all: a rod is drawn across
+# twenty-odd graduated bars and every one of them rings on, so a single note is a
+# GLISSANDO. Roland reads it the same way -- in the GS map note 84 is Belltree,
+# and one hit there is a full gliss of the instrument, not one bar.
+#
+# It differs from a rattle in the one way that matters: a rattle's impacts are
+# all the same pitch and thin out as the contents settle, while a bell tree's
+# climb (or fall) through the bars and every bar keeps sounding. So these strokes
+# carry a PITCH RATIO as well as a time and a level.
+#
+# (span seconds, bars, semitones swept). PERCUSSION_RING then gives the ring of
+# ONE bar, which is seconds -- they are little bells.
+#
+# NO REFERENCE, and one free choice: the sweep runs upward here, low bars to
+# high, which is the commoner notated gesture. Reversing it is the sign of the
+# span. Nothing else about the instrument depends on the direction.
+PERCUSSION_CASCADE = {
+    84: (0.70, 22, 30.0),    # bell tree: 22 bars over 0.7 s, two and a half octaves
+}
+
+
 def rasp_strokes(note, on, off, rng=None):
     """[(on, off, level)] for one scraped note, or None if it is not scraped.
 
@@ -483,6 +505,22 @@ def rasp_strokes(note, on, off, rng=None):
     at a regular spacing and only the hand varies, so the residual timing jitter
     stays small -- at +-9% it read as sloppy rather than human.
     """
+    cascade = PERCUSSION_CASCADE.get(note)
+    if cascade is not None:
+        span, n, semis = cascade
+        if off > on:
+            span = max(span, (off - on) * 0.6)
+        out = []
+        for k in range(n):
+            frac = k / float(n - 1) if n > 1 else 0.0
+            # the hand eases through the sweep rather than running at one rate
+            t = on + span * (frac ** 0.85)
+            jitter = ((k * 2654435761) % 1000 / 1000.0 - 0.5) * 0.35 * (span / max(n, 1))
+            level = 0.55 + 0.45 * (1.0 - abs(frac - 0.45) / 0.55) ** 2
+            ratio = 2.0 ** (semis * frac / 12.0)
+            out.append((max(on, t + jitter), t + span / n, level, ratio))
+        return out
+
     rattle = PERCUSSION_RATTLE.get(note)
     if rattle is not None:
         span, n = rattle

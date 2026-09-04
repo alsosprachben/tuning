@@ -214,12 +214,19 @@ def prepare(path, tuner='hybrid'):
     # see the real strokes.
     expanded = []
     inner_ridge = set()          # ridges after the first, which must not choke each other
+    stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
     for ev in notes:
         ch, note, on, off, vel, rest, pg = ev
         strokes = rasp_strokes(note, on, off) if ch == GM_PERCUSSION_CHANNEL else None
         if strokes is None:
             expanded.append(ev); continue
-        for k, (t0, t1, lvl) in enumerate(strokes):
+        for k, st in enumerate(strokes):
+            t0, t1, lvl = st[0], st[1], st[2]
+            # A swept instrument gives each stroke its own PITCH -- a bell tree's
+            # rod crosses graduated bars. Carried alongside the note list the way
+            # inner_ridge is, so the event tuple keeps its shape.
+            if len(st) > 3 and st[3] != 1.0:
+                stroke_pitch[(note, t0)] = st[3]
             expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
             if k: inner_ridge.add((note, t0))
     notes = expanded
@@ -267,6 +274,7 @@ def prepare(path, tuner='hybrid'):
             continue                      # unmapped drum: the reference drops it
         if drum is not None:
             _, pc, f0, dpan = drum
+            f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
             organ = False; chan_vol = (v7*v11)**2
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
