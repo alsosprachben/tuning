@@ -6639,11 +6639,25 @@ class WhistleProperties(OcarinaProperties):
     # smoothly where a pea interrupts. unison_detune takes as many offsets as it
     # is given, so the comb is written out directly, with the partner gains
     # falling as 1/k the way a pulse train's harmonics do.
-    # A generator expression in a class body cannot see class-level names, so the
-    # comb is written out rather than built from PEA_HZ in a comprehension.
-    # 25 Hz and its first seven harmonics, either side of every partial.
-    unison_detune = (25.0, 50.0, 75.0, 100.0, 125.0, 150.0, 175.0)
-    unison_gain = 0.55
+    # A generator expression in a class body cannot see class-level names, so
+    # the comb is written out. 25 Hz and its first three harmonics.
+    #
+    # DEPTH: THE PEA FLUTTERS THE TONE, IT DOES NOT GATE IT. Ben: "too much
+    # stopping, the tone barely comes through." At gain 0.55 the partners sum
+    # to 2.85x the carrier, so half the energy in the resonance region was
+    # chop rather than tone. Measured as the share within +-8 Hz of the
+    # resonance against the sidebands out to +-200 Hz:
+    #
+    #     gain 0.55   carrier 50 per cent   -- gated
+    #     gain 0.30           76
+    #     gain 0.20           86            -- the tone leads, the pea flutters
+    #     gain 0.15           90
+    #
+    # And seven comb harmonics is a very sharp interruption; four is a softer
+    # one, which is what a ball rolling round a chamber does rather than a
+    # shutter. It also halves the partners, from fourteen per partial to eight.
+    unison_detune = (25.0, 50.0, 75.0, 100.0)
+    unison_gain = 0.20
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """The pea's comb: partners at +-k*25 Hz with gains falling as 1/k,
