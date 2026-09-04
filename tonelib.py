@@ -4426,6 +4426,41 @@ class TriangleProperties(MetalPercussionProperties):
     inharmonicity_dynamic = False
 
 
+class HandClapProperties(NoiseDrumProperties):
+    """GM 39. Two hands colliding: a broadband burst with no pitch in it.
+
+    It shared NoiseDrumProperties with the rattles, on a 260 Hz base, and 16
+    per cent of its energy sat in one narrow band there. A dense hump about
+    1.5 kHz with a floor under it takes that to 2.6 -- below the maracas.
+
+    THE WASH STAYS WHITE, and that is a decision rather than an oversight.
+    Banding it (chiff_bandwidth) pulls the centroid from 5.5 kHz down to 1.0,
+    which is closer to where a clap sounds -- but it concentrates the noise
+    onto the modes and the strongest band goes back up to 7.8 per cent, which
+    is the thing being fixed. A clap is two hands slapping: the noise radiates
+    straight off them, it is not a plate's modes broadened by coupling, so
+    white is the right model and the brightness is the price.
+    """
+    mode_ratios = (1.0000, 1.1276, 1.1972, 1.2708, 1.3486, 1.5205, 1.6144, 1.7137,
+                   1.8187, 2.0503, 2.1769, 2.3109, 2.4527, 2.7646, 2.9355, 3.1164,
+                   3.3076, 3.7279, 3.9585, 4.2025, 4.4606, 5.0267, 5.3378, 5.6670,
+                   6.0153, 6.3837, 7.1977, 7.6420, 8.1120, 8.6090, 9.7056, 10.3051,
+                   10.9393, 11.6101, 13.0873, 13.8961, 14.7519, 15.6571, 17.6472, 18.7384,
+                   19.8932, 21.1147, 23.7956, 25.2680, 26.8261, 28.4744, 30.2175, 34.0725,
+                   36.1749, 38.3991, 40.7515, 45.9447)
+    mode_gains  = (0.4987, 0.5258, 0.5542, 0.5840, 0.6147, 0.6463, 0.6784, 0.7108,
+                   0.7431, 0.7751, 0.8062, 0.8362, 0.8647, 0.8914, 0.9158, 0.9376,
+                   0.9565, 0.9723, 0.9847, 0.9935, 0.9987, 1.0000, 0.9975, 0.9913,
+                   0.9814, 0.9680, 0.9512, 0.9314, 0.9088, 0.8837, 0.8565, 0.8275,
+                   0.7971, 0.7657, 0.7336, 0.7012, 0.6689, 0.6369, 0.6055, 0.5751,
+                   0.5457, 0.5176, 0.4910, 0.4659, 0.4424, 0.4207, 0.4006, 0.3822,
+                   0.3655, 0.3504, 0.3368, 0.3246)
+    max_harmonic = 52
+    initial_gain = 0.043380  # holds the level it had before the rebuild
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+
 class SideStickProperties(WoodPercussionProperties):
     """GM 37, side stick: the shaft of the stick on the RIM, no wires at all.
 
@@ -4435,15 +4470,52 @@ class SideStickProperties(WoodPercussionProperties):
     a woodblock than to the drum it is played on. Judgement, like the snare
     above: there is no Iowa reference for any of this.
     """
+    # A SIDE STICK IS A CLICK, NOT A NOTE. It carried a stretched harmonic
+    # series on a 340 Hz base, and 69 per cent of its energy sat in one narrow
+    # band there -- a pitched wooden note with a click on it. Ben: "side stick
+    # and hand clap ... are not atonal enough."
+    #
+    # A stick laid across a rim and struck against it radiates from a short,
+    # heavily damped contact: broad, bright, and with no mode standing out of
+    # the others. So a dense set with a broad hump about 2.1 kHz and a floor
+    # under it, nothing dominant, and enough wash to fill between the modes.
+    # Measured, share of the energy in the strongest narrow band:
+    #
+    #     stretched harmonic series   69.4 per cent   centroid  470 Hz
+    #     dense hump, wash 0.35        5.7            centroid 1017
+    #     dense hump, wash 4.0          5.5            centroid 2002
+    #
+    # For scale the maracas sit at 4.1 and the closed hat at 5.6, so under about
+    # six is what atonal means in this kit.
+    mode_ratios = (1.0000, 1.1245, 1.1907, 1.2605, 1.3340, 1.5000, 1.5883, 1.6814,
+                   1.7797, 2.0008, 2.1187, 2.2430, 2.3741, 2.6688, 2.8261, 2.9921,
+                   3.1671, 3.5598, 3.7697, 3.9913, 4.2249, 4.7482, 5.0284, 5.3241,
+                   5.6360, 5.9650, 6.7074, 7.1020, 7.5184, 7.9575, 8.9468, 9.4736,
+                   10.0294, 10.6155, 11.9338, 12.6370, 13.3788, 14.1613, 15.9180, 16.8566,
+                   17.8468, 18.8913, 21.2323, 22.4849, 23.8067, 25.2010, 26.6713, 29.9924,
+                   31.7567, 33.6179, 35.5807, 40.0063)
+    mode_gains  = (0.4211, 0.4445, 0.4698, 0.4970, 0.5259, 0.5564, 0.5884, 0.6215,
+                   0.6555, 0.6900, 0.7247, 0.7591, 0.7929, 0.8256, 0.8567, 0.8858,
+                   0.9124, 0.9362, 0.9566, 0.9734, 0.9864, 0.9952, 0.9998, 1.0000,
+                   0.9959, 0.9874, 0.9749, 0.9584, 0.9383, 0.9149, 0.8886, 0.8597,
+                   0.8288, 0.7962, 0.7625, 0.7281, 0.6934, 0.6588, 0.6248, 0.5916,
+                   0.5595, 0.5288, 0.4997, 0.4724, 0.4469, 0.4233, 0.4016, 0.3819,
+                   0.3641, 0.3481, 0.3339, 0.3213)
+    max_harmonic = 52
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    chiff_volume = 4.0
+    sustain_jitter = 0.30
+
     one_shot = True
     release_floor_db = -50.0
     decay_db = 150.0                # a click, gone in well under a tenth
     harmonic_decay_db = 30.0
-    chiff_volume = 0.35             # a trace of shell rattle, not a buzz
+    # (chiff_volume and sustain_jitter are set above, with the mode set: the
+    #  wash is what fills between 52 modes so the click has no gaps to ring in)
     chiff_width = 0.012
-    sustain_jitter = 0.02
     strike_noise_slope = 0.8
-    initial_gain = 0.323326
+    initial_gain = 0.106397
 
 class GuiroProperties(WoodPercussionProperties):
     """The guiro's body: struck wood, but the NOISIEST wood in the kit.
