@@ -101,7 +101,24 @@ PERCUSSION = {
     68: ("Low Agogo",          T, 560.0),
     69: ("Cabasa",             N, 640.0),
     70: ("Maracas",            N, 680.0),
-    71: ("Short Whistle",      WhistleProperties, 520.0),
+    # ROLAND NAMES THE PITCH, not just the length. GM calls 71 and 72 "Short
+    # Whistle" and "Long Whistle" and says nothing more, so the reading everyone
+    # implements is the SC-55's -- the same argument SlowBowedStringProperties
+    # makes about GM 48 and 49. In Roland's own GS drum map these are:
+    #
+    #     71  Short Hi Whistle
+    #     72  Long Lo Whistle
+    #
+    # so short-is-higher is not an inference, it is the reference stating it,
+    # and "Hi"/"Lo" as a named pair wants a clear interval rather than a few
+    # cents. A fourth: 694.9 against 520 puts the resonances at 3207 and 2400 Hz.
+    #
+    # The physics agrees under either reading of the names. A shorter chamber
+    # resonates higher directly; and a short sharp stab is blown HARDER, while a
+    # pressure-driven resonator goes sharp under pressure -- the same mechanism
+    # as the attack sweep in WhistleProperties, where the tone rises into place
+    # as the jet establishes.
+    71: ("Short Whistle",      WhistleProperties, 694.9),
     72: ("Long Whistle",       WhistleProperties, 520.0),
     # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560 -- and it is a
     # STRUCK WOODEN BODY, not noise. Spectral flatness on one ridge is 0.0044
@@ -273,7 +290,7 @@ PERCUSSION_LEVEL = {
     54: 1.200, # tambourine +1.6 dB
     69: 28.013, # cabasa +28.9 dB
     70: 32.612, # maracas +30.3 dB
-    71: 95.520, # whistle short +12.3 dB
+    71: 76.667,  # whistle short: the burst spreads the energy
     72: 44.283, # whistle long +5.7 dB
     # A surdo is the biggest drum in a samba and carries the whole groove, but
     # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
