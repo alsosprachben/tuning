@@ -4304,6 +4304,73 @@ class AgogoProperties(MetalPercussionProperties):
     inharmonicity_dynamic = False
 
 
+class RattleProperties(NoisyPercussionMixin, PercussionProperties):
+    """One impact of a rattle: a seed on a gourd, a steel bead on a cylinder.
+
+    The three rattles kept NoiseDrumProperties when their STRUCTURE was fixed --
+    a burst of impacts instead of one hit -- and that class is a stretched
+    harmonic series on a tuned base. So every seed struck the same note, forty
+    times a shake, and the ear integrates a repeated identical spectrum into a
+    pitch however flat any single window looks. Ben: "The Maracas seem to have
+    too much tonality."
+
+    Two things fix it and both are what the instrument does. The body becomes a
+    dense inharmonic set with a broad hump and no dominant mode -- a click, not
+    a note. And the impacts stop being identical: real seeds hit different parts
+    of the gourd with different force, so each stroke now carries its own pitch
+    scale (see PERCUSSION_RATTLE), which is the same per-stroke mechanism the
+    bell tree uses to sweep, scattered instead of swept.
+
+    NO REFERENCE: Iowa has no rattle of any kind.
+    """
+    one_shot = True
+    release_floor_db = -50.0
+    decay_db = 20.0
+    harmonic_decay_db = 2.0
+    harmonic_decay_dampening = 0.0
+    tonal_dampening = 0.15
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    chiff_volume = 2.0
+    chiff_cycle = 0.95
+    chiff_release = 0.0
+    sustain_jitter = 1.0
+    initial_gain = 1.0 / 11.0
+    attack_time = 0.0015
+    mode_ratios = (1.0000, 1.1480, 1.2284, 1.3141, 1.4054, 1.6131, 1.7263, 1.8468,
+                   1.9752, 2.2667, 2.4258, 2.5953, 2.7759, 3.1851, 3.4088, 3.6472,
+                   3.9012, 4.4756, 4.7901, 5.1254, 5.4826, 6.2888, 6.7311, 7.2026,
+                   7.7049, 8.2399, 9.4585, 10.1215, 10.8280, 11.5804, 13.2908, 14.2232,
+                   15.2168, 16.2751, 18.6758, 19.9869, 21.3842, 22.8727, 26.2423, 28.0860,
+                   30.0511, 32.1445, 36.8741, 39.4667)
+    mode_gains  = (0.4385, 0.4597, 0.4830, 0.5083, 0.5356, 0.5646, 0.5953, 0.6275,
+                   0.6607, 0.6947, 0.7290, 0.7634, 0.7971, 0.8299, 0.8611, 0.8902,
+                   0.9168, 0.9404, 0.9605, 0.9768, 0.9890, 0.9968, 1.0000, 0.9987,
+                   0.9927, 0.9824, 0.9678, 0.9492, 0.9270, 0.9016, 0.8735, 0.8431,
+                   0.8109, 0.7775, 0.7433, 0.7089, 0.6747, 0.6411, 0.6085, 0.5772,
+                   0.5474, 0.5194, 0.4933, 0.4691)
+    max_harmonic = 44
+
+
+class CabasaProperties(RattleProperties):
+    """GM 69. Steel ball chain twisted against a ridged metal cylinder --
+    brighter and harder than a gourd, with the beads audible individually.
+    Its hump sits an octave above the maracas'."""
+    mode_ratios = (1.0000, 1.1454, 1.2228, 1.3052, 1.3927, 1.5949, 1.7028, 1.8176,
+                   1.9395, 2.2207, 2.3712, 2.5311, 2.7010, 3.0922, 3.3018, 3.5247,
+                   3.7615, 4.3055, 4.5976, 4.9082, 5.2383, 5.9950, 6.4020, 6.8348,
+                   7.2949, 7.7836, 8.9144, 9.5176, 10.1587, 10.8399, 12.4126, 13.2532,
+                   14.1467, 15.0962, 17.2836, 18.4548, 19.7001, 21.0234, 24.0657, 25.6978,
+                   27.4332, 29.2775, 33.5088, 35.7832)
+    mode_gains  = (0.3464, 0.3563, 0.3678, 0.3811, 0.3963, 0.4135, 0.4329, 0.4545,
+                   0.4783, 0.5043, 0.5324, 0.5625, 0.5945, 0.6280, 0.6626, 0.6981,
+                   0.7340, 0.7697, 0.8048, 0.8386, 0.8706, 0.9001, 0.9268, 0.9499,
+                   0.9691, 0.9840, 0.9942, 0.9996, 1.0000, 0.9954, 0.9859, 0.9718,
+                   0.9532, 0.9307, 0.9046, 0.8754, 0.8438, 0.8102, 0.7754, 0.7397,
+                   0.7038, 0.6682, 0.6334, 0.5997)
+    max_harmonic = 44
+
+
 class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
     """Struck WOOD -- claves, woodblocks, guiro body: a hard, dry tock.
 

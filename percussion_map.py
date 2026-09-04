@@ -31,6 +31,8 @@ from tonelib import (
     SideStickProperties,
     HandClapProperties,
     WoodPercussionProperties,
+    RattleProperties,
+    CabasaProperties,
     WhistleProperties,
     ClavesProperties,
     WoodBlockHiProperties,
@@ -102,8 +104,8 @@ PERCUSSION = {
     66: ("Low Timbale",        M, 220.0),
     67: ("High Agogo",         AgogoProperties, 700.0),
     68: ("Low Agogo",          AgogoProperties, 560.0),
-    69: ("Cabasa",             N, 640.0),
-    70: ("Maracas",            N, 680.0),
+    69: ("Cabasa",             CabasaProperties, 482.5),
+    70: ("Maracas",            RattleProperties, 386.0),
     # ROLAND NAMES THE PITCH, not just the length. GM calls 71 and 72 "Short
     # Whistle" and "Long Whistle" and says nothing more, so the reading everyone
     # implements is the SC-55's -- the same argument SlowBowedStringProperties
@@ -290,9 +292,9 @@ PERCUSSION_LEVEL = {
     # across dozens of them. The whistles moved from the drum family to the pipe
     # family, which changes their level too; each is trimmed back to exactly
     # where it sat before, so this commit changes what they ARE and not the mix.
-    54: 1.200, # tambourine +1.6 dB
-    69: 28.013, # cabasa +28.9 dB
-    70: 32.612, # maracas +30.3 dB
+    54: 1.234, # tambourine +1.6 dB
+    69: 3.434, # cabasa +28.9 dB
+    70: 2.848, # maracas +30.3 dB
     71: 59.305,  # whistle short: the burst spreads the energy
     72: 30.980, # whistle long +5.7 dB
     # A surdo is the biggest drum in a samba and carries the whole groove, but
@@ -323,7 +325,7 @@ PERCUSSION_LEVEL = {
     # slightly quieter. The class itself is at its ceiling, and the trim is
     # where the headroom note above says this belongs.
     35: 1.783, 36: 1.783,      # bass drum
-    58: 12.496,        # vibraslap +21.9 dB: the burst spreads the energy
+    58: 12.825,        # vibraslap +21.9 dB: the burst spreads the energy
     84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
 
 }
@@ -547,7 +549,13 @@ def rasp_strokes(note, on, off, rng=None):
             jitter = ((k * 2654435761) % 1000 / 1000.0 - 0.5) * 0.55
             level = (1.0 - 0.75 * frac) ** 1.4
             step = w[k] * scale
-            out.append((max(on, t + step * jitter), t + step * 0.9, level))
+            # NO TWO IMPACTS ALIKE. Every seed struck the same note before, forty
+            # times a shake, and a repeated identical spectrum is a pitch however
+            # flat any one window looks. Real contents hit different parts of the
+            # body with different force, so each stroke gets its own pitch scale --
+            # the bell tree's per-stroke mechanism, scattered instead of swept.
+            pitch = 2.0 ** ((((k * 40503) % 977) / 977.0 - 0.5) * 0.62)
+            out.append((max(on, t + step * jitter), t + step * 0.9, level, pitch))
             t += step
         return out
 
