@@ -7773,7 +7773,17 @@ class SynthTone(BaseTone):
                     while f * eff_ratio > ceiling and eff_ratio >= 2.0:
                         eff_ratio *= 0.5          # break back an octave (top RE-COLORS)
                 for m in range(1, maxm + 1):
-                    h = eff_ratio * m
+                    # WHERE PARTIAL m ACTUALLY SITS. This read `eff_ratio * m`, which
+                    # assumes the rank's partials are a harmonic series -- true of every
+                    # organ rank, and the reason it went unnoticed, but not of a
+                    # registered voice built on a MEASURED mode set, whose partial m sits
+                    # at mode_ratio(m). blockrender has always used the mode ratio here,
+                    # so the two renderers silently disagreed for any such voice. Identity
+                    # for a harmonic voice, so no existing render moves.
+                    mr = self.properties.mode_ratio(m)
+                    if mr <= 0.0:
+                        break             # past the end of a measured mode set
+                    h = eff_ratio * mr
                     stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
                     hf = f * h * stretch
                     if hf > self.nyquist:

@@ -11,9 +11,29 @@ Covers all sustained/decaying voices: piano (two-stage decay + unison "dance" +
 strike comb + inharmonicity), flue/reed organ (drawn stops + swell), pipes /
 strings / brass (attack + sustain chiff, decay-to-sustain bloom). Each partial is
 a constant-frequency phasor; the decay envelope, gate/swell and chiff modulate
-its amplitude. Omitted (documented, small): the piano tension-bend attack pitch
-transient, per-note pitch/timing jitter, and the ~0.06 ms onset ITD. Verify by
-spectrum, not byte-diff.
+its amplitude.
+
+WHAT ACTUALLY DIFFERS FROM THE REFERENCE. This used to list three omissions --
+the piano's tension-bend attack transient, per-note pitch/timing jitter, and the
+~0.06 ms onset ITD -- and all three have since been implemented here (_TB, _PJ
+and attack_jitter, _DL). The list outlived the omissions, which is worse than no
+list: it invited the assumption that a measured difference was one of them.
+
+The one structural difference left is the synthesis model. Both sides compute
+every physical parameter from the same tonelib code; this renderer then holds
+each partial at a CONSTANT frequency and modulates its amplitude, where the
+reference evaluates the partial per sample. So anything that moves a partial's
+frequency continuously within a note is approximated rather than integrated,
+and small phase-sensitive differences follow from that.
+
+Measured, matched (both at the same TUNING_MASTER_DB, band error weighted by
+the energy each band carries): a bowed string SECTION agrees to 0.03 dB, peak
++0.18 dB. Two cautions for anyone repeating that measurement, both of which
+produced confident wrong answers here: the master gain is read from the
+environment by BOTH renderers (tonelib.master_gain), so an unset variable on one
+side is a flat offset that looks like a model difference; and an unweighted RMS
+over octave bands lets a near-silent octave dominate -- the same section reads
+14.7 dB that way. Verify by spectrum, weighted, not by byte-diff.
 
 Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 """
