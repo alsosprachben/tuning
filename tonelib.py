@@ -814,6 +814,21 @@ class SawtoothWave(SimplePartial):
             return 0.0
 
 
+def _strike_bit(frequency, harmonic):
+    """0 or 1 for this mode's strike sign, deterministic in (pitch, mode).
+
+    blockrender draws these from a module RNG seeded once per render, whose
+    consumption order this path cannot reproduce -- it builds the same partials
+    but not through the same call sequence. A hash of (pitch, mode) gives every
+    mode its own sign, the same sign every time, without the two engines having
+    to share a stream. The standard is the one blockrender's docstring sets:
+    verify by spectrum, not byte-diff, and an incoherent sum is incoherent
+    whichever bits it drew.
+    """
+    h = (int(round(frequency * 16.0)) * 2654435761 + harmonic * 40503) & 0xFFFFFFFF
+    return (h >> 13) & 1
+
+
 class SynthProperties:
     # dB of attenuation for EVEN harmonics, or None to use odd_only absolutely.
     # See series_volume(): a real stopped pipe suppresses its even harmonics,
@@ -7629,8 +7644,22 @@ class SynthTone(BaseTone):
 
         volume = 0.0
         transverse = []                       # (freq, raw gain, decay) for phantom-partial pairing
-        max_partials = int(float(self.nyquist) / self.frequency)
-        for harmonic in range(1, max_partials):
+        # THE COUNT IS NOT nyquist/f0. That bound assumes partial m sits at m*f0,
+        # which is the fifth place in this file to assume it (see harmonic_decay,
+        # which counted four) and the only one that silently DROPS partials rather
+        # than mis-placing them. With a measured mode set the ratios are not the
+        # index: a closed hi-hat's 224 modes run to ratio 80, every one of them
+        # under Nyquist, and 22050/248.4 stopped the loop at 87 -- 137 modes of a
+        # cymbal thrown away. That is the strike. It is why this renderer played a
+        # hi-hat as a flat wash where the block engine struck it, 20 dB apart over
+        # the first 50 ms and in agreement after 80.
+        #
+        # The right bound is max_harmonic, exactly as blockrender uses, with the
+        # per-partial guards below (mode_ratio <= 0, and frequency past Nyquist)
+        # doing the cutting. For a harmonic voice they cut in the same place the
+        # old bound did, so nothing else moves.
+        max_partials = getattr(self.properties, 'max_harmonic', 64) or 64
+        for harmonic in range(1, max_partials + 1):
             if self.properties.inharmonicity_dynamic:
                 self.properties.inharmonicity_coefficient = self.properties.inharmonicity_coefficient_for_frequency(
                     frequency)
@@ -7669,6 +7698,18 @@ class SynthTone(BaseTone):
             # a delay of d seconds is -f*d of them.
             if hrtf:
                 main.start_phase = -harmonic_frequency * main_delay
+            # EACH MODE'S SIGN, from where the stick landed relative to its nodes.
+            # See SynthProperties.strike_phase_spread, whose own comment says why:
+            # with three hundred partials, starting them all in phase means "they
+            # all add at t=0 and the note gets a spike that is an artefact of the
+            # synthesis, not of the plate". blockrender has flipped these since the
+            # plates were rebuilt; this path never did, so a dense mode set summed
+            # COHERENTLY here (224x) against INCOHERENTLY there (sqrt(224), 15x) --
+            # 23 dB, and it showed up as +6.9 dB on a closed hi-hat once the mode
+            # count was fixed. start_phase is in cycles, so a sign flip is 0.5.
+            sps = self.properties.strike_phase_spread
+            if sps > 0.0:
+                main.start_phase += 0.5 * sps * (_strike_bit(self.frequency, harmonic))
             main.vibrato = self.properties.voice_vibrato(self.frequency, 0)   # player 0
             main.player = 0
             self.partials.append(main)
