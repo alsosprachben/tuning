@@ -65,7 +65,7 @@ from percussion_map import percussion_for_note, choke_group, GM_PERCUSSION_CHANN
 # late. See blockrender.emit_partial.
 COLS_F8 = ("om", "p0", "p0R")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
-           "cv", "cc", "crl", "sj", "csc", "tbav", "tau", "tcut",
+           "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
            "vd", "vr", "vp", "delL", "delR")
 COLS_I8 = ("non", "noff")
 COLS_I4 = ("gr", "cr", "pl")
@@ -93,6 +93,12 @@ class Slab:
         for k in COLS_I8: self.a[k] = np.full(capacity, IDLE, np.int64)
         for k in COLS_I4: self.a[k] = np.zeros(capacity, np.int32)
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
+        # The wash's bandwidth, as a fraction of the partial's frequency. This
+        # list has to match blockrender's `cols` exactly -- synth_partials asks
+        # the slab for every column by name -- and it must default to RAND_GRAN
+        # rather than to zero: at zero the chiff's hash index never advances, so
+        # the "noise" becomes a fixed phase offset and the wash turns tonal.
+        self.a["cbw"][:] = B.RAND_GRAN
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
         # A slot can be scheduled for retirement twice -- stamp() schedules a
