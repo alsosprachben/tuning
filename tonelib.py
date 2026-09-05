@@ -7340,6 +7340,15 @@ class VocalProperties(FormantBody, BowedStringProperties):
     machinery for the same reason. Singers agree rather less than string players,
     hence the wider spread.
     """
+    # RE-BALANCED after the string family was raised 4.3 dB. These three carry
+    # their own absolute gains rather than deriving from the bowed base, so they
+    # did NOT ride that change and the choir silently dropped 4.3 dB relative to
+    # the orchestra it sings with -- the one family that lost ground. Re-measured
+    # register-averaged (five pitches, C3-C5) rather than at a single note, which
+    # also caught the vowels drifting 5 dB apart from each other: "oo" sat 1.7
+    # under the strings while the synth voice sat 3.3 over. All three now land on
+    # the string reference, as the equal-velocity convention asks.
+
     section_spread_cents = 8.0
     section_vibrato_cents = 7.0
     section_vibrato_hz = (4.8, 6.2)
@@ -7362,7 +7371,7 @@ class ChoirAahsProperties(VocalProperties):
     # differently -- "oo" throws away everything above its low F2. Measured
     # K-weighted at velocity 100 like the rest of the set and brought to the
     # orchestra's level. /sqrt(players) as for any section.
-    initial_gain = 1.0 / 6875 / (VocalProperties.section_players ** 0.5)
+    initial_gain = (1.0 / 6875 / (VocalProperties.section_players ** 0.5)) * 1.1521   # +1.23 dB, see VocalProperties
 
 
 class VoiceOohsProperties(VocalProperties):
@@ -7371,7 +7380,7 @@ class VoiceOohsProperties(VocalProperties):
     is F2, and it moves by more than an octave between these two."""
     formants = ((300.0, 90.0, 1.00), (870.0, 100.0, 0.42), (2240.0, 140.0, 0.12))
     bore_corner_hz = 3000.0
-    initial_gain = 1.0 / 6127 / (VocalProperties.section_players ** 0.5)
+    initial_gain = (1.0 / 6127 / (VocalProperties.section_players ** 0.5)) * 1.2134   # +1.68 dB, see VocalProperties
 
 
 class SynthVoiceProperties(VocalProperties):
@@ -7381,7 +7390,7 @@ class SynthVoiceProperties(VocalProperties):
     formants = ((530.0, 110.0, 1.00), (1840.0, 110.0, 0.55), (2480.0, 140.0, 0.25))
     section_spread_cents = 4.0
     section_vibrato_cents = 3.0
-    initial_gain = 1.0 / 4542 / (VocalProperties.section_players ** 0.5)
+    initial_gain = (1.0 / 4542 / (VocalProperties.section_players ** 0.5)) * 0.6823   # -3.32 dB, see VocalProperties
 
 
 # --- Sound effects (GM 120-127) --------------------------------------------
