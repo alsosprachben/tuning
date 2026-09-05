@@ -20,6 +20,7 @@ from tonelib import (
     GrandPianoProperties,
     HarpsichordProperties,
     PluckedStringProperties,
+    OrchestraHitProperties,
     NylonGuitarProperties,
     BassTromboneProperties,
     BassClarinetProperties,
@@ -128,6 +129,9 @@ PROGRAM_CLASS[49] = SlowBowedStringProperties  # String Ensemble 2: darker secti
 PROGRAM_CLASS[52] = ChoirAahsProperties      # open "ah"
 PROGRAM_CLASS[53] = VoiceOohsProperties      # rounded "oo": F1/F2 drop hard
 PROGRAM_CLASS[54] = SynthVoiceProperties     # an "eh", steadier than people are
+PROGRAM_CLASS[55] = OrchestraHitProperties   # Orchestra Hit: the whole band, one chord,
+                                             # short. Was falling through to a SUSTAINED
+                                             # bowed string, which is its exact opposite.
 # 56-63  Brass, split by bore profile: cylindrical (bright) vs conical (dark)
 _fill(56, 63, BrassProperties)              # default (brass section, synth brass)
 PROGRAM_CLASS[56] = TrumpetProperties        # fitted to the Iowa trumpet, 3 registers

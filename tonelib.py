@@ -858,6 +858,11 @@ class SynthProperties:
     # attack-time channel_volume and a single harmonic series (see init_partials
     # and SynthTone.sum_values). Default off so nothing but organs changes.
     registerable = False
+    # The stop word a voice starts on when the score draws none. An organ starts
+    # on its 8' foundation (bit 0) and the player draws the rest; a voice that is
+    # only ever played in ONE registration -- an orchestra hit is the whole band or
+    # it is not a hit -- declares that registration here instead.
+    default_stops = 1
 
     # No-swell defaults. These make the block kernel's shutter arithmetic exactly
     # identity (level = 1, no HF tilt) so it agrees with shutter() below for any
@@ -1813,7 +1818,6 @@ class PluckedStringProperties(SynthProperties):
 class TriplePluckedStringProperties(PluckedStringProperties):
     string_count = 3
     unison_detune = (0.25, 0.3)   # triple-string beating
-
 
 # --- Harpsichord -------------------------------------------------------------
 # A harpsichord is a REGISTERED instrument, exactly like the organ: the plectrum
@@ -3475,6 +3479,104 @@ class PercussionProperties(PluckedStringProperties):
     octave_dampening = 0.0
     octave_modulo = False
 
+
+
+
+class OrchestraHitProperties(PercussionProperties):
+    """GM 55. Not an instrument: the whole orchestra hitting one chord at once.
+
+    It had been falling through to BowedStringProperties -- a SUSTAINED bowed
+    note, which is the one thing a hit is not. Its four notes in the Ride of the
+    Valkyries rendered as a dull 245 Hz chord carrying six harmonics, where the
+    score wants a stab.
+
+    NOTHING IN IT IS PLUCKED, and no single spectrum describes it. A pluck is a
+    string released from a triangular displacement, leaving a comb set by where
+    the plectrum sat; a hit is an impulsive excitation of every body in the room.
+    So the base is the struck one the drums and cymbals share -- which is why
+    plucked_harmonic arrives here as 0, and it should.
+
+    And it is a REGISTRATION, not a voice. A hit is scored as everybody playing
+    one pitch in octaves, ff, short: basses and tuba at the bottom, trombones and
+    cellos above them, the strings and horns at the written pitch, trumpets and
+    winds an octave up. That is a stop list -- a rank is a voice class at a
+    transposition -- so it is built as one, out of the instrument classes this
+    file has already calibrated, rather than by fitting one spectrum to stand in
+    for fifteen. Each rank borrows only its own class's SPECTRUM; the envelope,
+    the decay and the inharmonicity stay this class's, which is correct because
+    the players are struck at one instant and stop together.
+
+    Two things the registration cannot supply, and they are what keep the result
+    from sounding like a chord rather than a blow:
+
+      PITCH SPREAD. Sixty players do not agree on the note. That is the unison
+      machinery taken in the RATIO slot (cents, as a piano's strings are) rather
+      than the fixed-Hz slot one instrument's own strings use -- a section's
+      disagreement scales with pitch, one string's beating does not.
+
+      ONSET SCATTER. They do not agree on the INSTANT either, which is what stops
+      a hit sounding like one synthetic click. strike_phase_spread is already the
+      mechanism for exactly that, from the hi-hat.
+
+    FITTED against a reference built from this file's own voices: thirteen
+    already-calibrated orchestral parts playing one ff chord in octaves. There is
+    no Iowa recording of an orchestra hit, and the orchestra we already model is
+    the only self-consistent standard for the orchestra-in-one-note.
+    """
+    registerable = True
+    default_stops = 0b1111111    # all seven: a hit is the whole band at once
+    # The scoring, as a stop list: (name, footage, gain, whose spectrum).
+    # Bits 0-6 of the CC11 stop word, so a default expression of 127 draws the
+    # whole band -- which is the only registration a hit is ever played in.
+    stop_ranks = [
+        ("bass",    0.25, 1.593, ConicalBrassProperties),   # basses, tuba: 2 octaves down
+        ("tenor",   0.5,  1.180, TromboneProperties),       # trombones, cellos
+        ("horn",    1.0,  0.538, HornProperties),           # horns at the written pitch
+        ("string",  1.0,  0.673, BowedStringProperties),    # the strings, marcato
+        ("tpt",     2.0,  0.430, TrumpetProperties),        # trumpets an octave up
+        ("wind",    2.0,  0.338, StoppedPipeProperties),    # flutes and oboes with them
+        ("picc",    4.0,  0.348, StoppedPipeProperties),    # piccolo on the top octave
+    ]
+    crescendo_order = ["string", "bass", "tenor", "horn", "tpt", "wind", "picc"]
+
+    # The chairs, in cents either side of the nominal. Wider than a string
+    # section's 6-8 because this is a section of sections: the winds and the
+    # brass are tuning to each other as well as to the strings.
+    section_cents = (-11.0, -4.5, 4.5, 11.0)
+    unison_gain = 0.62
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        return [(self.unison_gain, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, 0.0)
+                for c in self.section_cents]
+
+    strike_phase_spread = 0.8   # the players' onsets, smeared
+    attack_time = 0.010
+
+    # one_shot, as the struck voices are: a hit is a fixed-length EVENT. Holding
+    # the key longer does not hold the orchestra's chord any longer.
+    one_shot = True
+    release_floor_db = -40.0
+
+    max_harmonic = 32           # per rank, and there are seven of them
+    decay_db = 12.0             # fitted to the reference envelope; see the note below
+    harmonic_decay_db = 2.0
+    # ONE decay law cannot hold both ends of this envelope, because the thing
+    # being matched is a SUM: the strings and brass stop when the players stop,
+    # while the bass drum and the cymbal ring on underneath them. Fitting the
+    # initial drop (-10 dB at 0.17 s) leaves a 1.5 s tail no hit has; fitting the
+    # tail costs the attack. This is the compromise, and the honest fix is the
+    # two-component aftersound the cymbals already carry, which bends an envelope
+    # without tilting the spectrum -- it lives on CymbalProperties, not here.
+    harmonic_decay_dampening = 0.0
+    tonal_dampening = 0.0
+
+    chiff_volume = 0.35   # the cymbal and the bass drum in the attack
+    chiff_cycle = 0.20
+    chiff_release = 0.5
+    chiff_width = 0.02
+    chiff_bandwidth = 6.0   # broad: this noise is not one instrument's
+
+    initial_gain = 1.0 / 50
 
 class MembraneDrumProperties(PercussionProperties):
     """Struck membrane that rings with a pitch (toms, congas, timbales,
@@ -7494,7 +7596,7 @@ class SynthTone(BaseTone):
         # SynthTone.sum_values). Every other voice keeps the single harmonic
         # series below, untouched.
         if getattr(self.property_class, 'registerable', False):
-            self.reg_state = self.sampler.reg_state_for(self.midi_channel)
+            self.reg_state = self.sampler.reg_state_for(self.midi_channel, self.property_class)
             self._build_registered_partials()
             if self.max_fade is not None:
                 for partial in self.partials:
@@ -7715,9 +7817,20 @@ class RegState:
     a single 8' rank, fully open -- i.e. today's organ sound."""
     __slots__ = ('swell', 'gate')
 
-    def __init__(self):
+    def __init__(self, props=None):
         self.swell = 1.0
-        self.gate = {"8": 1.0}
+        # Seeded from the VOICE's own default registration, not from a literal
+        # rank name: an organ's default_stops of 1 gives {"8": 1.0} exactly as
+        # before, but a voice whose ranks are not called "8" -- an orchestra hit
+        # is bass/tenor/string/... -- would otherwise start with every rank
+        # gated off, since sum_values reads gate.get(rank, 0.0). That silenced
+        # the whole voice on this path while the block renderer played it.
+        ranks = getattr(props, 'stop_ranks', None) if props is not None else None
+        if ranks:
+            ds = getattr(props, 'default_stops', 1)
+            self.gate = {r[0]: 1.0 for i, r in enumerate(ranks) if (ds >> i) & 1}
+        else:
+            self.gate = {"8": 1.0}
 
 
 class SynthSampler(BaseSampler):
@@ -7729,10 +7842,10 @@ class SynthSampler(BaseSampler):
         # per-sample stepper writes here; registerable tones read it.
         self.channel_state = {}
 
-    def reg_state_for(self, midi_channel):
+    def reg_state_for(self, midi_channel, props=None):
         st = self.channel_state.get(midi_channel)
         if st is None:
-            st = RegState()
+            st = RegState(props)
             self.channel_state[midi_channel] = st
         return st
 

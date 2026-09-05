@@ -118,7 +118,7 @@ def registration_blocks(ch, prop, ccs, nblk):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
     # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
-    ev = sorted(ccs.get(ch, [])); mlo = 1; mhi = 0; cres = 0.0; vol = 1.0
+    ev = sorted(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); mlo = ds & 0x7F; mhi = (ds >> 7) & 0x7F; cres = 0.0; vol = 1.0
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     def emit(t):
         mask = mlo | (mhi << 7)

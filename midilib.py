@@ -1039,12 +1039,18 @@ class Channel:
         
     def updateProgram(self, c, s):
         self.program = c.program
-        # Selecting an organ voice defaults its registration to the 8' Principal
-        # (bit 0 of the CC11 stop bitfield). Expression otherwise defaults to full
-        # (0x7F) -- which as a bitmask would draw every stop -- so reset it here so
-        # an organ MIDI with no stop automation sounds as today's single 8' rank.
-        if getattr(property_class_for_program(self.program), 'registerable', False):
-            self.controls["expression"] = [0x01, 0x00]   # MSB=1 -> stop mask bit0 (8')
+        # Selecting a registered voice defaults its registration to the voice's
+        # OWN default_stops. Expression otherwise defaults to full (0x7F) --
+        # which as a bitmask would draw every stop -- so reset it here so an
+        # organ MIDI with no stop automation sounds as today's single 8' rank.
+        # An organ declares 1 (bit 0, the 8' Principal) and is unchanged; a voice
+        # that is only ever played in one registration declares that instead.
+        # This mirrors blockrender.registration_blocks, and must: the two
+        # renderers would otherwise disagree about which ranks are even audible.
+        pc = property_class_for_program(self.program)
+        if getattr(pc, 'registerable', False):
+            ds = getattr(pc, 'default_stops', 1)
+            self.controls["expression"] = [ds & 0x7F, (ds >> 7) & 0x7F]
 
     def stepRegistration(self, dt):
         """Step this channel's live RegState toward its CC targets (organ voices

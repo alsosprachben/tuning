@@ -681,7 +681,9 @@ class Part:
         self.level_db = level_db
         self.muted = False
         # Which stops are out, per part: two organ layers can differ.
-        self.drawn = set(bank.cres_order[:1])   # start on the 8' foundation
+        ds = getattr(bank.pc, 'default_stops', 1) if hasattr(bank,'pc') else 1
+        self.drawn = {r for j, r in enumerate(bank.rank_names) if (ds >> j) & 1} \
+                      or set(bank.cres_order[:1])   # start on the voice's own registration
         self.cres = 0.0
 
     # a Part delegates its patch identity to its bank
