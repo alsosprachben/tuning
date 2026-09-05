@@ -697,7 +697,17 @@ class BaseSampler:
 
 class SimplePartial(BasePartial):
     def __init__(self, properties, f, h, v=1.0, db=0.0, delay=0.0, ref_count=0):
-        if db > 30: db = 30
+        # NO DECAY CLAMP. This read `if db > 30: db = 30`, with no rationale and
+        # no counterpart in blockrender, which uses harmonic_decay(m) as given.
+        # It bit 156 of a closed hi-hat's 224 modes: the bright top of a cymbal
+        # decays at 50-200 dB/s and was held to 30, so those modes rang on and
+        # came out up to 31 dB hot. That is the whole of the hi-hat overshoot --
+        # the modes are the same, their volumes are the same, only their decay
+        # was being held back on this side.
+        #
+        # A fast decay is not a numerical hazard here: db_ratio is evaluated per
+        # partial per block, and a partial that has rung out is dropped at the
+        # floor (see wave()).
         # errlog(db)
         BasePartial.__init__(self, properties, v, db, delay)
         self.base_frequency = f
