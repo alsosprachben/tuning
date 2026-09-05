@@ -604,9 +604,23 @@ class BasePartial:
             if self.state is self.Attacking:
                 # chiff_fade (its own short, capped width) -- NOT attack_fade (the
                 # slow speech), so a big pipe's chiff is a brief burst, not a long hiss.
-                jitter_fade = self.chiff_fade.fade_in(second)  # * self.chiff_fade.fade_out(second)
-                jitter_fade = jitter_fade ** 0.5
-                jitter_fade *= (1.0 - jitter_fade)
+                # THE SUSTAINED WASH IS A FLOOR UNDER THE ATTACK HUMP, not a level
+                # the hump drops to zero before reaching. The hump r*(1-r) peaks at
+                # 0.25 and returns to 0 at chiff_fade's end, and the sustain then
+                # began at sustain_jitter -- so any voice whose sustain_jitter is
+                # large against 0.25 STEPPED at the join. A closed hi-hat's is 0.400,
+                # which is why it was the worst of them. The floor rises with the
+                # hump's own progress, so the attack is untouched at t=0 and the two
+                # meet exactly where the hump ends.
+                #
+                # synthkernel.c has done this since the wash was rebuilt; this side
+                # never got the same change, and the two renderers disagreed by 13.7
+                # dB on a closed hi-hat and 4.4 dB on a snare because of it. Keep the
+                # two expressions identical -- see the block marked THE SUSTAINED
+                # WASH IS A FLOOR in the kernel.
+                s = self.chiff_fade.fade_in(second)  # * self.chiff_fade.fade_out(second)
+                r = s ** 0.5
+                jitter_fade = max(r * (1.0 - r), self.properties.sustain_jitter * s)
             elif self.state is self.Releasing:
                 jitter_fade = self.release_fade.fade_in(second)  # * self.release_fade.fade_out(second)
                 jitter_fade = jitter_fade ** 0.5
