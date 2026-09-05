@@ -3083,7 +3083,11 @@ class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     # and add in POWER, not amplitude. Dividing here keeps the section at exactly
     # the loudness the equal-velocity balance was calibrated to with one voice --
     # and reads section_players, so raising the headcount cannot change the level.
-    initial_gain = 1.0 / 9381 / (section_players ** 0.5)
+    # +4.3 dB. The string family measured that far UNDER the rest of the orchestra
+    # at equal velocity (K-weighted, each voice in its own comfortable register),
+    # which is the balance convention this set is supposed to hold to but was not.
+    # Raised on the BASE so the family's own ratios (viola, contrabass) are kept.
+    initial_gain = (1.0 / 9381 / (section_players ** 0.5)) * 1.6406
     # A SECTION IS PLAYERS, NOT JITTER. This used to claim section shimmer from a
     # small sustained phase jitter -- "broader per-partial band, no amplitude
     # wobble" -- and measurement says it never did that. The jitter applies the
@@ -3336,7 +3340,11 @@ class SlowBowedStringProperties(BowedStringProperties):
     # supposed to set the balance, and they cannot if the voices are not level
     # with each other to begin with. Normalised to the brass, which was the most
     # recently calibrated (against a real trumpet recording).
-    initial_gain = 1.0 / 8536 / (BowedStringProperties.section_players ** 0.5)   # as the first section
+    # +4.3 dB. The string family measured that far UNDER the rest of the orchestra
+    # at equal velocity (K-weighted, each voice in its own comfortable register),
+    # which is the balance convention this set is supposed to hold to but was not.
+    # Raised on the BASE so the family's own ratios (viola, contrabass) are kept.
+    initial_gain = (1.0 / 8536 / (BowedStringProperties.section_players ** 0.5)) * 1.6406
     tonal_dampening = 1.25      # darker: the slow bow's own consequence
     max_harmonic = 32
     # THE SLOW BOW. chiff_max_valve_time is the onset ramp when attack_time is
