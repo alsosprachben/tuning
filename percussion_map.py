@@ -292,11 +292,11 @@ PERCUSSION_LEVEL = {
     # across dozens of them. The whistles moved from the drum family to the pipe
     # family, which changes their level too; each is trimmed back to exactly
     # where it sat before, so this commit changes what they ARE and not the mix.
-    54: 1.234, # tambourine +1.6 dB
-    69: 3.434, # cabasa +28.9 dB
-    70: 2.848, # maracas +30.3 dB
-    71: 59.305,  # whistle short: the burst spreads the energy
-    72: 30.980, # whistle long +5.7 dB
+    54: 1.1874, # tambourine +1.6 dB
+    69: 2.1697, # cabasa +28.9 dB
+    70: 2.6794, # maracas +30.3 dB
+    71: 53.6422,  # whistle short: the burst spreads the energy
+    72: 29.9953, # whistle long +5.7 dB
     # A surdo is the biggest drum in a samba and carries the whole groove, but
     # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
     # UNDER the kick. Open surdo now sits a little above it, muted a little
@@ -315,7 +315,7 @@ PERCUSSION_LEVEL = {
     # metal. A crash IS the loudest cymbal, but at that distance it stops being
     # an accent within the kit and becomes an interruption of it.
     49: 0.56, 57: 0.56,      # crash 1 and 2: -5 dB
-    52: 0.56, 55: 0.56,      # china and splash, to match
+    52: 0.5513, 55: 0.56,      # china and splash, to match
     # The kick's own class sits at 1/1.05, flagged as near a per-tone ceiling --
     # but that is a limit on the CLASS gain, and the trim is applied on top, so
     # the headroom question is simply whether the rendered tone stays clean.
@@ -325,8 +325,12 @@ PERCUSSION_LEVEL = {
     # slightly quieter. The class itself is at its ceiling, and the trim is
     # where the headroom note above says this belongs.
     35: 1.783, 36: 1.783,      # bass drum
-    58: 12.825,        # vibraslap +21.9 dB: the burst spreads the energy
+    58: 12.1336,        # vibraslap +21.9 dB: the burst spreads the energy
     84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
+    37: 1.0000,   # held against the wash-floor fix
+    55: 0.5533,   # held against the wash-floor fix
+    81: 0.8118,   # headroom at velocity 127
+    80: 0.9481,   # headroom at velocity 127
 
 }
 _RING_CLASSES = {}

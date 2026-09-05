@@ -176,7 +176,21 @@ void synth_voice(
                 // slow speech fade fadeS -- so a big pipe chuffs briefly, no hiss.
                 float jf=0.f; long mid=bs0+BLK/2; float invch=1.f/chiffS[p];
                 if(cv>0.f){
-                    if(mid < a+(long)chiffS[p]){ float s=sstep((float)(mid-a)*invch); float r=sqrtf(s); jf=r*(1.f-r); }
+                    // THE SUSTAINED WASH IS A FLOOR UNDER THE ATTACK HUMP, not a
+                    // level the hump drops to zero before reaching. The hump is
+                    // r*(1-r): it peaks at 0.25 and returns to 0 at chiffS, and
+                    // the sustain then began at sj -- so any voice whose sj is
+                    // large compared with 0.25 STEPPED UP when its hump ended.
+                    // The floor RISES with the hump's own progress (sj*s), so the
+                    // attack is untouched at t=0 and the two meet exactly where the
+                    // hump ends. A flat floor from t=0 would fix the step but raise
+                    // the attack peak, which clipped the triangle and the cabasa.
+                    // Inaudible where chiffS is a few ms, which is most voices;
+                    // on the chinese cymbal, chiffS 0.29 s against sj 1.0, it is
+                    // a burst of noise arriving a quarter second after the strike.
+                    // Ben: "sounding fine to start, then after a quarter second
+                    // or so, it suddenly adds noise."
+                    if(mid < a+(long)chiffS[p]){ float s=sstep((float)(mid-a)*invch); float r=sqrtf(s); jf=fmaxf(r*(1.f-r), sj*s); }
                     else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=r*(1.f-r)*crl; }
                     else jf=sj;
                 }
