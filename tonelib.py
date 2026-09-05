@@ -601,7 +601,21 @@ class BasePartial:
             return 0.0
 
         if self.properties.chiff_volume > 0.0:
-            if self.state is self.Attacking:
+            # GATED ON THE BURST, NOT ON THE STATE. This asked `state is Attacking`,
+            # which ends when the ATTACK FADE completes -- and the chiff burst is a
+            # different, usually longer clock. A snare's attack fade is 12 ms and
+            # its burst 90 ms, so from 12 ms on the hump was abandoned and the wash
+            # fell through to sustain_jitter: 0.244 against 0.030, an 18.2 dB hole
+            # in the noise from 12 to 90 ms. Measured on the rendered snare, the
+            # reference was 13-19 dB short of the block engine above 1 kHz -- above
+            # its twelve modes, where the sound IS the wash -- and in agreement
+            # below it and after 60 ms.
+            #
+            # synthkernel.c has always keyed this on time (mid < a + chiffS), which
+            # is the right clock: the burst is chiff_time, decoupled from the speech
+            # fade on purpose. Voices whose two clocks nearly coincide -- the plates,
+            # whose bursts are a few ms -- never showed the difference.
+            if self.chiff_fade is not None and self.chiff_fade.fade_in(second) < 1.0:
                 # chiff_fade (its own short, capped width) -- NOT attack_fade (the
                 # slow speech), so a big pipe's chiff is a brief burst, not a long hiss.
                 # THE SUSTAINED WASH IS A FLOOR UNDER THE ATTACK HUMP, not a level
