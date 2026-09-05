@@ -5126,7 +5126,7 @@ class ClosedHiHatProperties(HiHatProperties):
     # and initial_gain is solved to hold each voice's K-weighted loudness
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
-    initial_gain = 0.014036
+    initial_gain = (0.014036) * 1.2735   # +2.1 dB: K-weighted to the string reference
 
 class PedalHiHatProperties(HiHatProperties):
     """GM 44. The foot closing the hats: two plates clapping together.
@@ -5179,7 +5179,7 @@ class PedalHiHatProperties(HiHatProperties):
     # and initial_gain is solved to hold each voice's K-weighted loudness
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
-    initial_gain = 0.098139
+    initial_gain = (0.098139) * 1.3964   # +2.9 dB: K-weighted to the string reference
 
 class OpenHiHatProperties(HiHatProperties):
     """GM 46. Hats apart and ringing: the plate speaks.
@@ -5239,7 +5239,7 @@ class OpenHiHatProperties(HiHatProperties):
     # and initial_gain is solved to hold each voice's K-weighted loudness
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
-    initial_gain = 0.029231
+    initial_gain = (0.029231) * 1.2589   # +2.0 dB: K-weighted to the string reference
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
@@ -6365,7 +6365,7 @@ class RideCymbalProperties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.094449
+    initial_gain = (0.094449) * 2.6607   # +8.5 dB: K-weighted to the string reference
 
 class CrashRideProperties(CymbalProperties):
     """GM 59, Ride Cymbal 2: the 20" crash played as a ride.
