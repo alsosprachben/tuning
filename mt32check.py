@@ -263,18 +263,34 @@ def check(path, window=60.0):
             elif value == 0:
                 findings.append("ch%d: CC7=0 at %.1fs is silence" % (ch, when))
 
-        # -- notes the assigned instrument cannot play
+        # -- notes the assigned instrument cannot play.  When this fires, the
+        #    file's own shadowed program is very often the right answer: a
+        #    name-driven remapper has nothing to match on for an unnamed track
+        #    and will assign something anyway.
         if chosen and notes[ch] and chosen[1] in RANGES:
             lo, hi = RANGES[chosen[1]]
             out = [n for _, _, n in notes[ch] if n < lo or n > hi]
             if len(out) > max(4, 0.02 * len(notes[ch])):
+                written_lo = min(n for _, _, n in notes[ch])
+                written_hi = max(n for _, _, n in notes[ch])
+                fits = [p for _, p, _ in at_zero[:-1]
+                        if p in RANGES
+                        and RANGES[p][0] <= written_lo
+                        and RANGES[p][1] >= written_hi]
+                hint = ""
+                if fits:
+                    hint = ("  The file's own shadowed program %s covers it -- "
+                            "try that first."
+                            % " / ".join("%d %s" % (p, GM_NAMES[p]) for p in fits))
+                elif not names[ch]:
+                    hint = ("  No track on this channel is named, so a "
+                            "name-driven remap had nothing to go on.")
                 findings.append(
                     "ch%d: %d of %d notes lie outside %s (%d-%d); "
-                    "written range is %d-%d -- wrong program?"
+                    "written range is %d-%d -- wrong program?%s"
                     % (ch, len(out), len(notes[ch]),
                        GM_NAMES[chosen[1]], lo, hi,
-                       min(n for _, _, n in notes[ch]),
-                       max(n for _, _, n in notes[ch])))
+                       written_lo, written_hi, hint))
 
     if findings:
         print("\n   %d finding%s:" % (len(findings), "" if len(findings) == 1 else "s"))
