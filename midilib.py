@@ -14,7 +14,7 @@ All rights reserved.
 
 from patches import patches
 from patch_map import property_class_for_program, property_class_for_note
-from percussion_map import percussion_for_note, GM_PERCUSSION_CHANNEL
+from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
 
 # Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
 # str. Accept both so the byte-level MIDI parsing below works unchanged.
@@ -799,6 +799,11 @@ class Channels:
         events = []
         for track in self.midi.tracks:
             events.extend([(event.event.time, event.event) for event in track.contents.events])
+        # A scraped or rattled drum becomes its individual impacts BEFORE anything
+        # else sees the stream -- the choke and the note durations must both work
+        # on the real strokes, as they do in blockrender.
+        self.stroke_pitch = {}
+        events = self.expandRaspStrokes(events)
         self.q = EventQueue(0, events)
         
         self.meta_channel = 0;
@@ -817,10 +822,93 @@ class Channels:
                 ]
             ))
         )
+        # the swept-stroke pitches, so a drum's tone can pick up its own bar
+        for _ch in self.channels.values():
+            _ch.stroke_pitch = self.stroke_pitch
 
         self.scanNoteDurations(events)
 
         self.pullEnqueuedEvents()
+
+    def expandRaspStrokes(self, events):
+        """Expand a scraped or rattled percussion note into its real impacts.
+
+        A guiro, cabasa, maracas, tambourine or vibraslap is not one event: it
+        is a burst of individual strikes, and percussion_map.rasp_strokes says
+        where they fall and how hard. blockrender expands the note list before
+        anything else looks at it, "so the choke and the envelopes all see the
+        real strokes"; this does the same to the event stream, which is the
+        equivalent place on this path.
+
+        rasp_strokes works in SECONDS and the stream is in ticks, so this walks
+        the tempo map once to convert each way. A stroke may also carry a PITCH
+        (a bell tree's rod crosses graduated bars), kept in stroke_pitch and
+        read when the drum's tone is built.
+        """
+        import copy
+        tpb = self.midi.head.ticks_per_beat
+        if not tpb:
+            return events
+        ordered = sorted(events, key=lambda te: te[0])
+        # tick <-> second breakpoints, one per tempo change
+        marks = [(0, 0.0, 500000.0)]
+        tempo = 500000.0; sec = 0.0; last = 0
+        for tick, ev in ordered:
+            inner = getattr(ev, "event", None)
+            if isinstance(ev, MetaEvent) and isinstance(inner, MetaEvent.Tempo):
+                sec += (tick - last) / tpb * (tempo / 1e6); last = tick
+                tempo = float(inner.microseconds_per_beat)
+                marks.append((tick, sec, tempo))
+        def to_sec(tick):
+            t0, s0, tp = marks[0]
+            for m in marks:
+                if m[0] <= tick: t0, s0, tp = m
+                else: break
+            return s0 + (tick - t0) / tpb * (tp / 1e6)
+        def to_tick(second):
+            t0, s0, tp = marks[0]
+            for m in marks:
+                if m[1] <= second: t0, s0, tp = m
+                else: break
+            return int(round(t0 + (second - s0) * 1e6 / tp * tpb))
+
+        # pair the percussion note-ons with their offs
+        pending = {}; pairs = []
+        for tick, ev in ordered:
+            inner = getattr(ev, "event", None)
+            if not isinstance(ev, ChannelEvent) or inner is None:
+                continue
+            if getattr(inner, "midi_channel", None) != GM_PERCUSSION_CHANNEL:
+                continue
+            cls = inner.__class__
+            if cls is ChannelEvent.NoteOn and inner.velocity > 0:
+                pending.setdefault(inner.note, []).append((tick, ev))
+            elif cls is ChannelEvent.NoteOff or (cls is ChannelEvent.NoteOn and inner.velocity == 0):
+                stack = pending.get(inner.note)
+                if stack:
+                    on_tick, on_ev = stack.pop(0)
+                    pairs.append((inner.note, on_tick, on_ev, tick, ev))
+
+        drop = set(); add = []
+        for note, on_tick, on_ev, off_tick, off_ev in pairs:
+            strokes = rasp_strokes(note, to_sec(on_tick), to_sec(off_tick))
+            if not strokes:
+                continue
+            drop.add(id(on_ev)); drop.add(id(off_ev))
+            vel = on_ev.event.velocity
+            for st in strokes:
+                t0, t1, lvl = st[0], st[1], st[2]
+                if len(st) > 3 and st[3] != 1.0:
+                    self.stroke_pitch[(note, to_tick(t0))] = st[3]
+                a = copy.deepcopy(on_ev); b = copy.deepcopy(off_ev)
+                a.time = a.event.time = to_tick(t0)
+                b.time = b.event.time = max(a.time + 1, to_tick(t1))
+                a.event.velocity = max(1, min(127, int(vel * lvl)))
+                add.append((a.time, a)); add.append((b.time, b))
+        if not add:
+            return events
+        kept = [(t, e) for (t, e) in events if id(e) not in drop]
+        return sorted(kept + add, key=lambda te: te[0])
 
     def scanNoteDurations(self, events):
         """Pair note-ons with their note-offs to record each note's length in
@@ -894,6 +982,7 @@ class Note:
 
     def __init__(self, channel, f, n, pan, seconds, velocity=127):
         self.event = None
+        self.choked = False      # damped by a later strike in its exclusive class
         self.channel = channel
         self.n = n
         
@@ -928,6 +1017,11 @@ class Note:
                 self.tone = None
                 return
             name, property_class, base_frequency, default_pan = drum
+            # A SWEPT instrument gives each stroke its own pitch -- a bell tree's
+            # rod crosses graduated bars. expandRaspStrokes recorded it against
+            # (note, tick); the channel hands it over here because the tone is
+            # built before this Note's event is attached.
+            base_frequency *= getattr(self.channel, "_stroke_pitch", 1.0)
             self.f = base_frequency
             # Each drum has a default stereo position; the channel pan (CC10)
             # rotates the whole kit around it. Clamp to the legal pan range.
@@ -982,6 +1076,9 @@ class Channel:
     }
     toggle_mask = 0x40
 
+    def percussion_channel(self):
+        return self.midi_channel == GM_PERCUSSION_CHANNEL
+
     def attackNote(self, n, s):
         if n.velocity == 0:
             return self.releaseNote(n, s)
@@ -991,7 +1088,44 @@ class Channel:
         # same-pitch notes each ring in full; a later note-off retires the
         # oldest still-sounding one (see releaseNote), so a stop that lands past
         # the next note's start retires the old voice instead of cutting the new.
+        # EXCLUSIVE CLASSES. A closed hi-hat stroke damps a ringing open one:
+        # it is a fact about the instrument (one pair of cymbals, one pair of
+        # hands) rather than about the envelope, so the open hat simply stops.
+        #
+        # blockrender does this by scanning FORWARD over the note list for the
+        # next strike in the class and truncating the earlier note to it, which
+        # it can do because it has the whole file. Here, as in live.py, there is
+        # no forward to scan -- but the strike that does the choking is the one
+        # being handled right now, so it is a note-off written into whatever is
+        # still ringing. Same result, and it is the only shape this path can take.
+        if self.percussion_channel():
+            grp = choke_group(n.note)
+            if grp:
+                for other in grp:
+                    if other == n.note:
+                        continue
+                    for prev in self.notes.get(other, ()):
+                        # NOT `off_time is None`: a drum's note-off arrives almost
+                        # immediately and Note.release() deliberately does not touch
+                        # a one-shot tone ("releasing it would impose an unnatural
+                        # linear fade cut"), so every ringing drum already has an
+                        # off_time. What matters is whether it is still SOUNDING.
+                        #
+                        # And the choke must go straight to the tone, overriding
+                        # that same one-shot guard -- blockrender says why: "an
+                        # exclusive class OVERRIDES the ring-out: the point of a
+                        # choke is that the instrument is physically damped, so it
+                        # stops even though nothing about its own decay would have
+                        # stopped it." choked keeps ref_count honest if two strikes
+                        # in the class land on one ringing voice.
+                        if (prev.tone is not None and not prev.choked
+                                and not prev.tone.finished()):
+                            prev.choked = True
+                            prev.tone.release()
+
+        self._stroke_pitch = getattr(self, "stroke_pitch", {}).get((n.note, n.time), 1.0)
         e = Note(self, None, n.note, self.getControl("pan"), s, n.velocity)
+        self._stroke_pitch = 1.0
         e.event = n
         e.unrelease()   # strike this voice
         self.notes.setdefault(n.note, []).append(e)
