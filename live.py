@@ -74,7 +74,14 @@ ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
 
 MELODIC_RANGE = (21, 96)        # a keyboard
-DRUM_RANGE = (35, 81)           # the GM kit
+DRUM_RANGE = (35, 87)           # every note percussion_map has a voice for
+# NOT the GM kit's 35-81. percussion_map reaches 87, and the four notes above
+# 81 -- bell tree, castanets, and the mute and open surdo -- were unreachable
+# live: warm() never built them, so a pad sending note 84 got a template of
+# None and silence. They are fitted voices like the rest of the kit and there
+# is no reason the live engine should be the one place they cannot be played.
+# 82 and 83 are real holes in the map; warm() already skips what it cannot
+# build, so they cost nothing.
 
 
 class Slab:
