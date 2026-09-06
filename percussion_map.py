@@ -286,6 +286,25 @@ COMPOSITE_SLOWDOWN = 1.85    # measured across the kit; see _with_ring
 # 35 ms ridges rather than concentrated in one hit -- so it needs the trim even
 # before the hats are touched.
 PERCUSSION_LEVEL = {
+    # THE TRIANGLE IS AN ORCHESTRAL COLOUR, NOT A LEAD. Ben, on Jupiter, at its
+    # fitted gain: "very loud, overwhelms the whole orchestra", and again after a
+    # channel-volume bug of mine was fixed, "piercingly loud". Measured, the
+    # triangle stem alone was +7.9 dB on every other instrument in the movement
+    # combined.
+    #
+    # The Iowa hand-percussion session says the opposite -- there the 8" triangle
+    # is +10.3 dB on the claves -- but those are close-mic'd single instruments,
+    # the player's ear rather than row H. Ben: "A triangle sounds loud when you
+    # are playing it, but it doesn't overpower an orchestra. Something like a
+    # guiro, and other latin percussion, is recorded in a smaller band, so it has
+    # a higher relative loudness, which is correct." The ensemble is part of what
+    # the instrument is, and that is the thing a close mic cannot tell us. So the
+    # latin and hand percussion keep their recorded prominence; this does not.
+    #
+    # 16.2 dB, which is where his ear put it once the roll was actually audible.
+    # A Jupiter roll is 154 strokes at velocity 125 with a 4.4 s ring, so it
+    # accumulates about 20 dB over a single stroke no matter what this says --
+    # that part is real and belongs to the score, not to the gain.
     73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
     # ...and the rattles for the same reason: a shake is now a burst of impacts,
     # each ringing 10-12 ms instead of one 250 ms hit, so the energy is spread
@@ -329,8 +348,8 @@ PERCUSSION_LEVEL = {
     84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
     37: 1.0000,   # held against the wash-floor fix
     55: 0.5533,   # held against the wash-floor fix
-    81: 0.8118,   # headroom at velocity 127
-    80: 0.9481,   # headroom at velocity 127
+    81: 0.1260,   # open triangle -16.2 dB -- see the note above
+    80: 0.1472,   # mute triangle -16.2 dB -- see the note above
 
 }
 _RING_CLASSES = {}
@@ -536,7 +555,21 @@ def rasp_strokes(note, on, off, rng=None):
         # argument the guiro table makes about carved ridges. A longer shake is
         # more impacts at the same rate, not the same few spread thinner.
         if off > on:
-            want = max(span, (off - on) * 0.5)
+            # ...AND A SHORTER ONE IS FEWER. The floor used to be max(span, ...),
+            # so a note briefer than the gesture was stretched UP to a full shake.
+            # That doubles a written-out roll: Holst's Jupiter writes its
+            # tambourine as 436 separate notes 0.062 s apart, and each became a
+            # 0.237 s, 14-impact shake -- 96% of them outlasting the next note,
+            # so about 3.8 shakes sounded at once. The player is already shaking;
+            # the score is telling us the RATE, and we were adding our own on top.
+            #
+            # Symmetric now, which is what the rate-is-the-instrument argument
+            # actually implies: n scales with the gesture either way and the
+            # impact rate is unchanged. Normal notation does not move -- a
+            # quarter note at 120 gives want 0.25 s against the tambourine's
+            # intrinsic 0.237 -- and `max(2, ...)` keeps a very short note
+            # rattling rather than turning into a single click.
+            want = (off - on) * 0.5
             n = max(2, min(400, int(round(n * want / span))))
             span = want
         if n < 2:
