@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    MutedTrumpetProperties,
     TromboneProperties,
     HornProperties,
     brass_section,
@@ -136,7 +137,7 @@ PROGRAM_CLASS[55] = OrchestraHitProperties   # Orchestra Hit: the whole band, on
 _fill(56, 63, BrassProperties)              # default (brass section, synth brass)
 PROGRAM_CLASS[56] = TrumpetProperties        # fitted to the Iowa trumpet, 3 registers
 PROGRAM_CLASS[57] = CylindricalBrassProperties   # Trombone: cylindrical, bright
-PROGRAM_CLASS[59] = TrumpetProperties        # Muted Trumpet (mute not modelled)
+PROGRAM_CLASS[59] = MutedTrumpetProperties   # Muted Trumpet
 PROGRAM_CLASS[58] = ConicalBrassProperties     # Tuba: conical, dark
 PROGRAM_CLASS[60] = ConicalBrassProperties     # French Horn: conical, dark
 # 64-71  Reed (saxes, oboe, english horn, bassoon, clarinet). The reed ORGAN's
