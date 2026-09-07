@@ -224,6 +224,11 @@ def prepare(path, tuner='hybrid'):
     # delays come from -- so an object export that collapses a channel to one
     # point throws away placement the model already has.
     _PX = [0.0]; _PZ = [0.0]  # metres, + = right / up
+    # How much power the sources actually put INTO the room, per octave, which
+    # is what the diffuse tail is excited by. Accumulated on the direct partials
+    # only: a reflection is that same power heard again, not more of it.
+    ROOM_BANDS = (63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0)
+    _QACC = [[0.0, 0.0] for _ in ROOM_BANDS]   # [sum a^2, sum a^2/Q] per band
     def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0,
                      _place=None):
         # _place is (delL, delR, px, pz) for an image source; None means the
@@ -259,6 +264,20 @@ def prepare(path, tuner='hybrid'):
         A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
         A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["pl"].append(_PL[0])
+        if _place is None and ampM > 0.0:
+            # Q is how much louder this partial is toward the listener than its
+            # own spherical average, so ampM^2/Q is the power it feeds the room.
+            # Read at the band centre: the sphere integral is cached per radius
+            # and frequency, and per-partial resolution buys nothing here.
+            bi = min(range(len(ROOM_BANDS)),
+                     key=lambda i: abs(math.log(max(nomf, 1e-6) / ROOM_BANDS[i])))
+            try:
+                q = props.directivity_factor(ROOM_BANDS[bi], px, pz)
+            except Exception:
+                q = 1.0
+            e = ampM * ampM
+            _QACC[bi][0] += e
+            _QACC[bi][1] += e / max(q, 1e-6)
         if _place is not None or not REFLECT:
             return
         # THE REFLECTIONS. Each is this same partial heard again off one
@@ -575,7 +594,15 @@ def prepare(path, tuner='hybrid'):
                                  lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
-    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S)
+    # Effective Q per band: direct energy over energy fed to the room. One
+    # number per octave, derived from what this piece actually radiated rather
+    # than guessed once for the whole orchestra.
+    room_q = []
+    for i, f in enumerate(ROOM_BANDS):
+        d, r = _QACC[i]
+        room_q.append((f, (d / r) if r > 0.0 else 1.0, d))
+    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
+                room_q=room_q)
     for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),
                  ("px","f4"),("pz","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
@@ -617,8 +644,12 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR))
 
+_LAST_PREP = {}
+
+
 def render(path, tuner='hybrid'):
     prep = prepare(path, tuner)
+    _LAST_PREP.update(prep)
     t0=time.time(); L,R = synth_window(prep, 0, prep['N']); kdt=time.time()-t0
     return L,R,prep['total'],prep['P'],kdt
 
@@ -805,4 +836,9 @@ if __name__=="__main__":
         raise SystemExit(0)
     t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
     write_wav(outp, L, R)
+    _rq = _LAST_PREP.get('room_q')
+    if _rq:
+        import json
+        with open(os.path.splitext(outp)[0] + '.room.json', 'w') as fh:
+            json.dump({'bands': [{'hz': f, 'q': q, 'energy': e} for f, q, e in _rq]}, fh, indent=1)
     print("blockrender: %.1fs audio, %d partials, kernel %.2fs, total %.2fs = %.1fx realtime -> %s"%(total,P,kdt,dt,total/dt,outp))

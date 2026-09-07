@@ -36,6 +36,7 @@ Usage:
 """
 
 import math
+import os
 import sys
 import wave
 
@@ -57,13 +58,24 @@ def room_of(props):
     return w * d * h, areas
 
 
-def decay_and_level(props, q=2.0):
-    """[(centre Hz, T60 s, reverberant/direct energy ratio)] per octave."""
+def decay_and_level(props, q=2.0, band_q=None):
+    """[(centre Hz, T60 s, reverberant/direct energy ratio)] per octave.
+
+    `band_q` is the measured directivity factor per band, written by
+    blockrender as a sidecar: how much louder the sources were toward the
+    listener than toward the room, averaged over what the piece actually
+    played. It replaces the scalar `q`, which had to stand for every
+    instrument at every frequency at once -- and stood badly, since Q runs from
+    1.0 in the bass to about 15 at 8 kHz for a horn. Because the reverberant
+    ratio goes as 1/Q, getting this right is what makes a hall bass-wet and
+    treble-dry, which is most of why halls sound warm.
+    """
     volume, areas = room_of(props)
     surface = sum(areas.values())
     r = props.radiation_distance
     out = []
     for f in OCTAVES:
+        qf = band_q.get(f, q) if band_q else q
         absorbed = sum(a * props._octave_interp(props.SURFACE_ALPHA[s], f)
                        for s, a in areas.items())
         mean = absorbed / surface
@@ -73,12 +85,12 @@ def decay_and_level(props, q=2.0):
         t60 = 0.161 * volume / denom
         # Reverberant field against direct at r: (4/R) / (Q/(4*pi*r^2)).
         R = surface * mean / max(1e-6, 1.0 - mean)
-        ratio = 16.0 * math.pi * r * r / (q * R)
+        ratio = 16.0 * math.pi * r * r / (max(qf, 1e-3) * R)
         out.append((f, t60, ratio))
     return out
 
 
-def build_ir(props, sr, q=2.0, seed=0, channels=2):
+def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
     """A diffuse impulse response: band-limited noise, each octave decaying at
     its own T60 and carrying its own share of the reverberant energy.
 
@@ -87,7 +99,7 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2):
     being surrounded, and sharing one noise sequence would collapse it to the
     middle of the head.
     """
-    bands = decay_and_level(props, q)
+    bands = decay_and_level(props, q, band_q)
     volume, _ = room_of(props)
     t60_max = max(b[1] for b in bands)
     onset = math.sqrt(volume) / 1000.0          # mixing time, seconds
@@ -181,18 +193,29 @@ def main(argv):
 
     x, sr = read_wav(inp)
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
-    ir, bands, onset = build_ir(props, sr, q=q, seed=seed, channels=x.shape[1])
+    # Prefer what the render measured over the scalar.
+    band_q = None
+    side = os.path.splitext(inp)[0] + '.room.json'
+    if os.path.exists(side):
+        import json
+        d = json.load(open(side))
+        band_q = {b['hz']: b['q'] for b in d['bands'] if b.get('energy', 0) > 0}
+        print("   directivity factor from %s" % os.path.basename(side))
+    ir, bands, onset = build_ir(props, sr, q=q, seed=seed,
+                                channels=x.shape[1], band_q=band_q)
 
     volume, areas = room_of(props)
     print("== %s -> %s" % (inp, outp))
     print("   hall %.0f m3, %.0f m2 of surface, sources at %.0f m, Q=%.1f"
           % (volume, sum(areas.values()), props.radiation_distance, q))
     print("   tail starts at the mixing time, %.0f ms; IR %.2f s" % (onset * 1000, len(ir) / sr))
-    print("     Hz      T60     reverberant vs direct")
+    print("     Hz      T60       Q     reverberant vs direct")
     for f, t60, ratio in bands:
         if f > sr / 2:
             continue
-        print("   %6.0f   %5.2f s   %+6.1f dB" % (f, t60, 10 * math.log10(ratio)))
+        qf = band_q.get(f, q) if band_q else q
+        print("   %6.0f   %5.2f s  %6.2f   %+6.1f dB"
+              % (f, t60, qf, 10 * math.log10(ratio)))
 
     wet = np.empty_like(x)
     for c in range(x.shape[1]):

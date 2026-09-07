@@ -1653,6 +1653,55 @@ class SynthProperties:
             out.append((gain, (path - direct) / self.sound_speed, image))
         return out
 
+    _Q_CACHE = {}
+
+    def sphere_mean_directivity(self, frequency):
+        """<D^2> averaged over the whole sphere, for the piston pattern.
+
+        The tail needs the power an instrument sends into the ROOM, which is its
+        average over every direction -- not the one value pointing at the
+        listener. A trumpet aimed down the hall is loud here and quiet
+        everywhere else, so using what arrives at the listener as the reverb
+        send credits it with power it never radiated.
+
+        The pattern is axisymmetric about the bell, so the average is a single
+        integral in the polar angle with the sin(theta) area weight.
+        """
+        a = self.directivity_radius
+        if a <= 0.0:
+            return 1.0
+        key = (round(a, 4), round(frequency, 1), round(self.directivity_floor, 3))
+        got = self._Q_CACHE.get(key)
+        if got is not None:
+            return got
+        from math import pi, sin
+        k = 2.0 * pi * frequency / self.sound_speed
+        n = 180
+        total = 0.0
+        weight = 0.0
+        for i in range(n):
+            theta = (i + 0.5) * pi / n
+            s = sin(theta)
+            x = abs(k * a * s)
+            d = 1.0 if x < 1e-6 else max(abs(2.0 * self._bessel_j1(x) / x),
+                                         self.directivity_floor)
+            total += d * d * s
+            weight += s
+        got = total / weight if weight else 1.0
+        self._Q_CACHE[key] = got
+        return got
+
+    def directivity_factor(self, frequency, position_x=None, position_z=None):
+        """Q: how much louder this instrument is toward the listener than its
+        own spherical average. 1.0 for an omnidirectional source, and the
+        quantity the room constant wants when it sets the reverberant field
+        against the direct sound."""
+        mean = self.sphere_mean_directivity(frequency)
+        if mean <= 0.0:
+            return 1.0
+        d = self.directivity_gain(frequency, position_x, position_z)
+        return (d * d) / mean
+
     def radiation_gain(self, frequency, position_x=None, position_z=None):
         """What survives the trip: directivity times air absorption over
         radiation_distance. A linear amplitude factor, per partial."""
