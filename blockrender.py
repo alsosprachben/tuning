@@ -211,6 +211,11 @@ def prepare(path, tuner='hybrid'):
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     _PL = [0]                # which player of a section this partial belongs to
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
+    # Reflections cost about 7x the partials, since every one of them is
+    # audible and nothing prunes. Worth it for a render you will listen to,
+    # not for a batch. --no-reflect on the command line, or TUNING_REFLECT=0.
+    REFLECT = (os.environ.get('TUNING_REFLECT', '1') not in ('0', 'off', '')
+               and '--no-reflect' not in sys.argv)
     _MCH = [0]               # MIDI channel of the note being emitted (stem/object export)
     # Where this partial is actually radiating FROM. A section is not one
     # source: section_position_x seats each player at their own desk, and
@@ -219,8 +224,12 @@ def prepare(path, tuner='hybrid'):
     # delays come from -- so an object export that collapses a channel to one
     # point throws away placement the model already has.
     _PX = [0.0]; _PZ = [0.0]  # metres, + = right / up
-    def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
+    def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0,
+                     _place=None):
+        # _place is (delL, delR, px, pz) for an image source; None means the
+        # direct sound, which also emits the images.
         om = om * _PJ[0]
+        dl, dr, px, pz = _place if _place else (_DL[0], _DL[1], _PX[0], _PZ[0])
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
         # delays the whole signal; delaying only the envelope leaves both ears
         # with identical carrier phase, so a held note has no interaural time
@@ -231,15 +240,15 @@ def prepare(path, tuner='hybrid'):
         # supply the positions; this is what turns a position into an arrival.
         # p0 = -om*(non + d) + ph0, i.e. exactly "this partial, delayed by d".
         A["om"].append(om)
-        A["p0"].append(-om*(non + _DL[0]) + ph0)
-        A["p0R"].append(-om*(non + _DL[1]) + ph0)
+        A["p0"].append(-om*(non + dl) + ph0)
+        A["p0R"].append(-om*(non + dr) + ph0)
         A["aL"].append(ampL); A["aR"].append(ampR)
         # ampM is this partial BEFORE the head model -- what the instrument
         # radiates, not what an ear receives. aL/aR are ampM times a per-ear
         # hrtf_gain, so keeping it costs one column and makes a source-referenced
         # (object) render exact rather than an un-mixing of the binaural one.
         A["aM"].append(ampM); A["mch"].append(_MCH[0])
-        A["px"].append(_PX[0]); A["pz"].append(_PZ[0])
+        A["px"].append(px); A["pz"].append(pz)
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -248,8 +257,31 @@ def prepare(path, tuner='hybrid'):
         A["cbw"].append(_CBW[1]/max(1e-6,nomf) if _CBW[1] > 0.0 else _CBW[0])
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
-        A["delL"].append(_DL[0]); A["delR"].append(_DL[1])
+        A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["pl"].append(_PL[0])
+        if _place is not None or not REFLECT:
+            return
+        # THE REFLECTIONS. Each is this same partial heard again off one
+        # surface, and every term in it is frequency-dependent, which is why it
+        # belongs here and not in a reverb: how much the instrument sent that
+        # way (its directivity at the departure angle, not at the listener),
+        # what the surface kept, and what the longer path cost in air. A
+        # sampled instrument has one radiation pattern and can only delay a
+        # copy of it; this sends a different spectrum at the ceiling than at
+        # the audience, because that is what the instrument does.
+        # The room is a hall, so the source sits at radiation_distance, not at
+        # the 2 m listener_distance -- that one is a stage image chosen to give
+        # the head model sensible interaural cues, not a claim about where the
+        # players are (see the radiation comment in tonelib).
+        for rg, rdelay, image in props.reflection_terms(nomf, px, props.radiation_distance, pz):
+            ix, iy, iz = image
+            rli, rri, rld, rrd = props.hrtf_at(ix, iz, iy)
+            gm = ampM * rg
+            emit_partial(om/_PJ[0], gm*props.hrtf_gain(nomf, rli),
+                         gm*props.hrtf_gain(nomf, rri), gm, nomf,
+                         non + rdelay*SR, noff + rdelay*SR, fa, re, ch,
+                         logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0,
+                         _place=(rld*SR, rrd*SR, ix, iz))
     # SCRAPED instruments expand into their individual ridge impacts before
     # anything else looks at the note list, so the choke and the envelopes all
     # see the real strokes.
@@ -731,7 +763,8 @@ if __name__=="__main__":
         if k.strip().lower() not in ('a','c') or not v:
             raise SystemExit("pitch reference must be a=<hz> or c=<hz>, e.g. a=432")
         midilib.set_reference(**{k.strip().lower(): float(v)})
-    # blockrender.py IN.mid OUT.wav [tuner] [a=440] [--stems DIR | --objects DIR]
+    # blockrender.py IN.mid OUT.wav [tuner] [a=440]
+    #                [--stems DIR | --objects DIR [--by-source]] [--no-reflect]
     mode = None; outdir = None
     for i, a in enumerate(sys.argv):
         if a in ('--stems', '--objects') and i + 1 < len(sys.argv):

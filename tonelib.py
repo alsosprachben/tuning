@@ -1520,6 +1520,139 @@ class SynthProperties:
             + (T / T0) ** -2.5 * (0.01275 * exp(-2239.1 / T) / (frO + f2 / frO)
                                   + 0.1068 * exp(-3352.0 / T) / (frN + f2 / frN)))
 
+    # ------------------------------------------------------------------ the room
+    #
+    # Distances from the listener to each surface, metres. A shoebox is a coarse
+    # hall, but it is enough for the thing that matters here: a reflection is a
+    # second look at the SOURCE, taken from a different angle.
+    #
+    # That is what no sampled instrument can supply. A sample holds one
+    # radiation pattern, the one the microphone caught, so a reflected copy of
+    # it is the same timbre arriving late. A real trumpet sends a different
+    # spectrum at the ceiling than it sends at the listener -- its top beams
+    # forward and its bottom does not -- and computing per partial means each
+    # image source can be given the spectrum that actually departed toward its
+    # wall, absorbed by that wall's material, and aged by the longer trip
+    # through the air.
+    room_left = 12.0
+    room_right = 12.0
+    room_front = 18.0        # the wall behind the players
+    room_back = 15.0
+    room_ceiling = 12.0
+    room_floor = 1.2         # ear height above the floor
+
+    reflection_order = 1     # 0 = off; 1 = one bounce off each surface
+    reflection_floor_db = -40.0   # drop an image quieter than this, per partial
+
+    # Absorption by octave, 125 Hz to 4 kHz, for a wood-panelled hall over an
+    # occupied floor. Panelling on an airspace takes the bass through panel
+    # resonance; an occupied audience takes very nearly everything, which is why
+    # a floor reflection is weak and why halls hang their reflectors overhead.
+    SURFACE_ALPHA = {
+        'left':    (0.15, 0.11, 0.10, 0.07, 0.06, 0.07),   # wood panelling
+        'right':   (0.15, 0.11, 0.10, 0.07, 0.06, 0.07),
+        'front':   (0.02, 0.02, 0.03, 0.04, 0.05, 0.05),   # plaster behind the players
+        'back':    (0.25, 0.35, 0.45, 0.50, 0.55, 0.55),   # treated, or it slaps back
+        'ceiling': (0.02, 0.02, 0.03, 0.03, 0.04, 0.05),   # plaster
+        'floor':   (0.60, 0.74, 0.88, 0.96, 0.93, 0.85),   # occupied seating
+    }
+    # Scattering: the fraction of the reflected energy that leaves in some other
+    # direction than the mirror one. This is the term whose absence made the
+    # first version sound like a reverberation chamber. A hall's surfaces are
+    # articulated -- coffers, niches, balconies, ornament, and an audience is a
+    # very rough surface indeed -- and they break a reflection up rather than
+    # returning it whole. Scattering rises with frequency, because what scatters
+    # a wavelength is a feature about its size.
+    #
+    # The scattered energy is not destroyed, it just stops being a discrete
+    # early reflection and joins the diffuse field. We do not model that field,
+    # so it leaves here and does not come back; when a late tail exists, this is
+    # what should feed it.
+    SURFACE_SCATTER = {
+        'left':    (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+        'right':   (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+        'front':   (0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+        'back':    (0.30, 0.40, 0.60, 0.70, 0.80, 0.80),
+        'ceiling': (0.10, 0.20, 0.35, 0.50, 0.60, 0.65),
+        'floor':   (0.50, 0.60, 0.70, 0.80, 0.80, 0.80),
+    }
+    _ALPHA_HZ = (125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0)
+
+    def _octave_interp(self, table, frequency):
+        from math import log
+        f = min(max(frequency, self._ALPHA_HZ[0]), self._ALPHA_HZ[-1])
+        for i in range(len(self._ALPHA_HZ) - 1):
+            lo, hi = self._ALPHA_HZ[i], self._ALPHA_HZ[i + 1]
+            if f <= hi:
+                t = (log(f) - log(lo)) / (log(hi) - log(lo))
+                return table[i] + t * (table[i + 1] - table[i])
+        return table[-1]
+
+    def surface_reflection(self, surface, frequency):
+        """Pressure coefficient of the SPECULAR reflection: what the surface
+        did not absorb, less what it scattered elsewhere."""
+        from math import sqrt
+        alpha = self._octave_interp(self.SURFACE_ALPHA[surface], frequency)
+        scat = self._octave_interp(self.SURFACE_SCATTER[surface], frequency)
+        return sqrt(max(0.0, 1.0 - alpha)) * sqrt(max(0.0, 1.0 - scat))
+
+    def image_sources(self, sx, sy, sz):
+        """One first-order image per surface.
+
+        Two mirrors are needed, not one. Mirroring the SOURCE gives the image
+        whose straight line to the listener has the right length and the right
+        arrival direction. Mirroring the LISTENER gives the direction the sound
+        actually departed in, which is what the instrument's directivity must be
+        read at -- the ray leaves toward the mirrored listener, not toward the
+        real one. Using the arrival direction for both would ask a trumpet how
+        loud it is toward the audience and then use that for the ceiling.
+        """
+        walls = (('left', 0, -self.room_left), ('right', 0, self.room_right),
+                 ('back', 1, -self.room_back), ('front', 1, self.room_front),
+                 ('floor', 2, -self.room_floor), ('ceiling', 2, self.room_ceiling))
+        src = [sx, sy, sz]
+        out = []
+        for name, axis, plane in walls:
+            image = list(src)
+            image[axis] = 2.0 * plane - src[axis]
+            listener = [0.0, 0.0, 0.0]
+            listener[axis] = 2.0 * plane
+            out.append((name, tuple(image), tuple(listener)))
+        return out
+
+    def reflection_terms(self, frequency, sx, sy, sz):
+        """[(gain relative to the direct sound, extra delay s, image xyz)].
+
+        Every factor is frequency-dependent and so belongs to the partial, not
+        the note: how much the instrument sent that way, what the surface kept,
+        and what the longer path cost in air.
+        """
+        from math import sqrt
+        if not self.reflection_order:
+            return []
+        direct = sqrt(sx * sx + sy * sy + sz * sz) or 1e-9
+        direct_dir = self.directivity_gain(frequency, sx, sz) or 1e-9
+        air = self.air_absorption_db_per_m(frequency)
+        floor = 10.0 ** (self.reflection_floor_db / 20.0)
+        out = []
+        for name, image, mirrored in self.image_sources(sx, sy, sz):
+            path = sqrt(sum(c * c for c in image)) or 1e-9
+            # Directivity toward where the ray actually left: the mirrored
+            # listener, at the same range as the real one so only angle differs.
+            scale = direct / (sqrt(sum((m - s) ** 2 for m, s in
+                                       zip(mirrored, (sx, sy, sz)))) or 1e-9)
+            ax = (mirrored[0] - sx) * scale
+            az = (mirrored[2] - sz) * scale
+            depart = self.directivity_gain(frequency, ax, az)
+            gain = ((direct / path)
+                    * self.surface_reflection(name, frequency)
+                    * (depart / direct_dir)
+                    * 10.0 ** (-(air * (path - direct)) / 20.0))
+            if gain < floor:
+                continue
+            out.append((gain, (path - direct) / self.sound_speed, image))
+        return out
+
     def radiation_gain(self, frequency, position_x=None, position_z=None):
         """What survives the trip: directivity times air absorption over
         radiation_distance. A linear amplitude factor, per partial."""
@@ -1678,7 +1811,7 @@ class SynthProperties:
         else:
             self.plucked_volumes = [(1000000, 1.0)]
 
-    def hrtf_at(self, position_x, position_z=None):
+    def hrtf_at(self, position_x, position_z=None, position_y=None):
         """Per-ear (left_inc, right_inc, left_delay, right_delay) for a source at
         position_x metres (+ = right) and position_z metres (+ = up), via the
         Woodworth ITD on a spherical head. Factored out of __init__ so a
@@ -1694,7 +1827,7 @@ class SynthProperties:
         """
         from math import sqrt, acos, cos, pi
         z = self.position_z if position_z is None else position_z
-        y = self.listener_distance
+        y = self.listener_distance if position_y is None else position_y
         distance = max(sqrt(position_x ** 2 + y * y + z * z), self.head_radius)
         base_delay = distance / self.sound_speed
         cos_to_right = position_x / distance
@@ -3012,6 +3145,56 @@ class TrumpetProperties(CylindricalBrassProperties):
     tonal_dampening = 3.0
     octave_dampening = -0.1
 
+
+class MutedTrumpetProperties(TrumpetProperties):
+    """GM 59, with the mute actually there.
+
+    Program 59 was TrumpetProperties with a comment saying "mute not modelled",
+    so a muted part played open. A straight mute is a cone pushed into the bell
+    with a narrow annular gap left for the air, and it does three separate
+    things, all of which this model already has somewhere to put:
+
+    The bell gets acoustically SMALLER. A brass bell is a high-pass -- below its
+    cutoff the wave reflects back down the tube instead of radiating -- and
+    shrinking the opening raises that cutoff. So the fundamental and the low
+    harmonics, which an open trumpet radiates poorly already, are cut further.
+    That, not added brightness, is why a muted trumpet reads as thin and nasal.
+
+    The mute CAVITY resonates. The volume inside the cone with its gap gives a
+    broad peak in the upper middle -- around 1.9 kHz for a straight mute -- and
+    that peak is the sound people actually identify as "muted".
+
+    The aperture is smaller, so it is LESS directional, not more. Directivity
+    goes as k*a, and a mute takes the radiating radius from the bell's 62 mm to
+    something nearer 25 mm, which moves ka = 1 from about 880 Hz up past 2 kHz.
+    An open trumpet beams its top at the audience; a muted one spreads it. This
+    falls straight out of the piston model already in SynthProperties.
+
+    And it is quieter, which is the point of a mute. No equal-loudness trim
+    here: the level drop is the instrument, not the fit, and a composer writing
+    con sordino expects it.
+    """
+    # The mute's opening rather than the bell's: ka = 1 near 2.2 kHz, so it
+    # stays omnidirectional through most of its range.
+    directivity_radius = 0.025
+    # Raised from the open bell's 1600 Hz: a smaller mouth radiates less low.
+    bell_cutoff_hz = 2400.0
+    bell_order = 5.0
+    # The cavity peak. Broad (low Q) because the gap damps it heavily.
+    mute_resonance_hz = 1900.0
+    mute_resonance_q = 1.4
+    mute_resonance_db = 6.0
+    # A straight mute costs about 5 dB on top of what the raised cutoff removes.
+    initial_gain = TrumpetProperties.initial_gain * (10.0 ** (-5.0 / 20.0))
+
+    def bore_gain(self, partial_hz):
+        g = super(MutedTrumpetProperties, self).bore_gain(partial_hz)
+        if self.mute_resonance_hz and self.mute_resonance_db:
+            r = partial_hz / self.mute_resonance_hz
+            if r > 0.0:
+                boost = 10.0 ** (self.mute_resonance_db / 20.0) - 1.0
+                g *= 1.0 + boost / (1.0 + (self.mute_resonance_q * (r - 1.0 / r)) ** 2)
+        return g
 
 class TromboneProperties(CylindricalBrassProperties):
     # Radiating aperture: bell 216 mm.
