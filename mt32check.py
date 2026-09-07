@@ -287,14 +287,23 @@ def check(path, window=60.0):
                 % (ch, len(ctrl_tracks[ch]), len(names[ch]),
                    ", ".join(sorted(names[ch]))))
 
-        # -- volumes that mean silence
-        for when, value in volumes[ch]:
-            if 0 < value <= 16:
-                findings.append(
-                    "ch%d: CC7=%d at %.1fs is %.0f dB in GM -- near silence"
-                    % (ch, value, when, 40 * __import__('math').log10(value / 127)))
-            elif value == 0:
-                findings.append("ch%d: CC7=0 at %.1fs is silence" % (ch, when))
+        # -- volumes that mean silence, but only where they actually bite.
+        #    A file may set CC7=5 and then 96 at the same tick; reporting the
+        #    first is a confident, specific, false claim, and Jupiter's had
+        #    already been chased once. Flag a value only if some note sounds
+        #    while it is still the one in force.
+        onsets = sorted(o for o, _, _ in notes[ch])
+        vols = sorted(volumes[ch])
+        for i, (when, value) in enumerate(vols):
+            if value > 16:
+                continue
+            until = vols[i + 1][0] if i + 1 < len(vols) else float('inf')
+            if not any(when <= o < until for o in onsets):
+                continue
+            db = (40 * __import__('math').log10(value / 127)) if value else float('-inf')
+            findings.append(
+                "ch%d: CC7=%d from %.1fs is %s in GM, and notes sound under it"
+                % (ch, value, when, "silence" if not value else "%.0f dB" % db))
 
         # -- notes the assigned instrument cannot play.  When this fires, the
         #    file's own shadowed program is very often the right answer: a
