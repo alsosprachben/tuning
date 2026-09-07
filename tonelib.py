@@ -8416,8 +8416,17 @@ class SynthSampler(BaseSampler):
 # not in a hall: it is in a stone building four times the volume with a tenth
 # the absorption, and the difference is not a reverb setting but the room the
 # reflections and the tail are both computed from. TUNING_ROOM=church selects it.
+# Captured before any preset is applied, so 'hall' can restore them. An empty
+# dict meaning "the class defaults" is only true until something overwrites
+# them, and these ARE class attributes -- selecting chamber and then hall left
+# the hall 461 m3 with a 102 Hz Schroeder frequency.
+_ROOM_DEFAULTS = {k: getattr(SynthProperties, k) for k in (
+    'room_left', 'room_right', 'room_front', 'room_back',
+    'room_ceiling', 'room_floor', 'radiation_distance',
+    'SURFACE_ALPHA', 'SURFACE_SCATTER')}
+
 ROOM_PRESETS = {
-    'hall': {},                       # the class defaults
+    'hall': _ROOM_DEFAULTS,           # the orchestral default, restorable
     # Bach's church, not a cathedral. The Thomaskirche is a HALL church --
     # about 18000 m3, stuffed with timber galleries, a wooden roof, box pews and
     # a congregation -- and it reverberates for something like two seconds
@@ -8428,6 +8437,32 @@ ROOM_PRESETS = {
     # tracery SCATTER, which softens the early reflections and is already
     # modelled below, but scattered energy stays in the room and the
     # reverberation time barely moves. Wood, pews and people are what absorb.
+    # A salon: where modes actually live. Schroeder lands near 90 Hz here, so
+    # the bottom two octaves of a harpsichord or a chamber organ sit inside the
+    # modal region and the room's own resonances colour them -- which is the
+    # whole reason a small room sounds like a place and a hall sounds like air.
+    'chamber': dict(
+        room_left=4.0, room_right=4.0,
+        room_front=3.0, room_back=9.0,
+        room_ceiling=3.6, room_floor=1.2,
+        radiation_distance=2.5,
+        SURFACE_ALPHA={
+            'left':    (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),
+            'right':   (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),
+            'front':   (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),
+            'back':    (0.25, 0.20, 0.16, 0.14, 0.14, 0.14),
+            'ceiling': (0.25, 0.20, 0.15, 0.12, 0.12, 0.12),
+            'floor':   (0.10, 0.12, 0.18, 0.25, 0.35, 0.40),
+        },
+        SURFACE_SCATTER={
+            'left':    (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'right':   (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'front':   (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'back':    (0.15, 0.20, 0.30, 0.40, 0.50, 0.55),
+            'ceiling': (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'floor':   (0.20, 0.25, 0.35, 0.45, 0.50, 0.55),
+        },
+    ),
     'church': dict(
         room_left=11.0, room_right=11.0,
         room_front=12.0, room_back=38.0,     # organ gallery ahead, nave behind

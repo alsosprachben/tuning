@@ -126,6 +126,10 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
     rng = np.random.RandomState(seed)
     ir = np.zeros((n, channels))
     freqs = np.fft.rfftfreq(n, 1.0 / sr)
+    # Where the modal field takes over, the statistical one must stand down, or
+    # the same energy is delivered twice. Complementary to modal_ir's roll-off.
+    fs_hz = schroeder(props)
+    hp = np.clip((freqs - fs_hz) / max(fs_hz, 1e-6), 0.0, 1.0)
     for ci in range(channels):
         noise = rng.randn(n)
         spec = np.fft.rfft(noise)
@@ -152,7 +156,112 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
             if e > 0.0 and share > 0.0:
                 acc += band * math.sqrt(ratio * share / e)
         ir[:, ci] = acc
+    if fs_hz > 25.0:
+        spec = np.fft.rfft(ir, axis=0) * hp[:, None]
+        ir = np.fft.irfft(spec, n, axis=0)
     return ir, bands, onset
+
+
+def schroeder(props):
+    """Below this the room rings as discrete modes; above it, statistically."""
+    volume, _ = room_of(props)
+    t60 = decay_and_level(props, 1.0)[3][1]      # the 500 Hz band
+    return 2000.0 * math.sqrt(t60 / volume)
+
+
+def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2):
+    """The room's discrete low-frequency modes, as a sum of decaying cosines.
+
+    A rigid shoebox rings at f(nx,ny,nz) = (c/2)*sqrt((nx/Lx)^2 + (ny/Ly)^2 +
+    (nz/Lz)^2), and how strongly each mode is driven and heard depends on where
+    the source and the listener stand in its standing-wave pattern -- a source
+    at a pressure node cannot excite that mode at all, and a listener at one
+    cannot hear it. That is why bass in a small room depends so violently on
+    where you sit, and why no statistical model can produce the effect.
+
+    It matters only below the Schroeder frequency. Above that the modes overlap
+    so heavily that the response is statistical, which the diffuse tail already
+    describes: this hall has 1291 modes below 100 Hz with fiftyfold overlap. So
+    this enumerates only up to twice Schroeder and fades out across it, and in a
+    concert hall -- Schroeder 23 Hz -- it correctly does almost nothing.
+    """
+    lx = props.room_left + props.room_right
+    ly = props.room_front + props.room_back
+    lz = props.room_ceiling + props.room_floor
+    # Both positions measured from one corner.
+    lis = (props.room_left, props.room_back, props.room_floor)
+    src = (props.room_left + source_x,
+           props.room_back + props.radiation_distance,
+           props.room_floor + source_z)
+    fs = schroeder(props)
+    fmax = min(2.0 * fs, sr / 2.0)
+    c = props.sound_speed
+    bands = decay_and_level(props, 1.0)
+
+    def t60_at(f):
+        best = min(bands, key=lambda b: abs(math.log(max(f, 1e-3) / b[0])))
+        return best[1]
+
+    nmax = lambda L: int(2.0 * fmax * L / c) + 1
+    modes = []
+    for nx in range(nmax(lx) + 1):
+        for ny in range(nmax(ly) + 1):
+            for nz in range(nmax(lz) + 1):
+                if nx == ny == nz == 0:
+                    continue
+                f = 0.5 * c * math.sqrt((nx / lx) ** 2 + (ny / ly) ** 2 + (nz / lz) ** 2)
+                if f > fmax or f < 1.0:
+                    continue
+                # cos(n*pi*x/L): the standing-wave shape, at each end of the path
+                a = 1.0
+                for n, L, ps, pl in ((nx, lx, src[0], lis[0]),
+                                     (ny, ly, src[1], lis[1]),
+                                     (nz, lz, src[2], lis[2])):
+                    a *= (math.cos(n * math.pi * ps / L)
+                          * math.cos(n * math.pi * pl / L))
+                if abs(a) < 1e-4:
+                    continue
+                modes.append((f, a, t60_at(f)))
+    if not modes:
+        return np.zeros((1, channels)), 0, fs
+
+    longest = max(m[2] for m in modes)
+    n = int(min(longest * 1.2, 8.0) * sr)
+    t = np.arange(n) / float(sr)
+    ir = np.zeros((n, channels))
+    for f, a, t60 in modes:
+        env = a * np.exp(-6.907755 * t / max(t60, 1e-3))
+        for ci in range(channels):
+            # A half-wavelength apart at these frequencies is nothing, so the
+            # two ears see the same modal field -- correct, and audibly so:
+            # room bass is mono.
+            ir[:, ci] += env * np.cos(2.0 * math.pi * f * t)
+    # Fade out across Schroeder, where the statistical tail takes over.
+    spec = np.fft.rfft(ir, axis=0)
+    fr = np.fft.rfftfreq(n, 1.0 / sr)
+    roll = np.clip((2.0 * fs - fr) / max(fs, 1e-6), 0.0, 1.0)[:, None]
+    spec = spec * roll
+
+    # LEVEL. Summing 162 undamped mode shapes gives an impulse response 60 dB
+    # too hot, and nothing in the modal arithmetic sets a scale -- the same trap
+    # as the octave bands, and caught the same way. But the level is not free to
+    # choose: the modal and statistical descriptions are of ONE room, so where
+    # they meet they must agree. Normalise the modal field to the reverberant
+    # ratio the room constant already specifies at these frequencies, by
+    # mean-square gain in the band rather than by total energy.
+    band = fr <= 2.0 * fs
+    if band.any():
+        target = decay_and_level(props, 1.0)[0][2]
+        power = float((np.abs(spec[band, :]) ** 2).mean())
+        if power > 0.0:
+            # No 1/sqrt(n): convolution multiplies the spectrum by H, so the
+            # mean of |H|^2 across the band IS the mean-square gain. Including
+            # it put the modal field 47.6 dB down, which is exactly
+            # 20*log10(sqrt(n)) for this length -- the sort of error that hides
+            # as "the bass is a bit shy" if it is not measured.
+            spec *= math.sqrt(target / power)
+    ir = np.fft.irfft(spec, n, axis=0)
+    return ir, len(modes), fs
 
 
 def overlap_add(x, h):
@@ -233,6 +342,19 @@ def main(argv):
     for c in range(x.shape[1]):
         wet[:, c] = overlap_add(x[:, c], ir[:, c])
     out = x + wet
+
+    # The modal region, where the room rings rather than diffuses. In a hall
+    # this is entirely below hearing and costs nothing; in a small room it is
+    # the bass.
+    mir, nmodes, fs = modal_ir(props, sr, channels=x.shape[1])
+    if nmodes and fs > 25.0:
+        print("   %d modes below %.0f Hz (Schroeder %.1f Hz) -- the room rings"
+              % (nmodes, 2 * fs, fs))
+        for c in range(x.shape[1]):
+            out[:, c] += overlap_add(x[:, c], mir[:, c])
+    elif nmodes:
+        print("   %d modes, all below %.0f Hz (Schroeder %.1f Hz) -- inaudible,"
+              " the field is statistical here" % (nmodes, 2 * fs, fs))
     peak = np.abs(out).max()
     print("   direct peak %.3f, with tail %.3f" % (np.abs(x).max(), peak))
     # A church puts its reverberant field 14 dB over the direct sound, so a
