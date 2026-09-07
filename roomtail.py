@@ -106,9 +106,21 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
     n = int((onset + t60_max * 1.2) * sr)
     t = np.arange(n) / float(sr)
 
-    # The statistical field does not switch on; it takes over from the
-    # geometric one across the mixing time.
-    gate = np.clip((t - onset * 0.5) / max(onset * 0.5, 1e-6), 0.0, 1.0)
+    # THE DIFFUSE FIELD STARTS AT THE FIRST SCATTERING EVENT, NOT AT THE
+    # MIXING TIME. Waiting for sqrt(V) ms leaves the early window holding only
+    # the handful of specular images, and those comb: six coherent copies of a
+    # held organ note swing the steady-state response from -43.6 dB to +8.7 dB,
+    # with 43 notches below -6 dB and one at 326 Hz reaching -42.5 dB. A real
+    # room does not, because it has hundreds of early reflections filling each
+    # other's nulls.
+    #
+    # The energy to fill them is already accounted for and simply had nowhere to
+    # go: scattering takes 40-70% off every specular image, and that is exactly
+    # the incoherent early energy a room uses to fill its own combs. So the
+    # build begins at the first reflection and reaches full by the mixing time,
+    # rather than starting there.
+    early = 0.010
+    gate = np.clip((t - early) / max(onset - early, 1e-6), 0.0, 1.0)
     gate = gate * gate * (3.0 - 2.0 * gate)     # smoothstep
 
     rng = np.random.RandomState(seed)
@@ -223,6 +235,14 @@ def main(argv):
     out = x + wet
     peak = np.abs(out).max()
     print("   direct peak %.3f, with tail %.3f" % (np.abs(x).max(), peak))
+    # A church puts its reverberant field 14 dB over the direct sound, so a
+    # render mixed to sit near full scale has nowhere to put the room. Scale
+    # rather than clip: clipping here is destructive and would be heard as the
+    # model distorting, when it is only the file running out of numbers.
+    if peak > 1.0:
+        out = out / peak * 0.999
+        print("   scaled by %.2f dB to fit; render %.1f dB quieter to keep the"
+              " headroom in the mix instead" % (-20 * math.log10(peak), 20 * math.log10(peak)))
     write_wav(outp, out, sr)
     print("   written")
     return 0
