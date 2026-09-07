@@ -172,6 +172,13 @@ def rank_speak_sec(events, on_sec, aj):
         if t > on_sec and tg >= 0.5: return t + aj
     return None
 
+# Every per-partial column, in the order the table is built. subset() slices
+# exactly these and nothing else.
+PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","nf","non","noff","fa","re","ch",
+                "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
+                "tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")
+
+
 def prepare(path, tuner='hybrid'):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
@@ -196,7 +203,7 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
+    cols = {k:[] for k in ("om","p0","aL","aR","aM","mch","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
@@ -204,7 +211,8 @@ def prepare(path, tuner='hybrid'):
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     _PL = [0]                # which player of a section this partial belongs to
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
-    def emit_partial(om, ampL, ampR, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
+    _MCH = [0]               # MIDI channel of the note being emitted (stem/object export)
+    def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
         om = om * _PJ[0]
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
         # delays the whole signal; delaying only the envelope leaves both ears
@@ -219,6 +227,11 @@ def prepare(path, tuner='hybrid'):
         A["p0"].append(-om*(non + _DL[0]) + ph0)
         A["p0R"].append(-om*(non + _DL[1]) + ph0)
         A["aL"].append(ampL); A["aR"].append(ampR)
+        # ampM is this partial BEFORE the head model -- what the instrument
+        # radiates, not what an ear receives. aL/aR are ampM times a per-ear
+        # hrtf_gain, so keeping it costs one column and makes a source-referenced
+        # (object) render exact rather than an un-mixing of the binaural one.
+        A["aM"].append(ampM); A["mch"].append(_MCH[0])
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -279,6 +292,7 @@ def prepare(path, tuner='hybrid'):
         _vs = sorted(n[4] for n in notes if n[0] == _ch)
         if _vs: _vbase[_ch] = _vs[len(_vs)//2]
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
+        _MCH[0] = ch
         choked = None
         if ch == GM_PERCUSSION_CHANNEL and note in choke_at:
             choked = next((t for t in choke_at[note] if t > on + 1e-4), None)
@@ -439,7 +453,7 @@ def prepare(path, tuner='hybrid'):
                     # to its nodes; see SynthProperties.strike_phase_spread.
                     sps = props.strike_phase_spread
                     mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
-                    emit_partial(2*math.pi*hf/SR, gL, gR, hf, non_m, noff, pfade, rel, chiff,
+                    emit_partial(2*math.pi*hf/SR, gL, gR, hv*gain, hf, non_m, noff, pfade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc,
                                  gr, cr, ph0=mph)
                     # THE LATE ARRIVAL. A second copy of this partial, quieter
@@ -459,7 +473,7 @@ def prepare(path, tuner='hybrid'):
                         sc = props.bloom_scatter
                         pd = pdelay*(1.0 - sc + 2.0*sc*random.random()) if sc > 0.0 else pdelay
                         bfade = max(1e-4, min(props.bloom_swell*pd/SR, 0.45*dur))*SR
-                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hf, non_m+pd, noff,
+                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hv*gain*bg, hf, non_m+pd, noff,
                                      bfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
                                      cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
@@ -482,7 +496,7 @@ def prepare(path, tuner='hybrid'):
                         _PL[0] = ui + 1
                         non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
-                        emit_partial(2*math.pi*uf/SR, ugL, ugR, uf, non_u, noff, pfade, rel, chiff,
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, hv*gain*gm, uf, non_u, noff, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
@@ -509,12 +523,12 @@ def prepare(path, tuner='hybrid'):
                     if g < floor: continue
                     dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
                     aftp, adbp = props.aftersound(f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
-                    emit_partial(2*math.pi*fph/SR, g, g, fph, non, noff, fade, rel, chiff,
+                    emit_partial(2*math.pi*fph/SR, g, g, g, fph, non, noff, fade, rel, chiff,
                                  lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S)
-    for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("nf","f4"),
+    for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
@@ -559,6 +573,75 @@ def render(path, tuner='hybrid'):
     t0=time.time(); L,R = synth_window(prep, 0, prep['N']); kdt=time.time()-t0
     return L,R,prep['total'],prep['P'],kdt
 
+
+# ---------------------------------------------------------------- stems/objects
+#
+# The partial table already separates every source: each row knows which MIDI
+# channel it came from, what the instrument radiates (aM) and what each ear
+# receives (aL/aR, aM times a per-ear head-shadow gain). So a per-part render is
+# a row selection, not a second engine, and an object render is that selection
+# with the head model left off.
+#
+# Which you want depends on who applies the listener model:
+#
+#   stems    keep the head model. Stereo, and they sum back to the full mix
+#            sample for sample. For mixing, and for checking one part in place.
+#
+#   objects  drop it. Mono, source-referenced, carrying the position the source
+#            actually sits at -- what object audio (ADM BWF, Atmos) wants,
+#            because there the RENDERER owns the listener. Baking our head into
+#            an object would put two head models in series.
+
+def channel_rows(prep):
+    """{MIDI channel: row mask} over the partial table."""
+    mch = prep['mch']
+    return {int(c): (mch == c) for c in np.unique(mch)}
+
+
+def subset(prep, mask, objectify=False):
+    """A prep holding only the masked rows.
+
+    With objectify, the rows are re-pointed at what the instrument radiates:
+    both ears get aM, and the interaural delay -- which is a fact about a head,
+    not about a source -- is removed from both the envelope and the carrier
+    phase. p0R must follow p0 for that; leaving it would keep an ITD in the
+    carrier while claiming there is none, the same trap the ear-delay comment
+    above describes from the other side.
+    """
+    out = dict(prep)
+    # By name, not by length: G and S are the registration blocks, not partial
+    # columns, and selecting on len(v) == P would take them too on any file
+    # whose partial count happened to equal its rank count.
+    for k in PARTIAL_COLS:
+        out[k] = np.ascontiguousarray(prep[k][mask])
+    out['P'] = int(mask.sum())
+    if objectify:
+        out['aL'] = out['aR'] = np.ascontiguousarray(out['aM'])
+        out['p0R'] = np.ascontiguousarray(out['p0'])
+        z = np.zeros(out['P'], np.float32)
+        out['delL'] = z; out['delR'] = z.copy()
+    return out
+
+
+def render_parts(path, tuner='hybrid', objects=False):
+    """Render one signal per MIDI channel. Yields (channel, L, R, partials).
+
+    R is R for a stem and a copy of L for an object.
+    """
+    prep = prepare(path, tuner)
+    for ch, mask in sorted(channel_rows(prep).items()):
+        sub = subset(prep, mask, objectify=objects)
+        if not sub['P']:
+            continue
+        L, R = synth_window(sub, 0, sub['N'])
+        yield ch, L, R, sub['P']
+
+
+def write_wav_mono(path, L):
+    """One channel, at the rate it was rendered at (see write_wav)."""
+    w = wave.open(path, 'wb'); w.setnchannels(1); w.setsampwidth(4); w.setframerate(SR)
+    w.writeframes((np.clip(L, -1, 1) * 2147483647.0).astype('<i4').tobytes()); w.close()
+
 def write_wav(path, L, R):
     """Write a stereo render to WAV **at the rate it was rendered at**.
 
@@ -581,11 +664,31 @@ if __name__=="__main__":
     # matters -- a temperament's own A-to-C ratio is not equal temperament's, so
     # c=256 lands on a different A in each one. Omit it to keep each
     # temperament's own reference. See tunelib.set_reference.
-    if len(sys.argv)>4:
+    if len(sys.argv)>4 and not sys.argv[4].startswith('--'):
         k,_,v = sys.argv[4].partition('=')
         if k.strip().lower() not in ('a','c') or not v:
             raise SystemExit("pitch reference must be a=<hz> or c=<hz>, e.g. a=432")
         midilib.set_reference(**{k.strip().lower(): float(v)})
+    # blockrender.py IN.mid OUT.wav [tuner] [a=440] [--stems DIR | --objects DIR]
+    mode = None; outdir = None
+    for i, a in enumerate(sys.argv):
+        if a in ('--stems', '--objects') and i + 1 < len(sys.argv):
+            mode = a[2:]; outdir = sys.argv[i + 1]
+    if mode:
+        import os
+        os.makedirs(outdir, exist_ok=True)
+        base = os.path.splitext(os.path.basename(inp))[0]
+        t0 = time.time(); n = 0; tot = 0.0; P = 0
+        for ch, L, R, p in render_parts(inp, tuner, objects=(mode == 'objects')):
+            f = os.path.join(outdir, "%s.ch%02d.wav" % (base, ch))
+            if mode == 'objects': write_wav_mono(f, L)
+            else: write_wav(f, L, R)
+            print("  ch%-3d %8d partials -> %s" % (ch, p, f))
+            n += 1; P += p; tot = len(L) / float(SR)
+        dt = time.time() - t0
+        print("blockrender %s: %d parts, %d partials, %.1fs audio, %.2fs = %.1fx realtime"
+              % (mode, n, P, tot, dt, tot / dt if dt else 0.0))
+        raise SystemExit(0)
     t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
     write_wav(outp, L, R)
     print("blockrender: %.1fs audio, %d partials, kernel %.2fs, total %.2fs = %.1fx realtime -> %s"%(total,P,kdt,dt,total/dt,outp))

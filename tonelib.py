@@ -1397,6 +1397,13 @@ class SynthProperties:
     # rank) without rebuilding the note.
     head_radius = 0.0875        # metres
     listener_distance = 2.0     # metres (a stage image, not the 0.2 m soundboard)
+    # Height of the source above the listener's ear plane, metres (+ = up). Zero
+    # for anything standing on the stage floor; a gallery organ, an offstage
+    # chorus in a room above, or a raised percussion riser sit above it. Only the
+    # ANGLE to the interaural axis matters, so a source directly overhead has no
+    # interaural delay at all -- which is exactly why height needs its own axis
+    # and cannot be faked with pan.
+    position_z = 0.0            # metres
 
     # Decay rate scaling per octave (times harmonic_decay). 0 = register-flat; the
     # piano sets it > 0 so the bass rings long and the treble decays fast.
@@ -1549,22 +1556,33 @@ class SynthProperties:
         else:
             self.plucked_volumes = [(1000000, 1.0)]
 
-    def hrtf_at(self, position_x):
+    def hrtf_at(self, position_x, position_z=None):
         """Per-ear (left_inc, right_inc, left_delay, right_delay) for a source at
-        position_x metres (+ = right), via the Woodworth ITD on a spherical head.
-        Factored out of __init__ so a registerable voice can place each rank at
-        its own case position without rebuilding the note."""
-        from math import atan2, sqrt, acos, cos, pi
-        azimuth = atan2(position_x, self.listener_distance)
-        distance = max(sqrt(position_x ** 2 + self.listener_distance ** 2), self.head_radius)
+        position_x metres (+ = right) and position_z metres (+ = up), via the
+        Woodworth ITD on a spherical head. Factored out of __init__ so a
+        registerable voice can place each rank at its own case position without
+        rebuilding the note.
+
+        Both ears lie on the x axis, so the only thing either one asks of a
+        source is its angle to that axis -- which is the direction cosine along
+        x, whatever the source's height. Writing it that way rather than as an
+        azimuth generalises to three dimensions for free and is exactly the old
+        two-dimensional result when position_z is 0: there
+        sin(atan2(x, y)) == x / sqrt(x**2 + y**2).
+        """
+        from math import sqrt, acos, cos, pi
+        z = self.position_z if position_z is None else position_z
+        y = self.listener_distance
+        distance = max(sqrt(position_x ** 2 + y * y + z * z), self.head_radius)
         base_delay = distance / self.sound_speed
-        def woodworth(ear_azimuth):
+        cos_to_right = position_x / distance
+        def woodworth(cos_theta):
             # incidence angle between the source ray and the ear axis
-            theta = acos(cos(azimuth - ear_azimuth))
+            theta = acos(max(-1.0, min(1.0, cos_theta)))
             offset = -cos(theta) if theta <= pi / 2 else (theta - pi / 2)
             return theta, base_delay + offset * self.head_radius / self.sound_speed
-        li, ld = woodworth(-pi / 2)
-        ri, rd = woodworth(pi / 2)
+        li, ld = woodworth(-cos_to_right)
+        ri, rd = woodworth(cos_to_right)
         return li, ri, ld, rd
 
     def hrtf_gain(self, frequency, incidence):
