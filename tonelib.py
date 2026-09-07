@@ -8445,14 +8445,20 @@ ROOM_PRESETS = {
         room_left=4.0, room_right=4.0,
         room_front=3.0, room_back=9.0,
         room_ceiling=3.6, room_floor=1.2,
-        radiation_distance=2.5,
+        # 2 m, and the room FURNISHED. The first version had bare plaster over
+        # a bare floor, which gave a 461 m3 salon a 1.21 s reverberation and a
+        # critical distance of 1.15 m -- so a listener at 2.5 m sat more than
+        # twice beyond it and heard mostly room. A room with a harpsichord in it
+        # has rugs, hangings, bookcases and furniture, and those take the
+        # critical distance out to where a player actually sits.
+        radiation_distance=2.0,
         SURFACE_ALPHA={
-            'left':    (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),
-            'right':   (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),
-            'front':   (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),
-            'back':    (0.25, 0.20, 0.16, 0.14, 0.14, 0.14),
-            'ceiling': (0.25, 0.20, 0.15, 0.12, 0.12, 0.12),
-            'floor':   (0.10, 0.12, 0.18, 0.25, 0.35, 0.40),
+            'left':    (0.25, 0.22, 0.20, 0.18, 0.18, 0.18),   # hangings, shelves
+            'right':   (0.25, 0.22, 0.20, 0.18, 0.18, 0.18),
+            'front':   (0.25, 0.22, 0.20, 0.18, 0.18, 0.18),
+            'back':    (0.30, 0.26, 0.24, 0.22, 0.22, 0.22),
+            'ceiling': (0.20, 0.18, 0.15, 0.14, 0.14, 0.14),   # plaster
+            'floor':   (0.15, 0.20, 0.30, 0.40, 0.45, 0.45),   # boards and rugs
         },
         SURFACE_SCATTER={
             'left':    (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),

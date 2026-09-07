@@ -347,6 +347,9 @@ def main(argv):
     # this is entirely below hearing and costs nothing; in a small room it is
     # the bass.
     mir, nmodes, fs = modal_ir(props, sr, channels=x.shape[1])
+    if '--no-modes' in argv:
+        print("   modes suppressed (--no-modes)")
+        nmodes = 0
     if nmodes and fs > 25.0:
         print("   %d modes below %.0f Hz (Schroeder %.1f Hz) -- the room rings"
               % (nmodes, 2 * fs, fs))
