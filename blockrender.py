@@ -434,7 +434,11 @@ def prepare(path, tuner='hybrid'):
                     pfade = fade
                     dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
                     aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
-                    gL = hv*gain*props.hrtf_gain(hf, li); gR = hv*gain*props.hrtf_gain(hf, ri)
+                    # What the instrument radiates toward here: directivity at
+                    # this partial's frequency, less what the air ate on the way.
+                    # The head model is applied on top of it, not instead of it.
+                    gM = hv*gain*props.radiation_gain(hf)
+                    gL = gM*props.hrtf_gain(hf, li); gR = gM*props.hrtf_gain(hf, ri)
                     cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                     if mls > 0.0:
                         mlo = props.mode_lock_offset_for(m)
@@ -453,7 +457,7 @@ def prepare(path, tuner='hybrid'):
                     # to its nodes; see SynthProperties.strike_phase_spread.
                     sps = props.strike_phase_spread
                     mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
-                    emit_partial(2*math.pi*hf/SR, gL, gR, hv*gain, hf, non_m, noff, pfade, rel, chiff,
+                    emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, rel, chiff,
                                  logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc,
                                  gr, cr, ph0=mph)
                     # THE LATE ARRIVAL. A second copy of this partial, quieter
@@ -473,7 +477,7 @@ def prepare(path, tuner='hybrid'):
                         sc = props.bloom_scatter
                         pd = pdelay*(1.0 - sc + 2.0*sc*random.random()) if sc > 0.0 else pdelay
                         bfade = max(1e-4, min(props.bloom_swell*pd/SR, 0.45*dur))*SR
-                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, hv*gain*bg, hf, non_m+pd, noff,
+                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, gM*bg, hf, non_m+pd, noff,
                                      bfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
                                      cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
@@ -490,13 +494,13 @@ def prepare(path, tuner='hybrid'):
                             # voice's is -- a few cents of detune moves it by
                             # nothing, and the two renderers must agree.
                             sli, sri, sld, srd = seats[ui + 1]
-                            ugL = hv*gain*gm*props.hrtf_gain(hf, sli)
-                            ugR = hv*gain*gm*props.hrtf_gain(hf, sri)
+                            ugL = gM*gm*props.hrtf_gain(hf, sli)
+                            ugR = gM*gm*props.hrtf_gain(hf, sri)
                             _DL[0] = sld*SR; _DL[1] = srd*SR
                         _PL[0] = ui + 1
                         non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
-                        emit_partial(2*math.pi*uf/SR, ugL, ugR, hv*gain*gm, uf, non_u, noff, pfade, rel, chiff,
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, gM*gm, uf, non_u, noff, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
@@ -519,7 +523,7 @@ def prepare(path, tuner='hybrid'):
                     fb,vb,db_ = parents[bb]
                     fph = fa+fb
                     if fph >= SR/2: break
-                    g = coupling*va*vb*(1.0 if a==bb else 2.0)
+                    g = coupling*va*vb*(1.0 if a==bb else 2.0)*props.radiation_gain(fph)
                     if g < floor: continue
                     dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
                     aftp, adbp = props.aftersound(f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0

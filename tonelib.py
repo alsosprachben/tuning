@@ -1405,6 +1405,128 @@ class SynthProperties:
     # and cannot be faked with pan.
     position_z = 0.0            # metres
 
+    # ------------------------------------------------------------------ radiation
+    #
+    # Two things happen between the instrument and the listener that have
+    # nothing to do with the listener's head, and both are per-partial:
+    #
+    #   directivity     an instrument does not radiate equally in all
+    #                   directions, and how unequally depends on frequency. A
+    #                   bell of radius a is omnidirectional while the wavelength
+    #                   is long against it and beams once ka > 1, so a trumpet
+    #                   (a = 62 mm, ka = 1 at about 880 Hz) throws its top
+    #                   forward and its bottom everywhere.
+    #
+    #   air absorption  air is a low-pass filter with distance, going roughly as
+    #                   f^2. Over a hall it costs a decibel or so at 10 kHz and
+    #                   nothing at 1 kHz.
+    #
+    # Both are properties of the SOURCE and the PATH, so they belong to what the
+    # instrument radiates, not to what an ear receives -- which is why they
+    # multiply into the object signal and the head model stays separate.
+    #
+    # Distance: listener_distance is a 2 m stage IMAGE, chosen so the head model
+    # gives sensible interaural cues, not a claim about where the players are.
+    # Radiation happens over the real room, so it gets its own distance.
+    radiation_distance = 12.0   # metres, source to listener across the hall
+
+    directivity_radius = 0.0    # metres; effective radiating aperture, 0 = omni
+    directivity_axis_deg = 0.0  # where the instrument points, relative to the
+                                # listener (0 = at them, 180 = directly away)
+    directivity_floor = 0.25    # -12 dB, and this floor is doing real work.
+                                # An ideal piston has true nulls off axis, but
+                                # this model has only the direct path: no back
+                                # wall, no risers, no reverberant field. In a
+                                # hall none of those let a source vanish, and a
+                                # listener off the axis of a large bell hears it
+                                # through the room rather than not at all. -26 dB
+                                # was audibly wrong -- it took a horn one seat
+                                # off centre down 25 dB at 4 kHz. Until there is
+                                # a reflection model, this is what stands in for
+                                # the energy the room returns.
+
+    air_temperature_c = 20.0
+    air_humidity_pct = 50.0
+    air_pressure_kpa = 101.325
+
+    @staticmethod
+    def _bessel_j1(x):
+        """J1(x) for x >= 0, Abramowitz & Stegun 9.4.4 / 9.4.6 (~1e-7)."""
+        from math import sqrt, cos
+        if x < 3.0:
+            t = x / 3.0; t2 = t * t
+            return x * (0.5 + t2 * (-0.56249985 + t2 * (0.21093573 + t2 * (
+                -0.03954289 + t2 * (0.00443319 + t2 * (-0.00031761 + t2 * 0.00001109))))))
+        t = 3.0 / x
+        f1 = (0.79788456 + t * (0.00000156 + t * (0.01659667 + t * (0.00017105 + t * (
+            -0.00249511 + t * (0.00113653 + t * -0.00020033))))))
+        th = (x - 2.35619449 + t * (0.12499612 + t * (0.00005650 + t * (-0.00637879 + t * (
+            0.00074348 + t * (0.00079824 + t * -0.00029166))))))
+        return f1 * cos(th) / sqrt(x)
+
+    def off_axis_angle(self, position_x=None, position_z=None):
+        """Angle between where the instrument points and where the listener is.
+
+        The listener is the origin; the player sits at (x, radiation_distance, z)
+        and, with directivity_axis_deg = 0, aims into the hall along -y. Yawing
+        the axis by psi about the vertical takes it to (sin psi, -cos psi, 0),
+        so 180 degrees points directly upstage, away.
+
+        This has to come from the geometry rather than be a per-instrument
+        constant: an instrument aimed straight down the hall is still off axis
+        to anyone not sitting in front of it, and that -- not the axis angle --
+        is what makes a trumpet at the edge of the stage sound different from
+        one in the middle.
+        """
+        from math import pi, sin, cos, sqrt, acos
+        x = self.position_x if position_x is None else position_x
+        z = self.position_z if position_z is None else position_z
+        d = self.radiation_distance
+        psi = self.directivity_axis_deg * pi / 180.0
+        norm = sqrt(x * x + d * d + z * z) or 1.0
+        cos_theta = (-x * sin(psi) + d * cos(psi)) / norm
+        return acos(max(-1.0, min(1.0, cos_theta)))
+
+    def directivity_gain(self, frequency, position_x=None, position_z=None):
+        """Off-axis gain of a piston of radius `directivity_radius`: 2*J1(x)/x
+        with x = k*a*sin(theta). Unity below ka ~ 1 at any angle, which is why
+        low notes fill a hall from anywhere and high ones have to be aimed."""
+        from math import pi, sin
+        a = self.directivity_radius
+        if a <= 0.0:
+            return 1.0
+        theta = self.off_axis_angle(position_x, position_z)
+        x = abs(2.0 * pi * frequency / self.sound_speed * a * sin(theta))
+        if x < 1e-6:
+            return 1.0
+        return max(abs(2.0 * self._bessel_j1(x) / x), self.directivity_floor)
+
+    def air_absorption_db_per_m(self, frequency):
+        """ISO 9613-1 atmospheric attenuation, dB/m. No free parameters: it
+        follows from temperature, humidity and pressure, and the oxygen and
+        nitrogen relaxation frequencies those imply."""
+        from math import exp
+        T = self.air_temperature_c + 273.15
+        T0, T01 = 293.15, 273.16
+        pa = self.air_pressure_kpa / 101.325
+        psat = 10.0 ** (-6.8346 * (T01 / T) ** 1.261 + 4.6151)
+        h = self.air_humidity_pct * psat / pa
+        frO = pa * (24.0 + 4.04e4 * h * (0.02 + h) / (0.391 + h))
+        frN = pa * (T / T0) ** -0.5 * (9.0 + 280.0 * h
+                                       * exp(-4.170 * ((T / T0) ** (-1.0 / 3.0) - 1.0)))
+        f2 = frequency * frequency
+        return 8.686 * f2 * (
+            1.84e-11 / pa * (T / T0) ** 0.5
+            + (T / T0) ** -2.5 * (0.01275 * exp(-2239.1 / T) / (frO + f2 / frO)
+                                  + 0.1068 * exp(-3352.0 / T) / (frN + f2 / frN)))
+
+    def radiation_gain(self, frequency, position_x=None, position_z=None):
+        """What survives the trip: directivity times air absorption over
+        radiation_distance. A linear amplitude factor, per partial."""
+        db = self.air_absorption_db_per_m(frequency) * self.radiation_distance
+        return (self.directivity_gain(frequency, position_x, position_z)
+                * (10.0 ** (-db / 20.0)))
+
     # Decay rate scaling per octave (times harmonic_decay). 0 = register-flat; the
     # piano sets it > 0 so the bass rings long and the treble decays fast.
     decay_register_slope = 0.0
@@ -2850,6 +2972,8 @@ ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
 
 class TrumpetProperties(CylindricalBrassProperties):
+    # Radiating aperture: bell 125 mm; ka = 1 at about 880 Hz.
+    directivity_radius = 0.062
     """The Bb trumpet, fitted to the Iowa recordings across three registers.
 
     CylindricalBrassProperties is left as it was, because it is also the spectrum the
@@ -2890,6 +3014,8 @@ class TrumpetProperties(CylindricalBrassProperties):
 
 
 class TromboneProperties(CylindricalBrassProperties):
+    # Radiating aperture: bell 216 mm.
+    directivity_radius = 0.108
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -2956,6 +3082,8 @@ class TromboneProperties(CylindricalBrassProperties):
 
 
 class BassTromboneProperties(TromboneProperties):
+    # Radiating aperture: bell 242 mm.
+    directivity_radius = 0.121
     """The instrument that actually plays a trombone part below C2.
 
     MEASURED: Iowa BassTrombone.mf, four registers, C#1-G4, 43 notes.
@@ -2983,6 +3111,17 @@ class BassTromboneProperties(TromboneProperties):
     max_harmonic = 256
 
 class HornProperties(ConicalBrassProperties):
+    # Radiating aperture: bell 310 mm. The bell really does point back and
+    # right with the player's hand in it, and the audience hears it off axis
+    # and by reflection -- but this voice's SPECTRUM was fitted to a horn
+    # recording, which already contains that. Turning the axis away here
+    # would charge for the same mellowness twice, and the direct-path model
+    # has no back wall to return the energy the way a hall does. So only the
+    # seat geometry applies, as it does to every other instrument, and the
+    # bell's own direction stays in the calibrated spectrum where it was
+    # measured. Set directivity_axis_deg to experiment, but expect it to be
+    # too dark until there is a reflection model to put the energy back.
+    directivity_radius = 0.155
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -7721,7 +7860,10 @@ class SynthTone(BaseTone):
             harmonic_volume_raw = self.properties.harmonic_volume(harmonic)
             main_inc, main_delay = (self.seats[0] if self.seats
                                     else (getattr(self, 'incidence', 0.0), self.delay))
-            harmonic_volume = harmonic_volume_raw * self.pan
+            # Radiation is a fact about the instrument and the air between it
+            # and here, not about a head, so it applies whether or not the
+            # binaural model does.
+            harmonic_volume = harmonic_volume_raw * self.pan * self.properties.radiation_gain(harmonic_frequency)
             if hrtf:
                 harmonic_volume *= self.properties.hrtf_gain(harmonic_frequency, main_inc)
             if harmonic_volume == 0.0:
@@ -7767,7 +7909,7 @@ class SynthTone(BaseTone):
                 uinc, udelay = (self.seats[ui + 1]
                                 if self.seats and ui + 1 < len(self.seats)
                                 else (main_inc, main_delay))
-                uvol = harmonic_volume_raw * self.pan
+                uvol = harmonic_volume_raw * self.pan * self.properties.radiation_gain(harmonic_frequency)
                 if hrtf:
                     uvol *= self.properties.hrtf_gain(harmonic_frequency, uinc)
                 partial = SimplePartial(self.properties, self.frequency, harmonic,
@@ -7807,7 +7949,8 @@ class SynthTone(BaseTone):
                     if gain < floor:
                         continue
                     ph = SimplePartial(self.properties, self.frequency, f_ph / self.frequency,
-                                       gain * self.pan, da + db_, self.delay, self.ref_count)
+                                       gain * self.pan * self.properties.radiation_gain(f_ph),
+                                       da + db_, self.delay, self.ref_count)
                     ph.inharmonic_stretch = 1.0    # already placed at the (stretched) sum frequency
                     self.partials.append(ph)
 
@@ -7897,7 +8040,7 @@ class SynthTone(BaseTone):
                     hv = hv_fn(m)
                     if hv == 0.0:
                         continue
-                    vol = hv * self.pan
+                    vol = hv * self.pan * props.radiation_gain(hf)
                     if hrtf:
                         vol *= props.hrtf_gain(hf, rank_incidence)
                     vol *= gain
