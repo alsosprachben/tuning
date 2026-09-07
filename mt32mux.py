@@ -122,6 +122,7 @@ def read_parts(mid):
         held = {}
         notes = []
         drum = False
+        chans = set()
         now = 0
         for msg in track:
             now += msg.time
@@ -133,6 +134,7 @@ def read_parts(mid):
                 cc[msg.control].append((now, msg.value))
             elif msg.type == 'note_on' and msg.velocity:
                 held.setdefault(msg.note, []).append((now, msg.velocity))
+                chans.add(msg.channel)
                 drum = drum or msg.channel == GM_PERCUSSION_CHANNEL
             elif msg.type in ('note_off', 'note_on') and held.get(msg.note):
                 on, vel = held[msg.note].pop(0)
@@ -140,7 +142,47 @@ def read_parts(mid):
         if notes:
             parts.append({'track': ti, 'name': name or 'trk%d' % ti,
                           'progs': progs, 'cc': cc, 'notes': sorted(notes),
-                          'was_drum': drum})
+                          'was_drum': drum,
+                          'from_ch': min(chans) if chans else 0})
+    return parts
+
+
+def channel_cc(mid):
+    """The file's combined per-channel controller timelines -- what was really
+    in force, which is not the same as what any one track wrote."""
+    out = {}
+    for track in mid.tracks:
+        now = 0
+        for msg in track:
+            now += msg.time
+            if msg.type == 'control_change':
+                out.setdefault(msg.channel, {}).setdefault(msg.control, []).append(
+                    (now, msg.value))
+    for ch in out:
+        for c in out[ch]:
+            out[ch][c].sort()
+    return out
+
+
+def seed_parts(parts, combined):
+    """Give each part the volume that was actually in force when it entered.
+
+    Separating parts that shared a channel exposes anything a track wrote and
+    another track then masked. Jupiter's Percussion track opens with CC7=5 and
+    does not touch it again until 63 s -- inaudible in the original, because
+    Timpani I shared the channel and set 124 at 21 s. Split them and the
+    percussion plays its first 40 seconds at -56 dB.
+
+    So each part starts from the combined channel state at its first note, and
+    only then follows its own automation.
+    """
+    for p in parts:
+        first = p['notes'][0][0]
+        for ctrl, default in ((7, 100), (10, 64)):
+            own = [e for e in sorted(p['cc'][ctrl]) if e[0] >= first]
+            was = value_at(sorted(combined.get(p['from_ch'], {}).get(ctrl, [])),
+                           first, default)
+            p['cc'][ctrl] = [(0, was)] + own
     return parts
 
 
@@ -265,7 +307,7 @@ def main(argv):
             overrides[k.strip().lower()] = int(v)
 
     mid = mido.MidiFile(inp)
-    parts = read_parts(mid)
+    parts = seed_parts(read_parts(mid), channel_cc(mid))
     for p in parts:
         low = p['name'].lower()
         p['percussive'] = any(w in low for w in PERCUSSIVE)
