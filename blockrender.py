@@ -174,7 +174,7 @@ def rank_speak_sec(events, on_sec, aj):
 
 # Every per-partial column, in the order the table is built. subset() slices
 # exactly these and nothing else.
-PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","nf","non","noff","fa","re","ch",
+PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
                 "tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")
 
@@ -203,7 +203,7 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","aM","mch","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
+    cols = {k:[] for k in ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
@@ -212,6 +212,13 @@ def prepare(path, tuner='hybrid'):
     _PL = [0]                # which player of a section this partial belongs to
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     _MCH = [0]               # MIDI channel of the note being emitted (stem/object export)
+    # Where this partial is actually radiating FROM. A section is not one
+    # source: section_position_x seats each player at their own desk, and
+    # rank_position_x stands each drawstop at its own place in the case. The
+    # binaural mix has always honoured that -- it is where the interaural
+    # delays come from -- so an object export that collapses a channel to one
+    # point throws away placement the model already has.
+    _PX = [0.0]; _PZ = [0.0]  # metres, + = right / up
     def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0):
         om = om * _PJ[0]
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
@@ -232,6 +239,7 @@ def prepare(path, tuner='hybrid'):
         # hrtf_gain, so keeping it costs one column and makes a source-referenced
         # (object) render exact rather than an un-mixing of the binaural one.
         A["aM"].append(ampM); A["mch"].append(_MCH[0])
+        A["px"].append(_PX[0]); A["pz"].append(_PZ[0])
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -371,6 +379,7 @@ def prepare(path, tuner='hybrid'):
         # three strings share a hammer; a drum head's modes share a membrane).
         onsets = (props.section_onsets_at(f0)
                   if hasattr(props, 'section_onsets_at') else None)
+        _PX[0] = getattr(props,'position_x',0.0); _PZ[0] = getattr(props,'position_z',0.0)
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             li, ri, _sd0, _sd1 = seats[0]
@@ -407,8 +416,9 @@ def prepare(path, tuner='hybrid'):
                 non_r = non
             # Place this drawstop at its case position (shared across a compound rank).
             if organ and getattr(props,'spiral_spatial',False):
-                li,ri,_ld,_rd = props.hrtf_at(props.rank_position_x(key))
-                _DL[0] = _ld*SR; _DL[1] = _rd*SR
+                _rx = props.rank_position_x(key)
+                li,ri,_ld,_rd = props.hrtf_at(_rx)
+                _DL[0] = _ld*SR; _DL[1] = _rd*SR; _PX[0] = _rx
             ceiling = getattr(props,'pipe_ceiling_hz',None); bmode = getattr(props,'pipe_break_mode','fold')
             # Compound rank (Mixtur): ratio is a LIST of footages; else a scalar. Each
             # sub-footage breaks back on the note's grid past the ceiling (mirrors
@@ -494,6 +504,7 @@ def prepare(path, tuner='hybrid'):
                             # voice's is -- a few cents of detune moves it by
                             # nothing, and the two renderers must agree.
                             sli, sri, sld, srd = seats[ui + 1]
+                            _PX[0] = props.section_position_x(ui + 1)
                             ugL = gM*gm*props.hrtf_gain(hf, sli)
                             ugR = gM*gm*props.hrtf_gain(hf, sri)
                             _DL[0] = sld*SR; _DL[1] = srd*SR
@@ -505,6 +516,7 @@ def prepare(path, tuner='hybrid'):
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
                     _PL[0] = 0
+                    _PX[0] = getattr(props,'position_x',0.0)
                     if seats:
                         _DL[0] = seats[0][2]*SR; _DL[1] = seats[0][3]*SR
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
@@ -532,7 +544,8 @@ def prepare(path, tuner='hybrid'):
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S)
-    for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("nf","f4"),
+    for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),
+                 ("px","f4"),("pz","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
@@ -602,6 +615,44 @@ def channel_rows(prep):
     return {int(c): (mch == c) for c in np.unique(mch)}
 
 
+def source_rows(prep):
+    """{(channel, player, rank): row mask}, one entry per physical source.
+
+    Finer than channel_rows by exactly as much as the model already knows: the
+    players of a section sit at their own desks (pl) and an organ's drawstops
+    stand at their own places in the case (gr), so one channel is usually
+    several sources.
+
+    Grouping is by WHO is playing, not by where the sound came from. Position
+    is not an identity here: position_x carries a pitch term
+    (octave_position * octave_width), so every note of a part sits at a slightly
+    different place, and grouping on the coordinate splits one player into one
+    source per note -- 812 of them for Neptune, against an Atmos ceiling of 118.
+    An object is a thing that persists and moves; the movement belongs in its
+    position over time, not in its identity.
+    """
+    mch = prep['mch'].astype(np.int64)
+    pl = prep['pl'].astype(np.int64)
+    gr = prep['gr'].astype(np.int64)
+    key = (mch << 40) ^ (pl << 20) ^ (gr + 1)
+    out = {}
+    for k in np.unique(key):
+        m = key == k
+        out[(int(mch[m][0]), int(pl[m][0]), int(gr[m][0]))] = m
+    return out
+
+
+def source_position(prep, mask):
+    """Where a source sits: its partials' mean position, amplitude-weighted so
+    the notes it actually projects count for more than the ones it whispers."""
+    w = prep['aM'][mask].astype(np.float64)
+    s = w.sum()
+    if s <= 0:
+        return float(prep['px'][mask].mean()), float(prep['pz'][mask].mean())
+    return (float((prep['px'][mask] * w).sum() / s),
+            float((prep['pz'][mask] * w).sum() / s))
+
+
 def subset(prep, mask, objectify=False):
     """A prep holding only the masked rows.
 
@@ -627,18 +678,25 @@ def subset(prep, mask, objectify=False):
     return out
 
 
-def render_parts(path, tuner='hybrid', objects=False):
-    """Render one signal per MIDI channel. Yields (channel, L, R, partials).
+def render_parts(path, tuner='hybrid', objects=False, by='channel'):
+    """Render one signal per part. Yields (key, position, L, R, partials).
 
+    `by` is 'channel' (one per MIDI channel) or 'source' (one per distinct
+    radiating point -- each desk of a section, each drawstop of a case).
     R is R for a stem and a copy of L for an object.
     """
     prep = prepare(path, tuner)
-    for ch, mask in sorted(channel_rows(prep).items()):
+    if by == 'source':
+        groups = [(k[0], source_position(prep, m), m)
+                  for k, m in sorted(source_rows(prep).items())]
+    else:
+        groups = [(ch, None, m) for ch, m in sorted(channel_rows(prep).items())]
+    for ch, pos, mask in groups:
         sub = subset(prep, mask, objectify=objects)
         if not sub['P']:
             continue
         L, R = synth_window(sub, 0, sub['N'])
-        yield ch, L, R, sub['P']
+        yield ch, pos, L, R, sub['P']
 
 
 def write_wav_mono(path, L):
@@ -682,13 +740,32 @@ if __name__=="__main__":
         import os
         os.makedirs(outdir, exist_ok=True)
         base = os.path.splitext(os.path.basename(inp))[0]
-        t0 = time.time(); n = 0; tot = 0.0; P = 0
-        for ch, L, R, p in render_parts(inp, tuner, objects=(mode == 'objects')):
-            f = os.path.join(outdir, "%s.ch%02d.wav" % (base, ch))
+        by = 'source' if '--by-source' in sys.argv else 'channel'
+        t0 = time.time(); n = 0; tot = 0.0; P = 0; manifest = []
+        seen = {}
+        for ch, pos, L, R, p in render_parts(inp, tuner, objects=(mode == 'objects'), by=by):
+            if pos is None:
+                name = "%s.ch%02d" % (base, ch)
+            else:
+                i = seen[ch] = seen.get(ch, -1) + 1
+                name = "%s.ch%02d.s%02d" % (base, ch, i)
+            f = os.path.join(outdir, name + ".wav")
             if mode == 'objects': write_wav_mono(f, L)
             else: write_wav(f, L, R)
-            print("  ch%-3d %8d partials -> %s" % (ch, p, f))
+            rec = {"file": name + ".wav", "channel": ch, "partials": p}
+            if pos is not None:
+                rec["x_m"], rec["z_m"] = round(pos[0], 4), round(pos[1], 4)
+            manifest.append(rec)
+            print("  ch%-3d %s%8d partials -> %s"
+                  % (ch, "" if pos is None else "x=%+6.2f z=%+5.2f " % pos, p, f))
             n += 1; P += p; tot = len(L) / float(SR)
+        # Positions travel with the audio, or the objects are just files.
+        import json
+        with open(os.path.join(outdir, base + ".objects.json"), "w") as fh:
+            json.dump({"source": os.path.basename(inp), "sample_rate": SR,
+                       "listener_distance_m": T.SynthProperties.listener_distance,
+                       "radiation_distance_m": T.SynthProperties.radiation_distance,
+                       "objects": manifest}, fh, indent=1)
         dt = time.time() - t0
         print("blockrender %s: %d parts, %d partials, %.1fs audio, %.2fs = %.1fx realtime"
               % (mode, n, P, tot, dt, tot / dt if dt else 0.0))
