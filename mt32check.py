@@ -154,6 +154,30 @@ def _gather(mid, sec):
     return notes, programs, volumes, names, ctrl_tracks, track_names
 
 
+def _multiplexed(mid):
+    """True if this file stamps each note with its own patch.
+
+    blockrender's parse() snapshots the program and the CCs at note-on, so one
+    channel can carry any number of instruments provided they never sound the
+    same pitch at once. A file prepared that way puts a program_change a tick or
+    two before every note, and then a per-channel reading of it is meaningless:
+    'the' program of a channel is whatever its last note happened to select.
+    """
+    stamped = notes = 0
+    for track in mid.tracks:
+        pending = {}
+        now = 0
+        for msg in track:
+            now += msg.time
+            if msg.type == 'program_change':
+                pending[msg.channel] = now
+            elif msg.type == 'note_on' and msg.velocity:
+                notes += 1
+                if now - pending.get(msg.channel, -999) <= 4:
+                    stamped += 1
+    return notes > 0 and stamped >= 0.9 * notes
+
+
 def _character(window):
     """Call a window of notes 'figuration', 'sustained', or neither."""
     median = statistics.median(d for _, d, _ in window)
@@ -171,6 +195,11 @@ def check(path, window=60.0):
     notes, programs, volumes, names, ctrl_tracks, track_names = _gather(mid, sec)
 
     print("== %s" % path)
+    muxed = _multiplexed(mid)
+    if muxed:
+        print("   per-note patch stamping: every note carries its own program and"
+              " CCs,\n   so a channel is a multiplexing slot, not an instrument."
+              " Reported per part.")
     if any(n.lower().startswith('master parameters') for n in track_names):
         print("   MT-32 file (a 'Master Parameters' track is the tell)"
               " -- programs are not GM")
@@ -182,13 +211,17 @@ def check(path, window=60.0):
         label = ("%d %s" % (chosen[1], GM_NAMES[chosen[1]])
                  if chosen and chosen[1] < len(GM_NAMES) else "(none)")
         parts = sorted(names[ch])
-        print("   ch%-3d %-18s %5d notes   %s"
-              % (ch, label, len(notes[ch]),
-                 ", ".join(parts[:3]) + (" ..." if len(parts) > 3 else "")))
+        if muxed:
+            print("   ch%-3d %5d notes   %s"
+                  % (ch, len(notes[ch]), ", ".join(parts) or "(unnamed)"))
+        else:
+            print("   ch%-3d %-18s %5d notes   %s"
+                  % (ch, label, len(notes[ch]),
+                     ", ".join(parts[:3]) + (" ..." if len(parts) > 3 else "")))
 
         # -- programs that never take effect
         at_zero = [p for p in programs[ch] if p[0] <= 0.0]
-        if len(at_zero) > 1:
+        if len(at_zero) > 1 and not muxed:
             shadowed = ", ".join(
                 "%d %s%s" % (p, GM_NAMES[p] if p < len(GM_NAMES) else '?',
                              " [%s]" % t if t else "")
@@ -198,7 +231,7 @@ def check(path, window=60.0):
                 "effect. Shadowed: %s" % (ch, len(at_zero), shadowed))
 
         # -- one channel, two instruments
-        if notes[ch]:
+        if notes[ch] and not muxed:
             seen = []
             span = max(o for o, _, _ in notes[ch])
             start = 0.0
@@ -246,7 +279,7 @@ def check(path, window=60.0):
                        ", ".join(repr(s) for s in strangers)))
 
         # -- controller fights
-        if len(ctrl_tracks[ch]) > 1 and len(names[ch]) > 1:
+        if len(ctrl_tracks[ch]) > 1 and len(names[ch]) > 1 and not muxed:
             findings.append(
                 "ch%d: %d tracks write controllers to it (last write wins), "
                 "and it carries %d named parts -- their dynamics will be "
@@ -267,7 +300,7 @@ def check(path, window=60.0):
         #    file's own shadowed program is very often the right answer: a
         #    name-driven remapper has nothing to match on for an unnamed track
         #    and will assign something anyway.
-        if chosen and notes[ch] and chosen[1] in RANGES:
+        if chosen and notes[ch] and chosen[1] in RANGES and not muxed:
             lo, hi = RANGES[chosen[1]]
             out = [n for _, _, n in notes[ch] if n < lo or n > hi]
             if len(out) > max(4, 0.02 * len(notes[ch])):
