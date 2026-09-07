@@ -1487,12 +1487,16 @@ class SynthProperties:
         cos_theta = (-x * sin(psi) + d * cos(psi)) / norm
         return acos(max(-1.0, min(1.0, cos_theta)))
 
-    def directivity_gain(self, frequency, position_x=None, position_z=None):
+    def directivity_gain(self, frequency, position_x=None, position_z=None,
+                         radius=None):
         """Off-axis gain of a piston of radius `directivity_radius`: 2*J1(x)/x
         with x = k*a*sin(theta). Unity below ka ~ 1 at any angle, which is why
-        low notes fill a hall from anywhere and high ones have to be aimed."""
+        low notes fill a hall from anywhere and high ones have to be aimed.
+
+        `radius` overrides the class value, for a voice whose radiating aperture
+        is not fixed -- an organ, where every rank is a different set of pipes."""
         from math import pi, sin
-        a = self.directivity_radius
+        a = self.directivity_radius if radius is None else radius
         if a <= 0.0:
             return 1.0
         theta = self.off_axis_angle(position_x, position_z)
@@ -1620,7 +1624,7 @@ class SynthProperties:
             out.append((name, tuple(image), tuple(listener)))
         return out
 
-    def reflection_terms(self, frequency, sx, sy, sz):
+    def reflection_terms(self, frequency, sx, sy, sz, radius=None):
         """[(gain relative to the direct sound, extra delay s, image xyz)].
 
         Every factor is frequency-dependent and so belongs to the partial, not
@@ -1631,7 +1635,7 @@ class SynthProperties:
         if not self.reflection_order:
             return []
         direct = sqrt(sx * sx + sy * sy + sz * sz) or 1e-9
-        direct_dir = self.directivity_gain(frequency, sx, sz) or 1e-9
+        direct_dir = self.directivity_gain(frequency, sx, sz, radius) or 1e-9
         air = self.air_absorption_db_per_m(frequency)
         floor = 10.0 ** (self.reflection_floor_db / 20.0)
         out = []
@@ -1643,7 +1647,7 @@ class SynthProperties:
                                        zip(mirrored, (sx, sy, sz)))) or 1e-9)
             ax = (mirrored[0] - sx) * scale
             az = (mirrored[2] - sz) * scale
-            depart = self.directivity_gain(frequency, ax, az)
+            depart = self.directivity_gain(frequency, ax, az, radius)
             gain = ((direct / path)
                     * self.surface_reflection(name, frequency)
                     * (depart / direct_dir)
@@ -1655,7 +1659,7 @@ class SynthProperties:
 
     _Q_CACHE = {}
 
-    def sphere_mean_directivity(self, frequency):
+    def sphere_mean_directivity(self, frequency, radius=None):
         """<D^2> averaged over the whole sphere, for the piston pattern.
 
         The tail needs the power an instrument sends into the ROOM, which is its
@@ -1667,10 +1671,10 @@ class SynthProperties:
         The pattern is axisymmetric about the bell, so the average is a single
         integral in the polar angle with the sin(theta) area weight.
         """
-        a = self.directivity_radius
+        a = self.directivity_radius if radius is None else radius
         if a <= 0.0:
             return 1.0
-        key = (round(a, 4), round(frequency, 1), round(self.directivity_floor, 3))
+        key = (round(a, 5), round(frequency, 1), round(self.directivity_floor, 3))
         got = self._Q_CACHE.get(key)
         if got is not None:
             return got
@@ -1691,22 +1695,24 @@ class SynthProperties:
         self._Q_CACHE[key] = got
         return got
 
-    def directivity_factor(self, frequency, position_x=None, position_z=None):
+    def directivity_factor(self, frequency, position_x=None, position_z=None,
+                           radius=None):
         """Q: how much louder this instrument is toward the listener than its
         own spherical average. 1.0 for an omnidirectional source, and the
         quantity the room constant wants when it sets the reverberant field
         against the direct sound."""
-        mean = self.sphere_mean_directivity(frequency)
+        mean = self.sphere_mean_directivity(frequency, radius)
         if mean <= 0.0:
             return 1.0
-        d = self.directivity_gain(frequency, position_x, position_z)
+        d = self.directivity_gain(frequency, position_x, position_z, radius)
         return (d * d) / mean
 
-    def radiation_gain(self, frequency, position_x=None, position_z=None):
+    def radiation_gain(self, frequency, position_x=None, position_z=None,
+                       radius=None):
         """What survives the trip: directivity times air absorption over
         radiation_distance. A linear amplitude factor, per partial."""
         db = self.air_absorption_db_per_m(frequency) * self.radiation_distance
-        return (self.directivity_gain(frequency, position_x, position_z)
+        return (self.directivity_gain(frequency, position_x, position_z, radius)
                 * (10.0 ** (-db / 20.0)))
 
     # Decay rate scaling per octave (times harmonic_decay). 0 = register-flat; the
@@ -2608,6 +2614,29 @@ class StoppedPipeProperties(SynthProperties):
 
 
 class OrganProperties(StoppedPipeProperties):
+    # ---------------------------------------------------------- pipe scaling
+    #
+    # A rank's directivity is not a fixed aperture, because a rank is not one
+    # pipe. But organ SCALING makes it simple anyway: a pipe's diameter is cut
+    # in proportion to its speaking length, so for a flue of length L the mouth
+    # radius is about L/30, and with f = c/2L that is a = c/(60 f).
+    #
+    # Then ka at the fundamental is 2*pi*f*a/c = 2*pi/60 = 0.105 -- the SAME for
+    # every pipe in the rank, top to bottom. Which means an organ radiates its
+    # fundamentals equally in all directions and only begins to beam around the
+    # tenth harmonic, whatever note is played. That is why an organ fills a
+    # church from anywhere while its brightness depends sharply on where you
+    # stand, and why the reverberant field of an organ is duller than the direct
+    # sound: the room is fed the fundamentals and denied the upperwork.
+    pipe_scale_divisor = 60.0
+
+    def pipe_radius(self, rank_hz):
+        """Radiating aperture of the pipe sounding at rank_hz, metres."""
+        if rank_hz <= 0.0:
+            return 0.0
+        return self.sound_speed / (self.pipe_scale_divisor * rank_hz)
+
+
     initial_gain = 1.0 / 5000   # keep organ/reed/brass at the pre-pipe level
     inharmonicity_dynamic = False   # organs/reeds/brass stay phase-locked; only the bare blown pipe stretches dynamically
     tonal_dampening = 1.4
@@ -8379,3 +8408,74 @@ class SynthSampler(BaseSampler):
             return v
         else:
             return 0.0
+
+
+# ---------------------------------------------------------------- room presets
+#
+# The hall above is the default because the corpus is orchestral. An organ is
+# not in a hall: it is in a stone building four times the volume with a tenth
+# the absorption, and the difference is not a reverb setting but the room the
+# reflections and the tail are both computed from. TUNING_ROOM=church selects it.
+ROOM_PRESETS = {
+    'hall': {},                       # the class defaults
+    # Bach's church, not a cathedral. The Thomaskirche is a HALL church --
+    # about 18000 m3, stuffed with timber galleries, a wooden roof, box pews and
+    # a congregation -- and it reverberates for something like two seconds
+    # occupied. A French cathedral at six or seven seconds is a different
+    # building, and playing Bach in one is a modern habit rather than his.
+    #
+    # Note what does NOT dry a church: its decoration. Ornament, columns and
+    # tracery SCATTER, which softens the early reflections and is already
+    # modelled below, but scattered energy stays in the room and the
+    # reverberation time barely moves. Wood, pews and people are what absorb.
+    'church': dict(
+        room_left=11.0, room_right=11.0,
+        room_front=12.0, room_back=38.0,     # organ gallery ahead, nave behind
+        room_ceiling=15.8, room_floor=1.2,
+        radiation_distance=8.0,
+        # THE SHAPE MATTERS AS MUCH AS THE DEPTH. Flat absorption across
+        # frequency is the signature of masonry: brick and concrete take about
+        # equally little everywhere, so they ring in the bass and reflect the top
+        # hard, and a room built of them sounds like one however much you
+        # increase the numbers. Timber does the opposite. A panel on an airspace
+        # is a membrane, resonating and absorbing where its own compliance is --
+        # 0.30 at 125 Hz falling to 0.10 by 4 kHz -- and lath-and-plaster is the
+        # same kind of thing. That downward tilt is what a wooden room IS.
+        SURFACE_ALPHA={
+            'left':    (0.28, 0.20, 0.15, 0.12, 0.11, 0.10),   # timber galleries
+            'right':   (0.28, 0.20, 0.15, 0.12, 0.11, 0.10),
+            'front':   (0.20, 0.15, 0.12, 0.10, 0.10, 0.10),   # plaster and the case
+            'back':    (0.28, 0.20, 0.15, 0.12, 0.11, 0.10),
+            'ceiling': (0.30, 0.25, 0.20, 0.17, 0.15, 0.12),   # timber roof
+            'floor':   (0.35, 0.50, 0.62, 0.70, 0.72, 0.70),   # pews and congregation
+        },
+        SURFACE_SCATTER={
+            'left':    (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'right':   (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'front':   (0.10, 0.20, 0.30, 0.40, 0.50, 0.55),
+            'back':    (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'ceiling': (0.20, 0.30, 0.45, 0.55, 0.65, 0.70),
+            # The roughest surface in the building by far -- pews, hymnals,
+            # heads, shoulders -- and the one whose reflection arrives soonest
+            # and colours worst. At 1 ms it does not echo, it combs, and it put
+            # a null at 487 Hz in the middle of the organ.
+            'floor':   (0.55, 0.65, 0.75, 0.82, 0.85, 0.85),
+        },
+    ),
+}
+
+
+def set_room(name):
+    """Apply a room preset to SynthProperties, for every voice at once."""
+    preset = ROOM_PRESETS.get(name)
+    if preset is None:
+        raise ValueError("unknown room %r; have %s"
+                         % (name, ", ".join(sorted(ROOM_PRESETS))))
+    for k, v in preset.items():
+        setattr(SynthProperties, k, v)
+    return name
+
+
+import os as _os
+if _os.environ.get('TUNING_ROOM'):
+    set_room(_os.environ['TUNING_ROOM'])

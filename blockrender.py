@@ -224,6 +224,7 @@ def prepare(path, tuner='hybrid'):
     # delays come from -- so an object export that collapses a channel to one
     # point throws away placement the model already has.
     _PX = [0.0]; _PZ = [0.0]  # metres, + = right / up
+    _radius = [None]         # radiating aperture for THIS partial (organ ranks vary)
     # How much power the sources actually put INTO the room, per octave, which
     # is what the diffuse tail is excited by. Accumulated on the direct partials
     # only: a reflection is that same power heard again, not more of it.
@@ -272,7 +273,7 @@ def prepare(path, tuner='hybrid'):
             bi = min(range(len(ROOM_BANDS)),
                      key=lambda i: abs(math.log(max(nomf, 1e-6) / ROOM_BANDS[i])))
             try:
-                q = props.directivity_factor(ROOM_BANDS[bi], px, pz)
+                q = props.directivity_factor(ROOM_BANDS[bi], px, pz, _radius[0])
             except Exception:
                 q = 1.0
             e = ampM * ampM
@@ -292,7 +293,8 @@ def prepare(path, tuner='hybrid'):
         # the 2 m listener_distance -- that one is a stage image chosen to give
         # the head model sensible interaural cues, not a claim about where the
         # players are (see the radiation comment in tonelib).
-        for rg, rdelay, image in props.reflection_terms(nomf, px, props.radiation_distance, pz):
+        for rg, rdelay, image in props.reflection_terms(
+                nomf, px, props.radiation_distance, pz, _radius[0]):
             ix, iy, iz = image
             rli, rri, rld, rrd = props.hrtf_at(ix, iz, iy)
             gm = ampM * rg
@@ -498,7 +500,13 @@ def prepare(path, tuner='hybrid'):
                     # What the instrument radiates toward here: directivity at
                     # this partial's frequency, less what the air ate on the way.
                     # The head model is applied on top of it, not instead of it.
-                    gM = hv*gain*props.radiation_gain(hf)
+                    # An organ rank's aperture follows its own pipe, not the
+                    # class: scaling makes ka = 0.105 * harmonic whatever the
+                    # note, so the fundamentals go everywhere and the upperwork
+                    # is aimed. Everything else uses its fixed aperture.
+                    _radius[0] = (props.pipe_radius(f0*eff_ratio)
+                                  if organ and hasattr(props, 'pipe_radius') else None)
+                    gM = hv*gain*props.radiation_gain(hf, radius=_radius[0])
                     gL = gM*props.hrtf_gain(hf, li); gR = gM*props.hrtf_gain(hf, ri)
                     cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                     if mls > 0.0:
