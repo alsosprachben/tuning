@@ -1428,7 +1428,18 @@ class SynthProperties:
     # Distance: listener_distance is a 2 m stage IMAGE, chosen so the head model
     # gives sensible interaural cues, not a claim about where the players are.
     # Radiation happens over the real room, so it gets its own distance.
-    radiation_distance = 12.0   # metres, source to listener across the hall
+    #
+    # RECORDING PERSPECTIVE BY DEFAULT. Every room here was first built with the
+    # listener where an audience sits, and every one came back too wet -- four
+    # times, corrected by ear each time. Ben's scale-space measurement gives the
+    # threshold: two sounds interfere harmonically to first order only within
+    # about 3 dB of each other, so a reverberant field 3 dB BELOW the direct
+    # sound is audible as space without entering the harmony. That is the line
+    # between a room and a chord, and it is a criterion rather than a taste.
+    # The distance below solves for it (r_c 5.26 m in this hall). A seat in the
+    # audience is 12 m and +7.1 dB, which is a real perspective and sometimes
+    # the wanted one -- TUNING_DISTANCE=12, or TUNING_WET=+7.
+    radiation_distance = 3.73   # metres; -3.0 dB against the direct sound
 
     directivity_radius = 0.0    # metres; effective radiating aperture, 0 = omni
     directivity_axis_deg = 0.0  # where the instrument points, relative to the
@@ -3701,6 +3712,35 @@ class ViolinProperties(FormantBody, BowedStringProperties):
     bell_cutoff_hz = 150.0
     bell_order = 1.5
 
+
+class SoloViolinProperties(ViolinProperties):
+    """One violin, not a desk of seven.
+
+    GM says program 40 is a Violin and 48 a String Ensemble, so by the spec the
+    singular programs are single instruments. This model makes 40-43 sections
+    instead, because that is how orchestral MIDI actually uses them -- Holst's
+    string parts arrive on 40/41/42/43 and want seven players each -- and
+    changing that now would turn every string section in the corpus into a
+    soloist.
+
+    So the distinction lives here rather than there. A concerto is solo against
+    tutti and nothing else, and a soloist rendered as a section is not a small
+    error: seven players a few cents apart with their own entry scatter is
+    precisely the sound a concerto exists to contrast against.
+
+    Mapped to GM 110, Fiddle, which is a single player by any reading and was
+    previously a section by inheritance.
+    """
+    section_players = 1
+    section_spread_cents = 0.0
+    section_onset_ms = 0.0
+    # AND THE GAIN MUST COME WITH IT. initial_gain is evaluated in
+    # BowedStringProperties' class body as 1/9381 / sqrt(section_players) with
+    # section_players = 7, so that a desk of seven and a single instrument come
+    # out at the same TOTAL level. Overriding the count here without touching
+    # the gain therefore leaves the soloist playing at one seventh of a section
+    # -- sqrt(7), 8.4 dB down -- which is exactly what Ben heard.
+    initial_gain = ViolinProperties.initial_gain * (ViolinProperties.section_players ** 0.5)
 
 class ViolaProperties(FormantBody, BowedStringProperties):
     """MEASURED: Iowa Viola.arco.mf, sulC C3B3 and C4B4, sulA C5B5.
@@ -8451,7 +8491,9 @@ ROOM_PRESETS = {
         # twice beyond it and heard mostly room. A room with a harpsichord in it
         # has rugs, hangings, bookcases and furniture, and those take the
         # critical distance out to where a player actually sits.
-        radiation_distance=2.0,
+        # r_c 1.45 m; 1.03 m puts the room 3 dB under the direct sound.
+        # A seat is 2.0 m (+2.8 dB) -- TUNING_DISTANCE=2 for that.
+        radiation_distance=1.03,
         SURFACE_ALPHA={
             'left':    (0.25, 0.22, 0.20, 0.18, 0.18, 0.18),   # hangings, shelves
             'right':   (0.25, 0.22, 0.20, 0.18, 0.18, 0.18),
@@ -8469,11 +8511,48 @@ ROOM_PRESETS = {
             'floor':   (0.20, 0.25, 0.35, 0.45, 0.50, 0.55),
         },
     ),
+    # The Pieta: a Venetian ospedale chapel, which is what Vivaldi's Op. 8 was
+    # written for and played in by the girls of the orphanage. Between the salon
+    # and Bach's Leipzig in every dimension -- masonry and plaster, but small,
+    # and full of people, who are most of its absorption. A baroque concerto
+    # wants a room short enough not to smear its passagework and live enough to
+    # bloom, and neither the hall (built for a Beethoven orchestra) nor the
+    # church (three times the volume) is it.
+    'chapel': dict(
+        room_left=7.5, room_right=7.5,
+        room_front=9.0, room_back=21.0,
+        room_ceiling=10.8, room_floor=1.2,
+        # 5 m, not 7. Critical distance here is 3.3 m and an audience in a small
+        # chapel sits close to the players; at 7 m it was +6.5 dB and I have
+        # built every room in this session too wet by putting the listener too
+        # far back. Baroque passagework wants the room present, not dominant.
+        # r_c 3.28 m; 2.32 m puts the room 3 dB under the direct sound.
+        # A seat is 5.0 m (+3.7 dB) -- TUNING_DISTANCE=5 for that.
+        radiation_distance=2.32,
+        SURFACE_ALPHA={
+            'left':    (0.10, 0.09, 0.08, 0.08, 0.09, 0.10),   # plaster on masonry
+            'right':   (0.10, 0.09, 0.08, 0.08, 0.09, 0.10),
+            'front':   (0.10, 0.09, 0.08, 0.08, 0.09, 0.10),
+            'back':    (0.14, 0.12, 0.11, 0.11, 0.12, 0.13),
+            'ceiling': (0.12, 0.10, 0.09, 0.09, 0.10, 0.11),
+            'floor':   (0.35, 0.50, 0.65, 0.72, 0.74, 0.72),   # a congregation
+        },
+        SURFACE_SCATTER={
+            'left':    (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'right':   (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'front':   (0.10, 0.20, 0.30, 0.40, 0.50, 0.55),
+            'back':    (0.20, 0.30, 0.45, 0.55, 0.65, 0.70),
+            'ceiling': (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'floor':   (0.35, 0.45, 0.55, 0.65, 0.70, 0.70),
+        },
+    ),
     'church': dict(
         room_left=11.0, room_right=11.0,
         room_front=12.0, room_back=38.0,     # organ gallery ahead, nave behind
         room_ceiling=15.8, room_floor=1.2,
-        radiation_distance=8.0,
+        # r_c 5.86 m; 4.15 m puts the room 3 dB under the direct sound.
+        # A seat is 8.0 m (+2.7 dB) -- TUNING_DISTANCE=8 for that.
+        radiation_distance=4.15,
         # THE SHAPE MATTERS AS MUCH AS THE DEPTH. Flat absorption across
         # frequency is the signature of masonry: brick and concrete take about
         # equally little everywhere, so they ring in the bass and reflect the top
@@ -8506,6 +8585,54 @@ ROOM_PRESETS = {
 }
 
 
+def critical_distance(props=None, q=1.0):
+    """Where the direct sound and the reverberant field carry equal energy.
+
+    Direct sound falls with the inverse square; the reverberant field does not
+    fall off at all, being the accumulated arrivals of thousands of reflections
+    from every direction. So their RATIO is what distance changes, and this is
+    where it passes unity: inside it you hear the instrument, outside it you
+    hear the room.
+    """
+    from math import exp, log, sqrt, pi
+    p = props or SynthProperties
+    w = p.room_left + p.room_right
+    d = p.room_front + p.room_back
+    h = p.room_ceiling + p.room_floor
+    areas = {'floor': w * d, 'ceiling': w * d, 'left': d * h,
+             'right': d * h, 'front': w * h, 'back': w * h}
+    surface = sum(areas.values())
+    # SynthProperties is not directly constructible; any concrete voice carries
+    # the same room tables, since they are class attributes on the base.
+    inst = p if not isinstance(p, type) else StoppedPipeProperties(261.6, 0, 1, 1)
+    absorbed = sum(a * inst._octave_interp(inst.SURFACE_ALPHA[s], 500.0)
+                   for s, a in areas.items())
+    mean = absorbed / surface
+    R = surface * mean / max(1e-6, 1.0 - mean)
+    return sqrt(q * R / (16.0 * pi))
+
+
+def set_wetness(target_db, q=1.0):
+    """Place the listener so the reverberant field sits target_db against the
+    direct sound, and return the distance.
+
+    Ben's measurement, from the scale-space tools in ../recept: two sounds
+    interfere harmonically to first order only while they are within about 3 dB
+    of each other. So a reverberant field 3 dB BELOW the direct sound is plainly
+    audible as space and yet does not enter the harmony -- it colours the room
+    without muddying the chords. That makes -3 dB a criterion rather than a
+    preference, and it is a far better thing to ask for than a distance, since
+    the distance that achieves it differs in every room.
+
+    Every room default in this file was built about 6 dB wetter than that.
+    """
+    from math import sqrt
+    rc = critical_distance(q=q)
+    dist = rc * (10.0 ** (target_db / 20.0))
+    SynthProperties.radiation_distance = dist
+    return dist
+
+
 def set_room(name):
     """Apply a room preset to SynthProperties, for every voice at once."""
     preset = ROOM_PRESETS.get(name)
@@ -8520,3 +8647,16 @@ def set_room(name):
 import os as _os
 if _os.environ.get('TUNING_ROOM'):
     set_room(_os.environ['TUNING_ROOM'])
+# WHERE YOU LISTEN FROM, in metres, independent of which room. This is the
+# strongest single control over how a render sounds and it is not a reverb
+# setting: the direct-to-reverberant ratio goes as (distance / critical
+# distance)^2, so a listener at twice the critical distance hears four times as
+# much room as direct sound, and reads it as far away, dull and boomy all at
+# once. A microphone is placed at or inside the critical distance, which is
+# most of why records sound closer than seats do.
+if _os.environ.get('TUNING_DISTANCE'):
+    SynthProperties.radiation_distance = float(_os.environ['TUNING_DISTANCE'])
+# TUNING_WET asks for a direct-to-reverberant RATIO instead, and solves for the
+# distance that gives it. -3 is the harmonic-transparency target.
+if _os.environ.get('TUNING_WET'):
+    set_wetness(float(_os.environ['TUNING_WET']))

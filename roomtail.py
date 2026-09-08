@@ -119,7 +119,12 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
     # the incoherent early energy a room uses to fill its own combs. So the
     # build begins at the first reflection and reaches full by the mixing time,
     # rather than starting there.
-    early = 0.010
+    # The first reflection lands well before 10 ms -- the floor bounce arrives
+    # at 0.7 ms -- so scattering, and therefore diffuse energy, begins then.
+    # Starting the build at 10 ms left every note's ATTACK heard through the
+    # unfilled comb, which is audible as colouration on transients even though
+    # the sustained response measures flat.
+    early = 0.002
     gate = np.clip((t - early) / max(onset - early, 1e-6), 0.0, 1.0)
     gate = gate * gate * (3.0 - 2.0 * gate)     # smoothstep
 

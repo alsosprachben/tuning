@@ -67,7 +67,7 @@ from tonelib import (
     BreathNoiseProperties,
     SeashoreProperties,
     GunshotProperties,
-)
+    SoloViolinProperties,)
 
 # 0-based GM program -> property class. Grouped by the 16 GM families of 8.
 PROGRAM_CLASS = {}
@@ -184,7 +184,7 @@ _fill(96, 103, BowedStringProperties)
 _fill(104, 107, PluckedStringProperties)  # sitar, banjo, shamisen, koto
 PROGRAM_CLASS[108] = MalletProperties      # kalimba
 PROGRAM_CLASS[109] = ReedPipeProperties    # bagpipe: a reed and a pipe, no console
-PROGRAM_CLASS[110] = BowedStringProperties # fiddle
+PROGRAM_CLASS[110] = SoloViolinProperties  # fiddle -- ONE player, unlike 40-43
 PROGRAM_CLASS[111] = ReedPipeProperties    # shanai: likewise
 # 112-119 Percussive (tinkle bell, agogo, steel drums, woodblock, taiko, melodic tom, synth drum, reverse cymbal)
 _fill(112, 119, MalletProperties)
