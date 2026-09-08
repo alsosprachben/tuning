@@ -191,7 +191,17 @@ void synth_voice(
                     // Ben: "sounding fine to start, then after a quarter second
                     // or so, it suddenly adds noise."
                     if(mid < a+(long)chiffS[p]){ float s=sstep((float)(mid-a)*invch); float r=sqrtf(s); jf=fmaxf(r*(1.f-r), sj*s); }
-                    else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=r*(1.f-r)*crl; }
+                    // AND THE SAME ON THE WAY OUT. The attack floor rises so the
+                    // hump does not step up when it ends; the release had no floor
+                    // at all, so jf fell from sj to ZERO in one block at note-off
+                    // and humped back up -- a step in the noise at every note end.
+                    // Inaudible while the voice is buried; a solo line placed
+                    // forward puts it in the open, which is where Ben heard it:
+                    // "subtle clicking each note... an edge case involving attack
+                    // or release." The floor now FALLS as sj*(1-s), mirroring the
+                    // attack, so it leaves the sustain continuously and reaches
+                    // zero exactly when the release does.
+                    else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=fmaxf(r*(1.f-r)*crl, sj*(1.f-s)); }
                     else jf=sj;
                 }
                 // Tension bend (piano strike): frequency starts sharp by
