@@ -301,7 +301,13 @@ def overlap_add(x, h):
         y = np.fft.irfft(np.fft.rfft(seg, block) * H, block)
         m = min(len(y), len(out) - i)
         out[i:i + m] += y[:m]
-    return out[:len(x)]
+    # The WHOLE linear convolution, len(x) + len(h) - 1. Truncating to len(x)
+    # here guillotined the reverberation at the last sample of the music: a
+    # 2.44 s chapel got whatever was left of the file, which for Vivaldi's
+    # Summer was 1.0 s, so the tail stopped dead around -40 dB instead of
+    # decaying away. Ben: "This version is cut off." The caller decides how
+    # much of it to keep.
+    return out
 
 
 def read_wav(path):
@@ -362,26 +368,40 @@ def main(argv):
         print("   %6.0f   %5.2f s  %6.2f   %+6.1f dB"
               % (f, t60, qf, 10 * math.log10(ratio)))
 
-    wet = np.empty_like(x)
-    for c in range(x.shape[1]):
-        wet[:, c] = overlap_add(x[:, c], ir[:, c])
-    out = x + wet
-
     # The modal region, where the room rings rather than diffuses. In a hall
     # this is entirely below hearing and costs nothing; in a small room it is
-    # the bass.
+    # the bass. Built BEFORE the mix is allocated, because how far the room
+    # rings on is part of how long the file has to be.
     mir, nmodes, fs = modal_ir(props, sr, channels=x.shape[1])
     if '--no-modes' in argv:
         print("   modes suppressed (--no-modes)")
         nmodes = 0
-    if nmodes and fs > 25.0:
+    use_modes = bool(nmodes) and fs > 25.0
+
+    # ROOM FOR THE ROOM. A piece does not stop when its last note does -- the
+    # hall keeps going, and that decay is the whole point of modelling one. So
+    # the output is the music plus however long the room takes to fall silent,
+    # rather than the length of the MIDI file.
+    ring = len(ir) - 1
+    if use_modes:
+        ring = max(ring, len(mir) - 1)
+    out = np.zeros((len(x) + ring, x.shape[1]))
+    out[:len(x)] = x
+    for c in range(x.shape[1]):
+        y = overlap_add(x[:, c], ir[:, c])
+        out[:len(y), c] += y
+
+    if use_modes:
         print("   %d modes below %.0f Hz (Schroeder %.1f Hz) -- the room rings"
               % (nmodes, 2 * fs, fs))
         for c in range(x.shape[1]):
-            out[:, c] += overlap_add(x[:, c], mir[:, c])
+            y = overlap_add(x[:, c], mir[:, c])
+            out[:len(y), c] += y
     elif nmodes:
         print("   %d modes, all below %.0f Hz (Schroeder %.1f Hz) -- inaudible,"
               " the field is statistical here" % (nmodes, 2 * fs, fs))
+    print("   music %.2f s + %.2f s of room = %.2f s"
+          % (len(x) / sr, ring / sr, len(out) / sr))
     peak = np.abs(out).max()
     print("   direct peak %.3f, with tail %.3f" % (np.abs(x).max(), peak))
     # A church puts its reverberant field 14 dB over the direct sound, so a
