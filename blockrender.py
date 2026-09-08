@@ -757,6 +757,9 @@ def render_parts(path, tuner='hybrid', objects=False, by='channel'):
     R is R for a stem and a copy of L for an object.
     """
     prep = prepare(path, tuner)
+    # Same as render(): the directivity this piece measured has to reach
+    # roomtail, and a stems render is no less entitled to it than a plain one.
+    _LAST_PREP.update(prep)
     if by == 'source':
         groups = [(k[0], source_position(prep, m), m)
                   for k, m in sorted(source_rows(prep).items())]
@@ -833,6 +836,16 @@ if __name__=="__main__":
             n += 1; P += p; tot = len(L) / float(SR)
         # Positions travel with the audio, or the objects are just files.
         import json
+        # The same sidecar a plain render writes. Without it a stems render fed
+        # roomtail nothing and roomtail fell back to a scalar Q: on Vivaldi's
+        # Summer that meant Q=2.0 where the piece actually radiated Q=1.0, and
+        # the room came out about 3 dB drier than the -3 dB target it was
+        # placed for. Silent, and in exactly the quantity the placement tunes.
+        _rq = _LAST_PREP.get('room_q')
+        if _rq:
+            with open(os.path.join(outdir, base + ".room.json"), "w") as fh:
+                json.dump({"bands": [{"hz": f, "q": q, "energy": e}
+                                     for f, q, e in _rq]}, fh, indent=1)
         with open(os.path.join(outdir, base + ".objects.json"), "w") as fh:
             json.dump({"source": os.path.basename(inp), "sample_rate": SR,
                        "listener_distance_m": T.SynthProperties.listener_distance,

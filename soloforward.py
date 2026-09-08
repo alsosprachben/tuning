@@ -82,14 +82,28 @@ def main(argv):
         # a POSITION, not more power, so it must not appear here.
         wet_in = os.path.join(tmp, 'sum.wav')
         write_wav(wet_in, band + solo, sr)
+        # Hand roomtail the directivity this piece measured, or it falls back to
+        # a scalar Q and gets the wetness wrong -- 3 dB drier on Summer.
+        side = os.path.join(stems, base + '.room.json')
+        if os.path.exists(side):
+            shutil.copyfile(side, os.path.splitext(wet_in)[0] + '.room.json')
         subprocess.run([sys.executable, os.path.join(HERE, 'roomtail.py'),
                         wet_in, os.path.join(tmp, 'wet.wav')],
                        env=env, check=True)
         wet, _ = read_wav(os.path.join(tmp, 'wet.wav'))
-        wet = wet[:n] - (band + solo)          # the tail alone
-
-        out = band + 10.0 ** (gain_db / 20.0) * solo + wet
+        # roomtail returns the music PLUS the room's decay, so its output is
+        # longer than the stems. Pad rather than truncate: cutting back to n
+        # here would throw away the tail roomtail just took care to keep, and
+        # the piece would stop dead the moment the last note did.
+        m = len(wet)
+        dry = np.zeros((m, solo.shape[1]))
+        dry[:n] = band + solo
+        tail = wet - dry                       # the tail alone
+        fwd = np.zeros((m, solo.shape[1]))
+        fwd[:n] = band + 10.0 ** (gain_db / 20.0) * solo
+        out = fwd + tail
         write_wav(outp, out, sr)
+        print("  %.2f s of stems + %.2f s of room" % (n / sr, (m - n) / sr))
         print("  solo ch%d %+.1f dB of DIRECT only; tail from the unboosted sum"
               % (solo_ch, gain_db))
         print("  peak %.3f -> %s" % (np.abs(out).max(), outp))
