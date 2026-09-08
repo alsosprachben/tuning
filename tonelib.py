@@ -1558,6 +1558,32 @@ class SynthProperties:
 
     reflection_order = 1     # 0 = off; 1 = one bounce off each surface
     reflection_floor_db = -40.0   # drop an image quieter than this, per partial
+    # WHERE THE IMAGE MODEL HANDS OVER TO THE STATISTICAL ONE.
+    #
+    # Under about 50 ms the ear fuses a reflection with the direct sound: it is
+    # heard as tone colour and spaciousness, not as a second event, and it has
+    # to be rendered as a real delayed copy with a real direction for those cues
+    # to exist. Past that limit the same copy is heard as a separate arrival --
+    # an echo. Real halls get away with a 60 ms lateral reflection only because
+    # hundreds more surround it; ours has SIX first-order images and nothing
+    # else, so a late one stands alone and is heard for what it is. Measured on
+    # the solo violin: a -19 dB arrival 59 ms after every note, landing in the
+    # gap before the next one in a passage of 68 ms notes at 103 ms spacing, and
+    # plainly audible as a click.
+    #
+    # Dropping it costs no energy, because the diffuse tail is not built from
+    # what the images left over -- roomtail derives the whole reverberant field
+    # from the room constant, and deliberately begins at 2 ms rather than at the
+    # mixing time so that it fills the specular comb. The late image is a
+    # DUPLICATE of energy the tail already carries, and the only thing it adds
+    # is coherence: the tail delivers it decorrelated and dense, which is what a
+    # room does, while the image delivers it as an exact replica of the note.
+    # So this hands the late energy to the model that renders it correctly and
+    # keeps the images for the window where their directionality is the point.
+    #
+    # In a small room nothing is past the limit and nothing is dropped -- the
+    # chamber's latest image is 21 ms -- so this only bites where it should.
+    reflection_fusion_s = 0.050   # 0 = keep every image however late
 
     # Absorption by octave, 125 Hz to 4 kHz, for a wood-panelled hall over an
     # occupied floor. Panelling on an airspace takes the bass through panel
@@ -1665,7 +1691,12 @@ class SynthProperties:
                     * 10.0 ** (-(air * (path - direct)) / 20.0))
             if gain < floor:
                 continue
-            out.append((gain, (path - direct) / self.sound_speed, image))
+            delay = (path - direct) / self.sound_speed
+            # Past the fusion limit the diffuse tail already carries this, and
+            # carries it decorrelated instead of as a replica of the note.
+            if self.reflection_fusion_s and delay > self.reflection_fusion_s:
+                continue
+            out.append((gain, delay, image))
         return out
 
     _Q_CACHE = {}
