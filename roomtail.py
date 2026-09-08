@@ -226,6 +226,25 @@ def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2):
                           * math.cos(n * math.pi * pl / L))
                 if abs(a) < 1e-4:
                     continue
+                # FADE OUT ACROSS SCHROEDER, where the statistical tail takes
+                # over -- applied to the mode's AMPLITUDE here, as it is built,
+                # rather than by multiplying the finished spectrum by a mask.
+                #
+                # Every mode is a single cosine, so scaling its amplitude by
+                # roll(f) is exactly what a magnitude mask does, and it cannot
+                # wrap. Multiplying the spectrum of a 2.9 s buffer by a mask
+                # with a corner in it is a CIRCULAR convolution, and it folded a
+                # copy of the whole modal response back to the end of the
+                # buffer. Measured on one click in the chapel: a burst 42 dB
+                # above the decay it interrupted, 2.75 s late -- the buffer
+                # length. Ben heard it as "an echo a couple seconds later, like
+                # when listening to a taped recording... about 3 beats or 1
+                # measure offset", and it reached every render of a room that
+                # rings (chamber, chapel), though not the hall or church, where
+                # the modes are below Schroeder and never applied.
+                a *= min(1.0, max(0.0, (2.0 * fs - f) / max(fs, 1e-6)))
+                if abs(a) < 1e-4:
+                    continue
                 modes.append((f, a, t60_at(f)))
     if not modes:
         return np.zeros((1, channels)), 0, fs
@@ -241,11 +260,10 @@ def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2):
             # two ears see the same modal field -- correct, and audibly so:
             # room bass is mono.
             ir[:, ci] += env * np.cos(2.0 * math.pi * f * t)
-    # Fade out across Schroeder, where the statistical tail takes over.
+    # The spectrum is MEASURED below, never multiplied: reading it is free of
+    # the wrap that shaping it caused.
     spec = np.fft.rfft(ir, axis=0)
     fr = np.fft.rfftfreq(n, 1.0 / sr)
-    roll = np.clip((2.0 * fs - fr) / max(fs, 1e-6), 0.0, 1.0)[:, None]
-    spec = spec * roll
 
     # LEVEL. Summing 162 undamped mode shapes gives an impulse response 60 dB
     # too hot, and nothing in the modal arithmetic sets a scale -- the same trap
@@ -264,8 +282,9 @@ def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2):
             # it put the modal field 47.6 dB down, which is exactly
             # 20*log10(sqrt(n)) for this length -- the sort of error that hides
             # as "the bass is a bit shy" if it is not measured.
-            spec *= math.sqrt(target / power)
-    ir = np.fft.irfft(spec, n, axis=0)
+            # Applied to the TIME-DOMAIN ir. A scalar gain cannot wrap,
+            # where an inverse transform of a shaped spectrum can.
+            ir = ir * math.sqrt(target / power)
     return ir, len(modes), fs
 
 
