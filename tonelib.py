@@ -7,7 +7,7 @@ All rights reserved.
 
 import os
 import random as _random
-from math import exp as _exp, log as _log, sin as _sin, pi as _pi
+from math import exp as _exp, log as _log, sin as _sin, pi as _pi, sqrt as _sqrt
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
 # Spatialization uses the Brown-Duda spherical-head model by default:
@@ -8633,7 +8633,116 @@ def set_wetness(target_db, q=1.0):
     return dist
 
 
-def set_room(name):
+# ROOM STAGGER: no two surfaces the same distance away.
+#
+# A shoebox is laterally symmetric and a player stands near its centre line, so
+# the left and right walls are equidistant and their images arrive together.
+# Every preset above does that, and the hall does it three times over, because
+# room_left, room_right and room_ceiling were all written as 12 m -- three
+# different surfaces returning within 0.66 ms of each other and summing
+# COHERENTLY. Three -19 dB copies become one -14 dB arrival: +9.5 dB over any
+# one of them, energy the room never actually sent.
+#
+# Measured on the solo violin in the hall, that cost two audible things. In the
+# frequency domain the six reflections combed the musical band with a PERIODIC
+# 34 Hz ripple (autocorrelation 0.83 over 80-2000 Hz, 17.3 dB peak to trough),
+# which is heard as a hollow boom -- a regular ripple reads as coloration where
+# an irregular one of the same depth reads as neutral. In the time domain the
+# tripled arrival landed 60 ms after every note, past the ~50 ms fusion limit,
+# so a fast passage got a discrete echo of each note in the gap before the next
+# one: the click.
+#
+# The coincidence is an artefact of the idealisation, not a fact about halls.
+# A real wall is not a plane at a round number of metres -- it has relief,
+# boxes, splay, an organ case -- so its specular return comes off an irregular
+# surface spread over a range of path lengths, and no two surfaces in a real
+# room agree to the centimetre. Offsetting the image planes is the standard
+# repair for this in image-source models, and that is all this is. It is NOT a
+# claim that halls are asymmetric.
+#
+# Deterministic and seeded on the room name, so a render is reproducible, and
+# renormalised to preserve the VOLUME exactly -- so T60, the Schroeder
+# frequency, the room constant, the critical distance and hence the -3 dB
+# wetness target all stay precisely what the preset asked for. Rather than
+# trust one draw, it keeps the draw that best separates the arrivals, which is
+# the quantity that actually matters.
+#
+# The FLOOR is left alone. 1.2 m is ear height above the floor, a measurement
+# rather than a round number, and its 2 ms bounce is the cue that tells you
+# there is a floor under the player. That comb is real and belongs.
+ROOM_STAGGER = float(__import__('os').environ.get('TUNING_STAGGER') or 0.10)
+_STAGGER_PLANES = ('room_left', 'room_right', 'room_back', 'room_front',
+                   'room_ceiling')
+
+
+def _room_arrivals(planes, floor, sx, sy, sz):
+    """Path length to the listener for each of the six first-order images."""
+    L, R, B, F, C = planes
+    out = []
+    for axis, plane in ((0, -L), (0, R), (1, -B), (1, F), (2, C), (2, -floor)):
+        img = [sx, sy, sz]
+        img[axis] = 2.0 * plane - img[axis]
+        out.append(_sqrt(img[0] ** 2 + img[1] ** 2 + img[2] ** 2))
+    return out
+
+
+def stagger_room(name, amount=None, tries=256):
+    """Offset the shell planes so no two first-order images coincide.
+
+    Returns the smallest gap between adjacent arrivals, in METRES of path.
+    """
+    amount = ROOM_STAGGER if amount is None else amount
+    if amount <= 0.0:
+        return 0.0
+    import zlib
+    S = SynthProperties
+    base = [getattr(S, k) for k in _STAGGER_PLANES]
+    floor = S.room_floor
+    # Judge a draw on the centre line, where the symmetry is worst.
+    sy = S.radiation_distance
+    W0 = base[0] + base[1]; D0 = base[2] + base[3]; H0 = base[4] + floor
+    V0 = W0 * D0 * H0
+    A0 = 2.0 * (W0 * D0 + W0 * H0 + D0 * H0)
+    # crc32, not hash(): str hashing is salted per process and would make a
+    # render irreproducible across runs.
+    rng = _random.Random(0x52004D ^ zlib.crc32(name.encode()))
+    best, best_gap = None, -1.0
+    for _ in range(tries):
+        offs = [rng.uniform(-amount, amount) for _ in base]
+        # Straddle the preset: the mean offset is removed, so the draw moves
+        # the walls apart without moving the room as a whole.
+        m = sum(offs) / len(offs)
+        cand = [b * (1.0 + o - m) for b, o in zip(base, offs)]
+        # Restore the volume EXACTLY by scaling the three extents; the floor is
+        # fixed, so the ceiling absorbs its axis' share.
+        k = (V0 / ((cand[0] + cand[1]) * (cand[2] + cand[3])
+                   * (cand[4] + floor))) ** (1.0 / 3.0)
+        cand = [cand[0] * k, cand[1] * k, cand[2] * k, cand[3] * k,
+                (cand[4] + floor) * k - floor]
+        if min(cand) <= 0.0:
+            continue
+        # Hold the SURFACE AREA too, not just the volume. Eyring's T60 goes as
+        # V/(S*alpha), so letting S drift would quietly retune the reverberation
+        # the preset was written to have -- an unstaggered hall's area moves
+        # 2.4% on a free draw. One per cent is under a tenth of a dB of wetness.
+        w, d, h = cand[0] + cand[1], cand[2] + cand[3], cand[4] + floor
+        if abs(2.0 * (w * d + w * h + d * h) / A0 - 1.0) > 0.01:
+            continue
+        # Compare PATH LENGTHS. The separation that matters is a time, but
+        # the speed of sound is a constant factor and drops out of a
+        # comparison between draws.
+        t = sorted(_room_arrivals(cand, floor, 0.0, sy, 0.0))
+        gap = min(b - a for a, b in zip(t, t[1:]))
+        if gap > best_gap:
+            best, best_gap = cand, gap
+    if best is None:
+        return 0.0
+    for k, v in zip(_STAGGER_PLANES, best):
+        setattr(S, k, v)
+    return best_gap
+
+
+def set_room(name, stagger=True):
     """Apply a room preset to SynthProperties, for every voice at once."""
     preset = ROOM_PRESETS.get(name)
     if preset is None:
@@ -8641,12 +8750,15 @@ def set_room(name):
                          % (name, ", ".join(sorted(ROOM_PRESETS))))
     for k, v in preset.items():
         setattr(SynthProperties, k, v)
+    if stagger:
+        stagger_room(name)
     return name
 
 
 import os as _os
-if _os.environ.get('TUNING_ROOM'):
-    set_room(_os.environ['TUNING_ROOM'])
+# The default room is the hall, and it needs the stagger as much as any other --
+# it is the one with three coincident surfaces.
+set_room(_os.environ.get('TUNING_ROOM') or 'hall')
 # WHERE YOU LISTEN FROM, in metres, independent of which room. This is the
 # strongest single control over how a render sounds and it is not a reverb
 # setting: the direct-to-reverberant ratio goes as (distance / critical
