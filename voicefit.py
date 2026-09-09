@@ -448,8 +448,60 @@ def cmd_formants(args):
     return 0
 
 
+def ladder_of(path, nmax=16):
+    """[dB relative to the fundamental] for one note, over the steady part."""
+    x, sr = mono(path)
+    seg = steady(x, sr, 0.05, 0.5)
+    if len(seg) < 8192:
+        return None
+    f0 = detect_f0(seg, sr)
+    if not f0:
+        return None
+    N = 1 << 18
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N))
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    a = []
+    for m in range(1, nmax + 1):
+        fm = m * f0
+        if fm > 0.45 * sr:
+            return None
+        w = (f > fm - 0.3 * f0) & (f < fm + 0.3 * f0)
+        if not w.any():
+            return None
+        a.append(X[w].max())
+    a = np.array(a)
+    if a[0] <= 0:
+        return None
+    return f0, 20 * np.log10(np.maximum(a, 1e-12) / a[0])
+
+
+def cmd_ladder(args):
+    """The harmonic ladder, dB under the fundamental, pooled over the compass.
+
+    Reported per register as well as pooled: a ladder that is right in one octave
+    and wrong in the others is the commonest way a voice fit goes wrong, and a
+    single mean hides it perfectly.
+    """
+    files = sorted(f for f in glob.glob(os.path.join(args[0], '*.wav'))
+                   if note_of(f) is not None)
+    rows = [r for r in (ladder_of(p) for p in files) if r]
+    if len(rows) < 6:
+        print("  too few usable notes (%d)" % len(rows)); return 1
+    L = np.array([r[1] for r in rows]); f0s = np.array([r[0] for r in rows])
+    print("  %d notes, f0 %.0f-%.0f Hz" % (len(rows), f0s.min(), f0s.max()))
+    print("   m   " + " ".join("%6d" % m for m in range(1, L.shape[1] + 1)))
+    print("   dB  " + " ".join("%6.1f" % v for v in L.mean(0)))
+    print("   sd  " + " ".join("%6.1f" % v for v in L.std(0)))
+    for lo, hi, name in ((0, 200, "bass"), (200, 500, "tenor"), (500, 1e9, "treble")):
+        m = (f0s >= lo) & (f0s < hi)
+        if m.sum() >= 3:
+            print("   %-7s" % name + " ".join("%6.1f" % v for v in L[m].mean(0)))
+    return 0
+
+
 CMDS = {'decay': cmd_decay, 'inharm': cmd_inharm, 'comb': cmd_comb,
-        'ratio': cmd_ratio, 'formants': cmd_formants}
+        'ratio': cmd_ratio, 'formants': cmd_formants,
+        'ladder': cmd_ladder}
 
 
 def main(argv):

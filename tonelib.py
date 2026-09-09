@@ -2352,7 +2352,35 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     release_valve_time = 0.055
     strike_fills_with_force = False   # a quill, not a felt hammer: the comb stays deep
     strike_depth = 1.0
-    tonal_dampening = 1.55            # toward the pluck's 1/n^2, kept a little bright
+    # BRIGHTNESS, fitted rather than aimed at. This was 1.55 -- "toward the
+    # pluck's 1/n^2, kept a little bright" -- and it was far too dull. Against
+    # the English set the model's ladder sat 20 dB under the recordings at the
+    # 8th harmonic and 24 dB under at the 16th, and its 2-8 kHz content was some
+    # 13 dB short of the instrument's.
+    #
+    # A harpsichord is not 1/n^2. The recordings put the SECOND harmonic ABOVE
+    # the fundamental -- +3.3 dB pooled, +9.4 dB in the bass -- which is the weak
+    # fundamental everyone recognises the instrument by, and no amount of a
+    # steep series tilt produces it.
+    #
+    # Grid-searched through the renderer, so the body and the power
+    # renormalisation are inside the loop rather than corrected for afterwards:
+    #
+    #     tonal_dampening   ladder rms   2-8 kHz error
+    #          1.00           8.65 dB       -3.8 dB
+    #          0.85           6.65          -2.2
+    #          0.75           5.15          -1.2      <- both minima
+    #          0.65           8.17          -0.3
+    #          0.55           6.48          +0.6
+    #
+    # Judged on the ladder AND on broadband brightness together, because a
+    # ladder-only fit is one of the four standing ways these go wrong: the ladder
+    # alone bottoms in the same place but is noisy, while brightness is monotonic
+    # and settles it. 1.55 -> 0.75 takes the ladder rms from 17.52 dB to 5.15.
+    #
+    # The recordings' own ladder scatters 12-20 dB from note to note, so 5 dB rms
+    # is close to what this data can resolve; it is not a claim of 5 dB accuracy.
+    tonal_dampening = 0.75
     octave_dampening = 0.02
     # THE SOUNDBOARD. Measured with `voicefit.py formants`, which is the comb
     # method run on the other axis: a pluck comb and a series tilt are fixed in
@@ -2474,14 +2502,17 @@ class HarpsiUpperProperties(HarpsiBase):
     """Upper-manual 8': the jack plucks very close to the nut, so the comb nulls
     start high and the low harmonics are weak -- the classic nasal, reedy colour."""
     strike_point = 0.045              # ~1/22 of the string
-    tonal_dampening = 1.30            # brighter still
+    # Shifted with the base (-0.80): this was 1.30 against a base of 1.55, a
+    # brighter upper manual, and holding it fixed while the base moved would
+    # have made the upper manual the DULLER of the two.
+    tonal_dampening = 0.50            # brighter still
 
 
 class HarpsiLuteProperties(HarpsiBase):
     """Lute (buff) stop: leather pads press the strings at the nut, killing the
     upper partials and shortening the decay -- a dry, dull pizzicato."""
     strike_point = 0.11
-    tonal_dampening = 2.4
+    tonal_dampening = 1.60            # shifted with the base (-0.80); still the dullest
     decay_db = 11.0
     harmonic_decay_db = 3.0
     chiff_volume = 0.30
