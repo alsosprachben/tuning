@@ -1410,3 +1410,47 @@ rather than plotted.
 
 Nothing in the 135-file Sankey corpus drives any of this -- it contains zero
 controller events of any kind -- so registration has to be supplied.
+
+
+## The Sankey corpus (MIDI, not recordings) — and its terms
+
+Not a measurement source for the voice, but the provenance belongs here with
+everything else, because two tuners came out of it and because its terms
+constrain what may be done with renders.
+
+**What it is.** 135 MIDI files, essentially the complete Bach keyboard works,
+hand-played by John Sankey on a MIDI keyboard, from
+<http://www.jsbach.net/midi/sankey/>. Kept outside the repo; `NOTICE.txt` sits
+beside them.
+
+**What was measured from it**, which is the reason it is documented at all:
+
+- The files are NOT quantised: only 27% of onsets fall on even a 1/96-beat grid,
+  and there is one tempo event in BWV 971, so the ritardando at its end is
+  played rather than programmed.
+- The channels are not voices, they are PITCH CLASSES. Each carries a fixed
+  pitch bend, and those bends are Werckmeister III's deviations from equal
+  temperament to the cent (F#/A -11.72, C#/E -9.77, G#/B -7.81, D -7.71, Eb
+  -5.86, Bb -3.91, G -3.78, F -1.95, C 0.00). The temperament is IN the file.
+- This renderer ignores pitch bend entirely, so `werckmeister` is not an
+  embellishment on these files — without it they would silently play equal.
+- The playing is legato: notes are held 98.5% of the way to the next in the same
+  register, 7.3% detached, 98.1% duty cycle. That is his reading, and it is why
+  a note-off gate went unheard here for so long.
+- Zero controller events in all 135 files, so nothing drives registration.
+
+**Terms** (<http://www.johnsankey.ca/copyright.html>). The MIDI may be freely
+copied and redistributed with his notice attached, and modified freely FOR
+PERSONAL USE. But: *"If the distribution format is any form of audio, it must be
+derived from the MIDI files using my matching soundfont on a SoundBlaster 32 or
+100% compatible system."*
+
+So renders made here are personal use and permitted; **distributing them is
+not**, because they are a physical model and not his soundfont. His stated
+reason, cross-referenced to his own pages on sustain and consonance, is that he
+wants his tuning and sustain heard as intended.
+
+His Scarlatti is a separate matter and is NOT obtainable this way: his site
+offers his own edition (176 sonatas as zipped PostScript, k001-k176, typeset in
+LilyPond) and third-party MP3s, but the MIDI is at Classical Archives behind a
+subscription. The `sankey` tuner exists for it regardless.
