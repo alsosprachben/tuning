@@ -134,6 +134,12 @@ def onepole_blocks(events, nblk, default):
         if t1 < 1e17: v = target + (v - target) * np.exp(-(t1 - t0) / TAU)
     return out
 
+# How long a voice takes to get out of the way when its own pitch is struck
+# again. Not a cut: a cut is a step and a step is a click. Samplers call this
+# stealing and give it a few milliseconds for exactly this reason.
+RETRIGGER_FADE = 0.004
+
+
 def registration_blocks(ch, prop, ccs, nblk):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
@@ -441,10 +447,17 @@ def prepare(path, tuner='hybrid'):
         # pipes speak slowly, trebles promptly).
         at = props.speech_time(at, f0); rt = props.speech_time(rt, f0)
         fade = max(1e-4, min(at, 0.45*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
-        # ...and no longer than until this same string is plucked again.
+        # ...and no longer than until this same string is plucked again, but
+        # never SHORTER than a steal fade. A sampler stealing a voice does not
+        # cut it, it fades it over a few milliseconds, because a cut is a step
+        # and a step is a click -- the same lesson as the release jitter floor
+        # in synthkernel.c. Bach's tightest repeat here leaves 1.3 ms, and five
+        # notes in BWV 971 come in under 2, so the floor does real work. Where
+        # it exceeds the gap the old note runs a few ms into the new one, which
+        # is inaudible and is what a real damper does anyway: felt takes time.
         _nx = _next_same.get(((ch, note), on))
         if _nx is not None and _nx > off:
-            rel = min(rel, max(1e-4, _nx - off)*SR)
+            rel = min(rel, max(RETRIGGER_FADE, _nx - off)*SR)
         # chiff burst width: short/capped, decoupled from the slow speech fade
         chiff = max(1e-4, min(props.chiff_time(f0, at), 0.45*dur))*SR
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
