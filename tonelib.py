@@ -2326,6 +2326,19 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     has no dynamics, which is what makes it a REGISTERED instrument.
     """
 
+    # BALANCE-NORMALISED, and on the BASE so every rank gets it. This lived on
+    # HarpsichordProperties alone, whose comment said it was safe because "these
+    # voices play alone" -- true of a GM patch, false the moment stops are drawn.
+    # HarpsiUpperProperties and HarpsiLuteProperties still carried the inherited
+    # 1/50, so the upper manual and the buff were 23.9 dB under the lower 8':
+    # inaudible in a coupled registration, and a 24 dB drop when selected alone.
+    # Found by building a registration demo, which is what demos are for.
+    #
+    # The relative balance between ranks is stop_ranks' own gains (1.00, 0.82,
+    # 0.58, 0.50) and belongs there, not in an accident of which class happened
+    # to be normalised.
+    initial_gain = 0.3142260371
+
     # THE DAMPER. A harpsichord jack carries a scrap of felt that lands on the
     # string when the key comes up, and it takes time. This voice had
     # release_valve_time = 0.0, so `rel` floored at 1e-4 s and every note was
@@ -2524,7 +2537,6 @@ class HarpsichordProperties(HarpsiBase):
     # a peak normalise and these voices play alone -- and the organ family is
     # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
     # survives untouched.
-    initial_gain = 0.3142260371
     strike_point = 0.115              # lower-manual 8': ~1/9, round and full
 
     # Registers as stops (CC11 bitfield, bit i = stop_ranks[i]):

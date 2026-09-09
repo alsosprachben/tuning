@@ -1376,3 +1376,37 @@ relationship tuned by ear.
 The recordings' own ladder scatters 12-20 dB note to note, so 5 dB rms is near
 what this data resolves and is not a claim of 5 dB accuracy. The comb is
 unaffected: re-measuring a render returns strike_point 0.1150 at r = 1.00.
+
+### Registration, and a 24 dB bug it found
+
+Building a demo that draws each stop in turn (`harpsi_stops`: the C major
+Invention played six times, CC11 = 1, 2, 3, 5, 7, 8) exposed something no
+single-registration render could have.
+
+`initial_gain` had been balance-normalised on `HarpsichordProperties` ALONE. Its
+own comment said that was safe because "these voices play alone" -- true of a GM
+patch, false the moment stops are drawn. `HarpsiUpperProperties` and
+`HarpsiLuteProperties` still carried the inherited 1/50, leaving the upper manual
+and the buff **23.9 dB under the lower 8'**: inaudible in a coupled registration,
+and a 24 dB drop when either was selected alone. Moved to `HarpsiBase`, where
+every rank inherits it; the relative balance is `stop_ranks`' own gains and
+belongs there.
+
+After, measured per 18-second block:
+
+| registration | CC11 | rms vs 8' | 2-8 kHz vs peak |
+|---|---|---|---|
+| 8' lower | 1 | ref | -11.5 dB |
+| 8' upper | 2 | -2.7 dB | -5.4 |
+| both 8' | 3 | +4.4 | -7.7 |
+| 8' + 4' | 5 | +2.7 | -11.3 |
+| grand jeu | 7 | +6.2 | -6.7 |
+| lute / buff | 8 | -10.9 | -18.4 |
+
+The upper manual is 6 dB brighter than the lower at the same level, which is the
+pluck point doing it: `strike_point` 0.045 against 0.115, a quill catching the
+string near the nut. That is the comb measurement of the previous section heard
+rather than plotted.
+
+Nothing in the 135-file Sankey corpus drives any of this -- it contains zero
+controller events of any kind -- so registration has to be supplied.
