@@ -97,7 +97,7 @@ def note_stream(path, by_track=False):
 
 def main(argv):
     if len(argv) < 3:
-        print(__doc__.strip().splitlines()[-1])
+        print(__doc__[__doc__.index("Usage:"):].rstrip())
         return 2
     A = note_stream(argv[1]); B = note_stream(argv[2])
     P = align([x[1] for x in A], [x[1] for x in B])

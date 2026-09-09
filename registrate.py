@@ -66,7 +66,7 @@ def main(argv):
     def opt(name, d):
         return type(d)(argv[argv.index(name) + 1]) if name in argv else d
     if len(args) < 3:
-        print(__doc__.strip().splitlines()[-4])
+        print(__doc__[__doc__.index("Usage:"):].rstrip())
         return 2
     perf, outp, scores = args[0], args[1], args[2:]
     F, P, gap = opt('--forte', 7), opt('--piano', 2), opt('--gap', 2.0)
