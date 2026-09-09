@@ -1081,3 +1081,87 @@ footing as the ocarina and the blown bottle.
 the snare (4527 notes) and the hi-hats (~875). A snare IS genuinely broadband --
 the wires are a real noise source -- so it is not the error the wood turned out
 to be, but nobody has measured it.
+
+
+## Harpsichord — VCSL (added after the Iowa gap was found)
+
+Iowa has **no harpsichord**. Its families are woodwind, brass, strings,
+percussion and "piano/other", where other is guitar, balloon pops and found
+objects — piano and guitar are the only keyboard and plucked instruments in the
+collection. So `HarpsiBase` and its children had no measured reference at all.
+
+**Versilian Community Sample Library (VCSL)**, <https://github.com/sgossner/VCSL>
+— **CC0**, so unlike the Iowa files there is no redistribution question. Five
+harpsichords, 461 files, 48 kHz / 24-bit stereo, kept outside the repo for size.
+
+| set | notes | what it is |
+|---|---|---|
+| English Normal / "Lute" | 28 / 28 | Zuckermann kit, 1970s |
+| Flemish Low / High | 28 / 26 | two registers |
+| French | 30 | |
+| Italian stop1 | 32 | |
+| Unk | 61 | widest compass |
+
+Every instrument records its **releases separately from its sustains**, which is
+why the damper could be fitted at all: it is isolated rather than needing to be
+subtracted out of a whole note.
+
+### Measured
+
+**`HarpsiBase.release_valve_time = 0.055`** — time for the damper to take the
+first 20 dB, from the envelope peak of the isolated release: French 19 ms, Unk
+42, Flemish 57, English 68; mean 47, sd 30. The previous value was 0.0, which
+gated every note to silence in ~7 ms.
+
+**`HarpsichordProperties.strike_point = 0.115` — CONFIRMED, not changed.** The
+pluck fraction fitted from the comb, averaged over every note of each set:
+
+| set | beta | 1/beta | fit r |
+|---|---|---|---|
+| English Normal | 0.1200 | 8.3 | 0.55 |
+| English "Lute" | 0.1195 | 8.4 | 0.69 |
+| Flemish Low | 0.1210 | 8.3 | 0.62 |
+| Italian | 0.0970 | 10.3 | 0.65 |
+| Unk | 0.0975 | 10.3 | 0.60 |
+| Flemish High | 0.0870 | 11.5 | 0.59 |
+| French | 0.0485 | 20.6 | 0.35 |
+
+mean 0.0986 (1/10.1), sd 0.024. The existing 0.115 sits inside that and on the
+English/Flemish cluster, so this promotes it from assertion to measurement
+without moving it. The French outlier has the worst fit and is the set already
+shown to be the most reverberant here — a room-washed comb, not a different
+instrument.
+
+### What the recordings will NOT support, and why
+
+They are not anechoic, and there is one mic position per instrument, so a room
+cannot be subtracted. What makes anything separable is that **room decay is
+common across notes in a band and string decay is not**: in a fixed 890–1120 Hz
+band the French sustains decay at −11.4, −10.5 and −10.6 dB/s for C3, C4 and C5,
+and three different strings do not agree to within a dB. That is the room.
+
+So only the FAST stage of the release is fitted. The slow tail running several
+hundred ms reads as the soundboard but is largely their room, and fitting it
+would import it into the instrument for our own room model to double.
+
+Per-instrument usability, measured rather than assumed: the French is
+room-dominated even in its early window (early slopes −20.8/−19.6/−19.9 dB/s
+across three notes — again too equal to be strings). The Flemish is explicitly
+the `Far` mic. **The English (Zuckermann) varies most with pitch and is the only
+set I would trust for string decay.**
+
+### Not what it says on the tin
+
+VCSL's English **"Lute"** is a **buff stop**, not a lute stop. A lute stop is a
+second jack row plucking near the nut, which moves the comb; this leaves the
+comb untouched (beta 0.1200 vs 0.1195) and halves the decay:
+
+| note | Normal to −40 dB | "Lute" to −40 dB |
+|---|---|---|
+| C3 | 4.25 s | 2.25 s |
+| C4 | 1.98 s | 1.25 s |
+| C5 | 1.07 s | 0.32 s |
+
+Comb unchanged, decay collapsed: felt on the strings. `HarpsiLuteProperties`
+already models it that way and is correct. It also means this pair gives no
+pluck-point contrast — a true lute stop is still unmeasured.
