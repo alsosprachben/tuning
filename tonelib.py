@@ -2265,6 +2265,31 @@ class HarpsiBase(PluckedStringProperties):
     (strike_fills_with_force = False). That fixed force is also why the instrument
     has no dynamics, which is what makes it a REGISTERED instrument.
     """
+
+    # THE DAMPER. A harpsichord jack carries a scrap of felt that lands on the
+    # string when the key comes up, and it takes time. This voice had
+    # release_valve_time = 0.0, so `rel` floored at 1e-4 s and every note was
+    # gated to digital silence in about 7 ms -- the sound of a sampler cutting a
+    # voice, not of a damper landing, and something no instrument does.
+    #
+    # Measured on the VCSL harpsichords (CC0; see sources.md), as the time for
+    # the damper to take the first 20 dB, from the envelope peak of the isolated
+    # release recordings:
+    #
+    #     French 19 ms   Unk 42 ms   Flemish 57 ms   English 68 ms
+    #     mean 47, sd 30
+    #
+    # 0.055 s puts the model at 47 ms, the middle of that. The spread is wide
+    # because these are four different instruments with four different
+    # regulations, so this is a central value and not a constant of nature.
+    #
+    # Only the FAST stage is fitted. Those recordings also show a slow tail
+    # running on for several hundred ms, and it is tempting to read that as the
+    # soundboard -- but in a fixed band the French sustains decay at -11.4,
+    # -10.5 and -10.6 dB/s for C3, C4 and C5, and three different strings do not
+    # agree to a dB. That tail is their ROOM. Fitting it would import a sample
+    # library's room into the instrument and then double it against ours.
+    release_valve_time = 0.055
     strike_fills_with_force = False   # a quill, not a felt hammer: the comb stays deep
     strike_depth = 1.0
     tonal_dampening = 1.55            # toward the pluck's 1/n^2, kept a little bright
