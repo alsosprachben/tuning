@@ -600,6 +600,31 @@ def prepare(path, tuner='hybrid'):
                     aftp, adbp = props.aftersound(f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
                     emit_partial(2*math.pi*fph/SR, g, g, g, fph, non, noff, fade, rel, chiff,
                                  lrp, lrAp, aftp, props.sustain_level, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
+        # THE MECHANISM LETTING GO. On a harpsichord the key coming up is not
+        # only the damper arriving: the jack falls back and its tongue brushes
+        # past the string it just plucked. That is a MECHANICAL event, not a
+        # string one -- it happens at the same frequencies whatever note was
+        # played -- so it cannot be an envelope on the note's own partials, and
+        # it is not what chiff does either (chiff is jittered phase ON the
+        # partials, so it wears the note's spectrum and fades out with it).
+        #
+        # It is emitted here as what it is: a separate short event at note-off,
+        # at fixed frequencies, riding the note's gain so that a quiet note
+        # clicks quietly. Voices that leave release_click_db at None -- every
+        # voice but this one -- emit nothing and cost nothing.
+        cdb = getattr(props, 'release_click_db', None)
+        if cdb is not None and props.release_click_modes:
+            cg = gain * (10.0 ** (cdb / 20.0))
+            cdec = math.log(T.db_ratio(props.release_click_decay_db))
+            for chz, camp in props.release_click_modes:
+                if chz >= SR / 2:
+                    continue
+                a_ = cg * camp * props.radiation_gain(chz)
+                emit_partial(2 * math.pi * chz / SR, a_ * props.hrtf_gain(chz, li),
+                             a_ * props.hrtf_gain(chz, ri), a_, chz,
+                             noff, noff + props.release_click_s * SR,
+                             max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
+                             cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
     # Effective Q per band: direct energy over energy fed to the room. One

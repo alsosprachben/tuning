@@ -1556,6 +1556,16 @@ class SynthProperties:
     room_ceiling = 12.0
     room_floor = 1.2         # ear height above the floor
 
+    # THE MECHANISM LETTING GO -- off unless a voice has one. A plucked
+    # keyboard's jack falls back at note-off and its tongue brushes the string;
+    # a pipe's valve closing does not do this, which is why the organ has no
+    # release chiff and why this cannot simply be chiff run backwards. Chiff is
+    # jittered phase ON the note's partials, so it wears the note's spectrum;
+    # this is a mechanical event at fixed frequencies whatever note was played.
+    release_click_db = None          # level under the note; None = no mechanism
+    release_click_modes = ()         # ((Hz, relative amplitude), ...)
+    release_click_decay_db = 0.0     # dB/s, tonelib's power convention
+    release_click_s = 0.0            # how long the event is allowed to run
     reflection_order = 1     # 0 = off; 1 = one bounce off each surface
     reflection_floor_db = -40.0   # drop an image quieter than this, per partial
     # WHERE THE IMAGE MODEL HANDS OVER TO THE STATISTICAL ONE.
@@ -2365,6 +2375,38 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     # What this cannot separate is the room: a hall colours by frequency too, and
     # with one microphone there is no way to divide them. Read it as body-plus-
     # room, and keep it modest for that reason.
+    # THE JACK FALLING BACK. Measured off the VCSL release recordings, which
+    # capture the key coming up in isolation from the note it ends.
+    #
+    # The release is TWO events at once, and they separate on the same test that
+    # separated everything else here: a string event follows the note, a
+    # mechanical one does not. Below about 1.2 kHz the release spectrum moves
+    # 5.6-7.6 dB from note to note -- that is the damper arriving on the string,
+    # and the release fade already models it. Above 2.4 kHz it moves 2.2-4.6 dB
+    # and its centroid stays put: that is the jack, and nothing modelled it.
+    #
+    #     level under the sustain   -12.9 to -19.9 dB, mean -15.6
+    #     spectral centroid          2909 to 5068 Hz, mean ~3900
+    #
+    # The modes below are placed to land the centroid there rather than fitted
+    # individually -- five inharmonic frequencies are a stand-in for a small
+    # wooden object being dropped, not a claim about its modes. The decay comes
+    # from the shortest measured fall (C2, -20 dB in 33 ms); the longer readings
+    # run to 211 ms and are the note's own upper partials still ringing in the
+    # same band, not the click.
+    # -39.6, not the -15.6 the recordings show, because this rides `gain` --
+    # the factor before the harmonic ladder -- and not the note's audible peak,
+    # which the summed partials produce. Calibrated back THROUGH the renderer
+    # (isolating the click by differencing a render against one with it off,
+    # since the 55 ms damper is louder than the click for the whole window and
+    # hides it): -39.6 puts the click 15 dB under the note, mid-range of the
+    # -12.5 to -17.5 measured.
+    release_click_db = -39.6
+    release_click_modes = ((2200.0, 0.60), (3100.0, 1.00), (4300.0, 0.85),
+                           (5900.0, 0.50), (8000.0, 0.25))
+    release_click_decay_db = 285.0
+    release_click_s = 0.12
+
     formants = ((490.0, 350.0, 0.40),)
     formant_floor = 0.50            # so the pole stands +5.1 dB over the floor
     # bore_corner_hz GATES the whole formant path -- harmonic_volume returns

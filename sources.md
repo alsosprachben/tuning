@@ -1287,3 +1287,65 @@ as exact ratios and why one can be tuned genuinely beat-free where a piano
 cannot. For comparison StretchTuner carries 1.0019377 for piano wire, +3.35 cents
 per octave; borrowing that for a harpsichord would be wrong by some 17 cents
 across the compass.
+
+### The mechanism, not the string
+
+**`release_click_*` on HarpsiBase.** A harpsichord's key coming up does two
+things at once, and they separate on the test that separated everything else
+here: a string event follows the note, a mechanical one does not.
+
+Measured on the isolated VCSL release recordings, spectrum by octave band across
+C2-C5:
+
+| band | spread across notes | what it is |
+|---|---|---|
+| 150 – 1200 Hz | 5.6 – 7.6 dB | the damper arriving on the string — follows the note |
+| 2.4k – 9.6k | 2.2 – 4.6 dB | the jack falling back — the same whatever was played |
+
+The first was already modelled by the release fade. The second was not modelled
+at all, and it is not quiet: the release event sits **-12.5 to -17.5 dB under the
+note it ends**, with a spectral centroid holding between 2909 and 5068 Hz
+whatever the pitch.
+
+It cannot be done with chiff. Chiff is jittered phase ON the note's partials, so
+it wears the note's spectrum and fades out with it — right for a pipe's speech,
+wrong for a piece of wood dropping. Measured through the renderer, `chiff_release`
+moves the post-note-off peak by 0.2 dB between 0.0 and 2.0: the mechanism exists
+and is inert, because it scales phase noise on partials the release envelope is
+simultaneously removing.
+
+So it is emitted as what it is — a separate short event at note-off, at fixed
+frequencies, riding the note's gain so a quiet note clicks quietly. Round-tripped
+through the renderer by DIFFERENCING a render against one with the click off,
+because the 55 ms damper is louder than the click for the whole window and hides
+it in a direct measurement:
+
+| | rendered | measured |
+|---|---|---|
+| level under the sustain | -15.0 dB | -12.5 .. -17.5 |
+| spectral centroid | 3867 Hz | ~3900 |
+| -20 dB in | 32.7 ms | ~33 |
+
+`release_click_db = -39.6`, not the -15.6 the recordings show, because it rides
+`gain` — the factor before the harmonic ladder — rather than the note's audible
+peak. The five modes are a stand-in for a small wooden object being dropped,
+placed to land the centroid, not a claim about anything's modes. The decay comes
+from the shortest measured fall; the longer readings are the note's own upper
+partials still ringing in the same band.
+
+Off for all 101 voice classes but the four harpsichords.
+
+### Open, and measured: the voice is too dull
+
+Comparing 2–8 kHz content against the note's own peak:
+
+    our render     -21.8 dB
+    VCSL C3         -6.0 dB
+    VCSL C4         -7.0 dB
+
+**About 15 dB short in the brilliance region.** A room recording should have LESS
+high frequency than an anechoic model, not more, so the gap is real and if
+anything understated — though a sample library may have been brightened, which
+this cannot rule out. The knob is `tonal_dampening = 1.55`, and moving it changes
+the character of a voice Ben has tuned by ear, so it is recorded here and left
+alone rather than adjusted on one measurement.
