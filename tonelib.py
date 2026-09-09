@@ -2294,9 +2294,23 @@ class HarpsiBase(PluckedStringProperties):
     strike_depth = 1.0
     tonal_dampening = 1.55            # toward the pluck's 1/n^2, kept a little bright
     octave_dampening = 0.02
-    # Thin, low-tension brass/iron: much less inharmonicity than a piano's wound steel.
+    # Thin, low-tension brass/iron: much less inharmonicity than a piano's wound
+    # steel -- and less than this class used to claim. MEASURED over 195 notes
+    # from six VCSL sets by regressing (f_m/m)^2 on m^2 (see voicefit.py inharm):
+    #
+    #     English 3.63e-5   Italian 4.38e-5   Unk 2.67e-5
+    #     French  2.41e-5   Flemish 2.39e-5
+    #     pooled median 3.51e-5, IQR 2.19e-5 .. 8.16e-5
+    #
+    # 89% of every note measured fell below the 1.2e-4 that stood here.
+    #
+    # This is the one fit these recordings support unconditionally, because
+    # partial FREQUENCIES are immune to reverberation -- a room changes when
+    # energy arrives, never at what pitch. So the five instruments agreeing
+    # across five different rooms is real agreement and not a shared artefact,
+    # which is exactly what could NOT be said of the decay measurements.
     inharmonicity_dynamic = False
-    inharmonicity_coefficient = 0.00012
+    inharmonicity_coefficient = 3.51e-05
     # Plucked strings sing then die; the treble dies faster than the bass.
     decay_db = 3.2
     harmonic_decay_db = 1.5

@@ -320,6 +320,15 @@ def read_wav(path):
         a = np.frombuffer(raw, '<i4').astype(np.float64) / 2147483647.0
     elif sw == 2:
         a = np.frombuffer(raw, '<i2').astype(np.float64) / 32767.0
+    elif sw == 3:
+        # 24-bit packed, three bytes little-endian per sample. Widened to int32
+        # by placing the three bytes in the HIGH end and sign-extending, which
+        # costs nothing and avoids an explicit sign test. Reference recordings
+        # arrive this way -- the VCSL harpsichords are 24/48 -- and refusing
+        # them here sent every caller off to shell out to sox instead.
+        b = np.frombuffer(raw, np.uint8).reshape(-1, 3).astype(np.uint32)
+        v = (b[:, 0] << 8) | (b[:, 1] << 16) | (b[:, 2] << 24)
+        a = v.astype(np.int32).astype(np.float64) / 2147483647.0
     else:
         raise SystemExit("%s: unsupported sample width %d" % (path, sw))
     return a.reshape(-1, ch), sr

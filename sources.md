@@ -1165,3 +1165,63 @@ comb untouched (beta 0.1200 vs 0.1195) and halves the decay:
 Comb unchanged, decay collapsed: felt on the strings. `HarpsiLuteProperties`
 already models it that way and is correct. It also means this pair gives no
 pluck-point contrast — a true lute stop is still unmeasured.
+
+### Fitted with `voicefit.py`, and what would not fit
+
+`voicefit.py` is the committed version of the throwaway scripts every earlier
+calibration used. Subcommands `decay`, `inharm`, `comb`, `ratio`; it reproduces
+the two results above (comb: English 0.1150, Flemish 0.1200) before being trusted
+with anything new.
+
+**`inharmonicity_coefficient` 1.200e-4 -> 3.51e-5.** Regressing `(f_m/m)^2` on
+`m^2` over 195 notes from six sets:
+
+| set | median B |
+|---|---|
+| English | 3.63e-5 |
+| Italian | 4.38e-5 |
+| Unk | 2.67e-5 |
+| French | 2.41e-5 |
+| Flemish Low | 2.39e-5 |
+
+pooled median 3.51e-5, IQR 2.19e-5 – 8.16e-5; **89% of every note measured fell
+below the value that stood in the class.** This is the one fit these recordings
+support unconditionally, because partial FREQUENCIES are immune to reverberation,
+so five instruments agreeing across five rooms is real agreement. Round-tripped:
+rendering with 3.510e-5 and re-measuring returns 3.512e-5, sd 1.5e-7.
+
+**Decay: measured, NOT changed.** The fitted triple (decay_db 5.44,
+harmonic_decay_db 0.86, decay_register_slope 0.54) is no better than the standing
+3.2 / 1.5 / 0.42 — rms residual 11.37 against 11.26 dB/s, and worse in three
+registers of four. The residual is as large as the quantity, so the data does not
+constrain the law.
+
+The reason is physical rather than a limit of the recordings: **per-partial decay
+is not linear in m and nothing about a real string says it should be.** Partials
+couple individually to soundboard modes, so within one C4 the measured rates run
+5.8, 8.4, 40.1, 7.6, 10.0, 8.3 dB/s for m = 1,2,3,5,6,7. The model's linear law is
+a smooth approximation to something intrinsically scattered, and three parameters
+cannot be improved against scatter of that size. The standing values already sit
+inside it.
+
+An earlier claim of mine that the voice "rings twice too long" came from
+broadband time-to-−40 dB, which is dominated by the fastest-decaying partials and
+is not the m = 1 rate the parameter controls. Measured per partial, C4 m = 1 comes
+back at 3.88 dB/s against the model's 3.84.
+
+**Buff ratio: measured, NOT changed.** `HarpsiLuteProperties` implies a decay
+ratio of (11.0+3.0)/(3.2+1.5) = 2.98. Broadband gives 1.89 / 1.58 / 3.34 at
+C3/C4/C5 and the per-partial `ratio` fit a median of 2.71 (sd 3.77 — too noisy to
+refine anything). The standing value is inside the measurement.
+
+This is the room-free measurement of the set: two stops of one instrument in one
+room, so dividing removes the room exactly. It is worth knowing that even *that*
+was not precise enough to move a parameter.
+
+### Still assertions after all this
+
+`initial_gain` (no SPL reference or known gain — the files are level-set for a
+sampler), directivity (one mic, one angle), soundboard formants (not attempted),
+register coupling and sympathetic resonance (isolated notes, isolated registers),
+and the decay parameters above, which are now *consistent with* measurement
+rather than derived from it.
