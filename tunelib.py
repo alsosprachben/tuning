@@ -386,6 +386,59 @@ class WellTuner(TwelveTuner):
     intervals = compute_intervals(comma_spread)
 
 
+class WerckmeisterTuner(TwelveTuner):
+    """Werckmeister III, from the cents John Sankey published for his Bach.
+
+    The Pythagorean comma is taken off FOUR fifths -- C-G, G-D, D-A and B-F# --
+    a quarter each; every other fifth stays pure. That is what a *wohltemperirte*
+    tuning is and why the word is not "equal": the common keys keep thirds close
+    to pure while the remote ones are merely spicy rather than unusable, so each
+    key has its own colour and the WTC's twenty-four are twenty-four different
+    places instead of one place transposed. Equal temperament abolishes exactly
+    that distinction, which is why playing this repertoire in it removes the
+    argument the repertoire is making.
+
+    These are Sankey's numbers rather than the textbook's. They agree with the
+    canonical Werckmeister III (0, 90.225, 192.18, 294.135, ...) to within a
+    tenth of a cent, so it is that temperament and not a variant -- but the
+    point of using his table is that his sequences were played to it.
+    """
+    A = 415
+    cents = (0.0, 90.2, 192.3, 294.1, 390.2, 498.1,
+             588.3, 696.2, 792.2, 888.3, 996.1, 1092.2)
+    intervals = {}
+    for _pc, _c in enumerate(cents):
+        intervals[_pc] = 2.0 ** (_c / 1200.0)
+    del _pc, _c
+
+
+class SankeyTuner(TwelveTuner):
+    """John Sankey's Scarlatti tuning, found by consonance analysis.
+
+    Not deduced from a treatise but SEARCHED for: Sankey and Sethares scored
+    candidate tunings against the actual chords Scarlatti writes, using a
+    consonance measure over the harpsichord's own partials, and kept what the
+    music liked best (J. Acoust. Soc. Am. 101(4):2332-2337, 1997). What came
+    back resembles a tuning d'Alembert published in 1752, which is a better
+    result than agreeing with a treatise chosen in advance -- the music and the
+    document independently point at the same place.
+
+    C-E is a PURE 5:4 (386.3 c) and the fifth is meantone-ish at 696.8 c, so the
+    home keys have meantone's pure thirds; but the chromatic notes depart from
+    quarter-comma (85.6 against 76.0 for the minor second, 787.5 against 772.6
+    for the minor sixth), which is what buys back the remote keys that
+    quarter-comma's wolf makes unplayable. Scarlatti goes to those keys
+    constantly, so a strict meantone cannot be what he tuned to.
+    """
+    A = 415
+    cents = (0.0, 85.6, 193.4, 291.4, 386.3, 498.0,
+             584.7, 696.8, 787.5, 888.7, 994.9, 1086.5)
+    intervals = {}
+    for _pc, _c in enumerate(cents):
+        intervals[_pc] = 2.0 ** (_c / 1200.0)
+    del _pc, _c
+
+
 class LinearWellTuner(TwelveTuner):
     A = 415
     

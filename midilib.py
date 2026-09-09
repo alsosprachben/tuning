@@ -33,6 +33,10 @@ tuner_registry = {
     "just": JustTuner,
     "meantone": MeantoneTuner,   # quarter-comma: pure 3rds, every 5th tempered, wolf G#-Eb
     "well": WellTuner,
+    # Historical tables carried as published cents rather than derived, so a
+    # render can be played to the same tuning its sequencer used.
+    "werckmeister": WerckmeisterTuner,   # Werckmeister III (Sankey's Bach)
+    "sankey": SankeyTuner,               # his consonance-found Scarlatti tuning
     "linearwell": LinearWellTuner,
     "bechstein": BechsteinTuner,
     "dynamic": Tuner,
