@@ -1225,3 +1225,65 @@ sampler), directivity (one mic, one angle), soundboard formants (not attempted),
 register coupling and sympathetic resonance (isolated notes, isolated registers),
 and the decay parameters above, which are now *consistent with* measurement
 rather than derived from it.
+
+### Soundboard and radiation
+
+**`formants = ((490.0, 350.0, 0.40),)`, `formant_floor = 0.50`.** Measured with
+`voicefit.py formants`: the comb method run on the other axis. A pluck comb and a
+series tilt are fixed in HARMONIC NUMBER; a body resonance is fixed in FREQUENCY.
+So dividing each partial by what the source model predicts, removing anything
+smooth in m, and pooling by frequency finds the body and washes the source out.
+
+| set | body region |
+|---|---|
+| English | 449 Hz +5.2 dB, 566 Hz +3.4 |
+| Italian | 283 +9.1, 224 +7.2, 356 +5.3, 449 +3.8, 566 +4.0 |
+| Unk | 224 +3.9 |
+
+All three show one broad region between 200 and 600 Hz with a dip above it,
+which is where a harpsichord's soundboard and case cavity live. They differ
+because they are different bodies. Fitted to the English as a single pole.
+
+`bore_corner_hz = 40000` is placed above the audible band deliberately: it exists
+only to open the formant path (`harmonic_volume` returns early on a zero corner,
+so a body with no corner is silently no body), and the measurement was detrended
+in harmonic number so it CANNOT see a smooth high-frequency rolloff. Asserting
+one would be inventing a number.
+
+**Verified only partly, and this is weaker than the inharmonicity fit.** The body
+does reach the ladder -- for f0 = 245 the partial at 490 Hz comes out +3.0 dB on
+m=1 and +4.4 dB on m=4, against the measured +5.2 -- but re-measuring a RENDER
+with `voicefit formants` does not recover the pole, because the analysis divides
+by an assumed source model that is not exactly the renderer's. Inharmonicity
+round-tripped to 0.06%; this did not round-trip at all. Treat the body as
+measured in the recordings and plausible in the model rather than as confirmed
+end to end.
+
+**`directivity_radius = 0.15` is a GUESS and marked as one.** One microphone at
+one angle cannot measure a polar pattern; nothing in this set constrains it. The
+reasoning: a harpsichord soundboard is ~1.8 x 0.8 m tapering, some 0.9 m2, and a
+rigid piston of that area would have a = 0.54 m and beam into a 22-degree lobe by
+1 kHz, which no harpsichord does -- a soundboard is not rigid and above its first
+modes only a fraction radiates coherently. The piston model saturates near 12 dB
+of directivity index whatever the radius (0.08 m gives 9.9 dB at 4 kHz, 0.54
+gives 12.0), so the radius chooses the TRANSITION and not the strength; 0.15 puts
+ka = 1 at 364 Hz and keeps the bass omnidirectional.
+
+It matters more than a polar plot suggests, because Q sets the reverberant send:
+this voice previously radiated equally in every direction at every frequency, so
+its room was uniformly wet. Measured through a render, Q now runs 1.08 at 250 Hz
+to 8.77 at 4 kHz -- bass-wet and treble-dry, as a room is.
+
+### Stretch
+
+`WerckmeisterTuner.stretch_interval = 1.0000526`, derived from the measured B by
+sqrt((1+4B)/(1+B)) -- where the lower note's 2nd partial actually sits, which is
+what octaves are tuned beat-free against.
+
+That is **+0.091 cents per octave, +0.46 across a 61-note compass**, and the
+smallness is the result rather than a reason to leave it out: a harpsichord
+barely needs stretching, which is why historical temperaments for it are quoted
+as exact ratios and why one can be tuned genuinely beat-free where a piano
+cannot. For comparison StretchTuner carries 1.0019377 for piano wire, +3.35 cents
+per octave; borrowing that for a harpsichord would be wrong by some 17 cents
+across the compass.

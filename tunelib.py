@@ -404,6 +404,26 @@ class WerckmeisterTuner(TwelveTuner):
     point of using his table is that his sequences were played to it.
     """
     A = 415
+    # STRETCH, from the instrument's own stiffness rather than a piano's.
+    #
+    # A temperament sets the twelve intervals inside an octave; the octave
+    # itself is set by where the lower note's 2nd partial actually sits, which
+    # stiffness pushes sharp by sqrt((1+4B)/(1+B)). Tuning octaves beat-free
+    # against that is what stretch IS, and the two compose independently --
+    # TwelveTuner.note2Ratio multiplies the octave by 2*stretch_interval and
+    # leaves `intervals` alone.
+    #
+    # With B measured at 3.51e-5 on the VCSL harpsichords (see tonelib), that
+    # comes to 1.0000526: +0.091 cents per octave, +0.46 cents across a 61-note
+    # compass. Inaudible -- and that is the result, not a reason to omit it.
+    # A HARPSICHORD BARELY NEEDS STRETCHING, which is why historical
+    # temperaments for it are quoted as exact ratios and why one can be tuned
+    # genuinely beat-free where a piano cannot. StretchTuner carries 1.0019377
+    # for piano wire, some +3.35 cents per octave; borrowing that for a
+    # harpsichord would be wrong by roughly 17 cents across the compass, and
+    # wrong in a way that would sound like a badly tuned instrument rather than
+    # like a modelling choice.
+    stretch_interval = 1.0000526
     cents = (0.0, 90.2, 192.3, 294.1, 390.2, 498.1,
              588.3, 696.2, 792.2, 888.3, 996.1, 1092.2)
     intervals = {}
@@ -431,6 +451,7 @@ class SankeyTuner(TwelveTuner):
     constantly, so a strict meantone cannot be what he tuned to.
     """
     A = 415
+    stretch_interval = 1.0000526     # see WerckmeisterTuner: the same strings
     cents = (0.0, 85.6, 193.4, 291.4, 386.3, 498.0,
              584.7, 696.8, 787.5, 888.7, 994.9, 1086.5)
     intervals = {}

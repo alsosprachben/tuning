@@ -2208,6 +2208,56 @@ class SynthProperties:
         return base * self.decay_register_factor
 
 
+class FormantBody:
+    """A body with fixed resonances: the harmonics slide through, the peaks stay.
+
+    A resonator does not care what note is being played. Its peaks sit at fixed
+    frequencies, so a partial is loud when it happens to land on one -- which is
+    why a bassoon's fourth harmonic can be 19 dB ABOVE its fundamental at C3 and
+    the same instrument sounds like a bassoon two octaves up. Any voice whose
+    spectrum peaks somewhere other than the fundamental needs this; a monotonic
+    1/n^d rolloff cannot express it at all, because it makes h1 the strongest
+    partial by construction.
+
+    Rides on bore_gain, so it inherits that filter's power normalisation: moving
+    a formant changes the colour, never the loudness. formants are
+    (centre Hz, bandwidth Hz, amplitude); formant_floor is what the body passes
+    between its resonances, and bore_corner_hz still rolls the top off above them.
+    """
+    formants = ()
+    formant_floor = 0.06
+
+    # ANTIRESONANCES. A tube with a side branch -- a tonehole, a register vent,
+    # the bassoon's long wing joint -- has frequencies it will NOT pass: the
+    # branch presents a short to ground and the partial that lands there is
+    # cancelled. Poles alone cannot make a dip; a formant list can only add.
+    # Measured on the Iowa bassoon at C3, the 5th harmonic sits 33 dB BELOW its
+    # neighbours (-13.7 between +19.3 and -2.1), which is a zero, not the gap
+    # between two peaks. (centre Hz, bandwidth Hz, depth 0..1).
+    antiformants = ()
+
+    def bore_gain(self, partial_hz):
+        g = self.formant_floor
+        for centre, bandwidth, amp in self.formants:
+            d = (partial_hz - centre) / (bandwidth * 0.5)
+            g += amp / (1.0 + d * d)
+        for centre, bandwidth, depth in self.antiformants:
+            d = (partial_hz - centre) / (bandwidth * 0.5)
+            g *= 1.0 - depth / (1.0 + d * d)
+        g /= 1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order
+        # A BODY THAT SMALL CANNOT RADIATE THAT LOW. Below its lowest air mode a
+        # violin family box stops coupling to the room, and the fundamental goes
+        # with it: the Iowa cello's low C has its fundamental 11.2 dB BELOW its
+        # strongest partial, where a monotonic model makes h1 the strongest by
+        # construction. Same highpass SynthProperties.bore_gain uses for a brass
+        # bell, which FormantBody had been dropping. No-op at 0, which is what
+        # every voice that had formants before this line was written has.
+        if self.bell_cutoff_hz:
+            x = (partial_hz / self.bell_cutoff_hz) ** self.bell_order
+            g *= x / (1.0 + x)
+        return g
+
+
 class PluckedStringProperties(SynthProperties):
     octave_gain = -0.0
 
@@ -2255,7 +2305,7 @@ class TriplePluckedStringProperties(PluckedStringProperties):
 # nut (nasal and bright). In this model the pluck spectrum is set by
 # plucked_harmonic (the harmonic where the pluck comb nulls), so each choir is a
 # spectrum class borrowed via the cross-family stop mechanism.
-class HarpsiBase(PluckedStringProperties):
+class HarpsiBase(FormantBody, PluckedStringProperties):
     """Shared harpsichord physics. A plucked string released from a triangular
     displacement at fraction p of its length feeds mode n with amplitude
     ~ |sin(n*pi*p)| / n^2: a 1/n^2 rolloff times a COMB that nulls every harmonic
@@ -2294,6 +2344,59 @@ class HarpsiBase(PluckedStringProperties):
     strike_depth = 1.0
     tonal_dampening = 1.55            # toward the pluck's 1/n^2, kept a little bright
     octave_dampening = 0.02
+    # THE SOUNDBOARD. Measured with `voicefit.py formants`, which is the comb
+    # method run on the other axis: a pluck comb and a series tilt are fixed in
+    # HARMONIC NUMBER, a body resonance is fixed in FREQUENCY, so averaging every
+    # partial of every note by frequency -- after removing anything smooth in m --
+    # finds the body and washes the source out.
+    #
+    # All three usable sets show one broad region low down and a dip above it:
+    #
+    #     English   449 Hz +5.2 dB   566 Hz +3.4
+    #     Italian   283 Hz +9.1      224 +7.2, 356 +5.3, 449 +3.8, 566 +4.0
+    #     Unk       224 Hz +3.9
+    #
+    # which is where a harpsichord's soundboard and case cavity live. They differ
+    # from each other because they are different bodies, and that is the point:
+    # this is the English (Zuckermann) instrument, the only set whose decay also
+    # behaved. Fitted as one broad pole rather than the Italian's several,
+    # because +5 dB over a third of an octave is what THIS body showed.
+    #
+    # What this cannot separate is the room: a hall colours by frequency too, and
+    # with one microphone there is no way to divide them. Read it as body-plus-
+    # room, and keep it modest for that reason.
+    formants = ((490.0, 350.0, 0.40),)
+    formant_floor = 0.50            # so the pole stands +5.1 dB over the floor
+    # bore_corner_hz GATES the whole formant path -- harmonic_volume returns
+    # early on `not self.bore_corner_hz` -- so a body with no corner is silently
+    # no body at all. It is placed above the audible band ON PURPOSE: the
+    # measurement was detrended in harmonic number, so it cannot see a smooth
+    # high-frequency rolloff, and asserting one here would be inventing a number
+    # rather than measuring it. -0.5 dB at 10 kHz.
+    bore_corner_hz = 40000.0
+    bore_order = 2.0
+
+    # RADIATION. A harpsichord is a large flat radiator, not a point: the
+    # soundboard is roughly 1.8 x 0.8 m tapering, some 0.9 m2, and a rigid piston
+    # of that area has a = 0.54 m and would beam into a 22-degree lobe by 1 kHz.
+    # No harpsichord does that, because a soundboard is not rigid -- above its
+    # first few modes it breaks up and only a fraction radiates coherently.
+    #
+    # 0.15 m is that coherent fraction, and it is a GUESS: one microphone at one
+    # angle cannot measure a polar pattern, so nothing in the VCSL set constrains
+    # it. It puts ka = 1 at 364 Hz, so the instrument is near-omnidirectional
+    # through the bass and gently directional above -- which also makes its room
+    # send fall with frequency, giving the bass-wet, treble-dry balance a real
+    # room has. Until now this voice was omnidirectional at every frequency and
+    # fed the room equally from every partial.
+    #
+    # The radius chooses the TRANSITION, not the strength: this piston model
+    # saturates near 12 dB of directivity index whatever the radius (0.08 m
+    # gives 9.9 dB at 4 kHz, 0.54 m gives 12.0). So the conservative move is to
+    # put the transition high rather than to shrink the piston, and 0.15 keeps
+    # everything below 364 Hz effectively omnidirectional.
+    directivity_radius = 0.15
+
     # Thin, low-tension brass/iron: much less inharmonicity than a piano's wound
     # steel -- and less than this class used to claim. MEASURED over 195 notes
     # from six VCSL sets by regressing (f_m/m)^2 on m^2 (see voicefit.py inharm):
@@ -2948,56 +3051,6 @@ class ReedOrganProperties(OrganProperties):
     crescendo_order = ["8", "16", "4"]
     odd_only = True
     inharmonicity_coefficient = 0.0
-
-
-class FormantBody:
-    """A body with fixed resonances: the harmonics slide through, the peaks stay.
-
-    A resonator does not care what note is being played. Its peaks sit at fixed
-    frequencies, so a partial is loud when it happens to land on one -- which is
-    why a bassoon's fourth harmonic can be 19 dB ABOVE its fundamental at C3 and
-    the same instrument sounds like a bassoon two octaves up. Any voice whose
-    spectrum peaks somewhere other than the fundamental needs this; a monotonic
-    1/n^d rolloff cannot express it at all, because it makes h1 the strongest
-    partial by construction.
-
-    Rides on bore_gain, so it inherits that filter's power normalisation: moving
-    a formant changes the colour, never the loudness. formants are
-    (centre Hz, bandwidth Hz, amplitude); formant_floor is what the body passes
-    between its resonances, and bore_corner_hz still rolls the top off above them.
-    """
-    formants = ()
-    formant_floor = 0.06
-
-    # ANTIRESONANCES. A tube with a side branch -- a tonehole, a register vent,
-    # the bassoon's long wing joint -- has frequencies it will NOT pass: the
-    # branch presents a short to ground and the partial that lands there is
-    # cancelled. Poles alone cannot make a dip; a formant list can only add.
-    # Measured on the Iowa bassoon at C3, the 5th harmonic sits 33 dB BELOW its
-    # neighbours (-13.7 between +19.3 and -2.1), which is a zero, not the gap
-    # between two peaks. (centre Hz, bandwidth Hz, depth 0..1).
-    antiformants = ()
-
-    def bore_gain(self, partial_hz):
-        g = self.formant_floor
-        for centre, bandwidth, amp in self.formants:
-            d = (partial_hz - centre) / (bandwidth * 0.5)
-            g += amp / (1.0 + d * d)
-        for centre, bandwidth, depth in self.antiformants:
-            d = (partial_hz - centre) / (bandwidth * 0.5)
-            g *= 1.0 - depth / (1.0 + d * d)
-        g /= 1.0 + (partial_hz / self.bore_corner_hz) ** self.bore_order
-        # A BODY THAT SMALL CANNOT RADIATE THAT LOW. Below its lowest air mode a
-        # violin family box stops coupling to the room, and the fundamental goes
-        # with it: the Iowa cello's low C has its fundamental 11.2 dB BELOW its
-        # strongest partial, where a monotonic model makes h1 the strongest by
-        # construction. Same highpass SynthProperties.bore_gain uses for a brass
-        # bell, which FormantBody had been dropping. No-op at 0, which is what
-        # every voice that had formants before this line was written has.
-        if self.bell_cutoff_hz:
-            x = (partial_hz / self.bell_cutoff_hz) ** self.bell_order
-            g *= x / (1.0 + x)
-        return g
 
 
 class SectionMixin:

@@ -357,7 +357,99 @@ def cmd_ratio(args):
     return 0
 
 
-CMDS = {'decay': cmd_decay, 'inharm': cmd_inharm, 'comb': cmd_comb, 'ratio': cmd_ratio}
+def cmd_formants(args):
+    """The body's transfer function, sampled by every partial of every note.
+
+    The dual of `comb`. A pluck comb and a series tilt are fixed in HARMONIC
+    NUMBER, so averaging in harmonic number finds them and washes the body out.
+    A soundboard resonance is fixed in FREQUENCY, so averaging in frequency finds
+    it and washes the comb out. Same data, opposite axis.
+
+    Each partial gives one sample of the body: divide the measured amplitude by
+    what the source model predicts for that harmonic -- |sin(m*pi*beta)| / m^tilt
+    -- and what is left is the body's gain at m*f0. Pool those over the whole
+    compass and the body appears.
+
+    CAVEAT, and it is not small: a room's colouration is ALSO fixed in frequency,
+    so this cannot separate the instrument's body from the room it was recorded
+    in. The early window keeps the direct sound dominant, and a soundboard's
+    peaks are far deeper than an early reflection's ripple, but what comes out is
+    body-plus-room and should be read that way.
+    """
+    beta = float(args[1]) if len(args) > 1 else 0.115
+    tilt = float(args[2]) if len(args) > 2 else 1.55
+    files = sorted(f for f in glob.glob(os.path.join(args[0], '*.wav'))
+                   if note_of(f) is not None)
+    F, G = [], []
+    for p in files:
+        x, sr = mono(p)
+        i = onset(x, sr)
+        seg = x[i + int(0.02 * sr): i + int(0.14 * sr)]
+        if len(seg) < 4096:
+            continue
+        f0 = detect_f0(seg, sr)
+        if not f0:
+            continue
+        N = 1 << 18
+        X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N))
+        f = np.fft.rfftfreq(N, 1.0 / sr)
+        fr, gn = [], []
+        for m in range(1, 33):
+            fm = m * f0
+            if fm > 0.45 * sr:
+                break
+            w = (f > fm - 0.3 * f0) & (f < fm + 0.3 * f0)
+            if not w.any():
+                break
+            a = X[w].max()
+            src = abs(math.sin(m * math.pi * beta)) / (m ** tilt)
+            if a <= 0 or src < 1e-4:            # skip partials the comb nulls
+                continue
+            fr.append(fm); gn.append(20 * math.log10(a / src))
+        if len(gn) < 8:
+            continue
+        # REMOVE EVERY SMOOTH FUNCTION OF HARMONIC NUMBER before binning by
+        # frequency. Otherwise an error in the assumed series tilt -- which is
+        # smooth in m -- survives into the frequency bins as a slope, and reads
+        # as a broad "resonance" at whichever end it rises toward. The first
+        # version of this did exactly that and reported four peaks at 5-11 kHz
+        # which were the top of a tilt error. What is left after this is only
+        # what varies with FREQUENCY at fixed harmonic number, which is the body.
+        lm = np.log(np.arange(1, len(gn) + 1))
+        gn = np.array(gn)
+        gn = gn - np.polyval(np.polyfit(lm, gn, 2), lm)
+        F.extend(fr); G.extend(gn)
+    if len(F) < 200:
+        print("  too few samples (%d)" % len(F)); return 1
+    F = np.array(F); G = np.array(G)
+    # Third-octave bins: fine enough for a soundboard mode, coarse enough that
+    # every bin holds partials from several different notes.
+    edges = 50.0 * 2 ** (np.arange(0, 25) / 3.0)
+    print("  body response, %d partial samples from %d notes" % (len(F), len(files)))
+    print("   band Hz      dB     n    ")
+    curve = []
+    for lo, hi in zip(edges, edges[1:]):
+        m = (F >= lo) & (F < hi)
+        if m.sum() < 6:
+            continue
+        v = float(np.median(G[m]))
+        curve.append(((lo * hi) ** 0.5, v, int(m.sum())))
+    base = np.median([c[1] for c in curve])
+    for fc, v, n in curve:
+        d = v - base
+        bar = ('+' if d >= 0 else '-') * min(30, int(abs(d)))
+        print("   %7.0f %+8.1f %5d  %s" % (fc, d, n, bar))
+    pk = [c for c in curve if c[1] - base > 3.0]
+    if pk:
+        print("\n  peaks above +3 dB: " + ", ".join("%.0f Hz (%+.1f)" % (c[0], c[1] - base)
+                                                    for c in pk))
+    else:
+        print("\n  no peak above +3 dB -- no stable poles to fit")
+    return 0
+
+
+CMDS = {'decay': cmd_decay, 'inharm': cmd_inharm, 'comb': cmd_comb,
+        'ratio': cmd_ratio, 'formants': cmd_formants}
 
 
 def main(argv):
