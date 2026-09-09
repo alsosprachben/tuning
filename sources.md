@@ -1477,9 +1477,20 @@ Strong fundamental where the Zuckermann kit has a weak one, and 36% longer ring.
 a different measurement chain, agreeing to 8%. That is the strongest evidence
 yet that the number is the instrument's and not the dataset's.
 
-**And it is tuned to A = 426 Hz.** All three samples agree (426.8, 426.5, 425.6),
-which is neither baroque 415 nor modern 440. So renders of his Bach at
-`werckmeister` (A=415) are a little under the pitch he actually played.
+**What pitch he played at — and a correction.** The raw samples sit near A=426
+(426.8, 426.5, 425.6), and I first reported that as his instrument's pitch. It
+is not: the bank's instrument zones declare them as E3/A4/B5 and apply a
+fineTune of +71/+70/+73 cents, which puts playback near **A = 444**. His MIDI
+then adds Werckmeister's own -11.72 cents on A, so his recordings sound at about
+**A = 441** -- essentially modern pitch, not baroque.
+
+His pitch bends carry no global offset, which is what settles it: C is exactly
+0.00 and every other class is negative, to a maximum of -11.72 cents. That is a
+temperament defined downward from C, not a transposition.
+
+So `werckmeister` at A=415 renders his Bach a semitone below where he played it.
+415 remains the conventional baroque choice and the house default across the
+historical tuners; `blockrender IN OUT werckmeister a=441` matches him instead.
 
 **Fitted** into `HarpsiRossProperties`: the decay level and register slope
 (D(415) 3.46 against the base's 4.70, slope 0.536 from D = 2.16/3.21/5.68 at

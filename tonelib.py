@@ -2590,10 +2590,11 @@ class HarpsiRossProperties(HarpsiBase):
     best single tilt is the base's own 0.75 at 8.1 dB rms, so it is left alone
     rather than fitted to a number that would only look like a measurement.
 
-    His instrument is also tuned to A = 426 Hz, which all three samples agree on
-    (426.8, 426.5, 425.6) -- neither baroque 415 nor modern 440. That is a
-    property of his tuning, not of the voice, so it belongs to a tuner and not
-    here.
+    The samples sit near A = 426, but that is NOT his playing pitch: the bank's
+    zones declare them E3/A4/B5 and fine-tune them up some 70 cents, landing
+    near A = 444, and his MIDI then applies Werckmeister's own -11.72 cents on
+    A. He played at about A = 441. Either way it is a property of his tuning,
+    not of the voice, so it belongs to a tuner and not here.
 
     LICENCE. His terms permit modifying his files for personal use but require
     that distributed AUDIO be "derived from the MIDI files using my matching
