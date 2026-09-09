@@ -1454,3 +1454,53 @@ His Scarlatti is a separate matter and is NOT obtainable this way: his site
 offers his own edition (176 sonatas as zipped PostScript, k001-k176, typeset in
 LilyPond) and third-party MP3s, but the MIDI is at Classical Archives behind a
 subscription. The `sankey` tuner exists for it regardless.
+
+### His own instrument — `ross.sf2`, and `HarpsiRossProperties`
+
+<http://www.johnsankey.ca/data/ross.sf2> — the soundfont he recorded through,
+995 KB, converted from his original SoundBlaster SBK by Awave (its INFO chunk
+carries Creative's boilerplate copyright, not his). **Three unlooped samples**,
+44.1 kHz: E3 6.23 s, A4 2.87 s, B5 2.17 s.
+
+**It is a different harpsichord from the one we fitted.**
+
+    m =                    1     2      3      4      6      8     16
+    Sankey's own        0.0   -5.0   -7.0   -6.7  -10.5  -21.6  -27.7
+    VCSL English        0.0   +3.3   -4.6   -4.1   -8.5  -14.9  -24.4
+    our model           0.0   +5.2   +3.6   +1.7   -0.3  -19.2  -27.1
+
+Strong fundamental where the Zuckermann kit has a weak one, and 36% longer ring.
+`HarpsichordProperties` is not wrong; it is faithful to a bright 1970s kit.
+
+**It independently confirms the inharmonicity.** B = 3.23e-5 here against the
+3.51e-5 fitted from six VCSL sets — a different instrument, a different decade,
+a different measurement chain, agreeing to 8%. That is the strongest evidence
+yet that the number is the instrument's and not the dataset's.
+
+**And it is tuned to A = 426 Hz.** All three samples agree (426.8, 426.5, 425.6),
+which is neither baroque 415 nor modern 440. So renders of his Bach at
+`werckmeister` (A=415) are a little under the pitch he actually played.
+
+**Fitted** into `HarpsiRossProperties`: the decay level and register slope
+(D(415) 3.46 against the base's 4.70, slope 0.536 from D = 2.16/3.21/5.68 at
+160/427/955 Hz) and the inharmonicity. Round-tripped: E3 renders 2.11 against a
+measured 2.16, A4 3.47 against 3.21.
+
+**Not fitted, and the class is thin because of it.** His ladder is not a 1/n^k
+tilt -- m=2 alone wants `tonal_dampening` 1.4, m=8 wants 0.75, and it turns back
+up at m=12. That is body and comb structure and three samples cannot separate
+them, so the tilt keeps the base's value rather than take a number that would
+only look like a measurement. `strike_point` is set explicitly to the 8' lower
+manual's 0.115 as a STAND-IN: HarpsiBase leaves it None and inheriting that
+would have dropped the voice onto the legacy comb path without saying so.
+
+Selected with `TUNING_HARPSI=ross` (or `zuckermann` for the default). An env
+switch and not a stop, because a stop is a register of one instrument and this
+is a whole other instrument.
+
+**Licence, again.** Fitting a model to his soundfont does not make renders
+distributable: his terms require distributed audio to be "derived from the MIDI
+files using my matching soundfont on a SoundBlaster 32 or 100% compatible
+system", and a physical model is not that soundfont however well it is fitted.
+Whether "derived" was meant to reach a model fitted to it is a question for him,
+not for us to decide by assuming the generous reading.

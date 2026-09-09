@@ -2554,6 +2554,65 @@ class HarpsichordProperties(HarpsiBase):
     crescendo_order = ["8", "8-upper", "4", "lute"]
 
 
+class HarpsiRossProperties(HarpsiBase):
+    """John Sankey's own instrument, from the soundfont he recorded through.
+
+    A sibling, deliberately NOT a stop. A stop is a register of one instrument --
+    the same strings in the same case, plucked by a different row of jacks -- and
+    this is a different harpsichord. HarpsichordProperties is fitted to VCSL's
+    English set, a 1970s Zuckermann kit: the bright, nasal end of the family.
+    This one is the round, sustaining end, and the difference is measured rather
+    than asserted:
+
+        m =                    1     2      3      4      6      8     16
+        Sankey's own        0.0   -5.0   -7.0   -6.7  -10.5  -21.6  -27.7
+        VCSL English        0.0   +3.3   -4.6   -4.1   -8.5  -14.9  -24.4
+
+    His has a STRONG fundamental where the Zuckermann has a weak one, and it
+    rings 36% longer.
+
+    WHAT IS FITTED, from ross.sf2 (<http://www.johnsankey.ca/data/ross.sf2>),
+    three unlooped samples at E3, A4 and B5:
+
+      decay -- D(m=1) 2.16 / 3.21 / 5.68 at 160 / 427 / 955 Hz, giving a
+        register slope of 0.536 and D(415 Hz) = 3.46 against the base's 4.70.
+        The 3.2:1.5 split between the constant and per-harmonic terms is kept
+        from the base: three notes fix the LEVEL and the slope, not the split.
+
+      inharmonicity -- 3.23e-5. Not really a fit so much as a confirmation: the
+        base carries 3.51e-5 from six VCSL sets, and a different instrument
+        sampled in a different decade through a different chain agrees to 8%.
+
+    WHAT IS NOT FITTED, and why the class is thin. His ladder is not a 1/n^k
+    tilt: m=2 alone wants tonal_dampening 1.4, m=8 wants 0.75, and it turns back
+    up at m=12. That is body and comb structure, and three samples cannot
+    separate them -- `voicefit comb` refuses at two usable notes, correctly. The
+    best single tilt is the base's own 0.75 at 8.1 dB rms, so it is left alone
+    rather than fitted to a number that would only look like a measurement.
+
+    His instrument is also tuned to A = 426 Hz, which all three samples agree on
+    (426.8, 426.5, 425.6) -- neither baroque 415 nor modern 440. That is a
+    property of his tuning, not of the voice, so it belongs to a tuner and not
+    here.
+
+    LICENCE. His terms permit modifying his files for personal use but require
+    that distributed AUDIO be "derived from the MIDI files using my matching
+    soundfont on a SoundBlaster 32 or 100% compatible system". A model fitted to
+    that soundfont is not that soundfont, so this class does not make renders
+    distributable. See sources.md.
+    """
+    # HarpsiBase leaves strike_point None -- each register sets its own -- and
+    # inheriting that would silently drop this voice onto the legacy
+    # plucked_harmonic path and give it a different comb from the instrument it
+    # sits beside. His comb cannot be measured from three notes, so it takes the
+    # 8' lower manual's, explicitly and as a stand-in rather than a measurement.
+    strike_point = 0.115
+    inharmonicity_coefficient = 3.23e-05
+    decay_db = 2.36
+    harmonic_decay_db = 1.10
+    decay_register_slope = 0.536
+
+
 class InharmonicStringProperties(PluckedStringProperties):
     # http://daffy.uah.edu/piano/page4/page3/index.html
     inharmonicity_dynamic = True

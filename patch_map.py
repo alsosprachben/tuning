@@ -19,7 +19,7 @@ from tonelib import (
     SquareSynthProperties,
     SawtoothSynthProperties,
     GrandPianoProperties,
-    HarpsichordProperties,
+    HarpsichordProperties, HarpsiRossProperties,
     PluckedStringProperties,
     OrchestraHitProperties,
     NylonGuitarProperties,
@@ -345,3 +345,22 @@ def property_class_for_note(program, note):
 PROGRAM_CLASS[57] = TromboneProperties     # Trombone
 PROGRAM_CLASS[60] = HornProperties         # French Horn
 PROGRAM_CLASS[61] = TromboneProperties     # Brass Section: routed per note, see BRASS_SPLIT
+
+# WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
+# family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit
+# (VCSL's English set), the bright nasal end, and HarpsiRossProperties to John
+# Sankey's own instrument, which has a strong fundamental and rings 36% longer.
+# Neither is more correct; they are different harpsichords, and which one a file
+# wants is not something a program number can say.
+#
+# TUNING_HARPSI=ross selects the other. Deliberately an env switch rather than a
+# stop: a stop is a register of ONE instrument, the same strings plucked by a
+# different row of jacks, and swapping the whole instrument is not that.
+import os as _os
+_HARPSI = {'ross': HarpsiRossProperties, 'zuckermann': HarpsichordProperties}
+_want = _os.environ.get('TUNING_HARPSI', '').strip().lower()
+if _want:
+    _cls = _HARPSI.get(_want)
+    if _cls is None:
+        raise SystemExit("TUNING_HARPSI=%r; have %s" % (_want, ", ".join(sorted(_HARPSI))))
+    PROGRAM_CLASS[6] = PROGRAM_CLASS[7] = _cls
