@@ -352,6 +352,29 @@ def prepare(path, tuner='hybrid'):
     for _ch in {n[0] for n in notes}:
         _vs = sorted(n[4] for n in notes if n[0] == _ch)
         if _vs: _vbase[_ch] = _vs[len(_vs)//2]
+
+    # ONE STRING PER NOTE. When a pitch is played again, it is the SAME string:
+    # the damper lands, the key comes back down, and the plectrum plucks what it
+    # just stopped. Two copies of one pitch cannot sound at once on one
+    # instrument, and summing them is not a small error -- they beat against
+    # each other and the new attack emerges out of the old note instead of out
+    # of silence.
+    #
+    # It only became audible when the harpsichord's release grew from a 7 ms
+    # gate to a 55 ms damper: repeated notes in Bach's writing land 3 ms after
+    # their own note-off, so the old release ran 50 ms into the new note. Ben
+    # heard it as "every other note having their attack/release squashed", which
+    # is exactly what alternating repeated pitches would sound like.
+    #
+    # Only the RELEASE is clipped, never the note: the player has already lifted
+    # the key, so what is cut is a tail the instrument would not have sustained
+    # through a re-pluck anyway.
+    _next_same = {}
+    _seen = {}
+    for _n in sorted(notes, key=lambda e: -e[2]):
+        _k = (_n[0], _n[1])
+        if _k in _seen: _next_same[(_k, _n[2])] = _seen[_k]
+        _seen[_k] = _n[2]
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch
         choked = None
@@ -418,6 +441,10 @@ def prepare(path, tuner='hybrid'):
         # pipes speak slowly, trebles promptly).
         at = props.speech_time(at, f0); rt = props.speech_time(rt, f0)
         fade = max(1e-4, min(at, 0.45*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
+        # ...and no longer than until this same string is plucked again.
+        _nx = _next_same.get(((ch, note), on))
+        if _nx is not None and _nx > off:
+            rel = min(rel, max(1e-4, _nx - off)*SR)
         # chiff burst width: short/capped, decoupled from the slow speech fade
         chiff = max(1e-4, min(props.chiff_time(f0, at), 0.45*dur))*SR
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
