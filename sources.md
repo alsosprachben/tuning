@@ -1335,17 +1335,44 @@ partials still ringing in the same band.
 
 Off for all 101 voice classes but the four harpsichords.
 
-### Open, and measured: the voice is too dull
+### Brightness
 
-Comparing 2–8 kHz content against the note's own peak:
+Comparing 2-8 kHz content against the note's own peak found our render at
+-21.8 dB where the recordings sit at -6.0 (C3) and -7.0 (C4). A room recording
+carries LESS high frequency than an anechoic model, not more, so the gap was real
+and if anything understated.
 
-    our render     -21.8 dB
-    VCSL C3         -6.0 dB
-    VCSL C4         -7.0 dB
+**`tonal_dampening` 1.55 -> 0.75**, grid-searched through the renderer so the body
+and the power renormalisation sit inside the loop:
 
-**About 15 dB short in the brilliance region.** A room recording should have LESS
-high frequency than an anechoic model, not more, so the gap is real and if
-anything understated — though a sample library may have been brightened, which
-this cannot rule out. The knob is `tonal_dampening = 1.55`, and moving it changes
-the character of a voice Ben has tuned by ear, so it is recorded here and left
-alone rather than adjusted on one measurement.
+| tonal_dampening | ladder rms | 2-8 kHz error |
+|---|---|---|
+| 1.00 | 8.65 dB | -3.8 dB |
+| 0.85 | 6.65 | -2.2 |
+| **0.75** | **5.15** | **-1.2** |
+| 0.65 | 8.17 | -0.3 |
+| 0.55 | 6.48 | +0.6 |
+
+Judged on the ladder AND on broadband brightness, because a ladder-only fit is
+one of the four standing failure modes: the ladder alone bottoms in the same
+place but is noisy and non-monotonic -- the renormalisation moves the very
+fundamental the ladder is measured against -- while brightness is monotonic and
+settles it. Ladder rms 17.52 dB -> 5.15.
+
+    m           1     2     3     4     5     6     7     8    ...   16
+    recordings  0.0  +3.3  -4.6  -4.1  -9.7  -8.5 -15.0 -14.9        -24.4
+    before      0.0   0.0  -9.4  -8.6 -18.2 -18.5 -30.0 -35.6        -48.5
+    after       0.0  +5.2  +3.6  +1.7  -6.0  -0.3 -15.2 -19.2        -27.1
+
+A harpsichord is not 1/n^2, which is what 1.55 was reaching for. The recordings
+put the SECOND harmonic ABOVE the fundamental -- +3.3 dB pooled, +9.4 in the bass
+-- and that weak fundamental is what the instrument is recognised by.
+
+The sibling registers shifted by the same -0.80 (upper manual 1.30 -> 0.50, buff
+2.40 -> 1.60). They were set RELATIVE to the old base, so holding them fixed
+would have made the upper manual duller than the lower and inverted a
+relationship tuned by ear.
+
+The recordings' own ladder scatters 12-20 dB note to note, so 5 dB rms is near
+what this data resolves and is not a claim of 5 dB accuracy. The comb is
+unaffected: re-measuring a render returns strike_point 0.1150 at r = 1.00.
