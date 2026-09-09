@@ -2554,7 +2554,7 @@ class HarpsichordProperties(HarpsiBase):
     crescendo_order = ["8", "8-upper", "4", "lute"]
 
 
-class HarpsiRossProperties(HarpsiBase):
+class HarpsiRossProperties(HarpsichordProperties):
     """John Sankey's own instrument, from the soundfont he recorded through.
 
     A sibling, deliberately NOT a stop. A stop is a register of one instrument --
@@ -2602,12 +2602,12 @@ class HarpsiRossProperties(HarpsiBase):
     that soundfont is not that soundfont, so this class does not make renders
     distributable. See sources.md.
     """
-    # HarpsiBase leaves strike_point None -- each register sets its own -- and
-    # inheriting that would silently drop this voice onto the legacy
-    # plucked_harmonic path and give it a different comb from the instrument it
-    # sits beside. His comb cannot be measured from three notes, so it takes the
-    # 8' lower manual's, explicitly and as a stand-in rather than a measurement.
-    strike_point = 0.115
+    # Derived from HarpsichordProperties and not from HarpsiBase, because the
+    # registration machinery -- `registerable`, `stop_ranks` -- lives there, and
+    # a harpsichord that is not registerable does not merely lose its stops: its
+    # CC11 is then read as EXPRESSION, so a stop mask of 7 becomes a volume of
+    # 7/127 and the instrument nearly vanishes. It inherits strike_point 0.115
+    # with it, which is right as a stand-in -- three samples cannot give a comb.
     inharmonicity_coefficient = 3.23e-05
     decay_db = 2.36
     harmonic_decay_db = 1.10

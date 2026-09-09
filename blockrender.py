@@ -620,6 +620,14 @@ def prepare(path, tuner='hybrid'):
                 if chz >= SR / 2:
                     continue
                 a_ = cg * camp * props.radiation_gain(chz)
+                # A floor of its own, relative to the NOTE's gain rather than an
+                # absolute level, so a quiet note does not keep its mechanism
+                # after its tone has gone. That is exactly what a voice whose
+                # CC11 was misread as expression sounded like -- all clicks and
+                # no instrument -- because the note's partials were culled and
+                # the mechanism, having no floor, was not.
+                if a_ < 3e-3 * gain:
+                    continue
                 emit_partial(2 * math.pi * chz / SR, a_ * props.hrtf_gain(chz, li),
                              a_ * props.hrtf_gain(chz, ri), a_, chz,
                              noff, noff + props.release_click_s * SR,
