@@ -71,7 +71,7 @@ def main(argv):
     perf, outp, scores = args[0], args[1], args[2:]
     F, P, gap = opt('--forte', 7), opt('--piano', 2), opt('--gap', 2.0)
 
-    *_, notes, ccs, _t = blockrender.parse(perf)
+    _cp, _cps, notes, ccs, _t, _lg = blockrender.parse(perf)
     played = sorted((on, off, n) for ch, n, on, off, v, r, pg in notes)
     spans = movement_spans(notes, len(scores), gap)
     spt = 0.5 / TPB

@@ -83,6 +83,57 @@ def tuning_table(name):
     tuner.tune(1000, 30000); pairs = dict(tuner.noteFrequencies())
     return {n: pairs[n - mc] for n in range(128) if (n - mc) in pairs}
 
+
+def _legato_ticks(mid):
+    """{(channel, note, k)} for notes that begin CONTIGUOUSLY with whatever the
+    channel was playing before, judged in the file's own tick grid.
+
+    Ticks and not milliseconds, because a millisecond is a different musical
+    amount at every tempo and cannot tell a sequencer's one-tick nudge from a
+    real articulation gap. And a FRACTION of a beat rather than a fixed number
+    of ticks, because the corpus does not share a convention -- measured over
+    the adjacent-note gaps of four pieces:
+
+        Jupiter    tpb=120   4381 pairs at exactly 0 ticks (23%)
+        Neptune    tpb=480     42 at 0, but 4720 at +1 -- one tick IS its legato
+        Vivaldi    tpb=480    340 at 0, 948 at +5 (1/96 beat, a note-off nudge)
+        Valkyries  tpb=48      75 at 0; its 3-4 tick gaps are 1/16 of a beat
+                              and deliberate, so its slurs are the overlaps
+
+    Exact contiguity would have been right for Jupiter and wrong for the other
+    three -- and treating Neptune's one-tick gaps as detached would have made
+    the most sustained piece in the corpus entirely detache.
+
+    tpb/64 is a 64th of a beat, floored at one tick so a coarse file (Valkyries
+    at 48 ticks per beat) does not sweep in gaps it meant.
+    """
+    tol = max(1.0, mid.ticks_per_beat / 64.0)
+    spans = []
+    for tr in mid.tracks:
+        t = 0; held = {}
+        for x in tr:
+            t += x.time
+            if x.type == 'note_on' and x.velocity > 0:
+                held.setdefault((x.channel, x.note), []).append(t)
+            elif x.type == 'note_off' or (x.type == 'note_on' and x.velocity == 0):
+                q = held.get((x.channel, x.note))
+                if q:
+                    spans.append((q.pop(0), t, x.channel, x.note))
+    spans.sort()
+    # k indexes the occurrences of one (channel, note) in onset order, which is
+    # how prepare() finds the same note again from the seconds-based list.
+    seen = {}
+    ends = {}
+    out = set()
+    for on_t, off_t, ch, n in spans:
+        k = seen.get((ch, n), 0); seen[(ch, n)] = k + 1
+        prev = ends.get(ch)
+        if prev is not None and on_t - prev <= tol:
+            out.add((ch, n, k))
+        ends[ch] = max(prev or 0, off_t)
+    return out
+
+
 def parse(path):
     # `path` may also be an already-built mido.MidiFile, so a caller can hand in
     # a MIDI object it constructed in memory. live.py builds its note templates
@@ -123,7 +174,7 @@ def parse(path):
     # would miss it -- a KeyError at render time once notes carry their own
     # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
-    return ch_prog, ch_progs, notes, ccs, t
+    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid)
 
 def onepole_blocks(events, nblk, default):
     bc = (np.arange(nblk) + 0.5) * BLK / SR
@@ -192,7 +243,7 @@ def prepare(path, tuner='hybrid'):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
-    ch_prog, ch_progs, notes, ccs, total = parse(path)
+    ch_prog, ch_progs, notes, ccs, total, legato = parse(path)
     N = int(total*SR) + SR; nblk = N // BLK + 2
     # organ registration rows
     Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0)
@@ -381,6 +432,11 @@ def prepare(path, tuner='hybrid'):
         _k = (_n[0], _n[1])
         if _k in _seen: _next_same[(_k, _n[2])] = _seen[_k]
         _seen[_k] = _n[2]
+    # Occurrence index per (channel, note) in ONSET order -- the same key
+    # _legato_ticks used, so a note found in seconds here is the note it judged
+    # in ticks there.
+    _occ = {}
+    notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch
         choked = None
@@ -441,6 +497,13 @@ def prepare(path, tuner='hybrid'):
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f0)
         B = props.inharmonicity_coefficient; dur = off-on
         at = props.attack_time if props.attack_time is not None else props.chiff_max_valve_time
+        # SLUR: the previous note on this channel ran up to this one, so the
+        # exciter never stopped and there is no onset to make. Only voices with
+        # an exciter that can carry declare legato_attack_s; see tonelib.
+        _lg = getattr(props, 'legato_attack_s', None)
+        if _lg is not None and (ch, note, _occ.get((ch, note), 0)) in legato:
+            at = min(at, _lg)
+        _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
         # Pipe speech scales with wavelength: add speech_cycles periods of the
         # fundamental to the fixed floor (mirrors tonelib.speech_time -- bass

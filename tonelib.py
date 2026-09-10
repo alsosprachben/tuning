@@ -1566,6 +1566,21 @@ class SynthProperties:
     release_click_modes = ()         # ((Hz, relative amplitude), ...)
     release_click_decay_db = 0.0     # dB/s, tonelib's power convention
     release_click_s = 0.0            # how long the event is allowed to run
+    # SLURRED ONSET. When the previous note on this channel ran up to this one,
+    # the exciter never stopped: a bow stays on the string, lips and breath stay
+    # in the air column, and only the stopped length or the fingering changes.
+    # There is no attack to make, so the onset collapses to the time the new
+    # pitch takes to settle. A separated note has to establish Helmholtz motion
+    # or an air column from nothing, which is what attack_time describes.
+    #
+    # None = this voice has no exciter to carry over, which is the honest answer
+    # for anything struck or plucked -- and for the ORGAN, where the distinction
+    # is easy to get wrong: playing an organ legato does not carry anything
+    # across, because each pitch is a different pipe with its own valve, and the
+    # new pipe must speak in full. Clarinets inherit from ReedOrganProperties
+    # here, so setting this on the organ base would have given every rank a
+    # legato it cannot have.
+    legato_attack_s = None
     reflection_order = 1     # 0 = off; 1 = one bounce off each surface
     reflection_floor_db = -40.0   # drop an image quieter than this, per partial
     # WHERE THE IMAGE MODEL HANDS OVER TO THE STATISTICAL ONE.
@@ -3292,6 +3307,9 @@ class SectionMixin:
 
 
 class BrassProperties(OrganProperties):
+    # Slurred rather than tongued: the lips keep buzzing and the harmonic
+    # shifts, so there is no attack to make -- only the new partial to settle.
+    legato_attack_s = 0.015
     # A DRIVEN AIR COLUMN IS EXACTLY HARMONIC. The reed, or the lips, lock every
     # mode to the fundamental -- the same reason FlueOrganProperties and
     # ReedOrganProperties carry B = 0. Inheriting the piano's stretch put partial
@@ -3824,6 +3842,7 @@ class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     cello, contrabass), string/synth ensembles, choir/voice pads, and
     sustained synth leads/pads as a broad bucket. This is the brighter
     'first' section; BowedStringSecond is the darker companion."""
+    legato_attack_s = 0.012   # the bow never leaves the string; only the stopped length changes
     odd_only = False
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
@@ -7573,6 +7592,7 @@ class OpenPipeProperties(StoppedPipeProperties):
     max_harmonic 32 -> 49: h32 is only 4.2 kHz on the bass flute's low C, where
     the recording still carries 24 harmonics clear of its noise floor.
     """
+    legato_attack_s = 0.012   # a slurred flute: the embouchure holds, the fingering changes
     # A BLOWN INSTRUMENT IS NEVER SILENT BETWEEN ITS HARMONICS, and this was 0.
     # sustain_jitter is the wash's SUSTAINED level in the kernel, so with it at
     # zero the chiff was an attack transient only and the held note was pure
@@ -7891,6 +7911,7 @@ class CylindricalReedProperties(ReedOrganProperties):
     one, so this class does not pretend it does, and CC11 goes back to meaning
     what GM says it means.
     """
+    legato_attack_s = 0.012   # slurred rather than tongued: the reed keeps going, the fingering changes
     registerable = False
 
 
