@@ -117,11 +117,23 @@ def _seconds_fn(mid):
     return sec
 
 
+
+def _registerable(program):
+    """Does this GM program map to a voice that reads CC11 as drawn stops?"""
+    try:
+        import patch_map
+        cls = patch_map.PROGRAM_CLASS[int(program)]
+        return bool(getattr(cls, 'registerable', False))
+    except Exception:
+        return False
+
+
 def _gather(mid, sec):
     """Collect per-channel notes, programs, controllers and track names."""
     notes = defaultdict(list)          # channel -> [(onset, duration, note)]
     programs = defaultdict(list)       # channel -> [(seconds, program, track)]
     volumes = defaultdict(list)        # channel -> [(seconds, value)]
+    expression = defaultdict(list)     # channel -> [(seconds, value)] for CC11
     names = defaultdict(set)           # channel -> {track name}
     ctrl_tracks = defaultdict(set)     # channel -> {track index writing CC}
     track_names = []
@@ -141,6 +153,8 @@ def _gather(mid, sec):
                 ctrl_tracks[msg.channel].add(ti)
                 if msg.control == 7:
                     volumes[msg.channel].append((sec(now), msg.value))
+                elif msg.control == 11:
+                    expression[msg.channel].append((sec(now), msg.value))
             elif msg.type == 'note_on' and msg.velocity:
                 held.setdefault((msg.channel, msg.note), []).append(now)
                 if label:
@@ -151,7 +165,7 @@ def _gather(mid, sec):
                     on = stack.pop(0)
                     notes[msg.channel].append(
                         (sec(on), sec(now) - sec(on), msg.note))
-    return notes, programs, volumes, names, ctrl_tracks, track_names
+    return notes, programs, volumes, expression, names, ctrl_tracks, track_names
 
 
 def _multiplexed(mid):
@@ -192,7 +206,7 @@ def _character(window):
 def check(path, window=60.0):
     mid = mido.MidiFile(path)
     sec = _seconds_fn(mid)
-    notes, programs, volumes, names, ctrl_tracks, track_names = _gather(mid, sec)
+    notes, programs, volumes, expression, names, ctrl_tracks, track_names = _gather(mid, sec)
 
     print("== %s" % path)
     muxed = _multiplexed(mid)
@@ -304,6 +318,31 @@ def check(path, window=60.0):
             findings.append(
                 "ch%d: CC7=%d from %.1fs is %s in GM, and notes sound under it"
                 % (ch, value, when, "silence" if not value else "%.0f dB" % db))
+
+        # -- CC11 on a REGISTERED voice is a stop bitfield, not expression.
+        #    An organ or harpsichord here reads CC11 as which stops are drawn
+        #    (bit 0 = the first rank, and so on), so a file that sweeps CC11 as
+        #    a swell -- which is what GM means by it -- silently draws and
+        #    undraws ranks instead. A value of 100 is not "79% volume", it is
+        #    bits 2, 5 and 6: the 4' alone, plus two ranks that do not exist.
+        #    The reverse mistake bites too: a voice that is NOT registerable
+        #    reads CC11 as expression, so a stop mask of 7 becomes 7/127 and the
+        #    instrument nearly vanishes. Both have happened here.
+        if chosen and expression[ch] and notes[ch]:
+            vals = sorted({v for _, v in expression[ch]})
+            #    Judged on how MANY distinct values there are, not how large.
+            #    A large value is perfectly good registration -- 64 is bit 6,
+            #    the seventh rank -- and testing `max(value) > 15` reported the
+            #    correctly-registered BWV 542 as broken. A stop mask takes a few
+            #    values over and over (the registered Italian Concerto uses two,
+            #    BWV 542 three); a swell takes many.
+            if _registerable(chosen[1]) and len(vals) > 6:
+                findings.append(
+                    "ch%d: %d CC11 events with %d distinct values (%s...) -- this "
+                    "voice reads CC11 as a STOP BITFIELD, so these draw ranks "
+                    "rather than set a level"
+                    % (ch, len(expression[ch]), len(vals),
+                       ", ".join(str(v) for v in vals[:5])))
 
         # -- notes the assigned instrument cannot play.  When this fires, the
         #    file's own shadowed program is very often the right answer: a
