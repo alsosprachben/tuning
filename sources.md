@@ -1515,3 +1515,68 @@ files using my matching soundfont on a SoundBlaster 32 or 100% compatible
 system", and a physical model is not that soundfont however well it is fitted.
 Whether "derived" was meant to reach a model fitted to it is a question for him,
 not for us to decide by assuming the generous reading.
+
+## Engraved scores as a source of articulation (added for the Bumblebee)
+
+Every sequence of a piece carries someone's articulation, and it is usually
+either absent or invented. The composer's is in the score, and a score
+engraved by Sibelius or Finale and published as PDF is not a picture: the
+noteheads are font glyphs at exact coordinates, the staff lines are stroked
+paths, the slurs are beziers. That makes it symbolic data, readable by
+arithmetic.
+
+`pdfmus.py` interprets the content stream; `scorepdf.py` turns it into pitches
+and slur groups; `rearticulate.py` transfers the slurs onto a sequence of the
+same music.
+
+### What was taken, for Rimsky-Korsakov's "Flight of the Bumblebee"
+
+| quantity | source | check |
+|---|---|---|
+| notes, parts, arco/pizz | IMSLP orchestral MIDI, 12 named tracks | aligned against the engraving |
+| slurs | the engraving (31 arcs on the flute alone) | endpoints bracket noteheads |
+| tempo | the engraving's `Vivace q=180` | file said a flat 120 |
+| key | the engraving | file was the Johnson arr., +5 semitones |
+
+Score: IMSLP99876, a Sibelius engraving in Inkpen2, 23 pages, 17 staves.
+Sequence: IMSLP872813 `PMLP3170-Bumble_bee.mid`. Both public domain.
+
+Glyph vocabulary of that engraving, established by behaviour rather than
+assumed: **9** filled notehead, **20** open notehead, **5/6/10** sharp / flat /
+natural, **3/7/8** treble / bass / C clef, **4, 8, 12, 13** rests. Rests and
+clefs sit at a fixed height; noteheads vary. That is the discriminator.
+
+### The check that makes it trustworthy
+
+Decoded parts were aligned against the independent sequence by pitch, with
+`scorealign.py`. Agreement was total -- flute 543/543, clarinet 223/223,
+bassoon 113/113, cor anglais 41/41, oboe 19/19, horn 36/36, **zero pitch
+mismatches anywhere**. A misread pitch grid cannot survive that: it would show
+as a systematic interval error across a whole staff. This is the difference
+between reading an engraving and running OMR over a scan -- the failure mode
+is loud, not plausible.
+
+### What the engraving would not give
+
+- **Duration.** Inkpen2 draws beams as glyphs, not as strokable rectangles, so
+  note values are not directly recoverable. Taken from the sequence instead,
+  which is what the alignment validates.
+- **String slurs.** This engraver slurred the winds and *not one string part* --
+  common shorthand where the strings double a wind line, and invisible unless
+  you go looking. Violin I carries the bee line for whole pages with no slur
+  drawn over it. Read literally, that would have made the violins spiccato
+  against a legato flute; parts without engraved slurs fall back to the
+  grammar the engraved ones use.
+
+Rimsky's grain, measured from the flute: groups of **8, 16 and 32** -- one, two
+and four bars, dominated by the 2-bar slur (12 of 31). The sequence had joined
+the same line into runs of 33, 65 and 81, i.e. across slur boundaries.
+
+### mt32check earns its place again
+
+The sequence carried two program changes at tick 0 on six channels, and only
+the last takes effect. Every string part would have rendered **pizzicato
+throughout** -- including the violins carrying the bee line `con sord.` -- and
+the horns as muted trumpet. The file's own first program was right in all six
+cases. Nothing about this is audible until it is rendered, and by then it
+sounds like a choice.
