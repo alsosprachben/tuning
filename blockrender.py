@@ -40,6 +40,7 @@ Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import bisect as _bisect
+_CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
@@ -136,7 +137,8 @@ def _lyric_vowels(path, language=None):
                     continue
                 v = V.vowel_of(x.text, language)
                 if v:
-                    seen.add(t); rows.append((secs(t), v))
+                    seen.add(t)
+                    rows.append((secs(t), v, V.onset_of(x.text, language)))
         if rows:
             out[ch] = sorted(rows)
     return out
@@ -637,6 +639,18 @@ def prepare(path, tuner='hybrid'):
                 i = _bisect.bisect_right(rows, (on / float(SR) + 1e-3,)) - 1
                 if i >= 0:
                     vbase = _VOW.VOWELS.get(rows[i][1])
+                    # The CONSONANT the syllable starts with, as onset noise.
+                    # Vowels alone read as vocalise however exact the formants
+                    # are, because it is the consonants that carry the words.
+                    con = (_VOW.CONSONANTS.get(rows[i][2])
+                           if len(rows[i]) > 2 and _CONS else None)
+                    if con:
+                        (props.chiff_volume, props.chiff_cycle, props.chiff_width,
+                         _chz, props.chiff_harmonic_power,
+                         props.chiff_bandwidth_hz) = con
+                        # the friction band is fixed in Hz, so which HARMONIC
+                        # carries it depends on the note
+                        props.chiff_harmonic_span = max(2.0, _chz / max(f0, 1.0))
             props.formants = props._sung_formants(_tess.get(ch, f0),
                                                   part=_parts.get(ch), base=vbase)
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
