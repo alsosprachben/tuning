@@ -546,7 +546,12 @@ class PathTuner(BaseTuner):
     def __init__(self, *args, **kwargs):
         self.notes = []
         cls = type(self)
-        if cls._table is None:
+        # cls.__dict__, not cls._table: the latter resolves through the MRO, so
+        # a subclass that overrides _build_table() (HybridHarmonicTuner) would
+        # find its PARENT's already-built table, see it is not None, and skip
+        # building its own -- silently serving the parent's tuning under the
+        # subclass's name. Only bites when both are built in one process.
+        if cls.__dict__.get('_table') is None:
             cls._table = cls._build_table()
 
     @classmethod
