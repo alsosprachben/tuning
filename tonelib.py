@@ -8252,7 +8252,7 @@ class _VocalBody:
     # when the top resonance IS one. "Oo" puts its third formant at 2240 Hz,
     # below the cluster, and attenuating that is just making the vowel duller.
     female_top_formant = 0.55
-    singers_formant_hz = 2400.0
+    singers_formant_hz = 2600.0
 
     def _sung_formants(self, frequency, part=None):
         base = type(self).formants
