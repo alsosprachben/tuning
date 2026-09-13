@@ -8248,8 +8248,11 @@ class _VocalBody:
     voice_crossover_oct = 0.20  # sharp: the key is a stable part tessitura,
                                 # not a per-note pitch, so nothing can flip
     # The singer's formant (~2.8-3 kHz) is a trained MALE phenomenon; sopranos
-    # have far less of it, so the top resonance is not shared either.
+    # have far less of it, so the top resonance is not shared either -- but only
+    # when the top resonance IS one. "Oo" puts its third formant at 2240 Hz,
+    # below the cluster, and attenuating that is just making the vowel duller.
     female_top_formant = 0.55
+    singers_formant_hz = 2400.0
 
     def _sung_formants(self, frequency, part=None):
         base = type(self).formants
@@ -8260,14 +8263,12 @@ class _VocalBody:
             ratio = VOICE_BODIES[part]
             out = []
             for i, (centre, bandwidth, amp) in enumerate(base):
-                a = amp * (self.female_top_formant if (ratio > 1.0 and
-                           i == len(base) - 1) else 1.0)
+                a = amp * (self.female_top_formant
+                           if (ratio > 1.0 and i == len(base) - 1
+                               and centre * ratio >= self.singers_formant_hz)
+                           else 1.0)
                 out.append((centre * ratio, bandwidth * ratio, a))
-            f = float(frequency) or 1.0
-            if out and f > out[0][0]:
-                c, bw, a = out[0]
-                out[0] = (f, bw * (f / c) ** 0.5, a)
-            return tuple(out)
+            return tuple(self._formant_tune(out, float(frequency) or 1.0))
         f = float(frequency) or 1.0
         midi = int(round(69 + 12 * _log(f / 440.0) / _log(2)))
         # How female this pitch is. NOT a coin flip per note: a tenor is a man
@@ -8288,17 +8289,36 @@ class _VocalBody:
         out = []
         for i, (centre, bandwidth, amp) in enumerate(base):
             a = amp
-            if i == len(base) - 1:
+            if i == len(base) - 1 and centre * ratio >= self.singers_formant_hz:
                 a *= (1.0 - w) + w * self.female_top_formant
             out.append((centre * ratio, bandwidth * ratio * blend, a))
         # FORMANT TUNING. A soprano above about G5 sings a fundamental higher
         # than her own F1 and would be filtering out her loudest partial, so she
         # raises F1 onto it. "Fixed formants" is true of speech and stops being
         # true at the top of the female range.
-        if out and f > out[0][0]:
-            c, bw, a = out[0]
-            out[0] = (f, bw * (f / c) ** 0.5, a)
+        out = self._formant_tune(out, f)
         return tuple(out)
+
+    @staticmethod
+    def _formant_tune(out, f):
+        """A singer whose fundamental has risen above her own F1 raises F1 onto
+        it rather than filtering out her loudest partial.
+
+        She does it by OPENING the vowel, though, and that has a limit she
+        cannot pass: F1 must stay below F2. Unbounded, a dark vowel breaks --
+        "oo" has F1 at 300 Hz, so the rule fires from G4 upward and by C6 put
+        F1 (1047) above F2 (948), which is not a vocal tract at all. Bounded,
+        the vowel migrates toward open, which is what actually happens: nobody
+        sings a true "oo" at the top of the staff.
+        """
+        if not out or f <= out[0][0]:
+            return out
+        c, bw, a = out[0]
+        ceiling = out[1][0] * 0.8 if len(out) > 1 else f
+        new = min(f, ceiling)
+        if new > c:
+            out[0] = (new, bw * (new / c) ** 0.5, a)
+        return out
 
     def __init__(self, frequency=256.0, *args, **kwargs):
         super().__init__(frequency, *args, **kwargs)
