@@ -580,6 +580,41 @@ def prepare(path, tuner='hybrid'):
     # _legato_ticks used, so a note found in seconds here is the note it judged
     # in ticks there.
     _occ = {}
+    # CONSONANTS AS THEIR OWN EVENTS. They cannot ride the vowel's partials --
+    # a voice has nothing at 6 kHz to scatter into an /s/ -- so each onset
+    # consonant becomes a short band of noise of its own, ENDING where the vowel
+    # begins. That placement is the point: a singer puts the consonant before
+    # the beat so the vowel lands on it, and a consonant played ON the beat
+    # drags the whole line late.
+    _cons = {}
+    if _lyr:
+        _by_ch = {}
+        for _e in notes:
+            _by_ch.setdefault(_e[0], []).append(_e)
+        _extra = []
+        for _ch, _rows in _lyr.items():
+            _evs = sorted(_by_ch.get(_ch, []), key=lambda e: e[2])
+            if not _evs: continue
+            _ons = [e[2] for e in _evs]
+            for _row in _rows:
+                _con = _row[2] if len(_row) > 2 else None
+                _spec = _VOW.CONSONANTS.get(_con) if (_con and _CONS) else None
+                if not _spec: continue
+                _vol, _cyc, _w, _ctr, _pw, _bw = _spec
+                _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
+                if _i >= len(_evs): continue
+                _e = _evs[_i]
+                _st = _e[2] - _w
+                if _st < 0.0 or _st >= _e[2]: continue
+                # NOT the vowel's own note number: sharing (channel, note)
+                # with the note it precedes puts it into the same-pitch
+                # retrigger path, where its only audible effect is clipping the
+                # previous note's release -- a side effect I measured for a
+                # while and mistook for the consonant itself.
+                _cn = 1 if _e[1] != 1 else 2
+                _cons[(_ch, _cn, _st)] = (_ctr, _bw, _vol)
+                _extra.append((_ch, _cn, _st, _e[2], _e[4], _e[5], _e[6]))
+        notes = notes + _extra
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch
@@ -593,10 +628,17 @@ def prepare(path, tuner='hybrid'):
         # sounding drum note-numbers -- which is what a GM game cue exposed.
         # The reference (midilib) has always done this; only the block engine
         # did not, so the two disagreed on any file with a drum track.
+        cons = _cons.get((ch, note, on))
         drum = percussion_for_note(note) if ch == GM_PERCUSSION_CHANNEL else None
         if ch == GM_PERCUSSION_CHANNEL and drum is None:
             continue                      # unmapped drum: the reference drops it
-        if drum is not None:
+        if cons is not None:
+            # a band of noise, not a pitch: the base frequency only sets how
+            # dense the partials are, and the formant carves the band
+            _ctr, _bw, _vol = cons
+            pc = T.ConsonantProperties; organ = False
+            f0 = 90.0; chan_vol = (v7 * v11) ** 2
+        elif drum is not None:
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
             organ = False; chan_vol = (v7*v11)**2
@@ -627,6 +669,9 @@ def prepare(path, tuner='hybrid'):
         if getattr(pc, 'effort_tilt', 0.0) and vel and _vb:
             _eff = max(-12.0, min(12.0, 40.0*math.log10(vel/float(_vb))))
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
+        if cons is not None:
+            props.formants = ((_ctr, _bw, 1.0),)
+            props.chiff_volume = T.ConsonantProperties.chiff_volume * _vol
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
         if hasattr(props, '_sung_formants') and (ch in _tess or ch in _parts):

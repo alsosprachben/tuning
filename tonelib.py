@@ -8367,6 +8367,59 @@ class SynthVoiceProperties(VocalProperties):
 # tonal_dampening so no mode stands out of the wash, and a wide running phase
 # jitter (the chiff mechanism) to smear what is left into continuous noise.
 
+class ConsonantProperties(FormantBody, NoisyPercussionMixin, StoppedPipeProperties):
+    """One consonant, as its own brief band of noise.
+
+    Riding the vowel's own partials could never work: the chiff makes noise by
+    scattering the phase of partials that are ALREADY THERE, and a voice has
+    essentially nothing where a consonant lives -- the glottal source falls
+    11 dB/octave and the mouth stops radiating at 4 kHz, so the body gain at
+    6 kHz is -35 dB. You cannot make an /s/ out of harmonics that are absent.
+
+    So a consonant gets a source of its own, built the way the noise percussion
+    is: a hard inharmonicity that scatters the partials off the harmonic grid so
+    no mode stands out, a near-flat rolloff so the band is filled rather than
+    tilted, and a wide running phase jitter to smear what is left into a
+    continuum. A single formant then carves out the band the constriction makes
+    -- which is the whole difference between /s/, /S/ and /f/ -- and the note's
+    own length is the burst.
+
+    Its base frequency is deliberately low and unrelated to the sung pitch: it
+    only sets how DENSE the partials are, and a consonant needs them dense
+    enough to fill a band, not tuned to anything.
+    """
+    odd_only = False
+    # A SMALL inharmonicity, not a large one. The percussion voices scatter
+    # their partials hard because they have modes to scatter; a consonant needs
+    # the opposite -- partials packed CLOSE so the phase jitter can smear them
+    # into a continuum. At the percussion value they ran away quadratically and
+    # only two of them landed anywhere near the /s/ band, which is a whistle,
+    # not a hiss. Dense spacing plus a banded wash is what makes noise.
+    inharmonicity_coefficient = 0.0009
+    tonal_dampening = 0.25                             # near flat: fill the band
+    chiff_volume = 2.4
+    chiff_cycle = 0.95
+    # AND THE WASH MUST BE BANDED. Left white, every partial's noise spreads
+    # flat to Nyquist, so the band the formant carved is thrown away again and
+    # the body rolloff cannot catch it -- the noise is no longer AT the
+    # frequencies being filtered. Kept near its own partial, the formant's band
+    # survives into the wash, which is the entire point of choosing /s/ over /S/.
+    chiff_bandwidth_hz = 900.0
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    formants = ((4000.0, 1400.0, 1.0),)
+    formant_floor = 0.008         # tight: outside the band there is nothing
+    bore_corner_hz = 11000.0
+    bore_order = 2.0
+    # The wash runs flat to Nyquist if nothing stops it, and a mouth does not
+    # radiate at 12 kHz -- unchecked it read as fizz rather than as friction,
+    # +18 dB in a band where no consonant lives -- though the real cure for that
+    # was banding the wash, not lowering these, which had merely muted /s/ too.
+    hf_corner_hz = 10000.0
+    hf_order = 2.0
+    initial_gain = 3.5217467864060575e-05 * 0.55
+
+
 class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):
     """GM 121. Breath with no note in it: broadband, and it lasts as long as
     the player holds it -- so this sustains rather than ringing out like the
