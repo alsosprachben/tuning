@@ -8254,8 +8254,9 @@ class _VocalBody:
     female_top_formant = 0.55
     singers_formant_hz = 2600.0
 
-    def _sung_formants(self, frequency, part=None):
-        base = type(self).formants
+    def _sung_formants(self, frequency, part=None, base=None):
+        # base overrides the class vowel, so a sung TEXT can choose it
+        base = base if base is not None else type(self).formants
         if not base or not self.tract_ratio:
             return base
         if part:

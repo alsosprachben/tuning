@@ -39,7 +39,8 @@ Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 """
 import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
-import tonelib as T, midilib
+import bisect as _bisect
+import tonelib as T, midilib, vowels as _VOW
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
 # times the partial's frequency per second, which at 100000 is every sample --
@@ -82,6 +83,63 @@ def tuning_table(name):
     for n in range(128): tuner.addNote(n - mc)
     tuner.tune(1000, 30000); pairs = dict(tuner.noteFrequencies())
     return {n: pairs[n - mc] for n in range(128) if (n - mc) in pairs}
+
+
+def _lyric_vowels(path, language=None):
+    """{channel: [(second, vowel_key)]} from the file's own lyrics.
+
+    A choir that knows its text can sing the text: a vowel IS a formant triple,
+    so the only thing standing between "aah for eleven minutes" and the actual
+    words is knowing which vowel each note carries. MuseScore writes lyrics into
+    its MIDI export as meta events, syllable by syllable, at the tick of the
+    note they belong to -- so the alignment is given and does not have to be
+    guessed.
+
+    Only the NUCLEUS is taken. The consonants belong around the note (before the
+    beat at the front), not on it, and are not modelled yet.
+    """
+    language = language or os.environ.get('TUNING_LYRIC_LANG', '')
+    if not language:
+        return {}
+    try:
+        import mido, vowels as V
+        mid = mido.MidiFile(path)
+    except Exception:
+        return {}
+    tpb = mid.ticks_per_beat
+    tempo = [(0, 500000)]
+    for tr in mid.tracks:
+        t = 0
+        for x in tr:
+            t += x.time
+            if x.type == 'set_tempo':
+                tempo.append((t, x.tempo))
+    tempo.sort()
+
+    def secs(tick):
+        out = 0.0; last = 0; cur = 500000
+        for tk, tp in tempo:
+            if tk >= tick: break
+            out += (tk - last) * cur / 1e6 / tpb; last = tk; cur = tp
+        return out + (tick - last) * cur / 1e6 / tpb
+
+    out = {}
+    for tr in mid.tracks:
+        chans = {x.channel for x in tr if x.type == 'note_on' and x.velocity > 0}
+        if len(chans) != 1:
+            continue
+        ch = chans.pop(); t = 0; seen = set(); rows = []
+        for x in tr:
+            t += x.time
+            if x.type in ('lyrics', 'text') and str(getattr(x, 'text', '')).strip():
+                if t in seen:        # a second verse at the same tick
+                    continue
+                v = V.vowel_of(x.text, language)
+                if v:
+                    seen.add(t); rows.append((secs(t), v))
+        if rows:
+            out[ch] = sorted(rows)
+    return out
 
 
 def _declared_voice_parts():
@@ -323,6 +381,7 @@ def prepare(path, tuner='hybrid'):
     # body inside a line. A part's TESSITURA can: take each channel's median
     # pitch once and let every note of that channel be sung by the same people.
     _parts = _voice_parts(path)
+    _lyr = _lyric_vowels(path)
     _tess = {}
     for _e in notes:
         _tess.setdefault(_e[0], []).append(_e[1])
@@ -569,8 +628,17 @@ def prepare(path, tuner='hybrid'):
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
         if hasattr(props, '_sung_formants') and (ch in _tess or ch in _parts):
+            # If the file carries its text, sing the vowel it asks for; the body
+            # (tract length, singer's formant, formant tuning) is applied to that
+            # vowel rather than bolted on afterwards.
+            vbase = None
+            rows = _lyr.get(ch)
+            if rows:
+                i = _bisect.bisect_right(rows, (on / float(SR) + 1e-3,)) - 1
+                if i >= 0:
+                    vbase = _VOW.VOWELS.get(rows[i][1])
             props.formants = props._sung_formants(_tess.get(ch, f0),
-                                                  part=_parts.get(ch))
+                                                  part=_parts.get(ch), base=vbase)
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
