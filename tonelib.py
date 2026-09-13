@@ -8164,7 +8164,79 @@ class VocalProperties(FormantBody, BowedStringProperties):
 
 
 
-class ChoirAahsProperties(VocalProperties):
+class _VocalBody:
+    """Male and female bodies for the same vowel, and the draw between them.
+
+    The vowel formants above are one averaged singer. But a formant is a tract
+    resonance, and an adult male tract is 17-18 cm against 14-15 for a female:
+    formants scale INVERSELY with length, so the same vowel sits about 17%
+    higher in a woman. Peterson & Barney's /a/ is F1 730 / F2 1090 for men and
+    850 / 1220 for women -- a soprano and a bass singing "ah" do not share
+    formants, they share a vowel.
+
+    The split is symmetric about the existing values (each body moves by
+    sqrt(ratio), not one by the whole of it) so the geometric mean is unchanged
+    and the measured initial_gain calibration still holds.
+
+    Pitch is the only clue MIDI gives us about who is singing. Below ~G3 it is
+    men, above ~A4 women, and in between either -- so this DRAWS from a smooth
+    probability rather than switching at a boundary, seeded on the note so a
+    given pitch is always sung by the same person.
+    """
+    # TUNING_VOCAL_BODIES=0 collapses the split back to one averaged singer,
+    # so the change can be A/B'd against the old behaviour.
+    tract_ratio = 1.17 if os.environ.get('TUNING_VOCAL_BODIES', '1') != '0' else 0.0
+    tract_sigma = 0.015         # individual tracts vary within each sex
+    mixture_broadening = 0.9    # extra bandwidth where both sexes sing
+    voice_crossover_hz = 294.0  # ~D4: the boundary sits between alto and tenor
+    voice_crossover_oct = 0.20  # sharp: the key is a stable part tessitura,
+                                # not a per-note pitch, so nothing can flip
+    # The singer's formant (~2.8-3 kHz) is a trained MALE phenomenon; sopranos
+    # have far less of it, so the top resonance is not shared either.
+    female_top_formant = 0.55
+
+    def _sung_formants(self, frequency):
+        base = type(self).formants
+        if not base or not self.tract_ratio:
+            return base
+        f = float(frequency) or 1.0
+        midi = int(round(69 + 12 * _log(f / 440.0) / _log(2)))
+        # How female this pitch is. NOT a coin flip per note: a tenor is a man
+        # for the whole piece, and drawing per pitch would flip the body from
+        # note to note inside one line, which is worse than either answer.
+        x = (_log(f / self.voice_crossover_hz) / _log(2)) / self.voice_crossover_oct
+        w = 1.0 / (1.0 + _exp(-max(-40.0, min(40.0, x))))
+        half = self.tract_ratio ** 0.5          # symmetric about the mean body
+        ratio = half ** (2.0 * w - 1.0)         # 1/half at w=0, half at w=1
+        rng = _random.Random(0x5117 + midi * 2654435761)
+        ratio *= _exp(rng.gauss(0.0, self.tract_sigma))
+        # In the overlap BOTH sexes are singing the note, on tracts a whole
+        # 17% apart. That is not one resonance in the middle, it is two close
+        # together -- which a single wider, flatter formant approximates far
+        # better than a narrow one at the average. Widest where the mixture is
+        # most even, and back to normal at either end of the range.
+        blend = 1.0 + self.mixture_broadening * 4.0 * w * (1.0 - w)
+        out = []
+        for i, (centre, bandwidth, amp) in enumerate(base):
+            a = amp
+            if i == len(base) - 1:
+                a *= (1.0 - w) + w * self.female_top_formant
+            out.append((centre * ratio, bandwidth * ratio * blend, a))
+        # FORMANT TUNING. A soprano above about G5 sings a fundamental higher
+        # than her own F1 and would be filtering out her loudest partial, so she
+        # raises F1 onto it. "Fixed formants" is true of speech and stops being
+        # true at the top of the female range.
+        if out and f > out[0][0]:
+            c, bw, a = out[0]
+            out[0] = (f, bw * (f / c) ** 0.5, a)
+        return tuple(out)
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        self.formants = self._sung_formants(frequency)
+
+
+class ChoirAahsProperties(_VocalBody, VocalProperties):
     """GM 52. An open "ah": the first formant high and the tract wide open."""
     # BALANCE, per vowel: the formant filter is power-normalised, but the vowels
     # still land differently because they weight the source's harmonics
@@ -8174,7 +8246,7 @@ class ChoirAahsProperties(VocalProperties):
     initial_gain = (1.0 / 6875 / (VocalProperties.section_players ** 0.5)) * 1.1521   # +1.23 dB, see VocalProperties
 
 
-class VoiceOohsProperties(VocalProperties):
+class VoiceOohsProperties(_VocalBody, VocalProperties):
     """GM 53. A rounded "oo": lips narrowed, so F1 and F2 drop a long way and
     the vowel goes dark. The single biggest audible difference between vowels
     is F2, and it moves by more than an octave between these two."""
@@ -8184,6 +8256,8 @@ class VoiceOohsProperties(VocalProperties):
 
 
 class SynthVoiceProperties(VocalProperties):
+    # no male/female split: the thing being imitated is a synthesizer, which
+    # has one body and no anatomy
     """GM 54. A synthesized voice: an "eh" between the other two, and steadier
     than people are -- less spread, less vibrato, because the thing being
     imitated is a synthesizer imitating a choir."""

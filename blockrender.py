@@ -267,6 +267,16 @@ def prepare(path, tuner='hybrid'):
     FREQ = tuning_table(tuner)
     ch_prog, ch_progs, notes, ccs, total, legato = parse(path)
     N = int(total*SR) + SR; nblk = N // BLK + 2
+    # A CHOIR'S BODY BELONGS TO THE PART, NOT THE NOTE. Alto and tenor overlap
+    # by a fourth, yet one section is women and the other men -- tracts 17%
+    # apart -- so a per-note pitch rule cannot separate them and would flip the
+    # body inside a line. A part's TESSITURA can: take each channel's median
+    # pitch once and let every note of that channel be sung by the same people.
+    _tess = {}
+    for _e in notes:
+        _tess.setdefault(_e[0], []).append(_e[1])
+    _tess = {c: 440.0 * 2.0 ** ((sorted(v)[len(v) // 2] - 69) / 12.0)
+             for c, v in _tess.items() if v}
     # organ registration rows
     Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0)
     for ch, _plist in ch_progs.items():
@@ -505,6 +515,10 @@ def prepare(path, tuner='hybrid'):
         if getattr(pc, 'effort_tilt', 0.0) and vel and _vb:
             _eff = max(-12.0, min(12.0, 40.0*math.log10(vel/float(_vb))))
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
+        # A sung vowel picks its body from the PART's tessitura, not this note's
+        # pitch, so a tenor stays a man across his whole range. See _VocalBody.
+        if hasattr(props, '_sung_formants') and ch in _tess:
+            props.formants = props._sung_formants(_tess[ch])
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
