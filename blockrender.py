@@ -84,6 +84,29 @@ def tuning_table(name):
     return {n: pairs[n - mc] for n in range(128) if (n - mc) in pairs}
 
 
+def _declared_voice_parts():
+    """TUNING_VOICE_PARTS="8=soprano,10=alto" -- registration for files that
+    name nothing.
+
+    Neptune is the case: Holst asks for an offstage chorus of women, two
+    three-part choruses with no men in them at all, and the MIDI carries no
+    track names whatsoever. Its medians happen to land above the crossover so
+    the inference gets it right by luck; an alto part sitting a little lower
+    would have been sung by men. A score that specifies its forces should be
+    able to say so.
+    """
+    spec = os.environ.get('TUNING_VOICE_PARTS', '')
+    out = {}
+    for item in spec.replace(';', ',').split(','):
+        if '=' not in item: continue
+        ch, _, part = item.partition('=')
+        part = part.strip().lower()
+        if part in T.VOICE_BODIES:
+            try: out[int(ch)] = part
+            except ValueError: pass
+    return out
+
+
 def _voice_parts(path):
     """{channel: part name} from track/instrument names.
 
@@ -107,6 +130,7 @@ def _voice_parts(path):
                 part = T.voice_body(name)
                 if part:
                     out[ch] = part
+    out.update(_declared_voice_parts())      # an explicit registration wins
     return out
 
 
