@@ -8183,6 +8183,14 @@ VOICE_BODIES = {
     'soprano':      1.09,
     'treble':       1.20,   # a boy, not a woman: shorter tract, higher formants
     'boy':          1.20,
+    # A CASTRATO IS THE CASE THAT PROVES THE POINT. Castration before puberty
+    # leaves the larynx a boy's -- so the range is soprano or alto -- while the
+    # rest of the body grows on, and grows LONG, because the growth plates never
+    # close. A boy's folds in an unusually large man's tract. Singing the very
+    # note a soprano sings, his formants sit BELOW hers, not above. Nothing
+    # inferred from pitch can produce that; only a declaration can.
+    'castrato':     0.90,
+    'sopranist':    0.95,   # a modern male alto/soprano: adult tract, falsetto
 }
 
 
