@@ -8176,11 +8176,13 @@ VOICE_BODIES = {
     'basso':        0.92,
     'baritone':     0.94,
     'tenor':        0.97,
+    'tenore':       0.97,   # the Italian, as LilyPond and Italian scores write it
     'countertenor': 0.98,   # male tract, alto range: the case inference cannot do
     'contralto':    1.03,
     'alto':         1.05,
     'mezzo':        1.07,
     'soprano':      1.09,
+    'sopran':       1.09,
     'treble':       1.20,   # a boy, not a woman: shorter tract, higher formants
     'boy':          1.20,
     # A CASTRATO IS THE CASE THAT PROVES THE POINT. Castration before puberty
