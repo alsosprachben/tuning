@@ -7,6 +7,7 @@ All rights reserved.
 
 import os
 import random as _random
+import re as _re
 from math import exp as _exp, log as _log, sin as _sin, pi as _pi, sqrt as _sqrt
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
@@ -8164,6 +8165,53 @@ class VocalProperties(FormantBody, BowedStringProperties):
 
 
 
+# Named voice parts, as multipliers on the ensemble-average vocal tract.
+# Registration beats inference: a COUNTERTENOR sings the alto line on a male
+# tract, and no rule based on pitch can ever get that right -- nor a contralto,
+# nor a boys' choir, where a treble is a child and his tract is shorter than a
+# woman's, not longer. So when a part says what it is, believe it; the
+# tessitura rule below is only for when it does not.
+VOICE_BODIES = {
+    'bass':         0.92,
+    'basso':        0.92,
+    'baritone':     0.94,
+    'tenor':        0.97,
+    'countertenor': 0.98,   # male tract, alto range: the case inference cannot do
+    'contralto':    1.03,
+    'alto':         1.05,
+    'mezzo':        1.07,
+    'soprano':      1.09,
+    'treble':       1.20,   # a boy, not a woman: shorter tract, higher formants
+    'boy':          1.20,
+}
+
+
+# Names that contain a part name but are not a voice at all. "Bassoon" is not
+# a bass, and neither is a double bass, a bass drum or a bass guitar -- matching
+# on substrings turns all four into singers.
+_NOT_A_VOICE = ('bassoon', 'contrabass', 'double bass', "d'bass", 'dbass',
+                'bass drum', 'bass gtr', 'bass guitar', 'bassi', 'string')
+
+
+def voice_body(name):
+    """The named voice part in a track label, or None.
+
+    Tokenised rather than substring-matched, so "bassoon" does not read as a
+    bass. The final authority is still the voice CLASS: this is only consulted
+    for a part already being sung.
+    """
+    if not name:
+        return None
+    low = str(name).lower()
+    if any(bad in low for bad in _NOT_A_VOICE):
+        return None
+    hit = None
+    for word in _re.findall(r'[a-z]+', low):
+        if word in VOICE_BODIES and (hit is None or len(word) > len(hit)):
+            hit = word
+    return hit
+
+
 class _VocalBody:
     """Male and female bodies for the same vowel, and the draw between them.
 
@@ -8195,10 +8243,23 @@ class _VocalBody:
     # have far less of it, so the top resonance is not shared either.
     female_top_formant = 0.55
 
-    def _sung_formants(self, frequency):
+    def _sung_formants(self, frequency, part=None):
         base = type(self).formants
         if not base or not self.tract_ratio:
             return base
+        if part:
+            # Declared. No crossover, no draw, no broadening: we were told.
+            ratio = VOICE_BODIES[part]
+            out = []
+            for i, (centre, bandwidth, amp) in enumerate(base):
+                a = amp * (self.female_top_formant if (ratio > 1.0 and
+                           i == len(base) - 1) else 1.0)
+                out.append((centre * ratio, bandwidth * ratio, a))
+            f = float(frequency) or 1.0
+            if out and f > out[0][0]:
+                c, bw, a = out[0]
+                out[0] = (f, bw * (f / c) ** 0.5, a)
+            return tuple(out)
         f = float(frequency) or 1.0
         midi = int(round(69 + 12 * _log(f / 440.0) / _log(2)))
         # How female this pitch is. NOT a coin flip per note: a tenor is a man

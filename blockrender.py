@@ -84,6 +84,32 @@ def tuning_table(name):
     return {n: pairs[n - mc] for n in range(128) if (n - mc) in pairs}
 
 
+def _voice_parts(path):
+    """{channel: part name} from track/instrument names.
+
+    A part that says what it is beats any inference from its notes: a
+    countertenor sings the alto line on a male tract, a treble is a boy and not
+    a small woman. Tessitura is the fallback for files that say nothing.
+    """
+    try:
+        import mido
+        mid = mido.MidiFile(path)
+    except Exception:
+        return {}
+    out = {}
+    for tr in mid.tracks:
+        name = None
+        for x in tr:
+            if x.type in ('track_name', 'instrument_name') and not name:
+                name = x.name
+            ch = getattr(x, 'channel', None)
+            if ch is not None and name and ch not in out:
+                part = T.voice_body(name)
+                if part:
+                    out[ch] = part
+    return out
+
+
 def _legato_ticks(mid):
     """{(channel, note, k)} for notes that begin CONTIGUOUSLY with whatever the
     channel was playing before, judged in the file's own tick grid.
@@ -272,6 +298,7 @@ def prepare(path, tuner='hybrid'):
     # apart -- so a per-note pitch rule cannot separate them and would flip the
     # body inside a line. A part's TESSITURA can: take each channel's median
     # pitch once and let every note of that channel be sung by the same people.
+    _parts = _voice_parts(path)
     _tess = {}
     for _e in notes:
         _tess.setdefault(_e[0], []).append(_e[1])
@@ -517,8 +544,9 @@ def prepare(path, tuner='hybrid'):
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
-        if hasattr(props, '_sung_formants') and ch in _tess:
-            props.formants = props._sung_formants(_tess[ch])
+        if hasattr(props, '_sung_formants') and (ch in _tess or ch in _parts):
+            props.formants = props._sung_formants(_tess.get(ch, f0),
+                                                  part=_parts.get(ch))
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
