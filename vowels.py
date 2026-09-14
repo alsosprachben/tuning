@@ -53,6 +53,13 @@ VOWELS = {
     'P': ((400.0, 110.0, 1.00), (1550.0, 210.0, 0.45), (2200.0, 240.0, 0.16)),
     '@': ((500.0, 120.0, 1.00), (1500.0, 110.0, 0.45), (2500.0, 140.0, 0.18)),
     'A': ((600.0, 130.0, 1.00), (1300.0, 110.0, 0.48), (2500.0, 140.0, 0.18)),
+    # /ʌ/ -- the "u" in "sun". Holst's manuscript of Neptune gave his offstage
+    # chorus no vowel at all; Imogen Holst added "Sing throughout to the sound
+    # of 'u' in 'sun'" for the 1971 Faber revision, from memory of her father's
+    # rehearsals and matching what he had written for the hidden choir in
+    # Savitri. It is neither "ah" nor "oo", which are the two things a wordless
+    # chorus usually gets rendered as.
+    'V': ((640.0, 120.0, 1.00), (1190.0, 200.0, 0.52), (2390.0, 250.0, 0.20)),
 }
 
 # Digraphs first, longest match wins. The value is the HELD vowel.

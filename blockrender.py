@@ -147,6 +147,24 @@ def _lyric_vowels(path, language=None):
     return out
 
 
+def _vocalise():
+    """TUNING_VOCALISE="8=V,10=V" -- a constant vowel for a part with no text.
+
+    A wordless chorus is not a part we failed to find lyrics for; it is a part
+    that HAS no lyrics and still has a vowel. Holst's Neptune is the case, and
+    the vowel is documented (Imogen Holst, 1971): 'u' in 'sun'.
+    """
+    out = {}
+    for item in os.environ.get('TUNING_VOCALISE', '').replace(';', ',').split(','):
+        if '=' not in item: continue
+        ch, _, v = item.partition('=')
+        v = v.strip()
+        if v in _VOW.VOWELS:
+            try: out[int(ch)] = v
+            except ValueError: pass
+    return out
+
+
 def _declared_voice_parts():
     """TUNING_VOICE_PARTS="8=soprano,10=alto" -- registration for files that
     name nothing.
@@ -387,6 +405,8 @@ def prepare(path, tuner='hybrid'):
     # pitch once and let every note of that channel be sung by the same people.
     _parts = _voice_parts(path)
     _lyr = _lyric_vowels(path)
+    for _c, _v in _vocalise().items():          # a wordless part still has a vowel
+        _lyr.setdefault(_c, [(0.0, _v, None, None)])
     _tess = {}
     for _e in notes:
         _tess.setdefault(_e[0], []).append(_e[1])
