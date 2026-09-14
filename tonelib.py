@@ -8256,7 +8256,16 @@ class _VocalBody:
     female_top_formant = 0.55
     singers_formant_hz = 2600.0
 
+    # TUNING_VOCAL_FLAT=1 renders the SOURCE only -- the glottal buzz with its
+    # pitch, vibrato, section spread and mouth radiation, and no tract at all --
+    # so vocaltract.py can apply the formants as a filter that MOVES. Formants
+    # baked into a note are formants that jump, and a tract cannot jump.
+    vocal_flat = os.environ.get('TUNING_VOCAL_FLAT', '0') == '1'
+
     def _sung_formants(self, frequency, part=None, base=None):
+        if self.vocal_flat:
+            self.formant_floor = 1.0
+            return ()
         # base overrides the class vowel, so a sung TEXT can choose it
         base = base if base is not None else type(self).formants
         if not base or not self.tract_ratio:
