@@ -84,39 +84,37 @@ RULES = {'latin': LATIN, 'italian': ITALIAN, 'german': GERMAN}
 # where a real /s/ is pitch-independent friction at 5-8 kHz. A wide span puts
 # the energy high, which is approximately right and is not the same thing.
 CONSONANTS = {
-    # key: (volume, cycle, width_s, centre_hz, power, bandwidth_hz)
+    # key: (volume, width_s, centre_hz, bandwidth_hz)
     #
-    # CENTRE IS IN HERTZ, not in harmonic number -- the same distinction the
-    # harpsichord's body needed. A fricative's friction band is a property of
-    # the constriction, fixed where it is however high the singer sings, so it
-    # belongs on the frequency axis like a formant and not on the harmonic axis
-    # like a pluck comb. Given as harmonics it drifts: one span lands at 6 kHz
-    # for a bass and 14 kHz for a soprano, and only one of those is an /s/.
+    # CENTRE IN HERTZ, because a fricative's friction band is a property of the
+    # constriction and sits where it sits however high the singer is -- the
+    # same distinction the harpsichord's body needed against its pluck comb.
     #
-    # BANDWIDTH matters as much. Left at its default the chiff wash is WHITE --
-    # every partial's noise spread flat across the spectrum -- which throws the
-    # centre away again and piles the energy above 8 kHz, where no consonant
-    # lives. A bounded bandwidth keeps the friction where the constriction put it.
-    's':  (0.99, 0.95, 0.120, 6200.0, 1.0, 1400.0),
-    'z':  (0.90, 0.70, 0.090, 5600.0, 1.0, 1400.0),
-    'S':  (0.99, 0.95, 0.130, 3200.0, 1.0, 1400.0),   # "sc"/"sch", lower than /s/
-    'f':  (0.85, 0.60, 0.100, 4000.0, 1.2, 1400.0),
-    'v':  (0.55, 0.45, 0.080, 3400.0, 1.2, 1400.0),
-    'h':  (0.48, 0.40, 0.070, 2000.0, 1.5,  900.0),
-    't':  (0.99, 0.90, 0.035, 4200.0, 1.0, 1400.0),   # plosives: a click
-    'k':  (0.95, 0.85, 0.038, 2600.0, 1.0,  900.0),
-    'p':  (0.80, 0.70, 0.030, 1400.0, 1.2,  500.0),
-    'd':  (0.70, 0.55, 0.028, 3400.0, 1.2, 1400.0),
-    'g':  (0.65, 0.50, 0.030, 2200.0, 1.2,  900.0),
-    'b':  (0.55, 0.45, 0.026, 1200.0, 1.4,  500.0),
-    'tS': (0.99, 0.90, 0.060, 3000.0, 1.0,  900.0),
-    'dZ': (0.90, 0.65, 0.050, 2600.0, 1.0,  900.0),
-    'r':  (0.55, 0.40, 0.035, 1500.0, 2.0,  500.0),
-    'l':  (0.24, 0.20, 0.025, 1100.0, 2.0,  500.0),   # approximants barely rustle
-    'm':  (0.19, 0.18, 0.030,  700.0, 2.0,  500.0),   # nasals: low and soft
-    'n':  (0.24, 0.20, 0.030,  900.0, 2.0,  500.0),
-    'J':  (0.26, 0.22, 0.032, 1000.0, 2.0,  500.0),
+    # AND THE BANDS ARE WIDE. A narrow band is quasi-periodic and still reads
+    # as a pitch: measured, 1400 Hz at 6200 gives a periodicity of 0.36, and
+    # 3000 Hz gives 0.09. Real friction is broad; only the nasals, which have
+    # an actual resonating cavity behind them, are narrow.
+    's':  (1.00, 0.120, 6200.0, 3600.0),   # the brightest thing a voice does
+    'z':  (0.70, 0.090, 5600.0, 3400.0),
+    'S':  (1.00, 0.130, 3200.0, 2400.0),   # "sc"/"sch": lower, and that IS the difference
+    'f':  (0.65, 0.100, 4000.0, 4000.0),   # weak and very broad
+    'v':  (0.45, 0.080, 3400.0, 3400.0),
+    'h':  (0.40, 0.070, 1800.0, 2400.0),
+    't':  (0.95, 0.030, 4200.0, 3600.0),   # plosives: a click
+    'k':  (0.90, 0.032, 2600.0, 2400.0),
+    'p':  (0.70, 0.026, 1400.0, 1600.0),
+    'd':  (0.60, 0.024, 3400.0, 3000.0),
+    'g':  (0.55, 0.026, 2200.0, 2000.0),
+    'b':  (0.45, 0.022, 1200.0, 1400.0),
+    'tS': (0.95, 0.060, 3000.0, 2400.0),
+    'dZ': (0.70, 0.050, 2600.0, 2200.0),
+    'r':  (0.45, 0.035, 1500.0,  900.0),
+    'l':  (0.22, 0.028, 1100.0,  800.0),   # approximants barely rustle
+    'm':  (0.20, 0.035,  700.0,  600.0),   # nasals resonate, so they stay narrow
+    'n':  (0.24, 0.035,  900.0,  650.0),
+    'J':  (0.26, 0.035, 1000.0,  700.0),
 }
+
 
 
 # Spelling to consonant, longest match first. Ecclesiastical Latin and Italian

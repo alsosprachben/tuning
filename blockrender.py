@@ -40,6 +40,8 @@ Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import bisect as _bisect
+import noisegen as _NG
+CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.10'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
 
@@ -586,35 +588,29 @@ def prepare(path, tuner='hybrid'):
     # begins. That placement is the point: a singer puts the consonant before
     # the beat so the vowel lands on it, and a consonant played ON the beat
     # drags the whole line late.
-    _cons = {}
-    if _lyr:
+    cons_bursts = []
+    if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
             _by_ch.setdefault(_e[0], []).append(_e)
-        _extra = []
         for _ch, _rows in _lyr.items():
             _evs = sorted(_by_ch.get(_ch, []), key=lambda e: e[2])
             if not _evs: continue
             _ons = [e[2] for e in _evs]
             for _row in _rows:
-                _con = _row[2] if len(_row) > 2 else None
-                _spec = _VOW.CONSONANTS.get(_con) if (_con and _CONS) else None
+                _spec = _VOW.CONSONANTS.get(_row[2]) if len(_row) > 2 and _row[2] else None
                 if not _spec: continue
-                _vol, _cyc, _w, _ctr, _pw, _bw = _spec
+                _vol, _w, _ctr, _bw = _spec
                 _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
                 if _i >= len(_evs): continue
                 _e = _evs[_i]
                 _st = _e[2] - _w
-                if _st < 0.0 or _st >= _e[2]: continue
-                # NOT the vowel's own note number: sharing (channel, note)
-                # with the note it precedes puts it into the same-pitch
-                # retrigger path, where its only audible effect is clipping the
-                # previous note's release -- a side effect I measured for a
-                # while and mistook for the consonant itself.
-                _cn = 1 if _e[1] != 1 else 2
-                _cons[(_ch, _cn, _st)] = (_ctr, _bw, _vol)
-                _extra.append((_ch, _cn, _st, _e[2], _e[4], _e[5], _e[6]))
-        notes = notes + _extra
+                if _st < 0.0: continue
+                _pan = _e[5][2] if isinstance(_e[5], tuple) and len(_e[5]) > 2 else 0.0
+                _g = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _vol
+                cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
+                                    _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
+                                    _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch
@@ -628,27 +624,10 @@ def prepare(path, tuner='hybrid'):
         # sounding drum note-numbers -- which is what a GM game cue exposed.
         # The reference (midilib) has always done this; only the block engine
         # did not, so the two disagreed on any file with a drum track.
-        cons = _cons.get((ch, note, on))
         drum = percussion_for_note(note) if ch == GM_PERCUSSION_CHANNEL else None
         if ch == GM_PERCUSSION_CHANNEL and drum is None:
             continue                      # unmapped drum: the reference drops it
-        if cons is not None:
-            # a band of noise, not a pitch: the base frequency only sets how
-            # dense the partials are, and the formant carves the band
-            _ctr, _bw, _vol = cons
-            pc = T.ConsonantProperties; organ = False
-            # THE BASE FREQUENCY TRADES DENSITY AGAINST THE BAND, and both
-            # matter. Too high and the series is a handful of widely spaced
-            # partials that phase jitter cannot smear into anything -- discrete
-            # peaks 835 Hz apart, which is a harmonic series, which is a BEEP.
-            # Too low and the partials below the friction band leak enough
-            # energy to drag the whole thing down (an /s/ centred at 1462 Hz).
-            # Measured across the sweep, a base of about a 32nd of the band
-            # centre is where periodicity is lowest while the band still holds:
-            #   /8  periodicity 0.80, band ok     /24 0.60, band ok
-            #   /32 periodicity 0.58, band ok     /40 0.48, band GONE (33% off)
-            f0 = max(70.0, _ctr / 32.0); chan_vol = (v7 * v11) ** 2
-        elif drum is not None:
+        if drum is not None:
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
             organ = False; chan_vol = (v7*v11)**2
@@ -679,9 +658,6 @@ def prepare(path, tuner='hybrid'):
         if getattr(pc, 'effort_tilt', 0.0) and vel and _vb:
             _eff = max(-12.0, min(12.0, 40.0*math.log10(vel/float(_vb))))
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
-        if cons is not None:
-            props.formants = ((_ctr, _bw, 1.0),)
-            props.chiff_volume = T.ConsonantProperties.chiff_volume * _vol
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
         if hasattr(props, '_sung_formants') and (ch in _tess or ch in _parts):
@@ -694,18 +670,6 @@ def prepare(path, tuner='hybrid'):
                 i = _bisect.bisect_right(rows, (on / float(SR) + 1e-3,)) - 1
                 if i >= 0:
                     vbase = _VOW.VOWELS.get(rows[i][1])
-                    # The CONSONANT the syllable starts with, as onset noise.
-                    # Vowels alone read as vocalise however exact the formants
-                    # are, because it is the consonants that carry the words.
-                    con = (_VOW.CONSONANTS.get(rows[i][2])
-                           if len(rows[i]) > 2 and _CONS else None)
-                    if con:
-                        (props.chiff_volume, props.chiff_cycle, props.chiff_width,
-                         _chz, props.chiff_harmonic_power,
-                         props.chiff_bandwidth_hz) = con
-                        # the friction band is fixed in Hz, so which HARMONIC
-                        # carries it depends on the note
-                        props.chiff_harmonic_span = max(2.0, _chz / max(f0, 1.0))
             props.formants = props._sung_formants(_tess.get(ch, f0),
                                                   part=_parts.get(ch), base=vbase)
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
@@ -753,8 +717,7 @@ def prepare(path, tuner='hybrid'):
         # 55% of every burst as a pure harmonic series on whatever base
         # frequency the band happened to need: a different pitch per consonant,
         # which is to say a beep. Ben: "sounds like R2D2".
-        _ccap = 1.0 if cons is not None else 0.45
-        chiff = max(1e-4, min(props.chiff_time(f0, at), _ccap*dur))*SR
+        chiff = max(1e-4, min(props.chiff_time(f0, at), 0.45*dur))*SR
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
         non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
         _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
@@ -978,6 +941,7 @@ def prepare(path, tuner='hybrid'):
         d, r = _QACC[i]
         room_q.append((f, (d / r) if r > 0.0 else 1.0, d))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
+                cons_bursts=cons_bursts,
                 room_q=room_q)
     for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),
                  ("px","f4"),("pz","f4"),("nf","f4"),
@@ -994,6 +958,9 @@ def synth_window(prep, n0, winlen):
     clipped. Stateless (analytic phase), so a player calls it per audio block."""
     L=np.zeros(winlen,np.float32); R=np.zeros(winlen,np.float32)
     synth_partials(prep, n0, winlen, 0, prep['P'], L, R)
+    # Friction is not a partial. The consonant bursts are generated and mixed
+    # here rather than scheduled as voices -- see noisegen.py for why.
+    _NG.mix(L, R, n0, prep.get('cons_bursts'), SR)
     L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
     return L,R
 
