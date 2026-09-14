@@ -33,14 +33,24 @@ its values exactly), extended with the standard continental vowels.
 # and the upper formants weaken as the vowel closes, which is why "oo" is dark.
 VOWELS = {
     'a': ((730.0, 130.0, 1.00), (1090.0,  90.0, 0.55), (2440.0, 130.0, 0.22)),
-    'E': ((530.0, 110.0, 1.00), (1840.0, 110.0, 0.55), (2480.0, 140.0, 0.25)),
-    'e': ((390.0, 100.0, 1.00), (2100.0, 110.0, 0.50), (2600.0, 140.0, 0.22)),
-    'i': ((270.0,  80.0, 1.00), (2290.0, 100.0, 0.45), (3010.0, 150.0, 0.20)),
+    'E': ((530.0, 120.0, 1.00), (1840.0, 220.0, 0.55), (2480.0, 260.0, 0.25)),
+    'e': ((390.0, 110.0, 1.00), (2100.0, 240.0, 0.50), (2600.0, 260.0, 0.22)),
+    # /i/ lives on the WIDTH of the F1-F2 gap -- lowest F1 of any vowel,
+    # highest F2, and F3 close above it so the two read as one bright
+    # cluster. Pushed a little past the textbook values, which are an
+    # average over speakers rather than a clear sung 'ee'.
+    # A FORMANT MUST BE WIDER THAN THE HARMONIC SPACING or it can fall
+    # BETWEEN two harmonics and simply not sound: at 110 Hz wide, F2 here
+    # covered 2465-2575 while an F4 puts its harmonics at 2443 and 2792,
+    # and the /i/ lost its F2 altogether. Real voices are saved from this
+    # by vibrato and by a section never agreeing on the pitch; a synthetic
+    # one has to be told.
+    'i': ((250.0, 110.0, 1.00), (2520.0, 260.0, 0.62), (3150.0, 280.0, 0.30)),
     'O': ((570.0, 110.0, 1.00), ( 840.0, 100.0, 0.50), (2410.0, 140.0, 0.16)),
     'o': ((400.0,  95.0, 1.00), ( 750.0, 100.0, 0.46), (2400.0, 140.0, 0.14)),
     'u': ((300.0,  90.0, 1.00), ( 870.0, 100.0, 0.42), (2240.0, 140.0, 0.12)),
-    'y': ((300.0,  90.0, 1.00), (1750.0, 110.0, 0.40), (2200.0, 140.0, 0.14)),
-    'P': ((400.0, 100.0, 1.00), (1550.0, 110.0, 0.45), (2200.0, 140.0, 0.16)),
+    'y': ((300.0, 110.0, 1.00), (1750.0, 220.0, 0.40), (2200.0, 240.0, 0.14)),
+    'P': ((400.0, 110.0, 1.00), (1550.0, 210.0, 0.45), (2200.0, 240.0, 0.16)),
     '@': ((500.0, 120.0, 1.00), (1500.0, 110.0, 0.45), (2500.0, 140.0, 0.18)),
     'A': ((600.0, 130.0, 1.00), (1300.0, 110.0, 0.48), (2500.0, 140.0, 0.18)),
 }
