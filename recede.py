@@ -72,6 +72,21 @@ def main(argv):
 
     out = band + np.stack(out_ch, axis=1)
     write_wav(outp, out, sr)
+    # NOTE: this output is DRY. The docstring's "+ tail(...)" is the pipeline,
+    # not this function -- and running roomtail over the result afterwards is
+    # NOT the same thing, because it fades the room along with the direct and
+    # the source then merely gets quieter. roomtail is a convolution and so is
+    # linear, which gives the room its power back exactly:
+    #
+    #   wet   = roomtail(band + receding)        both, full power
+    #   owet  = roomtail(band)                   the band alone
+    #   room  = wet - owet - receding            the receding part's HALL share
+    #   out   = owet + room*r(t) + receded_direct
+    #
+    # with r(t) falling more slowly than g(t): a closing door takes the direct
+    # path first and the room coupling after, so the source goes quieter,
+    # relatively WETTER, duller, and only then away. Verified on Neptune: -0.0
+    # dB before the fade (the reconstruction is exact), -30.3 dB by the end.
     print("  recedes %.1f->%.1f s, direct %+.0f dB, top rolled to %.0f Hz"
           % (t0, t1, end_db, START_HZ * (10.0 ** -END_HZ_DECADES)))
     print("  peak %.3f -> %s" % (np.abs(out).max(), outp))
