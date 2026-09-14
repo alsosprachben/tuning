@@ -8417,7 +8417,33 @@ class ConsonantProperties(FormantBody, NoisyPercussionMixin, StoppedPipeProperti
     # was banding the wash, not lowering these, which had merely muted /s/ too.
     hf_corner_hz = 10000.0
     hf_order = 2.0
+    # A BURST MUST BE ABLE TO START AND THEN HOLD. Inherited, the attack was
+    # chiff_max_valve_time -- 18 ms, longer than the 15 ms plosive it was
+    # supposed to open -- so a /t/ never reached level at all, and
+    # sustain_level 0 then took away what little it had. A consonant is not a
+    # struck note that rings and dies; it is friction that lasts exactly as
+    # long as the constriction does.
+    attack_time = 0.002
+    sustain_level = 1.0
+    release_valve_time = 0.004
     initial_gain = 3.5217467864060575e-05 * 0.55
+
+    def chiff_harmonic_gain(self, harmonic):
+        """THE WASH MUST GET THE BAND, not merely a roll-off.
+
+        By default this returns 1.0 at every harmonic, so the noise runs flat
+        while only the tonal partials are shaped -- the same fault
+        NoisyPercussionMixin records for the drums, where the wash was carrying
+        nearly all the energy. For a consonant the noise IS the sound, so a
+        flat wash throws away the band the formant just carved: the model put
+        92% of an /s/ between 5 and 7.5 kHz and the render came back with a
+        centroid of 1233 Hz, which is not a sibilant, it is a rustle.
+
+        Weighting the chiff by the same body gain the partials get makes the
+        noise land where the constriction is.
+        """
+        fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+        return self.bore_gain(fn) * self._hf_rolloff(harmonic)
 
 
 class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):

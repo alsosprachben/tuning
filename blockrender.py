@@ -637,7 +637,14 @@ def prepare(path, tuner='hybrid'):
             # dense the partials are, and the formant carves the band
             _ctr, _bw, _vol = cons
             pc = T.ConsonantProperties; organ = False
-            f0 = 90.0; chan_vol = (v7 * v11) ** 2
+            # THE BASE FREQUENCY SETS WHERE THE PARTIALS START, and a partial
+            # that exists below the friction band leaks noise into it however
+            # hard the body gain is told to suppress it -- fifty weak low
+            # partials outweigh five strong ones in the band, which is why an
+            # /s/ was coming out with a centroid of 1233 Hz instead of 6200.
+            # Starting the series a few partials under the band leaves nothing
+            # down there to leak.
+            f0 = max(70.0, _ctr / 8.0); chan_vol = (v7 * v11) ** 2
         elif drum is not None:
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
