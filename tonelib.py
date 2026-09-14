@@ -8404,7 +8404,7 @@ class ConsonantProperties(FormantBody, NoisyPercussionMixin, StoppedPipeProperti
     # the body rolloff cannot catch it -- the noise is no longer AT the
     # frequencies being filtered. Kept near its own partial, the formant's band
     # survives into the wash, which is the entire point of choosing /s/ over /S/.
-    chiff_bandwidth_hz = 900.0
+    chiff_bandwidth_hz = 2000
     decay_db = 0.0
     harmonic_decay_db = 0.0
     formants = ((4000.0, 1400.0, 1.0),)

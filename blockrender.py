@@ -637,14 +637,17 @@ def prepare(path, tuner='hybrid'):
             # dense the partials are, and the formant carves the band
             _ctr, _bw, _vol = cons
             pc = T.ConsonantProperties; organ = False
-            # THE BASE FREQUENCY SETS WHERE THE PARTIALS START, and a partial
-            # that exists below the friction band leaks noise into it however
-            # hard the body gain is told to suppress it -- fifty weak low
-            # partials outweigh five strong ones in the band, which is why an
-            # /s/ was coming out with a centroid of 1233 Hz instead of 6200.
-            # Starting the series a few partials under the band leaves nothing
-            # down there to leak.
-            f0 = max(70.0, _ctr / 8.0); chan_vol = (v7 * v11) ** 2
+            # THE BASE FREQUENCY TRADES DENSITY AGAINST THE BAND, and both
+            # matter. Too high and the series is a handful of widely spaced
+            # partials that phase jitter cannot smear into anything -- discrete
+            # peaks 835 Hz apart, which is a harmonic series, which is a BEEP.
+            # Too low and the partials below the friction band leak enough
+            # energy to drag the whole thing down (an /s/ centred at 1462 Hz).
+            # Measured across the sweep, a base of about a 32nd of the band
+            # centre is where periodicity is lowest while the band still holds:
+            #   /8  periodicity 0.80, band ok     /24 0.60, band ok
+            #   /32 periodicity 0.58, band ok     /40 0.48, band GONE (33% off)
+            f0 = max(70.0, _ctr / 32.0); chan_vol = (v7 * v11) ** 2
         elif drum is not None:
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
@@ -744,7 +747,14 @@ def prepare(path, tuner='hybrid'):
         if _nx is not None and _nx > off:
             rel = min(rel, max(RETRIGGER_FADE, _nx - off)*SR)
         # chiff burst width: short/capped, decoupled from the slow speech fade
-        chiff = max(1e-4, min(props.chiff_time(f0, at), 0.45*dur))*SR
+        # A CONSONANT IS NOISE FOR ITS WHOLE LENGTH. The 45% cap is right for
+        # a pipe, where chiff is a transient before the tone settles -- but a
+        # consonant has no tone to settle into, and capping it left the back
+        # 55% of every burst as a pure harmonic series on whatever base
+        # frequency the band happened to need: a different pitch per consonant,
+        # which is to say a beep. Ben: "sounds like R2D2".
+        _ccap = 1.0 if cons is not None else 0.45
+        chiff = max(1e-4, min(props.chiff_time(f0, at), _ccap*dur))*SR
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
         non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
         _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
