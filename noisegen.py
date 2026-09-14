@@ -37,20 +37,33 @@ def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0):
     g = 1.0 / (1.0 + d * d)
     if tilt:
         g *= (np.maximum(f, 1.0) / max(1.0, float(centre_hz))) ** tilt
+    # AND A TOP THAT FALLS AWAY. A band that runs flat to Nyquist is a splash:
+    # the mouth does not radiate up there and neither should this.
+    g *= 1.0 / (1.0 + (np.maximum(f, 1.0) / 9000.0) ** 3)
     y = np.fft.irfft(X * g, n)
     p = float(np.sqrt((y * y).mean()))
     return (y / p).astype(np.float32) if p > 1e-12 else np.zeros(n, np.float32)
 
 
-def envelope(n, sr, attack=0.003, release=0.012):
-    """Open fast, hold, close fast. A constriction is held and then released;
-    it does not ring, so there is no decay to model -- which is why the burst
-    inherited the wrong envelope when it was pretending to be a note."""
-    e = np.ones(n, np.float32)
-    a = min(int(attack * sr), n // 2)
-    r = min(int(release * sr), n // 2)
-    if a > 0: e[:a] = np.linspace(0.0, 1.0, a, dtype=np.float32)
-    if r > 0: e[n - r:] = np.linspace(1.0, 0.0, r, dtype=np.float32)
+def envelope(n, sr, rise=0.45, fall=0.55):
+    """A rounded hump, not a flat-topped burst.
+
+    The first version opened in 3 ms, held flat and stopped: a hard-edged
+    broadband transient, which is the recipe for a cymbal and is what it
+    sounded like. Real friction starts gradually as the constriction closes,
+    peaks, and then RELEASES INTO the vowel -- the noise is already fading
+    while voicing begins, which is why a sung consonant blends instead of
+    cracking. Raised-cosine both sides, weighted toward the fall so the tail
+    overlaps the note that follows.
+    """
+    if n <= 0:
+        return np.zeros(0, np.float32)
+    t = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    pk = rise / (rise + fall)
+    e = np.empty(n, np.float32)
+    up = t <= pk
+    e[up] = 0.5 - 0.5 * np.cos(np.pi * t[up] / max(pk, 1e-6))
+    e[~up] = 0.5 + 0.5 * np.cos(np.pi * (t[~up] - pk) / max(1.0 - pk, 1e-6))
     return e
 
 

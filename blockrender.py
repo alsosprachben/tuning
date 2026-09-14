@@ -41,7 +41,7 @@ import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import bisect as _bisect
 import noisegen as _NG
-CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.10'))
+CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.035'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
 
