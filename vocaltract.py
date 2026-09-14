@@ -24,11 +24,21 @@ FRAME = 2048
 HOP = 256
 
 
-def _shape(f, formants, floor=0.05, corner=4000.0, order=2.0):
+def _shape(f, formants, floor=0.05, corner=4000.0, order=2.0, tilt=1.0):
+    """The tract's response.
+
+    TILT COMPENSATES THE SOURCE. The formant amplitudes in the table are read
+    off measured spectral ENVELOPES, which already contain the glottal
+    roll-off -- about 11 dB/octave. Applied to a source that still has that
+    roll-off they count it twice, and the upper formants never arrive: /i/
+    came back with its F2 at 991 Hz instead of 2290, which is not an /i/.
+    A resonance is a resonance whatever the source does, so the filter is
+    tilted back up before the formants are laid on it.
+    """
     g = np.full_like(f, floor)
     for centre, bw, amp in formants:
         d = (f - centre) / max(1.0, bw * 0.5)
-        g += amp / (1.0 + d * d)
+        g += amp * ((max(centre, 1.0) / 500.0) ** tilt) / (1.0 + d * d)
     g *= 1.0 / (1.0 + (np.maximum(f, 1.0) / corner) ** order)
     return g
 

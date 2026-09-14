@@ -140,7 +140,8 @@ def _lyric_vowels(path, language=None):
                 v = V.vowel_of(x.text, language)
                 if v:
                     seen.add(t)
-                    rows.append((secs(t), v, V.onset_of(x.text, language)))
+                    rows.append((secs(t), v, V.onset_of(x.text, language),
+                                 V.coda_of(x.text, language)))
         if rows:
             out[ch] = sorted(rows)
     return out
@@ -611,6 +612,16 @@ def prepare(path, tuner='hybrid'):
                 cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
                                     _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
                                     _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
+                # A CODA closes the syllable at the note's end rather than
+                # opening it. "not" without its final /t/ is "naw".
+                _cd = _VOW.CONSONANTS.get(_row[3]) if len(_row) > 3 and _row[3] else None
+                if _cd:
+                    _cv, _cw, _cc, _cbw = _cd
+                    _cg = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _cv * 0.8
+                    cons_bursts.append((int((_e[3] - _cw * 0.4) * SR),
+                                        max(8, int(_cw * SR)), _cc, _cbw, 1.0,
+                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
+                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch

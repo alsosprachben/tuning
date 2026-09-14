@@ -136,6 +136,8 @@ def onset_of(syllable, language='latin'):
         return None
     two, one = s[:2], s[0]
     nxt = s[1:2]
+    if language == 'phoneme':
+        return parse_phoneme(syllable)[0]
     if language in ('latin', 'italian'):
         if two == 'sc' and s[2:3] in _FRONT: return 'S'
         if two == 'ch': return 'k'
@@ -155,6 +157,15 @@ def onset_of(syllable, language='latin'):
         if one == 'v':  return 'f'
         if one == 'j':  return 'l'
     return one if one in CONSONANTS else None
+
+
+def coda_of(syllable, language='latin'):
+    """The consonant a syllable ENDS with -- only for explicit transcription,
+    since guessing a coda from spelling needs the same dictionary the onsets
+    avoid."""
+    if language != 'phoneme':
+        return None
+    return parse_phoneme(syllable)[2]
 
 
 def consonant_of(syllable, language='latin'):
@@ -185,6 +196,8 @@ def vowel_of(syllable, language='latin'):
     s = ''.join(c for c in s if c.isalpha() or c in 'äöü')
     if not s:
         return None
+    if language == 'phoneme':
+        return parse_phoneme(syllable)[1]
     rules = RULES.get(language, LATIN)
     i = 0
     while i < len(s):
@@ -201,6 +214,23 @@ def vowel_of(syllable, language='latin'):
         else:
             i += 1
     return None
+
+
+def parse_phoneme(text):
+    """'t/u' -> ('t', 'u', None);  '/O/r' -> (None, 'O', 'r').
+
+    An explicit transcription, for when spelling will not do it. English needs
+    a pronouncing dictionary and is not attempted by rule -- but a phrase that
+    is written out phonetically needs no rules at all, which also makes any
+    other language singable by transcribing it.
+
+    onset / vowel / coda. The coda matters more than it looks: "not" without
+    its final /t/ is "naw", and the word stops being the word.
+    """
+    parts = [p.strip() for p in str(text).split('/')]
+    while len(parts) < 3: parts.append('')
+    on, vow, coda = parts[0], parts[1], parts[2]
+    return (on or None), (vow or None), (coda or None)
 
 
 def formants_for(syllable, language='latin', default='a'):
