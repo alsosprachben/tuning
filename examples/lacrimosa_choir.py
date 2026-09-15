@@ -13,6 +13,13 @@ is found by having notes AND lyrics.
 With --both it renders the same choir twice -- once through the three-pole
 formant filter, once through the Kelly-Lochbaum tube (vocaltube.py) -- from
 one source render, so the only difference between the two files is the tract.
+
+With --orchestra the strings come too. They CANNOT go through singpass: that
+pass filters the whole file, so an orchestra sent through it is played inside
+a singer's mouth. Voices and orchestra are rendered separately and dry, summed,
+and given the hall once over the pair -- which needs their two room sidecars
+merged, because a choir and a string section do not feed a room alike and
+whichever sidecar the mix happened to inherit would be the wrong one.
 """
 import os
 import sys
@@ -27,6 +34,7 @@ def main(argv):
     score = argv[1]
     outdir = argv[2] if len(argv) > 2 and not argv[2].startswith('--') else '.'
     both = '--both' in argv
+    orch = '--orchestra' in argv
     os.makedirs(outdir, exist_ok=True)
 
     midi = lib.from_musicxml(score) if score.lower().endswith(
@@ -46,10 +54,31 @@ def main(argv):
     jobs = [('tube', True)] + ([('formant', False)] if both else [])
     for name, tube in jobs:
         wav = os.path.join(outdir, 'lacrimosa_choir_%s.wav' % name)
-        lib.sing(choir, wav, lang='latin', tube=tube)
-        out = lib.mp3(wav)
+        lib.sing(choir, wav, lang='latin', tube=tube, dry=orch)
+        if not orch:
+            out = lib.mp3(wav)
+            print("  %-8s -> %s" % (name, out))
+            for lo, hi, db in lib.bands(wav):
+                print("      %5d-%5d Hz  %+6.1f dB" % (lo, hi, db))
+            continue
+
+        rest = lib.other_tracks(midi, set(keep))
+        print("  orchestra: tracks %s" % rest)
+        omid = lib.take_tracks(midi, os.path.join(outdir, 'lacrimosa_orch.mid'),
+                               rest)
+        owav = os.path.join(outdir, 'lacrimosa_orch.wav')
+        lib.render_plain(omid, owav)
+
+        mix = os.path.join(outdir, 'lacrimosa_full_%s.dry.wav' % name)
+        lib.sum_wavs([wav, owav], mix)
+        lib.merge_room([os.path.splitext(wav)[0] + '.room.json',
+                        os.path.splitext(owav)[0] + '.room.json'],
+                       os.path.splitext(mix)[0] + '.room.json')
+        wet = os.path.join(outdir, 'lacrimosa_full_%s.wav' % name)
+        lib.roomtail(mix, wet)
+        out = lib.mp3(wet)
         print("  %-8s -> %s" % (name, out))
-        for lo, hi, db in lib.bands(wav):
+        for lo, hi, db in lib.bands(wet):
             print("      %5d-%5d Hz  %+6.1f dB" % (lo, hi, db))
     return 0
 

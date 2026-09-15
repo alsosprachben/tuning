@@ -80,7 +80,13 @@ def main(argv):
     side = os.path.splitext(tmp)[0] + '.room.json'
     if dry or not os.path.exists(side):
         write_wav(outp, y, sr)
-        if not dry:
+        if os.path.exists(side):
+            # KEEP THE SIDECAR when the room is deferred. A dry stem is only
+            # useful if what it fed the room travels with it -- otherwise the
+            # mix it lands in has to guess, and roomtail falls back to a
+            # scalar Q that is wrong by whatever this piece actually radiated.
+            shutil.copyfile(side, os.path.splitext(outp)[0] + '.room.json')
+        elif not dry:
             print("  no %s -- rendered DRY" % os.path.basename(side))
     else:
         # THE ROOM GOES AFTER THE TRACT, because the tract is part of the

@@ -25,14 +25,29 @@ and comparing them by a single broadband number has hidden the opposite.
 | script | what it builds |
 |---|---|
 | `say.py` | a single-voice MIDI singing given phonemes: `hamlet` ("To be or not to be") and `daisy` (the 1961 IBM 704 demonstration). Reproduces both originals event-for-event. |
-| `lacrimosa_choir.py` | Mozart, Requiem K.626, Lacrimosa -- choir alone with the Latin text, from a MusicXML score. `--both` renders the formant and tube tracts for comparison. |
+| `lacrimosa_choir.py` | Mozart, Requiem K.626, Lacrimosa, from a MusicXML score. Choir alone with the Latin text; `--both` renders the formant and tube tracts for comparison, `--orchestra` adds the strings. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
 python3 singpass.py /tmp/daisy.mid /tmp/daisy.wav --lang english --tube
 
 python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --both
+python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --orchestra
 ```
+
+## Voices and everything else do not render the same way
+
+`singpass.py` filters the WHOLE file -- it is a source-filter pass over a
+vocal stem, so an orchestra sent through it is played inside a singer's
+mouth. Anything unsung goes through `blockrender` directly (`lib.render_plain`).
+
+Which means a full piece is two renders that have to be put back together,
+and the trap there is the room. `blockrender` computes first-order images
+only and writes a `.room.json` sidecar saying what the piece fed the hall per
+band; the diffuse tail is `roomtail`'s convolution over the sum. Stems are
+therefore summed DRY and given the hall once, with their sidecars merged
+(`lib.merge_room`) -- a choir and a string section do not feed a room alike,
+and a mix that inherits whichever sidecar it found first gets the wrong one.
 
 ## Scores are not included
 

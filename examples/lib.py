@@ -87,7 +87,7 @@ def choir_tracks(path, min_lyrics=1):
 
 
 def sing(midi, out, lang='latin', tube=False, tuner='even', consonants=True,
-         body=None, glide=None, extra_env=None):
+         body=None, glide=None, dry=False, extra_env=None):
     """Render through singpass.py: flat source, then the tract as a filter."""
     env = dict(os.environ)
     if consonants:
@@ -97,6 +97,8 @@ def sing(midi, out, lang='latin', tube=False, tuner='even', consonants=True,
            '--lang', lang]
     if tube:
         cmd.append('--tube')
+    if dry:
+        cmd.append('--dry')
     if body:
         cmd += ['--body', str(body)]
     if glide:
@@ -145,3 +147,85 @@ def bands(path, edges=((200, 400), (400, 800), (800, 1600), (1600, 2800),
             ref = v
         out.append((lo, hi, v - ref))
     return out
+
+
+def merge_room(sidecars, dest):
+    """Combine several stems' .room.json into one for the summed mix.
+
+    Exactly, not approximately. Each band carries q -- direct energy over
+    energy fed to the room -- and the direct energy itself, so the room share
+    is energy/q, the two shares add across stems, and the combined q is their
+    ratio. Roomtailing the stems separately and adding them would also be
+    linear and would also be right; what is NOT right is taking one stem's q
+    for the pair, which is what happens if a mix inherits whichever sidecar it
+    finds first. A choir and a string section do not feed a hall alike.
+    """
+    import json
+    bands = {}
+    for path in sidecars:
+        if not os.path.exists(path):
+            continue
+        with open(path) as fh:
+            for b in json.load(fh)['bands']:
+                d, q = float(b['energy']), float(b['q']) or 1.0
+                acc = bands.setdefault(b['hz'], [0.0, 0.0])
+                acc[0] += d
+                acc[1] += d / q
+    if not bands:
+        return None
+    out = [{'hz': hz, 'q': (d / r) if r > 0.0 else 1.0, 'energy': d}
+           for hz, (d, r) in sorted(bands.items())]
+    with open(dest, 'w') as fh:
+        json.dump({'bands': out}, fh, indent=1)
+    return dest
+
+
+def sum_wavs(paths, dest, gains=None):
+    """Add stems sample for sample, padding to the longest."""
+    import numpy as np
+    from roomtail import read_wav, write_wav
+    gains = gains or [1.0] * len(paths)
+    acc = None
+    sr = None
+    for p, g in zip(paths, gains):
+        x, sr = read_wav(p)
+        x = x.astype(np.float64) * g
+        if acc is None:
+            acc = x
+        elif len(x) > len(acc):
+            x[:len(acc)] += acc
+            acc = x
+        else:
+            acc[:len(x)] += x
+    write_wav(dest, acc.astype(np.float32), sr)
+    return dest
+
+
+def roomtail(src, dest):
+    """Convolve the diffuse tail, using the sidecar beside `src`."""
+    subprocess.run([sys.executable, os.path.join(ROOT, 'roomtail.py'),
+                    src, dest], check=True)
+    return dest
+
+
+def render_plain(midi, out, tuner='even', lang=None, extra_env=None):
+    """blockrender straight through -- for parts that are not sung.
+
+    The tract pass in singpass.py filters the WHOLE file, so anything that is
+    not a voice has to come this way. Running an orchestra through singpass
+    puts the strings inside somebody's mouth.
+    """
+    env = dict(os.environ)
+    if lang:
+        env['TUNING_LYRIC_LANG'] = lang
+    env.update(extra_env or {})
+    subprocess.run([sys.executable, os.path.join(ROOT, 'blockrender.py'),
+                    midi, out, tuner], check=True, env=env,
+                   stdout=subprocess.DEVNULL)
+    return out
+
+
+def other_tracks(path, exclude):
+    """Indices of tracks with notes that are not in `exclude` (and not 0)."""
+    return [t['i'] for t in describe(path)
+            if t['notes'] > 0 and t['i'] not in exclude and t['i'] != 0]
