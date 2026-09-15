@@ -47,7 +47,8 @@ def _lip_reflectance(f):
     return -1.0 / np.sqrt(1.0 + (f / RADIATION_HZ) ** 2)
 
 
-def response(areas, freqs, tract_cm=TRACT_CM, glottal_r=0.97, radiate=True):
+def response(areas, freqs, tract_cm=TRACT_CM, glottal_r=0.97, radiate=True,
+             wall=1.0):
     """|H(f)| of a tube with these section areas, at `freqs`.
 
     Walks the chain reflectance from the lips back to the glottis: each section
@@ -60,7 +61,7 @@ def response(areas, freqs, tract_cm=TRACT_CM, glottal_r=0.97, radiate=True):
     L = tract_cm / n
     f = np.asarray(freqs, float)
     k = 2.0 * np.pi * f / C_SOUND
-    atten = np.exp(-WALL_LOSS * np.sqrt(np.maximum(f, 1.0) / 500.0) * L)
+    atten = np.exp(-WALL_LOSS * wall * np.sqrt(np.maximum(f, 1.0) / 500.0) * L)
     prop = np.exp(-1j * k * L) * atten          # one section, one way
     rt = prop * prop                            # ... and back
 
@@ -273,3 +274,95 @@ SHAPES = {
 
 def shape_of(name):
     return np.asarray(SHAPES[name], float)
+
+
+# ---------------------------------------------------------------------------
+# Stops, as a closure in the same tube.
+#
+# The three burst classes were three separate empirical facts in vowels.py --
+# velar COMPACT, alveolar diffuse-RISING, labial diffuse-FALLING -- each with
+# its own hand-set centre and bandwidth. They are one fact.
+#
+# A burst is excited AT THE CONSTRICTION, not at the glottis: the pressure
+# built up behind the closure escapes through it. So what filters it is the
+# cavity IN FRONT of the closure, and the back cavity, sealed off behind a
+# narrow constriction, contributes almost nothing. Front cavity length is
+# therefore the whole story:
+#
+#   labial    closure at the lips     -> no front cavity -> no resonance,
+#                                        a spectrum that only falls
+#   alveolar  closure ~2 cm back      -> short cavity    -> high peak
+#   velar     closure ~6-7 cm back    -> long cavity     -> low compact peak
+#
+# and "a velar burst tracks the following vowel's F2" needs no rule at all,
+# because the front cavity is cut out of THAT VOWEL's own tract shape.
+
+PLACE_X = {           # closure position, as a fraction from glottis to lips
+    'labial': 0.99,
+    'alveolar': 0.857,   # closure ~2.5 cm from the lips
+    'palatal': 0.771,    # ~4 cm
+    'velar': 0.657,      # ~6 cm
+    'glottal': 0.02,
+}
+
+
+def constrict(coeffs, place, area=0.04, width=0.055, sections=SECTIONS):
+    """The vowel's tract with a closure at `place`, as an area function.
+
+    `area` is the residual opening in cm^2. It is deliberately NOT zero: a
+    stop is heard at its RELEASE, when the articulators have already parted,
+    and a fully sealed tube has no transfer function to speak of. It is also
+    numerically kinder -- at total closure the front and back cavities
+    decouple, poles appear and vanish, and formant identity stops meaning
+    anything.
+    """
+    a = area_from_modes(coeffs, sections)
+    x = (np.arange(sections) + 0.5) / sections
+    p = PLACE_X.get(place, place) if isinstance(place, str) else place
+    w = np.exp(-0.5 * ((x - p) / width) ** 2)
+    return a * (1.0 - w) + area * w
+
+
+def front_cavity(coeffs, place, sections=SECTIONS, **kw):
+    """(areas, length_cm) of the tube in front of the closure."""
+    p = PLACE_X.get(place, place) if isinstance(place, str) else place
+    a = constrict(coeffs, place, sections=sections, **kw)
+    i = int(round(p * sections))
+    i = max(0, min(sections - 1, i))
+    return a[i:], TRACT_CM * (sections - i) / sections
+
+
+def burst(coeffs, place, freqs, tract_cm=TRACT_CM, sections=SECTIONS,
+          source_hz=2400.0, source_order=3.0, wall=1.0, **kw):
+    """The spectrum of a stop released at `place` before this vowel.
+
+    The source is a flat noise puff at the constriction; this is the filter it
+    passes through. Terminated at the closure end by a near-rigid wall,
+    because that is what a constriction narrow enough to build pressure is.
+    """
+    f = np.asarray(freqs, float)
+    # THE SOURCE HAS A BAND, and getting this wrong breaks both ends.
+    #
+    # It must FALL at the top, or a flat puff excites every front-cavity
+    # resonance equally and a velar -- which has three below 8 kHz -- comes
+    # out dominated by its highest and sounds alveolar.
+    #
+    # It must also fall at the BOTTOM. A release is a few milliseconds of a
+    # small volume of air; it cannot make a 200 Hz component, and radiation
+    # from the lips suppresses what little there is. Left flat down to DC, the
+    # labial burst -- which has no resonance anywhere to compete -- peaked at
+    # the bottom of the analysis range, which is a thump, not a /p/.
+    #
+    # What does NOT distinguish the three classes is this band. It is the same
+    # puff in every case; the cavity in front of the closure is the difference.
+    rise = f / (f + RADIATION_HZ)
+    fall = 1.0 / (1.0 + (np.maximum(f, 1.0) / source_hz) ** source_order)
+    a, L = front_cavity(coeffs, place, sections=sections, **kw)
+    L *= tract_cm / TRACT_CM
+    if len(a) < 2 or L < 0.25:
+        # LABIAL: there is no front cavity. Nothing resonates, so the burst is
+        # the bare source -- which is why a /p/ is diffuse and FALLING where a
+        # /t/ is diffuse and rising. The one class that is an absence.
+        return rise * fall
+    # response() already carries the radiation load, so only the fall is added
+    return response(a, f, tract_cm=L, glottal_r=0.92, wall=wall) * fall

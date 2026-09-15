@@ -18,10 +18,17 @@ constriction makes. Filtering is done on the spectrum directly rather than with
 a recursive filter, because a burst is 10-120 ms -- short enough that the
 transform is free, and exact where a biquad would need care at these Qs.
 """
+import os
+
 import numpy as np
 
+# How alike the two channels' noise is, 1.0 = one mono source panned. A choir
+# section's consonants come from many mouths at slightly different times and
+# reach the ears by different paths, so they are largely incoherent.
+COHERENCE = float(os.environ.get('TUNING_CONSONANT_COHERENCE', '0.30'))
 
-def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0):
+
+def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0, shape=None):
     """`n` samples of noise with a Lorentzian band at centre_hz.
 
     Same band shape the formants use, so a consonant's /s/ and a vowel's F2 are
@@ -33,8 +40,18 @@ def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0):
     x = rng.standard_normal(n)
     X = np.fft.rfft(x)
     f = np.fft.rfftfreq(n, 1.0 / sr)
-    d = (f - float(centre_hz)) / max(1.0, float(bandwidth_hz) * 0.5)
-    g = 1.0 / (1.0 + d * d)
+    if shape is not None:
+        # A SHAPE FROM THE TUBE. For a stop, the band is not a parameter: the
+        # burst is excited at the constriction, so what filters it is the
+        # cavity in FRONT of the closure, and vocaltube.burst() computes that
+        # from the same tract the vowel is about to use. `shape` is that
+        # response sampled on a reference grid; interpolate it onto this
+        # burst's own, which varies with the burst's length.
+        fr, gr = shape
+        g = np.interp(f, fr, gr, left=gr[0], right=gr[-1])
+    else:
+        d = (f - float(centre_hz)) / max(1.0, float(bandwidth_hz) * 0.5)
+        g = 1.0 / (1.0 + d * d)
     if tilt:
         g *= (np.maximum(f, 1.0) / max(1.0, float(centre_hz))) ** tilt
     # AND A TOP THAT FALLS AWAY. A band that runs flat to Nyquist is a splash:
@@ -72,11 +89,32 @@ def mix(L, R, n0, bursts, sr):
     if not bursts:
         return
     w = len(L)
+    c = np.sqrt(COHERENCE)
+    u = np.sqrt(max(0.0, 1.0 - COHERENCE))
     for i, b in enumerate(bursts):
-        s, n, ctr, bw, amp, gl, gr = b
+        s, n, ctr, bw, amp, gl, gr = b[:7]
+        shape = b[7] if len(b) > 7 else None
         if s + n <= n0 or s >= n0 + w:
             continue
-        y = burst(n, sr, ctr, bw, seed=i) * envelope(n, sr) * amp
+        env = envelope(n, sr) * amp
+        y = burst(n, sr, ctr, bw, seed=i, shape=shape)
+        if u > 0.0:
+            # THE SAME NOISE IN BOTH CHANNELS IS A POINT SOURCE. Panning one
+            # mono burst by amplitude gives two perfectly correlated channels,
+            # which images as a pinpoint -- while the vowels arrive through
+            # section spread, per-singer detuning and the hall, and image as
+            # something wide. That mismatch is audible as the consonants
+            # sitting in a different place from the voices that made them.
+            # A real burst reaches the two ears by different paths, and a
+            # SECTION of singers releases many of them a few ms apart, so the
+            # coherence between channels is low. Give each channel its own
+            # noise over a shared core.
+            yl = c * y + u * burst(n, sr, ctr, bw, seed=i + 0x51D3, shape=shape)
+            yr = c * y + u * burst(n, sr, ctr, bw, seed=i + 0xA71E, shape=shape)
+        else:
+            yl = yr = y
+        yl = yl * env
+        yr = yr * env
         a = max(s, n0); z = min(s + n, n0 + w)
-        L[a - n0:z - n0] += y[a - s:z - s] * gl
-        R[a - n0:z - n0] += y[a - s:z - s] * gr
+        L[a - n0:z - n0] += yl[a - s:z - s] * gl
+        R[a - n0:z - n0] += yr[a - s:z - s] * gr

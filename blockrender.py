@@ -41,6 +41,56 @@ import sys, os, time, ctypes, subprocess, wave, math
 import numpy as np, mido
 import bisect as _bisect
 import noisegen as _NG
+
+# THE TUBE IS USED WHERE IT HAS INFORMATION, and not where it does not.
+#
+# Velars and labials: yes. A velar's burst is set by a long front cavity cut
+# out of the following vowel's own tract, and that cavity's length is what the
+# vowel's formants are largely about -- so the fit constrains it, and the peak
+# runs 2835 Hz before /i/ down to 676 before /u/ with no rule for it. A labial
+# has no front cavity at all, which is a fact about anatomy and needs no fit.
+#
+# Alveolars: NO, they keep their measured band. Three formants cannot
+# determine a 44-section tube; the fit is regularised toward the neutral tube,
+# which is a choice rather than a measurement. It recovers /u/'s lip rounding
+# because rounding MOVES FORMANTS, and says nothing reliable about the 2.5 cm
+# in front of an alveolar closure because that geometry barely touches F1-F3.
+# Asked anyway, it puts the /t/ resonance at 7581 Hz before /i/ against a
+# measured 4000, and no source band then leaves /t/ bright and /k/ dark at the
+# same time. A measured 3800 is better knowledge than a fitted 7581.
+_STOPS = frozenset('kgpb')
+_SHAPE_N = 512
+_SHAPE_CACHE = {}
+
+
+def _stop_shape(consonant, vowel):
+    """(freqs, gains) for a stop released before `vowel`, from the tube.
+
+    Only the STOPS. A fricative is held turbulence at the constriction with a
+    measured band of its own, and /s/ at 6200 Hz is better known than anything
+    this would predict for it; a stop burst is a transient whose spectrum is
+    the front cavity's, and that is exactly what the tube gives.
+    """
+    if consonant not in _STOPS:
+        return None
+    key = (consonant, vowel)
+    if key in _SHAPE_CACHE:
+        return _SHAPE_CACHE[key]
+    try:
+        import vocaltube as _VT
+        import vowels as _W
+        place = _W.PLACE.get(consonant)
+        coeffs = _VT.SHAPES.get(vowel)
+        if place is None or coeffs is None:
+            _SHAPE_CACHE[key] = None
+            return None
+        f = np.linspace(0.0, 11025.0, _SHAPE_N)
+        g = _VT.burst(np.asarray(coeffs, float), place, f)
+        g = g / max(float(g.max()), 1e-12)
+        _SHAPE_CACHE[key] = (f, g)
+    except Exception:
+        _SHAPE_CACHE[key] = None
+    return _SHAPE_CACHE[key]
 CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.035'))
 # The rhythmic unit the nominal consonant widths were chosen against:
 # a syllable rate of about 3.3/s, which is ordinary speech.
@@ -631,14 +681,15 @@ def prepare(path, tuner='hybrid'):
                 if isinstance(_cods, str): _cods = (_cods,)
                 if not _spec and not _cods: continue
                 _vol, _w, _ctr, _bw = _spec[:4] if _spec else (0.0, 0.02, 1000.0, 800.0)
-                # A VELAR BURST FOLLOWS ITS VOWEL. The tongue body is already
-                # moving toward the vowel when the closure opens, so the peak
-                # sits near that vowel's F2 -- high before /i/, low before /u/.
-                # It is the one stop whose place is not fixed.
-                if _row[2] in ('k', 'g'):
-                    _vf = _VOW.VOWELS.get(_row[1])
-                    if _vf:
-                        _ctr = max(900.0, min(2400.0, 0.55*_ctr + 0.45*_vf[1][0]))
+                # A STOP IS A CLOSURE IN THE TUBE, and its burst is filtered by
+                # the cavity in FRONT of that closure -- so the three classes
+                # (velar compact, alveolar diffuse-rising, labial diffuse-
+                # falling) are one fact about front-cavity length, not three
+                # hand-set bands. It also makes "a velar burst follows its
+                # vowel" disappear as a special case: the front cavity is cut
+                # out of THAT vowel's own tract, so the peak runs from 2495 Hz
+                # before /i/ to 614 before /u/ with no rule for it.
+                _shape = _stop_shape(_row[2], _row[1]) if _spec else None
                 _el = (_spec[4] if len(_spec) > 4 else 0.3) if _spec else 0.3
                 _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
                 if _i >= len(_evs): continue
@@ -670,7 +721,8 @@ def prepare(path, tuner='hybrid'):
                 if _spec and _st >= 0.0:
                     cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
                                         _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
-                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
+                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
+                                        _shape))
                 # A CODA closes the syllable at the note's END rather than
                 # opening it, and there can be TWO: "ex" is /ks/. Codas are
                 # quieter than onsets -- a singer releases them, they do not
@@ -689,7 +741,8 @@ def prepare(path, tuner='hybrid'):
                     cons_bursts.append((int(_cst * SR), max(8, int(_cw2 * SR)),
                                         _cc, _cbw, 1.0,
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
-                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
+                                        _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
+                                        _stop_shape(_ck, _row[1])))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch
