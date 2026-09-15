@@ -94,6 +94,7 @@ def _stop_shape(consonant, vowel):
 CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.035'))
 # The rhythmic unit the nominal consonant widths were chosen against:
 # a syllable rate of about 3.3/s, which is ordinary speech.
+CONSONANT_SCATTER = float(os.environ.get('TUNING_CONSONANT_SCATTER', '0.014'))
 CONSONANT_REF = float(os.environ.get('TUNING_CONSONANT_REF', '0.30'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
@@ -663,6 +664,7 @@ def prepare(path, tuner='hybrid'):
     # the beat so the vowel lands on it, and a consonant played ON the beat
     # drags the whole line late.
     cons_bursts = []
+    _CONS_SRC = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -722,7 +724,7 @@ def prepare(path, tuner='hybrid'):
                     cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
                                         _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
                                         _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
-                                        _shape))
+                                        _shape, _ch))
                 # A CODA closes the syllable at the note's END rather than
                 # opening it, and there can be TWO: "ex" is /ks/. Codas are
                 # quieter than onsets -- a singer releases them, they do not
@@ -742,7 +744,7 @@ def prepare(path, tuner='hybrid'):
                                         _cc, _cbw, 1.0,
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
-                                        _stop_shape(_ck, _row[1])))
+                                        _stop_shape(_ck, _row[1]), _ch))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _MCH[0] = ch
@@ -863,6 +865,10 @@ def prepare(path, tuner='hybrid'):
         onsets = (props.section_onsets_at(f0)
                   if hasattr(props, 'section_onsets_at') else None)
         _PX[0] = getattr(props,'position_x',0.0); _PZ[0] = getattr(props,'position_z',0.0)
+        # The consonant bursts are built before this loop runs, so they never
+        # saw a props and never got a room -- see the reflection pass below.
+        if ch not in _CONS_SRC:
+            _CONS_SRC[ch] = (props, _PX[0], _PZ[0], _radius[0])
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             li, ri, _sd0, _sd1 = seats[0]
@@ -1063,6 +1069,75 @@ def prepare(path, tuner='hybrid'):
                              noff, noff + props.release_click_s * SR,
                              max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
                              cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
+    # A CONSONANT IS SUNG BY THE SECTION, NOT BY A POINT.
+    #
+    # This is why the consonants sat forward of the choir. A vowel is rendered
+    # once per SEAT -- section_seats() gives every singer their own position,
+    # their own pair of ear delays, their own onset -- so it arrives as a body
+    # of people spread across the stage. The burst was emitted once, at one
+    # pan, from one place. Decorrelating its two channels helped and did not
+    # fix it, because the problem was never stereo width: it was that eighteen
+    # singers made the vowel and one made the consonant.
+    #
+    # So each burst is now emitted once per seat, with that seat's ear gains
+    # and delays, its own noise, and its own small timing scatter -- because
+    # singers do not release a /t/ on the same sample, which is precisely why
+    # choral consonants are hard to get together. Amplitude divides by the
+    # square root of the count, the seats being incoherent.
+    #
+    # They also get the room, for the same reason: reflections are emitted as
+    # partials, and a burst is not a partial, so until now every consonant was
+    # dry against voices that each carried their images. Each image is taken
+    # at the BURST'S OWN centre frequency -- every term in a reflection is
+    # frequency-dependent, and a consonant lives two octaves above a vowel --
+    # and panned from the IMAGE's direction, not the source's, which is what
+    # makes a reflection widen rather than thicken.
+    _out = []
+    for _bi, _b in enumerate(cons_bursts):
+        _s, _n, _ctr, _bw, _amp, _gl, _gr, _shape, _bch = _b
+        _src = _CONS_SRC.get(_bch)
+        _fc = float(_ctr) or 3000.0
+        _g = math.sqrt(_gl * _gl + _gr * _gr)
+        _emit = []
+        _seats = None
+        if _src is not None:
+            _pr = _src[0]
+            try:
+                _seats = _pr.section_seats()
+            except Exception:
+                _seats = None
+        if _seats:
+            _ns = len(_seats)
+            _sc = _g / math.sqrt(_ns)
+            for _si, (_li, _ri, _ld, _rd) in enumerate(_seats):
+                # deterministic scatter, +-1 of a raised span, no RNG state
+                _j = ((_bi * 2654435761 + _si * 40503) % 1000) / 1000.0 - 0.5
+                _dj = int(CONSONANT_SCATTER * SR * _j)
+                _emit.append((_s + int(_ld * SR) + _dj, _s + int(_rd * SR) + _dj,
+                              _sc * _pr.hrtf_gain(_fc, _li),
+                              _sc * _pr.hrtf_gain(_fc, _ri), _si))
+        else:
+            _emit.append((_s, _s, _gl, _gr, 0))
+        if REFLECT and _src is not None:
+            _pr, _px, _pz, _rad = _src
+            try:
+                _terms = _pr.reflection_terms(_fc, _px, _pr.radiation_distance,
+                                              _pz, _rad)
+            except Exception:
+                _terms = []
+            for _ti, (_rg, _rdelay, _image) in enumerate(_terms):
+                _ix, _iy, _iz = _image
+                _d = math.sqrt(_ix*_ix + _iy*_iy + _iz*_iz) or 1e-9
+                _ip = max(-1.0, min(1.0, _ix / _d))
+                _rs = _s + int(_rdelay * SR)
+                _rgain = _g * float(_rg)
+                _emit.append((_rs, _rs,
+                              _rgain * math.sqrt(max(0.0, 0.5 * (1.0 - _ip))),
+                              _rgain * math.sqrt(max(0.0, 0.5 * (1.0 + _ip))),
+                              100 + _ti))
+        _out.append((_n, _ctr, _bw, _shape, tuple(_emit)))
+    cons_bursts = _out
+
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
     # Effective Q per band: direct energy over energy fed to the room. One

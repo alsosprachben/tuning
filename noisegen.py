@@ -85,36 +85,35 @@ def envelope(n, sr, rise=0.33, fall=0.67):
 
 
 def mix(L, R, n0, bursts, sr):
-    """Add every burst overlapping the window [n0, n0+len(L)) into L/R."""
+    """Add every burst overlapping the window [n0, n0+len(L)) into L/R.
+
+    A burst is now a set of EMISSIONS -- one per singer in the section, plus
+    one per room image -- because a consonant sung by a choir is made by all
+    of them, from where they are standing, a few milliseconds apart. Each gets
+    its own noise; the seats are incoherent and summing correlated copies
+    would just rebuild the point source this is here to avoid.
+    """
     if not bursts:
         return
     w = len(L)
-    c = np.sqrt(COHERENCE)
-    u = np.sqrt(max(0.0, 1.0 - COHERENCE))
     for i, b in enumerate(bursts):
-        s, n, ctr, bw, amp, gl, gr = b[:7]
-        shape = b[7] if len(b) > 7 else None
-        if s + n <= n0 or s >= n0 + w:
-            continue
-        env = envelope(n, sr) * amp
-        y = burst(n, sr, ctr, bw, seed=i, shape=shape)
-        if u > 0.0:
-            # THE SAME NOISE IN BOTH CHANNELS IS A POINT SOURCE. Panning one
-            # mono burst by amplitude gives two perfectly correlated channels,
-            # which images as a pinpoint -- while the vowels arrive through
-            # section spread, per-singer detuning and the hall, and image as
-            # something wide. That mismatch is audible as the consonants
-            # sitting in a different place from the voices that made them.
-            # A real burst reaches the two ears by different paths, and a
-            # SECTION of singers releases many of them a few ms apart, so the
-            # coherence between channels is low. Give each channel its own
-            # noise over a shared core.
-            yl = c * y + u * burst(n, sr, ctr, bw, seed=i + 0x51D3, shape=shape)
-            yr = c * y + u * burst(n, sr, ctr, bw, seed=i + 0xA71E, shape=shape)
-        else:
-            yl = yr = y
-        yl = yl * env
-        yr = yr * env
-        a = max(s, n0); z = min(s + n, n0 + w)
-        L[a - n0:z - n0] += yl[a - s:z - s] * gl
-        R[a - n0:z - n0] += yr[a - s:z - s] * gr
+        n, ctr, bw, shape, emits = b
+        env = None
+        for sl, sr_, gl, gr, tag in emits:
+            if (sl + n <= n0 or sl >= n0 + w) and (sr_ + n <= n0 or sr_ >= n0 + w):
+                continue
+            if env is None:
+                env = envelope(n, sr)
+            y = burst(n, sr, ctr, bw, seed=i * 131 + tag, shape=shape) * env
+            _add1(L, y, sl, n, n0, w, gl)
+            _add1(R, y, sr_, n, n0, w, gr)
+
+
+def _add1(buf, y, s, n, n0, w, g):
+    if g == 0.0:
+        return
+    a = max(s, n0)
+    z = min(s + n, n0 + w)
+    if z <= a:
+        return
+    buf[a - n0:z - n0] += y[a - s:z - s] * g
