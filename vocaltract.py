@@ -20,8 +20,15 @@ fast enough to follow a real articulator and cheap enough to be free.
 """
 import numpy as np
 
+import vocaltube
+
 FRAME = 2048
 HOP = 256
+
+# The tube response is rebuilt every TUBE_EVERY frames and interpolated
+# between, because walking 44 sections per 6 ms frame is most of the cost of
+# the pass and a tongue does not move in 23 ms.
+TUBE_EVERY = 4
 
 
 def _shape(f, formants, floor=0.05, corner=4000.0, order=2.0, tilt=1.0):
@@ -56,7 +63,7 @@ def trajectory(timeline, n, sr, glide=0.070):
     if not timeline:
         return None, t
     times = np.array([x[0] for x in timeline])
-    out = np.zeros((nf, len(timeline[0][1]), 3))
+    out = np.zeros((nf,) + np.asarray(timeline[0][1], float).shape)
     idx = np.searchsorted(times, t, 'right') - 1
     idx = np.clip(idx, 0, len(timeline) - 1)
     for k in range(nf):
@@ -75,9 +82,43 @@ def trajectory(timeline, n, sr, glide=0.070):
     return out, t
 
 
-def apply(x, sr, timeline, glide=0.070, floor=0.05):
-    """Filter `x` (n, ch) by a tract that moves along `timeline`."""
+def _tube_shape(f, coeffs, tract_cm, tilt, floor, corner=3600.0, order=3.0):
+    """The response of the TUBE this syllable is, rather than of three poles.
+
+    The bandwidths and relative formant heights are not supplied here: they
+    fall out of the wall losses and the radiation load, which is the point of
+    doing it this way. `tilt` remains because the SOURCE is still a rendered
+    harmonic series rather than a modelled glottis, so its slope has to be
+    reconciled with the filter's.
+    """
+    g = vocaltube.response(vocaltube.area_from_modes(coeffs), f, tract_cm)
+    g = g * (np.maximum(f, 50.0) / 500.0) ** tilt
+    # THE SAME HIGH-FREQUENCY ROLL-OFF THE FORMANT PATH USES, and it is not
+    # optional. A tube's radiation load is a +6 dB/oct highpass, so left alone
+    # the model runs 31 dB hot above 4.5 kHz -- audible as hissing consonants,
+    # because the consonant gain was tuned by ear against a filter that had
+    # this lowpass in it. What it stands for physically is the glottal return
+    # phase: a real source falls 12 dB/oct and steepens further above 3 kHz,
+    # where the rendered source here measures only 6.6.
+    g = g / (1.0 + (np.maximum(f, 1.0) / corner) ** order)
+    return g + floor
+
+
+def apply(x, sr, timeline, glide=0.070, floor=0.05, tube=False,
+          tract_cm=vocaltube.TRACT_CM, tilt=-0.15, gain=1.0):
+    """Filter `x` (n, ch) by a tract that moves along `timeline`.
+
+    With `tube`, the timeline carries tract SHAPES (mode coefficients) instead
+    of formant triples, and what is interpolated between syllables is a
+    geometry rather than three independent numbers.
+    """
     n = len(x)
+    if tube:
+        # The tube supplies its own floor: between formants its many poles
+        # overlap and fill in to about -16 dB, where the three-pole model digs
+        # a 48 dB trench and then has to have a floor added back under it.
+        # Real speech has the shallower valley.
+        floor = min(floor, 0.005)
     traj, _ = trajectory(timeline, n, sr, glide)
     if traj is None:
         return x
@@ -89,7 +130,16 @@ def apply(x, sr, timeline, glide=0.070, floor=0.05):
     for k in range(nf):
         s = k * HOP
         if s + FRAME > n: break
-        g = _shape(f, traj[k], floor=floor)
+        if tube:
+            if k % TUBE_EVERY == 0 or k == nf - 1:
+                nxt = min(k + TUBE_EVERY, nf - 1)
+                g0 = _tube_shape(f, traj[k], tract_cm, tilt, floor)
+                g1 = _tube_shape(f, traj[nxt], tract_cm, tilt, floor)
+                step, base = max(1, nxt - k), k
+            w = (k - base) / step
+            g = (g0 ** (1.0 - w)) * (g1 ** w) * gain     # interpolate in dB
+        else:
+            g = _shape(f, traj[k], floor=floor)
         for c in range(x.shape[1]):
             seg = np.fft.rfft(x[s:s + FRAME, c] * win)
             out[s:s + FRAME, c] += np.fft.irfft(seg * g, FRAME) * win

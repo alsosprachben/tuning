@@ -23,8 +23,10 @@ def main(argv):
     lang = argv[argv.index('--lang') + 1] if '--lang' in argv else \
            os.environ.get('TUNING_LYRIC_LANG', 'latin')
     glide = float(argv[argv.index('--glide') + 1]) if '--glide' in argv else 0.070
+    tube = '--tube' in argv or os.environ.get('TUNING_TRACT_TUBE') == '1'
+    body = float(argv[argv.index('--body') + 1]) if '--body' in argv else 1.0
 
-    import blockrender as B, vowels as W, vocaltract as VT
+    import blockrender as B, vowels as W, vocaltract as VT, vocaltube as VU
     from roomtail import read_wav, write_wav
 
     env = dict(os.environ, TUNING_VOCAL_FLAT='1', TUNING_LYRIC_LANG=lang)
@@ -46,19 +48,29 @@ def main(argv):
     timeline = []
     for t, v, *rest in rows[ch]:
         if v not in W.VOWELS: continue
+        if tube and v not in VU.SHAPES: continue
         con = rest[0] if rest else None
         loc = W.locus_of(con) if con else None
         # The locus must sit FURTHER BACK than the glide is wide, or the
         # move into it and the move out of it overlap and it is averaged
         # away -- which is what happened at 45 ms against a 70 ms glide:
         # the loci were all present and changed nothing.
-        if loc: timeline.append((max(0.0, t - glide * 1.35), loc))
-        timeline.append((t, W.VOWELS[v]))
+        if tube:
+            place = W.PLACE.get(con) if con else None
+            if place in VU.SHAPES:
+                timeline.append((max(0.0, t - glide * 1.35), VU.shape_of(place)))
+            timeline.append((t, VU.shape_of(v)))
+        else:
+            if loc: timeline.append((max(0.0, t - glide * 1.35), loc))
+            timeline.append((t, W.VOWELS[v]))
     timeline.sort(key=lambda r: r[0])
-    print("  %d syllables on channel %d, glide %.0f ms" % (len(timeline), ch, glide * 1000))
+    print("  %d syllables on channel %d, glide %.0f ms, %s tract%s" % (
+        len(timeline), ch, glide * 1000, "TUBE" if tube else "formant",
+        (", %.1f cm" % (VU.TRACT_CM * body)) if tube else ""))
 
     x, sr = read_wav(tmp)
-    y = VT.apply(x, sr, timeline, glide=glide)
+    y = VT.apply(x, sr, timeline, glide=glide, tube=tube,
+                 tract_cm=VU.TRACT_CM * body)
     # the tract filter changes the level; match the source's loudness
     a = float(np.sqrt((x.astype(np.float64) ** 2).mean()))
     b = float(np.sqrt((y.astype(np.float64) ** 2).mean()))
