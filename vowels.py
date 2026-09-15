@@ -101,7 +101,16 @@ RULES = {'latin': LATIN, 'italian': ITALIAN, 'german': GERMAN}
 # where a real /s/ is pitch-independent friction at 5-8 kHz. A wide span puts
 # the energy high, which is approximately right and is not the same thing.
 CONSONANTS = {
-    # key: (volume, width_s, centre_hz, bandwidth_hz)
+    # key: (volume, width_s, centre_hz, bandwidth_hz, elasticity)
+    #
+    # ELASTICITY is how far the segment follows the local tempo. Segments do
+    # all lengthen as the music slows, but NOT equally: the competing-
+    # constraints account of speech timing has every segment resisting
+    # departure from a preferred duration, with the long ones changing
+    # markedly and the short ones acting as "phonetic anchors". A fricative is
+    # held friction and stretches; a plosive is a ballistic gesture and does
+    # not -- nobody sings a 200 ms /t/ however slow the Larghetto. So
+    # 0 = fixed, 1 = fully proportional, and the plosives sit near the floor.
     #
     # CENTRE IN HERTZ, because a fricative's friction band is a property of the
     # constriction and sits where it sits however high the singer is -- the
@@ -111,25 +120,25 @@ CONSONANTS = {
     # as a pitch: measured, 1400 Hz at 6200 gives a periodicity of 0.36, and
     # 3000 Hz gives 0.09. Real friction is broad; only the nasals, which have
     # an actual resonating cavity behind them, are narrow.
-    's':  (1.00, 0.120, 6200.0, 3600.0),   # the brightest thing a voice does
-    'z':  (0.70, 0.090, 5600.0, 3400.0),
-    'S':  (1.00, 0.130, 3200.0, 2400.0),   # "sc"/"sch": lower, and that IS the difference
-    'f':  (0.65, 0.100, 4000.0, 4000.0),   # weak and very broad
-    'v':  (0.45, 0.080, 3400.0, 3400.0),
-    'h':  (0.40, 0.070, 1800.0, 2400.0),
-    't':  (0.95, 0.030, 4200.0, 3600.0),   # plosives: a click
-    'k':  (0.90, 0.032, 2600.0, 2400.0),
-    'p':  (0.70, 0.026, 1400.0, 1600.0),
-    'd':  (0.60, 0.024, 3400.0, 3000.0),
-    'g':  (0.55, 0.026, 2200.0, 2000.0),
-    'b':  (0.45, 0.022, 1200.0, 1400.0),
-    'tS': (0.95, 0.060, 3000.0, 2400.0),
-    'dZ': (0.70, 0.050, 2600.0, 2200.0),
-    'r':  (0.45, 0.035, 1500.0,  900.0),
-    'l':  (0.22, 0.028, 1100.0,  800.0),   # approximants barely rustle
-    'm':  (0.20, 0.035,  700.0,  600.0),   # nasals resonate, so they stay narrow
-    'n':  (0.24, 0.035,  900.0,  650.0),
-    'J':  (0.26, 0.035, 1000.0,  700.0),
+    's': (1.00, 0.120, 6200.0, 3600.0, 0.55),   # the brightest thing a voice does
+    'z': (0.70, 0.090, 5600.0, 3400.0, 0.55),
+    'S': (1.00, 0.130, 3200.0, 2400.0, 0.55),   # "sc"/"sch": lower, and that IS the difference
+    'f': (0.65, 0.100, 4000.0, 4000.0, 0.50),   # weak and very broad
+    'v': (0.45, 0.080, 3400.0, 3400.0, 0.50),
+    'h': (0.40, 0.070, 1800.0, 2400.0, 0.45),
+    't': (0.95, 0.030, 4200.0, 3600.0, 0.15),   # plosives: a click
+    'k': (0.90, 0.032, 2600.0, 2400.0, 0.15),
+    'p': (0.70, 0.026, 1400.0, 1600.0, 0.15),
+    'd': (0.60, 0.024, 3400.0, 3000.0, 0.15),
+    'g': (0.55, 0.026, 2200.0, 2000.0, 0.15),
+    'b': (0.45, 0.022, 1200.0, 1400.0, 0.15),
+    'tS': (0.95, 0.060, 3000.0, 2400.0, 0.40),
+    'dZ': (0.70, 0.050, 2600.0, 2200.0, 0.40),
+    'r': (0.45, 0.035, 1500.0,  900.0, 0.30),
+    'l': (0.22, 0.028, 1100.0,  800.0, 0.30),   # approximants barely rustle
+    'm': (0.20, 0.035,  700.0,  600.0, 0.35),   # nasals resonate, so they stay narrow
+    'n': (0.24, 0.035,  900.0,  650.0, 0.35),
+    'J': (0.26, 0.035, 1000.0,  700.0, 0.35),
 }
 
 

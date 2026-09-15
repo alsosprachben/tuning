@@ -42,6 +42,9 @@ import numpy as np, mido
 import bisect as _bisect
 import noisegen as _NG
 CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.035'))
+# The rhythmic unit the nominal consonant widths were chosen against:
+# a syllable rate of about 3.3/s, which is ordinary speech.
+CONSONANT_REF = float(os.environ.get('TUNING_CONSONANT_REF', '0.30'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
 
@@ -621,10 +624,30 @@ def prepare(path, tuner='hybrid'):
             for _row in _rows:
                 _spec = _VOW.CONSONANTS.get(_row[2]) if len(_row) > 2 and _row[2] else None
                 if not _spec: continue
-                _vol, _w, _ctr, _bw = _spec
+                _vol, _w, _ctr, _bw = _spec[:4]
+                _el = _spec[4] if len(_spec) > 4 else 0.3
                 _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
                 if _i >= len(_evs): continue
                 _e = _evs[_i]
+                # THE LOCAL RHYTHMIC GRAIN: the shortest note hereabouts, which
+                # is what sets how fast the words are going. Scaled by the
+                # segment's own elasticity, so a fricative follows the tempo
+                # and a plosive barely does.
+                _lo = max(0, _i - 6); _hi = min(len(_evs), _i + 7)
+                _gaps = [_evs[j+1][2] - _evs[j][2] for j in range(_lo, _hi-1)
+                         if _evs[j+1][2] - _evs[j][2] > 1e-3]
+                _unit = min(_gaps) if _gaps else CONSONANT_REF
+                _w = _w * (_unit / CONSONANT_REF) ** _el
+                # ...and it may not eat the note in front of it. A consonant
+                # sits in the time before the beat; if there is less time than
+                # it wants, it gets what there is.
+                # A singer TAKES the time from the previous note -- closing
+                # that vowel early to make room -- so the limit is the note's
+                # own start, not its end. Capping at the end instead squeezed
+                # every consonant in a legato line to the 20 ms floor.
+                _prev_on = _evs[_i-1][2] if _i > 0 else 0.0
+                _room = max(0.012, (_e[2] - _prev_on) * 0.6)
+                _w = max(0.010, min(_w, _room))
                 _st = _e[2] - _w
                 if _st < 0.0: continue
                 _pan = _e[5][2] if isinstance(_e[5], tuple) and len(_e[5]) > 2 else 0.0
