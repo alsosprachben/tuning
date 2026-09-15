@@ -180,8 +180,17 @@ def merge_room(sidecars, dest):
     return dest
 
 
-def sum_wavs(paths, dest, gains=None):
-    """Add stems sample for sample, padding to the longest."""
+def sum_wavs(paths, dest, gains=None, headroom_db=-1.0):
+    """Add stems sample for sample, padding to the longest.
+
+    Summing stems removes headroom that neither of them lacked: the Dies Irae's
+    choir peaks at 0.47 and its orchestra at 0.34, and lifting the choir 7 dB
+    to undo the exporter's flat velocities put the sum on the ceiling at one
+    sample. One sample is nothing to hear, but it says the margin is gone and
+    a bigger bar would clip in earnest -- so the sum is scaled to fit, which
+    costs nothing downstream because roomtail is linear and the mp3 is
+    normalised anyway.
+    """
     import numpy as np
     from roomtail import read_wav, write_wav
     gains = gains or [1.0] * len(paths)
@@ -197,6 +206,12 @@ def sum_wavs(paths, dest, gains=None):
             acc = x
         else:
             acc[:len(x)] += x
+    peak = float(np.abs(acc).max())
+    ceiling = 10.0 ** (headroom_db / 20.0)
+    if peak > ceiling:
+        acc *= ceiling / peak
+        print("  sum peaked at %.3f; scaled %.1f dB to fit"
+              % (peak, 20.0 * np.log10(ceiling / peak)))
     write_wav(dest, acc.astype(np.float32), sr)
     return dest
 
@@ -229,3 +244,45 @@ def other_tracks(path, exclude):
     """Indices of tracks with notes that are not in `exclude` (and not 0)."""
     return [t['i'] for t in describe(path)
             if t['notes'] > 0 and t['i'] not in exclude and t['i'] != 0]
+
+
+def overlap_balance(a, b, window=0.25, floor=0.06):
+    """Median dB of `a` against `b`, measured ONLY where `a` is sounding.
+
+    A ratio taken over a whole movement answers a question nobody asked. The
+    Dies Irae's choir sings in 38% of it, so the orchestra's tutti bars drag
+    the average down and report a balance that is not the one anyone hears.
+    What matters is the two together.
+    """
+    import numpy as np
+    from roomtail import read_wav
+    x, sr = read_wav(a)
+    y, _ = read_wav(b)
+    n = min(len(x), len(y))
+    x = x[:n].mean(1).astype(float)
+    y = y[:n].mean(1).astype(float)
+    w = int(window * sr)
+    xs = np.array([np.sqrt((x[i:i + w] ** 2).mean()) for i in range(0, n - w, w)])
+    ys = np.array([np.sqrt((y[i:i + w] ** 2).mean()) for i in range(0, n - w, w)])
+    act = xs > xs.max() * floor
+    if not act.any():
+        return 0.0, 0.0
+    r = 20 * np.log10(xs[act] / np.maximum(ys[act], 1e-12))
+    return float(np.median(r)), float(act.mean())
+
+
+def has_dynamics(path, min_distinct=4):
+    """Which tracks carry real dynamics, and which are one flat velocity.
+
+    Engraving exports often write a fixed velocity per staff -- LilyPond's
+    Dies Irae gives every choir note 95 and every first violin 101 -- so
+    summing stems at unit gain there preserves the EXPORTER'S defaults and
+    calls them the composer's. Worth knowing before trusting a balance.
+    """
+    import mido
+    out = {}
+    for i, t in enumerate(mido.MidiFile(path).tracks):
+        v = {e.velocity for e in t if e.type == 'note_on' and e.velocity > 0}
+        if v:
+            out[i] = (len(v) >= min_distinct, sorted(v))
+    return out

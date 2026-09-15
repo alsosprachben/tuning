@@ -25,7 +25,9 @@ and comparing them by a single broadband number has hidden the opposite.
 | script | what it builds |
 |---|---|
 | `say.py` | a single-voice MIDI singing given phonemes: `hamlet` ("To be or not to be") and `daisy` (the 1961 IBM 704 demonstration). Reproduces both originals event-for-event. |
-| `lacrimosa_choir.py` | Mozart, Requiem K.626, Lacrimosa, from a MusicXML score. Choir alone with the Latin text; `--both` renders the formant and tube tracts for comparison, `--orchestra` adds the strings. |
+| `choral.py` | The general driver: any lyric-bearing score. Splits choir from everything else, renders each the way it has to be rendered, sums dry and puts the hall over the pair. `--choir-only`, `--both` (formant vs tube), `--choir-db N`. |
+| `lacrimosa_choir.py` | Mozart, Requiem K.626, Lacrimosa -- a named entry point into `choral.py`. |
+| `dies_irae.py` | Mozart, Requiem K.626, Dies Irae. Same, and the reason `--choir-db` exists. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -61,7 +63,20 @@ from the MIDI files using my matching soundfont on a SoundBlaster 32". Renders
 of that corpus made with this renderer are therefore **personal use only and
 must not be distributed.** `NOTICE.txt` sits beside the corpus.
 
+## Check for dynamics before trusting a balance
+
+`choral.py` sums the stems at unit gain, which preserves whatever the score
+notated -- but engraving exports often notate nothing. LilyPond's Dies Irae
+gives every choir note velocity 95 and every first violin 101, one flat value
+per staff. Summed as-is that puts the choir 6 dB UNDER the orchestra where the
+two play together, and presents an exporter's default as Mozart's balance.
+
+So the script prints each track's velocity spread, and reports the balance
+measured only WHERE THE CHOIR SINGS -- that movement is 38% choral, so a ratio
+over the whole thing answers a question nobody asked. `--choir-db` then states
+the correction out loud rather than burying it in a gain.
+
 ## Not yet ported
 
-The Dies irae and the Neptune chorus (with its receding all-female registration)
-were built the same throwaway way and are not here yet.
+Neptune's receding all-female chorus. It has no text -- Holst writes it
+wordless -- so it needs the registration and the recession, not this pipeline.
