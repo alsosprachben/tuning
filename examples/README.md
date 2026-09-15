@@ -76,6 +76,14 @@ measured only WHERE THE CHOIR SINGS -- that movement is 38% choral, so a ratio
 over the whole thing answers a question nobody asked. `--choir-db` then states
 the correction out loud rather than burying it in a gain.
 
+Two kinds of number end up in that flag, and they should not be confused.
+The Dies Irae's `7` repairs a file with no dynamics at all. The Lacrimosa's
+`4` does not repair anything -- that score has real dynamics, eight to ten
+velocities across the choir -- it is a balance judgement, made because the
+median was fine (+1.3 dB) while the tenth percentile sat at -8.5, under the
+strings in exactly the quiet writing the movement is made of. Report the
+percentiles, not the mean: a median can be right while the piece is wrong.
+
 ## Not yet ported
 
 Neptune's receding all-female chorus. It has no text -- Holst writes it

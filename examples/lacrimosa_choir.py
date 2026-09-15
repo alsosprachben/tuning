@@ -20,4 +20,6 @@ if __name__ == '__main__':
     argv = list(sys.argv)
     if '--lang' not in argv:
         argv += ['--lang', 'latin']
+    if '--choir-db' not in argv:
+        argv += ['--choir-db', '4']
     sys.exit(choral.main(argv))
