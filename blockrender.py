@@ -625,6 +625,14 @@ def prepare(path, tuner='hybrid'):
                 _spec = _VOW.CONSONANTS.get(_row[2]) if len(_row) > 2 and _row[2] else None
                 if not _spec: continue
                 _vol, _w, _ctr, _bw = _spec[:4]
+                # A VELAR BURST FOLLOWS ITS VOWEL. The tongue body is already
+                # moving toward the vowel when the closure opens, so the peak
+                # sits near that vowel's F2 -- high before /i/, low before /u/.
+                # It is the one stop whose place is not fixed.
+                if _row[2] in ('k', 'g'):
+                    _vf = _VOW.VOWELS.get(_row[1])
+                    if _vf:
+                        _ctr = max(900.0, min(2400.0, 0.55*_ctr + 0.45*_vf[1][0]))
                 _el = _spec[4] if len(_spec) > 4 else 0.3
                 _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
                 if _i >= len(_evs): continue

@@ -155,12 +155,20 @@ CONSONANTS = {
     'f': (0.65, 0.100, 4000.0, 4000.0, 0.50),   # weak and very broad
     'v': (0.45, 0.080, 3400.0, 3400.0, 0.50),
     'h': (0.40, 0.070, 1800.0, 2400.0, 0.45),
-    't': (0.95, 0.030, 4200.0, 3600.0, 0.15),   # plosives: a click
-    'k': (0.90, 0.032, 2600.0, 2400.0, 0.15),
-    'p': (0.70, 0.026, 1400.0, 1600.0, 0.15),
-    'd': (0.60, 0.024, 3400.0, 3000.0, 0.15),
-    'g': (0.55, 0.026, 2200.0, 2000.0, 0.15),
-    'b': (0.45, 0.022, 1200.0, 1400.0, 0.15),
+    # THE THREE STOP CLASSES DIFFER IN SHAPE, not just in centre. A velar
+    # burst is COMPACT -- a narrow mid peak, which is exactly why /k/ and /g/
+    # sound dark. An alveolar is diffuse-RISING, broad and high; a labial
+    # diffuse-FALLING, broad and low. One broad band for all three made the
+    # velars top-heavy: a wide band at 2.6 kHz carries as much 4 kHz as an /s/.
+    # Voiced stops are weaker and darker than their voiceless partners too --
+    # the folds are already going, so the pressure drop behind the closure is
+    # smaller.
+    't': (0.95, 0.030, 3800.0, 3400.0, 0.15),   # alveolar: diffuse-rising
+    'k': (0.78, 0.032, 1750.0, 1100.0, 0.15),   # velar: compact, narrow, dark
+    'p': (0.62, 0.026, 1100.0, 1500.0, 0.15),   # labial: diffuse-falling
+    'd': (0.42, 0.024, 2700.0, 2600.0, 0.15),
+    'g': (0.38, 0.026, 1450.0, 1000.0, 0.15),
+    'b': (0.34, 0.022,  900.0, 1300.0, 0.15),
     'tS': (0.95, 0.060, 3000.0, 2400.0, 0.40),
     'dZ': (0.70, 0.050, 2600.0, 2200.0, 0.40),
     'r': (0.45, 0.035, 1500.0,  900.0, 0.30),
