@@ -622,9 +622,15 @@ def prepare(path, tuner='hybrid'):
             if not _evs: continue
             _ons = [e[2] for e in _evs]
             for _row in _rows:
+                # A syllable may have a coda and NO onset -- "ex", "es", "il"
+                # all begin on a vowel. Bailing out here when there is no
+                # onset skipped their codas too, which is why the /ks/ of "ex"
+                # stayed silent even once the spelling rules found it.
                 _spec = _VOW.CONSONANTS.get(_row[2]) if len(_row) > 2 and _row[2] else None
-                if not _spec: continue
-                _vol, _w, _ctr, _bw = _spec[:4]
+                _cods = _row[3] if len(_row) > 3 and _row[3] else ()
+                if isinstance(_cods, str): _cods = (_cods,)
+                if not _spec and not _cods: continue
+                _vol, _w, _ctr, _bw = _spec[:4] if _spec else (0.0, 0.02, 1000.0, 800.0)
                 # A VELAR BURST FOLLOWS ITS VOWEL. The tongue body is already
                 # moving toward the vowel when the closure opens, so the peak
                 # sits near that vowel's F2 -- high before /i/, low before /u/.
@@ -633,7 +639,7 @@ def prepare(path, tuner='hybrid'):
                     _vf = _VOW.VOWELS.get(_row[1])
                     if _vf:
                         _ctr = max(900.0, min(2400.0, 0.55*_ctr + 0.45*_vf[1][0]))
-                _el = _spec[4] if len(_spec) > 4 else 0.3
+                _el = (_spec[4] if len(_spec) > 4 else 0.3) if _spec else 0.3
                 _i = _bisect.bisect_left(_ons, _row[0] - 1e-3)
                 if _i >= len(_evs): continue
                 _e = _evs[_i]
@@ -659,20 +665,29 @@ def prepare(path, tuner='hybrid'):
                 # Friction does not stop when voicing starts; it OVERLAPS it.
                 # Ending the burst exactly on the onset put a seam there.
                 _st = _e[2] - _w * 0.78
-                if _st < 0.0: continue
                 _pan = _e[5][2] if isinstance(_e[5], tuple) and len(_e[5]) > 2 else 0.0
                 _g = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _vol
-                cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
-                                    _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
-                                    _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
-                # A CODA closes the syllable at the note's end rather than
-                # opening it. "not" without its final /t/ is "naw".
-                _cd = _VOW.CONSONANTS.get(_row[3]) if len(_row) > 3 and _row[3] else None
-                if _cd:
-                    _cv, _cw, _cc, _cbw = _cd
-                    _cg = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _cv * 0.8
-                    cons_bursts.append((int((_e[3] - _cw * 0.4) * SR),
-                                        max(8, int(_cw * SR)), _cc, _cbw, 1.0,
+                if _spec and _st >= 0.0:
+                    cons_bursts.append((int(_st * SR), max(8, int(_w * SR)), _ctr, _bw, 1.0,
+                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
+                                        _g * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
+                # A CODA closes the syllable at the note's END rather than
+                # opening it, and there can be TWO: "ex" is /ks/. Codas are
+                # quieter than onsets -- a singer releases them, they do not
+                # have to launch the note.
+                _back = 0.0
+                for _ck in reversed(_cods):
+                    _cd = _VOW.CONSONANTS.get(_ck)
+                    if not _cd: continue
+                    _cv, _cw2, _cc, _cbw = _cd[:4]
+                    _cel = _cd[4] if len(_cd) > 4 else 0.3
+                    _cw2 *= (_unit / CONSONANT_REF) ** _cel
+                    _cg = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _cv * 0.6
+                    _cst = _e[3] - _back - _cw2 * 0.5
+                    _back += _cw2 * 0.8
+                    if _cst < 0.0: continue
+                    cons_bursts.append((int(_cst * SR), max(8, int(_cw2 * SR)),
+                                        _cc, _cbw, 1.0,
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 - _pan))),
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan)))))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))

@@ -222,13 +222,49 @@ def onset_of(syllable, language='latin'):
     return one if one in CONSONANTS else None
 
 
+# What a final letter closes with. "x" is the interesting one: it is /ks/, two
+# segments, and dropping it entirely is why "ex" had no consonant at all.
+CODA = {'x': ('k', 's'), 's': ('s',), 't': ('t',), 'd': ('d',), 'm': ('m',),
+        'n': ('n',), 'r': ('r',), 'l': ('l',), 'c': ('k',), 'b': ('b',),
+        'p': ('p',), 'g': ('g',), 'f': ('f',), 'v': ('v',), 'z': ('z',)}
+
+
 def coda_of(syllable, language='latin'):
-    """The consonant a syllable ENDS with -- only for explicit transcription,
-    since guessing a coda from spelling needs the same dictionary the onsets
-    avoid."""
-    if language != 'phoneme':
+    """The consonant(s) a syllable ENDS with, as a tuple, or None.
+
+    Codas were only read from an explicit transcription before, so in Latin
+    every syllable-final consonant was silent: "ex" lost its /ks/ outright and
+    "resurget", "dies", "reus" all ended on a bare vowel. A sung coda is real
+    -- it closes the note, and without it the text loses most of its /t/ and
+    all of its /s/ that is not word-initial.
+
+    Only what follows the NUCLEUS counts, and only the trailing consonants: a
+    coda is what the syllable shuts with, not everything after the first vowel.
+    """
+    if language == 'phoneme':
+        c = parse_phoneme(syllable)[2]
+        return (c,) if c else None
+    if not syllable:
         return None
-    return parse_phoneme(syllable)[2]
+    s = _repair(str(syllable)).strip().lower()
+    s = ''.join(c for c in s if c.isalpha() or c in 'äöü')
+    v = vowel_of(s, language)
+    if not v:
+        return None
+    rules = RULES.get(language, LATIN)
+    vowels = set('aeiouyäöü')
+    i = 0
+    while i < len(s) and s[i] not in vowels:
+        i += 1
+    while i < len(s) and s[i] in vowels:        # step over the nucleus
+        i += 1
+    tail = s[i:]
+    if not tail or any(ch in vowels for ch in tail):
+        return None                              # another syllable, not a coda
+    out = []
+    for ch in tail:
+        out.extend(CODA.get(ch, ()))
+    return tuple(out[:2]) or None
 
 
 def consonant_of(syllable, language='latin'):
