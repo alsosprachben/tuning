@@ -8,7 +8,7 @@
 
 Usage: singpass.py IN.mid OUT.wav [tuner] [--lang latin] [--glide 0.07]
 """
-import os, subprocess, sys
+import os, shutil, subprocess, sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -24,6 +24,7 @@ def main(argv):
            os.environ.get('TUNING_LYRIC_LANG', 'latin')
     glide = float(argv[argv.index('--glide') + 1]) if '--glide' in argv else 0.070
     tube = '--tube' in argv or os.environ.get('TUNING_TRACT_TUBE') == '1'
+    dry = '--dry' in argv
     body = float(argv[argv.index('--body') + 1]) if '--body' in argv else 1.0
 
     import blockrender as B, vowels as W, vocaltract as VT, vocaltube as VU
@@ -75,8 +76,38 @@ def main(argv):
     a = float(np.sqrt((x.astype(np.float64) ** 2).mean()))
     b = float(np.sqrt((y.astype(np.float64) ** 2).mean()))
     if b > 1e-9: y = (y * (a / b)).astype(np.float32)
-    write_wav(outp, y, sr)
-    os.remove(tmp)
+
+    side = os.path.splitext(tmp)[0] + '.room.json'
+    if dry or not os.path.exists(side):
+        write_wav(outp, y, sr)
+        if not dry:
+            print("  no %s -- rendered DRY" % os.path.basename(side))
+    else:
+        # THE ROOM GOES AFTER THE TRACT, because the tract is part of the
+        # voice: source, then tract, then lips, and only then a hall. Putting
+        # it first would filter the reverberation with the singer's vowel.
+        #
+        # blockrender computes only the first-order images; the diffuse tail is
+        # roomtail's convolution, and singpass never ran it -- which is why
+        # every sung render so far has been nearly dry, one image per partial
+        # and nothing else.
+        #
+        # THE SIDECAR SURVIVES THE FILTER. room_q is a RATIO per band, direct
+        # energy over energy fed to the room, and the tract multiplies both by
+        # the same thing -- so a figure measured on the unfiltered source is
+        # still the right one here. It would NOT survive anything that treats
+        # the direct and reverberant shares differently.
+        mid = os.path.splitext(outp)[0] + '.dry.wav'
+        write_wav(mid, y, sr)
+        shutil.copyfile(side, os.path.splitext(mid)[0] + '.room.json')
+        subprocess.run([sys.executable, os.path.join(HERE, 'roomtail.py'),
+                        mid, outp], check=True)
+        for p in (mid, os.path.splitext(mid)[0] + '.room.json'):
+            if os.path.exists(p):
+                os.remove(p)
+    for p in (tmp, side):
+        if os.path.exists(p):
+            os.remove(p)
     print("  wrote %s" % outp)
     return 0
 

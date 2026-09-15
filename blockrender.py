@@ -91,7 +91,7 @@ def _stop_shape(consonant, vowel):
     except Exception:
         _SHAPE_CACHE[key] = None
     return _SHAPE_CACHE[key]
-CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.035'))
+CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.022'))
 # The rhythmic unit the nominal consonant widths were chosen against:
 # a syllable rate of about 3.3/s, which is ordinary speech.
 CONSONANT_SCATTER = float(os.environ.get('TUNING_CONSONANT_SCATTER', '0.014'))

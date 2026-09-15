@@ -27,6 +27,20 @@ import numpy as np
 # reach the ears by different paths, so they are largely incoherent.
 COHERENCE = float(os.environ.get('TUNING_CONSONANT_COHERENCE', '0.30'))
 
+# THE MOUTH IS A BEAM AT THE TOP, and a listener in a hall is off its axis.
+# A head radiates its high frequencies forward in a narrowing lobe, so by
+# 6 kHz a seat out in the room hears several dB less of them than a microphone
+# at the singer's lips would -- and in a choir, where the singers face where
+# they are pointed rather than at you, that is the normal case.
+#
+# It matters here and almost nowhere else, because friction is the ONLY thing
+# in a choir with energy up there: measured against the Lacrimosa's vowels the
+# bursts ran +22 dB in the 4.5-6.5 kHz band and +27 dB above it. They owned
+# the top of the spectrum, which is what "the consonants are too bright" is.
+# A vowel has no 6 kHz to lose, so this shelf is specific to the bursts.
+BEAM_HZ = float(os.environ.get('TUNING_CONSONANT_BEAM_HZ', '3000.0'))
+BEAM_ORDER = float(os.environ.get('TUNING_CONSONANT_BEAM', '1.0'))
+
 
 def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0, shape=None):
     """`n` samples of noise with a Lorentzian band at centre_hz.
@@ -57,9 +71,23 @@ def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0, shape=None):
     # AND A TOP THAT FALLS AWAY. A band that runs flat to Nyquist is a splash:
     # the mouth does not radiate up there and neither should this.
     g *= 1.0 / (1.0 + (np.maximum(f, 1.0) / 9000.0) ** 3)
+    beam = 1.0
+    if BEAM_ORDER:
+        bg = 1.0 / (1.0 + (np.maximum(f, 1.0) / BEAM_HZ) ** BEAM_ORDER)
+        e0 = float((g * g).sum())
+        g = g * bg
+        # THE LOSS HAS TO SURVIVE THE NORMALISATION BELOW. Unit-RMS output is
+        # what the gain calibration expects, but it would take a burst the
+        # beam had just darkened and hand back its loudness -- an /s/, nearly
+        # all of whose energy is above the corner, would come out dimmer and
+        # exactly as loud. So the level the shelf removed is measured here and
+        # reapplied after.
+        beam = np.sqrt(float((g * g).sum()) / e0) if e0 > 0.0 else 1.0
     y = np.fft.irfft(X * g, n)
     p = float(np.sqrt((y * y).mean()))
-    return (y / p).astype(np.float32) if p > 1e-12 else np.zeros(n, np.float32)
+    if p <= 1e-12:
+        return np.zeros(n, np.float32)
+    return (y * (beam / p)).astype(np.float32)
 
 
 def envelope(n, sr, rise=0.33, fall=0.67):
