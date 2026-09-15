@@ -81,6 +81,35 @@ GERMAN = [('ei', 'a'), ('ai', 'a'), ('eu', 'O'), ('au', 'a'),
 RULES = {'latin': LATIN, 'italian': ITALIAN, 'german': GERMAN}
 
 
+# The tract shape a consonant is RELEASED from, by place of articulation --
+# the classic formant "locus". The vowel is approached from here rather than
+# arrived at from nowhere, and the direction F2 travels out of the constriction
+# is a primary cue to which consonant it was: a labial starts F2 low and rises,
+# an alveolar starts it high and falls into a back vowel, a velar starts high
+# and close to F3. Without them a consonant is a noise stuck on the front of a
+# vowel instead of a gesture the vowel comes out of.
+LOCUS = {
+    'labial':   ((400.0, 150.0, 1.00), ( 800.0, 220.0, 0.50), (2200.0, 260.0, 0.18)),
+    'alveolar': ((350.0, 140.0, 1.00), (1750.0, 240.0, 0.55), (2600.0, 260.0, 0.22)),
+    'velar':    ((350.0, 140.0, 1.00), (2000.0, 240.0, 0.60), (2400.0, 260.0, 0.28)),
+    'palatal':  ((320.0, 130.0, 1.00), (2100.0, 240.0, 0.58), (2900.0, 260.0, 0.24)),
+    'glottal':  ((500.0, 180.0, 1.00), (1500.0, 300.0, 0.40), (2500.0, 300.0, 0.18)),
+}
+PLACE = {
+    'p':'labial','b':'labial','m':'labial','f':'labial','v':'labial',
+    't':'alveolar','d':'alveolar','n':'alveolar','s':'alveolar','z':'alveolar',
+    'l':'alveolar','r':'alveolar',
+    'k':'velar','g':'velar',
+    'S':'palatal','tS':'palatal','dZ':'palatal','J':'palatal',
+    'h':'glottal',
+}
+
+
+def locus_of(consonant):
+    """The tract shape a consonant releases from, or None."""
+    return LOCUS.get(PLACE.get(consonant))
+
+
 # ---------------------------------------------------------------- consonants
 # A consonant is noise, and the renderer already makes onset noise: chiff. So a
 # consonant is chosen by how much, for how long, and WHERE IN THE SPECTRUM --

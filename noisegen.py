@@ -45,7 +45,7 @@ def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0):
     return (y / p).astype(np.float32) if p > 1e-12 else np.zeros(n, np.float32)
 
 
-def envelope(n, sr, rise=0.45, fall=0.55):
+def envelope(n, sr, rise=0.33, fall=0.67):
     """A rounded hump, not a flat-topped burst.
 
     The first version opened in 3 ms, held flat and stopped: a hard-edged

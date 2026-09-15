@@ -648,7 +648,9 @@ def prepare(path, tuner='hybrid'):
                 _prev_on = _evs[_i-1][2] if _i > 0 else 0.0
                 _room = max(0.012, (_e[2] - _prev_on) * 0.6)
                 _w = max(0.010, min(_w, _room))
-                _st = _e[2] - _w
+                # Friction does not stop when voicing starts; it OVERLAPS it.
+                # Ending the burst exactly on the onset put a seam there.
+                _st = _e[2] - _w * 0.78
                 if _st < 0.0: continue
                 _pan = _e[5][2] if isinstance(_e[5], tuple) and len(_e[5]) > 2 else 0.0
                 _g = ((_e[4] / 127.0) ** 2) * CONSONANT_GAIN * _vol

@@ -39,7 +39,22 @@ def main(argv):
     # every part sings the same text here, so one trajectory serves; take the
     # part with the most syllables
     ch = max(rows, key=lambda c: len(rows[c]))
-    timeline = [(t, W.VOWELS[v]) for t, v, *_ in rows[ch] if v in W.VOWELS]
+    # THE TRACT COMES OUT OF THE CONSTRICTION. A point at the consonant's
+    # locus just before each vowel means the formants TRAVEL into the vowel
+    # rather than appearing at it -- which is the transition that makes a
+    # consonant sound attached to its syllable.
+    timeline = []
+    for t, v, *rest in rows[ch]:
+        if v not in W.VOWELS: continue
+        con = rest[0] if rest else None
+        loc = W.locus_of(con) if con else None
+        # The locus must sit FURTHER BACK than the glide is wide, or the
+        # move into it and the move out of it overlap and it is averaged
+        # away -- which is what happened at 45 ms against a 70 ms glide:
+        # the loci were all present and changed nothing.
+        if loc: timeline.append((max(0.0, t - glide * 1.35), loc))
+        timeline.append((t, W.VOWELS[v]))
+    timeline.sort(key=lambda r: r[0])
     print("  %d syllables on channel %d, glide %.0f ms" % (len(timeline), ch, glide * 1000))
 
     x, sr = read_wav(tmp)
