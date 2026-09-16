@@ -54,6 +54,9 @@ VOWEL_NORM = float(os.environ.get('TUNING_VOWEL_NORM', '1.0'))
 # -6.6 dB/octave. Loudness is what reaches the ear, so the filter has to be
 # judged against the spectrum it will actually be filtering.
 _SRC_TILT = -6.6 / 6.0
+
+# Where the source correction stops being a slope and becomes a shelf.
+TILT_KNEE = float(os.environ.get('TUNING_TILT_KNEE', '450.0'))
 _NORM_CACHE = {}
 
 
@@ -132,8 +135,24 @@ def _tube_shape(f, coeffs, tract_cm, tilt, floor, corner=3600.0, order=3.0):
     harmonic series rather than a modelled glottis, so its slope has to be
     reconciled with the filter's.
     """
-    g = vocaltube.response(vocaltube.area_from_modes(coeffs), f, tract_cm)
-    g = g * (np.maximum(f, 50.0) / 500.0) ** tilt
+    # NO RADIATION TERM. response() carries the lip load by default -- a
+    # +6 dB/octave highpass from volume velocity to radiated pressure, which is
+    # correct physics and wrong HERE, because the source this filters is not
+    # glottal flow. It is a rendered voice, and a rendered voice is already a
+    # radiated spectrum. Applied twice it costs a low bass 8.9 dB at its
+    # fundamental against the three-pole path, which is audible as a choir
+    # with no bottom. The F2:F1 calibration could not see it: both formants
+    # sit where the radiation curve is gentle, and the error is all below them.
+    g = vocaltube.response(vocaltube.area_from_modes(coeffs), f, tract_cm,
+                           radiate=False)
+    # A SHELF, NOT A SLOPE. The tilt corrects for the source, and the source
+    # was measured over 300-5000 Hz; a power law honours that inside the band
+    # and keeps going outside it, which at 87 Hz -- a bass's own fundamental --
+    # costs 11 dB the measurement never justified. Below TILT_KNEE the
+    # correction flattens out, and the response there is the tube's, which is
+    # what it should be: a tract is near enough flat below its first formant.
+    g = g * ((f * f + TILT_KNEE * TILT_KNEE) /
+             (500.0 * 500.0 + TILT_KNEE * TILT_KNEE)) ** (tilt * 0.5)
     # THE SAME HIGH-FREQUENCY ROLL-OFF THE FORMANT PATH USES, and it is not
     # optional. A tube's radiation load is a +6 dB/oct highpass, so left alone
     # the model runs 31 dB hot above 4.5 kHz -- audible as hissing consonants,
@@ -151,7 +170,7 @@ def _tube_shape(f, coeffs, tract_cm, tilt, floor, corner=3600.0, order=3.0):
 
 
 def apply(x, sr, timeline, glide=0.070, floor=0.05, tube=False,
-          tract_cm=vocaltube.TRACT_CM, tilt=-0.15, gain=1.0):
+          tract_cm=vocaltube.TRACT_CM, tilt=0.90, gain=1.0):
     """Filter `x` (n, ch) by a tract that moves along `timeline`.
 
     With `tube`, the timeline carries tract SHAPES (mode coefficients) instead
