@@ -18,6 +18,8 @@ start, and it is why this is a separate pass rather than another parameter.
 Done on the STFT: a 2048-point frame every 256 samples is ~6 ms of resolution,
 fast enough to follow a real articulator and cheap enough to be free.
 """
+import os
+
 import numpy as np
 
 import vocaltube
@@ -29,6 +31,45 @@ HOP = 256
 # between, because walking 44 sections per 6 ms frame is most of the cost of
 # the pass and a tongue does not move in 23 ms.
 TUBE_EVERY = 4
+
+# A SINGER EVENS OUT THE VOWELS AND A TALKER DOES NOT.
+#
+# Vowels have an intrinsic intensity: open ones radiate more than close ones,
+# so in speech /a/ runs 4-5 dB above /i/ and /u/ without anybody intending it
+# (Lehiste and Peterson). A tube reproduces that for free, being the same
+# physics -- and overdoes it here, spreading the inventory over 10.9 dB with
+# /i/ 8.3 dB under /a/. Singers spend years removing exactly this, adjusting
+# breath pressure and vowel shape to hold a line even; it is most of what
+# "vowel modification" is for. The three-pole path never had the problem
+# because its formant amplitudes were set by hand and so came pre-levelled.
+#
+# Left in, it reads as a choir that goes quiet on every /i/ and /e/ -- which
+# in the Lacrimosa is most of the words.
+#
+# 1.0 = fully even, 0.0 = whatever the tube gives. Speech wants a low value:
+# the unevenness is real, and only singing trains it out.
+VOWEL_NORM = float(os.environ.get('TUNING_VOWEL_NORM', '1.0'))
+
+# The source the levelling is weighted by -- measured off a flat render at
+# -6.6 dB/octave. Loudness is what reaches the ear, so the filter has to be
+# judged against the spectrum it will actually be filtering.
+_SRC_TILT = -6.6 / 6.0
+_NORM_CACHE = {}
+
+
+def _even_out(f, g, key):
+    """Scale a tract response so every vowel arrives at the same loudness."""
+    if not VOWEL_NORM:
+        return g
+    ref = _NORM_CACHE.get(key)
+    if ref is None:
+        src = (np.maximum(f, 50.0) / 500.0) ** _SRC_TILT
+        band = (f > 80.0) & (f < 9000.0)
+        ref = float(((g * src)[band] ** 2).sum())
+        _NORM_CACHE[key] = ref
+    if ref <= 0.0:
+        return g
+    return g * (1.0 / np.sqrt(ref)) ** VOWEL_NORM
 
 
 def _shape(f, formants, floor=0.05, corner=4000.0, order=2.0, tilt=1.0):
@@ -101,6 +142,11 @@ def _tube_shape(f, coeffs, tract_cm, tilt, floor, corner=3600.0, order=3.0):
     # phase: a real source falls 12 dB/oct and steepens further above 3 kHz,
     # where the rendered source here measures only 6.6.
     g = g / (1.0 + (np.maximum(f, 1.0) / corner) ** order)
+    src = (np.maximum(f, 50.0) / 500.0) ** _SRC_TILT
+    band = (f > 80.0) & (f < 9000.0)
+    e = float(((g * src)[band] ** 2).sum())
+    if VOWEL_NORM and e > 0.0:
+        g = g * (1.0 / np.sqrt(e)) ** VOWEL_NORM
     return g + floor
 
 
