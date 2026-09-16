@@ -10,7 +10,13 @@ found by looking for lyrics either, only by notes AND lyrics together. And it
 has no dynamics at all: every choir note is velocity 95, every first violin
 101, one flat value per staff. Summed at unit gain the choir sits 6 dB under
 the orchestra where they play together, which is LilyPond's opinion and not
-Mozart's, and --choir-db 7 is the correction.
+Mozart's, and --choir-db is the correction.
+
+That correction is 10, arrived at by matching the Lacrimosa rather than by
+picking a number: the two movements are the same forces in the same hall, so
+once one balance is right by ear the other should measure like it. 7 put the
+median at +1.8 dB where the Lacrimosa sits at +5.1, and the quiet choral
+writing at -7.5 where the Lacrimosa has -3.5. 10 gives +4.8 and -4.5.
 """
 import os
 import sys
@@ -23,5 +29,5 @@ if __name__ == '__main__':
     if '--lang' not in argv:
         argv += ['--lang', 'latin']
     if '--choir-db' not in argv:
-        argv += ['--choir-db', '7']
+        argv += ['--choir-db', '10']
     sys.exit(choral.main(argv))
