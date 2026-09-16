@@ -41,6 +41,17 @@ COHERENCE = float(os.environ.get('TUNING_CONSONANT_COHERENCE', '0.30'))
 BEAM_HZ = float(os.environ.get('TUNING_CONSONANT_BEAM_HZ', '3000.0'))
 BEAM_ORDER = float(os.environ.get('TUNING_CONSONANT_BEAM', '1.0'))
 
+# How much of the burst is spent arriving. The default used to be a third,
+# which on a 30 ms consonant is a 6 ms attack -- fast enough to read as an
+# edge. Raising it lengthens the approach and moves the peak of the friction
+# nearer the vowel it belongs to, which is where a sung consonant peaks.
+#
+# Raising the envelope to a POWER does not do this, and was tried first: a
+# raised cosine taken to 1.8 leaves with an even gentler slope but spends less
+# of its length near full, so the 10-90 rise gets FASTER, not slower. The
+# shoulders thin and the event shortens. Length is the parameter, not shape.
+RISE = float(os.environ.get('TUNING_CONSONANT_RISE', '0.48'))
+
 
 def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0, shape=None):
     """`n` samples of noise with a Lorentzian band at centre_hz.
@@ -90,7 +101,7 @@ def burst(n, sr, centre_hz, bandwidth_hz, seed=0, tilt=0.0, shape=None):
     return (y * (beam / p)).astype(np.float32)
 
 
-def envelope(n, sr, rise=0.33, fall=0.67):
+def envelope(n, sr, rise=None, fall=1.0):
     """A rounded hump, not a flat-topped burst.
 
     The first version opened in 3 ms, held flat and stopped: a hard-edged
@@ -104,6 +115,7 @@ def envelope(n, sr, rise=0.33, fall=0.67):
     if n <= 0:
         return np.zeros(0, np.float32)
     t = np.linspace(0.0, 1.0, n, dtype=np.float32)
+    rise = RISE if rise is None else rise
     pk = rise / (rise + fall)
     e = np.empty(n, np.float32)
     up = t <= pk

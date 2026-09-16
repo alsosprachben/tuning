@@ -91,10 +91,16 @@ def _stop_shape(consonant, vowel):
     except Exception:
         _SHAPE_CACHE[key] = None
     return _SHAPE_CACHE[key]
-CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.022'))
+CONSONANT_GAIN = float(os.environ.get('TUNING_CONSONANT_GAIN', '0.0175'))
 # The rhythmic unit the nominal consonant widths were chosen against:
 # a syllable rate of about 3.3/s, which is ordinary speech.
-CONSONANT_SCATTER = float(os.environ.get('TUNING_CONSONANT_SCATTER', '0.014'))
+# How far apart a section's singers release a consonant, as a standard
+# deviation in seconds. A choir does NOT release together -- getting a /t/
+# together is one of the hardest things a chorus master asks for, and even a
+# good chorus spreads over tens of milliseconds. Modelled normal rather than
+# uniform: most of them near the beat with a tail of late ones, which is what
+# a conductor is actually fighting.
+CONSONANT_SCATTER = float(os.environ.get('TUNING_CONSONANT_SCATTER', '0.015'))
 CONSONANT_REF = float(os.environ.get('TUNING_CONSONANT_REF', '0.30'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
@@ -1111,8 +1117,18 @@ def prepare(path, tuner='hybrid'):
             _sc = _g / math.sqrt(_ns)
             for _si, (_li, _ri, _ld, _rd) in enumerate(_seats):
                 # deterministic scatter, +-1 of a raised span, no RNG state
-                _j = ((_bi * 2654435761 + _si * 40503) % 1000) / 1000.0 - 0.5
-                _dj = int(CONSONANT_SCATTER * SR * _j)
+                # Deterministic, so a render repeats, but it has to be a real
+                # hash: taking three windows of ONE multiply gave three views
+                # of the same bits, and the seven "random" offsets came out a
+                # straight line -- singers walking in evenly, which is not
+                # scatter, it is a canon.
+                _j = 0.0
+                for _k in range(3):
+                    _hv = (_bi * 0x9E3779B1) ^ (_si * 0x85EBCA6B) ^ (_k * 0xC2B2AE35)
+                    _hv = (_hv ^ (_hv >> 15)) * 0x2545F491
+                    _hv = (_hv ^ (_hv >> 13)) & 0xFFFFFFFF
+                    _j += _hv / 4294967295.0 - 0.5
+                _dj = int(CONSONANT_SCATTER * SR * (_j / 3.0) * 6.0)
                 _emit.append((_s + int(_ld * SR) + _dj, _s + int(_rd * SR) + _dj,
                               _sc * _pr.hrtf_gain(_fc, _li),
                               _sc * _pr.hrtf_gain(_fc, _ri), _si))
