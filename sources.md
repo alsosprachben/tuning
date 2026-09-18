@@ -1652,3 +1652,50 @@ the other half of the distinction.
 Note the interaction with the previous section: a shallow slope puts more
 energy in the upper partials, which is exactly where the sparse early field
 combs. The two faults compound, and the brightness was audible first.
+
+## GM 16, 17 and 18 render as a pipe organ
+
+`property_class_for_program` sends Drawbar Organ (16), Percussive Organ (17)
+and Rock Organ (18) to `FlueOrganProperties`, the same class as Church Organ
+(19). There is no tonewheel voice in the repertoire at all.
+
+That matters for more than naming. A Hammond is not a pipe: its partials are
+near-pure sines at fixed drawbar ratios with no speech transient, its attack is
+a key click rather than a pipe building a standing wave, and its harmonic
+content does not fall off with a pipe's slope because it does not come from a
+pipe. Rendering one as a Principal gets every one of those wrong -- and it is
+the voice a Leslie belongs on.
+
+## What a Leslie needs, and what is already here
+
+`leslie.py` carries the geometry. Measured for the church room, a 1 kHz partial
+leaving the cabinet:
+
+| path | azimuth | rotor phase |
+|---|---|---|
+| direct | +0.2 deg | -0.2 deg |
+| image 1 | +80.3 deg | -80.3 deg |
+| image 2 | +90.0 deg | -90.0 deg |
+
+The images modulate up to 90 degrees out of phase with the direct sound: when
+the horn points at the listener it is side-on to that wall, and the reverse a
+quarter-turn later. THAT is the effect. The direct and reflected sound beat
+against each other at the rotor rate with a phase relationship the ROOM sets,
+which is why a Leslie sounds different in every room and why a static early-
+reflection network cannot reproduce it.
+
+Already present, and enough for the Doppler with no kernel change:
+per-partial sinusoidal FM with an independent phase, integrated on an ABSOLUTE
+clock -- a rotor angle is shared by every note and must not restart at note-on.
+Reflections are already separate partials, each carrying the source's
+directivity at its own departure angle, so each can take its own rotor phase.
+
+Missing: a tonewheel voice (above), and per-partial amplitude modulation. The
+second is not a new primitive, since AM of a sinusoid is three partials:
+(1 + m cos(wt+p)) sin(Wt) = sin(Wt) + (m/2)[sin((W+w)t+p) + sin((W-w)t-p)].
+Every partial becomes three, which the partial count can afford.
+
+Physical figures the module produces: Doppler +-35 cents at the horn (a 0.17 m
+throw at 6.6 Hz), level swing +-6% at 110 Hz rising to +-84% at 6 kHz -- the
+spectrum breathing at the rotor rate, which is what separates a Leslie from a
+tremolo.
