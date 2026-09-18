@@ -3080,6 +3080,18 @@ class OrganProperties(StoppedPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
+    # A PRINCIPAL IS DARKER THAN A REED, and that is most of what tells them
+    # apart. OrganProperties sets 1.4 for the family, which measures -6.2 dB
+    # per octave of harmonic number on a single D2 with the room switched off
+    # -- right for the reed, where a bright series is the point, and far too
+    # shallow for an open flue, which the literature puts at -10 to -14. By
+    # the eighth partial that was 12 to 24 dB of surplus, audible as an organ
+    # that is bright everywhere and has nowhere left to go when the Mixtur
+    # arrives. 2.2 measures -11.0 dB/oct. Set HERE and not on the family: the
+    # reed's 1.4 is not an error to be corrected, it is the other half of the
+    # distinction.
+    tonal_dampening = 2.2
+
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
     # a peak normalise and these voices play alone -- and the organ family is

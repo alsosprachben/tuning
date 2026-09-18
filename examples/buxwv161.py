@@ -76,29 +76,35 @@ LAST = 320.9          # the 28th and final statement
 LEAD = 0.05
 
 
-def at(t):
-    return max(0.0, t - LEAD)
+_SPANS = None
 
 
-PLAN = {
+def at_raw(t):
+    """When to draw, given what is sounding -- see lib.release_seam."""
+    if _SPANS is None:
+        return max(0.0, t - LEAD)
+    return max(0.0, lib.release_seam(_SPANS, t))
+
+
+RAW = {
     # manual flue
     0: [(0.0,           ['flute']),                              # Positiv
-        (at(KEY['F']),  ['8']),                                  # first brightening
-        (at(KEY['A']),  ['8', '4', '2', '2-2/3']),
-        (at(WALL),      ['8', '4', '2', '2-2/3', 'mixture']),
-        (at(KEY['D2']), ['8', '4', '2', '2-2/3', '16', '5-1/3', 'mixture'])],
+        (KEY['F'],  ['8']),                                  # first brightening
+        (KEY['A'],  ['8', '4', '2', '2-2/3']),
+        (WALL,      ['8', '4', '2', '2-2/3', 'mixture']),
+        (KEY['D2'], ['8', '4', '2', '2-2/3', '16', '5-1/3', 'mixture'])],
     # pedal flue
     1: [(0.0,           ['flute']),                             # stopped, not open
-        (at(KEY['F']),  ['8']),                                  # principal, with the manual
-        (at(KEY['A']),  ['16', '8', '4']),
-        (at(KEY['D2']), ['16', '8', '4', '5-1/3'])],
+        (KEY['F'],  ['8']),                                  # principal, with the manual
+        (KEY['A'],  ['16', '8', '4']),
+        (KEY['D2'], ['16', '8', '4', '5-1/3'])],
     # pedal reed: the weight, entering with the wall
     2: [(0.0,           []),
-        (at(WALL),      ['16']),
-        (at(KEY['D2']), ['16', '8'])],
+        (WALL,      ['16']),
+        (KEY['D2'], ['16', '8'])],
     # manual reed: the last statement only
     3: [(0.0,           []),
-        (at(LAST),      ['trumpet'])],
+        (LAST,      ['trumpet'])],
 }
 
 
@@ -108,6 +114,10 @@ def main(argv):
     score = argv[1]
     outdir = argv[2] if len(argv) > 2 else '.'
     os.makedirs(outdir, exist_ok=True)
+    global _SPANS, PLAN
+    _SPANS = lib.note_spans(score)
+    PLAN = {ch: [(at_raw(t), ns) for t, ns in spec]
+            for ch, spec in RAW.items()}
     graded = os.path.join(outdir, 'buxwv161_graded.mid')
     lib.set_stops(score, graded, PLAN)
     return organ.main([argv[0], graded, outdir])

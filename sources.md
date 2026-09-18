@@ -1643,9 +1643,11 @@ a principal, and that is most of what distinguishes them. Moving the family
 value would fix the flue by breaking the reed. The correction belongs on
 `FlueOrganProperties` alone.
 
-Not applied pending an ear. At 2.2 on the flue alone, the Passacaglia's
-2.8-4.5 kHz band falls 5.5 dB and 4.5-8 kHz falls 9.0 dB, with everything
-below 1.6 kHz within half a decibel.
+APPLIED, on `FlueOrganProperties` alone, at 2.2 (-11.0 dB/oct). Ben's ear on
+the A/B: "much better". The Passacaglia's 2.8-4.5 kHz band falls 5.5 dB and
+4.5-8 kHz falls 9.0 dB, with everything below 1.6 kHz within half a decibel.
+The reed keeps the family's 1.4, which is not an error to be corrected but
+the other half of the distinction.
 
 Note the interaction with the previous section: a shallow slope puts more
 energy in the upper partials, which is exactly where the sparse early field

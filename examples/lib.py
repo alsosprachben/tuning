@@ -395,3 +395,60 @@ def set_stops(src, dest, draw, verbose=True):
         out.tracks.append(nt)
     out.save(dest)
     return dest
+
+
+def note_spans(path):
+    """[(start_s, end_s, channel, note)] for every note."""
+    import mido
+    m = mido.MidiFile(path)
+    tempo = next((e.tempo for t in m.tracks for e in t
+                  if e.type == 'set_tempo'), 500000)
+    tps = m.ticks_per_beat * 1e6 / tempo
+    out = []
+    for t in m.tracks:
+        acc = 0
+        on = {}
+        for e in t:
+            acc += e.time
+            if e.type == 'note_on' and e.velocity > 0:
+                on.setdefault((e.channel, e.note), []).append(acc)
+            elif e.type in ('note_off', 'note_on'):
+                q = on.get((e.channel, e.note))
+                if q:
+                    out.append((q.pop(0) / tps, acc / tps, e.channel, e.note))
+    return out
+
+
+def release_seam(spans, downbeat, look=0.20, after=0.008, tail=0.25):
+    """When to draw a stop near `downbeat` so no sounding note is caught.
+
+    Drawing a stop over a held note makes it louder -- true of a real organ,
+    which is why an organist changes between notes. The trap is that a change
+    placed before the beat catches the previous chord for the SHORT remainder
+    of its life: at the A section here, eight notes were caught with 59 ms
+    left, which is heard as a blip rather than a swell and is easy to miss if
+    you only look for notes that persist.
+
+    So: find the wall of note-offs before the downbeat and go just past it.
+    Notes beginning at the downbeat are caught a few ms into their attack,
+    where the attack covers it; notes ending before it are not caught at all.
+    """
+    offs = sorted(e for s, e, c, n in spans if downbeat - look <= e <= downbeat + 0.05)
+    if not offs:
+        # No wall near the beat: the writing is held across it, so there is
+        # nothing to get out of the way of and the change may as well land
+        # where it belongs musically.
+        return downbeat - 0.05
+    # the densest release instant, latest one winning ties
+    best, count = offs[0], 0
+    for t in offs:
+        k = sum(1 for e in offs if abs(e - t) < 0.01)
+        if k >= count:
+            best, count = t, k
+    return best + after
+
+
+def caught(spans, t, short=0.25):
+    """(notes crossing t, of which have less than `short` left) -- the blips."""
+    cross = [(s, e) for s, e, c, n in spans if s < t < e]
+    return len(cross), sum(1 for s, e in cross if e - t < short)
