@@ -294,3 +294,104 @@ def has_dynamics(path, min_distinct=4):
         if v:
             out[i] = (len(v) >= min_distinct, sorted(v))
     return out
+
+
+def stop_names(program):
+    """The ranks a program's pipe voice offers, in bit order."""
+    import blockrender
+    pc = blockrender.property_class_for_program(program)
+    return [r[0] for r in pc(261.6, 0, 1, 1).stop_ranks]
+
+
+def set_stops(src, dest, draw, verbose=True):
+    """Redraw an organ's registration: {channel: [rank names]}.
+
+    A channel's value may instead be [(seconds, [names]), ...], which is a
+    REGISTRATION THAT CHANGES, and usually the honest answer. One mask for a
+    five-minute praeludium is not what a player does: the Mixtur that earns
+    its place on the ascending run before the ending does not earn it in bar
+    one, and left drawn throughout it is simply a thick piece.
+
+    The stop word is 14 bits, CC11 carrying the low seven and CC43 the high
+    seven, indexed against the voice's own stop_ranks. NOTE THAT CC11 IS NOT
+    EXPRESSION on a pipe voice -- it is half the stop word, and treating it as
+    a volume curve draws stops instead of shaping a line.
+
+    A channel given an empty list is REMOVED, not silenced. A silent channel
+    still builds its partials and gates them to nothing, which costs the same
+    to render as playing it.
+    """
+    import mido
+    prog = {}
+    for t in mido.MidiFile(src).tracks:
+        for e in t:
+            if e.type == 'program_change':
+                prog[e.channel] = e.program
+    m = mido.MidiFile(src)
+    tempo = next((e.tempo for t in m.tracks for e in t
+                  if e.type == 'set_tempo'), 500000)
+    tps = m.ticks_per_beat * 1e6 / tempo        # ticks per second
+    out = mido.MidiFile(ticks_per_beat=m.ticks_per_beat, type=m.type)
+    for t in m.tracks:
+        chans = {e.channel for e in t if hasattr(e, 'channel')}
+        ch = next(iter(chans)) if len(chans) == 1 else None
+        if ch is not None and ch in draw and not draw[ch]:
+            if verbose:
+                print("  ch%-2d dropped (no stops drawn)" % ch)
+            continue
+        nt = mido.MidiTrack()
+        nt.name = t.name
+        carry = 0
+        for e in t:
+            if e.type == 'control_change' and e.control in (11, 43):
+                if ch in draw:
+                    carry += e.time       # keep the timing, drop the event
+                    continue
+            if carry:
+                e = e.copy(time=e.time + carry)
+                carry = 0
+            nt.append(e)
+        if ch in draw:
+            names = stop_names(prog.get(ch, 19))
+            spec = draw[ch]
+            if spec and not isinstance(spec[0], tuple):
+                spec = [(0.0, spec)]
+
+            def word(ns):
+                v = 0
+                for n in ns:
+                    if n not in names:
+                        raise SystemExit("ch%d has no %r stop; it has %s"
+                                         % (ch, n, names))
+                    v |= 1 << names.index(n)
+                return v
+
+            # absolute ticks, so changes can be dropped in by the clock
+            abst = []
+            acc = 0
+            for e in nt:
+                acc += e.time
+                abst.append(acc)
+            items = list(zip(abst, nt))
+            for sec, ns in spec:
+                tick = int(round(sec * tps))
+                w = word(ns)
+                items.append((tick, mido.Message('control_change', channel=ch,
+                                                 control=11, value=w & 0x7F)))
+                items.append((tick, mido.Message('control_change', channel=ch,
+                                                 control=43,
+                                                 value=(w >> 7) & 0x7F)))
+                if verbose:
+                    print("  ch%-2d at %6.1f s  %s" % (ch, sec, ', '.join(ns)))
+            # program change must still precede the stops it applies to
+            items.sort(key=lambda r: (r[0], 0 if r[1].type == 'program_change'
+                                      else 1))
+            nt = mido.MidiTrack()
+            nt.name = t.name
+            prev = 0
+            for tick, e in items:
+                nt.append(e.copy(time=tick - prev))
+                prev = tick
+        out.tracks.append(nt)
+    out.save(dest)
+    return dest
