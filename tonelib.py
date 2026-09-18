@@ -2958,6 +2958,136 @@ class StoppedPipeProperties(SynthProperties):
     harmonic_decay_dampening = 0.0
 
 
+class TonewheelProperties(SynthProperties):
+    """A Hammond: geared steel wheels turning past magnetic pickups.
+
+    NOT A PIPE, which is why this sits under SynthProperties and not under
+    OrganProperties. There is no wind, no jet, no standing wave to build and
+    so no speech; a tonewheel is at full amplitude within a millisecond of the
+    contacts making, and the transient you hear is the CONTACTS, not the tone.
+    Nothing decays. Everything else in this family had to be told how a column
+    of air starts; this one has to be told that it does not.
+
+    THE HARMONICS ARE EQUAL-TEMPERED, and that is the single most characteristic
+    thing about the instrument. A drawbar does not synthesise a harmonic -- it
+    patches in ANOTHER WHEEL, the one already cut for that note of the scale. So
+    the "third harmonic" is the tempered twelfth at 2.9966 rather than 3.0, and
+    the "fifth" is the tempered seventeenth at 5.0397, which is 13.7 cents SHARP
+    of a just third. A Hammond therefore beats against itself on every held
+    chord, in a fixed pattern no pipe organ has, and a synthesiser that builds
+    the drawbars from exact integer ratios sounds clean and wrong.
+
+    Only nine ratios exist, and the seventh harmonic is not among them.
+    """
+    # NOT MEASURED. Sits between the flue and reed organ so the family balances
+    # by ear until somebody puts a B-3 in front of a microphone.
+    initial_gain = 0.00015
+
+    # A wheel against a pickup is nearly a sine. Not exactly -- the wheel's
+    # profile and the pickup's aperture put a little second and third in -- but
+    # the drawbars, not the wheel, are supposed to make the timbre.
+    # NOT 3, which was the first guess and wrong: max_harmonic caps the
+    # REGISTERED series, so a ceiling of 3 silently deleted every drawbar whose
+    # ratio exceeds it -- the 2', the 1-3/5', the 1-1/3' and the 1' simply did
+    # not sound, and nothing in the piece reached the horn's side of the
+    # crossover. The top drawbar is the 8th, and it wants its own few
+    # harmonics, so the cap belongs up here. Wheel purity is tonal_dampening's
+    # job and it does it: h2 at -21 dB, h3 at -33, near enough a sine.
+    max_harmonic = 24
+    tonal_dampening = 3.5
+    odd_only = False
+
+    # NO REGISTER SLOPE. Every note is the same nine wheels through the same
+    # pickups, so the timbre does not brighten or darken up the compass the way
+    # a pipe rank or a string does. Setting this to zero is a claim about the
+    # instrument, not a convenience.
+    octave_dampening = 0.0
+    octave_modulo = False
+    octave_gain = 0.0                # nor does it get louder up the keyboard
+    enharmonic_width = 0.0
+    # Nothing is struck or plucked; these exist because every family has to
+    # answer them, not because a wheel has an opinion.
+    pluck_dampening = 1.0
+    plucked_harmonic = 1000.0
+
+    # Nothing here is a pipe.
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    chiff_min_valve_time = 0.0
+    chiff_max_valve_time = 0.0
+    speech_cycles = 0.0
+    mode_lock_spread = 0.0
+    inharmonicity_dynamic = False
+    inharmonicity_coefficient = 0.0
+
+    # THE KEY CLICK IS THE ATTACK, not an effect laid over it. Nine contacts
+    # close within a millisecond or so of each other and each one steps its
+    # wheel in from silence; the step IS the click, and it is broadband because
+    # it is a step. Give the envelope a millisecond and it arrives on its own.
+    attack_time = 0.0012
+    decay_db = 0.0                   # a wheel does not decay
+    harmonic_decay_db = 0.0
+    harmonic_decay_dampening = 0.0
+    sustain_level = 1.0
+    release_time = 0.006             # contacts opening, same speed
+
+    # The drawbars. Ratios are TEMPERED, not integer -- see above. Amplitudes
+    # are the drawbar at 8, the stop mask choosing which are pulled.
+    stop_ranks = [
+        ("16",    0.5,    1.00),     # sub-fundamental
+        ("5-1/3", 1.4983, 0.85),     # sub-third: tempered fifth, not 1.5
+        ("8",     1.0,    1.00),     # fundamental
+        ("4",     2.0,    0.90),
+        ("2-2/3", 2.9966, 0.72),     # tempered twelfth, not 3.0
+        ("2",     4.0,    0.66),
+        ("1-3/5", 5.0397, 0.52),     # tempered seventeenth: 13.7 cents sharp
+        ("1-1/3", 5.9932, 0.45),
+        ("1",     8.0,    0.40),
+    ]
+    crescendo_order = ["8", "4", "16", "2-2/3", "2", "5-1/3", "1-1/3", "1-3/5", "1"]
+    # 888 000 000 -- the first three drawbars out, which is where everyone starts.
+    default_stops = 0b000000111
+
+    # FOLDBACK. There are only 91 wheels, so the top drawbars have nothing left
+    # to patch in and repeat the octave below instead. Without it the upper
+    # drawbars run off the end of the generator, which no Hammond does.
+    pipe_ceiling_hz = 6000.0
+
+    # The rotating speaker, when there is one. See leslie.py.
+    leslie = False
+    leslie_fast = True
+
+
+class DrawbarOrganProperties(TonewheelProperties):
+    """GM 16. The console itself, no percussion, rotor on chorale."""
+    leslie = True
+    leslie_fast = False
+
+
+class PercussiveOrganProperties(TonewheelProperties):
+    """GM 17. The same console with the percussion tab down.
+
+    Percussion is a separate decaying tap at the second or third harmonic,
+    keyed once per phrase rather than once per note -- a hardware detail this
+    does not model. What it does model is the SHAPE: an attack with a bright,
+    fast-decaying top over a flat sustain, which is the part that reads.
+    """
+    default_stops = 0b000001111      # 888 8
+    decay_db = 3.0
+    harmonic_decay_db = 9.0          # the tap, and it is all in the upper wheels
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.80
+    leslie = True
+    leslie_fast = False
+
+
+class RockOrganProperties(TonewheelProperties):
+    """GM 18. Drawbars out at both ends, rotor running fast."""
+    default_stops = 0b100000111      # 888 000 008
+    leslie = True
+    leslie_fast = True
+
+
 class OrganProperties(StoppedPipeProperties):
     # ---------------------------------------------------------- pipe scaling
     #
@@ -8428,6 +8558,7 @@ class ConsonantProperties(FormantBody, NoisyPercussionMixin, StoppedPipeProperti
     chiff_bandwidth_hz = 2000
     decay_db = 0.0
     harmonic_decay_db = 0.0
+    harmonic_decay_dampening = 0.0
     formants = ((4000.0, 1400.0, 1.0),)
     formant_floor = 0.008         # tight: outside the band there is nothing
     bore_corner_hz = 11000.0

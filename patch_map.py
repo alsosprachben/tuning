@@ -40,6 +40,9 @@ from tonelib import (
     slow_bow,
     FlueOrganProperties,
     ReedOrganProperties,
+    DrawbarOrganProperties,
+    PercussiveOrganProperties,
+    RockOrganProperties,
     BrassProperties,
     CylindricalBrassProperties,
     TrumpetProperties,
@@ -96,7 +99,14 @@ PROGRAM_CLASS[13] = XylophoneProperties     # rosewood, undercut 3:1
 PROGRAM_CLASS[14] = TubularBellProperties   # tubes, 2:3:4:5
 PROGRAM_CLASS[15] = PluckedStringProperties # dulcimer: struck STRINGS, not a bar
 # 16-23  Organ                         -> flue pipes; reeds/accordion from 20
-_fill(16, 19, FlueOrganProperties)
+# 16-18 are a HAMMOND, not a pipe organ: one instrument, three registrations.
+# They had all been pointed at FlueOrganProperties, which gets the speech, the
+# harmonic slope and the tuning of the drawbars wrong, all for the same reason
+# -- a tonewheel is not a pipe.
+_fill(16, 16, DrawbarOrganProperties)
+_fill(17, 17, PercussiveOrganProperties)
+_fill(18, 18, RockOrganProperties)
+_fill(19, 19, FlueOrganProperties)
 _fill(20, 23, ReedOrganProperties)
 # 24-31  Guitar                        -> plucked strings
 _fill(24, 31, PluckedStringProperties)

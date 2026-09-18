@@ -487,7 +487,7 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
+    cols = {k:[] for k in ("az","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
@@ -508,6 +508,10 @@ def prepare(path, tuner='hybrid'):
     # delays come from -- so an object export that collapses a channel to one
     # point throws away placement the model already has.
     _PX = [0.0]; _PZ = [0.0]  # metres, + = right / up
+    # Azimuth of the receiver this partial is travelling to, radians. The
+    # listener for a direct partial, the MIRRORED listener for an image. Only
+    # the rotating speaker uses it, and only it knows the difference matters.
+    _AZ = [0.0]
     _radius = [None]         # radiating aperture for THIS partial (organ ranks vary)
     # How much power the sources actually put INTO the room, per octave, which
     # is what the diffuse tail is excited by. Accumulated on the direct partials
@@ -520,6 +524,8 @@ def prepare(path, tuner='hybrid'):
         # direct sound, which also emits the images.
         om = om * _PJ[0]
         dl, dr, px, pz = _place if _place else (_DL[0], _DL[1], _PX[0], _PZ[0])
+        if _place is None:
+            _AZ[0] = math.atan2(px, max(props.radiation_distance, 1e-6))
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
         # delays the whole signal; delaying only the envelope leaves both ears
         # with identical carrier phase, so a held note has no interaural time
@@ -538,7 +544,7 @@ def prepare(path, tuner='hybrid'):
         # hrtf_gain, so keeping it costs one column and makes a source-referenced
         # (object) render exact rather than an un-mixing of the binaural one.
         A["aM"].append(ampM); A["mch"].append(_MCH[0])
-        A["px"].append(px); A["pz"].append(pz)
+        A["px"].append(px); A["pz"].append(pz); A["az"].append(_AZ[0])
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -565,6 +571,7 @@ def prepare(path, tuner='hybrid'):
             _QACC[bi][1] += e / max(q, 1e-6)
         if _place is not None or not REFLECT:
             return
+        _direct_az = math.atan2(px, max(props.radiation_distance, 1e-6))
         # THE REFLECTIONS. Each is this same partial heard again off one
         # surface, and every term in it is frequency-dependent, which is why it
         # belongs here and not in a reverb: how much the instrument sent that
@@ -580,6 +587,7 @@ def prepare(path, tuner='hybrid'):
         for rg, rdelay, image in props.reflection_terms(
                 nomf, px, props.radiation_distance, pz, _radius[0]):
             ix, iy, iz = image
+            _AZ[0] = math.atan2(ix, max(iy, 1e-6))
             rli, rri, rld, rrd = props.hrtf_at(ix, iz, iy)
             gm = ampM * rg
             emit_partial(om/_PJ[0], gm*props.hrtf_gain(nomf, rli),
@@ -587,6 +595,7 @@ def prepare(path, tuner='hybrid'):
                          non + rdelay*SR, noff + rdelay*SR, fa, re, ch,
                          logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0,
                          _place=(rld*SR, rrd*SR, ix, iz))
+        _AZ[0] = _direct_az
     # SCRAPED instruments expand into their individual ridge impacts before
     # anything else looks at the note list, so the choke and the envelopes all
     # see the real strokes.
@@ -671,6 +680,7 @@ def prepare(path, tuner='hybrid'):
     # drags the whole line late.
     cons_bursts = []
     _CONS_SRC = {}
+    _LESLIE_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -875,6 +885,8 @@ def prepare(path, tuner='hybrid'):
         # saw a props and never got a room -- see the reflection pass below.
         if ch not in _CONS_SRC:
             _CONS_SRC[ch] = (props, _PX[0], _PZ[0], _radius[0])
+        if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
+            _LESLIE_CH[ch] = bool(getattr(props, 'leslie_fast', True))
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             li, ri, _sd0, _sd1 = seats[0]
@@ -1153,6 +1165,17 @@ def prepare(path, tuner='hybrid'):
                               100 + _ti))
         _out.append((_n, _ctr, _bw, _shape, tuple(_emit)))
     cons_bursts = _out
+
+    # THE ROTATING SPEAKER. Every row already knows where it went -- px/pz is
+    # the listener's position for a direct partial and the IMAGE's for a
+    # reflected one -- so each takes the rotor phase of its own azimuth, and
+    # the room hears a different quarter of the turn than the listener does.
+    # That difference is the effect; see leslie.py.
+    if _LESLIE_CH:
+        import leslie as _LES
+        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az',))
+        if _n:
+            print("  leslie: %d channels, %d sideband partials" % (len(_LESLIE_CH), _n))
 
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
