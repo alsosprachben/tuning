@@ -161,7 +161,12 @@ def expand(A, channels, sr, cols):
         A['vd'][i] = fm
         A['vr'][i] = rate
         A['vp'][i] = math.atan2(math.sin(ph), math.cos(ph))
-        if am <= 1e-4:
+        # A STOPPED ROTOR HAS NO SIDEBANDS. At rate 0 they would land exactly
+        # on the carrier and simply add level -- a brake that makes the organ
+        # louder, which is not what a brake does.
+        if am <= 1e-4 or rate < 0.05:
+            if rate < 0.05:
+                A['vd'][i] = 0.0
             continue
         dw = 2.0 * math.pi * rate / sr
         for sign in (1.0, -1.0):

@@ -3045,6 +3045,14 @@ class TonewheelProperties(SynthProperties):
     harmonic_decay_dampening = 0.0
     sustain_level = 1.0
 
+    # DRAWBARS ARE A REGISTRATION, the same machinery the pipe organ and the
+    # harpsichord use: CC11 carries the low seven and CC43 the high. Without
+    # this flag the renderer treats CC11 as a VOLUME instead (chan_vol becomes
+    # (v7*v11)^2 for anything not registerable), so pulling a drawbar would
+    # have turned the organ down rather than changed its colour, and the
+    # registration would have been stuck on default_stops forever.
+    registerable = True
+
     # The drawbars. Ratios are TEMPERED, not integer -- see above. Amplitudes
     # are the drawbar at 8, the stop mask choosing which are pulled.
     stop_ranks = [
