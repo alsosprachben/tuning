@@ -1619,3 +1619,34 @@ diagnosis rather than a repair.
 Worth noting for any bass voice, not only the organ: the comb sits where it
 sits in HERTZ, so it lands on a different harmonic of every pitch, and it bites
 hardest where the harmonics are closest together -- the bottom of the compass.
+
+## The flue organ's harmonic slope is too shallow
+
+Measured on a single D2, each rank alone, no room at all, fitted over the first
+eight partials:
+
+| rank | slope |
+|---|---|
+| flue 8' (principal) | **-6.2 dB/octave** |
+| reed 8' (odd partials) | -6.3 dB/octave |
+| real open principal, literature | -10 to -14 dB/octave |
+
+`bore_corner_hz` is 0 for the organ, so `harmonic_volume` short-circuits and
+the spectrum is `series_volume` alone -- amplitude proportional to 1/m raised
+to `tonal_dampening`, which `OrganProperties` sets to 1.4. The relation comes
+out linear: slope = -6.02 * dampening + 2.2, so 1.4 gives -6.2 and the real
+range wants 2.2 to 2.6.
+
+THE PARAMETER IS SHARED WITH THE REED AND SHOULD NOT BE. At 1.4 the reed
+measures -6.3 dB/oct, which is RIGHT -- a reed stop is genuinely brighter than
+a principal, and that is most of what distinguishes them. Moving the family
+value would fix the flue by breaking the reed. The correction belongs on
+`FlueOrganProperties` alone.
+
+Not applied pending an ear. At 2.2 on the flue alone, the Passacaglia's
+2.8-4.5 kHz band falls 5.5 dB and 4.5-8 kHz falls 9.0 dB, with everything
+below 1.6 kHz within half a decibel.
+
+Note the interaction with the previous section: a shallow slope puts more
+energy in the upper partials, which is exactly where the sparse early field
+combs. The two faults compound, and the brightness was audible first.

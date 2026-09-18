@@ -20,11 +20,21 @@ them, plus one at the four-voice chordal transition into the final section.
 Nothing is ever taken away, which is what makes it a crescendo rather than a
 sequence of registrations.
 
-THE FIRST BRIGHTENING ADDS NOTHING. D minor plays on a stopped flute over a
-flue 8' pedal; F major moves the manual to the principal 8' and leaves the
-pedal where it is. No rank is drawn -- a stopped pipe is dark and hollow and a
-principal is not, so the change of colour IS the change. Everything after that
-is accumulation, and it can be because this step was not.
+THE FIRST BRIGHTENING ADDS NOTHING. D minor is a stopped flute over a stopped
+pedal; F major moves BOTH to the principal 8'. No rank is drawn -- a stopped
+pipe and an open one are different sounds at the same pitch and the same
+count, so the change of colour IS the change. Everything after that is
+accumulation, and it can be because this step was not.
+
+THE OPENING PEDAL IS THE STOPPED RANK, and the reason is measurable. A stopped
+pipe has no even harmonics: on D2 its second partial is 132 dB down, so it is
+very nearly the fundamental alone, which is what a Positiv registration wants
+under it. The open principal is the opposite -- a full series with the second
+only 6 dB down -- and the church's two first-order images land destructively
+on that second partial (0.469 and 0.200, so 1 - 0.669 = -9.6 dB) and take it
+out. What is left is a strong fundamental, no second, and a third at -9 dB,
+which is within a decibel of the REED's own spectrum. Ben heard the opening
+pedal as a reed and it was one, in every way that a spectrum can be.
 """
 import os
 import sys
@@ -78,7 +88,8 @@ PLAN = {
         (at(WALL),      ['8', '4', '2', '2-2/3', 'mixture']),
         (at(KEY['D2']), ['8', '4', '2', '2-2/3', '16', '5-1/3', 'mixture'])],
     # pedal flue
-    1: [(0.0,           ['8']),
+    1: [(0.0,           ['flute']),                             # stopped, not open
+        (at(KEY['F']),  ['8']),                                  # principal, with the manual
         (at(KEY['A']),  ['16', '8', '4']),
         (at(KEY['D2']), ['16', '8', '4', '5-1/3'])],
     # pedal reed: the weight, entering with the wall
