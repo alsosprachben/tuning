@@ -1580,3 +1580,42 @@ throughout** -- including the violins carrying the bee line `con sord.` -- and
 the horns as muted trumpet. The file's own first program was right in all six
 cases. Nothing about this is audible until it is rendered, and by then it
 sounds like a choice.
+
+## The early reflections comb the pedal register
+
+Ben, on BuxWV 161: "the first D pedal is definitely not a flue pipe. It is a
+reed. I can hear it." He was right about the sound and it was neither the
+registration nor the voice.
+
+Isolated, a D2 on the flue organ's 8' rank:
+
+| | h1 | h2 | h3 | h4 | h5 |
+|---|---|---|---|---|---|
+| `harmonic_volume` says | 0.0 | -6.0 | -9.5 | -15.6 | -15.6 |
+| rendered, reflections off | 0.0 | **-7.2** | -9.9 | -12.2 | -14.4 |
+| rendered, reflections on | 0.0 | **-16.4** | -9.1 | -9.2 | -17.1 |
+
+The voice is right to within a decibel until the room touches it. With the
+first-order images in, the second harmonic loses 9 dB -- and a spectrum of
+strong fundamental, no second and a healthy third is a REED. The flue pipe is
+being pushed onto the reed's own spectrum by the room, in the one register
+where it is audible as a change of stop rather than of colour.
+
+It is not the mono sum: left and right each measure -16.4 alone.
+
+The mechanism is that the early field is SPARSE. `reflection_order = 1` yields
+two surviving images for this voice, at -6.6 dB / 1.87 ms and -14.0 dB /
+39.5 ms. Two discrete arrivals comb; twenty would begin to diffuse, which is
+what a real church does between the direct sound and the statistical tail.
+The tail itself is fine -- roomtail convolves it and it is dense by
+construction. The gap is between the direct sound and the mixing time.
+
+WHAT WAS NOT DONE: raising the reflection order. It is the principled fix and
+it is not free -- every image is a full set of partials, and the count enters
+the render cost linearly. `TUNING_REFLECT=0` recovers 6.8 dB of the second
+harmonic in the finished piece and keeps the diffuse tail, which is a
+diagnosis rather than a repair.
+
+Worth noting for any bass voice, not only the organ: the comb sits where it
+sits in HERTZ, so it lands on a different harmonic of every pitch, and it bites
+hardest where the harmonics are closest together -- the bottom of the compass.
