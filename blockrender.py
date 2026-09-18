@@ -1201,7 +1201,7 @@ def prepare(path, tuner='hybrid'):
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
                 cons_bursts=cons_bursts,
                 room_q=room_q)
-    for k,dt in (("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),
+    for k,dt in (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),
                  ("px","f4"),("pz","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),

@@ -52,6 +52,7 @@ import random as _random
 os.environ.setdefault("OMP_WAIT_POLICY", "passive")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
+import math
 import numpy as np
 import mido
 import blockrender as B
@@ -66,7 +67,7 @@ from percussion_map import percussion_for_note, choke_group, GM_PERCUSSION_CHANN
 COLS_F8 = ("om", "p0", "p0R")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
-           "vd", "vr", "vp", "delL", "delR")
+           "vd", "vr", "vp", "delL", "delR", "az")
 COLS_I8 = ("non", "noff")
 COLS_I4 = ("gr", "cr", "pl")
 ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
@@ -82,6 +83,33 @@ DRUM_RANGE = (35, 87)           # every note percussion_map has a voice for
 # is no reason the live engine should be the one place they cannot be played.
 # 82 and 83 are real holes in the map; warm() already skips what it cannot
 # build, so they cost nothing.
+
+
+class LiveRotor:
+    """One rotor, advanced a block at a time.
+
+    The offline Rotor precomputes its whole trajectory because it knows how
+    long the piece is. Live there is no end, so this integrates forward: one
+    exponential step toward the requested speed per callback, and the angle
+    accumulated from the rate as it actually was, not as it was asked to be.
+    """
+
+    def __init__(self, horn):
+        import leslie as _L
+        self.up = _L.HORN_SPIN_UP if horn else _L.DRUM_SPIN_UP
+        self.down = _L.HORN_SPIN_DOWN if horn else _L.DRUM_SPIN_DOWN
+        self.ratio = 1.0 if horn else _L.DRUM_RATIO
+        self.rate = _L.CHORALE
+        self.target = _L.CHORALE
+        self.angle = 0.0
+
+    def advance(self, dt):
+        tau = self.up if self.target > self.rate else self.down
+        self.rate += (self.target - self.rate) * (1.0 - math.exp(-dt / tau))
+        self.angle += 2.0 * math.pi * self.rate * self.ratio * dt
+        if self.angle > 1e6:
+            self.angle = math.fmod(self.angle, 2.0 * math.pi)
+        return self.angle
 
 
 class Slab:
@@ -106,6 +134,18 @@ class Slab:
         # rather than to zero: at zero the chiff's hash index never advances, so
         # the "noise" becomes a fixed phase offset and the wash turns tonal.
         self.a["cbw"][:] = B.RAND_GRAN
+        # THE ROTOR'S SIDE OF THE SLAB. None of this is a kernel column --
+        # synth_partials never asks for it -- it is what the callback needs to
+        # recompute each partial's level every block: how deeply this partial
+        # swings (deeper the higher it sits, because a horn beams), the azimuth
+        # it left by, which rotor carries it, and the amplitude it would have
+        # had standing still.
+        self.ls_on = np.zeros(capacity, bool)
+        self.ls_am = np.zeros(capacity, np.float32)
+        self.ls_ph = np.zeros(capacity, np.float32)
+        self.ls_horn = np.zeros(capacity, bool)
+        self.ls_aL = np.zeros(capacity, np.float32)
+        self.ls_aR = np.zeros(capacity, np.float32)
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
         # A slot can be scheduled for retirement twice -- stamp() schedules a
@@ -158,6 +198,39 @@ class Slab:
         # a limiter behind. Set by Live from --headroom.
         self.headroom = 1.0
 
+    def leslie_arm(self, slots, az, nf):
+        """Record what the callback needs to swing these partials."""
+        import leslie as _L
+        if not slots:
+            return
+        idx = np.fromiter(slots, np.int64, len(slots))
+        nf = np.asarray(nf, np.float64)
+        horn = nf >= _L.CROSSOVER_HZ
+        x = (nf / 700.0) ** 2
+        am = 0.10 + (0.85 - 0.10) * x / (1.0 + x)      # leslie.beam_depth
+        self.ls_on[idx] = True
+        self.ls_ph[idx] = np.asarray(az, np.float32)
+        self.ls_horn[idx] = horn
+        self.ls_am[idx] = np.where(horn, am, am * 0.5)
+        self.ls_aL[idx] = self.a["aL"][idx]
+        self.ls_aR[idx] = self.a["aR"][idx]
+
+    def leslie_swing(self, horn_angle, drum_angle):
+        """Set every rotor partial's level from where the rotor has got to.
+
+        This is the whole point of doing it here rather than as sidebands: the
+        angle is evaluated NOW, so a held chord follows a speed change instead
+        of keeping whatever it was born with.
+        """
+        m = self.ls_on & self.busy
+        if not m.any():
+            return
+        idx = np.flatnonzero(m)
+        ang = np.where(self.ls_horn[idx], horn_angle, drum_angle)
+        g = 1.0 + self.ls_am[idx] * np.cos(ang - self.ls_ph[idx])
+        self.a["aL"][idx] = self.ls_aL[idx] * g
+        self.a["aR"][idx] = self.ls_aR[idx] * g
+
     def prep(self):
         """The kernel takes pointers into these arrays, and the arrays never move
         -- only their contents change -- so the dict is built once. Rebuilding it
@@ -184,6 +257,7 @@ class Slab:
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
+        self.ls_on[idx] = False
         self.dirty = True
         a = self.a
         for k in COLS_F4:
@@ -595,7 +669,19 @@ class Bank:
         # prepare() extends it to 8 s. The template has to be long enough to
         # hold that, or the tail is cut at build time.
         tr.append(mido.MetaMessage("end_of_track", time=480 * (18 if self.drums else 1)))
-        p = B.prepare(m, self.tuner)
+        if self.leslie:
+            # NO SIDEBANDS LIVE. Offline the level swing has to be partials
+            # because the render is one stateless call; here there is a
+            # callback, so the swing is a gain and the rotor stays a thing
+            # that can still be turned while a chord is held.
+            import leslie as _L
+            _was, _L.SIDEBANDS = _L.SIDEBANDS, False
+            try:
+                p = B.prepare(m, self.tuner)
+            finally:
+                _L.SIDEBANDS = _was
+        else:
+            p = B.prepare(m, self.tuner)
         t = {k: np.array(p[k]) for k in ALL_COLS}
         t["P"] = p["P"]
         nf = t["nf"].astype(np.float64)
@@ -802,7 +888,11 @@ class Live:
         # those parts the mod wheel is the rotor instead. The VOICE decides
         # what CC1 means, never a mode: a held controller value cannot be
         # reinterpreted under it, which is the failure a mode would invite.
-        self.rotor_fast = {}    # channel -> True (tremolo) / False (chorale)
+        self.rotor_fast = {}    # channel -> the CC1 zone a NEW note is built at
+        # ONE CABINET, not one per channel: there is a Leslie in the room and
+        # everything routed to it turns with the same rotors.
+        self.rotor_horn = LiveRotor(True)
+        self.rotor_drum = LiveRotor(False)
         self.cc1_count = 0      # how many mod-wheel messages have arrived
         self.cc1_last = -1      # and the last value, so a monitor can see them
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
@@ -905,6 +995,10 @@ class Live:
                     z = _LES.zone(msg.value)
                     self.rotor_fast[ch] = (0 if z == _LES.STOP
                                            else 64 if z == _LES.CHORALE else 127)
+                    # The rotors are AIMED, not set: they spend real seconds
+                    # getting there, and notes already sounding follow them.
+                    self.rotor_horn.target = z
+                    self.rotor_drum.target = z
                 for part in organs:
                     self._crescendo(part, ch, msg.value, n0)
                 if others:
@@ -1055,9 +1149,13 @@ class Live:
         if not got:
             return
         cols, n, hrel = got
-        if not self.slab.stamp_cols(cols, n, (part.pid, ch, note, rank), n0,
+        key = (part.pid, ch, note, rank)
+        if not self.slab.stamp_cols(cols, n, key, n0,
                                     part.gain(), hrel, 0, False):
             self.dropped += 1
+            return
+        if part.bank.leslie:
+            self.slab.leslie_arm(self.slab.live.get(key), cols["az"], cols["nf"])
 
     def _listens(self, part, ch):
         return (part.channel is None or part.channel == ch) and not part.muted
@@ -1188,6 +1286,10 @@ class Live:
             self.apply(n0)
             self.sweep(n0)
             self.slab.reap(n0)
+            if self.slab.ls_on.any():
+                dt = frame_count / float(self.rate)
+                self.slab.leslie_swing(self.rotor_horn.advance(dt),
+                                       self.rotor_drum.advance(dt))
             L, R = self.renderer.render(n0, frame_count)
         except Exception as e:
             # Last line of defence: emit silence for this block rather than let

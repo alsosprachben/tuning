@@ -54,6 +54,14 @@ FAST_HZ = 6.60              # tremolo
 DRUM_RATIO = -0.92
 C_SOUND = 343.0
 
+# OFFLINE the level swing has to be sidebands: blockrender renders a whole file
+# in one stateless call, so there is nowhere to put a gain that changes with
+# time. LIVE there is a callback every 2.7 ms, which is 55 updates per turn of
+# a 6.6 Hz rotor -- so the swing belongs there, as a gain, the way a real-time
+# engine would do it. Then the rotor is a continuously evaluated ANGLE rather
+# than something baked into a note, and it can change under a held chord.
+SIDEBANDS = True
+
 
 def azimuth(x, z):
     """Where a receiver sits, as seen from the cabinet."""
@@ -164,7 +172,7 @@ def expand(A, channels, sr, cols):
         # A STOPPED ROTOR HAS NO SIDEBANDS. At rate 0 they would land exactly
         # on the carrier and simply add level -- a brake that makes the organ
         # louder, which is not what a brake does.
-        if am <= 1e-4 or rate < 0.05:
+        if not SIDEBANDS or am <= 1e-4 or rate < 0.05:
             if rate < 0.05:
                 A['vd'][i] = 0.0
             continue
