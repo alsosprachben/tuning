@@ -6,6 +6,21 @@
   2. vocaltract.py applies the tract as a filter that moves between syllables
   3. the consonants are already noise and ride along unchanged
 
+ONE TRACT PER PART, which is why this renders STEMS rather than a mix. A bass
+and a treble do not share a throat: VOICE_BODIES puts them 30% apart in length
+-- 19.0 cm against 14.6 -- and filtering a mixed stem can only apply one of
+them to all of it, so every part was being sung down a 17.5 cm male tract.
+blockrender's stems are a row selection over the same partial table and sum
+back to the mix sample for sample, so each part can be filtered with its own
+tract and its own words and added up with nothing lost.
+
+Each part also gets ITS OWN lyric timeline now. The old path took whichever
+channel had the most syllables and applied that trajectory to everything,
+which is only right when the parts move together.
+
+A channel with no lyrics passes through untouched, so this no longer needs a
+voice-only file: an orchestra can come along and arrive unfiltered.
+
 Usage: singpass.py IN.mid OUT.wav [tuner] [--lang latin] [--glide 0.07]
 """
 import os, shutil, subprocess, sys
@@ -30,54 +45,76 @@ def main(argv):
     import blockrender as B, vowels as W, vocaltract as VT, vocaltube as VU
     from roomtail import read_wav, write_wav
 
+    import tonelib as T
+
     env = dict(os.environ, TUNING_VOCAL_FLAT='1', TUNING_LYRIC_LANG=lang)
-    tmp = outp + '.source.wav'
+    stems = outp + '.stems'
     subprocess.run([sys.executable, os.path.join(HERE, 'blockrender.py'),
-                    inp, tmp, tuner], env=env, check=True,
-                   stdout=subprocess.DEVNULL)
+                    inp, outp + '.ignored.wav', tuner, '--stems', stems],
+                   env=env, check=True, stdout=subprocess.DEVNULL)
+    import json
+    base = os.path.splitext(os.path.basename(inp))[0]
+    with open(os.path.join(stems, base + '.objects.json')) as fh:
+        man = json.load(fh)['objects']
 
     rows = B._lyric_vowels(inp, lang)
-    if not rows:
-        print("  no lyrics; nothing to articulate"); return 1
-    # every part sings the same text here, so one trajectory serves; take the
-    # part with the most syllables
-    ch = max(rows, key=lambda c: len(rows[c]))
-    # THE TRACT COMES OUT OF THE CONSTRICTION. A point at the consonant's
-    # locus just before each vowel means the formants TRAVEL into the vowel
-    # rather than appearing at it -- which is the transition that makes a
-    # consonant sound attached to its syllable.
-    timeline = []
-    for t, v, *rest in rows[ch]:
-        if v not in W.VOWELS: continue
-        if tube and v not in VU.SHAPES: continue
-        con = rest[0] if rest else None
-        loc = W.locus_of(con) if con else None
-        # The locus must sit FURTHER BACK than the glide is wide, or the
-        # move into it and the move out of it overlap and it is averaged
-        # away -- which is what happened at 45 ms against a 70 ms glide:
-        # the loci were all present and changed nothing.
-        if tube:
-            place = W.PLACE.get(con) if con else None
-            if place in VU.SHAPES:
-                timeline.append((max(0.0, t - glide * 1.35), VU.shape_of(place)))
-            timeline.append((t, VU.shape_of(v)))
+    parts = B._declared_voice_parts() or B._voice_parts(inp)
+
+    acc = None
+    sr = None
+    for rec in man:
+        ch = rec['channel']
+        x, sr = read_wav(os.path.join(stems, rec['file']))
+        name = parts.get(ch) if parts else None
+        # voice_body() returns the PART it recognised, not a number; the
+        # number is VOICE_BODIES' business. Tokenised, so "bassoon" is not
+        # a bass.
+        part = T.voice_body(name) if name else None
+        ratio = T.VOICE_BODIES.get(part) if part else None
+        # THE RATIO SCALES FORMANTS, SO THE LENGTH IS ITS RECIPROCAL. A bass
+        # sits at 0.92 -- formants 8% low -- which is a tract 8% LONGER, not
+        # shorter. Inverting this by hand once gave every bass a boy's throat.
+        cm = VU.TRACT_CM / ratio if ratio else VU.TRACT_CM
+        cm *= body
+        line = [r for r in rows.get(ch, [])]
+        if not line:
+            print("  ch%-3d %-10s no words -- passes through" % (ch, part or ''))
+            y = x
         else:
-            if loc: timeline.append((max(0.0, t - glide * 1.35), loc))
-            timeline.append((t, W.VOWELS[v]))
-    timeline.sort(key=lambda r: r[0])
-    print("  %d syllables on channel %d, glide %.0f ms, %s tract%s" % (
-        len(timeline), ch, glide * 1000, "TUBE" if tube else "formant",
-        (", %.1f cm" % (VU.TRACT_CM * body)) if tube else ""))
+            timeline = []
+            for t, v, *rest in line:
+                if v not in W.VOWELS: continue
+                if tube and v not in VU.SHAPES: continue
+                con = rest[0] if rest else None
+                if tube:
+                    place = W.PLACE.get(con) if con else None
+                    if place in VU.SHAPES:
+                        timeline.append((max(0.0, t - glide * 1.35),
+                                         VU.shape_of(place)))
+                    timeline.append((t, VU.shape_of(v)))
+                else:
+                    loc = W.locus_of(con) if con else None
+                    if loc:
+                        timeline.append((max(0.0, t - glide * 1.35), loc))
+                    timeline.append((t, W.VOWELS[v]))
+            timeline.sort(key=lambda r: r[0])
+            print("  ch%-3d %-10s %3d syllables, tract %.1f cm"
+                  % (ch, part or '(unnamed)', len(timeline), cm))
+            y = VT.apply(x, sr, timeline, glide=glide, tube=tube, tract_cm=cm)
+            a = float(np.sqrt((x.astype(np.float64) ** 2).mean()))
+            b = float(np.sqrt((y.astype(np.float64) ** 2).mean()))
+            if b > 1e-9:
+                y = (y * (a / b)).astype(np.float32)
+        if acc is None:
+            acc = np.zeros_like(y, dtype=np.float64)
+        n = min(len(acc), len(y))
+        acc[:n] += y[:n]
+    if acc is None:
+        print("  nothing rendered"); return 1
+    y = acc.astype(np.float32)
+    tmp = os.path.join(stems, base + '.room.json')
 
-    x, sr = read_wav(tmp)
-    y = VT.apply(x, sr, timeline, glide=glide, tube=tube,
-                 tract_cm=VU.TRACT_CM * body)
-    # the tract filter changes the level; match the source's loudness
-    a = float(np.sqrt((x.astype(np.float64) ** 2).mean()))
-    b = float(np.sqrt((y.astype(np.float64) ** 2).mean()))
-    if b > 1e-9: y = (y * (a / b)).astype(np.float32)
-
-    side = os.path.splitext(tmp)[0] + '.room.json'
+    side = tmp
     if dry or not os.path.exists(side):
         write_wav(outp, y, sr)
         if os.path.exists(side):
@@ -111,7 +148,8 @@ def main(argv):
         for p in (mid, os.path.splitext(mid)[0] + '.room.json'):
             if os.path.exists(p):
                 os.remove(p)
-    for p in (tmp, side):
+    shutil.rmtree(stems, ignore_errors=True)
+    for p in (outp + '.ignored.wav',):
         if os.path.exists(p):
             os.remove(p)
     print("  wrote %s" % outp)
