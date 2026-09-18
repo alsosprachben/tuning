@@ -507,8 +507,13 @@ class Bank:
         # a change of speed is a change of PARTIALS and cannot be retuned --
         # it needs a different template. Hence a speed axis on the cache.
         self.leslie = (not drums) and getattr(pc, "leslie", False)
-        self.speeds = (False, True) if self.leslie else (None,)
-        self.leslie_default = bool(getattr(pc, "leslie_fast", True))
+        # THE SAME THREE POSITIONS THE OFFLINE PATH READS, as CC1 values, so
+        # one MIDI file means one thing in both. They had disagreed: offline
+        # leslie.zone() brakes below 42 and runs chorale to 84, live I had
+        # written a bare >= 64 with no brake at all, so the same wheel position
+        # rendered as two different speeds depending on which path played it.
+        self.speeds = (0, 64, 127) if self.leslie else (None,)
+        self.leslie_default = 127 if getattr(pc, "leslie_fast", True) else 64
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
         # The order a crescendo pedal adds them in, which is the organ's own idea
         # of how a registration should grow.
@@ -579,9 +584,11 @@ class Bank:
             tr.append(mido.Message("control_change", channel=ch, control=43, value=127, time=0))
         if fast is not None:
             # CC1 is the half-moon switch on a tonewheel voice; blockrender
-            # reads it and gives every partial the rotor's rate and angle.
+            # reads it through leslie.zone() and gives every partial the
+            # rotor's rate and angle. `fast` is the CC value itself, so the
+            # zone boundaries live in one place.
             tr.append(mido.Message("control_change", channel=ch, control=1,
-                                   value=127 if fast else 64, time=0))
+                                   value=int(fast), time=0))
         tr.append(mido.Message("note_on", channel=ch, note=note, velocity=vel, time=0))
         tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
         # A struck drum ignores note-off and rings out on its own decay, so
@@ -892,11 +899,12 @@ class Live:
                 organs = [p for p in here if p.organ and not p.bank.leslie]
                 others = [p for p in here if not p.organ and not p.bank.leslie]
                 if rotors:
-                    # Tremolo above the midpoint, chorale below. New notes take
-                    # the new speed; notes already sounding keep theirs, which
-                    # is what a rotor does -- it does not reach back and change
-                    # what is already in the air.
-                    self.rotor_fast[ch] = msg.value >= 64
+                    # Quantised to the zone the offline path uses, so the cache
+                    # needs three templates and not one per controller step.
+                    import leslie as _LES
+                    z = _LES.zone(msg.value)
+                    self.rotor_fast[ch] = (0 if z == _LES.STOP
+                                           else 64 if z == _LES.CHORALE else 127)
                 for part in organs:
                     self._crescendo(part, ch, msg.value, n0)
                 if others:
