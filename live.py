@@ -146,6 +146,7 @@ class Slab:
         self.ls_horn = np.zeros(capacity, bool)
         self.ls_aL = np.zeros(capacity, np.float32)
         self.ls_aR = np.zeros(capacity, np.float32)
+        self.last_slots = []
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
         # A slot can be scheduled for retirement twice -- stamp() schedules a
@@ -341,6 +342,13 @@ class Slab:
         mv = float(np.mean(tmpl["vd"])) if n else 0.0
         self.vsc[idx] = (tmpl["vd"] / mv) if mv > 1e-12 else 1.0
         self.live.setdefault(key, []).extend(slots)
+        # THE SLOTS JUST ALLOCATED, which is not the same as live[key]: that
+        # accumulates, by design -- a key is stamped once per rank, and a
+        # re-struck note adds to it rather than replacing it. Arming the rotor
+        # from live[key] therefore handed 96 slots an array of 48 azimuths the
+        # second time a note was hit, which threw inside the callback, and the
+        # callback answers an exception with silence and a skipped reap.
+        self.last_slots = slots
         if oneshot:
             self.oneshot[key] = True
         return True
@@ -566,11 +574,29 @@ class Renderer:
                 self.done[k].set()
 
     def render(self, n0, frames):
+        # PORTAUDIO IS ASKED FOR A BLOCK SIZE, NOT PROMISED ONE. The buffers are
+        # allocated once at `frames` and the kernel writes however many samples
+        # it is told to, straight into them through a pointer -- so a callback
+        # arriving with a larger frame_count than the stream was opened with is
+        # a C write past the end of a numpy array. That is heap corruption, and
+        # it presents exactly as Ben saw it: fine for a minute of playing and
+        # then "malloc(): invalid next size (unsorted)", nowhere near the code
+        # that did it. Grow instead. An allocation on the audio thread is a
+        # glitch; writing past a buffer is a crash an hour later.
+        if frames > len(self.L):
+            self.L = np.zeros(frames, np.float32)
+            self.R = np.zeros(frames, np.float32)
+            self.bufs = [(np.zeros(frames, np.float32),
+                          np.zeros(frames, np.float32))
+                         for _ in range(self.K)]
+            self.grew = getattr(self, "grew", 0) + 1
         b = self.bounds()
         L, R = self.L, self.R
         L[:] = 0.0; R[:] = 0.0
+        # A VIEW OF WHAT WAS ASKED FOR, not the whole buffer: once it has grown
+        # it stays grown, and the caller wants exactly frame_count samples.
         if b is None:                       # nothing occupied: silence, cheaply
-            return L, R
+            return L[:frames], R[:frames]
         if self.K == 1 or self.act < PARALLEL_MIN or frames != self.frames:
             # One call over [0, hi). Slots past the high-water mark are idle and
             # contribute exactly zero, so stopping there is bit-identical.
@@ -585,7 +611,7 @@ class Renderer:
                 L += self.bufs[k][0]; R += self.bufs[k][1]
         L *= T.master_gain; R *= T.master_gain
         np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
-        return L, R
+        return L[:frames], R[:frames]
 
 
 # ---- banks: the expensive, shareable half of a patch ------------------------
@@ -1187,7 +1213,7 @@ class Live:
             self.dropped += 1
             return
         if part.bank.leslie:
-            self.slab.leslie_arm(self.slab.live.get(key), cols["az"], cols["nf"])
+            self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"])
 
     def _listens(self, part, ch):
         return (part.channel is None or part.channel == ch) and not part.muted
