@@ -3010,11 +3010,26 @@ class TonewheelProperties(SynthProperties):
     pluck_dampening = 1.0
     plucked_harmonic = 1000.0
 
-    # Nothing here is a pipe.
+    # Nothing here is a pipe: no chiff, no jet, no air.
     chiff_cycle = 0.0
     chiff_volume = 0.0
-    chiff_min_valve_time = 0.0
-    chiff_max_valve_time = 0.0
+    # BUT NOT ZERO VALVE TIMES, which is not the same statement. These are the
+    # onset and release FADES, not the chiff, and with the chiff times at zero
+    # the release falls back to zero too (see SynthTone.hammer_up: an unset
+    # release_valve_time inherits chiff_max_valve_time) and floors at 1e-4 s.
+    # Every note then ends in a sample-level step -- Ben heard it immediately,
+    # "a bit of a click around the edges... at the ends of all of the notes".
+    # It is the harpsichord's damper bug exactly, and this is the second time
+    # the same fallback has bitten: see HarpsiBase, where it read as a sampler
+    # cutting a voice rather than a damper landing.
+    #
+    # A Hammond's contacts DO make and break fast, and the click is real and
+    # wanted -- but it is a click, not a discontinuity. 1.5 to 3 ms of onset
+    # gives the contact bounce; the release runs a little longer because the
+    # tone still has an amplifier and a speaker cone to get out through.
+    chiff_min_valve_time = 0.0015
+    chiff_max_valve_time = 0.0030
+    release_valve_time = 0.012
     speech_cycles = 0.0
     mode_lock_spread = 0.0
     inharmonicity_dynamic = False
@@ -3024,12 +3039,11 @@ class TonewheelProperties(SynthProperties):
     # close within a millisecond or so of each other and each one steps its
     # wheel in from silence; the step IS the click, and it is broadband because
     # it is a step. Give the envelope a millisecond and it arrives on its own.
-    attack_time = 0.0012
+    attack_time = 0.0015
     decay_db = 0.0                   # a wheel does not decay
     harmonic_decay_db = 0.0
     harmonic_decay_dampening = 0.0
     sustain_level = 1.0
-    release_time = 0.006             # contacts opening, same speed
 
     # The drawbars. Ratios are TEMPERED, not integer -- see above. Amplitudes
     # are the drawbar at 8, the stop mask choosing which are pulled.

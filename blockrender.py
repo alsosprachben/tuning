@@ -886,7 +886,17 @@ def prepare(path, tuner='hybrid'):
         if ch not in _CONS_SRC:
             _CONS_SRC[ch] = (props, _PX[0], _PZ[0], _radius[0])
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
-            _LESLIE_CH[ch] = bool(getattr(props, 'leslie_fast', True))
+            # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
+            # rotor has momentum, so this is a history of requests and not a
+            # speed -- leslie.Rotor spends real seconds getting between them.
+            import leslie as _LES0
+            _req = [(t, _LES0.zone(v)) for t, cc, v in sorted(ccs.get(ch, []))
+                    if cc == 1]
+            if not _req or _req[0][0] > 0.0:
+                _req.insert(0, (0.0, _LES0.TREMOLO
+                                if getattr(props, 'leslie_fast', True)
+                                else _LES0.CHORALE))
+            _LESLIE_CH[ch] = _req
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             li, ri, _sd0, _sd1 = seats[0]
@@ -1175,7 +1185,9 @@ def prepare(path, tuner='hybrid'):
         import leslie as _LES
         _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az',))
         if _n:
-            print("  leslie: %d channels, %d sideband partials" % (len(_LESLIE_CH), _n))
+            print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
+                  % (len(_LESLIE_CH), _n,
+                     sum(len(v) - 1 for v in _LESLIE_CH.values())))
 
     P = len(A["om"])
     def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
