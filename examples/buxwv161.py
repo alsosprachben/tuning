@@ -48,7 +48,22 @@ KEY = {'D1': 1.8, 'F': 86.4, 'A': 170.9, 'D2': 255.5}
 # blaze starts there and arrives rather than switching on at the double bar.
 WALL = 249.5
 LAST = 320.9          # the 28th and final statement
-LEAD = 0.35           # speaking BY the downbeat, not arriving during it
+# WHERE IN THE BAR A STOP IS DRAWN, and it is not a matter of taste.
+#
+# Drawing a stop while a note is held makes that note louder -- which is what
+# a real organ does too, and is why an organist changes between notes. At
+# 0.35 s before the downbeat, which is where this used to sit, EIGHT notes of
+# the previous variation were still sounding and ended a quarter-second later:
+# the old section's last chord swelled and stopped. Ben heard it as "the last
+# note gets suddenly loud".
+#
+# Measured across the seams, anything from -100 ms to +50 ms catches ZERO
+# held notes; -200 ms and earlier catches eight. The texture never rests --
+# four voices minimum, all the way through -- so there is no silence to change
+# in, only the instant where the old chord has released and the new has not
+# yet spoken. 50 ms before the downbeat is inside that window and still leaves
+# the controller ahead of the note-ons it applies to.
+LEAD = 0.05
 
 
 def at(t):
