@@ -216,10 +216,18 @@ def sum_wavs(paths, dest, gains=None, headroom_db=-1.0):
     return dest
 
 
-def roomtail(src, dest):
-    """Convolve the diffuse tail, using the sidecar beside `src`."""
+def roomtail(src, dest, env=None):
+    """Convolve the diffuse tail, using the sidecar beside `src`.
+
+    Pass the SAME TUNING_ROOM the render used. blockrender builds the
+    first-order images against one room and this builds the late field against
+    another if you let it, which puts a hall's early reflections in front of a
+    different hall's tail.
+    """
+    e = dict(os.environ)
+    e.update(env or {})
     subprocess.run([sys.executable, os.path.join(ROOT, 'roomtail.py'),
-                    src, dest], check=True)
+                    src, dest], check=True, env=e)
     return dest
 
 

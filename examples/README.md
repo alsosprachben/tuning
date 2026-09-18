@@ -28,6 +28,7 @@ and comparing them by a single broadband number has hidden the opposite.
 | `choral.py` | The general driver: any lyric-bearing score. Splits choir from everything else, renders each the way it has to be rendered, sums dry and puts the hall over the pair. `--choir-only`, `--both` (formant vs tube), `--choir-db N`. |
 | `lacrimosa_choir.py` | Mozart, Requiem K.626, Lacrimosa -- a named entry point into `choral.py`. |
 | `dies_irae.py` | Mozart, Requiem K.626, Dies Irae. Same, and the reason `--choir-db` exists. |
+| `organ.py` | A registered organ score, by the recipe BWV 542 v7 used: church room in BOTH the render and the tail, `hybrid` tuner, -12 dB for headroom. Worked example: Buxtehude BuxWV 161. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -35,7 +36,22 @@ python3 singpass.py /tmp/daisy.mid /tmp/daisy.wav --lang english --tube
 
 python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --both
 python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --orchestra
+python3 examples/organ.py ~/Downloads/buxtehude_passacaglia_registered.mid /tmp
 ```
+
+## Why organ.py exists at all
+
+BWV 542 v7 was three environment variables on a shell line, and reproducing it
+for the next piece meant grepping a session transcript for the command. That is
+the whole argument for this directory. The three that mattered:
+
+- **the room has to be set TWICE**, once for `blockrender`'s first-order images
+  and once for `roomtail`'s diffuse tail, and to the same value -- otherwise a
+  hall's early reflections arrive in front of a studio's tail;
+- **`hybrid`, not `hybridharm`** -- both were tried on BWV 542 and hybrid is
+  the one that stuck;
+- **-12 dB master**, because `roomtail` adds energy and a mix that peaks near
+  full scale dry has nowhere to put its room.
 
 ## Voices and everything else do not render the same way
 
