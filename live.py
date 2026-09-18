@@ -502,6 +502,13 @@ class Bank:
         pc = None if drums else __import__("patch_map").property_class_for_program(program)
         self.cls_name = "GM percussion" if drums else pc.__name__
         self.organ = (not drums) and getattr(pc, "registerable", False)
+        # A ROTOR IS PART OF THE TEMPLATE, not a control over it. The level
+        # swing is carried by sidebands at the rotor rate (see leslie.py), so
+        # a change of speed is a change of PARTIALS and cannot be retuned --
+        # it needs a different template. Hence a speed axis on the cache.
+        self.leslie = (not drums) and getattr(pc, "leslie", False)
+        self.speeds = (False, True) if self.leslie else (None,)
+        self.leslie_default = bool(getattr(pc, "leslie_fast", True))
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
         # The order a crescendo pedal adds them in, which is the organ's own idea
         # of how a registration should grow.
@@ -556,7 +563,7 @@ class Bank:
             return got[1] if got else None
         return __import__("patch_map").property_class_for_note(self.program, note)
 
-    def _raw_template(self, note, vel):
+    def _raw_template(self, note, vel, fast=None):
         """Build one note at one velocity. Costs 1.4-10 ms: off-thread only."""
         ch = GM_PERCUSSION_CHANNEL if self.drums else 0
         m = mido.MidiFile(type=1, ticks_per_beat=480)
@@ -570,6 +577,11 @@ class Bank:
             # ranks we choose to stamp, not by a gate over ones already there.
             tr.append(mido.Message("control_change", channel=ch, control=11, value=127, time=0))
             tr.append(mido.Message("control_change", channel=ch, control=43, value=127, time=0))
+        if fast is not None:
+            # CC1 is the half-moon switch on a tonewheel voice; blockrender
+            # reads it and gives every partial the rotor's rate and angle.
+            tr.append(mido.Message("control_change", channel=ch, control=1,
+                                   value=127 if fast else 64, time=0))
         tr.append(mido.Message("note_on", channel=ch, note=note, velocity=vel, time=0))
         tr.append(mido.Message("note_off", channel=ch, note=note, velocity=0, time=480))
         # A struck drum ignores note-off and rings out on its own decay, so
@@ -619,18 +631,19 @@ class Bank:
             return self
         lo, hi = self.range
         done = 0
-        total = (hi - lo + 1) * self.nbuckets
+        total = (hi - lo + 1) * self.nbuckets * len(self.speeds)
         for note in range(lo, hi + 1):
             for b in range(self.nbuckets):
-                if (note, b) not in self.templates:
-                    try:
-                        t = self._raw_template(note, self.bucket_vel(b))
-                    except Exception:
-                        t = None         # unmapped drum note: nothing to build
-                    if t is not None:
-                        self.templates[(note, b)] = t
-                        self.partials += t["P"]
-                done += 1
+                for sp in self.speeds:
+                    if (note, b, sp) not in self.templates:
+                        try:
+                            t = self._raw_template(note, self.bucket_vel(b), sp)
+                        except Exception:
+                            t = None     # unmapped drum note: nothing to build
+                        if t is not None:
+                            self.templates[(note, b, sp)] = t
+                            self.partials += t["P"]
+                    done += 1
                 if progress and (done & 15) == 0:
                     progress(self, done / float(total))
         self.warmed = True
@@ -639,10 +652,10 @@ class Bank:
         return self
 
     # ---- lookup (the audio thread's only entry point) -----------------------
-    def get(self, note, vel):
+    def get(self, note, vel, fast=None):
         """Pure lookup. A miss returns None and is NEVER a build: building here
         costs 1.4-10 ms, which is more than a whole 2.7 ms block."""
-        return self.templates.get((note, self.bucket(vel)))
+        return self.templates.get((note, self.bucket(vel), fast))
 
 
 def bank_for(program, drums, tuner, progress=None):
@@ -777,6 +790,12 @@ class Live:
         # string vibrato actually sits.
         self.mod_rate = 0.25    # +25% rate at full wheel
         self.modw = {}          # channel -> wheel position 0..1
+        # Which way the half-moon switch is thrown, per channel. A tonewheel
+        # voice has no crescendo pedal -- that is a pipe-organ control -- so on
+        # those parts the mod wheel is the rotor instead. The VOICE decides
+        # what CC1 means, never a mode: a held controller value cannot be
+        # reinterpreted under it, which is the failure a mode would invite.
+        self.rotor_fast = {}    # channel -> True (tremolo) / False (chorale)
         self.cc1_count = 0      # how many mod-wheel messages have arrived
         self.cc1_last = -1      # and the last value, so a monitor can see them
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
@@ -868,8 +887,16 @@ class Live:
                 # VIBRATO on everything else, and with layers it can be both at
                 # once -- so each part is asked separately rather than the whole
                 # channel taking one branch.
-                organs = [p for p in parts if p.organ and self._listens(p, ch)]
-                others = [p for p in parts if not p.organ and self._listens(p, ch)]
+                here = [p for p in parts if self._listens(p, ch)]
+                rotors = [p for p in here if p.bank.leslie]
+                organs = [p for p in here if p.organ and not p.bank.leslie]
+                others = [p for p in here if not p.organ and not p.bank.leslie]
+                if rotors:
+                    # Tremolo above the midpoint, chorale below. New notes take
+                    # the new speed; notes already sounding keep theirs, which
+                    # is what a rotor does -- it does not reach back and change
+                    # what is already in the air.
+                    self.rotor_fast[ch] = msg.value >= 64
                 for part in organs:
                     self._crescendo(part, ch, msg.value, n0)
                 if others:
@@ -932,7 +959,9 @@ class Live:
         snote = note + part.transpose
         if not 0 <= snote <= 127:
             return
-        tmpl = part.bank.get(snote, vel)
+        tmpl = part.bank.get(snote, vel,
+                             self.rotor_fast.get(ch, part.bank.leslie_default)
+                             if part.bank.leslie else None)
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
             # counted, and the builder thread is what fixes it.
