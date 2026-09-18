@@ -28,7 +28,8 @@ and comparing them by a single broadband number has hidden the opposite.
 | `choral.py` | The general driver: any lyric-bearing score. Splits choir from everything else, renders each the way it has to be rendered, sums dry and puts the hall over the pair. `--choir-only`, `--both` (formant vs tube), `--choir-db N`. |
 | `lacrimosa_choir.py` | Mozart, Requiem K.626, Lacrimosa -- a named entry point into `choral.py`. |
 | `dies_irae.py` | Mozart, Requiem K.626, Dies Irae. Same, and the reason `--choir-db` exists. |
-| `organ.py` | A registered organ score, by the recipe BWV 542 v7 used: church room in BOTH the render and the tail, `hybrid` tuner, -12 dB for headroom. Worked example: Buxtehude BuxWV 161. |
+| `organ.py` | A registered organ score, by the recipe BWV 542 v7 used: church room in BOTH the render and the tail, `hybrid` tuner, -12 dB for headroom. |
+| `buxwv161.py` | Buxtehude's Passacaglia as one long crescendo -- the way passacaglias are played. Registration changes at the key changes, found from the ostinato itself. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -38,6 +39,21 @@ python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --b
 python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --orchestra
 python3 examples/organ.py ~/Downloads/buxtehude_passacaglia_registered.mid /tmp
 ```
+
+## A passacaglia is built, not registered
+
+`buxwv161.py` is the worked example for a registration that CHANGES. A
+passacaglia is played as one accumulation from Positiv to full -- BWV 582 the
+same way -- so the question is only where the changes go, and the answer is
+the key changes. The ostinato states itself 28 times in four groups of seven,
+transposed D-F-A-D, which the script finds rather than assumes; F major is the
+first brightening. One change is not a key change: four-voice quarter-note
+chords at 249.5 s, measured as the steadiest stacked writing in the piece, a
+cadenza of weight rather than of runs, walking into the final section.
+
+Nothing is ever taken away. That is what makes it a crescendo instead of a
+sequence of registrations, and it measures as +10.8 dB from the opening to the
+close with the 2-4 kHz band up 21 dB.
 
 ## Why organ.py exists at all
 
