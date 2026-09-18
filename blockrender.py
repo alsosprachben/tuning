@@ -1173,7 +1173,12 @@ def prepare(path, tuner='hybrid'):
                               _rgain * math.sqrt(max(0.0, 0.5 * (1.0 - _ip))),
                               _rgain * math.sqrt(max(0.0, 0.5 * (1.0 + _ip))),
                               100 + _ti))
-        _out.append((_n, _ctr, _bw, _shape, tuple(_emit)))
+        # AND A STABLE ID. noisegen seeds each burst's noise from its position
+        # in the list, so filtering the list for a stem renumbers every burst
+        # and it comes out as DIFFERENT noise -- which is why the stems did not
+        # sum back to the mix. The index into the full list is the thing that
+        # does not move.
+        _out.append((_n, _ctr, _bw, _shape, tuple(_emit), _bch, _bi))
     cons_bursts = _out
 
     # THE ROTATING SPEAKER. Every row already knows where it went -- px/pz is
@@ -1328,6 +1333,17 @@ def subset(prep, mask, objectify=False):
     above describes from the other side.
     """
     out = dict(prep)
+    # THE BURSTS ARE NOT PARTIALS AND SO ARE NOT MASKED BY THE ROW SELECTION.
+    # dict(prep) carries the whole list into every stem, and synth_window mixes
+    # whatever it is handed -- so four choir stems each got all 369 consonants
+    # and their sum had them four times over. Silent in a plain render, because
+    # there is only one stem; silent in a stems render too, until somebody adds
+    # the stems back up, which is exactly what a per-part tract pass does.
+    bursts = prep.get('cons_bursts')
+    if bursts:
+        chans = set(int(c) for c in np.unique(prep['mch'][mask]))
+        out['cons_bursts'] = [b for b in bursts
+                              if len(b) < 6 or int(b[5]) in chans]
     # By name, not by length: G and S are the registration blocks, not partial
     # columns, and selecting on len(v) == P would take them too on any file
     # whose partial count happened to equal its rank count.

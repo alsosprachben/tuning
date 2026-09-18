@@ -137,14 +137,15 @@ def mix(L, R, n0, bursts, sr):
         return
     w = len(L)
     for i, b in enumerate(bursts):
-        n, ctr, bw, shape, emits = b
+        n, ctr, bw, shape, emits = b[:5]   # [5] channel, [6] stable id
+        bid = b[6] if len(b) > 6 else i
         env = None
         for sl, sr_, gl, gr, tag in emits:
             if (sl + n <= n0 or sl >= n0 + w) and (sr_ + n <= n0 or sr_ >= n0 + w):
                 continue
             if env is None:
                 env = envelope(n, sr)
-            y = burst(n, sr, ctr, bw, seed=i * 131 + tag, shape=shape) * env
+            y = burst(n, sr, ctr, bw, seed=bid * 131 + tag, shape=shape) * env
             _add1(L, y, sl, n, n0, w, gl)
             _add1(R, y, sr_, n, n0, w, gr)
 
