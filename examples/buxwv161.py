@@ -16,9 +16,15 @@ times, in four groups of seven, transposed D - F - A - D, each statement
     F  var  8  86.4 s      D  var 22  255.5 s
 
 Registration changes go AT THE KEY CHANGES, which is where an organist puts
-them -- F major is the first brightening -- plus one at the four-voice chordal
-transition into the final section. Nothing is ever taken away, which is what
-makes it a crescendo rather than a sequence of registrations.
+them, plus one at the four-voice chordal transition into the final section.
+Nothing is ever taken away, which is what makes it a crescendo rather than a
+sequence of registrations.
+
+THE FIRST BRIGHTENING ADDS NOTHING. D minor plays on a stopped flute over a
+flue 8' pedal; F major moves the manual to the principal 8' and leaves the
+pedal where it is. No rank is drawn -- a stopped pipe is dark and hollow and a
+principal is not, so the change of colour IS the change. Everything after that
+is accumulation, and it can be because this step was not.
 """
 import os
 import sys
@@ -52,13 +58,12 @@ def at(t):
 PLAN = {
     # manual flue
     0: [(0.0,           ['flute']),                              # Positiv
-        (at(KEY['F']),  ['8', '4']),                             # first brightening
+        (at(KEY['F']),  ['8']),                                  # first brightening
         (at(KEY['A']),  ['8', '4', '2', '2-2/3']),
         (at(WALL),      ['8', '4', '2', '2-2/3', 'mixture']),
         (at(KEY['D2']), ['8', '4', '2', '2-2/3', '16', '5-1/3', 'mixture'])],
     # pedal flue
     1: [(0.0,           ['8']),
-        (at(KEY['F']),  ['16', '8']),
         (at(KEY['A']),  ['16', '8', '4']),
         (at(KEY['D2']), ['16', '8', '4', '5-1/3'])],
     # pedal reed: the weight, entering with the wall
