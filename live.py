@@ -214,6 +214,38 @@ class Slab:
         self.ls_am[idx] = np.where(horn, am, am * 0.5)
         self.ls_aL[idx] = self.a["aL"][idx]
         self.ls_aR[idx] = self.a["aR"][idx]
+        # THE DOPPLER IS NORMALISED TO A REFERENCE ROTOR, whatever speed the
+        # template happened to be built at, so every rotor partial shares one
+        # base and a single scalar can move the whole group. vsc is set equal
+        # to vbase so retune's `vbase + vd*vsc` becomes vbase*(1+vd) -- depth
+        # then tracks rate linearly, which is what Doppler does: the deviation
+        # is the arm's tip speed, and tip speed is proportional to rate.
+        ref = np.where(horn, _L.FAST_HZ, _L.FAST_HZ * abs(_L.DRUM_RATIO))
+        rad = np.where(horn, _L.HORN_RADIUS, _L.DRUM_RADIUS)
+        self.vrbase[idx] = ref
+        self.vbase[idx] = 2.0 * np.pi * rad * ref / _L.C_SOUND
+        self.vsc[idx] = self.vbase[idx]
+
+    def leslie_doppler(self, n, horn_rate, drum_rate):
+        """Move the rotor partials' frequency modulation to the current speed.
+
+        retune() does the hard part -- it puts the phase back so neither the
+        carrier nor the accumulated vibrato phase steps, which is what would
+        click. Called only when the rate has actually moved, so a settled rotor
+        costs nothing.
+        """
+        import leslie as _L
+        m = self.ls_on & self.busy
+        if not m.any():
+            return
+        for mask, rate, ref in ((m & self.ls_horn, horn_rate, _L.FAST_HZ),
+                                (m & ~self.ls_horn, drum_rate,
+                                 _L.FAST_HZ * abs(_L.DRUM_RATIO))):
+            idx = np.flatnonzero(mask)
+            if not len(idx):
+                continue
+            vrs = max(rate, 1e-4) / ref
+            self.retune(idx.tolist(), n, vd=vrs - 1.0, vrs=vrs)
 
     def leslie_swing(self, horn_angle, drum_angle):
         """Set every rotor partial's level from where the rotor has got to.
@@ -581,13 +613,12 @@ class Bank:
         # a change of speed is a change of PARTIALS and cannot be retuned --
         # it needs a different template. Hence a speed axis on the cache.
         self.leslie = (not drums) and getattr(pc, "leslie", False)
-        # THE SAME THREE POSITIONS THE OFFLINE PATH READS, as CC1 values, so
-        # one MIDI file means one thing in both. They had disagreed: offline
-        # leslie.zone() brakes below 42 and runs chorale to 84, live I had
-        # written a bare >= 64 with no brake at all, so the same wheel position
-        # rendered as two different speeds depending on which path played it.
-        self.speeds = (0, 64, 127) if self.leslie else (None,)
-        self.leslie_default = 127 if getattr(pc, "leslie_fast", True) else 64
+        # NO SPEED AXIS. It existed because the rotor was baked into the
+        # partials; now both the level swing and the Doppler are driven from
+        # the callback, so one template serves every speed and the cache is a
+        # third the size it was a moment ago.
+        self.speeds = (None,)
+        self.leslie_default = None
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
         # The order a crescendo pedal adds them in, which is the organ's own idea
         # of how a registration should grow.
@@ -893,6 +924,7 @@ class Live:
         # everything routed to it turns with the same rotors.
         self.rotor_horn = LiveRotor(True)
         self.rotor_drum = LiveRotor(False)
+        self._ls_rate = -1.0    # horn rate the Doppler was last moved to
         self.cc1_count = 0      # how many mod-wheel messages have arrived
         self.cc1_last = -1      # and the last value, so a monitor can see them
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
@@ -991,12 +1023,11 @@ class Live:
                 if rotors:
                     # Quantised to the zone the offline path uses, so the cache
                     # needs three templates and not one per controller step.
+                    # The rotors are AIMED, not set: they spend real seconds
+                    # getting there, and every note already sounding follows
+                    # them there -- both the level swing and the Doppler.
                     import leslie as _LES
                     z = _LES.zone(msg.value)
-                    self.rotor_fast[ch] = (0 if z == _LES.STOP
-                                           else 64 if z == _LES.CHORALE else 127)
-                    # The rotors are AIMED, not set: they spend real seconds
-                    # getting there, and notes already sounding follow them.
                     self.rotor_horn.target = z
                     self.rotor_drum.target = z
                 for part in organs:
@@ -1061,9 +1092,10 @@ class Live:
         snote = note + part.transpose
         if not 0 <= snote <= 127:
             return
-        tmpl = part.bank.get(snote, vel,
-                             self.rotor_fast.get(ch, part.bank.leslie_default)
-                             if part.bank.leslie else None)
+        # No speed in the key any more: the rotor is driven from the callback,
+        # so one template plays at every speed and a note started during a ramp
+        # simply joins the rotor where it is.
+        tmpl = part.bank.get(snote, vel, part.bank.leslie_default)
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
             # counted, and the builder thread is what fixes it.
@@ -1288,8 +1320,17 @@ class Live:
             self.slab.reap(n0)
             if self.slab.ls_on.any():
                 dt = frame_count / float(self.rate)
-                self.slab.leslie_swing(self.rotor_horn.advance(dt),
-                                       self.rotor_drum.advance(dt))
+                ah = self.rotor_horn.advance(dt)
+                ad = self.rotor_drum.advance(dt)
+                # The level swing is free to recompute, so it happens every
+                # block. The Doppler is not -- retune() rewrites phase anchors
+                # -- so it moves only when the rate has actually gone
+                # somewhere, which is never once the rotor has settled.
+                self.slab.leslie_swing(ah, ad)
+                if abs(self.rotor_horn.rate - self._ls_rate) > 0.05:
+                    self.slab.leslie_doppler(n0, self.rotor_horn.rate,
+                                             self.rotor_drum.rate)
+                    self._ls_rate = self.rotor_horn.rate
             L, R = self.renderer.render(n0, frame_count)
         except Exception as e:
             # Last line of defence: emit silence for this block rather than let
