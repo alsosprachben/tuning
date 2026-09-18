@@ -1603,18 +1603,48 @@ where it is audible as a change of stop rather than of colour.
 
 It is not the mono sum: left and right each measure -16.4 alone.
 
-The mechanism is that the early field is SPARSE. `reflection_order = 1` yields
-two surviving images for this voice, at -6.6 dB / 1.87 ms and -14.0 dB /
-39.5 ms. Two discrete arrivals comb; twenty would begin to diffuse, which is
-what a real church does between the direct sound and the statistical tail.
-The tail itself is fine -- roomtail convolves it and it is dense by
-construction. The gap is between the direct sound and the mixing time.
+The mechanism is NOT that the early field is sparse, which is what this
+section said before anyone tested it.
 
-WHAT WAS NOT DONE: raising the reflection order. It is the principled fix and
-it is not free -- every image is a full set of partials, and the count enters
-the render cost linearly. `TUNING_REFLECT=0` recovers 6.8 dB of the second
-harmonic in the finished piece and keeps the diffuse tail, which is a
-diagnosis rather than a repair.
+`image_sources` only ever built first order, so the claim was untested. It now
+builds any order, and the answer is no:
+
+| order | distinct images | survive | D2's second harmonic |
+|---|---|---|---|
+| 0 (no room) | - | - | -12.0 dB |
+| 1 | 6 | 3 | **-21.4** |
+| 2 | 24 | 5 | -21.5 |
+| 3 | 62 | 5 | -21.5 |
+
+Second order adds two early reflections and moves the notch by 0.1 dB, for 33%
+more partials (2028 to 2707). Third order adds 38 more images and not one
+survives. No band of the spectrum moves by more than 0.71 dB. So
+`reflection_order` stays at 1, and the extra machinery stays available and
+unused.
+
+TWO REASONS IT CANNOT WORK, both worth knowing before trying it again:
+
+- `reflection_fusion_s` is 50 ms, and past it an image is dropped because the
+  diffuse tail carries that energy decorrelated instead of as a replica. In a
+  hall, nearly every higher-order image is late: at third order, 57 of 62 are
+  past the limit. The early field is not sparse because the order is low, it is
+  sparse because the room is big.
+- A notch made by ONE strong early arrival cannot be filled by later, weaker
+  ones. The floor bounce here is -6.6 dB at 2.06 ms, which is most of the
+  effect, and it is not a modelling artefact -- source and listener at the same
+  height over a floor 1.2 m down is the geometry of every seated audience, and
+  a floor-bounce notch is what they hear.
+
+What WAS wrong, and was the whole of what Ben heard, is the section below: the
+flue's harmonic slope. Fixing that fixed the pedal. The comb is real.
+
+A LATENT BUG FOUND ON THE WAY. Mirroring in two perpendicular planes commutes,
+so floor+left+floor lands exactly where left alone does: at third order, 186
+sequences reach 62 distinct positions. Enumerating by sequence therefore emits
+one floor bounce five times, five times too loud, charged whatever absorption
+the last sequence happened to carry. Images are now deduplicated by POSITION,
+keeping the first (shortest, so physically real) sequence to reach each. At
+order 1 there are no duplicates, so this was invisible until the order moved.
 
 Worth noting for any bass voice, not only the organ: the comb sits where it
 sits in HERTZ, so it lands on a different harmonic of every pitch, and it bites

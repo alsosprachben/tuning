@@ -1663,8 +1663,12 @@ class SynthProperties:
         scat = self._octave_interp(self.SURFACE_SCATTER[surface], frequency)
         return sqrt(max(0.0, 1.0 - alpha)) * sqrt(max(0.0, 1.0 - scat))
 
-    def image_sources(self, sx, sy, sz):
-        """One first-order image per surface.
+    WALLS = (('left', 0, 'room_left', -1), ('right', 0, 'room_right', 1),
+             ('back', 1, 'room_back', -1), ('front', 1, 'room_front', 1),
+             ('floor', 2, 'room_floor', -1), ('ceiling', 2, 'room_ceiling', 1))
+
+    def image_sources(self, sx, sy, sz, order=None):
+        """Every image up to `order` bounces: (surfaces, image, mirrored listener).
 
         Two mirrors are needed, not one. Mirroring the SOURCE gives the image
         whose straight line to the listener has the right length and the right
@@ -1673,18 +1677,60 @@ class SynthProperties:
         read at -- the ray leaves toward the mirrored listener, not toward the
         real one. Using the arrival direction for both would ask a trumpet how
         loud it is toward the audience and then use that for the ceiling.
+
+        AT SECOND ORDER AND ABOVE THE LISTENER IS MIRRORED IN REVERSE. For a
+        path source -> A -> B -> listener the image of the source is A then B,
+        but the ray leaves toward B mirrored first and then A: the departure
+        direction is set by the FIRST surface the ray meets, and that is the
+        last one applied to the listener. Getting this backwards reads the
+        instrument's directivity toward the wrong wall, which is silent -- the
+        delay and the level stay right and only the colour is wrong.
+
+        AN IMAGE IS A PLACE, NOT A SEQUENCE. Mirroring in two PERPENDICULAR
+        planes commutes, so floor+left+floor lands exactly where left alone
+        does -- the two floor mirrors cancel -- and at third order 186
+        sequences reach only 62 distinct positions. Counting them all is not
+        merely wasteful: each duplicate is emitted as another partial at the
+        same delay, so a single floor bounce arrives five times and is five
+        times too loud, and the absorption charged to it is whatever sequence
+        happened to be enumerated. Deduplicate by POSITION, keeping the first
+        sequence to reach it -- which is the shortest, since this walks breadth
+        first, and the shortest is the path the sound actually takes.
         """
-        walls = (('left', 0, -self.room_left), ('right', 0, self.room_right),
-                 ('back', 1, -self.room_back), ('front', 1, self.room_front),
-                 ('floor', 2, -self.room_floor), ('ceiling', 2, self.room_ceiling))
-        src = [sx, sy, sz]
+        order = self.reflection_order if order is None else order
+        if order <= 0:
+            return []
+        walls = [(nm, ax, sgn * getattr(self, attr))
+                 for nm, ax, attr, sgn in self.WALLS]
+        by_name = {nm: (ax, pl) for nm, ax, pl in walls}
+
+        def mirror(p, axis, plane):
+            q = list(p)
+            q[axis] = 2.0 * plane - q[axis]
+            return tuple(q)
+
         out = []
-        for name, axis, plane in walls:
-            image = list(src)
-            image[axis] = 2.0 * plane - src[axis]
-            listener = [0.0, 0.0, 0.0]
-            listener[axis] = 2.0 * plane
-            out.append((name, tuple(image), tuple(listener)))
+        seen = {tuple(round(v, 4) for v in (sx, sy, sz))}
+        frontier = [((), (sx, sy, sz))]
+        for _ in range(int(order)):
+            nxt = []
+            for names, img in frontier:
+                for nm, ax, pl in walls:
+                    if names and names[-1] == nm:
+                        continue
+                    seq = names + (nm,)
+                    im = mirror(img, ax, pl)
+                    key = tuple(round(v, 4) for v in im)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    lis = (0.0, 0.0, 0.0)
+                    for back in reversed(seq):
+                        a2, p2 = by_name[back]
+                        lis = mirror(lis, a2, p2)
+                    out.append((seq, im, lis))
+                    nxt.append((seq, im))
+            frontier = nxt
         return out
 
     def reflection_terms(self, frequency, sx, sy, sz, radius=None):
@@ -1702,7 +1748,7 @@ class SynthProperties:
         air = self.air_absorption_db_per_m(frequency)
         floor = 10.0 ** (self.reflection_floor_db / 20.0)
         out = []
-        for name, image, mirrored in self.image_sources(sx, sy, sz):
+        for names, image, mirrored in self.image_sources(sx, sy, sz):
             path = sqrt(sum(c * c for c in image)) or 1e-9
             # Directivity toward where the ray actually left: the mirrored
             # listener, at the same range as the real one so only angle differs.
@@ -1711,8 +1757,11 @@ class SynthProperties:
             ax = (mirrored[0] - sx) * scale
             az = (mirrored[2] - sz) * scale
             depart = self.directivity_gain(frequency, ax, az, radius)
+            kept = 1.0
+            for nm in names:
+                kept *= self.surface_reflection(nm, frequency)
             gain = ((direct / path)
-                    * self.surface_reflection(name, frequency)
+                    * kept
                     * (depart / direct_dir)
                     * 10.0 ** (-(air * (path - direct)) / 20.0))
             if gain < floor:
