@@ -141,7 +141,9 @@ class Slab:
         # it left by, which rotor carries it, and the amplitude it would have
         # had standing still.
         self.ls_on = np.zeros(capacity, bool)
-        self.ls_am = np.zeros(capacity, np.float32)
+        self.ls_am = np.zeros(capacity, np.float32)     # the lobe's floor
+        self.ls_sharp = np.ones(capacity, np.float32)
+        self.ls_norm = np.ones(capacity, np.float32)     # so the mean is 1
         self.ls_ph = np.zeros(capacity, np.float32)
         self.ls_horn = np.zeros(capacity, bool)
         self.ls_aL = np.zeros(capacity, np.float32)
@@ -207,12 +209,28 @@ class Slab:
         idx = np.fromiter(slots, np.int64, len(slots))
         nf = np.asarray(nf, np.float64)
         horn = nf >= _L.CROSSOVER_HZ
-        x = (nf / 700.0) ** 2
-        am = 0.10 + (0.85 - 0.10) * x / (1.0 + x)      # leslie.beam_depth
+        # THE LOBE ITSELF, not its first Fourier term. Live this is a gain, so
+        # the exact pattern costs no more than a cosine did -- and a cosine is
+        # what makes a rotating speaker sound like a tremolo pedal. The drum
+        # fires into a rotating scoop rather than sweeping a horn, so its lobe
+        # is blunter: half the sharpness and half the depth.
+        fl = np.empty(len(nf), np.float32)
+        sh = np.empty(len(nf), np.float32)
+        for j, f in enumerate(nf):
+            a, b = _L.beam(float(f))
+            fl[j], sh[j] = a, b
+        sh = np.where(horn, sh, np.maximum(sh * 0.5, 0.5))
+        fl = np.where(horn, fl, 1.0 - (1.0 - fl) * 0.5)
         self.ls_on[idx] = True
         self.ls_ph[idx] = np.asarray(az, np.float32)
         self.ls_horn[idx] = horn
-        self.ls_am[idx] = np.where(horn, am, am * 0.5)
+        self.ls_am[idx] = fl
+        self.ls_sharp[idx] = sh
+        # mean of the lobe, so the swing is a colour and not a level change
+        th = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
+        cc = 0.5 * (1.0 + np.cos(th))
+        self.ls_norm[idx] = (fl[:, None] + (1.0 - fl[:, None])
+                             * cc[None, :] ** (0.5 * sh[:, None])).mean(axis=1)
         self.ls_aL[idx] = self.a["aL"][idx]
         self.ls_aR[idx] = self.a["aR"][idx]
         # THE DOPPLER IS NORMALISED TO A REFERENCE ROTOR, whatever speed the
@@ -260,7 +278,10 @@ class Slab:
             return
         idx = np.flatnonzero(m)
         ang = np.where(self.ls_horn[idx], horn_angle, drum_angle)
-        g = 1.0 + self.ls_am[idx] * np.cos(ang - self.ls_ph[idx])
+        fl = self.ls_am[idx]
+        c = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx]))
+        g = fl + (1.0 - fl) * c ** (0.5 * self.ls_sharp[idx])
+        g /= self.ls_norm[idx]
         self.a["aL"][idx] = self.ls_aL[idx] * g
         self.a["aR"][idx] = self.ls_aR[idx] * g
 

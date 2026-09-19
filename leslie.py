@@ -62,6 +62,15 @@ C_SOUND = 343.0
 # than something baked into a note, and it can change under a held chord.
 SIDEBANDS = True
 
+# How many harmonics of the lobe the offline path buys. Three carries the chop
+# -- the second and third are what separate a beam from a cosine -- and each
+# costs a sideband pair on every partial.
+HARMONICS = 3
+# The bass rotor is a scoop with a fixed driver, not a horn being swung, so its
+# pattern is blunt: measured live, its swing has a second harmonic of 0.11
+# against the horn's 0.50.
+DRUM_BLUNT = 0.5
+
 
 def azimuth(x, z):
     """Where a receiver sits, as seen from the cabinet."""
@@ -73,17 +82,62 @@ def doppler_depth(radius, rate_hz):
     return 2.0 * math.pi * radius * rate_hz / C_SOUND
 
 
-def beam_depth(freq_hz, floor=0.10, corner=700.0, ceiling=0.85):
-    """How deeply the level swings as the horn sweeps past.
+def beam(freq_hz, floor=0.06):
+    """The horn's pattern: (floor, sharpness) of a lobe that narrows with pitch.
 
-    A horn is directional in proportion to its mouth against the wavelength,
-    so the swing is shallow in the bass and deep in the treble. This is the
-    part that makes a Leslie sound like a Leslie rather than like a tremolo:
-    the bass barely moves while the top swings nearly on and off, so the
-    spectrum itself breathes at the rotor rate.
+    A horn is directional in proportion to its mouth against the wavelength, so
+    it is nearly omnidirectional in the bass and a narrow beam at the top. Both
+    the DEPTH of the level swing and its SHAPE follow from that, and the shape
+    is the part a cosine cannot give.
+
+    Sweeping a narrow lobe past a listener is a pulse, not a sine: measured on
+    a plausible horn pattern the swing carries a second harmonic at 0.40 of the
+    first and a third at 0.07, and sits above half its peak for a third of a
+    turn rather than half. That is the chop of a fast Leslie, and modelling the
+    level swing as 1 + m*cos(t) -- which is exactly the first Fourier term and
+    nothing else -- leaves it out. A tremolo pedal is a sine; a Leslie is not.
     """
-    x = (freq_hz / corner) ** 2
-    return floor + (ceiling - floor) * x / (1.0 + x)
+    x = (freq_hz / 700.0) ** 2
+    sharp = 0.6 + 9.0 * x / (1.0 + x)        # omni in the bass, a beam on top
+    fl = 1.0 - (1.0 - floor) * x / (1.0 + x)  # ...and a deeper swing with it
+    return fl, sharp
+
+
+def beam_gain(theta, fl, sharp):
+    """The lobe itself, mean-normalised so it is a colour and not a level."""
+    import numpy as _np
+    # ((1+cos)/2)^p, NOT cos(t/2)^p: the half-angle form has period 4*pi, so
+    # the lobe fired once every TWO revolutions and the whole swing came out at
+    # half the rotor rate -- 3.33 Hz measured against a rotor turning at 6.60.
+    # This one is period 2*pi by construction and never negative, so it needs
+    # no clip either.
+    c = (0.5 * (1.0 + _np.cos(_np.asarray(theta)))) ** (0.5 * sharp)
+    return fl + (1.0 - fl) * c
+
+
+def beam_harmonics(freq_hz, n=4, points=512):
+    """[c1, c2, ...] of the lobe, as a cosine series about its own mean.
+
+    The offline path has no gain that changes with time -- the render is one
+    stateless call -- so the swing has to be partials, and each harmonic of the
+    lobe is another sideband pair. A cosine needed one pair; a beam needs
+    three to be worth the name.
+    """
+    import numpy as _np
+    fl, sharp = beam(freq_hz)
+    # from 0, so index 0 IS the lobe's peak: sampling from -pi puts the
+    # peak in the middle of the array and every odd coefficient comes out
+    # negated, which reconstructs a lobe pointing the wrong way.
+    th = _np.linspace(0.0, 2.0 * _np.pi, points, endpoint=False)
+    g = beam_gain(th, fl, sharp)
+    g = g / g.mean()
+    sp = _np.fft.rfft(g) / points
+    return [2.0 * float(_np.real(sp[k])) for k in range(1, n + 1)]
+
+
+def beam_depth(freq_hz):
+    """The first harmonic alone -- what the old cosine model used."""
+    return abs(beam_harmonics(freq_hz, 1)[0])
 
 
 def path_at(freq_hz, az, fast=True):
@@ -162,7 +216,6 @@ def expand(A, channels, sr, cols):
             angle *= DRUM_RATIO          # and it turns the other way
         radius = HORN_RADIUS if horn else DRUM_RADIUS
         fm = doppler_depth(radius, rate)
-        am = beam_depth(f) if horn else beam_depth(f) * 0.5
         # The kernel's modulator is sin(2*pi*rate*t + vp) on an absolute clock,
         # and what is wanted is sin(angle(t) - azimuth). Equate them at t_on.
         ph = angle - 2.0 * math.pi * rate * t_on - A['az'][i]
@@ -172,21 +225,33 @@ def expand(A, channels, sr, cols):
         # A STOPPED ROTOR HAS NO SIDEBANDS. At rate 0 they would land exactly
         # on the carrier and simply add level -- a brake that makes the organ
         # louder, which is not what a brake does.
-        if not SIDEBANDS or am <= 1e-4 or rate < 0.05:
+        if not SIDEBANDS or rate < 0.05:
             if rate < 0.05:
                 A['vd'][i] = 0.0
             continue
+        # ONE SIDEBAND PAIR PER HARMONIC OF THE LOBE. A cosine needed one pair
+        # and made a tremolo; a beam swept past a listener is a pulse, and its
+        # second and third harmonics are the chop. Offline there is no gain
+        # that changes with time, so each harmonic has to be bought as
+        # partials -- which is why this truncates where the live path, where
+        # the lobe is simply a gain, does not.
+        cs = beam_harmonics(f, HARMONICS)
+        if not horn:
+            cs = [c * DRUM_BLUNT for c in cs]
         dw = 2.0 * math.pi * rate / sr
-        for sign in (1.0, -1.0):
-            for k in cols:
-                extra[k].append(A[k][i])
-            extra['om'][-1] = A['om'][i] + sign * dw
-            extra['aL'][-1] = A['aL'][i] * am * 0.5
-            extra['aR'][-1] = A['aR'][i] * am * 0.5
-            extra['aM'][-1] = A['aM'][i] * am * 0.5
-            extra['p0'][-1] = A['p0'][i] + sign * A['vp'][i]
-            extra['p0R'][-1] = A['p0R'][i] + sign * A['vp'][i]
-            made += 1
+        for k, ck in enumerate(cs, 1):
+            if abs(ck) < 1e-3:
+                continue
+            for sign in (1.0, -1.0):
+                for col in cols:
+                    extra[col].append(A[col][i])
+                extra['om'][-1] = A['om'][i] + sign * k * dw
+                extra['aL'][-1] = A['aL'][i] * ck * 0.5
+                extra['aR'][-1] = A['aR'][i] * ck * 0.5
+                extra['aM'][-1] = A['aM'][i] * ck * 0.5
+                extra['p0'][-1] = A['p0'][i] + sign * k * A['vp'][i]
+                extra['p0R'][-1] = A['p0R'][i] + sign * k * A['vp'][i]
+                made += 1
     for k in cols:
         A[k].extend(extra[k])
     return made
