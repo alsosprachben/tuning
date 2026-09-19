@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""An electric guitar: the drive sweep, and the calibration behind it.
+
+    python3 examples/guitar.py [outdir]
+    python3 examples/guitar.py --calibrate
+
+GM 27 is the first electric to have its own voice (see
+tonelib.ElectricGuitarProperties), and what makes it one is not a body -- it is
+two combs, a magnet and an amplifier. The colour arrives downstream of the
+string, from tubeamp and cabinet.py, which is where it comes from on the real
+instrument.
+
+    string -> pluck comb -> pickup comb -> AMP -> CABINET -> room
+
+THE SWEEP. The same passage at four drives, nothing else changed. Unlike the
+Hammond, this voice sets `amp_reference`, so the drive is measured against a
+FIXED level rather than against each segment's own peak -- which means playing
+harder genuinely breaks up more, and the passage below is written to show it:
+the same phrase is played softly and then dug into.
+
+--calibrate reports the peak a hard chord actually produces, in the renderer's
+own amplitude units, which is what `amp_reference` has to be for drive 1.0 to
+mean "the edge of breakup when you hit it hard". It calls tubeamp.emit itself,
+so the number is measured by the code it calibrates and cannot drift from it.
+"""
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import mido
+import numpy as np
+
+import blockrender as B
+import tubeamp as TA
+
+DRIVES = (0.0, 1.0, 2.0, 4.0)
+PROGRAM = 27            # GM 27, Electric Guitar (clean)
+TPB = 480
+SR = 44100.0
+
+# A six-string E-minor-ish voicing, low to high: the whole instrument at once,
+# which is what a hard strum drives the amplifier with.
+BIG_CHORD = (40, 47, 52, 55, 59, 64)
+
+
+def _track(tempo=100):
+    m = mido.MidiFile(ticks_per_beat=TPB)
+    tr = mido.MidiTrack(); m.tracks.append(tr)
+    tr.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(tempo), time=0))
+    tr.append(mido.Message('program_change', program=PROGRAM, channel=0, time=0))
+    return m, tr
+
+
+def _chord(tr, notes, beats, vel):
+    n = int(TPB * beats)
+    for p in notes:
+        tr.append(mido.Message('note_on', note=p, velocity=vel, channel=0, time=0))
+    for i, p in enumerate(notes):
+        tr.append(mido.Message('note_off', note=p, velocity=0, channel=0,
+                               time=n if i == 0 else 0))
+
+
+def passage():
+    """Single notes, then chords, then the same phrase soft and then dug into.
+
+    The third section is the one this voice exists for: a guitar's dynamics go
+    INTO the amplifier, so the quiet pass must be cleaner than the loud one
+    without anything being changed but the velocity.
+    """
+    m, tr = _track()
+    for p in (40, 47, 52, 55, 59, 64, 59, 55):      # a line, one note at a time
+        _chord(tr, [p], 0.5, 100)
+    _chord(tr, [40, 47, 52], 2.0, 100)              # a power chord: root, 5th, octave
+    _chord(tr, [40, 44, 47], 2.0, 100)              # the same root with a MAJOR THIRD
+    for vel in (45, 127):                           # soft, then dug in
+        for p in (40, 47, 52, 55):
+            _chord(tr, [p], 0.25, vel)
+        _chord(tr, BIG_CHORD, 3.0, vel)
+    return m
+
+
+def calibrate(outdir):
+    """What peak does a hard strum actually make, in renderer units?"""
+    m, tr = _track()
+    _chord(tr, BIG_CHORD, 4.0, 127)
+    path = os.path.join(outdir, 'guitar-calib.mid')
+    m.save(path)
+    A = B.prepare(path, 'even')
+    mch = np.asarray(A['mch'])
+    rows = np.flatnonzero(mch == 0)
+    # Direct sound only, as the amplifier pass does: a reflection is the room's
+    # copy of what the valve already made, not another input to it.
+    dl = (np.asarray(A['delL'], float)[rows]
+          + np.asarray(A['delR'], float)[rows])
+    rows = rows[dl <= dl.min() + 2.0]
+    om = np.asarray(A['om'], float)[rows]
+    aM = np.asarray(A['aM'], float)[rows]
+    p0 = np.asarray(A['p0'], float)[rows]
+    non = np.asarray(A['non'], float)[rows]
+    a = int(np.median(non)) + int(0.05 * SR)     # just after the strum lands
+    f = om * SR / (2.0 * np.pi)
+    ph = p0 + om * a
+    f, aM, ph = TA.combine(f, aM, ph)
+    keep = np.argsort(-aM)[:TA.KEEP_PARTIALS]
+    st = {}
+    TA.emit(f[keep].tolist(), aM[keep].tolist(), ph[keep].tolist(), SR, 1.0,
+            stats=st)
+    print("  %d partials, %d distinct frequencies" % (len(rows), len(f)))
+    print("  hard six-string strum, peak = %.6g" % st['peak'])
+    print()
+    print("  amp_reference = %.6g" % st['peak'])
+    print("  -> drive 1.0 then means the edge of breakup on a chord hit this")
+    print("     hard, and a soft single note reaches far less of the curve.")
+    return 0
+
+
+def main(argv):
+    if '--calibrate' in argv:
+        out = os.environ.get('TMPDIR', '/tmp')
+        os.makedirs(out, exist_ok=True)
+        return calibrate(out)
+    outdir = argv[1] if len(argv) > 1 else '.'
+    os.makedirs(outdir, exist_ok=True)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mid = os.path.join(outdir, 'guitar.mid')
+    passage().save(mid)
+    print("score: %s" % mid)
+    for d in DRIVES:
+        out = os.path.join(outdir, 'guitar-drive%g.wav' % d)
+        env = dict(os.environ)
+        env['TUNING_AMP_DRIVE'] = str(d)
+        env.setdefault('TUNING_ROOM', 'chamber')
+        env.setdefault('TUNING_MASTER_DB', '-12')
+        t0 = time.time()
+        r = subprocess.run([sys.executable,
+                            os.path.join(root, 'blockrender.py'), mid, out,
+                            'even'], env=env, cwd=root,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(r.stdout[-3000:]); print(r.stderr[-3000:]); return 1
+        note = [l.strip() for l in r.stdout.splitlines()
+                if 'tube amp' in l or 'cabinet' in l]
+        print("  drive %-4g %5.1fs  %s" % (d, time.time() - t0, "; ".join(note)))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

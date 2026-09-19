@@ -772,6 +772,18 @@ class Bank:
         # so this is the reference and not the setting -- a voice with no
         # amplifier (amp_drive 0) stays clean however far the wheel goes.
         self.amp_drive = 0.0 if drums else float(getattr(pc, "amp_drive", 0.0))
+        # The level `amp_drive` is measured against, so playing harder breaks
+        # up. None = scale by each chord's own peak, which is right for a
+        # keyboard and wrong for anything with a picking hand.
+        self.amp_reference = None if drums else getattr(pc, "amp_reference", None)
+        # The speaker. The TEMPLATE already went through it -- prepare() runs
+        # the cabinet pass -- and that is exact for a linear filter, since
+        # filtering each note and summing is the same as filtering the sum.
+        # The amplifier's products are the exception: they are created here,
+        # after the template was built, so _amp_place has to put them through
+        # the speaker itself or they arrive unfiltered. That is the whole
+        # difference between overdrive and a wasp.
+        self.cabinet = None if drums else getattr(pc, "cabinet", None)
         # NO SPEED AXIS. It existed because the rotor was baked into the
         # partials; now both the level swing and the Doppler are driven from
         # the callback, so one template serves every speed and the cache is a
@@ -1285,17 +1297,23 @@ class Live:
                 # once -- so each part is asked separately rather than the whole
                 # channel taking one branch.
                 here = [p for p in parts if self._listens(p, ch)]
-                rotors = [p for p in here if p.bank.leslie]
+                amped = [p for p in here if p.bank.amp_drive > 0.0]
                 organs = [p for p in here if p.organ and not p.bank.leslie]
-                others = [p for p in here if not p.organ and not p.bank.leslie]
-                if rotors:
-                    # THE WHEEL IS THE SWELL PEDAL, and the swell pedal is in
-                    # front of the amplifier -- so this is the drive. The rotor
-                    # speed moved to the pitch wheel, which a Hammond has no
-                    # other use for; see PW_FIRE and LIVE_DRIVE_STEPS.
+                others = [p for p in here
+                          if not p.organ and not p.bank.leslie
+                          and p.bank.amp_drive <= 0.0]
+                if amped:
+                    # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
+                    # pedal, which sits in FRONT of a fixed-gain amplifier; on
+                    # a guitar it is the amp's own gain. Either way it decides
+                    # where the playing sits on the valve's curve -- and on a
+                    # voice with an `amp_reference` how hard you play decides
+                    # the rest. Gated on HAVING an amplifier, not on having a
+                    # rotor: they were the same thing only because the Hammond
+                    # was the first voice with one.
                     step = int(round(msg.value / 127.0 * LIVE_DRIVE_STEPS))
-                    for p in rotors:
-                        if p.bank.amp_drive > 0.0 and self.drive_step.get(p.pid) != step:
+                    for p in amped:
+                        if self.drive_step.get(p.pid) != step:
                             self.drive_step[p.pid] = step
                             self.amp_dirty.add(p.pid)
                 for part in organs:
@@ -1455,7 +1473,7 @@ class Live:
         whole set -- which is the same rule the offline path states as the
         lifetime of a product being the intersection of its parents'.
         """
-        if part.bank.leslie and part.bank.amp_drive > 0.0:
+        if part.bank.amp_drive > 0.0:
             self.amp_dirty.add(part.pid)
 
     def _amp_key(self, pid):
@@ -1481,14 +1499,14 @@ class Live:
             job = self.amp_job
             if self.amp_stop or job is None:
                 continue
-            pid, key, src, f, am, ph, drive, when = job
+            pid, key, src, f, am, ph, drive, when, ref = job
             try:
                 fc, ac, pc = _TA.combine(f, am, ph)
                 out = _TA.emit(fc.tolist(), ac.tolist(), pc.tolist(),
                                float(self.rate), drive,
                                window_s=_TA.LIVE_WINDOW_S,
                                oversample=_TA.LIVE_OVERSAMPLE,
-                               keep=_TA.LIVE_KEEP)
+                               keep=_TA.LIVE_KEEP, reference=ref)
                 self.amp_calls += 1
             except Exception as e:
                 self.amp_err = "%s: %s" % (type(e).__name__, e)
@@ -1502,8 +1520,13 @@ class Live:
         if part is None:
             self.slab.release(key, n0)
             return None
-        step = self.drive_step.get(pid, 0)
-        drive = (part.bank.amp_drive * LIVE_DRIVE_RANGE
+        # AN UNTOUCHED WHEEL MEANS THE VOICE AS VOICED, not silence. A guitar
+        # patch has a drive because its amplifier is part of what it is, and
+        # waiting for someone to find the mod wheel before it sounds right is
+        # not a default. Once the wheel has been moved it owns the setting.
+        step = self.drive_step.get(pid)
+        drive = (part.bank.amp_drive if step is None else
+                 part.bank.amp_drive * LIVE_DRIVE_RANGE
                  * step / float(LIVE_DRIVE_STEPS))
         slots = [sl for k, ss in self.slab.live.items()
                  if k[0] == pid and k[3] != "amp" for sl in ss]
@@ -1540,7 +1563,8 @@ class Live:
             self.slab.release(key, n0)
             return None
         src = int(idx[ok[int(np.argmax(aM[ok]))]])
-        return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0)
+        return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0,
+                getattr(part.bank, 'amp_reference', None))
 
     def _amp_place(self, n0, pid, key, src, out):
         """Stamp what the worker returned. Cheap: no transform, just writes."""
@@ -1550,6 +1574,15 @@ class Live:
         f = [p[0] for p in out]
         a = [p[1] for p in out]
         p = [p[2] for p in out]
+        part = next((q for q in self.parts if q.pid == pid), None)
+        cab = getattr(part.bank, "cabinet", None) if part else None
+        if cab:
+            # THROUGH THE SPEAKER, like everything else this voice makes. The
+            # note templates were cabineted at build time; these products were
+            # not, because they did not exist yet.
+            import cabinet as _CB
+            g = _CB.get(cab).gain(np.asarray(f, float))
+            a = (np.asarray(a, float) * g).tolist()
         slots = self.slab.stamp_amp(key, src, f, a, p, n0, self.rate)
         if slots and self.slab.ls_on[src]:
             # The amplifier is UPSTREAM of the rotor, so its products swing and
@@ -2600,6 +2633,94 @@ def selftest():
           "" if bad is None else "  (%s)" % bad)
     lv.amp_stop = True; lv.amp_go.set()
     lv.renderer.close()
+
+    # ---- the electric guitar ------------------------------------------------
+    # Same amplifier, different instrument, and the differences are the point:
+    # a guitar BENDS, its wheel is the gain knob rather than a swell pedal, and
+    # its products have to go through a speaker that the note templates already
+    # went through at build time.
+    gv = Live(program=27, rate=44100, frames=128, verbose=False); gv.warm()
+    gp = gv.parts[0]
+
+    def gblock():
+        n = gv.n
+        gv.apply(n); gv.sweep(n); gv.slab.reap(n)
+        gv.n = n + 128
+
+    def gsettle(limit=200):
+        for _ in range(limit):
+            time.sleep(0.004); gblock()
+            if not gv.amp_busy and gv.amp_out is None:
+                return True
+        return False
+
+    check("the guitar has an amplifier and a speaker",
+          gp.bank.amp_drive > 0.0 and gp.bank.cabinet
+          and gp.bank.amp_reference, "  (%s, drive %.2f, ref %s)"
+          % (gp.bank.cabinet, gp.bank.amp_drive, gp.bank.amp_reference))
+    gkey = gv._amp_key(gp.pid)
+    for nn in (40, 47, 52, 55):
+        gv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
+        gv.down.add((0, nn))
+    gblock(); gsettle()
+    n_default = len(gv.slab.live.get(gkey, []))
+    check("an untouched wheel already gives the voice its own drive",
+          n_default > 0, "  (%d partials)" % n_default)
+
+    # A GUITAR BENDS. The half-moon ladder is gated on `leslie`, so this is the
+    # behaviour a guitar gets for free -- and it would be very wrong to lose.
+    ix = np.flatnonzero(gv.slab.busy)
+    om0 = gv.slab.a["om"][ix].copy()
+    gv.on_midi(mido.Message("pitchwheel", channel=0, pitch=8191)); gblock()
+    bent = float(np.max(np.abs(gv.slab.a["om"][ix] / np.maximum(om0, 1e-12) - 1.0)))
+    check("the wheel DOES bend a guitar", bent > 0.01,
+          "  (%.1f cents)" % (1200.0 * math.log2(1.0 + bent)))
+    gv.on_midi(mido.Message("pitchwheel", channel=0, pitch=0)); gblock()
+    check("...and the rotor ladder did not move, since a guitar has no rotor",
+          gv.half_moon == 1)
+
+    # THE PRODUCTS GO THROUGH THE SPEAKER. The templates were cabineted when
+    # they were built; these partials did not exist then, so _amp_place has to
+    # do it. Without that, everything the amplifier makes above 5 kHz arrives
+    # at full level, which is the difference between overdrive and a wasp.
+    # THE SAME PAYLOAD PLACED TWICE, once with the speaker and once without.
+    # Measuring it by recomputing instead does not work and the reason is worth
+    # keeping: the chord is DECAYING, so a recompute a moment later is a
+    # different chord, and two identical passes measured 1.375% and 0.831%.
+    # Holding the payload fixed is the only way the speaker is the variable.
+    probe = [(400.0, 1.0, 0.0), (8000.0, 1.0, 0.0)]
+    gsrc = int(np.flatnonzero(gv.slab.busy)[0])
+
+    def _place_probe():
+        gv._amp_place(gv.n, gp.pid, gkey, gsrc, probe)
+        sl = gv.slab.live.get(gkey, [])
+        i = np.fromiter(sl, np.int64, len(sl))
+        f = gv.slab.a["nf"][i]
+        a = gv.slab.aL0[i].astype(np.float64)
+        lo = a[np.argmin(np.abs(f - 400.0))]
+        hi = a[np.argmin(np.abs(f - 8000.0))]
+        return 20.0 * math.log10(max(hi, 1e-30) / max(lo, 1e-30))
+
+    got = _place_probe()
+    gp.bank.cabinet = None
+    flat = _place_probe()
+    gp.bank.cabinet = "guitar12"
+    import cabinet as _CBT
+    want = float(_CBT.get("guitar12").response_db([8000.0])[0]
+                 - _CBT.get("guitar12").response_db([400.0])[0])
+    check("the amplifier's products go through the speaker",
+          abs(flat) < 0.1 and abs(got - want) < 0.5,
+          "  (8 kHz vs 400 Hz: %+.1f dB placed, %+.1f dB the cabinet says,"
+          " %+.1f dB with no cabinet)" % (got, want, flat))
+    gv.slab.release(gkey, gv.n)
+
+    gv.on_midi(mido.Message("control_change", channel=0, control=1, value=0))
+    gblock(); gsettle()
+    check("wheel down is clean on a guitar too",
+          not gv.slab.live.get(gkey), "  (%d partials)" % len(gv.slab.live.get(gkey, [])))
+    check("the guitar raised no errors", gv.errors == 0 and gv.amp_err is None,
+          "" if gv.errors == 0 else "  (%s)" % gv.last_error)
+    gv.amp_stop = True; gv.amp_go.set(); gv.renderer.close()
 
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0

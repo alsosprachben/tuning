@@ -23,6 +23,7 @@ from tonelib import (
     PluckedStringProperties,
     OrchestraHitProperties,
     NylonGuitarProperties,
+    ElectricGuitarProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -118,6 +119,15 @@ _fill(24, 31, PluckedStringProperties)
 # instrument should not silently redefine an unmeasured one (the trap the
 # saxophone hit when it inherited the oboe's).
 PROGRAM_CLASS[24] = NylonGuitarProperties
+# 27 is the first electric to get its own class, now that there is an amplifier
+# and a speaker to give it: see ElectricGuitarProperties and cabinet.py. The
+# rest stay on the base ON PURPOSE. 25 is an ACOUSTIC steel-string -- a
+# different instrument from both its neighbours, and unmeasured. 29 and 30 are
+# this voice with the gain turned up and 26/28 are a pickup position and a
+# damping, so they are cheap once 27 has been judged by ear; cheap is not the
+# same as done, and handing them a class before then is exactly the trap the
+# saxophone hit.
+PROGRAM_CLASS[27] = ElectricGuitarProperties
 # 32-39  Bass                          -> plucked strings
 _fill(32, 39, PluckedStringProperties)
 # 40-47  Strings / orchestral

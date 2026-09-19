@@ -945,6 +945,55 @@ class SynthProperties:
     strike_depth = 1.0    # how deep the strike comb notches (1=point-strike null, 0=off); the
                           # finite hammer width fills it in, so real pianos want it shallow.
 
+    # The loudspeaker this voice is heard through, by name (see cabinet.py), or
+    # None for an instrument that radiates directly. NOT a body: a body belongs
+    # in harmonic_volume, which runs before the amplifier pass, and a cabinet
+    # has to be after it or the distortion bypasses the speaker.
+    cabinet = None
+
+    # How hard the valve stage is driven, in units of its own grid bias. 0 is a
+    # clean signal path. The tonewheel overrides this with its own discussion.
+    amp_drive = 0.0
+
+    # The signal peak, in this renderer's amplitude units, that `amp_drive`
+    # is measured against -- so a quiet note reaches less of the valve's curve
+    # than a loud one. None means "scale each segment by its own peak", which
+    # removes the playing level from the answer entirely: right for a keyboard
+    # whose keys are on or off and whose swell pedal is in front of the amp,
+    # wrong for anything where how hard you hit it is the point. See
+    # tubeamp.emit.
+    amp_reference = None
+
+    # THE PICKUP IS A SECOND COMB, and it is the other half of what "tone"
+    # means on an electric guitar. A magnetic pickup senses the string at a
+    # POINT, so it reads mode n with weight sin(n*pi*q) for a pickup q of the
+    # way along the speaking length -- the same function strike_point already
+    # computes for the pluck. A plucked electric is therefore two combs
+    # multiplied, one fixed by the luthier and one chosen by the player's right
+    # hand, and moving either is audible.
+    #
+    # Positions are fractions of the speaking length measured FROM THE BRIDGE,
+    # which is where a pickup's position is actually specified. Empty = no
+    # pickup, which is every acoustic instrument and the default.
+    pickup_points = ()
+    # Two entries is a HUMBUCKER: the coils are summed, and where they fall
+    # antiphase they cancel, which puts a null at n = 1/(q2-q1) that no single
+    # coil has. That, plus the wider aperture below, is why a humbucker is
+    # darker -- not the "thickness" it usually gets credited with.
+    #
+    # Coil aperture, also as a fraction of the length. A coil is not a point:
+    # averaging the string over its width multiplies mode n by a sinc, a
+    # low-pass in HARMONIC NUMBER. A Stratocaster single coil is ~9 mm on a
+    # 648 mm scale, so its first sinc null lands near the 71st harmonic and it
+    # barely matters -- which is the physical reason a single coil is bright.
+    pickup_width = 0.0
+    # A pickup's output is -dPhi/dt, so it reads string VELOCITY and not
+    # displacement: a factor of n, +6 dB per octave against an acoustic pluck.
+    # Kept explicit rather than folded into tonal_dampening, because the two
+    # say different things -- this one is a consequence of magnetism and would
+    # otherwise be silently fitted away by the next person to touch the series.
+    pickup_velocity = False
+
     # Chorus/ensemble: extra unison voices detuned by these Hz offsets, each
     # scaled by unison_gain. Empty = a single voice (no beating).
     unison_detune = ()
@@ -2081,9 +2130,27 @@ class SynthProperties:
             comb = _pluck_comb(self.plucked_harmonic, self.pluck_dampening, harmonic)
 
         v = self.gain / (harmonic ** self.attack_dampening) * comb
+        if self.pickup_points:
+            v *= self.pickup_gain(harmonic)
         if harmonic % 2 == 0 and self.even_harmonic_db is not None:
             v *= 10.0 ** (self.even_harmonic_db / 20.0)
         return v
+
+    def pickup_gain(self, harmonic):
+        """What a magnetic pickup reads of mode n. 1.0 for anything without one."""
+        if not self.pickup_points:
+            return 1.0
+        # Summed, not averaged in amplitude: two coils in series ARE one
+        # signal, and their cancellation is the humbucker's null.
+        g = abs(sum(_sin(harmonic * _pi * q) for q in self.pickup_points)
+                / len(self.pickup_points))
+        if self.pickup_width:
+            x = harmonic * _pi * self.pickup_width
+            if x > 1e-9:
+                g *= abs(_sin(x) / x)
+        if self.pickup_velocity:
+            g *= harmonic
+        return g
 
     def harmonic_volume(self, harmonic):
         """What leaves the instrument: the body's series, shaped by the bore."""
@@ -4488,6 +4555,86 @@ class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     # equal-velocity balance predates it, and the fit moved this voice's total
     # energy by that much.
     initial_gain = PluckedStringProperties.initial_gain * 0.9947
+
+
+class ElectricGuitarProperties(PluckedStringProperties):
+    """A solid-body electric: two combs, a magnet, and an amplifier.
+
+    patch_map has said for a long time that "26-31 are electrics, whose colour
+    is an amplifier's, not a box's", and left them on the bodyless base because
+    there was no amplifier to give them. There is one now, so this class is
+    the string and the magnet and nothing else -- the colour arrives downstream,
+    from tubeamp and from cabinet.py, which is where it comes from on the real
+    instrument too.
+
+    WHAT MAKES IT AN ELECTRIC IS THAT THERE ARE TWO COMBS. A string plucked at
+    fraction p feeds mode n with |sin(n*pi*p)|; a pickup at fraction q READS
+    mode n with |sin(n*pi*q)|. An acoustic guitar has the first and a body; this
+    has the first, the second, and an amplifier. The interaction of the two is
+    most of what a guitarist means by tone, and it is why moving the picking
+    hand two inches changes the sound of a solid-body far more than it changes
+    the sound of a classical.
+
+    GEOMETRY, NOT TASTE. The numbers are a Stratocaster's, which is a measurable
+    object: 648 mm scale, middle pickup ~100 mm from the bridge (0.154), coil
+    ~9 mm wide (0.014). Picking at 0.19 is a rock player's right hand, nearer
+    the bridge than a classical player's. The middle pickup is chosen for GM 27
+    because it is neither extreme; the neck position (~0.244) is the jazz sound
+    and the bridge (~0.063) is the cutting one, and both are this class with one
+    number changed.
+
+    THE SERIES IS 1/n, NOT 1/n^2, and both halves of that are physics. A plucked
+    string's DISPLACEMENT modes go as 1/n^2. A magnetic pickup's output is
+    -dPhi/dt, so it reads VELOCITY: another factor of n. Net 1/n, which is why a
+    solid-body is brighter than its unplugged self -- audibly so, and it is the
+    magnet doing it, not the wood. Written as tonal_dampening 2.0 plus
+    pickup_velocity rather than as a single fitted 1.0, so that the day someone
+    changes the pickup the exponent follows.
+
+    NO BODY AND NO SOUNDBOARD, which is the point of a solid body: nothing is
+    pulling energy out of the string, so it rings far longer than an acoustic.
+    That is also why it can be amplified to the point of feedback, which this
+    does not model.
+    """
+
+    # A pick is hard, narrow and plucks at whatever force the player uses, so
+    # the notch does NOT fill the way a felt hammer's does -- same argument as
+    # the harpsichord's quill. Not quite a point, though: a pick flexes.
+    strike_point = 0.19
+    strike_fills_with_force = False
+    strike_depth = 0.85
+
+    # Stratocaster middle pickup: 100 mm from the bridge on a 648 mm scale.
+    pickup_points = (0.154,)
+    pickup_width = 0.014          # ~9 mm coil, so its sinc null is past h64
+    pickup_velocity = True        # -dPhi/dt: the +6 dB/octave is the magnet
+
+    # 1/n^2 from the pluck; pickup_velocity supplies the n that makes it 1/n.
+    tonal_dampening = 2.0
+    octave_dampening = 0.0        # the magnet does not care what note it is
+
+    # ESTIMATED, NOT MEASURED, and flagged as such. Plain steel trebles and a
+    # flexible-core wound bass on a 648 mm scale sit between a harpsichord's
+    # thin iron (3.51e-5, measured over 195 notes) and a piano's short thick
+    # wire. Partial frequencies are the one thing a recording gives up
+    # unconditionally, so this is worth measuring properly if a steel-string
+    # reference ever turns up.
+    inharmonicity_coefficient = 5.0e-05
+
+    # A clean valve amplifier is not a distortion-free one -- it is one worked
+    # gently. This is the "clean" setting, and TUNING_AMP_DRIVE sweeps it.
+    amp_drive = 0.35
+    # ...and the level it is measured against, so that picking harder breaks up
+    # and picking softly does not. See tubeamp.emit; without this the drive is
+    # normalised per segment and the dynamics are divided out.
+    # MEASURED, by `python3 examples/guitar.py --calibrate`: the peak a hard
+    # six-string strum actually makes in this renderer's units. Drive 1.0
+    # therefore means "the edge of breakup when the instrument is hit that
+    # hard", and a soft single note reaches a small fraction of the curve --
+    # which is the whole difference between a guitar amplifier and an organ's.
+    amp_reference = 0.0655
+
+    cabinet = "guitar12"
 
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---

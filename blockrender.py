@@ -689,6 +689,8 @@ def prepare(path, tuner='hybrid'):
     _CONS_SRC = {}
     _LESLIE_CH = {}
     _AMP_CH = {}
+    _AMP_REF = {}
+    _CAB_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -901,6 +903,14 @@ def prepare(path, tuner='hybrid'):
             # one in front of a flute.
             _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE',
                                                props.amp_drive))
+            _AMP_REF[ch] = getattr(props, 'amp_reference', None)
+        if getattr(props, 'cabinet', None) and ch not in _CAB_CH:
+            # TUNING_CABINET=0 takes the speaker out, which is not a setting
+            # anyone wants to play through -- it is the A/B that shows what the
+            # cabinet is for, since a clipped signal without one has harmonics
+            # all the way to Nyquist.
+            if os.environ.get('TUNING_CABINET', '1') != '0':
+                _CAB_CH[ch] = props.cabinet
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a
@@ -1204,10 +1214,24 @@ def prepare(path, tuner='hybrid'):
     # given their Doppler and their level swing exactly as any other partial.
     if _AMP_CH and __import__('tubeamp').ENABLED:
         import tubeamp as _AMP
-        _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'),
+                          references=_AMP_REF)
         if _na:
             print("  tube amp: %d channel(s), %d distortion partials"
                   % (len(_AMP_CH), _na))
+
+    # THE SPEAKER, AFTER THE AMPLIFIER AND BEFORE THE ROOM. A cabinet creates
+    # nothing -- it only fails to pass things -- but it has to see the
+    # amplifier's output or it is not in the chain at all: a clipped signal has
+    # harmonics to Nyquist and a real 12" throws nearly all of them away. Put
+    # this before the amp pass, or on the voice class as a FormantBody, and
+    # every distortion product bypasses the speaker. See cabinet.py.
+    if _CAB_CH:
+        import cabinet as _CAB
+        _nc = _CAB.expand(A, _CAB_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        if _nc:
+            print("  cabinet: %s, %d partials through the speaker"
+                  % ("/".join(sorted(set(_CAB_CH.values()))), _nc))
 
     # THE ROTATING SPEAKER. Every row already knows where it went -- px/pz is
     # the listener's position for a direct partial and the IMAGE's for a

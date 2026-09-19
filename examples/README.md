@@ -32,6 +32,8 @@ and comparing them by a single broadband number has hidden the opposite.
 | `buxwv161.py` | Buxtehude's Passacaglia as one long crescendo -- the way passacaglias are played. Registration changes at the key changes, found from the ostinato itself. |
 | `hammond.py` | A Hammond through a driven Leslie, rendered at four amp drives with nothing else changed. The valve stage is the only variable, so the sweep from clean to overdrive is what is being listened to. |
 | `tubeamp_check.py` | What the valve stage actually does, measured rather than asserted: transfer curve, harmonic orders, energy conservation, intermodulation share, and cost. Needs no score. |
+| `guitar.py` | An electric guitar (GM 27) at four amp drives, plus `--calibrate`, which measures the peak a hard strum makes so `amp_reference` means something. The passage plays soft and then dug-in, because on this voice that is audible. |
+| `guitar_check.py` | The pickup's comb against its geometry, the cabinet's response, why power chords work, and the proof that playing harder breaks up. Needs no score. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -43,6 +45,10 @@ python3 examples/organ.py ~/Downloads/buxtehude_passacaglia_registered.mid /tmp
 
 python3 examples/tubeamp_check.py
 python3 examples/hammond.py /tmp
+
+python3 examples/guitar_check.py
+python3 examples/guitar.py --calibrate
+python3 examples/guitar.py /tmp
 ```
 
 ## A passacaglia is built, not registered

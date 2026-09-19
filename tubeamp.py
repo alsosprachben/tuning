@@ -318,7 +318,7 @@ def combine(freqs, amps, phases, tol=0.01):
 
 def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
          oversample=OVERSAMPLE, keep=KEEP_PEAKS, floor=PEAK_FLOOR,
-         stats=None, **valve):
+         reference=None, stats=None, **valve):
     """Distortion partials from the curve itself: [(freq, amp, phase)].
 
     Amplitudes go in and come out in the caller's units; the scaling into and
@@ -331,6 +331,19 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     factor of two and left the amplifier 50 dB down and inaudible. The analytic
     path had to guess at a crest factor (CREST, about 3x rms). This one does
     not have to guess: it synthesises the signal, so it can look.
+
+    `reference` IS WHAT MAKES PLAYING HARDER BREAK UP. Scaling by the segment's
+    OWN peak divides the playing level out completely: measured, the distortion
+    then sits 21.89 dB under the signal at every input level across a 24 dB
+    range, so picking harder changes nothing. That is right for a Hammond,
+    where a key is on or off and the swell pedal in FRONT of the amplifier is
+    the level control -- but it is wrong for anything played with dynamics,
+    where how hard the string is hit IS how hard the valve is hit.
+
+    So pass a FIXED reference peak, in the caller's own amplitude units, and
+    `drive` is measured against that instead: a quiet note then reaches less of
+    the curve than a dug-in chord, which is what a fixed-gain amplifier does.
+    None keeps the old behaviour exactly, and the Hammond wants None.
     """
     import numpy as np
     f = np.asarray(freqs, float)
@@ -356,7 +369,7 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     pk = float(np.abs(x).max())
     if pk <= 0.0:
         return []
-    unit = drive * BIAS / pk
+    unit = drive * BIAS / (float(reference) if reference else pk)
     x *= unit
     g = small_signal(**valve)
     r = curve(x, **valve) - g * x
@@ -448,6 +461,7 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     out = [(hz, am * sc, ph) for hz, am, ph in out]
     if stats is not None:
         stats['power'] = power
+        stats['peak'] = pk          # the signal's own peak, before any scaling
         stats['peaks'] = len(loc)
         stats['emitted'] = len(out)
         stats['drive_peak'] = float(np.abs(x).max())
@@ -535,7 +549,8 @@ def products(freqs, amps, phases, coeffs, keep=20, floor=1e-4, nyquist=None):
     return out
 
 
-def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR):
+def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
+           references=None):
     """Emit the amplifier's distortion partials, in place on the table.
 
     Runs BEFORE leslie.expand, which is the whole reason this can live in the
@@ -597,7 +612,8 @@ def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR):
                 fs, as_, ps = fs[sub], as_[sub], ps[sub]
             src = int(live[int(np.argmax(aM[live]))])
             for f, g, ph in emit(fs.tolist(), as_.tolist(), ps.tolist(),
-                                 sr, drive, floor=floor):
+                                 sr, drive, floor=floor,
+                                 reference=(references or {}).get(ch)):
                 for k in cols:
                     extra[k].append(A[k][src])
                 w = 2.0 * math.pi * f / sr

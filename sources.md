@@ -1860,3 +1860,73 @@ crest factor a random-phase sum actually has (about 3x rms) the same drive gives
 **25 dB down**, which is an amplifier being worked. The model was right and the
 level it was fed was not. The numerical path does not have to guess at a crest
 factor at all -- it synthesises the signal, so it measures the peak.
+
+## The electric guitar: two combs, a magnet and a speaker
+
+`patch_map` had said for a long time, and correctly, that "26-31 are electrics,
+whose colour is an amplifier's, not a box's" -- and left them on the bodyless
+plucked-string base because there was no amplifier to give them. GM 27 now has
+its own voice. 25 does not and should not: it is an ACOUSTIC steel-string, a
+different instrument, and unmeasured.
+
+WHAT MAKES IT AN ELECTRIC IS THAT THERE ARE TWO COMBS. A string plucked at
+fraction p feeds mode n with `|sin(n*pi*p)|`; a pickup at fraction q READS mode
+n with `|sin(n*pi*q)|`, because a magnetic pickup senses the string at a point.
+So an electric is the pluck comb the harpsichord already models, times a second
+comb at the pickup, and the interaction of the two is most of what a guitarist
+means by tone. The numbers are a Stratocaster's geometry, which is measurable:
+648 mm scale, middle pickup 100 mm from the bridge (0.154), coil ~9 mm (0.014).
+
+THE SERIES IS 1/n, NOT 1/n^2, AND THE MAGNET IS WHY. A plucked string's
+DISPLACEMENT modes go as 1/n^2. A pickup's output is -dPhi/dt, so it reads
+VELOCITY: another factor of n. Net 1/n -- a solid body is brighter than its
+unplugged self because of the magnet, not the wood. Written as
+`tonal_dampening = 2.0` plus `pickup_velocity`, so the two terms stay separable.
+
+THE CABINET IS A PASS, NOT A BODY, and that ordering is the whole design.
+`FormantBody` is already a loudspeaker in everything but name -- resonances,
+antiresonances, a top corner, a low cutoff, power-normalised -- but a body is
+applied in `harmonic_volume`, while a note's partials are being built, which is
+BEFORE the amplifier pass. Put the cabinet there and it filters the clean
+signal while every distortion product bypasses it. So `cabinet.py` runs on the
+finished table, between `tubeamp.expand` and `leslie.expand`:
+
+    string -> pluck comb -> pickup comb -> AMP -> CABINET -> room
+
+Measured on the rendered guitar at drive 4, cabinet against none, matched at
+800-2000 Hz: **-14.3 dB in 5-10 kHz, -19.9 dB above 10 kHz, and +3.0 dB at
+2-5 kHz**. Bite up, fizz down. That is the difference between an overdriven
+amplifier and a wasp, and it costs one gain per partial, because in the partial
+domain a cabinet is a table lookup rather than a convolution.
+
+PLAYING HARDER HAS TO BREAK UP, and it did not. `tubeamp.emit` normalised each
+segment to its own peak, which divides the playing level out completely --
+measured, distortion sat 21.89 dB under the signal at every input level across
+24 dB. That is RIGHT for a Hammond, whose keys are on or off and whose swell
+pedal sits in front of the amplifier, and wrong for anything with a picking
+hand. `amp_reference` fixes it: a fixed peak, measured by rendering a hard
+six-string strum (0.0655 in renderer units), that `drive` is taken against.
+Rendered, an 18 dB difference in playing now produces 22.7 to 32.6 dB of
+difference in distortion. `None` keeps the old behaviour, and the Hammond
+keeps it.
+
+WHY POWER CHORDS WORK, WHICH NOBODY TOLD IT. Distortion energy landing more
+than 25 cents from any sounding partial -- products that beat against the chord
+rather than reinforce it:
+
+| interval | ratio | rough |
+|---|---|---|
+| octave | 2:1 | **0.2%** |
+| fifth | 3:2 | **15.1%** |
+| fourth | 4:3 | 22.8% |
+| major sixth | 5:3 | 22.7% |
+| minor third | 6:5 | 25.7% |
+| tritone | 45:32 | 25.6% |
+| major third | 5:4 | **27.1%** |
+
+An octave is free, a fifth is about half as rough as a third, and everything
+else lands in between. That is the power chord, arrived at from a transfer
+function and a string -- nothing in the model was told which intervals survive
+overdrive. The metric has a limit worth stating: a minor SECOND scores low for
+the wrong reason, because its own partials are dense enough that everything is
+near something, so it is not comparable and is not listed.
