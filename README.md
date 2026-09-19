@@ -309,14 +309,30 @@ the kernel compiles one `.so` per rate, so 48000 costs a one-off rebuild.
 ## Render the corpus
 
 ```sh
-./render-corpus.sh                # everything in corpus.txt, to ~/Downloads/bwx-renders
-./render-corpus.sh a.mid b.mid    # just these
+./render-corpus.sh                    # everything in corpus.txt, to ~/Downloads/bwx-renders
+./render-corpus.sh a.mid b.mid        # just these
+ROOM=church ./render-corpus.sh ...    # a different building
 ```
 
-168 files, one at a time, to MP3. `corpus.txt` is the list. `TUNING_MASTER_DB=-14`
-leaves room for the reverb and the final -1 dBFS normalise, and the reverb is one
-hall for the whole set on purpose — these are comparison renders, and per-voice
-spaces would make the survey uneven.
+168 files, one at a time, to MP3. `corpus.txt` is the list.
 
-Serial rather than parallel: a parallel run was killed part-way once, and an even
-survey matters more here than speed. About five seconds for a 90-second piece.
+**One room, told to both halves.** `TUNING_ROOM` is exported once, so
+`blockrender` computes the first-order images against it and `roomtail.py`
+convolves the diffuse field of the *same* room — reading the `.room.json`
+sidecar the render leaves beside the wav, so the tail uses the directivity the
+render actually measured rather than a scalar. This replaced a `sox reverb`
+tacked on the end, which was a hall's early reflections in front of a reverb
+unit's tail: two different rooms. `hall` by default; an organ wants `church`,
+and that is not a reverb setting but a building four times the volume with a
+tenth the absorption.
+
+`TUNING_MASTER_DB=-14` leaves room for the tail and the final -1 dBFS
+normalise — 2 dB lower than a single piece needs, because a survey has to hold
+the loudest thing in the corpus, which since the electric guitars landed is an
+overdriven one.
+
+Serial rather than parallel: a parallel run was killed part-way once, and an
+even survey matters more here than speed. A clean 90-second piece is about five
+seconds. **A voice with a valve amplifier is not** — GM 18 and GM 26–31 emit
+distortion partials in bulk, and `bwx37` is 31 seconds of audio, 95,000
+partials and 1.6× realtime. A corpus with guitars in it is a much longer run.
