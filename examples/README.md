@@ -32,7 +32,7 @@ and comparing them by a single broadband number has hidden the opposite.
 | `buxwv161.py` | Buxtehude's Passacaglia as one long crescendo -- the way passacaglias are played. Registration changes at the key changes, found from the ostinato itself. |
 | `hammond.py` | A Hammond through a driven Leslie, rendered at four amp drives with nothing else changed. The valve stage is the only variable, so the sweep from clean to overdrive is what is being listened to. |
 | `tubeamp_check.py` | What the valve stage actually does, measured rather than asserted: transfer curve, harmonic orders, energy conservation, intermodulation share, and cost. Needs no score. |
-| `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31) on one passage at their own drives; `--calibrate` measures the peak a hard strum makes, so `amp_reference` means something. The passage plays soft and then dug-in, because on this voice that is audible. |
+| `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31); `--fret` plays a phrase with the position shifts left in, which is what fret noise (GM 120) is for; `--calibrate` measures the peak a hard strum makes, so `amp_reference` means something. The passage plays soft and then dug-in, because on this voice that is audible. |
 | `guitar_check.py` | The pickup's comb against its geometry, the cabinet's response, why power chords work, and the proof that playing harder breaks up. Needs no score. |
 
 ```
@@ -50,6 +50,7 @@ python3 examples/guitar_check.py
 python3 examples/guitar.py --calibrate
 python3 examples/guitar.py /tmp
 python3 examples/guitar.py --family /tmp
+python3 examples/guitar.py --fret /tmp
 ```
 
 ## A passacaglia is built, not registered

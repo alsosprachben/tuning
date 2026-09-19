@@ -2,6 +2,8 @@
 """An electric guitar: the drive sweep, and the calibration behind it.
 
     python3 examples/guitar.py [outdir]
+    python3 examples/guitar.py --family [outdir]
+    python3 examples/guitar.py --fret [outdir]
     python3 examples/guitar.py --calibrate
 
 GM 27 is the first electric to have its own voice (see
@@ -70,6 +72,69 @@ def _chord(tr, notes, beats, vel):
     for i, p in enumerate(notes):
         tr.append(mido.Message('note_off', note=p, velocity=0, channel=0,
                                time=n if i == 0 else 0))
+
+
+FRET_PROGRAM = 120      # GM 120, Guitar Fret Noise -- NOT GM 31, which is a
+                        # guitar HARMONIC (a finger on a node). This is the
+                        # squeak a hand makes shifting position.
+
+
+def fret(outdir):
+    """A phrase with the shifts left in, which is what fret noise is for.
+
+    On a real guitar track the squeaks are not decoration -- they are the
+    evidence that a hand moved, and they land in the GAPS, during the shift,
+    not on the notes. So the phrase plays in one position, shifts, and plays in
+    another, with a squeak covering each shift on its own channel.
+
+    Rendered under the same room and master as the sweep, a mid squeak sits
+    about 27 dB under a hard-picked chord: present, never competing.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    m = mido.MidiFile(ticks_per_beat=TPB)
+    tr = mido.MidiTrack(); m.tracks.append(tr)
+    tr.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(96), time=0))
+    tr.append(mido.Message('program_change', program=PROGRAM, channel=0, time=0))
+    tr.append(mido.Message('program_change', program=FRET_PROGRAM, channel=1, time=0))
+    # (tick, kind, note, vel, length): a low phrase, a shift, a high phrase,
+    # a shift back. The squeaks sit IN the shifts.
+    ev = []
+    t = 0
+    for p in (40, 43, 45, 47):                  # first position
+        ev.append((t, 0, p, 96, 200)); t += 240
+    ev.append((t + 20, 1, 79, 105, 150))        # the shift up: a fast squeak
+    t += 300
+    for p in (64, 67, 69, 71):                  # up the neck
+        ev.append((t, 0, p, 100, 200)); t += 240
+    ev.append((t + 20, 1, 74, 70, 170))         # the shift back: slower, lower
+    t += 320
+    for p in (40, 47, 52, 55, 59, 64):          # and a chord, hand arrived
+        ev.append((t, 0, p, 112, 900))
+    msgs = []
+    for tick, ch, note, vel, length in ev:
+        msgs.append((tick, mido.Message('note_on', note=note, velocity=vel, channel=ch)))
+        msgs.append((tick + length, mido.Message('note_off', note=note, velocity=0, channel=ch)))
+    msgs.sort(key=lambda kv: kv[0])
+    last = 0
+    for tick, msg in msgs:
+        msg.time = tick - last; last = tick
+        tr.append(msg)
+    mid = os.path.join(outdir, 'guitar-fret.mid')
+    m.save(mid)
+    out = mid[:-4] + '.wav'
+    env = dict(os.environ)
+    env.setdefault('TUNING_ROOM', 'chamber')
+    env.setdefault('TUNING_MASTER_DB', '-12')
+    r = subprocess.run([sys.executable, os.path.join(root, 'blockrender.py'),
+                        mid, out, 'even'], env=env, cwd=root,
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        print(r.stdout[-2000:]); print(r.stderr[-2000:]); return 1
+    print("  %s" % out)
+    for l in r.stdout.splitlines():
+        if 'blockrender:' in l or 'cabinet' in l or 'tube amp' in l:
+            print("  " + l.strip())
+    return 0
 
 
 def family(outdir):
@@ -157,6 +222,11 @@ def calibrate(outdir):
 
 
 def main(argv):
+    if '--fret' in argv:
+        i = argv.index('--fret')
+        out = argv[i + 1] if len(argv) > i + 1 else '.'
+        os.makedirs(out, exist_ok=True)
+        return fret(out)
     if '--family' in argv:
         out = argv[argv.index('--family') + 1] if len(argv) > argv.index('--family') + 1 else '.'
         os.makedirs(out, exist_ok=True)

@@ -2755,6 +2755,38 @@ def selftest():
     def _bright(g):
         v = np.array([g.harmonic_volume(h) for h in range(1, 25)])
         return float((np.arange(1, 25) * v ** 2).sum() / max((v ** 2).sum(), 1e-30))
+    # ---- fret noise, which is a different patch from harmonics ---------------
+    check("fret noise has its own voice, not a mallet's",
+          _PM.property_class_for_program(120) is _T.GuitarFretNoiseProperties,
+          "  (%s)" % _PM.property_class_for_program(120).__name__)
+    fn = _T.GuitarFretNoiseProperties(880.0, 0.0, 1.0, 1.0)
+    # THE GLIDE IS THE SOUND, so it needs range the piano's bloom never did --
+    # tension_bend was capped at 0.04 for that, which is 68 cents.
+    check("a slide sweeps further than the piano's bloom was allowed to",
+          fn.tension_bend > 0.04,
+          "  (%.0f cents at onset)" % (1200 * math.log2(1.0 + fn.tension_bend)))
+    check("...and it settles in the time a position shift takes",
+          fn.tension_settle_time < 0.15, "  (%.2f s)" % fn.tension_settle_time)
+    # A SQUEAK IS PITCHED; breath and a gunshot deliberately are not. Measured
+    # as WHERE half the energy is reached, at a fundamental low enough that the
+    # series still fits -- a share of the first few harmonics cannot separate
+    # them up high, because up there everything runs out of band together.
+    def _half_at(cls):
+        g = cls(110.0, 0.0, 1.0, 1.0)
+        e = np.array([g.harmonic_volume(h) for h in range(1, 33)]) ** 2
+        return int(np.searchsorted(np.cumsum(e) / max(e.sum(), 1e-30), 0.5)) + 1
+    hf, hb, hg = (_half_at(_T.GuitarFretNoiseProperties),
+                  _half_at(_T.BreathNoiseProperties),
+                  _half_at(_T.GunshotProperties))
+    check("fret noise keeps its pitch where breath and a gunshot throw theirs away",
+          hf < hb < hg, "  (half the energy by h%d, h%d, h%d)" % (hf, hb, hg))
+    # Only WOUND strings squeak, so it must fall away up the register.
+    hi = _T.GuitarFretNoiseProperties(3520.0, 0.0, 1.0, 1.0)
+    check("it fades where the strings would be plain",
+          hi.gain < fn.gain * 0.6,
+          "  (%.1f dB across two octaves)"
+          % (20 * math.log10(max(hi.gain, 1e-30) / max(fn.gain, 1e-30))))
+
     check("the neck humbucker is darker than the bridge one",
           _bright(inst[26]) < _bright(inst[30]),
           "  (mean harmonic %.1f vs %.1f)" % (_bright(inst[26]), _bright(inst[30])))

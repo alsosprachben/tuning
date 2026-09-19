@@ -1032,6 +1032,11 @@ class SynthProperties:
     tension_bend_slope = 1.0
     tension_settle_time = 0.28   # s: transient decays to the tuned pitch this fast
     tension_settle_cutoff = 1.8  # s: past this the bloom is spent; skip the math
+    # The cap, which used to be the literal 0.04 the piano needs -- "so an
+    # extreme-bass fff can't bend absurdly". A voice whose pitch transient IS
+    # the sound rather than a bloom on it wants far more: a slide up the neck
+    # sweeps a fifth, not 68 cents. See GuitarFretNoiseProperties.
+    tension_bend_max = 0.04
 
     # Per-note natural jitter (0 = off). Now that every strike is phase-coherent,
     # two voices on the same pitch would align TOO perfectly (a machine-gun,
@@ -1979,7 +1984,7 @@ class SynthProperties:
         # toward low f0 (tension_bend is the value at tension_bend_ref_hz); capped
         # so an extreme-bass fff can't bend absurdly.
         if self.tension_bend > 0.0:
-            self.tension_bend = min(0.04, self.tension_bend
+            self.tension_bend = min(self.tension_bend_max, self.tension_bend
                 * (self.tension_bend_ref_hz / float(frequency)) ** self.tension_bend_slope)
 
         if self.inharmonicity_dynamic:
@@ -8971,6 +8976,83 @@ class ConsonantProperties(FormantBody, NoisyPercussionMixin, StoppedPipeProperti
         """
         fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
         return self.bore_gain(fn) * self._hf_rolloff(harmonic)
+
+
+class GuitarFretNoiseProperties(NoisyPercussionMixin, PluckedStringProperties):
+    """GM 120. A fingertip dragged along a wound string.
+
+    NOT the same thing as GM 31, which is a guitar HARMONIC -- a finger resting
+    on a node so that most of the string cannot speak. This is the noise
+    between the notes: the squeak a hand makes shifting position, which on a
+    real guitar track is most of what tells you a human is playing it.
+
+    IT IS A PITCHED SCRAPE, NOT A HISS, and that is the whole design. A
+    round-wound string is a helix of wire, and a fingertip riding over the
+    windings crosses a ridge every winding pitch -- so the squeak's frequency
+    is slide speed divided by winding pitch, not anything about the note being
+    fretted. With a wrap around 0.35 mm and a hand moving 0.25 to 1 m/s that
+    puts it between about 700 Hz and 3 kHz, which is where fret noise lives.
+
+    So it is built as a harmonic voice roughened, rather than as noise given a
+    little shape: the neighbouring effects voices go the other way (breath sets
+    tonal_dampening 0.25 and a gunshot 0.12, both near-flat, because no pitch
+    should survive) and doing that here would give a shhh where there should be
+    a squeak.
+
+    THE GLIDE IS THE RECOGNISABLE PART, and it is already modelled -- as the
+    piano's tension bloom, which has exactly the shape a position shift has: it
+    starts displaced and settles exponentially. A hand is fastest when it
+    leaves and stops when it arrives, so the squeak starts high and falls. What
+    the piano does not need is the RANGE; tension_bend was capped at 0.04
+    (68 cents) for it, and a slide sweeps most of an octave, which is what
+    tension_bend_max is for. Velocity scales it, so a hard note is a long fast
+    shift and a soft one is a short one -- which is also how it is played.
+
+    THE NOTE STANDS IN FOR HAND SPEED, not for a fretted pitch, since the
+    squeak's pitch has nothing to do with which note is stopped. Writing it
+    high is writing a fast shift.
+
+    ONLY WOUND STRINGS SQUEAK. The plain trebles have no helix to ride over, so
+    there is nothing to make the sound at all -- hence octave_gain, which takes
+    9 dB an octave out as the part climbs into the register where the strings
+    would be plain. It is the same fact that makes fret noise a bass-string
+    phenomenon on every recording.
+    """
+    # A slide, not a bloom: most of an octave, settling in the tenth of a
+    # second a position shift takes, and independent of register because it is
+    # the hand's speed and not the string's tension.
+    tension_bend = 0.45
+    tension_bend_max = 0.80
+    tension_bend_slope = 0.0
+    tension_settle_time = 0.10
+    tension_settle_cutoff = 0.6
+
+    # Bright and dense, because a scrape over regular ridges is close to a
+    # pulse train -- but pitched, which is what separates it from breath.
+    tonal_dampening = 0.55
+    max_harmonic = 48
+    inharmonicity_coefficient = (
+        SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0)
+    inharmonicity_dynamic = False
+
+    # A fingertip is soft and it bounces, so the ridge crossings are not
+    # regular. The wash is what makes it a scrape rather than a buzz, and it
+    # has to keep moving while the hand does.
+    chiff_volume = 1.8
+    chiff_cycle = 0.90
+    chiff_min_valve_time = 0.010
+    chiff_max_valve_time = 0.030
+    chiff_release = 0.5
+    sustain_jitter = 1.0
+
+    hf_corner_hz = 8000.0
+    octave_gain = -9.0            # plain strings have no winding to ride over
+    # LEVELLED AGAINST THE GUITAR IT SITS BETWEEN. Rendered under the same
+    # room and master as examples/guitar.py, a hard-picked chord measures
+    # -45 dB; at 1/9000 a mid squeak came out 39 dB under that, which is
+    # inaudible in a mix and is not what fret noise does. This puts it about
+    # 27 dB under -- present, and never competing with a note.
+    initial_gain = 1.0 / 2300
 
 
 class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):

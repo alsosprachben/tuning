@@ -29,6 +29,7 @@ from tonelib import (
     OverdrivenGuitarProperties,
     DistortionGuitarProperties,
     GuitarHarmonicsProperties,
+    GuitarFretNoiseProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -227,6 +228,12 @@ PROGRAM_CLASS[115] = WoodPercussionProperties
 # tuned bell. The three the collection actually uses now have voices; the rest
 # keep the mallet fallback until there is a file to hear them in.
 _fill(120, 127, MalletProperties)
+# 120 is GUITAR FRET NOISE, and a struck bar is the wrong thing entirely: a
+# mallet voice has fixed modes and a decay where this has a swept fundamental
+# and a duration set by the hand. See GuitarFretNoiseProperties -- it is a
+# pitched scrape (slide speed / winding pitch), not a hiss, which is also why
+# it is not built on its neighbours at 121-122.
+PROGRAM_CLASS[120] = GuitarFretNoiseProperties
 PROGRAM_CLASS[121] = BreathNoiseProperties   # bwx27c, 339 notes
 PROGRAM_CLASS[122] = SeashoreProperties      # rigormrt "Water"
 PROGRAM_CLASS[127] = GunshotProperties       # A-Team "Gun Shot"
