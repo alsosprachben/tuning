@@ -1730,7 +1730,7 @@ throw at 6.6 Hz), level swing +-6% at 110 Hz rising to +-84% at 6 kHz -- the
 spectrum breathing at the rotor rate, which is what separates a Leslie from a
 tremolo.
 
-## The tube amp, and where a power series stops
+## The tube amp: where a power series stops, and what to do instead
 
 Distortion products are partials, so the amplifier does not need a sample-domain
 stage: a nonlinearity applied to a sum of cosines makes more cosines, at sums
@@ -1774,10 +1774,82 @@ only inside the grid bias:
 
 Past the bias it does not lose accuracy, it DIVERGES -- more orders are worse,
 not better -- because the tube cuts off there and a power series about zero
-cannot have a corner. So `tubeamp` clamps drive at 1.0. This models the bend;
-the clip is out of reach twice over, being past the radius of convergence and
-combinatorially hopeless anyway (fifth order over twenty partials is ~680,000
-products).
+cannot have a corner. So the first version clamped drive at 1.0, and modelled
+the bend rather than the clip.
+
+That clamp was the SERIES' limit, not the amplifier's, and the distinction
+matters because the clip is what Leslie overdrive is. Two things stood in the
+way, and they are independent:
+
+- **Convergence.** The radius really is the bias, so drive 1.0 is exactly the
+  edge -- that part of the old claim stands. Nor does a better fit rescue it:
+  Taylor is stuck at 120% error on a hard clipper *forever*, because a clipper
+  is exactly linear near zero, so every derivative above the first vanishes
+  there and the series never learns the corner exists. Fitting over the range
+  instead does converge -- Chebyshev reaches 5.8% at order 9, with **odd-only**
+  coefficients, which is the square wave falling out of the arithmetic.
+- **Combinatorics.** Which fixing convergence does nothing about. A clip's
+  energy lives in the high orders: hard-clipping a tonewheel chord puts 4.0%
+  of the distortion energy in third order, **46.7% in fifth and 41.9% in
+  seventh**. Fifth order over twenty partials is ~680,000 terms and seventh is
+  ~42 million. And truncating harder does not save it -- the captured fraction
+  goes as `f^n`, so keeping the strongest 8 parents captures 48.8% of third
+  order but only 30.3% of fifth. High orders need the same parents or more.
+
+BOTH ARE PROPERTIES OF EXPANDING, NOT OF THE PROBLEM. So `tubeamp` now
+evaluates the curve instead: synthesise the segment's partials, apply the valve
+per sample, subtract the linear part, transform, and read the products off the
+residual. One FFT finds every order at once, for any transfer function, with no
+radius of convergence and nothing enumerated. Measured on a four-note chord it
+emits 100.2-100.9% of the true distortion energy and reproduces its 1/12-octave
+spectrum to 10-15%, in 56 ms a segment.
+
+THE CURVE NEEDED A CEILING BEFORE IT COULD CLIP. Cutoff alone is half a
+clipper: past the bias one half stops conducting and the other keeps growing as
+`v^1.5`, so the stage went EXPANSIVE -- slope 0.718 at drive 1 rising back to
+1.008 by drive 3. A real stage also runs out at the top, when the plate voltage
+swings down and the load line reaches the knee, so each half's current now
+passes through a soft ceiling. The slope falls monotonically and stays fallen:
+0.94, 0.62, 0.43, 0.07 at drives 0.5, 1, 2, 4. Rendered, that is -24.6 dB of
+distortion at drive 1, -12.5 at 2 and -3.3 at 4, with the level dropping 1.9 dB
+across the sweep -- the compression and the clip being the same ceiling.
+
+WHY IT WORKS AS WELL AS IT DOES, WHICH WAS A SURPRISE. Counting terms is
+misleading; what matters is how many distinct FREQUENCIES they land on, and
+those collapse. Drawbar ratios are tempered approximations to integers -- the
+"third harmonic" is 2.9966 -- and sums and differences of near-integers are
+near-integers, so the products fall onto a near-harmonic lattice:
+
+| voicing | order | terms | distinct freqs | clusters 10c apart |
+|---|---|---|---|---|
+| 1 key | 7 | 403,779 | 7,969 | 610 |
+| triad | 5 | -- | 1,155,020 | **1,113** |
+| triad + 7th | 5 | -- | 5,068,131 | **1,153** |
+
+The frequency count explodes and the cluster count does not, because equal
+temperament keeps cross-products between different keys on the same lattice
+too. Five million lines inside eleven hundred groups is about a thousand lines
+per cluster, all beating against each other -- a dense chorus around a definite
+pitch, which is what the growl is, and which is why it has pitch at all.
+
+TWO THINGS THAT LOOK RIGHT AND ARE NOT.
+
+The residual is **not stationary**: distortion fires at the crests where the
+partials happen to align, and a one-second window holds only a handful of
+those, so whether a crest lands under the window's taper or its flat changes
+the apparent energy. Measured, the window-weighted total ran 29% over the true
+residual power and the first version duly emitted 131% of the distortion
+present. The distribution has to come from the FFT and the LEVEL from the
+time domain, where no window is involved.
+
+And emitting each cluster as several detuned partials carrying its measured
+width -- which is the obvious way to put the beating back -- makes it WORSE:
+waveform error went from 59.5% to 70.2% on a chord. The sub-partials get
+subdivision frequencies and mismatched phases, and detuning that is merely
+arbitrary is worse than none. One partial carrying the cluster's whole energy
+at its own peak is better, and what a cluster costs is therefore the beating
+inside it. No noise bed recovers that either: noise is uncorrelated with the
+source and a cluster is not.
 
 A MISTAKE WORTH KEEPING. The first version normalised the signal into the
 valve's units by SUMMING the partial amplitudes -- the all-in-phase worst case,
@@ -1786,4 +1858,5 @@ two, and a factor of two at the input is a factor of eight in every third-order
 product: the amplifier measured 50 dB down and did nothing audible. With the
 crest factor a random-phase sum actually has (about 3x rms) the same drive gives
 **25 dB down**, which is an amplifier being worked. The model was right and the
-level it was fed was not.
+level it was fed was not. The numerical path does not have to guess at a crest
+factor at all -- it synthesises the signal, so it measures the peak.

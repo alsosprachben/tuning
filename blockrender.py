@@ -894,7 +894,13 @@ def prepare(path, tuner='hybrid'):
         if ch not in _CONS_SRC:
             _CONS_SRC[ch] = (props, _PX[0], _PZ[0], _radius[0])
         if getattr(props, 'amp_drive', 0.0) and ch not in _AMP_CH:
-            _AMP_CH[ch] = float(props.amp_drive)
+            # TUNING_AMP_DRIVE overrides every voice's drive at once, which is
+            # how the stage gets auditioned: the same passage clean, at the
+            # edge of breakup and past it, with nothing else changed. It only
+            # scales voices that HAVE an amplifier -- setting it does not put
+            # one in front of a flute.
+            _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE',
+                                               props.amp_drive))
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a

@@ -30,6 +30,8 @@ and comparing them by a single broadband number has hidden the opposite.
 | `dies_irae.py` | Mozart, Requiem K.626, Dies Irae. Same, and the reason `--choir-db` exists. |
 | `organ.py` | A registered organ score, by the recipe BWV 542 v7 used: church room in BOTH the render and the tail, `hybrid` tuner, -12 dB for headroom. |
 | `buxwv161.py` | Buxtehude's Passacaglia as one long crescendo -- the way passacaglias are played. Registration changes at the key changes, found from the ostinato itself. |
+| `hammond.py` | A Hammond through a driven Leslie, rendered at four amp drives with nothing else changed. The valve stage is the only variable, so the sweep from clean to overdrive is what is being listened to. |
+| `tubeamp_check.py` | What the valve stage actually does, measured rather than asserted: transfer curve, harmonic orders, energy conservation, intermodulation share, and cost. Needs no score. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -38,6 +40,9 @@ python3 singpass.py /tmp/daisy.mid /tmp/daisy.wav --lang english --tube
 python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --both
 python3 examples/lacrimosa_choir.py ~/Downloads/MozartLacrimosaSATB.mxl /tmp --orchestra
 python3 examples/organ.py ~/Downloads/buxtehude_passacaglia_registered.mid /tmp
+
+python3 examples/tubeamp_check.py
+python3 examples/hammond.py /tmp
 ```
 
 ## A passacaglia is built, not registered

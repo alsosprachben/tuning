@@ -3135,10 +3135,14 @@ class TonewheelProperties(SynthProperties):
     # than harmonics of any one of them, which is why a Hammond thickens where
     # a single sine through the same amplifier barely would.
     #
-    # 1.0 IS THE CEILING, and not a soft one: past the bias the tube cuts off,
-    # the power series diverges, and tubeamp clamps rather than emit nonsense.
-    # What lies past it -- real Leslie overdrive, which is clipping -- this
-    # model cannot reach.
+    # THERE IS NO LONGER A CEILING AT 1.0. There used to be, and it was the
+    # POWER SERIES' limit rather than the amplifier's: the old stage expanded
+    # the transfer function about the operating point, which diverges past the
+    # bias, so the only honest thing was to clamp. tubeamp now evaluates the
+    # curve instead of expanding it, and the curve has a plate-current ceiling
+    # as well as cutoff, so drive past the bias is simply the clip -- which is
+    # what real Leslie overdrive is. Drive 1.0 still means the edge of breakup
+    # (the stage's slope is 0.62 there); 2 is into it and 4 is well past.
     amp_drive = 0.0
 
 
