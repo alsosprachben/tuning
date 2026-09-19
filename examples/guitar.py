@@ -102,11 +102,15 @@ def fret(outdir):
     t = 0
     for p in (40, 43, 45, 47):                  # first position
         ev.append((t, 0, p, 96, 200)); t += 240
-    ev.append((t + 20, 1, 79, 105, 150))        # the shift up: a fast squeak
+    # LOW, because that is where the wound strings are. The note no longer
+    # sets the squeak's band -- that is fixed at the hand's speed -- so all it
+    # does now is choose how much winding there is to ride over, and a squeak
+    # written up at G5 is a plain treble string, i.e. almost silent.
+    ev.append((t + 20, 1, 41, 120, 150))        # the shift up: a fast squeak
     t += 300
     for p in (64, 67, 69, 71):                  # up the neck
         ev.append((t, 0, p, 100, 200)); t += 240
-    ev.append((t + 20, 1, 74, 70, 170))         # the shift back: slower, lower
+    ev.append((t + 20, 1, 45, 96, 170))         # the shift back: slower, softer
     t += 320
     for p in (40, 47, 52, 55, 59, 64):          # and a chord, hand arrived
         ev.append((t, 0, p, 112, 900))
@@ -119,21 +123,36 @@ def fret(outdir):
     for tick, msg in msgs:
         msg.time = tick - last; last = tick
         tr.append(msg)
-    mid = os.path.join(outdir, 'guitar-fret.mid')
-    m.save(mid)
-    out = mid[:-4] + '.wav'
+    # AND THE SAME THING SOLOED. This phrase is fourteen guitar notes and two
+    # squeaks, which is the right proportion for a guitar part and the wrong
+    # one for judging a squeak -- played together it sounds like a guitar,
+    # because it mostly is one. Anything this quiet has to be listenable on its
+    # own before a balance against it means anything; choral.py has
+    # --choir-only for the same reason.
     env = dict(os.environ)
     env.setdefault('TUNING_ROOM', 'chamber')
     env.setdefault('TUNING_MASTER_DB', '-12')
-    r = subprocess.run([sys.executable, os.path.join(root, 'blockrender.py'),
-                        mid, out, 'even'], env=env, cwd=root,
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stdout[-2000:]); print(r.stderr[-2000:]); return 1
-    print("  %s" % out)
-    for l in r.stdout.splitlines():
-        if 'blockrender:' in l or 'cabinet' in l or 'tube amp' in l:
-            print("  " + l.strip())
+    outs = []
+    for tag, drop in (('guitar-fret', None), ('guitar-fret-squeaks', 0)):
+        mm = mido.MidiFile(ticks_per_beat=TPB)
+        t2 = mido.MidiTrack(); mm.tracks.append(t2)
+        for msg in tr:
+            if drop is not None and getattr(msg, 'channel', None) == drop \
+                    and msg.type in ('note_on', 'note_off'):
+                # keep the timing, drop the sound: a note-on at velocity 0
+                msg = msg.copy(velocity=0) if msg.type == 'note_on' else msg
+            t2.append(msg.copy())
+        mid = os.path.join(outdir, tag + '.mid')
+        mm.save(mid)
+        out = mid[:-4] + '.wav'
+        r = subprocess.run([sys.executable, os.path.join(root, 'blockrender.py'),
+                            mid, out, 'even'], env=env, cwd=root,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(r.stdout[-2000:]); print(r.stderr[-2000:]); return 1
+        outs.append(out)
+        print("  %s" % out)
+    print("  play the second one to judge the squeak; the first to judge the mix")
     return 0
 
 

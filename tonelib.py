@@ -9110,7 +9110,14 @@ class GuitarFretNoiseProperties(NoisyPercussionMixin, FormantBody,
     hf_corner_hz = 3800.0          # see above: the wash, not the partials
     hf_order = 2.0
     octave_gain = -9.0             # plain strings have no winding to ride over
-    initial_gain = 1.0 / 2300      # levelled: see below
+    # LEVELLED, AND THE PLACEMENT MATTERS MORE THAN THIS DOES. Written on a
+    # low (wound) string at a hard shift, a squeak peaks 14.6 dB under the
+    # guitar it sits beside -- audible, and never competing. Written up at G5
+    # the same voice is 36 dB under, because a plain treble string has no
+    # winding to ride over and this voice says so. That is the model being
+    # right, not the level being wrong: raising the gain to bring a treble
+    # squeak up would make a bass one louder than the note.
+    initial_gain = 1.0 / 2300
 
 
 class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):
