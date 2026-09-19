@@ -2037,6 +2037,20 @@ the bend -- a hard note is a long fast shift and a soft one a short one.
 
 ONLY WOUND STRINGS SQUEAK. The plain trebles have no helix to ride over, so
 `octave_gain` takes 9 dB an octave out as the part climbs into the register
-where the strings would be plain -- measured, 18 dB across two octaves. Levelled
-against the instrument it sits between: under the same room and master a hard
-chord is -45 dB and a mid squeak -72.9, about 28 dB under.
+where the strings would be plain -- measured, 18 dB across two octaves.
+
+WHICH MAKES WHERE IT IS WRITTEN MATTER MORE THAN THE GAIN. Peak against peak
+against the guitar beside it, a squeak on a low wound string at a hard shift
+sits about 21 dB under; the SAME voice written up at G5 sits 36 dB under,
+because there is no winding up there and the model says so. The first demo
+wrote them at G5 and D5 and they were inaudible, which is the model being
+right and the part being wrong -- raising the gain to rescue a treble squeak
+would put a bass one over the note.
+
+Levelled by ear from there: 14.6 dB under was "a bit too loud", which is the
+same judgement the recordings make -- fret noise is evidence that a hand moved,
+not a part. The level is linear in `initial_gain`, so that is the one knob.
+
+(And a measurement worth not repeating: "about 27 dB under a hard chord" came
+from comparing a 0.3 s squeak's RMS with a 1.6 s sustained chord's RMS. A
+transient against a held note is not like-for-like; peak against peak is.)
