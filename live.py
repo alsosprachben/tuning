@@ -871,27 +871,43 @@ class Bank:
         # prepare() extends it to 8 s. The template has to be long enough to
         # hold that, or the tail is cut at build time.
         tr.append(mido.MetaMessage("end_of_track", time=480 * (18 if self.drums else 1)))
+        # NO AMPLIFIER AT BUILD TIME, FOR ANY VOICE. The amplifier is a CHORD
+        # effect and a one-note template cannot know about it, so baking each
+        # note's own distortion in here has it counted twice once the live
+        # stage adds the chord's -- and worse, those baked products are then
+        # read back as PARENTS, which is how a single Hammond key came to
+        # measure 103 distortion partials where it honestly makes 15.
+        #
+        # This used to be done only for Leslie voices, because the Hammond was
+        # the only thing with an amplifier. An electric guitar has one too and
+        # is not a Leslie voice, so it took the `else` branch and built every
+        # template through the full offline pass: double distortion, a slow
+        # build, and a page of log noise per template into the TUI.
+        #
+        # THE CABINET STAYS ON, and that is not an inconsistency: a speaker is
+        # a LINEAR filter, so filtering each note and summing is the same as
+        # filtering the sum. Only the nonlinearity has to wait for the chord.
+        import leslie as _L
+        import tubeamp as _TA
+        _wasa, _TA.ENABLED = _TA.ENABLED, False
+        # NO SIDEBANDS LIVE either, for a rotor. Offline the level swing has to
+        # be partials because the render is one stateless call; here there is a
+        # callback, so the swing is a gain and the rotor stays a thing that can
+        # still be turned while a chord is held.
+        _was = _L.SIDEBANDS
         if self.leslie:
-            # NO SIDEBANDS LIVE. Offline the level swing has to be partials
-            # because the render is one stateless call; here there is a
-            # callback, so the swing is a gain and the rotor stays a thing
-            # that can still be turned while a chord is held.
-            import leslie as _L
-            import tubeamp as _TA
-            # NO SIDEBANDS AND NO AMPLIFIER at build time. The rotor is a gain
-            # live, and the amplifier is a CHORD effect that a one-note
-            # template cannot know about -- baking in each note's own
-            # distortion here would have it counted twice once the mod wheel
-            # adds the chord's. See Live._amp_worker.
-            _was, _L.SIDEBANDS = _L.SIDEBANDS, False
-            _wasa, _TA.ENABLED = _TA.ENABLED, False
-            try:
+            _L.SIDEBANDS = False
+        try:
+            # AND QUIETLY. prepare() reports what its passes did, which is
+            # right for a render and is corruption for a curses screen -- the
+            # TUI owns the terminal. Redirected rather than flag-guarded so
+            # that anything added to those passes later is caught too.
+            import contextlib as _ctx, io as _io
+            with _ctx.redirect_stdout(_io.StringIO()):
                 p = B.prepare(m, self.tuner)
-            finally:
-                _L.SIDEBANDS = _was
-                _TA.ENABLED = _wasa
-        else:
-            p = B.prepare(m, self.tuner)
+        finally:
+            _L.SIDEBANDS = _was
+            _TA.ENABLED = _wasa
         t = {k: np.array(p[k]) for k in ALL_COLS}
         t["P"] = p["P"]
         nf = t["nf"].astype(np.float64)
@@ -2718,6 +2734,31 @@ def selftest():
     gblock(); gsettle()
     check("wheel down is clean on a guitar too",
           not gv.slab.live.get(gkey), "  (%d partials)" % len(gv.slab.live.get(gkey, [])))
+    # BUILDING A BANK MUST BE SILENT AND MUST NOT BAKE THE AMPLIFIER IN.
+    # prepare() reports what its passes did, which is right for a render and is
+    # corruption for a curses screen; and an amplifier baked into a one-note
+    # template is counted twice and then read back as a parent. This was done
+    # for Leslie voices only, so a guitar -- which has an amplifier and is not
+    # a Leslie voice -- took the other branch: 527 partials a template instead
+    # of 128, and a line of log per note into the TUI.
+    import io as _io, contextlib as _ctx
+    import tubeamp as _TAG
+    _buf = _io.StringIO()
+    with _ctx.redirect_stdout(_buf):
+        _gq = Live(program=29, rate=44100, frames=128, verbose=False)
+        _gq.warm()
+    check("building an amplified bank says nothing to the terminal",
+          _buf.getvalue().strip() == "",
+          "" if not _buf.getvalue().strip() else
+          "  (%d chars leaked)" % len(_buf.getvalue()))
+    check("...and leaves the offline amplifier pass switched back on",
+          _TAG.ENABLED is True)
+    _tq = _gq.parts[0].bank.get(52, 110)
+    check("...and bakes no distortion into the template",
+          _tq is not None and _tq["P"] < 200,
+          "  (%s partials for one note)" % (None if _tq is None else _tq["P"]))
+    _gq.amp_stop = True; _gq.amp_go.set(); _gq.renderer.close()
+
     check("the guitar raised no errors", gv.errors == 0 and gv.amp_err is None,
           "" if gv.errors == 0 else "  (%s)" % gv.last_error)
     gv.amp_stop = True; gv.amp_go.set(); gv.renderer.close()
