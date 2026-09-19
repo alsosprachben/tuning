@@ -380,7 +380,7 @@ class TUI:
                         [r for r in p.bank.rank_names if r not in p.bank.cres_order]
                 k = len([r for r in order if r in p.drawn])
                 k = max(1, min(len(order), k + delta))
-                self.live.set_stops(p, set(order[:k]))
+                self.live.request_stops(p, set(order[:k]))
 
     def toggle_stop(self, i):
         p = self.sel()
@@ -391,7 +391,11 @@ class TUI:
             return
         want = set(p.drawn)
         want.symmetric_difference_update({names[i]})
-        self.live.set_stops(p, want)
+        # Drawing a stop STAMPS -- it pops slots off the free list and leaves
+        # `last_slots` behind for the very next line to read. Doing that from
+        # here can hand the callback's own _draw a set of slots belonging to
+        # something else, so it goes on the queue like everything else.
+        self.live.request_stops(p, want)
 
     # ---- presets ------------------------------------------------------------
     def save_preset(self, scr):
@@ -561,7 +565,7 @@ class TUI:
                               {i for i, r in enumerate(names) if r in p.drawn})
         if got is None:
             return
-        self.live.set_stops(p, {names[i] for i in got})
+        self.live.request_stops(p, {names[i] for i in got})
 
     def multi_menu(self, scr, title, items, chosen):
         """A picker where space toggles and enter accepts. Returns a set of
@@ -921,20 +925,16 @@ class TUI:
                 p.muted = not p.muted
                 if p.muted:
                     # A muted part must not leave its notes droning: they will
-                    # never get a note-off it answers.
-                    for k in [k for k in list(self.live.slab.live) if k[0] == p.pid]:
-                        self.live.slab.oneshot.pop(k, None)
-                        self.live.slab.release(k, self.live.n)
+                    # never get a note-off it answers. ASKED FOR, not done here
+                    # -- the slab has one writer and this is not it.
+                    self.live.release_part(p.pid)
         elif c == ord("S"):
             self.save_preset(scr)
         elif c == ord("L"):
             self.load_preset(scr)
         elif c == ord("P"):
             # panic, the one thing you want when something drones
-            for k in list(self.live.slab.live):
-                self.live.slab.oneshot.pop(k, None)
-                self.live.slab.release(k, self.live.n)
-            self.live.down.clear(); self.live.pedalled.clear()
+            self.live.panic()
             self.say("all notes off")
         elif ord("1") <= c <= ord("9"):
             self.toggle_stop(c - ord("1"))

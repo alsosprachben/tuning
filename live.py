@@ -1039,6 +1039,14 @@ class Live:
         self.pedalled = set()   # keys whose damper the pedal is holding off
         self.n = 0                       # absolute sample clock
         self.events = collections.deque()
+        # WORK THE TUI WANTS DONE ON THE AUDIO THREAD. The slab has exactly one
+        # writer by design -- the callback -- and everything that keeps it
+        # consistent assumes that: `free` is popped from, `live` is added to and
+        # popped from, and `last_slots` is written by one stamp and read by the
+        # very next line. A second thread doing any of that can hand `_draw` a
+        # set of slots that belong to something else entirely. So the TUI asks,
+        # and the callback does it, the same way MIDI already works.
+        self.cmds = collections.deque()
         self.lock = threading.Lock()
         self.bend = {}          # channel -> current pitch-bend ratio
         self.mod = {}           # channel -> current vibrato depth (fraction)
@@ -1102,11 +1110,18 @@ class Live:
         never sees a partial list. Notes belonging to parts that are going away
         are released; notes on parts that survive keep sounding."""
         keep = {p.pid for p in parts}
-        n0 = self.n
-        for k in [k for k in list(self.slab.live) if k[0] not in keep]:
-            self.slab.oneshot.pop(k, None)
-            self.slab.release(k, n0)
+        # The swap is one assignment and safe here; letting go of the notes the
+        # departing parts hold is NOT -- it pops from `live` while the callback
+        # may be walking it -- so that part is asked for rather than done. The
+        # order is deliberate: swap first, so nothing new is stamped for a part
+        # that is going, then release a block later.
         self.parts = tuple(parts)
+
+        def go(n0):
+            for k in [k for k in list(self.slab.live) if k[0] not in keep]:
+                self.slab.oneshot.pop(k, None)
+                self.slab.release(k, n0)
+        self.post(go)
 
     def warm(self, progress=None):
         """Build every part's bank. Off-thread; blocks."""
@@ -1125,6 +1140,46 @@ class Live:
                         "aftertouch", "polytouch"):
             with self.lock:
                 self.events.append((time.monotonic(), msg))
+
+    def post(self, fn):
+        """Ask the audio thread to run `fn(n0)` at the next block boundary.
+
+        For anything that touches the slab from the TUI. It is not about
+        tearing a single value -- it is that `free`, `live`, `retiring` and
+        `last_slots` are consistent only between one stamp and the next, and a
+        second thread cannot see those boundaries.
+        """
+        with self.lock:
+            self.cmds.append(fn)
+
+    def release_part(self, pid):
+        """Let go of everything a part is holding. Muting, from the TUI."""
+        def go(n0):
+            for k in [k for k in list(self.slab.live) if k[0] == pid]:
+                self.slab.oneshot.pop(k, None)
+                self.slab.release(k, n0)
+            for p in self.parts:
+                if p.pid == pid:
+                    self._amp_touch(p)
+        self.post(go)
+
+    def panic(self):
+        """All notes off, the one thing you want when something drones."""
+        def go(n0):
+            for k in list(self.slab.live):
+                self.slab.oneshot.pop(k, None)
+                self.slab.release(k, n0)
+            self.down.clear()
+            self.pedalled.clear()
+            for p in self.parts:
+                self._amp_touch(p)
+        self.post(go)
+
+    def request_stops(self, part, want):
+        """set_stops from the TUI. Drawing a stop STAMPS, which is the single
+        most dangerous thing another thread can do to the slab."""
+        want = set(want)
+        self.post(lambda n0: self.set_stops(part, want, n0))
 
     def apply(self, n0):
         with self.lock:
@@ -1145,6 +1200,15 @@ class Live:
                 # stream mid-performance.
                 self.errors += 1
                 self.last_error = "%s: %s" % (type(e).__name__, e)
+        if self.cmds:
+            with self.lock:
+                cmds, self.cmds = self.cmds, collections.deque()
+            for fn in cmds:
+                try:
+                    fn(n0)
+                except Exception as e:
+                    self.errors += 1
+                    self.last_error = "cmd: %s: %s" % (type(e).__name__, e)
         if self.amp_dirty or self.amp_out is not None:
             try:
                 self._amp_pump(n0)
@@ -1504,6 +1568,9 @@ class Live:
                       if k[0] == part.pid and k[3] == rank]:
                 self.slab.release(k, n0)
         part.drawn = set(want)
+        # A drawbar IS a parent, so the amplifier's products are now wrong --
+        # drawing all nine bars changes what is intermodulating with what.
+        self._amp_touch(part)
 
     def _draw(self, part, tmpl, ch, note, rank, n0):
         got = tmpl.get("ranks", {}).get(rank)
@@ -2414,6 +2481,42 @@ def selftest():
     # 44.1 kHz is 2.9 ms and one emit is about 7.
     check("the distortion was computed off the audio thread", lv.amp_calls > 0,
           "  (%d runs)" % lv.amp_calls)
+
+    # ---- the TUI asks; the callback does -----------------------------------
+    # The slab has one writer by design. Every path that lets the TUI thread
+    # stamp or release goes through post(), and the test is that the work has
+    # NOT happened when the call returns and HAS after a block.
+    for nn in (60, 64, 67):
+        lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
+    lv.apply(lv.n)
+    lv.down.update((0, nn) for nn in (60, 64, 67))
+    before = len(lv.slab.live)
+    lv.panic()
+    check("panic does not touch the slab from the caller's thread",
+          len(lv.slab.live) == before and len(lv.cmds) == 1,
+          "  (%d keys, %d queued)" % (len(lv.slab.live), len(lv.cmds)))
+    lv.apply(lv.n)
+    check("...and the callback carries it out",
+          len(lv.slab.live) == 0 and not lv.down and not lv.cmds,
+          "  (%d keys)" % len(lv.slab.live))
+
+    # Drawing a stop STAMPS, which is the one that could hand the callback's
+    # own _draw a set of slots belonging to something else.
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    lv.apply(lv.n); lv.down.add((0, 60))
+    was = set(lv.parts[0].drawn)
+    want = set(lv.parts[0].bank.rank_names)
+    lv.request_stops(lv.parts[0], want)
+    check("drawing a stop is deferred too",
+          lv.parts[0].drawn == was and len(lv.cmds) == 1)
+    lv.apply(lv.n)
+    check("...and all nine bars come out on the callback",
+          lv.parts[0].drawn == want and not lv.cmds,
+          "  (%d ranks)" % len(lv.parts[0].drawn))
+    # and the amplifier notices, because a drawbar is a parent
+    check("...and the amplifier knows its parents changed",
+          lv.parts[0].pid in lv.amp_dirty or lv.amp_busy or lv.amp_out is not None)
+    lv.panic(); lv.apply(lv.n); settle()
 
     # ---- the meter is read from ANOTHER THREAD ------------------------------
     # np.flatnonzero counts the set bits, allocates a result of that size and
