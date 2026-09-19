@@ -100,7 +100,38 @@ class Guitar12(Cabinet):
     bell_order = 2.0
 
 
-CABINETS = {"guitar12": Guitar12()}
+class Bass410(Cabinet):
+    """Four 10" drivers in a sealed bass cabinet, no tweeter.
+
+    A bass cabinet is not a guitar cabinet scaled down in pitch -- it is a
+    different design goal, and the two differ most exactly where each one has
+    to work:
+
+      45 Hz, 2nd    it has to REACH. A low E is 41 Hz and its fundamental is
+                    the note, so the cabinet goes down where a guitar 12"
+                    gives up: -4.9 dB here against the guitar's -10.4.
+      75 Hz peak    the box resonance, tuned low for the same reason.
+      600 Hz dip    the shallow scoop a 4x10 has between the piston band and
+                    the cone's own breakup.
+      1.8 kHz       presence, and MILD -- +1.2 dB where a guitar 12" has +6.4.
+                    A bass guitar wants definition, not bite; that peak is
+                    what makes a distorted guitar cut, and on a bass it would
+                    only make it honk.
+      3.5 kHz, 4th  the top, and lower than a guitar's. A 10" driver beams and
+                    breaks up sooner than a 12", and without a tweeter there
+                    is nothing above it. This is why a slapped bass sounds
+                    bright through a PA and blunt through a bass rig.
+    """
+    formants = ((75.0, 70.0, 0.40), (2000.0, 1800.0, 0.45))
+    antiformants = ((600.0, 500.0, 0.15),)
+    formant_floor = 0.80
+    bore_corner_hz = 3500.0
+    bore_order = 4.0
+    bell_cutoff_hz = 45.0
+    bell_order = 2.0
+
+
+CABINETS = {"guitar12": Guitar12(), "bass410": Bass410()}
 
 
 def get(name):

@@ -30,6 +30,11 @@ from tonelib import (
     DistortionGuitarProperties,
     GuitarHarmonicsProperties,
     GuitarFretNoiseProperties,
+    FingeredBassProperties,
+    PickedBassProperties,
+    FretlessBassProperties,
+    SlapBassProperties,
+    PoppedBassProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -141,6 +146,23 @@ PROGRAM_CLASS[30] = DistortionGuitarProperties
 PROGRAM_CLASS[31] = GuitarHarmonicsProperties
 # 32-39  Bass                          -> plucked strings
 _fill(32, 39, PluckedStringProperties)
+# 33-37 are the ELECTRIC basses, and they are the guitar's physics on a longer
+# string: two combs, a magnet, and a cabinet built to reach 41 Hz rather than
+# to bite. 33/34 differ only in the right hand (finger vs plectrum), 35 in the
+# termination (wood, not fret wire), 36/37 in the collision a slap makes.
+#
+# 32 IS NOT ONE OF THEM. "Acoustic Bass" is an upright -- a large wooden box
+# with its own radiating body, which is the one thing a solid-body deliberately
+# has not got. Giving it a pickup and a speaker cabinet would be the saxophone
+# trap again, and it is unmeasured.
+#
+# 38-39 are SYNTH basses: they have no string, no pickup and no cabinet, and
+# nothing here would be modelling them, only flattering them.
+PROGRAM_CLASS[33] = FingeredBassProperties
+PROGRAM_CLASS[34] = PickedBassProperties
+PROGRAM_CLASS[35] = FretlessBassProperties
+PROGRAM_CLASS[36] = SlapBassProperties
+PROGRAM_CLASS[37] = PoppedBassProperties
 # 40-47  Strings / orchestral
 _fill(40, 44, BowedStringProperties)   # violin, viola, cello, contrabass, tremolo
 PROGRAM_CLASS[45] = PluckedStringProperties  # pizzicato strings

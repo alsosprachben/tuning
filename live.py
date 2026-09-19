@@ -2796,6 +2796,54 @@ def selftest():
     def _bright(g):
         v = np.array([g.harmonic_volume(h) for h in range(1, 25)])
         return float((np.arange(1, 25) * v ** 2).sum() / max((v ** 2).sum(), 1e-30))
+    # ---- the basses ---------------------------------------------------------
+    # The guitar's physics on a longer string, so what is worth guarding is
+    # that each GM slot differs from its neighbour in the way its class claims.
+    bass = [(33, _T.FingeredBassProperties), (34, _T.PickedBassProperties),
+            (35, _T.FretlessBassProperties), (36, _T.SlapBassProperties),
+            (37, _T.PoppedBassProperties)]
+    check("the five electric basses are wired to their GM programs",
+          all(_PM.property_class_for_program(n) is c for n, c in bass))
+    # 32 is an UPRIGHT -- a wooden box, which is the one thing a solid body has
+    # not got -- and 38-39 have no string at all. Giving either a pickup and a
+    # speaker would be the saxophone trap.
+    check("...and the upright and the synth basses are left alone",
+          all(_PM.property_class_for_program(n) is _T.PluckedStringProperties
+              for n in (32, 38, 39)))
+    binst = {n: c(41.2, 0.0, 1.0, 1.0) for n, c in bass}
+
+    def _mean_h(g, top=17):
+        v = np.array([g.harmonic_volume(h) for h in range(1, top)]) ** 2
+        return float((np.arange(1, top) * v).sum() / max(v.sum(), 1e-30))
+    # A PICK IS HARDER AND NARROWER THAN A FINGER, so its comb notch stays deep
+    # and it is played nearer the bridge: brighter, and that is the whole
+    # difference between GM 33 and GM 34.
+    check("a pick is brighter than a finger",
+          _mean_h(binst[34]) > _mean_h(binst[33]),
+          "  (mean harmonic %.1f vs %.1f)" % (_mean_h(binst[34]), _mean_h(binst[33])))
+    # FRETLESS IS A TERMINATION, NOT A FILTER: the string stops on wood, which
+    # is lossy up high, so the harmonics GO rather than never arriving.
+    check("fretless loses its top rather than starting without it",
+          binst[35].harmonic_decay(8) > 3.0 * binst[33].harmonic_decay(8)
+          and abs(_mean_h(binst[35]) - _mean_h(binst[33])) < 0.5,
+          "  (h8 decays %.0f vs %.0f dB/s, same spectrum)"
+          % (binst[35].harmonic_decay(8), binst[33].harmonic_decay(8)))
+    check("a slap is the brightest of them",
+          _mean_h(binst[36]) > 1.5 * _mean_h(binst[33]),
+          "  (mean harmonic %.1f vs %.1f)" % (_mean_h(binst[36]), _mean_h(binst[33])))
+    # A BASS CABINET REACHES WHERE A GUITAR CABINET GIVES UP: the low E's
+    # FUNDAMENTAL is the note, at 41 Hz.
+    import cabinet as _CBB
+    b45 = float(_CBB.get("bass410").response_db([45.0])[0])
+    g45 = float(_CBB.get("guitar12").response_db([45.0])[0])
+    check("the bass cabinet reaches where the guitar's gives up",
+          b45 > g45 + 4.0, "  (%.1f dB vs %.1f dB at 45 Hz)" % (b45, g45))
+    # ...and does not bite, which is what that peak is for on a guitar.
+    b25 = float(_CBB.get("bass410").response_db([2500.0])[0])
+    g25 = float(_CBB.get("guitar12").response_db([2500.0])[0])
+    check("...and has far less presence, which a bass does not want",
+          b25 < g25 - 4.0, "  (%.1f dB vs %.1f dB at 2.5 kHz)" % (b25, g25))
+
     # ---- fret noise, which is a different patch from harmonics ---------------
     check("fret noise has its own voice, not a mallet's",
           _PM.property_class_for_program(120) is _T.GuitarFretNoiseProperties,

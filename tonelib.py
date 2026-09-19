@@ -4674,6 +4674,132 @@ class ElectricGuitarProperties(PluckedStringProperties):
     cabinet = "guitar12"
 
 
+class ElectricBassProperties(ElectricGuitarProperties):
+    """A solid-body electric bass: the guitar's physics on a longer string.
+
+    Everything that makes the guitar an electric makes this one too -- two
+    combs, a magnet reading VELOCITY, no body -- so this is that class with the
+    geometry of a different instrument and a cabinet built for a different job.
+    What actually differs:
+
+      SCALE. 864 mm (34") against the guitar's 648. The pickup and pluck
+      positions below are fractions of THAT, so the same millimetre distances
+      land at different fractions: a Jazz bridge pickup 70 mm from the bridge
+      is 0.081 of the length where 70 mm on a guitar would be 0.108.
+
+      THE CABINET. bass410, not guitar12, and the difference is not taste. A
+      low E is 41 Hz and its FUNDAMENTAL is the note, so the box has to reach:
+      -4.9 dB at 45 Hz where a guitar 12" is -10.4. And its presence peak is
+      +1.2 dB where the guitar's is +6.4, because a bass wants definition and
+      that peak is what makes a guitar bite.
+
+      THE AMPLIFIER RUNS CLEAN. A bass rig is usually a clean one -- the
+      instrument's job is the bottom of the arrangement, and a clipped bass
+      loses the fundamental it is there to supply, since distortion moves
+      energy UP. So the drive is a quarter of the guitar's.
+
+    STIFFNESS IS LOWER THAN IT LOOKS. A bass string is far thicker than a
+    guitar's, which raises inharmonicity, but it is also a third longer and
+    built on a flexible core to keep it playable -- and B falls as 1/L^2. The
+    two nearly cancel. ESTIMATED, like the guitar's, and worth measuring if a
+    reference ever turns up.
+    """
+    pickup_points = (0.191,)      # Precision-style split coil, 165 mm of 864
+    pickup_width = 0.0116         # ~10 mm coil
+    strike_point = 0.12           # plucked over the pickup, as a hand does
+    strike_depth = 0.55           # a fingertip is broad: a shallow notch
+    inharmonicity_coefficient = 2.0e-05
+    amp_drive = 0.15
+    amp_imbalance = 0.20
+    cabinet = "bass410"
+    # MEASURED, by `python3 examples/guitar.py --calibrate`: a low E dug in
+    # with its octave, which is what a bass playing hard actually is. Well
+    # under the guitar's 0.0655 because that one is six strings at once; a
+    # bass calibrated on a six-note voicing would have a reference it never
+    # reaches in use, and would then never break up at all.
+    amp_reference = 0.0264
+
+
+class FingeredBassProperties(ElectricBassProperties):
+    """GM 33. Two fingers alternating over the neck pickup.
+
+    The base voice IS the fingered bass -- this exists so the GM slot names
+    itself rather than pointing at a class called "electric bass" and leaving
+    the reader to guess which technique it means.
+    """
+
+
+class PickedBassProperties(ElectricBassProperties):
+    """GM 34. The same instrument played with a plectrum.
+
+    Two numbers, and both are the right hand rather than the instrument: a pick
+    is HARD and NARROW where a fingertip is soft and broad, so its comb notch
+    stays deep instead of being filled in by the contact patch; and it is
+    played nearer the bridge, which moves the notch up. That is the whole
+    difference between the two GM slots, and it is a difference in the player.
+    """
+    strike_point = 0.09
+    strike_depth = 0.90
+
+
+class FretlessBassProperties(ElectricBassProperties):
+    """GM 35. No frets, so the string stops on WOOD.
+
+    The one physical difference, and it is a termination: a fretted note ends
+    on a hard metal wire, which reflects the high partials almost perfectly,
+    and a fretless note ends on fingerboard timber under a fingertip, which
+    does not. A lossy termination is a DECAY, not a filter -- the note starts
+    with its harmonics and loses them, which is the "mwah" a fretless has and
+    a fretted bass does not, and it is why simply darkening the voice would be
+    wrong: that would take the top off the attack, where it really is present.
+
+    So the fundamental rings as long as ever and the upper partials go four
+    times faster.
+    """
+    harmonic_decay_db = 4.0       # vs 1.0: the top goes, the fundamental stays
+    strike_depth = 0.45           # played with more flesh, as fretless is
+
+
+class SlapBassProperties(ElectricBassProperties):
+    """GM 36. The thumb struck against the string, over the fingerboard.
+
+    WHAT MAKES A SLAP BRIGHT IS A COLLISION. The thumb drives the string down
+    onto the frets and it rattles back off them; the pop -- the finger pulling
+    a string up and releasing it -- does the same thing harder. Each of those
+    contacts is very nearly an impulse, and an impulse is broadband, which is
+    where a slapped bass gets a top end that no amount of plucking produces.
+
+    HONESTLY, THIS APPROXIMATES THAT RATHER THAN MODELLING IT. A string
+    colliding with a fret is a moving boundary condition and this engine has no
+    way to say that. What it can say is the consequence: a hard, narrow, near
+    point-source excitation, which is `strike_depth` 1.0 at a small
+    `strike_point` -- a comb whose first null is past the 16th harmonic instead
+    of at the 8th. That gets the brightness and the attack. It does not get the
+    rattle, which is a separate sound and would want noisegen.
+
+    The drive is up as well, because a slapped bass is the one case where a
+    bass player does push the front end.
+    """
+    strike_point = 0.06
+    strike_depth = 1.00
+    pickup_points = (0.081,)      # Jazz bridge pickup, 70 mm of 864
+    amp_drive = 0.45
+    amp_imbalance = 0.35
+
+
+class PoppedBassProperties(SlapBassProperties):
+    """GM 37. Slap Bass 2 -- the same technique, leaning on the pop.
+
+    GM does not define what separates its two slap basses and no instrument
+    does either, so this is a CONVENTION and is marked as one: 2 is taken as
+    the more aggressive of the pair. A pop pulls the string further before it
+    releases, so it hits the frets harder and drives the amplifier harder.
+    Nothing here is a measurement.
+    """
+    amp_drive = 0.70
+    amp_imbalance = 0.45
+
+
 class JazzGuitarProperties(ElectricGuitarProperties):
     """GM 26. A neck humbucker, picked with the thumb side of the hand.
 

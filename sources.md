@@ -2054,3 +2054,50 @@ not a part. The level is linear in `initial_gain`, so that is the one knob.
 (And a measurement worth not repeating: "about 27 dB under a hard chord" came
 from comparing a 0.3 s squeak's RMS with a 1.6 s sustained chord's RMS. A
 transient against a held note is not like-for-like; peak against peak is.)
+
+## The electric basses are the guitar on a longer string
+
+GM 33-37. Not new physics -- two combs, a magnet reading velocity, no body --
+so they are `ElectricGuitarProperties` with the geometry of a different
+instrument and a cabinet built for a different job. What actually differs:
+
+| GM | voice | what makes it that | pickup | strike |
+|---|---|---|---|---|
+| 33 | fingered | the base: a broad soft fingertip over the neck pickup | 0.191 | 0.12 / depth 0.55 |
+| 34 | picked | a plectrum is HARD and NARROW, and played nearer the bridge | 0.191 | 0.09 / **0.90** |
+| 35 | fretless | the string stops on WOOD, which is lossy | 0.191 | 0.12 / 0.45 |
+| 36 | slap | the thumb drives the string onto the frets | 0.081 | **0.06 / 1.00** |
+| 37 | popped | convention, not measurement: slap 2 taken as the harder one | 0.081 | 0.06 / 1.00 |
+
+Measured on a low E, the mean harmonic of the series: fingered **2.6**, picked
+**3.2**, fretless 2.5, slap **5.4**. The pick/finger difference is the right
+hand and nothing else, which is what those two GM slots actually are.
+
+FRETLESS IS A TERMINATION, NOT A FILTER, and this is the one worth stating. A
+fretted note ends on hard metal wire, which reflects the high partials almost
+perfectly; a fretless note ends on fingerboard timber under a fingertip, which
+does not. So the harmonics GO rather than never arriving -- h8 decays at
+32 dB/s against the fretted 8, on an identical spectrum. Darkening the voice
+instead would take the top off the ATTACK, where on a real fretless it is
+plainly present; the "mwah" is the loss, not the absence.
+
+A SLAP IS A COLLISION and this approximates it rather than modelling it. The
+thumb drives the string onto the frets and it rattles back off; each contact is
+nearly an impulse, and an impulse is broadband. A moving boundary condition is
+not something this engine can say, so what it says instead is the consequence:
+a hard, narrow, near point-source excitation, whose first comb null is past the
+16th harmonic rather than at the 8th. That gets the brightness. It does not get
+the rattle, which is a separate sound and wants `noisegen`.
+
+THE CABINET IS A DIFFERENT BOX, not the guitar's scaled down. A low E is 41 Hz
+and its FUNDAMENTAL is the note, so `bass410` reaches -4.9 dB at 45 Hz where
+`guitar12` is -10.4; and its presence peak is -0.4 dB at 2.5 kHz where the
+guitar's is +6.4, because that peak is what makes a guitar bite and on a bass
+it would only honk. The amplifier runs at a quarter of the guitar's drive:
+distortion moves energy UP, and a clipped bass loses the fundamental it is
+there to supply.
+
+AND THREE ARE LEFT ALONE. 32 "Acoustic Bass" is an upright -- a large wooden
+box with its own radiating body, which is the one thing a solid-body has not
+got -- and it is unmeasured; 38 and 39 are synth basses with no string, no
+pickup and no cabinet. Modelling either would be flattery.

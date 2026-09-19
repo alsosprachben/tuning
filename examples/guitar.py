@@ -205,11 +205,25 @@ def passage(program=PROGRAM):
     return m
 
 
+# What "played hard" means, per instrument. A guitar's is a six-string strum;
+# a bass's is a low E dug in with its octave, because a bass plays lines and
+# not chords and calibrating it on a six-note voicing would set the reference
+# to something it never does.
+CALIB = ((27, 'guitar', BIG_CHORD), (34, 'bass', (28, 40)))
+
+
 def calibrate(outdir):
-    """What peak does a hard strum actually make, in renderer units?"""
-    m, tr = _track()
-    _chord(tr, BIG_CHORD, 4.0, 127)
-    path = os.path.join(outdir, 'guitar-calib.mid')
+    """What peak does playing hard actually make, in renderer units?"""
+    for prog, name, notes in CALIB:
+        print("  %s (GM %d):" % (name, prog))
+        _calib_one(outdir, prog, name, notes)
+    return 0
+
+
+def _calib_one(outdir, prog, name, notes):
+    m, tr = _track(program=prog)
+    _chord(tr, notes, 4.0, 127)
+    path = os.path.join(outdir, '%s-calib.mid' % name)
     m.save(path)
     A = B.prepare(path, 'even')
     mch = np.asarray(A['mch'])
@@ -231,12 +245,10 @@ def calibrate(outdir):
     st = {}
     TA.emit(f[keep].tolist(), aM[keep].tolist(), ph[keep].tolist(), SR, 1.0,
             stats=st)
-    print("  %d partials, %d distinct frequencies" % (len(rows), len(f)))
-    print("  hard six-string strum, peak = %.6g" % st['peak'])
-    print()
-    print("  amp_reference = %.6g" % st['peak'])
-    print("  -> drive 1.0 then means the edge of breakup on a chord hit this")
-    print("     hard, and a soft single note reaches far less of the curve.")
+    print("    %d partials, %d distinct frequencies" % (len(rows), len(f)))
+    print("    peak = %.6g   ->   amp_reference = %.6g" % (st['peak'], st['peak']))
+    print("    (drive 1.0 then means the edge of breakup when it is hit that")
+    print("     hard; a soft note reaches far less of the curve.)")
     return 0
 
 
