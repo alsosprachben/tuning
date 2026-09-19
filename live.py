@@ -1707,7 +1707,20 @@ class Live:
         something the offline path can reproduce -- the value has to be watched
         while the hardware is sending."""
         sl = self.slab
-        idx = np.flatnonzero(sl.busy)
+        # A COPY BEFORE THE SCAN, because this runs on the TUI thread while the
+        # audio thread is stamping and reaping. np.flatnonzero COUNTS the set
+        # bits, allocates a result of exactly that size, and then fills it -- so
+        # if the audio thread clears a bit in between, fewer indices are written
+        # than were allocated and THE TAIL OF THE RESULT IS UNINITIALISED HEAP.
+        # That is where "index 136912427831408 is out of bounds for axis 0 with
+        # size 16384" came from: a pointer, read as a slot number. The number
+        # looks like nonsense and is in fact an address.
+        #
+        # One memcpy makes the count and the fill see the same array. The answer
+        # can be a block out of date, which for a meter is nothing. This got far
+        # more likely when the mod wheel became the amplifier's drive, because
+        # moving it now churns 150 slots.
+        idx = np.flatnonzero(sl.busy.copy())
         if not len(idx):
             return None
         vd = sl.a["vd"][idx].astype(np.float64)
@@ -1718,10 +1731,25 @@ class Live:
                     rate_lo=float(vr.min()), rate_hi=float(vr.max()),
                     cc1=self.cc1_count, cc1_last=self.cc1_last)
 
+    def _sounding_count(self):
+        """How many slots are held, counted without tripping over the writer.
+
+        Same thread problem as wheel_state: `live` is a dict the audio thread
+        adds to and pops from, and iterating it from the TUI can raise
+        "dictionary changed size during iteration". Retry once, then fall back
+        to the free list, which is a single deque length and cannot tear.
+        """
+        for _ in range(3):
+            try:
+                return sum(len(v) for v in list(self.slab.live.values()))
+            except RuntimeError:
+                pass
+        return self.slab.cap - len(self.slab.free)
+
     def stats(self):
         return dict(t=self.n / self.rate, peak=self.peak,
                     last_peak=self.last_peak,
-                    sounding=sum(len(v) for v in self.slab.live.values()),
+                    sounding=self._sounding_count(),
                     used=self.slab.cap - len(self.slab.free), cap=self.slab.cap,
                     free=len(self.slab.free),
                     under=self.underruns, drop=self.dropped, err=self.errors,
@@ -2386,6 +2414,35 @@ def selftest():
     # 44.1 kHz is 2.9 ms and one emit is about 7.
     check("the distortion was computed off the audio thread", lv.amp_calls > 0,
           "  (%d runs)" % lv.amp_calls)
+
+    # ---- the meter is read from ANOTHER THREAD ------------------------------
+    # np.flatnonzero counts the set bits, allocates a result of that size and
+    # then fills it. A concurrent reap clearing a bit in between leaves the
+    # tail of the result uninitialised -- heap, read as slot numbers. It
+    # reached Ben as "index 136912427831408 is out of bounds for axis 0 with
+    # size 16384", which is an address, and it got likely when the mod wheel
+    # became the drive and started churning 150 slots per move.
+    was = lv.slab.busy.copy()
+    stop = []
+    def churn():
+        rng = np.random.default_rng(3)
+        while not stop:
+            k = rng.integers(0, lv.slab.cap, 3000)
+            lv.slab.busy[k] = False
+            lv.slab.busy[k] = True
+    th = threading.Thread(target=churn, daemon=True)
+    th.start()
+    bad = None
+    try:
+        for _ in range(3000):
+            lv.wheel_state()
+            lv.stats()
+    except Exception as e:
+        bad = "%s: %s" % (type(e).__name__, e)
+    stop.append(1); th.join(timeout=2.0)
+    lv.slab.busy[:] = was
+    check("the meter survives being read while the slab churns", bad is None,
+          "" if bad is None else "  (%s)" % bad)
     lv.amp_stop = True; lv.amp_go.set()
     lv.renderer.close()
 
