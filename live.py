@@ -1420,6 +1420,24 @@ class Live:
             self.slab.release(key, n0)
             return None
         idx = np.fromiter(slots, np.int64, len(slots))
+        # THE DIRECT SOUND ONLY. The room's copies are downstream of the
+        # amplifier -- a reflection is what the room did to what the valve
+        # already made, not another thing going into it -- and feeding them in
+        # counts every partial twice. Measured on one key: 48 partials, 24
+        # frequencies, each appearing at 257 samples of delay and again at 570.
+        # combine() then summed each pair as one coherent parent, which
+        # inflated the drive and put the distortion 5.4 dB ABOVE the signal
+        # where the offline stage at the same drive puts it 3 dB under.
+        #
+        # Offline says this as `dr > 0.5`; live has no such column, so it is
+        # the shortest path -- which is what "direct" means. Nothing reflected
+        # can arrive sooner than the straight line.
+        dl = (self.slab.a["delL"][idx].astype(np.float64)
+              + self.slab.a["delR"][idx].astype(np.float64))
+        idx = idx[dl <= dl.min() + 2.0]
+        if len(idx) < 2:
+            self.slab.release(key, n0)
+            return None
         om = self.slab.a["om"][idx].astype(np.float64)
         f = om * float(self.rate) / (2.0 * np.pi)
         aM = 0.5 * (self.slab.aL0[idx].astype(np.float64)
@@ -1515,9 +1533,19 @@ class Live:
         session produced: 221 partials held and never freed, with the audio
         thread perfectly healthy underneath. Cheap, and it turns a lost message
         into a note that ends slightly late rather than one that never ends.
+
+        NOT THE AMPLIFIER, WHICH IS NOT A NOTE. Its key carries no channel and
+        no note by design -- nothing that sweeps a channel should catch it --
+        and the price of that is that this test cannot be applied to it: there
+        is no key down to look for, so it was released on EVERY BLOCK, the
+        instant after it was stamped. That is audible as a click each time the
+        mod wheel moves and no change in the sound, because the products never
+        lived long enough to sound. The amplifier's lifetime is its parents',
+        and _amp_touch is what keeps it honest.
         """
         for k in [k for k in list(self.slab.live)
-                  if (k[1], k[2]) not in self.down
+                  if k[3] != "amp"
+                  and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
@@ -2269,8 +2297,13 @@ def selftest():
         lv.apply(lv.n)
 
     def settle(limit=150):
+        # A REAL BLOCK, not just apply(): sweep() is what the callback does
+        # next, and a version of this that left it out passed while the
+        # amplifier was being swept away the instant it was stamped.
         for _ in range(limit):
-            time.sleep(0.01); lv.apply(lv.n)
+            time.sleep(0.005)
+            lv.apply(lv.n); lv.sweep(lv.n); lv.slab.reap(lv.n)
+            lv.n += 128
             if not lv.amp_busy and lv.amp_out is None:
                 return True
         return False
@@ -2319,6 +2352,18 @@ def selftest():
     drove = settle()
     one = len(lv.slab.live.get(key, []))
     check("wheel up: the stage distorts", drove and one > 0, "  (%d partials)" % one)
+    # THE BUG THIS EXISTS FOR. sweep() releases anything whose key is not
+    # down, and the amplifier's key carries no note -- so it was released on
+    # every block, the instant after it was stamped. Audible as a click each
+    # time the wheel moved and no change in the sound. A test that called
+    # apply() without sweep() could not see it.
+    was_stuck = lv.stuck
+    for _ in range(60):
+        lv.apply(lv.n); lv.sweep(lv.n); lv.slab.reap(lv.n); lv.n += 128
+    held = len(lv.slab.live.get(key, []))
+    check("...and survives the sweep, block after block",
+          held == one and lv.stuck == was_stuck,
+          "  (%d of %d partials, %d swept)" % (held, one, lv.stuck - was_stuck))
     # A PRODUCT NEEDS TWO PARENTS, so a chord must make more of them than a
     # single key -- even though a Hammond key is already several tonewheels.
     for nn in (64, 67, 72):
