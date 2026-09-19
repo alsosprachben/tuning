@@ -1729,3 +1729,61 @@ Physical figures the module produces: Doppler +-35 cents at the horn (a 0.17 m
 throw at 6.6 Hz), level swing +-6% at 110 Hz rising to +-84% at 6 kHz -- the
 spectrum breathing at the rotor rate, which is what separates a Leslie from a
 tremolo.
+
+## The tube amp, and where a power series stops
+
+Distortion products are partials, so the amplifier does not need a sample-domain
+stage: a nonlinearity applied to a sum of cosines makes more cosines, at sums
+and differences of the inputs, with amplitudes that follow from the transfer
+function's power series. `tubeamp.py` emits them, and it runs BEFORE
+`leslie.expand`, which is how the amp ends up upstream of the rotor -- the order
+a real cabinet has -- without leaving the partial domain.
+
+PER-PARTIAL HARMONICS WOULD NOT DO. Measured on a tempered Hammond chord
+through a soft clipper, only 27% of the distortion energy lands on harmonics of
+the inputs; **73% is intermodulation between them**. Distortion-as-harmonics is
+true of one tone and false of a chord, and a Hammond is a chord machine even
+when one key is down, because every drawbar is another tonewheel.
+
+WHY IT IS AFFORDABLE. A four-note chord on nine drawbars has 1015 partials but
+only **84 distinct frequencies** -- the tonewheels are shared. And a third-order
+product's amplitude is `A_i*A_j*A_k`, so weak partials make cubically weak
+products:
+
+| strongest K kept | products | distortion energy |
+|---|---|---|
+| 10 | 880 | 51.7% |
+| 14 | 2,240 | 76.0% |
+| **20** | **6,160** | **91.6%** |
+| all 36 | 33,744 | 98.6% |
+
+Verified against the real 3/2-law valve on two tones: every predicted product
+within 5% except where 4th and 5th order land in the same bin (15%). And on
+twenty partials the predicted total distortion sits within 3.5 dB of the true
+figure. With a balanced pair the even orders vanish by **150-170 dB** while the
+third order is untouched, which is push-pull doing what push-pull does.
+
+WHERE IT STOPS. The series is an expansion about the operating point and holds
+only inside the grid bias:
+
+| drive | 3 orders | 5 orders | 9 orders | 15 orders |
+|---|---|---|---|---|
+| 0.8 | 0.7% | 0.2% | 0.0% | 0.0% |
+| 1.0 | 2.6% | 1.5% | 0.8% | 0.4% |
+| 1.6 | 3.3% | 5.5% | 23.4% | **132.3%** |
+
+Past the bias it does not lose accuracy, it DIVERGES -- more orders are worse,
+not better -- because the tube cuts off there and a power series about zero
+cannot have a corner. So `tubeamp` clamps drive at 1.0. This models the bend;
+the clip is out of reach twice over, being past the radius of convergence and
+combinatorially hopeless anyway (fifth order over twenty partials is ~680,000
+products).
+
+A MISTAKE WORTH KEEPING. The first version normalised the signal into the
+valve's units by SUMMING the partial amplitudes -- the all-in-phase worst case,
+which a dense sum never reaches. That underdrove the stage by about a factor of
+two, and a factor of two at the input is a factor of eight in every third-order
+product: the amplifier measured 50 dB down and did nothing audible. With the
+crest factor a random-phase sum actually has (about 3x rms) the same drive gives
+**25 dB down**, which is an amplifier being worked. The model was right and the
+level it was fed was not.

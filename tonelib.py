@@ -3128,6 +3128,19 @@ class TonewheelProperties(SynthProperties):
     leslie = False
     leslie_fast = True
 
+    # How hard the valve stage is driven, in units of its own grid bias -- so 0
+    # is a clean signal path and 1 has the signal reaching the bias point,
+    # which is where a 3/2-law triode starts to bend. See tubeamp.py. The
+    # distortion it makes is mostly INTERMODULATION between drawbars rather
+    # than harmonics of any one of them, which is why a Hammond thickens where
+    # a single sine through the same amplifier barely would.
+    #
+    # 1.0 IS THE CEILING, and not a soft one: past the bias the tube cuts off,
+    # the power series diverges, and tubeamp clamps rather than emit nonsense.
+    # What lies past it -- real Leslie overdrive, which is clipping -- this
+    # model cannot reach.
+    amp_drive = 0.0
+
 
 class DrawbarOrganProperties(TonewheelProperties):
     """GM 16. The console itself, no percussion, rotor on chorale."""
@@ -3153,10 +3166,11 @@ class PercussiveOrganProperties(TonewheelProperties):
 
 
 class RockOrganProperties(TonewheelProperties):
-    """GM 18. Drawbars out at both ends, rotor running fast."""
+    """GM 18. Drawbars out at both ends, rotor running fast, amp pushed."""
     default_stops = 0b100000111      # 888 000 008
     leslie = True
     leslie_fast = True
+    amp_drive = 0.90
 
 
 class OrganProperties(StoppedPipeProperties):

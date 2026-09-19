@@ -487,7 +487,7 @@ def prepare(path, tuner='hybrid'):
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
     # partial table
-    cols = {k:[] for k in ("az","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
     A = cols  # alias
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
@@ -545,6 +545,13 @@ def prepare(path, tuner='hybrid'):
         # (object) render exact rather than an un-mixing of the binaural one.
         A["aM"].append(ampM); A["mch"].append(_MCH[0])
         A["px"].append(px); A["pz"].append(pz); A["az"].append(_AZ[0])
+        # 1 for the sound that goes straight to the listener, 0 for an image.
+        # The amplifier distorts BEFORE anything radiates, so its products are
+        # formed from the direct signal only -- a product between a direct
+        # partial and its own reflection would be two copies of one voltage
+        # beating against each other, which happens in the room and not in the
+        # valve.
+        A["dr"].append(1.0 if _place is None else 0.0)
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -681,6 +688,7 @@ def prepare(path, tuner='hybrid'):
     cons_bursts = []
     _CONS_SRC = {}
     _LESLIE_CH = {}
+    _AMP_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -885,6 +893,8 @@ def prepare(path, tuner='hybrid'):
         # saw a props and never got a room -- see the reflection pass below.
         if ch not in _CONS_SRC:
             _CONS_SRC[ch] = (props, _PX[0], _PZ[0], _radius[0])
+        if getattr(props, 'amp_drive', 0.0) and ch not in _AMP_CH:
+            _AMP_CH[ch] = float(props.amp_drive)
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a
@@ -1181,6 +1191,18 @@ def prepare(path, tuner='hybrid'):
         _out.append((_n, _ctr, _bw, _shape, tuple(_emit), _bch, _bi))
     cons_bursts = _out
 
+    # THE AMPLIFIER, AND IT RUNS FIRST. A Leslie's chain is organ -> amp ->
+    # crossover -> rotors, so the valve is upstream of the rotor; here that is
+    # simply which of two passes goes first, because both work on partials.
+    # Distortion products emitted now are picked up by the rotor pass below and
+    # given their Doppler and their level swing exactly as any other partial.
+    if _AMP_CH:
+        import tubeamp as _AMP
+        _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        if _na:
+            print("  tube amp: %d channel(s), %d distortion partials"
+                  % (len(_AMP_CH), _na))
+
     # THE ROTATING SPEAKER. Every row already knows where it went -- px/pz is
     # the listener's position for a direct partial and the IMAGE's for a
     # reflected one -- so each takes the rotor phase of its own azimuth, and
@@ -1188,7 +1210,7 @@ def prepare(path, tuner='hybrid'):
     # That difference is the effect; see leslie.py.
     if _LESLIE_CH:
         import leslie as _LES
-        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az',))
+        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az', 'dr'))
         if _n:
             print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
                   % (len(_LESLIE_CH), _n,
