@@ -1202,7 +1202,7 @@ def prepare(path, tuner='hybrid'):
     # simply which of two passes goes first, because both work on partials.
     # Distortion products emitted now are picked up by the rotor pass below and
     # given their Doppler and their level swing exactly as any other partial.
-    if _AMP_CH:
+    if _AMP_CH and __import__('tubeamp').ENABLED:
         import tubeamp as _AMP
         _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'))
         if _na:

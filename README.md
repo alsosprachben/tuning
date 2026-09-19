@@ -112,8 +112,24 @@ there is no sound the engine can make that the repo does not describe in code.
 | mod wheel *on the organ* | **draws stops** in crescendo order: 8′ 4′ 2′ 2⅔ 16′ 5⅓ |
 | aftertouch | crescendo, +8 dB and brighter together (`press_db`, `press_tilt`) |
 | mod wheel *with layers* | each part answers in its own way at once — the organ layer draws stops while the string layer vibrates |
+| pitch bend *on a Leslie voice* | the **half-moon switch**: flick up or down to step stop → chorale → tremolo |
+| mod wheel *on a Leslie voice* | the **swell pedal**, and it drives the amplifier into the clip |
 | sustain pedal (CC64) | holds the damper off (piano) |
 | CC123 | all notes off — panic |
+
+**A Hammond has neither wheel**, so both are free for the controls it does
+have. The tonewheels run off a synchronous motor, so the pitch is the mains and
+there is nothing to bend; and a pitch wheel springs back to centre, which is the
+wrong shape for a knob but the right one for a three-position switch read as
+EDGE events — a flick steps the ladder, the spring return re-arms it. The mod
+wheel then takes the swell pedal, which on a real rig sits in FRONT of a
+fixed-gain amplifier: opening it is how a player makes the Leslie break up.
+
+That last one is the only place drive follows how hard you play. Offline each
+segment is normalised to its `amp_drive`, so a passage distorts the same however
+it is played; live the wheel *is* the drive. The distortion is computed off the
+audio thread and stamped on it — one `tubeamp.emit` is about 7 ms and a
+128-frame block is 2.9 — so it arrives a block or two after the chord.
 
 Pitch bend, mod wheel and aftertouch are all phase-continuous: they recompute the
 partial's total phase and put the difference back into its anchor, so nothing

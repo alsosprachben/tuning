@@ -121,6 +121,14 @@ IMBALANCE = 0.06
 CEILING = 6.0      # peak plate current, in units of the quiescent current
 KNEE = 3.0         # sharpness of the corner; larger is harder
 
+# LIVE BUILDS ITS TEMPLATES THROUGH blockrender, one note at a time, so with
+# this on every template arrives carrying that note's own distortion baked in
+# -- and live then adds the chord's on top of it, counting the single-note part
+# twice. Live turns it off while it builds, the same way it turns off the
+# rotor's sidebands and for the same reason: offline has one stateless call to
+# put everything in, live has a callback and can do it properly later.
+ENABLED = True
+
 # Below this a difference tone is not a tone. Two partials a hair apart make a
 # product at a fraction of a hertz, which as a PARTIAL is a DC offset -- in a
 # real amplifier that same near-coincidence is heard as the two of them beating,
@@ -162,6 +170,16 @@ OVERSAMPLE = 2
 # and tripled the partial count, which is not a trade worth making.
 KEEP_PEAKS = 400
 PEAK_FLOOR = 1e-3
+
+# LIVE runs the same code at a lower setting, because `apply` is called on the
+# audio callback thread and a 128-frame block at 44.1 kHz is 2.9 ms. Measured
+# on a four-note chord: the offline setting is 54.7 ms (13.9% band error), and
+# 0.25 s at no oversampling with 150 peaks is 6.7 ms (16.4%) -- a sixth of a dB
+# worse per band for an eighth of the cost. Still far too slow for a block, so
+# the caller computes it OFF the audio thread and stamps the result on it.
+LIVE_WINDOW_S = 0.25
+LIVE_OVERSAMPLE = 1
+LIVE_KEEP = 150
 
 # Most partials a segment's signal is synthesised from. Unlike the analytic
 # path this cap is about COST ONLY and the cost is linear, not combinatorial --

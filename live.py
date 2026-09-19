@@ -74,6 +74,36 @@ ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
 
+# ---- the half-moon, on the pitch wheel --------------------------------------
+# A HAMMOND HAS NO PITCH BEND. The tonewheels are driven by a synchronous motor
+# off the mains, so the pitch is the mains frequency and there is nothing to
+# bend -- which leaves the wheel free for the control the instrument actually
+# has and a keyboard does not: the half-moon switch.
+#
+# A half-moon is a three-position SWITCH (stop / chorale / tremolo), not a knob,
+# and a pitch wheel springs back to centre, so it cannot hold a position. Read
+# it as EDGE EVENTS instead: a flick past PW_FIRE steps the ladder one place,
+# and letting it spring back past PW_REARM re-arms it. Two flicks up walks
+# stop -> chorale -> tremolo. The hysteresis matters -- a wheel left resting on
+# the threshold would otherwise machine-gun the rotor with requests.
+PW_FIRE = 0.50          # fraction of full travel that fires a step
+PW_REARM = 0.20         # and where the wheel has to return to before the next
+MIN_AMP_HZ = 20.0       # a parent below this is a rumble, not a tone
+
+# ---- the mod wheel as the swell pedal ---------------------------------------
+# On a real rig the Leslie's amplifier has FIXED gain and the swell pedal sits
+# in FRONT of it, which is how a player makes it break up: you open the pedal.
+# The offline path cannot express that -- it normalises every segment to its
+# `drive` and so distorts identically however hard the passage is played -- but
+# live the wheel can simply be the drive.
+#
+# Quantised, because moving it means recomputing the distortion partials and a
+# continuous controller would ask for that on every message. Eight steps over
+# the range, which is the same trick (and the same reason) as quantising the
+# rotor to three zones upstream.
+LIVE_DRIVE_STEPS = 8
+LIVE_DRIVE_RANGE = 4.0  # wheel fully up = this many times the voice's amp_drive
+
 MELODIC_RANGE = (21, 96)        # a keyboard
 DRUM_RANGE = (35, 87)           # every note percussion_map has a voice for
 # NOT the GM kit's 35-81. percussion_map reaches 87, and the four notes above
@@ -374,6 +404,56 @@ class Slab:
             self.oneshot[key] = True
         return True
 
+    def stamp_amp(self, key, src, freqs, amps, phases, n0, rate):
+        """Place the amplifier's distortion partials, copying `src` for the rest.
+
+        A distortion product is a partial like any other and belongs wherever
+        its parents went -- same part, same room, same reflections -- so
+        everything except frequency, level and phase is taken from a partial
+        that is already sounding. That is exactly what the offline path does
+        with `A[k][src]`; here the source is a slot rather than a row.
+        """
+        n = len(freqs)
+        if n == 0 or len(self.free) < n:
+            return []
+        slots = [self.free.popleft() for _ in range(n)]
+        idx = np.fromiter(slots, np.int64, n)
+        self.busy[idx] = True
+        self.ls_on[idx] = False
+        self.dirty = True
+        a = self.a
+        for k in COLS_F4:
+            a[k][idx] = a[k][src]
+        for k in COLS_I4:
+            a[k][idx] = a[k][src]
+        a["gr"][idx] = -1       # ungated: the amplifier is not a drawn rank
+        a["cr"][idx] = 0
+        f = np.asarray(freqs, np.float64)
+        om = 2.0 * np.pi * f / float(rate)
+        a["om"][idx] = om
+        a["nf"][idx] = f.astype(np.float32)
+        # `phases` is the phase wanted AT n0, and p0 anchors at sample 0.
+        a["p0"][idx] = np.asarray(phases, np.float64) - om * n0
+        a["p0R"][idx] = a["p0"][idx]
+        a["non"][idx] = n0
+        a["noff"][idx] = IDLE
+        # Levels ride the source's own panning, so a product sits where its
+        # parents sit. aL0/aR0 rather than aL/aR: the live rotor rewrites aL/aR
+        # every block, and reading it mid-swing would bake the swing in.
+        ref = 0.5 * (float(self.aL0[src]) + float(self.aR0[src]))
+        g = np.asarray(amps, np.float64) / max(ref, 1e-30)
+        a["aL"][idx] = (float(self.aL0[src]) * g).astype(np.float32)
+        a["aR"][idx] = (float(self.aR0[src]) * g).astype(np.float32)
+        self.aL0[idx] = a["aL"][idx]
+        self.aR0[idx] = a["aR"][idx]
+        self.hrel[idx] = 1.0
+        self.vbase[idx] = 0.0
+        self.vrbase[idx] = 0.0
+        self.vsc[idx] = 1.0
+        self.live.setdefault(key, []).extend(slots)
+        self.last_slots = slots
+        return slots
+
     def press(self, slots, pressure, gain_db, tilt):
         """Aftertouch: lean on the note and it swells AND opens.
 
@@ -660,6 +740,10 @@ class Bank:
         # a change of speed is a change of PARTIALS and cannot be retuned --
         # it needs a different template. Hence a speed axis on the cache.
         self.leslie = (not drums) and getattr(pc, "leslie", False)
+        # The drive the VOICE was voiced at. Live the mod wheel scales it,
+        # so this is the reference and not the setting -- a voice with no
+        # amplifier (amp_drive 0) stays clean however far the wheel goes.
+        self.amp_drive = 0.0 if drums else float(getattr(pc, "amp_drive", 0.0))
         # NO SPEED AXIS. It existed because the rotor was baked into the
         # partials; now both the level swing and the Doppler are driven from
         # the callback, so one template serves every speed and the cache is a
@@ -753,11 +837,19 @@ class Bank:
             # callback, so the swing is a gain and the rotor stays a thing
             # that can still be turned while a chord is held.
             import leslie as _L
+            import tubeamp as _TA
+            # NO SIDEBANDS AND NO AMPLIFIER at build time. The rotor is a gain
+            # live, and the amplifier is a CHORD effect that a one-note
+            # template cannot know about -- baking in each note's own
+            # distortion here would have it counted twice once the mod wheel
+            # adds the chord's. See Live._amp_worker.
             _was, _L.SIDEBANDS = _L.SIDEBANDS, False
+            _wasa, _TA.ENABLED = _TA.ENABLED, False
             try:
                 p = B.prepare(m, self.tuner)
             finally:
                 _L.SIDEBANDS = _was
+                _TA.ENABLED = _wasa
         else:
             p = B.prepare(m, self.tuner)
         t = {k: np.array(p[k]) for k in ALL_COLS}
@@ -974,6 +1066,22 @@ class Live:
         self._ls_rate = -1.0    # horn rate the Doppler was last moved to
         self.cc1_count = 0      # how many mod-wheel messages have arrived
         self.cc1_last = -1      # and the last value, so a monitor can see them
+        # The half-moon ladder. ONE cabinet, so one position -- but the ARMING
+        # is per channel, because each controller has its own wheel and each
+        # springs back on its own.
+        self.half_moon = 1      # index into (STOP, CHORALE, TREMOLO)
+        self.pw_armed = {}      # channel -> is the wheel back near centre
+        self.drive_step = {}    # part id -> quantised mod-wheel drive step
+        self.amp_dirty = set()  # pids whose distortion partials are stale
+        self.amp_job = None     # snapshot handed to the worker
+        self.amp_out = None     # what it handed back
+        self.amp_busy = False   # owned by the audio thread; see _amp_pump
+        self.amp_go = threading.Event()
+        self.amp_stop = False
+        self.amp_err = None
+        self.amp_calls = 0      # how many times the worker has run
+        self.amp_thread = threading.Thread(target=self._amp_worker, daemon=True)
+        self.amp_thread.start()
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = 8.0     # crescendo at full aftertouch
         self.press_tilt = 0.30  # and it brightens as it swells: see Slab.press
@@ -1037,6 +1145,12 @@ class Live:
                 # stream mid-performance.
                 self.errors += 1
                 self.last_error = "%s: %s" % (type(e).__name__, e)
+        if self.amp_dirty or self.amp_out is not None:
+            try:
+                self._amp_pump(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "amp: %s: %s" % (type(e).__name__, e)
 
     def _one(self, n0, msg):
         ch = msg.channel
@@ -1047,8 +1161,23 @@ class Live:
             ratio = 2.0 ** (msg.pitch / 8192.0 * self.bend_range / 12.0)
             prev = self.bend.get(ch, 1.0)
             self.bend[ch] = ratio
+            here = [p for p in parts if self._listens(p, ch)]
+            rotors = [p for p in here if p.bank.leslie]
+            if rotors:
+                # ON A ROTOR PART THE WHEEL IS THE HALF-MOON, not a bend: see
+                # PW_FIRE. A Hammond has no pitch bend to take away.
+                self._half_moon(ch, msg.pitch)
             if prev != ratio:
-                self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
+                if rotors:
+                    # A layered rig can have a Hammond and a lead on one
+                    # channel, and only one of them has a reason to ignore the
+                    # wheel -- so the rest still bend.
+                    keep = {p.pid for p in here if not p.bank.leslie}
+                    if keep:
+                        self.slab.retune(self._sounding(ch, pids=keep), n0,
+                                         om_scale=ratio / prev)
+                else:
+                    self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
         elif msg.type == "aftertouch":
             self.pressure[ch] = msg.value / 127.0
             for slots, tilt in self._press_groups(ch):
@@ -1068,15 +1197,15 @@ class Live:
                 organs = [p for p in here if p.organ and not p.bank.leslie]
                 others = [p for p in here if not p.organ and not p.bank.leslie]
                 if rotors:
-                    # Quantised to the zone the offline path uses, so the cache
-                    # needs three templates and not one per controller step.
-                    # The rotors are AIMED, not set: they spend real seconds
-                    # getting there, and every note already sounding follows
-                    # them there -- both the level swing and the Doppler.
-                    import leslie as _LES
-                    z = _LES.zone(msg.value)
-                    self.rotor_horn.target = z
-                    self.rotor_drum.target = z
+                    # THE WHEEL IS THE SWELL PEDAL, and the swell pedal is in
+                    # front of the amplifier -- so this is the drive. The rotor
+                    # speed moved to the pitch wheel, which a Hammond has no
+                    # other use for; see PW_FIRE and LIVE_DRIVE_STEPS.
+                    step = int(round(msg.value / 127.0 * LIVE_DRIVE_STEPS))
+                    for p in rotors:
+                        if p.bank.amp_drive > 0.0 and self.drive_step.get(p.pid) != step:
+                            self.drive_step[p.pid] = step
+                            self.amp_dirty.add(p.pid)
                 for part in organs:
                     self._crescendo(part, ch, msg.value, n0)
                 if others:
@@ -1102,6 +1231,11 @@ class Live:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
             elif msg.control == 123:                # all notes off
+                # The amplifier's partials hang off a key with no channel, so
+                # this sweep cannot see them -- but their parents are about to
+                # go, so mark them stale and let the pump clear them.
+                for p in parts:
+                    self._amp_touch(p)
                 self.down = {k for k in self.down if k[0] != ch}
                 self.pedalled = {k for k in self.pedalled if k[0] != ch}
                 self.pedal[ch] = False
@@ -1152,6 +1286,7 @@ class Live:
         # of the actual velocity to the one the bucket was built at.
         scale = ((vel / 127.0) ** 2 /
                  max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9)) * part.gain()
+        self._amp_touch(part)
         if part.organ:
             # A pipe organ has no touch: a key is open or shut, and the wind
             # does the rest. Velocity is deliberately ignored.
@@ -1188,12 +1323,141 @@ class Live:
                              vrs=(1.0 + self.mod_rate * w) if w != 0.0 else None)
 
     def _note_off(self, part, ch, note, n0):
+        self._amp_touch(part)
         if part.organ:
             for k in [k for k in list(self.slab.live)
                       if k[0] == part.pid and k[1] == ch and k[2] == note]:
                 self.slab.release(k, n0)
         else:
             self.slab.release((part.pid, ch, note, None), n0)
+
+    def _half_moon(self, ch, pitch):
+        """Step the rotor ladder on a wheel flick. See PW_FIRE.
+
+        Edge-triggered rather than positional, because the wheel springs back
+        and a half-moon does not. Firing on the EDGE and re-arming on the
+        return is what lets a sprung control hold a position it cannot hold.
+        """
+        import leslie as _LES
+        ladder = (_LES.STOP, _LES.CHORALE, _LES.TREMOLO)
+        f = pitch / 8192.0
+        armed = self.pw_armed.get(ch, True)
+        if armed and abs(f) >= PW_FIRE:
+            self.pw_armed[ch] = False
+            i = max(0, min(len(ladder) - 1,
+                           self.half_moon + (1 if f > 0.0 else -1)))
+            if i != self.half_moon:
+                self.half_moon = i
+                # AIMED, not set: the rotors spend real seconds getting there
+                # and every note already sounding follows them, both in level
+                # swing and in Doppler.
+                self.rotor_horn.target = ladder[i]
+                self.rotor_drum.target = ladder[i]
+        elif not armed and abs(f) <= PW_REARM:
+            self.pw_armed[ch] = True
+
+    def _amp_touch(self, part):
+        """Whatever just happened, this part's distortion no longer matches it.
+
+        A product's parents are the chord, so any note on or off changes the
+        whole set -- which is the same rule the offline path states as the
+        lifetime of a product being the intersection of its parents'.
+        """
+        if part.bank.leslie and part.bank.amp_drive > 0.0:
+            self.amp_dirty.add(part.pid)
+
+    def _amp_key(self, pid):
+        # A uniform 4-tuple like every other key, with no channel and no note:
+        # nothing that sweeps a channel should catch the amplifier by accident.
+        return (pid, -1, -1, "amp")
+
+    def _amp_worker(self):
+        """Compute distortion off the audio thread; the callback stamps it.
+
+        `apply` runs inside the PortAudio callback, where a 128-frame block at
+        44.1 kHz is 2.9 ms, and one `tubeamp.emit` is about 7 even at the live
+        setting. So the callback snapshots the chord, this does the arithmetic,
+        and the callback places the answer a block or two later. A few
+        milliseconds of lateness after a chord change is inaudible; an underrun
+        on every chord change is not.
+        """
+        import tubeamp as _TA
+        while not self.amp_stop:
+            if not self.amp_go.wait(0.2):
+                continue
+            self.amp_go.clear()
+            job = self.amp_job
+            if self.amp_stop or job is None:
+                continue
+            pid, key, src, f, am, ph, drive, when = job
+            try:
+                fc, ac, pc = _TA.combine(f, am, ph)
+                out = _TA.emit(fc.tolist(), ac.tolist(), pc.tolist(),
+                               float(self.rate), drive,
+                               window_s=_TA.LIVE_WINDOW_S,
+                               oversample=_TA.LIVE_OVERSAMPLE,
+                               keep=_TA.LIVE_KEEP)
+                self.amp_calls += 1
+            except Exception as e:
+                self.amp_err = "%s: %s" % (type(e).__name__, e)
+                out = []
+            self.amp_out = (pid, key, src, out)
+
+    def _amp_snapshot(self, pid, n0):
+        """What the worker needs, read on the audio thread so it cannot race."""
+        part = next((p for p in self.parts if p.pid == pid), None)
+        key = self._amp_key(pid)
+        if part is None:
+            self.slab.release(key, n0)
+            return None
+        step = self.drive_step.get(pid, 0)
+        drive = (part.bank.amp_drive * LIVE_DRIVE_RANGE
+                 * step / float(LIVE_DRIVE_STEPS))
+        slots = [sl for k, ss in self.slab.live.items()
+                 if k[0] == pid and k[3] != "amp" for sl in ss]
+        if drive <= 0.0 or len(slots) < 2:
+            # Wheel down, or nothing left to intermodulate: the stage is clean.
+            self.slab.release(key, n0)
+            return None
+        idx = np.fromiter(slots, np.int64, len(slots))
+        om = self.slab.a["om"][idx].astype(np.float64)
+        f = om * float(self.rate) / (2.0 * np.pi)
+        aM = 0.5 * (self.slab.aL0[idx].astype(np.float64)
+                    + self.slab.aR0[idx].astype(np.float64))
+        ph = self.slab.a["p0"][idx].astype(np.float64) + om * n0
+        ok = np.flatnonzero((f > MIN_AMP_HZ) & (aM > 0.0))
+        if len(ok) < 2:
+            self.slab.release(key, n0)
+            return None
+        src = int(idx[ok[int(np.argmax(aM[ok]))]])
+        return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0)
+
+    def _amp_place(self, n0, pid, key, src, out):
+        """Stamp what the worker returned. Cheap: no transform, just writes."""
+        self.slab.release(key, n0)
+        if not out or not self.slab.busy[src]:
+            return
+        f = [p[0] for p in out]
+        a = [p[1] for p in out]
+        p = [p[2] for p in out]
+        slots = self.slab.stamp_amp(key, src, f, a, p, n0, self.rate)
+        if slots and self.slab.ls_on[src]:
+            # The amplifier is UPSTREAM of the rotor, so its products swing and
+            # Doppler like anything else that came out of the cabinet.
+            self.slab.leslie_arm(slots, float(self.slab.ls_ph[src]), f)
+
+    def _amp_pump(self, n0):
+        out = self.amp_out
+        if out is not None:
+            self.amp_out = None
+            self.amp_busy = False
+            self._amp_place(n0, *out)
+        if self.amp_dirty and not self.amp_busy:
+            job = self._amp_snapshot(self.amp_dirty.pop(), n0)
+            if job is not None:
+                self.amp_job = job
+                self.amp_busy = True
+                self.amp_go.set()
 
     def _crescendo(self, part, ch, value, n0):
         """Rolling the wheel up adds stops in the organ's own crescendo order;
@@ -1992,6 +2256,93 @@ def selftest():
     check("layer+split: 1500 mixed events, no errors", lv.errors == 0,
           "" if lv.errors == 0 else "  (%s)" % lv.last_error)
     leak(lv, "layer+split: 1500 mixed events, no leak")
+
+    # ---- the Hammond's two wheels ------------------------------------------
+    # A Hammond has no pitch bend and no mod wheel, so both are free for the
+    # controls it does have: the half-moon switch and the swell pedal.
+    import leslie as _LES
+    lv = Live(program=18, rate=44100, frames=128, verbose=False); lv.warm()
+    pid = lv.parts[0].pid
+
+    def flick(v):
+        lv.on_midi(mido.Message("pitchwheel", channel=0, pitch=int(v * 8191)))
+        lv.apply(lv.n)
+
+    def settle(limit=150):
+        for _ in range(limit):
+            time.sleep(0.01); lv.apply(lv.n)
+            if not lv.amp_busy and lv.amp_out is None:
+                return True
+        return False
+
+    check("the rotor starts on chorale", lv.rotor_horn.target == _LES.CHORALE)
+    flick(1.0)
+    check("a flick up steps to tremolo", lv.rotor_horn.target == _LES.TREMOLO)
+    # HELD, not sprung back with the wheel: that is the whole point of reading
+    # edges rather than the position of a control that cannot stay put.
+    flick(0.0)
+    check("...and holds when the wheel springs back",
+          lv.rotor_horn.target == _LES.TREMOLO)
+    flick(1.0); flick(0.0)
+    check("...and cannot be pushed past the top",
+          lv.rotor_horn.target == _LES.TREMOLO and lv.half_moon == 2)
+    flick(-1.0); flick(0.0)
+    check("a flick down steps back to chorale",
+          lv.rotor_horn.target == _LES.CHORALE)
+    flick(-1.0); flick(0.0)
+    check("...and again to stop", lv.rotor_horn.target == _LES.STOP)
+    flick(-1.0); flick(0.0)
+    check("...and cannot be pushed below it",
+          lv.rotor_horn.target == _LES.STOP and lv.half_moon == 0)
+    # A wheel left leaning on the threshold must not machine-gun the ladder.
+    flick(1.0)
+    for _ in range(20):
+        flick(PW_FIRE + 0.02)
+    check("a wheel resting on the threshold steps once, not twenty",
+          lv.half_moon == 1, "  (half_moon %d)" % lv.half_moon)
+
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    lv.apply(lv.n)
+    ix = np.flatnonzero(lv.slab.busy)
+    om0 = lv.slab.a["om"][ix].copy()
+    flick(1.0); flick(0.0)
+    check("the wheel does not BEND a Hammond",
+          np.allclose(om0, lv.slab.a["om"][ix]))
+
+    # ---- the mod wheel is the swell pedal ----------------------------------
+    key = lv._amp_key(pid)
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=0))
+    lv.apply(lv.n); settle()
+    check("wheel down: the stage is clean", not lv.slab.live.get(key))
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=127))
+    lv.apply(lv.n)
+    drove = settle()
+    one = len(lv.slab.live.get(key, []))
+    check("wheel up: the stage distorts", drove and one > 0, "  (%d partials)" % one)
+    # A PRODUCT NEEDS TWO PARENTS, so a chord must make more of them than a
+    # single key -- even though a Hammond key is already several tonewheels.
+    for nn in (64, 67, 72):
+        lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
+    lv.apply(lv.n); settle()
+    many = len(lv.slab.live.get(key, []))
+    check("a chord makes more distortion than one key", many > one,
+          "  (%d vs %d partials)" % (many, one))
+    # The products die with the chord that made them: their lifetime is the
+    # intersection of their parents', which with nothing sounding is nothing.
+    lv.on_midi(mido.Message("control_change", channel=0, control=123, value=0))
+    lv.apply(lv.n); lv.down.clear(); lv.pedalled.clear()
+    settle()
+    check("silence leaves no distortion behind", not lv.slab.live.get(key),
+          "  (%d partials)" % len(lv.slab.live.get(key, [])))
+    check("the amplifier raised no errors",
+          lv.errors == 0 and lv.amp_err is None,
+          "" if lv.errors == 0 else "  (%s)" % lv.last_error)
+    # The worker exists because `apply` runs in the audio callback: a block at
+    # 44.1 kHz is 2.9 ms and one emit is about 7.
+    check("the distortion was computed off the audio thread", lv.amp_calls > 0,
+          "  (%d runs)" % lv.amp_calls)
+    lv.amp_stop = True; lv.amp_go.set()
+    lv.renderer.close()
 
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0
