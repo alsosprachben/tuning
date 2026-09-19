@@ -4658,12 +4658,18 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # ...and the level it is measured against, so that picking harder breaks up
     # and picking softly does not. See tubeamp.emit; without this the drive is
     # normalised per segment and the dynamics are divided out.
-    # MEASURED, by `python3 examples/guitar.py --calibrate`: the peak a hard
-    # six-string strum actually makes in this renderer's units. Drive 1.0
-    # therefore means "the edge of breakup when the instrument is hit that
-    # hard", and a soft single note reaches a small fraction of the curve --
-    # which is the whole difference between a guitar amplifier and an organ's.
-    amp_reference = 0.0655
+    # MEASURED, by `python3 examples/guitar.py --calibrate`: the peak a
+    # six-string strum makes AT VELOCITY 100, in this renderer's units.
+    #
+    # NOT at 127, and the difference matters. drive 1.0 has to mean "the edge
+    # of breakup at NORMAL playing", so that digging in goes PAST it -- which
+    # is how an amplifier is actually set: you put your usual touch where you
+    # want it and the hard notes exceed it. Calibrated at 127 the nominal
+    # drive was only reachable by playing as hard as MIDI can say, and real
+    # files never do: Riffsym writes all 727 of its notes at velocity 100, so
+    # its distortion guitars sat at 0.620 of nominal for ever. attack_volume
+    # is (vel/127)^2, so that is the square and not the ratio -- 4.1 dB.
+    amp_reference = 0.0406
 
     # A CLEAN VALVE AMPLIFIER IS STILL SINGLE-ENDED. Its preamp is one valve
     # with nothing to cancel against, so even at this drive the distortion it
@@ -4712,12 +4718,12 @@ class ElectricBassProperties(ElectricGuitarProperties):
     amp_drive = 0.15
     amp_imbalance = 0.20
     cabinet = "bass410"
-    # MEASURED, by `python3 examples/guitar.py --calibrate`: a low E dug in
-    # with its octave, which is what a bass playing hard actually is. Well
-    # under the guitar's 0.0655 because that one is six strings at once; a
-    # bass calibrated on a six-note voicing would have a reference it never
-    # reaches in use, and would then never break up at all.
-    amp_reference = 0.0264
+    # MEASURED at velocity 100, like the guitar's: a low E with its octave,
+    # which is what a bass line normally is. Well under the guitar's 0.0406
+    # because that one is six strings at once; a bass calibrated on a six-note
+    # voicing would have a reference it never reaches in use, and would then
+    # never break up at all.
+    amp_reference = 0.0164
 
 
 class FingeredBassProperties(ElectricBassProperties):

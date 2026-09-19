@@ -2796,6 +2796,34 @@ def selftest():
     def _bright(g):
         v = np.array([g.harmonic_volume(h) for h in range(1, 25)])
         return float((np.arange(1, 25) * v ** 2).sum() / max((v ** 2).sum(), 1e-30))
+    # ---- the wheel means the same thing live and offline ---------------------
+    # CC1 is the gain knob in both, and they are two separate implementations
+    # of one mapping: live quantises to LIVE_DRIVE_STEPS because every move
+    # costs a recompute, offline does not because there is nothing to
+    # economise on. They must still agree, or a part sounds different played
+    # than rendered.
+    _worst = 0.0
+    for _cc in (0, 16, 32, 64, 96, 127):
+        _live = LIVE_DRIVE_RANGE * int(round(_cc / 127.0 * LIVE_DRIVE_STEPS)) \
+            / float(LIVE_DRIVE_STEPS)
+        _off = 4.0 * _cc / 127.0
+        _worst = max(_worst, abs(_live - _off))
+    check("the gain knob means the same thing live and offline",
+          _worst <= LIVE_DRIVE_RANGE / LIVE_DRIVE_STEPS + 1e-9,
+          "  (worst disagreement %.3f, one step is %.3f)"
+          % (_worst, LIVE_DRIVE_RANGE / LIVE_DRIVE_STEPS))
+    # AND THE REFERENCE IS NORMAL PLAYING, NOT MAXIMUM. drive 1.0 has to mean
+    # the edge of breakup at a usual touch so digging in goes past it; at the
+    # old 127 calibration every real file fell short, since attack_volume is
+    # (vel/127)^2 and Riffsym writes everything at 100.
+    check("the amplifier is calibrated at normal playing, not maximum",
+          _T.ElectricGuitarProperties.amp_reference < 0.05
+          and _T.ElectricBassProperties.amp_reference
+          < _T.ElectricGuitarProperties.amp_reference,
+          "  (guitar %.4f, bass %.4f)"
+          % (_T.ElectricGuitarProperties.amp_reference,
+             _T.ElectricBassProperties.amp_reference))
+
     # ---- the basses ---------------------------------------------------------
     # The guitar's physics on a longer string, so what is worth guarding is
     # that each GM slot differs from its neighbour in the way its class claims.

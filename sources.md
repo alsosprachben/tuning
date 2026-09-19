@@ -2125,3 +2125,34 @@ two fader settings: CC7 127 and CC7 64 differ by 12.0 dB of level -- exactly
 VELOCITY IS NOT TAKEN OUT, and must not be. How hard a string is struck IS how
 hard the valve is driven; that is what `amp_reference` exists to express. A
 fader is a different kind of number, and the distinction is the whole fix.
+
+## Where "drive 1.0" sits, and who gets to set it
+
+`amp_reference` was measured at velocity 127 -- as hard as MIDI can say -- so
+the nominal `amp_drive` was only reachable by a note played at maximum, and no
+real file does that. Riffsym writes all 727 of its notes at velocity 100, and
+`attack_volume` is `(vel/127)^2`, so its distortion guitars sat at **0.620** of
+nominal for ever: a 4.1 dB shortfall that never moved, on every amplified voice
+in the corpus.
+
+So the reference is now measured at velocity 100. drive 1.0 means the edge of
+breakup at NORMAL playing, and digging in goes PAST it -- which is how an
+amplifier is actually set up: you put your usual touch where you want it and
+let the hard notes exceed it. Guitar 0.0655 -> **0.0406**, bass 0.0264 ->
+**0.0164**. The Hammond is untouched, having no reference at all: its keys are
+on or off, so there is no "normal touch" to calibrate to.
+
+AND A FILE CAN NOW SET THE KNOB OFFLINE. CC1 was the gain control live and
+ignored offline, so a part could ask for a setting when played and not when
+rendered. It is now `amp_drive * 4.0 * cc/127` in both -- unquantised offline,
+because there is no recompute to economise on -- taken from the FIRST CC1 on
+the channel, since offline the drive is a setting rather than a control being
+moved. Measured on GM 27 at velocity 100: CC1 absent -30.1 dB, 16 -37.8,
+64 -20.1, 127 -11.2.
+
+NOT FOR A ROTOR, though, and that asymmetry is deliberate. Offline CC1 is the
+Leslie half-moon and the organ renders depend on it; live resolved the clash by
+moving the half-moon to the pitch wheel, which offline has no reason to do
+because there is no wheel to move. The selftest checks the two mappings agree
+to within one of live's quantisation steps, since they are two implementations
+of one number.

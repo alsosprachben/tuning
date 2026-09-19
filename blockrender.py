@@ -902,8 +902,29 @@ def prepare(path, tuner='hybrid'):
             # edge of breakup and past it, with nothing else changed. It only
             # scales voices that HAVE an amplifier -- setting it does not put
             # one in front of a flute.
-            _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE',
-                                               props.amp_drive))
+            # CC1 IS THE GAIN KNOB, for a voice that is not a rotor. Live it
+            # already is (see live.py, LIVE_DRIVE_STEPS); offline it was
+            # ignored, so a file could not ask for a setting it can ask for
+            # live. Same mapping, so a part sounds the same either way:
+            # amp_drive * LIVE_DRIVE_RANGE * cc/127, unquantised here because
+            # offline has no recompute to economise on.
+            #
+            # ONE VALUE FOR THE PIECE, taken from the first CC1 on the channel.
+            # A player sets an amplifier once and then plays it; the drive is a
+            # SETTING offline, where live it is a control being moved. A file
+            # with no CC1 keeps the voice's own amp_drive, which is what every
+            # file in the corpus does.
+            #
+            # NOT for a rotor: CC1 offline is the half-moon switch below, and
+            # the Hammond examples depend on it. Live resolved that by moving
+            # the half-moon to the pitch wheel, which offline has no reason to
+            # do since there is no wheel to move.
+            _drv = float(props.amp_drive)
+            if not getattr(props, 'leslie', False):
+                _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+                if _c1:
+                    _drv *= 4.0 * _c1[0] / 127.0
+            _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE', _drv))
             # THE CHANNEL FADER IS NOT IN FRONT OF THE AMPLIFIER. chan_vol is
             # CC7*CC11 squared and it multiplies into every partial's gain, so
             # by the time tubeamp reads aM the mixer has already been applied

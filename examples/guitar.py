@@ -205,10 +205,19 @@ def passage(program=PROGRAM):
     return m
 
 
-# What "played hard" means, per instrument. A guitar's is a six-string strum;
-# a bass's is a low E dug in with its octave, because a bass plays lines and
+# What "played normally" means, per instrument. A guitar's is a six-string
+# strum; a bass's is a low E with its octave, because a bass plays lines and
 # not chords and calibrating it on a six-note voicing would set the reference
 # to something it never does.
+#
+# AT VELOCITY 100, NOT 127, and that is the point of the number. drive 1.0 has
+# to mean "the edge of breakup at NORMAL playing", so that digging in goes
+# PAST it -- which is how an amplifier is set up: you put your usual touch
+# where you want it and the hard notes exceed it. Calibrated at 127 instead,
+# nominal drive was only reachable by playing as hard as MIDI can say, and
+# every real file fell short: Riffsym writes all 727 of its notes at velocity
+# 100, so its distortion guitars ran at 0.787 of nominal for ever.
+CALIB_VEL = 100
 CALIB = ((27, 'guitar', BIG_CHORD), (34, 'bass', (28, 40)))
 
 
@@ -222,7 +231,7 @@ def calibrate(outdir):
 
 def _calib_one(outdir, prog, name, notes):
     m, tr = _track(program=prog)
-    _chord(tr, notes, 4.0, 127)
+    _chord(tr, notes, 4.0, CALIB_VEL)
     path = os.path.join(outdir, '%s-calib.mid' % name)
     m.save(path)
     A = B.prepare(path, 'even')
