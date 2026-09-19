@@ -43,6 +43,8 @@ is three partials, and partials are what this renderer makes.
 """
 import math
 
+import numpy as np
+
 # A 122-style cabinet.
 HORN_RADIUS = 0.17          # m, the horn mouth's throw
 DRUM_RADIUS = 0.10          # m, the bass rotor's port
@@ -70,6 +72,20 @@ HARMONICS = 3
 # pattern is blunt: measured live, its swing has a second harmonic of 0.11
 # against the horn's 0.50.
 DRUM_BLUNT = 0.5
+
+# A partial this far below the loudest keeps the whole lobe; below the second
+# threshold it keeps only the first harmonic, and below that the rotor still
+# turns it but stops describing the shape of the sweep.
+#
+# Set against where the energy actually is, not guessed. Measured on a Rock
+# Organ passage, the partials above 1% of the loudest are 8.5% of the table and
+# carry 100.0% of the energy; above 3% they are 5.9% and carry 99.9%. So the
+# full lobe goes on everything audible and the tail keeps only its first
+# harmonic -- which matters because the amplifier's distortion products are all
+# 25 dB down, and giving each of them a three-harmonic lobe had the rotor
+# multiplying the amplifier's output by seven.
+FULL_LOBE = 0.01
+SOME_LOBE = 0.001
 
 
 def azimuth(x, z):
@@ -197,6 +213,7 @@ def expand(A, channels, sr, cols):
         rotors[ch] = (Rotor(True, req), Rotor(False, req))
     extra = {k: [] for k in cols}
     made = 0
+    loudest = max(float(np.max(np.abs(A['aM']))), 1e-12) if n else 1.0
     for i in range(n):
         # 'mch' is the MIDI channel; 'ch' is CHIFF. Getting that wrong compares
         # a chiff amount against a channel number, matches nothing, and expands
@@ -235,7 +252,17 @@ def expand(A, channels, sr, cols):
         # that changes with time, so each harmonic has to be bought as
         # partials -- which is why this truncates where the live path, where
         # the lobe is simply a gain, does not.
-        cs = beam_harmonics(f, HARMONICS)
+        # HOW MUCH LOBE A PARTIAL IS WORTH. The chop lives in the lobe's 2nd
+        # and 3rd harmonics, and those are worth buying on the partials you can
+        # hear. On one 25 dB down -- which is what every distortion product
+        # from the amplifier is -- the 3rd harmonic of its level swing is 50 dB
+        # down and costs a partial pair to say so. Spending the full lobe on
+        # everything made the rotor multiply the amplifier's output by seven.
+        rel = A['aM'][i] / loudest
+        want = HARMONICS if rel > FULL_LOBE else (1 if rel > SOME_LOBE else 0)
+        if want == 0:
+            continue
+        cs = beam_harmonics(f, want)
         if not horn:
             cs = [c * DRUM_BLUNT for c in cs]
         dw = 2.0 * math.pi * rate / sr
