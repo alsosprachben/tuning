@@ -231,8 +231,21 @@ class Slab:
         # a limiter behind. Set by Live from --headroom.
         self.headroom = 1.0
 
-    def leslie_arm(self, slots, az, nf):
-        """Record what the callback needs to swing these partials."""
+    def leslie_arm(self, slots, az, nf, n=None, horn_rate=None, drum_rate=None):
+        """Record what the callback needs to swing these partials.
+
+        PASS THE RATES. The Doppler base written here is the deviation at
+        FAST_HZ -- a unit, not a speed -- and the callback only rescales it
+        when the rotor's rate MOVES. So a partial armed while the rotor sits
+        settled on chorale kept a 6.6 Hz wobble at full depth until the switch
+        was next touched, which is audible as new notes spinning at tremolo
+        while the held ones turn slowly, and as everything snapping back into
+        line the moment the speed is changed. Ben, playing: "sometimes in the
+        middle speed it goes to 6 Hz in half the sound... when I move it to
+        full speed, it resets. It seems related to note off events" -- it was
+        note ON, or rather anything that stamps: every new note, every rank
+        drawn, and every refresh of the amplifier's products.
+        """
         import leslie as _L
         if not slots:
             return
@@ -274,6 +287,27 @@ class Slab:
         self.vrbase[idx] = ref
         self.vbase[idx] = 2.0 * np.pi * rad * ref / _L.C_SOUND
         self.vsc[idx] = self.vbase[idx]
+        if horn_rate is not None:
+            self._doppler_to(idx, horn, n, horn_rate, drum_rate)
+
+    def _doppler_to(self, idx, horn, n, horn_rate, drum_rate):
+        """Scale these partials' REFERENCE Doppler to the rate the rotors are
+        actually turning at.
+
+        leslie_arm writes the deviation a rotor would make at FAST_HZ, because
+        that gives every rotor partial one base and lets a single scalar move
+        the whole group. The base is not a speed, it is a unit -- so nothing is
+        at the right speed until this has run over it.
+        """
+        import leslie as _L
+        for sel, rate, ref in ((horn, horn_rate, _L.FAST_HZ),
+                               (~horn, drum_rate,
+                                _L.FAST_HZ * abs(_L.DRUM_RATIO))):
+            sub = idx[sel]
+            if not len(sub):
+                continue
+            vrs = max(rate, 1e-4) / ref
+            self.retune(sub.tolist(), n, vd=vrs - 1.0, vrs=vrs)
 
     def leslie_doppler(self, n, horn_rate, drum_rate):
         """Move the rotor partials' frequency modulation to the current speed.
@@ -281,20 +315,14 @@ class Slab:
         retune() does the hard part -- it puts the phase back so neither the
         carrier nor the accumulated vibrato phase steps, which is what would
         click. Called only when the rate has actually moved, so a settled rotor
-        costs nothing.
+        costs nothing -- which is why leslie_arm has to place a NEW partial at
+        the current rate itself rather than wait for this.
         """
-        import leslie as _L
         m = self.ls_on & self.busy
         if not m.any():
             return
-        for mask, rate, ref in ((m & self.ls_horn, horn_rate, _L.FAST_HZ),
-                                (m & ~self.ls_horn, drum_rate,
-                                 _L.FAST_HZ * abs(_L.DRUM_RATIO))):
-            idx = np.flatnonzero(mask)
-            if not len(idx):
-                continue
-            vrs = max(rate, 1e-4) / ref
-            self.retune(idx.tolist(), n, vd=vrs - 1.0, vrs=vrs)
+        idx = np.flatnonzero(m)
+        self._doppler_to(idx, self.ls_horn[idx], n, horn_rate, drum_rate)
 
     def leslie_swing(self, horn_angle, drum_angle):
         """Set every rotor partial's level from where the rotor has got to.
@@ -1526,7 +1554,8 @@ class Live:
         if slots and self.slab.ls_on[src]:
             # The amplifier is UPSTREAM of the rotor, so its products swing and
             # Doppler like anything else that came out of the cabinet.
-            self.slab.leslie_arm(slots, float(self.slab.ls_ph[src]), f)
+            self.slab.leslie_arm(slots, float(self.slab.ls_ph[src]), f, n0,
+                                 self.rotor_horn.rate, self.rotor_drum.rate)
 
     def _amp_pump(self, n0):
         out = self.amp_out
@@ -1583,7 +1612,8 @@ class Live:
             self.dropped += 1
             return
         if part.bank.leslie:
-            self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"])
+            self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
+                                 n0, self.rotor_horn.rate, self.rotor_drum.rate)
 
     def _listens(self, part, ch):
         return (part.channel is None or part.channel == ch) and not part.muted
@@ -2481,6 +2511,28 @@ def selftest():
     # 44.1 kHz is 2.9 ms and one emit is about 7.
     check("the distortion was computed off the audio thread", lv.amp_calls > 0,
           "  (%d runs)" % lv.amp_calls)
+
+    # ---- a note started on a SETTLED rotor joins it at its speed ------------
+    # leslie_arm writes the Doppler at FAST_HZ as a unit, and the callback only
+    # rescales when the rate MOVES -- so on a settled chorale a new note kept a
+    # 6.6 Hz wobble while the held ones turned at 0.8, and changing speed
+    # snapped them together. Ben heard it as half the sound spinning fast.
+    lv.panic(); lv.apply(lv.n); settle()
+    lv.rotor_horn.rate = lv.rotor_horn.target = _LES.CHORALE
+    lv.rotor_drum.rate = lv.rotor_drum.target = _LES.CHORALE
+    lv._ls_rate = _LES.CHORALE
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    lv.apply(lv.n); lv.down.add((0, 60))
+    fresh = np.array([sl for k in lv.slab.live if k[2] == 60
+                      for sl in lv.slab.live[k]], dtype=int)
+    vr = np.unique(np.round(lv.slab.a["vr"][fresh], 3)) if len(fresh) else np.array([])
+    # the drum turns at DRUM_RATIO of the horn, so two rates are correct here;
+    # what is not correct is FAST_HZ, which is nobody's speed at chorale.
+    check("a note started on a settled rotor joins it, not the reference",
+          len(vr) > 0 and float(np.abs(vr).max()) < _LES.FAST_HZ * 0.5,
+          "  (vr %s, FAST_HZ %.2f)" % (vr, _LES.FAST_HZ))
+    lv.panic(); lv.apply(lv.n); settle()
+    lv.down.clear()
 
     # ---- the TUI asks; the callback does -----------------------------------
     # The slab has one writer by design. Every path that lets the TUI thread
