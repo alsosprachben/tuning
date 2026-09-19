@@ -2101,3 +2101,27 @@ AND THREE ARE LEFT ALONE. 32 "Acoustic Bass" is an upright -- a large wooden
 box with its own radiating body, which is the one thing a solid-body has not
 got -- and it is unmeasured; 38 and 39 are synth basses with no string, no
 pickup and no cabinet. Modelling either would be flattery.
+
+## A channel fader is not in front of the amplifier
+
+`chan_vol` is CC7*CC11 squared and it multiplies into every partial's gain
+(`tonelib.py`, `gain = ... * attack_volume * channel_volume`), so by the time
+`tubeamp` reads `aM` the mixer has already been applied. Turning a channel down
+was therefore making the valve distort LESS, which is not what a fader does:
+the amplifier is on the instrument's signal path and the fader is after it.
+
+Found on Riffsym, whose rhythm guitars sit at CC7 87 and velocity 100. They
+were reaching the valve at 0.370 of the reference where the lead, at CC7 127,
+reached 0.787 -- so a nominal `amp_drive` of 3.0 was rendering as about 1.1,
+and the DISTORTION voice was arriving at the OVERDRIVEN setting, on the two
+parts that carry the riff.
+
+The fix is to scale `amp_reference` by the same `chan_vol`. The drive then
+depends only on how hard the strings are hit, and the products still come out
+at the faded level because they scale with the input. Verified on one chord at
+two fader settings: CC7 127 and CC7 64 differ by 12.0 dB of level -- exactly
+(127/64)^2 -- and by **0.0 dB of distortion ratio**, both -8.6 dB.
+
+VELOCITY IS NOT TAKEN OUT, and must not be. How hard a string is struck IS how
+hard the valve is driven; that is what `amp_reference` exists to express. A
+fader is a different kind of number, and the distinction is the whole fix.

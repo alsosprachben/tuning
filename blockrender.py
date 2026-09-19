@@ -904,7 +904,26 @@ def prepare(path, tuner='hybrid'):
             # one in front of a flute.
             _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE',
                                                props.amp_drive))
-            _AMP_REF[ch] = getattr(props, 'amp_reference', None)
+            # THE CHANNEL FADER IS NOT IN FRONT OF THE AMPLIFIER. chan_vol is
+            # CC7*CC11 squared and it multiplies into every partial's gain, so
+            # by the time tubeamp reads aM the mixer has already been applied
+            # -- and turning a channel down was making the valve distort less,
+            # which is not what a fader does. It is downstream: the amp is on
+            # the instrument's signal path and the fader is after it.
+            #
+            # Scaling the REFERENCE by the same factor takes it back out. The
+            # drive then depends only on how hard the strings are hit, and the
+            # products still come out at the faded level because they scale
+            # with the input. Measured on Riffsym, whose rhythm guitars sit at
+            # CC7 87: they were reaching the valve at 0.37 of the reference,
+            # so a nominal drive of 3.0 was rendering as about 1.1 -- the
+            # distortion voice arriving at the overdriven setting.
+            #
+            # VELOCITY IS NOT TAKEN OUT, and must not be: how hard a string is
+            # struck IS how hard the valve is driven. That is the whole point
+            # of amp_reference. A fader is a different kind of number.
+            _ref = getattr(props, 'amp_reference', None)
+            _AMP_REF[ch] = (_ref * chan_vol) if _ref else None
             _AMP_IMB[ch] = getattr(props, 'amp_imbalance', None)
         if getattr(props, 'cabinet', None) and ch not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
