@@ -964,6 +964,28 @@ class SynthProperties:
     # tubeamp.emit.
     amp_reference = None
 
+    # How far the push-pull pair is mismatched, or None for tubeamp's own
+    # default. This is the difference between a POWER amp and a PREAMP: a
+    # balanced pair cancels its even orders exactly (measured, h2 129 dB down),
+    # which is a clean, odd-only, square-ish distortion; a single-ended stage
+    # cancels nothing and is even-dominant (h2 15.8 dB down, ABOVE h3). A
+    # guitar amplifier's gain stages are single-ended, and that asymmetry is
+    # most of why an overdriven guitar sounds warm rather than like a fuzz box.
+    amp_imbalance = None
+
+    # A TOUCHED NODE. Rest a finger on the string at 1/k of its length and
+    # every mode that does NOT have a node there is killed; what is left is the
+    # modes that are multiples of k, so the string speaks k times its open
+    # pitch with a spectrum of startling purity. That is a guitar harmonic, and
+    # it is a different thing from a comb: a comb weights modes, this one
+    # DELETES them. 0 = not touched, which is every other voice.
+    #
+    # The sounding partial m is therefore string mode m*k, and the comb, the
+    # roll-off and the pickup all have to be evaluated THERE rather than at m.
+    # (The true modes are also stretched by stiffness at m*k rather than m;
+    # that part is not modelled, and on a guitar's thin steel it is small.)
+    harmonic_touch = 0
+
     # THE PICKUP IS A SECOND COMB, and it is the other half of what "tone"
     # means on an electric guitar. A magnetic pickup senses the string at a
     # POINT, so it reads mode n with weight sin(n*pi*q) for a pickup q of the
@@ -2109,6 +2131,10 @@ class SynthProperties:
             if self.even_harmonic_db is None and self.odd_only:
                 return 0.0
 
+        # A touched harmonic sounds string mode m*k as its mth partial.
+        sm = harmonic * self.harmonic_touch if self.harmonic_touch else harmonic
+        if self.harmonic_touch and self.max_harmonic and sm > self.max_harmonic:
+            return 0.0
         if self.strike_point:
             # Strike comb: a string struck at fraction p of its length feeds mode n with
             # amplitude ~ |sin(n*pi*p)|, weakening n at multiples of 1/p (p~1/7 -> the sour
@@ -2125,13 +2151,13 @@ class SynthProperties:
             depth = self.strike_depth
             if self.strike_fills_with_force:
                 depth *= (1.0 - self.attack_volume)
-            comb = (1.0 - depth) + depth * abs(_sin(harmonic * _pi * self.strike_point))
+            comb = (1.0 - depth) + depth * abs(_sin(sm * _pi * self.strike_point))
         else:
             comb = _pluck_comb(self.plucked_harmonic, self.pluck_dampening, harmonic)
 
-        v = self.gain / (harmonic ** self.attack_dampening) * comb
+        v = self.gain / (sm ** self.attack_dampening) * comb
         if self.pickup_points:
-            v *= self.pickup_gain(harmonic)
+            v *= self.pickup_gain(sm)
         if harmonic % 2 == 0 and self.even_harmonic_db is not None:
             v *= 10.0 ** (self.even_harmonic_db / 20.0)
         return v
@@ -4634,7 +4660,120 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # which is the whole difference between a guitar amplifier and an organ's.
     amp_reference = 0.0655
 
+    # A CLEAN VALVE AMPLIFIER IS STILL SINGLE-ENDED. Its preamp is one valve
+    # with nothing to cancel against, so even at this drive the distortion it
+    # makes is second-order first -- which is what "warm" means and what a
+    # balanced pair (tubeamp's own default, h2 129 dB down) would not give.
+    amp_imbalance = 0.25
+
     cabinet = "guitar12"
+
+
+class JazzGuitarProperties(ElectricGuitarProperties):
+    """GM 26. A neck humbucker, picked with the thumb side of the hand.
+
+    The dark sound of a jazz box is NOT the box. A pickup senses the string,
+    not the air, so even on a hollow instrument almost nothing of the body
+    reaches the amplifier -- which is why an archtop played unplugged and
+    plugged in are two different instruments. What makes this dark is
+    geometry, and all of it is in the pickup:
+
+      - the NECK position, 0.244 of the length, nulls harmonics 4, 8, 12 --
+        the whole upper-mid ladder, at once;
+      - two COILS 18 mm apart cancel wherever they fall antiphase, which adds
+        a second null at n = 1/0.0278 = 36;
+      - and picking at 0.25 rather than 0.19 puts the pluck comb's own null
+        down at the 4th as well, instead of the 5th.
+
+    Three nulls converging on the 4th harmonic is the sound.
+    """
+    pickup_points = (0.230, 0.258)      # neck humbucker, 18 mm coil spacing
+    strike_point = 0.25                 # picked toward the neck, softly
+    strike_depth = 0.7                  # a thumb or a soft pick is not a point
+    amp_drive = 0.20
+    amp_imbalance = 0.35
+
+
+class MutedGuitarProperties(ElectricGuitarProperties):
+    """GM 28. The picking hand's palm resting on the strings at the bridge.
+
+    A palm mute is a DAMPER, and damping is a decay rate, not a filter. The
+    heel of the hand loads the string where it crosses the bridge and takes the
+    energy out fast -- fastest from the modes that move most under it, which is
+    the high ones. So this is the base voice with its decay opened up by an
+    order of magnitude: h1 falls at 38 dB/s where an open string falls at 1,
+    and h8 at 94.
+
+    What it is NOT is a low-pass. The attack is undamped -- the palm cannot act
+    before the pick does -- so a palm mute starts as bright as an open note and
+    then loses its top in a fraction of a second. That ORDER is the sound, and
+    a voice that simply rolled the treble off would get the chug and lose the
+    click.
+    """
+    pickup_points = (0.10,)             # near the bridge, where the hand is
+    strike_point = 0.10
+    decay_db = 30.0                     # dB/s on the fundamental
+    harmonic_decay_db = 8.0             # ...and far faster up the series
+    amp_drive = 0.80
+    amp_imbalance = 0.50
+
+
+class OverdrivenGuitarProperties(ElectricGuitarProperties):
+    """GM 29. The same instrument with the amplifier worked.
+
+    Only two numbers differ from the clean voice, and neither is a filter: the
+    drive, and the balance of the stage. A guitar amplifier's gain stages are
+    SINGLE-ENDED -- one valve, no partner to cancel against -- so they are
+    even-order dominant, and that is most of why an overdriven guitar sounds
+    warm where a balanced push-pull pair sounds like a square wave. Measured at
+    drive 2.0, a balanced stage puts h2 129 dB down and a single-ended one puts
+    it 15.8 down, ABOVE its own third.
+
+    Bridge pickup, because that is what the position is for.
+    """
+    pickup_points = (0.10,)
+    amp_drive = 1.20
+    amp_imbalance = 0.60
+
+
+class DistortionGuitarProperties(ElectricGuitarProperties):
+    """GM 30. Past the bend and into the clip.
+
+    Drive 3.0 is well past the grid bias -- the slope of the stage is 0.43 at
+    2 and 0.07 at 4 -- so this is the setting the old power-series amplifier
+    could not reach at all, because 1.0 was its radius of convergence rather
+    than the amplifier's limit.
+
+    A bridge HUMBUCKER, which is the pairing this patch means: hot enough to
+    push the front end, and its own 36th-harmonic null keeps the very top from
+    turning to hash before the speaker gets to it.
+    """
+    pickup_points = (0.049, 0.077)      # bridge humbucker
+    strike_point = 0.13
+    amp_drive = 3.00
+    amp_imbalance = 0.80
+
+
+class GuitarHarmonicsProperties(ElectricGuitarProperties):
+    """GM 31. A finger resting on a node, so most of the string cannot speak.
+
+    Touch a string at half its length and every odd mode -- which has an
+    ANTINODE there -- is killed, while the even ones, which have a node, are
+    untouched. The string goes on sounding at twice its open pitch with only
+    the modes that fit, and the result is the glassy, almost sine-like tone a
+    guitarist gets at the twelfth fret.
+
+    So this is not a filter and not a comb: harmonic_touch DELETES modes. The
+    mth partial you hear is string mode 2m, which is also where the pluck comb
+    and the pickup comb have to be read -- the combs stretch with it. Measured
+    against the open voice, h3 falls from +1 dB to -26.
+
+    It rings, too, because the finger is at a node and a node is not moving:
+    the touch selects rather than damps. Decay is left at the base voice's.
+    """
+    harmonic_touch = 2                  # touched at 1/2: the twelfth fret
+    strike_point = 0.13                 # struck near the bridge, as one does
+    amp_drive = 0.25
 
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---

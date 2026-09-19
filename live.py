@@ -2722,6 +2722,43 @@ def selftest():
           "" if gv.errors == 0 else "  (%s)" % gv.last_error)
     gv.amp_stop = True; gv.amp_go.set(); gv.renderer.close()
 
+    # ---- the rest of the family ---------------------------------------------
+    # Cheap, because these are one instrument with the pickup moved, the palm
+    # put down or the gain turned up -- so what is worth guarding is that the
+    # relationships between them survive, not that each renders.
+    fam = [(26, _T.JazzGuitarProperties), (27, _T.ElectricGuitarProperties),
+           (28, _T.MutedGuitarProperties), (29, _T.OverdrivenGuitarProperties),
+           (30, _T.DistortionGuitarProperties), (31, _T.GuitarHarmonicsProperties)]
+    import patch_map as _PM
+    check("all six electrics are wired to their GM programs",
+          all(_PM.property_class_for_program(n) is c for n, c in fam))
+    inst = {n: c(329.63, 0.0, 1.0, 1.0) for n, c in fam}
+    check("drive rises clean -> overdriven -> distortion",
+          inst[27].amp_drive < inst[29].amp_drive < inst[30].amp_drive,
+          "  (%.2f < %.2f < %.2f)" % (inst[27].amp_drive, inst[29].amp_drive,
+                                      inst[30].amp_drive))
+    # A PALM MUTE IS A DAMPER, so it has to be a decay and not a filter.
+    check("the muted voice damps, and by an order of magnitude",
+          inst[28].harmonic_decay(1) > 10.0 * inst[27].harmonic_decay(1),
+          "  (%.1f vs %.1f dB/s)" % (inst[28].harmonic_decay(1),
+                                     inst[27].harmonic_decay(1)))
+
+    def _h1_share(g):
+        v = np.array([g.harmonic_volume(h) for h in range(1, 33)])
+        return float(v[0] ** 2 / max((v ** 2).sum(), 1e-30))
+    # A touched node DELETES modes where a comb only weights them.
+    check("a touched harmonic is far purer than an open string",
+          _h1_share(inst[31]) > 2.0 * _h1_share(inst[27]),
+          "  (h1 carries %.0f%% vs %.0f%%)"
+          % (100 * _h1_share(inst[31]), 100 * _h1_share(inst[27])))
+    # A neck humbucker nulls h4/h8/h12 at once; a bridge one waits until h16.
+    def _bright(g):
+        v = np.array([g.harmonic_volume(h) for h in range(1, 25)])
+        return float((np.arange(1, 25) * v ** 2).sum() / max((v ** 2).sum(), 1e-30))
+    check("the neck humbucker is darker than the bridge one",
+          _bright(inst[26]) < _bright(inst[30]),
+          "  (mean harmonic %.1f vs %.1f)" % (_bright(inst[26]), _bright(inst[30])))
+
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0
 

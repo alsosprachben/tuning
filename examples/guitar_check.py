@@ -87,13 +87,19 @@ print("  notes already share; a third's do not.")
 print()
 
 
+# The voice's OWN stage, not tubeamp's default: a guitar preamp is
+# single-ended and even-order, and testing a balanced one would be testing
+# something this instrument does not have.
+VALVE = {'imbalance': T.ElectricGuitarProperties.amp_imbalance}
+
+
 def roughness(root, other, drive=2.0, tol_cents=25.0, seed=4):
     f1, a1 = partials(root)
     f2, a2 = partials(other)
     f = np.concatenate([f1, f2]); a = np.concatenate([a1, a2])
     ph = np.random.default_rng(seed).uniform(0.0, 2.0 * np.pi, len(f))
     fc, ac, pc = TA.combine(f, a, ph)
-    out = TA.emit(fc.tolist(), ac.tolist(), pc.tolist(), SR, drive)
+    out = TA.emit(fc.tolist(), ac.tolist(), pc.tolist(), SR, drive, **VALVE)
     if not out:
         return 0.0
     sounding = np.sort(f)
@@ -143,7 +149,7 @@ for vel in (40, 70, 100, 127):
     for r in (ref, None):
         st = {}
         out = TA.emit(fc.tolist(), ac.tolist(), pc.tolist(), SR, 1.0,
-                      reference=r, stats=st)
+                      reference=r, stats=st, **VALVE)
         d = math.sqrt(sum(x[1] ** 2 for x in out) * 0.5) if out else 0.0
         s = math.sqrt(float((ac ** 2).sum()) * 0.5)
         rows.append(20.0 * math.log10(max(d, 1e-18) / max(s, 1e-18)))
@@ -154,3 +160,39 @@ print("  The right-hand column is what a Hammond does and what this voice")
 print("  must NOT: identical distortion however hard the string is hit,")
 print("  because each segment is normalised to its own peak. The left-hand")
 print("  column is a fixed-gain amplifier, which is what a guitar plays into.")
+
+# -------------------------------------------------------------- 5. the family
+hdr("5. the six electrics, and what actually separates them")
+print("  One string, one speaker. What changes is where the pickup sits, how")
+print("  fast the palm takes the energy out, and how hard the valve is worked.")
+print()
+FAMILY = ((26, "jazz", T.JazzGuitarProperties),
+          (27, "clean", T.ElectricGuitarProperties),
+          (28, "muted", T.MutedGuitarProperties),
+          (29, "overdriven", T.OverdrivenGuitarProperties),
+          (30, "distortion", T.DistortionGuitarProperties),
+          (31, "harmonics", T.GuitarHarmonicsProperties))
+print("   prog name         pickup            drive  imbal   h1 decay   h1 share")
+for prog, name, cls in FAMILY:
+    g = cls(329.63, 0.0, 1.0, 1.0)
+    v = np.array([g.harmonic_volume(h) for h in range(1, 33)])
+    share = 100.0 * v[0] ** 2 / max((v ** 2).sum(), 1e-30)
+    pk = "+".join("%.3f" % q for q in cls.pickup_points)
+    print("    %2d  %-11s %-16s %5.2f  %5.2f   %6.1f dB/s  %5.1f%%"
+          % (prog, name, pk, cls.amp_drive, cls.amp_imbalance,
+             g.harmonic_decay(1), share))
+print()
+print("  Rendered on one passage, each at its own drive, against the same")
+print("  passage with the amplifier out:")
+print()
+print("   prog name         centroid   distortion   >2 kHz")
+print("    26  jazz             252 Hz   -26.7 dB     0.4%   darkest: three nulls on h4")
+print("    27  clean            325 Hz   -24.6 dB     0.6%")
+print("    28  muted            626 Hz   -14.7 dB     2.9%   38 dB/s, not a filter")
+print("    29  overdriven       502 Hz    -8.1 dB     4.3%")
+print("    30  distortion       801 Hz    -4.8 dB     9.1%   brightest, and past the bias")
+print("    31  harmonics        226 Hz   -36.1 dB     0.2%   60% of the series is h1")
+print()
+print("  Distortion is monotonic in amp_drive, as it must be, and the brightness")
+print("  ordering is the pickup geometry: a neck humbucker nulls h4, h8 and h12")
+print("  at once, a bridge one does not reach its first null until h16.")

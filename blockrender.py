@@ -690,6 +690,7 @@ def prepare(path, tuner='hybrid'):
     _LESLIE_CH = {}
     _AMP_CH = {}
     _AMP_REF = {}
+    _AMP_IMB = {}
     _CAB_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
@@ -904,6 +905,7 @@ def prepare(path, tuner='hybrid'):
             _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE',
                                                props.amp_drive))
             _AMP_REF[ch] = getattr(props, 'amp_reference', None)
+            _AMP_IMB[ch] = getattr(props, 'amp_imbalance', None)
         if getattr(props, 'cabinet', None) and ch not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
             # anyone wants to play through -- it is the A/B that shows what the
@@ -1215,7 +1217,7 @@ def prepare(path, tuner='hybrid'):
     if _AMP_CH and __import__('tubeamp').ENABLED:
         import tubeamp as _AMP
         _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'),
-                          references=_AMP_REF)
+                          references=_AMP_REF, imbalances=_AMP_IMB)
         if _na:
             print("  tube amp: %d channel(s), %d distortion partials"
                   % (len(_AMP_CH), _na))

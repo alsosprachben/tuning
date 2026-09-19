@@ -1916,13 +1916,13 @@ rather than reinforce it:
 
 | interval | ratio | rough |
 |---|---|---|
-| octave | 2:1 | **0.2%** |
-| fifth | 3:2 | **15.1%** |
-| fourth | 4:3 | 22.8% |
-| major sixth | 5:3 | 22.7% |
-| minor third | 6:5 | 25.7% |
-| tritone | 45:32 | 25.6% |
-| major third | 5:4 | **27.1%** |
+| octave | 2:1 | **0.3%** |
+| fifth | 3:2 | **16.7%** |
+| fourth | 4:3 | 21.0% |
+| major sixth | 5:3 | 24.3% |
+| tritone | 45:32 | 26.2% |
+| major third | 5:4 | **27.3%** |
+| minor third | 6:5 | 27.9% |
 
 An octave is free, a fifth is about half as rough as a third, and everything
 else lands in between. That is the power chord, arrived at from a transfer
@@ -1930,3 +1930,43 @@ function and a string -- nothing in the model was told which intervals survive
 overdrive. The metric has a limit worth stating: a minor SECOND scores low for
 the wrong reason, because its own partials are dense enough that everything is
 near something, so it is not comparable and is not listed.
+
+THE PREAMP IS SINGLE-ENDED, AND THAT IS WHY IT IS WARM. `tubeamp`'s default
+stage is a balanced push-pull pair, which cancels its even orders exactly --
+measured, h2 129 dB down -- and what is left is odd, which is a square wave,
+which is a fuzz box. A guitar amplifier's gain stages are single valves with
+nothing to cancel against: at `imbalance` 1.0 the same curve puts h2 15.8 dB
+down, ABOVE its own third. So the electrics carry `amp_imbalance`, rising with
+gain from 0.25 on the clean voice to 0.80 on the distortion one, and the
+roughness table above is measured through the stage the instrument actually
+has rather than through the default.
+
+THE OTHER FIVE, and what separates them. It is not five fitted voices -- it is
+one instrument with the pickup moved, the palm put down, or the gain turned up:
+
+| GM | voice | pickup | drive | imbalance | h1 decay |
+|---|---|---|---|---|---|
+| 26 | jazz | 0.230+0.258 neck humbucker | 0.20 | 0.35 | 1.0 dB/s |
+| 27 | clean | 0.154 middle single coil | 0.35 | 0.25 | 1.0 |
+| 28 | muted | 0.100 bridge | 0.80 | 0.50 | **38.0** |
+| 29 | overdriven | 0.100 bridge | 1.20 | 0.60 | 1.0 |
+| 30 | distortion | 0.049+0.077 bridge humbucker | 3.00 | 0.80 | 1.0 |
+| 31 | harmonics | 0.154, touched at 1/2 | 0.25 | 0.25 | 1.0 |
+
+Rendered on one passage, each at its own drive, against the same passage with
+the amplifier out: centroid 252 / 325 / 626 / 502 / 801 / 226 Hz and distortion
+-26.7 / -24.6 / -14.7 / -8.1 / -4.8 / -36.1 dB. Distortion is monotonic in
+`amp_drive`, as it must be; the brightness ordering is pickup geometry, because
+a neck humbucker nulls h4, h8 and h12 at once while a bridge one does not reach
+its first null until h16.
+
+TWO OF THEM NEEDED A MECHANISM, not a number. A palm mute is a DAMPER, so it is
+a decay rate and not a filter: 38 dB/s on the fundamental against 1, and 94 on
+the 8th. The attack is undamped, because the palm cannot act before the pick
+does -- that ORDER is the sound, and a voice that merely rolled the treble off
+would get the chug and lose the click. And a guitar harmonic is a touched NODE:
+rest a finger at 1/k and every mode without a node there is killed, so
+`harmonic_touch` DELETES modes where a comb only weights them. The mth partial
+heard is then string mode m*k, which is where the pluck comb and the pickup
+comb must be read as well. Measured, it takes the fundamental's share of the
+series from 21.5% to 60.2%, which is the glassiness.

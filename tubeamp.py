@@ -550,7 +550,7 @@ def products(freqs, amps, phases, coeffs, keep=20, floor=1e-4, nyquist=None):
 
 
 def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
-           references=None):
+           references=None, imbalances=None):
     """Emit the amplifier's distortion partials, in place on the table.
 
     Runs BEFORE leslie.expand, which is the whole reason this can live in the
@@ -611,9 +611,12 @@ def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
                 sub = np.argsort(-as_)[:keep]
                 fs, as_, ps = fs[sub], as_[sub], ps[sub]
             src = int(live[int(np.argmax(aM[live]))])
+            imb = (imbalances or {}).get(ch)
+            valve = {} if imb is None else {'imbalance': float(imb)}
             for f, g, ph in emit(fs.tolist(), as_.tolist(), ps.tolist(),
                                  sr, drive, floor=floor,
-                                 reference=(references or {}).get(ch)):
+                                 reference=(references or {}).get(ch),
+                                 **valve):
                 for k in cols:
                     extra[k].append(A[k][src])
                 w = 2.0 * math.pi * f / sr

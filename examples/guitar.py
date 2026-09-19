@@ -38,6 +38,15 @@ import tubeamp as TA
 
 DRIVES = (0.0, 1.0, 2.0, 4.0)
 PROGRAM = 27            # GM 27, Electric Guitar (clean)
+# The family, and what distinguishes each from the one before it. Every one is
+# the same string and the same speaker; what changes is where the pickup is,
+# how fast the palm takes the energy out, and how hard the valve is worked.
+FAMILY = ((26, "jazz", "neck humbucker, picked soft"),
+          (27, "clean", "middle single coil"),
+          (28, "muted", "palm at the bridge: decay, not filtering"),
+          (29, "overdriven", "bridge pickup, stage worked"),
+          (30, "distortion", "bridge humbucker, past the bias"),
+          (31, "harmonics", "a finger on the node at 1/2"))
 TPB = 480
 SR = 44100.0
 
@@ -46,11 +55,11 @@ SR = 44100.0
 BIG_CHORD = (40, 47, 52, 55, 59, 64)
 
 
-def _track(tempo=100):
+def _track(tempo=100, program=PROGRAM):
     m = mido.MidiFile(ticks_per_beat=TPB)
     tr = mido.MidiTrack(); m.tracks.append(tr)
     tr.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(tempo), time=0))
-    tr.append(mido.Message('program_change', program=PROGRAM, channel=0, time=0))
+    tr.append(mido.Message('program_change', program=program, channel=0, time=0))
     return m, tr
 
 
@@ -63,14 +72,44 @@ def _chord(tr, notes, beats, vel):
                                time=n if i == 0 else 0))
 
 
-def passage():
+def family(outdir):
+    """The same passage on all six electrics, so they can be told apart.
+
+    Each voice's own amp_drive is used -- no TUNING_AMP_DRIVE -- because the
+    drive IS part of what distinguishes them, and overriding it would render
+    six voices that differ only in their pickups.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for prog, name, why in FAMILY:
+        mid = os.path.join(outdir, 'guitar-%d-%s.mid' % (prog, name))
+        passage(prog).save(mid)
+        out = mid[:-4] + '.wav'
+        env = dict(os.environ)
+        env.pop('TUNING_AMP_DRIVE', None)
+        env.setdefault('TUNING_ROOM', 'chamber')
+        env.setdefault('TUNING_MASTER_DB', '-12')
+        t0 = time.time()
+        r = subprocess.run([sys.executable,
+                            os.path.join(root, 'blockrender.py'), mid, out,
+                            'even'], env=env, cwd=root,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(r.stdout[-2000:]); print(r.stderr[-2000:]); return 1
+        amp = [l for l in r.stdout.splitlines() if 'tube amp' in l]
+        print("  %2d %-11s %-38s %4.1fs  %s"
+              % (prog, name, why, time.time() - t0,
+                 amp[0].split(',')[-1].strip() if amp else 'clean'))
+    return 0
+
+
+def passage(program=PROGRAM):
     """Single notes, then chords, then the same phrase soft and then dug into.
 
     The third section is the one this voice exists for: a guitar's dynamics go
     INTO the amplifier, so the quiet pass must be cleaner than the loud one
     without anything being changed but the velocity.
     """
-    m, tr = _track()
+    m, tr = _track(program=program)
     for p in (40, 47, 52, 55, 59, 64, 59, 55):      # a line, one note at a time
         _chord(tr, [p], 0.5, 100)
     _chord(tr, [40, 47, 52], 2.0, 100)              # a power chord: root, 5th, octave
@@ -118,6 +157,10 @@ def calibrate(outdir):
 
 
 def main(argv):
+    if '--family' in argv:
+        out = argv[argv.index('--family') + 1] if len(argv) > argv.index('--family') + 1 else '.'
+        os.makedirs(out, exist_ok=True)
+        return family(out)
     if '--calibrate' in argv:
         out = os.environ.get('TMPDIR', '/tmp')
         os.makedirs(out, exist_ok=True)

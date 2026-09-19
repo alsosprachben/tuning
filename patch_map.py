@@ -24,6 +24,11 @@ from tonelib import (
     OrchestraHitProperties,
     NylonGuitarProperties,
     ElectricGuitarProperties,
+    JazzGuitarProperties,
+    MutedGuitarProperties,
+    OverdrivenGuitarProperties,
+    DistortionGuitarProperties,
+    GuitarHarmonicsProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -127,7 +132,12 @@ PROGRAM_CLASS[24] = NylonGuitarProperties
 # damping, so they are cheap once 27 has been judged by ear; cheap is not the
 # same as done, and handing them a class before then is exactly the trap the
 # saxophone hit.
+PROGRAM_CLASS[26] = JazzGuitarProperties
 PROGRAM_CLASS[27] = ElectricGuitarProperties
+PROGRAM_CLASS[28] = MutedGuitarProperties
+PROGRAM_CLASS[29] = OverdrivenGuitarProperties
+PROGRAM_CLASS[30] = DistortionGuitarProperties
+PROGRAM_CLASS[31] = GuitarHarmonicsProperties
 # 32-39  Bass                          -> plucked strings
 _fill(32, 39, PluckedStringProperties)
 # 40-47  Strings / orchestral
