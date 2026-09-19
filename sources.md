@@ -1979,35 +1979,64 @@ speak. GM 120 is fret noise: the squeak a hand makes shifting position, which
 on a real guitar track is most of what tells you a human is playing it. The
 repo had the first and, for 120, fell through `_fill(120, 127, MalletProperties)`
 to a struck bar -- fixed modes and a decay, where this has a swept fundamental
-and a duration set by the hand. Its immediate neighbours 121 and 122 had their
-own classes already, so it was a hole rather than a policy.
+and a duration set by the hand. Its neighbours 121 and 122 had their own
+classes already, so it was a hole rather than a policy.
 
-IT IS A PITCHED SCRAPE, NOT A HISS, and that is the design. A round-wound
-string is a helix, and a fingertip riding over the windings crosses a ridge
-every winding pitch -- so the squeak's frequency is slide speed divided by
-winding pitch, and has nothing to do with the note being fretted. A 0.35 mm
-wrap and a hand at 0.25-1 m/s puts it between about 700 Hz and 3 kHz, which is
-where fret noise lives. So it is a harmonic voice ROUGHENED, where the
-neighbouring effects go the other way: measured by where half the series energy
-falls, at a 110 Hz fundamental, fret noise reaches half by **h2**, breath by
-**h8** and a gunshot by **h12**. Those two throw the pitch away on purpose;
-this one must not.
+THE BAND IS FIXED, AND THE FIRST VERSION GOT THAT WRONG. A round-wound string
+is a helix, and a fingertip riding over the windings crosses a ridge every
+winding pitch -- so the squeak's frequency is slide speed over winding pitch,
+roughly 700 Hz to 3 kHz, and has NOTHING to do with the note being fretted. The
+first version let the note set the band on the argument that the note could
+stand in for hand speed. It cannot: written into a guitar part the squeak then
+lands on a musical pitch, in the middle of the guitar's own register, and is
+heard as another note. Measured, 58% of its energy sat in 300-700 Hz. Ben,
+hearing it: *"it just sounds like a regular guitar, not frets."*
 
-THE GLIDE WAS ALREADY MODELLED, as the piano's tension bloom. `tension_bend`
-has exactly the shape a position shift has -- it starts displaced and settles
-exponentially -- because a hand is fastest when it leaves and stops when it
-arrives. What the piano did not need was the RANGE: the bend was capped at a
-literal 0.04 "so an extreme-bass fff can't bend absurdly", which is 68 cents,
-and a slide sweeps most of an octave. That cap is now `tension_bend_max`, and
-fret noise sets it to 0.80. Rendered, an A5 at velocity 110 falls 1051 -> 987
--> 901 Hz through the note, and the same note at velocity 50 falls only 876 ->
-831, because `attack_volume` scales the bend: a hard note is a long fast shift
-and a soft one is a short one, which is also how it is played.
+So the band is a FORMANT, the mechanism this codebase already has for
+resonances that stay put while the harmonics slide through. Measured on the
+model, the centroid is **1541 Hz at a 110 Hz fundamental and 1330 Hz three
+octaves up** -- essentially fixed -- where breath, which has no band to keep,
+moves 1849 to 3520 Hz with its note.
+
+THE WASH HAD TO BE BANDED, NOT TURNED DOWN, and this is the part worth keeping.
+The chiff that makes a scrape out of a buzz defaults to spraying white noise
+from every partial regardless of where that partial sits, and shaping its LEVEL
+does not fix it. Three renders:
+
+| | 700 Hz - 3 kHz | above 6 kHz | centroid | periodicity |
+|---|---|---|---|---|
+| wash unbanded | 12% | **72%** | 10.9 kHz | 0.03 |
+| wash off | **99.6%** | 0.0% | 1.8 kHz | **0.91** |
+| wash banded | 84% | 3.8% | 2.3 kHz | 0.12 |
+
+The partial table was 99.6% correct in all three; only the render differed,
+because the noise was being made everywhere. And switching the wash off puts it
+back in band and turns it into a TONE -- 0.91 is the "which is a beep" failure
+`noisegen.py` records for fricatives built out of partials. The two failures
+sit on either side and neither is a matter of degree; `chiff_bandwidth` is the
+only thing that gets both. `tonelib.py` already carried the same finding for a
+sibilant: "THE WASH MUST GET THE BAND, not merely a roll-off... the model put
+92% of an /s/ between 5 and 7.5 kHz and the render came back with a centroid of
+1233 Hz, which is not a sibilant, it is a rustle."
+
+A RELATED TRAP: heavy inharmonicity and a band are incompatible. `harmonic_volume`
+evaluates the body filter at `f0*m`, not where stiffness has actually put the
+partial, so at the 45x the breath and gunshot voices use, a partial nominally at
+8.8 kHz sounds at 43 and the band is applied to a frequency it is nowhere near.
+Those two can use 45x precisely because they want no band at all. This uses 3x.
+
+THE GLIDE WAS ALREADY MODELLED, as the piano's tension bloom -- it has exactly
+the shape a position shift has, starting displaced and settling exponentially,
+because a hand is fastest when it leaves and stops when it arrives. What the
+piano did not need was the range: the bend was capped at a literal 0.04 "so an
+extreme-bass fff can't bend absurdly", 68 cents, where a slide sweeps most of an
+octave. That cap is now `tension_bend_max` and is a no-op for everything that
+had the literal. Rendered, an A5 at velocity 110 falls 1051 -> 987 -> 901 Hz
+through the note; at velocity 50 only 876 -> 831, because `attack_volume` scales
+the bend -- a hard note is a long fast shift and a soft one a short one.
 
 ONLY WOUND STRINGS SQUEAK. The plain trebles have no helix to ride over, so
 `octave_gain` takes 9 dB an octave out as the part climbs into the register
-where the strings would be plain -- measured, 18 dB across two octaves. It is
-the same fact that makes fret noise a bass-string phenomenon on every
-recording. Levelled against the instrument it sits between: under the same room
-and master, a hard-picked chord measures -45 dB and a mid squeak -71.8, i.e.
-about 27 dB under. Present, and never competing with a note.
+where the strings would be plain -- measured, 18 dB across two octaves. Levelled
+against the instrument it sits between: under the same room and master a hard
+chord is -45 dB and a mid squeak -72.9, about 28 dB under.

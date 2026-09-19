@@ -8978,7 +8978,8 @@ class ConsonantProperties(FormantBody, NoisyPercussionMixin, StoppedPipeProperti
         return self.bore_gain(fn) * self._hf_rolloff(harmonic)
 
 
-class GuitarFretNoiseProperties(NoisyPercussionMixin, PluckedStringProperties):
+class GuitarFretNoiseProperties(NoisyPercussionMixin, FormantBody,
+                                PluckedStringProperties):
     """GM 120. A fingertip dragged along a wound string.
 
     NOT the same thing as GM 31, which is a guitar HARMONIC -- a finger resting
@@ -8986,38 +8987,60 @@ class GuitarFretNoiseProperties(NoisyPercussionMixin, PluckedStringProperties):
     between the notes: the squeak a hand makes shifting position, which on a
     real guitar track is most of what tells you a human is playing it.
 
-    IT IS A PITCHED SCRAPE, NOT A HISS, and that is the whole design. A
-    round-wound string is a helix of wire, and a fingertip riding over the
-    windings crosses a ridge every winding pitch -- so the squeak's frequency
-    is slide speed divided by winding pitch, not anything about the note being
-    fretted. With a wrap around 0.35 mm and a hand moving 0.25 to 1 m/s that
-    puts it between about 700 Hz and 3 kHz, which is where fret noise lives.
+    THE BAND IS FIXED, AND THAT IS THE WHOLE POINT. A round-wound string is a
+    helix of wire, and a fingertip riding over the windings crosses a ridge
+    every winding pitch -- so the squeak's frequency is slide speed divided by
+    winding pitch, and has NOTHING to do with the note being fretted. With a
+    wrap around 0.35 mm and a hand moving 0.25 to 1 m/s that is roughly 700 Hz
+    to 3 kHz, wherever the left hand happens to be.
 
-    So it is built as a harmonic voice roughened, rather than as noise given a
-    little shape: the neighbouring effects voices go the other way (breath sets
-    tonal_dampening 0.25 and a gunshot 0.12, both near-flat, because no pitch
-    should survive) and doing that here would give a shhh where there should be
-    a squeak.
+    The first version of this voice let the note set the band, on the argument
+    that the note could stand in for hand speed. It cannot, and the reason is
+    worth keeping: written into a guitar part the squeak then lands on a
+    musical pitch, in the middle of the guitar's own register, and is heard as
+    another note. Measured, 58% of its energy sat in 300-700 Hz. Ben, hearing
+    it: "it just sounds like a regular guitar, not frets."
+
+    So the band is a FORMANT -- the mechanism this codebase already has for
+    resonances that stay put while the harmonics slide through them. Two
+    octaves apart, this voice now puts 99% of its energy in the same
+    700 Hz - 3 kHz either way, which is what "the pitch is the hand, not the
+    fret" has to mean in practice.
+
+    AND THE WASH HAD TO BE BANDED, NOT JUST TURNED DOWN. The chiff that makes
+    this a scrape rather than a buzz defaults to spraying white noise from
+    every partial regardless of where that partial sits, and shaping its LEVEL
+    does not fix that: with the band on the partials and the level on the
+    chiff, the partial table was 99.6% right and the RENDER still came back 72%
+    above 6 kHz with a centroid near 11 kHz. Switching the wash off puts it
+    back in band and turns it into a TONE -- periodicity 0.91, which is the
+    "which is a beep" failure noisegen.py records for fricatives built out of
+    partials. Only chiff_bandwidth gets both at once. The two failures sit on
+    either side of it and neither is a matter of degree.
 
     THE GLIDE IS THE RECOGNISABLE PART, and it is already modelled -- as the
     piano's tension bloom, which has exactly the shape a position shift has: it
-    starts displaced and settles exponentially. A hand is fastest when it
-    leaves and stops when it arrives, so the squeak starts high and falls. What
-    the piano does not need is the RANGE; tension_bend was capped at 0.04
-    (68 cents) for it, and a slide sweeps most of an octave, which is what
-    tension_bend_max is for. Velocity scales it, so a hard note is a long fast
-    shift and a soft one is a short one -- which is also how it is played.
-
-    THE NOTE STANDS IN FOR HAND SPEED, not for a fretted pitch, since the
-    squeak's pitch has nothing to do with which note is stopped. Writing it
-    high is writing a fast shift.
+    starts displaced and settles exponentially, because a hand is fastest when
+    it leaves and stops when it arrives. What the piano does not need is the
+    RANGE; tension_bend was capped at 0.04 (68 cents) for it, and a slide
+    sweeps most of an octave, which is what tension_bend_max is for. Velocity
+    scales it, so a hard note is a long fast shift and a soft one a short one.
 
     ONLY WOUND STRINGS SQUEAK. The plain trebles have no helix to ride over, so
-    there is nothing to make the sound at all -- hence octave_gain, which takes
-    9 dB an octave out as the part climbs into the register where the strings
-    would be plain. It is the same fact that makes fret noise a bass-string
-    phenomenon on every recording.
+    octave_gain takes 9 dB an octave out as the part climbs into the register
+    where the strings would be plain -- which is the same fact that makes fret
+    noise a bass-string phenomenon on every recording.
     """
+    # THE SQUEAK'S OWN BAND, independent of the note: slide speed over winding
+    # pitch, not anything the left hand is doing. Wide, because a hand does not
+    # move at one speed.
+    formants = ((1700.0, 2000.0, 1.0),)
+    formant_floor = 0.025          # almost nothing outside the band
+    bore_corner_hz = 3500.0
+    bore_order = 2.5
+    bell_cutoff_hz = 650.0         # below this there is no ridge-crossing left
+    bell_order = 2.5
+
     # A slide, not a bloom: most of an octave, settling in the tenth of a
     # second a position shift takes, and independent of register because it is
     # the hand's speed and not the string's tension.
@@ -9027,17 +9050,56 @@ class GuitarFretNoiseProperties(NoisyPercussionMixin, PluckedStringProperties):
     tension_settle_time = 0.10
     tension_settle_cutoff = 0.6
 
-    # Bright and dense, because a scrape over regular ridges is close to a
-    # pulse train -- but pitched, which is what separates it from breath.
-    tonal_dampening = 0.55
-    max_harmonic = 48
+    # Dense and strongly stretched, so the partials decorrelate into noise
+    # rather than ringing as a chord -- the same trick the percussion and the
+    # breath voices use, and the reason this is not simply a bright pluck.
+    tonal_dampening = 0.35
+    max_harmonic = 64
+    # MODERATE, WHERE BREATH AND A GUNSHOT USE 45x, and the band is the reason.
+    # harmonic_volume evaluates the body filter at f0*m, not at where the
+    # partial actually lands once stiffness has stretched it -- so heavy
+    # inharmonicity and a FORMANT are incompatible: at 45x a partial nominally
+    # at 8.8 kHz sounds at 43, and the band gets applied to a frequency the
+    # partial is nowhere near. Breath and a gunshot can use 45x precisely
+    # because they want no band at all. Here the decorrelation comes mostly
+    # from the wash, and this only has to roughen.
     inharmonicity_coefficient = (
-        SynthProperties.inharmonicity_coefficient_2nd_harmonic * 8.0)
+        SynthProperties.inharmonicity_coefficient_2nd_harmonic * 3.0)
     inharmonicity_dynamic = False
+
+    def chiff_harmonic_gain(self, harmonic):
+        """THE WASH MUST GET THE BAND, not merely a roll-off.
+
+        NoisyPercussionMixin gives the chiff `_hf_rolloff` and nothing else, so
+        the noise ignores the formant entirely -- and for this voice the noise
+        IS the sound, so a flat wash throws away the band that makes it a
+        squeak. Measured: with the formant on the partials alone, the rendered
+        voice still had 54-72% of its energy above 6 kHz and a centroid near
+        10 kHz. That is a hiss with a squeak somewhere inside it.
+
+        Exactly the fault the consonant voice above records for an /s/, and the
+        same fix: weight the chiff by the same body gain the partials get, so
+        the noise lands where the ridges are.
+        """
+        fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+        return self.bore_gain(fn) * self._hf_rolloff(harmonic)
 
     # A fingertip is soft and it bounces, so the ridge crossings are not
     # regular. The wash is what makes it a scrape rather than a buzz, and it
     # has to keep moving while the hand does.
+    #
+    # BANDED, WHICH IS THE WHOLE DIFFERENCE. The wash defaults to RAND_GRAN --
+    # effectively unbounded, so each partial sprays white noise regardless of
+    # where it sits. Shaping its LEVEL is not enough: with the band on the
+    # partials and the level on the chiff, the partial table was 99.6% correct
+    # and the RENDER still came back 72% above 6 kHz with a centroid near
+    # 11 kHz, because the noise was being made everywhere. Measured against
+    # chiff_volume 0, which is in band (99.6%) and a TONE (periodicity 0.91,
+    # the "which is a beep" failure noisegen.py records for partial-built
+    # fricatives). Banding the wash gets both: 84% in 700 Hz - 3 kHz and
+    # periodicity 0.12-0.26. Wider (2.6) loses the band again, narrower (0.8)
+    # goes tonal.
+    chiff_bandwidth = 1.2
     chiff_volume = 1.8
     chiff_cycle = 0.90
     chiff_min_valve_time = 0.010
@@ -9045,14 +9107,10 @@ class GuitarFretNoiseProperties(NoisyPercussionMixin, PluckedStringProperties):
     chiff_release = 0.5
     sustain_jitter = 1.0
 
-    hf_corner_hz = 8000.0
-    octave_gain = -9.0            # plain strings have no winding to ride over
-    # LEVELLED AGAINST THE GUITAR IT SITS BETWEEN. Rendered under the same
-    # room and master as examples/guitar.py, a hard-picked chord measures
-    # -45 dB; at 1/9000 a mid squeak came out 39 dB under that, which is
-    # inaudible in a mix and is not what fret noise does. This puts it about
-    # 27 dB under -- present, and never competing with a note.
-    initial_gain = 1.0 / 2300
+    hf_corner_hz = 3800.0          # see above: the wash, not the partials
+    hf_order = 2.0
+    octave_gain = -9.0             # plain strings have no winding to ride over
+    initial_gain = 1.0 / 2300      # levelled: see below
 
 
 class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):

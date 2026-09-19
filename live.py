@@ -2767,19 +2767,31 @@ def selftest():
           "  (%.0f cents at onset)" % (1200 * math.log2(1.0 + fn.tension_bend)))
     check("...and it settles in the time a position shift takes",
           fn.tension_settle_time < 0.15, "  (%.2f s)" % fn.tension_settle_time)
-    # A SQUEAK IS PITCHED; breath and a gunshot deliberately are not. Measured
-    # as WHERE half the energy is reached, at a fundamental low enough that the
-    # series still fits -- a share of the first few harmonics cannot separate
-    # them up high, because up there everything runs out of band together.
-    def _half_at(cls):
-        g = cls(110.0, 0.0, 1.0, 1.0)
-        e = np.array([g.harmonic_volume(h) for h in range(1, 33)]) ** 2
-        return int(np.searchsorted(np.cumsum(e) / max(e.sum(), 1e-30), 0.5)) + 1
-    hf, hb, hg = (_half_at(_T.GuitarFretNoiseProperties),
-                  _half_at(_T.BreathNoiseProperties),
-                  _half_at(_T.GunshotProperties))
-    check("fret noise keeps its pitch where breath and a gunshot throw theirs away",
-          hf < hb < hg, "  (half the energy by h%d, h%d, h%d)" % (hf, hb, hg))
+    # THE BAND DOES NOT MOVE WITH THE NOTE, which is the claim that matters:
+    # a squeak's frequency is slide speed over winding pitch, so it has to land
+    # in the same place whatever the left hand is doing. The first version let
+    # the note set it, which put the squeak on a musical pitch in the middle of
+    # the guitar's own register -- and it was heard, correctly, as another
+    # guitar note rather than as frets.
+    def _centroid(cls, f0):
+        g = cls(f0, 0.0, 1.0, 1.0)
+        h = np.arange(1, g.max_harmonic + 1)
+        e = np.array([g.harmonic_volume(int(k)) for k in h]) ** 2
+        f = f0 * h
+        keep = f < 20000.0
+        return float((f[keep] * e[keep]).sum() / max(e[keep].sum(), 1e-30))
+    lo_f = _centroid(_T.GuitarFretNoiseProperties, 110.0)
+    hi_f = _centroid(_T.GuitarFretNoiseProperties, 880.0)
+    check("the squeak's band is the hand's, not the fretted note's",
+          700.0 < lo_f < 3500.0 and 700.0 < hi_f < 3500.0
+          and max(lo_f, hi_f) < 1.6 * min(lo_f, hi_f),
+          "  (centroid %.0f Hz at 110 Hz, %.0f Hz three octaves up)"
+          % (lo_f, hi_f))
+    # ...where a voice that follows its note moves with it, by definition.
+    br_lo = _centroid(_T.BreathNoiseProperties, 110.0)
+    br_hi = _centroid(_T.BreathNoiseProperties, 880.0)
+    check("...unlike breath, which has no band to keep",
+          br_hi > 1.8 * br_lo, "  (breath moves %.0f -> %.0f Hz)" % (br_lo, br_hi))
     # Only WOUND strings squeak, so it must fall away up the register.
     hi = _T.GuitarFretNoiseProperties(3520.0, 0.0, 1.0, 1.0)
     check("it fades where the strings would be plain",
