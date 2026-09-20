@@ -41,6 +41,7 @@ from tonelib import (
     MembraneDrumProperties,
     TomTomProperties,
     ApplauseProperties,
+    SteelPanProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -267,12 +268,12 @@ PROGRAM_CLASS[112] = CrotaleProperties          # small tuned bells
 PROGRAM_CLASS[113] = AgogoProperties            # the class is named for it
 PROGRAM_CLASS[116] = MembraneDrumProperties     # a big drum, not a bar
 PROGRAM_CLASS[117] = TomTomProperties           # likewise, and pitched
+PROGRAM_CLASS[114] = SteelPanProperties          # tuned 1:2:3, not a bar
 PROGRAM_CLASS[126] = ApplauseProperties         # noise, not a mallet
-# STILL BARS, and each for a reason. 114 Steel Drums is a tuned pan -- a shaped
-# metal dome with tuned areas, which nothing here models. 118 Synth Drum has no
-# physical referent. 119 Reverse Cymbal needs a BACKWARDS envelope and there is
-# no mechanism for one. 123-125 (bird, telephone, helicopter) want voices of
-# their own, as 120 fret noise did.
+# STILL BARS, and each for a reason. 118 Synth Drum has no physical referent.
+# 119 Reverse Cymbal needs a BACKWARDS envelope and there is no mechanism for
+# one. 123-125 (bird, telephone, helicopter) want voices of their own, as 120
+# fret noise did.
 # 120 is GUITAR FRET NOISE, and a struck bar is the wrong thing entirely: a
 # mallet voice has fixed modes and a decay where this has a swept fundamental
 # and a duration set by the hand. See GuitarFretNoiseProperties -- it is a

@@ -2836,6 +2836,30 @@ def selftest():
           "  (struck at 1/%.0f, and a wooden hammer does not fill its notch)"
           % (1.0 / _T.HammeredDulcimerProperties.strike_point))
 
+    # ---- the steelpan, which is ASSERTED and must say so ---------------------
+    # 1 : 2 : 3 is the panmaker's tuning and the reason the instrument is
+    # pitched at all. If that stops being exact, the voice has stopped being a
+    # steelpan and become a bell.
+    _sp = _T.SteelPanProperties(261.63, 0.0, 1.0, 1.0)
+    check("a steelpan's first three modes are tuned to 1:2:3",
+          abs(_sp.mode_ratio(1) - 1.0) < 1e-9
+          and abs(_sp.mode_ratio(2) - 2.0) < 1e-9
+          and abs(_sp.mode_ratio(3) - 3.0) < 1e-9,
+          "  (%.3f, %.3f, %.3f)" % tuple(_sp.mode_ratio(m) for m in (1, 2, 3)))
+    # ...and the ones above are NOT tuned, deliberately: nobody hammers them,
+    # so they shimmer rather than reinforce. Integers up there would be an
+    # invention, and a tidier-looking one than the truth.
+    _up = [_sp.mode_ratio(m) for m in range(4, 10)]
+    check("...and the modes above them are deliberately not",
+          all(abs(r - round(r)) > 0.05 for r in _up),
+          "  (%s)" % ", ".join("%.2f" % r for r in _up))
+    check("the octave carries nearly as much as the fundamental",
+          _sp.harmonic_volume(2) > 0.6 * _sp.harmonic_volume(1),
+          "  (%.1f dB down)" % (-20 * math.log10(
+              _sp.harmonic_volume(2) / _sp.harmonic_volume(1))))
+    check("GM 114 is a pan and no longer a bar",
+          _PM.property_class_for_program(114) is _T.SteelPanProperties)
+
     # ---- the wheel means the same thing live and offline ---------------------
     # CC1 is the gain knob in both, and they are two separate implementations
     # of one mapping: live quantises to LIVE_DRIVE_STEPS because every move

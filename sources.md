@@ -135,6 +135,9 @@ trusted as far as the horn and trumpet are.
 - **Celesta, music box, saxophone formants, marimba's third mode**, and the
   clarinet's exact even-harmonic depth: placed by argument between measured
   neighbours, not measured directly.
+- **The steelpan, entirely.** Neither collection has one and no recording has
+  been looked at. Its 1:2:3 tuning is the instrument's design and is solid;
+  its upper ratios, all its gains and its ring are mine. See below.
 
 ## Strings (added later)
 
@@ -2197,3 +2200,49 @@ shaped metal dome with tuned areas, which nothing here models; 118 Synth Drum
 has no physical referent; 119 Reverse Cymbal needs a BACKWARDS envelope and
 there is no mechanism for one; and 123-125 (bird, telephone, helicopter) want
 voices of their own, as 120 fret noise did.
+
+## The steelpan, built from the instrument's design
+
+NOTHING HERE IS MEASURED. Iowa's percussion is marimba, xylophone, vibraphone
+and bells; VCSL's Struck Idiophones has forty-one entries -- anvils, brake
+drums, slit drums, gongs -- and no steel pan. Freesound has one plausible CC0
+candidate (28 minutes, 48 kHz/24-bit mono, "various sounds from the steel
+drum") which has not been opened. So this is built from the instrument's
+design, on the footing the toms already set: the ratios are physics, the gains
+are judgement.
+
+THE TUNING IS THE PHYSICS, and it is unusual enough to be the whole reason the
+voice is shaped this way. A steelpan's overtones are HARMONIC BY INTENTION: the
+panmaker hammers each dished note area until its principal modes sit at the
+fundamental, the OCTAVE and the TWELFTH -- 1 : 2 : 3 -- and tunes them by ear
+one at a time. That is a design intention rather than a property of the shape,
+and it is why a steelpan sounds sweet and pitched where a gong, which is the
+same steel and nearly the same geometry, does not. It is also why a mode SET is
+the right shape here and a harmonic series with a comb is not: the maker put
+the modes where they are.
+
+So `mode_ratios` opens `1.000, 2.000, 3.000` exactly, and the selftest requires
+it: if those stop being exact the voice has stopped being a steelpan and become
+a bell.
+
+ABOVE THE TUNED THREE, NOTHING IS TUNED. Nobody hammers those, so they sit at
+no particular ratio and supply shimmer rather than pitch. The four upper ratios
+are PLACEHOLDERS -- deliberately non-integer so they shimmer instead of
+reinforcing, and deliberately not precise, because four decimal places would be
+four invented decimal places. They are the first thing a recording replaces.
+
+THE RING IS THE SECOND. `one_shot` means note-off is ignored, so the decay
+alone decides how long a note lives. It is NOT, as assumed first, what decides
+whether a fast run turns to mush: measured on a fifteen-note run at 150 bpm the
+buildup from first note to last is +7.7 dB at decay 2.0 and +7.1 dB at both 3.0
+and 6.0 -- over a second and a half the decay barely enters into it, and that
+buildup is simply what a ringing instrument does. What it really sets is ring
+LENGTH: 12.5 s to -40 dB at 2.0, 9.5 at 3.0, 5.6 at 6.0. A tenor pan rings for
+seconds and not for ten of them, so it is 5.0, which is 6.5 s.
+
+TWO REAL THINGS ARE NOT MODELLED. Every note area on a pan shares one sheet of
+steel, so striking one rings its neighbours -- a large part of the instrument's
+wash, and this engine has no cross-note coupling at all. And thin steel struck
+hard is nonlinear, so the pitch moves as the note settles; `tension_bend` could
+express that, but how much and in which direction is not worth asserting
+without hearing one.

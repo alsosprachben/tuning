@@ -5874,6 +5874,82 @@ class CowbellProperties(MetalPercussionProperties):
     inharmonicity_dynamic = False
 
 
+class SteelPanProperties(MetalPercussionProperties):
+    """GM 114. A Caribbean steelpan: a tuned dish hammered into an oil drum.
+
+    ASSERTION, NOT MEASUREMENT, and flagged as such throughout. Neither
+    reference collection has one -- Iowa's percussion is marimba, xylophone,
+    vibraphone and bells, and VCSL's Struck Idiophones has forty-one entries
+    including anvils, brake drums and slit drums but no steel pan. A CC0
+    recording exists on Freesound and has not been looked at yet. So this is
+    built from the instrument's design and labelled the way the toms are:
+    the ratios are physics, the gains are judgement.
+
+    THE ONE THING THAT IS REALLY PHYSICS IS THE TUNING, and it is unusual
+    enough to be worth stating plainly: a steelpan's overtones are HARMONIC BY
+    INTENTION. The panmaker hammers each dished note area until its principal
+    modes sit at the fundamental, the OCTAVE and the TWELFTH -- 1 : 2 : 3 --
+    and checks them by ear one at a time. That is a design intention, not an
+    emergent property of the shape, and it is the whole reason a steelpan
+    sounds sweet and pitched where a gong, which is the same steel and nearly
+    the same geometry, sounds like a gong. It is also why a mode SET is the
+    right shape for this voice and a harmonic series with a comb is not: the
+    instrument's maker put the modes where they are.
+
+    THE OCTAVE IS NEARLY AS LOUD AS THE FUNDAMENTAL, which is where the
+    instrument's brightness comes from and why a pan carries over a band
+    outdoors. That is judgement here, not a measurement.
+
+    ABOVE THE TUNED THREE, NOTHING IS TUNED. The note area and the skirt have
+    plenty of further modes and nobody hammers them into place, so they sit at
+    no particular ratio and supply the metallic shimmer rather than the pitch.
+    The four upper ratios below are PLACEHOLDERS: deliberately non-integer, so
+    that they shimmer instead of reinforcing, and deliberately not precise,
+    because inventing four decimal places would be inventing four decimal
+    places. They are the first thing a recording should replace.
+
+    WHAT IS NOT MODELLED, and both are real:
+
+      - SYMPATHETIC COUPLING. Every note area on a pan shares one sheet of
+        steel, so striking one rings its neighbours. That is a large part of
+        the instrument's wash and this engine has no cross-note coupling.
+      - THE BLOOM. Thin steel struck hard is nonlinear and the pitch moves as
+        the note settles. tension_bend could express it; how much, and in
+        which direction, is not something to assert without hearing one.
+
+    RANGE. A tenor pan runs roughly C4-E6 and the lower pans are separate
+    instruments with fewer tuned modes per note. Played far outside that this
+    is extrapolation, like every other voice here whose reference covers one
+    octave.
+    """
+    # 1 : 2 : 3 is the maker's tuning. The rest are placeholders -- see above.
+    mode_ratios = (1.000, 2.000, 3.000, 3.92, 4.63, 5.41, 6.28, 7.35, 8.61)
+    mode_gains = (1.000, 0.800, 0.500, 0.160, 0.120, 0.090, 0.065, 0.045, 0.030)
+
+    # Thin steel, lightly damped, and nothing touching it: a pan rings for
+    # seconds where a cowbell does not. The upper modes go first, as they do
+    # on anything struck.
+    # JUDGEMENT, and the SECOND thing a recording should replace after the
+    # untuned ratios. one_shot means note-off is ignored, so this alone decides
+    # how long a note lives.
+    #
+    # It is not, as I first assumed, what decides whether a fast run turns to
+    # mush -- measured on a fifteen-note run at 150 bpm, the buildup from the
+    # first note to the last is +7.7 dB at 2.0 and +7.1 dB at both 3.0 and
+    # 6.0. Over a second and a half the decay barely enters into it; that
+    # buildup is simply what a ringing instrument does, and a pan does wash.
+    # What the number really sets is RING LENGTH: 12.5 s to -40 dB at 2.0,
+    # 9.5 at 3.0, 5.6 at 6.0. A tenor pan rings for seconds and not for ten of
+    # them, so this is 5.0, which is 6.5 s.
+    decay_db = 5.0
+    harmonic_decay_db = 1.2
+    harmonic_decay_dampening = 0.15
+
+    # Balance is a guess like the rest; a pan is a loud instrument outdoors
+    # and this sits it with the other struck metal rather than over it.
+    initial_gain = MetalPercussionProperties.initial_gain
+
+
 class AgogoProperties(MetalPercussionProperties):
     """GM 67 and 68: the two bells of an agogo.
 
