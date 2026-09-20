@@ -2900,6 +2900,40 @@ def selftest():
           len(_r) > 0 and all(abs(s) % 12 in (0, 2, 5, 7, 10) for s, _ in _r[:6]),
           "  (%s)" % ", ".join("%+d" % s for s, _ in _r[:6]))
 
+    # ---- the sitar, and what its strings need in order to ring ---------------
+    check("GM 104 is a sitar, with strings under the frets",
+          _PM.property_class_for_program(104) is _T.SitarProperties
+          and len(_T.SitarProperties.sympathetic_strings) == 13
+          and _T.SitarProperties.sympathetic_mode == 'coincidence')
+    _si = _T.SitarProperties(277.18, 0.0, 1.0, 1.0)
+    # Q COMES FROM THE DECAY, so an unphysical ring makes an unphysical
+    # resonance: at the first draft's 0.8 dB/s the modes were Q 12000 and
+    # nothing could couple to anything.
+    check("...and it rings for seconds, not half a minute",
+          3.0 < 40.0 / _si.harmonic_decay(1) < 15.0,
+          "  (%.1f s to fall 40 dB)" % (40.0 / _si.harmonic_decay(1)))
+
+    # THE PREDICTION, AND IT IS A LARGE ONE. Coincidence needs the driver's
+    # partial to land INSIDE the responder's resonance, which at Q 2800 is a
+    # fraction of a cent wide. An equal-tempered fifth is two cents narrow of a
+    # just one, so it misses. Sympathetic strings therefore ring in just
+    # intonation and are near silent in equal temperament -- which is not a
+    # defect, it is why the instruments that have them belong to musics that
+    # do not temper.
+    import blockrender as _BR, sympathetic as _SY
+    _c = {}
+    for _tn in ('even', 'just'):
+        _F = _BR.tuning_table(_tn)
+        _vals = []
+        for _n in (61, 63, 65, 68, 70):
+            _d = _T.SitarProperties(_F[_n], 0.0, 1.0, 1.0)
+            _vals.append(_SY._coupling(_d, _T.SitarProperties(_F[_n - 7], 0.0, 1.0, 1.0), 1.0))
+        _c[_tn] = sorted(_vals)[len(_vals) // 2]
+    check("the taraf ring in just intonation and not in equal",
+          _c['just'] > 20.0 * _c['even'],
+          "  (coupling %.4f just, %.4f even -- %.0f dB apart)"
+          % (_c['just'], _c['even'], 20 * math.log10(_c['just'] / max(_c['even'], 1e-9))))
+
     # ---- the wheel means the same thing live and offline ---------------------
     # CC1 is the gain knob in both, and they are two separate implementations
     # of one mapping: live quantises to LIVE_DRIVE_STEPS because every move

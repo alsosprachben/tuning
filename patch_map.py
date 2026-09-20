@@ -42,6 +42,7 @@ from tonelib import (
     TomTomProperties,
     ApplauseProperties,
     SteelPanProperties,
+    SitarProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -243,6 +244,11 @@ _fill(88, 95, BowedStringProperties)
 _fill(96, 103, BowedStringProperties)
 # 104-111 Ethnic (sitar, banjo, shamisen, koto, kalimba, bagpipe, fiddle, shanai)
 _fill(104, 107, PluckedStringProperties)  # sitar, banjo, shamisen, koto
+# 104 has SYMPATHETIC STRINGS, which is the whole instrument: thirteen tuned
+# strings under the frets that nobody plays. See SitarProperties. 105-107 stay
+# on the base -- a banjo is a membrane rather than a soundboard and a koto has
+# movable bridges, and neither is measured.
+PROGRAM_CLASS[104] = SitarProperties
 PROGRAM_CLASS[108] = MalletProperties      # kalimba
 PROGRAM_CLASS[109] = ReedPipeProperties    # bagpipe: a reed and a pipe, no console
 PROGRAM_CLASS[110] = SoloViolinProperties  # fiddle -- ONE player, unlike 40-43

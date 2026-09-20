@@ -58,6 +58,26 @@ def responders(props, sr=None):
     mode = getattr(props, 'sympathetic_mode', 'coincidence')
     fall = float(getattr(props, 'sympathetic_falloff', 0.0))
     out = []
+    strings = getattr(props, 'sympathetic_strings', ())
+    if strings:
+        # A FIXED SET OF TUNED STRINGS, which is what a sitar has. They do not
+        # move with the melody, so the offset from the driver changes note by
+        # note -- play the pitch a string is tuned to and that string answers
+        # loudly, play between them and little happens. That is what a sitar
+        # sounds like, and it is coincidence doing it: an exact unison is
+        # exactly in the resonance, and two cents away is already outside it.
+        tonic = int(getattr(props, 'sympathetic_tonic', 60))
+        f0 = props.frequency_x * (2.0 ** props.octave_position)
+        drv = int(round(69 + 12 * np.log2(max(f0, 1e-9) / 440.0)))
+        for off in strings:
+            s = (tonic + int(off)) - drv
+            if s == 0:
+                continue                 # the string the note is played on
+            d = _coupling(props, _at(props, f0 * 2.0 ** (s / 12.0)), g)
+            if d >= floor:
+                out.append((s, d))
+        out.sort(key=lambda sd: -sd[1])
+        return out[:top]
     if mode == 'contact':
         # The kick is broadband, so every responder gets the same spectrum and
         # only its DISTANCE matters. Semitone distance stands in for distance
@@ -80,14 +100,43 @@ def responders(props, sr=None):
         for s in range(-span, span + 1):
             if s == 0:
                 continue
-            r = type(props)(f0 * 2.0 ** (s / 12.0), 0.0, 1.0, 1.0)
-            r.sympathetic_gain = g
-            p = T.sympathetic_partials(props, r)
-            d = float(np.sqrt(sum(a * a for _, a in p))) if p else 0.0
+            d = _coupling(props, _at(props, f0 * 2.0 ** (s / 12.0)), g)
             if d >= floor:
                 out.append((s, d))
     out.sort(key=lambda sd: -sd[1])
     return out[:top]
+
+
+_VOICE_CACHE = {}
+
+
+def _coupling(driver, responder, gain):
+    """How loudly `responder` rings, as a FRACTION of its own natural level.
+
+    The same units the contact path returns, which matters because `expand`
+    scales a row copy by whatever comes back. sympathetic_partials gives
+    absolute amplitudes -- the responder's own spectrum, already carrying the
+    instrument's gain -- so dividing by that spectrum's own total is what turns
+    it into a coupling fraction. Without it the two paths meant different
+    things and every coincidence responder fell under the floor.
+    """
+    p = T.sympathetic_partials(driver, responder, gain=gain)
+    if not p:
+        return 0.0
+    nat = sum(a * a for _, a in T._voice_partials(responder))
+    if nat <= 0.0:
+        return 0.0
+    return float(np.sqrt(sum(a * a for _, a in p) / nat))
+
+
+def _at(props, freq):
+    """The same voice at another pitch, built once per (class, frequency)."""
+    key = (type(props), round(freq, 4))
+    v = _VOICE_CACHE.get(key)
+    if v is None:
+        v = type(props)(freq, 0.0, 1.0, 1.0)
+        _VOICE_CACHE[key] = v
+    return v
 
 
 def expand(A, channels, sr, cols=None):

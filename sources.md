@@ -2311,3 +2311,47 @@ contaminated, not the model. What remains unsettled is the finer shape: M2
 against M6 against M7 moves substantially with how the analysis is sliced,
 which is about what one 28-minute recording of one instrument through a lossy
 preview can support. It is not fitted, and should not be.
+
+## The sitar, and why sympathetic strings need just intonation
+
+GM 104, asserted throughout -- neither collection has a sitar (Iowa's plucked
+instruments are guitar and piano; VCSL's Composite Chordophones are two harps
+and a strumstick), so the SHAPE follows from how the instrument is built and
+the LEVELS are guesses. The steelpan is the cautionary tale: its ratios were
+right and every one of its gains was wrong by 25 to 30 dB when a recording
+turned up.
+
+THE JAWARI IS THE SOUND. A sitar's bridge is a wide gently curved plate rather
+than a knife edge, and the string rests along it. As the string swings its
+contact point MIGRATES along the curve, so the speaking length changes every
+cycle -- a boundary moving at the string's own frequency, generating energy
+high in the series continuously rather than only at the pluck. That is why a
+sitar keeps buzzing where a guitar's attack is bright and then dulls.
+Approximated here as a shallow roll-off plus an unusually FLAT decay across the
+harmonics; the second is the part a merely bright plucked string would not give.
+
+AND THE STRINGS UNDERNEATH ONLY RING IF THE MUSIC IS JUST. This is the
+interesting result. Coincidence resonance needs the driver's partial to land
+INSIDE the responder's resonance, and the width of that resonance comes from
+the decay: a sitar string ringing 7 s has a mode 0.1 Hz wide, a Q near 2800.
+An equal-tempered fifth is two cents narrow of a just one, which at these
+frequencies is several bandwidths. Measured on the model, the coupling of a
+taraf string a fifth below the played note:
+
+| tuner | coupling | |
+|---|---|---|
+| equal | 0.005 - 0.014 | essentially nothing |
+| just | **0.467** where the interval is exact | **35 dB stronger** |
+| hybrid | 0.025 - 0.468 | wherever it happens to be exact |
+
+Rendered, `even` emits NO sympathetic partials at all and `just` emits 2912 on
+the same eight notes. So a sitar rendered in equal temperament is a dry sitar,
+and that is not a defect in the model -- it is why the instruments that carry
+sympathetic strings belong to musics that do not temper. A sitar's taraf are
+tuned by ear against a drone, and the drone is what makes them ring.
+
+WHAT THE FIRST DRAFT GOT WRONG, since Q is entirely a function of decay: it had
+the string ringing 32 seconds, which put the modes at Q 12000 and made
+everything couple to nothing, in every tuning. 7 s is a sitar. The lesson
+generalises -- in this engine an unphysical decay silently becomes an
+unphysical resonance, and only sympathetic coupling makes that visible.

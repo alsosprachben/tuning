@@ -1004,6 +1004,15 @@ class SynthProperties:
     # sixth, 2% and 7%. The energy falls with distance round the cycle, which
     # is distance across the steel.
     sympathetic_falloff = 0.0
+
+    # COINCIDENCE WITH A FIXED SET. A steelpan's responders are "whatever else
+    # is on the instrument", so they are named as intervals from the note
+    # struck. A sitar's are thirteen TUNED STRINGS at fixed pitches, retuned
+    # for the raga and not moving with the melody -- so they are named
+    # absolutely, as semitone offsets from `sympathetic_tonic`. Empty = the
+    # interval rule above.
+    sympathetic_strings = ()
+    sympathetic_tonic = 61       # MIDI note of Sa; a sitar is commonly at C#
     # Extra distance for crossing an octave, in the same steps. A tenor pan's
     # inner ring is the octave above its outer one, so an octave is close.
     sympathetic_octave_step = 0.5
@@ -4563,6 +4572,72 @@ class SlowBowedStringProperties(BowedStringProperties):
 
 
 # --- The guitar box (GM 24) --------------------------------------------------
+
+class SitarProperties(PluckedStringProperties):
+    """GM 104. A long steel string over a curved bridge, and thirteen more
+    strings underneath that nobody touches.
+
+    ASSERTED, NOT MEASURED, and the steelpan is the cautionary tale: its
+    ratios were right and every one of its gains was wrong by 25 to 30 dB when
+    a recording finally turned up. Neither collection has a sitar -- Iowa's
+    plucked instruments are guitar and piano, and VCSL's Composite
+    Chordophones are a concert harp, a folk harp and a strumstick. So the
+    SHAPE here follows from how the instrument is built and the LEVELS are
+    guesses, which is the distinction that matters.
+
+    THE JAWARI IS THE SOUND. A sitar's bridge is not a knife edge, it is a wide
+    gently curved plate, and the string rests along it rather than on a point.
+    As the string swings, its contact point MIGRATES along that curve -- the
+    speaking length is shortening and lengthening every cycle -- and a boundary
+    that moves at the frequency of the string generates energy high in the
+    series continuously rather than only at the pluck. That is why a sitar
+    buzzes and keeps buzzing, where a guitar's attack is bright and then dulls.
+
+    APPROXIMATED, LIKE THE SLAP BASS AND FOR THE SAME REASON: a moving boundary
+    condition is not something this engine can state. What it can state is the
+    consequence, and here there are two -- a very shallow spectral roll-off, so
+    the series is rich to begin with, and an unusually FLAT decay across the
+    harmonics, so the top does not die away before the fundamental does. The
+    second is the one that matters and the one a bright plucked string would
+    not give: on a normal string the upper partials go first.
+
+    NO BODY HERE. A sitar has a gourd, and a second gourd on some, and they
+    colour it considerably. FormantBody is the mechanism and there is no
+    measurement to put in it, so it is left out rather than invented -- the
+    same call as the electric guitars, where the amplifier is the colour.
+    """
+    # A mizrab is a hard wire plectrum, plucked close to the bridge: a narrow
+    # exciter at fixed force, so the comb notch stays deep.
+    strike_point = 0.10
+    strike_depth = 0.90
+    strike_fills_with_force = False
+
+    # THE BUZZ, as spectrum and as envelope. tonal_dampening 0.55 is far
+    # shallower than a guitar's 2.0; harmonic_decay_db 0.45 against the plucked
+    # base's 1.0 is the part that makes it a jawari rather than a bright pluck.
+    tonal_dampening = 0.55
+    max_harmonic = 64
+    # A SITAR RINGS FOR SECONDS, NOT FOR HALF A MINUTE. The first version had
+    # 0.8, which is 32 s to fall 40 dB -- and since Q comes from the decay,
+    # that put the modes at Q 12000 and made every sympathetic coupling
+    # vanish. 5.0 is 7.3 s and Q 2800, which is still a very sharp resonance
+    # and is what a long steel string on a light bridge actually is.
+    decay_db = 5.0
+    harmonic_decay_db = 0.45
+    harmonic_decay_dampening = 0.0
+    inharmonicity_coefficient = 3.0e-05     # long steel, estimated
+
+    # THIRTEEN TARAF STRINGS under the frets, tuned to the raga and not
+    # touched. Offsets from Sa: an octave below through a ninth above, on the
+    # natural scale -- one common tuning, and a player retunes them per raga,
+    # so this is a default and not a fact about sitars.
+    sympathetic_mode = 'coincidence'
+    sympathetic_strings = (-12, -10, -8, -7, -5, -3, -1, 0, 2, 4, 5, 7, 9)
+    sympathetic_tonic = 61                  # Sa at C#, the common concert pitch
+    sympathetic_gain = 0.35                 # a guess; see the class docstring
+    sympathetic_max = 13
+    sympathetic_floor = 0.005
+
 
 class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     """MEASURED: Iowa Guitar.mf, all six strings, 35 notes G2-A#5.
@@ -10086,12 +10161,22 @@ def sympathetic_partials(driver, responder, gain=None):
             out.append((f, a * g * drive))
         return out
     # Coincidence: each responder mode is driven by whatever lands in it.
+    #
+    # THE COUPLING IS DIMENSIONLESS. The driver's partials are already in the
+    # renderer's absolute amplitude units, and so are the responder's, so
+    # multiplying them applies the instrument's gain TWICE -- which made an
+    # exact octave coincidence come out at 0.00005 and vanish under any
+    # sensible floor. Normalising by the driver's own strongest partial makes
+    # `d` a coupling FRACTION: 1.0 means this responder mode sits exactly under
+    # the driver's loudest partial, and the responder then rings at its own
+    # natural amplitude times the gain.
+    ref = max(a for _, a in dpar) or 1.0
     for j, (fj, aj) in enumerate(rpar, start=1):
         bw = _mode_bandwidth(responder, j)
         d = 0.0
         for fi, ai in dpar:
             x = (fi - fj) / max(bw, 1e-9)
-            d += ai / (1.0 + x * x)
+            d += (ai / ref) / (1.0 + x * x)
         if d > 0.0:
             out.append((fj, aj * g * d))
     return out
