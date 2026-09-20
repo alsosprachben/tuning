@@ -2796,6 +2796,46 @@ def selftest():
     def _bright(g):
         v = np.array([g.harmonic_volume(h) for h in range(1, 25)])
         return float((np.arange(1, 25) * v ** 2).sum() / max((v ** 2).sum(), 1e-30))
+    # ---- category errors in the GM map --------------------------------------
+    # Programs that had fallen through _fill to a struck BAR when this file
+    # already contained the voice that models them, fitted for the drum kit and
+    # reachable from a melodic channel like any other. 115 Woodblock had been
+    # pointed at one long ago; its neighbours were left behind.
+    for _p, _c in ((15, _T.HammeredDulcimerProperties),
+                   (112, _T.CrotaleProperties), (113, _T.AgogoProperties),
+                   (116, _T.MembraneDrumProperties), (117, _T.TomTomProperties),
+                   (126, _T.ApplauseProperties)):
+        if _PM.property_class_for_program(_p) is not _c:
+            break
+    else:
+        _p = None
+    check("the six category errors point at the right voice now", _p is None,
+          "" if _p is None else "  (GM %d is %s)"
+          % (_p, _PM.property_class_for_program(_p).__name__))
+
+    def _mh(c, f0=220.0, top=17):
+        g = c(f0, 0.0, 1.0, 1.0)
+        e = np.array([g.harmonic_volume(h) for h in range(1, top)]) ** 2
+        return float((np.arange(1, top) * e).sum() / max(e.sum(), 1e-30))
+    # A DRUM THUMPS; A BAR RINGS. That is the audible content of the error.
+    _bar = _T.MalletProperties(220.0, 0.0, 1.0, 1.0)
+    _drum = _T.TomTomProperties(220.0, 0.0, 1.0, 1.0)
+    check("a melodic tom now thumps instead of ringing",
+          _drum.harmonic_decay(1) > 10.0 * _bar.harmonic_decay(1),
+          "  (%.0f vs %.0f dB/s)" % (_drum.harmonic_decay(1), _bar.harmonic_decay(1)))
+    check("applause is noise, not a tuned bar",
+          _mh(_T.ApplauseProperties) > 3.0 * _mh(_T.MalletProperties),
+          "  (mean harmonic %.1f vs %.1f)"
+          % (_mh(_T.ApplauseProperties), _mh(_T.MalletProperties)))
+    # STRUCK, NOT PLUCKED: the hierarchy's whole distinction. A struck voice
+    # names its strike point; the generic plucked base has none.
+    check("a hammered dulcimer is struck, not plucked",
+          _T.HammeredDulcimerProperties.strike_point is not None
+          and _T.PluckedStringProperties.strike_point is None
+          and _T.HammeredDulcimerProperties.strike_fills_with_force is False,
+          "  (struck at 1/%.0f, and a wooden hammer does not fill its notch)"
+          % (1.0 / _T.HammeredDulcimerProperties.strike_point))
+
     # ---- the wheel means the same thing live and offline ---------------------
     # CC1 is the gain knob in both, and they are two separate implementations
     # of one mapping: live quantises to LIVE_DRIVE_STEPS because every move

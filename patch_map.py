@@ -35,6 +35,12 @@ from tonelib import (
     FretlessBassProperties,
     SlapBassProperties,
     PoppedBassProperties,
+    HammeredDulcimerProperties,
+    CrotaleProperties,
+    AgogoProperties,
+    MembraneDrumProperties,
+    TomTomProperties,
+    ApplauseProperties,
     BassTromboneProperties,
     BassClarinetProperties,
     AltoFluteProperties,
@@ -129,6 +135,7 @@ _fill(24, 31, PluckedStringProperties)
 # electrics, whose colour is an amplifier's, not a box's. A fit for one
 # instrument should not silently redefine an unmeasured one (the trap the
 # saxophone hit when it inherited the oboe's).
+PROGRAM_CLASS[15] = HammeredDulcimerProperties   # STRUCK, not plucked
 PROGRAM_CLASS[24] = NylonGuitarProperties
 # 27 is the first electric to get its own class, now that there is an amplifier
 # and a speaker to give it: see ElectricGuitarProperties and cabinet.py. The
@@ -250,6 +257,22 @@ PROGRAM_CLASS[115] = WoodPercussionProperties
 # tuned bell. The three the collection actually uses now have voices; the rest
 # keep the mallet fallback until there is a file to hear them in.
 _fill(120, 127, MalletProperties)
+# 112-119 AND 123-126 WERE ALL STRUCK BARS, and most of them are not. Each of
+# these already had a voice in this file, fitted for the drum kit on channel
+# 10 and reachable from a melodic channel like any other -- 115 Woodblock was
+# pointed at one long ago and its neighbours were left behind. They keep the
+# percussion classes' one_shot: a struck drum or bell ignores the stick being
+# lifted, so note length is the file's opinion and not the instrument's.
+PROGRAM_CLASS[112] = CrotaleProperties          # small tuned bells
+PROGRAM_CLASS[113] = AgogoProperties            # the class is named for it
+PROGRAM_CLASS[116] = MembraneDrumProperties     # a big drum, not a bar
+PROGRAM_CLASS[117] = TomTomProperties           # likewise, and pitched
+PROGRAM_CLASS[126] = ApplauseProperties         # noise, not a mallet
+# STILL BARS, and each for a reason. 114 Steel Drums is a tuned pan -- a shaped
+# metal dome with tuned areas, which nothing here models. 118 Synth Drum has no
+# physical referent. 119 Reverse Cymbal needs a BACKWARDS envelope and there is
+# no mechanism for one. 123-125 (bird, telephone, helicopter) want voices of
+# their own, as 120 fret noise did.
 # 120 is GUITAR FRET NOISE, and a struck bar is the wrong thing entirely: a
 # mallet voice has fixed modes and a decay where this has a swept fundamental
 # and a duration set by the hand. See GuitarFretNoiseProperties -- it is a

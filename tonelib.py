@@ -2795,6 +2795,40 @@ class InharmonicStringProperties(PluckedStringProperties):
         return self.inharmonicity_coefficient_func(float(frequency), self.a, self.b, self.c, self.d, self.e)
 
 
+class HammeredDulcimerProperties(InharmonicStringProperties):
+    """GM 15. Steel strings STRUCK with light wooden hammers.
+
+    It was on the plucked base, which is the wrong claim about the instrument:
+    a hammered dulcimer is hit, not plucked, and struck versus plucked is the
+    distinction the class hierarchy is built on. Its cousin the psaltery is
+    plucked; this one is not.
+
+    A HARD HAMMER DOES NOT FILL ITS NOTCH. A piano's felt compresses flatter
+    the harder it is hit, widening the contact patch and filling in the comb
+    (strike_fills_with_force). A dulcimer hammer is a bare wooden or
+    leather-faced spoon, narrow and hard at every dynamic, so the notch stays
+    where it is -- the same argument the harpsichord's quill gets, arrived at
+    from the other direction.
+
+    COURSES, NOT STRINGS. Each note is two to four strings tuned together and
+    never quite together, which is where the instrument's shimmer comes from;
+    it is the piano's unison dance on an instrument with no dampers at all to
+    stop it. Nothing mutes a dulcimer, so it rings until it stops.
+
+    The stiffness is ESTIMATED -- thin steel on a short scale, so more than a
+    harpsichord's iron and far less than a piano's wound bass.
+    """
+    strike_point = 1.0 / 5       # struck well in from the bridge
+    strike_depth = 0.90
+    strike_fills_with_force = False
+    inharmonicity_coefficient = 1.5e-04
+    inharmonicity_dynamic = False
+    string_count = 3
+    unison_detune = (0.35, 0.5)  # courses, beating: the shimmer
+    decay_db = 1.5               # no dampers
+    harmonic_decay_db = 2.5
+
+
 class GrandPianoProperties(InharmonicStringProperties):
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
@@ -9287,6 +9321,28 @@ class SeashoreProperties(BreathNoiseProperties):
     chiff_min_valve_time = 0.35    # swells in
     chiff_max_valve_time = 0.9
     chiff_release = 1.0
+
+
+class ApplauseProperties(BreathNoiseProperties):
+    """GM 126. A room full of hands, which is noise but not surf.
+
+    It had been a struck BAR, which is the same category error fret noise was:
+    a mallet voice has a few sharp modes and a decay where this has neither.
+    The noise family next door already had the machinery.
+
+    Between its two neighbours, and closer to breath than to the sea. Surf
+    swells in over a third of a second and is weighted low, because a wave is
+    a large slow thing; a clap is a small fast one, and a thousand of them are
+    still a thousand small fast ones. So the onset is quick and the weighting
+    is brighter -- but not as flat as breath, because a hall full of people is
+    a hall, and the room takes the very top off before anyone hears it.
+    """
+    tonal_dampening = 0.32         # brighter than surf (0.5), darker than breath
+    hf_corner_hz = 5500.0
+    chiff_min_valve_time = 0.02    # claps start; they do not swell
+    chiff_max_valve_time = 0.06
+    chiff_release = 0.5
+    initial_gain = BreathNoiseProperties.initial_gain
 
 
 class GunshotProperties(NoisyPercussionMixin, PercussionProperties):

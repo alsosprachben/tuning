@@ -2156,3 +2156,44 @@ moving the half-moon to the pitch wheel, which offline has no reason to do
 because there is no wheel to move. The selftest checks the two mappings agree
 to within one of live's quantisation steps, since they are two implementations
 of one number.
+
+## Six GM programs were pointing at the wrong kind of instrument
+
+Not fits, not tunings -- category errors, where a program fell through a
+`_fill` to a family base that makes a different physical claim. The voice that
+models each one was already in `tonelib.py`, fitted for the drum kit on channel
+10 and reachable from a melodic channel like any other. 115 Woodblock had been
+pointed at one long ago and its neighbours were left behind.
+
+| GM | was | is | what changed |
+|---|---|---|---|
+| 15 Dulcimer | plucked string | `HammeredDulcimer` | **struck**, not plucked |
+| 112 Tinkle Bell | struck bar | `Crotale` | small tuned bells; rings where a bar does not |
+| 113 Agogo | struck bar | `Agogo` | the class was named for it |
+| 116 Taiko | struck bar | `MembraneDrum` | a drum, not a bar |
+| 117 Melodic Tom | struck bar | `TomTom` | likewise, and pitched |
+| 126 Applause | struck bar | `Applause` | noise, the same error fret noise was |
+
+A DRUM THUMPS AND A BAR RINGS, which is the audible content of most of it: a
+melodic tom's fundamental now decays at **70 dB/s** where the bar it had been
+gave it **4**. Applause goes from a mean harmonic of 1.2 -- a near-sine with a
+couple of modes -- to 5.1, which is noise. Agogo brightens from 1.2 to 3.0,
+because agogo bells are bright metal and a marimba bar is not.
+
+THEY KEEP `one_shot`, and that is deliberate: a struck drum or bell ignores the
+stick being lifted, so note length is the file's opinion rather than the
+instrument's. The same argument `NoiseDrumProperties` already records for the
+kit -- "GM sequencers write arbitrary drum note lengths".
+
+A HAMMERED DULCIMER IS STRUCK, which is the distinction the class hierarchy is
+built on; its cousin the psaltery is the plucked one. And a dulcimer hammer is
+a bare wooden spoon, narrow and hard at every dynamic, so the strike comb's
+notch never fills the way a piano's felt fills it -- the harpsichord quill's
+argument arrived at from the other direction. Each note is a COURSE of two to
+four strings never quite in tune, which is the shimmer, and nothing dampens it.
+
+FOUR WERE LEFT AS BARS, each for a reason. 114 Steel Drums is a tuned pan, a
+shaped metal dome with tuned areas, which nothing here models; 118 Synth Drum
+has no physical referent; 119 Reverse Cymbal needs a BACKWARDS envelope and
+there is no mechanism for one; and 123-125 (bird, telephone, helicopter) want
+voices of their own, as 120 fret noise did.
