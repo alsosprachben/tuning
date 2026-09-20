@@ -973,6 +973,41 @@ class SynthProperties:
     # most of why an overdriven guitar sounds warm rather than like a fuzz box.
     amp_imbalance = None
 
+    # SYMPATHETIC RESONANCE: the notes nobody hit. 0 = off, which is every
+    # voice but one. See sympathetic_partials() below for the mechanism and
+    # what the steelpan recording says about it.
+    sympathetic_gain = 0.0
+    sympathetic_span = 24        # semitones either side to consider
+    sympathetic_max = 6          # most responders emitted per struck note
+    sympathetic_floor = 0.02     # drop a responder quieter than this
+    # 'coincidence' = a responder rings where its modes MATCH the driver's
+    # partials, which is resonance and is how a sitar's sympathetic strings
+    # and a piano's undamped ones work. 'contact' = the responder is kicked
+    # broadband because it shares a body with the driver, and rings at its own
+    # modes whatever the interval. Which one an instrument wants is a question
+    # about how the two are joined, not a preference.
+    sympathetic_mode = 'coincidence'
+    # CONTACT ONLY: how fast the kick falls off with distance across the body,
+    # in dB per step. Bending waves lose energy crossing the plate, so a near
+    # neighbour is driven harder than a far one.
+    #
+    # DISTANCE IS MEASURED IN FIFTHS, NOT SEMITONES, because that is how a
+    # steelpan is laid out: the note areas run round the pan in the cycle of
+    # fifths, so the area physically next to C is G and not C#. Semitone
+    # distance would make the nearest neighbours a chromatic cluster, which is
+    # both wrong about the instrument and wrong about the recording.
+    #
+    # It is what makes the measured histogram make sense. One step round the
+    # cycle is a fifth or a fourth -- 20% and 5% of the measured coupling. TWO
+    # steps is a MAJOR SECOND, which is 27%, the largest single cluster and the
+    # one a coincidence model cannot explain at all. Four steps is a third or a
+    # sixth, 2% and 7%. The energy falls with distance round the cycle, which
+    # is distance across the steel.
+    sympathetic_falloff = 0.0
+    # Extra distance for crossing an octave, in the same steps. A tenor pan's
+    # inner ring is the octave above its outer one, so an octave is close.
+    sympathetic_octave_step = 0.5
+
     # A TOUCHED NODE. Rest a finger on the string at 1/k of its length and
     # every mode that does NOT have a node there is killed; what is left is the
     # modes that are multiples of k, so the string speaks k times its open
@@ -5945,6 +5980,25 @@ class SteelPanProperties(MetalPercussionProperties):
     # because this is one instrument, one microphone and one player.
     mode_gains = (1.000, 0.036, 0.014, 0.007, 0.007, 0.007, 0.007, 0.007, 0.007)
 
+    # A TUNED MODE SET MUST NOT ALSO BE STRETCHED, and this class was the only
+    # one in the file that got that wrong. MetalPercussionProperties carries a
+    # stiffness term (20x the base coefficient) because its voices -- cowbell,
+    # triangle, agogo -- have no mode set and need their inharmonicity from
+    # somewhere. This one has a mode set, and a very particular one: the whole
+    # point is that a panmaker put the modes at 1 : 2 : 3 by hand.
+    #
+    # Inherited, it rendered them at 1.000, 2.078 and 3.310 -- the octave 66
+    # cents sharp and the twelfth 170 -- so the voice shipped claiming a tuning
+    # confirmed to two cents while the renderer was pulling it a sixth of a
+    # semitone out. Every other mode_ratios voice in this file (toms, crotale,
+    # timpani, snare, kick) already sets this to zero; this one now does too.
+    #
+    # The selftest was no help because it checked mode_ratio(), which is the
+    # INTENT, and the stretch happens downstream of it. It now checks where the
+    # partials land.
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
     # Thin steel, lightly damped, and nothing touching it: a pan rings for
     # seconds where a cowbell does not. The upper modes go first, as they do
     # on anything struck.
@@ -5967,6 +6021,27 @@ class SteelPanProperties(MetalPercussionProperties):
     # Balance is a guess like the rest; a pan is a loud instrument outdoors
     # and this sits it with the other struck metal rather than over it.
     initial_gain = MetalPercussionProperties.initial_gain
+
+    # SYMPATHETIC RESONANCE: the measured 23%. A pan is ONE SHEET of steel, so
+    # its note areas are not separate oscillators loosely coupled -- they are
+    # regions of the same plate, and a strike kicks all of them mechanically.
+    # That is `contact`, and the recording forced the choice: at this voice's
+    # Q of 2300 a coincidence model answers only at exact octaves, giving the
+    # fifth 0.0000024 against the octave's 0.0071, where the recording shows a
+    # broad spread with the fifth at 20% and a major second at 27%.
+    sympathetic_mode = 'contact'
+    # CALIBRATED against the recording's 23%: modelled 23%, real 23%. The
+    # SHAPE is only qualitatively right -- P5, P4 and M2 carry it and the
+    # semitone and tritone are absent, as on the real pan, but the model puts
+    # 68% on one-step intervals where the pan puts 25%, and correspondingly too
+    # little on two-step. Falloff barely moves that, because what sets the
+    # shape is which responders make the cut, not how they are weighted.
+    # Pushing it further would be fitting one instrument's peak-picking noise.
+    sympathetic_gain = 0.26
+    sympathetic_falloff = 2.0    # dB per step round the cycle of fifths
+    sympathetic_span = 19
+    sympathetic_max = 14         # far enough round the cycle to reach M2
+    sympathetic_floor = 0.01
 
 
 class AgogoProperties(MetalPercussionProperties):
@@ -9943,6 +10018,111 @@ class SynthSampler(BaseSampler):
             return v
         else:
             return 0.0
+
+
+def sympathetic_partials(driver, responder, gain=None):
+    """[(freq, amp)] that `responder` sounds when `driver` is struck.
+
+    TWO WAYS A NOTE CAN RING WITHOUT BEING HIT, and they are different physics
+    rather than two settings of one:
+
+      COINCIDENCE. The responder is a separate oscillator coupled loosely to
+      the driver -- a sitar's sympathetic strings through the bridge, a piano's
+      undamped strings through the plate. It answers only where one of the
+      driver's partials lands INSIDE one of its own modes, so a fifth rings and
+      a major second does not. The Lorentzian below is that resonance, and its
+      width comes from the mode's own decay, which the model already knows:
+      a mode falling at R dB/s has a time constant 8.686/R and a half-power
+      bandwidth 1/(pi*tau).
+
+      CONTACT. The responder shares a BODY with the driver, so the strike sends
+      a mechanical impulse through the material and kicks every note area at
+      once. An impulse is broadband, so the responder rings at its own modes
+      whatever interval it happens to sit at, and coincidence has nothing to do
+      with it. A steelpan is one continuous sheet of steel; its note areas are
+      not separate oscillators loosely coupled, they are regions of the same
+      plate.
+
+    Which of those a steelpan actually does is settled by measurement and not
+    by argument -- see examples/steelpan_check.py, which compares both against
+    the interval histogram of a real pan.
+    """
+    g = responder.sympathetic_gain if gain is None else gain
+    if g <= 0.0:
+        return []
+    dpar = _voice_partials(driver)
+    rpar = _voice_partials(responder)
+    if not dpar or not rpar:
+        return []
+    out = []
+    if responder.sympathetic_mode == 'contact':
+        # Broadband kick: the responder's own spectrum, scaled. Nothing about
+        # the driver's partials enters except how hard it was hit.
+        drive = _sqrt(sum(a * a for _, a in dpar))
+        if responder.sympathetic_falloff:
+            df = driver.frequency_x * (2.0 ** driver.octave_position)
+            rf = responder.frequency_x * (2.0 ** responder.octave_position)
+            semis = 12.0 * _log(max(rf, 1e-9) / max(df, 1e-9)) / _log(2.0)
+            drive *= 10.0 ** (-responder.sympathetic_falloff
+                              * body_distance(semis, responder) / 20.0)
+        for f, a in rpar:
+            out.append((f, a * g * drive))
+        return out
+    # Coincidence: each responder mode is driven by whatever lands in it.
+    for j, (fj, aj) in enumerate(rpar, start=1):
+        bw = _mode_bandwidth(responder, j)
+        d = 0.0
+        for fi, ai in dpar:
+            x = (fi - fj) / max(bw, 1e-9)
+            d += ai / (1.0 + x * x)
+        if d > 0.0:
+            out.append((fj, aj * g * d))
+    return out
+
+
+def body_distance(semis, props):
+    """How far apart two notes are ON THE INSTRUMENT, in steps.
+
+    For a steelpan that is distance round the cycle of FIFTHS, because that is
+    the order the note areas are hammered into the pan: seven semitones is ONE
+    step and a semitone is five. Plus half a step per octave, since a tenor
+    pan's inner ring is the octave above its outer one.
+    """
+    semis = int(round(semis))
+    pc = semis % 12
+    # 7k = pc (mod 12); 7 is coprime with 12 so every pitch class is reachable.
+    k = min((abs(j) for j in range(-6, 7) if (7 * j) % 12 == pc), default=6)
+    octs = abs(semis - (semis % 12 if semis >= 0 else -((-semis) % 12))) / 12.0
+    return k + getattr(props, 'sympathetic_octave_step', 0.5) * abs(semis) / 12.0
+
+
+def _voice_partials(p, top=24):
+    """(freq, amp) for one voice, as the renderer would build it."""
+    f0 = p.frequency_x * (2.0 ** p.octave_position)
+    out = []
+    for h in range(1, min(top, p.max_harmonic or top) + 1):
+        v = p.harmonic_volume(h)
+        if v <= 0.0:
+            continue
+        f = f0 * p.mode_ratio(h)
+        if f <= 0.0 or f > 20000.0:
+            continue
+        out.append((f, v))
+    return out
+
+
+def _mode_bandwidth(p, harmonic):
+    """Half-power bandwidth of one mode, in Hz, from how fast it rings down.
+
+    A mode falling at R dB/s has amplitude e^(-t/tau) with tau = 8.686/R, and
+    a Lorentzian of half-power half-width 1/(2*pi*tau). Steel rings for a long
+    time, so these are NARROW -- a steelpan mode at 260 Hz decaying at
+    6.2 dB/s is 0.11 Hz wide, a Q above two thousand. That sharpness is the
+    whole reason coincidence and contact give different answers.
+    """
+    r = max(p.harmonic_decay(harmonic), 1e-6)
+    tau = 8.685889638 / r
+    return 1.0 / (2.0 * _pi * tau)
 
 
 # ---------------------------------------------------------------- room presets

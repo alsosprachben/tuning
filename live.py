@@ -2862,8 +2862,43 @@ def selftest():
     check("the fundamental dominates, as the recording says it does",
           20.0 < _d2 < 38.0 and _d2 < _d3,
           "  (octave %.0f dB down, twelfth %.0f)" % (_d2, _d3))
+    # A MEASURED MODE SET MUST NOT ALSO BE STRETCHED. The steelpan was built on
+    # MetalPercussionProperties, which carries a stiffness term because ITS
+    # voices have no mode set -- so the pan's carefully tuned 1:2:3 rendered at
+    # 1.000, 2.078, 3.310, the octave 66 cents sharp, while a selftest that
+    # checked mode_ratio() reported it perfect. mode_ratio is the INTENT; the
+    # stretch happens downstream of it. Every mode_ratios voice in the file
+    # must zero the coefficient, and now something checks.
+    _stretched = []
+    for _n in dir(_T):
+        _c = getattr(_T, _n)
+        if not (isinstance(_c, type) and _n.endswith('Properties')):
+            continue
+        if getattr(_c, 'mode_ratios', None) is None:
+            continue
+        if getattr(_c, 'inharmonicity_coefficient', 0.0):
+            _stretched.append(_n)
+    check("a voice with a measured mode set is not also stretched",
+          not _stretched, "  (%s)" % ", ".join(_stretched))
+
     check("GM 114 is a pan and no longer a bar",
           _PM.property_class_for_program(114) is _T.SteelPanProperties)
+    # SYMPATHETIC RESONANCE. A pan is one sheet of steel, so its coupling is a
+    # mechanical kick and not resonance -- and the distance that matters is
+    # distance round the CYCLE OF FIFTHS, which is how the areas are laid out.
+    check("the pan couples by contact, not coincidence",
+          _T.SteelPanProperties.sympathetic_mode == 'contact'
+          and _T.SteelPanProperties.sympathetic_gain > 0)
+    _bd = _T.body_distance
+    check("...and a fifth is nearer than a semitone, across the steel",
+          _bd(7, _T.SteelPanProperties) < _bd(1, _T.SteelPanProperties),
+          "  (P5 %.1f steps, m2 %.1f)" % (_bd(7, _T.SteelPanProperties),
+                                          _bd(1, _T.SteelPanProperties)))
+    import sympathetic as _SY
+    _r = _SY.responders(_sp)
+    check("...and a struck note brings its neighbours with it",
+          len(_r) > 0 and all(abs(s) % 12 in (0, 2, 5, 7, 10) for s, _ in _r[:6]),
+          "  (%s)" % ", ".join("%+d" % s for s, _ in _r[:6]))
 
     # ---- the wheel means the same thing live and offline ---------------------
     # CC1 is the gain knob in both, and they are two separate implementations

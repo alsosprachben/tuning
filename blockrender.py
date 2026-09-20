@@ -688,6 +688,7 @@ def prepare(path, tuner='hybrid'):
     cons_bursts = []
     _CONS_SRC = {}
     _LESLIE_CH = {}
+    _SYM_CH = {}
     _AMP_CH = {}
     _AMP_REF = {}
     _AMP_IMB = {}
@@ -946,6 +947,8 @@ def prepare(path, tuner='hybrid'):
             _ref = getattr(props, 'amp_reference', None)
             _AMP_REF[ch] = (_ref * chan_vol) if _ref else None
             _AMP_IMB[ch] = getattr(props, 'amp_imbalance', None)
+        if getattr(props, 'sympathetic_gain', 0.0) and ch not in _SYM_CH:
+            _SYM_CH[ch] = props
         if getattr(props, 'cabinet', None) and ch not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
             # anyone wants to play through -- it is the A/B that shows what the
@@ -1248,6 +1251,18 @@ def prepare(path, tuner='hybrid'):
         # does not move.
         _out.append((_n, _ctr, _bw, _shape, tuple(_emit), _bch, _bi))
     cons_bursts = _out
+
+    # THE NOTES NOBODY HIT, AND THEY RUN BEFORE THE AMPLIFIER. A sympathetic
+    # note is part of what the instrument produces, so it is part of what an
+    # amplifier would be handed -- and part of what a room would hear. See
+    # sympathetic.py, and note that a steelpan's coupling turned out to be a
+    # mechanical kick through shared steel rather than resonance.
+    if _SYM_CH:
+        import sympathetic as _SYM
+        _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        if _ns:
+            print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
+                  % (len(_SYM_CH), _ns))
 
     # THE AMPLIFIER, AND IT RUNS FIRST. A Leslie's chain is organ -> amp ->
     # crossover -> rotors, so the valve is upstream of the rotor; here that is
