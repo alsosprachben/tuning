@@ -5896,23 +5896,36 @@ class SteelPanProperties(MetalPercussionProperties):
     right shape for this voice and a harmonic series with a comb is not: the
     instrument's maker put the modes where they are.
 
-    THE OCTAVE IS NEARLY AS LOUD AS THE FUNDAMENTAL, which is where the
-    instrument's brightness comes from and why a pan carries over a band
-    outdoors. That is judgement here, not a measurement.
+    THE FUNDAMENTAL DOMINATES, and I guessed the opposite. The first version
+    of this class asserted that "the octave is nearly as loud as the
+    fundamental, which is where the instrument's brightness comes from" and put
+    it 1.9 dB down. Measured afterwards on 26 single-note strikes from a CC0
+    recording, the octave is **29 dB** down and the twelfth **37** -- and the
+    fundamental is the strongest peak in 20 of 20 strikes where all three modes
+    could be read. The tuned modes are exactly where the maker put them and
+    they are QUIET; the instrument is strongly fundamental-dominated, and its
+    brightness is not where I said it was.
 
-    ABOVE THE TUNED THREE, NOTHING IS TUNED. The note area and the skirt have
-    plenty of further modes and nobody hammers them into place, so they sit at
-    no particular ratio and supply the metallic shimmer rather than the pitch.
-    The four upper ratios below are PLACEHOLDERS: deliberately non-integer, so
-    that they shimmer instead of reinforcing, and deliberately not precise,
-    because inventing four decimal places would be inventing four decimal
-    places. They are the first thing a recording should replace.
+    Not an envelope effect either, which was the obvious escape: the upper
+    modes are 24-30 dB down in every window from the first 80 ms to 1.5 s, so
+    they are not strong in the attack and fading.
+
+    ABOVE THE TUNED THREE, NOTHING IS TUNED -- and that part held up. Pooling
+    128 partials above 3.2x from those 26 strikes, they spread from 3.2 to 9.2
+    with no tuning to speak of, and sit at a median of -43 dB. So the SHAPE of
+    the assertion was right and its LEVEL was not: the ratios below stay
+    placeholders, still deliberately non-integer and still imprecise, but their
+    gains are now the measured -43 rather than the -16 to -31 I invented.
 
     WHAT IS NOT MODELLED, and both are real:
 
-      - SYMPATHETIC COUPLING. Every note area on a pan shares one sheet of
-        steel, so striking one rings its neighbours. That is a large part of
-        the instrument's wash and this engine has no cross-note coupling.
+      - SYMPATHETIC COUPLING, and the recording says how much: across 40
+        isolated strikes, a median of 23% of the peak energy is NOT a harmonic
+        of the note struck. It shows up as partials at 0.75, 0.80, 1.33, 1.50
+        of the fundamental -- fourths, thirds and fifths, which are musical
+        intervals and not modes, because they are the neighbouring note areas
+        answering through the shared steel. A quarter of what you hear is
+        notes nobody hit, and this engine has no cross-note coupling at all.
       - THE BLOOM. Thin steel struck hard is nonlinear and the pitch moves as
         the note settles. tension_bend could express it; how much, and in
         which direction, is not something to assert without hearing one.
@@ -5922,9 +5935,15 @@ class SteelPanProperties(MetalPercussionProperties):
     is extrapolation, like every other voice here whose reference covers one
     octave.
     """
-    # 1 : 2 : 3 is the maker's tuning. The rest are placeholders -- see above.
+    # 1 : 2 : 3 is the maker's tuning, and MEASURED at 1.9978 and 2.9972 --
+    # two cents flat of an exact octave and twelfth, across 26 strikes. The
+    # rest are placeholders; see above.
     mode_ratios = (1.000, 2.000, 3.000, 3.92, 4.63, 5.41, 6.28, 7.35, 8.61)
-    mode_gains = (1.000, 0.800, 0.500, 0.160, 0.120, 0.090, 0.065, 0.045, 0.030)
+    # MEASURED, and nothing like what this class first asserted. Octave -29 dB
+    # (10th-90th percentile -36 to -16), twelfth -37 (-48 to -27), everything
+    # above -43. The spread is wide because a pan's note areas differ and
+    # because this is one instrument, one microphone and one player.
+    mode_gains = (1.000, 0.036, 0.014, 0.007, 0.007, 0.007, 0.007, 0.007, 0.007)
 
     # Thin steel, lightly damped, and nothing touching it: a pan rings for
     # seconds where a cowbell does not. The upper modes go first, as they do

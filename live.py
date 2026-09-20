@@ -2853,10 +2853,15 @@ def selftest():
     check("...and the modes above them are deliberately not",
           all(abs(r - round(r)) > 0.05 for r in _up),
           "  (%s)" % ", ".join("%.2f" % r for r in _up))
-    check("the octave carries nearly as much as the fundamental",
-          _sp.harmonic_volume(2) > 0.6 * _sp.harmonic_volume(1),
-          "  (%.1f dB down)" % (-20 * math.log10(
-              _sp.harmonic_volume(2) / _sp.harmonic_volume(1))))
+    # MEASURED, and the reverse of what this class first asserted: the tuned
+    # modes are exactly where the maker put them and they are QUIET. Octave
+    # 29 dB down, twelfth 37, on 26 single-note strikes with the fundamental
+    # strongest in 20 of 20.
+    _d2 = -20 * math.log10(_sp.harmonic_volume(2) / _sp.harmonic_volume(1))
+    _d3 = -20 * math.log10(_sp.harmonic_volume(3) / _sp.harmonic_volume(1))
+    check("the fundamental dominates, as the recording says it does",
+          20.0 < _d2 < 38.0 and _d2 < _d3,
+          "  (octave %.0f dB down, twelfth %.0f)" % (_d2, _d3))
     check("GM 114 is a pan and no longer a bar",
           _PM.property_class_for_program(114) is _T.SteelPanProperties)
 

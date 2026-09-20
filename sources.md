@@ -135,9 +135,9 @@ trusted as far as the horn and trumpet are.
 - **Celesta, music box, saxophone formants, marimba's third mode**, and the
   clarinet's exact even-harmonic depth: placed by argument between measured
   neighbours, not measured directly.
-- **The steelpan, entirely.** Neither collection has one and no recording has
-  been looked at. Its 1:2:3 tuning is the instrument's design and is solid;
-  its upper ratios, all its gains and its ring are mine. See below.
+- **The steelpan's upper ratios and its ring.** Its 1:2:3 tuning and its mode
+  LEVELS are now measured against a CC0 recording (see below); the four upper
+  ratios and the decay are still mine.
 
 ## Strings (added later)
 
@@ -2203,13 +2203,36 @@ voices of their own, as 120 fret noise did.
 
 ## The steelpan, built from the instrument's design
 
-NOTHING HERE IS MEASURED. Iowa's percussion is marimba, xylophone, vibraphone
-and bells; VCSL's Struck Idiophones has forty-one entries -- anvils, brake
-drums, slit drums, gongs -- and no steel pan. Freesound has one plausible CC0
-candidate (28 minutes, 48 kHz/24-bit mono, "various sounds from the steel
-drum") which has not been opened. So this is built from the instrument's
-design, on the footing the toms already set: the ratios are physics, the gains
-are judgement.
+BUILT FROM THE DESIGN, THEN CHECKED. Iowa's percussion is marimba, xylophone,
+vibraphone and bells; VCSL's Struck Idiophones has forty-one entries -- anvils,
+brake drums, slit drums, gongs -- and no steel pan. So the voice was written
+first from the instrument's design, on the footing the toms set: the ratios are
+physics, the gains are judgement.
+
+Then it was checked against **Freesound 742254** (sciencewithmike, CC0, 28 min,
+48 kHz/24-bit mono, "various sounds from the steel drum"), which turned out to
+contain 408 strikes with over a second of clearance, of which 79 have 1.5 s
+before and 2 s after. Forty were analysed; 26 are dominated by a single note.
+
+THE SPLIT WAS EXACTLY THE ONE THE CLASS PREDICTED. Every RATIO held and every
+GAIN was wrong by 20-30 dB:
+
+| | asserted | measured |
+|---|---|---|
+| mode 2 / f0 | 2.000 | **1.9978** (-2 cents) |
+| mode 3 / f0 | 3.000 | **2.9972** (-2 cents) |
+| above mode 3 | untuned | untuned: 128 partials spread 3.2x to 9.2x |
+| mode 2 level | -1.9 dB | **-29 dB** (10th-90th: -36 to -16) |
+| mode 3 level | -6.0 dB | **-37 dB** (-48 to -27) |
+| upper levels | -16 to -31 dB | **-43 dB** |
+
+"The octave is nearly as loud as the fundamental, which is where the
+instrument's brightness comes from" was the assertion, and it is wrong by
+27 dB. The fundamental is the strongest peak in 20 of 20 strikes where all
+three modes could be read: the tuned modes are exactly where the maker put them
+and they are QUIET. Nor is it an envelope effect, which was the obvious escape
+-- the upper modes measure 24-30 dB down in every window from the first 80 ms
+out to 1.5 s, so they are not strong in the attack and fading.
 
 THE TUNING IS THE PHYSICS, and it is unusual enough to be the whole reason the
 voice is shaped this way. A steelpan's overtones are HARMONIC BY INTENTION: the
@@ -2240,9 +2263,15 @@ buildup is simply what a ringing instrument does. What it really sets is ring
 LENGTH: 12.5 s to -40 dB at 2.0, 9.5 at 3.0, 5.6 at 6.0. A tenor pan rings for
 seconds and not for ten of them, so it is 5.0, which is 6.5 s.
 
-TWO REAL THINGS ARE NOT MODELLED. Every note area on a pan shares one sheet of
-steel, so striking one rings its neighbours -- a large part of the instrument's
-wash, and this engine has no cross-note coupling at all. And thin steel struck
-hard is nonlinear, so the pitch moves as the note settles; `tension_bend` could
-express that, but how much and in which direction is not worth asserting
-without hearing one.
+SYMPATHETIC COUPLING IS A QUARTER OF THE SOUND, and the recording says so
+numerically: across 40 isolated strikes a median of **23%** of the peak energy
+is not a harmonic of the note struck. It shows up as partials at 0.75, 0.80,
+1.33 and 1.50 of the fundamental -- fourths, thirds and fifths, which are
+musical intervals and not modes, because they are the neighbouring note areas
+answering through the shared steel. A quarter of what you hear is notes nobody
+hit. This engine has no cross-note coupling, so that quarter is missing, and it
+is now the largest known gap in the voice rather than a suspicion.
+
+Still not modelled either: thin steel struck hard is nonlinear, so the pitch
+moves as the note settles. `tension_bend` could express it; the direction and
+size were not measured here.
