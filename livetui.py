@@ -173,6 +173,18 @@ COL_W = {"patch": 24, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8,
 # picker, whatever was highlighted.
 PICKERS = ("patch", "tuner", "stops")
 
+# How far a part's level column can be pushed, in dB. The floor is effectively
+# a mute; the ceiling used to be +12 and is +24 because balancing a rig against
+# a loud voice needs the range -- an amplified guitar next to a quiet patch can
+# want more than four times the gain.
+#
+# ABOVE UNITY IS NOT FREE, and the master column's note explains why:
+# synth_window applies T.master_gain and hard-clips to +/-1 BEFORE Live.limit
+# sees the block, so gain that overflows there clips inside the kernel where
+# the soft limiter cannot help it. Use the headroom column with this one.
+LEVEL_DB_MIN = -60.0
+LEVEL_DB_MAX = 24.0
+
 GLOBALS = (
     ("master",     "dB",   -60.0,  0.0, 0.5),
     ("headroom",   "dB",     0.0, 24.0, 0.5),
@@ -370,7 +382,9 @@ class TUI:
         elif col == "tr":
             p.transpose = max(-48, min(48, p.transpose + step))
         elif col == "level":
-            p.level_db = max(-60.0, min(12.0, p.level_db + delta * (3.0 if big else 0.5)))
+            p.level_db = max(LEVEL_DB_MIN,
+                             min(LEVEL_DB_MAX,
+                                 p.level_db + delta * (3.0 if big else 0.5)))
         elif col == "stops":
             # -/+ adds and removes ranks in the organ's own crescendo order, so
             # the column behaves like every other one; enter is where you pick
@@ -525,7 +539,7 @@ class TUI:
         elif col == "tr":
             p.transpose = max(-48, min(48, v))
         elif col == "level":
-            p.level_db = max(-60.0, min(12.0, v))
+            p.level_db = max(LEVEL_DB_MIN, min(LEVEL_DB_MAX, v))
 
     def pick_tuner(self, scr):
         p = self.sel()
