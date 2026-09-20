@@ -2275,3 +2275,39 @@ is now the largest known gap in the voice rather than a suspicion.
 Still not modelled either: thin steel struck hard is nonlinear, so the pitch
 moves as the note settles. `tension_bend` could express it; the direction and
 size were not measured here.
+
+## Which of a steelpan's neighbours are really ringing
+
+The coupling histogram raised a problem: a major second at 27% against a fifth
+at 20%, where a model built on distance round the cycle of fifths says the
+fifth -- ONE step, the area physically next door -- should dominate. Fitting
+that would have meant making the coupling RISE with distance, which is not a
+thing that happens.
+
+The test that settles it is to ask whether each non-harmonic partial is a NOTE.
+A steelpan note is tuned 1:2:3 by the maker, so a genuinely sounding neighbour
+must carry its own octave and twelfth; peak-picking noise will not.
+
+| interval | carries own 8ve | own 12th | level | |
+|---|---|---|---|---|
+| P4 | **76%** | **84%** | -29.5 dB | a note |
+| P5 | **74%** | 54% | -25.7 dB | a note |
+| M2 | 58% | 32% | -32.6 dB | part |
+| M3 | 56% | 30% | -34.4 dB | part |
+| m2 | **3%** | 25% | -37.8 dB | **not a note** |
+| TT | **4%** | **0%** | -37.1 dB | **not a note** |
+| m3 | 11% | 22% | -39.9 dB | **not a note** |
+| m6 | 8% | 12% | -38.2 dB | **not a note** |
+
+The partials that behave like sounding notes are overwhelmingly the FOURTH and
+the FIFTH -- one step round the cycle, which is the area next to the one that
+was struck. The intervals that disagreed with the spatial model are the ones
+that are not notes at all: 3-11% carry any mode structure, and they sit 10 dB
+below the ones that do.
+
+THE SPATIAL PATHWAY IS CONFIRMED in its main claim, and the earlier note that
+the model "over-weights one-step intervals" was wrong -- the target was
+contaminated, not the model. What remains unsettled is the finer shape: M2
+against M6 against M7 moves substantially with how the analysis is sliced,
+which is about what one 28-minute recording of one instrument through a lossy
+preview can support. It is not fitted, and should not be.

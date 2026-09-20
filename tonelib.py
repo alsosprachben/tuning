@@ -6030,13 +6030,30 @@ class SteelPanProperties(MetalPercussionProperties):
     # fifth 0.0000024 against the octave's 0.0071, where the recording shows a
     # broad spread with the fifth at 20% and a major second at 27%.
     sympathetic_mode = 'contact'
-    # CALIBRATED against the recording's 23%: modelled 23%, real 23%. The
-    # SHAPE is only qualitatively right -- P5, P4 and M2 carry it and the
-    # semitone and tritone are absent, as on the real pan, but the model puts
-    # 68% on one-step intervals where the pan puts 25%, and correspondingly too
-    # little on two-step. Falloff barely moves that, because what sets the
-    # shape is which responders make the cut, not how they are weighted.
-    # Pushing it further would be fitting one instrument's peak-picking noise.
+    # CALIBRATED against the recording's 23%: modelled 23%, real 23%.
+    #
+    # AND THE SHAPE IS BETTER THAN THE RAW HISTOGRAM SUGGESTED, because most of
+    # what disagreed with it was not resonance at all. A sounding neighbour is
+    # a NOTE, so it must carry its own tuned octave and twelfth -- 1:2:3 is
+    # what a pan note IS. Testing every non-harmonic partial for that:
+    #
+    #     P4   76% carry their own octave, 84% their own twelfth, -29.5 dB
+    #     P5   74%                         54%                    -25.7 dB
+    #     M2   58%                         32%                    -32.6 dB
+    #     m2    3%                         25%                    -37.8 dB
+    #     TT    4%                          0%                    -37.1 dB
+    #     m3   11%                         22%                    -39.9 dB
+    #
+    # The fourth and fifth behave like notes; the semitone, tritone and minor
+    # third do not, and are 10 dB quieter besides -- peak-picking noise that
+    # the raw histogram was counting as coupling. So the real neighbours are
+    # exactly ONE STEP round the cycle of fifths, which is what this model
+    # says, and the earlier worry that it over-weighted them came from a
+    # contaminated target rather than from the model.
+    #
+    # What one recording of one pan cannot settle is the finer distribution:
+    # M2 against M6 against M7 moves a lot with how the analysis is sliced. It
+    # is not fitted.
     sympathetic_gain = 0.26
     sympathetic_falloff = 2.0    # dB per step round the cycle of fifths
     sympathetic_span = 19
