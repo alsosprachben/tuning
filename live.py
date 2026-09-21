@@ -3368,6 +3368,45 @@ def selftest():
     check("its tremolo survives a mono fold, where the suitcase's pan does not",
           wp.tremolo_stereo is False and rp2.tremolo_stereo is True)
 
+    # ---- the clavinet, which is not a harpsichord ---------------------------
+    check("the clavinet is not a harpsichord",
+          _PM.property_class_for_program(7) is _T.ClavinetProperties
+          and _PM.property_class_for_program(6) is _T.HarpsichordProperties)
+    cv = _T.ClavinetProperties(261.63, 0.0, (100 / 127.0) ** 2, 1.0)
+    hc = _T.HarpsichordProperties(261.63, 0.0, (100 / 127.0) ** 2, 1.0)
+    # It is STRUCK, and struck essentially at the termination -- the tangent
+    # traps the string against the anvil -- so its comb RISES through the
+    # audible range instead of notching inside it.
+    check("...it is struck at the string's own end, so the comb rises",
+          cv.strike_point > 0.0 and 1.0 / cv.strike_point > 24.0
+          and cv.strike_fills_with_force is False,
+          "  (first null at partial %.0f; a piano notches at %.0f)"
+          % (1.0 / cv.strike_point, 1.0 / _T.GrandPianoProperties.strike_point))
+    up = lambda q: 10 * _math.log10(sum((q.harmonic_volume(h) / q.harmonic_volume(1)) ** 2
+                                        for h in range(2, 17)))
+    check("...which makes it buzz where a harpsichord rings",
+          up(cv) > up(hc) + 3.0,
+          "  (%+.1f dB above the fundamental against %+.1f)" % (up(cv), up(hc)))
+    # THE MAGNET, which the harpsichord voice it borrowed did not have at all.
+    check("...and it has pickups, which the harpsichord has none of",
+          cv.pickup_points and cv.pickup_velocity is True
+          and not _T.HarpsichordProperties.pickup_points)
+    # And the pickup's FRACTION moves with pitch, because the magnet is fixed in
+    # space while the speaking length is set per note by where the tangent lands.
+    # No other voice here does this: a guitar's nut is fixed, so its fraction is.
+    lo = _T.ClavinetProperties(65.4, 0.0, 1.0, 1.0).pickup_points[0]
+    hi = _T.ClavinetProperties(1046.5, 0.0, 1.0, 1.0).pickup_points[0]
+    check("...whose fraction climbs toward the treble, unlike any other voice",
+          hi > lo * 1.8 and _T.ElectricGuitarProperties.pickup_points
+          == _T.ElectricGuitarProperties(82.4, 0.0, 1.0, 1.0).pickup_points,
+          "  (%.3f at C2, %.3f at C6; a guitar's does not move)" % (lo, hi))
+    # The paper: the key, its rebound and the tangent on the anvil mask the
+    # string's own onset. So the click is the machine, and it grows with force.
+    check("...and its click is the machine, not the string",
+          cv.chiff_volume > 0.0 and cv.strike_noise_slope > 0.0
+          and cv.chiff_max_valve_time < 0.01,
+          "  (%.0f ms of broadband, rising with velocity)" % (1000 * cv.chiff_max_valve_time))
+
     # ---- the cuica, which is not struck at all ------------------------------
     import percussion_map as _PM2
     check("a cuica is not the generic struck membrane",

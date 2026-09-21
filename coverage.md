@@ -23,12 +23,12 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 58 | 45% |
-| 2 specific, theory | 23 | 18% |
+| 1 general class | 57 | 45% |
+| 2 specific, theory | 24 | 19% |
 | 3 specific, theory + ear | 18 | 14% |
 | 4 specific, reference audio | 29 | 23% |
 
-**6 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 7 Clavinet, 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
+**5 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
 
 ## Channel 10: the percussion note map
 
@@ -109,7 +109,7 @@ splits almost exactly along that line.
 | 4 | Electric Piano 1 | `Rhodes` | **2** | Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted |
 | 5 | Electric Piano 2 | `Wurlitzer` | **2** | Wurlitzer. Same machinery, 1/d pickup; no audio fitted |
 | 6 | Harpsichord | `Harpsichord` | **4** | VCSL recordings |
-| 7 | Clavinet | `Harpsichord` | **1** | the harpsichord. CATEGORY ERROR: a clavinet is a STRUCK string with a pickup |
+| 7 | Clavinet | `Clavinet` | **2** | its own voice: struck at the anvil, magnetic pickups whose fraction climbs with pitch. No reference |
 
 ## 8-15 Chromatic Percussion
 

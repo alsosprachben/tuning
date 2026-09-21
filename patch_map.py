@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    ClavinetProperties,
     RhodesProperties,
     WurlitzerProperties,
     MutedTrumpetProperties,
@@ -108,6 +109,12 @@ _fill(0, 7, GrandPianoProperties)
 # ...except the harpsichords (6 = Harpsichord, 7 = Clavi): PLUCKED, and registered
 # (choirs as stops via CC11), not struck. GM files that mean a harpsichord get one.
 _fill(6, 7, HarpsichordProperties)
+# ...and 7 (Clavi) is not a harpsichord: a clavinet is a STRUCK steel string
+# trapped against an anvil by a rubber tangent and read by MAGNETS, where the
+# harpsichord voice it borrowed is plucked, wooden and carries no pickup at all.
+# The tangent is the string's termination, so the strike comb rises instead of
+# notching -- that is the buzz. See ClavinetProperties.
+PROGRAM_CLASS[7] = ClavinetProperties     # struck string, anvil, magnetic pickup
 # ...and 4 (Electric Piano 1) is not a piano at all. A Rhodes is a struck steel
 # TINE read by a magnetic pickup: no strings, no soundboard, no unison trios,
 # so none of the piano's stretch or beating. Measured, the tine vibrates as a

@@ -68,7 +68,7 @@ RATED = {
  4:(2,"Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted"),
  5:(2,"Wurlitzer. Same machinery, 1/d pickup; no audio fitted"),
  6:(4,"VCSL recordings"),
- 7:(1,"the harpsichord. CATEGORY ERROR: a clavinet is a STRUCK string with a pickup"),
+ 7:(2,"its own voice: struck at the anvil, magnetic pickups whose fraction climbs with pitch. No reference"),
  8:(2,"struck steel plate, felt hammer"),
  9:(4,"Iowa orchestra bells"),
  10:(2,"plucked steel comb tooth. Its docstring claims a cantilever; its numbers are a free-free bar"),

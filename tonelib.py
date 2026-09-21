@@ -2887,6 +2887,118 @@ class HammeredDulcimerProperties(InharmonicStringProperties):
     harmonic_decay_db = 2.5
 
 
+class ClavinetProperties(InharmonicStringProperties):
+    """GM 7. A struck steel string read by magnets -- and it was a harpsichord.
+
+    Nothing about a plucked, wooden-bodied instrument is true of it, and the
+    voice it inherited had `pickup_points = ()` and `pickup_velocity = False`,
+    so the model carried no magnet at all.
+
+    THE TANGENT IS THE TERMINATION, and that is the whole sound. "The rubber tip
+    strikes the string and traps it against a metal stud, or anvil, for the
+    duration of the note, splitting the string into speaking and nonspeaking
+    parts, with the motion of the former transduced by the pickups." A piano is
+    struck at about 1/7 of its speaking length and a harpsichord plucked at
+    0.115; both get a comb with a NOTCH in the audible range. A clavinet is
+    excited essentially AT THE END of the length it goes on to sound, so
+    |sin(n*pi*p)| with p small RISES with harmonic number instead of notching
+    and its first null sits far above hearing. A weak fundamental and strong
+    upper partials: that is the buzz, and it is one attribute.
+
+    AND A HARD TANGENT DOES NOT FILL ITS NOTCH. Piano felt compresses flatter
+    the harder it is hit, widening the contact patch and filling the comb in.
+    Rubber against a steel anvil does not, so strike_fills_with_force is False,
+    the same argument the dulcimer's wooden hammer and the harpsichord's quill
+    get from the other direction.
+
+    THE PICKUP FRACTION MOVES WITH PITCH, which no other voice here does. The
+    pickups sit at the bridge end at a FIXED PHYSICAL POSITION while the
+    speaking length is set per note by where its tangent lands. On a guitar the
+    nut is fixed, so a pickup stays at one fraction of the string for every
+    note; on a clavinet the same magnet is a fifth of the way up a treble string
+    and a fifteenth of the way up a bass one. So pickup_points is computed per
+    instance from the note, the way the Rhodes computes its tonebar ratio.
+
+    This is also the voice the electric guitar's pickup machinery was actually
+    built for. The Rhodes could not use it -- a tine has one mode and no
+    standing wave to sample -- but a clavinet is a plain string with a magnet
+    under it, which is exactly what |sin(n*pi*q)| describes, and
+    pickup_velocity's +6 dB/octave is the same magnet.
+
+    THE ATTACK IS THE MACHINE, NOT THE STRING: "the mechanical noise generated
+    by the key, its rebound, and the tangent hitting the anvil masked the
+    striking portion of the tone nearly entirely." So the click is carried as
+    broadband noise that grows with force, not as a string transient.
+
+    NO REFERENCE. There is no clavinet in the Iowa set and no usable isolated
+    recording of one -- the CC0 material is loops, riffs and synth imitations.
+    The mechanism above is from the literature (Gabrielli et al., "A digital
+    waveguide-based approach for Clavinet modeling and synthesis", EURASIP
+    JASP 2013); the NUMBERS below are estimates, and the ones that matter most
+    are the string scale and the pickup's distance from the bridge.
+    """
+
+    # Struck at the very end of what sounds. 0.035 puts the comb's first null
+    # near the 28th partial, so everything audible is on its rising edge.
+    strike_point = 0.035
+    strike_depth = 0.90
+    strike_fills_with_force = False     # rubber on an anvil, not felt
+
+    # Short, stiff steel. Estimated: more than a harpsichord's long thin wire
+    # (3.5e-05), far less than a piano's wound bass.
+    inharmonicity_coefficient = 1.1e-04
+    inharmonicity_dynamic = False
+
+    # The magnet. pickup_points is filled in per note by __init__ below.
+    pickup_width = 0.012
+    pickup_velocity = True              # -dPhi/dt: the +6 dB/octave is the magnet
+
+    # WHERE THE STRING ENDS, as a function of the note. A real instrument does
+    # not scale its lengths as 1/f -- that would want a metre of wire at the
+    # bottom -- so the exponent is well under one, giving about 0.38 m at the
+    # bottom of the compass and 0.13 m at the top. ESTIMATED.
+    speaking_length_ref_m = 0.22
+    speaking_length_ref_hz = 261.6
+    speaking_length_power = 0.30
+    pickup_distance_m = 0.028           # from the bridge. ESTIMATED.
+    pickup_fraction_max = 0.30          # do not let the treble null fall too low
+
+    # Against the magnet's rising n. At 1.70 the pickup comb's SECOND LOBE came
+    # back to +6.5 dB at the 12th partial, rivalling the peak at the 4th; 2.0
+    # leaves the peak at the 3rd with the second lobe down at the fundamental.
+    # The voice still carries +11.4 dB above its fundamental where the
+    # harpsichord it replaces has +7.3, which is the difference in question.
+    tonal_dampening = 2.00
+    octave_dampening = 0.0
+    decay_db = 5.5                      # it dies fast, and the anvil is lossy
+    harmonic_decay_db = 3.0
+    release_valve_time = 0.035          # woven yarn, and it means it
+    attack_time = 0.0015
+
+    # The key, its rebound and the tangent on the anvil. Loud enough to mask the
+    # string's own onset, which is what the paper says it does.
+    chiff_volume = 0.55
+    chiff_cycle = 0.0
+    chiff_min_valve_time = 0.001
+    chiff_max_valve_time = 0.006
+    strike_noise_slope = 1.3            # and it grows with how hard the key is hit
+
+    # Balance-normalised the way the rest of the set is: C3/C4/C5 at velocity
+    # 100, same room and master, matched on rms against the grand piano. It
+    # started 18.7 dB UNDER one, because almost all of this voice's energy sits
+    # in partials the comb had been pushing around rather than in a fundamental.
+    initial_gain = 0.7786
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        f0 = float(frequency)
+        length = self.speaking_length_ref_m * (
+            (self.speaking_length_ref_hz / f0) ** self.speaking_length_power)
+        q = self.pickup_distance_m / max(length, 1e-6)
+        self.speaking_length_m = length
+        self.pickup_points = (min(q, self.pickup_fraction_max),)
+
+
 class GrandPianoProperties(InharmonicStringProperties):
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
