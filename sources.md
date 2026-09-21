@@ -2861,3 +2861,93 @@ anywhere. The measured curve above is the target and does not need remeasuring.
 validated on the settled spectrum, where it was a clear win, and not on the
 attack, where it was a loss. Half a validation is how a fit comes to fit the
 measurement instead of the instrument.
+
+---
+
+## The cuica: the one voice where the MECHANISM was wrong
+
+From the coverage audit, ten patches were being played by a voice of the wrong
+physical kind. Most are the wrong size or the wrong family. The cuica was the
+worst of them, because nothing about a struck membrane is true of it.
+
+**Sources.** The Wikipedia article and the summary literature on friction drums,
+plus the standard acoustics line, which is the one that matters: *"Rubbing the
+bamboo rod gives a primitive saw-toothed excitation, similar to a bowed violin
+string, which is connected to the center of a membrane which modifies and
+radiates the sound"*, and *"the pitch is increased or decreased by changing the
+pressure on the head"*. A thin stick is tied to the INSIDE CENTRE of the head
+and stroked with a damp cloth; stick-slip drives the stick and the stick drives
+the membrane.
+
+Three consequences, and the old voice had none of them.
+
+### It is bowed, not struck
+
+A cuica sustains while it is rubbed, so `decay_db` and `harmonic_decay_db` are
+zero exactly as they are on a bowed string and an organ pipe, and
+`tonal_dampening` is 1.0 because a sawtooth's harmonics go as 1/n. The voice was
+`MembraneDrumProperties` -- a struck onset with a fast decay -- which models the
+wrong thing entirely. It is also NOT placed under `PercussionProperties`, whose
+docstring reads "struck onset... fast decay"; the attributes that base would
+have supplied are written out on the class instead, because inheriting them
+would mean claiming it is struck in order to borrow defaults.
+
+### Driven at the centre, so most of the drum cannot speak
+
+**Every membrane mode with an angular node has a node at the centre of the
+head.** (1,1), (2,1), (3,1) and the rest are exactly where the stick is tied, so
+a centre drive cannot excite any of them. What is left is the axisymmetric
+series alone, `j(0,n)/j(0,1)`:
+
+    1.000   2.295   3.598   4.903   6.209
+
+`MembraneDrumProperties` hands out the full Bessel set -- twelve modes including
+1.593 and 2.136 -- and on a cuica none of those exist. This is the sharpest of
+the three claims and it costs nothing to honour.
+
+### And because it is driven, it mode-locks
+
+The same argument the organ pipes make: a nonlinearly driven oscillator pulls
+its passive resonances into one exactly periodic waveform, so the STEADY tone is
+harmonic and the passive inharmonicity is an ONSET TRANSIENT. So this voice has
+no `mode_ratios` -- that would assert the passive modes sound forever -- and
+carries the departure in `mode_lock_spread` instead.
+
+**The engine's existing lock law fits a Bessel series almost exactly.** Fitting
+`spread * x/(1+x)`, `x = (h/knee)^2` to those five axisymmetric ratios gives
+`mode_lock_spread = 0.2748`, `mode_lock_knee = 1.8522`, reproducing them as
+2.296, 3.597, 4.905, 6.208 -- **rms 0.0004**. That was a pleasant surprise: the
+law was written for the mild inharmonicity of a pipe's open-end correction and
+it happens to describe a membrane's wildly inharmonic modes just as well.
+
+Measured on the render, the mute cuica's onset partials sit at ratios
+1 : 2.204 : 3.438 -- partway to the membrane's 2.295 : 3.598, as they should be
+in a window straddling a 60 ms lock -- and its settled partials at
+1 : 2.010 : 3.022. **The squeak at the onset of a cuica is a membrane becoming a
+harmonic tone**, and that is most of what makes it recognisable.
+
+### The pitch is the other hand
+
+A finger pressed near the centre raises the head tension, and a membrane's pitch
+goes as sqrt(T) -- which is `tension_bend` exactly. On every other voice in this
+file that bend is a small attack transient; on a cuica it IS the instrument, so
+it is an order of magnitude larger (~155 cents against a piano's 14) and
+`tension_bend_slope` is zero, because the glide is a finger and not a register.
+
+**Which way each note glides is a CHOICE, not a measurement.** GM gives two
+notes and says nothing about what they do, so they are set to glide in opposite
+directions -- the mute rises into pitch, the open falls away from it -- which is
+what makes an alternating 78/79 figure sound like the instrument talking. Any
+real player does both on either note.
+
+### What it is not
+
+**NO REFERENCE.** Iowa has no cuica and no friction drum of any kind, so this
+sits at 2 in `coverage.md`: the mechanism above is measured physics taken from
+the literature, and every number below it is asserted. In particular the two
+pitches (420 Hz mute, 260 Hz open, against 340/300 before) and the glide
+magnitudes are choices. The stick-slip drive itself is modelled only by its
+RESULT -- a sawtooth spectrum -- and not as a friction oscillator, so the voice
+cannot squeal, break up or ride the way a real one does under a heavy hand.
+
+`examples/cymbals.py --cuica` renders the talking figure.

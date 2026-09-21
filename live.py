@@ -3368,6 +3368,50 @@ def selftest():
     check("its tremolo survives a mono fold, where the suitcase's pan does not",
           wp.tremolo_stereo is False and rp2.tremolo_stereo is True)
 
+    # ---- the cuica, which is not struck at all ------------------------------
+    import percussion_map as _PM2
+    check("a cuica is not the generic struck membrane",
+          _PM2.PERCUSSION[79][1] is _T.CuicaProperties
+          and _PM2.PERCUSSION[78][1] is _T.MuteCuicaProperties
+          and not issubclass(_T.CuicaProperties, _T.PercussionProperties),
+          "  (and not under PercussionProperties, whose docstring says struck)")
+    cu = _T.CuicaProperties(260.0, 0.0, 1.0, 1.0)
+    # Driven, so it rings while it is driven. A struck membrane's fast decay was
+    # modelling the wrong thing entirely.
+    check("...it is driven, so it sustains rather than decays",
+          cu.decay_db == 0.0 and cu.harmonic_decay_db == 0.0 and cu.one_shot is False)
+    # A sawtooth drive, as on a bowed string: harmonics go as 1/n.
+    h2 = 20 * _math.log10(cu.harmonic_volume(2) / cu.harmonic_volume(1))
+    h4 = 20 * _math.log10(cu.harmonic_volume(4) / cu.harmonic_volume(1))
+    check("...with a sawtooth's 1/n series, like the bowed string it resembles",
+          abs(h2 + 6.0) < 0.6 and abs(h4 + 12.0) < 0.8,
+          "  (h2 %.1f dB, h4 %.1f)" % (h2, h4))
+    # DRIVEN AT THE CENTRE, so only the axisymmetric modes can speak: every mode
+    # with an angular node has a node exactly where the stick is tied. These are
+    # j(0,n)/j(0,1), and they are what the onset must depart to.
+    AXI = (1.0, 2.29542, 3.59848, 4.90334, 6.20875)
+    got = [h * (1.0 + cu.mode_lock_offset_for(h)) for h in range(1, 6)]
+    worst = max(abs(g - w) for g, w in zip(got, AXI))
+    check("...and its onset is the AXISYMMETRIC membrane, not the whole Bessel set",
+          worst < 0.01 and cu.mode_ratios is None,
+          "  (worst %.4f against j(0,n)/j(0,1); %s)"
+          % (worst, "steady tone harmonic" if cu.mode_ratios is None else "STEADY IS NOT HARMONIC"))
+    # ...but because it is driven it mode-locks, so the STEADY tone is harmonic,
+    # exactly the argument the organ pipes make.
+    check("...which the drive then pulls into a harmonic tone",
+          cu.mode_lock_spread > 0.0 and cu.mode_lock_time > 0.0
+          and all(cu.mode_ratio(h) == float(h) for h in range(1, 8)),
+          "  (locks in %.0f ms)" % (1000 * cu.mode_lock_time))
+    # The other hand: a finger on the head changes the tension, and a membrane's
+    # pitch goes as sqrt(T). GM gives two notes, so they glide opposite ways.
+    mu = _T.MuteCuicaProperties(420.0, 0.0, 1.0, 1.0)
+    check("...and the two notes glide in opposite directions",
+          mu.tension_bend < 0.0 < cu.tension_bend
+          and abs(cu.tension_bend) > 8.0 * _T.GrandPianoProperties.tension_bend,
+          "  (mute %+.0f cents, open %+.0f, against a piano's %+.0f)"
+          % (1200 * _math.log2(1 + mu.tension_bend), 1200 * _math.log2(1 + cu.tension_bend),
+             1200 * _math.log2(1 + _T.GrandPianoProperties(261.6, 0.0, 1.0, 1.0).tension_bend)))
+
     # ---- which way a struck thing bends -------------------------------------
     # A string and a drumhead are tuned BY tension, so striking them raises it
     # and they bloom SHARP. A shallow curved shell is not: its nonlinearity is

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The cymbal family, so it can be heard rather than only measured.
+"""The cymbal family and the cuica, so they can be heard rather than only measured.
 
     python3 examples/cymbals.py [outdir]
     python3 examples/cymbals.py --dynamics [outdir]
     python3 examples/cymbals.py --bend [outdir]
+    python3 examples/cymbals.py --cuica [outdir]
     python3 examples/cymbals.py --ride [outdir]
 
 examples/cymbal_check.py established that a cymbal's modes do not bend -- 203
@@ -19,6 +20,13 @@ cents -- and that, not a nonlinearity, is the "drift" a cymbal really has.
 --bend is the A/B for the change: the same strokes with the old tension_bend of
 0.007 against the measured 0.0. The claim is that nothing worth having is lost,
 and the way to check a claim like that is to listen to both.
+
+--cuica is the other instrument in here, and the one that was most wrong: it
+was a struck membrane, and a cuica is a FRICTION drum. Listen for the squeak at
+each onset -- that is the membrane's own inharmonic modes being pulled into a
+harmonic tone by the friction drive -- and for the glide, which is the player's
+other hand pressing the head. The two GM notes deliberately glide opposite
+ways, so an alternating figure sounds like the instrument talking.
 
 --ride is a played pattern rather than isolated strokes, because a ride is an
 instrument you keep time on and a single stroke says nothing about that.
@@ -204,12 +212,42 @@ def ride(outdir):
     return 0
 
 
+def cuica(outdir):
+    """A cuica figure: the two notes alternating, then each on its own."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ev = []
+    t = 0.0
+    # The talking figure. The mute rises into pitch and the open falls away from
+    # it, so alternating them is the gesture the instrument is known for.
+    for n in (78, 79, 78, 79, 78, 78, 79):
+        tick = int(t * TICKS_S)
+        ev.append((tick, mido.Message('note_on', note=n, velocity=106, channel=DRUM_CH)))
+        ev.append((tick + 200, mido.Message('note_off', note=n, velocity=0, channel=DRUM_CH)))
+        t += 0.42
+    t += 1.4
+    for n in (79, 79, 78, 78):
+        tick = int(t * TICKS_S)
+        ev.append((tick, mido.Message('note_on', note=n, velocity=118, channel=DRUM_CH)))
+        ev.append((tick + 320, mido.Message('note_off', note=n, velocity=0, channel=DRUM_CH)))
+        t += 1.6
+    mid = os.path.join(outdir, 'cuica.mid')
+    _track(ev, 4.0).save(mid)
+    out = mid[:-4] + '.wav'
+    if _render(mid, out, _env(), root) is None:
+        return 1
+    print("  %s" % out)
+    print("  a talking figure, then open twice and mute twice on their own.")
+    print("  the squeak at each onset is the membrane locking into a harmonic tone")
+    return 0
+
+
 def main(argv):
     mode = next((a[2:] for a in argv[1:] if a.startswith('--')), None)
     args = [a for a in argv[1:] if not a.startswith('--')]
     outdir = args[0] if args else os.path.expanduser('~/Downloads/cymbals')
     os.makedirs(outdir, exist_ok=True)
-    return {'dynamics': dynamics, 'bend': bend, 'ride': ride}.get(mode, family)(outdir)
+    return {'dynamics': dynamics, 'bend': bend, 'ride': ride,
+            'cuica': cuica}.get(mode, family)(outdir)
 
 
 if __name__ == '__main__':

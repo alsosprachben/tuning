@@ -6329,6 +6329,119 @@ class MetalPercussionProperties(PercussionProperties):
     harmonic_decay_dampening = 0.1
 
 
+class CuicaProperties(SynthProperties):
+    """GM 78/79. A FRICTION drum -- the only one in the set, and it was a
+    struck membrane, which is the wrong mechanism rather than the wrong size.
+
+    NOT under PercussionProperties, whose docstring says "struck onset... fast
+    decay". Nobody hits a cuica. A thin bamboo stick is tied to the INSIDE
+    CENTRE of the head and the player strokes it with a damp cloth; stick-slip
+    friction drives the stick longitudinally and the stick drives the head.
+    Three things follow, and the old voice had none of them.
+
+    IT IS BOWED, NOT STRUCK. "Rubbing the bamboo rod gives a primitive
+    saw-toothed excitation, similar to a bowed violin string, which is connected
+    to the center of a membrane which modifies and radiates the sound." So the
+    drive is a sawtooth and the voice SUSTAINS while it is rubbed -- decay_db
+    and harmonic_decay_db are zero, as they are on a bowed string and an organ
+    pipe, and tonal_dampening is 1.0 because a sawtooth's harmonics go as 1/n.
+    A struck membrane's fast decay was modelling the wrong thing entirely.
+
+    DRIVEN AT THE CENTRE, SO MOST OF THE DRUM CANNOT SPEAK. Every membrane mode
+    with an angular node -- (1,1), (2,1), (3,1) and the rest -- has a NODE at
+    the centre of the head, so a centre drive cannot excite any of them. What is
+    left is the axisymmetric series alone, j(0,n)/j(0,1):
+
+        1.000   2.295   3.598   4.903   6.209
+
+    MembraneDrumProperties hands out the full Bessel set, twelve modes including
+    1.593 and 2.136, and on a cuica none of those exist.
+
+    AND BECAUSE IT IS DRIVEN, IT MODE-LOCKS. The same argument the organ pipes
+    make: a nonlinearly driven oscillator pulls its passive resonances into one
+    exactly periodic waveform, so the STEADY tone is harmonic and the passive
+    inharmonicity is an ONSET transient. That is why this class has no
+    mode_ratios -- it would be asserting the passive modes sound forever -- and
+    instead carries the departure in mode_lock_spread. Fitted against those five
+    axisymmetric ratios the engine's existing law reproduces them to three
+    decimal places: 2.296, 3.597, 4.905, 6.208, rms 0.0004. A cuica's onset is
+    therefore a genuine squeak from a wildly inharmonic membrane settling into a
+    harmonic tone, which is most of what makes it recognisable.
+
+    THE PITCH IS THE OTHER HAND. "The pitch is increased or decreased by
+    changing the pressure on the head" -- a finger pressed near the centre
+    raises the tension, and a membrane's pitch goes as sqrt(T), which is
+    tension_bend exactly. On every other voice here that bend is an attack
+    transient nobody asked for; on a cuica it IS the instrument, which is why
+    it is an order of magnitude larger and why tension_bend_slope is zero: the
+    glide is a finger, not a register.
+
+    WHICH WAY IT GLIDES IS A CHOICE, not a measurement. GM gives two notes and
+    does not say what they do, so they are set to glide in OPPOSITE directions
+    -- the mute rises into pitch, the open falls away from it -- which is what
+    makes an alternating 78/79 figure sound like the instrument talking. Any
+    real player does both on either.
+
+    NO REFERENCE. Iowa has no cuica and no friction drum of any kind. The
+    mechanism above is measured physics; the numbers below are not.
+    """
+
+    # Supplied rather than inherited. The attributes below live on
+    # PluckedStringProperties, and inheriting them would mean claiming this is a
+    # struck string to borrow its defaults -- which is the error being fixed.
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    plucked_harmonic = 0.0
+    pluck_dampening = 1.0
+    strike_point = 0.0
+    strike_depth = 0.0
+    odd_only = False
+    harmonic_decay_dampening = 0.0
+    octave_gain = 0.0
+    octave_modulo = 0
+
+    # Driven, so it rings while it is driven and not a moment longer.
+    one_shot = False
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    attack_time = 0.018           # friction takes a moment to catch
+    max_harmonic = 24
+    tonal_dampening = 1.0         # a sawtooth drive: harmonics go as 1/n
+    octave_dampening = 0.0
+
+    # The passive membrane, as an ONSET departure from harmonic. Fitted to
+    # j(0,n)/j(0,1) = 1, 2.295, 3.598, 4.903, 6.209 -- rms 0.0004.
+    mode_lock_spread = 0.2748
+    mode_lock_knee = 1.8522
+    mode_lock_time = 0.060        # slower than a pipe's 0.035: a weaker drive
+
+    # The damp cloth on the stick. Broadband, and it lasts as long as the stroke.
+    chiff_volume = 0.55
+    chiff_cycle = 0.9
+    chiff_min_valve_time = 0.004
+    chiff_max_valve_time = 0.03
+
+    # The other hand. Open: the finger lifts, the head slackens, the pitch falls
+    # away from the note. ~155 cents at full stroke.
+    tension_bend = 0.095
+    tension_bend_max = 0.30
+    tension_bend_slope = 0.0      # a finger, not a register
+    tension_settle_time = 0.13
+    tension_settle_cutoff = 0.9
+
+    initial_gain = 1.0 / 9.0
+
+
+class MuteCuicaProperties(CuicaProperties):
+    """GM 78. The same drum with the finger pressed: tighter, higher, shorter,
+    and gliding the other way -- UP into the note as the pressure comes on."""
+
+    tension_bend = -0.085         # starts flat and rises to pitch
+    tension_settle_time = 0.10
+    chiff_volume = 0.38           # the finger damps the head, and the noise with it
+    tonal_dampening = 1.25        # and takes the top off
+
+
 class CowbellProperties(MetalPercussionProperties):
     """GM 56. A folded steel plate, not a bell.
 

@@ -39,8 +39,8 @@ splits almost exactly along that line.
 
 | rating | notes | share |
 |---|---|---|
-| 1 general class | 12 | 24% |
-| 2 specific, theory | 15 | 29% |
+| 1 general class | 10 | 20% |
+| 2 specific, theory | 17 | 33% |
 | 3 specific, theory + ear | 5 | 10% |
 | 4 specific, reference audio | 19 | 37% |
 
@@ -89,8 +89,8 @@ splits almost exactly along that line.
 | 75 | Claves | `Claves` | **4** | Iowa claves, three pairs |
 | 76 | Hi Wood Block | `WoodBlockHi` | **4** | Iowa woodblocks, four sizes |
 | 77 | Low Wood Block | `WoodBlockLo` | **4** | as 76, the low block |
-| 78 | Mute Cuica | `MembraneDrum` | **1** | MembraneDrum. CATEGORY ERROR: a cuica is a FRICTION drum, a stick rubbed against the head |
-| 79 | Open Cuica | `MembraneDrum` | **1** | as 78. CATEGORY ERROR |
+| 78 | Mute Cuica | `MuteCuica` | **2** | its own FRICTION voice: sawtooth drive, axisymmetric modes only, mode-locked, glides up into pitch |
+| 79 | Open Cuica | `Cuica` | **2** | as 78, lower and gliding the other way. No reference -- Iowa has no friction drum |
 | 80 | Mute Triangle | `Triangle` | **4** | Iowa triangles, 6" and 8" |
 | 81 | Open Triangle | `Triangle` | **4** | as 80, undamped |
 | 84 | Belltree | `Crotale` | **4** | the measured crotales, cascaded -- 22 of them over 30 units |

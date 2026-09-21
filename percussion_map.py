@@ -13,6 +13,8 @@ or None if the note is unmapped (silent).
 
 from tonelib import (
     MembraneDrumProperties,
+    CuicaProperties,
+    MuteCuicaProperties,
     TomTomProperties,
     FloorTomProperties,
     HighTomProperties,
@@ -146,8 +148,15 @@ PERCUSSION = {
     # LOW the large one. They were 760 and 620, which is the large block twice.
     76: ("Hi Wood Block",      WoodBlockHiProperties, 687.7),
     77: ("Low Wood Block",     WoodBlockLoProperties, 777.9),
-    78: ("Mute Cuica",         M, 340.0),
-    79: ("Open Cuica",         M, 300.0),
+    # A CUICA IS NOT STRUCK, and this was M -- the generic struck membrane it
+    # shares with the bongos. It is a FRICTION drum: a stick tied to the inside
+    # centre of the head, stroked with a damp cloth, driving the membrane with a
+    # sawtooth. Driven at the centre only the axisymmetric modes can speak, and
+    # the drive mode-locks them into a harmonic tone. See CuicaProperties.
+    # The mute is the finger pressed on the head: tighter, higher, and gliding
+    # UP into the note where the open one falls away from it.
+    78: ("Mute Cuica",         MuteCuicaProperties, 420.0),
+    79: ("Open Cuica",         CuicaProperties, 260.0),
     # MEASURED: the Iowa 6" triangle sounds 1927 Hz and the 8" 1497 -- a
     # triangle is a bent BAR and rings far higher than 1000. Its upper modes
     # come out at 2.0, 3.2, 4.2 and 5.3 x f1, dense and inharmonic as a bent bar
