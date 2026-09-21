@@ -33,6 +33,7 @@ and comparing them by a single broadband number has hidden the opposite.
 | `hammond.py` | A Hammond through a driven Leslie, rendered at four amp drives with nothing else changed. The valve stage is the only variable, so the sweep from clean to overdrive is what is being listened to. |
 | `tubeamp_check.py` | What the valve stage actually does, measured rather than asserted: transfer curve, harmonic orders, energy conservation, intermodulation share, and cost. Needs no score. |
 | `rhodes.py` | The electric pianos, a Rhodes (GM 4) and a Wurlitzer (GM 5). `--pair` renders the same passage on both, which is the point of having two: one mechanism, and the only real difference is the pickup's curve -- a bell curve whose harmonics fall off a cliff against a 1/d pole whose harmonics fall off geometrically. `--voicing` sweeps the tine's rest position in the magnet's field, which is the falsifiable one: centred, the fundamental disappears and the pickup answers an octave up. `--velocity` plays one phrase at four velocities, because on this voice velocity changes the sound more than the volume. `--control` renders with the pickup's curve bypassed -- a pure sine -- which is what everything else here has to be judged against. `--tremolo` puts the mod wheel up, which on this voice is a stereo pan between the suitcase's two amplifiers and so vanishes in mono. |
+| `cymbals.py` | The cymbal family rendered so it can be heard: every plate in the GM set, `--dynamics` for one crash from pp to ff (what moves is brightness, not pitch), `--ride` for a played pattern rather than isolated strokes, and `--bend` for the A/B between the old asserted pitch bloom and the measured zero. |
 | `cymbal_check.py` | Do a cymbal's modes bend when it is struck harder? Tracks individual isolated partials by phase derivative across the Iowa cymbal family -- 203 of them -- and finds the drift under a cent, where the class once asserted sixteen. Checks the probe against planted bends first, and shows what DOES drift: the centroid, by more than an octave, which is differential decay. |
 | `rhodes_check.py` | The voice's own amplitude and decay laws printed beside the Hamburg measurements: the tonebar fit against ISMA 2014 Table 1, the octave test, the k*D decay law, and what a note costs. No score and no render. |
 | `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31); `--fret` plays a phrase with the position shifts left in, which is what fret noise (GM 120) is for; `--calibrate` measures the peak a hard strum (and a dug-in low E) makes, so `amp_reference` means something for the guitar and the bass. The passage plays soft and then dug-in, because on this voice that is audible. |
@@ -51,6 +52,10 @@ python3 examples/hammond.py /tmp
 
 python3 examples/guitar_check.py
 python3 examples/cymbal_check.py
+python3 examples/cymbals.py /tmp
+python3 examples/cymbals.py --dynamics /tmp
+python3 examples/cymbals.py --ride /tmp
+python3 examples/cymbals.py --bend /tmp
 python3 examples/rhodes_check.py
 python3 examples/rhodes.py /tmp
 python3 examples/rhodes.py --voicing /tmp
