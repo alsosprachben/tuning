@@ -173,12 +173,98 @@ RATED = {
 for p in range(88, 104):
     RATED[p] = (1, "one BowedStringProperties serves all sixteen pads and FX")
 
+# ---- channel 10, the percussion note map --------------------------------
+# Iowa's percussion pages carry cymbals, crotales and hand percussion -- and NO
+# DRUM KIT AT ALL: no snare, no bass drum, no toms, which is 9630 of the
+# collection's 12781 percussion notes. So this table splits almost exactly along
+# that line, and the classes that have no reference say so themselves.
+PERC_RATED = {
+ 35:(3,"no reference -- Iowa has no drum kit. Analytic membrane, pitch tuned by ear"),
+ 36:(3,"as 35, tuned higher"),
+ 37:(2,"its own class, theory"),
+ 38:(3,"NO REFERENCE, and it says so. Analytic Bessel modes plus the snare wires; ear"),
+ 39:(2,"its own class, theory"),
+ 40:(1,"the acoustic snare at a different pitch; an electric snare is a different instrument"),
+ 41:(2,"floor tom, analytic membrane"),
+ 42:(4,"Iowa hi-hat, five takes"),
+ 43:(2,"as 41, higher"),
+ 44:(4,"Iowa hi-hat, foot-close take"),
+ 45:(2,"tom, analytic membrane"),
+ 46:(4,"Iowa hi-hat, open"),
+ 47:(2,"as 45, higher"),
+ 48:(2,"high tom, analytic membrane"),
+ 49:(4,"Iowa 17\" suspended crash, stick on the bow"),
+ 50:(2,"as 48, higher"),
+ 51:(4,"Iowa 21\" ride, bow"),
+ 52:(4,"Iowa chinese, 16/19/20\""),
+ 53:(4,"Iowa ride bell -- the ping is mode 8.1, not the fundamental"),
+ 54:(2,"generic noise body, but its own rattle: 14 jingles. Iowa HAS tambourines; they were not taken"),
+ 55:(4,"Iowa splash"),
+ 56:(2,"its own class, theory"),
+ 57:(4,"Iowa 20\" and 13\" suspended crash"),
+ 58:(2,"generic noise body with its own rattle"),
+ 59:(4,"GM wants two rides and Iowa has one; this is that measurement on a larger plate"),
+ 60:(1,"one MembraneDrum serves eleven notes, 60-66 and 78-79 and 86-87, differing only in pitch"),
+ 61:(1,"as 60"), 62:(1,"as 60"), 63:(1,"as 60"), 64:(1,"as 60"),
+ 65:(1,"as 60"), 66:(1,"as 60"),
+ 67:(2,"its own class, theory"),
+ 68:(2,"as 67, lower"),
+ 69:(2,"its own class -- a shaken rattle, theory"),
+ 70:(2,"its own class -- a shaken rattle, theory"),
+ 71:(3,"NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven"),
+ 72:(3,"as 71, longer"),
+ 73:(4,"Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window"),
+ 74:(4,"as 73, the long scrape"),
+ 75:(4,"Iowa claves, three pairs"),
+ 76:(4,"Iowa woodblocks, four sizes"),
+ 77:(4,"as 76, the low block"),
+ 78:(1,"MembraneDrum. CATEGORY ERROR: a cuica is a FRICTION drum, a stick rubbed against the head"),
+ 79:(1,"as 78. CATEGORY ERROR"),
+ 80:(4,"Iowa triangles, 6\" and 8\""),
+ 81:(4,"as 80, undamped"),
+ 84:(4,"the measured crotales, cascaded -- 22 of them over 30 units"),
+ 85:(4,"Iowa castanets"),
+ 86:(1,"MembraneDrum again; a surdo is a different drum from a bongo"),
+ 87:(1,"as 86"),
+}
+
 FAMILY = [(0,"Piano"),(8,"Chromatic Percussion"),(16,"Organ"),(24,"Guitar"),(32,"Bass"),
           (40,"Strings"),(48,"Ensemble"),(56,"Brass"),(64,"Reed"),(72,"Pipe"),
           (80,"Synth Lead"),(88,"Synth Pad"),(96,"Synth Effects"),(104,"Ethnic"),
           (112,"Percussive"),(120,"Sound Effects")]
 LEVEL = {0:"nothing", 1:"general class", 2:"specific, theory",
          3:"specific, theory + ear", 4:"specific, reference audio"}
+
+
+def percussion_table():
+    """Channel 10. A separate specification from the 128 programs, and the place
+    where the reference corpus divides most sharply."""
+    import percussion_map as PM
+    L = ["## Channel 10: the percussion note map\n"]
+    ph = {k: 0 for k in range(5)}
+    for n in PERC_RATED:
+        ph[PERC_RATED[n][0]] += 1
+    tot = len(PERC_RATED)
+    L.append("%d notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and"
+             % tot)
+    L.append("hand percussion and **no drum kit at all** -- no snare, no bass drum, no")
+    L.append("toms, which is 9630 of that collection's 12781 percussion notes. This table")
+    L.append("splits almost exactly along that line.\n")
+    L.append("| rating | notes | share |")
+    L.append("|---|---|---|")
+    for k in range(5):
+        if ph[k]:
+            L.append("| %d %s | %d | %d%% |" % (k, LEVEL[k], ph[k], round(100 * ph[k] / tot)))
+    L.append("")
+    L.append("| # | note | class | | notes |")
+    L.append("|---|---|---|---|---|")
+    for n in sorted(PERC_RATED):
+        name, cls = PM.PERCUSSION[n][0], PM.PERCUSSION[n][1].__name__
+        r, note = PERC_RATED[n]
+        L.append("| %d | %s | `%s` | **%d** | %s |"
+                 % (n, name, cls.replace("Properties", ""), r, note))
+    L.append("")
+    return "\n".join(L)
 
 
 def main(argv):
@@ -213,6 +299,7 @@ def main(argv):
     L.append("**%d patches are played by a voice of the wrong physical kind** "
              "(marked CATEGORY ERROR below): %s.\n"
              % (len(cat), ", ".join("%d %s" % (p, GM[p]) for p in cat)))
+    L.append(percussion_table())
     for start, name in FAMILY:
         L.append("## %d-%d %s\n" % (start, start + 7, name))
         L.append("| # | patch | class | | notes |")

@@ -30,6 +30,74 @@ voices sit at 2 and say so.
 
 **6 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 7 Clavinet, 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
 
+## Channel 10: the percussion note map
+
+51 notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and
+hand percussion and **no drum kit at all** -- no snare, no bass drum, no
+toms, which is 9630 of that collection's 12781 percussion notes. This table
+splits almost exactly along that line.
+
+| rating | notes | share |
+|---|---|---|
+| 1 general class | 12 | 24% |
+| 2 specific, theory | 15 | 29% |
+| 3 specific, theory + ear | 5 | 10% |
+| 4 specific, reference audio | 19 | 37% |
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | Acoustic Bass Drum | `KickDrum` | **3** | no reference -- Iowa has no drum kit. Analytic membrane, pitch tuned by ear |
+| 36 | Bass Drum 1 | `KickDrum` | **3** | as 35, tuned higher |
+| 37 | Side Stick | `SideStick` | **2** | its own class, theory |
+| 38 | Acoustic Snare | `SnareDrum` | **3** | NO REFERENCE, and it says so. Analytic Bessel modes plus the snare wires; ear |
+| 39 | Hand Clap | `HandClap` | **2** | its own class, theory |
+| 40 | Electric Snare | `SnareDrum` | **1** | the acoustic snare at a different pitch; an electric snare is a different instrument |
+| 41 | Low Floor Tom | `FloorTom` | **2** | floor tom, analytic membrane |
+| 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | Iowa hi-hat, five takes |
+| 43 | High Floor Tom | `FloorTom` | **2** | as 41, higher |
+| 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Iowa hi-hat, foot-close take |
+| 45 | Low Tom | `TomTom` | **2** | tom, analytic membrane |
+| 46 | Open Hi-Hat | `OpenHiHat` | **4** | Iowa hi-hat, open |
+| 47 | Low-Mid Tom | `TomTom` | **2** | as 45, higher |
+| 48 | Hi-Mid Tom | `HighTom` | **2** | high tom, analytic membrane |
+| 49 | Crash Cymbal 1 | `CrashCymbal1` | **4** | Iowa 17" suspended crash, stick on the bow |
+| 50 | High Tom | `HighTom` | **2** | as 48, higher |
+| 51 | Ride Cymbal 1 | `RideCymbal` | **4** | Iowa 21" ride, bow |
+| 52 | Chinese Cymbal | `ChineseCymbal` | **4** | Iowa chinese, 16/19/20" |
+| 53 | Ride Bell | `RideBell` | **4** | Iowa ride bell -- the ping is mode 8.1, not the fundamental |
+| 54 | Tambourine | `NoiseDrum` | **2** | generic noise body, but its own rattle: 14 jingles. Iowa HAS tambourines; they were not taken |
+| 55 | Splash Cymbal | `SplashCymbal` | **4** | Iowa splash |
+| 56 | Cowbell | `Cowbell` | **2** | its own class, theory |
+| 57 | Crash Cymbal 2 | `CrashCymbal2` | **4** | Iowa 20" and 13" suspended crash |
+| 58 | Vibraslap | `NoiseDrum` | **2** | generic noise body with its own rattle |
+| 59 | Ride Cymbal 2 | `CrashRide` | **4** | GM wants two rides and Iowa has one; this is that measurement on a larger plate |
+| 60 | Hi Bongo | `MembraneDrum` | **1** | one MembraneDrum serves eleven notes, 60-66 and 78-79 and 86-87, differing only in pitch |
+| 61 | Low Bongo | `MembraneDrum` | **1** | as 60 |
+| 62 | Mute Hi Conga | `MembraneDrum` | **1** | as 60 |
+| 63 | Open Hi Conga | `MembraneDrum` | **1** | as 60 |
+| 64 | Low Conga | `MembraneDrum` | **1** | as 60 |
+| 65 | High Timbale | `MembraneDrum` | **1** | as 60 |
+| 66 | Low Timbale | `MembraneDrum` | **1** | as 60 |
+| 67 | High Agogo | `Agogo` | **2** | its own class, theory |
+| 68 | Low Agogo | `Agogo` | **2** | as 67, lower |
+| 69 | Cabasa | `Cabasa` | **2** | its own class -- a shaken rattle, theory |
+| 70 | Maracas | `Rattle` | **2** | its own class -- a shaken rattle, theory |
+| 71 | Short Whistle | `Whistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
+| 72 | Long Whistle | `Whistle` | **3** | as 71, longer |
+| 73 | Short Guiro | `Guiro` | **4** | Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window |
+| 74 | Long Guiro | `Guiro` | **4** | as 73, the long scrape |
+| 75 | Claves | `Claves` | **4** | Iowa claves, three pairs |
+| 76 | Hi Wood Block | `WoodBlockHi` | **4** | Iowa woodblocks, four sizes |
+| 77 | Low Wood Block | `WoodBlockLo` | **4** | as 76, the low block |
+| 78 | Mute Cuica | `MembraneDrum` | **1** | MembraneDrum. CATEGORY ERROR: a cuica is a FRICTION drum, a stick rubbed against the head |
+| 79 | Open Cuica | `MembraneDrum` | **1** | as 78. CATEGORY ERROR |
+| 80 | Mute Triangle | `Triangle` | **4** | Iowa triangles, 6" and 8" |
+| 81 | Open Triangle | `Triangle` | **4** | as 80, undamped |
+| 84 | Belltree | `Crotale` | **4** | the measured crotales, cascaded -- 22 of them over 30 units |
+| 85 | Castanets | `Castanets` | **4** | Iowa castanets |
+| 86 | Mute Surdo | `MembraneDrum` | **1** | MembraneDrum again; a surdo is a different drum from a bongo |
+| 87 | Open Surdo | `MembraneDrum` | **1** | as 86 |
+
 ## 0-7 Piano
 
 | # | patch | class | | notes |
