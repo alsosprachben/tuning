@@ -2277,9 +2277,18 @@ def selftest():
     # a mode-lock term, so the mod wheel reached the FUNDAMENTAL ONLY: measured,
     # h1 swung 33.4 cents while h2, h4 and h8 swung 0.3, 0.1 and 0.1.
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
-    tb = lv.parts[0].bank.get(60, 100)["tbav"]
+    tpl = lv.parts[0].bank.get(60, 100)
+    tb, nf = tpl["tbav"], tpl["nf"]
+    # Count by FREQUENCY, not by row. A mode occupies more than one row because
+    # the room's reflections ride along with it -- a trumpet's 32 modes are 64
+    # rows -- and the fundamental's rows carry zero by construction, since
+    # mode_lock_offset_for() is an offset FROM the fundamental. Counting rows
+    # asserted "at most one zero", which was true only before the reflections
+    # were in the template.
+    up = nf > nf.min() * 1.5
     check("a trumpet's partials do carry a mode-lock term",
-          int((tb != 0).sum()) >= len(tb) - 1, "  (%d of %d)" % (int((tb != 0).sum()), len(tb)))
+          int((tb[up] != 0).sum()) == int(up.sum()),
+          "  (%d of %d above the fundamental)" % (int((tb[up] != 0).sum()), int(up.sum())))
     lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
     buf = []
     for i in range(int(2.2 * 48000) // 128):
