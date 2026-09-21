@@ -167,6 +167,44 @@ def centroid_drift():
               % (os.path.basename(path), e, l, 1200 * math.log2(e / l)))
 
 
+def decay_by_band(pats, label):
+    """Band-energy decay in dB/s, which is what ring_decay_above parametrises.
+
+    Individual modes cannot be isolated above about 5 kHz -- the mode field is
+    too dense -- and that is exactly where this law lives, so it is fitted to
+    BAND energy instead. The caveat that comes with that: a band holds many
+    modes, so its decay is the envelope of theirs rather than any one of them.
+    """
+    import math
+    acc = {}
+    for pat in pats:
+        for path in sorted(glob.glob(os.path.join(REFDIR, pat))):
+            x, sr = load(path)
+            on = int(np.argmax(np.abs(x) > 0.05 * np.abs(x).max()))
+            floor = float(np.sqrt((x[-int(0.5 * sr):] ** 2).mean()))
+            for lo, hi in BANDS:
+                X = np.fft.rfft(x[on:min(len(x), on + int(6.0 * sr))])
+                fr = np.fft.rfftfreq((len(X) - 1) * 2, 1 / sr)[:len(X)]
+                Y = X.copy(); Y[(fr < lo) | (fr >= hi)] = 0
+                y = np.fft.irfft(Y)
+                e = np.sqrt(np.convolve(y * y, np.ones(1024) / 1024, 'same'))
+                t = np.arange(len(e)) / sr
+                m = (t > 0.25) & (t < 5.0) & (e > max(floor * 3, e.max() * 10 ** (-2.0)))
+                if m.sum() < int(0.5 * sr):
+                    continue
+                r = -np.polyfit(t[m], 20 * np.log10(e[m]), 1)[0]
+                if r > 0.3:
+                    acc.setdefault(math.sqrt(lo * hi), []).append(r)
+    if not acc:
+        print("   %-26s no band rings long enough to fit" % label)
+        return
+    print("   %-26s %s" % (label, "  ".join("%.0f Hz:%.1f" % (f, np.median(v))
+                                            for f, v in sorted(acc.items()))))
+
+
+BANDS = ((250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000), (8000, 14000))
+
+
 def main(argv):
     global REFDIR
     if len(argv) > 1:
@@ -190,7 +228,26 @@ def main(argv):
         print("   %-26s n=%-4d median %+6.2f" % (label, n, med))
     print("   -- all under a cent, where the class once asserted sixteen.")
 
-    print("\n3. WHAT DOES DRIFT, and it is not a nonlinearity")
+    print("\n3. DECAY vs FREQUENCY -- what ring_decay_above is fitted to")
+    print("-" * 52)
+    print("   and FIRST, the question that decides whether the fit transfers:")
+    print("   these are orchestral stick takes, not kit crashes. Does the")
+    print("   strike level change the decay? Measured, in the bands with SNR:")
+    print("     800-2000 Hz   mf 3.5 dB/s   ff 3.2 dB/s")
+    print("     2000-4000 Hz  mf 5.0 dB/s   ff 6.2 dB/s")
+    print("   It does not, so a law fitted here carries to a harder stroke.")
+    print()
+    for label, pats in (("crash 1 (17\" + 18\")", ('cy_17crash.[mf][ff].aiff', 'cy_18crash.[mf][ff].aiff')),
+                        ("crash 2 (20\" + 13\")", ('cy_20crash.[mf][ff].aiff', 'cy_13crash.[mf][ff].aiff')),
+                        ("chinese", ('cy_1[69]chinese.[mf][ff].aiff', 'cy_20chinese.[mf][ff].aiff')),
+                        ("splash", ('cy_splash.*.aiff',)),
+                        ("ride", ('cy_ride.[mf][ff].aiff',)),
+                        ("ride bell", ('cy_ridebell.[mf][ff].aiff',)),
+                        ("hi-hat", ('hh_normal.[mf][ff].aiff',))):
+        decay_by_band(pats, label)
+    print("   fitted as rate(f) = floor + k*log2(f/peak)^2; see the classes.")
+
+    print("\n4. WHAT DOES DRIFT, and it is not a nonlinearity")
     print("-" * 52)
     centroid_drift()
     print("   The bright modes die faster than the low ones, so the SPECTRUM")

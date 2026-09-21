@@ -2773,6 +2773,84 @@ predicting the right one, and the theory only did the first.**
 Removing it costs nothing that was doing work: the model's brightening from
 velocity 70 to 127 goes from +98 cents to +84.
 
+### ...and the decay that was standing in for it was an order out
+
+Removing the bend exposed the real problem. Rendered and measured against the
+reference with identical windows and band, the model's spectrum fell **275
+cents** through the ring where a real 17" crash falls **1614 to 2126**. A
+cymbal's actual "drift" IS its differential decay, and the parameter carrying
+it was badly wrong.
+
+**THE REFERENCES ARE WEAK HITS, and Ben asked whether that was accounted for.**
+It is the right question -- `sources.md` already records that "the suspended
+stick takes are a percussionist CONTROLLING a cymbal; a crash in a drum kit is
+the clash gesture", which is why the noise trajectory was taken from the clash
+takes instead. For a *decay* fit it is testable rather than assumed, so it was
+tested first:
+
+| band | mf | ff |
+|---|---|---|
+| 800-2000 Hz | 3.5 dB/s | 3.2 dB/s |
+| 2000-4000 Hz | 5.0 dB/s | 6.2 dB/s |
+
+Decay is level-independent across the dynamics that have SNR, which is what
+linear damping predicts and what "a hard crash is the same sound louder"
+already said from the spectral side. **So a decay law fitted to stick takes
+carries to a harder stroke.** The bend conclusion above is the one genuinely
+bounded by the reference dynamics, and it says so.
+
+**FITTED TO BAND ENERGY, not to modes.** Individual modes cannot be isolated
+above about 5 kHz -- the field is too dense -- and that is exactly where
+`ring_decay_above` lives. So the law was fitted to octave-band energy decay,
+with the caveat that a band's decay is the envelope of its modes' rather than
+any one of them. Per instrument, `rate(f) = floor + k*log2(f/peak)^2`:
+
+| voice | peak Hz | floor | k | rms | was |
+|---|---|---|---|---|---|
+| Crash 1 | 815 | 6.33 | 1.39 | 0.49 | 2000 / 20 / 8 |
+| Crash 2 | 642 | 7.02 | 1.28 | 1.48 | 2673 / 44.3 / 151.4 |
+| Chinese | 80 | 0.50 | 0.55 | 0.68 | 1500 / 14.4 / 24 |
+| Splash | 339 | 14.25 | 1.29 | 0.00 | 700 / 14.4 / 3 |
+| Ride | 627 | 2.78 | 1.97 | 1.31 | 1500 / 14.4 / 12 |
+| Ride bell | 420 | 6.02 | 1.53 | 3.01 | 1500 / 14.4 / 15 |
+
+The shipped law was three to fourteen times too fast across the whole measured
+range, and put its slowest decay at 2 kHz where the measurement says the decay
+is still falling toward the bass. **No value of `ring_decay_above` alone could
+have fixed that** -- the minimum was in the wrong place -- so `ring_peak_hz` and
+`ring_decay_floor` are fitted with it, and `ring_decay_below` is set equal to
+`above` because the fit used the symmetric parabola on points from both sides.
+
+Two of the six are weak and say so in the class: **Splash** has only three
+usable bands, so its three parameters are exactly determined and unvalidated;
+**Ride bell** fits at 3.0 dB/s rms because its band curve is not monotonic. The
+hi-hats are NOT fitted -- no band of a hi-hat rings long enough to fit a slope
+to -- and keep what they had.
+
+**What it bought, and what it did not.** Crash 1's fall goes from +275 cents to
+**+892**, against a target of +1614 to +2126: about 60% of the gap, measured the
+same way. The rest is NOT the broadband wash -- removing that entirely moves the
+fall from 892 to 789, the wrong way -- so it lies in the mode AMPLITUDES rather
+than their decay, which is a different fit and is not attempted here.
+
+**Checked against the render, not only the maths.** Measuring the rendered crash
+the same way as the reference, band by band:
+
+| band | the law says | the render does | the reference does |
+|---|---|---|---|
+| 354 Hz | 8.3 | 6.1 | 8.7 |
+| 707 Hz | 6.4 | 4.6 | 7.0 |
+| 1414 Hz | 7.2 | 5.7 | 7.9 |
+| 2828 Hz | 10.8 | 7.2 | 11.5 |
+| 5657 Hz | 17.2 | 11.3 | 17.0 |
+
+The shape carries (the render spans 1.85x across the bands against the law's
+2.07x) but every band reads about 0.7x the rate it was given. That is the ROOM:
+these renders go through `chamber`, the smallest preset there is, and its tail
+slows every measured decay. The references carry less of one. **The law is left
+alone for it** -- fitting the voice so that one particular room comes out right
+would bake that room into the instrument, and the room is chosen per render.
+
 One thing checked and NOT reported, because it did not survive contact with the
 rest of the set: on the 17" crash the attack centroid is 266 cents *darker* at
 ff than at mf, which looked like a real finding about how a cymbal responds to
