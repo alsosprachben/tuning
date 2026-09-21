@@ -3323,6 +3323,43 @@ def selftest():
           drift < 1e-9, "  (base amplitude drifted %.1e over four moves)" % drift)
     lv.renderer.close()
 
+    # ---- which way a struck thing bends -------------------------------------
+    # A string and a drumhead are tuned BY tension, so striking them raises it
+    # and they bloom SHARP. A shallow curved shell is not: its nonlinearity is
+    # dominated by a quadratic curvature term that enters the amplitude-frequency
+    # relation squared and negative, so it softens. The pan is curvature-
+    # dominated by construction -- that quadratic term is what makes its 1:2:3
+    # tuning work -- so it must bend the other way from the piano.
+    def _bend(cls, f0=261.63, vel=127):
+        return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0).tension_bend
+    check("a shallow curved shell bends FLAT where a string bends sharp",
+          _bend(_T.SteelPanProperties) < 0.0 < _bend(_T.GrandPianoProperties),
+          "  (pan %+.5f, piano %+.5f, timpani %+.5f)"
+          % (_bend(_T.SteelPanProperties), _bend(_T.GrandPianoProperties),
+             _bend(_T.TimpaniProperties)))
+    # The register scaling used to be gated on `> 0.0`, which silently skipped
+    # every softening voice and left it unscaled.
+    lo, hi = _bend(_T.SteelPanProperties, 130.8), _bend(_T.SteelPanProperties, 1046.5)
+    check("...and the register scaling carries the sign through",
+          lo < hi < 0.0 and abs(lo) > abs(hi),
+          "  (%+.5f at C3, %+.5f at C6)" % (lo, hi))
+    check("...capped in magnitude, not clipped to zero",
+          abs(_bend(_T.SteelPanProperties, 20.0)) <= _T.SteelPanProperties.tension_bend_max
+          and _bend(_T.SteelPanProperties, 20.0) < 0.0,
+          "  (%+.5f two octaves below the compass)" % _bend(_T.SteelPanProperties, 20.0))
+    # Struck BARS have no tension and no curvature, so they get neither.
+    check("a straight bar gets no bend at all, having nothing to bend",
+          all(getattr(c, "tension_bend", 0.0) == 0.0 for c in
+              (_T.GlockenspielProperties, _T.VibraphoneProperties, _T.MarimbaProperties,
+               _T.XylophoneProperties, _T.CelestaProperties, _T.TubularBellProperties,
+               _T.RhodesProperties)))
+    # And it must reach the partial table, negative, scaled by velocity.
+    lv = Live(program=114, rate=48000, frames=128, verbose=False); lv.warm()
+    hard = float(np.asarray(lv.parts[0].bank.get(60, 127)["tbav"])[0])
+    lv.renderer.close()
+    check("the pan's bend reaches the partials, still negative",
+          hard < 0.0, "  (tbav %+.5f)" % hard)
+
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0
 

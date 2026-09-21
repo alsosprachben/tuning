@@ -2036,8 +2036,13 @@ class SynthProperties:
         # for a given strike, so they bloom much sharper than the treble. Grows
         # toward low f0 (tension_bend is the value at tension_bend_ref_hz); capped
         # so an extreme-bass fff can't bend absurdly.
-        if self.tension_bend > 0.0:
-            self.tension_bend = min(self.tension_bend_max, self.tension_bend
+        if self.tension_bend:
+            # SIGNED. A string or a drumhead goes SHARP when it is struck, because
+            # striking it raises the tension it is tuned by. A shallow curved
+            # shell goes FLAT -- see SteelPanProperties -- so the cap and the
+            # register scaling work on the magnitude and the sign rides through.
+            _tbs = 1.0 if self.tension_bend > 0.0 else -1.0
+            self.tension_bend = _tbs * min(self.tension_bend_max, abs(self.tension_bend)
                 * (self.tension_bend_ref_hz / float(frequency)) ** self.tension_bend_slope)
 
         if self.inharmonicity_dynamic:
@@ -6326,15 +6331,50 @@ class SteelPanProperties(MetalPercussionProperties):
         intervals and not modes, because they are the neighbouring note areas
         answering through the shared steel. A quarter of what you hear is
         notes nobody hit, and this engine has no cross-note coupling at all.
-      - THE BLOOM. Thin steel struck hard is nonlinear and the pitch moves as
-        the note settles. tension_bend could express it; how much, and in
-        which direction, is not something to assert without hearing one.
+      - THE BLOOM'S SIZE. Thin steel struck hard is nonlinear and the pitch
+        moves as the note settles. The DIRECTION is now argued below and is
+        not a guess; the magnitude is, because the recording cannot resolve it
+        (see tension_bend).
 
     RANGE. A tenor pan runs roughly C4-E6 and the lower pans are separate
     instruments with fewer tuned modes per note. Played far outside that this
     is extrapolation, like every other voice here whose reference covers one
     octave.
     """
+    # A CURVED PLATE BENDS FLAT, WHERE A STRING BENDS SHARP. A string and a
+    # drumhead are tuned BY tension, so striking them raises it and the pitch
+    # blooms sharp. A pan note is neither: it is a shallow curved shell, and a
+    # shallow shell's nonlinearity is dominated by a QUADRATIC term that comes
+    # from its curvature rather than the cubic stretching term a flat plate has.
+    # In the amplitude-frequency relation the quadratic coefficient enters
+    # SQUARED with a minus sign,
+    #
+    #     w(a) = w0 * [1 + (3*a3/(8*w0^2) - 5*a2^2/(12*w0^4)) * a^2]
+    #
+    # so curvature ALWAYS softens, whatever its sign, while stretching hardens.
+    # The pan is curvature-dominated -- which is not an assumption here, it is
+    # the reason this class exists: the maker tunes 1:2:3 precisely BECAUSE the
+    # quadratic term pumps energy from the fundamental into 2f and 3f. A voice
+    # cannot claim that tuning and then claim a hardening nonlinearity.
+    #
+    # SO THE SIGN IS ARGUED AND THE MAGNITUDE IS ASSERTED, and the difference
+    # matters. I tried to measure it off Freesound 742254 and could not: a pan's
+    # fundamental is beaten on continuously by the neighbouring note areas this
+    # very class models as sympathetic responders -- measured, D4 and F#4 ring
+    # 36-42 Hz from a struck E4 and sometimes only 2.3 dB down -- so its
+    # instantaneous frequency wanders several cents at all times. Averaged over
+    # 24 isolated strikes the attack sat at -1.4 cents with a bootstrap 95%
+    # interval of -6.4 to +4.0, and splitting by strike force gave +3.0, +2.2
+    # and -9.2 cents with a correlation of -0.30. That is not a small effect
+    # measured imprecisely; it is no measurement at all.
+    #
+    # -0.004 is therefore deliberately conservative: about 7 cents at full
+    # velocity, comfortably inside what the recording could not have seen, and
+    # in the direction the shell says. Half of what the 17" crash carries.
+    tension_bend = -0.004
+    tension_settle_time = 0.06
+    tension_settle_cutoff = 0.5
+
     # 1 : 2 : 3 is the maker's tuning, and MEASURED at 1.9978 and 2.9972 --
     # two cents flat of an exact octave and twelfth, across 26 strikes. The
     # rest are placeholders; see above.

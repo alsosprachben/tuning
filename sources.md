@@ -2590,3 +2590,99 @@ has nothing that could be given a pitch vibrato anyway.
   steelpan was. Freesound 536266 is a CC0 chromatic Rhodes but carries a
   deliberate stereo delay and heavy effects, so it is a poor measurement
   target; a dry single note would have to be found.
+
+---
+
+## Which way a struck thing bends
+
+A follow-on from the Rhodes. Ben asked whether the pitch drift a piano has
+should be the same on a metal bar, which is the right question: the mechanism
+was being applied by instrument family rather than by what actually sets the
+pitch.
+
+**The rule is what provides the restoring force, not struck versus plucked.**
+
+- **Tuned BY tension** -- strings and membranes. Pitch goes as sqrt(T), and
+  striking displaces the string or head, which lengthens it, which raises T. So
+  they bloom SHARP and settle. Piano 0.008, timpani 0.016, kick 0.045, toms
+  0.030. Measured on the render, a grand piano's C3 starts **+10.4 cents** and
+  settles over about 0.85 s.
+- **Curved plates** -- cymbals, gongs, and the steelpan. No tension, but the
+  curvature couples bending to mid-plane strain, so amplitude changes the
+  stiffness.
+- **Straight bars free at an end** -- glockenspiel, vibraphone, marimba,
+  xylophone, celesta, music box, tubular bell, and the Rhodes tine. No tension
+  and no curvature: nothing a mallet does changes the stiffness, so no bend at
+  all. Measured on the render, the tine comes out at **+0.2 cents**, and its
+  partial table carries exactly zero frequency modulation of any kind.
+
+### The steelpan bends the other way, and the sign is not a guess
+
+A pan note area is a shallow curved shell. For an oscillator with both a
+quadratic and a cubic nonlinearity,
+
+    w(a) = w0 * [1 + (3*a3/(8*w0^2) - 5*a2^2/(12*w0^4)) * a^2]
+
+the quadratic coefficient enters **squared, with a minus sign**, so curvature
+always softens whatever its sign, while the cubic stretching term of a flat
+plate hardens. A pan is curvature-dominated -- and that is not an assumption
+imported for the occasion, it is the reason `SteelPanProperties` exists at all:
+the maker tunes the note areas 1:2:3 precisely *because* the quadratic term
+pumps energy from the fundamental into 2f and 3f. A voice cannot claim that
+tuning and simultaneously claim a hardening nonlinearity.
+
+So `tension_bend = -0.004`, about 7 cents flat at full velocity in the middle
+register, settling in 60 ms.
+
+### The magnitude is asserted, and here is exactly why
+
+I tried to measure it off Freesound 742254, the same CC0 recording the pan's
+mode gains and coupling came from, and **could not**. The reason is the
+instrument itself: a pan's fundamental is beaten on continuously by the
+neighbouring note areas that this very class models as sympathetic responders.
+Measured on that recording, a struck E4 has D4 and F#4 ringing 36-42 Hz away
+and sometimes only 2.3 dB down, so the fundamental's instantaneous frequency
+wanders several cents at all times, strike or no strike.
+
+Averaged over 24 isolated strikes, by phase derivative on a narrow band:
+
+| window | mean | bootstrap 95% CI |
+|---|---|---|
+| 4 ms | -1.4 cents | -6.4 .. +4.0 |
+| 25 ms | +2.9 | -0.3 .. +6.4 |
+| 60 ms | +14.9 | +4.4 .. +28.6 |
+| 450 ms | -5.5 | -16.7 .. +2.7 |
+
+and split by strike force: +3.0, +2.2, -9.2 cents, correlation with level
+**-0.30**. A settling bloom must converge on its own reference and this does
+not; the trace wanders in both directions throughout. That is not a small
+effect measured imprecisely, it is no measurement at all. **-0.004 is chosen to
+sit comfortably inside what that recording could not have seen** -- half what
+the 17" crash carries -- in the direction the shell demands.
+
+### Two probe failures worth recording
+
+Both cost real time and both made correct code look wrong.
+
+1. **A brick-wall analysis band has time smear.** The +-15 Hz filter used to
+   isolate the fundamental has an impulse response about 67 ms long, and the
+   pan's settle time is 60 ms -- so the bend was invisible through it, and the
+   first render check read the bend as *positive and larger at low velocity*.
+   The fix is the discipline that keeps working: render the A/B, bend on
+   against bend off, with the same probe, so the smear cancels. Done that way
+   the difference is -1.3, -3.9, -9.8, -2.1, -3.2 cents through the attack at
+   velocity 127 against -0.1, -0.8, -2.1, -0.5, -0.6 at velocity 60 -- the
+   right sign, and scaling with `attack_volume` as it should.
+2. **A parabolic peak interpolator divides by a NEGATIVE denominator.** At a
+   spectral maximum `y0 - 2*y1 + y2 < 0`; clamping it to `+1e-30` produced
+   frequencies of order -1e29 Hz. Guard on the magnitude, not the sign.
+
+### A loose end, not acted on
+
+`CymbalProperties` carries **+0.007**, and its own recorded measurement was
+"+7.8 cents at ff against -2.0 at mf, and -24.9 on the hardest-hit take". The
+hardest strike is the one where a nonlinearity speaks most clearly, and it went
+the *softening* way -- which is what the shallow-shell argument above predicts
+for a domed plate. The positive value came from the milder takes. That is worth
+re-measuring, but it was measured by somebody and changing it on this argument
+alone would be trading one assertion for another.
