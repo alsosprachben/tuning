@@ -694,6 +694,7 @@ def prepare(path, tuner='hybrid440'):
     _AMP_IMB = {}
     _CAB_CH = {}
     _TREM_CH = {}
+    _CLAV_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -957,6 +958,21 @@ def prepare(path, tuner='hybrid440'):
             # all the way to Nyquist.
             if os.environ.get('TUNING_CABINET', '1') != '0':
                 _CAB_CH[ch] = props.cabinet
+        if getattr(props, 'clav_panel', False) and ch not in _CLAV_CH:
+            # CC1 IS THE TONE ROCKERS. Six switches sit left of a D6's keyboard
+            # and four of them are the tone section; the wheel sweeps those four
+            # darkest to brightest. A file with no CC1 gets the panel at rest,
+            # every rocker up, which is what CLAV_FLAT is.
+            #
+            # ONE VALUE FOR THE PIECE, from the channel's first CC1, the same
+            # rule the amplifier's drive follows: a player sets the rockers and
+            # then plays, where live it is a control being moved.
+            _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+            _set = (int(round(_c1[0] / 127.0 * (len(T.CLAV_TONE) - 1)))
+                    if _c1 else T.CLAV_FLAT)
+            _set = int(os.environ.get('TUNING_CLAV', _set))
+            if _set != T.CLAV_FLAT:
+                _CLAV_CH[ch] = _set
         if getattr(props, 'tremolo_depth', 0.0) and ch not in _TREM_CH:
             # CC1 IS THE DEPTH KNOB. On a Rhodes suitcase and a Wurlitzer the
             # modulation depth is the one panel control a player moves while
@@ -1299,6 +1315,23 @@ def prepare(path, tuner='hybrid440'):
     # harmonics to Nyquist and a real 12" throws nearly all of them away. Put
     # this before the amp pass, or on the voice class as a FormantBody, and
     # every distortion product bypasses the speaker. See cabinet.py.
+    # THE CLAVINET'S TONE ROCKERS. A preamp filter of FREQUENCY, so it scales
+    # the partials that exist rather than making any, and the same function
+    # serves the live per-block gain. Before the speaker, because it is in the
+    # instrument.
+    if _CLAV_CH:
+        nf = A['nf']
+        for ch, setting in _CLAV_CH.items():
+            sel = np.asarray(A['mch']) == ch
+            if not sel.any():
+                continue
+            g = T.clav_tone_gain(np.asarray(nf)[sel], setting)
+            for col in ('aL', 'aR', 'aM'):
+                v = np.asarray(A[col]); v[sel] *= g
+                A[col] = list(v) if isinstance(A[col], list) else v
+            print("  clavinet: %s, %d partials through the tone section"
+                  % (T.CLAV_TONE[setting][0], int(sel.sum())))
+
     # THE TREMOLO, and on a Rhodes it is a stereo pan rather than a level
     # swing. After the amplifier so that a valve works on the carrier and not
     # on the sidebands, before the speaker so the speaker colours them. See

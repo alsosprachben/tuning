@@ -176,6 +176,15 @@ class Slab:
         # than sidebands -- cheaper, and exact, which is the same trade
         # leslie_swing makes against leslie.expand. tr_st is +1 for a level
         # tremolo and -1 for a pan, and that is the whole difference.
+        # The clavinet's tone rockers. Unlike the tremolo this does NOT need
+        # the callback: it is a fixed filter that only moves when the wheel
+        # does, so it is recomputed on a CC1 and on each new note and not once
+        # a block. cv_aL/cv_aR are the unfiltered template, kept so that
+        # sweeping the wheel cannot compound.
+        self.cv_on = np.zeros(capacity, bool)
+        self.cv_aL = np.zeros(capacity, np.float32)
+        self.cv_aR = np.zeros(capacity, np.float32)
+
         self.tr_on = np.zeros(capacity, bool)
         self.tr_dep = np.zeros(capacity, np.float32)
         self.tr_st = np.ones(capacity, np.float32)
@@ -334,6 +343,33 @@ class Slab:
         idx = np.flatnonzero(m)
         self._doppler_to(idx, self.ls_horn[idx], n, horn_rate, drum_rate)
 
+    def clav_tone(self, setting, slots=None):
+        """Set the tone rockers on the partials that are sounding.
+
+        Recomputed from the UNFILTERED template every time, never from what is
+        already there, so sweeping the wheel back and forth cannot compound --
+        the same reason aftertouch works from aL0/aR0.
+        """
+        import tonelib as _TL
+        if slots is None:
+            m = self.cv_on & self.busy
+            if not m.any():
+                return
+            idx = np.flatnonzero(m)
+        else:
+            if slots is None or not len(slots):
+                return
+            idx = np.asarray(slots, dtype=np.intp)
+            fresh = idx[~self.cv_on[idx]]
+            if len(fresh):
+                self.cv_aL[fresh] = self.a["aL"][fresh]
+                self.cv_aR[fresh] = self.a["aR"][fresh]
+            self.cv_on[idx] = True
+        g = _TL.clav_tone_gain(self.a["nf"][idx], setting)
+        self.a["aL"][idx] = self.cv_aL[idx] * g
+        self.a["aR"][idx] = self.cv_aR[idx] * g
+        self.dirty = True
+
     def tremolo_arm(self, slots, depth, stereo):
         """Record what the callback needs to swing these partials.
 
@@ -413,6 +449,7 @@ class Slab:
         self.busy[idx] = True
         self.ls_on[idx] = False
         self.tr_on[idx] = False
+        self.cv_on[idx] = False
         self.dirty = True
         a = self.a
         for k in COLS_F4:
@@ -492,6 +529,7 @@ class Slab:
         self.busy[idx] = True
         self.ls_on[idx] = False
         self.tr_on[idx] = False
+        self.cv_on[idx] = False
         self.dirty = True
         a = self.a
         for k in COLS_F4:
@@ -832,6 +870,9 @@ class Bank:
         # live it is a per-block gain, so one template plays at every depth and
         # a held chord follows the wheel. tremolo_depth is what a full wheel
         # asks for, not a setting -- at rest the panel is off.
+        # The clavinet's tone rockers, which are a filter and so need no new
+        # template -- unlike its AB/CD pickup switches, which would.
+        self.clav_panel = (not drums) and bool(getattr(pc, "clav_panel", False))
         self.tremolo_hz = 0.0 if drums else float(getattr(pc, "tremolo_hz", 0.0))
         self.tremolo_depth = 0.0 if drums else float(getattr(pc, "tremolo_depth", 0.0))
         self.tremolo_stereo = (not drums) and bool(getattr(pc, "tremolo_stereo", False))
@@ -1158,6 +1199,7 @@ class Live:
         self.bend = {}          # channel -> current pitch-bend ratio
         self.mod = {}           # channel -> current vibrato depth (fraction)
         self.trem_depth = {}    # pid -> current tremolo/pan depth (fraction)
+        self.clav_step = {}     # pid -> current tone-rocker position
         self.pressure = {}      # channel -> aftertouch 0..1
         self.bend_range = 2.0   # semitones at full wheel, the GM convention
         self.mod_cents = 35.0   # cents of vibrato at full mod wheel
@@ -1373,10 +1415,17 @@ class Live:
                 # the vibrato -- a tine cannot be given a pitch vibrato anyway,
                 # since nothing about the instrument can bend it.
                 tremmed = [p for p in here if p.bank.tremolo_depth > 0.0]
+                # AND ON A CLAVINET THE WHEEL IS THE TONE ROCKERS. Four of the
+                # six switches left of a D6's keyboard are the tone section, so
+                # the wheel sweeps them darkest to brightest. It reaches notes
+                # already sounding, which is what flipping a rocker does: the
+                # filter is in the preamp, downstream of every ringing string.
+                clavs = [p for p in here if p.bank.clav_panel]
                 others = [p for p in here
                           if not p.organ and not p.bank.leslie
                           and p.bank.amp_drive <= 0.0
-                          and p.bank.tremolo_depth <= 0.0]
+                          and p.bank.tremolo_depth <= 0.0
+                          and not p.bank.clav_panel]
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -1391,6 +1440,12 @@ class Live:
                         if self.drive_step.get(p.pid) != step:
                             self.drive_step[p.pid] = step
                             self.amp_dirty.add(p.pid)
+                for part in clavs:
+                    import tonelib as _TLm
+                    step = int(round(msg.value / 127.0 * (len(_TLm.CLAV_TONE) - 1)))
+                    if self.clav_step.get(part.pid) != step:
+                        self.clav_step[part.pid] = step
+                        self.slab.clav_tone(step, self._sounding(ch, pids={part.pid}))
                 for part in tremmed:
                     self.trem_depth[part.pid] = (msg.value / 127.0) * part.bank.tremolo_depth
                     self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}),
@@ -1502,6 +1557,10 @@ class Live:
                           and (k[2] + part.transpose) in grp]:
                     self.slab.oneshot.pop(k, None)
                     self.slab.release(k, n0)
+        cs = self.clav_step.get(part.pid)
+        if cs is not None:
+            # a note struck while the rockers are down joins them already set
+            self.slab.clav_tone(cs, slots)
         d = self.trem_depth.get(part.pid, 0.0)
         if d > 0.0:
             self.slab.tremolo_arm(slots, d, part.bank.tremolo_stereo)
@@ -3406,6 +3465,73 @@ def selftest():
           cv.chiff_volume > 0.0 and cv.strike_noise_slope > 0.0
           and cv.chiff_max_valve_time < 0.01,
           "  (%.0f ms of broadband, rising with velocity)" % (1000 * cv.chiff_max_valve_time))
+
+    # ---- and the tone rockers on the wheel ----------------------------------
+    # Six switches sit left of a D6's keyboard; four of them are the tone
+    # section, so the wheel sweeps those four. The other two select the pickups
+    # and are NOT on it -- that changes the comb, which is a template.
+    check("the clavinet's tone rockers are a ladder, dark to bright",
+          len(_T.CLAV_TONE) >= 4 and _T.CLAV_TONE[_T.CLAV_FLAT][1] == 0.0,
+          "  (%s)" % " < ".join(n for n, _c, _o, _h in _T.CLAV_TONE))
+    _cf = [_T.clav_tone_gain(4000.0, i) / max(_T.clav_tone_gain(250.0, i), 1e-9)
+           for i in range(len(_T.CLAV_TONE))]
+    check("...and each rung is brighter than the one below it",
+          all(_cf[i] < _cf[i + 1] for i in range(len(_cf) - 1)),
+          "  (4 kHz against 250 Hz: %s)" % ", ".join("%.2f" % v for v in _cf))
+
+    def _clav(cc, flip=None, t0=0.02, t1=0.14):
+        """One fresh instrument per reading. Stamping every note at absolute
+        sample 0 while the stream clock advances plays each one from the middle
+        of its own envelope, which is how this probe first read the ladder
+        backwards."""
+        lvc = Live(program=7, rate=48000, frames=128, verbose=False); lvc.warm()
+        if cc is not None:
+            lvc.on_midi(mido.Message("control_change", channel=0, control=1, value=cc))
+        lvc.on_midi(mido.Message("note_on", channel=0, note=48, velocity=112))
+        lvc.apply(lvc.n)
+        out = []
+        for i in range(int(0.75 * 48000) // 128):
+            if flip is not None and i == int(0.25 * 48000) // 128:
+                lvc.on_midi(mido.Message("control_change", channel=0, control=1, value=flip))
+            b, _f = lvc.callback(None, 128, None, 0)
+            out.append(np.frombuffer(b, np.float32)[0::2])
+        x = np.concatenate(out).astype(float)
+        lvc.renderer.close()
+        def cen(a0, a1):
+            a, b = int(a0 * 48000), int(a1 * 48000)
+            X = np.abs(np.fft.rfft(x[a:b] * np.hanning(b - a)))
+            fr = np.fft.rfftfreq(b - a, 1 / 48000.0)
+            k = (fr > 80) & (fr < 14000)
+            return float((fr[k] * X[k]).sum() / X[k].sum())
+        return cen(t0, t1), cen
+
+    cens = [_clav(cc)[0] for cc in (0, 32, 64, 96, 127)]
+    check("the wheel sweeps them, and the render follows",
+          all(cens[i] < cens[i + 1] for i in range(len(cens) - 1)),
+          "  (%s Hz)" % " ".join("%.0f" % v for v in cens))
+    _c, cen = _clav(64, flip=0)
+    before, after = cen(0.05, 0.22), cen(0.30, 0.60)
+    check("...and it reaches a note already ringing, as a rocker does",
+          after < before * 0.7,
+          "  (%.0f Hz -> %.0f when the wheel is flipped mid-note)" % (before, after))
+    # Sweeping back and forth must recompute from the unfiltered template and
+    # never from what is already there.
+    lvq = Live(program=7, rate=48000, frames=128, verbose=False); lvq.warm()
+    lvq.on_midi(mido.Message("control_change", channel=0, control=1, value=127))
+    lvq.on_midi(mido.Message("note_on", channel=0, note=48, velocity=112)); lvq.apply(lvq.n)
+    for _i in range(6):
+        lvq.callback(None, 128, None, 0)
+    base = lvq.slab.cv_aL[np.flatnonzero(lvq.slab.cv_on & lvq.slab.busy)].copy()
+    for v in (0, 127, 40, 100, 0):
+        lvq.on_midi(mido.Message("control_change", channel=0, control=1, value=v))
+        lvq.callback(None, 128, None, 0)
+    now = lvq.slab.cv_aL[np.flatnonzero(lvq.slab.cv_on & lvq.slab.busy)]
+    drift = float(np.max(np.abs(now - base))) if len(base) == len(now) and len(base) else 1.0
+    check("...and sweeping it cannot compound",
+          drift < 1e-9, "  (unfiltered base drifted %.1e over five moves)" % drift)
+    check("...and the wheel is not ALSO bending the pitch on this voice",
+          lvq.mod.get(0, 0.0) == 0.0)
+    lvq.renderer.close()
 
     # ---- the cuica, which is not struck at all ------------------------------
     import percussion_map as _PM2

@@ -3,12 +3,21 @@
 
     python3 examples/clavinet.py [outdir]
     python3 examples/clavinet.py --compare [outdir]
+    python3 examples/clavinet.py --tone [outdir]
 
 GM 7 was played by HarpsichordProperties -- plucked, wooden, and carrying no
 pickup at all. A clavinet is a struck steel string trapped against an anvil by
 a rubber tangent and read by magnets, and the tangent IS the string's
 termination, so its comb rises through the audible range instead of notching
 inside it. That is the buzz. See tonelib.ClavinetProperties and sources.md.
+
+--tone sweeps the panel. Six rocker switches sit left of a D6's keyboard and
+four of them are the tone section -- "Brilliant and Treble activate a high-pass
+filter, while Medium and Soft activate a low-pass filter" -- so CC1 sweeps those
+four, darkest to brightest, with all four up in the middle. Rendered, the
+attack centroid runs 673, 855, 1049, 1314, 1623 Hz across the five positions.
+The other two rockers, AB/CD, choose which pickup is heard; they change the
+COMB rather than filtering it, so they are not on the wheel.
 
 --compare renders the same figure on both, which is the point: they are both
 bright keyboard strings and they are not the same instrument. Listen low, where
@@ -80,6 +89,27 @@ def passage(program=CLAVINET):
     return m
 
 
+def tone(outdir):
+    """The five rocker positions on one figure. CC1 is written into each file."""
+    import tonelib as T
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    n = len(T.CLAV_TONE)
+    for i, (name, corner, order, high) in enumerate(T.CLAV_TONE):
+        cc = int(round(i / (n - 1.0) * 127))
+        m = passage()
+        m.tracks[0].insert(1, mido.Message('control_change', control=1, value=cc,
+                                           channel=0, time=0))
+        mid = os.path.join(outdir, 'clav-tone-%d-%s.mid' % (i, name))
+        m.save(mid)
+        out = mid[:-4] + '.wav'
+        if _render(mid, out, root) is None:
+            return 1
+        what = ("flat -- all four rockers up" if corner <= 0 else
+                "%s-pass at %.0f Hz" % ("high" if high else "low", corner))
+        print("  CC1 %3d  %-10s %-44s %s" % (cc, name, out, what))
+    return 0
+
+
 def compare(outdir):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for prog, name, why in ((CLAVINET, 'clavinet', 'struck at the anvil, read by magnets'),
@@ -101,6 +131,8 @@ def main(argv):
     os.makedirs(outdir, exist_ok=True)
     if mode == 'compare':
         return compare(outdir)
+    if mode == 'tone':
+        return tone(outdir)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     mid = os.path.join(outdir, 'clavinet.mid')
     passage().save(mid)

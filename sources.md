@@ -3020,9 +3020,54 @@ between them they set where every comb null lands. The stiffness, 1.1e-04, is
 estimated as more than a harpsichord's long thin wire and far less than a
 piano's wound bass.
 
-The D6's rocker switches -- pickup combinations and filters, which are most of
-how the instrument is played -- are NOT modelled. That is the obvious second
-pass and it maps onto CC1 the way the Rhodes' tremolo does.
+### The rockers, on CC1
+
+Six switches sit left of a D6's keyboard, and they are not one control but two.
+**"Brilliant and Treble activate a high-pass filter, while Medium and Soft
+activate a low-pass filter"**; the remaining pair, AB/CD, select which of the two
+pickups is heard -- one above the strings near the bridge, one below.
+
+**Only the four tone rockers are on the wheel, and the split is not arbitrary.**
+A filter is a function of FREQUENCY, so it scales partials that already exist
+and one function serves both paths: `clav_tone_gain(hz, setting)` is called by
+the offline pass over the finished table and by the live per-block gain. A
+PICKUP SELECTION is a function of HARMONIC NUMBER -- it moves the comb -- which
+is a different amplitude for every partial of every note and therefore a
+property of the template. It cannot be applied to a note already sounding
+without rebuilding it, so it wants a bank axis and is left for a third pass.
+
+CC1 sweeps the four darkest to brightest with all four up in the middle, which
+is the panel's own vocabulary:
+
+| CC1 | rocker | | rendered attack centroid |
+|---|---|---|---|
+| 0 | soft | low-pass 1.2 kHz | 673 Hz |
+| 32 | medium | low-pass 3 kHz | 855 Hz |
+| 64 | flat | all four up | 1049 Hz |
+| 96 | treble | high-pass 400 Hz | 1314 Hz |
+| 127 | brilliant | high-pass 900 Hz | 1623 Hz |
+
+**The corners are estimated. The names are the instrument's.**
+
+Live it runs 656, 862, 1082, 1397 and 1732 Hz -- within 7% of the offline pass,
+which is the agreement worth having, since the two take different routes. And
+because it is a preamp filter it **reaches notes already ringing**: flipping the
+wheel to "soft" mid-note takes a sounding C3 from 860 Hz to 377. That is what a
+rocker does; the filter is downstream of every vibrating string. Unlike the
+tremolo it needs no work in the callback, because a fixed filter only changes
+when the wheel does.
+
+A file with no CC1 gets the panel at rest. `TUNING_CLAV` overrides it for
+renders of material that carries no modulation.
+
+**A probe failure, and the same one as last time in a new costume.** The first
+live reading had the ladder BACKWARDS -- brilliant darkest, soft brightest --
+and showed the wheel doing nothing to a ringing note. The slab was right all
+along: the probe stamped every note at absolute sample 0 while the stream clock
+advanced, so each reading after the first played from the middle of its own
+envelope. One fresh instrument per reading, or `apply(lv.n)`, and the ladder
+came out monotonic. Both times this session the wrong-window mistake has looked
+exactly like a real inversion in the model.
 
 **A probe failure worth recording**, because it nearly sent this voice the wrong
 way: the first spectral comparison put the clavinet DARKER than the harpsichord

@@ -2887,6 +2887,39 @@ class HammeredDulcimerProperties(InharmonicStringProperties):
     harmonic_decay_db = 2.5
 
 
+# The Clavinet D6's tone rockers. Six switches sit left of the keyboard: the
+# four here are the TONE section -- "Brilliant and Treble activate a high-pass
+# filter, while Medium and Soft activate a low-pass filter" -- and the other two
+# (AB/CD) select the pickups, which is a different kind of control and is not
+# here; see ClavinetProperties.
+#
+# Ordered DARKEST TO BRIGHTEST so a wheel can sweep them, with the panel's own
+# names. Each rung is one rocker, except the middle, which is all four off.
+# (corner Hz, order, high-pass?)  CORNERS ARE ESTIMATED -- the names are the
+# instrument's, the frequencies are not.
+CLAV_TONE = (
+    ("soft",      1200.0, 2.0, False),
+    ("medium",    3000.0, 2.0, False),
+    ("flat",         0.0, 0.0, False),
+    ("treble",     400.0, 2.0, True),
+    ("brilliant",  900.0, 2.0, True),
+)
+CLAV_FLAT = 2          # the index of "all four rockers up"
+
+
+def clav_tone_gain(hz, setting):
+    """What one rocker does to a partial at hz. Vectorised over numpy arrays,
+    so the same function serves the offline pass and the live per-block gain --
+    which is the point of it being a filter of FREQUENCY and not of harmonic
+    number. The pickup selection is not like this and cannot be done here."""
+    i = int(setting) % len(CLAV_TONE)
+    _name, corner, order, high = CLAV_TONE[i]
+    if corner <= 0.0:
+        return 1.0
+    x = (hz / corner) ** order
+    return (x / (1.0 + x)) if high else (1.0 / (1.0 + x))
+
+
 class ClavinetProperties(InharmonicStringProperties):
     """GM 7. A struck steel string read by magnets -- and it was a harpsichord.
 
@@ -2940,6 +2973,14 @@ class ClavinetProperties(InharmonicStringProperties):
 
     # Struck at the very end of what sounds. 0.035 puts the comb's first null
     # near the 28th partial, so everything audible is on its rising edge.
+    # The four TONE rockers are on the wheel: see CLAV_TONE above and
+    # blockrender's clavinet pass. The other two, AB/CD, select which of the two
+    # pickups is heard, and they are NOT here -- a pickup selection changes the
+    # COMB, which is a different amplitude for every harmonic of every note, so
+    # it is a property of the template and cannot be a gain applied to a note
+    # already sounding. That is a second pass, and it wants a bank axis.
+    clav_panel = True
+
     strike_point = 0.035
     strike_depth = 0.90
     strike_fills_with_force = False     # rubber on an anvil, not felt
