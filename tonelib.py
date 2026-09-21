@@ -7043,13 +7043,45 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     # Kept below the level that slams the per-tone ceiling so initial_gain
     # actually controls how loud the crash is.
     chiff_volume = 1.8
-    # THE PLATE BENDS WHEN IT IS HIT. tension_bend is the mechanism the membranes
-    # use -- a head struck hard is stretched, and a stretched head is sharper --
-    # and it was zero here, so a cymbal's pitch was the same however it was
-    # struck. MEASURED on the 17" crash: +7.8 cents of drift through the ring at
-    # ff against -2.0 at mf, and -24.9 on the hardest-hit take in the set. Scaled
-    # by attack_volume by construction, so a soft stroke barely moves.
-    tension_bend = 0.007
+    # A CYMBAL'S MODES DO NOT BEND, and this carried 0.007 -- about 16 cents at
+    # ff -- on a measurement that was not measuring what it thought.
+    #
+    # REMEASURED on the same Iowa takes, tracking individual WELL-ISOLATED
+    # partials by phase derivative (which, unlike a spectral peak, does not
+    # care that the mode is decaying), across the whole family:
+    #
+    #     crash / chinese / splash   96 partials, 16 files   median +0.03 cents
+    #     ride and ride bell         36 partials             median -0.27
+    #     hi-hat                     13 partials             median +0.39
+    #     orchestral clash pairs     58 partials             median +0.61
+    #
+    # and no correlation with how hard it was struck (-0.08), with mf and ff
+    # indistinguishable. The probe was checked against planted bends first:
+    # +10.0 cents came back +9.65, -10.0 came back -9.74, zero came back -0.01.
+    # So the drift is bounded well under two cents where this class was
+    # asserting sixteen.
+    #
+    # WHAT THE EARLIER NUMBER ACTUALLY CAUGHT was almost certainly the
+    # SPECTRUM, not the modes. A cymbal's bright modes decay far faster than its
+    # low ones, so its centroid falls 1400 to 2100 cents through the ring --
+    # measured on these same files -- while every individual partial stands
+    # still. That is differential decay, which harmonic_decay_db already does
+    # and which needs no nonlinearity anywhere. The giveaway is that the old
+    # note's three numbers disagreed in SIGN (+7.8, -2.0, -24.9): that is an
+    # estimator being dragged around by neighbouring modes dying at different
+    # rates, not an effect.
+    #
+    # AND THE SHALLOW-SHELL ARGUMENT DOES NOT RESCUE IT EITHER. A domed plate
+    # should SOFTEN (see SteelPanProperties), so this value had the wrong sign
+    # as well as the wrong size -- but the measurement says the honest answer is
+    # neither, because the effect goes as amplitude squared and an orchestral
+    # stick stroke never reaches the regime where a cymbal's nonlinearity
+    # speaks. Predicting the old value was wrong is not the same as predicting
+    # the right one.
+    #
+    # Removing it costs nothing that was doing work: the model's brightening
+    # from v70 to v127 goes from +98 cents to +84.
+    tension_bend = 0.0
     chiff_cycle = 0.95
     chiff_release = 0.0
     sustain_jitter = 1.0

@@ -2729,12 +2729,52 @@ Both cost real time and both made correct code look wrong.
    spectral maximum `y0 - 2*y1 + y2 < 0`; clamping it to `+1e-30` produced
    frequencies of order -1e29 Hz. Guard on the magnitude, not the sign.
 
-### A loose end, not acted on
+### And the cymbal, remeasured: its modes do not bend at all
 
-`CymbalProperties` carries **+0.007**, and its own recorded measurement was
-"+7.8 cents at ff against -2.0 at mf, and -24.9 on the hardest-hit take". The
-hardest strike is the one where a nonlinearity speaks most clearly, and it went
-the *softening* way -- which is what the shallow-shell argument above predicts
-for a domed plate. The positive value came from the milder takes. That is worth
-re-measuring, but it was measured by somebody and changing it on this argument
-alone would be trading one assertion for another.
+`CymbalProperties` carried **+0.007**, about 16 cents at ff, citing "+7.8 cents
+at ff against -2.0 at mf, and -24.9 on the hardest-hit take". Three numbers that
+disagree in sign are not a measurement of an effect. Remeasured on the same
+Iowa takes -- `examples/cymbal_check.py`, which is in the repo so this can be
+rerun -- tracking individual **well-isolated** partials by phase derivative:
+
+| family | partials | median drift |
+|---|---|---|
+| crash / chinese / splash (16 files) | 96 | **+0.03 cents** |
+| ride and ride bell | 36 | -0.27 |
+| hi-hat | 13 | +0.39 |
+| orchestral clash pairs | 58 | +0.61 |
+
+203 partials, every group under a cent, no correlation with strike level
+(-0.08), and mf indistinguishable from ff. `tension_bend = 0.0`.
+
+**The method matters, and it is why the first answer was wrong.** A spectral
+peak estimator is biased by a decaying amplitude and dragged by neighbouring
+modes decaying at different rates -- which is precisely a cymbal, whose modes
+sit as little as 15 Hz apart. The phase derivative of a narrowly banded
+analytic signal does not care about the envelope at all. And the probe was
+checked against planted bends BEFORE being believed about their absence:
++10.0 cents came back +9.53, +5.0 came back +4.83, -10.0 came back -9.66, and
+zero came back -0.00.
+
+**What the old number was actually seeing was the SPECTRUM, not the modes.** A
+cymbal's bright modes decay far faster than its low ones, so on these same
+files the centroid falls **1400 to 2100 cents** through the ring while every
+individual partial stands still. That is differential decay, which
+`harmonic_decay_db` already does, and it needs no nonlinearity anywhere.
+
+**And the shallow-shell argument did not rescue it.** A domed plate should
+SOFTEN, so the old value had the wrong sign as well as the wrong size -- but
+the measurement says the honest answer is neither. The effect goes as amplitude
+squared, and an orchestral stick stroke never reaches the regime where a
+cymbal's nonlinearity speaks; that regime is real, it is just not orchestral
+playing. **Predicting that the old value was wrong is not the same as
+predicting the right one, and the theory only did the first.**
+
+Removing it costs nothing that was doing work: the model's brightening from
+velocity 70 to 127 goes from +98 cents to +84.
+
+One thing checked and NOT reported, because it did not survive contact with the
+rest of the set: on the 17" crash the attack centroid is 266 cents *darker* at
+ff than at mf, which looked like a real finding about how a cymbal responds to
+force. Across all eight instruments the same measurement gives -65, +142, -266,
+-226, +81, -128, -19 and +385 cents. There is no direction there, only scatter.

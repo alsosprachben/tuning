@@ -3392,6 +3392,15 @@ def selftest():
           abs(_bend(_T.SteelPanProperties, 20.0)) <= _T.SteelPanProperties.tension_bend_max
           and _bend(_T.SteelPanProperties, 20.0) < 0.0,
           "  (%+.5f two octaves below the compass)" % _bend(_T.SteelPanProperties, 20.0))
+    # A CYMBAL'S MODES DO NOT MEASURABLY BEND EITHER. Tracked by phase
+    # derivative across 203 well-isolated partials of the Iowa cymbal family,
+    # the median drift is under a cent -- against the 16 this class used to
+    # assert. What drifts on a cymbal is its CENTROID, by 1400-2100 cents, and
+    # that is differential decay rather than any nonlinearity.
+    check("a cymbal's modes do not measurably bend",
+          all(getattr(c, "tension_bend", 0.0) == 0.0 for c in
+              (_T.CymbalProperties, _T.CrashCymbal1Properties, _T.RideCymbalProperties,
+               _T.HiHatProperties, _T.ChineseCymbalProperties, _T.SplashCymbalProperties)))
     # Struck BARS have no tension and no curvature, so they get neither.
     check("a straight bar gets no bend at all, having nothing to bend",
           all(getattr(c, "tension_bend", 0.0) == 0.0 for c in
