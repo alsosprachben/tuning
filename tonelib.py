@@ -3377,6 +3377,85 @@ class RhodesProperties(ElectricPianoProperties):
         return _exp(-u * u)
 
 
+class WurlitzerProperties(ElectricPianoProperties):
+    """GM 5, Electric Piano 2: a Wurlitzer. Electrostatic, so a pole.
+
+    Not a Rhodes with a filter on it -- a different instrument sharing one
+    mechanism. Both are a struck steel bar whose sound is made by its pickup;
+    what differs is the CURVE, and two structural facts follow from it.
+
+    A ONE-SIDED PLATE IS ASYMMETRIC WHEREVER THE REED SITS. "A steel plate
+    impacted by a hammer vibrates as an electrode of a capacitor... analogous to
+    a capacitor microphone, the capacity varies inversely proportional to the
+    distance between the electrodes" (DAGA 2017). A Rhodes' magnet is symmetric
+    about the tine, which is why centring it kills the fundamental and why
+    voicing it is a real adjustment. A Wurlitzer's plate is on ONE side of the
+    reed, so 1/d is lopsided at every rest position and there is no centred
+    case to find. pickup_offset survives as the gap, not as a voicing screw.
+
+    AND A POLE DOES NOT FALL OFF A CLIFF. A Gaussian is entire, so the Rhodes'
+    harmonics collapse faster and faster -- h2 at -4 dB, h8 at -104, h12 at
+    -195. 1/d has a pole, so its harmonics fall GEOMETRICALLY, about 10 dB each:
+    -6, -25, -47, -69, -92, -116 at the same drive. That straight line in dB is
+    the bark, and it is the whole difference between the two instruments.
+
+    NO TONEBAR. "The reeds vibrate freely, providing a surface area large enough
+    to produce a measurable change in capacitance" -- there is no second prong
+    and no resonator, so there is nothing to make the Rhodes' glockenspiel-like
+    attack and tonebar_gains is empty. A Wurlitzer's attack is the hammer, not a
+    ringing bar.
+
+    WHAT IS NOT MODELLED. "The specific pickup geometry leads to a highly
+    complex decay characteristic showing interesting effects like non-exponential
+    decay characteristics and beating of higher partials" (DAGA 2017). Both are
+    real and neither is here: this voice decays exponentially, per partial, at
+    k*D like its sibling. The beating in particular would need the reed's own
+    higher modes, and the same paper's camera says the motion is "approximately
+    sinusoidal", so where it comes from is not settled by the measurement.
+
+    A NOTE ON THE SENSING CONVENTION, since it decides everything. Taken as
+    charge on a fixed-voltage plate, the signal follows C and therefore 1/d, and
+    that is what the paper's sentence describes and what is modelled here. Taken
+    at constant charge the voltage would follow d instead and be LINEAR -- a
+    condenser microphone's whole virtue. The paper is explicit that the pickup is
+    what shapes this instrument's timbre and that "higher velocity results in a
+    richer harmonic sound", which only the first reading produces, so that is the
+    one followed. It is an interpretation of a circuit, not a measurement of one.
+    """
+    # Fitted the same way the Rhodes was, to a Wurlitzer's own register and
+    # velocity behaviour: barkier everywhere and much barkier dug into.
+    # 1.4 dB rms against five targets.
+    pickup_offset = 0.05          # the gap, not a voicing screw: see above
+    pickup_deflection = 0.50
+    pickup_deflection_max = 0.70  # u must stay well clear of the pole at -1
+    deflection_register_slope = -0.30
+
+    # A free reed with nothing bolted to it.
+    tonebar_mode_ratios = ()
+    tonebar_gains = ()
+
+    # It does not sing as long as a Rhodes: a small reed, a felt damper and no
+    # tonebar feeding energy back into it.
+    harmonic_decay_db = 16.0
+    decay_register_slope = 0.45
+
+    cabinet = "wurlitzer"
+    # A true amplitude tremolo, in ONE channel -- a Wurlitzer has one amplifier
+    # and one pair of speakers, so unlike the suitcase's pan it survives a mono
+    # fold. Same mechanism, one sign.
+    tremolo_hz = 5.5
+    tremolo_depth = 0.55
+    tremolo_stereo = False
+
+    # Same normalisation as its sibling -- C3/C4/C5 at velocity 100, matched on
+    # rms against the grand piano. It started 5.1 dB OVER one, which is the
+    # small cabinet's midrange doing what a small cabinet does.
+    initial_gain = 0.31831274
+
+    def pickup_flux(self, u):
+        return 1.0 / (1.0 + u)
+
+
 class StoppedPipeProperties(SynthProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB

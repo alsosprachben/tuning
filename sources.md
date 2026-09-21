@@ -2573,14 +2573,66 @@ CC1 sets depth, and there is no conflict with the wheel's other jobs: the
 amp-drive path is gated on `amp_drive > 0` and this voice has none, and a tine
 has nothing that could be given a pitch vibrato anyway.
 
-### Still to do
+### GM 5, the Wurlitzer: one mechanism, a different curve
 
-- **GM 5, the Wurlitzer.** Same machinery, one different curve: its reed is a
-  capacitor plate and "the capacity varies inversely proportional to the
-  distance", so `Phi(u) = 1/(d0+u)`. That is a pole where the Rhodes has a
-  Gaussian, so its harmonics fall off geometrically instead of falling off a
-  cliff -- at equal drive h8 sits at -86 dB against the Rhodes' -120. Bell
-  versus bark, from the curve alone. GM 5 is still a grand piano until then.
+Built second, once the shared waveshaper was confirmed. It is not a Rhodes with
+a filter on it -- it is a different instrument that happens to work the same
+way, and three things follow from the curve alone.
+
+**A pole does not fall off a cliff.** "Analogous to a capacitor microphone, the
+capacity varies inversely proportional to the distance between the electrodes"
+(DAGA 2017), so `Phi(u) = 1/(1+u)`. A Gaussian is entire, so the Rhodes'
+harmonics collapse faster and faster; `1/d` has a pole, so its harmonics fall
+off GEOMETRICALLY. Measured on the two voices at C4, velocity 127:
+
+| | h2 | h3 | h4 | h5 | h6 | h7 | h8 |
+|---|---|---|---|---|---|---|---|
+| Rhodes | -7.1 | -23.0 | -41.2 | -57.2 | -81.7 | -- | -- |
+| Wurlitzer | -4.5 | -11.5 | -19.5 | -28.1 | -37.1 | -46.2 | -55.6 |
+
+The Rhodes' steps grow from 7 dB to 24; the Wurlitzer's stay between 5 and 9.
+That straight line in dB is the bark, and it is the whole difference.
+
+**A one-sided plate is asymmetric wherever the reed sits.** A Rhodes' magnet is
+symmetric about the tine, which is why centring it kills the fundamental and
+why voicing it is a real adjustment a technician makes. A Wurlitzer's plate is
+on ONE side, so at rest position 0 -- where the tine loses its fundamental
+entirely -- the reed still puts out h1 6.4 dB over h2. There is no centred case
+to find, and `pickup_offset` survives as the gap rather than as a voicing screw.
+
+**No tonebar.** "The reeds vibrate freely, providing a surface area large enough
+to produce a measurable change in capacitance." There is no second prong and no
+resonator, so `tonebar_gains` is empty and there is nothing to make the Rhodes'
+glockenspiel-like attack. It also rings shorter: 3.1 s to -40 dB at C4 against
+the Rhodes' 5.2.
+
+Its speaker is the other half of why it sounds like itself. `WurlitzerInternal`
+is a pair of 4x6" drivers in a plastic lid: -14 dB at 80 Hz where the suitcase
+is at 0, so the reed's fundamental is already on the slope through most of the
+compass and what you hear is its harmonics. **The bark is partly the speaker.**
+
+And its tremolo is a true amplitude tremolo rather than a pan, because it has
+one amplifier and one pair of speakers. Rendered at full wheel, both voices
+swing about 9-10 dB per ear at 5.5 Hz -- but the Rhodes' two ears are 180
+degrees apart and its mono sum swings 0.16 dB, while the Wurlitzer's are in
+phase and its mono sum swings the full 9.10 dB. One mechanism, one sign.
+
+**A NOTE ON THE SENSING CONVENTION**, since it decides the whole voice. Taken as
+charge on a fixed-voltage plate the signal follows C and therefore 1/d, which is
+the sentence the paper writes and what is modelled. Taken at constant charge the
+voltage follows d instead and is LINEAR -- a condenser microphone's whole
+virtue. The paper is explicit that the pickup is what shapes this instrument's
+timbre and that "higher velocity results in a richer harmonic sound", which only
+the first reading gives, so that is the one followed. It is an interpretation of
+a circuit, not a measurement of one, and it is the weakest joint in this voice.
+
+Also not modelled, and the paper names both: "non-exponential decay
+characteristics and beating of higher partials". This voice decays
+exponentially, per partial, at k*D like its sibling. The beating would need the
+reed's own higher modes, and the same paper's camera says the motion is
+"approximately sinusoidal", so the measurement does not say where it comes from.
+
+### Still to do
 - **The longitudinal transient is approximated.** The papers attribute the
   bright part of the attack to longitudinal waves converting to transverse at
   the tine/tonebar T-joint -- "10-15 times faster than transverse waves". That

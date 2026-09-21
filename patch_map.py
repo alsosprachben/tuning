@@ -12,6 +12,7 @@ and editing this table -- the dispatch stays data-driven.
 
 from tonelib import (
     RhodesProperties,
+    WurlitzerProperties,
     MutedTrumpetProperties,
     TromboneProperties,
     HornProperties,
@@ -112,6 +113,11 @@ _fill(6, 7, HarpsichordProperties)
 # so none of the piano's stretch or beating. Measured, the tine vibrates as a
 # pure sine and every harmonic is made by the pickup. See ElectricPianoProperties.
 PROGRAM_CLASS[4] = RhodesProperties       # tine + bell-curve magnetic pickup
+# ...and 5 (Electric Piano 2) is a Wurlitzer: a free steel REED read by an
+# electrostatic pickup, where capacitance goes as 1/d. A pole rather than a bell
+# curve, so its harmonics fall off geometrically instead of off a cliff -- bark
+# rather than bell -- and it has no tonebar at all.
+PROGRAM_CLASS[5] = WurlitzerProperties    # reed + 1/d electrostatic pickup
 # 8-15   Chromatic Percussion          -> struck bars/bells
 # 8-15  Chromatic percussion. These are NOT one instrument: what separates them
 # is whether the bar is undercut, and to what interval. See StruckBarProperties.

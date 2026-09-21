@@ -162,8 +162,37 @@ class RhodesSuitcase(Cabinet):
     bell_order = 2.0
 
 
+class WurlitzerInternal(Cabinet):
+    """The two small drivers built into a Wurlitzer 200's lid.
+
+    The opposite design problem from the Rhodes suitcase. That cabinet is four
+    12" drivers in a box you carry separately and it is trying to be honest.
+    This is a pair of 4x6" elliptical speakers screwed into a plastic case,
+    and what it does to the sound is most of why a Wurlitzer sounds like one:
+
+      150 Hz, 2nd    it does NOT reach, and that is the point. A small sealed
+                     driver in a shallow case gives up an octave above where
+                     the suitcase does, so the reed's fundamental is already on
+                     the slope through most of the compass and what you hear is
+                     its harmonics. The bark is partly the speaker.
+      260 Hz peak    the case resonance, high and fairly pronounced.
+      1.6 kHz        presence, and STRONGER than the Rhodes' -- a small cone
+                     breaks up sooner and lower, and this is the honk that lets
+                     a Wurlitzer cut through a band without being loud.
+      3.6 kHz, 4th   the top, low, because a 4x6" paper cone has nothing above
+                     it and there is no tweeter.
+    """
+    formants = ((260.0, 200.0, 0.50), (1600.0, 1200.0, 0.65))
+    antiformants = ((700.0, 450.0, 0.20),)
+    formant_floor = 0.60
+    bore_corner_hz = 3600.0
+    bore_order = 4.0
+    bell_cutoff_hz = 150.0
+    bell_order = 2.0
+
+
 CABINETS = {"guitar12": Guitar12(), "bass410": Bass410(),
-            "rhodes": RhodesSuitcase()}
+            "rhodes": RhodesSuitcase(), "wurlitzer": WurlitzerInternal()}
 
 
 def get(name):

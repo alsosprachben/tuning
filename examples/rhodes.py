@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""A Rhodes electric piano: the voicing screw, and what velocity really does.
+"""The electric pianos: the voicing screw, and what velocity really does.
 
     python3 examples/rhodes.py [outdir]
     python3 examples/rhodes.py --voicing [outdir]
     python3 examples/rhodes.py --velocity [outdir]
     python3 examples/rhodes.py --control [outdir]
     python3 examples/rhodes.py --tremolo [outdir]
+    python3 examples/rhodes.py --pair [outdir]
 
 GM 4 rendered as a Steinway B until now, which is wrong in every particular: a
 Rhodes has no strings, no soundboard and no unison trios. It is a struck steel
@@ -26,6 +27,14 @@ happening, from a hollow octave to a full fundamental.
 paper's: "velocity sensitivity is to be distinguished by a change in volume to
 lesser extent than in sound". The growl should arrive faster than the loudness.
 
+--pair renders the same passage on both electric pianos, which is the point
+of having two: they share one mechanism and differ only in the pickup's curve.
+A Rhodes' magnet is a bell curve, so its harmonics fall off a cliff -- bell. A
+Wurlitzer's plate is a capacitor and its capacitance goes as 1/d, which is a
+pole, so they fall off geometrically at about 9 dB a harmonic -- bark. Nothing
+else is changed between the two renders except the curve, the speaker and the
+fact that a Wurlitzer has no tonebar.
+
 --tremolo puts the wheel up. The suitcase's panel calls it vibrato and it is
 not one -- it is a stereo PAN between the cabinet's two amplifiers, so it is
 audible in the room and vanishes entirely if you sum to mono. CC1 sets depth,
@@ -45,6 +54,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import mido
 
 PROGRAM = 4             # GM 4, Electric Piano 1
+WURLITZER = 5           # GM 5, Electric Piano 2
 TPB = 480
 
 # The voicing screw, in units of the magnet's field width. 0.0 is the measured
@@ -70,7 +80,7 @@ def _env():
     return env
 
 
-def passage(velocity=None):
+def passage(velocity=None, program=PROGRAM):
     """A Rhodes figure: soft chords, then the same thing dug into.
 
     Written low-to-middle on purpose. The growl is a bass-register effect --
@@ -80,7 +90,7 @@ def passage(velocity=None):
     """
     m = mido.MidiFile(ticks_per_beat=TPB)
     tr = mido.MidiTrack(); m.tracks.append(tr)
-    tr.append(mido.Message('program_change', program=PROGRAM, channel=0, time=0))
+    tr.append(mido.Message('program_change', program=program, channel=0, time=0))
     ev = []
     # Fmaj7 - Bb9 - Ebmaj7 - Abmaj7, twice: once soft, once dug into.
     chords = (((41, 57, 60, 64), 0), ((46, 58, 62, 65), 1),
@@ -151,6 +161,21 @@ def tremolo(outdir):
     return 0
 
 
+def pair(outdir):
+    """Both electric pianos, same passage. One mechanism, two curves."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for prog, name, why in ((PROGRAM, 'rhodes', 'magnetic, a bell curve: harmonics fall off a cliff'),
+                            (WURLITZER, 'wurlitzer', 'electrostatic 1/d, a pole: they fall off geometrically')):
+        mid = os.path.join(outdir, 'ep-%d-%s.mid' % (prog, name))
+        passage(program=prog).save(mid)
+        out = mid[:-4] + '.wav'
+        t0 = time.time()
+        if _render(mid, out, _env(), root) is None:
+            return 1
+        print("  %-10s %-44s %4.1fs   %s" % (name, out, time.time() - t0, why))
+    return 0
+
+
 def control(outdir):
     """The tine on its own. Confirm this is dull before believing anything else.
 
@@ -189,6 +214,8 @@ def main(argv):
         return control(outdir)
     if mode == 'tremolo':
         return tremolo(outdir)
+    if mode == 'pair':
+        return pair(outdir)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     mid = os.path.join(outdir, 'rhodes.mid')
     passage().save(mid)

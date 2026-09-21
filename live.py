@@ -3323,6 +3323,51 @@ def selftest():
           drift < 1e-9, "  (base amplitude drifted %.1e over four moves)" % drift)
     lv.renderer.close()
 
+    # ---- the Wurlitzer: one mechanism, a different curve --------------------
+    check("the Wurlitzer is not a piano either",
+          _PM.property_class_for_program(5) is _T.WurlitzerProperties)
+    wp = _rh(261.63, 127, _T.WurlitzerProperties)
+    rp2 = _rh(261.63, 127)
+    # A Gaussian is entire and its harmonics collapse faster and faster; 1/d has
+    # a pole and its harmonics fall off GEOMETRICALLY. That straight line in dB
+    # is the bark, and it is the whole difference between the two instruments.
+    def _lad(q, n=6):
+        return [20 * _math.log10(max(q.harmonic_volume(h), 1e-300) / q.harmonic_volume(1))
+                for h in range(1, n + 1) if h <= q.pickup_harmonics]
+    lw, lr = _lad(wp), _lad(rp2)
+    # the Rhodes' steps GROW; the Wurlitzer's stay about the same size
+    dw = [lw[i] - lw[i + 1] for i in range(len(lw) - 1)]
+    dr = [lr[i] - lr[i + 1] for i in range(len(lr) - 1)]
+    check("a pole falls off geometrically where a bell curve falls off a cliff",
+          max(dw) - min(dw) < 5.0 and max(dr) - min(dr) > 8.0,
+          "  (Wurlitzer steps %.0f-%.0f dB, Rhodes %.0f-%.0f)"
+          % (min(dw), max(dw), min(dr), max(dr)))
+    check("...so it keeps its upper harmonics and barks",
+          wp.harmonic_volume(5) / wp.harmonic_volume(1)
+          > 20.0 * rp2.harmonic_volume(5) / rp2.harmonic_volume(1),
+          "  (h5 at %.0f dB against the Rhodes' %.0f)"
+          % (_lad(wp, 5)[-1], _lad(rp2, 5)[-1] if len(_lad(rp2, 5)) >= 5 else float('nan')))
+    # A magnet is symmetric about the tine, so centring it kills the fundamental.
+    # A capacitor plate is on ONE side, so there is no centred case to find.
+    class _WC(_T.WurlitzerProperties):
+        pickup_offset = 0.0
+    wc = _rh(261.63, 100, _WC)
+    check("a one-sided plate is asymmetric wherever the reed sits",
+          wc.harmonic_volume(1) > wc.harmonic_volume(2) > 0.0,
+          "  (h1 %+.1f dB over h2 at rest position 0, where the tine loses it entirely)"
+          % (20 * _math.log10(wc.harmonic_volume(1) / wc.harmonic_volume(2))))
+    check("a free reed has no tonebar to ring",
+          wp.tonebar_gains == () and wp.max_harmonic == wp.pickup_harmonics
+          and len(rp2.tonebar_gains) > 0)
+    check("and its own speaker, which does not reach",
+          wp.cabinet == "wurlitzer"
+          and _CAB.get("wurlitzer").gain(80.0) < 0.3 * _CAB.get("rhodes").gain(80.0),
+          "  (%.0f dB at 80 Hz against the suitcase's %+.0f)"
+          % (20 * _math.log10(_CAB.get("wurlitzer").gain(80.0)),
+             20 * _math.log10(_CAB.get("rhodes").gain(80.0))))
+    check("its tremolo survives a mono fold, where the suitcase's pan does not",
+          wp.tremolo_stereo is False and rp2.tremolo_stereo is True)
+
     # ---- which way a struck thing bends -------------------------------------
     # A string and a drumhead are tuned BY tension, so striking them raises it
     # and they bloom SHARP. A shallow curved shell is not: its nonlinearity is
