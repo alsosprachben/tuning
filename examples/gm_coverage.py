@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""How complete is each of the 128 GM patches? Writes coverage.md.
+
+    python3 examples/gm_coverage.py [outfile]
+
+THE CLASS COLUMN IS READ FROM THE CODE, so it cannot drift: it asks
+patch_map the same question blockrender asks. The RATING is a judgement and
+lives in RATED below, where it can be argued with.
+
+The scale, and how each rung was decided:
+
+  0  nothing -- no voice at all. (Nothing scores 0: every program resolves
+     to something. That is not the same as every program being served.)
+  1  a general class -- this patch is played by a shared base, or by another
+     instrument's voice standing in for it. Some stand-ins are reasonable
+     (an Electric Grand is a string piano) and some are category errors
+     (a Telephone Ring is not a mallet). The note says which.
+  2  a specific class built from theory -- the instrument has its own voice,
+     derived from how it works, with nothing heard or measured against it.
+  3  ...and calibrated by ear -- Ben listened and the numbers moved.
+  4  ...and fitted against a RECORDING of the instrument, or against the
+     family law measured on its close relatives (the sax law is measured on
+     soprano and alto; the flute law across bass, alto and concert).
+
+WHAT COUNTS AS A RECORDING, since that is the line that matters: audio of the
+instrument that was analysed and fitted against. Published measurements of an
+instrument -- the Rhodes' high-speed camera papers, say -- are better than
+theory but are NOT audio, so those voices sit at 2 with a note. The point of
+the scale is to show where the model has been contradicted by reality, and only
+a recording can do that.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import patch_map
+
+GM = """Acoustic Grand Piano,Bright Acoustic Piano,Electric Grand Piano,Honky-tonk Piano,
+Electric Piano 1,Electric Piano 2,Harpsichord,Clavinet,Celesta,Glockenspiel,Music Box,
+Vibraphone,Marimba,Xylophone,Tubular Bells,Dulcimer,Drawbar Organ,Percussive Organ,
+Rock Organ,Church Organ,Reed Organ,Accordion,Harmonica,Tango Accordion,
+Acoustic Guitar (nylon),Acoustic Guitar (steel),Electric Guitar (jazz),
+Electric Guitar (clean),Electric Guitar (muted),Overdriven Guitar,Distortion Guitar,
+Guitar Harmonics,Acoustic Bass,Electric Bass (finger),Electric Bass (pick),
+Fretless Bass,Slap Bass 1,Slap Bass 2,Synth Bass 1,Synth Bass 2,Violin,Viola,Cello,
+Contrabass,Tremolo Strings,Pizzicato Strings,Orchestral Harp,Timpani,String Ensemble 1,
+String Ensemble 2,Synth Strings 1,Synth Strings 2,Choir Aahs,Voice Oohs,Synth Choir,
+Orchestra Hit,Trumpet,Trombone,Tuba,Muted Trumpet,French Horn,Brass Section,
+Synth Brass 1,Synth Brass 2,Soprano Sax,Alto Sax,Tenor Sax,Baritone Sax,Oboe,
+English Horn,Bassoon,Clarinet,Piccolo,Flute,Recorder,Pan Flute,Blown Bottle,
+Shakuhachi,Whistle,Ocarina,Lead 1 (square),Lead 2 (sawtooth),Lead 3 (calliope),
+Lead 4 (chiff),Lead 5 (charang),Lead 6 (voice),Lead 7 (fifths),Lead 8 (bass+lead),
+Pad 1 (new age),Pad 2 (warm),Pad 3 (polysynth),Pad 4 (choir),Pad 5 (bowed),
+Pad 6 (metallic),Pad 7 (halo),Pad 8 (sweep),FX 1 (rain),FX 2 (soundtrack),
+FX 3 (crystal),FX 4 (atmosphere),FX 5 (brightness),FX 6 (goblins),FX 7 (echoes),
+FX 8 (sci-fi),Sitar,Banjo,Shamisen,Koto,Kalimba,Bag pipe,Fiddle,Shanai,Tinkle Bell,
+Agogo,Steel Drums,Woodblock,Taiko Drum,Melodic Tom,Synth Drum,Reverse Cymbal,
+Guitar Fret Noise,Breath Noise,Seashore,Bird Tweet,Telephone Ring,Helicopter,
+Applause,Gunshot""".replace("\n", "").split(",")
+
+# program: (rating, note). The note earns the rating or explains the gap.
+RATED = {
+ 0:(4,"Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured"),
+ 1:(1,"the grand piano; no separate bright voicing"),
+ 2:(1,"the grand piano. Defensible -- a CP-70 IS a string piano with pickups"),
+ 3:(1,"the grand piano; the honky-tonk detuning is not modelled"),
+ 4:(2,"Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted"),
+ 5:(2,"Wurlitzer. Same machinery, 1/d pickup; no audio fitted"),
+ 6:(4,"VCSL recordings"),
+ 7:(1,"the harpsichord. CATEGORY ERROR: a clavinet is a STRUCK string with a pickup"),
+ 8:(2,"struck steel plate, felt hammer"),
+ 9:(4,"Iowa orchestra bells"),
+ 10:(2,"plucked steel comb tooth. Its docstring claims a cantilever; its numbers are a free-free bar"),
+ 11:(4,"Iowa vibraphone. The motor tremolo that gives it its name is NOT modelled"),
+ 12:(4,"Iowa marimba"),
+ 13:(4,"Iowa xylophone"),
+ 14:(2,"tubes at 2:3:4:5"),
+ 15:(2,"struck steel courses; the stiffness is estimated"),
+ 16:(3,"tonewheel + Leslie, worked over extensively by ear"),
+ 17:(3,"tonewheel, percussive tap"),
+ 18:(3,"tonewheel, overdriven"),
+ 19:(3,"flue pipes; registration built on Geer and judged by ear"),
+ 20:(1,"one ReedOrganProperties serves all four of 20-23, which are four instruments"),
+ 21:(1,"as 20 -- an accordion is not a reed organ"),
+ 22:(1,"as 20 -- a harmonica is a free reed, but not this one"),
+ 23:(1,"as 20"),
+ 24:(4,"Iowa classical guitar, six strings measured sul A/B/D/E/G"),
+ 25:(1,"falls through to the generic plucked string"),
+ 26:(3,"electric family: pluck comb x pickup comb, amp and cabinet; judged by ear"),
+ 27:(3,"as 26 -- the reference voice of the family"),
+ 28:(3,"as 26, palm mute"),
+ 29:(3,"as 26, driven harder"),
+ 30:(3,"as 26, driven hardest"),
+ 31:(3,"as 26, touched harmonics"),
+ 32:(1,"falls through to the generic plucked string"),
+ 33:(3,"electric bass family, cabinet and amp; judged by ear"),
+ 34:(3,"as 33, pick"),
+ 35:(3,"as 33, fretless -- loses its top rather than starting without it"),
+ 36:(3,"as 33, slap"),
+ 37:(3,"as 33, pop"),
+ 38:(1,"falls through to the generic plucked string"),
+ 39:(1,"as 38"),
+ 40:(4,"Iowa violin"),
+ 41:(4,"Iowa viola, fitted across registers"),
+ 42:(4,"Iowa cello"),
+ 43:(4,"Iowa double bass"),
+ 44:(1,"the generic bowed string; the tremolo articulation is not modelled"),
+ 45:(1,"the generic plucked string"),
+ 46:(1,"the generic plucked string"),
+ 47:(2,"analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set"),
+ 48:(1,"the generic bowed string"),
+ 49:(2,"its own slow-bowed class"),
+ 50:(1,"the generic bowed string"),
+ 51:(1,"as 50"),
+ 52:(3,"vocal tract and formants; Ben's ear on the consonant balance"),
+ 53:(3,"as 52"),
+ 54:(2,"its own class, theory"),
+ 55:(2,"its own class, theory"),
+ 56:(4,"Iowa trumpet, three registers"),
+ 57:(4,"Iowa tenor and bass trombone, refitted across registers"),
+ 58:(4,"Iowa tuba"),
+ 59:(2,"its own class; the mute is theory"),
+ 60:(4,"Iowa horn, re-measured across four registers and pp/mf/ff"),
+ 61:(1,"the trombone stands in for the whole section"),
+ 62:(1,"the generic brass base"),
+ 63:(1,"as 62"),
+ 64:(4,"Iowa soprano sax"),
+ 65:(4,"Iowa alto sax"),
+ 66:(4,"the sax law, measured on soprano and alto and transposed"),
+ 67:(4,"as 66"),
+ 68:(4,"Iowa oboe"),
+ 69:(4,"the conical reed law measured on the oboe; its close relative"),
+ 70:(4,"Iowa bassoon"),
+ 71:(4,"Iowa clarinet family -- Bb, Eb and bass, to find one register law"),
+ 72:(4,"the flute law, measured across bass, alto and concert flute"),
+ 73:(4,"Iowa flute (nonvib -- vibrato smears the harmonics)"),
+ 74:(1,"the generic open pipe"),
+ 75:(1,"the generic stopped pipe"),
+ 76:(2,"its own class, theory"),
+ 77:(1,"the generic open pipe; a shakuhachi's breath and pitch bend are not modelled"),
+ 78:(1,"the generic open pipe"),
+ 79:(2,"its own class -- a vessel flute, theory"),
+ 80:(2,"its own class, theory"),
+ 81:(2,"its own class, theory"),
+ 82:(1,"one SynthLeadProperties serves 82-87"),
+ 83:(1,"as 82"), 84:(1,"as 82"), 85:(1,"as 82"), 86:(1,"as 82"), 87:(1,"as 82"),
+ 104:(2,"its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording"),
+ 105:(1,"the generic plucked string; a banjo's membrane head is a real resonator"),
+ 106:(1,"the generic plucked string"),
+ 107:(1,"the generic plucked string"),
+ 108:(1,"the generic mallet base; a kalimba is a plucked cantilever tine"),
+ 109:(1,"one ReedPipeProperties for the bagpipe and the shanai"),
+ 110:(4,"the measured violin, given solo treatment"),
+ 111:(1,"as 109"),
+ 112:(4,"Iowa crotales, 25 pitches"),
+ 113:(2,"its own class, theory"),
+ 114:(4,"built from the instrument's design, then corrected against Freesound 742254"),
+ 115:(4,"Iowa woodblocks"),
+ 116:(2,"the membrane drum class"),
+ 117:(2,"the tom class"),
+ 118:(1,"the generic mallet base. CATEGORY ERROR"),
+ 119:(1,"the generic mallet base. CATEGORY ERROR: this needs a BACKWARDS envelope"),
+ 120:(3,"its own class -- slide, squeak and position shift; reworked against Ben's ear"),
+ 121:(2,"its own class, theory"),
+ 122:(2,"its own class, theory"),
+ 123:(1,"the generic mallet base. CATEGORY ERROR"),
+ 124:(1,"the generic mallet base. CATEGORY ERROR: US ringback is 440+480 Hz gated"),
+ 125:(1,"the generic mallet base. CATEGORY ERROR"),
+ 126:(2,"its own class, theory"),
+ 127:(2,"its own class, theory"),
+}
+for p in range(88, 104):
+    RATED[p] = (1, "one BowedStringProperties serves all sixteen pads and FX")
+
+FAMILY = [(0,"Piano"),(8,"Chromatic Percussion"),(16,"Organ"),(24,"Guitar"),(32,"Bass"),
+          (40,"Strings"),(48,"Ensemble"),(56,"Brass"),(64,"Reed"),(72,"Pipe"),
+          (80,"Synth Lead"),(88,"Synth Pad"),(96,"Synth Effects"),(104,"Ethnic"),
+          (112,"Percussive"),(120,"Sound Effects")]
+LEVEL = {0:"nothing", 1:"general class", 2:"specific, theory",
+         3:"specific, theory + ear", 4:"specific, reference audio"}
+
+
+def main(argv):
+    out = argv[1] if len(argv) > 1 else os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')
+    fams = dict(FAMILY)
+    L = []
+    L.append("# GM coverage\n")
+    L.append("How complete each of the 128 GM patches is. Generated by")
+    L.append("`examples/gm_coverage.py`, which reads the class column out of `patch_map`")
+    L.append("so it cannot drift; the ratings live in that script and can be argued with.\n")
+    L.append("| | meaning |")
+    L.append("|---|---|")
+    for k in range(5):
+        L.append("| **%d** | %s |" % (k, LEVEL[k]))
+    L.append("")
+    L.append("4 means the voice was fitted against a RECORDING of the instrument, or")
+    L.append("against a family law measured on its close relatives. Published measurements")
+    L.append("that are not audio -- the Rhodes' high-speed-camera papers -- are better than")
+    L.append("theory but cannot contradict the model the way a recording can, so those")
+    L.append("voices sit at 2 and say so.\n")
+    hist = {k: 0 for k in range(5)}
+    for p in range(128):
+        hist[RATED[p][0]] += 1
+    L.append("## Where it stands\n")
+    L.append("| rating | patches | share |")
+    L.append("|---|---|---|")
+    for k in range(5):
+        L.append("| %d %s | %d | %d%% |" % (k, LEVEL[k], hist[k], round(100 * hist[k] / 128)))
+    L.append("")
+    cat = [p for p in range(128) if "CATEGORY ERROR" in RATED[p][1]]
+    L.append("**%d patches are played by a voice of the wrong physical kind** "
+             "(marked CATEGORY ERROR below): %s.\n"
+             % (len(cat), ", ".join("%d %s" % (p, GM[p]) for p in cat)))
+    for start, name in FAMILY:
+        L.append("## %d-%d %s\n" % (start, start + 7, name))
+        L.append("| # | patch | class | | notes |")
+        L.append("|---|---|---|---|---|")
+        for p in range(start, start + 8):
+            cls = patch_map.property_class_for_program(p).__name__
+            r, note = RATED[p]
+            L.append("| %d | %s | `%s` | **%d** | %s |"
+                     % (p, GM[p], cls.replace("Properties", ""), r, note))
+        L.append("")
+    open(out, 'w').write("\n".join(L) + "\n")
+    print("  wrote %s" % out)
+    print("  %s" % "  ".join("%d:%d" % (k, hist[k]) for k in range(5)))
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))
