@@ -46,6 +46,12 @@ tuner_registry = {
     # ...and the same temperament on PURE 2:1 octaves, for mode-locked pipes
     # (an organ has no sharp 2nd partial to chase, so a stretched octave beats).
     "hybridharm": HybridHarmonicTuner,
+    # ...and both at MODERN pitch. The temperament and the reference pitch are
+    # separate questions: `hybrid` is the baroque tuner and stays at 415, and
+    # these are the same ratios with A4 at 440, for everything that is not
+    # baroque. hybrid440 is the general default -- see blockrender.
+    "hybrid440": Hybrid440Tuner,
+    "hybridharm440": HybridHarmonic440Tuner,
     "spiral": SpiralTuner,
     "semi": SemiTuner,
     "path": PathNotesTuner,

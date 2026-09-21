@@ -30,7 +30,7 @@ def player_cmd():
 def main():
     if len(sys.argv) < 2:
         sys.exit("usage: play.py IN.mid [tuner]")
-    path = sys.argv[1]; tuner = sys.argv[2] if len(sys.argv) > 2 else "hybrid"
+    path = sys.argv[1]; tuner = sys.argv[2] if len(sys.argv) > 2 else "hybrid440"
 
     sys.stderr.write("preparing %s (%s) ...\n" % (path, tuner)); sys.stderr.flush()
     t0 = time.time()

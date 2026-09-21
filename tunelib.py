@@ -630,7 +630,13 @@ class HybridHarmonicTuner(HybridTuner):
     """
     @classmethod
     def _build_table(cls):
-        base = HybridTuner._build_table()
+        # cls, NOT HybridTuner. Calling the parent by name built the stretched
+        # table from HybridTuner's OWN reference pitch and then derived the
+        # pure-octave table from that, so any subclass with a different A was
+        # silently given the parent's -- which is exactly what happened to
+        # HybridHarmonic440Tuner, sitting at 415 while saying 440. Harmless
+        # while every hybrid shared one pitch, wrong as soon as one did not.
+        base = PathTuner._build_table.__func__(cls)
         if 60 not in base:
             return base
         ref = {i: base[60 + i] / base[60] for i in range(12) if 60 + i in base}
@@ -640,6 +646,34 @@ class HybridHarmonicTuner(HybridTuner):
         return {n: c4 * ref[(n - 60) % 12] * (2.0 ** ((n - 60 - ((n - 60) % 12)) // 12))
                 for n in range(128)}
 
+
+
+class Hybrid440Tuner(HybridTuner):
+    """The hybrid temperament at MODERN pitch.
+
+    Same temperament, same stretched octaves, A4 at 440 instead of 415 -- and
+    it exists because the temperament and the reference pitch are separate
+    questions that were being answered by one attribute. `hybrid` is the tuner
+    verified by ear for baroque, and it should stay at baroque pitch; but a
+    great deal of what gets rendered here is not baroque, and those renders
+    want this temperament at concert pitch rather than equal temperament or a
+    semitone flat.
+
+    A temperament is a set of RATIOS between the notes. Where A sits is a
+    separate decision about the ensemble, and a modern instrument playing a
+    well-tempered scale is not a contradiction -- it is most pianos.
+    """
+    A = 440
+
+
+class HybridHarmonic440Tuner(HybridHarmonicTuner):
+    """The pure-octave hybrid at modern pitch. See Hybrid440Tuner.
+
+    For a mode-locked pipe on a modern organ, which is most organs a listener
+    will have heard: an instrument built or restored to A440 is not thereby
+    equal-tempered.
+    """
+    A = 440
 
 class SpiralTuner(PathTuner):
     generator_name = "SpiralNotes"

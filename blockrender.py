@@ -449,7 +449,7 @@ PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa",
                 "tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")
 
 
-def prepare(path, tuner='hybrid'):
+def prepare(path, tuner='hybrid440'):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
     full window) and play.py (streamed windows)."""
@@ -1363,7 +1363,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
 _LAST_PREP = {}
 
 
-def render(path, tuner='hybrid'):
+def render(path, tuner='hybrid440'):
     prep = prepare(path, tuner)
     _LAST_PREP.update(prep)
     t0=time.time(); L,R = synth_window(prep, 0, prep['N']); kdt=time.time()-t0
@@ -1468,7 +1468,7 @@ def subset(prep, mask, objectify=False):
     return out
 
 
-def render_parts(path, tuner='hybrid', objects=False, by='channel'):
+def render_parts(path, tuner='hybrid440', objects=False, by='channel'):
     """Render one signal per part. Yields (key, position, L, R, partials).
 
     `by` is 'channel' (one per MIDI channel) or 'source' (one per distinct
@@ -1513,7 +1513,7 @@ def write_wav(path, L, R):
 
 
 if __name__=="__main__":
-    inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid'
+    inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid440'
     # Optional 4th argument sets the pitch everything tunes to: "a=432" names the
     # frequency of A4, "c=256" the frequency of middle C. Which end you give
     # matters -- a temperament's own A-to-C ratio is not equal temperament's, so

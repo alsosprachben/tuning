@@ -2413,6 +2413,25 @@ A rescales the whole table so A4 lands there.
 The baroque equal-tempered control is therefore `hybrid` rather than `even`,
 which is the tuner that should have been playing that part all along.
 
+AND THE TEMPERAMENT IS NOT THE PITCH. Those are two questions and one attribute
+was answering both, so wanting the hybrid temperament meant accepting baroque
+pitch with it. `hybrid440` and `hybridharm440` are the same ratios -- measured,
+0.0000 cents of difference across 25 notes, a pure transposition -- with A4 at
+440. A modern instrument playing a well-tempered scale is not a contradiction;
+it is most pianos.
+
+**`hybrid440` is now the general default** for `blockrender`, `play.py`,
+`soloforward.py`, the live TUI and `render-corpus.sh`. `examples/organ.py`
+stays on `hybrid` at 415 deliberately and says so: that recipe is Bach on an
+organ, and baroque pitch is part of it.
+
+A LATENT BUG THIS EXPOSED. `HybridHarmonicTuner._build_table` derived its
+pure-octave table by calling `HybridTuner._build_table()` BY NAME, so it always
+used HybridTuner's reference pitch rather than its own. Harmless while every
+hybrid shared one A; wrong the moment one did not, and `hybridharm440` duly
+came out at 415 while saying 440. It calls the base implementation with `cls`
+now.
+
 BLAST RADIUS, and it is not small: every `even` render moves up a semitone and
 every `hybrid` render down about 101 cents. `hybrid` is the default for
 `render-corpus.sh` and for `blockrender` itself, so the whole corpus re-pitches.

@@ -18,7 +18,11 @@ passed as flags nobody will remember.
            told the same thing. Setting it for one and not the other gives a
            hall's early reflections with a studio's tail.
 
-  hybrid   verified by ear as the baroque tuner. NOT hybridharm, which tracks
+  hybrid   verified by ear as the baroque tuner, and at A=415, which is the
+           pitch that goes with it. `hybrid440` is the same temperament at
+           concert pitch and is the general default now -- but this recipe is
+           Bach on an organ, so it stays at baroque pitch deliberately.
+           NOT hybridharm, which tracks
            the second harmonic; BWV 542 was rendered with both at different
            times and hybrid is the one that stuck.
 

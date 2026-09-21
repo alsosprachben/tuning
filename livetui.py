@@ -69,7 +69,8 @@ TUNERS = ["hybrid", "hybridharm", "even", "stretch", "meantone", "just", "pyth",
 # what it is called. These are the working notes from midilib/tunelib, not a
 # claim about historical practice.
 TUNER_NOTE = {
-    "hybrid":     "A=441, the default for most of this work",
+    "hybrid440":  "A=440, the default: the hybrid temperament at concert pitch",
+    "hybrid":     "A=415, the same temperament at baroque pitch",
     "hybridharm": "pure 2:1 octaves -- right for mode-locked pipes",
     "even":       "equal temperament, A=415",
     "stretch":    "equal, with the piano's stretched octaves",
@@ -325,7 +326,7 @@ class TUI:
     def add_part(self):
         specs = self.specs()
         if not specs:
-            specs = [dict(program=56, drums=False, tuner="hybrid", lo=0, hi=127)]
+            specs = [dict(program=56, drums=False, tuner="hybrid440", lo=0, hi=127)]
         else:
             specs.insert(self.row + 1, dict(specs[self.row]))
         self.rebuild("layer", specs)

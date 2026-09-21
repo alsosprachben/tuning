@@ -44,7 +44,10 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${OUT:-$HOME/Downloads/bwx-renders}"
 ROOM="${ROOM:-hall}"
-TUNER="${TUNER:-hybrid}"
+# hybrid440: the hybrid temperament at CONCERT pitch. `hybrid` is the same
+# ratios at baroque A=415, which is right for Bach and wrong for the rest of
+# a mixed corpus -- and this corpus is mixed.
+TUNER="${TUNER:-hybrid440}"
 MASTER_DB="${MASTER_DB:--14}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$OUT"

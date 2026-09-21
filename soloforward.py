@@ -55,7 +55,7 @@ def main(argv):
     try:
         stems = os.path.join(tmp, 'stems')
         subprocess.run([sys.executable, os.path.join(HERE, 'blockrender.py'),
-                        inp, os.path.join(tmp, 'all.wav'), 'hybrid',
+                        inp, os.path.join(tmp, 'all.wav'), 'hybrid440',
                         '--stems', stems], env=env, check=True)
         base = os.path.splitext(os.path.basename(inp))[0]
         solo, parts, sr, found = None, [], 44100, []
