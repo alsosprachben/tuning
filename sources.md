@@ -2387,3 +2387,34 @@ the string ringing 32 seconds, which put the modes at Q 12000 and made
 everything couple to nothing, in every tuning. 7 s is a sitar. The lesson
 generalises -- in this engine an unphysical decay silently becomes an
 unphysical resonance, and only sympathetic coupling makes that visible.
+
+## Which tuners are at which pitch
+
+`tunelib` gives every temperament its own A, and the split is now by period
+rather than by accident:
+
+| A440 (modern) | A415 (baroque) |
+|---|---|
+| equal, just, linear, Bechstein | **hybrid**, **hybridharm**, Werckmeister, meantone, Pythagorean, well, Sankey |
+
+TWO THINGS MOVED. `even` was at 415, which made it the equal-tempered control
+for Werckmeister and meantone -- defensible, but it also made `even` the wrong
+thing to reach for whenever the music is not Bach, and wrong *silently*: a
+render simply came out a semitone flat and nothing said so. It caught this
+session twice, once for an hour, because an analysis that assumed A440 found
+every partial a semitone from where it looked.
+
+And `hybrid`/`hybridharm` had no A at all. Path-generated tuners take
+`A = None` to mean "use the generator's own frequencies", which put A4 at
+441.04 -- near modern pitch by accident rather than by decision. They are the
+tuners verified by ear FOR BAROQUE, so they now carry baroque pitch, and naming
+A rescales the whole table so A4 lands there.
+
+The baroque equal-tempered control is therefore `hybrid` rather than `even`,
+which is the tuner that should have been playing that part all along.
+
+BLAST RADIUS, and it is not small: every `even` render moves up a semitone and
+every `hybrid` render down about 101 cents. `hybrid` is the default for
+`render-corpus.sh` and for `blockrender` itself, so the whole corpus re-pitches.
+`set_reference(a=...)` still overrides all of it per render, and
+`TUNING_REFERENCE` exposes that from the command line.

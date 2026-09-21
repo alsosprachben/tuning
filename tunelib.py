@@ -51,7 +51,9 @@ def ratio2EqualNote(npo, r):
 
 
 # THE PITCH THE WHOLE SYNTH TUNES TO. Every tuner here carries its own A -- 440
-# for the modern ones, 415 for the baroque -- and derives middle C from it, and
+# for the modern ones (equal, just, linear, Bechstein), 415 for the baroque
+# (hybrid, Werckmeister, meantone, Pythagorean, well, Sankey) -- and derives
+# middle C from it, and
 # the path-generated tuners rescale their whole table so A4 lands there. That is
 # a per-temperament decision baked into each class, which is right for what a
 # temperament IS but leaves no way to say "play this at A=432" or "at C=256"
@@ -246,7 +248,13 @@ class MeantoneTuner(TwelveTuner):
 
 
 class EvenTuner(TwelveTuner):
-    A = 415
+    # A440, BECAUSE EQUAL TEMPERAMENT IS THE MODERN ONE. This sat at 415 with
+    # the baroque tuners, which made it the equal-tempered control for
+    # Werckmeister and meantone -- reasonable, but it also made `even` the
+    # wrong thing to reach for whenever the music is not Bach, and silently:
+    # everything simply came out a semitone flat. The baroque control is now
+    # `hybrid`, which is the tuner that was verified for baroque anyway.
+    A = 440
     
     # Even Temperament
     # 440 * 2 ** (float(n) / 12)
@@ -594,6 +602,17 @@ class PathTuner(BaseTuner):
 
 
 class HybridTuner(PathTuner):
+    # A415: THIS IS THE BAROQUE TUNER, verified by ear as the one for baroque,
+    # so it carries baroque pitch. Path-generated tuners set A to None by
+    # default, which means "use the generator's own frequencies" -- those put
+    # A4 at 441.04, near modern pitch by accident rather than by decision.
+    # Naming it rescales the whole table so A4 lands there, which is what the
+    # reference comment at the top of this file describes.
+    #
+    # HybridHarmonicTuner inherits this, deliberately: it is the same
+    # temperament on pure octaves, for pipes rather than strings, and a pipe
+    # organ of the period is no less at 415 than a harpsichord is.
+    A = 415
     generator_name = "HybridNotes"
 
 

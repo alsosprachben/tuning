@@ -6156,7 +6156,7 @@ class SteelPanProperties(MetalPercussionProperties):
     # What one recording of one pan cannot settle is the finer distribution:
     # M2 against M6 against M7 moves a lot with how the analysis is sliced. It
     # is not fitted.
-    sympathetic_gain = 0.26
+    sympathetic_gain = 0.23
     sympathetic_falloff = 2.0    # dB per step round the cycle of fifths
     sympathetic_span = 19
     sympathetic_max = 14         # far enough round the cycle to reach M2
