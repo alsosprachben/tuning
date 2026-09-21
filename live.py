@@ -3222,10 +3222,46 @@ def selftest():
     import math as _math
     import patch_map as _PM
     check("the Rhodes is not a piano", _PM.property_class_for_program(4) is _T.RhodesProperties)
-    check("...and the acoustic pianos are where they were",
+    check("...and the ACOUSTIC pianos are where they were",
           all(_PM.property_class_for_program(n) is _T.GrandPianoProperties
-              for n in (0, 1, 2, 3)) and
+              for n in (0, 1, 3)) and
           _PM.property_class_for_program(6) is _T.HarpsichordProperties)
+
+    # ---- the electric grand: a CP-70 is a short piano with no board ---------
+    check("the electric grand is not the acoustic one",
+          _PM.property_class_for_program(2) is _T.ElectricGrandProperties
+          and issubclass(_T.ElectricGrandProperties, _T.GrandPianoProperties),
+          "  (still a piano: same hammers, same action, same strike comb)")
+    eg = _T.ElectricGrandProperties(261.63, 0.0, 1.0, 1.0)
+    ag = _T.GrandPianoProperties(261.63, 0.0, 1.0, 1.0)
+    # B goes as 1/L^4 at fixed pitch, and at constant stress L = C/f until the
+    # case runs out -- so two pianos of different size can differ ONLY where the
+    # shorter one binds. That predicts a knee, not a tilt.
+    _b = lambda q, f: q.inharmonicity_coefficient_for_frequency(f)
+    knee = eg.scale_constant_hz_m / eg.case_string_max_m
+    check("...and its bass is far stiffer, because its strings are short",
+          _b(eg, 41.2) > 8.0 * _b(ag, 41.2),
+          "  (%.1fx at E1, ceiling %.1fx)"
+          % (_b(eg, 41.2) / _b(ag, 41.2),
+             (eg.reference_string_max_m / eg.case_string_max_m) ** 4))
+    check("...while ABOVE the knee the two are identical, as the scaling says",
+          abs(_b(eg, knee * 1.4) / _b(ag, knee * 1.4) - 1.0) < 1e-9
+          and abs(_b(eg, 1046.5) / _b(ag, 1046.5) - 1.0) < 1e-9,
+          "  (the CP-70's case binds below %.0f Hz; above that, same string)" % knee)
+    # A piezo under the bridge is not a soundboard: no body resonance, and above
+    # all no sub-bass RADIATION loss, which is the term a board has and a pickup
+    # cannot. That is why an electric grand has more bottom, not less.
+    check("...and no soundboard, so it keeps the bass a board cannot radiate",
+          eg.soundboard_gain(35.0) / eg.soundboard_gain(400.0)
+          > 1.6 * (ag.soundboard_gain(35.0) / ag.soundboard_gain(400.0)),
+          "  (35 Hz against 400: %+.1f dB, where the board gives %+.1f)"
+          % (20 * _math.log10(eg.soundboard_gain(35.0) / eg.soundboard_gain(400.0)),
+             20 * _math.log10(ag.soundboard_gain(35.0) / ag.soundboard_gain(400.0))))
+    # The +6 dB/octave of bridge force is DERIVED and deliberately not applied;
+    # if somebody switches it on, they should have to mean it.
+    check("...and the derived bridge tilt is recorded, not spent",
+          eg.bridge_force_power == 0.0 and hasattr(eg, "bridge_force_power"),
+          "  (bridge force goes as n*A_n, but the A_n here is a generic tilt)")
 
     def _rh(f0=261.63, vel=100, cls=_T.RhodesProperties):
         return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)

@@ -63,7 +63,7 @@ Applause,Gunshot""".replace("\n", "").split(",")
 RATED = {
  0:(4,"Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured"),
  1:(1,"the grand piano; no separate bright voicing"),
- 2:(1,"the grand piano. Defensible -- a CP-70 IS a string piano with pickups"),
+ 2:(2,"a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference"),
  3:(1,"the grand piano; the honky-tonk detuning is not modelled"),
  4:(2,"Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted"),
  5:(2,"Wurlitzer. Same machinery, 1/d pickup; no audio fitted"),

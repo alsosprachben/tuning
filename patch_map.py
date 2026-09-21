@@ -12,6 +12,7 @@ and editing this table -- the dispatch stays data-driven.
 
 from tonelib import (
     ClavinetProperties,
+    ElectricGrandProperties,
     RhodesProperties,
     WurlitzerProperties,
     MutedTrumpetProperties,
@@ -109,6 +110,10 @@ _fill(0, 7, GrandPianoProperties)
 # ...except the harpsichords (6 = Harpsichord, 7 = Clavi): PLUCKED, and registered
 # (choirs as stops via CC11), not struck. GM files that mean a harpsichord get one.
 _fill(6, 7, HarpsichordProperties)
+# ...and 2 (Electric Grand) is a Yamaha CP-70: a real grand action and real
+# strings, but with NO SOUNDBOARD and a piezo under the bridge, and short enough
+# that its bass strings are a twelfth as stiff-tuned again as a concert grand's.
+PROGRAM_CLASS[2] = ElectricGrandProperties  # short strings, no board, bridge piezo
 # ...and 7 (Clavi) is not a harpsichord: a clavinet is a STRUCK steel string
 # trapped against an anvil by a rubber tangent and read by MAGNETS, where the
 # harpsichord voice it borrowed is plucked, wooden and carries no pickup at all.

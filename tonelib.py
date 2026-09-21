@@ -3276,6 +3276,125 @@ class GrandPianoProperties(InharmonicStringProperties):
         return body * high * low
 
 
+class ElectricGrandProperties(GrandPianoProperties):
+    """GM 2. A Yamaha CP-70: a real grand action and real strings, with no
+    soundboard and a piezo under the bridge. It was the acoustic grand, exactly
+    -- the same class object, not even a subclass -- and three things about that
+    are wrong. All three are derived here rather than fitted, because there is
+    no recording of one to fit against.
+
+    "The same frame, action and frame construction as an acoustic piano, but
+    with SHORTER STRINGS", and "pick-ups on each note INSTEAD OF A SOUNDBOARD".
+
+    THE STRETCH IS FROM THE WRONG PIANO, BY THE LARGEST POSSIBLE MARGIN. For a
+    stiff string B = pi^2 Q d^2 / (64 rho L^4 f0^2), so at a fixed pitch and
+    gauge B goes as 1/L^4 and a string shortened by k has k^4 the
+    inharmonicity. The voice this inherits carries a STEINWAY B fit -- a
+    seven-foot concert grand, the longest strings in the catalogue and the least
+    inharmonic thing it could have been given.
+
+    But the departure is not one number, and the shape is derivable. At constant
+    stress f0*L is fixed, so a piano's speaking length follows L = C/f UNTIL THE
+    CASE RUNS OUT, and two pianos of different size can only differ where the
+    shorter one BINDS. With C = 162 m*Hz (a grand's C4 string is about 0.62 m),
+    a 211 cm Steinway binds below 83 Hz and a CP-70's 120 cm case below 154, so:
+
+        above 154 Hz   the two are IDENTICAL -- same length, same B
+        83 to 154 Hz   the factor climbs as f^-4
+        below 83 Hz    both are capped, and it tops out at (1.95/1.05)^4 = 11.9
+
+    That predicts something specific: an electric grand's stretch departs from a
+    concert grand's ONLY in the bottom octave and a half, and there it is huge.
+    The 8th partial of its lowest A sits 195 cents sharp against a Steinway's
+    17. B reaches 3.8e-03, which is where the literature puts a spinet -- so the
+    derivation lands in the right place without having been aimed there.
+
+    A PIEZO READS FORCE, NOT RADIATED SOUND, and that is also derivable. The
+    transverse force a string exerts on its bridge is T times the slope there,
+    so for mode n it goes as n*A_n: **+6 dB per octave**, the same tilt a
+    magnetic pickup gets and for a different reason -- there it is velocity,
+    here it is the slope. It is NOT the guitar's pickup comb: a bridge pickup
+    sits at the termination and reads force, not displacement at an interior
+    point, so there is no |sin(n*pi*q)| and pickup_points stays empty.
+
+    AND THERE IS NO SOUNDBOARD TO RADIATE. The inherited soundboard_gain is
+    three things, and a CP-70 has none of them: a body resonance at 240 Hz, a
+    top roll-off at 2.6 kHz, and -- the one that matters most -- a sub-bass term
+    1/(1+(35/f)^2) that models a BOARD'S POOR RADIATION at low frequency. That
+    is a real acoustic loss and a piezo does not have it, so the inherited voice
+    was throwing away bass the instrument keeps. Backwards, for an instrument
+    whose signature is a thick clean bottom that engineers cut rather than lift.
+
+    WHAT IS KEPT, because it is all still true: the hammers, the action, the
+    strike comb at 1/7, the velocity-dependent hammer low-pass, the unison
+    dance and the phantom partials. This is a piano.
+
+    NO REFERENCE, so this sits at 2. The +6 dB/octave and the 1/L^4 law are
+    derived; the two CASE LENGTHS are facts about the instruments; and
+    bridge_corner_hz is an estimate standing in for the mechanical coupling
+    between string, bridge and pickup, which is the one number here with
+    nothing behind it. How many strings per note a CP-70 uses is also
+    unverified -- the unison behaviour is inherited unchanged.
+    """
+
+    # L = C/f until the case runs out. C from a grand's C4 string, 0.62 m.
+    scale_constant_hz_m = 162.0
+    reference_string_max_m = 1.95   # the Steinway B the inherited fit describes
+    case_string_max_m = 1.05        # a CP-70, whose case is about half as deep
+
+    # THE +6 dB/OCTAVE IS DERIVED AND DELIBERATELY NOT APPLIED, which is the
+    # most interesting thing in this class. Bridge force for mode n is T times
+    # the slope, so it goes as n*A_n -- that much is certain. But the A_n it
+    # would multiply is this engine's generic 1/n^1.1 string tilt, not a
+    # measured displacement spectrum, and stacking a full octave-doubling on
+    # top of it puts 1-4 kHz +11 dB and the top +15 over the acoustic grand,
+    # measured. A real CP-70 is thick and clean, not brilliant.
+    #
+    # The physics that rescues it is that a piezo sits under a MASSIVE WOODEN
+    # BRIDGE whose mechanical mobility falls with frequency, and that fall
+    # takes the slope back by an amount nothing here can predict. So the honest
+    # value is 0 and the derivation is recorded rather than spent: setting it to
+    # 1.0 and then choosing a corner that cancels it again would be fitting a
+    # free parameter to a target that does not exist.
+    bridge_force_power = 0.0
+    # The board radiates poorly above 2.6 kHz; a pickup does not stop there. The
+    # DIRECTION is defensible, the number is an estimate.
+    bridge_corner_hz = 4000.0
+    bridge_order = 1.6
+    initial_gain = 0.088489
+    bridge_gain = 1.0               # neutral: the board's three terms became one
+
+    # BALANCE, and it is not linear in this knob. Measured on four notes at
+    # velocity 100 with the master well clear of any ceiling, level against
+    # initial_gain runs at 38.8 dB per decade where a plain gain would give 20:
+    # the piano's PHANTOM PARTIALS are sum-tones whose amplitude goes as the
+    # product of two partials' amplitudes, so they scale as the SQUARE of this.
+    # Inheriting the acoustic grand's 0.0718 leaves the voice 3.5 dB under one;
+    # solved against the measurement it wants 0.0885.
+
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        b = super().inharmonicity_coefficient_for_frequency(frequency)
+        f = max(float(frequency), 1e-6)
+        c = self.scale_constant_hz_m
+        long_ = min(c / f, self.reference_string_max_m)
+        short = min(c / f, self.case_string_max_m)
+        return b * (long_ / short) ** 4
+
+    def soundboard_gain(self, fn):
+        """There is no soundboard. This is the bridge and the piezo on it.
+
+        Overriding the board's method rather than harmonic_volume keeps the
+        hammer low-pass above it exactly as the piano has it -- the hammers are
+        the same hammers.
+        """
+        slope = 1.0
+        if self.bridge_force_power:
+            f0 = self.frequency_x * (2.0 ** self.octave_position)
+            slope = max(fn / max(f0, 1e-9), 1.0) ** self.bridge_force_power
+        return self.bridge_gain * slope / (
+            1.0 + (fn / self.bridge_corner_hz) ** self.bridge_order)
+
+
 # One waveshaper answer per (curve, offset, deflection). A note asks for it up to
 # max_harmonic times, and a bank asks for it once per velocity bucket.
 _EP_PICKUP_CACHE = {}

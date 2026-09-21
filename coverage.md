@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 57 | 45% |
-| 2 specific, theory | 24 | 19% |
+| 1 general class | 56 | 44% |
+| 2 specific, theory | 25 | 20% |
 | 3 specific, theory + ear | 18 | 14% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -104,7 +104,7 @@ splits almost exactly along that line.
 |---|---|---|---|---|
 | 0 | Acoustic Grand Piano | `GrandPiano` | **4** | Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured |
 | 1 | Bright Acoustic Piano | `GrandPiano` | **1** | the grand piano; no separate bright voicing |
-| 2 | Electric Grand Piano | `GrandPiano` | **1** | the grand piano. Defensible -- a CP-70 IS a string piano with pickups |
+| 2 | Electric Grand Piano | `ElectricGrand` | **2** | a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference |
 | 3 | Honky-tonk Piano | `GrandPiano` | **1** | the grand piano; the honky-tonk detuning is not modelled |
 | 4 | Electric Piano 1 | `Rhodes` | **2** | Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted |
 | 5 | Electric Piano 2 | `Wurlitzer` | **2** | Wurlitzer. Same machinery, 1/d pickup; no audio fitted |

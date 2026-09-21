@@ -3076,3 +3076,94 @@ were the probe. The test MIDI's note-offs accumulate into the deltas, so its
 four notes start at 0, 0.96, 1.92 and 2.88 s rather than on the beat, and the
 window was reading C3's even harmonics as C4's. Find the onsets; do not assume
 them from the score.
+
+---
+
+## The electric grand: what can be derived, and what must not be
+
+GM 2 was the acoustic grand -- literally the same class object, not even a
+subclass. A Yamaha CP-70 has "the same frame, action and frame construction as
+an acoustic piano, but with SHORTER STRINGS", and "pick-ups on each note
+INSTEAD OF A SOUNDBOARD". There is no recording of one here, so everything
+below is derived or it is nothing.
+
+### The stretch, and a prediction with a knee in it
+
+For a stiff string `B = pi^2 Q d^2 / (64 rho L^4 f0^2)`, so at fixed pitch and
+gauge **B goes as 1/L^4** and a string shortened by k has k^4 the
+inharmonicity. The inherited voice carries a **Steinway B** fit: a seven-foot
+concert grand, the longest strings in the catalogue and the least inharmonic
+thing it could have been handed.
+
+The shape of the departure is derivable too. At constant stress `f0*L` is
+fixed, so a piano's speaking length follows `L = C/f` **until the case runs
+out** -- and two pianos of different size can only differ where the shorter one
+BINDS. With `C = 162 m*Hz` (a grand's C4 string is about 0.62 m), a 211 cm
+Steinway binds below 83 Hz and a CP-70's 120 cm case below 154:
+
+| band | ratio | B multiplier |
+|---|---|---|
+| above 154 Hz | 1.00 | **1.0 -- identical** |
+| 83 to 154 Hz | climbing | rises as f^-4 |
+| below 83 Hz | 1.857 | **11.9, and capped** |
+
+**That is a falsifiable prediction rather than a tilt:** an electric grand's
+stretch departs from a concert grand's ONLY in the bottom octave and a half,
+and is identical above D#3. It reaches B = 3.8e-03 in the bass, which is where
+the literature puts a spinet -- the derivation lands there without having been
+aimed. Rendered, E1's 8th partial sits **+50 cents** sharp against the acoustic
+grand's +2.
+
+### The soundboard, taken apart term by term
+
+The inherited `soundboard_gain` is three things and a CP-70 has none of them:
+
+- a body resonance at 240 Hz -- **gone**, there is no body;
+- a sub-bass term `1/(1+(35/f)^2)`, which is explicitly a BOARD'S POOR
+  RADIATION at low frequency -- **gone**, a piezo has no such loss. This is the
+  one that matters: the inherited voice was throwing away bass the instrument
+  keeps, which is backwards for something whose signature is a thick clean
+  bottom that engineers cut rather than lift. Measured on the class, 35 Hz
+  against 400 Hz is **+0.2 dB here where the board gives -8.3**;
+- a top roll-off at 2.6 kHz -- **moved to 4 kHz**, because a pickup reaches
+  higher than a board radiates. The direction is defensible; the number is an
+  estimate and the only one in this voice with nothing behind it.
+
+### The derivation that was NOT spent, which is the point
+
+The transverse force a string exerts on its bridge is T times the slope there,
+so for mode n it goes as `n*A_n`: **+6 dB per octave**, certain, and the same
+tilt a magnetic pickup gets by a different route.
+
+**It is implemented and set to zero.** The `A_n` it would multiply is this
+engine's generic `1/n^1.1` string tilt, not a measured displacement spectrum,
+and stacking a full octave-doubling on top of it measured **+11 dB across
+1-4 kHz and +15 at the top** against the acoustic grand. A real CP-70 is thick
+and clean, not brilliant. The physics that rescues the derivation is that a
+piezo sits under a MASSIVE WOODEN BRIDGE whose mechanical mobility falls with
+frequency -- real, and not quantifiable from anything here. So
+`bridge_force_power = 0.0`, with the law recorded on the class: setting it to
+1.0 and then choosing a corner that cancels it again would be fitting a free
+parameter to a target that does not exist.
+
+This is the same discipline the cymbal fit failed: a factor that looks derivable
+in isolation is not, if the thing it multiplies was fitted jointly with
+something else.
+
+### Two incidental findings
+
+**Level is not linear in `initial_gain` for a piano.** Measured across a decade,
+it runs at **38.8 dB per decade where a plain gain gives 20** -- the phantom
+partials are sum-tones whose amplitude goes as the product of two partials'
+amplitudes, so they scale as the SQUARE of the voice gain. Inheriting the
+acoustic grand's 0.0718 leaves this 3.5 dB under one; solved, it wants 0.0885.
+
+**And a probe failure with a new cause: stale bytecode.** A calibration loop
+wrote `initial_gain`, re-rendered, and got IDENTICAL results for two different
+values. Python caches `.pyc` on (mtime, size), and the loop was writing
+same-length values inside one second, so the subprocess reused stale bytecode.
+Clear `__pycache__` and space the writes when sweeping a constant by rewriting
+source.
+
+**Not verified:** how many strings per note a CP-70 uses. The unison behaviour
+is inherited from the acoustic grand unchanged and unchecked.
