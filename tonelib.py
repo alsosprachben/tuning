@@ -7741,12 +7741,7 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
     #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
-    # FITTED to band-energy decay on the Iowa references (17" and 18"
-    # suspended, stick, mf+ff): rate(f) = floor + k*log2(f/peak)^2, 0.49 dB/s
-    # rms. Was peak 2000, floor 20, above 8, below 8 -- three to fourteen
-    # times too fast, with its slowest decay at 2 kHz where the measurement
-    # says the decay is still falling toward the bass. See sources.md.
-    ring_peak_hz = 815.3
+    ring_peak_hz = 2000
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
     # and no delayed peak appears at all, which is a threshold, not a gradient.
@@ -7856,9 +7851,9 @@ class CrashCymbal1Properties(CymbalProperties):
     bloom_gain = 0.15
     bloom_center_hz = 1834.48
     bloom_octaves = 1.73876
-    ring_decay_floor = 6.33
-    ring_decay_below = 1.39
-    ring_decay_above = 1.39
+    ring_decay_floor = 20
+    ring_decay_below = 8
+    ring_decay_above = 8
     decay_db = 108.636
     harmonic_decay_db = 0.0200571
     hf_corner_hz = 12305.2
@@ -8112,13 +8107,7 @@ class CrashCymbal2Properties(CymbalProperties):
     #
     #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
     #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
-    # FITTED to band-energy decay on the Iowa references (20" and 13"
-    # suspended, stick, mf+ff): rate(f) = floor + k*log2(f/peak)^2, 1.48 dB/s
-    # rms. Was peak 2672.65, floor 44.2985, above 151.364, below 6.65704 --
-    # three to fourteen times too fast, with its slowest decay at 2 kHz where
-    # the measurement says the decay is still falling toward the bass. See
-    # sources.md.
-    ring_peak_hz = 641.6
+    ring_peak_hz = 2672.65
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
     # and no delayed peak appears at all, which is a threshold, not a gradient.
@@ -8147,9 +8136,9 @@ class CrashCymbal2Properties(CymbalProperties):
     bloom_seconds = 0.0161662
     bloom_center_hz = 5661.91
     bloom_octaves = 1.70142
-    ring_decay_floor = 7.02
-    ring_decay_below = 1.28
-    ring_decay_above = 1.28
+    ring_decay_floor = 44.2985
+    ring_decay_below = 6.65704
+    ring_decay_above = 151.364
     decay_db = 5.69981
     harmonic_decay_db = 0.325081
     hf_corner_hz = 38680.9
@@ -8289,16 +8278,10 @@ class SplashCymbalProperties(CymbalProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     strike_phase_spread = 1.0
-    # FITTED to band-energy decay on the Iowa references (splash, all three
-    # takes -- only 3 usable bands, so EXACTLY determined and not validated):
-    # rate(f) = floor + k*log2(f/peak)^2, 0.00 dB/s rms. Was peak 700.0, floor
-    # 14.4, above 3.0, below 5.0 -- three to fourteen times too fast, with its
-    # slowest decay at 2 kHz where the measurement says the decay is still
-    # falling toward the bass. See sources.md.
-    ring_peak_hz = 339.1
-    ring_decay_below = 1.29
-    ring_decay_floor = 14.25
-    ring_decay_above = 1.29
+    ring_peak_hz = 700.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 3.0
     chiff_volume = 30.0
     chiff_bandwidth = 0.30
     # REFITTED on honest frequencies. Everything above was fitted while the
@@ -8443,15 +8426,10 @@ class ChineseCymbalProperties(CymbalProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     strike_phase_spread = 1.0
-    # FITTED to band-energy decay on the Iowa references (16/19/20" chinese,
-    # stick, mf+ff): rate(f) = floor + k*log2(f/peak)^2, 0.68 dB/s rms. Was
-    # peak 1500.0, floor 14.4, above 24.0, below 5.0 -- three to fourteen
-    # times too fast, with its slowest decay at 2 kHz where the measurement
-    # says the decay is still falling toward the bass. See sources.md.
-    ring_peak_hz = 80.0
-    ring_decay_below = 0.55
-    ring_decay_floor = 0.5
-    ring_decay_above = 0.55
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 24.0
     chiff_volume = 2.00
     chiff_bandwidth = 1.50
     # REFITTED on honest frequencies. Everything above was fitted while the
@@ -8615,15 +8593,10 @@ class RideCymbalProperties(CymbalProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     strike_phase_spread = 1.0
-    # FITTED to band-energy decay on the Iowa references (21" ride, bow,
-    # mf+ff): rate(f) = floor + k*log2(f/peak)^2, 1.31 dB/s rms. Was peak
-    # 1500.0, floor 14.4, above 12.0, below 5.0 -- three to fourteen times too
-    # fast, with its slowest decay at 2 kHz where the measurement says the
-    # decay is still falling toward the bass. See sources.md.
-    ring_peak_hz = 626.7
-    ring_decay_below = 1.97
-    ring_decay_floor = 2.78
-    ring_decay_above = 1.97
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 12.0
     chiff_volume = 2.00
     chiff_bandwidth = 0.05
     # REFITTED on honest frequencies. Everything above was fitted while the
@@ -8935,16 +8908,10 @@ class RideBellProperties(CymbalProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     strike_phase_spread = 1.0
-    # FITTED to band-energy decay on the Iowa references (21" ride bell, mf+ff
-    # -- rms 3.0 dB/s, the worst of the six: its band curve is not monotonic):
-    # rate(f) = floor + k*log2(f/peak)^2, 3.01 dB/s rms. Was peak 1500.0,
-    # floor 14.4, above 15.0, below 5.0 -- three to fourteen times too fast,
-    # with its slowest decay at 2 kHz where the measurement says the decay is
-    # still falling toward the bass. See sources.md.
-    ring_peak_hz = 419.9
-    ring_decay_below = 1.53
-    ring_decay_floor = 6.02
-    ring_decay_above = 1.53
+    ring_peak_hz = 1500.0
+    ring_decay_below = 5.0
+    ring_decay_floor = 14.4
+    ring_decay_above = 15.0
     chiff_volume = 0.22
     chiff_bandwidth = 0.05
     # -8 dB with the rest of the kit; this class used to inherit the cymbal

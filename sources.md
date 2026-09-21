@@ -2773,20 +2773,17 @@ predicting the right one, and the theory only did the first.**
 Removing it costs nothing that was doing work: the model's brightening from
 velocity 70 to 127 goes from +98 cents to +84.
 
-### ...and the decay that was standing in for it was an order out
+### ...and the decay that was standing in for it is an order out. NOT FIXED.
 
 Removing the bend exposed the real problem. Rendered and measured against the
-reference with identical windows and band, the model's spectrum fell **275
+reference with identical windows and band, the model's spectrum falls **275
 cents** through the ring where a real 17" crash falls **1614 to 2126**. A
 cymbal's actual "drift" IS its differential decay, and the parameter carrying
-it was badly wrong.
+it is badly wrong. **An attempt to fit it was made and REVERTED**; what follows
+is what was learned, because the next person will want it.
 
 **THE REFERENCES ARE WEAK HITS, and Ben asked whether that was accounted for.**
-It is the right question -- `sources.md` already records that "the suspended
-stick takes are a percussionist CONTROLLING a cymbal; a crash in a drum kit is
-the clash gesture", which is why the noise trajectory was taken from the clash
-takes instead. For a *decay* fit it is testable rather than assumed, so it was
-tested first:
+For a *decay* fit it is testable rather than assumed, so it was tested:
 
 | band | mf | ff |
 |---|---|---|
@@ -2796,63 +2793,71 @@ tested first:
 Decay is level-independent across the dynamics that have SNR, which is what
 linear damping predicts and what "a hard crash is the same sound louder"
 already said from the spectral side. **So a decay law fitted to stick takes
-carries to a harder stroke.** The bend conclusion above is the one genuinely
-bounded by the reference dynamics, and it says so.
+would carry to a harder stroke.** That part of the plan was sound. (The
+pitch-bend conclusion above is the one genuinely bounded by the dynamics.)
 
-**FITTED TO BAND ENERGY, not to modes.** Individual modes cannot be isolated
-above about 5 kHz -- the field is too dense -- and that is exactly where
-`ring_decay_above` lives. So the law was fitted to octave-band energy decay,
-with the caveat that a band's decay is the envelope of its modes' rather than
-any one of them. Per instrument, `rate(f) = floor + k*log2(f/peak)^2`:
+**The measured curve, which stands and is worth having.** Individual modes
+cannot be isolated above about 5 kHz -- the field is too dense -- so this is
+octave-band energy decay in dB/s, and `examples/cymbal_check.py` reproduces it:
 
-| voice | peak Hz | floor | k | rms | was |
+| voice | 354 Hz | 707 | 1414 | 2828 | 5657 |
 |---|---|---|---|---|---|
-| Crash 1 | 815 | 6.33 | 1.39 | 0.49 | 2000 / 20 / 8 |
-| Crash 2 | 642 | 7.02 | 1.28 | 1.48 | 2673 / 44.3 / 151.4 |
-| Chinese | 80 | 0.50 | 0.55 | 0.68 | 1500 / 14.4 / 24 |
-| Splash | 339 | 14.25 | 1.29 | 0.00 | 700 / 14.4 / 3 |
-| Ride | 627 | 2.78 | 1.97 | 1.31 | 1500 / 14.4 / 12 |
-| Ride bell | 420 | 6.02 | 1.53 | 3.01 | 1500 / 14.4 / 15 |
+| crash 1 (17"+18") | 8.7 | 5.5 | 7.8 | 10.9 | 17.0 |
+| crash 2 (20"+13") | 6.9 | 9.7 | 7.3 | 12.2 | 20.3 |
+| chinese | 2.3 | 6.6 | 9.8 | 16.1 | 20.8 |
+| splash | -- | -- | 19.7 | 26.3 | 35.4 |
+| ride | 4.2 | 3.3 | 3.6 | 14.2 | 21.9 |
+| ride bell | 6.0 | 8.5 | 6.2 | 22.0 | 26.1 |
 
-The shipped law was three to fourteen times too fast across the whole measured
-range, and put its slowest decay at 2 kHz where the measurement says the decay
-is still falling toward the bass. **No value of `ring_decay_above` alone could
-have fixed that** -- the minimum was in the wrong place -- so `ring_peak_hz` and
-`ring_decay_floor` are fitted with it, and `ring_decay_below` is set equal to
-`above` because the fit used the symmetric parabola on points from both sides.
+Fitted as `rate(f) = floor + k*log2(f/peak)^2` that gives, for crash 1, peak 815
+floor 6.33 k 1.39 at 0.49 dB/s rms -- against a shipped 2000 / 20 / 8, three to
+fourteen times too fast, with its slowest decay at 2 kHz where the measurement
+says the decay is still falling toward the bass. **No hi-hat band rings long
+enough to fit a slope to**, so they could not be fitted at all.
 
-Two of the six are weak and say so in the class: **Splash** has only three
-usable bands, so its three parameters are exactly determined and unvalidated;
-**Ride bell** fits at 3.0 dB/s rms because its band curve is not monotonic. The
-hi-hats are NOT fitted -- no band of a hi-hat rings long enough to fit a slope
-to -- and keep what they had.
+### Why it was reverted, which is the useful part
 
-**What it bought, and what it did not.** Crash 1's fall goes from +275 cents to
-**+892**, against a target of +1614 to +2126: about 60% of the gap, measured the
-same way. The rest is NOT the broadband wash -- removing that entirely moves the
-fall from 892 to 789, the wrong way -- so it lies in the mode AMPLITUDES rather
-than their decay, which is a different fit and is not attempted here.
+**DECAY AND `mode_gains` ARE ONE FIT, NOT TWO.** The `mode_gains` tables are
+measured amplitudes fitted with the OLD decay in place. Changing the decay alone
+moved the attack spectrum, which is the half you hear:
 
-**Checked against the render, not only the maths.** Measuring the rendered crash
-the same way as the reference, band by band:
+| band | reference | before | after | after - ref |
+|---|---|---|---|---|
+| 250-500 | -10.4 | -18.3 | -11.1 | -0.6 |
+| 500-1000 | -15.7 | -16.9 | -11.4 | **+4.2** |
+| 1000-2000 | -12.1 | -6.9 | -3.9 | **+8.2** |
+| 2000-4000 | -4.1 | -6.0 | -7.3 | -3.1 |
+| 4000-8000 | -6.2 | -6.0 | -8.9 | -2.7 |
+| 8000-14000 | -7.5 | -5.8 | -9.0 | -1.5 |
 
-| band | the law says | the render does | the reference does |
-|---|---|---|---|
-| 354 Hz | 8.3 | 6.1 | 8.7 |
-| 707 Hz | 6.4 | 4.6 | 7.0 |
-| 1414 Hz | 7.2 | 5.7 | 7.9 |
-| 2828 Hz | 10.8 | 7.2 | 11.5 |
-| 5657 Hz | 17.2 | 11.3 | 17.0 |
+Band rms over the attack went 4.03 dB to 4.18: the change improved the SETTLED
+trajectory and made the ATTACK worse, and a crash is the 2-14 kHz bands. Ben, by
+ear, immediately: *"They all now sound weirdly dark. Like they lost half their
+crash."* The old too-fast decay had been masking a low-mid amplitude excess;
+removing the mask left the excess standing.
 
-The shape carries (the render spans 1.85x across the bands against the law's
-2.07x) but every band reads about 0.7x the rate it was given. That is the ROOM:
-these renders go through `chamber`, the smallest preset there is, and its tail
-slows every measured decay. The references carry less of one. **The law is left
-alone for it** -- fitting the voice so that one particular room comes out right
-would bake that room into the instrument, and the room is chosen per render.
+**Re-fitting `mode_gains` against the new decay converges for the crashes and
+DIVERGES for the rest.** Damped per-band iteration, four passes, band rms:
 
-One thing checked and NOT reported, because it did not survive contact with the
-rest of the set: on the 17" crash the attack centroid is 266 cents *darker* at
-ff than at mf, which looked like a real finding about how a cymbal responds to
-force. Across all eight instruments the same measurement gives -65, +142, -266,
--226, +81, -128, -19 and +385 cents. There is no direction there, only scatter.
+| voice | before | after |
+|---|---|---|
+| Crash 1 | 4.18 | **0.20** |
+| Crash 2 | 5.69 | **0.81** |
+| Chinese | 8.97 | 3.19 |
+| Splash | 5.92 | *7.28* |
+| Ride | 9.63 | *17.41* |
+| Ride bell | 8.24 | *11.32* |
+
+Two voices land far better than they ever have; three get worse. A method that
+improves a third of a family and damages half of it is not a fit, so the whole
+decay change was reverted and the cymbals are back where they were.
+
+**What the next attempt needs:** fit `mode_gains` and the ring law TOGETHER
+rather than in sequence, against BOTH windows rather than one, and find out why
+per-band iteration runs away on the ride and the splash before trusting it
+anywhere. The measured curve above is the target and does not need remeasuring.
+
+**And the lesson, which is the one this repo keeps relearning:** the change was
+validated on the settled spectrum, where it was a clear win, and not on the
+attack, where it was a loss. Half a validation is how a fit comes to fit the
+measurement instead of the instrument.
