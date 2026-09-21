@@ -2437,3 +2437,156 @@ every `hybrid` render down about 101 cents. `hybrid` is the default for
 `render-corpus.sh` and for `blockrender` itself, so the whole corpus re-pitches.
 `set_reference(a=...)` still overrides all of it per render, and
 `TUNING_REFERENCE` exposes that from the command line.
+
+---
+
+## The electric pianos: GM 4, and everything you hear is the pickup
+
+GM 4 and 5 were swept up by `_fill(0, 7, GrandPianoProperties)` and rendered as
+a Steinway B -- stretched strings, a soundboard, a hammer low-pass, phantom
+longitudinal partials. A Rhodes has no strings, no soundboard and no unison
+trios, so none of that is true of it. GM 4 now has its own voice.
+
+**The sources**, and they are unusually good ones:
+
+- M. Muenster and F. Pfeifle, *Non-Linear Behaviour in Sound Production of the
+  Rhodes Piano*, ISMA 2014, Le Mans, pp. 247-252.
+- F. Pfeifle and M. Muenster, *Tone Production of the Wurlitzer and Rhodes
+  E-Pianos*, DAGA 2017, Kiel, pp. 556-558.
+
+Both are Hamburg, and both are measurements rather than models: a Vision
+Research Phantom v711 high-speed camera at 38,000-44,127 fps tracking the tine
+itself, a PCB 352C23 piezo accelerometer on the tonebar, and a Kistler impulse
+hammer -- with the instrument's own direct out recorded simultaneously.
+
+### Four findings, and each one changes the model
+
+**1. The tine vibrates as a PURE SINE.** Four points tracked along a struck
+tine, plus the transverse and longitudinal directions compared: "after an
+extremely short transient the tine vibrates in a perfect sinusoidal motion
+without appearance of higher harmonics", and "there are no further eigenmodes
+than the lowest". So there are no cantilever overtones to model here -- not
+6.267, not 17.55. One mode. A voice built on the cantilever series would have
+been building the wrong instrument out of correct physics.
+
+**2. Every harmonic you hear is made by the PICKUP.** "The presented
+measurements... lead to the conclusion that the primary mechanical exciters are
+secondary for the sound production of both instruments and their specific
+timbres are influenced primarily by the specific pickup system." The magnet is
+a wedge-shaped frustum, and the FEM model in the DAGA paper shows its field has
+"an approximate bell curve characteristic". So the tine swinging through it is
+a waveshaper:
+
+    Phi(u) = exp(-(u/w)^2),   u(t) = x0 + A sin(wt),   V = -dPhi/dt
+
+**3. The tonebar is NOT tuned to the tine.** "Opposed to common belief, the tine
+and tonebar are not alike in pitch or resonance frequency. Their fundamental
+resonance frequencies are several hundred to more than 1400 cents apart." The
+tine *enslaves* it -- the tonebar is driven at the tine's frequency, perfectly
+in phase or anti-phase -- so its own eigenfrequencies "are not present in the
+sound, they only appear in the transient". It is the glockenspiel-like attack
+and nothing else. Table 1 of ISMA 2014 gives nine measured pairs:
+
+| tine Hz | 79 | 118 | 176 | 263 | 393 | 588 | 880 | 1316 | 1969 |
+|---|---|---|---|---|---|---|---|---|---|
+| tonebar f0 Hz | 51 | 69 | 79 | 105 | 138 | 183 | 140 | 145 | 222 |
+| phase | anti | anti | in | in | in | anti | anti | anti | in |
+
+fitted here as `tonebar_hz = 10.06 * f0**0.4066`, 16% rms. The fit's value is
+not its accuracy -- a transient's pitch is not its point -- but that it carries
+the measured *divergence*: the tonebar is at 0.75 of the tine at the bottom of
+the compass and 0.11 at the top, so no fixed ratio could do it.
+
+**4. Velocity is a timbre control more than a volume control.** "Velocity
+sensitivity is to be distinguished by a change in volume to lesser extent than
+in sound. Playing softly the fundamental comes up, playing harder the more and
+more growl appears." And the growl is register-dependent: "best audible in the
+lower register of the rhodes where the tines have a larger deflection."
+
+### Two things fall out of the curve, and both were verified
+
+**Centre the tine and the fundamental disappears.** A symmetric field crossed
+twice per cycle answers at twice the pitch: "when aligned perfectly centered,
+the produced sound behind the pickup is twice the fundamental of the tine". At
+`pickup_offset = 0.0` the fundamental measures 297 dB under the octave; at 0.30
+it is 9.2 dB over it, and at 0.60, 24.2 dB. That is the voicing screw a
+technician actually turns, and `TUNING_EP_VOICING` exposes it
+(`examples/rhodes.py --voicing`).
+
+**Harmonic k grows as A^k, so harmonic k decays k times as fast.** Fitted
+log-log slopes of harmonic amplitude against deflection: 0.992, 1.995, 2.993,
+3.995, 4.994, 5.995 against a wanted 1..6. And *this engine's decay law already
+is that* --
+
+    base = decay_db + harmonic_decay_db * h * (h ** harmonic_decay_dampening)
+
+is exactly `k*D` when `decay_db` and `harmonic_decay_dampening` are zero. So the
+growl fading into a bell as the note rings -- the Rhodes' whole signature --
+costs nothing, needs no time-varying spectrum and no work at render time.
+Measured on a struck low F at full velocity, the harmonics above the
+fundamental run `-0.2 dB` at the attack, then `-6.4`, `-14.3` and `-20.1` over
+the next three seconds.
+
+### Why this does not go near the tube amp
+
+`tubeamp` exists because distortion of a *chord* is not distortion of its notes
+-- only 27% of the distortion energy lands on harmonics of the inputs. None of
+that applies here. The pickup reads ONE tine, so its nonlinearity is one note's
+own curve, and a waveshaped sine gives back an exactly harmonic series. The
+whole thing is therefore an amplitude law in `series_volume()` and a decay law,
+with no new renderer machinery at all. `amp_drive` stays at 0: a suitcase has a
+power amp that can be pushed, but the growl is the pickup, and giving the voice
+a valve as well would count the same nonlinearity twice.
+
+**What did NOT carry over from the electric guitars, contrary to expectation:**
+the pickup machinery. `pickup_points` is `|sin(n*pi*q)|`, a *string's* standing
+wave sampled at a point in space. A tine has one mode and one pickup, and what
+shapes this sound is the field's shape against *displacement* -- a different
+physical quantity. What did carry over is the cabinet pass, the per-partial
+decay law, the `series_volume` override pattern and the patch_map wiring.
+
+### The control
+
+A pickup that does not bend is not a pickup: `TUNING_EP_CONTROL=1` makes the
+flux linear, so it hands back the sine it was given. Measured on the same
+struck low F, the harmonics above the fundamental sit at **-75.9 dB** with the
+waveshaper bypassed against **-2.1 dB** with it in. Seventy-four decibels of
+this voice's harmonic content comes from the pickup, which is the paper's claim
+put the only way it can be falsified.
+
+### The tremolo, which is a pan
+
+The Rhodes suitcase's panel calls it vibrato and it is not one -- it is the
+signal swinging between two amplifiers. `tremolo.py` gets both that and a
+Wurlitzer's true amplitude tremolo out of one mechanism, because AM is a
+sideband pair (the argument `leslie.py` makes) and **a pan is that same pair
+with the sign flipped in one ear**. So a stereo pan costs exactly what a mono
+tremolo costs, and one minus sign is the whole difference between the two
+instruments.
+
+It also follows that the mono sum of a pan vibrato is flat, which is true of
+the instrument: a suitcase heard down one microphone has no vibrato at all.
+Measured, offline and live: each ear swings 11.5 dB at 5.5 Hz, 180.0 degrees
+apart, with 0.18 dB left in the mono sum.
+
+CC1 sets depth, and there is no conflict with the wheel's other jobs: the
+amp-drive path is gated on `amp_drive > 0` and this voice has none, and a tine
+has nothing that could be given a pitch vibrato anyway.
+
+### Still to do
+
+- **GM 5, the Wurlitzer.** Same machinery, one different curve: its reed is a
+  capacitor plate and "the capacity varies inversely proportional to the
+  distance", so `Phi(u) = 1/(d0+u)`. That is a pole where the Rhodes has a
+  Gaussian, so its harmonics fall off geometrically instead of falling off a
+  cliff -- at equal drive h8 sits at -86 dB against the Rhodes' -120. Bell
+  versus bark, from the curve alone. GM 5 is still a grand piano until then.
+- **The longitudinal transient is approximated.** The papers attribute the
+  bright part of the attack to longitudinal waves converting to transverse at
+  the tine/tonebar T-joint -- "10-15 times faster than transverse waves". That
+  is carried here as two asserted tonebar modes at 12x and 24x, which is the
+  one place in this voice where a number is not measured.
+- **No recording has been fitted against.** Built from theory first, as the
+  steelpan was. Freesound 536266 is a CC0 chromatic Rhodes but carries a
+  deliberate stereo delay and heavy effects, so it is a poor measurement
+  target; a dry single note would have to be found.

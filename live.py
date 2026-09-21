@@ -171,6 +171,16 @@ class Slab:
         # it left by, which rotor carries it, and the amplitude it would have
         # had standing still.
         self.ls_on = np.zeros(capacity, bool)
+        # The tremolo, and the Rhodes' stereo pan, which is the same thing with
+        # one sign flipped (see tremolo.py). Live it is a per-block GAIN rather
+        # than sidebands -- cheaper, and exact, which is the same trade
+        # leslie_swing makes against leslie.expand. tr_st is +1 for a level
+        # tremolo and -1 for a pan, and that is the whole difference.
+        self.tr_on = np.zeros(capacity, bool)
+        self.tr_dep = np.zeros(capacity, np.float32)
+        self.tr_st = np.ones(capacity, np.float32)
+        self.tr_aL = np.zeros(capacity, np.float32)
+        self.tr_aR = np.zeros(capacity, np.float32)
         self.ls_am = np.zeros(capacity, np.float32)     # the lobe's floor
         self.ls_sharp = np.ones(capacity, np.float32)
         self.ls_norm = np.ones(capacity, np.float32)     # so the mean is 1
@@ -324,6 +334,38 @@ class Slab:
         idx = np.flatnonzero(m)
         self._doppler_to(idx, self.ls_horn[idx], n, horn_rate, drum_rate)
 
+    def tremolo_arm(self, slots, depth, stereo):
+        """Record what the callback needs to swing these partials.
+
+        The base amplitudes are captured ONCE, on rows not already armed.
+        Capturing again on a wheel move would save an amplitude that has
+        already been modulated and the swing would compound on itself every
+        time the wheel was touched -- the mistake aL0/aR0 exists to prevent for
+        aftertouch, arrived at from the other direction.
+        """
+        if slots is None or not len(slots):
+            return
+        idx = np.asarray(slots, dtype=np.intp)
+        fresh = idx[~self.tr_on[idx]]
+        if len(fresh):
+            self.tr_aL[fresh] = self.a["aL"][fresh]
+            self.tr_aR[fresh] = self.a["aR"][fresh]
+        self.tr_on[idx] = True
+        self.tr_dep[idx] = depth
+        self.tr_st[idx] = -1.0 if stereo else 1.0
+
+    def tremolo_swing(self, phase):
+        """Set every modulated partial's level from where the modulator has got
+        to. Evaluated NOW, so a held chord follows the wheel instead of keeping
+        whatever depth it was born with."""
+        m = self.tr_on & self.busy
+        if not m.any():
+            return
+        idx = np.flatnonzero(m)
+        c = math.cos(phase) * self.tr_dep[idx]
+        self.a["aL"][idx] = self.tr_aL[idx] * (1.0 + c)
+        self.a["aR"][idx] = self.tr_aR[idx] * (1.0 + c * self.tr_st[idx])
+
     def leslie_swing(self, horn_angle, drum_angle):
         """Set every rotor partial's level from where the rotor has got to.
 
@@ -370,6 +412,7 @@ class Slab:
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
         self.ls_on[idx] = False
+        self.tr_on[idx] = False
         self.dirty = True
         a = self.a
         for k in COLS_F4:
@@ -448,6 +491,7 @@ class Slab:
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
         self.ls_on[idx] = False
+        self.tr_on[idx] = False
         self.dirty = True
         a = self.a
         for k in COLS_F4:
@@ -784,6 +828,13 @@ class Bank:
         # the speaker itself or they arrive unfiltered. That is the whole
         # difference between overdrive and a wasp.
         self.cabinet = None if drums else getattr(pc, "cabinet", None)
+        # The modulation the panel offers, which is NOT baked into the template:
+        # live it is a per-block gain, so one template plays at every depth and
+        # a held chord follows the wheel. tremolo_depth is what a full wheel
+        # asks for, not a setting -- at rest the panel is off.
+        self.tremolo_hz = 0.0 if drums else float(getattr(pc, "tremolo_hz", 0.0))
+        self.tremolo_depth = 0.0 if drums else float(getattr(pc, "tremolo_depth", 0.0))
+        self.tremolo_stereo = (not drums) and bool(getattr(pc, "tremolo_stereo", False))
         # NO SPEED AXIS. It existed because the rotor was baked into the
         # partials; now both the level swing and the Doppler are driven from
         # the callback, so one template serves every speed and the cache is a
@@ -1106,6 +1157,7 @@ class Live:
         self.lock = threading.Lock()
         self.bend = {}          # channel -> current pitch-bend ratio
         self.mod = {}           # channel -> current vibrato depth (fraction)
+        self.trem_depth = {}    # pid -> current tremolo/pan depth (fraction)
         self.pressure = {}      # channel -> aftertouch 0..1
         self.bend_range = 2.0   # semitones at full wheel, the GM convention
         self.mod_cents = 35.0   # cents of vibrato at full mod wheel
@@ -1315,9 +1367,16 @@ class Live:
                 here = [p for p in parts if self._listens(p, ch)]
                 amped = [p for p in here if p.bank.amp_drive > 0.0]
                 organs = [p for p in here if p.organ and not p.bank.leslie]
+                # AND ON A VOICE WITH A TREMOLO THE WHEEL IS THE DEPTH KNOB.
+                # On a Rhodes suitcase and a Wurlitzer that is the one control
+                # a player moves while playing, so it takes the wheel ahead of
+                # the vibrato -- a tine cannot be given a pitch vibrato anyway,
+                # since nothing about the instrument can bend it.
+                tremmed = [p for p in here if p.bank.tremolo_depth > 0.0]
                 others = [p for p in here
                           if not p.organ and not p.bank.leslie
-                          and p.bank.amp_drive <= 0.0]
+                          and p.bank.amp_drive <= 0.0
+                          and p.bank.tremolo_depth <= 0.0]
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -1332,6 +1391,11 @@ class Live:
                         if self.drive_step.get(p.pid) != step:
                             self.drive_step[p.pid] = step
                             self.amp_dirty.add(p.pid)
+                for part in tremmed:
+                    self.trem_depth[part.pid] = (msg.value / 127.0) * part.bank.tremolo_depth
+                    self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}),
+                                          self.trem_depth[part.pid],
+                                          part.bank.tremolo_stereo)
                 for part in organs:
                     self._crescendo(part, ch, msg.value, n0)
                 if others:
@@ -1438,6 +1502,9 @@ class Live:
                           and (k[2] + part.transpose) in grp]:
                     self.slab.oneshot.pop(k, None)
                     self.slab.release(k, n0)
+        d = self.trem_depth.get(part.pid, 0.0)
+        if d > 0.0:
+            self.slab.tremolo_arm(slots, d, part.bank.tremolo_stereo)
         pr = self.pressure.get(ch, 0.0)
         if pr:
             self.slab.press(slots, pr, self.press_db, self.press_tilt)
@@ -1803,6 +1870,15 @@ class Live:
             self.apply(n0)
             self.sweep(n0)
             self.slab.reap(n0)
+            if self.slab.tr_on.any():
+                # ONE RATE, from an absolute clock, so a held chord and a note
+                # struck mid-swing are at the same place in the cycle. Both
+                # electric pianos modulate at 5.5 Hz; if a voice ever wants its
+                # own rate this has to become per-row, as ls_ph is.
+                hz = next((p.bank.tremolo_hz for p in self.parts
+                           if p.bank.tremolo_depth > 0.0), 0.0)
+                if hz > 0.0:
+                    self.slab.tremolo_swing(2.0 * math.pi * hz * n0 / float(self.rate))
             if self.slab.ls_on.any():
                 dt = frame_count / float(self.rate)
                 ah = self.rotor_horn.advance(dt)
@@ -2779,6 +2855,7 @@ def selftest():
     fam = [(26, _T.JazzGuitarProperties), (27, _T.ElectricGuitarProperties),
            (28, _T.MutedGuitarProperties), (29, _T.OverdrivenGuitarProperties),
            (30, _T.DistortionGuitarProperties), (31, _T.GuitarHarmonicsProperties)]
+    import math as _math
     import patch_map as _PM
     check("all six electrics are wired to their GM programs",
           all(_PM.property_class_for_program(n) is c for n, c in fam))
@@ -3078,6 +3155,173 @@ def selftest():
     check("the neck humbucker is darker than the bridge one",
           _bright(inst[26]) < _bright(inst[30]),
           "  (mean harmonic %.1f vs %.1f)" % (_bright(inst[26]), _bright(inst[30])))
+
+    # ---- the electric pianos ------------------------------------------------
+    # GM 4 rendered as a Steinway B. A Rhodes is a struck steel TINE read by a
+    # magnetic pickup: measured, the tine vibrates as a pure sine and every
+    # harmonic is made by the pickup, so nothing about a piano applies to it.
+    import math as _math
+    import patch_map as _PM
+    check("the Rhodes is not a piano", _PM.property_class_for_program(4) is _T.RhodesProperties)
+    check("...and the acoustic pianos are where they were",
+          all(_PM.property_class_for_program(n) is _T.GrandPianoProperties
+              for n in (0, 1, 2, 3)) and
+          _PM.property_class_for_program(6) is _T.HarpsichordProperties)
+
+    def _rh(f0=261.63, vel=100, cls=_T.RhodesProperties):
+        return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
+
+    rp = _rh()
+    # A waveshaped SINE gives back an exactly harmonic series -- no stiffness,
+    # no stretch. A tine is not a string and has neither.
+    worst = max(abs(rp.mode_ratio(h) - h) for h in range(1, rp.pickup_harmonics + 1))
+    check("a tine's partials are exactly harmonic, unlike a string's",
+          worst < 1e-12 and rp.inharmonicity_coefficient == 0.0,
+          "  (worst departure %.1e)" % worst)
+
+    # THE SHARPEST CLAIM THE MEASUREMENTS MAKE: "when aligned perfectly centered,
+    # the produced sound behind the pickup is twice the fundamental of the tine".
+    class _Centred(_T.RhodesProperties):
+        pickup_offset = 0.0
+    cen = _rh(cls=_Centred)
+    ratio = cen.harmonic_volume(1) / cen.harmonic_volume(2)
+    check("centre the tine and the fundamental disappears",
+          ratio < 1e-6 and cen.harmonic_volume(2) > 0.0,
+          "  (h1 %.0f dB under h2; offset 0.30 gives %+.1f)"
+          % (20 * _math.log10(max(ratio, 1e-300)),
+             20 * _math.log10(rp.harmonic_volume(1) / rp.harmonic_volume(2))))
+
+    # Harmonic k of a waveshaped sine goes as A^k, so it must decay k times as
+    # fast as the deflection does. This is the engine's own law with decay_db
+    # and harmonic_decay_dampening at zero -- if either drifts off zero, the
+    # growl stops decaying into the bell and this catches it.
+    d1 = rp.harmonic_decay(1)
+    err = max(abs(rp.harmonic_decay(k) / d1 - k) for k in range(1, rp.pickup_harmonics + 1))
+    check("harmonic k decays k times as fast as the tine",
+          err < 1e-9, "  (worst ratio error %.1e)" % err)
+
+    def _band(cls, f0=261.63, vel=100, hmax=8):
+        """Level and growl over a FIXED band. The series is trimmed where the
+        curve dies, so max_harmonic moves with velocity -- summing "all of
+        them" at two velocities would compare two different bands."""
+        q = cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
+        top = getattr(q, "pickup_harmonics", q.max_harmonic)
+        v = [q.harmonic_volume(h) if h <= top else 0.0 for h in range(1, hmax + 1)]
+        tot = _math.sqrt(sum(x * x for x in v))
+        up = _math.sqrt(sum(x * x for x in v[1:]))
+        return 20 * _math.log10(tot), 20 * _math.log10(up / v[0])
+
+    def _growl(f0=261.63, vel=100):
+        return _band(_T.RhodesProperties, f0, vel)[1]
+
+    # "Velocity sensitivity is to be distinguished by a change in volume to
+    # lesser extent than in sound." A hammer sets the tine's DEFLECTION and the
+    # coil reads deflection linearly, so the level follows velocity and NOT its
+    # square. Measured against a piano over the same velocity range, which is
+    # the comparison that makes the claim mean something.
+    plo, phi = _band(_T.GrandPianoProperties, vel=35), _band(_T.GrandPianoProperties, vel=127)
+    rlo, rhi = _band(_T.RhodesProperties, vel=35), _band(_T.RhodesProperties, vel=127)
+    check("velocity changes a Rhodes' volume half as much as a piano's",
+          (rhi[0] - rlo[0]) < 0.5 * (phi[0] - plo[0]),
+          "  (%+.1f dB against the piano's %+.1f)"
+          % (rhi[0] - rlo[0], phi[0] - plo[0]))
+    check("...and its timbre far more, which is what the tine is for",
+          (rhi[1] - rlo[1]) > 8.0 > (phi[1] - plo[1]),
+          "  (growl %.1f -> %.1f dB; the piano's goes %.1f -> %.1f)"
+          % (rlo[1], rhi[1], plo[1], phi[1]))
+
+    # "Best audible in the lower register, where the tines have a larger
+    # deflection."
+    check("the growl is a bass-register effect",
+          _growl(65.4) > _growl(261.6) + 4.0 > _growl(1046.5) + 8.0,
+          "  (C2 %+.1f, C4 %+.1f, C6 %+.1f dB)"
+          % (_growl(65.4), _growl(261.6), _growl(1046.5)))
+
+    # The tonebar is NOT tuned to the tine and is NOT in the sustain: its own
+    # eigenfrequencies "only appear in the transient".
+    tb = [h for h in range(1, rp.max_harmonic + 1) if h > rp.pickup_harmonics]
+    check("the tonebar lives in the transient and nowhere else",
+          len(tb) == len(rp.tonebar_gains)
+          and all(rp.harmonic_decay(h) > 100.0 * d1 for h in tb)
+          and all(abs(rp.mode_ratio(h) - round(rp.mode_ratio(h))) > 1e-6
+                  or rp.mode_ratio(h) < 1.0 for h in tb),
+          "  (%d modes at %.0f dB/s against the tine's %.1f)"
+          % (len(tb), rp.harmonic_decay(tb[0]), d1))
+
+    # A Rhodes has a speaker, and it is not a guitar's: it has to reach a 55 Hz
+    # fundamental where a guitar 12" has already given up.
+    import cabinet as _CAB
+    check("the Rhodes has its own cabinet, not the guitar's",
+          rp.cabinet == "rhodes" and rp.amp_drive == 0.0
+          and _CAB.get("rhodes").gain(55.0) > _CAB.get("guitar12").gain(55.0),
+          "  (%.1f dB at 55 Hz against the guitar's %.1f)"
+          % (20 * _math.log10(_CAB.get("rhodes").gain(55.0)),
+             20 * _math.log10(_CAB.get("guitar12").gain(55.0))))
+
+    # It is cheap, and it gets cheaper when played softly -- the curve's tail
+    # falls below audibility and those partials are never emitted.
+    check("a Rhodes note costs a fraction of a piano note",
+          _rh(vel=127).max_harmonic < 30 and _rh(vel=35).max_harmonic < _rh(vel=127).max_harmonic,
+          "  (%d partials at v127, %d at v35)"
+          % (_rh(vel=127).max_harmonic, _rh(vel=35).max_harmonic))
+
+    # ---- and the suitcase's pan vibrato -------------------------------------
+    lv = Live(program=4, rate=48000, frames=128, verbose=False); lv.warm()
+
+    def _pump(sec, cc=None):
+        Ls, Rs = [], []
+        for i in range(int(sec * 48000) // 128):
+            if cc is not None and i == 2:
+                lv.on_midi(mido.Message("control_change", channel=0, control=1, value=cc))
+            b, _f = lv.callback(None, 128, None, 0)
+            x = np.frombuffer(b, np.float32)
+            Ls.append(x[0::2]); Rs.append(x[1::2])
+        return np.concatenate(Ls).astype(float), np.concatenate(Rs).astype(float)
+
+    def _swing(v, rate=5.5, sr=48000.0):
+        """Depth and phase of the modulation, with the note's DECAY taken out.
+        The decay is 30-odd dB of the envelope and it is not the effect; left
+        in, both ears track it together and a pan reads as correlated."""
+        e = np.convolve(np.abs(v), np.ones(256) / 256, 'same')[int(0.3 * sr):]
+        t = np.arange(len(e)) / sr
+        e = np.log(np.maximum(e, 1e-12))
+        e = e - np.polyval(np.polyfit(t, e, 3), t)
+        W = np.hanning(len(e))
+        F = np.fft.rfft(e * W); fr = np.fft.rfftfreq(len(e), 1 / sr)
+        k = int(np.argmin(np.abs(fr - rate)))
+        return 20 * _math.log10(_math.e) * 2 * abs(F[k]) / (W.sum() / 2), np.angle(F[k])
+
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    L, R = _pump(2.0, cc=127)
+    dl, pl = _swing(L); dr, pr = _swing(R); dm, _pm = _swing((L + R) / 2.0)
+    deg = _math.degrees((pl - pr + _math.pi) % (2 * _math.pi) - _math.pi)
+    check("the wheel swings the suitcase's two amplifiers",
+          dl > 6.0 and dr > 6.0, "  (%.1f dB each ear at 5.5 Hz)" % dl)
+    check("...in opposition, because it is a PAN and not a tremolo",
+          abs(abs(deg) - 180.0) < 5.0 and dm < 1.0,
+          "  (%.0f deg apart, %.2f dB left in mono)" % (deg, dm))
+    check("...and the wheel is not ALSO bending the pitch",
+          lv.mod.get(0, 0.0) == 0.0 and lv.parts[0].bank.amp_drive == 0.0)
+    lv.renderer.close()
+
+    lv = Live(program=4, rate=48000, frames=128, verbose=False); lv.warm()
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
+    L, R = _pump(2.0)
+    check("a wheel left at rest leaves the panel switched off",
+          _swing(L)[0] < 0.5, "  (%.2f dB at 5.5 Hz)" % _swing(L)[0])
+    # Arming twice must not save an already-modulated amplitude: that would
+    # compound the swing every time the wheel moved.
+    lv.on_midi(mido.Message("control_change", channel=0, control=1, value=100))
+    _pump(0.3)
+    base = lv.slab.tr_aL[np.flatnonzero(lv.slab.tr_on & lv.slab.busy)].copy()
+    for v in (60, 127, 90):
+        lv.on_midi(mido.Message("control_change", channel=0, control=1, value=v))
+        _pump(0.2)
+    now = lv.slab.tr_aL[np.flatnonzero(lv.slab.tr_on & lv.slab.busy)]
+    drift = float(np.max(np.abs(now - base))) if len(base) == len(now) else 1.0
+    check("moving the wheel does not compound the swing",
+          drift < 1e-9, "  (base amplitude drifted %.1e over four moves)" % drift)
+    lv.renderer.close()
 
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0

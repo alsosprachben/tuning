@@ -693,6 +693,7 @@ def prepare(path, tuner='hybrid440'):
     _AMP_REF = {}
     _AMP_IMB = {}
     _CAB_CH = {}
+    _TREM_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -956,6 +957,20 @@ def prepare(path, tuner='hybrid440'):
             # all the way to Nyquist.
             if os.environ.get('TUNING_CABINET', '1') != '0':
                 _CAB_CH[ch] = props.cabinet
+        if getattr(props, 'tremolo_depth', 0.0) and ch not in _TREM_CH:
+            # CC1 IS THE DEPTH KNOB. On a Rhodes suitcase and a Wurlitzer the
+            # modulation depth is the one panel control a player moves while
+            # playing, so the wheel is where it belongs -- and these voices ship
+            # amp_drive 0, so the CC1-to-drive path above never fires and the
+            # wheel is not being asked to do two jobs at once.
+            #
+            # A file with no CC1 gets no modulation, which is the panel's own
+            # default position and what every file in the corpus will see.
+            _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+            _dep = float(props.tremolo_depth) * (_c1[0] / 127.0 if _c1 else 0.0)
+            if _dep > 0.0:
+                _TREM_CH[ch] = (float(props.tremolo_hz), _dep,
+                                bool(getattr(props, 'tremolo_stereo', False)))
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a
@@ -1284,6 +1299,18 @@ def prepare(path, tuner='hybrid440'):
     # harmonics to Nyquist and a real 12" throws nearly all of them away. Put
     # this before the amp pass, or on the voice class as a FormantBody, and
     # every distortion product bypasses the speaker. See cabinet.py.
+    # THE TREMOLO, and on a Rhodes it is a stereo pan rather than a level
+    # swing. After the amplifier so that a valve works on the carrier and not
+    # on the sidebands, before the speaker so the speaker colours them. See
+    # tremolo.py, which argues both placements.
+    if _TREM_CH:
+        import tremolo as _TRM
+        _nt = _TRM.expand(A, _TREM_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        if _nt:
+            _r0 = list(_TREM_CH.values())[0]
+            print("  tremolo: %.1f Hz, depth %.2f%s, %d sidebands"
+                  % (_r0[0], _r0[1], " (stereo pan)" if _r0[2] else "", _nt))
+
     if _CAB_CH:
         import cabinet as _CAB
         _nc = _CAB.expand(A, _CAB_CH, SR, PARTIAL_COLS + ('az', 'dr'))

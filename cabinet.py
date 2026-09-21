@@ -131,7 +131,39 @@ class Bass410(Cabinet):
     bell_order = 2.0
 
 
-CABINETS = {"guitar12": Guitar12(), "bass410": Bass410()}
+class RhodesSuitcase(Cabinet):
+    """The Rhodes suitcase: four 12" drivers in a sealed keyboard cabinet.
+
+    Not a guitar cabinet, and the difference is the design goal again. A guitar
+    amplifier is voiced to make a distorted signal cut, so it has a big presence
+    peak and gives up early on top. This cabinet is carrying an instrument whose
+    bottom note is a fundamental and whose character is a clean second harmonic,
+    so it has to go LOW and stay honest in the mid:
+
+      55 Hz, 2nd     the low roll-off. A Rhodes' bottom A is 55 Hz and that
+                     fundamental IS the note, so it reaches where a guitar 12"
+                     has already quit.
+      95 Hz peak     the box, tuned low for the same reason.
+      900 Hz dip     shallow, and shallower than a guitar 12"'s 1.1 kHz notch:
+                     the hollow in a Rhodes comes from the pickup, and a
+                     cabinet that added its own would double the effect.
+      2.2 kHz        presence, and mild. The tine's upper harmonics are the
+                     growl, and they only want to be heard, not sharpened.
+      5 kHz, 4th     the top. Higher than either guitar cabinet, because there
+                     is no fizz to hide here -- the pickup's harmonics stop on
+                     their own long before this.
+    """
+    formants = ((95.0, 85.0, 0.45), (2200.0, 1600.0, 0.40))
+    antiformants = ((900.0, 600.0, 0.15),)
+    formant_floor = 0.80
+    bore_corner_hz = 5000.0
+    bore_order = 4.0
+    bell_cutoff_hz = 55.0
+    bell_order = 2.0
+
+
+CABINETS = {"guitar12": Guitar12(), "bass410": Bass410(),
+            "rhodes": RhodesSuitcase()}
 
 
 def get(name):

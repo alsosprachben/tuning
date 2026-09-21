@@ -8,7 +8,7 @@ All rights reserved.
 import os
 import random as _random
 import re as _re
-from math import exp as _exp, log as _log, sin as _sin, pi as _pi, sqrt as _sqrt
+from math import exp as _exp, log as _log, sin as _sin, cos as _cos, pi as _pi, sqrt as _sqrt
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
 # Spatialization uses the Brown-Duda spherical-head model by default:
@@ -950,6 +950,15 @@ class SynthProperties:
     # in harmonic_volume, which runs before the amplifier pass, and a cabinet
     # has to be after it or the distortion bypasses the speaker.
     cabinet = None
+
+    # Periodic amplitude modulation, downstream of the tone generator. A
+    # Wurlitzer's tremolo and a Rhodes suitcase's stereo "vibrato" (which is a
+    # PAN, not a vibrato) are the same mechanism: see tremolo.py. depth is what
+    # a full modulation wheel asks for, since it is a panel control a player
+    # moves while playing; 0 is off, and off is the default for everything.
+    tremolo_hz = 0.0
+    tremolo_depth = 0.0
+    tremolo_stereo = False
 
     # How hard the valve stage is driven, in units of its own grid bias. 0 is a
     # clean signal path. The tonewheel overrides this with its own discussion.
@@ -3107,6 +3116,260 @@ class GrandPianoProperties(InharmonicStringProperties):
         high = 1.0 / (1.0 + (fn / self.board_high_hz) ** self.board_high_order)
         low = 1.0 / (1.0 + (self.board_low_hz / fn) ** 2)
         return body * high * low
+
+
+# One waveshaper answer per (curve, offset, deflection). A note asks for it up to
+# max_harmonic times, and a bank asks for it once per velocity bucket.
+_EP_PICKUP_CACHE = {}
+
+# The voicing screw, in units of the field's width. This is the one adjustment a
+# Rhodes technician actually makes on the instrument, and it is the sharpest
+# falsifiable claim the measurements offer: at 0.0 the fundamental vanishes and
+# the pickup answers at twice the pitch. Exposed so it can be swept and heard --
+# see examples/rhodes.py --voicing.
+ep_voicing = os.environ.get("TUNING_EP_VOICING", "")
+
+# THE CONTROL. A pickup that does not bend is not a pickup -- a linear flux
+# hands back the sine it was given -- and nothing this voice claims about its
+# harmonics means anything until the control has been heard to be dull. The
+# same discipline that caught the A415 assumption and the steelpan's stretch.
+ep_control = os.environ.get("TUNING_EP_CONTROL", "") not in ("", "0")
+
+
+class ElectricPianoProperties(PluckedStringProperties):
+    """GM 4-5. A struck steel bar read by a pickup -- and the pickup IS the voice.
+
+    These rendered as a Steinway B, which is wrong in every particular: an
+    electric piano has no strings, no soundboard and no unison trios, so it has
+    neither the piano's stretched partials nor its beating. Sibling of
+    InharmonicStringProperties rather than a child of it, for that reason.
+
+    THE TINE IS A PURE SINE. Hamburg tracked four points along a struck tine
+    with a high-speed camera at 38 kfps: "after an extremely short transient the
+    tine vibrates in a perfect sinusoidal motion without appearance of higher
+    harmonics" (Muenster & Pfeifle, ISMA 2014). There are no cantilever
+    overtones to model here -- not 6.267, not 17.55. One mode.
+
+    SO EVERY HARMONIC YOU HEAR IS MADE BY THE PICKUP: "their specific timbres
+    are influenced primarily by the specific pickup system" (Pfeifle & Muenster,
+    DAGA 2017). The tine swings through a field that is not flat, so what the
+    coil sees is a distorted copy of a sine, and the distortion is the
+    instrument:
+
+        Phi(u) = pickup_flux(u),   u(t) = pickup_offset + A sin(wt)
+
+    Two consequences fall out, and both are measurable:
+
+      * CENTRE THE TINE AND THE FUNDAMENTAL DISAPPEARS. A symmetric field
+        crossed twice per cycle answers at twice the pitch -- "when aligned
+        perfectly centered, the produced sound behind the pickup is twice the
+        fundamental of the tine" (DAGA 2017). pickup_offset is the voicing screw
+        a Rhodes technician actually turns; at 0.0 the fundamental measures
+        221 dB down, and by 0.5 it is 14.6 dB OVER the octave.
+
+      * HARMONIC k GROWS AS A^k, so if the tine's deflection decays at D dB/s
+        then harmonic k decays at k*D. That is already this engine's decay law
+        (harmonic_decay_db * h, with decay_db and harmonic_decay_dampening both
+        zero), so the growl fading into a bell as the note rings -- the Rhodes'
+        whole signature -- costs nothing and needs no time-varying spectrum.
+        Fitted slopes of log a_k against log A: 0.992, 1.995, 2.993, 3.995,
+        4.994, 5.995, against a wanted 1..6.
+
+    And because one sine through a waveshaper gives an EXACTLY HARMONIC series,
+    none of this goes near tubeamp -- which exists precisely because distortion
+    of a chord is not distortion of its notes. This is one note's own curve, so
+    it is only an amplitude law.
+
+    VELOCITY IS A TIMBRE CONTROL MORE THAN A VOLUME CONTROL: "velocity
+    sensitivity is to be distinguished by a change in volume to lesser extent
+    than in sound. Playing softly the fundamental comes up, playing harder the
+    more and more growl appears" (ISMA 2014). See series_volume for how that is
+    arranged; and the growl is loudest at the bottom of the compass, "where the
+    tines have a larger deflection", which deflection_register_slope carries.
+
+    THE TONEBAR IS NOT TUNED TO THE TINE. "Opposed to common belief, the tine
+    and tonebar are not alike in pitch or resonance frequency... several hundred
+    to more than 1400 cents apart", and the tine enslaves it, so the tonebar's
+    own eigenfrequencies "are not present in the sound, they only appear in the
+    transient". It is the glockenspiel-like attack and nothing else.
+
+    NOT the guitar's pickup_points. That comb is |sin(n*pi*q)|, a STRING's
+    standing wave sampled at a point in space. A tine has one mode and one
+    pickup, and what shapes this sound is the field's shape against
+    DISPLACEMENT -- a different physical quantity, and the reason none of the
+    electric guitar's pickup machinery carries over.
+    """
+
+    # A measured/derived mode set must not ALSO be stretched by a stiffness
+    # term. That is the bug that put the steelpan's octave 66 cents sharp, and
+    # both renderers do it (SimplePartial.__init__ and blockrender's emit loop).
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+
+    # The whole amplitude law is series_volume below, so no comb of any kind.
+    strike_point = 0.0
+    pickup_points = ()
+
+    # ---- the pickup -----------------------------------------------------
+    # pickup_offset and pickup_deflection are both in units of the field's
+    # width, which is what makes pickup_flux() dimensionless.
+    # Fitted to what a Rhodes does per register: the bass growls but KEEPS its
+    # fundamental, the treble is nearly a bell, and velocity moves the growl far
+    # more than the level. 0.9 dB rms against those five targets; the first try
+    # had the bass so wide that h2 beat h1 and the low notes read an octave up.
+    pickup_offset = 0.30          # voicing: how far off the axis the tine sits
+    pickup_deflection = 0.25      # swing at velocity 127, middle register
+    pickup_deflection_max = 1.10  # past this the tine has left the field
+    deflection_register_slope = -0.50   # per octave: low tines swing wider
+    pickup_harmonics = 16         # the curve is spent long before this
+    pickup_floor_db = -90.0       # and the tail below this is not worth a partial
+
+    # ---- the tonebar ----------------------------------------------------
+    # Fitted to the nine tine/tonebar pairs in ISMA 2014 Table 1 (16% rms).
+    # The fit carries the measured fact that the two DIVERGE with pitch: the
+    # tonebar sits at 0.75 of the tine at the bottom of the compass and 0.11 at
+    # the top, which is why this cannot be a fixed ratio.
+    tonebar_hz_coeff = 10.06
+    tonebar_hz_power = 0.4066
+    # Transverse bar modes, then the longitudinal ones. The paper attributes the
+    # bright part of the attack to longitudinal waves converting to transverse
+    # at the T-joint -- they are "10-15 times faster", and "because of the
+    # energy in the high frequency range these waves contribute a lot to the
+    # higher overtones of the extremely short initial transient". The transverse
+    # ratios are a free bar's; the longitudinal pair is ASSERTED from that
+    # 10-15x, not measured.
+    tonebar_mode_ratios = (1.0, 2.756, 5.404, 12.0, 24.0)
+    tonebar_gains = (0.30, 0.18, 0.10, 0.22, 0.10)
+    tonebar_decay_db = 3300.0     # -40 dB in 12 ms: the measured 10-14
+
+    # ---- the ring -------------------------------------------------------
+    # decay_db and harmonic_decay_dampening MUST stay at zero: that is what
+    # makes the inherited law exactly k*D, which is what A^k demands.
+    decay_db = 0.0
+    harmonic_decay_dampening = 0.0
+    harmonic_decay_db = 10.0
+    decay_register_slope = 0.55
+
+    attack_time = 0.004           # hammer contact measured at 6.42 ms
+    one_shot = False              # every tine has its own felt damper
+    release_valve_time = 0.09
+    octave_gain = 0.0             # the deflection slope already tilts the register
+    octave_width = -0.12          # keyboard pan, bass left, as the piano has
+
+    # Balance-normalised the way the rest of the set is: three notes, C3/C4/C5,
+    # velocity 100, same room and master, matched on rms against the grand
+    # piano. It started 18.0 dB under one.
+    initial_gain = 0.56950913
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        # The tonebar is a separate resonator that happens to be bolted on, so
+        # where its modes sit depends on the note -- hence mode_ratios per
+        # instance rather than per class.
+        if ep_voicing != "":
+            self.pickup_offset = float(ep_voicing)
+        f0 = float(frequency)
+        tb = self.tonebar_hz_coeff * (f0 ** self.tonebar_hz_power)
+        # A Gaussian's harmonics fall off a CLIFF -- at a middle-register
+        # velocity the 10th is already 133 dB down -- so carrying the whole
+        # series would spend partials on nothing. Trim to where the curve dies.
+        series = self._pickup_series()
+        top = self.pickup_harmonics
+        if series[0] > 0.0:
+            floor = series[0] * (10.0 ** (self.pickup_floor_db / 20.0))
+            while top > 1 and series[top - 1] < floor:
+                top -= 1
+        self._series = series[:top]
+        self.pickup_harmonics = top
+        self.mode_ratios = (tuple(float(m) for m in range(1, top + 1))
+                            + tuple(tb * r / f0 for r in self.tonebar_mode_ratios))
+        self.max_harmonic = len(self.mode_ratios)
+
+    def pickup_flux(self, u):
+        """Flux through the coil with the tine u from the axis. The curve IS the
+        instrument, so this is the one thing a subclass must answer."""
+        raise NotImplementedError
+
+    def _deflection(self):
+        """How far the tine swings, in units of the field's width.
+
+        Proportional to hammer velocity, and wider at the bottom of the compass.
+        attack_volume is the GM square law, so velocity is its square root."""
+        a = (self.pickup_deflection
+             * (2.0 ** (self.deflection_register_slope * self.octave_position))
+             * _sqrt(max(self.attack_volume, 1e-4)))
+        return min(a, self.pickup_deflection_max)
+
+    def _pickup_series(self):
+        """What the coil makes of one sine: the harmonics of the waveshaped flux."""
+        a = self._deflection()
+        key = (type(self).__name__, round(self.pickup_offset, 4), round(a, 4),
+               self.pickup_harmonics, ep_control)
+        out = _EP_PICKUP_CACHE.get(key)
+        if out is not None:
+            return out
+        n = 256
+        x0 = self.pickup_offset
+        flux = (lambda u: u) if ep_control else self.pickup_flux
+        phi = [flux(x0 + a * _sin(2.0 * _pi * i / n)) for i in range(n)]
+        s = []
+        for k in range(1, self.pickup_harmonics + 1):
+            re = sum(phi[i] * _cos(2.0 * _pi * k * i / n) for i in range(n)) * 2.0 / n
+            im = sum(phi[i] * _sin(2.0 * _pi * k * i / n) for i in range(n)) * 2.0 / n
+            # The coil reads the EMF, -dPhi/dt, and differentiation multiplies
+            # partial k by k. This is the magnet's +6 dB/octave, arrived at the
+            # same way pickup_velocity does it for a guitar.
+            s.append(k * _sqrt(re * re + im * im))
+        out = tuple(s)
+        _EP_PICKUP_CACHE[key] = out
+        return out
+
+    def series_volume(self, harmonic):
+        # THE LEVEL FOLLOWS VELOCITY, NOT ITS SQUARE. attack_volume is (v/127)^2,
+        # but a hammer sets the tine's DEFLECTION and the coil reads deflection
+        # linearly, so dividing it back out here leaves the note's level linear
+        # in velocity. The growl is what keeps the square and steeper, since
+        # harmonic k goes as A^k -- which is the measured behaviour: velocity
+        # changes the sound more than it changes the volume.
+        av = max(self.attack_volume, 1e-4)
+        np_, nb = self.pickup_harmonics, len(self.tonebar_gains)
+        if harmonic < 1 or harmonic > np_ + nb:
+            return 0.0
+        if harmonic > np_:
+            v = self.tonebar_gains[harmonic - np_ - 1] * self._deflection()
+        else:
+            v = self._series[harmonic - 1]
+        return self.gain * v / av
+
+    def harmonic_decay(self, harmonic):
+        if harmonic > self.pickup_harmonics:
+            # The tonebar lives in the transient only: measured, the waveform is
+            # sinusoidal again 10-14 ms after the strike. No register factor --
+            # a tick is a tick everywhere on the keyboard.
+            return self.tonebar_decay_db
+        # k*D, because harmonic k of a waveshaped sine goes as A^k.
+        return super().harmonic_decay(harmonic)
+
+
+class RhodesProperties(ElectricPianoProperties):
+    """GM 4, Electric Piano 1: a Fender Rhodes. Electromagnetic, so a bell curve.
+
+    "The flattened sides of the frustum focuses the magnet field in the center
+    showing an approximate bell curve characteristic" (DAGA 2017). A Gaussian is
+    an extremely smooth nonlinearity, so its harmonics fall off a cliff -- at
+    equal drive h8 sits 120 dB down, against 86 for the Wurlitzer's pole. That
+    cliff is why a Rhodes bells where a Wurlitzer barks.
+    """
+
+    cabinet = "rhodes"
+    # The panel calls it vibrato; it is a stereo PAN between the suitcase's two
+    # amplifiers, which is why it vanishes in mono. CC1 sets how much of it.
+    tremolo_hz = 5.5
+    tremolo_depth = 0.60
+    tremolo_stereo = True
+
+    def pickup_flux(self, u):
+        return _exp(-u * u)
 
 
 class StoppedPipeProperties(SynthProperties):

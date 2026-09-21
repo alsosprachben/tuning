@@ -32,6 +32,8 @@ and comparing them by a single broadband number has hidden the opposite.
 | `buxwv161.py` | Buxtehude's Passacaglia as one long crescendo -- the way passacaglias are played. Registration changes at the key changes, found from the ostinato itself. |
 | `hammond.py` | A Hammond through a driven Leslie, rendered at four amp drives with nothing else changed. The valve stage is the only variable, so the sweep from clean to overdrive is what is being listened to. |
 | `tubeamp_check.py` | What the valve stage actually does, measured rather than asserted: transfer curve, harmonic orders, energy conservation, intermodulation share, and cost. Needs no score. |
+| `rhodes.py` | A Rhodes electric piano (GM 4). `--voicing` sweeps the tine's rest position in the magnet's field, which is the falsifiable one: centred, the fundamental disappears and the pickup answers an octave up. `--velocity` plays one phrase at four velocities, because on this voice velocity changes the sound more than the volume. `--control` renders with the pickup's curve bypassed -- a pure sine -- which is what everything else here has to be judged against. `--tremolo` puts the mod wheel up, which on this voice is a stereo pan between the suitcase's two amplifiers and so vanishes in mono. |
+| `rhodes_check.py` | The voice's own amplitude and decay laws printed beside the Hamburg measurements: the tonebar fit against ISMA 2014 Table 1, the octave test, the k*D decay law, and what a note costs. No score and no render. |
 | `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31); `--fret` plays a phrase with the position shifts left in, which is what fret noise (GM 120) is for; `--calibrate` measures the peak a hard strum (and a dug-in low E) makes, so `amp_reference` means something for the guitar and the bass. The passage plays soft and then dug-in, because on this voice that is audible. |
 | `guitar_check.py` | The pickup's comb against its geometry, the cabinet's response, why power chords work, and the proof that playing harder breaks up. Needs no score. |
 
@@ -47,6 +49,12 @@ python3 examples/tubeamp_check.py
 python3 examples/hammond.py /tmp
 
 python3 examples/guitar_check.py
+python3 examples/rhodes_check.py
+python3 examples/rhodes.py /tmp
+python3 examples/rhodes.py --voicing /tmp
+python3 examples/rhodes.py --velocity /tmp
+python3 examples/rhodes.py --control /tmp
+python3 examples/rhodes.py --tremolo /tmp
 python3 examples/guitar.py --calibrate
 python3 examples/guitar.py /tmp
 python3 examples/guitar.py --family /tmp

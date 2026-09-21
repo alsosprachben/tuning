@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    RhodesProperties,
     MutedTrumpetProperties,
     TromboneProperties,
     HornProperties,
@@ -106,6 +107,11 @@ _fill(0, 7, GrandPianoProperties)
 # ...except the harpsichords (6 = Harpsichord, 7 = Clavi): PLUCKED, and registered
 # (choirs as stops via CC11), not struck. GM files that mean a harpsichord get one.
 _fill(6, 7, HarpsichordProperties)
+# ...and 4 (Electric Piano 1) is not a piano at all. A Rhodes is a struck steel
+# TINE read by a magnetic pickup: no strings, no soundboard, no unison trios,
+# so none of the piano's stretch or beating. Measured, the tine vibrates as a
+# pure sine and every harmonic is made by the pickup. See ElectricPianoProperties.
+PROGRAM_CLASS[4] = RhodesProperties       # tine + bell-curve magnetic pickup
 # 8-15   Chromatic Percussion          -> struck bars/bells
 # 8-15  Chromatic percussion. These are NOT one instrument: what separates them
 # is whether the bar is undercut, and to what interval. See StruckBarProperties.
