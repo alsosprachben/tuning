@@ -2933,6 +2933,18 @@ def selftest():
           _c['just'] > 20.0 * _c['even'],
           "  (coupling %.4f just, %.4f even -- %.0f dB apart)"
           % (_c['just'], _c['even'], 20 * math.log10(_c['just'] / max(_c['even'], 1e-9))))
+    # ...and end to end, which is the test that caught the responders being
+    # placed at EQUAL-tempered offsets from the driver instead of at their own
+    # tuned pitches. With that bug only the octave ever coincided, so the just
+    # tuner bought nothing but a louder octave.
+    _cnt = {}
+    for _tn in ('even', 'just'):
+        _F = _BR.tuning_table(_tn)
+        _cnt[_tn] = sum(len(_SY.responders(_T.SitarProperties(_F[_n], 0.0, 1.0, 1.0), _F))
+                        for _n in (60, 62, 64, 65, 67, 69))
+    check("...and it is the fifths and fourths, not just the octaves",
+          _cnt['just'] > 3 * _cnt['even'],
+          "  (%d responders just, %d even)" % (_cnt['just'], _cnt['even']))
 
     # ---- the wheel means the same thing live and offline ---------------------
     # CC1 is the gain knob in both, and they are two separate implementations

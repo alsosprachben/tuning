@@ -40,7 +40,7 @@ import numpy as np
 import tonelib as T
 
 
-def responders(props, sr=None):
+def responders(props, freq=None):
     """[(semitone offset, drive)] for one struck note, strongest first.
 
     The drive is a scalar per responder rather than per mode, which is exact
@@ -68,12 +68,26 @@ def responders(props, sr=None):
         # exactly in the resonance, and two cents away is already outside it.
         tonic = int(getattr(props, 'sympathetic_tonic', 60))
         f0 = props.frequency_x * (2.0 ** props.octave_position)
-        drv = int(round(69 + 12 * np.log2(max(f0, 1e-9) / 440.0)))
+        # WHICH NOTE IS THIS? Found by matching the tuning table rather than
+        # by assuming A440 and equal steps, because neither holds here: the
+        # default reference is baroque and the whole point of this voice is
+        # that the temperament is not equal.
+        if freq:
+            drv = min(freq, key=lambda n: abs(freq[n] - f0))
+        else:
+            drv = int(round(69 + 12 * np.log2(max(f0, 1e-9) / 440.0)))
         for off in strings:
-            s = (tonic + int(off)) - drv
+            pitch = tonic + int(off)
+            s = pitch - drv
             if s == 0:
                 continue                 # the string the note is played on
-            d = _coupling(props, _at(props, f0 * 2.0 ** (s / 12.0)), g)
+            # THE STRING'S OWN FREQUENCY, from the tuning table. Placing it an
+            # equal-tempered interval from the driver instead puts it two
+            # cents off its just pitch, which at Q 2800 is several bandwidths
+            # -- so only the octave coincided and the fifths, which are the
+            # reason to use a just tuner at all, never rang.
+            rf = freq[pitch] if (freq and pitch in freq) else f0 * 2.0 ** (s / 12.0)
+            d = _coupling(props, _at(props, rf), g)
             if d >= floor:
                 out.append((s, d))
         out.sort(key=lambda sd: -sd[1])
@@ -139,7 +153,7 @@ def _at(props, freq):
     return v
 
 
-def expand(A, channels, sr, cols=None):
+def expand(A, channels, sr, cols=None, freq=None):
     """Emit every channel's sympathetic notes, in place on the table.
 
     A struck note is one group of rows sharing an onset; each responder is that
@@ -160,7 +174,7 @@ def expand(A, channels, sr, cols=None):
     extra = {k: [] for k in keys}
     made = 0
     for ch, props in channels.items():
-        resp = responders(props, sr)
+        resp = responders(props, freq)
         if not resp:
             continue
         rows = np.flatnonzero(mch == ch)

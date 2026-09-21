@@ -1259,7 +1259,8 @@ def prepare(path, tuner='hybrid'):
     # mechanical kick through shared steel rather than resonance.
     if _SYM_CH:
         import sympathetic as _SYM
-        _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'),
+                          freq=FREQ)
         if _ns:
             print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
                   % (len(_SYM_CH), _ns))

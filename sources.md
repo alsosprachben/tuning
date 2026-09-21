@@ -2344,11 +2344,30 @@ taraf string a fifth below the played note:
 | just | **0.467** where the interval is exact | **35 dB stronger** |
 | hybrid | 0.025 - 0.468 | wherever it happens to be exact |
 
-Rendered, `even` emits NO sympathetic partials at all and `just` emits 2912 on
-the same eight notes. So a sitar rendered in equal temperament is a dry sitar,
+Rendered on the same eight notes, `even` emits 6,300 sympathetic partials --
+octaves, essentially -- and `just` emits **33,082**, which is the fifths,
+fourths and sixths joining in. Counted as responders rather than partials it is
+9 against 56. So a sitar rendered in equal temperament is a dry sitar,
 and that is not a defect in the model -- it is why the instruments that carry
 sympathetic strings belong to musics that do not temper. A sitar's taraf are
 tuned by ear against a drone, and the drone is what makes them ring.
+
+THE TUNER'S TONIC IS SA, and that is the tuner's constraint rather than the
+instrument's. Indian classical tunes the twelve swaras in just intonation
+against a fixed Sa, and `tunelib.JustTuner` is exactly that ratio set --
+16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8 -- but with its
+tonic nailed to C. The first version put Sa at C#, the common concert pitch for
+a sitar, which meant the taraf were tuned to intervals that were not pure:
+measured from C# the fourth is 21.5 cents off where from C it is the just 2.0.
+A real sitarist puts Sa where they like and retunes the taraf to match, which
+would need a tuner whose tonic moves.
+
+AND THE RESPONDERS HAVE TO BE AT THEIR OWN TUNED PITCHES. They were being
+placed an EQUAL-tempered interval from the driver -- `f0 * 2**(s/12)` -- which
+is two cents from the just pitch and, at Q 2800, several bandwidths. So only
+the octave ever coincided, because an equal-tempered octave is also a just one,
+and the just tuner bought nothing except a louder octave. Taking the string's
+frequency from the tuning table instead is what turns 9 responders into 56.
 
 WHAT THE FIRST DRAFT GOT WRONG, since Q is entirely a function of decay: it had
 the string ringing 32 seconds, which put the modes at Q 12000 and made

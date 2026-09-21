@@ -4633,7 +4633,19 @@ class SitarProperties(PluckedStringProperties):
     # so this is a default and not a fact about sitars.
     sympathetic_mode = 'coincidence'
     sympathetic_strings = (-12, -10, -8, -7, -5, -3, -1, 0, 2, 4, 5, 7, 9)
-    sympathetic_tonic = 61                  # Sa at C#, the common concert pitch
+    # SA MUST BE THE TUNING'S TONIC, and this is the tuner's constraint rather
+    # than the instrument's. Indian classical tunes the twelve swaras in just
+    # intonation against a fixed Sa, and tunelib's JustTuner is exactly that
+    # ratio set -- 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
+    # -- but with its tonic nailed to C. Put Sa anywhere else and the taraf are
+    # tuned to intervals that are not pure: measured from C# the fourth is
+    # 21.5 cents off where from C it is the just 2.0, and the coupling
+    # collapses accordingly.
+    #
+    # A real sitarist puts Sa wherever they like, commonly C# or D, and retunes
+    # the taraf to match. Following that would need a tuner whose tonic moves,
+    # which this one has not got.
+    sympathetic_tonic = 60                  # Sa at C, where JustTuner's is
     sympathetic_gain = 0.35                 # a guess; see the class docstring
     sympathetic_max = 13
     sympathetic_floor = 0.005
