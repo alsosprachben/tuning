@@ -2369,6 +2369,19 @@ the octave ever coincided, because an equal-tempered octave is also a just one,
 and the just tuner bought nothing except a louder octave. Taking the string's
 frequency from the tuning table instead is what turns 9 responders into 56.
 
+HOW LOUD, AND IT IS A GUESS. The coupling gain has no measurement behind it,
+and the steelpan is the precedent for how that usually goes. Measured on the
+rendered passage, the first value put the taraf **5.6 dB** under the played
+string -- which is two instruments rather than one with a halo. It is now
+14.9 dB under; 0.20 gives -10.5 and 0.07 gives -19.7, so the knob is roughly
+linear in dB.
+
+Worth checking and reassuring: they do NOT accumulate. Nothing damps a taraf
+and every note adds nine more ringing for seven seconds, so the obvious fear is
+a wash that climbs through a passage. Measured second by second it sits at a
+steady -5.7 dB relative to the melody rather than rising -- the strings reach a
+balance because they decay at the same rate the melody feeds them.
+
 WHAT THE FIRST DRAFT GOT WRONG, since Q is entirely a function of decay: it had
 the string ringing 32 seconds, which put the modes at Q 12000 and made
 everything couple to nothing, in every tuning. 7 s is a sitar. The lesson

@@ -4646,7 +4646,22 @@ class SitarProperties(PluckedStringProperties):
     # the taraf to match. Following that would need a tuner whose tonic moves,
     # which this one has not got.
     sympathetic_tonic = 60                  # Sa at C, where JustTuner's is
-    sympathetic_gain = 0.35                 # a guess; see the class docstring
+    # THE NUMBER MOST LIKELY TO BE WRONG HERE, and there is no measurement
+    # behind it -- the steelpan is the precedent, where the ratios were right
+    # and every asserted GAIN was out by 25 to 30 dB once a recording existed.
+    #
+    # It is a judgement about balance: the taraf are a halo round the note,
+    # clearly there and never a second voice. Measured on the rendered
+    # passage, 0.35 put them 5.6 dB under the played string -- which is two
+    # instruments -- and this puts them 14.9 under. 0.20 is -10.5 and 0.07 is
+    # -19.7, so the knob is roughly linear in dB and easy to move by ear.
+    #
+    # THEY DO NOT PILE UP, which was the worry worth checking: nothing damps a
+    # taraf, and every note adds nine more of them ringing for seven seconds.
+    # Measured second by second across the passage the wash sits at a steady
+    # -5.7 dB relative to the melody at the old gain rather than climbing, so
+    # it reaches a balance instead of accumulating.
+    sympathetic_gain = 0.12
     sympathetic_max = 13
     sympathetic_floor = 0.005
 
