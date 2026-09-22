@@ -5594,7 +5594,7 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # files never do: Riffsym writes all 727 of its notes at velocity 100, so
     # its distortion guitars sat at 0.620 of nominal for ever. attack_volume
     # is (vel/127)^2, so that is the square and not the ratio -- 4.1 dB.
-    amp_reference = 0.0406
+    amp_reference = 0.1408
 
     # A CLEAN VALVE AMPLIFIER IS STILL SINGLE-ENDED. Its preamp is one valve
     # with nothing to cancel against, so even at this drive the distortion it
@@ -5604,6 +5604,24 @@ class ElectricGuitarProperties(PluckedStringProperties):
 
     cabinet = "guitar12"
 
+    # LEVEL. This family inherited PluckedStringProperties' generic 0.02 and was
+    # never balance-normalised: measured against the grand piano in its own
+    # register it came out -20.8 dB, which Ben heard before anything measured it --
+    # "I have heard the electric bass as way too quiet". An amplified instrument
+    # is not 20 dB under a piano.
+    #
+    # BOTH NUMBERS MOVE TOGETHER, and they have to. amp_reference is the level
+    # amp_drive is measured against, so raising initial_gain alone drives the
+    # valve further into breakup and changes the voice: measured, x4 gave +11.2
+    # dB and the next x4 only +8.1. Scaled together the level is exactly linear
+    # (+12.0, +24.1 dB for x4 and x16) and the brightness does not move at all
+    # (-32.9 dB in every case), so the voiced distortion survives untouched.
+    #
+    # The anchor is the MEASURED nylon guitar at -9.7 dB, which is this family's
+    # own level rather than the piano's. Every member shifts by the one factor,
+    # so the relationships between them -- a palm mute quieter, a slap brighter
+    # -- are exactly as they were.
+    initial_gain = 0.0690
 
 class ElectricBassProperties(ElectricGuitarProperties):
     """A solid-body electric bass: the guitar's physics on a longer string.
@@ -5648,8 +5666,26 @@ class ElectricBassProperties(ElectricGuitarProperties):
     # because that one is six strings at once; a bass calibrated on a six-note
     # voicing would have a reference it never reaches in use, and would then
     # never break up at all.
-    amp_reference = 0.0164
+    amp_reference = 0.2289
 
+    # LEVEL. This family inherited PluckedStringProperties' generic 0.02 and was
+    # never balance-normalised: measured against the grand piano in its own
+    # register it came out -32.9 dB, which Ben heard before anything measured it --
+    # "I have heard the electric bass as way too quiet". An amplified instrument
+    # is not 32 dB under a piano.
+    #
+    # BOTH NUMBERS MOVE TOGETHER, and they have to. amp_reference is the level
+    # amp_drive is measured against, so raising initial_gain alone drives the
+    # valve further into breakup and changes the voice: measured, x4 gave +11.2
+    # dB and the next x4 only +8.1. Scaled together the level is exactly linear
+    # (+12.0, +24.1 dB for x4 and x16) and the brightness does not move at all
+    # (-32.9 dB in every case), so the voiced distortion survives untouched.
+    #
+    # The anchor is the MEASURED nylon guitar at -9.7 dB, which is this family's
+    # own level rather than the piano's. Every member shifts by the one factor,
+    # so the relationships between them -- a palm mute quieter, a slap brighter
+    # -- are exactly as they were.
+    initial_gain = 0.2790
 
 class FingeredBassProperties(ElectricBassProperties):
     """GM 33. Two fingers alternating over the neck pickup.
@@ -5806,7 +5842,10 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
     # Exactly 20.0 dB per decade of this knob -- pure linear, unlike the piano's
     # 38.8, whose phantom partials are sum-tones scaling as its square. This
     # voice has none.
-    initial_gain = 0.848726
+    # Re-anchored from the grand piano to this family's own measured level --
+    # the nylon guitar's -9.7 dB. Against the piano it read -0.0, which put it
+    # 10 dB over every other plucked voice and 16 over its own bowed twin.
+    initial_gain = 0.2684
 
 
 class SteelGuitarProperties(NylonGuitarProperties):

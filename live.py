@@ -3136,13 +3136,19 @@ def selftest():
     # the edge of breakup at a usual touch so digging in goes past it; at the
     # old 127 calibration every real file fell short, since attack_volume is
     # (vel/127)^2 and Riffsym writes everything at 100.
+    # AS A RATIO TO THE VOICE'S OWN GAIN, which is the scale-free form and the
+    # only one that survives re-levelling a family. The absolute thresholds this
+    # check used to carry were tied to the generic initial_gain those voices
+    # happened to inherit, so they failed the moment the family was balanced --
+    # even though both numbers had moved together and the valve saw exactly the
+    # same drive. What "calibrated at normal playing" means is reference over
+    # gain, and that is unchanged: guitar 2.03 -> 2.04, bass 0.82 -> 0.82.
+    _gr = _T.ElectricGuitarProperties.amp_reference / _T.ElectricGuitarProperties.initial_gain
+    _br = _T.ElectricBassProperties.amp_reference / _T.ElectricBassProperties.initial_gain
     check("the amplifier is calibrated at normal playing, not maximum",
-          _T.ElectricGuitarProperties.amp_reference < 0.05
-          and _T.ElectricBassProperties.amp_reference
-          < _T.ElectricGuitarProperties.amp_reference,
-          "  (guitar %.4f, bass %.4f)"
-          % (_T.ElectricGuitarProperties.amp_reference,
-             _T.ElectricBassProperties.amp_reference))
+          _gr < 2.6 and _br < _gr,
+          "  (guitar %.2f, bass %.2f, as a ratio to each voice's own gain)"
+          % (_gr, _br))
 
     # ---- the basses ---------------------------------------------------------
     # The guitar's physics on a longer string, so what is worth guarding is
@@ -3297,6 +3303,43 @@ def selftest():
           "  (%d of the whole set departs from the soft default)" % len(_moved))
 
     # ---- the acoustic bass: the measured upright, plucked --------------------
+    # AND NO VOICE IS LEFT AT THE GENERIC GAIN. This check exists because the
+    # electric bass shipped 23 dB too quiet for months and Ben's ear caught it,
+    # not the suite: fourteen voices inherited PluckedStringProperties'
+    # initial_gain = 0.02 and were never balance-normalised, so the family
+    # spanned 41 dB. Nothing here measured absolute level -- dozens of checks on
+    # spectrum and on relationships BETWEEN voices, none on how loud one is, so
+    # a voice could be inaudible and every check would pass.
+    #
+    # It cannot measure level honestly: that needs a render (examples/levels.py
+    # does it properly, and the arithmetic shortcut was wrong by up to 80 dB --
+    # a bowed voice has no onset, and the amp and cabinet are not in the
+    # series). So it asserts the thing that IS cheap and exact, and which is
+    # what actually went wrong: every voice in the family resolves its gain from
+    # a deliberately balanced class, not by falling through to the generic base.
+    _PLUCKED_FAMILY = (
+        "NylonGuitarProperties", "SteelGuitarProperties", "JazzGuitarProperties",
+        "ElectricGuitarProperties", "MutedGuitarProperties",
+        "OverdrivenGuitarProperties", "DistortionGuitarProperties",
+        "GuitarHarmonicsProperties", "AcousticBassProperties",
+        "FingeredBassProperties", "PickedBassProperties",
+        "FretlessBassProperties", "SlapBassProperties",
+    )
+    _unbalanced = []
+    for _n in _PLUCKED_FAMILY:
+        _c = getattr(_T, _n, None)
+        if _c is None:
+            continue
+        _src = next((_k.__name__ for _k in _c.__mro__ if "initial_gain" in vars(_k)),
+                    None)
+        if _src in (None, "PluckedStringProperties"):
+            _unbalanced.append(_n)
+    check("every plucked voice has a balanced gain, not the generic one",
+          not _unbalanced,
+          "  (%d voices, all resolving from a normalised class)"
+          % len(_PLUCKED_FAMILY) if not _unbalanced
+          else "  (still generic: %s)" % ", ".join(_unbalanced))
+
     check("the acoustic bass is not the generic plucked string",
           _PM.property_class_for_program(32) is _T.AcousticBassProperties)
     ab, cb2 = _T.AcousticBassProperties, _T.ContrabassProperties

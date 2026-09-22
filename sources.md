@@ -3513,3 +3513,79 @@ basses are left alone" asserted GM 32 was still generic. What that check was
 really protecting is in its comment -- that an upright must not be given a
 pickup and a cabinet, the saxophone trap -- so it now asserts THAT, and that
 38-39 are still untouched, which they are: they have no string to model.
+
+## Levels: the plucked family, re-balanced
+
+Ben reported the electric bass as "way too quiet". It was, by 23 dB, and so was
+most of its family: **fourteen voices inherited `PluckedStringProperties`'
+generic `initial_gain = 0.02`** and had never been balance-normalised against
+anything. Measured in each voice's own register against the grand piano at
+velocity 100, the family spanned **41 dB**.
+
+The anchor is the **measured nylon guitar at -9.7 dB**, not the grand piano:
+the nylon guitar and the contrabass are the only two members whose level
+answers to a recording, so everything else is placed relative to them.
+
+### The amplifier had to move with the gain
+
+Scaling `initial_gain` alone is **not** a level control on an amplified voice.
+Measured on the electric bass, x4 gave +11.2 dB and the next x4 only +8.1 --
+because `amp_reference` is the level `amp_drive` is measured against, so raising
+the gain alone drives the valve harder and it compresses. The voice got louder
+*and dirtier*, which is a different instrument.
+
+Scaling **both together** is exactly linear -- +12.0 and +24.1 dB for x4 and
+x16 -- with brightness pinned at -32.9 dB throughout. The distortion character
+is untouched; only the level moves.
+
+| | `initial_gain` | `amp_reference` | ratio |
+|---|---|---|---|
+| Electric guitar | 0.02 -> 0.069 | 0.0406 -> 0.1408 | 2.03 -> 2.04 |
+| Electric bass | 0.02 -> 0.279 | 0.0164 -> 0.2289 | 0.82 -> 0.82 |
+
+### Before and after
+
+| GM | voice | was | now | | GM | voice | was | now |
+|---|---|---|---|---|---|---|---|---|
+| 26 | Jazz guitar | -18.3 | -7.5 | | 32 | Acoustic bass | -0.0 | -10.0 |
+| 27 | Electric guitar | -20.8 | **-10.0** | | 33 | Bass finger | -32.9 | **-10.0** |
+| 28 | Muted guitar | -35.8 | -25.0 | | 34 | Bass pick | -35.7 | -12.8 |
+| 29 | Overdriven | -23.8 | -13.0 | | 35 | Fretless | -36.2 | -13.3 |
+| 30 | Distortion | -27.7 | -16.9 | | 36 | Slap | -40.0 | -17.1 |
+| 31 | Harmonics | -24.0 | -13.3 | | 37 | Pop | -40.7 | -17.8 |
+
+`examples/levels.py` re-measures this from rendered audio and reproduces it
+within a couple of dB on a slightly different window.
+
+### Two oddities left deliberately
+
+The **distortion guitar is 7 dB quieter than the clean one** and the **slap bass
+7 dB quieter than fingered**. Both are the wrong way round, and both are
+emergent from the spectra rather than chosen. Fixing them is per-voice
+judgement, not one family factor, so they are left visible rather than papered
+over -- the gross error had been hiding them.
+
+### Two process notes
+
+**THE ARITHMETIC SHORTCUT WAS WRONG BY 80 dB.** The first `examples/levels.py`
+estimated level from the partial series at onset rather than rendering, because
+rendering is slow. It put the contrabass 87 dB below the acoustic bass. A bowed
+voice has almost no onset, the amplifier and cabinet are not in the series, and
+`max_harmonic` truncates differently per voice. The script renders. A
+measurement whose whole purpose is to answer to something outside the model
+cannot be taken from inside it.
+
+**AN EXISTING CHECK FAILED, AND ITS THRESHOLD WAS THE BUG.** "The amplifier is
+calibrated at normal playing, not maximum" asserted `amp_reference < 0.05` --
+absolute numbers tied to the generic `initial_gain` those voices happened to
+inherit. It failed the moment the family was balanced, even though both numbers
+had moved together and the valve saw exactly the same drive. What that check
+means is `amp_reference / initial_gain`, which is scale-free and unchanged, and
+it now asserts that instead.
+
+**AND THE SUITE MEASURED NO LEVELS AT ALL.** Dozens of checks on spectrum and on
+relationships between voices; none on how loud a voice is. A voice could be
+inaudible and the suite would pass. It cannot honestly measure level without
+rendering, so it now asserts the thing that is cheap and exact and that is what
+actually went wrong: no voice in the family resolves `initial_gain` by falling
+through to the generic base.

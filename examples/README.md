@@ -41,6 +41,7 @@ and comparing them by a single broadband number has hidden the opposite.
 | `rhodes_check.py` | The voice's own amplitude and decay laws printed beside the Hamburg measurements: the tonebar fit against ISMA 2014 Table 1, the octave test, the k*D decay law, and what a note costs. No score and no render. |
 | `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31); `--fret` plays a phrase with the position shifts left in, which is what fret noise (GM 120) is for; `--acoustic` renders the two acoustics, the measured nylon (GM 24) and the steel-string (GM 25) that borrows its body; `--calibrate` measures the peak a hard strum (and a dug-in low E) makes, so `amp_reference` means something for the guitar and the bass. The passage plays soft and then dug-in, because on this voice that is audible. |
 | `guitar_check.py` | The pickup's comb against its geometry, the cabinet's response, why power chords work, and the proof that playing harder breaks up. Needs no score. |
+| `levels.py` | How loud each plucked voice is, rendered and measured against the grand piano in its own register. Written after the electric bass shipped 23 dB too quiet. Needs no score. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -54,6 +55,7 @@ python3 examples/tubeamp_check.py
 python3 examples/hammond.py /tmp
 
 python3 examples/guitar_check.py
+python3 examples/levels.py
 python3 examples/grand.py --compare /tmp
 python3 examples/grand.py --register /tmp
 python3 examples/grand.py --honky /tmp
