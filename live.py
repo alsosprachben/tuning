@@ -3160,15 +3160,24 @@ def selftest():
           all(_PM.property_class_for_program(n) is c for n, c in bass))
     # 32 is an UPRIGHT -- a wooden box, which is the one thing a solid body has
     # not got -- and 38-39 have no string at all. Giving either a pickup and a
-    # speaker would be the saxophone trap. 32 now has its own voice, wearing the
-    # measured contrabass's body; 38-39 still have nothing to model.
+    # speaker would be the saxophone trap, and THAT is what this guards.
+    #
+    # It used to guard it partly by asserting 38-39 were untouched, and it fired
+    # when they were given voices. Correctly: the clause was true when written
+    # and had become a statement about the calendar rather than about the model.
+    # What it means is that neither an upright nor a synthesiser is an electric
+    # bass guitar, and that survives 38-39 becoming oscillators -- an oscillator
+    # has no string for a magnet to read and no amplifier to go through.
+    _nopickup = [(32, _T.AcousticBassProperties)] + \
+                [(n, _PM.property_class_for_program(n)) for n in (38, 39)]
     check("...and neither the upright nor the synth basses got a pickup",
           _PM.property_class_for_program(32) is _T.AcousticBassProperties
-          and not getattr(_T.AcousticBassProperties, "pickup_points", ())
-          and not getattr(_T.AcousticBassProperties, "cabinet", None)
-          and all(_PM.property_class_for_program(n) is _T.PluckedStringProperties
-                  for n in (38, 39)),
-          "  (32 is the measured upright plucked; 38-39 are still untouched)")
+          and all(not getattr(c, "pickup_points", ())
+                  and not getattr(c, "cabinet", None)
+                  and not getattr(c, "amp_drive", 0.0)
+                  for _n, c in _nopickup),
+          "  (32 is the measured upright plucked; 38-39 are oscillators, and "
+          "none of the three has a magnet or a speaker)")
     binst = {n: c(41.2, 0.0, 1.0, 1.0) for n, c in bass}
 
     def _mean_h(g, top=17):
@@ -3339,6 +3348,58 @@ def selftest():
           "  (%d voices, all resolving from a normalised class)"
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
+
+    # ------------------------------------------------------------- synth bass
+    import patch_map as _PMsb
+    # 38 and 39 fell through to PluckedStringProperties -- the GENERIC plucked
+    # string, which has no `formants` attribute at all, so a synth bass was a
+    # bare string series with no body and no filter. The third family caught by
+    # that same hole, after the pizzicato and the harp.
+    _b1 = _PMsb.property_class_for_note(38, 28)
+    _b2 = _PMsb.property_class_for_note(39, 28)
+    check("the synth basses are oscillators, not plucked strings",
+          _b1 is not _b2
+          and not issubclass(_b1, _T.PluckedStringProperties)
+          and issubclass(_b1, _T.SawtoothSynthProperties)
+          and bool(getattr(_b1, "formants", ())),
+          "  (an oscillator under a resonant low-pass, and two distinct presets)")
+    # GM 39 IS A SQUARE, which is an exact distinction rather than a tuned one:
+    # a square IS the odd harmonics at 1/n, so its evens are absent by
+    # definition and it is audibly a different instrument from its neighbour
+    # rather than the same one brighter.
+    _q39 = _b2(41.2, 0.0, 1.0, 1.0)
+    check("...and GM 39 is a SQUARE, hollow where GM 38 is full",
+          _b2.odd_only and max(_q39.harmonic_volume(_k) for _k in (2, 4, 6)) < 1e-9,
+          "  (no even harmonics at all, by definition)")
+    # THE FILTER ENVELOPE IS THE PLUCK: the amplitude holds while the filter
+    # shuts, which is why a synth bass note has a bright attack and a round body
+    # without getting quieter.
+    _q38 = _b1(41.2, 0.0, 1.0, 1.0)
+    check("...and the filter shuts while the amplitude holds",
+          _q38.harmonic_decay(8) > 5.0 * _q38.harmonic_decay(1),
+          "  (h1 %.1f dB/s against h8 %.1f)"
+          % (_q38.harmonic_decay(1), _q38.harmonic_decay(8)))
+    # NO DETUNE, which is the opposite of the synth brass and is deliberate:
+    # two oscillators a few cents apart beat at a rate proportional to
+    # frequency, and at E1 that is 0.2 Hz -- a slow wobble across a whole bar,
+    # which in the bass reads as the part being out of tune, not as thickness.
+    check("...and a synth bass is voiced TIGHT, unlike the synth brass",
+          not _q38.unison_voices(41.2, 1, 0.0)
+          and not _q39.unison_voices(41.2, 1, 0.0),
+          "  (one oscillator; a 6-cent detune would beat at 0.2 Hz down here)")
+    # AND NEITHER IS A COPY OF THE ELECTRIC BASSES, which are modelled
+    # instruments in this renderer -- the lesson the synth brass taught.
+    _eb = _PMsb.property_class_for_note(33, 28)(41.2, 0.0, 1.0, 1.0)
+    def _odd_gap(_q):
+        return max(abs(20.0 * math.log10(max(_q.harmonic_volume(_k), 1e-12)
+                                         / max(_q.harmonic_volume(1), 1e-12))
+                       - 20.0 * math.log10(max(_eb.harmonic_volume(_k), 1e-12)
+                                           / max(_eb.harmonic_volume(1), 1e-12)))
+                   for _k in (3, 5, 7, 9, 11))
+    check("...and neither is a copy of the electric bass",
+          _odd_gap(_q38) > 8.0 and _odd_gap(_q39) > 8.0,
+          "  (%.0f and %.0f dB from GM 33 on the harmonics they share)"
+          % (_odd_gap(_q38), _odd_gap(_q39)))
 
     # ------------------------------------------------------------ synth brass
     import patch_map as _PMb2

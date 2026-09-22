@@ -4300,3 +4300,76 @@ probe first.
 
 Balance-normalised against the MEASURED trumpet (GM 56) on the same passage in
 the same room -- this family's reference-audio member.
+
+## GM 38, 39 Synth Bass: an oscillator under a filter, voiced tight
+
+Both fell through to `PluckedStringProperties` -- the GENERIC plucked string,
+which has **no `formants` attribute at all** -- so a synth bass was a bare
+string series with no body, no filter and nothing synthetic about it. The third
+family caught by that same hole, after the pizzicato section and the harp.
+
+**THE FILTER ENVELOPE IS THE PLUCK.** On a bass it is the whole gesture: the
+amplitude holds while the FILTER shuts, which is why a synth bass note has a
+bright attack and a round body without getting quieter. That is
+`harmonic_decay_db` running well ahead of `decay_db` -- measured, the
+fundamental at 3.7 dB/s against the eighth harmonic at 26.
+
+### One oscillator, and no detune -- the opposite of the synth brass
+
+Two oscillators a few cents apart beat at a rate **proportional to frequency**:
+
+| | a 6-cent detune beats at |
+|---|---|
+| C4 | 0.91 Hz |
+| E2 | 0.29 Hz |
+| E1 | **0.14 Hz** |
+
+At C3 that is a shimmer. At E1 it is a wobble lasting most of a bar, which down
+there reads as the part being out of tune rather than as thickness. Real synth
+basses are voiced tight for exactly that reason, and where they do use a second
+oscillator it is an OCTAVE down -- which does not beat at all.
+
+So the same mechanism that thickens GM 62/63 is deliberately absent here, and
+the reason is arithmetic rather than taste.
+
+### GM 39 is a square
+
+An exact distinction rather than a tuned one, as the leads were: a square IS the
+odd harmonics at 1/n, so its evens are absent by definition and it is audibly a
+different instrument from its neighbour rather than the same one brighter. With
+its cutoff higher and its resonance up, it is the aggressive one.
+
+**AND THE COMPARISON HAD TO BE MADE FAIRLY.** The first table put GM 39's even
+harmonics next to GM 38's and reported the two as 197 dB apart -- which is not a
+measurement, it is the definition of a square restated. Compared on the odd
+harmonics both voices actually have:
+
+| | worst difference |
+|---|---|
+| GM 38 vs the electric bass | 15.3 dB |
+| GM 39 vs the electric bass | 20.4 dB |
+| GM 38 vs GM 39 | 16.6 dB |
+
+with the absent evens noted separately as what they are.
+
+### Not tuned onto the electric basses
+
+GM 33-37 are modelled instruments in this renderer, so resemblance would be
+redundancy -- the lesson GM 62/63 taught, where a synth brass was tuned until it
+sat 1.7 dB from the modelled horn and that was written up as a passing check.
+
+### An existing check fired, correctly, and its clause was the stale part
+
+"...and neither the upright nor the synth basses got a pickup" guarded against
+the saxophone trap -- giving an upright or a synthesiser a magnet and a speaker
+-- and it did so partly by asserting 38-39 were still untouched. That clause was
+true when written and had become a statement about the calendar rather than
+about the model. It now asserts what it means: neither an upright nor a
+synthesiser is an electric bass guitar, which survives 38-39 becoming
+oscillators, because an oscillator has no string for a magnet to read.
+
+### Levels
+
+Balance-normalised against the fingered electric bass (GM 33) on the same
+passage in the same room -- the family's representative, itself anchored to the
+measured nylon guitar.

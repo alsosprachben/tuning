@@ -33,6 +33,8 @@ from tonelib import (
     FifthsLeadProperties,
     BassLeadProperties,
     SynthBrass1Properties,
+    SynthBass1Properties,
+    SynthBass2Properties,
     SynthBrass2Properties,
     GrandPianoProperties,
     HarpsichordProperties, HarpsiRossProperties,
@@ -251,6 +253,13 @@ PROGRAM_CLASS[34] = PickedBassProperties
 PROGRAM_CLASS[35] = FretlessBassProperties
 PROGRAM_CLASS[36] = SlapBassProperties
 PROGRAM_CLASS[37] = PoppedBassProperties
+# 38 and 39 are SYNTHESISERS and had been falling through to the generic plucked
+# string -- which has no `formants` attribute at all, so they were a bare string
+# series with no body and no filter. An oscillator under a resonant low-pass,
+# and deliberately not tuned onto the electric basses above: those are modelled
+# instruments here, so resemblance would be redundancy.
+PROGRAM_CLASS[38] = SynthBass1Properties   # saw, low cutoff: the round one
+PROGRAM_CLASS[39] = SynthBass2Properties   # square, higher and more resonant
 # 40-47  Strings / orchestral
 _fill(40, 44, BowedStringProperties)   # violin, viola, cello, contrabass, tremolo
 # 44 is an ARTICULATION, not an instrument, and it rides on whichever body the

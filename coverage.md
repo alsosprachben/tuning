@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 29 | 23% |
-| 2 specific, theory | 45 | 35% |
+| 1 general class | 27 | 21% |
+| 2 specific, theory | 47 | 37% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -160,8 +160,8 @@ splits almost exactly along that line.
 | 35 | Fretless Bass | `FretlessBass` | **3** | as 33, fretless -- loses its top rather than starting without it |
 | 36 | Slap Bass 1 | `SlapBass` | **3** | as 33, slap |
 | 37 | Slap Bass 2 | `PoppedBass` | **3** | as 33, pop |
-| 38 | Synth Bass 1 | `PluckedString` | **1** | falls through to the generic plucked string |
-| 39 | Synth Bass 2 | `PluckedString` | **1** | as 38 |
+| 38 | Synth Bass 1 | `SynthBass1` | **2** | a sawtooth under a resonant low-pass; the filter shuts while the amplitude holds, which is the pluck. Was the generic plucked string, i.e. no body and no filter |
+| 39 | Synth Bass 2 | `SynthBass2` | **2** | a SQUARE under a higher, more resonant filter -- odd harmonics only, so hollow where 38 is full, and an exact distinction rather than a tuned one |
 
 ## 40-47 Strings
 

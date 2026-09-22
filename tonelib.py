@@ -7683,6 +7683,113 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
         return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
 
 
+class SynthBassProperties(FormantBody, SawtoothSynthProperties):
+    """GM 38 and 39. An oscillator through a resonant low-pass, in the bass.
+
+    Both fell through to PluckedStringProperties -- the GENERIC plucked string,
+    which has no `formants` attribute at all, so a synth bass was a bare string
+    series with no body, no filter and nothing synthetic about it. The third
+    family to be caught by that same hole, after the pizzicato and the harp.
+
+    THE FILTER ENVELOPE IS THE PLUCK, and on a bass it is the whole gesture: the
+    amplitude holds while the FILTER shuts, which is why a synth bass note has a
+    bright attack and a round body without getting quieter. That is
+    harmonic_decay_db running well ahead of decay_db -- the fundamental sits
+    near 4 dB/s and the eighth harmonic near 30, so the note keeps its weight
+    while the top of it disappears.
+
+    ONE OSCILLATOR, AND NO DETUNE, which is the opposite of the synth brass and
+    is deliberate. Two oscillators a few cents apart beat at a rate proportional
+    to frequency: at C3 that is a shimmer, and at E1 it is 0.2 Hz -- a slow
+    wobble in and out of phase across a whole bar, which in the bass reads as
+    the part being out of tune rather than as thickness. Synth bass patches are
+    voiced tight for exactly that reason, and where they do use a second
+    oscillator it is an OCTAVE down, not a detune, because an octave does not
+    beat.
+
+    NOT TUNED ONTO THE ELECTRIC BASSES. GM 33-37 are modelled instruments in
+    this renderer, so resemblance would be redundancy -- the lesson the synth
+    brass taught the hard way. A synth bass is not a bass guitar with a filter:
+    it has no pluck comb, no string body, no fret, and its spectrum falls
+    monotonically from a waveform rather than being shaped by a box.
+    """
+    max_harmonic = 40
+
+    # The pluck: the filter shuts fast while the amplitude holds.
+    decay_db = 0.5
+    harmonic_decay_db = 3.5
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.86
+
+    attack_time = 0.006         # a synth bass speaks at once
+    speech_cycles = 0.0
+    chiff_volume = 0.0
+
+    # Tight: no second oscillator. See the docstring.
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        return []
+
+    formants = ((420.0, 260.0, 1.30),)
+    formant_floor = 0.08
+    bore_corner_hz = 1600.0
+    bore_order = 2.0
+    bell_cutoff_hz = 0.0
+    bell_order = 1.0
+
+    initial_gain = 0.02         # balance-normalised per subclass below
+
+    def harmonic_volume(self, harmonic):
+        # Hand-wired, as on the voice lead and the synth brass: the sawtooth
+        # parent returns gain/n directly and never reaches bore_gain, which is
+        # the hook FormantBody works through.
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
+
+
+class SynthBass1Properties(SynthBassProperties):
+    """GM 38. The round one: a SAWTOOTH under a low, moderately resonant filter.
+
+    Every harmonic present at 1/n, then a cutoff low enough that only the first
+    handful survive -- which is what makes it round rather than dark. The
+    reading is the SC-55's, where 38 is the warm analogue bass and 39 the
+    brighter, harder one; General MIDI names them and specifies nothing.
+    """
+    formants = ((380.0, 240.0, 1.25),)
+    bore_corner_hz = 1400.0
+    decay_db = 0.5
+    harmonic_decay_db = 3.2
+    # Balance-normalised against the fingered electric bass (GM 33) on the same
+    # passage in the same room -- the family's representative, itself anchored
+    # to the measured nylon guitar.
+    initial_gain = 0.126117
+
+
+class SynthBass2Properties(SynthBassProperties):
+    """GM 39. The hard one: a SQUARE, which is hollow where a saw is full.
+
+    The odd-only series is an exact distinction rather than a tuned one -- a
+    square IS the odd harmonics at 1/n, as GM 80 is -- and it is audibly a
+    different instrument from its neighbour rather than the same one brighter.
+    With the cutoff higher and the resonance up, this is the aggressive synth
+    bass: hollow, edged, and with more of the filter's ring in it.
+    """
+    odd_only = True
+    formants = ((620.0, 300.0, 1.55),)
+    bore_corner_hz = 2400.0
+    decay_db = 0.6
+    harmonic_decay_db = 4.2
+    # Higher than GM 38's, because a square's absent evens take energy out that
+    # the level has to make back: same passage, same anchor.
+    initial_gain = 0.170884
+
+    def harmonic_volume(self, harmonic):
+        if harmonic % 2 != 1:
+            return 0.0
+        return super().harmonic_volume(harmonic)
+
+
 class SynthBrassProperties(FormantBody, SawtoothSynthProperties):
     """GM 62 and 63. A SAWTOOTH THROUGH A FILTER ENVELOPE -- not a brass instrument.
 
