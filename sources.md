@@ -3279,32 +3279,56 @@ Needling felt softens it and lacquer hardens it. That changes two things:
   well, defaulting to 1.0. Verified: exactly one class in the whole set departs
   from that default.
 
-### The result is the velocity behaviour, not the brightness
+### The hammer alone could not be heard, and that was the finding
 
-Rendered at C4, energy above 2 kHz as a share of the note:
+Built as a pure voicing it measured +2.5 dB above 2 kHz at pp, falling to +1.7
+at ff. Ben, on the render: *"I can't hear a difference between grand and
+bright."*
 
-| velocity | grand | bright | difference |
-|---|---|---|---|
-| 35 | -30.6 dB | -28.1 dB | **+2.5** |
-| 70 | -30.1 | -28.0 | +2.1 |
-| 105 | -29.6 | -27.8 | +1.7 |
-| 127 | -29.4 | -27.7 | +1.7 |
+He was right, and the ceiling says he had to be. Removing the hammer's low-pass
+**entirely** buys only **+4.0 dB** above the 8th partial, so +2.4 was already
+60% of the theoretical maximum and no amount of voicing could have been
+audible. The board owns the top:
 
-**The gap is widest played softly.** So the grand brightens 2.0 dB from pp to
-ff and this voice only 0.8: it is already bright and has less to open into.
-That is what hard voicing does, and why players argue about it -- the tone
-stops being something the hand controls. It is also a better description of the
-difference than any single brightness figure.
+| | 1 kHz | 2 kHz | 4 kHz | 8 kHz |
+|---|---|---|---|---|
+| soundboard | -2.6 dB | -6.4 | **-12.1** | -19.6 |
+| hammer at 4 kHz | -0.6 | -2.3 | **-6.9** | -15.3 |
 
-### What limits it, said rather than engineered around
+**AND THE REASON THE BOARD WAS LEFT ALONE WAS WRONG.** It was left alone on the
+grounds that `board_high_hz` had been fitted with the rest of the piano, so
+moving it would be changing half of a joint fit -- the cymbal ring decay's
+mistake. It had not been fitted. This file's own *"Still assertions after all
+this"* list includes **"soundboard formants (not attempted)"**, and those
+parameters carry no measurement. The lesson was applied to something that is
+not a joint fit, and it cost a voice nobody could hear.
 
-**The hammer has less authority here than on a real piano.** The soundboard
-rolls off at 2.6 kHz, BELOW the hammer's corner, so the board discards much of
-what harder felt delivers and the whole change is about 2 dB. Voicing does more
-than that on a real instrument. But `board_high_hz` was fitted with the rest of
-the piano, and moving it to flatter this voice would be changing half of a joint
-fit to suit the other half -- the mistake the cymbal ring fit made and had to be
-reverted for. Left alone.
+### So the board moves too, and it stops being only a voicing
+
+`board_high_hz` 2600 -> 5500 and `board_body_gain` 0.6 -> 0.30. A stiffer,
+thinner, differently braced board radiates higher and carries less wooden
+warmth, and that is what actually separates the makers whose names get attached
+to the word "bright". Both sides are assertions, so there is no fit to break --
+but a different board is a different INSTRUMENT, so the class should be read as
+"a brighter piano" rather than "the same piano voiced", and it says so.
+
+Rendered on a chord, as a share of the whole note:
+
+| | 80-400 Hz | 400-2k | 2k-6k | 6k-14k |
+|---|---|---|---|---|
+| grand | -1.6 dB | -5.2 | -33.7 | -61.0 |
+| bright | -1.9 | -4.5 | **-27.9** | **-47.6** |
+
++7 dB at 2-6 kHz and +14 at 6-14, with the bass essentially untouched.
+Rebalanced afterwards, because cutting the warmth took 2.5 dB of level with it:
+`initial_gain` 0.0932, solved on the render at 21.8 dB per decade of that knob
+rather than 20 -- the phantom partials being sum-tones that scale as its square,
+the same super-linearity the CP-70 turned up.
+
+**The velocity character survives the change**, which is the part worth having:
++7.7 dB at pp against +6.7 at ff, and the bright piano opens 1.0 dB from pp to
+ff where the grand opens 2.0. A hard hammer is already bright and has less to
+open into -- the tone stops being something the hand controls.
 
 ### An open item this turned up, larger than the voice itself
 

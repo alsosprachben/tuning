@@ -3313,25 +3313,22 @@ class BrightPianoProperties(GrandPianoProperties):
         distinction; strike_fill_fraction now says how much, with 1.0 the soft
         default so nothing else in the set moves.
 
-    THE INTERESTING RESULT IS NOT THE BRIGHTNESS, IT IS THE VELOCITY. Measured
-    as energy above the 8th partial at C4:
+    THE HAMMER ALONE CANNOT BE HEARD, and that is measured rather than feared:
+    removing its low-pass ENTIRELY buys +4.0 dB above the 8th partial, because
+    the board is -12.1 dB at 4 kHz where the hammer is only -6.9. So the voicing
+    was inaudible until the board moved with it -- see board_high_hz below.
+
+    WITH BOTH, the velocity behaviour is still the characteristic part. Energy
+    above the 8th partial at C4:
 
         vel      grand     bright    difference
-         30    -27.1 dB   -24.3 dB     +2.8
-        127    -25.2 dB   -23.5 dB     +1.7
+         30    -27.1 dB   -19.4 dB     +7.7
+        127    -25.1 dB   -18.5 dB     +6.7
 
-    The gap is LARGEST when played softly. So the grand brightens 2.0 dB from pp
-    to ff and this voice only 0.8 -- it is already bright and has less to open
-    into. That is exactly what hard voicing does and exactly why players argue
-    about it: the tone stops being something the hand controls.
-
-    AND THE HAMMER HAS LESS AUTHORITY HERE THAN ON A REAL PIANO. The soundboard
-    rolls off at 2.6 kHz, BELOW the hammer's corner, so the board throws away
-    much of what a harder hammer delivers and the whole change is about 2 dB.
-    On a real instrument voicing does more than that. board_high_hz was fitted
-    with the rest of the piano, so moving it to make this voice louder in the
-    top would be changing half of a joint fit to flatter the other half --
-    which is the mistake the cymbal fit made. Left alone, and said out loud.
+    The gap is LARGEST when played softly, and the grand brightens 2.0 dB from
+    pp to ff where this voice brightens 1.0 -- it is already bright and has less
+    to open into. That is what hard voicing does and why players argue about it:
+    the tone stops being something the hand controls.
 
     NO REFERENCE. There is no piano in the reference set at all; the grand's own
     stretch is a published Steinway B model standing in for an unmeasured
@@ -3339,8 +3336,34 @@ class BrightPianoProperties(GrandPianoProperties):
     would take a hammer, not measurements of one.
     """
 
+    # Balance-normalised against the grand, which it needed: cutting the body
+    # warmth takes 2.5 dB of low-mid out of the note. Solved on the render at
+    # 21.8 dB per decade of this knob rather than 20, the phantom partials
+    # again being sum-tones that scale as its square.
+    initial_gain = 0.093189
     hammer_corner_hz = 7000.0       # ~0.14 ms of contact, against 0.25
     strike_fill_fraction = 0.45     # hard felt spreads about half as much
+
+    # AND A BRIGHTER BOARD, because the hammer alone cannot be heard. Measured:
+    # removing the hammer's low-pass ENTIRELY buys +4.0 dB above the 8th partial,
+    # so no amount of voicing is audible here -- the board owns the top, being
+    # -12.1 dB at 4 kHz where the hammer is -6.9. Ben, on the first version:
+    # "I can't hear a difference between grand and bright."
+    #
+    # These were left alone at first on the grounds that they were fitted with
+    # the rest of the piano. THEY WERE NOT: sources.md's own list of what is
+    # still assertion includes "soundboard formants (not attempted)", and these
+    # carry no measurement. The cymbal lesson -- do not change half of a joint
+    # fit -- was applied to something that is not a joint fit.
+    #
+    # A stiffer, thinner, differently braced board radiates higher and has less
+    # wooden warmth, and that is what actually separates the makers whose names
+    # get attached to the word "bright". It is an assertion on both sides, so
+    # there is no fit to break; it is also no longer only a voicing, and the
+    # class name should be read as "a brighter piano" rather than "the same
+    # piano voiced".
+    board_high_hz = 5500.0          # the board radiates higher, against 2600
+    board_body_gain = 0.30          # and carries less low-mid warmth, against 0.6
 
 
 class HonkyTonkProperties(GrandPianoProperties):
