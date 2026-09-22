@@ -3268,6 +3268,75 @@ def selftest():
           _bright(inst[26]) < _bright(inst[30]),
           "  (mean harmonic %.1f vs %.1f)" % (_bright(inst[26]), _bright(inst[30])))
 
+    # ---- THE WINDING, which is what sets a pickup's level -------------------
+    # The model had geometry and no turns, so a bridge humbucker -- the hottest
+    # pickup anyone fits -- came out the QUIETEST voice on the instrument, and
+    # GM 30 measured 3.2 dB under GM 29. A builder winds a bridge pickup hotter
+    # precisely because the string moves least there.
+    def _pk(q, h):
+        return q.pickup_gain(h)
+    # The coil's own aperture sinc is in there too, so build the expectation
+    # rather than assuming h1 escapes it.
+    _x = math.pi * inst[30].pickup_width
+    _expect = (abs(math.sin(math.pi * 0.049) + math.sin(math.pi * 0.077))
+               * abs(math.sin(_x) / _x) * inst[30].pickup_turns)
+    check("a humbucker's coils are in series, not averaged",
+          abs(_pk(inst[30], 1) - _expect) < 1e-12,
+          "  (h1 reads %.4f = both coils summed, x %.2f turns)"
+          % (_pk(inst[30], 1), inst[30].pickup_turns))
+    check("...and a bridge pickup is wound hotter than a middle one",
+          inst[30].pickup_turns > inst[27].pickup_turns
+          and inst[29].pickup_turns > inst[27].pickup_turns,
+          "  (16.6k humbucker %.2f, 6.2k bridge coil %.2f, 5.8k middle 1.00)"
+          % (inst[30].pickup_turns, inst[29].pickup_turns))
+    # A HUMBUCKER'S COILS ARE EACH SMALLER, which is the half of it that stops
+    # the series sum turning into a flat +6 dB on every humbucker.
+    check("...while a vintage humbucker's coils are each SMALLER than a single",
+          inst[26].pickup_turns < 1.0 < 2.0 * inst[26].pickup_turns,
+          "  (4.0k per coil = %.2f, but two in series = %.2f)"
+          % (inst[26].pickup_turns, 2.0 * inst[26].pickup_turns))
+    # THE WINDING IS A LEVEL, NOT A COLOUR -- the one thing that must not move.
+    _shape = lambda q: [q.harmonic_volume(h) / q.harmonic_volume(1)
+                        for h in range(1, 25)]
+    class _NoTurns(_T.DistortionGuitarProperties):
+        pickup_turns = 1.0
+    _w = max(abs(a - b) for a, b in zip(_shape(inst[30]),
+                                        _shape(_NoTurns(220.0, 0.0, 1.0, 1.0))))
+    check("...and the turns set the level without touching the tone",
+          _w < 1e-9, "  (worst shape deviation %.1e over 24 harmonics)" % _w)
+    # THE INVERSIONS THEMSELVES. Rendered levels are in examples/levels.py;
+    # what is checkable here is that the mechanism points the right way.
+    check("the distortion guitar is hotter at the pickup than the overdriven one",
+          _pk(inst[30], 1) > _pk(inst[29], 1),
+          "  (h1 %.3f vs %.3f)" % (_pk(inst[30], 1), _pk(inst[29], 1)))
+    # ...and a slap, whose brightness costs it the bottom of a 1/n series, gets
+    # its level back from the arm rather than from a filter.
+    check("a slap arrives harder than a pluck, and says so as momentum",
+          binst[36].initial_gain > 1.5 * binst[33].initial_gain
+          and binst[37].initial_gain > binst[36].initial_gain,
+          "  (finger %.3f, slap %.3f, pop %.3f)"
+          % (binst[33].initial_gain, binst[36].initial_gain,
+             binst[37].initial_gain))
+    # THE REPO RULE: initial_gain and amp_reference move together, or the
+    # louder voice is also a more distorted one.
+    # Each family has its own base ratio (a bass rig is not a guitar rig), and
+    # within a family the reference must have tracked the winding EXACTLY --
+    # turns times coils, since that is the whole of what changed at the valve's
+    # input. Any other number means one of these voices is now more distorted
+    # than it was voiced to be.
+    _base = {"g": (0.1772 / 0.0869, 1.0), "b": (0.2289 / 0.2790, 1.0)}
+    _amped = [(26, inst[26], "g"), (29, inst[29], "g"), (30, inst[30], "g"),
+              (36, binst[36], "b"), (37, binst[37], "b")]
+    _err = []
+    for _n, _q, _fam in _amped:
+        _want = (_q.pickup_turns * len(_q.pickup_points)) * _base[_fam][0]
+        _got = _q.amp_reference / _q.initial_gain
+        _err.append((_n, abs(_got / _want - 1.0)))
+    check("...and every re-levelled voice kept its drive where it was",
+          max(e for _n, e in _err) < 1e-9,
+          "  (reference/gain tracks turns x coils: worst %.1e)"
+          % max(e for _n, e in _err))
+
     # ---- the electric pianos ------------------------------------------------
     # GM 4 rendered as a Steinway B. A Rhodes is a struck steel TINE read by a
     # magnetic pickup: measured, the tine vibrates as a pure sine and every

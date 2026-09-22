@@ -1070,6 +1070,31 @@ class SynthProperties:
     # say different things -- this one is a consequence of magnetism and would
     # otherwise be silently fitted away by the next person to touch the series.
     pickup_velocity = False
+    # TURNS PER COIL, relative to the Stratocaster single coil the base electric
+    # models (~7,600 turns, ~5.8 kOhm). This is the one thing the model had no
+    # way to say, and it is the reason the levels came out wrong.
+    #
+    # A pickup's output is proportional to its turns, and A BUILDER CHOOSES THE
+    # TURNS. That choice is not free: it is made to compensate for exactly the
+    # geometry modelled above. A bridge pickup sits where the string moves
+    # least, so it is wound hotter -- 6.2 kOhm against a middle coil's 5.8 is a
+    # standard Stratocaster set, and a bridge humbucker meant to push a front
+    # end goes to 16 kOhm and beyond. Without this the model has the position
+    # and the cancellation and none of the compensation, so a bridge humbucker
+    # -- the hottest pickup anyone actually fits -- came out 7.7 dB QUIETER
+    # than a middle single coil, which inverted GM 30 against GM 29.
+    #
+    # Per COIL, not per pickup, because the coils are in series (see
+    # pickup_gain) and the series sum already supplies the second one. It has
+    # to be per coil, too: a humbucker's coils are each SMALLER than a single
+    # coil, since two of them have to fit in one pickup's footprint -- ~4,300
+    # turns each in a PAF against a Strat's 7,600. A humbucker is hotter
+    # because two coils add, not because each one is bigger, and the two
+    # effects are different sizes.
+    #
+    # Resistance stands in for turns at a fixed wire gauge, which is how these
+    # are specified and published.
+    pickup_turns = 1.0
 
     # Chorus/ensemble: extra unison voices detuned by these Hz offsets, each
     # scaled by unison_gain. Empty = a single voice (no beating).
@@ -2308,8 +2333,15 @@ class SynthProperties:
             return 1.0
         # Summed, not averaged in amplitude: two coils in series ARE one
         # signal, and their cancellation is the humbucker's null.
-        g = abs(sum(_sin(harmonic * _pi * q) for q in self.pickup_points)
-                / len(self.pickup_points))
+        #
+        # THE COMMENT SAID THIS AND THE CODE DIVIDED BY len(pickup_points)
+        # ANYWAY, which is the averaging it disclaims -- a flat -6.02 dB on
+        # every humbucker, taking away the second coil's contribution while
+        # keeping its cancellation. The turns scale below is what sets the
+        # level now, and it is per coil, so the series sum belongs here.
+        g = abs(sum(_sin(harmonic * _pi * q) for q in self.pickup_points))
+        if self.pickup_turns != 1.0:
+            g *= self.pickup_turns
         if self.pickup_width:
             x = harmonic * _pi * self.pickup_width
             if x > 1e-9:
@@ -6435,6 +6467,21 @@ class SlapBassProperties(ElectricBassProperties):
     strike_point = 0.06
     strike_depth = 1.00
     pickup_points = (0.081,)      # Jazz bridge pickup, 70 mm of 864
+    # 7.5 kOhm against the Precision split coil's ~5.25 per half. A Jazz bridge
+    # pickup is wound hot for the same reason every bridge pickup is: it sits
+    # where the string barely moves. Same correction as the guitars'.
+    pickup_turns = 1.43
+    # A SLAP IS HARDER THAN A PLUCK, and the model had no way to say so. Every
+    # other difference here is spectral -- the comb, the pickup, the drive --
+    # and all of them together still left this voice 4 dB UNDER the fingered
+    # bass, which inverts the one thing everybody knows about slap bass. The
+    # missing quantity is momentum: a fingertip pluck is a finger flexing and
+    # a thumb slap is the forearm rotating, and the moving mass is not close.
+    # A factor of two in amplitude is a conservative reading of that, and it
+    # is why a bass rig has a compressor on it.
+    _thumb = 2.0
+    initial_gain = 0.2790 * _thumb
+    amp_reference = 0.2289 * 1.43 * _thumb
     amp_drive = 1.45
     amp_imbalance = 0.35
 
@@ -6448,6 +6495,13 @@ class PoppedBassProperties(SlapBassProperties):
     releases, so it hits the frets harder and drives the amplifier harder.
     Nothing here is a measurement.
     """
+    # ...and it costs level to take it, because the extra drive compresses.
+    # Measured, the harder setting alone put GM 37 1.5 dB UNDER GM 36, which
+    # is backwards for the more aggressive of the pair. A pop pulls the string
+    # further before it lets go, so it arrives with more of everything.
+    _pop = 1.25
+    initial_gain = 0.2790 * 2.0 * _pop
+    amp_reference = 0.2289 * 1.43 * 2.0 * _pop
     amp_drive = 3.41
     amp_imbalance = 0.45
 
@@ -6627,6 +6681,24 @@ class JazzGuitarProperties(ElectricGuitarProperties):
     Three nulls converging on the 4th harmonic is the sound.
     """
     pickup_points = (0.230, 0.258)      # neck humbucker, 18 mm coil spacing
+    # A '57 Classic: 8.0 kOhm for the pair, so 4.0 per coil against a Strat
+    # coil's 5.8. Each coil is SMALLER, and the pickup is still hotter overall
+    # because the two are in series -- net +2.8 dB, not the +6 the sum alone
+    # would give. That is the whole difference between a vintage humbucker and
+    # a hot one, and GM 30 is the other end of it.
+    pickup_turns = 0.69
+    # ...AND THEN TURNED DOWN, which is the other half of how this sound is
+    # made. A hot neck humbucker really does read several dB above a middle
+    # single coil, and with that modelled this patch came out the LOUDEST in
+    # the plucked family, 6 dB over a nylon guitar -- which no jazz guitarist
+    # has ever been. The instrument has a volume control and the amplifier has
+    # another, and setting them is the first thing a player does. So the
+    # pickup keeps its honest output and the patch is set to sit just above
+    # the clean guitar, warm rather than loud. Both numbers scale together,
+    # so the valve sees exactly what it saw and only the level moves.
+    _knob = 0.66
+    initial_gain = 0.0869 * _knob
+    amp_reference = 0.1772 * 1.38 * _knob   # the pair reads 1.38x a single coil
     strike_point = 0.25                 # picked toward the neck, softly
     strike_depth = 0.7                  # a thumb or a soft pick is not a point
     amp_drive = 0.34
@@ -6650,6 +6722,8 @@ class MutedGuitarProperties(ElectricGuitarProperties):
     click.
     """
     pickup_points = (0.10,)             # near the bridge, where the hand is
+    pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
+    amp_reference = 0.1772 * 1.07
     strike_point = 0.10
     decay_db = 30.0                     # dB/s on the fundamental
     harmonic_decay_db = 8.0             # ...and far faster up the series
@@ -6671,6 +6745,8 @@ class OverdrivenGuitarProperties(ElectricGuitarProperties):
     Bridge pickup, because that is what the position is for.
     """
     pickup_points = (0.10,)
+    pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
+    amp_reference = 0.1772 * 1.07
     amp_drive = 4.45
     amp_imbalance = 0.60
 
@@ -6688,6 +6764,15 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     turning to hash before the speaker gets to it.
     """
     pickup_points = (0.049, 0.077)      # bridge humbucker
+    # "Hot enough to push the front end" is a NUMBER, and the docstring above
+    # has been claiming it without the model being able to say it. A Duncan
+    # Distortion is 16.6 kOhm, 8.3 per coil against a Strat coil's 5.8, and
+    # two of those in series read 2.86x a middle single coil. That is why
+    # people fit one. Against the geometry alone this pickup came out the
+    # QUIETEST on the instrument, 7.7 dB under the clean voice, which is how
+    # GM 30 ended up below GM 29.
+    pickup_turns = 1.43
+    amp_reference = 0.1772 * 2.86
     strike_point = 0.13
     amp_drive = 14.43
     amp_imbalance = 0.80
