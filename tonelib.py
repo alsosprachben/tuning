@@ -5731,6 +5731,74 @@ class PoppedBassProperties(SlapBassProperties):
     amp_imbalance = 0.45
 
 
+class SteelGuitarProperties(NylonGuitarProperties):
+    """GM 25. The steel-string flat-top, which fell through to the generic
+    plucked string -- a voice that is not a FormantBody at all and whose
+    `bore_corner_hz` is 0, so `harmonic_volume` returns before any body is
+    applied. NO GUITAR BODY WHATSOEVER: it rendered as a bare string in free
+    air, next door to the one voice in the family that has a measured one.
+
+    So it inherits that body. The Iowa classical is a close relative -- flat top,
+    soundhole, the same construction principle -- and a measured body of the
+    wrong size beats no body by a wide margin. What changes is the STRING, the
+    pluck and how much top the box passes, and the brief for that is written in
+    NylonGuitarProperties from its own measurement:
+
+        "Plain steel trebles are the brightest strings on a steel-string
+        acoustic and its bronze basses put real energy past 8 kHz; dark
+        fundamental-dominant trebles over rich wound basses is the classical
+        guitar."
+
+    -- the nylon having measured NOTHING above 8 kHz anywhere, -46 to -61 dB.
+    That is the target and it is somebody else's measurement of the instrument
+    this voice is not, which is the best available here.
+
+    THE OBVIOUS DERIVATION IS A DEAD END, and it is worth recording so nobody
+    repeats it. Steel's Young's modulus is some fifty times nylon's, so a steel
+    string ought to be far more inharmonic. But B goes as Q*d^2/rho at a given
+    pitch and scale, and a steel string for the same note is LESS THAN HALF THE
+    DIAMETER -- d enters squared, and the two effects very nearly cancel:
+
+        steel .012 high E   Q 200 GPa  d 0.305 mm   ->  2.37
+        nylon .028 high E   Q   4 GPa  d 0.711 mm   ->  1.76
+
+    **35%, not 50x.** So inharmonicity is the SMALLEST of the differences here,
+    not the defining one, and it is set to exactly that ratio rather than to
+    something dramatic.
+
+    WHAT ACTUALLY SEPARATES THEM IS DAMPING. Nylon is viscoelastic and eats its
+    own high partials; steel's internal losses are negligible. That is why a
+    classical is warm and short where a steel-string jangles and rings, and it
+    is a DECAY difference rather than a spectral one -- harmonic_decay_db, not
+    inharmonicity.
+
+    NO REFERENCE. There is no steel-string in the set; the numbers below are
+    aimed at the nylon's measured description of one, which is not the same
+    thing as measuring one. The body is the classical's, unshifted: a
+    dreadnought is bigger and its air resonance sits lower, but by how much is
+    not derivable here and those formants were fitted jointly with the rest of
+    the nylon. Moving them would be guessing at somebody else's fit.
+    """
+
+    # Steel's low internal loss: the high partials survive where nylon's die.
+    # The largest of the differences, and the reason the instrument rings.
+    harmonic_decay_db = 0.55
+
+    # A pick is hard and narrow where flesh and nail are soft and wide, so the
+    # source ladder tilts less steeply. The pluck POINT is unchanged -- both
+    # instruments are played over much the same part of the string -- so
+    # plucked_harmonic stays where the measurement put it.
+    tonal_dampening = 0.75
+
+    # A thin, stiff, X-braced spruce top driven through a pin bridge radiates
+    # higher than a fan-braced classical's. DIRECTION defensible, number not:
+    # it is set where the >8 kHz band stops being empty.
+    bore_corner_hz = 7000.0
+
+    # x1.35 exactly, from Q*d^2/rho above. Real, and the least of it.
+    inharmonicity_coefficient = NylonGuitarProperties.inharmonicity_coefficient * 1.35
+
+
 class JazzGuitarProperties(ElectricGuitarProperties):
     """GM 26. A neck humbucker, picked with the thumb side of the hand.
 

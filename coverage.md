@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 54 | 42% |
-| 2 specific, theory | 27 | 21% |
+| 1 general class | 53 | 41% |
+| 2 specific, theory | 28 | 22% |
 | 3 specific, theory + ear | 18 | 14% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -142,7 +142,7 @@ splits almost exactly along that line.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 24 | Acoustic Guitar (nylon) | `NylonGuitar` | **4** | Iowa classical guitar, six strings measured sul A/B/D/E/G |
-| 25 | Acoustic Guitar (steel) | `PluckedString` | **1** | falls through to the generic plucked string |
+| 25 | Acoustic Guitar (steel) | `SteelGuitar` | **2** | the measured classical's body with a steel string on it: less damping, a pick, 35% more stretch |
 | 26 | Electric Guitar (jazz) | `JazzGuitar` | **3** | electric family: pluck comb x pickup comb, amp and cabinet; judged by ear |
 | 27 | Electric Guitar (clean) | `ElectricGuitar` | **3** | as 26 -- the reference voice of the family |
 | 28 | Electric Guitar (muted) | `MutedGuitar` | **3** | as 26, palm mute |

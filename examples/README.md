@@ -39,7 +39,7 @@ and comparing them by a single broadband number has hidden the opposite.
 | `cymbals.py` | The cymbal family rendered so it can be heard: every plate in the GM set, `--dynamics` for one crash from pp to ff (what moves is brightness, not pitch), `--ride` for a played pattern rather than isolated strokes, and `--bend` for the A/B between the old asserted pitch bloom and the measured zero. |
 | `cymbal_check.py` | Do a cymbal's modes bend when it is struck harder? Tracks individual isolated partials by phase derivative across the Iowa cymbal family -- 203 of them -- and finds the drift under a cent, where the class once asserted sixteen. Checks the probe against planted bends first, and shows what DOES drift: the centroid, by more than an octave, which is differential decay. |
 | `rhodes_check.py` | The voice's own amplitude and decay laws printed beside the Hamburg measurements: the tonebar fit against ISMA 2014 Table 1, the octave test, the k*D decay law, and what a note costs. No score and no render. |
-| `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31); `--fret` plays a phrase with the position shifts left in, which is what fret noise (GM 120) is for; `--calibrate` measures the peak a hard strum (and a dug-in low E) makes, so `amp_reference` means something for the guitar and the bass. The passage plays soft and then dug-in, because on this voice that is audible. |
+| `guitar.py` | An electric guitar at four amp drives; `--family` renders all six electrics (GM 26-31); `--fret` plays a phrase with the position shifts left in, which is what fret noise (GM 120) is for; `--acoustic` renders the two acoustics, the measured nylon (GM 24) and the steel-string (GM 25) that borrows its body; `--calibrate` measures the peak a hard strum (and a dug-in low E) makes, so `amp_reference` means something for the guitar and the bass. The passage plays soft and then dug-in, because on this voice that is audible. |
 | `guitar_check.py` | The pickup's comb against its geometry, the cabinet's response, why power chords work, and the proof that playing harder breaks up. Needs no score. |
 
 ```
@@ -77,6 +77,7 @@ python3 examples/guitar.py --calibrate
 python3 examples/guitar.py /tmp
 python3 examples/guitar.py --family /tmp
 python3 examples/guitar.py --fret /tmp
+python3 examples/guitar.py --acoustic /tmp
 ```
 
 ## A passacaglia is built, not registered

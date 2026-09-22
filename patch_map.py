@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    SteelGuitarProperties,
     BrightPianoProperties,
     ClavinetProperties,
     ElectricGrandProperties,
@@ -182,6 +183,11 @@ PROGRAM_CLASS[24] = NylonGuitarProperties
 # damping, so they are cheap once 27 has been judged by ear; cheap is not the
 # same as done, and handing them a class before then is exactly the trap the
 # saxophone hit.
+# 25 Acoustic Guitar (steel) fell through to the generic plucked string, which
+# has NO BODY -- formants None, bore_corner_hz 0 -- so it rendered as a bare
+# string beside the one guitar in the set with a measured one. It inherits that
+# body and changes the string, the pick and how much top the box passes.
+PROGRAM_CLASS[25] = SteelGuitarProperties  # steel strings on the measured body
 PROGRAM_CLASS[26] = JazzGuitarProperties
 PROGRAM_CLASS[27] = ElectricGuitarProperties
 PROGRAM_CLASS[28] = MutedGuitarProperties

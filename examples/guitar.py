@@ -4,6 +4,7 @@
     python3 examples/guitar.py [outdir]
     python3 examples/guitar.py --family [outdir]
     python3 examples/guitar.py --fret [outdir]
+    python3 examples/guitar.py --acoustic [outdir]
     python3 examples/guitar.py --calibrate
 
 GM 27 is the first electric to have its own voice (see
@@ -261,6 +262,65 @@ def _calib_one(outdir, prog, name, notes):
     return 0
 
 
+def acoustic(outdir):
+    """The two acoustics: nylon (GM 24, measured) and steel (GM 25).
+
+    Written on the open strings and low positions, because what separates them
+    is the STRING and the top end -- a steel-string's plain trebles are the
+    brightest thing on it and its bronze basses put real energy past 8 kHz,
+    where the Iowa classical measured nothing above 8 kHz at all. Rendered, the
+    steel sits 13.7 dB higher in that band, and its 2-6 kHz content decays at
+    15.5 dB/s against the nylon's 26.3 -- steel's internal losses are
+    negligible where nylon is viscoelastic and eats its own high partials.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    TPB = 480
+    # open strings, then a chord, then a picked figure up the neck
+    ev = []
+    t = 0.0
+    for n in (40, 45, 50, 55, 59, 64):
+        ev.append((t, n, 102, 0.55)); t += 0.35
+    t += 0.6
+    for n in (40, 47, 52, 56, 59, 64):
+        ev.append((t, n, 96, 3.0))
+    t += 3.6
+    for n, v in ((64, 104), (59, 88), (62, 96), (67, 108), (64, 92), (59, 100)):
+        ev.append((t, n, v, 0.7)); t += 0.3
+    for prog, name in ((24, 'nylon'), (25, 'steel')):
+        m = mido.MidiFile(ticks_per_beat=TPB)
+        tr = mido.MidiTrack(); m.tracks.append(tr)
+        tr.append(mido.Message('program_change', program=prog, channel=0, time=0))
+        msgs = []
+        for beat, note, vel, ln in ev:
+            tick = int(beat * TPB * 2)
+            msgs.append((tick, mido.Message('note_on', note=note, velocity=vel, channel=0)))
+            msgs.append((tick + int(ln * TPB * 2),
+                         mido.Message('note_off', note=note, velocity=0, channel=0)))
+        # a guitar rings past its last note-off, and blockrender sizes a render
+        # as the MIDI plus one second
+        msgs.append((max(t2 for t2, _ in msgs) + TPB * 8,
+                     mido.Message('note_off', note=1, velocity=0, channel=0)))
+        msgs.sort(key=lambda kv: kv[0])
+        last = 0
+        for tick, msg in msgs:
+            msg.time = tick - last; last = tick
+            tr.append(msg)
+        mid = os.path.join(outdir, 'acoustic-%s.mid' % name)
+        m.save(mid)
+        out = mid[:-4] + '.wav'
+        env = dict(os.environ)
+        env.setdefault('TUNING_ROOM', 'chamber')
+        env.setdefault('TUNING_MASTER_DB', '-12')
+        r = subprocess.run([sys.executable, os.path.join(root, 'blockrender.py'), mid, out],
+                           env=env, cwd=root, capture_output=True, text=True)
+        if r.returncode != 0:
+            print(r.stdout[-2000:]); print(r.stderr[-2000:]); return 1
+        print("  %-6s %s" % (name, out))
+    print("  the nylon is the measured one; the steel borrows its body and")
+    print("  changes the string, the pick and how much top the box passes")
+    return 0
+
+
 def main(argv):
     if '--fret' in argv:
         i = argv.index('--fret')
@@ -271,6 +331,11 @@ def main(argv):
         out = argv[argv.index('--family') + 1] if len(argv) > argv.index('--family') + 1 else '.'
         os.makedirs(out, exist_ok=True)
         return family(out)
+    if '--acoustic' in argv:
+        i = argv.index('--acoustic')
+        out = argv[i + 1] if len(argv) > i + 1 else '.'
+        os.makedirs(out, exist_ok=True)
+        return acoustic(out)
     if '--calibrate' in argv:
         out = os.environ.get('TMPDIR', '/tmp')
         os.makedirs(out, exist_ok=True)

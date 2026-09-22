@@ -3349,3 +3349,92 @@ NOT ACTED ON. It needs a decision that is not a measurement: whether GM 0 is a
 concert grand that borrowed an upright's string breaks, or an upright wearing a
 concert grand's stretch. Either way one half is wrong, and the machinery to fix
 it exists.
+
+---
+
+## The steel-string guitar, and a derivation that goes nowhere
+
+GM 25 fell through to `PluckedStringProperties`, and the defect was worse than
+a missing class: that voice is not a `FormantBody` at all, and `harmonic_volume`
+returns early on its zero `bore_corner_hz`, so **it had no guitar body
+whatsoever**. It rendered as a bare string in free air, next door to GM 24, one
+of the few voices in the set with a measured one.
+
+(Said wrongly at first as "`formants = None`". The class has no `formants`
+attribute to BE None -- that None was the default in my own `getattr` probe,
+read back as if it were the class's value. The selftest caught it by crashing,
+which is the right outcome; the conclusion was sound and the mechanism was not.)
+
+So it inherits that body. The Iowa classical is a close relative -- flat top,
+soundhole, the same construction -- and a measured body of the wrong size beats
+no body by a wide margin.
+
+### The brief was already in the repo
+
+`NylonGuitarProperties` wrote this while working out what its recording was:
+
+> *"Plain steel trebles are the brightest strings on a steel-string acoustic
+> and its bronze basses put real energy past 8 kHz; dark fundamental-dominant
+> trebles over rich wound basses is the classical guitar."*
+
+-- the nylon having measured **nothing above 8 kHz anywhere, -46 to -61 dB**.
+That is a target rather than a guess, and it is somebody's measurement of the
+instrument this voice is NOT, which is the best available here.
+
+Rendered on the six open strings, 100 ms from the pluck:
+
+| | >2 kHz | >4 kHz | >8 kHz |
+|---|---|---|---|
+| nylon | -33.9 dB | -51.3 | **-56.1** |
+| steel | -26.2 | -39.4 | **-42.4** |
+
+The nylon renders at -56.1, inside its own measured -46 to -61; the steel sits
+above that ceiling, which is the point.
+
+### The obvious derivation is a dead end, and that is worth recording
+
+Steel's Young's modulus is some fifty times nylon's, so a steel string ought to
+be far more inharmonic. But `B` goes as `Q*d^2/rho` at a given pitch and scale,
+and a steel string for the same note is **less than half the diameter** -- d
+enters squared, and the two effects very nearly cancel:
+
+| | Q | d | Q d^2 / rho |
+|---|---|---|---|
+| steel .012 high E | 200 GPa | 0.305 mm | 2.37 |
+| nylon .028 high E | 4 GPa | 0.711 mm | 1.76 |
+
+**35%, not 50x.** So inharmonicity is set to exactly 1.35 and is the SMALLEST of
+the differences here rather than the defining one. A voice built on the naive
+expectation would have been dramatically wrong in the one place it felt most
+confident.
+
+### What actually separates them is damping
+
+Nylon is viscoelastic and eats its own high partials; steel's internal losses
+are negligible. Measured on a single rendered E3 -- one note, because six
+strings 0.35 s apart overlap and the first attempt at this measured three notes
+at once and reported the high band getting LOUDER with time:
+
+| band | nylon | steel |
+|---|---|---|
+| 200 Hz - 1 kHz | 4.6 dB/s | 2.7 |
+| 2 - 6 kHz | **26.3 dB/s** | **15.5** |
+
+That is "warm and short" against "jangles and rings", and it is a DECAY
+difference rather than a spectral one -- `harmonic_decay_db`, not
+inharmonicity.
+
+### What is asserted
+
+**NO REFERENCE**: there is no steel-string in the set, so this sits at 2. The
+numbers aim at the nylon's description of one, which is not the same as
+measuring one. `bore_corner_hz` 3335 -> 7000 has a defensible direction -- a
+thin, stiff, X-braced spruce top driven through a pin bridge radiates higher
+than a fan-braced classical's -- and an undefended magnitude; it is set where
+the >8 kHz band stops being empty.
+
+**The body is the classical's, unshifted.** A dreadnought is bigger and its air
+resonance sits lower, but by how much is not derivable here, and those formants
+were fitted jointly with the rest of the nylon against two measurements at
+once. Moving them would be guessing at somebody else's fit -- the error that
+had to be reverted on the cymbals.

@@ -3291,6 +3291,52 @@ def selftest():
           _moved == ["BrightPianoProperties"],
           "  (%d of the whole set departs from the soft default)" % len(_moved))
 
+    # ---- the steel-string, which had no body at all --------------------------
+    check("the steel-string guitar is not the generic plucked string",
+          _PM.property_class_for_program(25) is _T.SteelGuitarProperties
+          and issubclass(_T.SteelGuitarProperties, _T.NylonGuitarProperties))
+    st, ny, gen = (_T.SteelGuitarProperties, _T.NylonGuitarProperties,
+                   _T.PluckedStringProperties)
+    # THE DEFECT WAS NOT SUBTLE: the generic string has formants None and a zero
+    # bore corner, so GM 25 rendered as a bare string in free air, next door to
+    # the one guitar in the set with a measured body.
+    # The generic string is not a FormantBody AT ALL -- it has no `formants`
+    # attribute to be None -- and harmonic_volume returns early on its zero
+    # bore corner, so no body is ever applied.
+    check("...and it now has a body, which the generic one has none of",
+          issubclass(st, _T.FormantBody) and st.formants == ny.formants
+          and not issubclass(gen, _T.FormantBody) and gen.bore_corner_hz == 0.0,
+          "  (the measured classical's body, inherited unshifted)")
+    # Steel's low internal loss against nylon's viscoelasticity. The largest of
+    # the differences and the reason the instrument rings.
+    check("...whose high partials survive, where nylon eats its own",
+          st.harmonic_decay_db < ny.harmonic_decay_db * 0.7,
+          "  (%.2f against %.2f dB/s per mode)" % (st.harmonic_decay_db, ny.harmonic_decay_db))
+    # The nylon MEASURED nothing above 8 kHz, -46 to -61 dB. A steel-string's
+    # bronze basses put real energy up there; that is the target.
+    def _above(cls, k=8000.0):
+        tot = hi = 0.0
+        for f0 in (82.4, 110.0, 146.8, 196.0, 246.9, 329.6):
+            q = cls(f0, 0.0, (100 / 127.0) ** 2, 1.0)
+            for h in range(1, q.max_harmonic + 1):
+                v = q.harmonic_volume(h)
+                if v <= 0:
+                    continue
+                tot += v * v
+                if f0 * h >= k:
+                    hi += v * v
+        return 10 * _math.log10(max(hi, 1e-30) / tot)
+    check("...and real energy above 8 kHz, where the classical measured none",
+          _above(st) > _above(ny) + 8.0,
+          "  (%+.1f dB against the nylon's %+.1f)" % (_above(st), _above(ny)))
+    # AND THE OBVIOUS DERIVATION IS A DEAD END, recorded so nobody repeats it:
+    # steel's modulus is ~50x nylon's, but a steel string for the same note is
+    # less than half the diameter and d enters SQUARED. 35%, not 50x.
+    check("...with inharmonicity only 35% up, which is the whole of that story",
+          abs(st.inharmonicity_coefficient / ny.inharmonicity_coefficient - 1.35) < 0.01,
+          "  (x%.2f -- the modulus and the gauge nearly cancel)"
+          % (st.inharmonicity_coefficient / ny.inharmonicity_coefficient))
+
     # ---- the honky-tonk: the same piano, badly tuned -------------------------
     check("the honky-tonk is the grand with the tuner's hand off",
           _PM.property_class_for_program(3) is _T.HonkyTonkProperties

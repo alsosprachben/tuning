@@ -86,7 +86,7 @@ RATED = {
  22:(1,"as 20 -- a harmonica is a free reed, but not this one"),
  23:(1,"as 20"),
  24:(4,"Iowa classical guitar, six strings measured sul A/B/D/E/G"),
- 25:(1,"falls through to the generic plucked string"),
+ 25:(2,"the measured classical's body with a steel string on it: less damping, a pick, 35% more stretch"),
  26:(3,"electric family: pluck comb x pickup comb, amp and cabinet; judged by ear"),
  27:(3,"as 26 -- the reference voice of the family"),
  28:(3,"as 26, palm mute"),
