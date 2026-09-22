@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    BrightPianoProperties,
     ClavinetProperties,
     ElectricGrandProperties,
     HonkyTonkProperties,
@@ -111,6 +112,11 @@ _fill(0, 7, GrandPianoProperties)
 # ...except the harpsichords (6 = Harpsichord, 7 = Clavi): PLUCKED, and registered
 # (choirs as stops via CC11), not struck. GM files that mean a harpsichord get one.
 _fill(6, 7, HarpsichordProperties)
+# ...and 1 (Bright Acoustic) is the same piano voiced HARD: a shorter hammer
+# contact time, and felt that spreads about half as much under force so the
+# strike comb keeps its notch. GM names no instrument, and its own Wide/Dark
+# variations say brightness is a timbral axis rather than another piano.
+PROGRAM_CLASS[1] = BrightPianoProperties   # the grand, voiced hard
 # ...and 3 (Honky-tonk) is the same piano with the tuner's hand off. The grand
 # already models a unison as one string at pitch and two mistuned around it; a
 # honky-tonk just widens that range from under 2 cents to 8-20.

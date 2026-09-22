@@ -942,6 +942,8 @@ class SynthProperties:
     # comb notch (velocity-dependent timbre). False = a hard narrow exciter at
     # fixed force -- a plectrum -- whose notch never fills.
     strike_fills_with_force = True
+    # ...and by how much, for voices that fill only partly. See series_volume.
+    strike_fill_fraction = 1.0
     strike_depth = 1.0    # how deep the strike comb notches (1=point-strike null, 0=off); the
                           # finite hammer width fills it in, so real pianos want it shallow.
 
@@ -2213,7 +2215,12 @@ class SynthProperties:
             # harpsichord has no dynamics), so its notch stays at full depth.
             depth = self.strike_depth
             if self.strike_fills_with_force:
-                depth *= (1.0 - self.attack_volume)
+                # HOW MUCH the felt flattens, not merely whether it does. A
+                # softly-voiced hammer spreads almost completely at ff and its
+                # notch disappears; a hard, lacquered one barely spreads at all
+                # and keeps the notch at every dynamic. 1.0 is the soft case and
+                # the default, so nothing that had the boolean alone moves.
+                depth *= (1.0 - self.strike_fill_fraction * self.attack_volume)
             comb = (1.0 - depth) + depth * abs(_sin(sm * _pi * self.strike_point))
         else:
             comb = _pluck_comb(self.plucked_harmonic, self.pluck_dampening, harmonic)
@@ -3281,6 +3288,59 @@ class GrandPianoProperties(InharmonicStringProperties):
 # note by blockrender from the channel's CC1, and live by the bank axis, which
 # is literally "the CC1 value to build this template with".
 honky_detune = 1.0
+
+
+class BrightPianoProperties(GrandPianoProperties):
+    """GM 1. The same piano, voiced hard -- which is what a technician does.
+
+    GM specifies nothing beyond the name: the Level 1 list is a naming
+    convention, and the spec names no instrument for any program. What it does
+    say is in Level 2's bank variations -- "Wide" and "Dark" are variations OF
+    the acoustic grand -- so brightness in GM's own vocabulary is a timbral axis
+    on one instrument rather than a different instrument. Hence a voicing.
+
+    AND A VOICING IS A HAMMER. Needling the felt softens it, lacquer hardens it,
+    and both change exactly two things this engine already models:
+
+      * CONTACT TIME, which IS the hammer's low-pass. hammer_corner_hz is that
+        corner and it already shortens with force, which is why the piano
+        brightens when you dig in. A harder hammer starts shorter: 0.14 ms here
+        against the grand's 0.25.
+      * HOW MUCH THE FELT FLATTENS. A soft hammer spreads under force, widening
+        its contact patch and filling in the strike comb's notch -- which is why
+        a piano's sour 7th disappears at ff. A hard one barely spreads and keeps
+        its notch at every dynamic. That was a BOOLEAN here, the felt-vs-quill
+        distinction; strike_fill_fraction now says how much, with 1.0 the soft
+        default so nothing else in the set moves.
+
+    THE INTERESTING RESULT IS NOT THE BRIGHTNESS, IT IS THE VELOCITY. Measured
+    as energy above the 8th partial at C4:
+
+        vel      grand     bright    difference
+         30    -27.1 dB   -24.3 dB     +2.8
+        127    -25.2 dB   -23.5 dB     +1.7
+
+    The gap is LARGEST when played softly. So the grand brightens 2.0 dB from pp
+    to ff and this voice only 0.8 -- it is already bright and has less to open
+    into. That is exactly what hard voicing does and exactly why players argue
+    about it: the tone stops being something the hand controls.
+
+    AND THE HAMMER HAS LESS AUTHORITY HERE THAN ON A REAL PIANO. The soundboard
+    rolls off at 2.6 kHz, BELOW the hammer's corner, so the board throws away
+    much of what a harder hammer delivers and the whole change is about 2 dB.
+    On a real instrument voicing does more than that. board_high_hz was fitted
+    with the rest of the piano, so moving it to make this voice louder in the
+    top would be changing half of a joint fit to flatter the other half --
+    which is the mistake the cymbal fit made. Left alone, and said out loud.
+
+    NO REFERENCE. There is no piano in the reference set at all; the grand's own
+    stretch is a published Steinway B model standing in for an unmeasured
+    instrument. Both numbers below are judgements about how far a technician
+    would take a hammer, not measurements of one.
+    """
+
+    hammer_corner_hz = 7000.0       # ~0.14 ms of contact, against 0.25
+    strike_fill_fraction = 0.45     # hard felt spreads about half as much
 
 
 class HonkyTonkProperties(GrandPianoProperties):

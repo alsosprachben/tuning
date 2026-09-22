@@ -3238,3 +3238,90 @@ partial. A chord is not a good place to measure a beat.
 string and the unison swings about 9 dB rather than nulling. Raising it would
 make the wobble DEEPER as well as wider. That is a separate knob with a separate
 argument and it was left alone.
+
+---
+
+## The bright acoustic piano, and what GM actually specifies
+
+Ben asked what the precedent is -- whether GM 1 means a console piano or a
+different kind of instrument. Worth answering before building anything, and the
+answer is mostly negative.
+
+**GM specifies nothing.** The Level 1 list (1991) is a naming convention so
+files play recognisably across modules; it names no instrument, no timbre and
+no reference for ANY program, including program 0. A claim surfaced in search
+that Bright Acoustic is "based on a Yamaha C7" -- the GM Level 2 spec page says
+no such thing and it is not repeated here. Roland's SC-55 manual, the de facto
+reference implementation, is a scanned PDF with no text layer, so its patch
+naming could not be checked from a primary source either.
+
+**What GM does say is in Level 2's bank variations**, and it is informative:
+"Wide Acoustic Grand" (bank 1) and "Dark Acoustic Grand" (bank 2) are
+variations OF program 1. So brightness and darkness are, in GM's own
+vocabulary, a TIMBRAL AXIS ON ONE INSTRUMENT. Bright sits at its own program
+number only because the 1991 numbering was frozen before those banks existed.
+
+**And it is certainly not an upright.** Nothing in GM suggests one; there is no
+upright anywhere in the 128.
+
+### A voicing is a hammer, and both halves were already modelled
+
+Needling felt softens it and lacquer hardens it. That changes two things:
+
+- **CONTACT TIME, which IS the hammer's low-pass.** `hammer_corner_hz` is that
+  corner and already shortens with force, which is why the grand brightens when
+  it is dug into. Hard felt starts shorter: 0.14 ms against 0.25.
+- **HOW MUCH THE FELT SPREADS.** A soft hammer flattens under force, widening
+  its contact patch and filling the strike comb's notch -- which is why a
+  piano's sour 7th disappears at ff. A hard one barely spreads and keeps the
+  notch at every dynamic. This was a BOOLEAN, `strike_fills_with_force`, which
+  is the felt-versus-quill distinction; it is now `strike_fill_fraction` as
+  well, defaulting to 1.0. Verified: exactly one class in the whole set departs
+  from that default.
+
+### The result is the velocity behaviour, not the brightness
+
+Rendered at C4, energy above 2 kHz as a share of the note:
+
+| velocity | grand | bright | difference |
+|---|---|---|---|
+| 35 | -30.6 dB | -28.1 dB | **+2.5** |
+| 70 | -30.1 | -28.0 | +2.1 |
+| 105 | -29.6 | -27.8 | +1.7 |
+| 127 | -29.4 | -27.7 | +1.7 |
+
+**The gap is widest played softly.** So the grand brightens 2.0 dB from pp to
+ff and this voice only 0.8: it is already bright and has less to open into.
+That is what hard voicing does, and why players argue about it -- the tone
+stops being something the hand controls. It is also a better description of the
+difference than any single brightness figure.
+
+### What limits it, said rather than engineered around
+
+**The hammer has less authority here than on a real piano.** The soundboard
+rolls off at 2.6 kHz, BELOW the hammer's corner, so the board discards much of
+what harder felt delivers and the whole change is about 2 dB. Voicing does more
+than that on a real instrument. But `board_high_hz` was fitted with the rest of
+the piano, and moving it to flatter this voice would be changing half of a joint
+fit to suit the other half -- the mistake the cymbal ring fit made and had to be
+reverted for. Left alone.
+
+### An open item this turned up, larger than the voice itself
+
+GM 0's two halves describe different pianos. Ben: *"I used my piano for where
+the wound strings and 3 string note started. I don't know Steinway B, but I
+found an empirical model of the Steinway B, and used that for inharmonicity,
+since I didn't measure my upright grand."*
+
+So the stringing breaks are a measured upright's and the inharmonicity is a
+borrowed 211 cm concert grand's. The `L^4` argument derived for the CP-70
+applies unchanged: an upright's longest string is about 1.15 m against a
+Steinway B's 1.95, so **if GM 0 is meant to be that upright its bass is
+under-stretched by up to 8.3x** -- A0's 8th partial would move from +17 cents to
++138. Above about 141 Hz the two agree, because above the knee both use a string
+of the same length.
+
+NOT ACTED ON. It needs a decision that is not a measurement: whether GM 0 is a
+concert grand that borrowed an upright's string breaks, or an upright wearing a
+concert grand's stretch. Either way one half is wrong, and the machinery to fix
+it exists.

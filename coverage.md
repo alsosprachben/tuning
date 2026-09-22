@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 55 | 43% |
-| 2 specific, theory | 26 | 20% |
+| 1 general class | 54 | 42% |
+| 2 specific, theory | 27 | 21% |
 | 3 specific, theory + ear | 18 | 14% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -103,7 +103,7 @@ splits almost exactly along that line.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 0 | Acoustic Grand Piano | `GrandPiano` | **4** | Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured |
-| 1 | Bright Acoustic Piano | `GrandPiano` | **1** | the grand piano; no separate bright voicing |
+| 1 | Bright Acoustic Piano | `BrightPiano` | **2** | the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp |
 | 2 | Electric Grand Piano | `ElectricGrand` | **2** | a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference |
 | 3 | Honky-tonk Piano | `HonkyTonk` | **2** | the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it |
 | 4 | Electric Piano 1 | `Rhodes` | **2** | Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted |

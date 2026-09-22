@@ -3247,11 +3247,49 @@ def selftest():
     import math as _math
     import patch_map as _PM
     check("the Rhodes is not a piano", _PM.property_class_for_program(4) is _T.RhodesProperties)
-    check("...and the ACOUSTIC pianos are where they were",
-          all(_PM.property_class_for_program(n) is _T.GrandPianoProperties
-              for n in (0, 1)) and
-          _PM.property_class_for_program(6) is _T.HarpsichordProperties,
-          "  (0 and 1 only: 2 is a CP-70 and 3 is out of tune)")
+    check("...and the acoustic grand is still itself",
+          _PM.property_class_for_program(0) is _T.GrandPianoProperties
+          and _PM.property_class_for_program(6) is _T.HarpsichordProperties,
+          "  (every one of GM 0-7 is now its own instrument)")
+
+    # ---- the bright piano: the same instrument, voiced hard ------------------
+    check("the bright piano is the grand with harder hammers",
+          _PM.property_class_for_program(1) is _T.BrightPianoProperties
+          and issubclass(_T.BrightPianoProperties, _T.GrandPianoProperties))
+    bp, gp2 = _T.BrightPianoProperties, _T.GrandPianoProperties
+    check("...a shorter contact time, which IS the hammer's low-pass",
+          bp.hammer_corner_hz > gp2.hammer_corner_hz * 1.4,
+          "  (%.2f ms of contact against %.2f)"
+          % (1000.0 / bp.hammer_corner_hz, 1000.0 / gp2.hammer_corner_hz))
+    # A hard hammer barely spreads, so it keeps the strike comb's notch at every
+    # dynamic where a soft one fills it in completely by ff.
+    _d = lambda c, av: c.strike_depth * (1.0 - c.strike_fill_fraction * av)
+    check("...and felt that spreads less, so its notch survives being hit",
+          _d(bp, 1.0) > 0.2 and _d(gp2, 1.0) < 0.01,
+          "  (notch depth at ff: %.2f here, %.2f on the grand)"
+          % (_d(bp, 1.0), _d(gp2, 1.0)))
+    # THE CHARACTERISTIC RESULT: the difference is biggest played SOFTLY. A hard
+    # hammer is already bright and has less to open into, so the voice brightens
+    # LESS from pp to ff than the grand does. That is what voicing argues about.
+    def _bright(cls, vel):
+        q = cls(261.63, 0.0, (vel / 127.0) ** 2, 1.0)
+        v = [q.harmonic_volume(h) for h in range(1, 33)]
+        return 10 * _math.log10(sum(x * x for x in v[7:]) / sum(x * x for x in v))
+    soft = _bright(bp, 30) - _bright(gp2, 30)
+    hard = _bright(bp, 127) - _bright(gp2, 127)
+    check("...and it tells MOST when played softly, as hard voicing does",
+          soft > hard > 0.0,
+          "  (+%.1f dB at v30 against +%.1f at v127)" % (soft, hard))
+    check("...so it opens less from pp to ff, having started bright",
+          (_bright(bp, 127) - _bright(bp, 30)) < 0.6 * (_bright(gp2, 127) - _bright(gp2, 30)),
+          "  (+%.1f dB of opening against the grand's +%.1f)"
+          % (_bright(bp, 127) - _bright(bp, 30), _bright(gp2, 127) - _bright(gp2, 30)))
+    # The fill fraction generalises a boolean; every other voice must be untouched.
+    _moved = [k for k, v in sorted(vars(_T).items())
+              if isinstance(v, type) and getattr(v, "strike_fill_fraction", 1.0) != 1.0]
+    check("...and generalising that boolean moved nothing else",
+          _moved == ["BrightPianoProperties"],
+          "  (%d of the whole set departs from the soft default)" % len(_moved))
 
     # ---- the honky-tonk: the same piano, badly tuned -------------------------
     check("the honky-tonk is the grand with the tuner's hand off",

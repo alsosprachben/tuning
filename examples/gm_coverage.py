@@ -62,7 +62,7 @@ Applause,Gunshot""".replace("\n", "").split(",")
 # program: (rating, note). The note earns the rating or explains the gap.
 RATED = {
  0:(4,"Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured"),
- 1:(1,"the grand piano; no separate bright voicing"),
+ 1:(2,"the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp"),
  2:(2,"a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference"),
  3:(2,"the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it"),
  4:(2,"Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted"),

@@ -5,6 +5,7 @@
     python3 examples/grand.py --compare [outdir]
     python3 examples/grand.py --register [outdir]
     python3 examples/grand.py --honky [outdir]
+    python3 examples/grand.py --bright [outdir]
 
 GM 2 was the acoustic grand -- the same class object, not even a subclass. A
 Yamaha CP-70 has a real grand action and real strings with NO SOUNDBOARD and a
@@ -36,6 +37,13 @@ piano just tuned, 64 (and no wheel at all) for the voice's own range, 127 for
 one nobody has touched. Written in the middle of the keyboard, because the bass
 is a single wound string with nothing to beat against and the jangle lives
 above it.
+
+--bright is GM 1, the same piano voiced hard: a shorter hammer contact time
+and felt that spreads about half as much under force. It is rendered at four
+velocities against the grand, because that is where it tells -- the difference
+is LARGEST played softly (+2.5 dB above 2 kHz at velocity 35, +1.7 at 127). A
+hard hammer is already bright and has less to open into, so the voice brightens
+less from pp to ff than the grand does. Listen to the soft pair first.
 
 --compare plays a whole passage on both. Written low on purpose: a CP-70 part
 that stays above D#3 is a demo of nothing.
@@ -179,6 +187,25 @@ def honky(outdir):
     return 0
 
 
+def bright(outdir):
+    """GM 1 against GM 0 at four dynamics. The soft pair is the interesting one."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fig = [(0.0, (52, 64, 67, 71), None, 1.0), (1.2, (57, 64, 69), None, 0.8),
+           (2.2, (48, 60, 64, 67), None, 2.2)]
+    for vel, tag in ((35, 'pp'), (70, 'mf'), (105, 'f'), (127, 'ff')):
+        for prog, name in ((ACOUSTIC, 'grand'), (1, 'bright')):
+            ev = _notes([(b, n, vel, ln) for b, n, _v, ln in fig])
+            mid = os.path.join(outdir, 'bright-%s-%s.mid' % (tag, name))
+            _track(prog, ev, 5.0).save(mid)
+            out = mid[:-4] + '.wav'
+            if _render(mid, out, root) is None:
+                return 1
+        print("  %-3s (velocity %3d)  bright-%s-grand.wav / bright-%s-bright.wav"
+              % (tag, vel, tag, tag))
+    print("  the gap is widest at pp: a hard hammer does not need to be hit hard")
+    return 0
+
+
 def main(argv):
     mode = next((a[2:] for a in argv[1:] if a.startswith('--')), None)
     args = [a for a in argv[1:] if not a.startswith('--')]
@@ -190,6 +217,8 @@ def main(argv):
         return register(outdir)
     if mode == 'honky':
         return honky(outdir)
+    if mode == 'bright':
+        return bright(outdir)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     mid = os.path.join(outdir, 'grand.mid')
     passage().save(mid)
