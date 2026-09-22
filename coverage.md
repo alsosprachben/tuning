@@ -171,7 +171,7 @@ splits almost exactly along that line.
 | 42 | Cello | `Cello` | **4** | Iowa cello |
 | 43 | Contrabass | `Contrabass` | **4** | Iowa double bass |
 | 44 | Tremolo Strings | `BowedString` | **2** | tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase |
-| 45 | Pizzicato Strings | `PizzicatoStrings` | **2** | PizzicatoStrings: the MEASURED violin body, plucked over the fingerboard and damped in half a second |
+| 45 | Pizzicato Strings | `PizzicatoStrings` | **2** | pizzicato(): the MEASURED body of whichever instrument the register picks, plucked -- and the ring scales with register, 2.35 s at E1 to 0.42 at E5 |
 | 46 | Orchestral Harp | `Harp` | **2** | Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings |
 | 47 | Timpani | `Timpani` | **2** | analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set |
 

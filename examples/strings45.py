@@ -35,6 +35,27 @@ VOICES = [(40, "Violin (measured)"), (44, "Tremolo strings"),
           (45, "Pizzicato strings"), (46, "Orchestral harp")]
 
 
+def wide(program):
+    """A line that CROSSES the register boundaries, which is the only way to
+    hear the split: the same written part walks down through violin, viola,
+    cello and bass territory, and the body and the ring should change under it.
+    Boundaries are C4, C3 and C2 (see patch_map.BOWED_SPLIT)."""
+    m = mido.MidiFile(type=1, ticks_per_beat=480)
+    tr = mido.MidiTrack(); m.tracks.append(tr)
+    tr.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    tr.append(mido.Message("program_change", channel=0, program=program, time=0))
+    tr.append(mido.Message("control_change", channel=0, control=7, value=100, time=0))
+    for n in (76, 72, 67, 64, 59, 55, 52, 47, 43, 40, 35, 31, 28):
+        tr.append(mido.Message("note_on", channel=0, note=n, velocity=96, time=0))
+        tr.append(mido.Message("note_off", channel=0, note=n, velocity=0, time=480))
+    # ...and the bottom note left to ring, which is where a bass pizz shows
+    # what it does that a violin pizz cannot.
+    tr.append(mido.Message("note_on", channel=0, note=28, velocity=100, time=240))
+    tr.append(mido.Message("note_off", channel=0, note=28, velocity=0, time=480 * 6))
+    tr.append(mido.MetaMessage("end_of_track", time=960))
+    return m
+
+
 def passage(program, arpeggio=False):
     m = mido.MidiFile(type=1, ticks_per_beat=480)
     tr = mido.MidiTrack(); m.tracks.append(tr)
@@ -56,10 +77,10 @@ def passage(program, arpeggio=False):
     return m
 
 
-def render(gm, outdir):
-    mid = os.path.join(outdir, "str%d.mid" % gm)
-    out = os.path.join(outdir, "str%d.wav" % gm)
-    passage(gm).save(mid)
+def render(gm, outdir, build=None, tag=""):
+    mid = os.path.join(outdir, "str%d%s.mid" % (gm, tag))
+    out = os.path.join(outdir, "str%d%s.wav" % (gm, tag))
+    (build or passage)(gm).save(mid)
     env = dict(os.environ)
     env.setdefault("TUNING_ROOM", "chamber")
     env.setdefault("TUNING_MASTER_DB", "-12")
@@ -75,12 +96,32 @@ def render(gm, outdir):
 def check():
     import patch_map as P
     import tonelib as T
-    print("\nthese three had no body. What they have now:\n")
+    print("\nthese three had no body. What they have now, at C4 -- and it must be"
+          "\nasked of the ROUTER, since 44 and 45 both split by register and the"
+          "\nprogram-level class is only the no-note fallback:\n")
     for gm, lab in VOICES:
-        c = P.property_class_for_program(gm)
-        print("  %2d %-20s %-26s formants %s"
+        c = P.property_class_for_note(gm, 60)
+        f = getattr(c, "formants", None)
+        print("  %2d %-20s %-26s %s"
               % (gm, lab, c.__name__.replace("Properties", ""),
-                 getattr(c, "formants", "(NONE -- no body)")))
+                 ("%d formant(s)" % len(f)) if f else "(NONE -- no body)"))
+
+    print("\n45 and 44 are both sections, and both split at the same notes -- but"
+          "\n44 keeps the bow and 45 lends the plucked class a bowed box:\n")
+    for gm, lab in ((44, "Tremolo"), (45, "Pizzicato")):
+        row = []
+        for n, nl in ((28, "E1"), (40, "E2"), (52, "E3"), (64, "E4")):
+            row.append("%s=%s" % (nl, P.property_class_for_note(gm, n).__name__
+                                  .replace("Properties", "")))
+        print("  %-10s %s" % (lab, "  ".join(row)))
+
+    print("\nand a bass pizz rings while a violin pizz snaps -- one law, not four"
+          "\nnumbers (decay_register_slope scales the rate with the register):\n")
+    for n, nl in ((28, "E1"), (40, "E2"), (52, "E3"), (64, "E4"), (76, "E5")):
+        f0 = 440.0 * 2.0 ** ((n - 69) / 12.0)
+        q = P.property_class_for_note(45, n)(f0, 0.0, 1.0, 1.0)
+        print("  %-4s %7.1f Hz  decay x%.2f" % (nl, f0, q.decay_register_factor))
+    print("  (rendered: 2.35 s at E1 down to 0.42 at E5, to -30 dB)")
 
     print("\nthe pluck point decides the colour (first comb null at 1/p):\n")
     for gm, lab in ((45, "Pizzicato"), (46, "Harp")):
@@ -113,6 +154,14 @@ def main(argv):
         if got is None:
             return 1
         print("  %2d %-20s %5.1fs -> %s" % (gm, lab, got[1], got[0]))
+    # And the two register-split voices again on a line that crosses the
+    # boundaries, which is the only passage where the split is audible.
+    for gm, lab in ((44, "Tremolo"), (45, "Pizzicato")):
+        got = render(gm, outdir, wide, "wide")
+        if got is None:
+            return 1
+        print("  %2d %-20s %5.1fs -> %s  (crosses the register splits)"
+              % (gm, lab + " wide", got[1], got[0]))
     return 0
 
 

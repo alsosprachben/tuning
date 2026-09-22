@@ -3842,3 +3842,53 @@ one comparison that means anything here. Within 1 dB.
 it wears one body across its whole compass, and a low pizz is really a cello's.
 The machinery to fix it is the router GM 44 now uses. Left because it is a
 separate decision and this pass was already changing what those voices are.
+
+### 45, continued: the body follows the register too
+
+The pass above left GM 45 wearing one body across its whole compass, so every
+low pizz was a violin playing low. It is now routed the way GM 44 is: the
+register picks the instrument, and the articulation rides on it.
+
+**IT INVERTS `tremolo_bow`'s DIRECTION**, which is why it is a separate function
+rather than another entry in the same table. `tremolo_bow` takes a bowed class
+and keeps it bowed, changing only the stroke. A pizzicato is not a bowed
+instrument at all -- the excitation, the decay and the whole lineage are a
+plucked string's -- so `pizzicato(cls)` goes the other way: it takes the PLUCKED
+class and lends it the bowed instrument's box, exactly as `AcousticBassProperties`
+borrows the measured contrabass's. What transfers is the body and only the body.
+
+GM 45 is NOT added to `BOWED_ENSEMBLE` -- that set means bowed, and putting it
+there would give a pizzicato a bow. It has its own `PIZZ_ENSEMBLE` taking the
+same `BOWED_SPLIT` boundaries, because a pizzicato section is scored the way a
+bowed one is.
+
+| note | body |
+|---|---|
+| below C2 | measured contrabass (4 formants, bell 135 Hz) |
+| C2-B2 | measured cello (3 formants, bell 240) |
+| C3-B3 | measured viola (3 formants, bell 350) |
+| C4 up | measured violin (the bridge hill, bell 150) |
+
+**AND THE RING FOLLOWS FROM ONE LAW, NOT FOUR NUMBERS.** A bass pizz rings and a
+violin pizz snaps, and `decay_register_slope` already existed to say so: the
+rate scales as `2 ** (slope * octave_position)`, and a slope of 1.0 would be
+rate proportional to frequency -- the standard string result, a fixed number of
+CYCLES rather than of seconds. 0.85, a touch under, as the piano's is.
+
+Rendered, one held note per register, to -30 dB:
+
+| | E1 | E2 | E3 | E4 | E5 |
+|---|---|---|---|---|---|
+| | 2.35 s | 1.62 | 1.00 | 0.54 | 0.42 |
+
+5.6:1 across the compass, with the violin register still inside the 0.4-0.8 s a
+real pizz has. Nothing was re-fitted to get that: the slope did it.
+
+**A PROBE ERROR WORTH RECORDING, TWICE OVER.** Measured as rms over a fixed
+window, GM 45's level appeared to fall 10 dB from E1 to E5 -- but a pizz decays
+and a bowed note does not, so rms over a fixed window measures the DECAY. By
+peak, against GM 48 on the same notes as a control, the pizz spans 3 dB where
+the bowed ensemble spans 8.9: flatter than what was already shipping. And a
+second probe, timing each note of a walking line, was confounded because the
+notes are 0.5 s apart and the low ones ring for over 2 -- so every window held
+the previous note's tail. The isolated-note table above is the honest one.

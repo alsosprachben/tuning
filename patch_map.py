@@ -66,6 +66,7 @@ from tonelib import (
     CelloProperties,
     ContrabassProperties,
     tremolo_bow,
+    pizzicato,
     PizzicatoStringsProperties,
     HarpProperties,
     slow_bow,
@@ -248,6 +249,8 @@ _fill(40, 44, BowedStringProperties)   # violin, viola, cello, contrabass, tremo
 # attribute at all -- so a pizzicato section and a harp were being rendered with
 # no body whatsoever. 45 wears the measured violin body and plucks; 46 is its
 # own instrument.
+# Routed per register in property_class_for_note, as 44 is; this is the
+# fallback for anything that asks for the program without a note.
 PROGRAM_CLASS[45] = PizzicatoStringsProperties
 PROGRAM_CLASS[40] = ViolinProperties         # each instrument now has its own body
 PROGRAM_CLASS[41] = ViolaProperties
@@ -403,6 +406,11 @@ BRASS_ENSEMBLE = {61}
 # Programs that are a whole section rather than a named instrument.
 BOWED_ENSEMBLE = {44, 48, 50, 51}
 BOWED_ENSEMBLE_SLOW = {49}
+# A PIZZICATO SECTION IS SCORED THE SAME WAY A BOWED ONE IS, so it splits at the
+# same notes -- but it is NOT bowed, and putting 45 in BOWED_ENSEMBLE would give
+# it a bow. It takes the same BOWED_SPLIT boundaries through its own transform,
+# which lends the plucked class that instrument's body rather than the reverse.
+PIZZ_ENSEMBLE = {45}
 
 
 # A SOLO patch is a family too, and below a certain note it is a DIFFERENT
@@ -491,6 +499,10 @@ def property_class_for_note(program, note):
         for hi, cls in BRASS_SPLIT:
             if note < hi:
                 return brass_section(cls)
+    if prog in PIZZ_ENSEMBLE:
+        for hi, cls in BOWED_SPLIT:
+            if note < hi:
+                return pizzicato(cls)
     if prog in BOWED_ENSEMBLE or prog in BOWED_ENSEMBLE_SLOW:
         for hi, cls in BOWED_SPLIT:
             if note < hi:

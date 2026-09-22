@@ -5309,6 +5309,15 @@ class PizzicatoStringsProperties(FormantBody, SectionMixin, PluckedStringPropert
     # plucked voice in the bank: a guitar rings for seconds and a pizzicato
     # violin is gone in well under one, because a short thin string on a stiff
     # box is heavily damped and the player's next stop kills it anyway.
+    # A BASS PIZZ RINGS AND A VIOLIN PIZZ SNAPS, and that is one law rather than
+    # four numbers: decay_register_slope scales the rate with the note's own
+    # register, and a slope of 1.0 would be rate proportional to frequency --
+    # the standard string result, a fixed number of CYCLES rather than a fixed
+    # number of seconds. 0.85 is a touch under that, as the piano's is, because
+    # a real bass string is not purely frequency-damped. Re-fitted below once
+    # this was switched on, since it changes what decay_db means.
+    decay_register_slope = 0.85
+
     # Measured on a rendered note, 7.0 dB/s left it ringing 2.2 s to -30 dB,
     # which is a guitar. A pizzicato violin is gone in well under a second: a
     # short thin string on a stiff box is heavily damped, and the player's next
@@ -5648,6 +5657,45 @@ class ContrabassProperties(FormantBody, BowedStringProperties):
 
 
 _SLOW_BOW = {}
+
+
+_PIZZICATO = {}
+
+
+def pizzicato(cls):
+    """The same BODY, plucked -- GM 45. Cached per class, as slow_bow is.
+
+    GM 45 wore one body across its whole compass, which made every low pizz a
+    violin playing low. It is the section that GM 44 is, scored the same way,
+    so it routes the same way: the register picks the instrument and the
+    articulation rides on it.
+
+    BUT IT INVERTS tremolo_bow's DIRECTION, and that is the whole reason this is
+    a separate function rather than another entry in the same table. tremolo_bow
+    takes a bowed class and keeps it bowed, changing only the stroke. A
+    pizzicato is not a bowed instrument at all: the excitation, the decay and the
+    whole class lineage are a PLUCKED string's. So this goes the other way --
+    it takes the PLUCKED class and lends it the bowed instrument's body, exactly
+    as AcousticBassProperties borrows the measured contrabass's.
+
+    What transfers is the box and only the box. A body does not know how the
+    string it is carrying was set going.
+    """
+    got = _PIZZICATO.get(cls)
+    if got is None:
+        got = type(cls.__name__.replace("Properties", "") + "PizzProperties",
+                   (PizzicatoStringsProperties,), {
+            "formants": cls.formants,
+            "antiformants": getattr(cls, "antiformants", ()),
+            "formant_floor": cls.formant_floor,
+            "bore_corner_hz": cls.bore_corner_hz,
+            "bore_order": cls.bore_order,
+            "bell_cutoff_hz": cls.bell_cutoff_hz,
+            "bell_order": cls.bell_order,
+            "__doc__": "%s's body, plucked -- GM 45." % cls.__name__,
+        })
+        _PIZZICATO[cls] = got
+    return got
 
 
 _TREMOLO_BOW = {}

@@ -3355,12 +3355,44 @@ def selftest():
               "  (%s: %d formant%s)" % (_c.__name__.replace("Properties", ""),
                                         len(getattr(_c, "formants", ())),
                                         "" if len(getattr(_c, "formants", ())) == 1 else "s"))
-    # THE PIZZ WEARS THE MEASURED VIOLIN'S BODY. Same section, same box; only
-    # the excitation changed, and a body does not know how it was set going.
-    check("...and the pizzicato's body is the measured violin's",
-          _PMs.property_class_for_program(45).formants
-          == _T.ViolinProperties.formants,
-          "  (the Iowa bridge hill, unchanged)")
+    # THE PIZZ WEARS THE MEASURED BODY OF WHICHEVER INSTRUMENT THE REGISTER
+    # PICKS. A pizzicato section is scored the way a bowed one is, so it splits
+    # at the same notes -- but it is NOT bowed, so it takes those boundaries
+    # through its own transform, which lends the PLUCKED class the bowed
+    # instrument's box rather than the reverse. Checked through the ROUTER, not
+    # the assignment: PROGRAM_CLASS[45] is only the no-note fallback, and
+    # checking it is exactly the mistake GM 32 and GM 44 both punished.
+    _pz_by_reg = [(_n, _PMs.property_class_for_note(45, _n)) for _n in (28, 40, 52, 64)]
+    check("the pizzicato takes its body from the register, as the tremolo does",
+          len({_c for _, _c in _pz_by_reg}) == 4,
+          "  (%s)" % ", ".join(_c.__name__.replace("PizzProperties", "")
+                               for _, _c in _pz_by_reg))
+    # ...and each of those bodies is the MEASURED one, not an approximation of
+    # it. The box is all that transfers: a body does not know how the string it
+    # carries was set going.
+    _want = ((28, _T.ContrabassProperties), (40, _T.CelloProperties),
+             (52, _T.ViolaProperties), (64, _T.ViolinProperties))
+    check("...and every one of them is the measured instrument's box",
+          all(_PMs.property_class_for_note(45, _n).formants == _b.formants
+              and _PMs.property_class_for_note(45, _n).bell_cutoff_hz == _b.bell_cutoff_hz
+              for _n, _b in _want),
+          "  (formants and bell cutoff carried across unchanged)")
+    # ...but they are PLUCKED, not bowed. The transform must not have dragged
+    # the bow along with the box.
+    check("...while still being plucked and not bowed",
+          all(issubclass(_PMs.property_class_for_note(45, _n),
+                         _T.PluckedStringProperties)
+              and not issubclass(_PMs.property_class_for_note(45, _n),
+                                 _T.BowedStringProperties)
+              for _n, _ in _want),
+          "  (plucked lineage, with a bowed instrument's body)")
+    # A BASS PIZZ RINGS AND A VIOLIN PIZZ SNAPS, from one law rather than four
+    # numbers: the rate scales with the note's own register.
+    _pzb = _PMs.property_class_for_note(45, 28)(41.2, 0.0, 1.0, 1.0)
+    _pzt = _PMs.property_class_for_note(45, 76)(659.3, 0.0, 1.0, 1.0)
+    check("...and a bass pizz rings far longer than a violin one",
+          _pzb.decay_register_factor < 0.5 * _pzt.decay_register_factor,
+          "  (rendered: 2.35 s at E1 against 0.42 at E5, to -30 dB)")
     # A PIZZ NOTE IS SHORT. This is most of what separates it from every other
     # plucked voice, and it was 2.2 s to -30 dB before it was measured.
     _pz = _PMs.property_class_for_program(45)
