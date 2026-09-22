@@ -1371,8 +1371,8 @@ class Live:
         self.amp_thread = threading.Thread(target=self._amp_worker, daemon=True)
         self.amp_thread.start()
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
-        self.press_db = 8.0     # crescendo at full aftertouch
-        self.press_tilt = 0.30  # and it brightens as it swells: see Slab.press
+        self.press_db = T.PRESS_DB      # one constant, shared with the file path
+        self.press_tilt = T.PRESS_TILT
         self.underruns = 0
         self.dropped = 0
         self.errors = 0
@@ -4130,6 +4130,34 @@ def selftest():
           _at is not None and len(_at) > 40,
           "  (%s argument types derived from synthkernel.c)"
           % (len(_at) if _at else "no"))
+
+    # ---- AFTERTOUCH, and why the two paths agree by algebra -----------------
+    # The file path had none at all. It has one number per note now -- the
+    # time-weighted MEAN pressure over the note's span, not a note-on snapshot,
+    # because pressure is by definition applied after the key is down and a
+    # value read at note-on is the previous note's.
+    #
+    # The agreement with live is algebra, not calibration. Live scales each
+    # partial by (f/f0)^(press_tilt*p) with press_tilt = effort_tilt*PRESS_DB/
+    # 6.0206; tonelib does attack_dampening -= effort_tilt*effort/6.0206, which
+    # is the same expression with effort = PRESS_DB*p. One constant, so they
+    # cannot drift.
+    _lvp = Live(program=56, rate=48000, frames=128, verbose=False)
+    check("aftertouch is one constant, shared by both renderers",
+          _lvp.press_db == _T.PRESS_DB and _lvp.press_tilt == _T.PRESS_TILT
+          and _T.PRESS_DB == 8.0,
+          "  (%.1f dB and a tilt of %.2f, in tonelib where both can see them)"
+          % (_T.PRESS_DB, _T.PRESS_TILT))
+    _tp = _PMb.property_class_for_note(56, 60)
+    _e0 = _tp(261.63, 0.0, 1.0, 1.0, 0.0)
+    _e1 = _tp(261.63, 0.0, 1.0, 1.0, _T.PRESS_DB)
+    _b = lambda q: (sum(q.harmonic_volume(h) ** 2 for h in range(5, 33))
+                    / sum(q.harmonic_volume(h) ** 2 for h in range(1, 33)))
+    check("...and pressure opens the series, which is what leaning in does",
+          _b(_e1) > _b(_e0) * 1.05 and _tp.effort_tilt > 0.0,
+          "  (energy above h4: %.1f%% -> %.1f%% at full pressure)"
+          % (100 * _b(_e0), 100 * _b(_e1)))
+    _lvp.renderer.close()
 
     # ---- THE PIPER'S SCALE, which is not a temperament ----------------------
     # Nine holes cut once, and every one of them tuned to beat cleanly against

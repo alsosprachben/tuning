@@ -400,6 +400,7 @@ def parse(path):
     # drift from it.
     mid = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
     ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; pws = {}; on = {}; t = 0.0
+    ats = {}; pts = {}       # channel pressure, and per-key pressure
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
@@ -418,6 +419,10 @@ def parse(path):
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
+        elif msg.type == 'aftertouch':
+            ats.setdefault(msg.channel, []).append((t, msg.value))
+        elif msg.type == 'polytouch':
+            pts.setdefault((msg.channel, msg.note), []).append((t, msg.value))
         elif msg.type == 'note_on' and msg.velocity > 0:
             # THE PATCH IS SNAPSHOTTED AT NOTE-ON, like the CCs beside it. It
             # used to be read from ch_prog at render time, which holds only the
@@ -439,7 +444,7 @@ def parse(path):
     # would miss it -- a KeyError at render time once notes carry their own
     # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
-    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws
+    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws, (ats, pts)
 
 def bend_blocks(events, nblk):
     """Per-block (mean ratio, cumulative extra phase) for one channel's bend.
@@ -553,7 +558,39 @@ def prepare(path, tuner='hybrid440'):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
-    ch_prog, ch_progs, notes, ccs, total, legato, pws = parse(path)
+    ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts) = parse(path)
+
+    def _pressure_of(ch, note, on, off):
+        """This note's pressure, 0..1: the time-weighted MEAN over its span.
+
+        NOT A NOTE-ON SNAPSHOT, which is what CC7/CC11/CC10 get from cv() and
+        is wrong here for a reason that is in the name. Pressure is applied
+        AFTER the key is already down -- channel aftertouch almost always
+        arrives mid-note and polytouch always does -- so a value read at
+        note-on is the PREVIOUS note's.
+
+        Collapsing a gesture to one number per note is the honest limit of the
+        file path, and it is the same limit CC7 already sits behind: a swell
+        WITHIN a held note is not rendered offline. The mean is the collapse
+        that preserves the note's energy.
+        """
+        ev = pts.get((ch, note)) or ats.get(ch)
+        if not ev or off <= on:
+            return 0.0
+        ev = sorted(ev)
+        acc = 0.0; v = 0.0; t0 = on
+        for t1, val in ev:
+            if t1 >= off:
+                break
+            if t1 > t0:
+                acc += v * (t1 - t0); t0 = t1
+            elif t1 <= on:
+                pass
+            v = val / 127.0
+            if t1 <= on:
+                t0 = on
+        acc += v * (off - t0)
+        return max(0.0, min(1.0, acc / (off - on)))
     N = int(total*SR) + SR; nblk = N // BLK + 2
     # A CHOIR'S BODY BELONGS TO THE PART, NOT THE NOTE. Alto and tenor overlap
     # by a fourth, yet one section is women and the other men -- tracts 17%
@@ -1077,6 +1114,20 @@ def prepare(path, tuner='hybrid440'):
         _eff = 0.0
         if getattr(pc, 'effort_tilt', 0.0) and vel and _vb:
             _eff = max(-12.0, min(12.0, 40.0*math.log10(vel/float(_vb))))
+        # AFTERTOUCH IS EFFORT, and it arrives in the same units, so the two
+        # renderers agree by ALGEBRA rather than by calibration. Live scales
+        # each partial by (f/f0)^(press_tilt*p) with press_tilt = effort_tilt *
+        # PRESS_DB / 6.0206 (see live._press_tilt); tonelib does
+        # attack_dampening -= effort_tilt*effort/6.0206, which is the same
+        # expression with effort = PRESS_DB*p. Setting it makes them identical,
+        # not merely similar.
+        #
+        # Added AFTER the velocity clamp on purpose: +/-12 dB is a statement
+        # about what a MIDI velocity can be taken to mean, and a player leaning
+        # on a key is a separate and explicit request.
+        _press = _pressure_of(ch, note, on, off)
+        if _press:
+            _eff += T.PRESS_DB * _press
         # CC1 IS HOW FAR OUT OF TUNE. 64 -- and no CC1 at all -- is the voice's
         # own range; 0 is a piano just tuned, 127 one nobody has touched.
         #
@@ -1116,6 +1167,11 @@ def prepare(path, tuner='hybrid440'):
                                  else len(getattr(pc, 'drone_hz', ())))
             T.bagpipe_drones = _DRONE_CH[ch]
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
+        if _press:
+            # ...and the LEVEL half of it. `gain` is read lazily inside
+            # harmonic_volume, long after construction, so this needs no change
+            # to a constructor signature that subclasses override.
+            props.gain *= T.db_amplitude(T.PRESS_DB * _press)
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
         if hasattr(props, '_sung_formants') and (ch in _tess or ch in _parts):

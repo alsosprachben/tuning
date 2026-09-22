@@ -12242,6 +12242,13 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 # ONE CONSTANT, read by blockrender.cv() and live._chan_gain, because two
 # numbers in two files that happen to agree is not agreement.
 GM_DEFAULT_VOLUME = 100
+# AFTERTOUCH, in one place. live.Live carried press_db = 8.0 and press_tilt =
+# 0.30 as its own numbers and blockrender had none at all; two constants in two
+# files that happen to match is not agreement. A wind player leaning in is
+# louder AND brighter together, which is why this is a dB and a tilt rather
+# than a gain: see Slab.press and _press_tilt.
+PRESS_DB = 8.0
+PRESS_TILT = 0.30
 # GM's default pitch-bend range: +/- 2 semitones at full wheel. RPN 0 changes
 # it; live.Live.bend_range is the same number, and both read this one.
 BEND_RANGE_SEMITONES = 2.0
