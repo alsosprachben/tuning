@@ -898,6 +898,16 @@ class Bank:
         # exists and is literally "the CC1 value to build with", so three wheel
         # positions are pre-warmed and the wheel picks between them. A note
         # keeps the tuning it was struck with, which is what a piano does.
+        # THE DRONES ARE NOT THE NOTE, so unlike every other CC1 voice this one
+        # does NOT get a template axis. A bagpipe drone sounds once while the
+        # bag is up; baking it into the chanter's template would restart three
+        # of them on every note and stack them on a held line. So the chanter
+        # template is built with the drones CORKED (see _raw_template), and the
+        # drones are stamped separately as their own held voices.
+        self.drone_wheel = (not drums) and bool(getattr(pc, "drone_wheel", False))
+        self.drone_hz = tuple(getattr(pc, "drone_hz", ())) if pc else ()
+        self.drone_gain = tuple(getattr(pc, "drone_gain", ())) if pc else ()
+        self.part_break_s = float(getattr(pc, "part_break_s", 2.0)) if pc else 2.0
         self.detune_wheel = (not drums) and bool(getattr(pc, "detune_wheel", False))
         if self.detune_wheel:
             self.speeds = DETUNE_STEPS
@@ -970,6 +980,21 @@ class Bank:
             # ranks we choose to stamp, not by a gate over ones already there.
             tr.append(mido.Message("control_change", channel=ch, control=11, value=127, time=0))
             tr.append(mido.Message("control_change", channel=ch, control=43, value=127, time=0))
+        if self.drone_wheel and fast is None:
+            # CORK THEM FOR THE BUILD, and say so in the MIDI rather than by
+            # setting the module global -- blockrender reads the CHANNEL'S OWN
+            # CC1 and writes `bagpipe_drones` from it on the first note, so a
+            # value set from out here is overwritten before any partial is
+            # emitted. (Set it and measure: the template still came out with
+            # 110 and 220 Hz partials under a written D5. The selftest caught
+            # exactly that.)
+            #
+            # Why cork it at all: blockrender emits the spanning unison across
+            # the note's phrase, and a ONE-NOTE template is its own whole
+            # phrase, so every template would carry three drones and a held
+            # line would stack them a set at a time. Live sounds the drones as
+            # their own held voices instead; this template is the chanter.
+            fast = 0
         if fast is not None:
             # CC1 is the half-moon switch on a tonewheel voice; blockrender
             # reads it through leslie.zone() and gives every partial the
@@ -1217,6 +1242,8 @@ class Live:
         self.cmds = collections.deque()
         self.lock = threading.Lock()
         self.bend = {}          # channel -> current pitch-bend ratio
+        self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
+        self.drone_quiet = {}   # pid -> the sample the chanter went silent at
         self.mod = {}           # channel -> current vibrato depth (fraction)
         self.trem_depth = {}    # pid -> current tremolo/pan depth (fraction)
         self.detune_step = {}   # pid -> which pre-warmed detune the wheel is on
@@ -1446,12 +1473,20 @@ class Live:
                 # pre-warmed positions exist, so it snaps between them rather
                 # than sweeping -- a miss here would be a dropped note.
                 detuners = [p for p in here if p.bank.detune_wheel]
+                # AND ON A BAGPIPE THE WHEEL IS HOW MANY DRONES ARE UNCORKED.
+                # This is the bug Ben heard: with no branch of its own the
+                # bagpipe fell into `others` and CC1 gave it 35 cents of
+                # vibrato -- on the one instrument in the bank that has no
+                # vibrato at all, since a bag under constant pressure is what
+                # a piper is FOR.
+                dronists = [p for p in here if p.bank.drone_wheel]
                 others = [p for p in here
                           if not p.organ and not p.bank.leslie
                           and p.bank.amp_drive <= 0.0
                           and p.bank.tremolo_depth <= 0.0
                           and not p.bank.clav_panel
-                          and not p.bank.detune_wheel]
+                          and not p.bank.detune_wheel
+                          and not p.bank.drone_wheel]
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -1469,6 +1504,19 @@ class Live:
                 for part in detuners:
                     self.detune_step[part.pid] = min(
                         DETUNE_STEPS, key=lambda v: abs(v - msg.value))
+                for part in dronists:
+                    # Even quarters over the wheel, as blockrender does, so a
+                    # file and the keyboard cork the same drones at the same
+                    # place. UNLIKE the offline path this is live rather than
+                    # read-once: a piper corks before playing, but a player at
+                    # a keyboard has a wheel in their hand and expects it to
+                    # do something, so the drones come and go under it.
+                    _nd = len(part.bank.drone_hz)
+                    n = max(0, min(_nd, int(round(msg.value / 127.0 * _nd))))
+                    if self.drone_count.get(part.pid) != n:
+                        self.drone_count[part.pid] = n
+                        if self._chanting(part, ch):
+                            self._drones(part, ch, n0)
                 for part in clavs:
                     import tonelib as _TLm
                     step = int(round(msg.value / 127.0 * (len(_TLm.CLAV_TONE) - 1)))
@@ -1598,6 +1646,9 @@ class Live:
         pr = self.pressure.get(ch, 0.0)
         if pr:
             self.slab.press(slots, pr, self.press_db, self.press_tilt)
+        if part.bank.drone_wheel:
+            self.drone_quiet.pop(part.pid, None)
+            self._drones(part, ch, n0)
         b, v = self.bend.get(ch, 1.0), self.mod.get(ch, 0.0)
         w = self.modw.get(ch, 0.0)
         if b != 1.0 or v != 0.0 or w != 0.0:
@@ -1605,8 +1656,94 @@ class Live:
                              vd=(v if v != 0.0 else None),
                              vrs=(1.0 + self.mod_rate * w) if w != 0.0 else None)
 
+    DRONE_SLOT = "drone"
+
+    def _chanting(self, part, ch):
+        """Is a CHANTER note sounding? The drones do not count themselves."""
+        return any(k[0] == part.pid and k[1] == ch and k[3] != self.DRONE_SLOT
+                   for k in list(self.slab.live))
+
+    def _drones(self, part, ch, n0):
+        """Bring the uncorked drones up and cork the rest.
+
+        A DRONE IS THE PART, NOT THE NOTE, which is the whole reason this is
+        not a template axis. It sounds from the moment the bag is under
+        pressure until the piper lets it down, so it is stamped once, held
+        across everything the chanter plays, and released only after the
+        chanter has been silent for `part_break_s`.
+
+        The drone is voiced as this same instrument at the drone's own pitch,
+        which is the same approximation the offline path makes -- there, a
+        drone rides the chanter's harmonic series transposed to 220 or 110 Hz.
+        Both are a conical-reed stand-in for what is really a cylindrical pipe
+        with a single beating reed; the two renderers at least make it
+        together, and the difference between them is which register the series
+        is read in.
+        """
+        want = self.drone_count.get(part.pid, len(part.bank.drone_hz))
+        for i, hz in enumerate(part.bank.drone_hz):
+            key = (part.pid, ch, -1 - i, self.DRONE_SLOT)
+            on = key in self.slab.live
+            if i < want and not on:
+                # The nearest key, and then retuned onto the drone's ABSOLUTE
+                # frequency -- which is not the same as the nearest key's.
+                # A bagpipe is not on an equal-tempered tuner: measured, this
+                # voice puts MIDI 57 at 207.4 Hz, a full semitone under A3, so
+                # picking the key and stopping would have left the live drones
+                # 102 cents below the file's. The correction is read off the
+                # template's OWN fundamental rather than assumed, so it holds
+                # whatever tuner the part is on.
+                note = int(round(69.0 + 12.0 * math.log2(hz / 440.0)))
+                if not MELODIC_RANGE[0] <= note <= MELODIC_RANGE[1]:
+                    continue
+                tmpl = part.bank.get(note, 100, part.bank.leslie_default)
+                if tmpl is None:
+                    self.misses += 1
+                    continue
+                g = (part.bank.drone_gain[i]
+                     if i < len(part.bank.drone_gain) else 1.0)
+                if not self.slab.stamp(tmpl, key, n0, g * part.gain()):
+                    self.dropped += 1
+                    continue
+                slots = self.slab.live.get(key)
+                f0 = float(np.asarray(tmpl["nf"])[:tmpl["P"]].min())
+                if slots is not None and f0 > 0.0 and abs(hz / f0 - 1.0) > 1e-9:
+                    # ...and this is also what puts the two tenors three cents
+                    # apart, since drone_hz already carries that and both land
+                    # on the same key. It is the beat a piper calls drone lock.
+                    self.slab.retune(slots, n0, om_scale=hz / f0)
+            elif i >= want and on:
+                self.slab.release(key, n0)
+
+    def _drone_reap(self, n0):
+        """Let the bag down once the chanter has been quiet long enough.
+
+        Offline this is `part_break_s`, a gap in a score the renderer can see
+        the far side of. Live there is no far side, so the same number is spent
+        as a HOLD: the drones stay up through a rest and stop only when the
+        piper has plainly stopped playing. Without it every gap between two
+        notes would cork and re-sound three drones.
+        """
+        if not self.drone_quiet:
+            return
+        for pid, (ch, when, hold) in list(self.drone_quiet.items()):
+            if n0 - when < hold:
+                continue
+            del self.drone_quiet[pid]
+            for k in [k for k in list(self.slab.live)
+                      if k[0] == pid and k[3] == self.DRONE_SLOT]:
+                self.slab.release(k, n0)
+
     def _note_off(self, part, ch, note, n0):
         self._amp_touch(part)
+        if part.bank.drone_wheel:
+            # Arm the hold rather than release: this key may be the middle of a
+            # phrase. _drone_reap decides, part_break_s later.
+            self.slab.release((part.pid, ch, note, None), n0)
+            if not self._chanting(part, ch):
+                self.drone_quiet[part.pid] = (
+                    ch, n0, int(part.bank.part_break_s * self.rate))
+            return
         if part.organ:
             for k in [k for k in list(self.slab.live)
                       if k[0] == part.pid and k[1] == ch and k[2] == note]:
@@ -1847,9 +1984,16 @@ class Live:
         mod wheel moves and no change in the sound, because the products never
         lived long enough to sound. The amplifier's lifetime is its parents',
         and _amp_touch is what keeps it honest.
+
+        AND NOT THE BAGPIPE'S DRONES, for exactly the same reason and caught
+        exactly the same way. A drone belongs to the PART, so no key is ever
+        down for it -- and it was stamped, swept one block later, and rendered
+        43 dB under the chanter instead of 14. It sounded like a faint buzz and
+        measured like one. Its lifetime is the phrase's, and _drone_reap is
+        what keeps it honest.
         """
         for k in [k for k in list(self.slab.live)
-                  if k[3] != "amp"
+                  if k[3] not in ("amp", self.DRONE_SLOT)
                   and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
                   and not self.slab.oneshot.get(k)]:
@@ -1961,6 +2105,7 @@ class Live:
         try:
             self.apply(n0)
             self.sweep(n0)
+            self._drone_reap(n0)
             self.slab.reap(n0)
             if self.slab.tr_on.any():
                 # ONE RATE, from an absolute clock, so a held chord and a note
@@ -3651,6 +3796,101 @@ def selftest():
           and _eth[109].part_break_s > 0.0,
           "  (rendered: the drone holds through a detached line, and stops "
           "dead through a %.0f s rest)" % _eth[109].part_break_s)
+
+    # ---- AND THE SAME THING LIVE, which it was not doing ---------------------
+    # Ben, playing it: "Live bagpipe doesn't do the mod control over drones. It
+    # does a vibrato." It did. live.py knew nothing about `drone_wheel`, so the
+    # bagpipe fell through to the catch-all CC1 branch and got 35 cents of
+    # vibrato -- on the one instrument in the bank that cannot have any, since a
+    # bag under constant pressure is the entire point of the machine. And the
+    # drones themselves were baked into every note's template, so a held line
+    # stacked three of them per note.
+    lvbp = Live(program=109, rate=48000, frames=128, verbose=False); lvbp.warm()
+    _bpb = lvbp.parts[0].bank
+    check("the live bagpipe knows it has drones, and keeps them out of the note",
+          _bpb.drone_wheel and len(_bpb.drone_hz) == 3
+          and not _bpb.detune_wheel,
+          "  (%d drones, %d template axis positions)"
+          % (len(_bpb.drone_hz), len(_bpb.speeds)))
+    # THE CHANTER TEMPLATE IS THE CHANTER. If a drone were baked in, the
+    # template for a high note would carry partials down at 110 and 220 Hz.
+    _nf = np.asarray(_bpb.get(74, 100, _bpb.leslie_default)["nf"])
+    check("...so a chanter note carries no 220 Hz drone of its own",
+          float(_nf.min()) > 300.0,
+          "  (lowest partial %.0f Hz on a written D5, well above the drones)"
+          % float(_nf.min()))
+
+    def _bp_drones():
+        return sorted(k[2] for k in lvbp.slab.live if k[3] == lvbp.DRONE_SLOT)
+
+    def _bp_cc1(v, n):
+        lvbp.on_midi(mido.Message("control_change", channel=0, control=1, value=v))
+        lvbp.apply(n)
+
+    # THE WHEEL IS THE CORK, live and offline at the same places.
+    lvbp.on_midi(mido.Message("note_on", channel=0, note=74, velocity=100))
+    lvbp.apply(0)
+    _live_counts = [len(_bp_drones())]
+    for _v in (0, 42, 85, 127):
+        _bp_cc1(_v, 0)
+        _live_counts.append(len(_bp_drones()))
+    check("...and live, CC1 corks them exactly where the file does",
+          _live_counts == [3, 0, 1, 2, 3],
+          "  (3 with no wheel, then %s at CC1 0/42/85/127)"
+          % "/".join(str(_c) for _c in _live_counts[1:]))
+    # ...AND IT IS NOT A VIBRATO. The bug, asserted directly: after all that
+    # wheel movement, nothing on this channel may have picked up a depth.
+    check("...and moving the wheel put no vibrato on the chanter at all",
+          lvbp.mod.get(0, 0.0) == 0.0 and lvbp.modw.get(0, 0.0) == 0.0
+          and float(np.abs(lvbp.slab.a["vd"][lvbp.slab.busy]).max()
+                    if lvbp.slab.busy.any() else 0.0) < 1e-9,
+          "  (a bag under constant pressure cannot waver, and now does not)")
+    # AT THE FILE'S OWN PITCHES, to the Hz. A bagpipe is not on an equal
+    # tuner -- measured, this voice puts MIDI 57 at 207.4 Hz, a semitone under
+    # A3 -- so picking the nearest key and stopping would have left every live
+    # drone 102 cents below the one the renderer writes. The correction is read
+    # off the template's own fundamental, which is also what puts the two
+    # tenors three cents apart when they land on the same key.
+    _dr_f = sorted(float(lvbp.slab.a["om"][lvbp.slab.live[_k]].min())
+                   * lvbp.rate / (2.0 * _math.pi)
+                   for _k in lvbp.slab.live if _k[3] == lvbp.DRONE_SLOT)
+    _want_f = sorted(_bpb.drone_hz)
+    check("...at the file's own drone pitches, not the nearest key's",
+          len(_dr_f) == 3
+          and max(abs(a / b - 1.0) for a, b in zip(_dr_f, _want_f)) < 1e-6,
+          "  (%s Hz against the file's %s)"
+          % (", ".join("%.3f" % _x for _x in _dr_f),
+             ", ".join("%.3f" % _x for _x in _want_f)))
+    check("...and the two tenors are still three cents apart, which is the beat",
+          1.0 < 1200 * _math.log2(_dr_f[2] / _dr_f[1]) < 6.0,
+          "  (%.1f cents: one beat every %.1f s)"
+          % (1200 * _math.log2(_dr_f[2] / _dr_f[1]),
+             1.0 / max(abs(_dr_f[2] - _dr_f[1]), 1e-9)))
+    # SWEEP MUST NOT TAKE THEM. A drone belongs to the part, so no key is ever
+    # down for it -- and sweep releases exactly that. It was stamped, swept one
+    # block later, and rendered 43 dB under the chanter where it belongs at 14.
+    # Same failure as the amplifier's, whose exemption is two lines above it.
+    lvbp.sweep(0)
+    check("...and the block sweep leaves them alone, as it does the amplifier",
+          len([_k for _k in lvbp.slab.live if _k[3] == lvbp.DRONE_SLOT]) == 3,
+          "  (a part-level voice has no key down, and sweep looks for one)")
+    # A DRONE SPANS THE PHRASE, LIVE TOO, and live has no far side of the rest
+    # to look at -- so part_break_s is spent as a HOLD instead. The drones stay
+    # up through a gap between notes and are let down only once the piper has
+    # plainly stopped.
+    lvbp.on_midi(mido.Message("note_off", channel=0, note=74, velocity=0))
+    lvbp.apply(0)
+    _held = len(_bp_drones())
+    lvbp._drone_reap(int(0.5 * lvbp.rate))
+    _short = len(_bp_drones())
+    lvbp._drone_reap(int(3.0 * lvbp.rate))
+    lvbp.slab.reap(int(3.0 * lvbp.rate) + 4 * lvbp.rate)
+    _long = len(_bp_drones())
+    check("...and the bag stays up through a rest, and is let down after one",
+          _held == 3 and _short == 3 and _long == 0,
+          "  (3 drones at note-off, 3 still at 0.5 s, none at %.0f s)"
+          % _bpb.part_break_s)
+    lvbp.renderer.close()
     # A CONE PASSES THE WHOLE SERIES. The shanai had been on the bagpipe's
     # class, which is ReedOrganProperties underneath and suppresses the evens.
     _sh = _eth[111](261.63, 0.0, 1.0, 1.0)
