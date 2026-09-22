@@ -67,6 +67,7 @@ from tonelib import (
     ContrabassProperties,
     tremolo_bow,
     pizzicato,
+    brass_blend,
     PizzicatoStringsProperties,
     HarpProperties,
     slow_bow,
@@ -403,6 +404,42 @@ BRASS_SPLIT = ((40, ConicalBrassProperties),       # below E2: tuba weight
                (128, TrumpetProperties))        # C4 and up
 BRASS_ENSEMBLE = {61}
 
+# HOW WIDE THE HANDOVER IS. A trumpet plays F#3 to D6 and a trombone E2 to F5,
+# so they overlap by two octaves and a section on a unison line has both of them
+# on it -- the hard split at a single note was not modelling a section at all.
+# Measured, one semitone across the old C4 boundary moved the spectrum 13.2 dB
+# on average and 23.2 at the sixth harmonic, where a semitone inside one
+# instrument moves it 1.5 to 5.6.
+#
+# Six semitones, twice the piano's string_crossfade_semitones, because the real
+# overlap here is two octaves rather than a voicing detail -- but not wider,
+# because a blend spread across the whole overlap would leave no note sounding
+# like either instrument, and the point of the split is that a trumpet and a
+# trombone are different.
+BRASS_CROSSFADE_SEMITONES = 6.0
+
+
+def _brass_body(note):
+    """The brass body for one note: one instrument, or a blend across a break."""
+    half = BRASS_CROSSFADE_SEMITONES / 2.0
+    prev = None
+    for hi, cls in BRASS_SPLIT:
+        if note < hi:
+            # `hi` is the note the NEXT instrument starts at, and `prev` the one
+            # this one took over from. Blend on whichever break is close.
+            if prev is not None and note < prev[0] + half:
+                t = 0.5 + (note - prev[0]) / (2.0 * half)
+                return brass_blend(prev[1], cls, t)
+            nxt = next((c for h, c in BRASS_SPLIT if h > hi), None)
+            if nxt is not None and note >= hi - half:
+                t = (note - (hi - half)) / (2.0 * half)
+                return brass_blend(cls, nxt, t)
+            return cls
+        prev = (hi, cls)
+    return BRASS_SPLIT[-1][1]
+
+
+
 # Programs that are a whole section rather than a named instrument.
 BOWED_ENSEMBLE = {44, 48, 50, 51}
 BOWED_ENSEMBLE_SLOW = {49}
@@ -496,9 +533,7 @@ def property_class_for_note(program, note):
     """
     prog = program & 0x7F
     if prog in BRASS_ENSEMBLE:
-        for hi, cls in BRASS_SPLIT:
-            if note < hi:
-                return brass_section(cls)
+        return brass_section(_brass_body(note))
     if prog in PIZZ_ENSEMBLE:
         for hi, cls in BOWED_SPLIT:
             if note < hi:

@@ -109,10 +109,10 @@ RATED = {
  45:(2,"pizzicato(): the MEASURED body of whichever instrument the register picks, plucked -- and the ring scales with register, 2.35 s at E1 to 0.42 at E5"),
  46:(2,"Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings"),
  47:(2,"analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set"),
- 48:(1,"the generic bowed string"),
+ 48:(3,"four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section; the ensemble treatment is theory"),
  49:(2,"its own slow-bowed class"),
- 50:(1,"the generic bowed string"),
- 51:(1,"as 50"),
+ 50:(2,"not a synth string at all -- it borrows 48's measured bodies; its own voice is the honest fix"),
+ 51:(2,"as 50"),
  52:(3,"vocal tract and formants; Ben's ear on the consonant balance"),
  53:(3,"as 52"),
  54:(2,"its own class, theory"),
@@ -122,7 +122,7 @@ RATED = {
  58:(4,"Iowa tuba"),
  59:(2,"its own class; the mute is theory"),
  60:(4,"Iowa horn, re-measured across four registers and pp/mf/ff"),
- 61:(1,"the trombone stands in for the whole section"),
+ 61:(3,"brass_section over three MEASURED bodies (Iowa trumpet/trombone/tuba), five players each, crossfaded across the range handovers -- the hard break moved the spectrum 13.2 dB in one semitone and now moves 2.7"),
  62:(1,"the generic brass base"),
  63:(1,"as 62"),
  64:(4,"Iowa soprano sax"),
@@ -236,6 +236,39 @@ LEVEL = {0:"nothing", 1:"general class", 2:"specific, theory",
          3:"specific, theory + ear", 4:"specific, reference audio"}
 
 
+def _class_name(p):
+    """What program p actually renders as -- asked of the ROUTER, not the map.
+
+    This column used to read `patch_map.property_class_for_program`, which is
+    the no-note FALLBACK. Several programs are a FAMILY and are routed per note:
+    the bowed and pizzicato ensembles, the brass section, and the solo winds
+    whose bottom octave is a different instrument. For all of those the fallback
+    is one member of the family, so the doc reported GM 61 as `Trombone` and
+    called it a 1 -- "the trombone stands in for the whole section" -- when the
+    code had routed it to trumpet, trombone and tuba sections for some time.
+
+    The same mistake GM 32 and GM 44 both punished in the renderer, made here in
+    the thing that is supposed to report on it. Ask the router.
+    """
+    # Probe every band a split can carve: BOWED_SPLIT breaks at 36/48/60 and
+    # BRASS_SPLIT at 40/60, so sampling only low/middle/high missed the viola
+    # and the trombone and reported a four-way split as a two-way one.
+    names = []
+    for c in (patch_map.property_class_for_note(p, n)
+              for n in (30, 38, 44, 54, 64, 84)):
+        n = c.__name__.replace("Properties", "")
+        # A blended or sectioned class is named for what it is made of.
+        for suffix in ("Section", "Tremolo", "Pizz"):
+            n = n.replace(suffix, "")
+        if "To" in n:                      # a crossfade sits between two
+            n = n.split("To")[0]
+        if n and n not in names:
+            names.append(n)
+    if len(names) == 1:
+        return names[0]
+    return "/".join(names) + " by register"
+
+
 def percussion_table():
     """Channel 10. A separate specification from the 128 programs, and the place
     where the reference corpus divides most sharply."""
@@ -305,7 +338,7 @@ def main(argv):
         L.append("| # | patch | class | | notes |")
         L.append("|---|---|---|---|---|")
         for p in range(start, start + 8):
-            cls = patch_map.property_class_for_program(p).__name__
+            cls = _class_name(p)
             r, note = RATED[p]
             L.append("| %d | %s | `%s` | **%d** | %s |"
                      % (p, GM[p], cls.replace("Properties", ""), r, note))

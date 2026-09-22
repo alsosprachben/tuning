@@ -3892,3 +3892,79 @@ the bowed ensemble spans 8.9: flatter than what was already shipping. And a
 second probe, timing each note of a walking line, was confounded because the
 notes are 0.5 s apart and the low ones ring for over 2 -- so every window held
 the previous note's tail. The isolated-note table above is the honest one.
+
+## GM 61 Brass Section: the doc was wrong, and the handover was a seam
+
+**THE COVERAGE DOC UNDERSTATED IT, AND THE BUG WAS IN THE DOC.** GM 61 was
+listed as class `Trombone`, rated **1**, "the trombone stands in for the whole
+section" -- while the code had been routing it per register into trumpet,
+trombone and tuba SECTIONS of five since `brass_section` was written.
+
+`examples/gm_coverage.py` asked `property_class_for_program`, which is the
+**no-note fallback**. Several programs are a family routed per note: the bowed
+and pizzicato ensembles, the brass section, and the solo winds whose bottom
+octave is a different instrument. For all of those the fallback is one member,
+so the doc reported a family as whichever member happened to be the default.
+The same mistake GM 32 and GM 44 both punished in the renderer, made here in the
+thing that reports on it. It now asks the router, probing six notes so a
+four-way split is not reported as a two-way one.
+
+Corrected along with it: GM 48 String Ensemble 1 said "the generic bowed string"
+while routing to four MEASURED Iowa bodies (now 3), and GM 50/51 Synth Strings
+said the same while quietly borrowing those same bodies (now 2, with the note
+that their own voice is the honest fix).
+
+### What was genuinely wrong: it handed over at a single note
+
+Measured, one semitone across the C4 break:
+
+| | mean \|delta\| | worst |
+|---|---|---|
+| B3 -> C4, across the break | **13.2 dB** | 23.2 dB at h6 |
+| D#2 -> E2, across the break | 10.2 dB | 19.8 dB at h3 |
+| a semitone INSIDE one instrument | 1.5 to 5.6 dB | |
+
+Two to three times the natural variation, at one note.
+
+**AND THE REASON IS NOT A TUNING DETAIL.** A trumpet plays F#3 to D6 and a
+trombone E2 to F5. They overlap by **two octaves**, and a section on a unison
+line at C4 has both of them on it. Handing over at a point was not modelling a
+section at all -- it was modelling a soloist who changes instrument mid-phrase.
+
+### The fix, and what it is not
+
+`brass_blend(lo, hi, t)` interpolates the two bodies over six semitones. Every
+difference between the brass classes is a scalar -- bell cutoff, bore corner,
+register centre, orders, dB, times -- so this is an interpolation of about
+twenty numbers. **Frequencies blend geometrically**: halfway between a conical
+390 Hz bell and a trumpet's 1600 is 790, not 995.
+
+After it, through the same C4 region:
+
+| | mean \|delta\| per semitone | worst |
+|---|---|---|
+| the old break, 59 -> 60 | **2.7 dB** (was 13.2) | 9.8 (was 23.2) |
+| the whole handover region | 4.0 dB | 13.1 |
+
+which is inside the 1.5-5.6 dB a semitone moves within one instrument. The seam
+is no longer distinguishable from ordinary note-to-note variation.
+
+**WHAT THIS IS NOT.** Blending two bodies' PARAMETERS is not summing two
+sections' outputs. The honest version is partials from both classes on one
+note, which the renderer can only do today through the organ's registration
+path -- and that would drag a swell box and a CC11 mask onto a trumpet. This is
+the piano's answer instead: it fades an added string in across its break because
+"a real piano is voiced so the crossings are seamless". Same argument, same
+shape of fix, and it is a crossfade of the colour rather than of the ensemble.
+
+Six semitones and not the full two-octave overlap, deliberately: a blend spread
+across the whole overlap would leave no note sounding like either instrument,
+which is the opposite failure. The ends are still a trumpet and a tuba.
+
+### Rated 3
+
+Three MEASURED bodies (Iowa trumpet, trombone, tuba, all rated 4 in their own
+right), five players each, with the handover measured on rendered audio. The
+section treatment itself -- how many players, how far apart, how much vibrato --
+is argued rather than fitted, and no recording of a section was used, so it is
+not a 4.

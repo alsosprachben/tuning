@@ -5196,6 +5196,72 @@ class HornProperties(ConicalBrassProperties):
 _BRASS_SECTION = {}
 
 
+_BRASS_BLEND = {}
+
+# Which of a brass class's numbers are FREQUENCIES. A filter corner interpolates
+# in the log domain -- halfway between a trombone's 1073 Hz bell and a trumpet's
+# 1600 is 1310, not 1337, and for wider gaps the difference is large (a conical
+# 390 against a trumpet 1600 is 790 geometrically and 995 linearly). Everything
+# else -- orders, dB, times, fractions -- is linear.
+_BRASS_LOG = ("bell_cutoff_hz", "bore_corner_hz", "register_center_hz",
+              "initial_gain")
+
+
+def brass_blend(lo, hi, t):
+    """A body t of the way from `lo` to `hi`. Cached per (lo, hi, rounded t).
+
+    THE SECTION IS MIXED, and that is the point rather than a smoothing trick.
+    GM 61 handed over from trombones to trumpets at a single note, so one
+    semitone changed the spectrum by 13.2 dB on average and 23.2 at the sixth
+    harmonic -- against 1.5 to 5.6 dB for a semitone step inside one instrument.
+    Measured, the seam was two to three times the natural variation.
+
+    A real brass section does not hand over at a point. A trumpet plays F#3 to
+    D6 and a trombone E2 to F5, so they overlap by two octaves, and a section on
+    a unison line at C4 has both of them on it. What the hard split modelled was
+    not a section at all.
+
+    WHAT THIS IS NOT. Blending the two bodies' PARAMETERS is not the same as
+    summing two sections' outputs -- the honest version is partials from both
+    classes on one note, which the renderer can only do today through the organ's
+    registration path, and that would drag a swell box and a CC11 mask onto a
+    trumpet. This is the piano's answer instead: `string_crescendo_semitones`
+    fades an added string in across its break because "a real piano is voiced so
+    the crossings are seamless". Same argument, same shape of fix, and it is a
+    crossfade of the colour rather than of the ensemble.
+    """
+    key = (lo, hi, round(float(t), 3))
+    got = _BRASS_BLEND.get(key)
+    if got is not None:
+        return got
+    t = max(0.0, min(1.0, float(t)))
+    body = {}
+    for k in dir(lo):
+        if k.startswith("_"):
+            continue
+        a = getattr(lo, k, None)
+        b = getattr(hi, k, None)
+        if not isinstance(a, (int, float)) or isinstance(a, bool):
+            continue
+        if not isinstance(b, (int, float)) or isinstance(b, bool):
+            continue
+        if a == b:
+            continue
+        if k in _BRASS_LOG and a > 0.0 and b > 0.0:
+            v = _exp(_log(a) + (_log(b) - _log(a)) * t)
+        else:
+            v = a + (b - a) * t
+        body[k] = type(a)(round(v)) if isinstance(a, int) else v
+    body["__doc__"] = ("%s blended %.0f%% toward %s, across the section's range "
+                       "handover." % (lo.__name__, 100 * t, hi.__name__))
+    got = type("%sTo%s%02dProperties"
+               % (lo.__name__.replace("Properties", ""),
+                  hi.__name__.replace("Properties", ""), round(t * 100)),
+               (lo,), body)
+    _BRASS_BLEND[key] = got
+    return got
+
+
 def brass_section(cls):
     """One brass instrument, played by five of them.
 

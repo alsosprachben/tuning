@@ -3340,6 +3340,52 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------------- the brass section
+    import patch_map as _PMb
+    # GM 61 handed over from one instrument to the next at a SINGLE NOTE, so one
+    # semitone across the C4 break moved the spectrum 13.2 dB on average and
+    # 23.2 at the sixth harmonic, where a semitone inside one instrument moves
+    # it 1.5 to 5.6. A real trumpet plays F#3-D6 and a trombone E2-F5: they
+    # overlap by two octaves and a section has both on a unison line, so the
+    # hard split was not modelling a section at all.
+    _b = [_PMb.property_class_for_note(61, _n) for _n in range(54, 68)]
+    check("the brass section hands over gradually, not at one note",
+          len({_c.__name__ for _c in _b}) >= 6,
+          "  (%d distinct bodies across the C4 handover, not 2)"
+          % len({_c.__name__ for _c in _b}))
+    # AND IT REALLY IS A BLEND, moving monotonically from one body to the other.
+    # A crossfade that is not monotonic is a wobble, not a handover.
+    _bells = [_PMb.property_class_for_note(61, _n).bell_cutoff_hz
+              for _n in range(56, 64)]
+    check("...and the body moves monotonically from trombone to trumpet",
+          all(_bells[_i] <= _bells[_i + 1] + 1e-9 for _i in range(len(_bells) - 1))
+          and _bells[-1] > _bells[0],
+          "  (bell cutoff %.0f -> %.0f Hz over the handover)"
+          % (_bells[0], _bells[-1]))
+    # BOTH BREAKS, not just the one that was looked at.
+    _lo = [_PMb.property_class_for_note(61, _n).__name__ for _n in range(34, 47)]
+    check("...at the lower break too, not only the one that was measured",
+          len(set(_lo)) >= 6,
+          "  (%d distinct bodies across the E2 handover)" % len(set(_lo)))
+    # AND THE ENDS ARE STILL THE INSTRUMENTS THEMSELVES. A blend everywhere
+    # would leave no note sounding like a trumpet or a trombone, which is the
+    # opposite failure and the reason the crossfade is six semitones and not
+    # the full two-octave overlap.
+    check("...while the ends are still a trumpet and a tuba",
+          issubclass(_PMb.property_class_for_note(61, 84), _T.TrumpetProperties)
+          and issubclass(_PMb.property_class_for_note(61, 24),
+                         _T.ConicalBrassProperties),
+          "  (%.0f semitones of blend, not the whole overlap)"
+          % _PMb.BRASS_CROSSFADE_SEMITONES)
+    # A FREQUENCY BLENDS IN THE LOG DOMAIN. Halfway between a conical 390 Hz
+    # bell and a trumpet's 1600 is 790, not 995.
+    _mid = _T.brass_blend(_T.ConicalBrassProperties, _T.TrumpetProperties, 0.5)
+    _geo = (390.0 * 1600.0) ** 0.5
+    check("...and a filter corner blends geometrically, not linearly",
+          abs(_mid.bell_cutoff_hz - _geo) < 1.0,
+          "  (%.0f Hz, where a linear blend would give %.0f)"
+          % (_mid.bell_cutoff_hz, 0.5 * (390.0 + 1600.0)))
+
     # ------------------------------------------------- tremolo, pizz, harp
     import patch_map as _PMs
     # GM 45 and 46 were BOTH PluckedStringProperties, which has no `formants`
