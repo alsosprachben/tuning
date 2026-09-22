@@ -2080,6 +2080,24 @@ class SynthProperties:
     scale_tonic_note = None     # MIDI note of the instrument's tonic
     scale_cents = None          # {semitones from tonic: cents from tonic}
 
+    # CC64. Does this voice have anything for a damper pedal to lift?
+    #
+    # THE QUESTION IS THE EXCITATION, NOT THE KEYBOARD. A pedal is only
+    # meaningful on a voice that would still be ringing when the key comes up:
+    # a struck or plucked string rings, and the felt is the only thing that
+    # stops it, so lifting the felt is the whole effect. A DRIVEN voice -- a
+    # bowed string, a blown pipe, an organ rank -- stops when the excitation
+    # stops, and there is no damper anywhere on the instrument to lift. CC64 on
+    # such a channel is a sequencer's habit, and honouring it holds a violin
+    # note at full bow with nobody bowing it. (Measured: A-Team.mid pedals its
+    # bowed-string channel six times.)
+    #
+    # A SYNTHESISER IS THE OTHER CASE and keeps it. There is no damper there
+    # either, but a pedal on a synth holds the GATE, which is a real control a
+    # player really has and a sequencer really means. So the default is True
+    # and the refusals are the acoustic driven families, named one by one.
+    damper_pedal = True
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):
         # effort must be known BEFORE attack_dampening is computed below, which
@@ -2676,6 +2694,8 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     (strike_fills_with_force = False). That fixed force is also why the instrument
     has no dynamics, which is what makes it a REGISTERED instrument.
     """
+    # The dampers are on the jacks and there is no pedal to lift them.
+    damper_pedal = False
     # NO TOUCH. The key trips a jack; the quill plucks with a force the jack
     # decides, not the player. This is the textbook fact about the instrument
     # and the reason it has two manuals and a registration instead of a
@@ -3997,6 +4017,13 @@ class WurlitzerProperties(ElectricPianoProperties):
 
 
 class StoppedPipeProperties(SynthProperties):
+    # A DRIVEN AIR COLUMN HAS NO DAMPER: the tone stops when the wind does, and
+    # there is nothing anywhere on the instrument for a pedal to lift. Every
+    # pipe, reed, brass and bowed voice in the bank inherits this. The
+    # synthesisers that borrow this class's spectrum take it back below,
+    # because a pedal on a synth holds the GATE rather than lifting a felt.
+    damper_pedal = False
+
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -4091,6 +4118,9 @@ class TonewheelProperties(SynthProperties):
 
     Only nine ratios exist, and the seventh harmonic is not among them.
     """
+    # A tonewheel runs off a synchronous motor; the key is a switch and the
+    # pedal on the console is a swell, not a damper.
+    damper_pedal = False
     # NO TOUCH. A tonewheel organ's key is a set of switches closing onto nine
     # busbars: it connects the drawbars' wheels to the output and does nothing
     # else. How fast the key falls changes when the contacts close -- the key
@@ -4596,6 +4626,8 @@ class FreeReedProperties(SynthProperties):
     rough -6 dB/octave; the three numbers are chosen to land near it with
     plausible ripple, not derived from any one instrument's slot geometry.
     """
+    # A free reed speaks while the bellows push and stops when they stop.
+    damper_pedal = False
     # NO TOUCH AT THE KEY. A harmonium or accordion key opens a pallet and the
     # BELLOWS set the loudness -- which is why an accordionist's expression is
     # in their left arm. channel_volume still applies and is the right home for
@@ -7826,6 +7858,9 @@ class SawtoothSynthProperties(BowedStringProperties):
     flatly at odds with this family being exact. A docstring is not a test,
     which is why there is now a check for it in live.py's selftest.
     """
+    # ...AND A SYNTHESISER TAKES IT BACK. This sits under the bowed string for
+    # its spectrum, not for its dampers: a pedal on a synth holds the gate.
+    damper_pedal = True
     odd_only = False
     # ONE oscillator. Not a section, and not an ensemble.
     section_players = 1
@@ -8039,6 +8074,7 @@ class SynthPadProperties(FormantBody, SawtoothSynthProperties):
     General MIDI specifies none of this. Level 1 is a name list; the readings
     are the Roland SC-55's, which is what the files in the wild expect.
     """
+    damper_pedal = True         # the gate, not a felt -- see SynthProperties
     max_harmonic = 40
 
     # The swell. Long, and fixed in seconds: a pad's attack owes nothing to the
@@ -8651,6 +8687,7 @@ class SynthBassProperties(FormantBody, SawtoothSynthProperties):
     it has no pluck comb, no string body, no fret, and its spectrum falls
     monotonically from a waveform rather than being shaped by a box.
     """
+    damper_pedal = True         # the gate, not a felt -- see SynthProperties
     max_harmonic = 40
 
     # The pluck: the filter shuts fast while the amplitude holds.

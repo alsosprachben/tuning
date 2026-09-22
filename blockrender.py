@@ -669,6 +669,42 @@ def prepare(path, tuner='hybrid440'):
     # Only the RELEASE is clipped, never the note: the player has already lifted
     # the key, so what is cut is a tail the instrument would not have sustained
     # through a re-pluck anyway.
+    # THE DAMPER PEDAL. CC64 >= 64 lifts the dampers off every string, so a key
+    # released while it is down goes on ringing until the pedal comes up. That
+    # is a note-LENGTH fact, which is why it is resolved here rather than in
+    # parse(): _next_same below and _PHRASE_CH further down are both computed
+    # from the file's own note-offs, and they mean different things -- a phrase
+    # is when a piper lets the bag down, not when a pianist lifts a foot.
+    #
+    # ccs already carries every (t, control, value), so this costs no parsing.
+    _PED_CH = {}          # channel -> [(down_sec, up_sec)], sorted and disjoint
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in sorted(_evs):
+            if _cc != 64:
+                continue
+            # 64 is the switch point GM specifies, and half-pedalling is real:
+            # ondine.mid writes 0/24/40/56/72/88/104/127. Anything under 64 is
+            # the damper on the string.
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))      # held down to the end of the file
+        if _segs:
+            _PED_CH[_c] = _segs
+
+    def _damper_falls(_c, _t):
+        """When the damper actually lands for a key released at _t."""
+        _segs = _PED_CH.get(_c)
+        if not _segs:
+            return _t
+        _i = _bisect.bisect_right(_segs, (_t, 1e18)) - 1
+        if _i >= 0 and _segs[_i][0] <= _t < _segs[_i][1]:
+            return _segs[_i][1]
+        return _t
+
     _next_same = {}
     _seen = {}
     for _n in sorted(notes, key=lambda e: -e[2]):
@@ -946,6 +982,38 @@ def prepare(path, tuner='hybrid440'):
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
             off = max(off, on + 8.0)
+        # THE PEDAL, between the two of them on purpose. After the one-shot
+        # extension, because a cymbal has no damper to lift and must not be
+        # pedalled; before the choke override below, so a closed hi-hat still
+        # stops an open one whatever the foot is doing; and before dur = off-on
+        # a few lines down, so the longer note also gets the larger release,
+        # fade and chiff caps that follow from it.
+        #
+        # Nothing in the kernel changes: the two-stage decay is measured from
+        # note-on and is never reset at note-off, so a later noff simply lets
+        # the string's own decay run on under a lifted damper. Which is what
+        # actually happens.
+        _nx = _next_same.get(((ch, note), on))
+        if not getattr(pc, 'one_shot', False) and getattr(pc, 'damper_pedal', True):
+            _rel = _damper_falls(ch, off)
+            if _rel > off:
+                # ...AND NO LONGER THAN UNTIL THIS SAME STRING IS STRUCK AGAIN.
+                # Replaying a key drops the damper back onto that string
+                # whatever the pedal is doing -- there is only one string, and
+                # two copies of it do not sum, they BEAT. Measured on
+                # ondine.mid, 2658 of 4579 pedalled notes would otherwise run
+                # past their own next onset, so this is the common case and not
+                # an edge.
+                #
+                # The RETRIGGER_FADE margin is load-bearing. Clamp to exactly
+                # _nx and the guard below (`if _nx > off`) goes false, the
+                # release is never clipped, and the tail runs straight through
+                # the re-strike -- the same bug wearing a different hat. One
+                # steal-fade of margin keeps that guard true, so the existing
+                # clip fires and the tail lands exactly on the new attack.
+                if _nx is not None:
+                    _rel = min(_rel, max(off, _nx - RETRIGGER_FADE))
+                off = _rel
         # ...but an exclusive class OVERRIDES the ring-out: the point of a choke
         # is that the instrument is physically damped, so it stops even though
         # nothing about its own decay would have stopped it. Applied after the
@@ -982,7 +1050,7 @@ def prepare(path, tuner='hybrid440'):
         # notes in BWV 971 come in under 2, so the floor does real work. Where
         # it exceeds the gap the old note runs a few ms into the new one, which
         # is inaudible and is what a real damper does anyway: felt takes time.
-        _nx = _next_same.get(((ch, note), on))
+        # _nx was looked up above, before the pedal could move `off`.
         if _nx is not None and _nx > off:
             rel = min(rel, max(RETRIGGER_FADE, _nx - off)*SR)
         # chiff burst width: short/capped, decoupled from the slow speech fade

@@ -601,6 +601,21 @@ class Slab:
         next aftertouch message. And it takes a RATIO rather than an absolute
         gain, so a stream of CC7s cannot compound -- the caller remembers what
         it last applied, exactly as _one does for the drive step.
+
+        AND THERE ARE FOUR BASELINES, NOT ONE -- which is what this comment got
+        wrong when it was written a few hours ago. A Leslie, a tremolo and a
+        clavinet's rockers each capture their OWN copy of the amplitude
+        (ls_aL/ls_aR at 296, tr_aL/tr_aR at 387, cv_aL/cv_aR at 365) and then
+        ASSIGN a["aL"] from it on every block. So scaling only aL0 and a["aL"]
+        is erased within one block on exactly the voices that have a panel
+        effect: measured on program 16, CC11 127 -> 32 moved the note -23.9 dB
+        as it should, and one callback later it was back to +0.1. The existing
+        selftest passed only because it used the bagpipe, which has none of
+        them.
+
+        Unconditional, because an unarmed row's baseline is zero and scaling it
+        is a no-op -- and when that row is later armed, the capture reads an
+        a["aL"] that already carries the fader.
         """
         if not slots or ratio == 1.0:
             return
@@ -610,6 +625,12 @@ class Slab:
         self.aR0[idx] *= r
         self.a["aL"][idx] *= r
         self.a["aR"][idx] *= r
+        self.tr_aL[idx] *= r
+        self.tr_aR[idx] *= r
+        self.ls_aL[idx] *= r
+        self.ls_aR[idx] *= r
+        self.cv_aL[idx] *= r
+        self.cv_aR[idx] *= r
 
     def retune(self, slots, n, om_scale=None, vd=None, vrs=None):
         """Change a sounding partial's pitch or vibrato WITHOUT a click.
@@ -933,6 +954,11 @@ class Bank:
         # measured +24.1 dB from velocity 30 to 120 on a patch whose own class
         # says velocity does nothing.
         self.touch_sensitive = drums or bool(getattr(pc, "touch_sensitive", True))
+        # CC64: does this voice have anything for a pedal to lift? A struck or
+        # plucked string rings and the felt is what stops it; a bowed or blown
+        # one stops when the player does. Drums are one-shots and ignore
+        # note-off entirely, so the pedal cannot reach them either way.
+        self.damper_pedal = (not drums) and bool(getattr(pc, "damper_pedal", True))
         self.drone_wheel = (not drums) and bool(getattr(pc, "drone_wheel", False))
         # RATIOS OF THE TONIC, not frequencies. A drone is tuned to the
         # chanter before playing, so it has to follow the part's tuner: at
@@ -1644,7 +1670,13 @@ class Live:
             for part in parts:
                 if not part.matches(ch, msg.note):
                     continue
-                if self.pedal.get(ch, False) and not part.organ:
+                # ONE SOURCE OF TRUTH with the file path, which grew the same
+                # rule today. `not part.organ` was right and narrow: it caught
+                # the organs and the harpsichord (registerable, both) and left
+                # every bowed string and every blown pipe holding a pedalled
+                # note at full bow with nobody bowing it. See
+                # SynthProperties.damper_pedal.
+                if self.pedal.get(ch, False) and part.bank.damper_pedal:
                     # The key is up but the damper is not: the string keeps
                     # ringing until the pedal is lifted. Recorded so the
                     # stuck-note sweep does not mistake it for a lost note-off.
@@ -4146,6 +4178,44 @@ def selftest():
     _lv7.on_midi(mido.Message("control_change", channel=0, control=11, value=64))
     _lv7.apply(0)
     _a2 = _sum()
+    # ...AND ON EVERY VOICE, WHICH IT DID NOT. A Leslie, a tremolo and a
+    # clavinet's rockers each capture their own copy of the amplitude and then
+    # ASSIGN a["aL"] from it every block, so a fader that scaled only aL0 was
+    # erased within one block on exactly the voices with a panel effect.
+    # Measured on program 16 before the fix: CC11 127 -> 32 landed at -23.9 dB
+    # and one callback later read +0.1.
+    #
+    # LIKE FOR LIKE, which is the whole trick of this check: a tremolo is a
+    # time-varying gain, so the Rhodes really does move 4.08 dB over one block
+    # whatever the fader is doing. Comparing a swung note against an unswung
+    # one reads that as a 4 dB error. Both sides are therefore measured after
+    # the SAME number of blocks.
+    _fade = []
+    for _g, _lab, _arm in ((4, "Rhodes", True), (16, "Hammond", False),
+                           (7, "clavinet", True), (109, "bagpipe", False)):
+        _lv2 = []
+        for _cc in (127, 32):
+            _l = Live(program=_g, rate=48000, frames=128, verbose=False); _l.warm()
+            if _arm:
+                _l.on_midi(mido.Message("control_change", channel=0,
+                                        control=1, value=127))
+            _l.on_midi(mido.Message("control_change", channel=0,
+                                    control=11, value=_cc))
+            _l.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+            _l.apply(0)
+            _l.callback(None, 128, None, 0)
+            _ks = [_k for _k in _l.slab.live if _k[2] == 60]
+            _lv2.append(sum(float(np.abs(_l.slab.a["aL"][_l.slab.live[_k]]).sum())
+                            for _k in _ks))
+            _l.renderer.close()
+        _fade.append((_lab, 20 * _math.log10(max(_lv2[1], 1e-30)
+                                             / max(_lv2[0], 1e-30))))
+    _want = 20 * _math.log10((32 / 127.0) ** 2)
+    check("...and it survives a block on voices with a panel effect",
+          all(abs(_d - _want) < 0.2 for _l, _d in _fade),
+          "  (" + ", ".join("%s %+.1f" % _t for _t in _fade)
+          + " dB against %+.1f)" % _want)
+
     check("...and the swell reaches a note already sounding, without compounding",
           abs(20 * _math.log10(_a1 / _a0)
               - 20 * _math.log10((64 / 127.0) ** 2)) < 0.05
