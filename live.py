@@ -3340,6 +3340,59 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------- touch, and the lack of it
+    # Ben, playing live: "The harpsichord patch is touch sensitive."
+    #
+    # A harpsichord key trips a jack and the quill plucks with a force the jack
+    # decides, which is the textbook fact about the instrument and the reason it
+    # has two manuals and a registration instead of a crescendo. Measured across
+    # the corpus, 97% of harpsichord channels write a SINGLE velocity: the people
+    # who sequenced them knew too.
+    #
+    # THE COMMENT IN THE NOTE-ON PATH WAS TRUE AND INSUFFICIENT. It says a
+    # registerable voice ignores velocity, and the stamp does. But velocity also
+    # picks the BUCKET, and each bucket's template is built at its own velocity
+    # with attack_volume baked into the partial amplitudes -- so the harpsichord
+    # arrived 23 dB louder at velocity 120 than at 32 without the stamp ever
+    # looking at velocity. Checked here through the BANK, which is the path that
+    # actually broke, and not only through the class.
+    import patch_map as _PMt
+    _fixed = [(6, "harpsichord"), (16, "drawbar organ"), (19, "church organ"),
+              (20, "reed organ"), (21, "accordion"), (23, "tango accordion")]
+    _bad = []
+    for _g, _lab in _fixed:
+        _c = _PMt.property_class_for_note(_g, 60)
+        if _c.touch_sensitive:
+            _bad.append(_lab)
+    check("a key that trips a jack or opens a valve does not set the level",
+          not _bad,
+          "  (%d voices fixed-volume)" % len(_fixed) if not _bad
+          else "  (still touch-sensitive: %s)" % ", ".join(_bad))
+    # ...AND ONLY attack_volume IS NEUTRALISED. CC7 and CC11 are the channel,
+    # not the key, and they must still work -- an organ's swell box and an
+    # accordion's bellows are exactly that, so a fixed-volume patch that ignored
+    # them would be a worse model, not a purer one.
+    _hc = _PMt.property_class_for_note(6, 60)
+    _full = _hc(261.63, 0.0, 1.0, 1.0).gain
+    _soft_key = _hc(261.63, 0.0, (20 / 127.0) ** 2, 1.0).gain
+    _soft_cc = _hc(261.63, 0.0, 1.0, (20 / 127.0) ** 2).gain
+    check("...but channel volume still does, which is the swell and the bellows",
+          abs(_soft_key - _full) < 1e-12 and _soft_cc < 0.1 * _full,
+          "  (velocity 20 moves it %.2f dB, CC7 20 moves it %.1f)"
+          % (20.0 * math.log10(_soft_key / _full),
+             20.0 * math.log10(_soft_cc / _full)))
+    # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
+    # striking a string and is famously expressive; a harmonica has no key at
+    # all, so the player's breath is both the valve and the dynamic.
+    _touchy = [(0, "piano"), (7, "clavinet"), (22, "harmonica"), (56, "trumpet"),
+               (71, "clarinet")]
+    _lost = [_l for _g, _l in _touchy
+             if not _PMt.property_class_for_note(_g, 60).touch_sensitive]
+    check("...and everything that IS touch-sensitive still is",
+          not _lost,
+          "  (piano, clavinet, harmonica, trumpet, clarinet)" if not _lost
+          else "  (lost their touch: %s)" % ", ".join(_lost))
+
     # ------------------------------------------------------------ the pipes
     import patch_map as _PMp
     # 72-79 differ in three things: whether the tube is OPEN or CLOSED, how the

@@ -1967,6 +1967,22 @@ class SynthProperties:
     # piano sets it > 0 so the bass rings long and the treble decays fast.
     decay_register_slope = 0.0
 
+    # DOES THE KEY SET THE LOUDNESS? On most instruments, yes: how hard you
+    # strike, pluck or blow IS the dynamic. On some it does not and cannot --
+    # a harpsichord's key trips a jack and the quill plucks with a force the
+    # jack decides, which is exactly why the instrument has two manuals and a
+    # registration instead of a crescendo. An organ key opens a pallet valve
+    # and the wind pressure does the rest; a harmonium's and an accordion's
+    # loudness is in the bellows, not the keyboard.
+    #
+    # ONLY attack_volume IS NEUTRALISED, never channel_volume. Velocity is the
+    # KEY and CC7/CC11 are the CHANNEL, and they are separate factors in gain
+    # below -- so a fixed-volume patch still balances in a mix, still follows an
+    # expression pedal, and still swells. That is not a compromise to keep mix
+    # control: it is what the instrument does. CC11 on an organ IS the swell
+    # box, and on an accordion it is the bellows.
+    touch_sensitive = True
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):
         # effort must be known BEFORE attack_dampening is computed below, which
@@ -2072,9 +2088,12 @@ class SynthProperties:
 
         # attack_volume = per-note velocity gain, channel_volume = CC7*CC11
         # channel gain, both already squared to the MIDI (V/127)^2 law.
+        # touch_sensitive: a key that only trips a jack or opens a valve does not
+        # set the level. channel_volume is untouched -- see the note on the flag.
+        _touch = self.attack_volume if self.touch_sensitive else 1.0
         self.gain = (self.initial_gain * db_amplitude(self.octave_gain * self.octave_position)
                      * db_amplitude(self.register_effort() + self.projection_db)
-                     * self.attack_volume * self.channel_volume)
+                     * _touch * self.channel_volume)
 
         self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4  # meters
         self.position_y = 0.2  # meters
@@ -2553,6 +2572,15 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     (strike_fills_with_force = False). That fixed force is also why the instrument
     has no dynamics, which is what makes it a REGISTERED instrument.
     """
+    # NO TOUCH. The key trips a jack; the quill plucks with a force the jack
+    # decides, not the player. This is the textbook fact about the instrument
+    # and the reason it has two manuals and a registration instead of a
+    # crescendo -- and the corpus agrees: 97% of harpsichord channels across
+    # 76 measured channels write a SINGLE velocity, because the people who
+    # sequenced them knew. channel_volume still applies, so a part still
+    # balances and still follows an expression pedal.
+    touch_sensitive = False
+
 
     # BALANCE-NORMALISED, and on the BASE so every rank gets it. This lived on
     # HarpsichordProperties alone, whose comment said it was safe because "these
@@ -3959,6 +3987,13 @@ class TonewheelProperties(SynthProperties):
 
     Only nine ratios exist, and the seventh harmonic is not among them.
     """
+    # NO TOUCH. A tonewheel organ's key is a set of switches closing onto nine
+    # busbars: it connects the drawbars' wheels to the output and does nothing
+    # else. How fast the key falls changes when the contacts close -- the key
+    # click, which this voice models separately -- and never how loud the note
+    # is. The expression PEDAL is the volume control, which is CC11.
+    touch_sensitive = False
+
     # NOT MEASURED. Sits between the flue and reed organ so the family balances
     # by ear until somebody puts a B-3 in front of a microphone.
     initial_gain = 0.00015
@@ -4230,6 +4265,12 @@ class OrganProperties(StoppedPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
+    # NO TOUCH. A pipe organ key opens a pallet valve. The pipe then speaks at
+    # whatever the wind pressure dictates, and pressing harder opens the same
+    # valve no further. Dynamics come from the stops and the swell box -- and
+    # CC11 IS the swell box, which still applies.
+    touch_sensitive = False
+
     # A PRINCIPAL IS DARKER THAN A REED, and that is most of what tells them
     # apart. OrganProperties sets 1.4 for the family, which measures -6.2 dB
     # per octave of harmonic number on a single D2 with the room switched off
@@ -4440,6 +4481,17 @@ class FreeReedProperties(SynthProperties):
     rough -6 dB/octave; the three numbers are chosen to land near it with
     plausible ripple, not derived from any one instrument's slot geometry.
     """
+    # NO TOUCH AT THE KEY. A harmonium or accordion key opens a pallet and the
+    # BELLOWS set the loudness -- which is why an accordionist's expression is
+    # in their left arm. channel_volume still applies and is the right home for
+    # it: CC11 on an accordion is the bellows.
+    #
+    # THE HARMONICA IS THE EXCEPTION and overrides this back to True. It has no
+    # keyboard at all: the player's breath is both the valve and the dynamic, so
+    # there is no mechanism standing between effort and loudness for the key to
+    # bypass. See HarmonicaProperties.
+    touch_sensitive = False
+
 
     # No pipe. Every one of these is the resonator's doing, and there isn't one.
     odd_only = False
@@ -4622,6 +4674,10 @@ class HarmonicaProperties(FormantBody, FreeReedProperties):
     One reed per note, so no banks and no musette: a harmonica's warble comes
     from the player, not from the tuning.
     """
+    # The one free reed a player blows directly: breath is the dynamic, and
+    # there is no key in between. See FreeReedProperties.
+    touch_sensitive = True
+
     # A cupped hand around a small instrument: a broad vocal-tract-like peak
     # low down and a bright one where the comb and the cup ring. Asserted from
     # the size of the cavity, not measured -- see sources.md.

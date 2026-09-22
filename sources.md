@@ -4134,3 +4134,83 @@ the tuned pitch.
 All four balance-normalised against the **measured flute** (GM 73) on the same
 passage in the same room -- this family's one reference-audio member, and so the
 only anchor in it that answers to something outside the model.
+
+## Touch, and the instruments that have none
+
+Ben, playing live: *"The harpsichord patch is touch sensitive."*
+
+It was, by 23 dB. A harpsichord key trips a jack and the quill plucks with a
+force the JACK decides, not the player -- which is the textbook fact about the
+instrument and the reason it has two manuals and a registration instead of a
+crescendo. The corpus agrees: measured across 76 harpsichord channels,
+**97% write a single velocity**. The people who sequenced them knew.
+
+`touch_sensitive` (default True) now gates `attack_volume` in `gain`.
+
+### Only attack_volume, never channel_volume
+
+Ben asked exactly the right question: *"Do patches that are fixed volume still
+adjust with channel volume? Just attack volume is fixed?"* Yes, and that split
+is the whole design rather than a compromise to keep mix control:
+
+| | | |
+|---|---|---|
+| `attack_volume` | `(velocity/127)^2` | the **key** -- neutralised |
+| `channel_volume` | `(CC7 * CC11)^2` | the **channel** -- untouched |
+
+They are separate factors in `gain`, so a fixed-volume patch still balances in a
+mix, still follows an expression pedal and still swells. And that is what the
+instruments do: **CC11 on an organ IS the swell box, and on an accordion it is
+the bellows.** A model that ignored those would be worse, not purer.
+
+Measured on the harpsichord: velocity 20 moves it 0.00 dB, CC7 20 moves it
+-32.1 dB.
+
+### Which voices, and the one exception
+
+Fixed: harpsichord (and the lute, upper-manual and Ross variants), the three
+tonewheel organs, the pipe organ, the harmonium, and both accordions.
+
+**The harmonica is the exception and stays touch-sensitive.** It is the one free
+reed a player blows directly: there is no keyboard at all, so the breath is both
+the valve and the dynamic and there is no mechanism standing between effort and
+loudness for a key to bypass. The clavinet stays too -- a tangent striking a
+string, and famously expressive.
+
+The flag had to go on the right classes: `OrganProperties` is the base of
+**`BrassProperties`**, and `ReedOrganProperties` of the **clarinets**, so
+flagging either would have silenced a trumpet's or a clarinet's dynamics. It
+sits on `TonewheelProperties`, `FlueOrganProperties`, `HarpsiBase` and
+`FreeReedProperties` instead.
+
+### The live path: a comment that was true and insufficient
+
+The note-on path already said, of a registerable voice, *"A pipe organ has no
+touch: a key is open or shut, and the wind does the rest. Velocity is
+deliberately ignored."* And the stamp does ignore it.
+
+**But velocity also picks the BUCKET.** Each bucket's template is built by
+`_raw_template(note, vel)` at its own velocity, with `attack_volume` baked into
+the partial amplitudes -- so the harpsichord arrived 23 dB louder at velocity 120
+than at 32 without the stamp ever looking at velocity. Measured before and after:
+
+| | buckets | template, vel 32 -> 120 |
+|---|---|---|
+| before | 8 | **+22.7 dB** |
+| after | 1 | +0.0 dB |
+
+Ignoring a quantity downstream does not help if it chose the thing you are
+stamping. The check is written through the **bank**, which is the path that
+actually broke, not only through the class.
+
+Same shape as the sawtooth's docstring claiming a section was switched off when
+it was not: a comment states an intent, and only a test states a behaviour.
+
+### A side effect worth having
+
+Collapsing to one bucket is 8x fewer templates for those voices. The church
+organ still builds 8, because its chiff retains a small velocity response -- its
+level moves only 0.5 dB and its ranks 1.1 across the whole velocity range, so it
+was effectively fixed already, but it is paying for eight templates to carry
+about a decibel. Left alone: the organ's attack is ear-tuned and this is a
+performance note, not a defect.
