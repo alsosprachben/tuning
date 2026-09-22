@@ -154,7 +154,7 @@ RATED = {
  106:(2,"the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch"),
  107:(2,"long slack silk over a light WOODEN box: the banjo's opposite in every way. Movable bridges mean uniform, very low inharmonicity across the compass"),
  108:(2,"a plucked CANTILEVER, 1 : 6.267 : 17.55 -- not the mallet base's struck bar. The Rhodes tine's ratios, undamped, so the overtones ping above the note"),
- 109:(2,"the DRONES: fixed at 220/110 Hz whatever the melody does, which no other voice here can do. They restart per note, and sources.md says why"),
+ 109:(3,"the DRONES: two tenors and a bass at a FIXED 220/220.4/110 Hz whatever the melody does, which no other voice here can do. They belong to the PART -- sounding once across a played phrase, not restarting per note -- and CC1 corks them one at a time, 0 to 3, because a piper corks rather than turns down. Not touch sensitive: a bag holds one pressure, so CC7/CC11 are the whole dynamic"),
  110:(4,"the measured violin, given solo treatment"),
  111:(2,"a CONE, so the even harmonics the chanter's class suppressed come back -- a shawm is an oboe's geometry, not a bagpipe's"),
  112:(4,"Iowa crotales, 25 pitches"),

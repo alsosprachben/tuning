@@ -24,8 +24,8 @@ voices sit at 2 and say so.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 74 | 58% |
-| 3 specific, theory + ear | 25 | 20% |
+| 2 specific, theory | 73 | 57% |
+| 3 specific, theory + ear | 26 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
@@ -275,7 +275,7 @@ splits almost exactly along that line.
 | 106 | Shamisen | `Shamisen` | **2** | the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch |
 | 107 | Koto | `Koto` | **2** | long slack silk over a light WOODEN box: the banjo's opposite in every way. Movable bridges mean uniform, very low inharmonicity across the compass |
 | 108 | Kalimba | `Kalimba` | **2** | a plucked CANTILEVER, 1 : 6.267 : 17.55 -- not the mallet base's struck bar. The Rhodes tine's ratios, undamped, so the overtones ping above the note |
-| 109 | Bag pipe | `Bagpipe` | **2** | the DRONES: fixed at 220/110 Hz whatever the melody does, which no other voice here can do. They restart per note, and sources.md says why |
+| 109 | Bag pipe | `Bagpipe` | **3** | the DRONES: two tenors and a bass at a FIXED 220/220.4/110 Hz whatever the melody does, which no other voice here can do. They belong to the PART -- sounding once across a played phrase, not restarting per note -- and CC1 corks them one at a time, 0 to 3, because a piper corks rather than turns down. Not touch sensitive: a bag holds one pressure, so CC7/CC11 are the whole dynamic |
 | 110 | Fiddle | `SoloViolin` | **4** | the measured violin, given solo treatment |
 | 111 | Shanai | `Shanai` | **2** | a CONE, so the even harmonics the chanter's class suppressed come back -- a shawm is an oboe's geometry, not a bagpipe's |
 
