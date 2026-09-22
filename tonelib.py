@@ -7683,6 +7683,250 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
         return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
 
 
+class SynthPadProperties(FormantBody, SawtoothSynthProperties):
+    """GM 88-95, the pads. One BowedStringProperties served all eight.
+
+    Together with the effects at 96-103 that was sixteen programs on one voice,
+    and the largest single gap in the bank.
+
+    WHAT MAKES A PAD A PAD is the swell: a long attack, a filter that opens with
+    it, and a sustain that holds. Everything here has that, and it is why none
+    of them is a lead. What separates the eight from each other is not a tweak
+    to the same sound -- General MIDI's own names point at eight different
+    MECHANISMS, and each subclass below gets one it does not share:
+
+      88 new age    a glassy bell, slightly stretched -- not quite harmonic
+      89 warm       a low cutoff and a wide chorus, and nothing else
+      90 polysynth  the bright one, and the only pad with a fast enough front
+                    to play chords rhythmically
+      91 choir      VOCAL FORMANTS, from vowels.py's own table
+      92 bowed      a slow swell over a ringing body -- bowed glass
+      93 metallic   INHARMONIC partials: the only voice here whose overtones
+                    are not whole multiples, which is what metal means
+      94 halo       hollow: odd harmonics, with an airy formant high up
+      95 sweep      the filter sweep itself, far deeper than any other pad's
+
+    General MIDI specifies none of this. Level 1 is a name list; the readings
+    are the Roland SC-55's, which is what the files in the wild expect.
+    """
+    max_harmonic = 40
+
+    # The swell. Long, and fixed in seconds: a pad's attack owes nothing to the
+    # note's wavelength, which is why speech_cycles stays zero throughout.
+    attack_time = 0.28
+    speech_cycles = 0.0
+    chiff_volume = 0.0
+    decay_db = 0.8
+    harmonic_decay_db = 1.1
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.93
+
+    # A chorus, as the string machine has: fixed offsets, swept slowly. Every
+    # pad of the era had one, and it is the same systematic-not-drawn argument.
+    chorus_cents = (-8.0, 8.0)
+    chorus_gain = 0.70
+    section_vibrato_cents = 3.0
+    section_vibrato_hz = (0.3, 0.8)
+
+    formants = ((1200.0, 1300.0, 0.60),)
+    formant_floor = 0.16
+    bore_corner_hz = 3400.0
+    bore_order = 2.0
+    bell_cutoff_hz = 0.0
+    bell_order = 1.0
+
+    initial_gain = 0.02         # balance-normalised per subclass below
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        return [(self.chorus_gain, 0.0, 2.0 ** (c / 1200.0) - 1.0,
+                 harmonic_decay, 1.5707963 * (i + 1))
+                for i, c in enumerate(self.chorus_cents)]
+
+    def harmonic_volume(self, harmonic):
+        # Hand-wired, as on every oscillator voice with a body: the sawtooth
+        # parent returns gain/n directly and never reaches bore_gain.
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        if self.odd_only and harmonic % 2 == 0:
+            return 0.0
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
+
+
+class NewAgePadProperties(SynthPadProperties):
+    """GM 88, Pad 1 (new age). Glassy, and very slightly STRETCHED.
+
+    The SC-55's "Fantasia" -- a bell-like pad with a soft attack. What makes it
+    glassy rather than merely bright is that its partials are not quite whole
+    multiples: a small stretch, an order of magnitude under the metallic pad's,
+    so it shimmers where GM 93 clangs.
+    """
+    inharmonicity_coefficient = 0.00035
+    inharmonicity_dynamic = False
+    # A STRETCHED SERIES MUST BE SHORTER THAN A HARMONIC ONE. The stretch law is
+    # 1 + 0.5*(h^2-1)*B, so it grows with the SQUARE of the partial index: at 40
+    # partials this voice's h40 lands at 51 x f0, which is 17 kHz on an E4 and
+    # nothing like a mode anything has. Real glass rings in a couple of dozen.
+    max_harmonic = 24
+    formants = ((2400.0, 1800.0, 0.85),)
+    formant_floor = 0.10
+    bore_corner_hz = 5200.0
+    attack_time = 0.20
+    chorus_cents = (-5.0, 5.0, 12.0)
+    # Balance-normalised against the acoustic string ensemble (GM 48) on the
+    # same passage in the same room -- what a pad is reached for INSTEAD of,
+    # so it is the comparison a sequencer actually makes.
+    initial_gain = 0.0495371
+
+
+class WarmPadProperties(SynthPadProperties):
+    """GM 89, Pad 2 (warm). A low cutoff and a wide chorus, and nothing else.
+
+    The plainest member, deliberately: it is the pad you put underneath
+    something, and its whole job is to take up room without asking for
+    attention. No formant high up, no stretch, no sweep.
+    """
+    formants = ((700.0, 700.0, 0.55),)
+    formant_floor = 0.20
+    bore_corner_hz = 2000.0
+    attack_time = 0.34
+    chorus_cents = (-13.0, 11.0, 20.0)
+    chorus_gain = 0.78
+    initial_gain = 0.0390393
+
+
+class PolysynthPadProperties(SynthPadProperties):
+    """GM 90, Pad 3 (polysynth). The bright one, and the only one you can play.
+
+    A Prophet or a Juno playing chords: detuned saws, an open filter, and an
+    attack short enough to articulate a rhythm. It is in the pad family by name
+    and is really a poly patch, which is why its front is four times faster than
+    its neighbours'.
+    """
+    attack_time = 0.045
+    decay_db = 2.2
+    harmonic_decay_db = 2.0
+    sustain_level = 0.84
+    formants = ((2000.0, 1600.0, 0.80),)
+    formant_floor = 0.12
+    bore_corner_hz = 5000.0
+    chorus_cents = (-7.0, 7.0)
+    chorus_gain = 0.85
+    initial_gain = 0.0495865
+
+
+class ChoirPadProperties(SynthPadProperties):
+    """GM 91, Pad 4 (choir). An oscillator behind a VOCAL TRACT.
+
+    The formants are the patch, and they are the same table the singing
+    pipeline uses -- vowels.py's own, Peterson & Barney where it overlaps them.
+    An open /O/ rather than the voice lead's /a/: rounder, which is what a choir
+    pad is against a solo synth voice.
+
+    A THIRD FORMANT AND A FLOOR, because a choir is many people. The floor is
+    what a section passes between its resonances; a soloist's is lower.
+    """
+    # vowels.py VOWELS['O'], widened: a section's formants are the average of
+    # many tracts and so are broader than any one singer's.
+    formants = ((570.0, 180.0, 1.00), (840.0, 220.0, 0.70), (2410.0, 400.0, 0.30))
+    formant_floor = 0.10
+    bore_corner_hz = 3600.0
+    attack_time = 0.24
+    chorus_cents = (-9.0, 6.0, 14.0)
+    initial_gain = 0.0453122
+
+
+class BowedPadProperties(SynthPadProperties):
+    """GM 92, Pad 5 (bowed). Bowed glass: a slow swell over a ringing body.
+
+    The SC-55 calls it "Bowed Glass". What it is not is a bowed STRING -- GM 48
+    and 49 are that, and this is a struck-glass resonance excited slowly, which
+    is why the swell is the longest in the family and the body rings high and
+    narrow rather than broadly.
+    """
+    attack_time = 0.42
+    decay_db = 0.4
+    harmonic_decay_db = 0.7
+    sustain_level = 0.95
+    formants = ((3000.0, 900.0, 1.10),)
+    formant_floor = 0.08
+    bore_corner_hz = 6000.0
+    chorus_cents = (-4.0, 4.0)
+    initial_gain = 0.0617642
+
+
+class MetallicPadProperties(SynthPadProperties):
+    """GM 93, Pad 6 (metallic). The only pad whose partials are NOT harmonic.
+
+    That is what metal means, and it is the one distinction here that is a
+    matter of physics rather than of filtering. A struck or bowed plate rings in
+    modes that are not whole multiples of anything, so the overtones beat
+    against each other instead of fusing into a pitch -- which is why a metallic
+    pad has an edge no amount of brightness gives a harmonic one.
+
+    The stretch is the mallet family's order of magnitude, not the piano's: a
+    piano is a stiff STRING and barely stretched, where a bar or a plate is
+    stretched enough to hear.
+    """
+    inharmonicity_coefficient = 0.0062
+    inharmonicity_dynamic = False
+    # And far shorter again, because B here is eighteen times the glassy pad's:
+    # at 40 partials h40 sat at 238 x f0, which is 78 kHz on an E4 -- partials
+    # the renderer would carry to the edge of the band and throw away. A struck
+    # plate has a handful of modes, not forty. Capped, h14 lands at 7.4 kHz.
+    max_harmonic = 14
+    formants = ((2800.0, 2000.0, 0.90),)
+    formant_floor = 0.12
+    bore_corner_hz = 6500.0
+    attack_time = 0.18
+    chorus_cents = (-6.0, 9.0)
+    initial_gain = 0.0571093
+
+
+class HaloPadProperties(SynthPadProperties):
+    """GM 94, Pad 7 (halo). Hollow, and airy above it.
+
+    ODD HARMONICS ONLY, which is an exact distinction rather than a tuned one --
+    a square IS the odd harmonics at 1/n, as GM 80 and GM 39 are -- and it is
+    what makes a halo pad hollow where the warm pad is full. Over that, a formant
+    placed high and wide: the "air" the name is pointing at.
+    """
+    odd_only = True
+    formants = ((3400.0, 2600.0, 0.75),)
+    formant_floor = 0.14
+    bore_corner_hz = 5600.0
+    attack_time = 0.30
+    chorus_cents = (-10.0, 7.0)
+    initial_gain = 0.0608278
+
+
+class SweepPadProperties(SynthPadProperties):
+    """GM 95, Pad 8 (sweep). The filter sweep IS the patch.
+
+    Every pad here has a filter that shuts as the note holds -- upper partials
+    dying faster than lower ones, which is harmonic_decay_db. On the others that
+    is a colour. Here it is the sound, and it is set an order of magnitude
+    deeper: measured, the fundamental holds while the sixteenth harmonic falls
+    at over a hundred dB a second, so the note visibly closes while it sustains.
+
+    WHAT IS NOT MODELLED is the sweep going back UP. A real sweep pad's filter
+    is driven by an LFO or a slow envelope that opens as well as closes, and
+    this renderer's decay law is monotonic per partial -- a partial can fall
+    faster than its neighbour but cannot rise. A rising sweep needs a partial
+    whose amplitude envelope has a positive segment, which is machinery this
+    engine does not have and which is a larger change than this voice justifies.
+    """
+    decay_db = 0.5
+    harmonic_decay_db = 7.5     # an order of magnitude past the other pads'
+    sustain_level = 0.88
+    formants = ((1600.0, 1500.0, 0.90),)
+    formant_floor = 0.10
+    bore_corner_hz = 4400.0
+    attack_time = 0.26
+    chorus_cents = (-8.0, 8.0)
+    initial_gain = 0.0574479
+
+
 class SynthStringsProperties(FormantBody, SawtoothSynthProperties):
     """GM 50 and 51. A STRING MACHINE: sawtooths through a chorus, not a section.
 

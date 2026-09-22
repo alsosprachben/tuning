@@ -3349,6 +3349,65 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ---------------------------------------------------------------- the pads
+    import patch_map as _PMp2
+    # 88-95 were ONE BowedStringProperties, and with the effects at 96-103 that
+    # was sixteen programs on a single voice -- the largest gap in the bank.
+    _pads = {_g: _PMp2.property_class_for_note(_g, 64) for _g in range(88, 96)}
+    check("the eight pads are eight voices, not one bowed string",
+          len({_c.__name__ for _c in _pads.values()}) == 8
+          and not any(issubclass(_c, _T.BowedStringProperties)
+                      and not issubclass(_c, _T.SawtoothSynthProperties)
+                      for _c in _pads.values()),
+          "  (eight distinct classes where there had been one)")
+    # EACH GETS A MECHANISM THE OTHERS DO NOT HAVE, which is the difference
+    # between eight voices and one voice with eight sets of numbers. GM's own
+    # names point at mechanisms: a choir has formants, metal is inharmonic, a
+    # halo is hollow, a sweep sweeps.
+    _mech = {
+        "inharmonic (88, 93)": {_g for _g in _pads
+                                if _pads[_g].inharmonicity_coefficient > 0.0},
+        "odd-only (94)": {_g for _g in _pads if _pads[_g].odd_only},
+        "vocal formants (91)": {_g for _g in _pads if len(_pads[_g].formants) >= 3},
+        "fast enough to play (90)": {_g for _g in _pads
+                                     if _pads[_g].attack_time < 0.1},
+        "a deep sweep (95)": {_g for _g in _pads
+                              if _pads[_g].harmonic_decay_db > 5.0},
+    }
+    check("...and each has a mechanism the others do not",
+          _mech["odd-only (94)"] == {94} and _mech["vocal formants (91)"] == {91}
+          and _mech["fast enough to play (90)"] == {90}
+          and _mech["a deep sweep (95)"] == {95}
+          and _mech["inharmonic (88, 93)"] == {88, 93},
+          "  (%s)" % "; ".join("%s" % _k for _k in _mech))
+    # METAL MEANS INHARMONIC, and that is the one distinction here which is
+    # physics rather than filtering: a struck plate's modes are not whole
+    # multiples, so the overtones beat instead of fusing into a pitch.
+    _mt = _pads[93](329.63, 0.0, 1.0, 1.0)
+    _na = _pads[88](329.63, 0.0, 1.0, 1.0)
+    check("...and the metallic pad is stretched far past the glassy one",
+          _mt.inharmonicity_coefficient > 10.0 * _na.inharmonicity_coefficient,
+          "  (B %.5g against %.5g -- a clang against a shimmer)"
+          % (_mt.inharmonicity_coefficient, _na.inharmonicity_coefficient))
+    # A STRETCHED SERIES MUST BE SHORTER THAN A HARMONIC ONE. The law is
+    # 1 + 0.5*(h^2-1)*B, growing with the SQUARE of the index, so a voice with
+    # both a stretch and forty partials puts its top one past Nyquist: measured
+    # at B = 0.0062, h40 landed at 78 kHz on an E4.
+    _bad = []
+    for _g, _c in _pads.items():
+        _B = _c.inharmonicity_coefficient
+        if _B <= 0.0:
+            continue
+        _h = _c.max_harmonic
+        _top = 329.63 * _h * (1.0 + 0.5 * (_h * _h - 1) * _B)
+        if _top > 20000.0:
+            _bad.append((_g, _top))
+    check("...and every stretched voice keeps its top partial in the band",
+          not _bad,
+          "  (88 and 93 capped at %d and %d partials)"
+          % (_pads[88].max_harmonic, _pads[93].max_harmonic) if not _bad
+          else "  (out of band: %s)" % _bad)
+
     # ---------------------------------------------------------- synth strings
     import patch_map as _PMss
     # 50 and 51 were in BOWED_ENSEMBLE, so they routed per register to the four

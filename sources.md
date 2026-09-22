@@ -4426,3 +4426,69 @@ as far up the series.
 Balance-normalised against the acoustic string ensemble (GM 48) on the same
 passage in the same room -- the neighbour these two are chosen INSTEAD of, so it
 is the comparison a sequencer actually makes.
+
+## GM 88-95, the pads: eight mechanisms, not eight tweaks
+
+All eight were one `BowedStringProperties`. Together with the effects at 96-103
+that was **sixteen programs on a single voice**, and the largest gap in the bank.
+
+What makes a pad a pad is the swell -- a long attack fixed in seconds, a filter
+that opens with it, a sustain that holds -- and everything here has that. What
+separates the eight is that General MIDI's own names point at eight different
+MECHANISMS rather than eight settings of one, and each class gets one the others
+do not have:
+
+| | | the mechanism |
+|---|---|---|
+| 88 | new age | partials slightly STRETCHED: glassy |
+| 89 | warm | a low cutoff and a wide chorus, and deliberately nothing else |
+| 90 | polysynth | the only front fast enough (45 ms) to play chords in time |
+| 91 | choir | VOCAL FORMANTS, from vowels.py's own table |
+| 92 | bowed | the longest swell (420 ms), over a high narrow body |
+| 93 | metallic | INHARMONIC |
+| 94 | halo | ODD HARMONICS ONLY |
+| 95 | sweep | the filter sweep itself, an order of magnitude deeper |
+
+Two of those are exact rather than tuned -- a square IS the odd harmonics at
+1/n, and inharmonicity is a stated law -- and one is physics rather than
+filtering: **metal means the overtones are not whole multiples**, so they beat
+against each other instead of fusing into a pitch. That is why a metallic pad
+has an edge no amount of brightness gives a harmonic one.
+
+### A stretched series must be SHORTER than a harmonic one
+
+Not obvious, and it cost a correction. The stretch law is
+`1 + 0.5*(h^2-1)*B`, which grows with the **square** of the partial index. At the
+40 partials the other pads use, the metallic pad's fortieth landed at 238 x f0
+-- **78 kHz on an E4** -- partials the renderer would carry to the edge of the
+band and throw away. Capped at 14, which is about what a struck plate has; the
+glassy pad at 24.
+
+There is now a check that any voice with both a stretch and a partial count
+keeps its top partial inside the band.
+
+**AND THE PROBE FOR IT WAS WRONG FIRST.** The initial measurement used the
+sqrt-of-stiffness form, `n*sqrt(1+B*n^2)`, where the code at `tonelib.py:736`
+uses the linearised `1 + 0.5*(h^2-1)*B`. The two diverge fast: at h16, B=0.0062
+the first gives 25.7 x f0 and the second 28.7. Reading the law out of the code
+rather than out of memory is what turned a plausible number into the right one.
+
+### Not modelled, and it says so
+
+**A sweep pad's filter goes back UP.** A real one is driven by an LFO or a slow
+envelope that opens as well as closes, and this renderer's decay law is
+monotonic per partial: a partial can fall faster than its neighbour, but it
+cannot rise. A rising sweep needs an amplitude envelope with a positive segment,
+which is machinery the engine does not have and a larger change than one voice
+justifies. GM 95 sweeps down, deeply, and that is half the effect.
+
+### Levels
+
+All eight balance-normalised against the acoustic string ensemble (GM 48) on the
+same passage in the same room -- what a pad is reached for INSTEAD of, so it is
+the comparison a sequencer actually makes.
+
+### What is left
+
+96-103, the synth effects, are still the shared `BowedStringProperties` -- now
+the only remaining block of eight on one voice.

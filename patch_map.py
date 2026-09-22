@@ -35,6 +35,14 @@ from tonelib import (
     SynthBrass1Properties,
     SynthBass1Properties,
     SynthStrings1Properties,
+    NewAgePadProperties,
+    WarmPadProperties,
+    PolysynthPadProperties,
+    ChoirPadProperties,
+    BowedPadProperties,
+    MetallicPadProperties,
+    HaloPadProperties,
+    SweepPadProperties,
     SynthStrings2Properties,
     SynthBass2Properties,
     SynthBrass2Properties,
@@ -364,7 +372,19 @@ PROGRAM_CLASS[85] = VoiceLeadProperties          # Lead 6 (voice): vocal formant
 PROGRAM_CLASS[86] = FifthsLeadProperties         # Lead 7 (fifths): +700 cents
 PROGRAM_CLASS[87] = BassLeadProperties           # Lead 8 (bass+lead): an octave below
 # 88-95  Synth Pad                     -> soft sustained
+# 88-95 were one BowedStringProperties -- together with 96-103 that was sixteen
+# programs on a single voice, the largest gap in the bank. GM's own names point
+# at eight different MECHANISMS, not eight tweaks to one sound, and each class
+# below gets one the others do not have. See tonelib.SynthPadProperties.
 _fill(88, 95, BowedStringProperties)
+PROGRAM_CLASS[88] = NewAgePadProperties     # glassy: partials slightly stretched
+PROGRAM_CLASS[89] = WarmPadProperties       # low cutoff, wide chorus, nothing else
+PROGRAM_CLASS[90] = PolysynthPadProperties  # bright, and fast enough to play
+PROGRAM_CLASS[91] = ChoirPadProperties      # vocal formants, from vowels.py
+PROGRAM_CLASS[92] = BowedPadProperties      # bowed glass: the longest swell
+PROGRAM_CLASS[93] = MetallicPadProperties   # INHARMONIC -- what metal means
+PROGRAM_CLASS[94] = HaloPadProperties       # odd harmonics only: hollow, airy
+PROGRAM_CLASS[95] = SweepPadProperties      # the filter sweep IS the patch
 # 96-103 Synth FX                      -> sustained
 _fill(96, 103, BowedStringProperties)
 # 104-111 Ethnic (sitar, banjo, shamisen, koto, kalimba, bagpipe, fiddle, shanai)

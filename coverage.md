@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 27 | 21% |
-| 2 specific, theory | 47 | 37% |
+| 1 general class | 19 | 15% |
+| 2 specific, theory | 55 | 43% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -245,14 +245,14 @@ splits almost exactly along that line.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 88 | Pad 1 (new age) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 89 | Pad 2 (warm) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 90 | Pad 3 (polysynth) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 91 | Pad 4 (choir) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 92 | Pad 5 (bowed) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 93 | Pad 6 (metallic) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 94 | Pad 7 (halo) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 95 | Pad 8 (sweep) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
+| 88 | Pad 1 (new age) | `NewAgePad` | **2** | glassy: partials slightly STRETCHED (B=0.00035), so it shimmers where 93 clangs |
+| 89 | Pad 2 (warm) | `WarmPad` | **2** | the plain one, deliberately: a low cutoff and a wide chorus and nothing else -- the pad you put underneath something |
+| 90 | Pad 3 (polysynth) | `PolysynthPad` | **2** | really a poly patch: the only pad with a front fast enough (45 ms) to play chords in time |
+| 91 | Pad 4 (choir) | `ChoirPad` | **2** | vocal formants, an open /O/ from vowels.py's own table, widened because a section's formants average many tracts |
+| 92 | Pad 5 (bowed) | `BowedPad` | **2** | bowed glass: the longest swell in the family (420 ms) over a high narrow body. NOT a bowed string -- GM 48/49 are that |
+| 93 | Pad 6 (metallic) | `MetallicPad` | **2** | INHARMONIC, 18x the glassy pad's stretch -- the one pad distinction that is physics and not filtering. Capped at 14 partials, since the stretch grows as h^2 |
+| 94 | Pad 7 (halo) | `HaloPad` | **2** | hollow: ODD HARMONICS ONLY, an exact distinction, with an airy formant high above it |
+| 95 | Pad 8 (sweep) | `SweepPad` | **2** | the filter sweep IS the patch: h16 falls at 120 dB/s against the other pads' 18. The sweep back UP is not modelled, and says so |
 
 ## 96-103 Synth Effects
 
