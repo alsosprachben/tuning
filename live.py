@@ -3340,6 +3340,51 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ---------------------------------------------------------- free reeds
+    # GM 20-23 were all rendering as ReedOrganProperties, which is a pipe
+    # organ's reed RANK: a beating reed with a resonator behind it. All four are
+    # FREE reeds -- a tongue swinging through a slot with no resonator at all.
+    import patch_map as _PM
+    _free = [_PM.property_class_for_program(g) for g in (20, 21, 22, 23)]
+    check("the free reeds are not a pipe organ's reed rank",
+          all(not issubclass(c, _T.ReedOrganProperties) for c in _free)
+          and all(issubclass(c, _T.FreeReedProperties) for c in _free),
+          "  (%s)" % ", ".join(c.__name__.replace("Properties", "") for c in _free))
+    # ...and ReedOrganProperties itself must NOT have moved: it is the base of
+    # ReedPipeProperties and of the clarinets, so repurposing it would have
+    # taken the clarinet with it. This is the saxophone trap.
+    check("...and the organ's reed rank is left exactly as it was",
+          issubclass(_T.CylindricalReedProperties, _T.ReedOrganProperties)
+          and _T.ReedOrganProperties.odd_only,
+          "  (the clarinets still inherit it, and it is still odd-only)")
+    # THE EVENS ARE THE WHOLE POINT. A stopped cylinder passes odd multiples, so
+    # the rank has no evens by construction; nothing selects harmonics for a free
+    # reed, so it has them. Measured at C4.
+    _fr = _PM.property_class_for_program(20)(261.63, 0.0, 1.0, 1.0)
+    _ev = [_fr.harmonic_volume(k) / _fr.harmonic_volume(1) for k in (2, 4, 6)]
+    check("a free reed has even harmonics, which a stopped pipe cannot",
+          all(e > 0.02 for e in _ev),
+          "  (h2 %.1f, h4 %.1f, h6 %.1f dB; the organ rank's are absent)"
+          % tuple(20.0 * math.log10(e) for e in _ev))
+    # AND NO DEEP ZEROS. An idealised pulse train has true nulls -- at one point
+    # in fitting this the 16th partial sat 57 dB down, a hole no free reed has.
+    # Averaging over a spread of gate positions smears them; this is what
+    # catches that spread being removed or zeroed.
+    _worst = min((_fr.harmonic_volume(k) / _fr.harmonic_volume(1), k)
+                 for k in range(2, 25))
+    check("...and no zero anywhere in its series",
+          _worst[0] > 10.0 ** (-55.0 / 20.0),
+          "  (deepest partial h%d at %.1f dB)" % (_worst[1], 20.0 * math.log10(_worst[0])))
+    # WET AGAINST DRY is the whole of GM 21 versus GM 23. An accordion's banks
+    # are deliberately offset (musette); a bandoneon's are not.
+    def _beat(g):
+        q = _PM.property_class_for_program(g)(261.63, 0.0, 1.0, 1.0)
+        return abs(261.63 * (1.0 + q.unison_voices(261.63, 1, 0.0)[0][2]) - 261.63)
+    _wet, _dry = _beat(21), _beat(23)
+    check("the accordion is tuned wet and the bandoneon dry",
+          _wet > 3.0 * _dry and _wet > 1.0,
+          "  (musette beats at %.2f Hz, tango at %.2f)" % (_wet, _dry))
+
     check("the acoustic bass is not the generic plucked string",
           _PM.property_class_for_program(32) is _T.AcousticBassProperties)
     ab, cb2 = _T.AcousticBassProperties, _T.ContrabassProperties

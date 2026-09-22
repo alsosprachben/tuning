@@ -4375,6 +4375,266 @@ class ReedOrganProperties(OrganProperties):
     inharmonicity_coefficient = 0.0
 
 
+
+# ---------------------------------------------------------------- free reeds
+# GM 20-23 are a family, and not the one they were mapped to. All four -- reed
+# organ, accordion, harmonica, tango accordion -- are FREE reeds, and every one
+# of them was rendering as ReedOrganProperties, which is a pipe organ's reed
+# RANK: a beating reed with a resonator. That class is right for what it is and
+# is the base of the clarinets and ReedPipeProperties, so it stays exactly as it
+# is; the error was only in patch_map's _fill(20, 23).
+#
+# THE DIFFERENCE IS THE RESONATOR, and it decides three things at once.
+#
+# A beating reed slams shut against a shallot once a cycle, and a PIPE picks out
+# which harmonics survive. That pipe is where odd_only comes from (a stopped
+# cylinder passes odd multiples) and where pipe_ceiling_hz comes from (a short
+# high resonator goes weak and unstable, so a reed rank breaks back early).
+#
+# A free reed swings THROUGH a close-fitting slot and never seals, and there is
+# no resonator at all -- not a short one, not a weak one, none. Pitch is the
+# tongue's own bending mode. So:
+#
+#   - odd_only goes. Nothing is selecting odd multiples.
+#   - the break-back goes. There is no resonator to go unstable, which is
+#     exactly why an accordion can carry a 4' piccolo rank to the top of its
+#     compass where a reed rank in an organ cannot.
+#   - the harmonics are made by FLOW MODULATION, not by a resonator.
+#
+# That last point is the same argument the Rhodes tine makes: one mode, shaped,
+# so the series is EXACTLY HARMONIC and needs no mode table. The tongue moves as
+# a sinusoid; what is not sinusoidal is the airflow it lets past.
+
+_FREE_REED_CACHE = {}
+
+
+class FreeReedProperties(SynthProperties):
+    """A tongue swinging through a slot. No pipe, no bell, no resonator.
+
+    The flow model, and what is asserted about it. The tongue's displacement is
+    a sinusoid. Air passes only while the tongue is clear of the slot, and it is
+    INTERRUPTED -- not tapered -- when the tongue swings back across. That jump
+    is what makes a free reed buzz: a discontinuity gives 1/k harmonics (about
+    -6 dB/octave), where a smooth taper would give 1/k^2 and a much darker
+    instrument. Measured on this model the flow alone comes out at -7.9 dB per
+    octave, and a voice with its case on at -9.3, with both odd and even
+    harmonics present -- the evens being exactly what the stopped pipe's
+    odd_only had been forbidding.
+
+    Three parameters, all geometry:
+
+      reed_gate    how far the tongue must swing before the slot is clear
+      reed_edge    the crossing is not instant; the tongue has finite speed
+      reed_spread  the swing is not identical cycle to cycle and the slot is
+                   not a knife edge
+
+    The spread earns its place. An idealised single-shaped pulse has true zeros
+    in its spectrum -- at reed_gate = 0.55 the 16th harmonic sat 57 dB down, a
+    hole no free reed has, and no amount of reed_edge removed it because it is a
+    zero of the pulse and not of the edge. Averaging POWER over a small spread of
+    gate positions smears the zeros and leaves the envelope alone. It is the same
+    argument SectionMixin makes about a section smearing a comb.
+
+    NOT FITTED TO A RECORDING. The rolloff target is the free-reed literature's
+    rough -6 dB/octave; the three numbers are chosen to land near it with
+    plausible ripple, not derived from any one instrument's slot geometry.
+    """
+
+    # No pipe. Every one of these is the resonator's doing, and there isn't one.
+    odd_only = False
+    even_harmonic_db = None
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    pipe_ceiling_hz = 0.0
+
+    # No pipe speech either: a chiff is an air jet finding its edge, and a free
+    # reed has no edge to find. What it has is a tongue that takes a moment to
+    # come up to amplitude, which is attack_time and speech_cycles below.
+    chiff_cycle = 0.0
+    chiff_volume = 0.0
+    chiff_release = 0.0
+    chiff_min_valve_time = 0.0
+    chiff_max_valve_time = 0.0
+
+    # SynthProperties is abstract: it carries the machinery, and every concrete
+    # family states its own tone attributes. These are the free reed's, and most
+    # of them are stated in order to be zero -- which is the point. a..e are the
+    # Steinway B stiff-string inharmonicity model and a tongue has no string in
+    # it at all; the pluck and octave terms belong to bodies this one does not
+    # have. series_volume below replaces the series law outright, so the
+    # dampening terms never run, but they must exist to be inherited.
+    a = b = c = d = e = 0.0
+    octave_modulo = False
+    octave_dampening = 0.0
+    octave_gain = -0.0
+    tonal_dampening = 2.0
+    pluck_dampening = 1.0
+    plucked_harmonic = 1000.0
+    enharmonic_width = 0.0
+
+    reed_gate = 0.55
+    reed_edge = 0.15
+    reed_spread = 0.15
+    reed_points = 21            # gate positions averaged over
+    max_harmonic = 32
+
+    # A free reed does not decay -- the wind holds it -- but it does BLOOM: the
+    # tongue climbs to amplitude over a few cycles, longer for a big low reed.
+    # Gentler than an organ reed's pressure-build, because there is no boot to
+    # pressurise: the tongue is simply being got moving.
+    attack_time = 0.012
+    speech_cycles = 3.0
+    decay_db = 2.0
+    harmonic_decay_db = 1.0
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.92
+
+    # The case, the cavity, the grille cloth. Not a resonator that sets pitch --
+    # a lid over the reeds that takes the very top off.
+    bore_corner_hz = 5200.0
+    bore_order = 2
+
+    initial_gain = 1.0 / 5000   # balance-normalised below, per voice
+
+    def _reed_series(self):
+        """The flow spectrum, once per (geometry, length). Cached per class."""
+        key = (self.reed_gate, self.reed_edge, self.reed_spread,
+               self.reed_points, self.max_harmonic)
+        got = _FREE_REED_CACHE.get(key)
+        if got is not None:
+            return got
+        import numpy as _np
+        n = 1 << 13
+        t = _np.arange(n) / float(n)
+        u = _np.sin(2.0 * _np.pi * t)
+        power = _np.zeros(n // 2 + 1)
+        if self.reed_spread > 0.0 and self.reed_points > 1:
+            gates = _np.linspace(self.reed_gate - self.reed_spread,
+                                 self.reed_gate + self.reed_spread,
+                                 self.reed_points)
+        else:
+            gates = (self.reed_gate,)
+        for g0 in gates:
+            x = _np.clip((u - g0) / max(self.reed_edge, 1e-6) + 0.5, 0.0, 1.0)
+            a = u * (x * x * (3.0 - 2.0 * x))
+            power += (_np.abs(_np.fft.rfft(a)) / float(n)) ** 2
+        mag = _np.sqrt(power / len(gates))
+        top = min(self.max_harmonic, len(mag) - 1)
+        ref = mag[1] if mag[1] > 0 else 1.0
+        got = tuple(float(mag[k] / ref) for k in range(0, top + 1))
+        _FREE_REED_CACHE[key] = got
+        return got
+
+    def series_volume(self, harmonic):
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        series = self._reed_series()
+        if harmonic >= len(series):
+            return 0.0
+        return self.gain * series[harmonic]
+
+
+class ReedOrganFreeProperties(FreeReedProperties):
+    """GM 20, the harmonium / American organ: banks of free reeds and a bellows.
+
+    The plainest member, and the reference the other three are voiced against.
+    A harmonium has stops, and `registerable` would carry them, but a GM part
+    does not ask for a registration and a half-wired one is worse than none;
+    this is a single 8' rank.
+    """
+    # A big instrument with a wooden case over the reed pans: rounder than an
+    # accordion held against the chest, and the case takes more off the top.
+    bore_corner_hz = 4200.0
+    reed_gate = 0.52
+    # Balance-normalised against the CHURCH ORGAN (GM 19) on the same passage
+    # in the same room -- the acoustic member of this family and the nearest
+    # neighbour in the bank. These voices normalise their own series to h1 = 1,
+    # where the pipe classes carry the comb's absolute scale, so the numbers
+    # here are ~500x what a pipe voice's look like and mean the same thing.
+    initial_gain = 0.05964
+
+
+class AccordionProperties(FreeReedProperties):
+    """GM 21: two or three reed banks per note, DELIBERATELY mistuned.
+
+    Musette. This is the signature of the instrument and it is a different thing
+    from a piano's unisons, which is why it does not reuse the piano's machinery.
+    A piano's three strings are meant to be identical and are imperfectly tuned,
+    so the spread is a random error, drawn per note. An accordion's second reed
+    is deliberately offset by a set amount, the same way across the instrument,
+    so a tuner can name it: dry is 0-3 cents, American around 8-12, French
+    musette 15-20, Scottish up past 25.
+
+    So the offsets here are SYSTEMATIC, not drawn -- and they are what separates
+    this voice from GM 23, which is the same instrument tuned dry.
+    """
+    # 8' + a wet 8'. A third bank (16') for gravity, tuned true.
+    reed_detune_cents = (16.0, 0.0)
+    reed_bank_gain = (0.85, 0.55)
+    reed_bank_ratio = (1.0, 0.5)        # unison, and an octave below
+
+    # Held against the chest with the grille facing out: brighter than the
+    # harmonium's cabinet.
+    bore_corner_hz = 5600.0
+    reed_gate = 0.58
+    initial_gain = 0.03588
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        # Each extra bank is a whole reed set, so it carries the full series at
+        # its own ratio -- an octave bank is not a detune, it is another reed.
+        out = []
+        for g, cents, ratio in zip(self.reed_bank_gain, self.reed_detune_cents,
+                                   self.reed_bank_ratio):
+            if g <= 0.0:
+                continue
+            det = 2.0 ** (cents / 1200.0) - 1.0
+            # A bank sounds at `ratio` times the note, so the partial this voice
+            # adds sits at ratio*(1+det) of where the main voice's does.
+            out.append((g, 0.0, ratio * (1.0 + det) - 1.0, harmonic_decay, 0.0))
+        return out
+
+
+class TangoAccordionProperties(AccordionProperties):
+    """GM 23, the bandoneon: the same instrument tuned DRY.
+
+    A bandoneon is not a musette box. The tremolo that defines GM 21 is most of
+    what a tango player does not want, so the wet bank comes down to a couple of
+    cents -- enough to thicken, not enough to warble -- and the 16' comes up,
+    because the instrument's voice is its gravity.
+    """
+    reed_detune_cents = (3.0, 0.0)
+    reed_bank_gain = (0.80, 0.75)
+    bore_corner_hz = 4600.0             # darker: a squarer, heavier box
+    reed_gate = 0.50
+    initial_gain = 0.03282
+
+
+class HarmonicaProperties(FormantBody, FreeReedProperties):
+    """GM 22: one reed, and a pair of cupped hands.
+
+    The reed is the same mechanism as the other three. What makes a harmonica
+    sound like one is everything around it -- a tiny comb, the player's mouth,
+    and hands cupped into a cavity that is opened and closed. That is a FIXED
+    resonance the harmonics slide through, which is FormantBody's whole reason
+    to exist, so the body does the work here rather than the reed.
+
+    One reed per note, so no banks and no musette: a harmonica's warble comes
+    from the player, not from the tuning.
+    """
+    # A cupped hand around a small instrument: a broad vocal-tract-like peak
+    # low down and a bright one where the comb and the cup ring. Asserted from
+    # the size of the cavity, not measured -- see sources.md.
+    formants = ((750.0, 500.0, 0.55), (2400.0, 1600.0, 0.75))
+    formant_floor = 0.22
+    bore_corner_hz = 6500.0             # small and bright
+    bore_order = 2
+    bell_cutoff_hz = 0.0
+    bell_order = 1
+
+    reed_gate = 0.62                    # a small stiff tongue: buzzier
+    initial_gain = 0.05713
+
+
 class SectionMixin:
     """Several PLAYERS on one part, rather than one player made wide.
 

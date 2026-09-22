@@ -68,6 +68,10 @@ from tonelib import (
     slow_bow,
     FlueOrganProperties,
     ReedOrganProperties,
+    ReedOrganFreeProperties,
+    AccordionProperties,
+    TangoAccordionProperties,
+    HarmonicaProperties,
     DrawbarOrganProperties,
     PercussiveOrganProperties,
     RockOrganProperties,
@@ -164,7 +168,15 @@ _fill(16, 16, DrawbarOrganProperties)
 _fill(17, 17, PercussiveOrganProperties)
 _fill(18, 18, RockOrganProperties)
 _fill(19, 19, FlueOrganProperties)
-_fill(20, 23, ReedOrganProperties)
+# 20-23 are FREE reeds, and were rendering as a pipe organ's reed RANK -- a
+# beating reed with a resonator, which is what ReedOrganProperties is (and it
+# stays that, being the base of the clarinets and ReedPipeProperties). A free
+# reed swings through a slot with no resonator at all, so it has no odd-only
+# selection and no high break-back. See tonelib.FreeReedProperties.
+_fill(20, 23, ReedOrganFreeProperties)
+PROGRAM_CLASS[21] = AccordionProperties        # musette: banks tuned apart
+PROGRAM_CLASS[22] = HarmonicaProperties        # one reed and two cupped hands
+PROGRAM_CLASS[23] = TangoAccordionProperties   # a bandoneon is tuned DRY
 # 24-31  Guitar                        -> plucked strings
 _fill(24, 31, PluckedStringProperties)
 # 24 alone is MEASURED (Iowa's guitar is a nylon classical; see

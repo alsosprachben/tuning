@@ -3650,3 +3650,105 @@ The four principal voices now sit inside 0.8 dB:
 
 The family spans 14.7 dB, from the muted guitar at -21.4 to the jazz guitar at
 -6.7 -- both of those being emergent from their spectra rather than set.
+
+## GM 20-23: the free reeds
+
+All four of GM 20 Reed Organ, 21 Accordion, 22 Harmonica and 23 Tango Accordion
+rendered as `ReedOrganProperties`, which is a pipe organ's reed **rank**: a
+beating reed with a resonator. All four instruments are **free** reeds. It is
+the same class of error as the fret noise rendering as a mallet.
+
+`ReedOrganProperties` did not change and must not: it is the base of
+`ReedPipeProperties` and of the **clarinets** (`CylindricalReedProperties`), so
+repurposing it would have taken the clarinet with it. The error was one line in
+`patch_map`, `_fill(20, 23, ...)`.
+
+### The resonator decides three things at once
+
+A **beating** reed slams shut against a shallot and a pipe selects what survives.
+A **free** reed swings *through* a close-fitting slot, never seals, and has no
+resonator at all -- pitch is the tongue's own bending mode. So:
+
+| | organ reed rank | free reed |
+|---|---|---|
+| odd-only | yes, a stopped cylinder | **no** -- nothing is selecting |
+| high break-back | yes, short resonators go weak | **no** -- hence 4' piccolo reeds |
+| harmonics from | the pipe | the **airflow the tongue chops** |
+
+Measured, the rank's even harmonics are at -219.8 dB (absent by construction);
+the free reed's h2 sits 4.5 dB under its fundamental.
+
+### The flow model, and what is asserted
+
+The tongue moves as a sinusoid -- one mode -- so, exactly as with the Rhodes
+tine, the series is **exactly harmonic** and needs no mode table. What is not
+sinusoidal is the airflow. Air passes only while the tongue is clear of the
+slot, and is **interrupted** rather than tapered when the tongue swings back.
+That jump is what makes a free reed buzz: a discontinuity gives 1/k harmonics,
+about -6 dB/octave, where a smooth taper gives 1/k^2 and a far darker
+instrument. Measured on the model, the flow alone is -7.9 dB/octave and a voice
+with its case on is -9.3.
+
+Three parameters, all geometry: `reed_gate` (how far the tongue swings before
+the slot is clear), `reed_edge` (the crossing is not instant), `reed_spread`.
+
+**THE SPREAD EARNS ITS PLACE.** An idealised single-shaped pulse has true zeros:
+at `reed_gate = 0.55` the 16th partial sat **57 dB down**, a hole no free reed
+has, and no value of `reed_edge` removed it -- because it is a zero of the
+pulse, not of the edge. Averaging power over a small spread of gate positions
+(the swing is not identical cycle to cycle, the slot is not a knife edge) smears
+the zeros and leaves the envelope alone. Deepest partial is now h24 at -47.8 dB,
+monotone. It is the same argument `SectionMixin` makes about a section smearing
+a comb.
+
+Two shapes were tried and discarded first: a rectangular pulse train
+(`|sin(pi k d)|/(pi k)`) had nulls so deep they showed at every duty cycle, and
+a clipped sine tapering to zero gave -10 dB/octave, too dark, because it has no
+discontinuity.
+
+**NOT FITTED TO A RECORDING.** The rolloff target is the free-reed literature's
+rough -6 dB/octave. The three numbers land near it with plausible ripple; they
+are not derived from any one instrument's slot geometry. Rated 2.
+
+### Wet against dry is the whole of GM 21 versus GM 23
+
+An accordion has two or three reed banks per note, **deliberately** mistuned --
+musette. This is a different thing from a piano's unisons, which is why it does
+not reuse the piano's machinery: a piano's three strings are *meant* to be
+identical and are imperfectly tuned, so the spread is a random error drawn per
+note; an accordion's second reed is offset by a set amount the same way across
+the instrument, which is why a tuner can name it. Dry is 0-3 cents, American
+8-12, French musette 15-20, Scottish past 25.
+
+A bandoneon is **not** a musette box, so GM 23 is the same instrument tuned dry.
+Measured at C4, and then in the rendered audio on a held chord:
+
+| | bank offset | beat at C4 | rendered warble |
+|---|---|---|---|
+| 21 Accordion | 16 cents | 2.43 Hz | 3.34 Hz, 18.8% deep |
+| 23 Tango | 3 cents | 0.45 Hz | 0.67 Hz, 17.8% deep |
+
+The two single-reed voices show only 4-5% at 0.44 Hz on the same chord, which is
+the notes beating against each other and not the reeds.
+
+### Levels
+
+Balance-normalised against the **church organ** (GM 19) on the same passage in
+the same room -- the acoustic member of the family and the nearest neighbour in
+the bank. All four land within 0.05 dB.
+
+These classes normalise their own series to h1 = 1, where the pipe classes carry
+the comb's absolute scale, so their `initial_gain` numbers are ~500x what a pipe
+voice's look like and mean the same thing. Measured before that was understood,
+they came out 43-49 dB quiet.
+
+### Not attempted
+
+**A harmonium's stops.** `registerable` is general and a harmonium genuinely has
+them, but a GM part does not ask for a registration and a half-wired one is
+worse than none. GM 20 is a single 8' rank.
+
+**The harmonica's bends.** A player bends a harmonica down several semitones by
+reshaping the vocal tract, which couples strongly to such a small reed. The
+formant pair here is a fixed cupped hand; the bend would need a controller and
+is the obvious next thing if the voice is worth more work.
