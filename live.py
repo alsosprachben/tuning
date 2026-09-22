@@ -3349,6 +3349,58 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------------------ the ethnic
+    import patch_map as _PMe
+    # 105-108 were the generic plucked string and the generic mallet; 109 and
+    # 111 shared one reed pipe. Each is a different MECHANISM.
+    _eth = {_g: _PMe.property_class_for_note(_g, 60) for _g in range(104, 112)}
+    check("the ethnic family is eight voices, not three",
+          len({_c.__name__ for _c in _eth.values()}) == 8,
+          "  (104-111 all distinct)")
+    # THE ROUTER, NOT THE ASSIGNMENT. Three of these were written and then
+    # immediately overwritten four lines further down -- the same shape as
+    # GM 32, where the class existed, was correct, and was never reached.
+    check("...and the router agrees with the map that was written",
+          _eth[108] is _T.KalimbaProperties and _eth[109] is _T.BagpipeProperties
+          and _eth[111] is _T.ShanaiProperties,
+          "  (kalimba, bagpipe and shanai reached, not clobbered)")
+    # A KALIMBA IS A CANTILEVER, not a bar and not a string. A free-free bar
+    # runs 1 : 3 : 5 and a clamped-free cantilever 1 : 6.267 : 17.55, which is
+    # why a kalimba's overtones sit above the note as separate pings instead of
+    # fusing into it. Same ratios as a Rhodes tine, for the same reason.
+    _ka = _eth[108](261.63, 0.0, 1.0, 1.0)
+    check("...and the kalimba rings as a CANTILEVER, not as a bar",
+          abs(_ka.mode_ratio(2) - 6.267) < 0.01
+          and abs(_ka.mode_ratio(3) - 17.55) < 0.01,
+          "  (1 : %.3f : %.2f, where a marimba bar is 1 : 4 : 10)"
+          % (_ka.mode_ratio(2), _ka.mode_ratio(3)))
+    # A DRONE DOES NOT FOLLOW THE MELODY, which is the one thing no other voice
+    # in this bank does: every other user of unison_voices returns a RATIO and
+    # so tracks the note by construction.
+    _dr = []
+    for _m in (55, 67, 79):
+        _f = 440.0 * 2.0 ** ((_m - 69) / 12.0)
+        _q = _eth[109](_f, 0.0, 1.0, 1.0)
+        _dr.append(tuple(round(_f * (1.0 + _v[2]), 2)
+                         for _v in _q.unison_voices(_f, 1, 0.0)))
+    check("...and the bagpipe's drones hold while the melody moves",
+          len(set(_dr)) == 1 and len(_dr[0]) == 2,
+          "  (%s Hz at every pitch)" % ", ".join("%.0f" % _x for _x in _dr[0]))
+    # A CONE PASSES THE WHOLE SERIES. The shanai had been on the bagpipe's
+    # class, which is ReedOrganProperties underneath and suppresses the evens.
+    _sh = _eth[111](261.63, 0.0, 1.0, 1.0)
+    check("...and the shanai's cone brings the even harmonics back",
+          not _eth[111].odd_only and _sh.harmonic_volume(2) > 0.0,
+          "  (a shawm is an oboe's geometry, not a chanter's)")
+    # A MEMBRANE CANNOT RADIATE LOW. The banjo and the shamisen are the only
+    # plucked voices here whose body is a stretched skin.
+    check("...and the two drumhead instruments cannot radiate their bottom",
+          _eth[105].bell_cutoff_hz > 300.0 and _eth[106].bell_cutoff_hz > 300.0
+          and _eth[107].bell_cutoff_hz < 200.0,
+          "  (banjo %.0f Hz and shamisen %.0f, against the koto's wooden %.0f)"
+          % (_eth[105].bell_cutoff_hz, _eth[106].bell_cutoff_hz,
+             _eth[107].bell_cutoff_hz))
+
     # ------------------------------------------------------------ the effects
     import patch_map as _PMfx
     # 96-103 were the LAST block of eight on one voice.

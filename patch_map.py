@@ -37,6 +37,12 @@ from tonelib import (
     SynthStrings1Properties,
     NewAgePadProperties,
     RainFXProperties,
+    BanjoProperties,
+    ShamisenProperties,
+    KotoProperties,
+    KalimbaProperties,
+    BagpipeProperties,
+    ShanaiProperties,
     SoundtrackFXProperties,
     CrystalFXProperties,
     AtmosphereFXProperties,
@@ -415,10 +421,21 @@ _fill(104, 107, PluckedStringProperties)  # sitar, banjo, shamisen, koto
 # on the base -- a banjo is a membrane rather than a soundboard and a koto has
 # movable bridges, and neither is measured.
 PROGRAM_CLASS[104] = SitarProperties
-PROGRAM_CLASS[108] = MalletProperties      # kalimba
-PROGRAM_CLASS[109] = ReedPipeProperties    # bagpipe: a reed and a pipe, no console
+# 105-108 were the generic plucked string and the generic mallet; 109 and 111
+# shared one reed pipe. Each is a different MECHANISM: a string over a drumhead
+# (105, 106), a long silk string over a wooden box (107), a plucked cantilever
+# (108), a fixed-pitch DRONE (109), and a conical double reed (111).
+PROGRAM_CLASS[105] = BanjoProperties      # steel over a head: thin low, fast decay
+PROGRAM_CLASS[106] = ShamisenProperties   # the same head, plus a sawari buzz
+PROGRAM_CLASS[107] = KotoProperties       # long slack silk over a light wooden box
+PROGRAM_CLASS[108] = KalimbaProperties    # a CANTILEVER: 1 : 6.267 : 17.55
+PROGRAM_CLASS[109] = BagpipeProperties    # the drones, at a pitch the melody cannot move
+PROGRAM_CLASS[111] = ShanaiProperties     # a cone, so the evens come back
+# 108, 109 and 111 are set above and were being overwritten HERE -- the same
+# shape as GM 32, where PROGRAM_CLASS[32] sat above a _fill that clobbered it:
+# the class existed, was correct, and was never reached. Caught by asking
+# property_class_for_note what it returns rather than trusting the assignment.
 PROGRAM_CLASS[110] = SoloViolinProperties  # fiddle -- ONE player, unlike 40-43
-PROGRAM_CLASS[111] = ReedPipeProperties    # shanai: likewise
 # 112-119 Percussive (tinkle bell, agogo, steel drums, woodblock, taiko, melodic tom, synth drum, reverse cymbal)
 _fill(112, 119, MalletProperties)
 # 115 Woodblock is a TIME-KEEPING voice even on a melodic channel -- a game cue

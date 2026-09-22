@@ -296,13 +296,13 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="cell r2" title="103 FX 8 (sci-fi) &mdash; specific, theory">2</div>
 <div class="fam">Ethnic</div>
 <div class="cell r2" title="104 Sitar &mdash; specific, theory">2</div>
-<div class="cell r1" title="105 Banjo &mdash; general class">1</div>
-<div class="cell r1" title="106 Shamisen &mdash; general class">1</div>
-<div class="cell r1" title="107 Koto &mdash; general class">1</div>
-<div class="cell r1" title="108 Kalimba &mdash; general class">1</div>
-<div class="cell r1" title="109 Bag pipe &mdash; general class">1</div>
+<div class="cell r2" title="105 Banjo &mdash; specific, theory">2</div>
+<div class="cell r2" title="106 Shamisen &mdash; specific, theory">2</div>
+<div class="cell r2" title="107 Koto &mdash; specific, theory">2</div>
+<div class="cell r2" title="108 Kalimba &mdash; specific, theory">2</div>
+<div class="cell r2" title="109 Bag pipe &mdash; specific, theory">2</div>
 <div class="cell r4" title="110 Fiddle &mdash; specific, reference audio">4</div>
-<div class="cell r1" title="111 Shanai &mdash; general class">1</div>
+<div class="cell r2" title="111 Shanai &mdash; specific, theory">2</div>
 <div class="fam">Percussive</div>
 <div class="cell r4" title="112 Tinkle Bell &mdash; specific, reference audio">4</div>
 <div class="cell r2" title="113 Agogo &mdash; specific, theory">2</div>
@@ -334,8 +334,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Where it stands</h2>
 <div class="bar">
-<span class="r1" style="flex:11">11</span>
-<span class="r2" style="flex:63">63</span>
+<span class="r1" style="flex:5">5</span>
+<span class="r2" style="flex:69">69</span>
 <span class="r3" style="flex:25">25</span>
 <span class="r4" style="flex:29">29</span>
 </div>
@@ -654,23 +654,23 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="fambox">
 <div class="famhead"><h3>Ethnic</h3><span class="rng">104&ndash;111</span><span class="pips">
 <span class="pip r2"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
 <span class="pip r4"></span>
-<span class="pip r1"></span>
+<span class="pip r2"></span>
 </span></div>
 <div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
 <tr><td class="num">104</td><td class="nm">Sitar</td><td class="cls">Sitar</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording</td></tr>
-<tr><td class="num">105</td><td class="nm">Banjo</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic plucked string; a banjo&#x27;s membrane head is a real resonator</td></tr>
-<tr><td class="num">106</td><td class="nm">Shamisen</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic plucked string</td></tr>
-<tr><td class="num">107</td><td class="nm">Koto</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic plucked string</td></tr>
-<tr><td class="num">108</td><td class="nm">Kalimba</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base; a kalimba is a plucked cantilever tine</td></tr>
-<tr><td class="num">109</td><td class="nm">Bag pipe</td><td class="cls">ReedPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one ReedPipeProperties for the bagpipe and the shanai</td></tr>
+<tr><td class="num">105</td><td class="nm">Banjo</td><td class="cls">Banjo</td><td class="rt"><span class="chip r2">2</span></td><td class="note">steel over a DRUMHEAD: a membrane is light and damped, so it cannot radiate below 380 Hz and it empties the string fast. Thin, quick and bright are one fact</td></tr>
+<tr><td class="num">106</td><td class="nm">Shamisen</td><td class="cls">Shamisen</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch</td></tr>
+<tr><td class="num">107</td><td class="nm">Koto</td><td class="cls">Koto</td><td class="rt"><span class="chip r2">2</span></td><td class="note">long slack silk over a light WOODEN box: the banjo&#x27;s opposite in every way. Movable bridges mean uniform, very low inharmonicity across the compass</td></tr>
+<tr><td class="num">108</td><td class="nm">Kalimba</td><td class="cls">Kalimba</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a plucked CANTILEVER, 1 : 6.267 : 17.55 -- not the mallet base&#x27;s struck bar. The Rhodes tine&#x27;s ratios, undamped, so the overtones ping above the note</td></tr>
+<tr><td class="num">109</td><td class="nm">Bag pipe</td><td class="cls">Bagpipe</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the DRONES: fixed at 220/110 Hz whatever the melody does, which no other voice here can do. They restart per note, and sources.md says why</td></tr>
 <tr><td class="num">110</td><td class="nm">Fiddle</td><td class="cls">SoloViolin</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the measured violin, given solo treatment</td></tr>
-<tr><td class="num">111</td><td class="nm">Shanai</td><td class="cls">ReedPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 109</td></tr>
+<tr><td class="num">111</td><td class="nm">Shanai</td><td class="cls">Shanai</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a CONE, so the even harmonics the chanter&#x27;s class suppressed come back -- a shawm is an oboe&#x27;s geometry, not a bagpipe&#x27;s</td></tr>
 </table></div></div>
 </section>
 <section>

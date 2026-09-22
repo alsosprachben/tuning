@@ -11369,6 +11369,253 @@ class ReedPipeProperties(ReedOrganProperties):
     registerable = False
 
 
+class MembraneBodyProperties(FormantBody, PluckedStringProperties):
+    """A string over a DRUMHEAD. The banjo and the shamisen, and nothing else.
+
+    Every other plucked instrument in this bank radiates through a wooden box.
+    These two radiate through a stretched skin, and it is not a variation on a
+    soundboard -- a membrane is light, heavily damped, and cannot move enough
+    air at low frequencies to radiate them. That single fact gives both
+    instruments their character:
+
+      - a THIN low end, because the head does not radiate it. Modelled with the
+        same bell_cutoff highpass the violin family uses for "a body that small
+        cannot radiate that low", set high.
+      - a FAST decay, because a light damped radiator takes energy out of the
+        string quickly. A banjo note is gone while a guitar's is still ringing.
+      - a BRIGHT spectrum, because what the head does radiate well is the top.
+
+    The head's own modes are not modelled as modes. A drumhead driven at its
+    edge by a bridge is not a free membrane ringing in Bessel patterns -- it is
+    loaded, damped, and driven off-centre -- so what survives is a broad
+    resonance rather than a mode set. That is a formant, and it is asserted:
+    neither reference collection has a banjo or a shamisen.
+    """
+    formants = ((900.0, 800.0, 0.70), (2600.0, 1800.0, 0.55))
+    formant_floor = 0.18
+    bore_corner_hz = 6000.0
+    bore_order = 2.0
+    bell_cutoff_hz = 320.0      # the head cannot radiate below this
+    bell_order = 2.0
+
+    decay_db = 4.5              # a light damped radiator empties the string
+    harmonic_decay_db = 2.2
+    harmonic_decay_dampening = 0.0
+    tonal_dampening = 0.95
+    max_harmonic = 48
+
+
+class BanjoProperties(MembraneBodyProperties):
+    """GM 105. Five steel strings over a drumhead, picked near the bridge.
+
+    Steel and a fingerpick: brighter and faster than the shamisen's silk and
+    horn plectrum, and picked closer to the bridge, so the comb's first null
+    sits higher and the low partials are thinner still.
+
+    ASSERTED, NOT MEASURED. Neither collection has one.
+    """
+    strike_point = 0.12
+    strike_depth = 0.85
+    strike_fills_with_force = False
+    inharmonicity_coefficient = 8.0e-05     # short steel, estimated
+    inharmonicity_dynamic = False
+    tonal_dampening = 0.80                  # steel: brighter than silk
+    decay_db = 5.2
+    bell_cutoff_hz = 380.0                  # a small head, and a tight one
+    # Balance-normalised against the MEASURED nylon guitar (GM 24) on the same
+    # passage in the same room -- the plucked family's reference-audio member.
+    initial_gain = 0.0818031
+                    # balance-normalised below
+
+
+class ShamisenProperties(MembraneBodyProperties):
+    """GM 106. Silk over a skin, struck with a bachi -- and a SAWARI buzz.
+
+    The sawari is the same idea as the sitar's jawari and is the reason both
+    instruments sound related despite sharing no geometry: the lowest string is
+    left to graze a deliberately shallow ledge at the nut, so it rattles against
+    it and the upper partials are sustained instead of being damped away. It is
+    modelled as the sitar models its own -- a very shallow spectral rolloff and
+    an upper series that decays barely faster than the fundamental -- rather
+    than as a contact, because a grazing contact is a nonlinearity the renderer
+    has no way to integrate.
+
+    ONLY THE LOWEST STRING HAS IT on the real instrument, and here it is applied
+    across the compass. A per-register version would need the strike and the
+    rolloff to move with pitch, which is the koto's movable-bridge problem in
+    reverse and is not worth the machinery for a voice with no reference.
+
+    A bachi is a large heavy plectrum, so the exciter is WIDE where the banjo's
+    fingerpick is narrow: the comb notch fills and the attack is a thud rather
+    than a click.
+    """
+    strike_point = 0.18
+    strike_depth = 0.55         # a wide plectrum fills its own notch
+    strike_fills_with_force = False
+    tonal_dampening = 0.45      # the sawari: shallower even than the sitar's
+    harmonic_decay_db = 0.9     # ...and the top survives
+    decay_db = 3.8
+    max_harmonic = 64
+    initial_gain = 0.032913
+
+
+class KotoProperties(FormantBody, PluckedStringProperties):
+    """GM 107. Thirteen long silk strings over a long hollow paulownia box.
+
+    The opposite instrument to the banjo in every way that matters here. A koto
+    string is long, slack and silk or nylon, and it runs over a large light
+    WOODEN body -- so where a banjo is bright, thin and quick, a koto is round,
+    full and rings for a long time.
+
+    THE MOVABLE BRIDGES ARE WHY IT IS NOT A HARP. Each string has its own ji
+    that the player positions, so the speaking length is set per string and the
+    pitch comes from where the bridge sits rather than from the string's own
+    tension being tuned. What that means for the model is that the strings are
+    all of similar make and length: the inharmonicity is uniform and very low
+    across the compass, which is unlike a piano or a harp, whose bass strings
+    are wound and different in kind.
+
+    ASSERTED, NOT MEASURED.
+    """
+    # A long light box: a broad low resonance and a second in the low-mid,
+    # with plenty radiated below them -- a koto has real bottom.
+    formants = ((280.0, 200.0, 0.75), (900.0, 700.0, 0.45))
+    formant_floor = 0.16
+    bore_corner_hz = 3200.0
+    bore_order = 2.0
+    bell_cutoff_hz = 110.0
+    bell_order = 2.0
+
+    # Tsume: picks on three fingers, plucked well away from the bridge.
+    strike_point = 0.22
+    strike_depth = 0.70
+    strike_fills_with_force = False
+
+    # Long, slack, silk: almost no stiffness, and it rings.
+    inharmonicity_coefficient = 6.0e-06
+    inharmonicity_dynamic = False
+    decay_db = 0.9
+    harmonic_decay_db = 1.3
+    harmonic_decay_dampening = 0.0
+    tonal_dampening = 1.35
+    max_harmonic = 40
+    initial_gain = 0.0571298
+
+
+class KalimbaProperties(FormantBody, PluckedStringProperties):
+    """GM 108. A plucked metal TINE, which is not a string and not a bar.
+
+    It was on MalletProperties, which is a struck bar. A kalimba's tine is a
+    CANTILEVER -- clamped at one end and free at the other -- and a cantilever's
+    modes are not a bar's and certainly not a string's. The free-free bar a
+    marimba uses runs 1 : 3.01 : 5.03; a clamped-free cantilever runs
+
+        1 : 6.267 : 17.55
+
+    which is far wider, and it is why a kalimba's overtones do not fuse into a
+    pitch the way a marimba's do but sit above the note as separate pings.
+
+    Those are the same ratios the Rhodes tine has, and for the same reason --
+    a Rhodes tine is also a cantilever -- but the two instruments make opposite
+    use of them. A Rhodes damps its tine's overtones with a tonebar and reads
+    the fundamental with a pickup; a kalimba has neither, so the overtones
+    radiate and are most of the attack.
+
+    THE SECOND MODE IS BARELY THERE, though, because a thumb plucks the tine
+    near its free END, where the second mode has a node close by. That is the
+    same comb argument every plucked string here uses, applied to a cantilever.
+
+    ASSERTED, NOT MEASURED.
+    """
+    mode_ratios = (1.0, 6.267, 17.55)
+    mode_gains = (1.0, 0.16, 0.05)
+    max_harmonic = 3
+
+    # A slotted wooden box or a gourd: one broad resonance, and it is what
+    # makes a kalimba audible at all -- the tine alone moves almost no air.
+    formants = ((420.0, 500.0, 0.85),)
+    formant_floor = 0.22
+    bore_corner_hz = 4500.0
+    bore_order = 2.0
+    bell_cutoff_hz = 180.0
+    bell_order = 2.0
+
+    # Metal, plucked and undamped: the fundamental rings and the high modes go
+    # first, which is what a thin tine's radiation does.
+    decay_db = 1.8
+    harmonic_decay_db = 2.6
+    harmonic_decay_dampening = 0.0
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    initial_gain = 0.056563
+
+
+class BagpipeProperties(ReedPipeProperties):
+    """GM 109. A chanter, and the DRONES -- which are the instrument.
+
+    109 and 111 shared one ReedPipeProperties, and the thing that most obviously
+    separates a bagpipe from a shawm is not its reed: it is that a bagpipe plays
+    a continuous drone underneath everything, at a FIXED pitch, which never
+    changes with the melody. No other voice in this bank does that.
+
+    A FIXED PITCH IS EXPRESSIBLE, and it takes one line. unison_voices is handed
+    the note's own frequency, so a voice at `drone_hz / frequency` sounds at
+    drone_hz whatever is played -- every other user of that hook returns a
+    RATIO, which tracks the note by construction. A drone is the one thing that
+    must not.
+
+    WHAT IS NOT RIGHT ABOUT IT, stated: a real drone sounds continuously and
+    this one restarts with every note, because it is attached to the note rather
+    than to the part. On a legato line that is close to inaudible and on a
+    detached one it is wrong. A continuous drone belongs to the channel, not to
+    a voice, and would be a renderer change.
+
+    Two drones, tuned as a Highland pipe's tenor and bass are: A3 and A2 against
+    a chanter nominally in A. The chanter's own pitch is famously sharp of
+    concert A -- around 480 Hz rather than 440 -- but the drones are tuned to
+    the chanter, so what matters here is the interval and not the reference.
+    """
+    drone_hz = (220.0, 110.0)
+    drone_gain = (0.42, 0.34)
+
+    # A chanter is a loud, bright, double-reed pipe with a narrow conical bore.
+    tonal_dampening = 1.05
+    max_harmonic = 40
+    # Against the MEASURED oboe (GM 68), not the plucked anchor: this class
+    # inherits the organ's gain scale, where 0.02 is a hundred times hot.
+    initial_gain = 0.000163928
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        f = float(frequency)
+        if f <= 0.0:
+            return []
+        return [(g, 0.0, hz / f - 1.0, harmonic_decay, 0.0)
+                for hz, g in zip(self.drone_hz, self.drone_gain)]
+
+
+class ShanaiProperties(ReedPipeProperties):
+    """GM 111. A double reed in a CONICAL bore, and no drone at all.
+
+    The other half of the pair 109 and 111 used to share. A shehnai is a shawm:
+    a wide double reed driving a conical bore that flares to a metal bell, which
+    is an oboe's geometry rather than a bagpipe chanter's, and it is played with
+    no drone from the instrument itself -- the drone in the ensemble comes from
+    a second player on a sur peti or a second shehnai.
+
+    A CONE PASSES THE WHOLE SERIES where a cylinder favours the odd, so the even
+    harmonics that ReedOrganProperties suppresses have to come back. Bright and
+    nasal with it: the reed is wide and the bell is metal.
+
+    ASSERTED, NOT MEASURED.
+    """
+    odd_only = False
+    even_harmonic_db = None
+    tonal_dampening = 0.85      # brighter and more nasal than the chanter
+    max_harmonic = 48
+    bore_corner_hz = 4200.0
+    initial_gain = 0.000174797
+
+
 class OpenPipeProperties(StoppedPipeProperties):
     """An OPEN pipe: flute, piccolo, recorder, whistle, shakuhachi.
 

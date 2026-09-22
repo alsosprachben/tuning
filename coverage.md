@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 11 | 9% |
-| 2 specific, theory | 63 | 49% |
+| 1 general class | 5 | 4% |
+| 2 specific, theory | 69 | 54% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -272,13 +272,13 @@ splits almost exactly along that line.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 104 | Sitar | `Sitar` | **2** | its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording |
-| 105 | Banjo | `PluckedString` | **1** | the generic plucked string; a banjo's membrane head is a real resonator |
-| 106 | Shamisen | `PluckedString` | **1** | the generic plucked string |
-| 107 | Koto | `PluckedString` | **1** | the generic plucked string |
-| 108 | Kalimba | `Mallet` | **1** | the generic mallet base; a kalimba is a plucked cantilever tine |
-| 109 | Bag pipe | `ReedPipe` | **1** | one ReedPipeProperties for the bagpipe and the shanai |
+| 105 | Banjo | `Banjo` | **2** | steel over a DRUMHEAD: a membrane is light and damped, so it cannot radiate below 380 Hz and it empties the string fast. Thin, quick and bright are one fact |
+| 106 | Shamisen | `Shamisen` | **2** | the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch |
+| 107 | Koto | `Koto` | **2** | long slack silk over a light WOODEN box: the banjo's opposite in every way. Movable bridges mean uniform, very low inharmonicity across the compass |
+| 108 | Kalimba | `Kalimba` | **2** | a plucked CANTILEVER, 1 : 6.267 : 17.55 -- not the mallet base's struck bar. The Rhodes tine's ratios, undamped, so the overtones ping above the note |
+| 109 | Bag pipe | `Bagpipe` | **2** | the DRONES: fixed at 220/110 Hz whatever the melody does, which no other voice here can do. They restart per note, and sources.md says why |
 | 110 | Fiddle | `SoloViolin` | **4** | the measured violin, given solo treatment |
-| 111 | Shanai | `ReedPipe` | **1** | as 109 |
+| 111 | Shanai | `Shanai` | **2** | a CONE, so the even harmonics the chanter's class suppressed come back -- a shawm is an oboe's geometry, not a bagpipe's |
 
 ## 112-119 Percussive
 

@@ -4553,3 +4553,89 @@ the pads are: what one of these is reached for INSTEAD of.
 ### The bank
 
 With these, no block of eight shares a voice any longer.
+
+## GM 104-111, the ethnic family
+
+104 sitar and 110 fiddle already had voices. The other six did not: 105-107 were
+the generic plucked string, 108 the generic mallet, and 109 and 111 shared one
+reed pipe. They are not variations on each other, and each got the mechanism
+its name is pointing at.
+
+### A membrane is not a soundboard
+
+The banjo and the shamisen are the only plucked instruments in this bank whose
+body is a stretched skin, and it is not a variation on a wooden box. A membrane
+is light and heavily damped: it **cannot move enough air low down to radiate the
+bottom of the note**, it empties the string quickly, and what it radiates well
+is the top. Thin, fast and bright are one fact, not three.
+
+| | body cuts off below | decays at |
+|---|---|---|
+| banjo | 380 Hz | 5.2 dB/s |
+| shamisen | 320 Hz | 3.8 dB/s |
+| koto (wooden) | 110 Hz | 0.9 dB/s |
+
+The head's own modes are deliberately NOT modelled as modes. A drumhead driven
+at its edge by a bridge is loaded, damped and driven off-centre -- not a free
+membrane ringing in Bessel patterns -- so what survives is a broad resonance
+rather than a mode set, and a formant is the honest shape for that.
+
+The shamisen's **sawari** is the sitar's jawari under another name, and it is
+why the two instruments sound related despite sharing no geometry: the lowest
+string grazes a deliberately shallow ledge and rattles, so the upper partials
+sustain instead of damping away. Modelled as the sitar models its own -- a very
+shallow rolloff and an upper series that barely decays faster than the
+fundamental -- rather than as a contact, which is a nonlinearity this renderer
+cannot integrate. Applied across the compass where the real instrument has it
+on one string only, and that is stated in the class.
+
+### A kalimba is a cantilever
+
+It was on `MalletProperties`, a STRUCK BAR. A free-free bar runs 1 : 3 : 5 and
+a **clamped-free cantilever 1 : 6.267 : 17.55** -- far wider, which is why a
+kalimba's overtones sit above the note as separate pings instead of fusing into
+it.
+
+Those are the Rhodes tine's ratios, for the same reason: a Rhodes tine is also
+a cantilever. The two instruments make **opposite use** of them -- a Rhodes
+damps its tine's overtones with a tonebar and reads the fundamental with a
+pickup, where a kalimba has neither, so the overtones radiate and are most of
+the attack.
+
+### A drone does not follow the melody
+
+No other voice in this bank does that. Every user of `unison_voices` returns a
+RATIO and so tracks the note by construction; the bagpipe is handed the note's
+frequency and returns `drone_hz / frequency`, which cancels it. Measured, the
+drones sit at 220 and 110 Hz whether the melody is at G3, G4 or G5.
+
+**WHAT IS NOT RIGHT ABOUT IT, stated in the class:** a real drone sounds
+continuously and this one restarts with every note, because it is attached to
+the note rather than to the part. On a legato line that is near inaudible; on a
+detached one it is wrong. A continuous drone belongs to the channel and would be
+a renderer change.
+
+And the shanai is the other half of the pair: a **cone passes the whole series**
+where a cylinder favours the odd, so the evens `ReedOrganProperties` suppresses
+had to come back. Measured, the chanter's h2 sits at -218 dB and the shanai's at
+-4.9.
+
+### An old bug, in its exact original shape
+
+Three of the six were written into `patch_map` and then **overwritten four lines
+below** by the assignments they were meant to replace -- so the kalimba, bagpipe
+and shanai classes existed, were correct, and were never reached. That is GM 32
+again, precisely. It was caught by asking `property_class_for_note` what it
+returns instead of trusting the assignment, which is the habit that bug taught,
+and there is now a check that the router agrees with the map.
+
+### Levels
+
+The four plucked voices against the MEASURED nylon guitar (GM 24), the two reeds
+against the MEASURED oboe (GM 68). The reeds needed the oboe rather than the
+plucked anchor for a structural reason: `ReedPipeProperties` inherits the
+organ's gain scale, where the 0.02 used everywhere else is **a hundred times
+hot**.
+
+All six are ASSERTED, NOT MEASURED. Neither reference collection has a banjo, a
+shamisen, a koto, a kalimba, a bagpipe or a shehnai.
