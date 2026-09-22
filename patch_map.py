@@ -65,6 +65,9 @@ from tonelib import (
     ViolaProperties,
     CelloProperties,
     ContrabassProperties,
+    tremolo_bow,
+    PizzicatoStringsProperties,
+    HarpProperties,
     slow_bow,
     FlueOrganProperties,
     ReedOrganProperties,
@@ -236,12 +239,21 @@ PROGRAM_CLASS[36] = SlapBassProperties
 PROGRAM_CLASS[37] = PoppedBassProperties
 # 40-47  Strings / orchestral
 _fill(40, 44, BowedStringProperties)   # violin, viola, cello, contrabass, tremolo
-PROGRAM_CLASS[45] = PluckedStringProperties  # pizzicato strings
+# 44 is an ARTICULATION, not an instrument, and it rides on whichever body the
+# register picks -- a low tremolo is a CELLO section bowing tremolo. So it is
+# applied in property_class_for_note below, beside the slow bow of GM 49, and
+# NOT as a PROGRAM_CLASS entry: 44 is in BOWED_ENSEMBLE, so the per-note router
+# would override any class set here (and did, silently, until it was measured).
+# 45 and 46 were BOTH the generic plucked string, which has no `formants`
+# attribute at all -- so a pizzicato section and a harp were being rendered with
+# no body whatsoever. 45 wears the measured violin body and plucks; 46 is its
+# own instrument.
+PROGRAM_CLASS[45] = PizzicatoStringsProperties
 PROGRAM_CLASS[40] = ViolinProperties         # each instrument now has its own body
 PROGRAM_CLASS[41] = ViolaProperties
 PROGRAM_CLASS[42] = CelloProperties
 PROGRAM_CLASS[43] = ContrabassProperties
-PROGRAM_CLASS[46] = PluckedStringProperties  # orchestral harp
+PROGRAM_CLASS[46] = HarpProperties            # plucked near the middle, and it rings
 PROGRAM_CLASS[47] = TimpaniProperties         # tuned membrane over a bowl, not a bar
 # 48-55  Ensemble (strings, choir, voices, orchestra hit)
 _fill(48, 55, BowedStringProperties)
@@ -482,7 +494,13 @@ def property_class_for_note(program, note):
     if prog in BOWED_ENSEMBLE or prog in BOWED_ENSEMBLE_SLOW:
         for hi, cls in BOWED_SPLIT:
             if note < hi:
-                return slow_bow(cls) if prog in BOWED_ENSEMBLE_SLOW else cls
+                if prog in BOWED_ENSEMBLE_SLOW:
+                    return slow_bow(cls)
+                # GM 44 is the same section bowing tremolo: the articulation
+                # rides on the body the register chose. See tonelib.tremolo_bow.
+                if prog == 44:
+                    return tremolo_bow(cls)
+                return cls
     split = SOLO_SPLIT.get(prog)
     if split is not None:
         for hi, cls in split:

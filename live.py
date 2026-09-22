@@ -3340,6 +3340,66 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------- tremolo, pizz, harp
+    import patch_map as _PMs
+    # GM 45 and 46 were BOTH PluckedStringProperties, which has no `formants`
+    # attribute at all -- so a pizzicato section and a harp rendered with no
+    # body whatsoever. This is the same hole the acoustic bass was in, and the
+    # check is written the way that one is: by asking for the attribute rather
+    # than assuming a None default, which is the mistake that wrote it wrong
+    # three times.
+    for _gm, _what in ((45, "the pizzicato section"), (46, "the harp")):
+        _c = _PMs.property_class_for_program(_gm)
+        check("%s has a body at all" % _what,
+              bool(getattr(_c, "formants", ())),
+              "  (%s: %d formant%s)" % (_c.__name__.replace("Properties", ""),
+                                        len(getattr(_c, "formants", ())),
+                                        "" if len(getattr(_c, "formants", ())) == 1 else "s"))
+    # THE PIZZ WEARS THE MEASURED VIOLIN'S BODY. Same section, same box; only
+    # the excitation changed, and a body does not know how it was set going.
+    check("...and the pizzicato's body is the measured violin's",
+          _PMs.property_class_for_program(45).formants
+          == _T.ViolinProperties.formants,
+          "  (the Iowa bridge hill, unchanged)")
+    # A PIZZ NOTE IS SHORT. This is most of what separates it from every other
+    # plucked voice, and it was 2.2 s to -30 dB before it was measured.
+    _pz = _PMs.property_class_for_program(45)
+    _hp = _PMs.property_class_for_program(46)
+    check("a pizzicato note dies and a harp note rings",
+          _pz.decay_db > 10.0 * _hp.decay_db and _hp.decay_db < 1.0,
+          "  (pizz %.1f dB/s, harp %.2f)" % (_pz.decay_db, _hp.decay_db))
+    # A HARP IS PLUCKED IN TOWARD THE MIDDLE, which is the darkest place there
+    # is: the comb's first null lands on a low partial and that, not a filter,
+    # is why a harp is mellow.
+    check("the harp is plucked near the middle, the pizz near the end",
+          0.30 < _hp.strike_point < 0.45 and _pz.strike_point < 0.25,
+          "  (harp nulls at h%.1f, pizz at h%.1f)"
+          % (1.0 / _hp.strike_point, 1.0 / _pz.strike_point))
+    # GM 44 IS AN ARTICULATION AND RIDES ON THE REGISTER'S BODY. A low tremolo
+    # is a CELLO section bowing tremolo. A TremoloStringsProperties(Violin) was
+    # written first and the per-note router silently overrode it -- 44 is in
+    # BOWED_ENSEMBLE -- which is how that was caught. Check the router, never
+    # the assignment: the same lesson GM 32 taught.
+    _t_lo = _PMs.property_class_for_note(44, 40)
+    _t_hi = _PMs.property_class_for_note(44, 72)
+    check("tremolo strings ride on whichever body the register picks",
+          _t_lo is not _t_hi
+          and issubclass(_t_lo, _T.CelloProperties)
+          and issubclass(_t_hi, _T.ViolinProperties),
+          "  (E2 -> %s, C5 -> %s)" % (_t_lo.__name__.replace("Properties", ""),
+                                      _t_hi.__name__.replace("Properties", "")))
+    check("...and every one of them actually bows tremolo",
+          all(getattr(_PMs.property_class_for_note(44, _n), "tremolo_depth", 0.0) > 0.0
+              for _n in (36, 48, 60, 72, 84)),
+          "  (%.1f Hz at every pitch, +/-%.0f%% per player)"
+          % (_t_hi.tremolo_hz, 100 * _t_hi.tremolo_scatter))
+    # AND IT MUST NOT BE CONFUSABLE WITH THE SECTION'S VIBRATO. A tremolo that
+    # landed in the 4.6-6.4 Hz vibrato band would just read as a nervous player.
+    check("...at a rate no one could mistake for vibrato",
+          _t_hi.tremolo_hz > _t_hi.section_vibrato_hz[1] * 1.4,
+          "  (tremolo %.1f Hz against vibrato %.1f-%.1f)"
+          % ((_t_hi.tremolo_hz,) + tuple(_t_hi.section_vibrato_hz)))
+
     # ---------------------------------------------------------- free reeds
     # GM 20-23 were all rendering as ReedOrganProperties, which is a pipe
     # organ's reed RANK: a beating reed with a resonator behind it. All four are

@@ -1,5 +1,5 @@
   wrote /home/ben/repos/tuning/coverage.md
-  0:0  1:48  2:33  3:18  4:29
+  0:0  1:45  2:36  3:18  4:29
 examples/gm_coverage.py`, which reads the class column out of `patch_map`
 so it cannot drift; the ratings live in that script and can be argued with.
 
@@ -22,8 +22,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 48 | 38% |
-| 2 specific, theory | 33 | 26% |
+| 1 general class | 45 | 35% |
+| 2 specific, theory | 36 | 28% |
 | 3 specific, theory + ear | 18 | 14% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -170,9 +170,9 @@ splits almost exactly along that line.
 | 41 | Viola | `Viola` | **4** | Iowa viola, fitted across registers |
 | 42 | Cello | `Cello` | **4** | Iowa cello |
 | 43 | Contrabass | `Contrabass` | **4** | Iowa double bass |
-| 44 | Tremolo Strings | `BowedString` | **1** | the generic bowed string; the tremolo articulation is not modelled |
-| 45 | Pizzicato Strings | `PluckedString` | **1** | the generic plucked string |
-| 46 | Orchestral Harp | `PluckedString` | **1** | the generic plucked string |
+| 44 | Tremolo Strings | `BowedString` | **2** | tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase |
+| 45 | Pizzicato Strings | `PizzicatoStrings` | **2** | PizzicatoStrings: the MEASURED violin body, plucked over the fingerboard and damped in half a second |
+| 46 | Orchestral Harp | `Harp` | **2** | Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings |
 | 47 | Timpani | `Timpani` | **2** | analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set |
 
 ## 48-55 Ensemble

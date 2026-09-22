@@ -3752,3 +3752,93 @@ worse than none. GM 20 is a single 8' rank.
 reshaping the vocal tract, which couples strongly to such a small reed. The
 formant pair here is a fixed cupped hand; the bend would need a controller and
 is the obvious next thing if the voice is worth more work.
+
+## GM 44, 45, 46: tremolo strings, pizzicato strings, the harp
+
+All three sat at coverage 1, and two of them were bodiless.
+
+### 45 and 46 had no body at all
+
+Both were `PluckedStringProperties`, which **has no `formants` attribute** -- not
+`None`, absent. So a pizzicato section and an orchestral harp were being
+rendered as a bare string series with a bore roll-off and nothing of either
+instrument in them. Exactly the hole the acoustic bass was in.
+
+**45 Pizzicato** now wears the **measured violin body** -- the Iowa bridge hill
+at 2300 Hz, unchanged. A pizzicato note radiates through the same box a bowed
+one does; what changed is how the string was set going, and a body does not
+know. It is a section, so `SectionMixin` (which exists to be mixed into whatever
+is doing the playing), with a *wider* spread than the bowed sections use and no
+vibrato at all: a pizz note is too short to vibrate, and the entry scatter does
+the decorrelating instead.
+
+**THE DECAY HAD TO BE MEASURED, NOT CALCULATED.** At `decay_db = 7.0` a rendered
+note took **2.2 s** to fall 30 dB, which is a guitar. 30 + 12 overshot to 0.27 s.
+16 + 8 lands at 0.5 s, inside the 0.4-0.8 a pizz actually has. Nominal and
+measured rates differ because the upper partials dominate the envelope early.
+
+**46 Harp.** What makes a harp sound like one is where it is plucked and with
+what: the flesh of a finger, well in toward the middle of the string. A centre
+pluck is the darkest place there is, because the comb `|sin(n*pi*p)|` puts its
+first null at `n = 1/p` -- at p = 0.38 that is the **third partial**. That, and
+not a filter, is why a harp is mellow. And the strings anchor straight into the
+soundboard with no bridge, which is why it is loud for its size and why an
+undamped note sings on past 8 seconds.
+
+Measured across the compass the harp is rich in the bass and nearly pure at the
+top (h2 at -0.9 dB at C2, -20.4 at C6), with the lowest fundamental rolled off
+because a box that size cannot radiate 65 Hz. Total level is flat to 0.1 dB
+across five octaves -- `_bore_norm` doing its job.
+
+### 44 is an ARTICULATION, and that changed the design
+
+Written first as `TremoloStringsProperties(ViolinProperties)`. **The per-note
+router silently overrode it**: GM 44 is in `BOWED_ENSEMBLE`, so
+`property_class_for_note` was already routing each note to violin, viola or
+cello by register, and the class set in `PROGRAM_CLASS[44]` was never reached.
+The same lesson GM 32 taught -- check the router, never the assignment -- and
+this time the router was *right*: a low tremolo is a **cello** section bowing
+tremolo, not a violin section playing low.
+
+So it is a transform, `tremolo_bow(cls)`, beside the existing `slow_bow(cls)`
+for GM 49. The articulation rides on whichever body the register picked.
+
+The stroke is amplitude modulation, which this renderer makes out of partials:
+
+    (1 + m cos(w t)) sin(W t) = sin + (m/2)[ sin(W+w) + sin(W-w) ]
+
+one sideband pair per partial, `tremolo.py`'s identity, written for the
+Wurlitzer and now on its third voice.
+
+**THE SECTION IS THE DIFFICULTY.** A Wurlitzer has one modulator. Fourteen
+players bowing tremolo have fourteen, because nobody counts strokes -- so a
+single modulator gives a 9 Hz throb that sounds like an effect pedal bolted to
+an orchestra. `tremolo_scatter` gives each player their own rate and phase, and
+it costs nothing, because the phase is already in the algebra: the upper
+sideband takes `p + ph` and the lower `p - ph`. Each player's partials are
+already separate rows carrying a `pl` column, so the draw is per (channel,
+player) and one player's partials agree with each other and with no one else's.
+
+Measured in the held chord's envelope:
+
+| | strongest modulation | 7.5-11.5 Hz share |
+|---|---|---|
+| GM 40 sustained | 4.50 Hz (that is the vibrato) | 9.4% |
+| GM 44 tremolo | **8.84 Hz** | **48.8%** |
+
+8.84 rather than 9.5 is the per-player scatter, which is the point. And 9.5 Hz
+sits well clear of the same section's 4.6-6.4 Hz vibrato, deliberately: a
+tremolo landing in the vibrato band would just read as a nervous player.
+
+### Levels
+
+All three balance-normalised against the **measured violin** (GM 40) on the same
+passage in the same room -- the same section playing differently, which is the
+one comparison that means anything here. Within 1 dB.
+
+### Not attempted
+
+**A per-register body for the pizzicato.** GM 45 is not in `BOWED_ENSEMBLE`, so
+it wears one body across its whole compass, and a low pizz is really a cello's.
+The machinery to fix it is the router GM 44 now uses. Left because it is a
+separate decision and this pass was already changing what those voices are.

@@ -32,6 +32,7 @@ that a valve added later intermodulates the carrier rather than the sidebands,
 which would be wrong; move this pass ahead of the amp at the same time.
 """
 import math
+import random as _random
 
 import numpy as np
 
@@ -48,9 +49,27 @@ ENABLED = True
 def expand(A, channels, sr, cols):
     """Give every partial of a modulated voice its sideband pair, in place.
 
-    `channels` is {midi_channel: (rate_hz, depth, stereo)}. Depth is the
-    fraction the level swings by, already scaled by whatever the file asked
-    for; a depth of 0 emits nothing rather than emitting a silent pair.
+    `channels` is {midi_channel: (rate_hz, depth, stereo)} or, for a SECTION,
+    {midi_channel: (rate_hz, depth, stereo, scatter)}. Depth is the fraction the
+    level swings by, already scaled by whatever the file asked for; a depth of 0
+    emits nothing rather than emitting a silent pair.
+
+    SCATTER IS WHAT MAKES A SECTION TREMOLO A SHIMMER AND NOT A PULSE. Fourteen
+    players bowing tremolo are not bowing together -- nobody counts strokes --
+    so their modulators run at their own rates and their own phases, and what
+    the audience hears is the sum smearing into a wash. One rate and one phase
+    across the section gives a coherent 9 Hz throb, which is an effect pedal and
+    not an orchestra.
+
+    It costs nothing extra, because the phase is already in the algebra:
+
+        (1 + m cos(w t + ph)) sin(W t + p)
+          = sin(W t + p) + (m/2)[ sin((W+w) t + p + ph) + sin((W-w) t + p - ph) ]
+
+    -- the upper sideband takes p + ph and the lower p - ph. And each player's
+    partials are ALREADY separate rows carrying a 'pl' column that says which
+    player they belong to, so the draw is deterministic per (channel, player)
+    and every partial of one player agrees.
     """
     if not ENABLED or not channels:
         return 0
@@ -64,15 +83,34 @@ def expand(A, channels, sr, cols):
         cfg = channels.get(ch)
         if cfg is None:
             continue
-        rate, depth, stereo = cfg
+        if len(cfg) == 4:
+            rate, depth, stereo, scatter = cfg
+        else:
+            rate, depth, stereo = cfg
+            scatter = 0.0
         if depth <= 0.0 or rate <= 0.0:
             continue
+        ph = 0.0
+        if scatter > 0.0:
+            # Per (channel, player), so one player's partials agree with each
+            # other and disagree with the next player's. crc-free and stable:
+            # the same file must give the same section every run, in both
+            # renderers, which is why this is a seeded draw and not hash().
+            pl = int(A['pl'][i]) if 'pl' in A else 0
+            rng = _random.Random(0x7E30 + ch * 977 + pl)
+            rate = rate * (1.0 + scatter * rng.uniform(-1.0, 1.0))
+            ph = rng.uniform(0.0, 2.0 * math.pi)
         dw = 2.0 * math.pi * rate / sr
         half = 0.5 * depth
         for sign in (1.0, -1.0):
             for col in cols:
                 extra[col].append(A[col][i])
             extra['om'][-1] = A['om'][i] + sign * dw
+            if ph:
+                # p + ph for the upper sideband, p - ph for the lower.
+                extra['p0'][-1] = A['p0'][i] + sign * ph
+                if 'p0R' in extra:
+                    extra['p0R'][-1] = A['p0R'][i] + sign * ph
             extra['aL'][-1] = A['aL'][i] * half
             # The one minus sign that separates a pan from a tremolo.
             extra['aR'][-1] = A['aR'][i] * (-half if stereo else half)

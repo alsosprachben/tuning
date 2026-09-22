@@ -996,10 +996,20 @@ def prepare(path, tuner='hybrid440'):
             # A file with no CC1 gets no modulation, which is the panel's own
             # default position and what every file in the corpus will see.
             _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
-            _dep = float(props.tremolo_depth) * (_c1[0] / 127.0 if _c1 else 0.0)
+            if getattr(props, 'tremolo_intrinsic', False):
+                # AN INTRINSIC TREMOLO IS NOT A WHEEL EFFECT. GM 44 is called
+                # Tremolo Strings: the stroke is the patch, so it is on at full
+                # depth with no CC1 in the file, and the wheel scales it around
+                # that rather than switching it on. A Rhodes is the other case
+                # and keeps the behaviour above -- its panel default is off.
+                _dep = float(props.tremolo_depth) * (
+                    (_c1[0] / 64.0) if _c1 else 1.0)
+            else:
+                _dep = float(props.tremolo_depth) * (_c1[0] / 127.0 if _c1 else 0.0)
             if _dep > 0.0:
                 _TREM_CH[ch] = (float(props.tremolo_hz), _dep,
-                                bool(getattr(props, 'tremolo_stereo', False)))
+                                bool(getattr(props, 'tremolo_stereo', False)),
+                                float(getattr(props, 'tremolo_scatter', 0.0)))
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a

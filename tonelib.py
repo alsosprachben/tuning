@@ -3863,6 +3863,7 @@ class WurlitzerProperties(ElectricPianoProperties):
         return 1.0 / (1.0 + u)
 
 
+
 class StoppedPipeProperties(SynthProperties):
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
@@ -5258,6 +5259,128 @@ class MalletProperties(PluckedStringProperties):
     harmonic_decay_dampening = 0.3
 
 
+
+class PizzicatoStringsProperties(FormantBody, SectionMixin, PluckedStringProperties):
+    """GM 45: a string section PLUCKING. Not the generic plucked string.
+
+    It had been PluckedStringProperties, which has no `formants` attribute at
+    all -- so a pizzicato section was being rendered with NO BODY: a bare string
+    series with a bore roll-off, and nothing of the violin about it. That is the
+    same hole the acoustic bass was in.
+
+    Three claims, and each one comes from a different place:
+
+    THE BODY IS A VIOLIN'S, and it is measured -- the bridge hill at 2300 Hz
+    that ViolinProperties carries, from the Iowa recordings. A pizzicato note
+    radiates through exactly the same box as a bowed one; what changed is how
+    the string was set going, and a body does not know or care.
+
+    IT IS A SECTION, so SectionMixin, which exists precisely to be mixed into
+    whatever is doing the playing. Fewer players than the bowed sections use,
+    and a WIDER spread: a section plucking is less together than a section
+    bowing, because a bow stroke can be matched to a neighbour's over its whole
+    length and a pluck is over before anyone can adjust.
+
+    AND NO VIBRATO. A pizz note in a section is too short to vibrate, and
+    section_vibrato_cents = 0 is exactly what SectionMixin's docstring warns
+    about -- a player with no depth has no rate or phase either. That warning is
+    about a voice whose wheel raises a resting vibrato; this voice has none to
+    raise, which is the point. The entry scatter does the decorrelating instead.
+
+    NOT MEASURED. The body is; the pluck is argued. Rated 2.
+    """
+    # The measured violin body, unchanged -- see ViolinProperties.
+    formants = ((2300.0, 1400.0, 0.55),)
+    formant_floor = 0.05
+    bore_corner_hz = 4000.0
+    bore_order = 2.0
+    bell_cutoff_hz = 150.0
+    bell_order = 2.0
+
+    # Plucked over the end of the fingerboard, which on a violin is about a
+    # fifth of the way along from the bridge -- much further out than a guitar's
+    # pick, hence rounder. A finger, so the notch fills at no dynamic: a
+    # fingertip is soft but it does not flatten with force the way felt does.
+    strike_point = 0.20
+    strike_depth = 0.70
+    strike_fills_with_force = False
+
+    # A PIZZ NOTE IS SHORT. This is what most separates it from every other
+    # plucked voice in the bank: a guitar rings for seconds and a pizzicato
+    # violin is gone in well under one, because a short thin string on a stiff
+    # box is heavily damped and the player's next stop kills it anyway.
+    # Measured on a rendered note, 7.0 dB/s left it ringing 2.2 s to -30 dB,
+    # which is a guitar. A pizzicato violin is gone in well under a second: a
+    # short thin string on a stiff box is heavily damped, and the player's next
+    # stop kills what is left. 30 + 12 measured 0.27 s, snappier than the real
+    # thing; 16 + 8 lands at 0.5, inside the 0.4-0.8 a pizz note actually has.
+    # The nominal rate and the measured one differ because the upper partials
+    # dominate the envelope early -- which is why this was measured and not
+    # calculated.
+    decay_db = 16.0
+    harmonic_decay_db = 8.0
+    harmonic_decay_dampening = 0.0
+    tonal_dampening = 1.45
+    max_harmonic = 40
+
+    section_players = 6
+    section_spread_cents = 8.0          # wider than the bowed section's 6
+    section_vibrato_cents = 0.0         # a pizz note has no time to vibrate
+    section_onset_ms = 26.0             # and they do not pluck in the same instant
+
+    # Balance-normalised against the MEASURED violin (GM 40) on the same passage
+    # in the same room: the same section, the same body, playing differently, so
+    # it is the one comparison that means anything here.
+    initial_gain = 0.2383
+
+
+class HarpProperties(FormantBody, PluckedStringProperties):
+    """GM 46: the orchestral harp. One instrument, not a section.
+
+    Also on the generic plucked string until now, and also therefore bodiless.
+
+    WHAT MAKES A HARP SOUND LIKE ONE is where it is plucked and with what. A
+    harpist plucks with the flesh of the finger, not a nail or a plectrum, well
+    in toward the middle of the string -- and a centre pluck is the darkest
+    place there is, because the comb |sin(n*pi*p)| puts its first null at
+    n = 1/p. At p = 0.38 that is the third partial, so the fundamental carries
+    the note and the low harmonics are already thinned. That, and not a filter,
+    is why a harp is mellow.
+
+    AND IT RINGS. The strings are anchored directly into the soundboard with no
+    bridge in between, which is why a harp is loud for its size and why an
+    undamped note sings on for seconds. Nothing here damps it: the decay is slow
+    and the upper partials only a little faster.
+
+    NOT MEASURED. Rated 2.
+    """
+    # A tapered spruce soundboard over a long tapering box: a broad low
+    # resonance where the body is deep, a second where it is shallow. Asserted
+    # from the shape of the instrument, not from a recording.
+    formants = ((260.0, 180.0, 0.50), (1100.0, 800.0, 0.35))
+    formant_floor = 0.12
+    bore_corner_hz = 3600.0             # finger flesh: no top end to speak of
+    bore_order = 2.0
+    bell_cutoff_hz = 90.0               # a big box, but not an infinite one
+    bell_order = 2.0
+
+    # Plucked in toward the middle. The null at h3 is the instrument's voice.
+    strike_point = 0.38
+    strike_depth = 0.80
+    strike_fills_with_force = False
+
+    # Anchored into the board and undamped: this is the longest sustain of any
+    # plucked voice in the bank, which is the other half of sounding like a harp.
+    decay_db = 0.35
+    harmonic_decay_db = 0.9
+    harmonic_decay_dampening = 0.0
+    tonal_dampening = 1.25
+    max_harmonic = 48
+
+    # Balance-normalised against the measured violin, as the pizzicato is.
+    initial_gain = 0.1183
+
+
 class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     """Sustained bowed string: full harmonic series with a sawtooth-ish
     1/n tilt, no chiff, gentle onset. Covers solo strings (violin, viola,
@@ -5451,6 +5574,7 @@ class SoloViolinProperties(ViolinProperties):
     # -- sqrt(7), 8.4 dB down -- which is exactly what Ben heard.
     initial_gain = ViolinProperties.initial_gain * (ViolinProperties.section_players ** 0.5)
 
+
 class ViolaProperties(FormantBody, BowedStringProperties):
     """MEASURED: Iowa Viola.arco.mf, sulC C3B3 and C4B4, sulA C5B5.
 
@@ -5524,6 +5648,61 @@ class ContrabassProperties(FormantBody, BowedStringProperties):
 
 
 _SLOW_BOW = {}
+
+
+_TREMOLO_BOW = {}
+
+
+def tremolo_bow(cls):
+    """The same instrument, bowed TREMOLO -- GM 44. Cached per class, as
+    slow_bow is.
+
+    A TRANSFORM AND NOT A CLASS, and that distinction is the whole design. GM 44
+    is in BOWED_ENSEMBLE, so the renderer already routes each note to the
+    instrument whose register it falls in -- and it is right to: a low tremolo is
+    a CELLO section bowing tremolo, not a violin section playing low. A
+    `TremoloStringsProperties(ViolinProperties)` was written first and was wrong
+    for exactly that reason, and the per-note router quietly overrode it, which
+    is how the error was found. The articulation has to ride on whichever body
+    the register picks, the same way slow_bow does for GM 49.
+
+    THE STROKE. Rapid unmeasured bowing, eight to twelve strokes a second. What
+    it does to the sound is amplitude modulation, and this renderer makes that
+    out of partials rather than out of an LFO:
+
+        (1 + m cos(w t)) sin(W t) = sin + (m/2)[ sin(W+w) + sin(W-w) ]
+
+    so it costs one sideband pair per partial and no new machinery -- the
+    identity is tremolo.py's, written for the Wurlitzer.
+
+    THE SECTION IS THE DIFFICULTY. A Wurlitzer has ONE modulator. Fourteen
+    players bowing tremolo have fourteen, because nobody counts strokes, so the
+    section smears into a shimmer where a single modulator gives a 9 Hz throb
+    that sounds like an effect pedal bolted to an orchestra. tremolo_scatter
+    gives each player their own rate and phase; see tremolo.py.
+
+    AND IT IS BRIGHTER. A reversal every 105 ms means the note lives in its
+    attack, so the upper partials never settle the way a long stroke lets them.
+    """
+    got = _TREMOLO_BOW.get(cls)
+    if got is None:
+        got = type(cls.__name__.replace("Properties", "") + "TremoloProperties",
+                   (cls,), {
+            # Mid-range of the orchestral eight-to-twelve, and well clear of the
+            # 4.6-6.4 Hz this same section's VIBRATO runs at: the two must not
+            # be confusable, and a tremolo that landed in the vibrato band would
+            # simply read as a nervous player.
+            "tremolo_hz": 9.5,
+            "tremolo_depth": 0.70,        # the string never actually stops
+            "tremolo_stereo": False,
+            "tremolo_intrinsic": True,    # GM 44 IS tremolo, not a wheel effect
+            "tremolo_scatter": 0.20,      # +/-20% of rate per player, free phase
+            # The bite of a reversal every 105 ms.
+            "tonal_dampening": max(0.2, cls.tonal_dampening - 0.25),
+            "__doc__": "%s bowed tremolo, GM 44." % cls.__name__,
+        })
+        _TREMOLO_BOW[cls] = got
+    return got
 
 
 def slow_bow(cls):
