@@ -39,6 +39,9 @@ from tonelib import (
     RainFXProperties,
     BanjoProperties,
     ReverseCymbalProperties,
+    TelephoneRingProperties,
+    HelicopterProperties,
+    BirdTweetProperties,
     SynthDrumProperties,
     ShamisenProperties,
     KotoProperties,
@@ -467,6 +470,16 @@ PROGRAM_CLASS[114] = SteelPanProperties          # tuned 1:2:3, not a bar
 # SynthProperties.attack_fraction_max.
 PROGRAM_CLASS[118] = SynthDrumProperties        # an 808 tom, not a bar
 PROGRAM_CLASS[119] = ReverseCymbalProperties    # the measured crash, reversed
+# THE LAST THREE CATEGORY ERRORS, and all three turned out to be instruments.
+# 124 is a bell struck twenty times a second -- the thing in the room, not the
+# ringback tone the exchange sends the caller. 125 is the blade passing
+# frequency, a sawtooth at about 16 Hz, which is the only voice here whose
+# fundamental is below hearing. 123 is a nearly pure tone whose pitch sweeps,
+# repeated, which is tension_bend used rising where the synth drum uses it
+# falling. See tonelib for each.
+PROGRAM_CLASS[123] = BirdTweetProperties        # a chirp, and then three more
+PROGRAM_CLASS[124] = TelephoneRingProperties    # gongs and a clapper, not a tone
+PROGRAM_CLASS[125] = HelicopterProperties       # a sawtooth four octaves down
 PROGRAM_CLASS[126] = ApplauseProperties         # noise, not a mallet
 # STILL BARS, and each for a reason. 118 Synth Drum has no physical referent.
 # 119 Reverse Cymbal needs a BACKWARDS envelope and there is no mechanism for

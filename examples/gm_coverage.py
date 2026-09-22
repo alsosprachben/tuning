@@ -168,9 +168,9 @@ RATED = {
  120:(3,"its own class -- slide, squeak and position shift; reworked against Ben's ear"),
  121:(2,"its own class, theory"),
  122:(2,"its own class, theory"),
- 123:(1,"the generic mallet base. CATEGORY ERROR"),
- 124:(1,"the generic mallet base. CATEGORY ERROR: US ringback is 440+480 Hz gated"),
- 125:(1,"the generic mallet base. CATEGORY ERROR"),
+ 123:(2,"a CHIRP: a nearly pure tone whose pitch RISES (tension_bend negative, where the synth drum's is positive), repeated four times -- 999 Hz climbing to a written 1047"),
+ 124:(2,"a BELL struck 21 times a second by a clapper alternating between two gongs. The thing in the room, not the 440+480 Hz ringback the exchange sends the caller"),
+ 125:(2,"the BLADE PASSING FREQUENCY: a sawtooth at 16.3 Hz with partials every 16.3 up to 1 kHz. The only voice whose fundamental is below hearing -- the series above it IS the sound"),
  126:(2,"its own class, theory"),
  127:(2,"its own class, theory"),
 }
@@ -354,9 +354,17 @@ def main(argv):
         L.append("| %d %s | %d | %d%% |" % (k, LEVEL[k], hist[k], round(100 * hist[k] / 128)))
     L.append("")
     cat = [p for p in range(128) if "CATEGORY ERROR" in RATED[p][1]]
-    L.append("**%d patches are played by a voice of the wrong physical kind** "
-             "(marked CATEGORY ERROR below): %s.\n"
-             % (len(cat), ", ".join("%d %s" % (p, GM[p]) for p in cat)))
+    if cat:
+        L.append("**%d patches are played by a voice of the wrong physical kind** "
+                 "(marked CATEGORY ERROR below): %s.\n"
+                 % (len(cat), ", ".join("%d %s" % (p, GM[p]) for p in cat)))
+    else:
+        # It read "0 patches ... : ." once the list emptied, which is the kind of
+        # sentence that only ever gets written when the count cannot reach zero.
+        L.append("**No patch is played by a voice of the wrong physical kind.** "
+                 "The last three to be were 123 Bird Tweet, 124 Telephone Ring "
+                 "and 125 Helicopter, which are not recordings of the world but "
+                 "a chirp, a struck bell and a blade passing frequency.\n")
     L.append(percussion_table())
     for start, name in FAMILY:
         L.append("## %d-%d %s\n" % (start, start + 7, name))

@@ -316,9 +316,9 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="cell r3" title="120 Guitar Fret Noise &mdash; specific, theory + ear">3</div>
 <div class="cell r2" title="121 Breath Noise &mdash; specific, theory">2</div>
 <div class="cell r2" title="122 Seashore &mdash; specific, theory">2</div>
-<div class="cell r1 err" title="123 Bird Tweet &mdash; general class">1</div>
-<div class="cell r1 err" title="124 Telephone Ring &mdash; general class">1</div>
-<div class="cell r1 err" title="125 Helicopter &mdash; general class">1</div>
+<div class="cell r2" title="123 Bird Tweet &mdash; specific, theory">2</div>
+<div class="cell r2" title="124 Telephone Ring &mdash; specific, theory">2</div>
+<div class="cell r2" title="125 Helicopter &mdash; specific, theory">2</div>
 <div class="cell r2" title="126 Applause &mdash; specific, theory">2</div>
 <div class="cell r2" title="127 Gunshot &mdash; specific, theory">2</div>
 </div>
@@ -334,8 +334,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Where it stands</h2>
 <div class="bar">
-<span class="r1" style="flex:3">3</span>
-<span class="r2" style="flex:71">71</span>
+<span class="r2" style="flex:74">74</span>
 <span class="r3" style="flex:25">25</span>
 <span class="r4" style="flex:29">29</span>
 </div>
@@ -348,7 +347,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 </ul>
 <p><strong>Nothing scores 0</strong>, because every program resolves to something &mdash; which is not the same as every program being served. The line that matters is the one at 4: audio of the instrument, analysed and fitted against. Published measurements that are not audio &mdash; the Rhodes&rsquo; high-speed-camera papers, the free reeds&rsquo; flow model &mdash; are better than theory, but they cannot contradict the model the way a recording can, so those voices sit at 2 and say why.</p>
 <p><strong>The class column is what the ROUTER returns, not the program map.</strong> Several programs are a family routed per note &mdash; the bowed and pizzicato ensembles, the brass section, the solo winds whose bottom octave is a different instrument &mdash; and reading the program map instead reports the no-note fallback. That is how GM 61 came to be listed as a trombone standing in for a whole section long after it had been routed to trumpet, trombone and tuba sections.</p>
-<p>The single largest gap is one <code>BowedString</code> serving all sixteen pads and effects, 88&ndash;103. The 3 patches on a voice of the wrong physical kind are 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.</p>
+<p>Every one of the 128 programs now has a voice of its own kind; what remains is how much reality each has been allowed to contradict. The 0 patches on a voice of the wrong physical kind are .</p>
 </section>
 
 <section>
@@ -702,9 +701,9 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <span class="pip r3"></span>
 <span class="pip r2"></span>
 <span class="pip r2"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
 <span class="pip r2"></span>
 <span class="pip r2"></span>
 </span></div>
@@ -712,9 +711,9 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="num">120</td><td class="nm">Guitar Fret Noise</td><td class="cls">GuitarFretNoise</td><td class="rt"><span class="chip r3">3</span></td><td class="note">its own class -- slide, squeak and position shift; reworked against Ben&#x27;s ear</td></tr>
 <tr><td class="num">121</td><td class="nm">Breath Noise</td><td class="cls">BreathNoise</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
 <tr><td class="num">122</td><td class="nm">Seashore</td><td class="cls">Seashore</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
-<tr><td class="num">123</td><td class="nm">Bird Tweet</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR</td></tr>
-<tr><td class="num">124</td><td class="nm">Telephone Ring</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR: US ringback is 440+480 Hz gated</td></tr>
-<tr><td class="num">125</td><td class="nm">Helicopter</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR</td></tr>
+<tr><td class="num">123</td><td class="nm">Bird Tweet</td><td class="cls">BirdTweet</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a CHIRP: a nearly pure tone whose pitch RISES (tension_bend negative, where the synth drum&#x27;s is positive), repeated four times -- 999 Hz climbing to a written 1047</td></tr>
+<tr><td class="num">124</td><td class="nm">Telephone Ring</td><td class="cls">TelephoneRing</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a BELL struck 21 times a second by a clapper alternating between two gongs. The thing in the room, not the 440+480 Hz ringback the exchange sends the caller</td></tr>
+<tr><td class="num">125</td><td class="nm">Helicopter</td><td class="cls">Helicopter</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the BLADE PASSING FREQUENCY: a sawtooth at 16.3 Hz with partials every 16.3 up to 1 kHz. The only voice whose fundamental is below hearing -- the series above it IS the sound</td></tr>
 <tr><td class="num">126</td><td class="nm">Applause</td><td class="cls">Applause</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
 <tr><td class="num">127</td><td class="nm">Gunshot</td><td class="cls">Gunshot</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
 </table></div></div>

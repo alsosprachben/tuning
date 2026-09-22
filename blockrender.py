@@ -812,6 +812,15 @@ def prepare(path, tuner='hybrid440'):
             organ = getattr(pc,'registerable',False)
             chan_vol = 1.0 if organ else (v7*v11)**2
             f0 = FREQ[note]
+            # A WRITTEN NOTE IS NOT ALWAYS A PITCH. A helicopter's note chooses
+            # a blade passing rate, which is four octaves under where it is
+            # written; see SynthProperties.sounding_octaves. Applied HERE,
+            # because everything downstream -- the partial frequencies, the
+            # stretch, the bore -- is built from f0, and a class that scaled its
+            # own frequency instead changed none of them.
+            _so = getattr(pc, 'sounding_octaves', 0.0)
+            if _so:
+                f0 *= 2.0 ** _so
             # BRASS INTONATION FROM THE HORN, not from the temperament. The
             # fingering a player would choose determines the tube length, and
             # that tube does not sound the tempered pitch: valve combinations
@@ -1189,7 +1198,12 @@ def prepare(path, tuner='hybrid440'):
                             ugR = gM*gm*props.hrtf_gain(hf, sri)
                             _DL[0] = sld*SR; _DL[1] = srd*SR
                         _PL[0] = ui + 1
-                        non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
+                        # How late an extra voice may enter is a property: a
+                        # section's scatter must not begin after a short note
+                        # ends, but a telephone's clapper strikes for the whole
+                        # ring. See SynthProperties.unison_onset_fraction_max.
+                        _ofm = getattr(props, 'unison_onset_fraction_max', 0.25)
+                        non_u = non_r + (min(onsets[ui+1], _ofm*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
                         noff_u = noff
                         if _spans_part:

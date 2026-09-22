@@ -23,12 +23,12 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 3 | 2% |
-| 2 specific, theory | 71 | 55% |
+| 1 general class | 0 | 0% |
+| 2 specific, theory | 74 | 58% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
-**3 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
+**No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
 ## Channel 10: the percussion note map
 
@@ -300,9 +300,9 @@ splits almost exactly along that line.
 | 120 | Guitar Fret Noise | `GuitarFretNoise` | **3** | its own class -- slide, squeak and position shift; reworked against Ben's ear |
 | 121 | Breath Noise | `BreathNoise` | **2** | its own class, theory |
 | 122 | Seashore | `Seashore` | **2** | its own class, theory |
-| 123 | Bird Tweet | `Mallet` | **1** | the generic mallet base. CATEGORY ERROR |
-| 124 | Telephone Ring | `Mallet` | **1** | the generic mallet base. CATEGORY ERROR: US ringback is 440+480 Hz gated |
-| 125 | Helicopter | `Mallet` | **1** | the generic mallet base. CATEGORY ERROR |
+| 123 | Bird Tweet | `BirdTweet` | **2** | a CHIRP: a nearly pure tone whose pitch RISES (tension_bend negative, where the synth drum's is positive), repeated four times -- 999 Hz climbing to a written 1047 |
+| 124 | Telephone Ring | `TelephoneRing` | **2** | a BELL struck 21 times a second by a clapper alternating between two gongs. The thing in the room, not the 440+480 Hz ringback the exchange sends the caller |
+| 125 | Helicopter | `Helicopter` | **2** | the BLADE PASSING FREQUENCY: a sawtooth at 16.3 Hz with partials every 16.3 up to 1 kHz. The only voice whose fundamental is below hearing -- the series above it IS the sound |
 | 126 | Applause | `Applause` | **2** | its own class, theory |
 | 127 | Gunshot | `Gunshot` | **2** | its own class, theory |
 

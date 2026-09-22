@@ -4861,3 +4861,104 @@ rising envelope. Check what you actually rendered.
 Three programs remain at rating 1 and all three are the same category error:
 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are recordings of
 the world rather than instruments.
+
+## GM 123, 124, 125: the last three, and none of them was a recording
+
+Ben: *"We can do all of those 3 'recordings'... We can do all of them
+physically, yes?"* -- with a reading for each, and all three readings were
+right. They were the last programs marked CATEGORY ERROR and the last at rating
+1.
+
+### 124 Telephone Ring: a bell struck twenty-one times a second
+
+Ben: *"just a percussion instrument repeated, like the bell sweep."* That is a
+better reading than the one this file used to carry, which said US ringback is
+440+480 Hz gated. It IS -- but ringback is the tone the EXCHANGE sends the
+caller's earpiece. The thing in the room, the thing General MIDI names, is a
+pair of gongs and an electromagnet slamming a clapper between them.
+
+So: an inharmonic struck bell, repeated at the armature rate, with the clapper
+alternating between two gongs a few cents apart -- which is where a telephone's
+warble comes from. 18 strikes, 48 ms apart, spanning 0.86 s.
+
+The repetition is GM 102's mechanism, and **its one limitation there is exactly
+right here.** Those taps are repeated ONSETS rather than a repeated signal,
+which is why they made a poor echo -- and a clapper is precisely a repeated
+onset.
+
+One cap had to move: `unison_onset_fraction_max`, since the renderer holds an
+extra voice's entry inside a quarter of the note so a section's scatter cannot
+begin after a short note ends. A ring is struck for its whole length.
+
+The CADENCE is the score's. British ring is two short bursts and a long gap,
+American one long burst; a voice that baked either in would be wrong wherever it
+went.
+
+### 125 Helicopter: a sawtooth four octaves down
+
+Ben: *"simply a very low sawtooth, with maybe some chiff?"* Which is the
+physics. N blades at R revolutions a second slam a pressure pulse past a fixed
+point N*R times a second -- four blades at four revolutions is sixteen, far
+below pitch, so it is heard as CHOPPING and not as a note. A pulse train is a
+sawtooth.
+
+It is **the only voice in this bank whose fundamental is below hearing.** What
+reaches the ear is the series above it: measured, 16.31 Hz with partials every
+16.31 up to 1 kHz. And Ben's "maybe some chiff" is the right hook -- turbulence
+off the blade tips is broadband, and `sustain_jitter` broadens every partial
+into a band, the pan pipe's mechanism turned well up.
+
+**AND THE TRANSPOSITION HAD TO BE THE RENDERER'S.** The first attempt scaled the
+frequency in the class's own `__init__`, which changed `octave_position` and
+every register law reading it -- and left the partial frequencies exactly where
+they were, because blockrender builds those from its own `f0`. Measured, a
+helicopter whose lowest partial was 261 Hz. `sounding_octaves` is now a property
+the renderer applies. **Inheriting a thing is not the same as it reaching the
+output, for the fifth time in this session.**
+
+### 123 Bird Tweet: a chirp, and tension_bend's third direction
+
+Ben: *"just a chirp. That should be easy?"* It was, because both halves existed.
+A syrinx makes a very pure tone -- two partials and a whisper of a third -- and
+what makes it a bird is that the pitch MOVES, a long way, in a tenth of a second.
+
+The sweep is `tension_bend` for the third time in this file and in the third
+direction: the piano's sag, the synth drum's 808 fall, and now a bird's RISE.
+Negative, which works only because the steelpan work fixed a register scaling
+that silently skipped any voice whose bend was not positive. Measured on a
+written C6: 999 Hz, then 1040, then 1050, climbing to the written 1047.
+
+And a tweet is not one chirp -- birds repeat, fast -- so it uses the telephone's
+clapper mechanism at a bird's rate, four chirps in a third of a second, each a
+little higher than the last.
+
+### The selftest caught the steelpan's own bug in two of them
+
+**"A voice with a measured mode set is not also stretched"** fired on the bird
+and the telephone. Both inherit `MetalPercussionProperties`, which carries an
+inharmonicity coefficient of 0.026, and a stated mode set riding a stiffness
+stretch on top of it lands at neither -- which is exactly the bug that put the
+steelpan's octave 66 cents sharp. The check written for that caught these before
+either was ever heard.
+
+A second check crashed rather than failed: the new block referenced a variable
+bound in the block BELOW it. Two checks, two errors found, neither by ear.
+
+### Three probe failures worth recording
+
+Measuring the chop rate through `|x|` gave 32 Hz for a 16 Hz rotor, because
+rectification doubles a low waveform's apparent rate. Picking spectral peaks
+gave 9.7 Hz, because `sustain_jitter` deliberately broadens every partial into a
+band and there are no discrete lines left to find. Counting envelope threshold
+crossings gave 506 strikes a second for a 21 Hz clapper, because it was
+triggering on waveform cycles.
+
+The answer was to stop inferring and read the renderer's own partial table --
+which gave the fundamental, the spacing and every onset exactly, and which also
+showed the onsets arriving in PAIRS 2 ms apart: the interaural delay, one per
+ear, which had made the earlier medians meaningless.
+
+### The bank
+
+**Every one of the 128 programs now has a voice of its own kind.** Nothing is
+rated 1, nothing is a category error. 74 are at 2, 25 at 3, 29 at 4.

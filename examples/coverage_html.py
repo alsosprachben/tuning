@@ -316,7 +316,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 </ul>
 <p><strong>Nothing scores 0</strong>, because every program resolves to something &mdash; which is not the same as every program being served. The line that matters is the one at 4: audio of the instrument, analysed and fitted against. Published measurements that are not audio &mdash; the Rhodes&rsquo; high-speed-camera papers, the free reeds&rsquo; flow model &mdash; are better than theory, but they cannot contradict the model the way a recording can, so those voices sit at 2 and say why.</p>
 <p><strong>The class column is what the ROUTER returns, not the program map.</strong> Several programs are a family routed per note &mdash; the bowed and pizzicato ensembles, the brass section, the solo winds whose bottom octave is a different instrument &mdash; and reading the program map instead reports the no-note fallback. That is how GM 61 came to be listed as a trombone standing in for a whole section long after it had been routed to trumpet, trombone and tuba sections.</p>
-<p>The single largest gap is one <code>BowedString</code> serving all sixteen pads and effects, 88&ndash;103. The %(ncat)d patches on a voice of the wrong physical kind are %(cats)s.</p>
+<p>Every one of the 128 programs now has a voice of its own kind; what remains is how much reality each has been allowed to contradict. The %(ncat)d patches on a voice of the wrong physical kind are %(cats)s.</p>
 </section>
 
 %(families)s

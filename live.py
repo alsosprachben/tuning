@@ -3349,6 +3349,57 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # --------------------------------------- the three "recordings of the world"
+    import patch_map as _PMr
+    # 123, 124 and 125 were the last programs in the bank marked CATEGORY ERROR
+    # and the last at rating 1. Ben: "We can do all of them physically, yes?" --
+    # and all three turned out to be instruments once named properly.
+    _bt = _PMr.property_class_for_note(123, 60)
+    _tp = _PMr.property_class_for_note(124, 60)
+    _hc = _PMr.property_class_for_note(125, 60)
+    check("the bird, the telephone and the helicopter are modelled, not sampled",
+          all(not issubclass(_c, _T.MalletProperties) for _c in (_bt, _tp, _hc))
+          and len({_c.__name__ for _c in (_bt, _tp, _hc)}) == 3,
+          "  (a chirp, a struck bell, and a blade passing frequency)")
+    # A TELEPHONE IS A BELL STRUCK TWENTY TIMES A SECOND -- the thing in the
+    # room, not the 440+480 Hz ringback the exchange sends the caller. The
+    # repetition is GM 102's mechanism, whose limitation there (repeated ONSETS
+    # rather than a repeated signal) is exactly right for a clapper.
+    _on = _tp(261.63, 0.0, 1.0, 1.0).section_onsets_at(261.63)
+    _gap = _on[2] - _on[1]
+    check("...and the telephone's clapper strikes about twenty times a second",
+          18.0 < 1.0 / _gap < 24.0 and _on[-1] > 0.5,
+          "  (%d strikes %.0f ms apart, spanning %.2f s of the note)"
+          % (len(_on) - 1, 1000 * _gap, _on[-1]))
+    # ...which needed the entry cap raised, or the bell rings for the first
+    # quarter of each burst and then sits silent.
+    check("...which it could not do at the default entry cap",
+          _tp.unison_onset_fraction_max > 0.9
+          and _T.SynthProperties.unison_onset_fraction_max == 0.25,
+          "  (%.0f%% of the note against a section's 25%%)"
+          % (100 * _tp.unison_onset_fraction_max))
+    # A HELICOPTER'S FUNDAMENTAL IS BELOW HEARING. The written note picks the
+    # ROTOR, four octaves down, and what reaches the ear is the series above it.
+    check("...and the helicopter's note chooses a rotor, not a pitch",
+          _hc.sounding_octaves <= -3.0
+          and _T.SynthProperties.sounding_octaves == 0.0
+          and [_n for _n, _c in vars(_T).items()
+               if isinstance(_c, type) and getattr(_c, "sounding_octaves", 0.0)]
+          == ["HelicopterProperties"],
+          "  (a written C4 sounds at 16.3 Hz, with partials every 16.3 to 1 kHz)")
+    # A BIRD IS A CHIRP: tension_bend for the third time and in the third
+    # direction -- the piano's sag, the synth drum's 808 fall, and a bird's
+    # RISE. Negative, which only works because the steelpan fixed a register
+    # scaling that silently skipped any voice whose bend was not positive.
+    # Fetched here rather than borrowed from the block below: that one runs
+    # AFTER this and its _sd was not yet bound, which the selftest caught by
+    # crashing -- the third time in this session a check has been the thing
+    # that found the mistake.
+    _sd118 = _PMr.property_class_for_note(118, 60)
+    check("...and the bird's pitch RISES, where the synth drum's falls",
+          _bt.tension_bend < 0.0 and _sd118.tension_bend > 0.0,
+          "  (rendered on C6: 999 Hz, then 1040, then 1050 -- the written 1047)")
+
     # ------------------------------------------- the last two category errors
     import patch_map as _PMc
     # 118 and 119 were the last two programs in the bank marked CATEGORY ERROR:
