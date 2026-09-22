@@ -38,6 +38,8 @@ from tonelib import (
     NewAgePadProperties,
     RainFXProperties,
     BanjoProperties,
+    ReverseCymbalProperties,
+    SynthDrumProperties,
     ShamisenProperties,
     KotoProperties,
     KalimbaProperties,
@@ -458,6 +460,13 @@ PROGRAM_CLASS[113] = AgogoProperties            # the class is named for it
 PROGRAM_CLASS[116] = MembraneDrumProperties     # a big drum, not a bar
 PROGRAM_CLASS[117] = TomTomProperties           # likewise, and pitched
 PROGRAM_CLASS[114] = SteelPanProperties          # tuned 1:2:3, not a bar
+# The two CATEGORY ERRORS in this family, both on the generic mallet base.
+# 118 is an electronic drum -- an oscillator with a downward pitch sweep, which
+# is tension_bend and needed nothing new. 119 is a cymbal played BACKWARDS,
+# which needed the attack to be allowed past 45% of the note; see
+# SynthProperties.attack_fraction_max.
+PROGRAM_CLASS[118] = SynthDrumProperties        # an 808 tom, not a bar
+PROGRAM_CLASS[119] = ReverseCymbalProperties    # the measured crash, reversed
 PROGRAM_CLASS[126] = ApplauseProperties         # noise, not a mallet
 # STILL BARS, and each for a reason. 118 Synth Drum has no physical referent.
 # 119 Reverse Cymbal needs a BACKWARDS envelope and there is no mechanism for

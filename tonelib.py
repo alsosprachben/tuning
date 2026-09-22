@@ -1976,6 +1976,18 @@ class SynthProperties:
     # range, instead of once per note.
     unison_spans_part = False
 
+    # HOW MUCH OF A NOTE MAY BE ATTACK. Almost always well under half: an onset
+    # that outlasts the note it is opening is not an onset, and blockrender has
+    # capped it at 0.45 of the duration since it was written -- which keeps a
+    # short note speaking in time and is right for every acoustic voice here.
+    #
+    # A REVERSE CYMBAL IS THE EXCEPTION, and it is why this is a property rather
+    # than a constant. Its envelope IS the attack: a tape played backwards rises
+    # for the whole of its length and then stops, so capping the rise at 45%
+    # leaves it rising, then sitting, then ending -- which is a swell, not a
+    # reversal. See ReverseCymbalProperties.
+    attack_fraction_max = 0.45
+
     # DOES THE KEY SET THE LOUDNESS? On most instruments, yes: how hard you
     # strike, pluck or blow IS the dynamic. On some it does not and cannot --
     # a harpsichord's key trips a jack and the quill plucks with a force the
@@ -7937,6 +7949,7 @@ class SweepPadProperties(SynthPadProperties):
     initial_gain = 0.0574479
 
 
+
 class SynthEffectProperties(SynthPadProperties):
     """GM 96-103, the synth effects. The last eight programs on one voice.
 
@@ -10363,6 +10376,94 @@ class CrashCymbal1Properties(CymbalProperties):
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
     initial_gain = 0.196926
+
+class ReverseCymbalProperties(CrashCymbal1Properties):
+    """GM 119. A crash cymbal played BACKWARDS, which the coverage doc listed as
+    a category error needing machinery this renderer did not have.
+
+    It has it, and the machinery is the attack. Everything else in this bank
+    decays -- a partial can be made to fall faster than its neighbour but not to
+    rise -- so a reversed envelope looked impossible. But an ATTACK is a rise,
+    and the only thing standing in the way was blockrender's flat cap of 0.45 of
+    the note's duration, which is right for every acoustic voice and wrong for
+    this one. With attack_fraction_max raised, the attack IS the note: it swells
+    for almost its whole length and then stops dead, which is what a reversed
+    tape does.
+
+    THE SPECTRUM IS THE MEASURED CYMBAL'S, unchanged. This inherits
+    CrashCymbal1Properties and its 300 modes from the Iowa recording -- playing
+    a cymbal backwards does not change which modes a cymbal has, only when you
+    hear them, so there was nothing to re-fit and nothing to assert. The one
+    thing reversal genuinely changes in the spectrum is the ORDER the modes
+    arrive in, since a real reversed recording brings the longest-lived ones up
+    first; that is not modelled, and it is the honest gap here.
+    """
+    # The note is the swell. 0.92 rather than 1.0 so a release still exists to
+    # stop it with: a reversed cymbal ends abruptly, but a step is a click.
+    attack_fraction_max = 0.92
+    attack_time = 6.0           # longer than any note; the cap is what binds
+    release_valve_time = 0.010  # it stops dead
+
+    # AND IT IS NOT A ONE-SHOT, which every other cymbal here is. A struck
+    # cymbal ignores note-off and rings out because nothing stops it, so
+    # blockrender extends it to 8 s -- and with the attack capped at a fraction
+    # of the DURATION, that made this voice swell for 7.4 s whatever was
+    # written. Measured, a 3-second note peaked at 4.84 s: past its own end.
+    #
+    # A reverse cymbal is the opposite case. It is a recording played backwards
+    # and it stops when the recording stops, which is the whole point of the
+    # effect: it exists to ARRIVE somewhere, and an arrival that lands a second
+    # and a half after the downbeat is not one. So the written note-off is the
+    # arrival, and the swell is fitted to it.
+    one_shot = False
+
+    # NOT decaying while it swells. The crash it inherits from falls away over
+    # seconds, which fought the rise and left a hump in the middle.
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    sustain_level = 1.0
+    initial_gain = CrashCymbal1Properties.initial_gain
+
+
+class SynthDrumProperties(MembraneDrumProperties):
+    """GM 118. An ELECTRONIC drum, which is not a membrane and not a bar.
+
+    Also listed as a category error, and it was on the generic mallet base.
+    What a synth drum is -- a Simmons pad, a TR-808 tom, every drum machine of
+    that era -- is an oscillator with a fast DOWNWARD PITCH SWEEP and a fast
+    decay. The sweep is the entire signature: without it the sound is a dull
+    thud, and with it, it is unmistakably a drum machine.
+
+    THE SWEEP NEEDED NOTHING NEW. tension_bend is a pitch transient that blooms
+    and settles to the tuned pitch, scaled by how hard the note was struck --
+    written for the piano, where a hard blow stretches the string and the pitch
+    sags back. An 808 tom is the same shape and far more of it: start sharp,
+    fall to pitch, and do it in a fifth of a second.
+
+    It keeps a membrane's mode set rather than a bar's, because a drum machine's
+    designers were imitating a drum and voiced their filters to match -- but
+    with very few modes, because an oscillator has few and the pads famously
+    sound nothing like a real head.
+    """
+    # THE SWEEP. tension_bend_max is raised because the piano's 0.04 cap exists
+    # to stop a bass fff bending absurdly, and here the bend IS the sound -- the
+    # same argument GuitarFretNoiseProperties makes for a slide up the neck.
+    tension_bend = 0.55         # start a fifth-ish sharp
+    tension_bend_max = 0.70
+    tension_settle_time = 0.055 # and fall to pitch in a fifth of a second
+    tension_settle_cutoff = 0.5
+
+    # Few modes, and mostly the fundamental: an oscillator, not a head.
+    mode_ratios = (1.0, 1.58, 2.14)
+    mode_gains = (1.0, 0.14, 0.05)
+    max_harmonic = 3
+
+    decay_db = 9.0
+    harmonic_decay_db = 5.0
+    sustain_level = 0.0
+    initial_gain = MembraneDrumProperties.initial_gain
+
+
 
 class CrashCymbal2Properties(CymbalProperties):
     """GM 57, Crash Cymbal 2. MEASURED: Iowa 18" suspended crash. GM asks

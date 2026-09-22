@@ -4785,3 +4785,79 @@ melody had hidden that almost completely.
 Rendered: 128 notes, 127 of 127 gaps exactly 0.0 s, legato detected on all 127,
 and the chanter never falls below 0.23 of peak across 32 seconds of continuous
 tone.
+
+## GM 118, 119: the last two category errors in the melodic bank
+
+Six of the eight percussive programs were already done -- crotales, agogo,
+steelpan, woodblocks, taiko, melodic tom, three of them against recordings. The
+two that were not were both marked CATEGORY ERROR and both sat on the generic
+mallet base.
+
+### 118 Synth Drum: the sweep needed nothing new
+
+A Simmons pad, a TR-808 tom, every drum machine of that era: an oscillator with
+a fast DOWNWARD PITCH SWEEP and a fast decay. The sweep is the entire signature
+-- without it the sound is a dull thud.
+
+`tension_bend` already does exactly that shape. It is a pitch transient that
+blooms and settles to the tuned pitch, scaled by how hard the note was struck,
+and it was written for the PIANO, where a hard blow stretches the string and the
+pitch sags back. An 808 tom is the same curve with far more of it. Measured on a
+written A2:
+
+| window | strongest partial |
+|---|---|
+| 0-35 ms | 166.7 Hz |
+| 40-90 ms | 120.0 |
+| 120-250 ms | 115.4 |
+| 300-600 ms | **110.0** |
+
+settling exactly on the written pitch.
+
+`tension_bend_max` is raised past the piano's 0.04, which exists to stop a bass
+fff bending absurdly -- the same argument `GuitarFretNoiseProperties` makes for
+a slide up the neck, where the bend IS the sound.
+
+### 119 Reverse Cymbal: the one voice in the bank whose envelope rises
+
+The coverage doc had said this "needs a BACKWARDS envelope", and the pads' notes
+had said flatly that the engine could not do it: the decay law is monotonic per
+partial, so a partial can fall faster than its neighbour but cannot rise.
+
+**BOTH WERE LOOKING AT THE WRONG END.** An ATTACK is a rise. The only thing
+standing in the way was blockrender's flat cap of 0.45 of the note's duration --
+right for every acoustic voice, since an onset that outlasts the note it opens
+is not an onset, and wrong for this one, where the attack IS the note.
+`attack_fraction_max` is now a property, 0.45 everywhere and 0.92 here, and it
+is the only voice in the bank that changes it.
+
+**THE SPECTRUM DID NOT NEED TOUCHING.** It inherits `CrashCymbal1Properties` and
+its 300 modes measured from the Iowa recording: playing a cymbal backwards does
+not change which modes a cymbal has, only when they are heard. The honest gap is
+that a real reversed recording brings the longest-lived modes up FIRST, and the
+order of arrival is not modelled.
+
+**AND IT IS NOT A ONE-SHOT, which every other cymbal is.** A struck cymbal
+ignores note-off and rings out because nothing stops it, so blockrender extends
+it to 8 seconds -- and with the attack capped at a FRACTION of the duration,
+that made this voice swell for 7.4 s whatever was written. Measured, a
+3-second note peaked at **4.84 s**: past its own end. A reverse cymbal is a
+recording played backwards and it stops when the recording stops, which is the
+point of the effect -- it exists to ARRIVE somewhere, and an arrival a second
+and a half after the downbeat is not one.
+
+After: a 3-second note peaks at **2.82 s**, rising 0.12 to 0.73, where a forward
+crash on the same note peaks at **0.03 s**, falling 0.63 to 0.03. A clean mirror.
+
+### A probe error worth recording
+
+The first comparison rendered "the forward crash" as **program 49** -- which is
+String Ensemble 2. The cymbals are channel-10 NOTES, not programs. It duly
+swelled, and for a moment it looked as though the measured crash cymbal had a
+rising envelope. Check what you actually rendered.
+
+### The bank
+
+Three programs remain at rating 1 and all three are the same category error:
+123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are recordings of
+the world rather than instruments.

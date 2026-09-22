@@ -896,7 +896,12 @@ def prepare(path, tuner='hybrid440'):
         # fundamental to the fixed floor (mirrors tonelib.speech_time -- bass
         # pipes speak slowly, trebles promptly).
         at = props.speech_time(at, f0); rt = props.speech_time(rt, f0)
-        fade = max(1e-4, min(at, 0.45*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
+        # The ATTACK's share of the note is a property, because a reverse cymbal
+        # needs almost all of it; see SynthProperties.attack_fraction_max. The
+        # RELEASE keeps the flat 0.45: nothing wants a release longer than that,
+        # and a reverse cymbal in particular wants a short one -- it stops dead.
+        _afm = getattr(props, 'attack_fraction_max', 0.45)
+        fade = max(1e-4, min(at, _afm*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
         # ...and no longer than until this same string is plucked again, but
         # never SHORTER than a steal fade. A sampler stealing a voice does not
         # cut it, it fades it over a few milliseconds, because a cut is a step

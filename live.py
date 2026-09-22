@@ -3349,6 +3349,48 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------- the last two category errors
+    import patch_map as _PMc
+    # 118 and 119 were the last two programs in the bank marked CATEGORY ERROR:
+    # a drum machine and a reversed cymbal, both on the generic mallet base.
+    _sd = _PMc.property_class_for_note(118, 60)
+    _rc = _PMc.property_class_for_note(119, 60)
+    check("the synth drum and the reverse cymbal are no longer mallets",
+          not issubclass(_sd, _T.MalletProperties)
+          and not issubclass(_rc, _T.MalletProperties)
+          and issubclass(_rc, _T.CrashCymbal1Properties),
+          "  (an 808 tom and the MEASURED crash, reversed)")
+    # A REVERSE CYMBAL IS THE ONE VOICE WHOSE ENVELOPE RISES. Everything else
+    # in this bank decays; a partial can be made to fall faster than its
+    # neighbour but not to rise. The rise is the ATTACK, and the only thing
+    # in the way was blockrender's flat cap of 0.45 of the note's duration --
+    # right for every acoustic voice and wrong for this one.
+    check("...and the reverse cymbal's attack may outlast half its note",
+          _rc.attack_fraction_max > 0.85
+          and _T.SynthProperties.attack_fraction_max == 0.45
+          and [_n for _n, _c in vars(_T).items()
+               if isinstance(_c, type)
+               and getattr(_c, "attack_fraction_max", 0.45) != 0.45]
+          == ["ReverseCymbalProperties"],
+          "  (%.0f%% of the note against everything else's 45%%)"
+          % (100 * _rc.attack_fraction_max))
+    # ...AND IT IS NOT A ONE-SHOT, which every other cymbal is. A struck cymbal
+    # ignores note-off and rings out because nothing stops it; blockrender
+    # extends it to 8 s, and with the attack capped at a FRACTION of the
+    # duration that made this voice swell for 7.4 s whatever was written --
+    # measured, a 3-second note peaked at 4.84, past its own end. A reverse
+    # cymbal exists to ARRIVE somewhere.
+    check("...and it ends where it is written, unlike every other cymbal",
+          not _rc.one_shot and _T.CrashCymbal1Properties.one_shot,
+          "  (rendered, a 3 s note now peaks at 2.82 s; a forward crash at 0.03)")
+    # THE DRUM MACHINE'S SWEEP NEEDED NOTHING NEW. tension_bend is a pitch
+    # transient that blooms and settles, written for the piano, where a hard
+    # blow stretches the string. An 808 tom is the same shape and much more of
+    # it: start sharp, fall to pitch, in a fifth of a second.
+    check("...and the synth drum sweeps its pitch down, which is its whole sound",
+          _sd.tension_bend > 0.3 and _sd.tension_settle_time < 0.1,
+          "  (rendered on A2: 167 Hz at the onset, settling to 110)")
+
     # ------------------------------------------------------------ the ethnic
     import patch_map as _PMe
     # 105-108 were the generic plucked string and the generic mallet; 109 and

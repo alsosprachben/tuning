@@ -310,8 +310,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="cell r4" title="115 Woodblock &mdash; specific, reference audio">4</div>
 <div class="cell r2" title="116 Taiko Drum &mdash; specific, theory">2</div>
 <div class="cell r2" title="117 Melodic Tom &mdash; specific, theory">2</div>
-<div class="cell r1 err" title="118 Synth Drum &mdash; general class">1</div>
-<div class="cell r1 err" title="119 Reverse Cymbal &mdash; general class">1</div>
+<div class="cell r2" title="118 Synth Drum &mdash; specific, theory">2</div>
+<div class="cell r2" title="119 Reverse Cymbal &mdash; specific, theory">2</div>
 <div class="fam">Sound Effects</div>
 <div class="cell r3" title="120 Guitar Fret Noise &mdash; specific, theory + ear">3</div>
 <div class="cell r2" title="121 Breath Noise &mdash; specific, theory">2</div>
@@ -334,8 +334,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Where it stands</h2>
 <div class="bar">
-<span class="r1" style="flex:5">5</span>
-<span class="r2" style="flex:69">69</span>
+<span class="r1" style="flex:3">3</span>
+<span class="r2" style="flex:71">71</span>
 <span class="r3" style="flex:25">25</span>
 <span class="r4" style="flex:29">29</span>
 </div>
@@ -348,7 +348,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 </ul>
 <p><strong>Nothing scores 0</strong>, because every program resolves to something &mdash; which is not the same as every program being served. The line that matters is the one at 4: audio of the instrument, analysed and fitted against. Published measurements that are not audio &mdash; the Rhodes&rsquo; high-speed-camera papers, the free reeds&rsquo; flow model &mdash; are better than theory, but they cannot contradict the model the way a recording can, so those voices sit at 2 and say why.</p>
 <p><strong>The class column is what the ROUTER returns, not the program map.</strong> Several programs are a family routed per note &mdash; the bowed and pizzicato ensembles, the brass section, the solo winds whose bottom octave is a different instrument &mdash; and reading the program map instead reports the no-note fallback. That is how GM 61 came to be listed as a trombone standing in for a whole section long after it had been routed to trumpet, trombone and tuba sections.</p>
-<p>The single largest gap is one <code>BowedString</code> serving all sixteen pads and effects, 88&ndash;103. The 5 patches on a voice of the wrong physical kind are 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.</p>
+<p>The single largest gap is one <code>BowedString</code> serving all sixteen pads and effects, 88&ndash;103. The 3 patches on a voice of the wrong physical kind are 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.</p>
 </section>
 
 <section>
@@ -682,8 +682,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <span class="pip r4"></span>
 <span class="pip r2"></span>
 <span class="pip r2"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
 </span></div>
 <div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
 <tr><td class="num">112</td><td class="nm">Tinkle Bell</td><td class="cls">Crotale</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa crotales, 25 pitches</td></tr>
@@ -692,8 +692,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="num">115</td><td class="nm">Woodblock</td><td class="cls">WoodPercussion</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa woodblocks</td></tr>
 <tr><td class="num">116</td><td class="nm">Taiko Drum</td><td class="cls">MembraneDrum</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the membrane drum class</td></tr>
 <tr><td class="num">117</td><td class="nm">Melodic Tom</td><td class="cls"> by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the tom class</td></tr>
-<tr><td class="num">118</td><td class="nm">Synth Drum</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR</td></tr>
-<tr><td class="num">119</td><td class="nm">Reverse Cymbal</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR: this needs a BACKWARDS envelope</td></tr>
+<tr><td class="num">118</td><td class="nm">Synth Drum</td><td class="cls">SynthDrum</td><td class="rt"><span class="chip r2">2</span></td><td class="note">an 808 tom: an oscillator with a downward PITCH SWEEP, which is tension_bend and needed nothing new -- 167 Hz at the onset settling to a written 110</td></tr>
+<tr><td class="num">119</td><td class="nm">Reverse Cymbal</td><td class="cls">ReverseCymbal</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender&#x27;s 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere</td></tr>
 </table></div></div>
 </section>
 <section>

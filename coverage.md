@@ -23,12 +23,12 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 5 | 4% |
-| 2 specific, theory | 69 | 54% |
+| 1 general class | 3 | 2% |
+| 2 specific, theory | 71 | 55% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
-**5 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
+**3 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
 
 ## Channel 10: the percussion note map
 
@@ -290,8 +290,8 @@ splits almost exactly along that line.
 | 115 | Woodblock | `WoodPercussion` | **4** | Iowa woodblocks |
 | 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |
 | 117 | Melodic Tom | ` by register` | **2** | the tom class |
-| 118 | Synth Drum | `Mallet` | **1** | the generic mallet base. CATEGORY ERROR |
-| 119 | Reverse Cymbal | `Mallet` | **1** | the generic mallet base. CATEGORY ERROR: this needs a BACKWARDS envelope |
+| 118 | Synth Drum | `SynthDrum` | **2** | an 808 tom: an oscillator with a downward PITCH SWEEP, which is tension_bend and needed nothing new -- 167 Hz at the onset settling to a written 110 |
+| 119 | Reverse Cymbal | `ReverseCymbal` | **2** | the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere |
 
 ## 120-127 Sound Effects
 
