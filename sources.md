@@ -3589,3 +3589,25 @@ inaudible and the suite would pass. It cannot honestly measure level without
 rendering, so it now asserts the thing that is cheap and exact and that is what
 actually went wrong: no voice in the family resolves `initial_gain` by falling
 through to the generic base.
+
+### What the re-balance did to a real mix
+
+Re-rendered `bwx25b` (Riffsym) against the previous commit, same score, same
+room, same master level -- the only difference is the plucked family's gains.
+Band energy, and then the same figures as a BALANCE against the guitar band in
+each mix, which is what survives peak normalisation and is therefore what is
+actually audible:
+
+| band | before | after | change | as balance |
+|---|---|---|---|---|
+| bass 40-160 Hz | 50.0 | 72.6 | +22.6 | **+5.1** |
+| low-mid 160-400 | 61.2 | 81.5 | +20.4 | +2.9 |
+| guitar 400-2k | 58.4 | 75.9 | +17.5 | 0.0 (reference) |
+| presence 2k-6k | 50.1 | 63.1 | +13.0 | -4.5 |
+
+The bass sits **5 dB further up against the guitars** than it did, which is the
+audible content of the fix. The mix is correspondingly darker: presence falls
+4.5 dB relative, because the band that was missing is a low one.
+
+`examples/riffsym.py` renders these, so the A/B is repeatable rather than made
+by hand each time the voices move.
