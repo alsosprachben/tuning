@@ -1,0 +1,783 @@
+<title>GM Patch Coverage</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+
+:root{
+  --paper:#f6f7f9; --card:#ffffff; --ink:#161a1f; --ink-2:#39424d; --muted:#5c6672;
+  --rule:#dfe3e8; --rule-2:#eceff3;
+  --accent:#1d4e6f;
+  --r0:#d7dce2; --r1:#b8bfc8; --r2:#7f9cb5; --r3:#3d6f8f; --r4:#a8742a;
+  --warn:#8c3b26;
+  --shadow:0 1px 2px rgba(22,26,31,.05), 0 8px 24px -16px rgba(22,26,31,.25);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#11151a; --card:#171c23; --ink:#e8ecf1; --ink-2:#c3cbd4; --muted:#8e99a6;
+    --rule:#28313b; --rule-2:#1f272f;
+    --accent:#6fa8cc;
+    --r0:#2c343d; --r1:#48525d; --r2:#5b7f9c; --r3:#6fa8cc; --r4:#d09a44;
+    --warn:#e0885f;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11151a; --card:#171c23; --ink:#e8ecf1; --ink-2:#c3cbd4; --muted:#8e99a6;
+  --rule:#28313b; --rule-2:#1f272f;
+  --accent:#6fa8cc;
+  --r0:#2c343d; --r1:#48525d; --r2:#5b7f9c; --r3:#6fa8cc; --r4:#d09a44;
+  --warn:#e0885f;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+}
+*{box-sizing:border-box}
+body{
+  background:var(--paper); color:var(--ink);
+  font-family:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  font-size:15px; line-height:1.55; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:56px 28px 96px}
+header{display:flex; flex-direction:column; gap:14px; margin-bottom:40px}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11.5px;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+}
+h1{
+  font-family:Spectral,Georgia,serif; font-weight:600; font-size:clamp(34px,5vw,50px);
+  line-height:1.06; letter-spacing:-.015em; margin:0; text-wrap:balance;
+}
+.standfirst{
+  font-family:Spectral,Georgia,serif; font-size:19px; line-height:1.6;
+  color:var(--ink-2); max-width:62ch; margin:0;
+}
+.standfirst em{color:var(--ink)}
+h2{
+  font-family:Spectral,Georgia,serif; font-weight:600; font-size:26px;
+  letter-spacing:-.01em; margin:0; text-wrap:balance;
+}
+section{margin-top:52px; display:flex; flex-direction:column; gap:18px}
+p{margin:0; max-width:66ch; color:var(--ink-2)}
+
+/* ---- the map: 16 families x 8 programs ---------------------------------- */
+.map{
+  background:var(--card); border:1px solid var(--rule); border-radius:4px;
+  padding:26px 26px 22px; box-shadow:var(--shadow); overflow-x:auto;
+}
+.mapgrid{display:grid; grid-template-columns:132px repeat(8,1fr); gap:5px; min-width:640px}
+.mapgrid .fam{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted);
+  display:flex; align-items:center; justify-content:flex-end; padding-right:10px;
+  white-space:nowrap; letter-spacing:.01em;
+}
+.cell{
+  aspect-ratio:1/1.08; border-radius:2px; position:relative; min-height:22px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:"IBM Plex Mono",monospace; font-size:10px; color:#fff;
+  opacity:.94;
+}
+.cell.r1,.cell.r0{color:var(--ink)}
+.r0{background:var(--r0)} .r1{background:var(--r1)} .r2{background:var(--r2)}
+.r3{background:var(--r3)} .r4{background:var(--r4)}
+.cell.err::after{
+  content:""; position:absolute; inset:2px; border:1.5px dashed var(--warn);
+  border-radius:2px;
+}
+.maplegend{
+  display:flex; flex-wrap:wrap; gap:18px; margin-top:20px; padding-top:16px;
+  border-top:1px solid var(--rule-2);
+}
+.lg{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted)}
+.sw{width:13px; height:13px; border-radius:2px; flex:none}
+.sw.err{border:1.5px dashed var(--warn); background:transparent}
+
+/* ---- the proportion bar -------------------------------------------------- */
+.bar{display:flex; height:34px; border-radius:3px; overflow:hidden; border:1px solid var(--rule)}
+.bar span{
+  display:flex; align-items:center; justify-content:center; color:#fff;
+  font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500;
+}
+.bar span.r1{color:var(--ink)}
+.scalelist{list-style:none; padding:0; margin:0; display:grid; gap:1px;
+  border:1px solid var(--rule); border-radius:4px; overflow:hidden; background:var(--rule)}
+.scalelist li{
+  background:var(--card); display:grid; grid-template-columns:38px 190px 1fr; gap:14px;
+  align-items:baseline; padding:11px 16px;
+}
+.scalelist .n{
+  font-family:"IBM Plex Mono",monospace; font-weight:500; font-size:15px;
+  display:flex; align-items:center; gap:8px;
+}
+.scalelist .t{font-weight:600; color:var(--ink)}
+.scalelist .d{color:var(--muted); font-size:13.5px}
+
+/* ---- tables -------------------------------------------------------------- */
+.fambox{border:1px solid var(--rule); border-radius:4px; background:var(--card); overflow:hidden}
+.famhead{
+  display:flex; align-items:baseline; justify-content:space-between; gap:16px;
+  padding:14px 18px; border-bottom:1px solid var(--rule); flex-wrap:wrap;
+}
+.famhead h3{
+  font-family:Spectral,Georgia,serif; font-weight:600; font-size:19px; margin:0;
+}
+.famhead .rng{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--muted)}
+.pips{display:flex; gap:3px}
+.pip{width:11px; height:11px; border-radius:2px}
+.tscroll{overflow-x:auto}
+table{border-collapse:collapse; width:100%; min-width:620px}
+td,th{text-align:left; padding:9px 18px; border-top:1px solid var(--rule-2); vertical-align:top}
+tr:first-child td{border-top:none}
+th{
+  font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); font-weight:400; border-top:none;
+  padding-top:11px; padding-bottom:9px;
+}
+td.num{font-family:"IBM Plex Mono",monospace; color:var(--muted); font-variant-numeric:tabular-nums; width:42px}
+td.nm{font-weight:500; white-space:nowrap}
+td.cls{font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:var(--accent); white-space:nowrap}
+td.rt{width:34px}
+td.note{color:var(--muted); font-size:13.5px; min-width:260px}
+.chip{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:3px; color:#fff;
+  font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500;
+}
+.chip.r1,.chip.r0{color:var(--ink)}
+.err-tag{color:var(--warn); font-weight:600}
+footer{
+  margin-top:64px; padding-top:20px; border-top:1px solid var(--rule);
+  color:var(--muted); font-size:13px; max-width:70ch;
+}
+code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)}
+
+.strip{display:flex; flex-wrap:wrap; gap:4px}
+.scell{
+  width:38px; border-radius:2px; padding:5px 0 4px; text-align:center;
+  font-family:"IBM Plex Mono",monospace; font-size:9.5px; line-height:1.25; color:#fff;
+}
+.scell.r1,.scell.r0{color:var(--ink)}
+.scell b{display:block; font-size:11px; font-weight:500}
+.scell.err{outline:1.5px dashed var(--warn); outline-offset:-2px}
+.kitnote{display:flex; gap:10px; align-items:flex-start; font-size:13.5px; color:var(--muted)}
+@media (max-width:720px){
+  .scalelist li{grid-template-columns:38px 1fr; }
+  .scalelist .d{grid-column:2}
+}
+
+</style>
+
+<div class="wrap">
+<header>
+<div class="eyebrow">Physically-modelled additive synthesiser &middot; General MIDI</div>
+<h1>GM Patch Coverage</h1>
+<p class="standfirst">All 128 programs, rated by <em>how much reality has been allowed to contradict the model</em> &mdash; from a shared base standing in, through a voice derived from how the instrument works, to one fitted against a recording of the thing itself.</p>
+</header>
+
+<section>
+<h2>The whole set at once</h2>
+<p>General MIDI is exactly sixteen families of eight, so the entire specification fits in one grid. Each cell is a program, coloured by its rating; a dashed outline marks a patch played by a voice of the wrong physical kind.</p>
+<div class="map"><div class="mapgrid">
+<div class="fam">Piano</div>
+<div class="cell r4" title="0 Acoustic Grand Piano &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="1 Bright Acoustic Piano &mdash; specific, theory">2</div>
+<div class="cell r2" title="2 Electric Grand Piano &mdash; specific, theory">2</div>
+<div class="cell r2" title="3 Honky-tonk Piano &mdash; specific, theory">2</div>
+<div class="cell r2" title="4 Electric Piano 1 &mdash; specific, theory">2</div>
+<div class="cell r2" title="5 Electric Piano 2 &mdash; specific, theory">2</div>
+<div class="cell r4" title="6 Harpsichord &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="7 Clavinet &mdash; specific, theory">2</div>
+<div class="fam">Chromatic Percussion</div>
+<div class="cell r2" title="8 Celesta &mdash; specific, theory">2</div>
+<div class="cell r4" title="9 Glockenspiel &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="10 Music Box &mdash; specific, theory">2</div>
+<div class="cell r4" title="11 Vibraphone &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="12 Marimba &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="13 Xylophone &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="14 Tubular Bells &mdash; specific, theory">2</div>
+<div class="cell r2" title="15 Dulcimer &mdash; specific, theory">2</div>
+<div class="fam">Organ</div>
+<div class="cell r3" title="16 Drawbar Organ &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="17 Percussive Organ &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="18 Rock Organ &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="19 Church Organ &mdash; specific, theory + ear">3</div>
+<div class="cell r2" title="20 Reed Organ &mdash; specific, theory">2</div>
+<div class="cell r2" title="21 Accordion &mdash; specific, theory">2</div>
+<div class="cell r2" title="22 Harmonica &mdash; specific, theory">2</div>
+<div class="cell r2" title="23 Tango Accordion &mdash; specific, theory">2</div>
+<div class="fam">Guitar</div>
+<div class="cell r4" title="24 Acoustic Guitar (nylon) &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="25 Acoustic Guitar (steel) &mdash; specific, theory">2</div>
+<div class="cell r3" title="26 Electric Guitar (jazz) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="27 Electric Guitar (clean) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="28 Electric Guitar (muted) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="29 Overdriven Guitar &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="30 Distortion Guitar &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="31 Guitar Harmonics &mdash; specific, theory + ear">3</div>
+<div class="fam">Bass</div>
+<div class="cell r2" title="32 Acoustic Bass &mdash; specific, theory">2</div>
+<div class="cell r3" title="33 Electric Bass (finger) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="34 Electric Bass (pick) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="35 Fretless Bass &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="36 Slap Bass 1 &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="37 Slap Bass 2 &mdash; specific, theory + ear">3</div>
+<div class="cell r1" title="38 Synth Bass 1 &mdash; general class">1</div>
+<div class="cell r1" title="39 Synth Bass 2 &mdash; general class">1</div>
+<div class="fam">Strings</div>
+<div class="cell r4" title="40 Violin &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="41 Viola &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="42 Cello &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="43 Contrabass &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="44 Tremolo Strings &mdash; specific, theory">2</div>
+<div class="cell r2" title="45 Pizzicato Strings &mdash; specific, theory">2</div>
+<div class="cell r2" title="46 Orchestral Harp &mdash; specific, theory">2</div>
+<div class="cell r2" title="47 Timpani &mdash; specific, theory">2</div>
+<div class="fam">Ensemble</div>
+<div class="cell r3" title="48 String Ensemble 1 &mdash; specific, theory + ear">3</div>
+<div class="cell r2" title="49 String Ensemble 2 &mdash; specific, theory">2</div>
+<div class="cell r2" title="50 Synth Strings 1 &mdash; specific, theory">2</div>
+<div class="cell r2" title="51 Synth Strings 2 &mdash; specific, theory">2</div>
+<div class="cell r3" title="52 Choir Aahs &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="53 Voice Oohs &mdash; specific, theory + ear">3</div>
+<div class="cell r2" title="54 Synth Choir &mdash; specific, theory">2</div>
+<div class="cell r2" title="55 Orchestra Hit &mdash; specific, theory">2</div>
+<div class="fam">Brass</div>
+<div class="cell r4" title="56 Trumpet &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="57 Trombone &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="58 Tuba &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="59 Muted Trumpet &mdash; specific, theory">2</div>
+<div class="cell r4" title="60 French Horn &mdash; specific, reference audio">4</div>
+<div class="cell r3" title="61 Brass Section &mdash; specific, theory + ear">3</div>
+<div class="cell r1" title="62 Synth Brass 1 &mdash; general class">1</div>
+<div class="cell r1" title="63 Synth Brass 2 &mdash; general class">1</div>
+<div class="fam">Reed</div>
+<div class="cell r4" title="64 Soprano Sax &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="65 Alto Sax &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="66 Tenor Sax &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="67 Baritone Sax &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="68 Oboe &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="69 English Horn &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="70 Bassoon &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="71 Clarinet &mdash; specific, reference audio">4</div>
+<div class="fam">Pipe</div>
+<div class="cell r4" title="72 Piccolo &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="73 Flute &mdash; specific, reference audio">4</div>
+<div class="cell r1" title="74 Recorder &mdash; general class">1</div>
+<div class="cell r1" title="75 Pan Flute &mdash; general class">1</div>
+<div class="cell r2" title="76 Blown Bottle &mdash; specific, theory">2</div>
+<div class="cell r1" title="77 Shakuhachi &mdash; general class">1</div>
+<div class="cell r1" title="78 Whistle &mdash; general class">1</div>
+<div class="cell r2" title="79 Ocarina &mdash; specific, theory">2</div>
+<div class="fam">Synth Lead</div>
+<div class="cell r2" title="80 Lead 1 (square) &mdash; specific, theory">2</div>
+<div class="cell r2" title="81 Lead 2 (sawtooth) &mdash; specific, theory">2</div>
+<div class="cell r1" title="82 Lead 3 (calliope) &mdash; general class">1</div>
+<div class="cell r1" title="83 Lead 4 (chiff) &mdash; general class">1</div>
+<div class="cell r1" title="84 Lead 5 (charang) &mdash; general class">1</div>
+<div class="cell r1" title="85 Lead 6 (voice) &mdash; general class">1</div>
+<div class="cell r1" title="86 Lead 7 (fifths) &mdash; general class">1</div>
+<div class="cell r1" title="87 Lead 8 (bass+lead) &mdash; general class">1</div>
+<div class="fam">Synth Pad</div>
+<div class="cell r1" title="88 Pad 1 (new age) &mdash; general class">1</div>
+<div class="cell r1" title="89 Pad 2 (warm) &mdash; general class">1</div>
+<div class="cell r1" title="90 Pad 3 (polysynth) &mdash; general class">1</div>
+<div class="cell r1" title="91 Pad 4 (choir) &mdash; general class">1</div>
+<div class="cell r1" title="92 Pad 5 (bowed) &mdash; general class">1</div>
+<div class="cell r1" title="93 Pad 6 (metallic) &mdash; general class">1</div>
+<div class="cell r1" title="94 Pad 7 (halo) &mdash; general class">1</div>
+<div class="cell r1" title="95 Pad 8 (sweep) &mdash; general class">1</div>
+<div class="fam">Synth Effects</div>
+<div class="cell r1" title="96 FX 1 (rain) &mdash; general class">1</div>
+<div class="cell r1" title="97 FX 2 (soundtrack) &mdash; general class">1</div>
+<div class="cell r1" title="98 FX 3 (crystal) &mdash; general class">1</div>
+<div class="cell r1" title="99 FX 4 (atmosphere) &mdash; general class">1</div>
+<div class="cell r1" title="100 FX 5 (brightness) &mdash; general class">1</div>
+<div class="cell r1" title="101 FX 6 (goblins) &mdash; general class">1</div>
+<div class="cell r1" title="102 FX 7 (echoes) &mdash; general class">1</div>
+<div class="cell r1" title="103 FX 8 (sci-fi) &mdash; general class">1</div>
+<div class="fam">Ethnic</div>
+<div class="cell r2" title="104 Sitar &mdash; specific, theory">2</div>
+<div class="cell r1" title="105 Banjo &mdash; general class">1</div>
+<div class="cell r1" title="106 Shamisen &mdash; general class">1</div>
+<div class="cell r1" title="107 Koto &mdash; general class">1</div>
+<div class="cell r1" title="108 Kalimba &mdash; general class">1</div>
+<div class="cell r1" title="109 Bag pipe &mdash; general class">1</div>
+<div class="cell r4" title="110 Fiddle &mdash; specific, reference audio">4</div>
+<div class="cell r1" title="111 Shanai &mdash; general class">1</div>
+<div class="fam">Percussive</div>
+<div class="cell r4" title="112 Tinkle Bell &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="113 Agogo &mdash; specific, theory">2</div>
+<div class="cell r4" title="114 Steel Drums &mdash; specific, reference audio">4</div>
+<div class="cell r4" title="115 Woodblock &mdash; specific, reference audio">4</div>
+<div class="cell r2" title="116 Taiko Drum &mdash; specific, theory">2</div>
+<div class="cell r2" title="117 Melodic Tom &mdash; specific, theory">2</div>
+<div class="cell r1 err" title="118 Synth Drum &mdash; general class">1</div>
+<div class="cell r1 err" title="119 Reverse Cymbal &mdash; general class">1</div>
+<div class="fam">Sound Effects</div>
+<div class="cell r3" title="120 Guitar Fret Noise &mdash; specific, theory + ear">3</div>
+<div class="cell r2" title="121 Breath Noise &mdash; specific, theory">2</div>
+<div class="cell r2" title="122 Seashore &mdash; specific, theory">2</div>
+<div class="cell r1 err" title="123 Bird Tweet &mdash; general class">1</div>
+<div class="cell r1 err" title="124 Telephone Ring &mdash; general class">1</div>
+<div class="cell r1 err" title="125 Helicopter &mdash; general class">1</div>
+<div class="cell r2" title="126 Applause &mdash; specific, theory">2</div>
+<div class="cell r2" title="127 Gunshot &mdash; specific, theory">2</div>
+</div>
+<div class="legend">
+<div class="lg"><span class="sw r1"></span>1 &nbsp;general class</div>
+<div class="lg"><span class="sw r2"></span>2 &nbsp;specific, theory</div>
+<div class="lg"><span class="sw r3"></span>3 &nbsp;specific, theory + ear</div>
+<div class="lg"><span class="sw r4"></span>4 &nbsp;specific, reference audio</div>
+<div class="lg"><span class="sw err"></span>wrong physical kind</div>
+</div></div>
+</section>
+
+<section>
+<h2>Where it stands</h2>
+<div class="bar">
+<span class="r1" style="flex:41">41</span>
+<span class="r2" style="flex:38">38</span>
+<span class="r3" style="flex:20">20</span>
+<span class="r4" style="flex:29">29</span>
+</div>
+<ul class="scalelist">
+<li><span class="n"><span class="sw r0"></span>0</span><span class="t">nothing</span><span class="d">no voice at all</span></li>
+<li><span class="n"><span class="sw r1"></span>1</span><span class="t">general class</span><span class="d">a shared base, or another instrument standing in</span></li>
+<li><span class="n"><span class="sw r2"></span>2</span><span class="t">specific, theory</span><span class="d">its own voice, derived from how the instrument works</span></li>
+<li><span class="n"><span class="sw r3"></span>3</span><span class="t">specific, theory + ear</span><span class="d">...and the numbers moved after listening</span></li>
+<li><span class="n"><span class="sw r4"></span>4</span><span class="t">specific, reference audio</span><span class="d">...and fitted against a recording of the instrument</span></li>
+</ul>
+<p><strong>Nothing scores 0</strong>, because every program resolves to something &mdash; which is not the same as every program being served. The line that matters is the one at 4: audio of the instrument, analysed and fitted against. Published measurements that are not audio &mdash; the Rhodes&rsquo; high-speed-camera papers, the free reeds&rsquo; flow model &mdash; are better than theory, but they cannot contradict the model the way a recording can, so those voices sit at 2 and say why.</p>
+<p><strong>The class column is what the ROUTER returns, not the program map.</strong> Several programs are a family routed per note &mdash; the bowed and pizzicato ensembles, the brass section, the solo winds whose bottom octave is a different instrument &mdash; and reading the program map instead reports the no-note fallback. That is how GM 61 came to be listed as a trombone standing in for a whole section long after it had been routed to trumpet, trombone and tuba sections.</p>
+<p>The single largest gap is one <code>BowedString</code> serving all sixteen pads and effects, 88&ndash;103. The 5 patches on a voice of the wrong physical kind are 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.</p>
+</section>
+
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Piano</h3><span class="rng">0&ndash;7</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">0</td><td class="nm">Acoustic Grand Piano</td><td class="cls">GrandPiano</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured</td></tr>
+<tr><td class="num">1</td><td class="nm">Bright Acoustic Piano</td><td class="cls">BrightPiano</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp</td></tr>
+<tr><td class="num">2</td><td class="nm">Electric Grand Piano</td><td class="cls">ElectricGrand</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference</td></tr>
+<tr><td class="num">3</td><td class="nm">Honky-tonk Piano</td><td class="cls">Honky</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the grand with the tuner&#x27;s hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it</td></tr>
+<tr><td class="num">4</td><td class="nm">Electric Piano 1</td><td class="cls">Rhodes</td><td class="rt"><span class="chip r2">2</span></td><td class="note">Rhodes. Built on two papers&#x27; high-speed-camera measurements, but NO audio fitted</td></tr>
+<tr><td class="num">5</td><td class="nm">Electric Piano 2</td><td class="cls">Wurlitzer</td><td class="rt"><span class="chip r2">2</span></td><td class="note">Wurlitzer. Same machinery, 1/d pickup; no audio fitted</td></tr>
+<tr><td class="num">6</td><td class="nm">Harpsichord</td><td class="cls">Harpsichord</td><td class="rt"><span class="chip r4">4</span></td><td class="note">VCSL recordings</td></tr>
+<tr><td class="num">7</td><td class="nm">Clavinet</td><td class="cls">Clavinet</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own voice: struck at the anvil, magnetic pickups whose fraction climbs with pitch. No reference</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Chromatic Percussion</h3><span class="rng">8&ndash;15</span><span class="pips">
+<span class="pip r2"></span>
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">8</td><td class="nm">Celesta</td><td class="cls">Celesta</td><td class="rt"><span class="chip r2">2</span></td><td class="note">struck steel plate, felt hammer</td></tr>
+<tr><td class="num">9</td><td class="nm">Glockenspiel</td><td class="cls">Glockenspiel</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa orchestra bells</td></tr>
+<tr><td class="num">10</td><td class="nm">Music Box</td><td class="cls">MusicBox</td><td class="rt"><span class="chip r2">2</span></td><td class="note">plucked steel comb tooth. Its docstring claims a cantilever; its numbers are a free-free bar</td></tr>
+<tr><td class="num">11</td><td class="nm">Vibraphone</td><td class="cls">Vibraphone</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa vibraphone. The motor tremolo that gives it its name is NOT modelled</td></tr>
+<tr><td class="num">12</td><td class="nm">Marimba</td><td class="cls">Marimba</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa marimba</td></tr>
+<tr><td class="num">13</td><td class="nm">Xylophone</td><td class="cls">Xylophone</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa xylophone</td></tr>
+<tr><td class="num">14</td><td class="nm">Tubular Bells</td><td class="cls">TubularBell</td><td class="rt"><span class="chip r2">2</span></td><td class="note">tubes at 2:3:4:5</td></tr>
+<tr><td class="num">15</td><td class="nm">Dulcimer</td><td class="cls">HammeredDulcimer</td><td class="rt"><span class="chip r2">2</span></td><td class="note">struck steel courses; the stiffness is estimated</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Organ</h3><span class="rng">16&ndash;23</span><span class="pips">
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">16</td><td class="nm">Drawbar Organ</td><td class="cls">DrawbarOrgan</td><td class="rt"><span class="chip r3">3</span></td><td class="note">tonewheel + Leslie, worked over extensively by ear</td></tr>
+<tr><td class="num">17</td><td class="nm">Percussive Organ</td><td class="cls">PercussiveOrgan</td><td class="rt"><span class="chip r3">3</span></td><td class="note">tonewheel, percussive tap</td></tr>
+<tr><td class="num">18</td><td class="nm">Rock Organ</td><td class="cls">RockOrgan</td><td class="rt"><span class="chip r3">3</span></td><td class="note">tonewheel, overdriven</td></tr>
+<tr><td class="num">19</td><td class="nm">Church Organ</td><td class="cls">FlueOrgan</td><td class="rt"><span class="chip r3">3</span></td><td class="note">flue pipes; registration built on Geer and judged by ear</td></tr>
+<tr><td class="num">20</td><td class="nm">Reed Organ</td><td class="cls">ReedOrganFree</td><td class="rt"><span class="chip r2">2</span></td><td class="note">FreeReedProperties: a tongue through a slot, no resonator -- not the pipe organ reed RANK all four used to be</td></tr>
+<tr><td class="num">21</td><td class="nm">Accordion</td><td class="cls">Accordion</td><td class="rt"><span class="chip r2">2</span></td><td class="note">AccordionProperties: musette, the reed banks deliberately offset ~16 cents</td></tr>
+<tr><td class="num">22</td><td class="nm">Harmonica</td><td class="cls">Harmonica</td><td class="rt"><span class="chip r2">2</span></td><td class="note">HarmonicaProperties: one free reed inside a cupped-hand formant pair</td></tr>
+<tr><td class="num">23</td><td class="nm">Tango Accordion</td><td class="cls">TangoAccordion</td><td class="rt"><span class="chip r2">2</span></td><td class="note">TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Guitar</h3><span class="rng">24&ndash;31</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">24</td><td class="nm">Acoustic Guitar (nylon)</td><td class="cls">NylonGuitar</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa classical guitar, six strings measured sul A/B/D/E/G</td></tr>
+<tr><td class="num">25</td><td class="nm">Acoustic Guitar (steel)</td><td class="cls">SteelGuitar</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the measured classical&#x27;s body with a steel string on it: less damping, a pick, 35% more stretch</td></tr>
+<tr><td class="num">26</td><td class="nm">Electric Guitar (jazz)</td><td class="cls">JazzGuitar</td><td class="rt"><span class="chip r3">3</span></td><td class="note">electric family: pluck comb x pickup comb, amp and cabinet; judged by ear</td></tr>
+<tr><td class="num">27</td><td class="nm">Electric Guitar (clean)</td><td class="cls">ElectricGuitar</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 26 -- the reference voice of the family</td></tr>
+<tr><td class="num">28</td><td class="nm">Electric Guitar (muted)</td><td class="cls">MutedGuitar</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 26, palm mute</td></tr>
+<tr><td class="num">29</td><td class="nm">Overdriven Guitar</td><td class="cls">OverdrivenGuitar</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 26, driven harder</td></tr>
+<tr><td class="num">30</td><td class="nm">Distortion Guitar</td><td class="cls">DistortionGuitar</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 26, driven hardest</td></tr>
+<tr><td class="num">31</td><td class="nm">Guitar Harmonics</td><td class="cls">GuitarHarmonics</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 26, touched harmonics</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Bass</h3><span class="rng">32&ndash;39</span><span class="pips">
+<span class="pip r2"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">32</td><td class="nm">Acoustic Bass</td><td class="cls">AcousticBass</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the upright PLUCKED: GM 43&#x27;s measured body with a plucked base, comb at the quarter point</td></tr>
+<tr><td class="num">33</td><td class="nm">Electric Bass (finger)</td><td class="cls">FingeredBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">electric bass family, cabinet and amp; judged by ear</td></tr>
+<tr><td class="num">34</td><td class="nm">Electric Bass (pick)</td><td class="cls">PickedBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 33, pick</td></tr>
+<tr><td class="num">35</td><td class="nm">Fretless Bass</td><td class="cls">FretlessBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 33, fretless -- loses its top rather than starting without it</td></tr>
+<tr><td class="num">36</td><td class="nm">Slap Bass 1</td><td class="cls">SlapBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 33, slap</td></tr>
+<tr><td class="num">37</td><td class="nm">Slap Bass 2</td><td class="cls">PoppedBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 33, pop</td></tr>
+<tr><td class="num">38</td><td class="nm">Synth Bass 1</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">falls through to the generic plucked string</td></tr>
+<tr><td class="num">39</td><td class="nm">Synth Bass 2</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 38</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Strings</h3><span class="rng">40&ndash;47</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">40</td><td class="nm">Violin</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa violin</td></tr>
+<tr><td class="num">41</td><td class="nm">Viola</td><td class="cls">Contrabass/Cello/Viola by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa viola, fitted across registers</td></tr>
+<tr><td class="num">42</td><td class="nm">Cello</td><td class="cls">Contrabass/Cello by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa cello</td></tr>
+<tr><td class="num">43</td><td class="nm">Contrabass</td><td class="cls">Contrabass</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa double bass</td></tr>
+<tr><td class="num">44</td><td class="nm">Tremolo Strings</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase</td></tr>
+<tr><td class="num">45</td><td class="nm">Pizzicato Strings</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">pizzicato(): the MEASURED body of whichever instrument the register picks, plucked -- and the ring scales with register, 2.35 s at E1 to 0.42 at E5</td></tr>
+<tr><td class="num">46</td><td class="nm">Orchestral Harp</td><td class="cls">Harp</td><td class="rt"><span class="chip r2">2</span></td><td class="note">Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings</td></tr>
+<tr><td class="num">47</td><td class="nm">Timpani</td><td class="cls">Timpani</td><td class="rt"><span class="chip r2">2</span></td><td class="note">analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Ensemble</h3><span class="rng">48&ndash;55</span><span class="pips">
+<span class="pip r3"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">48</td><td class="nm">String Ensemble 1</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r3">3</span></td><td class="note">four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section; the ensemble treatment is theory</td></tr>
+<tr><td class="num">49</td><td class="nm">String Ensemble 2</td><td class="cls">ContrabassSlow/CelloSlow/ViolaSlow/ViolinSlow by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own slow-bowed class</td></tr>
+<tr><td class="num">50</td><td class="nm">Synth Strings 1</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">not a synth string at all -- it borrows 48&#x27;s measured bodies; its own voice is the honest fix</td></tr>
+<tr><td class="num">51</td><td class="nm">Synth Strings 2</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">as 50</td></tr>
+<tr><td class="num">52</td><td class="nm">Choir Aahs</td><td class="cls">ChoirAahs</td><td class="rt"><span class="chip r3">3</span></td><td class="note">vocal tract and formants; Ben&#x27;s ear on the consonant balance</td></tr>
+<tr><td class="num">53</td><td class="nm">Voice Oohs</td><td class="cls">VoiceOohs</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 52</td></tr>
+<tr><td class="num">54</td><td class="nm">Synth Choir</td><td class="cls">SynthVoice</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">55</td><td class="nm">Orchestra Hit</td><td class="cls">OrchestraHit</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Brass</h3><span class="rng">56&ndash;63</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r4"></span>
+<span class="pip r3"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">56</td><td class="nm">Trumpet</td><td class="cls">ConicalBrass/Trombone/Trumpet by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa trumpet, three registers</td></tr>
+<tr><td class="num">57</td><td class="nm">Trombone</td><td class="cls">BassTrombone/Trombone by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa tenor and bass trombone, refitted across registers</td></tr>
+<tr><td class="num">58</td><td class="nm">Tuba</td><td class="cls">ConicalBrass</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa tuba</td></tr>
+<tr><td class="num">59</td><td class="nm">Muted Trumpet</td><td class="cls">MutedTrumpet</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class; the mute is theory</td></tr>
+<tr><td class="num">60</td><td class="nm">French Horn</td><td class="cls">ConicalBrass/Horn by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa horn, re-measured across four registers and pp/mf/ff</td></tr>
+<tr><td class="num">61</td><td class="nm">Brass Section</td><td class="cls">ConicalBrass/Trombone/Trumpet by register</td><td class="rt"><span class="chip r3">3</span></td><td class="note">brass_section over three MEASURED bodies (Iowa trumpet/trombone/tuba), five players each, crossfaded across the range handovers -- the hard break moved the spectrum 13.2 dB in one semitone and now moves 2.7</td></tr>
+<tr><td class="num">62</td><td class="nm">Synth Brass 1</td><td class="cls">Brass</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic brass base</td></tr>
+<tr><td class="num">63</td><td class="nm">Synth Brass 2</td><td class="cls">Brass</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 62</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Reed</h3><span class="rng">64&ndash;71</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">64</td><td class="nm">Soprano Sax</td><td class="cls">Saxophone</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa soprano sax</td></tr>
+<tr><td class="num">65</td><td class="nm">Alto Sax</td><td class="cls">Saxophone</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa alto sax</td></tr>
+<tr><td class="num">66</td><td class="nm">Tenor Sax</td><td class="cls">Saxophone</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the sax law, measured on soprano and alto and transposed</td></tr>
+<tr><td class="num">67</td><td class="nm">Baritone Sax</td><td class="cls">Saxophone</td><td class="rt"><span class="chip r4">4</span></td><td class="note">as 66</td></tr>
+<tr><td class="num">68</td><td class="nm">Oboe</td><td class="cls">ConicalReed</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa oboe</td></tr>
+<tr><td class="num">69</td><td class="nm">English Horn</td><td class="cls">ConicalReed</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the conical reed law measured on the oboe; its close relative</td></tr>
+<tr><td class="num">70</td><td class="nm">Bassoon</td><td class="cls">Bassoon</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa bassoon</td></tr>
+<tr><td class="num">71</td><td class="nm">Clarinet</td><td class="cls">BassClarinet/Clarinet by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa clarinet family -- Bb, Eb and bass, to find one register law</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Pipe</h3><span class="rng">72&ndash;79</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">72</td><td class="nm">Piccolo</td><td class="cls">BassFlute/OpenPipe by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the flute law, measured across bass, alto and concert flute</td></tr>
+<tr><td class="num">73</td><td class="nm">Flute</td><td class="cls">BassFlute/OpenPipe by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa flute (nonvib -- vibrato smears the harmonics)</td></tr>
+<tr><td class="num">74</td><td class="nm">Recorder</td><td class="cls">OpenPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic open pipe</td></tr>
+<tr><td class="num">75</td><td class="nm">Pan Flute</td><td class="cls">StoppedPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic stopped pipe</td></tr>
+<tr><td class="num">76</td><td class="nm">Blown Bottle</td><td class="cls">BlownBottle</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">77</td><td class="nm">Shakuhachi</td><td class="cls">OpenPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic open pipe; a shakuhachi&#x27;s breath and pitch bend are not modelled</td></tr>
+<tr><td class="num">78</td><td class="nm">Whistle</td><td class="cls">OpenPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic open pipe</td></tr>
+<tr><td class="num">79</td><td class="nm">Ocarina</td><td class="cls">Ocarina</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class -- a vessel flute, theory</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Synth Lead</h3><span class="rng">80&ndash;87</span><span class="pips">
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">80</td><td class="nm">Lead 1 (square)</td><td class="cls">SquareSynth</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">81</td><td class="nm">Lead 2 (sawtooth)</td><td class="cls">SawtoothSynth</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">82</td><td class="nm">Lead 3 (calliope)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one SynthLeadProperties serves 82-87</td></tr>
+<tr><td class="num">83</td><td class="nm">Lead 4 (chiff)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
+<tr><td class="num">84</td><td class="nm">Lead 5 (charang)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
+<tr><td class="num">85</td><td class="nm">Lead 6 (voice)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
+<tr><td class="num">86</td><td class="nm">Lead 7 (fifths)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
+<tr><td class="num">87</td><td class="nm">Lead 8 (bass+lead)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Synth Pad</h3><span class="rng">88&ndash;95</span><span class="pips">
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">88</td><td class="nm">Pad 1 (new age)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">89</td><td class="nm">Pad 2 (warm)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">90</td><td class="nm">Pad 3 (polysynth)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">91</td><td class="nm">Pad 4 (choir)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">92</td><td class="nm">Pad 5 (bowed)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">93</td><td class="nm">Pad 6 (metallic)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">94</td><td class="nm">Pad 7 (halo)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">95</td><td class="nm">Pad 8 (sweep)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Synth Effects</h3><span class="rng">96&ndash;103</span><span class="pips">
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">96</td><td class="nm">FX 1 (rain)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">97</td><td class="nm">FX 2 (soundtrack)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">98</td><td class="nm">FX 3 (crystal)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">99</td><td class="nm">FX 4 (atmosphere)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">100</td><td class="nm">FX 5 (brightness)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">101</td><td class="nm">FX 6 (goblins)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">102</td><td class="nm">FX 7 (echoes)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+<tr><td class="num">103</td><td class="nm">FX 8 (sci-fi)</td><td class="cls">BowedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one BowedStringProperties serves all sixteen pads and FX</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Ethnic</h3><span class="rng">104&ndash;111</span><span class="pips">
+<span class="pip r2"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r4"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">104</td><td class="nm">Sitar</td><td class="cls">Sitar</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording</td></tr>
+<tr><td class="num">105</td><td class="nm">Banjo</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic plucked string; a banjo&#x27;s membrane head is a real resonator</td></tr>
+<tr><td class="num">106</td><td class="nm">Shamisen</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic plucked string</td></tr>
+<tr><td class="num">107</td><td class="nm">Koto</td><td class="cls">PluckedString</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic plucked string</td></tr>
+<tr><td class="num">108</td><td class="nm">Kalimba</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base; a kalimba is a plucked cantilever tine</td></tr>
+<tr><td class="num">109</td><td class="nm">Bag pipe</td><td class="cls">ReedPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one ReedPipeProperties for the bagpipe and the shanai</td></tr>
+<tr><td class="num">110</td><td class="nm">Fiddle</td><td class="cls">SoloViolin</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the measured violin, given solo treatment</td></tr>
+<tr><td class="num">111</td><td class="nm">Shanai</td><td class="cls">ReedPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 109</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Percussive</h3><span class="rng">112&ndash;119</span><span class="pips">
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r4"></span>
+<span class="pip r4"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">112</td><td class="nm">Tinkle Bell</td><td class="cls">Crotale</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa crotales, 25 pitches</td></tr>
+<tr><td class="num">113</td><td class="nm">Agogo</td><td class="cls">Agogo</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">114</td><td class="nm">Steel Drums</td><td class="cls">SteelPan</td><td class="rt"><span class="chip r4">4</span></td><td class="note">built from the instrument&#x27;s design, then corrected against Freesound 742254</td></tr>
+<tr><td class="num">115</td><td class="nm">Woodblock</td><td class="cls">WoodPercussion</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa woodblocks</td></tr>
+<tr><td class="num">116</td><td class="nm">Taiko Drum</td><td class="cls">MembraneDrum</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the membrane drum class</td></tr>
+<tr><td class="num">117</td><td class="nm">Melodic Tom</td><td class="cls"> by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the tom class</td></tr>
+<tr><td class="num">118</td><td class="nm">Synth Drum</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR</td></tr>
+<tr><td class="num">119</td><td class="nm">Reverse Cymbal</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR: this needs a BACKWARDS envelope</td></tr>
+</table></div></div>
+</section>
+<section>
+<div class="fambox">
+<div class="famhead"><h3>Sound Effects</h3><span class="rng">120&ndash;127</span><span class="pips">
+<span class="pip r3"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+</span></div>
+<div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
+<tr><td class="num">120</td><td class="nm">Guitar Fret Noise</td><td class="cls">GuitarFretNoise</td><td class="rt"><span class="chip r3">3</span></td><td class="note">its own class -- slide, squeak and position shift; reworked against Ben&#x27;s ear</td></tr>
+<tr><td class="num">121</td><td class="nm">Breath Noise</td><td class="cls">BreathNoise</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">122</td><td class="nm">Seashore</td><td class="cls">Seashore</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">123</td><td class="nm">Bird Tweet</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR</td></tr>
+<tr><td class="num">124</td><td class="nm">Telephone Ring</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR: US ringback is 440+480 Hz gated</td></tr>
+<tr><td class="num">125</td><td class="nm">Helicopter</td><td class="cls">Mallet</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic mallet base. CATEGORY ERROR</td></tr>
+<tr><td class="num">126</td><td class="nm">Applause</td><td class="cls">Applause</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+<tr><td class="num">127</td><td class="nm">Gunshot</td><td class="cls">Gunshot</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
+</table></div></div>
+</section>
+
+<section>
+<h2>Channel 10: the percussion note map</h2>
+<p>A separate specification from the 128 programs, and the place where the reference corpus divides most sharply. Iowa&rsquo;s percussion pages carry cymbals, crotales and hand percussion &mdash; and <strong>no drum kit at all</strong>: no snare, no bass drum, no toms, which is 9,630 of that collection&rsquo;s 12,781 percussion notes. 19 of the 51 mapped notes are fitted against a recording.</p>
+<div class="map">
+<div class="strip">
+<div class="scell r3" title="35 Acoustic Bass Drum &mdash; specific, theory + ear"><b>35</b>3</div>
+<div class="scell r3" title="36 Bass Drum 1 &mdash; specific, theory + ear"><b>36</b>3</div>
+<div class="scell r2" title="37 Side Stick &mdash; specific, theory"><b>37</b>2</div>
+<div class="scell r3" title="38 Acoustic Snare &mdash; specific, theory + ear"><b>38</b>3</div>
+<div class="scell r2" title="39 Hand Clap &mdash; specific, theory"><b>39</b>2</div>
+<div class="scell r1" title="40 Electric Snare &mdash; general class"><b>40</b>1</div>
+<div class="scell r2" title="41 Low Floor Tom &mdash; specific, theory"><b>41</b>2</div>
+<div class="scell r4" title="42 Closed Hi-Hat &mdash; specific, reference audio"><b>42</b>4</div>
+<div class="scell r2" title="43 High Floor Tom &mdash; specific, theory"><b>43</b>2</div>
+<div class="scell r4" title="44 Pedal Hi-Hat &mdash; specific, reference audio"><b>44</b>4</div>
+<div class="scell r2" title="45 Low Tom &mdash; specific, theory"><b>45</b>2</div>
+<div class="scell r4" title="46 Open Hi-Hat &mdash; specific, reference audio"><b>46</b>4</div>
+<div class="scell r2" title="47 Low-Mid Tom &mdash; specific, theory"><b>47</b>2</div>
+<div class="scell r2" title="48 Hi-Mid Tom &mdash; specific, theory"><b>48</b>2</div>
+<div class="scell r4" title="49 Crash Cymbal 1 &mdash; specific, reference audio"><b>49</b>4</div>
+<div class="scell r2" title="50 High Tom &mdash; specific, theory"><b>50</b>2</div>
+<div class="scell r4" title="51 Ride Cymbal 1 &mdash; specific, reference audio"><b>51</b>4</div>
+<div class="scell r4" title="52 Chinese Cymbal &mdash; specific, reference audio"><b>52</b>4</div>
+<div class="scell r4" title="53 Ride Bell &mdash; specific, reference audio"><b>53</b>4</div>
+<div class="scell r2" title="54 Tambourine &mdash; specific, theory"><b>54</b>2</div>
+<div class="scell r4" title="55 Splash Cymbal &mdash; specific, reference audio"><b>55</b>4</div>
+<div class="scell r2" title="56 Cowbell &mdash; specific, theory"><b>56</b>2</div>
+<div class="scell r4" title="57 Crash Cymbal 2 &mdash; specific, reference audio"><b>57</b>4</div>
+<div class="scell r2" title="58 Vibraslap &mdash; specific, theory"><b>58</b>2</div>
+<div class="scell r4" title="59 Ride Cymbal 2 &mdash; specific, reference audio"><b>59</b>4</div>
+<div class="scell r1" title="60 Hi Bongo &mdash; general class"><b>60</b>1</div>
+<div class="scell r1" title="61 Low Bongo &mdash; general class"><b>61</b>1</div>
+<div class="scell r1" title="62 Mute Hi Conga &mdash; general class"><b>62</b>1</div>
+<div class="scell r1" title="63 Open Hi Conga &mdash; general class"><b>63</b>1</div>
+<div class="scell r1" title="64 Low Conga &mdash; general class"><b>64</b>1</div>
+<div class="scell r1" title="65 High Timbale &mdash; general class"><b>65</b>1</div>
+<div class="scell r1" title="66 Low Timbale &mdash; general class"><b>66</b>1</div>
+<div class="scell r2" title="67 High Agogo &mdash; specific, theory"><b>67</b>2</div>
+<div class="scell r2" title="68 Low Agogo &mdash; specific, theory"><b>68</b>2</div>
+<div class="scell r2" title="69 Cabasa &mdash; specific, theory"><b>69</b>2</div>
+<div class="scell r2" title="70 Maracas &mdash; specific, theory"><b>70</b>2</div>
+<div class="scell r3" title="71 Short Whistle &mdash; specific, theory + ear"><b>71</b>3</div>
+<div class="scell r3" title="72 Long Whistle &mdash; specific, theory + ear"><b>72</b>3</div>
+<div class="scell r4" title="73 Short Guiro &mdash; specific, reference audio"><b>73</b>4</div>
+<div class="scell r4" title="74 Long Guiro &mdash; specific, reference audio"><b>74</b>4</div>
+<div class="scell r4" title="75 Claves &mdash; specific, reference audio"><b>75</b>4</div>
+<div class="scell r4" title="76 Hi Wood Block &mdash; specific, reference audio"><b>76</b>4</div>
+<div class="scell r4" title="77 Low Wood Block &mdash; specific, reference audio"><b>77</b>4</div>
+<div class="scell r2" title="78 Mute Cuica &mdash; specific, theory"><b>78</b>2</div>
+<div class="scell r2" title="79 Open Cuica &mdash; specific, theory"><b>79</b>2</div>
+<div class="scell r4" title="80 Mute Triangle &mdash; specific, reference audio"><b>80</b>4</div>
+<div class="scell r4" title="81 Open Triangle &mdash; specific, reference audio"><b>81</b>4</div>
+<div class="scell r4" title="84 Belltree &mdash; specific, reference audio"><b>84</b>4</div>
+<div class="scell r4" title="85 Castanets &mdash; specific, reference audio"><b>85</b>4</div>
+<div class="scell r1" title="86 Mute Surdo &mdash; general class"><b>86</b>1</div>
+<div class="scell r1" title="87 Open Surdo &mdash; general class"><b>87</b>1</div>
+</div>
+</div>
+</section>
+
+</div>
