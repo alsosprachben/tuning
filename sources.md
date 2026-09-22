@@ -3968,3 +3968,90 @@ right), five players each, with the handover measured on rendered audio. The
 section treatment itself -- how many players, how far apart, how much vibrato --
 is argued rather than fitted, and no recording of a section was used, so it is
 not a 4.
+
+## GM 80-87, the synth leads: the one family that can be EXACT
+
+82-87 all shared `SynthLeadProperties`, which is a `FlueOrganProperties` -- an
+organ pipe standing in for a synthesiser. 80 and 81 already had their own
+classes; this finishes the family.
+
+**THE TARGET HERE IS A SPECIFICATION, NOT AN INSTRUMENT, and that inverts the
+usual problem.** Everywhere else in this bank the model approximates a physical
+object and a recording can contradict it. A sawtooth is not an approximation of
+anything: it IS the harmonic series at 1/n, a square IS the odd harmonics at
+1/n, a triangle IS the odd harmonics at 1/n^2. There is no object to measure and
+nothing a recording could correct, so an additive engine renders these
+**exactly** -- the one family where this renderer has an advantage over sampling
+rather than a handicap. Checked against the closed form, worst deviation over 32
+partials: sawtooth 1.4e-17, square 5.6e-17, triangle 3.5e-18.
+
+What General MIDI does NOT specify is everything that makes a waveform a LEAD
+rather than a buzz: the resonant low-pass, its envelope, the vibrato, the
+doubling. GM names eight leads and defines none, so the reading used is the
+Roland SC-55's, which is what the files in the wild were written for. Those
+choices are judgement and are marked as such.
+
+A lead's filter envelope needed no new machinery: a low-pass sweeping shut is
+the upper partials dying faster than the lower ones, which is
+`harmonic_decay_db` -- the same observation that gave the Rhodes its growl.
+
+| | what it is | how specified |
+|---|---|---|
+| 80 square | odd harmonics at 1/n | exact |
+| 81 sawtooth | every harmonic at 1/n | exact |
+| 82 calliope | a TRIANGLE: odd at 1/n^2 | exact |
+| 83 chiff | a saw with the organ's own chiff | judgement |
+| 84 charang | a saw through the guitars' valve | judgement |
+| 85 voice | an oscillator behind vocal formants | judgement |
+| 86 fifths | the waveform and its fifth | exact, +700.0 cents |
+| 87 bass+lead | the waveform and an octave below | exact, -1200.0 cents |
+
+**82 is a triangle, and the GM name misleads.** A real calliope is a steam
+whistle organ and this patch is nothing like one; the SC-55 reading is the soft
+lead, which is exactly a triangle -- the same hollow odd-only interval structure
+as a square, falling away four times faster, which is why it is round and
+flute-like where a square is hollow and reedy.
+
+**86 IS TEMPERED, NOT JUST.** A GM synth's second oscillator is offset by seven
+SEMITONES on the keyboard, so it tracks whatever tuning is in force rather than
+sitting at 3/2. 2^(7/12) is 1.4983, two cents under just -- and under an unequal
+temperament the difference is audible, which is the whole point of this renderer.
+
+### Two bugs found, and what they have in common
+
+**GM 80 AND 81 WERE SUPERSAWS.** `SawtoothSynthProperties`' docstring said "the
+shimmer BowedString uses for section detune is switched off ... a single
+oscillator does not have a section". What had actually been switched off was
+`sustain_jitter`. `section_players` stayed at the **7** it inherits from
+`BowedStringProperties`, so both patches shipped as seven oscillators 6 cents
+apart, each with its own 5-cent vibrato. A fine sound; not a sawtooth; and
+flatly incompatible with the family being exact. **A docstring is not a test**,
+which is why there is now a check for it -- and the gain had to be re-calibrated
+afterwards, because the old divisor had been measured with seven oscillators
+running and so described a supersaw's level.
+
+**GM 85's FORMANTS WERE INERT.** `VoiceLeadProperties` inherits `FormantBody`,
+and it did nothing: `SawtoothSynthProperties` overrides `harmonic_volume` to
+return `self.gain / harmonic` directly -- deliberately, so a saw is exactly 1/n
+and nothing downstream can bend it -- which also bypasses `bore_gain`, the hook
+`FormantBody` works through. Measured, the voice lead rendered as a plain saw,
+partial for partial, with three vocal formants declared and unreachable. Wired
+up by hand; now h3 stands **+8.4 dB above the fundamental** at C4, F1 at 730 Hz
+landing on partial 2.8.
+
+Both are the same mistake in different clothes: **inheriting a thing is not the
+same as it reaching the output.** It is the third time this session, after
+`PluckedStringProperties` having no `formants` attribute at all and
+`PROGRAM_CLASS[44]` being overridden by the per-note router.
+
+### Levels
+
+All eight balance-normalised against the church organ (GM 19), same passage and
+room, within 0.05 dB.
+
+### A note on the rating
+
+80, 81, 82, 86 and 87 are rated **3**, and the scale is the reason they are not
+4: rung 4 means fitted against reference audio, and there is no audio to fit
+because there is no instrument. Exact-by-construction is arguably better than
+what 4 measures rather than worse, and the scale has no rung for it.

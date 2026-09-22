@@ -268,14 +268,14 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="cell r1" title="78 Whistle &mdash; general class">1</div>
 <div class="cell r2" title="79 Ocarina &mdash; specific, theory">2</div>
 <div class="fam">Synth Lead</div>
-<div class="cell r2" title="80 Lead 1 (square) &mdash; specific, theory">2</div>
-<div class="cell r2" title="81 Lead 2 (sawtooth) &mdash; specific, theory">2</div>
-<div class="cell r1" title="82 Lead 3 (calliope) &mdash; general class">1</div>
-<div class="cell r1" title="83 Lead 4 (chiff) &mdash; general class">1</div>
-<div class="cell r1" title="84 Lead 5 (charang) &mdash; general class">1</div>
-<div class="cell r1" title="85 Lead 6 (voice) &mdash; general class">1</div>
-<div class="cell r1" title="86 Lead 7 (fifths) &mdash; general class">1</div>
-<div class="cell r1" title="87 Lead 8 (bass+lead) &mdash; general class">1</div>
+<div class="cell r3" title="80 Lead 1 (square) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="81 Lead 2 (sawtooth) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="82 Lead 3 (calliope) &mdash; specific, theory + ear">3</div>
+<div class="cell r2" title="83 Lead 4 (chiff) &mdash; specific, theory">2</div>
+<div class="cell r2" title="84 Lead 5 (charang) &mdash; specific, theory">2</div>
+<div class="cell r2" title="85 Lead 6 (voice) &mdash; specific, theory">2</div>
+<div class="cell r3" title="86 Lead 7 (fifths) &mdash; specific, theory + ear">3</div>
+<div class="cell r3" title="87 Lead 8 (bass+lead) &mdash; specific, theory + ear">3</div>
 <div class="fam">Synth Pad</div>
 <div class="cell r1" title="88 Pad 1 (new age) &mdash; general class">1</div>
 <div class="cell r1" title="89 Pad 2 (warm) &mdash; general class">1</div>
@@ -334,9 +334,9 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Where it stands</h2>
 <div class="bar">
-<span class="r1" style="flex:41">41</span>
-<span class="r2" style="flex:38">38</span>
-<span class="r3" style="flex:20">20</span>
+<span class="r1" style="flex:35">35</span>
+<span class="r2" style="flex:39">39</span>
+<span class="r3" style="flex:25">25</span>
 <span class="r4" style="flex:29">29</span>
 </div>
 <ul class="scalelist">
@@ -584,24 +584,24 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <div class="fambox">
 <div class="famhead"><h3>Synth Lead</h3><span class="rng">80&ndash;87</span><span class="pips">
+<span class="pip r3"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
 <span class="pip r2"></span>
 <span class="pip r2"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r3"></span>
+<span class="pip r3"></span>
 </span></div>
 <div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
-<tr><td class="num">80</td><td class="nm">Lead 1 (square)</td><td class="cls">SquareSynth</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
-<tr><td class="num">81</td><td class="nm">Lead 2 (sawtooth)</td><td class="cls">SawtoothSynth</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
-<tr><td class="num">82</td><td class="nm">Lead 3 (calliope)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">one SynthLeadProperties serves 82-87</td></tr>
-<tr><td class="num">83</td><td class="nm">Lead 4 (chiff)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
-<tr><td class="num">84</td><td class="nm">Lead 5 (charang)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
-<tr><td class="num">85</td><td class="nm">Lead 6 (voice)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
-<tr><td class="num">86</td><td class="nm">Lead 7 (fifths)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
-<tr><td class="num">87</td><td class="nm">Lead 8 (bass+lead)</td><td class="cls">SynthLead</td><td class="rt"><span class="chip r1">1</span></td><td class="note">as 82</td></tr>
+<tr><td class="num">80</td><td class="nm">Lead 1 (square)</td><td class="cls">SquareSynth</td><td class="rt"><span class="chip r3">3</span></td><td class="note">a square EXACTLY: odd harmonics at 1/n, checked against the closed form to 6e-17. The section that had been making it a supersaw is off</td></tr>
+<tr><td class="num">81</td><td class="nm">Lead 2 (sawtooth)</td><td class="cls">SawtoothSynth</td><td class="rt"><span class="chip r3">3</span></td><td class="note">a sawtooth EXACTLY: every harmonic at 1/n, to 1e-17</td></tr>
+<tr><td class="num">82</td><td class="nm">Lead 3 (calliope)</td><td class="cls">TriangleSynth</td><td class="rt"><span class="chip r3">3</span></td><td class="note">a TRIANGLE exactly -- odd harmonics at 1/n^2, which is why it is the soft one. The GM name misleads: a real calliope is a steam whistle organ</td></tr>
+<tr><td class="num">83</td><td class="nm">Lead 4 (chiff)</td><td class="cls">ChiffLead</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a saw with the organ&#x27;s own chiff on the front, which is what the patch is named for</td></tr>
+<tr><td class="num">84</td><td class="nm">Lead 5 (charang)</td><td class="cls">CharangLead</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a saw through the valve the electric guitars use; amp_reference scales with its gain</td></tr>
+<tr><td class="num">85</td><td class="nm">Lead 6 (voice)</td><td class="cls">VoiceLead</td><td class="rt"><span class="chip r2">2</span></td><td class="note">an oscillator behind vocal formants (an open /a/ from vowels.py). FormantBody had to be wired in by hand -- the saw bypasses bore_gain</td></tr>
+<tr><td class="num">86</td><td class="nm">Lead 7 (fifths)</td><td class="cls">FifthsLead</td><td class="rt"><span class="chip r3">3</span></td><td class="note">the waveform and its fifth, +700.0 cents exactly -- TEMPERED, since a GM oscillator is offset in semitones</td></tr>
+<tr><td class="num">87</td><td class="nm">Lead 8 (bass+lead)</td><td class="cls">BassLead</td><td class="rt"><span class="chip r3">3</span></td><td class="note">the waveform and an octave below, -1200.0 cents; a ratio of 2 in any temperament</td></tr>
 </table></div></div>
 </section>
 <section>

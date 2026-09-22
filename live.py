@@ -3340,6 +3340,72 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ---------------------------------------------------------- the synth leads
+    import patch_map as _PMl
+    # GM 82-87 all shared SynthLeadProperties, which is a FlueOrganProperties:
+    # an organ pipe standing in for a synthesiser.
+    _leads = {_g: _PMl.property_class_for_program(_g) for _g in range(80, 88)}
+    check("each synth lead is its own voice, not one organ pipe",
+          len({_c.__name__ for _c in _leads.values()}) == 8
+          and not any(issubclass(_c, _T.FlueOrganProperties) for _c in _leads.values()),
+          "  (eight distinct classes, none of them a pipe)")
+    # THESE ARE THE ONE FAMILY WHOSE TARGET IS A SPECIFICATION. A sawtooth IS
+    # the series at 1/n and a square IS the odd harmonics at 1/n -- there is no
+    # object to measure, so the check is against the closed form and the
+    # tolerance is floating point, not decibels.
+    for _gm, _law, _nm in ((81, lambda n: 1.0 / n, "sawtooth"),
+                           (80, lambda n: 1.0 / n if n % 2 else 0.0, "square"),
+                           (82, lambda n: 1.0 / (n * n) if n % 2 else 0.0, "triangle")):
+        _q = _leads[_gm](261.63, 0.0, 1.0, 1.0)
+        _v1 = _q.harmonic_volume(1)
+        _worst = max(abs(_q.harmonic_volume(_n) / _v1 - _law(_n) / _law(1))
+                     for _n in range(1, 33))
+        check("the %s is EXACTLY the %s series" % (_nm, _nm),
+              _worst < 1e-12,
+              "  (worst deviation over 32 partials %.1e)" % _worst)
+    # AND ONE OSCILLATOR IS ONE OSCILLATOR. SawtoothSynthProperties' docstring
+    # said the section shimmer was switched off and it was not: it inherits
+    # BowedStringProperties, so section_players stayed at 7 and GM 80 and 81
+    # shipped as seven oscillators 6 cents apart, each with its own vibrato --
+    # a supersaw, which is a fine sound, is not a sawtooth, and cannot be
+    # "exact". A docstring is not a test; this is the test.
+    _plain = [_g for _g in (80, 81, 82, 83, 84, 85) if _leads[_g](261.63, 0.0, 1.0, 1.0)
+              .unison_voices(261.63, 1, 0.0)]
+    check("...and a single oscillator is not secretly a section",
+          not _plain,
+          "  (no extra voices on 80-85)" if not _plain
+          else "  (still a section: %s)" % _plain)
+    # THE TWO FIXED-INTERVAL LEADS are exactly specifiable and are the whole
+    # difference between GM 86 and 87.
+    def _iv(_g):
+        _q = _leads[_g](440.0, 0.0, 1.0, 1.0)
+        _vs = _q.unison_voices(440.0, 1, 0.0)
+        return 1200.0 * math.log2(1.0 + _vs[0][2]) if _vs else None
+    check("the fifths lead really is a TEMPERED fifth up",
+          abs(_iv(86) - 700.0) < 0.01,
+          "  (%+.1f cents; a just fifth would be +702.0, and a GM oscillator "
+          "is offset in semitones)" % _iv(86))
+    check("...and the bass lead an octave down",
+          abs(_iv(87) + 1200.0) < 1e-6,
+          "  (%+.1f cents, which is a ratio of 2 in any temperament)" % _iv(87))
+    # AND THE SIX ARE DISTINGUISHED BY SOMETHING, not just by name.
+    # THE INTERVAL, not merely whether there is one. The first version of this
+    # check recorded "has an extra voice" as a boolean and so could not tell
+    # GM 86 from GM 87 -- which are alike in having a second oscillator and
+    # differ in nothing else, so a boolean collapsed exactly the pair the check
+    # exists to separate. It failed, correctly, and this is the fix.
+    def _second(_g):
+        _vs = _leads[_g](261.63, 0.0, 1.0, 1.0).unison_voices(261.63, 1, 0.0)
+        return round(1.0 + _vs[0][2], 4) if _vs else None
+    _feat = {_g: (getattr(_leads[_g], "chiff_volume", 0.0) > 0.0,
+                  getattr(_leads[_g], "amp_drive", 0.0) > 0.0,
+                  bool(getattr(_leads[_g], "formants", ())),
+                  _second(_g))
+             for _g in range(83, 88)}
+    check("...and chiff, charang, voice, fifths and bass each differ in kind",
+          len(set(_feat.values())) == 5,
+          "  (breath / valve / formants / +700c / -1200c, one each)")
+
     # ------------------------------------------------------- the brass section
     import patch_map as _PMb
     # GM 61 handed over from one instrument to the next at a SINGLE NOTE, so one

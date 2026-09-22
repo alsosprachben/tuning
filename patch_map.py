@@ -26,6 +26,12 @@ from tonelib import (
     WoodPercussionProperties,
     SquareSynthProperties,
     SawtoothSynthProperties,
+    TriangleSynthProperties,
+    ChiffLeadProperties,
+    CharangLeadProperties,
+    VoiceLeadProperties,
+    FifthsLeadProperties,
+    BassLeadProperties,
     GrandPianoProperties,
     HarpsichordProperties, HarpsiRossProperties,
     PluckedStringProperties,
@@ -314,8 +320,20 @@ _fill(80, 87, SynthLeadProperties)
 # ...except the two that name an actual waveform. An additive engine can BE a
 # saw or a square exactly (1/n over all harmonics, or over the odd ones), so
 # routing them to an organ pipe threw away the one thing they specify.
-PROGRAM_CLASS[80] = SquareSynthProperties        # Lead 1 (square)
-PROGRAM_CLASS[81] = SawtoothSynthProperties      # Lead 2 (sawtooth)
+# 80-87 are the one family in the bank whose targets are SPECIFICATIONS rather
+# than instruments: a sawtooth IS the series at 1/n and a square IS the odd
+# harmonics at 1/n, so an additive engine renders them exactly. What General
+# MIDI does not specify is anything that makes a waveform a lead rather than a
+# buzz, so the readings below are the Roland SC-55's, which is what the files in
+# the wild were written for. See tonelib, above TriangleSynthProperties.
+PROGRAM_CLASS[80] = SquareSynthProperties        # Lead 1 (square): odd, 1/n
+PROGRAM_CLASS[81] = SawtoothSynthProperties      # Lead 2 (sawtooth): all, 1/n
+PROGRAM_CLASS[82] = TriangleSynthProperties      # Lead 3 (calliope): odd, 1/n^2
+PROGRAM_CLASS[83] = ChiffLeadProperties          # Lead 4 (chiff): a breath on the front
+PROGRAM_CLASS[84] = CharangLeadProperties        # Lead 5 (charang): through the valve
+PROGRAM_CLASS[85] = VoiceLeadProperties          # Lead 6 (voice): vocal formants
+PROGRAM_CLASS[86] = FifthsLeadProperties         # Lead 7 (fifths): +700 cents
+PROGRAM_CLASS[87] = BassLeadProperties           # Lead 8 (bass+lead): an octave below
 # 88-95  Synth Pad                     -> soft sustained
 _fill(88, 95, BowedStringProperties)
 # 96-103 Synth FX                      -> sustained

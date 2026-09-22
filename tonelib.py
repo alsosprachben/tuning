@@ -7432,8 +7432,20 @@ class SawtoothSynthProperties(BowedStringProperties):
     Kept deliberately ideal: no inharmonicity (an oscillator has none) and no
     chiff. The shimmer BowedString uses for section detune is switched off for
     the same reason -- a single oscillator does not have a section.
+
+    AND IT REALLY IS OFF NOW. That sentence was written and not carried out:
+    what had been switched off was sustain_jitter, while section_players stayed
+    at the 7 this class inherits from BowedStringProperties. So GM 80 and 81
+    shipped as SEVEN oscillators 6 cents apart, each with its own 5-cent
+    vibrato -- a supersaw, which is a fine sound and is not a sawtooth, and is
+    flatly at odds with this family being exact. A docstring is not a test,
+    which is why there is now a check for it in live.py's selftest.
     """
     odd_only = False
+    # ONE oscillator. Not a section, and not an ensemble.
+    section_players = 1
+    section_spread_cents = 0.0
+    section_vibrato_cents = 0.0
     max_harmonic = 64
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
@@ -7445,7 +7457,11 @@ class SawtoothSynthProperties(BowedStringProperties):
     # mix of a General MIDI cue outright (Flat factor 18 on the first attempt).
     # Sharing a gain constant with another family is not the same as sharing a
     # level; the divisor has to be measured, not assumed.
-    initial_gain = 1.0 / 6.6
+    # RE-CALIBRATED after the section was switched off (see above): the old
+    # divisor was measured with seven oscillators running, so it described a
+    # supersaw's level and not a saw's. Against the church organ on the same
+    # passage in the same room, as the whole lead family now is.
+    initial_gain = 0.05263
 
     def harmonic_volume(self, harmonic):
         if self.max_harmonic and harmonic > self.max_harmonic:
@@ -7465,7 +7481,7 @@ class SquareSynthProperties(SawtoothSynthProperties):
     inharmonicity and no breath.
     """
     odd_only = True
-    initial_gain = 1.0 / 6.5       # measured the same way; a square sits ~1 dB under a saw
+    initial_gain = 0.06238         # measured the same way; a square sits ~1.5 dB over a saw
 
     def harmonic_volume(self, harmonic):
         if harmonic % 2 != 1:
@@ -7473,6 +7489,194 @@ class SquareSynthProperties(SawtoothSynthProperties):
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
         return self.gain / harmonic
+
+
+
+# ------------------------------------------------------------- the synth leads
+# GM 82-87 all shared SynthLeadProperties, which is a FlueOrganProperties: an
+# organ pipe standing in for a synthesiser. 80 and 81 already had their own
+# classes and this finishes the family.
+#
+# THE TARGET HERE IS A SPECIFICATION, NOT AN INSTRUMENT, and that inverts the
+# usual problem. Everywhere else in this bank the model is an approximation of
+# a physical object and a recording can contradict it. A sawtooth is not an
+# approximation of anything: it IS the harmonic series at 1/n, exactly, and a
+# square IS the odd harmonics at 1/n. There is no object to measure and nothing
+# a recording could correct, so an additive engine renders these EXACTLY rather
+# than approximately -- which is the one family where this renderer has an
+# advantage over sampling rather than a handicap.
+#
+# WHAT IS NOT SPECIFIED is everything that makes a waveform a LEAD rather than a
+# buzz: the resonant low-pass, its envelope, the vibrato, the doubling. General
+# MIDI names eight leads and defines none of them, so the reading used here is
+# the Roland SC-55's, which is what the files in the wild were written for.
+# Those choices are judgement and are marked as such.
+#
+# The filter envelope is not new machinery either. A lead's low-pass sweeping
+# shut is upper partials dying faster than lower ones, which is exactly
+# harmonic_decay_db -- so the classic filter envelope falls out of the decay law
+# the same way the Rhodes' growl did.
+
+
+class TriangleSynthProperties(SquareSynthProperties):
+    """GM 82, Lead 3 (calliope): the soft one. A TRIANGLE, exactly.
+
+    A triangle is the odd harmonics at 1/n^2 where a square is the odd harmonics
+    at 1/n -- so it is the same hollow interval structure falling away four times
+    faster, which is why it sounds round and flute-like where a square sounds
+    hollow and reedy. That is the calliope lead: soft, nearly pure, a little
+    breathy, and the GM name is misleading -- a real calliope is a steam whistle
+    organ and this patch is nothing like one. The SC-55 reading is the soft lead,
+    and that is what files expect.
+
+    Exact, like its siblings. The 1/n^2 is the waveform's definition.
+    """
+    # A little vibrato, because the soft leads are always played with some and
+    # a naked triangle is a test tone. Judgement, not specification.
+    section_players = 1
+    initial_gain = 0.06754          # 1/n^2 sums to far less than 1/n, hence the larger number
+
+    def harmonic_volume(self, harmonic):
+        if harmonic % 2 != 1:
+            return 0.0
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        return self.gain / (harmonic * harmonic)
+
+
+class ChiffLeadProperties(SawtoothSynthProperties):
+    """GM 83, Lead 4 (chiff): a saw with a BREATH on the front.
+
+    The chiff is the whole patch -- a soft-attacking lead whose onset carries a
+    noisy, pitched-up transient, imitating the way a flue pipe's air jet finds
+    its edge before the tone settles. The renderer already models that, for the
+    instrument the effect is named after, so this is the organ's chiff on a
+    synthetic waveform rather than anything new.
+    """
+    # The chiff SawtoothSynthProperties deliberately switched off, switched back
+    # on: it is the one thing this patch is named for.
+    chiff_volume = 0.55
+    chiff_cycle = 1.0 / 4.0
+    chiff_min_valve_time = 0.010
+    chiff_max_valve_time = 0.032
+    # ...and the body settles darker than a raw saw once the breath has gone,
+    # which is the filter closing after the attack. See the note on the family:
+    # a filter envelope is upper partials dying faster.
+    harmonic_decay_db = 0.9
+    max_harmonic = 48
+    initial_gain = 0.05916
+
+
+class CharangLeadProperties(SawtoothSynthProperties):
+    """GM 84, Lead 5 (charang): the hard, guitar-like one.
+
+    A charango is a small Andean lute, and as with the calliope the GM name
+    describes an association rather than an instrument: the patch is a bright
+    aggressive lead with a guitar's bite. What gives it that is distortion, and
+    the renderer has a valve -- so this is a saw through the amplifier the
+    electric guitars use.
+
+    amp_reference scales with initial_gain, as the guitar work established: the
+    reference is the level the drive is measured against, so the two move
+    together or the voice gets louder AND dirtier.
+    """
+    amp_drive = 0.55
+    amp_reference = None            # set below, from this class's own gain
+    max_harmonic = 48
+    # Hard and bright, with the low end tightened the way a driven amp does.
+    harmonic_decay_db = 0.25
+    initial_gain = 0.05685
+
+
+class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
+    """GM 85, Lead 6 (voice): a waveform sung through a vocal tract.
+
+    The formants are the patch. A voice lead is not a vowel sample -- it is an
+    oscillator behind a fixed pair of vocal resonances, which is precisely what
+    FormantBody is for, and the same reason a bassoon's fourth harmonic can
+    stand above its fundamental.
+
+    The vowel is an open /a/, from vowels.py's table (Peterson & Barney where it
+    overlaps them), copied rather than imported: tonelib does not depend on the
+    singing pipeline and should not start here for three numbers.
+    """
+    # vowels.py VOWELS['a'], an adult male tract.
+    formants = ((730.0, 130.0, 1.00), (1090.0, 90.0, 0.55), (2440.0, 130.0, 0.22))
+    formant_floor = 0.06
+    bore_corner_hz = 4000.0
+    bore_order = 2.0
+    bell_cutoff_hz = 0.0
+    bell_order = 1.0
+    max_harmonic = 48
+    initial_gain = 0.04470
+
+    def harmonic_volume(self, harmonic):
+        # THE MIXIN HAD TO BE WIRED UP BY HAND, and it is worth saying why.
+        # SawtoothSynthProperties overrides harmonic_volume to return
+        # `self.gain / harmonic` directly -- deliberately, so a saw is exactly
+        # 1/n and nothing downstream can bend it. That also bypasses bore_gain,
+        # which is the hook FormantBody works through, so inheriting FormantBody
+        # here did exactly nothing: measured, this voice rendered as a plain saw,
+        # partial for partial, with three vocal formants declared and inert.
+        # The same trap as PluckedStringProperties having no `formants`
+        # attribute at all -- inheriting a body is not the same as sounding
+        # through it.
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
+
+
+class FifthsLeadProperties(SawtoothSynthProperties):
+    """GM 86, Lead 7 (fifths): the waveform and its FIFTH, together.
+
+    Exactly that, and exactly specifiable: a second oscillator a perfect fifth
+    above, which is a frequency ratio of 3/2. Not a detune and not a chorus --
+    a fixed interval, so the patch plays parallel fifths whatever is written,
+    which is the whole character and the reason it is used for a certain kind
+    of lead line.
+
+    A TEMPERED FIFTH, NOT A JUST ONE. A GM synth's second oscillator is offset
+    by seven SEMITONES on the keyboard, so it tracks the tuning in force rather
+    than sitting at 3/2 -- and under an unequal temperament the difference is
+    audible. 2^(7/12) is 1.4983, two cents under just.
+    """
+    fifth_gain = 0.62               # under the root, so the fifth colours it
+    fifth_ratio = 2.0 ** (7.0 / 12.0)
+    # Lower than its siblings because the second voice adds level: a fixed
+    # interval is two oscillators, and the patch must not be louder for it.
+    initial_gain = 0.04319
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        return [(self.fifth_gain, 0.0, self.fifth_ratio - 1.0, harmonic_decay, 0.0)]
+
+
+class BassLeadProperties(SawtoothSynthProperties):
+    """GM 87, Lead 8 (bass + lead): the waveform and an octave BELOW it.
+
+    The other fixed-interval lead, and the reason the two sit next to each other
+    in the specification. An octave is a ratio of 2 in any temperament, so unlike
+    the fifth there is nothing to decide: 0.5 is 0.5.
+
+    The lower voice carries MORE than the upper one does in GM 86, because this
+    patch is meant to play its own bass line -- the name is an instruction about
+    arrangement, not a colour.
+    """
+    bass_gain = 0.85
+    bass_ratio = 0.5
+    # Lower than its siblings because the second voice adds level: a fixed
+    # interval is two oscillators, and the patch must not be louder for it.
+    initial_gain = 0.03291
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        return [(self.bass_gain, 0.0, self.bass_ratio - 1.0, harmonic_decay, 0.0)]
+
+
+# The valve is measured against the voice's own level, never a shared constant.
+# The valve is measured against the voice's OWN level, never a shared constant,
+# and the two move together -- raising the gain alone drives the valve harder and
+# makes the voice louder AND dirtier. The electric bass taught this the hard way.
+CharangLeadProperties.amp_reference = CharangLeadProperties.initial_gain * 2.0
 
 
 class MetalPercussionProperties(PercussionProperties):

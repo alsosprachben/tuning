@@ -23,9 +23,9 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 41 | 32% |
-| 2 specific, theory | 38 | 30% |
-| 3 specific, theory + ear | 20 | 16% |
+| 1 general class | 35 | 27% |
+| 2 specific, theory | 39 | 30% |
+| 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
 **5 patches are played by a voice of the wrong physical kind** (marked CATEGORY ERROR below): 118 Synth Drum, 119 Reverse Cymbal, 123 Bird Tweet, 124 Telephone Ring, 125 Helicopter.
@@ -232,14 +232,14 @@ splits almost exactly along that line.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 80 | Lead 1 (square) | `SquareSynth` | **2** | its own class, theory |
-| 81 | Lead 2 (sawtooth) | `SawtoothSynth` | **2** | its own class, theory |
-| 82 | Lead 3 (calliope) | `SynthLead` | **1** | one SynthLeadProperties serves 82-87 |
-| 83 | Lead 4 (chiff) | `SynthLead` | **1** | as 82 |
-| 84 | Lead 5 (charang) | `SynthLead` | **1** | as 82 |
-| 85 | Lead 6 (voice) | `SynthLead` | **1** | as 82 |
-| 86 | Lead 7 (fifths) | `SynthLead` | **1** | as 82 |
-| 87 | Lead 8 (bass+lead) | `SynthLead` | **1** | as 82 |
+| 80 | Lead 1 (square) | `SquareSynth` | **3** | a square EXACTLY: odd harmonics at 1/n, checked against the closed form to 6e-17. The section that had been making it a supersaw is off |
+| 81 | Lead 2 (sawtooth) | `SawtoothSynth` | **3** | a sawtooth EXACTLY: every harmonic at 1/n, to 1e-17 |
+| 82 | Lead 3 (calliope) | `TriangleSynth` | **3** | a TRIANGLE exactly -- odd harmonics at 1/n^2, which is why it is the soft one. The GM name misleads: a real calliope is a steam whistle organ |
+| 83 | Lead 4 (chiff) | `ChiffLead` | **2** | a saw with the organ's own chiff on the front, which is what the patch is named for |
+| 84 | Lead 5 (charang) | `CharangLead` | **2** | a saw through the valve the electric guitars use; amp_reference scales with its gain |
+| 85 | Lead 6 (voice) | `VoiceLead` | **2** | an oscillator behind vocal formants (an open /a/ from vowels.py). FormantBody had to be wired in by hand -- the saw bypasses bore_gain |
+| 86 | Lead 7 (fifths) | `FifthsLead` | **3** | the waveform and its fifth, +700.0 cents exactly -- TEMPERED, since a GM oscillator is offset in semitones |
+| 87 | Lead 8 (bass+lead) | `BassLead` | **3** | the waveform and an octave below, -1200.0 cents; a ratio of 2 in any temperament |
 
 ## 88-95 Synth Pad
 
