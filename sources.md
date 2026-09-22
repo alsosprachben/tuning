@@ -4639,3 +4639,54 @@ hot**.
 
 All six are ASSERTED, NOT MEASURED. Neither reference collection has a banjo, a
 shamisen, a koto, a kalimba, a bagpipe or a shehnai.
+
+### The bagpipe's drones, after Ben's three questions
+
+**"Is it normal to also render the drone?"** Yes -- the reference implementation
+does, and the program is called Bag pipe rather than Chanter. But an arranger
+who writes the drone as held notes would then have it twice, and a voice cannot
+detect that. Nothing in the corpus uses GM 109 at all, so there is no evidence
+either way from the files; it is argued, not measured.
+
+**"Should the drone not be a small chorus of all of the drones of the bag?"**
+It should, and the first version was missing one. A Highland pipe carries
+**two tenor drones at A3 and one bass at A2** -- and the two tenors are at the
+same nominal pitch, which makes them a CHORUS rather than a doubling. They beat,
+they always beat, and getting that beat slow is what a piper means by "drone
+lock". Rendering one tenor loses it completely.
+
+Three cents apart is 0.38 Hz at A3 -- one beat every 2.6 s, a well-tuned pipe.
+Measured in the rendered audio the tenor band modulates at 0.432 Hz, which is
+within one bin of the 7-second analysis window.
+
+**"How are the drones normally switched on? Modulation wheel?"** No module gives
+you this -- GM specifies no control and the SC-55 bakes the drone in -- but CC1
+in this renderer is consistently the one panel control a voice has, and there is
+a real-instrument answer: **a piper CORKS a drone before playing, not during.**
+Playing with one tenor corked is ordinary practice. So CC1 is read ONCE from the
+channel, as the clavinet's tone rockers and the amplifier's drive are, with 64
+the voiced default and 0 corking them all.
+
+A file with no CC1 gets full drones, which is the honky-tonk's convention rather
+than the Rhodes'. The difference is the instrument's default position: a
+Rhodes's panel tremolo is off until you turn it on, and a bagpipe DRONES.
+
+**"The drones seem to me to be a channel event?"** They are, and this took the
+renderer change the class had only promised. They were attached to the note and
+restarted on every one -- inaudible on a legato line, wrong on a detached one.
+
+`unison_spans_part` is now a general flag on `SynthProperties`, and the bagpipe
+is the only voice that sets it: a chorus, a section and a set of sympathetic
+strings all belong to the note that excited them, and a drone is the one thing
+in this bank that does not. The renderer emits those voices ONCE per channel,
+spanning first note-on to last note-off.
+
+Two details that mattered in the implementation. The channel is marked as done
+**after the whole note**, not inside the harmonic loop -- the guard runs once
+per harmonic, so marking it there would have emitted the drone for harmonic 1
+and skipped it for every other. And `emit_partial` already takes `non` and
+`noff` per partial, so the span needed no new column.
+
+Rendered on a deliberately detached line -- seven notes with rests between --
+the bass drone holds between 0.75 and 0.84 of its peak from the first note to
+the last, and stops with the part.

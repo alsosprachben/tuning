@@ -696,6 +696,16 @@ def prepare(path, tuner='hybrid440'):
     _TREM_CH = {}
     _CLAV_CH = {}
     _DETUNE_CH = {}
+    # A PART'S SPAN, for voices whose extra voices belong to the channel rather
+    # than the note -- a bagpipe's drones are the only ones today. First note-on
+    # to last note-off, so a drone sounds under the whole line instead of
+    # restarting on every note of it. See SynthProperties.unison_spans_part.
+    _SPAN_CH = {}
+    for _e in notes:
+        _c, _on, _off = _e[0], _e[2], _e[3]
+        _s = _SPAN_CH.get(_c)
+        _SPAN_CH[_c] = (_on, _off) if _s is None else (min(_s[0], _on), max(_s[1], _off))
+    _SPANNED = set()          # channels whose part-voices have been emitted
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -834,6 +844,17 @@ def prepare(path, tuner='hybrid440'):
             _c1d = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
             _DETUNE_CH[ch] = (_c1d[0] / 64.0) if _c1d else 1.0
         T.honky_detune = _DETUNE_CH[ch] if getattr(pc, 'detune_wheel', False) else 1.0
+        # THE DRONES, on the same wheel and by the same rule. A piper corks a
+        # drone BEFORE playing, not during -- playing with one tenor corked is
+        # ordinary practice -- so this is a setup value read once, as the
+        # clavinet's rockers and the amplifier's drive are, and not a control
+        # moved mid-phrase. 64 is the voiced default and 0 corks them all.
+        #
+        # Set HERE, at the props construction site, and not in the per-channel
+        # block further down: that block runs after every note is built, which
+        # is how the honky-tonk's wheel came to do nothing at all.
+        T.bagpipe_drone = (_DETUNE_CH[ch] if getattr(pc, 'drone_wheel', False)
+                           else T.bagpipe_drone)
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
@@ -1139,7 +1160,13 @@ def prepare(path, tuner='hybrid440'):
                                      bfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
                                      cvp, cc, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
-                    for ui, (gm, off_hz, dr, ud, uph) in enumerate(props.unison_voices(f0, m, dbps)):
+                    # A DRONE IS THE PART, NOT THE NOTE: emit it once for the
+                    # channel, spanning its whole range, and skip it on every
+                    # later note. See SynthProperties.unison_spans_part.
+                    _spans_part = getattr(props, 'unison_spans_part', False)
+                    _uv = () if (_spans_part and ch in _SPANNED) \
+                        else props.unison_voices(f0, m, dbps)
+                    for ui, (gm, off_hz, dr, ud, uph) in enumerate(_uv):
                         vb = props.voice_vibrato(f0, ui + 1)
                         _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
                         uf = hf*(1.0+dr) + off_hz
@@ -1159,7 +1186,13 @@ def prepare(path, tuner='hybrid440'):
                         _PL[0] = ui + 1
                         non_u = non_r + (min(onsets[ui+1], 0.25*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
-                        emit_partial(2*math.pi*uf/SR, ugL, ugR, gM*gm, uf, non_u, noff, pfade, rel, chiff,
+                        noff_u = noff
+                        if _spans_part:
+                            # The channel's whole range, not this note's. Emitted
+                            # only once per channel -- see the guard above.
+                            non_u = _SPAN_CH[ch][0]*SR
+                            noff_u = _SPAN_CH[ch][1]*SR
+                        emit_partial(2*math.pi*uf/SR, ugL, ugR, gM*gm, uf, non_u, noff_u, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
                                      2*math.pi*uph)
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
@@ -1167,6 +1200,11 @@ def prepare(path, tuner='hybrid440'):
                     _PX[0] = getattr(props,'position_x',0.0)
                     if seats:
                         _DL[0] = seats[0][2]*SR; _DL[1] = seats[0][3]*SR
+        # MARKED AFTER THE WHOLE NOTE, not inside the harmonic loop: the guard
+        # above runs once per harmonic, so marking it there would emit the drone
+        # for harmonic 1 and skip it for every other.
+        if getattr(props, 'unison_spans_part', False):
+            _SPANNED.add(ch)
         # Phantom (longitudinal / Conklin) sum-tones for the wound bass: f_i+f_j of
         # the transverse partials, gain ~ coupling * v_i*v_j, decay d_i+d_j; centred
         # (no HRTF gain, like the reference). Off unless phantom_coupling > 0 (piano

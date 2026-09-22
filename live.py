@@ -3384,8 +3384,44 @@ def selftest():
         _dr.append(tuple(round(_f * (1.0 + _v[2]), 2)
                          for _v in _q.unison_voices(_f, 1, 0.0)))
     check("...and the bagpipe's drones hold while the melody moves",
-          len(set(_dr)) == 1 and len(_dr[0]) == 2,
-          "  (%s Hz at every pitch)" % ", ".join("%.0f" % _x for _x in _dr[0]))
+          len(set(_dr)) == 1 and len(_dr[0]) == 3,
+          "  (%s Hz at every pitch)" % ", ".join("%.1f" % _x for _x in _dr[0]))
+    # THREE DRONES, AND TWO OF THEM ARE THE SAME NOTE. A Highland pipe carries
+    # two TENORS at A3 and one bass at A2, and the tenors are a chorus rather
+    # than a doubling: they beat, always, and a piper's "drone lock" is the
+    # sound of two reeds almost agreeing. Rendering one tenor loses it, which
+    # is what this class did first -- Ben asked whether the drone should not be
+    # "a small chorus of all of the drones of the bag", and it should.
+    _ten = sorted(_x for _x in _dr[0] if _x > 150.0)
+    check("...and its two tenors beat, which is what drone lock is",
+          len(_ten) == 2 and 0.05 < abs(_ten[1] - _ten[0]) < 2.0,
+          "  (%.2f Hz apart: one beat every %.1f s, a well-tuned pipe)"
+          % (abs(_ten[1] - _ten[0]), 1.0 / max(abs(_ten[1] - _ten[0]), 1e-9)))
+    # AND THE DRONES CAN BE SWITCHED OFF. Including them is right -- the
+    # reference implementation does, and the program is called Bag pipe rather
+    # than Chanter -- but a score that writes its own drone as held notes would
+    # have it twice, and a voice cannot tell.
+    _was = _T.bagpipe_drone
+    try:
+        _T.bagpipe_drone = 0.0
+        _silent = _eth[109](392.0, 0.0, 1.0, 1.0).unison_voices(392.0, 1, 0.0)
+    finally:
+        _T.bagpipe_drone = _was
+    check("...and they can be corked, for a score that writes its own",
+          not _silent and _T.bagpipe_drone,
+          "  (CC1 0, or TUNING_BAGPIPE_DRONE=0, leaves the chanter alone)")
+    # AND THEY BELONG TO THE PART. Ben: "The drones seem to me to be a channel
+    # event?" -- they are, and attaching them to the note made them restart on
+    # every one. The flag is general; the bagpipe is the only voice that sets
+    # it, because a chorus, a section and a set of sympathetic strings all
+    # belong to the note that excited them and a drone does not.
+    _spanners = [_n for _n, _c in vars(_T).items()
+                 if isinstance(_c, type) and getattr(_c, "unison_spans_part", False)]
+    check("...and they span the PART, not the note",
+          _eth[109].unison_spans_part
+          and not _T.SynthProperties.unison_spans_part
+          and _spanners == ["BagpipeProperties"],
+          "  (rendered on a detached line the drone holds through the rests)")
     # A CONE PASSES THE WHOLE SERIES. The shanai had been on the bagpipe's
     # class, which is ReedOrganProperties underneath and suppresses the evens.
     _sh = _eth[111](261.63, 0.0, 1.0, 1.0)
