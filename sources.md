@@ -4728,3 +4728,60 @@ band actually plays -- a chanter's A is nearer 470 Hz than 440 -- with the drone
 going sharp alongside it, since they are tuned to the chanter and not to a fork.
 The melody is reconstructed from memory and is a common setting rather than a
 sourced one; it is one list in the file and easy to correct.
+
+### Scotland the Brave: from a source, and what the source proved
+
+Ben: *"Let's find a proper score. It should be out of copyright."* The first
+render used a melody reconstructed from memory, which is the habit this repo
+distrusts everywhere else.
+
+**PROVENANCE.** The tune's earliest known printing is the *Utah Musical
+Bouquet*, January 1878, so the melody has been public domain for a century.
+Cliff Hanley's 1950 LYRICS are still in copyright and are not used. The setting
+is quoted verbatim from the John Chambers ABC collection
+(trillian.mit.edu/~jc/music/abc, marked `C:Trad.`, `O:Scotland`), and
+`examples/scotland.py` PARSES it rather than transcribing it, so the score is
+the source of truth and any error is visible as text.
+
+104 notes, 128 eighths, 32 bars of 2/4 -- against the 73 the remembered version
+had.
+
+### The song setting cannot be played on a chanter, and that is the finding
+
+| | span |
+|---|---|
+| the song setting | 16 semitones, D4 to F#5 |
+| a Highland chanter | 14 semitones, Low G to High A |
+
+Two too wide **at every transposition** -- and the chanter's scale fixes the
+transposition anyway, since the tonic must land on Low A for the other eight
+notes to fall on fingerholes. The pipe version is therefore an ADAPTATION and
+not a transposition, which is why a separate pipe setting exists at all.
+
+Three notes cannot be taken literally, and the mechanical rule -- up a fifth,
+then the nearest note the chanter has -- puts all three where the tradition
+puts them:
+
+| source | literal | chanter |
+|---|---|---|
+| C# | G# | **G natural**, the flat seventh a chanter has instead of a leading tone |
+| e | 83 | **High A** |
+| f | 85 | **High A** |
+
+**AND IT REPRODUCES THE ONE DOCUMENTED FEATURE OF THE PIPE SETTING WITHOUT
+BEING TOLD.** Of the bagpipe version it is said that *the second half starts on
+the top A*. It does here, at MIDI 81, out of the mapping alone -- which is the
+nearest thing to a falsifiable check this tune allows, since no pipe ABC was
+found to compare against.
+
+### And the source changed the articulation count
+
+The mapped tune has **24 repeated pitches** where the remembered version had 2.
+Each one needs a grace note, because a chanter cannot put a gap between two
+notes and two of the same pitch in a row would otherwise be one long note. Pipe
+music is full of grace notes for exactly this reason, and a memory-written
+melody had hidden that almost completely.
+
+Rendered: 128 notes, 127 of 127 gaps exactly 0.0 s, legato detected on all 127,
+and the chanter never falls below 0.23 of peak across 32 seconds of continuous
+tone.
