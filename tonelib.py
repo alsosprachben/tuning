@@ -5731,6 +5731,84 @@ class PoppedBassProperties(SlapBassProperties):
     amp_imbalance = 0.45
 
 
+class AcousticBassProperties(FormantBody, PluckedStringProperties):
+    """GM 32. The upright, plucked -- the jazz walking bass. It fell through to
+    the generic plucked string, which is not a FormantBody and whose zero bore
+    corner makes `harmonic_volume` return before any body is applied: no
+    instrument at all, only a string.
+
+    AND THE INSTRUMENT IS ALREADY MEASURED, one bank away. GM 43 Contrabass is
+    fitted against the Iowa double bass across three registers, and GM 32 is THE
+    SAME INSTRUMENT -- the difference is arco against pizzicato, an excitation
+    and not a body. So the measured body is copied here verbatim: the 93 Hz
+    air resonance at 0.9, the 1750 Hz bridge region, the 5.5 kHz corner and the
+    135 Hz bell cutoff are the contrabass's numbers, unchanged.
+
+    COPIED, NOT INHERITED, and that is the whole reason this class is shaped the
+    way it is. ContrabassProperties is a BowedStringProperties: bowed means
+    driven, which is why it carries decay_db = 0 and harmonic_decay_db = 0 and
+    sustains as long as the bow moves. Subclassing it to get the body would mean
+    claiming a plucked instrument is a driven one, so this takes
+    PluckedStringProperties as its base -- the physical claim -- and FormantBody
+    beside it for the resonances, exactly as NylonGuitarProperties does.
+
+    THE PLUCK POINT IS THE OTHER HALF, and it is derivable. A guitar is plucked
+    around a seventh of the way along, so its comb first nulls at the 7th
+    partial. An upright is plucked at the END OF THE FINGERBOARD, some 25-30 cm
+    from the bridge on a ~105 cm string -- a quarter of the way, so the comb
+    nulls at the FOURTH. That is most of why pizzicato is dark and
+    fundamental-heavy where a guitar is bright: the notch sits low enough to
+    take out a partial the ear is still counting.
+
+    AND THE TOP DIES FAST. A thick gut or steel string on a big soft top loses
+    its high partials in a moment, which is the thump; the fundamental stays for
+    a second or two under it. That is harmonic_decay_db doing the work, not the
+    body.
+
+    NO REFERENCE FOR THE PLUCK. The Iowa bass is bowed, so the body below is
+    measured and everything about the excitation is derived or asserted: the
+    pluck point from where a player's hand goes, the decay rates by ear against
+    what a walking bass does. The instrument is right; the gesture is argued.
+    """
+
+    # THE CONTRABASS'S MEASURED BODY, copied verbatim. If that fit is ever
+    # revised these should move with it -- they are the same instrument.
+    formants = ContrabassProperties.formants
+    formant_floor = ContrabassProperties.formant_floor
+    bore_corner_hz = ContrabassProperties.bore_corner_hz
+    bore_order = ContrabassProperties.bore_order
+    bell_cutoff_hz = ContrabassProperties.bell_cutoff_hz
+    bell_order = ContrabassProperties.bell_order
+
+    # PLUCKED AT THE END OF THE FINGERBOARD, a quarter of the way from the
+    # bridge on a ~105 cm string, so the comb nulls at the 4th partial where a
+    # guitar's nulls at the 7th. That low notch is most of why pizzicato is dark
+    # and fundamental-heavy.
+    #
+    # strike_point, NOT plucked_harmonic. The latter is the legacy path and is
+    # not a pluck POSITION at all: it builds divisor entries for 1..P-1 and sums
+    # the ones that do not divide the harmonic, so plucked_harmonic = 4 zeroes
+    # every 6th partial and notches the evens -- which is what it did here
+    # before this was measured. strike_point is the physical comb the class
+    # documents, |sin(n*pi*p)|.
+    strike_point = 0.25
+    strike_depth = 0.75             # a finger is wide, so the notch is not total
+    strike_fills_with_force = False # and it releases rather than compressing
+
+    # The thump: high partials go in a moment, the fundamental stays under them.
+    decay_db = 1.2
+    harmonic_decay_db = 2.6
+
+    max_harmonic = 40               # as the contrabass has; the body is spent
+    tonal_dampening = 1.35          # a soft, wide finger, not a plectrum
+
+    # Balance-normalised against the grand piano on E1/A1/E2 at velocity 100.
+    # Exactly 20.0 dB per decade of this knob -- pure linear, unlike the piano's
+    # 38.8, whose phantom partials are sum-tones scaling as its square. This
+    # voice has none.
+    initial_gain = 0.848726
+
+
 class SteelGuitarProperties(NylonGuitarProperties):
     """GM 25. The steel-string flat-top, which fell through to the generic
     plucked string -- a voice that is not a FormantBody at all and whose

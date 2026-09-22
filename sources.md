@@ -3438,3 +3438,78 @@ resonance sits lower, but by how much is not derivable here, and those formants
 were fitted jointly with the rest of the nylon against two measurements at
 once. Moving them would be guessing at somebody else's fit -- the error that
 had to be reverted on the cymbals.
+
+---
+
+## The acoustic bass: the same instrument as one already measured
+
+GM 32 fell through to the generic plucked string -- no `FormantBody`, a zero
+bore corner, so no instrument at all, only a string. And the instrument was
+sitting one bank away the whole time: **GM 43 Contrabass is the same double
+bass**, fitted against the Iowa recordings across three registers. Arco against
+pizzicato is an EXCITATION, not a body.
+
+So the measured body is copied verbatim -- the 93 Hz air resonance at 0.9, the
+190 Hz and 880 Hz regions, the 1750 Hz bridge peak, the 5.5 kHz corner and the
+135 Hz bell cutoff are the contrabass's numbers unchanged.
+
+**COPIED, NOT INHERITED**, and that shapes the class. `ContrabassProperties` is
+a `BowedStringProperties`: bowed means DRIVEN, which is why it carries
+`decay_db = 0` and sustains as long as the bow moves. Subclassing it to get the
+body would claim a plucked instrument is a driven one -- the base is a physical
+claim. So this takes `PluckedStringProperties` as its base with `FormantBody`
+beside it, the same shape `NylonGuitarProperties` has.
+
+### The pluck point, and a parameter that does not mean what it says
+
+A guitar is plucked about a seventh along, so its comb first nulls at the 7th
+partial. An upright is plucked at the END OF THE FINGERBOARD, some 25-30 cm
+from the bridge on a ~105 cm string -- a quarter of the way, nulling at the
+FOURTH. That low notch is most of why pizzicato is dark and fundamental-heavy.
+
+**The first attempt expressed that as `plucked_harmonic = 4.0`, and it is not a
+pluck position at all.** That is the legacy path: it builds divisor entries for
+`1..P-1` and sums the ones that do NOT divide the harmonic, so
+
+    plucked_harmonic = 4  ->  comb = 0.75 0.25 0.5 0.25 0.75 **0** 0.75 ...
+
+which zeroes every SIXTH partial and notches the evens. The render duly showed
+the 6th at -94 dB and it was nearly written off as a probe artifact. The
+physical parameter is `strike_point`, which the class documents as
+`|sin(n*pi*p)|`; with `strike_point = 0.25`:
+
+| h3 | h4 | h5 | h6 | h7 | h8 | h9 |
+|---|---|---|---|---|---|---|
+| -14.7 | **-28.8** | -21.2 | -20.7 | -23.9 | **-34.5** | -24.9 |
+
+Nulls at the 4th and 8th, and the 6th back where it belongs.
+
+### The thump
+
+A thick string on a big soft top loses its high partials at once and keeps its
+fundamental under them. Measured on a rendered E1, band energy from the pluck:
+
+| band | 0.03 s | 0.4 s | 1.2 s |
+|---|---|---|---|
+| 60-200 Hz | 0 dB | -2.8 | **-9.0** |
+| 800 Hz - 3 kHz | 0 dB | -25.3 | **-73.2** |
+
+### What is asserted, and two process notes
+
+**NO REFERENCE FOR THE PLUCK.** The Iowa bass is bowed, so the body is measured
+and every part of the excitation is argued: the pluck point from where a
+player's hand goes, the decay rates against what a walking bass does. Rated 2.
+Balance-normalised against the grand piano at exactly 20.0 dB per decade of
+`initial_gain` -- pure linear, unlike the piano's 38.8, because this voice has
+no phantom partials.
+
+**THE MAPPING SILENTLY DID NOT APPLY AT FIRST.** `PROGRAM_CLASS[32]` was set
+above `_fill(32, 39, PluckedStringProperties)`, which then overwrote it. The
+class existed, was correct, and was never reached. Always re-read
+`property_class_for_program` after wiring, not the assignment.
+
+**AND AN EXISTING CHECK FAILED, CORRECTLY.** "...the upright and the synth
+basses are left alone" asserted GM 32 was still generic. What that check was
+really protecting is in its comment -- that an upright must not be given a
+pickup and a cabinet, the saxophone trap -- so it now asserts THAT, and that
+38-39 are still untouched, which they are: they have no string to model.

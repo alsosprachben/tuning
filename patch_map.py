@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    AcousticBassProperties,
     SteelGuitarProperties,
     BrightPianoProperties,
     ClavinetProperties,
@@ -204,7 +205,15 @@ _fill(32, 39, PluckedStringProperties)
 # 32 IS NOT ONE OF THEM. "Acoustic Bass" is an upright -- a large wooden box
 # with its own radiating body, which is the one thing a solid-body deliberately
 # has not got. Giving it a pickup and a speaker cabinet would be the saxophone
-# trap again, and it is unmeasured.
+# trap again.
+#
+# AND ITS BODY IS NOT UNMEASURED AFTER ALL, which is what changed: GM 43
+# Contrabass is the SAME INSTRUMENT, fitted against the Iowa double bass across
+# three registers. Arco and pizzicato differ by excitation, not by box. So 32
+# takes that measured body with a PLUCKED base under it -- copied rather than
+# inherited, because ContrabassProperties is bowed and subclassing it would
+# claim a plucked instrument is a driven one. See AcousticBassProperties.
+PROGRAM_CLASS[32] = AcousticBassProperties   # the measured upright, pizzicato
 #
 # 38-39 are SYNTH basses: they have no string, no pickup and no cabinet, and
 # nothing here would be modelling them, only flattering them.

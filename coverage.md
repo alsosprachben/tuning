@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 53 | 41% |
-| 2 specific, theory | 28 | 22% |
+| 1 general class | 52 | 41% |
+| 2 specific, theory | 29 | 23% |
 | 3 specific, theory + ear | 18 | 14% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -154,7 +154,7 @@ splits almost exactly along that line.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 32 | Acoustic Bass | `PluckedString` | **1** | falls through to the generic plucked string |
+| 32 | Acoustic Bass | `AcousticBass` | **2** | the upright PLUCKED: GM 43's measured body with a plucked base, comb at the quarter point |
 | 33 | Electric Bass (finger) | `FingeredBass` | **3** | electric bass family, cabinet and amp; judged by ear |
 | 34 | Electric Bass (pick) | `PickedBass` | **3** | as 33, pick |
 | 35 | Fretless Bass | `FretlessBass` | **3** | as 33, fretless -- loses its top rather than starting without it |

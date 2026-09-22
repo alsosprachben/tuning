@@ -3154,10 +3154,15 @@ def selftest():
           all(_PM.property_class_for_program(n) is c for n, c in bass))
     # 32 is an UPRIGHT -- a wooden box, which is the one thing a solid body has
     # not got -- and 38-39 have no string at all. Giving either a pickup and a
-    # speaker would be the saxophone trap.
-    check("...and the upright and the synth basses are left alone",
-          all(_PM.property_class_for_program(n) is _T.PluckedStringProperties
-              for n in (32, 38, 39)))
+    # speaker would be the saxophone trap. 32 now has its own voice, wearing the
+    # measured contrabass's body; 38-39 still have nothing to model.
+    check("...and neither the upright nor the synth basses got a pickup",
+          _PM.property_class_for_program(32) is _T.AcousticBassProperties
+          and not getattr(_T.AcousticBassProperties, "pickup_points", ())
+          and not getattr(_T.AcousticBassProperties, "cabinet", None)
+          and all(_PM.property_class_for_program(n) is _T.PluckedStringProperties
+                  for n in (38, 39)),
+          "  (32 is the measured upright plucked; 38-39 are still untouched)")
     binst = {n: c(41.2, 0.0, 1.0, 1.0) for n, c in bass}
 
     def _mean_h(g, top=17):
@@ -3290,6 +3295,42 @@ def selftest():
     check("...and generalising that boolean moved nothing else",
           _moved == ["BrightPianoProperties"],
           "  (%d of the whole set departs from the soft default)" % len(_moved))
+
+    # ---- the acoustic bass: the measured upright, plucked --------------------
+    check("the acoustic bass is not the generic plucked string",
+          _PM.property_class_for_program(32) is _T.AcousticBassProperties)
+    ab, cb2 = _T.AcousticBassProperties, _T.ContrabassProperties
+    # GM 32 and GM 43 are THE SAME INSTRUMENT: arco against pizzicato is an
+    # excitation, not a body. So the measured contrabass body is copied over.
+    check("...and wears the measured contrabass's body, being the same instrument",
+          ab.formants == cb2.formants and ab.bore_corner_hz == cb2.bore_corner_hz
+          and ab.bell_cutoff_hz == cb2.bell_cutoff_hz,
+          "  (the Iowa double bass, fitted across three registers)")
+    # COPIED, NOT INHERITED. The contrabass is bowed -- driven, so decay_db is
+    # zero and it sustains as long as the bow moves. Subclassing it would claim
+    # a plucked instrument is a driven one.
+    check("...but is PLUCKED, so it does not inherit a bowed class",
+          issubclass(ab, _T.PluckedStringProperties)
+          and not issubclass(ab, _T.BowedStringProperties)
+          and cb2.decay_db == 0.0 and ab.decay_db > 0.0,
+          "  (the bow sustains at %.1f dB/s; the pluck decays at %.1f)"
+          % (cb2.decay_db, ab.decay_db))
+    # The pluck point: a quarter of the way from the bridge, where the hand goes
+    # at the end of the fingerboard, so the comb nulls at the 4th where a
+    # guitar's nulls at the 7th. That low notch is why pizzicato is dark.
+    _lv = [ab(82.4, 0.0, 1.0, 1.0).harmonic_volume(h) for h in range(1, 10)]
+    _db = [20 * _math.log10(max(v, 1e-15) / _lv[0]) for v in _lv]
+    check("...plucked a quarter along, so the comb nulls at the 4th partial",
+          ab.strike_point == 0.25 and _db[3] < _db[2] - 5.0 and _db[3] < _db[4] - 5.0
+          and _db[7] < _db[6] - 5.0,
+          "  (h3 %+.0f, h4 %+.0f, h5 %+.0f dB -- and h8 %+.0f)"
+          % (_db[2], _db[3], _db[4], _db[7]))
+    # AND IT USES strike_point, NOT plucked_harmonic. The latter is the legacy
+    # path and is not a pluck POSITION: it builds divisor entries for 1..P-1, so
+    # setting it to 4 zeroed every 6th partial. Measured, and then fixed.
+    check("...using the physical comb and not the legacy divisor list",
+          ab.strike_point is not None and _db[5] > _db[3],
+          "  (h6 %+.0f dB, which the legacy path silenced entirely)" % _db[5])
 
     # ---- the steel-string, which had no body at all --------------------------
     check("the steel-string guitar is not the generic plucked string",

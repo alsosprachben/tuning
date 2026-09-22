@@ -93,7 +93,7 @@ RATED = {
  29:(3,"as 26, driven harder"),
  30:(3,"as 26, driven hardest"),
  31:(3,"as 26, touched harmonics"),
- 32:(1,"falls through to the generic plucked string"),
+ 32:(2,"the upright PLUCKED: GM 43's measured body with a plucked base, comb at the quarter point"),
  33:(3,"electric bass family, cabinet and amp; judged by ear"),
  34:(3,"as 33, pick"),
  35:(3,"as 33, fretless -- loses its top rather than starting without it"),
