@@ -3611,3 +3611,42 @@ audible content of the fix. The mix is correspondingly darker: presence falls
 
 `examples/riffsym.py` renders these, so the A/B is repeatable rather than made
 by hand each time the voices move.
+
+### The anchor was wrong for the amplified half of the family
+
+Ben, on the first re-balance: *"The bass electric guitar is a bit loud relative
+to the others. But maybe the rest of the guitars need to rise to the bass
+guitar?"* They should, and the reason is that **the anchor had no physical
+content for these voices**.
+
+The measured nylon guitar is an ACOUSTIC classical guitar. GM 24 and 25 are
+acoustic guitars and belong against it. GM 26-31 and 33-37 go through an
+amplifier and a speaker, and their level is set by the amp's volume knob, not by
+the string -- so pinning them to an unamplified instrument's loudness asserts
+nothing. What the nylon guitar anchors is the acoustic end of the family; an
+amplifier sits between it and everything else.
+
+So the guitars rose 2 dB rather than the bass falling. Measured, the electric
+guitar sat 1.8 dB under the electric bass and now sits 0.2 dB over it.
+
+`initial_gain` 0.0690 -> 0.0869 and `amp_reference` 0.1408 -> 0.1772, the ratio
+held at 2.04, so the distortion character did not move.
+
+**And that exposed GM 32.** With the guitars up, the acoustic bass was the
+loudest voice in the family at -6.4 dB -- an unamplified upright over an
+amplified bass beside it, and 4.5 dB over its own measured bowed twin. Its
+re-anchor had been done with the arithmetic estimate that this file records as
+wrong by up to 80 dB; rendered, it was 3.6 dB hot. `initial_gain` 0.2684 ->
+0.1900.
+
+The four principal voices now sit inside 0.8 dB:
+
+| GM | voice | dB |
+|---|---|---|
+| 24 | Nylon guitar (measured) | -9.9 |
+| 27 | Electric guitar | -9.1 |
+| 32 | Acoustic bass | -9.4 |
+| 33 | Bass finger | -9.3 |
+
+The family spans 14.7 dB, from the muted guitar at -21.4 to the jazz guitar at
+-6.7 -- both of those being emergent from their spectra rather than set.

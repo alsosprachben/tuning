@@ -5594,7 +5594,7 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # files never do: Riffsym writes all 727 of its notes at velocity 100, so
     # its distortion guitars sat at 0.620 of nominal for ever. attack_volume
     # is (vel/127)^2, so that is the square and not the ratio -- 4.1 dB.
-    amp_reference = 0.1408
+    amp_reference = 0.1772
 
     # A CLEAN VALVE AMPLIFIER IS STILL SINGLE-ENDED. Its preamp is one valve
     # with nothing to cancel against, so even at this drive the distortion it
@@ -5621,7 +5621,21 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # own level rather than the piano's. Every member shifts by the one factor,
     # so the relationships between them -- a palm mute quieter, a slap brighter
     # -- are exactly as they were.
-    initial_gain = 0.0690
+    # AND THEN +2 dB AGAIN, because the anchor was wrong for this family. The
+    # measured nylon guitar is an ACOUSTIC classical guitar, and pinning an
+    # amplified instrument to an unamplified one has no physical content: a
+    # guitarist sets this level with the amp's volume knob, not with the string.
+    # Ben heard the result as "the bass electric guitar is a bit loud relative
+    # to the others", and asked the right question back -- whether the guitars
+    # should rise instead. They should. Measured, the electric guitar sat 1.8 dB
+    # under the electric bass; this closes that and leaves it just above the
+    # acoustic nylon, which is where an amplified guitar belongs.
+    #
+    # The two ACOUSTIC guitars (GM 24, 25) do not move. Their level IS measured,
+    # and they are the reference the rest of the plucked family is placed
+    # against -- what changed is the recognition that an amplifier sits between
+    # that reference and these voices.
+    initial_gain = 0.0869
 
 class ElectricBassProperties(ElectricGuitarProperties):
     """A solid-body electric bass: the guitar's physics on a longer string.
@@ -5845,7 +5859,14 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
     # Re-anchored from the grand piano to this family's own measured level --
     # the nylon guitar's -9.7 dB. Against the piano it read -0.0, which put it
     # 10 dB over every other plucked voice and 16 over its own bowed twin.
-    initial_gain = 0.2684
+    # -3 dB from that, measured. The re-anchor above was done with an
+    # arithmetic estimate that put this voice at -10.0; rendered it is -6.4,
+    # which made an UNAMPLIFIED upright the loudest thing in the family --
+    # louder than the amplified electric bass beside it and 4.5 dB over its own
+    # measured bowed twin. A pizzicato attack is brighter and punchier than a
+    # bowed one, not louder than an amplifier. This puts it at -9.4, with the
+    # electric bass and the electric guitar.
+    initial_gain = 0.1900
 
 
 class SteelGuitarProperties(NylonGuitarProperties):
