@@ -4055,3 +4055,82 @@ room, within 0.05 dB.
 4: rung 4 means fitted against reference audio, and there is no audio to fit
 because there is no instrument. Exact-by-construction is arguably better than
 what 4 measures rather than worse, and the scale has no rung for it.
+
+## GM 72-79, the pipes: open, closed, vessel, and how much breath misses
+
+Two of the eight were measured against the Iowa flutes (72, 73) and two were
+already vessel flutes (76, 79). The other four sat on a generic base -- and they
+are not variations on a flute. A flue instrument is decided by three things, and
+the four differ in all of them.
+
+**IS THE TUBE OPEN OR CLOSED?** A pan pipe is stopped at the bottom, so it
+resonates at odd multiples and overblows at the twelfth rather than the octave.
+Everything else here is open, except the two that are not tubes at all.
+
+**HOW IS THE JET AIMED?** A recorder has a windway cut into it: the jet reaches
+the labium identically every time, for every player, at every dynamic. A
+flautist forms it with their lips and steers it. That single fact is the whole
+difference between GM 73 and GM 74 -- purer tone and a more consistent chiff
+both follow from it rather than being separate observations. Measured, the
+recorder now sits 3.0 dB under the flute at the second harmonic; at the first
+attempt it was 0.9 dB, which is a difference nobody could hear and not much of
+a claim.
+
+**HOW MUCH BREATH MISSES THE EDGE?** On a pan pipe or a shakuhachi, a great deal
+-- no windway, and the player aims across an open rim, so much of the jet never
+couples into the resonance and stays as turbulence.
+
+### GM 75 had no breath at all
+
+`StoppedPipeProperties` ships `sustain_jitter = 0`, so the pan flute rendered as
+a clean odd-harmonic tone: **an organ's Gedackt rank**, which is exactly what
+that class is for and is not a pan pipe. The noise is not a defect of the
+instrument, it is most of its sound.
+
+The mechanism was already there and is worth naming, because it reads as an
+unrelated parameter: `sustain_jitter` is described in the renderer as "a small
+steady phase jitter [that] broadens each partial into a band -- a sustained
+chiff, no beating or amplitude wobble". That is what breath past an edge does to
+a spectrum. Recorder 0.12, pan pipe 0.55, shakuhachi 0.62.
+
+### GM 78 is a category correction, not a refinement
+
+A **human whistle is a Helmholtz resonator, not a pipe.** The mouth cavity is
+the vessel and the lips are its neck; the air in that neck moves as a lump
+against the springiness of the cavity, tuned by changing the cavity's volume
+with the tongue. That is why whistling has no registers, no overblowing and no
+fingering -- and why it is the closest thing to a pure sine a person can make,
+since with no tube there is no harmonic series for a body to reinforce.
+Measured, h2 at **-33.1 dB** against the flute's -8.0.
+
+It belongs with the ocarina and the blown bottle, between which General MIDI
+already puts it.
+
+**THE OTHER READING, stated because the name is ambiguous.** GM 78 could be a
+tin or penny whistle, which is a pipe and a fipple one. Against that: the SC-55
+sound every file was written for is the human whistle; a tin whistle would
+duplicate the recorder two programs earlier, both being duct flutes; and the
+specification puts 78 between the shakuhachi and the ocarina rather than with
+the flutes. If a tin whistle is wanted it is `RecorderProperties` with a wider
+bore, not this class.
+
+### Deliberately not modelled, and the same reason twice
+
+**A recorder has almost no dynamic range**, because blowing harder mostly raises
+the PITCH rather than the level -- there are no lips to compensate, which is why
+recorder consorts put their dynamics in the scoring. **A shakuhachi's meri and
+kari** bend the pitch up to a semitone by tilting the head across the utaguchi,
+and the technique is central to the repertoire.
+
+Both are tempting to wire to velocity and both would be wrong here, for the
+reason already established in this repo: **velocity in a MIDI file is mix
+balance, not effort**, so a loud passage would simply play sharp. They are
+player gestures and belong on a controller. What IS honestly velocity-scaled is
+the recorder's attack bloom, `tension_bend` being a transient that settles to
+the tuned pitch.
+
+### Levels
+
+All four balance-normalised against the **measured flute** (GM 73) on the same
+passage in the same room -- this family's one reference-audio member, and so the
+only anchor in it that answers to something outside the model.

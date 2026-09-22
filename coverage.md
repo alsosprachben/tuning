@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 35 | 27% |
-| 2 specific, theory | 39 | 30% |
+| 1 general class | 31 | 24% |
+| 2 specific, theory | 43 | 34% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -221,11 +221,11 @@ splits almost exactly along that line.
 |---|---|---|---|---|
 | 72 | Piccolo | `BassFlute/OpenPipe by register` | **4** | the flute law, measured across bass, alto and concert flute |
 | 73 | Flute | `BassFlute/OpenPipe by register` | **4** | Iowa flute (nonvib -- vibrato smears the harmonics) |
-| 74 | Recorder | `OpenPipe` | **1** | the generic open pipe |
-| 75 | Pan Flute | `StoppedPipe` | **1** | the generic stopped pipe |
+| 74 | Recorder | `Recorder` | **2** | a fipple DUCT: the windway is built in, so the jet is identical every time and the tone is purer than the flute's by 3 dB at h2 |
+| 75 | Pan Flute | `PanFlute` | **2** | a CLOSED tube (odd harmonics, already right) that had no breath at all -- StoppedPipe ships sustain_jitter 0, so it rendered as an organ's Gedackt |
 | 76 | Blown Bottle | `BlownBottle` | **2** | its own class, theory |
-| 77 | Shakuhachi | `OpenPipe` | **1** | the generic open pipe; a shakuhachi's breath and pitch bend are not modelled |
-| 78 | Whistle | `OpenPipe` | **1** | the generic open pipe |
+| 77 | Shakuhachi | `Shakuhachi` | **2** | a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled |
+| 78 | Whistle | `Whistle` | **2** | CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB) |
 | 79 | Ocarina | `Ocarina` | **2** | its own class -- a vessel flute, theory |
 
 ## 80-87 Synth Lead

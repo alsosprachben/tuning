@@ -64,6 +64,10 @@ from tonelib import (
     VesselFluteProperties,
     OcarinaProperties,
     BlownBottleProperties,
+    RecorderProperties,
+    PanFluteProperties,
+    ShakuhachiProperties,
+    WhistleProperties,
     MalletProperties,
     BowedStringProperties,
     SlowBowedStringProperties,
@@ -311,7 +315,17 @@ for _p in (72, 73, 74, 77, 78):
     PROGRAM_CLASS[_p] = OpenPipeProperties
 # Same Helmholtz body, different EDGE: an ocarina has a fipple and sings, a
 # bottle has none and is mostly breath. See the two classes.
+# 72-79 differ in the three things that decide what a flue instrument sounds
+# like: whether the tube is OPEN or CLOSED, how the jet is aimed, and how much
+# of the breath misses the edge entirely. Four of them had none of that.
+PROGRAM_CLASS[74] = RecorderProperties     # a fipple DUCT: a fixed jet, so pure
+PROGRAM_CLASS[75] = PanFluteProperties     # closed tube (odd), and mostly breath
 PROGRAM_CLASS[76] = BlownBottleProperties
+PROGRAM_CLASS[77] = ShakuhachiProperties   # a knife-edge notch; breathiest of all
+# A HUMAN whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by
+# the tongue, which is why whistling has no registers and is nearly a sine. It
+# belongs with the ocarina and the bottle, where GM already put it.
+PROGRAM_CLASS[78] = WhistleProperties
 PROGRAM_CLASS[79] = OcarinaProperties
 # 80-87  Synth Lead                    -> bright sustained pipe, but no drawbars:
 # a synth lead has no stops to draw, and registerable would make CC11 a stop word

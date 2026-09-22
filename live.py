@@ -3340,6 +3340,61 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------------------ the pipes
+    import patch_map as _PMp
+    # 72-79 differ in three things: whether the tube is OPEN or CLOSED, how the
+    # jet is aimed, and how much of the breath misses the edge. Four of the eight
+    # had none of that and sat on a generic base.
+    _pipes = {_g: _PMp.property_class_for_note(_g, 72) for _g in range(72, 80)}
+    check("each pipe is its own voice, not one generic tube",
+          len({_c.__name__ for _c in _pipes.values()}) >= 6,
+          "  (%d distinct classes over the eight programs)"
+          % len({_c.__name__ for _c in _pipes.values()}))
+    # A PAN PIPE IS CLOSED AT THE BOTTOM, and nothing else in the family is.
+    # That is not a colour: a stopped tube resonates at ODD multiples and
+    # overblows at the twelfth rather than the octave.
+    _pf = _pipes[75](523.25, 0.0, 1.0, 1.0)
+    _evens = max(_pf.harmonic_volume(_k) / _pf.harmonic_volume(1) for _k in (2, 4, 6))
+    check("the pan pipe is a CLOSED tube and the rest are open",
+          _pipes[75].odd_only and _evens < 1e-6
+          and not any(_pipes[_g].odd_only for _g in (72, 73, 74, 77, 78, 79)),
+          "  (its evens are absent by construction; no other pipe's are)")
+    # ...AND IT IS THE BREATH THAT WAS MISSING. StoppedPipeProperties ships
+    # sustain_jitter = 0, so GM 75 rendered as a clean odd-harmonic tone -- an
+    # organ's Gedackt rank, which is what that class is for and is not a pan
+    # pipe. The player blows across an open tube top with no windway and no
+    # labium; most of that jet never couples in, and the noise is most of the
+    # sound.
+    check("...and the breathy pipes are breathier than the ducted one",
+          _pipes[75].sustain_jitter > 3.0 * _pipes[74].sustain_jitter
+          and _pipes[77].sustain_jitter > _pipes[75].sustain_jitter,
+          "  (recorder %.2f, pan pipe %.2f, shakuhachi %.2f)"
+          % (_pipes[74].sustain_jitter, _pipes[75].sustain_jitter,
+             _pipes[77].sustain_jitter))
+    # A HUMAN WHISTLE IS A HELMHOLTZ RESONATOR, NOT A PIPE. One resonance tuned
+    # by the tongue -- no registers, no overblowing, no fingering -- which is
+    # why it is the closest thing to a sine a person makes. It belongs with the
+    # ocarina and the bottle, where GM already put it.
+    check("the whistle is a vessel, not a tube",
+          issubclass(_pipes[78], _T.VesselFluteProperties)
+          and not issubclass(_pipes[78], _T.BassFluteProperties),
+          "  (with the ocarina and the bottle, which GM sits it between)")
+    _wh = _pipes[78](523.25, 0.0, 1.0, 1.0)
+    _h2 = 20.0 * math.log10(_wh.harmonic_volume(2) / _wh.harmonic_volume(1))
+    check("...and is nearly a pure tone, as a whistled note is",
+          _h2 < -25.0,
+          "  (second harmonic %.1f dB; the flute's is -8.0)" % _h2)
+    # THE DUCT IS THE RECORDER'S WHOLE DIFFERENCE from the flute beside it: a
+    # windway cut in wood aims the same jet every time, where a flautist steers
+    # theirs. So it is purer, and it keeps less breath past the edge.
+    _rc = _pipes[74](523.25, 0.0, 1.0, 1.0)
+    _fl = _pipes[73](523.25, 0.0, 1.0, 1.0)
+    _dr = (20.0 * math.log10(_rc.harmonic_volume(2) / _rc.harmonic_volume(1))
+           - 20.0 * math.log10(_fl.harmonic_volume(2) / _fl.harmonic_volume(1)))
+    check("the ducted recorder is purer than the lip-blown flute",
+          _dr < -1.5 and _pipes[74].sustain_jitter < _pipes[73].sustain_jitter,
+          "  (%.1f dB less second harmonic, and less breath past the edge)" % _dr)
+
     # ---------------------------------------------------------- the synth leads
     import patch_map as _PMl
     # GM 82-87 all shared SynthLeadProperties, which is a FlueOrganProperties:

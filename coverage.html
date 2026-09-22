@@ -261,11 +261,11 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="fam">Pipe</div>
 <div class="cell r4" title="72 Piccolo &mdash; specific, reference audio">4</div>
 <div class="cell r4" title="73 Flute &mdash; specific, reference audio">4</div>
-<div class="cell r1" title="74 Recorder &mdash; general class">1</div>
-<div class="cell r1" title="75 Pan Flute &mdash; general class">1</div>
+<div class="cell r2" title="74 Recorder &mdash; specific, theory">2</div>
+<div class="cell r2" title="75 Pan Flute &mdash; specific, theory">2</div>
 <div class="cell r2" title="76 Blown Bottle &mdash; specific, theory">2</div>
-<div class="cell r1" title="77 Shakuhachi &mdash; general class">1</div>
-<div class="cell r1" title="78 Whistle &mdash; general class">1</div>
+<div class="cell r2" title="77 Shakuhachi &mdash; specific, theory">2</div>
+<div class="cell r2" title="78 Whistle &mdash; specific, theory">2</div>
 <div class="cell r2" title="79 Ocarina &mdash; specific, theory">2</div>
 <div class="fam">Synth Lead</div>
 <div class="cell r3" title="80 Lead 1 (square) &mdash; specific, theory + ear">3</div>
@@ -334,8 +334,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Where it stands</h2>
 <div class="bar">
-<span class="r1" style="flex:35">35</span>
-<span class="r2" style="flex:39">39</span>
+<span class="r1" style="flex:31">31</span>
+<span class="r2" style="flex:43">43</span>
 <span class="r3" style="flex:25">25</span>
 <span class="r4" style="flex:29">29</span>
 </div>
@@ -563,21 +563,21 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="famhead"><h3>Pipe</h3><span class="rng">72&ndash;79</span><span class="pips">
 <span class="pip r4"></span>
 <span class="pip r4"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
 <span class="pip r2"></span>
-<span class="pip r1"></span>
-<span class="pip r1"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
+<span class="pip r2"></span>
 <span class="pip r2"></span>
 </span></div>
 <div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
 <tr><td class="num">72</td><td class="nm">Piccolo</td><td class="cls">BassFlute/OpenPipe by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the flute law, measured across bass, alto and concert flute</td></tr>
 <tr><td class="num">73</td><td class="nm">Flute</td><td class="cls">BassFlute/OpenPipe by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa flute (nonvib -- vibrato smears the harmonics)</td></tr>
-<tr><td class="num">74</td><td class="nm">Recorder</td><td class="cls">OpenPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic open pipe</td></tr>
-<tr><td class="num">75</td><td class="nm">Pan Flute</td><td class="cls">StoppedPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic stopped pipe</td></tr>
+<tr><td class="num">74</td><td class="nm">Recorder</td><td class="cls">Recorder</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a fipple DUCT: the windway is built in, so the jet is identical every time and the tone is purer than the flute&#x27;s by 3 dB at h2</td></tr>
+<tr><td class="num">75</td><td class="nm">Pan Flute</td><td class="cls">PanFlute</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a CLOSED tube (odd harmonics, already right) that had no breath at all -- StoppedPipe ships sustain_jitter 0, so it rendered as an organ&#x27;s Gedackt</td></tr>
 <tr><td class="num">76</td><td class="nm">Blown Bottle</td><td class="cls">BlownBottle</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class, theory</td></tr>
-<tr><td class="num">77</td><td class="nm">Shakuhachi</td><td class="cls">OpenPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic open pipe; a shakuhachi&#x27;s breath and pitch bend are not modelled</td></tr>
-<tr><td class="num">78</td><td class="nm">Whistle</td><td class="cls">OpenPipe</td><td class="rt"><span class="chip r1">1</span></td><td class="note">the generic open pipe</td></tr>
+<tr><td class="num">77</td><td class="nm">Shakuhachi</td><td class="cls">Shakuhachi</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled</td></tr>
+<tr><td class="num">78</td><td class="nm">Whistle</td><td class="cls">Whistle</td><td class="rt"><span class="chip r2">2</span></td><td class="note">CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB)</td></tr>
 <tr><td class="num">79</td><td class="nm">Ocarina</td><td class="cls">Ocarina</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own class -- a vessel flute, theory</td></tr>
 </table></div></div>
 </section>

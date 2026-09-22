@@ -10738,6 +10738,178 @@ class BlownBottleProperties(VesselFluteProperties):
     tonal_dampening = 3.9
     bore_corner_hz = 1600.0
 
+# ----------------------------------------------------------- the rest of 72-79
+# The pipe family was two measured flutes (72, 73), two vessel flutes (76, 79),
+# and four programs on a generic base. The four are not variations on a flute:
+# they differ in the three things that decide what a flue instrument sounds
+# like -- whether the tube is open or closed, how the jet is aimed, and how much
+# of the breath misses the edge.
+
+
+class RecorderProperties(OpenPipeProperties):
+    """GM 74. A FIPPLE flute: the windway is built into the instrument.
+
+    That single fact is the whole difference from the flute beside it. A
+    flautist forms the jet with their lips and can change its length, its angle
+    and its width while playing -- which is where a flute's shading, its
+    dynamics and its colour come from. A recorder's windway is a duct cut in
+    wood: the jet arrives at the labium the same way every time, for every
+    player, at every dynamic.
+
+    So a recorder is PURER and more uniform than a flute, and its chiff is
+    consistent where a flute's varies with the player. Both follow from the duct
+    rather than being separate observations.
+
+    WHAT IS DELIBERATELY NOT MODELLED. A recorder has almost no dynamic range,
+    because blowing harder mostly raises the PITCH instead of the level -- there
+    are no lips to compensate, which is why recorder consorts play with dynamics
+    written into the scoring rather than into the breath. It is tempting to wire
+    that to velocity, and it would be wrong here: velocity in a MIDI file is mix
+    balance, not effort (see the note on effort being a relative signal), so a
+    loud passage would simply play sharp. The attack bloom below is the part of
+    it that is honestly velocity-scaled, being a transient that settles.
+    """
+    # A narrow cylindrical bore, and a duct that puts the jet where it belongs:
+    # strong fundamental, and less of the upper development a flute gets from a
+    # jet the player is steering.
+    # Purer than the flute, and audibly so rather than arguably so: at 1.55 this
+    # sat 0.9 dB from the flute at the second harmonic, which is a difference
+    # no one could hear and not much of a claim. How MUCH purer is a judgement
+    # -- there is no recorder in the reference set -- but that it is purer
+    # follows from the duct, and it should be worth saying.
+    tonal_dampening = 1.90
+    max_harmonic = 32
+    bore_corner_hz = 2600.0
+    octave_dampening = 0.0
+
+    # The fixed windway again: a crisp, repeatable speech, shorter than a
+    # flute's because there is no lip to find the edge with.
+    chiff_volume = 1.15
+    chiff_min_valve_time = 0.008
+    chiff_max_valve_time = 0.020
+    # Less breath past the edge than any other member of this family: a duct
+    # aims the whole jet at the labium, which is what a duct is for.
+    sustain_jitter = 0.12
+
+    # The pressure bloom as the jet establishes -- an attack transient that
+    # settles to the tuned pitch, not a sustained offset. See the docstring.
+    tension_bend = 0.004
+    tension_settle_time = 0.06
+    tension_bend_max = 0.01
+
+    # Balance-normalised against the MEASURED flute (GM 73) on the same passage
+    # in the same room -- this family's one reference-audio member, and so the
+    # only anchor in it that answers to something outside the model.
+    initial_gain = 0.000144868
+
+
+class PanFluteProperties(StoppedPipeProperties):
+    """GM 75. A CLOSED tube, and most of the breath missing it.
+
+    The closed end is already right -- 75 was mapped to the stopped pipe, which
+    is the one thing about this instrument the old mapping got correct, and it
+    matters: a pipe closed at the bottom resonates at ODD multiples and overblows
+    at the twelfth rather than the octave. What was missing is everything else.
+
+    A PAN PIPE IS THE BREATHIEST INSTRUMENT IN THIS FAMILY, and it had no breath
+    at all: StoppedPipeProperties ships sustain_jitter = 0, so GM 75 rendered as
+    a clean odd-harmonic tone -- an organ's Gedackt rank, which is exactly what
+    that class is for and is not a pan pipe. The player blows across the open top
+    of a tube with no windway and no labium, so a large part of the jet never
+    couples into the resonance and stays as turbulence. That noise is not a
+    defect of the instrument; it is most of its sound.
+    """
+    # Broadens every partial into a band: the sustained-chiff mechanism, which
+    # is what breath past an edge actually does to a spectrum.
+    sustain_jitter = 0.55
+    chiff_volume = 1.8
+    chiff_min_valve_time = 0.018
+    chiff_max_valve_time = 0.055
+
+    # Odd-only is inherited and is the point. A wide, short tube: the series
+    # falls away fast above the first few.
+    tonal_dampening = 2.4
+    max_harmonic = 24
+    bore_corner_hz = 2200.0
+    bore_order = 2.0
+
+    initial_gain = 7.51211e-05          # against the measured flute, as above
+
+
+class ShakuhachiProperties(OpenPipeProperties):
+    """GM 77. An open tube, a knife edge, and the breath as the instrument.
+
+    End-blown: the player blows across a sharply bevelled notch cut into the rim
+    (the utaguchi) rather than into a duct or across a side hole. There is no
+    windway, the bore is wide for its length, and the edge is deliberately
+    severe -- so more of the breath stays as turbulence than in any other member
+    of this family except the bottle.
+
+    That is why a shakuhachi sounds the way it does, and it is a spectral fact
+    rather than an effect: the breath broadens every partial into a band. The
+    same mechanism the pan pipe uses, further.
+
+    MERI AND KARI ARE NOT MODELLED. Tilting the head down across the utaguchi
+    (meri) flattens the note by up to a semitone and darkens it; raising it
+    (kari) does the reverse, and the technique is central to the repertoire --
+    it is how the instrument plays the pitches its five holes do not give. It
+    belongs on a controller rather than in the voice, for the same reason the
+    recorder's pressure-sharpening does: it is a gesture the player makes, not a
+    property of the note. Left for whoever wires a breath controller.
+    """
+    sustain_jitter = 0.62
+    chiff_volume = 1.5
+    chiff_min_valve_time = 0.020
+    chiff_max_valve_time = 0.060
+
+    # Wide bore, strong low end, and a rich series -- the notch is a hard edge
+    # and drives the upper partials well even as the breath blurs them.
+    tonal_dampening = 1.15
+    max_harmonic = 40
+    bore_corner_hz = 3400.0
+
+    initial_gain = 6.68141e-05          # against the measured flute, as above
+
+
+class WhistleProperties(VesselFluteProperties):
+    """GM 78. A HUMAN whistle -- which is a Helmholtz resonator, not a pipe.
+
+    This is a category correction, not a refinement. GM 78 sat on the open pipe
+    with the flutes, and a whistled note is not produced by a standing wave in a
+    tube at all: the mouth cavity is a vessel, the lips are its neck, and the air
+    in that neck moves as a lump against the springiness of the cavity behind
+    it. One resonance, tuned by changing the cavity's volume with the tongue --
+    which is why whistling has no registers, no overblowing, and no fingering.
+
+    And it is why a whistle is the closest thing to a pure sine tone a person
+    can make: with no tube there is no harmonic series for the body to
+    reinforce, so what little is there comes from the jet. It sits with the
+    ocarina and the blown bottle, next to which General MIDI already put it.
+
+    THE OTHER READING, stated because the name is ambiguous: GM 78 could be a
+    tin or penny whistle, which IS a pipe and a fipple one. Against that -- the
+    Roland SC-55 sound every file was written for is the human whistle; a tin
+    whistle would duplicate the recorder two programs earlier, since both are
+    duct flutes; and the specification puts 78 between the shakuhachi and the
+    ocarina rather than with the flutes. If a tin whistle is wanted it is
+    RecorderProperties with a wider bore, not this.
+    """
+    # Purer than the ocarina, which at least has a chamber with real walls and
+    # finger holes breaking it up. A whistle is almost the fundamental alone.
+    tonal_dampening = 5.2
+    max_harmonic = 8
+    bore_corner_hz = 1800.0
+    bore_order = 2.0
+
+    # Lips are a poor edge but a small one: some breath, far less than a bottle.
+    sustain_jitter = 0.22
+    chiff_volume = 0.55
+    chiff_min_valve_time = 0.012
+    chiff_max_valve_time = 0.040
+
+    initial_gain = 0.000152137          # against the measured flute, as above
+
+
 class AltoFluteProperties(OpenPipeProperties):
     """A flute part below B3 is an alto flute part. MEASURED: Iowa AltoFlute.mf,
     four registers, G3-G6.
