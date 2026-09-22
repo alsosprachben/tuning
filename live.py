@@ -3340,6 +3340,92 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------------------ synth brass
+    import patch_map as _PMb2
+    # 62 and 63 sat on BrassProperties, the abstract ACOUSTIC brass base, which
+    # carries a bore, a register centre and the intonation tendencies of a
+    # played horn. General MIDI specifies nothing about how these are built --
+    # Level 1 is a name list -- so the reading is the SC-55's, but a synthesiser
+    # is certainly not an air column.
+    _sb1 = _PMb2.property_class_for_note(62, 60)
+    _sb2 = _PMb2.property_class_for_note(63, 60)
+    check("the synth brasses are oscillators, not horns",
+          not issubclass(_sb1, _T.BrassProperties)
+          and issubclass(_sb1, _T.SawtoothSynthProperties)
+          and _sb1 is not _sb2,
+          "  (a sawtooth through a resonant filter, and two distinct presets)")
+    # THE FILTER, NOT ONLY ITS ENVELOPE. The first version gave these the sweep
+    # and left the spectrum a bare 1/n saw -- which made 62 and 63 spectrally
+    # IDENTICAL, differing only in an envelope. The bite of a synth brass patch
+    # is the RESONANT PEAK at the cutoff, and the two presets' cutoffs are an
+    # octave apart, which is what "softer" means on the panel.
+    _q1 = _sb1(261.63, 0.0, 1.0, 1.0)
+    _q2 = _sb2(261.63, 0.0, 1.0, 1.0)
+    _s1 = [_q1.harmonic_volume(_k) / _q1.harmonic_volume(1) for _k in (4, 8, 16)]
+    _s2 = [_q2.harmonic_volume(_k) / _q2.harmonic_volume(1) for _k in (4, 8, 16)]
+    check("...and they differ in SPECTRUM, not only in envelope",
+          max(abs(20.0 * math.log10(_a / _b)) for _a, _b in zip(_s1, _s2)) > 8.0,
+          "  (resonances at %.0f and %.0f Hz -- the MEASURED spectral peaks of "
+          "the Iowa trumpet and horn, which these two imitate)"
+          % (_sb1.formants[0][0], _sb2.formants[0][0]))
+    # AND THE RESONANCE HAD TO BE WIRED BY HAND. SawtoothSynthProperties
+    # overrides harmonic_volume to return gain/n directly and so never reaches
+    # bore_gain, which is the hook FormantBody works through -- the same trap
+    # the voice lead fell into. Inheriting a body is not sounding through one.
+    # Against the IDEAL 1/n saw these are built from, anywhere in the series --
+    # the first version of this check looked only at h8, which on the trumpet
+    # reading sits above the resonance and so barely moves; a filter shows
+    # itself wherever its corner happens to fall, not at a fixed harmonic.
+    def _off_saw(_q):
+        _r = _q.harmonic_volume(1)
+        return max(abs(20.0 * math.log10(max(_q.harmonic_volume(_k), 1e-12) / _r)
+                       + 20.0 * math.log10(_k))
+                   for _k in range(2, 17))
+    check("...and the filter actually reaches the output",
+          min(_off_saw(_q1), _off_saw(_q2)) > 6.0,
+          "  (%.1f and %.1f dB off a bare 1/n saw, so the resonance is there)"
+          % (_off_saw(_q1), _off_saw(_q2)))
+    # AND IT MUST NOT BE A COPY OF THE ACOUSTIC VOICE. This check used to assert
+    # the opposite -- that GM 63 tracked the measured horn to within 4 dB -- and
+    # that was the wrong test written confidently. GM 56 and GM 60 in this
+    # renderer are themselves synthesised, so "sound like a horn" collapses into
+    # "be the horn", and a patch that passes a resemblance test has become
+    # redundant with the program four numbers earlier. The first version of
+    # these two made 62 and 63 identical to each other; tuning them onto the
+    # acoustic voices only moved the collision.
+    #
+    # A synth brass is a caricature: a sawtooth cannot rise to a formant the way
+    # a bore does, and its filter sits where the knob is. Checked across the
+    # compass, because the two are closest at exactly one pitch and diverge away
+    # from it.
+    def _gap(_g_syn, _g_ac):
+        _worst = 0.0
+        for _m in (48, 60, 72, 84):
+            _f = 440.0 * 2.0 ** ((_m - 69) / 12.0)
+            _a = _PMb2.property_class_for_note(_g_syn, _m)(_f, 0.0, 1.0, 1.0)
+            _b = _PMb2.property_class_for_note(_g_ac, _m)(_f, 0.0, 1.0, 1.0)
+            for _k in (2, 3, 4, 6, 8):
+                _worst = max(_worst, abs(
+                    20.0 * math.log10(max(_a.harmonic_volume(_k), 1e-12)
+                                      / max(_a.harmonic_volume(1), 1e-12))
+                    - 20.0 * math.log10(max(_b.harmonic_volume(_k), 1e-12)
+                                        / max(_b.harmonic_volume(1), 1e-12))))
+        return _worst
+    check("...and neither is a copy of the acoustic voice it leans toward",
+          _gap(62, 56) > 10.0 and _gap(63, 60) > 10.0,
+          "  (%.0f dB from the trumpet, %.0f from the horn, across four octaves)"
+          % (_gap(62, 56), _gap(63, 60)))
+
+    # The two oscillators are a KNOB: the same offset on every note, unlike a
+    # piano's unisons (random per note) or a section (random per player).
+    _v1 = _q1.unison_voices(261.63, 1, 0.0)
+    _v2 = _q2.unison_voices(261.63, 1, 0.0)
+    check("...and the second oscillator is a fixed detune, not a spread",
+          len(_v1) == 1 and len(_v2) == 1
+          and abs(1200.0 * math.log2(1.0 + _v1[0][2]) - _sb1.detune_cents) < 0.01,
+          "  (%.0f and %.0f cents, the same on every note)"
+          % (_sb1.detune_cents, _sb2.detune_cents))
+
     # ------------------------------------------------- touch, and the lack of it
     # Ben, playing live: "The harpsichord patch is touch sensitive."
     #

@@ -7683,6 +7683,187 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
         return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
 
 
+class SynthBrassProperties(FormantBody, SawtoothSynthProperties):
+    """GM 62 and 63. A SAWTOOTH THROUGH A FILTER ENVELOPE -- not a brass instrument.
+
+    Both programs sat on BrassProperties, the abstract acoustic brass base. That
+    class carries a bore, a register centre, an effort tilt and the intonation
+    tendencies of a played horn, and a synthesiser has none of those: the same
+    category error as the synth leads rendering through an organ pipe, in the
+    family next door.
+
+    WHAT A SYNTH BRASS PATCH ACTUALLY IS, on every machine that made the sound
+    famous: one or two sawtooth oscillators, a resonant low-pass, and an
+    envelope on the FILTER rather than on the amplitude. The filter opens fast,
+    falls back to a sustain point, and that sweep is the whole character -- it is
+    why the patch reads as "brassy" without any brass in it, because a real horn
+    also gets brighter as it is pushed and settles as the note steadies.
+
+    AND THE FILTER ENVELOPE NEEDED NO MACHINERY, for the reason the leads
+    established: a low-pass closing is upper partials dying faster than lower
+    ones, which is harmonic_decay_db, and a front that blooms and settles is
+    decay_db against sustain_level. Those three numbers ARE the filter envelope.
+    The acoustic brass base was already using them for the same purpose, which is
+    why it was a passable stand-in and still the wrong class.
+
+    TWO OSCILLATORS, DETUNED BY A FIXED AMOUNT. The thickness of a synth brass
+    patch is a second saw a few cents off, and it is a KNOB: the same offset on
+    every note, every time. That is a different thing from a piano's unisons,
+    which are meant to be identical and are imperfectly tuned (random, per note),
+    and from a section, which is many players who cannot agree (random, per
+    player). It is the accordion's musette argument again -- systematic, not
+    drawn -- so it does not reuse either of their mechanisms.
+    """
+    # The oscillator: every harmonic at 1/n, exactly, as its parent. The colour
+    # comes from the envelope, not from the waveform.
+    max_harmonic = 40
+
+    # THE FILTER ENVELOPE. decay_db is how far the front blooms above the
+    # sustain and harmonic_decay_db how much faster the top of the spectrum
+    # gets there -- a sweep down through the series rather than a level change.
+    decay_db = 16.0
+    harmonic_decay_db = 5.5
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.62
+
+    # The onset. A synth brass patch does not speak like a horn, it RAMPS --
+    # the filter and the amplifier open together over a fixed time that has
+    # nothing to do with the note's wavelength, which is why speech_cycles
+    # stays zero here where every acoustic wind voice sets it.
+    attack_time = 0.018
+    speech_cycles = 0.0
+    chiff_volume = 0.0
+
+    detune_cents = 7.0          # the second oscillator, a knob and not a spread
+    detune_gain = 0.80
+
+    # A RESONANCE, NOT A BODY. Ben, on an earlier version of these two that had
+    # been tuned until GM 63 sat within 1.7 dB of the measured horn: "Is it
+    # imitating the instrument, or just mapping directly to it? The proper
+    # trumpet and horn patches are literally synthesized, after all."
+    #
+    # Which is exactly right and is the trap this family sets. GM 56 and GM 60
+    # in this renderer are not samples -- they are additive models with their own
+    # formants and envelopes. So "make GM 63 sound like a horn" collapses into
+    # "make GM 63 BE the horn", and a check that it resembles one is a check
+    # that it has become redundant. The first version made 62 and 63 identical
+    # to each other; tuning them onto the acoustic voices merely moved the
+    # collision.
+    #
+    # WHAT A SYNTH BRASS ACTUALLY IS is a caricature, and its character lives in
+    # the ways it FAILS to be brass. A bore-shaped spectrum RISES to a formant
+    # -- the Iowa trumpet puts h4 about 19 dB above its fundamental -- where a
+    # sawtooth falls monotonically and a filter can only carve a bump into that
+    # fall. The filter sits where the knob is instead of moving with register or
+    # dynamic. Two oscillators beat at a fixed rate where a section's spread is
+    # random. None of that is a deficiency to be tuned away; it is the sound.
+    #
+    # So the resonances below are NARROW and STRONG -- a filter with its Q up,
+    # which is what the machines did -- rather than the broad gentle colour a
+    # body gives. The trumpet and horn centres set which DIRECTION each preset
+    # leans, and nothing is tuned toward matching them.
+    #
+    # THE FILTER ITSELF, not just its envelope. A first pass gave these voices
+    # the sweep (decay_db, harmonic_decay_db) and left the spectrum a bare 1/n
+    # saw -- which is a synth brass patch with the resonance turned off, and
+    # measured, it made GM 62 and GM 63 spectrally IDENTICAL, differing only in
+    # an envelope the audio would not clearly show. The bite of the sound is the
+    # RESONANT PEAK at the cutoff, and a peak is what FormantBody makes.
+    #
+    # Which is the same thing a real horn's bell does -- measured, the trumpet
+    # puts h4 to h6 about 19 dB ABOVE its fundamental, and that peak is why a
+    # saw with a resonant filter reads as brass at all while a bare saw does not.
+    formants = ((1800.0, 1100.0, 0.85),)
+    formant_floor = 0.10
+    bore_corner_hz = 3200.0     # the low-pass above the resonance
+    bore_order = 2.0
+    bell_cutoff_hz = 0.0
+    bell_order = 1.0
+
+    initial_gain = 0.02         # balance-normalised per subclass below
+
+    def harmonic_volume(self, harmonic):
+        # WIRED BY HAND, because SawtoothSynthProperties overrides
+        # harmonic_volume to return gain/n directly and so never reaches
+        # bore_gain -- which is the hook FormantBody works through. Inheriting
+        # the mixin alone does nothing, exactly as it did nothing on the voice
+        # lead until this was written there. Inheriting a body is not the same
+        # as sounding through it.
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        if self.detune_gain <= 0.0:
+            return []
+        return [(self.detune_gain, 0.0,
+                 2.0 ** (self.detune_cents / 1200.0) - 1.0, harmonic_decay, 0.0)]
+
+
+class SynthBrass1Properties(SynthBrassProperties):
+    """GM 62. The TRUMPET reading: bright and hard.
+
+    General MIDI names two synth brasses and distinguishes them nowhere, so the
+    reading is the Roland SC-55's, which is what the files were written for: 62
+    is the bright aggressive stab and 63 the softer, slower pad. They differ in
+    the ENVELOPE, which is correct -- on the machines these imitate, that is
+    mostly what the two presets did differ in.
+    """
+    # THE TRUMPET READING. Ben's: rather than two cutoffs an octave apart chosen
+    # for contrast, make one patch imitate a TRUMPET and the other a HORN --
+    # which is bright-and-hard against soft-and-slow, and is what arrangers
+    # actually reach for these two presets to do. It replaces two invented
+    # numbers with two measured ones.
+    #
+    # Measured on the Iowa trumpet, its spectral peak sits at 1308, 1308 and
+    # 1570 Hz at C3, C4 and C5 -- very nearly FIXED against pitch, which is what
+    # a body resonance is and confirms modelling it as a formant rather than as
+    # a tilt. 1400 Hz is the middle of that. Its envelope is the trumpet's too:
+    # decay 20, sustain 0.58, harmonic decay 5.5.
+    attack_time = 0.014
+    decay_db = 20.0
+    harmonic_decay_db = 5.5
+    sustain_level = 0.58
+    detune_cents = 6.0
+    formants = ((1400.0, 480.0, 1.60),)
+    formant_floor = 0.07
+    bore_corner_hz = 3000.0
+    # Balance-normalised against the MEASURED trumpet (GM 56) on the same
+    # passage in the same room -- this family's reference-audio member.
+    initial_gain = 0.060868
+
+
+class SynthBrass2Properties(SynthBrassProperties):
+    """GM 63. The HORN reading: soft and slow.
+
+    Slower and warmer is not two decisions. A filter that opens gently never
+    reaches as far up the series, so the patch is darker as well as softer --
+    the colour follows from the envelope rather than standing on its own, the
+    same argument SlowBowedStringProperties makes about the bow.
+    """
+    # THE HORN READING, against GM 62's trumpet. Measured on the Iowa horn, its
+    # spectral peak sits at 392, 262 and 523 Hz across C3-C5 and its centroid at
+    # 382, 338, 533 -- again nearly fixed, and 420 Hz is the middle. That is
+    # 3.4 times lower than the trumpet's 1400, where the two cutoffs this class
+    # carried before were an invented octave apart.
+    #
+    # And the envelope is the horn's: decay 13 against the trumpet's 20, sustain
+    # 0.70 against 0.58, harmonic decay 2.0 against 5.5. Soft and slow is not a
+    # separate decision from dark -- a gentler front never drives the upper
+    # partials as far, the same argument SlowBowedStringProperties makes.
+    attack_time = 0.075
+    decay_db = 13.0
+    harmonic_decay_db = 2.0
+    sustain_level = 0.70
+    detune_cents = 11.0         # wider, which is where the "warm" comes from
+    detune_gain = 0.88
+    formants = ((420.0, 200.0, 1.30),)
+    formant_floor = 0.09
+    bore_corner_hz = 1500.0
+    initial_gain = 0.0433277    # against the measured trumpet, as GM 62
+
+
 class FifthsLeadProperties(SawtoothSynthProperties):
     """GM 86, Lead 7 (fifths): the waveform and its FIFTH, together.
 

@@ -32,6 +32,8 @@ from tonelib import (
     VoiceLeadProperties,
     FifthsLeadProperties,
     BassLeadProperties,
+    SynthBrass1Properties,
+    SynthBrass2Properties,
     GrandPianoProperties,
     HarpsichordProperties, HarpsiRossProperties,
     PluckedStringProperties,
@@ -593,6 +595,13 @@ def property_class_for_note(program, note):
 PROGRAM_CLASS[57] = TromboneProperties     # Trombone
 PROGRAM_CLASS[60] = HornProperties         # French Horn
 PROGRAM_CLASS[61] = TromboneProperties     # Brass Section: routed per note, see BRASS_SPLIT
+# 62 and 63 are SYNTHESISER patches, not brass. They had been on the acoustic
+# brass base, which carries a bore, a register centre and the intonation
+# tendencies of a played horn -- the same category error the synth leads had
+# with the organ pipe. A synth brass is a sawtooth through a filter envelope,
+# and the two programs differ in that envelope. See tonelib.SynthBrassProperties.
+PROGRAM_CLASS[62] = SynthBrass1Properties  # the bright stab: fast, deep sweep
+PROGRAM_CLASS[63] = SynthBrass2Properties  # the soft pad: slower, shallower
 
 # WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
 # family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit

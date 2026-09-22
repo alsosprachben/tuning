@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 31 | 24% |
-| 2 specific, theory | 43 | 34% |
+| 1 general class | 29 | 23% |
+| 2 specific, theory | 45 | 35% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -199,8 +199,8 @@ splits almost exactly along that line.
 | 59 | Muted Trumpet | `MutedTrumpet` | **2** | its own class; the mute is theory |
 | 60 | French Horn | `ConicalBrass/Horn by register` | **4** | Iowa horn, re-measured across four registers and pp/mf/ff |
 | 61 | Brass Section | `ConicalBrass/Trombone/Trumpet by register` | **3** | brass_section over three MEASURED bodies (Iowa trumpet/trombone/tuba), five players each, crossfaded across the range handovers -- the hard break moved the spectrum 13.2 dB in one semitone and now moves 2.7 |
-| 62 | Synth Brass 1 | `Brass` | **1** | the generic brass base |
-| 63 | Synth Brass 2 | `Brass` | **1** | as 62 |
+| 62 | Synth Brass 1 | `SynthBrass1` | **2** | a sawtooth through a RESONANT filter, leaning trumpet-bright (resonance 1400 Hz); not the acoustic brass base, which carries a bore and a horn's intonation |
+| 63 | Synth Brass 2 | `SynthBrass2` | **2** | the same synth leaning horn-soft (resonance 420 Hz, slower front); deliberately NOT tuned onto GM 60, which is itself synthesised -- resemblance there would be redundancy |
 
 ## 64-71 Reed
 

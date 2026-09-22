@@ -4214,3 +4214,89 @@ level moves only 0.5 dB and its ranks 1.1 across the whole velocity range, so it
 was effectively fixed already, but it is paying for eight templates to carry
 about a decibel. Left alone: the organ's attack is ear-tuned and this is a
 performance note, not a defect.
+
+## GM 62, 63 Synth Brass: a caricature, and the trap of making it good
+
+Both sat on `BrassProperties`, the abstract ACOUSTIC brass base -- a bore, a
+register centre, an effort tilt and the intonation tendencies of a played horn.
+The same category error the synth leads had with the organ pipe.
+
+**GENERAL MIDI SPECIFIES NOTHING ABOUT CONSTRUCTION.** Level 1 is a name list
+plus behavioural requirements: 24 voices, channel 10 percussion, controller
+response. It gives program 62 the name "Synth Brass 1" and stops. Level 2 adds
+controllers and effects and still says nothing about synthesis. The only real
+grounding is the Roland SC-55, the reference implementation GM was co-developed
+against, where 62 is the bright hard stab and 63 the softer slower one.
+
+What GM does say is taxonomic and weak: 56-63 is the BRASS family, so these two
+are classified as brass substitutes rather than as synth voices, which have
+their own families at 80-87 and 88-95.
+
+### Three versions, and two of them were wrong
+
+**FIRST: the envelope without the filter.** A synth brass is one or two saws, a
+resonant low-pass, and an envelope on the FILTER rather than the amplitude. The
+envelope needed no machinery -- a low-pass closing is upper partials dying faster
+than lower ones (`harmonic_decay_db`) and a front that blooms and settles is
+`decay_db` against `sustain_level`. But the filter itself was missing, so both
+programs were a bare 1/n saw: **spectrally identical to each other**, differing
+only in an envelope that repeated audio probes could not cleanly show.
+
+**SECOND: tuned onto the acoustic voices.** Ben's suggestion -- make one lean
+trumpet and the other horn, which is bright-and-hard against soft-and-slow, and
+is what arrangers reach for these presets to do. That replaced two invented
+cutoffs (chosen an octave apart for contrast, with nothing behind them) with two
+measured ones: the Iowa trumpet's spectral peak sits at 1308, 1308 and 1570 Hz
+across C3-C5 and the horn's at 392, 262, 523 -- both nearly FIXED against pitch,
+which is what a body resonance is and confirms modelling them as formants.
+
+Then Ben: *"Is it imitating the instrument, or just mapping directly to it? The
+proper trumpet and horn patches are literally synthesized, after all."*
+
+Which is the trap, and I had walked into it and written a passing check that
+proved it: **"the horn reading tracks the measured horn -- within 1.7 dB through
+the sixth harmonic."** Recorded as a success. GM 56 and GM 60 in this renderer
+are not samples; they are additive models with their own formants and envelopes.
+So "sound like a horn" collapses into "be the horn", and a patch that passes a
+resemblance test has become redundant with the program four numbers earlier. The
+first version made 62 and 63 identical to each other; the second only moved the
+collision onto 60.
+
+**THIRD, and the one that ships: a caricature.** What a synth brass IS lives in
+the ways it FAILS to be brass. A bore-shaped spectrum RISES to a formant -- the
+Iowa trumpet puts h4 about 19 dB above its fundamental -- where a sawtooth falls
+monotonically and a filter can only carve a bump into that fall. The filter sits
+where the knob is. Two oscillators beat at a fixed rate (0.83 Hz at C3 rising to
+3.34 at C5) where a section's spread is random per player and a solo horn has
+none at all. None of that is a deficiency to tune away; it is the sound.
+
+So the resonances are NARROW and STRONG -- a filter with its Q up, which is what
+the machines did -- rather than the broad gentle colour a body gives. The
+trumpet and horn centres set which DIRECTION each preset leans, and nothing is
+tuned toward matching them:
+
+| | vs its acoustic cousin | vs each other |
+|---|---|---|
+| GM 62 | 31 dB | |
+| GM 63 | 18 dB | 36 dB apart |
+
+measured across four octaves. The check now asserts they are NOT copies, which
+is the opposite of what it asserted an hour earlier.
+
+### And a probe lesson, three times over
+
+Demonstrating the filter envelope in audio took four attempts. A spectral
+centroid over 0-60 ms straddled the attack ramp and read the sweep BACKWARDS.
+Per-harmonic demodulation over 50 ms windows measured the beat between the two
+detuned oscillators rather than any decay -- at h16 they sit 15 Hz apart. Band
+energy without length normalisation showed a sustained trumpet note getting
+3 dB LOUDER. Only the fourth, length-normalised and beat-averaged, was honest.
+
+The class-level decay rates said what was wanted all along (h32 at 210 dB/s
+against h1 at 24), and three probes in a row failed to confirm it. Check the
+probe first.
+
+### Levels
+
+Balance-normalised against the MEASURED trumpet (GM 56) on the same passage in
+the same room -- this family's reference-audio member.
