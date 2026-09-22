@@ -7683,6 +7683,118 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
         return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
 
 
+class SynthStringsProperties(FormantBody, SawtoothSynthProperties):
+    """GM 50 and 51. A STRING MACHINE: sawtooths through a chorus, not a section.
+
+    Both were in BOWED_ENSEMBLE, so they routed per register to the four
+    MEASURED string bodies -- which meant GM 50 and GM 51 rendered identically
+    to GM 48, the acoustic string ensemble. Three programs, one voice. The same
+    redundancy the synth brass fell into by being tuned onto the modelled horn,
+    except here it was not even a resemblance: it was the same class.
+
+    THE CHORUS IS THE INSTRUMENT, and it is a different mechanism from a
+    section. An ARP or Solina string machine has ONE oscillator per key and gets
+    its width from a bucket-brigade chorus: a small number of copies at FIXED
+    offsets, each slowly swept by its own low-frequency oscillator. A string
+    section has many players whose spread is random, per player, per note, and
+    who never agree. Systematic against drawn -- the accordion's musette
+    argument, one more time.
+
+    That difference is audible and is most of why nobody mistakes a string
+    machine for an orchestra: the machine's width is periodic and identical on
+    every note, and a section's is not.
+
+    THE SWEEP COSTS NOTHING. Each chorus voice's slow detune modulation is
+    voice_vibrato, which SectionMixin already provides per player index and
+    which the renderer already reads as vd/vr/vp -- so a BBD chorus is the
+    section's own per-player vibrato machinery running at a chorus rate instead
+    of a violinist's. Set slow and shallow, it IS the effect.
+
+    AND THE ATTACK IS THE OTHER HALF. A string pad swells: the filter and the
+    amplifier open together over a fixed time with nothing to do with the note's
+    wavelength, which is why speech_cycles stays zero where every acoustic wind
+    and bowed voice sets it.
+    """
+    max_harmonic = 40
+
+    # The swell. Long enough to read as a pad rather than a lead.
+    attack_time = 0.16
+    speech_cycles = 0.0
+    chiff_volume = 0.0
+    decay_db = 1.2
+    harmonic_decay_db = 1.4
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.90
+
+    # The chorus: fixed offsets in cents, the same on every note and every time.
+    chorus_cents = (-7.0, 7.0, 13.0)
+    chorus_gain = 0.72
+    # ...each swept by its own slow LFO. A chorus rate, not a vibrato rate:
+    # a player's vibrato is 4.6-6.4 Hz and this must not be mistaken for one.
+    section_vibrato_cents = 3.0
+    section_vibrato_hz = (0.35, 0.85)
+
+    formants = ((1500.0, 1400.0, 0.70),)
+    formant_floor = 0.14
+    bore_corner_hz = 3600.0
+    bore_order = 2.0
+    bell_cutoff_hz = 0.0
+    bell_order = 1.0
+
+    initial_gain = 0.02         # balance-normalised per subclass below
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        # FIXED, not drawn. Phase 0.25 apart so the copies do not all start
+        # together the way a struck body's do -- a BBD chorus's taps are
+        # staggered by construction.
+        return [(self.chorus_gain, 0.0, 2.0 ** (c / 1200.0) - 1.0,
+                 harmonic_decay, 1.5707963 * (i + 1))
+                for i, c in enumerate(self.chorus_cents)]
+
+    def harmonic_volume(self, harmonic):
+        # Hand-wired, as on the voice lead, the synth brass and the synth bass:
+        # the sawtooth parent returns gain/n directly and never reaches
+        # bore_gain, which is the hook FormantBody works through.
+        if self.max_harmonic and harmonic > self.max_harmonic:
+            return 0.0
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
+
+
+class SynthStrings1Properties(SynthStringsProperties):
+    """GM 50. The brighter one, and the faster swell.
+
+    General MIDI names two and specifies neither; the reading is the SC-55's,
+    where 50 is the brighter string pad and 51 the slower, warmer one.
+    """
+    attack_time = 0.12
+    formants = ((1800.0, 1500.0, 0.75),)
+    bore_corner_hz = 4200.0
+    chorus_cents = (-6.0, 6.0, 11.0)
+    # Balance-normalised against the acoustic string ensemble (GM 48) on the
+    # same passage in the same room -- the neighbour these two are chosen
+    # INSTEAD of, so it is the comparison a sequencer actually makes.
+    initial_gain = 0.0462611
+
+
+class SynthStrings2Properties(SynthStringsProperties):
+    """GM 51. The slow one: a longer swell and a lower cutoff.
+
+    Darker and slower is one decision rather than two, the argument
+    SlowBowedStringProperties makes about the bow and GM 63 about its filter: an
+    envelope that opens gently never reaches as far up the series.
+
+    And the chorus is WIDER, which is where the extra warmth comes from -- more
+    of that periodic width is exactly what a string machine's depth switch does.
+    """
+    attack_time = 0.30
+    formants = ((1000.0, 1000.0, 0.62),)
+    bore_corner_hz = 2600.0
+    chorus_cents = (-11.0, 9.0, 18.0)
+    section_vibrato_hz = (0.25, 0.6)
+    initial_gain = 0.045397     # against the string ensemble, as GM 50
+
+
 class SynthBassProperties(FormantBody, SawtoothSynthProperties):
     """GM 38 and 39. An oscillator through a resonant low-pass, in the bass.
 

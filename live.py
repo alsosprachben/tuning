@@ -3349,6 +3349,48 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ---------------------------------------------------------- synth strings
+    import patch_map as _PMss
+    # 50 and 51 were in BOWED_ENSEMBLE, so they routed per register to the four
+    # MEASURED string bodies and rendered IDENTICALLY to GM 48: three programs,
+    # one voice. Worse than the synth brass's redundancy, which was at least a
+    # resemblance rather than the same class.
+    _s50 = _PMss.property_class_for_note(50, 64)
+    _s51 = _PMss.property_class_for_note(51, 64)
+    _s48 = _PMss.property_class_for_note(48, 64)
+    check("the synth strings are not the acoustic string ensemble",
+          _s50 is not _s48 and _s51 is not _s48 and _s50 is not _s51
+          and 50 not in _PMss.BOWED_ENSEMBLE and 51 not in _PMss.BOWED_ENSEMBLE,
+          "  (three distinct voices where there had been one)")
+    # A CHORUS IS NOT A SECTION, and that is the whole instrument. A string
+    # machine has one oscillator per key and a bucket-brigade chorus: a few
+    # copies at FIXED offsets, the same on every note. A section has many
+    # players whose spread is drawn per note and who never agree.
+    def _offs(_g, _midi):
+        _f = 440.0 * 2.0 ** ((_midi - 69) / 12.0)
+        _q = _PMss.property_class_for_note(_g, _midi)(_f, 0.0, 1.0, 1.0)
+        return tuple(round(1200.0 * math.log2(1.0 + _v[2]), 3)
+                     for _v in _q.unison_voices(_f, 1, 0.0))
+    _mach = {_offs(50, _m) for _m in (52, 64, 76)}
+    _sect = {_offs(48, _m) for _m in (52, 64, 76)}
+    check("...and the machine's chorus is FIXED where a section's spread is drawn",
+          len(_mach) == 1 and len(_sect) == 3,
+          "  (the machine gives the same %d offsets on every note; the section "
+          "redraws its %d)" % (len(_offs(50, 64)), len(_offs(48, 64))))
+    # ...each tap swept by its own slow LFO, which is voice_vibrato running at a
+    # chorus rate rather than a violinist's. The two must not be confusable.
+    _vb = _s50(329.63, 0.0, 1.0, 1.0).voice_vibrato(329.63, 1)
+    check("...and the chorus sweeps far slower than a player vibrates",
+          _vb is not None and _s50.section_vibrato_hz[1] < 0.5 * _s48.section_vibrato_hz[0],
+          "  (%.2f-%.2f Hz against a violinist's %.1f-%.1f)"
+          % (_s50.section_vibrato_hz + _s48.section_vibrato_hz))
+    # AND A PAD SWELLS. The attack is fixed in seconds and owes nothing to the
+    # note's wavelength, which is why speech_cycles stays zero here.
+    check("...and both swell, the second more slowly than the first",
+          _s51.attack_time > 2.0 * _s50.attack_time and not _s50.speech_cycles,
+          "  (%.0f ms and %.0f ms, neither scaled by wavelength)"
+          % (1000 * _s50.attack_time, 1000 * _s51.attack_time))
+
     # ------------------------------------------------------------- synth bass
     import patch_map as _PMsb
     # 38 and 39 fell through to PluckedStringProperties -- the GENERIC plucked

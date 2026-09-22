@@ -34,6 +34,8 @@ from tonelib import (
     BassLeadProperties,
     SynthBrass1Properties,
     SynthBass1Properties,
+    SynthStrings1Properties,
+    SynthStrings2Properties,
     SynthBass2Properties,
     SynthBrass2Properties,
     GrandPianoProperties,
@@ -283,6 +285,8 @@ PROGRAM_CLASS[47] = TimpaniProperties         # tuned membrane over a bowl, not 
 # 48-55  Ensemble (strings, choir, voices, orchestra hit)
 _fill(48, 55, BowedStringProperties)
 PROGRAM_CLASS[49] = SlowBowedStringProperties  # String Ensemble 2: darker section
+PROGRAM_CLASS[50] = SynthStrings1Properties   # a string MACHINE: chorus, not section
+PROGRAM_CLASS[51] = SynthStrings2Properties   # ...slower swell, wider chorus
 # 52-54 are PEOPLE, not strings. A voice is a glottal buzz through a tract whose
 # fixed formants are what make a vowel a vowel; the bowed-string bucket got the
 # "sustained, not percussive" part right and the identifying part wrong. 1950
@@ -484,7 +488,11 @@ def _brass_body(note):
 
 
 # Programs that are a whole section rather than a named instrument.
-BOWED_ENSEMBLE = {44, 48, 50, 51}
+# 50 and 51 are NOT bowed and are no longer here. They were, so they routed per
+# register to the four measured string bodies and rendered IDENTICALLY to GM 48
+# -- three programs, one voice. A string machine has one oscillator per key and
+# a chorus; see tonelib.SynthStringsProperties.
+BOWED_ENSEMBLE = {44, 48}
 BOWED_ENSEMBLE_SLOW = {49}
 # A PIZZICATO SECTION IS SCORED THE SAME WAY A BOWED ONE IS, so it splits at the
 # same notes -- but it is NOT bowed, and putting 45 in BOWED_ENSEMBLE would give

@@ -4373,3 +4373,56 @@ oscillators, because an oscillator has no string for a magnet to read.
 Balance-normalised against the fingered electric bass (GM 33) on the same
 passage in the same room -- the family's representative, itself anchored to the
 measured nylon guitar.
+
+## GM 50, 51 Synth Strings: a machine, not a section
+
+Both were in `BOWED_ENSEMBLE`, so they routed per register to the four MEASURED
+string bodies -- which meant **GM 50 and GM 51 rendered identically to GM 48**.
+Three programs, one voice. Worse than the synth brass's redundancy, which was at
+least a resemblance rather than literally the same class.
+
+### The chorus is the instrument
+
+An ARP or Solina string machine has ONE oscillator per key and gets its width
+from a bucket-brigade chorus: a few copies at FIXED offsets, each slowly swept
+by its own low-frequency oscillator. A string section has many players whose
+spread is drawn per note, per player, and who never agree.
+
+Measured, the same three notes:
+
+| | note 52 | note 64 | note 76 |
+|---|---|---|---|
+| section | +5.39, +1.28, +0.05, -3.17 | +3.11, +3.84, -3.22, -1.46 | +3.84, +0.35, +2.21, +4.97 |
+| machine | -6.00, +6.00, +11.00 | -6.00, +6.00, +11.00 | -6.00, +6.00, +11.00 |
+
+The machine repeats itself exactly and the section redraws every time. That is
+most of why nobody mistakes a string machine for an orchestra: the width is
+periodic and identical on every note.
+
+It is the accordion's musette argument for the fourth time -- systematic against
+drawn -- and it now separates four different pairs of voices in this bank: a
+piano's unisons from an accordion's reeds, a section's spread from a synth
+brass's detune, and a string section's from a string machine's chorus.
+
+### The sweep cost nothing
+
+Each chorus tap's slow detune modulation is `voice_vibrato`, which `SectionMixin`
+already provides per player index and which the renderer already reads as
+vd/vr/vp. Set to **0.35-0.85 Hz** instead of a violinist's **4.6-6.4**, the
+section's own per-player vibrato machinery IS a BBD chorus. Nothing new was
+written for it.
+
+### And a pad swells
+
+`attack_time` 120 ms for GM 50 and 300 for GM 51, fixed in seconds and owing
+nothing to the note's wavelength -- which is why `speech_cycles` stays zero here
+where every acoustic wind and bowed voice sets it. Darker and slower is one
+decision rather than two, the argument `SlowBowedStringProperties` makes about
+the bow and GM 63 about its filter: an envelope that opens gently never reaches
+as far up the series.
+
+### Levels
+
+Balance-normalised against the acoustic string ensemble (GM 48) on the same
+passage in the same room -- the neighbour these two are chosen INSTEAD of, so it
+is the comparison a sequencer actually makes.

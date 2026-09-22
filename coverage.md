@@ -182,8 +182,8 @@ splits almost exactly along that line.
 |---|---|---|---|---|
 | 48 | String Ensemble 1 | `Contrabass/Cello/Viola/Violin by register` | **3** | four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section; the ensemble treatment is theory |
 | 49 | String Ensemble 2 | `ContrabassSlow/CelloSlow/ViolaSlow/ViolinSlow by register` | **2** | its own slow-bowed class |
-| 50 | Synth Strings 1 | `Contrabass/Cello/Viola/Violin by register` | **2** | not a synth string at all -- it borrows 48's measured bodies; its own voice is the honest fix |
-| 51 | Synth Strings 2 | `Contrabass/Cello/Viola/Violin by register` | **2** | as 50 |
+| 50 | Synth Strings 1 | `SynthStrings1` | **2** | a string MACHINE: one oscillator per key and a bucket-brigade chorus -- three copies at FIXED offsets, each swept at 0.35-0.85 Hz. Had rendered identically to GM 48 |
+| 51 | Synth Strings 2 | `SynthStrings2` | **2** | as 50, slower swell (300 ms) and a wider chorus. Darker and slower is one decision: an envelope that opens gently never reaches as far up the series |
 | 52 | Choir Aahs | `ChoirAahs` | **3** | vocal tract and formants; Ben's ear on the consonant balance |
 | 53 | Voice Oohs | `VoiceOohs` | **3** | as 52 |
 | 54 | Synth Choir | `SynthVoice` | **2** | its own class, theory |
