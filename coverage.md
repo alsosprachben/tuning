@@ -39,8 +39,7 @@ splits almost exactly along that line.
 
 | rating | notes | share |
 |---|---|---|
-| 1 general class | 10 | 20% |
-| 2 specific, theory | 17 | 33% |
+| 2 specific, theory | 27 | 53% |
 | 3 specific, theory + ear | 5 | 10% |
 | 4 specific, reference audio | 19 | 37% |
 
@@ -51,7 +50,7 @@ splits almost exactly along that line.
 | 37 | Side Stick | `SideStick` | **2** | its own class, theory |
 | 38 | Acoustic Snare | `SnareDrum` | **3** | NO REFERENCE, and it says so. Analytic Bessel modes plus the snare wires; ear |
 | 39 | Hand Clap | `HandClap` | **2** | its own class, theory |
-| 40 | Electric Snare | `SnareDrum` | **1** | the acoustic snare at a different pitch; an electric snare is a different instrument |
+| 40 | Electric Snare | `ElectricSnare` | **2** | a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all |
 | 41 | Low Floor Tom | `FloorTom` | **2** | floor tom, analytic membrane |
 | 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | Iowa hi-hat, five takes |
 | 43 | High Floor Tom | `FloorTom` | **2** | as 41, higher |
@@ -71,13 +70,13 @@ splits almost exactly along that line.
 | 57 | Crash Cymbal 2 | `CrashCymbal2` | **4** | Iowa 20" and 13" suspended crash |
 | 58 | Vibraslap | `NoiseDrum` | **2** | generic noise body with its own rattle |
 | 59 | Ride Cymbal 2 | `CrashRide` | **4** | GM wants two rides and Iowa has one; this is that measurement on a larger plate |
-| 60 | Hi Bongo | `MembraneDrum` | **1** | one MembraneDrum serves eleven notes, 60-66 and 78-79 and 86-87, differing only in pitch |
-| 61 | Low Bongo | `MembraneDrum` | **1** | as 60 |
-| 62 | Mute Hi Conga | `MembraneDrum` | **1** | as 60 |
-| 63 | Open Hi Conga | `MembraneDrum` | **1** | as 60 |
-| 64 | Low Conga | `MembraneDrum` | **1** | as 60 |
-| 65 | High Timbale | `MembraneDrum` | **1** | as 60 |
-| 66 | Low Timbale | `MembraneDrum` | **1** | as 60 |
+| 60 | Hi Bongo | `Bongo` | **2** | a BONGO: the tightest head and shortest shell in the kit, so the shell does almost nothing and you hear the head alone. Fingers, not a stick |
+| 61 | Low Bongo | `Bongo` | **2** | as 60, lower |
+| 62 | Mute Hi Conga | `Conga` | **2** | a CONGA: a tall wooden cavity resonating at 128 Hz, BELOW its own 210 Hz head -- which is why a conga speaks from under the head. Muted; see 63 |
+| 63 | Open Hi Conga | `Conga` | **2** | as 62, open -- percussion_map already rings the two differently, which is what a hand on the head does |
+| 64 | Low Conga | `Conga` | **2** | as 62, the low drum |
+| 65 | High Timbale | `Timbale` | **2** | a TIMBALE: a METAL shell with no bottom head, ringing to 3900 Hz where the head reaches 1116 and holding it three times longer than wood. Sticks |
+| 66 | Low Timbale | `Timbale` | **2** | as 65, lower |
 | 67 | High Agogo | `Agogo` | **2** | its own class, theory |
 | 68 | Low Agogo | `Agogo` | **2** | as 67, lower |
 | 69 | Cabasa | `Cabasa` | **2** | its own class -- a shaken rattle, theory |
@@ -95,8 +94,8 @@ splits almost exactly along that line.
 | 81 | Open Triangle | `Triangle` | **4** | as 80, undamped |
 | 84 | Belltree | `Crotale` | **4** | the measured crotales, cascaded -- 22 of them over 30 units |
 | 85 | Castanets | `Castanets` | **4** | Iowa castanets |
-| 86 | Mute Surdo | `MembraneDrum` | **1** | MembraneDrum again; a surdo is a different drum from a bongo |
-| 87 | Open Surdo | `MembraneDrum` | **1** | as 86 |
+| 86 | Mute Surdo | `Surdo` | **2** | a SURDO: two feet across, its shell resonating at 52 Hz under a 66 Hz head. Muted -- a hand laid flat straight after the beater |
+| 87 | Open Surdo | `Surdo` | **2** | as 86, open, and it rings nearly four times as long |
 
 ## 0-7 Piano
 

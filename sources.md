@@ -4962,3 +4962,86 @@ ear, which had made the earlier medians meaningless.
 
 **Every one of the 128 programs now has a voice of its own kind.** Nothing is
 rated 1, nothing is a category error. 74 are at 2, 25 at 3, 29 at 4.
+
+## Channel 10: the kit's hand drums
+
+Nine notes -- 60-66 and 86-87 -- were one `MembraneDrumProperties`. Nine notes,
+four instruments. They share a circular head and its twelve Bessel modes, and
+very little else: **what separates a bongo from a surdo is the SHELL, and what
+separates a timbale from a conga is what the shell is made of.**
+
+`percussion_map` already varied the ring time per note, so the mute/open pairs
+(62 against 63, 86 against 87) were distinguished in the one way a damping hand
+shows up most. What was missing was the body.
+
+### A shell RADIATES; it does not filter the head
+
+The first version made each shell a formant, and that was wrong in a way worth
+recording. **A formant can only shape partials that already exist**, and
+measured against the head's twelve modes, three of the four shells had nothing
+to shape:
+
+| | head modes | shell |
+|---|---|---|
+| bongo | 260-1074 Hz | 900 Hz, among them |
+| conga | 210-868 | **128 Hz, below every one** |
+| timbale | 270-1116 | **1280 Hz and up, above every one** |
+| surdo | 66-273 | **52 Hz, below every one** |
+
+The four drums came out within 4 dB of each other, which is what a filter with
+nothing to filter does.
+
+A shell is a **separate source**. The strike drives the head, and the head and
+the beater together drive the air in the shell and the shell itself; those
+radiate at their own frequencies whether or not a head mode sits near one. That
+is why a conga sounds as though the note comes from below the head rather than
+from it -- measured, its lowest partial is now 128 Hz under a 210 Hz head.
+
+The mechanism is the bagpipe's: `unison_voices` is handed the note's own
+frequency and returns `shell_hz / frequency`, so the result does not track it. A
+drum's shell does not retune when the head is tightened.
+
+**And once per note, not per mode.** A shell is one resonance; emitting it under
+every harmonic would put twelve copies in the sound. It is emitted under
+harmonic 1 only.
+
+### What each drum is
+
+**Bongo** (60, 61): the tightest head and the shortest shell in the kit -- a few
+inches of wood, open at the bottom, far too small to resonate at any pitch that
+matters. The one drum whose shell does almost nothing. Struck with FINGERS,
+which are wide and soft where a stick is narrow and hard, so the highest modes
+are never excited: a bongo is bright because it is SMALL.
+
+**Conga** (62, 63, 64): two or three feet of staved wood with a real column of
+air in it, and the shell is most of the sound.
+
+**Timbale** (65, 66): a METAL shell, one head, sticks. Wood damps and metal does
+not, so it rings to 3900 Hz where the head reaches 1116, and holds it three
+times longer (shell decay 9 dB/s against the conga's 26). No bottom head, so
+there is no low cavity resonance to put weight underneath -- the opposite of the
+conga.
+
+**Surdo** (86, 87): two feet across, slack, a padded beater, and a shell
+resonance under even this head's low fundamental. Felt as much as heard.
+
+### 40 Electric Snare
+
+It had been the acoustic snare at a different pitch. What GM means is the
+808/909 sound: a short noise burst over a body that DROPS, and no wires at all
+-- the rattle an acoustic snare gets from forty steel spirals is replaced by a
+filtered noise generator, which is why a machine's snare is cleaner and shorter.
+The drop is `tension_bend`, the fourth voice in this file to use it and the
+second as a drum-machine sweep. `strike_noise_slope` is zeroed: a machine does
+not get rattlier when it is hit harder.
+
+### A near miss worth recording
+
+The coverage update was first written with a regex that matched
+`^\\s+<note>:\\(...` -- which found those numbers in the PROGRAM table, not the
+percussion one, and silently rewrote the ratings of GM 40, 60-66 and 86-87 with
+drum descriptions. It was caught by the histogram moving the wrong way: 3s and
+4s fell where nothing should have moved. Reverted and redone scoped to the
+`PERC_RATED` block.
+
+**The check was the total, not the diff.** A diff would have looked plausible.

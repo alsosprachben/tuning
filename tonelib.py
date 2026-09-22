@@ -6889,6 +6889,137 @@ class MembraneDrumProperties(PercussionProperties):
     harmonic_decay_dampening = 0.2
 
 
+# ------------------------------------------- the hand drums of the GM kit
+# Notes 60-66 and 86-87 were ONE MembraneDrumProperties -- nine notes, four
+# instruments. They share a circular head and its Bessel modes, and they share
+# very little else: what separates a bongo from a surdo is not the tuning, it is
+# the SHELL, and what separates a timbale from a conga is what the shell is made
+# of.
+#
+# The map already varies the ring time per note (PERCUSSION_RING), so the
+# mute/open pairs -- 62 against 63, 86 against 87 -- were already distinguished
+# in the one way a damping hand shows up most. What was missing is the body.
+
+
+class ShelledDrumProperties(MembraneDrumProperties):
+    """A drumhead over a shell that RADIATES ON ITS OWN, not a filtered head.
+
+    The first version of this class made the shell a formant, and that was
+    wrong in a way worth recording. A formant can only shape partials that
+    already exist, and measured against the head's twelve Bessel modes the
+    shells did not overlap them at all: a conga's cavity resonates near 150 Hz
+    and a surdo's near 58, both BELOW the lowest mode, while a timbale's metal
+    shell rings above 1250 and the highest mode reaches 1116. Three of the four
+    shells had nothing to filter, and the four drums came out within 4 dB of
+    each other.
+
+    A shell is a SEPARATE SOURCE. The strike drives the head, and the head and
+    the stick together drive the air in the shell and the shell itself; those
+    radiate at their own frequencies whether or not a head mode happens to sit
+    near one. That is why a conga sounds as though the note comes from below
+    the head rather than from it.
+
+    So the shell is emitted as extra partials at ABSOLUTE frequencies -- the
+    mechanism the bagpipe's drones use, where unison_voices is handed the note's
+    own frequency and returns shell_hz/frequency so the result does not track
+    it. A drum's shell does not retune when the head is tightened.
+
+    ASSERTED, NOT MEASURED. Iowa's percussion pages have no bongos, congas,
+    timbales or surdos.
+    """
+    shell_hz = ()               # absolute, in Hz
+    shell_gain = ()
+    shell_decay_db = 30.0       # how fast the shell lets go of it
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        # Only under the head's FUNDAMENTAL: a shell is one resonance, not a
+        # copy of the whole mode set, so it must not be re-emitted per mode.
+        if harmonic != 1 or not self.shell_hz:
+            return []
+        f = float(frequency)
+        if f <= 0.0:
+            return []
+        return [(g, 0.0, hz / f - 1.0, self.shell_decay_db, 0.0)
+                for hz, g in zip(self.shell_hz, self.shell_gain)]
+
+
+class BongoProperties(ShelledDrumProperties):
+    """Notes 60, 61. Small, very tight, struck with the fingers.
+
+    A bongo is the tightest head in the kit and the shortest shell -- a few
+    inches of wood, open at the bottom, far too small and far too open to
+    resonate at any pitch that matters. It is the one drum here whose shell does
+    almost nothing, and what you hear is the head alone: high, dry, gone at once.
+
+    FINGERS, NOT A STICK, which is the other half. A fingertip is wide and soft
+    where a stick is narrow and hard, so the highest modes are never excited --
+    a bongo is bright because it is SMALL, not because it is struck sharply.
+    """
+    shell_hz = (900.0,)         # a token cavity, and deliberately weak
+    shell_gain = (0.10,)
+    shell_decay_db = 55.0
+    tonal_dampening = 1.85      # a fingertip, not a tip
+    max_harmonic = 10
+
+
+class CongaProperties(ShelledDrumProperties):
+    """Notes 62, 63, 64. A tall wooden shell with a real column of air in it.
+
+    The drum whose shell matters most: two or three feet of staved wood, narrow
+    at the bottom, with a strong low resonance well under the head's own
+    fundamental. It is why a conga has BODY under the slap, and why it seems to
+    speak from below the head.
+
+    62 is the MUTED hi conga and 63 the open one; percussion_map gives them
+    their own ring times, which is what a hand laid on the head actually does.
+    """
+    shell_hz = (128.0, 395.0)   # the air column, and the first shell mode
+    shell_gain = (0.55, 0.16)
+    shell_decay_db = 26.0       # wood lets go fairly quickly
+    tonal_dampening = 1.55
+    max_harmonic = 12
+
+
+class TimbaleProperties(ShelledDrumProperties):
+    """Notes 65, 66. A METAL shell, one head, and sticks.
+
+    Everything else in this group is wood struck with a hand, and the three
+    differences all point the same way:
+
+      the SHELL RINGS. Wood damps and metal does not, so a timbale carries a
+      bright shell tone well above the head's own modes and holds it far longer
+      than the head holds anything. It is what makes the instrument cut.
+
+      NO BOTTOM HEAD and no enclosed air, so there is no low cavity resonance
+      to put weight underneath -- the opposite of the conga.
+
+      STICKS, so the high modes are driven hard where a hand would not reach.
+    """
+    shell_hz = (1280.0, 2350.0, 3900.0)     # steel, and it sings
+    shell_gain = (0.42, 0.26, 0.14)
+    shell_decay_db = 9.0                    # metal: the longest ring here
+    tonal_dampening = 0.95                  # sticks: the brightest of the four
+    max_harmonic = 14
+
+
+class SurdoProperties(ShelledDrumProperties):
+    """Notes 86, 87. The biggest drum in a bateria, and a padded beater.
+
+    Two feet across, slack, carried on a strap. The shell is large enough that
+    its air resonance sits under even this head's low fundamental, which is why
+    a surdo is felt as much as heard.
+
+    86 is MUTED and 87 OPEN: a hand laid flat on the head straight after the
+    beater leaves it. percussion_map already rings 86 for 0.25 s against 87's
+    0.90, which is the whole of that gesture.
+    """
+    shell_hz = (52.0, 168.0)
+    shell_gain = (0.70, 0.22)
+    shell_decay_db = 18.0
+    tonal_dampening = 2.10      # a padded beater takes the top off
+    max_harmonic = 10
+
+
 class TomTomProperties(MembraneDrumProperties):
     """A tom: TWO heads over a closed shell, which the bare Bessel set is not.
 
@@ -7519,6 +7650,36 @@ class SnareDrumProperties(NoisyPercussionMixin, PercussionProperties):
     # all; 26 dB across the dynamic was never defensible. Still judgement, and
     # still Ben's ear as the outer loop.
     strike_noise_slope = 0.35
+
+
+class ElectricSnareProperties(SnareDrumProperties):
+    """Note 40. A drum machine's snare, which is not a snare drum.
+
+    It had been the acoustic snare at a different pitch. What GM means by
+    Electric Snare is the 808/909 sound: a short burst of noise over a pitched
+    body that DROPS, and no wires at all -- the rattle an acoustic snare gets
+    from forty steel spirals under the head is replaced by a filtered noise
+    generator, which is why a drum machine's snare is so much cleaner and so
+    much shorter.
+
+    THE DROP IS tension_bend, the fourth voice in this file to use it and the
+    second as a drum-machine sweep: the synth drum's 808 tom falls a fifth, and
+    a snare's body falls less and faster.
+    """
+    # The body drops, fast. Less than the tom's fifth -- a snare is a crack.
+    tension_bend = 0.22
+    tension_bend_max = 0.35
+    tension_settle_time = 0.022
+    tension_settle_cutoff = 0.3
+
+    # Fewer modes than a head has: an oscillator and a noise band, not forty
+    # wires and a membrane.
+    max_harmonic = 8
+    tonal_dampening = 1.15
+    decay_db = 40.0
+    harmonic_decay_db = 26.0
+    strike_noise_slope = 0.0    # a machine does not get rattlier when hit harder
+
 
 
 class SawtoothSynthProperties(BowedStringProperties):

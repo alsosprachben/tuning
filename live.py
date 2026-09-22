@@ -3349,6 +3349,48 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------ the kit's hand drums
+    import percussion_map as _PMk
+    # Notes 60-66 and 86-87 were ONE MembraneDrumProperties: nine notes, four
+    # instruments. They share a circular head and its twelve Bessel modes and
+    # very little else -- what separates a bongo from a surdo is the SHELL, and
+    # what separates a timbale from a conga is what the shell is made of.
+    _kit = {_n: _PMk.PERCUSSION[_n][1] for _n in (60, 61, 62, 63, 64, 65, 66, 86, 87)}
+    check("the kit's hand drums are four instruments, not one",
+          len({_c.__name__ for _c in _kit.values()}) == 4
+          and _kit[60] is _T.BongoProperties and _kit[65] is _T.TimbaleProperties,
+          "  (bongo, conga, timbale, surdo across nine notes)")
+    # A SHELL RADIATES ON ITS OWN; it does not filter the head. The first
+    # version made it a formant, and measured against the head's modes three of
+    # the four shells had nothing to filter: a conga's cavity sits near 128 Hz
+    # and a surdo's near 52, BELOW the lowest mode, while a timbale's steel
+    # rings above 1280 and the highest mode reaches 1116.
+    _cg = _kit[63](210.0, 0.0, 1.0, 1.0)
+    _shell = [210.0 * (1.0 + _v[2]) for _v in _cg.unison_voices(210.0, 1, 30.0)]
+    check("...and a shell RADIATES, where a formant could only have filtered",
+          _shell and min(_shell) < 210.0 * _kit[63].mode_ratios[0],
+          "  (the conga's %.0f Hz sits under its own %.0f Hz head)"
+          % (min(_shell), 210.0))
+    _tb = _kit[65](270.0, 0.0, 1.0, 1.0)
+    _tshell = [270.0 * (1.0 + _v[2]) for _v in _tb.unison_voices(270.0, 1, 30.0)]
+    check("...and the timbale's steel rings above the head, where wood cannot",
+          max(_tshell) > 270.0 * _kit[65].mode_ratios[-1] * 1.5
+          and _kit[65].shell_decay_db < _kit[63].shell_decay_db,
+          "  (%.0f Hz against a head reaching %.0f, and it holds it longer)"
+          % (max(_tshell), 270.0 * _kit[65].mode_ratios[-1]))
+    # ...AND ONCE PER NOTE, NOT PER MODE. A shell is one resonance; emitting it
+    # under every harmonic would put twelve copies of it in the sound.
+    check("...and the shell is emitted once, not under every mode",
+          len(_cg.unison_voices(210.0, 1, 30.0)) > 0
+          and not _cg.unison_voices(210.0, 2, 30.0),
+          "  (under harmonic 1 only)")
+    # AN ELECTRIC SNARE IS A MACHINE, not the acoustic snare at another pitch.
+    _es = _PMk.PERCUSSION[40][1]
+    check("...and the electric snare is a drum machine, not a retuned snare",
+          _es is _T.ElectricSnareProperties and _es.tension_bend > 0.0
+          and not _es.strike_noise_slope,
+          "  (its body DROPS, and it does not get rattlier when hit harder)")
+
     # --------------------------------------- the three "recordings of the world"
     import patch_map as _PMr
     # 123, 124 and 125 were the last programs in the bank marked CATEGORY ERROR

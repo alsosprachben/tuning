@@ -13,6 +13,11 @@ or None if the note is unmapped (silent).
 
 from tonelib import (
     MembraneDrumProperties,
+    BongoProperties,
+    CongaProperties,
+    TimbaleProperties,
+    SurdoProperties,
+    ElectricSnareProperties,
     CuicaProperties,
     MuteCuicaProperties,
     TomTomProperties,
@@ -50,7 +55,16 @@ from tonelib import (
     GuiroProperties,
 )
 
-M = MembraneDrumProperties      # single head, open shell: congas, timbales, bongos
+M = MembraneDrumProperties      # a head with no shell worth modelling
+# ...and the four that DO have one. These nine notes were all M: nine notes,
+# four instruments. They share a circular head and its Bessel modes and very
+# little else -- what separates a bongo from a surdo is the SHELL, and what
+# separates a timbale from a conga is what the shell is made of. See
+# tonelib.ShelledDrumProperties.
+BO = BongoProperties            # tiny, tight, fingers: almost no shell at all
+CO = CongaProperties            # a tall wooden cavity, and it is most of the sound
+TI = TimbaleProperties          # a METAL shell, one head, sticks: it rings
+SU = SurdoProperties            # two feet across, slack, a padded beater
 TF = FloorTomProperties         # two heads over a closed shell: see TomTomProperties
 TR = TomTomProperties
 TH = HighTomProperties
@@ -71,7 +85,7 @@ PERCUSSION = {
     37: ("Side Stick",      SideStickProperties, 407.4),
     38: ("Acoustic Snare",     S, 260.0),
     39: ("Hand Clap",          HandClapProperties, 310.4),
-    40: ("Electric Snare",     S, 275.0),
+    40: ("Electric Snare",     ElectricSnareProperties, 275.0),
     41: ("Low Floor Tom",      TF, 87.0),
     42: ("Closed Hi-Hat",   ClosedHiHatProperties, 248.4),
     43: ("High Floor Tom",     TF, 98.0),
@@ -97,13 +111,13 @@ PERCUSSION = {
     # ride, so this is its 20" plate -- the biggest and lowest in the set -- and
     # so a crash-ride rather than a second dark ride. See CrashRideProperties.
     59: ("Ride Cymbal 2",     CrashRideProperties, 151.7),
-    60: ("Hi Bongo",           M, 260.0),
-    61: ("Low Bongo",          M, 200.0),
-    62: ("Mute Hi Conga",      M, 230.0),
-    63: ("Open Hi Conga",      M, 210.0),
-    64: ("Low Conga",          M, 160.0),
-    65: ("High Timbale",       M, 270.0),
-    66: ("Low Timbale",        M, 220.0),
+    60: ("Hi Bongo",           BO, 260.0),
+    61: ("Low Bongo",          BO, 200.0),
+    62: ("Mute Hi Conga",      CO, 230.0),
+    63: ("Open Hi Conga",      CO, 210.0),
+    64: ("Low Conga",          CO, 160.0),
+    65: ("High Timbale",       TI, 270.0),
+    66: ("Low Timbale",        TI, 220.0),
     67: ("High Agogo",         AgogoProperties, 700.0),
     68: ("Low Agogo",          AgogoProperties, 560.0),
     69: ("Cabasa",             CabasaProperties, 482.5),
@@ -172,8 +186,8 @@ PERCUSSION = {
     # 86 and 87 were unmapped too. A surdo is the big Brazilian bass drum that
     # carries a samba -- a large membrane, deeper than a floor tom, and the
     # muted stroke is the same head with a hand on it.
-    86: ("Mute Surdo",         M, 70.0),
-    87: ("Open Surdo",         M, 66.0),
+    86: ("Mute Surdo",         SU, 70.0),
+    87: ("Open Surdo",         SU, 66.0),
 }
 
 GM_PERCUSSION_CHANNEL = 9  # 0-based; GM drum channel is "10" one-based
