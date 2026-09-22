@@ -69,7 +69,7 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
            "vd", "vr", "vp", "delL", "delR", "az")
 COLS_I8 = ("non", "noff")
-COLS_I4 = ("gr", "cr", "pl")
+COLS_I4 = ("gr", "cr", "br", "pl")
 ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
@@ -158,6 +158,7 @@ class Slab:
         for k in COLS_I8: self.a[k] = np.full(capacity, IDLE, np.int64)
         for k in COLS_I4: self.a[k] = np.zeros(capacity, np.int32)
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
+        self.a["br"][:] = -1            # -1 = no bend row; live bends via retune
         # The wash's bandwidth, as a fraction of the partial's frequency. This
         # list has to match blockrender's `cols` exactly -- synth_partials asks
         # the slab for every column by name -- and it must default to RAND_GRAN
@@ -215,6 +216,8 @@ class Slab:
         # Non-organ voices never read G/S, but the kernel still wants pointers.
         self.G = np.ones((1, 1), np.float32)
         self.S = np.ones((1, 1), np.float32)
+        self.BR = np.ones((1, 1), np.float32)     # inert: see prep()
+        self.BC = np.zeros((1, 1), np.float64)
         self.sh = (0.06, 1.6, 3.5, 1500.0)
         self._prep_cache = None
         self.rate = 48000.0   # set by Live; needed by retune()
@@ -427,7 +430,15 @@ class Slab:
         per callback was an allocation on the audio thread."""
         if self._prep_cache is None:
             d = dict(self.a)
-            d.update(lib=self.lib, P=self.cap, nblk=1, G=self.G, S=self.S, sh=self.sh)
+            # BR/BC ARE INERT HERE, ON PURPOSE. The kernel is shared with the
+            # file renderer, which uses these rows for pitch bend; live bends
+            # through Slab.retune instead, which rewrites om and re-anchors the
+            # phase. So live hands the kernel one row of ones and one of zeros
+            # and every slot's br stays -1, which takes the same code path the
+            # kernel took before the rows existed. (Unifying the two is a
+            # tempting follow-up and deliberately not this change.)
+            d.update(lib=self.lib, P=self.cap, nblk=1, G=self.G, S=self.S,
+                     BR=self.BR, BC=self.BC, sh=self.sh)
             self._prep_cache = d
         return self._prep_cache
 
@@ -457,6 +468,7 @@ class Slab:
         for k in COLS_I4:
             a[k][idx] = tmpl[k]
         a["gr"][idx] = -1     # ungated: a drawn rank is one we stamped
+        a["br"][idx] = -1     # live bends through retune, never through a row
         a["cr"][idx] = 0
         a["om"][idx] = tmpl["om"]
         # Phase is anchored to the note's own onset: p0 = -om*non + ph0. Shift the
@@ -537,6 +549,7 @@ class Slab:
         for k in COLS_I4:
             a[k][idx] = a[k][src]
         a["gr"][idx] = -1       # ungated: the amplifier is not a drawn rank
+        a["br"][idx] = -1
         a["cr"][idx] = 0
         f = np.asarray(freqs, np.float64)
         om = 2.0 * np.pi * f / float(rate)
@@ -4066,6 +4079,57 @@ def selftest():
     check("...so its partials do not move with velocity, and it needs one bucket",
           all(_n == 1 and abs(_d) < 1e-4 for _l, _n, _d in _spread),
           "  (" + ", ".join("%s %d bucket/%.2f dB" % _t for _t in _spread) + ")")
+
+    # ---- PITCH BEND: A TUNING IS NOT A GESTURE ------------------------------
+    # The file path ignored the wheel completely -- a render at full deflection
+    # and one without came back bit-identical. What that threw away was not
+    # only expression: John Sankey's bwv847.mid and bwv974.mid put one pitch
+    # class on each channel and one STATIC bend on each, which is a temperament
+    # written as twelve numbers, and it was going in the bin.
+    #
+    # The classifier has no threshold in it. If the wheel never moves while a
+    # channel is sounding, a fixed offset on f0 reproduces it EXACTLY -- so it
+    # is not an approximation, and a harpsichord can have it.
+    import blockrender as _BRb
+    import patch_map as _PMb
+    check("a static pitch bend is a TUNING, and every voice takes one",
+          abs(_T.bend_ratio(-400) - 2.0 ** (-400 / 8192.0 * 2.0 / 12.0)) < 1e-15
+          and _T.BEND_RANGE_SEMITONES == 2.0,
+          "  (-400 of 8192 is %.2f cents at GM's +/-2 semitones)"
+          % (1200 * _math.log2(_T.bend_ratio(-400))))
+    # ...AND A MOVING ONE IS A GESTURE, which a struck bar cannot make.
+    _nobend = [_g for _g in range(128)
+               if not _PMb.property_class_for_note(_g, 60).pitch_bendable]
+    check("...but a MOVING one is a gesture, and not every voice has one",
+          set(range(16, 24)) <= set(_nobend) and 0 in _nobend and 6 in _nobend
+          and 109 in _nobend
+          and _PMb.property_class_for_note(40, 60).pitch_bendable
+          and _PMb.property_class_for_note(56, 60).pitch_bendable,
+          "  (%d voices refuse it: pianos, organs, tuned percussion, the pipes;"
+          " a lip and a fingerboard keep it)" % len(_nobend))
+    # THE ROWS. A bend is a RATIO, so the phase a partial accrues over a block
+    # is w*(r-1)*BLK and the w factors out -- the cumulative term is
+    # partial-independent, which is why one pair of rows serves a channel.
+    # r is computed FROM the cumulative array so the identity holds by
+    # construction: that is what makes the phase continuous across a step in
+    # the wheel, and a bend a chirp rather than a click.
+    _was_sr = _BRb.SR
+    _BRb.SR = 48000
+    _r, _c = _BRb.bend_blocks([(0.1, 2.0)], 40)
+    _BRb.SR = _was_sr
+    _ident = float(np.abs(_c[1:] - (_c[:-1] + (_r[:-1] - 1.0) * _BRb.BLK)).max())
+    check("...and the bend rows' phase and frequency agree by construction",
+          _ident < 1e-6 and abs(_r[0] - 1.0) < 1e-9 and abs(_r[-1] - 2.0) < 1e-6,
+          "  (C[b+1] - C[b] - (r[b]-1)*BLK worst %.1e over 40 blocks)" % _ident)
+    # AND THE KERNEL IS CHECKED NOW. Without argtypes a ctypes call does no
+    # checking at all: a prototype and a call site out of step give you a
+    # pointer read as a float, not a TypeError. Parsed from the C rather than
+    # transcribed, because a transcribed copy is one more thing that can drift.
+    _at = getattr(_BRb.ensure_lib().synth_voice, "argtypes", None)
+    check("...and the kernel's arguments are typed, read off the C itself",
+          _at is not None and len(_at) > 40,
+          "  (%s argument types derived from synthkernel.c)"
+          % (len(_at) if _at else "no"))
 
     # ---- THE PIPER'S SCALE, which is not a temperament ----------------------
     # Nine holes cut once, and every one of them tuned to beat cleanly against

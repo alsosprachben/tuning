@@ -37,7 +37,7 @@ over octave bands lets a near-silent octave dominate -- the same section reads
 
 Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 """
-import sys, os, time, ctypes, subprocess, wave, math
+import sys, os, time, ctypes, subprocess, wave, math, re
 import numpy as np, mido
 import bisect as _bisect
 import noisegen as _NG
@@ -139,7 +139,52 @@ def ensure_lib():
     if (not os.path.exists(lib)) or os.path.getmtime(src) > os.path.getmtime(lib):
         subprocess.check_call(["gcc","-O3","-march=native","-ffast-math","-fopenmp","-shared","-fPIC",
                                "-DSRATE=%d" % SR, src,"-o",lib,"-lm"])
-    return ctypes.CDLL(lib)
+    dll = ctypes.CDLL(lib)
+    _declare(dll, src)
+    return dll
+
+
+# The C argument types, READ OFF THE C. Without argtypes a ctypes call does no
+# checking at all: get the call site and the prototype out of step and you do
+# not get a TypeError, you get a pointer read as a float and whatever memory
+# lies past the end of an array. That is the worst failure mode in this file --
+# silent, intermittent, and a day to find -- and adding the feature that
+# prompted this (a pitch-bend row, three more arguments) is exactly when it
+# would have happened.
+#
+# Parsed from synthkernel.c rather than transcribed, because a transcribed copy
+# is one more thing that can drift from the source it describes, and the drift
+# is the bug. If the parse fails for any reason the call is left unchecked,
+# which is what it was before -- this must never be the thing that stops a
+# render.
+_CTYPE = {"float*": ctypes.POINTER(ctypes.c_float),
+          "double*": ctypes.POINTER(ctypes.c_double),
+          "int*": ctypes.POINTER(ctypes.c_int),
+          "long*": ctypes.POINTER(ctypes.c_long),
+          "float": ctypes.c_float, "double": ctypes.c_double,
+          "int": ctypes.c_int, "long": ctypes.c_long}
+
+
+def _declare(dll, src):
+    try:
+        text = open(src).read()
+        i = text.index("void synth_voice(")
+        args = text[text.index("(", i) + 1:text.index(")", i)]
+        # strip comments and line breaks, then one entry per comma
+        args = re.sub(r"//[^\n]*", " ", args).replace("\n", " ")
+        out = []
+        for a in args.split(","):
+            a = a.replace("const", "").strip()
+            if not a:
+                continue
+            # "float* outL" and "float *outL" and "float outL" all appear
+            base, name = a.rsplit(" ", 1)
+            star = "*" if ("*" in base or name.startswith("*")) else ""
+            out.append(_CTYPE[base.replace("*", "").strip() + star])
+        dll.synth_voice.argtypes = out
+        dll.synth_voice.restype = None
+    except Exception:
+        pass        # unchecked, exactly as before; never fatal
 
 def tuning_table(name):
     midilib.set_tuner(name); mc = midilib.middle_c; tuner = midilib.tuner_class()
@@ -354,7 +399,7 @@ def parse(path):
     # jitter, HRTF, unison voices and all -- rather than a second one that could
     # drift from it.
     mid = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
-    ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; on = {}; t = 0.0
+    ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; pws = {}; on = {}; t = 0.0
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
@@ -371,6 +416,8 @@ def parse(path):
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
+        elif msg.type == 'pitchwheel':
+            pws.setdefault(msg.channel, []).append((t, msg.pitch))
         elif msg.type == 'note_on' and msg.velocity > 0:
             # THE PATCH IS SNAPSHOTTED AT NOTE-ON, like the CCs beside it. It
             # used to be read from ch_prog at render time, which holds only the
@@ -392,7 +439,52 @@ def parse(path):
     # would miss it -- a KeyError at render time once notes carry their own
     # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
-    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid)
+    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws
+
+def bend_blocks(events, nblk):
+    """Per-block (mean ratio, cumulative extra phase) for one channel's bend.
+
+    THE BEND IS A RATIO, so the extra phase a partial of angular frequency w
+    accrues over block k is w*(r_k - 1)*BLK -- and w factors out. The cumulative
+    term is therefore PARTIAL-INDEPENDENT, which is the whole reason a channel
+    needs two rows rather than two per partial, and the reason the kernel can
+    stay stateless.
+
+    NOT onepole_blocks, which is the other per-block control in this file. Its
+    TAU is a model of a swell shutter's and a fader's mechanical inertia. A
+    pitch wheel is a sprung lever and MIDI pitch bend is a zero-order hold
+    between messages -- and A-Team.mid, the only real bend in the corpus,
+    writes one message every 11.4 ms against a block of 11.6. Smoothing that
+    would round off the only gesture there is.
+
+    r is the block's exact MEAN of the step function the file wrote, and C is
+    the running sum of those same means -- computed FROM C rather than beside
+    it, so C[b+1] == C[b] + (r[b]-1)*BLK holds by construction and not by care.
+    That identity is what makes the phase continuous across a step in the
+    wheel: a bend is a chirp and not a click only because of it. Same argument
+    as the vibrato's block-mean frequency in synthkernel.c.
+
+    THE STATIC PART IS NOT IN HERE. A bend that never moves is folded into f0
+    instead (see the tuning/gesture split in prepare), and that is a numerical
+    requirement, not a tidiness one: C grows without bound while a bend is
+    held, and a -11.7 cent offset over a ten-minute piece accumulates some
+    180,000 samples of phase. In float32 the rounding there lands as a phase
+    step per block -- an audible buzz. Here C only ever carries excursions.
+    """
+    ev = sorted(events)
+    edges = np.arange(nblk + 1, dtype=np.float64) * BLK / SR
+    # I(t) = integral of (r-1) dt, in SECONDS, over the step function
+    ts = np.array([0.0] + [t for t, _ in ev], np.float64)
+    rs = np.array([1.0] + [r for _, r in ev], np.float64)
+    # cumulative integral at each event time
+    seg = np.diff(ts, append=max(edges[-1], ts[-1]) + 1.0)
+    acc = np.concatenate(([0.0], np.cumsum((rs - 1.0) * seg)))
+    i = np.searchsorted(ts, edges, side='right') - 1
+    I = acc[i] + (rs[i] - 1.0) * (edges - ts[i])
+    C = I * SR                                  # samples of extra phase
+    r = 1.0 + np.diff(C) / float(BLK)
+    return r.astype(np.float32), C[:nblk].astype(np.float64)
+
 
 def onepole_blocks(events, nblk, default):
     bc = (np.arange(nblk) + 0.5) * BLK / SR
@@ -451,7 +543,7 @@ def rank_speak_sec(events, on_sec, aj):
 # exactly these and nothing else.
 PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
-                "tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")
+                "tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","br","p0R","pl")
 
 
 def prepare(path, tuner='hybrid440'):
@@ -461,7 +553,7 @@ def prepare(path, tuner='hybrid440'):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
-    ch_prog, ch_progs, notes, ccs, total, legato = parse(path)
+    ch_prog, ch_progs, notes, ccs, total, legato, pws = parse(path)
     N = int(total*SR) + SR; nblk = N // BLK + 2
     # A CHOIR'S BODY BELONGS TO THE PART, NOT THE NOTE. Alto and tenor overlap
     # by a fourth, yet one section is women and the other men -- tracts 17%
@@ -491,9 +583,55 @@ def prepare(path, tuner='hybrid440'):
         sh=(pr.swell_floor,pr.swell_gain_power,pr.swell_hf_max,pr.swell_hf_ref_hz)
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
+
+    # ---- PITCH BEND: A TUNING IS NOT A GESTURE ----------------------------
+    # The wheel carries two entirely different things and they need different
+    # machinery, so they are separated here rather than downstream.
+    #
+    # A bend SET BEFORE THE CHANNEL'S FIRST NOTE AND NEVER MOVED is a TUNING.
+    # John Sankey's bwv847.mid and bwv974.mid are the reason this matters: they
+    # put one pitch class on each channel and one static bend on each, which is
+    # a temperament written in twelve numbers -- C +0.0 cents, C# -9.8, D -7.7,
+    # D# -5.9, E -9.8, F -2.0, F# -11.7, G -3.8, G# -7.8, A -11.7, A# -3.9,
+    # B -7.8. The renderer threw it away. A tuning goes into f0 with the other
+    # fixed pitch offsets, costs nothing, is EXACT, and is honoured by every
+    # voice -- including the harpsichord those files are written for, which
+    # could not bend a note if it wanted to.
+    #
+    # A bend that MOVES WHILE THE CHANNEL IS SOUNDING is a GESTURE, and only a
+    # voice that can physically be bent gets one. (A-Team.mid is the corpus's
+    # only example: 0 to +200 cents in 57 ms on a guitar.)
+    #
+    # The classifier is not a heuristic and has no threshold: if the wheel
+    # never moves while anything is sounding, a fixed offset reproduces it
+    # EXACTLY, and there is nothing left to approximate.
+    _BTUN = {}          # channel -> fixed ratio, folded into f0
+    _BGEST = {}         # channel -> [(t, residual ratio)], only where it moves
+    _first_on = {}
+    for _n in notes:
+        if _n[0] not in _first_on or _n[2] < _first_on[_n[0]]:
+            _first_on[_n[0]] = _n[2]
+    for _c, _ev in pws.items():
+        _ev = sorted(_ev)
+        _f = _first_on.get(_c)
+        if _f is None:
+            continue                            # a wheel on a silent channel
+        _tun = T.bend_ratio(next((_p for _t, _p in _ev if _t <= _f + 1e-6), 0))
+        _res = [(_t, T.bend_ratio(_p) / _tun) for _t, _p in _ev]
+        if abs(_tun - 1.0) > 1e-12:
+            _BTUN[_c] = _tun
+        if any(abs(_r - 1.0) > 1e-9 for _, _r in _res):
+            _BGEST[_c] = _res
+    BRrows=[]; BCrows=[]; brow_of={}
+    for _c, _ev in _BGEST.items():
+        _r, _cc = bend_blocks(_ev, nblk)
+        brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+    BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
+    BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","p0R","pl")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","br","p0R","pl")}
     A = cols  # alias
+    _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
@@ -566,7 +704,7 @@ def prepare(path, tuner='hybrid440'):
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
         A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
         A["delL"].append(dl); A["delR"].append(dr)
-        A["gr"].append(gr); A["cr"].append(cr); A["pl"].append(_PL[0])
+        A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
         if _place is None and ampM > 0.0:
             # Q is how much louder this partial is toward the listener than its
             # own spherical average, so ampM^2/Q is the power it feeds the room.
@@ -889,6 +1027,15 @@ def prepare(path, tuner='hybrid440'):
             _so = getattr(pc, 'sounding_octaves', 0.0)
             if _so:
                 f0 *= 2.0 ** _so
+            # A STATIC PITCH BEND IS A TUNING, and it belongs here with the
+            # other fixed pitch offsets -- for the reason stated two hundred
+            # lines above this one: everything downstream is built from f0.
+            # Every voice honours it, a harpsichord included, because a wheel
+            # that never moves while anything sounds is a temperament and not
+            # a gesture. See the tuning/gesture split in prepare.
+            _bt = _BTUN.get(ch)
+            if _bt:
+                f0 *= _bt
             # AN INSTRUMENT WITH HOLES HAS ITS OWN SCALE, and it is not the
             # render's temperament. A chanter is cut once for one tonic and
             # every note of it is tuned to beat cleanly against a fixed drone,
@@ -901,7 +1048,7 @@ def prepare(path, tuner='hybrid440'):
             _sc = getattr(pc, 'scale_cents', None)
             _st = getattr(pc, 'scale_tonic_note', None)
             if _sc and _st is not None and _st in FREQ:
-                _tonic = FREQ[_st] * (2.0 ** _so if _so else 1.0)
+                _tonic = FREQ[_st] * (2.0 ** _so if _so else 1.0) * (_bt or 1.0)
                 _deg = _sc.get(note - _st)
                 if _deg is not None:
                     f0 = _tonic * 2.0 ** (_deg / 1200.0)
@@ -1069,6 +1216,11 @@ def prepare(path, tuner='hybrid440'):
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
         non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
         _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
+        # ...AND WHETHER THIS NOTE CAN BE BENT AT ALL. Per NOTE and not per
+        # channel, because a channel can change program mid-piece (passac.mid
+        # cycles six of them), so each note is judged by its own class.
+        _BR[0] = (brow_of.get(ch, -1)
+                  if getattr(pc, 'pitch_bendable', True) else -1)
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate
@@ -1605,10 +1757,10 @@ def prepare(path, tuner='hybrid440'):
     for i, f in enumerate(ROOM_BANDS):
         d, r = _QACC[i]
         room_q.append((f, (d / r) if r > 0.0 else 1.0, d))
-    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S,
+    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
                 cons_bursts=cons_bursts,
                 room_q=room_q)
-    for k,dt in (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),
+    for k,dt in (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("br","i4"),
                  ("px","f4"),("pz","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
@@ -1649,6 +1801,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
                     fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),fp(sl('cbw')),
                     fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
+                    ip(sl('br')),fp(a['BR']),dp(a['BC']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR))
 

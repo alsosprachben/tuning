@@ -133,6 +133,7 @@ void synth_voice(
     const float* vdep, const float* vrate, const float* vph,
     const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
+    const int* brow, const float* BR, const double* BC,
     float sfloor, float spow, float shmax, float shref, long CHUNK)
 {
     long nchunks=(winlen+CHUNK-1)/CHUNK;
@@ -148,6 +149,13 @@ void synth_voice(
             float cv=chVol[p], cc=chCyc[p], crl=chRel[p], sj=susJit[p], csc=chScale[p];
             int gr=grow[p]; const float* Grow = gr>=0 ? G+(long)gr*nblk : 0;
             const float* Srow = gr>=0 ? S+(long)crow[p]*nblk : 0;
+            // PITCH BEND: a per-CHANNEL pair of rows, selected exactly as the
+            // organ's gate and shutter are. BR is the frequency ratio in force
+            // during each block and BC the extra phase accumulated up to the
+            // START of it, in samples -- see bend_blocks in blockrender.
+            int br=brow[p];
+            const float*  BRrow = br>=0 ? BR+(long)br*nblk : 0;
+            const double* BCrow = br>=0 ? BC+(long)br*nblk : 0;
             // amplitude at absolute sample n (env * decay * gate * shutter). The
             // envelope onset is shifted per ear by the HRTF path delay d (samples)
             // -- the interaural time difference -- while the carrier phase (ph0)
@@ -260,6 +268,31 @@ void synth_voice(
                     // kept in float, and summed in float, so a voice with only
                     // this term rounds exactly as it did before it was factored out
                     bendfac = 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
+                }
+                // PITCH BEND, and it is the THIRD modulator here, so it obeys
+                // the rule the comment at the top of this block was written to
+                // enforce: phases ADD and frequency factors MULTIPLY. Never
+                // assign -- that is the bug that deleted the mod wheel's
+                // vibrato on trumpet and left it on violin.
+                //
+                // A bend is a RATIO, so the phase a partial accrues over a
+                // block is w*(r-1)*BLK and the w factors out: the cumulative
+                // term is partial-INDEPENDENT, which is why one pair of rows
+                // serves a whole channel and the kernel stays stateless.
+                //
+                // ...AND IT ANCHORS AT ns, NOT AT bs0. A chunk boundary does
+                // not land on a block boundary (CHUNK is a second, BLK is 512),
+                // so once per chunk ns is clipped into the middle of a block.
+                // BC holds the integral to the block START, so the remainder
+                // from there to ns has to be added here. Anchoring at bs0
+                // instead is a phase error of up to w*(r-1)*BLK -- some 190
+                // radians during a full bend -- once per chunk, an audible
+                // click that would only ever appear on bent notes.
+                if(BRrow){
+                    int bb=(b)<nblk?(b):nblk-1;
+                    double rb=(double)BRrow[bb];
+                    bph += w*(BCrow[bb] + (rb-1.0)*(double)(ns-bs0));
+                    vibfac *= rb;
                 }
                 // With either term absent its factor is 1 and its phase 0, so a
                 // voice that has only one of them renders exactly as before.

@@ -2098,6 +2098,18 @@ class SynthProperties:
     # and the refusals are the acoustic driven families, named one by one.
     damper_pedal = True
 
+    # CAN THIS VOICE BE BENT? Only a MOVING bend asks -- a static one is a
+    # tuning and every voice takes it, which is what lets a harpsichord carry
+    # a temperament written as pitch bend (bwv847.mid is written that way).
+    # This flag is about the gesture.
+    #
+    # A struck bar has no pitch control after the strike; a pallet valve is
+    # open or shut; a tonewheel runs off a synchronous motor on the mains; a
+    # free reed's pitch is its own mass; a bag holds one pressure. A string
+    # under a finger, a lip on a mouthpiece and a breath across a reed all
+    # bend, which is most of the bank.
+    pitch_bendable = True
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):
         # effort must be known BEFORE attack_dampening is computed below, which
@@ -2694,6 +2706,10 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     (strike_fills_with_force = False). That fixed force is also why the instrument
     has no dynamics, which is what makes it a REGISTERED instrument.
     """
+    # A quill plucks; there is no way to lean on a note afterwards.
+    # (A STATIC bend still applies -- that is a temperament, and
+    #  bwv847.mid is written that way.)
+    pitch_bendable = False
     # The dampers are on the jacks and there is no pedal to lift them.
     damper_pedal = False
     # NO TOUCH. The key trips a jack; the quill plucks with a force the jack
@@ -3200,6 +3216,8 @@ class ClavinetProperties(InharmonicStringProperties):
 
 
 class GrandPianoProperties(InharmonicStringProperties):
+    # Struck, then nothing the player does reaches the string.
+    pitch_bendable = False
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
     # a peak normalise and these voices play alone -- and the organ family is
@@ -3924,6 +3942,8 @@ class RhodesProperties(ElectricPianoProperties):
     equal drive h8 sits 120 dB down, against 86 for the Wurlitzer's pole. That
     cliff is why a Rhodes bells where a Wurlitzer barks.
     """
+    # A struck tine keeps the pitch its length gives it.
+    pitch_bendable = False
 
     cabinet = "rhodes"
     # The panel calls it vibrato; it is a stereo PAN between the suitcase's two
@@ -3981,6 +4001,8 @@ class WurlitzerProperties(ElectricPianoProperties):
     richer harmonic sound", which only the first reading produces, so that is the
     one followed. It is an interpretation of a circuit, not a measurement of one.
     """
+    # A struck reed, the same as the tine: nothing bends it.
+    pitch_bendable = False
     # Fitted the same way the Rhodes was, to a Wurlitzer's own register and
     # velocity behaviour: barkier everywhere and much barkier dug into.
     # 1.4 dB rms against five targets.
@@ -4118,6 +4140,8 @@ class TonewheelProperties(SynthProperties):
 
     Only nine ratios exist, and the seventh harmonic is not among them.
     """
+    # A synchronous motor decides the pitch, not the player.
+    pitch_bendable = False
     # A tonewheel runs off a synchronous motor; the key is a switch and the
     # pedal on the console is a swell, not a damper.
     damper_pedal = False
@@ -4410,6 +4434,8 @@ class OrganProperties(StoppedPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
+    # A pallet valve is open or shut and a pipe is cut to length.
+    pitch_bendable = False
     # NO TOUCH. A pipe organ key opens a pallet valve. The pipe then speaks at
     # whatever the wind pressure dictates, and pressing harder opens the same
     # valve no further. Dynamics come from the stops and the swell box -- and
@@ -4626,6 +4652,8 @@ class FreeReedProperties(SynthProperties):
     rough -6 dB/octave; the three numbers are chosen to land near it with
     plausible ripple, not derived from any one instrument's slot geometry.
     """
+    # A free reed's pitch is its own mass and stiffness.
+    pitch_bendable = False
     # A free reed speaks while the bellows push and stops when they stop.
     damper_pedal = False
     # NO TOUCH AT THE KEY. A harmonium or accordion key opens a pallet and the
@@ -5513,6 +5541,8 @@ class MalletProperties(PluckedStringProperties):
     marimba, xylophone, tubular bells) and struck ethnic/percussive metal
     (kalimba, steel drums, tinkle bell, agogo, woodblock). A first generic
     voice; a true modal-bar model is the realism step."""
+    # A struck bar keeps the pitch it was cut to.
+    pitch_bendable = False
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 6.0
     inharmonicity_dynamic = False
 
@@ -12212,6 +12242,16 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 # ONE CONSTANT, read by blockrender.cv() and live._chan_gain, because two
 # numbers in two files that happen to agree is not agreement.
 GM_DEFAULT_VOLUME = 100
+# GM's default pitch-bend range: +/- 2 semitones at full wheel. RPN 0 changes
+# it; live.Live.bend_range is the same number, and both read this one.
+BEND_RANGE_SEMITONES = 2.0
+
+
+def bend_ratio(pitch, semitones=None):
+    """A MIDI pitch-wheel value, -8192..8191, as a frequency ratio."""
+    st = BEND_RANGE_SEMITONES if semitones is None else semitones
+    return 2.0 ** (float(pitch) / 8192.0 * st / 12.0)
+
 GM_DEFAULT_EXPRESSION = 127     # CC11 does start at full: it is an attenuator
 GM_DEFAULT_PAN = 64             # centre
 
@@ -12283,6 +12323,8 @@ class BagpipeProperties(ReedPipeProperties):
     than 440, but the drones are tuned to the chanter rather than to a fork, so
     what matters here is the interval and not the reference.)
     """
+    # Nine holes and a bag at constant pressure: see scale_cents.
+    pitch_bendable = False
     # Two tenors and a bass. The tenors are a chorus: same nominal pitch, a few
     # cents apart, beating slowly.
     # THE DRONES ARE THE PART, NOT THE NOTE. Ben: "The drones seem to me
