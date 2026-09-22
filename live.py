@@ -827,6 +827,10 @@ class Renderer:
 
 # ---- banks: the expensive, shareable half of a patch ------------------------
 
+# The honky-tonk's wheel positions, pre-warmed so sweeping it cannot miss.
+# 64 is the voice's own range, and the value a bank defaults to.
+DETUNE_STEPS = (0, 64, 127)
+
 _BANKS = collections.OrderedDict()   # (program, drums, tuner) -> Bank
 _BANK_PARTIAL_CAP = 400000           # ~50 MB of templates; piano alone is 125k
 _BANK_LOCK = threading.RLock()
@@ -882,6 +886,16 @@ class Bank:
         # third the size it was a moment ago.
         self.speeds = (None,)
         self.leslie_default = None
+        # A HONKY-TONK'S DETUNE IS IN THE PARTIALS' FREQUENCIES, so unlike the
+        # clavinet's rockers it cannot be a gain applied to a note already
+        # sounding -- it is a different template. But the axis for that already
+        # exists and is literally "the CC1 value to build with", so three wheel
+        # positions are pre-warmed and the wheel picks between them. A note
+        # keeps the tuning it was struck with, which is what a piano does.
+        self.detune_wheel = (not drums) and bool(getattr(pc, "detune_wheel", False))
+        if self.detune_wheel:
+            self.speeds = DETUNE_STEPS
+            self.leslie_default = DETUNE_STEPS[len(DETUNE_STEPS) // 2]
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
         # The order a crescendo pedal adds them in, which is the organ's own idea
         # of how a registration should grow.
@@ -1199,6 +1213,7 @@ class Live:
         self.bend = {}          # channel -> current pitch-bend ratio
         self.mod = {}           # channel -> current vibrato depth (fraction)
         self.trem_depth = {}    # pid -> current tremolo/pan depth (fraction)
+        self.detune_step = {}   # pid -> which pre-warmed detune the wheel is on
         self.clav_step = {}     # pid -> current tone-rocker position
         self.pressure = {}      # channel -> aftertouch 0..1
         self.bend_range = 2.0   # semitones at full wheel, the GM convention
@@ -1421,11 +1436,16 @@ class Live:
                 # already sounding, which is what flipping a rocker does: the
                 # filter is in the preamp, downstream of every ringing string.
                 clavs = [p for p in here if p.bank.clav_panel]
+                # AND ON A HONKY-TONK THE WHEEL IS HOW FAR OUT OF TUNE. Only the
+                # pre-warmed positions exist, so it snaps between them rather
+                # than sweeping -- a miss here would be a dropped note.
+                detuners = [p for p in here if p.bank.detune_wheel]
                 others = [p for p in here
                           if not p.organ and not p.bank.leslie
                           and p.bank.amp_drive <= 0.0
                           and p.bank.tremolo_depth <= 0.0
-                          and not p.bank.clav_panel]
+                          and not p.bank.clav_panel
+                          and not p.bank.detune_wheel]
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -1440,6 +1460,9 @@ class Live:
                         if self.drive_step.get(p.pid) != step:
                             self.drive_step[p.pid] = step
                             self.amp_dirty.add(p.pid)
+                for part in detuners:
+                    self.detune_step[part.pid] = min(
+                        DETUNE_STEPS, key=lambda v: abs(v - msg.value))
                 for part in clavs:
                     import tonelib as _TLm
                     step = int(round(msg.value / 127.0 * (len(_TLm.CLAV_TONE) - 1)))
@@ -1521,7 +1544,9 @@ class Live:
         # No speed in the key any more: the rotor is driven from the callback,
         # so one template plays at every speed and a note started during a ramp
         # simply joins the rotor where it is.
-        tmpl = part.bank.get(snote, vel, part.bank.leslie_default)
+        _axis = (self.detune_step.get(part.pid, part.bank.leslie_default)
+                 if part.bank.detune_wheel else part.bank.leslie_default)
+        tmpl = part.bank.get(snote, vel, _axis)
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
             # counted, and the builder thread is what fixes it.
@@ -3224,8 +3249,81 @@ def selftest():
     check("the Rhodes is not a piano", _PM.property_class_for_program(4) is _T.RhodesProperties)
     check("...and the ACOUSTIC pianos are where they were",
           all(_PM.property_class_for_program(n) is _T.GrandPianoProperties
-              for n in (0, 1, 3)) and
-          _PM.property_class_for_program(6) is _T.HarpsichordProperties)
+              for n in (0, 1)) and
+          _PM.property_class_for_program(6) is _T.HarpsichordProperties,
+          "  (0 and 1 only: 2 is a CP-70 and 3 is out of tune)")
+
+    # ---- the honky-tonk: the same piano, badly tuned -------------------------
+    check("the honky-tonk is the grand with the tuner's hand off",
+          _PM.property_class_for_program(3) is _T.HonkyTonkProperties
+          and issubclass(_T.HonkyTonkProperties, _T.GrandPianoProperties))
+    ht, gp = _T.HonkyTonkProperties, _T.GrandPianoProperties
+    # The VOICE is one number. Everything else on the class is the wheel.
+    _tonal = [k for k in ht.__dict__
+              if not k.startswith("_") and k not in ("detune_wheel",)]
+    check("...and it needed no new mechanism, only a wider range",
+          ht.string_detune_range[0] > gp.string_detune_range[1] * 4.0
+          and _tonal == ["string_detune_range"],
+          "  (grand %.1f-%.1f cents, honky-tonk %.1f-%.1f, and that is the whole voice)"
+          % (gp.string_detune_range + ht.string_detune_range))
+    # THE BEAT RATE IS NOT SET ANYWHERE. Two strings a fixed number of CENTS
+    # apart beat proportionally to pitch, so one range gives a slow fat wobble
+    # in the bass and a fast nervous one at the top, for free.
+    def _beat(f):
+        q = ht(f, 0.0, 1.0, 1.0)
+        return max(f * (2.0 ** (abs(c) / 1200.0) - 1.0) for c in q.note_detune_cents)
+    lo_b, hi_b = _beat(65.4), _beat(1046.5)
+    check("...and the beat rate follows the pitch rather than being chosen",
+          hi_b > 8.0 * lo_b,
+          "  (%.2f Hz at C2, %.1f Hz at C6 -- from the same cents)" % (lo_b, hi_b))
+    # The main string stays AT PITCH and carries the gain; the extras straddle
+    # it. So a honky-tonk jangles without going out of tune, which matters --
+    # it still has to play with the rest of the orchestra.
+    q = ht(440.0, 0.0, 1.0, 1.0)
+    w = [1.0] + list(q.string_gain[:len(q.note_detune_cents)])
+    c = [0.0] + list(q.note_detune_cents)
+    centre = sum(wi * ci for wi, ci in zip(w, c)) / sum(w)
+    check("...and the note itself stays in tune, because the extras straddle it",
+          abs(centre) < 4.0,
+          "  (gain-weighted centre %+.1f cents off, from %+.0f/%+.0f)"
+          % (centre, c[1], c[2]))
+    # And the bass cannot wobble at all: the stringing is a single wound
+    # monochord down there, so there is no second string to mistune.
+    check("...while the bass stays clean, having only one string to begin with",
+          q.string_count_for_frequency(41.2) == 1 < q.string_count_for_frequency(440.0),
+          "  (%d string at E1, %d at A4)"
+          % (q.string_count_for_frequency(41.2), q.string_count_for_frequency(440.0)))
+
+    # CC1 IS HOW FAR OUT OF TUNE, with 64 -- and no wheel at all -- the voice's
+    # own range. Unlike the clavinet's rockers this cannot be a gain on a note
+    # already sounding: a detune is in the partials' FREQUENCIES, so it is a
+    # different template. The axis for that already existed and is literally
+    # "the CC1 value to build with", so the positions are pre-warmed.
+    lvh = Live(program=3, rate=48000, frames=128, verbose=False); lvh.warm()
+    bh = lvh.parts[0].bank
+    check("the honky-tonk's wheel is pre-warmed, so sweeping cannot miss",
+          bh.detune_wheel and tuple(bh.speeds) == DETUNE_STEPS
+          and bh.leslie_default == DETUNE_STEPS[len(DETUNE_STEPS) // 2]
+          and all(bh.get(69, 100, v) is not None for v in DETUNE_STEPS),
+          "  (positions %s, default %s)" % (DETUNE_STEPS, bh.leslie_default))
+
+    def _unison(cc):
+        t = bh.get(69, 100, cc)
+        nf = np.asarray(t["nf"])
+        u = np.unique(np.round(nf[nf < nf.min() * 1.05], 3))
+        mid = u[len(u) // 2]
+        return [1200 * _math.log2(v / mid) for v in u]
+
+    spread = [max(_unison(v)) - min(_unison(v)) for v in DETUNE_STEPS]
+    check("...and it really moves the strings, not just the template key",
+          spread[0] < 0.01 and spread[1] > 25.0 and spread[2] > 1.8 * spread[1],
+          "  (unison spread %.1f / %.1f / %.1f cents across the three)" % tuple(spread))
+    # The zero position is a piano somebody has just tuned, which is a useful
+    # thing to be able to ask for and a sharp test that the wheel reaches.
+    check("...with the wheel down giving one string and no beating at all",
+          len(_unison(DETUNE_STEPS[0])) == 1,
+          "  (the unison collapses to a single in-tune string)")
+    lvh.renderer.close()
 
     # ---- the electric grand: a CP-70 is a short piano with no board ---------
     check("the electric grand is not the acoustic one",

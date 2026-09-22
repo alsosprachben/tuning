@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""An electric grand, and the acoustic one it used to be.
+"""The piano bank: an electric grand, a honky-tonk, and the acoustic one.
 
     python3 examples/grand.py [outdir]
     python3 examples/grand.py --compare [outdir]
     python3 examples/grand.py --register [outdir]
+    python3 examples/grand.py --honky [outdir]
 
 GM 2 was the acoustic grand -- the same class object, not even a subclass. A
 Yamaha CP-70 has a real grand action and real strings with NO SOUNDBOARD and a
@@ -27,6 +28,14 @@ what is left over is the OTHER change on its own -- the soundboard replaced by a
 bridge pickup, which applies at every pitch. If the high pair showed a stretch
 difference the scaling argument would be wrong; a residual at that level is the
 board.
+
+--honky is GM 3, which is the same piano with the tuner's hand off. The grand
+already models a unison as one string at pitch and two mistuned around it; the
+honky-tonk widens that from under 2 cents to 8-20, and CC1 scales it -- 0 for a
+piano just tuned, 64 (and no wheel at all) for the voice's own range, 127 for
+one nobody has touched. Written in the middle of the keyboard, because the bass
+is a single wound string with nothing to beat against and the jangle lives
+above it.
 
 --compare plays a whole passage on both. Written low on purpose: a CP-70 part
 that stays above D#3 is a demo of nothing.
@@ -140,6 +149,36 @@ def register(outdir):
     return 0
 
 
+def honky(outdir):
+    """The same rag at three wheel positions, and the grand for reference."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Mid-register: the bass is a single wound string and cannot jangle.
+    rag = [(0.0, (48, 64, 67, 72), 104, 0.45), (0.5, (55, 64, 67), 76, 0.4),
+           (1.0, (50, 65, 69, 74), 100, 0.45), (1.5, (57, 65, 69), 74, 0.4),
+           (2.0, (52, 67, 71, 76), 106, 0.45), (2.5, (59, 67, 71), 78, 0.4),
+           (3.0, (53, 65, 69, 72), 110, 0.9),
+           (4.0, (48, 64, 67, 72), 108, 0.45), (4.5, (55, 64, 67), 78, 0.4),
+           (5.0, (43, 62, 67, 71), 104, 0.45), (5.5, (50, 62, 67), 76, 0.4),
+           (6.0, (48, 60, 64, 67), 114, 2.4)]
+    for cc, name, why in ((None, 'grand', 'GM 0, for reference'),
+                          (0, 'tuned', 'wheel down: one string, no beating'),
+                          (64, 'default', "wheel centred, and what a file with no CC1 gets"),
+                          (127, 'wide', 'wheel up: twice the range again')):
+        prog = ACOUSTIC if cc is None else 3
+        ev = _notes(rag)
+        m = _track(prog, ev, 5.0)
+        if cc is not None:
+            m.tracks[0].insert(1, mido.Message('control_change', control=1,
+                                               value=cc, channel=0, time=0))
+        mid = os.path.join(outdir, 'honky-%s.mid' % name)
+        m.save(mid)
+        out = mid[:-4] + '.wav'
+        if _render(mid, out, root) is None:
+            return 1
+        print("  %-8s %-42s %s" % (name, out, why))
+    return 0
+
+
 def main(argv):
     mode = next((a[2:] for a in argv[1:] if a.startswith('--')), None)
     args = [a for a in argv[1:] if not a.startswith('--')]
@@ -149,6 +188,8 @@ def main(argv):
         return compare(outdir)
     if mode == 'register':
         return register(outdir)
+    if mode == 'honky':
+        return honky(outdir)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     mid = os.path.join(outdir, 'grand.mid')
     passage().save(mid)

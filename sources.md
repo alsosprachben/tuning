@@ -3167,3 +3167,74 @@ source.
 
 **Not verified:** how many strings per note a CP-70 uses. The unison behaviour
 is inherited from the acoustic grand unchanged and unchecked.
+
+---
+
+## The honky-tonk, which needed no new mechanism at all
+
+GM 3 was the acoustic grand unchanged. A honky-tonk is that piano badly tuned,
+and the grand ALREADY models a real unison properly: one string at pitch and two
+more mistuned around it, drawn per note from `string_detune_range`, straddling
+so the note itself stays in tune. So the whole voice is one number.
+
+| | range | beating at A4 |
+|---|---|---|
+| grand | 0.5 to 1.7 cents | 0.43 Hz -- a shimmer |
+| honky-tonk | 8 to 20 cents | 2.0 to 5.1 Hz -- a wobble |
+
+**THE BEAT RATE IS NOT SET ANYWHERE.** Two strings a fixed number of CENTS
+apart beat at a rate proportional to pitch, so one range gives 0.75 Hz at C2 and
+11.5 Hz at C6 -- slow and fat in the bass, fast and nervous at the top, which is
+how a neglected piano sounds. Measured on the render, A4 went from 0.67 Hz at
+1.0 dB to **4.00 Hz at 4.1 dB**, against a predicted 4.14.
+
+Two more things came for free. **The bass does not wobble**, because the
+stringing is a single wound monochord at the bottom and there is no second
+string to mistune -- which is true of the real instrument too. And **the note
+stays in tune**: the main string is at pitch and carries the gain, so the
+gain-weighted centre sits 1.8 cents off even with strings at -16 and +9.
+
+### CC1 is how far out of tune, and the axis already existed
+
+Ben: *"Maybe the mod wheel can control how detuned it is. With a default in the
+middle?"* It fits better than it had any right to. The live template cache has a
+third axis, built for the Leslie half-moon, and that axis is **literally "the
+CC1 value to build this template with"** -- `_raw_template` injects a CC1
+message into the one-note MIDI it synthesises. So a wheel can drive a
+template-level parameter with no new machinery:
+
+    CC1   0   A4 unison  [415.0]                  one string, just tuned
+    CC1  64   A4 unison  [411.0, 415.0, 419.7]    -16.9 / +19.3 cents
+    CC1 127   A4 unison  [407.0, 415.0, 424.3]    -33.5 / +38.3 cents
+
+64 is the default AND what a file with no CC1 gets, so the corpus needs no
+edits. The three positions are pre-warmed, because a miss on this axis would be
+a dropped note rather than a wrong sound.
+
+**AND IT CANNOT REACH A RINGING NOTE, unlike the clavinet's rockers.** A
+filter is a function of frequency and scales partials that already exist; a
+detune is IN those partials' frequencies, so it is a different template. Notes
+keep the tuning they were struck with -- which is what a piano does, since
+nobody retunes a ringing string.
+
+### Two probe failures, both the same shape
+
+**The wheel silently did nothing at first.** The CC1 was read in the
+per-channel block that runs AFTER the note loop has already built every note,
+so the scale was always its default. The three templates were distinct cache
+keys with identical contents, which is exactly what that looks like. Resolve a
+per-note parameter where it is USED, not where the other channel settings are
+gathered.
+
+**And the wobble measured 58 dB deep on every position, identically.** That was
+an envelope probe over a sustained chord whose cubic detrend could not remove
+the decay, so it measured the note dying rather than the strings beating. The
+clean measurement is the one on a single held note with a narrow band around one
+partial. A chord is not a good place to measure a beat.
+
+### Not done
+
+`string_gain = (0.28, 0.20)` is inherited, so the extras sit under the main
+string and the unison swings about 9 dB rather than nulling. Raising it would
+make the wobble DEEPER as well as wider. That is a separate knob with a separate
+argument and it was left alone.

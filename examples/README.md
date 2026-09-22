@@ -34,7 +34,7 @@ and comparing them by a single broadband number has hidden the opposite.
 | `tubeamp_check.py` | What the valve stage actually does, measured rather than asserted: transfer curve, harmonic orders, energy conservation, intermodulation share, and cost. Needs no score. |
 | `rhodes.py` | The electric pianos, a Rhodes (GM 4) and a Wurlitzer (GM 5). `--pair` renders the same passage on both, which is the point of having two: one mechanism, and the only real difference is the pickup's curve -- a bell curve whose harmonics fall off a cliff against a 1/d pole whose harmonics fall off geometrically. `--voicing` sweeps the tine's rest position in the magnet's field, which is the falsifiable one: centred, the fundamental disappears and the pickup answers an octave up. `--velocity` plays one phrase at four velocities, because on this voice velocity changes the sound more than the volume. `--control` renders with the pickup's curve bypassed -- a pure sine -- which is what everything else here has to be judged against. `--tremolo` puts the mod wheel up, which on this voice is a stereo pan between the suitcase's two amplifiers and so vanishes in mono. |
 | `gm_coverage.py` | How complete each of the 128 GM patches is, 0 to 4, written to `coverage.md`. The class column is read out of `patch_map` so it cannot drift; the ratings are curated in the script. |
-| `grand.py` | An electric grand (GM 2, a CP-70) against the acoustic one it used to be. `--register` is the test: the same figure low, where the short case makes its bass up to twelve times stiffer, and two octaves up, where both pianos use a string of the same length and only the missing soundboard is left. |
+| `grand.py` | The piano bank. An electric grand (GM 2, a CP-70) against the acoustic one, and `--honky` for GM 3 at three wheel positions. `--register` is the test: the same figure low, where the short case makes its bass up to twelve times stiffer, and two octaves up, where both pianos use a string of the same length and only the missing soundboard is left. |
 | `clavinet.py` | A clavinet (GM 7). `--tone` sweeps the four tone rockers on CC1, darkest to brightest; `--compare` renders the same figure on the harpsichord it used to be. Both are bright keyboard strings and they are not the same instrument. |
 | `cymbals.py` | The cymbal family rendered so it can be heard: every plate in the GM set, `--dynamics` for one crash from pp to ff (what moves is brightness, not pitch), `--ride` for a played pattern rather than isolated strokes, and `--bend` for the A/B between the old asserted pitch bloom and the measured zero. |
 | `cymbal_check.py` | Do a cymbal's modes bend when it is struck harder? Tracks individual isolated partials by phase derivative across the Iowa cymbal family -- 203 of them -- and finds the drift under a cent, where the class once asserted sixteen. Checks the probe against planted bends first, and shows what DOES drift: the centroid, by more than an octave, which is differential decay. |
@@ -56,6 +56,7 @@ python3 examples/hammond.py /tmp
 python3 examples/guitar_check.py
 python3 examples/grand.py --compare /tmp
 python3 examples/grand.py --register /tmp
+python3 examples/grand.py --honky /tmp
 python3 examples/clavinet.py --tone /tmp
 python3 examples/clavinet.py --compare /tmp
 python3 examples/gm_coverage.py

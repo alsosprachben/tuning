@@ -695,6 +695,7 @@ def prepare(path, tuner='hybrid440'):
     _CAB_CH = {}
     _TREM_CH = {}
     _CLAV_CH = {}
+    _DETUNE_CH = {}
     if _lyr and _CONS:
         _by_ch = {}
         for _e in notes:
@@ -821,6 +822,18 @@ def prepare(path, tuner='hybrid440'):
         _eff = 0.0
         if getattr(pc, 'effort_tilt', 0.0) and vel and _vb:
             _eff = max(-12.0, min(12.0, 40.0*math.log10(vel/float(_vb))))
+        # CC1 IS HOW FAR OUT OF TUNE. 64 -- and no CC1 at all -- is the voice's
+        # own range; 0 is a piano just tuned, 127 one nobody has touched.
+        #
+        # RESOLVED HERE, not in the per-channel block further down, which runs
+        # AFTER this loop has already built every note: read there, the scale
+        # was always its default and the wheel did nothing. And unlike the
+        # clavinet's rockers it cannot be a pass over the finished table at all,
+        # because a detune is in the partials' FREQUENCIES.
+        if ch not in _DETUNE_CH:
+            _c1d = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+            _DETUNE_CH[ch] = (_c1d[0] / 64.0) if _c1d else 1.0
+        T.honky_detune = _DETUNE_CH[ch] if getattr(pc, 'detune_wheel', False) else 1.0
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.

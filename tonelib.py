@@ -3276,6 +3276,58 @@ class GrandPianoProperties(InharmonicStringProperties):
         return body * high * low
 
 
+# HOW FAR OUT OF TUNE, on the wheel. 1.0 is the class's own range; 0 is a piano
+# somebody has just tuned; 2.0 is one nobody has touched in a decade. Set per
+# note by blockrender from the channel's CC1, and live by the bank axis, which
+# is literally "the CC1 value to build this template with".
+honky_detune = 1.0
+
+
+class HonkyTonkProperties(GrandPianoProperties):
+    """GM 3. The same piano, badly tuned -- which is all a honky-tonk is.
+
+    It was the acoustic grand unchanged, and the fix needs no new mechanism at
+    all: the grand ALREADY models a real unison as one string at pitch and two
+    more mistuned around it, drawn per note and straddling so the note itself
+    stays in tune. A honky-tonk is that with the tuner's hand off. So this class
+    widens one number and touches nothing else.
+
+        grand        0.5 to 1.7 cents     0.43 Hz of beating at A4 -- a shimmer
+        honky-tonk   8 to 20 cents        2.0 to 5.1 Hz -- a wobble
+
+    THE BEAT RATE IS NOT A CHOICE, it follows. Two strings a fixed number of
+    CENTS apart beat at a rate proportional to pitch, so one range gives 0.3 Hz
+    at the bottom of the compass and 12 Hz at the top -- slow and fat in the
+    bass, fast and nervous in the treble, which is how a neglected piano
+    actually sounds. Nothing here sets a rate; the cents set it.
+
+    AND THE BASS DOES NOT WOBBLE, also for free. The grand's stringing is a
+    single wound monochord at the bottom, two strings from G1 and three from B2,
+    so the lowest notes have NO second string to mistune. A real honky-tonk is
+    the same: its bottom octave is comparatively clean and the jangle lives in
+    the middle and top.
+
+    WHAT IS NOT DONE. A tack piano -- drawing pins in the hammers -- is a
+    different instrument and a different sound, and GM 3 does not mean it. The
+    extras' gains are left at the grand's (0.28, 0.20), which swings the unison
+    about 9 dB rather than nulling it; raising string_gain would make the
+    wobble deeper as well as wider, and that is a separate knob with a separate
+    argument. NO REFERENCE: the range is judged from the beat rates above, not
+    measured off an instrument.
+    """
+
+    string_detune_range = (8.0, 20.0)   # |cents| of the two extra strings
+    detune_wheel = True                 # ...and CC1 scales it, 64 being this
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        # Scaled BEFORE super(), which is what draws this note's two strings
+        # out of the range. An instance attribute, so the class value stays the
+        # instrument's own and the wheel is a performance control over it.
+        lo, hi = type(self).string_detune_range
+        self.string_detune_range = (lo * honky_detune, hi * honky_detune)
+        super().__init__(frequency, *args, **kwargs)
+
+
 class ElectricGrandProperties(GrandPianoProperties):
     """GM 2. A Yamaha CP-70: a real grand action and real strings, with no
     soundboard and a piezo under the bridge. It was the acoustic grand, exactly
