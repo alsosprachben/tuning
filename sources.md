@@ -1947,14 +1947,14 @@ has rather than through the default.
 THE OTHER FIVE, and what separates them. It is not five fitted voices -- it is
 one instrument with the pickup moved, the palm put down, or the gain turned up:
 
-| GM | voice | pickup | drive | imbalance | h1 decay |
-|---|---|---|---|---|---|
-| 26 | jazz | 0.230+0.258 neck humbucker | 0.20 | 0.35 | 1.0 dB/s |
-| 27 | clean | 0.154 middle single coil | 0.35 | 0.25 | 1.0 |
-| 28 | muted | 0.100 bridge | 0.80 | 0.50 | **38.0** |
-| 29 | overdriven | 0.100 bridge | 1.20 | 0.60 | 1.0 |
-| 30 | distortion | 0.049+0.077 bridge humbucker | 3.00 | 0.80 | 1.0 |
-| 31 | harmonics | 0.154, touched at 1/2 | 0.25 | 0.25 | 1.0 |
+| GM | voice | pickup | turns/coil | drive | imbalance | h1 decay |
+|---|---|---|---|---|---|---|
+| 26 | jazz | 0.230+0.258 neck humbucker | 0.69 (8.0k pair) | 0.34 | 0.35 | 1.0 dB/s |
+| 27 | clean | 0.154 middle single coil | 1.00 (5.8k) | 0.60 | 0.25 | 1.0 |
+| 28 | muted | 0.100 bridge | 1.07 (6.2k) | 1.98 | 0.50 | **38.0** |
+| 29 | overdriven | 0.100 bridge | 1.07 (6.2k) | 4.45 | 0.60 | 1.0 |
+| 30 | distortion | 0.049+0.077 bridge humbucker | 1.43 (16.6k pair) | 14.43 | 0.80 | 1.0 |
+| 31 | harmonics | 0.154, touched at 1/2 | 1.00 | 0.45 | 0.25 | 1.0 |
 
 Rendered on one passage, each at its own drive, against the same passage with
 the amplifier out: centroid 252 / 325 / 626 / 502 / 801 / 226 Hz and distortion
@@ -1962,6 +1962,36 @@ the amplifier out: centroid 252 / 325 / 626 / 502 / 801 / 226 Hz and distortion
 `amp_drive`, as it must be; the brightness ordering is pickup geometry, because
 a neck humbucker nulls h4, h8 and h12 at once while a bridge one does not reach
 its first null until h16.
+
+THE TURNS COLUMN IS NOT DECORATION, and it was missing for a long time. With
+position and coil cancellation modelled and the winding absent, GM 30 -- a
+bridge humbucker, the hottest pickup anybody actually fits -- rendered 3.2 dB
+UNDER GM 29 and 7.7 dB under a middle single coil. A builder winds a bridge
+pickup hotter precisely because the string moves least there, and the numbers
+are published as DC resistance, which stands in for turns at a fixed gauge.
+
+Per COIL, because the two coils of a humbucker are in SERIES and the model
+sums them (it used to divide by the coil count as well, which cancelled the
+second coil's output while keeping its cancellation -- a flat -6.02 dB on
+every humbucker, against a comment two lines up that said the opposite). Per
+coil is also the physically honest place for it: a humbucker's coils are each
+SMALLER than a single coil, because two have to fit in one pickup's footprint
+-- ~4,300 turns each in a PAF against a Stratocaster's ~7,600. So a vintage
+humbucker reads 1.38x a single coil, not 2x, and a 16.6k bridge humbucker
+reads 2.86x. That spread is the whole distance between GM 26 and GM 30, and
+every voice's spectrum is unchanged by it to 3e-16: the winding is a scalar.
+
+`amp_reference` moves with the turns on every one of them, or the hotter
+pickup would also be the more distorted voice.
+
+THE LEVELS, rendered against the grand piano in the same register at velocity
+100: jazz -7.5, clean -9.0, muted -21.0, overdriven -11.8, distortion -6.5,
+harmonics -12.5, against a MEASURED nylon guitar at -9.9. The jazz guitar's
+hot neck humbucker is then turned back down with the one control a player
+actually sets per patch, because a modelled +2.8 dB made it the loudest voice
+in the plucked family, which no jazz guitarist has ever been. GM 28's -21.0 is
+not a level: it decays 30 dB/s and the measurement is 0.5 s of RMS, so that
+number is how SHORT a palm mute is.
 
 TWO OF THEM NEEDED A MECHANISM, not a number. A palm mute is a DAMPER, so it is
 a decay rate and not a filter: 38 dB/s on the fundamental against 1, and 94 on
@@ -2064,17 +2094,29 @@ GM 33-37. Not new physics -- two combs, a magnet reading velocity, no body --
 so they are `ElectricGuitarProperties` with the geometry of a different
 instrument and a cabinet built for a different job. What actually differs:
 
-| GM | voice | what makes it that | pickup | strike |
-|---|---|---|---|---|
-| 33 | fingered | the base: a broad soft fingertip over the neck pickup | 0.191 | 0.12 / depth 0.55 |
-| 34 | picked | a plectrum is HARD and NARROW, and played nearer the bridge | 0.191 | 0.09 / **0.90** |
-| 35 | fretless | the string stops on WOOD, which is lossy | 0.191 | 0.12 / 0.45 |
-| 36 | slap | the thumb drives the string onto the frets | 0.081 | **0.06 / 1.00** |
-| 37 | popped | convention, not measurement: slap 2 taken as the harder one | 0.081 | 0.06 / 1.00 |
+| GM | voice | what makes it that | pickup | turns | strike |
+|---|---|---|---|---|---|
+| 33 | fingered | the base: a broad soft fingertip over the neck pickup | 0.191 | 1.00 | 0.12 / depth 0.55 |
+| 34 | picked | a plectrum is HARD and NARROW, and played nearer the bridge | 0.191 | 1.00 | 0.09 / **0.90** |
+| 35 | fretless | the string stops on WOOD, which is lossy | 0.191 | 1.00 | 0.12 / 0.45 |
+| 36 | slap | the thumb drives the string onto the frets | 0.081 | 1.43 | **0.06 / 1.00** |
+| 37 | popped | convention, not measurement: slap 2 taken as the harder one | 0.081 | 1.43 | 0.06 / 1.00 |
 
 Measured on a low E, the mean harmonic of the series: fingered **2.6**, picked
 **3.2**, fretless 2.5, slap **5.4**. The pick/finger difference is the right
 hand and nothing else, which is what those two GM slots actually are.
+
+A SLAP IS ALSO LOUDER, and that needed saying separately. Every difference
+above is spectral, and a 1/n series that trades its bottom for its mids loses
+total power doing it: measured, the slap sat 7.2 dB UNDER the fingered bass,
+which inverts the one thing everybody knows about the technique. Its Jazz
+bridge pickup is wound hot (7.5k against the Precision split coil's ~5.25 per
+half, the same bridge-position correction as the guitars') and the rest is
+MOMENTUM -- a fingertip pluck is a finger flexing and a thumb slap is the
+forearm rotating, so `initial_gain` doubles. A pop takes another 1.25x,
+because its extra drive compresses and had otherwise left GM 37 1.5 dB under
+GM 36, backwards for the harder of the pair. Rendered: fingered -9.3, picked
+-11.9, fretless -11.4, slap -7.4, popped -6.9.
 
 FRETLESS IS A TERMINATION, NOT A FILTER, and this is the one worth stating. A
 fretted note ends on hard metal wire, which reflects the high partials almost
