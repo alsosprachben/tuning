@@ -4690,3 +4690,41 @@ and skipped it for every other. And `emit_partial` already takes `non` and
 Rendered on a deliberately detached line -- seven notes with rests between --
 the bass drone holds between 0.75 and 0.84 of its peak from the first note to
 the last, and stops with the part.
+
+### Legato, on the one instrument that has no choice about it
+
+Ben, on the Scotland the Brave render: *"Make sure the legato is properly
+implemented."* It was not. `BagpipeProperties` had `legato_attack_s = None`, so
+every note re-articulated.
+
+**AND FOR THIS VOICE THAT IS WORSE THAN FOR ANY OTHER.** Every other voice that
+declares `legato_attack_s` -- the clarinet at 0.012, the flute, the bowed
+strings -- is describing a SLUR, which a player elects instead of tonguing or
+re-bowing. A piper has no such election: the reed is fed by a bag under constant
+arm pressure, there is no tongue anywhere near it, and the chanter cannot be
+stopped. Notes change by moving fingers on a sounding pipe, and that is the only
+way they change. So the bagpipe gets 0.004, shorter than anything else in the
+bank, and the shanai gets the clarinet's 0.012 -- a shehnai player CAN tongue,
+and that distinction is exactly the one the bagpipe does not get to make.
+
+Measured on the rendered tune: **74 of 74 gaps between consecutive notes are
+exactly 0.0 s**, the renderer detects legato on every note but the first, and
+the chanter never falls below 0.24 of peak across 25.9 seconds.
+
+**GRACE NOTES ARE THE ARTICULATION, NOT ORNAMENT,** and they follow from the
+same fact. With no way to put a gap between two of the same note, a piper flicks
+a higher finger for a few milliseconds; that flick is the instrument's entire
+articulation, and without it two repeated notes are one long note. Every
+repeated pitch in `examples/scotland.py` gets one.
+
+**AND THE TWO TENORS WERE CANCELLING.** At gains 0.34 and 0.32 they very nearly
+nulled at the trough of their beat -- the 220 Hz band fell to 0.02 of its peak,
+a 34 dB hole. Two reeds in two pipes never do that: they differ in reed, in bore
+and in how far each sits from the ear, so the beat is a breathing rather than a
+gap. Unequal gains (0.36 against 0.25) put the trough at 0.14.
+
+`examples/scotland.py` also carries `--sharp`, which renders at the pitch a pipe
+band actually plays -- a chanter's A is nearer 470 Hz than 440 -- with the drones
+going sharp alongside it, since they are tuned to the chanter and not to a fork.
+The melody is reconstructed from memory and is a common setting rather than a
+sourced one; it is one list in the file and easy to correct.

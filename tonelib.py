@@ -11637,8 +11637,29 @@ class BagpipeProperties(ReedPipeProperties):
     # once for the channel, across its whole range.
     unison_spans_part = True
     drone_wheel = True          # CC1 corks them; see the docstring
+
+    # A BAGPIPE IS ALWAYS LEGATO, and it is the only voice in this bank for
+    # which that is a fact about the instrument rather than a choice by the
+    # player. Every other voice that declares legato_attack_s -- the clarinet,
+    # the flute, the bowed strings -- is describing a SLUR, which a player
+    # elects instead of tonguing or re-bowing. A piper has no such election:
+    # the reed is fed by a bag under constant arm pressure, there is no tongue
+    # anywhere near it, and the chanter cannot be stopped. Notes change by
+    # moving fingers on a sounding pipe, and that is the only way they change.
+    #
+    # Hence a legato attack shorter than any other voice's, and hence also the
+    # grace notes in examples/scotland.py: with no way to put a gap between two
+    # of the same note, a piper flicks a higher finger for a few milliseconds,
+    # and that flick is the instrument's entire articulation.
+    legato_attack_s = 0.004     # the clarinet's is 0.012, and it can tongue
     drone_hz = (220.0, 220.0 * 2.0 ** (3.0 / 1200.0), 110.0)
-    drone_gain = (0.34, 0.32, 0.30)
+    # NOT EQUAL, and that matters more than it looks. At 0.34 against 0.32 the
+    # two tenors very nearly cancel at the trough of their beat -- measured in
+    # a rendered tune the 220 Hz band fell to 0.02 of its peak, a 34 dB null.
+    # Two reeds in two pipes never do that: they differ in reed, in bore and in
+    # how far each sits from the ear, so the beat is a breathing rather than a
+    # gap. Unequal gains put the trough at about a quarter rather than at zero.
+    drone_gain = (0.36, 0.25, 0.30)
 
     # A chanter is a loud, bright, double-reed pipe with a narrow conical bore.
     tonal_dampening = 1.05
@@ -11672,6 +11693,9 @@ class ShanaiProperties(ReedPipeProperties):
     """
     odd_only = False
     even_harmonic_db = None
+    # A shehnai player CAN tongue, so this is a slur they elect -- the clarinet's
+    # value, and the distinction the bagpipe above does not get to make.
+    legato_attack_s = 0.012
     tonal_dampening = 0.85      # brighter and more nasal than the chanter
     max_harmonic = 48
     bore_corner_hz = 4200.0
