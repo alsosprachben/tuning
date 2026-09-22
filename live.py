@@ -3349,6 +3349,55 @@ def selftest():
           % len(_PLUCKED_FAMILY) if not _unbalanced
           else "  (still generic: %s)" % ", ".join(_unbalanced))
 
+    # ------------------------------------------------------------ the effects
+    import patch_map as _PMfx
+    # 96-103 were the LAST block of eight on one voice.
+    _fx = {_g: _PMfx.property_class_for_note(_g, 64) for _g in range(96, 104)}
+    check("the eight effects are eight voices, not one bowed string",
+          len({_c.__name__ for _c in _fx.values()}) == 8,
+          "  (and with the pads, sixteen programs off a single class)")
+    # Each has a mechanism the others do not, as the pads do.
+    _fxm = {
+        "echo taps (96, 102)": {_g for _g in _fx if getattr(_fx[_g], "echo_taps", ())},
+        "breath (99)": {_g for _g in _fx if _fx[_g].sustain_jitter > 0.3},
+        "a deep wobble (101)": {_g for _g in _fx
+                                if _fx[_g].section_vibrato_cents > 20.0},
+        "odd-only (103)": {_g for _g in _fx if _fx[_g].odd_only},
+    }
+    check("...and each has a mechanism the others do not",
+          _fxm["breath (99)"] == {99} and _fxm["a deep wobble (101)"] == {101}
+          and _fxm["odd-only (103)"] == {103}
+          and _fxm["echo taps (96, 102)"] == {96, 102},
+          "  (%s)" % "; ".join(_fxm))
+    # THE TAPS ARE REPEATED ONSETS, NOT A DELAY LINE, and the docstring says so
+    # at length. What is checkable is that they are evenly spaced, fall in gain,
+    # and sit at the note's own pitch bar a few cents of tape drift.
+    _ec = _fx[102](329.63, 0.0, 1.0, 1.0)
+    _on = _ec.section_onsets_at(329.63)
+    _gn = [_v[0] for _v in _ec.unison_voices(329.63, 1, 0.0)]
+    _sp = [round(_on[_i + 1] - _on[_i], 4) for _i in range(len(_on) - 1)]
+    check("...and the echo taps are even, falling, and at pitch",
+          len(set(_sp)) == 1 and all(_gn[_i] > _gn[_i + 1] for _i in range(len(_gn) - 1))
+          and max(abs(1200.0 * math.log2(1.0 + _v[2]))
+                  for _v in _ec.unison_voices(329.63, 1, 0.0)) < 15.0,
+          "  (%d taps %.0f ms apart, gains %s)"
+          % (len(_on) - 1, 1000 * _sp[0], "/".join("%.2f" % _x for _x in _gn)))
+    # AND A TAP NEEDS A DECAYING NOTE. With a pad's sustain the repeats merged
+    # into what they were repeating; GM 102 is percussive for that reason.
+    check("...and the echoing voice decays, or the taps would merge",
+          _fx[102].sustain_level < 0.25 and _fx[102].decay_db > 4.0,
+          "  (sustain %.2f against the pads' 0.93)" % _fx[102].sustain_level)
+    # The stretched effects obey the same cap the pads do.
+    _oob = [_g for _g, _c in _fx.items() if _c.inharmonicity_coefficient > 0.0
+            and 329.63 * _c.max_harmonic
+            * (1.0 + 0.5 * (_c.max_harmonic ** 2 - 1) * _c.inharmonicity_coefficient)
+            > 20000.0]
+    check("...and the stretched ones keep their top partial in the band",
+          not _oob,
+          "  (96 and 98 capped at %d and %d partials)"
+          % (_fx[96].max_harmonic, _fx[98].max_harmonic) if not _oob
+          else "  (out of band: %s)" % _oob)
+
     # ---------------------------------------------------------------- the pads
     import patch_map as _PMp2
     # 88-95 were ONE BowedStringProperties, and with the effects at 96-103 that

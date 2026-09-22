@@ -4492,3 +4492,64 @@ the comparison a sequencer actually makes.
 
 96-103, the synth effects, are still the shared `BowedStringProperties` -- now
 the only remaining block of eight on one voice.
+
+## GM 96-103, the synth effects: the last block on one voice
+
+Built on the pads, because most of these ARE pads with one unusual property
+pushed to the front. Each class gets one the others do not:
+
+| | | the mechanism |
+|---|---|---|
+| 96 | rain | stretched AND echoing -- the only voice with both |
+| 97 | soundtrack | the widest chorus and longest swell in the bank |
+| 98 | crystal | the most inharmonic voice here |
+| 99 | atmosphere | BREATH: `sustain_jitter`, at the pan pipe's value |
+| 100 | brightness | the hardest front, with nothing rolled off above it |
+| 101 | goblins | a deep slow WOBBLE -- 55 cents where a violinist uses 5 |
+| 102 | echoes | four repeated attacks 160 ms apart at falling gain |
+| 103 | sci-fi | odd harmonics AND a deep sweep, two exact mechanisms stacked |
+
+### The echo: what it is, and what it is not
+
+**DELAYED ENTRIES COST NOTHING.** The renderer already gives each player of a
+section their own entry instant -- `non` is a per-partial column and
+blockrender adds `onsets[ui+1]` to it -- so evenly spaced entries at falling
+gain are free. `section_onsets_at` is overridden rather than reused, because
+the section's version DRAWS its offsets and an echo needs them even and
+repeatable. Systematic against drawn, again.
+
+**BUT IT IS NOT A DELAY LINE, and it is worth recording how that was found.** A
+delay repeats a SIGNAL; this repeats an ONSET. Each tap is a fresh set of
+partials starting while the original is still ringing, and being at the same
+pitch they comb against it rather than arriving as a separate event. Measured,
+a note with four taps **rose again ten times in its first second**, where there
+are four taps.
+
+Drifting each tap a few cents -- which is what tape and bucket-brigade delays
+do on every pass, and which should have decorrelated them -- took ten to nine.
+The drift is kept because it is what the hardware does; it did not buy what it
+was meant to buy.
+
+**AND THE FIRST ATTEMPT HID THE MECHANISM COMPLETELY.** With a pad's slow front
+and a 0.70 sustain, the four repeats merged into the note they were repeating:
+the envelope rose smoothly from 0.72 to 1.00 over 0.6 s with no step at any tap
+time. Every copy was there and none was audible AS a copy, because **a delay is
+only heard when what it repeats has ended**. The SC-55 calls GM 102 "Echo Drops"
+and it is a plucky tone rather than a pad for exactly that reason, so the front
+is now fast, the decay steep and the sustain 0.12.
+
+What these voices have is therefore a repeated ATTACK at falling gain, which
+reads as repeats on a decaying note and as thickening on a sustaining one. A
+true delay line wants the renderer to sum a delayed copy of the OUTPUT -- a
+pass like `tremolo.py` or `cabinet.py`, not a property of a voice. Also stated:
+blockrender caps a player's entry at a QUARTER of the note's duration, so these
+taps shorten with the note instead of standing at a fixed time.
+
+### Levels
+
+All eight balance-normalised against the acoustic string ensemble (GM 48), as
+the pads are: what one of these is reached for INSTEAD of.
+
+### The bank
+
+With these, no block of eight shares a voice any longer.

@@ -36,6 +36,14 @@ from tonelib import (
     SynthBass1Properties,
     SynthStrings1Properties,
     NewAgePadProperties,
+    RainFXProperties,
+    SoundtrackFXProperties,
+    CrystalFXProperties,
+    AtmosphereFXProperties,
+    BrightnessFXProperties,
+    GoblinsFXProperties,
+    EchoesFXProperties,
+    SciFiFXProperties,
     WarmPadProperties,
     PolysynthPadProperties,
     ChoirPadProperties,
@@ -386,7 +394,20 @@ PROGRAM_CLASS[93] = MetallicPadProperties   # INHARMONIC -- what metal means
 PROGRAM_CLASS[94] = HaloPadProperties       # odd harmonics only: hollow, airy
 PROGRAM_CLASS[95] = SweepPadProperties      # the filter sweep IS the patch
 # 96-103 Synth FX                      -> sustained
+# 96-103 were the LAST block of eight on one voice. Most of these are pads with
+# one unusual property pushed to the front, so they are built on the pads -- and
+# each gets a mechanism the others do not. See tonelib.SynthEffectProperties,
+# and note that the echo is the section's own per-player entry offsets, evenly
+# spaced instead of drawn.
 _fill(96, 103, BowedStringProperties)
+PROGRAM_CLASS[96] = RainFXProperties         # stretched AND echoing: droplets
+PROGRAM_CLASS[97] = SoundtrackFXProperties   # the widest chorus and longest swell
+PROGRAM_CLASS[98] = CrystalFXProperties      # the most inharmonic voice in the bank
+PROGRAM_CLASS[99] = AtmosphereFXProperties   # BREATH -- sustain_jitter, as a pan pipe
+PROGRAM_CLASS[100] = BrightnessFXProperties  # the hardest front and nothing rolled off
+PROGRAM_CLASS[101] = GoblinsFXProperties     # a deep slow WOBBLE, and dark with it
+PROGRAM_CLASS[102] = EchoesFXProperties      # the delay line itself
+PROGRAM_CLASS[103] = SciFiFXProperties       # odd harmonics AND a deep sweep
 # 104-111 Ethnic (sitar, banjo, shamisen, koto, kalimba, bagpipe, fiddle, shanai)
 _fill(104, 107, PluckedStringProperties)  # sitar, banjo, shamisen, koto
 # 104 has SYMPATHETIC STRINGS, which is the whole instrument: thirteen tuned

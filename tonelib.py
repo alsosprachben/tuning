@@ -7683,6 +7683,7 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
         return (self.gain / harmonic) * self.bore_gain(f0 * harmonic) * self._bore_norm()
 
 
+
 class SynthPadProperties(FormantBody, SawtoothSynthProperties):
     """GM 88-95, the pads. One BowedStringProperties served all eight.
 
@@ -7925,6 +7926,257 @@ class SweepPadProperties(SynthPadProperties):
     attack_time = 0.26
     chorus_cents = (-8.0, 8.0)
     initial_gain = 0.0574479
+
+
+class SynthEffectProperties(SynthPadProperties):
+    """GM 96-103, the synth effects. The last eight programs on one voice.
+
+    Built on the pads, because most of these ARE pads with something extra --
+    what General MIDI calls an effect here is a pad with one unusual property
+    pushed to the front. Each subclass below gets one the others do not.
+
+    DELAYED ENTRIES COST NOTHING, and how far that gets is worth stating
+    precisely, because it is less far than it first looked. The renderer already
+    gives each player of a SECTION their own entry instant -- `non` is a
+    per-partial column and blockrender adds `onsets[ui+1]` to it -- so evenly
+    spaced entries at falling gain are available for free, the same shape of
+    reuse as the string machine's chorus.
+
+    WHAT THAT IS NOT is a delay line. A delay repeats a SIGNAL; this repeats an
+    ONSET. Each tap is a fresh set of partials starting while the original is
+    still ringing, and being at the same pitch they comb against it rather than
+    arriving as a separate event -- measured, a note with four taps rose again
+    ten times in its first second. Drifting each tap a few cents, which is what
+    tape and bucket-brigade delays do on every pass and which should have
+    decorrelated them, took that from ten to nine. The drift is kept because it
+    is what the hardware does; it did not buy what it was meant to buy.
+
+    So what these voices actually have is a REPEATED ATTACK at falling gain,
+    which on a decaying note reads as repeats and on a sustaining one reads as
+    thickening. That is why GM 102's envelope is set percussive below. A true
+    delay line wants the renderer to sum a delayed copy of the OUTPUT, which is
+    a pass like tremolo.py or cabinet.py and not a property of a voice.
+
+    `section_onsets_at` is overridden rather than reused, because the section's
+    version DRAWS its offsets (a scatter, which is what an ensemble wants) and
+    an echo needs them evenly spaced and repeatable. Systematic against drawn,
+    one more time.
+
+    WHAT LIMITS IT, stated because it is a real constraint and not a choice:
+    blockrender caps a player's entry at a QUARTER of the note's duration, so
+    the echo shortens with the note instead of standing at a fixed time the way
+    a delay pedal does. On a held chord it is an echo; on a short note it is a
+    thickening. Raising that cap is a renderer change, not a voice one.
+    """
+    echo_taps = ()              # seconds, per extra voice; () = no echo
+    echo_falloff = 0.55         # each tap this fraction of the one before
+
+    def section_onsets_at(self, frequency):
+        if not self.echo_taps:
+            return super().section_onsets_at(frequency)
+        # index 0 is the main voice and must be on time.
+        return [0.0] + list(self.echo_taps)
+
+    echo_drift_cents = 2.5      # per pass; see below
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        if not self.echo_taps:
+            return super().unison_voices(frequency, harmonic, harmonic_decay)
+        # A TAP MUST DRIFT, or it is not a repeat but an interference pattern.
+        # Measured on the first attempt with the taps at exactly the note's
+        # pitch: four identical, phase-coherent copies of the same partials
+        # starting at different instants do not read as four repeats, they comb
+        # against the still-ringing original. The envelope rose again TEN times
+        # in the first second where there are four taps, which is beating and
+        # not echo.
+        #
+        # A real delay does not have that problem, and the reason is physical:
+        # tape and bucket-brigade delays accumulate wow on every pass, so the
+        # nth repeat is a few cents off the (n-1)th and the copies cannot lock
+        # together. Drifting each tap progressively is therefore both the fix
+        # and what the hardware does.
+        return [(self.chorus_gain * (self.echo_falloff ** (i + 1)),
+                 0.0,
+                 2.0 ** (self.echo_drift_cents * (i + 1) / 1200.0) - 1.0,
+                 harmonic_decay, 0.0)
+                for i in range(len(self.echo_taps))]
+
+
+class RainFXProperties(SynthEffectProperties):
+    """GM 96, FX 1 (rain). Glassy droplets, falling.
+
+    The SC-55's "Ice Rain": a bright bell-like tone that repeats. Two mechanisms
+    at once, and it is the only voice here with both -- a stretched, glassy
+    series and an ECHO, because the repeats are what makes it rain rather than
+    a chime.
+    """
+    inharmonicity_coefficient = 0.0022
+    inharmonicity_dynamic = False
+    max_harmonic = 16           # stretched, so short: see SynthPadProperties
+    echo_taps = (0.11, 0.23, 0.37)
+    echo_falloff = 0.62
+    attack_time = 0.02          # a droplet does not swell
+    decay_db = 3.0
+    harmonic_decay_db = 3.0
+    sustain_level = 0.40
+    formants = ((3200.0, 2200.0, 0.95),)
+    formant_floor = 0.10
+    bore_corner_hz = 7000.0
+    # Balance-normalised against the acoustic string ensemble (GM 48), as the
+    # pads are: what one of these is reached for INSTEAD of.
+    initial_gain = 0.12368
+
+
+class SoundtrackFXProperties(SynthEffectProperties):
+    """GM 97, FX 2 (soundtrack). The widest thing in the bank.
+
+    A slow sweeping pad with the chorus opened as far as it goes -- this is the
+    voice whose whole character is WIDTH, where the warm pad's is weight. The
+    sweep is deep and the swell is long.
+    """
+    attack_time = 0.55          # the longest front of any voice here
+    harmonic_decay_db = 5.0
+    sustain_level = 0.92
+    chorus_cents = (-22.0, 17.0, 29.0, -13.0)
+    chorus_gain = 0.80
+    section_vibrato_hz = (0.2, 0.5)
+    formants = ((1300.0, 1500.0, 0.75),)
+    formant_floor = 0.16
+    bore_corner_hz = 3800.0
+    initial_gain = 0.0416079
+
+
+class CrystalFXProperties(SynthEffectProperties):
+    """GM 98, FX 3 (crystal). The most inharmonic voice in the bank.
+
+    A struck glass bell: the stretch here is larger than the metallic pad's, so
+    the overtones are further from whole multiples and beat harder. Short
+    series, for the reason the pads recorded -- the stretch grows as the square
+    of the index, so a strongly stretched voice must carry few partials or its
+    top ones leave the band.
+    """
+    inharmonicity_coefficient = 0.0105
+    inharmonicity_dynamic = False
+    max_harmonic = 10
+    attack_time = 0.015
+    decay_db = 1.6
+    harmonic_decay_db = 2.2
+    sustain_level = 0.55
+    formants = ((4000.0, 2600.0, 1.05),)
+    formant_floor = 0.08
+    bore_corner_hz = 8000.0
+    chorus_cents = (-4.0, 4.0)
+    initial_gain = 0.0754605
+
+
+class AtmosphereFXProperties(SynthEffectProperties):
+    """GM 99, FX 4 (atmosphere). The breathy one.
+
+    BREATH is its mechanism, and it is the only voice in these two families to
+    use it: sustain_jitter broadens every partial into a band, which is what the
+    pan pipe and the shakuhachi use for air past an edge. Here there is no edge
+    -- it is an oscillator -- but the effect a synthesist reaches for is the
+    same, and the renderer makes it the same way.
+    """
+    sustain_jitter = 0.55       # the pan pipe's value; see PanFluteProperties
+    attack_time = 0.34
+    formants = ((1100.0, 1400.0, 0.60),)
+    formant_floor = 0.22
+    bore_corner_hz = 3000.0
+    chorus_cents = (-12.0, 9.0)
+    initial_gain = 0.0494635
+
+
+class BrightnessFXProperties(SynthEffectProperties):
+    """GM 100, FX 5 (brightness). The brightest, and the hardest front.
+
+    Its mechanism is the attack: a fast, hard onset on a wide-open filter, which
+    is what separates it from every other pad here. Where the polysynth pad is
+    merely quick, this one is quick AND has nothing rolled off above it.
+    """
+    attack_time = 0.012
+    decay_db = 3.5
+    harmonic_decay_db = 1.6
+    sustain_level = 0.80
+    formants = ((5000.0, 3500.0, 0.95),)
+    formant_floor = 0.30        # very little taken out anywhere
+    bore_corner_hz = 9000.0
+    chorus_cents = (-6.0, 6.0)
+    initial_gain = 0.0563511
+
+
+class GoblinsFXProperties(SynthEffectProperties):
+    """GM 101, FX 6 (goblins). Dark, and WOBBLING.
+
+    The unsettling one, and what unsettles is a deep slow pitch modulation --
+    far deeper than any vibrato and far slower, so it reads as the instrument
+    being unstable rather than as a player's expression. That is its mechanism:
+    section_vibrato_cents at twenty times a violinist's depth.
+
+    Dark with it, because the two together are the effect: a wobble on a bright
+    sound is a broken synth, and on a dark one it is a cave.
+    """
+    section_vibrato_cents = 55.0        # a violinist uses 5
+    section_vibrato_hz = (0.18, 0.45)
+    attack_time = 0.30
+    formants = ((480.0, 420.0, 0.70),)
+    formant_floor = 0.10
+    bore_corner_hz = 1500.0
+    chorus_cents = (-16.0, 13.0)
+    initial_gain = 0.0490219
+
+
+class EchoesFXProperties(SynthEffectProperties):
+    """GM 102, FX 7 (echoes). The delay line itself.
+
+    Four evenly spaced repeated ATTACKS at falling gain, built out of the
+    section's own per-player entry offsets -- see SynthEffectProperties, which
+    records both how that works and how far short of a real delay line it
+    falls. Unlike the chorus every other voice here has, the taps are at the
+    note's own pitch save for a few cents of tape-style drift per pass.
+    """
+    echo_taps = (0.16, 0.32, 0.48, 0.64)
+    echo_falloff = 0.60
+    chorus_gain = 0.95          # the first tap is nearly as loud as the note
+
+    # AND THE NOTE MUST DECAY, or the taps are not an echo. Measured on the
+    # first attempt, with a pad's slow front and a 0.70 sustain, the four
+    # repeats merged into the note they were repeating: the envelope rose
+    # smoothly from 0.72 to 1.00 over 0.6 s with no step at any tap time. Each
+    # copy was there and none of them was audible AS a copy.
+    #
+    # A delay is only heard when what it repeats has ENDED. The SC-55 calls
+    # this one "Echo Drops" and it is a plucky tone, not a pad, for exactly
+    # that reason -- so the front is fast, the decay steep and the sustain low,
+    # and each tap then lands in the gap the last one left.
+    attack_time = 0.008
+    decay_db = 7.0
+    harmonic_decay_db = 4.0
+    sustain_level = 0.12
+    formants = ((1800.0, 1600.0, 0.80),)
+    formant_floor = 0.12
+    bore_corner_hz = 4200.0
+    initial_gain = 0.220825
+
+
+class SciFiFXProperties(SynthEffectProperties):
+    """GM 103, FX 8 (sci-fi). Hollow, bright, and sweeping.
+
+    The only voice in these two families to combine ODD HARMONICS with a deep
+    sweep: hollow like the halo pad, closing like the sweep pad, and brighter
+    than either. Two exact mechanisms stacked rather than a new one.
+    """
+    odd_only = True
+    harmonic_decay_db = 6.5
+    attack_time = 0.10
+    decay_db = 1.0
+    sustain_level = 0.82
+    formants = ((2600.0, 2000.0, 0.95),)
+    formant_floor = 0.10
+    bore_corner_hz = 6000.0
+    chorus_cents = (-9.0, 9.0)
+    initial_gain = 0.0708722
+
 
 
 class SynthStringsProperties(FormantBody, SawtoothSynthProperties):

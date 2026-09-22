@@ -23,8 +23,8 @@ voices sit at 2 and say so.
 | rating | patches | share |
 |---|---|---|
 | 0 nothing | 0 | 0% |
-| 1 general class | 19 | 15% |
-| 2 specific, theory | 55 | 43% |
+| 1 general class | 11 | 9% |
+| 2 specific, theory | 63 | 49% |
 | 3 specific, theory + ear | 25 | 20% |
 | 4 specific, reference audio | 29 | 23% |
 
@@ -258,14 +258,14 @@ splits almost exactly along that line.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 96 | FX 1 (rain) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 97 | FX 2 (soundtrack) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 98 | FX 3 (crystal) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 99 | FX 4 (atmosphere) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 100 | FX 5 (brightness) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 101 | FX 6 (goblins) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 102 | FX 7 (echoes) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
-| 103 | FX 8 (sci-fi) | `BowedString` | **1** | one BowedStringProperties serves all sixteen pads and FX |
+| 96 | FX 1 (rain) | `RainFX` | **2** | glassy droplets: the only voice with BOTH a stretch and repeated attacks |
+| 97 | FX 2 (soundtrack) | `SoundtrackFX` | **2** | the widest chorus and the longest swell (550 ms) in the bank -- its character is WIDTH where the warm pad's is weight |
+| 98 | FX 3 (crystal) | `CrystalFX` | **2** | the most inharmonic voice here, B=0.0105, capped at ten partials because the stretch grows as h^2 |
+| 99 | FX 4 (atmosphere) | `AtmosphereFX` | **2** | BREATH: sustain_jitter at the pan pipe's value, the only voice in these sixteen to use it |
+| 100 | FX 5 (brightness) | `BrightnessFX` | **2** | the hardest front (12 ms) with nothing rolled off above it -- quick AND wide open, where the polysynth pad is merely quick |
+| 101 | FX 6 (goblins) | `GoblinsFX` | **2** | a deep slow WOBBLE, 55 cents where a violinist uses 5, so it reads as an unstable instrument rather than expression -- and dark, because a wobble on a bright sound is a broken synth |
+| 102 | FX 7 (echoes) | `EchoesFX` | **2** | four repeated ATTACKS 160 ms apart at falling gain. NOT a delay line, and sources.md records how far short it falls and why |
+| 103 | FX 8 (sci-fi) | `SciFiFX` | **2** | odd harmonics AND a deep sweep: two exact mechanisms stacked rather than a new one |
 
 ## 104-111 Ethnic
 

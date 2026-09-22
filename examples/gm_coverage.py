@@ -188,6 +188,14 @@ RATED.update({
  93:(2,"INHARMONIC, 18x the glassy pad's stretch -- the one pad distinction that is physics and not filtering. Capped at 14 partials, since the stretch grows as h^2"),
  94:(2,"hollow: ODD HARMONICS ONLY, an exact distinction, with an airy formant high above it"),
  95:(2,"the filter sweep IS the patch: h16 falls at 120 dB/s against the other pads' 18. The sweep back UP is not modelled, and says so"),
+ 96:(2,"glassy droplets: the only voice with BOTH a stretch and repeated attacks"),
+ 97:(2,"the widest chorus and the longest swell (550 ms) in the bank -- its character is WIDTH where the warm pad's is weight"),
+ 98:(2,"the most inharmonic voice here, B=0.0105, capped at ten partials because the stretch grows as h^2"),
+ 99:(2,"BREATH: sustain_jitter at the pan pipe's value, the only voice in these sixteen to use it"),
+ 100:(2,"the hardest front (12 ms) with nothing rolled off above it -- quick AND wide open, where the polysynth pad is merely quick"),
+ 101:(2,"a deep slow WOBBLE, 55 cents where a violinist uses 5, so it reads as an unstable instrument rather than expression -- and dark, because a wobble on a bright sound is a broken synth"),
+ 102:(2,"four repeated ATTACKS 160 ms apart at falling gain. NOT a delay line, and sources.md records how far short it falls and why"),
+ 103:(2,"odd harmonics AND a deep sweep: two exact mechanisms stacked rather than a new one"),
 })
 
 # ---- channel 10, the percussion note map --------------------------------
