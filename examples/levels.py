@@ -77,6 +77,20 @@ def one_note_midi(path, program, notes, vel=VEL, beats=2):
     tr = mido.MidiTrack(); m.tracks.append(tr)
     tr.append(mido.MetaMessage("set_tempo", tempo=1000000, time=0))
     tr.append(mido.Message("program_change", channel=0, program=program, time=0))
+    # PIN THE CHANNEL VOLUME, rather than inherit whatever the renderer's
+    # default happens to be. This measurement is a RATIO against the piano, so
+    # a change in the default ought to cancel -- and it does not, because the
+    # yardstick is not linear in it. A piano's phantom sum-tones go as the
+    # PRODUCT of two partial amplitudes, so halving the source quarters them;
+    # an amped voice slides down its valve curve and compresses less. Measured,
+    # moving the default from 127 to GM's 100 moved this table by +1.0 dB on the
+    # nylon guitar and +3.3 on the slap bass -- not a uniform shift, and nothing
+    # about the instruments had changed.
+    #
+    # So the condition is stated here instead of assumed: full scale, where no
+    # non-linear term is being exercised by the apparatus itself.
+    tr.append(mido.Message("control_change", channel=0, control=7, value=127, time=0))
+    tr.append(mido.Message("control_change", channel=0, control=11, value=127, time=0))
     for n in notes:
         tr.append(mido.Message("note_on", channel=0, note=n, velocity=vel, time=0))
         tr.append(mido.Message("note_off", channel=0, note=n, velocity=0,

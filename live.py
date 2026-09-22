@@ -1761,9 +1761,14 @@ class Live:
                              vrs=(1.0 + self.mod_rate * w) if w != 0.0 else None)
 
     def _chan_gain(self, ch):
-        """CC7 x CC11, squared -- blockrender's (v7*v11)**2, one law."""
-        return ((self.vol.get(ch, 127) / 127.0)
-                * (self.expr.get(ch, 127) / 127.0)) ** 2
+        """CC7 x CC11, squared -- blockrender's (v7*v11)**2, one law.
+
+        ...and one set of defaults with it. GM powers a channel up at volume
+        100, not 127, which is four decibels of room for a part to be turned
+        UP. Both renderers read tonelib's constant so they cannot drift.
+        """
+        return ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0)
+                * (self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)) ** 2
 
     DRONE_SLOT = "drone"
 

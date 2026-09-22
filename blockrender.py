@@ -357,7 +357,12 @@ def parse(path):
     ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; on = {}; t = 0.0
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
-        c = ctrl.get(ch, {}); return (c.get(7,127)/127.0, c.get(11,127)/127.0, (c.get(10,64)-64)/63.0)
+        # GM's power-on defaults, not 127/127/64-as-an-accident: see
+        # tonelib.GM_DEFAULT_VOLUME for why volume starts at 100.
+        c = ctrl.get(ch, {})
+        return (c.get(7, T.GM_DEFAULT_VOLUME)/127.0,
+                c.get(11, T.GM_DEFAULT_EXPRESSION)/127.0,
+                (c.get(10, T.GM_DEFAULT_PAN)-64)/63.0)
     for msg in mid:
         t += msg.time
         if msg.type == 'program_change':

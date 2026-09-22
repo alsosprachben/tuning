@@ -12202,6 +12202,19 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 # Three is the default, because a bagpipe's resting state is DRONING and most
 # files carry no CC1 at all. (The Rhodes is the opposite case: its panel
 # tremolo is off until asked for, so absence there means silence.)
+# GM Level 1's power-on channel volume. NOT 127, which is what both renderers
+# assumed: the spec says a channel that has never been told otherwise sits at
+# 100, four decibels down, leaving room for a part to be turned UP as well as
+# down. 53 of the 217 files in the corpus never send CC7 at all and every one
+# of them is now 4.2 dB quieter, which is the point -- a mix where nothing can
+# rise above the default is not a mix.
+#
+# ONE CONSTANT, read by blockrender.cv() and live._chan_gain, because two
+# numbers in two files that happen to agree is not agreement.
+GM_DEFAULT_VOLUME = 100
+GM_DEFAULT_EXPRESSION = 127     # CC11 does start at full: it is an attenuator
+GM_DEFAULT_PAN = 64             # centre
+
 bagpipe_drones = int(os.environ.get("TUNING_BAGPIPE_DRONE", "3") or 3)
 # WHERE LOW A ACTUALLY LANDED, which only the renderer knows: it owns the
 # tuning table, and the drones are tuned to the chanter rather than to a fork.
