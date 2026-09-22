@@ -12218,6 +12218,27 @@ class BagpipeProperties(ReedPipeProperties):
     unison_spans_part = True
     drone_wheel = True          # CC1 corks them; see the docstring
 
+    # AND IT IS NOT TOUCH SENSITIVE, which is the same argument as the organ's
+    # and reaches it by a different route. Ben: "it should be more like an
+    # organ: not touch sensitive. Channel volumes only."
+    #
+    # A BAG IS A PRESSURE REGULATOR. That is what it is FOR: the piper's arm
+    # holds the bag at a constant pressure and the reeds see that pressure and
+    # nothing else, which is precisely why a piper can breathe without the
+    # sound stopping. There is no dynamic marking in pipe music and no way to
+    # play one -- a Highland pipe has exactly one volume, and the expression is
+    # entirely in grace notes and in time.
+    #
+    # It got True by default rather than by a claim: ReedPipeProperties sits
+    # under ReedOrganProperties, but the False lives on FlueOrganProperties, so
+    # the whole reed-pipe chain fell through to SynthProperties' default. That
+    # is right for the shanai, which is mouth-blown -- a shawm player's breath
+    # IS the dynamic -- and wrong for the one pipe with a bag in the way.
+    #
+    # ONLY attack_volume IS NEUTRALISED, as everywhere: CC7 and CC11 still
+    # work, and on a pipe band that is the only balance there is.
+    touch_sensitive = False
+
     # A BAGPIPE IS ALWAYS LEGATO, and it is the only voice in this bank for
     # which that is a fact about the instrument rather than a choice by the
     # player. Every other voice that declares legato_attack_s -- the clarinet,

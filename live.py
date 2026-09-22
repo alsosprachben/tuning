@@ -592,6 +592,25 @@ class Slab:
         self.a["aL"][idx] = self.aL0[idx] * shape
         self.a["aR"][idx] = self.aR0[idx] * shape
 
+    def channel_gain(self, slots, ratio):
+        """Move the channel fader under a note already sounding.
+
+        THE BASELINE, not the current value. aL0/aR0 are what aftertouch, the
+        rotor and the tone rockers all recompute from, so scaling those makes
+        the fader compose with every one of them instead of being wiped by the
+        next aftertouch message. And it takes a RATIO rather than an absolute
+        gain, so a stream of CC7s cannot compound -- the caller remembers what
+        it last applied, exactly as _one does for the drive step.
+        """
+        if not slots or ratio == 1.0:
+            return
+        idx = np.fromiter(slots, np.int64, len(slots))
+        r = np.float32(ratio)
+        self.aL0[idx] *= r
+        self.aR0[idx] *= r
+        self.a["aL"][idx] *= r
+        self.a["aR"][idx] *= r
+
     def retune(self, slots, n, om_scale=None, vd=None, vrs=None):
         """Change a sounding partial's pitch or vibrato WITHOUT a click.
 
@@ -904,6 +923,16 @@ class Bank:
         # of them on every note and stack them on a held line. So the chanter
         # template is built with the drones CORKED (see _raw_template), and the
         # drones are stamped separately as their own held voices.
+        # A KEY THAT ONLY OPENS A VALVE DOES NOT SET THE LEVEL, and live has to
+        # know it too. The class flag was honoured in the PARTIALS -- every
+        # bucket of a fixed-volume voice comes out identical -- and then thrown
+        # away again by the velocity trim in _note_on, which scales what it
+        # stamps by (vel/bucket_vel)^2 whatever the voice is. The harpsichord
+        # escaped only because it is `registerable` and takes the organ branch
+        # before that line; the accordions and the bagpipe did not, and
+        # measured +24.1 dB from velocity 30 to 120 on a patch whose own class
+        # says velocity does nothing.
+        self.touch_sensitive = drums or bool(getattr(pc, "touch_sensitive", True))
         self.drone_wheel = (not drums) and bool(getattr(pc, "drone_wheel", False))
         self.drone_hz = tuple(getattr(pc, "drone_hz", ())) if pc else ()
         self.drone_gain = tuple(getattr(pc, "drone_gain", ())) if pc else ()
@@ -1242,6 +1271,15 @@ class Live:
         self.cmds = collections.deque()
         self.lock = threading.Lock()
         self.bend = {}          # channel -> current pitch-bend ratio
+        # CC7 AND CC11, WHICH LIVE DID NOT HAVE AT ALL. It implemented CC1,
+        # CC64 and CC123 and nothing else, so `level_db` in the mixer was the
+        # only volume there was. That is survivable on a piano, where velocity
+        # is the dynamic -- and it is the WHOLE dynamic range of a patch whose
+        # class says velocity does nothing. A bagpipe with neither touch nor
+        # channel volume cannot be played at two levels at all.
+        self.vol = {}           # channel -> CC7, 127 until one arrives
+        self.expr = {}          # channel -> CC11, the swell and the bellows
+        self.cgain = {}         # channel -> the gain last applied to its notes
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
         self.mod = {}           # channel -> current vibrato depth (fraction)
@@ -1542,6 +1580,28 @@ class Live:
                     self.modw[ch] = w
                     self.slab.retune(self._sounding(ch, pids={p.pid for p in others}),
                                      n0, vd=depth, vrs=1.0 + self.mod_rate * w)
+            elif msg.control in (7, 11):            # volume and expression
+                # (v7*v11)^2, which is blockrender's law at line 840 -- the
+                # same squared MIDI curve velocity uses, applied to the
+                # CHANNEL. Snapshotted into every note stamped from here on,
+                # which is exactly what the file path does.
+                if msg.control == 7:
+                    self.vol[ch] = msg.value
+                else:
+                    self.expr[ch] = msg.value
+                g = self._chan_gain(ch)
+                was = self.cgain.get(ch, 1.0)
+                if g != was:
+                    self.cgain[ch] = g
+                    # ...AND IT REACHES A NOTE ALREADY SOUNDING, which the file
+                    # path cannot do: offline a note's amplitude is fixed when
+                    # its partials are emitted, so CC7 is read once at note-on
+                    # and a swell written mid-note does nothing. Live has a
+                    # fader in someone's hand, and on an organ or a bagpipe
+                    # CC11 IS the swell box and the only expression there is.
+                    # The DIFFERENCE is that and only that: a note stamped at
+                    # this setting comes out identical either way.
+                    self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
             elif msg.control == 64:                 # sustain pedal
                 downp = msg.value >= 64
                 was = self.pedal.get(ch, False)
@@ -1608,8 +1668,15 @@ class Live:
             return
         # Timbre is quantised to the bucket, level is not: trim by the ratio
         # of the actual velocity to the one the bucket was built at.
-        scale = ((vel / 127.0) ** 2 /
-                 max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9)) * part.gain()
+        #
+        # ...UNLESS THE VOICE HAS NO TOUCH. Then the bucket's template already
+        # carries the whole level -- attack_volume was neutralised when it was
+        # built -- and trimming it by velocity is the touch sensitivity the
+        # class spent a paragraph refusing. See Bank.touch_sensitive.
+        scale = part.gain() * self._chan_gain(ch)
+        if part.bank.touch_sensitive:
+            scale *= ((vel / 127.0) ** 2 /
+                      max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9))
         self._amp_touch(part)
         if part.organ:
             # A pipe organ has no touch: a key is open or shut, and the wind
@@ -1655,6 +1722,11 @@ class Live:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
                              vd=(v if v != 0.0 else None),
                              vrs=(1.0 + self.mod_rate * w) if w != 0.0 else None)
+
+    def _chan_gain(self, ch):
+        """CC7 x CC11, squared -- blockrender's (v7*v11)**2, one law."""
+        return ((self.vol.get(ch, 127) / 127.0)
+                * (self.expr.get(ch, 127) / 127.0)) ** 2
 
     DRONE_SLOT = "drone"
 
@@ -1702,7 +1774,8 @@ class Live:
                     continue
                 g = (part.bank.drone_gain[i]
                      if i < len(part.bank.drone_gain) else 1.0)
-                if not self.slab.stamp(tmpl, key, n0, g * part.gain()):
+                if not self.slab.stamp(tmpl, key, n0,
+                                       g * part.gain() * self._chan_gain(ch)):
                     self.dropped += 1
                     continue
                 slots = self.slab.live.get(key)
@@ -1952,8 +2025,14 @@ class Live:
             return
         cols, n, hrel = got
         key = (part.pid, ch, note, rank)
+        # THE SWELL BOX IS CC11, which is the one control a pipe organ's
+        # console really has -- so the organ path takes the channel gain too,
+        # even though it takes no velocity at all. It cannot come from the
+        # scale computed in _note_on, because this branch returns before that
+        # is used.
         if not self.slab.stamp_cols(cols, n, key, n0,
-                                    part.gain(), hrel, 0, False):
+                                    part.gain() * self._chan_gain(ch),
+                                    hrel, 0, False):
             self.dropped += 1
             return
         if part.bank.leslie:
@@ -3874,6 +3953,98 @@ def selftest():
     check("...and the block sweep leaves them alone, as it does the amplifier",
           len([_k for _k in lvbp.slab.live if _k[3] == lvbp.DRONE_SLOT]) == 3,
           "  (a part-level voice has no key down, and sweep looks for one)")
+
+    # ---- A BAG IS A PRESSURE REGULATOR --------------------------------------
+    # Ben, still playing it: "it should be more like an organ: not touch
+    # sensitive. Channel volumes only." A piper's arm holds the bag at a
+    # constant pressure -- that is what a bag is FOR, and why a piper can
+    # breathe without the sound stopping. There is no dynamic marking in pipe
+    # music because there is no way to play one.
+    #
+    # It had touch by DEFAULT rather than by a claim: the reed-pipe chain sits
+    # under ReedOrganProperties, but the False lives on FlueOrganProperties, so
+    # it fell through to SynthProperties. That default is right for the shanai,
+    # which is mouth-blown, and wrong for the one pipe with a bag in the way.
+    check("a bag holds one pressure, so the bagpipe has no touch",
+          not _eth[109].touch_sensitive and _eth[111].touch_sensitive,
+          "  (and the shanai keeps its, being blown by a mouth)")
+
+    def _live_level(_lv, _ch=0, note=60, vel=100, cc7=None, cc11=None):
+        for _c, _v in ((7, cc7), (11, cc11)):
+            if _v is not None:
+                _lv.on_midi(mido.Message("control_change", channel=_ch,
+                                         control=_c, value=_v))
+        _lv.on_midi(mido.Message("note_on", channel=_ch, note=note, velocity=vel))
+        _lv.apply(0)
+        _ks = [_k for _k in _lv.slab.live if _k[2] == note]
+        _v = sum(float(np.abs(_lv.slab.a["aL"][_lv.slab.live[_k]]).sum())
+                 for _k in _ks)
+        _lv.on_midi(mido.Message("note_off", channel=_ch, note=note, velocity=0))
+        _lv.apply(0)
+        for _k in _ks:
+            _lv.slab.release(_k, 0)
+        _lv.slab.reap(10 ** 9)
+        return _v
+
+    # THE CLASS FLAG WAS HONOURED IN THE PARTIALS AND THROWN AWAY AGAIN. Every
+    # bucket of a fixed-volume voice comes out identical -- and then _note_on
+    # trimmed what it stamped by (vel/bucket_vel)^2 whatever the voice was. The
+    # harpsichord escaped only because it is `registerable` and returns down the
+    # organ branch before that line; the accordions and the bagpipe did not, and
+    # measured +24.1 dB from velocity 30 to 120 on a patch whose own class says
+    # velocity does nothing. Checked through the BANK, which is the path that
+    # broke, exactly as the earlier bucket version of this bug was.
+    _touchless = []
+    for _g, _lab in ((109, "bagpipe"), (21, "accordion"), (23, "tango accordion"),
+                     (20, "reed organ"), (6, "harpsichord")):
+        _l = Live(program=_g, rate=48000, frames=128, verbose=False); _l.warm()
+        _db = 20.0 * _math.log10(max(_live_level(_l, vel=120), 1e-12)
+                                 / max(_live_level(_l, vel=30), 1e-12))
+        if abs(_db) > 0.01:
+            _touchless.append("%s %+.1f dB" % (_lab, _db))
+        _l.renderer.close()
+    check("...and live honours that, which it did not for anything but the organs",
+          not _touchless,
+          "  (five fixed-volume voices, velocity 30 to 120, all flat)"
+          if not _touchless else "  (still touch-sensitive: %s)"
+          % ", ".join(_touchless))
+    # ...AND CHANNEL VOLUME HAD TO EXIST FOR THAT TO BE PLAYABLE. Live
+    # implemented CC1, CC64 and CC123 and nothing else, so with velocity
+    # correctly doing nothing a bagpipe had no dynamic range at all. CC7 and
+    # CC11 now carry blockrender's own law, (v7*v11)^2 at line 840.
+    _lv7 = Live(program=109, rate=48000, frames=128, verbose=False); _lv7.warm()
+    _f = _live_level(_lv7, cc7=127, cc11=127)
+    _g7 = 20.0 * _math.log10(_live_level(_lv7, cc7=40, cc11=127) / _f)
+    _g11 = 20.0 * _math.log10(_live_level(_lv7, cc7=127, cc11=40) / _f)
+    _want = 20.0 * _math.log10((40 / 127.0) ** 2)
+    check("...so CC7 and CC11 exist now, on the file path's own law",
+          abs(_g7 - _want) < 0.05 and abs(_g11 - _want) < 0.05,
+          "  (CC 40 gives %+.1f and %+.1f dB against (40/127)^2 = %+.1f)"
+          % (_g7, _g11, _want))
+    # AND A SWELL REACHES A NOTE ALREADY SOUNDING, which is the one place live
+    # goes further than the file path: offline an amplitude is fixed when the
+    # partials are emitted, so CC11 is read once at note-on. On an organ or a
+    # bagpipe that pedal IS the expression, and here there is a foot on it.
+    _lv7.on_midi(mido.Message("control_change", channel=0, control=7, value=127))
+    _lv7.on_midi(mido.Message("control_change", channel=0, control=11, value=127))
+    _lv7.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _lv7.apply(0)
+    _k60 = [_k for _k in _lv7.slab.live if _k[2] == 60][0]
+    _sum = lambda: float(np.abs(_lv7.slab.a["aL"][_lv7.slab.live[_k60]]).sum())
+    _a0 = _sum()
+    _lv7.on_midi(mido.Message("control_change", channel=0, control=11, value=64))
+    _lv7.apply(0)
+    _a1 = _sum()
+    _lv7.on_midi(mido.Message("control_change", channel=0, control=11, value=64))
+    _lv7.apply(0)
+    _a2 = _sum()
+    check("...and the swell reaches a note already sounding, without compounding",
+          abs(20 * _math.log10(_a1 / _a0)
+              - 20 * _math.log10((64 / 127.0) ** 2)) < 0.05
+          and abs(_a2 - _a1) < 1e-6,
+          "  (%+.1f dB under a held note, and the same message twice adds %+.2f)"
+          % (20 * _math.log10(_a1 / _a0), 20 * _math.log10(_a2 / _a1)))
+    _lv7.renderer.close()
     # A DRONE SPANS THE PHRASE, LIVE TOO, and live has no far side of the rest
     # to look at -- so part_break_s is spent as a HOLD instead. The drones stay
     # up through a gap between notes and are let down only once the piper has

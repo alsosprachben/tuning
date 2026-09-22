@@ -105,6 +105,29 @@ def main():
     cap.blocks(3.0)
     made.append(cap.write(os.path.join(out, "pipes_live_rest.wav")))
     print("  two bars' rest mid-phrase      %s" % os.path.basename(made[-1]))
+
+    # A BAG HOLDS ONE PRESSURE. The first half hammers the velocity from 30 to
+    # 120 and back and must come out dead flat; the second holds one velocity
+    # and works CC11, which on a pipe is the only expression there is.
+    cap = Capture(109)
+    cap.blocks(0.25)
+    vels = [30, 60, 90, 120, 100, 70, 45, 120, 35, 110]
+    for (deg, beats), vel in zip(PHRASE, vels):
+        note = CHANTER[deg]
+        cap.send(mido.Message("note_on", channel=0, note=note, velocity=vel))
+        cap.blocks(beats * beat)
+        cap.send(mido.Message("note_off", channel=0, note=note, velocity=0))
+    cap.blocks(1.0)
+    swell = [40, 64, 90, 112, 127, 112, 90, 64, 48, 127]
+    for (deg, beats), cc in zip(PHRASE, swell):
+        note = CHANTER[deg]
+        cap.send(mido.Message("control_change", channel=0, control=11, value=cc))
+        cap.send(mido.Message("note_on", channel=0, note=note, velocity=100))
+        cap.blocks(beats * beat)
+        cap.send(mido.Message("note_off", channel=0, note=note, velocity=0))
+    cap.blocks(1.5)
+    made.append(cap.write(os.path.join(out, "pipes_live_touch.wav")))
+    print("  velocity, then CC11            %s" % os.path.basename(made[-1]))
     return made
 
 
