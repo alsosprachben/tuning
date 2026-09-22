@@ -5045,3 +5045,45 @@ drum descriptions. It was caught by the histogram moving the wrong way: 3s and
 `PERC_RATED` block.
 
 **The check was the total, not the diff.** A diff would have looked plausible.
+
+### The drones on the wheel, and following the phrase
+
+Two changes Ben asked for, and the second reintroduced a bug this file already
+records.
+
+**CC1 SAYS HOW MANY, NOT HOW LOUD.** A piper does not turn a drone down: they
+CORK it. So the wheel selects a count out of the set the instrument has, and
+`drone_hz` was already in the order a piper corks them -- (tenor, tenor, bass)
+-- so the count is a slice.
+
+| CC1 | | |
+|---|---|---|
+| 0 | 0 drones | the chanter alone, which is what a practice chanter is |
+| 1-63 | 1 drone | a tenor, which is what you hear while a piper tunes |
+| 64-106 | 2 drones | two tenors: **the instrument before the bass was added** |
+| 107-127 | 3 drones | the modern pipe |
+| absent | 3 drones | a bagpipe's resting state is droning |
+
+Every intermediate step is a pipe somebody once played: the Great Highland
+Bagpipe carried two tenors for most of its history. And absence means the full
+set because the instrument's default is to drone -- the Rhodes is the opposite
+case, where a panel tremolo is off until asked for, so absence there means
+silence.
+
+**AND THE DRONES FOLLOW THE PLAYED PHRASES.** `unison_spans_part` spanned the
+channel's first note-on to its last note-off, so a part with sixteen bars of
+tacet in the middle droned straight through them. Notes are now grouped into
+phrases, breaking at a gap longer than `part_break_s` (2 s, in SECONDS because
+the decision being modelled is when a player lets the bag down). Rendered on a
+part with a six-second rest, the bass drone holds at 0.78-0.83 through the first
+phrase, sits at **0.00 for the whole rest**, and returns for the second.
+
+**THE SAME BUG, WITHIN THE HOUR.** The CC1 count was first built in the
+per-channel block with `_CLAV_CH` -- which runs AFTER every note is built, so
+`_DRONE_CH` was empty when it was read and every CC1 value gave three drones.
+That is exactly how the honky-tonk's wheel came to be inert, which this file
+already records, and the warning was in the plan for this very change. It is now
+built inline at the props construction site, as `_DETUNE_CH` is.
+
+Measured end to end, from the partial table: 0/0/1/1/2/2/3/3 drones at CC1
+0/1/40/63/64/80/106/127, and three when no CC1 is written.

@@ -3532,19 +3532,34 @@ def selftest():
           len(_ten) == 2 and 0.05 < abs(_ten[1] - _ten[0]) < 2.0,
           "  (%.2f Hz apart: one beat every %.1f s, a well-tuned pipe)"
           % (abs(_ten[1] - _ten[0]), 1.0 / max(abs(_ten[1] - _ten[0]), 1e-9)))
-    # AND THE DRONES CAN BE SWITCHED OFF. Including them is right -- the
-    # reference implementation does, and the program is called Bag pipe rather
-    # than Chanter -- but a score that writes its own drone as held notes would
-    # have it twice, and a voice cannot tell.
-    _was = _T.bagpipe_drone
+    # CC1 SAYS HOW MANY, NOT HOW LOUD. A piper does not turn a drone down, they
+    # CORK it -- so the wheel selects a count out of the set the instrument has,
+    # and each step is a pipe that existed: the Great Highland Bagpipe carried
+    # two tenors for most of its history and the bass drone was added later.
+    _was = _T.bagpipe_drones
+    _counts = []
     try:
-        _T.bagpipe_drone = 0.0
-        _silent = _eth[109](392.0, 0.0, 1.0, 1.0).unison_voices(392.0, 1, 0.0)
+        for _n in (0, 1, 2, 3):
+            _T.bagpipe_drones = _n
+            _counts.append(len(_eth[109](392.0, 0.0, 1.0, 1.0)
+                               .unison_voices(392.0, 1, 0.0)))
     finally:
-        _T.bagpipe_drone = _was
-    check("...and they can be corked, for a score that writes its own",
-          not _silent and _T.bagpipe_drone,
-          "  (CC1 0, or TUNING_BAGPIPE_DRONE=0, leaves the chanter alone)")
+        _T.bagpipe_drones = _was
+    check("...and CC1 corks them one at a time, rather than turning them down",
+          _counts == [0, 1, 2, 3],
+          "  (0 is the chanter alone; 2 is the pipe before the bass drone)")
+    # ...AND THE ORDER IS THE INSTRUMENT'S OWN. drone_hz is (tenor, tenor, bass),
+    # so the count is a slice and every intermediate state is playable.
+    _T.bagpipe_drones = 2
+    try:
+        _two = sorted(392.0 * (1.0 + _v[2]) for _v in
+                      _eth[109](392.0, 0.0, 1.0, 1.0).unison_voices(392.0, 1, 0.0))
+    finally:
+        _T.bagpipe_drones = _was
+    check("...and two drones means two TENORS, not a tenor and the bass",
+          len(_two) == 2 and min(_two) > 150.0,
+          "  (%s Hz -- the two-drone pipe, not half of the modern one)"
+          % ", ".join("%.0f" % _x for _x in _two))
     # AND THEY BELONG TO THE PART. Ben: "The drones seem to me to be a channel
     # event?" -- they are, and attaching them to the note made them restart on
     # every one. The flag is general; the bagpipe is the only voice that sets
@@ -3552,11 +3567,13 @@ def selftest():
     # belong to the note that excited them and a drone does not.
     _spanners = [_n for _n, _c in vars(_T).items()
                  if isinstance(_c, type) and getattr(_c, "unison_spans_part", False)]
-    check("...and they span the PART, not the note",
+    check("...and they span the PHRASE, not the note and not the channel",
           _eth[109].unison_spans_part
           and not _T.SynthProperties.unison_spans_part
-          and _spanners == ["BagpipeProperties"],
-          "  (rendered on a detached line the drone holds through the rests)")
+          and _spanners == ["BagpipeProperties"]
+          and _eth[109].part_break_s > 0.0,
+          "  (rendered: the drone holds through a detached line, and stops "
+          "dead through a %.0f s rest)" % _eth[109].part_break_s)
     # A CONE PASSES THE WHOLE SERIES. The shanai had been on the bagpipe's
     # class, which is ReedOrganProperties underneath and suppresses the evens.
     _sh = _eth[111](261.63, 0.0, 1.0, 1.0)

@@ -1976,6 +1976,12 @@ class SynthProperties:
     # range, instead of once per note.
     unison_spans_part = False
 
+    # ...and how long a gap ENDS one of those parts. A bagpipe's drones follow
+    # the played phrases, not the channel's whole lifetime: a piper does not
+    # stop for a two-bar rest and does not keep the bag up through a section
+    # off. In SECONDS, because that is what the decision is about.
+    part_break_s = 2.0
+
     # HOW MUCH OF A NOTE MAY BE ATTACK. Almost always well under half: an onset
     # that outlasts the note it is opening is not an onset, and blockrender has
     # capped it at 0.45 of the duration since it was written -- which keeps a
@@ -12027,7 +12033,22 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 # called Bag pipe, not Chanter -- but a score that writes its own drone as held
 # notes would then have it twice, and a voice cannot tell. So it is a setting,
 # the way the electric piano's voicing and the honky-tonk's detune are.
-bagpipe_drone = float(os.environ.get("TUNING_BAGPIPE_DRONE", "1") or 1.0)
+#
+# A COUNT, NOT A GAIN. This was a continuous volume multiplier, and a piper does
+# not turn a drone down: they CORK it. So the wheel selects how many drones are
+# sounding, out of the set the instrument actually has -- and each step is a
+# pipe that existed, because the Great Highland Bagpipe carried two tenors for
+# most of its history and the bass drone was added later:
+#
+#     0 drones   the chanter alone, which is what a practice chanter is
+#     1 drone    a tenor -- what you hear while a piper tunes one at a time
+#     2 drones   two tenors: the instrument before the bass was added
+#     3 drones   two tenors and a bass: the modern pipe
+#
+# Three is the default, because a bagpipe's resting state is DRONING and most
+# files carry no CC1 at all. (The Rhodes is the opposite case: its panel
+# tremolo is off until asked for, so absence there means silence.)
+bagpipe_drones = int(os.environ.get("TUNING_BAGPIPE_DRONE", "3") or 3)
 
 
 class BagpipeProperties(ReedPipeProperties):
@@ -12133,10 +12154,15 @@ class BagpipeProperties(ReedPipeProperties):
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         f = float(frequency)
-        if f <= 0.0 or not bagpipe_drone:
+        n = max(0, min(int(bagpipe_drones), len(self.drone_hz)))
+        if f <= 0.0 or not n:
             return []
-        return [(g * bagpipe_drone, 0.0, hz / f - 1.0, harmonic_decay, 0.0)
-                for hz, g in zip(self.drone_hz, self.drone_gain)]
+        # A SLICE, because drone_hz is already in the order a piper corks them:
+        # (tenor, tenor, bass). Taking the first n therefore walks the
+        # instrument's own history backwards, and every intermediate state is a
+        # pipe somebody once played.
+        return [(g, 0.0, hz / f - 1.0, harmonic_decay, 0.0)
+                for hz, g in zip(self.drone_hz[:n], self.drone_gain[:n])]
 
 
 class ShanaiProperties(ReedPipeProperties):
