@@ -27,7 +27,7 @@ FRAMES = 512
 BPM = 108
 
 # The nine notes of a Highland chanter, as scotland.py maps them: G4 to A5.
-CHANTER = (67, 69, 71, 72, 74, 76, 78, 79, 81)
+CHANTER = (67, 69, 71, 73, 74, 76, 78, 79, 81)
 # The opening of a strathspey-ish figure, in chanter degrees.
 PHRASE = [(4, 1.0), (2, 0.5), (4, 0.5), (6, 1.0), (4, 1.0),
           (7, 1.0), (6, 0.5), (4, 0.5), (2, 1.0), (4, 2.0)]

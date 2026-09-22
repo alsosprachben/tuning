@@ -934,8 +934,13 @@ class Bank:
         # says velocity does nothing.
         self.touch_sensitive = drums or bool(getattr(pc, "touch_sensitive", True))
         self.drone_wheel = (not drums) and bool(getattr(pc, "drone_wheel", False))
-        self.drone_hz = tuple(getattr(pc, "drone_hz", ())) if pc else ()
+        # RATIOS OF THE TONIC, not frequencies. A drone is tuned to the
+        # chanter before playing, so it has to follow the part's tuner: at
+        # `hybrid` Low A is 415 Hz and a drone nailed to 220 would be a
+        # hundred cents out against the one note it exists to reinforce.
+        self.drone_ratios = tuple(getattr(pc, "drone_ratios", ())) if pc else ()
         self.drone_gain = tuple(getattr(pc, "drone_gain", ())) if pc else ()
+        self.scale_tonic_note = getattr(pc, "scale_tonic_note", None) if pc else None
         self.part_break_s = float(getattr(pc, "part_break_s", 2.0)) if pc else 2.0
         self.detune_wheel = (not drums) and bool(getattr(pc, "detune_wheel", False))
         if self.detune_wheel:
@@ -1549,7 +1554,7 @@ class Live:
                     # read-once: a piper corks before playing, but a player at
                     # a keyboard has a wheel in their hand and expects it to
                     # do something, so the drones come and go under it.
-                    _nd = len(part.bank.drone_hz)
+                    _nd = len(part.bank.drone_ratios)
                     n = max(0, min(_nd, int(round(msg.value / 127.0 * _nd))))
                     if self.drone_count.get(part.pid) != n:
                         self.drone_count[part.pid] = n
@@ -1735,6 +1740,22 @@ class Live:
         return any(k[0] == part.pid and k[1] == ch and k[3] != self.DRONE_SLOT
                    for k in list(self.slab.live))
 
+    def _tonic_hz(self, part):
+        """Where this part's tuner actually put the instrument's tonic.
+
+        Read off the tonic's OWN template rather than computed, so it survives
+        any temperament, any transposition the bank applies, and the chanter's
+        own scale -- the tonic's scale offset is zero by definition, so this is
+        the same number the file path publishes as bagpipe_tonic_hz.
+        """
+        n = part.bank.scale_tonic_note
+        if n is None:
+            return 0.0
+        t = part.bank.get(n, 100, part.bank.leslie_default)
+        if t is None:
+            return 0.0
+        return float(np.asarray(t["nf"])[:t["P"]].min())
+
     def _drones(self, part, ch, n0):
         """Bring the uncorked drones up and cork the rest.
 
@@ -1752,8 +1773,11 @@ class Live:
         together, and the difference between them is which register the series
         is read in.
         """
-        want = self.drone_count.get(part.pid, len(part.bank.drone_hz))
-        for i, hz in enumerate(part.bank.drone_hz):
+        want = self.drone_count.get(part.pid, len(part.bank.drone_ratios))
+        tonic = self._tonic_hz(part)
+        if tonic <= 0.0:
+            return
+        for i, hz in enumerate(tonic * r for r in part.bank.drone_ratios):
             key = (part.pid, ch, -1 - i, self.DRONE_SLOT)
             on = key in self.slab.live
             if i < want and not on:
@@ -3887,10 +3911,10 @@ def selftest():
     lvbp = Live(program=109, rate=48000, frames=128, verbose=False); lvbp.warm()
     _bpb = lvbp.parts[0].bank
     check("the live bagpipe knows it has drones, and keeps them out of the note",
-          _bpb.drone_wheel and len(_bpb.drone_hz) == 3
+          _bpb.drone_wheel and len(_bpb.drone_ratios) == 3
           and not _bpb.detune_wheel,
           "  (%d drones, %d template axis positions)"
-          % (len(_bpb.drone_hz), len(_bpb.speeds)))
+          % (len(_bpb.drone_ratios), len(_bpb.speeds)))
     # THE CHANTER TEMPLATE IS THE CHANTER. If a drone were baked in, the
     # template for a high note would carry partials down at 110 and 220 Hz.
     _nf = np.asarray(_bpb.get(74, 100, _bpb.leslie_default)["nf"])
@@ -3933,7 +3957,8 @@ def selftest():
     _dr_f = sorted(float(lvbp.slab.a["om"][lvbp.slab.live[_k]].min())
                    * lvbp.rate / (2.0 * _math.pi)
                    for _k in lvbp.slab.live if _k[3] == lvbp.DRONE_SLOT)
-    _want_f = sorted(_bpb.drone_hz)
+    _want_f = sorted(lvbp._tonic_hz(lvbp.parts[0]) * _r
+                     for _r in _bpb.drone_ratios)
     check("...at the file's own drone pitches, not the nearest key's",
           len(_dr_f) == 3
           and max(abs(a / b - 1.0) for a, b in zip(_dr_f, _want_f)) < 1e-6,
@@ -3968,6 +3993,89 @@ def selftest():
     check("a bag holds one pressure, so the bagpipe has no touch",
           not _eth[109].touch_sensitive and _eth[111].touch_sensitive,
           "  (and the shanai keeps its, being blown by a mouth)")
+
+    # A RANK BORROWS A SPECTRUM, NOT A TOUCH. The line that builds a
+    # cross-family stop says "borrow this voice's spectrum only" and then
+    # handed the borrowed class a velocity too. A church organ's Gedackt is a
+    # StoppedPipeProperties, which sits ABOVE OrganProperties and so takes the
+    # touch-sensitive default: one rank of eight scaled by (vel/127)^2 on a
+    # patch whose own class says velocity does nothing. Measured, 33 partials
+    # of 491 -- exactly the odd harmonics, which is what a stopped pipe has --
+    # and the church organ built 8 velocity buckets to carry it.
+    _borrowers = [(_n, _c) for _n, _c in sorted(vars(_T).items())
+                  if isinstance(_c, type) and getattr(_c, "stop_ranks", None)
+                  and not _c.touch_sensitive
+                  and any(len(_r) > 3 and isinstance(_r[3], type)
+                          and _r[3].touch_sensitive for _r in _c.stop_ranks)]
+    check("a voice with no touch has no touch in its ranks either",
+          len(_borrowers) >= 3,
+          "  (%s borrow a touch-sensitive spectrum, and must not borrow the touch)"
+          % ", ".join(_n.replace("Properties", "") for _n, _c in _borrowers))
+    _spread = []
+    for _g, _lab in ((19, "church organ"), (16, "drawbar organ"),
+                     (80, "square lead"), (109, "bagpipe")):
+        _l = Live(program=_g, rate=48000, frames=128, verbose=False)
+        _b = _l.parts[0].bank
+        _t1 = _b._raw_template(60, 127); _t2 = _b._raw_template(60, 32)
+        _r = (np.asarray(_t2["aL"])[:_t2["P"]]
+              / np.maximum(np.asarray(_t1["aL"])[:_t1["P"]], 1e-30))
+        _r = _r[np.isfinite(_r) & (_r > 0)]
+        _spread.append((_lab, _b.nbuckets,
+                        20 * _math.log10(_r.max() / max(_r.min(), 1e-30))))
+        _l.renderer.close()
+    # 1e-4 dB, not 0: templates are stored as float32, so the square lead's
+    # 64 partials come back 1e-6 dB apart at two velocities from rounding
+    # alone. The threshold is a storage limit, not a tolerance for touch.
+    check("...so its partials do not move with velocity, and it needs one bucket",
+          all(_n == 1 and abs(_d) < 1e-4 for _l, _n, _d in _spread),
+          "  (" + ", ".join("%s %d bucket/%.2f dB" % _t for _t in _spread) + ")")
+
+    # ---- THE PIPER'S SCALE, which is not a temperament ----------------------
+    # Nine holes cut once, and every one of them tuned to beat cleanly against
+    # a fixed A drone -- which makes the scale just intonation on Low A rather
+    # than a compromise between keys. A pipe cannot change key, so it has
+    # nothing to compromise for.
+    _bp = _eth[109]
+    _ratio = {0: 1.0, 2: 9.0 / 8, 4: 5.0 / 4, 5: 4.0 / 3, 7: 3.0 / 2,
+              9: 5.0 / 3, 10: 16.0 / 9, 12: 2.0, -2: 8.0 / 9}
+    _worst = max(abs(_bp.scale_cents[_k]
+                     - 1200.0 * _math.log2(_v)) for _k, _v in _ratio.items())
+    check("a chanter's nine holes are just intonation on Low A, not a temperament",
+          _bp.scale_tonic_note == 69 and len(_bp.scale_cents) == 9
+          and _worst < 0.01,
+          "  (worst departure from the pure ratio %.3f cents)" % _worst)
+    # THE FLAT SEVENTH IS THE ONE EVERYBODY HEARS: 16/9 is 996 cents, four
+    # under equal, and there is no leading tone anywhere on the instrument --
+    # which is why a song has to be adapted rather than transposed to play it.
+    check("...with a flat seventh and a flat third, where equal has neither",
+          abs(_bp.scale_cents[10] - 996.09) < 0.01
+          and abs(_bp.scale_cents[4] - 386.31) < 0.01,
+          "  (High G %.0f cents against equal's 1000, C# %.0f against 400)"
+          % (_bp.scale_cents[10], _bp.scale_cents[4]))
+    # AND THE DRONES ARE TUNED TO THE CHANTER, which is what a piper does by
+    # ear before playing. They were absolute Hz -- right at A=440 and a hundred
+    # cents out at `hybrid`'s A=415, against the one note they reinforce.
+    _by_tuner = {}
+    for _tn in ("hybrid440", "hybrid"):
+        _l = Live(program=109, rate=48000, frames=128, tuner=_tn, verbose=False)
+        _l.warm()
+        _by_tuner[_tn] = (_l._tonic_hz(_l.parts[0]),
+                          sorted(_l._tonic_hz(_l.parts[0]) * _r
+                                 for _r in _l.parts[0].bank.drone_ratios))
+        _l.renderer.close()
+    _a4, _d4 = _by_tuner["hybrid440"]
+    _a1, _d1 = _by_tuner["hybrid"]
+    check("...and the drones are tuned to the chanter, not to a fork",
+          abs(_a4 - 440.0) < 0.01 and abs(_a1 - 415.0) < 0.01
+          and all(abs(1200 * _math.log2(_x / _y) + 101.27) < 0.5
+                  for _x, _y in zip(_d1, _d4)),
+          "  (Low A %.0f and %.0f Hz; the drones follow it, %.0f cents down)"
+          % (_a4, _a1, 1200 * _math.log2(_d1[0] / _d4[0])))
+    check("...and they are RATIOS now, so nothing is nailed to 440",
+          not hasattr(_T.SynthProperties, "drone_ratios")
+          and abs(_bp.drone_ratios[0] - 0.5) < 1e-12
+          and abs(_bp.drone_ratios[2] - 0.25) < 1e-12,
+          "  (two tenors an octave under Low A, a bass two octaves under)")
 
     def _live_level(_lv, _ch=0, note=60, vel=100, cc7=None, cc11=None):
         for _c, _v in ((7, cc7), (11, cc11)):

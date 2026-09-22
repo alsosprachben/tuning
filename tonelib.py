@@ -2059,6 +2059,27 @@ class SynthProperties:
     # box, and on an accordion it is the bellows.
     touch_sensitive = True
 
+    # AN INSTRUMENT'S OWN SCALE, where it has holes rather than a keyboard.
+    # Empty means "use the temperament", which is every voice that can play a
+    # chromatic scale at all -- almost all of them.
+    #
+    # A TEMPERAMENT IS A COMPROMISE BETWEEN KEYS, and an instrument that cannot
+    # change key has no reason to make it. A chanter's holes are cut once, in
+    # one place, for one tonic; a recorder's, a tin whistle's and a shawm's
+    # likewise. What they are cut FOR is a set of intervals that beat cleanly
+    # against the instrument's own drone or its own fundamental, which is not
+    # what twelve equal semitones give. So the scale is expressed as CENTS FROM
+    # THE INSTRUMENT'S TONIC, and the tonic itself still follows the render's
+    # temperament -- the pipe plays with the band, and plays itself in tune.
+    #
+    # Same argument and same mechanism as the brass intonation in blockrender,
+    # which takes a trumpet's pitch from the valve combination rather than from
+    # the scale. A degree absent from the table keeps the temperament's pitch:
+    # the sequencer has asked for a note the instrument does not have, and
+    # silently moving it somewhere else would be worse than sounding it.
+    scale_tonic_note = None     # MIDI note of the instrument's tonic
+    scale_cents = None          # {semitones from tonic: cents from tonic}
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):
         # effort must be known BEFORE attack_dampening is computed below, which
@@ -12145,6 +12166,11 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 # files carry no CC1 at all. (The Rhodes is the opposite case: its panel
 # tremolo is off until asked for, so absence there means silence.)
 bagpipe_drones = int(os.environ.get("TUNING_BAGPIPE_DRONE", "3") or 3)
+# WHERE LOW A ACTUALLY LANDED, which only the renderer knows: it owns the
+# tuning table, and the drones are tuned to the chanter rather than to a fork.
+# 440 is the fallback and the equal-tempered answer, so nothing that never sets
+# it moves. See BagpipeProperties.drone_ratios.
+bagpipe_tonic_hz = 440.0
 
 
 class BagpipeProperties(ReedPipeProperties):
@@ -12253,7 +12279,47 @@ class BagpipeProperties(ReedPipeProperties):
     # of the same note, a piper flicks a higher finger for a few milliseconds,
     # and that flick is the instrument's entire articulation.
     legato_attack_s = 0.004     # the clarinet's is 0.012, and it can tongue
-    drone_hz = (220.0, 220.0 * 2.0 ** (3.0 / 1200.0), 110.0)
+
+    # ---- THE PIPER'S SCALE, which is not a temperament ---------------------
+    # Nine holes, cut once, and the reason they are where they are is sounding
+    # three feet away over the piper's shoulder. Every note of a chanter is
+    # tuned to BEAT CLEANLY AGAINST A FIXED A DRONE, which makes the scale
+    # just intonation on Low A and not a compromise between keys -- a pipe
+    # cannot change key, so it has nothing to compromise for.
+    #
+    #        Low G   -204   9/8 below the tonic
+    #        Low A      0   the drone's own note
+    #        B       +204   9/8
+    #        C#      +386   5/4   (14 cents FLAT of equal, and audibly so)
+    #        D       +498   4/3
+    #        E       +702   3/2
+    #        F#      +884   5/3   (16 cents flat)
+    #        High G  +996   16/9  the famous flat seventh: there is no leading
+    #                             tone on a chanter, which is why a song has to
+    #                             be adapted rather than transposed to play it
+    #        High A +1200
+    #
+    # THE TONIC STILL FOLLOWS THE RENDER'S TEMPERAMENT, so a pipe band sits
+    # with an orchestra at whatever pitch the orchestra is at; only the
+    # intervals inside the instrument are the instrument's own. (A real chanter
+    # is also famously sharp -- its A is nearer 470 or 480 Hz than 440 -- but
+    # that is a reference and not a scale, and pinning it here would make the
+    # patch unable to play with anything else. The interval is the physics.)
+    scale_tonic_note = 69                       # Low A
+    scale_cents = {-2: -203.910, 0: 0.0, 2: 203.910, 4: 386.314,
+                   5: 498.045, 7: 701.955, 9: 884.359, 10: 996.090,
+                   12: 1200.0}
+
+    # AND THE DRONES ARE RATIOS OF THAT TONIC, not frequencies. They were
+    # absolute -- 220, 220.4 and 110 Hz -- which is exactly right under equal
+    # temperament at A=440 and silently wrong under every other tuner this
+    # renderer has: at `hybrid` the chanter drops to A=415 and the drones
+    # stayed at 440, a hundred cents out against the one note they exist to
+    # reinforce. A drone is tuned TO THE CHANTER, by ear, before playing.
+    #
+    # Two tenors an octave below Low A and a bass two octaves below; the three
+    # cents between the tenors is the beat, and it is a ratio too.
+    drone_ratios = (0.5, 0.5 * 2.0 ** (3.0 / 1200.0), 0.25)
     # NOT EQUAL, and that matters more than it looks. At 0.34 against 0.32 the
     # two tenors very nearly cancel at the trough of their beat -- measured in
     # a rendered tune the 220 Hz band fell to 0.02 of its peak, a 34 dB null.
@@ -12269,9 +12335,14 @@ class BagpipeProperties(ReedPipeProperties):
     # inherits the organ's gain scale, where 0.02 is a hundred times hot.
     initial_gain = 0.000163928
 
+    @property
+    def drone_hz(self):
+        """The drones, in Hz, against wherever the render put Low A."""
+        return tuple(bagpipe_tonic_hz * r for r in self.drone_ratios)
+
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         f = float(frequency)
-        n = max(0, min(int(bagpipe_drones), len(self.drone_hz)))
+        n = max(0, min(int(bagpipe_drones), len(self.drone_ratios)))
         if f <= 0.0 or not n:
             return []
         # A SLICE, because drone_hz is already in the order a piper corks them:

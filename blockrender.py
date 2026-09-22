@@ -848,6 +848,27 @@ def prepare(path, tuner='hybrid440'):
             _so = getattr(pc, 'sounding_octaves', 0.0)
             if _so:
                 f0 *= 2.0 ** _so
+            # AN INSTRUMENT WITH HOLES HAS ITS OWN SCALE, and it is not the
+            # render's temperament. A chanter is cut once for one tonic and
+            # every note of it is tuned to beat cleanly against a fixed drone,
+            # which is just intonation and not twelve equal semitones. The
+            # TONIC still comes from the temperament -- so the pipe plays with
+            # whatever else is in the file -- and only the intervals inside the
+            # instrument are its own. See SynthProperties.scale_cents; same
+            # mechanism as the brass intonation immediately below, which takes
+            # a trumpet's pitch from its valve combination.
+            _sc = getattr(pc, 'scale_cents', None)
+            _st = getattr(pc, 'scale_tonic_note', None)
+            if _sc and _st is not None and _st in FREQ:
+                _tonic = FREQ[_st] * (2.0 ** _so if _so else 1.0)
+                _deg = _sc.get(note - _st)
+                if _deg is not None:
+                    f0 = _tonic * 2.0 ** (_deg / 1200.0)
+                # ...AND THE DRONES ARE TUNED TO IT, by ear, before playing.
+                # They were absolute Hz, which is right at A=440 and a hundred
+                # cents out at `hybrid`'s A=415 -- against the one note they
+                # exist to reinforce.
+                T.bagpipe_tonic_hz = _tonic
             # BRASS INTONATION FROM THE HORN, not from the temperament. The
             # fingering a player would choose determines the tube length, and
             # that tube does not sound the tempered pitch: valve combinations
@@ -1121,7 +1142,22 @@ def prepare(path, tuner='hybrid440'):
         for key, ratio, gain, *rest in stops:
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
             dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
-            spv = T.rank_spectrum(spec_cls)(f0, pan, (vel/127.0)**2, chan_vol) if spec_cls else None
+            # "BORROW THIS VOICE'S SPECTRUM ONLY" -- and the line under that
+            # comment handed the borrowed class a velocity as well, so it also
+            # borrowed its TOUCH. A church organ's Gedackt is written as a
+            # StoppedPipeProperties, which sits above OrganProperties in the
+            # chain and therefore takes SynthProperties' touch-sensitive
+            # default: measured, one rank of a patch whose own class says
+            # velocity does nothing scaled by (vel/127)^2 while the other seven
+            # did not. 33 partials of 491, exactly the odd harmonics of the
+            # fundamental, which is what a stopped pipe has.
+            #
+            # A rank is part of the instrument that draws it. Whose wind chest
+            # a pipe stands on is the parent's question, not the spectrum's.
+            # This also moves the bagpipe's trumpet rank and the synth lead's
+            # flute, both borrowed into voices with no touch of their own.
+            _rank_av = (vel/127.0)**2 if getattr(props, 'touch_sensitive', True) else 1.0
+            spv = T.rank_spectrum(spec_cls)(f0, pan, _rank_av, chan_vol) if spec_cls else None
             hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
             rank_B = (spv or props).inharmonicity_coefficient_for_frequency(f0) if dyn else B
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
