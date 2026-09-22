@@ -862,6 +862,12 @@ class Bank:
         # up. None = scale by each chord's own peak, which is right for a
         # keyboard and wrong for anything with a picking hand.
         self.amp_reference = None if drums else getattr(pc, "amp_reference", None)
+        # AND THE IMBALANCE, which live never carried. Offline passes each voice
+        # its own (blockrender's _AMP_IMB); live passed none, so tubeamp's
+        # default of 0.06 applied -- a balanced push-pull pair with its even
+        # orders cancelled. GM 30 asks for 0.80. The same voice was running
+        # through two different amplifiers depending on how it was played.
+        self.amp_imbalance = None if drums else getattr(pc, "amp_imbalance", None)
         # The speaker. The TEMPLATE already went through it -- prepare() runs
         # the cabinet pass -- and that is exact for a linear filter, since
         # filtering each note and summing is the same as filtering the sum.
@@ -1666,14 +1672,15 @@ class Live:
             job = self.amp_job
             if self.amp_stop or job is None:
                 continue
-            pid, key, src, f, am, ph, drive, when, ref = job
+            pid, key, src, f, am, ph, drive, when, ref, imb = job
             try:
                 fc, ac, pc = _TA.combine(f, am, ph)
+                _kw = {} if imb is None else {"imbalance": float(imb)}
                 out = _TA.emit(fc.tolist(), ac.tolist(), pc.tolist(),
                                float(self.rate), drive,
                                window_s=_TA.LIVE_WINDOW_S,
                                oversample=_TA.LIVE_OVERSAMPLE,
-                               keep=_TA.LIVE_KEEP, reference=ref)
+                               keep=_TA.LIVE_KEEP, reference=ref, **_kw)
                 self.amp_calls += 1
             except Exception as e:
                 self.amp_err = "%s: %s" % (type(e).__name__, e)
@@ -1731,7 +1738,8 @@ class Live:
             return None
         src = int(idx[ok[int(np.argmax(aM[ok]))]])
         return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0,
-                getattr(part.bank, 'amp_reference', None))
+                getattr(part.bank, 'amp_reference', None),
+                getattr(part.bank, 'amp_imbalance', None))
 
     def _amp_place(self, n0, pid, key, src, out):
         """Stamp what the worker returned. Cheap: no transform, just writes."""

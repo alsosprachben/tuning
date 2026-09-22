@@ -4191,7 +4191,18 @@ class RockOrganProperties(TonewheelProperties):
     default_stops = 0b100000111      # 888 000 008
     leslie = True
     leslie_fast = True
-    amp_drive = 0.90
+    # RE-VOICED after tubeamp's units fix. The distortion had been arriving with
+    # the valve stage's own gain still on it -- 8 to 9.5 dB hot against a dry path
+    # at unity -- so every drive in this file was set to sound right through an
+    # amplifier that was shouting. Dividing that out drops the distortion by the
+    # same amount, and these numbers put each voice back to the EXACT distortion
+    # it made before, measured on a rendered chord against the same chord with
+    # the amplifier out.
+    #
+    # The ratios are not constant -- 1.7x here, 4.8x on the distortion guitar --
+    # because the curve compresses: recovering the same distortion from a stage
+    # that is already working harder costs disproportionately more drive.
+    amp_drive = 1.53
 
 
 class OrganProperties(StoppedPipeProperties):
@@ -6239,7 +6250,7 @@ class ElectricGuitarProperties(PluckedStringProperties):
 
     # A clean valve amplifier is not a distortion-free one -- it is one worked
     # gently. This is the "clean" setting, and TUNING_AMP_DRIVE sweeps it.
-    amp_drive = 0.35
+    amp_drive = 0.6
     # ...and the level it is measured against, so that picking harder breaks up
     # and picking softly does not. See tubeamp.emit; without this the drive is
     # normalised per segment and the dynamics are divided out.
@@ -6332,7 +6343,7 @@ class ElectricBassProperties(ElectricGuitarProperties):
     strike_point = 0.12           # plucked over the pickup, as a hand does
     strike_depth = 0.55           # a fingertip is broad: a shallow notch
     inharmonicity_coefficient = 2.0e-05
-    amp_drive = 0.15
+    amp_drive = 0.28
     amp_imbalance = 0.20
     cabinet = "bass410"
     # MEASURED at velocity 100, like the guitar's: a low E with its octave,
@@ -6424,7 +6435,7 @@ class SlapBassProperties(ElectricBassProperties):
     strike_point = 0.06
     strike_depth = 1.00
     pickup_points = (0.081,)      # Jazz bridge pickup, 70 mm of 864
-    amp_drive = 0.45
+    amp_drive = 1.45
     amp_imbalance = 0.35
 
 
@@ -6437,7 +6448,7 @@ class PoppedBassProperties(SlapBassProperties):
     releases, so it hits the frets harder and drives the amplifier harder.
     Nothing here is a measurement.
     """
-    amp_drive = 0.70
+    amp_drive = 3.41
     amp_imbalance = 0.45
 
 
@@ -6618,7 +6629,7 @@ class JazzGuitarProperties(ElectricGuitarProperties):
     pickup_points = (0.230, 0.258)      # neck humbucker, 18 mm coil spacing
     strike_point = 0.25                 # picked toward the neck, softly
     strike_depth = 0.7                  # a thumb or a soft pick is not a point
-    amp_drive = 0.20
+    amp_drive = 0.34
     amp_imbalance = 0.35
 
 
@@ -6642,7 +6653,7 @@ class MutedGuitarProperties(ElectricGuitarProperties):
     strike_point = 0.10
     decay_db = 30.0                     # dB/s on the fundamental
     harmonic_decay_db = 8.0             # ...and far faster up the series
-    amp_drive = 0.80
+    amp_drive = 1.98
     amp_imbalance = 0.50
 
 
@@ -6660,7 +6671,7 @@ class OverdrivenGuitarProperties(ElectricGuitarProperties):
     Bridge pickup, because that is what the position is for.
     """
     pickup_points = (0.10,)
-    amp_drive = 1.20
+    amp_drive = 4.45
     amp_imbalance = 0.60
 
 
@@ -6678,7 +6689,7 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     """
     pickup_points = (0.049, 0.077)      # bridge humbucker
     strike_point = 0.13
-    amp_drive = 3.00
+    amp_drive = 14.43
     amp_imbalance = 0.80
 
 
@@ -6701,7 +6712,7 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     """
     harmonic_touch = 2                  # touched at 1/2: the twelfth fret
     strike_point = 0.13                 # struck near the bridge, as one does
-    amp_drive = 0.25
+    amp_drive = 0.45
 
 
 # --- Percussion (channel 10): broad noise/membrane/metal buckets ---
@@ -7848,7 +7859,7 @@ class CharangLeadProperties(SawtoothSynthProperties):
     reference is the level the drive is measured against, so the two move
     together or the voice gets louder AND dirtier.
     """
-    amp_drive = 0.55
+    amp_drive = 1.46
     amp_reference = None            # set below, from this class's own gain
     max_harmonic = 48
     # Hard and bright, with the low end tightened the way a driven amp does.

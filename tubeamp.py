@@ -457,7 +457,27 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     # "does it conserve" but "is the energy in the right PLACES" -- the
     # waveform error, not the total.
     have = sum(am * am for _, am, _ in out) * 0.5
-    sc = math.sqrt(power / have) / unit if have > 0.0 else 0.0
+    # ...AND BACK OUT OF THE STAGE'S GAIN, not only out of the drive scaling.
+    # `r` above is `curve(x) - g*x`: a residual sitting on top of a LINEAR PATH
+    # OF GAIN g, because that is what the valve does to the signal it is handed.
+    # But expand() only ever APPENDS these partials -- the dry ones pass through
+    # this module untouched, at gain 1. Dividing by `unit` alone therefore
+    # returned the distortion in the valve's output units against a dry signal
+    # in the input's, and the two cannot both be right.
+    #
+    # Measured, g runs 2.52 to 2.95 across the imbalances the voices use, so the
+    # distortion was arriving 8.0 to 9.4 dB hot on all thirteen amped voices.
+    # Roughly half of what looked like valve COMPRESSION was this: the residual
+    # carries the compression term, it lands antiphase on the input frequencies,
+    # and at 2.5x it cancelled the note far harder than the curve ever does.
+    # With the gain divided out, the model tracks the honest per-sample
+    # waveshaper to within a quarter of a dB at every drive.
+    #
+    # That the gain was known and simply never carried across the boundary is
+    # visible in examples/tubeamp_check.py, which multiplies its analytic path
+    # by `gnc` to make the two agree -- "without putting the gain back, it
+    # measures neither the series nor the stage".
+    sc = math.sqrt(power / have) / (g * unit) if have > 0.0 else 0.0
     out = [(hz, am * sc, ph) for hz, am, ph in out]
     if stats is not None:
         stats['power'] = power
