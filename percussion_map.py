@@ -59,6 +59,9 @@ from tonelib import (
     ElectronicKickProperties,
     ElectronicSnareProperties,
     GatedSnareProperties,
+    BrushTapProperties,
+    BrushSlapProperties,
+    BrushSwirlProperties,
 )
 
 M = MembraneDrumProperties      # a head with no shell worth modelling
@@ -261,6 +264,13 @@ KITS = {
         50: ("Elec Hi Tom 1",    SynthDrumProperties, 175.0),
         52: ("Reverse Cymbal",   ReverseCymbalProperties, 181.9),
     },
+    # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
+    # notes, all strokes of a brush on the snare, at the snare's own pitch.
+    40: {
+        38: ("Brush Tap",        BrushTapProperties, 260.0),
+        39: ("Brush Slap",       BrushSlapProperties, 260.0),
+        40: ("Brush Swirl",      BrushSwirlProperties, 260.0),
+    },
 }
 
 # A set's own notes do NOT take Standard's per-note ring and level: those were
@@ -272,11 +282,18 @@ KITS = {
 # is four times a tom and turns a fill into a drone. A Simmons tom is long for a
 # drum and short for a note; its kick is a thump with a tail.
 KIT_RING = {24: {36: 0.55, 41: 0.95, 43: 0.95, 45: 0.9, 47: 0.9, 48: 0.85, 50: 0.85}}
+# BRUSH is balanced against its own tap instead, which lands on Standard's snare
+# unaided: a slap does not replace a hand clap nor a swirl an electric snare,
+# whatever key they share. The slap sits ~3 dB over the tap and the swirl
+# ~5.5 dB under it -- a swirl is a texture under the band, not a stroke.
+# Judgement, for Ben's ear.
+#
 # ...and its LEVELS, matched to the Standard note each replaces (loudness over
 # the first 150 ms, examples/drumset_check.py). A set is a different
 # instrument, not a louder one: a file balanced its drums against its band
 # with velocities, and swapping the kit must not undo that.
-KIT_LEVEL = {24: {36: 3.467, 38: 0.603, 40: 0.519, 41: 0.851, 43: 0.861, 45: 0.822, 47: 0.871, 48: 0.912, 50: 0.813}}
+KIT_LEVEL = {24: {36: 3.467, 38: 0.603, 40: 0.519, 41: 0.851, 43: 0.861, 45: 0.822, 47: 0.871, 48: 0.912, 50: 0.813},
+             40: {39: 1.148, 40: 0.135}}
 
 
 class DrumProgram(int):

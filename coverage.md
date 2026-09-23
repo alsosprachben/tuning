@@ -112,7 +112,7 @@ plays Standard, as does any program that is not a set.
 | 24 | Electronic | yes |
 | 25 | TR-808 | no -- plays Standard |
 | 32 | Jazz | = Standard on the SC-55 |
-| 40 | Brush | no -- plays Standard |
+| 40 | Brush | yes |
 | 48 | Orchestra | no -- plays Standard |
 | 56 | SFX | no -- plays Standard |
 | 127 | CM-64/32L | no -- plays Standard |
@@ -131,6 +131,14 @@ plays Standard, as does any program that is not a set.
 | 48 | Elec Hi Tom 2 | `SynthDrum` | **2** | as 41 |
 | 50 | Elec Hi Tom 1 | `SynthDrum` | **2** | as 41 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **2** | GM 119's reverse cymbal: a measured crash, swelling to the written note-off |
+
+### 40 Brush
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 38 | Brush Tap | `BrushTap` | **2** | a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes |
+| 39 | Brush Slap | `BrushSlap` | **2** | a brush slapped FLAT: louder, and it lies on the head and chokes it |
+| 40 | Brush Swirl | `BrushSwirl` | **2** | a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms |
 
 ## 0-7 Piano
 

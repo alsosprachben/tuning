@@ -669,9 +669,10 @@ it. None is built, because the corpus asks for none: of its 42 CC0 messages,
 **The drum SET is the program on a drum channel** (p.21). The SC-55 has ten,
 and its table (p.70–71) lists only the notes each changes. Every blank is
 *"Same as the percussion sound of Standard"*.
-- **Built:** 24 Electronic.
-- **Not built:** every other set plays Standard. Jazz (32) already is Standard
-  on the SC-55, since it shares Standard's column.
+- **Built:** 24 Electronic and 40 Brush. Brush is the SC-55's jazz set,
+  because its Jazz (32) is Standard: the two share a column.
+- **Not built, and this is where drum sets stop:** Room, Power, TR-808,
+  Orchestra, SFX and CM-64 play Standard. See `remaining.md`.
 - **Not a set at all:** the manual doesn't say what happens, so nothing is
   guessed and the number plays Standard. The corpus sends 1, 20, 29, 30, 35, 47,
   49 and 60 this way, and they play what they always have.

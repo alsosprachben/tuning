@@ -2,7 +2,7 @@
 
     python3 examples/drumset_check.py [SET]      # default 24, Electronic
 
-For each note the set changes: loudness (RMS over the first 150 ms, dB) and
+For each note the set changes: loudness (the loudest 150 ms, RMS in dB) and
 how long the note takes to fall 40 dB from its peak, for the set and for
 Standard. A set is a different instrument, not a quieter or longer one, so
 the loudness should land near Standard's -- a kit whose kick is 12 dB under
@@ -35,7 +35,12 @@ def measure(program, note, hold):
     L, R = B.render(note_file(program, note, hold=hold))[:2]
     x = np.asarray(L, np.float64) + np.asarray(R, np.float64)
     sr = B.SR
-    rms = 20 * np.log10(np.sqrt(np.mean(x[:int(0.15 * sr)] ** 2)) + 1e-12)
+    # THE LOUDEST 150 ms, not the first: a struck drum's loudest window IS its
+    # first, but a brush swirl swells in over 120 ms and would read quiet.
+    n150, hop = int(0.15 * sr), int(0.01 * sr)
+    rms = 20 * np.log10(max(np.sqrt(np.mean(x[i:i + n150] ** 2))
+                            for i in range(0, max(1, min(len(x), 2 * sr) - n150), hop))
+                        + 1e-12)
     w = int(0.005 * sr)
     env = np.sqrt(np.convolve(x ** 2, np.ones(w) / w, 'same')) + 1e-12
     pk = int(np.argmax(env))
@@ -47,6 +52,8 @@ def measure(program, note, hold):
 
 def main():
     kit = int(sys.argv[1]) if len(sys.argv) > 1 else 24
+    if kit not in PM.KITS:
+        sys.exit("set %d is not built" % kit)
     print("  note  %-18s %8s %8s   %-16s %8s %8s   %6s" %
           (PM.DRUM_SETS.get(kit, kit), "dB", "t-40", "Standard", "dB", "t-40", "diff"))
     for note in sorted(PM.KITS[kit]):

@@ -8753,6 +8753,12 @@ def selftest():
           and _PM.drum_set_name(32) == "Jazz",
           "  (the manual does not say what a non-set number does, so the "
           "corpus's 1, 20, 29, 30, 35, 47, 49, 60 play Standard, as before)")
+    check("...and Brush is the jazz set, since the SC-55's Jazz is Standard",
+          _PM.kit_for_program(40) == 40 and _PM.kit_for_program(32) == 0
+          and [_PM.percussion_for_note(n, 40)[0] for n in (38, 39, 40)]
+          == ["Brush Tap", "Brush Slap", "Brush Swirl"]
+          and _PM.percussion_for_note(36, 40)[0] == "Bass Drum 1",
+          "  (three snare strokes; every other note is Standard's, p.70)")
 
     def _bfile(msgs):
         _m = mido.MidiFile(type=1, ticks_per_beat=480)

@@ -5303,3 +5303,19 @@ set in `thememat` and `thememix`, and all it changes there is one note: a 52
 held 0.86 s into a downbeat. That was a Chinese cymbal until now, and is the
 reverse cymbal the file was written for.
 
+**The Brush set (41 in the manual, program 40)** changes three notes: 38 Brush
+Tap, 39 Brush Slap, 40 Brush Swirl. It was built as the SC-55's jazz set,
+because **Jazz (33, program 32) shares Standard's column** there and so is
+Standard. No recording of it is to hand. The three voices are a brush's physics
+on the snare already here: many wires landing over milliseconds, an area
+contact that darkens the high modes, and a swirl with no strike at all, just
+friction driving the head. They are balanced against the brush tap, which lands
+on Standard's snare, and Ben's ear is the calibration.
+
+**The SC-88 Pro's drum set list** (`SC-88PRO_OM.pdf` p.163, which has a text
+layer) gives all three maps side by side. Native has 25 sets, the SC-88 map 14
+and the SC-55 map 10. In 0-based programs, the ones the corpus sends are 1
+STANDARD 2 (SC-88 and Pro), 29 TR-707 and 30 TR-909 (Pro only), and 49 ETHNIC
+(SC-88 and Pro). 20, 35, 47 and 60 are sets on none of them. Like the SC-55's,
+this manual does not say what a number that is not a set does.
+

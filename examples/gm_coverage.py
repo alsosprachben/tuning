@@ -340,6 +340,11 @@ KIT_RATED = {
         43: (2, "as 41"), 45: (2, "as 41"), 47: (2, "as 41"), 48: (2, "as 41"), 50: (2, "as 41"),
         52: (2, "GM 119's reverse cymbal: a measured crash, swelling to the written note-off"),
     },
+    40: {
+        38: (2, "a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes"),
+        39: (2, "a brush slapped FLAT: louder, and it lies on the head and chokes it"),
+        40: (2, "a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms"),
+    },
 }
 
 

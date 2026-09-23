@@ -11228,6 +11228,64 @@ class GatedSnareProperties(SnareDrumProperties):
     release_valve_time = 0.015
 
 
+# ---- the Brush set (SC-55 p.70, program 40): three notes, all on the snare ---
+# A wire brush is a fan of a hundred-odd fine wires. What that changes about a
+# snare stroke, and nothing here goes further than this:
+#
+#   the wires land over a few milliseconds, not in one instant, so the attack
+#   is a soft smear where a stick is a click;
+#   they strike an AREA, and an area excites a membrane's high modes less than
+#   a point does -- the high modes' nodal lines fall inside the contact and
+#   cancel -- so the head is darker;
+#   and the brush is light, so the head is driven less and the snare wires
+#   under it are a larger share of what is heard.
+#
+# No reference: the SC-55's samples are not to hand and Iowa has no kit. The
+# gains and times are judgement, the level is matched to the Standard note each
+# replaces (examples/drumset_check.py), and Ben's ear is the calibration.
+_BRUSH_GAINS = tuple(g ** 1.6 for g in SnareDrumProperties.mode_gains)
+
+
+class BrushTapProperties(SnareDrumProperties):
+    """Note 38 of the Brush set: a brush tapped on the head, snares on."""
+    mode_gains = _BRUSH_GAINS
+    chiff_min_valve_time = 0.005    # the wires land over ~5-18 ms
+    chiff_max_valve_time = 0.018
+    attack_time = 0.006
+    chiff_volume = 9.0
+    tension_bend = 0.008            # a light blow stretches the head less
+    decay_db = 58.0                 # the brush stays on a moment and damps it
+    strike_noise_slope = 0.25
+
+
+class BrushSlapProperties(BrushTapProperties):
+    """Note 39: the brush slapped FLAT onto the head. More wires, harder, and
+    it lies there afterwards -- a loud wash with the head choked under it."""
+    chiff_min_valve_time = 0.003
+    chiff_max_valve_time = 0.010
+    attack_time = 0.003
+    chiff_volume = 16.0
+    chiff_width = 0.060
+    decay_db = 85.0
+
+
+class BrushSwirlProperties(SnareDrumProperties):
+    """Note 40: the brush swept round the head in circles. There is no strike
+    at all: friction drives the head CONTINUOUSLY, so what sounds is the head's
+    own modes excited by noise -- each broadened into a band -- with the wires
+    faintly buzzing under it. That is sustain_jitter at full with the strike
+    ramped away, and a slow decay rather than a ring."""
+    mode_gains = _BRUSH_GAINS
+    chiff_volume = 6.0
+    chiff_cycle = 1.0
+    sustain_jitter = 1.0            # the noise runs the whole note
+    attack_time = 0.12              # it swells in; nothing strikes
+    tension_bend = 0.0
+    strike_noise_slope = 0.0
+    decay_db = 9.0
+    harmonic_decay_db = 6.0
+
+
 
 class CrashCymbal2Properties(CymbalProperties):
     """GM 57, Crash Cymbal 2. MEASURED: Iowa 18" suspended crash. GM asks

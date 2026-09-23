@@ -49,7 +49,7 @@ drum sets and GM 2's drum/melodic switch. What is left:
 | | state | note |
 |---|---|---|
 | ~128 variation sounds | resolved and latched, then played as the capital tone; not yet carried to the voice (below) | one at a time, in `patch_map.VARIATIONS`, when a file or a player wants one |
-| drum sets | Electronic (24) built; Room, Power, TR-808, Brush, Orchestra, SFX, CM-64 play Standard | one at a time, like Electronic: the SC-55's table says which notes |
+| drum sets | **stopped here, deliberately**: Electronic (24) and Brush (40) built; the rest play Standard | see below |
 | legato attack, live | file only | live mono re-articulates every note; the pitch path is right |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
 | CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
@@ -67,6 +67,27 @@ bank. What it did use was drum SETS, by program change alone, and only
 `thememat`/`thememix` asked for one that exists (Electronic, for one reverse
 cymbal). So the wiring went in with the one set that is heard. Variations wait
 to be asked for.
+
+**Drum sets went as far as Electronic and Brush, and stop there.** Electronic
+is the one set the corpus asks for, and Brush is the SC-55's jazz set, built
+because Jazz on the SC-55 IS Standard. The rest play Standard, and here is what
+building one would take:
+
+| set | SC-55 program | notes it changes (p.70–71) | what it would take |
+|---|---|---|---|
+| Room | 8 | the six toms | a smaller-room tom, which is mostly a shorter ring |
+| Power | 16 | kick, snare, the six toms | gated and compressed rock drums; the gate exists now |
+| TR-808 | 25 | 19 notes: kick, rim, snare, the six toms, the three hats, cymbal, cowbell, three congas, maracas, claves | a whole circuit kit: bridged-T resonators and the six-square hats |
+| Orchestra | 48 | hats and ride moved to 27–30, concert bass drums and snares, castanets, timpani across 41–53, two concert cymbals, applause on 88 | the timpani voice already exists; the rest is a concert kit |
+| SFX | 56 | from 39 up, all effects (p.71) | sound effects, not drums |
+| CM-64/32L | 127 | the MT-32's map | a different map, not a set |
+
+The SC-88 and SC-88 Pro add more (STANDARD 2 and 3, TR-707, TR-909, Ethnic and
+others; SC-88 Pro manual p.163), and corpus files send 1, 29, 30 and 49, which
+are those numbers. But on the SC-55 they are not sets, and at least 49 — in
+Ben's `monocas` pieces — was never chosen: a 1990s sequencer wrote it. So they
+play Standard, and a later map belongs behind an explicit setting (the SC-88
+Pro's own MAP button, or CC32 per part), never inferred from a program number.
 
 **When the first variation is built,** thread it through: `resolve_patch`
 already returns it, but neither renderer carries it yet. It needs to go on

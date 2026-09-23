@@ -355,7 +355,7 @@ That covers GM Level 1, plus GM 2's Scale/Octave tuning, chorus and reverb
 sends, portamento, mono/poly mode, modulation depth range (RPN 5), the
 master controls, and bank select: latched as the hardware latches it, with GM
 2's switch between drums and melody. On a drum channel the program is the drum
-SET, and the SC-55's Electronic set is built. `midi.md` has the whole surface —
+SET, and the SC-55's Electronic and Brush sets are built. `midi.md` has the whole surface —
 what each message does, what a voice is allowed to refuse, why the pitch wheel
 is two different controls depending on whether it moves, and why a glide is a
 length rather than a pitch. `remaining.md` has what is still missing, chiefly
