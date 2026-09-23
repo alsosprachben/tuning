@@ -5073,6 +5073,39 @@ def selftest():
           % (100 * _b(_e0), 100 * _b(_e1)))
     _lvp.renderer.close()
 
+    # ---- CC91 reverb is a DISTANCE, which this renderer already had ---------
+    # roomtail.py has said so from the start: "the room constant sets the
+    # reverberant field against the direct sound at the source distance. No
+    # wet/dry knob." T60 does not contain r at all; only the ratio does, and it
+    # goes as r squared. So CC91 is how many times the nominal distance a
+    # channel stands at, and GM's default of 40 IS that nominal distance -- a
+    # file that never sends it renders exactly as it did.
+    import roomtail as _RT
+    _rp = _T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
+    _bands = _RT.decay_and_level(_rp)
+    _r0 = _rp.radiation_distance
+    _t60 = [t for _f, t, _r in _bands]
+    check("the room's decay does not depend on where the source stands",
+          max(_t60) / min(_t60) > 1.5,
+          "  (T60 %.2f-%.2f s across the bands, and r appears in none of it -- "
+          "only in the ratio, as r squared)" % (min(_t60), max(_t60)))
+    # ...so a whole channel's contribution to the tail is ONE SCALAR, which is
+    # a textbook send bus arrived at from the room equation rather than bolted
+    # onto it. The critical distance is where the room overtakes the direct
+    # sound, and the bass gets there first -- which is why halls sound warm.
+    _rc = [(f, _r0 / _math.sqrt(ratio)) for f, _t, ratio in _bands]
+    _lo = [d for f, d in _rc if f <= 125][0]
+    _hi = [d for f, d in _rc if f >= 1000][0]
+    check("...and the bass reaches the room before the treble does",
+          _lo < _hi,
+          "  (critical distance %.1f m at 125 Hz against %.1f m at 1 kHz, from "
+          "the same formula -- nothing dialled that in)" % (_lo, _hi))
+    check("...and GM's default send is the distance the room was placed for",
+          _BRb.GM_DEFAULT_REVERB == 40,
+          "  (so CC91 40 is 1.00x nominal, 0 is on the microphone and 127 is "
+          "%.2fx -- %.1f m, past the %.1f m where the room takes over)"
+          % (127.0 / 40, _r0 * 127.0 / 40, _lo))
+
     # ---- CC93 chorus: systematic, not drawn ---------------------------------
     # A bucket-brigade chorus makes a small number of copies at FIXED offsets,
     # each swept by its own slow oscillator. A string SECTION has many players

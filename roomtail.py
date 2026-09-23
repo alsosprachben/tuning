@@ -355,12 +355,16 @@ def main(argv):
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
     # Prefer what the render measured over the scalar.
     band_q = None
+    side_send = None
     side = os.path.splitext(inp)[0] + '.room.json'
     if os.path.exists(side):
         import json
         d = json.load(open(side))
         band_q = {b['hz']: b['q'] for b in d['bands'] if b.get('energy', 0) > 0}
         print("   directivity factor from %s" % os.path.basename(side))
+        _sd = d.get('send') or {}
+        if _sd and len(set(_sd.values())) == 1:
+            side_send = float(next(iter(_sd.values())))
     ir, bands, onset = build_ir(props, sr, q=q, seed=seed,
                                 channels=x.shape[1], band_q=band_q)
 
@@ -396,8 +400,29 @@ def main(argv):
         ring = max(ring, len(mir) - 1)
     out = np.zeros((len(x) + ring, x.shape[1]))
     out[:len(x)] = x
+    # WHAT FEEDS THE ROOM IS NOT ALWAYS WHAT REACHES THE EARS. CC91 puts each
+    # channel at its own distance, and the reverberant field a source raises
+    # goes as that distance while the direct sound does not move -- so the send
+    # is a separate bus. Because the IR's SHAPE does not depend on distance and
+    # only its amplitude does, one convolution still serves every channel: the
+    # weighting happens before the sum, not after it.
+    #
+    # blockrender writes the bus only when the channels differ. A uniform send
+    # -- including the usual case of no CC91 at all -- is a scalar on the mix,
+    # so there is nothing extra to read and nothing extra to render.
+    wet_in = x
+    send = os.path.splitext(inp)[0] + '.send.wav'
+    if os.path.exists(send):
+        wet_in, _sr = read_wav(send)
+        if len(wet_in) < len(x):
+            wet_in = np.pad(wet_in, ((0, len(x) - len(wet_in)), (0, 0)))
+        wet_in = wet_in[:len(x)]
+        print("   reverb send bus from %s" % os.path.basename(send))
+    elif side_send is not None and side_send != 1.0:
+        wet_in = x * side_send
+        print("   reverb send %.2f of nominal distance (CC91)" % side_send)
     for c in range(x.shape[1]):
-        y = overlap_add(x[:, c], ir[:, c])
+        y = overlap_add(wet_in[:, c], ir[:, c])
         out[:len(y), c] += y
 
     if use_modes:

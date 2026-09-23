@@ -603,6 +603,10 @@ def onepole_blocks(events, nblk, default):
 # stealing and give it a few milliseconds for exactly this reason.
 RETRIGGER_FADE = 0.004
 
+# GM's default reverb send. It is also the value that means "the distance this
+# room was placed for", so a file that never sends CC91 is unchanged.
+GM_DEFAULT_REVERB = 40
+
 
 def registration_blocks(ch, prop, ccs, nblk):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
@@ -1102,6 +1106,7 @@ def prepare(path, tuner='hybrid440'):
     _CAB_CH = {}
     _TREM_CH = {}
     _CHORUS_CH = {}     # channel -> (CC93 send 0..1, cents tuple)
+    _REVERB_CH = {}     # channel -> CC91 send as a DISTANCE MULTIPLE
     _CLAV_CH = {}
     _DETUNE_CH = {}
     _DRONE_CH = {}          # how many drones, per channel: see below
@@ -1614,6 +1619,27 @@ def prepare(path, tuner='hybrid440'):
         # Read once per channel, like the other effect settings here: a send
         # that moved mid-note would have to scale the copies' gain per block,
         # and nothing in this file does that to a partial already written.
+        # CC91 REVERB SEND IS A DISTANCE. This renderer has no wet/dry knob and
+        # never did: roomtail sets the reverberant field against the direct
+        # sound at the SOURCE DISTANCE, through the room constant
+        # (roomtail.decay_and_level). T60 does not contain r at all; only the
+        # ratio does, and it goes as r squared.
+        #
+        # So the send is how many times the nominal distance this channel
+        # stands at, and GM's default of 40 IS that nominal distance -- a file
+        # that never sends CC91 renders exactly as it did. 0 puts the source on
+        # the microphone and 127 puts it 3.2 times out, which on the hall
+        # preset is 11.8 m, past the 6-7.8 m where the room overtakes the
+        # direct sound.
+        #
+        # Because the IR's SHAPE does not depend on r and only its amplitude
+        # does, a whole channel's contribution to the tail is one scalar --
+        # which is a textbook send bus, arrived at from the room equation
+        # rather than bolted onto it.
+        if ch not in _REVERB_CH:
+            _c91 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 91]
+            if _c91:
+                _REVERB_CH[ch] = _c91[0] / float(GM_DEFAULT_REVERB)
         if ch not in _CHORUS_CH:
             _c93 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 93]
             if _c93 and _c93[0] > 0:
@@ -2054,7 +2080,7 @@ def prepare(path, tuner='hybrid440'):
         room_q.append((f, (d / r) if r > 0.0 else 1.0, d))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
                 cons_bursts=cons_bursts,
-                room_q=room_q)
+                room_q=room_q, reverb_send=dict(_REVERB_CH))
     for k,dt in (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("br","i4"),
                  ("px","f4"),("pz","f4"),("nf","f4"),
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
@@ -2317,8 +2343,48 @@ if __name__=="__main__":
     t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
     write_wav(outp, L, R)
     _rq = _LAST_PREP.get('room_q')
+    _rs = _LAST_PREP.get('reverb_send') or {}
     if _rq:
         import json
         with open(os.path.splitext(outp)[0] + '.room.json', 'w') as fh:
-            json.dump({'bands': [{'hz': f, 'q': q, 'energy': e} for f, q, e in _rq]}, fh, indent=1)
+            _sd = {str(k): v for k, v in _rs.items()}
+            if _rs:
+                _hh = sorted(set(int(_c) for _c in np.unique(_LAST_PREP['mch'])))
+                _vv = {_rs.get(_c, 1.0) for _c in _hh}
+                if len(_vv) == 1:
+                    # One number for every channel that sounds: roomtail scales
+                    # the mix it already has and nothing extra is rendered.
+                    _sd = {str(_c): next(iter(_vv)) for _c in _hh}
+            json.dump({'bands': [{'hz': f, 'q': q, 'energy': e} for f, q, e in _rq],
+                       'send': _sd}, fh, indent=1)
+    # THE REVERB SEND BUS. Each channel feeds the room in proportion to how far
+    # away it stands, and the room's IR is the same shape for all of them --
+    # so the whole send is one weighted sum, convolved once.
+    #
+    # Rendered only when the channels actually DIFFER. If every channel sends
+    # the same amount (which includes the usual case of none of them sending at
+    # all), the bus is a scalar multiple of the dry mix and roomtail can scale
+    # what it already has. That keeps the common file at exactly one render.
+    _mch = _LAST_PREP['mch'] if _rs else None
+    if _rs:
+        # Uniform against WHAT ACTUALLY SOUNDS, not against the table. A file
+        # where one channel sends 100 and the others send nothing is uniform if
+        # only that channel has notes -- and comparing the send table alone
+        # would call it split and pay for a second render.
+        _heard = sorted(set(int(_c) for _c in np.unique(_mch)))
+        _vals = {_rs.get(_c, 1.0) for _c in _heard}
+    if _rs and len(_vals) > 1:
+        _g = np.ones(len(_mch), np.float32)
+        for _c in range(16):
+            _g[_mch == _c] = _rs.get(_c, 1.0)
+        _sav = (_LAST_PREP['aL'].copy(), _LAST_PREP['aR'].copy())
+        _LAST_PREP['aL'] *= _g
+        _LAST_PREP['aR'] *= _g
+        _bl = np.zeros(_LAST_PREP['N'], np.float32)
+        _br = np.zeros(_LAST_PREP['N'], np.float32)
+        synth_partials(_LAST_PREP, 0, _LAST_PREP['N'], 0, _LAST_PREP['P'], _bl, _br)
+        _LAST_PREP['aL'][:], _LAST_PREP['aR'][:] = _sav
+        write_wav(os.path.splitext(outp)[0] + '.send.wav', _bl, _br)
+        print("  reverb send: %d channel(s) at their own distance, bus written"
+              % len(_rs))
     print("blockrender: %.1fs audio, %d partials, kernel %.2fs, total %.2fs = %.1fx realtime -> %s"%(total,P,kdt,dt,total/dt,outp))
