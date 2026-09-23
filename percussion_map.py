@@ -40,7 +40,7 @@ from tonelib import (
     WoodPercussionProperties,
     RattleProperties,
     CabasaProperties,
-    WhistleProperties,
+    SambaWhistleProperties,
     ClavesProperties,
     WoodBlockHiProperties,
     WoodBlockLoProperties,
@@ -137,10 +137,10 @@ PERCUSSION = {
     # The physics agrees under either reading of the names. A shorter chamber
     # resonates higher directly; and a short sharp stab is blown HARDER, while a
     # pressure-driven resonator goes sharp under pressure -- the same mechanism
-    # as the attack sweep in WhistleProperties, where the tone rises into place
+    # as the attack sweep in SambaWhistleProperties, where the tone rises into place
     # as the jet establishes.
-    71: ("Short Whistle",      WhistleProperties, 694.9),
-    72: ("Long Whistle",       WhistleProperties, 520.0),
+    71: ("Short Whistle",      SambaWhistleProperties, 694.9),
+    72: ("Long Whistle",       SambaWhistleProperties, 520.0),
     # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560 -- and it is a
     # STRUCK WOODEN BODY, not noise. Spectral flatness on one ridge is 0.0044
     # (away) and 0.0056 (toward), against a clave's 0.0002 and a woodblock's

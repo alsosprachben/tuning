@@ -62,14 +62,22 @@ a bend. That is a conversation before it is an implementation.
 
 ## Known and deliberately not fixed
 
-**`WhistleProperties` is defined twice** — `tonelib.py:12830` on
-`OcarinaProperties` (the samba/referee whistle) and `tonelib.py:13132` on
-`VesselFluteProperties` (a human whistle). Python keeps the later one, so GM 78
-gets the human whistle. **GM 78 is the slide whistle**, whose entire mechanism
-is a glide, so this is both a shadowed definition and the wrong instrument. It
-was found while writing portamento and deliberately not fixed inside that
-change; a slide whistle wants `glide_mechanism = 'slide'` and an unbounded
-reach, and it wants to be its own class.
+~~`WhistleProperties` is defined twice.~~ **Fixed** — the percussion class is
+`SambaWhistleProperties` now, and a general check refuses any two classes in
+`tonelib.py` sharing a name.
+
+Two corrections to what this file said before. The casualty was **percussion
+71/72**, not GM 78: the referee's whistle was being built from the human
+whistle's class, 80 partials where it wanted 5598. And **GM 78 is not a slide
+whistle** — its own docstring argues the point, and it is right: the SC-55
+sound every file was written for is a human whistle, a tin whistle would
+duplicate the recorder two programs earlier, and the specification places 78
+between the shakuhachi and the ocarina rather than with the flutes.
+
+Worth knowing for next time: fixing it moved the render by **half a decibel**.
+The voice is mostly broadband air either way, so a seventy-fold change in the
+partial table was nearly inaudible — which is exactly why the collision
+survived as long as it did.
 
 **`_sysex` re-programs the Parts that exist and creates none.** A real GM module
 is sixteen-part multitimbral; a Part here is an explicit assignment with a

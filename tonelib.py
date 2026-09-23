@@ -12827,8 +12827,34 @@ class OcarinaProperties(VesselFluteProperties):
     chiff_cycle = 0.2
 
 
-class WhistleProperties(OcarinaProperties):
-    """GM 71 and 72: the samba/referee whistle.
+class SambaWhistleProperties(OcarinaProperties):
+    """PERCUSSION 71 and 72: the samba/referee whistle, the one with a pea.
+
+    NOT GM PROGRAM 78, which is a HUMAN whistle and is WhistleProperties far
+    below. Both classes were called WhistleProperties for a while, and Python
+    keeps whichever definition it reads last -- so percussion 71 and 72 were
+    built from the whistled note instead of from this. Class attributes, and
+    then the table they produce:
+
+        unison_detune   (25, 50, 75, 100)   against  ()       -- the pea
+        max_harmonic    64                  against  8
+        chiff_volume    6.0                 against  0.55
+        sustain_jitter  3.0                 against  0.22
+
+        partials        5598                against  80
+        distinct freqs  1117                against  16
+
+    AND THE RENDER BARELY MOVED, which is the part worth keeping. Gross level
+    changed 0.5 dB, the 2-3 kHz chamber band 0.8 dB, and the warble depth in
+    that band went 0.077 against 0.079 -- because this voice is mostly
+    broadband air in either reading, and the air was drowning the difference.
+    A seventy-fold change in the partial table arrived as half a decibel.
+
+    That is why the collision survived: nothing raised, nothing logged, and the
+    audio was not obviously wrong either. It was found by reading, not by
+    listening, and the check that now guards it is the general one -- no two
+    classes in this file may share a name -- because the specific check only
+    ever gets written after somebody has already noticed.
 
     THESE WERE DRUMS. Both sat on NoiseDrumProperties with a tuned base of 900
     and 880 Hz -- a struck membrane standing in for a blown resonator, which is
@@ -12844,9 +12870,10 @@ class WhistleProperties(OcarinaProperties):
 
     AND IT WARBLES, because of the pea. A cork or plastic ball rattling around
     the chamber interrupts the jet a few dozen times a second, which is the sound
-    that makes a whistle a whistle rather than a high recorder. strike_wobble_hz
-    beats one detuned voice per partial against the original, which is the
-    closest mechanism this engine has; at 24 Hz it reads as the pea.
+    that makes a whistle a whistle rather than a high recorder. That is
+    unison_detune below, NOT strike_wobble_hz, which this paragraph named until
+    the mechanism changed underneath it -- see the argument further down for why
+    one detuned voice beats smoothly where a pea interrupts.
 
     ONE WHISTLE, TWO BLASTS: GM 71 is a short toot and 72 a long one, so they
     share this class and differ only in PERCUSSION_RING -- the pattern the hats,

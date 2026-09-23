@@ -454,7 +454,30 @@ can only be an approximation taken at C4. Even `werckmeister` and `sankey`
 spread 0.36 cents, because their octaves are stretched a little. A temperament
 fits in this message. A stretched piano does not.
 
-## Three corrections that are worth the space
+## Four corrections that are worth the space
+
+**A key deliberately without a channel, and a filter that selects by channel.**
+The amplifier's distortion products hang off `(pid, -1, -1, "amp")` — no
+channel, on purpose, so that nothing sweeping a channel catches the amplifier
+by accident. That is right for a note-off and wrong for a pitch: `_sounding`
+selects on exactly that field, so a pitch bend moved the strings and left the
+distortion where it was. On an overdriven voice the products are most of what
+you hear, so the note slid out of tune with its own grit. Ben, playing it:
+*"the main part bends, but the secondary parts appear to stay."*
+
+Measured before and after: strings **+200.0 cents** both times, products
+**+0.0** then **+200.0**. The existing check took the *maximum* deviation over
+every busy slot, so the strings moving was enough to pass it — a test can be
+green and still be asking the wrong question.
+
+One ratio is exact here and that is worth stating rather than assuming: a
+product's frequency is a sum of integer multiples of its parents', so scaling
+every parent by `r` scales every sum by `r`. The retune is not an
+approximation of a rebuild, it *is* the rebuild. The scale/octave table is the
+case where that argument fails — twelve different ratios, so no single number
+to scale a product of several parents by — and there the amplifier is rebuilt
+instead. The file renderer never had this bug: `tubeamp.expand` copies every
+column from the parent partial, bend row and glide included.
 
 **`sweep` steals anything whose key is not down.** The voice allocator's
 scavenge pass looks for voices with no key holding them and takes them, which

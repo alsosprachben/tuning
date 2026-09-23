@@ -81,8 +81,8 @@ splits almost exactly along that line.
 | 68 | Low Agogo | `Agogo` | **2** | as 67, lower |
 | 69 | Cabasa | `Cabasa` | **2** | its own class -- a shaken rattle, theory |
 | 70 | Maracas | `Rattle` | **2** | its own class -- a shaken rattle, theory |
-| 71 | Short Whistle | `Whistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
-| 72 | Long Whistle | `Whistle` | **3** | as 71, longer |
+| 71 | Short Whistle | `SambaWhistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
+| 72 | Long Whistle | `SambaWhistle` | **3** | as 71, longer |
 | 73 | Short Guiro | `Guiro` | **4** | Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window |
 | 74 | Long Guiro | `Guiro` | **4** | as 73, the long scrape |
 | 75 | Claves | `Claves` | **4** | Iowa claves, three pairs |

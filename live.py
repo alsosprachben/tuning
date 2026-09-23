@@ -2535,8 +2535,36 @@ class Live:
             if keep:
                 self.slab.retune(self._sounding(ch, pids=keep), n0,
                                  om_scale=ratio / prev)
+                self._repitch_amp(keep, n0, ratio / prev)
         else:
             self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
+            self._repitch_amp({p.pid for p in here}, n0, ratio / prev)
+
+    def _repitch_amp(self, pids, n0, scale):
+        """Bend the amplifier's distortion products with their parents.
+
+        THE AMPLIFIER HAS NO CHANNEL, ON PURPOSE. _amp_key is
+        (pid, -1, -1, "amp") so that nothing sweeping a channel catches it by
+        accident -- which is right for a note-off and wrong for a pitch. It
+        made _sounding blind to the products, so bending an electric guitar
+        moved the strings and left the distortion sitting where it was: Ben,
+        playing it, "the main part bends, but the secondary parts appear to
+        stay". They are the loudest thing in an overdriven voice, so what you
+        hear is the note sliding out of tune with its own grit.
+
+        ONE RATIO IS EXACT HERE, and that is worth stating rather than
+        assuming. A product's frequency is a sum of integer multiples of its
+        parents', so scaling every parent by r scales every sum by r. A retune
+        is therefore not an approximation of a rebuild, it IS the rebuild, for
+        a fraction of the cost and without waiting on the worker.
+        """
+        if scale == 1.0:
+            return
+        slots = []
+        for pid in pids:
+            slots.extend(self.slab.live.get(self._amp_key(pid), ()))
+        if slots:
+            self.slab.retune(slots, n0, om_scale=scale)
 
     def _sota_ratio(self, ch, note):
         """This channel's scale/octave factor for one written key."""
@@ -2556,6 +2584,7 @@ class Live:
         bank cache key grew a channel, which is sixteen times the build cost
         and sixteen times the memory.
         """
+        moved = False
         for pc in range(12):
             want = self._sota_ratio(ch, pc)
             was = self.sota_at.get((ch, pc), 1.0)
@@ -2565,6 +2594,19 @@ class Live:
             slots = self._sounding(ch, pcs={pc})
             if slots:
                 self.slab.retune(slots, n0, om_scale=want / was)
+                moved = True
+        # THE AMPLIFIER CANNOT TAKE TWELVE RATIOS, so it is rebuilt instead of
+        # retuned. A distortion product is a sum of integer multiples of its
+        # parents, and here the parents have just moved by DIFFERENT amounts --
+        # so there is no single number to scale the product by, which is
+        # exactly what makes _repitch's one-ratio shortcut legitimate and this
+        # one not. The rebuild reads the parents' current frequencies, so it is
+        # correct by construction; it costs a trip through the worker, which a
+        # scale table changing mid-phrase can afford and a pitch wheel cannot.
+        if moved:
+            for p in self.parts:
+                if self._listens(p, ch):
+                    self._amp_touch(p)
 
     def _rpn_data(self, ch, cc, value, n0):
         """CC6/CC38 into whichever RPN is selected. Unknown ones are ignored."""
@@ -4065,6 +4107,39 @@ def selftest():
     check("...and the rotor ladder did not move, since a guitar has no rotor",
           gv.half_moon == 1)
 
+    # ...AND THE DISTORTION BENDS WITH IT. The check above takes the MAXIMUM
+    # deviation over every busy slot, so the strings moving is enough to pass
+    # it -- and for a long time that is all that was moving. _amp_key is
+    # (pid, -1, -1, "amp"), deliberately channelless so a channel sweep cannot
+    # catch the amplifier, and _sounding filters on exactly that field: the
+    # products were invisible to the bend. Ben, playing it: "the main part
+    # bends, but the secondary parts appear to stay." On an overdriven voice
+    # the products are most of what you hear, so the note slides out of tune
+    # with its own grit.
+    #
+    # ONE RATIO IS EXACT. A product is a sum of integer multiples of its
+    # parents, so scaling every parent by r scales every sum by r -- the
+    # retune is not an approximation of a rebuild, it is the rebuild.
+    _ampsl = gv.slab.live.get(gkey, [])
+    _strsl = [i for k, v in gv.slab.live.items() if k[3] is None for i in v]
+    if _ampsl and _strsl:
+        _ai = np.fromiter(_ampsl, np.int64, len(_ampsl))
+        _si = np.fromiter(_strsl, np.int64, len(_strsl))
+        _a0 = gv.slab.a["om"][_ai].copy(); _s0 = gv.slab.a["om"][_si].copy()
+        gv.on_midi(mido.Message("pitchwheel", channel=0, pitch=8191)); gblock()
+        _ar = float(np.median(gv.slab.a["om"][_ai] / np.maximum(_a0, 1e-12)))
+        _sr = float(np.median(gv.slab.a["om"][_si] / np.maximum(_s0, 1e-12)))
+        check("...and the DISTORTION bends with the strings, not without them",
+              abs(1200.0 * math.log2(max(_ar, 1e-12) / max(_sr, 1e-12))) < 0.01,
+              "  (strings %+.1f cents, products %+.1f -- it was %+.1f before "
+              "the amplifier was given a channel to listen on)"
+              % (1200.0 * math.log2(_sr), 1200.0 * math.log2(_ar), 0.0))
+        gv.on_midi(mido.Message("pitchwheel", channel=0, pitch=0)); gblock()
+    else:
+        check("...and the DISTORTION bends with the strings, not without them",
+              False, "  (no products to test: %d amp, %d string slots)"
+              % (len(_ampsl), len(_strsl)))
+
     # THE PRODUCTS GO THROUGH THE SPEAKER. The templates were cabineted when
     # they were built; these partials did not exist then, so _amp_place has to
     # do it. Without that, everything the amplifier makes above 5 kHz arrives
@@ -5356,6 +5431,35 @@ def selftest():
     check("...and lets go when the pedal does",
           not [_k for _k in _lp.slab.live if _k[2] == 60], "")
     _lp.shutdown()
+
+    # ---- TWO INSTRUMENTS MUST NOT SHARE A CLASS NAME ------------------------
+    #
+    # A referee's whistle and a whistled note are both "a whistle" in English
+    # and nothing else about them is alike. They were both WhistleProperties,
+    # Python keeps whichever definition it reads last, and so percussion 71 and
+    # 72 rendered as a human whistle: no pea, eight partials instead of 64, a
+    # fourteenth of the breath. Nothing raised and nothing logged.
+    #
+    # The general check is the useful one, because the specific one only exists
+    # after somebody has already heard the problem.
+    _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "tonelib.py")).read()
+    import re as _re, percussion_map as _PMp, patch_map as _PMb2
+    _cls = _re.findall(r"^class (\w+)", _src, _re.M)
+    _dups = sorted({_n for _n in _cls if _cls.count(_n) > 1})
+    check("no two tonelib classes share a name", not _dups,
+          "  (%s)" % (", ".join(_dups) if _dups else
+                      "%d classes, all distinct" % len(_cls)))
+    _sw = _PMp.PERCUSSION[71][1]
+    check("...so the referee's whistle is built from the referee's whistle",
+          _sw.__name__ == "SambaWhistleProperties" and len(_sw.unison_detune) == 4,
+          "  (%d detuned voices at %s cents -- the pea; the human whistle has "
+          "none, and until the rename this is the class it was using)"
+          % (len(_sw.unison_detune),
+             "/".join("%g" % _c for _c in _sw.unison_detune)))
+    check("...and GM 78 is still the human whistle it argues for being",
+          _PMb2.property_class_for_program(78).__name__ == "WhistleProperties",
+          "  (a Helmholtz resonator: no registers, no overblowing, no fingering)")
 
     # ---- PORTAMENTO, CC5/CC65/CC84 ------------------------------------------
     #
