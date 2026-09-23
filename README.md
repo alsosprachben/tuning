@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 370 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 374 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 

@@ -3996,20 +3996,50 @@ toward a line and damped in the middle where the harmonic alignment is broken.
 Half-valving is quieter, which is the audible tell and the thing that would
 make it recognisable rather than merely continuous.
 
-**WHAT IS ACTUALLY BUILT IS THE LIP, AND ONLY THE LIP.** The lattice is not
-implemented. Until it is, a valved brass voice carries `glide_mechanism =
-'valve'` with a reach of two semitones -- technique 4, which is real: a player
-backing off the mouthpiece can sway a note about that far without touching a
-valve. Anything wider plays clean.
+**SO THE RENDERER EMITS A RUN OF REAL NOTES**, which is not a workaround. The
+model says a run of pitches is what is happening, so a run of pitches is what
+gets built: one short note-group per rung, each going through the same note
+loop as everything else and therefore picking up its FINGERED pitch for free.
+Measured on a C4 -> G4 rip, in cents per step:
 
-That is a deliberate gap rather than an approximation, and the reason is the
-one this file keeps arriving at: a brass gliss past a tone is a DIFFERENT
-gesture, not a longer one. The design for the lattice -- the walk, what CC5
-means on a valved horn, and why it wants note-groups rather than a kernel term
--- is written down in `remaining.md`. Rendering it as a smooth sweep would produce
-something that sounds like a trombone played by a trumpet, and a listener who
-plays brass would hear it immediately. Nothing is a better answer than the
-wrong thing, and it leaves the lattice free to be built properly.
+    91.7  111.2   91.6   91.9  112.3   91.7  111.6
+
+An equal semitone is 100.0 throughout, so that is 20.7 cents of spread, and it
+is where the valves actually put those notes. Nothing had to be added to get
+it: the same `cents_offset` that keeps a held note in character puts every rung
+of a gliss slightly off, differently, which is a good part of why the gesture
+reads as a player rather than as a pitch ramp.
+
+AND THE RUN IS EVEN, NOT EXPONENTIAL. The reciprocal settle the slide and the
+stopped string use is a hand DECELERATING into a target. Ripping through seven
+fingerings is not that -- it is a sequence of discrete actions at a steady rate
+-- and an exponential would also never reach the last rung.
+
+**CC5 STOPS BEING ONLY A SPEED**, which is Ben's own suggestion. A quick gliss
+is a rip and the steps are the sound of it; a slow one is held, and a player
+holding a staircase half-valves instead. So the smear opens with CC5 -- each
+rung arriving FROM the one below rather than starting on its own pitch -- and
+the level comes down with it: -0.2 dB through the middle of a rip against
+-2.6 dB through a half-valve, and +0.0 dB on a trombone, which has no valves to
+half. The dip is the tell. Half-valving breaks the harmonic alignment and loses
+support, and a smear without it is just a portamento wearing a staircase.
+
+**LIVE STILL DOES ONLY THE LIP.** A run of note-groups has to be scheduled
+ahead on the audio thread, and the engine does not do that for anything yet, so
+live keeps `glide_reach_semitones = 2.0` -- technique 4, and real: a player
+backing off the mouthpiece can sway a note about that far without touching a
+valve -- and plays anything wider clean. The two paths agree to two semitones
+and diverge deliberately past it, which is recorded in `remaining.md` rather
+than left to be found.
+
+AND THE MEASUREMENT WAS WRONG FIRST, as it has been every time here. The
+half-valve dip was reported at 18 dB on a TROMBONE, which has no valves: the
+probe grouped partials by their exact onset, and `attack_jitter` gives one
+note's partials onsets a few milliseconds apart, so it was comparing the
+powers of unequal sets of partials. Grouping within 20 ms gives the numbers
+above. That is the same error recorded further up this file against the cymbal
+work, made again by the person who wrote it down.
+
 
 ## GM 61 Brass Section: the doc was wrong, and the handover was a seam
 

@@ -173,7 +173,7 @@ a glide of a fifth. So the property is a mechanism, not a flag.
 A voice with no mechanism ignores all three controllers, and its partial table
 is **bit-identical** with and without them.
 
-### The valve case is not a longer slide, and is not finished
+### The valve case is not a longer slide
 
 Ben, who plays these:
 
@@ -185,16 +185,45 @@ Ben, who plays these:
 > allow for more lip sway.
 
 So a valved gliss walks a LATTICE — harmonic *n* over whatever length the
-valves have added — and `brass_fingering.py` already knows that lattice, having
-been written for intonation. CC5 there should be how *straight* the gliss is
-rather than how fast: clean fingering steps at one end, half-valve smear at the
-other, quieter in the middle where the harmonic alignment is broken.
+valves have added — and `brass_fingering.py` already knew that lattice, having
+been written for intonation.
 
-**That is not built yet.** Until it is, a valved brass voice glides only as far
-as the LIP reaches — about a tone, which is technique 4 and is real — and plays
-anything wider clean. A brass gliss past a tone is a different gesture, not a
-longer one, and rendering it as a smooth sweep would be a worse answer than
-rendering nothing.
+**The file renderer therefore emits a run of real notes**, which is not a
+workaround: the model says a run of pitches is what is happening, so a run of
+pitches is what gets built. Each step goes through the same note loop as
+everything else and so picks up its **fingered** pitch for free. Measured on a
+C4 → G4 rip:
+
+    91.7  111.2   91.6   91.9  112.3   91.7  111.6      cents per step
+
+An equal semitone is 100.0 throughout. That **20.7 cents of spread** is where
+the valves actually put those notes, and it is a good part of what makes the
+gesture sound like a player rather than a pitch ramp.
+
+The run is **even, not exponential**. The reciprocal settle is a hand
+decelerating into a target, which is what a slide does; ripping through seven
+fingerings is a sequence of discrete actions at a steady rate — and an
+exponential would never reach the last step.
+
+**CC5 opens the smear, and Ben's suggestion is why.** A quick gliss is a rip
+and the steps are the sound of it; a slow one is held, and a player holding a
+staircase half-valves instead. So each rung arrives *from* the one below with a
+τ that opens with CC5, and the level comes down with it:
+
+| | τ into each rung | level through the middle |
+|---|---|---|
+| CC5 = 20 | 3.7 ms — clean steps | **−0.2 dB** |
+| CC5 = 110 | 92.8 ms against a 143 ms step | **−2.6 dB** |
+| trombone, either | no lattice at all | +0.0 dB |
+
+The dip is the tell: half-valving breaks the harmonic alignment and loses
+support. Without it a smear is just a portamento wearing a staircase.
+
+**Live does not do this.** Those note-groups have to be scheduled ahead on the
+audio thread and nothing there does that yet, so live glides a valved voice
+only as far as the lip reaches — about a tone, technique 4, which is real — and
+plays anything wider clean. The two paths agree up to two semitones and diverge
+deliberately past it.
 
 ### Where the two renderers meet
 

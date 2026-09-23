@@ -1187,6 +1187,83 @@ def prepare(path, tuner='hybrid440'):
         if _pv is None or _on >= _pv[0]:
             _prev_on[_c] = (_on, _n)
 
+    # ---------------------------------- A VALVED GLISS WALKS THE HARMONICS
+    #
+    # A trumpet does not slide. Ben, who plays these: brass players gliss by
+    # moving "cleanly from one fingering to another, and blow through the
+    # harmonics", or by half-valving to break the alignment and smear between
+    # them. So the reachable pitches are a LATTICE -- a partial over whatever
+    # length the valves have added -- and a gliss is a RUN through it, not a
+    # sweep across it. sources.md carries the physical account.
+    #
+    # THE RENDERER THEREFORE EMITS REAL NOTES, which is not a workaround: the
+    # model says a run of pitches is what is happening, so a run of pitches is
+    # what gets built. Each step goes through the same note loop as everything
+    # else, which means each one picks up the FINGERED pitch for free --
+    # brass_fingering puts every semitone a few cents off equal temperament,
+    # differently, and that wobble is a good part of what makes the gesture
+    # recognisable rather than merely continuous.
+    #
+    # AND THE RUN IS EVEN, not exponential. The reciprocal settle the other
+    # mechanisms use is a hand DECELERATING into a target, which is what a
+    # slide or a finger does; ripping through seven fingerings is a sequence of
+    # discrete actions at a steady rate, and an exponential would also never
+    # reach the last step.
+    _GLISS = {}         # (ch, note, on) -> (level scale, smear 0..1)
+    _GLISS_DROP = set() # the notes the run replaces
+    _GLISS_STEPS = []
+    for _e in notes:
+        _k3 = (_e[0], _e[1], _e[2])
+        _gs = _GLIDE_SRC.get(_k3)
+        if _gs is None:
+            continue
+        _pcv = property_class_for_note(_e[6], _e[1])
+        if getattr(_pcv, 'glide_mechanism', None) != 'valve':
+            continue
+        _step = 1 if _e[1] > _gs else -1
+        _path = list(range(_gs, _e[1], _step))       # src .. one short of target
+        if len(_path) < 2 or _e[3] - _e[2] <= 0.0:
+            continue                                 # a tone or less: the lip has it
+        # One journey time, from the same speed law every other mechanism uses,
+        # so CC5 means one thing across the bank. Capped at half the note: a
+        # gliss is an ornament on the note it arrives at, not the note itself.
+        _cc5 = _porta_cc5_at(_e[0], _e[2])
+        _T = T.glide_tau(_cc5, FREQ[_e[1]], FREQ[_gs], 'slide') * T.PORTA_SETTLE_TAUS
+        _T = min(_T, (_e[3] - _e[2]) * 0.5)
+        _dt = _T / float(len(_path))
+        if _dt < 0.012:
+            continue                    # faster than a valve moves: play it clean
+        # SMEAR RIDES ON THE SAME KNOB, which is Ben's suggestion: "maybe the
+        # speed controller can control how straight or slurred the glissando is
+        # across the harmonics". A quick gliss is a RIP and the steps are the
+        # sound of it; a slow one is held, and a player holding a staircase
+        # half-valves instead. So the smear opens with CC5, and with it the
+        # level comes DOWN -- half-valving breaks the harmonic alignment and
+        # loses support, and that dip is the audible tell. Without it a smear
+        # is just a portamento with extra steps.
+        _sm = min(1.0, max(0.0, _cc5 / 127.0))
+        for _i, _p in enumerate(_path):
+            _t0 = _e[2] + _i * _dt
+            # Quietest in the middle, where the alignment is worst, and back up
+            # at both ends where a real fingering is being held.
+            _mid = 1.0 - abs((_i + 0.5) / len(_path) * 2.0 - 1.0)
+            _lv = 1.0 - 0.45 * _sm * _mid
+            _GLISS[(_e[0], _p, _t0)] = (_lv, _sm,
+                                        _path[_i - 1] if _i else None, _dt)
+            _GLISS_STEPS.append(
+                (_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
+        # The note proper begins where the run arrives. Its own onset is where
+        # the gliss STARTED, which is what the file asked for: a rip into a
+        # note is part of the note, not something played before it.
+        _GLISS[(_e[0], _e[1], _e[2] + _T)] = (1.0, _sm, _path[-1], _dt)
+        _GLISS_STEPS.append(
+            (_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
+        _GLIDE_SRC.pop(_k3, None)       # the lattice replaces the smooth glide
+        _GLISS_DROP.add(_k3)
+    if _GLISS_STEPS:
+        notes = [_n for _n in notes
+                 if (_n[0], _n[1], _n[2]) not in _GLISS_DROP] + _GLISS_STEPS
+
     def _sound_off(_c, _t):
         """The first All Sound Off on this channel at or after _t."""
         _ts = _SOFF_CH.get(_c)
@@ -1505,6 +1582,13 @@ def prepare(path, tuner='hybrid440'):
             # harmonic_volume, long after construction, so this needs no change
             # to a constructor signature that subclasses override.
             props.gain *= T.db_amplitude(T.PRESS_DB * _press)
+        # HALF-VALVING LOSES SUPPORT, and the dip is the whole tell. Deepest in
+        # the middle of the run where the harmonic alignment is worst, back up
+        # at either end where a real fingering is being held. A smear without
+        # it is just a portamento wearing a staircase.
+        _gl = _GLISS.get((ch, note, on))
+        if _gl is not None and _gl[0] != 1.0:
+            props.gain *= _gl[0]
         # A sung vowel picks its body from the PART's tessitura, not this note's
         # pitch, so a tenor stays a man across his whole range. See _VocalBody.
         if hasattr(props, '_sung_formants') and (ch in _tess or ch in _parts):
@@ -1584,6 +1668,12 @@ def prepare(path, tuner='hybrid440'):
         # an exciter that can carry declare legato_attack_s; see tonelib.
         _lg = getattr(props, 'legato_attack_s', None)
         if _lg is not None and (ch, note, _occ.get((ch, note), 0)) in legato:
+            at = min(at, _lg)
+        # A GLISS STEP IS NOT RETONGUED. The lips keep buzzing through the whole
+        # run -- that is what "blow through the harmonics" means -- so every
+        # step takes the legato attack whether or not _legato_ticks saw it.
+        # It could not have: these notes did not exist when the file was parsed.
+        if _lg is not None and (ch, note, on) in _GLISS:
             at = min(at, _lg)
         _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
@@ -1810,9 +1900,26 @@ def prepare(path, tuner='hybrid440'):
         # the GM2 scale table are the same multiplier on both and divide out:
         # the tuning table's own ratio is the whole answer, and it is exact.
         _GL[0] = 0.0
+        # THE SMEAR IS THE SAME GLIDE TERM, one step at a time: each rung of the
+        # run arrives FROM the one below rather than starting on its own pitch.
+        # It has to be that way round and not "leans toward the next", because
+        # the kernel's curve always ENDS on the pitch the note was built at --
+        # a glide here is something a note arrives from, never something it
+        # departs toward.
+        #
+        # At CC5 = 0 tau collapses and every step is clean; opening it stretches
+        # each arrival until a step is still moving when the next begins, and a
+        # staircase with no flat left on it is a half-valve.
+        if _gl is not None and _gl[1] > 0.0 and _gl[2] is not None:
+            _stau = _gl[3] * _gl[1] * 0.75
+            if _stau > 2e-3 and FREQ[_gl[2]] > 0.0:
+                _GL[0] = T.glide_g(FREQ[note], FREQ[_gl[2]])
+                _GL[1] = _stau
+                _GL[2] = _stau * T.PORTA_SETTLE_TAUS
         _gsrc = _GLIDE_SRC.get((ch, note, on))
         _gmech = getattr(pc, 'glide_mechanism', None)
-        if _gsrc is not None and _gmech and 0 <= _gsrc < len(FREQ) and FREQ[_gsrc] > 0.0:
+        if (_GL[0] == 0.0 and _gsrc is not None and _gmech
+                and 0 <= _gsrc < len(FREQ) and FREQ[_gsrc] > 0.0):
             # CAN THE MECHANISM REACH? A hand and a slide have a compass and a
             # circuit does not, and a valved gliss does not reach at all -- it
             # crosses harmonics, which is a different thing and is handled by

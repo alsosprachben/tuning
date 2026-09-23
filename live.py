@@ -58,6 +58,7 @@ instead of 10.7 ms, which is what keeps a struck attack from smearing.
 Usage:  live.py [--tui] [--program N] [--port SUBSTRING] [--rate HZ] [--frames N]
 """
 import sys, os, time, threading, argparse, collections, signal, itertools
+import tempfile
 import random as _random
 
 # The kernel enters an OpenMP region per call. At a 256-frame window that is one
@@ -5460,6 +5461,95 @@ def selftest():
     check("...and it is spent: the note after it does not glide",
           _gcols(_pg, 62) is None, "  (a one-shot, not a mode)")
     _pg.shutdown()
+
+    # A VALVED GLISS WALKS THE HARMONICS, in the file renderer. A trumpet does
+    # not slide: it runs through real fingerings and blows through the
+    # harmonics, so the renderer emits a run of real notes. Offline only --
+    # live would have to schedule those note-groups ahead on the audio thread,
+    # which nothing here does yet, so live glides a valved voice only as far as
+    # the lip reaches and plays anything wider clean. The two paths therefore
+    # agree up to two semitones and diverge deliberately past it.
+    def _gliss_mid(_prog, _cc5, _a, _b):
+        _m = mido.MidiFile(ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=_prog, time=0))
+        _t.append(mido.Message("control_change", channel=0, control=5, value=_cc5, time=0))
+        _t.append(mido.Message("control_change", channel=0, control=65, value=127, time=0))
+        _t.append(mido.Message("note_on", channel=0, note=_a, velocity=100, time=0))
+        _t.append(mido.Message("note_off", channel=0, note=_a, velocity=0, time=480))
+        _t.append(mido.Message("note_on", channel=0, note=_b, velocity=100, time=0))
+        _t.append(mido.Message("note_off", channel=0, note=_b, velocity=0, time=1920))
+        _fn = os.path.join(tempfile.gettempdir(), "gliss_%d_%d.mid" % (_prog, _cc5))
+        _m.save(_fn)
+        return _fn
+
+    def _groups(_prep, _tol_ms=20.0):
+        """Partials by STEP, not by exact onset.
+
+        attack_jitter and the section's entry scatter put one note's partials a
+        few milliseconds apart, so grouping on the exact sample splits a step
+        into pieces with different partial counts -- and comparing their powers
+        then compares unequal sets. That mistake reported an 18 dB half-valve
+        dip on a TROMBONE while this was being written, which has no valves.
+        """
+        _nf = np.asarray(_prep["nf"]); _non = np.asarray(_prep["non"])
+        _tol = _tol_ms * 44100.0 / 1000.0
+        _out = {}
+        for _i in range(len(_nf)):
+            _t = float(_non[_i])
+            _k = next((_k0 for _k0 in _out if abs(_k0 - _t) <= _tol), int(_t))
+            _out.setdefault(_k, []).append(_i)
+        return _out, _nf, _non
+
+    _gm = _gliss_mid(56, 20, 60, 67)             # trumpet, C4 -> G4, a quick rip
+    _gp = _BRb.prepare(_gm, "hybrid440")
+    _gg, _gnf, _gnon = _groups(_gp)
+    _gts = sorted(_gg)
+    _gf = [min(float(_gnf[_i]) for _i in _gg[_t]) for _t in _gts]
+    _grun = sorted({round(_f, 2) for _f in _gf})
+    check("a valved gliss is a RUN of real pitches, not a sweep",
+          len(_grun) >= 8,
+          "  (%d distinct pitches from C4 to G4 -- seven fingerings and the "
+          "note it arrives at)" % len(_grun))
+    # THE STEPS ARE FINGERED, NOT TEMPERED. brass_fingering puts every semitone
+    # a few cents off equal, differently, and that wobble is a good part of what
+    # makes the gesture sound like a brass player rather than a pitch ramp.
+    _gsemi = [1200.0 * math.log(_grun[_i + 1] / _grun[_i], 2.0)
+              for _i in range(len(_grun) - 1)]
+    _gspread = max(_gsemi) - min(_gsemi)
+    check("...and its rungs are FINGERED, not equal-tempered",
+          _gspread > 5.0,
+          "  (%.1f cents of spread across the run, against 0.0 for a "
+          "chromatic scale)" % _gspread)
+
+    # CC5 OPENS THE SMEAR AND DROPS THE LEVEL. A quick gliss is a rip and the
+    # steps are the sound of it; a slow one is held, and a player holding a
+    # staircase half-valves instead -- which breaks the harmonic alignment and
+    # loses support. The dip is the tell.
+    _gp2 = _BRb.prepare(_gliss_mid(56, 110, 60, 67), "hybrid440")
+    _gg2, _gnf2, _gnon2 = _groups(_gp2)
+    _gt1 = float(np.asarray(_gp["gt"])[_gg[_gts[3]][0]])
+    _gts2 = sorted(_gg2)
+    _gt2 = float(np.asarray(_gp2["gt"])[_gg2[_gts2[3]][0]])
+    check("CC5 opens the smear between the rungs", _gt2 > 8.0 * _gt1,
+          "  (tau %.4f s at CC5=20 against %.4f at 110 -- clean steps against "
+          "a staircase with no flat left on it)" % (_gt1, _gt2))
+    _gam = np.asarray(_gp2["aM"])
+    _gpow = [float(np.sum(_gam[_gg2[_t]] ** 2)) for _t in _gts2[1:]]
+    _gdip = 10.0 * math.log10(min(_gpow) / max(_gpow[0], 1e-12))
+    check("...and half-valving loses support through the middle",
+          _gdip < -2.0,
+          "  (%.1f dB down where the alignment is worst, back up at the "
+          "fingering it arrives on)" % _gdip)
+
+    # THE TROMBONE IS THE CONTROL. A real slide, so no lattice and no run: one
+    # note with one continuous glide on it.
+    _gb = _BRb.prepare(_gliss_mid(57, 20, 60, 67), "hybrid440")
+    _ggb, _gnfb, _gnonb = _groups(_gb)
+    check("a trombone does not do this, having an actual slide",
+          len(_ggb) <= 2,
+          "  (%d note-groups against the trumpet's %d: seven positions are a "
+          "continuum, seven fingerings are not)" % (len(_ggb), len(_gg)))
 
     # A VOICE WITH NO MECHANISM REFUSES, exactly as one with no damper refuses
     # CC64. A hammer leaves the string; there is nothing to slide along.

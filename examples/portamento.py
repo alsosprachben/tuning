@@ -361,6 +361,68 @@ def refusal(outdir):
     print("   (a hammer leaves the string; there is nothing to slide along)")
 
 
+def step_groups(non, tol_ms=20.0):
+    """Partials grouped by which STEP they belong to, not by exact onset.
+
+    A note does not start at one instant: attack_jitter and the section's entry
+    scatter give its partials onsets a few milliseconds apart, so grouping on
+    the exact sample splits one step into several groups with different partial
+    counts -- and then comparing their powers compares unequal sets. That error
+    reported a 18 dB "half-valve dip" on a TROMBONE, which has no valves.
+    """
+    tol = tol_ms * RATE / 1000.0
+    out = {}
+    for i, t in enumerate(np.asarray(non)):
+        key = next((k for k in out if abs(k - t) <= tol), int(t))
+        out.setdefault(key, []).append(i)
+    return out
+
+
+def valve_lattice(outdir):
+    """A valved gliss is a RUN through the harmonics, not a sweep across them."""
+    import collections
+    print("\n A TRUMPET DOES NOT SLIDE: IT RUNS THROUGH FINGERINGS")
+    print("   Seven valve combinations and a lip, so the reachable pitches are")
+    print("   a lattice. brass_fingering.py has held it all along -- it was")
+    print("   written for intonation and answers this too.\n")
+    for label, prog, v in (("trumpet, CC5=20 (a rip)", 56, 20),
+                           ("trumpet, CC5=110 (half-valve)", 56, 110),
+                           ("trombone, CC5=20 (the control)", 57, 20)):
+        mid = write_midi(os.path.join(outdir, 'porta_gliss_%d_%d.mid'
+                                      % (prog, v)), prog, [
+            (cc(5, v), 0), (cc(65, 127), 0),
+            (note(60), 0), (note(60, False), 480),
+            (note(67), 0), (note(67, False), 1920)])
+        p = B.prepare(mid, TUNER)
+        nf, non = np.asarray(p['nf']), np.asarray(p['non'])
+        gt, aM = np.asarray(p['gt']), np.asarray(p['aM'])
+        g = step_groups(non)
+        ts = sorted(g)
+        f0s = [min(float(nf[i]) for i in g[t]) for t in ts]
+        uniq = sorted({round(f, 2) for f in f0s})
+        pw = [float(np.sum(aM[g[t]] ** 2)) for t in ts[2:]]
+        dip = (10.0 * np.log10(min(pw) / max(pw[0], 1e-12))) if pw else 0.0
+        print("   %-32s %2d pitches, tau %.4f s, dip %+5.1f dB"
+              % (label, len(uniq), float(gt[g[ts[min(4, len(ts) - 1)]][0]]), dip))
+    # THE RUNGS ARE FINGERED, NOT TEMPERED, which is the part that could not
+    # have been faked: every semitone sits a few cents off equal, differently,
+    # because that is where the valves actually put it.
+    mid = write_midi(os.path.join(outdir, 'porta_gliss_rungs.mid'), 56, [
+        (cc(5, 20), 0), (cc(65, 127), 0),
+        (note(60), 0), (note(60, False), 480),
+        (note(67), 0), (note(67, False), 1920)])
+    p = B.prepare(mid, TUNER)
+    nf, non = np.asarray(p['nf']), np.asarray(p['non'])
+    g = step_groups(non)
+    uniq = sorted({round(min(float(nf[i]) for i in g[t]), 3) for t in sorted(g)})
+    print("\n   THE RUNGS ARE WHERE THE VALVES PUT THEM, not where equal")
+    print("   temperament would. Steps of the run, in cents:\n")
+    steps = [1200.0 * np.log2(uniq[i + 1] / uniq[i]) for i in range(len(uniq) - 1)]
+    print("      " + "  ".join("%6.1f" % c for c in steps))
+    print("      %s" % ("an equal semitone is 100.0 throughout; the spread here "
+                        "is %.1f cents" % (max(steps) - min(steps))))
+
+
 def live_agrees(outdir):
     """The two renderers must write the SAME three floats.
 
@@ -452,6 +514,7 @@ def main():
     speed_law()
     asymmetry(outdir)
     refusal(outdir)
+    valve_lattice(outdir)
     live_agrees(outdir)
     if not check:
         render(outdir)

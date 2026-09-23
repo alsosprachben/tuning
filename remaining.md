@@ -10,97 +10,24 @@ Two things it is not. It is not a wish list — every entry is something already
 worked out far enough to know what it would cost. And it is not a defect log:
 things that are simply wrong get fixed, not filed.
 
-## The brass glissando lattice
+## The brass glissando lattice — file renderer done, live not
 
-The largest designed-and-unbuilt thing here, and the reason this file exists.
+Built for `blockrender.py`; see `midi.md` for what it does and `sources.md` for
+the physical account. What remains is **live**: the run is a sequence of
+note-groups, and scheduling those ahead on the audio thread is something the
+engine does not do for anything yet. Until it does, live glides a valved voice
+only as far as the lip reaches and plays anything wider clean, so the two paths
+agree to two semitones and diverge deliberately past it.
 
-Portamento shipped with `glide_mechanism` on 49 programs. Four of them —
-trumpet, muted trumpet, horn and tuba — carry `'valve'`, and a valved gliss is
-**not a slower slide**. Ben, who plays these:
+**One question still open**, and it applies to both paths. Does the gliss
+occupy the space *between* two notes, or the attack *of* the second one? It
+currently takes the head of the target note — a rip into a note is part of that
+note — but a player does both, and the controller does not distinguish them.
 
-> When we brass players glissando, we do it in many ways. 1. move cleanly from
-> one fingering to another, and blow through the harmonics. 2. move arbitrarily
-> the valves while blowing through the harmonics. 3. pressing down half way on
-> one of the valves to interfere with harmonic alignment, while muffling the
-> gliss, in between. 4. backing off the mouthpiece for a similar effect, to
-> allow for more lip sway, as blowing through the harmonics.
->
-> Maybe the speed controller can control how straight or slurred the glissando
-> is across the harmonics?
-
-**What is built today is technique 4 and only that.** `glide_reach_semitones =
-2.0` on `BrassProperties` is the lip's sway; anything wider plays clean. That
-is a deliberate gap rather than an approximation, because a brass gliss past a
-tone is a different gesture and a smooth sweep would sound like a trombone
-played by a trumpet.
-
-### The lattice already exists
-
-`brass_fingering.py` was written for INTONATION — valve combinations run sharp,
-the harmonic series is not the temperament — and it happens to contain exactly
-what a glissando needs:
-
-| | |
-|---|---|
-| `INSTRUMENTS` | `open_hz`, usable `partials`, which `valves` exist |
-| `COMBOS` | the seven combinations, in the order a player prefers them |
-| `COMBOS_4` | eleven, for the tuba's fourth valve |
-| `_length_ratio(combo)` | what that combination does to the tube |
-| `fingering(hz, instrument)` | `(partial, combo, cents_error, actual_hz)` |
-
-A reachable pitch is `partial × open_hz / _length_ratio(combo)`. The set of them
-is the lattice, and a gliss walks it.
-
-### The path, and why it is a chromatic run and not a sweep
-
-Technique 1 — the common one — is a chromatic run using the standard fingering
-for each semitone. `fingering()` already returns the pitch that fingering
-**actually produces**, which is a few cents off equal temperament and differs
-per step. So the gliss is a staircase of real, slightly-out-of-tune pitches,
-and that microscopic wobble is part of what makes it recognisable. Nothing has
-to be invented: walk the semitones between source and target, ask `fingering()`
-for each, and take the `actual_hz` it gives back.
-
-### CC5 stops being a speed and becomes a straightness
-
-This is Ben's suggestion and it is the interesting part. On a `valve` voice:
-
-| CC5 | technique | what it sounds like |
-|---|---|---|
-| low | 1 | clean steps, each a real fingered pitch |
-| mid | 2 | steps, but the valve order wanders |
-| high | 3 / 4 | half-valve: the steps smeared toward a line, **and quieter** |
-
-The level dip matters. Half-valving breaks the harmonic alignment, so the note
-loses support in the middle of the gliss — that dip is the audible tell, and a
-smear without it would just sound like a portamento with extra steps.
-
-The smear itself is a crossfade between the staircase and the continuous
-length-linear path the other mechanisms already use.
-
-### What it would cost
-
-**The kernel cannot do a staircase with the glide term it has.** `gbav/gtau/gcut`
-render one smooth reciprocal settle; arbitrary shapes need rows, and rows are
-per-block-per-note, which `midi.md` explains is ~3 GB on a busy file.
-
-The honest implementation is therefore not a kernel change at all: **emit the
-gliss as a short sequence of note-groups** in `blockrender`'s build loop, one
-per lattice step, each with `legato_attack_s` so it does not re-articulate, and
-each carrying a small `gb` glide between steps as the smear opens up. That is
-what the model actually says is happening — a run of real pitches — so the
-renderer emitting real notes is not a workaround.
-
-Live is harder and should follow, not lead: those note-groups have to be
-scheduled ahead on the audio thread, which nothing here does yet.
-
-### One question still open
-
-Does the gliss occupy the space *between* two notes, or the attack *of* the
-second one? A rip into a note and a gliss between two notes are different
-gestures and a player does both. The controller does not distinguish them, so
-this is a choice, and it should be made deliberately rather than falling out of
-where the code happens to sit.
+**One refinement not attempted.** Technique 2, "move arbitrarily the valves
+while blowing through the harmonics", would wander the valve order instead of
+walking the chromatic fingerings. It needs a reason to prefer one path over
+another, and there isn't one yet.
 
 ## General MIDI 2
 
