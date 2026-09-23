@@ -126,6 +126,12 @@ and sends nothing until you move it.
 | `b` | bind a hotkey, which then works **from every pane** |
 | `d` | remove it |
 
+**Mono is one of them.** It's a switch that sends Mono On (CC126) or Poly On
+(CC127), with portamento (CC65) and portamento time (CC5) beside it, so a
+keyboard with no mode buttons can play a monophonic line, glide or not. Both
+mode messages carry an All Sounds Off, as the MIDI spec requires, so switching
+mono either way stops everything the channel is holding.
+
 **Switches latch.** Press once to put the pedal down, press again to lift it.
 A terminal reports a key when it goes down and never when it comes up, so a
 computer key can't be held like a pedal. The lamp reads the engine's own
@@ -168,6 +174,7 @@ can't offer a control the engine ignores.
 | mod wheel *with layers* | each part answers in its own way at once — the organ layer draws stops while the string layer vibrates |
 | pitch bend *on a Leslie voice* | the **half-moon switch**: flick up or down to step stop → chorale → tremolo |
 | mod wheel *on an amplified voice* | the **gain knob** — the Leslie's swell pedal, or a guitar amp's own gain |
+| legato playing *on a blown or bowed voice* | a note that overlaps the last (or follows it within 15 ms) is **slurred**: no new attack, as the file renderer does — see `midi.md` |
 | sustain pedal (CC64) | holds the damper off, on voices that have dampers |
 | soft pedal (CC67) | *una corda* — the hammer reaches one string fewer |
 | CC120 | all sound off — **the panic**; CC123 only lifts the keys |

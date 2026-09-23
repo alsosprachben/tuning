@@ -716,6 +716,8 @@ class TUI:
             return bool(L.soft.get(ch))
         if key == 65:
             return bool(L.porta_on.get(ch))
+        if key == "mono":
+            return ch in L.mono
         return False
 
     def send_control(self, c, value):
@@ -1198,7 +1200,9 @@ class TUI:
             "                    it; 3 is usually best. Watch the cpu meter.",
             "",
             "on-screen controls and routes  (the third pane)",
-            "  a                 add a control: any pedal, CC, the wheel, aftertouch",
+            "  a                 add a control: any pedal, CC, the wheel, aftertouch,",
+            "                    or MONO -- which, switched either way, stops",
+            "                    everything the channel is holding (the spec's rule)",
             "  space             a switch: toggle it   anything else: back to default",
             "  - +  enter        step it (shift: by 8)   type a value",
             "  b                 bind a hotkey; it works from EVERY pane. Only keys",

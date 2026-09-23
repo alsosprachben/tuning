@@ -12716,6 +12716,44 @@ def rpn_fine_msb(cents):
     return max(0, min(16383, code)) >> 7
 
 
+# ---------------------------------------------- the legato attack
+#
+# A SLUR IS ONE NUMBER. The previous note ran up to this one, so the exciter
+# never stopped and there is no onset to make: the attack time becomes the
+# voice's legato_attack_s where that is shorter, and everything the attack
+# feeds -- the wavelength-scaled speech, CC73, the caps, the fade (`fa`) and the
+# chiff width (`ch`) -- follows from it unchanged. Onset, phases, strike noise
+# and a bloom copy's own swell are not the attack and do not move.
+#
+# WHY LIVE MAY APPLY IT AFTER THE STAMP. Every step from the attack time to
+# `fa` and `ch` is non-decreasing: speech_time adds, CC73 multiplies by a
+# positive factor, the caps are min()s, and chiff_time returns its argument or
+# a min of it. So for any such chain F, F(min(at, lg)) == min(F(at), F(lg)),
+# and a template built with the full attack can be slurred by taking the min
+# of what it holds and what the legato attack alone would give.
+
+
+def slur_attack(at, cls):
+    """The attack time of a SLURRED note: `at`, or the voice's legato attack
+    where that is shorter. Voices with none (struck, plucked, the organ, whose
+    every pipe has its own valve) are returned unchanged."""
+    lg = getattr(cls, 'legato_attack_s', None)
+    return at if lg is None else min(at, lg)
+
+
+def slur_fade(cls, f0):
+    """(fade, chiff) in seconds for the legato attack alone, before CC73 and
+    before the note-length caps -- the F(lg) above -- or None if the voice has
+    no legato attack. Read off the CLASS: speech_time and chiff_time touch only
+    class attributes, and a live note must not build a properties instance on
+    the audio thread to ask."""
+    lg = getattr(cls, 'legato_attack_s', None)
+    if lg is None:
+        return None
+    s = cls.speech_time(cls, lg, f0)
+    return s, cls.chiff_time(cls, f0, s)
+
+
 # ---------------------------------------------- CC0/CC32, bank select
 #
 # LATCHED: "Bank select is suspended until receiving Program change" (SC-55

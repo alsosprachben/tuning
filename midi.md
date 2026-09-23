@@ -323,9 +323,32 @@ unambiguous — including the return, which glides *down* from the key released.
 the note being left stops as the next starts: the release is the steal-fade,
 not the instrument's own, and a held damper is not consulted, because that key
 has not come up — its voice has been taken. The arriving note takes the voice's
-legato attack in the file renderer. Live cannot soften an attack yet —
-`legato_attack_s` is not implemented there — so live mono re-articulates each
-note; the pitch path is the same.
+legato attack, in both renderers.
+
+**The legato attack, live.** A slur is one number: the attack time becomes
+the voice's `legato_attack_s` where that is shorter. Everything the attack
+feeds follows unchanged: speech, CC73, the caps, the fade and the chiff width.
+The onset, phases, strike noise and a bloom copy's own swell don't move.
+- **Which voices:** six families declare one. Brass is 15 ms; bowed strings,
+  flute, clarinet and shanai are 12; the bagpipe is 4. Struck and plucked
+  voices and the organ never do: a hammer and a pipe valve have no exciter
+  to carry.
+- **Which notes live slurs:** the file renderer's two rules.
+  - **A mono handoff**, including the return to a key still held.
+  - **In poly, a note that follows the previous onset group contiguously.**
+    A keyboard has no tick grid, so contiguous means a key of that group
+    is still down (finger legato is an overlap), or was let go at most
+    15 ms before. That's about a 64th of a beat at 120 bpm, the file's
+    tolerance. Note-ons within 30 ms are one group, a chord, and share one
+    answer, as a chord's members sharing a tick do in a file. A bass held
+    under a moving line slurs only the line's first note; after that the
+    line is judged on its own previous note.
+  - The pedal plays no part: legato is the keys.
+- **How live applies it:** after the stamp. Every step from attack time to
+  fade never decreases (speech adds, CC73 multiplies, the caps and
+  `chiff_time` are mins), so the slurred note is the min of the template's
+  fade and the legato attack's. The selftest checks the two renderers agree
+  in float32.
 
 **A sound-off in the header killed the note after it.** CC126 and CC127 carry
 an All Sounds Off, they are set before the first note, and the file renderer

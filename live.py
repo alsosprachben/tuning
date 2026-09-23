@@ -165,9 +165,69 @@ IDLE = 1 << 62          # a note-on so far in the future the partial never sound
 # and letting it spring back past PW_REARM re-arms it. Two flicks up walks
 # stop -> chorale -> tremolo. The hysteresis matters -- a wheel left resting on
 # the threshold would otherwise machine-gun the rotor with requests.
+# LEGATO FROM A KEYBOARD. The file renderer judges a slur in the file's own
+# tick grid (blockrender._legato_ticks: a 64th of a beat). A keyboard has no
+# grid, so these are the live equivalents, in seconds:
+#   a key of the previous onset group still DOWN is an overlap -- finger
+#   legato -- and slurs; failing that, a gap of at most LEGATO_GAP_S does,
+#   about a 64th of a beat at 120; and note-ons within CHORD_WINDOW_S of the
+#   first are ONE group, a chord, and take one answer, as a chord's members
+#   sharing a tick do in a file. The pedal plays no part: legato is the keys.
+LEGATO_GAP_S = 0.015
+CHORD_WINDOW_S = 0.030
+
 PW_FIRE = 0.50          # fraction of full travel that fires a step
 PW_REARM = 0.20         # and where the wheel has to return to before the next
 MIN_AMP_HZ = 20.0       # a parent below this is a rumble, not a tone
+
+# ---- QUIET, PER THREAD -------------------------------------------------------
+# A template build runs blockrender.prepare, which reports what its passes did:
+# right for a render, corruption for a curses screen. It used to be silenced
+# with contextlib.redirect_stdout -- which swaps sys.stdout for the WHOLE
+# PROCESS. Two builds overlapping (the patch worker and a warm() on the main
+# thread) interleaved their save and restore, the second restored the first's
+# sink, and sys.stdout stayed a StringIO for good: every later line of output
+# vanished. The selftest ran to the end, returned 0, and printed nothing past
+# the point of the race -- twice, both times under load, and taken the first
+# time for a machine that was merely busy.
+#
+# So the silence is per THREAD: one proxy, installed once, drops writes from a
+# thread that has asked to be quiet and passes every other thread's through.
+
+class _QuietStdout(object):
+    def __init__(self, real):
+        self.real = real
+        self.local = threading.local()
+
+    def write(self, s):
+        if getattr(self.local, "depth", 0):
+            return len(s)
+        return self.real.write(s)
+
+    def flush(self):
+        return self.real.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+
+
+_QUIET_LOCK = threading.Lock()
+
+
+class quiet(object):
+    """`with quiet():` -- this thread's prints go nowhere; nobody else's do."""
+    def __enter__(self):
+        with _QUIET_LOCK:
+            if not isinstance(sys.stdout, _QuietStdout):
+                sys.stdout = _QuietStdout(sys.stdout)
+            self.proxy = sys.stdout
+        self.proxy.local.depth = getattr(self.proxy.local, "depth", 0) + 1
+        return self
+
+    def __exit__(self, *exc):
+        self.proxy.local.depth -= 1
+        return False
+
 
 # ---- WHAT CAN BE CONTROLLED ------------------------------------------------
 #
@@ -183,6 +243,10 @@ CONTROLS = (
     (66, "sostenuto", "switch", 0),
     (67, "soft", "switch", 0),
     (65, "portamento", "switch", 0),
+    # MONO is a channel MODE, not a controller: on is CC126 (GM 2's M = 1, one
+    # voice per channel), off is CC127. Both carry an All Sounds Off, as the
+    # spec requires, so switching it stops what the channel is holding.
+    ("mono", "mono", "switch", 0),
     (1, "mod wheel", "continuous", 0),
     (11, "expression", "continuous", 127),
     (7, "volume", "continuous", 100),
@@ -211,6 +275,10 @@ def control_message(key, value, channel):
     if key == "pressure":
         return mido.Message("aftertouch", channel=channel,
                             value=max(0, min(127, int(value))))
+    if key == "mono":
+        return (mido.Message("control_change", channel=channel, control=126, value=1)
+                if value >= 64 else
+                mido.Message("control_change", channel=channel, control=127, value=0))
     return mido.Message("control_change", channel=channel, control=int(key),
                         value=max(0, min(127, int(value))))
 
@@ -1479,8 +1547,7 @@ class Patch:
             # right for a render and is corruption for a curses screen -- the
             # TUI owns the terminal. Redirected rather than flag-guarded so
             # that anything added to those passes later is caught too.
-            import contextlib as _ctx, io as _io
-            with _ctx.redirect_stdout(_io.StringIO()):
+            with quiet():
                 p = B.prepare(m, self.tuner)
         finally:
             _L.SIDEBANDS = _was
@@ -1507,6 +1574,12 @@ class Patch:
                                                 "one_shot", False)
         t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
         t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
+        # WHICH PARTIALS' FADE IS THE ATTACK, for a slur to shorten (_slur_stamp):
+        # those sharing the note's main fade. A bloom copy swells in on its own
+        # schedule, which a slur does not touch offline either.
+        if t["P"]:
+            _u, _c = np.unique(t["fa"], return_counts=True)
+            t["fa_at"] = t["fa"] == _u[int(np.argmax(_c))]
         t["ranks"] = {}
         if self.organ:
             # gr is the rank index the offline gate would have used, so it is
@@ -1802,6 +1875,10 @@ class Live:
         # Rx.BANK SELECT: off after GM1 System On, on after GS Reset or GM 2 On.
         self.bank_msb = {}
         self.bank_lsb = {}
+        # LEGATO: each channel's most recent onset group, and the flag that
+        # carries a slur into _note_on as _glide_from carries a glide.
+        self.onset_group = {}
+        self._slur = False
         self.ch_drums = {}
         self.rx_bank = True
         self._rpn_fine_msb = {}
@@ -2394,6 +2471,9 @@ class Live:
             if self.patch_reqs:
                 self.patch_go.set()
         elif msg.type == "note_on" and msg.velocity > 0:
+            # LEGATO is judged BEFORE this key goes down, against the group of
+            # notes this one follows -- see _legato_on.
+            _slur = self._legato_on(ch, msg.note, n0)
             # Every voice records the key as down, not just the organ. The
             # stuck-note sweep releases whatever is sounding without a key behind
             # it, so a voice that never registered its key had every note swept
@@ -2415,6 +2495,7 @@ class Live:
                 _st[:] = [x for x in _st if x[0] != msg.note] + [(msg.note, msg.velocity)]
                 if _prev is not None and _prev != msg.note:
                     self._mono_cut(ch, _prev, n0, parts)
+                    _slur = True        # a handoff is a slur: _MONO_SLUR, offline
                 self.mono_cur[ch] = msg.note
             # WHERE THIS NOTE GLIDES FROM, decided once for the channel before
             # any part sees it -- a layered channel is several parts and one
@@ -2427,12 +2508,15 @@ class Live:
                 _psrc = self.last_on.get(ch)
             self._glide_from = _psrc if _psrc != msg.note else None
             self.last_on[ch] = msg.note
+            self._slur = _slur
             for part in parts:
                 if part.matches(ch, msg.note):
                     self._note_on(part, ch, msg.note, msg.velocity, n0)
             self._glide_from = None
+            self._slur = False
         else:
             self.down.discard((ch, msg.note))
+            self._legato_off(ch, msg.note, n0)
             if ch in self.mono:
                 _st = self.mono_stack.get(ch, [])
                 _st[:] = [x for x in _st if x[0] != msg.note]
@@ -2449,10 +2533,12 @@ class Live:
                     self._glide_from = (msg.note if self.porta_on.get(ch)
                                         else None)
                     self.last_on[ch] = _back
+                    self._slur = True   # back to a key still held: a slur too
                     for part in parts:
                         if part.matches(ch, _back):
                             self._note_on(part, ch, _back, _bvel, n0)
                     self._glide_from = None
+                    self._slur = False
                     return
                 self.mono_cur.pop(ch, None)     # last key up: an ordinary release
             pedalled = False
@@ -2543,6 +2629,8 @@ class Live:
         # calibration: they write the same three floats.
         if self._glide_from is not None and slots:
             self._glide(part, ch, note, slots)
+        if self._slur and slots:
+            self._slur_stamp(part, note, tmpl)
         if part.drums:
             # CHOKE, live. Offline this is done by scanning FORWARD for
             # the next strike in the exclusive class and truncating the
@@ -2858,6 +2946,62 @@ class Live:
         for part in parts:
             if part.matches(ch, note):
                 self._note_off(part, ch, note, n0)
+
+    def _legato_on(self, ch, note, n0):
+        """Is a note-on arriving now slurred? Judged against the onset group
+        this one FOLLOWS, never against whatever else is ringing: a bass note
+        held under a moving line would otherwise make every note above it
+        legato, and the members of one chord would disagree -- the offline
+        path measured that mislabelling 64-82% of contiguous notes."""
+        g = self.onset_group.get(ch)
+        if g is not None and n0 - g["on"] <= CHORD_WINDOW_S * self.rate:
+            g["keys"].add(note)             # a chord member: the chord's answer
+            return g["slur"]
+        slur = g is not None and (
+            any((ch, k) in self.down for k in g["keys"])
+            or (g["off"] is not None and n0 - g["off"] <= LEGATO_GAP_S * self.rate))
+        self.onset_group[ch] = {"on": n0, "keys": {note}, "off": None, "slur": slur}
+        return slur
+
+    def _legato_off(self, ch, note, n0):
+        """The group's END is its last key up, as offline it is the latest
+        note-off of the group."""
+        g = self.onset_group.get(ch)
+        if g is not None and note in g["keys"]:
+            g["off"] = n0 if g["off"] is None else max(g["off"], n0)
+
+    def _slur_stamp(self, part, note, tmpl):
+        """Give the slots just stamped the voice's legato attack.
+
+        The template was built with the full attack; tonelib's slur_fade gives
+        the legato attack alone, and since every step from attack time to
+        fade is non-decreasing, the slurred note is the MIN of the two -- with
+        the same caps as blockrender's fade and chiff. Only the partials whose
+        fade is the attack move (tmpl["fa_at"]). Before _sound_stamp, so CC73
+        scales the result, which is the order the file renderer applies them.
+        """
+        tgt = note + part.transpose
+        pc = part.patch._voice_class(tgt)
+        F = part.patch.freqs()
+        if not (0 <= tgt < len(F)) or F[tgt] <= 0.0:
+            return
+        got = T.slur_fade(pc, F[tgt])
+        if got is None or "fa_at" not in tmpl:
+            return
+        fs, cs = got
+        sl = self.slab.last_slots
+        if sl is None or len(sl) != len(tmpl["fa_at"]):
+            return
+        idx = np.fromiter(sl, np.int64, len(sl))[tmpl["fa_at"]]
+        dur = tmpl["dur"] / float(B.SR) if tmpl.get("dur") else 1.0
+        afm = getattr(pc, "attack_fraction_max", 0.45)
+        a = self.slab.a
+        a["fa"][idx] = np.minimum(a["fa"][idx],
+                                  np.float32(max(1e-4, min(fs, afm * dur)) * B.SR))
+        a["ch"][idx] = np.minimum(a["ch"][idx],
+                                  np.float32(max(1e-4, min(cs, 0.45 * dur)) * B.SR))
+        self.slab.dirty = True
+        self.slurs = getattr(self, "slurs", 0) + 1
 
     def _glide(self, part, ch, note, slots):
         """Write this press's portamento into the slots just stamped.
@@ -8710,7 +8854,7 @@ def selftest():
           and [(m.control, m.value) for m in _up] == [(64, 0)],
           "  (%s, lamp %s, %s)" % (_down, _lamp, _up))
     _ui.pane = 2
-    _answers[:] = [4, ""]                                # mod wheel, all channels
+    _answers[:] = [[c[0] for c in CONTROLS].index(1), ""]   # mod wheel, all channels
     _ui.key(_scr, ord("a"))
     _ui.crow = 1
     _ui.key(_scr, ord("+")); _ui.key(_scr, ord("="))
@@ -8731,6 +8875,29 @@ def selftest():
     check("panel: d deletes a route and a control",
           _lr.routes == () and [c["key"] for c in _lr.screen_controls] == [1])
     _lr.renderer.close()
+
+    # MONO FROM THE PANEL: a keyboard with no mode buttons still gets one.
+    _lmo = Live(program=56, rate=48000, frames=128, verbose=False)
+    _umo = _tui.TUI(_lmo, "stub"); _umo.builder.stop = True
+    _answers[:] = [[c[0] for c in CONTROLS].index("mono"), "1"]
+    _umo.menu = lambda scr, title, items, start=0: _answers.pop(0)
+    _umo.prompt = lambda scr, label: _answers.pop(0)
+    _umo.pane = 2
+    _umo.key(_Scr(24, 80), ord("a"))
+    _mc = _lmo.screen_controls[0]
+    _umo.fire(_mc); _lmo.apply(0)
+    _on = 0 in _lmo.mono and _umo.switch_on("mono", 0)
+    _umo.fire(_mc); _lmo.apply(128)
+    _off = 0 not in _lmo.mono and not _umo.switch_on("mono", 0)
+    # ...and held while pushed, from the pitch wheel, through a route.
+    _lmo.set_routes([Route(("bend", "up"), "mono")])
+    _lmo.on_midi(mido.Message("pitchwheel", channel=0, pitch=6000)); _lmo.apply(256)
+    _held = 0 in _lmo.mono
+    _lmo.on_midi(mido.Message("pitchwheel", channel=0, pitch=0)); _lmo.apply(384)
+    check("mono is a switch on the panel: CC126 on, CC127 off, and the lamp sees it",
+          _on and _off and _held and 0 not in _lmo.mono,
+          "  (toggled from its hotkey, then held by the pitch wheel through a route)")
+    _lmo.shutdown()
 
     # ---- BANK SELECT AND DRUM SETS -----------------------------------------
     import percussion_map as _PM
@@ -8848,6 +9015,135 @@ def selftest():
           "  (before %s, after %s; the omni part is the player's and stays)"
           % (_still, [p.drums for p in _lb.parts]))
     _lb.shutdown()
+
+    # ---- THE LEGATO ATTACK, LIVE --------------------------------------------
+    # A slur is one number -- the attack time -- and live applies it after the
+    # stamp as a min, which is exact because every step from attack to fade is
+    # non-decreasing. So the checks ask the two renderers the same questions
+    # and expect the same float32 answers.
+    def _lgfile(prog, ev, mono=False):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))   # 960 = 1 s
+        _t.append(mido.Message("program_change", channel=0, program=prog, time=0))
+        if mono:
+            _t.append(mido.Message("control_change", channel=0, control=126, value=1, time=0))
+        _now = 0
+        for _tk, _on, _n in ev:
+            _t.append(mido.Message("note_on" if _on else "note_off", channel=0, note=_n,
+                                   velocity=90 if _on else 0, time=_tk - _now))
+            _now = _tk
+        _p = B.prepare(_m, "hybrid")
+        _non, _fa, _cw = (np.asarray(_p[k]) for k in ("non", "fa", "ch"))
+        return {(_tk, _n): (np.unique(_fa[np.abs(_non - _tk / 960.0 * B.SR) < 200]),
+                            np.unique(_cw[np.abs(_non - _tk / 960.0 * B.SR) < 200]))
+                for _tk, _on, _n in ev if _on}
+
+    def _lglive(prog, ev, mono=False):
+        _l = Live(program=prog, rate=B.SR, frames=128, verbose=False, tuner="hybrid")
+        _l.warm()
+        if mono:
+            _l.on_midi(mido.Message("control_change", channel=0, control=126, value=1))
+            _l.apply(0)
+        _o = {}
+        for _tk, _on, _n in ev:
+            _l.on_midi(mido.Message("note_on" if _on else "note_off", channel=0, note=_n,
+                                    velocity=90 if _on else 0))
+            _l.apply(int(_tk / 960.0 * B.SR))
+            if _on:
+                _ix = np.fromiter(_l.slab.last_slots, np.int64, len(_l.slab.last_slots))
+                _o[(_tk, _n)] = (np.unique(_l.slab.a["fa"][_ix]), np.unique(_l.slab.a["ch"][_ix]))
+        _l.shutdown()
+        return _o
+
+    def _lgsame(f, l):
+        return f.keys() == l.keys() and all(
+            np.array_equal(f[k][0], l[k][0]) and np.array_equal(f[k][1], l[k][1]) for k in f)
+
+    _tr = [(0, 1, 60), (480, 1, 62), (960, 0, 60), (1440, 0, 62)]
+    _f, _l = _lgfile(71, _tr, True), _lglive(71, _tr, True)
+    check("legato live: a mono handoff takes the legato attack, as in a file",
+          _lgsame(_f, _l) and _l[(480, 62)][0][0] < _l[(0, 60)][0][0],
+          "  (clarinet: fade %.0f -> %.0f samples, identical to the file)"
+          % (_l[(0, 60)][0][0], _l[(480, 62)][0][0]))
+    _ov = [(0, 1, 60), (500, 1, 62), (520, 0, 60), (1400, 0, 62)]
+    _gp = [(0, 1, 60), (400, 0, 60), (496, 1, 62), (1400, 0, 62)]
+    _f, _l = _lgfile(40, _ov), _lglive(40, _ov)
+    _f2, _l2 = _lgfile(40, _gp), _lglive(40, _gp)
+    check("...and in poly an OVERLAP slurs, a 100 ms gap does not",
+          _lgsame(_f, _l) and _lgsame(_f2, _l2)
+          and _l[(500, 62)][0][0] < _l[(0, 60)][0][0]
+          and _l2[(496, 62)][0][0] == _l2[(0, 60)][0][0],
+          "  (violin: %.0f samples overlapped against %.0f detached, both as the file has them)"
+          % (_l[(500, 62)][0][0], _l2[(496, 62)][0][0]))
+    # Judged against the GROUP this note follows. A chord spread over 20 ms after
+    # a legato note: all three slurred. A bass held under a moving line: the line
+    # is judged on its own previous note, detached here, so it is not slurred.
+    _lc = Live(program=40, rate=48000, frames=128, verbose=False)
+    _sl = []
+    for _n0, _msg in ((0, ("note_on", 55)), (24000, ("note_on", 60)),
+                      (24480, ("note_on", 64)), (24960, ("note_on", 67)),
+                      (25000, ("note_off", 55))):
+        _sl.append(_lc._legato_on(0, _msg[1], _n0) if _msg[0] == "note_on" else None)
+        (_lc.down.add if _msg[0] == "note_on" else _lc.down.discard)((0, _msg[1]))
+        if _msg[0] == "note_off":
+            _lc._legato_off(0, _msg[1], _n0)
+    _hb = Live(program=40, rate=48000, frames=128, verbose=False)
+    _hs = []
+    for _n0, _on, _n in ((0, 1, 36), (24000, 1, 60), (48000, 0, 60), (57600, 1, 62)):
+        if _on:
+            _hs.append(_hb._legato_on(0, _n, _n0)); _hb.down.add((0, _n))
+        else:
+            _hb.down.discard((0, _n)); _hb._legato_off(0, _n, _n0)
+    check("...a chord takes one answer, and a held bass does not make a line legato",
+          _sl[1:4] == [True, True, True] and _hs == [False, True, False],
+          "  (the chord after a held note: %s; over a held C2, the line's first note "
+          "overlaps the bass and slurs, its second follows a 200 ms gap and does "
+          "not: %s)"
+          % (_sl[1:4], _hs))
+    _f, _l = _lgfile(0, _ov), _lglive(0, _ov)
+    check("...and a piano played legato is struck exactly as a detached one",
+          _lgsame(_f, _l) and np.array_equal(_l[(500, 62)][0], _l[(0, 60)][0]),
+          "  (no legato attack: a hammer has no exciter to carry)")
+    # THE IDENTITY live leans on: F(min(at, lg)) == min(F(at), F(lg)), for the
+    # speech-and-CC73 chain every legato voice runs, at five pitches and three
+    # CC73 settings.
+    import patch_map as _PMl
+    _bad = []
+    for _cls in {_PMl.property_class_for_note(p, 60) for p in range(128)}:
+        if getattr(_cls, "legato_attack_s", None) is None:
+            continue
+        _at = _cls.attack_time if _cls.attack_time is not None else _cls.chiff_max_valve_time
+        for _f0 in (65.4, 130.8, 261.6, 523.3, 1046.5):
+            for _k in (0.25, 1.0, 4.0):
+                _F = lambda x: _cls.speech_time(_cls, x, _f0) * _k
+                _lhs = _F(_T.slur_attack(_at, _cls))
+                _rhs = min(_F(_at), _T.slur_fade(_cls, _f0)[0] * _k)
+                if abs(_lhs - _rhs) > 1e-12:
+                    _bad.append((_cls.__name__, _f0, _k))
+    check("...and the min it applies after the stamp is exact, for every legato voice",
+          not _bad, "  (%s)" % _bad[:3] if _bad else "")
+
+    # OVERLAPPING QUIET BUILDS MUST NOT SWALLOW THE PROCESS'S OUTPUT, which is
+    # what redirect_stdout did: eight threads going quiet at staggered times,
+    # and afterwards the stream underneath is still the real one.
+    import io as _iox
+    _real = getattr(sys.stdout, "real", sys.stdout)
+
+    def _qt(_d):
+        with quiet():
+            time.sleep(_d)
+    _ths = [threading.Thread(target=_qt, args=(0.01 * (_i % 3),)) for _i in range(8)]
+    for _th in _ths:
+        _th.start()
+    for _th in _ths:
+        _th.join()
+    check("a quiet template build silences its own thread and nobody else's",
+          getattr(sys.stdout, "real", sys.stdout) is _real
+          and not isinstance(_real, _iox.StringIO)
+          and getattr(sys.stdout.local, "depth", 0) == 0,
+          "  (redirect_stdout was process-wide: two builds racing left stdout a "
+          "StringIO for good, and the selftest went on silently)")
 
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0

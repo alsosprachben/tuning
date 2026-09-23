@@ -2273,16 +2273,16 @@ def prepare(path, tuner='hybrid440'):
         # SLUR: the previous note on this channel ran up to this one, so the
         # exciter never stopped and there is no onset to make. Only voices with
         # an exciter that can carry declare legato_attack_s; see tonelib.
-        _lg = getattr(props, 'legato_attack_s', None)
-        if _lg is not None and (ch, note, _occ.get((ch, note), 0)) in legato:
-            at = min(at, _lg)
+        # The arithmetic is tonelib's (slur_attack), shared with live, which
+        # applies the same slur after stamping a template.
+        if (ch, note, _occ.get((ch, note), 0)) in legato:
+            at = T.slur_attack(at, props)
         # A GLISS STEP IS NOT RETONGUED. The lips keep buzzing through the whole
         # run -- that is what "blow through the harmonics" means -- so every
         # step takes the legato attack whether or not _legato_ticks saw it.
         # It could not have: these notes did not exist when the file was parsed.
-        if _lg is not None and ((ch, note, on) in _GLISS
-                                or (ch, note, on) in _MONO_SLUR):
-            at = min(at, _lg)
+        if (ch, note, on) in _GLISS or (ch, note, on) in _MONO_SLUR:
+            at = T.slur_attack(at, props)
         _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
         # Pipe speech scales with wavelength: add speech_cycles periods of the
