@@ -401,6 +401,7 @@ def parse(path):
     mid = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
     ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; pws = {}; on = {}; t = 0.0
     ats = {}; pts = {}       # channel pressure, and per-key pressure
+    sotas = {}               # channel -> [(t, 12 cents)] from GM2 sysex
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
@@ -419,6 +420,12 @@ def parse(path):
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
+        elif msg.type == 'sysex':
+            _so_ta = parse_sota(msg.data)
+            if _so_ta is not None:
+                _chs, _cents = _so_ta
+                for _c in _chs:
+                    sotas.setdefault(_c, []).append((t, tuple(_cents)))
         elif msg.type == 'aftertouch':
             ats.setdefault(msg.channel, []).append((t, msg.value))
         elif msg.type == 'polytouch':
@@ -444,7 +451,97 @@ def parse(path):
     # would miss it -- a KeyError at render time once notes carry their own
     # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
-    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws, (ats, pts)
+    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws, (ats, pts, sotas)
+
+# ---- GM2 Scale/Octave Tuning Adjust -----------------------------------------
+# Twelve cent offsets, one per pitch class, applied to a set of channels. It is
+# the standard, portable way to put a TEMPERAMENT in a MIDI file, and nothing
+# here spoke it -- which is why John Sankey's bwv847.mid smuggles his tuning
+# through one-pitch-class-per-channel static pitch bend instead. There was no
+# other way to say it.
+#
+#   1-byte  F0 7E <dev> 08 08 <ff> <gg> <hh> <ss x 12> F7
+#           ss 0x00..0x7F  ->  -64..+63 cents, 0x40 = 0
+#   2-byte  F0 7E <dev> 08 09 <ff> <gg> <hh> <ss tt x 12> F7
+#           14-bit 0x0000..0x3FFF -> -100..+100 cents, 0x2000 = 0
+#
+# ff/gg/hh is a 3-byte channel bitmap: ff bits 0-1 are channels 14-15, gg is
+# 7-13, hh is 0-6. 7F in the device byte is "all devices". The realtime form
+# (7F instead of 7E) is the same payload and means "take effect now" -- which
+# offline is the same thing, so both are accepted.
+SOTA_NONREALTIME = 0x7E
+SOTA_REALTIME = 0x7F
+
+
+def _sota_channels(ff, gg, hh):
+    """The 3-byte channel bitmap, as a set of 0-based channels."""
+    out = set()
+    for b in range(2):
+        if ff & (1 << b):
+            out.add(14 + b)
+    for b in range(7):
+        if gg & (1 << b):
+            out.add(7 + b)
+        if hh & (1 << b):
+            out.add(b)
+    return out
+
+
+def parse_sota(data):
+    """(channels, [12 cents]) from a sysex payload, or None if it is not one.
+
+    `data` is mido's view: the bytes BETWEEN F0 and F7, so it starts at the
+    manufacturer/universal id. Anything that is not a Scale/Octave Tuning
+    Adjust returns None and must be ignored silently -- a Roland GS or Yamaha
+    XG header in a file is a message for a different machine, not a malformed
+    one.
+    """
+    d = tuple(data)
+    if len(d) < 7 or d[0] not in (SOTA_NONREALTIME, SOTA_REALTIME):
+        return None
+    if d[2] != 0x08 or d[3] not in (0x08, 0x09):
+        return None
+    chans = _sota_channels(d[4], d[5], d[6])
+    body = d[7:]
+    if d[3] == 0x08:
+        if len(body) < 12:
+            return None
+        cents = [float(b) - 64.0 for b in body[:12]]
+    else:
+        if len(body) < 24:
+            return None
+        cents = [((body[2 * i] << 7 | body[2 * i + 1]) - 8192) / 8192.0 * 100.0
+                 for i in range(12)]
+    return chans, cents
+
+
+def sota_message(cents, channels=range(16), two_byte=True, realtime=False):
+    """A mido sysex carrying twelve cent offsets. The inverse of parse_sota.
+
+    This is the half with a payoff: the renderer's own tuners are finer than
+    twelve cents-per-pitch-class, so reading this is a convenience, but WRITING
+    it lets a temperament travel to any GM2 instrument. See
+    examples/tuning_sysex.py.
+    """
+    ff = gg = hh = 0
+    for c in channels:
+        if 14 <= c <= 15:
+            ff |= 1 << (c - 14)
+        elif 7 <= c <= 13:
+            gg |= 1 << (c - 7)
+        elif 0 <= c <= 6:
+            hh |= 1 << c
+    out = [SOTA_REALTIME if realtime else SOTA_NONREALTIME, 0x7F, 0x08,
+           0x09 if two_byte else 0x08, ff, gg, hh]
+    for c in cents[:12]:
+        if two_byte:
+            v = int(round(max(-100.0, min(100.0, c)) / 100.0 * 8192.0)) + 8192
+            v = max(0, min(0x3FFF, v))
+            out += [(v >> 7) & 0x7F, v & 0x7F]
+        else:
+            out.append(max(0, min(127, int(round(c)) + 64)))
+    return out
+
 
 def bend_blocks(events, nblk):
     """Per-block (mean ratio, cumulative extra phase) for one channel's bend.
@@ -558,7 +655,27 @@ def prepare(path, tuner='hybrid440'):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
-    ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts) = parse(path)
+    ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas) = parse(path)
+
+    # THE SAME SPLIT THE PITCH WHEEL GETS, and for the same reason: a table set
+    # before the channel's first note and never changed is a TEMPERAMENT, and a
+    # fixed factor on f0 reproduces it exactly. Real files send it once in the
+    # header. One that changed mid-note would be a gesture, which this does not
+    # model -- the last table in force at the channel's first note is used and
+    # the change is reported rather than silently interpolated.
+    _OTUN = {}
+    for _c, _ev in sotas.items():
+        _ev = sorted(_ev)
+        _f = min((_n[2] for _n in notes if _n[0] == _c), default=None)
+        if _f is None:
+            continue
+        _tab = next((_t for _s, _t in reversed(_ev) if _s <= _f + 1e-6),
+                    _ev[0][1])
+        if any(abs(_x) > 1e-9 for _x in _tab):
+            _OTUN[_c] = _tab
+        if len({_t for _s, _t in _ev}) > 1:
+            print("  scale/octave tuning changes mid-piece on channel %d; "
+                  "the table in force at its first note is used" % _c)
 
     def _pressure_of(ch, note, on, off):
         """This note's pressure, 0..1: the time-weighted MEAN over its span.
@@ -1073,6 +1190,15 @@ def prepare(path, tuner='hybrid440'):
             _bt = _BTUN.get(ch)
             if _bt:
                 f0 *= _bt
+            # ...AND THE CHANNEL'S OWN TEMPERAMENT, if a GM2 Scale/Octave
+            # Tuning sysex set one. A sibling of the static bend above: both
+            # say "this channel is tuned differently", and both are exact as a
+            # fixed factor on f0. MULTIPLICATIVE, so it composes with the
+            # instrument's own scale below rather than replacing it -- a
+            # retuned channel retunes a chanter too, and the drones follow.
+            _ot = _OTUN.get(ch)
+            if _ot:
+                f0 *= 2.0 ** (_ot[note % 12] / 1200.0)
             # AN INSTRUMENT WITH HOLES HAS ITS OWN SCALE, and it is not the
             # render's temperament. A chanter is cut once for one tonic and
             # every note of it is tuned to beat cleanly against a fixed drone,
@@ -1085,7 +1211,8 @@ def prepare(path, tuner='hybrid440'):
             _sc = getattr(pc, 'scale_cents', None)
             _st = getattr(pc, 'scale_tonic_note', None)
             if _sc and _st is not None and _st in FREQ:
-                _tonic = FREQ[_st] * (2.0 ** _so if _so else 1.0) * (_bt or 1.0)
+                _tonic = (FREQ[_st] * (2.0 ** _so if _so else 1.0) * (_bt or 1.0)
+                          * (2.0 ** (_ot[_st % 12] / 1200.0) if _ot else 1.0))
                 _deg = _sc.get(note - _st)
                 if _deg is not None:
                     f0 = _tonic * 2.0 ** (_deg / 1200.0)

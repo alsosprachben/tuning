@@ -4766,6 +4766,48 @@ def selftest():
           % (100 * _b(_e0), 100 * _b(_e1)))
     _lvp.renderer.close()
 
+    # ---- GM2 Scale/Octave Tuning Adjust -------------------------------------
+    # Twelve cent offsets per pitch class: the standard, portable way to put a
+    # TEMPERAMENT in a MIDI file. Nothing here spoke it, which is why John
+    # Sankey's bwv847.mid smuggles his tuning through one-pitch-class-per-
+    # channel static pitch bend -- twelve numbers sent through a control meant
+    # for a gesture, costing twelve channels, and legible to nothing else.
+    _SANKEY = [0.0, -9.77, -7.71, -5.86, -9.77, -1.95,
+               -11.72, -3.78, -7.81, -11.72, -3.91, -7.81]
+    _m2 = _BRb.sota_message(_SANKEY, two_byte=True)
+    _m1 = _BRb.sota_message(_SANKEY, two_byte=False)
+    _g2 = _BRb.parse_sota(_m2)
+    _g1 = _BRb.parse_sota(_m1)
+    _e2 = max(abs(a - b) for a, b in zip(_g2[1], _SANKEY))
+    _e1 = max(abs(a - b) for a, b in zip(_g1[1], _SANKEY))
+    check("a temperament round-trips through the GM2 tuning sysex",
+          _e2 < 0.01 and _e1 < 0.5 and len(_g2[0]) == 16,
+          "  (2-byte %.3f cents, 1-byte %.2f -- which is its own 1-cent step)"
+          % (_e2, _e1))
+    # A message for another machine must be ignored SILENTLY: a Roland GS or
+    # Yamaha XG header in a file is not malformed, it is not ours.
+    check("...and a sysex for another machine is not mistaken for one",
+          _BRb.parse_sota([0x41, 0x10, 0x42, 0x12]) is None
+          and _BRb.parse_sota([0x7E, 0x7F, 0x09, 0x01]) is None
+          and _BRb.parse_sota([0x7E]) is None,
+          "  (GM System On is 7E..09, not 7E..08, and must not match either)")
+    # THE CHANNEL BITMAP is three bytes in an order nobody remembers: ff is
+    # channels 14-15, gg is 7-13, hh is 0-6.
+    _one = _BRb.parse_sota(_BRb.sota_message(_SANKEY, channels=[0, 9, 15]))
+    check("...and the three-byte channel map addresses the right channels",
+          _one[0] == {0, 9, 15},
+          "  (ff = 14-15, gg = 7-13, hh = 0-6)")
+    # WHAT IT CANNOT CARRY, stated rather than discovered. Twelve cents per
+    # pitch class is a temperament and nothing more: a stretched octave forces
+    # every C to one offset, and a dynamic tuner retunes per chord.
+    import examples.tuning_sysex as _TS
+    _pure = _TS.stretch_of("meantone")
+    _str = _TS.stretch_of("stretch")
+    check("...and it cannot carry a stretched octave, which the export says",
+          _pure < 0.05 < _str,
+          "  (meantone varies %.2f cents across the compass and exports "
+          "exactly; stretch varies %.2f and cannot)" % (_pure, _str))
+
     # ---- THE PIPER'S SCALE, which is not a temperament ----------------------
     # Nine holes cut once, and every one of them tuned to beat cleanly against
     # a fixed A drone -- which makes the scale just intonation on Low A rather
