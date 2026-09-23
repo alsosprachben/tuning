@@ -62,7 +62,7 @@ what you can change about it, and the same two keys change every one of them.
 
 | key | what it does |
 |---|---|
-| `tab` | move between the part table and the controls |
+| `tab` | cycle the part table → the globals → [on-screen controls and routes](#controls-a-keyboard-doesnt-have) |
 | arrows / `hjkl` | select a part, and a column within it |
 | `-` `+` | change the selected cell (`_` and shifted `+` are coarse) |
 | `enter` | **acts on the highlighted column** — `patch`, `tuner` and `stops` open a picker; `ch`, `lo`, `hi`, `tr`, `level` take a typed value (ranges accept `C3` as well as `48`) |
@@ -101,6 +101,56 @@ attribute write and takes effect on the next MIDI event.
 Presets live in `presets.json`, next to the code. They are **data**: a part list
 plus the control settings. A voice is still only ever defined in `tonelib.py`, so
 there is no sound the engine can make that the repo does not describe in code.
+A preset also carries its on-screen controls and routes.
+
+### Controls a keyboard doesn't have
+
+A keyboard may send nothing but notes. The third pane (`tab` twice) supplies
+the rest, and remaps what the keyboard does have.
+
+**On-screen controls.** `a` adds any control the engine answers: the four
+pedals, the CCs, the pitch wheel, aftertouch. Each one is sent on a single
+channel, or on all sixteen. The panel sends them exactly as hardware would,
+so the engine can't tell the difference. A new control starts at its default
+and sends nothing until you move it.
+
+| key | on a control |
+|---|---|
+| `space` | a switch: toggle it · anything else: back to its default |
+| `-` `+` | step it (shifted: by 8; the wheel moves 128 at a time) |
+| `enter` | type a value |
+| `b` | bind a hotkey, which then works **from every pane** |
+| `d` | remove it |
+
+**Switches latch.** Press once to put the pedal down, press again to lift it.
+A terminal reports a key when it goes down and never when it comes up, so a
+computer key can't be held like a pedal. The lamp reads the engine's own
+pedal state, so a CC121 or a GM System On from the keyboard shows up there.
+A hotkey can only be a key the panel doesn't already use; the binder refuses
+the others and lists the free ones. On a continuous control, the hotkey jumps
+between the default and full travel.
+
+**Routes** (`r`) remap the keyboard's own controls before the engine sees
+them. Sources are the mod wheel, the pitch wheel up, down or either way,
+aftertouch, and any CC. The destination can be anything in the catalogue.
+What a route does follows from the two ends:
+
+| route | behaviour |
+|---|---|
+| pitch wheel → a pedal | **held while pushed**: down past half-way, up again under a fifth. These are the half-moon switch's thresholds, so a wobble can't make it chatter |
+| a CC → a pedal | 64 and above is down, GM's own switch point |
+| anything → a CC | its travel scaled to 0–127 |
+| a CC → the pitch wheel | 0–127 onto the full bend, centred at 64 |
+
+A route **replaces** its source unless you choose to keep the original. The
+pitch wheel routed to sustain stops bending. Rerouting the mod wheel takes away
+everything CC1 does by voice: vibrato, drones, drive, the rockers. A route can
+listen on one channel or all of them. The panel's own controls go around the
+routes rather than through them, so nothing can loop.
+
+The catalogue behind both pickers is `CONTROLS` in `live.py`. The selftest
+checks it against the same dispatch `midi.md` is generated from, so the panel
+can't offer a control the engine ignores.
 
 ### Controls
 
@@ -110,7 +160,7 @@ there is no sound the engine can make that the repo does not describe in code.
 | pitch bend | ±2 semitones (`bend_range`) |
 | mod wheel | vibrato: 35 cents deeper **and 25% faster** at full (`mod_cents`, `mod_rate`) |
 | mod wheel *on the organ* | **draws stops** in crescendo order: 8′ 4′ 2′ 2⅔ 16′ 5⅓ |
-| aftertouch | crescendo, +8 dB and brighter together (`press_db`, `press_tilt`) |
+| aftertouch | crescendo, +8 dB (`press_db`); brighter too, by each voice's own measured effort law where it has one |
 | mod wheel *with layers* | each part answers in its own way at once — the organ layer draws stops while the string layer vibrates |
 | pitch bend *on a Leslie voice* | the **half-moon switch**: flick up or down to step stop → chorale → tremolo |
 | mod wheel *on an amplified voice* | the **gain knob** — the Leslie's swell pedal, or a guitar amp's own gain |

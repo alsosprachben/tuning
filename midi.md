@@ -610,6 +610,31 @@ did nothing and every value gave three drones. The honky-tonk's wheel had gone
 inert in exactly that way, the fact was recorded in `sources.md`, and it was
 reintroduced within the hour by someone who had read it.
 
+## A route changes what a controller means, before anyone answers it
+
+Live only. The panel's routes (`Route` in `live.py`) rewrite hardware messages
+in `on_midi`, on the MIDI input thread, before they are queued. So everything in
+the table above describes the message **after** routing. With the pitch wheel
+routed to sustain, the engine sees CC64 and no pitch bend at all.
+
+A route **replaces** its source unless it is set to keep it. Replacing is what
+makes a two-wheel keyboard useful: the pitch wheel springs back to centre, which
+is the right shape for a momentary pedal. It goes down past half of its half of
+travel and comes up under a fifth. Those are the thresholds of the Leslie's
+half-moon switch, and here they are read as a level instead of an edge. A CC
+routed onto a pedal switches at 64, as a real pedal does. The previous section
+is why routing the mod wheel away is not a small thing.
+
+The panel's on-screen controls go past the routes (`Live.inject`), so a route
+can never feed back into itself. A route that turns the mod wheel into
+sostenuto catches exactly the keys a real CC66 does, and the selftest checks
+that against the same sequence.
+
+Writing this found a live bug in sostenuto. A pedal put down while **no** key
+was held left the channel with an empty set, and the pedal-up branch read that
+as "never went down". It now checks whether the channel is in the set, not
+whether the set is empty.
+
 ## What a voice can refuse
 
 A controller is not a property of the protocol, it is a question put to an

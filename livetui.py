@@ -202,9 +202,19 @@ GLOBALS = (
     ("mod depth",  "cents",  0.0, 200.0, 5.0),
     ("mod rate",   "%",      0.0,  1.5, 0.05),
     ("aftertouch", "dB",     0.0, 24.0, 0.5),
-    ("at tilt",    "",       0.0,  1.5, 0.05),
+    # "at tilt" USED TO BE HERE and set a global aftertouch tilt. Aftertouch now
+    # colours only voices with a measured effort law, each by its own amount
+    # (Live._press_tilt), so that knob moved nothing -- a control that does
+    # nothing is worse than no control.
     ("threads",    "x",      1.0,  8.0, 1.0),
 )
+
+# THE KEYS A PANEL CONTROL MAY BE BOUND TO: everything the panel does not
+# already use, in any pane, since a bound key fires from every pane. Space is
+# the controls pane's own toggle, so it is not offered.
+HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLP")))
+
 
 
 class TUI:
@@ -214,7 +224,8 @@ class TUI:
         self.builder = Builder(); self.builder.start()
         self.row = 0
         self.col = 0
-        self.pane = 0           # 0 = parts, 1 = globals
+        self.pane = 0           # 0 = parts, 1 = globals, 2 = controls
+        self.crow = 0           # selected row in the controls pane
         self.grow = 0           # selected global
         self.meter = 0.0
         self.message = ""
@@ -243,7 +254,7 @@ class TUI:
     def get_global(self, i):
         L = self.live
         return (self.master_db(), L.headroom_db, L.thresh, L.bend_range,
-                L.mod_cents, L.mod_rate, L.press_db, L.press_tilt,
+                L.mod_cents, L.mod_rate, L.press_db,
                 float(L.renderer.K))[i]
 
     def set_global(self, i, v):
@@ -269,8 +280,6 @@ class TUI:
             L.mod_rate = v
         elif i == 6:
             L.press_db = v
-        elif i == 7:
-            L.press_tilt = v
         else:
             # A new worker pool, swapped in by one atomic assignment. The old
             # one is told to stop; its threads are daemons and exit on their own.
@@ -648,6 +657,295 @@ class TUI:
         else:
             self.change_patch(program=pick - 1)
 
+    # ---- the controls pane -------------------------------------------------
+    # A keyboard may send nothing but notes. This pane supplies what it lacks
+    # (on-screen controls, sent through Live.inject exactly as hardware's would
+    # arrive) and bends what it has (routes, which Live.on_midi applies to the
+    # hardware before the engine sees it).
+    #
+    # A TERMINAL NEVER REPORTS A KEY BEING LET GO. curses hands over a key when
+    # it goes down and says nothing when it comes up, so a computer key cannot
+    # be held like a pedal: an on-screen switch LATCHES -- press to put it down,
+    # press again to lift it. Held-while-pushed exists only on hardware, which
+    # is what routing the pitch wheel onto sustain is for.
+
+    ROUTE_SOURCES = (
+        ("mod wheel", ("cc", 1)),
+        ("pitch wheel, pushed up", ("bend", "up")),
+        ("pitch wheel, pulled down", ("bend", "down")),
+        ("pitch wheel, either way", ("bend", "both")),
+        ("aftertouch", ("pressure",)),
+        ("sustain pedal (CC64)", ("cc", 64)),
+        ("expression pedal (CC11)", ("cc", 11)),
+        ("another CC, by number", None),
+    )
+
+    def controls(self):
+        return self.live.screen_controls
+
+    def ctl_rows(self):
+        """The pane's rows: the on-screen controls, then the routes."""
+        return ([("ctl", i) for i in range(len(self.controls()))]
+                + [("route", j) for j in range(len(self.live.routes))])
+
+    def ctl_sel(self):
+        rows = self.ctl_rows()
+        if not rows:
+            self.crow = 0
+            return None
+        self.crow = max(0, min(self.crow, len(rows) - 1))
+        return rows[self.crow]
+
+    def switch_on(self, key, ch):
+        """The ENGINE's pedal state, not a copy: a CC121 or a GM System On from
+        the keyboard lifts a pedal, and the lamp has to say so."""
+        L = self.live
+        ch = 0 if ch is None else ch
+        if key == 64:
+            return bool(L.pedal.get(ch))
+        if key == 66:
+            return ch in L.sost
+        if key == 67:
+            return bool(L.soft.get(ch))
+        if key == 65:
+            return bool(L.porta_on.get(ch))
+        return False
+
+    def send_control(self, c, value):
+        """Set an on-screen control and send it -- to every channel for 'all',
+        since a part may listen on any of them."""
+        key = c["key"]
+        kind = LV.CONTROL_BY_KEY[key][2]
+        lo, hi = (-8192, 8191) if kind == "bend" else (0, 127)
+        c["value"] = int(max(lo, min(hi, value)))
+        chans = range(16) if c.get("channel") is None else (c["channel"],)
+        for ch in chans:
+            self.live.inject(LV.control_message(key, c["value"], ch))
+
+    def fire(self, c):
+        """What a control's hotkey does: a switch toggles; a continuous control
+        jumps between its default and full travel -- the mod wheel's vibrato on
+        and off, say."""
+        key = c["key"]
+        _, label, kind, default = LV.CONTROL_BY_KEY[key]
+        if kind == "switch":
+            on = not self.switch_on(key, c.get("channel"))
+            self.send_control(c, 127 if on else 0)
+            self.say("%s %s" % (label, "down" if on else "up"))
+        else:
+            top = 8191 if kind == "bend" else 127
+            self.send_control(c, default if c.get("value", default) != default else top)
+            self.say("%s %d" % (label, c["value"]))
+
+    def ask_channel(self, scr, what):
+        """None for every channel; False if cancelled or not a channel."""
+        s = self.prompt(scr, "%s channel (1-16, blank = all): " % what)
+        if s is None:
+            return False
+        if s == "" or s.lower() == "all":
+            return None
+        try:
+            ch = int(s)
+        except ValueError:
+            ch = 0
+        if not 1 <= ch <= 16:
+            self.say("not a channel: %s" % s)
+            return False
+        return ch - 1
+
+    def add_control(self, scr):
+        items = ["%-16s %s" % (lab, "cc%d" % k if isinstance(k, int) else k)
+                 for k, lab, kind, d in LV.CONTROLS]
+        i = self.menu(scr, "add an on-screen control", items)
+        if i is None:
+            return
+        ch = self.ask_channel(scr, LV.CONTROLS[i][1])
+        if ch is False:
+            return
+        key, label, kind, default = LV.CONTROLS[i]
+        # It starts at its default and SENDS NOTHING: adding a control must not
+        # change the sound until it is moved.
+        self.controls().append(dict(key=key, channel=ch, value=default, hotkey=None))
+        self.crow = len(self.controls()) - 1
+        self.say("added %s" % label)
+
+    def add_route(self, scr):
+        i = self.menu(scr, "route FROM", [x[0] for x in self.ROUTE_SOURCES])
+        if i is None:
+            return
+        src = self.ROUTE_SOURCES[i][1]
+        if src is None:
+            s = self.prompt(scr, "CC number (0-119): ")
+            if s is None:
+                return
+            try:
+                n = int(s)
+            except ValueError:
+                n = -1
+            if not 0 <= n <= 119:
+                self.say("not a controller: %s" % s)
+                return
+            src = ("cc", n)
+        j = self.menu(scr, "route TO", [c[1] for c in LV.CONTROLS])
+        if j is None:
+            return
+        dst = LV.CONTROLS[j][0]
+        if src[0] == "cc" and src[1] == dst or src[0] == dst:
+            self.say("a control routed to itself does nothing")
+            return
+        k = self.menu(scr, "and the original", [
+            "replace it (the source stops doing what it did)",
+            "keep it (the source does both)"])
+        if k is None:
+            return
+        ch = self.ask_channel(scr, "listen on")
+        if ch is False:
+            return
+        r = LV.Route(src, dst, keep=(k == 1), channel=ch)
+        self.live.set_routes(self.live.routes + (r,))
+        self.crow = len(self.ctl_rows()) - 1
+        self.say("route " + r.describe())
+
+    def del_ctl_row(self):
+        row = self.ctl_sel()
+        if row is None:
+            return
+        kind, i = row
+        if kind == "ctl":
+            c = self.controls().pop(i)
+            self.say("removed %s" % LV.CONTROL_BY_KEY[c["key"]][1])
+        else:
+            rs = list(self.live.routes)
+            r = rs.pop(i)
+            self.live.set_routes(rs)
+            self.say("removed route " + r.describe())
+
+    def bind_hotkey(self, scr):
+        row = self.ctl_sel()
+        if row is None or row[0] != "ctl":
+            self.say("a hotkey belongs to an on-screen control")
+            return
+        c = self.controls()[row[1]]
+        self.say("press the key for %s  (esc: none)" % LV.CONTROL_BY_KEY[c["key"]][1], 30)
+        self.draw(scr)
+        while True:
+            k = scr.getch()
+            if k != -1:
+                break
+        if k == 27:
+            c["hotkey"] = None
+            self.say("no hotkey")
+            return
+        ch = chr(k) if 0 < k < 256 else ""
+        if ch not in HOTKEYS_FREE:
+            self.say("%r is the panel's own key; free: %s"
+                     % (ch or k, "".join(sorted(HOTKEYS_FREE))), 6)
+            return
+        for other in self.controls():
+            if other is not c and other.get("hotkey") == ch:
+                self.say("%r is already %s" % (ch, LV.CONTROL_BY_KEY[other["key"]][1]), 6)
+                return
+        c["hotkey"] = ch
+        self.say("%r -> %s" % (ch, LV.CONTROL_BY_KEY[c["key"]][1]))
+
+    def ctl_bump(self, delta, big=False):
+        row = self.ctl_sel()
+        if row is None or row[0] != "ctl":
+            return
+        c = self.controls()[row[1]]
+        kind = LV.CONTROL_BY_KEY[c["key"]][2]
+        if kind == "switch":
+            if (delta > 0) != self.switch_on(c["key"], c.get("channel")):
+                self.fire(c)
+            return
+        step = (128 if kind == "bend" else 1) * (8 if big else 1)
+        self.send_control(c, c.get("value", 0) + delta * step)
+
+    def ctl_space(self):
+        row = self.ctl_sel()
+        if row is None or row[0] != "ctl":
+            return
+        c = self.controls()[row[1]]
+        _, label, kind, default = LV.CONTROL_BY_KEY[c["key"]]
+        if kind == "switch":
+            self.fire(c)
+        else:
+            self.send_control(c, default)
+            self.say("%s back to %d" % (label, default))
+
+    def ctl_type(self, scr):
+        row = self.ctl_sel()
+        if row is None or row[0] != "ctl":
+            return
+        c = self.controls()[row[1]]
+        _, label, kind, default = LV.CONTROL_BY_KEY[c["key"]]
+        rng = "-8192..8191" if kind == "bend" else "0-127"
+        s = self.prompt(scr, "%s (%s): " % (label, rng))
+        if not s:
+            return
+        try:
+            self.send_control(c, int(s))
+        except ValueError:
+            self.say("not a number: %s" % s)
+
+    def draw_controls(self, scr, y, w, bottom):
+        """The pane itself, between the part table and the meters."""
+        C = self.C
+        L = self.live
+        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
+        y += 1
+        rows = self.ctl_rows()
+        sel = self.ctl_sel() if self.pane == 2 else None
+        room = max(1, bottom - y - 2)
+        top = max(0, min(self.crow - room // 2, len(rows) - room))
+        shown = rows[top:top + room]
+
+        def head(txt, hint):
+            self.addstr(scr, y, 1, txt, curses.A_BOLD
+                        | (C("cyan") if self.pane == 2 else C("dim")))
+            self.addstr(scr, y, 16, hint, C("dim"))
+
+        head("on screen", "a add   space toggle   -/+ step   enter value   b hotkey"
+             if self.controls() else "none yet -- tab here and press a")
+        y += 1
+        for r in shown:
+            if r[0] != "ctl":
+                continue
+            c = self.controls()[r[1]]
+            key, label, kind, default = LV.CONTROL_BY_KEY[c["key"]]
+            here = (r == sel)
+            chs = "all" if c.get("channel") is None else str(c["channel"] + 1)
+            self.addstr(scr, y, 0, (">" if here else " ") + " %-16s ch %-3s"
+                        % (label, chs), curses.A_REVERSE if here else 0)
+            if kind == "switch":
+                on = self.switch_on(key, c.get("channel"))
+                self.addstr(scr, y, 27, " ON " if on else " off",
+                            (C("green") | curses.A_BOLD | curses.A_REVERSE) if on
+                            else C("dim"))
+            else:
+                v = c.get("value", default)
+                lo, hi = (-8192, 8191) if kind == "bend" else (0, 127)
+                self.addstr(scr, y, 27, "%5d %s" % (v, bar(v, lo, hi, 16)),
+                            C("green") if here else 0)
+            if c.get("hotkey"):
+                self.addstr(scr, y, 52, "key %s" % c["hotkey"], C("yellow"))
+            y += 1
+        head("routes", "r add   d delete  -- a route rewrites the keyboard's own"
+             " controls before the engine sees them")
+        y += 1
+        if not L.routes:
+            self.addstr(scr, y, 3, "none: every control means what it says", C("dim"))
+            y += 1
+        for r in shown:
+            if r[0] != "route":
+                continue
+            here = (r == sel)
+            self.addstr(scr, y, 0, (">" if here else " ") + " "
+                        + L.routes[r[1]].describe(),
+                        curses.A_REVERSE if here else 0)
+            y += 1
+        return y
+
     # ---- drawing ------------------------------------------------------------
     def addstr(self, scr, y, x, s, attr=0):
         """curses raises at the last cell of the last line, and on any write off
@@ -713,6 +1011,15 @@ class TUI:
                 y += 1
         y += 1
 
+        if self.pane == 2:
+            y = self.draw_controls(scr, y, w, h - 6)
+        else:
+            y = self.draw_globals(scr, y, w, h)
+
+        self.draw_meters(scr, y, w, h, s)
+
+    def draw_globals(self, scr, y, w, h):
+        C = self.C
         # keyboard map
         y = self.draw_keyboard(scr, y, w)
         y += 1
@@ -735,7 +1042,11 @@ class TUI:
             self.addstr(scr, row, col + 24, bar(v, lo, hi, 14),
                         C("green") if here else C("dim"))
         y += (len(GLOBALS) + 1) // 2
+        return y
 
+    def draw_meters(self, scr, y, w, h, s):
+        C = self.C
+        L = self.live
         # meters
         self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
         y += 1
@@ -782,8 +1093,11 @@ class TUI:
             self.addstr(scr, h - 2, 2, "last error: " + s["last_error"], C("red"))
         elif time.monotonic() < self.msg_until:
             self.addstr(scr, h - 2, 2, self.message, C("green"))
-        keys = ("tab pane   arrows move   -/+ change   enter patch   a layer   "
-                "s split   d del   m mute   S/L preset   ? help   q quit")
+        keys = (("tab pane   a control   r route   d del   space toggle   "
+                 "-/+ step   enter value   b hotkey   ? help   q quit")
+                if self.pane == 2 else
+                ("tab pane   arrows move   -/+ change   enter patch   a layer   "
+                 "s split   d del   m mute   S/L preset   ? help   q quit"))
         self.addstr(scr, h - 1, 1, keys, C("dim"))
         if self.help:
             self.draw_help(scr)
@@ -851,7 +1165,7 @@ class TUI:
     def draw_help(self, scr):
         lines = [
             "parts",
-            "  tab / shift-tab   move between the part table and the controls",
+            "  tab / shift-tab   parts -> globals -> controls and routes",
             "  up down           select a part          left right  select a column",
             "  - +               change the selected cell   (with shift: coarse)",
             "  enter             acts on the HIGHLIGHTED COLUMN:",
@@ -868,7 +1182,7 @@ class TUI:
             "  and mixture are hand-drawn only. enter on the stops column, or the",
             "  digit next to the name under the selected row.",
             "",
-            "controls",
+            "globals",
             "  master            capped at 0 dB: above unity the kernel hard-clips",
             "                    before the soft limiter can see the block",
             "  headroom          applies to NOTES STARTED AFTER IT, not to the mix",
@@ -876,8 +1190,25 @@ class TUI:
             "                    engages when the block is big enough to be worth",
             "                    it; 3 is usually best. Watch the cpu meter.",
             "",
+            "on-screen controls and routes  (the third pane)",
+            "  a                 add a control: any pedal, CC, the wheel, aftertouch",
+            "  space             a switch: toggle it   anything else: back to default",
+            "  - +  enter        step it (shift: by 8)   type a value",
+            "  b                 bind a hotkey; it works from EVERY pane. Only keys",
+            "                    the panel does not use itself are offered",
+            "  r                 route one of the keyboard's controls onto another",
+            "  d                 delete the selected control or route",
+            "",
+            "  switches LATCH: press to put the pedal down, press again to lift",
+            "  it. A terminal never says when a key is let go, so a key cannot be",
+            "  held like a pedal. For held-while-pushed, route the pitch wheel:",
+            "  past half-way the pedal goes down, back under a fifth it lifts.",
+            "  A route REPLACES its source unless you keep it -- the mod wheel",
+            "  routed away takes vibrato, drones, drive and rockers with it.",
+            "",
             "presets",
             "  S save   L load   -- presets.json, data only; voices live in tonelib.py",
+            "  a preset carries its on-screen controls and routes too",
             "",
             "  patch and tuner changes build templates on a worker thread;",
             "  everything else takes effect on the next MIDI event.",
@@ -903,22 +1234,47 @@ class TUI:
             return False
         if c == 27:
             return True     # never quit on ESC: a half-read arrow key is an ESC
+        # A bound hotkey fires from ANY pane: a pedal you have to tab to first
+        # is no pedal. bind_hotkey only ever hands out keys nothing else uses.
+        if 0 < c < 256:
+            for ctl in self.controls():
+                if ctl.get("hotkey") == chr(c):
+                    self.fire(ctl)
+                    return True
         if c == ord("?"):
             self.help = True
         elif c == 9:                                    # tab
-            self.pane = 1 - self.pane
+            self.pane = (self.pane + 1) % 3
         elif c == curses.KEY_BTAB:
-            self.pane = 1 - self.pane
+            self.pane = (self.pane - 1) % 3
         elif c in (curses.KEY_UP, ord("k")):
             if self.pane == 0:
                 self.row = max(0, self.row - 1)
-            else:
+            elif self.pane == 1:
                 self.grow = max(0, self.grow - 1)
+            else:
+                self.crow = max(0, self.crow - 1)
         elif c in (curses.KEY_DOWN, ord("j")):
             if self.pane == 0:
                 self.row = min(max(0, len(self.parts()) - 1), self.row + 1)
-            else:
+            elif self.pane == 1:
                 self.grow = min(len(GLOBALS) - 1, self.grow + 1)
+            else:
+                self.crow = min(max(0, len(self.ctl_rows()) - 1), self.crow + 1)
+        elif self.pane == 2 and c in (ord("a"), ord("r"), ord("d"), ord("b"),
+                                      ord(" "), 10, 13):
+            if c == ord("a"):
+                self.add_control(scr)
+            elif c == ord("r"):
+                self.add_route(scr)
+            elif c == ord("d"):
+                self.del_ctl_row()
+            elif c == ord("b"):
+                self.bind_hotkey(scr)
+            elif c == ord(" "):
+                self.ctl_space()
+            else:
+                self.ctl_type(scr)
         elif c in (curses.KEY_LEFT, ord("h")):
             if self.pane == 0:
                 self.col = max(0, self.col - 1)
@@ -966,6 +1322,8 @@ class TUI:
     def bump(self, delta, big=False):
         if self.pane == 0:
             self.adjust(delta, big)
+        elif self.pane == 2:
+            self.ctl_bump(delta, big)
         else:
             name, unit, lo, hi, step = GLOBALS[self.grow]
             self.set_global(self.grow, self.get_global(self.grow)

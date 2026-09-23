@@ -168,6 +168,160 @@ PW_FIRE = 0.50          # fraction of full travel that fires a step
 PW_REARM = 0.20         # and where the wheel has to return to before the next
 MIN_AMP_HZ = 20.0       # a parent below this is a rumble, not a tone
 
+# ---- WHAT CAN BE CONTROLLED ------------------------------------------------
+#
+# The one list of controls the TUI can offer and a route can drive: (key,
+# label, kind, default). A key is a CC number, or 'bend' for the pitch wheel
+# and 'pressure' for channel aftertouch. The dispatch in Live._one is an if/elif
+# chain and cannot be asked what it answers, so this is written out -- and the
+# selftest checks every CC here against that chain, the same grep midi.md's
+# table is generated from, so the panel can never offer a control the engine
+# ignores.
+CONTROLS = (
+    (64, "sustain", "switch", 0),
+    (66, "sostenuto", "switch", 0),
+    (67, "soft", "switch", 0),
+    (65, "portamento", "switch", 0),
+    (1, "mod wheel", "continuous", 0),
+    (11, "expression", "continuous", 127),
+    (7, "volume", "continuous", 100),
+    (10, "pan", "continuous", 64),
+    (5, "portamento time", "continuous", 0),
+    (93, "chorus", "continuous", 0),
+    (74, "brightness", "continuous", 64),
+    (71, "resonance", "continuous", 64),
+    (73, "attack", "continuous", 64),
+    (75, "decay", "continuous", 64),
+    (72, "release", "continuous", 64),
+    (76, "vibrato rate", "continuous", 64),
+    (77, "vibrato depth", "continuous", 64),
+    (78, "vibrato delay", "continuous", 64),
+    ("bend", "pitch wheel", "bend", 0),
+    ("pressure", "aftertouch", "pressure", 0),
+)
+CONTROL_BY_KEY = {c[0]: c for c in CONTROLS}
+
+
+def control_message(key, value, channel):
+    """The message one catalogue control sends at `value`."""
+    if key == "bend":
+        return mido.Message("pitchwheel", channel=channel,
+                            pitch=max(-8192, min(8191, int(value))))
+    if key == "pressure":
+        return mido.Message("aftertouch", channel=channel,
+                            value=max(0, min(127, int(value))))
+    return mido.Message("control_change", channel=channel, control=int(key),
+                        value=max(0, min(127, int(value))))
+
+
+class Route(object):
+    """One hardware control made to drive another.
+
+    A keyboard may have a mod wheel and a pitch wheel and nothing else, and a
+    pitch wheel that springs back is a natural momentary pedal: push it and the
+    sustain holds, let go and it lifts. So `src` is ('cc', n), ('bend', 'up' |
+    'down' | 'both') or ('pressure',), `dst` is any CONTROLS key, and the
+    transform follows from what the two are:
+
+      the wheel onto a switch    HELD WHILE PUSHED, with the half-moon's own
+                                 hysteresis: down past PW_FIRE of that half, up
+                                 under PW_REARM, so a wobble cannot chatter
+      a CC onto a switch         64 and above is down -- GM's switch point
+      anything onto a CC         its travel scaled 0-127
+      a CC onto the wheel        0-127 onto -8192...8191, centred at 64
+
+    A route REPLACES its source unless `keep` is set (Ben's call): the pitch
+    wheel sent to sustain no longer bends. Rerouting the mod wheel away removes
+    everything CC1 does by voice -- vibrato, drones, drive, rockers -- which is
+    what rerouting means and is said in the panel's help.
+
+    Switch state lives here, per channel, and is touched only from the MIDI
+    input thread that calls on_midi.
+    """
+
+    def __init__(self, src, dst, keep=False, channel=None):
+        self.src = tuple(src)
+        self.dst = dst
+        self.keep = bool(keep)
+        self.channel = None if channel is None else int(channel)
+        self._down = {}
+
+    def matches(self, msg):
+        if self.channel is not None and getattr(msg, "channel", None) != self.channel:
+            return False
+        kind = self.src[0]
+        if kind == "cc":
+            return msg.type == "control_change" and msg.control == self.src[1]
+        if kind == "bend":
+            return msg.type == "pitchwheel"
+        if kind == "pressure":
+            return msg.type == "aftertouch"
+        return False
+
+    def _level(self, msg):
+        """How far the source is pushed, 0..1."""
+        kind = self.src[0]
+        if kind == "bend":
+            p = msg.pitch
+            half = self.src[1] if len(self.src) > 1 else "up"
+            if half == "up":
+                return max(0, p) / 8191.0
+            if half == "down":
+                return max(0, -p) / 8192.0
+            return abs(p) / 8192.0
+        return msg.value / 127.0
+
+    def rewrite(self, msg):
+        """The messages this route turns `msg` into; empty if nothing changes."""
+        ch = msg.channel
+        spec = CONTROL_BY_KEY.get(self.dst)
+        if spec is None:
+            return []
+        dkind = spec[2]
+        x = self._level(msg)
+        if dkind == "switch":
+            was = self._down.get(ch, False)
+            if self.src[0] == "bend":
+                now = (x >= PW_FIRE) if not was else (x > PW_REARM)
+            else:
+                now = x >= 64.0 / 127.0
+            if now == was:
+                return []              # a pedal is sent on a change, not a stream
+            self._down[ch] = now
+            return [control_message(self.dst, 127 if now else 0, ch)]
+        if dkind == "bend":
+            if self.src[0] == "bend":
+                return [control_message("bend", msg.pitch, ch)]
+            # Each half on its own scale: 64 is centre, 0 is full down (-8192)
+            # and 127 is full up (8191) -- one scale for both would stop the top
+            # at 8064, because above centre there are 63 steps and not 64.
+            v = x * 127.0
+            p = ((v - 64.0) / 63.0 * 8191.0) if v >= 64.0 else ((v - 64.0) / 64.0 * 8192.0)
+            return [control_message("bend", round(p), ch)]
+        return [control_message(self.dst, round(x * 127.0), ch)]
+
+    def to_dict(self):
+        return dict(src=list(self.src), dst=self.dst, keep=self.keep,
+                    channel=self.channel)
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(d["src"], d["dst"], d.get("keep", False), d.get("channel"))
+
+    def describe(self):
+        s = self.src
+        src = (CONTROL_BY_KEY.get(s[1], (0, "CC%d" % s[1]))[1] if s[0] == "cc"
+               else {"up": "pitch \u2191", "down": "pitch \u2193",
+                     "both": "pitch \u2195"}.get(s[1] if len(s) > 1 else "up")
+               if s[0] == "bend" else "aftertouch")
+        dst = CONTROL_BY_KEY.get(self.dst, (None, str(self.dst)))[1]
+        how = ("held" if CONTROL_BY_KEY.get(self.dst, (0, 0, ""))[2] == "switch"
+               else "scaled")
+        return "%s \u2192 %s  %s  %s  %s" % (
+            src, dst, how, "keeps" if self.keep else "replaces",
+            "all" if self.channel is None else "ch%d" % (self.channel + 1))
+
+
 # ---- the mod wheel as the swell pedal ---------------------------------------
 # On a real rig the Leslie's amplifier has FIXED gain and the swell pedal sits
 # in FRONT of it, which is how a player makes it break up: you open the pedal.
@@ -1564,6 +1718,11 @@ class Live:
         self.pedalled = set()   # keys whose damper the pedal is holding off
         self.n = 0                       # absolute sample clock
         self.events = collections.deque()
+        self.routes = ()             # Route table, applied in on_midi
+        # The panel's on-screen controls, as plain dicts. The ENGINE does not
+        # read these -- a control sends ordinary messages through inject() --
+        # they are kept here so a preset carries them with the rig.
+        self.screen_controls = []
         # WORK THE TUI WANTS DONE ON THE AUDIO THREAD. The slab has exactly one
         # writer by design -- the callback -- and everything that keeps it
         # consistent assumes that: `free` is popped from, `live` is added to and
@@ -1738,11 +1897,44 @@ class Live:
                              % (nt, tot, time.time() - t0))
 
     # ---- midi ---------------------------------------------------------------
+    _ACCEPT = ("note_on", "note_off", "pitchwheel", "control_change",
+               "aftertouch", "polytouch", "program_change", "sysex")
+
     def on_midi(self, msg):
-        if msg.type in ("note_on", "note_off", "pitchwheel", "control_change",
-                        "aftertouch", "polytouch", "program_change", "sysex"):
+        """Hardware in: through the routes, then queued for the audio thread.
+
+        The routes run HERE, on the MIDI input thread, before anything is
+        queued: a rewrite costs nothing, the audio thread never sees a message
+        a route consumed, and every test that drives on_midi drives the routes.
+        """
+        if msg.type not in self._ACCEPT:
+            return
+        routes = self.routes
+        msgs = [msg]
+        if routes and msg.type in ("control_change", "pitchwheel", "aftertouch"):
+            out, consumed = [], False
+            for r in routes:
+                if r.matches(msg):
+                    out.extend(r.rewrite(msg))
+                    consumed = consumed or not r.keep
+            msgs = out if consumed else [msg] + out
+        if msgs:
+            now = time.monotonic()
+            with self.lock:
+                for m in msgs:
+                    self.events.append((now, m))
+
+    def inject(self, msg):
+        """A message from the PANEL: queued exactly as hardware's, past the
+        routes. An on-screen control is already the destination, and routing it
+        again could send it round in a circle."""
+        if msg.type in self._ACCEPT:
             with self.lock:
                 self.events.append((time.monotonic(), msg))
+
+    def set_routes(self, routes):
+        """Swap the route table: one assignment, as set_parts does."""
+        self.routes = tuple(routes)
 
     def post(self, fn):
         """Ask the audio thread to run `fn(n0)` at the next block boundary.
@@ -2056,7 +2248,11 @@ class Live:
                 # the whole instrument -- it is how a pianist holds a bass note
                 # under a passage that has to stay dry.
                 _dn = msg.value >= 64
-                _wasq = bool(self.sost.get(ch))
+                # DOWN IS THE PEDAL, NOT WHAT IT HOLDS. This read bool() of the
+                # held set, so a sostenuto pressed with no keys down counted as
+                # still up: a second press re-snapshotted, and the release never
+                # cleared it. The panel's lamp reads this, so it has to be true.
+                _wasq = ch in self.sost
                 if _dn and not _wasq:
                     # A SNAPSHOT of what is down right now, and nothing later.
                     self.sost[ch] = {k for k in self.down if k[0] == ch}
@@ -3792,7 +3988,11 @@ def preset_from(live):
         headroom_db=live.headroom_db,
         bend_range=live.bend_range, mod_cents=live.mod_cents,
         press_db=live.press_db, press_tilt=live.press_tilt,
-        thresh=live.thresh,
+        thresh=live.thresh, mod_rate=live.mod_rate,
+        # The panel's controls and the route table: lists, so they travel
+        # outside the float() loop apply_preset runs over the knobs.
+        controls=[dict(c) for c in getattr(live, "screen_controls", [])],
+        routes=[r.to_dict() for r in getattr(live, "routes", ())],
     )
 
 
@@ -3819,10 +4019,15 @@ def apply_preset(live, preset, progress=None):
     if "master_db" in preset:
         T.master_gain = 10.0 ** (float(preset["master_db"]) / 20.0)
     for k in ("headroom_db", "bend_range", "mod_cents", "press_db",
-              "press_tilt", "thresh"):
+              "press_tilt", "thresh", "mod_rate"):
         if k in preset:
             setattr(live, k, float(preset[k]))
     live.slab.headroom = 10.0 ** (-live.headroom_db / 20.0)
+    # The lists, outside the float() loop. A preset from before they existed
+    # has neither key and leaves the rig with no routes and no panel controls,
+    # which is what it had when it was saved.
+    live.screen_controls = [dict(c) for c in preset.get("controls", [])]
+    live.set_routes([Route.from_dict(r) for r in preset.get("routes", [])])
 
 
 def selftest():
@@ -8264,6 +8469,194 @@ def selftest():
     lv.renderer.close()
     check("the pan's bend reaches the partials, still negative",
           hard < 0.0, "  (tbav %+.5f)" % hard)
+
+    # ---- ROUTES AND THE PANEL'S CONTROLS -----------------------------------
+    # A keyboard with nothing but notes and two wheels: the wheels rerouted onto
+    # pedals, and the panel supplying the rest.
+    import inspect, json, re as _re
+    _src = inspect.getsource(Live)
+    _answered = {int(x) for x in _re.findall(r"msg\.control == (\d+)", _src)}
+    for _grp in _re.findall(r"msg\.control in \(([\d, ]+)\)", _src):
+        _answered |= {int(x) for x in _grp.split(",") if x.strip()}
+    if "msg.control in T.SOUND_CC" in _src:
+        _answered |= set(_T.SOUND_CC)
+    _dead = [k for k, _l, _kd, _d in CONTROLS if isinstance(k, int) and k not in _answered]
+    check("every CC the panel offers is one the engine answers",
+          not _dead, "  (dead: %s)" % _dead if _dead else
+          "  (%d CCs, read from the same dispatch midi.md is)" %
+          sum(isinstance(c[0], int) for c in CONTROLS))
+
+    _lr = Live(program=0, rate=48000, frames=128, verbose=False); _lr.warm()
+
+    def _drain(lv):
+        with lv.lock:
+            ev = [m for _t, m in lv.events]
+            lv.events.clear()
+        return ev
+
+    def _wheel(lv, frac):
+        lv.on_midi(mido.Message("pitchwheel", channel=0, pitch=int(round(frac * 8191))))
+        return _drain(lv)
+
+    _lr.set_routes([Route(("bend", "up"), 64)])
+    _seen = {}
+    for _f in (0.30, 0.49, 0.51, 0.35, 0.21, 0.45, 0.19, 0.0):
+        _seen[_f] = _wheel(_lr, _f)
+    _pedal = [(f, m.value) for f, ms in _seen.items() for m in ms
+              if m.type == "control_change" and m.control == 64]
+    check("pitch wheel -> sustain: down past half, up under a fifth",
+          _pedal == [(0.51, 127), (0.19, 0)],
+          "  (%s)" % _pedal)
+    check("...and a replacing route stops the wheel bending",
+          not any(m.type == "pitchwheel" for ms in _seen.values() for m in ms))
+    _lr.set_routes([Route(("bend", "up"), 64, keep=True)])
+    _k = _wheel(_lr, 0.6)
+    check("...a kept one bends AND holds",
+          [m.type for m in _k] == ["pitchwheel", "control_change"], "  (%s)"
+          % [m.type for m in _k])
+    _wheel(_lr, 0.0)
+
+    # The mod wheel onto sostenuto must catch exactly what a real CC66 does.
+    _lr.set_routes([Route(("cc", 1), 66)])
+    _lr.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _lr.apply(0)
+    _lr.on_midi(mido.Message("control_change", channel=0, control=1, value=90)); _lr.apply(0)
+    _lr.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+    _lr.on_midi(mido.Message("note_on", channel=0, note=64, velocity=100)); _lr.apply(0)
+    _lr.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0)); _lr.apply(0)
+    _lr.sweep(128); _lr.sweep(256)
+    check("mod wheel -> sostenuto holds what a real CC66 holds",
+          sorted({_k[2] for _k in _lr.slab.live}) == [60],
+          "  (%s)" % sorted({_k[2] for _k in _lr.slab.live}))
+    _lr.on_midi(mido.Message("control_change", channel=0, control=1, value=0)); _lr.apply(384)
+    check("...and lets go below 64", not [_k for _k in _lr.slab.live if _k[2] == 60])
+    # The fix this found: a sostenuto put down with no key held looked, to the
+    # pedal-up branch, like a pedal that had never gone down.
+    _lr.on_midi(mido.Message("control_change", channel=0, control=66, value=127)); _lr.apply(400)
+    check("sostenuto with no keys down still reads as down", 0 in _lr.sost)
+    _lr.on_midi(mido.Message("control_change", channel=0, control=66, value=0)); _lr.apply(410)
+
+    _lr.set_routes([Route(("cc", 1), 64, channel=1)])
+    _lr.on_midi(mido.Message("control_change", channel=0, control=1, value=100))
+    _a = _drain(_lr)
+    _lr.on_midi(mido.Message("control_change", channel=1, control=1, value=100))
+    _b = _drain(_lr)
+    check("a route on channel 2 leaves channel 1 alone",
+          [(m.channel, m.control) for m in _a] == [(0, 1)]
+          and [(m.channel, m.control) for m in _b] == [(1, 64)],
+          "  (%s / %s)" % (_a, _b))
+    _lr.set_routes([Route(("cc", 1), 66)])
+    _lr.inject(control_message(1, 100, 0))
+    _i = _drain(_lr)
+    check("the panel's own messages go past the routes",
+          [(m.type, m.control) for m in _i] == [("control_change", 1)])
+    _r = Route(("bend", "down"), 66, keep=True, channel=3)
+    _r2 = Route.from_dict(_r.to_dict())
+    check("a route survives a round trip",
+          (_r2.src, _r2.dst, _r2.keep, _r2.channel) == (_r.src, _r.dst, _r.keep, _r.channel))
+    _lr.screen_controls = [dict(key=64, channel=None, value=0, hotkey="z")]
+    _lr.set_routes([_r])
+    _pr = preset_from(_lr)
+    _lr2 = Live(program=0, rate=48000, frames=128, verbose=False)
+    apply_preset(_lr2, json.loads(json.dumps(_pr)))
+    check("a preset carries its controls and routes",
+          _lr2.screen_controls == _lr.screen_controls
+          and [x.to_dict() for x in _lr2.routes] == [_r.to_dict()])
+    _old = {k: v for k, v in _pr.items() if k not in ("controls", "routes")}
+    _lr3 = Live(program=0, rate=48000, frames=128, verbose=False)
+    apply_preset(_lr3, _old)
+    check("...and an older preset without them loads with none",
+          _lr3.screen_controls == [] and _lr3.routes == ())
+    for _x in (_lr2, _lr3):
+        _x.renderer.close()
+
+    # The panel itself, on a stub screen: every pane drawn at two sizes, and the
+    # keys driven through add, toggle, step, hotkey, route and delete.
+    import livetui as _tui
+
+    class _Scr(object):
+        def __init__(self, h, w, keys=()):
+            self.h, self.w, self.keys = h, w, list(keys)
+        def getmaxyx(self):
+            return self.h, self.w
+        def getch(self):
+            return self.keys.pop(0) if self.keys else -1
+        def addnstr(self, y, x, s, n, a=0):
+            if not (0 <= y < self.h and 0 <= x < self.w):
+                raise AssertionError("drew off the screen")
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+
+    _lr.set_routes([])
+    _lr.screen_controls = []
+    _ui = _tui.TUI(_lr, "stub")
+    _ui.builder.stop = True
+    _answers = []
+    _ui.menu = lambda scr, title, items, start=0: _answers.pop(0)
+    _ui.prompt = lambda scr, label: _answers.pop(0)
+    _drawn = True
+    try:
+        for _hw in ((24, 80), (20, 60)):
+            for _pane in (0, 1, 2):
+                _ui.pane = _pane
+                _ui.draw(_Scr(*_hw))
+    except Exception as e:
+        _drawn = "%s: %s" % (type(e).__name__, e)
+    check("the panel draws all three panes at 80x24 and 60x20", _drawn is True,
+          "" if _drawn is True else "  (%s)" % _drawn)
+
+    _scr = _Scr(24, 80)
+    _drain(_lr)
+    _ui.pane = 0
+    _ui.key(_scr, 9); _ui.key(_scr, 9)
+    _p2 = _ui.pane
+    _answers[:] = [0, "1"]                               # sustain, channel 1
+    _ui.key(_scr, ord("a"))
+    _added = [dict(c) for c in _lr.screen_controls]
+    _quiet = not _drain(_lr)
+    _scr.keys = [ord("s")]                               # the panel's own key
+    _ui.key(_scr, ord("b"))
+    _refused = _lr.screen_controls[0]["hotkey"] is None
+    _scr.keys = [ord("z")]
+    _ui.key(_scr, ord("b"))
+    _ui.pane = 0                                         # a hotkey fires anywhere
+    _ui.key(_scr, ord("z"))
+    _down = _drain(_lr)
+    _lr.inject(_down[0]) if _down else None
+    _lr.apply(0)
+    _lamp = _ui.switch_on(64, 0)
+    _ui.key(_scr, ord("z"))
+    _up = _drain(_lr)
+    check("panel: tab reaches the controls; adding sends nothing",
+          _p2 == 2 and _added == [dict(key=64, channel=0, value=0, hotkey=None)]
+          and _quiet)
+    check("panel: a hotkey the panel uses is refused, a free one bound",
+          _refused and _lr.screen_controls[0]["hotkey"] == "z")
+    check("panel: the hotkey latches the pedal, from any pane, and the lamp sees it",
+          [(m.control, m.value) for m in _down] == [(64, 127)] and _lamp
+          and [(m.control, m.value) for m in _up] == [(64, 0)],
+          "  (%s, lamp %s, %s)" % (_down, _lamp, _up))
+    _ui.pane = 2
+    _answers[:] = [4, ""]                                # mod wheel, all channels
+    _ui.key(_scr, ord("a"))
+    _ui.crow = 1
+    _ui.key(_scr, ord("+")); _ui.key(_scr, ord("="))
+    _st = _drain(_lr)
+    check("panel: -/+ steps a continuous control on every channel for 'all'",
+          len(_st) == 32 and _st[-1].control == 1 and _st[-1].value == 9
+          and {m.channel for m in _st} == set(range(16)),
+          "  (%d messages, last %s)" % (len(_st), _st[-1] if _st else None))
+    _answers[:] = [1, 1, 0, ""]           # pitch up -> sostenuto, replace, all
+    _ui.key(_scr, ord("r"))
+    check("panel: r adds a route",
+          [x.to_dict() for x in _lr.routes]
+          == [dict(src=["bend", "up"], dst=66, keep=False, channel=None)])
+    _ui.crow = 2
+    _ui.key(_scr, ord("d"))
+    _ui.crow = 0
+    _ui.key(_scr, ord("d"))
+    check("panel: d deletes a route and a control",
+          _lr.routes == () and [c["key"] for c in _lr.screen_controls] == [1])
+    _lr.renderer.close()
 
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0
