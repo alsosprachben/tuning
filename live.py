@@ -2194,8 +2194,14 @@ class Live:
                 was = self.pedal.get(ch, False)
                 self.pedal[ch] = downp
                 if was and not downp:
-                    # Pedal up: every damper falls at once.
-                    gone = {k for k in self.pedalled if k[0] == ch}
+                    # Pedal up: every damper falls at once -- on the keys that
+                    # are UP. A key let go under the pedal and struck again is
+                    # held again; its damper stays off because the finger is
+                    # on it. Guarded here as well as cleared at note-on, since
+                    # a slab key is (part, ch, note) and not the press, so a
+                    # stale entry releases the new note, not the old one.
+                    gone = {k for k in self.pedalled
+                            if k[0] == ch and k not in self.down}
                     for k in [k for k in list(self.slab.live) if (k[1], k[2]) in gone]:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
@@ -2363,6 +2369,10 @@ class Live:
             # it, so a voice that never registered its key had every note swept
             # a block after it started -- notes dying in a fraction of a second.
             self.down.add((ch, msg.note))
+            # Struck again under the pedal: the key holds it now, not the
+            # damper. Left in `pedalled`, pedal-up released the note still under
+            # the finger -- every repedalled legato line lost its held notes.
+            self.pedalled.discard((ch, msg.note))
             # MONO: ONE VOICE. The note already sounding hands it over -- cut,
             # not released, so neither its own release nor a held damper
             # leaves it ringing under the new one -- and the new key goes on
@@ -4116,6 +4126,20 @@ def selftest():
     lv.on_midi(mido.Message("control_change", channel=0, control=64, value=0))
     lv.apply(9600); lv.sweep(9600)
     check("pedal: releases on pedal-up", sounding(lv) == 0)
+    # A key let go under the pedal and STRUCK AGAIN is held by the finger, and
+    # pedal-up must leave it alone. It did not: `pedalled` is keyed on
+    # (channel, note), the stale entry survived the re-press, and lifting the
+    # pedal cut every repedalled note that was still under a finger.
+    lv.on_midi(mido.Message("control_change", channel=0, control=64, value=127))
+    lv.on_midi(mido.Message("note_on", channel=0, note=64, velocity=90)); lv.apply(14400)
+    lv.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0)); lv.apply(14528)
+    lv.on_midi(mido.Message("note_on", channel=0, note=64, velocity=90)); lv.apply(14656)
+    lv.on_midi(mido.Message("control_change", channel=0, control=64, value=0))
+    lv.apply(14784); lv.sweep(14784)
+    check("pedal: up leaves a key struck again under it sounding",
+          any(k[2] == 64 for k in lv.slab.live))
+    lv.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0))
+    lv.apply(14912); lv.sweep(14912)
 
     # 5. a lost note-off is healed rather than droning
     lv = Live(program=0, rate=48000, frames=128, verbose=False); lv.warm()
