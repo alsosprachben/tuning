@@ -300,7 +300,8 @@ That covers GM Level 1, plus four of GM 2's: Scale/Octave tuning by SysEx,
 chorus send, reverb send, and portamento. `midi.md` has the whole surface —
 what each message does, what a voice is allowed to refuse, why the pitch wheel
 is two different controls depending on whether it moves, and why a glide is a
-length rather than a pitch.
+length rather than a pitch. `remaining.md` has what is still missing, chiefly
+GM 2's bank select and the brass glissando's harmonic lattice.
 
 ## Render a file
 

@@ -4004,7 +4004,9 @@ valve. Anything wider plays clean.
 
 That is a deliberate gap rather than an approximation, and the reason is the
 one this file keeps arriving at: a brass gliss past a tone is a DIFFERENT
-gesture, not a longer one. Rendering it as a smooth sweep would produce
+gesture, not a longer one. The design for the lattice -- the walk, what CC5
+means on a valved horn, and why it wants note-groups rather than a kernel term
+-- is written down in `remaining.md`. Rendering it as a smooth sweep would produce
 something that sounds like a trombone played by a trumpet, and a listener who
 plays brass would hear it immediately. Nothing is a better answer than the
 wrong thing, and it leaves the lattice free to be built properly.
