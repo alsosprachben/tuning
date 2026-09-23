@@ -1454,6 +1454,11 @@ class Live:
         self.coarse = {}        # channel -> RPN 2, semitones
         self.fine = {}          # channel -> RPN 1, cents
         self.rpn = {}           # channel -> selected (msb, lsb); (127,127) = null
+        # GM2 scale/octave tuning: twelve cent offsets per channel, and the
+        # ratio last APPLIED to each pitch class so a repeat cannot compound.
+        # It cannot fold into self.bend, which is one scalar for the channel.
+        self.sota = {}          # channel -> [12 cents]
+        self.sota_at = {}       # (channel, pitch class) -> ratio last applied
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
@@ -1973,7 +1978,11 @@ class Live:
         if part.bank.drone_wheel:
             self.drone_quiet.pop(part.pid, None)
             self._drones(part, ch, n0)
-        b, v = self.bend.get(ch, 1.0), self.mod.get(ch, 0.0)
+        # THE CHANNEL'S TUNING IS PER PITCH CLASS, so it multiplies the
+        # channel's single bend ratio rather than joining it. `note` is the
+        # written key, which is what the MIDI spec indexes the table by.
+        b = self.bend.get(ch, 1.0) * self._sota_ratio(ch, note)
+        v = self.mod.get(ch, 0.0)
         w = self.modw.get(ch, 0.0)
         if b != 1.0 or v != 0.0 or w != 0.0:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
@@ -1997,7 +2006,7 @@ class Live:
         return any(k[0] == part.pid and k[1] == ch and k[3] != self.DRONE_SLOT
                    for k in list(self.slab.live))
 
-    def _tonic_hz(self, part):
+    def _tonic_hz(self, part, ch=None):
         """Where this part's tuner actually put the instrument's tonic.
 
         Read off the tonic's OWN template rather than computed, so it survives
@@ -2011,7 +2020,12 @@ class Live:
         t = part.bank.get(n, 100, part.bank.leslie_default)
         if t is None:
             return 0.0
-        return float(np.asarray(t["nf"])[:t["P"]].min())
+        # ...AND THE CHANNEL'S OWN TUNING, if one was sent. A drone is tuned to
+        # the chanter, so retuning the channel has to move both or the pipe
+        # goes out with itself -- the same argument that made the drones
+        # ratios of the tonic rather than absolute Hz.
+        hz = float(np.asarray(t["nf"])[:t["P"]].min())
+        return hz if ch is None else hz * self._sota_ratio(ch, n)
 
     def _drones(self, part, ch, n0):
         """Bring the uncorked drones up and cork the rest.
@@ -2031,7 +2045,7 @@ class Live:
         is read in.
         """
         want = self.drone_count.get(part.pid, len(part.bank.drone_ratios))
-        tonic = self._tonic_hz(part)
+        tonic = self._tonic_hz(part, ch)
         if tonic <= 0.0:
             return
         for i, hz in enumerate(tonic * r for r in part.bank.drone_ratios):
@@ -2180,6 +2194,34 @@ class Live:
         else:
             self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
 
+    def _sota_ratio(self, ch, note):
+        """This channel's scale/octave factor for one written key."""
+        t = self.sota.get(ch)
+        return 1.0 if not t else 2.0 ** (t[note % 12] / 1200.0)
+
+    def _resota(self, ch, n0):
+        """Move this channel's sounding notes onto a new scale/octave table.
+
+        TWELVE RATIOS, NOT ONE, which is the whole reason this cannot go
+        through _repitch. Each pitch class is retuned against the ratio last
+        applied to THAT class, so a stream of tables cannot compound -- the
+        same discipline the bend and the fader use, twelve times over.
+
+        No rebuild: a template is a set of partial frequencies and retune
+        scales them. Baking a channel's tuning into templates would mean the
+        bank cache key grew a channel, which is sixteen times the build cost
+        and sixteen times the memory.
+        """
+        for pc in range(12):
+            want = self._sota_ratio(ch, pc)
+            was = self.sota_at.get((ch, pc), 1.0)
+            if want == was:
+                continue
+            self.sota_at[(ch, pc)] = want
+            slots = self._sounding(ch, pcs={pc})
+            if slots:
+                self.slab.retune(slots, n0, om_scale=want / was)
+
     def _rpn_data(self, ch, cc, value, n0):
         """CC6/CC38 into whichever RPN is selected. Unknown ones are ignored."""
         sel = self.rpn.get(ch, (127, 127))
@@ -2255,6 +2297,17 @@ class Live:
         and it is deliberate.
         """
         d = tuple(msg.data)
+        # SCALE/OCTAVE TUNING first: same universal id, a different sub-id, and
+        # the codec lives in blockrender so the two renderers cannot read the
+        # same bytes differently.
+        import blockrender as _BRs
+        _t = _BRs.parse_sota(d)
+        if _t is not None:
+            _chs, _cents = _t
+            for _c in _chs:
+                self.sota[_c] = list(_cents)
+                self._resota(_c, n0)
+            return
         if len(d) < 4 or d[0] != 0x7E or d[2] != 0x09 or d[3] not in (0x01, 0x03):
             return
         self._all_off(n0)
@@ -2275,6 +2328,12 @@ class Live:
             self.coarse.pop(ch, None)
             self.fine.pop(ch, None)
             self._repitch(ch, n0)
+            # ...and the channel's scale/octave table, which is a tuning and so
+            # survives CC121 but not a system reset. Cleared THEN re-applied,
+            # so any note still sounding is moved back to equal rather than
+            # left where the old table put it.
+            self.sota.pop(ch, None)
+            self._resota(ch, n0)
         self.cgain.clear()
         for part in self.parts:
             want = (0, part.drums, part.tuner)
@@ -2559,6 +2618,17 @@ class Live:
                                     hrel, 0, False):
             self.dropped += 1
             return
+        # A REGISTERABLE VOICE STILL TAKES A TUNING, even though it takes no
+        # bend. `_note_on` returns here before every per-channel pitch
+        # adjustment, which is right for the wheel -- an organ has no pitch
+        # bend and a Hammond's tonewheels run off a synchronous motor -- and
+        # wrong for a temperament. The harpsichord is registerable, and a
+        # harpsichord is the instrument a temperament is FOR: measured before
+        # this line existed, a channel tuned to Sankey's offsets moved a
+        # trumpet by -9.766 cents and a harpsichord by 0.000.
+        _sr = self._sota_ratio(ch, note)
+        if _sr != 1.0:
+            self.slab.retune(self.slab.last_slots, n0, om_scale=_sr)
         if part.bank.leslie:
             self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
                                  n0, self.rotor_horn.rate, self.rotor_drum.rate)
@@ -2651,9 +2721,16 @@ class Live:
             return (et * self.press_db / 6.0206) if et else self.press_tilt
         return self.press_tilt
 
-    def _sounding(self, ch, pids=None, note=None):
+    def _sounding(self, ch, pids=None, note=None, pcs=None):
         """Every slot sounding on this channel, optionally narrowed to a set of
-        parts or to one note.
+        parts, to one note, or to a set of PITCH CLASSES.
+
+        The pitch-class filter exists for scale/octave tuning, which is twelve
+        different ratios where everything else here is one. Keyed on the
+        WRITTEN note, `k[2]`, not the sounding one: the MIDI spec indexes the
+        table by the key number received, so a transposed Part is tuned by the
+        key the player pressed and not by the pitch that comes out. That is
+        also, conveniently, the number the slab key already carries.
 
         Keys are a UNIFORM (part, channel, note, rank) 4-tuple. They did not use
         to be -- a normal voice was a pair and the organ a triple -- and
@@ -2670,6 +2747,8 @@ class Live:
             if pids is not None and k[0] not in pids:
                 continue
             if note is not None and k[2] != note:
+                continue
+            if pcs is not None and (k[2] % 12) not in pcs:
                 continue
             out.extend(slots)
         return out
@@ -4807,6 +4886,73 @@ def selftest():
           _pure < 0.05 < _str,
           "  (meantone varies %.2f cents across the compass and exports "
           "exactly; stretch varies %.2f and cannot)" % (_pure, _str))
+
+    # ---- ...AND LIVE HONOURS IT, by retuning rather than rebuilding ---------
+    # Baking a channel's tuning into templates would put a channel in the bank
+    # cache key: sixteen times the build cost and sixteen times the memory,
+    # against a cap a piano already fills a quarter of. Retune scales `om` on
+    # partials that are already sounding, which is what it is for.
+    #
+    # TWELVE RATIOS, NOT ONE. Everything else per-channel here -- bend, the
+    # RPN tunings, the fader -- is a single scalar. This is one per pitch
+    # class, so it cannot fold into self.bend and needs its own
+    # last-applied bookkeeping, twelve times over.
+    _lvs = Live(program=6, rate=48000, frames=128, verbose=False)
+    _lvs.warm()
+    _SANK = [0.0, -9.77, -7.71, -5.86, -9.77, -1.95,
+             -11.72, -3.78, -7.81, -11.72, -3.91, -7.81]
+    _lvs.on_midi(mido.Message("sysex", data=_BRb.sota_message(_SANK)))
+    _lvs.apply(0)
+    _worst = 0.0
+    for _n in range(60, 72):
+        _lvs.on_midi(mido.Message("note_on", channel=0, note=_n, velocity=100))
+        _lvs.apply(0)
+        _ks = [_k for _k in _lvs.slab.live if _k[2] == _n]
+        _om = np.concatenate([_lvs.slab.a["om"][_lvs.slab.live[_k]] for _k in _ks])
+        _nf = np.concatenate([_lvs.slab.a["nf"][_lvs.slab.live[_k]] for _k in _ks])
+        _c = 1200 * _math.log2((_om.min() * _lvs.rate / (2 * _math.pi))
+                               / float(_nf[_nf > 0].min()))
+        _worst = max(_worst, abs(_c - _SANK[_n % 12]))
+    check("live takes the same tuning, on a voice that cannot bend",
+          _worst < 0.02,
+          "  (a harpsichord over twelve pitch classes, worst %.4f cents)"
+          % _worst)
+    # A REGISTERABLE VOICE STILL TAKES A TUNING. _note_on returns down the
+    # organ branch before every per-channel pitch adjustment -- right for the
+    # wheel, wrong for a temperament, and the harpsichord is registerable.
+    # Measured before the fix: the trumpet moved -9.766 cents and the
+    # harpsichord 0.000.
+    check("...including down the rank path, which returns before the wheel",
+          _lvs.parts[0].organ and _worst < 0.02,
+          "  (part.organ is True here; an organ takes no bend and a "
+          "harpsichord still takes a temperament)")
+    # ...AND A SOUNDING NOTE MOVES, without compounding.
+    _lv2 = Live(program=56, rate=48000, frames=128, verbose=False)
+    _lv2.warm()
+    _lv2.on_midi(mido.Message("note_on", channel=0, note=61, velocity=100))
+    _lv2.apply(0)
+    _k = [_x for _x in _lv2.slab.live if _x[2] == 61][0]
+    _b0 = float(_lv2.slab.a["om"][_lv2.slab.live[_k]].min())
+    _lv2.on_midi(mido.Message("sysex", data=_BRb.sota_message(_SANK)))
+    _lv2.apply(0)
+    _b1 = float(_lv2.slab.a["om"][_lv2.slab.live[_k]].min())
+    _lv2.on_midi(mido.Message("sysex", data=_BRb.sota_message(_SANK)))
+    _lv2.apply(0)
+    _b2 = float(_lv2.slab.a["om"][_lv2.slab.live[_k]].min())
+    check("...and a note already sounding is moved onto it, once",
+          abs(1200 * _math.log2(_b1 / _b0) - _SANK[1]) < 0.02 and _b2 == _b1,
+          "  (%+.3f cents, and the same table twice adds %+.4f)"
+          % (1200 * _math.log2(_b1 / _b0), 1200 * _math.log2(_b2 / _b1)))
+    # A TUNING SURVIVES CC121 AND NOT A SYSTEM RESET -- it is not a controller.
+    _lv2.on_midi(mido.Message("control_change", channel=0, control=121, value=0))
+    _lv2.apply(0)
+    _kept = _lv2.sota.get(0) is not None
+    _lv2.on_midi(mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01]))
+    _lv2.apply(128)
+    check("...and it survives CC121 but not a GM System On",
+          _kept and _lv2.sota.get(0) is None,
+          "  (a temperament is a tuning, not a controller)")
+    _lvs.shutdown(); _lv2.shutdown()
 
     # ---- THE PIPER'S SCALE, which is not a temperament ----------------------
     # Nine holes cut once, and every one of them tuned to beat cleanly against
