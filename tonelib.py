@@ -12451,6 +12451,81 @@ def glide_tau(cc5, f_target, f_source, mechanism='slide'):
 # travelled -- under a cent for anything short of a two-octave sweep.
 PORTA_SETTLE_TAUS = 5.0
 
+# ------------------------------------------ the RPNs, arithmetic in one place
+#
+# BOTH RENDERERS CALL THESE. live.py had the only copy of this arithmetic and
+# the file renderer had none at all -- a file that asked for a bend range of 12
+# was bent over 2, and fine and coarse tuning were read by nobody. Writing it a
+# second time in blockrender would have produced two implementations of one
+# number, which is how this codebase has twice ended up with the two renderers
+# disagreeing by a quantisation step nobody could explain. So it lives here,
+# pure, with the state passed in and the new value passed back.
+
+def rpn_bend_range(cc, value, current):
+    """RPN 0/0, pitch bend sensitivity, in semitones.
+
+    CC6 is semitones and ZEROES the cents -- the universal convention, and what
+    makes a bare 101/100/6 exact, which is what almost every file sends. CC38
+    then adds cents to whatever whole semitones are there.
+    """
+    if cc == 6:
+        return float(value)
+    return float(int(current)) + value / 100.0
+
+
+def rpn_fine(cc, value, msb):
+    """RPN 0/1, channel fine tuning: 14-bit, +/-100 cents.
+
+    Returns (msb to keep, cents). CC6 alone is a coarse step with the LSB
+    taken as zero; CC38 fills in the LSB under the last MSB seen.
+    """
+    if cc == 6:
+        msb = value
+    lsb = value if cc == 38 else 0
+    return msb, ((msb << 7 | lsb) - 8192) / 8192.0 * 100.0
+
+
+def rpn_coarse(cc, value):
+    """RPN 0/2, channel coarse tuning, whole semitones from 64. MSB only."""
+    return float(value - 64) if cc == 6 else None
+
+
+# RPN 0/5 is GM 2's MODULATION DEPTH RANGE: how far the mod wheel's vibrato
+# reaches at full. MSB in semitones, LSB in 128ths of a semitone. Roland's
+# VE-GS Pro does not implement it, so there is no reference text to quote here
+# and this is the GM 2 definition as understood -- the LSB unit in particular.
+RPN_MOD_LSB_CENTS = 100.0 / 128.0
+
+def rpn_mod_range(cc, value, current_cents):
+    """RPN 0/5, modulation depth range, in cents."""
+    if cc == 6:
+        return float(value) * 100.0
+    return float(int(current_cents // 100.0)) * 100.0 + value * RPN_MOD_LSB_CENTS
+
+
+def channel_pitch_ratio(range_st, wheel, coarse_st, fine_cents,
+                        master_coarse_st=0.0, master_fine_cents=0.0):
+    """The one number everything that tunes a channel reduces to.
+
+    Wheel over its range, plus the channel's coarse and fine tuning, plus the
+    device's master coarse and fine tuning. Five inputs, one ratio -- which is
+    why any of them can move without fighting the others, and why the file
+    renderer's tuning/gesture split can be run on the product rather than on
+    each input separately.
+    """
+    st = (range_st * wheel / 8192.0 + coarse_st + fine_cents / 100.0
+          + master_coarse_st + master_fine_cents / 100.0)
+    return 2.0 ** (st / 12.0)
+
+
+# Master Volume, Universal Realtime F0 7F dd 04 01 ll mm F7. Roland's text says
+# the LSB "will be handled as 00H"; it is read here, since a device that uses
+# it is not wrong. The LAW is the one CC7 uses, squared, because the GM 2 text
+# for it is not to hand and a master fader that tapered differently from a
+# channel fader would be a surprise nobody asked for.
+def master_volume_gain(v14):
+    return (max(0, min(16383, int(v14))) / 16383.0) ** 2
+
 GM_DEFAULT_EXPRESSION = 127     # CC11 does start at full: it is an attenuator
 GM_DEFAULT_PAN = 64             # centre
 

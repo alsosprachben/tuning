@@ -34,10 +34,10 @@ for the reason above.
 | pitch wheel | ✓ | ✓ | a temperament when static, a gesture when it moves — see below |
 | channel aftertouch | ✓ | ✓ | crescendo: **+8 dB** and brighter together (`PRESS_DB`, `PRESS_TILT`) |
 | polyphonic aftertouch | ✓ | ✓ | the same, per note |
-| SysEx | ✓ | ✓ | GM System On, and GM2 Scale/Octave Tuning in both byte forms |
+| SysEx | ✓ | ✓ | GM System On; GM2 Scale/Octave Tuning in both byte forms; Master Volume, Fine and Coarse Tuning |
 | CC1 modulation | ✓ | ✓ | seven controls live, five in a file, chosen by voice — see below |
 | CC5 portamento time | ✓ | ✓ | the glide's **rate**, not its duration |
-| CC6 / CC38 data entry | ✓ | | into the selected RPN |
+| CC6 / CC38 data entry | ✓ | ✓ | into the selected RPN |
 | CC7 volume | ✓ | ✓ | channel fader, default **100** |
 | CC10 pan | ✓ | ✓ | a position, not a fader |
 | CC11 expression | ✓ | ✓ | the second fader, default **127** |
@@ -48,17 +48,44 @@ for the reason above.
 | CC84 portamento control | ✓ | ✓ | its byte is a **source note number**; fires once |
 | CC91 reverb send | | ✓ | distance from the microphone |
 | CC93 chorus send | ✓ | ✓ | fixed detuned copies, mixed in power |
-| CC98 / CC99 NRPN | ✓ | | selected and then deliberately ignored |
-| CC100 / CC101 RPN | ✓ | | selects 0/0, 0/1, 0/2 |
+| CC98 / CC99 NRPN | ✓ | ✓ | selected and then deliberately ignored |
+| CC100 / CC101 RPN | ✓ | ✓ | selects 0/0, 0/1, 0/2, 0/5 |
 | CC120 all sound off | ✓ | ✓ | the panic — stops the channel dead, pedal or no pedal |
 | CC121 reset controllers | ✓ | | re-sends CC1/11/64/66/67 at their defaults |
-| CC123 all notes off | ✓ | | lifts the keys; the pedal still holds them |
+| CC123 all notes off | ✓ | ✓ | lifts the keys; the pedal still holds them |
+| CC124 / CC125 omni off / on | ✓ | ✓ | all notes off, and nothing else — a Part already knows its channel |
+| CC126 mono | ✓ | ✓ | all sound off, all notes off, then **one voice** — see below |
+| CC127 poly | ✓ | ✓ | all sound off, all notes off, then polyphonic again |
 
-Twenty controllers live, thirteen in files. Three RPNs: **0/0** bend range,
-**0/1** fine tuning (14-bit, ±100 cents), **0/2** coarse tuning (MSB only,
-±64 semitones). NRPNs are selected so that a file which sends one does not have
-its data entry land in whatever RPN was selected last — the select is honoured
-precisely in order to discard what follows it.
+Twenty-four controllers in each, and they differ in one each: CC121 is live
+only, CC91 file only. Four RPNs: **0/0** bend range, **0/1** fine tuning
+(14-bit, ±100 cents), **0/2** coarse tuning (MSB only, ±64 semitones), and GM
+2's **0/5** modulation depth range. NRPNs are selected so that a file which
+sends one does not have its data entry land in whatever RPN was selected last —
+the select is honoured precisely in order to discard what follows it.
+
+**Until this batch the file renderer read no RPN at all.** A file asking for a
+bend range of 12 was bent over 2, and fine and coarse tuning were ignored —
+GM Level 1 requires all three, and live had them the whole time. The arithmetic
+now lives once, in `tonelib` (`rpn_bend_range`, `rpn_fine`, `rpn_coarse`,
+`rpn_mod_range`, `channel_pitch_ratio`), and both renderers call it; the
+selftest asks each the same questions and expects the same answer to the
+hundredth of a cent. Two more things this document claimed and the file
+renderer did not do: it listed **GM System On** as answered by both, and the
+file path ignored it entirely; and it read no All Notes Off. Both are real now.
+
+**Same-tick order is the file's own.** A file's header is all tick zero, and
+the first draft of the reset broke ties by putting GM System On first, on the
+theory that that is where files put it — so a file that tuned and *then* reset
+stayed tuned. Message order is the only tie-break that is not a guess. The
+GM 2 scale-table path had the same flaw one level down, sorting two tables sent
+on one tick by their cent values.
+
+RPN 0/5's LSB unit — 128ths of a semitone — is GM 2's definition as understood.
+Roland's reference implementation does not implement RPN 5, so there is no
+reference text to check it against. Offline it is parsed and has nothing to
+act on, because the file renderer's mod wheel is a setting on five voices and
+vibrato on none (see CC1 below).
 
 CC120 against CC123 is not pedantry and cost a commit to get right. **CC120 is
 the panic**: it stops sound regardless of the damper. CC123 lifts the keys, and
@@ -242,6 +269,74 @@ becomes the new note — so the source note's later note-off does nothing. Here
 the bank's template cache is keyed on the note, so a fresh voice starts with
 the glide stamped and the old one is released. The audible difference is one
 attack transient, which is what `legato_attack_s` exists to suppress.
+
+## Mono is what makes a glide's source a fact
+
+In poly mode, "which note does this glide from" has no answer when a chord is
+sounding. Roland does not give one, CC84 exists *because* there isn't one, and
+the last note to start is a convention. Mono mode removes the question: there
+is only ever one note.
+
+Roland's text for **CC126**: *"The same processing will be carried out as when
+All Sounds Off and All Notes Off is received, and the corresponding channel
+will be set to Mode 4 (M = 1) regardless of the value of 'mono number.'"* One
+voice. **CC127** is the same two messages and then Mode 3, polyphonic. **CC124**
+and **CC125** are *"the same processing ... as when All Note Off is received"*
+and nothing else.
+
+What Roland does not specify is what happens when the key on top is released
+while another is still down. Every monophonic instrument answers the same way —
+it goes back to the key still held, last-pressed first — and a trill with one
+finger held needs exactly that, so that is what both renderers do. **It is a
+convention, stated as one.**
+
+| held | poly | mono |
+|---|---|---|
+| C, then E, then G, released G–E–C | a triad whose upper notes slid in | C → E → G → E → C, one line |
+
+With CC65 up, every one of those mono moves is a glide and every source is
+unambiguous — including the return, which glides *down* from the key released.
+
+**The handoff is a cut, not a release.** One voice cannot be in two places, so
+the note being left stops as the next starts: the release is the steal-fade,
+not the instrument's own, and a held damper is not consulted, because that key
+has not come up — its voice has been taken. The arriving note takes the voice's
+legato attack in the file renderer. Live cannot soften an attack yet —
+`legato_attack_s` is not implemented there — so live mono re-articulates each
+note; the pitch path is the same.
+
+**A sound-off in the header killed the note after it.** CC126 and CC127 carry
+an All Sounds Off, they are set before the first note, and the file renderer
+looked for sound-offs "at or after" a note's onset — so the message that
+*preceded* a note on the same tick stopped it four milliseconds in. Bare CC120
+had the same bug; nobody sends one in a header, so it never showed until mono
+mode did.
+
+## The device's own fader and tuning
+
+Universal Realtime `F0 7F dd 04 xx ll mm F7`, parsed by one function
+(`blockrender.parse_master`) for both renderers:
+
+| | | |
+|---|---|---|
+| `04 01` Master Volume | the CC7 law, squared | Roland's reference implements this one |
+| `04 03` Master Fine Tuning | 14-bit, ±100 cents | the MIDI definition; Roland does not implement it |
+| `04 04` Master Coarse Tuning | semitones about 40H | likewise |
+
+Master tuning joins the channel's own in `channel_pitch_ratio`, so it is a
+temperament when set before the first note and a gesture when it moves, like
+everything else that tunes a channel. Master Volume sits at the output, ahead
+of the limiter, and moves over **5 ms** — a step in gain is a step in the
+waveform, and a step is a click. Its squared law is chosen to match CC7, since
+no text for it was to hand.
+
+The live ramp had a bug worth naming: it recomputed its step from wherever it
+had got to, so each block covered a fixed *fraction* of what was left. That is
+an exponential approach, and it measured −11.28 dB four blocks after being
+asked for −12.04. A linear ramp lands, and lands when it says it will.
+
+A GM System On puts all three back: full volume, no master tuning, every
+channel poly.
 
 ## Pan is a position, not a fader
 

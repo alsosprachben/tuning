@@ -10,11 +10,11 @@ time by exactly the same C the offline renderer uses.
 Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
        python3 live.py --list | --selftest | --latency
 
-It answers twenty controllers -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66, 67, 84,
-93, 98, 99, 100, 101, 120, 121, 123 -- plus program change, both aftertouches,
-the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning), with RPN 0/0,
-0/1 and 0/2. That is GM Level 1 complete, plus three of GM 2's; the fourth,
-CC91, is offline-only. See midi.md, which is generated from this dispatch.
+It answers twenty-four controllers -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66, 67,
+84, 93, 98-101, 120, 121, 123-127 -- plus program change, both aftertouches,
+the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning, Master Volume,
+Fine and Coarse Tuning), with RPN 0/0, 0/1, 0/2 and 0/5. CC91 alone is
+offline-only. See midi.md, which is generated from this dispatch.
 
 BANKS ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
 one. Pinning is not an optimisation: without it the LRU evicted the bank that
@@ -1602,6 +1602,21 @@ class Live:
         # note to start is the convention everyone uses.
         self.last_on = {}       # channel -> the most recent note-on
         self._glide_from = None # source pitch for the note-on being dispatched
+        # CHANNEL MODE. Roland: MONO (126) sets Mode 4 with M = 1 "regardless
+        # of the value of mono number"; POLY (127) sets Mode 3. Both are All
+        # Sounds Off and All Notes Off first.
+        self.mono = set()       # channels in mono mode
+        self.mono_stack = {}    # channel -> [(note, velocity)] held, press order
+        self.mono_cur = {}      # channel -> the one note sounding
+        # RPN 0/5, GM 2's modulation depth range, in cents. Absent is the TUI's
+        # mod_cents, for the reason bend_range works the same way: GM gives a
+        # default, and the knob at the console is the human.
+        self.modrange = {}
+        # THE DEVICE'S OWN FADER AND TUNING, Universal Realtime 04 01/03/04.
+        self.master_vol = 1.0   # gain, on the CC7 law
+        self._mv_now = 1.0      # where the ramp toward master_vol has got to
+        self.master_fine = 0.0  # cents
+        self.master_coarse = 0.0  # semitones
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
@@ -1926,7 +1941,7 @@ class Live:
                     # it is the per-player vibrato built for the string sections
                     # -- so here it is simply driven by hand instead of by seed.
                     w = msg.value / 127.0
-                    depth = (2.0 ** (self.mod_cents * w / 1200.0)) - 1.0
+                    depth = (2.0 ** (self._mod_cents(ch) * w / 1200.0)) - 1.0
                     self.mod[ch] = depth
                     self.modw[ch] = w
                     self.slab.retune(self._sounding(ch, pids={p.pid for p in others}),
@@ -1982,6 +1997,23 @@ class Live:
                 # sounding -- see Slab.soft_strings. Nothing to do here but
                 # remember it; _note_on reads it when the hammer swings.
                 self.soft[ch] = msg.value >= 64
+            elif msg.control in (124, 125, 126, 127):   # channel mode
+                # Roland, for all four: "the same processing ... as when All
+                # Note Off is received", and MONO and POLY are All Sounds Off
+                # as well. Sent as the real messages, so a pedal is honoured
+                # exactly as CC123 honours it and a panic is exactly CC120's.
+                # OMNI does nothing else: a Part here already knows its channel.
+                if msg.control in (126, 127):
+                    self._one(n0, mido.Message("control_change", channel=ch,
+                                               control=120, value=0))
+                self._one(n0, mido.Message("control_change", channel=ch,
+                                           control=123, value=0))
+                self.mono_stack.pop(ch, None)
+                self.mono_cur.pop(ch, None)
+                if msg.control == 126:
+                    self.mono.add(ch)
+                elif msg.control == 127:
+                    self.mono.discard(ch)
             elif msg.control == 5:                  # portamento time
                 self.porta_time[ch] = msg.value
             elif msg.control == 65:                 # portamento on/off
@@ -2099,6 +2131,19 @@ class Live:
             # it, so a voice that never registered its key had every note swept
             # a block after it started -- notes dying in a fraction of a second.
             self.down.add((ch, msg.note))
+            # MONO: ONE VOICE. The note already sounding hands it over -- cut,
+            # not released, so neither its own release nor a held damper
+            # leaves it ringing under the new one -- and the new key goes on
+            # top of the held stack, which is where a release will come back
+            # to. The glide source below is then simply the note being left,
+            # which is the whole reason mono mode belongs to portamento.
+            if ch in self.mono:
+                _prev = self.mono_cur.get(ch)
+                _st = self.mono_stack.setdefault(ch, [])
+                _st[:] = [x for x in _st if x[0] != msg.note] + [(msg.note, msg.velocity)]
+                if _prev is not None and _prev != msg.note:
+                    self._mono_cut(ch, _prev, n0, parts)
+                self.mono_cur[ch] = msg.note
             # WHERE THIS NOTE GLIDES FROM, decided once for the channel before
             # any part sees it -- a layered channel is several parts and one
             # keyboard, so they must all glide from the same place. A pending
@@ -2116,6 +2161,28 @@ class Live:
             self._glide_from = None
         else:
             self.down.discard((ch, msg.note))
+            if ch in self.mono:
+                _st = self.mono_stack.get(ch, [])
+                _st[:] = [x for x in _st if x[0] != msg.note]
+                if self.mono_cur.get(ch) != msg.note:
+                    return          # already handed over: nothing sounds for it
+                if _st:
+                    # BACK TO THE KEY STILL DOWN, last-pressed first. Roland
+                    # does not say; every monophonic instrument does this, and
+                    # a trill with one finger held needs it. A convention,
+                    # stated as one.
+                    _back, _bvel = _st[-1]
+                    self._mono_cut(ch, msg.note, n0, parts)
+                    self.mono_cur[ch] = _back
+                    self._glide_from = (msg.note if self.porta_on.get(ch)
+                                        else None)
+                    self.last_on[ch] = _back
+                    for part in parts:
+                        if part.matches(ch, _back):
+                            self._note_on(part, ch, _back, _bvel, n0)
+                    self._glide_from = None
+                    return
+                self.mono_cur.pop(ch, None)     # last key up: an ordinary release
             pedalled = False
             for part in parts:
                 if not part.matches(ch, msg.note):
@@ -2334,6 +2401,52 @@ class Live:
         hz = float(np.asarray(t["nf"])[:t["P"]].min())
         return hz if ch is None else hz * self._sota_ratio(ch, n)
 
+    def master_gain(self, L, R, n):
+        """Master Volume on one block, ramped toward the last value asked for.
+
+        Before the limiter, which is where a fader sits. The ramp is the file
+        renderer's MASTER_RAMP_S: a step in gain is a step in the waveform, and
+        a step is a click. At full and not moving it costs nothing at all.
+        """
+        want, now = self.master_vol, self._mv_now
+        if want == now:
+            return (L, R) if want == 1.0 else (L * np.float32(want),
+                                                 R * np.float32(want))
+        # THE STEP IS FIXED WHEN THE TARGET CHANGES, not recomputed per block.
+        # Recomputing it from wherever the ramp had got to made each block
+        # cover a fixed FRACTION of what was left -- an exponential approach
+        # that never lands, which measured -11.28 dB four blocks after asking
+        # for -12.04. A linear ramp lands, and lands when it says it will.
+        if want != getattr(self, "_mv_target", None):
+            self._mv_target = want
+            ramp = max(1, int(B.MASTER_RAMP_S * self.rate))
+            self._mv_step = (want - now) / float(ramp)
+        step = self._mv_step
+        g = now + step * np.arange(1, n + 1, dtype=np.float64)
+        g = np.minimum(g, want) if step > 0 else np.maximum(g, want)
+        self._mv_now = float(g[-1])
+        g = g.astype(np.float32)
+        return L * g, R * g
+
+    def _mono_cut(self, ch, note, n0, parts):
+        """Hand a mono voice over: stop this note NOW, pedal or no pedal.
+
+        A cut and not a release, for the reason the file renderer gives: one
+        voice cannot be in two places. The release is the steal-fade rather
+        than the instrument's own, and the damper is not consulted, because
+        this key has not come up -- its voice has been taken.
+        """
+        _fade = np.float32(B.RETRIGGER_FADE * self.rate)
+        for k in [k for k in list(self.slab.live) if k[1] == ch and k[2] == note]:
+            _sl = self.slab.live.get(k)
+            if _sl:
+                _ix = np.fromiter(_sl, np.int64, len(_sl))
+                self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix], _fade)
+        self.pedalled.discard((ch, note))
+        for part in parts:
+            if part.matches(ch, note):
+                self._note_off(part, ch, note, n0)
+
     def _glide(self, part, ch, note, slots):
         """Write this press's portamento into the slots just stamped.
 
@@ -2519,9 +2632,12 @@ class Live:
         off centre has to recompute from the wheel -- and moving the sounding
         pitch when the range changes is the entire point of RPN 0.
         """
-        r = (self._bend_range(ch) * self.wheel.get(ch, 0) / 8192.0 / 12.0
-             + (self.coarse.get(ch, 0.0) + self.fine.get(ch, 0.0) / 100.0) / 12.0)
-        ratio = 2.0 ** r
+        # tonelib.channel_pitch_ratio, which the file renderer calls too -- one
+        # implementation of one number, master tuning included.
+        ratio = T.channel_pitch_ratio(
+            self._bend_range(ch), self.wheel.get(ch, 0),
+            self.coarse.get(ch, 0.0), self.fine.get(ch, 0.0),
+            self.master_coarse, self.master_fine)
         prev = self.bend.get(ch, 1.0)
         if ratio == prev:
             return
@@ -2613,26 +2729,35 @@ class Live:
         sel = self.rpn.get(ch, (127, 127))
         if sel is None or sel == (127, 127):
             return                      # RPN null, or an NRPN: not ours
+        # THE ARITHMETIC IS tonelib's, shared with the file renderer, which had
+        # none of this until now: a file asking for a bend range of 12 was bent
+        # over 2 there. One copy of each formula, so the two cannot drift.
         if sel == (0, 0):               # pitch bend sensitivity
-            if cc == 6:
-                # CC6 is semitones and zeroes the cents, which is the universal
-                # convention and makes a bare 101/100/6 exact -- which is what
-                # almost every GM file sends.
-                self.brange[ch] = float(value)
-            else:
-                self.brange[ch] = float(int(self._bend_range(ch))) + value / 100.0
+            self.brange[ch] = T.rpn_bend_range(cc, value, self._bend_range(ch))
         elif sel == (0, 1):             # fine tuning, 14-bit, +/-100 cents
-            if cc == 6:
-                self._rpn_fine_msb[ch] = value
-            lsb = value if cc == 38 else 0
-            msb = self._rpn_fine_msb.get(ch, 64)
-            self.fine[ch] = ((msb << 7 | lsb) - 8192) / 8192.0 * 100.0
-        elif sel == (0, 2):             # coarse tuning, MSB only, +/-64 st
-            if cc == 6:
-                self.coarse[ch] = float(value - 64)
+            self._rpn_fine_msb[ch], self.fine[ch] = T.rpn_fine(
+                cc, value, self._rpn_fine_msb.get(ch, 64))
+        elif sel == (0, 2):             # coarse tuning, MSB only
+            co = T.rpn_coarse(cc, value)
+            if co is None:
+                return
+            self.coarse[ch] = co
+        elif sel == (0, 5):             # GM 2: modulation depth range
+            self.modrange[ch] = T.rpn_mod_range(cc, value, self._mod_cents(ch))
+            # A wheel already up has to follow its new range, or the range
+            # would only mean something to the NEXT movement. Sent as a real
+            # message, for the reason _RESET_CC gives: CC1 is seven controls.
+            w = self.modw.get(ch, 0.0)
+            if w > 0.0:
+                self._one(n0, mido.Message("control_change", channel=ch,
+                                           control=1, value=int(round(w * 127))))
+            return
         else:
             return
         self._repitch(ch, n0)
+
+    def _mod_cents(self, ch):
+        return self.modrange.get(ch, self.mod_cents)
 
     # Sent as real messages rather than re-implemented, because CC1 on this
     # engine is seven different controls chosen per voice (drive, drone count,
@@ -2700,9 +2825,34 @@ class Live:
                 self.sota[_c] = list(_cents)
                 self._resota(_c, n0)
             return
-        if len(d) < 4 or d[0] != 0x7E or d[2] != 0x09 or d[3] not in (0x01, 0x03):
+        # THE DEVICE'S OWN FADER AND TUNING, parsed by the same function the
+        # file renderer uses. Tuning moves every channel, so every channel is
+        # re-pitched against its last-applied ratio and nothing compounds.
+        _m = _BRs.parse_master(d)
+        if _m is not None:
+            kind, val = _m
+            if kind == 'vol':
+                self.master_vol = float(val)
+            else:
+                if kind == 'fine':
+                    self.master_fine = float(val)
+                else:
+                    self.master_coarse = float(val)
+                for ch in range(16):
+                    self._repitch(ch, n0)
+            return
+        if not _BRs.parse_gm_on(d):
             return
         self._all_off(n0)
+        # ...and the device-level state, BEFORE the per-channel loop re-pitches
+        # every channel, so that loop lands them on a master tuning of zero.
+        self.master_vol = 1.0
+        self.master_fine = 0.0
+        self.master_coarse = 0.0
+        self.mono.clear()
+        self.mono_stack.clear()
+        self.mono_cur.clear()
+        self.modrange.clear()
         for ch in range(16):
             self._reset_controllers(n0, ch)
             self.vol[ch] = T.GM_DEFAULT_VOLUME
@@ -3224,6 +3374,7 @@ class Live:
         if self.renderer.error:
             self.errors += 1
             self.last_error, self.renderer.error = self.renderer.error, None
+        L, R = self.master_gain(L, R, frame_count)
         L, R = self.limit(L), self.limit(R)
         # Layering makes overload reachable, and the drop counter only reports it
         # AFTER notes are already lost. This reports it before.
@@ -5460,6 +5611,166 @@ def selftest():
     check("...and GM 78 is still the human whistle it argues for being",
           _PMb2.property_class_for_program(78).__name__ == "WhistleProperties",
           "  (a Helmholtz resonator: no registers, no overblowing, no fingering)")
+
+    # ---- CHANNEL MODE, RPNs AND THE MASTER CONTROLS -------------------------
+    #
+    # The file renderer read no RPN at all until this batch: a file asking for
+    # a bend range of 12 was bent over 2 there, and fine and coarse tuning were
+    # ignored. The arithmetic is tonelib's now, and both renderers call it, so
+    # the checks below ask the two paths the same questions and expect the
+    # same answer to the hundredth of a cent.
+    def _mid(_msgs, _prog=73, _notes=((69, 0, 480),)):
+        _m = mido.MidiFile(ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=_prog, time=0))
+        for _x in _msgs:
+            _t.append(_x)
+        _ev = []
+        for _n, _a, _b in _notes:
+            _ev.append((_a, 1, _n)); _ev.append((_b, 0, _n))
+        _ev.sort(key=lambda e: (e[0], e[1]))
+        _now = 0
+        for _tk, _on, _n in _ev:
+            _t.append(mido.Message("note_on" if _on else "note_off", channel=0,
+                                   note=_n, velocity=100 if _on else 0,
+                                   time=_tk - _now))
+            _now = _tk
+        _fn = os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid())
+        _m.save(_fn)
+        return _BRb.prepare(_fn, "even")
+
+    def _cc(_n, _v):
+        return mido.Message("control_change", channel=0, control=_n, value=_v, time=0)
+
+    def _cents_of(_prep, _base):
+        return 1200.0 * math.log2(float(np.min(np.asarray(_prep["nf"]))) / _base)
+
+    _b0 = float(np.min(np.asarray(_mid([])["nf"])))
+    _full = mido.Message("pitchwheel", channel=0, pitch=8191, time=0)
+    _got12 = _cents_of(_mid([_cc(101, 0), _cc(100, 0), _cc(6, 12), _full]), _b0)
+    check("the FILE renderer reads the bend range now",
+          abs(_got12 - 1200.0 * 12.0 * 8191 / 8192 / 12.0) < 0.01,
+          "  (RPN 0 = 12, wheel full: %+.2f cents -- it was +199.98, the default "
+          "range, whatever the file asked for)" % _got12)
+    _gotc = _cents_of(_mid([_cc(101, 0), _cc(100, 2), _cc(6, 67)]), _b0)
+    _gotf = _cents_of(_mid([_cc(101, 0), _cc(100, 1), _cc(6, 32), _cc(38, 0)]), _b0)
+    check("...and channel coarse and fine tuning",
+          abs(_gotc - 300.0) < 0.01 and abs(_gotf + 50.0) < 0.01,
+          "  (%+.2f and %+.2f cents, asked +300 and -50)" % (_gotc, _gotf))
+    _gm = mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01], time=0)
+    _gA = _cents_of(_mid([_cc(101, 0), _cc(100, 2), _cc(6, 67), _gm]), _b0)
+    _gB = _cents_of(_mid([_gm, _cc(101, 0), _cc(100, 2), _cc(6, 67)]), _b0)
+    check("...and a GM System On resets them, in the order the file sent it",
+          abs(_gA) < 0.01 and abs(_gB - 300.0) < 0.01,
+          "  (tune then reset: %+.2f; reset then tune: %+.2f -- all on one tick, "
+          "which a rule about which message comes first got wrong)" % (_gA, _gB))
+    _mc = _cents_of(_mid([mido.Message("sysex", data=_BRb.master_message("coarse", -2))]), _b0)
+    _mf = _cents_of(_mid([mido.Message("sysex", data=_BRb.master_message("fine", 25.0))]), _b0)
+    check("master coarse and fine tuning reach every note",
+          abs(_mc + 200.0) < 0.01 and abs(_mf - 25.0) < 0.01,
+          "  (%+.2f and %+.2f cents)" % (_mc, _mf))
+
+    # THE SAME QUESTIONS, LIVE, and the same answers.
+    _lm = Live(program=81, rate=44100, frames=128, verbose=False, tuner="even")
+    _lm.warm()
+
+    def _lpump(_n=3):
+        for _ in range(_n):
+            _n0 = _lm.n
+            _lm.apply(_n0); _lm.sweep(_n0); _lm.slab.reap(_n0)
+            _lm.renderer.render(_n0, 128); _lm.n = _n0 + 128
+
+    def _lsay(**_k):
+        _lm.on_midi(mido.Message(channel=0, **_k))
+
+    _lsay(type="note_on", note=69, velocity=100)
+    for _c, _v in ((101, 0), (100, 0), (6, 12)):
+        _lsay(type="control_change", control=_c, value=_v)
+    _lsay(type="pitchwheel", pitch=8191)
+    _lm.on_midi(mido.Message("sysex", data=_BRb.master_message("coarse", -2)))
+    _lm.on_midi(mido.Message("sysex", data=_BRb.master_message("fine", 25.0)))
+    _lpump()
+    _lr = 1200.0 * math.log2(_lm.bend.get(0, 1.0))
+    _fr = _cents_of(_mid([_cc(101, 0), _cc(100, 0), _cc(6, 12), _full,
+                          mido.Message("sysex", data=_BRb.master_message("coarse", -2)),
+                          mido.Message("sysex", data=_BRb.master_message("fine", 25.0))]),
+                    _b0)
+    check("live and the file renderer agree on the whole product",
+          abs(_lr - _fr) < 0.01,
+          "  (range 12, wheel full, master -2 st and +25 c: live %+.2f, file %+.2f)"
+          % (_lr, _fr))
+    for _c, _v in ((101, 0), (100, 5), (6, 1), (38, 64)):
+        _lsay(type="control_change", control=_c, value=_v)
+    _lpump()
+    check("RPN 5 sets how far the mod wheel reaches",
+          abs(_lm._mod_cents(0) - 150.0) < 1e-9,
+          "  (1 semitone + 64/128: %.2f cents; GM 2's own definition -- Roland's "
+          "reference does not implement it)" % _lm._mod_cents(0))
+    _lm.on_midi(mido.Message("sysex", data=_BRb.master_message("vol", 0.25)))
+    _lpump()
+    _one = np.ones(128, np.float32)
+    for _ in range(4):
+        _mo, _ = _lm.master_gain(_one, _one, 128)
+    # Against what the MESSAGE carried, not against 0.25: fourteen bits put
+    # the nearest value at 0.25003, and a check that wanted 0.25 exactly was
+    # testing the quantisation of the test rather than the ramp.
+    check("master volume lands where it was asked, after its ramp",
+          abs(float(_mo[-1]) - _lm.master_vol) < 1e-6,
+          "  (%.2f dB; the first draft recomputed its step each block and "
+          "approached -12.04 without ever arriving)" % (20.0 * math.log10(float(_mo[-1]))))
+    _lsay(type="note_off", note=69, velocity=0)
+    _lsay(type="pitchwheel", pitch=0)
+    _lpump(40)
+
+    # MONO: ONE VOICE, and portamento's source note becomes a fact. In poly a
+    # chord has no answer to "which note does this glide from"; in mono there
+    # is only ever one note sounding.
+    def _lkeys():
+        return sorted({_k[2] for _k, _v in _lm.slab.live.items()
+                       if _k[1] == 0 and _v and _k[3] is None})
+
+    for _c, _v in ((126, 1), (65, 127), (5, 64)):
+        _lsay(type="control_change", control=_c, value=_v)
+    _lpump()
+    _lsay(type="note_on", note=60, velocity=100); _lpump()
+    _lsay(type="note_on", note=64, velocity=100); _lpump(40)
+    check("mono: a second key takes the voice from the first",
+          _lkeys() == [64], "  (sounding %s)" % _lkeys())
+    _lsay(type="note_off", note=64, velocity=0); _lpump(40)
+    _Fe = _BRb.tuning_table("even")
+    _back = [_i for _k, _v in _lm.slab.live.items()
+             if _k[1] == 0 and _k[2] == 60 and _k[3] is None for _i in _v]
+    _bgb = {round(float(_lm.slab.a["gb"][_i]), 6) for _i in _back}
+    check("...and releasing it goes BACK to the key still held, gliding down",
+          _lkeys() == [60] and _bgb == {round(_Fe[60] / _Fe[64] - 1.0, 6)},
+          "  (last-pressed first -- every monophonic instrument's convention, "
+          "stated as one, since Roland does not say)")
+    _lsay(type="control_change", control=127, value=0); _lpump(40)
+    check("POLY is an All Sounds Off, and the channel is poly again",
+          0 not in _lm.mono and not _lkeys(),
+          "  (Roland: MONO and POLY are All Sounds Off and All Notes Off first)")
+    _lm.shutdown()
+
+    # ...AND THE FILE RENDERER DOES THE SAME, from the same bytes.
+    def _segs(_p):
+        _nf = np.asarray(_p["nf"]); _non = np.asarray(_p["non"])
+        _g = {}
+        for _i in range(len(_nf)):
+            _g.setdefault(round(_non[_i] / 44100.0, 2), []).append(_i)
+        return [(_t, round(float(min(_nf[_i] for _i in _g[_t])), 1)) for _t in sorted(_g)]
+
+    _trill = ((60, 0, 1440), (64, 480, 960))    # C held, E pressed and released
+    _poly = _segs(_mid([], _notes=_trill))
+    _mono = _segs(_mid([_cc(126, 1)], _notes=_trill))
+    check("the file renderer: mono splits a held key into what actually sounds",
+          len(_poly) == 2 and len(_mono) == 3 and _mono[0][1] == _mono[2][1],
+          "  (poly %d notes; mono C, E, and C again at %.2f s)"
+          % (len(_poly), _mono[2][0] if len(_mono) > 2 else -1.0))
+    _hdr = _mid([_cc(120, 0)], _notes=((69, 0, 480),))
+    check("a sound-off in the header does not kill the note after it",
+          float(np.max(np.asarray(_hdr["noff"]))) / 44100.0 > 0.45,
+          "  (it did, four milliseconds in: 'at or after the onset' caught the "
+          "message that preceded it on the same tick)")
 
     # ---- PORTAMENTO, CC5/CC65/CC84 ------------------------------------------
     #

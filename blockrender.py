@@ -37,10 +37,12 @@ phase-sensitive differences follow from the block size.
 longer than it was true, four lines under a warning about exactly that. See
 midi.md, which was written because of it.)
 
-WHAT CONTROLS IT READS: thirteen CCs -- 1, 5, 7, 10, 11, 64, 65, 66, 67, 84,
-91, 93, 120 -- plus program change, both aftertouches, the pitch wheel and
-SysEx (GM System On, GM2 Scale/Octave Tuning). The pedals are here and not
-only in live.py.
+WHAT CONTROLS IT READS: twenty-four CCs -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66,
+67, 84, 91, 93, 98-101, 120, 123-127 -- with RPN 0/0, 0/1, 0/2 and 0/5, plus
+program change, both aftertouches, the pitch wheel and SysEx (GM System On,
+GM2 Scale/Octave Tuning, Master Volume, Fine and Coarse Tuning). The pedals are
+here and not only in live.py. Until the RPNs arrived this list claimed GM
+System On, which nothing in this file read.
 CC91 is here and NOT in live.py, because a reverb send offline is a distance
 from the microphone and needs no new DSP; live it would be a convolver on the
 audio thread. Seeing the whole file first is this renderer's advantage and is
@@ -424,6 +426,15 @@ def parse(path):
     ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; pws = {}; on = {}; t = 0.0
     ats = {}; pts = {}       # channel pressure, and per-key pressure
     sotas = {}               # channel -> [(t, 12 cents)] from GM2 sysex
+    # THE RPNs, which this renderer read none of. A file that set its bend
+    # range to 12 was bent over 2, and fine and coarse tuning were ignored --
+    # GM Level 1 requires all three, and live.py had them the whole time. The
+    # arithmetic is tonelib's, shared, so the two cannot drift apart.
+    rpns = {}                # channel -> [(t, 'range'|'fine'|'coarse'|'mod', v)]
+    _rsel = {}; _rfmsb = {}; _rrange = {}; _rmod = {}
+    master = []              # [(t, 'vol'|'fine'|'coarse', v, seq)], the device's own
+    gmon = []                # [(t, seq)] GM System On: every channel back to power-on
+    _pwseq = {}              # channel -> [(t, seq, pitch)], the wheel in message order
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
@@ -432,17 +443,59 @@ def parse(path):
         return (c.get(7, T.GM_DEFAULT_VOLUME)/127.0,
                 c.get(11, T.GM_DEFAULT_EXPRESSION)/127.0,
                 (c.get(10, T.GM_DEFAULT_PAN)-64)/63.0)
+    _seq = 0     # message order, for events that share a tick -- see _pitch_stream
     for msg in mid:
         t += msg.time
+        _seq += 1
         if msg.type == 'program_change':
             ch_prog[msg.channel] = msg.program
             ch_progs.setdefault(msg.channel, []).append(msg.program)
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
+            _c, _cc, _v = msg.channel, msg.control, msg.value
+            if _cc in (98, 99):
+                _rsel[_c] = None            # an NRPN: its data entry is not ours
+            elif _cc == 101:
+                _rsel[_c] = (_v, (_rsel.get(_c) or (127, 127))[1])
+            elif _cc == 100:
+                _rsel[_c] = ((_rsel.get(_c) or (127, 127))[0], _v)
+            elif _cc in (6, 38):
+                _sel = _rsel.get(_c)
+                if _sel == (0, 0):
+                    _rrange[_c] = T.rpn_bend_range(
+                        _cc, _v, _rrange.get(_c, T.BEND_RANGE_SEMITONES))
+                    rpns.setdefault(_c, []).append((t, 'range', _rrange[_c], _seq))
+                elif _sel == (0, 1):
+                    _rfmsb[_c], _fc = T.rpn_fine(_cc, _v, _rfmsb.get(_c, 64))
+                    rpns.setdefault(_c, []).append((t, 'fine', _fc, _seq))
+                elif _sel == (0, 2):
+                    _co = T.rpn_coarse(_cc, _v)
+                    if _co is not None:
+                        rpns.setdefault(_c, []).append((t, 'coarse', _co, _seq))
+                elif _sel == (0, 5):
+                    _rmod[_c] = T.rpn_mod_range(_cc, _v, _rmod.get(_c, 0.0))
+                    rpns.setdefault(_c, []).append((t, 'mod', _rmod[_c], _seq))
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
+            _pwseq.setdefault(msg.channel, []).append((t, _seq, msg.pitch))
         elif msg.type == 'sysex':
+            if parse_gm_on(msg.data):
+                # BACK TO POWER-ON, which this renderer did not do at all while
+                # its own docstring said it did. The controllers go (so a note
+                # after it snapshots CC7 at 100 again), and every tuning the
+                # file had set -- RPN, master, scale -- is reset downstream from
+                # the time recorded here.
+                gmon.append((t, _seq))
+                ctrl.clear(); _rsel.clear(); _rfmsb.clear(); _rrange.clear()
+                _rmod.clear()
+                for _c in list(sotas):
+                    sotas[_c].append((t, (0.0,) * 12))
+                continue
+            _mst = parse_master(msg.data)
+            if _mst is not None:
+                master.append((t, _mst[0], _mst[1], _seq))
+                continue
             _so_ta = parse_sota(msg.data)
             if _so_ta is not None:
                 _chs, _cents = _so_ta
@@ -473,7 +526,9 @@ def parse(path):
     # would miss it -- a KeyError at render time once notes carry their own
     # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
-    return ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws, (ats, pts, sotas)
+    return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
+            (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
+                                   pwseq=_pwseq)))
 
 # ---- GM2 Scale/Octave Tuning Adjust -----------------------------------------
 # Twelve cent offsets, one per pitch class, applied to a set of channels. It is
@@ -507,6 +562,57 @@ def _sota_channels(ff, gg, hh):
         if hh & (1 << b):
             out.add(b)
     return out
+
+
+def parse_gm_on(data):
+    """True for GM System On (7E dd 09 01) or GM 2 System On (7E dd 09 03).
+
+    Any device id: a file addresses "all devices" as 7F, but one aimed at id
+    10 is not addressed to somebody else -- there is nobody else here.
+    """
+    d = tuple(data)
+    return len(d) >= 4 and d[0] == 0x7E and d[2] == 0x09 and d[3] in (0x01, 0x03)
+
+
+def parse_master(data):
+    """('vol', gain) / ('fine', cents) / ('coarse', semitones), or None.
+
+    Universal Realtime Device Control, F0 7F dd 04 xx ll mm F7:
+      01  Master Volume          14-bit, the CC7 law (tonelib.master_volume_gain)
+      03  Master Fine Tuning     14-bit, +/-100 cents about 2000H
+      04  Master Coarse Tuning   MSB only, semitones about 40H
+
+    Roland's VE-GS Pro receives only the first of these, and says so, so fine
+    and coarse follow the MIDI definition rather than a reference device.
+    Anything else returns None and is ignored silently, like every other
+    message for a machine this is not.
+    """
+    d = tuple(data)
+    if len(d) < 6 or d[0] != 0x7F or d[2] != 0x04:
+        return None
+    ll, mm = d[4], d[5]
+    if d[3] == 0x01:
+        return ('vol', T.master_volume_gain(mm << 7 | ll))
+    if d[3] == 0x03:
+        return ('fine', ((mm << 7 | ll) - 8192) / 8192.0 * 100.0)
+    if d[3] == 0x04:
+        return ('coarse', float(mm - 64))
+    return None
+
+
+def master_message(kind, value, device=0x7F):
+    """The bytes for one master message, BETWEEN F0 and F7 -- for tests and
+    examples, so nothing writes these by hand and gets the order wrong."""
+    if kind == 'vol':
+        v = int(round((max(0.0, min(1.0, value)) ** 0.5) * 16383))
+        return [0x7F, device, 0x04, 0x01, v & 0x7F, v >> 7]
+    if kind == 'fine':
+        v = int(round(value / 100.0 * 8192.0)) + 8192
+        v = max(0, min(16383, v))
+        return [0x7F, device, 0x04, 0x03, v & 0x7F, v >> 7]
+    if kind == 'coarse':
+        return [0x7F, device, 0x04, 0x04, 0x00, int(value) + 64]
+    raise ValueError(kind)
 
 
 def parse_sota(data):
@@ -682,7 +788,110 @@ def prepare(path, tuner='hybrid440'):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
-    ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas) = parse(path)
+    ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
+    rpns, master, gmon = _sys['rpns'], _sys['master'], _sys['gmon']
+    _pwseq = _sys['pwseq']
+
+    # ------------------------------------------- CHANNEL MODE, CC123 to CC127
+    #
+    # ALL NOTES OFF, which this renderer did not read -- and Roland's text
+    # makes four more messages carry it: OMNI OFF (124) and OMNI ON (125) are
+    # "the same processing ... as when All Note Off is received", and MONO
+    # (126) and POLY (127) are All Sounds Off AND All Notes Off before they
+    # change the mode. So all five lift every key held on the channel, and a
+    # held damper then does what it would do to any lifted key.
+    for _c, _evs in ccs.items():
+        _aoff = sorted(_t for _t, _cc, _v in _evs if _cc in (123, 124, 125, 126, 127))
+        if not _aoff:
+            continue
+        _nn = []
+        for _n in notes:
+            if _n[0] == _c:
+                _i = _bisect.bisect_right(_aoff, _n[2])
+                if _i < len(_aoff) and _aoff[_i] < _n[3]:
+                    _n = (_n[0], _n[1], _n[2], _aoff[_i]) + tuple(_n[4:])
+            _nn.append(_n)
+        notes = _nn
+
+    # MONO MODE, which is what makes portamento's source note a fact rather
+    # than a convention. In poly mode "which note does this glide from" has no
+    # answer when a chord is sounding -- Roland gives none, and CC84 exists
+    # because there is none. In mono there is only ever one note.
+    #
+    # Roland sets the channel to Mode 4, M = 1, "regardless of the value of
+    # mono number": one voice. What it does not specify is what happens when
+    # the key on top is released while another is still held. Every monophonic
+    # instrument answers the same way -- it goes back to the key still down,
+    # last-pressed first -- and that is what a trill with one finger held
+    # needs, so that is what this does. Stated as a convention, not as Roland.
+    #
+    # The handoff is a SLUR: the new note takes the voice's legato attack, and
+    # the old one stops as it starts rather than ringing out on its own
+    # release or under the damper. One voice cannot be in two places.
+    _MONO_SLUR = set()      # (ch, note, on) that arrive by slur
+    _MONO_CUT = set()       # (ch, note, on) that are cut off by the next
+    _mono_notes = []
+    _in_mono = set()
+    for _c, _evs in ccs.items():
+        _gm = [_t for _t, _q in gmon]
+        _mode = sorted([(_t, _cc == 126) for _t, _cc, _v in _evs if _cc in (126, 127)]
+                       + [(_t, False) for _t in _gm], key=lambda e: e[0])
+        if not any(_m for _t, _m in _mode):
+            continue
+        _spans = []; _st = None
+        for _t, _m in _mode:
+            if _m and _st is None:
+                _st = _t
+            elif not _m and _st is not None:
+                _spans.append((_st, _t)); _st = None
+        if _st is not None:
+            _spans.append((_st, total + 1.0))
+
+        def _mono_at(_t, _spans=_spans):
+            return any(_a <= _t < _b for _a, _b in _spans)
+
+        _mine = [_n for _n in notes if _n[0] == _c and _mono_at(_n[2])]
+        if not _mine:
+            continue
+        _in_mono.update(id(_n) for _n in _mine)
+        # Releases before presses at the same instant: a key lifted as the next
+        # goes down is not an overlap, so it is not a slur.
+        _ev = sorted([(_n[2], 1, _n) for _n in _mine]
+                     + [(_n[3], 0, _n) for _n in _mine],
+                     key=lambda e: (e[0], e[1]))
+        _stack = []            # held keys, in the order they went down
+        _cur = None            # (note tuple it came from, start, slur)
+
+        def _emit(_src, _start, _end, _slur, _cut):
+            if _end - _start <= 1e-9:
+                return
+            _nt = (_c, _src[1], _start, _end) + tuple(_src[4:])
+            _mono_notes.append(_nt)
+            if _slur:
+                _MONO_SLUR.add((_c, _src[1], _start))
+            if _cut:
+                _MONO_CUT.add((_c, _src[1], _start))
+
+        for _t, _kind, _n in _ev:
+            if _kind == 1:
+                if _cur is not None:
+                    _emit(_cur[0], _cur[1], _t, _cur[2], True)
+                _stack = [_x for _x in _stack if _x[1] != _n[1]] + [_n]
+                _cur = (_n, _t, _cur is not None)
+            else:
+                _top = _cur is not None and _cur[0][1] == _n[1]
+                _stack = [_x for _x in _stack if _x[1] != _n[1]]
+                if not _top:
+                    continue            # already replaced: nothing sounds for it
+                if _stack:
+                    _emit(_cur[0], _cur[1], _t, _cur[2], True)
+                    _cur = (_stack[-1], _t, True)   # back to the key still down
+                else:
+                    _emit(_cur[0], _cur[1], _t, _cur[2], False)
+                    _cur = None
+    if _mono_notes:
+        notes = [_n for _n in notes if id(_n) not in _in_mono] + _mono_notes
+
 
     # THE SAME SPLIT THE PITCH WHEEL GETS, and for the same reason: a table set
     # before the channel's first note and never changed is a TEMPERAMENT, and a
@@ -692,7 +901,11 @@ def prepare(path, tuner='hybrid440'):
     # the change is reported rather than silently interpolated.
     _OTUN = {}
     for _c, _ev in sotas.items():
-        _ev = sorted(_ev)
+        # ON TIME ALONE, and stably. sorted() on the bare tuples broke ties on
+        # the table itself, so two tables sent on the same tick came out in
+        # order of their cents rather than the order they were sent -- which
+        # mattered the moment GM System On started posting a zero table.
+        _ev = sorted(_ev, key=lambda e: e[0])
         _f = min((_n[2] for _n in notes if _n[0] == _c), default=None)
         if _f is None:
             continue
@@ -700,7 +913,10 @@ def prepare(path, tuner='hybrid440'):
                     _ev[0][1])
         if any(abs(_x) > 1e-9 for _x in _tab):
             _OTUN[_c] = _tab
-        if len({_t for _s, _t in _ev}) > 1:
+        # Only a change AFTER the first note is a change mid-piece. A header
+        # that sets a table and then resets it on the same tick has changed
+        # its mind before anyone played, which is nothing to report.
+        if any(_s > _f + 1e-6 and _t != _tab for _s, _t in _ev):
             print("  scale/octave tuning changes mid-piece on channel %d; "
                   "the table in force at its first note is used" % _c)
 
@@ -792,13 +1008,56 @@ def prepare(path, tuner='hybrid440'):
     for _n in notes:
         if _n[0] not in _first_on or _n[2] < _first_on[_n[0]]:
             _first_on[_n[0]] = _n[2]
-    for _c, _ev in pws.items():
-        _ev = sorted(_ev)
+    # ONE RATIO PER CHANNEL, FROM FIVE INPUTS: the wheel over its range (RPN 0),
+    # the channel's coarse and fine tuning (RPN 2, 1), and the device's master
+    # coarse and fine tuning (Universal Realtime 04 04, 04 03). The split below
+    # then runs on the PRODUCT, so a coarse tune set in the header is a
+    # temperament exactly as a static wheel is, and an RPN 0 change while the
+    # wheel is off centre moves the pitch -- which is the entire point of RPN 0.
+    # tonelib.channel_pitch_ratio is the same function live.py's _repitch uses.
+    #
+    # IN THE ORDER THE FILE SENT THEM, not by a rule about which kind of
+    # message usually comes first. Most of these land on the same tick -- a
+    # file's header is all tick zero -- and the first draft broke those ties by
+    # putting GM System On first, on the theory that that is where files put
+    # it. A file that tunes and THEN resets was left tuned. Message order is
+    # the only tie-break that is not a guess.
+    def _pitch_stream(_c):
+        _ev = [(_t, _q, 'wheel', _p) for _t, _q, _p in _pwseq.get(_c, ())]
+        _ev += [(_t, _q, _k, _v) for _t, _k, _v, _q in rpns.get(_c, ())
+                if _k in ('range', 'fine', 'coarse')]
+        _ev += [(_t, _q, 'm' + _k, _v) for _t, _k, _v, _q in master
+                if _k in ('fine', 'coarse')]
+        _ev += [(_t, _q, 'gmon', None) for _t, _q in gmon]
+        _ev.sort(key=lambda e: (e[0], e[1]))
+        st = {}
+        out = []
+        for _t, _o, _k, _v in _ev:
+            if _k == 'gmon':
+                st = {}
+            else:
+                st[_k] = _v
+            out.append((_t, T.channel_pitch_ratio(
+                st.get('range', T.BEND_RANGE_SEMITONES), st.get('wheel', 0),
+                st.get('coarse', 0.0), st.get('fine', 0.0),
+                st.get('mcoarse', 0.0), st.get('mfine', 0.0))))
+        return out
+
+    _pchans = set(pws) | set(rpns) | (set(_first_on) if master else set())
+    for _c in _pchans:
+        _ev = _pitch_stream(_c)
         _f = _first_on.get(_c)
-        if _f is None:
-            continue                            # a wheel on a silent channel
-        _tun = T.bend_ratio(next((_p for _t, _p in _ev if _t <= _f + 1e-6), 0))
-        _res = [(_t, T.bend_ratio(_p) / _tun) for _t, _p in _ev]
+        if _f is None or not _ev:
+            continue                            # tuning a silent channel
+        # THE VALUE IN FORCE AT THE FIRST NOTE, which is the LAST event at or
+        # before it. This used to take the FIRST such event: a file that set
+        # the wheel twice before playing was tuned by the setting it had
+        # already changed its mind about.
+        _pre = [_r for _t, _r in _ev if _t <= _f + 1e-6]
+        _tun = _pre[-1] if _pre else 1.0
+        # Only what happens once the channel is sounding can be a gesture;
+        # anything earlier is folded into the tuning above.
+        _res = [(_t, _r / _tun) for _t, _r in _ev if _t > _f + 1e-6]
         if abs(_tun - 1.0) > 1e-12:
             _BTUN[_c] = _tun
         if any(abs(_r - 1.0) > 1e-9 for _, _r in _res):
@@ -1030,7 +1289,9 @@ def prepare(path, tuner='hybrid440'):
     # in the note loop so it overrides a held pedal.
     _SOFF_CH = {}
     for _c, _evs in ccs.items():
-        _ts = sorted(_t for _t, _cc, _v in _evs if _cc == 120)
+        # 126 and 127 too: Roland's MONO and POLY are "the same processing ...
+        # as when All Sounds Off and All Notes Off is received".
+        _ts = sorted(_t for _t, _cc, _v in _evs if _cc in (120, 126, 127))
         if _ts:
             _SOFF_CH[_c] = _ts
 
@@ -1265,11 +1526,19 @@ def prepare(path, tuner='hybrid440'):
                  if (_n[0], _n[1], _n[2]) not in _GLISS_DROP] + _GLISS_STEPS
 
     def _sound_off(_c, _t):
-        """The first All Sound Off on this channel at or after _t."""
+        """The first All Sound Off on this channel strictly AFTER _t.
+
+        Strictly, not "at or after". A sound-off on the same tick as a note-on
+        is in the file's header nearly every time it happens -- CC126 and
+        CC127 carry one, and they are set before the first note -- and "at or
+        after" let it kill the note it preceded, four milliseconds in. It was
+        the same for a bare CC120; nobody sends one of those in a header, so it
+        never showed until mono mode did.
+        """
         _ts = _SOFF_CH.get(_c)
         if not _ts:
             return None
-        _i = _bisect.bisect_left(_ts, _t)
+        _i = _bisect.bisect_right(_ts, _t)
         return _ts[_i] if _i < len(_ts) else None
 
     def _damper_falls(_c, _t):
@@ -1619,7 +1888,9 @@ def prepare(path, tuner='hybrid440'):
         # the string's own decay run on under a lifted damper. Which is what
         # actually happens.
         _nx = _next_same.get(((ch, note), on))
-        if not getattr(pc, 'one_shot', False) and getattr(pc, 'damper_pedal', True):
+        _mcut = (ch, note, on) in _MONO_CUT
+        if (not getattr(pc, 'one_shot', False) and getattr(pc, 'damper_pedal', True)
+                and not _mcut):
             _rel = _damper_falls(ch, off)
             if _rel > off:
                 # ...AND NO LONGER THAN UNTIL THIS SAME STRING IS STRUCK AGAIN.
@@ -1644,7 +1915,7 @@ def prepare(path, tuner='hybrid440'):
         # a string re-struck is a string re-damped whatever any pedal is doing.
         _sh = _SOST_HELD.get((ch, note, on))
         if _sh is not None and _sh > off and getattr(pc, 'damper_pedal', True) \
-                and not getattr(pc, 'one_shot', False):
+                and not getattr(pc, 'one_shot', False) and not _mcut:
             if _nx is not None:
                 _sh = min(_sh, max(off, _nx - RETRIGGER_FADE))
             off = max(off, _sh)
@@ -1673,7 +1944,8 @@ def prepare(path, tuner='hybrid440'):
         # run -- that is what "blow through the harmonics" means -- so every
         # step takes the legato attack whether or not _legato_ticks saw it.
         # It could not have: these notes did not exist when the file was parsed.
-        if _lg is not None and (ch, note, on) in _GLISS:
+        if _lg is not None and ((ch, note, on) in _GLISS
+                                or (ch, note, on) in _MONO_SLUR):
             at = min(at, _lg)
         _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
@@ -1698,6 +1970,12 @@ def prepare(path, tuner='hybrid440'):
         # _nx was looked up above, before the pedal could move `off`.
         if _nx is not None and _nx > off:
             rel = min(rel, max(RETRIGGER_FADE, _nx - off)*SR)
+        # ONE VOICE CANNOT BE IN TWO PLACES. A mono note cut by the next one
+        # hands its voice straight over: the release is the steal-fade and not
+        # the instrument's own, which would leave the old pitch sounding under
+        # the new one for as long as the instrument rings.
+        if _mcut:
+            rel = min(rel, RETRIGGER_FADE * SR)
         # chiff burst width: short/capped, decoupled from the slow speech fade
         # A CONSONANT IS NOISE FOR ITS WHOLE LENGTH. The 45% cap is right for
         # a pipe, where chiff is a transient before the tone settles -- but a
@@ -2345,7 +2623,17 @@ def prepare(path, tuner='hybrid440'):
     for i, f in enumerate(ROOM_BANDS):
         d, r = _QACC[i]
         room_q.append((f, (d / r) if r > 0.0 else 1.0, d))
+    # MASTER VOLUME, the device's own fader: every channel, after everything.
+    # A GM System On puts it back to full. Kept as (sample, gain) steps and
+    # ramped where it is applied, in synth_window.
+    _mv = [(_t, _q, _v) for _t, _k, _v, _q in master if _k == 'vol']
+    _mv += [(_t, _q, 1.0) for _t, _q in gmon]
+    _mv.sort(key=lambda e: (e[0], e[1]))
+    mvol = [(int(round(_t * SR)), float(_g)) for _t, _q, _g in _mv]
+    if mvol and all(abs(_g - 1.0) < 1e-12 for _, _g in mvol):
+        mvol = []                       # a file that only ever says "full"
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
+                mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH))
     for k,dt in (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("br","i4"),
@@ -2359,6 +2647,35 @@ def prepare(path, tuner='hybrid440'):
         prep[k] = arr(k, dt)
     return prep
 
+# How long a Master Volume change takes to arrive. A step in gain is a step in
+# the waveform, and a step is a click -- the same argument RETRIGGER_FADE makes
+# for a cut note. Five milliseconds is under anything a fader could be heard
+# to glide and over anything a click needs.
+MASTER_RAMP_S = 0.005
+
+
+def master_curve(mvol, n0, n):
+    """Master Volume over samples [n0, n0+n), or None if the file never set it.
+
+    Each change ramps linearly from the gain before it over MASTER_RAMP_S.
+    """
+    if not mvol:
+        return None
+    ramp = max(1, int(MASTER_RAMP_S * SR))
+    g = np.empty(n, np.float32)
+    prev = 1.0
+    idx = np.arange(n0, n0 + n, dtype=np.int64)
+    g[:] = prev
+    for s0, v in mvol:
+        if s0 >= n0 + n:
+            break
+        frac = np.clip((idx - s0) / float(ramp), 0.0, 1.0)
+        live = idx >= s0
+        g[live] = (prev + (v - prev) * frac[live]).astype(np.float32)
+        prev = v
+    return g
+
+
 def synth_window(prep, n0, winlen):
     """Synthesise absolute samples [n0, n0+winlen) -> (L, R) float32, gained and
     clipped. Stateless (analytic phase), so a player calls it per audio block."""
@@ -2367,6 +2684,9 @@ def synth_window(prep, n0, winlen):
     # Friction is not a partial. The consonant bursts are generated and mixed
     # here rather than scheduled as voices -- see noisegen.py for why.
     _NG.mix(L, R, n0, prep.get('cons_bursts'), SR)
+    _mg = master_curve(prep.get('mvol'), n0, winlen)
+    if _mg is not None:
+        L *= _mg; R *= _mg
     L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
     return L,R
 
@@ -2654,6 +2974,12 @@ if __name__=="__main__":
         _br = np.zeros(_LAST_PREP['N'], np.float32)
         synth_partials(_LAST_PREP, 0, _LAST_PREP['N'], 0, _LAST_PREP['P'], _bl, _br)
         _LAST_PREP['aL'][:], _LAST_PREP['aR'][:] = _sav
+        # The room hears the device's output, so a master fader that moves
+        # moves the send too -- otherwise fading a piece out would leave its
+        # reverb standing at full.
+        _mg = master_curve(_LAST_PREP.get('mvol'), 0, _LAST_PREP['N'])
+        if _mg is not None:
+            _bl *= _mg; _br *= _mg
         write_wav(os.path.splitext(outp)[0] + '.send.wav', _bl, _br)
         print("  reverb send: %d channel(s) at their own distance, bus written"
               % len(_rs))

@@ -19,10 +19,20 @@ engine does not do for anything yet. Until it does, live glides a valved voice
 only as far as the lip reaches and plays anything wider clean, so the two paths
 agree to two semitones and diverge deliberately past it.
 
-**One question still open**, and it applies to both paths. Does the gliss
-occupy the space *between* two notes, or the attack *of* the second one? It
-currently takes the head of the target note — a rip into a note is part of that
-note — but a player does both, and the controller does not distinguish them.
+**Settled: the gliss takes the head of the note it arrives at**, and the
+arrival is late by the length of the run. Three reasons, and the first is
+decisive. Roland's text puts the glide at the note-on — a note after portamento
+*"will change continuously in pitch, starting from the pitch of the Source Note
+Number"* — so a file that uses CC65 or CC84 has already chosen this. Live can
+only do it this way: a gliss *between* two notes has to start before the second
+note-on, which means knowing it is coming. And a file that wants the arrival on
+the beat can put the note-on earlier; the renderer does what the bytes say.
+
+What is still worth revisiting is the cap: the run is limited to **half the
+note**, so on a short note a slow gliss is squeezed and CC5 means something
+different depending on note length. An absolute cap would keep CC5's meaning
+fixed. A notated "between" gliss, if ever wanted from a score, should be an
+explicit per-part setting on the file renderer and never a heuristic.
 
 **One refinement not attempted.** Technique 2, "move arbitrarily the valves
 while blowing through the harmonics", would wander the valve order instead of
@@ -31,8 +41,9 @@ another, and there isn't one yet.
 
 ## General MIDI 2
 
-Four of GM 2's features are in: Scale/Octave tuning by SysEx, CC93 chorus,
-CC91 reverb (file only), and portamento. What is left:
+In: Scale/Octave tuning by SysEx, CC93 chorus, CC91 reverb (file only),
+portamento, mono/poly mode, RPN 5 modulation depth range, and Master Volume,
+Fine and Coarse Tuning. What is left:
 
 | | state | note |
 |---|---|---|
@@ -41,11 +52,25 @@ CC91 reverb (file only), and portamento. What is left:
 | 9 drum kits | one kit | addressed by CC0=120 |
 | channel 11 as a second drum part | no | falls out of bank select |
 | CC71–78 sound controllers | none | **needs a design first**, see below |
-| CC124–127 mono/poly mode | none | mono makes portamento's source note unambiguous |
-| RPN 3, 4, 5 | only 0/0, 0/1, 0/2 | tuning program/bank select, modulation depth range |
-| Master Volume / Fine / Coarse SysEx | none | small and mechanical |
+| **RPN 3, 4** | not read | **not small** — see below |
+| CC121 in a file | live only | a file that resets its controllers mid-piece |
+| legato attack, live | file only | live mono re-articulates every note; the pitch path is right |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
 | CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
+
+**RPN 3 and 4 select a tuning PROGRAM, and there are none to select.** They
+are the MIDI Tuning Standard's program and bank select, and they point at
+tables a device holds — loaded by a Bulk Tuning Dump (`7E dd 08 01`) or edited
+note by note (`7F dd 08 02`). Receiving the select without a store behind it is
+what the code already does for any unknown RPN, so "implementing" it alone
+would add nothing. The real feature is the store, and it is interesting: an
+MTS table is **128 keys**, not 12 pitch classes, so it can carry a *stretched*
+tuning — exactly what `midi.md` says a Scale/Octave message cannot. The
+renderer's own tuners could be the built-in programs, and a file could carry
+`stretch` or `dynamic` to any MTS device. It would need a per-key table in both
+renderers (the Scale/Octave machinery generalised from 12 entries to 128), so
+it is medium, not small, and it wants a decision about how the built-in
+programs are numbered.
 
 **Bank select is load-bearing.** GM 2's whole extended sound set is addressed
 through it, and without it a GM 2 file's variations collapse silently onto the
