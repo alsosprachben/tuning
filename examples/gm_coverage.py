@@ -330,7 +330,8 @@ def percussion_table():
 # contents are the SC-55 owner's manual's drum set table (p.70-71); the sounds
 # are theory, and their level and length are matched to the Standard note each
 # replaces (examples/drumset_check.py). No reference audio exists for any of
-# them, and Ben's ear has not had its turn yet, so none is above 2.
+# them. Ben's ear has had its turn on what he heard -- all of Brush, and the
+# one Electronic note thememat plays -- which is 3; the rest stay at 2.
 KIT_RATED = {
     24: {
         36: (2, "a synth tom tuned down to a kick: the same downward sweep, narrower and faster"),
@@ -338,12 +339,12 @@ KIT_RATED = {
         40: (2, "an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s"),
         41: (2, "GM 118's synth tom at the Standard tom's pitch, given a drum's ring (0.85-0.95 s to silence) in place of its melodic one"),
         43: (2, "as 41"), 45: (2, "as 41"), 47: (2, "as 41"), 48: (2, "as 41"), 50: (2, "as 41"),
-        52: (2, "GM 119's reverse cymbal: a measured crash, swelling to the written note-off"),
+        52: (3, "GM 119's reverse cymbal: a measured crash, swelling to the written note-off. Ben's ear, in thememat (2026-09-23): good"),
     },
     40: {
-        38: (2, "a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes"),
-        39: (2, "a brush slapped FLAT: louder, and it lies on the head and chokes it"),
-        40: (2, "a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms"),
+        38: (3, "a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good"),
+        39: (3, "a brush slapped FLAT: louder, and it lies on the head and chokes it. As 38"),
+        40: (3, "a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms. As 38"),
     },
 }
 

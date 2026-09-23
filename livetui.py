@@ -685,6 +685,8 @@ class TUI:
         ("sustain pedal (CC64)", ("cc", 64)),
         ("expression pedal (CC11)", ("cc", 11)),
         ("another CC, by number", None),
+        ("a key: press it", "learn"),
+        ("a key: by name (C1, 36)", "name"),
     )
 
     def controls(self):
@@ -746,6 +748,39 @@ class TUI:
             self.send_control(c, default if c.get("value", default) != default else top)
             self.say("%s %d" % (label, c["value"]))
 
+    def learn_key(self, scr):
+        """Wait for the next key pressed on the keyboard: (channel, note), or
+        None if cancelled or nothing came in ten seconds. The press does not
+        play -- Live.learn_key swallows it and its release."""
+        self.live.learn_key()
+        self.say("press the key on your keyboard  (esc: cancel)", 11)
+        t0 = time.monotonic()
+        try:
+            while time.monotonic() - t0 < 10.0:
+                got = self.live.learned()
+                if got is not None:
+                    return got
+                self.draw(scr)
+                if scr.getch() == 27:
+                    self.say("cancelled")
+                    return None
+            self.say("no key came in")
+            return None
+        finally:
+            self.live.learn_cancel()
+
+    def _channel_of(self, s):
+        if s.lower() == "all":
+            return None
+        try:
+            c = int(s)
+        except ValueError:
+            c = 0
+        if not 1 <= c <= 16:
+            self.say("not a channel: %s" % s)
+            return False
+        return c - 1
+
     def ask_channel(self, scr, what):
         """None for every channel; False if cancelled or not a channel."""
         s = self.prompt(scr, "%s channel (1-16, blank = all): " % what)
@@ -783,6 +818,22 @@ class TUI:
         if i is None:
             return
         src = self.ROUTE_SOURCES[i][1]
+        learned_ch = None
+        if src == "learn":
+            got = self.learn_key(scr)
+            if got is None:
+                return
+            learned_ch, n = got
+            src = ("note", n)
+        elif src == "name":
+            s_ = self.prompt(scr, "key (C1, F#2, or 0-127): ")
+            if s_ is None:
+                return
+            try:
+                src = ("note", parse_note(s_))
+            except ValueError:
+                self.say("not a key: %s" % s_)
+                return
         if src is None:
             s = self.prompt(scr, "CC number (0-119): ")
             if s is None:
@@ -802,15 +853,31 @@ class TUI:
         if src[0] == "cc" and src[1] == dst or src[0] == dst:
             self.say("a control routed to itself does nothing")
             return
+        latch = False
+        if src[0] == "note" and LV.CONTROL_BY_KEY[dst][2] == "switch":
+            h = self.menu(scr, "the key", [
+                "held while down (a pedal)",
+                "toggle: each press flips it"])
+            if h is None:
+                return
+            latch = (h == 1)
         k = self.menu(scr, "and the original", [
             "replace it (the source stops doing what it did)",
             "keep it (the source does both)"])
         if k is None:
             return
-        ch = self.ask_channel(scr, "listen on")
+        if learned_ch is not None:
+            # The key's own channel is the natural answer; blank keeps it.
+            s_ = self.prompt(scr, "listen on channel (blank = %d, 'all' = all): "
+                             % (learned_ch + 1))
+            if s_ is None:
+                return
+            ch = learned_ch if s_ == "" else self._channel_of(s_)
+        else:
+            ch = self.ask_channel(scr, "listen on")
         if ch is False:
             return
-        r = LV.Route(src, dst, keep=(k == 1), channel=ch)
+        r = LV.Route(src, dst, keep=(k == 1), channel=ch, latch=latch)
         self.live.set_routes(self.live.routes + (r,))
         self.crow = len(self.ctl_rows()) - 1
         self.say("route " + r.describe())
@@ -1208,6 +1275,9 @@ class TUI:
             "  b                 bind a hotkey; it works from EVERY pane. Only keys",
             "                    the panel does not use itself are offered",
             "  r                 route one of the keyboard's controls onto another",
+            "                    -- or a KEY: press it, or name it. On a pedal it is",
+            "                    held while down, or toggles; on anything else it",
+            "                    sets the control from velocity while held",
             "  d                 delete the selected control or route",
             "",
             "  switches LATCH: press to put the pedal down, press again to lift",

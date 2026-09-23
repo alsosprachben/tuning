@@ -130,15 +130,15 @@ plays Standard, as does any program that is not a set.
 | 47 | Elec Mid Tom 1 | `SynthDrum` | **2** | as 41 |
 | 48 | Elec Hi Tom 2 | `SynthDrum` | **2** | as 41 |
 | 50 | Elec Hi Tom 1 | `SynthDrum` | **2** | as 41 |
-| 52 | Reverse Cymbal | `ReverseCymbal` | **2** | GM 119's reverse cymbal: a measured crash, swelling to the written note-off |
+| 52 | Reverse Cymbal | `ReverseCymbal` | **3** | GM 119's reverse cymbal: a measured crash, swelling to the written note-off. Ben's ear, in thememat (2026-09-23): good |
 
 ### 40 Brush
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 38 | Brush Tap | `BrushTap` | **2** | a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes |
-| 39 | Brush Slap | `BrushSlap` | **2** | a brush slapped FLAT: louder, and it lies on the head and chokes it |
-| 40 | Brush Swirl | `BrushSwirl` | **2** | a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms |
+| 38 | Brush Tap | `BrushTap` | **3** | a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good |
+| 39 | Brush Slap | `BrushSlap` | **3** | a brush slapped FLAT: louder, and it lies on the head and chokes it. As 38 |
+| 40 | Brush Swirl | `BrushSwirl` | **3** | a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms. As 38 |
 
 ## 0-7 Piano
 

@@ -649,6 +649,14 @@ half-moon switch, and here they are read as a level instead of an edge. A CC
 routed onto a pedal switches at 64, as a real pedal does. The previous section
 is why routing the mod wheel away is not a small thing.
 
+**A key is a source too.** Notes pass through the routes as controllers do. A
+route on a key consumes that key unless it keeps it. It only swallows a
+release whose press it took, so a route added under a held key can't leave a
+note stuck. On a knob, the key's release restores the control's last value
+on that channel. The routes keep that value as messages pass (`Live.seen`),
+because the engine doesn't keep every control per channel. CC121 and a system
+reset clear it.
+
 The panel's on-screen controls go past the routes (`Live.inject`), so a route
 can never feed back into itself. A route that turns the mod wheel into
 sostenuto catches exactly the keys a real CC66 does, and the selftest checks

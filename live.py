@@ -283,6 +283,14 @@ def control_message(key, value, channel):
                         value=max(0, min(127, int(value))))
 
 
+_KEY_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
+
+def key_name(n):
+    """MIDI 60 is C4, as the TUI names notes."""
+    return "%s%d" % (_KEY_NAMES[n % 12], n // 12 - 1)
+
+
 class Route(object):
     """One hardware control made to drive another.
 
@@ -308,12 +316,19 @@ class Route(object):
     input thread that calls on_midi.
     """
 
-    def __init__(self, src, dst, keep=False, channel=None):
+    def __init__(self, src, dst, keep=False, channel=None, latch=False):
         self.src = tuple(src)
         self.dst = dst
         self.keep = bool(keep)
         self.channel = None if channel is None else int(channel)
+        self.latch = bool(latch)     # a KEY onto a switch: press toggles
         self._down = {}
+        self._held = set()           # channels whose key this route swallowed
+        self._prior = {}             # channel -> the value before the key went down
+
+    @staticmethod
+    def _is_on(msg):
+        return msg.type == "note_on" and msg.velocity > 0
 
     def matches(self, msg):
         if self.channel is not None and getattr(msg, "channel", None) != self.channel:
@@ -325,6 +340,13 @@ class Route(object):
             return msg.type == "pitchwheel"
         if kind == "pressure":
             return msg.type == "aftertouch"
+        if kind == "note":
+            if msg.type not in ("note_on", "note_off") or msg.note != self.src[1]:
+                return False
+            # A RELEASE ONLY IF THIS ROUTE TOOK THE PRESS. A route added while
+            # the key was already down lets its release through, so the note
+            # that key is sounding ends instead of sticking.
+            return self._is_on(msg) or msg.channel in self._held
         return False
 
     def _level(self, msg):
@@ -340,13 +362,17 @@ class Route(object):
             return abs(p) / 8192.0
         return msg.value / 127.0
 
-    def rewrite(self, msg):
-        """The messages this route turns `msg` into; empty if nothing changes."""
+    def rewrite(self, msg, seen=None):
+        """The messages this route turns `msg` into; empty if nothing changes.
+        `seen` is Live.seen, the last value of each control on each channel,
+        which a key restores when it comes up."""
         ch = msg.channel
         spec = CONTROL_BY_KEY.get(self.dst)
         if spec is None:
             return []
         dkind = spec[2]
+        if self.src[0] == "note":
+            return self._key(msg, ch, spec, seen or {})
         x = self._level(msg)
         if dkind == "switch":
             was = self._down.get(ch, False)
@@ -369,23 +395,63 @@ class Route(object):
             return [control_message("bend", round(p), ch)]
         return [control_message(self.dst, round(x * 127.0), ch)]
 
+    def _key(self, msg, ch, spec, seen):
+        """A KEY AS A CONTROL. A MIDI key sends its release, which a terminal
+        key never does, so a spare key is a real momentary button:
+
+          onto a switch       held while down -- a pedal -- or, with `latch`,
+                              each press toggles it
+          onto anything else  the key's VELOCITY while it is held, and on
+                              release the value the control had before; the
+                              wheel bends up by velocity/127 of its travel
+        """
+        on = self._is_on(msg)
+        if on:
+            self._held.add(ch)
+        else:
+            self._held.discard(ch)
+        dkind = spec[2]
+        if dkind == "switch":
+            was = self._down.get(ch, False)
+            if self.latch:
+                if not on:
+                    return []
+                now = not was
+            else:
+                now = on
+                if now == was:
+                    return []
+            self._down[ch] = now
+            return [control_message(self.dst, 127 if now else 0, ch)]
+        if on:
+            if ch not in self._prior:
+                self._prior[ch] = seen.get((ch, self.dst), spec[3])
+            v = msg.velocity
+            return [control_message(self.dst,
+                                    round(v / 127.0 * 8191) if dkind == "bend" else v, ch)]
+        prior = self._prior.pop(ch, None)
+        return [] if prior is None else [control_message(self.dst, prior, ch)]
+
     def to_dict(self):
         return dict(src=list(self.src), dst=self.dst, keep=self.keep,
-                    channel=self.channel)
+                    channel=self.channel, latch=self.latch)
 
     @classmethod
     def from_dict(cls, d):
-        return cls(d["src"], d["dst"], d.get("keep", False), d.get("channel"))
+        return cls(d["src"], d["dst"], d.get("keep", False), d.get("channel"),
+                   d.get("latch", False))
 
     def describe(self):
         s = self.src
         src = (CONTROL_BY_KEY.get(s[1], (0, "CC%d" % s[1]))[1] if s[0] == "cc"
                else {"up": "pitch \u2191", "down": "pitch \u2193",
                      "both": "pitch \u2195"}.get(s[1] if len(s) > 1 else "up")
-               if s[0] == "bend" else "aftertouch")
+               if s[0] == "bend"
+               else "key %s" % key_name(s[1]) if s[0] == "note" else "aftertouch")
         dst = CONTROL_BY_KEY.get(self.dst, (None, str(self.dst)))[1]
-        how = ("held" if CONTROL_BY_KEY.get(self.dst, (0, 0, ""))[2] == "switch"
-               else "scaled")
+        sw = CONTROL_BY_KEY.get(self.dst, (0, 0, ""))[2] == "switch"
+        how = (("toggle" if self.latch else "held") if sw
+               else "velocity" if s[0] == "note" else "scaled")
         return "%s \u2192 %s  %s  %s  %s" % (
             src, dst, how, "keeps" if self.keep else "replaces",
             "all" if self.channel is None else "ch%d" % (self.channel + 1))
@@ -1795,6 +1861,9 @@ class Live:
         self.n = 0                       # absolute sample clock
         self.events = collections.deque()
         self.routes = ()             # Route table, applied in on_midi
+        self.seen = {}               # (channel, control key) -> last value
+        self._learn = None
+        self._learn_swallow = set()
         # The panel's on-screen controls, as plain dicts. The ENGINE does not
         # read these -- a control sends ordinary messages through inject() --
         # they are kept here so a preset carries them with the rig.
@@ -1997,26 +2066,78 @@ class Live:
         """
         if msg.type not in self._ACCEPT:
             return
+        if msg.type in ("note_on", "note_off") and self._learn_take(msg):
+            return
         routes = self.routes
         msgs = [msg]
-        if routes and msg.type in ("control_change", "pitchwheel", "aftertouch"):
+        if routes and msg.type in ("control_change", "pitchwheel", "aftertouch",
+                                   "note_on", "note_off"):
             out, consumed = [], False
             for r in routes:
                 if r.matches(msg):
-                    out.extend(r.rewrite(msg))
+                    out.extend(r.rewrite(msg, self.seen))
                     consumed = consumed or not r.keep
             msgs = out if consumed else [msg] + out
+        for m in msgs:
+            self._see(m)
         if msgs:
             now = time.monotonic()
             with self.lock:
                 for m in msgs:
                     self.events.append((now, m))
 
+    # THE LAST VALUE OF EACH CONTROL ON EACH CHANNEL, as it passed through here
+    # from the keyboard or the panel -- what a key routed onto a control puts
+    # back when it comes up. The engine's own state is not asked: it does not
+    # keep every control per channel (the mod wheel's last value is global).
+    # The resets are honoured, so a release never restores a value the file
+    # has since wiped.
+    _RESET_KEYS = (1, 11, 64, 65, 66, 67, "bend", "pressure")
+
+    def _see(self, m):
+        t = m.type
+        if t == "control_change":
+            if m.control == 121:
+                for k in self._RESET_KEYS:
+                    self.seen.pop((m.channel, k), None)
+            elif m.control in CONTROL_BY_KEY:
+                self.seen[(m.channel, m.control)] = m.value
+        elif t == "pitchwheel":
+            self.seen[(m.channel, "bend")] = m.pitch
+        elif t == "aftertouch":
+            self.seen[(m.channel, "pressure")] = m.value
+        elif t == "sysex" and (B.gm_on_level(m.data) or B.parse_gs_reset(m.data)):
+            self.seen.clear()
+
+    # LEARNING A KEY: the TUI arms it, the next key pressed anywhere is taken
+    # as the answer, and neither that press nor its release plays.
+    def learn_key(self):
+        self._learn = "armed"
+
+    def learned(self):
+        got = self._learn
+        return got if isinstance(got, tuple) else None
+
+    def learn_cancel(self):
+        self._learn = None
+
+    def _learn_take(self, msg):
+        k = (msg.channel, msg.note)
+        if self._learn == "armed" and msg.type == "note_on" and msg.velocity > 0:
+            self._learn = k
+            self._learn_swallow.add(k)
+            return True
+        if k in self._learn_swallow and not (msg.type == "note_on" and msg.velocity > 0):
+            self._learn_swallow.discard(k)
+            return True
+        return False
+
     def inject(self, msg):
         """A message from the PANEL: queued exactly as hardware's, past the
         routes. An on-screen control is already the destination, and routing it
         again could send it round in a circle."""
         if msg.type in self._ACCEPT:
+            self._see(msg)
             with self.lock:
                 self.events.append((time.monotonic(), msg))
 
@@ -8867,7 +8988,7 @@ def selftest():
     _ui.key(_scr, ord("r"))
     check("panel: r adds a route",
           [x.to_dict() for x in _lr.routes]
-          == [dict(src=["bend", "up"], dst=66, keep=False, channel=None)])
+          == [dict(src=["bend", "up"], dst=66, keep=False, channel=None, latch=False)])
     _ui.crow = 2
     _ui.key(_scr, ord("d"))
     _ui.crow = 0
@@ -8898,6 +9019,73 @@ def selftest():
           _on and _off and _held and 0 not in _lmo.mono,
           "  (toggled from its hotkey, then held by the pitch wheel through a route)")
     _lmo.shutdown()
+
+    # A KEY AS A CONTROL. A MIDI key sends its release, so a spare key is a
+    # real momentary button: held or toggling on a switch, velocity-while-held
+    # on anything else, and consumed unless the route keeps it.
+    _lk2 = Live(program=0, rate=48000, frames=128, verbose=False)
+
+    def _kd():
+        with _lk2.lock:
+            _e = [m for _t, m in _lk2.events]
+            _lk2.events.clear()
+        return [(m.type, getattr(m, "control", getattr(m, "note", None)),
+                 getattr(m, "value", getattr(m, "pitch", getattr(m, "velocity", None))))
+                for m in _e]
+    _kon = lambda n, v=100: mido.Message("note_on", channel=0, note=n, velocity=v)
+    _koff = lambda n: mido.Message("note_off", channel=0, note=n, velocity=0)
+    _lk2.set_routes([Route(("note", 36), 64)])
+    _lk2.on_midi(_kon(36)); _a = _kd(); _lk2.on_midi(_koff(36)); _b = _kd()
+    _lk2.set_routes([Route(("note", 36), 64, latch=True)])
+    for _m in (_kon(36), _koff(36), _kon(36), _koff(36)):
+        _lk2.on_midi(_m)
+    _c = _kd()
+    check("a key as a pedal: held while down, or each press toggles, and it plays no note",
+          _a == [("control_change", 64, 127)] and _b == [("control_change", 64, 0)]
+          and _c == [("control_change", 64, 127), ("control_change", 64, 0)],
+          "  (held %s %s; toggling %s)" % (_a, _b, _c))
+    _lk2.on_midi(mido.Message("control_change", channel=0, control=1, value=40)); _kd()
+    _lk2.set_routes([Route(("note", 37), 1)])
+    _lk2.on_midi(_kon(37, 100)); _lk2.on_midi(_koff(37)); _d = _kd()
+    _lk2.set_routes([Route(("note", 37), 11), Route(("note", 38), "bend")])
+    _lk2.on_midi(_kon(37, 90)); _lk2.on_midi(_koff(37))
+    _lk2.on_midi(_kon(38, 127)); _lk2.on_midi(_koff(38)); _e2 = _kd()
+    check("...on a knob, velocity while held, and back to what it was on release",
+          _d == [("control_change", 1, 100), ("control_change", 1, 40)]
+          and _e2 == [("control_change", 11, 90), ("control_change", 11, 127),
+                      ("pitchwheel", None, 8191), ("pitchwheel", None, 0)],
+          "  (mod wheel %s; expression back to its default, the wheel to centre: %s)"
+          % (_d, _e2))
+    _lk2.set_routes([Route(("note", 36), 64, keep=True)])
+    _lk2.on_midi(_kon(36)); _f = _kd(); _lk2.on_midi(_koff(36)); _kd()
+    _lk2.set_routes([]); _lk2.on_midi(_kon(40)); _kd()
+    _lk2.set_routes([Route(("note", 40), 64)]); _lk2.on_midi(_koff(40)); _g = _kd()
+    check("...kept, it plays AND switches; added under a held key, it lets the release through",
+          [x[0] for x in _f] == ["note_on", "control_change"]
+          and _g == [("note_off", 40, 0)],
+          "  (no stuck note: the route never took that key's press)")
+    _lk2.learn_key(); _lk2.on_midi(_kon(50)); _lk2.on_midi(_koff(50))
+    _h = (_lk2.learned(), _kd()); _lk2.learn_cancel()
+    _rk = Route.from_dict(Route(("note", 36), 64, latch=True, channel=2).to_dict())
+    _rold = Route.from_dict(dict(src=["cc", 1], dst=66, keep=False, channel=None))
+    check("...a key is learned by pressing it, silently; and presets keep the toggle",
+          _h == ((0, 50), []) and _rk.latch and _rk.src == ("note", 36)
+          and _rold.latch is False,
+          "  (%s)" % (_h,))
+    # The TUI: r -> a key by name -> sustain -> toggle -> replace -> all channels.
+    _lk2.set_routes([])
+    _uk = _tui.TUI(_lk2, "stub"); _uk.builder.stop = True
+    _src_i = [x[1] for x in _uk.ROUTE_SOURCES].index("name")
+    _answers[:] = [_src_i, "C1", [c[0] for c in CONTROLS].index(64), 1, 0, ""]
+    _uk.menu = lambda scr, title, items, start=0: _answers.pop(0)
+    _uk.prompt = lambda scr, label: _answers.pop(0)
+    _uk.pane = 2
+    _uk.key(_Scr(24, 80), ord("r"))
+    check("...and the panel builds one: r, a key by name, sustain, toggle",
+          [x.to_dict() for x in _lk2.routes]
+          == [dict(src=["note", 24], dst=64, keep=False, channel=None, latch=True)],
+          "  (%s)" % [x.describe() for x in _lk2.routes])
+    _lk2.renderer.close()
 
     # ---- BANK SELECT AND DRUM SETS -----------------------------------------
     import percussion_map as _PM

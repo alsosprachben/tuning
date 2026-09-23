@@ -142,7 +142,9 @@ between the default and full travel.
 
 **Routes** (`r`) remap the keyboard's own controls before the engine sees
 them. Sources are the mod wheel, the pitch wheel up, down or either way,
-aftertouch, and any CC. The destination can be anything in the catalogue.
+aftertouch, any CC, and **any key**. You pick the key by pressing it (the
+press doesn't play) or by name. The destination can be anything in the
+catalogue.
 What a route does follows from the two ends:
 
 | route | behaviour |
@@ -151,6 +153,8 @@ What a route does follows from the two ends:
 | a CC → a pedal | 64 and above is down, GM's own switch point |
 | anything → a CC | its travel scaled to 0–127 |
 | a CC → the pitch wheel | 0–127 onto the full bend, centred at 64 |
+| a key → a pedal | **held while down**, or, if the route says so, **each press toggles** it. A MIDI key sends its release, which a terminal key never does, so a spare key is a real pedal |
+| a key → anything else | the key's **velocity** while it's held, and on release the value the control had before. Hit it harder for more vibrato; on the pitch wheel it bends up by velocity |
 
 A route **replaces** its source unless you choose to keep the original. The
 pitch wheel routed to sustain stops bending. Rerouting the mod wheel takes away

@@ -101,15 +101,10 @@ reset them. Both renderers assume it doesn't.
 
 ## The panel's controls and routes
 
-Built (README, "Controls a keyboard doesn't have"). Two things were left out on
-purpose:
+Built (README, "Controls a keyboard doesn't have"), including **a key as a
+control**: any key, held or toggling on a pedal, velocity-while-held on
+anything else. One thing was left out on purpose:
 
-- **A key as a pedal.** On a keyboard that sends only notes, the natural
-  momentary control is a key it can spare, such as the bottom A held as
-  sustain. A route source of `('note', n)` would do it with the same
-  held-while-down logic the wheel uses: note-on puts the pedal down, note-off
-  lifts it, and the note itself is consumed. It was not asked for, and it takes
-  a key away from the music.
 - **Routes in the file renderer.** They are a property of the player's
   keyboard, not the score, so `blockrender.py` doesn't see them. A file that
   wants sustain writes CC64.
