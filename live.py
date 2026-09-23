@@ -744,6 +744,36 @@ class Slab:
             a["p0"][idx] -= a["om"][idx] * float(dl)
             a["p0R"][idx] += a["om"][idx] * float(dl)
 
+    def soft_strings(self, slots, drop, top):
+        """Silence the `drop` highest unison voices of a note -- una corda.
+
+        AT NOTE-ON ONLY, and that is not a shortcut. The shift moves the whole
+        action sideways so the hammer no longer REACHES the last string; once a
+        note has been struck, moving the pedal cannot un-strike a string that
+        is already vibrating. A real una corda pedal pressed mid-note does
+        nothing to the notes already sounding, and neither does this.
+
+        The strings are already separable: blockrender stamps every unison
+        voice with its own index in `pl` (_PL[0] = ui + 1), so this is a mask
+        on a column that exists rather than a filter over one that does not.
+
+        `top` is the INSTRUMENT's highest string index, not this note's. A note
+        with one or two strings loses nothing: the action still slides, and the
+        hammer still covers every string there is. Taking "the highest present"
+        instead removed the second string in the bass, where the file renderer
+        correctly removed none -- measured as a 0.48 dB divergence at C2.
+        """
+        if not slots or drop <= 0 or top <= 0:
+            return
+        idx = np.fromiter(slots, np.int64, len(slots))
+        gone = idx[self.a["pl"][idx] > top - drop]
+        if not len(gone):
+            return
+        for arr in (self.aL0, self.aR0, self.a["aL"], self.a["aR"],
+                    self.tr_aL, self.tr_aR, self.ls_aL, self.ls_aR,
+                    self.cv_aL, self.cv_aR):
+            arr[gone] = 0.0
+
     def retune(self, slots, n, om_scale=None, vd=None, vrs=None):
         """Change a sounding partial's pitch or vibrato WITHOUT a click.
 
@@ -1072,6 +1102,26 @@ class Bank:
         # one stops when the player does. Drums are one-shots and ignore
         # note-off entirely, so the pedal cannot reach them either way.
         self.damper_pedal = (not drums) and bool(getattr(pc, "damper_pedal", True))
+        # How many strings the una corda shift takes away; 0 on everything
+        # that is not a grand. See SynthProperties.soft_pedal_strings.
+        self.soft_pedal_strings = (0 if drums
+                                   else int(getattr(pc, "soft_pedal_strings", 0)))
+        # ...and WHICH strings those are. The shift takes the third string of a
+        # TRICHORD; on a note that has only one or two it still moves, and the
+        # hammer still covers every string there is. So the index is fixed by
+        # the instrument, not by what a given note happens to have -- dropping
+        # "the highest one present" would take the second string in the bass,
+        # where the file renderer correctly takes nothing.
+        # note_detune_cents is drawn PER NOTE in __init__, so the class does
+        # not carry it -- ask an instance at a reference pitch. Its length is
+        # the instrument's string complement and does not vary with the note.
+        self.soft_pedal_top = 0
+        if not drums and self.soft_pedal_strings:
+            try:
+                self.soft_pedal_top = len(
+                    pc(261.63, 0.0, 1.0, 1.0).note_detune_cents or ())
+            except Exception:
+                self.soft_pedal_top = 0
         self.drone_wheel = (not drums) and bool(getattr(pc, "drone_wheel", False))
         # RATIOS OF THE TONIC, not frequencies. A drone is tuned to the
         # chanter before playing, so it has to follow the part's tuner: at
@@ -1488,6 +1538,8 @@ class Live:
         # GM2 scale/octave tuning: twelve cent offsets per channel, and the
         # ratio last APPLIED to each pitch class so a repeat cannot compound.
         # It cannot fold into self.bend, which is one scalar for the channel.
+        self.soft = {}          # channel -> the una corda shift is in
+        self.sost = {}          # channel -> keys the sostenuto pedal is holding
         self.sota = {}          # channel -> [12 cents]
         self.sota_at = {}       # (channel, pitch class) -> ratio last applied
         self._rpn_fine_msb = {}
@@ -1860,6 +1912,31 @@ class Live:
                     for k in [k for k in list(self.slab.live) if (k[1], k[2]) in gone]:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
+            elif msg.control == 67:                 # soft pedal (una corda)
+                # A SETUP FOR THE NOTES TO COME, not an effect on the ones
+                # sounding -- see Slab.soft_strings. Nothing to do here but
+                # remember it; _note_on reads it when the hammer swings.
+                self.soft[ch] = msg.value >= 64
+            elif msg.control == 66:                 # sostenuto pedal
+                # NOT THE DAMPER PEDAL WITH A DIFFERENT NUMBER. Sustain holds
+                # everything played while it is down; sostenuto holds only the
+                # keys that were ALREADY DOWN at the instant it went down, and
+                # lets everything after that damp normally. That asymmetry is
+                # the whole instrument -- it is how a pianist holds a bass note
+                # under a passage that has to stay dry.
+                _dn = msg.value >= 64
+                _wasq = bool(self.sost.get(ch))
+                if _dn and not _wasq:
+                    # A SNAPSHOT of what is down right now, and nothing later.
+                    self.sost[ch] = {k for k in self.down if k[0] == ch}
+                elif not _dn and _wasq:
+                    _gone = self.sost.pop(ch, set())
+                    for k in [k for k in list(self.slab.live)
+                              if (k[1], k[2]) in _gone
+                              and (k[1], k[2]) not in self.down
+                              and not (self.pedal.get(ch, False))]:
+                        self.slab.release(k, n0)
+                    self.pedalled -= _gone
             elif msg.control in (98, 99):           # NRPN select
                 # Nothing here implements an NRPN, but selecting one must STOP
                 # a following CC6 from landing on whatever RPN was last chosen.
@@ -1874,17 +1951,52 @@ class Live:
                 self._rpn_data(ch, msg.control, msg.value, n0)
             elif msg.control == 121:                # reset all controllers
                 self._reset_controllers(n0, ch)
+            elif msg.control == 120:                # all SOUND off
+                # THE DIFFERENCE FROM CC123 IS THE TAIL. All Notes Off lifts
+                # the keys and lets every voice ring out on its own release;
+                # All Sound Off stops the channel NOW, pedal or no pedal, and
+                # is what a panic button sends.
+                #
+                # "Now" is four milliseconds, not zero. The kernel divides by
+                # the release length (invr = 1.f/relS[p]), so a zero release is
+                # a divide by zero -- and a hard cut is a step, and a step is a
+                # click. RETRIGGER_FADE is the constant the file renderer
+                # already floors every release at, for exactly this argument.
+                for p in parts:
+                    self._amp_touch(p)
+                self.down = {k for k in self.down if k[0] != ch}
+                self.pedalled = {k for k in self.pedalled if k[0] != ch}
+                self.sost.pop(ch, None)
+                self.pedal[ch] = False
+                _fade = np.float32(B.RETRIGGER_FADE * self.rate)
+                for k in [k for k in list(self.slab.live) if k[1] == ch]:
+                    _sl = self.slab.live.get(k)
+                    if _sl:
+                        _ix = np.fromiter(_sl, np.int64, len(_sl))
+                        self.slab.a["re"][_ix] = np.minimum(
+                            self.slab.a["re"][_ix], _fade)
+                    self.slab.oneshot.pop(k, None)
+                    self.slab.release(k, n0)
             elif msg.control == 123:                # all notes off
                 # The amplifier's partials hang off a key with no channel, so
                 # this sweep cannot see them -- but their parents are about to
                 # go, so mark them stale and let the pump clear them.
                 for p in parts:
                     self._amp_touch(p)
+                # ...AND IT HONOURS THE PEDAL, which it did not. This branch
+                # cleared `pedalled`, cleared `pedal` and popped every oneshot
+                # -- which is All SOUND Off's behaviour, not its own. All Notes
+                # Off means the keys came up: a note under a held damper goes
+                # on ringing, and a struck cymbal goes on ringing, because
+                # neither is a key being held down.
                 self.down = {k for k in self.down if k[0] != ch}
-                self.pedalled = {k for k in self.pedalled if k[0] != ch}
-                self.pedal[ch] = False
+                _keep = (self.pedal.get(ch, False), self.sost.get(ch) or set())
                 for k in [k for k in list(self.slab.live) if k[1] == ch]:
-                    self.slab.oneshot.pop(k, None)
+                    if self.slab.oneshot.get(k):
+                        continue                # rings out on its own decay
+                    if _keep[0] or (k[1], k[2]) in _keep[1]:
+                        self.pedalled.add((k[1], k[2]))
+                        continue                # a damper is still off it
                     self.slab.release(k, n0)
         elif msg.type == "program_change":
             # INCOMING MIDI WINS. A part listening on this channel changes
@@ -1925,7 +2037,9 @@ class Live:
                 # every bowed string and every blown pipe holding a pedalled
                 # note at full bow with nobody bowing it. See
                 # SynthProperties.damper_pedal.
-                if self.pedal.get(ch, False) and part.bank.damper_pedal:
+                if ((self.pedal.get(ch, False)
+                     or (ch, msg.note) in self.sost.get(ch, ()))
+                        and part.bank.damper_pedal):
                     # The key is up but the damper is not: the string keeps
                     # ringing until the pedal is lifted. Recorded so the
                     # stuck-note sweep does not mistake it for a lost note-off.
@@ -1989,6 +2103,10 @@ class Live:
         _cp = self.cpan.get(ch, T.GM_DEFAULT_PAN)
         if _cp != T.GM_DEFAULT_PAN and slots:
             self.slab.repan(slots, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
+        # UNA CORDA, before those same captures and for the same reason.
+        if self.soft.get(ch) and slots:
+            self.slab.soft_strings(slots, part.bank.soft_pedal_strings,
+                                   part.bank.soft_pedal_top)
         if part.drums:
             # CHOKE, live. Offline this is done by scanning FORWARD for
             # the next strike in the exclusive class and truncating the
@@ -2700,6 +2818,11 @@ class Live:
         lived long enough to sound. The amplifier's lifetime is its parents',
         and _amp_touch is what keeps it honest.
 
+        AND NOT A NOTE THE SOSTENUTO PEDAL IS HOLDING, which is the same trap
+        a third time: its key is not down, so without the guard the sweep takes
+        it one block after the pedal caught it. The damper pedal is safe here
+        only because `pedalled` is checked below; sostenuto needed its own.
+
         AND NOT THE BAGPIPE'S DRONES, for exactly the same reason and caught
         exactly the same way. A drone belongs to the PART, so no key is ever
         down for it -- and it was stamped, swept one block later, and rendered
@@ -2709,6 +2832,7 @@ class Live:
         """
         for k in [k for k in list(self.slab.live)
                   if k[3] not in ("amp", self.DRONE_SLOT)
+                  and (k[1], k[2]) not in self.sost.get(k[1], ())
                   and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
                   and not self.slab.oneshot.get(k)]:
@@ -4886,6 +5010,97 @@ def selftest():
           "  (energy above h4: %.1f%% -> %.1f%% at full pressure)"
           % (100 * _b(_e0), 100 * _b(_e1)))
     _lvp.renderer.close()
+
+    # ---- the three pedals GM2 asks for --------------------------------------
+    # CC120 ALL SOUND OFF stops a channel dead where CC123 lifts the keys and
+    # lets it ring. Those had been the same branch, which is CC120's meaning,
+    # not CC123's: a note under a held damper keeps sounding when the keys come
+    # up, and so does a struck cymbal, because neither is a key being held.
+    _lp = Live(program=0, rate=48000, frames=128, verbose=False)
+    _lp.warm()
+    for _cc, _want in ((123, True), (120, False)):
+        _lp.on_midi(mido.Message("control_change", channel=0, control=64, value=127))
+        _lp.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+        _lp.apply(0)
+        _lp.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+        _lp.apply(0)
+        _lp.on_midi(mido.Message("control_change", channel=0, control=_cc, value=0))
+        _lp.apply(128)
+        _rings = any(_k[2] == 60 for _k in _lp.slab.live)
+        if _cc == 123:
+            check("CC123 lifts the keys; a pedalled note goes on ringing",
+                  _rings is _want, "  (the damper is still off the string)")
+        else:
+            check("...and CC120 stops the channel, pedal or no pedal",
+                  _rings is _want, "  (four milliseconds, not zero -- the "
+                  "kernel divides by the release and a cut is a click)")
+        for _k in list(_lp.slab.live):
+            _lp.slab.release(_k, 0)
+        _lp.slab.reap(10 ** 9)
+
+    # CC66 SOSTENUTO holds only what was already down. That asymmetry is the
+    # whole instrument and nothing else distinguishes it from sustain.
+    _lp.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _lp.apply(0)
+    _lp.on_midi(mido.Message("control_change", channel=0, control=66, value=127))
+    _lp.apply(0)
+    _lp.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+    _lp.on_midi(mido.Message("note_on", channel=0, note=64, velocity=100))
+    _lp.apply(0)
+    _lp.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0))
+    _lp.apply(0)
+    _lp.sweep(128); _lp.sweep(256)
+    _alive = sorted({_k[2] for _k in _lp.slab.live})
+    check("sostenuto holds the keys that were down, and only those",
+          _alive == [60],
+          "  (C4 was down when the pedal fell and is held; E4 came after and "
+          "is not -- and it survives a sweep, which is where this bug lives)")
+    _lp.on_midi(mido.Message("control_change", channel=0, control=66, value=0))
+    _lp.apply(384)
+    check("...and lets go when the pedal does",
+          not [_k for _k in _lp.slab.live if _k[2] == 60], "")
+    _lp.shutdown()
+
+    # CC67 UNA CORDA is a STRING COUNT, not a filter. The action slides so the
+    # hammer strikes two strings of three: quieter and different in colour both
+    # fall out of that rather than being fitted. The strings were already
+    # separable -- blockrender stamps each unison voice with its own `pl`.
+    _ls = Live(program=0, rate=48000, frames=128, verbose=False)
+    _ls.warm()
+
+    def _una(_soft, _note):
+        _ls.on_midi(mido.Message("control_change", channel=0, control=67,
+                                 value=127 if _soft else 0))
+        _ls.on_midi(mido.Message("note_on", channel=0, note=_note, velocity=100))
+        _ls.apply(0)
+        _k = [_x for _x in _ls.slab.live if _x[2] == _note][0]
+        _sl = _ls.slab.live[_k]
+        _pl = _ls.slab.a["pl"][_sl]
+        _am = np.abs(_ls.slab.a["aL"][_sl])
+        _r = (sorted({int(v) for v, x in zip(_pl, _am) if x > 0}), float(_am.sum()))
+        _ls.on_midi(mido.Message("note_off", channel=0, note=_note, velocity=0))
+        _ls.apply(0)
+        _ls.slab.release(_k, 0); _ls.slab.reap(10 ** 9)
+        return _r
+    _d4, _s4 = _una(False, 60), _una(True, 60)
+    _d2, _s2 = _una(False, 36), _una(True, 36)
+    check("the soft pedal takes a string, and the level follows from that",
+          _s4[0] == [0, 1] and _d4[0] == [0, 1, 2]
+          and -2.0 < 20 * _math.log10(_s4[1] / _d4[1]) < -0.5,
+          "  (C4 loses its third string: %+.2f dB, which is what one string "
+          "of three is worth)" % (20 * _math.log10(_s4[1] / _d4[1])))
+    # ...AND NOTHING WHERE THERE IS NO THIRD STRING. The index is the
+    # instrument's, not the note's: dropping "the highest present" took the
+    # SECOND string in the bass, a 0.48 dB divergence from the file renderer.
+    check("...and nothing at all in the bass, which has no third string",
+          _s2[0] == _d2[0] and abs(_s2[1] - _d2[1]) < 1e-6,
+          "  (C2 is a bichord; the action still slides and the hammer still "
+          "covers every string there is)")
+    check("...and a harpsichord has no una corda to give",
+          _T.HarpsiBase.soft_pedal_strings == 0
+          and _T.GrandPianoProperties.soft_pedal_strings == 1,
+          "  (a quill plucks one string per register, drawn by hand)")
+    _ls.shutdown()
 
     # ---- the bank cache must not evict a voice that is on stage -------------
     # The LRU counted partials and nothing else, so the bank it dropped could

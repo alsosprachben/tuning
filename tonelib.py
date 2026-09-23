@@ -2110,6 +2110,21 @@ class SynthProperties:
     # bend, which is most of the bank.
     pitch_bendable = True
 
+    # CC67, the soft pedal. How many strings the una corda shift TAKES AWAY.
+    #
+    # NOT A FILTER AND NOT AN ATTENUATOR. On a grand the whole action slides
+    # sideways so the hammer strikes two strings of three -- and quieter, and
+    # different in colour, both fall out of that. The remaining pair beats
+    # against itself differently from the trio, and that changed beating is
+    # what a pianist is actually reaching for; the drop in level is a side
+    # effect they usually have to play against.
+    #
+    # 0 is "this instrument has no soft pedal", which is nearly everything. It
+    # also does nothing in the bass by construction, where a piano has one or
+    # two strings to begin with -- which is correct: the shift only affects
+    # trichord notes.
+    soft_pedal_strings = 0
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):
         # effort must be known BEFORE attack_dampening is computed below, which
@@ -2712,6 +2727,9 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     pitch_bendable = False
     # The dampers are on the jacks and there is no pedal to lift them.
     damper_pedal = False
+    # ...and no una corda either: a quill plucks one string per register, and
+    # the registers are drawn by hand, not shifted by a foot.
+    soft_pedal_strings = 0
     # NO TOUCH. The key trips a jack; the quill plucks with a force the jack
     # decides, not the player. This is the textbook fact about the instrument
     # and the reason it has two manuals and a registration instead of a
@@ -3417,11 +3435,19 @@ class GrandPianoProperties(InharmonicStringProperties):
         level += (self.aftersound_level_3 - level) * b2
         return (level, decay_rate * self.aftersound_decay_ratio)
 
+    # THE UNA CORDA TAKES ONE STRING. See SynthProperties.soft_pedal_strings.
+    soft_pedal_strings = 1
+
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         # Second string fades in across G1, third across B2 -- a crossfade, not a
         # hard switch, so the unison shimmer regulates smoothly through the breaks.
         gains = (self.string_gain[0] * self._string_blend(frequency, self.string_break_hz[0]),
                  self.string_gain[1] * self._string_blend(frequency, self.string_break_hz[1]))
+        if soft_pedal_down and self.soft_pedal_strings:
+            # The action has slid: the hammer no longer reaches the last
+            # string. Dropped rather than damped, so its partials are never
+            # emitted -- which is also cheaper.
+            gains = gains[:max(0, len(gains) - self.soft_pedal_strings)]
         voices = []
         for i, g in enumerate(gains[:len(self.note_detune_cents)]):
             if g < 1e-3:
@@ -12261,6 +12287,11 @@ def bend_ratio(pitch, semitones=None):
 
 GM_DEFAULT_EXPRESSION = 127     # CC11 does start at full: it is an attenuator
 GM_DEFAULT_PAN = 64             # centre
+
+# CC67 for the note being built, set by the renderer exactly as
+# bagpipe_drones and honky_detune are: a per-note fact that reaches the voice
+# through the one place that knows both the file and the class.
+soft_pedal_down = False
 
 bagpipe_drones = int(os.environ.get("TUNING_BAGPIPE_DRONE", "3") or 3)
 # WHERE LOW A ACTUALLY LANDED, which only the renderer knows: it owns the

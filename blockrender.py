@@ -992,6 +992,79 @@ def prepare(path, tuner='hybrid440'):
         if _segs:
             _PED_CH[_c] = _segs
 
+    # ALL SOUND OFF stops a channel dead, pedal or no pedal -- what a panic
+    # button sends. Collected the same way as the damper, and applied after it
+    # in the note loop so it overrides a held pedal.
+    _SOFF_CH = {}
+    for _c, _evs in ccs.items():
+        _ts = sorted(_t for _t, _cc, _v in _evs if _cc == 120)
+        if _ts:
+            _SOFF_CH[_c] = _ts
+
+    # SOSTENUTO holds only the keys already down when the pedal went down, and
+    # lets everything played after it damp normally. That asymmetry is the
+    # whole instrument and nothing else here expresses it: _next_same answers
+    # "when is this key struck again", _PHRASE_CH answers "is the channel
+    # active", and neither answers "what was sounding at this instant".
+    #
+    # Keyed on the note INSTANCE, (channel, note, onset), because being caught
+    # by the pedal is a fact about one press of one key -- and read from the
+    # RAW note-off, before the damper below can extend it.
+    _SOST_HELD = {}
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in sorted(_evs):
+            if _cc != 66:
+                continue
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))
+        for _d0, _u0 in _segs:
+            for _e in notes:
+                if _e[0] == _c and _e[2] <= _d0 < _e[3]:
+                    _SOST_HELD[(_e[0], _e[1], _e[2])] = max(
+                        _u0, _SOST_HELD.get((_e[0], _e[1], _e[2]), 0.0))
+
+    # CC67, the soft pedal: same switch, same half-pedal collapse.
+    _SOFT_CH = {}
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in sorted(_evs):
+            if _cc != 67:
+                continue
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))
+        if _segs:
+            _SOFT_CH[_c] = _segs
+
+    def _soft_at(_c, _t):
+        """Was the una corda shift in at this note's ONSET?
+
+        At the onset and not across the note, because the shift decides which
+        strings the HAMMER reaches. Once a note is struck, moving the pedal
+        cannot un-strike a string -- which is why this is a build-time fact
+        and not a gain.
+        """
+        for _d0, _u0 in _SOFT_CH.get(_c, ()):
+            if _d0 <= _t < _u0:
+                return True
+        return False
+
+    def _sound_off(_c, _t):
+        """The first All Sound Off on this channel at or after _t."""
+        _ts = _SOFF_CH.get(_c)
+        if not _ts:
+            return None
+        _i = _bisect.bisect_left(_ts, _t)
+        return _ts[_i] if _i < len(_ts) else None
+
     def _damper_falls(_c, _t):
         """When the damper actually lands for a key released at _t."""
         _segs = _PED_CH.get(_c)
@@ -1293,6 +1366,7 @@ def prepare(path, tuner='hybrid440'):
                 _DRONE_CH[ch] = (int(round(_c1d2[0] / 127.0 * 3.0)) if _c1d2
                                  else len(getattr(pc, 'drone_hz', ())))
             T.bagpipe_drones = _DRONE_CH[ch]
+        T.soft_pedal_down = _soft_at(ch, on)
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         if _press:
             # ...and the LEVEL half of it. `gain` is read lazily inside
@@ -1349,6 +1423,20 @@ def prepare(path, tuner='hybrid440'):
                 if _nx is not None:
                     _rel = min(_rel, max(off, _nx - RETRIGGER_FADE))
                 off = _rel
+        # ...AND THE SOSTENUTO PEDAL, which caught this note only if its key
+        # was already down when the pedal went down. Same clamp as the damper:
+        # a string re-struck is a string re-damped whatever any pedal is doing.
+        _sh = _SOST_HELD.get((ch, note, on))
+        if _sh is not None and _sh > off and getattr(pc, 'damper_pedal', True) \
+                and not getattr(pc, 'one_shot', False):
+            if _nx is not None:
+                _sh = min(_sh, max(off, _nx - RETRIGGER_FADE))
+            off = max(off, _sh)
+        # ALL SOUND OFF overrides both of them, and the note's own length: it
+        # is the one message that means "stop now" rather than "let go".
+        _sf = _sound_off(ch, on)
+        if _sf is not None and _sf < off:
+            off = max(on + RETRIGGER_FADE, _sf)
         # ...but an exclusive class OVERRIDES the ring-out: the point of a choke
         # is that the instrument is physically damped, so it stops even though
         # nothing about its own decay would have stopped it. Applied after the
