@@ -7,8 +7,9 @@ frequency sets where the struck modes sit; the bucket sets the timbre
 per-drum base frequencies. Splitting buckets into distinct kick/snare/hat
 models is the realism step.
 
-`percussion_for_note(note)` returns (name, property_class, base_frequency)
-or None if the note is unmapped (silent).
+`percussion_for_note(note, kit=0)` returns (name, property_class,
+base_frequency, pan) or None if the note is unmapped (silent). `kit` is the
+drum set, chosen by program change on the drum channel: see KITS.
 """
 
 from tonelib import (
@@ -53,6 +54,11 @@ from tonelib import (
     PedalHiHatProperties,
     OpenHiHatProperties,
     GuiroProperties,
+    SynthDrumProperties,
+    ReverseCymbalProperties,
+    ElectronicKickProperties,
+    ElectronicSnareProperties,
+    GatedSnareProperties,
 )
 
 M = MembraneDrumProperties      # a head with no shell worth modelling
@@ -217,9 +223,105 @@ DEFAULT_PAN = {
 }
 
 
-def percussion_for_note(note):
+# ---- DRUM SETS ---------------------------------------------------------------
+#
+# The drum set is the PROGRAM on the drum channel -- "The Drum Set number
+# corresponds to the program number" (SC-55 owner's manual p.21). The SC-55 has
+# ten, and its drum set table (p.70-71) says what each changes: a set lists
+# only the notes that differ, and every blank is "Same as the percussion sound
+# of Standard". Numbered 0-based here, as the bytes are; the manual counts from
+# 1, so its "25:Electronic Set" is program 24.
+#
+# Jazz (32) shares Standard's column on the SC-55, so it IS Standard there.
+DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
+             25: "TR-808", 32: "Jazz", 40: "Brush", 48: "Orchestra",
+             56: "SFX", 127: "CM-64/32L"}
+
+# THE SETS THAT ARE BUILT: {program: {note: (name, class, base Hz)}}, holding
+# only the notes that differ. A set named above but not here plays Standard,
+# as it always has; a program that is no set at all does too. The manual does
+# not say what the SC-55 does with a number that is not a set, so nothing is
+# guessed: 1, 20, 29, 30, 35, 47, 49 and 60 -- all sent to channel 10 by files
+# in the corpus -- play Standard, which is what they did before sets existed.
+#
+# ELECTRONIC, p.70. A Simmons-era kit: the six toms are synth toms, which
+# SynthDrumProperties (GM 118) already is; the reverse cymbal is GM 119. Only
+# the kick and the two snares needed new classes. The toms keep Standard's
+# pitches, so a fill written for one kit lands in the same places on the other.
+KITS = {
+    24: {
+        36: ("Elec BD",          ElectronicKickProperties, 55.0),
+        38: ("Elec SD",          ElectronicSnareProperties, 220.0),
+        40: ("Gated SD",         GatedSnareProperties, 260.0),
+        41: ("Elec Low Tom 2",   SynthDrumProperties, 87.0),
+        43: ("Elec Low Tom 1",   SynthDrumProperties, 98.0),
+        45: ("Elec Mid Tom 2",   SynthDrumProperties, 110.0),
+        47: ("Elec Mid Tom 1",   SynthDrumProperties, 130.0),
+        48: ("Elec Hi Tom 2",    SynthDrumProperties, 150.0),
+        50: ("Elec Hi Tom 1",    SynthDrumProperties, 175.0),
+        52: ("Reverse Cymbal",   ReverseCymbalProperties, 181.9),
+    },
+}
+
+# A set's own notes do NOT take Standard's per-note ring and level: those were
+# measured for the acoustic instrument on that key, and would force a chinese
+# cymbal's ring onto a reverse cymbal that must not decay while it swells. A
+# built set may give its own here, {program: {note: value}}.
+#
+# ELECTRONIC'S RINGS: GM 118's decay is a melodic voice's, 1.4 s to -40 dB, which
+# is four times a tom and turns a fill into a drone. A Simmons tom is long for a
+# drum and short for a note; its kick is a thump with a tail.
+KIT_RING = {24: {36: 0.55, 41: 0.95, 43: 0.95, 45: 0.9, 47: 0.9, 48: 0.85, 50: 0.85}}
+# ...and its LEVELS, matched to the Standard note each replaces (loudness over
+# the first 150 ms, examples/drumset_check.py). A set is a different
+# instrument, not a louder one: a file balanced its drums against its band
+# with velocities, and swapping the kit must not undo that.
+KIT_LEVEL = {24: {36: 3.467, 38: 0.603, 40: 0.519, 41: 0.851, 43: 0.861, 45: 0.822, 47: 0.871, 48: 0.912, 50: 0.813}}
+
+
+class DrumProgram(int):
+    """A program number that is a DRUM SET: the channel it was sent on was a
+    drum channel when the note began.
+
+    An int, so everything that reads a note's program keeps working; the file
+    renderer's note tuple keeps its shape (registrate.py unpacks it), and the
+    mono, gliss and rasp passes that rebuild notes carry it without knowing.
+    Channel 10 is one from power-on; GM 2's CC0 = 120 makes any channel one,
+    and 121 makes it melodic again.
+    """
+    __slots__ = ()
+
+    def __repr__(self):
+        return "DrumProgram(%d)" % int(self)
+
+
+def is_drum(program):
+    return isinstance(program, DrumProgram)
+
+
+def kit_for_program(program):
+    """The drum set a drum-channel program plays: itself if built, else 0."""
+    return program if program in KITS else 0
+
+
+def drum_set_name(program):
+    """What the SC-55 calls this program on a drum channel, and whether it
+    sounds as itself here."""
+    name = DRUM_SETS.get(program)
+    if name is None:
+        return "%d (Standard)" % program
+    if program and program not in KITS and name != "Jazz":
+        return "%s (plays Standard)" % name
+    return name
+
+
+def percussion_for_note(note, kit=0):
     """Return (name, property_class, base_frequency, default_pan) for a GM
-    drum note, or None if unmapped."""
+    drum note in drum set `kit`, or None if unmapped."""
+    own = KITS.get(kit, {}).get(note)
+    if own is not None:
+        name, cls, freq = own
+        return name, _with_ring(cls, note, kit), freq, DEFAULT_PAN.get(note, 0.0)
     entry = PERCUSSION.get(note)
     if entry is None:
         return None
@@ -378,7 +480,7 @@ PERCUSSION_LEVEL = {
 _RING_CLASSES = {}
 
 
-def _with_ring(cls, note):
+def _with_ring(cls, note, kit=0):
     """A per-note subclass whose fundamental decays over the instrument's own
     ring time, keeping the family's relative rolloff across the harmonics.
 
@@ -387,11 +489,15 @@ def _with_ring(cls, note):
     from properties that do not exist yet when the note is created, so there is
     no moment at which an instance could be adjusted in time.
     """
-    ring = PERCUSSION_RING.get(note)
-    trim = PERCUSSION_LEVEL.get(note)
+    if kit:
+        ring = KIT_RING.get(kit, {}).get(note)
+        trim = KIT_LEVEL.get(kit, {}).get(note)
+    else:
+        ring = PERCUSSION_RING.get(note)
+        trim = PERCUSSION_LEVEL.get(note)
     if not ring and not trim:
         return cls
-    key = (cls.__name__, note)
+    key = (cls.__name__, note, kit)
     if key not in _RING_CLASSES:
         target = 60.0 / ((ring or 1.0) * COMPOSITE_SLOWDOWN)
         # The audible ring is the whole sound dying away, not the fundamental
@@ -408,7 +514,9 @@ def _with_ring(cls, note):
         attrs = {}
         if ring: attrs["harmonic_decay"] = harmonic_decay
         if trim: attrs["initial_gain"] = cls.initial_gain * trim
-        _RING_CLASSES[key] = type("%s_n%d" % (cls.__name__, note), (cls,), attrs)
+        _RING_CLASSES[key] = type("%s_n%d%s" % (cls.__name__, note,
+                                               "_k%d" % kit if kit else ""),
+                                  (cls,), attrs)
     return _RING_CLASSES[key]
 
 # GM EXCLUSIVE CLASSES. Some percussion is mutually exclusive on one physical

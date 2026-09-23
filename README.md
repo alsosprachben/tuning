@@ -93,6 +93,10 @@ Any single rank can stand alone, so a reed organ on nothing but its `trumpet` is
 one keystroke away. The tuner is per part too, so a mode-locked organ layer can
 sit on `hybridharm` while the strings above it stay on `hybrid`.
 
+**A drum part's patch is its drum set.** The picker lists the SC-55's ten
+sets by name before the 128 programs, and a set that isn't built yet says
+"(plays Standard)".
+
 **Patch and tuner changes build templates** (0.02 s for a kit, 0.67 s for the
 piano's eight velocity bands) and run on a worker thread with a progress bar.
 Everything else — channel, range, transpose, level, mute, stops — is a single
@@ -337,22 +341,25 @@ threads that do not exist in the child.
 ## What MIDI it understands
 
 The table under *Controls* above is about the panel — what a knob does to a
-voice. This is the protocol: **thirty-four controllers in each, and CC91 in a file**,
+voice. This is the protocol: **thirty-six controllers in each, and CC91 in a file**,
 plus program change, both aftertouches, the wheel and SysEx — GM System On,
-GM 2 Scale/Octave Tuning, and Master Volume, Fine and Coarse Tuning.
+GM 2 System On, GS Reset, GM 2 Scale/Octave Tuning, and Master Volume, Fine and
+Coarse Tuning.
 
 | | |
 |---|---|
-| both renderers | CC1, CC5, CC6, CC7, CC10, CC11, CC38, CC64–CC67, CC71–CC78, CC84, CC93, CC96–CC101, CC120, CC121, CC123–CC127 |
+| both renderers | CC0, CC1, CC5, CC6, CC7, CC10, CC11, CC32, CC38, CC64–CC67, CC71–CC78, CC84, CC93, CC96–CC101, CC120, CC121, CC123–CC127 |
 | file only | CC91 |
 
 That covers GM Level 1, plus GM 2's Scale/Octave tuning, chorus and reverb
-sends, portamento, mono/poly mode, modulation depth range (RPN 5) and the
-master controls. `midi.md` has the whole surface —
+sends, portamento, mono/poly mode, modulation depth range (RPN 5), the
+master controls, and bank select: latched as the hardware latches it, with GM
+2's switch between drums and melody. On a drum channel the program is the drum
+SET, and the SC-55's Electronic set is built. `midi.md` has the whole surface —
 what each message does, what a voice is allowed to refuse, why the pitch wheel
 is two different controls depending on whether it moves, and why a glide is a
 length rather than a pitch. `remaining.md` has what is still missing, chiefly
-GM 2's bank select and the brass glissando's harmonic lattice.
+GM 2's variation sounds, the other drum sets, and the brass glissando live.
 
 ## Render a file
 

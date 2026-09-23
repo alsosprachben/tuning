@@ -97,6 +97,41 @@ splits almost exactly along that line.
 | 86 | Mute Surdo | `Surdo` | **2** | a SURDO: two feet across, its shell resonating at 52 Hz under a 66 Hz head. Muted -- a hand laid flat straight after the beater |
 | 87 | Open Surdo | `Surdo` | **2** | as 86, open, and it rings nearly four times as long |
 
+## Drum sets: the program on a drum channel
+
+The program on a drum channel is the drum SET (SC-55 owner's manual
+p.21), and a set changes only some notes -- every blank in the manual's
+table is "same as Standard". The SC-55 has ten; a set not built here
+plays Standard, as does any program that is not a set.
+
+| program | set | built |
+|---|---|---|
+| 0 | Standard | the note map above |
+| 8 | Room | no -- plays Standard |
+| 16 | Power | no -- plays Standard |
+| 24 | Electronic | yes |
+| 25 | TR-808 | no -- plays Standard |
+| 32 | Jazz | = Standard on the SC-55 |
+| 40 | Brush | no -- plays Standard |
+| 48 | Orchestra | no -- plays Standard |
+| 56 | SFX | no -- plays Standard |
+| 127 | CM-64/32L | no -- plays Standard |
+
+### 24 Electronic
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 36 | Elec BD | `ElectronicKick` | **2** | a synth tom tuned down to a kick: the same downward sweep, narrower and faster |
+| 38 | Elec SD | `ElectronicSnare` | **2** | the Simmons snare: the drum machine's snare with its body let loose -- it sweeps as the toms do |
+| 40 | Gated SD | `GatedSnare` | **2** | an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s |
+| 41 | Elec Low Tom 2 | `SynthDrum` | **2** | GM 118's synth tom at the Standard tom's pitch, given a drum's ring (0.85-0.95 s to silence) in place of its melodic one |
+| 43 | Elec Low Tom 1 | `SynthDrum` | **2** | as 41 |
+| 45 | Elec Mid Tom 2 | `SynthDrum` | **2** | as 41 |
+| 47 | Elec Mid Tom 1 | `SynthDrum` | **2** | as 41 |
+| 48 | Elec Hi Tom 2 | `SynthDrum` | **2** | as 41 |
+| 50 | Elec Hi Tom 1 | `SynthDrum` | **2** | as 41 |
+| 52 | Reverse Cymbal | `ReverseCymbal` | **2** | GM 119's reverse cymbal: a measured crash, swelling to the written note-off |
+
 ## 0-7 Piano
 
 | # | patch | class | | notes |

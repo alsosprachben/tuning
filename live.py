@@ -75,7 +75,8 @@ import mido
 import blockrender as B
 import chorus as _CHR
 import tonelib as T
-from percussion_map import percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL
+from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
+                            kit_for_program, drum_set_name)
 
 # Columns of the partial table, in the order blockrender builds them.
 # p0 is the LEFT ear's carrier phase and p0R the RIGHT one: the interaural
@@ -1399,7 +1400,8 @@ class Patch:
         entry scatter.
         """
         if self.drums:
-            got = percussion_for_note(note)
+            # The program IS the drum set, on a drum part (SC-55 p.21).
+            got = percussion_for_note(note, kit_for_program(self.program))
             return got[1] if got else None
         return __import__("patch_map").property_class_for_note(self.program, note)
 
@@ -1409,8 +1411,9 @@ class Patch:
         m = mido.MidiFile(type=1, ticks_per_beat=480)
         tr = mido.MidiTrack(); m.tracks.append(tr)
         tr.append(mido.MetaMessage("set_tempo", tempo=1000000, time=0))
-        if not self.drums:
-            tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
+        # A drum part sends its program too: it is the drum SET, and blockrender
+        # reads it off channel 10 exactly as it does in a file.
+        tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
         if self.organ:
             # Draw everything so every rank emits partials AND speaks at the
             # note's own onset. The live registration is then decided by which
@@ -1663,7 +1666,7 @@ class Part:
 
     def label(self):
         if self.drums:
-            return "-- drum kit"
+            return "-- %s kit" % drum_set_name(self.program)
         return "%d %s" % (self.program, self.patch.cls_name)
 
     def to_dict(self):
@@ -1793,6 +1796,14 @@ class Live:
         # CC71-78: channel -> {control name: d}, only the ones not at 64.
         self.snd = {}
         self.nrpn = {}          # channel -> the NRPN selected, for GS's sound NRPNs
+        # BANK SELECT, latched until the next program change (tonelib's
+        # resolve_patch). ch_drums is what each channel's last program change
+        # resolved to; channel 10 is drums from power-on. rx_bank is Roland's
+        # Rx.BANK SELECT: off after GM1 System On, on after GS Reset or GM 2 On.
+        self.bank_msb = {}
+        self.bank_lsb = {}
+        self.ch_drums = {}
+        self.rx_bank = True
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
@@ -2180,6 +2191,12 @@ class Live:
                     # The DIFFERENCE is that and only that: a note stamped at
                     # this setting comes out identical either way.
                     self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
+            elif msg.control == 0:                  # bank select MSB
+                # LATCHED: nothing happens until the next program change reads
+                # it (SC-55 owner's manual p.74). See tonelib.resolve_patch.
+                self.bank_msb[ch] = msg.value
+            elif msg.control == 32:                 # bank select LSB
+                self.bank_lsb[ch] = msg.value
             elif msg.control == 10:                 # pan
                 # THE LEVEL IMAGE FOLLOWS THE POT, THE TIME IMAGE DOES NOT --
                 # see Slab.repan. A note keeps the interaural delay it was
@@ -2354,10 +2371,23 @@ class Live:
             # A DRUM PART STAYS A DRUM PART: `drums` is carried through, so a
             # program change on channel 10 re-selects the kit rather than
             # turning the kit into a piano. GM has no melodic program there.
+            #
+            # ...UNLESS THE BANK SAYS OTHERWISE. GM 2's CC0 = 120 makes a
+            # channel drums and 121 makes it melodic, and only then does a part
+            # change what it is -- and only a part on THAT channel: an omni part
+            # is the player's own setup, and one channel of a file turning into
+            # a kit must not turn the player's piano into one.
+            _msb = self.bank_msb.get(ch, 0)
+            _dr, _prog, _var = T.resolve_patch(
+                _msb, self.bank_lsb.get(ch, 0), msg.program,
+                self.ch_drums.get(ch, ch == GM_PERCUSSION_CHANNEL), self.rx_bank)
+            self.ch_drums[ch] = _dr
+            _said = self.rx_bank and _msb in (T.GM2_DRUM_BANK, T.GM2_MELODIC_BANK)
             for part in parts:
                 if not self._listens(part, ch):
                     continue
-                want = (int(msg.program), part.drums, part.tuner)
+                _pd = _dr if (_said and part.channel == ch) else part.drums
+                want = (_prog, _pd, part.tuner)
                 if (part.patch.program, part.patch.drums, part.patch.tuner) == want:
                     continue
                 self.patch_reqs.append((part.pid, want))
@@ -3350,9 +3380,19 @@ class Live:
                 for ch in range(16):
                     self._repitch(ch, n0)
             return
-        if not _BRs.parse_gm_on(d):
+        _lvl = _BRs.gm_on_level(d)
+        if not _lvl and not _BRs.parse_gs_reset(d):
             return
         self._all_off(n0)
+        # BANK SELECT to power-on, and Roland's text says which way: "Rx.BANK
+        # SELECT is set to OFF by Turn General MIDI System On, and set to ON by
+        # GS RESET". GM 2 On turns it on. A part the bank made a kit stays
+        # whatever it is now -- it is the player's part -- but every channel's
+        # own drums state goes back to channel 10 alone.
+        self.rx_bank = _lvl != 1
+        self.bank_msb.clear()
+        self.bank_lsb.clear()
+        self.ch_drums.clear()
         # ...and the device-level state, BEFORE the per-channel loop re-pitches
         # every channel, so that loop lands them on a master tuning of zero.
         self.master_vol = 1.0
@@ -6203,12 +6243,21 @@ def selftest():
           abs(_gotc - 300.0) < 0.01 and abs(_gotf + 50.0) < 0.01,
           "  (%+.2f and %+.2f cents, asked +300 and -50)" % (_gotc, _gotf))
     _gm = mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01], time=0)
-    _gA = _cents_of(_mid([_cc(101, 0), _cc(100, 2), _cc(6, 67), _gm]), _b0)
-    _gB = _cents_of(_mid([_gm, _cc(101, 0), _cc(100, 2), _cc(6, 67)]), _b0)
+    # The program is SENT AGAIN after the reset, because a GM System On sends
+    # it back to 0 as well now (live always did) -- and this check is about the
+    # tuning, not about which voice measures it.
+    _p73 = mido.Message("program_change", channel=0, program=73, time=0)
+    _gA = _cents_of(_mid([_cc(101, 0), _cc(100, 2), _cc(6, 67), _gm, _p73]), _b0)
+    _gB = _cents_of(_mid([_gm, _p73, _cc(101, 0), _cc(100, 2), _cc(6, 67)]), _b0)
     check("...and a GM System On resets them, in the order the file sent it",
           abs(_gA) < 0.01 and abs(_gB - 300.0) < 0.01,
           "  (tune then reset: %+.2f; reset then tune: %+.2f -- all on one tick, "
           "which a rule about which message comes first got wrong)" % (_gA, _gB))
+    _mid([_gm])
+    _pgm = [n[6] for n in _BRb.parse(os.path.join(tempfile.gettempdir(),
+                                                  "modes_%d.mid" % os.getpid()))[2]]
+    check("...and it sends the program back to 0 in a file, as live does",
+          _pgm == [0], "  (%s; the file renderer used to keep the flute)" % _pgm)
     _mc = _cents_of(_mid([mido.Message("sysex", data=_BRb.master_message("coarse", -2))]), _b0)
     _mf = _cents_of(_mid([mido.Message("sysex", data=_BRb.master_message("fine", 25.0))]), _b0)
     check("master coarse and fine tuning reach every note",
@@ -6377,7 +6426,8 @@ def selftest():
           abs(_f61(_hy) - _f61(_hy0)) < 1e-9,
           "  (hybrid, with and without the select: choosing a tuner is choosing "
           "who owns the tuning)")
-    _mid(_sel(0, 6) + [mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01], time=0)],
+    _mid(_sel(0, 6) + [mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01], time=0),
+                       mido.Message("program_change", channel=0, program=73, time=0)],
          _notes=((61, 0, 480),))
     _gr = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "gm2")
     _Fe2 = _BRb.tuning_table("even")
@@ -8681,6 +8731,117 @@ def selftest():
     check("panel: d deletes a route and a control",
           _lr.routes == () and [c["key"] for c in _lr.screen_controls] == [1])
     _lr.renderer.close()
+
+    # ---- BANK SELECT AND DRUM SETS -----------------------------------------
+    import percussion_map as _PM
+    _rp = _T.resolve_patch
+    check("bank select: GM 2's 120 and 121, GS's variation, a drum channel kept",
+          _rp(120, 0, 24, False) == (True, 24, 0)
+          and _rp(121, 3, 5, True) == (False, 5, 3)
+          and _rp(0, 0, 24, True) == (True, 24, 0)       # GS files send this
+          and _rp(127, 0, 24, True) == (True, 24, 0)     # XG's drums, monocas2
+          and _rp(8, 0, 5, False) == (False, 5, 8)
+          and _rp(120, 0, 5, False, rx_bank=False) == (False, 5, 0))
+    check("...and every variation falls back to the capital tone",
+          _PM is not None and __import__("patch_map").variation_class(5, 8)
+          is __import__("patch_map").property_class_for_program(5))
+    check("drum sets: the SC-55's numbers; only built ones sound as themselves",
+          [_PM.kit_for_program(k) for k in (0, 24, 25, 1, 20, 29, 30, 35, 47, 49, 60)]
+          == [0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          and _PM.drum_set_name(24) == "Electronic"
+          and _PM.drum_set_name(25) == "TR-808 (plays Standard)"
+          and _PM.drum_set_name(32) == "Jazz",
+          "  (the manual does not say what a non-set number does, so the "
+          "corpus's 1, 20, 29, 30, 35, 47, 49, 60 play Standard, as before)")
+
+    def _bfile(msgs):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _tr = mido.MidiTrack(); _m.tracks.append(_tr)
+        _tr.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+        for _x in msgs:
+            _tr.append(_x)
+        return _m
+
+    def _pgs(msgs):
+        return [(n[0], n[1], n[6], _PM.is_drum(n[6]))
+                for n in B.parse(_bfile(msgs))[2]]
+
+    _M = mido.Message
+    _SX = lambda *b: _M("sysex", data=list(b))
+    _on = lambda ch, n: [_M("note_on", channel=ch, note=n, velocity=100, time=0),
+                         _M("note_off", channel=ch, note=n, velocity=0, time=240)]
+    _got = _pgs([_M("control_change", channel=2, control=0, value=120)]
+                + _on(2, 36)
+                + [_M("program_change", channel=2, program=24)] + _on(2, 36)
+                + [_M("control_change", channel=9, control=0, value=121),
+                   _M("program_change", channel=9, program=0)] + _on(9, 60)
+                + [_M("control_change", channel=9, control=0, value=0),
+                   _M("program_change", channel=9, program=24)] + _on(9, 60))
+    check("file: CC0 waits for the program change, then 120 makes a kit",
+          [x[3] for x in _got[:2]] == [False, True] and int(_got[1][2]) == 24,
+          "  (%s)" % _got[:2])
+    check("file: 121 turns channel 10 melodic; CC0 = 0 alone does not undo it",
+          [x[3] for x in _got[2:]] == [False, False], "  (%s)" % _got[2:])
+    _got = _pgs([_SX(0x7E, 0x7F, 0x09, 0x01),
+                 _M("control_change", channel=2, control=0, value=120),
+                 _M("program_change", channel=2, program=0)] + _on(2, 36)
+                + [_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41),
+                   _M("control_change", channel=2, control=0, value=120),
+                   _M("program_change", channel=2, program=0)] + _on(2, 36))
+    check("file: GM1 On turns bank select off; GS Reset turns it on",
+          [x[3] for x in _got] == [False, True], "  (%s)" % _got)
+    # A kit on channel 3 is the same kit as on channel 10, sample for sample.
+    _a = B.render(_bfile(_on(9, 38)))[0]
+    _b = B.render(_bfile([_M("control_change", channel=2, control=0, value=120),
+                          _M("program_change", channel=2, program=0)] + _on(2, 38)))[0]
+    check("file: CC0 = 120 on channel 3 plays the kit channel 10 does",
+          len(_a) == len(_b) and float(np.abs(np.asarray(_a) - np.asarray(_b)).max()) < 1e-6,
+          "  (max diff %.2g)" % float(np.abs(np.asarray(_a)[:min(len(_a), len(_b))]
+                                              - np.asarray(_b)[:min(len(_a), len(_b))]).max()))
+    # The gate: the Electronic set's note 40 stops dead at gate_time, held or not.
+    _g = np.asarray(B.render(_bfile([_M("program_change", channel=9, program=24),
+                                     _M("note_on", channel=9, note=40, velocity=110, time=0),
+                                     _M("note_off", channel=9, note=40, velocity=0,
+                                        time=1920)]))[0])
+    _sr = B.SR
+    _gt = _T.GatedSnareProperties.gate_time
+    _pre = float(np.sqrt(np.mean(_g[int(0.15 * _sr):int(0.25 * _sr)] ** 2)))
+    _post = float(np.sqrt(np.mean(_g[int((_gt + 0.05) * _sr):int((_gt + 0.25) * _sr)] ** 2)) + 1e-12)
+    check("the gated snare holds, then the gate shuts",
+          _pre > 0 and 20 * np.log10(_pre / _post) > 40,
+          "  (%.0f dB down 50 ms after the gate)" % (20 * np.log10(_pre / _post)))
+
+    # Live: the set follows the program, and the bank moves only its own channel.
+    _lk = Live(program=0, rate=48000, frames=128, drums=True, verbose=False)
+    _lk.on_midi(_M("program_change", channel=9, program=24)); _lk.apply(0)
+    _okk = _lk.wait_patch(90)
+    _vc = _lk.parts[0].patch._voice_class(36)
+    check("live: program 24 on a drum part is the Electronic set",
+          _okk and _lk.parts[0].program == 24
+          and issubclass(_vc, _T.ElectronicKickProperties)
+          and _lk.parts[0].label() == "-- Electronic kit",
+          "  (%s, %s)" % (_vc.__name__, _lk.parts[0].label()))
+    _tm = _lk.parts[0].patch.get(40, 110)
+    if _tm is None:
+        _lk.parts[0].patch.warm()
+        _tm = _lk.parts[0].patch.get(40, 110)
+    check("...and live's gated snare is the file's: the template ends at the gate",
+          _tm is not None and abs(_tm["dur"] - _gt * 48000) <= 1,
+          "  (%s samples against %d)" % (None if _tm is None else _tm["dur"],
+                                         int(_gt * 48000)))
+    _lk.shutdown()
+    _lb = Live(program=0, rate=48000, frames=128, verbose=False)
+    _lb.set_parts([Part(Patch(0, False, "hybrid"), 2), Part(Patch(0, False, "hybrid"))])
+    _lb.on_midi(_M("control_change", channel=2, control=0, value=120)); _lb.apply(0)
+    _lb.wait_patch(30)
+    _still = [p.drums for p in _lb.parts]
+    _lb.on_midi(_M("program_change", channel=2, program=0)); _lb.apply(0)
+    _lb.wait_patch(90)
+    check("live: CC0 = 120 waits for the program change, then makes channel 3 a kit",
+          _still == [False, False] and [p.drums for p in _lb.parts] == [True, False],
+          "  (before %s, after %s; the omni part is the player's and stays)"
+          % (_still, [p.drums for p in _lb.parts]))
+    _lb.shutdown()
 
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
     return 1 if fails else 0

@@ -137,7 +137,8 @@ import chorus as _CHR
 RAND_GRAN = 100000.0
 from patch_map import property_class_for_program, property_class_for_note
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
-from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
+from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
+                            GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program)
 
 # SR is the engine's sample rate. It used to be hardcoded here AND as six literal
 # 44100s inside the kernel, so it could not actually be changed; the kernel now
@@ -442,6 +443,17 @@ def parse(path):
     _pwseq = {}              # channel -> [(t, seq, pitch)], the wheel in message order
     mtsev = []               # [(t, seq, parsed)] MIDI Tuning Standard messages
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
+    # BANK SELECT, latched until the next program change: see tonelib's
+    # resolve_patch. A channel is drums or melodic by what its last program
+    # change resolved to -- channel 10 from power-on -- and the program itself
+    # carries the answer (DrumProgram), snapshotted at note-on like the rest.
+    _bmsb = {}; _blsb = {}; _drums = {}
+    _rxbank = [True]         # Rx.BANK SELECT: GM1 On turns it off
+    def _is_drums(ch):
+        return _drums.get(ch, ch == GM_PERCUSSION_CHANNEL)
+    def _cur_prog(ch):
+        p = ch_prog.get(ch, 0)
+        return DrumProgram(p) if _is_drums(ch) else p
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
         # tonelib.GM_DEFAULT_VOLUME for why volume starts at 100.
@@ -454,10 +466,22 @@ def parse(path):
         t += msg.time
         _seq += 1
         if msg.type == 'program_change':
-            ch_prog[msg.channel] = msg.program
-            ch_progs.setdefault(msg.channel, []).append(msg.program)
+            _dr, _pr, _var = T.resolve_patch(_bmsb.get(msg.channel, 0),
+                                             _blsb.get(msg.channel, 0), msg.program,
+                                             _is_drums(msg.channel), _rxbank[0])
+            _drums[msg.channel] = _dr
+            ch_prog[msg.channel] = _pr
+            # A drum set is not a melodic program: the organ registration pass
+            # reads this list, and a Power kit (16) would have registered the
+            # drum channel as a Drawbar Organ.
+            if not _dr:
+                ch_progs.setdefault(msg.channel, []).append(_pr)
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
+            if msg.control == 0:
+                _bmsb[msg.channel] = msg.value
+            elif msg.control == 32:
+                _blsb[msg.channel] = msg.value
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
             _c, _cc, _v = msg.channel, msg.control, msg.value
             if _cc == 121:
@@ -561,7 +585,15 @@ def parse(path):
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
             _pwseq.setdefault(msg.channel, []).append((t, _seq, msg.pitch))
         elif msg.type == 'sysex':
-            if parse_gm_on(msg.data):
+            _lvl = gm_on_level(msg.data)
+            if _lvl or parse_gs_reset(msg.data):
+                # BANK SELECT goes back to power-on too, and Roland's text says
+                # which way: "Rx.BANK SELECT is set to OFF by Turn General MIDI
+                # System On, and set to ON by GS RESET". GM 2 On turns it on --
+                # its whole sound set is addressed through it. Every program
+                # goes to 0, as live's does; this renderer kept them.
+                _rxbank[0] = _lvl != 1
+                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear()
                 # BACK TO POWER-ON, which this renderer did not do at all while
                 # its own docstring said it did. The controllers go (so a note
                 # after it snapshots CC7 at 100 again), and every tuning the
@@ -601,7 +633,7 @@ def parse(path):
             # clarinet, trumpet, organ and music box, and all 2161 notes came
             # out as strings.
             on.setdefault((msg.channel, msg.note), []).append(
-                (t, msg.velocity, cv(msg.channel), ch_prog.get(msg.channel, 0)))
+                (t, msg.velocity, cv(msg.channel), _cur_prog(msg.channel)))
         elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
             q = on.get((msg.channel, msg.note))
             if q:
@@ -612,7 +644,9 @@ def parse(path):
     # needs its registration rows built, and ch_prog alone (the last program)
     # would miss it -- a KeyError at render time once notes carry their own
     # patch. Channel 0 of passac.mid is a drawbar organ for exactly one section.
-    for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
+    for _c, _p in ch_prog.items():
+        if not _is_drums(_c):
+            ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
                                    pwseq=_pwseq, mts=mtsev, snd=sndev)))
@@ -683,8 +717,29 @@ def parse_gm_on(data):
     Any device id: a file addresses "all devices" as 7F, but one aimed at id
     10 is not addressed to somebody else -- there is nobody else here.
     """
+    return gm_on_level(data) is not None
+
+
+def gm_on_level(data):
+    """1 for GM System On, 2 for GM 2 System On, None for anything else."""
     d = tuple(data)
-    return len(d) >= 4 and d[0] == 0x7E and d[2] == 0x09 and d[3] in (0x01, 0x03)
+    if len(d) >= 4 and d[0] == 0x7E and d[2] == 0x09:
+        return {0x01: 1, 0x03: 2}.get(d[3])
+    return None
+
+
+def parse_gs_reset(data):
+    """True for Roland's GS Reset, F0 41 dd 42 12 40 00 7F 00 41 F7.
+
+    "A command message that resets the internal settings of a device to the GS
+    initial state" (VE-GS Pro MIDI Implementation), and the one that turns bank
+    select ON where GM System On turns it off. Any device id, as parse_gm_on.
+    The checksum is not checked: a wrong one addressed to this device is still
+    a reset somebody meant.
+    """
+    d = tuple(data)
+    return (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4:8] == (0x40, 0x00, 0x7F, 0x00))
 
 
 def parse_master(data):
@@ -1414,7 +1469,7 @@ def prepare(path, tuner='hybrid440'):
     stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
     for ev in notes:
         ch, note, on, off, vel, rest, pg = ev
-        strokes = rasp_strokes(note, on, off) if ch == GM_PERCUSSION_CHANNEL else None
+        strokes = rasp_strokes(note, on, off) if is_drum(pg) else None
         if strokes is None:
             expanded.append(ev); continue
         for k, st in enumerate(strokes):
@@ -1431,19 +1486,23 @@ def prepare(path, tuner='hybrid440'):
     # EXCLUSIVE CLASSES: a closed hi-hat stroke damps a ringing open one. Applied
     # here, on the note list, because it is a fact about the instrument rather
     # than about the envelope -- the open hat simply stops.
+    #
+    # PER CHANNEL: a hi-hat is one object in ONE kit. Keyed on the note alone,
+    # a second drum channel (GM 2's CC0 = 120) would close the first one's hat.
     drum_ons = {}
     for ch, note, on, off, vel, _, _pg in notes:
-        if ch == GM_PERCUSSION_CHANNEL and choke_group(note) is not None:
+        if is_drum(_pg) and choke_group(note) is not None:
             # A ridge WITHIN a scrape is not a new stroke: the gourd goes on
             # ringing as the stick moves to the next ridge, so only the start of
             # a scrape damps what came before it.
             if (note, on) in inner_ridge: continue
-            drum_ons.setdefault(note, []).append(on)
+            drum_ons.setdefault((ch, note), []).append(on)
     choke_at = {}
-    for note, ons in drum_ons.items():
+    for (ch, note), ons in drum_ons.items():
         grp = choke_group(note)
-        later = sorted(t for n2, ts in drum_ons.items() if n2 in grp for t in ts)
-        choke_at[note] = later
+        later = sorted(t for (c2, n2), ts in drum_ons.items()
+                       if c2 == ch and n2 in grp for t in ts)
+        choke_at[(ch, note)] = later
 
     # EFFORT BASELINE, PER CHANNEL. Velocity in a real file is largely used to
     # BALANCE one instrument against the others, not to say how hard the player
@@ -1964,8 +2023,8 @@ def prepare(path, tuner='hybrid440'):
         _SV[0], _SV[1] = 0.0, 1.0; _VDL[0] = 0.0
         _MCH[0] = ch
         choked = None
-        if ch == GM_PERCUSSION_CHANNEL and note in choke_at:
-            choked = next((t for t in choke_at[note] if t > on + 1e-4), None)
+        if (ch, note) in choke_at:
+            choked = next((t for t in choke_at[(ch, note)] if t > on + 1e-4), None)
         # PERCUSSION (GM channel 10). The note number selects a drum, not a
         # pitch: it takes a fixed base frequency and its own property class, and
         # the tuner never sees it. Without this the whole kit was routed through
@@ -1973,8 +2032,10 @@ def prepare(path, tuner='hybrid440'):
         # sounding drum note-numbers -- which is what a GM game cue exposed.
         # The reference (midilib) has always done this; only the block engine
         # did not, so the two disagreed on any file with a drum track.
-        drum = percussion_for_note(note) if ch == GM_PERCUSSION_CHANNEL else None
-        if ch == GM_PERCUSSION_CHANNEL and drum is None:
+        # THE DRUM SET is the program, when the note began on a drum channel.
+        drum = (percussion_for_note(note, kit_for_program(int(prog)))
+                if is_drum(prog) else None)
+        if is_drum(prog) and drum is None:
             continue                      # unmapped drum: the reference drops it
         if drum is not None:
             FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
@@ -2147,7 +2208,10 @@ def prepare(path, tuner='hybrid440'):
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
-            off = max(off, on + 8.0)
+            # ...unless it is GATED, when it stops where the gate closes,
+            # whatever the key did: see tonelib.GatedSnareProperties.
+            _gate = getattr(pc, 'gate_time', None)
+            off = (on + _gate) if _gate else max(off, on + 8.0)
         # THE PEDAL, between the two of them on purpose. After the one-shot
         # extension, because a cymbal has no damper to lift and must not be
         # pedalled; before the choke override below, so a closed hi-hat still

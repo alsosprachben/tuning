@@ -26,6 +26,7 @@ import numpy as np
 import mido
 import tonelib as T
 import live as LV
+import percussion_map as PM
 
 locale.setlocale(locale.LC_ALL, "")
 
@@ -309,6 +310,8 @@ class TUI:
         s = specs[self.row]
         if drums is not None:
             s["drums"] = drums
+            if program is not None:
+                s["program"] = program      # on a drum part, the drum SET
         elif program is not None:
             s["program"], s["drums"] = program, False
         else:
@@ -646,16 +649,20 @@ class TUI:
         p = self.sel()
         if p is None:
             return
-        items = ["-- drum kit (GM percussion)"] + \
+        # The drum SETS first, by the SC-55's names: on a drum part the program
+        # is the set. One not built says so, and plays Standard.
+        sets = sorted(PM.DRUM_SETS)
+        items = ["-- %s kit" % PM.drum_set_name(k) for k in sets] + \
                 ["%3d  %s" % (i, GM[i]) for i in range(len(GM))]
-        start = 0 if p.drums else p.program + 1
+        start = (sets.index(p.program) if p.drums and p.program in sets
+                 else 0 if p.drums else len(sets) + p.program)
         pick = self.menu(scr, "patch for part %d" % (self.row + 1), items, start)
         if pick is None:
             return
-        if pick == 0:
-            self.change_patch(drums=True)
+        if pick < len(sets):
+            self.change_patch(drums=True, program=sets[pick])
         else:
-            self.change_patch(program=pick - 1)
+            self.change_patch(program=pick - len(sets))
 
     # ---- the controls pane -------------------------------------------------
     # A keyboard may send nothing but notes. This pane supplies what it lacks
@@ -1105,7 +1112,7 @@ class TUI:
 
     def cell(self, p, c):
         if c == "patch":
-            return ("-- drum kit" if p.drums
+            return ("-- %s kit" % PM.drum_set_name(p.program) if p.drums
                     else "%3d %s" % (p.program, GM[p.program] if p.program < len(GM) else "?"))
         if c == "ch":
             return "all" if p.channel is None else str(p.channel + 1)
@@ -1364,7 +1371,7 @@ class TUI:
 
 def patch_label(spec):
     if spec.get("drums"):
-        return "drum kit"
+        return "%s kit" % PM.drum_set_name(spec.get("program", 0))
     p = spec.get("program", 0)
     return GM[p] if p < len(GM) else str(p)
 

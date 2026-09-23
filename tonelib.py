@@ -7032,6 +7032,10 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
 
 class PercussionProperties(PluckedStringProperties):
     """Base drum voice: struck onset, no chiff jitter, fast decay."""
+    # A GATED one-shot stops here, in seconds from the strike, instead of
+    # ringing out: see GatedSnareProperties. None is every other struck voice.
+    gate_time = None
+
     chiff_cycle = 0.0
     chiff_volume = 0.0
     chiff_min_valve_time = 0.002
@@ -11172,6 +11176,58 @@ class SynthDrumProperties(MembraneDrumProperties):
     initial_gain = MembraneDrumProperties.initial_gain
 
 
+class ElectronicKickProperties(SynthDrumProperties):
+    """Note 36 of the Electronic set (SC-55 p.70, "Elec BD"). A synth tom
+    tuned down to a kick: the same oscillator and the same downward sweep, but
+    a narrower one and a faster one -- a kick has to land on the beat, so its
+    fall must be over before the next sixteenth, and a fifth of drop at 55 Hz
+    already sounds like the pad it is.
+
+    NOT register-scaled: tension_bend_slope is 0, so the drop is what is
+    written here at any tuning, the argument GuitarFretNoiseProperties makes.
+    """
+    tension_bend = 0.45
+    tension_bend_max = 0.45
+    tension_bend_slope = 0.0
+    tension_settle_time = 0.035
+    tension_settle_cutoff = 0.35
+    mode_ratios = (1.0, 1.58)
+    mode_gains = (1.0, 0.08)
+    max_harmonic = 2
+    decay_db = 7.0
+
+
+class ElectronicSnareProperties(ElectricSnareProperties):
+    """Note 38 of the Electronic set ("Elec SD"). The Simmons snare, which is
+    the drum machine's snare with its body let loose: where note 40 of the
+    Standard kit is an 808 -- a crack, a body that barely drops -- a Simmons
+    pad pitch-sweeps its snare as it does its toms, and that "pew" under the
+    noise is the sound of the whole decade.
+    """
+    tension_bend = 0.35
+    tension_bend_max = 0.50
+    tension_bend_slope = 0.0
+    tension_settle_time = 0.045
+    tension_settle_cutoff = 0.4
+    decay_db = 32.0             # a little longer than the 808's crack
+
+
+class GatedSnareProperties(SnareDrumProperties):
+    """Note 40 of the Electronic set ("Gated SD"). An acoustic snare in a big
+    room with a noise gate on the reverb: the tail HOLDS, then stops dead.
+
+    THE STOP IS THE SOUND, and nothing here decays into it. So this is the
+    snare's own modes with the decay slowed to let the room carry, and a GATE:
+    `gate_time` is the one-shot's length instead of the eight seconds every
+    other struck voice is allowed to ring, and release_valve_time is the
+    gate's own close -- fast, but not a step, because a step is a click.
+    """
+    decay_db = 14.0
+    harmonic_decay_db = 10.0
+    gate_time = 0.30
+    release_valve_time = 0.015
+
+
 
 class CrashCymbal2Properties(CymbalProperties):
     """GM 57, Crash Cymbal 2. MEASURED: Iowa 18" suspended crash. GM asks
@@ -12600,6 +12656,53 @@ def rpn_fine_msb(cents):
     """The data-entry MSB a fine-tuning value in cents corresponds to."""
     code = int(round(float(cents) / 100.0 * 8192.0)) + 8192
     return max(0, min(16383, code)) >> 7
+
+
+# ---------------------------------------------- CC0/CC32, bank select
+#
+# LATCHED: "Bank select is suspended until receiving Program change" (SC-55
+# owner's manual p.74; the VE-GS Pro text says the same). CC0 and CC32 are
+# remembered per channel and only a program change reads them -- and goes on
+# reading them, since nothing clears them but a reset.
+#
+# THREE DIALECTS SHARE THE TWO BYTES, and this is the one place they meet:
+#
+#   GS (SC-55/88)   MSB = the variation number, 0 the capital tone. The SC-55
+#                   ignores the LSB; later modules use it to pick a sound map.
+#                   A drum part's set is chosen by program change alone.
+#   GM 2            MSB 121 melodic with LSB = the variation, 120 drums.
+#   XG              MSB 0 normal, 127 drums, 64 sound effects.
+#
+# RESOLVED FOR GS FIRST, because the SC-55 is what the corpus was written for,
+# and GM 2's two values are taken because nothing in GS uses them. A drum
+# channel stays drums under any other MSB: GS files send CC0 = 0 on channel 10
+# as a matter of course, and reading that as XG's "MSB 0 is melodic" would turn
+# every such kit into a piano. MSB 127 on a MELODIC channel is therefore the
+# GS CM-64 map (a variation, falling back to capital), not XG drums.
+#
+# rx_bank is Roland's Rx.BANK SELECT: "set to OFF by Turn General MIDI System
+# On, and set to ON by GS RESET" (VE-GS Pro MIDI Implementation), and on by GM 2
+# System On, whose whole sound set is addressed through it.
+GM2_DRUM_BANK = 120
+GM2_MELODIC_BANK = 121
+
+
+def resolve_patch(msb, lsb, program, was_drums, rx_bank=True):
+    """(drums, program, variation) for a program change under a latched bank.
+
+    `was_drums` is what the channel was before -- channel 10 starts as drums.
+    Variation 0 is the capital tone; patch_map.variation_class falls back to it
+    for any variation not built, as a Sound Canvas does.
+    """
+    if not rx_bank:
+        return bool(was_drums), int(program), 0
+    if msb == GM2_DRUM_BANK:
+        return True, int(program), 0
+    if msb == GM2_MELODIC_BANK:
+        return False, int(program), int(lsb)
+    if was_drums:
+        return True, int(program), 0
+    return False, int(program), int(msb)
 
 
 # ---------------------------------------------- CC71-78, the sound controllers

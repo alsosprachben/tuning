@@ -3340,7 +3340,8 @@ no reference for ANY program, including program 0. A claim surfaced in search
 that Bright Acoustic is "based on a Yamaha C7" -- the GM Level 2 spec page says
 no such thing and it is not repeated here. Roland's SC-55 manual, the de facto
 reference implementation, is a scanned PDF with no text layer, so its patch
-naming could not be checked from a primary source either.
+naming could not be checked from a primary source either. (It CAN be read, as
+page images rather than text: see "The SC-55's drum sets", below.)
 
 **What GM does say is in Level 2's bank variations**, and it is informative:
 "Wide Acoustic Grand" (bank 1) and "Dark Acoustic Grand" (bank 2) are
@@ -5267,3 +5268,38 @@ built inline at the props construction site, as `_DETUNE_CH` is.
 
 Measured end to end, from the partial table: 0/0/1/1/2/2/3/3 drones at CC1
 0/1/40/63/64/80/106/127, and three when no CC1 is written.
+
+## The SC-55's drum sets, read off the scan
+
+Roland's SC-55 owner's manual (`cdn.roland.com/assets/media/pdf/SC-55_OM.pdf`,
+92 pages) has no text layer, and `pdftotext` returns nothing. **It reads fine
+as images**: `pdftoppm -r 200 -f N -l N` and look at the page. The PDF page
+numbers are the printed ones. What was taken from it:
+
+- **p.20–21, How to select the drum set.** *"The Sound Canvas contains a Drum
+  Set with various percussion sounds. There are ten different combinations"*,
+  and *"The Drum Set number corresponds to the program number."* So on a drum
+  part, the program change IS the set, with no bank involved. Part 10 is the
+  factory drum part, and any part can be made one (Drum 1 / Drum 2).
+- **p.70–71, the drum set table.** It gives the ten sets with their 1-based
+  numbers: 1 Standard, 9 Room, 17 Power, 25 Electronic, 26 TR-808, 33 Jazz,
+  41 Brush, 49 Orchestra, 57 SFX, 128 CM-64/32L. The legend reads *"Blank:
+  Same as the percussion sound of Standard"*, so a set is defined by the notes
+  it changes. **Jazz shares Standard's column**, so on the SC-55 it is
+  Standard.
+  - **The Electronic set (25, program 24):** 36 Elec BD, 38 Elec SD, 40 Gated
+    SD, 41/43 Elec Low Tom 2/1, 45/47 Elec Mid Tom 2/1, 48/50 Elec Hi Tom 2/1,
+    52 Reverse Cymbal. Everything else is Standard's.
+- **p.74, bank select.** *"The LSB 7-bit is ignored (value = 00)"* and
+  *"'Bank select' is suspended until receiving 'Program change'."*
+- **p.75, program change.** It gives the range 0–127 and nothing else.
+  **Nowhere does the manual say what a program number that is not a drum set
+  does on the drum part**, and nothing was inferred. Such numbers play
+  Standard here, which is what they always did.
+
+The corpus makes this concrete. Its drum channels send 0, 1, 20, 24, 29, 30,
+35, 47, 49 and 60, and of those only 0 and 24 are sets. 24 is the Electronic
+set in `thememat` and `thememix`, and all it changes there is one note: a 52
+held 0.86 s into a downbeat. That was a Chinese cymbal until now, and is the
+reverse cymbal the file was written for.
+

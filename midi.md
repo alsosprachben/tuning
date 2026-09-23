@@ -30,11 +30,12 @@ for the reason above.
 | message | live | file | what it does |
 |---|---|---|---|
 | note on / off | ✓ | ✓ | velocity is loudness, and on a struck voice also timbre |
-| program change | ✓ | ✓ | all 128 GM programs; channel 10 is percussion |
+| program change | ✓ | ✓ | all 128 GM programs; on a drum channel, the **drum set** — see [bank select](#bank-select-is-three-dialects-sharing-two-bytes) |
 | pitch wheel | ✓ | ✓ | a temperament when static, a gesture when it moves — see below |
 | channel aftertouch | ✓ | ✓ | crescendo: **+8 dB** and brighter together (`PRESS_DB`, `PRESS_TILT`) |
 | polyphonic aftertouch | ✓ | ✓ | the same, per note |
-| SysEx | ✓ | ✓ | GM System On; GM2 Scale/Octave Tuning in both byte forms; Master Volume, Fine and Coarse Tuning; MTS dumps and single-note changes under `gm2` |
+| SysEx | ✓ | ✓ | GM System On, GM 2 System On and GS Reset (which also switch bank select off and on); GM2 Scale/Octave Tuning in both byte forms; Master Volume, Fine and Coarse Tuning; MTS dumps and single-note changes under `gm2` |
+| CC0 / CC32 bank select | ✓ | ✓ | **latched** until the next program change; GM 2's 120/121 make a channel drums/melodic, and every variation plays its capital tone |
 | CC1 modulation | ✓ | ✓ | seven controls live, five in a file, chosen by voice — see below |
 | CC5 portamento time | ✓ | ✓ | the glide's **rate**, not its duration |
 | CC6 / CC38 data entry | ✓ | ✓ | into the selected RPN |
@@ -634,6 +635,53 @@ Writing this found a live bug in sostenuto. A pedal put down while **no** key
 was held left the channel with an empty set, and the pedal-up branch read that
 as "never went down". It now checks whether the channel is in the set, not
 whether the set is empty.
+
+## Bank select is three dialects sharing two bytes
+
+CC0 and CC32 do nothing on arrival. *"Bank select is suspended until
+receiving Program change"* (SC-55 owner's manual p.74), so both renderers latch
+them per channel and read them at the next program change, which goes on
+reading them until a reset. What the bytes MEAN depends on who wrote the file:
+
+| | CC0 | CC32 | drum sets |
+|---|---|---|---|
+| GS (SC-55/88) | the variation; 0 = capital tone | ignored by the SC-55; a sound map on later modules | program change on the drum part |
+| GM 2 | 121 melodic, 120 drums | the variation | CC0 = 120, then the program |
+| XG | 0 normal, 127 drums, 64 SFX | the variation | CC0 = 127, then the program |
+
+**Resolved for GS first** (`tonelib.resolve_patch`), because the SC-55 is what
+the corpus was written for, taking GM 2's 120 and 121 because GS uses neither.
+A drum channel stays drums under any other MSB: GS files send CC0 = 0 on
+channel 10 as a matter of course, and XG's reading of that ("MSB 0 is
+melodic") would turn every such kit into a piano. MSB 127 on a melodic channel
+is GS's CM-64 map, not XG's drums.
+
+**Rx.BANK SELECT.** *"Set to OFF by Turn General MIDI System On, and set to ON
+by GS RESET"* (VE-GS Pro MIDI Implementation). GM 2 System On turns it on. Both
+renderers now read GS Reset, and a system reset also sends every program back
+to 0. Live already did that; the file renderer had kept its programs.
+
+**Every variation plays its capital tone,** as a Sound Canvas does with one it
+lacks. `patch_map.VARIATIONS` is where one goes when a file or a player wants
+it. None is built, because the corpus asks for none: of its 42 CC0 messages,
+39 are 0 and the other three are XG's 127 on channel 10, in `monocas2`.
+
+**The drum SET is the program on a drum channel** (p.21). The SC-55 has ten,
+and its table (p.70–71) lists only the notes each changes. Every blank is
+*"Same as the percussion sound of Standard"*.
+- **Built:** 24 Electronic.
+- **Not built:** every other set plays Standard. Jazz (32) already is Standard
+  on the SC-55, since it shares Standard's column.
+- **Not a set at all:** the manual doesn't say what happens, so nothing is
+  guessed and the number plays Standard. The corpus sends 1, 20, 29, 30, 35, 47,
+  49 and 60 this way, and they play what they always have.
+
+**What GM 2's drum switch moves.** In a file, the whole channel changes: the
+program carries a `DrumProgram` flag from the note-on onward, and the choke
+groups now work per channel, so a second kit can't close the first kit's
+hi-hat. Live moves only a part **on that channel**. An omni part is the
+player's own setup, and one channel of a file becoming a kit must not turn the
+player's piano into one.
 
 ## What a voice can refuse
 

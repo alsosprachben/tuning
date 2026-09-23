@@ -325,6 +325,53 @@ def percussion_table():
     return "\n".join(L)
 
 
+# ---- drum sets: the program on a drum channel ----------------------------------
+# Only the notes a set CHANGES; every other note is Standard's, rated above. The
+# contents are the SC-55 owner's manual's drum set table (p.70-71); the sounds
+# are theory, and their level and length are matched to the Standard note each
+# replaces (examples/drumset_check.py). No reference audio exists for any of
+# them, and Ben's ear has not had its turn yet, so none is above 2.
+KIT_RATED = {
+    24: {
+        36: (2, "a synth tom tuned down to a kick: the same downward sweep, narrower and faster"),
+        38: (2, "the Simmons snare: the drum machine's snare with its body let loose -- it sweeps as the toms do"),
+        40: (2, "an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s"),
+        41: (2, "GM 118's synth tom at the Standard tom's pitch, given a drum's ring (0.85-0.95 s to silence) in place of its melodic one"),
+        43: (2, "as 41"), 45: (2, "as 41"), 47: (2, "as 41"), 48: (2, "as 41"), 50: (2, "as 41"),
+        52: (2, "GM 119's reverse cymbal: a measured crash, swelling to the written note-off"),
+    },
+}
+
+
+def drum_set_table():
+    """The drum sets, by the program that selects them."""
+    import percussion_map as PM
+    L = ["## Drum sets: the program on a drum channel\n"]
+    L.append("The program on a drum channel is the drum SET (SC-55 owner's manual")
+    L.append("p.21), and a set changes only some notes -- every blank in the manual's")
+    L.append("table is \"same as Standard\". The SC-55 has ten; a set not built here")
+    L.append("plays Standard, as does any program that is not a set.\n")
+    L.append("| program | set | built |")
+    L.append("|---|---|---|")
+    for k in sorted(PM.DRUM_SETS):
+        built = ("the note map above" if k == 0 else "yes" if k in PM.KITS else
+                 "= Standard on the SC-55" if PM.DRUM_SETS[k] in ("Standard", "Jazz")
+                 else "no -- plays Standard")
+        L.append("| %d | %s | %s |" % (k, PM.DRUM_SETS[k], built))
+    L.append("")
+    for k in sorted(KIT_RATED):
+        L.append("### %d %s\n" % (k, PM.DRUM_SETS[k]))
+        L.append("| # | note | class | | notes |")
+        L.append("|---|---|---|---|---|")
+        for n in sorted(KIT_RATED[k]):
+            name, cls = PM.KITS[k][n][0], PM.KITS[k][n][1].__name__
+            r, note = KIT_RATED[k][n]
+            L.append("| %d | %s | `%s` | **%d** | %s |"
+                     % (n, name, cls.replace("Properties", ""), r, note))
+        L.append("")
+    return "\n".join(L)
+
+
 def main(argv):
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')
@@ -366,6 +413,7 @@ def main(argv):
                  "and 125 Helicopter, which are not recordings of the world but "
                  "a chirp, a struck bell and a blade passing frequency.\n")
     L.append(percussion_table())
+    L.append(drum_set_table())
     for start, name in FAMILY:
         L.append("## %d-%d %s\n" % (start, start + 7, name))
         L.append("| # | patch | class | | notes |")

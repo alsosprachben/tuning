@@ -43,14 +43,13 @@ another, and there isn't one yet.
 
 In: Scale/Octave tuning by SysEx, CC93 chorus, CC91 reverb (file only),
 portamento, mono/poly mode, RPN 5 modulation depth range, Master Volume, Fine
-and Coarse Tuning, and the CC71–78 sound controllers. What is left:
+and Coarse Tuning, the CC71–78 sound controllers, and **bank select**, with the
+drum sets and GM 2's drum/melodic switch. What is left:
 
 | | state | note |
 |---|---|---|
-| **Bank Select, CC0/CC32** | nothing reads them | the structural one — everything below it depends on this |
-| ~128 variation sounds | none | addressed by CC0=121 + CC32 |
-| 9 drum kits | one kit | addressed by CC0=120 |
-| channel 11 as a second drum part | no | falls out of bank select |
+| ~128 variation sounds | resolved and latched, then played as the capital tone; not yet carried to the voice (below) | one at a time, in `patch_map.VARIATIONS`, when a file or a player wants one |
+| drum sets | Electronic (24) built; Room, Power, TR-808, Brush, Orchestra, SFX, CM-64 play Standard | one at a time, like Electronic: the SC-55's table says which notes |
 | legato attack, live | file only | live mono re-articulates every note; the pitch path is right |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
 | CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
@@ -61,12 +60,19 @@ real-time single-note change reaches a sounding note only from its next
 onset.** The spec says it should move at once, and live does. The file renderer
 prints a count when this happens.
 
-**Bank select is load-bearing.** GM 2's whole extended sound set is addressed
-through it, and without it a GM 2 file's variations collapse silently onto the
-Level 1 program — the failure mode you cannot hear. Note that `live.py`'s `Bank`
-class is the **template cache** keyed on `(program, drums, tuner)` and has
-nothing to do with MIDI bank select; one of the two will need renaming before
-the other is built, or it will cost somebody an hour.
+**Bank select was not load-bearing here.** This file used to call it the
+structural gap, and for GM 2 files it is. But the corpus has none: it contains
+no SysEx, 39 of its 42 CC0 messages are 0, and the other three are XG's drum
+bank. What it did use was drum SETS, by program change alone, and only
+`thememat`/`thememix` asked for one that exists (Electronic, for one reverse
+cymbal). So the wiring went in with the one set that is heard. Variations wait
+to be asked for.
+
+**When the first variation is built,** thread it through: `resolve_patch`
+already returns it, but neither renderer carries it yet. It needs to go on
+blockrender's note snapshot, next to the program, and into live's `Patch` key
+`(program, drums, tuner)`. Building that plumbing with an empty table would be
+code that does nothing.
 
 **CC71–78 are done** — see `midi.md`. Their laws are chosen rather than
 published. If the GM 2 specification comes to hand (the sound-controller

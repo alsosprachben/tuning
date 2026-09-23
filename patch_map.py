@@ -501,6 +501,22 @@ def property_class_for_program(program):
     return PROGRAM_CLASS.get(program & 0x7F, PluckedStringProperties)
 
 
+# BANK VARIATIONS: {(program, variation): class}. EMPTY, and on purpose. The
+# corpus selects none -- 39 of its 42 CC0 messages are 0 and the other three
+# are XG's drum bank on channel 10 -- so a variation built now could not be
+# heard in anything that asks for it. Each one goes here when a file or a
+# player wants it, as a subclass of its capital program. Until then every
+# variation falls back to the capital tone, which is what a Sound Canvas does
+# with one it lacks.
+VARIATIONS = {}
+
+
+def variation_class(program, variation):
+    """The class for `program` in bank `variation`, or the capital tone's."""
+    return (VARIATIONS.get((program & 0x7F, variation))
+            or property_class_for_program(program))
+
+
 # An ENSEMBLE patch is not one instrument, so a single note of it should be
 # played by whichever instrument actually plays that note -- basses at the
 # bottom, violins at the top -- each with its own body. Same shape as
