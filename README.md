@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 413 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 423 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -287,13 +287,13 @@ threads that do not exist in the child.
 ## What MIDI it understands
 
 The table under *Controls* above is about the panel — what a knob does to a
-voice. This is the protocol: **twenty-six controllers in each, and CC91 in a file**,
+voice. This is the protocol: **thirty-four controllers in each, and CC91 in a file**,
 plus program change, both aftertouches, the wheel and SysEx — GM System On,
 GM 2 Scale/Octave Tuning, and Master Volume, Fine and Coarse Tuning.
 
 | | |
 |---|---|
-| both renderers | CC1, CC5, CC6, CC7, CC10, CC11, CC38, CC64–CC67, CC84, CC93, CC96–CC101, CC120, CC121, CC123–CC127 |
+| both renderers | CC1, CC5, CC6, CC7, CC10, CC11, CC38, CC64–CC67, CC71–CC78, CC84, CC93, CC96–CC101, CC120, CC121, CC123–CC127 |
 | file only | CC91 |
 
 That covers GM Level 1, plus GM 2's Scale/Octave tuning, chorus and reverb

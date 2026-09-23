@@ -45,11 +45,12 @@ for the reason above.
 | CC65 portamento | ✓ | ✓ | the switch; the next note glides from the last |
 | CC66 sostenuto | ✓ | ✓ | holds only what was already down |
 | CC67 soft | ✓ | ✓ | una corda: a string count, not a filter |
+| CC71–78 sound controllers | ✓ | ✓ | resonance, release, attack, brightness, decay, vibrato rate/depth/delay — **only where the instrument has the mechanism** |
 | CC84 portamento control | ✓ | ✓ | its byte is a **source note number**; fires once |
 | CC91 reverb send | | ✓ | distance from the microphone |
 | CC93 chorus send | ✓ | ✓ | fixed detuned copies, mixed in power |
 | CC96 / CC97 data increment / decrement | ✓ | ✓ | the selected RPN by one unit of its finest byte |
-| CC98 / CC99 NRPN | ✓ | ✓ | selected and then deliberately ignored |
+| CC98 / CC99 NRPN | ✓ | ✓ | GS's eight sound NRPNs (`01 08…01 66`) read as CC71–78; every other NRPN deliberately ignored |
 | CC100 / CC101 RPN | ✓ | ✓ | selects 0/0, 0/1, 0/2, 0/5, and 0/3, 0/4 under `gm2` |
 | CC120 all sound off | ✓ | ✓ | the panic — stops the channel dead, pedal or no pedal |
 | CC121 reset controllers | ✓ | ✓ | CC1/11/64/65/66/67 to defaults, wheel centred, pressure off, RPN null |
@@ -58,7 +59,7 @@ for the reason above.
 | CC126 mono | ✓ | ✓ | all sound off, all notes off, then **one voice** — see below |
 | CC127 poly | ✓ | ✓ | all sound off, all notes off, then polyphonic again |
 
-Twenty-six controllers live and twenty-seven in a file. The one difference is
+Thirty-four controllers live and thirty-five in a file. The one difference is
 CC91, which is file only. Four RPNs: **0/0** bend range, **0/1** fine tuning
 (14-bit, ±100 cents), **0/2** coarse tuning (MSB only, ±64 semitones), and GM
 2's **0/5** modulation depth range. NRPNs are selected so that a file which
@@ -357,6 +358,90 @@ asked for −12.04. A linear ramp lands, and lands when it says it will.
 
 A GM System On puts all three back: full volume, no master tuning, every
 channel poly.
+
+## CC71–78: a synthesiser's knobs, on instruments that have no filter
+
+GM 2's sound controllers are resonance, release, attack, brightness, decay,
+and vibrato rate, depth and delay. They are the front panel of a subtractive
+synthesiser. A physical model has no filter to turn, so each control lands
+only where the instrument has the thing it names, and the rest are refused
+the way a bend is refused on a piano.
+
+**Roland is the reference, by another address.** The VE-GS Pro has no
+CC71–78. It has the same eight controls as GS **NRPNs**: `01 08/09/0A`
+(vibrato), `01 20/21` (cutoff, resonance), `01 63/64/66` (attack, decay,
+release), each *"relative change −64 … +63"*, stacking on the sound's own
+setting. GM 2 gave them CC numbers. Both forms are read, and they produce
+identical tables.
+
+**What each instrument answers**, one table for both renderers
+(`tonelib.sound_controls_of`), pinned by the selftest:
+
+| instruments | programs | answer |
+|---|---|---|
+| synthesisers | 31 | all eight |
+| winds, bowed strings, voices | 33 | attack, release, vibrato |
+| struck and plucked strings | 33 | decay, release |
+| one-shots (mallets, drums) | 16 | decay |
+| brass, and the clarinet | 6 | brightness (as effort), attack, release, vibrato |
+| the muted trumpet | 1 | the same, plus resonance (its mute's Q) |
+| the reed organ | 1 | attack, release — nobody's hand on a vibrato |
+| organs, harpsichord, bagpipe, orchestra hit | 7 | nothing |
+
+**What each one is, where it lands:**
+- **Brightness** is *effort* on a voice with a measured effort-to-colour law,
+  the same exponent aftertouch uses. On a synthesiser it's the low-pass
+  corner, two octaves either way. Either way it is **colour, not level**: a
+  trumpet at CC74 = 127 gains 11.9 dB of upper partials against the lower, and
+  its total power moves +0.000 dB.
+- **Resonance** is the Q of a synthesiser's low-pass at its corner, as the
+  ratio of a resonant two-pole response to a Butterworth one. That ratio is
+  exactly 1 at CC71 = 64, so the saw and square leads, which have no formants,
+  answer too. On the muted trumpet it's the mute's own resonance.
+- **Attack, decay, release** scale real times: a breath's or bow's onset, a
+  string's ring, what a sustaining note does when its key comes up.
+- **Vibrato rate** scales a player's rate. **Depth** is *added* upward, up to
+  30 cents, because most solo voices have none and a multiple of nothing is
+  nothing; downward it takes the voice's own depth toward zero. **Delay**
+  starts the note straight and lets the vibrato bloom in over 0.25 s.
+
+**The laws are chosen, not published.** Roland gives the range and not the
+amount. Times scale ×/÷ 4, a rate ×/÷ 2, a cutoff by two octaves, and
+brightness by the ±12 dB that velocity's effort is already clamped to. Value
+64, or no message, is the voice exactly as it is, so a file that never sends
+these is bit-identical.
+
+**Both renderers apply the same function**, `tonelib.sound_shape`, to a note's
+partials, power-normalised per note, so they agree by construction. Live applies
+brightness, resonance, release and vibrato to notes already sounding. Attack,
+decay and delay are onset facts and reach the next note, because moving them
+under a sounding note would jump its envelope.
+
+### The vibrato delay is an exact integral
+
+The vibrato's phase has always been computed as a closed-form integral, which
+is why the wheel can move without a click. A depth that ramps in time breaks
+that form, and re-evaluating it with a new depth every block would jump the
+phase at every block boundary. So the ramp has its own closed form, the
+integral of `(s − t₁)·sin(ωs + φ)` by parts. Measured through the kernel on a
+planted partial:
+
+| | |
+|---|---|
+| before the delay | straight: 1.35 cents of variation, the probe's floor |
+| after the bloom | 34.33 cents peak to peak, 34.63 asked |
+| largest sample-to-sample step | **0.005 Hz** — a phase jump would be tens |
+
+### Aftertouch now agrees with itself
+
+Aftertouch brightened **every** voice live and only **four** offline. The file
+renderer applies colour only where there's an effort law; live fell back to a
+constant tilt of 0.30 everywhere else, so pressing a piano key brightened it.
+**Ben's call: the file renderer's rule.** Pressing a struck string harder
+after it's struck can't open it. Live now matches. A second bug was underneath
+it: a note struck while pressure was already held took the global constant
+rather than its own voice's law, so a trombone pressed-then-struck opened by a
+third of what it's measured to.
 
 ## Pan is a position, not a fader
 

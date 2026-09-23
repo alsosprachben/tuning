@@ -37,8 +37,9 @@ phase-sensitive differences follow from the block size.
 longer than it was true, four lines under a warning about exactly that. See
 midi.md, which was written because of it.)
 
-WHAT CONTROLS IT READS: twenty-seven CCs -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66,
-67, 84, 91, 93, 96-101, 120, 121, 123-127 -- with RPN 0/0 to 0/5, plus
+WHAT CONTROLS IT READS: thirty-five CCs -- 1, 5, 6, 7, 10, 11, 38, 64-67,
+71-78, 84, 91, 93, 96-101, 120, 121, 123-127 -- with RPN 0/0 to 0/5, GS's
+sound NRPNs 01 xx, plus
 program change, both aftertouches, the pitch wheel and SysEx (GM System On,
 GM2 Scale/Octave Tuning, Master Volume, Fine and Coarse Tuning). The pedals are
 here and not only in live.py. Until the RPNs arrived this list claimed GM
@@ -434,6 +435,8 @@ def parse(path):
     rpns = {}                # channel -> [(t, 'range'|'fine'|'coarse'|'mod', v)]
     _rsel = {}; _rfmsb = {}; _rrange = {}; _rmod = {}
     _rfine = {}; _rcoarse = {}; _rtp = {}; _rtb = {}   # current values, for CC96/97
+    sndev = {}               # channel -> [(t, seq, cc, value)], CC71-78 and GS NRPN 01 xx
+    _nsel = {}               # channel -> the NRPN selected, (MSB, LSB)
     master = []              # [(t, 'vol'|'fine'|'coarse', v, seq)], the device's own
     gmon = []                # [(t, seq)] GM System On: every channel back to power-on
     _pwseq = {}              # channel -> [(t, seq, pitch)], the wheel in message order
@@ -483,14 +486,25 @@ def parse(path):
                 _pwseq.setdefault(_c, []).append((t, _seq, 0))
                 ats.setdefault(_c, []).append((t, 0))   # not polytouch: live keeps it
                 _rsel[_c] = (127, 127)
+            if _cc in T.SOUND_CC:
+                sndev.setdefault(_c, []).append((t, _seq, _cc, _v))
             if _cc in (98, 99):
                 _rsel[_c] = None            # an NRPN: its data entry is not ours
+                # ...unless it is one of GS's eight sound NRPNs, which are the
+                # same controls as CC71-78 under an older address.
+                _ns0 = _nsel.get(_c) or (127, 127)
+                _nsel[_c] = (_v, _ns0[1]) if _cc == 99 else (_ns0[0], _v)
             elif _cc == 101:
+                _nsel[_c] = None
                 _rsel[_c] = (_v, (_rsel.get(_c) or (127, 127))[1])
             elif _cc == 100:
+                _nsel[_c] = None
                 _rsel[_c] = ((_rsel.get(_c) or (127, 127))[0], _v)
             elif _cc in (6, 38):
                 _sel = _rsel.get(_c)
+                _gs = T.GS_SOUND_NRPN.get(_nsel.get(_c)) if _sel is None else None
+                if _gs is not None and _cc == 6:
+                    sndev.setdefault(_c, []).append((t, _seq, _gs, _v))
                 if _sel == (0, 0):
                     _rrange[_c] = T.rpn_bend_range(
                         _cc, _v, _rrange.get(_c, T.BEND_RANGE_SEMITONES))
@@ -555,6 +569,7 @@ def parse(path):
                 # the time recorded here.
                 gmon.append((t, _seq))
                 ctrl.clear(); _rsel.clear(); _rfmsb.clear(); _rrange.clear()
+                _nsel.clear()
                 _rmod.clear(); _rfine.clear(); _rcoarse.clear()
                 _rtp.clear(); _rtb.clear()
                 for _c in list(sotas):
@@ -600,7 +615,7 @@ def parse(path):
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
-                                   pwseq=_pwseq, mts=mtsev)))
+                                   pwseq=_pwseq, mts=mtsev, snd=sndev)))
 
 # ---- GM2 Scale/Octave Tuning Adjust -----------------------------------------
 # Twelve cent offsets, one per pitch class, applied to a set of channels. It is
@@ -875,7 +890,7 @@ def rank_speak_sec(events, on_sec, aj):
 # exactly these and nothing else.
 PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
-                "tbav","tau","tcut","gb","gt","gc","vd","vr","vp","delL","delR",
+                "tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR",
                 "gr","cr","br","p0R","pl")
 
 
@@ -949,6 +964,30 @@ def prepare(path, tuner='hybrid440'):
             print("  gm2: %d notes were sounding when a tuning change that "
                   "should move them arrived; here they keep their tuning until "
                   "their next onset (live moves them)" % _late)
+
+    # ------------------------------------------- CC71-78, IN FORCE AT AN ONSET
+    # A timeline per channel rather than a snapshot per note, so the notes this
+    # renderer makes for itself -- a mono handoff, a gliss rung -- read the same
+    # state as the notes the file wrote. GM System On puts every control back
+    # to 64; CC121 does not touch them, as live does not.
+    _SND_TL = {}
+    for _c, _evs in _sys['snd'].items():
+        _ev = [(_t, _q, _cc, _v) for _t, _q, _cc, _v in _evs]
+        _ev += [(_t, _q, None, None) for _t, _q in gmon]
+        _ev.sort(key=lambda e: (e[0], e[1]))
+        _SND_TL[_c] = _ev
+
+    def _snd_d(_c, _t):
+        """{control name: d} in force at _t, only the ones that are not 64."""
+        _st = {}
+        for _et, _q, _cc, _v in _SND_TL.get(_c, ()):
+            if _et > _t + 1e-9:
+                break
+            if _cc is None:
+                _st = {}
+            else:
+                _st[T.SOUND_CC[_cc]] = T.sound_offset(_v)
+        return {_k: _d for _k, _d in _st.items() if _d}
 
     def _F(_c, _t):
         """This channel's 128-key table at time _t: FREQ unless under gm2."""
@@ -1235,12 +1274,13 @@ def prepare(path, tuner='hybrid440'):
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","delL","delR","gr","cr","br","p0R","pl")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
     _GL = [0.0, 0.05, 0.0]   # per-note portamento [g = ftgt/fsrc - 1, tau, cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
+    _VDL = [0.0]             # per-note vibrato delay, seconds (CC78); 0 = none
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     _PL = [0]                # which player of a section this partial belongs to
@@ -1314,7 +1354,15 @@ def prepare(path, tuner='hybrid440'):
         # is NOT per note: mode lock overrides it per partial, which is exactly
         # why portamento could not borrow those three slots and has its own.
         A["gb"].append(_GL[0]); A["gt"].append(_GL[1]); A["gc"].append(_GL[2])
-        A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
+        # CC77 moves the depth -- adding up to 30 cents where a voice has none,
+        # taking a voice's own toward zero downward -- and CC76 the rate.
+        _vd0 = _VB[0]
+        if _SV[0] > 0.0:
+            _vd0 = _vd0 + _SV[0] * (2.0 ** (T.SOUND_VIB_DEPTH_CENTS / 1200.0) - 1.0)
+        elif _SV[0] < 0.0:
+            _vd0 = _vd0 * (1.0 + _SV[0])
+        A["vd"].append(_vd0); A["vr"].append(_VB[1] * _SV[1]); A["vp"].append(_VB[2])
+        A["vdl"].append(_VDL[0])
         A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
         if _place is None and ampM > 0.0:
@@ -1879,7 +1927,41 @@ def prepare(path, tuner='hybrid440'):
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
                                         _stop_shape(_ck, _row[1]), _ch))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
+
+    def _snd_finish(_p):
+        """Brightness, resonance and decay on the partials one note made.
+
+        Applied to the note's FINISHED rows -- the slice of the table it
+        emitted -- with the same tonelib.sound_shape live applies to its slots,
+        so the renderers agree by construction. The gain is power-normalised
+        over the note: both are colour, not level.
+        """
+        if _p is None:
+            return
+        _i0, _pc, _sd = _p
+        _i1 = len(A['om'])
+        if _i1 <= _i0:
+            return
+        _s75 = _sd.get('decay')
+        if _s75:
+            _k = 1.0 / T.sound_time_scale(_s75)
+            for _j in range(_i0, _i1):
+                A['logr'][_j] *= _k
+                A['logrA'][_j] *= _k
+        _d74, _d71 = _sd.get('brightness', 0.0), _sd.get('resonance', 0.0)
+        if _d74 or _d71:
+            _nf = np.asarray(A['nf'][_i0:_i1], dtype=np.float64)
+            _g = T.sound_shape(_pc, _nf, _d74, _d71)
+            _g = T.normalise_power(np.asarray(A['aM'][_i0:_i1]), _g)
+            for _o, _j in enumerate(range(_i0, _i1)):
+                A['aL'][_j] *= float(_g[_o]); A['aR'][_j] *= float(_g[_o])
+                A['aM'][_j] *= float(_g[_o])
+
+    _SND_PEND = [None]
+    _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
+        _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
+        _SV[0], _SV[1] = 0.0, 1.0; _VDL[0] = 0.0
         _MCH[0] = ch
         choked = None
         if ch == GM_PERCUSSION_CHANNEL and note in choke_at:
@@ -2143,6 +2225,23 @@ def prepare(path, tuner='hybrid440'):
         # fundamental to the fixed floor (mirrors tonelib.speech_time -- bass
         # pipes speak slowly, trebles promptly).
         at = props.speech_time(at, f0); rt = props.speech_time(rt, f0)
+        # CC71-78: WHAT THIS INSTRUMENT HAS, AND WHAT THE CHANNEL ASKS. Only the
+        # controls sound_controls_of grants reach the note; the rest are refused
+        # here, silently, as a bend is on a piano.
+        _sctl = T.sound_controls_of(pc)
+        _sd = {_k: _d for _k, _d in _snd_d(ch, on).items() if _k in _sctl} if _sctl else {}
+        if _sd:
+            if 'attack' in _sd:
+                at *= T.sound_time_scale(_sd['attack'])
+            if 'release' in _sd:
+                rt *= T.sound_time_scale(_sd['release'])
+            if 'vib_depth' in _sd:
+                _SV[0] = _sd['vib_depth']
+            if 'vib_rate' in _sd:
+                _SV[1] = T.sound_vib_rate(_sd['vib_rate'])
+            if 'vib_delay' in _sd:
+                _VDL[0] = T.sound_vib_delay(_sd['vib_delay'])
+            _SND_PEND[0] = (len(A['om']), pc, _sd)
         # The ATTACK's share of the note is a property, because a reverse cymbal
         # needs almost all of it; see SynthProperties.attack_fraction_max. The
         # RELEASE keeps the flat 0.45: nothing wants a release longer than that,
@@ -2629,6 +2728,8 @@ def prepare(path, tuner='hybrid440'):
                              noff, noff + props.release_click_s * SR,
                              max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
                              cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
+    _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
+
     # A CONSONANT IS SUNG BY THE SECTION, NOT BY A POINT.
     #
     # This is why the consonants sat forward of the choir. A vowel is rendered
@@ -2834,7 +2935,7 @@ def prepare(path, tuner='hybrid440'):
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),
-                 ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
+                 ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vdl","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
                  ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4")):
         prep[k] = arr(k, dt)
     return prep
@@ -2902,7 +3003,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
                     fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),fp(sl('cbw')),
                     fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),
                     fp(sl('gb')),fp(sl('gt')),fp(sl('gc')),
-                    fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),
+                    fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('vdl')),fp(sl('delL')),fp(sl('delR')),
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ip(sl('br')),fp(a['BR']),dp(a['BC']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),

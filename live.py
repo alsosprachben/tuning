@@ -10,7 +10,7 @@ time by exactly the same C the offline renderer uses.
 Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
        python3 live.py --list | --selftest | --latency
 
-It answers twenty-six controllers -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66, 67,
+It answers thirty-four controllers -- 1, 5, 6, 7, 10, 11, 38, 64-67, 71-78,
 84, 93, 96-101, 120, 121, 123-127 -- plus program change, both aftertouches,
 the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning, Master Volume,
 Fine and Coarse Tuning), with RPN 0/0 to 0/5. CC91 alone is
@@ -58,6 +58,7 @@ instead of 10.7 ms, which is what keeps a struck attack from smearing.
 Usage:  live.py [--tui] [--program N] [--port SUBSTRING] [--rate HZ] [--frames N]
 """
 import sys, os, time, threading, argparse, collections, signal, itertools
+import re
 import tempfile
 import random as _random
 
@@ -91,7 +92,7 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
 # keyed on (note, velocity bucket), and a portamento's source pitch is neither;
 # baking it in would mean a template per interval, which is the cache blowing
 # up for a fact that costs three floats to carry instead.
-COLS_F4_NOTE = ("gb", "gt", "gc")
+COLS_F4_NOTE = ("gb", "gt", "gc", "vdl")   # + CC78's vibrato delay: also a press
 COLS_I8 = ("non", "noff")
 COLS_I4 = ("gr", "cr", "br", "pl")
 
@@ -304,6 +305,11 @@ class Slab:
         self.aL0 = np.zeros(capacity, np.float32)
         self.aR0 = np.zeros(capacity, np.float32)
         self.hrel = np.ones(capacity, np.float32)   # partial freq / lowest partial
+        # CC71/74 and CC72 as applied to each slot: the brightness/resonance
+        # gain already baked into aL0, and the release scale already in `re`.
+        # Kept so a later change applies only new/old, never compounding.
+        self.sg = np.ones(capacity, np.float32)
+        self.sre = np.ones(capacity, np.float32)
         # The mod wheel DEEPENS a section's vibrato, it does not replace it.
         # vbase is the vibrato this partial was built with -- the player's own,
         # from voice_vibrato -- and vsc is that player's depth relative to their
@@ -583,6 +589,8 @@ class Slab:
             a["aR"][idx] *= self.headroom
         self.aL0[idx] = a["aL"][idx]
         self.aR0[idx] = a["aR"][idx]
+        self.sg[idx] = 1.0
+        self.sre[idx] = 1.0
         self.hrel[idx] = hrel
         self.vbase[idx] = tmpl["vd"]
         self.vrbase[idx] = tmpl["vr"]
@@ -1623,6 +1631,9 @@ class Live:
         import mts as _MTSm
         self.mts = _MTSm.TuningStore()
         self.mts_at = {}        # (pid, channel, key) -> MTS ratio last applied
+        # CC71-78: channel -> {control name: d}, only the ones not at 64.
+        self.snd = {}
+        self.nrpn = {}          # channel -> the NRPN selected, for GS's sound NRPNs
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
@@ -1950,8 +1961,11 @@ class Live:
                     depth = (2.0 ** (self._mod_cents(ch) * w / 1200.0)) - 1.0
                     self.mod[ch] = depth
                     self.modw[ch] = w
-                    self.slab.retune(self._sounding(ch, pids={p.pid for p in others}),
-                                     n0, vd=depth, vrs=1.0 + self.mod_rate * w)
+                    # ONE retune per part, with the sound controllers' CC76/77
+                    # folded in: both write the same two numbers, and retune
+                    # sets them absolutely, so two calls would fight.
+                    for part in others:
+                        self._vib_apply(part, ch, n0)
             elif msg.control in (7, 11):            # volume and expression
                 # (v7*v11)^2, which is blockrender's law at line 840 -- the
                 # same squared MIDI curve velocity uses, applied to the
@@ -2003,6 +2017,8 @@ class Live:
                 # sounding -- see Slab.soft_strings. Nothing to do here but
                 # remember it; _note_on reads it when the hammer swings.
                 self.soft[ch] = msg.value >= 64
+            elif msg.control in T.SOUND_CC:          # CC71-78, sound controllers
+                self._sound_cc(ch, msg.control, msg.value, n0, parts)
             elif msg.control in (124, 125, 126, 127):   # channel mode
                 # Roland, for all four: "the same processing ... as when All
                 # Note Off is received", and MONO and POLY are All Sounds Off
@@ -2053,17 +2069,29 @@ class Live:
                         self.slab.release(k, n0)
                     self.pedalled -= _gone
             elif msg.control in (98, 99):           # NRPN select
-                # Nothing here implements an NRPN, but selecting one must STOP
-                # a following CC6 from landing on whatever RPN was last chosen.
+                # Selecting one must STOP a following CC6 from landing on
+                # whatever RPN was last chosen. Eight of them ARE read: GS's
+                # sound NRPNs, the older address of CC71-78.
                 self.rpn[ch] = None
+                _n0s = self.nrpn.get(ch) or (127, 127)
+                self.nrpn[ch] = ((msg.value, _n0s[1]) if msg.control == 99
+                                 else (_n0s[0], msg.value))
             elif msg.control == 101:                # RPN MSB
+                self.nrpn[ch] = None
                 _sel = self.rpn.get(ch) or (127, 127)
                 self.rpn[ch] = (msg.value, _sel[1])
             elif msg.control == 100:                # RPN LSB
+                self.nrpn[ch] = None
                 _sel = self.rpn.get(ch) or (127, 127)
                 self.rpn[ch] = (_sel[0], msg.value)
             elif msg.control in (6, 38):            # data entry
-                self._rpn_data(ch, msg.control, msg.value, n0)
+                _gs = (T.GS_SOUND_NRPN.get(self.nrpn.get(ch))
+                       if self.rpn.get(ch, (127, 127)) is None else None)
+                if _gs is not None:
+                    if msg.control == 6:
+                        self._sound_cc(ch, _gs, msg.value, n0, parts)
+                else:
+                    self._rpn_data(ch, msg.control, msg.value, n0)
             elif msg.control in (96, 97):           # data increment / decrement
                 self._rpn_step(ch, msg.control == 96, n0)
             elif msg.control == 121:                # reset all controllers
@@ -2301,7 +2329,10 @@ class Live:
             self.slab.tremolo_arm(slots, d, part.bank.tremolo_stereo)
         pr = self.pressure.get(ch, 0.0)
         if pr:
-            self.slab.press(slots, pr, self.press_db, self.press_tilt)
+            # The VOICE's tilt, as every other pressure path uses -- this one
+            # passed the global constant, so a trombone struck under held
+            # pressure opened by a third of what its measured law says.
+            self.slab.press(slots, pr, self.press_db, self._press_tilt(part.pid, note))
         if part.bank.drone_wheel:
             self.drone_quiet.pop(part.pid, None)
             self._drones(part, ch, n0)
@@ -2316,10 +2347,14 @@ class Live:
                 self._mts_ratio(part, ch, note)
         v = self.mod.get(ch, 0.0)
         w = self.modw.get(ch, 0.0)
-        if b != 1.0 or v != 0.0 or w != 0.0:
+        self._sound_stamp(part, ch, note, slots)
+        sva, svr = self._snd_vib(part, ch, slots)
+        v2 = v + sva
+        r2 = (1.0 + self.mod_rate * w) * svr
+        if b != 1.0 or v2 != 0.0 or r2 != 1.0:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
-                             vd=(v if v != 0.0 else None),
-                             vrs=(1.0 + self.mod_rate * w) if w != 0.0 else None)
+                             vd=(v2 if v2 != 0.0 else None),
+                             vrs=(r2 if r2 != 1.0 else None))
 
     def _chan_gain(self, ch):
         """CC7 x CC11, squared -- blockrender's (v7*v11)**2, one law.
@@ -2438,6 +2473,136 @@ class Live:
         self._mv_now = float(g[-1])
         g = g.astype(np.float32)
         return L * g, R * g
+
+    # ------------------------------------------------ CC71-78, the sound controllers
+    def _snd_for(self, part, ch, note):
+        """{control: d} this channel asks for AND this note's instrument has.
+
+        Refused silently where the instrument has no mechanism, the way a bend
+        is on a piano: tonelib.sound_controls_of is the one table, for both
+        renderers.
+        """
+        sd = self.snd.get(ch)
+        if not sd or part.drums:
+            return {}
+        ctl = T.sound_controls_of(part.bank._voice_class(note + part.transpose))
+        return {k: d for k, d in sd.items() if k in ctl}
+
+    def _sound_stamp(self, part, ch, note, slots):
+        """At note-on: the times, the delay, and the brightness/resonance gain.
+
+        Times and the delay are onset facts and are set only here -- moving an
+        attack or a decay under a sounding note would jump its envelope. The
+        gain is baked into aL0 AND recorded in sg, so aftertouch, which
+        recomputes from aL0, composes with it, and a later CC71/74 applies only
+        new/old.
+        """
+        sd = self._snd_for(part, ch, note)
+        if not sd or not slots:
+            return
+        idx = np.fromiter(slots, np.int64, len(slots))
+        a = self.slab.a
+        if 'attack' in sd:
+            a["fa"][idx] *= np.float32(T.sound_time_scale(sd['attack']))
+        if 'release' in sd:
+            r = np.float32(T.sound_time_scale(sd['release']))
+            a["re"][idx] *= r
+            self.slab.sre[idx] = r
+        if 'decay' in sd:
+            k = np.float32(1.0 / T.sound_time_scale(sd['decay']))
+            a["logr"][idx] *= k
+            a["logrA"][idx] *= k
+        if 'vib_delay' in sd:
+            a["vdl"][idx] = np.float32(T.sound_vib_delay(sd['vib_delay']))
+        if 'brightness' in sd or 'resonance' in sd:
+            cls = part.bank._voice_class(note + part.transpose)
+            g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
+                              sd.get('resonance', 0.0))
+            g = T.normalise_power(self.slab.aL0[idx], g).astype(np.float32)
+            for col in (a["aL"], a["aR"], self.slab.aL0, self.slab.aR0):
+                col[idx] *= g
+            self.slab.sg[idx] = g
+        self.slab.dirty = True
+
+    def _snd_vib(self, part, ch, slots):
+        """(depth to add, rate factor) this part's CC77/76 ask of these slots."""
+        sd = self._snd_for(part, ch, 60 - part.transpose)
+        if not slots or not sd:
+            return 0.0, 1.0
+        idx = np.fromiter(slots, np.int64, len(slots))
+        add = (T.sound_vib_depth_add(sd['vib_depth'], float(np.mean(self.slab.vbase[idx])))
+               if 'vib_depth' in sd else 0.0)
+        rate = T.sound_vib_rate(sd['vib_rate']) if 'vib_rate' in sd else 1.0
+        return add, rate
+
+    def _vib_apply(self, part, ch, n0):
+        """The mod wheel and CC76/77 together, on one part's sounding slots.
+
+        retune sets depth and rate ABSOLUTELY against each slot's own baseline,
+        so the two sources are summed first and written once; two calls would
+        each undo the other.
+        """
+        slots = self._sounding(ch, pids={part.pid})
+        if not slots:
+            return
+        add, rate = self._snd_vib(part, ch, slots)
+        v = self.mod.get(ch, 0.0) + add
+        w = self.modw.get(ch, 0.0)
+        self.slab.retune(slots, n0, vd=v, vrs=(1.0 + self.mod_rate * w) * rate)
+
+    def _sound_cc(self, ch, cc, value, n0, parts):
+        """One CC71-78 (or its GS NRPN) on this channel."""
+        name = T.SOUND_CC[cc]
+        d = T.sound_offset(value)
+        st = self.snd.setdefault(ch, {})
+        if d:
+            st[name] = d
+        else:
+            st.pop(name, None)
+        here = [p for p in parts if self._listens(p, ch) and not p.drums]
+        if name in ('brightness', 'resonance'):
+            # ON NOTES ALREADY SOUNDING, as a filter would: per note, the new
+            # gain against the un-shaped baseline, applied as new/old so
+            # aftertouch's own shaping, which rides on aL0, is left alone.
+            a = self.slab.a
+            for part in here:
+                for k, sl in list(self.slab.live.items()):
+                    if k[0] != part.pid or k[1] != ch or k[2] < 0 or not sl:
+                        continue
+                    idx = np.fromiter(sl, np.int64, len(sl))
+                    sd = self._snd_for(part, ch, k[2])
+                    cls = part.bank._voice_class(k[2] + part.transpose)
+                    base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
+                    g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
+                                      sd.get('resonance', 0.0))
+                    g = T.normalise_power(base, g).astype(np.float32)
+                    r = g / np.maximum(self.slab.sg[idx], 1e-12)
+                    for col in (a["aL"], a["aR"], self.slab.aL0, self.slab.aR0):
+                        col[idx] *= r
+                    self.slab.sg[idx] = g
+            self.slab.dirty = True
+        elif name == 'release':
+            # Only notes whose key is still down: a release already running is
+            # an envelope in progress, and rescaling it would jump its level.
+            a = self.slab.a
+            for part in here:
+                for k, sl in list(self.slab.live.items()):
+                    if k[0] != part.pid or k[1] != ch or not sl:
+                        continue
+                    idx = np.fromiter(sl, np.int64, len(sl))
+                    idx = idx[a["noff"][idx] == IDLE]
+                    if not len(idx):
+                        continue
+                    sd = self._snd_for(part, ch, k[2])
+                    new = np.float32(T.sound_time_scale(sd['release'])
+                                     if 'release' in sd else 1.0)
+                    a["re"][idx] *= new / np.maximum(self.slab.sre[idx], 1e-12)
+                    self.slab.sre[idx] = new
+        elif name in ('vib_rate', 'vib_depth'):
+            for part in here:
+                if name in T.sound_controls_of(part.bank._voice_class(60 + part.transpose)):
+                    self._vib_apply(part, ch, n0)
+        # attack, decay, vib_delay: onset facts, for the next note.
 
     def _mono_cut(self, ch, note, n0, parts):
         """Hand a mono voice over: stop this note NOW, pedal or no pedal.
@@ -2991,6 +3156,8 @@ class Live:
         self.mono_stack.clear()
         self.mono_cur.clear()
         self.modrange.clear()
+        self.snd.clear()
+        self.nrpn.clear()
         # The MTS store keeps its tables -- a mode reset is not a memory wipe --
         # but every channel goes back to program 0, equal temperament.
         self.mts.reset_selections()
@@ -3415,8 +3582,13 @@ class Live:
                 et = getattr(p.bank._voice_class(note), "effort_tilt", 0.0)
             except Exception:
                 return self.press_tilt
-            return (et * self.press_db / 6.0206) if et else self.press_tilt
-        return self.press_tilt
+            # EFFORT VOICES ONLY, as the file renderer has always done. A voice
+            # with no effort-to-colour law gets louder under pressure and NOT
+            # brighter: pressing a piano key harder after it is struck cannot
+            # open the string. The 0.30 fallback that used to stand here made
+            # every voice brighten live and only four offline.
+            return (et * self.press_db / 6.0206) if et else 0.0
+        return 0.0
 
     def _sounding(self, ch, pids=None, note=None, pcs=None):
         """Every slot sounding on this channel, optionally narrowed to a set of
@@ -6168,6 +6340,113 @@ def selftest():
           len(set(_cnt)) > 1,
           "  (off-series partials per strike %s -- it used to be the FIRST "
           "note's answer, reused for every note after it)" % _cnt)
+
+    # ---- CC71-78, THE SOUND CONTROLLERS -------------------------------------
+    #
+    # Knobs on a subtractive synth, landing only where the instrument has the
+    # thing they name. tonelib.sound_controls_of is the one table for both
+    # renderers, and this pins it: a voice gaining or losing a control is a
+    # decision, not a side effect.
+    import patch_map as _PMsc
+    _fam = {}
+    for _pg in range(128):
+        _k = tuple(sorted(T.sound_controls_of(_PMsc.property_class_for_program(_pg))))
+        _fam[_k] = _fam.get(_k, 0) + 1
+    _want_fam = {
+        ('attack', 'brightness', 'decay', 'release', 'resonance', 'vib_delay',
+         'vib_depth', 'vib_rate'): 31,                          # synthesisers
+        ('attack', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 33,  # winds, bows, voices
+        ('decay', 'release'): 33,                               # struck and plucked
+        ('decay',): 16,                                         # one-shots
+        (): 7,                                                  # organs, harpsichord, bagpipe, hit
+        ('attack', 'brightness', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 6,  # effort
+        ('attack', 'release'): 1,                               # the reed organ
+        ('attack', 'brightness', 'release', 'resonance', 'vib_delay', 'vib_depth',
+         'vib_rate'): 1,                                        # the muted trumpet
+    }
+    check("what each instrument answers of CC71-78 is pinned",
+          _fam == _want_fam,
+          "  (%d families over 128 programs; synthesisers answer all eight, a "
+          "piano decay and release, an organ nothing)" % len(_fam))
+    _cbl = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "synthkernel.c")).read()
+    _mb = re.search(r"#define VIB_BLOOM ([0-9.]+)", _cbl)
+    check("the kernel's vibrato bloom is tonelib's",
+          _mb is not None and abs(float(_mb.group(1)) - T.VIB_BLOOM_S) < 1e-12,
+          "  (%s s)" % (_mb.group(1) if _mb else "missing"))
+
+    def _scp(_prog, _ccs, _dur=960):
+        _evs = [_c(_n, _v) for _n, _v in _ccs] + [_on(60), _off(60, _dur)]
+        return _mk(_evs, _prog, "hybrid")
+
+    def _same(_a, _b):
+        return all(np.array_equal(np.asarray(_a[_k]), np.asarray(_b[_k]))
+                   for _k in _BRb.PARTIAL_COLS)
+
+    def _hilo(_p):
+        _nf = np.asarray(_p["nf"]); _am = np.asarray(_p["aM"]); _f0 = _nf.min()
+        return 10.0 * math.log10((_am[_nf > 4 * _f0] ** 2).sum()
+                                 / max((_am[_nf <= 2 * _f0] ** 2).sum(), 1e-30))
+
+    _s0 = _scp(81, [])
+    check("a file that sends all eight at 64 renders as one that sends none",
+          _same(_s0, _scp(81, [(_n, 64) for _n in range(71, 79)])),
+          "  (relative controls: 64 is the voice exactly as it is)")
+    check("...and a piano refuses brightness, resonance and attack outright",
+          _same(_scp(0, []), _scp(0, [(74, 127), (71, 127), (73, 127)])),
+          "  (a hammer is not a filter, and a struck string has no onset to slow)")
+    _t0, _t1 = _scp(56, []), _scp(56, [(74, 127)])
+    _pw = 10.0 * math.log10((np.asarray(_t1["aM"]) ** 2).sum()
+                            / (np.asarray(_t0["aM"]) ** 2).sum())
+    check("CC74 on a trumpet is a harder breath: brighter, and no louder",
+          _hilo(_t1) - _hilo(_t0) > 6.0 and abs(_pw) < 0.01,
+          "  (+%.1f dB of upper partials against the lower, total power %+.3f dB "
+          "-- colour, not level)" % (_hilo(_t1) - _hilo(_t0), _pw))
+    _r0, _r1 = _scp(81, []), _scp(81, [(71, 127)])
+    _nf1 = np.asarray(_r0["nf"])
+    _near = np.abs(_nf1 / T.SawtoothSynthProperties.bore_corner_hz - 1.0) < 0.15
+    _rg = 10.0 * math.log10((np.asarray(_r1["aM"])[_near] ** 2).sum()
+                            / (np.asarray(_r0["aM"])[_near] ** 2).sum())
+    check("CC71 on a saw lead is a resonant peak at its filter's corner",
+          _rg > 4.0, "  (%+.1f dB at the corner: a Q, relative to Butterworth)" % _rg)
+    _a0, _a1 = _scp(40, []), _scp(40, [(73, 127), (72, 127)])
+    _ws = T.sound_time_scale(63 / 64.0)
+    check("CC73 and CC72 scale a bow's attack and release",
+          abs(np.max(_a1["fa"]) / np.max(_a0["fa"]) - _ws) < 1e-3
+          and abs(np.max(_a1["re"]) / np.max(_a0["re"]) - _ws) < 1e-3,
+          "  (x%.3f each, as asked)" % _ws)
+    _d0, _d1 = _scp(24, [], 3840), _scp(24, [(75, 0)], 3840)
+    _dr = float(np.max(_d1["logr"]) / np.max(_d0["logr"]))
+    check("CC75 shortens a plucked string's ring",
+          abs(_dr - 4.0) < 1e-3, "  (decay rate x%.3f at CC75 = 0)" % _dr)
+    _v1 = _scp(73, [(77, 127), (76, 0), (78, 127)])
+    check("CC76-78 give a flute a vibrato, at half the rate, delayed",
+          float(np.max(_v1["vd"])) > 0.01 and float(np.max(_v1["vdl"])) > 0.9,
+          "  (a flute has none of its own: depth is ADDED, since a multiple of "
+          "nothing is nothing)")
+    check("GS's sound NRPNs are the same controls as CC71-78",
+          _same(_scp(81, [(99, 1), (98, 0x20), (6, 127)]), _scp(81, [(74, 127)])),
+          "  (NRPN 01 20, Roland's cutoff, against CC74)")
+
+    # AFTERTOUCH, LIVE, NOW AGREES WITH THE FILE: effort voices open, the rest
+    # only swell. The 0.30 fallback made every voice brighten live and four
+    # offline.
+    _lp2 = Live(program=0, rate=44100, frames=128, verbose=False)
+    _lp2.warm()
+    _lp2.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _lp2.apply(0)
+    _sl2 = [_i for _k, _v in _lp2.slab.live.items() if _k[2] == 60 for _i in _v]
+    _ix2 = np.asarray(_sl2)
+    _b2 = np.asarray(_lp2.slab.a["aL"])[_ix2].copy()
+    _lp2.on_midi(mido.Message("aftertouch", channel=0, value=127))
+    _lp2.apply(128)
+    _a2 = np.asarray(_lp2.slab.a["aL"])[_ix2]
+    _rat = _a2 / np.maximum(_b2, 1e-30)
+    check("aftertouch on a piano, live: louder, and not brighter",
+          float(_rat.max() / max(_rat.min(), 1e-30)) < 1.0001 and float(_rat.mean()) > 1.5,
+          "  (every partial x%.2f alike -- the file renderer's rule; the 0.30 "
+          "fallback used to tilt it)" % float(_rat.mean()))
+    _lp2.shutdown()
 
     # ---- PORTAMENTO, CC5/CC65/CC84 ------------------------------------------
     #

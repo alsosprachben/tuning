@@ -42,8 +42,8 @@ another, and there isn't one yet.
 ## General MIDI 2
 
 In: Scale/Octave tuning by SysEx, CC93 chorus, CC91 reverb (file only),
-portamento, mono/poly mode, RPN 5 modulation depth range, and Master Volume,
-Fine and Coarse Tuning. What is left:
+portamento, mono/poly mode, RPN 5 modulation depth range, Master Volume, Fine
+and Coarse Tuning, and the CC71–78 sound controllers. What is left:
 
 | | state | note |
 |---|---|---|
@@ -51,7 +51,6 @@ Fine and Coarse Tuning. What is left:
 | ~128 variation sounds | none | addressed by CC0=121 + CC32 |
 | 9 drum kits | one kit | addressed by CC0=120 |
 | channel 11 as a second drum part | no | falls out of bank select |
-| CC71–78 sound controllers | none | **needs a design first**, see below |
 | legato attack, live | file only | live mono re-articulates every note; the pitch path is right |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
 | CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
@@ -69,11 +68,10 @@ class is the **template cache** keyed on `(program, drums, tuner)` and has
 nothing to do with MIDI bank select; one of the two will need renaming before
 the other is built, or it will cost somebody an hour.
 
-**CC71–78 is not a protocol job.** "Brightness" and "filter resonance" are knobs
-on a subtractive synth; a physical model has no filter to turn. They would have
-to land on something real — `effort_tilt` for brightness, the actual mechanism's
-attack and decay for 72/73/75 — and voices would refuse them the way they refuse
-a bend. That is a conversation before it is an implementation.
+**CC71–78 are done** — see `midi.md`. Their laws are chosen rather than
+published. If the GM 2 specification comes to hand (the sound-controller
+defaults are RP-021), check them against it, and check whether CC121 should
+reset them. Both renderers assume it doesn't.
 
 ## Known and deliberately not fixed
 

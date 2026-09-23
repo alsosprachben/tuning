@@ -27,6 +27,27 @@
 #define SRATE_D ((double)SRATE)
 #define SRATE_F ((float)SRATE)
 
+/* CC78, vibrato delay: how long a delayed vibrato takes to bloom in once its
+   delay has passed. tonelib.VIB_BLOOM_S must match; the selftest reads both. */
+#define VIB_BLOOM 0.25
+
+/* The integral of g(s)*sin(w2*s + ph) from note-on to x, where the depth
+   envelope g is 0 until t1, rises linearly to 1 over [t1, t2], and stays 1.
+   Closed form, by parts on the ramp -- so a delayed vibrato keeps the EXACT
+   phase the constant-depth one has, and blooming in costs no click: a depth
+   that changed per block, evaluated with the constant-depth formula, would
+   jump the phase at every block boundary. */
+static inline double vib_ramp_integral(double x, double t1, double t2,
+                                       double w2, double ph) {
+    if (x <= t1) return 0.0;
+    double B = t2 - t1;
+    double xe = x < t2 ? x : t2;
+    double r = (-(xe - t1) * cos(w2 * xe + ph) / w2
+                + (sin(w2 * xe + ph) - sin(w2 * t1 + ph)) / (w2 * w2)) / B;
+    if (x > t2) r += (cos(w2 * t2 + ph) - cos(w2 * x + ph)) / w2;
+    return r;
+}
+
 #define RAND_GRAN 100000.0
 
 // THE CHIFF'S RANDOMNESS, TWISTED. This used to read a 100000-entry table at
@@ -131,7 +152,7 @@ void synth_voice(
     const float* chBW,
     const float* tbav, const float* tau, const float* tcut,
     const float* gbav, const float* gtau, const float* gcut,
-    const float* vdep, const float* vrate, const float* vph,
+    const float* vdep, const float* vrate, const float* vph, const float* vdl,
     const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
     const int* brow, const float* BR, const double* BC,
@@ -249,17 +270,32 @@ void synth_voice(
                     double fp=w*SRATE_D/6.283185307179586;
                     double ta=(double)ns/SRATE_D, tb2=(double)ne/SRATE_D, ton=(double)a/SRATE_D;
                     double w2=6.283185307179586*r;
+                    double dt=tb2-ta;
+                    if(vdl[p] > 0.f){
+                        // CC78: STRAIGHT, THEN BLOOMING. A held note on a string
+                        // or a voice starts without vibrato and the vibrato grows
+                        // in; the depth is d*g(t), and the phase and the block's
+                        // mean frequency both come from the exact integral of
+                        // that envelope rather than from the constant-depth form.
+                        double t1=ton+(double)vdl[p], t2=t1+VIB_BLOOM;
+                        double Sa=vib_ramp_integral(ta, t1, t2, w2, vp0);
+                        double Sb=vib_ramp_integral(tb2, t1, t2, w2, vp0);
+                        bph += 6.283185307179586*fp*d*Sa;
+                        vibfac = dt > 0.0 ? 1.0 + d*(Sb-Sa)/dt
+                                          : 1.0 + d*(ta>=t2 ? 1.0 : (ta>t1 ? (ta-t1)/VIB_BLOOM : 0.0))
+                                                   *sin(w2*ta+vp0);
+                    } else {
                     bph += (fp*d/r)*(cos(w2*ton+vp0)-cos(w2*ta+vp0));
                     // The recurrence holds one frequency for the whole block, so
                     // use the block's EXACT MEAN frequency, not its value at the
                     // start: that lands the phase at the block end exactly where
                     // the integral says, leaving only a bounded, non-accumulating
                     // error mid-block (each block re-anchors from bph anyway).
-                    double dt=tb2-ta;
                     double avg = dt > 0.0
                         ? 1.0 + d*(cos(w2*ta+vp0)-cos(w2*tb2+vp0))/(w2*dt)
                         : 1.0 + d*sin(w2*ta+vp0);
                     vibfac = avg;
+                    }
                 }
                 if(tbav[p]!=0.f){
                     float tb=tbav[p], ts=tau[p], cut=tcut[p];

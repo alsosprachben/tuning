@@ -2149,6 +2149,25 @@ class SynthProperties:
     # coordinate the hand actually moves along. The kernel does the reciprocal.
     glide_mechanism = None
 
+    # CC71-78, GM 2's SOUND CONTROLLERS: which of them this instrument has the
+    # mechanism for. They are knobs on a subtractive synth -- brightness is a
+    # filter cutoff, resonance its Q, attack and release envelope times -- and a
+    # physical model has no filter to turn. So each lands only where the
+    # instrument has the thing it names, and the rest are refused the way a bend
+    # or a damper is (see sound_controls_of, which also removes everything from
+    # a registerable instrument and all but decay from a one-shot):
+    #
+    #   brightness   effort, on the voices with an effort-to-colour law; the
+    #                filter corner on a synthesiser
+    #   resonance    a synthesiser's filter Q; a mute's resonance
+    #   attack       an onset that takes time: breath, bow, a synth envelope
+    #   decay        a ring: a struck or plucked string, a synth's filter decay
+    #   release      what a sustaining note does when the key comes up
+    #   vib_rate, vib_depth, vib_delay   a player's vibrato
+    #
+    # Empty by default: an instrument answers nothing it has not been given.
+    sound_controls = frozenset()
+
     # How far the mechanism physically reaches, in semitones. None is unbounded:
     # a synth has no arm, and a valved gliss walks the harmonic series rather
     # than reaching for anything.
@@ -2694,6 +2713,8 @@ class FormantBody:
 
 
 class PluckedStringProperties(SynthProperties):
+    # CC71-78: a plucked string: how long it rings, and how it is damped.
+    sound_controls = frozenset(('decay', 'release'))
     octave_gain = -0.0
 
     chiff_cycle = 0.0
@@ -3263,6 +3284,9 @@ class ClavinetProperties(InharmonicStringProperties):
 
 
 class GrandPianoProperties(InharmonicStringProperties):
+    # CC71-78: a struck string: how long it rings, and how the damper lands;
+    # nothing to brighten, no onset to slow.
+    sound_controls = frozenset(('decay', 'release'))
     # Struck, then nothing the player does reaches the string.
     pitch_bendable = False
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
@@ -4094,6 +4118,8 @@ class WurlitzerProperties(ElectricPianoProperties):
 
 
 class StoppedPipeProperties(SynthProperties):
+    # CC71-78: a stopped pipe blown by a player, the pan flute.
+    sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # A DRIVEN AIR COLUMN HAS NO DAMPER: the tone stops when the wind does, and
     # there is nothing anywhere on the instrument for a pedal to lift. Every
     # pipe, reed, brass and bowed voice in the bank inherits this. The
@@ -4586,6 +4612,8 @@ class FlueOrganProperties(OrganProperties):
 
 
 class ReedOrganProperties(OrganProperties):
+    # CC71-78: the reed winds: breath has an onset, a release and a vibrato.
+    sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # A chorus reed is present but should NOT dominate. Equal-PEAK calibration
     # (1/2200) left the spiky odd-only reed reading ~1-2 dB *under* the flue on
     # sustains, so it wanted lifting; but its high crest factor means a big lift
@@ -4707,6 +4735,9 @@ class FreeReedProperties(SynthProperties):
     rough -6 dB/octave; the three numbers are chosen to land near it with
     plausible ripple, not derived from any one instrument's slot geometry.
     """
+    # CC71-78: accordion bellows shake and a harmonica player vibrates from the
+    # throat.
+    sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # A free reed's pitch is its own mass and stiffness.
     pitch_bendable = False
     # A free reed speaks while the bellows push and stops when they stop.
@@ -4825,6 +4856,9 @@ class ReedOrganFreeProperties(FreeReedProperties):
     does not ask for a registration and a half-wired one is worse than none;
     this is a single 8' rank.
     """
+    # CC71-78: a pumped reed ORGAN: an onset and a release, and nobody's hand
+    # on a vibrato.
+    sound_controls = frozenset(('attack', 'release'))
     # A big instrument with a wooden case over the reed pans: rounder than an
     # accordion held against the chest, and the case takes more off the top.
     bore_corner_hz = 4200.0
@@ -5016,6 +5050,9 @@ class SectionMixin:
 
 
 class BrassProperties(OrganProperties):
+    # CC71-78: a player's effort brightens it, and breath has an onset, a
+    # release and a vibrato.
+    sound_controls = frozenset(('brightness', 'attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # Slurred rather than tongued: the lips keep buzzing and the harmonic
     # shifts, so there is no attack to make -- only the new partial to settle.
     legato_attack_s = 0.015
@@ -5280,6 +5317,9 @@ class MutedTrumpetProperties(TrumpetProperties):
     here: the level drop is the instrument, not the fit, and a composer writing
     con sordino expects it.
     """
+    # CC71-78: and a mute is a resonator with a Q -- the one acoustic resonance
+    # a player puts in.
+    sound_controls = BrassProperties.sound_controls | frozenset(('resonance',))
     # The mute's opening rather than the bell's: ka = 1 near 2.2 kHz, so it
     # stays omnidirectional through most of its range.
     directivity_radius = 0.025
@@ -5779,6 +5819,9 @@ class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     cello, contrabass), string/synth ensembles, choir/voice pads, and
     sustained synth leads/pads as a broad bucket. This is the brighter
     'first' section; BowedStringSecond is the darker companion."""
+    # CC71-78: a bow has an onset, a release and a vibrato; nothing brightens a
+    # violin but the player's bow, which is velocity.
+    sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     legato_attack_s = 0.012   # the bow never leaves the string; only the stopped length changes
     # AND IF THE STOPPED LENGTH SLIDES INSTEAD OF STEPPING, that is portamento
     # -- the same sentence as the line above, carried further. A hand position
@@ -7986,6 +8029,10 @@ class SawtoothSynthProperties(BowedStringProperties):
     flatly at odds with this family being exact. A docstring is not a test,
     which is why there is now a check for it in live.py's selftest.
     """
+    # CC71-78: a synthesiser IS the instrument these controls were named for:
+    # every one lands.
+    sound_controls = frozenset(('resonance', 'release', 'attack', 'brightness',
+                                'decay', 'vib_rate', 'vib_depth', 'vib_delay'))
 
     # AND ITS GLIDE IS A CIRCUIT, NOT AN ARM. This inherits from the bowed
     # string, so it has to say so or a saw lead would portamento like a
@@ -12555,6 +12602,144 @@ def rpn_fine_msb(cents):
     return max(0, min(16383, code)) >> 7
 
 
+# ---------------------------------------------- CC71-78, the sound controllers
+#
+# RELATIVE AND CENTRED, as Roland defines the same controls in GS: its NRPNs
+# 01 08/09/0A (vibrato rate, depth, delay), 01 20/21 (cutoff, resonance) and
+# 01 63/64/66 (attack, decay, release) are each a "relative change -64 ... +63"
+# stacked on the sound's own setting. GM 2 gave them CC numbers; both forms are
+# read. Value 64, or no message, is the voice exactly as it is.
+#
+# THE LAWS ARE CHOSEN, NOT PUBLISHED. Roland gives the range and not the amount,
+# and no GM 2 text was to hand when these were written. One shape per kind of
+# quantity: times scale by up to four either way, a rate by two, a cutoff by two
+# octaves, brightness by the +/-12 dB of effort velocity already clamps to.
+SOUND_CC = {71: 'resonance', 72: 'release', 73: 'attack', 74: 'brightness',
+            75: 'decay', 76: 'vib_rate', 77: 'vib_depth', 78: 'vib_delay'}
+GS_SOUND_NRPN = {(1, 0x08): 76, (1, 0x09): 77, (1, 0x0A): 78, (1, 0x20): 74,
+                 (1, 0x21): 71, (1, 0x63): 73, (1, 0x64): 75, (1, 0x66): 72}
+SOUND_EFFORT_DB = 12.0          # brightness at the extremes, as effort
+SOUND_TIME_RANGE = 4.0          # attack, decay, release: x/ 4
+SOUND_CORNER_RANGE = 4.0        # a synth's cutoff: two octaves either way
+SOUND_Q_RANGE = 4.0             # resonance: Q x/ 4 about Butterworth
+SOUND_VIB_RATE_RANGE = 2.0      # vibrato rate x/ 2
+SOUND_VIB_DEPTH_CENTS = 30.0    # vibrato depth added at full
+SOUND_VIB_DELAY_S = 1.0         # vibrato delay at full
+VIB_BLOOM_S = 0.25              # how long a delayed vibrato takes to bloom in;
+                                # synthkernel.c's VIB_BLOOM must match
+
+
+def sound_offset(value):
+    """d in -1 ... +0.98 from a 0-127 controller value; 64 is 0."""
+    return (float(value) - 64.0) / 64.0
+
+
+def sound_time_scale(d):
+    return SOUND_TIME_RANGE ** d
+
+
+def sound_vib_rate(d):
+    return SOUND_VIB_RATE_RANGE ** d
+
+
+def sound_vib_depth_add(d, base_mean):
+    """Depth to ADD to a voice's own, as a fraction of frequency.
+
+    Upward it adds up to SOUND_VIB_DEPTH_CENTS, because most solo voices have
+    no vibrato and a multiple of nothing is nothing. Downward it takes the
+    voice's own depth toward zero.
+    """
+    if d >= 0.0:
+        return d * (2.0 ** (SOUND_VIB_DEPTH_CENTS / 1200.0) - 1.0)
+    return d * float(base_mean)
+
+
+def sound_vib_delay(d):
+    return max(0.0, d) * SOUND_VIB_DELAY_S
+
+
+def sound_controls_of(cls):
+    """What this instrument answers of CC71-78, after the two blanket rules.
+
+    A registerable instrument answers none: it is set up by its stops, not
+    shaded by a player. A one-shot answers decay alone: nothing it does after
+    the strike is a player's, but how long it rings is the instrument's.
+    """
+    if cls is None or getattr(cls, 'registerable', False):
+        return frozenset()
+    if getattr(cls, 'one_shot', False):
+        return frozenset(('decay',))
+    return getattr(cls, 'sound_controls', frozenset())
+
+
+def _two_pole(x, q):
+    """|H| of a two-pole low-pass at x = f/fc, with quality q."""
+    import numpy as np
+    return 1.0 / np.sqrt((1.0 - x * x) ** 2 + (x / q) ** 2)
+
+
+def sound_shape(cls, nf, d_bright, d_res):
+    """A per-partial gain for brightness and resonance, NOT yet normalised.
+
+    The caller normalises it to keep the note's power: both controls are
+    COLOUR, not level, the separation the bore filter and aftertouch keep. The
+    same function shapes the note in both renderers, so they agree by
+    construction rather than by algebra.
+
+      brightness, effort voices:   (f/f0)^(effort_tilt * dB / 6.0206), the
+                                   aftertouch law -- a harder breath
+      brightness, synthesisers:    the low-pass corner moved, as a ratio of the
+                                   voice's own filter to the moved one
+      resonance, synthesisers:     a resonant peak at that corner, as a ratio
+                                   of a two-pole response at Q to a Butterworth
+                                   one -- exactly 1 when the Q is unchanged
+      resonance, a mute:           its own resonance's Q
+    """
+    import numpy as np
+    nf = np.asarray(nf, dtype=np.float64)
+    g = np.ones_like(nf)
+    ctl = sound_controls_of(cls)
+    if not len(nf):
+        return g
+    if d_bright and 'brightness' in ctl:
+        et = getattr(cls, 'effort_tilt', 0.0)
+        corner = getattr(cls, 'bore_corner_hz', 0.0)
+        if et:
+            k = et * (SOUND_EFFORT_DB * d_bright) / 6.0206
+            g *= (nf / max(float(nf.min()), 1e-9)) ** k
+        elif corner:
+            order = getattr(cls, 'bore_order', 2.0)
+            c2 = corner * SOUND_CORNER_RANGE ** d_bright
+            g *= (1.0 + (nf / corner) ** order) / (1.0 + (nf / c2) ** order)
+    if d_res and 'resonance' in ctl:
+        mq = getattr(cls, 'mute_resonance_q', 0.0)
+        corner = getattr(cls, 'bore_corner_hz', 0.0)
+        if mq and getattr(cls, 'mute_resonance_hz', 0.0):
+            hz = cls.mute_resonance_hz
+            boost = 10.0 ** (getattr(cls, 'mute_resonance_db', 0.0) / 20.0) - 1.0
+            r = nf / hz
+            q2 = mq * SOUND_Q_RANGE ** d_res
+            g *= ((1.0 + boost / (1.0 + (q2 * (r - 1.0 / r)) ** 2))
+                  / (1.0 + boost / (1.0 + (mq * (r - 1.0 / r)) ** 2)))
+        elif corner:
+            c = corner * (SOUND_CORNER_RANGE ** d_bright
+                          if (d_bright and 'brightness' in ctl
+                              and not getattr(cls, 'effort_tilt', 0.0)) else 1.0)
+            x = nf / c
+            q0 = 0.5 ** 0.5
+            g *= _two_pole(x, q0 * SOUND_Q_RANGE ** d_res) / _two_pole(x, q0)
+    return g
+
+
+def normalise_power(amp, gain):
+    """Scale `gain` so amp*gain carries amp's power: colour, not level."""
+    import numpy as np
+    amp = np.asarray(amp, dtype=np.float64)
+    p0 = float((amp * amp).sum())
+    p1 = float(((amp * gain) ** 2).sum())
+    return gain * ((p0 / p1) ** 0.5 if p1 > 0.0 and p0 > 0.0 else 1.0)
+
+
 def channel_pitch_ratio(range_st, wheel, coarse_st, fine_cents,
                         master_coarse_st=0.0, master_fine_cents=0.0):
     """The one number everything that tunes a channel reduces to.
@@ -12654,6 +12839,9 @@ class BagpipeProperties(ReedPipeProperties):
     than 440, but the drones are tuned to the chanter rather than to a fork, so
     what matters here is the interval and not the reference.)
     """
+    # CC71-78: NOTHING: the bag is at the pressure the arm holds, the chanter
+    # has no dynamics, and a piper does not vibrate.
+    sound_controls = frozenset()
     # Nine holes and a bag at constant pressure: see scale_cents.
     pitch_bendable = False
     # Two tenors and a bass. The tenors are a chorus: same nominal pitch, a few
@@ -12852,6 +13040,8 @@ class OpenPipeProperties(StoppedPipeProperties):
     max_harmonic 32 -> 49: h32 is only 4.2 kHz on the bass flute's low C, where
     the recording still carries 24 harmonics clear of its noise floor.
     """
+    # CC71-78: the flutes: breath has an onset, a release and a vibrato.
+    sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     legato_attack_s = 0.012   # a slurred flute: the embouchure holds, the fingering changes
     # A BLOWN INSTRUMENT IS NEVER SILENT BETWEEN ITS HARMONICS, and this was 0.
     # sustain_jitter is the wash's SUSTAINED level in the kernel, so with it at
@@ -13515,6 +13705,9 @@ class ClarinetProperties(CylindricalReedProperties):
     replacing it with a uniform one. If a quantity is the point of the fit, it
     has to be in the objective -- the same lesson the guitar's top end taught.
     """
+    # CC71-78: and the clarinet has a measured effort-to-colour law, +0.13 dB
+    # of tilt per dB.
+    sound_controls = ReedOrganProperties.sound_controls | frozenset(('brightness',))
     # EFFORT. Measured the same way as the brass, and the answer is the
     # difference every player knows: +0.13 dB of flattening per dB of level
     # against a trombone's +0.68. A clarinet is famously stable in colour across
