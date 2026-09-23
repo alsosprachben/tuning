@@ -432,6 +432,13 @@ unit's tail: two different rooms. `hall` by default; an organ wants `church`,
 and that is not a reverb setting but a building four times the volume with a
 tenth the absorption.
 
+The diffuse field starts at the first reflection, at full strength. It begins
+sparse, as discrete specular arrivals at the room's reflection density, and
+turns dense as each surface scatters what it reflects, so the 20–80 ms where a
+hall gets its width is no longer left almost empty. The walls are offset so
+that no three reflections arrive together anywhere across the stage.
+`python3 roomcheck.py` checks both, and more, for every room.
+
 `TUNING_MASTER_DB=-14` leaves room for the tail and the final -1 dBFS
 normalise — 2 dB lower than a single piece needs, because a survey has to hold
 the loudest thing in the corpus, which since the electric guitars landed is an

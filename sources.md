@@ -5319,3 +5319,51 @@ STANDARD 2 (SC-88 and Pro), 29 TR-707 and 30 TR-909 (Pro only), and 49 ETHNIC
 (SC-88 and Pro). 20, 35, 47 and 60 are sets on none of them. Like the SC-55's,
 this manual does not say what a number that is not a set does.
 
+## The early room: the tail from the first reflection, and a stagger across the stage
+
+Asked whether the room's reflections were properly spread out after the old
+hall's three surfaces at 12 m (+9.5 dB, a 34 Hz comb), measuring found two more
+problems.
+
+**The early field was short.** Of the six first-order images, those past 50 ms
+are dropped as echoes, which leaves the hall with only its floor bounce. The
+diffuse tail faded in on a smoothstep to the mixing time (√V ms), so the window
+where a hall's side reflections give it width was short of the physical level.
+The shortfall was 32 dB at the first reflection, 20 at 15 ms and 10 at 30 ms in
+the hall, and 31, 24 and 16 in the church. That is measured per octave with the
+decay removed at the ENERGY rate, 13.8/T60. A first pass removed it at the
+amplitude rate, 6.9/T60, and under-read everything; the figures here are the
+corrected ones.
+
+The statistical room is flat in energy from the first reflection apart from its
+decay: arrivals come faster as t² and each is weaker as 1/t², and the two
+cancel. What changes is the fine structure. Specular arrivals come at the
+reflection density 4πc³t²/V (Kuttruff, *Room Acoustics*, the statistical
+reflection density). Each reflection turns a fraction s of what it carries
+diffuse, s being the area-weighted `SURFACE_SCATTER` already declared per
+surface per octave. After n ≈ ct/(4V/S) reflections the specular share is
+(1−s)ⁿ. So `roomtail.build_ir` now sums a sparse train at that density,
+carrying (1−s)ⁿ from the second order on, with dense noise carrying the rest,
+from the first reflection at full strength. The density alone would crackle,
+since it gives the hall only ~8 arrivals a second at 13 ms. With s = 0.4-0.6
+the field is mostly diffuse within a few reflections, and no 1 ms window stands
+more than 3 dB over its neighbourhood. The per-band normalisation stays last, so
+each octave's total reverberant energy, and with it the −3 dB wetness, is
+unchanged; energy only moved from late to early.
+
+One fault came out of it: the high-pass that hands the bass to the room modes
+was a circular FFT filter applied after the decay. Its ringing from the IR's
+start wrapped to its end, which was harmless while the start was silent and
++22 dB of climb in the chapel once it was not. It is zero-padded now.
+
+**The stagger was judged on the centre line.** Three metres off it, the chamber
+and the church had two arrivals 0.8 and 0.6 ms apart. But a pair MUST coincide
+somewhere on every stage, real rooms included: as a player moves across, the two
+side walls' images lengthen and shorten in opposite senses and cross near the
+midpoint (measured 0.000-0.007 ms on a 1 cm grid in all four rooms). What made
+the hall boom was three surfaces together, and that is avoidable; the chapel and
+hall still had it over ~4% of the stage. So a draw is now scored on the
+soloist's pair on the centre line and the tightest TRIPLE anywhere across the
+stage. The tightest triples are now 4.1 ms (chamber), 7.4 (chapel), 7.6 (hall)
+and 14.3 (church); the centre-line pairs are 2.6, 4.6, 3.9 and 9.2 ms.
+`roomcheck.py` tests both, plus the early field and the spikes.

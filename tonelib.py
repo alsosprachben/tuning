@@ -15348,6 +15348,20 @@ def set_wetness(target_db, q=1.0):
 # rather than a round number, and its 2 ms bounce is the cue that tells you
 # there is a floor under the player. That comb is real and belongs.
 ROOM_STAGGER = float(__import__('os').environ.get('TUNING_STAGGER') or 0.10)
+# ...AND ACROSS THE STAGE, not only on the centre line -- but not for PAIRS.
+# As a player moves across the stage the two side walls' images lengthen and
+# shorten in opposite senses, so SOMEWHERE they are equal: one pair coincides
+# at some position in every shoebox, real ones included (measured on a 1 cm
+# grid: 0.000-0.007 ms in all four rooms, near the midpoint between the walls).
+# No stagger can remove that; it can only move it, which it does. What made the
+# old hall boom was THREE surfaces arriving together, +9.5 dB of coherent
+# energy -- and that IS avoidable: the chapel and the hall still had it over
+# about 4% of the stage. So a draw is scored by the worse of two things: the
+# closest PAIR on the centre line, where a soloist stands, and the tightest
+# TRIPLE anywhere across the stage (each position kept 0.5 m inside the walls;
+# the chamber is only 8 m wide). Behind the pairs that must coincide somewhere,
+# roomtail's early field now fills in.
+STAGGER_STAGE_X = tuple(-4.0 + 0.2 * i for i in range(41))
 _STAGGER_PLANES = ('room_left', 'room_right', 'room_back', 'room_front',
                    'room_ceiling')
 
@@ -15361,6 +15375,24 @@ def _room_arrivals(planes, floor, sx, sy, sz):
         img[axis] = 2.0 * plane - img[axis]
         out.append(_sqrt(img[0] ** 2 + img[1] ** 2 + img[2] ** 2))
     return out
+
+
+def centre_gap(planes, floor, sy):
+    """The closest two first-order arrivals on the centre line, metres of path."""
+    t = sorted(_room_arrivals(planes, floor, 0.0, sy, 0.0))
+    return min(b - a for a, b in zip(t, t[1:]))
+
+
+def stage_triple(planes, floor, sy):
+    """The tightest span of THREE first-order arrivals anywhere across the
+    stage (STAGGER_STAGE_X), metres of path."""
+    L, R = planes[0], planes[1]
+    worst = float("inf")
+    for x in STAGGER_STAGE_X:
+        sx = max(-L + 0.5, min(R - 0.5, x))
+        t = sorted(_room_arrivals(planes, floor, sx, sy, 0.0))
+        worst = min(worst, min(t[i + 2] - t[i] for i in range(len(t) - 2)))
+    return worst
 
 
 def stagger_room(name, amount=None, tries=256):
@@ -15408,8 +15440,7 @@ def stagger_room(name, amount=None, tries=256):
         # Compare PATH LENGTHS. The separation that matters is a time, but
         # the speed of sound is a constant factor and drops out of a
         # comparison between draws.
-        t = sorted(_room_arrivals(cand, floor, 0.0, sy, 0.0))
-        gap = min(b - a for a, b in zip(t, t[1:]))
+        gap = min(centre_gap(cand, floor, sy), stage_triple(cand, floor, sy))
         if gap > best_gap:
             best, best_gap = cand, gap
     if best is None:

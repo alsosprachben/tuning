@@ -22,10 +22,18 @@ declared in `tonelib.SynthProperties`:
   level    the room constant R = S*alpha/(1-alpha) sets the reverberant field
            against the direct sound at the source distance. No wet/dry knob.
 
-  onset    the mixing time, about sqrt(V) ms, which is where a geometric
-           description stops being meaningful and the statistical one starts.
-           For this hall that is ~102 ms, and the first-order images arrive
-           between 1 and 87 ms, so the two meet without a gap.
+  onset    the FIRST REFLECTION (the floor bounce, ~2 ms), at full strength:
+           a statistical room's reverberant energy is flat from there apart
+           from its decay. What changes with time is the fine structure, not
+           the level -- specular arrivals at Kuttruff's reflection density
+           4*pi*c^3*t^2/V, a few a second at first and hundreds by the mixing
+           time (~sqrt(V) ms, 102 in the hall), each reflection turning the
+           surfaces' declared scattering fraction diffuse. So the tail is a
+           sparse specular train carrying (1-s)^n after n reflections, from
+           the second order (blockrender draws the first), and dense noise
+           carrying the rest. See build_ir. It used to fade in on a smoothstep
+           nobody derived, which left the hall 32 dB short at its first
+           reflection and 20 dB at 15 ms.
 
 The first-order images do double-count slightly, since Eyring's reverberant
 field includes them. Measured on this room they contribute about 2.7% of the
@@ -132,21 +140,44 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
     # held organ note swing the steady-state response from -43.6 dB to +8.7 dB,
     # with 43 notches below -6 dB and one at 326 Hz reaching -42.5 dB. A real
     # room does not, because it has hundreds of early reflections filling each
-    # other's nulls.
+    # other's nulls. Starting at 10 ms left every note's ATTACK heard through
+    # the unfilled comb -- audible as colouration on transients even though the
+    # sustained response measured flat. So the tail begins at the FIRST
+    # reflection, the floor bounce, computed from the (staggered) room.
     #
-    # The energy to fill them is already accounted for and simply had nowhere to
-    # go: scattering takes 40-70% off every specular image, and that is exactly
-    # the incoherent early energy a room uses to fill its own combs. So the
-    # build begins at the first reflection and reaches full by the mixing time,
-    # rather than starting there.
-    # The first reflection lands well before 10 ms -- the floor bounce arrives
-    # at 0.7 ms -- so scattering, and therefore diffuse energy, begins then.
-    # Starting the build at 10 ms left every note's ATTACK heard through the
-    # unfilled comb, which is audible as colouration on transients even though
-    # the sustained response measures flat.
-    early = 0.002
-    gate = np.clip((t - early) / max(onset - early, 1e-6), 0.0, 1.0)
-    gate = gate * gate * (3.0 - 2.0 * gate)     # smoothstep
+    # AND AT FULL STRENGTH, WHICH IT WAS NOT. The build used to be a smoothstep
+    # from there to the mixing time, a shape nobody derived, and it left the
+    # window where a hall's side reflections live 15 dB short at 15 ms and
+    # 7 dB at 30 ms (hall), 18 and 9 (church). The reverberant energy of a
+    # statistical room is flat from the first reflection, apart from its decay:
+    # arrivals come faster as t^2 and each is weaker as 1/t^2, and the two
+    # cancel. That is the envelope now.
+    #
+    # WHAT CHANGES WITH TIME IS THE FINE STRUCTURE, not the level. Specular
+    # arrivals come at Kuttruff's reflection density 4*pi*c^3*t^2/V -- a few a
+    # second at 10 ms in the hall, ~500 at 100 ms -- and each reflection turns a
+    # fraction s of what it carries diffuse (SURFACE_SCATTER, per surface per
+    # octave). After n reflections, n ~ c*t over the mean free path 4V/S, the
+    # specular share is (1-s)^n. So the tail is two fields summed in energy:
+    # a SPARSE train at the reflection density carrying (1-s)^n, and dense
+    # noise carrying the rest. The specular train starts at the SECOND order,
+    # because blockrender already draws the first geometrically, per partial.
+    # With s = 0.3-0.5 the field is mostly diffuse within a few reflections,
+    # which is why it does not crackle -- a sparse train at image density
+    # alone would, each of its few arrivals carrying far too much energy.
+    c = 343.0
+    t0 = first_reflection(props)
+    r = props.radiation_distance
+    tau = t + r / c                              # time since emission
+    mfp = 4.0 * volume / max(sum(room_of(props)[1].values()), 1e-6)
+    order = c * tau / mfp                        # reflections so far
+    gate = (t >= t0).astype(float)
+    # The sparse train: arrivals at the reflection density, each scaled so the
+    # train's local mean square is 1 whatever the density -- its level is the
+    # envelope's job, its sparseness is the density's.
+    lam = 4.0 * math.pi * c ** 3 * tau * tau / volume
+    p_arr = np.clip(lam / float(sr), 0.0, 1.0)
+    amp = np.sqrt(1.0 / np.maximum(p_arr, 1e-12))
 
     rng = np.random.RandomState(seed)
     ir = np.zeros((n, channels))
@@ -158,6 +189,9 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
     for ci in range(channels):
         noise = rng.randn(n)
         spec = np.fft.rfft(noise)
+        sparse = np.where(rng.rand(n) < p_arr, amp * np.sign(rng.randn(n)), 0.0)
+        sparse[order < 2.0] = 0.0                  # first order is geometric
+        sspec = np.fft.rfft(sparse)
         acc = np.zeros(n)
         for i, (fc, t60, ratio) in enumerate(bands):
             lo = fc / math.sqrt(2.0)
@@ -169,6 +203,15 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
             if not mask.any():
                 continue
             band = np.fft.irfft(np.where(mask, spec, 0.0), n)
+            spar = np.fft.irfft(np.where(mask, sspec, 0.0), n)
+            # Each part to unit mean square in the band, so the mix below is a
+            # mix of ENERGIES: (1-s)^n specular, the rest diffuse.
+            band /= math.sqrt(max(float(np.mean(band * band)), 1e-30))
+            ms = float(np.mean(spar * spar))
+            spar = spar / math.sqrt(ms) if ms > 0.0 else spar
+            spec_share = (1.0 - scatter_at(props, fc)) ** order
+            spec_share[order < 2.0] = 0.0
+            band = np.sqrt(1.0 - spec_share) * band + np.sqrt(spec_share) * spar
             band *= gate * np.exp(-6.907755 * t / max(t60, 1e-3))
             # NORMALISE THE MEAN-SQUARE GAIN IN THE BAND, NOT THE TOTAL ENERGY.
             # sum(h^2) is the integral of |H|^2 over the band, so equating it to
@@ -182,9 +225,35 @@ def build_ir(props, sr, q=2.0, seed=0, channels=2, band_q=None):
                 acc += band * math.sqrt(ratio * share / e)
         ir[:, ci] = acc
     if fs_hz > 25.0:
-        spec = np.fft.rfft(ir, axis=0) * hp[:, None]
-        ir = np.fft.irfft(spec, n, axis=0)
+        # ZERO-PADDED, so the high-pass is a linear filter and not a circular
+        # one. Unpadded, its ringing from the START of the IR wrapped round to
+        # the END -- harmless while the tail faded in from nothing, and +22 dB
+        # of climb at 3.4 s in the chapel once the early field arrived at full
+        # strength (roomcheck's "wrap", which is what it is for).
+        f2 = np.fft.rfftfreq(2 * n, 1.0 / sr)
+        hp2 = np.clip((f2 - fs_hz) / max(fs_hz, 1e-6), 0.0, 1.0)
+        spec = np.fft.rfft(ir, 2 * n, axis=0) * hp2[:, None]
+        ir = np.fft.irfft(spec, 2 * n, axis=0)[:n]
     return ir, bands, onset
+
+
+def first_reflection(props):
+    """Seconds after the direct sound at which the first reflection arrives:
+    the earliest first-order image on the centre line, the floor's in every
+    room here. The diffuse field begins with the first scattering event."""
+    S = type(props)
+    planes = [S.room_left, S.room_right, S.room_back, S.room_front, S.room_ceiling]
+    r = props.radiation_distance
+    arr = T._room_arrivals(planes, S.room_floor, 0.0, r, 0.0)
+    return max(0.0, (min(arr) - r) / 343.0)
+
+
+def scatter_at(props, f):
+    """The room's area-weighted scattering coefficient at `f`."""
+    _, areas = room_of(props)
+    tot = sum(areas.values())
+    return sum(a * props._octave_interp(props.SURFACE_SCATTER[s], f)
+               for s, a in areas.items()) / max(tot, 1e-9)
 
 
 def schroeder(props):
@@ -392,7 +461,8 @@ def main(argv):
     print("== %s -> %s" % (inp, outp))
     print("   hall %.0f m3, %.0f m2 of surface, sources at %.0f m, Q=%.1f"
           % (volume, sum(areas.values()), props.radiation_distance, q))
-    print("   tail starts at the mixing time, %.0f ms; IR %.2f s" % (onset * 1000, len(ir) / sr))
+    print("   tail from the first reflection, %.1f ms, diffuse by the mixing time, %.0f ms; IR %.2f s"
+          % (first_reflection(props) * 1000, onset * 1000, len(ir) / sr))
     print("     Hz      T60       Q     reverberant vs direct")
     for f, t60, ratio in bands:
         if f > sr / 2:

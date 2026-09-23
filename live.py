@@ -6315,6 +6315,68 @@ def selftest():
           "%.2fx -- %.1f m, past the %.1f m where the room takes over)"
           % (127.0 / 40, _r0 * 127.0 / 40, _lo))
 
+    # ---- THE EARLY ROOM -----------------------------------------------------
+    # The walls are offset so no three reflections arrive together anywhere
+    # across the stage (a PAIR must cross somewhere; three need not), with the
+    # room's volume and surface -- hence its T60 and wetness -- preserved. The
+    # tail is flat in energy from the first reflection, and each octave still
+    # carries exactly the reverberant energy the room equation gives it.
+    import roomcheck as _RCk
+    _rb = []
+    _sr = 48000
+    for _room in sorted(_T.ROOM_PRESETS):
+        _T.set_room(_room, stagger=False)
+        _S = _T.SynthProperties
+        _pre = [_S.room_left + _S.room_right, _S.room_front + _S.room_back,
+                _S.room_ceiling + _S.room_floor]
+        _V0 = _pre[0] * _pre[1] * _pre[2]
+        _A0 = 2 * (_pre[0] * _pre[1] + _pre[0] * _pre[2] + _pre[1] * _pre[2])
+        _T.set_room(_room)
+        _pl = [_S.room_left, _S.room_right, _S.room_back, _S.room_front, _S.room_ceiling]
+        _w, _d, _h = _pl[0] + _pl[1], _pl[2] + _pl[3], _pl[4] + _S.room_floor
+        _cg = _T.centre_gap(_pl, _S.room_floor, _S.radiation_distance) / 0.343
+        _tg = _T.stage_triple(_pl, _S.room_floor, _S.radiation_distance) / 0.343
+        _ear = dict((n, ok) for n, ok, _m in _RCk.check_early(_T, _room))
+        _p = _T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
+        _ir, _bd, _on = _RT.build_ir(_p, _sr, channels=1)
+        _fq = np.fft.rfftfreq(len(_ir), 1.0 / _sr)
+        _spc = np.fft.rfft(_ir[:, 0])
+        # Per octave, cutting the finished IR back into bands LEAKS: each band
+        # was shaped in time, and a time shape spreads energy over its band's
+        # edges (the old tail read 0.965 at 500 Hz in the chamber by the same
+        # measure). Across 250 Hz-8 kHz the leakage between neighbours cancels,
+        # so that total is held to 2% and each octave only to 10% (0.4 dB).
+        _en = []
+        _tot, _tgt = 0.0, 0.0
+        for _fc, _t6, _ratio in _bd:
+            if not 250.0 <= _fc <= 8000.0:
+                continue
+            _lo2, _hi2 = _fc / 2 ** 0.5, _fc * 2 ** 0.5
+            _x = np.fft.irfft(np.where((_fq >= _lo2) & (_fq < _hi2), _spc, 0.0), len(_ir))
+            _e1 = float((_x * _x).sum())
+            _t1 = _ratio * (_hi2 - _lo2) / (_sr / 2.0)
+            _en.append(_e1 / _t1)
+            _tot += _e1; _tgt += _t1
+        _rb.append((_room, _cg, _tg, abs(_w * _d * _h / _V0 - 1.0),
+                    abs(2 * (_w * _d + _w * _h + _d * _h) / _A0 - 1.0),
+                    _ear.get("early") and _ear.get("spike"),
+                    (max(abs(e - 1.0) for e in _en), abs(_tot / _tgt - 1.0))))
+    _T.set_room(os.environ.get("TUNING_ROOM") or "hall")
+    check("no three reflections together anywhere on the stage, in any room",
+          all(cg >= 1.0 and tg >= 1.0 and dv < 1e-9 and da <= 0.01
+              for _r, cg, tg, dv, da, _e, _x in _rb),
+          "  (%s; volume exact, surface within 1%%)"
+          % ", ".join("%s pair %.1f/triple %.1f ms" % (r, cg, tg) for r, cg, tg, _a, _b, _e, _x in _rb))
+    check("...and the tail is flat from the first reflection, with no clicks",
+          all(e for _r, _a, _b, _c, _d, e, _x in _rb),
+          "  (every room within 3 dB, decay removed, from the first reflection "
+          "to the mixing time)")
+    check("...while the room's reverberant energy is what the room equation gives",
+          all(x[1] < 0.02 and x[0] < 0.10 for _r, _a, _b, _c, _d, _e, x in _rb),
+          "  (250 Hz-8 kHz within %.1f%%, every octave within %.1f%%: energy moved "
+          "from late to early, none added, so the -3 dB wetness stands)"
+          % (100 * max(x[1] for *_q, x in _rb), 100 * max(x[0] for *_q, x in _rb)))
+
     # ---- CC93 chorus: systematic, not drawn ---------------------------------
     # A bucket-brigade chorus makes a small number of copies at FIXED offsets,
     # each swept by its own slow oscillator. A string SECTION has many players
