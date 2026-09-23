@@ -37,9 +37,10 @@ phase-sensitive differences follow from the block size.
 longer than it was true, four lines under a warning about exactly that. See
 midi.md, which was written because of it.)
 
-WHAT CONTROLS IT READS: ten CCs -- 1, 7, 10, 11, 64, 66, 67, 91, 93, 120 --
-plus program change, both aftertouches, the pitch wheel and SysEx (GM System
-On, GM2 Scale/Octave Tuning). The pedals are here and not only in live.py.
+WHAT CONTROLS IT READS: thirteen CCs -- 1, 5, 7, 10, 11, 64, 65, 66, 67, 84,
+91, 93, 120 -- plus program change, both aftertouches, the pitch wheel and
+SysEx (GM System On, GM2 Scale/Octave Tuning). The pedals are here and not
+only in live.py.
 CC91 is here and NOT in live.py, because a reverb send offline is a distance
 from the microphone and needs no new DSP; live it would be a convolver on the
 audio thread. Seeing the whole file first is this renderer's advantage and is
@@ -670,7 +671,8 @@ def rank_speak_sec(events, on_sec, aj):
 # exactly these and nothing else.
 PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
-                "tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","br","p0R","pl")
+                "tbav","tau","tcut","gb","gt","gc","vd","vr","vp","delL","delR",
+                "gr","cr","br","p0R","pl")
 
 
 def prepare(path, tuner='hybrid440'):
@@ -808,10 +810,11 @@ def prepare(path, tuner='hybrid440'):
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","vd","vr","vp","delL","delR","gr","cr","br","p0R","pl")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","delL","delR","gr","cr","br","p0R","pl")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
+    _GL = [0.0, 0.05, 0.0]   # per-note portamento [g = ftgt/fsrc - 1, tau, cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
@@ -881,6 +884,11 @@ def prepare(path, tuner='hybrid440'):
         # width in Hz is that same number divided by where the partial sits.
         A["cbw"].append(_CBW[1]/max(1e-6,nomf) if _CBW[1] > 0.0 else _CBW[0])
         A["tbav"].append(_TB[0]); A["tau"].append(_TB[1]); A["tcut"].append(_TB[2])
+        # THE GLIDE IS PER NOTE, NOT PER PARTIAL, but it is stamped per partial
+        # because that is where the kernel reads it -- and because _TB beside it
+        # is NOT per note: mode lock overrides it per partial, which is exactly
+        # why portamento could not borrow those three slots and has its own.
+        A["gb"].append(_GL[0]); A["gt"].append(_GL[1]); A["gc"].append(_GL[2])
         A["vd"].append(_VB[0]); A["vr"].append(_VB[1]); A["vp"].append(_VB[2])
         A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
@@ -1081,6 +1089,103 @@ def prepare(path, tuner='hybrid440'):
             if _d0 <= _t < _u0:
                 return True
         return False
+
+    # ------------------------------------------------- PORTAMENTO (CC5/65/84)
+    #
+    # THREE CONTROLLERS THAT ARE NOT THREE SETTINGS OF ONE THING. CC65 is a
+    # switch, CC5 is a speed, and CC84 is neither: its data byte is a source
+    # NOTE NUMBER, it fires once, and it works with the switch off. Roland's
+    # VE-GS Pro MIDI Implementation is the primary source for all three -- the
+    # SC-55 manual is a scan with no text layer (see sources.md) and this one
+    # is the same GS control set with the text intact.
+    #
+    # CC5 IS A RATE, NOT A TIME, and that is Roland's own word: "This adjusts
+    # the rate of pitch change when Portamento is ON or when using the
+    # Portamento Control. A value of 0 results in the fastest change." So a
+    # wide interval takes proportionally longer than a narrow one, which is
+    # also what a hand does. What Roland does NOT publish is the curve from
+    # the 0-127 value to an actual speed; that is chosen here and written down
+    # in midi.md, the same position tension_settle_time is in.
+    _PORTA_ON = {}      # channel -> [(down_sec, up_sec)], the CC65 segments
+    for _c, _evs in ccs.items():
+        _segs = []; _dn = None
+        for _t, _cc, _v in sorted(_evs):
+            if _cc != 65:
+                continue
+            # 64 again, the same switch point the three pedals collapse at.
+            if _v >= 64 and _dn is None:
+                _dn = _t
+            elif _v < 64 and _dn is not None:
+                _segs.append((_dn, _t)); _dn = None
+        if _dn is not None:
+            _segs.append((_dn, total))
+        if _segs:
+            _PORTA_ON[_c] = _segs
+
+    _PORTA_T = {}       # channel -> sorted [(t, CC5 value)]
+    _PORTA_CTL = {}     # channel -> sorted [(t, source note number)]
+    for _c, _evs in ccs.items():
+        _t5 = sorted((_t, _v) for _t, _cc, _v in _evs if _cc == 5)
+        if _t5:
+            _PORTA_T[_c] = _t5
+        _t84 = sorted((_t, _v) for _t, _cc, _v in _evs if _cc == 84)
+        if _t84:
+            _PORTA_CTL[_c] = _t84
+
+    def _porta_on_at(_c, _t):
+        """Was CC65 up at this instant? Roland: 0-63 OFF, 64-127 ON."""
+        for _d0, _u0 in _PORTA_ON.get(_c, ()):
+            if _d0 <= _t < _u0:
+                return True
+        return False
+
+    def _porta_cc5_at(_c, _t):
+        """The CC5 in force at _t. Roland's initial value is 0 -- fastest."""
+        _ev = _PORTA_T.get(_c)
+        if not _ev:
+            return 0
+        _i = _bisect.bisect_right(_ev, (_t, 128)) - 1
+        return _ev[_i][1] if _i >= 0 else 0
+
+    # WHERE EACH NOTE GLIDES FROM, decided once for the whole file because
+    # offline it can be. Keyed on the note INSTANCE, (channel, note, onset),
+    # for the same reason sostenuto is: being glided into is a fact about one
+    # press of one key.
+    #
+    # CC84 WINS OVER CC65 AND IS CONSUMED. Roland's Example 2 sends it with
+    # nothing sounding at all and still glides, so it is not "reuse the voice
+    # that is playing" -- it is "the next note starts from here", and it fires
+    # once. The most recent CC84 before a note-on applies to that note-on and
+    # to no other.
+    _GLIDE_SRC = {}
+    _prev_on = {}       # channel -> (onset, pitch) of the last note started
+    _ctl_used = {}      # channel -> index of the last CC84 already spent
+    for _e in sorted(notes, key=lambda e: (e[2], e[0], e[1])):
+        _c, _n, _on = _e[0], _e[1], _e[2]
+        _src = None
+        _ctl = _PORTA_CTL.get(_c)
+        if _ctl:
+            _i = _bisect.bisect_right(_ctl, (_on, 128)) - 1
+            if _i >= 0 and _i != _ctl_used.get(_c, -1):
+                _pv = _prev_on.get(_c)
+                # ...only if it arrived AFTER the previous note-on, or it is a
+                # message about a note that has already been and gone.
+                if _pv is None or _ctl[_i][0] >= _pv[0]:
+                    _src = _ctl[_i][1]
+                    _ctl_used[_c] = _i
+        if _src is None and _porta_on_at(_c, _on):
+            _pv = _prev_on.get(_c)
+            # A STRICTLY EARLIER ONSET, so a chord does not glide from itself.
+            # Which note of a chord a glide starts from is undefined in poly
+            # mode -- Roland does not say, and CC84 exists because it does not.
+            # The last one to start is the convention, and it is a convention.
+            if _pv is not None and _pv[0] < _on:
+                _src = _pv[1]
+        if _src is not None and _src != _n:
+            _GLIDE_SRC[(_c, _n, _on)] = _src
+        _pv = _prev_on.get(_c)
+        if _pv is None or _on >= _pv[0]:
+            _prev_on[_c] = (_on, _n)
 
     def _sound_off(_c, _t):
         """The first All Sound Off on this channel at or after _t."""
@@ -1691,6 +1796,38 @@ def prepare(path, tuner='hybrid440'):
         _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
         _TBN = (_TB[0], _TB[1], _TB[2])   # note-level bend, restored per partial
+
+        # ------------------------------------------------ THE GLIDE, per note
+        #
+        # A SEPARATE SLOT FROM _TB, and the two lines above are why: mode lock
+        # overwrites the tension-bend triple PER PARTIAL a few lines down, and
+        # mode lock is carried by brass and strings -- exactly the voices that
+        # glide. Portamento cannot borrow those three floats because the voices
+        # that need them are the voices already using them.
+        #
+        # THE RATIO CANCELS EVERYTHING THE CHANNEL DID. Source and target are
+        # the same channel, so the static bend, the octave transposition and
+        # the GM2 scale table are the same multiplier on both and divide out:
+        # the tuning table's own ratio is the whole answer, and it is exact.
+        _GL[0] = 0.0
+        _gsrc = _GLIDE_SRC.get((ch, note, on))
+        _gmech = getattr(pc, 'glide_mechanism', None)
+        if _gsrc is not None and _gmech and 0 <= _gsrc < len(FREQ) and FREQ[_gsrc] > 0.0:
+            # CAN THE MECHANISM REACH? A hand and a slide have a compass and a
+            # circuit does not, and a valved gliss does not reach at all -- it
+            # crosses harmonics, which is a different thing and is handled by
+            # the lattice rather than by this test.
+            _reach = getattr(pc, 'glide_reach_semitones', None)
+            if _reach is None or abs(note - _gsrc) <= _reach + 1e-9:
+                _gg = T.glide_g(FREQ[note], FREQ[_gsrc])
+                _gtau = T.glide_tau(_porta_cc5_at(ch, on),
+                                    FREQ[note], FREQ[_gsrc], _gmech)
+                _GL[0] = _gg
+                _GL[1] = _gtau
+                _GL[2] = _gtau * T.PORTA_SETTLE_TAUS
+        # No _GLN beside _TBN: nothing overwrites the glide per partial, because
+        # a glide is a fact about the NOTE. Mode lock is a fact about a partial,
+        # which is the whole reason these are two triples and not one.
         # A pipe's passive modes start sharp and are pulled into lock by the drive
         # (mirrors tonelib: mode_lock_offset_for / mode_lock_time). It reuses the
         # kernel's per-partial pitch-bend slot -- a voice never needs both, since
@@ -2109,7 +2246,8 @@ def prepare(path, tuner='hybrid440'):
                  ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
                  ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
-                 ("tbav","f4"),("tau","f4"),("tcut","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
+                 ("tbav","f4"),("tau","f4"),("tcut","f4"),
+                 ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
                  ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4")):
         prep[k] = arr(k, dt)
     return prep
@@ -2143,7 +2281,9 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
                     dp(sl('om')),dp(sl('p0')),dp(sl('p0R')),fp(sl('aL')),fp(sl('aR')),fp(sl('nf')),
                     lp(sl('non')),lp(sl('noff')),fp(sl('fa')),fp(sl('re')),fp(sl('ch')),fp(sl('logr')),fp(sl('logrA')),fp(sl('aft')),fp(sl('sus')),
                     fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),fp(sl('cbw')),
-                    fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),
+                    fp(sl('tbav')),fp(sl('tau')),fp(sl('tcut')),
+                    fp(sl('gb')),fp(sl('gt')),fp(sl('gc')),
+                    fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('delL')),fp(sl('delR')),
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ip(sl('br')),fp(a['BR']),dp(a['BC']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),

@@ -10,11 +10,11 @@ time by exactly the same C the offline renderer uses.
 Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
        python3 live.py --list | --selftest | --latency
 
-It answers seventeen controllers -- 1, 6, 7, 10, 11, 38, 64, 66, 67, 93, 98,
-99, 100, 101, 120, 121, 123 -- plus program change, both aftertouches, the
-wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning), with RPN 0/0, 0/1
-and 0/2. That is GM Level 1 complete, plus two of GM 2's; the third, CC91, is
-offline-only. See midi.md, which is generated from this dispatch.
+It answers twenty controllers -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66, 67, 84,
+93, 98, 99, 100, 101, 120, 121, 123 -- plus program change, both aftertouches,
+the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning), with RPN 0/0,
+0/1 and 0/2. That is GM Level 1 complete, plus three of GM 2's; the fourth,
+CC91, is offline-only. See midi.md, which is generated from this dispatch.
 
 BANKS ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
 one. Pinning is not an optimisation: without it the LRU evicted the bank that
@@ -84,6 +84,13 @@ COLS_F8 = ("om", "p0", "p0R")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
            "vd", "vr", "vp", "delL", "delR", "az")
+# A GLIDE BELONGS TO THE PRESS, NOT TO THE VOICE, so these three are the one
+# group that is NOT copied from the template -- they are zeroed at stamp time
+# and written afterwards if this particular note-on is gliding. Templates are
+# keyed on (note, velocity bucket), and a portamento's source pitch is neither;
+# baking it in would mean a template per interval, which is the cache blowing
+# up for a fact that costs three floats to carry instead.
+COLS_F4_NOTE = ("gb", "gt", "gc")
 COLS_I8 = ("non", "noff")
 COLS_I4 = ("gr", "cr", "br", "pl")
 
@@ -139,7 +146,7 @@ def pan_table():
         out.append((al, ar, (ld - rd) / 2.0))
     _PAN_TABLE = out
     return out
-ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
+ALL_COLS = COLS_F8 + COLS_F4 + COLS_F4_NOTE + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
 
@@ -224,6 +231,7 @@ class Slab:
         self.a = {}
         for k in COLS_F8: self.a[k] = np.zeros(capacity, np.float64)
         for k in COLS_F4: self.a[k] = np.zeros(capacity, np.float32)
+        for k in COLS_F4_NOTE: self.a[k] = np.zeros(capacity, np.float32)
         for k in COLS_I8: self.a[k] = np.full(capacity, IDLE, np.int64)
         for k in COLS_I4: self.a[k] = np.zeros(capacity, np.int32)
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
@@ -536,6 +544,8 @@ class Slab:
             a[k][idx] = tmpl[k]
         for k in COLS_I4:
             a[k][idx] = tmpl[k]
+        for k in COLS_F4_NOTE:
+            a[k][idx] = 0.0   # no glide unless this press asks for one
         a["gr"][idx] = -1     # ungated: a drawn rank is one we stamped
         a["br"][idx] = -1     # live bends through retune, never through a row
         a["cr"][idx] = 0
@@ -614,6 +624,11 @@ class Slab:
         self.dirty = True
         a = self.a
         for k in COLS_F4:
+            a[k][idx] = a[k][src]
+        # A DISTORTION PRODUCT GLIDES WITH ITS PARENTS. Every input to the
+        # valve is moving by one ratio, so every sum and difference of them
+        # moves by that same ratio -- copied, not zeroed, unlike at stamp time.
+        for k in COLS_F4_NOTE:
             a[k][idx] = a[k][src]
         for k in COLS_I4:
             a[k][idx] = a[k][src]
@@ -1045,6 +1060,7 @@ class Bank:
 
     def __init__(self, program, drums, tuner):
         self.program, self.drums, self.tuner = program, drums, tuner
+        self._freqs = None
         pc = None if drums else __import__("patch_map").property_class_for_program(program)
         self.cls_name = "GM percussion" if drums else pc.__name__
         self.organ = (not drums) and getattr(pc, "registerable", False)
@@ -1196,6 +1212,19 @@ class Bank:
     def bucket_vel(self, b):
         """The velocity a bucket is built at: the centre of its band."""
         return int(min(127, (b + 0.5) * 128.0 / self.nbuckets))
+
+    def freqs(self):
+        """This bank's tuning table, built once.
+
+        THE RATIO IS ALL PORTAMENTO NEEDS, and taking it from the table rather
+        than from a template means it is the same number the file renderer
+        uses. A glide is between two notes of one channel, so whatever the
+        channel did to both -- bend, coarse and fine tuning, the GM2 scale
+        table -- is the same multiplier on each and cancels.
+        """
+        if self._freqs is None:
+            self._freqs = __import__("blockrender").tuning_table(self.tuner)
+        return self._freqs
 
     def _voice_class(self, note):
         """The property class this note will actually be rendered with.
@@ -1559,6 +1588,19 @@ class Live:
         self.sost = {}          # channel -> keys the sostenuto pedal is holding
         self.sota = {}          # channel -> [12 cents]
         self.sota_at = {}       # (channel, pitch class) -> ratio last applied
+        # PORTAMENTO. CC65 is a switch, CC5 a speed, CC84 neither -- its byte is
+        # a source NOTE NUMBER, it fires once, and Roland's Example 2 shows it
+        # working with the switch off and nothing sounding. See midi.md.
+        self.porta_on = {}      # channel -> CC65 is up
+        self.porta_time = {}    # channel -> CC5, 0 (fastest) by Roland's default
+        self.porta_src = {}     # channel -> a pending CC84 source note, consumed
+        # WHICH NOTE A GLIDE STARTS FROM, and self.down cannot answer it: it is
+        # a SET of what is held, with no order in it, so it knows what is down
+        # and not what went down last. Poly mode has no defined answer here --
+        # Roland does not give one, which is why CC84 exists -- and the last
+        # note to start is the convention everyone uses.
+        self.last_on = {}       # channel -> the most recent note-on
+        self._glide_from = None # source pitch for the note-on being dispatched
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
@@ -1939,6 +1981,18 @@ class Live:
                 # sounding -- see Slab.soft_strings. Nothing to do here but
                 # remember it; _note_on reads it when the hammer swings.
                 self.soft[ch] = msg.value >= 64
+            elif msg.control == 5:                  # portamento time
+                self.porta_time[ch] = msg.value
+            elif msg.control == 65:                 # portamento on/off
+                # Roland: 0-63 OFF, 64-127 ON -- the same switch point the three
+                # pedals collapse half-pedalling at.
+                self.porta_on[ch] = msg.value >= 64
+            elif msg.control == 84:                 # portamento control
+                # THE BYTE IS A NOTE NUMBER, not a depth. It arms the NEXT
+                # note-on on this channel to start from that pitch, once, and
+                # it does not need CC65: Roland's Example 2 sends it with
+                # nothing sounding at all and still glides.
+                self.porta_src[ch] = msg.value
             elif msg.control == 66:                 # sostenuto pedal
                 # NOT THE DAMPER PEDAL WITH A DIFFERENT NUMBER. Sustain holds
                 # everything played while it is down; sostenuto holds only the
@@ -2044,9 +2098,21 @@ class Live:
             # it, so a voice that never registered its key had every note swept
             # a block after it started -- notes dying in a fraction of a second.
             self.down.add((ch, msg.note))
+            # WHERE THIS NOTE GLIDES FROM, decided once for the channel before
+            # any part sees it -- a layered channel is several parts and one
+            # keyboard, so they must all glide from the same place. A pending
+            # CC84 wins and is spent here; otherwise CC65 takes the last note
+            # to have started. Read BEFORE last_on is updated, or every note
+            # would glide from itself.
+            _psrc = self.porta_src.pop(ch, None)
+            if _psrc is None and self.porta_on.get(ch):
+                _psrc = self.last_on.get(ch)
+            self._glide_from = _psrc if _psrc != msg.note else None
+            self.last_on[ch] = msg.note
             for part in parts:
                 if part.matches(ch, msg.note):
                     self._note_on(part, ch, msg.note, msg.velocity, n0)
+            self._glide_from = None
         else:
             self.down.discard((ch, msg.note))
             pedalled = False
@@ -2129,6 +2195,14 @@ class Live:
         if self.soft.get(ch) and slots:
             self.slab.soft_strings(slots, part.bank.soft_pedal_strings,
                                    part.bank.soft_pedal_top)
+        # PORTAMENTO, stamped rather than swept. The kernel carries the glide
+        # per partial (gb/gt/gc), so live does not advance anything per block
+        # the way the Leslie's Doppler has to -- the note is placed once with
+        # its whole trajectory attached and the kernel renders it. That is also
+        # what makes the two renderers agree by construction rather than by
+        # calibration: they write the same three floats.
+        if self._glide_from is not None and slots:
+            self._glide(part, ch, note, slots)
         if part.drums:
             # CHOKE, live. Offline this is done by scanning FORWARD for
             # the next strike in the exclusive class and truncating the
@@ -2258,6 +2332,43 @@ class Live:
         # ratios of the tonic rather than absolute Hz.
         hz = float(np.asarray(t["nf"])[:t["P"]].min())
         return hz if ch is None else hz * self._sota_ratio(ch, n)
+
+    def _glide(self, part, ch, note, slots):
+        """Write this press's portamento into the slots just stamped.
+
+        THE BANK DECIDES WHETHER IT GLIDES AT ALL, and it decides by mechanism
+        rather than by a flag: a trombone's slide, a stopped string, a valved
+        horn and a lag circuit are four different gestures and only the last
+        two are interchangeable. A voice with no mechanism ignores CC5/65/84
+        entirely, exactly as one with no damper ignores CC64.
+        """
+        src = self._glide_from + part.transpose
+        tgt = note + part.transpose
+        # THE ROUTER, NOT THE PROGRAM. GM 61 Brass Section hands each register
+        # to a different body, and two of those bodies are a slide and two are
+        # valves -- so the mechanism is a fact about the note, not the patch.
+        pc = part.bank._voice_class(tgt)
+        mech = getattr(pc, "glide_mechanism", None)
+        if not mech:
+            return
+        F = part.bank.freqs()
+        if not (0 <= src < len(F)) or F[src] <= 0.0 or F[tgt] <= 0.0:
+            return
+        # CAN THE MECHANISM REACH? An arm and a slide have a compass; a circuit
+        # does not. Out of reach is played clean -- a trombonist whose slide
+        # cannot get there does not glide most of the way and jump.
+        reach = getattr(pc, "glide_reach_semitones", None)
+        if reach is not None and abs(tgt - src) > reach + 1e-9:
+            return
+        g = T.glide_g(F[tgt], F[src])
+        tau = T.glide_tau(self.porta_time.get(ch, 0), F[tgt], F[src], mech)
+        idx = np.fromiter(slots, np.int64, len(slots))
+        a = self.slab.a
+        a["gb"][idx] = g
+        a["gt"][idx] = tau
+        a["gc"][idx] = tau * T.PORTA_SETTLE_TAUS
+        self.slab.dirty = True
+        self.glides = getattr(self, "glides", 0) + 1
 
     def _drones(self, part, ch, n0):
         """Bring the uncorked drones up and cork the rest.
@@ -2485,7 +2596,7 @@ class Live:
     # rockers, detune, tremolo depth, crescendo, vibrato) and a second copy of
     # that logic would be wrong within a week. Contains no CC121 and no sysex,
     # so _reset_controllers cannot recurse.
-    _RESET_CC = ((1, 0), (11, 127), (64, 0), (66, 0), (67, 0))
+    _RESET_CC = ((1, 0), (11, 127), (64, 0), (65, 0), (66, 0), (67, 0))
 
     def _reset_controllers(self, n0, ch):
         """CC121. Modulation, expression, pedals, bend, pressure, RPN select.
@@ -2500,6 +2611,12 @@ class Live:
         """
         self.wheel[ch] = 0
         self._repitch(ch, n0)
+        # A PENDING CC84 IS NOT A CONTROLLER AND STILL GOES. It is a one-shot
+        # that has not fired yet, and leaving it armed across a reset would let
+        # a glide arrive from a source note the file asked for before somebody
+        # said "put everything back". CC5 stays: it is a setting, like the bend
+        # range, and GM's reset list does not name it either.
+        self.porta_src.pop(ch, None)
         for cc, v in self._RESET_CC:
             try:
                 self._one(n0, mido.Message("control_change", channel=ch,
@@ -5238,6 +5355,125 @@ def selftest():
     check("...and lets go when the pedal does",
           not [_k for _k in _lp.slab.live if _k[2] == 60], "")
     _lp.shutdown()
+
+    # ---- PORTAMENTO, CC5/CC65/CC84 ------------------------------------------
+    #
+    # A GLIDE IS A LENGTH MOVING. The kernel carries it per partial as
+    # 1/(1 + g*e^(-t/tau)) -- the reciprocal, because f is 1/L and what settles
+    # is the hand's position, not the pitch. See midi.md and examples/portamento.py.
+    _pg = Live(program=57, rate=44100, frames=128, verbose=False,
+               tuner="hybrid440")          # 57 trombone: a real slide
+    _pg.warm()
+
+    def _pump(lv, n=2):
+        for _ in range(n):
+            _n0 = lv.n
+            lv.apply(_n0); lv.renderer.render(_n0, 128); lv.n = _n0 + 128
+
+    def _gcols(lv, _note):
+        """The glide on THIS note's slots, not on anything the slab still holds.
+
+        Scanning the whole slab for a nonzero gb finds the note BEFORE this one
+        -- which is still sounding, still gliding, and still correct -- and so
+        reports that every note glides forever. Three checks below failed that
+        way before they were asking the right question.
+        """
+        _sl = [i for k, v in lv.slab.live.items() if k[2] == _note for i in v]
+        if not _sl:
+            return None
+        _i = np.fromiter(_sl, np.int64, len(_sl))
+        _g = np.asarray(lv.slab.a["gb"])[_i]
+        if not (_g != 0.0).any():
+            return None
+        _j = _sl[int(np.nonzero(_g != 0.0)[0][0])]
+        return tuple(float(np.asarray(lv.slab.a[k])[_j])
+                     for k in ("gb", "gt", "gc"))
+
+    # float32 columns: gb lands exactly (0.25 is a power of two), gt does not,
+    # so the comparison is relative and sized to the storage rather than to
+    # double precision. A tolerance of 1e-9 on a float32 is a test that fails
+    # for arithmetic reasons and tells you nothing about the feature.
+    def _f32eq(a, b):
+        return abs(a - b) <= 1e-6 * max(1.0, abs(b))
+
+    _pg.on_midi(mido.Message("control_change", channel=0, control=5, value=64))
+    _pg.on_midi(mido.Message("control_change", channel=0, control=65, value=127))
+    _pg.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _pump(_pg)
+    check("a note with nothing before it does not glide", _gcols(_pg, 60) is None,
+          "  (there is nowhere to glide from)")
+    _pg.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+    _pg.on_midi(mido.Message("note_on", channel=0, note=64, velocity=100))
+    _pump(_pg)
+    _gc = _gcols(_pg, 64)
+    _F = _BRb.tuning_table("hybrid440")
+    _wg = T.glide_g(_F[64], _F[60])
+    _wt = T.glide_tau(64, _F[64], _F[60], "slide")
+    check("...and the next one glides from it, by the tuning table's own ratio",
+          _gc is not None and _f32eq(_gc[0], _wg),
+          "  (g = %.6f, and 1/(1+g) is the source pitch exactly)" % _wg)
+    check("...at the speed CC5 asked for",
+          _gc is not None and _f32eq(_gc[1], _wt),
+          "  (tau %.4f s, from the LENGTH travelled, not the interval)" % _wt)
+
+    # SAME INTERVAL, SAME TRAVEL, SAME TIME -- the direction symmetry that the
+    # first draft of the speed law did NOT have. It normalised the travel by
+    # the target length, which made a glide up 25% slower than the identical
+    # glide down: an artefact that would have had to be defended as physics.
+    _tu = T.glide_tau(64, _F[64], _F[60], "slide")
+    _td = T.glide_tau(64, _F[60], _F[64], "slide")
+    check("a glide takes the same time in either direction",
+          abs(_tu - _td) < 1e-12, "  (%.4f s both ways: it is the same slide)" % _tu)
+    # ...BUT NOT THE SAME CURVE. f is 1/L, so the same remaining travel is worth
+    # more cents as the tube shortens: an upward glide lingers near its target.
+    _hu = -math.log((math.sqrt(1.0 + _wg) - 1.0) / _wg)
+    _gd = T.glide_g(_F[60], _F[64])
+    _hd = -math.log((math.sqrt(1.0 + _gd) - 1.0) / _gd)
+    check("...and not the same curve, which is what makes it a length",
+          _hu > math.log(2.0) > _hd,
+          "  (half the interval at %.3f tau going up, %.3f down, ln2 = %.3f "
+          "for a lag circuit)" % (_hu, _hd, math.log(2.0)))
+
+    # THE REACH IS THE MECHANISM'S. A trombone's slide is a tritone; asked for
+    # more, a player does not glide most of the way and jump, they play it.
+    _pg.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0))
+    _pg.on_midi(mido.Message("note_on", channel=0, note=76, velocity=100))
+    _pump(_pg)
+    check("past the slide's reach it plays clean instead of gliding",
+          _gcols(_pg, 76) is None,
+          "  (an octave, and seven positions only span a tritone)")
+
+    # CC84: THE BYTE IS A NOTE NUMBER, it fires once, and Roland's Example 2
+    # shows it working with CC65 off and nothing sounding at all.
+    _pg.on_midi(mido.Message("control_change", channel=0, control=65, value=0))
+    _pg.on_midi(mido.Message("note_off", channel=0, note=76, velocity=0))
+    _pump(_pg)
+    _pg.on_midi(mido.Message("control_change", channel=0, control=84, value=60))
+    _pg.on_midi(mido.Message("note_on", channel=0, note=64, velocity=100))
+    _pump(_pg)
+    check("CC84 glides with the switch OFF, which is Roland's Example 2",
+          _gcols(_pg, 64) is not None and _f32eq(_gcols(_pg, 64)[0], _wg),
+          "  (a source note number, not a depth)")
+    _pg.on_midi(mido.Message("note_off", channel=0, note=64, velocity=0))
+    _pg.on_midi(mido.Message("note_on", channel=0, note=62, velocity=100))
+    _pump(_pg)
+    check("...and it is spent: the note after it does not glide",
+          _gcols(_pg, 62) is None, "  (a one-shot, not a mode)")
+    _pg.shutdown()
+
+    # A VOICE WITH NO MECHANISM REFUSES, exactly as one with no damper refuses
+    # CC64. A hammer leaves the string; there is nothing to slide along.
+    _pp = Live(program=0, rate=44100, frames=128, verbose=False, tuner="hybrid440")
+    _pp.warm()
+    _pp.on_midi(mido.Message("control_change", channel=0, control=65, value=127))
+    _pp.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _pump(_pp)
+    _pp.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+    _pp.on_midi(mido.Message("note_on", channel=0, note=64, velocity=100))
+    _pump(_pp)
+    check("a grand piano refuses portamento outright",
+          _gcols(_pp, 64) is None, "  (glide_mechanism is None on a struck string)")
+    _pp.shutdown()
 
     # CC67 UNA CORDA is a STRING COUNT, not a filter. The action slides so the
     # hammer strikes two strings of three: quieter and different in colour both

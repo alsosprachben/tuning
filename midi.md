@@ -36,13 +36,16 @@ for the reason above.
 | polyphonic aftertouch | ✓ | ✓ | the same, per note |
 | SysEx | ✓ | ✓ | GM System On, and GM2 Scale/Octave Tuning in both byte forms |
 | CC1 modulation | ✓ | ✓ | seven controls live, five in a file, chosen by voice — see below |
+| CC5 portamento time | ✓ | ✓ | the glide's **rate**, not its duration |
 | CC6 / CC38 data entry | ✓ | | into the selected RPN |
 | CC7 volume | ✓ | ✓ | channel fader, default **100** |
 | CC10 pan | ✓ | ✓ | a position, not a fader |
 | CC11 expression | ✓ | ✓ | the second fader, default **127** |
 | CC64 sustain | ✓ | ✓ | damper off, on voices that have one |
+| CC65 portamento | ✓ | ✓ | the switch; the next note glides from the last |
 | CC66 sostenuto | ✓ | ✓ | holds only what was already down |
 | CC67 soft | ✓ | ✓ | una corda: a string count, not a filter |
+| CC84 portamento control | ✓ | ✓ | its byte is a **source note number**; fires once |
 | CC91 reverb send | | ✓ | distance from the microphone |
 | CC93 chorus send | ✓ | ✓ | fixed detuned copies, mixed in power |
 | CC98 / CC99 NRPN | ✓ | | selected and then deliberately ignored |
@@ -51,7 +54,7 @@ for the reason above.
 | CC121 reset controllers | ✓ | | re-sends CC1/11/64/66/67 at their defaults |
 | CC123 all notes off | ✓ | | lifts the keys; the pedal still holds them |
 
-Seventeen controllers live, ten in files. Three RPNs: **0/0** bend range,
+Twenty controllers live, thirteen in files. Three RPNs: **0/0** bend range,
 **0/1** fine tuning (14-bit, ±100 cents), **0/2** coarse tuning (MSB only,
 ±64 semitones). NRPNs are selected so that a file which sends one does not have
 its data entry land in whatever RPN was selected last — the select is honoured
@@ -93,6 +96,123 @@ phasor integrates through them. The trick that keeps it to two rows rather than
 two per partial: a bend is a RATIO, so the phase a partial accumulates over a
 block is `w·(r−1)·BLK` and the partial's own frequency `w` factors straight
 out. The cumulative term is partial-independent. The kernel stays stateless.
+
+## A glide is a length moving, not a pitch moving
+
+Three controllers, and they are not three settings of one thing. CC65 is a
+switch, CC5 is a speed, and CC84 is neither.
+
+**Roland is the primary source and it settles two of the three.** The SC-55
+manual is a scan with no text layer (`sources.md`), but the **VE-GS Pro MIDI
+Implementation** is the same GS control set with the text intact:
+
+- CC5 *"adjusts the **rate** of pitch change … A value of 0 results in the
+  fastest change"*, initial value 0. **Rate, not time** — so a wide glide takes
+  proportionally longer than a narrow one.
+- CC65 is *"0-63 = OFF, 64-127 = ON"*, the same switch point the three pedals
+  collapse half-pedalling at.
+- CC84's data byte is a **source note number**. It arms the next note-on to
+  start from that pitch, once, and it does not need CC65 — Roland's Example 2
+  sends it with nothing sounding at all and the note still glides.
+
+What Roland does **not** publish is the curve from CC5's byte to a real speed.
+That is chosen in `tonelib.porta_semitone_time` and is anchored on a semitone:
+**2 ms at CC5 = 0** (which is to say, not a glide at all, because that is what
+"fastest" has to mean) to **300 ms at CC5 = 127**, geometric between.
+
+### What actually moves is a length
+
+A trombone slide, a finger on a string and a slide whistle's plunger all change
+a LENGTH, and `f = k/L`. So the distance in a glide is `|1/f_src − 1/f_tgt|`,
+and the kernel's frequency factor is a **reciprocal** settle rather than the
+exponential the tension bend uses:
+
+    bendfac = 1 / (1 + g·e^(−t/τ))        g = f_target/f_source − 1
+
+Two things fall out that nobody put in:
+
+| | |
+|---|---|
+| **direction** | the same interval takes the same time either way — it is the same travel |
+| **register** | the same interval takes **4× longer two octaves down**: a semitone in the pedal register is far more slide than a semitone at the top |
+
+An earlier draft normalised the travel by the *target* length instead, which
+made a glide up 25% slower than the identical glide down. That is an artefact
+of a normalisation, and the only thing worse than not having a physical claim
+is having to defend one you did not mean to make.
+
+### Up and down are not mirror images
+
+They take the same time; they do not take the same path. As the tube shortens
+the same remaining travel is worth more cents, so an upward glide **lingers**
+near its target and a downward one **arrives sooner**. Measured as the time to
+cover half the interval in cents, in units of τ:
+
+| | |
+|---|---|
+| up, C4 → E4 | **0.749 τ** |
+| a lag circuit | 0.693 τ (ln 2) |
+| down, E4 → C4 | **0.607 τ** |
+
+The circuit sits exactly between them, which is what it means for an arm and a
+capacitor to settle in different coordinates.
+
+### What each voice glides with
+
+`pitch_bendable` is the wrong gate: a trumpet is bendable and still cannot lip
+a glide of a fifth. So the property is a mechanism, not a flag.
+
+| `glide_mechanism` | programs | reach | what it is |
+|---|---|---|---|
+| `slide` | 2 | 6 st | a trombone's seven positions, one continuous slide |
+| `stop` | 12 | 7 st, 12 st | the violin family at a hand position; a fretless bass neck is longer |
+| `valve` | 4 | 2 st | trumpet, horn, tuba — **see below** |
+| `circuit` | 31 | unbounded | the synthesisers, settling in pitch rather than length |
+| *(none)* | 79 | — | piano, organ, harpsichord, mallets, bagpipe, free reeds |
+
+A voice with no mechanism ignores all three controllers, and its partial table
+is **bit-identical** with and without them.
+
+### The valve case is not a longer slide, and is not finished
+
+Ben, who plays these:
+
+> When we brass players glissando, we do it in many ways. 1. move cleanly from
+> one fingering to another, and blow through the harmonics. 2. move arbitrarily
+> the valves while blowing through the harmonics. 3. pressing down half way on
+> one of the valves to interfere with harmonic alignment, while muffling the
+> gliss, in between. 4. backing off the mouthpiece for a similar effect, to
+> allow for more lip sway.
+
+So a valved gliss walks a LATTICE — harmonic *n* over whatever length the
+valves have added — and `brass_fingering.py` already knows that lattice, having
+been written for intonation. CC5 there should be how *straight* the gliss is
+rather than how fast: clean fingering steps at one end, half-valve smear at the
+other, quieter in the middle where the harmonic alignment is broken.
+
+**That is not built yet.** Until it is, a valved brass voice glides only as far
+as the LIP reaches — about a tone, which is technique 4 and is real — and plays
+anything wider clean. A brass gliss past a tone is a different gesture, not a
+longer one, and rendering it as a smooth sweep would be a worse answer than
+rendering nothing.
+
+### Where the two renderers meet
+
+The file path can see the whole file, so it decides every note's source pitch
+in one pass before rendering a sample. Live cannot: it keeps the last note-on
+per channel, because `self.down` is a **set** and knows what is held without
+knowing what went down last.
+
+Both then write the same three floats per partial — `gb`, `gt`, `gc` — and one
+piece of C renders them, so the two agree by construction rather than by
+calibration. Measured, they differ by **exactly zero**.
+
+One deviation to record. Roland says that if a voice is already sounding at
+CC84's source note, *"this voice will continue sounding (i.e., legato)"* and
+becomes the new note — so the source note's later note-off does nothing. Here
+the bank's template cache is keyed on the note, so a fresh voice starts with
+the glide stamped and the old one is released. The audible difference is one
+attack transient, which is what `legato_attack_s` exists to suppress.
 
 ## Pan is a position, not a fader
 

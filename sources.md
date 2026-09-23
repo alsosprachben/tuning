@@ -3957,6 +3957,58 @@ second probe, timing each note of a walking line, was confounded because the
 notes are 0.5 s apart and the low ones ring for over 2 -- so every window held
 the previous note's tail. The isolated-note table above is the honest one.
 
+## A brass glissando is a walk through the harmonics, not a slide
+
+Portamento arrived with GM 2's CC5/CC65/CC84, and the control surface itself is
+in `midi.md`. What belongs here is the physical account, because brass is the
+one family where the gesture the controller names is not the gesture the
+instrument makes.
+
+**THE TROMBONE IS THE EXCEPTION, NOT THE RULE.** It has a genuine continuous
+slide -- seven positions, each a semitone below the last, so first to seventh
+is a tritone and every pitch between them exists. Everything else in the family
+has valves, which are discrete: three of them, seven usable combinations, each
+adding a fixed length.
+
+Ben, who plays these, on how the other gesture is actually produced:
+
+> When we brass players glissando, we do it in many ways. 1. move cleanly from
+> one fingering to another, and blow through the harmonics. 2. move arbitrarily
+> the valves while blowing through the harmonics. 3. pressing down half way on
+> one of the valves to interfere with harmonic alignment, while muffling the
+> gliss, in between. 4. backing off the mouthpiece for a similar effect, to
+> allow for more lip sway, as blowing through the harmonics.
+
+So the reachable pitches are a LATTICE -- harmonic *n* over the length the
+valves have added -- and a gliss walks it. `brass_fingering.py` already holds
+that lattice and did before any of this: `COMBOS` is the seven combinations,
+`_length_ratio` the length each adds, and the module was written to get the
+INTONATION right (valve combinations run sharp, the harmonic series is not the
+temperament). The same table answers a glissando, which is the second time this
+session that a module written for one purpose turned out to contain the answer
+to another.
+
+**AND CC5 THEN MEANS SOMETHING DIFFERENT ON A VALVED HORN.** Ben's own
+suggestion: *"Maybe the speed controller can control how straight or slurred
+the glissando is across the harmonics?"* -- so low CC5 is technique 1, stepping
+cleanly between fingerings, and high CC5 is technique 3 or 4, the steps smeared
+toward a line and damped in the middle where the harmonic alignment is broken.
+Half-valving is quieter, which is the audible tell and the thing that would
+make it recognisable rather than merely continuous.
+
+**WHAT IS ACTUALLY BUILT IS THE LIP, AND ONLY THE LIP.** The lattice is not
+implemented. Until it is, a valved brass voice carries `glide_mechanism =
+'valve'` with a reach of two semitones -- technique 4, which is real: a player
+backing off the mouthpiece can sway a note about that far without touching a
+valve. Anything wider plays clean.
+
+That is a deliberate gap rather than an approximation, and the reason is the
+one this file keeps arriving at: a brass gliss past a tone is a DIFFERENT
+gesture, not a longer one. Rendering it as a smooth sweep would produce
+something that sounds like a trombone played by a trumpet, and a listener who
+plays brass would hear it immediately. Nothing is a better answer than the
+wrong thing, and it leaves the lattice free to be built properly.
+
 ## GM 61 Brass Section: the doc was wrong, and the handover was a seam
 
 **THE COVERAGE DOC UNDERSTATED IT, AND THE BUG WAS IN THE DOC.** GM 61 was

@@ -2125,6 +2125,35 @@ class SynthProperties:
     # trichord notes.
     soft_pedal_strings = 0
 
+    # CC5/CC65/CC84, portamento: WHICH MECHANISM CARRIES THE GLIDE.
+    #
+    # Not a boolean, because pitch_bendable is the wrong question. A trumpet is
+    # bendable and still cannot lip a glide of a fifth -- it blows through the
+    # harmonics instead, which is a different gesture that sounds different, and
+    # a flag cannot say so. None means the instrument has no way to move
+    # continuously between two pitches at all, and CC5/65/84 do nothing on it,
+    # exactly as CC64 does nothing without a damper.
+    #
+    #   'slide'    a continuous length: a trombone, a slide whistle
+    #   'stop'     a stopped string: the violin family, a fretless bass
+    #   'valve'    the harmonic lattice: trumpet, horn, tuba (brass_fingering)
+    #   'circuit'  an analogue lag: the synthesisers, which model no mechanism
+    #
+    # AND THE GLIDE IS EXPONENTIAL IN LENGTH, NOT IN PITCH. A slide, a finger
+    # and a plunger all move a LENGTH, and f is 1/L. A hand settling toward its
+    # target position therefore gives a frequency curve that ACCELERATES in
+    # cents going up and DECELERATES going down -- the same hand, the same
+    # speed, an asymmetry a synthesiser does not have. GuitarFretNoiseProperties
+    # made half of this argument already ("a hand is fastest when it leaves and
+    # stops when it arrives"); this is the other half, and the settle is in the
+    # coordinate the hand actually moves along. The kernel does the reciprocal.
+    glide_mechanism = None
+
+    # How far the mechanism physically reaches, in semitones. None is unbounded:
+    # a synth has no arm, and a valved gliss walks the harmonic series rather
+    # than reaching for anything.
+    glide_reach_semitones = None
+
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):
         # effort must be known BEFORE attack_dampening is computed below, which
@@ -4990,6 +5019,28 @@ class BrassProperties(OrganProperties):
     # Slurred rather than tongued: the lips keep buzzing and the harmonic
     # shifts, so there is no attack to make -- only the new partial to settle.
     legato_attack_s = 0.015
+    # A VALVED GLISS IS NOT A SLIDE. Ben, who plays these: "When we brass
+    # players glissando, we do it in many ways. 1. move cleanly from one
+    # fingering to another, and blow through the harmonics. 2. move arbitrarily
+    # the valves while blowing through the harmonics. 3. pressing down half way
+    # on one of the valves to interfere with harmonic alignment, while muffling
+    # the gliss, in between. 4. backing off the mouthpiece for a similar effect,
+    # to allow for more lip sway."
+    #
+    # So the reachable pitches are a LATTICE -- harmonic n over the length the
+    # valves are adding -- and a gliss walks it rather than sweeping through it.
+    # brass_fingering already knows the lattice; it was written for intonation
+    # and answers this too.
+    glide_mechanism = 'valve'
+
+    # UNTIL THE LATTICE IS BUILT, ONLY THE LIP GLIDES -- which is technique 4,
+    # and is real: a player backing off the mouthpiece can sway a note a tone
+    # or so without touching a valve. Past that a brass gliss is not a longer
+    # version of the same gesture, it is a different one, and rendering it as a
+    # smooth sweep would be a worse answer than rendering nothing. So the reach
+    # is the lip's reach and a trumpet asked for a fifth plays it clean, until
+    # the harmonic walk exists to answer it properly.
+    glide_reach_semitones = 2.0
     # A DRIVEN AIR COLUMN IS EXACTLY HARMONIC. The reed, or the lips, lock every
     # mode to the fundamental -- the same reason FlueOrganProperties and
     # ReedOrganProperties carry B = 0. Inheriting the piano's stretch put partial
@@ -5254,6 +5305,13 @@ class MutedTrumpetProperties(TrumpetProperties):
 class TromboneProperties(CylindricalBrassProperties):
     # Radiating aperture: bell 216 mm.
     directivity_radius = 0.108
+    # THE ONE BRASS WITH NO VALVES AND NO LATTICE. Seven positions, each a
+    # semitone lower than the last, on one continuous slide -- so first to
+    # seventh is a tritone and everything between them exists. This is the
+    # control case for the whole feature: the same controller that smears a
+    # trumpet through harmonics is a plain hand speed here.
+    glide_mechanism = 'slide'
+    glide_reach_semitones = 6.0
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
     # over a trumpet. No score can correct that: the composer's velocities are
@@ -5722,6 +5780,13 @@ class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     sustained synth leads/pads as a broad bucket. This is the brighter
     'first' section; BowedStringSecond is the darker companion."""
     legato_attack_s = 0.012   # the bow never leaves the string; only the stopped length changes
+    # AND IF THE STOPPED LENGTH SLIDES INSTEAD OF STEPPING, that is portamento
+    # -- the same sentence as the line above, carried further. A hand position
+    # spans about a fifth before a shift, which is the reach a player has
+    # without lifting; beyond it they still slide, but it is a shift and sounds
+    # like one.
+    glide_mechanism = 'stop'
+    glide_reach_semitones = 7.0
     odd_only = False
     # BALANCE. Measured K-weighted at the same MIDI velocity, each voice in its
     # own comfortable register, the orchestra spanned 24.8 dB -- a flute 13.7 dB
@@ -6548,7 +6613,14 @@ class FretlessBassProperties(ElectricBassProperties):
 
     So the fundamental rings as long as ever and the upper partials go four
     times faster.
+
+    AND THE SAME ABSENCE MAKES IT THE GLIDING BASS. With no frets there is
+    nothing to step on, which is why the slides are the sound of the
+    instrument and why the reach is a long one: a bass neck is long, and
+    players use it.
     """
+    glide_mechanism = 'stop'
+    glide_reach_semitones = 12.0
     harmonic_decay_db = 4.0       # vs 1.0: the top goes, the fundamental stays
     strike_depth = 0.45           # played with more flesh, as fretless is
 
@@ -7914,6 +7986,17 @@ class SawtoothSynthProperties(BowedStringProperties):
     flatly at odds with this family being exact. A docstring is not a test,
     which is why there is now a check for it in live.py's selftest.
     """
+
+    # AND ITS GLIDE IS A CIRCUIT, NOT AN ARM. This inherits from the bowed
+    # string, so it has to say so or a saw lead would portamento like a
+    # violinist: a hand speed, an asymmetry between going up and going down,
+    # and a reach of a fifth. A voltage-controlled oscillator behind a lag has
+    # none of those -- it settles exponentially in PITCH rather than in length,
+    # both directions alike, as far as it is asked. This is the one place in
+    # the bank where the synthetic answer is the correct one rather than the
+    # cheap one, which is the same argument this class was created to make.
+    glide_mechanism = 'circuit'
+    glide_reach_semitones = None
     # ...AND A SYNTHESISER TAKES IT BACK. This sits under the bowed string for
     # its spectrum, not for its dampers: a pedal on a synth holds the gate.
     damper_pedal = True
@@ -12284,6 +12367,89 @@ def bend_ratio(pitch, semitones=None):
     """A MIDI pitch-wheel value, -8192..8191, as a frequency ratio."""
     st = BEND_RANGE_SEMITONES if semitones is None else semitones
     return 2.0 ** (float(pitch) / 8192.0 * st / 12.0)
+
+# ------------------------------------------------- CC5, the portamento speed
+#
+# ROLAND SAYS RATE AND DOES NOT SAY HOW MUCH. The VE-GS Pro MIDI Implementation
+# -- the primary source, since the SC-55 manual is a scan with no text layer --
+# specifies only that CC5 "adjusts the RATE of pitch change" and that "a value
+# of 0 results in the fastest change", with an initial value of 0. The curve
+# from the 0-127 byte to a real speed is not published by anyone, so it is
+# chosen here, once, and both renderers read it from this one place rather than
+# each having an opinion.
+#
+# Anchored on a SEMITONE because that is the interval a player is thinking in:
+# a semitone glide takes 2 ms at CC5=0 -- which is to say it does not sound
+# like a glide at all, which is what "fastest" has to mean -- and 300 ms at
+# CC5=127. Geometric in between, because a linear ramp through a range this
+# wide spends most of its travel in the part nobody uses.
+PORTA_SEMITONE_FAST = 0.002     # seconds at CC5 = 0
+PORTA_SEMITONE_SLOW = 0.300     # seconds at CC5 = 127
+
+# WHAT A HAND ACTUALLY COVERS. A slide moves in metres and a string is stopped
+# at a place, so the distance in a glide is a LENGTH DIFFERENCE -- and since f
+# is 1/L, that is |1/f_src - 1/f_tgt| up to the instrument's own scale. Measured
+# against a semitone at A440, so CC5 has a fixed meaning to anchor to.
+#
+# TWO CONSEQUENCES, BOTH TRUE OF A TROMBONE AND NEITHER PUT IN BY HAND. The
+# same interval takes the same time in either direction, because it is the same
+# travel; and the same interval takes LONGER LOW than high, because a semitone
+# down in the pedal register is far more slide than a semitone at the top. An
+# earlier draft normalised the travel by the target length instead, which made
+# a glide up 25% slower than the identical glide down -- an artefact of the
+# normalisation that would have had to be defended as if it were physics.
+_PORTA_REF_HZ = 440.0
+_PORTA_D_SEMI = (1.0 - 2.0 ** (-1.0 / 12.0)) / _PORTA_REF_HZ
+
+
+def porta_semitone_time(cc5):
+    """The settle time constant CC5 asks for, for a glide of one semitone."""
+    v = min(127.0, max(0.0, float(cc5))) / 127.0
+    return PORTA_SEMITONE_FAST * (PORTA_SEMITONE_SLOW / PORTA_SEMITONE_FAST) ** v
+
+
+def glide_g(f_target, f_source):
+    """The kernel's glide coefficient: f_target/f_source - 1.
+
+    The frequency factor is 1/(1 + g*e^(-t/tau)), so t=0 gives the source pitch
+    exactly and t->infinity the target the note was built at. It is also, read
+    the other way, the fractional change in LENGTH: L is 1/f, so L_source over
+    L_target is f_target over f_source, and g is how much of the length the
+    hand has to cover. That is why it, and not the interval in cents, is what
+    the speed divides into below.
+    """
+    return float(f_target) / float(f_source) - 1.0
+
+
+def glide_travel(f_target, f_source):
+    """How far the mechanism has to move, in units of 1/Hz -- i.e. of length."""
+    return abs(1.0 / float(f_source) - 1.0 / float(f_target))
+
+
+def glide_tau(cc5, f_target, f_source, mechanism='slide'):
+    """Settle time constant for a glide, from CC5 and how far it has to go.
+
+    TWO LAWS, AND THE DIFFERENCE IS THE POINT. A hand holds a SPEED, so the
+    time it needs is proportional to the DISTANCE -- which is what Roland's
+    word "rate" means, and which is why the travel above is in length and not
+    in cents. A lag circuit holds a TIME: its capacitor does not know how far
+    the control voltage moved, so a synthesiser's portamento takes about as
+    long for an octave as for a semitone.
+
+    The two agree at a semitone around A440, by construction, so CC5 means one
+    thing on a trombone and on a saw lead until the interval -- or the register
+    -- opens up.
+    """
+    t1 = porta_semitone_time(cc5)
+    if mechanism == 'circuit':
+        return max(1e-4, t1)
+    return max(1e-4, t1 * glide_travel(f_target, f_source) / _PORTA_D_SEMI)
+
+
+# How many time constants of glide to render before calling it arrived. An
+# exponential settle never actually lands, and 5 tau is 99.3% of the length
+# travelled -- under a cent for anything short of a two-octave sweep.
+PORTA_SETTLE_TAUS = 5.0
 
 GM_DEFAULT_EXPRESSION = 127     # CC11 does start at full: it is an attenuator
 GM_DEFAULT_PAN = 64             # centre

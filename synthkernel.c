@@ -130,6 +130,7 @@ void synth_voice(
     const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
     const float* chBW,
     const float* tbav, const float* tau, const float* tcut,
+    const float* gbav, const float* gtau, const float* gcut,
     const float* vdep, const float* vrate, const float* vph,
     const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
@@ -268,6 +269,36 @@ void synth_voice(
                     // kept in float, and summed in float, so a voice with only
                     // this term rounds exactly as it did before it was factored out
                     bendfac = 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
+                }
+                // PORTAMENTO, and it settles exponentially in LENGTH rather than
+                // in pitch -- which is the one thing that makes a modelled glide
+                // different from a synthesiser's. A trombone slide, a finger on a
+                // string and a slide whistle's plunger all move a LENGTH, and f is
+                // 1/L. So a hand settling toward its target position gives
+                // 1/(1 + g*e^{-t/tau}) in FREQUENCY, not the 1 + g*e^{-t/tau} the
+                // tension bend above uses. A glide up therefore accelerates in
+                // cents and a glide down decelerates, by the same amount, from the
+                // same hand. Nothing had to be tuned to get that; it is what the
+                // reciprocal does.
+                //
+                // g = f_target/f_source - 1, so t=0 gives exactly the source pitch
+                // and t->infinity the target the note was built at. g > -1 for any
+                // two real frequencies, so the denominator cannot vanish.
+                //
+                // Extra phase is the exact integral of (bendfac - 1):
+                //     tau * ln( (1 + g*e^{-t/tau}) / (1 + g) )
+                // zero at t=0 by construction, the same way BC is -- and frozen
+                // past the cutoff, where the instantaneous factor is already 1.
+                //
+                // MULTIPLIES, never assigns. This is the fourth modulator in this
+                // block and the rule the mode-lock bug wrote is now load-bearing
+                // four ways: phases ADD and frequency factors MULTIPLY.
+                if(gbav[p]!=0.f){
+                    float gg=gbav[p], gs=gtau[p], gcu=gcut[p];
+                    float trel=(float)(ns-a)/SRATE_F;
+                    float e=expf(-(trel<gcu?trel:gcu)/gs);
+                    bph += (double)w*SRATE_D*(double)(gs*logf((1.f+gg*e)/(1.f+gg)));
+                    if(trel<gcu) bendfac *= 1.f/(1.f+gg*e);
                 }
                 // PITCH BEND, and it is the THIRD modulator here, so it obeys
                 // the rule the comment at the top of this block was written to
