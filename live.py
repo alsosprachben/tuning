@@ -70,6 +70,59 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "vd", "vr", "vp", "delL", "delR", "az")
 COLS_I8 = ("non", "noff")
 COLS_I4 = ("gr", "cr", "br", "pl")
+
+# ---- CC10, and what pan actually IS in this renderer ------------------------
+# NOT A PAN LAW. The file path puts CC10 into channel_pan, which becomes a
+# POSITION IN METRES (tonelib: position_x = octave_position*octave_width +
+# channel_pan*4) and then an HRTF. Measured on that geometry, hard left against
+# centre:
+#
+#     interaural delay   +0.516 ms
+#     level difference   +0.10 dB at 100 Hz, +1.92 at 500,
+#                        +9.86 at 2 kHz, +15.20 at 4 kHz
+#
+# So an amplitude pan law would not merely lose the time cue -- it would be a
+# DIFFERENT EFFECT, loud where this one is nearly silent and silent where it is
+# loud. Live therefore does what the file does: a head shadow that depends on
+# frequency, and an interaural delay.
+#
+# Precomputed once from tonelib's own hrtf_at, so the two paths place a pan
+# identically and the audio thread does no trigonometry.
+PAN_METRES = 4.0                # channel_pan * 4, from tonelib's position_x
+_PAN_TABLE = None               # cc -> (alphaL, alphaR, half_itd_s)
+_PAN_BETA = 0.0                 # the head-shadow corner, rad/s
+
+
+def pan_table():
+    """cc -> (alpha_left, alpha_right, half_itd_seconds), 128 entries.
+
+    alpha is the only thing hrtf_gain takes from DIRECTION, so inverting it
+    here leaves the audio thread one sqrt per partial.
+    """
+    global _PAN_TABLE, _PAN_BETA
+    if _PAN_TABLE is not None:
+        return _PAN_TABLE
+    # StoppedPipe rather than the bare base: SynthProperties is abstract enough
+    # that it cannot be constructed. Only the head geometry is read, and that
+    # is the same on every voice.
+    q = T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
+    _PAN_BETA = q.hrtf_beta
+    amin, tmin = 0.1, 150.0 * math.pi / 180.0
+    out = []
+    for cc in range(128):
+        li, ri, ld, rd = q.hrtf_at((cc - 64) / 63.0 * PAN_METRES)
+        al = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * math.cos(li * math.pi / tmin)
+        ar = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * math.cos(ri * math.pi / tmin)
+        # THE DIFFERENTIAL ONLY. Panning hard moves the source 4 m sideways,
+        # which puts it 7.5 ms further from BOTH ears -- and the kernel shifts
+        # the envelope by delL/delR, so applying that would start a hard-panned
+        # attack 7.5 ms late in an engine whose control quantum is 2.7 ms. It
+        # would also break _amp_snapshot, which picks the direct sound out as
+        # the partials within two samples of the minimum delay. A delay applied
+        # equally to both ears of one source is not a cue anyway.
+        out.append((al, ar, (ld - rd) / 2.0))
+    _PAN_TABLE = out
+    return out
 ALL_COLS = COLS_F8 + COLS_F4 + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
@@ -645,6 +698,52 @@ class Slab:
         self.cv_aL[idx] *= r
         self.cv_aR[idx] *= r
 
+    def repan(self, slots, cc, was, rate, itd=True):
+        """Move a note's source position, CC10 `was` -> CC10 `cc`.
+
+        RATIOS AND DELTAS, never absolutes, so a stream of CC10s cannot
+        compound -- the caller remembers what it last applied, exactly as it
+        does for the channel fader.
+
+        THE LEVEL IMAGE AND THE TIME IMAGE ARE SEPARATE, and only the first of
+        them may move under a sounding note. delL/delR are not bookkeeping:
+        the kernel shifts each ear's ENVELOPE by them (see AMP in
+        synthkernel.c), so moving them mid-note moves the time origin of a
+        decaying note -- a level step, not merely a phase click. A pan pot on a
+        desk does not move a source's arrival time either. So a note takes its
+        interaural delay when it is struck, and after that only the head shadow
+        follows the hand.
+
+        The shadow is frequency-dependent and that is the whole point: hard
+        left is 0.10 dB at 100 Hz and 15.2 dB at 4 kHz. A single gain would be
+        a different effect.
+        """
+        if not slots or cc == was:
+            return
+        tab = pan_table()
+        al1, ar1, d1 = tab[max(0, min(127, int(cc)))]
+        al0, ar0, d0 = tab[max(0, min(127, int(was)))]
+        idx = np.fromiter(slots, np.int64, len(slots))
+        a = self.a
+        om = 2.0 * math.pi * a["nf"][idx].astype(np.float64)
+        b2 = _PAN_BETA * _PAN_BETA
+        shelf = lambda al: np.sqrt((al * om) ** 2 + b2)
+        rl = (shelf(al1) / shelf(al0)).astype(np.float32)
+        rr = (shelf(ar1) / shelf(ar0)).astype(np.float32)
+        for L, R in ((self.aL0, self.aR0), (a["aL"], a["aR"]),
+                     (self.tr_aL, self.tr_aR), (self.ls_aL, self.ls_aR),
+                     (self.cv_aL, self.cv_aR)):
+            L[idx] *= rl
+            R[idx] *= rr
+        if itd:
+            # p0 = -om*(non + delay) + ph0 in blockrender, so a delay delta of
+            # d samples moves the anchor by -om*d. Both ears, opposite signs.
+            dl = np.float32((d1 - d0) * rate)
+            a["delL"][idx] += dl
+            a["delR"][idx] -= dl
+            a["p0"][idx] -= a["om"][idx] * float(dl)
+            a["p0R"][idx] += a["om"][idx] * float(dl)
+
     def retune(self, slots, n, om_scale=None, vd=None, vrs=None):
         """Change a sounding partial's pitch or vibrato WITHOUT a click.
 
@@ -986,6 +1085,12 @@ class Bank:
             self.speeds = DETUNE_STEPS
             self.leslie_default = DETUNE_STEPS[len(DETUNE_STEPS) // 2]
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
+        # THE VOICE'S OWN REGISTRATION, which has never once applied. Part
+        # read it as `getattr(bank.pc, ...) if hasattr(bank, 'pc')` -- and Bank
+        # binds pc as a LOCAL and never assigns self.pc, so hasattr was always
+        # False and every organ Part started on rank 0 regardless of what its
+        # class declared. Four classes declare multi-bit registrations.
+        self.default_stops = 1 if drums else int(getattr(pc, "default_stops", 1))
         # The order a crescendo pedal adds them in, which is the organ's own idea
         # of how a registration should grow.
         self.cres_order = list(getattr(pc, "crescendo_order", self.rank_names)) if pc else []
@@ -1154,8 +1259,13 @@ class Bank:
         t["vel"] = vel
         return t
 
-    def warm(self, progress=None):
-        """Build every template for the playable range. Off-thread only."""
+    def warm(self, progress=None, stop=None):
+        """Build every template for the playable range. Off-thread only.
+
+        `stop` lets a newer program change preempt an older one's warm: it
+        returns without setting `warmed`, so the next pass resumes where the
+        cache left off rather than starting again.
+        """
         if self.warmed:
             return self
         lo, hi = self.range
@@ -1164,6 +1274,8 @@ class Bank:
         for note in range(lo, hi + 1):
             for b in range(self.nbuckets):
                 for sp in self.speeds:
+                    if stop is not None and stop():
+                        return self          # preempted; resume later
                     if (note, b, sp) not in self.templates:
                         try:
                             t = self._raw_template(note, self.bucket_vel(b), sp)
@@ -1229,11 +1341,23 @@ class Part:
         self.transpose = transpose
         self.level_db = level_db
         self.muted = False
-        # Which stops are out, per part: two organ layers can differ.
-        ds = getattr(bank.pc, 'default_stops', 1) if hasattr(bank,'pc') else 1
-        self.drawn = {r for j, r in enumerate(bank.rank_names) if (ds >> j) & 1} \
-                      or set(bank.cres_order[:1])   # start on the voice's own registration
         self.cres = 0.0
+        self.set_bank(bank)
+
+    def set_bank(self, bank):
+        """Point this part at a voice -- at construction, or on a program change.
+
+        IN PLACE, keeping the pid. A program change must not cut a note that is
+        already sounding (it does not on any synthesiser), and the pid is the
+        key for every per-part dict there is: the drive step, the tremolo
+        depth, the rockers, the detune, the drone count. Building a new Part
+        would orphan all of them and release every held note through set_parts.
+        """
+        self.bank = bank
+        # Which stops are out, per part: two organ layers can differ.
+        ds = getattr(bank, "default_stops", 1)
+        self.drawn = {r for j, r in enumerate(bank.rank_names) if (ds >> j) & 1} \
+                      or set(bank.cres_order[:1])   # the voice's own registration
 
     # a Part delegates its patch identity to its bank
     program = property(lambda self: self.bank.program)
@@ -1324,6 +1448,13 @@ class Live:
         self.vol = {}           # channel -> CC7, 127 until one arrives
         self.expr = {}          # channel -> CC11, the swell and the bellows
         self.cgain = {}         # channel -> the gain last applied to its notes
+        self.cpan = {}          # channel -> the CC10 last applied to its notes
+        self.wheel = {}         # channel -> raw pitchwheel, -8192..8191
+        self.brange = {}        # channel -> RPN 0, semitones; absent = bend_range
+        self.coarse = {}        # channel -> RPN 2, semitones
+        self.fine = {}          # channel -> RPN 1, cents
+        self.rpn = {}           # channel -> selected (msb, lsb); (127,127) = null
+        self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
         self.mod = {}           # channel -> current vibrato depth (fraction)
@@ -1370,6 +1501,17 @@ class Live:
         self.amp_calls = 0      # how many times the worker has run
         self.amp_thread = threading.Thread(target=self._amp_worker, daemon=True)
         self.amp_thread.start()
+        # ...and the same division for program changes: the audio thread may
+        # queue a voice change, never build one. See _bank_worker.
+        self.bank_reqs = collections.deque()      # (pid, (program, drums, tuner))
+        self.warm_reqs = collections.deque(maxlen=256)   # (bank, note, bucket, axis)
+        self.bank_go = threading.Event()
+        self.bank_stop = False
+        self.bank_label = None                    # what is building, for the TUI
+        self.bank_busy = False                    # a pass is in flight: see wait_bank
+        self.bank_err = None
+        self.bank_thread = threading.Thread(target=self._bank_worker, daemon=True)
+        self.bank_thread.start()
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = T.PRESS_DB      # one constant, shared with the file path
         self.press_tilt = T.PRESS_TILT
@@ -1417,7 +1559,7 @@ class Live:
     # ---- midi ---------------------------------------------------------------
     def on_midi(self, msg):
         if msg.type in ("note_on", "note_off", "pitchwheel", "control_change",
-                        "aftertouch", "polytouch"):
+                        "aftertouch", "polytouch", "program_change", "sysex"):
             with self.lock:
                 self.events.append((time.monotonic(), msg))
 
@@ -1443,17 +1585,35 @@ class Live:
                     self._amp_touch(p)
         self.post(go)
 
+    def shutdown(self):
+        """Stop the worker threads and the renderer.
+
+        The builder holds no lock the interpreter needs, but a daemon thread
+        still mid-build at shutdown discards whatever stdout had buffered --
+        which cost an hour of chasing a program change that was working
+        perfectly and simply could not say so.
+        """
+        self.bank_stop = True
+        self.bank_go.set()
+        self.amp_stop = True
+        self.amp_go.set()
+        self.renderer.close()
+
     def panic(self):
         """All notes off, the one thing you want when something drones."""
-        def go(n0):
-            for k in list(self.slab.live):
-                self.slab.oneshot.pop(k, None)
-                self.slab.release(k, n0)
-            self.down.clear()
-            self.pedalled.clear()
-            for p in self.parts:
-                self._amp_touch(p)
-        self.post(go)
+        self.post(self._all_off)
+
+    def _all_off(self, n0):
+        """The body of panic, callable with n0 in hand -- which is what a GM
+        System On needs, because it arrives ON the audio thread and must take
+        effect on this block rather than the next."""
+        for k in list(self.slab.live):
+            self.slab.oneshot.pop(k, None)
+            self.slab.release(k, n0)
+        self.down.clear()
+        self.pedalled.clear()
+        for p in self.parts:
+            self._amp_touch(p)
 
     def request_stops(self, part, want):
         """set_stops from the TUI. Drawing a stop STAMPS, which is the single
@@ -1497,31 +1657,24 @@ class Live:
                 self.last_error = "amp: %s: %s" % (type(e).__name__, e)
 
     def _one(self, n0, msg):
+        if msg.type == "sysex":
+            # No channel on a sysex, and every line below this reads one.
+            self._sysex(n0, msg)
+            return
         ch = msg.channel
         parts = self.parts
         if msg.type == "pitchwheel":
             # MIDI pitch bend is +/- 8192 over the wheel's range, which is
             # +/- bend_range semitones by convention.
-            ratio = 2.0 ** (msg.pitch / 8192.0 * self.bend_range / 12.0)
-            prev = self.bend.get(ch, 1.0)
-            self.bend[ch] = ratio
-            here = [p for p in parts if self._listens(p, ch)]
-            rotors = [p for p in here if p.bank.leslie]
-            if rotors:
+            # THE RAW WHEEL IS KEPT, which nothing did before: `bend` holds a
+            # ratio, and RPN 0 changing the range while the wheel is off centre
+            # has to recompute from the wheel itself. See _repitch.
+            self.wheel[ch] = msg.pitch
+            if any(p.bank.leslie for p in parts if self._listens(p, ch)):
                 # ON A ROTOR PART THE WHEEL IS THE HALF-MOON, not a bend: see
                 # PW_FIRE. A Hammond has no pitch bend to take away.
                 self._half_moon(ch, msg.pitch)
-            if prev != ratio:
-                if rotors:
-                    # A layered rig can have a Hammond and a lead on one
-                    # channel, and only one of them has a reason to ignore the
-                    # wheel -- so the rest still bend.
-                    keep = {p.pid for p in here if not p.bank.leslie}
-                    if keep:
-                        self.slab.retune(self._sounding(ch, pids=keep), n0,
-                                         om_scale=ratio / prev)
-                else:
-                    self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
+            self._repitch(ch, n0)
         elif msg.type == "aftertouch":
             self.pressure[ch] = msg.value / 127.0
             for slots, tilt in self._press_groups(ch):
@@ -1646,6 +1799,15 @@ class Live:
                     # The DIFFERENCE is that and only that: a note stamped at
                     # this setting comes out identical either way.
                     self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
+            elif msg.control == 10:                 # pan
+                # THE LEVEL IMAGE FOLLOWS THE POT, THE TIME IMAGE DOES NOT --
+                # see Slab.repan. A note keeps the interaural delay it was
+                # struck with; the head shadow moves under the hand.
+                was = self.cpan.get(ch, T.GM_DEFAULT_PAN)
+                if msg.value != was:
+                    self.cpan[ch] = msg.value
+                    self.slab.repan(self._sounding(ch), msg.value, was,
+                                    self.rate, itd=False)
             elif msg.control == 64:                 # sustain pedal
                 downp = msg.value >= 64
                 was = self.pedal.get(ch, False)
@@ -1656,6 +1818,20 @@ class Live:
                     for k in [k for k in list(self.slab.live) if (k[1], k[2]) in gone]:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
+            elif msg.control in (98, 99):           # NRPN select
+                # Nothing here implements an NRPN, but selecting one must STOP
+                # a following CC6 from landing on whatever RPN was last chosen.
+                self.rpn[ch] = None
+            elif msg.control == 101:                # RPN MSB
+                _sel = self.rpn.get(ch) or (127, 127)
+                self.rpn[ch] = (msg.value, _sel[1])
+            elif msg.control == 100:                # RPN LSB
+                _sel = self.rpn.get(ch) or (127, 127)
+                self.rpn[ch] = (_sel[0], msg.value)
+            elif msg.control in (6, 38):            # data entry
+                self._rpn_data(ch, msg.control, msg.value, n0)
+            elif msg.control == 121:                # reset all controllers
+                self._reset_controllers(n0, ch)
             elif msg.control == 123:                # all notes off
                 # The amplifier's partials hang off a key with no channel, so
                 # this sweep cannot see them -- but their parents are about to
@@ -1668,6 +1844,24 @@ class Live:
                 for k in [k for k in list(self.slab.live) if k[1] == ch]:
                     self.slab.oneshot.pop(k, None)
                     self.slab.release(k, n0)
+        elif msg.type == "program_change":
+            # INCOMING MIDI WINS. A part listening on this channel changes
+            # voice; notes already sounding keep the templates they were struck
+            # with, which is what a program change means and what keeps a held
+            # chord intact across one.
+            #
+            # A DRUM PART STAYS A DRUM PART: `drums` is carried through, so a
+            # program change on channel 10 re-selects the kit rather than
+            # turning the kit into a piano. GM has no melodic program there.
+            for part in parts:
+                if not self._listens(part, ch):
+                    continue
+                want = (int(msg.program), part.drums, part.tuner)
+                if (part.bank.program, part.bank.drums, part.bank.tuner) == want:
+                    continue
+                self.bank_reqs.append((part.pid, want))
+            if self.bank_reqs:
+                self.bank_go.set()
         elif msg.type == "note_on" and msg.velocity > 0:
             # Every voice records the key as down, not just the organ. The
             # stuck-note sweep releases whatever is sounding without a key behind
@@ -1714,7 +1908,12 @@ class Live:
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
             # counted, and the builder thread is what fixes it.
+            # ...AND ASK FOR IT. A program change swaps in a cold bank so the
+            # part is playable at once; this is what fills it, one template per
+            # note actually played, instead of eight seconds up front.
             self.misses += 1
+            self.warm_reqs.append((part.bank, snote, part.bank.bucket(vel), _axis))
+            self.bank_go.set()
             return
         # Timbre is quantised to the bucket, level is not: trim by the ratio
         # of the actual velocity to the one the bucket was built at.
@@ -1740,6 +1939,14 @@ class Live:
             return                  # slab full: this note does not sound
         # a note started while the wheel is up must join in progress
         slots = self.slab.live.get(key)
+        # PAN BEFORE THE EFFECTS CAPTURE. clav_tone, tremolo_arm and press all
+        # take their own baseline from a["aL"], so the pan has to be in it
+        # already or the first block would wipe it -- the same trap the channel
+        # fader fell into. Full transform here, delay included: this note has
+        # not sounded yet, so there is no envelope to step.
+        _cp = self.cpan.get(ch, T.GM_DEFAULT_PAN)
+        if _cp != T.GM_DEFAULT_PAN and slots:
+            self.slab.repan(slots, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
         if part.drums:
             # CHOKE, live. Offline this is done by scanning FORWARD for
             # the next strike in the exclusive class and truncating the
@@ -1937,6 +2144,249 @@ class Live:
         # A uniform 4-tuple like every other key, with no channel and no note:
         # nothing that sweeps a channel should catch the amplifier by accident.
         return (pid, -1, -1, "amp")
+
+    def _bend_range(self, ch):
+        return self.brange.get(ch, self.bend_range)
+
+    def _repitch(self, ch, n0):
+        """Recompute this channel's total pitch ratio and move its notes to it.
+
+        ONE PRODUCT, ONE LAST-APPLIED VALUE. The wheel, the bend range (RPN 0),
+        the coarse tune (RPN 2) and the fine tune (RPN 1) are four inputs to a
+        single ratio, and applying any of them RELATIVELY against the last one
+        means they cannot fight each other.
+
+        It is also why the RAW wheel value has to be kept, which nothing did
+        before: `bend` holds a ratio, so changing the range while the wheel is
+        off centre has to recompute from the wheel -- and moving the sounding
+        pitch when the range changes is the entire point of RPN 0.
+        """
+        r = (self._bend_range(ch) * self.wheel.get(ch, 0) / 8192.0 / 12.0
+             + (self.coarse.get(ch, 0.0) + self.fine.get(ch, 0.0) / 100.0) / 12.0)
+        ratio = 2.0 ** r
+        prev = self.bend.get(ch, 1.0)
+        if ratio == prev:
+            return
+        self.bend[ch] = ratio
+        here = [p for p in self.parts if self._listens(p, ch)]
+        rotors = [p for p in here if p.bank.leslie]
+        if rotors:
+            # A layered rig can have a Hammond and a lead on one channel, and
+            # only one of them has a reason to ignore the wheel.
+            keep = {p.pid for p in here if not p.bank.leslie}
+            if keep:
+                self.slab.retune(self._sounding(ch, pids=keep), n0,
+                                 om_scale=ratio / prev)
+        else:
+            self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
+
+    def _rpn_data(self, ch, cc, value, n0):
+        """CC6/CC38 into whichever RPN is selected. Unknown ones are ignored."""
+        sel = self.rpn.get(ch, (127, 127))
+        if sel is None or sel == (127, 127):
+            return                      # RPN null, or an NRPN: not ours
+        if sel == (0, 0):               # pitch bend sensitivity
+            if cc == 6:
+                # CC6 is semitones and zeroes the cents, which is the universal
+                # convention and makes a bare 101/100/6 exact -- which is what
+                # almost every GM file sends.
+                self.brange[ch] = float(value)
+            else:
+                self.brange[ch] = float(int(self._bend_range(ch))) + value / 100.0
+        elif sel == (0, 1):             # fine tuning, 14-bit, +/-100 cents
+            if cc == 6:
+                self._rpn_fine_msb[ch] = value
+            lsb = value if cc == 38 else 0
+            msb = self._rpn_fine_msb.get(ch, 64)
+            self.fine[ch] = ((msb << 7 | lsb) - 8192) / 8192.0 * 100.0
+        elif sel == (0, 2):             # coarse tuning, MSB only, +/-64 st
+            if cc == 6:
+                self.coarse[ch] = float(value - 64)
+        else:
+            return
+        self._repitch(ch, n0)
+
+    # Sent as real messages rather than re-implemented, because CC1 on this
+    # engine is seven different controls chosen per voice (drive, drone count,
+    # rockers, detune, tremolo depth, crescendo, vibrato) and a second copy of
+    # that logic would be wrong within a week. Contains no CC121 and no sysex,
+    # so _reset_controllers cannot recurse.
+    _RESET_CC = ((1, 0), (11, 127), (64, 0), (66, 0), (67, 0))
+
+    def _reset_controllers(self, n0, ch):
+        """CC121. Modulation, expression, pedals, bend, pressure, RPN select.
+
+        NOT CC7 volume, NOT CC10 pan, NOT the program, and NOT the tuning RPNs:
+        those are what a GM System On resets, and this is not one.
+
+        CLEARING THE DICTS IS NOT ENOUGH. A sounding note carries the old bend
+        in its `om` and the old expression in its amplitude, so each is put
+        back by the branch that put it there -- through the same inverse-ratio
+        arithmetic that makes a stream of controllers non-compounding.
+        """
+        self.wheel[ch] = 0
+        self._repitch(ch, n0)
+        for cc, v in self._RESET_CC:
+            try:
+                self._one(n0, mido.Message("control_change", channel=ch,
+                                           control=cc, value=v))
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "%s: %s" % (type(e).__name__, e)
+        try:
+            self._one(n0, mido.Message("aftertouch", channel=ch, value=0))
+        except Exception:
+            pass
+        self.rpn[ch] = (127, 127)
+        self.pw_armed[ch] = True
+
+    def _sysex(self, n0, msg):
+        """GM System On: F0 7E <dev> 09 01 F7.
+
+        Anything else is ignored SILENTLY and does not count an error -- a
+        Roland GS or Yamaha XG header in a file is not a malformed message,
+        it is a message for a different machine.
+
+        IT RE-PROGRAMS THE PARTS THAT EXIST AND CREATES NONE. A real GM module
+        is sixteen-part multitimbral; a Part here is an explicit assignment
+        with a channel, a key range, a level and a registration, and
+        manufacturing sixteen of them would demolish a hand-built split and cut
+        every held note. That is the one place this is not GM Level 1 complete,
+        and it is deliberate.
+        """
+        d = tuple(msg.data)
+        if len(d) < 4 or d[0] != 0x7E or d[2] != 0x09 or d[3] not in (0x01, 0x03):
+            return
+        self._all_off(n0)
+        for ch in range(16):
+            self._reset_controllers(n0, ch)
+            self.vol[ch] = T.GM_DEFAULT_VOLUME
+            self.expr[ch] = T.GM_DEFAULT_EXPRESSION
+            try:
+                self._one(n0, mido.Message("control_change", channel=ch,
+                                           control=10, value=T.GM_DEFAULT_PAN))
+            except Exception:
+                pass
+            # The per-channel tuning RPNs go; self.bend_range does NOT. GM says
+            # +/-2, and that is what an absent override gives -- but the TUI
+            # knob and the preset are the human, and a file does not overrule
+            # the person at the console.
+            self.brange.pop(ch, None)
+            self.coarse.pop(ch, None)
+            self.fine.pop(ch, None)
+            self._repitch(ch, n0)
+        self.cgain.clear()
+        for part in self.parts:
+            want = (0, part.drums, part.tuner)
+            if (part.bank.program, part.bank.drums, part.bank.tuner) != want:
+                self.bank_reqs.append((part.pid, want))
+        if self.bank_reqs:
+            self.bank_go.set()
+
+    def _bank_worker(self):
+        """Build voices off the audio thread, for program changes.
+
+        `_one` runs INSIDE the PortAudio callback, where the budget is 2.7 ms
+        and a full Bank.warm is 0.4 to 8.5 SECONDS. So a program change only
+        queues here, and this thread does the work -- the same division
+        _amp_worker already makes for distortion, for the same reason.
+
+        AND IT SWAPS THE VOICE BEFORE IT IS WARM. Constructing a Bank costs 5
+        to 33 ms (measured); warming it costs up to 8.5 s. Waiting for warm
+        would mean seconds of silence after every program change, and a GM file
+        that cycles sixteen programs would never catch up. So the part is
+        pointed at the cold bank immediately and plays whatever templates exist
+        -- none, at first, which Bank.get already handles by returning None and
+        counting a miss. The misses are then filled ON DEMAND, one template at
+        a time (13.9 ms for the worst voice), so a chord struck on a fresh
+        program is silent once and sounds ~60 ms later. That is the difference
+        between a usable program change and an unusable one.
+        """
+        while not self.bank_stop:
+          try:
+            if not self.bank_go.wait(0.2):
+                continue
+            self.bank_go.clear()
+            # BUSY SPANS THE WHOLE PASS, not just the build. The queue empties
+            # the instant a request is POPPED, so anything watching bank_reqs
+            # alone sees an idle builder in the window between the pop and the
+            # first assignment to bank_label -- and calls the swap done before
+            # it has been posted. That is a race a test wins by luck.
+            self.bank_busy = True
+            while self.bank_reqs and not self.bank_stop:
+                pid, want = self.bank_reqs.popleft()
+                # COALESCE. A file that sweeps a bank select sends a dozen
+                # program changes in a row and only the last one is worth
+                # building.
+                if any(p == pid for p, _ in self.bank_reqs):
+                    continue
+                part = next((q for q in self.parts if q.pid == pid), None)
+                if part is None:
+                    continue        # the rig was rebuilt under us; drop it
+                try:
+                    with _BANK_LOCK:
+                        bank = _BANKS.get(want)
+                        if bank is None:
+                            bank = Bank(want[0], want[1], want[2])
+                            _BANKS[want] = bank
+                        _BANKS.move_to_end(want)
+                    self.post(lambda n0, _p=part, _b=bank: self._swap_bank(_p, _b, n0))
+                    self.bank_label = "%d" % want[0]
+                    bank.warm(stop=lambda: bool(self.bank_reqs) or self.bank_stop)
+                    self.bank_label = None
+                except Exception as e:
+                    self.bank_err = "%s: %s" % (type(e).__name__, e)
+                    self.bank_label = None
+            self._fill_misses()
+            self.bank_busy = False
+          except BaseException as e:
+            # A builder thread that dies silently takes the feature with it and
+            # leaves no trace; this is the only place that can say so.
+            import traceback
+            self.bank_err = traceback.format_exc()
+            self.bank_label = None
+            self.bank_busy = False
+
+    def _fill_misses(self):
+        """Build the templates a note actually asked for and did not find."""
+        while self.warm_reqs and not self.bank_stop:
+            bank, note, bucket, axis = self.warm_reqs.popleft()
+            if (note, bucket, axis) in bank.templates:
+                continue
+            try:
+                t = bank._raw_template(note, bank.bucket_vel(bucket), axis)
+            except Exception:
+                t = None
+            if t is not None:
+                # One writer, and Bank.get is a pure dict lookup, so this is
+                # safe against the audio thread under the GIL.
+                bank.templates[(note, bucket, axis)] = t
+                bank.partials += t["P"]
+
+    def _swap_bank(self, part, bank, n0):
+        """Point a part at a new voice, on the audio thread.
+
+        Notes already sounding keep the templates they were struck with, which
+        is what a program change means. What must go is everything keyed to the
+        OLD voice: its panel state, and its amplifier's products.
+        """
+        part.set_bank(bank)
+        for d in (self.drive_step, self.trem_depth, self.clav_step,
+                  self.detune_step, self.drone_count, self.drone_quiet):
+            d.pop(part.pid, None)
+        self.amp_dirty.discard(part.pid)
+        self._amp_touch(part)
+
+    def wait_bank(self, timeout=30.0):
+        """Block until the builder is idle -- for tests and for the TUI."""
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < timeout:
+            if (not self.bank_reqs and not self.warm_reqs
+                    and not self.bank_busy and self.bank_label is None):
+                self.apply(self.n)
+                return True
+            time.sleep(0.01)
+        return False
 
     def _amp_worker(self):
         """Compute distortion off the audio thread; the callback stamps it.
@@ -2440,7 +2890,12 @@ def selftest():
     fails = []
 
     def check(name, ok, detail=""):
-        print("   %-54s %s%s" % (name, "ok" if ok else "FAIL", detail))
+        # FLUSHED, because an abnormal exit discards whatever stdout had
+        # buffered -- and a suite that dies without saying which check it died
+        # in costs more time than every check in it saves. (Twice today: a
+        # program change that worked perfectly and could not say so, and this.)
+        print("   %-54s %s%s" % (name, "ok" if ok else "FAIL", detail),
+              flush=True)
         if not ok:
             fails.append(name)
 
@@ -4079,6 +4534,158 @@ def selftest():
     check("...so its partials do not move with velocity, and it needs one bucket",
           all(_n == 1 and abs(_d) < 1e-4 for _l, _n, _d in _spread),
           "  (" + ", ".join("%s %d bucket/%.2f dB" % _t for _t in _spread) + ")")
+
+    # ---- GM Level 1's control surface, live -------------------------------
+    # The two renderers had COMPLEMENTARY gaps: live had bend, aftertouch and
+    # the pedal and no pan or program change; the file path had pan and
+    # program change and none of the others. Neither was the union.
+    _gm = Live(program=56, rate=48000, frames=128, verbose=False)
+    _gm.warm()
+
+    # PAN IS NOT A GAIN LAW HERE. CC10 offline becomes a position in METRES and
+    # then an HRTF, so hard left is 0.10 dB at 100 Hz and 15.2 at 4 kHz plus
+    # half a millisecond of interaural delay. An amplitude pan would be a
+    # different effect: loud where this one is silent.
+    def _panshot(_cc, _note=72):
+        _gm.on_midi(mido.Message("control_change", channel=0, control=10, value=_cc))
+        _gm.on_midi(mido.Message("note_on", channel=0, note=_note, velocity=100))
+        _gm.apply(0)
+        _k = [_x for _x in _gm.slab.live if _x[2] == _note][0]
+        _sl = _gm.slab.live[_k]
+        _a = _gm.slab.a
+        _hi = _a["nf"][_sl] > 3000.0
+        _r = (float(np.abs(_a["aL"][_sl][_hi]).sum()),
+              float(np.abs(_a["aR"][_sl][_hi]).sum()),
+              float(_a["delR"][_sl].mean() - _a["delL"][_sl].mean()))
+        _gm.on_midi(mido.Message("note_off", channel=0, note=_note, velocity=0))
+        _gm.apply(0)
+        _gm.slab.release(_k, 0); _gm.slab.reap(10 ** 9)
+        return _r
+    _pl = _panshot(0); _pc0 = _panshot(64); _pr = _panshot(127)
+    _db = lambda a, b: 20 * _math.log10(max(a, 1e-30) / max(b, 1e-30))
+    check("CC10 places a source, it does not fade one",
+          _db(_pl[0], _pl[1]) > 12.0 and _db(_pr[0], _pr[1]) < -12.0
+          and abs(_db(_pc0[0], _pc0[1])) < 1.0,
+          "  (above 3 kHz: %+.1f dB hard left, %+.1f centred, %+.1f hard right)"
+          % (_db(_pl[0], _pl[1]), _db(_pc0[0], _pc0[1]), _db(_pr[0], _pr[1])))
+    check("...with an interaural delay, which is the whole cue in the bass",
+          abs(_pl[2] / 48.0 - 0.5) < 0.1 and abs(_pr[2] / 48.0 + 0.5) < 0.1,
+          "  (%+.3f ms hard left, %+.3f hard right)"
+          % (_pl[2] / 48.0, _pr[2] / 48.0))
+    # ...AND THE TIME IMAGE DOES NOT MOVE UNDER A SOUNDING NOTE. delL/delR
+    # shift each ear's ENVELOPE in the kernel, so moving them mid-note is a
+    # level step, not a click. A pan pot does not move a source's arrival time.
+    _gm.on_midi(mido.Message("note_on", channel=0, note=72, velocity=100))
+    _gm.apply(0)
+    _k = [_x for _x in _gm.slab.live if _x[2] == 72][0]
+    _sl = _gm.slab.live[_k]
+    _d0 = _gm.slab.a["delL"][_sl].copy()
+    _a0 = float(np.abs(_gm.slab.a["aL"][_sl]).sum())
+    _gm.on_midi(mido.Message("control_change", channel=0, control=10, value=0))
+    _gm.apply(0)
+    _a1 = float(np.abs(_gm.slab.a["aL"][_sl]).sum())
+    _gm.on_midi(mido.Message("control_change", channel=0, control=10, value=0))
+    _gm.apply(0)
+    _a2 = float(np.abs(_gm.slab.a["aL"][_sl]).sum())
+    check("...and the level image follows the pot while the time image does not",
+          _db(_a1, _a0) > 2.0
+          and np.array_equal(_d0, _gm.slab.a["delL"][_sl])
+          and abs(_a2 - _a1) < 1e-6,
+          "  (%+.1f dB, delays bit-identical, and a repeat adds %+.4f dB)"
+          % (_db(_a1, _a0), _db(_a2, _a1)))
+    _gm.slab.release(_k, 0); _gm.slab.reap(10 ** 9)
+
+    # RPN 0, AND WHY THE RAW WHEEL HAS TO BE KEPT. `bend` holds a ratio and is
+    # applied relatively, so changing the range while the wheel is off centre
+    # can only work if the wheel value itself was stored -- which nothing did.
+    # Moving the SOUNDING pitch when the range changes is the point of RPN 0.
+    for _cc, _v in ((101, 0), (100, 0), (6, 2)):
+        _gm.on_midi(mido.Message("control_change", channel=0, control=_cc, value=_v))
+    _gm.on_midi(mido.Message("pitchwheel", channel=0, pitch=4096))
+    _gm.apply(0)
+    _c2 = 1200 * _math.log2(_gm.bend[0])
+    _gm.on_midi(mido.Message("control_change", channel=0, control=6, value=12))
+    _gm.apply(0)
+    _c12 = 1200 * _math.log2(_gm.bend[0])
+    check("RPN 0 changes the bend range under a wheel already off centre",
+          abs(_c2 - 100.0) < 0.1 and abs(_c12 - 600.0) < 0.1,
+          "  (half wheel: %.0f cents at +/-2, %.0f at +/-12)" % (_c2, _c12))
+    # RPN 1 and 2 are TUNINGS and fold into the same product -- and a null
+    # selection must stop a stray CC6 from landing on the last RPN used.
+    _gm.on_midi(mido.Message("control_change", channel=0, control=100, value=2))
+    _gm.on_midi(mido.Message("control_change", channel=0, control=6, value=64 + 7))
+    _gm.apply(0)
+    _tot = 1200 * _math.log2(_gm.bend[0])
+    for _cc, _v in ((101, 127), (100, 127), (6, 99)):
+        _gm.on_midi(mido.Message("control_change", channel=0, control=_cc, value=_v))
+    _gm.apply(0)
+    check("...and RPN 2 tunes the channel, while a null selection ignores data",
+          abs(_tot - 1300.0) < 0.1 and _gm.coarse.get(0) == 7.0,
+          "  (600 cents of wheel + 700 of coarse = %.0f, and CC6 after a null "
+          "left it at %.0f semitones)" % (_tot, _gm.coarse.get(0, 0)))
+
+    # CC121. Clearing the dicts is not enough: a sounding note carries the old
+    # bend in its om and the old expression in its amplitude.
+    for _cc, _v in ((7, 40), (11, 40), (10, 0), (64, 127), (1, 100)):
+        _gm.on_midi(mido.Message("control_change", channel=0, control=_cc, value=_v))
+    _gm.apply(0)
+    _gm.on_midi(mido.Message("control_change", channel=0, control=121, value=0))
+    _gm.apply(0)
+    check("CC121 resets the controllers and keeps what is not one",
+          _gm.wheel.get(0) == 0 and _gm.mod.get(0, 0.0) == 0.0
+          and _gm.pedal.get(0) is False and _gm.expr.get(0) == 127
+          and _gm.vol.get(0) == 40 and _gm.cpan.get(0) == 0
+          and _gm.rpn.get(0) == (127, 127) and _gm.coarse.get(0) == 7.0,
+          "  (volume, pan and the tuning RPNs survive it -- they are not "
+          "controllers; the wheel, mod, pedals and expression do not)")
+
+    # GM System On. It RE-PROGRAMS the parts that exist and creates none: a
+    # Part here is an explicit assignment with a channel, a range and a level,
+    # and manufacturing sixteen would demolish a hand-built split.
+    _gm.on_midi(mido.Message("note_on", channel=0, note=67, velocity=100))
+    _gm.apply(0)
+    _n_before = len(_gm.slab.live)
+    _gm.on_midi(mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01]))
+    _gm.apply(128)
+    check("a GM System On resets the machine and leaves the rig standing",
+          _n_before > 0 and len(_gm.slab.live) == 0
+          and _gm.vol.get(0) == _T.GM_DEFAULT_VOLUME
+          and _gm.cpan.get(0) == _T.GM_DEFAULT_PAN
+          and _gm.bend_range == 2.0 and not _gm.brange and not _gm.coarse,
+          "  (%d notes off, volume %d, pan centred, the per-channel tuning "
+          "cleared -- and bend_range, which is the TUI's knob, untouched)"
+          % (_n_before, _T.GM_DEFAULT_VOLUME))
+    _errs = _gm.errors
+    _gm.on_midi(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12]))
+    _gm.apply(256)
+    check("...and a sysex for another machine is ignored, not an error",
+          _gm.errors == _errs,
+          "  (a Roland GS or Yamaha XG header in a file is not malformed)")
+    _gm.shutdown()
+
+    # PROGRAM CHANGE. The audio thread may queue a voice change, never build
+    # one: _one runs inside the callback where the budget is 2.7 ms and a warm
+    # is up to 8.5 SECONDS. The part is pointed at a COLD bank at once and the
+    # templates are filled on demand, one per note actually played.
+    _pc = Live(program=56, rate=48000, frames=128, verbose=False)
+    _pc.warm()
+    _pc.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _pc.apply(0)
+    _pid0, _held = _pc.parts[0].pid, len(_pc.slab.live)
+    _pc.on_midi(mido.Message("program_change", channel=0, program=41))
+    _pc.apply(0)
+    _ok = _pc.wait_bank(90)
+    check("a program change switches the voice without cutting a held note",
+          _ok and _pc.parts[0].program == 41 and _pc.parts[0].pid == _pid0
+          and len(_pc.slab.live) == _held,
+          "  (56 -> 41, the pid kept so every per-part control survives, and "
+          "the chord still sounding on its own templates)")
+    check("...and the default registration finally applies",
+          Bank(16, False, "hybrid").default_stops == 7
+          and len(Part(Bank(16, False, "hybrid")).drawn) == 3,
+          "  (Bank never assigned self.pc, so hasattr() was always False and "
+          "every organ part started on one rank whatever its class declared)")
+    _pc.shutdown()
 
     # ---- PITCH BEND: A TUNING IS NOT A GESTURE ------------------------------
     # The file path ignored the wheel completely -- a render at full deflection
