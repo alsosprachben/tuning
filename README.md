@@ -327,7 +327,7 @@ it means a native PipeWire or JACK client instead of PortAudio-over-ALSA.
 **The GIL is what makes background building possible.** PyAudio's callback is a
 Python callback, so it needs the GIL, and `blockrender.prepare()` is pure Python
 and holds it. At the default 5 ms switch interval — longer than the 2.67 ms
-block budget — rebuilding the piano bank while playing measured **2.50
+block budget — rebuilding the piano patch while playing measured **2.50
 underruns/s**. `sys.setswitchinterval(0.0005)` in `live.py` takes that to
 **0.00**, at no measurable cost to latency. If it ever stops being enough the
 answer is `multiprocessing` with `spawn` and shared memory, not `fork`: forking a

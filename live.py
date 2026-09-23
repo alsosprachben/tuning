@@ -16,9 +16,9 @@ the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning, Master Volume,
 Fine and Coarse Tuning), with RPN 0/0 to 0/5. CC91 alone is
 offline-only. See midi.md, which is generated from this dispatch.
 
-BANKS ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
-one. Pinning is not an optimisation: without it the LRU evicted the bank that
-had just been requested, because a freshly built bank is the most recent thing
+PATCHES ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
+one. Pinning is not an optimisation: without it the LRU evicted the patch that
+had just been requested, because a freshly built patch is the most recent thing
 in the cache and nothing was holding it, so sixteen timbres left eleven
 resident and each new arrival evicted itself.
 
@@ -38,11 +38,11 @@ Two things make it fast enough to play by hand:
 THE ENGINE IS MULTI-TIMBRAL. A `Part` is one patch listening on one channel over
 one range of keys, so patches layer (two parts over the same keys) and split
 (two parts over different keys). The expensive half of a part -- its templates --
-lives in a `Bank` keyed by (program, drums, tuner) and shared between parts that
-want the same patch, so a layer of two trumpets builds one bank.
+lives in a `Patch` keyed by (program, drums, tuner) and shared between parts that
+want the same patch, so a layer of two trumpets builds one patch.
 
-NOTHING BUILDS ON THE AUDIO THREAD. `Bank.get()` is a pure dict lookup and
-returns None on a miss; every build goes through `Bank.warm()` on another
+NOTHING BUILDS ON THE AUDIO THREAD. `Patch.get()` is a pure dict lookup and
+returns None on a miss; every build goes through `Patch.warm()` on another
 thread. See the GIL note in `main()` for why that is not free either.
 
 BLOCK ALIGNMENT MATTERS. The kernel is window-independent only when the window is
@@ -1201,23 +1201,23 @@ class Renderer:
         return L[:frames], R[:frames]
 
 
-# ---- banks: the expensive, shareable half of a patch ------------------------
+# ---- patches: the expensive, shareable half of a part -------------------------
 
 # The honky-tonk's wheel positions, pre-warmed so sweeping it cannot miss.
-# 64 is the voice's own range, and the value a bank defaults to.
+# 64 is the voice's own range, and the value a patch defaults to.
 DETUNE_STEPS = (0, 64, 127)
 
-_BANKS = collections.OrderedDict()   # (program, drums, tuner) -> Bank
-_BANK_PARTIAL_CAP = 400000           # ~50 MB of templates; piano alone is 125k
-_BANK_LOCK = threading.RLock()
-_BANK_PINNED = set()        # (program, drums, tuner) a Part is holding now
+_PATCHES = collections.OrderedDict()   # (program, drums, tuner) -> Patch
+_PATCH_PARTIAL_CAP = 400000           # ~50 MB of templates; piano alone is 125k
+_PATCH_LOCK = threading.RLock()
+_PATCH_PINNED = set()        # (program, drums, tuner) a Part is holding now
 
 
-class Bank:
+class Patch:
     """Every template for one patch: (program, drums, tuner).
 
     Shared by every Part that wants that patch, so layering two trumpets builds
-    one bank. Effectively immutable once warmed, which is what makes it safe to
+    one patch. Effectively immutable once warmed, which is what makes it safe to
     hand to the audio thread by a single attribute assignment.
     """
 
@@ -1332,7 +1332,7 @@ class Bank:
             self.leslie_default = DETUNE_STEPS[len(DETUNE_STEPS) // 2]
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
         # THE VOICE'S OWN REGISTRATION, which has never once applied. Part
-        # read it as `getattr(bank.pc, ...) if hasattr(bank, 'pc')` -- and Bank
+        # read it as `getattr(patch.pc, ...) if hasattr(patch, 'pc')` -- and Patch
         # binds pc as a LOCAL and never assigns self.pc, so hasattr was always
         # False and every organ Part started on rank 0 regardless of what its
         # class declared. Four classes declare multi-bit registrations.
@@ -1377,7 +1377,7 @@ class Bank:
         return int(min(127, (b + 0.5) * 128.0 / self.nbuckets))
 
     def freqs(self):
-        """This bank's tuning table, built once.
+        """This patch's tuning table, built once.
 
         THE RATIO IS ALL PORTAMENTO NEEDS, and taking it from the table rather
         than from a template means it is the same number the file renderer
@@ -1558,25 +1558,25 @@ class Bank:
         return self.templates.get((note, self.bucket(vel), fast))
 
 
-def bank_for(program, drums, tuner, progress=None):
-    """The warmed Bank for one patch, built if it is not already cached.
+def patch_for(program, drums, tuner, progress=None):
+    """The warmed Patch for one patch, built if it is not already cached.
 
     BLOCKS while it builds -- callers must not be the audio thread. Serialised,
     because blockrender.prepare() reseeds the global RNG and two concurrent
     builds would race on it.
     """
     key = (int(program), bool(drums), str(tuner))
-    with _BANK_LOCK:
-        got = _BANKS.get(key)
+    with _PATCH_LOCK:
+        got = _PATCHES.get(key)
         if got is None:
-            got = Bank(key[0], key[1], key[2])
-            _BANKS[key] = got
+            got = Patch(key[0], key[1], key[2])
+            _PATCHES[key] = got
         got.warm(progress)
-        _BANKS.move_to_end(key)
+        _PATCHES.move_to_end(key)
         # LRU by partial count: piano is 242k partials on its own.
         #
-        # BUT NEVER A BANK SOMEBODY IS PLAYING. The cap counts partials and
-        # nothing else, so the least-recently-used bank it drops can be one a
+        # BUT NEVER A PATCH SOMEBODY IS PLAYING. The cap counts partials and
+        # nothing else, so the least-recently-used patch it drops can be one a
         # Part is holding and sounding through -- which was only a rebuild cost
         # until a program change could re-select a voice, and is now a voice
         # rebuilt from cold in the middle of a piece. Measured: sixteen typical
@@ -1586,28 +1586,28 @@ def bank_for(program, drums, tuner, progress=None):
         # So the LRU drops what nothing is using, and stops when everything
         # left is in use -- a rig playing sixteen voices keeps all sixteen,
         # because it is playing all sixteen.
-        while len(_BANKS) > 1:
-            if sum(b.partials for b in _BANKS.values()) <= _BANK_PARTIAL_CAP:
+        while len(_PATCHES) > 1:
+            if sum(b.partials for b in _PATCHES.values()) <= _PATCH_PARTIAL_CAP:
                 break
             # ...and never the one just asked for. It is not pinned yet --
             # the caller pins it once it is holding it -- and it is the most
-            # recently used, so without this the bank being built evicts
+            # recently used, so without this the patch being built evicts
             # ITSELF the moment the cache is full. Measured: sixteen voices
             # added one at a time left eleven resident, each new arrival
             # throwing away the one before it had a chance to be claimed.
-            drop = next((k for k in _BANKS
-                         if k != key and k not in _BANK_PINNED), None)
+            drop = next((k for k in _PATCHES
+                         if k != key and k not in _PATCH_PINNED), None)
             if drop is None:
-                break           # every bank left is on stage
-            del _BANKS[drop]
+                break           # every patch left is on stage
+            del _PATCHES[drop]
         return got
 
 
-def pin_banks(keys):
-    """The banks a live rig is holding, which the LRU must not evict."""
-    with _BANK_LOCK:
-        _BANK_PINNED.clear()
-        _BANK_PINNED.update(keys)
+def pin_patches(keys):
+    """The patches a live rig is holding, which the LRU must not evict."""
+    with _PATCH_LOCK:
+        _PATCH_PINNED.clear()
+        _PATCH_PINNED.update(keys)
 
 
 # ---- parts: the cheap, per-assignment half ---------------------------------
@@ -1616,24 +1616,24 @@ _PART_IDS = itertools.count(1)
 
 
 class Part:
-    """One patch assignment: a Bank, listening on a channel over a key range.
+    """One patch assignment: a Patch, listening on a channel over a key range.
 
     Two parts over the same keys is a LAYER; two over different keys is a SPLIT.
-    Everything here is cheap to change; everything expensive is in the Bank.
+    Everything here is cheap to change; everything expensive is in the Patch.
     """
 
-    def __init__(self, bank, channel=None, lo=0, hi=127, transpose=0, level_db=0.0):
+    def __init__(self, patch, channel=None, lo=0, hi=127, transpose=0, level_db=0.0):
         self.pid = next(_PART_IDS)
-        self.bank = bank
+        self.patch = patch
         self.channel = channel          # None = listen on every channel
         self.lo, self.hi = lo, hi
         self.transpose = transpose
         self.level_db = level_db
         self.muted = False
         self.cres = 0.0
-        self.set_bank(bank)
+        self.set_patch(patch)
 
-    def set_bank(self, bank):
+    def set_patch(self, patch):
         """Point this part at a voice -- at construction, or on a program change.
 
         IN PLACE, keeping the pid. A program change must not cut a note that is
@@ -1642,17 +1642,17 @@ class Part:
         depth, the rockers, the detune, the drone count. Building a new Part
         would orphan all of them and release every held note through set_parts.
         """
-        self.bank = bank
+        self.patch = patch
         # Which stops are out, per part: two organ layers can differ.
-        ds = getattr(bank, "default_stops", 1)
-        self.drawn = {r for j, r in enumerate(bank.rank_names) if (ds >> j) & 1} \
-                      or set(bank.cres_order[:1])   # the voice's own registration
+        ds = getattr(patch, "default_stops", 1)
+        self.drawn = {r for j, r in enumerate(patch.rank_names) if (ds >> j) & 1} \
+                      or set(patch.cres_order[:1])   # the voice's own registration
 
-    # a Part delegates its patch identity to its bank
-    program = property(lambda self: self.bank.program)
-    drums = property(lambda self: self.bank.drums)
-    organ = property(lambda self: self.bank.organ)
-    tuner = property(lambda self: self.bank.tuner)
+    # a Part delegates its patch identity to its patch
+    program = property(lambda self: self.patch.program)
+    drums = property(lambda self: self.patch.drums)
+    organ = property(lambda self: self.patch.organ)
+    tuner = property(lambda self: self.patch.tuner)
 
     def matches(self, ch, note):
         return ((self.channel is None or self.channel == ch)
@@ -1664,7 +1664,7 @@ class Part:
     def label(self):
         if self.drums:
             return "-- drum kit"
-        return "%d %s" % (self.program, self.bank.cls_name)
+        return "%d %s" % (self.program, self.patch.cls_name)
 
     def to_dict(self):
         return dict(program=self.program, drums=self.drums, tuner=self.tuner,
@@ -1674,13 +1674,13 @@ class Part:
 
     @staticmethod
     def from_dict(d, progress=None):
-        bank = bank_for(d.get("program", 56), d.get("drums", False),
+        patch = patch_for(d.get("program", 56), d.get("drums", False),
                         d.get("tuner", "hybrid"), progress)
-        p = Part(bank, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
+        p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.muted = bool(d.get("muted", False))
         if d.get("drawn"):
-            p.drawn = {r for r in d["drawn"] if r in bank.rank_names}
+            p.drawn = {r for r in d["drawn"] if r in patch.rank_names}
         return p
 
 
@@ -1702,7 +1702,7 @@ class Live:
         # which is atomic under the GIL: the callback sees the old tuple or the
         # new one, never a half-built one. See set_parts().
         if parts is None:
-            parts = (Part(Bank(program, bool(drums), tuner)),)
+            parts = (Part(Patch(program, bool(drums), tuner)),)
         self.parts = tuple(parts)
         # WHICH KEYS ARE DOWN, tracked explicitly. It used to be inferred from
         # what the slab was sounding, which is not the same thing: the crescendo
@@ -1841,16 +1841,16 @@ class Live:
         self.amp_thread = threading.Thread(target=self._amp_worker, daemon=True)
         self.amp_thread.start()
         # ...and the same division for program changes: the audio thread may
-        # queue a voice change, never build one. See _bank_worker.
-        self.bank_reqs = collections.deque()      # (pid, (program, drums, tuner))
-        self.warm_reqs = collections.deque(maxlen=256)   # (bank, note, bucket, axis)
-        self.bank_go = threading.Event()
-        self.bank_stop = False
-        self.bank_label = None                    # what is building, for the TUI
-        self.bank_busy = False                    # a pass is in flight: see wait_bank
-        self.bank_err = None
-        self.bank_thread = threading.Thread(target=self._bank_worker, daemon=True)
-        self.bank_thread.start()
+        # queue a voice change, never build one. See _patch_worker.
+        self.patch_reqs = collections.deque()      # (pid, (program, drums, tuner))
+        self.warm_reqs = collections.deque(maxlen=256)   # (patch, note, bucket, axis)
+        self.patch_go = threading.Event()
+        self.patch_stop = False
+        self.patch_label = None                    # what is building, for the TUI
+        self.patch_busy = False                    # a pass is in flight: see wait_patch
+        self.patch_err = None
+        self.patch_thread = threading.Thread(target=self._patch_worker, daemon=True)
+        self.patch_thread.start()
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = T.PRESS_DB      # one constant, shared with the file path
         self.press_tilt = T.PRESS_TILT
@@ -1877,7 +1877,7 @@ class Live:
         # order is deliberate: swap first, so nothing new is stamped for a part
         # that is going, then release a block later.
         self.parts = tuple(parts)
-        self._pin_banks()
+        self._pin_patches()
 
         def go(n0):
             for k in [k for k in list(self.slab.live) if k[0] not in keep]:
@@ -1886,13 +1886,13 @@ class Live:
         self.post(go)
 
     def warm(self, progress=None):
-        """Build every part's bank. Off-thread; blocks."""
+        """Build every part's patch. Off-thread; blocks."""
         t0 = time.time()
         for p in self.parts:
-            p.bank.warm(progress)
+            p.patch.warm(progress)
         if self.verbose:
-            tot = sum(p.bank.partials for p in self.parts)
-            nt = sum(len(p.bank.templates) for p in self.parts)
+            tot = sum(p.patch.partials for p in self.parts)
+            nt = sum(len(p.patch.templates) for p in self.parts)
             sys.stderr.write("  %d templates, %d partials, %.2f s\n"
                              % (nt, tot, time.time() - t0))
 
@@ -1958,9 +1958,9 @@ class Live:
                     self._amp_touch(p)
         self.post(go)
 
-    def _pin_banks(self):
+    def _pin_patches(self):
         """Tell the cache which voices are on stage, so it evicts none of them."""
-        pin_banks({(p.bank.program, p.bank.drums, p.bank.tuner)
+        pin_patches({(p.patch.program, p.patch.drums, p.patch.tuner)
                    for p in self.parts})
 
     def shutdown(self):
@@ -1971,8 +1971,8 @@ class Live:
         which cost an hour of chasing a program change that was working
         perfectly and simply could not say so.
         """
-        self.bank_stop = True
-        self.bank_go.set()
+        self.patch_stop = True
+        self.patch_go.set()
         self.amp_stop = True
         self.amp_go.set()
         self.renderer.close()
@@ -2048,7 +2048,7 @@ class Live:
             # ratio, and RPN 0 changing the range while the wheel is off centre
             # has to recompute from the wheel itself. See _repitch.
             self.wheel[ch] = msg.pitch
-            if any(p.bank.leslie for p in parts if self._listens(p, ch)):
+            if any(p.patch.leslie for p in parts if self._listens(p, ch)):
                 # ON A ROTOR PART THE WHEEL IS THE HALF-MOON, not a bend: see
                 # PW_FIRE. A Hammond has no pitch bend to take away.
                 self._half_moon(ch, msg.pitch)
@@ -2068,38 +2068,38 @@ class Live:
                 # once -- so each part is asked separately rather than the whole
                 # channel taking one branch.
                 here = [p for p in parts if self._listens(p, ch)]
-                amped = [p for p in here if p.bank.amp_drive > 0.0]
-                organs = [p for p in here if p.organ and not p.bank.leslie]
+                amped = [p for p in here if p.patch.amp_drive > 0.0]
+                organs = [p for p in here if p.organ and not p.patch.leslie]
                 # AND ON A VOICE WITH A TREMOLO THE WHEEL IS THE DEPTH KNOB.
                 # On a Rhodes suitcase and a Wurlitzer that is the one control
                 # a player moves while playing, so it takes the wheel ahead of
                 # the vibrato -- a tine cannot be given a pitch vibrato anyway,
                 # since nothing about the instrument can bend it.
-                tremmed = [p for p in here if p.bank.tremolo_depth > 0.0]
+                tremmed = [p for p in here if p.patch.tremolo_depth > 0.0]
                 # AND ON A CLAVINET THE WHEEL IS THE TONE ROCKERS. Four of the
                 # six switches left of a D6's keyboard are the tone section, so
                 # the wheel sweeps them darkest to brightest. It reaches notes
                 # already sounding, which is what flipping a rocker does: the
                 # filter is in the preamp, downstream of every ringing string.
-                clavs = [p for p in here if p.bank.clav_panel]
+                clavs = [p for p in here if p.patch.clav_panel]
                 # AND ON A HONKY-TONK THE WHEEL IS HOW FAR OUT OF TUNE. Only the
                 # pre-warmed positions exist, so it snaps between them rather
                 # than sweeping -- a miss here would be a dropped note.
-                detuners = [p for p in here if p.bank.detune_wheel]
+                detuners = [p for p in here if p.patch.detune_wheel]
                 # AND ON A BAGPIPE THE WHEEL IS HOW MANY DRONES ARE UNCORKED.
                 # This is the bug Ben heard: with no branch of its own the
                 # bagpipe fell into `others` and CC1 gave it 35 cents of
                 # vibrato -- on the one instrument in the bank that has no
                 # vibrato at all, since a bag under constant pressure is what
                 # a piper is FOR.
-                dronists = [p for p in here if p.bank.drone_wheel]
+                dronists = [p for p in here if p.patch.drone_wheel]
                 others = [p for p in here
-                          if not p.organ and not p.bank.leslie
-                          and p.bank.amp_drive <= 0.0
-                          and p.bank.tremolo_depth <= 0.0
-                          and not p.bank.clav_panel
-                          and not p.bank.detune_wheel
-                          and not p.bank.drone_wheel]
+                          if not p.organ and not p.patch.leslie
+                          and p.patch.amp_drive <= 0.0
+                          and p.patch.tremolo_depth <= 0.0
+                          and not p.patch.clav_panel
+                          and not p.patch.detune_wheel
+                          and not p.patch.drone_wheel]
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -2124,7 +2124,7 @@ class Live:
                     # read-once: a piper corks before playing, but a player at
                     # a keyboard has a wheel in their hand and expects it to
                     # do something, so the drones come and go under it.
-                    _nd = len(part.bank.drone_ratios)
+                    _nd = len(part.patch.drone_ratios)
                     n = max(0, min(_nd, int(round(msg.value / 127.0 * _nd))))
                     if self.drone_count.get(part.pid) != n:
                         self.drone_count[part.pid] = n
@@ -2137,10 +2137,10 @@ class Live:
                         self.clav_step[part.pid] = step
                         self.slab.clav_tone(step, self._sounding(ch, pids={part.pid}))
                 for part in tremmed:
-                    self.trem_depth[part.pid] = (msg.value / 127.0) * part.bank.tremolo_depth
+                    self.trem_depth[part.pid] = (msg.value / 127.0) * part.patch.tremolo_depth
                     self.slab.tremolo_arm(self._sounding(ch, pids={part.pid}),
                                           self.trem_depth[part.pid],
-                                          part.bank.tremolo_stereo)
+                                          part.patch.tremolo_stereo)
                 for part in organs:
                     self._crescendo(part, ch, msg.value, n0)
                 if others:
@@ -2358,11 +2358,11 @@ class Live:
                 if not self._listens(part, ch):
                     continue
                 want = (int(msg.program), part.drums, part.tuner)
-                if (part.bank.program, part.bank.drums, part.bank.tuner) == want:
+                if (part.patch.program, part.patch.drums, part.patch.tuner) == want:
                     continue
-                self.bank_reqs.append((part.pid, want))
-            if self.bank_reqs:
-                self.bank_go.set()
+                self.patch_reqs.append((part.pid, want))
+            if self.patch_reqs:
+                self.patch_go.set()
         elif msg.type == "note_on" and msg.velocity > 0:
             # Every voice records the key as down, not just the organ. The
             # stuck-note sweep releases whatever is sounding without a key behind
@@ -2437,7 +2437,7 @@ class Live:
                 # SynthProperties.damper_pedal.
                 if ((self.pedal.get(ch, False)
                      or (ch, msg.note) in self.sost.get(ch, ()))
-                        and part.bank.damper_pedal):
+                        and part.patch.damper_pedal):
                     # The key is up but the damper is not: the string keeps
                     # ringing until the pedal is lifted. Recorded so the
                     # stuck-note sweep does not mistake it for a lost note-off.
@@ -2456,18 +2456,18 @@ class Live:
         # No speed in the key any more: the rotor is driven from the callback,
         # so one template plays at every speed and a note started during a ramp
         # simply joins the rotor where it is.
-        _axis = (self.detune_step.get(part.pid, part.bank.leslie_default)
-                 if part.bank.detune_wheel else part.bank.leslie_default)
-        tmpl = part.bank.get(snote, vel, _axis)
+        _axis = (self.detune_step.get(part.pid, part.patch.leslie_default)
+                 if part.patch.detune_wheel else part.patch.leslie_default)
+        tmpl = part.patch.get(snote, vel, _axis)
         if tmpl is None:
             # Never build here: that is 1.4-10 ms on the audio thread. Silence,
             # counted, and the builder thread is what fixes it.
-            # ...AND ASK FOR IT. A program change swaps in a cold bank so the
+            # ...AND ASK FOR IT. A program change swaps in a cold patch so the
             # part is playable at once; this is what fills it, one template per
             # note actually played, instead of eight seconds up front.
             self.misses += 1
-            self.warm_reqs.append((part.bank, snote, part.bank.bucket(vel), _axis))
-            self.bank_go.set()
+            self.warm_reqs.append((part.patch, snote, part.patch.bucket(vel), _axis))
+            self.patch_go.set()
             return
         # Timbre is quantised to the bucket, level is not: trim by the ratio
         # of the actual velocity to the one the bucket was built at.
@@ -2475,9 +2475,9 @@ class Live:
         # ...UNLESS THE VOICE HAS NO TOUCH. Then the bucket's template already
         # carries the whole level -- attack_volume was neutralised when it was
         # built -- and trimming it by velocity is the touch sensitivity the
-        # class spent a paragraph refusing. See Bank.touch_sensitive.
+        # class spent a paragraph refusing. See Patch.touch_sensitive.
         scale = part.gain() * self._chan_gain(ch)
-        if part.bank.touch_sensitive:
+        if part.patch.touch_sensitive:
             scale *= ((vel / 127.0) ** 2 /
                       max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9))
         self._amp_touch(part)
@@ -2503,8 +2503,8 @@ class Live:
             self.slab.repan(slots, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
         # UNA CORDA, before those same captures and for the same reason.
         if self.soft.get(ch) and slots:
-            self.slab.soft_strings(slots, part.bank.soft_pedal_strings,
-                                   part.bank.soft_pedal_top)
+            self.slab.soft_strings(slots, part.patch.soft_pedal_strings,
+                                   part.patch.soft_pedal_top)
         # PORTAMENTO, stamped rather than swept. The kernel carries the glide
         # per partial (gb/gt/gc), so live does not advance anything per block
         # the way the Leslie's Doppler has to -- the note is placed once with
@@ -2532,14 +2532,14 @@ class Live:
             self.slab.clav_tone(cs, slots)
         d = self.trem_depth.get(part.pid, 0.0)
         if d > 0.0:
-            self.slab.tremolo_arm(slots, d, part.bank.tremolo_stereo)
+            self.slab.tremolo_arm(slots, d, part.patch.tremolo_stereo)
         pr = self.pressure.get(ch, 0.0)
         if pr:
             # The VOICE's tilt, as every other pressure path uses -- this one
             # passed the global constant, so a trombone struck under held
             # pressure opened by a third of what its measured law says.
             self.slab.press(slots, pr, self.press_db, self._press_tilt(part.pid, note))
-        if part.bank.drone_wheel:
+        if part.patch.drone_wheel:
             self.drone_quiet.pop(part.pid, None)
             self._drones(part, ch, n0)
         if self.chorus.get(ch, 0.0) > _CHR.FLOOR:
@@ -2548,7 +2548,7 @@ class Live:
         # channel's single bend ratio rather than joining it. `note` is the
         # written key, which is what the MIDI spec indexes the table by.
         b = self.bend.get(ch, 1.0) * self._key_ratio(part, ch, note)
-        if str(part.bank.tuner).lower() == 'gm2':
+        if str(part.patch.tuner).lower() == 'gm2':
             self.mts_at[(part.pid, ch, note + part.transpose)] = \
                 self._mts_ratio(part, ch, note)
         v = self.mod.get(ch, 0.0)
@@ -2597,10 +2597,10 @@ class Live:
         if send <= _CHR.FLOOR or not slots:
             return
         cents = _CHR.offsets_for(
-            part.bank._voice_class(note + part.transpose))[:self.CHORUS_MAX]
+            part.patch._voice_class(note + part.transpose))[:self.CHORUS_MAX]
         if not cents:
             return
-        tmpl = part.bank.get(note + part.transpose, vel, part.bank.leslie_default)
+        tmpl = part.patch.get(note + part.transpose, vel, part.patch.leslie_default)
         if tmpl is None:
             return
         wet = (send / float(len(cents))) ** 0.5
@@ -2636,14 +2636,14 @@ class Live:
         """Where this part's tuner actually put the instrument's tonic.
 
         Read off the tonic's OWN template rather than computed, so it survives
-        any temperament, any transposition the bank applies, and the chanter's
+        any temperament, any transposition the patch applies, and the chanter's
         own scale -- the tonic's scale offset is zero by definition, so this is
         the same number the file path publishes as bagpipe_tonic_hz.
         """
-        n = part.bank.scale_tonic_note
+        n = part.patch.scale_tonic_note
         if n is None:
             return 0.0
-        t = part.bank.get(n, 100, part.bank.leslie_default)
+        t = part.patch.get(n, 100, part.patch.leslie_default)
         if t is None:
             return 0.0
         # ...AND THE CHANNEL'S OWN TUNING, if one was sent. A drone is tuned to
@@ -2691,7 +2691,7 @@ class Live:
         sd = self.snd.get(ch)
         if not sd or part.drums:
             return {}
-        ctl = T.sound_controls_of(part.bank._voice_class(note + part.transpose))
+        ctl = T.sound_controls_of(part.patch._voice_class(note + part.transpose))
         return {k: d for k, d in sd.items() if k in ctl}
 
     def _sound_stamp(self, part, ch, note, slots):
@@ -2721,7 +2721,7 @@ class Live:
         if 'vib_delay' in sd:
             a["vdl"][idx] = np.float32(T.sound_vib_delay(sd['vib_delay']))
         if 'brightness' in sd or 'resonance' in sd:
-            cls = part.bank._voice_class(note + part.transpose)
+            cls = part.patch._voice_class(note + part.transpose)
             g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
                               sd.get('resonance', 0.0))
             g = T.normalise_power(self.slab.aL0[idx], g).astype(np.float32)
@@ -2777,7 +2777,7 @@ class Live:
                         continue
                     idx = np.fromiter(sl, np.int64, len(sl))
                     sd = self._snd_for(part, ch, k[2])
-                    cls = part.bank._voice_class(k[2] + part.transpose)
+                    cls = part.patch._voice_class(k[2] + part.transpose)
                     base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
                     g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
                                       sd.get('resonance', 0.0))
@@ -2806,7 +2806,7 @@ class Live:
                     self.slab.sre[idx] = new
         elif name in ('vib_rate', 'vib_depth'):
             for part in here:
-                if name in T.sound_controls_of(part.bank._voice_class(60 + part.transpose)):
+                if name in T.sound_controls_of(part.patch._voice_class(60 + part.transpose)):
                     self._vib_apply(part, ch, n0)
         # attack, decay, vib_delay: onset facts, for the next note.
 
@@ -2832,7 +2832,7 @@ class Live:
     def _glide(self, part, ch, note, slots):
         """Write this press's portamento into the slots just stamped.
 
-        THE BANK DECIDES WHETHER IT GLIDES AT ALL, and it decides by mechanism
+        THE PATCH DECIDES WHETHER IT GLIDES AT ALL, and it decides by mechanism
         rather than by a flag: a trombone's slide, a stopped string, a valved
         horn and a lag circuit are four different gestures and only the last
         two are interchangeable. A voice with no mechanism ignores CC5/65/84
@@ -2843,11 +2843,11 @@ class Live:
         # THE ROUTER, NOT THE PROGRAM. GM 61 Brass Section hands each register
         # to a different body, and two of those bodies are a slide and two are
         # valves -- so the mechanism is a fact about the note, not the patch.
-        pc = part.bank._voice_class(tgt)
+        pc = part.patch._voice_class(tgt)
         mech = getattr(pc, "glide_mechanism", None)
         if not mech:
             return
-        F = part.bank.freqs()
+        F = part.patch.freqs()
         if not (0 <= src < len(F)) or F[src] <= 0.0 or F[tgt] <= 0.0:
             return
         # CAN THE MECHANISM REACH? An arm and a slide have a compass; a circuit
@@ -2883,11 +2883,11 @@ class Live:
         together, and the difference between them is which register the series
         is read in.
         """
-        want = self.drone_count.get(part.pid, len(part.bank.drone_ratios))
+        want = self.drone_count.get(part.pid, len(part.patch.drone_ratios))
         tonic = self._tonic_hz(part, ch)
         if tonic <= 0.0:
             return
-        for i, hz in enumerate(tonic * r for r in part.bank.drone_ratios):
+        for i, hz in enumerate(tonic * r for r in part.patch.drone_ratios):
             key = (part.pid, ch, -1 - i, self.DRONE_SLOT)
             on = key in self.slab.live
             if i < want and not on:
@@ -2902,12 +2902,12 @@ class Live:
                 note = int(round(69.0 + 12.0 * math.log2(hz / 440.0)))
                 if not MELODIC_RANGE[0] <= note <= MELODIC_RANGE[1]:
                     continue
-                tmpl = part.bank.get(note, 100, part.bank.leslie_default)
+                tmpl = part.patch.get(note, 100, part.patch.leslie_default)
                 if tmpl is None:
                     self.misses += 1
                     continue
-                g = (part.bank.drone_gain[i]
-                     if i < len(part.bank.drone_gain) else 1.0)
+                g = (part.patch.drone_gain[i]
+                     if i < len(part.patch.drone_gain) else 1.0)
                 if not self.slab.stamp(tmpl, key, n0,
                                        g * part.gain() * self._chan_gain(ch)):
                     self.dropped += 1
@@ -2943,13 +2943,13 @@ class Live:
 
     def _note_off(self, part, ch, note, n0):
         self._amp_touch(part)
-        if part.bank.drone_wheel:
+        if part.patch.drone_wheel:
             # Arm the hold rather than release: this key may be the middle of a
             # phrase. _drone_reap decides, part_break_s later.
             self.slab.release((part.pid, ch, note, None), n0)
             if not self._chanting(part, ch):
                 self.drone_quiet[part.pid] = (
-                    ch, n0, int(part.bank.part_break_s * self.rate))
+                    ch, n0, int(part.patch.part_break_s * self.rate))
             return
         if part.organ:
             for k in [k for k in list(self.slab.live)
@@ -2990,7 +2990,7 @@ class Live:
         whole set -- which is the same rule the offline path states as the
         lifetime of a product being the intersection of its parents'.
         """
-        if part.bank.amp_drive > 0.0:
+        if part.patch.amp_drive > 0.0:
             self.amp_dirty.add(part.pid)
 
     def _amp_key(self, pid):
@@ -3025,11 +3025,11 @@ class Live:
             return
         self.bend[ch] = ratio
         here = [p for p in self.parts if self._listens(p, ch)]
-        rotors = [p for p in here if p.bank.leslie]
+        rotors = [p for p in here if p.patch.leslie]
         if rotors:
             # A layered rig can have a Hammond and a lead on one channel, and
             # only one of them has a reason to ignore the wheel.
-            keep = {p.pid for p in here if not p.bank.leslie}
+            keep = {p.pid for p in here if not p.patch.leslie}
             if keep:
                 self.slab.retune(self._sounding(ch, pids=keep), n0,
                                  om_scale=ratio / prev)
@@ -3073,12 +3073,12 @@ class Live:
         instead of 12. Indexed by the sounding key, so a transposed part is
         tuned at the pitch it actually plays.
         """
-        if str(part.bank.tuner).lower() != 'gm2' or part.drums:
+        if str(part.patch.tuner).lower() != 'gm2' or part.drums:
             return 1.0
         key = note + part.transpose
         if not 0 <= key < 128:
             return 1.0
-        base = part.bank.freqs().get(key)
+        base = part.patch.freqs().get(key)
         if not base:
             return 1.0
         return float(self.mts.table_for(ch)[key]) / float(base)
@@ -3105,7 +3105,7 @@ class Live:
         """
         for part in self.parts:
             if (not self._listens(part, ch)
-                    or str(part.bank.tuner).lower() != 'gm2'):
+                    or str(part.patch.tuner).lower() != 'gm2'):
                 continue
             moved = False
             if keys is None:
@@ -3142,7 +3142,7 @@ class Live:
 
         No rebuild: a template is a set of partial frequencies and retune
         scales them. Baking a channel's tuning into templates would mean the
-        bank cache key grew a channel, which is sixteen times the build cost
+        patch cache key grew a channel, which is sixteen times the build cost
         and sixteen times the memory.
         """
         moved = False
@@ -3393,116 +3393,116 @@ class Live:
         self.cgain.clear()
         for part in self.parts:
             want = (0, part.drums, part.tuner)
-            if (part.bank.program, part.bank.drums, part.bank.tuner) != want:
-                self.bank_reqs.append((part.pid, want))
-        if self.bank_reqs:
-            self.bank_go.set()
+            if (part.patch.program, part.patch.drums, part.patch.tuner) != want:
+                self.patch_reqs.append((part.pid, want))
+        if self.patch_reqs:
+            self.patch_go.set()
 
-    def _bank_worker(self):
+    def _patch_worker(self):
         """Build voices off the audio thread, for program changes.
 
         `_one` runs INSIDE the PortAudio callback, where the budget is 2.7 ms
-        and a full Bank.warm is 0.4 to 8.5 SECONDS. So a program change only
+        and a full Patch.warm is 0.4 to 8.5 SECONDS. So a program change only
         queues here, and this thread does the work -- the same division
         _amp_worker already makes for distortion, for the same reason.
 
-        AND IT SWAPS THE VOICE BEFORE IT IS WARM. Constructing a Bank costs 5
+        AND IT SWAPS THE VOICE BEFORE IT IS WARM. Constructing a Patch costs 5
         to 33 ms (measured); warming it costs up to 8.5 s. Waiting for warm
         would mean seconds of silence after every program change, and a GM file
         that cycles sixteen programs would never catch up. So the part is
-        pointed at the cold bank immediately and plays whatever templates exist
-        -- none, at first, which Bank.get already handles by returning None and
+        pointed at the cold patch immediately and plays whatever templates exist
+        -- none, at first, which Patch.get already handles by returning None and
         counting a miss. The misses are then filled ON DEMAND, one template at
         a time (13.9 ms for the worst voice), so a chord struck on a fresh
         program is silent once and sounds ~60 ms later. That is the difference
         between a usable program change and an unusable one.
         """
-        while not self.bank_stop:
+        while not self.patch_stop:
           try:
-            if not self.bank_go.wait(0.2):
+            if not self.patch_go.wait(0.2):
                 continue
-            self.bank_go.clear()
+            self.patch_go.clear()
             # BUSY SPANS THE WHOLE PASS, not just the build. The queue empties
-            # the instant a request is POPPED, so anything watching bank_reqs
+            # the instant a request is POPPED, so anything watching patch_reqs
             # alone sees an idle builder in the window between the pop and the
-            # first assignment to bank_label -- and calls the swap done before
+            # first assignment to patch_label -- and calls the swap done before
             # it has been posted. That is a race a test wins by luck.
-            self.bank_busy = True
-            while self.bank_reqs and not self.bank_stop:
-                pid, want = self.bank_reqs.popleft()
+            self.patch_busy = True
+            while self.patch_reqs and not self.patch_stop:
+                pid, want = self.patch_reqs.popleft()
                 # COALESCE. A file that sweeps a bank select sends a dozen
                 # program changes in a row and only the last one is worth
                 # building.
-                if any(p == pid for p, _ in self.bank_reqs):
+                if any(p == pid for p, _ in self.patch_reqs):
                     continue
                 part = next((q for q in self.parts if q.pid == pid), None)
                 if part is None:
                     continue        # the rig was rebuilt under us; drop it
                 try:
-                    with _BANK_LOCK:
-                        bank = _BANKS.get(want)
-                        if bank is None:
-                            bank = Bank(want[0], want[1], want[2])
-                            _BANKS[want] = bank
-                        _BANKS.move_to_end(want)
-                    self.post(lambda n0, _p=part, _b=bank: self._swap_bank(_p, _b, n0))
+                    with _PATCH_LOCK:
+                        patch = _PATCHES.get(want)
+                        if patch is None:
+                            patch = Patch(want[0], want[1], want[2])
+                            _PATCHES[want] = patch
+                        _PATCHES.move_to_end(want)
+                    self.post(lambda n0, _p=part, _b=patch: self._swap_patch(_p, _b, n0))
                     # Published BEFORE the warm, which is the call that can
-                    # evict: the new bank is on stage the moment it is swapped
+                    # evict: the new patch is on stage the moment it is swapped
                     # in, and the old one still is until then.
-                    pin_banks({(q.bank.program, q.bank.drums, q.bank.tuner)
+                    pin_patches({(q.patch.program, q.patch.drums, q.patch.tuner)
                                for q in self.parts} | {want})
-                    self.bank_label = "%d" % want[0]
-                    bank.warm(stop=lambda: bool(self.bank_reqs) or self.bank_stop)
-                    self.bank_label = None
+                    self.patch_label = "%d" % want[0]
+                    patch.warm(stop=lambda: bool(self.patch_reqs) or self.patch_stop)
+                    self.patch_label = None
                 except Exception as e:
-                    self.bank_err = "%s: %s" % (type(e).__name__, e)
-                    self.bank_label = None
+                    self.patch_err = "%s: %s" % (type(e).__name__, e)
+                    self.patch_label = None
             self._fill_misses()
-            self.bank_busy = False
+            self.patch_busy = False
           except BaseException as e:
             # A builder thread that dies silently takes the feature with it and
             # leaves no trace; this is the only place that can say so.
             import traceback
-            self.bank_err = traceback.format_exc()
-            self.bank_label = None
-            self.bank_busy = False
+            self.patch_err = traceback.format_exc()
+            self.patch_label = None
+            self.patch_busy = False
 
     def _fill_misses(self):
         """Build the templates a note actually asked for and did not find."""
-        while self.warm_reqs and not self.bank_stop:
-            bank, note, bucket, axis = self.warm_reqs.popleft()
-            if (note, bucket, axis) in bank.templates:
+        while self.warm_reqs and not self.patch_stop:
+            patch, note, bucket, axis = self.warm_reqs.popleft()
+            if (note, bucket, axis) in patch.templates:
                 continue
             try:
-                t = bank._raw_template(note, bank.bucket_vel(bucket), axis)
+                t = patch._raw_template(note, patch.bucket_vel(bucket), axis)
             except Exception:
                 t = None
             if t is not None:
-                # One writer, and Bank.get is a pure dict lookup, so this is
+                # One writer, and Patch.get is a pure dict lookup, so this is
                 # safe against the audio thread under the GIL.
-                bank.templates[(note, bucket, axis)] = t
-                bank.partials += t["P"]
+                patch.templates[(note, bucket, axis)] = t
+                patch.partials += t["P"]
 
-    def _swap_bank(self, part, bank, n0):
+    def _swap_patch(self, part, patch, n0):
         """Point a part at a new voice, on the audio thread.
 
         Notes already sounding keep the templates they were struck with, which
         is what a program change means. What must go is everything keyed to the
         OLD voice: its panel state, and its amplifier's products.
         """
-        part.set_bank(bank)
+        part.set_patch(patch)
         for d in (self.drive_step, self.trem_depth, self.clav_step,
                   self.detune_step, self.drone_count, self.drone_quiet):
             d.pop(part.pid, None)
         self.amp_dirty.discard(part.pid)
         self._amp_touch(part)
 
-    def wait_bank(self, timeout=30.0):
+    def wait_patch(self, timeout=30.0):
         """Block until the builder is idle -- for tests and for the TUI."""
         t0 = time.monotonic()
         while time.monotonic() - t0 < timeout:
-            if (not self.bank_reqs and not self.warm_reqs
-                    and not self.bank_busy and self.bank_label is None):
+            if (not self.patch_reqs and not self.warm_reqs
+                    and not self.patch_busy and self.patch_label is None):
                 self.apply(self.n)
                 return True
             time.sleep(0.01)
@@ -3553,8 +3553,8 @@ class Live:
         # waiting for someone to find the mod wheel before it sounds right is
         # not a default. Once the wheel has been moved it owns the setting.
         step = self.drive_step.get(pid)
-        drive = (part.bank.amp_drive if step is None else
-                 part.bank.amp_drive * LIVE_DRIVE_RANGE
+        drive = (part.patch.amp_drive if step is None else
+                 part.patch.amp_drive * LIVE_DRIVE_RANGE
                  * step / float(LIVE_DRIVE_STEPS))
         slots = [sl for k, ss in self.slab.live.items()
                  if k[0] == pid and k[3] != "amp" for sl in ss]
@@ -3592,8 +3592,8 @@ class Live:
             return None
         src = int(idx[ok[int(np.argmax(aM[ok]))]])
         return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0,
-                getattr(part.bank, 'amp_reference', None),
-                getattr(part.bank, 'amp_imbalance', None))
+                getattr(part.patch, 'amp_reference', None),
+                getattr(part.patch, 'amp_imbalance', None))
 
     def _amp_place(self, n0, pid, key, src, out):
         """Stamp what the worker returned. Cheap: no transform, just writes."""
@@ -3604,7 +3604,7 @@ class Live:
         a = [p[1] for p in out]
         p = [p[2] for p in out]
         part = next((q for q in self.parts if q.pid == pid), None)
-        cab = getattr(part.bank, "cabinet", None) if part else None
+        cab = getattr(part.patch, "cabinet", None) if part else None
         if cab:
             # THROUGH THE SPEAKER, like everything else this voice makes. The
             # note templates were cabineted at build time; these products were
@@ -3640,18 +3640,18 @@ class Live:
         The offline renderer gets this from rank_speak_sec by scanning forward
         through future CC events; live it is simply now."""
         part.cres = value / 127.0
-        n = int(part.cres * len(part.bank.cres_order) + 1e-9)
-        self.set_stops(part, set(part.bank.cres_order[:max(1, n)]), n0)
+        n = int(part.cres * len(part.patch.cres_order) + 1e-9)
+        self.set_stops(part, set(part.patch.cres_order[:max(1, n)]), n0)
 
     def set_stops(self, part, want, n0=None):
         """Draw and retire ranks to match `want`, on every key already down."""
         if n0 is None:
             n0 = self.n
-        want = {r for r in want if r in part.bank.rank_names} or set(part.bank.cres_order[:1])
+        want = {r for r in want if r in part.patch.rank_names} or set(part.patch.cres_order[:1])
         for rank in want - part.drawn:
             for (c, note) in self._held_any():
                 if part.matches(c, note):
-                    t = part.bank.get(note + part.transpose, 127)
+                    t = part.patch.get(note + part.transpose, 127)
                     if t is not None:
                         self._draw(part, t, c, note, rank, n0)
         for rank in part.drawn - want:
@@ -3688,12 +3688,12 @@ class Live:
         # this line existed, a channel tuned to Sankey's offsets moved a
         # trumpet by -9.766 cents and a harpsichord by 0.000.
         _sr = self._key_ratio(part, ch, note)
-        if str(part.bank.tuner).lower() == 'gm2':
+        if str(part.patch.tuner).lower() == 'gm2':
             self.mts_at[(part.pid, ch, note + part.transpose)] = \
                 self._mts_ratio(part, ch, note)
         if _sr != 1.0:
             self.slab.retune(self.slab.last_slots, n0, om_scale=_sr)
-        if part.bank.leslie:
+        if part.patch.leslie:
             self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
                                  n0, self.rotor_horn.rate, self.rotor_drum.rate)
 
@@ -3785,7 +3785,7 @@ class Live:
             if p.pid != pid:
                 continue
             try:
-                et = getattr(p.bank._voice_class(note), "effort_tilt", 0.0)
+                et = getattr(p.patch._voice_class(note), "effort_tilt", 0.0)
             except Exception:
                 return self.press_tilt
             # EFFORT VOICES ONLY, as the file renderer has always done. A voice
@@ -3869,8 +3869,8 @@ class Live:
                 # struck mid-swing are at the same place in the cycle. Both
                 # electric pianos modulate at 5.5 Hz; if a voice ever wants its
                 # own rate this has to become per-row, as ls_ph is.
-                hz = next((p.bank.tremolo_hz for p in self.parts
-                           if p.bank.tremolo_depth > 0.0), 0.0)
+                hz = next((p.patch.tremolo_hz for p in self.parts
+                           if p.patch.tremolo_depth > 0.0), 0.0)
                 if hz > 0.0:
                     self.slab.tremolo_swing(2.0 * math.pi * hz * n0 / float(self.rate))
             if self.slab.ls_on.any():
@@ -4021,7 +4021,7 @@ def save_preset(name, live, path=PRESET_PATH):
 
 
 def apply_preset(live, preset, progress=None):
-    """Rebuild the part set from a preset. BLOCKS while banks build."""
+    """Rebuild the part set from a preset. BLOCKS while patches build."""
     parts = [Part.from_dict(pd, progress) for pd in preset.get("parts", [])]
     if not parts:
         return
@@ -4150,8 +4150,8 @@ def selftest():
 
     # ---- multi-timbral ------------------------------------------------------
     # 6. a SPLIT sends each key to exactly one part
-    kit = Part(bank_for(0, True, "hybrid"), lo=21, hi=47, transpose=14)
-    tpt = Part(bank_for(56, False, "hybrid"), lo=48, hi=96)
+    kit = Part(patch_for(0, True, "hybrid"), lo=21, hi=47, transpose=14)
+    tpt = Part(patch_for(56, False, "hybrid"), lo=48, hi=96)
     lv = Live(rate=48000, frames=128, verbose=False, parts=(kit, tpt))
     lv.on_midi(mido.Message("note_on", channel=0, note=24, velocity=100))
     lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
@@ -4162,8 +4162,8 @@ def selftest():
           and all(k[0] == tpt.pid for k in lv.slab.live if k[2] == 60))
 
     # 7. a LAYER sends one key to both parts, and both release
-    a1 = Part(bank_for(56, False, "hybrid"))
-    a2 = Part(bank_for(48, False, "hybrid"))
+    a1 = Part(patch_for(56, False, "hybrid"))
+    a2 = Part(patch_for(48, False, "hybrid"))
     lv = Live(rate=48000, frames=128, verbose=False, parts=(a1, a2))
     lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); lv.apply(0)
     check("layer: one key sounds both parts",
@@ -4187,7 +4187,7 @@ def selftest():
     for note in (55, 60, 64):
         lv.on_midi(mido.Message("note_on", channel=0, note=note, velocity=100))
     lv.apply(0); lv.callback(None, 128, None, 0)
-    lv.set_parts((Part(bank_for(48, False, "hybrid")),))
+    lv.set_parts((Part(patch_for(48, False, "hybrid")),))
     lv.down.clear(); lv.sweep(lv.n)
     leak(lv, "part swap under load leaks no slots")
 
@@ -4200,8 +4200,8 @@ def selftest():
 
     # 11. presets round-trip
     lv = Live(rate=48000, frames=128, verbose=False,
-              parts=(Part(bank_for(56, False, "hybrid"), lo=48, hi=96, level_db=-3.0),
-                     Part(bank_for(0, True, "hybrid"), lo=21, hi=47, transpose=14)))
+              parts=(Part(patch_for(56, False, "hybrid"), lo=48, hi=96, level_db=-3.0),
+                     Part(patch_for(0, True, "hybrid"), lo=21, hi=47, transpose=14)))
     lv.bend_range = 7.0
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         pth = f.name
@@ -4358,7 +4358,7 @@ def selftest():
     # a synth lead and makes the wheel a tempo control
     was = _T.TrumpetProperties.solo_vibrato_spread
     _T.TrumpetProperties.solo_vibrato_spread = 0.0
-    _T._SOLO_VIBRATO.clear(); _BANKS.clear()
+    _T._SOLO_VIBRATO.clear(); _PATCHES.clear()
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
     for nn in (60, 64, 67, 72):
         lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
@@ -4368,7 +4368,7 @@ def selftest():
           len(np.unique(lv.slab.a["vp"][ix])) == 1 and len(np.unique(lv.slab.a["vr"][ix])) == 1)
     lv.renderer.close()
     _T.TrumpetProperties.solo_vibrato_spread = was
-    _T._SOLO_VIBRATO.clear(); _BANKS.clear()
+    _T._SOLO_VIBRATO.clear(); _PATCHES.clear()
 
     # ---- vibrato must reach a voice that also SPEAKS ------------------------
     # The kernel's mode-lock transient and its vibrato shared one slot and the
@@ -4376,7 +4376,7 @@ def selftest():
     # a mode-lock term, so the mod wheel reached the FUNDAMENTAL ONLY: measured,
     # h1 swung 33.4 cents while h2, h4 and h8 swung 0.3, 0.1 and 0.1.
     lv = Live(program=56, rate=48000, frames=128, verbose=False); lv.warm()
-    tpl = lv.parts[0].bank.get(60, 100)
+    tpl = lv.parts[0].patch.get(60, 100)
     tb, nf = tpl["tbav"], tpl["nf"]
     # Count by FREQUENCY, not by row. A mode occupies more than one row because
     # the room's reflections ride along with it -- a trumpet's 32 modes are 64
@@ -4444,7 +4444,7 @@ def selftest():
     # 12. splitting the table across threads must not change what you hear
     def chord(K):
         lv = Live(rate=48000, frames=128, verbose=False, threads=K,
-                  parts=(Part(bank_for(48, False, "hybrid")),))
+                  parts=(Part(patch_for(48, False, "hybrid")),))
         for nn in (48, 52, 55, 60, 64, 67):
             lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
         lv.apply(0)
@@ -4484,7 +4484,7 @@ def selftest():
 
     # 14. swapping the pool live, which is what the TUI's threads control does
     lv = Live(rate=48000, frames=128, verbose=False, threads=1,
-              parts=(Part(bank_for(48, False, "hybrid")),))
+              parts=(Part(patch_for(48, False, "hybrid")),))
     for nn in (48, 52, 55, 60, 64, 67):
         lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
     lv.apply(0); lv.callback(None, 128, None, 0)
@@ -4539,9 +4539,9 @@ def selftest():
 
     # 16. a fuzzed LAYER + SPLIT, the configuration the TUI actually makes
     lv = Live(rate=48000, frames=128, verbose=False, parts=(
-        Part(bank_for(0, True, "hybrid"), lo=21, hi=47, transpose=14),
-        Part(bank_for(48, False, "hybrid"), lo=48, hi=96),
-        Part(bank_for(56, False, "hybrid"), lo=48, hi=96, level_db=-6.0)))
+        Part(patch_for(0, True, "hybrid"), lo=21, hi=47, transpose=14),
+        Part(patch_for(48, False, "hybrid"), lo=48, hi=96),
+        Part(patch_for(56, False, "hybrid"), lo=48, hi=96, level_db=-6.0)))
     random.seed(9); down = set(); n = 0
     for _ in range(1500):
         n += 128; r = random.random()
@@ -4714,7 +4714,7 @@ def selftest():
     lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
     lv.apply(lv.n); lv.down.add((0, 60))
     was = set(lv.parts[0].drawn)
-    want = set(lv.parts[0].bank.rank_names)
+    want = set(lv.parts[0].patch.rank_names)
     lv.request_stops(lv.parts[0], want)
     check("drawing a stop is deferred too",
           lv.parts[0].drawn == was and len(lv.cmds) == 1)
@@ -4779,9 +4779,9 @@ def selftest():
         return False
 
     check("the guitar has an amplifier and a speaker",
-          gp.bank.amp_drive > 0.0 and gp.bank.cabinet
-          and gp.bank.amp_reference, "  (%s, drive %.2f, ref %s)"
-          % (gp.bank.cabinet, gp.bank.amp_drive, gp.bank.amp_reference))
+          gp.patch.amp_drive > 0.0 and gp.patch.cabinet
+          and gp.patch.amp_reference, "  (%s, drive %.2f, ref %s)"
+          % (gp.patch.cabinet, gp.patch.amp_drive, gp.patch.amp_reference))
     gkey = gv._amp_key(gp.pid)
     for nn in (40, 47, 52, 55):
         gv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
@@ -4859,9 +4859,9 @@ def selftest():
         return 20.0 * math.log10(max(hi, 1e-30) / max(lo, 1e-30))
 
     got = _place_probe()
-    gp.bank.cabinet = None
+    gp.patch.cabinet = None
     flat = _place_probe()
-    gp.bank.cabinet = "guitar12"
+    gp.patch.cabinet = "guitar12"
     import cabinet as _CBT
     want = float(_CBT.get("guitar12").response_db([8000.0])[0]
                  - _CBT.get("guitar12").response_db([400.0])[0])
@@ -4875,7 +4875,7 @@ def selftest():
     gblock(); gsettle()
     check("wheel down is clean on a guitar too",
           not gv.slab.live.get(gkey), "  (%d partials)" % len(gv.slab.live.get(gkey, [])))
-    # BUILDING A BANK MUST BE SILENT AND MUST NOT BAKE THE AMPLIFIER IN.
+    # BUILDING A PATCH MUST BE SILENT AND MUST NOT BAKE THE AMPLIFIER IN.
     # prepare() reports what its passes did, which is right for a render and is
     # corruption for a curses screen; and an amplifier baked into a one-note
     # template is counted twice and then read back as a parent. This was done
@@ -4888,13 +4888,13 @@ def selftest():
     with _ctx.redirect_stdout(_buf):
         _gq = Live(program=29, rate=44100, frames=128, verbose=False)
         _gq.warm()
-    check("building an amplified bank says nothing to the terminal",
+    check("building an amplified patch says nothing to the terminal",
           _buf.getvalue().strip() == "",
           "" if not _buf.getvalue().strip() else
           "  (%d chars leaked)" % len(_buf.getvalue()))
     check("...and leaves the offline amplifier pass switched back on",
           _TAG.ENABLED is True)
-    _tq = _gq.parts[0].bank.get(52, 110)
+    _tq = _gq.parts[0].patch.get(52, 110)
     check("...and bakes no distortion into the template",
           _tq is not None and _tq["P"] < 200,
           "  (%s partials for one note)" % (None if _tq is None else _tq["P"]))
@@ -5625,7 +5625,7 @@ def selftest():
     # drones themselves were baked into every note's template, so a held line
     # stacked three of them per note.
     lvbp = Live(program=109, rate=48000, frames=128, verbose=False); lvbp.warm()
-    _bpb = lvbp.parts[0].bank
+    _bpb = lvbp.parts[0].patch
     check("the live bagpipe knows it has drones, and keeps them out of the note",
           _bpb.drone_wheel and len(_bpb.drone_ratios) == 3
           and not _bpb.detune_wheel,
@@ -5731,7 +5731,7 @@ def selftest():
     for _g, _lab in ((19, "church organ"), (16, "drawbar organ"),
                      (80, "square lead"), (109, "bagpipe")):
         _l = Live(program=_g, rate=48000, frames=128, verbose=False)
-        _b = _l.parts[0].bank
+        _b = _l.parts[0].patch
         _t1 = _b._raw_template(60, 127); _t2 = _b._raw_template(60, 32)
         _r = (np.asarray(_t2["aL"])[:_t2["P"]]
               / np.maximum(np.asarray(_t1["aL"])[:_t1["P"]], 1e-30))
@@ -5876,7 +5876,7 @@ def selftest():
 
     # PROGRAM CHANGE. The audio thread may queue a voice change, never build
     # one: _one runs inside the callback where the budget is 2.7 ms and a warm
-    # is up to 8.5 SECONDS. The part is pointed at a COLD bank at once and the
+    # is up to 8.5 SECONDS. The part is pointed at a COLD patch at once and the
     # templates are filled on demand, one per note actually played.
     _pc = Live(program=56, rate=48000, frames=128, verbose=False)
     _pc.warm()
@@ -5885,16 +5885,16 @@ def selftest():
     _pid0, _held = _pc.parts[0].pid, len(_pc.slab.live)
     _pc.on_midi(mido.Message("program_change", channel=0, program=41))
     _pc.apply(0)
-    _ok = _pc.wait_bank(90)
+    _ok = _pc.wait_patch(90)
     check("a program change switches the voice without cutting a held note",
           _ok and _pc.parts[0].program == 41 and _pc.parts[0].pid == _pid0
           and len(_pc.slab.live) == _held,
           "  (56 -> 41, the pid kept so every per-part control survives, and "
           "the chord still sounding on its own templates)")
     check("...and the default registration finally applies",
-          Bank(16, False, "hybrid").default_stops == 7
-          and len(Part(Bank(16, False, "hybrid")).drawn) == 3,
-          "  (Bank never assigned self.pc, so hasattr() was always False and "
+          Patch(16, False, "hybrid").default_stops == 7
+          and len(Part(Patch(16, False, "hybrid")).drawn) == 3,
+          "  (Patch never assigned self.pc, so hasattr() was always False and "
           "every organ part started on one rank whatever its class declared)")
     _pc.shutdown()
 
@@ -6926,8 +6926,8 @@ def selftest():
           "  (a quill plucks one string per register, drawn by hand)")
     _ls.shutdown()
 
-    # ---- the bank cache must not evict a voice that is on stage -------------
-    # The LRU counted partials and nothing else, so the bank it dropped could
+    # ---- the patch cache must not evict a voice that is on stage -------------
+    # The LRU counted partials and nothing else, so the patch it dropped could
     # be one a Part was holding and sounding through. That was only a rebuild
     # cost until a program change could re-select a voice; now it is a voice
     # rebuilt from cold in the middle of a piece.
@@ -6938,28 +6938,28 @@ def selftest():
     _PROGS = [0, 11, 19, 24, 30, 33, 40, 48, 56, 61, 66, 73, 80, 89, 105, 118]
     _held = []
     for _i, _p in enumerate(_PROGS):
-        _held.append(Part(bank_for(_p, _p == 118, "hybrid"), channel=_i))
-        pin_banks({(_q.bank.program, _q.bank.drums, _q.bank.tuner)
+        _held.append(Part(patch_for(_p, _p == 118, "hybrid"), channel=_i))
+        pin_patches({(_q.patch.program, _q.patch.drums, _q.patch.tuner)
                    for _q in _held})
-    _res = len(_BANKS)
-    _tot = sum(_b.partials for _b in _BANKS.values())
+    _res = len(_PATCHES)
+    _tot = sum(_b.partials for _b in _PATCHES.values())
     check("the cache keeps every voice a rig is actually playing",
-          _res == 16 and _tot > _BANK_PARTIAL_CAP,
+          _res == 16 and _tot > _PATCH_PARTIAL_CAP,
           "  (%d of 16 resident, %d partials -- %.2fx the cap, on purpose)"
-          % (_res, _tot, float(_tot) / _BANK_PARTIAL_CAP))
-    # ...AND THE BANK JUST ASKED FOR IS NEVER THE ONE DROPPED. It is not
+          % (_res, _tot, float(_tot) / _PATCH_PARTIAL_CAP))
+    # ...AND THE PATCH JUST ASKED FOR IS NEVER THE ONE DROPPED. It is not
     # pinned yet -- the caller pins it once it holds it -- and it is the most
     # recently used, so without that guard a full cache makes each new arrival
     # evict itself. Measured before the fix: sixteen added one at a time left
     # ELEVEN resident, each throwing away the one before.
-    pin_banks(set())
-    bank_for(2, False, "hybrid")
-    _after = sum(_b.partials for _b in _BANKS.values())
+    pin_patches(set())
+    patch_for(2, False, "hybrid")
+    _after = sum(_b.partials for _b in _PATCHES.values())
     check("...and still evicts freely once nothing is holding them",
-          _after <= _BANK_PARTIAL_CAP
-          and (2, False, "hybrid") in _BANKS,
+          _after <= _PATCH_PARTIAL_CAP
+          and (2, False, "hybrid") in _PATCHES,
           "  (%d partials, %.2fx the cap, and the newest survived)"
-          % (_after, float(_after) / _BANK_PARTIAL_CAP))
+          % (_after, float(_after) / _PATCH_PARTIAL_CAP))
     del _held
 
     # ---- GM2 Scale/Octave Tuning Adjust -------------------------------------
@@ -7005,7 +7005,7 @@ def selftest():
           "exactly; stretch varies %.2f and cannot)" % (_pure, _str))
 
     # ---- ...AND LIVE HONOURS IT, by retuning rather than rebuilding ---------
-    # Baking a channel's tuning into templates would put a channel in the bank
+    # Baking a channel's tuning into templates would put a channel in the patch
     # cache key: sixteen times the build cost and sixteen times the memory,
     # against a cap a piano already fills a quarter of. Retune scales `om` on
     # partials that are already sounding, which is what it is for.
@@ -7102,7 +7102,7 @@ def selftest():
         _l.warm()
         _by_tuner[_tn] = (_l._tonic_hz(_l.parts[0]),
                           sorted(_l._tonic_hz(_l.parts[0]) * _r
-                                 for _r in _l.parts[0].bank.drone_ratios))
+                                 for _r in _l.parts[0].patch.drone_ratios))
         _l.renderer.close()
     _a4, _d4 = _by_tuner["hybrid440"]
     _a1, _d1 = _by_tuner["hybrid"]
@@ -7141,7 +7141,7 @@ def selftest():
     # harpsichord escaped only because it is `registerable` and returns down the
     # organ branch before that line; the accordions and the bagpipe did not, and
     # measured +24.1 dB from velocity 30 to 120 on a patch whose own class says
-    # velocity does nothing. Checked through the BANK, which is the path that
+    # velocity does nothing. Checked through the PATCH, which is the path that
     # broke, exactly as the earlier bucket version of this bug was.
     _touchless = []
     for _g, _lab in ((109, "bagpipe"), (21, "accordion"), (23, "tango accordion"),
@@ -7566,7 +7566,7 @@ def selftest():
     # picks the BUCKET, and each bucket's template is built at its own velocity
     # with attack_volume baked into the partial amplitudes -- so the harpsichord
     # arrived 23 dB louder at velocity 120 than at 32 without the stamp ever
-    # looking at velocity. Checked here through the BANK, which is the path that
+    # looking at velocity. Checked here through the PATCH, which is the path that
     # actually broke, and not only through the class.
     import patch_map as _PMt
     _fixed = [(6, "harpsichord"), (16, "drawbar organ"), (19, "church organ"),
@@ -8037,7 +8037,7 @@ def selftest():
     # different template. The axis for that already existed and is literally
     # "the CC1 value to build with", so the positions are pre-warmed.
     lvh = Live(program=3, rate=48000, frames=128, verbose=False); lvh.warm()
-    bh = lvh.parts[0].bank
+    bh = lvh.parts[0].patch
     check("the honky-tonk's wheel is pre-warmed, so sweeping cannot miss",
           bh.detune_wheel and tuple(bh.speeds) == DETUNE_STEPS
           and bh.leslie_default == DETUNE_STEPS[len(DETUNE_STEPS) // 2]
@@ -8231,7 +8231,7 @@ def selftest():
           abs(abs(deg) - 180.0) < 5.0 and dm < 1.0,
           "  (%.0f deg apart, %.2f dB left in mono)" % (deg, dm))
     check("...and the wheel is not ALSO bending the pitch",
-          lv.mod.get(0, 0.0) == 0.0 and lv.parts[0].bank.amp_drive == 0.0)
+          lv.mod.get(0, 0.0) == 0.0 and lv.parts[0].patch.amp_drive == 0.0)
     lv.renderer.close()
 
     lv = Live(program=4, rate=48000, frames=128, verbose=False); lv.warm()
@@ -8489,7 +8489,7 @@ def selftest():
                _T.RhodesProperties)))
     # And it must reach the partial table, negative, scaled by velocity.
     lv = Live(program=114, rate=48000, frames=128, verbose=False); lv.warm()
-    hard = float(np.asarray(lv.parts[0].bank.get(60, 127)["tbav"])[0])
+    hard = float(np.asarray(lv.parts[0].patch.get(60, 127)["tbav"])[0])
     lv.renderer.close()
     check("the pan's bend reaches the partials, still negative",
           hard < 0.0, "  (tbav %+.5f)" % hard)
@@ -8759,7 +8759,7 @@ def main():
         sys.stderr.write("  GM percussion at %d Hz, %d-frame blocks\n" % (a.rate, a.frames))
     else:
         sys.stderr.write("  program %d -> %s at %d Hz, %d-frame blocks\n"
-                         % (a.program, live.parts[0].bank.cls_name, a.rate, a.frames))
+                         % (a.program, live.parts[0].patch.cls_name, a.rate, a.frames))
 
     pa, stream = open_stream(live, a.rate, a.frames)
     port = mido.open_input(name, callback=live.on_midi)

@@ -287,7 +287,7 @@ calibration. Measured, they differ by **exactly zero**.
 One deviation to record. Roland says that if a voice is already sounding at
 CC84's source note, *"this voice will continue sounding (i.e., legato)"* and
 becomes the new note — so the source note's later note-off does nothing. Here
-the bank's template cache is keyed on the note, so a fresh voice starts with
+the patch's template cache is keyed on the note, so a fresh voice starts with
 the glide stamped and the old one is released. The audible difference is one
 attack transient, which is what `legato_attack_s` exists to suppress.
 

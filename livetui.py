@@ -11,7 +11,7 @@ TWO KINDS OF EDIT, and the difference is the whole design:
     single attribute write on a live Part. They take effect on the next MIDI
     event, and they happen inline.
 
-  - EXPENSIVE edits -- program, drums, tuner -- need a Bank, which is 0.02-0.67 s
+  - EXPENSIVE edits -- program, drums, tuner -- need a Patch, which is 0.02-0.67 s
     of pure-Python template building. Those go to the Builder thread, never to
     the audio thread and never to the input loop, and the panel shows a progress
     bar while they run.
@@ -147,7 +147,7 @@ class Builder(threading.Thread):
     def busy(self):
         return self.label is not None or bool(self.q)
 
-    def progress(self, bank, frac):
+    def progress(self, patch, frac):
         self.frac = frac
 
     def run(self):
@@ -290,7 +290,7 @@ class TUI:
                 L.slab.dirty = True
                 old.close()
 
-    # ---- edits that need a bank --------------------------------------------
+    # ---- edits that need a patch --------------------------------------------
     def rebuild(self, label, specs):
         """Replace the whole part set from a list of spec dicts, off-thread."""
         def job(progress):
@@ -408,8 +408,8 @@ class TUI:
             # the column behaves like every other one; enter is where you pick
             # ranks by name, including the ones no crescendo reaches.
             if p.organ:
-                order = [r for r in p.bank.cres_order] + \
-                        [r for r in p.bank.rank_names if r not in p.bank.cres_order]
+                order = [r for r in p.patch.cres_order] + \
+                        [r for r in p.patch.rank_names if r not in p.patch.cres_order]
                 k = len([r for r in order if r in p.drawn])
                 k = max(1, min(len(order), k + delta))
                 self.live.request_stops(p, set(order[:k]))
@@ -418,7 +418,7 @@ class TUI:
         p = self.sel()
         if p is None or not p.organ:
             return
-        names = p.bank.rank_names
+        names = p.patch.rank_names
         if not 0 <= i < len(names):
             return
         want = set(p.drawn)
@@ -589,8 +589,8 @@ class TUI:
             self.say("%s has no stops -- they are an organ and harpsichord thing"
                      % (p.label()))
             return
-        names = p.bank.rank_names
-        cres = set(p.bank.cres_order)
+        names = p.patch.rank_names
+        cres = set(p.patch.cres_order)
         labels = ["%-9s %s" % (r, "crescendo" if r in cres else "hand-drawn only")
                   for r in names]
         got = self.multi_menu(scr, "stops for part %d" % (self.row + 1), labels,
@@ -1122,13 +1122,13 @@ class TUI:
         if c == "stops":
             if not p.organ:
                 return "-"
-            return " ".join(r for r in p.bank.rank_names if r in p.drawn) or "none"
+            return " ".join(r for r in p.patch.rank_names if r in p.drawn) or "none"
         return ""
 
     def stops_str(self, p):
         """Numbered, so the digit that toggles a rank is written next to it."""
         out = []
-        for i, r in enumerate(p.bank.rank_names):
+        for i, r in enumerate(p.patch.rank_names):
             out.append("%d[%s]" % (i + 1, r) if r in p.drawn else "%d %s " % (i + 1, r))
         return "stops  " + " ".join(out)
 
