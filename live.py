@@ -10,10 +10,10 @@ time by exactly the same C the offline renderer uses.
 Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
        python3 live.py --list | --selftest | --latency
 
-It answers twenty-four controllers -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66, 67,
-84, 93, 98-101, 120, 121, 123-127 -- plus program change, both aftertouches,
+It answers twenty-six controllers -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66, 67,
+84, 93, 96-101, 120, 121, 123-127 -- plus program change, both aftertouches,
 the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning, Master Volume,
-Fine and Coarse Tuning), with RPN 0/0, 0/1, 0/2 and 0/5. CC91 alone is
+Fine and Coarse Tuning), with RPN 0/0 to 0/5. CC91 alone is
 offline-only. See midi.md, which is generated from this dispatch.
 
 BANKS ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
@@ -2064,6 +2064,8 @@ class Live:
                 self.rpn[ch] = (_sel[0], msg.value)
             elif msg.control in (6, 38):            # data entry
                 self._rpn_data(ch, msg.control, msg.value, n0)
+            elif msg.control in (96, 97):           # data increment / decrement
+                self._rpn_step(ch, msg.control == 96, n0)
             elif msg.control == 121:                # reset all controllers
                 self._reset_controllers(n0, ch)
             elif msg.control == 120:                # all SOUND off
@@ -2837,6 +2839,45 @@ class Live:
                                            control=1, value=int(round(w * 127))))
             return
         else:
+            return
+        self._repitch(ch, n0)
+
+    def _rpn_step(self, ch, up, n0):
+        """CC96/97: the selected RPN, one unit of its finest byte up or down.
+
+        tonelib.rpn_step does the arithmetic for both renderers. The effects
+        are data entry's own -- a re-pitch, an MTS retune of sounding notes, a
+        mod-range re-send -- so a stepped value and an entered one are the same
+        thing by the time anything sounds.
+        """
+        sel = self.rpn.get(ch, (127, 127))
+        cur = {(0, 0): self._bend_range(ch), (0, 1): self.fine.get(ch, 0.0),
+               (0, 2): self.coarse.get(ch, 0.0),
+               (0, 3): self.mts.selection(ch)[1], (0, 4): self.mts.selection(ch)[0],
+               (0, 5): self._mod_cents(ch)}.get(sel)
+        if cur is None:
+            return                      # RPN null, an NRPN, or one we do not read
+        v = T.rpn_step(sel, cur, up)
+        if sel == (0, 0):
+            self.brange[ch] = v
+        elif sel == (0, 1):
+            self.fine[ch] = v
+            self._rpn_fine_msb[ch] = T.rpn_fine_msb(v)
+        elif sel == (0, 2):
+            self.coarse[ch] = v
+        elif sel in ((0, 3), (0, 4)):
+            if sel == (0, 3):
+                self.mts.select(ch, program=int(v))
+            else:
+                self.mts.select(ch, bank=int(v))
+            self._remts(ch, None, n0)
+            return
+        else:                           # (0, 5)
+            self.modrange[ch] = v
+            w = self.modw.get(ch, 0.0)
+            if w > 0.0:
+                self._one(n0, mido.Message("control_change", channel=ch,
+                                           control=1, value=int(round(w * 127))))
             return
         self._repitch(ch, n0)
 
@@ -6030,6 +6071,103 @@ def selftest():
     check("a scale/octave dump lands in the store as a 128-key preset",
           abs(_sc + 13.7) < 0.02,
           "  (C#4 %+.3f cents, asked -13.7)" % _sc)
+
+    # ---- CC121 OFFLINE, SAME-TICK ORDER, CC96/97, THE GLISS CAP, SYMPATHY ----
+    def _mk(_evs, _prog, _tuner="even"):
+        _m = mido.MidiFile(ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=_prog, time=0))
+        for _kind, _dt, _kw in _evs:
+            _t.append(mido.Message(_kind, channel=0, time=_dt, **_kw))
+        _fn = os.path.join(tempfile.gettempdir(), "small_%d.mid" % os.getpid())
+        _m.save(_fn)
+        return _BRb.prepare(_fn, _tuner)
+
+    def _c(_n, _v, _dt=0):
+        return ("control_change", _dt, dict(control=_n, value=_v))
+
+    def _on(_n, _dt=0):
+        return ("note_on", _dt, dict(note=_n, velocity=100))
+
+    def _off(_n, _dt=0):
+        return ("note_off", _dt, dict(note=_n, velocity=0))
+
+    def _koff(_p):
+        return float(np.max(np.asarray(_p["noff"]))) / 44100.0
+
+    _k1 = _koff(_mk([_c(64, 127), _on(60), _off(60, 480), _c(121, 0, 480),
+                     _c(64, 0, 960)], 0))
+    check("CC121 in a FILE lifts the pedal where it lands",
+          abs(_k1 - 1.0) < 0.01,
+          "  (damper at %.2f s, the reset; without it, the pedal-up at 2.00 s. "
+          "The file renderer ignored CC121 until now)" % _k1)
+    _bp = [_on(69), _off(69, 960)]
+    _a = _mk(_bp, 109); _b = _mk([_c(121, 0)] + _bp, 109)
+    check("...and on a channel that sent no controllers it changes nothing",
+          all(np.array_equal(np.asarray(_a[_k]), np.asarray(_b[_k]))
+              for _k in _BRb.PARTIAL_COLS),
+          "  (a bagpipe keeps its three drones: CC1 is reset only where the "
+          "channel had sent one, since offline 'absent' means the default)")
+    _du = _koff(_mk([_on(60), _c(64, 127, 240), _c(64, 0), _off(60, 240),
+                     _c(64, 0, 960)], 0))
+    _ud = _koff(_mk([_on(60), _c(64, 0, 240), _c(64, 127), _off(60, 240),
+                     _c(64, 0, 960)], 0))
+    check("pedal events on one tick keep the file's order",
+          abs(_du - 0.5) < 0.01 and abs(_ud - 1.5) < 0.01,
+          "  (down-then-up released at %.2f s, up-then-down held to %.2f s; "
+          "sorting on the value made both 'held')" % (_du, _ud))
+    _gz = _mk([_c(84, 60), _c(121, 0), _on(64), _off(64, 480)], 57)
+    check("...and CC121 spends a pending CC84",
+          not (np.asarray(_gz["gb"]) != 0.0).any(),
+          "  (the portamento source note a reset should have forgotten)")
+
+    _Fe3 = _BRb.tuning_table("even")
+    _st = [_c(101, 0), _c(100, 0), _c(6, 2), _c(96, 127), _c(96, 127), _c(96, 127),
+           ("pitchwheel", 0, dict(pitch=8191)), _on(61), _off(61, 480)]
+    _sc = 1200.0 * math.log2(float(np.min(np.asarray(_mk(_st, 73)["nf"]))) / _Fe3[61])
+    check("CC96 steps the bend range by one cent, in a file",
+          abs(_sc - 203.0 * 8191 / 8192) < 0.001,
+          "  (range 2 + 3 steps, wheel full: %+.4f cents; one unit of the "
+          "finest byte, a convention generalised from the MTS text)" % _sc)
+    _tp = [_c(101, 0), _c(100, 3), _c(6, 0)] + [_c(96, 127)] * 6 + [_on(61), _off(61, 480)]
+    _tw = 1200.0 * math.log2(float(np.min(np.asarray(_mk(_tp, 73, "gm2")["nf"])))
+                             / _BRb.tuning_table("werckmeister")[61])
+    check("...and steps the MTS tuning program: 0 + 6 is Werckmeister",
+          abs(_tw) < 0.01, "  (%+.4f cents)" % _tw)
+
+    _gl = _mk([_c(5, 60), _c(65, 127), _on(60), _off(60, 480), _on(67),
+               _off(67, 1920)], 56, "hybrid440")
+    _gn = np.asarray(_gl["non"]) / 44100.0
+    _gs = sorted({round(float(_x), 3) for _x in _gn if _x >= 0.49})
+    _Fh = _BRb.tuning_table("hybrid440")
+    _gw = T.glide_tau(60, _Fh[67], _Fh[60], "slide") * T.PORTA_SETTLE_TAUS
+    check("a valved gliss keeps CC5's time when the note can hold it",
+          abs((_gs[-1] - 0.5) - _gw) < 0.01,
+          "  (run %.3f s, CC5 asks %.3f; the old cap, half the note, gave "
+          "%.3f)" % (_gs[-1] - 0.5, _gw, min(_gw, 1.0)))
+
+    _sev = []
+    for _n in (60, 62, 64, 67):
+        _sev += [_on(_n), _off(_n, 480)]
+    _sp = _mk(_sev, 104, "just")
+    _Fj = _BRb.tuning_table("just")
+    _snf = np.asarray(_sp["nf"]); _snon = np.asarray(_sp["non"]) / 44100.0
+    _gG = (_snon >= 1.49) & (_snon < 1.60)
+    _sE = min((1200.0 * math.log2(_x / _Fj[64]) for _x in _snf[_gG]), key=abs)
+    check("a sitar's sympathetic string rings at its TUNED pitch",
+          abs(_sE) < 0.01,
+          "  (G4 struck under `just`, the E4 string answers %+.3f cents from "
+          "the table; it was +15.64 -- an equal-tempered interval under every "
+          "tuner)" % _sE)
+    _cnt = []
+    for _k in range(4):
+        _g = (_snon >= _k * 0.5 - 0.01) & (_snon < _k * 0.5 + 0.1)
+        _r = _snf[_g] / _snf[_g].min()
+        _cnt.append(int((np.abs(_r - np.round(_r)) > 0.02).sum()))
+    check("...and which strings answer depends on the note struck",
+          len(set(_cnt)) > 1,
+          "  (off-series partials per strike %s -- it used to be the FIRST "
+          "note's answer, reused for every note after it)" % _cnt)
 
     # ---- PORTAMENTO, CC5/CC65/CC84 ------------------------------------------
     #

@@ -12510,7 +12510,7 @@ def rpn_tuning_program(cc, value):
     the one that keeps a store to select from (mts.TuningStore). The MTS text:
     "Bn 64 03 65 00 06 tt" -- the data entry MSB is the program, shown to
     users as 1-128 and sent as 0-127. Data increment and decrement (CC96/97)
-    are also defined there and are not read by this renderer.
+    step it by one: see rpn_step.
     """
     return int(value) if cc == 6 else None
 
@@ -12518,6 +12518,41 @@ def rpn_tuning_program(cc, value):
 def rpn_tuning_bank(cc, value):
     """RPN 0/4, MIDI Tuning Standard bank select: the data entry MSB."""
     return int(value) if cc == 6 else None
+
+
+# CC96/97, DATA INCREMENT AND DECREMENT: one unit of the parameter's FINEST
+# byte, clamped to its range. The MTS text is the only primary source to hand,
+# and it uses them to step a tuning program ("Bn 64 03 65 00 60 7F (data
+# increment)"), where one is the only unit there is; this generalises that to
+# the least significant byte each RPN uses, and is a convention, stated as one.
+# The value byte is ignored, as in the MTS example.
+RPN_STEP = {
+    (0, 0): (0.01, 0.0, 127.99),                       # bend range, 1 cent
+    (0, 1): (100.0 / 8192.0, -100.0, 100.0 * 8191.0 / 8192.0),   # fine, 1 LSB
+    (0, 2): (1.0, -64.0, 63.0),                        # coarse, 1 semitone
+    (0, 3): (1.0, 0.0, 127.0),                         # MTS tuning program
+    (0, 4): (1.0, 0.0, 127.0),                         # MTS tuning bank
+    (0, 5): (100.0 / 128.0, 0.0, 127.0 * 100.0 + 127.0 * 100.0 / 128.0),  # mod range
+}
+
+
+def rpn_step(sel, current, up):
+    """The selected RPN's value after one CC96 (up) or CC97 (down), or None."""
+    st = RPN_STEP.get(sel)
+    if st is None:
+        return None
+    step, lo, hi = st
+    v = float(current) + (step if up else -step)
+    v = min(hi, max(lo, v))
+    if sel in ((0, 2), (0, 3), (0, 4)):
+        v = float(int(round(v)))
+    return v
+
+
+def rpn_fine_msb(cents):
+    """The data-entry MSB a fine-tuning value in cents corresponds to."""
+    code = int(round(float(cents) / 100.0 * 8192.0)) + 8192
+    return max(0, min(16383, code)) >> 7
 
 
 def channel_pitch_ratio(range_st, wheel, coarse_st, fine_cents,

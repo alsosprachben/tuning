@@ -48,17 +48,18 @@ for the reason above.
 | CC84 portamento control | ✓ | ✓ | its byte is a **source note number**; fires once |
 | CC91 reverb send | | ✓ | distance from the microphone |
 | CC93 chorus send | ✓ | ✓ | fixed detuned copies, mixed in power |
+| CC96 / CC97 data increment / decrement | ✓ | ✓ | the selected RPN by one unit of its finest byte |
 | CC98 / CC99 NRPN | ✓ | ✓ | selected and then deliberately ignored |
 | CC100 / CC101 RPN | ✓ | ✓ | selects 0/0, 0/1, 0/2, 0/5, and 0/3, 0/4 under `gm2` |
 | CC120 all sound off | ✓ | ✓ | the panic — stops the channel dead, pedal or no pedal |
-| CC121 reset controllers | ✓ | | re-sends CC1/11/64/66/67 at their defaults |
+| CC121 reset controllers | ✓ | ✓ | CC1/11/64/65/66/67 to defaults, wheel centred, pressure off, RPN null |
 | CC123 all notes off | ✓ | ✓ | lifts the keys; the pedal still holds them |
 | CC124 / CC125 omni off / on | ✓ | ✓ | all notes off, and nothing else — a Part already knows its channel |
 | CC126 mono | ✓ | ✓ | all sound off, all notes off, then **one voice** — see below |
 | CC127 poly | ✓ | ✓ | all sound off, all notes off, then polyphonic again |
 
-Twenty-four controllers in each, and they differ in one each: CC121 is live
-only, CC91 file only. Four RPNs: **0/0** bend range, **0/1** fine tuning
+Twenty-six controllers live and twenty-seven in a file. The one difference is
+CC91, which is file only. Four RPNs: **0/0** bend range, **0/1** fine tuning
 (14-bit, ±100 cents), **0/2** coarse tuning (MSB only, ±64 semitones), and GM
 2's **0/5** modulation depth range. NRPNs are selected so that a file which
 sends one does not have its data entry land in whatever RPN was selected last —
@@ -74,7 +75,26 @@ hundredth of a cent. Two more things this document claimed and the file
 renderer did not do: it listed **GM System On** as answered by both, and the
 file path ignored it entirely; and it read no All Notes Off. Both are real now.
 
-**Same-tick order is the file's own.** A file's header is all tick zero, and
+**CC121 in a file** is posted as the events a player resetting by hand would
+have sent, at that instant and in that order, so every reader honours it
+without knowing it exists. CC1 is reset only on a channel that has already sent
+one. Offline, most CC1 readers take the channel's *first* value as a setting,
+and "absent" means the voice's default (a bagpipe's three drones), so a reset
+on an untouched channel would otherwise have silently changed it.
+
+**CC96/97** step the selected RPN by one unit of its finest byte. That's 1 for
+coarse tuning and MTS program and bank, 1 cent for bend range, 1/8192 of 100
+cents for fine tuning, and 1/128 semitone for mod range. The MTS text is the
+one primary source, and it steps a tuning program, where 1 is the only unit
+there is. This generalises that, and is a convention.
+
+**Same-tick order is the file's own**, for controllers as well now. The pedal
+and portamento builders sorted `(t, cc, v)` tuples, so events sharing a tick
+tie-broke on the *value*: a pedal-down then pedal-up on one tick always came
+out up-then-down, and the bar ended held. `ccs` is appended in message order and
+Python's sort is stable, so sorting on the time alone fixed it (`in_order`).
+
+A file's header is all tick zero, and
 the first draft of the reset broke ties by putting GM System On first, on the
 theory that that is where files put it — so a file that tuned and *then* reset
 stayed tuned. Message order is the only tie-break that is not a guess. The

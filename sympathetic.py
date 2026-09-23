@@ -40,7 +40,12 @@ import numpy as np
 import tonelib as T
 
 
-def responders(props, freq=None):
+def _nearest_key(tab, f0):
+    """The table key whose pitch is nearest f0, in cents rather than Hz."""
+    return min(tab, key=lambda n: abs(np.log2(max(tab[n], 1e-9) / max(f0, 1e-9))))
+
+
+def responders(props, freq=None, f0=None):
     """[(semitone offset, drive)] for one struck note, strongest first.
 
     The drive is a scalar per responder rather than per mode, which is exact
@@ -67,13 +72,18 @@ def responders(props, freq=None):
         # sounds like, and it is coincidence doing it: an exact unison is
         # exactly in the resonance, and two cents away is already outside it.
         tonic = int(getattr(props, 'sympathetic_tonic', 60))
-        f0 = props.frequency_x * (2.0 ** props.octave_position)
+        # THIS STRIKE'S pitch when the caller knows it, which expand now does:
+        # the props are the channel's FIRST note, and a sitar's strings are
+        # fixed while the melody moves, so the first note's pitch is the wrong
+        # question for every note after it.
+        if f0 is None:
+            f0 = props.frequency_x * (2.0 ** props.octave_position)
         # WHICH NOTE IS THIS? Found by matching the tuning table rather than
         # by assuming A440 and equal steps, because neither holds here: the
         # default reference is baroque and the whole point of this voice is
         # that the temperament is not equal.
         if freq:
-            drv = min(freq, key=lambda n: abs(freq[n] - f0))
+            drv = _nearest_key(freq, f0)
         else:
             drv = int(round(69 + 12 * np.log2(max(f0, 1e-9) / 440.0)))
         for off in strings:
@@ -153,7 +163,7 @@ def _at(props, freq):
     return v
 
 
-def expand(A, channels, sr, cols=None, freq=None):
+def expand(A, channels, sr, cols=None, freq=None, table=None):
     """Emit every channel's sympathetic notes, in place on the table.
 
     A struck note is one group of rows sharing an onset; each responder is that
@@ -173,9 +183,13 @@ def expand(A, channels, sr, cols=None, freq=None):
     keys = list(cols or A.keys())
     extra = {k: [] for k in keys}
     made = 0
+    # THE TUNING TABLE IN FORCE AT EACH STRIKE. `table(ch, t)` is
+    # blockrender's _F: the channel's MTS table under gm2, the tuner's own
+    # otherwise. A bare `freq` still works and means one table for everything.
+    if table is None:
+        table = (lambda _c, _t: freq)
     for ch, props in channels.items():
-        resp = responders(props, freq)
-        if not resp:
+        if getattr(props, 'sympathetic_gain', 0.0) <= 0.0:
             continue
         rows = np.flatnonzero(mch == ch)
         if not len(rows):
@@ -186,10 +200,32 @@ def expand(A, channels, sr, cols=None, freq=None):
         grp = {}
         for i in rows:
             grp.setdefault(int(round(non[i] / 64.0)), []).append(i)
+        cache = {}
         for _, idx in grp.items():
             ix = np.asarray(idx)
-            for semis, drive in resp:
-                ratio = 2.0 ** (semis / 12.0)
+            # PER STRIKE, NOT PER CHANNEL. This used to ask responders() once,
+            # with the channel's first note, and apply the answer to every
+            # note after it -- so a sitar's sympathetic strings answered each
+            # note as if it were the first. The driver is this strike's own
+            # fundamental, found in the table in force when it was struck.
+            tab = table(ch, float(non[ix].min()) / sr)
+            f0 = float(nf[ix].min())
+            drv = _nearest_key(tab, f0) if tab else None
+            key = (id(tab), drv)
+            if key not in cache:
+                cache[key] = responders(props, tab, f0=f0)
+            for semis, drive in cache[key]:
+                # AND THE PITCH IS THE TABLE'S. This was 2**(semis/12) -- an
+                # equal-tempered interval from the partial -- under every tuner,
+                # so a sitar tuned `just` had its sympathetic strings ring
+                # tempered, a couple of cents off the pure pitch the strings are
+                # tuned to, which at Q ~2800 is several bandwidths: the fifths
+                # a just tuner exists for could not coincide. The equal ratio
+                # remains only for a key outside the table.
+                if tab and drv is not None and (drv + semis) in tab and tab[drv] > 0:
+                    ratio = float(tab[drv + semis]) / float(tab[drv])
+                else:
+                    ratio = 2.0 ** (semis / 12.0)
                 if (nf[ix] * ratio > sr * 0.5).all():
                     continue
                 keep = ix[nf[ix] * ratio < sr * 0.5]

@@ -28,11 +28,11 @@ only do it this way: a gliss *between* two notes has to start before the second
 note-on, which means knowing it is coming. And a file that wants the arrival on
 the beat can put the note-on earlier; the renderer does what the bytes say.
 
-What is still worth revisiting is the cap: the run is limited to **half the
-note**, so on a short note a slow gliss is squeezed and CC5 means something
-different depending on note length. An absolute cap would keep CC5's meaning
-fixed. A notated "between" gliss, if ever wanted from a score, should be an
-explicit per-part setting on the file renderer and never a heuristic.
+The cap is settled too: the run keeps CC5's time and gives way only to leave
+the arrival max(60 ms, 20%) of the note, and a gliss too short to run is
+counted rather than silently dropped. A notated "between" gliss, if ever wanted
+from a score, should be an explicit per-part setting on the file renderer and
+never a heuristic.
 
 **One refinement not attempted.** Technique 2, "move arbitrarily the valves
 while blowing through the harmonics", would wander the valve order instead of
@@ -52,21 +52,15 @@ Fine and Coarse Tuning. What is left:
 | 9 drum kits | one kit | addressed by CC0=120 |
 | channel 11 as a second drum part | no | falls out of bank select |
 | CC71–78 sound controllers | none | **needs a design first**, see below |
-| CC121 in a file | live only | a file that resets its controllers mid-piece |
 | legato attack, live | file only | live mono re-articulates every note; the pitch path is right |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
 | CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
 
 **RPN 3 and 4 are done, as the `gm2` tuner's store** (`mts.py`, and see
-`midi.md`). Three things are left from that work:
-
-- **Data increment and decrement (CC96/97)** are defined by the MTS text as a
-  way to step the tuning program and bank. This renderer reads neither for any
-  RPN.
-- **Offline, a tuning select or a real-time single-note change reaches a
-  sounding note only from its next onset.** The spec says it should move at
-  once, and live does. The file renderer prints a count when this happens.
-- **Sympathetic resonance reads the base table**, not a channel's MTS table.
+`midi.md`). One thing is left from that work: **offline, a tuning select or a
+real-time single-note change reaches a sounding note only from its next
+onset.** The spec says it should move at once, and live does. The file renderer
+prints a count when this happens.
 
 **Bank select is load-bearing.** GM 2's whole extended sound set is addressed
 through it, and without it a GM 2 file's variations collapse silently onto the

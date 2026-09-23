@@ -37,8 +37,8 @@ phase-sensitive differences follow from the block size.
 longer than it was true, four lines under a warning about exactly that. See
 midi.md, which was written because of it.)
 
-WHAT CONTROLS IT READS: twenty-four CCs -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66,
-67, 84, 91, 93, 98-101, 120, 123-127 -- with RPN 0/0, 0/1, 0/2 and 0/5, plus
+WHAT CONTROLS IT READS: twenty-seven CCs -- 1, 5, 6, 7, 10, 11, 38, 64, 65, 66,
+67, 84, 91, 93, 96-101, 120, 121, 123-127 -- with RPN 0/0 to 0/5, plus
 program change, both aftertouches, the pitch wheel and SysEx (GM System On,
 GM2 Scale/Octave Tuning, Master Volume, Fine and Coarse Tuning). The pedals are
 here and not only in live.py. Until the RPNs arrived this list claimed GM
@@ -433,6 +433,7 @@ def parse(path):
     # arithmetic is tonelib's, shared, so the two cannot drift apart.
     rpns = {}                # channel -> [(t, 'range'|'fine'|'coarse'|'mod', v)]
     _rsel = {}; _rfmsb = {}; _rrange = {}; _rmod = {}
+    _rfine = {}; _rcoarse = {}; _rtp = {}; _rtb = {}   # current values, for CC96/97
     master = []              # [(t, 'vol'|'fine'|'coarse', v, seq)], the device's own
     gmon = []                # [(t, seq)] GM System On: every channel back to power-on
     _pwseq = {}              # channel -> [(t, seq, pitch)], the wheel in message order
@@ -456,6 +457,32 @@ def parse(path):
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
             _c, _cc, _v = msg.channel, msg.control, msg.value
+            if _cc == 121:
+                # RESET ALL CONTROLLERS, which only live answered. Posted as the
+                # events a player resetting by hand would have sent, at this
+                # instant and in this order, so every consumer below honours it
+                # without knowing it exists -- the list is live's _RESET_CC.
+                # Kept, as live keeps them: CC7, CC10, the program, CC5 and
+                # every tuning RPN.
+                _cl = ccs[_c]
+                for _rc in (64, 65, 66, 67):
+                    _cl.append((t, _rc, 0))
+                # CC1 ONLY IF THE CHANNEL HAS SENT ONE. Offline, most CC1 readers
+                # take the channel's FIRST value as a setting and "absent" is the
+                # voice's default -- three drones, not none. A reset on a channel
+                # that never touched the wheel would become that first value and
+                # silently change the default. With a CC1 already sent, the
+                # first-value readers are untouched and the one time-aware
+                # reader, the Leslie half-moon, gets its reset.
+                if any(_x[1] == 1 for _x in _cl):
+                    _cl.append((t, 1, 0))
+                _cl.append((t, 84, CC84_CANCEL))     # a pending CC84 is spent
+                ctrl.setdefault(_c, {})[11] = 127
+                ctrl[_c][1] = 0
+                pws.setdefault(_c, []).append((t, 0))
+                _pwseq.setdefault(_c, []).append((t, _seq, 0))
+                ats.setdefault(_c, []).append((t, 0))   # not polytouch: live keeps it
+                _rsel[_c] = (127, 127)
             if _cc in (98, 99):
                 _rsel[_c] = None            # an NRPN: its data entry is not ours
             elif _cc == 101:
@@ -470,10 +497,12 @@ def parse(path):
                     rpns.setdefault(_c, []).append((t, 'range', _rrange[_c], _seq))
                 elif _sel == (0, 1):
                     _rfmsb[_c], _fc = T.rpn_fine(_cc, _v, _rfmsb.get(_c, 64))
+                    _rfine[_c] = _fc
                     rpns.setdefault(_c, []).append((t, 'fine', _fc, _seq))
                 elif _sel == (0, 2):
                     _co = T.rpn_coarse(_cc, _v)
                     if _co is not None:
+                        _rcoarse[_c] = _co
                         rpns.setdefault(_c, []).append((t, 'coarse', _co, _seq))
                 elif _sel == (0, 5):
                     _rmod[_c] = T.rpn_mod_range(_cc, _v, _rmod.get(_c, 0.0))
@@ -484,8 +513,36 @@ def parse(path):
                     _tv = (T.rpn_tuning_program if _sel == (0, 3)
                            else T.rpn_tuning_bank)(_cc, _v)
                     if _tv is not None:
+                        (_rtp if _sel == (0, 3) else _rtb)[_c] = _tv
                         rpns.setdefault(_c, []).append(
                             (t, 'tprog' if _sel == (0, 3) else 'tbank', _tv, _seq))
+            elif _cc in (96, 97):
+                # DATA INCREMENT / DECREMENT: one unit of the selected RPN's
+                # finest byte (tonelib.rpn_step), posted as the same event data
+                # entry would have posted, so nothing downstream can tell.
+                _sel = _rsel.get(_c)
+                _cur = {(0, 0): _rrange.get(_c, T.BEND_RANGE_SEMITONES),
+                        (0, 1): _rfine.get(_c, 0.0),
+                        (0, 2): _rcoarse.get(_c, 0.0),
+                        (0, 3): _rtp.get(_c, 0), (0, 4): _rtb.get(_c, 0),
+                        (0, 5): _rmod.get(_c, 0.0)}.get(_sel)
+                _nv = None if _cur is None else T.rpn_step(_sel, _cur, _cc == 96)
+                if _nv is not None:
+                    _kind = {(0, 0): 'range', (0, 1): 'fine', (0, 2): 'coarse',
+                             (0, 3): 'tprog', (0, 4): 'tbank', (0, 5): 'mod'}[_sel]
+                    if _sel == (0, 0):
+                        _rrange[_c] = _nv
+                    elif _sel == (0, 1):
+                        _rfine[_c] = _nv; _rfmsb[_c] = T.rpn_fine_msb(_nv)
+                    elif _sel == (0, 2):
+                        _rcoarse[_c] = _nv
+                    elif _sel == (0, 3):
+                        _rtp[_c] = _nv = int(_nv)
+                    elif _sel == (0, 4):
+                        _rtb[_c] = _nv = int(_nv)
+                    else:
+                        _rmod[_c] = _nv
+                    rpns.setdefault(_c, []).append((t, _kind, _nv, _seq))
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
             _pwseq.setdefault(msg.channel, []).append((t, _seq, msg.pitch))
@@ -498,7 +555,8 @@ def parse(path):
                 # the time recorded here.
                 gmon.append((t, _seq))
                 ctrl.clear(); _rsel.clear(); _rfmsb.clear(); _rrange.clear()
-                _rmod.clear()
+                _rmod.clear(); _rfine.clear(); _rcoarse.clear()
+                _rtp.clear(); _rtb.clear()
                 for _c in list(sotas):
                     sotas[_c].append((t, (0.0,) * 12))
                 continue
@@ -576,6 +634,32 @@ def _sota_channels(ff, gg, hh):
         if hh & (1 << b):
             out.add(b)
     return out
+
+
+def in_order(evs):
+    """Controller events sorted by TIME ONLY, stably -- so events that share a
+    tick keep the order the file sent them.
+
+    sorted() on the bare (t, cc, v) tuples broke ties on the VALUE: a pedal
+    down and a pedal up on one tick always came out up-then-down, whatever the
+    file said, so a pedal pressed on the last tick of a bar and released on
+    the same one ended the bar held. `ccs` is appended in message order, and
+    Python's sort is stable, so sorting on the time alone is the whole fix.
+    The same bug class as GM System On's tie-break, one layer down.
+    """
+    return sorted(evs, key=lambda e: e[0])
+
+
+# A pending CC84 cancelled by CC121. Not a note number -- a controller value
+# never exceeds 127 -- so it can ride in `ccs` in message order and be told
+# apart from a real source note by the one reader that cares.
+CC84_CANCEL = 128
+
+# A valved gliss leaves the note it arrives at at least this much of itself:
+# 60 ms or a fifth of the note, whichever is longer. Below that the arrival is
+# not a note any more, just the last step of the run.
+GLISS_ARRIVAL_S = 0.06
+GLISS_ARRIVAL_FRAC = 0.2
 
 
 def parse_gm_on(data):
@@ -753,7 +837,7 @@ def registration_blocks(ch, prop, ccs, nblk):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
     # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
-    ev = sorted(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); mlo = ds & 0x7F; mhi = (ds >> 7) & 0x7F; cres = 0.0; vol = 1.0
+    ev = in_order(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); mlo = ds & 0x7F; mhi = (ds >> 7) & 0x7F; cres = 0.0; vol = 1.0
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     def emit(t):
         mask = mlo | (mhi << 7)
@@ -1351,7 +1435,7 @@ def prepare(path, tuner='hybrid440'):
     _PED_CH = {}          # channel -> [(down_sec, up_sec)], sorted and disjoint
     for _c, _evs in ccs.items():
         _segs = []; _dn = None
-        for _t, _cc, _v in sorted(_evs):
+        for _t, _cc, _v in in_order(_evs):
             if _cc != 64:
                 continue
             # 64 is the switch point GM specifies, and half-pedalling is real:
@@ -1389,7 +1473,7 @@ def prepare(path, tuner='hybrid440'):
     _SOST_HELD = {}
     for _c, _evs in ccs.items():
         _segs = []; _dn = None
-        for _t, _cc, _v in sorted(_evs):
+        for _t, _cc, _v in in_order(_evs):
             if _cc != 66:
                 continue
             if _v >= 64 and _dn is None:
@@ -1408,7 +1492,7 @@ def prepare(path, tuner='hybrid440'):
     _SOFT_CH = {}
     for _c, _evs in ccs.items():
         _segs = []; _dn = None
-        for _t, _cc, _v in sorted(_evs):
+        for _t, _cc, _v in in_order(_evs):
             if _cc != 67:
                 continue
             if _v >= 64 and _dn is None:
@@ -1452,7 +1536,7 @@ def prepare(path, tuner='hybrid440'):
     _PORTA_ON = {}      # channel -> [(down_sec, up_sec)], the CC65 segments
     for _c, _evs in ccs.items():
         _segs = []; _dn = None
-        for _t, _cc, _v in sorted(_evs):
+        for _t, _cc, _v in in_order(_evs):
             if _cc != 65:
                 continue
             # 64 again, the same switch point the three pedals collapse at.
@@ -1468,10 +1552,10 @@ def prepare(path, tuner='hybrid440'):
     _PORTA_T = {}       # channel -> sorted [(t, CC5 value)]
     _PORTA_CTL = {}     # channel -> sorted [(t, source note number)]
     for _c, _evs in ccs.items():
-        _t5 = sorted((_t, _v) for _t, _cc, _v in _evs if _cc == 5)
+        _t5 = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 5]
         if _t5:
             _PORTA_T[_c] = _t5
-        _t84 = sorted((_t, _v) for _t, _cc, _v in _evs if _cc == 84)
+        _t84 = [(_t, _v) for _t, _cc, _v in in_order(_evs) if _cc == 84]
         if _t84:
             _PORTA_CTL[_c] = _t84
 
@@ -1514,8 +1598,9 @@ def prepare(path, tuner='hybrid440'):
                 # ...only if it arrived AFTER the previous note-on, or it is a
                 # message about a note that has already been and gone.
                 if _pv is None or _ctl[_i][0] >= _pv[0]:
-                    _src = _ctl[_i][1]
                     _ctl_used[_c] = _i
+                    if _ctl[_i][1] != CC84_CANCEL:
+                        _src = _ctl[_i][1]
         if _src is None and _porta_on_at(_c, _on):
             _pv = _prev_on.get(_c)
             # A STRICTLY EARLIER ONSET, so a chord does not glide from itself.
@@ -1552,6 +1637,7 @@ def prepare(path, tuner='hybrid440'):
     # slide or a finger does; ripping through seven fingerings is a sequence of
     # discrete actions at a steady rate, and an exponential would also never
     # reach the last step.
+    _gliss_clean = 0    # glisses too short to play, reported below
     _GLISS = {}         # (ch, note, on) -> (level scale, smear 0..1)
     _GLISS_DROP = set() # the notes the run replaces
     _GLISS_STEPS = []
@@ -1568,15 +1654,24 @@ def prepare(path, tuner='hybrid440'):
         if len(_path) < 2 or _e[3] - _e[2] <= 0.0:
             continue                                 # a tone or less: the lip has it
         # One journey time, from the same speed law every other mechanism uses,
-        # so CC5 means one thing across the bank. Capped at half the note: a
-        # gliss is an ornament on the note it arrives at, not the note itself.
+        # so CC5 means one thing across the bank -- and it KEEPS meaning it
+        # unless the note physically cannot hold the run. The cap used to be
+        # half the note, which squeezed a slow gliss on any note shorter than
+        # twice its run, so CC5 meant different speeds at different note
+        # lengths. Now the run keeps CC5's time and gives way only to leave the
+        # arrival a real hold: max(60 ms, 20%) of the note, the least that
+        # still sounds like landing somewhere.
         _cc5 = _porta_cc5_at(_e[0], _e[2])
         _Fe = _F(_e[0], _e[2])
         _T = T.glide_tau(_cc5, _Fe[_e[1]], _Fe[_gs], 'slide') * T.PORTA_SETTLE_TAUS
-        _T = min(_T, (_e[3] - _e[2]) * 0.5)
-        _dt = _T / float(len(_path))
+        _dur = _e[3] - _e[2]
+        _T = min(_T, _dur - max(GLISS_ARRIVAL_S, GLISS_ARRIVAL_FRAC * _dur))
+        _dt = _T / float(len(_path)) if _T > 0.0 else 0.0
         if _dt < 0.012:
-            continue                    # faster than a valve moves: play it clean
+            # Faster than a valve moves: played clean. COUNTED, which it was
+            # not -- a gliss that disappeared left nothing to say it had.
+            _gliss_clean += 1
+            continue
         # SMEAR RIDES ON THE SAME KNOB, which is Ben's suggestion: "maybe the
         # speed controller can control how straight or slurred the glissando is
         # across the harmonics". A quick gliss is a RIP and the steps are the
@@ -1604,6 +1699,9 @@ def prepare(path, tuner='hybrid440'):
             (_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
         _GLIDE_SRC.pop(_k3, None)       # the lattice replaces the smooth glide
         _GLISS_DROP.add(_k3)
+    if _gliss_clean:
+        print("  %d valved glissandi were too short to run and played clean "
+              "(a step would have been under 12 ms)" % _gliss_clean)
     if _GLISS_STEPS:
         notes = [_n for _n in notes
                  if (_n[0], _n[1], _n[2]) not in _GLISS_DROP] + _GLISS_STEPS
@@ -1900,7 +1998,7 @@ def prepare(path, tuner='hybrid440'):
         # clavinet's rockers it cannot be a pass over the finished table at all,
         # because a detune is in the partials' FREQUENCIES.
         if ch not in _DETUNE_CH:
-            _c1d = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+            _c1d = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
             _DETUNE_CH[ch] = (_c1d[0] / 64.0) if _c1d else 1.0
         T.honky_detune = _DETUNE_CH[ch] if getattr(pc, 'detune_wheel', False) else 1.0
         # THE DRONES, on the same wheel and by the same rule. A piper corks a
@@ -1925,9 +2023,16 @@ def prepare(path, tuner='hybrid440'):
         # recorded in sources.md, and it was reintroduced within the hour.
         if getattr(pc, 'drone_wheel', False):
             if ch not in _DRONE_CH:
-                _c1d2 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+                _c1d2 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
                 _DRONE_CH[ch] = (int(round(_c1d2[0] / 127.0 * 3.0)) if _c1d2
-                                 else len(getattr(pc, 'drone_hz', ())))
+                                 # drone_RATIOS, the class's tuple: drone_hz
+                                 # became a property (it follows the chanter's
+                                 # tuning), and on the CLASS a property is not
+                                 # a sequence -- so from 8a86e4a until this
+                                 # line, every bagpipe file that never sent a
+                                 # CC1 crashed the file renderer. Nothing sent
+                                 # one without CC1; the CC121 check did.
+                                 else len(getattr(pc, 'drone_ratios', ())))
             T.bagpipe_drones = _DRONE_CH[ch]
         T.soft_pedal_down = _soft_at(ch, on)
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
@@ -2119,7 +2224,7 @@ def prepare(path, tuner='hybrid440'):
             # have.
             _drv = float(props.amp_drive)
             if not getattr(props, 'leslie', False):
-                _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+                _c1 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
                 if _c1:
                     _drv *= 4.0 * _c1[0] / 127.0
             _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE', _drv))
@@ -2162,7 +2267,7 @@ def prepare(path, tuner='hybrid440'):
             # ONE VALUE FOR THE PIECE, from the channel's first CC1, the same
             # rule the amplifier's drive follows: a player sets the rockers and
             # then plays, where live it is a control being moved.
-            _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
             _set = (int(round(_c1[0] / 127.0 * (len(T.CLAV_TONE) - 1)))
                     if _c1 else T.CLAV_FLAT)
             _set = int(os.environ.get('TUNING_CLAV', _set))
@@ -2177,7 +2282,7 @@ def prepare(path, tuner='hybrid440'):
             #
             # A file with no CC1 gets no modulation, which is the panel's own
             # default position and what every file in the corpus will see.
-            _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
             if getattr(props, 'tremolo_intrinsic', False):
                 # AN INTRINSIC TREMOLO IS NOT A WHEEL EFFECT. GM 44 is called
                 # Tremolo Strings: the stroke is the patch, so it is on at full
@@ -2218,11 +2323,11 @@ def prepare(path, tuner='hybrid440'):
         # which is a textbook send bus, arrived at from the room equation
         # rather than bolted onto it.
         if ch not in _REVERB_CH:
-            _c91 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 91]
+            _c91 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 91]
             if _c91:
                 _REVERB_CH[ch] = _c91[0] / float(GM_DEFAULT_REVERB)
         if ch not in _CHORUS_CH:
-            _c93 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 93]
+            _c93 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 93]
             if _c93 and _c93[0] > 0:
                 _CHORUS_CH[ch] = (_c93[0] / 127.0, _CHR.offsets_for(props))
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
@@ -2230,7 +2335,7 @@ def prepare(path, tuner='hybrid440'):
             # rotor has momentum, so this is a history of requests and not a
             # speed -- leslie.Rotor spends real seconds getting between them.
             import leslie as _LES0
-            _req = [(t, _LES0.zone(v)) for t, cc, v in sorted(ccs.get(ch, []))
+            _req = [(t, _LES0.zone(v)) for t, cc, v in in_order(ccs.get(ch, []))
                     if cc == 1]
             if not _req or _req[0][0] > 0.0:
                 _req.insert(0, (0.0, _LES0.TREMOLO
@@ -2615,8 +2720,10 @@ def prepare(path, tuner='hybrid440'):
     # mechanical kick through shared steel rather than resonance.
     if _SYM_CH:
         import sympathetic as _SYM
+        # The table in force at each strike -- the tuner's, or under gm2 the
+        # channel's MTS table -- rather than one global FREQ for the piece.
         _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'),
-                          freq=FREQ)
+                          table=_F)
         if _ns:
             print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
                   % (len(_SYM_CH), _ns))

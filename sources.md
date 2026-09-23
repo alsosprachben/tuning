@@ -2422,6 +2422,29 @@ the octave ever coincided, because an equal-tempered octave is also a just one,
 and the just tuner bought nothing except a louder octave. Taking the string's
 frequency from the tuning table instead is what turns 9 responders into 56.
 
+**AND THEN THEY WERE EMITTED AT THE WRONG PITCH ANYWAY.** The paragraph above
+fixed the COUPLING -- how strongly a string answers was computed at its tuned
+pitch -- and `sympathetic.expand` went on to place the answering partial at
+`nf * 2**(s/12)`, the equal-tempered interval, under every tuner. Two places
+decided the same number, they disagreed, and this file described the half
+that had been fixed. Measured on G4 struck under `just`, the E4 string
+answered **+15.64 cents** from where it is tuned; it now answers at **0.00**.
+The ratio is the tuning table's, `tab[drv + s] / tab[drv]`, and under `gm2`
+the table is the channel's own MTS table at the instant of the strike.
+
+**AND EVERY NOTE WAS ANSWERED AS IF IT WERE THE FIRST.** `responders()` ran
+once per channel, with the props of the channel's first note, and that answer
+was reused for every strike after it -- for an instrument whose strings are
+fixed while the melody moves, which is the one case where the answer must
+change note by note. It is asked per strike now, from that strike's own
+fundamental. Off-series partials per strike on a six-note phrase went from
+212, 212, 208, 170, 152, 124 (the first note's set, thinned only by Nyquist)
+to 212, 330, 330, 254, 244, 194.
+
+The steelpan, the only other voice with sympathetic gain, is unchanged under
+`even` to the bit: its contact responders do not depend on which note was
+struck, and there a table ratio is the equal one.
+
 HOW LOUD, AND IT IS A GUESS. The coupling gain has no measurement behind it,
 and the steelpan is the precedent for how that usually goes. Measured on the
 rendered passage, the first value put the taraf **5.6 dB** under the played
