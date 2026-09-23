@@ -56,6 +56,7 @@ import math
 import numpy as np
 import mido
 import blockrender as B
+import chorus as _CHR
 import tonelib as T
 from percussion_map import percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL
 
@@ -1538,6 +1539,7 @@ class Live:
         # GM2 scale/octave tuning: twelve cent offsets per channel, and the
         # ratio last APPLIED to each pitch class so a repeat cannot compound.
         # It cannot fold into self.bend, which is one scalar for the channel.
+        self.chorus = {}        # channel -> CC93 send, 0..1
         self.soft = {}          # channel -> the una corda shift is in
         self.sost = {}          # channel -> keys the sostenuto pedal is holding
         self.sota = {}          # channel -> [12 cents]
@@ -1912,6 +1914,11 @@ class Live:
                     for k in [k for k in list(self.slab.live) if (k[1], k[2]) in gone]:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
+            elif msg.control == 93:                 # chorus send
+                # A setup for the notes to come, like the soft pedal: a copy of
+                # a note already sounding would have to start in the middle of
+                # its own envelope. See _chorus.
+                self.chorus[ch] = msg.value / 127.0
             elif msg.control == 67:                 # soft pedal (una corda)
                 # A SETUP FOR THE NOTES TO COME, not an effect on the ones
                 # sounding -- see Slab.soft_strings. Nothing to do here but
@@ -2133,6 +2140,8 @@ class Live:
         if part.bank.drone_wheel:
             self.drone_quiet.pop(part.pid, None)
             self._drones(part, ch, n0)
+        if self.chorus.get(ch, 0.0) > _CHR.FLOOR:
+            self._chorus(part, ch, note, vel, key, slots, n0)
         # THE CHANNEL'S TUNING IS PER PITCH CLASS, so it multiplies the
         # channel's single bend ratio rather than joining it. `note` is the
         # written key, which is what the MIDI spec indexes the table by.
@@ -2153,6 +2162,59 @@ class Live:
         """
         return ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0)
                 * (self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)) ** 2
+
+    CHORUS_SLOT = "chorus"
+    CHORUS_MAX = 2              # copies, live: see _chorus
+
+    def _chorus(self, part, ch, note, vel, key, slots, n0):
+        """Stamp this note's chorus copies, a few cents away.
+
+        OFFLINE THIS IS A PASS OVER THE FINISHED TABLE and costs one clone per
+        partial. Live there is no finished table -- a template is stamped into
+        a slab with 16384 slots, and a layered string voice is ~260 partials
+        per key. So the copies are stamped like any other note, and the count
+        is CAPPED: three copies of a ten-note string chord is 10,400 slots,
+        two thirds of the slab, for an effect that is audible with one.
+
+        A SEND IS A MIX, as offline: the wet share comes out of the dry one and
+        the total is held, so CC93 does not double as a volume control.
+
+        Applied at note-on only. A copy of a note that is already sounding
+        would have to start in the middle of its own envelope, and stamping it
+        fresh would sound like a second strike -- which is not what turning up
+        a chorus does.
+        """
+        send = self.chorus.get(ch, 0.0)
+        if send <= _CHR.FLOOR or not slots:
+            return
+        cents = _CHR.offsets_for(
+            part.bank._voice_class(note + part.transpose))[:self.CHORUS_MAX]
+        if not cents:
+            return
+        tmpl = part.bank.get(note + part.transpose, vel, part.bank.leslie_default)
+        if tmpl is None:
+            return
+        wet = (send / float(len(cents))) ** 0.5
+        dry = (1.0 - send) ** 0.5
+        scale = ((vel / 127.0) ** 2
+                 / max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9)) * part.gain()
+        made = False
+        for ci, c in enumerate(cents):
+            ckey = (part.pid, ch, note, "%s%d" % (self.CHORUS_SLOT, ci))
+            if ckey in self.slab.live:
+                continue
+            if not self.slab.stamp(tmpl, ckey, n0,
+                                   scale * self._chan_gain(ch) * wet):
+                self.dropped += 1
+                continue
+            csl = self.slab.live.get(ckey)
+            if csl:
+                self.slab.retune(csl, n0, om_scale=2.0 ** (c / 1200.0),
+                                 vd=_CHR.SWEEP_DEPTH,
+                                 vrs=_CHR.SWEEP_HZ[ci % len(_CHR.SWEEP_HZ)])
+                made = True
+        if made and dry != 1.0:
+            self.slab.channel_gain(slots, dry)
 
     DRONE_SLOT = "drone"
 
@@ -5010,6 +5072,74 @@ def selftest():
           "  (energy above h4: %.1f%% -> %.1f%% at full pressure)"
           % (100 * _b(_e0), 100 * _b(_e1)))
     _lvp.renderer.close()
+
+    # ---- CC93 chorus: systematic, not drawn ---------------------------------
+    # A bucket-brigade chorus makes a small number of copies at FIXED offsets,
+    # each swept by its own slow oscillator. A string SECTION has many players
+    # whose spread is random, per player and per note. GM2's chorus is the
+    # first, which is the accordion-musette argument this file already makes
+    # three times -- and it is why a chorus can be a pass over the finished
+    # partial table at all, where a detune normally cannot: the offsets are
+    # constants chosen in advance and only the wet gain follows the controller.
+    import chorus as _CHRk
+    check("a chorus is a fixed comb, not a section's scatter",
+          len(_CHRk.DEFAULT_CENTS) >= 2
+          and all(abs(_c) < 30.0 for _c in _CHRk.DEFAULT_CENTS)
+          and len(set(_CHRk.SWEEP_HZ)) == len(_CHRk.SWEEP_HZ),
+          "  (%s cents, each swept at its own rate so the comb does not march "
+          "in step and read as a phaser)"
+          % "/".join("%+.0f" % _c for _c in _CHRk.DEFAULT_CENTS))
+    # ...AND IT TAKES THE VOICE'S OWN COMB where the voice has one, because on
+    # a string machine or a synth pad the chorus is part of what it IS.
+    _mach = _CHRk.offsets_for(_PMb.property_class_for_note(51, 60)(261.63, 0, 1, 1))
+    _plain = _CHRk.offsets_for(_PMb.property_class_for_note(48, 60)(261.63, 0, 1, 1))
+    check("...and it is the instrument's own where the instrument has one",
+          tuple(_mach) != tuple(_plain) and len(_mach) >= 2,
+          "  (synth strings %s against a plain pair %s)"
+          % ("/".join("%+.0f" % _c for _c in _mach),
+             "/".join("%+.0f" % _c for _c in _plain)))
+
+    # A SEND IS A MIX, NOT AN ADDITION, which is the same decision CC91 takes.
+    # Copies are incoherent with their parent so their POWERS add: two at full
+    # send made the channel 3.5 dB louder before the wet share was taken out of
+    # the dry one. A controller that raises the level while it is asked for an
+    # effect is a controller nobody can use.
+    _lc = Live(program=48, rate=48000, frames=128, verbose=False)
+    _lc.warm()
+
+    def _chor(_send):
+        _lc.on_midi(mido.Message("control_change", channel=0,
+                                 control=93, value=_send))
+        _lc.on_midi(mido.Message("note_on", channel=0, note=69, velocity=100))
+        _lc.apply(0)
+        _ks = [_k for _k in _lc.slab.live if _k[2] == 69]
+        _pw = sum(float((_lc.slab.a["aL"][_lc.slab.live[_k]] ** 2).sum())
+                  for _k in _ks)
+        _main = [_k for _k in _ks if _k[3] is None][0]
+        _f0 = float(_lc.slab.a["om"][_lc.slab.live[_main]].min())
+        _off = sorted(1200 * _math.log2(
+            float(_lc.slab.a["om"][_lc.slab.live[_k]].min()) / _f0)
+            for _k in _ks if _k[3] is not None)
+        _n = sum(len(_lc.slab.live[_k]) for _k in _ks)
+        _lc.on_midi(mido.Message("note_off", channel=0, note=69, velocity=0))
+        _lc.apply(0)
+        for _k in _ks:
+            _lc.slab.release(_k, 0)
+        _lc.slab.reap(10 ** 9)
+        return _n, _pw, _off
+    _n0, _p0c, _o0 = _chor(0)
+    _n1, _p1c, _o1 = _chor(127)
+    check("live, the chorus holds the level it was asked for an effect",
+          abs(10 * _math.log10(_p1c / _p0c)) < 0.2 and not _o0,
+          "  (%+.2f dB at full send -- the wet share comes out of the dry one, "
+          "and powers add because the copies are incoherent)"
+          % (10 * _math.log10(_p1c / _p0c)))
+    check("...with the copies exactly where the comb says",
+          len(_o1) == 2 and abs(_o1[0] + 7.0) < 0.05 and abs(_o1[1] - 7.0) < 0.05,
+          "  (%s, and %d slots against %d dry -- capped at %d copies, because "
+          "a ten-note string chord at three would be two thirds of the slab)"
+          % ("/".join("%+.1fc" % _c for _c in _o1), _n1, _n0, Live.CHORUS_MAX))
+    _lc.shutdown()
 
     # ---- the three pedals GM2 asks for --------------------------------------
     # CC120 ALL SOUND OFF stops a channel dead where CC123 lifts the keys and

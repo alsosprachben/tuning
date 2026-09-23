@@ -104,6 +104,7 @@ CONSONANT_SCATTER = float(os.environ.get('TUNING_CONSONANT_SCATTER', '0.015'))
 CONSONANT_REF = float(os.environ.get('TUNING_CONSONANT_REF', '0.30'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
+import chorus as _CHR
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
 # times the partial's frequency per second, which at 100000 is every sample --
@@ -1100,6 +1101,7 @@ def prepare(path, tuner='hybrid440'):
     _AMP_IMB = {}
     _CAB_CH = {}
     _TREM_CH = {}
+    _CHORUS_CH = {}     # channel -> (CC93 send 0..1, cents tuple)
     _CLAV_CH = {}
     _DETUNE_CH = {}
     _DRONE_CH = {}          # how many drones, per channel: see below
@@ -1604,6 +1606,18 @@ def prepare(path, tuner='hybrid440'):
                 _TREM_CH[ch] = (float(props.tremolo_hz), _dep,
                                 bool(getattr(props, 'tremolo_stereo', False)),
                                 float(getattr(props, 'tremolo_scatter', 0.0)))
+        # CC93 CHORUS. The send is the CHANNEL's; the offsets are the VOICE's,
+        # because on a string machine or a synth pad the chorus is part of what
+        # the instrument is and its comb is already declared. Anything else
+        # gets a plain pair, which is a chorus pedal in front of it.
+        #
+        # Read once per channel, like the other effect settings here: a send
+        # that moved mid-note would have to scale the copies' gain per block,
+        # and nothing in this file does that to a partial already written.
+        if ch not in _CHORUS_CH:
+            _c93 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 93]
+            if _c93 and _c93[0] > 0:
+                _CHORUS_CH[ch] = (_c93[0] / 127.0, _CHR.offsets_for(props))
         if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a
@@ -1998,6 +2012,16 @@ def prepare(path, tuner='hybrid440'):
             _r0 = list(_TREM_CH.values())[0]
             print("  tremolo: %.1f Hz, depth %.2f%s, %d sidebands"
                   % (_r0[0], _r0[1], " (stereo pan)" if _r0[2] else "", _nt))
+
+    # THE CHORUS SITS BEFORE THE SPEAKER, which is where a chorus pedal sits:
+    # the cabinet colours whatever reaches it, copies included.
+    if _CHORUS_CH:
+        _nc = _CHR.expand(A, _CHORUS_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        if _nc:
+            print("  chorus: %d channel(s), %d copies at %s cents"
+                  % (len(_CHORUS_CH), _nc,
+                     "/".join("%+.0f" % c
+                              for c in list(_CHORUS_CH.values())[0][1])))
 
     if _CAB_CH:
         import cabinet as _CAB
