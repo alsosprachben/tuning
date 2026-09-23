@@ -986,6 +986,7 @@ DETUNE_STEPS = (0, 64, 127)
 _BANKS = collections.OrderedDict()   # (program, drums, tuner) -> Bank
 _BANK_PARTIAL_CAP = 400000           # ~50 MB of templates; piano alone is 125k
 _BANK_LOCK = threading.RLock()
+_BANK_PINNED = set()        # (program, drums, tuner) a Part is holding now
 
 
 class Bank:
@@ -1314,11 +1315,41 @@ def bank_for(program, drums, tuner, progress=None):
             _BANKS[key] = got
         got.warm(progress)
         _BANKS.move_to_end(key)
-        # LRU by partial count: piano is 125k partials (~16 MB) on its own.
-        while (len(_BANKS) > 1
-               and sum(b.partials for b in _BANKS.values()) > _BANK_PARTIAL_CAP):
-            _BANKS.popitem(last=False)
+        # LRU by partial count: piano is 242k partials on its own.
+        #
+        # BUT NEVER A BANK SOMEBODY IS PLAYING. The cap counts partials and
+        # nothing else, so the least-recently-used bank it drops can be one a
+        # Part is holding and sounding through -- which was only a rebuild cost
+        # until a program change could re-select a voice, and is now a voice
+        # rebuilt from cold in the middle of a piece. Measured: sixteen typical
+        # GM timbres warm to 503,387 partials against a 400,000 cap, and one
+        # gets evicted. The piano alone is 242,718 of that.
+        #
+        # So the LRU drops what nothing is using, and stops when everything
+        # left is in use -- a rig playing sixteen voices keeps all sixteen,
+        # because it is playing all sixteen.
+        while len(_BANKS) > 1:
+            if sum(b.partials for b in _BANKS.values()) <= _BANK_PARTIAL_CAP:
+                break
+            # ...and never the one just asked for. It is not pinned yet --
+            # the caller pins it once it is holding it -- and it is the most
+            # recently used, so without this the bank being built evicts
+            # ITSELF the moment the cache is full. Measured: sixteen voices
+            # added one at a time left eleven resident, each new arrival
+            # throwing away the one before it had a chance to be claimed.
+            drop = next((k for k in _BANKS
+                         if k != key and k not in _BANK_PINNED), None)
+            if drop is None:
+                break           # every bank left is on stage
+            del _BANKS[drop]
         return got
+
+
+def pin_banks(keys):
+    """The banks a live rig is holding, which the LRU must not evict."""
+    with _BANK_LOCK:
+        _BANK_PINNED.clear()
+        _BANK_PINNED.update(keys)
 
 
 # ---- parts: the cheap, per-assignment half ---------------------------------
@@ -1543,6 +1574,7 @@ class Live:
         # order is deliberate: swap first, so nothing new is stamped for a part
         # that is going, then release a block later.
         self.parts = tuple(parts)
+        self._pin_banks()
 
         def go(n0):
             for k in [k for k in list(self.slab.live) if k[0] not in keep]:
@@ -1589,6 +1621,11 @@ class Live:
                 if p.pid == pid:
                     self._amp_touch(p)
         self.post(go)
+
+    def _pin_banks(self):
+        """Tell the cache which voices are on stage, so it evicts none of them."""
+        pin_banks({(p.bank.program, p.bank.drums, p.bank.tuner)
+                   for p in self.parts})
 
     def shutdown(self):
         """Stop the worker threads and the renderer.
@@ -2390,6 +2427,11 @@ class Live:
                             _BANKS[want] = bank
                         _BANKS.move_to_end(want)
                     self.post(lambda n0, _p=part, _b=bank: self._swap_bank(_p, _b, n0))
+                    # Published BEFORE the warm, which is the call that can
+                    # evict: the new bank is on stage the moment it is swapped
+                    # in, and the old one still is until then.
+                    pin_banks({(q.bank.program, q.bank.drums, q.bank.tuner)
+                               for q in self.parts} | {want})
                     self.bank_label = "%d" % want[0]
                     bank.warm(stop=lambda: bool(self.bank_reqs) or self.bank_stop)
                     self.bank_label = None
@@ -4844,6 +4886,42 @@ def selftest():
           "  (energy above h4: %.1f%% -> %.1f%% at full pressure)"
           % (100 * _b(_e0), 100 * _b(_e1)))
     _lvp.renderer.close()
+
+    # ---- the bank cache must not evict a voice that is on stage -------------
+    # The LRU counted partials and nothing else, so the bank it dropped could
+    # be one a Part was holding and sounding through. That was only a rebuild
+    # cost until a program change could re-select a voice; now it is a voice
+    # rebuilt from cold in the middle of a piece.
+    #
+    # Sixteen typical GM timbres come to 503,387 partials against a 400,000
+    # cap. A rig playing all sixteen keeps all sixteen, because it is playing
+    # all sixteen -- the cap governs what nothing is using.
+    _PROGS = [0, 11, 19, 24, 30, 33, 40, 48, 56, 61, 66, 73, 80, 89, 105, 118]
+    _held = []
+    for _i, _p in enumerate(_PROGS):
+        _held.append(Part(bank_for(_p, _p == 118, "hybrid"), channel=_i))
+        pin_banks({(_q.bank.program, _q.bank.drums, _q.bank.tuner)
+                   for _q in _held})
+    _res = len(_BANKS)
+    _tot = sum(_b.partials for _b in _BANKS.values())
+    check("the cache keeps every voice a rig is actually playing",
+          _res == 16 and _tot > _BANK_PARTIAL_CAP,
+          "  (%d of 16 resident, %d partials -- %.2fx the cap, on purpose)"
+          % (_res, _tot, float(_tot) / _BANK_PARTIAL_CAP))
+    # ...AND THE BANK JUST ASKED FOR IS NEVER THE ONE DROPPED. It is not
+    # pinned yet -- the caller pins it once it holds it -- and it is the most
+    # recently used, so without that guard a full cache makes each new arrival
+    # evict itself. Measured before the fix: sixteen added one at a time left
+    # ELEVEN resident, each throwing away the one before.
+    pin_banks(set())
+    bank_for(2, False, "hybrid")
+    _after = sum(_b.partials for _b in _BANKS.values())
+    check("...and still evicts freely once nothing is holding them",
+          _after <= _BANK_PARTIAL_CAP
+          and (2, False, "hybrid") in _BANKS,
+          "  (%d partials, %.2fx the cap, and the newest survived)"
+          % (_after, float(_after) / _BANK_PARTIAL_CAP))
+    del _held
 
     # ---- GM2 Scale/Octave Tuning Adjust -------------------------------------
     # Twelve cent offsets per pitch class: the standard, portable way to put a
