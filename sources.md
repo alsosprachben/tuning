@@ -1435,8 +1435,16 @@ beside them.
   pitch bend, and those bends are Werckmeister III's deviations from equal
   temperament to the cent (F#/A -11.72, C#/E -9.77, G#/B -7.81, D -7.71, Eb
   -5.86, Bb -3.91, G -3.78, F -1.95, C 0.00). The temperament is IN the file.
-- This renderer ignores pitch bend entirely, so `werckmeister` is not an
-  embellishment on these files — without it they would silently play equal.
+- This renderer NOW READS THOSE BENDS, and did not when the line above was
+  written. A bend set before a channel's first note and never moved is a
+  temperament, not a gesture, so it goes into `f0` and every voice takes it —
+  including a harpsichord, which is tuned before the recital like everything
+  else. Measured against `bwv847.mid`'s twelve channels: 0.00 cents of error.
+  So Sankey's files now play in Werckmeister III whatever tuner is named, and
+  `werckmeister` on the command line agrees with the file rather than
+  supplying what it lacked. See `midi.md` for the static/moving split, and
+  `## Which tuners are at which pitch` below for which temperaments this
+  renderer can also accept as a GM2 SysEx table.
 - The playing is legato: notes are held 98.5% of the way to the next in the same
   register, 7.3% detached, 98.1% duty cycle. That is his reading, and it is why
   a note-off gate went unheard here for so long.
@@ -2198,9 +2206,12 @@ moved. Measured on GM 27 at velocity 100: CC1 absent -30.1 dB, 16 -37.8,
 NOT FOR A ROTOR, though, and that asymmetry is deliberate. Offline CC1 is the
 Leslie half-moon and the organ renders depend on it; live resolved the clash by
 moving the half-moon to the pitch wheel, which offline has no reason to do
-because there is no wheel to move. The selftest checks the two mappings agree
-to within one of live's quantisation steps, since they are two implementations
-of one number.
+because a file's wheel does not spring back. (There IS a wheel offline now --
+`bend_blocks` integrates a moving one through the kernel -- but a half-moon
+switch is read as an EDGE, and what makes the flick-and-release work live is
+the spring return, which a written bend has no reason to have.) The selftest
+checks the two mappings agree to within one of live's quantisation steps,
+since they are two implementations of one number.
 
 ## Six GM programs were pointing at the wrong kind of instrument
 
@@ -2438,6 +2449,17 @@ rather than by accident:
 | A440 (modern) | A415 (baroque) |
 |---|---|
 | equal, just, linear, Bechstein | **hybrid**, **hybridharm**, Werckmeister, meantone, Pythagorean, well, Sankey |
+
+ELEVEN OF THE TWENTY ALSO FIT IN A MIDI MESSAGE, and the nine that do not are
+the interesting ones. GM2's Scale/Octave Tuning SysEx carries one offset per
+pitch class, repeated up the compass, so `even`, `just`, `meantone`, `pyth`,
+`well`, `linear`, `linear5`, `linearwell`, `bechstein`, `hybridharm` and
+`hybridharm440` survive an export and re-import unchanged. `dynamic` spreads
+**237.86 cents** across the compass, `path` 20.51, `stretch` 13.41, and even
+`werckmeister` and `sankey` spread 0.36 -- those are STRETCH, which is a
+statement about string stiffness that no octave-repeating table can make, and
+an export of one can only be an approximation taken at C4. A temperament fits
+in the message; a tuned piano does not. See `midi.md`.
 
 TWO THINGS MOVED. `even` was at 415, which made it the equal-tempered control
 for Werckmeister and meantone -- defensible, but it also made `even` the wrong
@@ -4247,6 +4269,15 @@ actually broke, not only through the class.
 
 Same shape as the sawtooth's docstring claiming a section was switched off when
 it was not: a comment states an intent, and only a test states a behaviour.
+
+**AND THE BRANCH WAS IGNORING MORE THAN VELOCITY.** The account above is right
+about touch and too generous about everything else: the registerable path was
+a separate note-on route, and it skipped every PER-CHANNEL PITCH adjustment as
+well -- the static bend, the RPN fine and coarse tuning, the GM2 Scale/Octave
+table. It surfaced when the same table was measured down two paths: a trumpet
+moved -9.766 cents and a harpsichord moved 0.000. A voice with no touch is
+still a voice that gets tuned, and "the organ ignores the keyboard" quietly
+grew into "the organ ignores the channel". Fixed in `2c82f8b`.
 
 ### A side effect worth having
 

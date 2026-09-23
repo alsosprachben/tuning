@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Put a temperament INTO a MIDI file, as GM2 Scale/Octave Tuning Adjust.
 
-This renderer has nineteen temperaments in midilib.tuner_registry and no way to
+This renderer has twenty temperaments in midilib.tuner_registry and no way to
 tell anything else about them. John Sankey's bwv847.mid shows what people do
 instead: one pitch class per MIDI channel, one static pitch bend on each, twelve
 numbers smuggled through a control that was meant for a gesture. It works, it

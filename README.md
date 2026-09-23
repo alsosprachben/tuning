@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 61 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 362 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -114,8 +114,9 @@ there is no sound the engine can make that the repo does not describe in code.
 | mod wheel *with layers* | each part answers in its own way at once — the organ layer draws stops while the string layer vibrates |
 | pitch bend *on a Leslie voice* | the **half-moon switch**: flick up or down to step stop → chorale → tremolo |
 | mod wheel *on an amplified voice* | the **gain knob** — the Leslie's swell pedal, or a guitar amp's own gain |
-| sustain pedal (CC64) | holds the damper off (piano) |
-| CC123 | all notes off — panic |
+| sustain pedal (CC64) | holds the damper off, on voices that have dampers |
+| soft pedal (CC67) | *una corda* — the hammer reaches one string fewer |
+| CC120 | all sound off — **the panic**; CC123 only lifts the keys |
 
 **A Hammond has neither wheel**, so both are free for the controls it does
 have. The tonewheels run off a synchronous motor, so the pitch is the mains and
@@ -283,6 +284,23 @@ answer is `multiprocessing` with `spawn` and shared memory, not `fork`: forking 
 process that has a live PortAudio callback thread inherits mutexes held by
 threads that do not exist in the child.
 
+## What MIDI it understands
+
+The table under *Controls* above is about the panel — what a knob does to a
+voice. This is the protocol: **seventeen controllers live, ten in a file**,
+plus program change, both aftertouches, the wheel and SysEx.
+
+| | |
+|---|---|
+| both renderers | CC1, CC7, CC10, CC11, CC64, CC66, CC67, CC93, CC120 |
+| live only | CC6, CC38, CC98, CC99, CC100, CC101, CC121, CC123 |
+| file only | CC91 |
+
+That covers GM Level 1, plus three of GM 2's: Scale/Octave tuning by SysEx,
+chorus send, reverb send. `midi.md` has the whole surface — what each message
+does, what a voice is allowed to refuse, and why the pitch wheel is two
+different controls depending on whether it moves.
+
 ## Render a file
 
 ```sh
@@ -305,6 +323,15 @@ peak-normalised downstream, so it mainly matters live.
 
 Sample rate defaults to 44100 and is set with `blockrender.set_sample_rate()`;
 the kernel compiles one `.so` per rate, so 48000 costs a one-off rebuild.
+
+**The file renderer reads controls too** — ten of them, the pedals included,
+and it reads them with an advantage the live engine does not have: it can see
+the whole file before it renders a sample. That is how a damper knows, at the
+note's onset, how long the note will end up ringing, and how the una corda
+shift is a decision about which strings the hammer reaches rather than a gain
+applied afterwards. `midi.md` lists what it answers and what it leaves to
+`live.py`. A channel that sends CC91 also gets a `.send.wav` bus beside the
+wav, which `roomtail.py` picks up on its own.
 
 ## Render the corpus
 

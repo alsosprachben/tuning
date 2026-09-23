@@ -7,6 +7,21 @@ live front end is not a new synthesiser -- it is a partial table that grows at
 note-on and gets one int64 written into it at note-off, rendered a block at a
 time by exactly the same C the offline renderer uses.
 
+Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
+       python3 live.py --list | --selftest | --latency
+
+It answers seventeen controllers -- 1, 6, 7, 10, 11, 38, 64, 66, 67, 93, 98,
+99, 100, 101, 120, 121, 123 -- plus program change, both aftertouches, the
+wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning), with RPN 0/0, 0/1
+and 0/2. That is GM Level 1 complete, plus two of GM 2's; the third, CC91, is
+offline-only. See midi.md, which is generated from this dispatch.
+
+BANKS ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
+one. Pinning is not an optimisation: without it the LRU evicted the bank that
+had just been requested, because a freshly built bank is the most recent thing
+in the cache and nothing was holding it, so sixteen timbres left eleven
+resident and each new arrival evicted itself.
+
 Two things make it fast enough to play by hand:
 
   - Note templates. Building one note's partials in Python costs 1.4-7 ms, which

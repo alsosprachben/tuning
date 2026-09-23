@@ -31,6 +31,26 @@ The first-order images do double-count slightly, since Eyring's reverberant
 field includes them. Measured on this room they contribute about 2.7% of the
 reverberant energy, which is -15 dB into a term that is itself an estimate.
 
+CC91 ARRIVES HERE AS A SEND BUS, and it arrives without being asked for. A
+render whose file sets CC91 leaves a `.send.wav` beside the wav and a `send`
+map in the `.room.json` sidecar, and this script picks both up on its own -- so
+the same command line produces a different tail depending on what the MIDI
+said, which is the intent but is worth knowing when a render will not
+reproduce. The send is a per-channel DISTANCE MULTIPLE against the room's
+declared source distance, not a wet/dry knob: T60 has no r in it, only the
+reverberant-to-direct ratio does, and it has it as r^2. So a channel sent
+further does not ring longer, it rings more.
+
+The send scales the ROOM FEED and leaves the direct sound alone. That is not
+the mistake it resembles: the ratio is what a distance sets, the absolute level
+is a normalisation, and holding the direct fixed is the normalisation that
+makes the control a send rather than a fader. A file with CC91 at zero is
+bit-identical to a file with no CC91 at all.
+
+Merging stems: `examples/lib.py`'s `merge_room` carries the send map through,
+and warns if the stems disagree, because a summed mix has no channels left to
+weight and can only carry one distance.
+
 Usage:
     python3 roomtail.py IN.wav OUT.wav [--q 2.0] [--seed 0]
 """

@@ -293,7 +293,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 
 <section>
 <h2>The whole set at once</h2>
-<p>General MIDI is exactly sixteen families of eight, so the entire specification fits in one grid. Each cell is a program, coloured by its rating; a dashed outline marks a patch played by a voice of the wrong physical kind.</p>
+<p>General MIDI&rsquo;s program list is exactly sixteen families of eight, so the whole of it fits in one grid. Each cell is a program, coloured by its rating; a dashed outline marks a patch played by a voice of the wrong physical kind. The rest of the specification is not a list of sounds but a list of behaviours &mdash; how many voices, which channel is percussion, which controllers must respond &mdash; and that half is documented in <code>midi.md</code> rather than here.</p>
 <div class="map"><div class="mapgrid">
 %(cells)s
 </div>

@@ -162,21 +162,39 @@ def merge_room(sidecars, dest):
     """
     import json
     bands = {}
+    send = {}
     for path in sidecars:
         if not os.path.exists(path):
             continue
         with open(path) as fh:
-            for b in json.load(fh)['bands']:
+            _d = json.load(fh)
+            for b in _d['bands']:
                 d, q = float(b['energy']), float(b['q']) or 1.0
                 acc = bands.setdefault(b['hz'], [0.0, 0.0])
                 acc[0] += d
                 acc[1] += d / q
+            # THE REVERB SEND TRAVELS TOO. The sidecar grew a per-channel CC91
+            # distance, and this merged every band carefully while dropping it
+            # on the floor -- so a stem rendered at one distance and a stem
+            # rendered at another were summed and then given one room, with
+            # nothing to say they had asked for different ones.
+            send.update({str(k): float(v) for k, v in (_d.get('send') or {}).items()})
     if not bands:
         return None
     out = [{'hz': hz, 'q': (d / r) if r > 0.0 else 1.0, 'energy': d}
            for hz, (d, r) in sorted(bands.items())]
+    # ...AND IF THE STEMS DISAGREE, SAY SO RATHER THAN PICK ONE. A summed dry
+    # mix has no channels left to weight: applying a per-channel send needs the
+    # bus blockrender writes, which the stem path does not produce. One send is
+    # applicable to the sum; several are not, and silently taking the first is
+    # the mistake this function exists to prevent for q.
+    if len(set(send.values())) > 1:
+        print("   WARNING: stems asked for different reverb sends (%s);"
+              % ", ".join("%s=%.2f" % kv for kv in sorted(send.items())))
+        print("            a summed mix can only carry one. Render the send"
+              " bus instead, or give the stems one distance.")
     with open(dest, 'w') as fh:
-        json.dump({'bands': out}, fh, indent=1)
+        json.dump({'bands': out, 'send': send}, fh, indent=1)
     return dest
 
 

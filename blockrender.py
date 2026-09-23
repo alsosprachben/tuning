@@ -21,10 +21,30 @@ list: it invited the assumption that a measured difference was one of them.
 
 The one structural difference left is the synthesis model. Both sides compute
 every physical parameter from the same tonelib code; this renderer then holds
-each partial at a CONSTANT frequency and modulates its amplitude, where the
-reference evaluates the partial per sample. So anything that moves a partial's
-frequency continuously within a note is approximated rather than integrated,
-and small phase-sensitive differences follow from that.
+each partial at a constant frequency within a block and modulates its
+amplitude, where the reference evaluates the partial per sample.
+
+Read that as "within a block", because the exceptions now matter more than the
+rule: vibrato, the tension-bend attack and a moving pitch wheel all move a
+partial's frequency, and all three are integrated by the kernel rather than
+approximated -- the wheel via `bend_blocks`, which costs two kernel rows per
+channel and not two per partial, because a bend is a RATIO and the partial's
+own frequency factors out of the accumulated phase. What is left is that a
+block boundary is where a continuous change is sampled, so small
+phase-sensitive differences follow from the block size.
+
+(This paragraph said flatly "holds each partial at a CONSTANT frequency" for
+longer than it was true, four lines under a warning about exactly that. See
+midi.md, which was written because of it.)
+
+WHAT CONTROLS IT READS: ten CCs -- 1, 7, 10, 11, 64, 66, 67, 91, 93, 120 --
+plus program change, both aftertouches, the pitch wheel and SysEx (GM System
+On, GM2 Scale/Octave Tuning). The pedals are here and not only in live.py.
+CC91 is here and NOT in live.py, because a reverb send offline is a distance
+from the microphone and needs no new DSP; live it would be a convolver on the
+audio thread. Seeing the whole file first is this renderer's advantage and is
+why the damper, sostenuto and una corda are decided at a note's onset from
+events that have not happened yet. midi.md is the full surface.
 
 Measured, matched (both at the same TUNING_MASTER_DB, band error weighted by
 the energy each band carries): a bowed string SECTION agrees to 0.03 dB, peak
@@ -1535,7 +1555,10 @@ def prepare(path, tuner='hybrid440'):
             # NOT for a rotor: CC1 offline is the half-moon switch below, and
             # the Hammond examples depend on it. Live resolved that by moving
             # the half-moon to the pitch wheel, which offline has no reason to
-            # do since there is no wheel to move.
+            # do: there IS a wheel offline now (bend_blocks integrates a moving
+            # one), but a half-moon is read as an EDGE and what makes the flick
+            # work is the SPRING RETURN, which a written bend has no reason to
+            # have.
             _drv = float(props.amp_drive)
             if not getattr(props, 'leslie', False):
                 _c1 = [v for t, cc, v in sorted(ccs.get(ch, [])) if cc == 1]

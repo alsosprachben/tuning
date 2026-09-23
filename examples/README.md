@@ -45,6 +45,23 @@ and comparing them by a single broadband number has hidden the opposite.
 | `levels.py` | How loud each plucked voice is, rendered and measured against the grand piano in its own register. Written after the electric bass shipped 23 dB too quiet. Needs no score. |
 | `scotland.py` | Scotland the Brave on the bagpipe voice: the chanter's nine notes, the drones under the whole tune, and grace notes as the instrument's ONLY articulation. `--sharp` renders it where a pipe band actually plays. |
 | `riffsym.py` | Ben's own 2001 piece in its three guitar orchestrations (`--all` for all seven). The A/B set to re-render whenever the electric guitar or bass voices move. Reads `~/Downloads/midi`, or `--src DIR`. |
+| `reeds.py` | GM 20-23, the free reeds. A free reed has no resonator behind it -- which is what separates an accordion from a pipe organ's reed rank, the class all four used to render as. `--check` measures without rendering. |
+| `pipes.py` | GM 72-79. A flue instrument is decided by three things -- open or closed tube, how the jet is aimed, and how much breath misses -- and the four that sat on a generic base differ in all three. A pan pipe is stopped, so it overblows at the twelfth. |
+| `ethnic.py` | GM 104-111: six mechanisms that were three classes. A banjo is steel over a drumhead, a shamisen adds the sawari buzz, a kalimba is a plucked cantilever at 1 : 6.267 : 17.55 -- not a bar and not a string. |
+| `strings45.py` | GM 44, 45, 46. Pizzicato and harp were the generic plucked string, which has no `formants` at all, so both were rendering with no body whatsoever. Tremolo strings were rendering identically to GM 40. |
+| `bass.py` | GM 32 acoustic bass, and GM 43 contrabass -- the same instrument, already measured one bank away. `--arco` is the argument: the same walking line plucked and bowed, one box, two excitations. `--family` for the set. |
+| `brass61.py` | GM 61 Brass Section, and the seam between its three measured bodies. It was already routing per register; what was wrong is that it handed over at a SINGLE NOTE, and one semitone across the C4 break moved the spectrum 13.2 dB. |
+| `synthbass.py` | GM 38, 39: an oscillator under a resonant low-pass. The third family caught by the generic-plucked-string hole, after the pizzicato section and the harp. |
+| `synthbrass.py` | GM 62, 63: a sawtooth through a resonant filter. They sat on the abstract ACOUSTIC brass base -- a bore, a register centre, an effort tilt -- which a synthesiser has none of. 62 is the bright stab, 63 the slower one, which is the SC-55's reading and the only grounding GM gives. |
+| `synthstrings.py` | GM 50, 51: a string MACHINE, not a section. Both were routing to the measured string bodies, so they rendered identically to GM 48. The chorus IS the instrument -- fixed offsets swept slowly, against a section's per-note drawn spread. |
+| `leads.py` | GM 80-87, the one family that can be EXACT. A sawtooth is not an approximation of anything: it IS the harmonic series at 1/n. The one place an additive engine has an advantage over sampling rather than a handicap. |
+| `pads.py` | GM 88-95. All eight were one bowed-string class. What makes a pad a pad is the swell; what separates the eight is that GM's own names point at eight different mechanisms. |
+| `effects.py` | GM 96-103, built on the pads -- because most of these ARE pads with one property pushed to the front. Rain echoes, crystal is the most inharmonic voice in the bank, atmosphere breathes, goblins wobble 55 cents. |
+| `steelpan_check.py` | Does the modelled pan COUPLE like a real one? Runs the analysis that was run on a real recording (Freesound 742254, CC0). The 1:2:3 tuning was never in doubt; what is measured is the other 23%. |
+| `pedal.py` | The damper pedal offline. A three-note file with the pedal held and one without came back BIT-IDENTICAL. Two things have to be true and the second is easy to miss: a pedalled note rings until the pedal lifts, but no longer than until that same string is struck again -- 2658 of Ondine's 4579 pedalled notes, the common case. |
+| `bend.py` | Pitch bend offline, and the test that separates its two meanings: does the wheel ever MOVE while the channel sounds? If not it is a temperament and goes on `f0`, so a harpsichord gets it too; if it does it is a gesture and the kernel integrates it. Sankey's twelve channels against A-Team's 200-cent sweep in 57 ms. |
+| `tuning_sysex.py` | Writes a temperament into a MIDI file as GM2 Scale/Octave Tuning Adjust -- what Sankey's twelve channels of static bend were a workaround for. Also shows what the message CANNOT carry: a stretched octave, because every C is forced to the same offset. |
+| `pipes_live.py` | The bagpipe through the LIVE engine, driven headlessly block by block so what it writes is what the keyboard plays. Four passes with the mod wheel at 0, 42, 85, 127 -- chanter alone, one tenor, two, the full set. Written because Ben played it and the wheel gave vibrato. |
 
 ```
 python3 examples/say.py daisy /tmp/daisy.mid
@@ -115,6 +132,10 @@ the whole argument for this directory. The three that mattered:
 - **-12 dB master**, because `roomtail` adds energy and a mix that peaks near
   full scale dry has nowhere to put its room.
 
+A fourth has since joined them: if the score sets CC91, `roomtail` picks up the
+send bus on its own and the same command line produces a different tail. That
+is the intent, and it is worth knowing when a render will not reproduce.
+
 ## Voices and everything else do not render the same way
 
 `singpass.py` filters the WHOLE file -- it is a source-filter pass over a
@@ -128,6 +149,14 @@ band; the diffuse tail is `roomtail`'s convolution over the sum. Stems are
 therefore summed DRY and given the hall once, with their sidecars merged
 (`lib.merge_room`) -- a choir and a string section do not feed a room alike,
 and a mix that inherits whichever sidecar it found first gets the wrong one.
+
+**CC91 travels in that sidecar too**, and it is the one thing the stem path
+cannot fully honour. A reverb send here is a DISTANCE from the microphone, so
+`blockrender` writes a per-channel `send` map beside the bands and a
+`.send.wav` bus alongside the wav. `merge_room` carries the map through and
+warns if two stems disagree -- because once they are summed there are no
+channels left to weight, and a summed mix can only stand at one distance. If
+the stems genuinely want different ones, render the bus rather than the sum.
 
 ## Scores are not included
 
