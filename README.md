@@ -45,7 +45,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 392 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 405 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -317,10 +317,18 @@ python3 play.py IN.mid hybrid                   # render, then play it
 they agree to a fraction of a dB, and that is the correctness anchor for every
 voice.
 
-The third argument is the temperament: `hybrid` (A=441, the default for most of
-this work), `hybridharm` (pure octaves, right for mode-locked pipes), `even`,
-`stretch`, `meantone` (all at A=415), `linear`, `just`, `pyth`, `well`,
-`bechstein`, `spiral` and others — see `tuner_registry` in `midilib.py`.
+The third argument is the temperament. `hybrid440` is the default, and
+`hybrid` is the same temperament at the baroque A=415. `hybridharm` has pure
+octaves, which is right for mode-locked pipes. Then there's `even` (A=440),
+`stretch`, `meantone`, `werckmeister`, `sankey` (these at A=415), `linear`,
+`just`, `pyth`, `well`, `bechstein`, `spiral` and others — see `tuner_registry`
+in `midilib.py`.
+
+**`gm2`** is the one to use when the *file* should own the tuning. It starts at
+equal temperament, A=440, and obeys the file's MIDI Tuning Standard messages:
+128-key dumps, single-note changes, and program selection by RPN. Every tuner
+above is pre-loaded as a program. `examples/tuning_sysex.py --mts` writes any of
+them into a file, stretched octaves and all. See `midi.md`.
 
 `TUNING_MASTER_DB` sets the output gain (default −9.3). Offline renders are
 peak-normalised downstream, so it mainly matters live.

@@ -273,6 +273,30 @@ class EvenTuner(TwelveTuner):
         11: note2EqualRatio(12, 11), # B
     }
 
+
+class GM2Tuner(EvenTuner):
+    """`gm2`: a General MIDI 2 device's tuning, which the FILE owns.
+
+    Its own table is equal temperament at A440 -- GM's power-on state -- and it
+    is that by construction, being EvenTuner, so a file that sends no tuning
+    renders bit-identically to `even`. What makes it different is not in this
+    class but in what it licenses: under `gm2`, and only under `gm2`, the
+    renderers keep an MTS store (mts.TuningStore) and let the file fill it with
+    Bulk Tuning Dumps and Single Note Tuning Changes and select from it per
+    channel with RPN 0/3 and 0/4. Bank 0 comes pre-loaded with every tuner in
+    the registry, in the frozen order of mts.BUILTIN_PROGRAMS.
+
+    Under any other tuner the renderer's temperament is the choice, and a file's
+    MTS is ignored: choosing a tuner is choosing who owns the tuning.
+    """
+    A = 440
+
+    @staticmethod
+    def store_for(warn=None):
+        """A fresh store for one render or one live session."""
+        import mts
+        return mts.TuningStore(warn=warn)
+
 class LinearTuner(TwelveTuner):
     A = 440
     

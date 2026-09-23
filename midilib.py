@@ -55,6 +55,10 @@ tuner_registry = {
     "spiral": SpiralTuner,
     "semi": SemiTuner,
     "path": PathNotesTuner,
+    # A GM 2 DEVICE: equal temperament at power-on, and the one tuner under
+    # which the FILE owns the tuning -- MTS dumps, single-note changes, and the
+    # tuning program and bank RPNs. See tunelib.GM2Tuner and mts.py.
+    "gm2": GM2Tuner,
 }
 tuner_class = StretchTuner
 

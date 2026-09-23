@@ -63,6 +63,7 @@ Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 import sys, os, time, ctypes, subprocess, wave, math, re
 import numpy as np, mido
 import bisect as _bisect
+import mts as _MTS
 import noisegen as _NG
 
 # THE TUBE IS USED WHERE IT HAS INFORMATION, and not where it does not.
@@ -435,6 +436,7 @@ def parse(path):
     master = []              # [(t, 'vol'|'fine'|'coarse', v, seq)], the device's own
     gmon = []                # [(t, seq)] GM System On: every channel back to power-on
     _pwseq = {}              # channel -> [(t, seq, pitch)], the wheel in message order
+    mtsev = []               # [(t, seq, parsed)] MIDI Tuning Standard messages
     ctrl = {}  # (ch)->{cc:val} current, snapshotted at note-on
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
@@ -476,6 +478,14 @@ def parse(path):
                 elif _sel == (0, 5):
                     _rmod[_c] = T.rpn_mod_range(_cc, _v, _rmod.get(_c, 0.0))
                     rpns.setdefault(_c, []).append((t, 'mod', _rmod[_c], _seq))
+                elif _sel in ((0, 3), (0, 4)):
+                    # MTS program and bank select. Recorded under every tuner
+                    # and acted on only under `gm2`, which keeps the store.
+                    _tv = (T.rpn_tuning_program if _sel == (0, 3)
+                           else T.rpn_tuning_bank)(_cc, _v)
+                    if _tv is not None:
+                        rpns.setdefault(_c, []).append(
+                            (t, 'tprog' if _sel == (0, 3) else 'tbank', _tv, _seq))
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
             _pwseq.setdefault(msg.channel, []).append((t, _seq, msg.pitch))
@@ -495,6 +505,10 @@ def parse(path):
             _mst = parse_master(msg.data)
             if _mst is not None:
                 master.append((t, _mst[0], _mst[1], _seq))
+                continue
+            _mt = _MTS.parse_mts(msg.data)
+            if _mt is not None:
+                mtsev.append((t, _seq, _mt))
                 continue
             _so_ta = parse_sota(msg.data)
             if _so_ta is not None:
@@ -528,7 +542,7 @@ def parse(path):
     for _c, _p in ch_prog.items(): ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
-                                   pwseq=_pwseq)))
+                                   pwseq=_pwseq, mts=mtsev)))
 
 # ---- GM2 Scale/Octave Tuning Adjust -----------------------------------------
 # Twelve cent offsets, one per pitch class, applied to a set of channels. It is
@@ -791,6 +805,74 @@ def prepare(path, tuner='hybrid440'):
     ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
     rpns, master, gmon = _sys['rpns'], _sys['master'], _sys['gmon']
     _pwseq = _sys['pwseq']
+
+    # ---------------------------------------------- THE `gm2` TUNER'S STORE
+    #
+    # Under `gm2`, and only under it, the FILE owns the tuning: its MTS dumps
+    # and single-note changes fill an mts.TuningStore, and RPN 0/4 and 0/3 pick
+    # a bank and program per channel. Replayed in message order -- the
+    # tie-break the RPNs taught -- into a timeline of (time, table) per
+    # channel, and each note reads the table in force at its ONSET through
+    # _F(ch, t). Under every other tuner _F is simply FREQ, so the note loop
+    # below does not branch on the tuner at all.
+    #
+    # THE SPEC SAYS SOUNDING NOTES MOVE, for two of these: a tuning program or
+    # bank select ("This change takes effect immediately") and a real-time
+    # single-note change. Here each note keeps the table in force at its
+    # onset, so a change that lands mid-note reaches it only from its next
+    # onset -- moving a sounding partial is a gesture, and live does it where
+    # this does not. Counted and reported, not hidden. Dumps and non-real-time
+    # changes are setup messages and do not count: the spec has them ignored
+    # by notes already sounding, which is exactly what this does.
+    _MTS_TL = {}
+    if str(tuner).lower() == 'gm2':
+        _store = _MTS.TuningStore(warn=lambda m: print("  " + m))
+        _tev = [(_t, _q, 'mts', None, _m) for _t, _q, _m in _sys['mts']]
+        for _c, _evs in rpns.items():
+            _tev += [(_t, _q, _k, _c, _v) for _t, _k, _v, _q in _evs
+                     if _k in ('tprog', 'tbank')]
+        _tev += [(_t, _q, 'gmon', None, None) for _t, _q in gmon]
+        _tev.sort(key=lambda e: (e[0], e[1]))
+        _cur = {}
+        def _snap(_t):
+            for _c in range(16):
+                _tab = _store.table_for(_c)
+                if _cur.get(_c) is not _tab:
+                    _cur[_c] = _tab
+                    _MTS_TL.setdefault(_c, []).append(
+                        (_t, {_k: float(_tab[_k]) for _k in range(128)}))
+        _snap(0.0)
+        for _t, _q, _k, _c, _v in _tev:
+            if _k == 'mts':
+                _store.load(_v)
+            elif _k == 'tprog':
+                _store.select(_c, program=_v)
+            elif _k == 'tbank':
+                _store.select(_c, bank=_v)
+            elif _k == 'gmon':
+                _store.reset_selections()
+            _snap(_t)
+        _late = 0
+        for _t, _q, _m in _sys['mts']:
+            if _m[0] == 'single' and _m[4]:
+                _late += sum(1 for _n in notes if _n[2] < _t < _n[3])
+        for _c, _evs in rpns.items():
+            for _t, _k, _v, _q in _evs:
+                if _k in ('tprog', 'tbank'):
+                    _late += sum(1 for _n in notes
+                                 if _n[0] == _c and _n[2] < _t < _n[3])
+        if _late:
+            print("  gm2: %d notes were sounding when a tuning change that "
+                  "should move them arrived; here they keep their tuning until "
+                  "their next onset (live moves them)" % _late)
+
+    def _F(_c, _t):
+        """This channel's 128-key table at time _t: FREQ unless under gm2."""
+        _tl = _MTS_TL.get(_c)
+        if not _tl:
+            return FREQ
+        _i = _bisect.bisect_right([_x[0] for _x in _tl], _t + 1e-9) - 1
+        return _tl[max(0, _i)][1]
 
     # ------------------------------------------- CHANNEL MODE, CC123 to CC127
     #
@@ -1489,7 +1571,8 @@ def prepare(path, tuner='hybrid440'):
         # so CC5 means one thing across the bank. Capped at half the note: a
         # gliss is an ornament on the note it arrives at, not the note itself.
         _cc5 = _porta_cc5_at(_e[0], _e[2])
-        _T = T.glide_tau(_cc5, FREQ[_e[1]], FREQ[_gs], 'slide') * T.PORTA_SETTLE_TAUS
+        _Fe = _F(_e[0], _e[2])
+        _T = T.glide_tau(_cc5, _Fe[_e[1]], _Fe[_gs], 'slide') * T.PORTA_SETTLE_TAUS
         _T = min(_T, (_e[3] - _e[2]) * 0.5)
         _dt = _T / float(len(_path))
         if _dt < 0.012:
@@ -1714,6 +1797,7 @@ def prepare(path, tuner='hybrid440'):
         if ch == GM_PERCUSSION_CHANNEL and drum is None:
             continue                      # unmapped drum: the reference drops it
         if drum is not None:
+            FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
             organ = False; chan_vol = (v7*v11)**2
@@ -1722,7 +1806,8 @@ def prepare(path, tuner='hybrid440'):
             pc = property_class_for_note(prog, note)
             organ = getattr(pc,'registerable',False)
             chan_vol = 1.0 if organ else (v7*v11)**2
-            f0 = FREQ[note]
+            FREQ_N = _F(ch, on)
+            f0 = FREQ_N[note]
             # A WRITTEN NOTE IS NOT ALWAYS A PITCH. A helicopter's note chooses
             # a blade passing rate, which is four octaves under where it is
             # written; see SynthProperties.sounding_octaves. Applied HERE,
@@ -1761,8 +1846,8 @@ def prepare(path, tuner='hybrid440'):
             # a trumpet's pitch from its valve combination.
             _sc = getattr(pc, 'scale_cents', None)
             _st = getattr(pc, 'scale_tonic_note', None)
-            if _sc and _st is not None and _st in FREQ:
-                _tonic = (FREQ[_st] * (2.0 ** _so if _so else 1.0) * (_bt or 1.0)
+            if _sc and _st is not None and _st in FREQ_N:
+                _tonic = (FREQ_N[_st] * (2.0 ** _so if _so else 1.0) * (_bt or 1.0)
                           * (2.0 ** (_ot[_st % 12] / 1200.0) if _ot else 1.0))
                 _deg = _sc.get(note - _st)
                 if _deg is not None:
@@ -2190,23 +2275,23 @@ def prepare(path, tuner='hybrid440'):
         # staircase with no flat left on it is a half-valve.
         if _gl is not None and _gl[1] > 0.0 and _gl[2] is not None:
             _stau = _gl[3] * _gl[1] * 0.75
-            if _stau > 2e-3 and FREQ[_gl[2]] > 0.0:
-                _GL[0] = T.glide_g(FREQ[note], FREQ[_gl[2]])
+            if _stau > 2e-3 and FREQ_N[_gl[2]] > 0.0:
+                _GL[0] = T.glide_g(FREQ_N[note], FREQ_N[_gl[2]])
                 _GL[1] = _stau
                 _GL[2] = _stau * T.PORTA_SETTLE_TAUS
         _gsrc = _GLIDE_SRC.get((ch, note, on))
         _gmech = getattr(pc, 'glide_mechanism', None)
         if (_GL[0] == 0.0 and _gsrc is not None and _gmech
-                and 0 <= _gsrc < len(FREQ) and FREQ[_gsrc] > 0.0):
+                and 0 <= _gsrc < len(FREQ_N) and FREQ_N[_gsrc] > 0.0):
             # CAN THE MECHANISM REACH? A hand and a slide have a compass and a
             # circuit does not, and a valved gliss does not reach at all -- it
             # crosses harmonics, which is a different thing and is handled by
             # the lattice rather than by this test.
             _reach = getattr(pc, 'glide_reach_semitones', None)
             if _reach is None or abs(note - _gsrc) <= _reach + 1e-9:
-                _gg = T.glide_g(FREQ[note], FREQ[_gsrc])
+                _gg = T.glide_g(FREQ_N[note], FREQ_N[_gsrc])
                 _gtau = T.glide_tau(_porta_cc5_at(ch, on),
-                                    FREQ[note], FREQ[_gsrc], _gmech)
+                                    FREQ_N[note], FREQ_N[_gsrc], _gmech)
                 _GL[0] = _gg
                 _GL[1] = _gtau
                 _GL[2] = _gtau * T.PORTA_SETTLE_TAUS

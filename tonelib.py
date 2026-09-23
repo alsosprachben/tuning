@@ -12503,6 +12503,23 @@ def rpn_mod_range(cc, value, current_cents):
     return float(int(current_cents // 100.0)) * 100.0 + value * RPN_MOD_LSB_CENTS
 
 
+def rpn_tuning_program(cc, value):
+    """RPN 0/3, MIDI Tuning Standard program select: the data entry MSB.
+
+    Read by every renderer and ACTED ON only under the `gm2` tuner, which is
+    the one that keeps a store to select from (mts.TuningStore). The MTS text:
+    "Bn 64 03 65 00 06 tt" -- the data entry MSB is the program, shown to
+    users as 1-128 and sent as 0-127. Data increment and decrement (CC96/97)
+    are also defined there and are not read by this renderer.
+    """
+    return int(value) if cc == 6 else None
+
+
+def rpn_tuning_bank(cc, value):
+    """RPN 0/4, MIDI Tuning Standard bank select: the data entry MSB."""
+    return int(value) if cc == 6 else None
+
+
 def channel_pitch_ratio(range_st, wheel, coarse_st, fine_cents,
                         master_coarse_st=0.0, master_fine_cents=0.0):
     """The one number everything that tunes a channel reduces to.

@@ -61,7 +61,11 @@ Steel Drums,Woodblock,Taiko Drum,Melodic Tom,Synth Drum,Reverse Cymbal,
 Guitar Fret Noise,Breath Noise,Seashore,Bird Tweet,Telephone Ring,Helicopter,
 Applause,Gunshot""".replace("\n", "").split(",")
 
-TUNERS = ["hybrid", "hybridharm", "even", "stretch", "meantone", "just", "pyth",
+# Every tuner in midilib.tuner_registry. This list was hand-kept and had drifted
+# four entries short of the registry -- hybrid440, the general default, among
+# them -- so it is now the registry, in the order the picker wants.
+TUNERS = ["hybrid440", "hybrid", "hybridharm", "hybridharm440", "gm2", "even",
+          "stretch", "werckmeister", "sankey", "meantone", "just", "pyth",
           "well", "linear", "linear5", "linearwell", "bechstein", "spiral",
           "semi", "dynamic", "path"]
 
@@ -72,8 +76,12 @@ TUNER_NOTE = {
     "hybrid440":  "A=440, the default: the hybrid temperament at concert pitch",
     "hybrid":     "A=415, the same temperament at baroque pitch",
     "hybridharm": "pure 2:1 octaves -- right for mode-locked pipes",
-    "even":       "equal temperament, A=415",
-    "stretch":    "equal, with the piano's stretched octaves",
+    "hybridharm440": "pure 2:1 octaves at concert pitch",
+    "gm2":        "a GM 2 device: equal A=440, and the FILE owns the tuning (MTS)",
+    "werckmeister": "Werckmeister III, from Sankey's published cents, A=415",
+    "sankey":     "Sankey's consonance-found Scarlatti tuning, A=415",
+    "even":       "equal temperament, A=440",
+    "stretch":    "pure fifths, the comma taken into stretched octaves, A=415",
     "meantone":   "quarter-comma, A=415",
     "just":       "pure ratios from the tonic",
     "pyth":       "pure fifths",
@@ -84,7 +92,7 @@ TUNER_NOTE = {
     "bechstein":  "measured from a Bechstein",
     "spiral":     "the spiral of fifths, unclosed",
     "semi":       "semitone-based",
-    "dynamic":    "retunes as it plays, by common tone",
+    "dynamic":    "solved once over the keyboard (only midi.py retunes per chord)",
     "path":       "follows a written path of notes",
 }
 

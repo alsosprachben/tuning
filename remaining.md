@@ -52,25 +52,21 @@ Fine and Coarse Tuning. What is left:
 | 9 drum kits | one kit | addressed by CC0=120 |
 | channel 11 as a second drum part | no | falls out of bank select |
 | CC71–78 sound controllers | none | **needs a design first**, see below |
-| **RPN 3, 4** | not read | **not small** — see below |
 | CC121 in a file | live only | a file that resets its controllers mid-piece |
 | legato attack, live | file only | live mono re-articulates every note; the pitch path is right |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
 | CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
 
-**RPN 3 and 4 select a tuning PROGRAM, and there are none to select.** They
-are the MIDI Tuning Standard's program and bank select, and they point at
-tables a device holds — loaded by a Bulk Tuning Dump (`7E dd 08 01`) or edited
-note by note (`7F dd 08 02`). Receiving the select without a store behind it is
-what the code already does for any unknown RPN, so "implementing" it alone
-would add nothing. The real feature is the store, and it is interesting: an
-MTS table is **128 keys**, not 12 pitch classes, so it can carry a *stretched*
-tuning — exactly what `midi.md` says a Scale/Octave message cannot. The
-renderer's own tuners could be the built-in programs, and a file could carry
-`stretch` or `dynamic` to any MTS device. It would need a per-key table in both
-renderers (the Scale/Octave machinery generalised from 12 entries to 128), so
-it is medium, not small, and it wants a decision about how the built-in
-programs are numbered.
+**RPN 3 and 4 are done, as the `gm2` tuner's store** (`mts.py`, and see
+`midi.md`). Three things are left from that work:
+
+- **Data increment and decrement (CC96/97)** are defined by the MTS text as a
+  way to step the tuning program and bank. This renderer reads neither for any
+  RPN.
+- **Offline, a tuning select or a real-time single-note change reaches a
+  sounding note only from its next onset.** The spec says it should move at
+  once, and live does. The file renderer prints a count when this happens.
+- **Sympathetic resonance reads the base table**, not a channel's MTS table.
 
 **Bank select is load-bearing.** GM 2's whole extended sound set is addressed
 through it, and without it a GM 2 file's variations collapse silently onto the

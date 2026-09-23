@@ -1617,6 +1617,12 @@ class Live:
         self._mv_now = 1.0      # where the ramp toward master_vol has got to
         self.master_fine = 0.0  # cents
         self.master_coarse = 0.0  # semitones
+        # THE MTS STORE. Always here, cheap until asked, and CONSULTED only for
+        # parts whose tuner is `gm2`: choosing a tuner is choosing who owns the
+        # tuning, and under any other one a file's dump changes nothing.
+        import mts as _MTSm
+        self.mts = _MTSm.TuningStore()
+        self.mts_at = {}        # (pid, channel, key) -> MTS ratio last applied
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
@@ -2302,7 +2308,10 @@ class Live:
         # THE CHANNEL'S TUNING IS PER PITCH CLASS, so it multiplies the
         # channel's single bend ratio rather than joining it. `note` is the
         # written key, which is what the MIDI spec indexes the table by.
-        b = self.bend.get(ch, 1.0) * self._sota_ratio(ch, note)
+        b = self.bend.get(ch, 1.0) * self._key_ratio(part, ch, note)
+        if str(part.bank.tuner).lower() == 'gm2':
+            self.mts_at[(part.pid, ch, note + part.transpose)] = \
+                self._mts_ratio(part, ch, note)
         v = self.mod.get(ch, 0.0)
         w = self.modw.get(ch, 0.0)
         if b != 1.0 or v != 0.0 or w != 0.0:
@@ -2399,7 +2408,7 @@ class Live:
         # goes out with itself -- the same argument that made the drones
         # ratios of the tonic rather than absolute Hz.
         hz = float(np.asarray(t["nf"])[:t["P"]].min())
-        return hz if ch is None else hz * self._sota_ratio(ch, n)
+        return hz if ch is None else hz * self._key_ratio(part, ch, n)
 
     def master_gain(self, L, R, n):
         """Master Volume on one block, ramped toward the last value asked for.
@@ -2682,6 +2691,69 @@ class Live:
         if slots:
             self.slab.retune(slots, n0, om_scale=scale)
 
+    def _mts_ratio(self, part, ch, note):
+        """The `gm2` store's correction for one written key, or 1.0.
+
+        Templates are built at the part's own tuner, and `gm2`'s own tuner is
+        equal temperament, so the correction is the selected table over that:
+        one ratio per KEY, which is the Scale/Octave machinery with 128 entries
+        instead of 12. Indexed by the sounding key, so a transposed part is
+        tuned at the pitch it actually plays.
+        """
+        if str(part.bank.tuner).lower() != 'gm2' or part.drums:
+            return 1.0
+        key = note + part.transpose
+        if not 0 <= key < 128:
+            return 1.0
+        base = part.bank.freqs().get(key)
+        if not base:
+            return 1.0
+        return float(self.mts.table_for(ch)[key]) / float(base)
+
+    def _key_ratio(self, part, ch, note):
+        """Everything that tunes one KEY: Scale/Octave, and under gm2, MTS."""
+        return self._sota_ratio(ch, note) * self._mts_ratio(part, ch, note)
+
+    def _remts(self, ch, keys, n0):
+        """Move sounding notes onto the tuning now in force for them.
+
+        Two callers, and the MTS text is explicit about both. A real-time
+        single-note change "should take effect immediately ... if any affected
+        notes are sounding" -- `keys` is the keys it named. And a tuning
+        program or bank select "takes effect immediately and must occur without
+        audible artifacts ... if any affected notes are sounding" -- `keys` is
+        None, meaning every key sounding on the channel. The first draft
+        treated the select like a program change, from the next note; it is
+        not one. Bulk dumps and non-real-time changes do not come here: they
+        are setup messages, and "ignored for notes that are already sounding".
+
+        Only gm2 parts, and each note against the ratio it was stamped with,
+        so nothing compounds.
+        """
+        for part in self.parts:
+            if (not self._listens(part, ch)
+                    or str(part.bank.tuner).lower() != 'gm2'):
+                continue
+            moved = False
+            if keys is None:
+                pk = {k[2] + part.transpose for k in self.slab.live
+                      if k[0] == part.pid and k[1] == ch and k[2] >= 0}
+            else:
+                pk = keys
+            for key in pk:
+                w = key - part.transpose
+                want = self._mts_ratio(part, ch, w)
+                was = self.mts_at.get((part.pid, ch, key), 1.0)
+                if abs(want - was) < 1e-15:
+                    continue
+                slots = self._sounding(ch, pids={part.pid}, note=w)
+                if slots:
+                    self.slab.retune(slots, n0, om_scale=want / was)
+                    moved = True
+                self.mts_at[(part.pid, ch, key)] = want
+            if moved:
+                self._amp_touch(part)
+
     def _sota_ratio(self, ch, note):
         """This channel's scale/octave factor for one written key."""
         t = self.sota.get(ch)
@@ -2742,6 +2814,18 @@ class Live:
             if co is None:
                 return
             self.coarse[ch] = co
+        elif sel in ((0, 3), (0, 4)):   # MTS program / bank select
+            # Read under every tuner and ACTED on only by gm2 parts, through
+            # _mts_ratio -- and at once, sounding notes included: "This change
+            # takes effect immediately". See _remts.
+            v = (T.rpn_tuning_program if sel == (0, 3) else T.rpn_tuning_bank)(cc, value)
+            if v is not None:
+                if sel == (0, 3):
+                    self.mts.select(ch, program=v)
+                else:
+                    self.mts.select(ch, bank=v)
+                self._remts(ch, None, n0)
+            return
         elif sel == (0, 5):             # GM 2: modulation depth range
             self.modrange[ch] = T.rpn_mod_range(cc, value, self._mod_cents(ch))
             # A wheel already up has to follow its new range, or the range
@@ -2818,6 +2902,7 @@ class Live:
         # the codec lives in blockrender so the two renderers cannot read the
         # same bytes differently.
         import blockrender as _BRs
+        import mts as _MTSp
         _t = _BRs.parse_sota(d)
         if _t is not None:
             _chs, _cents = _t
@@ -2828,6 +2913,18 @@ class Live:
         # THE DEVICE'S OWN FADER AND TUNING, parsed by the same function the
         # file renderer uses. Tuning moves every channel, so every channel is
         # re-pitched against its last-applied ratio and nothing compounds.
+        _mt = _MTSp.parse_mts(d)
+        if _mt is not None:
+            bank, prog = self.mts.load(_mt)
+            if _mt[0] == 'single' and _mt[4]:
+                # REAL-TIME: the keys it names move now, on every channel
+                # currently playing from the program it changed. The
+                # non-real-time 08 07 "will NOT update the currently sounding
+                # notes", and neither does a dump.
+                for ch in range(16):
+                    if self.mts.selection(ch) == (bank, prog):
+                        self._remts(ch, list(_mt[3]), n0)
+            return
         _m = _BRs.parse_master(d)
         if _m is not None:
             kind, val = _m
@@ -2853,6 +2950,9 @@ class Live:
         self.mono_stack.clear()
         self.mono_cur.clear()
         self.modrange.clear()
+        # The MTS store keeps its tables -- a mode reset is not a memory wipe --
+        # but every channel goes back to program 0, equal temperament.
+        self.mts.reset_selections()
         for ch in range(16):
             self._reset_controllers(n0, ch)
             self.vol[ch] = T.GM_DEFAULT_VOLUME
@@ -3173,7 +3273,10 @@ class Live:
         # harpsichord is the instrument a temperament is FOR: measured before
         # this line existed, a channel tuned to Sankey's offsets moved a
         # trumpet by -9.766 cents and a harpsichord by 0.000.
-        _sr = self._sota_ratio(ch, note)
+        _sr = self._key_ratio(part, ch, note)
+        if str(part.bank.tuner).lower() == 'gm2':
+            self.mts_at[(part.pid, ch, note + part.transpose)] = \
+                self._mts_ratio(part, ch, note)
         if _sr != 1.0:
             self.slab.retune(self.slab.last_slots, n0, om_scale=_sr)
         if part.bank.leslie:
@@ -5771,6 +5874,162 @@ def selftest():
           float(np.max(np.asarray(_hdr["noff"]))) / 44100.0 > 0.45,
           "  (it did, four milliseconds in: 'at or after the onset' caught the "
           "message that preceded it on the same tick)")
+
+    # ---- THE `gm2` TUNER AND ITS MTS STORE -----------------------------------
+    #
+    # A Scale/Octave message carries twelve cents and so eleven of the tuners;
+    # an MTS table is 128 keys at 100/16384 of a cent and carries all of them.
+    # Honoured ONLY under gm2: choosing a tuner is choosing who owns the tuning.
+    import mts as _MTSt
+    _worst, _out = 0.0, 0
+    _lo, _hi = _MTSt.word_to_hz(0, 0, 0), _MTSt.word_to_hz(127, 127, 126)
+    for _nm in _MTSt.BUILTIN_PROGRAMS:
+        _tb = _MTSt.builtin_table(_nm)
+        if _tb is None:
+            continue
+        _bk = _MTSt.parse_mts(_MTSt.bulk_dump_message(_tb, 0, _nm))[4]
+        _in = (_tb >= _lo) & (_tb <= _hi)
+        _worst = max(_worst, float(np.abs(1200.0 * np.log2(_bk[_in] / _tb[_in])).max()))
+        _out += int((~_in).sum())
+    check("every tuner survives an MTS dump, stretched octaves and all",
+          _worst <= 50.0 / 16384 + 1e-9,
+          "  (worst %.5f cents -- half of one 1/16384-semitone step, the "
+          "format's own limit; %d keys across all tuners fall outside the "
+          "word's 8.18 Hz-13.3 kHz range)" % (_worst, _out))
+    # THE BUILT-IN ORDER IS A PUBLIC INTERFACE. A file that selects program 6
+    # expects Werckmeister tomorrow too. Pinned here so a reorder fails loudly.
+    check("the built-in MTS programs are in their frozen order",
+          _MTSt.BUILTIN_PROGRAMS[:20] == (
+              'even', 'hybrid', 'hybridharm', 'hybrid440', 'hybridharm440',
+              'stretch', 'werckmeister', 'sankey', 'meantone', 'well',
+              'pyth', 'just', 'linear', 'linear5', 'linearwell', 'bechstein',
+              'spiral', 'semi', 'path', 'dynamic'),
+          "  (new tuners are appended, never inserted)")
+
+    def _sel(_b, _p):
+        return [_cc(101, 0), _cc(100, 4), _cc(6, _b),
+                _cc(101, 0), _cc(100, 3), _cc(6, _p)]
+
+    _g_plain = _mid([], _notes=((61, 0, 480),))
+    _gp_e = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "even")
+    _gp_g = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "gm2")
+    check("gm2 with no tuning in the file IS equal temperament",
+          all(np.array_equal(np.asarray(_gp_e[_k]), np.asarray(_gp_g[_k]))
+              for _k in _BRb.PARTIAL_COLS),
+          "  (the whole partial table, bit for bit: GM2Tuner is EvenTuner)")
+
+    def _f61(_prep):
+        return float(np.min(np.asarray(_prep["nf"])))
+
+    _Fw = _BRb.tuning_table("werckmeister")
+    _w61 = _f61(_mid(_sel(0, 6), _notes=((61, 0, 480),)))
+    _p6 = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "gm2")
+    check("RPN 0/3 selects a built-in: program 6 is Werckmeister",
+          abs(1200.0 * math.log2(_f61(_p6) / _Fw[61])) < 0.01,
+          "  (C#4 %+.3f cents from --tuner werckmeister)"
+          % (1200.0 * math.log2(_f61(_p6) / _Fw[61])))
+    _hy = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "hybrid")
+    _mid([], _notes=((61, 0, 480),))
+    _hy0 = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "hybrid")
+    check("...and under any other tuner the file's MTS changes nothing",
+          abs(_f61(_hy) - _f61(_hy0)) < 1e-9,
+          "  (hybrid, with and without the select: choosing a tuner is choosing "
+          "who owns the tuning)")
+    _mid(_sel(0, 6) + [mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01], time=0)],
+         _notes=((61, 0, 480),))
+    _gr = _BRb.prepare(os.path.join(tempfile.gettempdir(), "modes_%d.mid" % os.getpid()), "gm2")
+    _Fe2 = _BRb.tuning_table("even")
+    check("...and a GM System On goes back to program 0, equal temperament",
+          abs(1200.0 * math.log2(_f61(_gr) / _Fe2[61])) < 0.01, "")
+
+    # LIVE, THE SAME: select, then a REAL-TIME single-note change moves a note
+    # that is already sounding.
+    _lg = Live(program=73, rate=44100, frames=128, verbose=False, tuner="gm2")
+    _lg.warm()
+
+    def _gpump(_n=3):
+        for _ in range(_n):
+            _n0 = _lg.n
+            _lg.apply(_n0); _lg.sweep(_n0); _lg.slab.reap(_n0)
+            _lg.renderer.render(_n0, 128); _lg.n = _n0 + 128
+
+    def _ghz(_note):
+        _sl = [_i for _k, _v in _lg.slab.live.items() if _k[1] == 0 and _k[2] == _note
+               for _i in _v]
+        return float(np.asarray(_lg.slab.a["om"])[_sl].min()) * 44100.0 / (2.0 * math.pi)
+
+    for _c, _v in ((101, 0), (100, 3), (6, 6)):
+        _lg.on_midi(mido.Message("control_change", channel=0, control=_c, value=_v))
+    _gpump()
+    _lg.on_midi(mido.Message("note_on", channel=0, note=61, velocity=100)); _gpump()
+    _lw = 1200.0 * math.log2(_ghz(61) / _Fw[61])
+    _Fs = _BRb.tuning_table("stretch")
+    _lg.on_midi(mido.Message("sysex", data=_MTSt.single_note_message({61: _Fs[61]}, 6)))
+    _gpump()
+    _ls = 1200.0 * math.log2(_ghz(61) / _Fs[61])
+    check("live gm2: program 6 is Werckmeister, as in the file renderer",
+          abs(_lw) < 0.01, "  (%+.4f cents)" % _lw)
+    check("...and a real-time single-note change moves the note already sounding",
+          abs(_ls) < 0.01,
+          "  (%+.4f cents from where it was sent -- the format's quantisation)" % _ls)
+    # NON-REAL-TIME: "will NOT update the currently sounding notes".
+    _lg.on_midi(mido.Message("sysex", data=_MTSt.single_note_message(
+        {61: _Fe2[61] * 1.1}, 6, bank=0, realtime=False)))
+    _gpump()
+    _ln = 1200.0 * math.log2(_ghz(61) / _Fs[61])
+    check("...but a non-real-time one leaves a sounding note alone",
+          abs(_ln) < 0.01, "  (%+.4f cents: a setup message, per the spec)" % _ln)
+    # A SELECT MOVES SOUNDING NOTES TOO -- "This change takes effect
+    # immediately". The first draft applied it from the next note.
+    for _c, _v in ((101, 0), (100, 3), (6, 0)):
+        _lg.on_midi(mido.Message("control_change", channel=0, control=_c, value=_v))
+    _gpump()
+    _le = 1200.0 * math.log2(_ghz(61) / _Fe2[61])
+    check("...and an RPN 0/3 select retunes the note already sounding",
+          abs(_le) < 0.01,
+          "  (program 0, equal temperament: %+.4f cents -- MTS: 'This change "
+          "takes effect immediately')" % _le)
+    _lg.shutdown()
+
+    # THE SPEC'S OWN WORKED EXAMPLES, against its own definition. All agree
+    # within 0.01 cents but one: "00 00 01 = 8.2104 Hz" is 7.3 cents above
+    # 00 00 00, and a step of the word is 0.0061 -- a typo in the spec, which
+    # its own "45 00 01 = 440.0016 Hz" contradicts. Named, not bent around.
+    _ex = (((0, 0, 0), 8.1758), ((1, 0, 0), 8.6620), ((0x0C, 0, 0), 16.3516),
+           ((0x3C, 0, 0), 261.6256), ((0x3D, 0, 0), 277.1827),
+           ((0x44, 0x7F, 0x7F), 439.9984), ((0x45, 0, 0), 440.0),
+           ((0x45, 0, 1), 440.0016), ((0x78, 0, 0), 8372.0190),
+           ((0x78, 0, 1), 8372.0630), ((0x7F, 0, 0), 12543.88),
+           ((0x7F, 0, 1), 12543.92), ((0x7F, 0x7F, 0x7E), 13289.73))
+    _exw = max(abs(1200.0 * math.log2(_hz / _MTSt.word_to_hz(*_w))) for _w, _hz in _ex)
+    _typo = 1200.0 * math.log2(8.2104 / _MTSt.word_to_hz(0, 0, 1))
+    check("the codec agrees with the MTS spec's worked examples",
+          _exw < 0.01 and all(_MTSt.hz_to_word(_MTSt.word_to_hz(*_w)) == _w
+                              for _w, _ in _ex),
+          "  (13 of 14 within %.4f cents; the 14th, '00 00 01 = 8.2104 Hz', is "
+          "%+.2f cents off -- 1200 steps, not one: the spec's typo)" % (_exw, _typo))
+    # THE CHECKSUMS: 08 01's is to be ignored ("various manufacturers have
+    # implemented that checksum differently"), every other dump's is held.
+    _d1 = _MTSt.bulk_dump_message(_MTSt.equal_table(), 3, "x")
+    _d1[-1] ^= 0x55
+    _d4 = _MTSt.bulk_dump_message(_MTSt.equal_table(), 3, "x", bank=1)
+    _d4[-1] ^= 0x55
+    check("a bad checksum passes on 08 01 and is refused on 08 04",
+          _MTSt.parse_mts(_d1) is not None and _MTSt.parse_mts(_d4) is None,
+          "  (the spec's own recommendation for the original dump)")
+    # A SCALE/OCTAVE DUMP (08 06) WRITES A PRESET INTO THE STORE -- twelve
+    # offsets from equal temperament, repeated in every octave.
+    _so = [0x7E, 0x7F, 0x08, 0x06, 0, 40] + [ord(_ch) for _ch in "twelve".ljust(16)]
+    for _pc in range(12):
+        _v = int(round((-13.7 if _pc == 1 else 0.0) / 100.0 * 8192)) + 8192
+        _so += [_v >> 7, _v & 0x7F]
+    _so.append(_MTSt._checksum(_so))
+    _st = _MTSt.TuningStore()
+    _st.load(_MTSt.parse_mts(_so)); _st.select(0, bank=0, program=40)
+    _sc = 1200.0 * math.log2(_st.table_for(0)[61] / _Fe2[61])
+    check("a scale/octave dump lands in the store as a 128-key preset",
+          abs(_sc + 13.7) < 0.02,
+          "  (C#4 %+.3f cents, asked -13.7)" % _sc)
 
     # ---- PORTAMENTO, CC5/CC65/CC84 ------------------------------------------
     #

@@ -34,7 +34,7 @@ for the reason above.
 | pitch wheel | ✓ | ✓ | a temperament when static, a gesture when it moves — see below |
 | channel aftertouch | ✓ | ✓ | crescendo: **+8 dB** and brighter together (`PRESS_DB`, `PRESS_TILT`) |
 | polyphonic aftertouch | ✓ | ✓ | the same, per note |
-| SysEx | ✓ | ✓ | GM System On; GM2 Scale/Octave Tuning in both byte forms; Master Volume, Fine and Coarse Tuning |
+| SysEx | ✓ | ✓ | GM System On; GM2 Scale/Octave Tuning in both byte forms; Master Volume, Fine and Coarse Tuning; MTS dumps and single-note changes under `gm2` |
 | CC1 modulation | ✓ | ✓ | seven controls live, five in a file, chosen by voice — see below |
 | CC5 portamento time | ✓ | ✓ | the glide's **rate**, not its duration |
 | CC6 / CC38 data entry | ✓ | ✓ | into the selected RPN |
@@ -49,7 +49,7 @@ for the reason above.
 | CC91 reverb send | | ✓ | distance from the microphone |
 | CC93 chorus send | ✓ | ✓ | fixed detuned copies, mixed in power |
 | CC98 / CC99 NRPN | ✓ | ✓ | selected and then deliberately ignored |
-| CC100 / CC101 RPN | ✓ | ✓ | selects 0/0, 0/1, 0/2, 0/5 |
+| CC100 / CC101 RPN | ✓ | ✓ | selects 0/0, 0/1, 0/2, 0/5, and 0/3, 0/4 under `gm2` |
 | CC120 all sound off | ✓ | ✓ | the panic — stops the channel dead, pedal or no pedal |
 | CC121 reset controllers | ✓ | | re-sends CC1/11/64/66/67 at their defaults |
 | CC123 all notes off | ✓ | ✓ | lifts the keys; the pedal still holds them |
@@ -548,6 +548,90 @@ saying something an octave-repeating table cannot say, and a SysEx export of it
 can only be an approximation taken at C4. Even `werckmeister` and `sankey`
 spread 0.36 cents, because their octaves are stretched a little. A temperament
 fits in this message. A stretched piano does not.
+
+## `gm2`: the tuner under which the file owns the tuning
+
+A Scale/Octave message is twelve cents, one per pitch class, and **a stretched
+octave does not fit in it**. The MIDI Tuning Standard's tables are **128 keys**
+at 100/16384 of a cent, and every tuner here is already a fixed 128-key table —
+`blockrender.tuning_table` solves even `dynamic` once over the whole keyboard —
+so every one of them fits. `examples/tuning_sysex.py --list`, measured:
+
+| | carried exactly |
+|---|---|
+| as a Scale/Octave message | **11 of 21** |
+| as an MTS bulk dump | **21 of 21**, worst **0.00305 cents** |
+
+0.00305 is half of one 1/16384-semitone step, which is the format's own limit.
+What an MTS dump cannot hold is the keys outside its range, 8.18 Hz to just
+under 13.3 kHz: the sub-audio bottom key or two of an A415 tuner, and the top
+five keys of `dynamic`, which it stretches to 17 kHz. Those are clamped.
+
+**Only `gm2` honours any of it.** Choosing a tuner is choosing who owns the
+tuning. Under `hybrid` the temperament is Ben's and a file's dump is ignored,
+bit for bit. Under `gm2` the file is in charge, starting from equal temperament
+at A440 — GM's power-on state. `gm2` *is* `EvenTuner`, so a file that sends no
+tuning renders bit-identically to `even`. Scale/Octave is unaffected and works
+under every tuner, as before.
+
+**The store** (`mts.TuningStore`) holds banks × programs. A program nobody has
+loaded sounds equal temperament. Bank 0 comes pre-loaded with every tuner in
+the registry, **in an order that is frozen**, because a file that selects
+program 6 expects Werckmeister tomorrow as well. New tuners are appended and
+never inserted, and a selftest pins the list.
+
+| program | | program | |
+|---|---|---|---|
+| 0 | even (GM power-on) | 10 | pyth |
+| 1 | hybrid | 11 | just |
+| 2 | hybridharm | 12 | linear |
+| 3 | hybrid440 | 13 | linear5 |
+| 4 | hybridharm440 | 14 | linearwell |
+| 5 | stretch | 15 | bechstein |
+| 6 | werckmeister | 16 | spiral |
+| 7 | sankey | 17 | semi |
+| 8 | meantone | 18 | path |
+| 9 | well | 19 | dynamic |
+
+Each built-in is at that tuner's own reference pitch: selecting `hybrid` drops
+the channel to A415, because that is what `hybrid` is. A dump into a built-in
+slot replaces it for the rest of the render or session, since the store is the
+device's memory. **RPN 0/4** picks a bank and **RPN 0/3** a program, per channel.
+Scale/Octave *dumps* (`08 05`/`08 06`) also write presets into the store, as
+the 128-key tables they amount to.
+A GM System On sends every channel back to program 0 but keeps the tables. A
+mode reset is not a memory wipe.
+
+`examples/tuning_sysex.py --mts --tuner stretch in.mid out.mid` writes any tuner
+into a file this way: a dump into program 127, selected on every channel but
+10. The result renders as `stretch` under `gm2`, and on any other MTS device.
+
+**When things take effect** is set by the spec (the MMA's *MIDI Tuning
+Updated Specification*, read in full). **A select moves sounding notes.** *"This
+change takes effect immediately and must occur without audible artifacts
+(notes-off, resets, re-triggers, glitches, etc.) if any affected notes are
+sounding."* My first draft applied it from the next note, like a program
+change. It isn't one. A real-time single-note change moves sounding notes too.
+A non-real-time one and a dump are setup messages, and the spec has them
+ignored by notes already sounding. Live does all of this, measured to within
+the format's quantisation. The file renderer gives each note the table in force
+at its onset. It does the setup messages right, and it prints a count of any
+note a select or real-time change should have moved mid-sound.
+
+**Two things in the spec are not what you'd guess.** The original dump's
+checksum is unreliable by the spec's own account — *"various manufacturers have
+implemented that checksum differently, and it is now recommended that receivers
+may ignore the checksum in that message"* — so `08 01` is accepted whatever its
+checksum, and the extensions' checksums are enforced. And the spec's own table
+of worked examples has a typo. *"00 00 01 = 8.2104 Hz"* is 7.3 cents above
+`00 00 00`, where one step of the word is 0.0061 cents, and it contradicts the
+spec's own `45 00 01 = 440.0016 Hz`. The other thirteen examples agree with the
+definition to within 0.01 cents. The codec follows the definition, and the
+selftest checks all fourteen, naming the one.
+
+The spec also says *"Standard mappings of 'common' tunings to program numbers
+are not being proposed"*, so the table above is this renderer's own. Its one
+suggestion, RP-020, is honoured: bank 0, preset 0 is equal temperament.
 
 ## Four corrections that are worth the space
 
