@@ -2593,6 +2593,45 @@ def prepare(path, tuner='hybrid440'):
             _rank_av = (vel/127.0)**2 if getattr(props, 'touch_sensitive', True) else 1.0
             spv = T.rank_spectrum(spec_cls)(f0, pan, _rank_av, chan_vol) if spec_cls else None
             hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
+            # ...UNLESS THE BORROWED CLASS IS ITSELF AN ORGAN PIPE, when the rank
+            # IS that pipe: its ceiling (where its upperwork breaks back), its
+            # decay, its chiff -- a reed has none -- and its sustain are its own,
+            # not the host's. The pipe reeds on the church organ's console
+            # (tonelib, bits 8-11) need exactly this: borrowing only the
+            # spectrum put them 5 dB hot (the flue's zero decay against the
+            # reed's own), chiffed, and broken back at the flue's 2100 Hz rather
+            # than their 1600 -- 4-8 dB off in the upper octaves. A class opts in
+            # with rank_is_pipe (the pipe reed does); NOT "is an OrganProperties",
+            # which the brass also is by descent -- the flute (a stopped pipe),
+            # the trumpet (brass) and the harpsichord's ranks render as they did.
+            # A rank may also NAME its pipe (the sixth element): the console's
+            # trumpet is a brass SPECTRUM on a reed PIPE, which is what it was
+            # when it stood in the reed organ, whose pipe was its host.
+            pipe_cls = rest[2] if len(rest) > 2 else None
+            if pipe_cls is not None:
+                rp = T.rank_spectrum(pipe_cls)(f0, pan, _rank_av, chan_vol)
+            elif spv is not None and getattr(spv, 'rank_is_pipe', False):
+                rp = spv
+            else:
+                rp = props
+            cv_r = rp.chiff_volume if rp is not props else cv
+            cc_r = rp.chiff_cycle if rp is not props else cc
+            # Its speech too: the attack, release and chiff times were set per
+            # NOTE from the host's pipe, so the rank's are the host's scaled by
+            # its own speech against the host's -- which keeps whatever the note
+            # already folded in (a slur, CC73, the caps).
+            if rp is not props:
+                def _speech(pp):
+                    a = pp.attack_time if pp.attack_time is not None else pp.chiff_max_valve_time
+                    r = pp.release_valve_time if pp.release_valve_time is not None else pp.chiff_max_valve_time
+                    return pp.speech_time(a, f0), pp.speech_time(r, f0)
+                _ha, _hr = _speech(props); _ra, _rr = _speech(rp)
+                fade_r = fade * (_ra / _ha) if _ha > 0 else fade
+                rel_r = rel * (_rr / _hr) if _hr > 0 else rel
+                _hc = props.chiff_time(f0, _ha)
+                chiff_r = chiff * (rp.chiff_time(f0, _ra) / _hc) if _hc > 0 else chiff
+            else:
+                fade_r, rel_r, chiff_r = fade, rel, chiff
             rank_B = (spv or props).inharmonicity_coefficient_for_frequency(f0) if dyn else B
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
             # A drawn stop speaks (phase + attack fade start) at its draw time, not
@@ -2608,7 +2647,7 @@ def prepare(path, tuner='hybrid440'):
                 _rx = props.rank_position_x(key)
                 li,ri,_ld,_rd = props.hrtf_at(_rx)
                 _DL[0] = _ld*SR; _DL[1] = _rd*SR; _PX[0] = _rx
-            ceiling = getattr(props,'pipe_ceiling_hz',None); bmode = getattr(props,'pipe_break_mode','fold')
+            ceiling = getattr(rp,'pipe_ceiling_hz',None); bmode = getattr(rp,'pipe_break_mode','fold')
             # Compound rank (Mixtur): ratio is a LIST of footages; else a scalar. Each
             # sub-footage breaks back on the note's grid past the ceiling (mirrors
             # tonelib._build_registered_partials); only upperwork (>=2) breaks.
@@ -2630,9 +2669,9 @@ def prepare(path, tuner='hybrid440'):
                     # its fade and its decay together -- rather than stretching
                     # its fade, which would leave it decaying while it faded in.
                     pdelay = props.bloom_delay_for(hf)*SR
-                    pfade = fade
-                    dbps = props.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
-                    aftL, adbps = props.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
+                    pfade = fade_r
+                    dbps = rp.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
+                    aftL, adbps = rp.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
                     # What the instrument radiates toward here: directivity at
                     # this partial's frequency, less what the air ate on the way.
                     # The head model is applied on top of it, not instead of it.
@@ -2644,7 +2683,7 @@ def prepare(path, tuner='hybrid440'):
                                   if organ and hasattr(props, 'pipe_radius') else None)
                     gM = hv*gain*props.radiation_gain(hf, radius=_radius[0])
                     gL = gM*props.hrtf_gain(hf, li); gR = gM*props.hrtf_gain(hf, ri)
-                    cvp = cv * props.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
+                    cvp = cv_r * rp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                     if mls > 0.0:
                         mlo = props.mode_lock_offset_for(m)
                         _TB[0], _TB[1], _TB[2] = (mlo, props.mode_lock_time, props.mode_lock_time*6.0) \
@@ -2662,8 +2701,8 @@ def prepare(path, tuner='hybrid440'):
                     # to its nodes; see SynthProperties.strike_phase_spread.
                     sps = props.strike_phase_spread
                     mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
-                    emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, rel, chiff,
-                                 logr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc,
+                    emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, rel_r, chiff_r,
+                                 logr, logrA, aftL, rp.sustain_level, cvp, cc_r, crl, sjit, csc,
                                  gr, cr, ph0=mph)
                     # THE LATE ARRIVAL. A second copy of this partial, quieter
                     # and starting pdelay later: the cascade adds energy to the
@@ -2683,8 +2722,8 @@ def prepare(path, tuner='hybrid440'):
                         pd = pdelay*(1.0 - sc + 2.0*sc*random.random()) if sc > 0.0 else pdelay
                         bfade = max(1e-4, min(props.bloom_swell*pd/SR, 0.45*dur))*SR
                         emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, gM*bg, hf, non_m+pd, noff,
-                                     bfade, rel, chiff, logr, logrA, aftL, props.sustain_level,
-                                     cvp, cc, crl, sjit, csc, gr, cr)
+                                     bfade, rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level,
+                                     cvp, cc_r, crl, sjit, csc, gr, cr)
                     transverse.append((hf, hv, dbps))
                     # A DRONE IS THE PART, NOT THE NOTE: emit it once for the
                     # channel, spanning its whole range, and skip it on every

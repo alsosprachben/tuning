@@ -4612,6 +4612,10 @@ class FlueOrganProperties(OrganProperties):
 
 
 class ReedOrganProperties(OrganProperties):
+    # Borrowed as a RANK (the church organ's reed stops), it is this pipe
+    # entire -- its own ceiling, decay, chiff and sustain -- not a spectrum laid
+    # on the host's. See blockrender's rank loop.
+    rank_is_pipe = True
     # CC71-78: the reed winds: breath has an onset, a release and a vibrato.
     sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # A chorus reed is present but should NOT dominate. Equal-PEAK calibration
@@ -5243,6 +5247,23 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture", [
 # Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
 # peroration crowns without blaring (also relieves the dense close's headroom).
 ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, CylindricalBrassProperties, True)]
+
+# THE REEDS ARE ON THE CONSOLE TOO. A pipe organ is one instrument: flue ranks
+# and reed ranks on one set of stop knobs, and GM gives it one program, 19. The
+# reeds used to be reached through program 20 -- until 20 became what GM says it
+# is, a reed organ, a FREE reed (see ReedOrganFreeProperties), which left the
+# pipe organ's reed division with no address at all: BuxWV 140's fugue subject
+# on its solo 8' reed and 161's Posaune and Trompette came out as a harmonium.
+# So they are the flue organ's bits 8-11, after the Mixtur so no existing bit
+# moves, each built by the pipe-reed class (a rank may name its own voice, as
+# the flute and the harpsichord's upper 8' do). Hand-drawn: the crescendo pedal
+# walks the flue chorus, and a reed is a registration choice, as a Mixtur is.
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
+    ("reed 8",  1.0, 1.00, ReedOrganProperties),
+    ("reed 16", 0.5, 0.72, ReedOrganProperties),
+    ("reed 4",  2.0, 0.55, ReedOrganProperties),
+    ("trumpet", 1.0, 0.42, CylindricalBrassProperties, True, ReedOrganProperties),
+]
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
