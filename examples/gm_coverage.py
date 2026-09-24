@@ -81,7 +81,7 @@ RATED = {
  17:(3,"tonewheel, percussive tap"),
  18:(3,"tonewheel, overdriven"),
  19:(3,"flue pipes; registration built on Geer and judged by ear"),
- 20:(2,"FreeReedProperties: a tongue through a slot, no resonator -- not the pipe organ reed RANK all four used to be"),
+ 20:(2,"a French harmonium: free reeds, four registers split bass/treble, celeste, Expression/Percussion/Tremolo on CC43/44"),
  21:(2,"AccordionProperties: musette, the reed banks deliberately offset ~16 cents"),
  22:(2,"HarmonicaProperties: one free reed inside a cupped-hand formant pair"),
  23:(2,"TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is"),

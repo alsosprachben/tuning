@@ -638,8 +638,19 @@ class TUI:
             return
         names = p.patch.rank_names
         cres = set(p.patch.cres_order)
-        labels = ["%-9s %s" % (r, "crescendo" if r in cres else "hand-drawn only")
-                  for r in names]
+        if cres:
+            labels = ["%-9s %s" % (r, "crescendo" if r in cres else "hand-drawn only")
+                      for r in names]
+        else:
+            # No crescendo: a harmonium, whose registers are split. Say which
+            # half each one speaks in, and which knobs are not reeds at all.
+            ranks = p.patch.stop_ranks
+            def half(rk):
+                if rk[1] is None:
+                    return "effect"
+                kr = rk[6] if len(rk) > 6 else None
+                return ("bass" if kr[1] < 127 else "treble") if kr else ""
+            labels = ["%-14s %s" % (rk[0], half(rk)) for rk in ranks]
         got = self.multi_menu(scr, "stops for part %d" % (self.row + 1), labels,
                               {i for i, r in enumerate(names) if r in p.drawn})
         if got is None:
@@ -1276,7 +1287,8 @@ class TUI:
             if p.muted or y >= scr.getmaxyx()[0] - 12:
                 continue
             a = col(max(lo, p.lo))
-            nm = ("kit" if p.drums else GM[p.program].split()[0]) if not p.organ else "organ"
+            nm = ("kit" if p.drums else GM[p.program].split()[0]) if not p.organ else \
+                 ("organ" if p.patch.cres_order else "harmonium")
             self.addstr(scr, y, a, "|%d %s" % (i + 1, nm),
                         self.C("dim") if i != self.row else self.C("cyan"))
             y += 1

@@ -908,6 +908,12 @@ def registration_blocks(ch, prop, ccs, nblk):
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
     # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
     ev = in_order(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); mlo = ds & 0x7F; mhi = (ds >> 7) & 0x7F; cres = 0.0; vol = 1.0
+    # WHERE THE STOP WORD LIVES. CC11/CC43 on the pipe organ and the harpsichord,
+    # where CC7 is the swell shutter. A voice can put it elsewhere -- the
+    # harmonium's is CC43/CC44, CC11 being its bellows -- and then CC7 and CC11
+    # stay the channel's volume and expression, as on any other voice.
+    lo_cc, hi_cc = getattr(prop, 'stop_word_ccs', (11, 43))
+    swells = (lo_cc, hi_cc) == (11, 43)
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     def emit(t):
         mask = mlo | (mhi << 7)
@@ -917,10 +923,10 @@ def registration_blocks(ch, prop, ccs, nblk):
         swell_ev.append((t, vol))
     emit(0.0)
     for t, cc, val in ev:
-        if cc==11: mlo=val
-        elif cc==43: mhi=val
+        if cc==lo_cc: mlo=val
+        elif cc==hi_cc: mhi=val
         elif cc==4: cres=val/127.0
-        elif cc==7: vol=val/127.0
+        elif cc==7 and swells: vol=val/127.0
         else: continue
         emit(t)
     gate = {r[0]: onepole_blocks(rank_ev[r[0]][1:], nblk, rank_ev[r[0]][0][1]) for r in ranks}
@@ -1237,7 +1243,8 @@ def prepare(path, tuner='hybrid440'):
         rankev_of[ch]=rev
         crow_of[ch]=len(Srows); Srows.append(s)
         for r in pr.stop_ranks: k=r[0]; grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
-        sh=(pr.swell_floor,pr.swell_gain_power,pr.swell_hf_max,pr.swell_hf_ref_hz)
+        if getattr(pr, 'stop_word_ccs', (11, 43)) == (11, 43):   # only what swells shapes the swell
+            sh=(pr.swell_floor,pr.swell_gain_power,pr.swell_hf_max,pr.swell_hf_ref_hz)
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
 
@@ -1864,6 +1871,10 @@ def prepare(path, tuner='hybrid440'):
     _AMP_IMB = {}
     _CAB_CH = {}
     _TREM_CH = {}
+    # The harmonium's Tremolo stop: channel -> (rate, depth, stereo), and the
+    # row spans of the notes that sounded with it drawn. Per NOTE, because it
+    # is a stop and not a panel knob -- tremolo.expand takes the row mask.
+    _HTREM_CH = {}; _HT_ROWS = []; _HT_PEND = [None]
     _CHORUS_CH = {}     # channel -> (CC93 send 0..1, cents tuple)
     _REVERB_CH = {}     # channel -> CC91 send as a DISTANCE MULTIPLE
     _CLAV_CH = {}
@@ -2020,6 +2031,8 @@ def prepare(path, tuner='hybrid440'):
     _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
+        if _HT_PEND[0] is not None:
+            _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
         _SV[0], _SV[1] = 0.0, 1.0; _VDL[0] = 0.0
         _MCH[0] = ch
         choked = None
@@ -2046,7 +2059,12 @@ def prepare(path, tuner='hybrid440'):
         else:
             pc = property_class_for_note(prog, note)
             organ = getattr(pc,'registerable',False)
-            chan_vol = 1.0 if organ else (v7*v11)**2
+            # An organ's CC7 is its swell shutter and its CC11 half the stop
+            # word, so its channel gain is 1 and the swell row does the rest; a
+            # voice whose stop word lives elsewhere (the harmonium) keeps the
+            # volume and expression every other voice has.
+            chan_vol = (1.0 if organ and getattr(pc, 'stop_word_ccs', (11, 43)) == (11, 43)
+                        else (v7*v11)**2)
             FREQ_N = _F(ch, on)
             f0 = FREQ_N[note]
             # A WRITTEN NOTE IS NOT ALWAYS A PITCH. A helicopter's note chooses
@@ -2572,8 +2590,28 @@ def prepare(path, tuner='hybrid440'):
         # tension bend is a struck string and mode lock is a driven air column.
         mls = getattr(props,'mode_lock_spread',0.0)
         stops = props.stop_ranks if organ else [("_",1.0,1.0)]
+        # THE HARMONIUM'S EFFECT STOPS, each read at NOTE-ON -- the moment CC11
+        # is read for loudness -- from the gate events the stop word made. See
+        # tonelib above harmonium_expression_gain for all three.
+        _hx = None; _hperc = False
+        if organ and 'expression' in rankev_of[ch]:
+            _st = lambda k: T.stop_drawn_at(rankev_of[ch].get(k, ()), on)
+            if _st('expression'):
+                _hx = v11
+            _hperc = _st('percussion')
+            if _st('tremolo') and getattr(props, 'stop_tremolo_depth', 0.0) > 0.0:
+                _HTREM_CH[ch] = (float(props.stop_tremolo_hz),
+                                 float(props.stop_tremolo_depth), False)
+                _HT_PEND[0] = len(A['om'])
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         for key, ratio, gain, *rest in stops:
+            # A stop with no pipes (the harmonium's Expression, Percussion,
+            # Tremolo) has a gate and no partials; a rank with a key range (its
+            # split registers) has none outside it.
+            if ratio is None:
+                continue
+            if len(rest) > 3 and rest[3] is not None and not (rest[3][0] <= note <= rest[3][1]):
+                continue
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
             dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
             # "BORROW THIS VOICE'S SPECTRUM ONLY" -- and the line under that
@@ -2632,6 +2670,9 @@ def prepare(path, tuner='hybrid440'):
                 chiff_r = chiff * (rp.chiff_time(f0, _ra) / _hc) if _hc > 0 else chiff
             else:
                 fade_r, rel_r, chiff_r = fade, rel, chiff
+            if _hperc and key in getattr(props, 'percussion_ranks', ()):
+                # The hammer: min(attack, hammer), as a slur is min(attack, legato).
+                fade_r = min(fade_r, max(1e-4, min(props.percussion_attack_s, _afm*dur))*SR)
             rank_B = (spv or props).inharmonicity_coefficient_for_frequency(f0) if dyn else B
             gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
             # A drawn stop speaks (phase + attack fade start) at its draw time, not
@@ -2682,6 +2723,8 @@ def prepare(path, tuner='hybrid440'):
                     _radius[0] = (props.pipe_radius(f0*eff_ratio)
                                   if organ and hasattr(props, 'pipe_radius') else None)
                     gM = hv*gain*props.radiation_gain(hf, radius=_radius[0])
+                    if _hx is not None:
+                        gM *= float(T.harmonium_expression_gain(h, _hx))
                     gL = gM*props.hrtf_gain(hf, li); gR = gM*props.hrtf_gain(hf, ri)
                     cvp = cv_r * rp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                     if mls > 0.0:
@@ -2832,6 +2875,8 @@ def prepare(path, tuner='hybrid440'):
                              max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
                              cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
+    if _HT_PEND[0] is not None:
+        _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
 
     # A CONSONANT IS SUNG BY THE SECTION, NOT BY A POINT.
     #
@@ -2972,6 +3017,14 @@ def prepare(path, tuner='hybrid440'):
     # swing. After the amplifier so that a valve works on the carrier and not
     # on the sidebands, before the speaker so the speaker colours them. See
     # tremolo.py, which argues both placements.
+    if _HT_ROWS:
+        import tremolo as _TRM
+        _hm = np.zeros(len(A['om']), bool)
+        for _a, _b in _HT_ROWS:
+            _hm[_a:_b] = True
+        _nt = _TRM.expand(A, _HTREM_CH, SR, PARTIAL_COLS + ('az', 'dr'), rows=_hm)
+        if _nt:
+            print("  harmonium tremolo: %d notes, %d sidebands" % (len(_HT_ROWS), _nt))
     if _TREM_CH:
         import tremolo as _TRM
         _nt = _TRM.expand(A, _TREM_CH, SR, PARTIAL_COLS + ('az', 'dr'))

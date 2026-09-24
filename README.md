@@ -92,7 +92,10 @@ them. Three ways to draw a rank by hand:
   the hand-drawn ranks
 
 Any single rank can stand alone, so a reed organ on nothing but its `trumpet` is
-one keystroke away. The tuner is per part too, so a mode-locked organ layer can
+one keystroke away. The harmonium (GM 20) has stops too — four registers in
+each half of a split keyboard, the céleste, and Expression, Percussion and
+Tremolo — listed by the names on its knobs (`hautbois 4`); a file draws them on
+CC43/CC44, because its CC11 is the bellows. The tuner is per part too, so a mode-locked organ layer can
 sit on `hybridharm` while the strings above it stay on `hybrid`.
 
 **A drum part's patch is its drum set.** The picker lists the SC-55's ten

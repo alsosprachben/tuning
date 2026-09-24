@@ -1169,10 +1169,14 @@ class Slab:
         is a no-op -- and when that row is later armed, the capture reads an
         a["aL"] that already carries the fader.
         """
-        if not slots or ratio == 1.0:
+        # `ratio` is a scalar (the fader) or one per slot, in `slots` order (the
+        # harmonium's Expression, which is a gain per partial).
+        if slots is None or not len(slots):
+            return
+        r = np.asarray(ratio, np.float32)
+        if r.ndim == 0 and float(r) == 1.0:
             return
         idx = np.fromiter(slots, np.int64, len(slots))
-        r = np.float32(ratio)
         self.aL0[idx] *= r
         self.aR0[idx] *= r
         self.a["aL"][idx] *= r
@@ -1654,6 +1658,16 @@ class Patch:
             self.speeds = DETUNE_STEPS
             self.leslie_default = DETUNE_STEPS[len(DETUNE_STEPS) // 2]
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
+        self.stop_ranks = list(getattr(pc, "stop_ranks", [])) if pc else []
+        # The harmonium's Tremolo STOP (not the wheel's tremolo_depth, which
+        # would give its CC1 a tremolo knob) and its Percussion ranks.
+        self.stop_tremolo_hz = float(getattr(pc, "stop_tremolo_hz", 0.0)) if pc else 0.0
+        self.stop_tremolo_depth = float(getattr(pc, "stop_tremolo_depth", 0.0)) if pc else 0.0
+        self.percussion_ranks = tuple(getattr(pc, "percussion_ranks", ())) if pc else ()
+        self.percussion_attack_s = float(getattr(pc, "percussion_attack_s", 0.0)) if pc else 0.0
+        # Where this voice's stop word lives: CC11/43 on the pipe organ and the
+        # harpsichord, CC43/44 on the harmonium (its CC11 is the bellows).
+        self.stop_word_ccs = tuple(getattr(pc, "stop_word_ccs", (11, 43))) if pc else (11, 43)
         # THE VOICE'S OWN REGISTRATION, which has never once applied. Part
         # read it as `getattr(patch.pc, ...) if hasattr(patch, 'pc')` -- and Patch
         # binds pc as a LOCAL and never assigns self.pc, so hasattr was always
@@ -1740,8 +1754,17 @@ class Patch:
             # Draw everything so every rank emits partials AND speaks at the
             # note's own onset. The live registration is then decided by which
             # ranks we choose to stamp, not by a gate over ones already there.
-            tr.append(mido.Message("control_change", channel=ch, control=11, value=127, time=0))
-            tr.append(mido.Message("control_change", channel=ch, control=43, value=127, time=0))
+            # Through the voice's OWN stop word: CC11/43 on the pipe organ, CC43/44
+            # on the harmonium, whose CC11 is the bellows and stays at rest.
+            # Every REED, that is: the harmonium's Expression, Percussion and
+            # Tremolo are drawn on the stamped slots, and built into the
+            # template they would be in every note whether drawn or not.
+            if self.stop_word_ccs == (11, 43):
+                _w = (1 << 14) - 1
+            else:
+                _w = sum(1 << i for i, r in enumerate(self.stop_ranks) if r[1] is not None)
+            for _swc, _v in zip(self.stop_word_ccs, (_w & 0x7F, (_w >> 7) & 0x7F)):
+                tr.append(mido.Message("control_change", channel=ch, control=_swc, value=_v, time=0))
         if self.drone_wheel and fast is None:
             # CORK THEM FOR THE BUILD, and say so in the MIDI rather than by
             # setting the module global -- blockrender reads the CHANNEL'S OWN
@@ -2055,6 +2078,8 @@ class Live:
         # that reached the engine, from the keyboard (after routing) or the
         # panel. Culled by construction -- a later value replaces an earlier.
         self.chanstate = {}
+        self.stopword = {}           # channel -> [CC43, CC44], a harmonium's stop word
+        self.xnote = {}              # slot key -> the bellows (0..1) its Expression was stamped at
         self.dirty = False           # the session has changed since it was saved
         self._learn = None
         self._learn_swallow = set()
@@ -2321,6 +2346,7 @@ class Live:
             self.seen[(m.channel, "pressure")] = m.value
         elif t == "sysex" and (B.gm_on_level(m.data) or B.parse_gs_reset(m.data)):
             self.seen.clear()
+            self.stopword.clear()
             if self.chanstate:
                 self.chanstate.clear()
                 self.dirty = True
@@ -2495,7 +2521,11 @@ class Live:
                 # channel taking one branch.
                 here = [p for p in parts if self._listens(p, ch)]
                 amped = [p for p in here if p.patch.amp_drive > 0.0]
-                organs = [p for p in here if p.organ and not p.patch.leslie]
+                # The crescendo pedal is an organ WITH a crescendo order; the
+                # harmonium has stops and no crescendo, so its wheel stays the
+                # vibrato it always was.
+                organs = [p for p in here if p.organ and not p.patch.leslie
+                          and p.patch.cres_order]
                 # AND ON A VOICE WITH A TREMOLO THE WHEEL IS THE DEPTH KNOB.
                 # On a Rhodes suitcase and a Wurlitzer that is the one control
                 # a player moves while playing, so it takes the wheel ahead of
@@ -2520,7 +2550,7 @@ class Live:
                 # a piper is FOR.
                 dronists = [p for p in here if p.patch.drone_wheel]
                 others = [p for p in here
-                          if not p.organ and not p.patch.leslie
+                          if not (p.organ and p.patch.cres_order) and not p.patch.leslie
                           and p.patch.amp_drive <= 0.0
                           and p.patch.tremolo_depth <= 0.0
                           and not p.patch.clav_panel
@@ -2606,6 +2636,43 @@ class Live:
                     # The DIFFERENCE is that and only that: a note stamped at
                     # this setting comes out identical either way.
                     self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
+                if msg.control == 11 and self.xnote:
+                    # THE HARMONIUM'S EXPRESSION: its bellows brighten as well
+                    # as swell, on the notes stamped with the stop drawn. The
+                    # law's ratio between two pressures needs only the delta.
+                    e = msg.value / 127.0
+                    for key, e0 in list(self.xnote.items()):
+                        sl = self.slab.live.get(key)
+                        if not sl:
+                            del self.xnote[key]
+                            continue
+                        if key[1] != ch or e0 == e:
+                            continue
+                        part = next((p for p in parts if p.pid == key[0]), None)
+                        if part is None:
+                            continue
+                        idx = np.fromiter(sl, np.int64, len(sl))
+                        h = self.slab.hrel[idx].astype(np.float64) * self._h8(part, key[2])
+                        self.slab.channel_gain(sl, (T.harmonium_expression_gain(h, e)
+                                                    / T.harmonium_expression_gain(h, e0)
+                                                    ).astype(np.float32))
+                        self.xnote[key] = e
+            elif msg.control in (43, 44):           # a harmonium's stop word
+                # CC43 low seven, CC44 high seven -- on a voice that says its
+                # stop word lives there (the harmonium, whose CC11 is the
+                # bellows). The pipe organ's registration is the panel's here.
+                w = self.stopword.setdefault(ch, [None, None])
+                w[0 if msg.control == 43 else 1] = msg.value
+                for part in parts:
+                    if not (self._listens(part, ch) and part.organ):
+                        continue
+                    if part.patch.stop_word_ccs != (43, 44):
+                        continue
+                    ds = part.patch.default_stops
+                    word = ((w[0] if w[0] is not None else ds & 0x7F)
+                            | ((w[1] if w[1] is not None else (ds >> 7) & 0x7F) << 7))
+                    names = part.patch.rank_names
+                    self.set_stops(part, {names[i] for i in range(len(names)) if (word >> i) & 1}, n0)
             elif msg.control == 91:                 # reverb send
                 # A DISTANCE, as the file renderer has it: CC91 over GM's
                 # default 40 is how many times the room's nominal distance this
@@ -4308,6 +4375,42 @@ class Live:
         # drawing all nine bars changes what is intermodulating with what.
         self._amp_touch(part)
 
+    def _h8(self, part, note):
+        """hrel is against the template's lowest partial; the Expression law
+        wants h against the note's 8-foot pitch. The template is built with
+        every stop drawn, so its lowest partial is the lowest footage whose key
+        range holds this key."""
+        tgt = note + part.transpose
+        fs = [r[1] for r in part.patch.stop_ranks
+              if r[1] is not None and not isinstance(r[1], (list, tuple))
+              and (len(r) < 7 or r[6] is None or r[6][0] <= tgt <= r[6][1])]
+        return min(fs) if fs else 1.0
+
+    def _harmonium_stamp(self, part, tmpl, ch, note, rank, key, hrel):
+        """The harmonium's effect stops on the slots just stamped, as the file
+        renderer reads them: at note-on. See tonelib's harmonium_expression_gain."""
+        sl = self.slab.last_slots
+        if sl is None or not len(sl) or len(sl) != len(hrel):
+            return
+        idx = np.fromiter(sl, np.int64, len(sl))
+        # CC73/72 first, as the file scales the attack before the hammer's min.
+        self._sound_stamp(part, ch, note, sl)
+        if "expression" in part.drawn:
+            e = self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0
+            g = T.harmonium_expression_gain(np.asarray(hrel, np.float64) * self._h8(part, note), e)
+            self.slab.channel_gain(sl, g.astype(np.float32))
+            self.xnote[key] = e
+        if "percussion" in part.drawn and rank in part.patch.percussion_ranks:
+            pc = part.patch._voice_class(note + part.transpose)
+            dur = tmpl["dur"] / float(B.SR) if tmpl.get("dur") else 1.0
+            afm = getattr(pc, "attack_fraction_max", 0.45)
+            a = self.slab.a
+            a["fa"][idx] = np.minimum(a["fa"][idx], np.float32(
+                max(1e-4, min(part.patch.percussion_attack_s, afm * dur)) * B.SR))
+        if "tremolo" in part.drawn and part.patch.stop_tremolo_depth > 0.0:
+            self.slab.tremolo_arm(sl, part.patch.stop_tremolo_depth, False)
+        self.slab.dirty = True
+
     def _draw(self, part, tmpl, ch, note, rank, n0):
         got = tmpl.get("ranks", {}).get(rank)
         if not got:
@@ -4324,6 +4427,8 @@ class Live:
                                     hrel, 0, False):
             self.dropped += 1
             return
+        if part.patch.stop_word_ccs == (43, 44):
+            self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
         # A REGISTERABLE VOICE STILL TAKES A TUNING, even though it takes no
         # bend. `_note_on` returns here before every per-channel pitch
         # adjustment, which is right for the wheel -- an organ has no pitch
@@ -4515,7 +4620,9 @@ class Live:
                 # electric pianos modulate at 5.5 Hz; if a voice ever wants its
                 # own rate this has to become per-row, as ls_ph is.
                 hz = next((p.patch.tremolo_hz for p in self.parts
-                           if p.patch.tremolo_depth > 0.0), 0.0)
+                           if p.patch.tremolo_depth > 0.0), 0.0) or \
+                     next((p.patch.stop_tremolo_hz for p in self.parts
+                           if p.patch.stop_tremolo_depth > 0.0), 0.0)
                 if hz > 0.0:
                     self.slab.tremolo_swing(2.0 * math.pi * hz * n0 / float(self.rate))
             if self.slab.ls_on.any():
@@ -4731,7 +4838,7 @@ def apply_preset(live, preset, progress=None):
 # (a scene recalled with sustain down would hold whatever is played next), and
 # the one-shots -- CC84's source note, the sound-offs and resets, notes and
 # program changes. Programs belong to the setup, which is what a preset holds.
-CAPTURE_CC = (0, 32, 1, 5, 7, 10, 11, 65, 91, 93)
+CAPTURE_CC = (0, 32, 1, 5, 7, 10, 11, 43, 44, 65, 91, 93)
 CAPTURE_RESET_CC = (1, 11, 65)       # the captured ones CC121 resets
 SCENE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes.json")
 SESSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session.json")
@@ -4754,7 +4861,7 @@ def _crescendo_channel(live, ch):
     leaves is saved as the part's own drawn stops. Replaying the wheel would
     redraw over them: that is exactly how a hand registration, set with the
     number keys, came back as the crescendo's first five stops."""
-    return any(p.organ and not p.patch.leslie
+    return any(p.organ and not p.patch.leslie and p.patch.cres_order
                and (p.channel is None or p.channel == ch) for p in live.parts)
 
 
@@ -9775,6 +9882,122 @@ def selftest():
           "scene's wheel is not replayed onto it either)" % sorted(_og2.parts[0].drawn))
     for _x in (_og, _og2):
         _x.renderer.close()
+    # THE HARMONIUM (GM 20): its stop word is CC43/44 -- CC11 is its bellows --
+    # the registers split at f-one, and three of its stops are not reeds.
+    # Each effect is read at note-on, and live must stamp what the file builds.
+    _hm = Live(program=20, rate=48000, frames=128, verbose=False); _hm.warm()
+    _hp = _hm.parts[0]
+    def _hword(l, w, v11=127):
+        l.on_midi(_cc_(0, 43, w & 127)); l.on_midi(_cc_(0, 44, w >> 7))
+        l.on_midi(_cc_(0, 11, v11)); l.apply(l.n)
+    def _hlive(w, v11, note):
+        _hword(_hm, w, v11)
+        _hm.on_midi(mido.Message("note_on", channel=0, note=note, velocity=100)); _hm.apply(_hm.n)
+        ix = np.flatnonzero(_hm.slab.busy); a = _hm.slab.a
+        r = dict(nf=a["nf"][ix].astype(np.float64), aL=a["aL"][ix].astype(np.float64),
+                 fa=a["fa"][ix].astype(np.float64), tr=int(_hm.slab.tr_on[ix].sum()),
+                 keys=sorted(k[3] for k in _hm.slab.live))
+        _hm.on_midi(mido.Message("note_off", channel=0, note=note, velocity=0)); _hm.apply(_hm.n)
+        _hm.panic()
+        for _ in range(300):
+            _hm.callback(None, 128, None, 0)
+        return r
+    def _hfile(w, v11, note):
+        m = mido.MidiFile(type=1, ticks_per_beat=480); tr = mido.MidiTrack(); m.tracks.append(tr)
+        tr.append(mido.Message("program_change", channel=0, program=20, time=0))
+        for c, v in ((43, w & 127), (44, w >> 7), (11, v11)):
+            tr.append(mido.Message("control_change", channel=0, control=c, value=v, time=0))
+        tr.append(mido.Message("note_on", channel=0, note=note, velocity=100, time=0))
+        tr.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=960))
+        p = B.prepare(m, "hybrid")
+        gr = np.asarray(p["gr"]).astype(int)
+        keep = np.array([(w >> g) & 1 for g in gr], bool)
+        return dict(nf=np.asarray(p["nf"])[keep], aL=np.asarray(p["aL"])[keep],
+                    fa=np.asarray(p["fa"])[keep], rows=len(p["nf"]), carriers=int(keep.sum()))
+    def _bynf(r):
+        u = np.unique(np.round(r["nf"], 3))
+        return np.array([r["aL"][np.round(r["nf"], 3) == x].sum() for x in u])
+    _H1 = (1 << 0) | (1 << 4)                   # register 1, both halves
+    _hword(_hm, (1 << 0) | (1 << 7))            # bass Cor anglais, treble Hautbois
+    _hm.on_midi(_cc_(0, 1, 127)); _hm.apply(_hm.n)
+    check("the harmonium's stops are its own, on CC43/44, and the wheel leaves them",
+          _hp.patch.stop_word_ccs == (43, 44)
+          and _hp.drawn == {"cor anglais 1", "hautbois 4"},
+          "  (drawn %s; a crescendo pedal is a pipe organ's -- the harmonium has none)"
+          % sorted(_hp.drawn))
+    _lo = _hlive((1 << 0) | (1 << 7), 127, 48)["keys"]
+    _hi = _hlive((1 << 0) | (1 << 7), 127, 72)["keys"]
+    check("a harmonium register sounds in its own half of the keyboard",
+          _lo == ["cor anglais 1"] and _hi == ["hautbois 4"],
+          "  (c: %s, c'': %s -- split at f', MIDI %d)" % (_lo, _hi, T.HARMONIUM_SPLIT))
+    _xs = []
+    for _v in (64, 32):
+        _ro = _bynf(_hfile(_H1 | (1 << 9), _v, 72)) / _bynf(_hfile(_H1, _v, 72))
+        _rl = _bynf(_hlive(_H1 | (1 << 9), _v, 72)) / _bynf(_hlive(_H1, _v, 72))
+        _xs.append((float(np.max(np.abs(_ro - _rl))), float(_ro[7])))
+    check("the Expression stop brightens with the bellows, live as in the file",
+          all(d < 1e-5 for d, _ in _xs) and _xs[1][1] < _xs[0][1] < 1.0,
+          "  (8th harmonic x%.3f at CC11 64, x%.3f at 32; live against file %.1e)"
+          % (_xs[0][1], _xs[1][1], max(d for d, _ in _xs)))
+    _pf = [(sorted(set(np.round(_hfile(w, 127, 48)["fa"]).astype(int))),
+            sorted(set(np.round(_hlive(w, 127, 48)["fa"]).astype(int))))
+           for w in (_H1, _H1 | (1 << 10), _H1 | (1 << 3) | (1 << 10))]
+    check("Percussion strikes register 1 only, live as in the file",
+          all(f == l for f, l in _pf) and len(_pf[0][0]) == 1 and len(_pf[2][0]) == 2
+          and _pf[1][0][0] < _pf[0][0][0],
+          "  (attack in samples, file/live: plain %s/%s, percussion %s/%s, with the "
+          "Basson %s/%s)" % tuple(x for p in _pf for x in p))
+    # CC73 is still the harmonium's (a stop list is no reason to lose an
+    # onset), and the hammer is a min over whatever CC73 made the attack.
+    _a73 = []
+    for _w in (_H1, _H1 | (1 << 3) | (1 << 10)):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480); _t = mido.MidiTrack(); _m.tracks.append(_t)
+        for _e in [mido.Message("program_change", channel=0, program=20, time=0)] + \
+                  [_cc_(0, c, v) for c, v in ((43, _w & 127), (44, _w >> 7), (73, 110))] + \
+                  [mido.Message("note_on", channel=0, note=48, velocity=100, time=0),
+                   mido.Message("note_off", channel=0, note=48, velocity=0, time=960)]:
+            _t.append(_e)
+        _p73 = B.prepare(_m, "hybrid")
+        _k73 = np.array([(_w >> g) & 1 for g in np.asarray(_p73["gr"]).astype(int)], bool)
+        _f73 = sorted(set(np.round(np.asarray(_p73["fa"])[_k73]).astype(int)))
+        _hm.on_midi(_cc_(0, 73, 110)); _hm.apply(_hm.n)
+        _l73 = sorted(set(np.round(_hlive(_w, 127, 48)["fa"]).astype(int)))
+        _hm.on_midi(_cc_(0, 73, 64)); _hm.apply(_hm.n)
+        _a73.append((_f73, _l73))
+    check("the harmonium keeps its CC73 attack under its stops, live as in the file",
+          all(f == l for f, l in _a73) and _a73[0][0][0] > _pf[0][0][0]
+          and _a73[1][0][0] == _pf[1][0][0],
+          "  (attack at CC73 110, file/live: %s/%s; with Percussion %s/%s)"
+          % tuple(x for p in _a73 for x in p))
+    _tf0 = _hfile(_H1, 127, 72); _tf1 = _hfile(_H1 | (1 << 11), 127, 72)
+    _tl0 = _hlive(_H1, 127, 72)["tr"]; _tl1 = _hlive(_H1 | (1 << 11), 127, 72)["tr"]
+    check("the Tremolo stop flutters the notes it is drawn for, and only those",
+          _tf0["rows"] * 3 == _tf1["rows"] and _tl0 == 0
+          and _tl1 == _tf0["carriers"] and _tf1["carriers"] == 3 * _tl1,
+          "  (file rows %d -> %d with the sidebands; live partials armed %d -> %d)"
+          % (_tf0["rows"], _tf1["rows"], _tl0, _tl1))
+    # The panel lists them by their knobs' names, says which half each is in,
+    # and the digit keys draw them.
+    import livetui as _tuiH
+    _uH = _tuiH.TUI(_hm, "stub"); _uH.builder.stop = True
+    class _ScrH(object):
+        def getmaxyx(self): return 24, 80
+        def getch(self): return -1
+        def __getattr__(self, n): return lambda *a, **k: None
+    _hword(_hm, _H1)
+    _seen = {}
+    def _mm(scr, title, items, chosen):
+        _seen["items"] = list(items); return None
+    _uH.multi_menu = _mm
+    _uH.pick_stops(_ScrH())
+    _uH.key(_ScrH(), ord("8")); _hm.apply(_hm.n)
+    _labs = _seen.get("items", [])
+    check("the panel names the harmonium's stops, their halves, and draws them by digit",
+          "hautbois 4" in _hp.drawn and "stops" in _uH.stops_str(_hp)
+          and any(l.startswith("hautbois 4") and l.rstrip().endswith("treble") for l in _labs)
+          and any(l.startswith("tremolo") and l.rstrip().endswith("effect") for l in _labs),
+          "  (%s; picker: %s)" % (_uH.stops_str(_hp), _labs[:3]))
+    _hm.renderer.close()
     _bad = os.path.join(_sd, "bad.json")
     open(_bad, "w").write("{not json")
     _nb = load_session(_bad)

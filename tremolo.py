@@ -46,7 +46,7 @@ WURLITZER_HZ = 5.5
 ENABLED = True
 
 
-def expand(A, channels, sr, cols):
+def expand(A, channels, sr, cols, rows=None):
     """Give every partial of a modulated voice its sideband pair, in place.
 
     `channels` is {midi_channel: (rate_hz, depth, stereo)} or, for a SECTION,
@@ -79,6 +79,11 @@ def expand(A, channels, sr, cols):
     for i in range(n):
         # 'mch' is the MIDI channel. leslie.py records what happens if this is
         # confused with 'ch', which is chiff: nothing expands, silently.
+        # `rows`, when given, is a mask over the rows that existed before: a
+        # harmonium's Tremolo is a STOP, so only the notes that sounded with it
+        # drawn are modulated, not the whole channel.
+        if rows is not None and (i >= len(rows) or not rows[i]):
+            continue
         ch = int(A['mch'][i])
         cfg = channels.get(ch)
         if cfg is None:

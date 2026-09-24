@@ -4853,12 +4853,32 @@ class FreeReedProperties(SynthProperties):
 
 
 class ReedOrganFreeProperties(FreeReedProperties):
-    """GM 20, the harmonium / American organ: banks of free reeds and a bellows.
+    """GM 20, the harmonium: banks of free reeds and a bellows -- a FRENCH one
+    (Debain, Alexandre, Mustel), with its stops.
 
-    The plainest member, and the reference the other three are voiced against.
-    A harmonium has stops, and `registerable` would carry them, but a GM part
-    does not ask for a registration and a half-wired one is worse than none;
-    this is a single 8' rank.
+    The plainest member of the free-reed family, and the reference the other
+    three are voiced against. Its eight reed compartments are "four bass and
+    four treble, of three different pitches of octave and double octave
+    distance" (Encyclopaedia Britannica 1911, "Harmonium"): the keyboard divides
+    in the middle, and every register is two stops, one for each half, so a
+    treble solo stop can sing over a bass accompaniment on another.
+
+      bass   1 Cor anglais 8'   2 Bourdon 16'     3 Clairon 4'   4 Basson 8'
+      treble 1 Flute 8'         2 Clarinette 16'  3 Fifre 4'     4 Hautbois 8'
+
+    1 and 2 are the front organ, the foundation; 3 and 4 the back, the solo and
+    combination stops. Then the Voix celeste, a 16-foot row "tuned not quite in
+    unison" (EB1911, and a 16-foot on Mustel's instruments), and three stops
+    that are not reeds: Expression, which shuts the reservoir so the player's
+    feet ARE the wind pressure; Percussion, a hammer action on the front 8-foot
+    rows so they speak at once; and Tremolo, which flutters the wind.
+
+    THE STOPS HAVE THEIR OWN ADDRESS. On the pipe organ and the harpsichord CC11
+    is half the stop word; on a free reed CC11 is the bellows -- the expression
+    -- so here the stop word is CC43 (low seven) and CC44 (high seven), which GM
+    files do not send. A GM file therefore keeps its expression and plays the
+    default registration, register 1 in both halves, which is exactly the single
+    8-foot rank this voice was before it had stops.
     """
     # CC71-78: a pumped reed ORGAN: an onset and a release, and nobody's hand
     # on a vibrato.
@@ -4873,6 +4893,151 @@ class ReedOrganFreeProperties(FreeReedProperties):
     # where the pipe classes carry the comb's absolute scale, so the numbers
     # here are ~500x what a pipe voice's look like and mean the same thing.
     initial_gain = 0.05964
+
+    registerable = True
+    # ...AND STILL PLAYED, not only set up: its onset and release (CC73/72)
+    # are the bellows and the player's, as they were before it had stops. The
+    # blanket "registerable answers nothing" rule is the pipe organ's.
+    answers_sound_controls = True
+    stop_word_ccs = (43, 44)
+    # Registers 1 in both halves: the plain 8-foot, what GM 20 has always been.
+    default_stops = (1 << 0) | (1 << 4)
+    # No crescendo pedal on a harmonium: the mod wheel does not draw its stops.
+    crescendo_order = []
+
+
+# ---- the harmonium's registers -------------------------------------------------
+# Each is this free reed voiced differently, as a real harmonium's compartments
+# are. MEASURED, on this model, before choosing: brightness is almost entirely
+# the reed's OPENING (reed_gate) -- the further the tongue must swing before the
+# slot clears, the shorter the pulse -- running from -31 dB of energy at h6 and
+# above (gate 0) to -18 dB (gate 0.8); the closing (reed_edge) moves it by a dB.
+# So the registers sit along that axis, with the case (bore_corner_hz) opened or
+# closed to match. Chosen, not fitted -- there is no recording to fit -- and
+# Ben's ear is the outer loop.
+#
+# ONE THING THIS MODEL CANNOT DO is a HOLLOW reed. Its evens always equal or
+# beat its odds, and darker means MORE even (a half-wave pulse is mostly even
+# harmonics). A harmonium's Clarinette owes its hollowness to a resonating
+# cavity over the reeds, which this voice does not have; it is voiced dark and
+# covered instead, and the cavity is a stated gap, not a claim.
+class HarmoniumBourdonProperties(ReedOrganFreeProperties):
+    """2 Bourdon, 16-foot: dark and weighty, the double diapason under the
+    foundation."""
+    reed_gate = 0.35
+    bore_corner_hz = 3000.0
+
+
+class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
+    """2 Clarinette, treble 16-foot: dark and covered. Not hollow -- see above:
+    that is the cavity this model lacks."""
+    reed_gate = 0.30
+    bore_corner_hz = 2600.0
+
+
+class HarmoniumClaironProperties(ReedOrganFreeProperties):
+    """3 Clairon / Fifre, 4-foot: the bright octave above."""
+    reed_gate = 0.65
+    bore_corner_hz = 5600.0
+
+
+class HarmoniumHautboisProperties(ReedOrganFreeProperties):
+    """4 Basson / Hautbois, 8-foot: reedy and nasal, the treble's solo stop and
+    the bass's bassoon -- the shortest pulse and the most open case."""
+    reed_gate = 0.80
+    bore_corner_hz = 6400.0
+
+
+# THE VOIX CELESTE'S DETUNE, in cents. EB1911 says only "not quite in unison";
+# the amount is a choice. +12 cents beats against the foundation at about 1.8 Hz
+# at middle C and proportionally faster above -- the slow shimmer the stop is
+# for, not a chorus.
+HARMONIUM_CELESTE_CENTS = 12.0
+
+# The split: EB1911 puts it "in the middle of the keyboard scale", each half
+# about two octaves and a half of a five-octave compass (C2 to C7 here). That
+# is between e-one and f-one, MIDI 64 and 65 -- the notes are the reading of
+# that sentence, not a quotation of one.
+HARMONIUM_SPLIT = 65
+_BASS = (0, HARMONIUM_SPLIT - 1)
+_TREBLE = (HARMONIUM_SPLIT, 127)
+
+# (name, footage ratio, gain, voice, dyn, pipe, key range). A ratio of None is
+# a stop that is not a reed -- it has a knob and a gate, and no pipes.
+ReedOrganFreeProperties.stop_ranks = [
+    ("cor anglais 1", 1.0, 1.00, None, False, None, _BASS),
+    ("bourdon 2",     0.5, 0.80, HarmoniumBourdonProperties, False, None, _BASS),
+    ("clairon 3",     2.0, 0.60, HarmoniumClaironProperties, False, None, _BASS),
+    ("basson 4",      1.0, 0.85, HarmoniumHautboisProperties, False, None, _BASS),
+    ("flute 1",       1.0, 1.00, None, False, None, _TREBLE),
+    ("clarinette 2",  0.5, 0.80, HarmoniumClarinetteProperties, False, None, _TREBLE),
+    ("fifre 3",       2.0, 0.60, HarmoniumClaironProperties, False, None, _TREBLE),
+    ("hautbois 4",    1.0, 0.85, HarmoniumHautboisProperties, False, None, _TREBLE),
+    ("celeste",       0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 1200.0), 0.70,
+                      HarmoniumBourdonProperties, False, None, _TREBLE),
+    ("expression",    None, 0.0),
+    ("percussion",    None, 0.0),
+    ("tremolo",       None, 0.0),
+]
+
+
+# THE THREE STOPS THAT ARE NOT REEDS. Each is a gate (a stop_ranks row with no
+# ratio) read at NOTE-ON in both renderers, the same moment CC11 is read for
+# loudness, so a note stamped live under a setting is the note the file renders.
+#
+# EXPRESSION: the reservoir shut, the feet ARE the wind. A free reed driven
+# harder swings further and its upper harmonics grow faster than its
+# fundamental -- measured on this model, opening the tongue's swing (reed_gate
+# 0 -> 0.8) lifts everything above the sixth harmonic from -31 to -18 dB. The
+# law is a tilt on the harmonic number h (the partial against the NOTE's 8-foot
+# pitch, floored at 1 so the 16-foot's fundamental is not boosted):
+#
+#     g(h, e) = max(h, 1) ** (HARMONIUM_EXPRESSION_TILT * (e - 1))
+#
+# with e = CC11 / 127. At e = 1 -- full wind, and every file that sends no CC11
+# -- g is exactly 1, so drawing the stop changes nothing until the bellows move.
+# At e = 0.5 the eighth harmonic is 7 dB under where it was, on top of the
+# loudness CC11 already takes. NOT MEASURED ON A HARMONIUM: EB1911 says only
+# that Expression puts the pressure under the feet; the slope is this model's
+# own gate-to-brightness ratio, halved to stay inside one register's voicing.
+HARMONIUM_EXPRESSION_TILT = 0.8
+
+
+def stop_drawn_at(events, t):
+    """Is a stop drawn at time t? `events` is [(time, 0/1)], as
+    blockrender.registration_blocks records per rank."""
+    cur = 0.0
+    for et, tg in events:
+        if et <= t:
+            cur = tg
+        else:
+            break
+    return cur >= 0.5
+
+
+def harmonium_expression_gain(h, e):
+    """The Expression stop's per-partial gain: h the harmonic against the
+    note's 8-foot pitch, e the bellows (CC11 / 127). Scalar or array."""
+    import numpy as _np
+    h = _np.maximum(_np.asarray(h, dtype=_np.float64), 1.0)
+    return h ** (HARMONIUM_EXPRESSION_TILT * (float(e) - 1.0))
+
+
+# PERCUSSION: a hammer strikes the front 8-foot reeds as the key goes down, so
+# they speak at once instead of swelling in (EB1911: "percussion ... on the
+# diapason rows"). Register 1 in each half and nothing else. The attack becomes
+# min(attack, this) -- the legato-attack machinery, used for a hammer.
+ReedOrganFreeProperties.percussion_ranks = ("cor anglais 1", "flute 1")
+ReedOrganFreeProperties.percussion_attack_s = 0.003
+
+# TREMOLO: a small bellows in the wind trunk makes the wind flutter. An
+# amplitude swing, through the same machinery as the electric pianos' panel
+# tremolo, gated by the stop instead of the mod wheel -- so these are NOT
+# tremolo_hz/tremolo_depth, which would hand the harmonium's CC1 a tremolo
+# knob. EB1911 says the flutter quickens with the pressure; this one runs at a
+# fixed rate, and has no pitch wobble.
+ReedOrganFreeProperties.stop_tremolo_hz = 5.5
+ReedOrganFreeProperties.stop_tremolo_depth = 0.22
 
 
 class AccordionProperties(FreeReedProperties):
@@ -12885,7 +13050,8 @@ def sound_controls_of(cls):
     shaded by a player. A one-shot answers decay alone: nothing it does after
     the strike is a player's, but how long it rings is the instrument's.
     """
-    if cls is None or getattr(cls, 'registerable', False):
+    if cls is None or (getattr(cls, 'registerable', False)
+                       and not getattr(cls, 'answers_sound_controls', False)):
         return frozenset()
     if getattr(cls, 'one_shot', False):
         return frozenset(('decay',))
@@ -14861,8 +15027,17 @@ class SynthTone(BaseTone):
         B = props.inharmonicity_coefficient
         maxm = getattr(props, 'max_harmonic', 64) or 64
         spec_cache = {}
+        _midi = int(round(69 + 12 * _log(f / 440.0) / _log(2))) if f > 0 else 60
         for rank in props.stop_ranks:
             key, ratio, gain = rank[0], rank[1], rank[2]
+            # A stop with no pipes (a harmonium's Expression, say) has no
+            # partials; a rank with a key range (its split registers) has none
+            # outside it.
+            if ratio is None:
+                continue
+            _kr = rank[6] if len(rank) > 6 else None
+            if _kr is not None and not (_kr[0] <= _midi <= _kr[1]):
+                continue
             spec_cls = rank[3] if len(rank) > 3 else None   # borrow this voice's SPECTRUM only
             dyn = rank[4] if len(rank) > 4 else False        # force flue-dynamic inharmonicity (hybrid-lock)
             sp = None

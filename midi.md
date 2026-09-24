@@ -41,7 +41,8 @@ for the reason above.
 | CC6 / CC38 data entry | ✓ | ✓ | into the selected RPN |
 | CC7 volume | ✓ | ✓ | channel fader, default **100** |
 | CC10 pan | ✓ | ✓ | a position, not a fader |
-| CC11 expression | ✓ | ✓ | the second fader, default **127** |
+| CC11 expression | ✓ | ✓ | the second fader, default **127**; on the harmonium the bellows, and with its Expression stop drawn, brighter as well as louder |
+| CC43 / CC44 harmonium stops | ✓ | ✓ | the harmonium's stop word, low seven and high seven — see [below](#the-harmoniums-stops-have-their-own-address) |
 | CC64 sustain | ✓ | ✓ | damper off, on voices that have one |
 | CC65 portamento | ✓ | ✓ | the switch; the next note glides from the last |
 | CC66 sostenuto | ✓ | ✓ | holds only what was already down |
@@ -765,6 +766,37 @@ open or shut, and how fast you pushed it changes nothing — but the swell
 shutters and the stops are still controls. The bagpipe is the same: the bag is
 at the pressure the piper's arm holds, the chanter has no dynamics at all, and
 the channel fader is the only level there is.
+
+## The harmonium's stops have their own address
+
+On the pipe organ and the harpsichord the stop word is CC11 (bits 0–6) and
+CC43 (bits 7–13), and CC7 is the swell. On a free reed CC11 is the bellows,
+the expression every GM file already sends, so GM 20 keeps it and puts its
+stops on **CC43 (bits 0–6) and CC44 (bits 7–11)**, which no GM file sends. A
+file that says nothing plays register 1 in both halves, which is the single
+8′ rank GM 20 always was.
+
+| bit | stop | half | |
+|---|---|---|---|
+| 0 | Cor anglais 1 | bass | 8′, the foundation |
+| 1 | Bourdon 2 | bass | 16′ |
+| 2 | Clairon 3 | bass | 4′ |
+| 3 | Basson 4 | bass | 8′, reedy |
+| 4 | Flûte 1 | treble | 8′, the foundation |
+| 5 | Clarinette 2 | treble | 16′, dark |
+| 6 | Fifre 3 | treble | 4′ |
+| 7 | Hautbois 4 | treble | 8′, reedy — the solo stop |
+| 8 | Voix céleste | treble | 16′, **12 cents** sharp |
+| 9 | Expression | — | CC11 brightens as well as swells |
+| 10 | Percussion | — | a hammer on register 1: a **3 ms** attack |
+| 11 | Tremolo | — | the wind flutters, **5.5 Hz**, ±22% |
+
+The keyboard splits between e′ and f′ (MIDI 64 | 65). All three effects are
+read at **note-on**, the moment CC11 is read for loudness, so a note stamped
+live under a setting is the note the file builds, checked in the selftest to
+float32. Live, as with the fader, a CC11 move also reaches the notes already
+sounding under Expression. The mod wheel is not a crescendo here: the
+harmonium has none.
 
 ## Tuning by SysEx
 

@@ -3830,11 +3830,49 @@ the comb's absolute scale, so their `initial_gain` numbers are ~500x what a pipe
 voice's look like and mean the same thing. Measured before that was understood,
 they came out 43-49 dB quiet.
 
-### Not attempted
+### The harmonium's stops (GM 20)
 
-**A harmonium's stops.** `registerable` is general and a harmonium genuinely has
-them, but a GM part does not ask for a registration and a half-wired one is
-worse than none. GM 20 is a single 8' rank.
+A **French** harmonium -- Debain, Alexandre, Mustel, the instrument Franck and
+Reger wrote for. The source is the Encyclopaedia Britannica 1911, "Harmonium",
+which gives:
+
+- eight reed compartments, "four bass and four treble, of three different
+  pitches of octave and double octave distance": 8' diapason, 16' bourdon,
+  4' principal and a bassoon/oboe 8', each divided into a bass and a treble
+  half;
+- the division "in the middle of the keyboard scale". **The split point is
+  this renderer's reading of that sentence, e' | f' (MIDI 64 | 65), not a
+  quotation**: no manual with a key number was to hand;
+- Mustel's voix céleste, a 16-foot row "not quite in unison". **The 12 cents
+  is chosen**, not sourced: against the Flute 8' the céleste's second
+  harmonic beats at f x 0.0070 -- 2.4 Hz at f', 3.6 Hz at c'', 7.3 Hz at c3 --
+  and against the Clarinette 16' at half that;
+- Expression, which shuts off the reservoir so the feet are the wind
+  pressure; Percussion, hammers on the diapason (register 1) rows so they
+  speak at once; the tremolo, a small bellows whose pulsation quickens with
+  the pressure.
+
+The stop names are the French knobs' (Cor anglais 1, Bourdon 2, Clairon 3,
+Basson 4 in the bass; Flute 1, Clarinette 2, Fifre 3, Hautbois 4 in the treble).
+Their **voicings are chosen**, one free-reed subclass each, on the model's one
+brightness axis, the tongue's opening `reed_gate` (0 -> 0.8 moves everything
+above the sixth harmonic from -31 to -18 dB). Measured above 2 kHz on a treble
+note: Clarinette -31.9 dB, Flute -18.8, Hautbois -12.6, Fifre -4.3; the 16'
+and 4' ranks sit 4-5 dB under the 8'.
+
+**Gaps, stated:**
+
+- the Clarinette is **dark, not hollow**. The flow model's even harmonics are
+  never below its odd ones, so it cannot make a clarinet's odd-dominant tone
+  without a resonator the free reed does not have;
+- Expression's brightness slope is **this model's own**, not a harmonium's: a
+  tilt of 0.8 on the harmonic number per unit of bellows (tonelib,
+  `harmonium_expression_gain`). EB1911 says nothing about timbre and pressure;
+- the tremolo runs at a **fixed** 5.5 Hz with no pitch wobble, where EB1911's
+  quickens with the pressure;
+- the reference renderer (`midilib`) plays the default registration only.
+
+### Not attempted
 
 **The harmonica's bends.** A player bends a harmonica down several semitones by
 reshaping the vocal tract, which couples strongly to such a small reed. The
