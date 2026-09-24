@@ -415,6 +415,13 @@ attribute. `--midi2-play FILE` plays a MIDI 2.0 Clip File in alongside you:
     python3 examples/midi2_demo.py            # writes midi2_demo.midi2
     python3 live.py --program 19 --midi2 --midi2-play midi2_demo.midi2 --tui
 
+`--ump` opens a MIDI 2.0 port in the ALSA sequencer, for anything that sends
+UMP, such as another process:
+
+    python3 live.py --ump --tui                         # one terminal
+    python3 examples/umpplay.py midi2_demo.midi2        # another
+
+and `--ump-from "USB Midi"` lets the kernel carry the keyboard across instead.
 `midi.md` has the details: per-note pitch is absolute (A = 440) whatever the
 tuner, as MIDI 2.0 says.
 

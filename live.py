@@ -10335,6 +10335,33 @@ def selftest():
                                "neighbour %s, Pitch 7.25 mid-note %+.2g c"
                                % (pg, e, b, "still" if st else "MOVED", e2)
                                for pg, sp, e, b, st, e2 in _pn))
+    # THROUGH THE KERNEL: a MIDI 2.0 client of the ALSA sequencer sends a
+    # Note On with its own pitch to live's port, as a MIDI 2.0 controller or
+    # examples/umpplay.py would, and it sounds at that pitch.
+    try:
+        import alsaump as _A
+        _le = Live(program=19, rate=48000, frames=128, verbose=False); _le.warm()
+        _rx = _A.UmpClient("tuning-st-%d" % os.getpid(),
+                           on_packet=lambda w: _le.on_ump([w])).start()
+        _tx = _A.UmpClient("tuning-st-tx")
+        _qa = _U.semitones_to_q(63.8631, 9)
+        _tx.send(_U.m2_note_on(0, 0, 64, 0xC000, 3, _qa), (_rx.client, _rx.port))
+        _t0 = time.monotonic()
+        while not _le.events and time.monotonic() - _t0 < 2.0:
+            time.sleep(0.005)
+        _le.apply(_le.n)
+        _ks = [k for k in _le.slab.live if k[2] == 64]
+        _hz = (float(np.concatenate([_le.slab.a["om"][list(_le.slab.live[k])] for k in _ks]).min())
+               * 48000 / 2 / math.pi) if _ks else 0.0
+        _hw = 440.0 * 2 ** ((_qa / 512.0 - 69) / 12)
+        _rx.close(); _tx.close(); _le.renderer.close()
+        check("a MIDI 2.0 note sent through the ALSA sequencer sounds at its own pitch",
+              bool(_ks) and abs(1200 * math.log2(_hz / _hw)) < 1e-3,
+              "  (%.4f Hz for a Pitch 7.9 of %.4f Hz)" % (_hz, _hw))
+        check("alsaump: UMP between clients, and the kernel's MIDI 1.0 bridge",
+              _A.selftest())
+    except OSError as _e:
+        print("  (no ALSA sequencer MIDI 2.0 here, skipped: %s)" % _e)
     _jt = _U.pitch_table("just:C")
     check("the bridge's just table puts E 13.69 cents under equal temperament",
           abs((_jt(0, 64) - 64) * 100 + 13.686) < 1e-3 and _jt(0, 60) == 60.0
@@ -10797,6 +10824,13 @@ def main():
     ap.add_argument("--midi2-play", default=None, metavar="FILE",
                     help="play a MIDI 2.0 Clip File (.midi2) or raw UMP stream into the "
                          "engine, alongside the keyboard")
+    ap.add_argument("--ump", action="store_true",
+                    help="open a MIDI 2.0 port in the ALSA sequencer, 'tuning:MIDI 2.0 in', "
+                         "for MIDI 2.0 senders (examples/umpplay.py, a MIDI 2.0 controller)")
+    ap.add_argument("--ump-from", default=None, metavar="PORT",
+                    help="with --ump: subscribe it to PORT (e.g. 'USB Midi'), so the "
+                         "kernel carries that keyboard's MIDI 1.0 across as MIDI 2.0; "
+                         "the keyboard is then not also opened through mido")
     ap.add_argument("--midi2-pitch", default=None, metavar="TABLE",
                     help="with the bridge: every note carries its own pitch from TABLE "
                          "(just:C, just:Eb, ... or et) as a MIDI 2.0 Pitch 7.9 attribute")
@@ -10850,10 +10884,23 @@ def main():
     live.warm()
     if a.midi2_play:
         play_ump_file(live, a.midi2_play)
+    uc = None
+    if a.ump or a.ump_from:
+        import alsaump
+        uc = alsaump.UmpClient("tuning", on_packet=lambda w: live.on_ump([w]))
+        if a.ump_from:
+            uc.connect_from(a.ump_from)
+            name = None                 # the keyboard comes through the kernel
+            live.midi2_label = "MIDI 2.0 (kernel bridge from %s)" % a.ump_from
+        else:
+            live.midi2_label = live.midi2_label or "MIDI 2.0 port %s" % uc.address
+        uc.start()
+        sys.stderr.write("  ALSA MIDI 2.0 port %s%s\n"
+                         % (uc.address, (", from " + a.ump_from) if a.ump_from else ""))
 
     if a.tui:
         import livetui
-        return livetui.run(live, name)
+        return livetui.run(live, name, uc)
 
     if a.drums:
         sys.stderr.write("  GM percussion at %d Hz, %d-frame blocks\n" % (a.rate, a.frames))
@@ -10862,8 +10909,8 @@ def main():
                          % (a.program, live.parts[0].patch.cls_name, a.rate, a.frames))
 
     pa, stream = open_stream(live, a.rate, a.frames)
-    port = mido.open_input(name, callback=live.on_midi)
-    sys.stderr.write("  listening on %s -- ctrl-c to stop\n" % name)
+    port = mido.open_input(name, callback=live.on_midi) if name else None
+    sys.stderr.write("  listening on %s -- ctrl-c to stop\n" % (name or uc.address))
     # SIGTERM as well as ctrl-c, so `timeout 90 live.py` still reports its stats
     # instead of being killed silently.
     stop = threading.Event()
@@ -10895,7 +10942,11 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        stream.stop_stream(); stream.close(); pa.terminate(); port.close()
+        stream.stop_stream(); stream.close(); pa.terminate()
+        if port:
+            port.close()
+        if uc:
+            uc.close()
         save_session(live)                 # and once more on the way out
         live.renderer.close()
         s = live.stats()

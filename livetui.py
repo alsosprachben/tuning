@@ -1182,7 +1182,7 @@ class TUI:
         self.addstr(scr, y, 1, "tuning", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 8, "%d Hz   %d frames   %.1f ms/block"
                     % (L.rate, L.frames, s["budget_ms"]), C("dim"))
-        pn = self.port_name + ("  " + L.midi2_label if L.midi2 is not None else "")
+        pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "")
         self.addstr(scr, y, max(40, w - len(pn) - 2), pn[:max(0, w - 42)], C("dim"))
         y += 1
         self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
@@ -1646,11 +1646,12 @@ def bar(v, lo, hi, n):
     return "#" * k + "-" * (n - k)
 
 
-def run(live, port_name):
-    """Open audio and MIDI, then hand the terminal to curses."""
+def run(live, port_name, ump_client=None):
+    """Open audio and MIDI, then hand the terminal to curses. With no
+    `port_name` the MIDI arrives some other way -- the ALSA MIDI 2.0 client."""
     pa, stream = LV.open_stream(live, live.rate, live.frames)
-    port = mido.open_input(port_name, callback=live.on_midi)
-    ui = TUI(live, port_name)
+    port = mido.open_input(port_name, callback=live.on_midi) if port_name else None
+    ui = TUI(live, port_name or ("ALSA %s" % ump_client.address if ump_client else "no MIDI"))
     ui.free_hotkeys()
     stream.start_stream()
     try:
@@ -1659,7 +1660,11 @@ def run(live, port_name):
         pass
     finally:
         ui.builder.stop = True
-        stream.stop_stream(); stream.close(); pa.terminate(); port.close()
+        stream.stop_stream(); stream.close(); pa.terminate()
+        if port:
+            port.close()
+        if ump_client:
+            ump_client.close()
         LV.save_session(live)             # and once more on the way out
         s = live.stats()
         sys.stderr.write("  peak %.3f  underruns %d  dropped %d  errors %d  "

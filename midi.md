@@ -832,8 +832,25 @@ rank), with no identity for each instance of a note. A detached note that is
 still ringing and a new note on the same number are the same key. Detach
 therefore only keeps the ringing notes where they are when a reset arrives.
 
+**Through the ALSA sequencer.** `--ump` gives live a MIDI 2.0 port of its
+own, `tuning:MIDI 2.0 in`. `alsaump.py` is a client of the Linux sequencer
+that declares itself MIDI 2.0 (alsa-lib 1.2.10+ and a 6.5+ kernel; here
+1.2.11 and 6.8), reached through ctypes because no Python MIDI library
+speaks UMP. Anything that sends UMP can play into it. So can any MIDI 1.0
+program, because the kernel converts on the way in.
+- `--ump-from "USB Midi"` subscribes the port to the keyboard, so the
+  **kernel** is the bridge instead of `ump.py`.
+- The two bridges agree packet for packet with **one exception**. A
+  velocity-0 Note On should become a Note Off with velocity 0x8000
+  (D.3.1), and Linux 6.8 sends 0x0000. `ump.py` follows the spec. The
+  engine doesn't read note-off velocity, so they sound the same.
+  `alsaump.py --selftest` checks this against a real MIDI 1.0 client.
+
 **Sources of MIDI 2.0 today:**
 - **`--midi2`**, your keyboard through the bridge.
+- **`--ump-from "USB Midi"`**, your keyboard through the kernel's bridge.
+- **`examples/umpplay.py FILE`**, a Clip File sent from another process to
+  `--ump`'s port, as a MIDI 2.0 controller would send it.
 - **`--midi2-pitch just:C`** (any tonic, or `et`): the bridge gives every
   Note On a Pitch 7.9 attribute from a five-limit just table. Your keyboard
   then plays real per-note pitch through the whole MIDI 2.0 path.
