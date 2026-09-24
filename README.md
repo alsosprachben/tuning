@@ -433,6 +433,12 @@ python3 play.py IN.mid hybrid                   # render, then play it
 ./render.sh IN.mid OUT hybrid                   # the pypy reference renderer
 ```
 
+`blockrender.py` and `play.py` also take a **MIDI 2.0** file, either a Clip
+File (`.midi2`) or a raw UMP stream, and tell the two apart by their first
+bytes. `examples/midi1to2.py IN.mid` converts a Standard MIDI File to one, and
+it renders bit-identically (`examples/midi2ident.py` checks that). A MIDI 2.0
+file can give each note its own pitch; see `midi.md`.
+
 `render.sh` is the slow, readable implementation the C kernel is checked against;
 they agree to a fraction of a dB, and that is the correctness anchor for every
 voice.

@@ -12869,6 +12869,11 @@ PORTA_SETTLE_TAUS = 5.0
 # disagreeing by a quantisation step nobody could explain. So it lives here,
 # pure, with the state passed in and the new value passed back.
 
+# MIDI 2.0 PER-NOTE PITCH BEND RANGE until RPN 0/7 sets one. M2-104 7.4.13
+# gives the message and no default, so this is the channel's own default, 2.
+PN_BEND_RANGE = 2.0
+
+
 def rpn_bend_range(cc, value, current):
     """RPN 0/0, pitch bend sensitivity, in semitones.
 

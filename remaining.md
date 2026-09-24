@@ -98,6 +98,29 @@ published. If the GM 2 specification comes to hand (the sound-controller
 defaults are RP-021), check them against it, and check whether CC121 should
 reset them. Both renderers assume it doesn't.
 
+## MIDI 2.0
+
+Built: the Universal MIDI Packet and the MIDI 2.0 Protocol, live and offline
+(see `midi.md`), with the bridge from MIDI 1.0, the ALSA sequencer client, the
+Clip File and per-note pitch. What is not:
+
+- **Per-note controllers other than pitch.** Modulation, volume, pan,
+  expression and the sound controllers (Appendix A) arrive decoded and are
+  ignored. The machinery exists per slot live (press, channel_gain,
+  sound_shape); offline, a controller that moves under a sounding note would
+  need rows like the bend's.
+- **Relative registered and assignable controllers**, ignored.
+- **MIDI-CI** (discovery, profiles, property exchange) and the **UMP Endpoint
+  and Function Block** messages: nothing asks for them until a MIDI 2.0
+  controller is plugged in.
+- **The multi-track MIDI Container File**, which the Clip File specification
+  mentions and which is not published.
+- **Detach for each instance of a note.** Live keys a note by
+  (part, channel, note, rank), so two instances of one note number can't be
+  told apart.
+- **Track names and lyrics** in a converted file: Flex Data text messages
+  could carry them.
+
 ## The panel's controls and routes
 
 Built (README, "Controls a keyboard doesn't have"), including **a key as a

@@ -425,8 +425,12 @@ def parse(path):
     # that way, which keeps them on exactly this code path -- brass fingering,
     # jitter, HRTF, unison voices and all -- rather than a second one that could
     # drift from it.
-    mid = path if isinstance(path, mido.MidiFile) else mido.MidiFile(path)
+    mid = _open_midi(path)
     ch_prog = {}; ch_progs = {}; notes = []; ccs = {}; pws = {}; on = {}; t = 0.0
+    # MIDI 2.0's per-note pitch (ump.py): a Note On's own Pitch 7.9, keyed by
+    # (channel, note, onset); and the timelines of Pitch 7.25, per-note bend
+    # and its range. Empty for every MIDI 1.0 file.
+    pn = dict(attr={}, p725={}, bend={}, range={})
     ats = {}; pts = {}       # channel pressure, and per-key pressure
     sotas = {}               # channel -> [(t, 12 cents)] from GM2 sysex
     # THE RPNs, which this renderer read none of. A file that set its bend
@@ -618,13 +622,29 @@ def parse(path):
             _so_ta = parse_sota(msg.data)
             if _so_ta is not None:
                 _chs, _cents = _so_ta
+                # A MIDI 2.0 SysEx belongs to its group, and so do the sixteen
+                # channels its bitmap names.
+                _g16 = 16 * (getattr(msg, 'group', 0) or 0)
                 for _c in _chs:
-                    sotas.setdefault(_c, []).append((t, tuple(_cents)))
+                    sotas.setdefault(_c + _g16, []).append((t, tuple(_cents)))
         elif msg.type == 'aftertouch':
             ats.setdefault(msg.channel, []).append((t, msg.value))
         elif msg.type == 'polytouch':
             pts.setdefault((msg.channel, msg.note), []).append((t, msg.value))
+        elif msg.type in ('pn_pitch', 'pn_bend', 'pn_bend_range', 'pn_mgmt'):
+            _k = (msg.channel, msg.note)
+            if msg.type == 'pn_pitch':
+                pn['p725'].setdefault(_k, []).append((t, msg.semitones))
+            elif msg.type == 'pn_bend':
+                pn['bend'].setdefault(_k, []).append((t, msg.value))
+            elif msg.type == 'pn_bend_range':
+                pn['range'].setdefault(msg.channel, []).append((t, msg.semitones))
+            elif msg.reset:
+                pn['p725'].setdefault(_k, []).append((t, None))
+                pn['bend'].setdefault(_k, []).append((t, 0.0))
         elif msg.type == 'note_on' and msg.velocity > 0:
+            if getattr(msg, 'attr_pitch', None) is not None:
+                pn['attr'][(msg.channel, msg.note, t)] = msg.attr_pitch
             # THE PATCH IS SNAPSHOTTED AT NOTE-ON, like the CCs beside it. It
             # used to be read from ch_prog at render time, which holds only the
             # LAST program change on each channel -- so a file that changes
@@ -649,7 +669,20 @@ def parse(path):
             ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
-                                   pwseq=_pwseq, mts=mtsev, snd=sndev)))
+                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn)))
+
+
+def _open_midi(path):
+    """A path, a mido.MidiFile, or a MIDI 2.0 file (Clip File or raw UMP),
+    which ump.UmpMidi presents in mido's shape -- see ump.py."""
+    if isinstance(path, mido.MidiFile) or hasattr(path, 'slots'):
+        return path
+    import ump as _U
+    with open(path, 'rb') as f:
+        head = f.read(8)
+    if _U.is_ump_file(head):
+        return _U.UmpMidi.open(path)
+    return mido.MidiFile(path)
 
 # ---- GM2 Scale/Octave Tuning Adjust -----------------------------------------
 # Twelve cent offsets, one per pitch class, applied to a set of channels. It is
@@ -994,8 +1027,12 @@ def prepare(path, tuner='hybrid440'):
         _tev += [(_t, _q, 'gmon', None, None) for _t, _q in gmon]
         _tev.sort(key=lambda e: (e[0], e[1]))
         _cur = {}
+        # Every channel a note is on, and at least the first sixteen: a MIDI
+        # 2.0 file can address sixteen groups of them.
+        _mts_chs = sorted(set(range(16)) | {n[0] for n in notes})
+
         def _snap(_t):
-            for _c in range(16):
+            for _c in _mts_chs:
                 _tab = _store.table_for(_c)
                 if _cur.get(_c) is not _tab:
                     _cur[_c] = _tab
@@ -1333,6 +1370,58 @@ def prepare(path, tuner='hybrid440'):
     for _c, _ev in _BGEST.items():
         _r, _cc = bend_blocks(_ev, nblk)
         brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+    # MIDI 2.0 PER-NOTE PITCH, per note: (absolute semitones at onset or None,
+    # the per-note bend ratio at onset, and a bend row of its own when the
+    # pitch moves while it sounds). The row is the channel's gesture times the
+    # note's own movement, so the kernel is unchanged: one row per note.
+    _PN_AT = {}
+    _pnd = _sys.get('pn') or {}
+    if any(_pnd.get(k) for k in ('attr', 'p725', 'bend')):
+        def _step(evs, tt, default):
+            v = default
+            for _t, _v in evs:
+                if _t <= tt + 1e-9:
+                    v = _v
+                else:
+                    break
+            return v
+        for (ch, note, on, off, vel, _cvv, prog) in notes:
+            if isinstance(prog, DrumProgram):
+                continue
+            _k = (ch, note)
+            _attr = _pnd['attr'].get((ch, note, on))
+            _p7 = _pnd['p725'].get(_k, [])
+            _bd = _pnd['bend'].get(_k, [])
+            _rg = _pnd['range'].get(ch, [])
+            if _attr is None and not _p7 and not _bd:
+                continue
+            _tuned = _F(ch, on)[note] * (2.0 ** (_OTUN[ch][note % 12] / 1200.0)
+                                         if _OTUN.get(ch) else 1.0)
+
+            def _abs(tt):
+                p = _attr if _attr is not None else _step(_p7, tt, None)
+                return None if p is None else p
+
+            def _hz(tt):
+                p = _abs(tt)
+                return 440.0 * 2.0 ** ((p - 69.0) / 12.0) if p is not None else _tuned
+
+            def _pb(tt):
+                b = _step(_bd, tt, 0.0)
+                return 2.0 ** (b * _step(_rg, tt, T.PN_BEND_RANGE) / 12.0) if b else 1.0
+            p0, b0 = _abs(on), _pb(on)
+            moves = sorted({_t for _t, _ in (([] if _attr is not None else _p7) + _bd + _rg)
+                            if on + 1e-9 < _t <= off})
+            row = -1
+            if moves:
+                bendable = getattr(property_class_for_note(prog, note), 'pitch_bendable', True)
+                chev = _BGEST.get(ch, []) if bendable else []
+                ref = _hz(on) * b0
+                times = sorted({_t for _t, _ in chev} | set(moves))
+                ev = [(_t, _step(chev, _t, 1.0) * (_hz(_t) * _pb(_t) / ref)) for _t in times]
+                _r, _cc = bend_blocks(ev, nblk)
+                row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _PN_AT[(ch, note, on)] = (p0, b0, row)
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
@@ -2030,6 +2119,7 @@ def prepare(path, tuner='hybrid440'):
     _SND_PEND = [None]
     _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
+        _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
         if _HT_PEND[0] is not None:
             _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
@@ -2066,7 +2156,14 @@ def prepare(path, tuner='hybrid440'):
             chan_vol = (1.0 if organ and getattr(pc, 'stop_word_ccs', (11, 43)) == (11, 43)
                         else (v7*v11)**2)
             FREQ_N = _F(ch, on)
-            f0 = FREQ_N[note]
+            # MIDI 2.0 PER-NOTE PITCH is absolute and outranks the tuner, MTS
+            # and the channel's scale/octave table (M2-104 7.4.15); static bend
+            # and channel tuning still offset it, below. See _PN_AT.
+            _pna = _PN_AT.get((ch, note, on))
+            f0 = (440.0 * 2.0 ** ((_pna[0] - 69.0) / 12.0)
+                  if _pna and _pna[0] is not None else FREQ_N[note])
+            if _pna:
+                f0 *= _pna[1]
             # A WRITTEN NOTE IS NOT ALWAYS A PITCH. A helicopter's note chooses
             # a blade passing rate, which is four octaves under where it is
             # written; see SynthProperties.sounding_octaves. Applied HERE,
@@ -2092,7 +2189,7 @@ def prepare(path, tuner='hybrid440'):
             # instrument's own scale below rather than replacing it -- a
             # retuned channel retunes a chanter too, and the drones follow.
             _ot = _OTUN.get(ch)
-            if _ot:
+            if _ot and not (_pna and _pna[0] is not None):
                 f0 *= 2.0 ** (_ot[note % 12] / 1200.0)
             # AN INSTRUMENT WITH HOLES HAS ITS OWN SCALE, and it is not the
             # render's temperament. A chanter is cut once for one tonic and
@@ -2363,6 +2460,8 @@ def prepare(path, tuner='hybrid440'):
         # cycles six of them), so each note is judged by its own class.
         _BR[0] = (brow_of.get(ch, -1)
                   if getattr(pc, 'pitch_bendable', True) else -1)
+        if _pna and _pna[2] >= 0:
+            _BR[0] = _pna[2]            # its own row: per-note pitch that moves
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate
@@ -3418,7 +3517,7 @@ if __name__=="__main__":
         _vals = {_rs.get(_c, 1.0) for _c in _heard}
     if _rs and len(_vals) > 1:
         _g = np.ones(len(_mch), np.float32)
-        for _c in range(16):
+        for _c in _heard:
             _g[_mch == _c] = _rs.get(_c, 1.0)
         _sav = (_LAST_PREP['aL'].copy(), _LAST_PREP['aR'].copy())
         _LAST_PREP['aL'] *= _g

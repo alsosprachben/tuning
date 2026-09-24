@@ -680,7 +680,7 @@ class Slab:
         # kernel weights its second output by. Not a template column -- set at
         # stamp time from `send`, and rewritten when the channel's CC91 moves.
         self.a["sw"] = np.ones(capacity, np.float32)
-        self.send = [1.0] * 16
+        self.send = [1.0] * 256     # a MIDI 2.0 channel is group * 16 + channel
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
         self.a["br"][:] = -1            # -1 = no bend row; live bends via retune
         # The wash's bandwidth, as a fraction of the partial's frequency. This
@@ -1046,7 +1046,7 @@ class Slab:
         mv = float(np.mean(tmpl["vd"])) if n else 0.0
         self.vsc[idx] = (tmpl["vd"] / mv) if mv > 1e-12 else 1.0
         _kc = key[1] if len(key) > 1 and isinstance(key[1], int) else None
-        a["sw"][idx] = self.send[_kc] if _kc is not None and 0 <= _kc < 16 else 1.0
+        a["sw"][idx] = self.send[_kc] if _kc is not None and 0 <= _kc < 256 else 1.0
         self.live.setdefault(key, []).extend(slots)
         # THE SLOTS JUST ALLOCATED, which is not the same as live[key]: that
         # accumulates, by design -- a key is stamped once per rank, and a
@@ -3809,7 +3809,7 @@ class Live:
                 self._amp_touch(part)
 
     # ---- MIDI 2.0 per-note ---------------------------------------------------
-    PN_BEND_RANGE = 2.0     # semitones until RPN 0/7 says; the spec gives none
+    PN_BEND_RANGE = T.PN_BEND_RANGE     # until RPN 0/7 says; the spec gives none
 
     def _pn_want(self, part, ch, note):
         """(factor, absolute) for one written key under MIDI 2.0 per-note pitch.
@@ -3859,6 +3859,8 @@ class Live:
         if t == "ignored":
             self.m2_ignored += 1
             return
+        if t in ("set_tempo", "noop"):
+            return                  # a file's timing, which the player already used
         ch = msg.channel
         if t == "pn_pitch":                     # Registered Per-Note #3, Pitch 7.25
             self.pn725[(ch, msg.note)] = msg.semitones
@@ -4055,6 +4057,9 @@ class Live:
     def _sysex(self, n0, msg):
         """GM System On: F0 7E <dev> 09 01 F7.
 
+        A MIDI 2.0 SysEx belongs to its GROUP, so everything below that says
+        "every channel" means the sixteen of the message's own group.
+
         Anything else is ignored SILENTLY and does not count an error -- a
         Roland GS or Yamaha XG header in a file is not a malformed message,
         it is a message for a different machine.
@@ -4066,6 +4071,8 @@ class Live:
         every held note. That is the one place this is not GM Level 1 complete,
         and it is deliberate.
         """
+        _g = getattr(msg, "group", 0) or 0
+        _gch = range(16 * _g, 16 * _g + 16)
         d = tuple(msg.data)
         # SCALE/OCTAVE TUNING first: same universal id, a different sub-id, and
         # the codec lives in blockrender so the two renderers cannot read the
@@ -4076,8 +4083,8 @@ class Live:
         if _t is not None:
             _chs, _cents = _t
             for _c in _chs:
-                self.sota[_c] = list(_cents)
-                self._resota(_c, n0)
+                self.sota[_c + 16 * _g] = list(_cents)
+                self._resota(_c + 16 * _g, n0)
             return
         # THE DEVICE'S OWN FADER AND TUNING, parsed by the same function the
         # file renderer uses. Tuning moves every channel, so every channel is
@@ -4090,7 +4097,7 @@ class Live:
                 # currently playing from the program it changed. The
                 # non-real-time 08 07 "will NOT update the currently sounding
                 # notes", and neither does a dump.
-                for ch in range(16):
+                for ch in _gch:
                     if self.mts.selection(ch) == (bank, prog):
                         self._remts(ch, list(_mt[3]), n0)
             return
@@ -4104,7 +4111,7 @@ class Live:
                     self.master_fine = float(val)
                 else:
                     self.master_coarse = float(val)
-                for ch in range(16):
+                for ch in _gch:
                     self._repitch(ch, n0)
             return
         _lvl = _BRs.gm_on_level(d)
@@ -4117,7 +4124,7 @@ class Live:
         # whatever it is now -- it is the player's part -- but every channel's
         # own drums state goes back to channel 10 alone.
         self.rx_bank = _lvl != 1
-        self.slab.send = [1.0] * 16            # every channel back to the nominal distance
+        self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()
         self.ch_drums.clear()
@@ -4135,7 +4142,7 @@ class Live:
         # The MTS store keeps its tables -- a mode reset is not a memory wipe --
         # but every channel goes back to program 0, equal temperament.
         self.mts.reset_selections()
-        for ch in range(16):
+        for ch in _gch:
             self._reset_controllers(n0, ch)
             self.vol[ch] = T.GM_DEFAULT_VOLUME
             self.expr[ch] = T.GM_DEFAULT_EXPRESSION
@@ -5008,7 +5015,8 @@ def apply_preset(live, preset, progress=None):
 # the one-shots -- CC84's source note, the sound-offs and resets, notes and
 # program changes. Programs belong to the setup, which is what a preset holds.
 # MIDI 2.0 event types with no MIDI 1.0 message: see ump.decode.
-_M2_ONLY = frozenset(("ignored", "pn_pitch", "pn_bend", "pn_bend_range", "pn_mgmt"))
+_M2_ONLY = frozenset(("ignored", "pn_pitch", "pn_bend", "pn_bend_range", "pn_mgmt",
+                      "set_tempo", "noop"))
 
 
 def _m1_view(e):
@@ -10362,6 +10370,49 @@ def selftest():
               _A.selftest())
     except OSError as _e:
         print("  (no ALSA sequencer MIDI 2.0 here, skipped: %s)" % _e)
+    # ...AND OFFLINE, from a Clip File: the organ's 8' rank (bit 0), since the
+    # file renderer builds every rank and gates the undrawn ones.
+    _fd, _cp = tempfile.mkstemp(suffix=".midi2"); os.close(_fd)
+    _q79 = _U.semitones_to_q(63.8631, 9)
+    _U.write_clip(_cp, [(0, _U.m2_program(0, 0, 19)),
+                        (0, _U.m2_note_on(0, 0, 60, 0xC000)),
+                        (0, _U.m2_note_on(0, 0, 64, 0xC000, 3, _q79)),
+                        (960, _U.m2_per_note_ctrl(0, 0, 60, 3, _U.semitones_to_q(59.5, 25))),
+                        (1920, _U.m2_per_note_bend(0, 0, 64, 0xFFFFFFFF)),
+                        (2880, _U.m2_note_off(0, 0, 60, 0)), (2880, _U.m2_note_off(0, 0, 64, 0))],
+                  tpq=480)
+    _po = B.prepare(_cp, "hybrid"); os.unlink(_cp)
+    _om = np.asarray(_po["om"], float); _gr = np.asarray(_po["gr"]); _brr = np.asarray(_po["br"])
+    _BRm = np.asarray(_po["BR"], float)
+    _hzq = lambda s_: 440.0 * 2 ** ((s_ - 69) / 12)
+    _Fh = B.tuning_table("hybrid")
+    _r8 = _gr == _gr.min()
+    _f0s = sorted(set(np.round(_om[_r8] * B.SR / (2 * math.pi), 6)))
+    _lo = [f for f in _f0s if f < 300]; _hi = [f for f in _f0s if 300 < f < 400]
+    _row = lambda f: _BRm[int(_brr[_r8][np.argmin(abs(_om[_r8] * B.SR / (2 * math.pi) - f))])]
+    _bk = lambda t_: int(t_ * B.SR / B.BLK)
+    _e79 = 1200 * math.log2(_hi[0] / _hzq(_q79 / 512.0))
+    _e60 = 1200 * math.log2(_lo[0] / _Fh[60])
+    _m725 = 1200 * math.log2(_row(_lo[0])[_bk(1.5)]) - 1200 * math.log2(_hzq(59.5) / _Fh[60])
+    _mb = 1200 * math.log2(_row(_hi[0])[_bk(2.5)])
+    check("offline, a Clip File's per-note pitch is the live engine's to the cent's thousandth",
+          abs(_e79) < 1e-3 and abs(_e60) < 1e-3 and abs(_m725) < 1e-3 and abs(_mb - 200) < 1e-3,
+          "  (Pitch 7.9 %+.1e c at onset, under a tuner whose own E4 is %+.1f c off; a plain "
+          "C4 moved by Pitch 7.25 %+.1e c from the spec; per-note bend %+.4f c)"
+          % (_e79, 1200 * math.log2(_Fh[64] / _hzq(64)), _m725, _mb))
+    # GROUPS: sixteen MIDI 2.0 groups of sixteen channels. A note on group 1
+    # is channel 16, and a Scale/Octave SysEx sent on group 1 tunes group 1.
+    _lg2 = Live(program=0, rate=48000, frames=128, verbose=False); _lg2.warm()
+    _sx = B.sota_message([0.0] * 4 + [-13.69] + [0.0] * 7, channels=[0])
+    _lg2.on_ump(_U.sysex7(1, _sx[1:-1] if _sx[0] == 0xF0 else _sx)
+                + [_U.m2_note_on(1, 0, 64, 0xC000)])
+    _lg2.apply(_lg2.n)
+    check("MIDI 2.0 groups: channel 16 sounds, and a group's SysEx tunes that group",
+          any(k[1] == 16 and k[2] == 64 for k in _lg2.slab.live)
+          and 16 in _lg2.sota and 0 not in _lg2.sota and _lg2.errors == 0,
+          "  (keys %s; scale/octave on channels %s)"
+          % (sorted({k[1:3] for k in _lg2.slab.live}), sorted(_lg2.sota)))
+    _lg2.renderer.close()
     _jt = _U.pitch_table("just:C")
     check("the bridge's just table puts E 13.69 cents under equal temperament",
           abs((_jt(0, 64) - 64) * 100 + 13.686) < 1e-3 and _jt(0, 60) == 60.0
@@ -10462,7 +10513,7 @@ def selftest():
           "bit-identical with the send bus on or off)")
     _ls.on_midi(mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01])); _ls.apply(256)
     check("...and a system reset puts every channel back at the nominal distance",
-          _ls.slab.send == [1.0] * 16)
+          _ls.slab.send == [1.0] * 256)
     _ls.shutdown()
     # A ROOM SWITCH, while playing: the templates re-built in the new room, the
     # tail swapped with a crossfade, and nothing left half-built.
@@ -10780,7 +10831,7 @@ def play_ump_file(live, path, stop=None, lead_s=0.5):
     in -- and it is the real path, not a simulation of it: the same decode and
     the same per-note machinery a MIDI 2.0 controller would reach."""
     import ump as _U
-    evs, _facts = _U.read(open(path, "rb").read())
+    evs = _U.timeline(_U.read(open(path, "rb").read())[0])
     stop = stop or threading.Event()
 
     def run():

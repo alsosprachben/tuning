@@ -5405,3 +5405,53 @@ soloist's pair on the centre line and the tightest TRIPLE anywhere across the
 stage. The tightest triples are now 4.1 ms (chamber), 7.4 (chapel), 7.6 (hall)
 and 14.3 (church); the centre-line pairs are 2.6, 4.6, 3.9 and 9.2 ms.
 `roomcheck.py` tests both, plus the early field and the spikes.
+
+## MIDI 2.0: the specifications, and what was chosen beside them
+
+**Sources.** MIDI Association / AMEI, *MIDI 2.0 Core Specifications*, the
+bundle dated 2025-12-18. It is read for this and not kept in the repo:
+- **M2-104-UM v1.1.2**, *UMP Format & MIDI 2.0 Protocol* (2023-10-27);
+- **M2-116-U v1.0**, *MIDI Clip File Specification*.
+
+`ump.py` and `alsaump.py` cite them section by section. Several facts were
+read off the figures, which have no text layer, as page images:
+- the Appendix F packet tables;
+- Figures 46–51, the MIDI 2.0 Note On and per-note messages;
+- Figure 64, the Program Change and its Bank Valid bit;
+- Figure 105, the RPN data as the 14-bit MSB/LSB pair upscaled to 32 bits;
+- §7.1.10–7.1.11, Start and End of Clip as 128-bit stream messages;
+- §7.2.3, DCTPQ and the 20-bit Delta Clockstamp.
+
+**Taken from the spec:**
+- **Scaling.** Min-center-max upscaling and bit-shift downscaling (D.1),
+  with the spec's own numbers as tests: 10→0x1400, 64→0x8000, 87→0xAEBA,
+  127→0xFFFF, and velocity 1→0x0200.
+- **The Default Translation (D.3):**
+  - a velocity-0 Note On becomes a Note Off with velocity 0x8000;
+  - the RPN/NRPN data entry is held;
+  - bank select rides on the Program Change;
+  - CC96/97 carry no RPN function.
+- **What a receiver ignores:** CC 0, 6, 32, 38, 98–101 under MIDI 2.0
+  (7.4.6).
+- **Pitch.** Pitch 7.9 and 7.25 are absolute, in semitones of 12-TET at
+  A = 440, and override MTS; bends and channel tuning offset them (7.4.15).
+
+**Chosen, where the spec is silent:**
+- **The per-note bend range until RPN 0/7 arrives:** 2 semitones
+  (`tonelib.PN_BEND_RANGE`). 7.4.13 defines the message and gives no
+  default.
+- **When a held data entry is sent.** D.3.3 names three triggers and allows
+  a timeout. Here any other message sends it first, and so does 5 ms of
+  silence live. Offline, it goes out in the slot of the message that held it
+  unless the next message shares its tick.
+- **Per-note pitch against the renderer's tuners.** The spec's precedence is
+  applied literally. The tuner stands where the spec puts the note number's
+  "roughly defined" default, so an absolute pitch overrides it, even at
+  A415.
+- **The raw UMP stream** (`UMPRAW02`) is this renderer's own format. There's
+  no standard for one.
+
+**Found:** Linux 6.8's sequencer, converting a MIDI 1.0 client's
+velocity-0 Note On for a MIDI 2.0 client, sends velocity 0x0000 where D.3.1
+says 0x8000. `alsaump.py --selftest` pins the difference against a real
+MIDI 1.0 client.

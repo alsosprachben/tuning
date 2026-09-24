@@ -23,7 +23,7 @@ def main():
     ap.add_argument("file")
     ap.add_argument("--to", default="tuning", help="destination port (default: live's)")
     a = ap.parse_args()
-    evs, facts = U.read(open(a.file, "rb").read())
+    evs = U.timeline(U.read(open(a.file, "rb").read())[0])
     c = alsaump.UmpClient("umpplay", "out")
     dest = c.resolve(a.to)
     sys.stderr.write("  %s -> %d:%d, %d UMPs\n" % (os.path.basename(a.file), dest[0], dest[1], len(evs)))

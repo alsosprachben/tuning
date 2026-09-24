@@ -197,7 +197,7 @@ class Ev(object):
     it as they read a mido message. `channel` is flat: group * 16 + channel."""
     __slots__ = ("type", "channel", "note", "velocity", "value", "control",
                  "pitch", "program", "data", "attr_pitch", "semitones",
-                 "detach", "reset", "group")
+                 "detach", "reset", "group", "time")
 
     def __init__(self, type, **kw):
         self.type = type
@@ -252,6 +252,8 @@ def decode(pkt, sysex_buf=None):
             data = tuple(buf.pop(g, []))
             return [Ev("sysex", data=data, group=g)]
         return []
+    if mt == 0xD and ((w0 >> 8) & 0xFF, w0 & 0xFF) == (0, 0):
+        return [Ev("set_tempo", value=pkt[1] / 100.0)]
     if mt != 0x4:
         return []
     d = pkt[1]
@@ -456,61 +458,102 @@ def pitch_table(spec):
 CLIP_MAGIC = b"SMF2CLIP"
 
 
-def is_ump_file(data):
-    return data[:8] == CLIP_MAGIC
+# A FILE IS A LIST OF SLOTS: (delta ticks, delta seconds, [packets]). One slot
+# is one Delta Clockstamp and what follows it. Converting a MIDI 1.0 file gives
+# every MIDI 1.0 message a slot of its own -- a NOOP stands in for a message
+# that produced no packet (a meta event, a held CC6) -- so a reader adding up
+# seconds adds up exactly the terms mido does, and the renderer sees the same
+# note times to the last bit. Seconds are mido's formula: ticks * (tempo * 1e-6
+# / tpq), and 0 for a zero delta.
+
+NOOP = (0,)
 
 
-def write_clip(path, events, tpq=960, us_per_quarter=500000):
+def tick_seconds(dt, tempo_us, tpq):
+    return dt * (tempo_us * 1e-6 / tpq) if dt > 0 else 0
+
+
+def slots_from_events(events):
+    """[(absolute tick, packet)] in presentation order -> slots (seconds None)."""
+    out, last = [], None
+    for tick, pkt in events:
+        if last is not None and tick == last:
+            out[-1][2].append(pkt)
+        else:
+            out.append((tick - (last or 0), None, [pkt]))
+            last = tick
+    return out
+
+
+def write_clip(path, slots, tpq=960, us_per_quarter=500000):
     """A MIDI Clip File (M2-116): header, configuration (DCTPQ, tempo), Start
-    of Clip, the events -- [(tick, packet)] in presentation order -- End of
-    Clip. A Delta Clockstamp precedes every UMP; a gap past 20 bits is bridged
-    with a NOOP, as 3.2.2 says."""
+    of Clip, the slots, End of Clip. A Delta Clockstamp precedes every UMP; a
+    gap past 20 bits is bridged with a NOOP, as 3.2.2 says. `slots` may also be
+    [(absolute tick, packet)], as a sequencer would hand it over."""
+    if slots and len(slots[0]) == 2:
+        slots = slots_from_events(slots)
     words = []
 
     def at(dt):
         while dt > 0xFFFFF:
-            words.extend(delta_clockstamp(0xFFFFF)); words.append(0)
+            words.extend(delta_clockstamp(0xFFFFF)); words.extend(NOOP)
             dt -= 0xFFFFF
         words.extend(delta_clockstamp(dt))
 
     at(0); words.extend(dctpq(tpq))
     at(0); words.extend(set_tempo(0, us_per_quarter))
     at(0); words.extend(stream(START_OF_CLIP))
-    last = 0
-    for tick, pkt in events:
-        at(tick - last); last = tick
-        words.extend(pkt)
+    for dt, _ds, pkts in slots:
+        at(dt)
+        for pkt in (pkts or [NOOP]):
+            words.extend(pkt)
     at(0); words.extend(stream(END_OF_CLIP))
     with open(path, "wb") as f:
         f.write(CLIP_MAGIC + struct.pack(">%dI" % len(words), *words))
 
 
-def write_raw(path, events_s):
-    """A raw UMP stream: [(seconds, packet)], each packet preceded by its time
-    as a JR-free 64-bit big-endian microsecond count. Not a standard -- a
-    capture format for tests and for tools that record what arrived when."""
+RAW_MAGIC = b"UMPRAW02"
+
+
+def write_raw(path, slots, tpq=960):
+    """A raw UMP stream: the tick rate (u32), then each slot as (delta seconds,
+    float64; delta ticks, u32; packet count, u16) and its packets. Not a
+    standard -- a capture form for tests and tools, which keeps both clocks,
+    and the tick grid they were counted on, so nothing is re-derived."""
     with open(path, "wb") as f:
-        f.write(b"UMPRAW01")
-        for t, pkt in events_s:
-            f.write(struct.pack(">QB", int(round(t * 1e6)), len(pkt)))
-            f.write(struct.pack(">%dI" % len(pkt), *pkt))
+        f.write(RAW_MAGIC + struct.pack(">I", tpq))
+        for dt, ds, pkts in slots:
+            pkts = pkts or [NOOP]
+            f.write(struct.pack(">dIH", ds or 0.0, dt or 0, len(pkts)))
+            for pkt in pkts:
+                f.write(struct.pack(">B%dI" % len(pkt), len(pkt), *pkt))
+
+
+def is_ump_file(data):
+    return data[:8] in (CLIP_MAGIC, RAW_MAGIC)
 
 
 def read(data):
-    """Either form -> (seconds, packet) in order, plus the file's facts:
-    {'tpq', 'tempo_us', 'ticks': [tick per event], 'clip': bool}."""
-    if data[:8] == b"UMPRAW01":
-        out, i = [], 8
+    """Either form -> (slots, facts). Slots are (delta ticks, delta seconds,
+    [packets]) in order; facts {'clip', 'tpq'}. A Clip File's seconds follow
+    its Set Tempo messages, which stay in their slots as packets."""
+    if data[:8] == RAW_MAGIC:
+        tpq = struct.unpack_from(">I", data, 8)[0]
+        out, i = [], 12
         while i < len(data):
-            t, n = struct.unpack_from(">QB", data, i); i += 9
-            pkt = struct.unpack_from(">%dI" % n, data, i); i += 4 * n
-            out.append((t / 1e6, tuple(pkt)))
-        return out, {"clip": False, "tpq": None, "ticks": None, "tempo_us": None}
-    if not is_ump_file(data):
+            ds, dt, n = struct.unpack_from(">dIH", data, i); i += 14
+            pkts = []
+            for _ in range(n):
+                k = data[i]; i += 1
+                pkts.append(tuple(struct.unpack_from(">%dI" % k, data, i))); i += 4 * k
+            out.append((dt, ds, [p for p in pkts if p != NOOP]))
+        return out, {"clip": False, "tpq": tpq}
+    if data[:8] != CLIP_MAGIC:
         raise ValueError("not a MIDI Clip File or raw UMP stream")
-    words = struct.unpack(">%dI" % ((len(data) - 8) // 4), data[8:8 + (len(data) - 8) // 4 * 4])
-    tpq, tempo, tick, t_s, last_tick = 960, 500000.0, 0, 0.0, 0
-    out, ticks, started = [], [], False
+    n = (len(data) - 8) // 4
+    words = struct.unpack(">%dI" % n, data[8:8 + 4 * n])
+    tpq, tempo, started = 960, 500000.0, False
+    out, cur = [], None
     for pkt in split(list(words)):
         w0 = pkt[0]
         mt = (w0 >> 28) & 0xF
@@ -518,13 +561,10 @@ def read(data):
             st = (w0 >> 20) & 0xF
             if st == 0x3:
                 tpq = (w0 & 0xFFFF) or tpq
-            elif st == 0x4:
+            elif st == 0x4 and started:
                 dt = w0 & 0xFFFFF
-                tick += dt
-                t_s += dt * tempo / 1e6 / tpq
-            continue
-        if mt == 0xD and ((w0 >> 8) & 0xFF, w0 & 0xFF) == (0, 0):
-            tempo = pkt[1] / 100.0          # 10 ns units -> microseconds
+                cur = (dt, tick_seconds(dt, tempo, tpq), [])
+                out.append(cur)
             continue
         if mt == 0xF:
             s = (w0 >> 16) & 0x3FF
@@ -533,33 +573,94 @@ def read(data):
             elif s == END_OF_CLIP:
                 break
             continue
-        out.append((t_s, pkt)); ticks.append(tick)
-    return out, {"clip": True, "tpq": tpq, "ticks": ticks, "tempo_us": tempo}
+        if mt == 0xD and ((w0 >> 8) & 0xFF, w0 & 0xFF) == (0, 0):
+            tempo = pkt[1] / 100.0          # 10 ns units -> microseconds
+        if started and cur is not None:
+            cur[2].append(tuple(pkt))
+    # A slot made only of a gap-bridging NOOP carries time and nothing else.
+    return out, {"clip": True, "tpq": tpq}
 
 
-def midi1_to_clip(mid, path=None, raw=False):
-    """A mido MidiFile -> a Clip File (or raw UMP) through Midi1to2, merged to
-    one clip in presentation order. Tempo changes are carried as Flex Data."""
+def timeline(slots):
+    """Slots -> [(absolute seconds, packet)] for a player."""
+    t, out = 0.0, []
+    for _dt, ds, pkts in slots:
+        t += ds
+        out.extend((t, p) for p in pkts)
+    return out
+
+
+class UmpMidi(object):
+    """A MIDI 2.0 file, shaped as the renderer reads a mido.MidiFile.
+
+    Iterating gives decoded events (Ev) with .time the delta in seconds, as
+    mido's iteration does; .tracks is one track with .time in ticks, for the
+    renderer's legato pass; .ticks_per_beat is the clip's DCTPQ."""
+
+    def __init__(self, data):
+        self.slots, facts = read(data)
+        self.ticks_per_beat = facts["tpq"]
+
+    @classmethod
+    def open(cls, path):
+        with open(path, "rb") as f:
+            return cls(f.read())
+
+    def _events(self, clock):
+        buf = {}
+        for dt, ds, pkts in self.slots:
+            evs = []
+            for p in pkts:
+                evs.extend(decode(p, buf))
+            first = ds if clock == "s" else dt
+            if not evs:
+                evs = [Ev("noop")]
+            for k, e in enumerate(evs):
+                e.time = first if k == 0 else 0
+                yield e
+
+    def __iter__(self):
+        return self._events("s")
+
+    @property
+    def tracks(self):
+        return [list(self._events("t"))]
+
+
+def midi1_to_slots(mid):
+    """A mido MidiFile -> slots, through Midi1to2: one slot per MIDI 1.0
+    message, merged in presentation order as mido iterates it. A held data
+    entry is sent in the slot of the message that holds it unless the next
+    message shares its tick, when the translator sends it there -- either
+    way at the tick MIDI 1.0 had it."""
     import mido
     tr = Midi1to2()
     tpq = mid.ticks_per_beat
-    ev_t, ev_s = [], []
-    t_s, tempo, tick = 0.0, 500000, 0
-    for m in mido.merge_tracks(mid.tracks):
-        tick += m.time
-        t_s += mido.tick2second(m.time, tpq, tempo)
+    msgs = list(mido.merge_tracks(mid.tracks))
+    slots, tempo = [], 500000
+    for i, m in enumerate(msgs):
+        ds = tick_seconds(m.time, tempo, tpq)
         if m.is_meta:
+            pkts = [set_tempo(0, m.tempo)] if m.type == "set_tempo" else []
             if m.type == "set_tempo":
                 tempo = m.tempo
-                ev_t.append((tick, set_tempo(0, tempo))); ev_s.append((t_s, set_tempo(0, tempo)))
-            continue
-        for pkt in tr.feed(m):
-            ev_t.append((tick, pkt)); ev_s.append((t_s, pkt))
-    for pkt in tr.flush():
-        ev_t.append((tick, pkt)); ev_s.append((t_s, pkt))
-    if path:
-        (write_raw(path, ev_s) if raw else write_clip(path, ev_t, tpq=tpq))
-    return ev_t
+        else:
+            pkts = tr.feed(m)
+        nxt = msgs[i + 1] if i + 1 < len(msgs) else None
+        if tr.pending and (nxt is None or nxt.time > 0):
+            pkts = pkts + tr.flush()
+        slots.append((m.time, ds, pkts))
+    return slots, tpq
+
+
+def midi1_to_clip(mid, path, raw=False):
+    """A mido MidiFile -> a Clip File, or a raw UMP stream, through Midi1to2."""
+    slots, tpq = midi1_to_slots(mid)
+    if raw:
+        write_raw(path, slots, tpq=tpq)
+    else:
+        write_clip(path, slots, tpq=tpq)
+    return slots
 
 
 # ------------------------------------------------------------ selftest
@@ -621,12 +722,14 @@ def selftest():
     fd, p = tempfile.mkstemp(suffix=".midi2"); os.close(fd)
     write_clip(p, [(0, m2_note_on(0, 0, 60, 0xFFFF)), (480, m2_note_off(0, 0, 60, 0)),
                    (480 + 0x100000, m2_note_on(0, 0, 62, 0x8000))], tpq=480, us_per_quarter=600000)
-    evs, facts = read(open(p, "rb").read())
+    slots, facts = read(open(p, "rb").read())
     os.unlink(p)
+    tl = timeline(slots)
+    ticks = [sum(s[0] for s in slots[:i + 1]) for i, s in enumerate(slots) if s[2]]
     check("a Clip File round-trips, a 20-bit clockstamp gap included",
-          facts["tpq"] == 480 and [round(t, 6) for t, _ in evs] ==
+          facts["tpq"] == 480 and [round(t, 6) for t, _ in tl] ==
           [0.0, 0.6, round((480 + 0x100000) * 0.6 / 480, 6)]
-          and facts["ticks"] == [0, 480, 480 + 0x100000])
+          and ticks == [0, 480, 480 + 0x100000])
     print("  all passed" if not fails else "  FAILED: " + ", ".join(fails))
     return not fails
 

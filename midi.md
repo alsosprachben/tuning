@@ -777,16 +777,18 @@ sends across to MIDI 2.0 and hands the engine the result.
 | | live | file | |
 |---|---|---|---|
 | MIDI 1.0 bridged to MIDI 2.0 (`--midi2`) | ✓ | | sample-for-sample what MIDI 1.0 plays, checked in the selftest |
-| Note On/Off, 16-bit velocity | ✓ | | a velocity of 0 is still a note (7.4.2) |
-| CC, channel and poly pressure, pitch bend, 32-bit | ✓ | | the full resolution reaches the voice |
-| Program change with bank | ✓ | | unrolled into CC0/CC32/program for the existing latch |
-| RPN / NRPN (registered and assignable controllers) | ✓ | | unrolled into 101/100/6/38 (or 99/98) for the existing handlers |
-| **Pitch 7.9** — a Note On's own pitch | ✓ | | absolute, for that note alone |
-| **Pitch 7.25** — registered per-note controller 3 | ✓ | | absolute and persistent per note number; moves a sounding note |
-| **per-note pitch bend**, and its range (RPN 0/7) | ✓ | | an offset on the note's pitch; its neighbours don't move |
-| per-note management (detach, reset) | ✓ | | reset clears the note number's per-note state |
-| SysEx (7-bit) | ✓ | | reassembled across packets |
-| relative controllers, other per-note controllers, CC 0/6/32/38/88/96–101 | ignored, counted | | the last group is the spec's: 7.4.6, D.3.3 |
+| Note On/Off, 16-bit velocity | ✓ | ✓ | a velocity of 0 is still a note (7.4.2) |
+| CC, channel and poly pressure, pitch bend, 32-bit | ✓ | ✓ | the full resolution reaches the voice |
+| Program change with bank | ✓ | ✓ | unrolled into CC0/CC32/program for the existing latch |
+| RPN / NRPN (registered and assignable controllers) | ✓ | ✓ | unrolled into 101/100/6/38 (or 99/98) for the existing handlers |
+| **Pitch 7.9** — a Note On's own pitch | ✓ | ✓ | absolute, for that note alone |
+| **Pitch 7.25** — registered per-note controller 3 | ✓ | ✓ | absolute and persistent per note number; moves a sounding note |
+| **per-note pitch bend**, and its range (RPN 0/7) | ✓ | ✓ | an offset on the note's pitch; its neighbours don't move |
+| per-note management (detach, reset) | ✓ | ✓ | reset clears the note number's per-note state |
+| SysEx (7-bit) | ✓ | ✓ | reassembled across packets; addresses its own group's channels |
+| Set Tempo (Flex Data) | | ✓ | a Clip File's tempo, 10 ns per quarter note |
+| 16 groups × 16 channels | ✓ | ✓ | channel = group × 16 + channel; a scene stores group 0 only |
+| relative controllers, other per-note controllers, CC 0/6/32/38/88/96–101 | ignored, counted | ignored | the last group is the spec's: 7.4.6, D.3.3 |
 
 **The exactness rule.** The engine still works in MIDI 1 units, but as
 floats: velocity and controllers 0..127, bend −8192..8191. A 32-bit value
@@ -845,6 +847,32 @@ program, because the kernel converts on the way in.
   (D.3.1), and Linux 6.8 sends 0x0000. `ump.py` follows the spec. The
   engine doesn't read note-off velocity, so they sound the same.
   `alsaump.py --selftest` checks this against a real MIDI 1.0 client.
+
+**Offline, both file forms.** `blockrender` reads a **MIDI Clip File**
+(M2-116-U: `SMF2CLIP`, the `.midi2` extension) or a **raw UMP stream**
+(`UMPRAW02`, this renderer's own capture form). It tells them apart by the
+first eight bytes, and any path the renderer accepts can be one. Two MIDI 2.0
+features go through machinery that already existed:
+- **Per-note pitch** is decided where every note's pitch is decided.
+  Pitch 7.9 or 7.25 replaces the tuner's key and the Scale/Octave table,
+  and static bend still offsets it.
+- **A pitch that moves while the note sounds** gets a bend row of its own.
+  The row is the channel's gesture times the note's own movement. The kernel
+  is unchanged, at the cost of one row for each moving note.
+
+Measured from a Clip File under `hybrid` (A415): Pitch 7.9 at onset is exact
+to 5e-7 cents, a Pitch 7.25 move to 1e-5, and a per-note bend exact. That's
+the live engine's answer.
+
+**MIDI 1.0 files survive the trip.** `examples/midi1to2.py` converts an SMF
+to either form through the same bridge. Every MIDI 1.0 message keeps a Delta
+Clockstamp of its own, with a NOOP where a meta event or a held CC6 produced
+no packet. The seconds therefore add up exactly as mido adds them.
+`examples/midi2ident.py` renders a file three ways (MIDI 1.0, Clip File,
+raw) and compares hashes. Two things are lost:
+- **Track names and lyrics**, which have no Clip File equivalent here. A
+  choir part's body and a sung vowel fall back to their defaults.
+- **CC96/97.**
 
 **Sources of MIDI 2.0 today:**
 - **`--midi2`**, your keyboard through the bridge.
