@@ -10339,6 +10339,17 @@ def selftest():
     check("the bridge's just table puts E 13.69 cents under equal temperament",
           abs((_jt(0, 64) - 64) * 100 + 13.686) < 1e-3 and _jt(0, 60) == 60.0
           and abs((_jt(0, 67) - 67) * 100 - 1.955) < 1e-3)
+    _ins = ["Midi Through:Midi Through Port-0 14:0", "USB Midi:USB Midi MIDI 1 20:0"]
+    _said = []
+    _p0 = pick_port(None, _ins, _said.append)[0]
+    _p1 = pick_port("usb midi", _ins, _said.append)[0]
+    _p2 = pick_port("nope", _ins, _said.append)[0]
+    _p3 = pick_port("through", _ins, _said.append)[0]
+    check("the default MIDI input is the keyboard, not ALSA's Midi Through",
+          _p0 == _p1 == _p2 == _ins[1] and _p3 == _ins[0]
+          and len(_said) == 1 and "nope" in _said[0],
+          "  (no --port: %s; a --port matching nothing is said out loud: %r)"
+          % (_p0, _said[0] if _said else None))
     _bad = os.path.join(_sd, "bad.json")
     open(_bad, "w").write("{not json")
     _nb = load_session(_bad)
@@ -10707,11 +10718,31 @@ def open_stream(live, rate, frames):
     return pa, stream
 
 
-def pick_port(sub):
-    names = mido.get_input_names()
+def pick_port(sub, names=None, warn=None):
+    """The MIDI input to open: the first whose name contains `sub`, else the
+    first that is a real instrument.
+
+    NOT SIMPLY THE FIRST. ALSA lists its "Midi Through" loopback before any
+    hardware, so with no --port the keyboard was never opened and nothing
+    sounded; a --port that matched nothing fell back to the same place without
+    a word. Both now skip the loopback -- still reachable by naming it -- and
+    a --port that matches nothing says so."""
+    names = mido.get_input_names() if names is None else list(names)
+    warn = warn or (lambda m: sys.stderr.write(m + "\n"))
     if not names:
         return None, []
-    return next((n for n in names if sub and sub.lower() in n.lower()), names[0]), names
+    if sub:
+        got = next((n for n in names if sub.lower() in n.lower()), None)
+        if got:
+            return got, names
+    real = [n for n in names if "midi through" not in n.lower()]
+    pick = real[0] if real else names[0]
+    if sub:
+        warn("  no MIDI input matches %r; using %s (inputs: %s)"
+             % (sub, pick, ", ".join(dict.fromkeys(names))))
+    elif not real:
+        warn("  only the Midi Through loopback is present -- is the keyboard plugged in?")
+    return pick, names
 
 
 def play_ump_file(live, path, stop=None, lead_s=0.5):
