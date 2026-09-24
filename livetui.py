@@ -208,13 +208,18 @@ GLOBALS = (
     # (Live._press_tilt), so that knob moved nothing -- a control that does
     # nothing is worse than no control.
     ("threads",    "x",      1.0,  8.0, 1.0),
+    # THE ROOM: a building, not a reverb knob -- the early reflections every
+    # template is built with AND the tail convolved onto the mix, both from the
+    # same room. Stepping it re-builds the patches off the audio thread (the
+    # sounding notes keep the old room) and crossfades the tail.
+    ("room",       "room",   0.0,  float(len(LV.ROOM_NAMES) - 1), 1.0),
 )
 
 # THE KEYS A PANEL CONTROL MAY BE BOUND TO: everything the panel does not
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
 HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLP")))
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNR")))   # N/R: scenes
 
 
 
@@ -256,7 +261,8 @@ class TUI:
         L = self.live
         return (self.master_db(), L.headroom_db, L.thresh, L.bend_range,
                 L.mod_cents, L.mod_rate, L.press_db,
-                float(L.renderer.K))[i]
+                float(L.renderer.K),
+                float(LV.ROOM_NAMES.index(L.room_name or "dry")))[i]
 
     def set_global(self, i, v):
         L = self.live
@@ -281,6 +287,11 @@ class TUI:
             L.mod_rate = v
         elif i == 6:
             L.press_db = v
+        elif i == 8:
+            name = LV.ROOM_NAMES[int(round(v))]
+            if name != L.room_name:
+                L.set_room(name)
+                self.say("room: %s -- re-building the patches in it" % name)
         else:
             # A new worker pool, swapped in by one atomic assignment. The old
             # one is told to stop; its threads are daemons and exit on their own.
@@ -440,6 +451,38 @@ class TUI:
         LV.save_preset(name, self.live)
         self.say("saved %r to %s" % (name, os.path.basename(LV.PRESET_PATH)))
 
+    def save_scene(self, scr):
+        """N: the channel controls as they are now, under a name."""
+        name = self.prompt(scr, "save scene as: ")
+        if not name:
+            return
+        n = LV.save_scene(name, self.live)
+        self.say("scene %r: %d events -> %s" % (name, n, os.path.basename(LV.SCENE_PATH)))
+
+    def recall_scene(self, scr):
+        """R: put a named scene's channel controls back, on this setup."""
+        d = LV.load_scenes()
+        if not d:
+            self.say("no scenes in %s yet -- N saves one" % os.path.basename(LV.SCENE_PATH))
+            return
+        names = sorted(d)
+        pick = self.menu(scr, "recall scene", names)
+        if pick is None:
+            return
+        n = LV.recall_scene(self.live, d[names[pick]])
+        self.say("scene %r: %d events" % (names[pick], n))
+
+    def free_hotkeys(self):
+        """A preset or session from before N and R were the scene keys may have
+        bound a control to one. The scene key wins, and says so."""
+        lost = [c for c in self.live.screen_controls
+                if c.get("hotkey") and c["hotkey"] not in HOTKEYS_FREE]
+        for c in lost:
+            c["hotkey"] = None
+        if lost:
+            self.say("hotkey unbound (now a panel key): %s"
+                     % ", ".join(LV.CONTROL_BY_KEY[c["key"]][1] for c in lost), 6)
+
     def load_preset(self, scr):
         d = LV.load_presets()
         if not d:
@@ -452,6 +495,7 @@ class TUI:
         pres = d[names[pick]]
         def job(progress):
             LV.apply_preset(self.live, pres, progress)
+            self.free_hotkeys()
         self.builder.submit("preset %s" % names[pick], job)
         self.row = 0
         self.say("loading %r" % names[pick])
@@ -1173,7 +1217,7 @@ class TUI:
                  "-/+ step   enter value   b hotkey   ? help   q quit")
                 if self.pane == 2 else
                 ("tab pane   arrows move   -/+ change   enter patch   a layer   "
-                 "s split   d del   m mute   S/L preset   ? help   q quit"))
+                 "s split   d del   m mute   S/L preset   N/R scene   ? help   q quit"))
         self.addstr(scr, h - 1, 1, keys, C("dim"))
         if self.help:
             self.draw_help(scr)
@@ -1289,6 +1333,11 @@ class TUI:
             "",
             "presets",
             "  S save   L load   -- presets.json, data only; voices live in tonelib.py",
+            "  N save   R recall a SCENE: every channel's controls as MIDI events",
+            "    (volume, pan, expression, CC91, sound controls, tuning, mono --",
+            "    not the pedals or the wheel), recalled on top of this setup",
+            "  the whole session is saved as you go and resumed next time;",
+            "    live.py --fresh starts clean",
             "  a preset carries its on-screen controls and routes too",
             "",
             "  patch and tuner changes build templates on a worker thread;",
@@ -1388,6 +1437,10 @@ class TUI:
                     # never get a note-off it answers. ASKED FOR, not done here
                     # -- the slab has one writer and this is not it.
                     self.live.release_part(p.pid)
+        elif c == ord("N"):
+            self.save_scene(scr)
+        elif c == ord("R"):
+            self.recall_scene(scr)
         elif c == ord("S"):
             self.save_preset(scr)
         elif c == ord("L"):
@@ -1429,8 +1482,14 @@ class TUI:
                             "dim": curses.A_DIM}
         except curses.error:
             self._colors = {}
+        saved = time.monotonic()
         while True:
             self.draw(scr)
+            # THE SESSION, saved as it changes: at most every 2 s, here on the
+            # TUI thread -- never the audio or the MIDI one.
+            if self.live.dirty and time.monotonic() - saved >= 2.0:
+                LV.save_session(self.live)
+                saved = time.monotonic()
             c = scr.getch()
             if c == -1:
                 continue
@@ -1438,6 +1497,7 @@ class TUI:
                 continue
             if not self.key(scr, c):
                 return
+            self.live.dirty = True
 
     def C(self, name):
         return self._colors.get(name, 0)
@@ -1451,6 +1511,8 @@ def patch_label(spec):
 
 
 def fmt(v, unit):
+    if unit == "room":
+        return LV.ROOM_NAMES[int(round(v))]
     if unit == "x":
         return "%d thread%s" % (int(v), "" if int(v) == 1 else "s")
     if unit == "dB":
@@ -1475,6 +1537,7 @@ def run(live, port_name):
     pa, stream = LV.open_stream(live, live.rate, live.frames)
     port = mido.open_input(port_name, callback=live.on_midi)
     ui = TUI(live, port_name)
+    ui.free_hotkeys()
     stream.start_stream()
     try:
         curses.wrapper(ui.loop)
@@ -1483,6 +1546,7 @@ def run(live, port_name):
     finally:
         ui.builder.stop = True
         stream.stop_stream(); stream.close(); pa.terminate(); port.close()
+        LV.save_session(live)             # and once more on the way out
         s = live.stats()
         sys.stderr.write("  peak %.3f  underruns %d  dropped %d  errors %d  "
                          "stuck %d  miss %d  max render %.2f ms\n"

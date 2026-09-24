@@ -156,8 +156,15 @@ void synth_voice(
     const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
     const int* brow, const float* BR, const double* BC,
-    float sfloor, float spow, float shmax, float shref, long CHUNK)
+    float sfloor, float spow, float shmax, float shref, long CHUNK,
+    const float* sendW, float* outSL, float* outSR)
 {
+    // THE SEND BUS, for the live room. When outSL is non-NULL every partial is
+    // ALSO accumulated into outSL/outSR scaled by sendW[p] -- its channel's
+    // CC91 distance multiple -- and that pair feeds the room's tail. The
+    // oscillator is computed once; only the accumulation doubles. NULL (the
+    // file renderer, which makes its send by a second render) touches nothing,
+    // so outL/outR are bit-identical to before.
     long nchunks=(winlen+CHUNK-1)/CHUNK;
     #pragma omp parallel for schedule(dynamic)
     for(long c=0;c<nchunks;c++){
@@ -167,6 +174,7 @@ void synth_voice(
             if(a>=ce||zend<=cs) continue;
             double w=omega[p]; float invf=1.f/fadeS[p], invr=1.f/relS[p];
             float aL=ampL[p], aR=ampR[p], nf=nomfreq[p];
+            float swp = outSL ? sendW[p] : 0.f;
             float sl=susL[p], af=aftL[p], lr=logr[p], lrA=logrA[p];
             float cv=chVol[p], cc=chCyc[p], crl=chRel[p], sj=susJit[p], csc=chScale[p];
             int gr=grow[p]; const float* Grow = gr>=0 ? G+(long)gr*nblk : 0;
@@ -401,6 +409,7 @@ void synth_voice(
                         sR += (zrR*cj - ziR*sj2)*jfa;
                     }
                     outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+                    if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
                     float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
                     tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
                 }

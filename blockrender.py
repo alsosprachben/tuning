@@ -3047,7 +3047,7 @@ def synth_window(prep, n0, winlen):
     L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
     return L,R
 
-def synth_partials(prep, n0, winlen, i0, i1, L, R):
+def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     """Render partials [i0,i1) of `prep` into L/R, with no master gain and no
     clip. Partials are independent and the kernel accumulates into the buffers,
     so a caller can split the table across threads and sum the results -- which
@@ -3071,7 +3071,11 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R):
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ip(sl('br')),fp(a['BR']),dp(a['BC']),
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
-                    ctypes.c_long(SR))
+                    ctypes.c_long(SR),
+                    # the live room's send bus: NULL unless asked for (see synthkernel.c)
+                    fp(sl('sw')) if SndL is not None else None,
+                    fp(SndL) if SndL is not None else None,
+                    fp(SndR) if SndL is not None else None)
 
 _LAST_PREP = {}
 

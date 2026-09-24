@@ -41,7 +41,7 @@ another, and there isn't one yet.
 
 ## General MIDI 2
 
-In: Scale/Octave tuning by SysEx, CC93 chorus, CC91 reverb (file only),
+In: Scale/Octave tuning by SysEx, CC93 chorus, CC91 reverb (live and file),
 portamento, mono/poly mode, RPN 5 modulation depth range, Master Volume, Fine
 and Coarse Tuning, the CC71–78 sound controllers, and **bank select**, with the
 drum sets and GM 2's drum/melodic switch. What is left:
@@ -51,7 +51,6 @@ drum sets and GM 2's drum/melodic switch. What is left:
 | ~128 variation sounds | resolved and latched, then played as the capital tone; not yet carried to the voice (below) | one at a time, in `patch_map.VARIATIONS`, when a file or a player wants one |
 | drum sets | **stopped here, deliberately**: Electronic (24) and Brush (40) built; the rest play Standard | see below |
 | reverb *type* / chorus *type* SysEx | sends work, types cannot be chosen | one physical room; may stay a knowing deviation |
-| CC91 live | file only | new DSP on the audio thread — a convolver or an FDN, not a port |
 
 **RPN 3 and 4 are done, as the `gm2` tuner's store** (`mts.py`, and see
 `midi.md`). One thing is left from that work: **offline, a tuning select or a

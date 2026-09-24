@@ -72,7 +72,9 @@ what you can change about it, and the same two keys change every one of them.
 | `1`..`9` | on an organ part, draw or retire that stop |
 | `-` `+` on `stops` | add and retire ranks in the organ's own crescendo order |
 | `S` / `L` | save / load a preset |
+| `N` / `R` | save / recall a named **scene**: every channel's controls |
 | `P` | panic: all notes off |
+| `room` global | the building: dry, chamber, chapel, hall or church. Early reflections and the live tail both; a switch rebuilds the patches off-thread and crossfades the tail (`live.py --room` at startup) |
 | `?` / `q` | help / quit |
 
 ### Stops
@@ -101,6 +103,29 @@ sets by name before the 128 programs, and a set that isn't built yet says
 piano's eight velocity bands) and run on a worker thread with a progress bar.
 Everything else — channel, range, transpose, level, mute, stops — is a single
 attribute write and takes effect on the next MIDI event.
+
+**The session is kept.** Everything is saved as you change it, at most every
+2 s and again on the way out, to `session.json`: the parts, globals, room,
+on-screen controls, routes, and each channel's mix. The next start resumes it.
+`live.py --fresh` starts clean, and `--preset NAME` starts from that preset
+instead. A session file that won't load is set aside as `session.json.bad`, so
+it can't block a start.
+
+**Scenes are a mix you can go back to.** `N` saves every channel's controls
+under a name, and `R` recalls one on top of whatever setup is loaded, without
+reloading any patches. A scene is stored as the MIDI events themselves, one per
+channel and controller, with only the latest value kept. It's captured from
+what reached the engine, so your keyboard's own faders count (after routing),
+as well as the panel's. What's in a scene:
+- volume, pan, expression, CC91 distance, chorus;
+- portamento time and switch, bank select, and the mod wheel, except on an organ. There it's the crescendo pedal, and the registration it leaves is saved as the part's stops, so replaying it would redraw over a hand registration;
+- CC71–78 and the tuning RPNs, read back from the engine;
+- mono.
+
+What isn't: gestures (the wheel, aftertouch, the three pedals) and one-shots.
+A recalled scene with sustain down would hold whatever you played next.
+Programs belong to the setup, which is what a preset saves. Presets now save
+the channel controls too.
 
 Presets live in `presets.json`, next to the code. They are **data**: a part list
 plus the control settings. A voice is still only ever defined in `tonelib.py`, so
@@ -352,15 +377,14 @@ threads that do not exist in the child.
 ## What MIDI it understands
 
 The table under *Controls* above is about the panel — what a knob does to a
-voice. This is the protocol: **thirty-six controllers in each, and CC91 in a file**,
+voice. This is the protocol: **thirty-seven controllers, the same in both renderers**,
 plus program change, both aftertouches, the wheel and SysEx — GM System On,
 GM 2 System On, GS Reset, GM 2 Scale/Octave Tuning, and Master Volume, Fine and
 Coarse Tuning.
 
 | | |
 |---|---|
-| both renderers | CC0, CC1, CC5, CC6, CC7, CC10, CC11, CC32, CC38, CC64–CC67, CC71–CC78, CC84, CC93, CC96–CC101, CC120, CC121, CC123–CC127 |
-| file only | CC91 |
+| both renderers | CC0, CC1, CC5, CC6, CC7, CC10, CC11, CC32, CC38, CC64–CC67, CC71–CC78, CC84, CC91, CC93, CC96–CC101, CC120, CC121, CC123–CC127 |
 
 That covers GM Level 1, plus GM 2's Scale/Octave tuning, chorus and reverb
 sends, portamento, mono/poly mode, modulation depth range (RPN 5), the

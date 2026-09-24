@@ -8,13 +8,19 @@ note-on and gets one int64 written into it at note-off, rendered a block at a
 time by exactly the same C the offline renderer uses.
 
 Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
+                      [--room dry|chamber|chapel|hall|church] [--fresh]
        python3 live.py --list | --selftest | --latency
 
-It answers thirty-four controllers -- 1, 5, 6, 7, 10, 11, 38, 64-67, 71-78,
-84, 93, 96-101, 120, 121, 123-127 -- plus program change, both aftertouches,
-the wheel, and SysEx (GM System On, GM2 Scale/Octave Tuning, Master Volume,
-Fine and Coarse Tuning), with RPN 0/0 to 0/5. CC91 alone is
-offline-only. See midi.md, which is generated from this dispatch.
+It answers thirty-seven controllers -- 0, 1, 5, 6, 7, 10, 11, 32, 38, 64-67,
+71-78, 84, 91, 93, 96-101, 120, 121, 123-127 -- plus program change, both
+aftertouches, the wheel, and SysEx (GM System On, GM 2 System On, GS Reset,
+GM2 Scale/Octave Tuning, Master Volume, Fine and Coarse Tuning), with RPN 0/0
+to 0/5. See midi.md, which is generated from this dispatch.
+
+THE ROOM IS HERE TOO. The templates carry the first-order reflections, and the
+diffuse tail -- roomtail's own impulse response -- is convolved onto the mix
+by convolver.c, fed by the kernel's second, CC91-weighted output. The same
+room as the file renderer, by construction, and switchable while playing.
 
 PATCHES ARE BUILT OFF THE AUDIO THREAD and pinned while a Part is playing from
 one. Pinning is not an optimisation: without it the LRU evicted the patch that
@@ -227,6 +233,150 @@ class quiet(object):
     def __exit__(self, *exc):
         self.proxy.local.depth -= 1
         return False
+
+
+# ---- THE ROOM, LIVE ----------------------------------------------------------
+# The file renderer's tail is roomtail.py convolving a finished render with the
+# room's impulse response. Live had none of it: its templates carry the first-
+# order reflections (blockrender bakes them in), and nothing after. These
+# convolve the SAME IR -- roomtail.build_ir and modal_ir -- block by block, in
+# convolver.c (two-tier partitioned overlap-save, no latency), so live and the
+# file hear one room by construction.
+_CONV = []
+
+
+def _conv_dll():
+    if _CONV:
+        return _CONV[0]
+    import ctypes, subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = os.path.join(here, "convolver.c")
+    lib = os.path.join(here, "libconvolver.so")
+    if (not os.path.exists(lib)) or os.path.getmtime(src) > os.path.getmtime(lib):
+        subprocess.check_call(["gcc", "-O3", "-march=native", "-ffast-math", "-shared",
+                               "-fPIC", src, "-o", lib, "-lm"])
+    d = ctypes.CDLL(lib)
+    fp = ctypes.POINTER(ctypes.c_float)
+    d.conv_new.restype = ctypes.c_void_p
+    d.conv_new.argtypes = [fp, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    d.conv_process.restype = None
+    d.conv_process.argtypes = [ctypes.c_void_p, fp, fp]
+    d.conv_free.restype = None
+    d.conv_free.argtypes = [ctypes.c_void_p]
+    _CONV.append(d)
+    return d
+
+
+class Convolver(object):
+    """One channel of one impulse response, block by block, in C."""
+    SEGMENT_BLOCKS = 16
+
+    def __init__(self, ir, frames):
+        import ctypes
+        self.dll = _conv_dll()
+        self.frames = frames
+        self._fp = ctypes.POINTER(ctypes.c_float)
+        ir = np.ascontiguousarray(ir, np.float32)
+        self.c = self.dll.conv_new(ir.ctypes.data_as(self._fp), len(ir), int(frames),
+                                   self.SEGMENT_BLOCKS)
+        if not self.c:
+            raise ValueError("convolver: the block must be a power of two")
+        self.out = np.zeros(frames, np.float32)
+
+    def process(self, x):
+        x = np.ascontiguousarray(x, np.float32)
+        self.dll.conv_process(self.c, x.ctypes.data_as(self._fp), self.out.ctypes.data_as(self._fp))
+        return self.out
+
+    def close(self):
+        if self.c:
+            self.dll.conv_free(self.c)
+            self.c = None
+
+
+ROOM_NAMES = ("dry", "chamber", "chapel", "hall", "church")
+ROOM_XFADE_S = 0.15          # a room switch crossfades the tails over this
+
+
+class RoomTail(object):
+    """The late room for one set of IRs: the diffuse tail fed by the SEND, and
+    the room's modes fed by the DRY signal, exactly as roomtail.main mixes
+    them. The modes are skipped where the room has none worth drawing (the
+    hall's Schroeder frequency is under 25 Hz), as offline.
+
+    ON ITS OWN THREAD, EXCEPT THE FIRST BLOCK. Each IR is split at one block:
+    its first `frames` taps are convolved here, on the audio thread, which is
+    one small FFT; the rest -- the whole of the room, really -- runs on a
+    worker a block behind. That is EXACT, not an approximation: the rest of
+    the IR starts a block late by definition, so what the worker computes from
+    block n is what block n+1 needs. ctypes lets go of the GIL inside the C,
+    so the worker convolves while the audio thread renders the next block.
+    """
+
+    def __init__(self, ir, mir, frames):
+        self.ir, self.mir = ir, mir            # kept, so a check can do it offline
+        self.frames = frames
+        B = frames
+        irs = [ir[:, 0], ir[:, 1]]
+        if mir is not None:
+            irs += [mir[:, 0], mir[:, 1]]
+        self.nconv = len(irs)
+        self.head = [Convolver(h[:B], B) for h in irs]
+        self.body = [Convolver(h[B:], B) if len(h) > B else None for h in irs]
+        self.inp = [np.zeros(B, np.float32) for _ in irs]
+        self.res = [np.zeros(B, np.float32) for _ in irs]
+        self.go = threading.Event()
+        self.done = threading.Event()
+        self.done.set()
+        self.stop = False
+        self.thread = threading.Thread(target=self._work, daemon=True)
+        self.thread.start()
+
+    def _work(self):
+        while True:
+            self.go.wait(); self.go.clear()
+            if self.stop:
+                return
+            try:
+                for i, c in enumerate(self.body):
+                    if c is not None:
+                        self.res[i][:] = c.process(self.inp[i])
+            finally:
+                self.done.set()
+
+    def process(self, sendL, sendR, dryL, dryR):
+        xs = [sendL, sendR] + ([dryL, dryR] if self.nconv == 4 else [])
+        self.done.wait()                    # last block's body: ready, normally long since
+        self.done.clear()
+        out = [self.head[i].process(x) + self.res[i] for i, x in enumerate(xs)]
+        for i, x in enumerate(xs):
+            self.inp[i][:] = x
+        self.go.set()
+        wl, wr = out[0], out[1]
+        if self.nconv == 4:
+            wl = wl + out[2]; wr = wr + out[3]
+        return wl, wr
+
+    def close(self):
+        self.done.wait()
+        self.stop = True
+        self.go.set()
+        self.thread.join(1.0)
+        for c in self.head + [b for b in self.body if b is not None]:
+            c.close()
+
+
+def build_room_tail(rate, frames, band_q=None):
+    """The CURRENT room's IRs (tonelib.set_room has already been applied),
+    built as roomtail.main builds them. Off the audio thread: this takes a
+    second or two."""
+    import roomtail as _RT
+    props = T.StoppedPipeProperties(261.6, 0, 1, 1)
+    ir, _bands, _onset = _RT.build_ir(props, rate, channels=2, band_q=band_q)
+    mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2)
+    use_modes = bool(nmodes) and fs > 25.0
+    return RoomTail(ir.astype(np.float32),
+                    mir.astype(np.float32) if use_modes else None, frames)
 
 
 # ---- WHAT CAN BE CONTROLLED ------------------------------------------------
@@ -525,6 +675,11 @@ class Slab:
         for k in COLS_F4_NOTE: self.a[k] = np.zeros(capacity, np.float32)
         for k in COLS_I8: self.a[k] = np.full(capacity, IDLE, np.int64)
         for k in COLS_I4: self.a[k] = np.zeros(capacity, np.int32)
+        # THE ROOM SEND: each slot's channel's CC91 distance multiple, which the
+        # kernel weights its second output by. Not a template column -- set at
+        # stamp time from `send`, and rewritten when the channel's CC91 moves.
+        self.a["sw"] = np.ones(capacity, np.float32)
+        self.send = [1.0] * 16
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
         self.a["br"][:] = -1            # -1 = no bend row; live bends via retune
         # The wash's bandwidth, as a fraction of the partial's frequency. This
@@ -889,6 +1044,8 @@ class Slab:
         # behaves exactly as it always did.
         mv = float(np.mean(tmpl["vd"])) if n else 0.0
         self.vsc[idx] = (tmpl["vd"] / mv) if mv > 1e-12 else 1.0
+        _kc = key[1] if len(key) > 1 and isinstance(key[1], int) else None
+        a["sw"][idx] = self.send[_kc] if _kc is not None and 0 <= _kc < 16 else 1.0
         self.live.setdefault(key, []).extend(slots)
         # THE SLOTS JUST ALLOCATED, which is not the same as live[key]: that
         # accumulates, by design -- a key is stamped once per rank, and a
@@ -1249,6 +1406,12 @@ class Renderer:
         self.R = np.zeros(frames, np.float32)
         self.bufs = [(np.zeros(frames, np.float32), np.zeros(frames, np.float32))
                      for _ in range(self.K)]
+        # THE SEND PAIR, filled only while a live room is on (self.send).
+        self.send = False
+        self.SL = np.zeros(frames, np.float32)
+        self.SR = np.zeros(frames, np.float32)
+        self.sbufs = [(np.zeros(frames, np.float32), np.zeros(frames, np.float32))
+                      for _ in range(self.K)]
         self.go = [threading.Event() for _ in range(self.K)]
         self.done = [threading.Event() for _ in range(self.K)]
         self.threads = []
@@ -1288,8 +1451,14 @@ class Renderer:
                 L, R = self.bufs[k]
                 L[:] = 0.0; R[:] = 0.0
                 b = self._b
-                B.synth_partials(self.slab.prep(), self.n0, self.frames,
-                                 b[k], b[k + 1], L, R)
+                if self.send:
+                    SL, SR = self.sbufs[k]
+                    SL[:] = 0.0; SR[:] = 0.0
+                    B.synth_partials(self.slab.prep(), self.n0, self.frames,
+                                     b[k], b[k + 1], L, R, SL, SR)
+                else:
+                    B.synth_partials(self.slab.prep(), self.n0, self.frames,
+                                     b[k], b[k + 1], L, R)
             except Exception as e:
                 self.error = "%s: %s" % (type(e).__name__, e)
             finally:
@@ -1311,10 +1480,19 @@ class Renderer:
             self.bufs = [(np.zeros(frames, np.float32),
                           np.zeros(frames, np.float32))
                          for _ in range(self.K)]
+            self.SL = np.zeros(frames, np.float32)
+            self.SR = np.zeros(frames, np.float32)
+            self.sbufs = [(np.zeros(frames, np.float32),
+                           np.zeros(frames, np.float32))
+                          for _ in range(self.K)]
             self.grew = getattr(self, "grew", 0) + 1
         b = self.bounds()
         L, R = self.L, self.R
         L[:] = 0.0; R[:] = 0.0
+        snd = self.send
+        SL, SR = self.SL, self.SR
+        if snd:
+            SL[:] = 0.0; SR[:] = 0.0
         # A VIEW OF WHAT WAS ASKED FOR, not the whole buffer: once it has grown
         # it stays grown, and the caller wants exactly frame_count samples.
         if b is None:                       # nothing occupied: silence, cheaply
@@ -1322,17 +1500,27 @@ class Renderer:
         if self.K == 1 or self.act < PARALLEL_MIN or frames != self.frames:
             # One call over [0, hi). Slots past the high-water mark are idle and
             # contribute exactly zero, so stopping there is bit-identical.
-            B.synth_partials(self.slab.prep(), n0, frames, 0, b[-1], L, R)
+            if snd:
+                B.synth_partials(self.slab.prep(), n0, frames, 0, b[-1], L, R, SL, SR)
+            else:
+                B.synth_partials(self.slab.prep(), n0, frames, 0, b[-1], L, R)
         else:
             self.n0 = n0
             for k in range(1, self.K):
                 self.go[k].set()
-            B.synth_partials(self.slab.prep(), n0, frames, b[0], b[1], L, R)
+            if snd:
+                B.synth_partials(self.slab.prep(), n0, frames, b[0], b[1], L, R, SL, SR)
+            else:
+                B.synth_partials(self.slab.prep(), n0, frames, b[0], b[1], L, R)
             for k in range(1, self.K):
                 self.done[k].wait(); self.done[k].clear()
                 L += self.bufs[k][0]; R += self.bufs[k][1]
+                if snd:
+                    SL += self.sbufs[k][0]; SR += self.sbufs[k][1]
         L *= T.master_gain; R *= T.master_gain
         np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
+        if snd:
+            SL *= T.master_gain; SR *= T.master_gain
         return L[:frames], R[:frames]
 
 
@@ -1620,6 +1808,7 @@ class Patch:
             _TA.ENABLED = _wasa
         t = {k: np.array(p[k]) for k in ALL_COLS}
         t["P"] = p["P"]
+        t["room_q"] = p.get("room_q")      # what the live room's Q is built from
         nf = t["nf"].astype(np.float64)
         # An unmapped drum note builds NOTHING: percussion_for_note has no
         # voice for it and prepare() emits no partials. A zero-partial
@@ -1862,6 +2051,11 @@ class Live:
         self.events = collections.deque()
         self.routes = ()             # Route table, applied in on_midi
         self.seen = {}               # (channel, control key) -> last value
+        # THE CHANNEL STATE A SCENE RESTORES: (channel, CC) -> the latest value
+        # that reached the engine, from the keyboard (after routing) or the
+        # panel. Culled by construction -- a later value replaces an earlier.
+        self.chanstate = {}
+        self.dirty = False           # the session has changed since it was saved
         self._learn = None
         self._learn_swallow = set()
         # The panel's on-screen controls, as plain dicts. The ENGINE does not
@@ -1948,6 +2142,18 @@ class Live:
         # carries a slur into _note_on as _glide_from carries a glide.
         self.onset_group = {}
         self._slur = False
+        # THE ROOM: off until enable_room/set_room, so the hundreds of Live
+        # instances the selftest makes pay nothing for it. room_name is what
+        # the templates were built in; room is the tail convolving now, and
+        # _room_prev the one it is crossfading away from.
+        self.room_name = None
+        self.room = None
+        self._room_prev = None
+        self._room_xf = 0
+        self._room_xf_n = 1
+        self._room_trash = []
+        self.room_reqs = collections.deque()
+        self.room_ms = 0.0
         self.ch_drums = {}
         self.rx_bank = True
         self._rpn_fine_msb = {}
@@ -2097,9 +2303,16 @@ class Live:
     def _see(self, m):
         t = m.type
         if t == "control_change":
-            if m.control == 121:
+            c, ch = m.control, m.channel
+            if c in CAPTURE_CC and self.chanstate.get((ch, c)) != m.value:
+                self.chanstate[(ch, c)] = m.value
+                self.dirty = True
+            if c == 121:
                 for k in self._RESET_KEYS:
                     self.seen.pop((m.channel, k), None)
+                for k in CAPTURE_RESET_CC:
+                    if self.chanstate.pop((ch, k), None) is not None:
+                        self.dirty = True
             elif m.control in CONTROL_BY_KEY:
                 self.seen[(m.channel, m.control)] = m.value
         elif t == "pitchwheel":
@@ -2108,6 +2321,9 @@ class Live:
             self.seen[(m.channel, "pressure")] = m.value
         elif t == "sysex" and (B.gm_on_level(m.data) or B.parse_gs_reset(m.data)):
             self.seen.clear()
+            if self.chanstate:
+                self.chanstate.clear()
+                self.dirty = True
 
     # LEARNING A KEY: the TUI arms it, the next key pressed anywhere is taken
     # as the answer, and neither that press nor its release plays.
@@ -2144,6 +2360,7 @@ class Live:
     def set_routes(self, routes):
         """Swap the route table: one assignment, as set_parts does."""
         self.routes = tuple(routes)
+        self.dirty = True
 
     def post(self, fn):
         """Ask the audio thread to run `fn(n0)` at the next block boundary.
@@ -2389,6 +2606,19 @@ class Live:
                     # The DIFFERENCE is that and only that: a note stamped at
                     # this setting comes out identical either way.
                     self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
+            elif msg.control == 91:                 # reverb send
+                # A DISTANCE, as the file renderer has it: CC91 over GM's
+                # default 40 is how many times the room's nominal distance this
+                # channel stands at, and its room feed scales by exactly that --
+                # so the reverberant-to-direct ratio goes as r^2 and T60, which
+                # has no r in it, does not move. Rewritten on the notes already
+                # sounding: moving back is not a note-on event.
+                _v = msg.value / float(B.GM_DEFAULT_REVERB)
+                self.slab.send[ch] = _v
+                _ix = [i for k, sl in self.slab.live.items()
+                       if len(k) > 1 and k[1] == ch for i in sl]
+                if _ix:
+                    self.slab.a["sw"][np.asarray(_ix, np.int64)] = np.float32(_v)
             elif msg.control == 0:                  # bank select MSB
                 # LATCHED: nothing happens until the next program change reads
                 # it (SC-55 owner's manual p.74). See tonelib.resolve_patch.
@@ -2901,6 +3131,7 @@ class Live:
         """
         want, now = self.master_vol, self._mv_now
         if want == now:
+            self._mv_g = np.float32(want)       # the send takes exactly this
             return (L, R) if want == 1.0 else (L * np.float32(want),
                                                  R * np.float32(want))
         # THE STEP IS FIXED WHEN THE TARGET CHANGES, not recomputed per block.
@@ -2917,6 +3148,7 @@ class Live:
         g = np.minimum(g, want) if step > 0 else np.maximum(g, want)
         self._mv_now = float(g[-1])
         g = g.astype(np.float32)
+        self._mv_g = g
         return L * g, R * g
 
     # ------------------------------------------------ CC71-78, the sound controllers
@@ -3655,6 +3887,7 @@ class Live:
         # whatever it is now -- it is the player's part -- but every channel's
         # own drums state goes back to channel 10 alone.
         self.rx_bank = _lvl != 1
+        self.slab.send = [1.0] * 16            # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()
         self.ch_drums.clear()
@@ -3703,6 +3936,108 @@ class Live:
         if self.patch_reqs:
             self.patch_go.set()
 
+    # ---- the room ---------------------------------------------------------
+    def _apply_room(self, name):
+        """Make `name` the room every template is built in. Under _PATCH_LOCK:
+        prepare() reads the room off class attributes and the environment."""
+        if name not in ROOM_NAMES:
+            raise ValueError("room %r: one of %s" % (name, ", ".join(ROOM_NAMES)))
+        with _PATCH_LOCK:
+            if name == "dry":
+                os.environ["TUNING_REFLECT"] = "0"
+            else:
+                os.environ.pop("TUNING_REFLECT", None)
+                T.set_room(name)
+        self.room_name = name
+        self.dirty = True
+
+    def _room_band_q(self):
+        """The directivity of what is on stage, per octave: the energy-weighted
+        Q of the templates the parts have built, as blockrender weights its own
+        (sum a^2 / sum a^2/Q). The file renderer measures the PIECE; live
+        measures the RIG. None until something has been played."""
+        acc = {}
+        for part in self.parts:
+            for t in list(part.patch.templates.values()):
+                for f, q, e in (t.get("room_q") or ()):
+                    if e > 0.0:
+                        d = acc.setdefault(f, [0.0, 0.0])
+                        d[0] += e
+                        d[1] += e / max(q, 1e-6)
+        return {f: d / r for f, (d, r) in acc.items() if r > 0.0} or None
+
+    def _room_install(self, tail):
+        """Hand a new tail to the audio thread, crossfading from the old."""
+        def go(n0):
+            if self._room_prev is not None:
+                self._room_trash.append(self._room_prev)
+            self._room_prev = self.room
+            self.room = tail
+            self._room_xf_n = max(1, int(ROOM_XFADE_S * self.rate / self.frames))
+            self._room_xf = self._room_xf_n
+        self.post(go)
+
+    def enable_room(self, name):
+        """At startup, before warm(): the room the templates are built in, and
+        its tail. Synchronous -- nothing is playing yet."""
+        self._apply_room(name)
+        if name != "dry":
+            self.room = build_room_tail(self.rate, self.frames)
+
+    def set_room(self, name):
+        """While playing: queued for the patch worker, which is the one thread
+        that builds templates -- so no template is ever built half in one room
+        and half in the other."""
+        self.room_reqs.append(name)
+        self.patch_go.set()
+
+    def _room_switch(self):
+        name = None
+        while self.room_reqs:
+            name = self.room_reqs.popleft()   # only the last one asked for
+        if name is None or name == self.room_name:
+            return
+        self._apply_room(name)
+        with _PATCH_LOCK:
+            _PATCHES.clear()
+        # Every part re-built in the new room. Notes sounding keep the old
+        # reflections, as a program change keeps its old voice.
+        for part in self.parts:
+            self.patch_reqs.append((part.pid, (part.patch.program, part.patch.drums,
+                                               part.patch.tuner)))
+        self._room_install(None if name == "dry"
+                           else build_room_tail(self.rate, self.frames, self._room_band_q()))
+
+    def _room_add(self, L, R, n):
+        """The late room onto the mix. The send (per-channel CC91) is the
+        kernel's second output when there is one; with none, every channel sits
+        at the room's nominal distance and the send IS the dry mix."""
+        sL = getattr(self, "_sendL", None)
+        sR = getattr(self, "_sendR", None)
+        if sL is None:
+            u = getattr(self, "_send_uniform", 1.0)
+            u = 1.0 if u is None else u
+            sL, sR = (L, R) if u == 1.0 else (L * np.float32(u), R * np.float32(u))
+        wl = np.zeros(n, np.float32); wr = np.zeros(n, np.float32)
+        ramp = np.arange(n, dtype=np.float32) / float(n)
+        if self.room is not None:
+            a, b = self.room.process(sL, sR, L, R)
+            if self._room_xf > 0:
+                g = 1.0 - (self._room_xf - ramp) / float(self._room_xf_n)
+                a = a * g; b = b * g
+            wl += a; wr += b
+        if self._room_prev is not None:
+            a, b = self._room_prev.process(sL, sR, L, R)
+            g = (self._room_xf - ramp) / float(self._room_xf_n)
+            wl += a * g; wr += b * g
+            self._room_xf -= 1
+            if self._room_xf <= 0:
+                self._room_trash.append(self._room_prev)
+                self._room_prev = None
+        elif self._room_xf > 0:
+            self._room_xf -= 1
+        return L + wl, R + wr
+
     def _patch_worker(self):
         """Build voices off the audio thread, for program changes.
 
@@ -3733,6 +4068,10 @@ class Live:
             # first assignment to patch_label -- and calls the swap done before
             # it has been posted. That is a race a test wins by luck.
             self.patch_busy = True
+            if self.room_reqs:
+                self._room_switch()
+            while self._room_trash:
+                self._room_trash.pop().close()   # freed here, never on the audio thread
             while self.patch_reqs and not self.patch_stop:
                 pid, want = self.patch_reqs.popleft()
                 # COALESCE. A file that sweeps a bank select sends a dozen
@@ -3757,7 +4096,8 @@ class Live:
                     pin_patches({(q.patch.program, q.patch.drums, q.patch.tuner)
                                for q in self.parts} | {want})
                     self.patch_label = "%d" % want[0]
-                    patch.warm(stop=lambda: bool(self.patch_reqs) or self.patch_stop)
+                    patch.warm(stop=lambda: bool(self.patch_reqs) or bool(self.room_reqs)
+                               or self.patch_stop)
                     self.patch_label = None
                 except Exception as e:
                     self.patch_err = "%s: %s" % (type(e).__name__, e)
@@ -4191,6 +4531,16 @@ class Live:
                     self.slab.leslie_doppler(n0, self.rotor_horn.rate,
                                              self.rotor_drum.rate)
                     self._ls_rate = self.rotor_horn.rate
+            # THE SEND BUS ONLY WHEN IT IS NEEDED. The kernel's second output
+            # costs about a sixth more per partial (measured 5.40 -> 6.29 ms on
+            # an 8400-partial string chord). When every channel stands at one
+            # distance -- no CC91 at all, which is nearly always -- the send is
+            # just the dry mix times that distance, which is the file
+            # renderer's own shortcut. Only channels that DIFFER need the bus.
+            _room_on = self.room is not None or self._room_prev is not None
+            _snd = self.slab.send
+            self._send_uniform = _snd[0] if all(v == _snd[0] for v in _snd) else None
+            self.renderer.send = _room_on and self._send_uniform is None
             L, R = self.renderer.render(n0, frame_count)
         except Exception as e:
             # Last line of defence: emit silence for this block rather than let
@@ -4202,6 +4552,16 @@ class Live:
             self.errors += 1
             self.last_error, self.renderer.error = self.renderer.error, None
         L, R = self.master_gain(L, R, frame_count)
+        if self.renderer.send:
+            g = self._mv_g
+            self._sendL = self.renderer.SL[:frame_count] * g
+            self._sendR = self.renderer.SR[:frame_count] * g
+        else:
+            self._sendL = self._sendR = None
+        if self.room is not None or self._room_prev is not None:
+            _t0r = time.perf_counter()
+            L, R = self._room_add(L, R, frame_count)
+            self.room_ms = (time.perf_counter() - _t0r) * 1000.0
         L, R = self.limit(L), self.limit(R)
         # Layering makes overload reachable, and the drop counter only reports it
         # AFTER notes are already lost. This reports it before.
@@ -4307,6 +4667,8 @@ def preset_from(live):
         # The panel's controls and the route table: lists, so they travel
         # outside the float() loop apply_preset runs over the knobs.
         controls=[dict(c) for c in getattr(live, "screen_controls", [])],
+        room=getattr(live, "room_name", None),
+        chanstate=scene_from(live),
         routes=[r.to_dict() for r in getattr(live, "routes", ())],
     )
 
@@ -4342,7 +4704,178 @@ def apply_preset(live, preset, progress=None):
     # has neither key and leaves the rig with no routes and no panel controls,
     # which is what it had when it was saved.
     live.screen_controls = [dict(c) for c in preset.get("controls", [])]
+    # The room, if the preset has one and the rig has a room at all (the
+    # selftest's Live instances do not). Queued: it rebuilds the patches.
+    _rm = preset.get("room")
+    if _rm and getattr(live, "room_name", None) and _rm != live.room_name:
+        live.set_room(_rm)
     live.set_routes([Route.from_dict(r) for r in preset.get("routes", [])])
+    if preset.get("chanstate"):
+        recall_scene(live, preset["chanstate"])
+
+
+# ---- SCENES AND THE SESSION -------------------------------------------------
+# A SCENE is the channel controls as MIDI events: what it takes to put every
+# channel's mix back, one event per (channel, controller), the latest value
+# only. Captured from what reached the engine -- the keyboard's controls after
+# routing, and the panel's -- so it is the state as played, not as the panel
+# thinks it is.
+#
+# WHAT IS CAPTURED is the channel's SETTINGS: bank select, the mod wheel (a
+# setting on the voices where it is one -- drones, rockers, drive), portamento
+# time and switch, volume, pan, expression, CC91 distance, chorus; CC71-78 and
+# the tuning RPNs, read back from the engine, which has already folded in data
+# increments, GS's NRPN spelling of the sound controllers, and resets; and mono.
+#
+# WHAT IS NOT is the GESTURES: the pitch wheel, aftertouch and the three pedals
+# (a scene recalled with sustain down would hold whatever is played next), and
+# the one-shots -- CC84's source note, the sound-offs and resets, notes and
+# program changes. Programs belong to the setup, which is what a preset holds.
+CAPTURE_CC = (0, 32, 1, 5, 7, 10, 11, 65, 91, 93)
+CAPTURE_RESET_CC = (1, 11, 65)       # the captured ones CC121 resets
+SCENE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes.json")
+SESSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session.json")
+
+
+def _cc(ch, c, v):
+    return mido.Message("control_change", channel=ch, control=c, value=int(v))
+
+
+def _rpn_events(ch, lsb, msb_val, lsb_val=None):
+    ev = [_cc(ch, 101, 0), _cc(ch, 100, lsb), _cc(ch, 6, msb_val)]
+    if lsb_val is not None:
+        ev.append(_cc(ch, 38, lsb_val))
+    return ev + [_cc(ch, 101, 127), _cc(ch, 100, 127)]      # the null RPN
+
+
+def _crescendo_channel(live, ch):
+    """Does the mod wheel on this channel draw an ORGAN's stops? There it is
+    the crescendo pedal -- a registration gesture -- and the registration it
+    leaves is saved as the part's own drawn stops. Replaying the wheel would
+    redraw over them: that is exactly how a hand registration, set with the
+    number keys, came back as the crescendo's first five stops."""
+    return any(p.organ and not p.patch.leslie
+               and (p.channel is None or p.channel == ch) for p in live.parts)
+
+
+def scene_from(live):
+    """The channel state as MIDI events, in mido's text form."""
+    ev = []
+    for (ch, c) in sorted(live.chanstate):
+        if c == 1 and _crescendo_channel(live, ch):
+            continue            # the registration is the parts' drawn stops
+        ev.append(_cc(ch, c, live.chanstate[(ch, c)]))
+    for ch in range(16):
+        for name, d in sorted((live.snd.get(ch) or {}).items()):
+            cc = next((k for k, v in T.SOUND_CC.items() if v == name), None)
+            if cc is not None:
+                ev.append(_cc(ch, cc, max(0, min(127, round(d * 64.0 + 64.0)))))
+        if ch in live.brange:
+            b = live.brange[ch]
+            msb = int(b)
+            lsb = int(round((b - msb) * 100.0))
+            ev += _rpn_events(ch, 0, msb, lsb if lsb else None)
+        if ch in live.fine:
+            code = max(0, min(16383, int(round(live.fine[ch] / 100.0 * 8192.0)) + 8192))
+            ev += _rpn_events(ch, 1, code >> 7, code & 127)
+        if ch in live.coarse:
+            ev += _rpn_events(ch, 2, max(0, min(127, int(round(live.coarse[ch])) + 64)))
+        if ch in live.modrange:
+            m = live.modrange[ch]
+            msb = int(m // 100.0)
+            lsb = int(round((m - msb * 100.0) / T.RPN_MOD_LSB_CENTS))
+            ev += _rpn_events(ch, 5, msb, lsb if lsb else None)
+        if ch in live.mono:
+            ev.append(_cc(ch, 126, 1))
+    return [str(m) for m in ev]
+
+
+def recall_scene(live, events):
+    """Put a scene's channel state back: its events, injected past the routes
+    (they are already what the engine received). Mono is changed only where it
+    DIFFERS -- both mode messages carry an All Sounds Off -- and a channel the
+    scene leaves polyphonic is put back to poly if it is mono now."""
+    msgs = []
+    for e in events:
+        try:
+            msgs.append(mido.Message.from_str(e))
+        except Exception:
+            continue
+    want_mono = {m.channel for m in msgs if m.type == "control_change" and m.control == 126}
+    # ...and never replayed onto an organ, even from a scene or session saved
+    # before the rule above existed.
+    msgs = [m for m in msgs if not (m.type == "control_change" and m.control == 1
+                                    and _crescendo_channel(live, m.channel))]
+    for m in msgs:
+        if m.type == "control_change" and m.control in (126, 127):
+            if (m.control == 126) != (m.channel in live.mono):
+                live.inject(m)
+            continue
+        live.inject(m)
+    for ch in sorted(live.mono - want_mono):
+        live.inject(_cc(ch, 127, 0))
+    return len(msgs)
+
+
+def _load_json(path):
+    import json
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_json(path, d):
+    import json
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=2, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def load_scenes(path=None):
+    return _load_json(path or SCENE_PATH)
+
+
+def save_scene(name, live, path=None):
+    path = path or SCENE_PATH
+    d = load_scenes(path)
+    d[name] = scene_from(live)
+    _save_json(path, d)
+    return len(d[name])
+
+
+def save_session(live, path=None):
+    """The whole live state, as a preset -- parts, globals, room, controls,
+    routes and the channel scene. Written atomically; never raises."""
+    try:
+        _save_json(path or SESSION_PATH, preset_from(live))
+        live.dirty = False
+        return True
+    except Exception:
+        return False
+
+
+def load_session(path=None):
+    """The saved session, or None. A file that will not parse is SET ASIDE as
+    .bad rather than left to fail every start."""
+    path = path or SESSION_PATH
+    if not os.path.exists(path):
+        return None
+    import json
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        try:
+            os.replace(path, path + ".bad")
+        except OSError:
+            pass
+        sys.stderr.write("  session %s did not load; set aside as %s.bad\n"
+                         % (os.path.basename(path), os.path.basename(path)))
+        return None
 
 
 def selftest():
@@ -9149,6 +9682,209 @@ def selftest():
           "  (%s)" % [x.describe() for x in _lk2.routes])
     _lk2.renderer.close()
 
+    # ---- SCENES AND THE SESSION ---------------------------------------------
+    # The channel controls as MIDI events, one per (channel, controller), the
+    # latest only -- from the keyboard after routing and from the panel -- and
+    # a session that brings the whole rig back.
+    _M = mido.Message
+    _sc = Live(program=56, rate=48000, frames=128, verbose=False)
+    _t = 0
+
+    def _feed(lv, *msgs, via="midi"):
+        nonlocal _t
+        for m in msgs:
+            (lv.on_midi if via == "midi" else lv.inject)(m)
+        lv.apply(_t)
+        _t += 128
+    _cc_ = lambda ch, c, v: _M("control_change", channel=ch, control=c, value=v)
+    _feed(_sc, _cc_(0, 7, 90), _cc_(0, 7, 100), _cc_(1, 7, 60))
+    _sc.set_routes([Route(("bend", "up"), 11)])
+    _feed(_sc, _M("pitchwheel", channel=2, pitch=8191), _cc_(2, 64, 127),
+          _M("aftertouch", channel=2, value=90))
+    _sc.set_routes([])
+    check("a scene keeps the latest value per channel, as the engine received it",
+          _sc.chanstate.get((0, 7)) == 100 and _sc.chanstate.get((1, 7)) == 60
+          and _sc.chanstate.get((2, 11)) == 127
+          and (2, 64) not in _sc.chanstate,
+          "  (CC7 90 then 100 is one event, the 100; a wheel routed to CC11 is "
+          "captured as CC11; the pedal and the wheel themselves are gestures, not state)")
+    # A varied state -- keyboard and panel -- then recalled on a fresh engine.
+    _feed(_sc, _cc_(3, 101, 0), _cc_(3, 100, 0), _cc_(3, 6, 12), _cc_(3, 96, 0),
+          _cc_(3, 101, 0), _cc_(3, 100, 1), _cc_(3, 6, 70), _cc_(3, 38, 9),
+          _cc_(3, 101, 0), _cc_(3, 100, 2), _cc_(3, 6, 66),
+          _cc_(3, 101, 0), _cc_(3, 100, 5), _cc_(3, 6, 1), _cc_(3, 38, 32),
+          _cc_(3, 101, 127), _cc_(3, 100, 127),
+          _cc_(3, 11, 80), _cc_(3, 10, 20), _cc_(3, 93, 50), _cc_(3, 91, 80),
+          _cc_(3, 5, 40), _cc_(3, 65, 127), _cc_(3, 74, 100), _cc_(4, 126, 1))
+    _feed(_sc, _cc_(5, 7, 33), via="panel")
+    _ev = scene_from(_sc)
+    _sc2 = Live(program=56, rate=48000, frames=128, verbose=False)
+    _sc2.on_midi(_cc_(6, 126, 1)); _sc2.apply(0)       # mono now, poly in the scene
+    recall_scene(_sc2, _ev); _sc2.apply(128)
+    _keys = ("vol", "expr", "cpan", "chorus", "porta_on", "porta_time", "snd",
+             "brange", "fine", "coarse", "modrange")
+    _diff = [k for k in _keys if getattr(_sc, k) != getattr(_sc2, k)]
+    check("...and recalled on a fresh engine, every channel is back as it was",
+          not _diff and _sc.mono == _sc2.mono and _sc.slab.send == _sc2.slab.send,
+          "  (%d events: volume, pan, expression, CC91, chorus, portamento, CC74, "
+          "all four tuning RPNs -- one of them stepped by CC96 -- and mono; the "
+          "channel that was mono and is not in the scene went back to poly)%s"
+          % (len(_ev), (" DIFF %s" % _diff) if _diff else ""))
+    _feed(_sc, _cc_(0, 1, 70), _cc_(0, 121, 0))
+    _r121 = (0, 1) not in _sc.chanstate and _sc.chanstate.get((0, 7)) == 100
+    _feed(_sc, _M("sysex", data=[0x7E, 0x7F, 0x09, 0x01]))
+    check("...CC121 drops what it resets, and a system reset empties it",
+          _r121 and not _sc.chanstate)
+    # THE SESSION: saved, and a new rig started from it.
+    import tempfile as _tf2, json as _js2
+    _sd = _tf2.mkdtemp()
+    _sp = os.path.join(_sd, "session.json")
+    _sc.set_parts([Part(Patch(40, False, "hybrid"), 0), Part(Patch(0, False, "hybrid"), 1)])
+    _sc.set_routes([Route(("note", 36), 64)])
+    _sc.screen_controls = [dict(key=64, channel=0, value=0, hotkey="z")]
+    _feed(_sc, _cc_(1, 7, 77), _cc_(1, 91, 20))
+    _saved = save_session(_sc, _sp)
+    _ld = load_session(_sp)
+    _sc3 = Live(program=0, rate=48000, frames=128, verbose=False)
+    apply_preset(_sc3, _ld); _sc3.apply(0)
+    check("the session brings the whole rig back",
+          _saved and [p.program for p in _sc3.parts] == [40, 0]
+          and [r.to_dict() for r in _sc3.routes] == [r.to_dict() for r in _sc.routes]
+          and _sc3.screen_controls == _sc.screen_controls
+          and _sc3.vol.get(1) == 77 and _sc3.slab.send[1] == 0.5,
+          "  (parts, routes, panel controls and channel 2's mix: volume 77 and "
+          "half the room distance)")
+    # A HAND REGISTRATION SURVIVES, whatever the wheel was left at. Ben drew an
+    # organ's stops with the number keys; the session saved them and the wheel's
+    # 126, and the restore replayed the wheel -- the crescendo pedal -- which
+    # redrew the first five stops over his.
+    _og = Live(program=19, rate=48000, frames=128, verbose=False)
+    _og.on_midi(_cc_(0, 1, 126)); _og.apply(0)
+    _og.set_stops(_og.parts[0], {"8", "2"})
+    _gp = os.path.join(_sd, "organ.json")
+    save_session(_og, _gp)
+    _og2 = Live(program=0, rate=48000, frames=128, verbose=False)
+    _og2.set_parts([Part(Patch(19, False, "hybrid"))])
+    apply_preset(_og2, load_session(_gp)); _og2.apply(128)
+    _old = [str(_cc_(0, 1, 126))]
+    recall_scene(_og2, _old); _og2.apply(256)
+    check("an organ's hand registration survives the session, wheel or no wheel",
+          _og2.parts[0].drawn == {"8", "2"},
+          "  (drawn %s; the mod wheel on an organ is the crescendo pedal, and the "
+          "registration it leaves is saved as the stops themselves -- an old "
+          "scene's wheel is not replayed onto it either)" % sorted(_og2.parts[0].drawn))
+    for _x in (_og, _og2):
+        _x.renderer.close()
+    _bad = os.path.join(_sd, "bad.json")
+    open(_bad, "w").write("{not json")
+    _nb = load_session(_bad)
+    check("...and a session that will not load is set aside, not fatal",
+          _nb is None and os.path.exists(_bad + ".bad") and not os.path.exists(_bad))
+    # The panel: N saves a named scene, R recalls it.
+    import livetui as _tuiS
+    _scp = os.path.join(_sd, "scenes.json")
+    # Through livetui's OWN reference: run as `live.py --selftest` this module
+    # is __main__, and livetui imported `live` separately -- setting ours would
+    # not reach the one it calls.
+    _oldp = _tuiS.LV.SCENE_PATH
+    _tuiS.LV.SCENE_PATH = _scp
+    try:
+        _uS = _tuiS.TUI(_sc3, "stub"); _uS.builder.stop = True
+
+        class _ScrS(object):
+            def getmaxyx(self): return 24, 80
+            def getch(self): return -1
+            def __getattr__(self, n): return lambda *a, **k: None
+        _uS.prompt = lambda scr, label: "hall mix"
+        _uS.key(_ScrS(), ord("N"))
+        _stored = _js2.load(open(_scp)).get("hall mix")
+        with _sc3.lock:
+            _sc3.events.clear()
+        _uS.menu = lambda scr, title, items, start=0: 0
+        _uS.key(_ScrS(), ord("R"))
+        with _sc3.lock:
+            _inj = [str(m) for _q, m in _sc3.events]
+    finally:
+        _tuiS.LV.SCENE_PATH = _oldp
+    check("the panel names a scene with N and recalls it with R",
+          _stored and _inj == [e for e in _stored if " control=126 " not in e],
+          "  (%d events written to scenes.json and injected back)" % len(_stored or []))
+    for _x in (_sc, _sc2, _sc3):
+        _x.renderer.close()
+
+    # ---- THE ROOM, LIVE ------------------------------------------------------
+    # The tail roomtail.py convolves onto a render, convolved block by block on
+    # the audio path -- the SAME IR, so the two renderers hear one room.
+    import roomtail as _RT2
+    _cv_err = []
+    for _room in ("chamber", "hall"):
+        _T.set_room(_room)
+        _rt = build_room_tail(48000, 128)
+        _x = np.random.RandomState(7).randn(128 * 600).astype(np.float32)
+        _y = np.zeros_like(_x); _ym = np.zeros_like(_x)
+        for _i in range(0, len(_x), 128):
+            _a, _b = _rt.process(_x[_i:_i + 128], _x[_i:_i + 128],
+                                 _x[_i:_i + 128], _x[_i:_i + 128])
+            _y[_i:_i + 128] = _a
+        _ref = _RT2.overlap_add(_x.astype(np.float64), _rt.ir[:, 0].astype(np.float64))[:len(_x)]
+        if _rt.mir is not None:
+            _ref += _RT2.overlap_add(_x.astype(np.float64), _rt.mir[:, 0].astype(np.float64))[:len(_x)]
+        _cv_err.append((_room, float(np.abs(_y - _ref).max() / np.abs(_ref).max())))
+        _rt.close()
+    _T.set_room(os.environ.get("TUNING_ROOM") or "hall")
+    check("the live room is the file's convolution, block by block",
+          all(e < 1e-5 for _r, e in _cv_err),
+          "  (%s: the same IR, two-tier partitioned in C, no latency)"
+          % ", ".join("%s %.1e" % (r, e) for r, e in _cv_err))
+    # The SEND: a channel's CC91 is its distance multiple, and the kernel's
+    # second output carries it -- the dry output untouched.
+    _ls = Live(program=56, rate=48000, frames=128, verbose=False)
+    _ls.warm()
+    _ls.renderer.send = True
+    _ls.on_midi(mido.Message("control_change", channel=0, control=91, value=80))
+    _ls.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    _ls.apply(0)
+    _Ld, _Rd = _ls.renderer.render(0, 128)
+    _Ld = _Ld.copy()
+    _SLd = _ls.renderer.SL[:128].copy()
+    _ls.renderer.send = False
+    _Ld2, _ = _ls.renderer.render(0, 128)
+    _ls.on_midi(mido.Message("control_change", channel=0, control=91, value=0)); _ls.apply(128)
+    _ls.renderer.send = True
+    _ls.renderer.render(128, 128)
+    _sl0 = float(np.abs(_ls.renderer.SL[:128]).max())
+    check("CC91 is a distance: 80 doubles the channel's room feed, the dry sound untouched",
+          np.allclose(_SLd, 2.0 * _Ld, rtol=1e-5, atol=1e-7)
+          and np.array_equal(_Ld, _Ld2.copy()) and _sl0 == 0.0,
+          "  (send = 2.000 x dry at CC91 80, nothing at 0, and the dry output "
+          "bit-identical with the send bus on or off)")
+    _ls.on_midi(mido.Message("sysex", data=[0x7E, 0x7F, 0x09, 0x01])); _ls.apply(256)
+    check("...and a system reset puts every channel back at the nominal distance",
+          _ls.slab.send == [1.0] * 16)
+    _ls.shutdown()
+    # A ROOM SWITCH, while playing: the templates re-built in the new room, the
+    # tail swapped with a crossfade, and nothing left half-built.
+    _lr9 = Live(program=56, rate=48000, frames=128, verbose=False)
+    _lr9.enable_room("hall")
+    _lr9.warm()
+    _was = (_T.SynthProperties.room_left, _T.SynthProperties.room_back)
+    _lr9.set_room("church")
+    _ok9 = _lr9.wait_patch(120)
+    for _i in range(int(ROOM_XFADE_S * 48000 / 128) + 4):
+        _lr9.callback(None, 128, None, 0)
+    _now = (_T.SynthProperties.room_left, _T.SynthProperties.room_back)
+    check("a room switch re-builds the patches in it and crossfades the tail",
+          _ok9 and _lr9.room_name == "church" and _now != _was
+          and _lr9.room is not None and _lr9._room_prev is None
+          and all(p.patch is not None for p in _lr9.parts),
+          "  (hall -> church: walls %.1f/%.1f m -> %.1f/%.1f m, tail swapped over %.0f ms"
+          "; built %s, name %s, tail %s, fading %s)"
+          % (_was[0], _was[1], _now[0], _now[1], ROOM_XFADE_S * 1000, _ok9,
+             _lr9.room_name, _lr9.room is not None, _lr9._room_prev is not None))
+    _lr9.shutdown()
+    _T.set_room(os.environ.get("TUNING_ROOM") or "hall")
+    os.environ.pop("TUNING_REFLECT", None)
+
     # ---- BANK SELECT AND DRUM SETS -----------------------------------------
     import percussion_map as _PM
     _rp = _T.resolve_patch
@@ -9431,6 +10167,10 @@ def main():
     ap.add_argument("--preset", default=None, help="load this preset from presets.json at startup")
     ap.add_argument("--tui", action="store_true", help="full-screen synthesiser interface")
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
+    ap.add_argument("--room", default=None, choices=ROOM_NAMES,
+                    help="the room, early reflections and tail (default: the session's, else hall)")
+    ap.add_argument("--fresh", action="store_true",
+                    help="start clean instead of resuming the last session")
     ap.add_argument("--selftest", action="store_true", help="run the behaviour checks and exit")
     ap.add_argument("--latency", action="store_true", help="measure MIDI-to-DAC latency while you play")
     a = ap.parse_args()
@@ -9457,11 +10197,24 @@ def main():
     live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner,
                 drums=a.drums, headroom_db=a.headroom, capacity=a.capacity,
                 threads=a.threads, verbose=not a.tui)
+    # THE LAST SESSION, unless told otherwise: everything as it was left --
+    # parts, globals, room, controls, routes and each channel's mix. A named
+    # preset asked for on the command line wins over it.
+    sess = None if (a.fresh or a.preset) else load_session()
+    live.enable_room(a.room or (sess or {}).get("room")
+                     or os.environ.get("TUNING_ROOM") or "hall")
     if a.preset:
         pres = load_presets().get(a.preset)
         if not pres:
             sys.exit("no preset %r in %s" % (a.preset, PRESET_PATH))
         apply_preset(live, pres)
+    elif sess:
+        try:
+            apply_preset(live, sess)
+            sys.stderr.write("  resumed the last session (--fresh to start clean)\n")
+        except Exception as e:
+            sys.stderr.write("  the last session would not apply (%s); starting clean\n" % e)
+    live.dirty = False
     live.warm()
 
     if a.tui:
@@ -9488,9 +10241,13 @@ def main():
                          % (li * 1000.0))
     stream.start_stream()
     last = time.monotonic()
+    saved = time.monotonic()
     try:
         while stream.is_active() and not stop.is_set():
             time.sleep(0.2)
+            if live.dirty and time.monotonic() - saved >= 2.0:
+                save_session(live)
+                saved = time.monotonic()
             if time.monotonic() - last >= 5.0:
                 last = time.monotonic()
                 s = live.stats()
@@ -9505,6 +10262,7 @@ def main():
         pass
     finally:
         stream.stop_stream(); stream.close(); pa.terminate(); port.close()
+        save_session(live)                 # and once more on the way out
         live.renderer.close()
         s = live.stats()
         sys.stderr.write("\n  peak %.3f  underruns %d  dropped %d  errors %d  stuck %d  miss %d\n"

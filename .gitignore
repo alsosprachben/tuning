@@ -1,1 +1,4 @@
 __pycache__/
+session.json
+session.json.bad
+session.json.tmp

@@ -48,7 +48,7 @@ for the reason above.
 | CC67 soft | ✓ | ✓ | una corda: a string count, not a filter |
 | CC71–78 sound controllers | ✓ | ✓ | resonance, release, attack, brightness, decay, vibrato rate/depth/delay — **only where the instrument has the mechanism** |
 | CC84 portamento control | ✓ | ✓ | its byte is a **source note number**; fires once |
-| CC91 reverb send | | ✓ | distance from the microphone |
+| CC91 reverb send | ✓ | ✓ | distance from the microphone — the same law in both, see below |
 | CC93 chorus send | ✓ | ✓ | fixed detuned copies, mixed in power |
 | CC96 / CC97 data increment / decrement | ✓ | ✓ | the selected RPN by one unit of its finest byte |
 | CC98 / CC99 NRPN | ✓ | ✓ | GS's eight sound NRPNs (`01 08…01 66`) read as CC71–78; every other NRPN deliberately ignored |
@@ -60,8 +60,7 @@ for the reason above.
 | CC126 mono | ✓ | ✓ | all sound off, all notes off, then **one voice** — see below |
 | CC127 poly | ✓ | ✓ | all sound off, all notes off, then polyphonic again |
 
-Thirty-four controllers live and thirty-five in a file. The one difference is
-CC91, which is file only. Four RPNs: **0/0** bend range, **0/1** fine tuning
+Thirty-seven controllers, the same in both renderers. Four RPNs: **0/0** bend range, **0/1** fine tuning
 (14-bit, ±100 cents), **0/2** coarse tuning (MSB only, ±64 semitones), and GM
 2's **0/5** modulation depth range. NRPNs are selected so that a file which
 sends one does not have its data entry land in whatever RPN was selected last —
@@ -556,8 +555,31 @@ Critical distance is where reverberant energy equals direct. It is nearer at
 room first and the room gets warmer as it gets further. Nobody tuned that in;
 it falls out of α rising with frequency.
 
-CC91 is file-only. Doing it live is new DSP on the audio thread — a partitioned
-convolver or an FDN — not a port of anything.
+**Live, the same room.** `convolver.c` convolves the tail on the audio path,
+block by block. It uses the same impulse response the file renderer's tail uses
+(`roomtail.build_ir` and `modal_ir`), and matches `roomtail`'s own convolution to
+3×10⁻⁷. It's partitioned in two tiers with no added latency: the first 4096 taps
+in one-block partitions every block, the rest in 2048-sample partitions whose
+work is spread over the sixteen blocks before it's due. The whole room costs
+0.04–0.10 ms a block on average, 0.5 ms at worst, against a 2.67 ms budget.
+
+CC91 follows the same law live. The synth kernel writes a second output, each
+partial weighted by its channel's `cc91/40`, and that send feeds the tail. The
+room modes are fed by the dry signal, as `roomtail.main` feeds them. So a
+channel sent back rings more, not longer, and its dry sound is bit-identical
+either way.
+
+**One difference remains: the directivity.** The file renderer weights the tail
+by the Q it measured over the *piece*. Live uses the energy-weighted Q of the
+templates the rig has built. Both keep the room bass-wet and treble-dry, but
+they aren't the same number.
+
+**The room is chosen while playing:** the TUI's `room` global, or
+`live.py --room`. A room is its early reflections as well as its tail, and
+those are baked into every template. So a switch rebuilds the patches off the
+audio thread, and notes already sounding keep the old room, as a program change
+keeps its old voice. The tail crossfades over 150 ms. "dry" turns off both
+the reflections and the tail.
 
 ## Una corda is a string count
 
@@ -656,6 +678,15 @@ note stuck. On a knob, the key's release restores the control's last value
 on that channel. The routes keep that value as messages pass (`Live.seen`),
 because the engine doesn't keep every control per channel. CC121 and a system
 reset clear it.
+
+**A scene is MIDI.** `N` in the panel saves every channel's controls as the
+events that would set them, one per (channel, controller), with only the latest
+value kept. It's captured after routing, so it's what the engine received. The
+tuning RPNs and CC71–78 are read back from the engine. That way data-increment
+steps, GS's NRPN spelling and resets are already folded in, and they're written
+out as clean select, data and null-RPN sequences. Recalling a scene injects the
+events past the routes. Mono is changed only where it differs, because both
+mode messages carry an All Sounds Off.
 
 The panel's on-screen controls go past the routes (`Live.inject`), so a route
 can never feed back into itself. A route that turns the mod wheel into
