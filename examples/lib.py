@@ -377,7 +377,10 @@ def set_stops(src, dest, draw, verbose=True):
 
             def word(ns):
                 v = 0
+                import tonelib
                 for n in ns:
+                    # an old name ("8", "flute") is still understood
+                    n = tonelib.rank_rename(n, names)
                     if n not in names:
                         raise SystemExit("ch%d has no %r stop; it has %s"
                                          % (ch, n, names))

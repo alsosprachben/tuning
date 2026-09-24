@@ -88,16 +88,16 @@ def at_raw(t):
 
 RAW = {
     # manual flue
-    0: [(0.0,           ['flute']),                              # Positiv
-        (KEY['F'],  ['8']),                                  # first brightening
-        (KEY['A'],  ['8', '4', '2', '2-2/3']),
-        (WALL,      ['8', '4', '2', '2-2/3', 'mixture']),
-        (KEY['D2'], ['8', '4', '2', '2-2/3', '16', '5-1/3', 'mixture'])],
+    0: [(0.0,           ['flute 8']),                              # Positiv
+        (KEY['F'],  ['principal 8']),                                  # first brightening
+        (KEY['A'],  ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3']),
+        (WALL,      ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'mixture III']),
+        (KEY['D2'], ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])],
     # pedal flue
-    1: [(0.0,           ['flute']),                             # stopped, not open
-        (KEY['F'],  ['8']),                                  # principal, with the manual
-        (KEY['A'],  ['16', '8', '4']),
-        (KEY['D2'], ['16', '8', '4', '5-1/3'])],
+    1: [(0.0,           ['flute 8']),                             # stopped, not open
+        (KEY['F'],  ['principal 8']),                                  # principal, with the manual
+        (KEY['A'],  ['principal 16', 'principal 8', 'octave 4']),
+        (KEY['D2'], ['principal 16', 'principal 8', 'octave 4', 'quint 5-1/3'])],
     # pedal reed: the weight, entering with the wall
     2: [(0.0,           []),
         (WALL,      ['16']),

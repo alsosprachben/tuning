@@ -1659,6 +1659,18 @@ class Patch:
             self.leslie_default = DETUNE_STEPS[len(DETUNE_STEPS) // 2]
         self.rank_names = [r[0] for r in getattr(pc, "stop_ranks", [])] if pc else []
         self.stop_ranks = list(getattr(pc, "stop_ranks", [])) if pc else []
+        # How the PANEL shows them (tonelib stop_rows): row 0 on the digit keys,
+        # row 1 on shift+digit. When the voice gives none, or rows that are not
+        # every rank once, the bit order in rows of nine.
+        # A "|" in a row is a line break on the panel, and not a stop.
+        _lines = [list(r) for r in getattr(pc, "stop_rows", [])] if pc else []
+        _sr = [[n for n in r if n != "|"] for r in _lines]
+        if sorted(n for r in _sr for n in r) != sorted(self.rank_names):
+            _sr = [self.rank_names[i:i + 9] for i in range(0, len(self.rank_names), 9)]
+            _lines = _sr
+        self.stop_rows = _sr
+        self.stop_row_lines = _lines
+        self.stop_display = [n for r in _sr for n in r]
         # The harmonium's Tremolo STOP (not the wheel's tremolo_depth, which
         # would give its CC1 a tremolo knob) and its Percussion ranks.
         self.stop_tremolo_hz = float(getattr(pc, "stop_tremolo_hz", 0.0)) if pc else 0.0
@@ -2034,7 +2046,8 @@ class Part:
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.muted = bool(d.get("muted", False))
         if d.get("drawn"):
-            p.drawn = {r for r in d["drawn"] if r in patch.rank_names}
+            p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
+            p.drawn = {r for r in p.drawn if r in patch.rank_names}
         return p
 
 
@@ -9867,7 +9880,7 @@ def selftest():
     # redrew the first five stops over his.
     _og = Live(program=19, rate=48000, frames=128, verbose=False)
     _og.on_midi(_cc_(0, 1, 126)); _og.apply(0)
-    _og.set_stops(_og.parts[0], {"8", "2"})
+    _og.set_stops(_og.parts[0], {"principal 8", "super octave 2"})
     _gp = os.path.join(_sd, "organ.json")
     save_session(_og, _gp)
     _og2 = Live(program=0, rate=48000, frames=128, verbose=False)
@@ -9876,7 +9889,7 @@ def selftest():
     _old = [str(_cc_(0, 1, 126))]
     recall_scene(_og2, _old); _og2.apply(256)
     check("an organ's hand registration survives the session, wheel or no wheel",
-          _og2.parts[0].drawn == {"8", "2"},
+          _og2.parts[0].drawn == {"principal 8", "super octave 2"},
           "  (drawn %s; the mod wheel on an organ is the crescendo pedal, and the "
           "registration it leaves is saved as the stops themselves -- an old "
           "scene's wheel is not replayed onto it either)" % sorted(_og2.parts[0].drawn))
@@ -9998,6 +10011,48 @@ def selftest():
           and any(l.startswith("tremolo") and l.rstrip().endswith("effect") for l in _labs),
           "  (%s; picker: %s)" % (_uH.stops_str(_hp), _labs[:3]))
     _hm.renderer.close()
+    # THE ORGAN'S PANEL READS LIKE A STOP JAMB, whatever the bits are: gravest
+    # flue first, reeds last, and the digit is the place on the panel.
+    _oc = Live(program=19, rate=48000, frames=128, verbose=False)
+    _uO = _tuiH.TUI(_oc, "stub"); _uO.builder.stop = True
+    _ocp = _oc.parts[0]
+    _oc.set_stops(_ocp, {"principal 8"}); _oc.apply(_oc.n)
+    _uO.key(_ScrH(), ord("2")); _oc.apply(_oc.n)
+    _sh3 = next(k for k, v in _tuiH.STOP_KEYS.items() if v == (1, 2))
+    _uO.key(_ScrH(), ord(_sh3)); _oc.apply(_oc.n)
+    _ostr = _uO.stops_str(_ocp)
+    _olines = _uO.stops_lines(_ocp, 72)
+    check("the organ's stops are shown in console order, flues on the digits, reeds shifted",
+          _ocp.patch.stop_display[:3] == ["principal 16", "bourdon 16", "principal 8"]
+          and _ocp.patch.stop_rows[1] == ["reed 16", "reed 8", "trumpet 8", "reed 4"]
+          and _ocp.drawn == {"principal 8", "bourdon 16", "trumpet 8"}
+          and _ostr.index("principal 16") < _ostr.index("mixture III") < _ostr.index("reed 16")
+          and all(len(l) <= 72 for l in _olines) and _olines[-1].strip().startswith(
+              _tuiH.STOP_LABELS[(1, 0)]),
+          "  (%s; shift+3 is %r here, from %s)"
+          % (" / ".join(_olines), _sh3, _tuiH.STOP_KEYS_FROM))
+    # WHAT SHIFT TYPES IS THE KEYBOARD'S, read from the keymap: a German board
+    # shifts 2 to '"', a French one types the DIGIT shifted.
+    _dump = lambda lv: "\n".join("key <AE0%d> { [ %s, %s ] };" % (i + 1, a, b)
+                                   for i, (a, b) in enumerate(lv))
+    _kde = _tuiH.stop_keymap(_dump([(str(i + 1), s) for i, s in enumerate(
+        ["exclam", "quotedbl", "section", "dollar", "percent", "ampersand",
+         "slash", "parenleft", "parenright"])]))[0]
+    _kfr = _tuiH.stop_keymap(_dump([(s, str(i + 1)) for i, s in enumerate(
+        ["ampersand", "eacute", "quotedbl", "apostrophe", "parenleft", "minus",
+         "egrave", "underscore", "ccedilla"])]))[0]
+    check("the stop keys follow the keyboard layout's own shifted digits",
+          _kde['"'] == (1, 1) and _kde["/"] == (1, 6) and _kde["2"] == (0, 1)
+          and _kfr["\u00e9"] == (1, 1) and _kfr["2"] == (0, 1)
+          and not (set(_tuiH.STOP_KEYS) & _tuiH.HOTKEYS_FREE),
+          "  (German shift+2 %r, French unshifted 2 %r; no stop key is offered "
+          "as a panel hotkey)" % ('"', "\u00e9"))
+    _pd = _ocp.to_dict(); _pd["drawn"] = ["8", "16", "flute", "mixture", "trumpet"]
+    _rd = sorted(Part.from_dict(_pd).drawn)
+    check("a preset saved under the old stop names still draws them",
+          _rd == ["flute 8", "mixture III", "principal 16", "principal 8", "trumpet 8"],
+          "  (%s)" % _rd)
+    _oc.renderer.close()
     _bad = os.path.join(_sd, "bad.json")
     open(_bad, "w").write("{not json")
     _nb = load_session(_bad)

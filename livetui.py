@@ -222,6 +222,83 @@ HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
                 | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNR")))   # N/R: scenes
 
 
+# THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
+# depends on the keyboard -- "!" on a US board, "!" on a UK one too but "@" is
+# shift+' there, "!" on a German one but shift+2 is '"' -- and curses only ever
+# sees the character. So the layout is read from the keymap itself: xkbcomp
+# dumps the running X (or Xwayland) keymap, and each digit key's two levels are
+# its two characters. Over ssh the keymap here is not the keyboard in front of
+# the player, so that, and any failure, is a US board.
+_US_SHIFTED = "!@#$%^&*("
+_KEYSYM_CHARS = {
+    "exclam": "!", "at": "@", "numbersign": "#", "dollar": "$", "percent": "%",
+    "asciicircum": "^", "ampersand": "&", "asterisk": "*", "parenleft": "(",
+    "parenright": ")", "quotedbl": '"', "apostrophe": "'", "grave": "`",
+    "slash": "/", "equal": "=", "question": "?", "minus": "-", "underscore": "_",
+    "plus": "+", "section": "\u00a7", "sterling": "\u00a3", "degree": "\u00b0",
+    "eacute": "\u00e9", "egrave": "\u00e8", "ccedilla": "\u00e7",
+    "agrave": "\u00e0", "currency": "\u00a4", "EuroSign": "\u20ac",
+    "quoteleft": "`", "quoteright": "'", "less": "<", "greater": ">",
+    "semicolon": ";", "colon": ":", "comma": ",", "period": ".",
+    "bracketleft": "[", "bracketright": "]", "braceleft": "{", "braceright": "}",
+    "backslash": "\\", "bar": "|", "asciitilde": "~",
+}
+
+
+def _keysym_char(name):
+    if len(name) == 1:
+        return name
+    if len(name) == 5 and name[0] == "U":
+        try:
+            return chr(int(name[1:], 16))
+        except ValueError:
+            return None
+    return _KEYSYM_CHARS.get(name)
+
+
+def stop_keymap(dump=None):
+    """{character: (row, index), ...} and {(row, index): label}: row 0 is the
+    level that types the digit, row 1 the other one. `dump` is xkbcomp's
+    output, for the selftest; None reads the running keymap."""
+    import re
+    import subprocess
+    keys, labels = {}, {}
+    for i in range(9):
+        keys[str(i + 1)] = (0, i); labels[(0, i)] = str(i + 1)
+        keys[_US_SHIFTED[i]] = (1, i); labels[(1, i)] = "\u21e7" + str(i + 1)
+    if dump is None:
+        if os.environ.get("SSH_CONNECTION") or not (os.environ.get("DISPLAY")
+                                                    or os.environ.get("WAYLAND_DISPLAY")):
+            return keys, labels, "us (assumed)"
+        try:
+            dump = subprocess.run(["xkbcomp", "-xkb", os.environ.get("DISPLAY", ":0"), "-"],
+                                  capture_output=True, text=True, timeout=2).stdout
+        except Exception:
+            return keys, labels, "us (assumed)"
+    got = {}
+    for m in re.finditer(r"key <AE0([1-9])>\s*{[^\[]*\[\s*([^,\]]+?)\s*,\s*([^,\]]+?)\s*[,\]]", dump):
+        got[int(m.group(1)) - 1] = (_keysym_char(m.group(2)), _keysym_char(m.group(3)))
+    if len(got) != 9:
+        return keys, labels, "us (assumed)"
+    keys, labels = {}, {}
+    for i in range(9):
+        d = str(i + 1)
+        lv0, lv1 = got[i]
+        if lv1 == d and lv0:                 # AZERTY: the digit is the SHIFTED level
+            keys[d] = (0, i); labels[(0, i)] = "\u21e7" + d
+            keys[lv0] = (1, i); labels[(1, i)] = lv0
+        else:
+            keys[d] = (0, i); labels[(0, i)] = d
+            if lv1:
+                keys[lv1] = (1, i); labels[(1, i)] = "\u21e7" + d
+    return keys, labels, "keymap"
+
+
+STOP_KEYS, STOP_LABELS, STOP_KEYS_FROM = stop_keymap()
+# A panel control cannot be bound to a stop key.
+HOTKEYS_FREE = HOTKEYS_FREE - set(STOP_KEYS)
+
+
 
 class TUI:
     def __init__(self, live, port_name):
@@ -423,16 +500,17 @@ class TUI:
             # ranks by name, including the ones no crescendo reaches.
             if p.organ:
                 order = [r for r in p.patch.cres_order] + \
-                        [r for r in p.patch.rank_names if r not in p.patch.cres_order]
+                        [r for r in p.patch.stop_display if r not in p.patch.cres_order]
                 k = len([r for r in order if r in p.drawn])
                 k = max(1, min(len(order), k + delta))
                 self.live.request_stops(p, set(order[:k]))
 
-    def toggle_stop(self, i):
+    def toggle_stop(self, i, row=0):
         p = self.sel()
         if p is None or not p.organ:
             return
-        names = p.patch.rank_names
+        rows = p.patch.stop_rows
+        names = rows[row] if row < len(rows) else []
         if not 0 <= i < len(names):
             return
         want = set(p.drawn)
@@ -636,15 +714,17 @@ class TUI:
             self.say("%s has no stops -- they are an organ and harpsichord thing"
                      % (p.label()))
             return
-        names = p.patch.rank_names
+        names = p.patch.stop_display
         cres = set(p.patch.cres_order)
         if cres:
-            labels = ["%-9s %s" % (r, "crescendo" if r in cres else "hand-drawn only")
+            wd = max(len(r) for r in names)
+            labels = ["%-*s  %s" % (wd, r, "crescendo" if r in cres else "hand-drawn only")
                       for r in names]
         else:
             # No crescendo: a harmonium, whose registers are split. Say which
             # half each one speaks in, and which knobs are not reeds at all.
-            ranks = p.patch.stop_ranks
+            ranks = {rk[0]: rk for rk in p.patch.stop_ranks}
+            ranks = [ranks[r] for r in names]
             def half(rk):
                 if rk[1] is None:
                     return "effect"
@@ -1137,9 +1217,12 @@ class TUI:
             # The full registration goes UNDERNEATH the selected row, not off to
             # the right of it: at x=70 on an 80-column terminal it was clipped
             # clean off the screen, which is no way to show a registration.
-            if here and p.organ and y < h - 12:
-                self.addstr(scr, y, 6, self.stops_str(p), C("yellow"))
-                y += 1
+            if here and p.organ:
+                for ln in self.stops_lines(p, max(20, w - 8)):
+                    if y >= h - 12:
+                        break
+                    self.addstr(scr, y, 6, ln, C("yellow"))
+                    y += 1
         y += 1
 
         if self.pane == 2:
@@ -1253,15 +1336,32 @@ class TUI:
         if c == "stops":
             if not p.organ:
                 return "-"
-            return " ".join(r for r in p.patch.rank_names if r in p.drawn) or "none"
+            return " ".join(r for r in p.patch.stop_display if r in p.drawn) or "none"
         return ""
 
+    def stops_lines(self, p, width=80):
+        """One line per key row, wrapped to the width: each stop with the key
+        that toggles it written next to it, and the drawn ones bracketed."""
+        lines = []
+        for row, names in enumerate(p.patch.stop_row_lines):
+            cur = "stops  " if row == 0 else "       "
+            i = -1
+            for r in names:
+                if r == "|":
+                    if cur.strip():
+                        lines.append(cur.rstrip()); cur = "       "
+                    continue
+                i += 1
+                k = STOP_LABELS.get((row, i), "") if row < 2 else ""
+                item = ("%s[%s]" % (k, r)) if r in p.drawn else ("%s %s " % (k, r))
+                if len(cur) + len(item) + 1 > width and cur.strip():
+                    lines.append(cur.rstrip()); cur = "       "
+                cur += item + " "
+            lines.append(cur.rstrip())
+        return lines
+
     def stops_str(self, p):
-        """Numbered, so the digit that toggles a rank is written next to it."""
-        out = []
-        for i, r in enumerate(p.patch.rank_names):
-            out.append("%d[%s]" % (i + 1, r) if r in p.drawn else "%d %s " % (i + 1, r))
-        return "stops  " + " ".join(out)
+        return "  ".join(self.stops_lines(p, 10 ** 6))
 
     def draw_keyboard(self, scr, y, w):
         """Which part answers which key. The point of a split is that you can see
@@ -1306,13 +1406,14 @@ class TUI:
             "  a                 LAYER: duplicate this part over the same keys",
             "  s                 SPLIT: halve this part's range into two parts",
             "  d                 remove this part        m   mute / unmute",
-            "  1..9              on an organ part, draw or retire that stop",
+            "  1..9, shift+1..9  on an organ part, draw or retire that stop",
             "",
             "stops",
             "  the mod wheel walks the crescendo order, which does NOT contain",
-            "  every rank -- the reed organ's trumpet and the flue organ's flute",
-            "  and mixture are hand-drawn only. enter on the stops column, or the",
-            "  digit next to the name under the selected row.",
+            "  every rank -- the organ's flute 8, bourdon 16, mixture and reeds",
+            "  are hand-drawn only. enter on the stops column, or the",
+            "  key next to the name under the selected row: the digits for the",
+            "  first row, shift and the digit for the second (the reeds).",
             "",
             "globals",
             "  master            capped at 0 dB: above unity the kernel hard-clips",
@@ -1461,8 +1562,9 @@ class TUI:
             # panic, the one thing you want when something drones
             self.live.panic()
             self.say("all notes off")
-        elif ord("1") <= c <= ord("9"):
-            self.toggle_stop(c - ord("1"))
+        elif 0 < c < 0x110000 and chr(c) in STOP_KEYS:
+            row, i = STOP_KEYS[chr(c)]
+            self.toggle_stop(i, row)
         return True
 
     def bump(self, delta, big=False):

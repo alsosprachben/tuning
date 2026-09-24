@@ -80,19 +80,27 @@ what you can change about it, and the same two keys change every one of them.
 ### Stops
 
 The mod wheel is a crescendo pedal on an organ part, and it walks
-`crescendo_order` — which deliberately **does not contain every rank**. The reed
-organ's `trumpet` and the flue organ's `flute` and `mixture` are registration
-choices, not places a crescendo passes through, so no amount of wheel will reach
-them. Three ways to draw a rank by hand:
+`crescendo_order` — which deliberately **does not contain every rank**. The
+church organ's `flute 8`, `bourdon 16`, `mixture III` and its reeds are
+registration choices, not places a crescendo passes through, so no amount of
+wheel will reach them. Three ways to draw a rank by hand:
 
 - `enter` on the **stops** column — every rank listed by name, `space` toggles,
   and each says whether the crescendo can reach it
-- the **digit** printed next to the rank on the line under the selected part
+- the **key** printed next to the rank on the lines under the selected part:
+  the digits for the first row (the organ's flue stops, the harmonium's
+  registers) and **shift+digit** for the second (the organ's reeds, the
+  harmonium's Expression, Percussion and Tremolo). What shift+digit types is
+  read from the keyboard's own layout (`xkbcomp`); over ssh it assumes US
 - `-` / `+` on the stops column, which walks the crescendo order first and then
   the hand-drawn ranks
 
-Any single rank can stand alone, so a reed organ on nothing but its `trumpet` is
-one keystroke away. The harmonium (GM 20) has stops too — four registers in
+The panel lists the organ as a stop jamb does, which is not the bit order a
+file uses: flues from the 16′s down to the Mixtur, then the reeds. The stops
+are named as a console names them (`principal 8`, `octave 4`, `quint 2-2/3`,
+`super octave 2`); presets and scripts using the old bare footages (`8`, `4`)
+still work. Any single rank can stand alone, so an organ on nothing but its
+`trumpet 8` is one keystroke away. The harmonium (GM 20) has stops too — four registers in
 each half of a split keyboard, the céleste, and Expression, Percussion and
 Tremolo — listed by the names on its knobs (`hautbois 4`); a file draws them on
 CC43/CC44, because its CC11 is the bellows. The tuner is per part too, so a mode-locked organ layer can

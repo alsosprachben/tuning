@@ -4491,6 +4491,16 @@ class OrganProperties(StoppedPipeProperties):
     # hard L<->R (that read as a gimmick).
     rank_spatial = {
         "16":     (-1.55, 0.22),   # pedal 16': far flank, a touch of tower width
+        "principal 16": (-1.55, 0.22),  # the flue's, by its full name
+        "bourdon 16":   (-1.55, 0.22),  # the stopped 16' stands in the same towers
+        # ...and the rest of the flue console by theirs, each where it stood.
+        "principal 8":    (0.0,   0.12),
+        "octave 4":       (0.95,  0.12),
+        "super octave 2": (-1.15, 0.10),
+        "quint 2-2/3":    (1.60,  0.10),
+        "quint 5-1/3":    (-1.70, 0.10),
+        "flute 8":        (1.25,  0.12),
+        "trumpet 8":      (-1.35, 0.15),
         "8":      (0.0,   0.12),   # foundation, central
         "4":      (0.95,  0.12),
         "2":      (-1.15, 0.10),
@@ -4599,16 +4609,23 @@ class FlueOrganProperties(OrganProperties):
     # the pyramid weight (8' loudest, upperwork softer, quints softest). Bit i
     # of the CC11 mask = stop_ranks[i]; default drawn set is 8'-only.
     registerable = True
+    #
+    # NAMED AS A CONSOLE NAMES THEM, the German way Geer teaches: a family and
+    # a footage. They were bare footages ("8", "4", ...), which read as numbers
+    # beside the panel's digit keys; the old names are still understood
+    # (RANK_RENAMES below). The 16' is an OPEN one, rare and grave on a manual,
+    # beside the stopped bourdon 16 (bit 12) that is the usual one.
     stop_ranks = [
-        ("8",     1.0, 1.00),
-        ("4",     2.0, 0.72),
-        ("2",     4.0, 0.55),
-        ("2-2/3", 3.0, 0.40),
-        ("16",    0.5, 0.80),
-        ("5-1/3", 1.5, 0.34),
+        ("principal 8",    1.0, 1.00),
+        ("octave 4",       2.0, 0.72),
+        ("super octave 2", 4.0, 0.55),
+        ("quint 2-2/3",    3.0, 0.40),
+        ("principal 16",   0.5, 0.80),
+        ("quint 5-1/3",    1.5, 0.34),
     ]
     # Rollschweller draw order for the CC4 crescendo pedal: brighten, then weight.
-    crescendo_order = ["8", "4", "2", "2-2/3", "16", "5-1/3"]
+    crescendo_order = ["principal 8", "octave 4", "super octave 2", "quint 2-2/3",
+                       "principal 16", "quint 5-1/3"]
 
 
 class ReedOrganProperties(OrganProperties):
@@ -4978,6 +4995,13 @@ ReedOrganFreeProperties.stop_ranks = [
     ("expression",    None, 0.0),
     ("percussion",    None, 0.0),
     ("tremolo",       None, 0.0),
+]
+# The panel's two key rows: the reeds on the digits, the three stops that are
+# not reeds on shift+digit.
+ReedOrganFreeProperties.stop_rows = [
+    ["cor anglais 1", "bourdon 2", "clairon 3", "basson 4", "|",
+     "flute 1", "clarinette 2", "fifre 3", "hautbois 4", "celeste"],
+    ["expression", "percussion", "tremolo"],
 ]
 
 
@@ -5401,14 +5425,14 @@ class ConicalBrassProperties(BrassProperties):
 # trumpet. So a drawn flute/trumpet is a genuinely different colour that still locks
 # like every other stop. Appended here (not inline) because BrightBrass is defined
 # after ReedOrgan. Flute = flue bit 6; Trumpet = reed bit 3.
-FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute", 1.0, 0.60, StoppedPipeProperties)]
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute 8", 1.0, 0.60, StoppedPipeProperties)]
 # Mixtur III -- one drawstop, several very high ranks (1 1/3' + 1' + 2/3'). They sit
 # far above the pipe ceiling, so the break-back folds them back constantly to stay
 # under it: THAT is a Mixtur's "composition", and why its shimmer re-colors up the
 # keyboard instead of turning shrill. A COMPOUND rank: ratio is a list of the ranks'
 # footages; the build loops expand it, each sub-rank breaking back on the note's grid
 # (so all stay hybrid-locked). Drawn by bit 7 (14-bit stop word: CC11 | CC43<<7).
-FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture", [6.0, 8.0, 12.0], 0.28)]
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture III", [6.0, 8.0, 12.0], 0.28)]
 # Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
 # peroration crowns without blaring (also relieves the dense close's headroom).
 ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, CylindricalBrassProperties, True)]
@@ -5427,8 +5451,45 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("reed 8",  1.0, 1.00, ReedOrganProperties),
     ("reed 16", 0.5, 0.72, ReedOrganProperties),
     ("reed 4",  2.0, 0.55, ReedOrganProperties),
-    ("trumpet", 1.0, 0.42, CylindricalBrassProperties, True, ReedOrganProperties),
+    ("trumpet 8", 1.0, 0.42, CylindricalBrassProperties, True, ReedOrganProperties),
 ]
+# THE BOURDON 16', bit 12: the manual's usual 16', and a STOPPED one -- a
+# stopped pipe sounds an octave below its length, so it is half the size and a
+# fraction of the weight of the open principal 16 at bit 4, and its odd
+# harmonics make it a soft gravity under an 8' rather than a second bass line.
+# Built as the 8' flute is, the stopped spectrum on the flue's pipe; hand-drawn,
+# after every existing bit, so nothing already written moves.
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
+    ("bourdon 16", 0.5, 0.60, StoppedPipeProperties),
+]
+# HOW THE CONSOLE SHOWS THEM, which is not the bit order: the bits are the file
+# format and grew one addition at a time, so they must never move. A stop jamb
+# reads the flue chorus from the gravest pitch down to the Mixtur, the mutations
+# in their places by pitch, then the reeds from 16' up. Two ROWS: the panel's
+# digit keys draw the first and shift+digit the second, so the reeds are their
+# own row on the panel as they are their own division on the console. A "|"
+# starts a new LINE within a row without changing the numbering: the
+# foundations, then the upperwork.
+FlueOrganProperties.stop_rows = [
+    ["principal 16", "bourdon 16", "principal 8", "flute 8", "|",
+     "quint 5-1/3", "octave 4", "quint 2-2/3", "super octave 2", "mixture III"],
+    ["reed 16", "reed 8", "trumpet 8", "reed 4"],
+]
+
+# RENAMED RANKS, old -> new, so a preset, a session or a script written before
+# still draws them. Applied only where the NEW name is one of the voice's ranks:
+# the harpsichord still has an "8" and a "4", and they are its own.
+RANK_RENAMES = {
+    "16": "principal 16", "8": "principal 8", "4": "octave 4",
+    "2": "super octave 2", "2-2/3": "quint 2-2/3", "5-1/3": "quint 5-1/3",
+    "flute": "flute 8", "mixture": "mixture III", "trumpet": "trumpet 8",
+}
+
+
+def rank_rename(name, names):
+    """`name` as the voice with ranks `names` calls it today."""
+    new = RANK_RENAMES.get(name)
+    return new if (new is not None and new in names and name not in names) else name
 
 
 # --- Broad melodic buckets (generic; specialize per-instrument later) ---
