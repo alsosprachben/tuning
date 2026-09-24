@@ -767,6 +767,82 @@ shutters and the stops are still controls. The bagpipe is the same: the bag is
 at the pressure the piper's arm holds, the chanter has no dynamics at all, and
 the channel fader is the only level there is.
 
+## MIDI 2.0: the bridge, and per-note pitch
+
+Live speaks MIDI 2.0 (the Universal MIDI Packet and the MIDI 2.0 Protocol,
+M2-104-UM v1.1.2) through `ump.py`. The keyboard in front of it is MIDI 1.0,
+so the first thing built is the **bridge**: `--midi2` carries every message it
+sends across to MIDI 2.0 and hands the engine the result.
+
+| | live | file | |
+|---|---|---|---|
+| MIDI 1.0 bridged to MIDI 2.0 (`--midi2`) | ✓ | | sample-for-sample what MIDI 1.0 plays, checked in the selftest |
+| Note On/Off, 16-bit velocity | ✓ | | a velocity of 0 is still a note (7.4.2) |
+| CC, channel and poly pressure, pitch bend, 32-bit | ✓ | | the full resolution reaches the voice |
+| Program change with bank | ✓ | | unrolled into CC0/CC32/program for the existing latch |
+| RPN / NRPN (registered and assignable controllers) | ✓ | | unrolled into 101/100/6/38 (or 99/98) for the existing handlers |
+| **Pitch 7.9** — a Note On's own pitch | ✓ | | absolute, for that note alone |
+| **Pitch 7.25** — registered per-note controller 3 | ✓ | | absolute and persistent per note number; moves a sounding note |
+| **per-note pitch bend**, and its range (RPN 0/7) | ✓ | | an offset on the note's pitch; its neighbours don't move |
+| per-note management (detach, reset) | ✓ | | reset clears the note number's per-note state |
+| SysEx (7-bit) | ✓ | | reassembled across packets |
+| relative controllers, other per-note controllers, CC 0/6/32/38/88/96–101 | ignored, counted | | the last group is the spec's: 7.4.6, D.3.3 |
+
+**The exactness rule.** The engine still works in MIDI 1 units, but as
+floats: velocity and controllers 0..127, bend −8192..8191. A 32-bit value
+that *is* the spec's min-center-max upscale of a 7-bit value decodes to that
+integer. Anything else decodes through the inverse of the same curve. The
+spec requires MIDI 1.0 → 2.0 → 1.0 to come back unchanged (D.1.2), which is
+why a bridged keyboard plays the same samples as MIDI 1.0 does. Controllers
+the engine reads as integers (bank, pan, CC5, CC43/44, CC84, CC126) are taken
+at their top seven bits, as the spec says of CC84 and CC126.
+
+**The bridge's one choice.** A lone CC6 is held until a CC38, a later CC6 or
+a new selection arrives, and only then does one MIDI 2.0 RPN go out (D.3.3).
+The spec allows a timeout on top of that. Here the next message of any kind
+flushes it first, and so does 5 ms of silence. So an RPN is always in force
+before the note that follows it, as it was in the MIDI 1.0 stream.
+
+**The one thing that plays differently: CC96/97.** Data increment and
+decrement "have no RPN/NRPN related function in the MIDI 2.0 Protocol"
+(D.3.3). Through the bridge they are ignored, so the stepped RPN doesn't
+move.
+
+**Per-note pitch is absolute, whatever the tuner.** MIDI 2.0 ranks the
+sources of a note's pitch:
+- The note number gives a default that "is only roughly defined". That's
+  what the tuner supplies.
+- MTS and Pitch 7.25 override the default.
+- Pitch 7.9 overrides both, for its one note.
+- Bends and channel tuning (RPN 1/2) offset whatever pitch is in force.
+
+Pitch 7.9 and 7.25 are semitones of **12-TET at A = 440**. Under `hybrid`,
+which sits at A415, they are still A440-referenced. A file that wants its
+own intonation under any tuner should send a Pitch 7.25 table first
+(`examples/midi2_demo.py` does). The partials are still the voice's own, so
+a just third on the piano comes from a stretched string. Measured on a piano
+and on the organ, every partial moves by the same ratio and lands on target
+to within 1e-6 cents (selftest).
+
+**Per-note bend range.** RPN 0/7 sets it, in 7.25 format. The spec gives no
+default, so **2 semitones** is used, the same as the channel's.
+
+**Detach can't be complete.** The slab keys a note by (part, channel, note,
+rank), with no identity for each instance of a note. A detached note that is
+still ringing and a new note on the same number are the same key. Detach
+therefore only keeps the ringing notes where they are when a reset arrives.
+
+**Sources of MIDI 2.0 today:**
+- **`--midi2`**, your keyboard through the bridge.
+- **`--midi2-pitch just:C`** (any tonic, or `et`): the bridge gives every
+  Note On a Pitch 7.9 attribute from a five-limit just table. Your keyboard
+  then plays real per-note pitch through the whole MIDI 2.0 path.
+- **`--midi2-play FILE`**: a Clip File (`.midi2`) or raw UMP stream, played
+  into the engine alongside the keyboard. `examples/midi2_demo.py` writes
+  one with a third that settles from 12-TET to 5:4 while the root and fifth
+  hold, a just chord from its first sample, and a vibrato on one note under
+  a 32-bit swell.
+
 ## The harmonium's stops have their own address
 
 On the pipe organ and the harpsichord the stop word is CC11 (bits 0–6) and

@@ -79,6 +79,7 @@ import math
 import numpy as np
 import mido
 import blockrender as B
+import ump as U
 import chorus as _CHR
 import tonelib as T
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
@@ -2093,6 +2094,21 @@ class Live:
         self.chanstate = {}
         self.stopword = {}           # channel -> [CC43, CC44], a harmonium's stop word
         self.xnote = {}              # slot key -> the bellows (0..1) its Expression was stamped at
+        # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
+        # MIDI 1.0 is being carried as MIDI 2.0; None means MIDI 1.0 straight in.
+        self.midi2 = None
+        self.midi2_label = ""
+        self.m2_held_at = 0.0        # when the bridge started holding a data entry
+        self.m2_sysex = {}           # group -> SysEx bytes still arriving
+        self.m2_ignored = 0          # MIDI 2.0 messages the engine has no use for
+        # PER-NOTE PITCH, the spec's precedence (M2-104 7.4.15): a Note On's
+        # Pitch 7.9 for that note, else the Pitch 7.25 set for the note number,
+        # else the tuner (and MTS); per-note bend offsets whichever it is.
+        self.pn725 = {}              # (channel, note) -> semitones, persistent
+        self.pnattr = {}             # (channel, note) -> semitones, the note's own
+        self.pnbend = {}             # (channel, note) -> -1..1
+        self.pnrange = {}            # channel -> per-note bend range, semitones
+        self.pn_at = {}              # (pid, channel, note) -> (factor, absolute)
         self.dirty = False           # the session has changed since it was saved
         self._learn = None
         self._learn_swallow = set()
@@ -2327,8 +2343,44 @@ class Live:
         if msgs:
             now = time.monotonic()
             with self.lock:
+                if self.midi2 is not None:
+                    # THE BRIDGE: routes, learn and the panel's memory saw the
+                    # keyboard's MIDI 1.0 above; the engine gets MIDI 2.0.
+                    msgs = self._bridge(msgs, now)
                 for m in msgs:
                     self.events.append((now, m))
+
+    def _bridge(self, msgs, now):
+        """MIDI 1.0 -> UMP -> the engine's events. Under the lock."""
+        out = []
+        for m in msgs:
+            for pkt in self.midi2.feed(m):
+                out.extend(U.decode(pkt, self.m2_sysex))
+        if self.midi2.pending and not self.m2_held_at:
+            self.m2_held_at = now
+        elif not self.midi2.pending:
+            self.m2_held_at = 0.0
+        return out
+
+    # A lone CC6 is held by the translator until a CC38 or the next message
+    # (M2-104 D.3.3); the spec allows a timeout, and this is it.
+    M2_HOLD_S = 0.005
+
+    def on_ump(self, packets):
+        """UMP in -- a MIDI 2.0 sender, or a Clip File played in. Decoded to the
+        engine's events and queued. The panel's memory of channel controls
+        records them at MIDI 1.0 resolution, which is what a scene stores."""
+        now = time.monotonic()
+        evs = []
+        with self.lock:
+            for pkt in packets:
+                evs.extend(U.decode(pkt, self.m2_sysex))
+        for e in evs:
+            if e.type in ("control_change", "pitchwheel", "aftertouch", "sysex"):
+                self._see(_m1_view(e))
+        with self.lock:
+            for e in evs:
+                self.events.append((now, e))
 
     # THE LAST VALUE OF EACH CONTROL ON EACH CHANNEL, as it passed through here
     # from the keyboard or the panel -- what a key routed onto a control puts
@@ -2466,6 +2518,12 @@ class Live:
 
     def apply(self, n0):
         with self.lock:
+            if (self.midi2 is not None and self.m2_held_at
+                    and time.monotonic() - self.m2_held_at > self.M2_HOLD_S):
+                for pkt in self.midi2.flush():
+                    self.events.extend((self.m2_held_at, e)
+                                       for e in U.decode(pkt, self.m2_sysex))
+                self.m2_held_at = 0.0
             evs, self.events = self.events, collections.deque()
         for stamped, msg in evs:
             if self.measure and msg.type == "note_on" and msg.velocity > 0 and self._dac:
@@ -2500,6 +2558,9 @@ class Live:
                 self.last_error = "amp: %s: %s" % (type(e).__name__, e)
 
     def _one(self, n0, msg):
+        if msg.type in _M2_ONLY:
+            self._one_m2(n0, msg)
+            return
         if msg.type == "sysex":
             # No channel on a sysex, and every line below this reads one.
             self._sysex(n0, msg)
@@ -2939,6 +3000,13 @@ class Live:
                 _psrc = self.last_on.get(ch)
             self._glide_from = _psrc if _psrc != msg.note else None
             self.last_on[ch] = msg.note
+            # A MIDI 2.0 Note On may carry its own pitch (Pitch 7.9), which is
+            # this note's alone and outranks every other tuning (7.4.15.3).
+            _ap = getattr(msg, "attr_pitch", None)
+            if _ap is not None:
+                self.pnattr[(ch, msg.note)] = _ap
+            else:
+                self.pnattr.pop((ch, msg.note), None)
             self._slur = _slur
             for part in parts:
                 if part.matches(ch, msg.note):
@@ -3096,8 +3164,12 @@ class Live:
         # THE CHANNEL'S TUNING IS PER PITCH CLASS, so it multiplies the
         # channel's single bend ratio rather than joining it. `note` is the
         # written key, which is what the MIDI spec indexes the table by.
-        b = self.bend.get(ch, 1.0) * self._key_ratio(part, ch, note)
-        if str(part.patch.tuner).lower() == 'gm2':
+        # ...UNLESS MIDI 2.0 GAVE THIS NOTE ITS OWN PITCH, which replaces the
+        # key's tuning outright; a per-note bend then multiplies either one.
+        _pf, _pabs = self._pn_want(part, ch, note)
+        self.pn_at[(part.pid, ch, note)] = (_pf, _pabs)
+        b = self.bend.get(ch, 1.0) * (_pf if _pabs else self._key_ratio(part, ch, note) * _pf)
+        if str(part.patch.tuner).lower() == 'gm2' and not _pabs:
             self.mts_at[(part.pid, ch, note + part.transpose)] = \
                 self._mts_ratio(part, ch, note)
         v = self.mod.get(ch, 0.0)
@@ -3722,6 +3794,8 @@ class Live:
                 pk = keys
             for key in pk:
                 w = key - part.transpose
+                if self.pn_at.get((part.pid, ch, w), (1.0, False))[1]:
+                    continue            # its own MIDI 2.0 pitch outranks MTS
                 want = self._mts_ratio(part, ch, w)
                 was = self.mts_at.get((part.pid, ch, key), 1.0)
                 if abs(want - was) < 1e-15:
@@ -3733,6 +3807,82 @@ class Live:
                 self.mts_at[(part.pid, ch, key)] = want
             if moved:
                 self._amp_touch(part)
+
+    # ---- MIDI 2.0 per-note ---------------------------------------------------
+    PN_BEND_RANGE = 2.0     # semitones until RPN 0/7 says; the spec gives none
+
+    def _pn_want(self, part, ch, note):
+        """(factor, absolute) for one written key under MIDI 2.0 per-note pitch.
+
+        ABSOLUTE when a Pitch 7.9 (this note) or 7.25 (this note number) is in
+        force: then the factor IS the key's whole tuning, the pitch in
+        semitones of 12-TET at A = 440 (7.4.15.2) over the frequency the
+        template was built at -- the tuner supplies only a note number's
+        default pitch, which MIDI 2.0 overrides as it overrides MTS. Otherwise
+        the factor multiplies the key's own tuning. The per-note bend is in
+        both, "an offset from" whichever pitch is in force.
+        """
+        k = (ch, note)
+        pb = self.pnbend.get(k, 0.0)
+        f = 2.0 ** (pb * self.pnrange.get(ch, self.PN_BEND_RANGE) / 12.0) if pb else 1.0
+        p = self.pnattr.get(k, self.pn725.get(k))
+        if p is None or part.drums:
+            return f, False
+        base = part.patch.freqs().get(note + part.transpose)
+        if not base:
+            return f, False
+        hz = 440.0 * 2.0 ** ((p + part.transpose - 69.0) / 12.0)
+        return hz / float(base) * f, True
+
+    def _repn(self, ch, note, n0):
+        """Move the sounding notes of one key to the per-note pitch now in
+        force, each against what it was stamped with, so nothing compounds."""
+        for part in self.parts:
+            if not self._listens(part, ch):
+                continue
+            slots = self._sounding(ch, pids={part.pid}, note=note)
+            if not slots:
+                continue
+            kr = self._key_ratio(part, ch, note)
+            of, oa = self.pn_at.get((part.pid, ch, note), (1.0, False))
+            nf, na = self._pn_want(part, ch, note)
+            was = of if oa else kr * of
+            want = nf if na else kr * nf
+            self.pn_at[(part.pid, ch, note)] = (nf, na)
+            if abs(want / was - 1.0) > 1e-15:
+                self.slab.retune(slots, n0, om_scale=want / was)
+                self._amp_touch(part)
+
+    def _one_m2(self, n0, msg):
+        """What MIDI 2.0 adds and MIDI 1.0 has no message for."""
+        t = msg.type
+        if t == "ignored":
+            self.m2_ignored += 1
+            return
+        ch = msg.channel
+        if t == "pn_pitch":                     # Registered Per-Note #3, Pitch 7.25
+            self.pn725[(ch, msg.note)] = msg.semitones
+            self._repn(ch, msg.note, n0)
+        elif t == "pn_bend":
+            self.pnbend[(ch, msg.note)] = msg.value
+            self._repn(ch, msg.note, n0)
+        elif t == "pn_bend_range":              # RPN 0/7
+            self.pnrange[ch] = msg.semitones
+            for note in {k[1] for k in self.pnbend if k[0] == ch}:
+                self._repn(ch, note, n0)
+        elif t == "pn_mgmt":
+            # RESET returns the note number's per-note controllers to their
+            # defaults. DETACH leaves the notes already sounding where they are
+            # (the spec: they "maintain the current values"), so only without
+            # it are they moved. There is no per-note-instance identity in the
+            # slab -- a key is (part, channel, note, rank) -- so detaching
+            # cannot keep an old note deaf while a new one on the same number
+            # listens; it keeps both where they are until the next change.
+            if msg.reset:
+                self.pn725.pop((ch, msg.note), None)
+                self.pnbend.pop((ch, msg.note), None)
+                if not msg.detach:
+                    self._repn(ch, msg.note, n0)
 
     def _sota_ratio(self, ch, note):
         """This channel's scale/octave factor for one written key."""
@@ -3759,7 +3909,7 @@ class Live:
             if want == was:
                 continue
             self.sota_at[(ch, pc)] = want
-            slots = self._sounding(ch, pcs={pc})
+            slots = self._sounding(ch, pcs={pc}, skip_abs=True)
             if slots:
                 self.slab.retune(slots, n0, om_scale=want / was)
                 moved = True
@@ -4450,8 +4600,12 @@ class Live:
         # harpsichord is the instrument a temperament is FOR: measured before
         # this line existed, a channel tuned to Sankey's offsets moved a
         # trumpet by -9.766 cents and a harpsichord by 0.000.
-        _sr = self._key_ratio(part, ch, note)
-        if str(part.patch.tuner).lower() == 'gm2':
+        # ...and a MIDI 2.0 per-note pitch, exactly as _note_on takes it: an
+        # absolute pitch replaces the key's tuning, a per-note bend offsets it.
+        _pf, _pabs = self._pn_want(part, ch, note)
+        self.pn_at[(part.pid, ch, note)] = (_pf, _pabs)
+        _sr = _pf if _pabs else self._key_ratio(part, ch, note) * _pf
+        if str(part.patch.tuner).lower() == 'gm2' and not _pabs:
             self.mts_at[(part.pid, ch, note + part.transpose)] = \
                 self._mts_ratio(part, ch, note)
         if _sr != 1.0:
@@ -4559,7 +4713,7 @@ class Live:
             return (et * self.press_db / 6.0206) if et else 0.0
         return 0.0
 
-    def _sounding(self, ch, pids=None, note=None, pcs=None):
+    def _sounding(self, ch, pids=None, note=None, pcs=None, skip_abs=False):
         """Every slot sounding on this channel, optionally narrowed to a set of
         parts, to one note, or to a set of PITCH CLASSES.
 
@@ -4588,6 +4742,8 @@ class Live:
                 continue
             if pcs is not None and (k[2] % 12) not in pcs:
                 continue
+            if skip_abs and self.pn_at.get((k[0], k[1], k[2]), (1.0, False))[1]:
+                continue                # a MIDI 2.0 absolute pitch: not the key's
             out.extend(slots)
         return out
 
@@ -4851,6 +5007,26 @@ def apply_preset(live, preset, progress=None):
 # (a scene recalled with sustain down would hold whatever is played next), and
 # the one-shots -- CC84's source note, the sound-offs and resets, notes and
 # program changes. Programs belong to the setup, which is what a preset holds.
+# MIDI 2.0 event types with no MIDI 1.0 message: see ump.decode.
+_M2_ONLY = frozenset(("ignored", "pn_pitch", "pn_bend", "pn_bend_range", "pn_mgmt"))
+
+
+def _m1_view(e):
+    """A decoded MIDI 2.0 event as the MIDI 1.0 message the panel's memory
+    keeps -- rounded to seven bits (fourteen for a bend), which is what a
+    scene stores and recalls."""
+    if e.type == "control_change":
+        return mido.Message("control_change", channel=e.channel & 15, control=e.control,
+                            value=max(0, min(127, int(round(e.value)))))
+    if e.type == "pitchwheel":
+        return mido.Message("pitchwheel", channel=e.channel & 15,
+                            pitch=max(-8192, min(8191, int(round(e.pitch)))))
+    if e.type == "aftertouch":
+        return mido.Message("aftertouch", channel=e.channel & 15,
+                            value=max(0, min(127, int(round(e.value)))))
+    return mido.Message("sysex", data=e.data)
+
+
 CAPTURE_CC = (0, 32, 1, 5, 7, 10, 11, 43, 44, 65, 91, 93)
 CAPTURE_RESET_CC = (1, 11, 65)       # the captured ones CC121 resets
 SCENE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes.json")
@@ -10053,6 +10229,116 @@ def selftest():
           _rd == ["flute 8", "mixture III", "principal 16", "principal 8", "trumpet 8"],
           "  (%s)" % _rd)
     _oc.renderer.close()
+
+    # ---- MIDI 2.0 ------------------------------------------------------------
+    import ump as _U
+    check("ump.py: packets, scaling and the Clip File pass their own selftest",
+          _U.selftest())
+    # THE BRIDGE IS INVISIBLE: the same MIDI 1.0 played straight in and carried
+    # as MIDI 2.0 comes out as the same samples -- RPNs held and unrolled, the
+    # bank riding on the program, a GS NRPN, SysEx, the pedal, portamento.
+    _M2 = mido.Message
+    _c2 = lambda c, v: _M2("control_change", channel=0, control=c, value=v)
+    _on2 = lambda n, v: _M2("note_on", channel=0, note=n, velocity=v)
+    _blocks2 = [
+        [_c2(101, 0), _c2(100, 0), _c2(6, 12)],
+        [_on2(60, 100), _on2(64, 37)],
+        [_M2("pitchwheel", channel=0, pitch=3000)],
+        [_c2(1, 90), _c2(7, 110), _c2(11, 70), _c2(10, 20)],
+        [_M2("aftertouch", channel=0, value=77), _M2("polytouch", channel=0, note=64, value=50)],
+        [_c2(101, 0), _c2(100, 1), _c2(6, 70), _c2(38, 33)],
+        [_c2(99, 1), _c2(98, 0x20), _c2(6, 90)],
+        [_c2(74, 100), _c2(71, 30), _c2(73, 80)],
+        [_on2(67, 127), _on2(60, 0)],
+        [_c2(64, 127), _M2("note_off", channel=0, note=64, velocity=0), _c2(64, 0)],
+        [_c2(0, 0), _c2(32, 0), _M2("program_change", channel=0, program=0)],
+        [_on2(72, 90)],
+        [_c2(65, 127), _c2(5, 40), _on2(74, 80)],
+        [_M2("sysex", data=(0x7F, 0x7F, 0x04, 0x03, 0x00, 0x50))],
+        [_c2(91, 100), _c2(93, 60)],
+        [_M2("pitchwheel", channel=0, pitch=-8192), _M2("note_off", channel=0, note=72, velocity=0),
+         _M2("note_off", channel=0, note=74, velocity=0), _M2("note_off", channel=0, note=67, velocity=0)],
+        [_c2(123, 0)],
+    ]
+
+    def _br_run(bridge):
+        import random as _r
+        _r.seed(1); np.random.seed(1)
+        lv = Live(program=0, rate=48000, frames=128, verbose=False); lv.warm()
+        if bridge:
+            lv.midi2 = _U.Midi1to2()
+        out = []
+        for b in _blocks2:
+            for m in b:
+                lv.on_midi(m)
+            for _ in range(6):
+                out.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).copy())
+        for _ in range(150):
+            out.append(np.frombuffer(lv.callback(None, 128, None, 0)[0], np.float32).copy())
+        st = (dict(lv.brange), dict(lv.fine), lv.errors)
+        lv.renderer.close()
+        return np.concatenate(out), st
+    _ad, _sd2 = _br_run(False)
+    _ab, _sb2 = _br_run(True)
+    check("MIDI 1.0 bridged to MIDI 2.0 plays sample-for-sample as MIDI 1.0 does",
+          np.array_equal(_ad, _ab) and _sd2 == _sb2 and _sd2[2] == 0 and float(np.abs(_ad).max()) > 0,
+          "  (%d samples, bend range %s, fine tuning %s)"
+          % (len(_ad), _sd2[0], _sd2[1]))
+    # ...except increment and decrement, which MIDI 2.0 strips of their RPN role.
+    _l96 = Live(program=0, rate=48000, frames=128, verbose=False)
+    _l96.midi2 = _U.Midi1to2()
+    for _m in (_c2(101, 0), _c2(100, 0), _c2(6, 2), _c2(96, 0)):
+        _l96.on_midi(_m)
+    _l96.apply(0)
+    check("under MIDI 2.0, CC96/97 are ignored rather than stepping an RPN",
+          _l96.brange.get(0) == 2.0 and _l96.m2_ignored >= 1,
+          "  (bend range %s after an increment; %d ignored -- M2-104 D.3.3)"
+          % (_l96.brange.get(0), _l96.m2_ignored))
+    _l96.renderer.close()
+
+    # PER-NOTE PITCH, exact and absolute (M2-104 7.4.15): measured as the ratio
+    # every partial moved by against the same key played plainly.
+    def _pn_om(lv, note):
+        ks = [k for k in lv.slab.live if k[2] == note]
+        return np.sort(np.concatenate([lv.slab.a["om"][list(lv.slab.live[k])]
+                                       for k in ks]).astype(np.float64))
+
+    def _pn_clear(lv):
+        lv.panic()
+        for _ in range(300):
+            lv.callback(None, 128, None, 0)
+    _pn = []
+    for _prog in (0, 19):                       # a struck voice, and a registered one
+        _lp = Live(program=_prog, rate=48000, frames=128, verbose=False)
+        _lp.set_parts([Part(Patch(_prog, False, "hybrid"))]); _lp.warm()
+        _lp.on_ump([_U.m2_note_on(0, 0, 64, 0xC000)]); _lp.apply(_lp.n)
+        _plain = _pn_om(_lp, 64); _pn_clear(_lp)
+        _q = _U.semitones_to_q(64 - 0.1369, 9)
+        _lp.on_ump([_U.m2_note_on(0, 0, 64, 0xC000, 3, _q), _U.m2_note_on(0, 0, 60, 0xC000)])
+        _lp.apply(_lp.n)
+        _r = _pn_om(_lp, 64) / _plain
+        _want = 440.0 * 2 ** ((_q / 512.0 - 69) / 12) / _lp.parts[0].patch.freqs()[64]
+        _o60 = _pn_om(_lp, 60)
+        _lp.on_ump([_U.m2_per_note_bend(0, 0, 64, 0xFFFFFFFF)]); _lp.apply(_lp.n)
+        _bend = _pn_om(_lp, 64)[0] / (_plain[0] * _r[0])
+        _still = np.array_equal(_pn_om(_lp, 60), _o60)
+        _lp.on_ump([_U.m2_per_note_ctrl(0, 0, 60, 3, _U.semitones_to_q(59.5, 25))]); _lp.apply(_lp.n)
+        _p725 = _pn_om(_lp, 60)[0] / _o60[0]
+        _w725 = (440.0 * 2 ** ((59.5 - 69) / 12)) / _lp.parts[0].patch.freqs()[60]
+        _pn.append((_prog, float(np.ptp(_r) / _r[0]), 1200 * math.log2(_r[0] / _want),
+                    1200 * math.log2(_bend), _still, 1200 * math.log2(_p725 / _w725)))
+        _lp.renderer.close()
+    check("MIDI 2.0 per-note pitch is exact and absolute, under a tuner at A415",
+          all(sp < 1e-9 and abs(e) < 1e-6 and abs(b - 200.0) < 1e-6 and st and abs(e2) < 1e-6
+              for _, sp, e, b, st, e2 in _pn),
+          "  (%s)" % "; ".join("program %d: Pitch 7.9 %+.2g c, per-note bend %+.4f c with the "
+                               "neighbour %s, Pitch 7.25 mid-note %+.2g c"
+                               % (pg, e, b, "still" if st else "MOVED", e2)
+                               for pg, sp, e, b, st, e2 in _pn))
+    _jt = _U.pitch_table("just:C")
+    check("the bridge's just table puts E 13.69 cents under equal temperament",
+          abs((_jt(0, 64) - 64) * 100 + 13.686) < 1e-3 and _jt(0, 60) == 60.0
+          and abs((_jt(0, 67) - 67) * 100 - 1.955) < 1e-3)
     _bad = os.path.join(_sd, "bad.json")
     open(_bad, "w").write("{not json")
     _nb = load_session(_bad)
@@ -10428,6 +10714,30 @@ def pick_port(sub):
     return next((n for n in names if sub and sub.lower() in n.lower()), names[0]), names
 
 
+def play_ump_file(live, path, stop=None, lead_s=0.5):
+    """Play a Clip File or raw UMP stream into `live`, as UMP, on its own
+    thread: each packet goes to on_ump at its time. Returns the thread.
+
+    The one MIDI 2.0 source there is until a MIDI 2.0 instrument is plugged
+    in -- and it is the real path, not a simulation of it: the same decode and
+    the same per-note machinery a MIDI 2.0 controller would reach."""
+    import ump as _U
+    evs, _facts = _U.read(open(path, "rb").read())
+    stop = stop or threading.Event()
+
+    def run():
+        t0 = time.monotonic() + lead_s
+        for t, pkt in evs:
+            d = t0 + t - time.monotonic()
+            if d > 0 and stop.wait(d):
+                return
+            live.on_ump([pkt])
+        sys.stderr.write("  %s: played %d UMPs\n" % (os.path.basename(path), len(evs)))
+    th = threading.Thread(target=run, daemon=True, name="ump-play")
+    th.start()
+    return th
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--program", type=int, default=56, help="GM program (default 56, trumpet)")
@@ -10451,6 +10761,14 @@ def main():
                     help="start clean instead of resuming the last session")
     ap.add_argument("--selftest", action="store_true", help="run the behaviour checks and exit")
     ap.add_argument("--latency", action="store_true", help="measure MIDI-to-DAC latency while you play")
+    ap.add_argument("--midi2", action="store_true",
+                    help="carry the keyboard's MIDI 1.0 into the engine as MIDI 2.0 (the bridge)")
+    ap.add_argument("--midi2-play", default=None, metavar="FILE",
+                    help="play a MIDI 2.0 Clip File (.midi2) or raw UMP stream into the "
+                         "engine, alongside the keyboard")
+    ap.add_argument("--midi2-pitch", default=None, metavar="TABLE",
+                    help="with the bridge: every note carries its own pitch from TABLE "
+                         "(just:C, just:Eb, ... or et) as a MIDI 2.0 Pitch 7.9 attribute")
     a = ap.parse_args()
 
     if a.selftest:
@@ -10493,7 +10811,14 @@ def main():
         except Exception as e:
             sys.stderr.write("  the last session would not apply (%s); starting clean\n" % e)
     live.dirty = False
+    if a.midi2 or a.midi2_pitch:
+        import ump as _U
+        live.midi2 = _U.Midi1to2(pitch_of=_U.pitch_table(a.midi2_pitch) if a.midi2_pitch else None)
+        live.midi2_label = "MIDI 2.0 (bridged%s)" % (", " + a.midi2_pitch if a.midi2_pitch else "")
+        sys.stderr.write("  %s\n" % live.midi2_label)
     live.warm()
+    if a.midi2_play:
+        play_ump_file(live, a.midi2_play)
 
     if a.tui:
         import livetui

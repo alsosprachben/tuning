@@ -407,6 +407,17 @@ is two different controls depending on whether it moves, and why a glide is a
 length rather than a pitch. `remaining.md` has what is still missing, chiefly
 GM 2's variation sounds, the other drum sets, and the brass glissando live.
 
+**MIDI 2.0, live.** `--midi2` carries the keyboard's MIDI 1.0 into the engine
+as MIDI 2.0 (it plays sample-for-sample the same). `--midi2-pitch just:C` makes
+every key you press carry its own just-intonation pitch, as a MIDI 2.0 Pitch 7.9
+attribute. `--midi2-play FILE` plays a MIDI 2.0 Clip File in alongside you:
+
+    python3 examples/midi2_demo.py            # writes midi2_demo.midi2
+    python3 live.py --program 19 --midi2 --midi2-play midi2_demo.midi2 --tui
+
+`midi.md` has the details: per-note pitch is absolute (A = 440) whatever the
+tuner, as MIDI 2.0 says.
+
 ## Render a file
 
 ```sh
