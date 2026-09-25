@@ -5455,3 +5455,27 @@ read off the figures, which have no text layer, as page images:
 velocity-0 Note On for a MIDI 2.0 client, sends velocity 0x0000 where D.3.1
 says 0x8000. `alsaump.py --selftest` pins the difference against a real
 MIDI 1.0 client.
+
+## MPE: M1-100-UM, and the two combines it leaves to the receiver
+
+**Source.** MMA/AMEI, *MIDI Polyphonic Expression*, M1-100-UM v1.1
+(14 April 2022). It is read for this and not kept in the repo; the Appendix
+E table was read off its page image.
+
+**Taken from the spec:**
+- the MCM on channels 1 and 16 only, where the newest zone wins and a zone
+  change resets what it moves (§2.2.1, §2.2.3);
+- 48 semitones on members and 2 on the manager, with RPN 0 on any member
+  setting all of them (§2.2.5);
+- member plus manager bend, in semitones (Appendix C);
+- member controls stop at Note Off while the manager's bend reaches
+  released notes (§2.2.6, A.4.1);
+- zone-wide messages on the manager only (§2.3.1), and member program
+  changes ignored in Mode 3 (§2.3.3);
+- Mode 4 on the lowest member (§2.2.4.3).
+
+**Chosen.** Pressure takes the greater of manager and member; CC74 adds the
+manager's offset to the member's. These are Appendix D's own suggestions,
+and "the actual implementation is left to the manufacturer". An MCM
+identical to the one in force resets nothing, because the reset in §2.2.3
+is for channels "entering or leaving MPE control".

@@ -453,9 +453,17 @@ def parse(path):
     # carries the answer (DrumProgram), snapshotted at note-on like the rest.
     _bmsb = {}; _blsb = {}; _drums = {}
     _rxbank = [True]         # Rx.BANK SELECT: GM1 On turns it off
+    # MPE (M1-100-UM), as live.py plays it: the zones in force, and their
+    # history for prepare. A member channel takes its manager's program and is
+    # never a drum channel, whatever its number.
+    _mpe = T.MpeZones(); mpe_ev = []
     def _is_drums(ch):
+        if _mpe and _mpe.is_member(ch):
+            return False
         return _drums.get(ch, ch == GM_PERCUSSION_CHANNEL)
     def _cur_prog(ch):
+        if _mpe and _mpe.is_member(ch):
+            ch = _mpe.manager_of(ch)
         p = ch_prog.get(ch, 0)
         return DrumProgram(p) if _is_drums(ch) else p
     def cv(ch):
@@ -466,9 +474,40 @@ def parse(path):
                 c.get(11, T.GM_DEFAULT_EXPRESSION)/127.0,
                 (c.get(10, T.GM_DEFAULT_PAN)-64)/63.0)
     _seq = 0     # message order, for events that share a tick -- see _pitch_stream
-    for msg in mid:
+    # Messages the file did not send but MPE implies -- a manager's zone-wide
+    # control copied to its members, the resets an MPE Configuration Message
+    # causes -- are queued here and run at the same instant, through the same
+    # code, straight after the message that caused them.
+    _inj = []
+
+    def _stream():
+        for _m in mid:
+            yield _m, False
+            while _inj:
+                yield _inj.pop(0), True
+    for msg, _mpe_done in _stream():
         t += msg.time
         _seq += 1
+        if _mpe and not _mpe_done and hasattr(msg, 'channel') and _mpe.zone_of(msg.channel):
+            _mc = msg.channel
+            if _mpe.is_member(_mc):
+                if msg.type == 'control_change':
+                    _c0 = msg.control
+                    if _c0 in (126, 127):
+                        if _mc == _mpe.lowest_member(_mc):
+                            _inj.extend(msg.copy(channel=_m2, time=0)
+                                        for _m2 in _mpe.members(_mc))
+                        continue
+                    if not (_c0 == 74 or _c0 in (6, 38, 96, 97, 98, 99, 100, 101,
+                                                  120, 121, 123)):
+                        continue            # a zone-wide control on a member (2.3.1)
+                elif msg.type in ('program_change', 'polytouch'):
+                    continue                # 2.3.3, 2.2.7
+            elif msg.type == 'control_change':
+                if msg.control in (126, 127):
+                    continue
+                if msg.control not in _MPE_NOT_FANNED:
+                    _inj.extend(msg.copy(channel=_m2, time=0) for _m2 in _mpe.members(_mc))
         if msg.type == 'program_change':
             _dr, _pr, _var = T.resolve_patch(_bmsb.get(msg.channel, 0),
                                              _blsb.get(msg.channel, 0), msg.program,
@@ -533,10 +572,31 @@ def parse(path):
                 _gs = T.GS_SOUND_NRPN.get(_nsel.get(_c)) if _sel is None else None
                 if _gs is not None and _cc == 6:
                     sndev.setdefault(_c, []).append((t, _seq, _gs, _v))
+                if _sel == (0, 6) and _cc == 6:
+                    # THE MPE CONFIGURATION MESSAGE (2.2.1): the zones, a
+                    # reset on every channel whose zone changed (2.2.3), and the
+                    # bend ranges, 2 on the manager and 48 on members (2.2.5).
+                    _chg = _mpe.mcm(_c, _v)
+                    if _chg is not None:
+                        mpe_ev.append((t, dict(_mpe.channels())))
+                        _inj.extend(mido.Message('control_change', channel=_x & 15,
+                                                 control=121, value=0, time=0)
+                                    for _x in sorted(_chg))
+                        if _mpe.zone_of(_c) is not None:
+                            for _x, _r in [(_c, T.MPE_MANAGER_BEND)] + \
+                                    [(_m2, T.MPE_MEMBER_BEND) for _m2 in _mpe.members(_c)]:
+                                _rrange[_x] = _r
+                                rpns.setdefault(_x, []).append((t, 'range', _r, _seq))
                 if _sel == (0, 0):
                     _rrange[_c] = T.rpn_bend_range(
                         _cc, _v, _rrange.get(_c, T.BEND_RANGE_SEMITONES))
                     rpns.setdefault(_c, []).append((t, 'range', _rrange[_c], _seq))
+                    if _mpe and _mpe.is_member(_c):
+                        # one range for the zone's members (2.2.5)
+                        for _m2 in _mpe.members(_c):
+                            if _m2 != _c:
+                                _rrange[_m2] = _rrange[_c]
+                                rpns.setdefault(_m2, []).append((t, 'range', _rrange[_c], _seq))
                 elif _sel == (0, 1):
                     _rfmsb[_c], _fc = T.rpn_fine(_cc, _v, _rfmsb.get(_c, 64))
                     _rfine[_c] = _fc
@@ -652,8 +712,12 @@ def parse(path):
             # end on. passac.mid cycles channel 0 through strings, recorder,
             # clarinet, trumpet, organ and music box, and all 2161 notes came
             # out as strings.
+            _np = _cur_prog(msg.channel)
             on.setdefault((msg.channel, msg.note), []).append(
-                (t, msg.velocity, cv(msg.channel), _cur_prog(msg.channel)))
+                (t, msg.velocity, cv(msg.channel), _np))
+            if _mpe and _mpe.is_member(msg.channel) and not isinstance(_np, DrumProgram) \
+                    and _np not in ch_progs.get(msg.channel, ()):
+                ch_progs.setdefault(msg.channel, []).append(_np)
         elif msg.type == 'note_off' or (msg.type == 'note_on' and msg.velocity == 0):
             q = on.get((msg.channel, msg.note))
             if q:
@@ -669,7 +733,15 @@ def parse(path):
             ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
-                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn)))
+                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn,
+                                   mpe=mpe_ev)))
+
+
+# What an MPE manager's control change does NOT copy to its members: the RPN
+# machinery and bank select (the manager's own), CC74 (combined per note
+# instead) and the mode messages (sent to the lowest member). live.py keeps
+# the same list.
+_MPE_NOT_FANNED = frozenset((0, 6, 32, 38, 74, 96, 97, 98, 99, 100, 101, 126, 127))
 
 
 def _open_midi(path):
@@ -1326,12 +1398,13 @@ def prepare(path, tuner='hybrid440'):
     # putting GM System On first, on the theory that that is where files put
     # it. A file that tunes and THEN resets was left tuned. Message order is
     # the only tie-break that is not a guess.
-    def _pitch_stream(_c):
+    def _pitch_stream(_c, with_master=True):
         _ev = [(_t, _q, 'wheel', _p) for _t, _q, _p in _pwseq.get(_c, ())]
         _ev += [(_t, _q, _k, _v) for _t, _k, _v, _q in rpns.get(_c, ())
                 if _k in ('range', 'fine', 'coarse')]
-        _ev += [(_t, _q, 'm' + _k, _v) for _t, _k, _v, _q in master
-                if _k in ('fine', 'coarse')]
+        if with_master:
+            _ev += [(_t, _q, 'm' + _k, _v) for _t, _k, _v, _q in master
+                    if _k in ('fine', 'coarse')]
         _ev += [(_t, _q, 'gmon', None) for _t, _q in gmon]
         _ev.sort(key=lambda e: (e[0], e[1]))
         st = {}
@@ -1347,7 +1420,31 @@ def prepare(path, tuner='hybrid440'):
                 st.get('mcoarse', 0.0), st.get('mfine', 0.0))))
         return out
 
-    _pchans = set(pws) | set(rpns) | (set(_first_on) if master else set())
+    # MPE: a MEMBER channel is not a tuning and a gesture -- every note on it
+    # brings its own bend -- so its pitch is decided per note below (_MPE_AT),
+    # and the channel split is for everything else.
+    _mpe_ev = _sys.get('mpe') or []
+
+    def _zone_at(_c, _t):
+        _z = None
+        for _t0, _chs in _mpe_ev:
+            if _t0 <= _t + 1e-9:
+                _z = _chs
+            else:
+                break
+        return (_z or {}).get(_c)
+
+    def _manager(_c, _t):
+        _z = _zone_at(_c, _t)
+        return None if _z is None else 16 * _z[0] + (0 if _z[1] == 'lower' else 15)
+    _mpe_member = {}
+    if _mpe_ev:
+        for _n in notes:
+            _m = _manager(_n[0], _n[2])
+            if _m is not None and _m != _n[0]:
+                _mpe_member[(_n[0], _n[1], _n[2])] = _m
+    _mchans = {k[0] for k in _mpe_member}
+    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set())) - _mchans
     for _c in _pchans:
         _ev = _pitch_stream(_c)
         _f = _first_on.get(_c)
@@ -1370,6 +1467,43 @@ def prepare(path, tuner='hybrid440'):
     for _c, _ev in _BGEST.items():
         _r, _cc = bend_blocks(_ev, nblk)
         brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+    # MPE, PER NOTE: the member's bend plus the manager's, in semitones -- a
+    # product of ratios (M1-100-UM Appendix C). The value in force at Note On
+    # goes into that note's f0; what moves afterwards is the note's own row:
+    # its member's bend until its Note Off and no longer (2.2.6), its
+    # manager's for as long as it sounds (A.4.1). (ratio at onset, row).
+    _MPE_AT = {}
+    if _mpe_member:
+        def _val(_st, _tt, _d=1.0):
+            _v = _d
+            for _t0, _r in _st:
+                if _t0 <= _tt + 1e-9:
+                    _v = _r
+                else:
+                    break
+            return _v
+        _sm = {}
+        for (ch, note, on), mgr in _mpe_member.items():
+            if ch not in _sm:
+                _sm[ch] = _pitch_stream(ch)
+            if ('m', mgr) not in _sm:
+                _sm[('m', mgr)] = _pitch_stream(mgr, with_master=False)
+        _offs = {(n[0], n[1], n[2]): (n[3], n[6]) for n in notes if (n[0], n[1], n[2]) in _mpe_member}
+        for (ch, note, on), mgr in _mpe_member.items():
+            off, prog = _offs[(ch, note, on)]
+            ms, gs = _sm[ch], _sm[('m', mgr)]
+            r0 = _val(ms, on) * _val(gs, on)
+            row = -1
+            bendable = (not isinstance(prog, DrumProgram)
+                        and getattr(property_class_for_note(prog, note), 'pitch_bendable', True))
+            moves = sorted({_t for _t, _ in ms if on + 1e-9 < _t <= off}
+                           | {_t for _t, _ in gs if _t > on + 1e-9})
+            if bendable and moves:
+                ev = [(_t, _val(ms, min(_t, off)) * _val(gs, _t) / r0) for _t in moves]
+                if any(abs(_r - 1.0) > 1e-9 for _, _r in ev):
+                    _r, _cc = bend_blocks(ev, nblk)
+                    row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _MPE_AT[(ch, note, on)] = (r0, row)
     # MIDI 2.0 PER-NOTE PITCH, per note: (absolute semitones at onset or None,
     # the per-note bend ratio at onset, and a bend row of its own when the
     # pitch moves while it sounds). The row is the channel's gesture times the
@@ -2120,6 +2254,7 @@ def prepare(path, tuner='hybrid440'):
     _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
+        _mmgr = None             # MPE: this note's manager channel, if it is on a member
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
         if _HT_PEND[0] is not None:
             _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
@@ -2164,6 +2299,9 @@ def prepare(path, tuner='hybrid440'):
                   if _pna and _pna[0] is not None else FREQ_N[note])
             if _pna:
                 f0 *= _pna[1]
+            _mpa = _MPE_AT.get((ch, note, on))
+            if _mpa:
+                f0 *= _mpa[0]           # this note's own MPE bend at Note On
             # A WRITTEN NOTE IS NOT ALWAYS A PITCH. A helicopter's note chooses
             # a blade passing rate, which is four octaves under where it is
             # written; see SynthProperties.sounding_octaves. Applied HERE,
@@ -2245,6 +2383,10 @@ def prepare(path, tuner='hybrid440'):
         # about what a MIDI velocity can be taken to mean, and a player leaning
         # on a key is a separate and explicit request.
         _press = _pressure_of(ch, note, on, off)
+        _mmgr = _mpe_member.get((ch, note, on))
+        if _mmgr is not None:
+            # MPE: the louder of the note's own and its manager's (Appendix D)
+            _press = T.mpe_pressure(_press, _pressure_of(_mmgr, -1, on, off))
         if _press:
             _eff += T.PRESS_DB * _press
         # CC1 IS HOW FAR OUT OF TUNE. 64 -- and no CC1 at all -- is the voice's
@@ -2408,7 +2550,14 @@ def prepare(path, tuner='hybrid440'):
         # controls sound_controls_of grants reach the note; the rest are refused
         # here, silently, as a bend is on a piano.
         _sctl = T.sound_controls_of(pc)
-        _sd = {_k: _d for _k, _d in _snd_d(ch, on).items() if _k in _sctl} if _sctl else {}
+        _sdd = _snd_d(ch, on)
+        if _mmgr is not None:
+            # MPE: CC74 per note, the manager's a bias on it (Appendix D)
+            _mb = _snd_d(_mmgr, on).get('brightness', 0.0)
+            if _mb:
+                _sdd = dict(_sdd)
+                _sdd['brightness'] = T.mpe_timbre(_sdd.get('brightness', 0.0), _mb)
+        _sd = {_k: _d for _k, _d in _sdd.items() if _k in _sctl} if _sctl else {}
         if _sd:
             if 'attack' in _sd:
                 at *= T.sound_time_scale(_sd['attack'])
@@ -2462,6 +2611,9 @@ def prepare(path, tuner='hybrid440'):
                   if getattr(pc, 'pitch_bendable', True) else -1)
         if _pna and _pna[2] >= 0:
             _BR[0] = _pna[2]            # its own row: per-note pitch that moves
+        _mpa = _MPE_AT.get((ch, note, on))
+        if _mpa is not None:
+            _BR[0] = _mpa[1]            # MPE: the note's own row, or none
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate

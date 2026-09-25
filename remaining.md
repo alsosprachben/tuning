@@ -121,6 +121,19 @@ Clip File and per-note pitch. What is not:
 - **Track names and lyrics** in a converted file: Flex Data text messages
   could carry them.
 
+## MPE
+
+Built to M1-100-UM v1.1, live and offline (see `midi.md`). Not built:
+
+- **Different programs per member in Mode 4** (§2.3.3). It's optional, and
+  a guitar-like controller could use it.
+- **The MIDI-CI MPE Profile**, how MIDI 2.0 devices agree on MPE.
+- **CC74 on voices without brightness.** A piano, organ or string ignores
+  it. Mapping MPE's third dimension onto what a voice does have (effort,
+  bow position) would be a per-family decision.
+- **Pressure and CC74 contours within a note offline.** The file renderer
+  reads them as a whole-note mean and at onset, as for any channel.
+
 ## The panel's controls and routes
 
 Built (README, "Controls a keyboard doesn't have"), including **a key as a

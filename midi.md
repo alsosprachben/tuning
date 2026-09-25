@@ -888,6 +888,70 @@ raw) and compares hashes. Two things are lost:
   hold, a just chord from its first sample, and a vibrato on one note under
   a 32-bit swell.
 
+## MPE: one channel per note
+
+MPE (M1-100-UM v1.1) is how MIDI 1.0 controllers (Seaboard, Linnstrument,
+Osmose, Continuum, Sensel) give every note its own expression. Each note
+sounds on a **member channel** of its own, and that channel carries the
+note's pitch bend, channel pressure and CC74. A **manager channel** carries
+what the whole zone shares: channel 1 for the Lower Zone, 16 for the Upper.
+Both renderers follow the spec.
+
+| | live | file | |
+|---|---|---|---|
+| MPE Configuration Message (RPN 0/6 on channel 1 or 16) | ✓ | ✓ | makes a zone; on any other channel it's ignored |
+| zones, newest wins | ✓ | ✓ | a new zone takes its channels; one left with no channels, or without its manager, is switched off |
+| zone change | ✓ | ✓ | the channels it moves are cut and their controllers reset (2.2.3); an MCM identical to the last changes nothing |
+| bend range | ✓ | ✓ | the MCM sets 48 semitones on members and 2 on the manager; RPN 0 on any member sets every member |
+| a note's bend | ✓ | ✓ | its member's plus its manager's; the value before Note On is the note's own |
+| after Note Off | ✓ | ✓ | the member's bend, pressure and CC74 stop reaching it; the manager's bend still does, pedal and release included |
+| pressure | ✓ | ✓, as the mean over the note | the louder of the note's own and the manager's |
+| CC74 | ✓ | ✓, at onset | the note's own plus the manager's as a bias |
+| zone-wide controls | ✓ | ✓ | on the manager, copied to every member; on a member, ignored |
+| program change | ✓ | ✓ | the manager's sets the zone; a member's is ignored |
+| Mode 4 (mono) | ✓ | ✓ | CC126/127 on the zone's lowest member makes every member monophonic |
+| legato and portamento | ✓ | | judged across the zone, not per member channel |
+
+**What counts as zone-wide:** every control change except the RPN
+machinery (CC6, 38, 96–101), bank select, CC74 and the mode messages. That
+covers CC1, CC7, CC10, CC11, the pedals, the sends, CC5/65/84 and the stop
+words. A member's program change or poly pressure is ignored too, as
+§§2.3.3 and 2.2.7 require.
+
+**The spec leaves how to combine to the receiver.** It suggests Max for
+pressure and Add for CC74 (Appendix D), and those are the laws here.
+
+**Where each note's pitch lives:**
+- **Live:** in the note's slots, with the member's and the manager's shares
+  applied separately. Once a note is released it has left `slab.live`, so
+  the slab remembers each slot's channel. That's how a manager bend still
+  finds a released note.
+- **Offline:** the bend in force at Note On goes into that note's f0. What
+  moves afterwards is the note's own bend row: its member's bend up to its
+  Note Off, its manager's until it stops sounding. This is the same
+  machinery as MIDI 2.0's per-note pitch. Member channels are left out of
+  the channel tuning/gesture split, since every note on one brings its own
+  bend.
+
+**A 48-semitone range costs precision.** A 14-bit bend over ±48 semitones
+moves in steps of 0.59 cents. A just third sent as an MPE bend lands at
+−13.48 cents rather than −13.69. MIDI 2.0's Pitch 7.25 is exact.
+
+**`--mpe`** starts live in MPE for a controller that sends no MCM (§2.2.2).
+Plain `--mpe` gives the Lower Zone with 15 members, which is the spec's
+default; you can also give `upper`, `both` (7 + 7), or `lower:N` / `upper:N`.
+The panel's header shows the zones, and a saved scene stores the MCM first.
+
+**Limits, stated:**
+- **CC74 changes the sound only on voices that answer brightness:** the
+  effort voices (brass, clarinets) and the synths.
+- **In a file, pressure and CC74 are read as a whole-note mean and at
+  onset.** Their contour within a note is live only, as for any channel.
+- **A GM System On inside an MPE file** puts a member's bend range back to 2
+  offline, where live falls back to the zone's 48.
+
+`examples/mpe_demo.py` writes a file that exercises all of it.
+
 ## The harmonium's stops have their own address
 
 On the pipe organ and the harpsichord the stop word is CC11 (bits 0–6) and

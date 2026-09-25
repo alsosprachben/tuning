@@ -12869,6 +12869,131 @@ PORTA_SETTLE_TAUS = 5.0
 # disagreeing by a quantisation step nobody could explain. So it lives here,
 # pure, with the state passed in and the new value passed back.
 
+# ------------------------------------------- MPE, MIDI Polyphonic Expression
+#
+# M1-100-UM v1.1 (MMA/AMEI, 2022). Every note on its own MEMBER channel, which
+# carries that note's pitch bend, channel pressure and CC74; a MANAGER channel
+# -- 1 for the Lower Zone, 16 for the Upper -- carries what the whole zone
+# shares. The MPE Configuration Message (RPN 0/6, data MSB = member count,
+# sent only on a manager) declares a zone. Channels here are 0-based and flat
+# (group * 16 + channel), so each MIDI 2.0 group has its own pair of zones.
+
+MPE_MEMBER_BEND = 48.0      # 2.2.5: every member on an MCM
+MPE_MANAGER_BEND = 2.0      # ...and the manager
+
+
+class MpeZones(object):
+    """The zones in force. `n[(group, 'lower'|'upper')]` = member count.
+
+    THE NEWEST ZONE WINS (2.2.1): an MCM that reaches channels the other zone
+    holds takes them, and a zone left with no member channels -- or whose
+    manager was taken -- is deactivated.
+    """
+
+    def __init__(self):
+        self.n = {}
+        self._cache = None
+
+    def __bool__(self):
+        return bool(self.n)
+
+    @staticmethod
+    def _chans(g, side, n):
+        b = 16 * g
+        if side == 'lower':
+            return {b} | set(range(b + 1, b + 1 + n))
+        return {b + 15} | set(range(b + 15 - n, b + 15))
+
+    def channels(self):
+        """{flat channel: (group, side)} for every channel in MPE."""
+        if self._cache is not None:
+            return self._cache
+        out = {}
+        for (g, side), n in self.n.items():
+            for c in self._chans(g, side, n):
+                out[c] = (g, side)
+        self._cache = out
+        return out
+
+    def mcm(self, ch, count):
+        """An MCM arriving on flat channel `ch`. Returns the set of channels
+        whose zone changed (entering, leaving, or moving), which 2.2.3 says
+        must be cut and reset; None if the MCM is not on a manager channel."""
+        g, c = divmod(ch, 16)
+        if c not in (0, 15):
+            return None
+        side = 'lower' if c == 0 else 'upper'
+        before = dict(self.channels())
+        count = max(0, min(15, int(count)))
+        if count == 0:
+            self.n.pop((g, side), None)
+        else:
+            self.n[(g, side)] = count
+            mine = self._chans(g, side, count)
+            other = (g, 'upper' if side == 'lower' else 'lower')
+            if other in self.n:
+                m = self.n[other]
+                while m > 0 and self._chans(g, other[1], m) & mine:
+                    m -= 1
+                mgr = 16 * g + (15 if other[1] == 'upper' else 0)
+                if m == 0 or mgr in mine:
+                    self.n.pop(other)
+                else:
+                    self.n[other] = m
+        self._cache = None
+        after = self.channels()
+        # Only what CHANGED: a controller re-sending the MCM it already sent
+        # (many do, on connecting) must not cut the notes being played.
+        return {c for c in set(before) | set(after) if before.get(c) != after.get(c)}
+
+    def zone_of(self, ch):
+        return self.channels().get(ch)
+
+    def manager_of(self, ch):
+        z = self.zone_of(ch)
+        return None if z is None else 16 * z[0] + (0 if z[1] == 'lower' else 15)
+
+    def is_manager(self, ch):
+        return self.zone_of(ch) is not None and self.manager_of(ch) == ch
+
+    def is_member(self, ch):
+        return self.zone_of(ch) is not None and self.manager_of(ch) != ch
+
+    def members(self, ch):
+        """The member channels of the zone `ch` belongs to, lowest first
+        (the Upper Zone's run downward from 15, so its lowest member is its
+        last-assigned one)."""
+        z = self.zone_of(ch)
+        if z is None:
+            return []
+        m = self.manager_of(ch)
+        return sorted(self._chans(z[0], z[1], self.n[z]) - {m})
+
+    def lowest_member(self, ch):
+        """Where a zone's mode message goes (2.2.4.3): the lowest-numbered
+        member channel -- channel 2 of the Lower Zone, 16-n of the Upper."""
+        ms = self.members(ch)
+        return ms[0] if ms else None
+
+    def bend_default(self, ch):
+        """48 on a member, 2 on a manager, None outside MPE (2.2.5)."""
+        if self.zone_of(ch) is None:
+            return None
+        return MPE_MANAGER_BEND if self.is_manager(ch) else MPE_MEMBER_BEND
+
+
+# MPE COMBINES what the manager and a member both say, per note, and leaves the
+# law to the receiver (Appendix D): these are its two suggestions. Pressure is
+# the LOUDER of the two, so a manager swell lifts quiet notes and leaves a
+# pressed one alone; CC74 is a BIAS, the two offsets from 64 added.
+def mpe_pressure(member, manager):
+    return max(member, manager)
+
+
+def mpe_timbre(member_offset, manager_offset):
+    return max(-1.0, min(1.0, member_offset + manager_offset))
+
+
 # MIDI 2.0 PER-NOTE PITCH BEND RANGE until RPN 0/7 sets one. M2-104 7.4.13
 # gives the message and no default, so this is the channel's own default, 2.
 PN_BEND_RANGE = 2.0

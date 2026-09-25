@@ -1182,7 +1182,8 @@ class TUI:
         self.addstr(scr, y, 1, "tuning", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 8, "%d Hz   %d frames   %.1f ms/block"
                     % (L.rate, L.frames, s["budget_ms"]), C("dim"))
-        pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "")
+        pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "") \
+            + ("  " + L.mpe_label() if L.mpe else "")
         self.addstr(scr, y, max(40, w - len(pn) - 2), pn[:max(0, w - 42)], C("dim"))
         y += 1
         self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))

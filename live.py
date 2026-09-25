@@ -750,6 +750,10 @@ class Slab:
         self.aL0 = np.zeros(capacity, np.float32)
         self.aR0 = np.zeros(capacity, np.float32)
         self.hrel = np.ones(capacity, np.float32)   # partial freq / lowest partial
+        # The channel each slot was stamped for. A released note has left
+        # `live`, but MPE's manager bend still reaches it (M1-100-UM A.4.1),
+        # so the slab has to be able to say whose it was.
+        self.slot_ch = np.full(capacity, -1, np.int32)
         # CC71/74 and CC72 as applied to each slot: the brightness/resonance
         # gain already baked into aL0, and the release scale already in `re`.
         # Kept so a later change applies only new/old, never compounding.
@@ -1037,6 +1041,7 @@ class Slab:
         self.sg[idx] = 1.0
         self.sre[idx] = 1.0
         self.hrel[idx] = hrel
+        self.slot_ch[idx] = key[1] if isinstance(key, tuple) and len(key) > 1 else -1
         self.vbase[idx] = tmpl["vd"]
         self.vrbase[idx] = tmpl["vr"]
         # Relative to this note's own mean, so a wheel of N cents means N cents
@@ -1334,6 +1339,14 @@ class Slab:
         if vrs is not None:
             a["vr"][idx] = vr1
             a["vp"][idx] = vp1
+
+    def released_on(self, channels):
+        """Slots of notes released on these channels and still ringing."""
+        if not self.retiring:
+            return []
+        idx = np.concatenate([r[0] for r in self.retiring])
+        idx = idx[self.busy[idx] & np.isin(self.slot_ch[idx], list(channels))]
+        return list(np.unique(idx))
 
     def release(self, key, n):
         """Note-off: one write per partial. The kernel picks it up next block."""
@@ -2109,6 +2122,13 @@ class Live:
         self.pnbend = {}             # (channel, note) -> -1..1
         self.pnrange = {}            # channel -> per-note bend range, semitones
         self.pn_at = {}              # (pid, channel, note) -> (factor, absolute)
+        # MPE (M1-100-UM): the zones, each member channel's own share of its
+        # pitch ratio, each manager's bend as the zone last applied it, and a
+        # count of member-channel messages the spec says to ignore.
+        self.mpe = T.MpeZones()
+        self.bend_mem = {}           # member channel -> its own ratio (master included)
+        self.mpe_mgr = {}            # manager channel -> its bend ratio, as applied to the zone
+        self.mpe_ignored = 0
         self.dirty = False           # the session has changed since it was saved
         self._learn = None
         self._learn_swallow = set()
@@ -2558,6 +2578,105 @@ class Live:
                 self.last_error = "amp: %s: %s" % (type(e).__name__, e)
 
     def _one(self, n0, msg):
+        if self.mpe and msg.type not in _M2_ONLY and msg.type != "sysex" \
+                and self._mpe_route(n0, msg):
+            return
+        self._one_core(n0, msg)
+
+    # MPE, what the zone does with a message before the channel does (2.3,
+    # Appendix E). Returns True when it has dealt with the message itself.
+    # Zone-wide controls on the MANAGER are handled there AND fanned out to
+    # every member through _one_core, so each channel's own handler -- the
+    # pedal, the fader, the pan, the sends, portamento -- does what it always
+    # does; the same controls arriving on a MEMBER are ignored. Pitch bend,
+    # pressure and CC74 are the per-note dimensions and are combined instead.
+    _MPE_NOT_FANNED = frozenset((0, 6, 32, 38, 74, 96, 97, 98, 99, 100, 101, 126, 127))
+
+    def _mpe_route(self, n0, msg):
+        ch = getattr(msg, "channel", None)
+        z = self.mpe.zone_of(ch) if ch is not None else None
+        if z is None:
+            return False
+        t = msg.type
+        if self.mpe.is_member(ch):
+            if t == "control_change":
+                c = msg.control
+                if c in (126, 127):
+                    # Mode 4 goes to the LOWEST member and means the zone
+                    # (2.2.4.3): every member becomes one monophonic string.
+                    if ch == self.mpe.lowest_member(ch):
+                        for m in self.mpe.members(ch):
+                            self._one_core(n0, _cc_msg(m, c, msg.value))
+                    else:
+                        self.mpe_ignored += 1
+                    return True
+                if c == 74 or c in (6, 38, 96, 97, 98, 99, 100, 101, 120, 121, 123):
+                    return False            # per note, the RPNs, the mode messages
+                self.mpe_ignored += 1       # a zone-wide control on a member (2.3.1)
+                return True
+            if t in ("program_change", "polytouch"):
+                # 2.3.3: ignored on members in Mode 3; 2.2.7: poly pressure is
+                # prohibited on members.
+                self.mpe_ignored += 1
+                return True
+            if t == "aftertouch":
+                self.pressure[ch] = msg.value / 127.0
+                self._mpe_press(ch, n0)
+                return True
+            return False
+        # THE MANAGER
+        if t == "control_change":
+            c = msg.control
+            if c in (126, 127):
+                self.mpe_ignored += 1       # prohibited on the manager (Appendix E)
+                return True
+            self._one_core(n0, msg)
+            if c == 74:
+                for m in self.mpe.members(ch):
+                    self._mpe_reshape(m, n0)
+            elif c not in self._MPE_NOT_FANNED:
+                for m in self.mpe.members(ch):
+                    self._one_core(n0, _cc_msg(m, c, msg.value))
+            return True
+        if t == "aftertouch":
+            self._one_core(n0, msg)
+            for m in self.mpe.members(ch):
+                self._mpe_press(m, n0)
+            return True
+        return False
+
+    def _mpe_press(self, ch, n0):
+        """A member's notes under the pressure MPE gives them: the greater of
+        its own and its manager's (Appendix D), held notes only (2.2.7)."""
+        p = T.mpe_pressure(self.pressure.get(ch, 0.0),
+                           self.pressure.get(self.mpe.manager_of(ch), 0.0))
+        for slots, tilt in self._press_groups(ch):
+            slots = self._held(slots)
+            if slots:
+                self.slab.press(slots, p, self.press_db, tilt)
+
+    def _held(self, slots):
+        """Only the slots whose key is still down: MPE's per-note controls
+        stop at Note Off (2.2.6-2.2.8)."""
+        if not slots:
+            return slots
+        idx = np.fromiter(slots, np.int64, len(slots))
+        return list(idx[self.slab.a["noff"][idx] == IDLE])
+
+    def _pc(self, ch):
+        """The channel a Part is asked about: a member's is its manager's, so
+        a part set to channel 1 plays the whole Lower Zone."""
+        if not self.mpe:
+            return ch
+        m = self.mpe.manager_of(ch)
+        return ch if m is None else m
+
+    def _lk(self, ch):
+        """Where legato and portamento are judged: per zone under MPE, since a
+        line's successive notes arrive on different member channels."""
+        return self._pc(ch)
+
+    def _one_core(self, n0, msg):
         if msg.type in _M2_ONLY:
             self._one_m2(n0, msg)
             return
@@ -2810,9 +2929,9 @@ class Live:
                 # exactly as CC123 honours it and a panic is exactly CC120's.
                 # OMNI does nothing else: a Part here already knows its channel.
                 if msg.control in (126, 127):
-                    self._one(n0, mido.Message("control_change", channel=ch,
+                    self._one_core(n0, mido.Message("control_change", channel=ch,
                                                control=120, value=0))
-                self._one(n0, mido.Message("control_change", channel=ch,
+                self._one_core(n0, mido.Message("control_change", channel=ch,
                                            control=123, value=0))
                 self.mono_stack.pop(ch, None)
                 self.mono_cur.pop(ch, None)
@@ -2831,7 +2950,7 @@ class Live:
                 # note-on on this channel to start from that pitch, once, and
                 # it does not need CC65: Roland's Example 2 sends it with
                 # nothing sounding at all and still glides.
-                self.porta_src[ch] = msg.value
+                self.porta_src[self._lk(ch)] = msg.value
             elif msg.control == 66:                 # sostenuto pedal
                 # NOT THE DAMPER PEDAL WITH A DIFFERENT NUMBER. Sustain holds
                 # everything played while it is down; sostenuto holds only the
@@ -2995,11 +3114,11 @@ class Live:
             # CC84 wins and is spent here; otherwise CC65 takes the last note
             # to have started. Read BEFORE last_on is updated, or every note
             # would glide from itself.
-            _psrc = self.porta_src.pop(ch, None)
+            _psrc = self.porta_src.pop(self._lk(ch), None)
             if _psrc is None and self.porta_on.get(ch):
-                _psrc = self.last_on.get(ch)
+                _psrc = self.last_on.get(self._lk(ch))
             self._glide_from = _psrc if _psrc != msg.note else None
-            self.last_on[ch] = msg.note
+            self.last_on[self._lk(ch)] = msg.note
             # A MIDI 2.0 Note On may carry its own pitch (Pitch 7.9), which is
             # this note's alone and outranks every other tuning (7.4.15.3).
             _ap = getattr(msg, "attr_pitch", None)
@@ -3009,7 +3128,7 @@ class Live:
                 self.pnattr.pop((ch, msg.note), None)
             self._slur = _slur
             for part in parts:
-                if part.matches(ch, msg.note):
+                if part.matches(self._pc(ch), msg.note):
                     self._note_on(part, ch, msg.note, msg.velocity, n0)
             self._glide_from = None
             self._slur = False
@@ -3031,10 +3150,10 @@ class Live:
                     self.mono_cur[ch] = _back
                     self._glide_from = (msg.note if self.porta_on.get(ch)
                                         else None)
-                    self.last_on[ch] = _back
+                    self.last_on[self._lk(ch)] = _back
                     self._slur = True   # back to a key still held: a slur too
                     for part in parts:
-                        if part.matches(ch, _back):
+                        if part.matches(self._pc(ch), _back):
                             self._note_on(part, ch, _back, _bvel, n0)
                     self._glide_from = None
                     self._slur = False
@@ -3042,7 +3161,7 @@ class Live:
                 self.mono_cur.pop(ch, None)     # last key up: an ordinary release
             pedalled = False
             for part in parts:
-                if not part.matches(ch, msg.note):
+                if not part.matches(self._pc(ch), msg.note):
                     continue
                 # ONE SOURCE OF TRUTH with the file path, which grew the same
                 # rule today. `not part.organ` was right and narrow: it caught
@@ -3151,6 +3270,8 @@ class Live:
         if d > 0.0:
             self.slab.tremolo_arm(slots, d, part.patch.tremolo_stereo)
         pr = self.pressure.get(ch, 0.0)
+        if self.mpe and self.mpe.is_member(ch):
+            pr = T.mpe_pressure(pr, self.pressure.get(self.mpe.manager_of(ch), 0.0))
         if pr:
             # The VOICE's tilt, as every other pressure path uses -- this one
             # passed the global constant, so a trombone struck under held
@@ -3312,6 +3433,12 @@ class Live:
         renderers.
         """
         sd = self.snd.get(ch)
+        if self.mpe and self.mpe.is_member(ch):
+            # CC74 is per note and the manager's is a BIAS on it (Appendix D).
+            mb = (self.snd.get(self.mpe.manager_of(ch)) or {}).get('brightness', 0.0)
+            if mb:
+                sd = dict(sd or {})
+                sd['brightness'] = T.mpe_timbre(sd.get('brightness', 0.0), mb)
         if not sd or part.drums:
             return {}
         ctl = T.sound_controls_of(part.patch._voice_class(note + part.transpose))
@@ -3379,6 +3506,37 @@ class Live:
         w = self.modw.get(ch, 0.0)
         self.slab.retune(slots, n0, vd=v, vrs=(1.0 + self.mod_rate * w) * rate)
 
+    def _reshape_sound(self, ch, here):
+        """Brightness and resonance on one channel's sounding notes, each
+        against its un-shaped baseline. Under MPE a member's notes that are
+        already released keep what they had: CC74 stops at Note Off (2.2.8)."""
+        a = self.slab.a
+        member = bool(self.mpe) and self.mpe.is_member(ch)
+        for part in here:
+            for k, sl in list(self.slab.live.items()):
+                if k[0] != part.pid or k[1] != ch or k[2] < 0 or not sl:
+                    continue
+                idx = np.fromiter(sl, np.int64, len(sl))
+                if member:
+                    idx = idx[a["noff"][idx] == IDLE]
+                    if not len(idx):
+                        continue
+                sd = self._snd_for(part, ch, k[2])
+                cls = part.patch._voice_class(k[2] + part.transpose)
+                base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
+                g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
+                                  sd.get('resonance', 0.0))
+                g = T.normalise_power(base, g).astype(np.float32)
+                r = g / np.maximum(self.slab.sg[idx], 1e-12)
+                for col in (a["aL"], a["aR"], self.slab.aL0, self.slab.aR0):
+                    col[idx] *= r
+                self.slab.sg[idx] = g
+        self.slab.dirty = True
+
+    def _mpe_reshape(self, ch, n0):
+        """A member's notes after its manager's CC74 moved."""
+        self._reshape_sound(ch, [p for p in self.parts if self._listens(p, ch) and not p.drums])
+
     def _sound_cc(self, ch, cc, value, n0, parts):
         """One CC71-78 (or its GS NRPN) on this channel."""
         name = T.SOUND_CC[cc]
@@ -3393,23 +3551,7 @@ class Live:
             # ON NOTES ALREADY SOUNDING, as a filter would: per note, the new
             # gain against the un-shaped baseline, applied as new/old so
             # aftertouch's own shaping, which rides on aL0, is left alone.
-            a = self.slab.a
-            for part in here:
-                for k, sl in list(self.slab.live.items()):
-                    if k[0] != part.pid or k[1] != ch or k[2] < 0 or not sl:
-                        continue
-                    idx = np.fromiter(sl, np.int64, len(sl))
-                    sd = self._snd_for(part, ch, k[2])
-                    cls = part.patch._voice_class(k[2] + part.transpose)
-                    base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
-                    g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
-                                      sd.get('resonance', 0.0))
-                    g = T.normalise_power(base, g).astype(np.float32)
-                    r = g / np.maximum(self.slab.sg[idx], 1e-12)
-                    for col in (a["aL"], a["aR"], self.slab.aL0, self.slab.aR0):
-                        col[idx] *= r
-                    self.slab.sg[idx] = g
-            self.slab.dirty = True
+            self._reshape_sound(ch, here)
         elif name == 'release':
             # Only notes whose key is still down: a release already running is
             # an envelope in progress, and rescaling it would jump its level.
@@ -3449,7 +3591,7 @@ class Live:
                 self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix], _fade)
         self.pedalled.discard((ch, note))
         for part in parts:
-            if part.matches(ch, note):
+            if part.matches(self._pc(ch), note):
                 self._note_off(part, ch, note, n0)
 
     def _legato_on(self, ch, note, n0):
@@ -3458,21 +3600,22 @@ class Live:
         held under a moving line would otherwise make every note above it
         legato, and the members of one chord would disagree -- the offline
         path measured that mislabelling 64-82% of contiguous notes."""
-        g = self.onset_group.get(ch)
+        lk = self._lk(ch)
+        g = self.onset_group.get(lk)
         if g is not None and n0 - g["on"] <= CHORD_WINDOW_S * self.rate:
-            g["keys"].add(note)             # a chord member: the chord's answer
+            g["keys"].add((ch, note))       # a chord member: the chord's answer
             return g["slur"]
         slur = g is not None and (
-            any((ch, k) in self.down for k in g["keys"])
+            any(k in self.down for k in g["keys"])
             or (g["off"] is not None and n0 - g["off"] <= LEGATO_GAP_S * self.rate))
-        self.onset_group[ch] = {"on": n0, "keys": {note}, "off": None, "slur": slur}
+        self.onset_group[lk] = {"on": n0, "keys": {(ch, note)}, "off": None, "slur": slur}
         return slur
 
     def _legato_off(self, ch, note, n0):
         """The group's END is its last key up, as offline it is the latest
         note-off of the group."""
-        g = self.onset_group.get(ch)
-        if g is not None and note in g["keys"]:
+        g = self.onset_group.get(self._lk(ch))
+        if g is not None and (ch, note) in g["keys"]:
             g["off"] = n0 if g["off"] is None else max(g["off"], n0)
 
     def _slur_stamp(self, part, note, tmpl):
@@ -3678,7 +3821,11 @@ class Live:
         return (pid, -1, -1, "amp")
 
     def _bend_range(self, ch):
-        return self.brange.get(ch, self.bend_range)
+        r = self.brange.get(ch)
+        if r is not None:
+            return r
+        d = self.mpe.bend_default(ch) if self.mpe else None
+        return self.bend_range if d is None else d
 
     def _repitch(self, ch, n0):
         """Recompute this channel's total pitch ratio and move its notes to it.
@@ -3699,6 +3846,9 @@ class Live:
             self._bend_range(ch), self.wheel.get(ch, 0),
             self.coarse.get(ch, 0.0), self.fine.get(ch, 0.0),
             self.master_coarse, self.master_fine)
+        if self.mpe and self.mpe.zone_of(ch) is not None:
+            self._mpe_repitch(ch, ratio, n0)
+            return
         prev = self.bend.get(ch, 1.0)
         if ratio == prev:
             return
@@ -3716,6 +3866,90 @@ class Live:
         else:
             self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
             self._repitch_amp({p.pid for p in here}, n0, ratio / prev)
+
+    def _mpe_repitch(self, ch, ratio, n0):
+        """MPE's pitch: a note's bend is its member's plus its manager's, in
+        semitones -- a product of ratios (Appendix C). A MEMBER'S share moves
+        only the notes still held on it (2.2.6: "A Released Note shall cease
+        to be affected by Pitch Bend messages from the Member Channels"); the
+        MANAGER'S moves every note in the zone, pedalled and releasing ones
+        included (A.4.1). Each share is applied against the last of itself,
+        so nothing compounds. The amplifier's products are rebuilt, not
+        retuned: its parents no longer move by one ratio."""
+        here = [p for p in self.parts if self._listens(p, ch) and not p.patch.leslie]
+        pids = {p.pid for p in here}
+        if self.mpe.is_member(ch):
+            was = self.bend_mem.get(ch, 1.0)
+            self.bend_mem[ch] = ratio
+            mgr = self.mpe_mgr.get(self.mpe.manager_of(ch), 1.0)
+            self.bend[ch] = ratio * mgr
+            if ratio != was:
+                sl = self._held(self._sounding(ch, pids=pids))
+                if sl:
+                    self.slab.retune(sl, n0, om_scale=ratio / was)
+                    for p in here:
+                        self._amp_touch(p)
+            return
+        # the MANAGER: its own notes take its whole ratio, as any channel's do
+        prev = self.bend.get(ch, 1.0)
+        self.bend[ch] = ratio
+        if ratio != prev:
+            self.slab.retune(self._sounding(ch, pids=pids), n0, om_scale=ratio / prev)
+        # ...and the zone takes its BEND, without the master tuning each
+        # member already carries
+        zb = T.channel_pitch_ratio(self._bend_range(ch), self.wheel.get(ch, 0),
+                                   self.coarse.get(ch, 0.0), self.fine.get(ch, 0.0), 0.0, 0.0)
+        was = self.mpe_mgr.get(ch, 1.0)
+        self.mpe_mgr[ch] = zb
+        moved = ratio != prev
+        for m in self.mpe.members(ch):
+            self.bend[m] = self.bend_mem.get(m, self.bend.get(m, 1.0)) * zb
+            if zb != was:
+                sl = self._sounding(m, pids=pids)
+                if sl:
+                    self.slab.retune(sl, n0, om_scale=zb / was)
+                    moved = True
+        if zb != was:
+            # ...released notes too: "Manager Pitch Bend applies to every
+            # Sounding Note within the Zone, even those that have passed into
+            # their Note Off phase" (A.4.1). They have left `live`, so they are
+            # found by the channel they were stamped for.
+            rel = self.slab.released_on(self.mpe.members(ch))
+            if rel:
+                self.slab.retune(rel, n0, om_scale=zb / was)
+                moved = True
+        if moved:
+            for p in here:
+                self._amp_touch(p)
+
+    def mpe_label(self):
+        """'MPE lower 15', 'MPE lower 7 + upper 7', or '' -- for the panel."""
+        z = sorted(self.mpe.n.items())
+        return ("MPE " + " + ".join("%s%s %d" % ("" if g == 0 else "g%d " % (g + 1), side, n)
+                                    for (g, side), n in z)) if z else ""
+
+    def _mpe_mcm(self, ch, count, n0):
+        """The MPE Configuration Message (2.2.1): zones rebuilt, every channel
+        whose zone changed cut and reset (2.2.3), and the bend ranges set --
+        2 on the manager, 48 on every member (2.2.5) -- on every MCM, since
+        the spec says a receiver "shall" on receiving one."""
+        changed = self.mpe.mcm(ch, count)
+        if changed is None:
+            self.mpe_ignored += 1           # not on a manager channel: invalid
+            return
+        for c in sorted(changed):
+            self._one_core(n0, _cc_msg(c, 120, 0))
+            self._one_core(n0, _cc_msg(c, 121, 0))
+            self.snd.pop(c, None)
+            self.bend_mem.pop(c, None)
+            self.mpe_mgr.pop(c, None)
+        if self.mpe.zone_of(ch) is not None:
+            self.brange[ch] = T.MPE_MANAGER_BEND
+            for m in self.mpe.members(ch):
+                self.brange[m] = T.MPE_MEMBER_BEND
+        for c in sorted(changed | set(self.mpe.members(ch)) | {ch}):
+            self._repitch(c, n0)
+        self.dirty = True
 
     def _repitch_amp(self, pids, n0, scale):
         """Bend the amplifier's distortion products with their parents.
@@ -3936,8 +4170,20 @@ class Live:
         # THE ARITHMETIC IS tonelib's, shared with the file renderer, which had
         # none of this until now: a file asking for a bend range of 12 was bent
         # over 2 there. One copy of each formula, so the two cannot drift.
+        if sel == (0, 6):               # MPE Configuration Message
+            if cc == 6:                 # the LSB "has no function" (2.2.1)
+                self._mpe_mcm(ch, value, n0)
+            return
         if sel == (0, 0):               # pitch bend sensitivity
             self.brange[ch] = T.rpn_bend_range(cc, value, self._bend_range(ch))
+            if self.mpe and self.mpe.is_member(ch):
+                # One value for every member of the zone: "apply the last
+                # Pitch Bend Sensitivity message received on any Member
+                # Channel to all Member Channels" (2.2.5).
+                for m in self.mpe.members(ch):
+                    if m != ch:
+                        self.brange[m] = self.brange[ch]
+                        self._repitch(m, n0)
         elif sel == (0, 1):             # fine tuning, 14-bit, +/-100 cents
             self._rpn_fine_msb[ch], self.fine[ch] = T.rpn_fine(
                 cc, value, self._rpn_fine_msb.get(ch, 64))
@@ -3965,7 +4211,7 @@ class Live:
             # message, for the reason _RESET_CC gives: CC1 is seven controls.
             w = self.modw.get(ch, 0.0)
             if w > 0.0:
-                self._one(n0, mido.Message("control_change", channel=ch,
+                self._one_core(n0, mido.Message("control_change", channel=ch,
                                            control=1, value=int(round(w * 127))))
             return
         else:
@@ -4006,7 +4252,7 @@ class Live:
             self.modrange[ch] = v
             w = self.modw.get(ch, 0.0)
             if w > 0.0:
-                self._one(n0, mido.Message("control_change", channel=ch,
+                self._one_core(n0, mido.Message("control_change", channel=ch,
                                            control=1, value=int(round(w * 127))))
             return
         self._repitch(ch, n0)
@@ -4042,13 +4288,13 @@ class Live:
         self.porta_src.pop(ch, None)
         for cc, v in self._RESET_CC:
             try:
-                self._one(n0, mido.Message("control_change", channel=ch,
+                self._one_core(n0, mido.Message("control_change", channel=ch,
                                            control=cc, value=v))
             except Exception as e:
                 self.errors += 1
                 self.last_error = "%s: %s" % (type(e).__name__, e)
         try:
-            self._one(n0, mido.Message("aftertouch", channel=ch, value=0))
+            self._one_core(n0, mido.Message("aftertouch", channel=ch, value=0))
         except Exception:
             pass
         self.rpn[ch] = (127, 127)
@@ -4147,7 +4393,7 @@ class Live:
             self.vol[ch] = T.GM_DEFAULT_VOLUME
             self.expr[ch] = T.GM_DEFAULT_EXPRESSION
             try:
-                self._one(n0, mido.Message("control_change", channel=ch,
+                self._one_core(n0, mido.Message("control_change", channel=ch,
                                            control=10, value=T.GM_DEFAULT_PAN))
             except Exception:
                 pass
@@ -4532,7 +4778,7 @@ class Live:
         want = {r for r in want if r in part.patch.rank_names} or set(part.patch.cres_order[:1])
         for rank in want - part.drawn:
             for (c, note) in self._held_any():
-                if part.matches(c, note):
+                if part.matches(self._pc(c), note):
                     t = part.patch.get(note + part.transpose, 127)
                     if t is not None:
                         self._draw(part, t, c, note, rank, n0)
@@ -4622,7 +4868,7 @@ class Live:
                                  n0, self.rotor_horn.rate, self.rotor_drum.rate)
 
     def _listens(self, part, ch):
-        return (part.channel is None or part.channel == ch) and not part.muted
+        return (part.channel is None or part.channel == self._pc(ch)) and not part.muted
 
     def _held_any(self):
         """Every key actually down -- from the key state, not from whatever
@@ -5019,6 +5265,11 @@ _M2_ONLY = frozenset(("ignored", "pn_pitch", "pn_bend", "pn_bend_range", "pn_mgm
                       "set_tempo", "noop"))
 
 
+def _cc_msg(ch, control, value):
+    return mido.Message("control_change", channel=ch & 15, control=control,
+                        value=max(0, min(127, int(round(value)))))
+
+
 def _m1_view(e):
     """A decoded MIDI 2.0 event as the MIDI 1.0 message the panel's memory
     keeps -- rounded to seven bits (fourteen for a bend), which is what a
@@ -5065,6 +5316,13 @@ def _crescendo_channel(live, ch):
 def scene_from(live):
     """The channel state as MIDI events, in mido's text form."""
     ev = []
+    # MPE FIRST: the zones decide what every other channel event means, and a
+    # recalled MCM resets the channels it moves (M1-100-UM 2.2.3), so it has
+    # to land before the state it would otherwise wipe.
+    for (g, side), n in sorted(live.mpe.n.items()):
+        if g == 0:
+            m = 0 if side == 'lower' else 15
+            ev += [_cc(m, 101, 0), _cc(m, 100, 6), _cc(m, 6, n)]
     for (ch, c) in sorted(live.chanstate):
         if c == 1 and _crescendo_channel(live, ch):
             continue            # the registration is the parts' drawn stops
@@ -10413,6 +10671,126 @@ def selftest():
           "  (keys %s; scale/octave on channels %s)"
           % (sorted({k[1:3] for k in _lg2.slab.live}), sorted(_lg2.sota)))
     _lg2.renderer.close()
+    # ---- MPE (M1-100-UM v1.1) --------------------------------------------------
+    _Mm = mido.Message
+    _mcc = lambda ch, c, v: _Mm("control_change", channel=ch, control=c, value=v)
+    _lm = Live(program=81, rate=48000, frames=128, verbose=False); _lm.warm()
+
+    def _mf(ch, note):
+        ks = [k for k in _lm.slab.live if k[1] == ch and k[2] == note]
+        idx = (np.concatenate([np.fromiter(_lm.slab.live[k], np.int64) for k in ks]) if ks
+               else np.array(_lm.slab.released_on([ch]), np.int64))
+        return float(_lm.slab.a["om"][idx].min()) * 48000 / (2 * math.pi) if len(idx) else None
+
+    def _mfeed(*ms):
+        for m in ms:
+            _lm.on_midi(m)
+        _lm.apply(_lm.n)
+    _mc = lambda a_, b_: 1200 * math.log2(a_ / b_)
+    _mfeed(_mcc(5, 101, 0), _mcc(5, 100, 6), _mcc(5, 6, 3))
+    _bad_mcm = (not _lm.mpe) and _lm.mpe_ignored == 1
+    _mfeed(_mcc(0, 101, 0), _mcc(0, 100, 6), _mcc(0, 6, 15))
+    check("MPE: the Configuration Message makes a zone, members bend 48 and the manager 2",
+          _bad_mcm and _lm.mpe.n == {(0, 'lower'): 15}
+          and (_lm._bend_range(0), _lm._bend_range(1), _lm._bend_range(15)) == (2.0, 48.0, 48.0),
+          "  (%s; an MCM on channel 6 is ignored, 2.2.1)" % _lm.mpe_label())
+    _mfeed(_Mm("note_on", channel=5, note=60, velocity=100)); _mref = _mf(5, 60)
+    _mfeed(_Mm("note_off", channel=5, note=60, velocity=0)); _lm.panic()
+    for _ in range(300):
+        _lm.callback(None, 128, None, 0)
+    _mfeed(_Mm("pitchwheel", channel=1, pitch=int(7 * 8192 / 48)), _Mm("note_on", channel=1, note=60, velocity=100),
+           _Mm("note_on", channel=2, note=60, velocity=100),
+           _Mm("pitchwheel", channel=3, pitch=-2048), _Mm("note_on", channel=3, note=60, velocity=100))
+    _m3 = [_mc(_mf(c_, 60), _mref) for c_ in (1, 2, 3)]
+    _mfeed(_Mm("pitchwheel", channel=0, pitch=8191))
+    _m3b = [_mc(_mf(c_, 60), _mref) for c_ in (1, 2, 3)]
+    check("MPE: each note bends alone, and the manager's bend adds to all of them",
+          abs(_m3[0] - 699.6) < 0.1 and abs(_m3[1]) < 1e-3 and abs(_m3[2] + 1200) < 1e-3
+          and all(abs(b_ - a_ - 200.0 * 8191 / 8192) < 1e-3 for a_, b_ in zip(_m3, _m3b)),
+          "  (member bends %s c, then with the manager's +2: %s c)"
+          % (["%+.1f" % x for x in _m3], ["%+.1f" % x for x in _m3b]))
+    _mfeed(_Mm("note_off", channel=2, note=60, velocity=0))
+    _mr0 = _mf(2, 60); _mfeed(_Mm("pitchwheel", channel=2, pitch=8191)); _mr1 = _mf(2, 60)
+    _mfeed(_Mm("pitchwheel", channel=0, pitch=0)); _mr2 = _mf(2, 60)
+    check("MPE: after Note Off its member no longer moves it, and its manager still does",
+          abs(_mc(_mr1, _mr0)) < 1e-3 and abs(_mc(_mr2, _mr1) + 200.0 * 8191 / 8192) < 1e-3,
+          "  (member bend %+.3f c, manager %+.1f c -- 2.2.6, A.4.1)"
+          % (_mc(_mr1, _mr0), _mc(_mr2, _mr1)))
+    _mfeed(_mcc(4, 101, 0), _mcc(4, 100, 0), _mcc(4, 6, 12))
+    _mfeed(_mcc(3, 64, 127)); _mped_member = _lm.pedal.get(3, False)
+    _mfeed(_mcc(0, 64, 127))
+    _mprog0 = _lm.parts[0].patch.program
+    _mfeed(_Mm("program_change", channel=3, program=40))
+    _lm.apply(_lm.n)
+    check("MPE: RPN 0 on a member sets the zone; the pedal and the program are the manager's",
+          _lm._bend_range(1) == 12.0 and _lm._bend_range(14) == 12.0 and _lm._bend_range(0) == 2.0
+          and not _mped_member and _lm.pedal.get(3) and _lm.pedal.get(9)
+          and _lm.parts[0].patch.program == _mprog0 and not _lm.patch_reqs,
+          "  (member range %s everywhere; a member's CC64 and program change ignored, "
+          "the manager's CC64 holds every member)" % _lm._bend_range(9))
+    _mfeed(_mcc(0, 64, 0)); _lm.panic()
+    for _ in range(300):
+        _lm.callback(None, 128, None, 0)
+    # pressure: the louder of the note's own and the manager's (Appendix D)
+    _mfeed(_Mm("aftertouch", channel=6, value=0), _Mm("note_on", channel=6, note=64, velocity=100),
+           _Mm("aftertouch", channel=7, value=0), _Mm("note_on", channel=7, note=67, velocity=100))
+    _mamp = lambda ch, n: float(np.abs(_lm.slab.a["aL"][list(next(v for k, v in _lm.slab.live.items()
+                                                                   if k[1] == ch and k[2] == n))]).sum())
+    _mq0 = (_mamp(6, 64), _mamp(7, 67))
+    _mfeed(_Mm("aftertouch", channel=6, value=30), _Mm("aftertouch", channel=0, value=100))
+    _mq1 = (_mamp(6, 64), _mamp(7, 67))
+    _mfeed(_Mm("aftertouch", channel=6, value=127))
+    _mq2 = (_mamp(6, 64), _mamp(7, 67))
+    check("MPE: a note's pressure is the louder of its own and its manager's",
+          _mq1[0] / _mq0[0] > 1.5 and abs(_mq1[0] / _mq0[0] - _mq1[1] / _mq0[1]) < 1e-3
+          and _mq2[0] / _mq1[0] > 1.1 and abs(_mq2[1] - _mq1[1]) < 1e-9,
+          "  (manager 100 lifts both by %.2fx; the note's own 127 lifts only it, %.2fx more)"
+          % (_mq1[1] / _mq0[1], _mq2[0] / _mq1[0]))
+    # legato is judged across the zone, not per member channel
+    _mfeed(_Mm("note_off", channel=6, note=64, velocity=0), _Mm("note_off", channel=7, note=67, velocity=0))
+    for _ in range(40):
+        _lm.callback(None, 128, None, 0)
+    _mfeed(_Mm("note_on", channel=8, note=60, velocity=100))
+    for _ in range(40):
+        _lm.callback(None, 128, None, 0)
+    _mslur = _lm._legato_on(9, 62, _lm.n)
+    check("MPE: a line on different member channels is still judged legato",
+          _mslur and 0 in _lm.onset_group,
+          "  (a note on member 10 while member 9 holds: slurred, by zone)")
+    # a zone change resets what it moves (2.2.3)
+    _mfeed(_Mm("note_on", channel=13, note=72, velocity=100))
+    _mheld = any(k[1] == 13 for k in _lm.slab.live)
+    _mfeed(_mcc(15, 101, 0), _mcc(15, 100, 6), _mcc(15, 6, 3))
+    check("MPE: a new zone takes its channels and cuts what was sounding on them",
+          _mheld and not any(k[1] == 13 for k in _lm.slab.live)
+          and _lm.mpe.n == {(0, 'lower'): 11, (0, 'upper'): 3},
+          "  (%s)" % _lm.mpe_label())
+    _lm.renderer.close()
+    # OFFLINE, the same file: each note's bend at onset is its own, and a slide
+    # is the note's own row. Against the tuner's key, as live measures it.
+    _mm = mido.MidiFile(ticks_per_beat=480); _mt = mido.MidiTrack(); _mm.tracks.append(_mt)
+    for _e in [_mcc(0, 101, 0), _mcc(0, 100, 6), _mcc(0, 6, 15),
+               _Mm("program_change", channel=0, program=81),
+               _Mm("pitchwheel", channel=1, pitch=int(7 * 8192 / 48)),
+               _Mm("note_on", channel=1, note=60, velocity=100),
+               _Mm("note_on", channel=2, note=64, velocity=100),
+               _Mm("pitchwheel", channel=2, pitch=683, time=480),
+               _Mm("note_off", channel=1, note=60, velocity=0, time=480),
+               _Mm("note_off", channel=2, note=64, velocity=0)]:
+        _mt.append(_e)
+    _pm = B.prepare(_mm, "hybrid")
+    _Fm = B.tuning_table("hybrid")
+    _omm = np.asarray(_pm["om"], float); _mchm = np.asarray(_pm["mch"]).astype(int)
+    _brm = np.asarray(_pm["br"]).astype(int); _BRmm = np.asarray(_pm["BR"], float)
+    _o1 = _mc(_omm[_mchm == 1].min() * B.SR / (2 * math.pi), _Fm[60])
+    _o2 = _mc(_omm[_mchm == 2].min() * B.SR / (2 * math.pi), _Fm[64])
+    _row2 = _BRmm[_brm[_mchm == 2][0]] if _brm[_mchm == 2][0] >= 0 else None
+    _s2 = _mc(_row2[int(0.75 * B.SR / B.BLK)], 1.0) if _row2 is not None else 0.0
+    check("MPE offline: each note's own bend at onset, and a slide on its own row",
+          abs(_o1 - 699.6) < 0.1 and abs(_o2) < 1e-6 and abs(_s2 - 400.2) < 0.1
+          and _brm[_mchm == 1][0] == -1,
+          "  (member 2 at %+.1f c, member 3 at %+.1f c then sliding %+.1f c on its "
+          "own row; live gave %+.1f c for the same bend)" % (_o1, _o2, _s2, _m3[0]))
     _jt = _U.pitch_table("just:C")
     check("the bridge's just table puts E 13.69 cents under equal temperament",
           abs((_jt(0, 64) - 64) * 100 + 13.686) < 1e-3 and _jt(0, 60) == 60.0
@@ -10875,6 +11253,11 @@ def main():
     ap.add_argument("--midi2-play", default=None, metavar="FILE",
                     help="play a MIDI 2.0 Clip File (.midi2) or raw UMP stream into the "
                          "engine, alongside the keyboard")
+    ap.add_argument("--mpe", nargs="?", const="lower", default=None,
+                    metavar="ZONES",
+                    help="start in MPE for a controller that sends no MPE Configuration "
+                         "Message: lower (15 members, the spec's default), upper, both "
+                         "(7 + 7), or lower:N / upper:N")
     ap.add_argument("--ump", action="store_true",
                     help="open a MIDI 2.0 port in the ALSA sequencer, 'tuning:MIDI 2.0 in', "
                          "for MIDI 2.0 senders (examples/umpplay.py, a MIDI 2.0 controller)")
@@ -10932,6 +11315,16 @@ def main():
         live.midi2 = _U.Midi1to2(pitch_of=_U.pitch_table(a.midi2_pitch) if a.midi2_pitch else None)
         live.midi2_label = "MIDI 2.0 (bridged%s)" % (", " + a.midi2_pitch if a.midi2_pitch else "")
         sys.stderr.write("  %s\n" % live.midi2_label)
+    if a.mpe:
+        for part in a.mpe.lower().split(","):
+            side, _, n = part.partition(":")
+            if side == "both":
+                live._mpe_mcm(0, int(n or 7), 0); live._mpe_mcm(15, int(n or 7), 0)
+            elif side in ("lower", "upper"):
+                live._mpe_mcm(0 if side == "lower" else 15, int(n or 15), 0)
+            else:
+                sys.exit("--mpe: lower, upper, both, or lower:N / upper:N")
+        sys.stderr.write("  %s\n" % live.mpe_label())
     live.warm()
     if a.midi2_play:
         play_ump_file(live, a.midi2_play)

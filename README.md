@@ -425,6 +425,11 @@ and `--ump-from "USB Midi"` lets the kernel carry the keyboard across instead.
 `midi.md` has the details: per-note pitch is absolute (A = 440) whatever the
 tuner, as MIDI 2.0 says.
 
+**MPE.** An MPE controller (Seaboard, Linnstrument, Osmose and the like) works
+as it is: its Configuration Message sets the zone, and each finger bends,
+presses and brightens its own note. `--mpe` turns MPE on for a controller that
+doesn't send one. `examples/mpe_demo.py` writes a file to hear it with.
+
 ## Render a file
 
 ```sh

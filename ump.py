@@ -204,6 +204,13 @@ class Ev(object):
         for k in self.__slots__[1:]:
             setattr(self, k, kw.get(k))
 
+    def copy(self, **kw):
+        """As mido's Message.copy: the same event with some fields changed."""
+        e = Ev(self.type, **{k: getattr(self, k) for k in self.__slots__[1:]})
+        for k, v in kw.items():
+            setattr(e, k, v)
+        return e
+
     def __repr__(self):
         return "Ev(%s)" % ", ".join("%s=%r" % (k, getattr(self, k)) for k in self.__slots__
                                     if getattr(self, k) is not None)
