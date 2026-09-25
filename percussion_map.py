@@ -207,6 +207,8 @@ GM_PERCUSSION_CHANNEL = 9  # 0-based; GM drum channel is "10" one-based
 # drum at one point. A channel pan (CC10) is added on top to rotate the
 # whole kit. Kick and snare sit near center; hats to the left, ride/toms
 # fanning to the right, crashes to the sides.
+import os as _os
+
 DEFAULT_PAN = {
     35: 0.0, 36: 0.0,                    # bass drums: center
     37: -0.12, 38: -0.12, 40: -0.12,     # snare / stick: just left of center
@@ -225,6 +227,27 @@ DEFAULT_PAN = {
     75: -0.3, 76: -0.3, 77: -0.35,       # claves / woodblocks: left
 }
 
+
+
+def kit_pan(note):
+    """This drum's place in the stereo image, before the channel's CC10.
+
+    FROM WHICH SIDE OF THE KIT. DEFAULT_PAN is the drummer's view (hi-hat
+    left, ride right), which is how most records are mixed. A GS module adds
+    CC10 to "each Instrument's pan setting" (Roland, VE-GS Pro MIDI
+    Implementation) -- so a pan move on a drum channel lands relative to where
+    the module put each drum, and modules did not agree on which side.
+
+    Ben's qkbttl02 shows which his card used. The hi-hat section pans the kit
+    to 24, then sweeps it back to 64 across the bar that ends it, and he heard
+    the hi-hats START LEFT AND SWEEP TO THE RIGHT -- the climax of the piece.
+    With the hi-hat left of centre (this table) that sweep goes from hard left
+    to left and never crosses; with it RIGHT of centre it goes from a little
+    left to clearly right, which is what he wrote for. That is an audience-side
+    kit, and TUNING_KIT_VIEW=audience mirrors the whole kit for such a file.
+    """
+    p = DEFAULT_PAN.get(note, 0.0)
+    return -p if _os.environ.get('TUNING_KIT_VIEW', 'drummer') == 'audience' else p
 
 # ---- DRUM SETS ---------------------------------------------------------------
 #
@@ -338,12 +361,12 @@ def percussion_for_note(note, kit=0):
     own = KITS.get(kit, {}).get(note)
     if own is not None:
         name, cls, freq = own
-        return name, _with_ring(cls, note, kit), freq, DEFAULT_PAN.get(note, 0.0)
+        return name, _with_ring(cls, note, kit), freq, kit_pan(note)
     entry = PERCUSSION.get(note)
     if entry is None:
         return None
     name, cls, freq = entry
-    return name, _with_ring(cls, note), freq, DEFAULT_PAN.get(note, 0.0)
+    return name, _with_ring(cls, note), freq, kit_pan(note)
 
 # How long each instrument actually SOUNDS, in seconds to inaudibility (-60 dB).
 #
