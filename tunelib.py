@@ -39,6 +39,7 @@ To deal with sustained notes:
 
 from tonelib import *
 import linearcomma
+import math
 from inharmonicity import *
 
 def note2EqualRatio(npo, note):
@@ -670,6 +671,45 @@ class HybridHarmonicTuner(HybridTuner):
         return {n: c4 * ref[(n - 60) % 12] * (2.0 ** ((n - 60 - ((n - 60) % 12)) // 12))
                 for n in range(128)}
 
+
+
+class HybridMeanTuner(PathTuner):
+    """The hybrid's two chains of pure fifths, bridged by a MEAN third.
+
+    Ben's construction. Chain one, C3-G-D-A-E-B5, and chain two, C#3-G#-D#-
+    A#-F-C6, pure fifths both; the bridge is D4-F#4, and F#4 reaches chain
+    two by a pure fourth to C#4. The hybrid bridges with a pure 5:4, which
+    leaves one fifth 21.5 cents narrow -- the wolf. Here the bridge is the
+    geometric mean of 5:4 and 81:64, 397.07 cents, half a syntonic comma wide,
+    and the comma splits almost evenly over the two fifths between the chains:
+    B-F# -10.75 and F-C -12.71. No wolf.
+
+    The thirds: every third lies within a chain or crosses one gap. The eight
+    that cross (D E A B, and Eb F Ab Bb) sit at +10.8 and +8.8 cents, between
+    pure and equal (+13.7); the four inside a chain (C C# F# G) are
+    Pythagorean, +21.5. Twelve thirds always average +13.7 in any closed
+    12-note tuning, so this is choosing WHICH are good, and the mean bridge
+    makes eight of them nearly alike.
+
+    Pure octaves: it is for pipes, which are exactly harmonic.
+    """
+    A = 415
+
+    @classmethod
+    def _build_table(cls):
+        P = 1200.0 * math.log(1.5, 2)
+        X = 1200.0 * math.log(math.sqrt(1.25 * 81.0 / 64.0), 2)
+        c = {}
+        for i, n in enumerate((0, 7, 2, 9, 4, 11)):     # C G D A E B, pure
+            c[n] = (i * P) % 1200.0
+        c[6] = (c[2] + X) % 1200.0                      # the bridge, D-F#
+        c[1] = (c[6] + P) % 1200.0                      # F#-C#, pure
+        for i, n in enumerate((8, 3, 10, 5), 1):        # C# G# D# A# F, pure
+            c[n] = (c[1] + i * P) % 1200.0
+        ref = _REFERENCE if _REFERENCE is not None else (69, cls.A or 440.0)
+        base = float(ref[1]) / 2.0 ** ((c[ref[0] % 12] + 1200.0 * (ref[0] // 12)) / 1200.0)
+        return {n: base * 2.0 ** ((c[n % 12] + 1200.0 * (n // 12)) / 1200.0)
+                for n in range(128)}
 
 
 class Hybrid440Tuner(HybridTuner):

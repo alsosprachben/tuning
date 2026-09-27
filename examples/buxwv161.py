@@ -66,9 +66,11 @@ KEY = {'D1': 1.8, 'F': 86.4, 'A': 170.9, 'D2': 255.5}
 # arrive at 249.5 s and run to the D return -- measured, 4.1 voices at 487 ms,
 # the steadiest stacked writing in the piece. It is a cadenza made of weight
 # rather than of runs, and it is the approach to the final section, so the
-# blaze starts there and arrives rather than switching on at the double bar.
-WALL = 249.5
+# blaze starts there and arrives rather than switching on at the double bar:
+# the whole return registration is drawn on its first chord (ENCORE, below).
 LAST = 320.9          # the 28th and final statement
+BEAT = 0.454545       # a quarter at the file's 132
+ENCORE = 549 * BEAT   # the encore's first chord, beat 4, in the score
 # WHERE IN THE BAR A STOP IS DRAWN, and it is not a matter of taste.
 #
 # Drawing a stop while a note is held makes that note louder -- which is what
@@ -102,8 +104,10 @@ RAW = {
     0: [(0.0,           ['flute 8']),                              # Positiv
         (KEY['F'],  ['principal 8']),                                  # first brightening
         (KEY['A'],  ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3']),
-        (WALL,      ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'mixture III']),
-        (KEY['D2'], ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])],
+        # the return's full registration arrives WITH the encore's chords, on
+        # beat 4 (Ben), not at the double bar: the chord section is the
+        # approach, and it is played on everything
+        (ENCORE,    ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])],
     # pedal flue
     1: [(0.0,           ['bourdon 16', 'flute 8']),               # stopped, not open
         (KEY['F'],  ['bourdon 16', 'principal 8']),                    # principal, with the manual
@@ -123,13 +127,12 @@ RAW = {
 # THE ENCORE. The chords before the return are played as an encore: the
 # variation before them slows into its half cadence on A, the organ stops
 # long enough for the church to mostly empty, and the chords begin a tempo
-# out of the quiet. The reed 16' and the Mixtur are drawn IN the pause, the
-# one moment in the piece with nothing sounding to catch.
+# out of the quiet, on the full registration of the return.
 #
-# The pause is the room's, measured: after the release the church tail is
-# 27 dB down at 0.55 s and 42 dB down at 1.05 s. At 1.3 s it had fully
-# drained and the thread snapped (Ben: "should enter before the reverb fully
-# disappears"), so the chords come in at 0.6 s, into the last of the tail.
+# A pause was tried first, sized to the room (the church tail is 27 dB down
+# at 0.55 s, 42 at 1.05): 1.3 s drained it and the thread snapped, 0.6 s was
+# right -- and then the score showed the pedal holding across it, so the
+# breath became beat 3 itself (below).
 #
 # And the piece ends with a ritardando through the last statement's cadence,
 # its final chord held at the slower tempo.
@@ -138,8 +141,6 @@ RAW = {
 # linearly across the window. Times are the score's own seconds, and on the
 # quarter exactly (132 bpm): a pause a hair late of the chord it precedes puts
 # the chord in front of it.
-BEAT = 0.454545
-ENCORE = 549 * BEAT                  # the first chord, in the score
 RITS = [(540 * BEAT, ENCORE, 0.75, False),    # the bar of the half cadence
         (720 * BEAT, 732 * BEAT, 0.70, True)] # the last run into the final chord
 # (where the silence goes, seconds, where held notes are cut). NONE HERE NOW.
@@ -149,20 +150,19 @@ RITS = [(540 * BEAT, ENCORE, 0.75, False),    # the bar of the half cadence
 # cut it, so the breath is beat 3 itself, the broadest step of the ritardando,
 # with the bass sounding under it; beat 4 is a tempo.
 PAUSES = []
-BREATH = (548 * BEAT, ENCORE)        # beat 3, the rest in the upper voices
 
 # THE TEMPO. The file's 132 is the quarter; the bar is 3/2 and its beat the
 # half at 66, a bar every 2.7 s, and the piece ran 5:37. Recordings run 5:09
 # (Viderø) to 6:43 (Havinga), median about 6:10; Ben heard it a little fast and
-# asked for 4 bpm slower. At half = 62 it is about 5:58. Applied in the
+# asked for it slower; half = 60 to the encore, 64 from it (68 was too fast). Applied in the
 # time map, so every time above stays in the score's own seconds.
 #
 # THE ENCORE GOES BACK UP TO 66. The variations before it run in fast
 # subdivisions; the chords are plain quarters, so the surface slows by itself, and
 # held to the same beat it drags. A player presses on there (Ben heard it),
 # and the return keeps the pace to the end.
-TEMPI = [(0.0, 66.0 / 62.0),         # (from score time, seconds per score second)
-         (ENCORE, 1.0)]
+TEMPI = [(0.0, 66.0 / 60.0),         # half = 60 (seconds per score second)
+         (ENCORE, 66.0 / 64.0)]      # the encore at 64
 
 
 def _stretch(a, b, lo, hold, t):
@@ -240,6 +240,16 @@ def perform(src, dest):
     return dest
 
 
+# THE TEMPERAMENT. The hybrid puts its whole comma on A-E, 19.7 cents narrow
+# -- and here A-E is the dominant's fifth, 28.6% of all the fifths sounding in
+# the piece, the most of any. Pipes, exactly harmonic, beat it for as long as
+# it is held. Moved to D the wolf left, but C-E went Pythagorean. hybridmean
+# (Ben's) bridges the hybrid's two pure-fifth chains with the mean of 5:4 and
+# 81:64, splitting the comma over B-F# and F-C: no wolf, D-A and A-E pure, and
+# the thirds of A, D, E, F and Bb majors within 11 cents of pure. At Chorton.
+TUNER = 'hybridmean:466'   # Chorton: see midilib.at_pitch
+
+
 def to_console(src, dest):
     """Every channel on the console, GM 19: the reeds are its bits 8-11."""
     import mido
@@ -261,12 +271,25 @@ def main(argv):
     global _SPANS, PLAN
     score = perform(score, os.path.join(outdir, 'buxwv161_performed.mid'))
     _SPANS = lib.note_spans(score)
-    quiet = (warp_time(BREATH[0]) + warp_time(BREATH[1])) / 2
-    PLAN = {ch: [(quiet if t == WALL else at_raw(warp_time(t)), ns) for t, ns in spec]
-            for ch, spec in RAW.items()}
+    # on the chord's attack, which covers the draw; the manual's held A under
+    # it is struck again by the chord itself
+    encore = warp_time(ENCORE) + 0.008
+    # THE PEDAL'S RETURN IS DRAWN AHEAD of its D (bar 94, beat 5), the
+    # ostinato's first note: the pedal has been silent since its whole note
+    # ended under the encore, so there is nothing to catch, and the D speaks
+    # on its full registration rather than taking it 8 ms in.
+    ahead = warp_time(KEY['D2']) - 0.25
+
+    def when(ch, t):
+        if t == ENCORE:
+            return encore
+        if ch in (1, 2) and t == KEY['D2']:
+            return ahead
+        return at_raw(warp_time(t))
+    PLAN = {ch: [(when(ch, t), ns) for t, ns in spec] for ch, spec in RAW.items()}
     graded = os.path.join(outdir, 'buxwv161_graded.mid')
     lib.set_stops(score, graded, PLAN)
-    return organ.main([argv[0], graded, outdir])
+    return organ.main([argv[0], graded, outdir, '--tuner', TUNER])
 
 
 if __name__ == '__main__':

@@ -52,6 +52,9 @@ tuner_registry = {
     # baroque. hybrid440 is the general default -- see blockrender.
     "hybrid440": Hybrid440Tuner,
     "hybridharm440": HybridHarmonic440Tuner,
+    # The hybrid's two pure-fifth chains, moved to C and C#, bridged D-F# by
+    # the MEAN of 5:4 and 81:64: the comma splits over two fifths, no wolf.
+    "hybridmean": HybridMeanTuner,
     "spiral": SpiralTuner,
     "semi": SemiTuner,
     "path": PathNotesTuner,
@@ -78,13 +81,85 @@ TUNING_RECENTER_CENTS = float(os.environ.get("TUNING_RECENTER_CENTS", "1.0"))
 from math import exp as _reg_exp
 REG_SMOOTH_TAU = float(os.environ.get("REG_SMOOTH_TAU", "0.015"))
 
+_KEYS = {"c": 0, "c#": 1, "db": 1, "d": 2, "d#": 3, "eb": 3, "e": 4, "f": 5,
+         "f#": 6, "gb": 6, "g": 7, "g#": 8, "ab": 8, "a": 9, "a#": 10, "bb": 10,
+         "b": 11}
+
+
+def in_key(base, key):
+    """A fixed temperament moved to another key: `hybrid@D`.
+
+    A temperament that is not equal has a centre -- the hybrid's is C, with
+    its pure thirds on C, D, G and A and its whole comma on ONE fifth, A-E,
+    19.7 cents narrow. On a piano the stretched partials soften that fifth;
+    on pipes, which are exactly harmonic, nothing does. BuxWV 161 is in D
+    minor, where A-E is the dominant's fifth and 28.6% of all the fifths
+    sounding in the piece, so on C it is the worst place in the piece for it.
+    Moved to D, every interval moves up a whole tone: the comma lands on B-F#
+    (0.1%), and D minor sounds exactly as before.
+
+    The same ratios, transposed, with A4 kept where the base tuner puts it.
+    """
+    k = _KEYS[key.lower()]
+    if not issubclass(base, PathTuner):
+        raise ValueError("%s has no table to move to another key" % base.__name__)
+    if k == 0:
+        return base
+
+    @classmethod
+    def _build_table(cls):
+        t = base._build_table.__func__(cls)
+        moved = {m + k: f for m, f in t.items()}
+        if 69 in t and 69 in moved:
+            s = t[69] / moved[69]
+            moved = {m: f * s for m, f in moved.items()}
+        return moved
+
+    return type("%s_in_%s" % (base.__name__, key.upper()), (base,),
+                {"_table": None, "_build_table": _build_table,
+                 "__doc__": "%s moved to %s." % (base.__name__, key)})
+
+
+def at_pitch(base, a4):
+    """A fixed temperament at another reference pitch: `hybrid:466`.
+
+    The temperament is a set of ratios and A4 is a separate decision about
+    the instrument -- 415 is Kammerton, the chamber pitch of baroque
+    ensembles, but the North German organs Buxtehude played stood at Chorton,
+    about a semitone above modern: an 8-foot C at the speed of sound puts A
+    near 470, and 466 is the clean semitone above 440.
+    """
+    if not issubclass(base, PathTuner):
+        raise ValueError("%s has no table to move to another pitch" % base.__name__)
+    return type("%s_at_%g" % (base.__name__, a4), (base,),
+                {"_table": None, "A": a4,
+                 "__doc__": "%s at A4 = %g Hz." % (base.__name__, a4)})
+
+
 def set_tuner(name):
+    """A registry name, then optionally @KEY and/or :A4 -- `hybrid@D:466`."""
     global tuner_class
     key = name.lower()
+    tonic = pitch = None
+    if ":" in key:
+        key, pitch = key.split(":", 1)
+        try:
+            pitch = float(pitch)
+        except ValueError:
+            raise ValueError("bad pitch in %r; A4 in Hz, e.g. hybrid:466" % name)
+    if "@" in key:
+        key, tonic = key.split("@", 1)
+        if tonic not in _KEYS:
+            raise ValueError("unknown key %r in %r; one of %s"
+                             % (tonic, name, ", ".join(sorted(_KEYS))))
     if key not in tuner_registry:
         raise ValueError("unknown tuner %r; choose from: %s"
                          % (name, ", ".join(sorted(tuner_registry))))
     tuner_class = tuner_registry[key]
+    if pitch is not None:
+        tuner_class = at_pitch(tuner_class, pitch)
+    if tonic is not None:
+        tuner_class = in_key(tuner_class, tonic)
 
 def notename(n):
     n = int(n + .5)

@@ -477,7 +477,13 @@ The third argument is the temperament. `hybrid440` is the default, and
 octaves, which is right for mode-locked pipes. Then there's `even` (A=440),
 `stretch`, `meantone`, `werckmeister`, `sankey` (these at A=415), `linear`,
 `just`, `pyth`, `well`, `bechstein`, `spiral` and others — see `tuner_registry`
-in `midilib.py`.
+in `midilib.py`. `hybridmean` is the hybrid's two chains of pure fifths bridged
+by the mean of 5:4 and 81:64 instead of a pure third, so the comma splits over
+two fifths and there is no wolf; with pure octaves, it is for pipes.
+
+A table tuner takes a key and a pitch: `hybrid@D` is the hybrid moved so its
+centre is D (its wolf moves from A–E to B–F♯), and `hybridmean:466` is at
+Chorton, a semitone above A=440. Both at once: `hybrid@D:466`.
 
 **`gm2`** is the one to use when the *file* should own the tuning. It starts at
 equal temperament, A=440, and obeys the file's MIDI Tuning Standard messages:
