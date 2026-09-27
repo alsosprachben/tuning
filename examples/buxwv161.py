@@ -3,6 +3,12 @@
 
     python3 examples/buxwv161.py SCORE.mid [outdir]
 
+SCORE is the four-channel score (buxtehude_passacaglia_registered.mid): 0 the
+manual, 1 the pedal, 2 the pedal reed, 3 the manual reed. The reed channels
+were written for program 20 when that was the reed organ; the reeds are on the
+console now (GM 19, bits 8-11) and 20 is the harmonium, so every channel is
+put on 19 here and the reeds drawn by their console names.
+
 A passacaglia is not registered once and played. It is built: the organist
 starts on the Positiv and adds through the piece, so the ostinato that opens
 almost inaudibly is thundering by the close. BWV 582 is played this way by
@@ -35,7 +41,12 @@ on that second partial (0.469 and 0.200, so 1 - 0.669 = -9.6 dB) and take it
 out. What is left is a strong fundamental, no second, and a third at -9 dB,
 which is within a decibel of the REED's own spectrum. Ben heard the opening
 pedal as a reed and it was one, in every way that a spectrum can be.
+
+UNDER IT, THE BOURDON 16'. Stopped 16' + stopped 8' is the classic quiet pedal:
+the octave below gives the ground a floor without any of the open rank's
+brightness. Nothing is taken away, so it stays drawn to the end.
 """
+import math
 import os
 import sys
 
@@ -94,29 +105,144 @@ RAW = {
         (WALL,      ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'mixture III']),
         (KEY['D2'], ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])],
     # pedal flue
-    1: [(0.0,           ['flute 8']),                             # stopped, not open
-        (KEY['F'],  ['principal 8']),                                  # principal, with the manual
-        (KEY['A'],  ['principal 16', 'principal 8', 'octave 4']),
-        (KEY['D2'], ['principal 16', 'principal 8', 'octave 4', 'quint 5-1/3'])],
+    1: [(0.0,           ['bourdon 16', 'flute 8']),               # stopped, not open
+        (KEY['F'],  ['bourdon 16', 'principal 8']),                    # principal, with the manual
+        (KEY['A'],  ['bourdon 16', 'principal 16', 'principal 8', 'octave 4']),
+        (KEY['D2'], ['bourdon 16', 'principal 16', 'principal 8', 'octave 4', 'quint 5-1/3'])],
     # pedal reed: the weight, entering with the wall
     2: [(0.0,           []),
-        (WALL,      ['16']),
-        (KEY['D2'], ['16', '8'])],
+        (WALL,      ['reed 16']),
+        (KEY['D2'], ['reed 16', 'reed 8'])],
     # manual reed: the last statement only
     3: [(0.0,           []),
-        (LAST,      ['trumpet'])],
+        (LAST,      ['trumpet 8'])],
 }
+
+
+# THE ENCORE. The chords before the return are played as an encore: the
+# variation before them slows into its half cadence on A, the organ stops
+# long enough for the church to mostly empty, and the chords begin a tempo
+# out of the quiet. The reed 16' and the Mixtur are drawn IN the pause, the
+# one moment in the piece with nothing sounding to catch.
+#
+# The pause is the room's, measured: after the release the church tail is
+# 27 dB down at 0.55 s and 42 dB down at 1.05 s, so 1.3 s is "mostly
+# drained" without the thread snapping.
+#
+# And the piece ends with a ritardando through the last statement's cadence,
+# its final chord held at the slower tempo.
+#
+# (start, end, tempo reached at end, whether it holds after): the tempo falls
+# linearly across the window. Times are the score's own seconds, and on the
+# beat exactly (132 bpm): a pause a hair late of the chord it precedes puts
+# the chord in front of it.
+BEAT = 0.454545
+ENCORE = 549 * BEAT                  # the first chord, in the score
+RITS = [(540 * BEAT, ENCORE, 0.75, False),    # the bar of the half cadence
+        (720 * BEAT, 732 * BEAT, 0.70, True)] # the last run into the final chord
+PAUSES = [(ENCORE, 1.3)]
+
+# THE TEMPO. The file says 132, but that is the eighth: the beat is the quarter
+# at 66, a bar of 3/4 every 2.7 s, and the piece ran 5:37. Recordings run 5:09
+# (Viderø) to 6:43 (Havinga), median about 6:10; Ben heard it a little fast and
+# asked for 4 bpm slower. At quarter = 62 it is about 5:58. Applied in the
+# time map, so every time above stays in the score's own seconds.
+SLOW = 66.0 / 62.0
+
+
+def _stretch(a, b, lo, hold, t):
+    """Extra seconds a rit adds up to score time t: the tempo r(u) falls
+    linearly from 1 to lo across [a, b], and time is the integral of 1/r."""
+    if t <= a:
+        return 0.0
+    k = (1.0 - lo) / (b - a)
+    u = min(t, b) - a
+    extra = -math.log(1.0 - k * u) / k - u
+    if hold and t > b:
+        extra += (t - b) * (1.0 / lo - 1.0)
+    return extra
+
+
+def warp_time(t, pre_pause=False):
+    """Score seconds -> performed seconds. A note-off exactly AT a pause
+    belongs before it (pre_pause); everything else there comes after."""
+    out = SLOW * (t + sum(_stretch(a, b, lo, hold, t) for a, b, lo, hold in RITS))
+    for p, dur in PAUSES:
+        if t > p + 1e-4 or (abs(t - p) <= 1e-4 and not pre_pause):
+            out += dur
+    return out
+
+
+def perform(src, dest):
+    """The rits and the pause, written into the score's ticks at its one tempo
+    (set_stops reads seconds off a single tempo, so the tempo map stays flat).
+    A note held across a pause is cut there and struck again after it: the
+    pedal A under the half cadence, which restarts with the first chord."""
+    import mido
+    m = mido.MidiFile(src)
+    tempo = next((e.tempo for t in m.tracks for e in t if e.type == 'set_tempo'), 500000)
+    spt = tempo / 1e6 / m.ticks_per_beat
+    for ti, t in enumerate(m.tracks):
+        ev, acc = [], 0
+        for e in t:
+            acc += e.time
+            off = e.type == 'note_off' or (e.type == 'note_on' and e.velocity == 0)
+            ev.append((acc * spt, off, e, len(ev)))
+        # cut what is held when a pause arrives, and strike it again after,
+        # unless the music strikes it there anyway. Counted, not paired: a
+        # voice here can hold a note and strike it again before releasing it.
+        extra = []
+        for p, _ in PAUSES:
+            held = {}
+            for sec, off, e, _ in ev:
+                if sec > p - 1e-4 and not (off and sec <= p + 1e-4):
+                    break
+                if e.type in ('note_on', 'note_off'):
+                    key = (e.channel, e.note)
+                    held[key] = held.get(key, 0) + (-1 if off else 1)
+            struck = {(e.channel, e.note) for sec, off, e, _ in ev
+                      if abs(sec - p) <= 1e-4 and e.type == 'note_on' and not off}
+            for (ch, n), c in held.items():
+                for _ in range(max(0, c)):
+                    extra.append((p, True, mido.Message('note_off', channel=ch, note=n, velocity=0), -2))
+                if c > 0 and (ch, n) not in struck:
+                    extra.append((p, False, mido.Message('note_on', channel=ch, note=n, velocity=64), -1))
+        ev += extra
+        # by performed time, and within a tick in the file's own order: a
+        # repeated note is written as its new Note On ahead of the old Note Off
+        out = sorted(((int(round(warp_time(sec, pre_pause=off) / spt)), k, e)
+                      for sec, off, e, k in ev), key=lambda r: (r[0], r[1]))
+        nt = mido.MidiTrack(); last = 0
+        for tick, _, e in out:
+            nt.append(e.copy(time=tick - last)); last = tick
+        m.tracks[ti] = nt
+    m.save(dest)
+    return dest
+
+
+def to_console(src, dest):
+    """Every channel on the console, GM 19: the reeds are its bits 8-11."""
+    import mido
+    m = mido.MidiFile(src)
+    for t in m.tracks:
+        for i, e in enumerate(t):
+            if e.type == 'program_change' and e.program != 19:
+                t[i] = e.copy(program=19)
+    m.save(dest)
+    return dest
 
 
 def main(argv):
     if len(argv) < 2:
         print(__doc__.strip()); return 2
-    score = argv[1]
     outdir = argv[2] if len(argv) > 2 else '.'
     os.makedirs(outdir, exist_ok=True)
+    score = to_console(argv[1], os.path.join(outdir, 'buxwv161_console.mid'))
     global _SPANS, PLAN
+    score = perform(score, os.path.join(outdir, 'buxwv161_performed.mid'))
     _SPANS = lib.note_spans(score)
-    PLAN = {ch: [(at_raw(t), ns) for t, ns in spec]
+    quiet = warp_time(ENCORE, pre_pause=True) + PAUSES[0][1] / 2
+    PLAN = {ch: [(quiet if t == WALL else at_raw(warp_time(t)), ns) for t, ns in spec]
             for ch, spec in RAW.items()}
     graded = os.path.join(outdir, 'buxwv161_graded.mid')
     lib.set_stops(score, graded, PLAN)
