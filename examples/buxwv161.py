@@ -109,9 +109,10 @@ RAW = {
         (KEY['F'],  ['bourdon 16', 'principal 8']),                    # principal, with the manual
         (KEY['A'],  ['bourdon 16', 'principal 16', 'principal 8', 'octave 4']),
         (KEY['D2'], ['bourdon 16', 'principal 16', 'principal 8', 'octave 4', 'quint 5-1/3'])],
-    # pedal reed: the weight, entering with the wall
+    # pedal reed: the weight of the return. The pedal rests from the end of
+    # the whole note to the return, so a 16' drawn at the wall was never heard
+    # alone -- and drawn there it swelled the held whole note.
     2: [(0.0,           []),
-        (WALL,      ['reed 16']),
         (KEY['D2'], ['reed 16', 'reed 8'])],
     # manual reed: the last statement only
     3: [(0.0,           []),
@@ -126,28 +127,42 @@ RAW = {
 # one moment in the piece with nothing sounding to catch.
 #
 # The pause is the room's, measured: after the release the church tail is
-# 27 dB down at 0.55 s and 42 dB down at 1.05 s, so 1.3 s is "mostly
-# drained" without the thread snapping.
+# 27 dB down at 0.55 s and 42 dB down at 1.05 s. At 1.3 s it had fully
+# drained and the thread snapped (Ben: "should enter before the reverb fully
+# disappears"), so the chords come in at 0.6 s, into the last of the tail.
 #
 # And the piece ends with a ritardando through the last statement's cadence,
 # its final chord held at the slower tempo.
 #
 # (start, end, tempo reached at end, whether it holds after): the tempo falls
 # linearly across the window. Times are the score's own seconds, and on the
-# beat exactly (132 bpm): a pause a hair late of the chord it precedes puts
+# quarter exactly (132 bpm): a pause a hair late of the chord it precedes puts
 # the chord in front of it.
 BEAT = 0.454545
 ENCORE = 549 * BEAT                  # the first chord, in the score
 RITS = [(540 * BEAT, ENCORE, 0.75, False),    # the bar of the half cadence
         (720 * BEAT, 732 * BEAT, 0.70, True)] # the last run into the final chord
-PAUSES = [(ENCORE, 1.3)]
+# (where the silence goes, seconds, where held notes are cut). NONE HERE NOW.
+# The pedal is a whole note under the half cadence that reaches into the
+# first chord (Ben, from the score): the upper voices rest on beat 3 and the
+# encore enters on beat 4 over the whole note's last quarter. A pause would
+# cut it, so the breath is beat 3 itself, the broadest step of the ritardando,
+# with the bass sounding under it; beat 4 is a tempo.
+PAUSES = []
+BREATH = (548 * BEAT, ENCORE)        # beat 3, the rest in the upper voices
 
-# THE TEMPO. The file says 132, but that is the eighth: the beat is the quarter
-# at 66, a bar of 3/4 every 2.7 s, and the piece ran 5:37. Recordings run 5:09
+# THE TEMPO. The file's 132 is the quarter; the bar is 3/2 and its beat the
+# half at 66, a bar every 2.7 s, and the piece ran 5:37. Recordings run 5:09
 # (Viderø) to 6:43 (Havinga), median about 6:10; Ben heard it a little fast and
-# asked for 4 bpm slower. At quarter = 62 it is about 5:58. Applied in the
+# asked for 4 bpm slower. At half = 62 it is about 5:58. Applied in the
 # time map, so every time above stays in the score's own seconds.
-SLOW = 66.0 / 62.0
+#
+# THE ENCORE GOES BACK UP TO 66. The variations before it run in fast
+# subdivisions; the chords are plain quarters, so the surface slows by itself, and
+# held to the same beat it drags. A player presses on there (Ben heard it),
+# and the return keeps the pace to the end.
+TEMPI = [(0.0, 66.0 / 62.0),         # (from score time, seconds per score second)
+         (ENCORE, 1.0)]
 
 
 def _stretch(a, b, lo, hold, t):
@@ -166,8 +181,13 @@ def _stretch(a, b, lo, hold, t):
 def warp_time(t, pre_pause=False):
     """Score seconds -> performed seconds. A note-off exactly AT a pause
     belongs before it (pre_pause); everything else there comes after."""
-    out = SLOW * (t + sum(_stretch(a, b, lo, hold, t) for a, b, lo, hold in RITS))
-    for p, dur in PAUSES:
+    w = lambda u: u + sum(_stretch(a, b, lo, hold, u) for a, b, lo, hold in RITS)
+    out = 0.0
+    for i, (t0, f) in enumerate(TEMPI):
+        t1 = TEMPI[i + 1][0] if i + 1 < len(TEMPI) else float('inf')
+        if t > t0:
+            out += f * (w(min(t, t1)) - w(t0))
+    for p, dur, _ in PAUSES:
         if t > p + 1e-4 or (abs(t - p) <= 1e-4 and not pre_pause):
             out += dur
     return out
@@ -192,10 +212,10 @@ def perform(src, dest):
         # unless the music strikes it there anyway. Counted, not paired: a
         # voice here can hold a note and strike it again before releasing it.
         extra = []
-        for p, _ in PAUSES:
+        for p, _, cut in PAUSES:
             held = {}
             for sec, off, e, _ in ev:
-                if sec > p - 1e-4 and not (off and sec <= p + 1e-4):
+                if sec > cut - 1e-4 and not (off and sec <= cut + 1e-4):
                     break
                 if e.type in ('note_on', 'note_off'):
                     key = (e.channel, e.note)
@@ -204,7 +224,7 @@ def perform(src, dest):
                       if abs(sec - p) <= 1e-4 and e.type == 'note_on' and not off}
             for (ch, n), c in held.items():
                 for _ in range(max(0, c)):
-                    extra.append((p, True, mido.Message('note_off', channel=ch, note=n, velocity=0), -2))
+                    extra.append((cut, True, mido.Message('note_off', channel=ch, note=n, velocity=0), -2))
                 if c > 0 and (ch, n) not in struck:
                     extra.append((p, False, mido.Message('note_on', channel=ch, note=n, velocity=64), -1))
         ev += extra
@@ -241,7 +261,7 @@ def main(argv):
     global _SPANS, PLAN
     score = perform(score, os.path.join(outdir, 'buxwv161_performed.mid'))
     _SPANS = lib.note_spans(score)
-    quiet = warp_time(ENCORE, pre_pause=True) + PAUSES[0][1] / 2
+    quiet = (warp_time(BREATH[0]) + warp_time(BREATH[1])) / 2
     PLAN = {ch: [(quiet if t == WALL else at_raw(warp_time(t)), ns) for t, ns in spec]
             for ch, spec in RAW.items()}
     graded = os.path.join(outdir, 'buxwv161_graded.mid')
