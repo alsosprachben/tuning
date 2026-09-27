@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Touch keys</title>
+<style>
+  /* One deliberate theme: a dark stage, so the keys are the light in the room. */
+  :root {
+    --stage: #15171c;
+    --bar: #1d2027;
+    --ink: #e9e6df;
+    --dim: #8d8f96;
+    --ivory: #f1ede4;
+    --ivory-edge: #c9c3b6;
+    --ebony: #26282e;
+    --ebony-top: #3a3d45;
+    --lit: #e0a33a;          /* a held key: warm, like a lamp on the fallboard */
+    --lit-ebony: #b87c1c;
+    --ok: #6fbf73;
+    --off: #c9594a;
+  }
+  html, body {
+    margin: 0; height: 100%; background: var(--stage); color: var(--ink);
+    font: 15px/1.2 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  #bar {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: var(--bar); border-bottom: 1px solid #000;
+  }
+  #bar .spacer { flex: 1; }
+  button, select {
+    font: inherit; color: var(--ink); background: #2b2f38; border: 1px solid #3b404b;
+    border-radius: 8px; padding: 10px 16px; min-height: 44px; min-width: 52px;
+    touch-action: none;
+  }
+  button:active, button.on { background: var(--lit); color: #1b1407; border-color: var(--lit); }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--lit); outline-offset: 2px; }
+  #range { min-width: 92px; text-align: center; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+  #status { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--off); }
+  #dot.ok { background: var(--ok); }
+  #held { color: var(--dim); font-size: 13px; min-width: 140px; font-variant-numeric: tabular-nums; }
+  #stage { display: flex; }
+  canvas { display: block; flex: 1; min-width: 0; touch-action: none; }
+  /* The mod wheel: a strip to push up and down. It stays where it's left, as
+     a wheel does; a double tap sends it home. */
+  #wheel {
+    position: relative; width: 84px; flex: none; touch-action: none;
+    background: #0e1013; border-right: 1px solid #000; cursor: ns-resize;
+  }
+  #wheel:focus-visible { outline: 2px solid var(--lit); outline-offset: -2px; }
+  #wfill {
+    position: absolute; left: 14px; right: 14px; bottom: 34px; border-radius: 6px;
+    background: linear-gradient(to top, #6b4a17, var(--lit));
+  }
+  #wtrack {
+    position: absolute; left: 14px; right: 14px; top: 14px; bottom: 34px;
+    border-radius: 6px; border: 1px solid #2c3038;
+    background: repeating-linear-gradient(to bottom, #1a1d23 0 5px, #121418 5px 8px);
+  }
+  #wval {
+    position: absolute; left: 0; right: 0; bottom: 8px; text-align: center;
+    color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums;
+  }
+  .label { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="octDown" aria-label="Octave down">&minus;</button>
+  <div id="range">C3&ndash;C5</div>
+  <button id="octUp" aria-label="Octave up">+</button>
+  <button id="sus" aria-label="Sustain, held while touched">Sustain</button>
+  <button id="latch" aria-label="Latch sustain">Latch</button>
+  <span class="label">Velocity</span>
+  <select id="velmode" aria-label="Velocity">
+    <option value="pos">from the key</option>
+    <option value="fixed">fixed 100</option>
+  </select>
+  <div class="spacer"></div>
+  <div id="held"></div>
+  <button id="panic" aria-label="All notes off">All off</button>
+  <div id="status"><div id="dot"></div><span id="stext">connecting</span></div>
+</div>
+<div id="stage">
+  <div id="wheel" tabindex="0" role="slider" aria-label="Mod wheel" aria-valuemin="0"
+       aria-valuemax="127" aria-valuenow="0">
+    <div id="wtrack"></div><div id="wfill"></div><div id="wval">MOD 0</div>
+  </div>
+  <canvas id="keys"></canvas>
+</div>
+<script>
+"use strict";
+// ---------------------------------------------------------------- the wire
+let ws = null, connected = false;
+function connect() {
+  ws = new WebSocket("ws://" + location.host + "/ws");
+  ws.onopen = () => { connected = true; setStatus(); send({t: "hello"}); send({t: "mod", v: mod}); };
+  ws.onclose = () => { connected = false; setStatus(); setTimeout(connect, 1000); };
+  ws.onerror = () => ws.close();
+}
+function send(ev) { if (connected) ws.send(JSON.stringify(ev)); }
+function setStatus() {
+  document.getElementById("dot").className = connected ? "ok" : "";
+  document.getElementById("stext").textContent = connected ? "tuning touch" : "reconnecting";
+}
+
+// ---------------------------------------------------------------- the keyboard
+const NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const BLACK = new Set([1, 3, 6, 8, 10]);
+let low = 48;                       // C3; the range is two octaves and the top C
+const SPAN = 25;
+const cv = document.getElementById("keys"), g = cv.getContext("2d");
+let W = 0, H = 0, whiteW = 0, blackW = 0, blackH = 0, keys = [];
+
+function layout() {
+  const top = document.getElementById("bar").offsetHeight;
+  const dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth - document.getElementById("wheel").offsetWidth;
+  H = window.innerHeight - top;
+  document.getElementById("wheel").style.height = H + "px";
+  if (typeof setMod === "function") setMod(mod);
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + "px";
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const whites = [];
+  for (let n = low; n < low + SPAN; n++) if (!BLACK.has(n % 12)) whites.push(n);
+  whiteW = W / whites.length; blackW = whiteW * 0.6; blackH = H * 0.62;
+  keys = [];
+  whites.forEach((n, i) => keys.push({n, x: i * whiteW, w: whiteW, h: H, black: false}));
+  for (let n = low; n < low + SPAN; n++) {
+    if (!BLACK.has(n % 12)) continue;
+    const left = keys.find(k => !k.black && k.n === n - 1);
+    keys.push({n, x: left.x + whiteW - blackW / 2, w: blackW, h: blackH, black: true});
+  }
+  draw();
+}
+
+function keyAt(x, y) {
+  for (const k of keys) if (k.black && x >= k.x && x < k.x + k.w && y < k.h) return k;
+  for (const k of keys) if (!k.black && x >= k.x && x < k.x + k.w) return k;
+  return null;
+}
+
+// Continuous pitch across the keyboard: the key centres, in pitch order, joined
+// by straight lines, so a finger sliding sideways glides through every key it
+// crosses and lands on each one in tune.
+function pitchAt(x) {
+  const c = keys.map(k => [k.x + k.w / 2, k.n]).sort((a, b) => a[1] - b[1]);
+  if (x <= c[0][0]) return c[0][1] - (c[0][0] - x) / whiteW;
+  for (let i = 1; i < c.length; i++)
+    if (x <= c[i][0]) return c[i - 1][1] + (x - c[i - 1][0]) / (c[i][0] - c[i - 1][0]);
+  const e = c[c.length - 1]; return e[1] + (x - e[0]) / whiteW;
+}
+
+// ---------------------------------------------------------------- held notes
+const held = new Map();             // id -> {note, x0, y0, bend, tim, pres, key}
+const DEAD = 6;                     // px a finger may wander before it bends
+
+function noteOn(id, key, x, y, pressure, pen) {
+  let vel = 100;
+  if (document.getElementById("velmode").value === "pos") {
+    vel = pen ? 30 + 97 * pressure : 30 + 97 * Math.min(1, Math.max(0, y / key.h));
+  }
+  const h = {note: key.n, x0: x, y0: y, bend: 0, tim: 64, pres: pen ? Math.round(pressure * 127) : 0, key};
+  held.set(id, h);
+  send({t: "on", id, note: key.n, vel: Math.round(vel), bend: 0, tim: 64, pres: h.pres});
+  draw();
+}
+
+const pending = new Map();
+function noteMove(id, x, y, pressure, pen) {
+  const h = held.get(id); if (!h) return;
+  const dx = x - h.x0;
+  const xe = Math.abs(dx) < DEAD ? h.x0 : x - Math.sign(dx) * DEAD;
+  h.bend = pitchAt(xe) - pitchAt(h.x0);
+  h.tim = Math.max(0, Math.min(127, Math.round(64 + (h.y0 - y) / H * 127)));
+  if (pen) h.pres = Math.round(pressure * 127);
+  pending.set(id, true);
+}
+function flush() {
+  for (const id of pending.keys()) {
+    const h = held.get(id);
+    if (h) send({t: "move", id, bend: +h.bend.toFixed(4), tim: h.tim, pres: h.pres});
+  }
+  if (pending.size) draw();
+  pending.clear();
+  requestAnimationFrame(flush);
+}
+requestAnimationFrame(flush);
+
+function noteOff(id) {
+  if (!held.delete(id)) return;
+  send({t: "off", id}); draw();
+}
+
+// ---------------------------------------------------------------- touch and pen
+cv.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const k = keyAt(x, y); if (!k) return;
+  cv.setPointerCapture(e.pointerId);
+  noteOn("p" + e.pointerId, k, x, y, e.pressure || 0.5, e.pointerType === "pen");
+});
+cv.addEventListener("pointermove", e => {
+  const id = "p" + e.pointerId; if (!held.has(id)) return;
+  const r = cv.getBoundingClientRect();
+  noteMove(id, e.clientX - r.left, e.clientY - r.top, e.pressure || 0.5, e.pointerType === "pen");
+});
+for (const t of ["pointerup", "pointercancel", "lostpointercapture"])
+  cv.addEventListener(t, e => noteOff("p" + e.pointerId));
+cv.addEventListener("contextmenu", e => e.preventDefault());
+
+// ---------------------------------------------------------------- the computer keyboard
+// Physical keys (KeyboardEvent.code), so the layout is the same on any keymap.
+const LOWER = ["KeyZ", "KeyS", "KeyX", "KeyD", "KeyC", "KeyV", "KeyG", "KeyB", "KeyH", "KeyN", "KeyJ", "KeyM", "Comma"];
+const UPPER = ["KeyQ", "Digit2", "KeyW", "Digit3", "KeyE", "KeyR", "Digit5", "KeyT", "Digit6", "KeyY", "Digit7", "KeyU", "KeyI"];
+function codeNote(code) {
+  let i = LOWER.indexOf(code); if (i >= 0) return low + i;
+  i = UPPER.indexOf(code); if (i >= 0) return low + 12 + i;
+  return null;
+}
+window.addEventListener("keydown", e => {
+  if (e.repeat && (e.code === "ArrowUp" || e.code === "ArrowDown")) {
+    e.preventDefault(); setMod(mod + (e.code === "ArrowUp" ? 4 : -4)); return;
+  }
+  if (e.repeat) { e.preventDefault(); return; }
+  if (e.code === "Space") { e.preventDefault(); setSus(true); return; }
+  if (e.code === "Minus") { shift(-12); return; }
+  if (e.code === "Equal") { shift(12); return; }
+  if (e.code === "Escape") { panic(); return; }
+  if (e.code === "ArrowUp" || e.code === "ArrowDown") {
+    e.preventDefault(); setMod(mod + (e.code === "ArrowUp" ? 16 : -16)); return;
+  }
+  if (e.code === "Digit0") { setMod(0); return; }
+  const n = codeNote(e.code); if (n === null) return;
+  e.preventDefault();
+  const k = keys.find(k => k.n === n) || {n, x: 0, w: 1, h: 1};
+  const id = "k" + e.code; if (held.has(id)) return;
+  held.set(id, {note: n, x0: 0, y0: 0, bend: 0, tim: 64, pres: 0, key: k});
+  send({t: "on", id, note: n, vel: 100, bend: 0, tim: 64, pres: 0});
+  draw();
+});
+window.addEventListener("keyup", e => {
+  if (e.code === "Space") { setSus(false); return; }
+  if (codeNote(e.code) !== null) noteOff("k" + e.code);
+});
+window.addEventListener("blur", () => { for (const id of [...held.keys()]) if (id[0] === "k") noteOff(id); });
+
+// ---------------------------------------------------------------- the mod wheel
+// CC1, relative like a real wheel: grab it anywhere and push. The whole height
+// of the strip is the full travel, so it never jumps under the finger.
+let mod = 0, modSent = -1;
+const wheel = document.getElementById("wheel");
+const wgrab = new Map();            // pointerId -> {y, v}
+function setMod(v) {
+  mod = Math.max(0, Math.min(127, Math.round(v)));
+  const tr = document.getElementById("wtrack");
+  document.getElementById("wfill").style.height = (mod / 127 * tr.offsetHeight) + "px";
+  document.getElementById("wval").textContent = "MOD " + mod;
+  wheel.setAttribute("aria-valuenow", mod);
+}
+function flushMod() {
+  if (mod !== modSent) { send({t: "mod", v: mod}); modSent = connected ? mod : -1; }
+  requestAnimationFrame(flushMod);
+}
+requestAnimationFrame(flushMod);
+let lastTap = 0;
+wheel.addEventListener("pointerdown", e => {
+  e.preventDefault(); wheel.setPointerCapture(e.pointerId);
+  const now = performance.now();
+  if (now - lastTap < 300) { setMod(0); lastTap = 0; } else lastTap = now;
+  wgrab.set(e.pointerId, {y: e.clientY, v: mod});
+});
+wheel.addEventListener("pointermove", e => {
+  const gr = wgrab.get(e.pointerId); if (!gr) return;
+  const travel = document.getElementById("wtrack").offsetHeight || 1;
+  setMod(gr.v + (gr.y - e.clientY) / travel * 127);
+});
+for (const t of ["pointerup", "pointercancel", "lostpointercapture"])
+  wheel.addEventListener(t, e => wgrab.delete(e.pointerId));
+
+// ---------------------------------------------------------------- the bar
+let susDown = false, latched = false;
+function setSus(v) {
+  if (latched && !v) return;
+  susDown = v; send({t: "sus", v: v ? 1 : 0});
+  document.getElementById("sus").classList.toggle("on", v);
+}
+const susBtn = document.getElementById("sus");
+susBtn.addEventListener("pointerdown", e => { e.preventDefault(); setSus(true); });
+susBtn.addEventListener("pointerup", () => setSus(false));
+susBtn.addEventListener("pointercancel", () => setSus(false));
+document.getElementById("latch").addEventListener("click", e => {
+  latched = !latched; e.currentTarget.classList.toggle("on", latched);
+  if (!latched) setSus(false); else setSus(true);
+});
+function shift(d) {
+  low = Math.max(12, Math.min(96, low + d));
+  const name = n => NAMES[n % 12] + (Math.floor(n / 12) - 1);
+  document.getElementById("range").textContent = name(low) + "–" + name(low + SPAN - 1);
+  layout();
+}
+document.getElementById("octDown").addEventListener("click", () => shift(-12));
+document.getElementById("octUp").addEventListener("click", () => shift(12));
+function panic() { for (const id of [...held.keys()]) noteOff(id); send({t: "panic"}); setSus(false); }
+document.getElementById("panic").addEventListener("click", panic);
+
+// ---------------------------------------------------------------- drawing
+function draw() {
+  g.clearRect(0, 0, W, H);
+  const lit = new Map();
+  for (const h of held.values()) lit.set(h.note, h);
+  for (const k of keys.filter(k => !k.black)) drawKey(k, lit.get(k.n));
+  for (const k of keys.filter(k => k.black)) drawKey(k, lit.get(k.n));
+  // a bend marker where each sliding finger is sounding
+  for (const h of held.values()) {
+    if (Math.abs(h.bend) < 0.02) continue;
+    const kx = keys.find(k => k.n === h.note);
+    const cx = kx.x + kx.w / 2 + h.bend * whiteW * 7 / 12;
+    g.fillStyle = "#e0a33a"; g.beginPath(); g.arc(cx, H * 0.9, 9, 0, 7); g.fill();
+    g.fillStyle = "#1b1407"; g.font = "600 12px system-ui"; g.textAlign = "center";
+    g.fillText((h.bend > 0 ? "+" : "") + h.bend.toFixed(2), cx, H * 0.9 - 16);
+  }
+  const names = [...lit.keys()].sort((a, b) => a - b).map(n => NAMES[n % 12] + (Math.floor(n / 12) - 1));
+  document.getElementById("held").textContent = names.join(" ");
+}
+function drawKey(k, h) {
+  const r = 7;
+  g.beginPath();
+  g.moveTo(k.x + 1, 0); g.lineTo(k.x + k.w - 1, 0);
+  g.lineTo(k.x + k.w - 1, k.h - r); g.quadraticCurveTo(k.x + k.w - 1, k.h, k.x + k.w - 1 - r, k.h);
+  g.lineTo(k.x + 1 + r, k.h); g.quadraticCurveTo(k.x + 1, k.h, k.x + 1, k.h - r); g.closePath();
+  if (k.black) {
+    const grad = g.createLinearGradient(0, 0, 0, k.h);
+    grad.addColorStop(0, h ? "#d69431" : "#3a3d45"); grad.addColorStop(1, h ? "#b87c1c" : "#1f2126");
+    g.fillStyle = grad;
+  } else {
+    g.fillStyle = h ? "#e0a33a" : "#f1ede4";
+  }
+  g.fill();
+  if (!k.black) { g.strokeStyle = "#c9c3b6"; g.lineWidth = 1; g.stroke(); }
+  if (!k.black && k.n % 12 === 0) {
+    g.fillStyle = h ? "#1b1407" : "#8d8f96"; g.font = "13px system-ui"; g.textAlign = "center";
+    g.fillText("C" + (Math.floor(k.n / 12) - 1), k.x + k.w / 2, k.h - 16);
+  }
+}
+
+window.addEventListener("resize", layout);
+setStatus(); layout(); setMod(0); connect();
+</script>
+</body>
+</html>

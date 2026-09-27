@@ -950,7 +950,15 @@ The panel's header shows the zones, and a saved scene stores the MCM first.
 - **A GM System On inside an MPE file** puts a member's bend range back to 2
   offline, where live falls back to the zone's 48.
 
-`examples/mpe_demo.py` writes a file that exercises all of it.
+`examples/mpe_demo.py` writes a file that exercises all of it, and
+`touchkeys.py` is an MPE controller of its own: a touch-screen piano whose
+fingers each get a member channel. It follows the sender's rules as live
+follows the receiver's:
+- **Channels:** each new note takes the member with the fewest notes, the
+  one released longest ago breaking ties, and a repeated note reuses its
+  channel (A.3).
+- **Order:** a note's initial values are sent before its Note On, and
+  nothing per-note after its Note Off (2.4, 2.2.6).
 
 ## The harmonium's stops have their own address
 

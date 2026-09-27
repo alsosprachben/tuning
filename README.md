@@ -425,6 +425,30 @@ and `--ump-from "USB Midi"` lets the kernel carry the keyboard across instead.
 `midi.md` has the details: per-note pitch is absolute (A = 440) whatever the
 tuner, as MIDI 2.0 says.
 
+**Touch keys: play live without a MIDI keyboard.** `touchkeys.py` is a
+touch-screen piano, a web page with a small server behind it, and it speaks MPE:
+
+    python3 touchkeys.py --open               # opens the page (F11: full screen)
+    python3 live.py --port touch --tui        # in another terminal
+
+- **Fingers and pen:** every finger or the pen plays its own note. Sliding
+  sideways bends that note alone, gliding through the keys it crosses;
+  sliding along the key moves its timbre (CC74); the pen's pressure is the
+  note's pressure.
+- **Velocity** comes from where on the key you strike (nearer the front is
+  louder) or from the pen's pressure; there's also a fixed-100 mode.
+- **The computer keyboard** plays too, with real key releases: `Z S X D C V G B
+  H N J M ,` for the lower octave, `Q 2 W 3 E R 5 T 6 Y 7 U I` for the upper,
+  Space for sustain, `-`/`=` for the octave, Esc for all notes off.
+- **The mod wheel** is the strip at the left: push it up or down from
+  anywhere on it, and it stays where you leave it; a double tap sends it
+  home. On the keyboard, the arrows move it (hold to sweep) and `0` zeroes it.
+  It's CC1 on the manager, so it reaches every note: vibrato on most voices,
+  the crescendo pedal on the organ, tremolo depth on an electric piano.
+
+A terminal couldn't do this: it reports key presses but never releases. The
+page reaches live as a virtual MIDI port, "tuning touch".
+
 **MPE.** An MPE controller (Seaboard, Linnstrument, Osmose and the like) works
 as it is: its Configuration Message sets the zone, and each finger bends,
 presses and brightens its own note. `--mpe` turns MPE on for a controller that
