@@ -8,7 +8,7 @@ note-on and gets one int64 written into it at note-off, rendered a block at a
 time by exactly the same C the offline renderer uses.
 
 Usage: python3 live.py [--port NAME] [--program N] [--frames N] [--headroom dB]
-                      [--room dry|chamber|chapel|hall|church] [--fresh]
+                      [--room dry|booth|studio|chamber|chapel|hall|church] [--fresh]
        python3 live.py --list | --selftest | --latency
 
 It answers thirty-seven controllers -- 0, 1, 5, 6, 7, 10, 11, 32, 38, 64-67,
@@ -295,14 +295,15 @@ class Convolver(object):
             self.c = None
 
 
-ROOM_NAMES = ("dry", "chamber", "chapel", "hall", "church")
+ROOM_NAMES = ("dry", "booth", "studio", "chamber", "chapel", "hall", "church")
 ROOM_XFADE_S = 0.15          # a room switch crossfades the tails over this
 
 
 class RoomTail(object):
-    """The late room for one set of IRs: the diffuse tail fed by the SEND, and
-    the room's modes fed by the DRY signal, exactly as roomtail.main mixes
-    them. The modes are skipped where the room has none worth drawing (the
+    """The late room for one set of IRs: the diffuse tail AND the room's modes
+    fed by the SEND, exactly as roomtail.main mixes them. (The modes were fed
+    by the dry signal, so a channel sent less to the room -- CC91, a close mic
+    -- still drove them at full strength; see roomtail.py.) The modes are skipped where the room has none worth drawing (the
     hall's Schroeder frequency is under 25 Hz), as offline.
 
     ON ITS OWN THREAD, EXCEPT THE FIRST BLOCK. Each IR is split at one block:
@@ -346,7 +347,7 @@ class RoomTail(object):
                 self.done.set()
 
     def process(self, sendL, sendR, dryL, dryR):
-        xs = [sendL, sendR] + ([dryL, dryR] if self.nconv == 4 else [])
+        xs = [sendL, sendR] + ([sendL, sendR] if self.nconv == 4 else [])
         self.done.wait()                    # last block's body: ready, normally long since
         self.done.clear()
         out = [self.head[i].process(x) + self.res[i] for i, x in enumerate(xs)]
@@ -374,7 +375,8 @@ def build_room_tail(rate, frames, band_q=None):
     import roomtail as _RT
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
     ir, _bands, _onset = _RT.build_ir(props, rate, channels=2, band_q=band_q)
-    mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2)
+    q_low = band_q.get(_RT.OCTAVES[0], 1.0) if band_q else 1.0
+    mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2, q_low=q_low)
     use_modes = bool(nmodes) and fs > 25.0
     return RoomTail(ir.astype(np.float32),
                     mir.astype(np.float32) if use_modes else None, frames)
@@ -7443,8 +7445,13 @@ def selftest():
         # so that total is held to 2% and each octave only to 10% (0.4 dB).
         _en = []
         _tot, _tgt = 0.0, 0.0
+        # ...and only where the tail IS the room: above twice the Schroeder
+        # frequency, where the modes have handed over. A booth's Schroeder is
+        # 196 Hz, so its 250 Hz octave is modal, which the tail rightly
+        # leaves to the modes.
+        _fsh = _RT.schroeder(_p)
         for _fc, _t6, _ratio in _bd:
-            if not 250.0 <= _fc <= 8000.0:
+            if not 250.0 <= _fc <= 8000.0 or _fc / 2 ** 0.5 < 2.0 * _fsh:
                 continue
             _lo2, _hi2 = _fc / 2 ** 0.5, _fc * 2 ** 0.5
             _x = np.fft.irfft(np.where((_fq >= _lo2) & (_fq < _hi2), _spc, 0.0), len(_ir))

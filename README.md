@@ -74,7 +74,7 @@ what you can change about it, and the same two keys change every one of them.
 | `S` / `L` | save / load a preset |
 | `N` / `R` | save / recall a named **scene**: every channel's controls |
 | `P` | panic: all notes off |
-| `room` global | the building: dry, chamber, chapel, hall or church. Early reflections and the live tail both; a switch rebuilds the patches off-thread and crossfades the tail (`live.py --room` at startup) |
+| `room` global | the building: dry, booth, studio, chamber, chapel, hall or church. Early reflections and the live tail both; a switch rebuilds the patches off-thread and crossfades the tail (`live.py --room` at startup) |
 | `?` / `q` | help / quit |
 
 ### Stops
@@ -525,6 +525,17 @@ tacked on the end, which was a hall's early reflections in front of a reverb
 unit's tail: two different rooms. `hall` by default; an organ wants `church`,
 and that is not a reverb setting but a building four times the volume with a
 tenth the absorption.
+
+**Studio rooms.** For a produced record rather than a concert there are two,
+both acoustically treated, with the treatment aimed at the bass:
+- `studio`: a tracking room, 90 m³, 0.32–0.34 s flat from 63 Hz to 8 kHz.
+- `booth`: an isolation booth, 16 m³, 0.12–0.17 s.
+
+A mix can put each part at its own mic distance with `TUNING_DISTANCE`, per part
+and for both halves, or render a part with `TUNING_REFLECT=0` and add it after
+the room: DI, a cable into the desk. `examples/qkbattle_mix.py` does both. The
+room's modes follow each part's send, the same as the tail, so a close mic
+feeds the bass modes less.
 
 The diffuse field starts at the first reflection, at full strength. It begins
 sparse, as discrete specular arrivals at the room's reflection density, and

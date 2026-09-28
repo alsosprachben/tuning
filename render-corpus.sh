@@ -22,7 +22,8 @@
 # specific mistake this arrangement exists to prevent.
 #
 # `hall` is the default because the corpus is mostly ensemble music. The rooms
-# are hall, chamber, chapel and church; an organ wants church (see
+# are hall, chamber, chapel and church, and for a produced record studio and
+# booth; an organ wants church (see
 # examples/organ.py), and it is not a reverb setting, it is a different
 # building -- four times the volume with a tenth the absorption.
 #

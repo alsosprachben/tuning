@@ -15658,6 +15658,77 @@ ROOM_PRESETS = {
             'floor':   (0.55, 0.65, 0.75, 0.82, 0.85, 0.85),
         },
     ),
+    # A TRACKING ROOM: where a band is recorded, which none of the rooms above
+    # is. The chamber was standing in for it and it is a furnished salon, 461
+    # m3 with nothing in it made to absorb bass: 0.79 s right down to 63 Hz,
+    # which added 4.5 dB of low end to every kick within 150 ms and stretched
+    # its fall by half (Ben heard it as "loose"). A studio is SMALLER and it is
+    # TREATED, and the treatment's whole point is the bass: traps in the corners
+    # and on the back wall, broadband panels on the sides, clouds over the
+    # kit, a diffuser at the back so the room keeps some life without flutter.
+    # 5.0 x 5.6 x 3.2 m, 90 m3. Eyring T60 0.32-0.34 s FLAT from 63 Hz to 8k --
+    # flat is the treated room's signature; an untreated small room is always
+    # longest in the bass. Schroeder 120 Hz, so its modes are few and short.
+    'studio': dict(
+        room_left=2.4, room_right=2.6,
+        room_front=2.2, room_back=3.4,
+        room_ceiling=2.0, room_floor=1.2,
+        # r_c 1.03 m; 0.73 m puts the room 3 dB under the direct sound. A close
+        # mic is nearer still: TUNING_DISTANCE per part (the mixes set it).
+        radiation_distance=0.73,
+        SURFACE_ALPHA={
+            'left':    (0.30, 0.38, 0.42, 0.42, 0.40, 0.36),   # broadband panels
+            'right':   (0.30, 0.38, 0.42, 0.42, 0.40, 0.36),
+            'front':   (0.40, 0.34, 0.30, 0.28, 0.28, 0.26),   # corner traps
+            'back':    (0.50, 0.30, 0.22, 0.20, 0.20, 0.20),   # trap wall, diffuser
+            'ceiling': (0.28, 0.36, 0.40, 0.40, 0.38, 0.34),   # clouds
+            'floor':   (0.10, 0.08, 0.10, 0.14, 0.18, 0.20),   # wood, a rug
+        },
+        SURFACE_SCATTER={
+            'left':    (0.10, 0.15, 0.20, 0.30, 0.35, 0.40),
+            'right':   (0.10, 0.15, 0.20, 0.30, 0.35, 0.40),
+            'front':   (0.10, 0.15, 0.20, 0.30, 0.35, 0.40),
+            'back':    (0.30, 0.50, 0.70, 0.80, 0.80, 0.80),   # the diffuser
+            'ceiling': (0.10, 0.15, 0.25, 0.35, 0.40, 0.45),
+            'floor':   (0.10, 0.15, 0.20, 0.25, 0.30, 0.35),
+        },
+    ),
+    # A BOOTH: the vocal or isolation booth beside the tracking room, built to
+    # have almost no room at all. 2.33 x 2.63 x 2.68 m, 16 m3, every wall
+    # covered. Eyring T60 0.12 s in the bass rising to 0.17 s -- a booth is
+    # deadest where a small box would otherwise boom, which is what its bass
+    # trapping is for. Schroeder 196 Hz: modes exist, but they die in a tenth
+    # of a second.
+    #
+    # THE MIC IS OFF CENTRE, and not for taste. A smaller, squarer booth (2.0 x
+    # 2.4 x 2.4 around a centred mic) put two walls' reflections 0.53 ms apart
+    # and three within 0.69 ms, where they sum into a comb rather than
+    # arriving (roomcheck needs 1 ms). This is the smallest of the best of
+    # 1200 drawn shapes from 12 to 22 m3, judged under this name (the stagger
+    # is seeded by it): 1.10 ms between any two, 1.11 ms for any three.
+    'booth': dict(
+        room_left=0.64, room_right=1.69,
+        room_front=1.02, room_back=1.61,
+        room_ceiling=1.48, room_floor=1.2,
+        # r_c 0.64 m; 0.46 m puts the room 3 dB under the direct sound.
+        radiation_distance=0.46,
+        SURFACE_ALPHA={
+            'left':    (0.50, 0.45, 0.40, 0.38, 0.36, 0.34),
+            'right':   (0.50, 0.45, 0.40, 0.38, 0.36, 0.34),
+            'front':   (0.50, 0.45, 0.40, 0.38, 0.36, 0.34),
+            'back':    (0.55, 0.45, 0.40, 0.38, 0.36, 0.34),
+            'ceiling': (0.45, 0.42, 0.38, 0.36, 0.34, 0.32),
+            'floor':   (0.10, 0.08, 0.10, 0.15, 0.20, 0.25),
+        },
+        SURFACE_SCATTER={
+            'left':    (0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+            'right':   (0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+            'front':   (0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+            'back':    (0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+            'ceiling': (0.05, 0.10, 0.15, 0.20, 0.25, 0.30),
+            'floor':   (0.10, 0.15, 0.20, 0.25, 0.30, 0.35),
+        },
+    ),
 }
 
 

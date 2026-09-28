@@ -263,7 +263,7 @@ def schroeder(props):
     return 2000.0 * math.sqrt(t60 / volume)
 
 
-def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2):
+def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2, q_low=1.0):
     """The room's discrete low-frequency modes, as a sum of decaying cosines.
 
     A rigid shoebox rings at f(nx,ny,nz) = (c/2)*sqrt((nx/Lx)^2 + (ny/Ly)^2 +
@@ -363,7 +363,10 @@ def modal_ir(props, sr, source_x=0.0, source_z=0.0, channels=2):
     # mean-square gain in the band rather than by total energy.
     band = fr <= 2.0 * fs
     if band.any():
-        target = decay_and_level(props, 1.0)[0][2]
+        # ...at the directivity the sources actually had in the lowest band,
+        # from the sidecar, as the tail is. This was q=1 whatever the render
+        # measured, so the modes did not follow the parts that fed them.
+        target = decay_and_level(props, q_low)[0][2]
         power = float((np.abs(spec[band, :]) ** 2).mean())
         if power > 0.0:
             # No 1/sqrt(n): convolution multiplies the spectrum by H, so the
@@ -475,7 +478,8 @@ def main(argv):
     # this is entirely below hearing and costs nothing; in a small room it is
     # the bass. Built BEFORE the mix is allocated, because how far the room
     # rings on is part of how long the file has to be.
-    mir, nmodes, fs = modal_ir(props, sr, channels=x.shape[1])
+    q_low = (band_q.get(OCTAVES[0], 1.0) if band_q else 1.0)
+    mir, nmodes, fs = modal_ir(props, sr, channels=x.shape[1], q_low=q_low)
     if '--no-modes' in argv:
         print("   modes suppressed (--no-modes)")
         nmodes = 0
@@ -518,8 +522,13 @@ def main(argv):
     if use_modes:
         print("   %d modes below %.0f Hz (Schroeder %.1f Hz) -- the room rings"
               % (nmodes, 2 * fs, fs))
+        # THE MODES ARE THE ROOM TOO, so they are fed by what feeds the room --
+        # the send, not the dry mix. They were convolved with `x`, so a part
+        # sent less to the room (CC91, a close mic, a DI) still drove the low
+        # modes at full strength: in a small room that is the boom, and turning
+        # the kick's send down left it exactly where it was.
         for c in range(x.shape[1]):
-            y = overlap_add(x[:, c], mir[:, c])
+            y = overlap_add(wet_in[:, c], mir[:, c])
             out[:len(y), c] += y
     elif nmodes:
         print("   %d modes, all below %.0f Hz (Schroeder %.1f Hz) -- inaudible,"

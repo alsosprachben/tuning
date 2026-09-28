@@ -86,21 +86,23 @@ PARTS = [
     ('saw lead',    3, None,     +5.0),      # +1, then 6 dB up by ear; -2 once the attack was instant
     ('drawbar',     4, None,     +9.0),      # +3, then 3 dB more twice by ear
     ('square lead', 5, None,     +6.0),      # +2, +5, +8: its entrance must cut through; -2 once the attack was instant
-    ('piano',       6, None,     +1.0),
+    ('piano',       6, None,     +7.0),      # +1, then 6 dB up by ear in the studio
     ('rock organ',  7, None,     +1.0),      # -5, then 3 dB up twice by ear
     ('woodblock',   8, None,     -6.0),
 ]
 REFERENCE = 'kit'              # the drums, less what is lifted out of them
-# CLOSE-MIKED, AS IN A STUDIO: less of the kick and toms goes to the room. The
-# chamber's tail rings 0.79 s right down to 63 Hz -- a furnished room with no
-# bass trap -- and on every kick it added 4.5 dB of low end in the first
-# 150 ms and stretched the low band's fall to -30 dB from 180 ms to 260
-# (Ben: "too loose sounding ... maybe the chamber is booming it"). A studio
-# keeps the kick nearly dry. Reverb is linear, so these parts get a tail of
-# their own at this fraction of their room energy and the rest keep theirs.
-# The synth leads likewise: they go into the desk by cable and have no sound in
-# the room at all, so their space is a send, and a small one (Ben).
-ROOM_SEND = {'bass drum': 0.25, 'toms': 0.5, 'saw lead': 0.25, 'square lead': 0.25}
+# MICS, AS IN A STUDIO: each part at its own distance, which sets both its
+# early reflections (the stem's render) and how much of the room's tail and
+# modes it raises (its own roomtail, at the same distance). In the chamber
+# the kick's room added 3.5 dB below 150 Hz and held its fall to -30 dB until
+# 260 ms (Ben: "too loose ... maybe the chamber is booming it"); in the studio
+# at 0.3 m it is +1.7 dB and 170 ms. 'DI' is a cable into the desk: no early
+# reflections, no room at all -- the synth leads have no sound in any room
+# (Ben: fully dry). Distances are starting points for the ear.
+OVERHEADS = 1.0
+MIC = {'bass drum': 0.3, 'toms': 0.4, 'piano': 0.5,
+       'drawbar': 0.7, 'rock organ': 0.7,               # the Leslie cabinet
+       'saw lead': 'DI', 'square lead': 'DI'}           # the rest: OVERHEADS
 # The two organs with a Leslie: the rock organ (GM 18, channel 9) and the
 # drawbar (GM 16, channel 5). Both are made steady: every CC1 the file sends
 # them is taken out -- on the drawbar it was written as vibrato for the sound
@@ -118,10 +120,11 @@ PIPE_ORGAN_CH = 2
 # slowly swept (chorus.py) -- a chorus pedal in front of the voice.
 CHORUS = {3: 64, 5: 64}          # channel -> CC93: the saw lead and the square lead
 PIPE_STOPS = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 4)
-# THE SMALLEST ROOM, for a produced sound rather than a concert: 'chamber', a
-# furnished salon whose reverberation sits 3 dB under the direct sound
-# (tonelib ROOM_PRESETS). Set for the stems' early reflections AND the tail.
-ROOM = 'chamber'
+# A STUDIO, for a produced sound rather than a concert: the treated tracking
+# room, 90 m3, 0.32-0.34 s flat into the bass (tonelib ROOM_PRESETS). It was
+# the chamber, a furnished salon ringing 0.79 s at 63 Hz. Set for the stems'
+# early reflections AND the tail.
+ROOM = 'studio'
 # THE KIT FROM THE AUDIENCE'S SIDE (percussion_map.kit_pan): hi-hats right of
 # centre, ride left. The file pans the drums to 24 as the hi-hats enter and
 # sweeps back to 64 over the bar that ends them -- the climax, which Ben heard
@@ -328,7 +331,7 @@ def only_notes(path, track, keep):
 
 
 # the mix's number, in every output name
-MIX = 'mix13'
+MIX = 'mix14'
 VOICE_CODE = b''.join(open(os.path.join(HERE, f), 'rb').read()
                       for f in ('tonelib.py', 'blockrender.py', 'synthkernel.c', 'chorus.py'))
 
@@ -339,16 +342,23 @@ def main(argv):
     os.makedirs(outdir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(src))[0]
     mid = steady_organ(src, os.path.join(outdir, stem + '_steady.mid'))
-    env = {'TUNING_MASTER_DB': '-14', 'TUNING_ROOM': ROOM, 'TUNING_KIT_VIEW': KIT_VIEW}
+    base_env = {'TUNING_MASTER_DB': '-14', 'TUNING_ROOM': ROOM, 'TUNING_KIT_VIEW': KIT_VIEW}
     wavs, lufs = {}, {}
     for name, t, notes, _ in PARTS + FIXED:
+        mic = MIC.get(name, OVERHEADS)
+        env = dict(base_env)
+        if mic == 'DI':
+            env['TUNING_REFLECT'] = '0'
+        else:
+            env['TUNING_DISTANCE'] = str(mic)
         tag = name.replace(' ', '-')
         smid = os.path.join(outdir, '%s.%s.mid' % (stem, tag))
         lib.take_tracks(mid, smid, [t])
         if notes is not None:
             only_notes(smid, 1, notes)          # take_tracks puts the part at index 1
-        wav = os.path.join(outdir, '%s.%s.%s%s.wav' % (stem, tag, ROOM,
-                                                     '.' + KIT_VIEW if notes is not None else ''))
+        wav = os.path.join(outdir, '%s.%s.%s.%s%s.wav' % (stem, tag, ROOM,
+                                                        'di' if mic == 'DI' else '%gm' % mic,
+                                                        '.' + KIT_VIEW if notes is not None else ''))
         # RENDER ONLY WHAT CHANGED, by content: the stem MIDIs are rewritten on
         # every run, so their times say nothing, and a full render is fifteen
         # minutes where a change of gains alone should take seconds.
@@ -395,30 +405,36 @@ def main(argv):
             acc = x
         else:
             acc[:len(x)] += x
-    fit = min(1.0, 10 ** (-1.0 / 20) / float(np.abs(acc).max()))
+    # 3 dB, not 1: each group's room ADDS to its peak, and roomtail rescales a
+    # group that would clip -- which moved the 1 m group 0.1 dB against the
+    # others in the first mix14. The loop is normalised at the end anyway.
+    fit = min(1.0, 10 ** (-3.0 / 20) / float(np.abs(acc).max()))
     gains = [g * fit for g in gains]
     lib.sum_wavs([wavs[n] for n in names], dry, gains=gains)     # the dry mix, for reference
     wet = os.path.join(outdir, '%s_%s.%s.wav' % (stem, MIX, ROOM))
-    groups = [('room', [n for n in names if n not in ROOM_SEND], 1.0)]
-    groups += [(n.replace(' ', '-'), [n], ROOM_SEND[n]) for n in names if n in ROOM_SEND]
+    # ONE ROOM PER MIC DISTANCE: roomtail sets the tail's level against the
+    # direct sound from the distance, so each distance gets its own (reverb
+    # is linear, so the sum is the same room). DI parts get none: they are
+    # added after the room, as they came out of the desk.
+    by_mic = {}
+    for n in names:
+        by_mic.setdefault(MIC.get(n, OVERHEADS), []).append(n)
     wets = []
-    for tag, members, send in groups:
+    for mic, members in sorted(by_mic.items(), key=lambda kv: str(kv[0])):
+        tag = 'di' if mic == 'DI' else '%gm' % mic
         gdry = os.path.join(outdir, '%s_%s.%s.%s.dry.wav' % (stem, MIX, ROOM, tag))
         lib.sum_wavs([wavs[n] for n in members], gdry, gains=[gains[names.index(n)] for n in members],
                      headroom_db=None)
-        side = os.path.splitext(gdry)[0] + '.room.json'
-        lib.merge_room([os.path.splitext(wavs[n])[0] + '.room.json' for n in members], side)
-        if send != 1.0:                       # less energy to the room: q = direct / fed
-            import json
-            d = json.load(open(side))
-            for b_ in d['bands']:
-                b_['q'] = b_['q'] / send
-            json.dump(d, open(side, 'w'), indent=1)
+        if mic == 'DI':
+            wets.append(gdry)
+            print("  DI, no room:  %s" % ", ".join(members))
+            continue
+        lib.merge_room([os.path.splitext(wavs[n])[0] + '.room.json' for n in members],
+                       os.path.splitext(gdry)[0] + '.room.json')
         gwet = os.path.join(outdir, '%s_%s.%s.%s.wav' % (stem, MIX, ROOM, tag))
-        lib.roomtail(gdry, gwet, env={'TUNING_ROOM': ROOM})
+        lib.roomtail(gdry, gwet, env={'TUNING_ROOM': ROOM, 'TUNING_DISTANCE': str(mic)})
         wets.append(gwet)
-        if send != 1.0:
-            print("  %-13s room send %.2f (%+.1f dB)" % (members[0], send, 10 * math.log10(send)))
+        print("  mic %.1f m:    %s" % (mic, ", ".join(members)))
     lib.sum_wavs(wets, wet, gains=[1.0] * len(wets))
     print("  -> %s" % lib.mp3(wet))
     loop_s, marker_s, bars = loop_points(src)

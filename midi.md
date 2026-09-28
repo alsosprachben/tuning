@@ -580,7 +580,8 @@ they aren't the same number.
 those are baked into every template. So a switch rebuilds the patches off the
 audio thread, and notes already sounding keep the old room, as a program change
 keeps its old voice. The tail crossfades over 150 ms. "dry" turns off both
-the reflections and the tail.
+the reflections and the tail. "studio" and "booth" are treated rooms for a
+produced sound; see the README.
 
 ## Una corda is a string count
 
