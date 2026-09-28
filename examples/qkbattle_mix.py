@@ -81,9 +81,9 @@ PARTS = [
     ('hi-hats',     1, HATS,     +5.0),
     ('crashes',     1, CRASHES,  +1.0),      # +4 was too loud, by ear
     ('pipe organ',  2, None,     +4.0),      # -2, then 6 dB up by ear
-    ('saw lead',    3, None,     +7.0),      # +1, then 6 dB up by ear
+    ('saw lead',    3, None,     +5.0),      # +1, then 6 dB up by ear; -2 once the attack was instant
     ('drawbar',     4, None,     +9.0),      # +3, then 3 dB more twice by ear
-    ('square lead', 5, None,     +8.0),      # +2, +5, then +8: its entrance must cut through
+    ('square lead', 5, None,     +6.0),      # +2, +5, +8: its entrance must cut through; -2 once the attack was instant
     ('piano',       6, None,     +1.0),
     ('rock organ',  7, None,     +1.0),      # -5, then 3 dB up twice by ear
     ('woodblock',   8, None,     -6.0),
