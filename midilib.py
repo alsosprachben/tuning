@@ -55,6 +55,10 @@ tuner_registry = {
     # The hybrid's two pure-fifth chains, moved to C and C#, bridged D-F# by
     # the MEAN of 5:4 and 81:64: the comma splits over two fifths, no wolf.
     "hybridmean": HybridMeanTuner,
+    # ...and the same built on a piano's stretched octaves (path.py).
+    "hybridmeanpiano": HybridMeanPianoTuner,
+    # Two pure-fifth chains joined only by inharmonic octaves (path.py).
+    "stretchedhelmholtz": StretchedHelmholtzTuner,
     "spiral": SpiralTuner,
     "semi": SemiTuner,
     "path": PathNotesTuner,

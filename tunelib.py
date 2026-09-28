@@ -712,6 +712,41 @@ class HybridMeanTuner(PathTuner):
                 for n in range(128)}
 
 
+class HybridMeanPianoTuner(PathTuner):
+    """hybridmean for a piano: the same chains and mean-3rd bridge, built in
+    path.py (HybridMeanNotes) with every octave on the string's 2nd partial,
+    by the Steinway B model.
+
+    The stretched octaves take part of the comma themselves -- the circle of
+    fifths spans seven octaves, and each cent of stretch is a cent the fifths
+    need not lose. The bridge reaches chain two the long way round (Ben's
+    path), F#4 up a 5th to C#5 and down two stretched octaves, so they take
+    more of it: in the middle the two tempered fifths ease from -12.7 and
+    -10.8 to about -8.7 and -7.3, the Pythagorean thirds drop toward +19, the
+    eight bridged ones draw together at +10.8 to +12.6, and the whole sits
+    2.4 cents RMS from a stretched equal temperament. The treble follows the
+    Steinway stretch.
+
+    A harpsichord's octaves stretch 0.1 cent: use hybridmean. A = 440, as a
+    piano is; `:415` for a baroque one.
+    """
+    A = 440
+    generator_name = "HybridMeanNotes"
+
+
+class StretchedHelmholtzTuner(PathTuner):
+    """Ben's StretchedHelmholtz: two chains of pure 5ths, F#2-C6 and C3-B5,
+    joined only by three inharmonic octaves, C6 back to C3 (path.py). On pipes
+    it would be Pythagorean with the comma on B-F#; on a piano the stretched
+    octaves of the wrap take part of it. Measured at C4 on the Steinway
+    model: A, E, B and D major thirds within 5 cents of pure, B-F# the one
+    tempered fifth (-15.6), the other thirds about +19. For music on the sharp
+    side and in D, where F and Bb majors matter less. A = 440.
+    """
+    A = 440
+    generator_name = "StretchedHelmholtzNotes"
+
+
 class Hybrid440Tuner(HybridTuner):
     """The hybrid temperament at MODERN pitch.
 
