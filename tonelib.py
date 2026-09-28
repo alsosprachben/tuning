@@ -8308,6 +8308,14 @@ class SawtoothSynthProperties(BowedStringProperties):
     inharmonicity_dynamic = False
     chiff_volume = 0.0
     sustain_jitter = 0.0
+    # AN ENVELOPE AT ZERO ATTACK, NOT A BOW. With attack_time unset the onset
+    # fell back to chiff_max_valve_time, and that is the BOWED STRING's 100 ms
+    # ramp inherited from the class above: every lead measured 78-80 ms to 90%
+    # -- slower than the church organ (26) and three times the synth brass
+    # (24). An analogue lead with its attack at zero is there at once. 5 ms is
+    # as fast as a ramp goes without a click, the synth bass's range. Chiff
+    # and voice set their own: the breath and the swell are those patches.
+    attack_time = 0.005
     # CALIBRATED against the pipe organ at the same note and velocity. A saw
     # sums 64 partials at 1/n, so for the same initial_gain it lands ~20 dB
     # hotter than a voice whose spectrum rolls off quickly -- enough to clip the
@@ -8413,6 +8421,8 @@ class ChiffLeadProperties(SawtoothSynthProperties):
     # The chiff SawtoothSynthProperties deliberately switched off, switched back
     # on: it is the one thing this patch is named for.
     chiff_volume = 0.55
+    # the breath IS the attack: the valve ramp below, not the family's 5 ms
+    attack_time = None
     chiff_cycle = 1.0 / 4.0
     chiff_min_valve_time = 0.010
     chiff_max_valve_time = 0.032
@@ -8465,6 +8475,8 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
     bell_cutoff_hz = 0.0
     bell_order = 1.0
     max_harmonic = 48
+    # a sung lead swells: the ramp below, not the family's 5 ms
+    attack_time = None
     initial_gain = 0.04470
 
     def harmonic_volume(self, harmonic):

@@ -69,7 +69,10 @@ LIFTED = KICK | HATS | CRASHES
 # toms are split out too, 6 dB over the kit.
 FIXED = [
     ('kit less ride', 1, ('rest', LIFTED | RIDE | TOMS), 0.0),
-    ('ride',          1, RIDE,                           +3.0),
+    # the ride takes the time over from the hi-hats, so it sits by them: at
+    # +3 it measured -6.4 against the kit, 11.4 dB under the hats' +5.0
+    # (Ben: "very quiet"). +13.4 puts it at +4.0, a dB under the hats.
+    ('ride',          1, RIDE,                          +13.4),
     ('toms',          1, TOMS,                          +12.0),   # +6 left them 6.5 dB under the bass drum
 ]
 PARTS = [
@@ -312,6 +315,12 @@ def only_notes(path, track, keep):
     return path
 
 
+# the mix's number, in every output name
+MIX = 'mix13'
+VOICE_CODE = b''.join(open(os.path.join(HERE, f), 'rb').read()
+                      for f in ('tonelib.py', 'blockrender.py', 'synthkernel.c', 'chorus.py'))
+
+
 def main(argv):
     src = os.path.expanduser(argv[1] if len(argv) > 1 else '~/Downloads/midi/qkbttl02.mid')
     outdir = os.path.expanduser(argv[2] if len(argv) > 2 else '~/Downloads/bwx-renders/qkbttl02_mix')
@@ -331,8 +340,12 @@ def main(argv):
         # RENDER ONLY WHAT CHANGED, by content: the stem MIDIs are rewritten on
         # every run, so their times say nothing, and a full render is fifteen
         # minutes where a change of gains alone should take seconds.
+        # ...and by the VOICES too: a change to tonelib (a lead's attack, say)
+        # changes the sound with the MIDI untouched, and a key that did not
+        # include the voice code served the old render under the new name.
         import hashlib
-        digest = hashlib.sha1(open(smid, 'rb').read() + repr(sorted(env.items())).encode()).hexdigest()
+        digest = hashlib.sha1(open(smid, 'rb').read() + repr(sorted(env.items())).encode()
+                              + VOICE_CODE).hexdigest()
         mark = wav + '.src'
         if not (os.path.exists(wav) and os.path.exists(mark) and open(mark).read() == digest):
             lib.render_plain(smid, wav, tuner='even', extra_env=env)
@@ -357,11 +370,11 @@ def main(argv):
     for name, _t, _n, g in FIXED:
         print("  %-13s at the kit's gain %+.1f dB" % (name, g))
         names.append(name); gains.append(10 ** (g / 20.0))
-    dry = os.path.join(outdir, '%s_mix12.%s.dry.wav' % (stem, ROOM))
+    dry = os.path.join(outdir, '%s_%s.%s.dry.wav' % (stem, MIX, ROOM))
     lib.sum_wavs([wavs[n] for n in names], dry, gains=gains)
     lib.merge_room([os.path.splitext(wavs[n])[0] + '.room.json' for n in names],
                    os.path.splitext(dry)[0] + '.room.json')
-    wet = os.path.join(outdir, '%s_mix12.%s.wav' % (stem, ROOM))
+    wet = os.path.join(outdir, '%s_%s.%s.wav' % (stem, MIX, ROOM))
     lib.roomtail(dry, wet, env={'TUNING_ROOM': ROOM})
     print("  -> %s" % lib.mp3(wet))
     loop_s, marker_s, bars = loop_points(src)

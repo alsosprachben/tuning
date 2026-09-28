@@ -39,6 +39,17 @@ DEFAULT_CENTS = (-7.0, 7.0)
 SWEEP_HZ = (0.21, 0.29, 0.17, 0.34)
 SWEEP_DEPTH = 0.0016            # fraction of the frequency, ~2.8 cents
 
+# THE COPIES ARE DELAYED, as a bucket brigade's are: that is what it is, a
+# delay line swept a little. Without it every copy began each note IN PHASE
+# with its parent -- the phase anchor scaled with the frequency -- so every
+# note opened coherent, 2 or 3 copies summing to a peak, and fell as they
+# drifted apart: measured, a held square fell 12 dB in a second and a saw 5,
+# heard as a decay on every note (Ben: "the leads seem to have a decay").
+# A delay turns each harmonic of the copy by a different angle, so the sum
+# starts where it will stay: a shimmer, not a fade. Different per copy, and
+# in the BBD range.
+DELAY_S = (0.007, 0.011, 0.013, 0.017)
+
 # Below this the copy is inaudible against its parent and is not worth a row.
 # Same argument as leslie's lobe gates: spending partials on what cannot be
 # heard multiplies the table for nothing.
@@ -97,6 +108,7 @@ def expand(A, channels, sr, cols=None):
             if not len(keep):
                 continue
             rate = SWEEP_HZ[ci % len(SWEEP_HZ)]
+            delay = DELAY_S[ci % len(DELAY_S)]
             for i in keep:
                 for k in keys:
                     extra[k].append(A[k][int(i)])
@@ -104,8 +116,11 @@ def expand(A, channels, sr, cols=None):
                 # p0 = -om*(non + delay) and om has just been multiplied.
                 extra['om'][-1] = om[i] * ratio
                 extra['nf'][-1] = nf[i] * ratio
-                extra['p0'][-1] = p0[i] * ratio
-                extra['p0R'][-1] = p0R[i] * ratio
+                # ...and then turned by the line's delay at the copy's own
+                # frequency, which is what delaying it does to its phase.
+                # (om is radians per SAMPLE, so the delay goes in samples.)
+                extra['p0'][-1] = p0[i] * ratio - om[i] * ratio * delay * sr
+                extra['p0R'][-1] = p0R[i] * ratio - om[i] * ratio * delay * sr
                 extra['aL'][-1] = aL[i] * gain
                 extra['aR'][-1] = aR[i] * gain
                 extra['aM'][-1] = aM[i] * gain
