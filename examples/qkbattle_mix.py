@@ -59,6 +59,7 @@ import lib  # noqa: E402
 KICK, HATS, CRASHES = {35, 36}, {42, 44, 46}, {49, 52, 55, 57}
 RIDE = {51, 53, 59}
 TOMS = {41, 43, 45, 47, 48, 50}
+CLAVES = {75}
 LIFTED = KICK | HATS | CRASHES
 # Third pass: the ride "3 dB more". It is split from the rest of the kit and
 # both are summed at the gain the whole rest-of-kit had, the ride 3 dB over it.
@@ -68,12 +69,13 @@ LIFTED = KICK | HATS | CRASHES
 # was buried -- the bass drum, crashes and saw lead all sat over it -- so the
 # toms are split out too, 6 dB over the kit.
 FIXED = [
-    ('kit less ride', 1, ('rest', LIFTED | RIDE | TOMS), 0.0),
+    ('kit less ride', 1, ('rest', LIFTED | RIDE | TOMS | CLAVES), 0.0),
     # the ride takes the time over from the hi-hats, so it sits by them: at
     # +3 it measured -6.4 against the kit, 11.4 dB under the hats' +5.0
     # (Ben: "very quiet"). +13.4 puts it at +4.0, a dB under the hats.
     ('ride',          1, RIDE,                          +13.4),
-    ('toms',          1, TOMS,                          +12.0),   # +6 left them 6.5 dB under the bass drum
+    ('toms',          1, TOMS,                          +15.0),   # +6 left them 6.5 dB under the bass drum; +12, then 3 more by ear
+    ('claves',        1, CLAVES,                         +3.0),   # "a little louder" (Ben)
 ]
 PARTS = [
     ('kit',         1, ('rest', LIFTED), 0.0),      # the reference: measured, not mixed
