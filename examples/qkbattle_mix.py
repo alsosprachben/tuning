@@ -91,6 +91,16 @@ PARTS = [
     ('woodblock',   8, None,     -6.0),
 ]
 REFERENCE = 'kit'              # the drums, less what is lifted out of them
+# CLOSE-MIKED, AS IN A STUDIO: less of the kick and toms goes to the room. The
+# chamber's tail rings 0.79 s right down to 63 Hz -- a furnished room with no
+# bass trap -- and on every kick it added 4.5 dB of low end in the first
+# 150 ms and stretched the low band's fall to -30 dB from 180 ms to 260
+# (Ben: "too loose sounding ... maybe the chamber is booming it"). A studio
+# keeps the kick nearly dry. Reverb is linear, so these parts get a tail of
+# their own at this fraction of their room energy and the rest keep theirs.
+# The synth leads likewise: they go into the desk by cable and have no sound in
+# the room at all, so their space is a send, and a small one (Ben).
+ROOM_SEND = {'bass drum': 0.25, 'toms': 0.5, 'saw lead': 0.25, 'square lead': 0.25}
 # The two organs with a Leslie: the rock organ (GM 18, channel 9) and the
 # drawbar (GM 16, channel 5). Both are made steady: every CC1 the file sends
 # them is taken out -- on the drawbar it was written as vibrato for the sound
@@ -373,11 +383,43 @@ def main(argv):
         print("  %-13s at the kit's gain %+.1f dB" % (name, g))
         names.append(name); gains.append(10 ** (g / 20.0))
     dry = os.path.join(outdir, '%s_%s.%s.dry.wav' % (stem, MIX, ROOM))
-    lib.sum_wavs([wavs[n] for n in names], dry, gains=gains)
-    lib.merge_room([os.path.splitext(wavs[n])[0] + '.room.json' for n in names],
-                   os.path.splitext(dry)[0] + '.room.json')
+    # ONE headroom for every group, from the whole mix, so splitting the room
+    # by part cannot move one part against another.
+    import numpy as np
+    from roomtail import read_wav
+    acc = None
+    for n, g in zip(names, gains):
+        x = read_wav(wavs[n])[0].astype(np.float64) * g
+        if acc is None or len(x) > len(acc):
+            x[:0 if acc is None else len(acc)] += (0 if acc is None else acc)
+            acc = x
+        else:
+            acc[:len(x)] += x
+    fit = min(1.0, 10 ** (-1.0 / 20) / float(np.abs(acc).max()))
+    gains = [g * fit for g in gains]
+    lib.sum_wavs([wavs[n] for n in names], dry, gains=gains)     # the dry mix, for reference
     wet = os.path.join(outdir, '%s_%s.%s.wav' % (stem, MIX, ROOM))
-    lib.roomtail(dry, wet, env={'TUNING_ROOM': ROOM})
+    groups = [('room', [n for n in names if n not in ROOM_SEND], 1.0)]
+    groups += [(n.replace(' ', '-'), [n], ROOM_SEND[n]) for n in names if n in ROOM_SEND]
+    wets = []
+    for tag, members, send in groups:
+        gdry = os.path.join(outdir, '%s_%s.%s.%s.dry.wav' % (stem, MIX, ROOM, tag))
+        lib.sum_wavs([wavs[n] for n in members], gdry, gains=[gains[names.index(n)] for n in members],
+                     headroom_db=None)
+        side = os.path.splitext(gdry)[0] + '.room.json'
+        lib.merge_room([os.path.splitext(wavs[n])[0] + '.room.json' for n in members], side)
+        if send != 1.0:                       # less energy to the room: q = direct / fed
+            import json
+            d = json.load(open(side))
+            for b_ in d['bands']:
+                b_['q'] = b_['q'] / send
+            json.dump(d, open(side, 'w'), indent=1)
+        gwet = os.path.join(outdir, '%s_%s.%s.%s.wav' % (stem, MIX, ROOM, tag))
+        lib.roomtail(gdry, gwet, env={'TUNING_ROOM': ROOM})
+        wets.append(gwet)
+        if send != 1.0:
+            print("  %-13s room send %.2f (%+.1f dB)" % (members[0], send, 10 * math.log10(send)))
+    lib.sum_wavs(wets, wet, gains=[1.0] * len(wets))
     print("  -> %s" % lib.mp3(wet))
     loop_s, marker_s, bars = loop_points(src)
     lw, tail_s, residue = make_loop(wet, wet.replace('.wav', '.loop.raw.wav'), loop_s, marker_s)

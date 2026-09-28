@@ -225,7 +225,9 @@ def sum_wavs(paths, dest, gains=None, headroom_db=-1.0):
         else:
             acc[:len(x)] += x
     peak = float(np.abs(acc).max())
-    ceiling = 10.0 ** (headroom_db / 20.0)
+    # headroom_db=None: a PART of a mix that will be summed again, whose level
+    # against the other parts must not move -- scale only the final sum.
+    ceiling = 10.0 ** (headroom_db / 20.0) if headroom_db is not None else float('inf')
     if peak > ceiling:
         acc *= ceiling / peak
         print("  sum peaked at %.3f; scaled %.1f dB to fit"
