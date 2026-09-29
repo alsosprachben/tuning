@@ -10789,15 +10789,22 @@ def selftest():
     _Fm = B.tuning_table("hybrid")
     _omm = np.asarray(_pm["om"], float); _mchm = np.asarray(_pm["mch"]).astype(int)
     _brm = np.asarray(_pm["br"]).astype(int); _BRmm = np.asarray(_pm["BR"], float)
-    _o1 = _mc(_omm[_mchm == 1].min() * B.SR / (2 * math.pi), _Fm[60])
-    _o2 = _mc(_omm[_mchm == 2].min() * B.SR / (2 * math.pi), _Fm[64])
-    _row2 = _BRmm[_brm[_mchm == 2][0]] if _brm[_mchm == 2][0] >= 0 else None
-    _s2 = _mc(_row2[int(0.75 * B.SR / B.BLK)], 1.0) if _row2 is not None else 0.0
+    # AN MPE ZONE IS ONE INSTRUMENT: both notes' partials carry the MANAGER's
+    # channel (so they share an amp, a cabinet, a stem), not their members'.
+    # The notes are told apart by what is theirs: the slide has a row of its
+    # own, the held note does not.
+    _n1 = (_mchm == 0) & (_brm == -1)
+    _n2 = (_mchm == 0) & (_brm >= 0)
+    _o1 = _mc(_omm[_n1].min() * B.SR / (2 * math.pi), _Fm[60])
+    _o2 = _mc(_omm[_n2].min() * B.SR / (2 * math.pi), _Fm[64])
+    _row2 = _BRmm[_brm[_n2][0]]
+    _s2 = _mc(_row2[int(0.75 * B.SR / B.BLK)], 1.0)
     check("MPE offline: each note's own bend at onset, and a slide on its own row",
           abs(_o1 - 699.6) < 0.1 and abs(_o2) < 1e-6 and abs(_s2 - 400.2) < 0.1
-          and _brm[_mchm == 1][0] == -1,
+          and set(np.unique(_mchm)) == {0},
           "  (member 2 at %+.1f c, member 3 at %+.1f c then sliding %+.1f c on its "
-          "own row; live gave %+.1f c for the same bend)" % (_o1, _o2, _s2, _m3[0]))
+          "own row, both the zone's instrument; live gave %+.1f c for the same bend)"
+          % (_o1, _o2, _s2, _m3[0]))
     _jt = _U.pitch_table("just:C")
     check("the bridge's just table puts E 13.69 cents under equal temperament",
           abs((_jt(0, 64) - 64) * 100 + 13.686) < 1e-3 and _jt(0, 60) == 60.0

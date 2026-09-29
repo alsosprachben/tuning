@@ -1342,7 +1342,7 @@ def prepare(path, tuner='hybrid440'):
     _tess = {c: 440.0 * 2.0 ** ((sorted(v)[len(v) // 2] - 69) / 12.0)
              for c, v in _tess.items() if v}
     # organ registration rows
-    Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0)
+    Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0); _laws=[]
     for ch, _plist in ch_progs.items():
         prog = next((q for q in dict.fromkeys(_plist)
                      if getattr(property_class_for_program(q), 'registerable', False)), None)
@@ -1353,7 +1353,30 @@ def prepare(path, tuner='hybrid440'):
         crow_of[ch]=len(Srows); Srows.append(s)
         for r in pr.stop_ranks: k=r[0]; grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
         if getattr(pr, 'stop_word_ccs', (11, 43)) == (11, 43):   # only what swells shapes the swell
-            sh=(pr.swell_floor,pr.swell_gain_power,pr.swell_hf_max,pr.swell_hf_ref_hz)
+            _laws.append((crow_of[ch], (pr.swell_floor, pr.swell_gain_power,
+                                        pr.swell_hf_max, pr.swell_hf_ref_hz)))
+    # ONE SWELL LAW PER RENDER, BUT EVERY ORGAN'S OWN LEVEL. The kernel applies
+    # one law (sh) to every swell row, and it used to be whichever organ was
+    # processed LAST -- so with a Hammond and a church organ in one file each
+    # got the other's box: the Hammond, whose swell is fixed open (floor 1.0),
+    # took the flue's 0.06 floor, and a rock organ asked for -3 dB by CC7 came
+    # out +16 (examples/qkbattle_mix.py). Now the law is a real box's -- the
+    # first organ that has one -- and every other organ's row is re-mapped so
+    # that law gives the LEVEL its own law would:
+    #     L = f_i + (1 - f_i) s^p_i,   s' = ((L - f_g) / (1 - f_g))^(1/p_g)
+    # A single-organ render keeps its own law and its rows untouched.
+    if _laws:
+        sh = next((lw for _r, lw in _laws if lw[0] < 1.0), _laws[-1][1])
+        fg, pg = sh[0], sh[1]
+        for _r, (fi, pi, _hm, _hr) in _laws:
+            if (fi, pi) == (fg, pg):
+                continue
+            _s = np.asarray(Srows[_r], np.float64)
+            _L = fi + (1.0 - fi) * np.clip(_s, 0.0, 1.0) ** pi
+            if fg < 1.0:
+                Srows[_r] = np.clip((_L - fg) / (1.0 - fg), 0.0, 1.0) ** (1.0 / pg)
+            else:
+                Srows[_r] = np.ones_like(_s)      # a law with no range: open
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
 
@@ -2385,6 +2408,13 @@ def prepare(path, tuner='hybrid440'):
         _press = _pressure_of(ch, note, on, off)
         _mmgr = _mpe_member.get((ch, note, on))
         if _mmgr is not None:
+            # AN MPE ZONE IS ONE INSTRUMENT. Its notes sit on member channels
+            # only so each can bend alone; everything that belongs to the
+            # INSTRUMENT -- its amplifier and cabinet, its chorus, its stem --
+            # is the zone's. Tagged with the member, every note of an MPE
+            # guitar went through an amplifier of its own, and two strings that
+            # should intermodulate in one valve stage distorted apart (Ben).
+            _MCH[0] = _mmgr
             # MPE: the louder of the note's own and its manager's (Appendix D)
             _press = T.mpe_pressure(_press, _pressure_of(_mmgr, -1, on, off))
         if _press:
@@ -2626,9 +2656,9 @@ def prepare(path, tuner='hybrid440'):
         _PX[0] = getattr(props,'position_x',0.0); _PZ[0] = getattr(props,'position_z',0.0)
         # The consonant bursts are built before this loop runs, so they never
         # saw a props and never got a room -- see the reflection pass below.
-        if ch not in _CONS_SRC:
-            _CONS_SRC[ch] = (props, _PX[0], _PZ[0], _radius[0])
-        if getattr(props, 'amp_drive', 0.0) and ch not in _AMP_CH:
+        if _MCH[0] not in _CONS_SRC:
+            _CONS_SRC[_MCH[0]] = (props, _PX[0], _PZ[0], _radius[0])
+        if getattr(props, 'amp_drive', 0.0) and _MCH[0] not in _AMP_CH:
             # TUNING_AMP_DRIVE overrides every voice's drive at once, which is
             # how the stage gets auditioned: the same passage clean, at the
             # edge of breakup and past it, with nothing else changed. It only
@@ -2656,10 +2686,10 @@ def prepare(path, tuner='hybrid440'):
             # have.
             _drv = float(props.amp_drive)
             if not getattr(props, 'leslie', False):
-                _c1 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
+                _c1 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 1]
                 if _c1:
                     _drv *= 4.0 * _c1[0] / 127.0
-            _AMP_CH[ch] = float(os.environ.get('TUNING_AMP_DRIVE', _drv))
+            _AMP_CH[_MCH[0]] = float(os.environ.get('TUNING_AMP_DRIVE', _drv))
             # THE CHANNEL FADER IS NOT IN FRONT OF THE AMPLIFIER. chan_vol is
             # CC7*CC11 squared and it multiplies into every partial's gain, so
             # by the time tubeamp reads aM the mixer has already been applied
@@ -2679,18 +2709,18 @@ def prepare(path, tuner='hybrid440'):
             # struck IS how hard the valve is driven. That is the whole point
             # of amp_reference. A fader is a different kind of number.
             _ref = getattr(props, 'amp_reference', None)
-            _AMP_REF[ch] = (_ref * chan_vol) if _ref else None
-            _AMP_IMB[ch] = getattr(props, 'amp_imbalance', None)
-        if getattr(props, 'sympathetic_gain', 0.0) and ch not in _SYM_CH:
-            _SYM_CH[ch] = props
-        if getattr(props, 'cabinet', None) and ch not in _CAB_CH:
+            _AMP_REF[_MCH[0]] = (_ref * chan_vol) if _ref else None
+            _AMP_IMB[_MCH[0]] = getattr(props, 'amp_imbalance', None)
+        if getattr(props, 'sympathetic_gain', 0.0) and _MCH[0] not in _SYM_CH:
+            _SYM_CH[_MCH[0]] = props
+        if getattr(props, 'cabinet', None) and _MCH[0] not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
             # anyone wants to play through -- it is the A/B that shows what the
             # cabinet is for, since a clipped signal without one has harmonics
             # all the way to Nyquist.
             if os.environ.get('TUNING_CABINET', '1') != '0':
-                _CAB_CH[ch] = props.cabinet
-        if getattr(props, 'clav_panel', False) and ch not in _CLAV_CH:
+                _CAB_CH[_MCH[0]] = props.cabinet
+        if getattr(props, 'clav_panel', False) and _MCH[0] not in _CLAV_CH:
             # CC1 IS THE TONE ROCKERS. Six switches sit left of a D6's keyboard
             # and four of them are the tone section; the wheel sweeps those four
             # darkest to brightest. A file with no CC1 gets the panel at rest,
@@ -2699,13 +2729,13 @@ def prepare(path, tuner='hybrid440'):
             # ONE VALUE FOR THE PIECE, from the channel's first CC1, the same
             # rule the amplifier's drive follows: a player sets the rockers and
             # then plays, where live it is a control being moved.
-            _c1 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 1]
             _set = (int(round(_c1[0] / 127.0 * (len(T.CLAV_TONE) - 1)))
                     if _c1 else T.CLAV_FLAT)
             _set = int(os.environ.get('TUNING_CLAV', _set))
             if _set != T.CLAV_FLAT:
-                _CLAV_CH[ch] = _set
-        if getattr(props, 'tremolo_depth', 0.0) and ch not in _TREM_CH:
+                _CLAV_CH[_MCH[0]] = _set
+        if getattr(props, 'tremolo_depth', 0.0) and _MCH[0] not in _TREM_CH:
             # CC1 IS THE DEPTH KNOB. On a Rhodes suitcase and a Wurlitzer the
             # modulation depth is the one panel control a player moves while
             # playing, so the wheel is where it belongs -- and these voices ship
@@ -2714,7 +2744,7 @@ def prepare(path, tuner='hybrid440'):
             #
             # A file with no CC1 gets no modulation, which is the panel's own
             # default position and what every file in the corpus will see.
-            _c1 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 1]
+            _c1 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 1]
             if getattr(props, 'tremolo_intrinsic', False):
                 # AN INTRINSIC TREMOLO IS NOT A WHEEL EFFECT. GM 44 is called
                 # Tremolo Strings: the stroke is the patch, so it is on at full
@@ -2726,7 +2756,7 @@ def prepare(path, tuner='hybrid440'):
             else:
                 _dep = float(props.tremolo_depth) * (_c1[0] / 127.0 if _c1 else 0.0)
             if _dep > 0.0:
-                _TREM_CH[ch] = (float(props.tremolo_hz), _dep,
+                _TREM_CH[_MCH[0]] = (float(props.tremolo_hz), _dep,
                                 bool(getattr(props, 'tremolo_stereo', False)),
                                 float(getattr(props, 'tremolo_scatter', 0.0)))
         # CC93 CHORUS. The send is the CHANNEL's; the offsets are the VOICE's,
@@ -2754,26 +2784,26 @@ def prepare(path, tuner='hybrid440'):
         # does, a whole channel's contribution to the tail is one scalar --
         # which is a textbook send bus, arrived at from the room equation
         # rather than bolted onto it.
-        if ch not in _REVERB_CH:
-            _c91 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 91]
+        if _MCH[0] not in _REVERB_CH:
+            _c91 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 91]
             if _c91:
-                _REVERB_CH[ch] = _c91[0] / float(GM_DEFAULT_REVERB)
-        if ch not in _CHORUS_CH:
-            _c93 = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 93]
+                _REVERB_CH[_MCH[0]] = _c91[0] / float(GM_DEFAULT_REVERB)
+        if _MCH[0] not in _CHORUS_CH:
+            _c93 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
             if _c93 and _c93[0] > 0:
-                _CHORUS_CH[ch] = (_c93[0] / 127.0, _CHR.offsets_for(props))
-        if getattr(props, 'leslie', False) and ch not in _LESLIE_CH:
+                _CHORUS_CH[_MCH[0]] = (_c93[0] / 127.0, _CHR.offsets_for(props))
+        if getattr(props, 'leslie', False) and _MCH[0] not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a
             # speed -- leslie.Rotor spends real seconds getting between them.
             import leslie as _LES0
-            _req = [(t, _LES0.zone(v)) for t, cc, v in in_order(ccs.get(ch, []))
+            _req = [(t, _LES0.zone(v)) for t, cc, v in in_order(ccs.get(_MCH[0], []))
                     if cc == 1]
             if not _req or _req[0][0] > 0.0:
                 _req.insert(0, (0.0, _LES0.TREMOLO
                                 if getattr(props, 'leslie_fast', True)
                                 else _LES0.CHORALE))
-            _LESLIE_CH[ch] = _req
+            _LESLIE_CH[_MCH[0]] = _req
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             li, ri, _sd0, _sd1 = seats[0]
