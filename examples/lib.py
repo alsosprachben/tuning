@@ -8,6 +8,7 @@ which reads as "the accompaniment is exactly twice as fast"), guessing which
 tracks are the choir, and comparing two renders made under different settings.
 Each of those is handled once, here.
 """
+import math
 import os
 import subprocess
 import sys
@@ -475,3 +476,41 @@ def caught(spans, t, short=0.25):
     """(notes crossing t, of which have less than `short` left) -- the blips."""
     cross = [(s, e) for s, e, c, n in spans if s < t < e]
     return len(cross), sum(1 for s, e in cross if e - t < short)
+
+
+# ---------------------------------------------------------------- loudness
+# K-weighted, gated median loudness (ITU-R BS.1770 weighting): how loud a part
+# is WHEN IT IS PLAYING. Used to balance the qkbttl02 mix and to calibrate the
+# voices against reference soundfonts (voice_levels.py).
+
+def kweight(fs):
+    """ITU-R BS.1770 K-weighting at any rate: the high shelf, then the RLB
+    high-pass, from their analogue parameters."""
+    G, Q, fc = 3.99984385397, 0.7071752369554193, 1681.9744509555319
+    A = 10 ** (G / 40.0); w0 = 2 * math.pi * fc / fs; al = math.sin(w0) / (2 * Q)
+    c = math.cos(w0); r = 2 * math.sqrt(A) * al
+    b = [A * ((A + 1) + (A - 1) * c + r), -2 * A * ((A - 1) + (A + 1) * c),
+         A * ((A + 1) + (A - 1) * c - r)]
+    a = [(A + 1) - (A - 1) * c + r, 2 * ((A - 1) - (A + 1) * c), (A + 1) - (A - 1) * c - r]
+    b1, a1 = [v / a[0] for v in b], [v / a[0] for v in a]
+    Q2, fc2 = 0.5003270373253953, 38.13547087613982
+    w0 = 2 * math.pi * fc2 / fs; al = math.sin(w0) / (2 * Q2); c = math.cos(w0)
+    b = [(1 + c) / 2, -(1 + c), (1 + c) / 2]; a = [1 + al, -2 * c, 1 - al]
+    return b1, a1, [v / a[0] for v in b], [v / a[0] for v in a]
+
+
+def loudness(wav, win=0.4, gate=-20.0):
+    """K-weighted median loudness over the windows where the part is playing
+    (within `gate` dB of its loudest): how loud it is when it is there."""
+    import numpy as _np
+    from scipy.io import wavfile
+    from scipy.signal import lfilter
+    sr, x = wavfile.read(wav)
+    x = x.astype(_np.float64)
+    if x.ndim == 1:
+        x = x[:, None]
+    b1, a1, b2, a2 = kweight(sr)
+    y = lfilter(b2, a2, lfilter(b1, a1, x, axis=0), axis=0)
+    n = int(win * sr); k = len(y) // n
+    db = 10 * _np.log10((y[:k * n].reshape(k, n, -1) ** 2).mean(1).sum(1) + 1e-30)
+    return float(_np.median(db[db > db.max() + gate]))

@@ -8326,7 +8326,16 @@ class SawtoothSynthProperties(BowedStringProperties):
     # divisor was measured with seven oscillators running, so it described a
     # supersaw's level and not a saw's. Against the church organ on the same
     # passage in the same room, as the whole lead family now is.
-    initial_gain = 0.05263
+    # +7 dB FOR THE WHOLE LEAD FAMILY (GM 80-87), one factor so the siblings
+    # keep the balance they were given against each other. They had been
+    # calibrated to the church organ, which leaves every error of the organ's
+    # own calibration in them; against two reference GM sets instead
+    # (examples/voice_levels.py: MuseScore's MS Basic and TiMidity's FluidR3,
+    # K-weighted against the grand piano, CC7 127) the leads sat 7-10 dB (MS
+    # Basic) and 8.5-19 dB (FluidR3) too quiet -- the only voices on which the
+    # two references agreed. 7 dB is the least both support (Ben's choice).
+    # Found first in qkbttl02, whose leads needed +17 and +23 dB in the mix.
+    initial_gain = 0.11782
 
     def harmonic_volume(self, harmonic):
         if self.max_harmonic and harmonic > self.max_harmonic:
@@ -8346,7 +8355,7 @@ class SquareSynthProperties(SawtoothSynthProperties):
     inharmonicity and no breath.
     """
     odd_only = True
-    initial_gain = 0.06238         # measured the same way; a square sits ~1.5 dB over a saw
+    initial_gain = 0.13965         # measured the same way; a square sits ~1.5 dB over a saw
 
     def harmonic_volume(self, harmonic):
         if harmonic % 2 != 1:
@@ -8399,7 +8408,7 @@ class TriangleSynthProperties(SquareSynthProperties):
     # A little vibrato, because the soft leads are always played with some and
     # a naked triangle is a test tone. Judgement, not specification.
     section_players = 1
-    initial_gain = 0.06754          # 1/n^2 sums to far less than 1/n, hence the larger number
+    initial_gain = 0.15120          # 1/n^2 sums to far less than 1/n, hence the larger number
 
     def harmonic_volume(self, harmonic):
         if harmonic % 2 != 1:
@@ -8431,7 +8440,7 @@ class ChiffLeadProperties(SawtoothSynthProperties):
     # a filter envelope is upper partials dying faster.
     harmonic_decay_db = 0.9
     max_harmonic = 48
-    initial_gain = 0.05916
+    initial_gain = 0.13244
 
 
 class CharangLeadProperties(SawtoothSynthProperties):
@@ -8452,7 +8461,7 @@ class CharangLeadProperties(SawtoothSynthProperties):
     max_harmonic = 48
     # Hard and bright, with the low end tightened the way a driven amp does.
     harmonic_decay_db = 0.25
-    initial_gain = 0.05685
+    initial_gain = 0.12727
 
 
 class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
@@ -8477,7 +8486,7 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
     max_harmonic = 48
     # a sung lead swells: the ramp below, not the family's 5 ms
     attack_time = None
-    initial_gain = 0.04470
+    initial_gain = 0.10007
 
     def harmonic_volume(self, harmonic):
         # THE MIXIN HAD TO BE WIRED UP BY HAND, and it is worth saying why.
@@ -9413,7 +9422,7 @@ class FifthsLeadProperties(SawtoothSynthProperties):
     fifth_ratio = 2.0 ** (7.0 / 12.0)
     # Lower than its siblings because the second voice adds level: a fixed
     # interval is two oscillators, and the patch must not be louder for it.
-    initial_gain = 0.04319
+    initial_gain = 0.09669
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         return [(self.fifth_gain, 0.0, self.fifth_ratio - 1.0, harmonic_decay, 0.0)]
@@ -9434,7 +9443,7 @@ class BassLeadProperties(SawtoothSynthProperties):
     bass_ratio = 0.5
     # Lower than its siblings because the second voice adds level: a fixed
     # interval is two oscillators, and the patch must not be louder for it.
-    initial_gain = 0.03291
+    initial_gain = 0.07368
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         return [(self.bass_gain, 0.0, self.bass_ratio - 1.0, harmonic_decay, 0.0)]
