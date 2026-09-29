@@ -141,7 +141,12 @@ RAW = {
 # linearly across the window. Times are the score's own seconds, and on the
 # quarter exactly (132 bpm): a pause a hair late of the chord it precedes puts
 # the chord in front of it.
-RITS = [(540 * BEAT, ENCORE, 0.75, False),    # the bar of the half cadence
+# The key changes to F and to A breathe the same way (Ben): a ritardando
+# through the bar before the ostinato's first note -- its two-beat key-note
+# lead-in on beat 5 (F2, bar 32; A1, bar 63) -- and that note a tempo.
+RITS = [(184 * BEAT, 190 * BEAT, 0.80, False),   # into F: bar 32, beats 1-4
+        (370 * BEAT, 376 * BEAT, 0.80, False),   # into A: bar 63, beats 1-4
+        (540 * BEAT, ENCORE, 0.75, False),    # the bar of the half cadence
         (720 * BEAT, 732 * BEAT, 0.70, True)] # the last run into the final chord
 # (where the silence goes, seconds, where held notes are cut). NONE HERE NOW.
 # The pedal is a whole note under the half cadence that reaches into the
