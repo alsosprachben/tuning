@@ -54,15 +54,15 @@ TARGETS = {'leads': 0.0, 'bass': -2.0, 'chords': -6.0}      # dB against the lea
 # THE KEY'S OWN ROOTS, preferred: a chromatic root has to be clearly supported
 # by the notes to win. F minor's, with the raised seventh (E) for its dominant.
 KEYS = {'wtc2f12': {5, 7, 8, 10, 0, 1, 3, 4}, 'wtc2f10': {4, 6, 7, 9, 11, 0, 2, 3},
-        'wtc2f04': {1, 3, 4, 6, 8, 9, 11, 0}}
+        'wtc2f04': {1, 3, 4, 6, 8, 9, 11, 0}, 'wtc2f20': {9, 11, 0, 2, 4, 5, 7, 8}}
 # EACH FUGUE'S METER AND PICKUP, in quarters, and its tempo. The E minor is
 # in 2/2 from a quarter's upbeat; CCARH's *MM130 runs it in 2:39, where a
 # recording runs 3:00 -- 116. The C# minor is 12/16, a bar of three quarters;
 # its *MM84 would run 2:32 where the fugue takes about two minutes -- a dotted
-# eighth at 72, ♩=108.
-METER = {'wtc2f12': 2, 'wtc2f10': 4, 'wtc2f04': 3}
+# eighth at 72, ♩=108. The A minor's *MM72 runs 1:33, a recording 1:50: ♩=64.
+METER = {'wtc2f12': 2, 'wtc2f10': 4, 'wtc2f04': 3, 'wtc2f20': 4}
 PICKUP = {'wtc2f10': 1}
-BPM = {'wtc2f12': 84.0, 'wtc2f10': 116.0, 'wtc2f04': 108.0}
+BPM = {'wtc2f12': 84.0, 'wtc2f10': 116.0, 'wtc2f04': 108.0, 'wtc2f20': 64.0}
 # THE VOICES' CHANNELS: 0 bottom, 1 middle, 2 top. Where the kern splits a
 # voice for a chord it writes the extra notes on channels 3 and up; each goes
 # to the voice sounding nearest it in pitch, unless the piece says otherwise.
@@ -148,12 +148,15 @@ def drums(style, st, ns, tpb, nbar, note):
 
 
 # WHICH VOICE CARRIES EACH SUBJECT ENTRY (for the scoop into it): 0 bottom,
-# 1 middle, 2 top.
+# 1 middle, 2 top. Keyed by bar, or by bar and a fraction of one.
 ENTRY_VOICE = {'wtc2f12': {1: 2, 5: 1, 12: 0, 29: 1, 41: 0, 51: 1, 75: 1},
                'wtc2f10': {1: 2, 7: 1, 13: 0, 24: 2, 30: 1, 42: 0, 50: 1, 60: 2, 72: 0},
                # 48 (top) and 55 (bass) come in off a tied note, on the lower
                # neighbour: no scoop there
-               'wtc2f04': {1: 0, 2: 2, 5: 1, 16: 2, 17: 1, 20: 0, 30: 1, 61: 1, 66: 1}}
+               'wtc2f04': {1: 0, 2: 2, 5: 1, 16: 2, 17: 1, 20: 0, 30: 1, 61: 1, 66: 1},
+               # a fraction of a bar where the entry is not the voice's first
+               # note in it: at 13 the top runs up to the subject's A5 on beat 2
+               'wtc2f20': {1: 0, 3: 1, 6: 2, 13.25: 2, 21: 2, 26: 0}}
 
 
 def guitar_mpe(notes, tpb, bpm, prog, pan, path, scoops):
@@ -422,6 +425,36 @@ MANUAL = {'wtc2f12': [
     (68, 71, 'A', "B's bass runs to the end; the middle holds F#4, then moves "
                   "in dotted quarters under A's top; the final chord's E#4 on "
                   "A with its C#5, over B's C#2"),
+],
+# The A minor: the subject in quarters (E C F G# -- the diminished seventh),
+# its countersubject a chromatic line in 32nds. The middle goes to whichever
+# guitar is NOT carrying 32nds, and where top and middle interlock -- one
+# holds while the other runs -- one hand plays both. Guitar B reaches A1: a
+# baritone, or a seven-string dropped to A.
+'wtc2f20': [
+    (1, 7, 'A', "the answer enters at 3 over the bass's countersubject in "
+                "32nds; A's top does not come in until 6, and then in quarters "
+                "(the subject), holding over the middle's runs"),
+    (8, 8, 'B', "the bass thins to four eighths with rests; A's top is "
+                "continuous eighths"),
+    (9, 9, 'A', "top and middle interlock: A holds C5 while the middle runs, "
+                "the middle holds D4 while the top runs; B's bass is eighths"),
+    (10, 12, 'B', "B's bass in quarters (E3 A3 B2), then halves; the middle's "
+                  "32nds at 12 run over B's held A3; A's top runs 32nds"),
+    (13, 14, 'A', "the middle jumps up to B4-F#5, beside A's subject in "
+                  "quarters (A5 G5 C6); at 14 A's top holds D#5 and rests "
+                  "while the middle has the 32nds"),
+    (15, 16, 'B', "the middle moves only where B's bass rests or holds (E3 "
+                  "then A3); A's top runs 32nds"),
+    (17, 24, 'A', "the bass has the countersubject in 32nds for most of eight "
+                  "bars; A's top holds B4, then interlocks with the middle "
+                  "(19-20), carries the subject in quarters over it (21), and "
+                  "runs parallel eighths a sixth above it (24): double-stops"),
+    (25, 26, 'B', "the middle's 32nds run over B's held A3 and its quarters "
+                  "(the bass's last entry, C3 F3 G#2); A's top runs"),
+    (27, 28, 'A', "the middle's last 32nds under A's held A4, then parallel "
+                  "eighths with the top; the final chord's C4 and A4 on A, "
+                  "over B's A1 -- minor, no Picardy third"),
 ]}
 
 import mido
@@ -512,7 +545,7 @@ def render_effects(name, ns, who, bar, pk, nbar, tpb, bpm, tag, room_mics=False)
         (A if g == 'A' else B).append((warp(s), warp(e), v, n))
     scoops = set()
     for bar1, v in ENTRY_VOICE.get(name, {}).items():
-        b0 = pk + (bar1 - 1) * bar
+        b0 = pk + int(round((bar1 - 1) * bar))
         first = min((s for s, _e, c, _n in ns if voice(c) == v and s >= b0), default=None)
         if first is not None:
             scoops.add((warp(first), v))
