@@ -111,15 +111,22 @@ tearing sweep. RESONANCE's last tenth brings in the ladder's own sine at the
 cutoff — at the cutoff the filter contour *sustains* at: a sine that swept
 with the contour would need its phase integrated over the note's history,
 which the stateless kernel cannot carry (the resonant peak on the harmonics
-does sweep). Not yet: LFO 1's other destinations, FM and the MOD section, the
-FB/EXT input, LFO 2, and GLIDE as a panel knob (CC5 portamento works).
+does sweep). The MOD section's F ENV>OSC 2 FREQ throws OSC 2's pitch with the filter
+contour — up to four octaves either way at MOD AMOUNT's ends, a guess until a
+Messenger is recorded — and LFO 1 can sweep OSC 2 FREQ too (an octave at full
+depth). OSC 2's phase is the pitch's integral, worked out per 128 samples and
+handed to the kernel as rows, so a file and the player sweep identically and a
+knob turned mid-sweep changes only what is still to come. Not yet: the MOD
+section's 1>2 FM and its two waveshape routes, LFO 1's waveshape destinations,
+the sync sweep, the FB/EXT input, LFO 2, and GLIDE as a panel knob (CC5
+portamento works).
 
 **Playing it from a Messenger.** Give the part a channel (the `ch` column),
 then `M` on its panel: that channel's CCs are read by the Messenger's own
 chart (its manual's Appendix A, 14-bit, bipolar knobs centred at 8192) instead
 of General MIDI's, which disagree about half the numbers — CC10 is TUNE, not
 pan. The mod wheel, volume, expression and sustain stay General MIDI's. Panel
-controls the simulator does not model yet (MOD, FB, LFO 2, the envelope loops)
+controls the simulator does not model yet (FB, LFO 2, the envelope loops)
 are taken and ignored rather than landing on a GM meaning. The ranges of the KB TRACKING
 and MODE switches are not in the manual; even thirds and quarters are assumed.
 

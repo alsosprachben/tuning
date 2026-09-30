@@ -94,7 +94,7 @@ from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHAN
 COLS_F8 = ("om", "p0", "p0R")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
-           "vd", "vr", "vp", "delL", "delR", "az")
+           "vd", "vr", "vp", "delL", "delR", "az", "rdl")
 # A GLIDE BELONGS TO THE PRESS, NOT TO THE VOICE, so these three are the one
 # group that is NOT copied from the template -- they are zeroed at stamp time
 # and written afterwards if this particular note-on is gliding. Templates are
@@ -702,6 +702,20 @@ class Slab:
         self.ft_cnt = np.zeros(MOOG_FT_ROWS, np.int32)
         self.KN = np.zeros(MOOG_KN_ROWS * 2 * _MG.KN_W, np.float32)
         self.kn_of = {}                 # (part id, channel) -> its KN row
+        # THE MOD SECTION'S PITCH ROWS (moog.pitch_rows), per sounding note:
+        # this block's grid points of OSC 2's ratio and accumulated extra phase,
+        # appended block by block from the same cell integral the file
+        # renderer sums -- so the two agree, and a knob turned mid-sweep moves
+        # only what is still to come.
+        self.MPI = np.zeros(MOOG_FT_ROWS * 3, np.int32)
+        self.MPI[2::3] = 1
+        self.MPC = np.zeros(MOOG_FT_ROWS * MOOG_MP_CAP, np.float64)
+        self.MPR = np.ones(MOOG_FT_ROWS * MOOG_MP_CAP, np.float32)
+        self.mp_on = np.zeros(MOOG_FT_ROWS, bool)
+        self.mp_P = np.zeros((MOOG_FT_ROWS, 9), np.float64)
+        self.mp_a0 = np.zeros(MOOG_FT_ROWS, np.float64)
+        self.mp_toff = np.full(MOOG_FT_ROWS, np.inf)
+        self.mp_acc = np.zeros(MOOG_FT_ROWS, np.float64)
         # A MOOG SLOT'S OWN BASELINE. Its template is knob-neutral (every
         # harmonic at unit weight, phase 0, nominal frequency: moog.weights),
         # so the panel is applied here: mo_u is the slot's level at unit
@@ -1005,7 +1019,8 @@ class Slab:
             # tempting follow-up and deliberately not this change.)
             d.update(lib=self.lib, P=self.cap, nblk=1, G=self.G, S=self.S,
                      BR=self.BR, BC=self.BC, sh=self.sh,
-                     FT=self.FT, KN=self.KN, knk=2, kb0=0)
+                     FT=self.FT, KN=self.KN, knk=2, kb0=0,
+                     MPI=self.MPI, MPC=self.MPC, MPR=self.MPR)
             self._prep_cache = d
         return self._prep_cache
 
@@ -1045,14 +1060,22 @@ class Slab:
         # Each player enters at their own instant, drawn fresh for this press.
         # The template carries the offline scatter in its own `non`; that is
         # discarded rather than added to.
+        # ...BUT A ROOM IMAGE'S OWN DELAY IS KEPT. The template's onsets carry
+        # two things: the section's scatter, redrawn here, and each reflection's
+        # extra path (rdl), which is the room's and not the player's. Resetting
+        # every onset to the press started the images WITH the direct sound, at
+        # its phase -- a different comb against it than the file renders, on
+        # every voice (90 samples on a lead in the studio).
+        rd = (np.asarray(tmpl["rdl"]).astype(np.int64) if "rdl" in tmpl
+              else np.zeros(n, np.int64))
         scat = tmpl.get("scatter_ms", 0.0)
         if scat and n:
             pl = tmpl["pl"]
             offs = np.array([self._rng.random() * scat * 0.001 * self.rate
                              for _ in range(int(pl.max()) + 1)])
-            newnon = (n0 + offs[pl]).astype(np.int64)
+            newnon = (n0 + offs[pl]).astype(np.int64) + rd
         else:
-            newnon = n0
+            newnon = n0 + rd
         # p0 = -om*(non + ear delay) + ph0, so moving the onset moves the phase
         # anchor with it. Written against the template's OWN onsets, which makes
         # it correct whether or not they differ from each other.
@@ -1061,7 +1084,7 @@ class Slab:
         a["non"][idx] = newnon
         # A sustaining voice is held until the key is released; a struck one
         # already knows how long it rings and must not be cut short by note-off.
-        a["noff"][idx] = (n0 + dur) if oneshot else IDLE
+        a["noff"][idx] = (n0 + dur + rd) if oneshot else IDLE
         if oneshot:
             self.retiring.append((idx, n0 + dur))
         if vel_scale != 1.0:
@@ -1149,9 +1172,19 @@ class Slab:
         r = self.ft_free.popleft()
         W = _MG.FT_W
         krow = self.knob_row(pk, _MG.kn_row(panel))
-        self.FT[r * W:(r + 1) * W] = _MG.ft_row(panel, float(ft[10]), krow, ft[11] > 0.5)
+        pp = _MG.pitch_params(panel)
+        self.FT[r * W:(r + 1) * W] = _MG.ft_row(panel, float(ft[10]), krow, ft[11] > 0.5,
+                                                _MG.FT_PITCH if pp is not None else 0)
         a["fx"][idx[m]] = r
         self.ft_cnt[r] = int(m.sum())
+        # the note's key, for its pitch rows: its direct sound's onset
+        dr = idx[a["rdl"][idx] == 0]
+        self.mp_a0[r] = float(a["non"][dr].min() if len(dr) else a["non"][idx].min())
+        self.mp_toff[r] = np.inf
+        self.mp_acc[r] = 0.0
+        self.mp_on[r] = pp is not None
+        if pp is not None:
+            self.mp_P[r] = pp
         mo = idx[a["mk"][idx] > 0]
         if len(mo):
             self.mo_uL[mo] = self.aL0[mo]
@@ -1253,6 +1286,51 @@ class Slab:
                 d = want - have
                 a[col][i] += d - 2.0 * np.pi * np.floor(d / (2.0 * np.pi) + 0.5)
 
+    def moog_pitch(self, idx, panel):
+        """A knob changed what moves OSC 2's pitch: the notes' rows carry on
+        from where they are with the new law. Turned off, a note keeps the
+        phase it had gathered (its amounts go to zero) -- dropping it would be
+        a jump."""
+        pp = _MG.pitch_params(panel)
+        W = _MG.FT_W
+        for r in np.unique(self.a["fx"][idx]):
+            if r < 0:
+                continue
+            if pp is not None:
+                if not self.mp_on[r]:
+                    self.mp_on[r] = True
+                    self.mp_acc[r] = 0.0
+                    self.FT[r * W + 12] = float(int(self.FT[r * W + 12]) | _MG.FT_PITCH)
+                self.mp_P[r] = pp
+            elif self.mp_on[r]:
+                self.mp_P[r, 0] = 0.0
+                self.mp_P[r, 5] = 0.0
+
+    def moog_pitch_block(self, n0, frames):
+        """This block's pitch rows for every note that has them: the grid
+        points from n0 on, one cell integral apart (moog.pitch_cells)."""
+        on = np.flatnonzero(self.mp_on)
+        if not len(on):
+            return
+        mg = moog_grid(frames)
+        j0 = n0 // mg
+        nj = frames // mg + 1
+        C = self.mp_acc[on].copy()
+        P = self.mp_P[on]
+        a0, toff = self.mp_a0[on], self.mp_toff[on]
+        for m in range(nj):
+            g = float((j0 + m) * mg)
+            base = on * MOOG_MP_CAP + m
+            self.MPC[base] = C
+            dc, rr = _MG.pitch_cells_c(np.full(len(on), g), a0, toff, P, self.rate, mg)
+            if m < nj - 1:
+                C = C + dc
+            self.MPR[base] = rr
+        self.MPI[on * 3] = on * MOOG_MP_CAP
+        self.MPI[on * 3 + 1] = j0
+        self.MPI[on * 3 + 2] = nj
+        self.mp_acc[on] = C                  # this block's end is the next one's start
+
     def moog_rows(self, idx, panel):
         """Rebuild the filter rows these slots read from a changed panel: the
         contours' times, the mode, key tracking. The release span follows."""
@@ -1262,7 +1340,7 @@ class Slab:
             if r < 0:
                 continue
             row = self.FT[r * W:(r + 1) * W]
-            row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]), row[11] > 0.5)
+            row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]), row[11] > 0.5, int(row[12]))
         a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
 
     def stamp_amp(self, key, src, freqs, amps, phases, n0, rate):
@@ -1310,6 +1388,7 @@ class Slab:
         a["p0R"][idx] = a["p0"][idx] - om * (float(a["delR"][src]) - float(a["delL"][src]))
         a["non"][idx] = n0
         a["noff"][idx] = IDLE
+        a["rdl"][idx] = 0.0     # stamped at the key, and stops with it
         # Levels ride the source's own panning, so a product sits where its
         # parents sit. aL0/aR0 rather than aL/aR: the live rotor rewrites aL/aR
         # every block, and reading it mid-swing would bake the swing in.
@@ -1564,14 +1643,19 @@ class Slab:
             self.oneshot.pop(key, None)
             return                      # struck: it rings out, note-off is not a stop
         idx = np.fromiter(slots, np.int64, len(slots))
-        self.a["noff"][idx] = n
+        # a reflection stops as late as it started
+        self.a["noff"][idx] = n + self.a["rdl"][idx].astype(np.int64)
         self.retiring.append((idx, n))
+        fr = self.a["fx"][idx]
+        fr = np.unique(fr[fr >= 0])
+        if len(fr):
+            self.mp_toff[fr] = np.minimum(self.mp_toff[fr], float(n))   # the pitch rows' key-up
 
     def reap(self, n):
         """Return slots whose release has finished ringing."""
         keep = []
         for idx, off in self.retiring:
-            tail = off + float(self.a["re"][idx].max()) + B.BLK
+            tail = off + float((self.a["re"][idx] + self.a["rdl"][idx]).max()) + B.BLK
             if n > tail:
                 self.a["non"][idx] = IDLE
                 live = idx[self.busy[idx]]
@@ -1587,6 +1671,7 @@ class Slab:
                     self.ft_cnt[u] -= c.astype(np.int32)
                     for q in u[self.ft_cnt[u] <= 0]:
                         self.ft_cnt[q] = 0
+                        self.mp_on[q] = False
                         self.ft_free.append(int(q))
                     self.a["fx"][live] = -1
             else:
@@ -1597,6 +1682,7 @@ class Slab:
 # Sounding Moog notes, and parts with Moog knobs, the slab has rows for.
 MOOG_FT_ROWS = 1024
 MOOG_KN_ROWS = 256
+MOOG_MP_CAP = 65        # a note's pitch-row slots per block: a block of 64 grid cells
 
 
 def moog_grid(blk):
@@ -1736,6 +1822,7 @@ class Renderer:
         L[:] = 0.0; R[:] = 0.0
         # the Moog's knob rows are indexed from this block's first grid point
         self.slab.prep()["kb0"] = n0 // moog_grid(B.BLK)
+        self.slab.moog_pitch_block(n0, frames)
         snd = self.send
         SL, SR = self.SL, self.SR
         if snd:
@@ -3931,6 +4018,7 @@ class Live:
             if not len(idx):
                 continue
             sl.moog_rows(idx, panel)
+            sl.moog_pitch(idx, panel)
             mo = idx[sl.a["mk"][idx] > 0]
             if len(mo):
                 sl.moog_retimbre(mo, panel, n0)
@@ -9885,6 +9973,169 @@ def selftest():
     _mdb2 = float(np.max(np.abs(20 * np.log10(_mspec(_ma) / _mspec(_mb)))))
     check("...and SYNC, OSC 2 FREQ and the LFO turned under a note land as struck",
           _mdb2 < 0.05, "  (worst harmonic %.3f dB)" % _mdb2)
+
+    # THE ROOM'S IMAGES ARRIVE LIVE AS THEY DO IN THE FILE. Live re-times
+    # every onset at the press (to redraw a section's scatter), and that used
+    # to start each reflection WITH the direct sound, at its phase: a clarinet
+    # held for a second differed from its file render by 0.38 of its level.
+    # Each image now keeps its own extra path (rdl), in and out.
+    _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=71)
+    _mm.save(_mpath)
+    _ri = Live(program=71, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _ri.warm()
+    _ro = []
+    def _rp():
+        _n0 = _ri.n; _ri.apply(_n0); _ri.sweep(_n0); _ri.slab.reap(_n0)
+        _ro.append(np.array(_ri.renderer.render(_n0, 128)[0])); _ri.n = _n0 + 128
+    _ri.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _rp()
+    _rix = np.flatnonzero(_ri.slab.busy)
+    _rd = _ri.slab.a["rdl"][_rix]
+    _ron = int(_ri.slab.a["non"][_rix][_rd == 0][0])
+    while _ri.n < _ron + _BRb.SR:
+        _rp()
+    _ri.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0)); _rp()
+    _roff = int(_ri.slab.a["noff"][_rix][_rd == 0][0])
+    for _ in range(int(0.6 * _BRb.SR / 128)):
+        _rp()
+    _rL = np.concatenate(_ro).astype(float)
+    _rq = _BRb.prepare(_mpath, "even")
+    _rq = dict(_rq, non=_rq["non"] + _ron, noff=_rq["noff"] - int(_BRb.SR) + _roff,
+               p0=_rq["p0"] - _rq["om"] * _ron, p0R=_rq["p0R"] - _rq["om"] * _ron)
+    _rF = _BRb.synth_window(_rq, 0, len(_rL))[0].astype(float)
+    _ra, _rb = _rL[_ron:], _rF[_ron:]
+    _rg = float(np.dot(_ra, _rb) / np.dot(_ra, _ra))
+    _rres = float(np.sqrt(((_rg * _ra - _rb) ** 2).mean()) / np.sqrt((_rb ** 2).mean()))
+    check("live's room images arrive and stop as the file's do",
+          _rres < 1e-4 and (_rd > 0).any(),
+          "  (a clarinet with its reflections, key down to release: residual %.1e; "
+          "images %d samples behind their direct sound)" % (_rres, int(_rd.max())))
+
+    # THE MOD SECTION'S PITCH: F ENV -> OSC 2 FREQ, with LFO 1 on it too. The
+    # rows are the phase's integral (moog.pitch_rows); the kernel re-anchors
+    # each cell on them, so the swept phase is theirs, a file's 512-sample
+    # blocks walk it as live's 128 do, and live builds them block by block.
+    _mpk = dict(osc1_level=0.0, osc2_level=1.0, cutoff=1.0, resonance=0.0, kb_track=0.0,
+                mod_dest=1, mod_amount=0.9, f_attack=0.3, f_decay=0.55, f_sustain=0.2,
+                lfo1_dest=1, lfo1_depth=0.8, lfo1_rate=0.6, lfo1_reset=True)
+    _mwas = dict(T.MoogSawLead.messenger)
+    _menv = os.environ.get("TUNING_REFLECT")
+    os.environ["TUNING_REFLECT"] = "0"
+    try:
+        from scipy.signal import hilbert as _hilb
+        T.MoogSawLead.messenger = dict(_mwas, **_mpk)
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        _mq = _BRb.prepare(_mpath, "even")
+        _i1 = np.flatnonzero(_mq["mk"] == 2 * 4096 + 1)
+        _ms = {_k: (np.ascontiguousarray(_v[_i1]) if isinstance(_v, np.ndarray) and _v.shape == (_mq["P"],) else _v)
+               for _k, _v in _mq.items()}
+        _ms["P"] = len(_i1)
+        _mN = int(1.3 * _BRb.SR)
+        _mblk = _BRb.BLK
+        def _mrb(_blk, _win):
+            _BRb.BLK = _blk
+            _o = np.zeros(_mN, np.float32)
+            for _s0 in range(0, _mN, _win):
+                _n = min(_win, _mN - _s0)
+                _l = np.zeros(_n, np.float32); _r = np.zeros(_n, np.float32)
+                _BRb.synth_partials(_ms, _s0, _n, 0, _ms["P"], _l, _r); _o[_s0:_s0 + _n] = _l
+            return _o.astype(float)
+        try:
+            _mfa, _mfb = _mrb(512, _mN), _mrb(128, 128)
+        finally:
+            _BRb.BLK = _mblk
+        _mw1 = float(_ms["om"][0]); _mi = _mq["MPI"][0:3]
+        _mC = _mq["MPC"][_mi[0]:_mi[0] + _mi[2]]
+        _mn = np.arange(_mN)
+        _mref = _ms["p0"][0] + _mw1 * _mn + _mw1 * np.interp(_mn, (_mi[1] + np.arange(_mi[2])) * float(_MG.MG), _mC)
+        _mph = np.unwrap(np.angle(_hilb(_mfa)))
+        _msg = slice(int(0.05 * _BRb.SR), int(1.0 * _BRb.SR))
+        _md = _mph[_msg] - _mref[_msg]
+        _md -= np.median(_md)
+    finally:
+        T.MoogSawLead.messenger = _mwas
+        if _menv is None:
+            os.environ.pop("TUNING_REFLECT", None)
+        else:
+            os.environ["TUNING_REFLECT"] = _menv
+    check("the MOD section's pitch envelope sweeps OSC 2 as its rows say",
+          float(np.median(np.abs(_md))) < 1e-3 and float(np.max(np.abs(_mfa - _mfb))) < 1e-5,
+          "  (F ENV and LFO 1 on OSC 2 FREQ: phase median %.1e rad over %.0f rad swept; "
+          "512- and 128-sample blocks %.1e apart)"
+          % (float(np.median(np.abs(_md))), _mw1 * float(_mC[-1] - _mC[0]), float(np.max(np.abs(_mfa - _mfb)))))
+    # ...LIVE, a knob turned in the middle of the sweep changes what is to come
+    def _mswp(_turn):
+        _l = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _l.warm()
+        _l.parts[0].synth.update(dict(mod_dest=1, mod_amount=0.85, f_attack=0.3, f_decay=0.6,
+                                      f_sustain=0.2, osc1_level=0.0, osc2_level=1.0))
+        _o = []
+        def _pp():
+            _n0 = _l.n; _l.apply(_n0); _l.sweep(_n0); _l.slab.reap(_n0)
+            _o.append(np.array(_l.renderer.render(_n0, 128)[0])); _l.n = _n0 + 128
+        _l.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _pp()
+        _on = int(_l.slab.a["non"][np.flatnonzero(_l.slab.busy)][0])
+        while _l.n < _on + int(0.08 * _BRb.SR):
+            _pp()
+        if _turn:
+            _l.set_synth(_l.parts[0], "mod_amount", 0.3)
+        while _l.n < _on + int(0.6 * _BRb.SR):
+            _pp()
+        return np.concatenate(_o).astype(float)[_on:], _l
+    _mx, _mlx = _mswp(True)
+    _my, _ = _mswp(False)
+    _mjt = np.abs(np.diff(_mx, 2))[int(0.07 * _BRb.SR):int(0.12 * _BRb.SR)].max()
+    _mjs = np.abs(np.diff(_my, 2))[int(0.02 * _BRb.SR):int(0.3 * _BRb.SR)].max()
+    check("...and MOD AMOUNT turned mid-sweep takes the rest of it, without a click",
+          _mjt < _mjs and bool(_mlx.slab.mp_on.any()),
+          "  (the turn's sharpest step %.2fx the sweep's own)" % (_mjt / _mjs))
+
+    # ...AND LIVE PLAYS THE SWEEP AS THE FILE RENDERS IT, key down to release:
+    # the file's rows rebuilt for live's onset and key-up, as its note is moved
+    import json as _mjson
+    _menv2 = os.environ.get("TUNING_MOOG_PANEL")
+    os.environ["TUNING_MOOG_PANEL"] = _mjson.dumps(dict(mod_dest=1, mod_amount=0.85, f_attack=0.3,
+                                                      f_decay=0.55, f_sustain=0.2, lfo1_dest=1,
+                                                      lfo1_depth=0.7, lfo1_rate=0.6, lfo1_reset=True))
+    try:
+        _lv = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _lv.warm()
+        _lo = []
+        def _lp():
+            _n0 = _lv.n; _lv.apply(_n0); _lv.sweep(_n0); _lv.slab.reap(_n0)
+            _lo.append(np.array(_lv.renderer.render(_n0, 128)[0])); _lv.n = _n0 + 128
+        _lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _lp()
+        _lix = np.flatnonzero(_lv.slab.busy); _lrd = _lv.slab.a["rdl"][_lix]
+        _lon = int(_lv.slab.a["non"][_lix][_lrd == 0][0])
+        while _lv.n < _lon + _BRb.SR:
+            _lp()
+        _lv.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0)); _lp()
+        _loff = int(_lv.slab.a["noff"][_lix][_lrd == 0][0])
+        for _ in range(int(0.8 * _BRb.SR / 128)):
+            _lp()
+        _lL = np.concatenate(_lo).astype(float)
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        _lq = _BRb.prepare(_mpath, "even")
+        _lpan = _MG.panel_of(T.MoogSawLead)
+        _lj0, _lc, _lr = _MG.pitch_rows(_MG.pitch_params(_lpan), float(_lon), float(_loff),
+                                        float(_loff) + _MG.release_span(_lpan) * _BRb.SR + 4096.0,
+                                        _BRb.SR, _MG.MG)
+        _lq = dict(_lq, non=_lq["non"] + _lon, noff=_lq["noff"] - int(_BRb.SR) + _loff,
+                   p0=_lq["p0"] - _lq["om"] * _lon, p0R=_lq["p0R"] - _lq["om"] * _lon,
+                   MPI=np.array([0, _lj0, len(_lc)], np.int32), MPC=np.ascontiguousarray(_lc),
+                   MPR=np.ascontiguousarray(_lr.astype(np.float32)))
+        _lF = _BRb.synth_window(_lq, 0, len(_lL))[0].astype(float)
+        _la, _lb = _lL[_lon:], _lF[_lon:]
+        _lg = float(np.dot(_la, _lb) / np.dot(_la, _la))
+        _lres = float(np.sqrt(((_lg * _la - _lb) ** 2).mean()) / np.sqrt((_lb ** 2).mean()))
+    finally:
+        if _menv2 is None:
+            os.environ.pop("TUNING_MOOG_PANEL", None)
+        else:
+            os.environ["TUNING_MOOG_PANEL"] = _menv2
+    check("...and live sweeps it as the file renders it, key down to release",
+          _lres < 1e-3, "  (with the room's images: residual %.1e)" % _lres)
 
     # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
     # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.

@@ -11,6 +11,8 @@ rendered in the studio at the same level as the plain patch:
     sync       OSC 2 alone, hard-synced a fifth up (+7 st): the synced lead
     whistle    the oscillators off, RESONANCE fully up: the ladder's own sine
     noise      the noise oscillator alone through the ladder and its contour
+    penv       MOD: F ENV -> OSC 2 FREQ, two octaves up on the key and back
+    lfopitch   LFO 1 -> OSC 2 FREQ, a slow semitone either side of OSC 1
 """
 import json
 import os
@@ -27,6 +29,12 @@ SETTINGS = {
     'whistle': dict(osc1_level=0.0, osc2_level=0.0, resonance=1.0, eg_amount=0.5, kb_track=1.0,
                     cutoff=0.45),
     'noise': dict(osc1_level=0.0, osc2_level=0.0, noise_level=1.0),
+    # the MOD section: OSC 2 thrown up two octaves by the filter contour, and
+    # falling back to the key as it decays -- under OSC 1 holding the note
+    'penv': dict(mod_dest=1, mod_amount=0.75, f_attack=0.0, f_decay=0.6, f_sustain=0.0,
+                 osc2_level=0.8),
+    # LFO 1 on OSC 2 FREQ: OSC 2 wanders a semitone either side of OSC 1
+    'lfopitch': dict(lfo1_dest=1, lfo1_depth=0.5 + 0.5 / 12.0, lfo1_rate=0.35, osc2_level=0.8),
 }
 
 

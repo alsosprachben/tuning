@@ -1749,6 +1749,8 @@ SYNTH_KNOBS = (
     ("OSC 2", "osc2_wave", "wave", "wave"),
     ("OSC 2", "osc2_freq", "freq", "semi"),
     ("OSC 2", "sync", "sync 1>2", "onoff"),
+    ("MOD", "mod_amount", "amount", "modamt"),
+    ("MOD", "mod_dest", "dest", "moddest"),
     ("TUNE", "tune", "tune", "semi"),
     ("SUB", "sub_wave", "wave", "subwave"),
     ("MIXER", "osc1_level", "osc 1", "level"),
@@ -1777,7 +1779,7 @@ SYNTH_KNOBS = (
 )
 SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 2.0 / 3.0, 1.0),
                "mode": (0, 1, 2, 3), "onoff": (False, True),
-               "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3)}
+               "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3), "moddest": (0, 1, 2, 3)}
 
 
 def synth_fmt(kind, v):
@@ -1823,7 +1825,11 @@ def synth_fmt(kind, v):
     if kind == "lfodepth":
         return "%+.1f oct" % MG.bipolar(v, MG.LFO_OCTAVES)
     if kind == "lfodest":
-        return MG.LFO_DESTS[int(v)] + ("" if int(v) == 0 else " (not yet)")
+        return MG.LFO_DESTS[int(v)] + ("" if int(v) in (0, 1) else " (not yet)")
+    if kind == "moddest":
+        return MG.MOD_DESTS[int(v)] + ("" if int(v) == 1 else " (not yet)")
+    if kind == "modamt":
+        return "%+.0f%%" % MG.bipolar(v, 100.0)
     if kind == "time":
         t = MG.knob_time(v)
         return ("%.2f s" % t) if t >= 1.0 else "%d ms" % round(t * 1000)

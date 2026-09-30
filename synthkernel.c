@@ -147,7 +147,8 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
 // amount, the two sustains), one entry per grid point so a knob never steps
 // at a block boundary. fx < 0, or no fx at all, is every other voice, whose
 // arithmetic is untouched.
-#define FTW 12          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp
+#define FTW 13          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp flags
+#define FT_PITCH 1      // flags: OSC 2 follows its note's pitch rows (MPI/MPC/MPR)
 #define KNW 9           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
                         //     lfo_hz lfo_octaves lfo_shape lfo_reset
 #define MOOG_GRID 128   // samples between evaluations: the live block, so a
@@ -171,6 +172,63 @@ static inline float moog_ladder(float x, float k, int mode, int rb){
     return h;
 }
 
+// THE MOD SECTION'S PITCH ROWS, one cell each: moog.pitch_cells in C, because
+// live builds them every block and numpy's per-call cost was half a millisecond
+// at eight notes. moog.py keeps the reference (pitch_cells_ref) and the tests.
+// P is n x 9: A_env fA fD fS fR A_lfo lfo_hz lfo_shape lfo_reset.
+static double mp_held(double tt, double A, double D, double S){
+    if(tt<0.0) return 0.0;
+    if(tt<A) return 1.5*(1.0-exp(-tt*1.0986122886681098/fmax(A,1e-6)));
+    return S+(1.0-S)*exp(-(tt-A)/(fmax(D,1e-6)/4.0));
+}
+static double mp_ratio(double nn, double a0, double toff, const double* q, double sr){
+    double t=(nn-a0)/sr;
+    if(t<0.0) return 1.0;
+    double to=(toff-a0)/sr, e;
+    if(t>=to) e=mp_held(to,q[1],q[2],q[3])*exp(-(t-to)/(fmax(q[4],1e-6)/4.0));
+    else e=mp_held(t,q[1],q[2],q[3]);
+    double x=q[0]*e;
+    if(q[5]!=0.0){
+        double tl = q[8]>0.5 ? t : nn/sr;
+        double ph=tl*q[6]; ph-=floor(ph);
+        int sh=(int)q[7];
+        double lv = sh==0 ? 1.0-4.0*fabs(ph-0.5) : sh==1 ? 2.0*ph-1.0 : sh==2 ? 1.0-2.0*ph : (ph<0.5?1.0:-1.0);
+        x+=q[5]*lv;
+    }
+    return exp2(x);
+}
+static const double MP_GX[8]={0.019855071751231856,0.10166676129318664,0.2372337950418355,0.4082826787521751,
+                              0.5917173212478249,0.7627662049581645,0.8983332387068134,0.9801449282487681};
+static const double MP_GW[8]={0.05061426814518813,0.11119051722668724,0.15685332293894363,0.18134189168918100,
+                              0.18134189168918100,0.15685332293894363,0.11119051722668724,0.05061426814518813};
+void moog_pitch_cells(int n, const double* g, const double* a0, const double* toff,
+                      const double* P, double sr, int mg, double* dc, double* r){
+    for(int i=0;i<n;i++){
+        const double* q=P+(long)i*9;
+        double g0=g[i], g1=g0+mg, k[4];
+        k[0]=a0[i]; k[1]=a0[i]+q[1]*sr; k[2]=toff[i];
+        k[3]=INFINITY;
+        if(q[5]!=0.0){
+            double lhz=fmax(q[6],1e-9);
+            double tl0 = q[8]>0.5 ? (g0-a0[i])/sr : g0/sr;
+            double ph0=tl0*lhz; ph0-=floor(ph0);
+            double nxt = ph0<0.5 ? 0.5 : 1.0;
+            k[3]=g0+(nxt-ph0)/lhz*sr;
+        }
+        double e[6]; e[0]=g0; e[5]=g1;
+        for(int j=0;j<4;j++) e[j+1]= k[j]<g0 ? g0 : (k[j]>g1 ? g1 : k[j]);
+        for(int a=1;a<5;a++) for(int b=a+1;b<5;b++) if(e[b]<e[a]){ double t=e[a]; e[a]=e[b]; e[b]=t; }
+        double tot=0.0;
+        for(int s=0;s<5;s++){
+            double h=e[s+1]-e[s];
+            if(h<=0.0) continue;
+            for(int j=0;j<8;j++) tot+=MP_GW[j]*h*(mp_ratio(e[s]+MP_GX[j]*h,a0[i],toff[i],q,sr)-1.0);
+        }
+        dc[i]=tot;
+        r[i]=mp_ratio(g0,a0[i],toff[i],q,sr);
+    }
+}
+
 // Renders absolute samples [n0, n0+winlen) into outL/outR[0 .. winlen). Phase is
 // analytic (ph0 + w*n_absolute), so windows are stateless -- a player can call
 // this per audio block with no carried state. render()/play both use it.
@@ -190,6 +248,7 @@ void synth_voice(
     const int* brow, const float* BR, const double* BC,
     const int* fxr, const float* FT, const float* KN, long knk, long kb0,
     const float* ampLp, const float* ampRp, const int* mkr,
+    const int* MPI, const double* MPC, const float* MPR,
     float sfloor, float spow, float shmax, float shref, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
@@ -427,6 +486,13 @@ void synth_voice(
                 // is shared by both ears; the contour's onset keeps each ear's
                 // own delay, as AMP's does.
                 float gLm[65], gRm[65]; int j0=0;
+                // THE MOD SECTION'S PITCH (moog.pitch_rows): an OSC 2 partial of
+                // a note with pitch rows sounds at its ratio R_j at each grid
+                // point, and carries the extra phase C_j accumulated to it --
+                // integrated in Python, cell by cell, so a knob turned mid-sweep
+                // changes only what is still to come.
+                double mCp[65]; int pm=0;
+                if(ftr && MPI && ((int)ftr[12] & FT_PITCH) && mkr && (mkr[p]>>12)==2) pm=1;
                 if(ftr){
                     j0=(int)(bs0/mg); int nj=BLK/mg+1;
                     float kbf=ftr[0], fA=ftr[1], fD=ftr[2], fR=ftr[3], aA=ftr[4], aD=ftr[5], aR2=ftr[6];
@@ -436,10 +502,19 @@ void synth_voice(
                     float toffL=(float)(off-a-(long)dL)/SRATE_F, toffR=(float)(off-a-(long)dR)/SRATE_F;
                     float toff=(float)(off-a)/SRATE_F;
                     float big=0.f;
+                    const int* mpi = pm ? MPI+(long)fxp*3 : 0;
                     for(int j=0;j<nj;j++){
                         long nn=(long)(j0+j)*mg;
                         long ki=(long)(j0+j)-kb0; if(ki<0)ki=0; if(ki>knk-1)ki=knk-1;
                         const float* kn=KN+(krow*knk+ki)*KNW;
+                        float fhzj=fhz, fade=1.f;
+                        if(pm){
+                            long mi=(long)(j0+j)-mpi[1]; if(mi<0)mi=0; if(mi>mpi[2]-1)mi=mpi[2]-1;
+                            mCp[j]=MPC[mpi[0]+mi]; fhzj=fhz*MPR[mpi[0]+mi];
+                            // swept up past the top it would alias: fade it out
+                            float fr=fhzj/SRATE_F;
+                            fade = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
+                        }
                         float t=(float)(nn-a)/SRATE_F;
                         float fe=moog_adsr(t,fA,fD,kn[3],fR,toff);
                         float fc=kn[0]*kbf*exp2f(kn[2]*fe);
@@ -455,7 +530,7 @@ void synth_voice(
                         }
                         if(fc<1.f)fc=1.f;
                         // the ladder's OWN sine (moog.SELF) is not filtered by it
-                        float h = selfosc ? 1.f : moog_ladder(fhz/fc,kn[1],mode,rb);
+                        float h = selfosc ? 1.f : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade;
                         if(pre && !selfosc){   // the partials carry the ladder at its sustain already
                             float fcs=kn[0]*kbf*exp2f(kn[2]*kn[3]); if(fcs<1.f)fcs=1.f;
                             h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
@@ -533,6 +608,17 @@ void synth_voice(
                 long s0 = ns>c0 ? ns : c0, s1 = ne<c1 ? ne : c1;
                 if(s0>=s1) continue;
                 float a0L=gLm[cl], a1L=gLm[cl+1], a0R=gRm[cl], a1R=gRm[cl+1];
+                if(pm){
+                    // re-anchor the phase at the cell's start, exactly, and turn
+                    // at this cell's own rate: a 512-sample file block and a
+                    // 128-sample live one then walk the same phase
+                    double cs=mCp[cl]+(mCp[cl+1]-mCp[cl])*(double)(s0-c0)/(double)mg;
+                    double el=(double)winst*(double)(s0-ns)+w*cs;
+                    zrL=(float)cos(phL+el); ziL=(float)sin(phL+el);
+                    zrR=(float)cos(phR+el); ziR=(float)sin(phR+el);
+                    double wc=(double)winst+w*(mCp[cl+1]-mCp[cl])/(double)mg;
+                    rr=(float)cos(wc); ri=(float)sin(wc);
+                }
                 for(long n=s0;n<s1;n++){
                     float t=(float)(n-c0)*invg, tb=(float)(n-bs0)*invb;
                     float mL=(a0L+(a1L-a0L)*t)*(aLp+(aL-aLp)*tb), mR=(a0R+(a1R-a0R)*t)*(aRp+(aR-aRp)*tb);

@@ -394,6 +394,7 @@ PANEL = dict(
     glide=0.0,
     sync=False,
     lfo1_rate=0.5, lfo1_shape=0, lfo1_depth=0.5, lfo1_dest=0, lfo1_reset=False,
+    mod_amount=0.5, mod_dest=1,
 )
 
 
@@ -419,7 +420,8 @@ def panel_of(props, overrides=None):
 # ---------------------------------------------------------------- to partials
 # What the kernel is handed. Both renderers build a Moog note from these three,
 # so they cannot disagree about what a knob means.
-FT_W, KN_W = 12, 9      # must match FTW and KNW in synthkernel.c
+FT_W, KN_W = 13, 9      # must match FTW and KNW in synthkernel.c
+FT_PITCH = 1            # FT slot 12, a flag: OSC 2 follows the note's pitch rows
 FMAX_HZ = 12000.0       # highest partial: past it a saw's harmonics are 27 dB
                         # down at 440 Hz, the ladder usually has them lower
                         # still, and three oscillators' worth is the CPU bill
@@ -456,6 +458,11 @@ NOISE_HZ, NOISE_AMP = _noise_bank()
 
 
 def partials(panel, f0, fmax=FMAX_HZ):
+    """(see below)"""
+    return _partials(panel, f0, fmax)
+
+
+def _partials(panel, f0, fmax=FMAX_HZ):
     """[(osc, harmonic, Hz, amplitude, phase)] for one key at f0.
 
     Each oscillator is its own set of partials -- never merged where two
@@ -488,6 +495,10 @@ def partials(panel, f0, fmax=FMAX_HZ):
         if lvl <= 0.0 or f <= 0.0:
             continue
         n = min(OSC_HARMONICS if osc != SUB else SUB_HARMONICS, int(fmax // f))
+        if osc == OSC2 and pitch_params(panel) is not None:
+            # its pitch will move: every harmonic, and the kernel fades those
+            # a sweep carries up toward Nyquist (a sweep down reveals them)
+            n = OSC_HARMONICS
         if n < 1:
             continue
         cs = c(n)
@@ -498,7 +509,7 @@ def partials(panel, f0, fmax=FMAX_HZ):
     return out
 
 
-def ft_row(panel, f0, krow, pre_amp=False):
+def ft_row(panel, f0, krow, pre_amp=False, flags=0):
     """The note's fixed row (FT): what is set at the key. Slot 10 keeps the
     key's own frequency, so a row can be rebuilt when a knob moves; slot 11
     says the partials already carry the filter at its sustain (sustain_gain)
@@ -509,7 +520,7 @@ def ft_row(panel, f0, krow, pre_amp=False):
         knob_time(panel['f_attack']), knob_time(panel['f_decay']), knob_time(panel['f_release']),
         knob_time(panel['a_attack']), knob_time(panel['a_decay']), knob_time(panel['a_release']),
         float(panel['mode']), 1.0 if panel['res_bass'] else 0.0, float(krow), float(f0),
-        1.0 if pre_amp else 0.0]
+        1.0 if pre_amp else 0.0, float(flags)]
 
 
 def sustain_gain(panel, f0, f):
@@ -571,7 +582,8 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
         rt[m] = r
         w[m] = 2.0 * np.abs(c[kk]) * float(panel[lvl])
         ph[m] = np.angle(c[kk])
-        w[m] = np.where(np.asarray(nf, float)[m] * r > fmax, 0.0, w[m])
+        if not (o == OSC2 and pitch_params(panel) is not None):   # as partials() keeps them
+            w[m] = np.where(np.asarray(nf, float)[m] * r > fmax, 0.0, w[m])
     return w, ph, rt
 
 
@@ -614,9 +626,10 @@ MESSENGER_CC = {
     28: ('a_attack', '14'), 29: ('a_decay', '14'), 30: ('a_sustain', '14'), 31: ('a_release', '14'),
     71: ('sub_wave', '7'), 75: ('osc1_octave', 'foot'), 76: ('osc2_octave', 'foot'),
     78: ('kb_track', 'track'), 79: ('res_bass', 'onoff'), 109: ('mode', 'mode'),
+    13: ('mod_amount', '14'), 72: ('mod_dest', 'mode'),
     77: ('sync', 'onoff'), 3: ('lfo1_rate', '14'), 4: ('lfo1_depth', '14'),
     83: ('lfo1_shape', 'mode'), 85: ('lfo1_dest', 'mode'), 93: ('lfo1_reset', 'onoff'),
-    2: None, 13: None, 18: None, 20: None, 27: None, 72: None,
+    2: None, 18: None, 20: None, 27: None,
     73: None, 80: None, 81: None, 89: None,
     102: None, 107: None, 108: None, 112: None, 113: None, 114: None, 116: None,
     117: None, 118: None,
@@ -633,8 +646,8 @@ def messenger_value(kind, msb, lsb=None):
         return msb / 127.0
     if kind == 'foot':
         return (4, 8, 16, 32)[min(3, msb // 32)]
-    if kind == 'track':
-        return (0.0, 2.0 / 3.0, 1.0)[min(2, msb * 3 // 128)]
+    if kind == 'track':                 # the manual: 0-42, 43-84, 85-126
+        return 0.0 if msb <= 42 else 2.0 / 3.0 if msb <= 84 else 1.0
     if kind == 'mode':
         return min(3, msb // 32)
     if kind == 'onoff':
@@ -648,6 +661,166 @@ NOTE_ROW = ('kb_track', 'f_attack', 'f_decay', 'f_release', 'a_attack', 'a_decay
             'a_release', 'mode', 'res_bass')                                      # FT, per note
 TIMBRE = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
           'sub_level', 'noise_level', 'osc1_octave', 'osc2_octave', 'osc2_freq', 'tune')         # the partials
+
+
+# ---------------------------------------------------------------- MOD: pitch
+# THE MOD SECTION'S F ENV -> OSC 2 FREQ, and LFO 1 -> OSC 2 FREQ. OSC 2 sounds
+# at its ratio times 2^x(t) with x = A_env*e(t) + A_lfo*l(t): e the filter
+# contour, l LFO 1, in octaves. The manual gives MOD AMOUNT as +-100% and not
+# how far that is; four octaves is the choice until Ben's Messenger is
+# recorded, and an octave for the LFO's own reach at full depth.
+MOD_DESTS = ('1>2 FM', 'F ENV>OSC 2 FREQ', 'F ENV>OSC 2 WAVE', 'F ENV>SUB WAVE')
+MOD_PITCH_OCTAVES = 4.0
+LFO_PITCH_OCTAVES = 1.0
+MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)
+
+
+def pitch_params(panel):
+    """What the pitch rows need of the panel, or None if nothing moves OSC 2's
+    pitch: (A_env, fA, fD, fS, fR, A_lfo, lfo_hz, lfo_shape, lfo_reset).
+    SYNC turns OSC 2 FREQ into a spectrum, not a pitch -- not these rows."""
+    if panel['sync']:
+        return None
+    ae = bipolar(panel['mod_amount'], MOD_PITCH_OCTAVES) if int(panel['mod_dest']) == 1 else 0.0
+    al = bipolar(panel['lfo1_depth'], LFO_PITCH_OCTAVES) if int(panel['lfo1_dest']) == 1 else 0.0
+    if ae == 0.0 and al == 0.0:
+        return None
+    return (ae, knob_time(panel['f_attack']), knob_time(panel['f_decay']),
+            float(panel['f_sustain']), knob_time(panel['f_release']),
+            al, knob_lfo_rate(panel['lfo1_rate']), float(int(panel['lfo1_shape'])),
+            1.0 if panel['lfo1_reset'] else 0.0)
+
+
+def _adsr_v(t, A, D, S, R, toff):
+    """adsr() with every argument an array (numpy broadcasting)."""
+    t = np.asarray(t, float)
+    def held(tt):
+        before = tt < 0.0
+        tt = np.maximum(tt, 0.0)
+        att = 1.5 * (1.0 - np.exp(-tt * math.log(3.0) / np.maximum(A, 1e-6)))
+        dec = S + (1.0 - S) * np.exp(-(tt - A) / (np.maximum(D, 1e-6) / 4.0))
+        return np.where(before, 0.0, np.where(tt < A, att, dec))
+    rel = held(toff) * np.exp(-(t - toff) / (np.maximum(R, 1e-6) / 4.0))
+    return np.where(t >= toff, rel, held(t))
+
+
+def pitch_ratio(n, a0, toff, P, sr):
+    """OSC 2's pitch ratio 2^x at absolute sample(s) n, for a note whose key
+    went down at sample a0 and up at toff (np.inf while held); P from
+    pitch_params, each field scalar or array. 1 before the key."""
+    ae, fA, fD, fS, fR, al, lhz, lsh, lres = P
+    t = (np.asarray(n, float) - a0) / sr
+    x = ae * _adsr_v(t, fA, fD, fS, fR, (toff - a0) / sr)
+    if np.any(np.asarray(al) != 0.0):
+        tl = np.where(lres > 0.5, t, np.asarray(n, float) / sr)
+        ph = (tl * lhz) % 1.0
+        lv = np.select([lsh == 0, lsh == 1, lsh == 2],
+                       [1.0 - 4.0 * np.abs(ph - 0.5), 2.0 * ph - 1.0, 1.0 - 2.0 * ph],
+                       np.where(ph < 0.5, 1.0, -1.0))
+        x = x + al * lv
+    return np.where(t < 0.0, 1.0, 2.0 ** x)
+
+
+_GL_X, _GL_W = np.polynomial.legendre.leggauss(8)
+_GL_X, _GL_W = 0.5 * (_GL_X + 1.0), 0.5 * _GL_W
+
+
+def pitch_cells(g, a0, toff, P, sr, mg=MG):
+    """For cells starting at absolute samples g (array): the integral of
+    (ratio - 1) over each, in samples, and the ratio at each cell's start.
+    8-point Gauss-Legendre on every piece between the cell's KINKS -- the key,
+    the attack's end, the key's release, LFO 1's corners -- where the ratio
+    turns a corner and a quadrature across it would not be exact. Both
+    renderers build a note's rows from this one function, so they agree."""
+    g = np.asarray(g, float)
+    ae, fA, fD, fS, fR, al, lhz, lsh, lres = [np.broadcast_to(np.asarray(v, float), g.shape)
+                                               for v in P]
+    a0 = np.broadcast_to(np.asarray(a0, float), g.shape)
+    toff = np.broadcast_to(np.asarray(toff, float), g.shape)
+    ks = [a0, a0 + fA * sr, toff]
+    # LFO 1's next corner after the cell's start (at most one per cell: 12 Hz
+    # moves the phase 0.03 of a cycle in 128 samples)
+    tl0 = np.where(lres > 0.5, (g - a0) / sr, g / sr)
+    ph0 = (tl0 * np.maximum(lhz, 1e-9)) % 1.0
+    nxt = np.where(ph0 < 0.5, 0.5, 1.0)
+    ks.append(np.where(al != 0.0, g + (nxt - ph0) / np.maximum(lhz, 1e-9) * sr, np.inf))
+    cuts = np.sort(np.stack([np.clip(k, g, g + mg) for k in ks]), axis=0)
+    edges = np.concatenate([g[None], cuts, (g + mg)[None]])       # 6 x shape
+    # every node of every piece at once: (5 pieces x 8 nodes) x shape
+    e0, h = edges[:-1], edges[1:] - edges[:-1]
+    nodes = e0[:, None] + _GL_X[None, :, None] * h[:, None] if g.ndim == 1 else \
+        e0[:, None] + _GL_X.reshape((1, -1) + (1,) * g.ndim) * h[:, None]
+    shp = nodes.shape
+    Pb = tuple(np.broadcast_to(v, shp) for v in (ae, fA, fD, fS, fR, al, lhz, lsh, lres))
+    rat = pitch_ratio(nodes, np.broadcast_to(a0, shp), np.broadcast_to(toff, shp), Pb, sr)
+    wts = _GL_W.reshape((1, -1) + (1,) * g.ndim) * h[:, None]
+    # summed piece by piece, node by node, in a fixed order: the same
+    # additions for one note in the file as for many at once live
+    total = np.zeros(g.shape)
+    for i in range(rat.shape[0]):
+        for k in range(rat.shape[1]):
+            total = total + wts[i, k] * (rat[i, k] - 1.0)
+    return total, pitch_ratio(g, a0, toff, (ae, fA, fD, fS, fR, al, lhz, lsh, lres), sr)
+
+
+_LIB = [None]
+
+
+def _lib():
+    if _LIB[0] is None:
+        import ctypes
+        import blockrender
+        lib = blockrender.ensure_lib()
+        d = ctypes.POINTER(ctypes.c_double)
+        lib.moog_pitch_cells.argtypes = [ctypes.c_int, d, d, d, d, ctypes.c_double, ctypes.c_int, d, d]
+        lib.moog_pitch_cells.restype = None
+        _LIB[0] = lib
+    return _LIB[0]
+
+
+def pitch_cells_c(g, a0, toff, P, sr, mg=MG):
+    """pitch_cells, in C (synthkernel.c moog_pitch_cells): what both renderers
+    use. P rows are notes (n x 9), or one tuple for every cell."""
+    import ctypes
+    g = np.ascontiguousarray(np.asarray(g, np.float64).ravel())
+    n = len(g)
+    bc = lambda v: np.ascontiguousarray(np.broadcast_to(np.asarray(v, np.float64), (n,)))
+    Pm = np.asarray(P, np.float64)
+    Pm = np.ascontiguousarray(np.broadcast_to(Pm.reshape(1, 9) if Pm.ndim == 1 else Pm.reshape(-1, 9), (n, 9)))
+    a0, toff = bc(a0), bc(toff)
+    dc = np.zeros(n); r = np.zeros(n)
+    dp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+    _lib().moog_pitch_cells(n, dp(g), dp(a0), dp(toff), dp(Pm), float(sr), int(mg), dp(dc), dp(r))
+    return dc, r
+
+
+def pitch_rows(P, a0, toff, end, sr, mg=MG):
+    """A note's rows for the file renderer: (j0, C, R) on the grid from the
+    cell holding its key to `end` -- C the extra phase in samples up to each
+    grid point, R the ratio there."""
+    j0 = int(a0 // mg)
+    n = max(2, int(-(-end // mg)) - j0 + 1)
+    g = (j0 + np.arange(n)) * float(mg)
+    dc, r = pitch_cells_c(g, a0, toff, P, sr, mg)
+    # the running sum one cell at a time, as live adds them block by block
+    c = np.zeros(n)
+    for i in range(1, n):
+        c[i] = c[i - 1] + dc[i - 1]
+    return j0, c, r
+
+
+def _stage_integral(A_oct, p, q, tau, u0, u1):
+    """Closed form of the integral of 2^{A(p + q e^{-u/tau})} over [u0, u1]
+    (seconds): 2^{Ap} tau [ (u1-u0)/tau + sum (a^n - b^n)/(n n!) ], the
+    exponential integral with its logarithm cancelled -- the reference the
+    quadrature is checked against."""
+    c = A_oct * q * math.log(2.0)
+    a, b = c * math.exp(-u0 / tau), c * math.exp(-u1 / tau)
+    tot, fa, fb, fact = 0.0, 1.0, 1.0, 1.0
+    for n in range(1, 80):
+        fa *= a; fb *= b; fact *= n
+        tot += (fa - fb) / (n * fact)
+    return 2.0 ** (A_oct * p) * tau * ((u1 - u0) / tau + tot)
 
 
 def kn_row(panel):
@@ -670,8 +843,10 @@ def self_hz(panel, f0):
 
 
 def release_span(panel):
-    """How long a released note sounds: 1.5 release times, -52 dB."""
-    return 1.5 * knob_time(panel['a_release'])
+    """How long a released note sounds: 2.5 release times, -87 dB. At 1.5
+    (-52 dB) the tail was cut off audibly short -- a step to silence -- and
+    where the cut fell depended on the renderer's block size."""
+    return 2.5 * knob_time(panel['a_release'])
 
 
 def gain_at(panel, f, t, t_off=None):
@@ -762,6 +937,29 @@ def selftest():
           and np.allclose(lfo([0, 0.5], 2), [1, 0]) and np.allclose(lfo([0.25, 0.75], 3), [1, -1]))
     check("RESONANCE self-oscillates only at the top of its travel",
           self_amp(0.9) == 0.0 and abs(self_amp(1.0) - SELF_AMP) < 1e-12 and self_amp(0.95) > 0)
+    # the pitch rows' quadrature against the closed form, through attack,
+    # decay and release, over cells that straddle both corners
+    sr = 48000.0
+    P = (3.0, 0.02, 0.3, 0.4, 0.2, 0.0, 1.0, 0.0, 0.0)
+    a0, toff = 1000.3, 1000.3 + 0.5 * sr
+    g = np.arange(0, 60000, MG, dtype=float)
+    dc, _ = pitch_cells(g, a0, toff, P, sr)
+    num = float(np.sum(dc))                          # integral of (R - 1), samples
+    ae, fA, fD, fS, fR = P[:5]
+    lo = 1.5 * (1 - math.exp(-(toff - a0) / sr * math.log(3) / fA)) if (toff - a0) / sr < fA else         fS + (1 - fS) * math.exp(-((toff - a0) / sr - fA) / (fD / 4))
+    T = (g[-1] + MG - a0) / sr
+    ref = (_stage_integral(ae, 1.5, -1.5, fA / math.log(3), 0.0, fA)
+           + _stage_integral(ae, fS, 1 - fS, fD / 4, 0.0, (toff - a0) / sr - fA)
+           + _stage_integral(ae, 0.0, lo, fR / 4, 0.0, T - (toff - a0) / sr)) * sr
+    ref -= (g[-1] + MG - a0)                          # the "- 1" over the note's span
+    dcc, rc = pitch_cells_c(g, a0, toff, P, sr)
+    Pl = (2.0, 0.01, 0.2, 0.5, 0.2, 0.7, 3.3, 0.0, 1.0)
+    dl, _ = pitch_cells(g, a0, toff, Pl, sr); dlc, _ = pitch_cells_c(g, a0, toff, Pl, sr)
+    check("the C cells are the numpy reference's",
+          np.allclose(dcc, dc, rtol=1e-12, atol=1e-9) and np.allclose(dlc, dl, rtol=1e-12, atol=1e-9),
+          "(worst %.1e samples, with and without LFO 1)" % max(np.abs(dcc - dc).max(), np.abs(dlc - dl).max()))
+    check("the pitch rows' phase is the closed form's",
+          abs(num / ref - 1) < 1e-9, "(%.1f samples of extra phase, rel err %.1e)" % (ref, abs(num / ref - 1)))
     check("the noise bank is white noise of NOISE_RMS",
           abs(np.sqrt(0.5 * (NOISE_AMP ** 2).sum()) - NOISE_RMS) < 1e-12
           and np.allclose(NOISE_AMP ** 2 / NOISE_HZ, NOISE_AMP[0] ** 2 / NOISE_HZ[0]),

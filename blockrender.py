@@ -1057,7 +1057,7 @@ def rank_speak_sec(events, on_sec, aj):
 PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
                 "tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR",
-                "gr","cr","br","p0R","pl","fx","mk")
+                "gr","cr","br","p0R","pl","fx","mk","rdl")
 
 # LIVE'S MOOG TEMPLATES ARE KNOB-NEUTRAL (moog.weights): every harmonic of every
 # oscillator at unit weight and phase 0, so the slab can apply whatever the
@@ -1588,7 +1588,7 @@ def prepare(path, tuner='hybrid440'):
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
@@ -1601,7 +1601,14 @@ def prepare(path, tuner='hybrid440'):
     _FX = [-1]               # the Moog filter row of this note (moog.py), -1 = none
     _MK = [0]                # a Moog partial's oscillator * 4096 + harmonic, 0 = none
     _NOREFL = [False]        # emit no room images for this partial (noise: see below)
+    # A ROOM IMAGE'S EXTRA PATH, in samples: how much later than its direct
+    # sound it starts and stops. Already in its `non`/`noff` here; recorded on
+    # its own because live re-times every onset at stamp (a section's scatter
+    # is drawn afresh per press) and has to know which part of an offset is
+    # scatter to redraw and which is the room's, to keep.
+    _RD = [0.0]
     _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
+    _MOOG_MPI, _MOOG_MPC, _MOOG_MPR = [], [], []   # per-note pitch rows (moog.pitch_rows)
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     # Reflections cost about 7x the partials, since every one of them is
     # audible and nothing prunes. Worth it for a render you will listen to,
@@ -1683,7 +1690,7 @@ def prepare(path, tuner='hybrid440'):
         A["vdl"].append(_VDL[0])
         A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
-        A["fx"].append(_FX[0]); A["mk"].append(_MK[0])
+        A["fx"].append(_FX[0]); A["mk"].append(_MK[0]); A["rdl"].append(_RD[0])
         if _place is None and ampM > 0.0:
             # Q is how much louder this partial is toward the listener than its
             # own spherical average, so ampM^2/Q is the power it feeds the room.
@@ -1719,11 +1726,14 @@ def prepare(path, tuner='hybrid440'):
             _AZ[0] = math.atan2(ix, max(iy, 1e-6))
             rli, rri, rld, rrd = props.hrtf_at(ix, iz, iy)
             gm = ampM * rg
+            # as the table will store it: onsets are kept as whole samples
+            _RD[0] = float(int(non + rdelay*SR) - int(non))
             emit_partial(om/_PJ[0], gm*props.hrtf_gain(nomf, rli),
                          gm*props.hrtf_gain(nomf, rri), gm, nomf,
                          non + rdelay*SR, noff + rdelay*SR, fa, re, ch,
                          logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0,
                          _place=(rld*SR, rrd*SR, ix, iz))
+        _RD[0] = 0.0
         _AZ[0] = _direct_az
     # SCRAPED instruments expand into their individual ridge impacts before
     # anything else looks at the note list, so the choke and the envelopes all
@@ -2916,7 +2926,17 @@ def prepare(path, tuner='hybrid440'):
             _pre = bool(getattr(props, 'amp_drive', 0.0))
             _body = getattr(props, 'moog_body', None)       # formants, after it
             _FX[0] = len(_MOOG_FT)
-            _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre))
+            # THE MOD SECTION'S PITCH: the note's rows, if anything moves OSC 2
+            _mpp = _MG.pitch_params(_pan)
+            if _mpp is not None:
+                _mj0, _mc, _mr = _MG.pitch_rows(_mpp, float(non), float(noff), float(noff) + _MG.release_span(_pan) * SR + 4096.0,
+                                                SR, _MG.MG)
+                _MOOG_MPI.append([len(_MOOG_MPC), _mj0, len(_mc)])
+                _MOOG_MPC.extend(_mc.tolist()); _MOOG_MPR.extend(_mr.tolist())
+            else:
+                _MOOG_MPI.append([0, 0, 1])
+            _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre,
+                                       _MG.FT_PITCH if _mpp is not None else 0))
             _mre = max(1.0, _MG.release_span(_pan) * SR)
             vb = props.voice_vibrato(f0, 0)
             _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
@@ -3448,8 +3468,12 @@ def prepare(path, tuner='hybrid440'):
           if _MOOG_FT else None)
     KN = (np.ascontiguousarray(np.array(_MOOG_KN, np.float32).reshape(-1))
           if _MOOG_KN else None)
+    _mpon = any(int(r[12]) & 1 for r in _MOOG_FT) if _MOOG_FT else False
+    MPI = np.ascontiguousarray(np.array(_MOOG_MPI, np.int32).reshape(-1)) if _mpon else None
+    MPC = np.ascontiguousarray(np.array(_MOOG_MPC or [0.0], np.float64)) if _mpon else None
+    MPR = np.ascontiguousarray(np.array(_MOOG_MPR or [1.0], np.float32)) if _mpon else None
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
-                FT=FT, KN=KN, knk=1, kb0=0,
+                FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH))
@@ -3460,7 +3484,7 @@ def prepare(path, tuner='hybrid440'):
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),
                  ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vdl","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
-                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4")):
+                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4"),("rdl","f4")):
         prep[k] = arr(k, dt)
     return prep
 
@@ -3538,6 +3562,10 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     ctypes.c_long(a.get('knk', 1)), ctypes.c_long(a.get('kb0', 0)),
                     fp(sl('aLp')) if 'aLp' in a else None, fp(sl('aRp')) if 'aRp' in a else None,
                     ip(sl('mk')) if (a.get('FT') is not None and 'mk' in a) else None,
+                    # a Moog note's pitch rows (moog.pitch_rows); NULL: none
+                    ip(a['MPI']) if a.get('MPI') is not None else None,
+                    dp(a['MPC']) if a.get('MPI') is not None else None,
+                    fp(a['MPR']) if a.get('MPI') is not None else None,
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)
