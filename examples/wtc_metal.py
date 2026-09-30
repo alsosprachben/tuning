@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""A metal arrangement of a WTC fugue (Ben's idea: Book 2's F minor).
+"""A metal arrangement of a WTC fugue (Ben's idea: Book 2's F minor; then the
+E minor, wtc2f10, by the same method -- --effects).
 
     python3 examples/wtc_metal.py [wtc2f12] [--bpm 84]
     python3 examples/wtc_metal.py [wtc2f12] --chord-out    # no rhythm part: the leads
@@ -13,6 +14,8 @@
     python3 examples/wtc_metal.py [wtc2f12] --manual --drums metal|fusion
     python3 examples/wtc_metal.py [wtc2f12] --effects      # the hand-traded guitars with
                                                            # slides, vibrato, entry scoops
+    python3 examples/wtc_metal.py [wtc2f12] --effects --room-mics   # ...each amp with a
+                                                           # close mic and a room mic
 
 From the urtext's notation MIDI (wtc_fugue.py writes it), in strict time --
 no baroque rubato; metal is tight:
@@ -50,7 +53,20 @@ import sys
 TARGETS = {'leads': 0.0, 'bass': -2.0, 'chords': -6.0}      # dB against the leads
 # THE KEY'S OWN ROOTS, preferred: a chromatic root has to be clearly supported
 # by the notes to win. F minor's, with the raised seventh (E) for its dominant.
-KEYS = {'wtc2f12': {5, 7, 8, 10, 0, 1, 3, 4}}
+KEYS = {'wtc2f12': {5, 7, 8, 10, 0, 1, 3, 4}, 'wtc2f10': {4, 6, 7, 9, 11, 0, 2, 3},
+        'wtc2f04': {1, 3, 4, 6, 8, 9, 11, 0}}
+# EACH FUGUE'S METER AND PICKUP, in quarters, and its tempo. The E minor is
+# in 2/2 from a quarter's upbeat; CCARH's *MM130 runs it in 2:39, where a
+# recording runs 3:00 -- 116. The C# minor is 12/16, a bar of three quarters;
+# its *MM84 would run 2:32 where the fugue takes about two minutes -- a dotted
+# eighth at 72, ♩=108.
+METER = {'wtc2f12': 2, 'wtc2f10': 4, 'wtc2f04': 3}
+PICKUP = {'wtc2f10': 1}
+BPM = {'wtc2f12': 84.0, 'wtc2f10': 116.0, 'wtc2f04': 108.0}
+# THE VOICES' CHANNELS: 0 bottom, 1 middle, 2 top. Where the kern splits a
+# voice for a chord it writes the extra notes on channels 3 and up; each goes
+# to the voice sounding nearest it in pitch, unless the piece says otherwise.
+VOICE_OF = {'wtc2f12': {0: 0, 1: 1, 2: 2, 3: 2}}
 NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
 
 # THE FUGUE'S ARCHITECTURE, for the drums: where the subject enters, and the
@@ -133,7 +149,11 @@ def drums(style, st, ns, tpb, nbar, note):
 
 # WHICH VOICE CARRIES EACH SUBJECT ENTRY (for the scoop into it): 0 bottom,
 # 1 middle, 2 top.
-ENTRY_VOICE = {'wtc2f12': {1: 2, 5: 1, 12: 0, 29: 1, 41: 0, 51: 1, 75: 1}}
+ENTRY_VOICE = {'wtc2f12': {1: 2, 5: 1, 12: 0, 29: 1, 41: 0, 51: 1, 75: 1},
+               'wtc2f10': {1: 2, 7: 1, 13: 0, 24: 2, 30: 1, 42: 0, 50: 1, 60: 2, 72: 0},
+               # 48 (top) and 55 (bass) come in off a tied note, on the lower
+               # neighbour: no scoop there
+               'wtc2f04': {1: 0, 2: 2, 5: 1, 16: 2, 17: 1, 20: 0, 30: 1, 61: 1, 66: 1}}
 
 
 def guitar_mpe(notes, tpb, bpm, prog, pan, path, scoops):
@@ -152,7 +172,7 @@ def guitar_mpe(notes, tpb, bpm, prog, pan, path, scoops):
                into a chromatic staircase, which quickens going up the neck
                where they crowd, and it takes ~28 ms a fret. The first version
                glided smoothly in pitch over a fixed 60 ms, a fretless sound.
-      VIBRATO  a held note (a dotted eighth or more) gets finger vibrato after
+      VIBRATO  a held note (0.54 s or more) gets finger vibrato after
                ~120 ms: UPWARD, as a guitar's is, growing to +35 cents at 5.5 Hz.
       SCOOP    the first note of each subject entry comes up from a tone below --
                on the WHAMMY BAR, so smooth: the bar pre-dipped and released,
@@ -192,6 +212,10 @@ def guitar_mpe(notes, tpb, bpm, prog, pan, path, scoops):
         out.append((t0 + w, float(n)))
         return out
     RANGE = 48.0                                  # the MPE member bend range
+    # A NOTE HELD LONG ENOUGH TO VIBRATE, in seconds -- a hand's time, not the
+    # beat's: a dotted eighth at the F minor's 84. Counted in beats, the E
+    # minor's 116 gave every quarter note vibrato (330 notes against 67).
+    VIB_S = 0.75 * 60.0 / 84.0
     by_voice = {}
     for n in sorted(notes):
         by_voice.setdefault(n[2], []).append(n)
@@ -247,7 +271,7 @@ def guitar_mpe(notes, tpb, bpm, prog, pan, path, scoops):
             for t, st in curve_out:
                 if t <= e0:
                     pb(ch, t, st)
-        elif (e0 - land) >= 0.75 * tpb:           # a held note: finger vibrato
+        elif (e0 - land) >= VIB_S * tps:          # a held note: finger vibrato
             vibs += 1
             t = max(land, s0 + 0.120 * tps)
             while t < e0:
@@ -304,6 +328,100 @@ MANUAL = {'wtc2f12': [
     (84, 85, 'B', "the cadence: the middle's F4 is the top voice's F4, which "
                   "one guitar cannot play twice -- so B takes it, and the final "
                   "chord is both guitars"),
+],
+# The E minor: a long subject (a turn figure, a leap to the sixth, a triplet
+# run), nine entries, and a middle voice that roams from A#2 to E5 -- so it
+# changes hands more often than the F minor's did.
+'wtc2f10': [
+    (1, 11, 'B', "the answer enters at 7 (D4-G4); B's bass is silent until "
+                 "12 and A runs triplets above it"),
+    (12, 23, 'A', "the bass takes the subject at 13; the middle holds half "
+                  "notes and suspensions (E4-A4) under A's long notes, and in "
+                  "21-23 A holds while the middle runs, then runs while it holds"),
+    (24, 29, 'B', "the top has the subject; the middle drops to E3-F#4, into "
+                  "the bass's register, over B's halves and quarters"),
+    (30, 36, 'A', "the subject in the middle (F#4-D5) under A's halves and "
+                  "quarters; B's bass runs triplets"),
+    (37, 39, 'B', "B's bass holds F#4, D4, B3 most of each bar, a third to a "
+                  "sixth under the middle, while A runs in 37 and 39"),
+    (40, 55, 'A', "the middle climbs to F#5, out of B's reach; the bass has the "
+                  "subject at 42; at 46-49 the top and middle hold fourths "
+                  "together (F#4/C#4, G4/D4, A4/E4); the middle's subject at 50 "
+                  "goes where A's top rests and dips under it"),
+    (56, 58, 'B', "A runs triplets across two octaves; B's bass walks in "
+                  "quarters a third to a sixth under the middle"),
+    (59, 59, 'A', "the top rests after two notes, and the middle's run down "
+                  "to G#3 goes to the free hand; B's bass is running too"),
+    (60, 61, 'B', "the top has the subject; the middle holds A3 and runs "
+                  "C3-A3, crossing the bass -- one hand, both lines, low"),
+    (62, 63, 'A', "the middle jumps up to D5-A4 in half notes, a third to a "
+                  "sixth under A's subject; B's bass runs"),
+    (64, 64, 'B', "the middle runs down to G#3 over B's slow bass (D3 F3 E3 "
+                  "D#3 E3); A's top is running"),
+    (65, 67, 'A', "A holds A4 and G4 while the middle runs and holds B3; B's "
+                  "bass runs triplets"),
+    (68, 70, 'B', "B's bass holds B2 for a bar, then the middle goes BELOW it "
+                  "(A#2, B2 half notes): a pedal on the low string under the bass"),
+    (71, 77, 'A', "the middle rests, then returns at B4 over the bass's "
+                  "final subject (72), so B's hand is taken; A's top holds under "
+                  "the middle's halves and suspensions"),
+    (78, 78, 'B', "the middle climbs from D#3 right over B's held B2"),
+    (79, 82, 'A', "the middle climbs E4-B4 in half notes near A's held top; "
+                  "B's B2 pedal figure is two octaves down"),
+    (83, 84, 'B', "the middle drops to F#3, then runs over B's held B3"),
+    (85, 86, 'A', "the cadence: the middle's G#3 is the Picardy third, on A "
+                  "under its closing E4, over B's octave E"),
+],
+# The C# minor: a gigue in 12/16, the subject a run of sixteenths, a second
+# figure (a leaping, dotted one) from 33. Every voice runs somewhere in almost
+# every bar, so the middle goes to whichever guitar's own line is SLOW there --
+# it trades most of the three, and in 25-29 and 50-54 the guitars hand a run
+# across bar by bar, which is what twin guitars do.
+'wtc2f04': [
+    (1, 7, 'B', "the middle's subject at 5 (C#4-G#4) over B's bass in dotted "
+                "quarters; A's top would cross it (D#4 in bar 6)"),
+    (8, 11, 'A', "the middle holds C4, C#4, B3 under A's top; B's bass runs"),
+    (12, 14, 'B', "the middle drops to B2-B3, into the bass's register, over "
+                  "B's slow notes"),
+    (15, 16, 'A', "the middle runs up to G#4, two octaves over B's D#2; A's "
+                  "top is in dotted quarters just above it"),
+    (17, 19, 'B', "the answer enters mid-bar over B's held C#4, then B's bass "
+                  "moves in dotted quarters; A's top is still running the subject"),
+    (20, 24, 'A', "the bass takes the subject in E major and runs; the middle "
+                  "holds B4, A4, G#4 under A's slow top"),
+    (25, 25, 'B', "the middle's dotted figure over B's own, a sixth apart; A runs"),
+    (26, 26, 'A', "the middle runs from C#5 under A's slow top; B's bass trills"),
+    (27, 27, 'B', "the bass rests, so the run goes to B's free hand; A's top "
+                  "is in dotted rhythm"),
+    (28, 29, 'A', "the middle slows (B4, A4, F#4) under A's long notes; B runs"),
+    (30, 31, 'B', "the subject in the middle over B's held F#3 and dotted "
+                  "quarters; A's top has sixteenths"),
+    (32, 32, 'A', "B's bass trills, so the subject's last bar goes to A, "
+                  "holding G#4 and F#4"),
+    (33, 35, 'B', "A's top brings the second figure; the middle answers it at "
+                  "34 over B's bass walking in dotted quarters"),
+    (36, 41, 'A', "the middle jumps up to B4-C#5 and holds, too far over B's "
+                  "running bass; A's top is slow, then runs over the middle's "
+                  "held G#4"),
+    (42, 46, 'B', "the middle comes down to A#3-F4 over B's dotted quarters; "
+                  "A's top runs"),
+    (47, 47, 'A', "the middle's short run leads to A's held C#5; B runs"),
+    (48, 49, 'B', "the subject is in A's top, so the middle goes over B's slow "
+                  "bass (F#3 F3 E3)"),
+    (50, 51, 'A', "A's top slows, a sixth over the middle; B's A2 is two "
+                  "octaves under it"),
+    (52, 52, 'B', "the middle's chromatic descent (D4 C#4 C4 B3) and B's bass, "
+                  "both in dotted quarters: chords on one guitar; A runs"),
+    (53, 53, 'A', "A holds A4 over the middle's run; B runs too"),
+    (54, 54, 'B', "the middle runs low (F#3-B3) over B's dotted quarters; A runs"),
+    (55, 56, 'A', "the bass has the subject; the middle holds and runs under "
+                  "A's slow top"),
+    (57, 67, 'B', "B's bass slows, then holds G#3 for two bars (59-60) and "
+                  "again under the middle's last subject entry (66); the "
+                  "middle stays low, A3-D#4, while A's top runs"),
+    (68, 71, 'A', "B's bass runs to the end; the middle holds F#4, then moves "
+                  "in dotted quarters under A's top; the final chord's E#4 on "
+                  "A with its C#5, over B's C#2"),
 ]}
 
 import mido
@@ -325,6 +443,19 @@ def notes_of(m):
             elif e.type in ('note_off', 'note_on') and (e.channel, e.note) in on:
                 out.append((on.pop((e.channel, e.note)), a, e.channel, e.note))
     return out
+
+
+def voices(ns, table=None):
+    """The notes with each channel made its voice: 0 bottom, 1 middle, 2 top."""
+    if table:
+        return [(s, e, table.get(c, 2), n) for s, e, c, n in ns]
+    main_ = [x for x in ns if x[2] <= 2]
+    out = list(main_)
+    for s, e, c, n in ns:
+        if c > 2:                    # a divisi: the voice sounding nearest in pitch
+            near = [(abs(n2 - n), c2) for s2, e2, c2, n2 in main_ if s2 <= s < e2 or s <= s2 < e]
+            out.append((s, e, min(near)[1] if near else (0 if n < 55 else 2), n))
+    return sorted(out)
 
 
 def harmony(ns, beat, tpb, prev, diatonic=None):
@@ -352,12 +483,17 @@ def harmony(ns, beat, tpb, prev, diatonic=None):
     return best
 
 
-def render_effects(name, ns, who, bar, nbar, tpb, bpm, tag):
+# A STUDIO GUITAR RECORDING: each amp on a close mic for the attack and a
+# room mic a few metres back for the air, blended. (distance m, gain dB)
+MICS = {'close': (0.5, 0.0), 'room': (3.0, -6.0)}
+
+
+def render_effects(name, ns, who, bar, pk, nbar, tpb, bpm, tag, room_mics=False):
     """The hand-traded two guitars, each an MPE zone with slides, vibrato and
     entry scoops; the same closing ritardando, the same mix."""
     import lib
     last = max(s for s, _e, _c, _n in ns)
-    fin = (last // bar) * bar
+    fin = pk + ((last - pk) // bar) * bar
     r0, r1, lo = fin - 2 * bar, fin, 0.70
     def warp(t):
         if t <= r0:
@@ -372,30 +508,33 @@ def render_effects(name, ns, who, bar, nbar, tpb, bpm, tag):
     A, B = [], []
     for s, e, c, n in ns:
         v = voice(c)
-        g = 'A' if v == 2 else 'B' if v == 0 else ('A' if who[min(s // bar, nbar - 1)] == 0 else 'B')
+        g = 'A' if v == 2 else 'B' if v == 0 else ('A' if who[min(max(0, (s - pk) // bar), nbar - 1)] == 0 else 'B')
         (A if g == 'A' else B).append((warp(s), warp(e), v, n))
     scoops = set()
     for bar1, v in ENTRY_VOICE.get(name, {}).items():
-        b0 = (bar1 - 1) * bar
+        b0 = pk + (bar1 - 1) * bar
         first = min((s for s, _e, c, _n in ns if voice(c) == v and s >= b0), default=None)
         if first is not None:
             scoops.add((warp(first), v))
-    env = {'TUNING_ROOM': 'studio', 'TUNING_DISTANCE': '0.5', 'TUNING_MASTER_DB': '-14'}
+    mics = MICS if room_mics else {'close': MICS['close']}
     wavs, loud = {}, {}
     for g, notes, pan in (('guitar B', B, 36), ('guitar A', A, 92)):
         mid = os.path.join(OUT, '%s%s.%s.mid' % (name, tag, g.replace(' ', '-')))
         sl, vb, sc = guitar_mpe(notes, tpb, bpm, 30, pan, mid, scoops)
         print("  %s: %d slides, %d notes with vibrato, %d entry scoops" % (g, sl, vb, sc))
-        wav = mid[:-4] + '.wav'
-        lib.render_plain(mid, wav, tuner='even', extra_env=env)
-        wavs[g], loud[g] = wav, lib.loudness(wav)
-    gains = [10 ** ((loud['guitar A'] - loud[g]) / 20.0) for g in wavs]
-    dry = os.path.join(OUT, name + tag + '.dry.wav')
-    lib.sum_wavs(list(wavs.values()), dry, gains=gains)
-    lib.merge_room([os.path.splitext(w)[0] + '.room.json' for w in wavs.values()],
-                   os.path.splitext(dry)[0] + '.room.json')
+        for mname, (dist, _gdb) in mics.items():
+            env = {'TUNING_ROOM': 'studio', 'TUNING_DISTANCE': str(dist), 'TUNING_MASTER_DB': '-14'}
+            wav = mid[:-4] + '.%s.dry.wav' % mname
+            lib.render_plain(mid, wav, tuner='even', extra_env=env)
+            wet = mid[:-4] + '.%s.wav' % mname
+            lib.roomtail(wav, wet, env={'TUNING_ROOM': 'studio', 'TUNING_DISTANCE': str(dist)})
+            wavs[(g, mname)] = wet
+        loud[g] = lib.loudness(wavs[(g, 'close')])      # the guitars balanced on the close mic
+    gains = [10 ** ((loud['guitar A'] - loud[g]) / 20.0 + mics[m][1] / 20.0) for (g, m) in wavs]
+    # each mic already has its room, at its own distance: sum them as they are
     wet = os.path.join(OUT, name + tag + '.wav')
-    lib.roomtail(dry, wet, env={'TUNING_ROOM': 'studio', 'TUNING_DISTANCE': '0.5'})
+    lib.sum_wavs(list(wavs.values()), wet, gains=gains)
+    print("  mics: %s" % ', '.join('%s %.1f m %+.0f dB' % (k, d, g) for k, (d, g) in mics.items()))
     print("  -> %s" % lib.mp3(wet))
     return 0
 
@@ -403,7 +542,6 @@ def render_effects(name, ns, who, bar, nbar, tpb, bpm, tag):
 def main(argv):
     args = argv[1:]
     name = next((a for a in args if a.startswith('wtc')), 'wtc2f12')
-    bpm = float(args[args.index('--bpm') + 1]) if '--bpm' in args else 84.0
     # CHORD-OUT (Ben): no power-chord part at all. The two leads play their
     # lines, and wherever both attack TOGETHER each note becomes a power chord
     # -- note, fifth, octave -- so the harmony arrives where the voices meet.
@@ -433,10 +571,14 @@ def main(argv):
     tag = ('_metal6' if effects else ('_metal5' + ('_%s' % dstyle if dstyle else '')) if manual else
            ('_metal4' if switch == 1.5 else '_metal4_switch%g' % switch) if trade else '_metal3' if one_guitar else
            '_metal2' if chord_out else '_metal')
+    bpm = float(args[args.index('--bpm') + 1]) if '--bpm' in args else BPM.get(name, 84.0)
     src = mido.MidiFile(os.path.join(OUT, name + '.notation.mid'))
     tpb = src.ticks_per_beat
-    ns = notes_of(src)
+    ns = voices(notes_of(src), VOICE_OF.get(name))
     end = max(e for _s, e, _c, _n in ns)
+    bar, pk = METER.get(name, 2) * tpb, PICKUP.get(name, 0) * tpb
+    nbar = (end - pk) // bar + 1
+    bi = lambda t: min(max(0, (t - pk) // bar), nbar - 1)   # a tick's bar, from 0
 
     ev = []                                   # (tick, order, message)
     def note(ch, n, t0, t1, v):
@@ -482,12 +624,10 @@ def main(argv):
         print("  one guitar: %d notes, %d left ringing past their written value" % (len(upper), rung))
     if trade:
         ctl(1, 30, 36); ctl(2, 30, 92)                   # B (bottom) left, A (top) right
-        bar = 2 * tpb                                     # 2/4
-        nbar = end // bar + 1
         roughness = {0: 0.1, 1: 1.0, 2: 0.8, 3: 0.4, 4: 0.4, 5: 0.1, 6: 0.9,
                      7: 0.05, 8: 0.4, 9: 0.4, 10: 0.8, 11: 1.0}
         def cost(bi, own):
-            b0, b1 = bi * bar, (bi + 1) * bar
+            b0, b1 = pk + bi * bar, pk + (bi + 1) * bar
             mids = [(s, e, n) for s, e, c, n in ns if c == 1 and s < b1 and e > b0]
             mine = [(s, e, n) for s, e, c, n in ns if c in own and s < b1 and e > b0]
             k = 0.0
@@ -525,7 +665,7 @@ def main(argv):
             elif c in (2, 3):
                 note(2, n, s, e, 100)                    # A: the top
             else:
-                note(2 if who[min(s // bar, nbar - 1)] == 0 else 1, n, s, e, 100)
+                note(2 if who[bi(s)] == 0 else 1, n, s, e, 100)
         chart_trade = (['bars %d-%d: middle with %s -- %s' % (b0, b1, g, why)
                         for b0, b1, g, why in MANUAL[name]] if manual else
                        ['bar %3d: middle with %s' % (b + 1, 'A (top)' if w == 0 else 'B (bottom)')
@@ -540,7 +680,9 @@ def main(argv):
                     if c_ == 0:
                         note(3, n_ - 12, s_, e_, 96)
         if effects:
-            return render_effects(name, ns, who, bar, nbar, tpb, bpm, tag)
+            return render_effects(name, ns, who, bar, pk, nbar, tpb, bpm,
+                                  tag + ('_roommics' if '--room-mics' in args else ''),
+                                  room_mics='--room-mics' in args)
         print("  trade: the middle changes hands %d times; with A in %d bars, with B in %d"
               % (trades, who.count(0), who.count(1)))
     for s, e, c, n in (ns if not (one_guitar or trade) else ()):
@@ -576,9 +718,8 @@ def main(argv):
     # THE ENDING BROADENS (Ben): the two bars before the final chord slow
     # linearly to 70%, and the chord is held at that tempo -- BuxWV 161's
     # shape. Ticks are warped, at one tempo, so the stems stay aligned.
-    bar = 2 * tpb                                         # 2/4
     last = max(t for t, _o, m_ in ev if m_.type == 'note_on')
-    fin = (last // bar) * bar                            # the final chord's bar
+    fin = pk + ((last - pk) // bar) * bar                # the final chord's bar
     r0, r1, lo = fin - 2 * bar, fin, 0.70
     def warp(t):
         if t <= r0:
@@ -591,7 +732,7 @@ def main(argv):
         return int(round(out))
     ev = [(warp(t), o, m_) for t, o, m_ in ev]
     ev.sort(key=lambda x: (x[0], x[1]))
-    beats_per_bar = 2                                     # the fugue is in 2/4
+    beats_per_bar = METER.get(name, 2)
     lines = (['(no power-chord part: the leads chord out where they meet)'] if chord_out else
              ['(one guitar, both upper voices, let ring)'] if one_guitar else
              ['(two guitars: A the top, B the bottom, the middle traded)'] + chart_trade if trade else [])
