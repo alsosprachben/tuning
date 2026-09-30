@@ -644,9 +644,13 @@ def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
                 extra['nf'][-1] = f
                 extra['non'][-1] = int(a)
                 extra['noff'][-1] = int(b)
-                # back out an anchor at sample 0 from the phase wanted at `a`
+                # back out an anchor at sample 0 from the phase wanted at `a`.
+                # The input phases are p0, the LEFT ear's (p0 = -om*(t + delL)),
+                # and a product's phase is a sum of them, so `ph` already carries
+                # the left ear's delay. The right ear hears the same amplifier
+                # delR samples later: p0R = p0 - w*(delR - delL).
                 extra['p0'][-1] = ph - w * a
-                extra['p0R'][-1] = ph - w * a
+                extra['p0R'][-1] = ph - w * a - w * (A['delR'][src] - A['delL'][src])
                 sc = g / max(A['aM'][src], 1e-12)
                 extra['aL'][-1] = A['aL'][src] * sc
                 extra['aR'][-1] = A['aR'][src] * sc

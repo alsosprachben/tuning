@@ -1104,7 +1104,9 @@ class Slab:
         a["nf"][idx] = f.astype(np.float32)
         # `phases` is the phase wanted AT n0, and p0 anchors at sample 0.
         a["p0"][idx] = np.asarray(phases, np.float64) - om * n0
-        a["p0R"][idx] = a["p0"][idx]
+        # `phases` came from p0, the LEFT ear's; the right ear hears the amp
+        # delR - delL samples later (tubeamp.expand says why this matters).
+        a["p0R"][idx] = a["p0"][idx] - om * (float(a["delR"][src]) - float(a["delL"][src]))
         a["non"][idx] = n0
         a["noff"][idx] = IDLE
         # Levels ride the source's own panning, so a product sits where its
