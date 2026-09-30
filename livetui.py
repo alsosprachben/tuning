@@ -1299,6 +1299,23 @@ class TUI:
         self.live.set_synth(p, knob, MG.panel_of(p.moog())[knob])
         p.synth.pop(knob, None)
 
+    def synth_hardware(self):
+        """Read the Messenger's own CC chart on this part's channel, or stop.
+        One channel, named: a part that hears all sixteen cannot read one
+        instrument's chart on every one of them."""
+        p = self.synth_part()
+        if p is None:
+            return
+        if p.cc_map == "messenger":
+            p.cc_map = "gm"
+            self.say("part %d: General MIDI CCs again" % (self.row + 1))
+        elif p.channel is None:
+            self.say("give the part a channel first (the ch column) -- the Messenger's")
+        else:
+            p.cc_map = "messenger"
+            self.say("part %d reads a Messenger on channel %d" % (self.row + 1, p.channel + 1))
+        self.live.dirty = True
+
     def draw_synth(self, scr, y, w, h):
         C = self.C
         self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
@@ -1306,10 +1323,14 @@ class TUI:
         p = self.synth_part()
         if p is None:
             self.addstr(scr, y, 2, "the selected part is not a Moog -- the synth panel is for "
-                        "the Moog leads (GM 80, 81)", C("dim"))
+                        "the Moog leads (GM 80-87)", C("dim"))
             return y + 2
         self.addstr(scr, y, 2, "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 18, "part %d, %s" % (self.row + 1, p.label()), C("dim"))
+        hw = ("reads a Messenger on ch %d  (M: stop)" % (p.channel + 1)
+              if p.cc_map == "messenger" else "M: read a Messenger on this part's channel")
+        self.addstr(scr, y, max(50, w - len(hw) - 2), hw[:max(0, w - 52)],
+                    C("green") if p.cc_map == "messenger" else C("dim"))
         y += 1
         half = (len(SYNTH_KNOBS) + 1) // 2
         last = [None, None]
@@ -1522,6 +1543,9 @@ class TUI:
             "  up down           select a knob     - + / left right  turn it",
             "                    (shift: ten times as far); a switch steps",
             "  space             back to where the patch has it",
+            "  M                 read a Moog Messenger on the part's channel: its",
+            "                    knobs turn these (its own CC chart, 14-bit), the",
+            "                    wheel, pedal and volume stay General MIDI's",
             "  a knob you have moved shows yellow, and is saved with the part.",
             "  CC74 and CC71 move CUTOFF and RESONANCE, CC73/75/72 the amp",
             "  contour's attack, decay and release -- offsets, as on any synth.",
@@ -1592,6 +1616,8 @@ class TUI:
                 self.crow = min(max(0, len(self.ctl_rows()) - 1), self.crow + 1)
         elif self.pane == 3 and c == ord(" "):
             self.synth_reset()
+        elif self.pane == 3 and c == ord("M"):
+            self.synth_hardware()
         elif self.pane == 2 and c in (ord("a"), ord("r"), ord("d"), ord("b"),
                                       ord(" "), 10, 13):
             if c == ord("a"):
@@ -1727,6 +1753,7 @@ SYNTH_KNOBS = (
     ("MIXER", "osc1_level", "osc 1", "level"),
     ("MIXER", "osc2_level", "osc 2", "level"),
     ("MIXER", "sub_level", "sub", "level"),
+    ("MIXER", "noise_level", "noise", "level"),
     ("FILTER", "cutoff", "cutoff", "hz"),
     ("FILTER", "resonance", "resonance", "level"),
     ("FILTER", "eg_amount", "eg amount", "oct"),

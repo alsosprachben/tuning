@@ -9486,6 +9486,118 @@ class MoogSawLead(SawtoothSynthProperties):
     )
 
 
+class MoogCalliopeLead(TriangleSynthProperties):
+    """GM 82 on a Moog Messenger: the calliope -- a steam whistle, so the
+    purest thing the panel makes. OSC 1 a triangle, OSC 2 a triangle an
+    octave up and quiet (a whistle's upper mouth), the ladder wide open with
+    no resonance, and a soft attack for the steam to arrive."""
+    moog = True
+    # at the level of the additive lead it replaces, which every mix was
+    # balanced on (examples/voice_levels.py, K-weighted against the piano)
+    initial_gain = TriangleSynthProperties.initial_gain * 10 ** (2.0 / 20.0)
+    messenger = dict(
+        osc1_wave=0.4, osc2_wave=0.4, osc2_octave=4, osc1_level=1.0, osc2_level=0.25,
+        cutoff=0.8, resonance=0.0, eg_amount=0.55, kb_track=1.0,
+        f_attack=0.2, f_decay=0.5, f_sustain=0.6, f_release=0.5,
+        a_attack=0.3, a_decay=0.5, a_sustain=1.0, a_release=0.55,
+    )
+
+
+class MoogChiffLead(ChiffLeadProperties):
+    """GM 83 on a Moog Messenger: a saw with a breath on the front, made the
+    way a Moog player makes one -- the NOISE oscillator in the mixer, through
+    the same ladder as the saw, so the breath chuffs as the filter contour
+    snaps open on the key and falls away as it closes. The contour settles
+    over a few hundred milliseconds, so every note starts bright and mellows,
+    which is what the additive chiff lead's upper partials did by dying first.
+    The organ's chiff this class inherits is switched off: the breath is the
+    Moog's own now."""
+    moog = True
+    # at the additive chiff lead's level (examples/moog_ab.py, K-weighted)
+    initial_gain = ChiffLeadProperties.initial_gain * 10 ** (7.9 / 20.0)
+    chiff_volume = 0.0
+    messenger = dict(
+        osc1_wave=0.5, osc2_level=0.0, osc1_level=1.0, noise_level=0.2,
+        cutoff=0.55, resonance=0.2, eg_amount=0.7, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.62, f_sustain=0.25, f_release=0.45,
+        a_attack=0.15, a_decay=0.5, a_sustain=0.95, a_release=0.5,
+    )
+
+
+class MoogCharangLead(CharangLeadProperties):
+    """GM 84 on a Moog Messenger: two saws, ten cents apart, through the
+    ladder and THEN the valve -- the synth in front of a guitar amp, which is
+    the order the hardware has. The amplifier sees the filter at its sustain
+    cutoff (moog.sustain_gain); the contour's movement about that rides on
+    the partials after it (FT slot 11), so the products are a filtered saw's."""
+    moog = True
+    # at the level of the additive lead it replaces, which every mix was
+    # balanced on (examples/voice_levels.py, K-weighted against the piano)
+    initial_gain = CharangLeadProperties.initial_gain * 10 ** (9.6 / 20.0)
+    # the valve keeps the additive charang's reference: the ladder takes
+    # back what the gain adds, so it is driven about as hard as it was
+    amp_reference = CharangLeadProperties.initial_gain * 2.0
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 10.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.62, resonance=0.35, eg_amount=0.6, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.5, f_sustain=0.5, f_release=0.4,
+        a_attack=0.05, a_decay=0.5, a_sustain=1.0, a_release=0.45,
+    )
+
+
+class MoogVoiceLead(VoiceLeadProperties):
+    """GM 85 on a Moog Messenger: two saws, a slow breath of an attack, and
+    the ladder -- sung through the class's own open /a/ AFTER it, since the
+    formants are a body the whole instrument sounds through (moog_body)."""
+    moog = True
+    # at the level of the additive lead it replaces, which every mix was
+    # balanced on (examples/voice_levels.py, K-weighted against the piano)
+    initial_gain = VoiceLeadProperties.initial_gain * 10 ** (7.8 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.6,
+        cutoff=0.7, resonance=0.1, eg_amount=0.6, kb_track=1.0,
+        f_attack=0.35, f_decay=0.55, f_sustain=0.6, f_release=0.5,
+        a_attack=0.45, a_decay=0.5, a_sustain=1.0, a_release=0.55,
+    )
+
+    def moog_body(self, partial_hz):
+        return self.bore_gain(partial_hz) * self._bore_norm()
+
+
+class MoogFifthsLead(FifthsLeadProperties):
+    """GM 86 on a Moog Messenger: OSC 2 FREQ fully up, a tempered fifth
+    (+7 semitones, which is where the knob's travel ends), a little under
+    OSC 1 -- the parallel-fifths lead every Moog player has set."""
+    moog = True
+    # at the level of the additive lead it replaces, which every mix was
+    # balanced on (examples/voice_levels.py, K-weighted against the piano)
+    initial_gain = FifthsLeadProperties.initial_gain * 10 ** (11.3 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=1.0, osc1_level=0.8, osc2_level=0.5,
+        cutoff=0.55, resonance=0.2, eg_amount=0.7, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.55, f_sustain=0.35, f_release=0.5,
+        a_attack=0.1, a_decay=0.5, a_sustain=1.0, a_release=0.54,
+    )
+
+
+class MoogBassLead(BassLeadProperties):
+    """GM 87 on a Moog Messenger: OSC 2 on its 16' footage, an octave under
+    OSC 1 -- the bass and the lead from one key -- with more resonance and a
+    shorter contour than the saw, for the bass line's punch."""
+    moog = True
+    # at the level of the additive lead it replaces, which every mix was
+    # balanced on (examples/voice_levels.py, K-weighted against the piano)
+    initial_gain = BassLeadProperties.initial_gain * 10 ** (12.4 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_octave=16, osc1_level=0.8, osc2_level=0.7,
+        cutoff=0.5, resonance=0.3, eg_amount=0.72, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.5, f_sustain=0.3, f_release=0.45,
+        a_attack=0.05, a_decay=0.5, a_sustain=1.0, a_release=0.5,
+    )
+
+
 class MoogSquareLead(SquareSynthProperties):
     """GM 80 on a Moog Messenger: the square lead.
 

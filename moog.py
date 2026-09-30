@@ -337,7 +337,33 @@ FMAX_HZ = 12000.0       # highest partial: past it a saw's harmonics are 27 dB
 OSC_HARMONICS, SUB_HARMONICS = 64, 32
 FOOT = {32: 0.25, 16: 0.5, 8: 1.0, 4: 2.0}      # OCTAVE, against 8'
 SEMIS = 7.0                                     # TUNE and OSC 2 FREQ: +-7
-OSC1, OSC2, SUB = 1, 2, 3
+OSC1, OSC2, SUB, NOISE = 1, 2, 3, 4
+
+# THE NOISE OSCILLATOR, as partials. White noise is a flat spectrum, so it is
+# a bank of noise BANDS: a third of an octave apart from 40 Hz to the top, each
+# a partial whose phase is redrawn at random as fast as its own bandwidth
+# (synthkernel.c, a Moog partial with a negative wash bandwidth). A band's
+# power goes as its width, so its amplitude as the square root of its centre;
+# the bank together is noise of NOISE_RMS at NOISE fully up -- a saw's own rms
+# is 0.58. Fixed in hertz, not following the key: noise has no pitch. And it
+# is a Moog partial like the others, so the ladder filters it by frequency and
+# the amp contour shapes it -- the Messenger's mixer, filter, VCA.
+NOISE_LO_HZ, NOISE_STEP = 40.0, 2.0 ** (1.0 / 3.0)
+NOISE_BW = NOISE_STEP - 1.0          # a band's width, as a fraction of its centre
+NOISE_RMS = 0.5
+
+
+def _noise_bank():
+    f = []
+    while NOISE_LO_HZ * NOISE_STEP ** len(f) <= FMAX_HZ:
+        f.append(NOISE_LO_HZ * NOISE_STEP ** len(f))
+    f = np.array(f)
+    a = np.sqrt(f)
+    a *= NOISE_RMS / np.sqrt(0.5 * (a * a).sum())
+    return f, a
+
+
+NOISE_HZ, NOISE_AMP = _noise_bank()
 
 
 def partials(panel, f0, fmax=FMAX_HZ):
@@ -352,7 +378,9 @@ def partials(panel, f0, fmax=FMAX_HZ):
     f1 = f0 * t * FOOT.get(int(panel['osc1_octave']), 1.0)
     f2 = (f0 * t * FOOT.get(int(panel['osc2_octave']), 1.0)
           * 2.0 ** (bipolar(panel['osc2_freq'], SEMIS) / 12.0))
-    out = []
+    out = [(NOISE, k + 1, float(NOISE_HZ[k]), float(NOISE_AMP[k]) * panel['noise_level'], 0.0)
+           for k in range(len(NOISE_HZ))
+           if panel['noise_level'] > 0.0 and NOISE_HZ[k] <= fmax]
     for osc, f, lvl, c in (
             (OSC1, f1, panel['osc1_level'], lambda n: osc_spectrum(panel['osc1_wave'], n)),
             (OSC2, f2, panel['osc2_level'], lambda n: osc_spectrum(panel['osc2_wave'], n)),
@@ -370,14 +398,29 @@ def partials(panel, f0, fmax=FMAX_HZ):
     return out
 
 
-def ft_row(panel, f0, krow):
+def ft_row(panel, f0, krow, pre_amp=False):
     """The note's fixed row (FT): what is set at the key. Slot 10 keeps the
-    key's own frequency, so a row can be rebuilt when a knob moves."""
+    key's own frequency, so a row can be rebuilt when a knob moves; slot 11
+    says the partials already carry the filter at its sustain (sustain_gain)
+    -- a voice with an amplifier after the ladder -- so the kernel applies
+    only the contour's movement about it."""
     return [
         (f0 / KB_REF_HZ) ** float(panel['kb_track']),
         knob_time(panel['f_attack']), knob_time(panel['f_decay']), knob_time(panel['f_release']),
         knob_time(panel['a_attack']), knob_time(panel['a_decay']), knob_time(panel['a_release']),
-        float(panel['mode']), 1.0 if panel['res_bass'] else 0.0, float(krow), float(f0), 0.0]
+        float(panel['mode']), 1.0 if panel['res_bass'] else 0.0, float(krow), float(f0),
+        1.0 if pre_amp else 0.0]
+
+
+def sustain_gain(panel, f0, f):
+    """|H| at the cutoff the filter contour holds while the key is down: what
+    an amplifier AFTER the ladder hears of a partial at f, for a key at f0.
+    The amplifier's products are computed once, from this; the kernel then
+    moves the partials by H(t) / H(sustain) (FT slot 11)."""
+    fcs = (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
+           * 2.0 ** (bipolar(panel['eg_amount'], EG_OCTAVES) * float(panel['f_sustain'])))
+    return ladder_gain(f, max(fcs, 1.0), knob_k(panel['resonance']),
+                       int(panel['mode']), bool(panel['res_bass']))
 
 
 def osc_ratio(panel, osc):
@@ -399,6 +442,11 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
     mk = np.asarray(mk, np.int64)
     osc, k = mk // 4096, mk % 4096
     w = np.zeros(len(mk)); ph = np.zeros(len(mk)); rt = np.ones(len(mk))
+    m = osc == NOISE                     # the noise bands: level only, in hertz
+    if m.any():
+        kk = np.clip(k[m], 1, len(NOISE_AMP)) - 1
+        w[m] = np.where(np.asarray(nf, float)[m] > fmax, 0.0,
+                        NOISE_AMP[kk] * float(panel['noise_level']))
     for o, lvl, n, spec, shape in ((OSC1, 'osc1_level', OSC_HARMONICS, osc_spectrum, 'osc1_wave'),
                                    (OSC2, 'osc2_level', OSC_HARMONICS, osc_spectrum, 'osc2_wave'),
                                    (SUB, 'sub_level', SUB_HARMONICS, sub_spectrum, 'sub_wave')):
@@ -436,12 +484,56 @@ def apply_gm(panel, sd):
     return out
 
 
+# THE MESSENGER'S OWN CC CHART (its manual, Appendix A): what a part set to
+# listen to one reads on its channel INSTEAD of General MIDI -- the two
+# disagree about half the numbers (CC10 is TUNE, not pan; CC71-79 are panel
+# switches, not sound controllers). Knobs are 14-bit, the fine value on CC+32,
+# and a bipolar one is centred at 8192. (panel name, how the value reads);
+# None is a control the Messenger has and this simulator does not model yet
+# -- taken all the same, so it cannot land on a GM meaning by accident.
+# The switch ranges for KB TRACKING and MODE are not in the manual, which
+# gives only their positions; even thirds and quarters are the assumption.
+MESSENGER_CC = {
+    9: ('osc1_wave', '14'), 14: ('osc2_wave', '14'), 10: ('tune', '14'),
+    12: ('osc2_freq', '14'), 15: ('osc1_level', '14'), 16: ('osc2_level', '14'),
+    17: ('sub_level', '14'), 8: ('noise_level', '14'),
+    19: ('cutoff', '14'), 21: ('resonance', '14'), 22: ('eg_amount', '14'),
+    23: ('f_attack', '14'), 24: ('f_decay', '14'), 25: ('f_sustain', '14'), 26: ('f_release', '14'),
+    28: ('a_attack', '14'), 29: ('a_decay', '14'), 30: ('a_sustain', '14'), 31: ('a_release', '14'),
+    71: ('sub_wave', '7'), 75: ('osc1_octave', 'foot'), 76: ('osc2_octave', 'foot'),
+    78: ('kb_track', 'track'), 79: ('res_bass', 'onoff'), 109: ('mode', 'mode'),
+    2: None, 3: None, 4: None, 13: None, 18: None, 20: None, 27: None, 72: None,
+    73: None, 77: None, 80: None, 81: None, 83: None, 85: None, 89: None, 93: None,
+    102: None, 107: None, 108: None, 112: None, 113: None, 114: None, 116: None,
+    117: None, 118: None,
+}
+# the fine halves of the 14-bit knobs
+MESSENGER_LSB = {cc + 32: cc for cc, v in MESSENGER_CC.items() if v and v[1] == '14'}
+
+
+def messenger_value(kind, msb, lsb=None):
+    """A Messenger CC's value as the panel knob's (moog.PANEL units)."""
+    if kind == '14':
+        return ((msb << 7) | (lsb or 0)) / 16383.0 if lsb is not None else msb / 127.0
+    if kind == '7':
+        return msb / 127.0
+    if kind == 'foot':
+        return (4, 8, 16, 32)[min(3, msb // 32)]
+    if kind == 'track':
+        return (0.0, 2.0 / 3.0, 1.0)[min(2, msb * 3 // 128)]
+    if kind == 'mode':
+        return min(3, msb // 32)
+    if kind == 'onoff':
+        return msb >= 64
+    raise ValueError(kind)
+
+
 # Knobs by what moving one under a sounding note has to touch.
 KNOB_ROW = ('cutoff', 'resonance', 'eg_amount', 'f_sustain', 'a_sustain')     # KN, per block
 NOTE_ROW = ('kb_track', 'f_attack', 'f_decay', 'f_release', 'a_attack', 'a_decay',
             'a_release', 'mode', 'res_bass')                                      # FT, per note
 TIMBRE = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
-          'sub_level', 'osc1_octave', 'osc2_octave', 'osc2_freq', 'tune')         # the partials
+          'sub_level', 'noise_level', 'osc1_octave', 'osc2_octave', 'osc2_freq', 'tune')         # the partials
 
 
 def kn_row(panel):
@@ -521,6 +613,11 @@ def selftest():
     r = adsr(np.array([1.0, 1.5]), 0.01, 0.1, 0.6, 0.5, t_off=1.0)
     check("ADSR: release starts at the held level and falls 98%",
           abs(r[0] - 0.6) < 1e-6 and abs(r[1] / r[0] - math.exp(-4)) < 1e-9)
+    check("the noise bank is white noise of NOISE_RMS",
+          abs(np.sqrt(0.5 * (NOISE_AMP ** 2).sum()) - NOISE_RMS) < 1e-12
+          and np.allclose(NOISE_AMP ** 2 / NOISE_HZ, NOISE_AMP[0] ** 2 / NOISE_HZ[0]),
+          "(%d bands, 40 Hz to %.1f kHz, power per band as its width)"
+          % (len(NOISE_HZ), NOISE_HZ[-1] / 1000))
     return ok
 
 

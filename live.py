@@ -1149,7 +1149,7 @@ class Slab:
         r = self.ft_free.popleft()
         W = _MG.FT_W
         krow = self.knob_row(pk, _MG.kn_row(panel))
-        self.FT[r * W:(r + 1) * W] = _MG.ft_row(panel, float(ft[10]), krow)
+        self.FT[r * W:(r + 1) * W] = _MG.ft_row(panel, float(ft[10]), krow, ft[11] > 0.5)
         a["fx"][idx[m]] = r
         self.ft_cnt[r] = int(m.sum())
         mo = idx[a["mk"][idx] > 0]
@@ -1175,6 +1175,14 @@ class Slab:
         a = self.a
         w, ph, rt = _MG.weights(panel, a["mk"][idx], a["nf"][idx],
                                 fmax=min(_MG.FMAX_HZ, 0.5 * self.rate))
+        # an amplifier after the ladder hears it at its sustain (FT slot 11)
+        W = _MG.FT_W
+        rows = a["fx"][idx]
+        pre = (rows >= 0) & (self.FT[np.maximum(rows, 0) * W + 11] > 0.5)
+        if pre.any():
+            f0s = self.FT[rows[pre] * W + 10].astype(np.float64)
+            fs = a["nf"][idx][pre].astype(np.float64) * rt[pre]
+            w[pre] *= np.array([_MG.sustain_gain(panel, f0, f) for f0, f in zip(f0s, fs)])
         sc = rt / self.mo_r[idx]
         if np.any(np.abs(sc - 1.0) > 1e-12):
             if n is None:
@@ -1223,7 +1231,7 @@ class Slab:
             if r < 0:
                 continue
             row = self.FT[r * W:(r + 1) * W]
-            row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]))
+            row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]), row[11] > 0.5)
         a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
 
     def stamp_amp(self, key, src, freqs, amps, phases, n0, rate):
@@ -1255,6 +1263,8 @@ class Slab:
             a[k][idx] = a[k][src]
         for k in COLS_I4:
             a[k][idx] = a[k][src]
+        a["fx"][idx] = -1       # the ladder was before the valve (moog.py)
+        a["mk"][idx] = 0
         a["gr"][idx] = -1       # ungated: the amplifier is not a drawn rank
         a["br"][idx] = -1
         a["cr"][idx] = 0
@@ -2208,6 +2218,7 @@ class Part:
         self.muted = False
         self.cres = 0.0
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
+        self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
         self.set_patch(patch)
 
     def set_patch(self, patch):
@@ -2261,6 +2272,8 @@ class Part:
                  muted=self.muted, drawn=sorted(self.drawn))
         if self.synth:
             d["synth"] = dict(self.synth)
+        if self.cc_map != "gm":
+            d["cc_map"] = self.cc_map
         return d
 
     @staticmethod
@@ -2271,6 +2284,7 @@ class Part:
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.muted = bool(d.get("muted", False))
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
+        p.cc_map = d.get("cc_map", "gm")
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
             p.drawn = {r for r in p.drawn if r in patch.rank_names}
@@ -2288,6 +2302,7 @@ class Live:
         self.slab = Slab(capacity)
         self.slab.panel_for = self._moog_panel_for
         self.moog_glide = {}            # part id -> {knob: where it has got to}
+        self.msg_msb = {}               # (channel, CC) -> a Messenger knob's coarse half
         self.slab.lib = B.ensure_lib()
         self.slab.rate = float(rate)
         self.headroom_db = headroom_db
@@ -2925,6 +2940,8 @@ class Live:
         elif msg.type == "polytouch":
             for slots, tilt in self._press_groups(ch, note=msg.note):
                 self.slab.press(slots, msg.value / 127.0, self.press_db, tilt)
+        elif msg.type == "control_change" and self._messenger_cc(ch, msg.control, msg.value):
+            pass            # a Messenger's panel, on a part that reads its chart
         elif msg.type == "control_change":
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
@@ -3774,7 +3791,7 @@ class Live:
     # as the Messenger's does.
     MOOG_GLIDE_PER_BLOCK = 0.01
     MOOG_GLIDES = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
-                   'sub_level', 'osc2_freq', 'tune')
+                   'sub_level', 'noise_level', 'osc2_freq', 'tune')
 
     def _moog_panel_for(self, pid, ch):
         """The panel a part's notes on a channel play: its patch's knobs, the
@@ -3808,6 +3825,36 @@ class Live:
             if not now:
                 self.moog_glide.pop(pid, None)
             self._moog_refresh(part, n0)
+
+    def _messenger_cc(self, ch, cc, value):
+        """A CC on a channel where a part reads the Messenger's chart
+        (moog.MESSENGER_CC): turn that part's knob and say so, or leave the
+        message to General MIDI. Only on an EXPLICIT channel -- a part that
+        hears every channel cannot read one chart on all of them."""
+        mine = [p for p in self.parts if p.cc_map == "messenger" and p.channel == ch
+                and p.moog() is not None]
+        if not mine:
+            return False
+        if cc in _MG.MESSENGER_LSB:                 # the fine half of a knob
+            hi = _MG.MESSENGER_LSB[cc]
+            msb = self.msg_msb.get((ch, hi))
+            if msb is None:
+                return True
+            knob, kind = _MG.MESSENGER_CC[hi]
+            for p in mine:
+                self.set_synth(p, knob, _MG.messenger_value(kind, msb, value))
+            return True
+        if cc not in _MG.MESSENGER_CC:
+            return False                            # CC1, 7, 11, 64, 74 ...: GM's
+        ent = _MG.MESSENGER_CC[cc]
+        if ent is None:
+            return True                             # the panel's, not modelled yet
+        knob, kind = ent
+        if kind == '14':
+            self.msg_msb[(ch, cc)] = value
+        for p in mine:
+            self.set_synth(p, knob, _MG.messenger_value(kind, value))
+        return True
 
     def set_synth(self, part, knob, value):
         """Turn one of a Moog part's knobs -- from the TUI, or a Messenger's CC.
@@ -3856,6 +3903,10 @@ class Live:
             mo = idx[sl.a["mk"][idx] > 0]
             if len(mo):
                 sl.moog_retimbre(mo, panel, n0)
+        # an amplifier after the ladder (the charang) distorts what the filter
+        # passed: its products are recomputed from the new levels
+        if getattr(part.moog(), "amp_drive", 0.0):
+            self.amp_dirty.add(part.pid)
 
     def _sound_cc(self, ch, cc, value, n0, parts):
         """One CC71-78 (or its GS NRPN) on this channel."""
@@ -8433,11 +8484,12 @@ def selftest():
           _hilo(_t1) - _hilo(_t0) > 6.0 and abs(_pw) < 0.01,
           "  (+%.1f dB of upper partials against the lower, total power %+.3f dB "
           "-- colour, not level)" % (_hilo(_t1) - _hilo(_t0), _pw))
-    # GM 80/81 are a Moog now (moog.py), whose CC71 is its ladder's RESONANCE;
-    # the calliope keeps the virtual corner this check is about.
-    _r0, _r1 = _scp(82, []), _scp(82, [(71, 127)])
+    # The leads are a Moog now (moog.py), whose CC71 is its ladder's
+    # RESONANCE; Synth Brass 1 keeps the virtual corner this check is about.
+    import patch_map as _PMr
+    _r0, _r1 = _scp(62, []), _scp(62, [(71, 127)])
     _nf1 = np.asarray(_r0["nf"])
-    _near = np.abs(_nf1 / T.SawtoothSynthProperties.bore_corner_hz - 1.0) < 0.15
+    _near = np.abs(_nf1 / _PMr.property_class_for_program(62).bore_corner_hz - 1.0) < 0.15
     _rg = 10.0 * math.log10((np.asarray(_r1["aM"])[_near] ** 2).sum()
                             / (np.asarray(_r0["aM"])[_near] ** 2).sum())
     check("CC71 on a synth lead is a resonant peak at its filter's corner",
@@ -9482,7 +9534,7 @@ def selftest():
     # exactly from the wave's straight segments.
     for _gm, _law, _nm, _pos in ((81, lambda n: 1.0 / n, "sawtooth", _MG.SAW),
                                  (80, lambda n: 1.0 / n if n % 2 else 0.0, "square", _MG.SQUARE),
-                                 (82, lambda n: 1.0 / (n * n) if n % 2 else 0.0, "triangle", None)):
+                                 (82, lambda n: 1.0 / (n * n) if n % 2 else 0.0, "triangle", _MG.TRI)):
         if getattr(_leads[_gm], "moog", False):
             _cs = np.abs(_MG.osc_spectrum(_pos, 32))
             _worst = max(abs(_cs[_n - 1] / _cs[0] - _law(_n) / _law(1)) for _n in range(1, 33))
@@ -9510,6 +9562,11 @@ def selftest():
     # THE TWO FIXED-INTERVAL LEADS are exactly specifiable and are the whole
     # difference between GM 86 and 87.
     def _iv(_g):
+        # on the Moog the second voice is OSC 2, set by its knobs (moog.py)
+        if getattr(_leads[_g], "moog", False):
+            _pn = _MG.panel_of(_leads[_g])
+            return (1200.0 * math.log2(_MG.osc_ratio(_pn, _MG.OSC2) / _MG.osc_ratio(_pn, _MG.OSC1))
+                    if _pn["osc2_level"] > 0 else None)
         _q = _leads[_g](440.0, 0.0, 1.0, 1.0)
         _vs = _q.unison_voices(440.0, 1, 0.0)
         return 1200.0 * math.log2(1.0 + _vs[0][2]) if _vs else None
@@ -9527,6 +9584,9 @@ def selftest():
     # differ in nothing else, so a boolean collapsed exactly the pair the check
     # exists to separate. It failed, correctly, and this is the fix.
     def _second(_g):
+        if getattr(_leads[_g], "moog", False):
+            _c = _iv(_g)
+            return round(2.0 ** (_c / 1200.0), 3) if _c is not None and abs(_c) > 50 else None
         _vs = _leads[_g](261.63, 0.0, 1.0, 1.0).unison_voices(261.63, 1, 0.0)
         return round(1.0 + _vs[0][2], 4) if _vs else None
     _feat = {_g: (getattr(_leads[_g], "chiff_volume", 0.0) > 0.0,
@@ -9698,6 +9758,72 @@ def selftest():
     check("...and a part's knobs are saved with it",
           Part.from_dict(_mpd).synth == _lb.parts[0].synth == _mknobs,
           "  (%d knobs through to_dict / from_dict)" % len(_mpd.get("synth", {})))
+
+    # THE NOISE OSCILLATOR IS WHITE, AND THE LADDER SHAPES IT. With the
+    # oscillators off and the filter open the power per hertz is level across
+    # the spectrum; through a closed 4-pole it falls as the ladder does,
+    # which it could not while each band's phase JUMPED at every draw.
+    _mwas = dict(T.MoogSawLead.messenger)
+    _menv = os.environ.get("TUNING_REFLECT")
+    os.environ["TUNING_REFLECT"] = "0"
+    try:
+        from scipy.signal import welch as _welch
+        _moct = [(100, 200), (200, 400), (400, 800), (800, 1600), (1600, 3200), (3200, 6400)]
+        def _mnoise(**_k):
+            T.MoogSawLead.messenger = dict(_mwas, osc1_level=0.0, osc2_level=0.0, noise_level=1.0,
+                                           resonance=0.0, eg_amount=0.5, a_attack=0.0, **_k)
+            _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+            _mm.save(_mpath)
+            _l = _BRb.synth_window(_BRb.prepare(_mpath, "even"), 0, int(1.0 * _BRb.SR))[0]
+            _f, _P = _welch(_l[int(0.1 * _BRb.SR):int(0.9 * _BRb.SR)].astype(float), _BRb.SR, nperseg=8192)
+            _v = [10 * np.log10(_P[(_f >= _a) & (_f < _b)].mean()) for _a, _b in _moct]
+            return np.array(_v) - _v[0]
+        _mopen = _mnoise(cutoff=1.0)
+        _mclosed = _mnoise(cutoff=0.5, kb_track=0.0)
+        _mlad = np.array([20 * np.log10(_MG.ladder_gain(np.sqrt(_a * _b), _MG.knob_cutoff(0.5), 0.0)
+                                        / _MG.ladder_gain(np.sqrt(100 * 200), _MG.knob_cutoff(0.5), 0.0))
+                          for _a, _b in _moct])
+    finally:
+        T.MoogSawLead.messenger = _mwas
+        if _menv is None:
+            os.environ.pop("TUNING_REFLECT", None)
+        else:
+            os.environ["TUNING_REFLECT"] = _menv
+    check("the Moog's noise is white, and its ladder filters it",
+          np.all(np.abs(_mopen[:5]) < 2.5) and np.all(np.abs(_mclosed - _mlad) < 3.5),
+          "  (open: %s dB per octave band; through LP4 at 632 Hz: %s against the "
+          "ladder's %s)" % (" ".join("%+.1f" % _v for _v in _mopen),
+                            " ".join("%+.0f" % _v for _v in _mclosed),
+                            " ".join("%+.0f" % _v for _v in _mlad)))
+
+    # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
+    # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.
+    _mx = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _mxp = _mx.parts[0]; _mxp.channel = 0; _mxp.cc_map = "messenger"
+    for _c, _v in ((19, 50), (51, 64), (75, 70), (79, 100), (109, 40), (10, 64), (42, 0)):
+        _mx.on_midi(mido.Message("control_change", channel=0, control=_c, value=_v))
+    _mx.apply(_mx.n)
+    _mgm = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _mgm.on_midi(mido.Message("control_change", channel=0, control=19, value=50))
+    _mgm.apply(_mgm.n)
+    check("a part reading a Messenger takes its CC chart as the panel's knobs",
+          abs(_mxp.synth.get("cutoff", 0) - (50 * 128 + 64) / 16383.0) < 1e-9
+          and _mxp.synth.get("osc1_octave") == 16 and _mxp.synth.get("res_bass") is True
+          and _mxp.synth.get("mode") == 1 and abs(_mxp.synth.get("tune", 0) - 0.5) < 1e-4
+          and not _mgm.parts[0].synth and Part.from_dict(_mxp.to_dict()).cc_map == "messenger",
+          "  (CUTOFF 50/64 as fourteen bits, an octave switch, RES BASS, MODE, and "
+          "CC10 as TUNE; a General MIDI part leaves CC19 alone)")
+    # THE CHARANG'S VALVE COMES AFTER ITS LADDER: its products carry no filter
+    # row, its oscillators the ladder at its sustain for the valve to hear.
+    _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=84)
+    _mm.save(_mpath)
+    _mch = _BRb.prepare(_mpath, "even")
+    _mprod = (np.asarray(_mch["fx"]) < 0) & (np.asarray(_mch["mk"]) == 0)
+    check("...and the charang's valve hears its ladder, not the other way round",
+          _mprod.any() and _mch["FT"] is not None and _mch["FT"][11] == 1.0
+          and not (np.asarray(_mch["fx"])[_mprod] >= 0).any(),
+          "  (%d distortion products, none filtered again; the oscillators carry "
+          "the filter at sustain)" % int(_mprod.sum()))
 
     _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=0)
     _mm.save(_mpath)

@@ -79,17 +79,21 @@ what you can change about it, and the same two keys change every one of them.
 
 ### The synth panel
 
-The synth leads GM 80 (square) and 81 (sawtooth) are a **Moog Messenger**
-(`moog.py`): two oscillators whose WAVESHAPE sweeps folded triangle →
-triangle → saw → square → narrow pulse, a sub oscillator, and the four-mode
-transistor ladder with its two contours. Each lead is a patch on it. The fourth
-pane (`tab` three times) is the panel of the selected part:
+The synth leads, GM 80–87, are a **Moog Messenger** (`moog.py`): two
+oscillators whose WAVESHAPE sweeps folded triangle → triangle → saw → square →
+narrow pulse, a sub oscillator, and the four-mode transistor ladder with its
+two contours. Each lead is a patch on it — square, sawtooth, calliope
+(triangles), chiff (with its breath), charang (the ladder in front of a valve),
+voice (the ladder, then an open /a/), fifths (OSC 2 FREQ +7) and bass+lead
+(OSC 2 at 16'). The fourth pane (`tab` three times) is the panel of the
+selected part:
 
 | key | what it does |
 |---|---|
 | up / down | select a knob: OSC 1, OSC 2, TUNE, SUB, MIXER, FILTER, F ENV, A ENV |
 | `-` `+`, left / right | turn it (`_` and shifted `+` ten times as far); a switch — OCTAVE, KB TRACK, MODE, RES BASS — steps |
 | space | back to where the patch has it |
+| `M` | read a **Messenger on the part's channel** — its knobs turn these |
 
 A knob you have moved reads yellow and is saved with the part, in the session
 and in presets. It moves notes already sounding: the waveshape, the mixer and
@@ -97,6 +101,15 @@ the tuning glide there over a few blocks rather than jump, which on a
 waveshape — whose harmonics change phase, not only level — would click.
 `TUNING_MOOG=0` puts the old additive leads back for an A/B
 (`examples/moog_ab.py`).
+
+**Playing it from a Messenger.** Give the part a channel (the `ch` column),
+then `M` on its panel: that channel's CCs are read by the Messenger's own
+chart (its manual's Appendix A, 14-bit, bipolar knobs centred at 8192) instead
+of General MIDI's, which disagree about half the numbers — CC10 is TUNE, not
+pan. The mod wheel, volume, expression and sustain stay General MIDI's. Panel
+controls the simulator does not model yet (the LFOs, MOD, SYNC, FB) are taken
+and ignored rather than landing on a GM meaning. The ranges of the KB TRACKING
+and MODE switches are not in the manual; even thirds and quarters are assumed.
 
 ### Stops
 

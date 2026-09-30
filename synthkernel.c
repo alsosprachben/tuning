@@ -147,7 +147,7 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
 // amount, the two sustains), one entry per grid point so a knob never steps
 // at a block boundary. fx < 0, or no fx at all, is every other voice, whose
 // arithmetic is untouched.
-#define FTW 12          // FT: kbfac fA fD fR aA aD aR mode res_bass krow - -
+#define FTW 12          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp
 #define KNW 5           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
 #define MOOG_GRID 128   // samples between evaluations: the live block, so a
                         // file render and the player land on the same points
@@ -429,7 +429,7 @@ void synth_voice(
                 if(ftr){
                     j0=(int)(bs0/mg); int nj=BLK/mg+1;
                     float kbf=ftr[0], fA=ftr[1], fD=ftr[2], fR=ftr[3], aA=ftr[4], aD=ftr[5], aR2=ftr[6];
-                    int mode=(int)ftr[7], rb=ftr[8]>0.5f; long krow=(long)ftr[9];
+                    int mode=(int)ftr[7], rb=ftr[8]>0.5f, pre=ftr[11]>0.5f; long krow=(long)ftr[9];
                     float fhz=winst*SRATE_F/6.2831853f;
                     float toffL=(float)(off-a-(long)dL)/SRATE_F, toffR=(float)(off-a-(long)dR)/SRATE_F;
                     float toff=(float)(off-a)/SRATE_F;
@@ -443,6 +443,10 @@ void synth_voice(
                         float fc=kn[0]*kbf*exp2f(kn[2]*fe);
                         if(fc<1.f)fc=1.f;
                         float h=moog_ladder(fhz/fc,kn[1],mode,rb);
+                        if(pre){   // the partials carry the ladder at its sustain already
+                            float fcs=kn[0]*kbf*exp2f(kn[2]*kn[3]); if(fcs<1.f)fcs=1.f;
+                            h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
+                        }
                         gLm[j]=moog_adsr((float)(nn-a-dL)/SRATE_F,aA,aD,kn[4],aR2,toffL)*h;
                         gRm[j]=moog_adsr((float)(nn-a-dR)/SRATE_F,aA,aD,kn[4],aR2,toffR)*h;
                         big=fmaxf(big,fmaxf(gLm[j],gRm[j]));
@@ -504,6 +508,13 @@ void synth_voice(
                     tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
                 }
                 } else {
+                // a Moog partial with a NEGATIVE wash bandwidth is a noise band
+                // (moog.NOISE): seeded by its note's onset and its own centre, so
+                // two notes' noise is not one noise twice
+                int noiz = chBW[p] < 0.f;
+                double nrate = noiz ? (double)nf*(double)(-chBW[p]) : 0.0;
+                uint64_t nseed = (uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
+                long long nui=-1; double nh0=0.0, ndh=0.0;
                 for(int cl=0; cl<BLK/mg; cl++){
                 long c0=bs0+(long)cl*mg, c1=c0+mg;
                 long s0 = ns>c0 ? ns : c0, s1 = ne<c1 ? ne : c1;
@@ -513,6 +524,26 @@ void synth_voice(
                     float t=(float)(n-c0)*invg, tb=(float)(n-bs0)*invb;
                     float mL=(a0L+(a1L-a0L)*t)*(aLp+(aL-aLp)*tb), mR=(a0R+(a1R-a0R)*t)*(aRp+(aR-aRp)*tb);
                     float sL=zrL, sR=zrR;
+                    if(noiz){
+                        // A NOISE BAND: the carrier's phase moved to a new
+                        // random value nrate times a second, which spreads it
+                        // over a band that wide around its centre -- and no
+                        // carrier left. MOVED, not jumped: each draw is joined
+                        // to the next the short way round the circle. A phase
+                        // that jumps is a click at every draw, and a thousand
+                        // of them leaked the low bands up the spectrum to a
+                        // floor 45 dB down, which a closed ladder cannot take out.
+                        double sec=(double)n/SRATE_D, u=sec*nrate;
+                        long long ui=(long long)u; double uf=u-(double)ui;
+                        if(ui!=nui){   // a new draw: hash only then
+                            nui=ui; nh0=hash01(nseed+(uint64_t)ui);
+                            double h1=hash01(nseed+(uint64_t)(ui+1));
+                            ndh=h1-nh0; ndh-=floor(ndh+0.5);
+                        }
+                        float jn=6.2831853f*(float)(nh0+ndh*uf);
+                        float cn=cosf(jn), sn=sinf(jn);
+                        sL = zrL*cn - ziL*sn; sR = zrR*cn - ziR*sn;
+                    }
                     if(jfa>0.f){
                         double sec=(double)n/SRATE_D;
                         // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per

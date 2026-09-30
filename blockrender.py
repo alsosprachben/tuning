@@ -1600,6 +1600,7 @@ def prepare(path, tuner='hybrid440'):
     _PL = [0]                # which player of a section this partial belongs to
     _FX = [-1]               # the Moog filter row of this note (moog.py), -1 = none
     _MK = [0]                # a Moog partial's oscillator * 4096 + harmonic, 0 = none
+    _NOREFL = [False]        # emit no room images for this partial (noise: see below)
     _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     # Reflections cost about 7x the partials, since every one of them is
@@ -1697,7 +1698,7 @@ def prepare(path, tuner='hybrid440'):
             e = ampM * ampM
             _QACC[bi][0] += e
             _QACC[bi][1] += e / max(q, 1e-6)
-        if _place is not None or not REFLECT:
+        if _place is not None or not REFLECT or _NOREFL[0]:
             return
         _direct_az = math.atan2(px, max(props.radiation_distance, 1e-6))
         # THE REFLECTIONS. Each is this same partial heard again off one
@@ -2909,8 +2910,13 @@ def prepare(path, tuner='hybrid440'):
             _knr = tuple(_MG.kn_row(_pan))
             if (ch, _knr) not in _MOOG_KROW:
                 _MOOG_KROW[(ch, _knr)] = len(_MOOG_KN); _MOOG_KN.append(list(_knr))
+            # A VALVE AFTER THE LADDER (the charang) hears the filter at its
+            # sustain: baked into the partials here, before tubeamp.expand
+            # runs on them, and taken back out by the kernel (FT slot 11).
+            _pre = bool(getattr(props, 'amp_drive', 0.0))
+            _body = getattr(props, 'moog_body', None)       # formants, after it
             _FX[0] = len(_MOOG_FT)
-            _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)]))
+            _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre))
             _mre = max(1.0, _MG.release_span(_pan) * SR)
             vb = props.voice_vibrato(f0, 0)
             _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
@@ -2925,15 +2931,34 @@ def prepare(path, tuner='hybrid440'):
                                                (_MG.OSC2, f0, _MG.OSC_HARMONICS),
                                                (_MG.SUB, f0 * 0.5, _MG.SUB_HARMONICS))
                            for _k in range(1, _n + 1)]
+                _mparts += [(_MG.NOISE, _k + 1, float(_MG.NOISE_HZ[_k]), 1.0, 0.0)
+                            for _k in range(len(_MG.NOISE_HZ))]
             else:
                 _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
+            _cbw = (_CBW[0], _CBW[1])
             for _osc, _k, _hf, _amp, _ph in _mparts:
                 _MK[0] = _osc * 4096 + _k
+                # a noise band: its wash bandwidth, NEGATIVE, is what makes the
+                # kernel draw it as noise rather than as a tone (moog.NOISE)
+                _nz = _osc == _MG.NOISE
+                _CBW[0], _CBW[1] = (-_MG.NOISE_BW, 0.0) if _nz else _cbw
+                # NOISE GETS NO IMAGES. A reflection of noise is more noise,
+                # uncorrelated with the first -- nothing an ear can place --
+                # and the images doubled the dearest partials there are (a
+                # hash and a sine per sample). The tail still hears it.
+                _NOREFL[0] = _nz
                 _gM = props.gain * _amp * props.radiation_gain(_hf)
+                if _body is not None:
+                    _gM *= float(_body(_hf))
+                if _pre and not MOOG_NEUTRAL:
+                    _gM *= float(_MG.sustain_gain(_pan, f0, _hf))
                 emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
                              _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, noff, 1.0, _mre,
-                             chiff, 0.0, 0.0, 0.0, 1.0, cv * props.chiff_harmonic_gain(_k),
+                             chiff, 0.0, 0.0, 0.0, 1.0,
+                             0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
                              cc, crl, sjit, csc, -1, 0, ph0=_ph)
+            _CBW[0], _CBW[1] = _cbw
+            _NOREFL[0] = False
             _MK[0] = 0
             _FX[0] = -1
             _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0

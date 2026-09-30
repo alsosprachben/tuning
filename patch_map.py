@@ -24,7 +24,8 @@ from tonelib import (
     HornProperties,
     brass_section,
     WoodPercussionProperties,
-    SquareSynthProperties, MoogSawLead, MoogSquareLead,
+    SquareSynthProperties, MoogSawLead, MoogSquareLead, MoogCalliopeLead, MoogChiffLead,
+    MoogCharangLead, MoogVoiceLead, MoogFifthsLead, MoogBassLead,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -384,17 +385,23 @@ _fill(80, 87, SynthLeadProperties)
 # the wild were written for. See tonelib, above TriangleSynthProperties.
 PROGRAM_CLASS[80] = MoogSquareLead               # Lead 1 (square): a Moog, moog.py
 PROGRAM_CLASS[81] = MoogSawLead                  # Lead 2 (sawtooth): a Moog, moog.py
+PROGRAM_CLASS[82] = MoogCalliopeLead             # Lead 3 (calliope): triangles
+PROGRAM_CLASS[83] = MoogChiffLead                # Lead 4 (chiff): a breath on the front
+PROGRAM_CLASS[84] = MoogCharangLead              # Lead 5 (charang): the ladder, then the valve
+PROGRAM_CLASS[85] = MoogVoiceLead                # Lead 6 (voice): the ladder, then formants
+PROGRAM_CLASS[86] = MoogFifthsLead               # Lead 7 (fifths): OSC 2 FREQ +7
+PROGRAM_CLASS[87] = MoogBassLead                 # Lead 8 (bass+lead): OSC 2 at 16'
 # TUNING_MOOG=0 puts the additive leads back -- not a setting to play through,
 # the A/B that shows what the Moog is for, as TUNING_CABINET=0 is the amp's.
 if __import__('os').environ.get('TUNING_MOOG', '1') == '0':
     PROGRAM_CLASS[80] = SquareSynthProperties
     PROGRAM_CLASS[81] = SawtoothSynthProperties
-PROGRAM_CLASS[82] = TriangleSynthProperties      # Lead 3 (calliope): odd, 1/n^2
-PROGRAM_CLASS[83] = ChiffLeadProperties          # Lead 4 (chiff): a breath on the front
-PROGRAM_CLASS[84] = CharangLeadProperties        # Lead 5 (charang): through the valve
-PROGRAM_CLASS[85] = VoiceLeadProperties          # Lead 6 (voice): vocal formants
-PROGRAM_CLASS[86] = FifthsLeadProperties         # Lead 7 (fifths): +700 cents
-PROGRAM_CLASS[87] = BassLeadProperties           # Lead 8 (bass+lead): an octave below
+    PROGRAM_CLASS[82] = TriangleSynthProperties
+    PROGRAM_CLASS[83] = ChiffLeadProperties
+    PROGRAM_CLASS[84] = CharangLeadProperties
+    PROGRAM_CLASS[85] = VoiceLeadProperties
+    PROGRAM_CLASS[86] = FifthsLeadProperties
+    PROGRAM_CLASS[87] = BassLeadProperties
 # 88-95  Synth Pad                     -> soft sustained
 # 88-95 were one BowedStringProperties -- together with 96-103 that was sixteen
 # programs on a single voice, the largest gap in the bank. GM's own names point

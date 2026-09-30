@@ -651,6 +651,12 @@ def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
                 # delR samples later: p0R = p0 - w*(delR - delL).
                 extra['p0'][-1] = ph - w * a
                 extra['p0R'][-1] = ph - w * a - w * (A['delR'][src] - A['delL'][src])
+                # a product is the amplifier's, not the Moog's: no filter row
+                # (the ladder was before the valve) and no oscillator harmonic
+                if 'fx' in extra:
+                    extra['fx'][-1] = -1
+                if 'mk' in extra:
+                    extra['mk'][-1] = 0
                 sc = g / max(A['aM'][src], 1e-12)
                 extra['aL'][-1] = A['aL'][src] * sc
                 extra['aR'][-1] = A['aR'][src] * sc
