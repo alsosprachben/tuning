@@ -139,6 +139,37 @@ void synth_organ(
 // Amplitude is interpolated between block endpoints so fast decays don't step.
 static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; return x*x*(3.f-2.f*x); }
 
+// THE MOOG: a ladder filter and two contours, evaluated per partial -- the C
+// mirror of moog.py, which is the reference and says why each law is what it
+// is. A Moog partial has fx >= 0: its row FT[fx] holds what is fixed at the
+// key (key tracking, the contours' times, the filter mode), and the knob rows
+// KN hold what a knob moves while the note sounds (cutoff, resonance, EG
+// amount, the two sustains), one entry per grid point so a knob never steps
+// at a block boundary. fx < 0, or no fx at all, is every other voice, whose
+// arithmetic is untouched.
+#define FTW 12          // FT: kbfac fA fD fR aA aD aR mode res_bass krow - -
+#define KNW 5           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
+#define MOOG_GRID 128   // samples between evaluations: the live block, so a
+                        // file render and the player land on the same points
+static inline float moog_held(float tt, float A, float D, float S){
+    if(tt<0.f) return 0.f;
+    if(tt<A) return 1.5f*(1.f-expf(-tt*1.0986123f/fmaxf(A,1e-6f)));
+    return S+(1.f-S)*expf(-(tt-A)/(fmaxf(D,1e-6f)*0.25f));
+}
+static inline float moog_adsr(float t, float A, float D, float S, float R, float toff){
+    if(t>=toff) return moog_held(toff,A,D,S)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f));
+    return moog_held(t,A,D,S);
+}
+static inline float moog_ladder(float x, float k, int mode, int rb){
+    // |H| = |num| / |(1+jx)^4 + k|, the modes mixing the poles (moog.ladder_gain)
+    float x2=x*x, re4=1.f-6.f*x2+x2*x2+k, im4=4.f*x-4.f*x*x2;
+    float den=sqrtf(re4*re4+im4*im4);
+    float num = mode==0 ? 1.f : mode==1 ? 1.f+x2 : mode==2 ? 4.f*x2 : x2*(1.f+x2);
+    float h=num/den;
+    if(rb && mode<2) h*=1.f+k;
+    return h;
+}
+
 // Renders absolute samples [n0, n0+winlen) into outL/outR[0 .. winlen). Phase is
 // analytic (ph0 + w*n_absolute), so windows are stateless -- a player can call
 // this per audio block with no carried state. render()/play both use it.
@@ -156,6 +187,8 @@ void synth_voice(
     const float* delL, const float* delR,
     const int* grow, const int* crow, const float* G, const float* S,
     const int* brow, const float* BR, const double* BC,
+    const int* fxr, const float* FT, const float* KN, long knk, long kb0,
+    const float* ampLp, const float* ampRp,
     float sfloor, float spow, float shmax, float shref, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
@@ -177,6 +210,17 @@ void synth_voice(
             float swp = outSL ? sendW[p] : 0.f;
             float sl=susL[p], af=aftL[p], lr=logr[p], lrA=logrA[p];
             float cv=chVol[p], cc=chCyc[p], crl=chRel[p], sj=susJit[p], csc=chScale[p];
+            // a partial the mixer or the waveshape has set to nothing costs
+            // nothing (a Moog template carries every harmonic, some at zero)
+            int fxp = fxr ? fxr[p] : -1;
+            // A MOOG'S LEVEL MOVES ACROSS THE BLOCK, not at its edge: live
+            // re-weighs its partials when a knob turns, and a level that steps
+            // every block is a click (ampLp is the last block's; NULL offline,
+            // where nothing moves it). Every other voice: as before.
+            float aLp = (fxp>=0 && ampLp) ? ampLp[p] : aL, aRp = (fxp>=0 && ampRp) ? ampRp[p] : aR;
+            if(aL==0.f && aR==0.f && aLp==0.f && aRp==0.f) continue;
+            const float* ftr = fxp>=0 ? FT+(long)fxp*FTW : 0;
+            int mg = (BLK%MOOG_GRID==0 && BLK/MOOG_GRID<=64) ? MOOG_GRID : BLK;
             int gr=grow[p]; const float* Grow = gr>=0 ? G+(long)gr*nblk : 0;
             const float* Srow = gr>=0 ? S+(long)crow[p]*nblk : 0;
             // PITCH BEND: a per-CHANNEL pair of rows, selected exactly as the
@@ -207,8 +251,11 @@ void synth_voice(
                 // of chunking/windowing -- a streamed window == the full render.
                 long bs0=b*BLK, bs1=bs0+BLK;
                 long ns=bs0<cs?cs:bs0, ne=bs1>ce?ce:bs1; if(ns>=ne)continue;
+                // Spelled exactly as it always was, and for every partial: moved
+                // inside a branch, gcc vectorised the four evaluations another way
+                // and the organ's swell moved by an ULP. A Moog ignores them.
                 float mL0=AMP(bs0,b,dL), mL1=AMP(bs1,b,dL), mR0=AMP(bs0,b,dR), mR1=AMP(bs1,b,dR);
-                if(mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
+                if(!ftr && mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
                 // chiff fade for this block (state: attack/sustain/release). The
                 // attack chiff rides chiffS -- its OWN short, capped width, NOT the
                 // slow speech fade fadeS -- so a big pipe chuffs briefly, no hiss.
@@ -372,11 +419,54 @@ void synth_voice(
                 // With either term absent its factor is 1 and its phase 0, so a
                 // voice that has only one of them renders exactly as before.
                 float winst=(float)(w*vibfac*(double)bendfac);
+                // THE MOOG'S GAIN on its grid: the amp contour times the ladder
+                // at the cutoff the filter contour has reached, at the
+                // frequency this partial is sounding NOW (bend, glide and
+                // vibrato included, so the peak follows the note). The filter
+                // is shared by both ears; the contour's onset keeps each ear's
+                // own delay, as AMP's does.
+                float gLm[65], gRm[65]; int j0=0;
+                if(ftr){
+                    j0=(int)(bs0/mg); int nj=BLK/mg+1;
+                    float kbf=ftr[0], fA=ftr[1], fD=ftr[2], fR=ftr[3], aA=ftr[4], aD=ftr[5], aR2=ftr[6];
+                    int mode=(int)ftr[7], rb=ftr[8]>0.5f; long krow=(long)ftr[9];
+                    float fhz=winst*SRATE_F/6.2831853f;
+                    float toffL=(float)(off-a-(long)dL)/SRATE_F, toffR=(float)(off-a-(long)dR)/SRATE_F;
+                    float toff=(float)(off-a)/SRATE_F;
+                    float big=0.f;
+                    for(int j=0;j<nj;j++){
+                        long nn=(long)(j0+j)*mg;
+                        long ki=(long)(j0+j)-kb0; if(ki<0)ki=0; if(ki>knk-1)ki=knk-1;
+                        const float* kn=KN+(krow*knk+ki)*KNW;
+                        float t=(float)(nn-a)/SRATE_F;
+                        float fe=moog_adsr(t,fA,fD,kn[3],fR,toff);
+                        float fc=kn[0]*kbf*exp2f(kn[2]*fe);
+                        if(fc<1.f)fc=1.f;
+                        float h=moog_ladder(fhz/fc,kn[1],mode,rb);
+                        gLm[j]=moog_adsr((float)(nn-a-dL)/SRATE_F,aA,aD,kn[4],aR2,toffL)*h;
+                        gRm[j]=moog_adsr((float)(nn-a-dR)/SRATE_F,aA,aD,kn[4],aR2,toffR)*h;
+                        big=fmaxf(big,fmaxf(gLm[j],gRm[j]));
+                    }
+                    // silent for the whole block: above a closed ladder the
+                    // top harmonics of a lead mostly are. The level here is
+                    // BEFORE the master gain, where a note sits near -50 dBFS,
+                    // so 1e-8 is ~110 dB under it -- at 1e-6 it was 70, and a
+                    // renderer with a different headroom skipped different
+                    // partials (live against the file: 2.9e-4 apart).
+                    if(big*fmaxf(fabsf(aL),fabsf(aR))<=1e-8f) continue;
+                }
+                float invg=1.f/(float)mg;
                 double phL=ph0L[p]+w*(double)ns+bph, phR=ph0R[p]+w*(double)ns+bph;
                 float zrL=cos(phL),ziL=sin(phL),zrR=cos(phR),ziR=sin(phR);
                 float rr=cosf(winst),ri=sinf(winst);
                 float invb=1.f/(float)BLK;
                 float jfa=jf*cv*csc;
+                // EVERY OTHER VOICE takes the loop it always took, spelled as it
+                // always was: -ffast-math contracts a restructured expression
+                // differently, and a render moves by an ULP. A MOOG runs the
+                // same body over grid cells, each interpolated between its own
+                // two grid gains; the phasor runs on across them untouched.
+                if(!ftr){
                 for(long n=ns;n<ne;n++){
                     float t=(float)(n-bs0)*invb; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
                     float sL=zrL, sR=zrR;
@@ -412,6 +502,51 @@ void synth_voice(
                     if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
                     float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
                     tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+                }
+                } else {
+                for(int cl=0; cl<BLK/mg; cl++){
+                long c0=bs0+(long)cl*mg, c1=c0+mg;
+                long s0 = ns>c0 ? ns : c0, s1 = ne<c1 ? ne : c1;
+                if(s0>=s1) continue;
+                float a0L=gLm[cl], a1L=gLm[cl+1], a0R=gRm[cl], a1R=gRm[cl+1];
+                for(long n=s0;n<s1;n++){
+                    float t=(float)(n-c0)*invg, tb=(float)(n-bs0)*invb;
+                    float mL=(a0L+(a1L-a0L)*t)*(aLp+(aL-aLp)*tb), mR=(a0R+(a1R-a0R)*t)*(aRp+(aR-aRp)*tb);
+                    float sL=zrL, sR=zrR;
+                    if(jfa>0.f){
+                        double sec=(double)n/SRATE_D;
+                        // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per
+                        // second, so gran IS the noise's bandwidth as a fraction of
+                        // the partial's own frequency: at RAND_GRAN it is redrawn
+                        // every sample and the noise is white, spread flat over the
+                        // whole spectrum no matter which partial it came from. That
+                        // is why turning the wash up far enough to fill between a
+                        // cymbal's modes also fills the notches BETWEEN its bands.
+                        // A smaller gran keeps each partial's noise around the
+                        // partial, so the wash inherits the plate's own shape.
+                        double gbw=(double)chBW[p];
+                        // Two spellings, not a ternary: a voice that does not set
+                        // chiff_bandwidth must take the IDENTICAL expression it took
+                        // before this column existed. -ffast-math folds a constant
+                        // differently from a loaded value, and the index runs to
+                        // ~1e9, so a 1-ULP shift reseeds the hash completely --
+                        // same loudness and same spectrum to 0.01 dB, but not the
+                        // same samples, and every render in the corpus would move.
+                        float jit;
+                        if(gbw==(double)RAND_GRAN)
+                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
+                        else
+                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*gbw))*cc;
+                        float cj=cosf(jit),sj2=sinf(jit);
+                        sL += (zrL*cj - ziL*sj2)*jfa;
+                        sR += (zrR*cj - ziR*sj2)*jfa;
+                    }
+                    outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+                    if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
+                    float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
+                    tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+                }
+                }
                 }
             }
             #undef AMP

@@ -9456,6 +9456,54 @@ class BassLeadProperties(SawtoothSynthProperties):
 CharangLeadProperties.amp_reference = CharangLeadProperties.initial_gain * 2.0
 
 
+class MoogSawLead(SawtoothSynthProperties):
+    """GM 81 on a Moog Messenger: the sawtooth lead as a Moog player sets it.
+
+    The oscillators, the ladder filter and the two contours are moog.py's --
+    this class is only the PATCH, the positions of the panel's knobs, and the
+    renderers build the note from them (blockrender's Moog branch, synthkernel
+    's moog_* functions). `messenger` overrides moog.PANEL; the TUI and a
+    Messenger on the part's channel move the same names.
+
+    Two sawtooths, OSC 2 a few cents sharp so the pair beats slowly -- the
+    sound a single oscillator never has -- into the four-pole ladder half open
+    with a little resonance, and a filter contour that opens it three and a
+    half octaves on the key and settles back: the classic lead's bite. Key
+    tracking at two thirds keeps the top of the keyboard from going glassy.
+    """
+    moog = True
+    # AT TODAY'S LEAD'S LEVEL: the ladder takes the top off, which put this
+    # 9.5 dB under the additive saw it replaces (examples/moog_ab.py, K-weighted
+    # over the same phrase), and every mix balanced on that saw would have lost
+    # it. Recalibrated against the reference soundfonts with the other leads.
+    initial_gain = SawtoothSynthProperties.initial_gain * 10 ** (9.5 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,   # +6 cents
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.55, resonance=0.25, eg_amount=0.75, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.55, f_sustain=0.35, f_release=0.5,
+        a_attack=0.1, a_decay=0.5, a_sustain=1.0, a_release=0.54,
+    )
+
+
+class MoogSquareLead(SquareSynthProperties):
+    """GM 80 on a Moog Messenger: the square lead.
+
+    OSC 1 a square, and the SUB OSC a square an octave under it at half level
+    -- the weight a square lead has on a Moog and not on a chip -- through the
+    ladder a little more open than the saw's and with less contour, because a
+    square's hollowness is the point and a big sweep would bury it."""
+    moog = True
+    initial_gain = SquareSynthProperties.initial_gain * 10 ** (1.5 / 20.0)   # as the saw's
+    messenger = dict(
+        osc1_wave=0.6, osc2_level=0.0, sub_wave=0.4, sub_level=0.5,
+        osc1_level=1.0,
+        cutoff=0.6, resonance=0.15, eg_amount=0.7, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.5, f_sustain=0.4, f_release=0.5,
+        a_attack=0.05, a_decay=0.5, a_sustain=1.0, a_release=0.5,
+    )
+
+
 class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
     agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,

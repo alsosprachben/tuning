@@ -62,7 +62,7 @@ what you can change about it, and the same two keys change every one of them.
 
 | key | what it does |
 |---|---|
-| `tab` | cycle the part table → the globals → [on-screen controls and routes](#controls-a-keyboard-doesnt-have) |
+| `tab` | cycle the part table → the globals → [on-screen controls and routes](#controls-a-keyboard-doesnt-have) → [the synth panel](#the-synth-panel) |
 | arrows / `hjkl` | select a part, and a column within it |
 | `-` `+` | change the selected cell (`_` and shifted `+` are coarse) |
 | `enter` | **acts on the highlighted column** — `patch`, `tuner` and `stops` open a picker; `ch`, `lo`, `hi`, `tr`, `level` take a typed value (ranges accept `C3` as well as `48`) |
@@ -76,6 +76,27 @@ what you can change about it, and the same two keys change every one of them.
 | `P` | panic: all notes off |
 | `room` global | the building: dry, booth, studio, chamber, chapel, hall or church. Early reflections and the live tail both; a switch rebuilds the patches off-thread and crossfades the tail (`live.py --room` at startup) |
 | `?` / `q` | help / quit |
+
+### The synth panel
+
+The synth leads GM 80 (square) and 81 (sawtooth) are a **Moog Messenger**
+(`moog.py`): two oscillators whose WAVESHAPE sweeps folded triangle →
+triangle → saw → square → narrow pulse, a sub oscillator, and the four-mode
+transistor ladder with its two contours. Each lead is a patch on it. The fourth
+pane (`tab` three times) is the panel of the selected part:
+
+| key | what it does |
+|---|---|
+| up / down | select a knob: OSC 1, OSC 2, TUNE, SUB, MIXER, FILTER, F ENV, A ENV |
+| `-` `+`, left / right | turn it (`_` and shifted `+` ten times as far); a switch — OCTAVE, KB TRACK, MODE, RES BASS — steps |
+| space | back to where the patch has it |
+
+A knob you have moved reads yellow and is saved with the part, in the session
+and in presets. It moves notes already sounding: the waveshape, the mixer and
+the tuning glide there over a few blocks rather than jump, which on a
+waveshape — whose harmonics change phase, not only level — would click.
+`TUNING_MOOG=0` puts the old additive leads back for an A/B
+(`examples/moog_ab.py`).
 
 ### Stops
 

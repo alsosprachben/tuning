@@ -1057,7 +1057,13 @@ def rank_speak_sec(events, on_sec, aj):
 PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
                 "tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR",
-                "gr","cr","br","p0R","pl")
+                "gr","cr","br","p0R","pl","fx","mk")
+
+# LIVE'S MOOG TEMPLATES ARE KNOB-NEUTRAL (moog.weights): every harmonic of every
+# oscillator at unit weight and phase 0, so the slab can apply whatever the
+# panel says -- and move it under a held note -- without a template rebuild.
+# live.py sets this while it builds a template; a file render never does.
+MOOG_NEUTRAL = False
 
 
 def prepare(path, tuner='hybrid440'):
@@ -1582,7 +1588,7 @@ def prepare(path, tuner='hybrid440'):
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
@@ -1592,6 +1598,9 @@ def prepare(path, tuner='hybrid440'):
     _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     _PL = [0]                # which player of a section this partial belongs to
+    _FX = [-1]               # the Moog filter row of this note (moog.py), -1 = none
+    _MK = [0]                # a Moog partial's oscillator * 4096 + harmonic, 0 = none
+    _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     # Reflections cost about 7x the partials, since every one of them is
     # audible and nothing prunes. Worth it for a render you will listen to,
@@ -1673,6 +1682,7 @@ def prepare(path, tuner='hybrid440'):
         A["vdl"].append(_VDL[0])
         A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
+        A["fx"].append(_FX[0]); A["mk"].append(_MK[0])
         if _place is None and ampM > 0.0:
             # Q is how much louder this partial is toward the listener than its
             # own spherical average, so ampM^2/Q is the power it feeds the room.
@@ -2885,6 +2895,50 @@ def prepare(path, tuner='hybrid440'):
                                  float(props.stop_tremolo_depth), False)
                 _HT_PEND[0] = len(A['om'])
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
+        if getattr(props, 'moog', False):
+            # A MOOG IS NOT A RANK. Its oscillators are its own partial sets,
+            # every one tagged with this note's filter row, which carries the
+            # contours the kernel evaluates in place of the envelope above --
+            # so the envelope columns are neutral (a 1-sample fade, no decay)
+            # and the release column only has to cover the release. The rows
+            # it is emitted with are the same ones every voice uses: radiation,
+            # the head, the room's images.
+            import moog as _MG
+            # GM's sound controllers are this instrument's knobs (moog.apply_gm)
+            _pan = _MG.apply_gm(_MG.panel_of(props), _SND_PEND[0][2] if _SND_PEND[0] else None)
+            _knr = tuple(_MG.kn_row(_pan))
+            if (ch, _knr) not in _MOOG_KROW:
+                _MOOG_KROW[(ch, _knr)] = len(_MOOG_KN); _MOOG_KN.append(list(_knr))
+            _FX[0] = len(_MOOG_FT)
+            _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)]))
+            _mre = max(1.0, _MG.release_span(_pan) * SR)
+            vb = props.voice_vibrato(f0, 0)
+            _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
+            _PL[0] = 0
+            if MOOG_NEUTRAL:
+                # every harmonic, unit weight, phase 0, at its NOMINAL frequency
+                # (OSC 1 and 2 on the key, the SUB an octave under), over
+                # Nyquist included: the slab weighs them, and zeroes those the
+                # panel's octave and tuning put out of range.
+                _mparts = [(_o, _k, _fn * _k, 1.0, 0.0)
+                           for _o, _fn, _n in ((_MG.OSC1, f0, _MG.OSC_HARMONICS),
+                                               (_MG.OSC2, f0, _MG.OSC_HARMONICS),
+                                               (_MG.SUB, f0 * 0.5, _MG.SUB_HARMONICS))
+                           for _k in range(1, _n + 1)]
+            else:
+                _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
+            for _osc, _k, _hf, _amp, _ph in _mparts:
+                _MK[0] = _osc * 4096 + _k
+                _gM = props.gain * _amp * props.radiation_gain(_hf)
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, noff, 1.0, _mre,
+                             chiff, 0.0, 0.0, 0.0, 1.0, cv * props.chiff_harmonic_gain(_k),
+                             cc, crl, sjit, csc, -1, 0, ph0=_ph)
+            _MK[0] = 0
+            _FX[0] = -1
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            _SND_PEND[0] = None      # its CC74/71 moved the ladder, not sound_shape
+            stops = ()
         for key, ratio, gain, *rest in stops:
             # A stop with no pipes (the harmonium's Expression, Percussion,
             # Tremolo) has a gate and no partials; a rank with a key range (its
@@ -3362,7 +3416,14 @@ def prepare(path, tuner='hybrid440'):
     mvol = [(int(round(_t * SR)), float(_g)) for _t, _q, _g in _mv]
     if mvol and all(abs(_g - 1.0) < 1e-12 for _, _g in mvol):
         mvol = []                       # a file that only ever says "full"
+    # THE MOOG'S ROWS (moog.py). None when the file has no Moog note, and the
+    # kernel then never reads fx -- every other file renders as it did.
+    FT = (np.ascontiguousarray(np.array(_MOOG_FT, np.float32).reshape(-1))
+          if _MOOG_FT else None)
+    KN = (np.ascontiguousarray(np.array(_MOOG_KN, np.float32).reshape(-1))
+          if _MOOG_KN else None)
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
+                FT=FT, KN=KN, knk=1, kb0=0,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH))
@@ -3373,7 +3434,7 @@ def prepare(path, tuner='hybrid440'):
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),
                  ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vdl","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
-                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4")):
+                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4")):
         prep[k] = arr(k, dt)
     return prep
 
@@ -3443,12 +3504,21 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('vdl')),fp(sl('delL')),fp(sl('delR')),
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ip(sl('br')),fp(a['BR']),dp(a['BC']),
+                    # the Moog's filter and contours (moog.py): NULL fx is no
+                    # Moog in this table, and the kernel never reads FT or KN
+                    ip(sl('fx')) if a.get('FT') is not None else None,
+                    fp(a['FT'] if a.get('FT') is not None else _NO_ROWS),
+                    fp(a['KN'] if a.get('KN') is not None else _NO_ROWS),
+                    ctypes.c_long(a.get('knk', 1)), ctypes.c_long(a.get('kb0', 0)),
+                    fp(sl('aLp')) if 'aLp' in a else None, fp(sl('aRp')) if 'aRp' in a else None,
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)
                     fp(sl('sw')) if SndL is not None else None,
                     fp(SndL) if SndL is not None else None,
                     fp(SndR) if SndL is not None else None)
+
+_NO_ROWS = np.zeros(16, np.float32)
 
 _LAST_PREP = {}
 

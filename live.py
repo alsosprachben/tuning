@@ -81,6 +81,7 @@ import mido
 import blockrender as B
 import ump as U
 import chorus as _CHR
+import moog as _MG
 import tonelib as T
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name)
@@ -102,7 +103,7 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
 # up for a fact that costs three floats to carry instead.
 COLS_F4_NOTE = ("gb", "gt", "gc", "vdl")   # + CC78's vibrato delay: also a press
 COLS_I8 = ("non", "noff")
-COLS_I4 = ("gr", "cr", "br", "pl")
+COLS_I4 = ("gr", "cr", "br", "pl", "fx", "mk")
 
 # ---- CC10, and what pan actually IS in this renderer ------------------------
 # NOT A PAN LAW. The file path puts CC10 into channel_pan, which becomes a
@@ -685,6 +686,36 @@ class Slab:
         self.send = [1.0] * 256     # a MIDI 2.0 channel is group * 16 + channel
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
         self.a["br"][:] = -1            # -1 = no bend row; live bends via retune
+        self.a["fx"][:] = -1            # -1 = not a Moog note (moog.py)
+        # a Moog partial's level at the END of the last block: the kernel ramps
+        # from it to aL across this one (synthkernel.c, ampLp)
+        self.a["aLp"] = np.zeros(capacity, np.float32)
+        self.a["aRp"] = np.zeros(capacity, np.float32)
+        # THE MOOG'S ROWS. FT is one row per sounding Moog NOTE -- what was
+        # fixed at its key -- handed out from a pool and returned when the
+        # note's last slot is reaped. KN is one row per PART, twice over: the
+        # knobs at the start of the block and at its end, so a knob moved
+        # between callbacks ramps across the next block instead of stepping
+        # (synthkernel.c reads index 0 and 1 as kb0 and kb0+1).
+        self.FT = np.zeros(MOOG_FT_ROWS * _MG.FT_W, np.float32)
+        self.ft_free = collections.deque(range(MOOG_FT_ROWS))
+        self.ft_cnt = np.zeros(MOOG_FT_ROWS, np.int32)
+        self.KN = np.zeros(MOOG_KN_ROWS * 2 * _MG.KN_W, np.float32)
+        self.kn_of = {}                 # (part id, channel) -> its KN row
+        # A MOOG SLOT'S OWN BASELINE. Its template is knob-neutral (every
+        # harmonic at unit weight, phase 0, nominal frequency: moog.weights),
+        # so the panel is applied here: mo_u is the slot's level at unit
+        # weight -- velocity, headroom and the fader in it, which channel_gain
+        # keeps up to date -- and mo_w, mo_ph, mo_r what the panel currently
+        # makes of it. A knob moved under a held note is new against these.
+        self.mo_uL = np.zeros(capacity, np.float32)
+        self.mo_uR = np.zeros(capacity, np.float32)
+        self.mo_w = np.zeros(capacity, np.float32)
+        self.mo_ph = np.zeros(capacity, np.float64)
+        self.mo_r = np.ones(capacity, np.float64)
+        # (part id, channel) -> the panel its notes play, knobs and GM sound
+        # controllers together; Live answers it (Live._moog_panel_for)
+        self.panel_for = None
         # The wash's bandwidth, as a fraction of the partial's frequency. This
         # list has to match blockrender's `cols` exactly -- synth_partials asks
         # the slab for every column by name -- and it must default to RAND_GRAN
@@ -973,7 +1004,8 @@ class Slab:
             # kernel took before the rows existed. (Unifying the two is a
             # tempting follow-up and deliberately not this change.)
             d.update(lib=self.lib, P=self.cap, nblk=1, G=self.G, S=self.S,
-                     BR=self.BR, BC=self.BC, sh=self.sh)
+                     BR=self.BR, BC=self.BC, sh=self.sh,
+                     FT=self.FT, KN=self.KN, knk=2, kb0=0)
             self._prep_cache = d
         return self._prep_cache
 
@@ -1064,7 +1096,135 @@ class Slab:
         self.last_slots = slots
         if oneshot:
             self.oneshot[key] = True
+        self._moog_stamp(tmpl, key, idx)
         return True
+
+    def knob_row(self, pk, kn=None):
+        """The KN row of a (part id, channel), made on first use from the knobs
+        it is stamped with. Rows are never freed -- they are cheap and the pool
+        is large; when it runs out the mapping starts again."""
+        r = self.kn_of.get(pk)
+        if r is None:
+            if len(self.kn_of) >= MOOG_KN_ROWS:
+                self.kn_of.clear()
+            r = self.kn_of[pk] = len(self.kn_of)
+            if kn is not None:
+                self.set_knobs(r, kn, ramp=False)
+        return r
+
+    def set_knobs(self, r, kn, ramp=True):
+        """The knob values a part's notes read (moog.kn_row). With ramp the
+        new values are the END of the next block, which starts from where the
+        last one ended; without, both ends -- no ramp from nothing."""
+        W = _MG.KN_W
+        v = np.asarray(kn, np.float32)[:W]
+        self.KN[(2 * r + 1) * W:(2 * r + 2) * W] = v
+        if not ramp:
+            self.KN[2 * r * W:(2 * r + 1) * W] = v
+
+    def knobs_advance(self):
+        """After a block: its end is the next one's start -- the knob rows'
+        and the Moog partials' levels alike."""
+        W = _MG.KN_W
+        k = self.KN.reshape(MOOG_KN_ROWS, 2, W)
+        k[:, 0, :] = k[:, 1, :]
+        np.copyto(self.a["aLp"], self.a["aL"])
+        np.copyto(self.a["aRp"], self.a["aR"])
+
+    def _moog_stamp(self, tmpl, key, idx):
+        """A Moog note: its filter row, its part's knob row, and the panel
+        applied to its knob-neutral partials. A full row pool leaves the note
+        unfiltered rather than dropping it -- that has never happened at 1024."""
+        a = self.a
+        ft = tmpl.get("FT") if isinstance(tmpl, dict) else None
+        m = a["fx"][idx] >= 0
+        if ft is None or not m.any():
+            a["fx"][idx] = -1
+            return
+        if not self.ft_free:
+            a["fx"][idx] = -1
+            return
+        pk = (key[0], key[1]) if isinstance(key, tuple) and len(key) > 1 else (key, -1)
+        panel = (self.panel_for(*pk) if self.panel_for else None) or tmpl.get("panel")
+        r = self.ft_free.popleft()
+        W = _MG.FT_W
+        krow = self.knob_row(pk, _MG.kn_row(panel))
+        self.FT[r * W:(r + 1) * W] = _MG.ft_row(panel, float(ft[10]), krow)
+        a["fx"][idx[m]] = r
+        self.ft_cnt[r] = int(m.sum())
+        mo = idx[a["mk"][idx] > 0]
+        if len(mo):
+            self.mo_uL[mo] = self.aL0[mo]
+            self.mo_uR[mo] = self.aR0[mo]
+            self.mo_w[mo] = 1.0
+            self.mo_ph[mo] = 0.0
+            self.mo_r[mo] = 1.0
+            self.moog_retimbre(mo, panel, None)
+        a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
+        a["aLp"][idx] = a["aL"][idx]
+        a["aRp"][idx] = a["aR"][idx]
+
+    def moog_retimbre(self, idx, panel, n):
+        """What the panel makes of these Moog slots: each partial's weight
+        (waveshape, mixer, band limit), its phase (a waveshape's harmonics
+        differ in phase, not only in level) and its frequency (OCTAVE, TUNE,
+        OSC 2 FREQ), each against what was applied before. n None is a note
+        being stamped -- its onset is now, so the frequency is simply set;
+        otherwise the pitch moves through retune, which keeps the phase
+        continuous."""
+        a = self.a
+        w, ph, rt = _MG.weights(panel, a["mk"][idx], a["nf"][idx],
+                                fmax=min(_MG.FMAX_HZ, 0.5 * self.rate))
+        sc = rt / self.mo_r[idx]
+        if np.any(np.abs(sc - 1.0) > 1e-12):
+            if n is None:
+                om0 = a["om"][idx]
+                om1 = om0 * sc
+                non = a["non"][idx].astype(np.float64)
+                a["p0"][idx] -= (om1 - om0) * (non + a["delL"][idx])
+                a["p0R"][idx] -= (om1 - om0) * (non + a["delR"][idx])
+                a["om"][idx] = om1
+            else:
+                self.retune(list(idx), n, om_scale=sc)
+            self.mo_r[idx] = rt
+        # A HARMONIC THAT PASSES THROUGH ZERO CHANGES SIGN, NOT PHASE. Between
+        # a saw and a square the odd harmonics cross zero (a saw's sit at +90
+        # degrees, a square's at -90), and as a phase that is a 180-degree jump
+        # at a block edge while the level ramp still carries the old level --
+        # every odd harmonic flipping at once, a click. So a weight may be
+        # negative: the phase stays within 90 degrees of the one applied and
+        # the level ramps through zero, which is what the crossfade does.
+        d = np.angle(np.exp(1j * (ph - self.mo_ph[idx])))
+        flip = np.abs(d) > 0.5 * np.pi
+        ph = np.where(flip, ph - np.pi * np.sign(d), ph)
+        w = np.where(flip, -w, w)
+        dph = ph - self.mo_ph[idx]
+        a["p0"][idx] += dph
+        a["p0R"][idx] += dph
+        self.mo_ph[idx] = ph
+        # aftertouch rides on aL0: keep the note's current factor over it
+        f = np.ones(len(idx), np.float32)
+        on = self.aL0[idx] > 0
+        if on.any():
+            f[:] = float(np.median(a["aL"][idx][on] / self.aL0[idx][on]))
+        self.aL0[idx] = self.mo_uL[idx] * w
+        self.aR0[idx] = self.mo_uR[idx] * w
+        a["aL"][idx] = self.aL0[idx] * f
+        a["aR"][idx] = self.aR0[idx] * f
+        self.mo_w[idx] = w
+        self.dirty = True
+
+    def moog_rows(self, idx, panel):
+        """Rebuild the filter rows these slots read from a changed panel: the
+        contours' times, the mode, key tracking. The release span follows."""
+        W = _MG.FT_W
+        a = self.a
+        for r in np.unique(a["fx"][idx]):
+            if r < 0:
+                continue
+            row = self.FT[r * W:(r + 1) * W]
+            row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]))
+        a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
 
     def stamp_amp(self, key, src, freqs, amps, phases, n0, rate):
         """Place the amplifier's distortion partials, copying `src` for the rest.
@@ -1197,6 +1357,8 @@ class Slab:
         self.ls_aR[idx] *= r
         self.cv_aL[idx] *= r
         self.cv_aR[idx] *= r
+        self.mo_uL[idx] *= r
+        self.mo_uR[idx] *= r
 
     def repan(self, slots, cc, was, rate, itd=True):
         """Move a note's source position, CC10 `was` -> CC10 `cc`.
@@ -1376,9 +1538,29 @@ class Slab:
                     self.busy[live] = False
                     self.dirty = True
                 self.free.extend(int(i) for i in live)
+                # the Moog rows these slots held, returned with the last of them
+                fr = self.a["fx"][live]
+                fr = fr[fr >= 0]
+                if len(fr):
+                    u, c = np.unique(fr, return_counts=True)
+                    self.ft_cnt[u] -= c.astype(np.int32)
+                    for q in u[self.ft_cnt[u] <= 0]:
+                        self.ft_cnt[q] = 0
+                        self.ft_free.append(int(q))
+                    self.a["fx"][live] = -1
             else:
                 keep.append((idx, off))
         self.retiring = keep
+
+
+# Sounding Moog notes, and parts with Moog knobs, the slab has rows for.
+MOOG_FT_ROWS = 1024
+MOOG_KN_ROWS = 256
+
+
+def moog_grid(blk):
+    """The kernel's evaluation step for Moog partials (synthkernel.c `mg`)."""
+    return 128 if (blk % 128 == 0 and blk // 128 <= 64) else blk
 
 
 # Below this many occupied slots, waking threads costs more than it saves.
@@ -1511,6 +1693,8 @@ class Renderer:
         b = self.bounds()
         L, R = self.L, self.R
         L[:] = 0.0; R[:] = 0.0
+        # the Moog's knob rows are indexed from this block's first grid point
+        self.slab.prep()["kb0"] = n0 // moog_grid(B.BLK)
         snd = self.send
         SL, SR = self.SL, self.SR
         if snd:
@@ -1518,6 +1702,7 @@ class Renderer:
         # A VIEW OF WHAT WAS ASKED FOR, not the whole buffer: once it has grown
         # it stays grown, and the caller wants exactly frame_count samples.
         if b is None:                       # nothing occupied: silence, cheaply
+            self.slab.knobs_advance()
             return L[:frames], R[:frames]
         if self.K == 1 or self.act < PARALLEL_MIN or frames != self.frames:
             # One call over [0, hi). Slots past the high-water mark are idle and
@@ -1539,6 +1724,7 @@ class Renderer:
                 L += self.bufs[k][0]; R += self.bufs[k][1]
                 if snd:
                     SL += self.sbufs[k][0]; SR += self.sbufs[k][1]
+        self.slab.knobs_advance()
         L *= T.master_gain; R *= T.master_gain
         np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
         if snd:
@@ -1855,12 +2041,18 @@ class Patch:
             # TUI owns the terminal. Redirected rather than flag-guarded so
             # that anything added to those passes later is caught too.
             with quiet():
+                B.MOOG_NEUTRAL = True        # the slab applies the panel
                 p = B.prepare(m, self.tuner)
         finally:
+            B.MOOG_NEUTRAL = False
             _L.SIDEBANDS = _was
             _TA.ENABLED = _wasa
         t = {k: np.array(p[k]) for k in ALL_COLS}
         t["P"] = p["P"]
+        t["FT"] = p.get("FT")               # a Moog note's filter row, and
+        t["KN"] = p.get("KN")               # its patch's knobs (moog.py)
+        _vc = self._voice_class(note)
+        t["panel"] = _MG.panel_of(_vc) if getattr(_vc, "moog", False) else None
         t["room_q"] = p.get("room_q")      # what the live room's Q is built from
         nf = t["nf"].astype(np.float64)
         # An unmapped drum note builds NOTHING: percussion_for_note has no
@@ -2015,6 +2207,7 @@ class Part:
         self.level_db = level_db
         self.muted = False
         self.cres = 0.0
+        self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
         self.set_patch(patch)
 
     def set_patch(self, patch):
@@ -2026,6 +2219,10 @@ class Part:
         depth, the rockers, the detune, the drone count. Building a new Part
         would orphan all of them and release every held note through set_parts.
         """
+        # A NEW PROGRAM IS A NEW PATCH: its knobs are its own, not the last
+        # one's -- on a Messenger, recalling a patch sets every knob.
+        if getattr(self, "patch", None) is not None and patch.program != self.patch.program:
+            self.synth = {}
         self.patch = patch
         # Which stops are out, per part: two organ layers can differ.
         ds = getattr(patch, "default_stops", 1)
@@ -2050,11 +2247,21 @@ class Part:
             return "-- %s kit" % drum_set_name(self.program)
         return "%d %s" % (self.program, self.patch.cls_name)
 
+    def moog(self):
+        """The Moog voice this part plays, or None (moog.py)."""
+        if self.drums:
+            return None
+        vc = self.patch._voice_class(60 + self.transpose)
+        return vc if getattr(vc, "moog", False) else None
+
     def to_dict(self):
-        return dict(program=self.program, drums=self.drums, tuner=self.tuner,
-                    channel=self.channel, lo=self.lo, hi=self.hi,
-                    transpose=self.transpose, level_db=self.level_db,
-                    muted=self.muted, drawn=sorted(self.drawn))
+        d = dict(program=self.program, drums=self.drums, tuner=self.tuner,
+                 channel=self.channel, lo=self.lo, hi=self.hi,
+                 transpose=self.transpose, level_db=self.level_db,
+                 muted=self.muted, drawn=sorted(self.drawn))
+        if self.synth:
+            d["synth"] = dict(self.synth)
+        return d
 
     @staticmethod
     def from_dict(d, progress=None):
@@ -2063,6 +2270,7 @@ class Part:
         p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.muted = bool(d.get("muted", False))
+        p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
             p.drawn = {r for r in p.drawn if r in patch.rank_names}
@@ -2078,6 +2286,8 @@ class Live:
         self.rate, self.frames, self.tuner = rate, frames, tuner
         self.verbose = verbose
         self.slab = Slab(capacity)
+        self.slab.panel_for = self._moog_panel_for
+        self.moog_glide = {}            # part id -> {knob: where it has got to}
         self.slab.lib = B.ensure_lib()
         self.slab.rate = float(rate)
         self.headroom_db = headroom_db
@@ -2574,6 +2784,12 @@ class Live:
                 except Exception as e:
                     self.errors += 1
                     self.last_error = "cmd: %s: %s" % (type(e).__name__, e)
+        if self.moog_glide:
+            try:
+                self._moog_tick(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "moog: %s: %s" % (type(e).__name__, e)
         if self.amp_dirty or self.amp_out is not None:
             try:
                 self._amp_pump(n0)
@@ -3462,6 +3678,12 @@ class Live:
             return
         idx = np.fromiter(slots, np.int64, len(slots))
         a = self.slab.a
+        # A MOOG'S CC71-75 ARE ITS PANEL (moog.py): the ladder and the
+        # contours, which sound_shape's power-normalised corner would only
+        # filter a second time.
+        idx = idx[a["fx"][idx] < 0]
+        if not len(idx):
+            return
         if 'attack' in sd:
             a["fa"][idx] *= np.float32(T.sound_time_scale(sd['attack']))
         if 'release' in sd:
@@ -3521,10 +3743,11 @@ class Live:
                 if k[0] != part.pid or k[1] != ch or k[2] < 0 or not sl:
                     continue
                 idx = np.fromiter(sl, np.int64, len(sl))
+                idx = idx[a["fx"][idx] < 0]         # a Moog's are its panel
                 if member:
                     idx = idx[a["noff"][idx] == IDLE]
-                    if not len(idx):
-                        continue
+                if not len(idx):
+                    continue
                 sd = self._snd_for(part, ch, k[2])
                 cls = part.patch._voice_class(k[2] + part.transpose)
                 base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
@@ -3540,6 +3763,99 @@ class Live:
     def _mpe_reshape(self, ch, n0):
         """A member's notes after its manager's CC74 moved."""
         self._reshape_sound(ch, [p for p in self.parts if self._listens(p, ch) and not p.drums])
+
+    # ---- the Moog (moog.py) ------------------------------------------------
+    # A KNOB TURNS, IT DOES NOT JUMP. A waveshape's harmonics differ in PHASE
+    # as well as level -- a saw's sit at +90 degrees, a square's odd ones at
+    # -90 -- so stepping one to the other in a block is a discontinuity in the
+    # wave, which is a click; so is stepping a mixer level. What the notes play
+    # therefore glides toward what was asked, this far per block (a whole
+    # sweep in about 270 ms at 128 frames). The octave is a switch and jumps,
+    # as the Messenger's does.
+    MOOG_GLIDE_PER_BLOCK = 0.01
+    MOOG_GLIDES = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
+                   'sub_level', 'osc2_freq', 'tune')
+
+    def _moog_panel_for(self, pid, ch):
+        """The panel a part's notes on a channel play: its patch's knobs, the
+        part's own over them -- where one is still gliding, where it has got
+        to -- and the channel's GM sound controllers as offsets
+        (moog.apply_gm). None if the part is not a Moog."""
+        part = next((p for p in self.parts if p.pid == pid), None)
+        vc = part.moog() if part is not None else None
+        if vc is None:
+            return None
+        knobs = dict(part.synth)
+        knobs.update(self.moog_glide.get(pid, {}))
+        return _MG.apply_gm(_MG.panel_of(vc, knobs),
+                            self._snd_for(part, ch, 60 - part.transpose) if ch >= 0 else None)
+
+    def _moog_tick(self, n0):
+        """One block of every gliding knob."""
+        step = self.MOOG_GLIDE_PER_BLOCK
+        for pid, now in list(self.moog_glide.items()):
+            part = next((p for p in self.parts if p.pid == pid), None)
+            if part is None or part.moog() is None:
+                self.moog_glide.pop(pid, None)
+                continue
+            base = _MG.panel_of(part.moog(), part.synth)
+            for k in list(now):
+                d = base[k] - now[k]
+                if abs(d) <= step:
+                    now.pop(k)
+                else:
+                    now[k] += step if d > 0 else -step
+            if not now:
+                self.moog_glide.pop(pid, None)
+            self._moog_refresh(part, n0)
+
+    def set_synth(self, part, knob, value):
+        """Turn one of a Moog part's knobs -- from the TUI, or a Messenger's CC.
+        The value is kept on the part (and so in a preset); what it does to
+        notes already sounding happens at the next block boundary."""
+        if knob not in _MG.PANEL or part.moog() is None:
+            return
+        # THE PART HAS THE NEW VALUE AT ONCE, so the next press steps from it
+        # -- five quick presses were one step while the part waited for the
+        # audio thread -- and the audio thread is told where the sounding
+        # notes are gliding FROM.
+        old = float(_MG.panel_of(part.moog(), part.synth)[knob])
+        part.synth[knob] = value
+        def go(n0, part=part, knob=knob, old=old):
+            if knob in self.MOOG_GLIDES and any(k[0] == part.pid for k in self.slab.live):
+                self.moog_glide.setdefault(part.pid, {}).setdefault(knob, old)
+            self._moog_refresh(part, n0)
+        self.dirty = True
+        self.post(go)
+
+    def _moog_refresh(self, part, n0, chans=None):
+        """A Moog part's panel changed: its knob rows ramp to the new values
+        over the next block, its sounding notes' filter rows are rebuilt, and
+        their partials re-weighed. Per channel, because each carries its own
+        sound controllers."""
+        sl = self.slab
+        by_ch = {}
+        for k, slots in list(sl.live.items()):
+            if k[0] == part.pid and slots and (chans is None or k[1] in chans):
+                by_ch.setdefault(k[1], []).extend(slots)
+        for (pid, ch), row in list(sl.kn_of.items()):
+            if pid == part.pid and (chans is None or ch in chans):
+                by_ch.setdefault(ch, [])
+        for ch, slots in by_ch.items():
+            panel = self._moog_panel_for(part.pid, ch)
+            if panel is None:
+                continue
+            sl.set_knobs(sl.knob_row((part.pid, ch), _MG.kn_row(panel)), _MG.kn_row(panel))
+            if not slots:
+                continue
+            idx = np.fromiter(slots, np.int64, len(slots))
+            idx = idx[sl.a["fx"][idx] >= 0]
+            if not len(idx):
+                continue
+            sl.moog_rows(idx, panel)
+            mo = idx[sl.a["mk"][idx] > 0]
+            if len(mo):
+                sl.moog_retimbre(mo, panel, n0)
 
     def _sound_cc(self, ch, cc, value, n0, parts):
         """One CC71-78 (or its GS NRPN) on this channel."""
@@ -3565,7 +3881,7 @@ class Live:
                     if k[0] != part.pid or k[1] != ch or not sl:
                         continue
                     idx = np.fromiter(sl, np.int64, len(sl))
-                    idx = idx[a["noff"][idx] == IDLE]
+                    idx = idx[(a["noff"][idx] == IDLE) & (a["fx"][idx] < 0)]
                     if not len(idx):
                         continue
                     sd = self._snd_for(part, ch, k[2])
@@ -3577,7 +3893,12 @@ class Live:
             for part in here:
                 if name in T.sound_controls_of(part.patch._voice_class(60 + part.transpose)):
                     self._vib_apply(part, ch, n0)
-        # attack, decay, vib_delay: onset facts, for the next note.
+        # attack, decay, vib_delay: onset facts, for the next note -- except
+        # on a Moog, where they are the panel's knobs and move as knobs do.
+        if name in _MG.GM_SOUND:
+            for part in here:
+                if part.moog() is not None:
+                    self._moog_refresh(part, n0, chans=(ch,))
 
     def _mono_cut(self, ch, note, n0, parts):
         """Hand a mono voice over: stop this note NOW, pedal or no pedal.
@@ -8112,12 +8433,14 @@ def selftest():
           _hilo(_t1) - _hilo(_t0) > 6.0 and abs(_pw) < 0.01,
           "  (+%.1f dB of upper partials against the lower, total power %+.3f dB "
           "-- colour, not level)" % (_hilo(_t1) - _hilo(_t0), _pw))
-    _r0, _r1 = _scp(81, []), _scp(81, [(71, 127)])
+    # GM 80/81 are a Moog now (moog.py), whose CC71 is its ladder's RESONANCE;
+    # the calliope keeps the virtual corner this check is about.
+    _r0, _r1 = _scp(82, []), _scp(82, [(71, 127)])
     _nf1 = np.asarray(_r0["nf"])
     _near = np.abs(_nf1 / T.SawtoothSynthProperties.bore_corner_hz - 1.0) < 0.15
     _rg = 10.0 * math.log10((np.asarray(_r1["aM"])[_near] ** 2).sum()
                             / (np.asarray(_r0["aM"])[_near] ** 2).sum())
-    check("CC71 on a saw lead is a resonant peak at its filter's corner",
+    check("CC71 on a synth lead is a resonant peak at its filter's corner",
           _rg > 4.0, "  (%+.1f dB at the corner: a Q, relative to Butterworth)" % _rg)
     _a0, _a1 = _scp(40, []), _scp(40, [(73, 127), (72, 127)])
     _ws = T.sound_time_scale(63 / 64.0)
@@ -9154,16 +9477,24 @@ def selftest():
     # the series at 1/n and a square IS the odd harmonics at 1/n -- there is no
     # object to measure, so the check is against the closed form and the
     # tolerance is floating point, not decibels.
-    for _gm, _law, _nm in ((81, lambda n: 1.0 / n, "sawtooth"),
-                           (80, lambda n: 1.0 / n if n % 2 else 0.0, "square"),
-                           (82, lambda n: 1.0 / (n * n) if n % 2 else 0.0, "triangle")):
-        _q = _leads[_gm](261.63, 0.0, 1.0, 1.0)
-        _v1 = _q.harmonic_volume(1)
-        _worst = max(abs(_q.harmonic_volume(_n) / _v1 - _law(_n) / _law(1))
-                     for _n in range(1, 33))
+    # GM 80 and 81 are a Moog Messenger (moog.py), whose oscillator is the
+    # spec: its sawtooth and square positions are the closed forms, computed
+    # exactly from the wave's straight segments.
+    for _gm, _law, _nm, _pos in ((81, lambda n: 1.0 / n, "sawtooth", _MG.SAW),
+                                 (80, lambda n: 1.0 / n if n % 2 else 0.0, "square", _MG.SQUARE),
+                                 (82, lambda n: 1.0 / (n * n) if n % 2 else 0.0, "triangle", None)):
+        if getattr(_leads[_gm], "moog", False):
+            _cs = np.abs(_MG.osc_spectrum(_pos, 32))
+            _worst = max(abs(_cs[_n - 1] / _cs[0] - _law(_n) / _law(1)) for _n in range(1, 33))
+        else:
+            _q = _leads[_gm](261.63, 0.0, 1.0, 1.0)
+            _v1 = _q.harmonic_volume(1)
+            _worst = max(abs(_q.harmonic_volume(_n) / _v1 - _law(_n) / _law(1))
+                         for _n in range(1, 33))
         check("the %s is EXACTLY the %s series" % (_nm, _nm),
               _worst < 1e-12,
-              "  (worst deviation over 32 partials %.1e)" % _worst)
+              "  (worst deviation over 32 partials %.1e%s)"
+              % (_worst, ", the Moog's oscillator" if getattr(_leads[_gm], "moog", False) else ""))
     # AND ONE OSCILLATOR IS ONE OSCILLATOR. SawtoothSynthProperties' docstring
     # said the section shimmer was switched off and it was not: it inherits
     # BowedStringProperties, so section_players stayed at 7 and GM 80 and 81
@@ -9206,6 +9537,183 @@ def selftest():
     check("...and chiff, charang, voice, fifths and bass each differ in kind",
           len(set(_feat.values())) == 5,
           "  (breath / valve / formants / +700c / -1200c, one each)")
+
+    # ------------------------------------------------------- the Moog (moog.py)
+    # GM 80 and 81 are a Moog Messenger: oscillators that are their Fourier
+    # series, a ladder filter evaluated per partial, and two contours the
+    # kernel evaluates in time. Everything here is against moog.py, which is
+    # the reference both renderers are built from.
+    import io as _io, contextlib as _ctx, tempfile as _tf
+    _mbuf = _io.StringIO()
+    with _ctx.redirect_stdout(_mbuf):
+        _mok = _MG.selftest()
+    check("the Moog's waves and ladder are their closed forms", _mok,
+          "  (%d of %d: the saw, square, triangle and pulse series, the "
+          "folder, the ladder's DC, slopes and peak, RES BASS, the contours)"
+          % (_mbuf.getvalue().count(" ok "), _mbuf.getvalue().count("\n")))
+    _mpath = os.path.join(_tf.gettempdir(), "moog_%d.mid" % os.getpid())
+    _mm = mido.MidiFile(ticks_per_beat=480); _mt = mido.MidiTrack(); _mm.tracks.append(_mt)
+    _mt += [mido.MetaMessage("set_tempo", tempo=500000),
+            mido.Message("program_change", channel=0, program=81),
+            mido.Message("note_on", channel=0, note=60, velocity=100, time=0),
+            mido.Message("note_off", channel=0, note=60, velocity=0, time=960),
+            mido.Message("note_off", channel=0, note=61, velocity=0, time=480)]
+    _mm.save(_mpath)
+    _menv = os.environ.get("TUNING_REFLECT")
+    os.environ["TUNING_REFLECT"] = "0"        # the images are not the Moog's
+    _mwas = dict(T.MoogSawLead.messenger)
+    try:
+        # THE KERNEL FOLLOWS THE REFERENCE through a filter sweep: one
+        # oscillator (a second would beat), a resonant ladder, each harmonic's
+        # level against its own at 0.4 s, where the contours have settled.
+        T.MoogSawLead.messenger = dict(_mwas, osc2_level=0.0, resonance=0.6)
+        _mp = _BRb.prepare(_mpath, "even")
+        _mL, _ = _BRb.synth_window(_mp, 0, int(1.3 * _BRb.SR))
+        _mpan = _MG.panel_of(T.MoogSawLead)
+        _mf0 = 440.0 * 2.0 ** (-9 / 12.0)
+        _mN = 2048; _mw = np.hanning(_mN)
+        def _mprobe(_k, _t):
+            _i = int(_t * _BRb.SR) - _mN // 2
+            _ph = np.exp(-2j * np.pi * _mf0 * _k * (np.arange(_mN) + _i) / _BRb.SR)
+            return 2 * abs(np.sum(_mL[_i:_i + _mN] * _mw * _ph)) / _mw.sum()
+        # The probe is a 46 ms window, and the level moves inside it -- most
+        # of all across the release -- so the reference is the SAME window's
+        # weighted mean of gain_at, not its value at the centre.
+        def _mref(_k, _t):
+            _i = int(_t * _BRb.SR) - _mN // 2
+            _tt = (np.arange(_mN) + _i) / _BRb.SR
+            return float(np.sum(_mw * _MG.gain_at(_mpan, _mf0 * _k, _tt, t_off=1.0)) / _mw.sum())
+        _mts = np.array([0.1, 0.2, 0.4, 0.8, 1.05])
+        _mworst = 0.0
+        for _k in (1, 3, 8):
+            _me = np.array([_mprobe(_k, _t) for _t in _mts])
+            _mr = np.array([_mref(_k, _t) for _t in _mts])
+            _mworst = max(_mworst, float(np.max(np.abs((_me / _me[2]) / (_mr / _mr[2]) - 1.0))))
+        check("...and the kernel's filter sweep follows moog.py's",
+              _mworst < 0.02,
+              "  (harmonics 1, 3, 8 through the contour and the release: worst %.2f%%)"
+              % (100 * _mworst))
+        # WINDOWS ARE FREE: the Moog's gains sit on an absolute grid, so a
+        # render in blocks is the render in one piece.
+        _mW = np.zeros(len(_mL), np.float32)
+        for _s in range(0, len(_mL), 128):
+            _l, _r = _BRb.synth_window(_mp, _s, min(128, len(_mL) - _s))
+            _mW[_s:_s + len(_l)] = _l
+        check("...rendered in 128-sample windows it is the same render",
+              float(np.max(np.abs(_mW - _mL))) < 1e-7,
+              "  (worst %.1e)" % float(np.max(np.abs(_mW - _mL))))
+        T.MoogSawLead.messenger = _mwas
+        # LIVE IS THE FILE RENDERER, key down to release.
+        _ml = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _ml.warm()
+        _mout = []
+        def _mpump(_nb):
+            for _ in range(_nb):
+                _n0 = _ml.n; _ml.apply(_n0); _ml.sweep(_n0); _ml.slab.reap(_n0)
+                _l, _r = _ml.renderer.render(_n0, 128); _mout.append(np.array(_l)); _ml.n = _n0 + 128
+        _ml.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+        _mpump(1)
+        _mix = np.flatnonzero(_ml.slab.busy)
+        _mon = int(_ml.slab.a["non"][_mix][0])
+        # CC74 IS THE PANEL'S, NOT sound_shape's: a Moog note is not shaped twice
+        _ma0 = _ml.slab.a["aL"][_mix].copy()
+        _ml.on_midi(mido.Message("control_change", channel=0, control=74, value=127))
+        _mpump(1)
+        _mcc = float(np.max(np.abs(_ml.slab.a["aL"][_mix] - _ma0)))
+        _ml.on_midi(mido.Message("control_change", channel=0, control=74, value=64))
+        while _ml.n < _mon + _BRb.SR:
+            _mpump(1)
+        _ml.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+        _mpump(1)
+        _moff = int(_ml.slab.a["noff"][_mix][0])
+        _mpump(int(0.5 * _BRb.SR / 128))
+        _mlive = np.concatenate(_mout).astype(float)
+        _mq = _BRb.prepare(_mpath, "even")
+        _mq = dict(_mq, non=_mq["non"] + _mon, noff=np.full_like(_mq["noff"], _moff),
+                   p0=_mq["p0"] - _mq["om"] * _mon, p0R=_mq["p0R"] - _mq["om"] * _mon)
+        _mfile = _BRb.synth_window(_mq, 0, len(_mlive))[0].astype(float)
+        _ma, _mb = _mlive[_mon:], _mfile[_mon:]
+        _mg = float(np.dot(_ma, _mb) / np.dot(_ma, _ma))
+        _mres = float(np.sqrt(((_mg * _ma - _mb) ** 2).mean()) / np.sqrt((_mb ** 2).mean()))
+        # 1e-4, not 1e-7: live's templates are KNOB-NEUTRAL, each partial's
+        # radiation and head read at its NOMINAL frequency, which for OSC 2
+        # six cents sharp is six cents off -- a thousandth of a dB.
+        check("...and live plays it as the file renders it, key down to release",
+              _mres < 1e-3,
+              "  (residual %.1e after the one gain live adds, its headroom)" % _mres)
+        check("...its CC74 leaves the partials to the panel",
+              _mcc == 0.0, "  (aL moved by %.1e)" % _mcc)
+        check("...and every filter row is returned when the note is gone",
+              len(_ml.slab.ft_free) == MOOG_FT_ROWS and not (_ml.slab.a["fx"] >= 0).any(),
+              "  (%d of %d rows free)" % (len(_ml.slab.ft_free), MOOG_FT_ROWS))
+    finally:
+        T.MoogSawLead.messenger = _mwas
+        if _menv is None:
+            os.environ.pop("TUNING_REFLECT", None)
+        else:
+            os.environ["TUNING_REFLECT"] = _menv
+    # THE PANEL, LIVE. A knob turned under a held note ends where a note
+    # struck with it already there sits, and gets there without a click.
+    def _mplay(_pre=None, _turn=None, _at=0.3, _until=1.2, _glide=None):
+        _l = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _l.warm()
+        if _glide is not None:
+            _l.MOOG_GLIDE_PER_BLOCK = _glide
+        if _pre:
+            _l.parts[0].synth.update(_pre)
+        _o = []
+        def _pp():
+            _n0 = _l.n; _l.apply(_n0); _l.sweep(_n0); _l.slab.reap(_n0)
+            _o.append(np.array(_l.renderer.render(_n0, 128)[0])); _l.n = _n0 + 128
+        _l.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _pp()
+        _on = int(_l.slab.a["non"][np.flatnonzero(_l.slab.busy)][0])
+        while _l.n < _on + int(_at * _BRb.SR):
+            _pp()
+        for _k, _v in (_turn or {}).items():
+            _l.set_synth(_l.parts[0], _k, _v)
+        while _l.n < _on + int(_until * _BRb.SR):
+            _pp()
+        return np.concatenate(_o).astype(float)[_on:], _l
+    _mknobs = dict(osc1_wave=0.6, cutoff=0.7, osc2_level=0.0, sub_level=0.6, resonance=0.5)
+    _ma, _ = _mplay(_turn=_mknobs)
+    _mb, _lb = _mplay(_pre=_mknobs)
+    _mf0 = 440.0 * 2.0 ** (-9 / 12.0); _mN = 4096; _mw = np.hanning(_mN)
+    def _mspec(_x):
+        _i = int(0.9 * _BRb.SR); _n = np.arange(_mN)
+        return np.array([2 * abs(np.sum(_x[_i:_i + _mN] * _mw * np.exp(-2j * np.pi * _mf0 * _k * _n / _BRb.SR)))
+                         / _mw.sum() for _k in range(1, 13)])
+    _mdb = float(np.max(np.abs(20 * np.log10(_mspec(_ma) / _mspec(_mb)))))
+    check("a Moog knob turned under a held note lands where striking with it does",
+          _mdb < 0.05,
+          "  (waveshape, mixer, cutoff and resonance at once: worst harmonic %.3f dB)" % _mdb)
+    _msq = dict(osc1_wave=0.6, osc2_wave=0.6)
+    _mref = np.abs(np.diff(_mplay(_pre=_msq, _until=1.0)[0], 2))[int(0.5 * _BRb.SR):].max()
+    _mturn = np.abs(np.diff(_mplay(_turn=_msq, _until=1.0)[0], 2))[int(0.28 * _BRb.SR):int(0.7 * _BRb.SR)].max()
+    _mjump = np.abs(np.diff(_mplay(_turn=_msq, _until=1.0, _glide=10.0)[0], 2))[int(0.28 * _BRb.SR):int(0.7 * _BRb.SR)].max()
+    check("...and gets there without a click: the knob glides, the level ramps",
+          _mturn < 1.2 * _mref,
+          "  (saw to square: the sharpest step %.2fx a square's own edges; "
+          "stepped in one block it was %.0fx)" % (_mturn / _mref, _mjump / _mref))
+    _mpd = _lb.parts[0].to_dict()
+    check("...and a part's knobs are saved with it",
+          Part.from_dict(_mpd).synth == _lb.parts[0].synth == _mknobs,
+          "  (%d knobs through to_dict / from_dict)" % len(_mpd.get("synth", {})))
+
+    _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=0)
+    _mm.save(_mpath)
+    _pn = _BRb.prepare(_mpath, "even")
+    _pa = _BRb.synth_window(_pn, 0, 20000)[0]
+    _pw = dict(_pn, FT=np.zeros(_MG.FT_W, np.float32), KN=np.zeros(_MG.KN_W, np.float32),
+               fx=np.full(_pn["P"], -1, np.int32))
+    _pb = _BRb.synth_window(_pw, 0, 20000)[0]
+    check("...while fx = -1 leaves every other voice bit-identical",
+          _pn.get("FT") is None and np.array_equal(_pa, _pb),
+          "  (a piano with and without the Moog's rows: %s)"
+          % ("identical" if np.array_equal(_pa, _pb) else "DIFFERENT"))
+    try:
+        os.remove(_mpath)
+    except OSError:
+        pass
 
     # ------------------------------------------------------- the brass section
     import patch_map as _PMb

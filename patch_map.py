@@ -24,7 +24,7 @@ from tonelib import (
     HornProperties,
     brass_section,
     WoodPercussionProperties,
-    SquareSynthProperties,
+    SquareSynthProperties, MoogSawLead, MoogSquareLead,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -382,8 +382,13 @@ _fill(80, 87, SynthLeadProperties)
 # MIDI does not specify is anything that makes a waveform a lead rather than a
 # buzz, so the readings below are the Roland SC-55's, which is what the files in
 # the wild were written for. See tonelib, above TriangleSynthProperties.
-PROGRAM_CLASS[80] = SquareSynthProperties        # Lead 1 (square): odd, 1/n
-PROGRAM_CLASS[81] = SawtoothSynthProperties      # Lead 2 (sawtooth): all, 1/n
+PROGRAM_CLASS[80] = MoogSquareLead               # Lead 1 (square): a Moog, moog.py
+PROGRAM_CLASS[81] = MoogSawLead                  # Lead 2 (sawtooth): a Moog, moog.py
+# TUNING_MOOG=0 puts the additive leads back -- not a setting to play through,
+# the A/B that shows what the Moog is for, as TUNING_CABINET=0 is the amp's.
+if __import__('os').environ.get('TUNING_MOOG', '1') == '0':
+    PROGRAM_CLASS[80] = SquareSynthProperties
+    PROGRAM_CLASS[81] = SawtoothSynthProperties
 PROGRAM_CLASS[82] = TriangleSynthProperties      # Lead 3 (calliope): odd, 1/n^2
 PROGRAM_CLASS[83] = ChiffLeadProperties          # Lead 4 (chiff): a breath on the front
 PROGRAM_CLASS[84] = CharangLeadProperties        # Lead 5 (charang): through the valve

@@ -422,6 +422,13 @@ identical tables.
   ratio of a resonant two-pole response to a Butterworth one. That ratio is
   exactly 1 at CC71 = 64, so the saw and square leads, which have no formants,
   answer too. On the muted trumpet it's the mute's own resonance.
+- **On the Moog leads** (GM 80, 81 — `moog.py`) the five that are its panel's
+  knobs turn them: brightness is CUTOFF (two octaves either way), resonance
+  RESONANCE (half the knob), attack, decay and release the amp contour's
+  (×/÷ 4). As on the hardware, a closed filter is quieter — the ladder is not
+  power-normalised — and they move notes already sounding, attack and decay
+  included, because a contour is a function of time and not a fact fixed at
+  the key.
 - **Attack, decay, release** scale real times: a breath's or bow's onset, a
   string's ring, what a sustaining note does when its key comes up.
 - **Vibrato rate** scales a player's rate. **Depth** is *added* upward, up to

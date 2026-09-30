@@ -26,6 +26,7 @@ import numpy as np
 import mido
 import tonelib as T
 import live as LV
+import moog as MG
 import percussion_map as PM
 
 locale.setlocale(locale.LC_ALL, "")
@@ -310,8 +311,9 @@ class TUI:
         self.builder = Builder(); self.builder.start()
         self.row = 0
         self.col = 0
-        self.pane = 0           # 0 = parts, 1 = globals, 2 = controls
+        self.pane = 0           # 0 = parts, 1 = globals, 2 = controls, 3 = synth
         self.crow = 0           # selected row in the controls pane
+        self.srow = 0           # selected knob on the synth panel
         self.grow = 0           # selected global
         self.meter = 0.0
         self.message = ""
@@ -1231,6 +1233,8 @@ class TUI:
 
         if self.pane == 2:
             y = self.draw_controls(scr, y, w, h - 6)
+        elif self.pane == 3:
+            y = self.draw_synth(scr, y, w, h)
         else:
             y = self.draw_globals(scr, y, w, h)
 
@@ -1261,6 +1265,72 @@ class TUI:
                         C("green") if here else C("dim"))
         y += (len(GLOBALS) + 1) // 2
         return y
+
+    # ---- the synth panel (the fourth pane) ----------------------------------
+    def synth_part(self):
+        """The selected part, if it is a Moog, else None."""
+        p = self.sel()
+        return p if p is not None and p.moog() is not None else None
+
+    def synth_value(self, p, knob):
+        return MG.panel_of(p.moog(), p.synth)[knob]
+
+    def synth_bump(self, delta, big=False):
+        p = self.synth_part()
+        if p is None:
+            return
+        knob, kind = SYNTH_KNOBS[self.srow][1], SYNTH_KNOBS[self.srow][3]
+        v = self.synth_value(p, knob)
+        steps = SYNTH_STEPS.get(kind)
+        if steps:
+            # a switch: its next position that way
+            i = min(range(len(steps)), key=lambda j: abs(steps[j] - v))
+            v = steps[max(0, min(len(steps) - 1, i + (1 if delta > 0 else -1)))]
+        else:
+            v = max(0.0, min(1.0, v + delta * (0.1 if big else 0.01)))
+        self.live.set_synth(p, knob, v)
+
+    def synth_reset(self):
+        """Back to what the patch has it at."""
+        p = self.synth_part()
+        if p is None:
+            return
+        knob = SYNTH_KNOBS[self.srow][1]
+        self.live.set_synth(p, knob, MG.panel_of(p.moog())[knob])
+        p.synth.pop(knob, None)
+
+    def draw_synth(self, scr, y, w, h):
+        C = self.C
+        self.addstr(scr, y, 0, "-" * (w - 1), C("dim"))
+        y += 1
+        p = self.synth_part()
+        if p is None:
+            self.addstr(scr, y, 2, "the selected part is not a Moog -- the synth panel is for "
+                        "the Moog leads (GM 80, 81)", C("dim"))
+            return y + 2
+        self.addstr(scr, y, 2, "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
+        self.addstr(scr, y, 18, "part %d, %s" % (self.row + 1, p.label()), C("dim"))
+        y += 1
+        half = (len(SYNTH_KNOBS) + 1) // 2
+        last = [None, None]
+        for i, (sec, knob, label, kind) in enumerate(SYNTH_KNOBS):
+            c = 0 if i < half else 1
+            row = y + (i if i < half else i - half)
+            if row >= h - 4:
+                continue
+            x = 2 if c == 0 else max(40, w // 2)
+            here = i == self.srow
+            if sec != last[c]:
+                self.addstr(scr, row, x, sec, curses.A_BOLD)
+                last[c] = sec
+            v = self.synth_value(p, knob)
+            own = knob in p.synth
+            self.addstr(scr, row, x + 7, "%-10s" % label, curses.A_REVERSE if here else 0)
+            self.addstr(scr, row, x + 18, "%10s" % synth_fmt(kind, v),
+                        (curses.A_BOLD if here else 0) | (C("yellow") if own else 0))
+            if kind not in SYNTH_STEPS:
+                self.addstr(scr, row, x + 29, bar(v, 0.0, 1.0, 8), C("green") if here else C("dim"))
+        return y + half + 1
 
     def draw_meters(self, scr, y, w, h, s):
         C = self.C
@@ -1401,7 +1471,7 @@ class TUI:
     def draw_help(self, scr):
         lines = [
             "parts",
-            "  tab / shift-tab   parts -> globals -> controls and routes",
+            "  tab / shift-tab   parts -> globals -> controls and routes -> synth",
             "  up down           select a part          left right  select a column",
             "  - +               change the selected cell   (with shift: coarse)",
             "  enter             acts on the HIGHLIGHTED COLUMN:",
@@ -1448,6 +1518,14 @@ class TUI:
             "  A route REPLACES its source unless you keep it -- the mod wheel",
             "  routed away takes vibrato, drones, drive and rockers with it.",
             "",
+            "the synth panel  (the fourth pane: the selected part, if it is a Moog)",
+            "  up down           select a knob     - + / left right  turn it",
+            "                    (shift: ten times as far); a switch steps",
+            "  space             back to where the patch has it",
+            "  a knob you have moved shows yellow, and is saved with the part.",
+            "  CC74 and CC71 move CUTOFF and RESONANCE, CC73/75/72 the amp",
+            "  contour's attack, decay and release -- offsets, as on any synth.",
+            "",
             "presets",
             "  S save   L load   -- presets.json, data only; voices live in tonelib.py",
             "  N save   R recall a SCENE: every channel's controls as MIDI events",
@@ -1491,14 +1569,16 @@ class TUI:
         if c == ord("?"):
             self.help = True
         elif c == 9:                                    # tab
-            self.pane = (self.pane + 1) % 3
+            self.pane = (self.pane + 1) % 4
         elif c == curses.KEY_BTAB:
-            self.pane = (self.pane - 1) % 3
+            self.pane = (self.pane - 1) % 4
         elif c in (curses.KEY_UP, ord("k")):
             if self.pane == 0:
                 self.row = max(0, self.row - 1)
             elif self.pane == 1:
                 self.grow = max(0, self.grow - 1)
+            elif self.pane == 3:
+                self.srow = max(0, self.srow - 1)
             else:
                 self.crow = max(0, self.crow - 1)
         elif c in (curses.KEY_DOWN, ord("j")):
@@ -1506,8 +1586,12 @@ class TUI:
                 self.row = min(max(0, len(self.parts()) - 1), self.row + 1)
             elif self.pane == 1:
                 self.grow = min(len(GLOBALS) - 1, self.grow + 1)
+            elif self.pane == 3:
+                self.srow = min(len(SYNTH_KNOBS) - 1, self.srow + 1)
             else:
                 self.crow = min(max(0, len(self.ctl_rows()) - 1), self.crow + 1)
+        elif self.pane == 3 and c == ord(" "):
+            self.synth_reset()
         elif self.pane == 2 and c in (ord("a"), ord("r"), ord("d"), ord("b"),
                                       ord(" "), 10, 13):
             if c == ord("a"):
@@ -1576,6 +1660,8 @@ class TUI:
             self.adjust(delta, big)
         elif self.pane == 2:
             self.ctl_bump(delta, big)
+        elif self.pane == 3:
+            self.synth_bump(delta, big)
         else:
             name, unit, lo, hi, step = GLOBALS[self.grow]
             self.set_global(self.grow, self.get_global(self.grow)
@@ -1626,6 +1712,80 @@ def patch_label(spec):
         return "%s kit" % PM.drum_set_name(spec.get("program", 0))
     p = spec.get("program", 0)
     return GM[p] if p < len(GM) else str(p)
+
+
+# THE MESSENGER'S KNOBS, laid out as its panel is: (section, moog.PANEL name,
+# label, how it reads). A kind in SYNTH_STEPS is a switch; the rest turn 0..1.
+SYNTH_KNOBS = (
+    ("OSC 1", "osc1_octave", "octave", "foot"),
+    ("OSC 1", "osc1_wave", "wave", "wave"),
+    ("OSC 2", "osc2_octave", "octave", "foot"),
+    ("OSC 2", "osc2_wave", "wave", "wave"),
+    ("OSC 2", "osc2_freq", "freq", "semi"),
+    ("TUNE", "tune", "tune", "semi"),
+    ("SUB", "sub_wave", "wave", "subwave"),
+    ("MIXER", "osc1_level", "osc 1", "level"),
+    ("MIXER", "osc2_level", "osc 2", "level"),
+    ("MIXER", "sub_level", "sub", "level"),
+    ("FILTER", "cutoff", "cutoff", "hz"),
+    ("FILTER", "resonance", "resonance", "level"),
+    ("FILTER", "eg_amount", "eg amount", "oct"),
+    ("FILTER", "kb_track", "kb track", "track"),
+    ("FILTER", "mode", "mode", "mode"),
+    ("FILTER", "res_bass", "res bass", "onoff"),
+    ("F ENV", "f_attack", "attack", "time"),
+    ("F ENV", "f_decay", "decay", "time"),
+    ("F ENV", "f_sustain", "sustain", "level"),
+    ("F ENV", "f_release", "release", "time"),
+    ("A ENV", "a_attack", "attack", "time"),
+    ("A ENV", "a_decay", "decay", "time"),
+    ("A ENV", "a_sustain", "sustain", "level"),
+    ("A ENV", "a_release", "release", "time"),
+)
+SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 2.0 / 3.0, 1.0),
+               "mode": (0, 1, 2, 3), "onoff": (False, True)}
+
+
+def synth_fmt(kind, v):
+    """A Messenger knob's value, in the panel's own terms."""
+    if kind == "foot":
+        return "%d'" % int(v)
+    if kind == "wave":
+        if v < MG.TRI - 1e-9:
+            return "fold %d%%" % round(100 * (MG.TRI - v) / MG.TRI)
+        for at, nm in ((MG.TRI, "triangle"), (MG.SAW, "saw"), (MG.SQUARE, "square")):
+            if abs(v - at) < 1e-9:
+                return nm
+        if v < MG.SAW:
+            return "tri>saw"
+        if v < MG.SQUARE:
+            return "saw>sq"
+        return "pulse %d%%" % round(100 * (0.5 - (0.5 - MG.PULSE_MIN) * (v - MG.SQUARE) / (1 - MG.SQUARE)))
+    if kind == "subwave":
+        if abs(v - MG.SUB_SQUARE) < 1e-9:
+            return "square"
+        if v < MG.SUB_SQUARE:
+            return "triangle" if v < 1e-9 else "tri>sq"
+        return "pulse %d%%" % round(100 * (0.5 - (0.5 - MG.PULSE_MIN) * (v - MG.SUB_SQUARE) / (1 - MG.SUB_SQUARE)))
+    if kind == "semi":
+        return "%+.2f st" % MG.bipolar(v, MG.SEMIS)
+    if kind == "level":
+        return "%.2f" % v
+    if kind == "hz":
+        f = MG.knob_cutoff(v)
+        return ("%.1f kHz" % (f / 1000.0)) if f >= 1000 else "%d Hz" % round(f)
+    if kind == "oct":
+        return "%+.1f oct" % MG.bipolar(v, MG.EG_OCTAVES)
+    if kind == "track":
+        return {0.0: "off", 1.0: "1:1"}.get(round(v, 3), "2/3")
+    if kind == "mode":
+        return ("4P LP", "2P LP", "BP", "HP")[int(v)]
+    if kind == "onoff":
+        return "on" if v else "off"
+    if kind == "time":
+        t = MG.knob_time(v)
+        return ("%.2f s" % t) if t >= 1.0 else "%d ms" % round(t * 1000)
+    return str(v)
 
 
 def fmt(v, unit):
