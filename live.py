@@ -1178,7 +1178,8 @@ class Slab:
         # an amplifier after the ladder hears it at its sustain (FT slot 11)
         W = _MG.FT_W
         rows = a["fx"][idx]
-        pre = (rows >= 0) & (self.FT[np.maximum(rows, 0) * W + 11] > 0.5)
+        pre = ((rows >= 0) & (self.FT[np.maximum(rows, 0) * W + 11] > 0.5)
+               & (a["mk"][idx] // 4096 != _MG.SELF))
         if pre.any():
             f0s = self.FT[rows[pre] * W + 10].astype(np.float64)
             fs = a["nf"][idx][pre].astype(np.float64) * rt[pre]
@@ -1220,7 +1221,37 @@ class Slab:
         a["aL"][idx] = self.aL0[idx] * f
         a["aR"][idx] = self.aR0[idx] * f
         self.mo_w[idx] = w
+        if n is not None and panel.get("sync"):
+            self._moog_sync_lock(idx, n)
         self.dirty = True
+
+    def _moog_sync_lock(self, idx, n):
+        """SYNC under a held note. A synced OSC 2 restarts at every one of OSC
+        1's periods, so its harmonic k has to stand at k times OSC 1's own
+        phase plus the synced wave's -- a struck note starts that way, but one
+        that was free drifted anywhere, and on OSC 1's harmonics the two
+        oscillators then added at the wrong phase (23 dB off, measured). Set
+        per note, per ear, and per room image, each against its own OSC 1
+        fundamental; once locked they stay so, running at the same frequencies."""
+        a = self.a
+        mk = a["mk"][idx]
+        o2 = idx[mk // 4096 == _MG.OSC2]
+        if not len(o2):
+            return
+        f1 = idx[mk == _MG.OSC1 * 4096 + 1]
+        key = lambda i: (int(a["fx"][i]), round(float(a["delL"][i]), 2), round(float(a["delR"][i]), 2))
+        fund = {key(i): i for i in f1}
+        for i in o2:
+            j = fund.get(key(i))
+            if j is None:
+                continue
+            k = int(a["mk"][i]) % 4096
+            for col in ("p0", "p0R"):
+                th1 = a[col][j] + a["om"][j] * n - self.mo_ph[j]       # OSC 1's own phase
+                want = k * th1 + self.mo_ph[i]
+                have = a[col][i] + a["om"][i] * n
+                d = want - have
+                a[col][i] += d - 2.0 * np.pi * np.floor(d / (2.0 * np.pi) + 0.5)
 
     def moog_rows(self, idx, panel):
         """Rebuild the filter rows these slots read from a changed panel: the
@@ -9795,6 +9826,65 @@ def selftest():
           "ladder's %s)" % (" ".join("%+.1f" % _v for _v in _mopen),
                             " ".join("%+.0f" % _v for _v in _mclosed),
                             " ".join("%+.0f" % _v for _v in _mlad)))
+
+    # PHASE 4: LFO 1 ON THE CUTOFF, SYNC 1->2, AND THE LADDER'S OWN SINE --
+    # each against moog.py, which the kernel's arithmetic mirrors.
+    _mwas = dict(T.MoogSawLead.messenger)
+    _menv = os.environ.get("TUNING_REFLECT")
+    os.environ["TUNING_REFLECT"] = "0"
+    try:
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        _mf0 = 440.0 * 2.0 ** (-9 / 12.0); _mN = 2048; _mw = np.hanning(_mN)
+        def _mren(**_k):
+            T.MoogSawLead.messenger = dict(_mwas, **_k)
+            return (_BRb.synth_window(_BRb.prepare(_mpath, "even"), 0, int(1.3 * _BRb.SR))[0].astype(float),
+                    _MG.panel_of(T.MoogSawLead))
+        def _mprb(_L, _f, _t):
+            _i = int(_t * _BRb.SR) - _mN // 2
+            return 2 * abs(np.sum(_L[_i:_i + _mN] * _mw * np.exp(-2j * np.pi * _f * (np.arange(_mN) + _i) / _BRb.SR))) / _mw.sum()
+        _mL, _mpan = _mren(osc2_level=0.0, lfo1_rate=math.log(3 / 0.05) / math.log(240), lfo1_depth=0.8,
+                           lfo1_reset=True)
+        def _mrf(_f, _t):
+            _i = int(_t * _BRb.SR) - _mN // 2
+            _tt = (np.arange(_mN) + _i) / _BRb.SR
+            return float(np.sum(_mw * _MG.gain_at(_mpan, _f, _tt, t_off=1.0)) / _mw.sum())
+        _mts = [0.25, 0.35, 0.45, 0.55, 0.65, 0.8]; _mlw = 0.0
+        for _k in (1, 3, 6):
+            _me = np.array([_mprb(_mL, _mf0 * _k, _t) for _t in _mts])
+            _mr = np.array([_mrf(_mf0 * _k, _t) for _t in _mts])
+            _mlw = max(_mlw, float(np.max(np.abs((_me / _me[0]) / (_mr / _mr[0]) - 1))))
+        _mcom = dict(osc2_level=1.0, osc1_level=0.0, cutoff=1.0, eg_amount=0.5, resonance=0.0, kb_track=0.0)
+        _mLs, _ = _mren(sync=True, osc2_freq=1.0, **_mcom)
+        _mLf, _ = _mren(sync=False, osc2_freq=0.5, **_mcom)
+        _ms = np.array([_mprb(_mLs, _mf0 * _k, 0.6) for _k in range(1, 11)])
+        _mfr = np.array([_mprb(_mLf, _mf0 * _k, 0.6) for _k in range(1, 11)])
+        _mrel = (_ms / _mfr) / (np.abs(_MG.sync_spectrum(_MG.SAW, 2 ** (7 / 12.0), 10))
+                               / np.abs(_MG.osc_spectrum(_MG.SAW, 10)))
+        _mrel /= _mrel[0]
+        _mLo, _mpo = _mren(osc1_level=0.0, osc2_level=0.0, resonance=1.0)
+        _mseg = _mLo[int(0.3 * _BRb.SR):int(0.3 * _BRb.SR) + 32768] * np.hanning(32768)
+        _mpk = np.fft.rfftfreq(32768, 1.0 / _BRb.SR)[np.argmax(np.abs(np.fft.rfft(_mseg)))]
+    finally:
+        T.MoogSawLead.messenger = _mwas
+        if _menv is None:
+            os.environ.pop("TUNING_REFLECT", None)
+        else:
+            os.environ["TUNING_REFLECT"] = _menv
+    check("LFO 1 swings the Moog's cutoff as moog.py says",
+          _mlw < 0.02, "  (3 Hz triangle from the key: harmonics 1, 3, 6 worst %.2f%%)" % (100 * _mlw))
+    check("...SYNC 1->2 sounds the synced wave, exactly",
+          float(np.max(np.abs(_mrel - 1))) < 0.01,
+          "  (OSC 2 at +7 st, synced: harmonics 1-10 worst %.2f%%)" % (100 * float(np.max(np.abs(_mrel - 1)))))
+    check("...and at full RESONANCE the ladder sings at its cutoff",
+          abs(_mpk / _MG.self_hz(_mpo, _mf0) - 1) < 0.002,
+          "  (a sine at %.1f Hz; the sustained cutoff is %.1f)" % (_mpk, _MG.self_hz(_mpo, _mf0)))
+    _msk = dict(sync=True, osc2_freq=0.9, lfo1_depth=0.7, lfo1_reset=True)
+    _ma, _ = _mplay(_turn=_msk)
+    _mb, _ = _mplay(_pre=_msk)
+    _mdb2 = float(np.max(np.abs(20 * np.log10(_mspec(_ma) / _mspec(_mb)))))
+    check("...and SYNC, OSC 2 FREQ and the LFO turned under a note land as struck",
+          _mdb2 < 0.05, "  (worst harmonic %.3f dB)" % _mdb2)
 
     # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
     # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.

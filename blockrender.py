@@ -2933,6 +2933,7 @@ def prepare(path, tuner='hybrid440'):
                            for _k in range(1, _n + 1)]
                 _mparts += [(_MG.NOISE, _k + 1, float(_MG.NOISE_HZ[_k]), 1.0, 0.0)
                             for _k in range(len(_MG.NOISE_HZ))]
+                _mparts.append((_MG.SELF, 1, f0, 1.0, 0.0))    # at the key; the slab moves it
             else:
                 _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
             _cbw = (_CBW[0], _CBW[1])
@@ -2950,7 +2951,7 @@ def prepare(path, tuner='hybrid440'):
                 _gM = props.gain * _amp * props.radiation_gain(_hf)
                 if _body is not None:
                     _gM *= float(_body(_hf))
-                if _pre and not MOOG_NEUTRAL:
+                if _pre and not MOOG_NEUTRAL and _osc != _MG.SELF:
                     _gM *= float(_MG.sustain_gain(_pan, f0, _hf))
                 emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
                              _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, noff, 1.0, _mre,
@@ -3536,6 +3537,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     fp(a['KN'] if a.get('KN') is not None else _NO_ROWS),
                     ctypes.c_long(a.get('knk', 1)), ctypes.c_long(a.get('kb0', 0)),
                     fp(sl('aLp')) if 'aLp' in a else None, fp(sl('aRp')) if 'aRp' in a else None,
+                    ip(sl('mk')) if (a.get('FT') is not None and 'mk' in a) else None,
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)

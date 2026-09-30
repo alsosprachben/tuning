@@ -1748,6 +1748,7 @@ SYNTH_KNOBS = (
     ("OSC 2", "osc2_octave", "octave", "foot"),
     ("OSC 2", "osc2_wave", "wave", "wave"),
     ("OSC 2", "osc2_freq", "freq", "semi"),
+    ("OSC 2", "sync", "sync 1>2", "onoff"),
     ("TUNE", "tune", "tune", "semi"),
     ("SUB", "sub_wave", "wave", "subwave"),
     ("MIXER", "osc1_level", "osc 1", "level"),
@@ -1768,9 +1769,15 @@ SYNTH_KNOBS = (
     ("A ENV", "a_decay", "decay", "time"),
     ("A ENV", "a_sustain", "sustain", "level"),
     ("A ENV", "a_release", "release", "time"),
+    ("LFO 1", "lfo1_rate", "rate", "lfohz"),
+    ("LFO 1", "lfo1_shape", "shape", "lfoshape"),
+    ("LFO 1", "lfo1_depth", "depth", "lfodepth"),
+    ("LFO 1", "lfo1_dest", "dest", "lfodest"),
+    ("LFO 1", "lfo1_reset", "kb reset", "onoff"),
 )
 SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 2.0 / 3.0, 1.0),
-               "mode": (0, 1, 2, 3), "onoff": (False, True)}
+               "mode": (0, 1, 2, 3), "onoff": (False, True),
+               "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3)}
 
 
 def synth_fmt(kind, v):
@@ -1809,6 +1816,14 @@ def synth_fmt(kind, v):
         return ("4P LP", "2P LP", "BP", "HP")[int(v)]
     if kind == "onoff":
         return "on" if v else "off"
+    if kind == "lfohz":
+        return "%.2f Hz" % MG.knob_lfo_rate(v)
+    if kind == "lfoshape":
+        return MG.LFO_SHAPES[int(v)]
+    if kind == "lfodepth":
+        return "%+.1f oct" % MG.bipolar(v, MG.LFO_OCTAVES)
+    if kind == "lfodest":
+        return MG.LFO_DESTS[int(v)] + ("" if int(v) == 0 else " (not yet)")
     if kind == "time":
         t = MG.knob_time(v)
         return ("%.2f s" % t) if t >= 1.0 else "%d ms" % round(t * 1000)

@@ -90,7 +90,7 @@ selected part:
 
 | key | what it does |
 |---|---|
-| up / down | select a knob: OSC 1, OSC 2, TUNE, SUB, MIXER, FILTER, F ENV, A ENV |
+| up / down | select a knob: OSC 1, OSC 2 (with SYNC 1>2), TUNE, SUB, MIXER (with NOISE), FILTER, F ENV, A ENV, LFO 1 |
 | `-` `+`, left / right | turn it (`_` and shifted `+` ten times as far); a switch — OCTAVE, KB TRACK, MODE, RES BASS — steps |
 | space | back to where the patch has it |
 | `M` | read a **Messenger on the part's channel** — its knobs turn these |
@@ -102,13 +102,25 @@ waveshape — whose harmonics change phase, not only level — would click.
 `TUNING_MOOG=0` puts the old additive leads back for an A/B
 (`examples/moog_ab.py`).
 
+**What the panel has, and what it does not yet.** LFO 1 sweeps the cutoff —
+triangle, rising saw, falling ramp or square, 0.05–12 Hz, up to three octaves
+either way, from the key (KB RESET) or free-running. SYNC 1>2 restarts OSC 2
+at every one of OSC 1's periods, and since the synced wave is still straight
+segments its spectrum is exact; turning OSC 2 FREQ under it is the classic
+tearing sweep. RESONANCE's last tenth brings in the ladder's own sine at the
+cutoff — at the cutoff the filter contour *sustains* at: a sine that swept
+with the contour would need its phase integrated over the note's history,
+which the stateless kernel cannot carry (the resonant peak on the harmonics
+does sweep). Not yet: LFO 1's other destinations, FM and the MOD section, the
+FB/EXT input, LFO 2, and GLIDE as a panel knob (CC5 portamento works).
+
 **Playing it from a Messenger.** Give the part a channel (the `ch` column),
 then `M` on its panel: that channel's CCs are read by the Messenger's own
 chart (its manual's Appendix A, 14-bit, bipolar knobs centred at 8192) instead
 of General MIDI's, which disagree about half the numbers — CC10 is TUNE, not
 pan. The mod wheel, volume, expression and sustain stay General MIDI's. Panel
-controls the simulator does not model yet (the LFOs, MOD, SYNC, FB) are taken
-and ignored rather than landing on a GM meaning. The ranges of the KB TRACKING
+controls the simulator does not model yet (MOD, FB, LFO 2, the envelope loops)
+are taken and ignored rather than landing on a GM meaning. The ranges of the KB TRACKING
 and MODE switches are not in the manual; even thirds and quarters are assumed.
 
 ### Stops

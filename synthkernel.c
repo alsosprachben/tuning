@@ -148,7 +148,8 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
 // at a block boundary. fx < 0, or no fx at all, is every other voice, whose
 // arithmetic is untouched.
 #define FTW 12          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp
-#define KNW 5           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
+#define KNW 9           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
+                        //     lfo_hz lfo_octaves lfo_shape lfo_reset
 #define MOOG_GRID 128   // samples between evaluations: the live block, so a
                         // file render and the player land on the same points
 static inline float moog_held(float tt, float A, float D, float S){
@@ -188,7 +189,7 @@ void synth_voice(
     const int* grow, const int* crow, const float* G, const float* S,
     const int* brow, const float* BR, const double* BC,
     const int* fxr, const float* FT, const float* KN, long knk, long kb0,
-    const float* ampLp, const float* ampRp,
+    const float* ampLp, const float* ampRp, const int* mkr,
     float sfloor, float spow, float shmax, float shref, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
@@ -430,6 +431,7 @@ void synth_voice(
                     j0=(int)(bs0/mg); int nj=BLK/mg+1;
                     float kbf=ftr[0], fA=ftr[1], fD=ftr[2], fR=ftr[3], aA=ftr[4], aD=ftr[5], aR2=ftr[6];
                     int mode=(int)ftr[7], rb=ftr[8]>0.5f, pre=ftr[11]>0.5f; long krow=(long)ftr[9];
+                    int selfosc = mkr && (mkr[p]>>12)==5;
                     float fhz=winst*SRATE_F/6.2831853f;
                     float toffL=(float)(off-a-(long)dL)/SRATE_F, toffR=(float)(off-a-(long)dR)/SRATE_F;
                     float toff=(float)(off-a)/SRATE_F;
@@ -441,9 +443,20 @@ void synth_voice(
                         float t=(float)(nn-a)/SRATE_F;
                         float fe=moog_adsr(t,fA,fD,kn[3],fR,toff);
                         float fc=kn[0]*kbf*exp2f(kn[2]*fe);
+                        if(kn[6]!=0.f && kn[5]>0.f){
+                            // LFO 1 on the cutoff: from the key (KB RESET) or
+                            // free-running on the absolute clock (moog.lfo)
+                            double tl = kn[8]>0.5f ? (double)(nn-a)/SRATE_D : (double)nn/SRATE_D;
+                            double x=tl*(double)kn[5]; x-=floor(x);
+                            int ls=(int)kn[7]; float xf=(float)x;
+                            float lv = ls==0 ? 1.f-4.f*fabsf(xf-0.5f) : ls==1 ? 2.f*xf-1.f
+                                     : ls==2 ? 1.f-2.f*xf : (xf<0.5f ? 1.f : -1.f);
+                            fc*=exp2f(kn[6]*lv);
+                        }
                         if(fc<1.f)fc=1.f;
-                        float h=moog_ladder(fhz/fc,kn[1],mode,rb);
-                        if(pre){   // the partials carry the ladder at its sustain already
+                        // the ladder's OWN sine (moog.SELF) is not filtered by it
+                        float h = selfosc ? 1.f : moog_ladder(fhz/fc,kn[1],mode,rb);
+                        if(pre && !selfosc){   // the partials carry the ladder at its sustain already
                             float fcs=kn[0]*kbf*exp2f(kn[2]*kn[3]); if(fcs<1.f)fcs=1.f;
                             h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
                         }

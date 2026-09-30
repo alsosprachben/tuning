@@ -59,7 +59,9 @@ exact as the fundamental's.
 """
 import cmath
 import functools
+import json
 import math
+import os
 
 import numpy as np
 
@@ -145,20 +147,63 @@ Q = 250                                # knob positions cached: 250 steps put
                                        # every landmark (0.4, 0.5, 0.6) on one
 
 
-@functools.lru_cache(maxsize=4 * Q)
-def _osc_cached(q, n):
-    s = q / float(Q)
+def _osc_parts(s):
+    """WAVESHAPE at s as [(weight, segments)]: one wave, or the two a
+    crossfade is between."""
     if s < TRI:                                    # folded triangle
         g = 1.0 + (FOLD_MAX - 1.0) * (TRI - s) / TRI
-        return _segments_coeffs(_fold(_skewed_triangle(0.5), g), n)
+        return [(1.0, _fold(_skewed_triangle(0.5), g))]
     if s < SAW:                                    # triangle skewed to a saw
-        return _segments_coeffs(_skewed_triangle(0.5 + 0.5 * (s - TRI) / (SAW - TRI)), n)
+        return [(1.0, _skewed_triangle(0.5 + 0.5 * (s - TRI) / (SAW - TRI)))]
     if s < SQUARE:                                 # saw crossfaded to square
         a = (s - SAW) / (SQUARE - SAW)
-        return ((1.0 - a) * _segments_coeffs(_skewed_triangle(1.0), n)
-                + a * _segments_coeffs(_pulse(0.5), n))
+        return [(1.0 - a, _skewed_triangle(1.0)), (a, _pulse(0.5))]
     d = 0.5 - (0.5 - PULSE_MIN) * (s - SQUARE) / (1.0 - SQUARE)
-    return _segments_coeffs(_pulse(d), n)
+    return [(1.0, _pulse(d))]
+
+
+@functools.lru_cache(maxsize=4 * Q)
+def _osc_cached(q, n):
+    parts = _osc_parts(q / float(Q))
+    c = parts[0][0] * _segments_coeffs(parts[0][1], n)
+    for w, segs in parts[1:]:
+        c = c + w * _segments_coeffs(segs, n)
+    return c
+
+
+def _synced(segs, r):
+    """A wave of period 1/r hard-synced to period 1: each of OSC 1's periods
+    holds r of OSC 2's, restarted at its start -- still straight segments, so
+    its series is as exact as the free waves'."""
+    out, c = [], 0
+    while c < r:
+        for t0, t1, y0, y1 in segs:
+            u0, u1 = c + t0, c + t1
+            if u0 >= r:
+                break
+            if u1 > r:
+                y1 = y0 + (y1 - y0) * (r - u0) / (u1 - u0)
+                u1 = r
+            out.append((u0 / r, u1 / r, y0, y1))
+        c += 1
+    return out
+
+
+@functools.lru_cache(maxsize=1024)
+def _sync_cached(q, rq, n):
+    r = rq / 10000.0
+    c = np.zeros(n, complex)
+    for w, segs in _osc_parts(q / float(Q)):
+        c += w * _segments_coeffs(_synced(segs, r), n)
+    return c
+
+
+def sync_spectrum(shape, r, n):
+    """OSC 2 at WAVESHAPE `shape`, r times OSC 1's frequency, hard-synced to
+    it (SYNC 1->2): c_k of the harmonics of OSC 1. The classic tearing sweep
+    is r moving -- OSC 2 FREQ turned while the sync holds the pitch."""
+    q = int(round(max(0.0, min(1.0, shape)) * Q))
+    return _sync_cached(q, int(round(max(r, 1e-3) * 10000)), int(n)).copy()
 
 
 def osc_spectrum(shape, n):
@@ -283,6 +328,43 @@ def knob_cutoff(v):
     return 20.0 * 1000.0 ** max(0.0, min(1.0, v))
 
 
+def knob_lfo_rate(v):
+    """LFO 1 RATE: 0.05 Hz fully CCW to 12 Hz fully CW, exponentially -- the
+    Messenger's default range."""
+    return 0.05 * 240.0 ** max(0.0, min(1.0, v))
+
+
+LFO_OCTAVES = 3.0   # LFO 1 DEPTH fully either way moves the cutoff this far
+LFO_SHAPES = ('triangle', 'sawtooth', 'ramp', 'square')
+LFO_DESTS = ('cutoff', 'osc 2 freq', 'osc 1 wave', 'sub wave')   # only cutoff, yet
+
+
+def lfo(x, shape):
+    """LFO 1 at phase x (cycles): -1..1. Sawtooth rises, ramp falls."""
+    x = np.asarray(x, float) % 1.0
+    if shape == 0:
+        return 1.0 - 4.0 * np.abs(x - 0.5)
+    if shape == 1:
+        return 2.0 * x - 1.0
+    if shape == 2:
+        return 1.0 - 2.0 * x
+    return np.where(x < 0.5, 1.0, -1.0)
+
+
+# SELF-OSCILLATION. The Messenger's resonance "self-oscillates to a sine at
+# fully clockwise"; here the last tenth of the knob brings in that sine, at the
+# cutoff, rising as the square of how far past 0.9 the knob is, up to SELF_AMP
+# (about a saw's own level). The ladder's feedback itself stops at K_MAX, where
+# a partial on the peak is already 30 dB up. The sine stands at the cutoff the
+# contour SUSTAINS at: a sine that swept with the contour would need its phase
+# integrated over the note's history, which a stateless kernel cannot carry.
+SELF_FROM, SELF_AMP = 0.9, 0.5
+
+
+def self_amp(v):
+    return SELF_AMP * max(0.0, (v - SELF_FROM) / (1.0 - SELF_FROM)) ** 2
+
+
 def knob_k(v):
     """RESONANCE: the ladder's feedback, 0 to K_MAX."""
     return K_MAX * max(0.0, min(1.0, v))
@@ -310,6 +392,8 @@ PANEL = dict(
     f_attack=0.0, f_decay=0.4, f_sustain=0.5, f_release=0.3,
     a_attack=0.0, a_decay=0.4, a_sustain=1.0, a_release=0.3,
     glide=0.0,
+    sync=False,
+    lfo1_rate=0.5, lfo1_shape=0, lfo1_depth=0.5, lfo1_dest=0, lfo1_reset=False,
 )
 
 
@@ -320,9 +404,14 @@ def bipolar(v, span):
 
 def panel_of(props, overrides=None):
     """A voice's knobs: the panel's defaults, the voice's patch over them
-    (its class's `messenger` dict), and a part's own settings over that."""
+    (its class's `messenger` dict), TUNING_MOOG_PANEL over that (JSON knob
+    positions, for a file render -- the panel a file cannot turn), and a
+    part's own settings over everything."""
     out = dict(PANEL)
     out.update(getattr(props, 'messenger', None) or {})
+    env = os.environ.get('TUNING_MOOG_PANEL')
+    if env:
+        out.update({k: v for k, v in json.loads(env).items() if k in PANEL})
     out.update(overrides or {})
     return out
 
@@ -330,14 +419,14 @@ def panel_of(props, overrides=None):
 # ---------------------------------------------------------------- to partials
 # What the kernel is handed. Both renderers build a Moog note from these three,
 # so they cannot disagree about what a knob means.
-FT_W, KN_W = 12, 5      # must match FTW and KNW in synthkernel.c
+FT_W, KN_W = 12, 9      # must match FTW and KNW in synthkernel.c
 FMAX_HZ = 12000.0       # highest partial: past it a saw's harmonics are 27 dB
                         # down at 440 Hz, the ladder usually has them lower
                         # still, and three oscillators' worth is the CPU bill
 OSC_HARMONICS, SUB_HARMONICS = 64, 32
 FOOT = {32: 0.25, 16: 0.5, 8: 1.0, 4: 2.0}      # OCTAVE, against 8'
 SEMIS = 7.0                                     # TUNE and OSC 2 FREQ: +-7
-OSC1, OSC2, SUB, NOISE = 1, 2, 3, 4
+OSC1, OSC2, SUB, NOISE, SELF = 1, 2, 3, 4, 5
 
 # THE NOISE OSCILLATOR, as partials. White noise is a flat spectrum, so it is
 # a bank of noise BANDS: a third of an octave apart from 40 Hz to the top, each
@@ -381,9 +470,20 @@ def partials(panel, f0, fmax=FMAX_HZ):
     out = [(NOISE, k + 1, float(NOISE_HZ[k]), float(NOISE_AMP[k]) * panel['noise_level'], 0.0)
            for k in range(len(NOISE_HZ))
            if panel['noise_level'] > 0.0 and NOISE_HZ[k] <= fmax]
+    sa = self_amp(panel['resonance'])
+    if sa > 0.0:
+        fs = self_hz(panel, f0)
+        if fs <= fmax:
+            out.append((SELF, 1, fs, sa, 0.0))
+    # SYNC: OSC 2 restarts at every one of OSC 1's periods, so it sounds on
+    # OSC 1's harmonics, its wave the synced one
+    sync = bool(panel['sync'])
+    osc2 = ((OSC2, f1, panel['osc2_level'],
+             lambda n: sync_spectrum(panel['osc2_wave'], f2 / f1, n)) if sync else
+            (OSC2, f2, panel['osc2_level'], lambda n: osc_spectrum(panel['osc2_wave'], n)))
     for osc, f, lvl, c in (
             (OSC1, f1, panel['osc1_level'], lambda n: osc_spectrum(panel['osc1_wave'], n)),
-            (OSC2, f2, panel['osc2_level'], lambda n: osc_spectrum(panel['osc2_wave'], n)),
+            osc2,
             (SUB, f1 * 0.5, panel['sub_level'], lambda n: sub_spectrum(panel['sub_wave'], n))):
         if lvl <= 0.0 or f <= 0.0:
             continue
@@ -447,15 +547,27 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
         kk = np.clip(k[m], 1, len(NOISE_AMP)) - 1
         w[m] = np.where(np.asarray(nf, float)[m] > fmax, 0.0,
                         NOISE_AMP[kk] * float(panel['noise_level']))
+    m = osc == SELF                      # the ladder's own sine, at its cutoff
+    if m.any():
+        f0s = np.asarray(nf, float)[m]
+        fs = np.array([self_hz(panel, f) for f in f0s])
+        rt[m] = fs / f0s
+        w[m] = np.where(fs > fmax, 0.0, self_amp(panel['resonance']))
+    sync = bool(panel['sync'])
+    r12 = osc_ratio(panel, OSC2) / osc_ratio(panel, OSC1)
     for o, lvl, n, spec, shape in ((OSC1, 'osc1_level', OSC_HARMONICS, osc_spectrum, 'osc1_wave'),
                                    (OSC2, 'osc2_level', OSC_HARMONICS, osc_spectrum, 'osc2_wave'),
                                    (SUB, 'sub_level', SUB_HARMONICS, sub_spectrum, 'sub_wave')):
         m = osc == o
         if not m.any():
             continue
-        c = spec(panel[shape], n)
+        if o == OSC2 and sync:              # on OSC 1's harmonics, synced
+            c = sync_spectrum(panel[shape], r12, n)
+            r = osc_ratio(panel, OSC1)
+        else:
+            c = spec(panel[shape], n)
+            r = osc_ratio(panel, o)
         kk = np.clip(k[m], 1, n) - 1
-        r = osc_ratio(panel, o)
         rt[m] = r
         w[m] = 2.0 * np.abs(c[kk]) * float(panel[lvl])
         ph[m] = np.angle(c[kk])
@@ -502,8 +614,10 @@ MESSENGER_CC = {
     28: ('a_attack', '14'), 29: ('a_decay', '14'), 30: ('a_sustain', '14'), 31: ('a_release', '14'),
     71: ('sub_wave', '7'), 75: ('osc1_octave', 'foot'), 76: ('osc2_octave', 'foot'),
     78: ('kb_track', 'track'), 79: ('res_bass', 'onoff'), 109: ('mode', 'mode'),
-    2: None, 3: None, 4: None, 13: None, 18: None, 20: None, 27: None, 72: None,
-    73: None, 77: None, 80: None, 81: None, 83: None, 85: None, 89: None, 93: None,
+    77: ('sync', 'onoff'), 3: ('lfo1_rate', '14'), 4: ('lfo1_depth', '14'),
+    83: ('lfo1_shape', 'mode'), 85: ('lfo1_dest', 'mode'), 93: ('lfo1_reset', 'onoff'),
+    2: None, 13: None, 18: None, 20: None, 27: None, 72: None,
+    73: None, 80: None, 81: None, 89: None,
     102: None, 107: None, 108: None, 112: None, 113: None, 114: None, 116: None,
     117: None, 118: None,
 }
@@ -537,10 +651,22 @@ TIMBRE = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
 
 
 def kn_row(panel):
-    """The knob row (KN): what a knob moves while a note sounds."""
+    """The knob row (KN): what a knob moves while a note sounds -- and LFO 1,
+    whose depth only reaches the cutoff when that is where it is sent."""
+    on = int(panel['lfo1_dest']) == 0
     return [knob_cutoff(panel['cutoff']), knob_k(panel['resonance']),
             bipolar(panel['eg_amount'], EG_OCTAVES),
-            float(panel['f_sustain']), float(panel['a_sustain'])]
+            float(panel['f_sustain']), float(panel['a_sustain']),
+            knob_lfo_rate(panel['lfo1_rate']),
+            bipolar(panel['lfo1_depth'], LFO_OCTAVES) if on else 0.0,
+            float(int(panel['lfo1_shape'])), 1.0 if panel['lfo1_reset'] else 0.0]
+
+
+def self_hz(panel, f0):
+    """Where the ladder's own sine stands for a key at f0: the cutoff the
+    filter contour sustains at, key tracking and all."""
+    return (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
+            * 2.0 ** (bipolar(panel['eg_amount'], EG_OCTAVES) * float(panel['f_sustain'])))
 
 
 def release_span(panel):
@@ -555,6 +681,9 @@ def gain_at(panel, f, t, t_off=None):
     fe = adsr(t, knob_time(panel['f_attack']), knob_time(panel['f_decay']),
               panel['f_sustain'], knob_time(panel['f_release']), t_off)
     fc = knob_cutoff(panel['cutoff']) * 2.0 ** (bipolar(panel['eg_amount'], EG_OCTAVES) * fe)
+    kn = kn_row(panel)
+    if kn[6]:        # LFO 1 on the cutoff: from the key (KB RESET), as tested
+        fc = fc * 2.0 ** (kn[6] * lfo(np.asarray(t, float) * kn[5], int(kn[7])))
     h = ladder_gain(f, np.maximum(fc, 1.0), knob_k(panel['resonance']),
                     int(panel['mode']), bool(panel['res_bass']))
     return adsr(t, knob_time(panel['a_attack']), knob_time(panel['a_decay']),
@@ -613,6 +742,26 @@ def selftest():
     r = adsr(np.array([1.0, 1.5]), 0.01, 0.1, 0.6, 0.5, t_off=1.0)
     check("ADSR: release starts at the held level and falls 98%",
           abs(r[0] - 0.6) < 1e-6 and abs(r[1] / r[0] - math.exp(-4)) < 1e-9)
+    saw = osc_spectrum(SAW, 64)
+    check("SYNC at unison is the free wave",
+          np.allclose(sync_spectrum(SAW, 1.0, 64), saw, atol=1e-12))
+    s2 = sync_spectrum(SAW, 2.0, 64)
+    check("...and at an octave, the wave an octave up: even harmonics only",
+          np.allclose(s2[1::2], saw[:32], atol=1e-12) and np.allclose(s2[0::2], 0, atol=1e-12))
+    s15 = 2 * np.abs(sync_spectrum(SAW, 1.5, 64))
+    t = np.linspace(0, 1, 4001)[:-1]
+    y = sum(2 * abs(c) * np.cos(2 * np.pi * (i + 1) * t + cmath.phase(c))
+            for i, c in enumerate(sync_spectrum(SAW, 1.5, 800)))
+    direct = 2 * ((1.5 * t) % 1.0) - 1
+    direct -= direct.mean()                 # its DC (-1/6) is not a partial
+    err = np.median(np.abs(y - direct))
+    check("...and between, the synced wave itself", err < 0.02,
+          "(r 1.5: median err %.3f; the fundamental is OSC 1's, at %.2f)" % (err, s15[0]))
+    check("LFO 1's shapes: triangle, rising saw, falling ramp, square",
+          np.allclose(lfo([0, 0.25, 0.5], 0), [-1, 0, 1]) and np.allclose(lfo([0, 0.5], 1), [-1, 0])
+          and np.allclose(lfo([0, 0.5], 2), [1, 0]) and np.allclose(lfo([0.25, 0.75], 3), [1, -1]))
+    check("RESONANCE self-oscillates only at the top of its travel",
+          self_amp(0.9) == 0.0 and abs(self_amp(1.0) - SELF_AMP) < 1e-12 and self_amp(0.95) > 0)
     check("the noise bank is white noise of NOISE_RMS",
           abs(np.sqrt(0.5 * (NOISE_AMP ** 2).sum()) - NOISE_RMS) < 1e-12
           and np.allclose(NOISE_AMP ** 2 / NOISE_HZ, NOISE_AMP[0] ** 2 / NOISE_HZ[0]),
