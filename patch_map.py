@@ -26,6 +26,10 @@ from tonelib import (
     WoodPercussionProperties,
     SquareSynthProperties, MoogSawLead, MoogSquareLead, MoogCalliopeLead, MoogChiffLead,
     MoogCharangLead, MoogVoiceLead, MoogFifthsLead, MoogBassLead,
+    MoogSynthBass1, MoogSynthBass2, MoogSynthBrass1, MoogSynthBrass2,
+    MoogSynthStrings1, MoogSynthStrings2, MoogWarmPad, MoogPolysynthPad,
+    MoogHaloPad, MoogSweepPad, MoogSoundtrackPad,
+    MoogAtmosphereFX, MoogGoblinsFX, MoogSciFiFX,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -727,6 +731,27 @@ PROGRAM_CLASS[61] = TromboneProperties     # Brass Section: routed per note, see
 # and the two programs differ in that envelope. See tonelib.SynthBrassProperties.
 PROGRAM_CLASS[62] = SynthBrass1Properties  # the bright stab: fast, deep sweep
 PROGRAM_CLASS[63] = SynthBrass2Properties  # the soft pad: slower, shallower
+
+# THE SUBTRACTIVE BANK ON THE MOOG: the synth programs a two-oscillator synth
+# through a ladder actually makes, as the leads (80-87) are. The additive
+# classes above stay as their bases and as the A/B: TUNING_MOOG=0 keeps them.
+# The programs whose mechanism is NOT subtractive -- stretched or inharmonic
+# partials, formants, echo taps -- stay additive. See tonelib, below the leads.
+if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
+    PROGRAM_CLASS[38] = MoogSynthBass1           # saw over a 16' saw, low ladder
+    PROGRAM_CLASS[39] = MoogSynthBass2           # square and SUB, resonant
+    PROGRAM_CLASS[62] = MoogSynthBrass1          # the blat: a 60 ms filter attack
+    PROGRAM_CLASS[63] = MoogSynthBrass2          # slower, darker, wider apart
+    PROGRAM_CLASS[50] = MoogSynthStrings1        # two saws 7 c apart: no chorus
+    PROGRAM_CLASS[51] = MoogSynthStrings2        # slower, darker, 11 c
+    PROGRAM_CLASS[89] = MoogWarmPad              # a low ladder, a slow swell
+    PROGRAM_CLASS[90] = MoogPolysynthPad         # open, and a front to play on
+    PROGRAM_CLASS[94] = MoogHaloPad              # squares, and NOISE for the air
+    PROGRAM_CLASS[95] = MoogSweepPad             # LFO 1 on the cutoff: up AND down
+    PROGRAM_CLASS[97] = MoogSoundtrackPad        # the longest swell, a slow drift
+    PROGRAM_CLASS[99] = MoogAtmosphereFX         # a saw and the NOISE oscillator
+    PROGRAM_CLASS[101] = MoogGoblinsFX           # two wobbles: the voice, and OSC 2
+    PROGRAM_CLASS[103] = MoogSciFiFX             # PWM squares, a resonant contour
 
 # WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
 # family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit

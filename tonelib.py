@@ -9616,6 +9616,262 @@ class MoogSquareLead(SquareSynthProperties):
     )
 
 
+# THE REST OF THE SUBTRACTIVE BANK on the same panel: what a two-oscillator
+# synth through a ladder actually makes. Each keeps the class it replaces as
+# its base, for its GM behaviour (the damper as a gate, the level family), and
+# the Moog branch builds the note from `messenger` alone -- so the base's
+# chorus comb, formants and harmonic_volume drop out. Width is OSC 2 detuned,
+# as on a Messenger; a file's CC93 still runs chorus.py over the channel.
+# Knob laws (moog.py): times 1 ms * 10^(4v), cutoff 20 Hz * 1000^v.
+
+class MoogSynthBass1(SynthBass1Properties):
+    """GM 38 on a Moog: the round bass. A saw with OSC 2 an octave under it
+    on 16' -- an octave, not a detune, because a detune beats in the bass
+    (see SynthBassProperties) -- through the ladder low and a little resonant,
+    and a short filter contour: the pluck is the filter shutting while the
+    amplifier holds, which is the gesture the additive voice imitated with
+    harmonic_decay_db."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthBass1Properties.initial_gain * 10 ** (7.7 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_octave=16, osc1_level=0.85, osc2_level=0.5,
+        cutoff=0.5, resonance=0.2, eg_amount=0.72, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.63, f_sustain=0.2, f_release=0.55,
+        a_attack=0.08, a_decay=0.5, a_sustain=1.0, a_release=0.47,
+    )
+
+
+class MoogSynthBass2(SynthBass2Properties):
+    """GM 39 on a Moog: the hard bass. OSC 1 a square and the SUB a square
+    under it, the resonance up and the contour snappier -- hollow and edged,
+    with the ladder's ring in it, where 38 is round."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthBass2Properties.initial_gain * 10 ** (5.4 / 20.0)
+    messenger = dict(
+        osc1_wave=0.6, osc2_level=0.0, sub_wave=0.4, sub_level=0.5, osc1_level=1.0,
+        cutoff=0.56, resonance=0.45, eg_amount=0.7, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.58, f_sustain=0.25, f_release=0.5,
+        a_attack=0.08, a_decay=0.5, a_sustain=1.0, a_release=0.47,
+    )
+
+
+class MoogSynthBrass1(SynthBrass1Properties):
+    """GM 62 on a Moog: the brass stab. Two saws eight cents apart, the
+    ladder nearly shut, and a filter contour that takes 60 ms to open three
+    octaves and falls back to the middle -- the blat. That sweep IS synth
+    brass on every machine that made the sound; plain, no measured horn body
+    (Ben's call: the patch, not the trumpet)."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthBrass1Properties.initial_gain * 10 ** (6.2 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.42, resonance=0.15, eg_amount=0.78, kb_track=2.0 / 3.0,
+        f_attack=0.445, f_decay=0.65, f_sustain=0.45, f_release=0.55,
+        a_attack=0.37, a_decay=0.5, a_sustain=1.0, a_release=0.55,
+    )
+
+
+class MoogSynthBrass2(SynthBrass2Properties):
+    """GM 63 on a Moog: the soft brass. Wider apart (eleven cents), darker,
+    and slower to open -- a gentler filter attack never reaches as far up the
+    series, so softer is darker too (SynthBrass2Properties)."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthBrass2Properties.initial_gain * 10 ** (7.9 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 11.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.38, resonance=0.1, eg_amount=0.68, kb_track=2.0 / 3.0,
+        f_attack=0.54, f_decay=0.68, f_sustain=0.55, f_release=0.6,
+        a_attack=0.48, a_decay=0.5, a_sustain=1.0, a_release=0.6,
+    )
+
+
+# THE STRING MACHINES AND PADS. A chord is several notes, each its own Moog
+# voice -- a poly Moog. Width is OSC 2 a few cents off OSC 1 and nothing more
+# (Ben's call: the Messenger has no chorus), so the base classes' chorus combs
+# are gone; what is left of a string machine is two saws beating slowly, which
+# is the one half of it a Moog really has. LFO 1 (0.05 Hz * 240^v; DEPTH
+# bipolar about 0.5) sweeps the CUTOFF on the two pads that move.
+
+class MoogSynthStrings1(SynthStrings1Properties):
+    """GM 50 on a Moog: the string machine without its chorus. Two saws
+    seven cents apart, the ladder half open with no resonance, and the amp
+    and filter swelling together over an eighth of a second."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthStrings1Properties.initial_gain * 10 ** (6.5 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 7.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.62, resonance=0.0, eg_amount=0.58, kb_track=2.0 / 3.0,
+        f_attack=0.52, f_decay=0.7, f_sustain=0.7, f_release=0.7,
+        a_attack=0.52, a_decay=0.6, a_sustain=1.0, a_release=0.7,
+    )
+
+
+class MoogSynthStrings2(SynthStrings2Properties):
+    """GM 51 on a Moog: slower and darker than 50, and wider apart --
+    eleven cents, so the pair beats faster."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthStrings2Properties.initial_gain * 10 ** (7.4 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 11.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.55, resonance=0.0, eg_amount=0.58, kb_track=2.0 / 3.0,
+        f_attack=0.62, f_decay=0.7, f_sustain=0.75, f_release=0.72,
+        a_attack=0.62, a_decay=0.6, a_sustain=1.0, a_release=0.72,
+    )
+
+
+class MoogWarmPad(WarmPadProperties):
+    """GM 89 on a Moog: two saws ten cents apart under a low ladder, a slow
+    swell and a long release. Nothing else, as the additive warm pad says:
+    it is the pad you put underneath something."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = WarmPadProperties.initial_gain * 10 ** (10.3 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 10.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.48, resonance=0.05, eg_amount=0.56, kb_track=2.0 / 3.0,
+        f_attack=0.63, f_decay=0.7, f_sustain=0.8, f_release=0.75,
+        a_attack=0.63, a_decay=0.6, a_sustain=1.0, a_release=0.75,
+    )
+
+
+class MoogPolysynthPad(PolysynthPadProperties):
+    """GM 90 on a Moog: the playable one. Open, a quick front (6 ms on the
+    filter, 45 on the amp) and a contour that settles, so chords articulate
+    a rhythm."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = PolysynthPadProperties.initial_gain * 10 ** (10.1 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 7.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.62, resonance=0.15, eg_amount=0.68, kb_track=2.0 / 3.0,
+        f_attack=0.2, f_decay=0.62, f_sustain=0.5, f_release=0.66,
+        a_attack=0.41, a_decay=0.65, a_sustain=0.85, a_release=0.66,
+    )
+
+
+class MoogHaloPad(HaloPadProperties):
+    """GM 94 on a Moog: hollow and airy. Two squares six cents apart (the
+    odd harmonics, exactly, as the additive halo has) and a little of the
+    NOISE oscillator through the same ladder -- the air the name means."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = HaloPadProperties.initial_gain * 10 ** (2.7 / 20.0)
+    messenger = dict(
+        osc1_wave=0.6, osc2_wave=0.6, osc2_freq=0.5 + 6.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.7, noise_level=0.08,
+        cutoff=0.66, resonance=0.1, eg_amount=0.55, kb_track=2.0 / 3.0,
+        f_attack=0.62, f_decay=0.7, f_sustain=0.75, f_release=0.75,
+        a_attack=0.62, a_decay=0.6, a_sustain=1.0, a_release=0.75,
+    )
+
+
+class MoogSweepPad(SweepPadProperties):
+    """GM 95 on a Moog: the sweep, BOTH ways. LFO 1, a slow triangle (0.15
+    Hz), swings the resonant cutoff nearly two octaves up and down -- the
+    rising half the additive sweep pad could not make (its docstring: a
+    partial's decay law cannot rise). The contour stays out of it."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SweepPadProperties.initial_gain * 10 ** (11.6 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.45, resonance=0.45, eg_amount=0.5, kb_track=2.0 / 3.0,
+        f_attack=0.6, f_decay=0.7, f_sustain=1.0, f_release=0.74,
+        a_attack=0.6, a_decay=0.6, a_sustain=1.0, a_release=0.74,
+        lfo1_rate=0.2, lfo1_shape=0, lfo1_depth=0.8, lfo1_dest=0,
+    )
+
+
+class MoogSoundtrackPad(SoundtrackFXProperties):
+    """GM 97 on a Moog: the longest swell in the bank, the widest pair
+    (fourteen cents) and a slower, shallower LFO on the cutoff than the
+    sweep pad's -- width and drift, where 95 is the sweep itself."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SoundtrackFXProperties.initial_gain * 10 ** (13.2 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 14.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.52, resonance=0.2, eg_amount=0.6, kb_track=2.0 / 3.0,
+        f_attack=0.72, f_decay=0.75, f_sustain=0.8, f_release=0.78,
+        a_attack=0.685, a_decay=0.6, a_sustain=1.0, a_release=0.78,
+        lfo1_rate=0.126, lfo1_shape=0, lfo1_depth=0.68, lfo1_dest=0,
+    )
+
+
+# THE THREE EFFECTS THAT ARE SUBTRACTIVE: a breath, a wobble and a sweep,
+# each a Moog mechanism -- the NOISE oscillator, LFO 1 on OSC 2's pitch, LFO 1
+# on the waveshape under a resonant contour. The rest of 96-103 is stretched,
+# inharmonic or echoed, and stays additive.
+
+class MoogAtmosphereFX(AtmosphereFXProperties):
+    """GM 99 on a Moog: the breathy one. A saw and the NOISE oscillator
+    through the same ladder, so the breath is filtered with the tone and
+    swells with it -- where the additive voice smeared every partial into a
+    band (sustain_jitter), this is air beside the note, as a Moog makes it."""
+    moog = True
+    sustain_jitter = 0.0        # the breath is the NOISE oscillator's now
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = AtmosphereFXProperties.initial_gain * 10 ** (12.4 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.4, osc2_freq=0.5 + 5.0 / 1400.0,
+        osc1_level=0.7, osc2_level=0.5, noise_level=0.25,
+        cutoff=0.55, resonance=0.15, eg_amount=0.58, kb_track=2.0 / 3.0,
+        f_attack=0.63, f_decay=0.7, f_sustain=0.75, f_release=0.75,
+        a_attack=0.633, a_decay=0.6, a_sustain=1.0, a_release=0.75,
+    )
+
+
+class MoogGoblinsFX(GoblinsFXProperties):
+    """GM 101 on a Moog: dark, and wobbling. The class's own deep slow
+    vibrato (55 cents) moves the whole voice, as before; LFO 1 adds a
+    second, faster drift on OSC 2 alone (about 30 cents at 0.7 Hz), so the
+    two oscillators slide against each other as well -- unstable, not
+    expressive. Under a low, resonant ladder: a cave, not a broken synth."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = GoblinsFXProperties.initial_gain * 10 ** (11.4 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.4, resonance=0.3, eg_amount=0.55, kb_track=2.0 / 3.0,
+        f_attack=0.6, f_decay=0.7, f_sustain=0.8, f_release=0.72,
+        a_attack=0.62, a_decay=0.6, a_sustain=1.0, a_release=0.72,
+        lfo1_rate=0.48, lfo1_shape=0, lfo1_depth=0.5125, lfo1_dest=1,
+    )
+
+
+class MoogSciFiFX(SciFiFXProperties):
+    """GM 103 on a Moog: hollow, resonant and moving. Two squares (the odd
+    harmonics the additive voice had), LFO 1 working OSC 1's waveshape --
+    pulse-width modulation, the square thinning and filling -- and a deep
+    filter contour that opens slowly on a resonant ladder and closes over
+    seconds: the sweep, on its own peak."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SciFiFXProperties.initial_gain * 10 ** (8.8 / 20.0)
+    messenger = dict(
+        osc1_wave=0.6, osc2_wave=0.6, osc2_freq=0.5 + 9.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.6,
+        cutoff=0.4, resonance=0.6, eg_amount=0.82, kb_track=2.0 / 3.0,
+        f_attack=0.6, f_decay=0.82, f_sustain=0.3, f_release=0.72,
+        a_attack=0.45, a_decay=0.6, a_sustain=1.0, a_release=0.72,
+        lfo1_rate=0.55, lfo1_shape=0, lfo1_depth=0.75, lfo1_dest=2,
+    )
+
+
 class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
     agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,

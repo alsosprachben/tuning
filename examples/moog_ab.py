@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A/B the Moog leads against the additive ones they replace.
+"""A/B the Moog voices against the additive ones they replace.
 
     python3 examples/moog_ab.py [GM ...] [--out DIR]
 
@@ -7,7 +7,8 @@ For GM 80 and 81 (or those named): a phrase on the lead -- running quarters,
 then long notes, so the filter contour is heard both snapping on each key and
 settling under a held one -- rendered on the old additive lead
 (TUNING_MOOG=0) and on the Moog, the Moog's level matched to the old one
-(lib.loudness), both in the studio. Only the voice differs.
+(lib.loudness), both in the studio. Only the voice differs. A bass is
+played two octaves down, where it lives; a pad plays chords.
 """
 import os
 import sys
@@ -24,15 +25,28 @@ PHRASE = ([(i * 0.5, n, 0.5) for i, n in enumerate([60, 62, 64, 65, 67, 69, 71, 
           + [(8.0, 60, 2.0), (10.0, 67, 2.0), (12.0, 72, 4.0), (16.5, 48, 3.0)])
 
 
+# A PAD IS HEARD IN CHORDS: four held, then the same four struck on the
+# beat, so both the swell and the front are heard, and poly voices overlap.
+CHORDS = [(48, 55, 60, 64), (45, 52, 57, 60), (41, 48, 53, 57), (43, 50, 55, 59)]
+CHORD_PHRASE = ([(i * 4.0, n, 4.0) for i, c in enumerate(CHORDS) for n in c]
+                + [(16.0 + i * 1.0, n, 0.9) for i, c in enumerate(CHORDS * 2) for n in c]
+                + [(24.0, n, 6.0) for n in CHORDS[0]])
+CHORDAL = {50, 51, 88, 89, 90, 91, 92, 93, 94, 95, 97, 99, 101, 103}
+
+# where each program is played, in semitones from the phrase as written
+REGISTER = {38: -24, 39: -24}
+
+
 def phrase(prog, path):
+    shift = REGISTER.get(prog, 0)
     m = mido.MidiFile(ticks_per_beat=TPB)
     t = mido.MidiTrack(); m.tracks.append(t)
     t.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(100)))
     t.append(mido.Message('program_change', channel=0, program=prog))
     ev = []
-    for b, n, d in PHRASE:
-        ev.append((int(b * TPB), 1, mido.Message('note_on', channel=0, note=n, velocity=100)))
-        ev.append((int((b + d) * TPB) - 10, 0, mido.Message('note_off', channel=0, note=n, velocity=0)))
+    for b, n, d in (CHORD_PHRASE if prog in CHORDAL else PHRASE):
+        ev.append((int(b * TPB), 1, mido.Message('note_on', channel=0, note=n + shift, velocity=100)))
+        ev.append((int((b + d) * TPB) - 10, 0, mido.Message('note_off', channel=0, note=n + shift, velocity=0)))
     ev.sort(key=lambda e: (e[0], e[1]))
     last = 0
     for tick, _k, msg in ev:

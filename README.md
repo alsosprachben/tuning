@@ -85,7 +85,16 @@ narrow pulse, a sub oscillator, and the four-mode transistor ladder with its
 two contours. Each lead is a patch on it — square, sawtooth, calliope
 (triangles), chiff (with its breath), charang (the ladder in front of a valve),
 voice (the ladder, then an open /a/), fifths (OSC 2 FREQ +7) and bass+lead
-(OSC 2 at 16'). The fourth pane (`tab` three times) is the panel of the
+(OSC 2 at 16'). The synth basses (38/39) and synth brass (62/63) are patches
+on it too: a saw over a 16' saw and a resonant square with its SUB, a brass
+blat (a 60 ms filter attack) and its softer, darker sibling. So are the
+string machines (50/51) and the pads that are subtractive -- warm, polysynth,
+halo (squares and a breath of NOISE), sweep (LFO 1 on the cutoff, up and
+down) and soundtrack (97) -- and three effects: atmosphere (99, a saw and the
+NOISE oscillator), goblins (101, OSC 2 drifting against the voice's own deep
+wobble) and sci-fi (103, PWM squares under a resonant contour) -- each note its own voice, a poly Moog, with OSC 2
+detuned for width and no chorus. What is stretched, inharmonic, sung or
+echoed stays additive. `TUNING_MOOG=0` puts every one of them back, for A/B. The fourth pane (`tab` three times) is the panel of the
 selected part:
 
 | key | what it does |
