@@ -1434,8 +1434,10 @@ class TUI:
             self.addstr(scr, row, x + 7, "%-10s" % label, curses.A_REVERSE if here else 0)
             self.addstr(scr, row, x + 18, "%10s" % synth_fmt(kind, v, pan),
                         (curses.A_BOLD if here else 0) | (C("yellow") if own else 0))
-            if kind not in SYNTH_STEPS:
-                self.addstr(scr, row, x + 29, bar(v, 0.0, 1.0, 8), C("green") if here else C("dim"))
+            if kind in self.SYNTH_CENTRED:
+                self.addstr(scr, row, x + 29, signed_bar(v, 4), C("green") if here else C("dim"))
+            elif kind not in SYNTH_STEPS:
+                self.addstr(scr, row, x + 29, bar(v, 0.0, 1.0, 9), C("green") if here else C("dim"))
         # THE MESSENGER THIS PANEL SETS, if one is plugged in (--messenger)
         L = self.live
         row = y + half
@@ -1979,10 +1981,43 @@ def fmt(v, unit):
     return "%.2f" % v
 
 
+# THE BARS, at eight steps a cell: recept's bar (../recept/bar.py, bar.js),
+# a full block for each whole cell and one of the left-aligned eighths for
+# the remainder. A bar growing LEFT (the negative half of a centred knob) has
+# no right-aligned eighths to draw with, so, as recept does, its part cell is
+# the complement drawn from the left.
+BAR_FILL = "\u2588"
+BAR_EIGHTHS = (" ", "\u258f", "\u258e", "\u258d", "\u258c", "\u258b", "\u258a", "\u2589")
+
+
+def _bar(f, n, left=False):
+    """A bar n cells wide filled to the fraction f (0..1)."""
+    f = max(0.0, min(1.0, f))
+    if left:
+        f = 1.0 - f
+    sn = f * n
+    si = min(int(sn), n)
+    sr = sn - si
+    if si >= n:
+        return (" " * n) if left else (BAR_FILL * n)
+    if left:
+        if sr == 0.0:                       # the edge on a cell boundary: that cell is full
+            return " " * si + BAR_FILL * (n - si)
+        return " " * si + BAR_EIGHTHS[min(7, int((1.0 - sr) * 8))] + BAR_FILL * (n - si - 1)
+    return BAR_FILL * si + BAR_EIGHTHS[min(7, int(sr * 8))] + " " * (n - si - 1)
+
+
 def bar(v, lo, hi, n):
-    f = 0.0 if hi <= lo else max(0.0, min(1.0, (v - lo) / (hi - lo)))
-    k = int(round(f * n))
-    return "#" * k + "-" * (n - k)
+    return _bar(0.0 if hi <= lo else (v - lo) / (hi - lo), n)
+
+
+def signed_bar(v, n):
+    """A centred knob, v in 0..1 with its detent at 0.5: n cells either side
+    of a mark, filling away from it."""
+    d = 2.0 * (max(0.0, min(1.0, v)) - 0.5)
+    if d >= 0.0:
+        return " " * n + "\u2502" + _bar(d, n)
+    return _bar(-d, n, left=True) + "\u2502" + " " * n
 
 
 def run(live, port_name, ump_client=None):
