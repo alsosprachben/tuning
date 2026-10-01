@@ -701,6 +701,8 @@ class Slab:
         self.FT = np.zeros(MOOG_FT_ROWS * _MG.FT_W, np.float32)
         self.ft_free = collections.deque(range(MOOG_FT_ROWS))
         self.ft_cnt = np.zeros(MOOG_FT_ROWS, np.int32)
+        # which Messenger of a LAYERED voice a row is (moog.layers_of): 'a' or 'b'
+        self.ft_layer = ['a'] * MOOG_FT_ROWS
         self.KN = np.zeros(MOOG_KN_ROWS * 2 * _MG.KN_W, np.float32)
         self.kn_of = {}                 # (part id, channel) -> its KN row
         # THE MOD SECTION'S PITCH ROWS (moog.pitch_rows), per sounding note:
@@ -1038,13 +1040,14 @@ class Slab:
             self._prep_cache = d
         return self._prep_cache
 
-    def stamp(self, tmpl, key, n0, vel_scale):
+    def stamp(self, tmpl, key, n0, vel_scale, layer='a'):
         """Place one note's partials at absolute sample n0. Returns False if the
-        slab is full -- the caller decides what to do about that."""
+        slab is full -- the caller decides what to do about that. `layer` is
+        which Messenger of a layered Moog these partials are (moog.layers_of)."""
         return self.stamp_cols(tmpl, tmpl["P"], key, n0, vel_scale,
-                               tmpl["hrel"], tmpl.get("dur", 0), tmpl.get("oneshot"))
+                               tmpl["hrel"], tmpl.get("dur", 0), tmpl.get("oneshot"), layer)
 
-    def stamp_cols(self, tmpl, n, key, n0, vel_scale, hrel, dur, oneshot):
+    def stamp_cols(self, tmpl, n, key, n0, vel_scale, hrel, dur, oneshot, layer='a'):
         """As stamp(), but over an arbitrary column dict -- so one organ RANK can
         be placed on its own, which is what drawing a stop mid-note means."""
         if n == 0:
@@ -1134,7 +1137,7 @@ class Slab:
         self.last_slots = slots
         if oneshot:
             self.oneshot[key] = True
-        self._moog_stamp(tmpl, key, idx)
+        self._moog_stamp(tmpl, key, idx, layer)
         return True
 
     def knob_row(self, pk, kn=None):
@@ -1169,7 +1172,7 @@ class Slab:
         np.copyto(self.a["aLp"], self.a["aL"])
         np.copyto(self.a["aRp"], self.a["aR"])
 
-    def _moog_stamp(self, tmpl, key, idx):
+    def _moog_stamp(self, tmpl, key, idx, layer='a'):
         """A Moog note: its filter row, its part's knob row, and the panel
         applied to its knob-neutral partials. A full row pool leaves the note
         unfiltered rather than dropping it -- that has never happened at 1024."""
@@ -1183,10 +1186,13 @@ class Slab:
             a["fx"][idx] = -1
             return
         pk = (key[0], key[1]) if isinstance(key, tuple) and len(key) > 1 else (key, -1)
-        panel = (self.panel_for(*pk) if self.panel_for else None) or tmpl.get("panel")
+        panel = (self.panel_for(*pk, layer) if self.panel_for else None) or tmpl.get("panel")
         r = self.ft_free.popleft()
+        self.ft_layer[r] = layer
         W = _MG.FT_W
-        krow = self.knob_row(pk, _MG.kn_row(panel))
+        # layer B's knob row is its own; layer A's keeps the (part, channel)
+        # key every single-panel voice has
+        krow = self.knob_row(pk if layer == 'a' else pk + (layer,), _MG.kn_row(panel))
         pp = _MG.pitch_params(panel)
         sf = _MG.shape_flags(panel)
         self.FT[r * W:(r + 1) * W] = _MG.ft_row(panel, float(ft[10]), krow, ft[11] > 0.5,
@@ -2473,6 +2479,7 @@ class Part:
         self.muted = False
         self.cres = 0.0
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
+        self.synth_b = {}       # ...and a layered Moog's second Messenger's
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
         self.set_patch(patch)
 
@@ -2489,6 +2496,7 @@ class Part:
         # one's -- on a Messenger, recalling a patch sets every knob.
         if getattr(self, "patch", None) is not None and patch.program != self.patch.program:
             self.synth = {}
+            self.synth_b = {}
         self.patch = patch
         # Which stops are out, per part: two organ layers can differ.
         ds = getattr(patch, "default_stops", 1)
@@ -2527,6 +2535,8 @@ class Part:
                  muted=self.muted, drawn=sorted(self.drawn))
         if self.synth:
             d["synth"] = dict(self.synth)
+        if self.synth_b:
+            d["synth_b"] = dict(self.synth_b)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
         return d
@@ -2539,6 +2549,7 @@ class Part:
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.muted = bool(d.get("muted", False))
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
+        p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
         p.cc_map = d.get("cc_map", "gm")
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
@@ -3825,6 +3836,21 @@ class Live:
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
+        # A LAYERED MOOG (moog.layers_of): the same knob-neutral template again
+        # for its second Messenger, under the SAME key -- so everything below,
+        # and note-off, acts on both -- each stamp's rows reading its own panel.
+        # On layer A's onset: a second stamp drawing its own scatter would put
+        # the two layers a few ms apart, where the file has them together.
+        _vcm = part.moog()
+        _lslots = {'a': list(self.slab.last_slots)}
+        if _vcm is not None:
+            _la = self.slab.a
+            _lon = int(min(_la["non"][i] - _la["rdl"][i] for i in _lslots['a']))
+            for _ly in _MG.layers_of(_vcm)[1:]:
+                if self.slab.stamp(dict(tmpl, scatter_ms=0.0), key, _lon, scale, layer=_ly):
+                    _lslots[_ly] = list(self.slab.last_slots)
+                else:
+                    self.dropped += 1
         # a note started while the wheel is up must join in progress
         slots = self.slab.live.get(key)
         # PAN BEFORE THE EFFECTS CAPTURE. clav_tone, tremolo_arm and press all
@@ -3906,7 +3932,8 @@ class Live:
                              vd=(v2 if v2 != 0.0 else None),
                              vrs=(r2 if r2 != 1.0 else None))
         if part.moog() is not None and slots:
-            self._mf104(part, ch, note, tmpl, key, slots, scale, n0, b, _cp)
+            for _ly, _ls in _lslots.items():         # each Messenger its own pedal
+                self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
 
     # THE MF-104M, LIVE (mf104.py): a Moog part whose panel has the pedal on
     # stamps each repeat as its own key at n0 + k tau -- a future onset, which
@@ -3919,8 +3946,8 @@ class Live:
     # the original's note-off before it had sounded.
     MF104_SLOT = "mf104"
 
-    def _mf104(self, part, ch, note, tmpl, key, slots, scale, n0, b, cpan):
-        pan = self._moog_panel_for(part.pid, ch)
+    def _mf104(self, part, ch, note, tmpl, key, slots, scale, n0, b, cpan, layer='a'):
+        pan = self._moog_panel_for(part.pid, ch, layer)
         st = _MFD.settings(pan)
         if st is None:
             return
@@ -3954,9 +3981,9 @@ class Live:
                    for c, v in tmpl.items()}
             sub["P"] = int(m.sum())
             sub["scatter_ms"] = 0.0
-            ckey = (part.pid, ch, note, "%s%d_%d" % (self.MF104_SLOT, k, n0))
+            ckey = (part.pid, ch, note, "%s%s%d_%d" % (self.MF104_SLOT, '' if layer == 'a' else layer, k, n0))
             if not self.slab.stamp_cols(sub, sub["P"], ckey, on + d, scale, sub["hrel"],
-                                        sub.get("dur", 0), sub.get("oneshot")):
+                                        sub.get("dur", 0), sub.get("oneshot"), layer):
                 self.dropped += 1
                 break
             cs = self.slab.last_slots
@@ -4252,7 +4279,7 @@ class Live:
     MOOG_GLIDES = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
                    'sub_level', 'noise_level', 'osc2_freq', 'tune', 'mod_amount')
 
-    def _moog_panel_for(self, pid, ch):
+    def _moog_panel_for(self, pid, ch, layer='a'):
         """The panel a part's notes on a channel play: its patch's knobs, the
         part's own over them -- where one is still gliding, where it has got
         to -- and the channel's GM sound controllers as offsets
@@ -4261,20 +4288,24 @@ class Live:
         vc = part.moog() if part is not None else None
         if vc is None:
             return None
-        knobs = dict(part.synth)
-        knobs.update(self.moog_glide.get(pid, {}))
-        return _MG.apply_gm(_MG.panel_of(vc, knobs),
+        # a layered voice's second Messenger reads its own knobs (synth_b)
+        knobs = dict(part.synth if layer == 'a' else part.synth_b)
+        knobs.update(self.moog_glide.get(pid if layer == 'a' else (pid, layer), {}))
+        return _MG.apply_gm(_MG.panel_of(vc, knobs, layer),
                             self._snd_for(part, ch, 60 - part.transpose) if ch >= 0 else None)
 
     def _moog_tick(self, n0):
         """One block of every gliding knob."""
         step = self.MOOG_GLIDE_PER_BLOCK
-        for pid, now in list(self.moog_glide.items()):
+        # keyed by the part's pid (layer A), or (pid, 'b') for a layered
+        # voice's second Messenger
+        for gk, now in list(self.moog_glide.items()):
+            pid, lay = (gk, 'a') if not isinstance(gk, tuple) else gk
             part = next((p for p in self.parts if p.pid == pid), None)
             if part is None or part.moog() is None:
-                self.moog_glide.pop(pid, None)
+                self.moog_glide.pop(gk, None)
                 continue
-            base = _MG.panel_of(part.moog(), part.synth)
+            base = _MG.panel_of(part.moog(), part.synth if lay == 'a' else part.synth_b, lay)
             for k in list(now):
                 d = base[k] - now[k]
                 if abs(d) <= step:
@@ -4282,7 +4313,7 @@ class Live:
                 else:
                     now[k] += step if d > 0 else -step
             if not now:
-                self.moog_glide.pop(pid, None)
+                self.moog_glide.pop(gk, None)
             self._moog_refresh(part, n0)
 
     def _messenger_cc(self, ch, cc, value):
@@ -4319,12 +4350,23 @@ class Live:
             self.set_synth(p, knob, _MG.messenger_value(kind, value), from_hardware=True)
         return True
 
-    def set_synth(self, part, knob, value, from_hardware=False):
+    def set_synth(self, part, knob, value, from_hardware=False, layer='a'):
         """Turn one of a Moog part's knobs -- from the TUI, or a Messenger's CC.
         The value is kept on the part (and so in a preset); what it does to
         notes already sounding happens at the next block boundary. A turn that
-        did not come from the Messenger is sent to it (messenger_sync)."""
+        did not come from the Messenger is sent to it (messenger_sync). Layer
+        'b' is a layered voice's second Messenger (synth_b): ours alone."""
         if knob not in _MG.PANEL or part.moog() is None:
+            return
+        if layer != 'a':
+            old = float(_MG.panel_of(part.moog(), part.synth_b, layer)[knob])
+            part.synth_b[knob] = value
+            def go_b(n0, part=part, knob=knob, old=old, layer=layer):
+                if knob in self.MOOG_GLIDES and any(k[0] == part.pid for k in self.slab.live):
+                    self.moog_glide.setdefault((part.pid, layer), {}).setdefault(knob, old)
+                self._moog_refresh(part, n0)
+            self.dirty = True
+            self.post(go_b)
             return
         # THE PART HAS THE NEW VALUE AT ONCE, so the next press steps from it
         # -- five quick presses were one step while the part waited for the
@@ -4347,18 +4389,23 @@ class Live:
         their partials re-weighed. Per channel, because each carries its own
         sound controllers."""
         sl = self.slab
+        # BY CHANNEL AND LAYER: a layered voice's two Messengers are refreshed
+        # each with its own panel, its slots told apart by their row's layer
         by_ch = {}
         for k, slots in list(sl.live.items()):
             if k[0] == part.pid and slots and (chans is None or k[1] in chans):
-                by_ch.setdefault(k[1], []).extend(slots)
-        for (pid, ch), row in list(sl.kn_of.items()):
-            if pid == part.pid and (chans is None or ch in chans):
-                by_ch.setdefault(ch, [])
-        for ch, slots in by_ch.items():
-            panel = self._moog_panel_for(part.pid, ch)
+                for i in slots:
+                    r = int(sl.a["fx"][i])
+                    by_ch.setdefault((k[1], sl.ft_layer[r] if r >= 0 else 'a'), []).append(i)
+        for kk, row in list(sl.kn_of.items()):
+            if kk[0] == part.pid and (chans is None or kk[1] in chans):
+                by_ch.setdefault((kk[1], kk[2] if len(kk) > 2 else 'a'), [])
+        for (ch, lay), slots in by_ch.items():
+            panel = self._moog_panel_for(part.pid, ch, lay)
             if panel is None:
                 continue
-            sl.set_knobs(sl.knob_row((part.pid, ch), _MG.kn_row(panel)), _MG.kn_row(panel))
+            sl.set_knobs(sl.knob_row((part.pid, ch) if lay == 'a' else (part.pid, ch, lay),
+                                     _MG.kn_row(panel)), _MG.kn_row(panel))
             if not slots:
                 continue
             idx = np.fromiter(slots, np.int64, len(slots))
@@ -8988,16 +9035,22 @@ def selftest():
           _hilo(_t1) - _hilo(_t0) > 6.0 and abs(_pw) < 0.01,
           "  (+%.1f dB of upper partials against the lower, total power %+.3f dB "
           "-- colour, not level)" % (_hilo(_t1) - _hilo(_t0), _pw))
-    # The synth bank is a Moog now (moog.py), whose CC71 is its ladder's
-    # RESONANCE; Pad 1 (new age), the one program no Moog makes, stays
-    # additive and keeps the virtual corner this check is about.
+    # The whole synth bank is a Moog now (moog.py), whose CC71 is its
+    # ladder's RESONANCE. The virtual corner this check is about is the
+    # ADDITIVE synths' (TUNING_MOOG=0 restores them), so it is checked on one:
+    # the additive New Age mapped onto 88 for the length of the check.
     import patch_map as _PMr
-    _r0, _r1 = _scp(88, []), _scp(88, [(71, 127)])
+    _was88 = _PMr.PROGRAM_CLASS[88]
+    _PMr.PROGRAM_CLASS[88] = T.NewAgePadProperties
+    try:
+        _r0, _r1 = _scp(88, []), _scp(88, [(71, 127)])
+    finally:
+        _PMr.PROGRAM_CLASS[88] = _was88
     _nf1 = np.asarray(_r0["nf"])
-    _near = np.abs(_nf1 / _PMr.property_class_for_program(88).bore_corner_hz - 1.0) < 0.15
+    _near = np.abs(_nf1 / T.NewAgePadProperties.bore_corner_hz - 1.0) < 0.15
     _rg = 10.0 * math.log10((np.asarray(_r1["aM"])[_near] ** 2).sum()
                             / (np.asarray(_r0["aM"])[_near] ** 2).sum())
-    check("CC71 on a synth lead is a resonant peak at its filter's corner",
+    check("CC71 is a resonant peak at a voice's filter corner",
           _rg > 4.0, "  (%+.1f dB at the corner: a Q, relative to Butterworth)" % _rg)
     _a0, _a1 = _scp(40, []), _scp(40, [(73, 127), (72, 127)])
     _ws = T.sound_time_scale(63 / 64.0)
@@ -10753,6 +10806,87 @@ def selftest():
           all(_r < 1e-5 and _z == 0.0 for _, _r, _z in _mfr),
           "  (a flat line, fully wet: %s)" % ", ".join("%s %.1e" % (_n, _r) for _n, _r, _ in _mfr))
     check("...and the pedal's physics hold (mf104.selftest)", _MFt.selftest())
+    # A LAYERED VOICE (moog.layers_of) is two Messengers on one channel: a
+    # note renders as the SUM of each layer rendered on its own, room images
+    # and each layer's own MF-104M included.
+    _LC = T.MoogNewAgePad
+    _la0, _lb0 = dict(_LC.messenger), dict(_LC.messenger_b)
+    _menv5 = os.environ.get("TUNING_MOOG_PANEL")
+    os.environ.pop("TUNING_MOOG_PANEL", None)
+    try:
+        _LC.messenger_b = dict(_lb0, mf104_on=True, mf104_time=0.4, mf104_feedback=0.4, mf104_mix=0.3)
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=88)
+        _mm.save(_mpath)
+        def _lren():
+            _q = _BRb.prepare(_mpath, "even")
+            return _BRb.synth_window(_q, 0, _q["N"])[0].astype(float)
+        _yab = _lren()
+        _lbm = _LC.messenger_b
+        _LC.messenger_b = None
+        _ya = _lren()
+        _LC.messenger = _lbm
+        _yb = _lren()
+    finally:
+        _LC.messenger, _LC.messenger_b = _la0, _lb0
+        if _menv5 is not None:
+            os.environ["TUNING_MOOG_PANEL"] = _menv5
+    _ln = min(len(_yab), len(_ya), len(_yb))
+    _lsum = _ya[:_ln] + _yb[:_ln]
+    _lres = float(np.sqrt(((_yab[:_ln] - _lsum) ** 2).mean()) / np.sqrt((_lsum ** 2).mean()))
+    check("a layered Moog is its two Messengers summed",
+          _lres < 1e-5 and np.sqrt((_yb ** 2).mean()) > 1e-6,
+          "  (GM 88, the pad and the bell with its own MF-104M: residual %.1e)" % _lres)
+    # ...AND LIVE STAMPS BOTH: the knob-neutral template twice under the
+    # note's own key, on one onset, each stamp's rows reading its own panel --
+    # as the file renders it. A knob on layer B turns layer B alone, and the
+    # part keeps both layers' knobs through a save.
+    _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=88)
+    _mm.save(_mpath)
+    _lv = Live(program=88, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _lv.warm()
+    _lo = []
+    def _lp():
+        _n0 = _lv.n; _lv.apply(_n0); _lv.sweep(_n0); _lv.slab.reap(_n0); _lv._mf104_reap(_n0)
+        _lo.append(np.array(_lv.renderer.render(_n0, 128)[0])); _lv.n = _n0 + 128
+    _lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _lp()
+    _lix = np.flatnonzero(_lv.slab.busy); _lrd = _lv.slab.a["rdl"][_lix]
+    _lon = int(min(_lv.slab.a["non"][_lix][_lrd == 0]))
+    _lrows = {_lv.slab.ft_layer[int(_r)] for _r in np.unique(_lv.slab.a["fx"][_lix]) if _r >= 0}
+    while _lv.n < _lon + _BRb.SR:
+        _lp()
+    _lv.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0)); _lp()
+    _loff = int(_lv.slab.a["noff"][_lix][_lrd == 0][0])
+    for _ in range(int(1.5 * _BRb.SR / 128)):
+        _lp()
+    _lL = np.concatenate(_lo).astype(float)
+    _lq = _BRb.prepare(_mpath, "even")
+    _lq = dict(_lq, non=_lq["non"] + _lon, noff=_lq["noff"] - int(_BRb.SR) + _loff,
+               p0=_lq["p0"] - _lq["om"] * _lon, p0R=_lq["p0R"] - _lq["om"] * _lon,
+               fmp=_lq["fmp"] - _lq["fmw"] * _lon, fmpR=_lq["fmpR"] - _lq["fmw"] * _lon)
+    _lF = _BRb.synth_window(_lq, 0, len(_lL))[0].astype(float)
+    _la, _lb = _lL[_lon:], _lF[_lon:]
+    _lg = float(np.dot(_la, _lb) / np.dot(_la, _la))
+    _lyres = float(np.sqrt(((_lg * _la - _lb) ** 2).mean()) / np.sqrt((_lb ** 2).mean()))
+    _lystuck = _lv.stuck
+    # a knob on layer B, under a held note: B's slots move, A's do not
+    _lv.on_midi(mido.Message("note_on", channel=0, note=64, velocity=100)); _lp(); _lp()
+    _lk = [_i for _k, _v in _lv.slab.live.items() if _k[2] == 64 for _i in _v]
+    _lka = np.array([_i for _i in _lk if _lv.slab.ft_layer[int(_lv.slab.a["fx"][_i])] == 'a'
+                     and _lv.slab.a["fx"][_i] >= 0])
+    _lkb = np.array([_i for _i in _lk if _lv.slab.ft_layer[int(_lv.slab.a["fx"][_i])] == 'b'
+                     and _lv.slab.a["fx"][_i] >= 0])
+    _ga, _gb = _lv.slab.a["aL"][_lka].copy(), _lv.slab.a["aL"][_lkb].copy()
+    _lv.set_synth(_lv.parts[0], "osc2_level", 0.1, layer='b'); _lp(); _lp()
+    _movea = float(np.abs(_lv.slab.a["aL"][_lka] - _ga).max())
+    _moveb = float(np.abs(_lv.slab.a["aL"][_lkb] - _gb).max())
+    _lpart = Part.from_dict(_lv.parts[0].to_dict())
+    _lv.shutdown()
+    check("...and live stamps both layers as the file renders them",
+          _lrows == {'a', 'b'} and _lyres < 1e-5 and _lystuck == 0,
+          "  (two rows, layers A and B, one onset: residual %.1e)" % _lyres)
+    check("...a knob on layer B turns layer B alone, and both layers save",
+          _moveb > 0.0 and _movea == 0.0 and _lpart.synth_b.get("osc2_level") == 0.1,
+          "  (layer B moved %.1e, layer A %.1e; synth_b through to_dict)" % (_moveb, _movea))
     # ...AND LIVE PLAYS IT AS THE FILE RENDERS IT: a held note through the
     # pedal, OSC 2 a fourth up (the line filters each partial where it SOUNDS),
     # the repeats stamped on the note's own onset, carrying only the partials
@@ -10801,6 +10935,35 @@ def selftest():
           _mfres < 1e-5 and _mfstuck == 0 and _mfn > 2,
           "  (%d repeats stamped, released after the note, none stuck: residual %.1e)"
           % (_mfn, _mfres))
+
+    # THE PANEL'S KEYS on it: 0 is a knob's zero (a level to the bottom, a
+    # bipolar knob to its centre), B the other layer, D every knob of the
+    # layer being edited back to the patch.
+    import livetui as _tuiK
+    class _KScr(object):
+        def getmaxyx(self):
+            return 40, 120
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+    _kl = Live(program=88, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _ku = _tuiK.TUI(_kl, "stub")
+    _ku.builder.stop = True
+    _ku.pane = 3
+    _kn = [_e[1] for _e in _tuiK.SYNTH_KNOBS]
+    _ks = _KScr()
+    _ku.srow = _kn.index("cutoff"); _ku.key(_ks, ord("0"))
+    _ku.srow = _kn.index("tune"); _ku.key(_ks, ord("0"))
+    _ka = dict(_kl.parts[0].synth)
+    _ku.key(_ks, ord("B"))
+    _ku.srow = _kn.index("cutoff"); _ku.key(_ks, ord("0"))
+    _kb = dict(_kl.parts[0].synth_b)
+    _ku.key(_ks, ord("D"))
+    _kb2 = dict(_kl.parts[0].synth_b)
+    _kl.shutdown()
+    check("...and the panel's keys: 0 zeroes a knob, B the other layer, D the patch",
+          _ka == {"cutoff": 0.0, "tune": 0.5} and _kb == {"cutoff": 0.0} and _kb2 == {}
+          and _kl.parts[0].synth == _ka,
+          "  (layer A: %s; layer B zeroed, then back to the patch)" % _ka)
 
     # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
     # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.

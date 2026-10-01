@@ -111,8 +111,11 @@ the selected part:
 | up / down | select a knob: OSC 1, OSC 2 (with SYNC 1>2), MOD, TUNE, SUB, MIXER (with NOISE), FILTER, F ENV, A ENV, LFO 1, MF-104 (the delay) |
 | `-` `+`, left / right | turn it (`_` and shifted `+` ten times as far); a switch — OCTAVE, KB TRACK, MODE, RES BASS — steps |
 | space | back to where the patch has it |
+| `0` | the knob to its zero: a level or time to the bottom, a bipolar knob (TUNE, FREQ, EG and MOD AMOUNT, LFO DEPTH) to its centre, a switch off |
+| `D` | every knob on the panel (the layer being edited) back to the patch |
 | `M` | read a **Messenger on the part's channel** — its knobs turn these |
-| `S` | **set the Messenger** to this panel now (`live.py --messenger PORT` names its output) |
+| `T` | **set the Messenger** to this panel now (`live.py --messenger PORT` names its output) |
+| `B` | a **layered** voice's other Messenger (GM 88): edit layer B, and back to A |
 | `F` | the Messenger's firmware: SUB WAVE on CC71, or CC11 before 1.0.7 |
 
 A knob you have moved reads yellow and is saved with the part, in the session

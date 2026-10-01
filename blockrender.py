@@ -2931,103 +2931,110 @@ def prepare(path, tuner='hybrid440'):
             # it is emitted with are the same ones every voice uses: radiation,
             # the head, the room's images.
             import moog as _MG
-            # GM's sound controllers are this instrument's knobs (moog.apply_gm)
-            _pan = _MG.apply_gm(_MG.panel_of(props), _SND_PEND[0][2] if _SND_PEND[0] else None)
-            _knr = tuple(_MG.kn_row(_pan))
-            if (ch, _knr) not in _MOOG_KROW:
-                _MOOG_KROW[(ch, _knr)] = len(_MOOG_KN); _MOOG_KN.append(list(_knr))
-            # A VALVE AFTER THE LADDER (the charang) hears the filter at its
-            # sustain: baked into the partials here, before tubeamp.expand
-            # runs on them, and taken back out by the kernel (FT slot 11).
-            _pre = bool(getattr(props, 'amp_drive', 0.0))
-            _body = getattr(props, 'moog_body', None)       # formants, after it
-            _FX[0] = len(_MOOG_FT)
-            # THE MOD SECTION'S PITCH: the note's rows, if anything moves OSC 2
-            _mpp = _MG.pitch_params(_pan)
-            if _mpp is not None:
-                _mj0, _mc, _mr = _MG.pitch_rows(_mpp, float(non), float(noff), float(noff) + _MG.release_span(_pan) * SR + 4096.0,
-                                                SR, _MG.MG)
-                _MOOG_MPI.append([len(_MOOG_MPC), _mj0, len(_mc)])
-                _MOOG_MPC.extend(_mc.tolist()); _MOOG_MPR.extend(_mr.tolist())
-            else:
-                _MOOG_MPI.append([0, 0, 1])
-            # ...AND ITS SHAPE ROWS, if a shape moves (moog.shape_rows)
-            _msf = _MG.shape_flags(_pan)
-            if _msf:
-                _mj0, _mn, _mst, _moff, _mdat = _MG.shape_rows(
-                    _MG.shape_params(_pan), float(non), float(noff),
-                    float(noff) + _MG.release_span(_pan) * SR + 4096.0, SR, _MG.MG)
-                _MOOG_MKI.append([_MOOG_MPKN[0], _mj0, _mn, _mst] + _moff)
-                _MOOG_MPK.append(_mdat); _MOOG_MPKN[0] += len(_mdat)
-            else:
-                _MOOG_MKI.append([0, 0, 1, 0, -1, -1, -1])
-            _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre,
-                                       (_MG.FT_PITCH if _mpp is not None else 0) | _msf))
-            _mre = max(1.0, _MG.release_span(_pan) * SR)
-            vb = props.voice_vibrato(f0, 0)
-            _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
-            _PL[0] = 0
-            if MOOG_NEUTRAL:
-                # every harmonic, unit weight, phase 0, at its NOMINAL frequency
-                # (OSC 1 and 2 on the key, the SUB an octave under), over
-                # Nyquist included: the slab weighs them, and zeroes those the
-                # panel's octave and tuning put out of range.
-                _mparts = [(_o, _k, _fn * _k, 1.0, 0.0)
-                           for _o, _fn, _n in ((_MG.OSC1, f0, _MG.OSC_HARMONICS),
-                                               (_MG.OSC2, f0, _MG.OSC_HARMONICS),
-                                               (_MG.SUB, f0 * 0.5, _MG.SUB_HARMONICS))
-                           for _k in range(1, _n + 1)]
-                _mparts += [(_MG.NOISE, _k + 1, float(_MG.NOISE_HZ[_k]), 1.0, 0.0)
-                            for _k in range(len(_MG.NOISE_HZ))]
-                _mparts.append((_MG.SELF, 1, f0, 1.0, 0.0))    # at the key; the slab moves it
-            else:
-                _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
-            _cbw = (_CBW[0], _CBW[1])
-            # THE MF-104M after it, if the panel has the pedal on: this note's
-            # rows, room images and all, are what its repeats are copied from
-            _mf0 = len(A['om'])
-            _fmi = _MG.fm_index(_pan)
-            _fm1 = (2 * math.pi * f0 * _MG.osc_ratio(_pan, _MG.OSC1) / SR) if _fmi else 0.0
-            _fmph = cmath.phase(_MG.osc_spectrum(_pan['osc1_wave'], 1)[0]) if _fmi else 0.0
-            for _osc, _k, _hf, _amp, _ph in _mparts:
-                _MK[0] = _osc * 4096 + _k
-                _FMW[0], _FMPH[0] = (_fm1, _fmph) if _osc == _MG.OSC2 else (0.0, 0.0)
-                # a noise band: its wash bandwidth, NEGATIVE, is what makes the
-                # kernel draw it as noise rather than as a tone (moog.NOISE)
-                _nz = _osc == _MG.NOISE
-                _CBW[0], _CBW[1] = (-_MG.NOISE_BW, 0.0) if _nz else _cbw
-                # NOISE GETS NO IMAGES. A reflection of noise is more noise,
-                # uncorrelated with the first -- nothing an ear can place --
-                # and the images doubled the dearest partials there are (a
-                # hash and a sine per sample). The tail still hears it.
-                _NOREFL[0] = _nz
-                # THE HEAD, THE RADIATION AND THE BODY AT THE KEY'S HARMONIC: where
-                # live's knob-neutral template reads them (moog.weights), so the two
-                # agree for a transposed oscillator too -- a fourth up was 8e-3
-                # apart. The pitch, and the ladder before a valve, are the true one.
-                _hn = (f0 * _k if _osc in (_MG.OSC1, _MG.OSC2) else f0 * 0.5 * _k if _osc == _MG.SUB
-                       else f0 if _osc == _MG.SELF else _hf)
-                _gM = props.gain * _amp * props.radiation_gain(_hn)
-                if _body is not None:
-                    _gM *= float(_body(_hn))
-                if _pre and not MOOG_NEUTRAL and _osc != _MG.SELF:
-                    _gM *= float(_MG.sustain_gain(_pan, f0, _hf))
-                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hn, li),
-                             _gM * props.hrtf_gain(_hn, ri), _gM, _hn, non, noff, 1.0, _mre,
-                             chiff, 0.0, 0.0, 0.0, 1.0,
-                             0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
-                             cc, crl, sjit, csc, -1, 0, ph0=_ph)
-            _CBW[0], _CBW[1] = _cbw
-            # ...but not into a LIVE template (MOOG_NEUTRAL): live stamps its
-            # own repeats, and a template carrying the file's would be echoed twice
-            _mfst = None if MOOG_NEUTRAL else _MFD.settings(_pan)
-            if _mfst is not None:
-                _MF104.append((_mf0, len(A['om']), _mfst))
-            _NOREFL[0] = False
-            _FMW[0] = _FMPH[0] = 0.0
-            _MK[0] = 0
-            _FX[0] = -1
-            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            # GM's sound controllers are this instrument's knobs (moog.apply_gm),
+            # both layers' alike
+            _sd = _SND_PEND[0][2] if _SND_PEND[0] else None
+            # A LAYERED VOICE (moog.layers_of) is two Messengers on one channel:
+            # the whole note again for each panel, each with its own rows, the
+            # two summed. A live template stays ONE knob-neutral set, which
+            # live stamps once per layer (live.py, Slab.stamp's layer).
+            for _lay in (('a',) if MOOG_NEUTRAL else _MG.layers_of(props)):
+                _pan = _MG.apply_gm(_MG.panel_of(props, layer=_lay), _sd)
+                _knr = tuple(_MG.kn_row(_pan))
+                if (ch, _knr) not in _MOOG_KROW:
+                    _MOOG_KROW[(ch, _knr)] = len(_MOOG_KN); _MOOG_KN.append(list(_knr))
+                # A VALVE AFTER THE LADDER (the charang) hears the filter at its
+                # sustain: baked into the partials here, before tubeamp.expand
+                # runs on them, and taken back out by the kernel (FT slot 11).
+                _pre = bool(getattr(props, 'amp_drive', 0.0))
+                _body = getattr(props, 'moog_body', None)       # formants, after it
+                _FX[0] = len(_MOOG_FT)
+                # THE MOD SECTION'S PITCH: the note's rows, if anything moves OSC 2
+                _mpp = _MG.pitch_params(_pan)
+                if _mpp is not None:
+                    _mj0, _mc, _mr = _MG.pitch_rows(_mpp, float(non), float(noff), float(noff) + _MG.release_span(_pan) * SR + 4096.0,
+                                                    SR, _MG.MG)
+                    _MOOG_MPI.append([len(_MOOG_MPC), _mj0, len(_mc)])
+                    _MOOG_MPC.extend(_mc.tolist()); _MOOG_MPR.extend(_mr.tolist())
+                else:
+                    _MOOG_MPI.append([0, 0, 1])
+                # ...AND ITS SHAPE ROWS, if a shape moves (moog.shape_rows)
+                _msf = _MG.shape_flags(_pan)
+                if _msf:
+                    _mj0, _mn, _mst, _moff, _mdat = _MG.shape_rows(
+                        _MG.shape_params(_pan), float(non), float(noff),
+                        float(noff) + _MG.release_span(_pan) * SR + 4096.0, SR, _MG.MG)
+                    _MOOG_MKI.append([_MOOG_MPKN[0], _mj0, _mn, _mst] + _moff)
+                    _MOOG_MPK.append(_mdat); _MOOG_MPKN[0] += len(_mdat)
+                else:
+                    _MOOG_MKI.append([0, 0, 1, 0, -1, -1, -1])
+                _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre,
+                                           (_MG.FT_PITCH if _mpp is not None else 0) | _msf))
+                _mre = max(1.0, _MG.release_span(_pan) * SR)
+                vb = props.voice_vibrato(f0, 0)
+                _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
+                _PL[0] = 0
+                if MOOG_NEUTRAL:
+                    # every harmonic, unit weight, phase 0, at its NOMINAL frequency
+                    # (OSC 1 and 2 on the key, the SUB an octave under), over
+                    # Nyquist included: the slab weighs them, and zeroes those the
+                    # panel's octave and tuning put out of range.
+                    _mparts = [(_o, _k, _fn * _k, 1.0, 0.0)
+                               for _o, _fn, _n in ((_MG.OSC1, f0, _MG.OSC_HARMONICS),
+                                                   (_MG.OSC2, f0, _MG.OSC_HARMONICS),
+                                                   (_MG.SUB, f0 * 0.5, _MG.SUB_HARMONICS))
+                               for _k in range(1, _n + 1)]
+                    _mparts += [(_MG.NOISE, _k + 1, float(_MG.NOISE_HZ[_k]), 1.0, 0.0)
+                                for _k in range(len(_MG.NOISE_HZ))]
+                    _mparts.append((_MG.SELF, 1, f0, 1.0, 0.0))    # at the key; the slab moves it
+                else:
+                    _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
+                _cbw = (_CBW[0], _CBW[1])
+                # THE MF-104M after it, if the panel has the pedal on: this note's
+                # rows, room images and all, are what its repeats are copied from
+                _mf0 = len(A['om'])
+                _fmi = _MG.fm_index(_pan)
+                _fm1 = (2 * math.pi * f0 * _MG.osc_ratio(_pan, _MG.OSC1) / SR) if _fmi else 0.0
+                _fmph = cmath.phase(_MG.osc_spectrum(_pan['osc1_wave'], 1)[0]) if _fmi else 0.0
+                for _osc, _k, _hf, _amp, _ph in _mparts:
+                    _MK[0] = _osc * 4096 + _k
+                    _FMW[0], _FMPH[0] = (_fm1, _fmph) if _osc == _MG.OSC2 else (0.0, 0.0)
+                    # a noise band: its wash bandwidth, NEGATIVE, is what makes the
+                    # kernel draw it as noise rather than as a tone (moog.NOISE)
+                    _nz = _osc == _MG.NOISE
+                    _CBW[0], _CBW[1] = (-_MG.NOISE_BW, 0.0) if _nz else _cbw
+                    # NOISE GETS NO IMAGES. A reflection of noise is more noise,
+                    # uncorrelated with the first -- nothing an ear can place --
+                    # and the images doubled the dearest partials there are (a
+                    # hash and a sine per sample). The tail still hears it.
+                    _NOREFL[0] = _nz
+                    # THE HEAD, THE RADIATION AND THE BODY AT THE KEY'S HARMONIC: where
+                    # live's knob-neutral template reads them (moog.weights), so the two
+                    # agree for a transposed oscillator too -- a fourth up was 8e-3
+                    # apart. The pitch, and the ladder before a valve, are the true one.
+                    _hn = (f0 * _k if _osc in (_MG.OSC1, _MG.OSC2) else f0 * 0.5 * _k if _osc == _MG.SUB
+                           else f0 if _osc == _MG.SELF else _hf)
+                    _gM = props.gain * _amp * props.radiation_gain(_hn)
+                    if _body is not None:
+                        _gM *= float(_body(_hn))
+                    if _pre and not MOOG_NEUTRAL and _osc != _MG.SELF:
+                        _gM *= float(_MG.sustain_gain(_pan, f0, _hf))
+                    emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hn, li),
+                                 _gM * props.hrtf_gain(_hn, ri), _gM, _hn, non, noff, 1.0, _mre,
+                                 chiff, 0.0, 0.0, 0.0, 1.0,
+                                 0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
+                                 cc, crl, sjit, csc, -1, 0, ph0=_ph)
+                _CBW[0], _CBW[1] = _cbw
+                # ...but not into a LIVE template (MOOG_NEUTRAL): live stamps its
+                # own repeats, and a template carrying the file's would be echoed twice
+                _mfst = None if MOOG_NEUTRAL else _MFD.settings(_pan)
+                if _mfst is not None:
+                    _MF104.append((_mf0, len(A['om']), _mfst))
+                _NOREFL[0] = False
+                _FMW[0] = _FMPH[0] = 0.0
+                _MK[0] = 0
+                _FX[0] = -1
+                _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
             _SND_PEND[0] = None      # its CC74/71 moved the ladder, not sound_shape
             stops = ()
         for key, ratio, gain, *rest in stops:

@@ -315,6 +315,7 @@ class TUI:
         self.pane = 0           # 0 = parts, 1 = globals, 2 = controls, 3 = synth
         self.crow = 0           # selected row in the controls pane
         self.srow = 0           # selected knob on the synth panel
+        self.slayer = 'a'       # which Messenger of a layered Moog it edits
         self.grow = 0           # selected global
         self.meter = 0.0
         self.message = ""
@@ -1273,8 +1274,17 @@ class TUI:
         p = self.sel()
         return p if p is not None and p.moog() is not None else None
 
+    def synth_layer(self, p):
+        """The layer the pane edits: B only on a layered voice (moog.layers_of)."""
+        return self.slayer if p is not None and self.slayer in MG.layers_of(p.moog()) else 'a'
+
+    def synth_own(self, p):
+        """The part's own knobs on the layer being edited."""
+        return p.synth if self.synth_layer(p) == 'a' else p.synth_b
+
     def synth_value(self, p, knob):
-        return MG.panel_of(p.moog(), p.synth)[knob]
+        lay = self.synth_layer(p)
+        return MG.panel_of(p.moog(), self.synth_own(p), lay)[knob]
 
     def synth_bump(self, delta, big=False):
         p = self.synth_part()
@@ -1289,7 +1299,7 @@ class TUI:
             v = steps[max(0, min(len(steps) - 1, i + (1 if delta > 0 else -1)))]
         else:
             v = max(0.0, min(1.0, v + delta * (0.1 if big else 0.01)))
-        self.live.set_synth(p, knob, v)
+        self.live.set_synth(p, knob, v, layer=self.synth_layer(p))
 
     def synth_reset(self):
         """Back to what the patch has it at."""
@@ -1297,8 +1307,58 @@ class TUI:
         if p is None:
             return
         knob = SYNTH_KNOBS[self.srow][1]
-        self.live.set_synth(p, knob, MG.panel_of(p.moog())[knob])
-        p.synth.pop(knob, None)
+        lay = self.synth_layer(p)
+        self.live.set_synth(p, knob, MG.panel_of(p.moog(), None, lay)[knob], layer=lay)
+        self.synth_own(p).pop(knob, None)
+
+    # A KNOB'S ZERO: nothing of it. A level, a time, the cutoff or the pedal's
+    # mix to the bottom of its travel; a bipolar knob to its centre detent,
+    # where it does nothing either way; a switch off. An octave, a shape or a
+    # mode has no zero, and stays where it is.
+    SYNTH_CENTRED = ("semi", "oct", "modamt", "lfodepth")
+
+    def synth_zero(self):
+        """The selected knob to its zero (space is the patch's setting)."""
+        p = self.synth_part()
+        if p is None:
+            return
+        sec, knob, label, kind = SYNTH_KNOBS[self.srow]
+        if kind in self.SYNTH_CENTRED:
+            v = 0.5
+        elif kind == "onoff":
+            v = False
+        elif kind in SYNTH_STEPS:
+            self.say("%s %s has no zero" % (sec, label))
+            return
+        else:
+            v = 0.0
+        self.live.set_synth(p, knob, v, layer=self.synth_layer(p))
+
+    def synth_defaults(self):
+        """Every knob on this layer back to what the patch has it at."""
+        p = self.synth_part()
+        if p is None:
+            return
+        lay = self.synth_layer(p)
+        own = self.synth_own(p)
+        base = MG.panel_of(p.moog(), None, lay)
+        n = len(own)
+        for knob in list(own):
+            self.live.set_synth(p, knob, base[knob], layer=lay)
+            own.pop(knob, None)
+        self.say("part %d%s: %d knob%s back to the patch" % (
+            self.row + 1, (" layer %s" % lay.upper()) if len(MG.layers_of(p.moog())) > 1 else "",
+            n, "" if n == 1 else "s"))
+
+    def synth_switch_layer(self):
+        """A layered Moog's other Messenger (B), and back."""
+        p = self.synth_part()
+        if p is None or len(MG.layers_of(p.moog())) < 2:
+            self.say("this voice is one Messenger -- no second layer")
+            return
+        self.slayer = 'b' if self.synth_layer(p) == 'a' else 'a'
+        self.say("editing layer %s%s" % (self.slayer.upper(),
+                                         "  (the Messenger plugged in is layer A)" if self.slayer == 'b' else ""))
 
     def synth_send(self):
         """Set the Messenger to this part's whole panel, now."""
@@ -1344,8 +1404,11 @@ class TUI:
             self.addstr(scr, y, 2, "the selected part is not a Moog -- the synth panel is for "
                         "the Moog voices (the synth programs)", C("dim"))
             return y + 2
-        self.addstr(scr, y, 2, "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
-        self.addstr(scr, y, 18, "part %d, %s" % (self.row + 1, p.label()), C("dim"))
+        _layered = len(MG.layers_of(p.moog())) > 1
+        self.addstr(scr, y, 2, ("MOOG MESSENGER %s" % self.synth_layer(p).upper()) if _layered
+                    else "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
+        self.addstr(scr, y, 20, ("part %d, %s  (layered -- B: the other)" if _layered else "part %d, %s")
+                    % (self.row + 1, p.label()), C("dim"))
         hw = (("reads a Messenger on %s  (M: stop)"
                % ("every channel" if p.channel is None else "ch %d" % (p.channel + 1)))
               if p.cc_map == "messenger" else "M: read a Messenger's knobs")
@@ -1354,7 +1417,8 @@ class TUI:
         y += 1
         half = (len(SYNTH_KNOBS) + 1) // 2
         last = [None, None]
-        pan = MG.panel_of(p.moog(), p.synth)
+        lay = self.synth_layer(p)
+        pan = MG.panel_of(p.moog(), self.synth_own(p), lay)
         for i, (sec, knob, label, kind) in enumerate(SYNTH_KNOBS):
             c = 0 if i < half else 1
             row = y + (i if i < half else i - half)
@@ -1366,7 +1430,7 @@ class TUI:
                 self.addstr(scr, row, x, sec, curses.A_BOLD)
                 last[c] = sec
             v = self.synth_value(p, knob)
-            own = knob in p.synth
+            own = knob in self.synth_own(p)
             self.addstr(scr, row, x + 7, "%-10s" % label, curses.A_REVERSE if here else 0)
             self.addstr(scr, row, x + 18, "%10s" % synth_fmt(kind, v, pan),
                         (curses.A_BOLD if here else 0) | (C("yellow") if own else 0))
@@ -1377,7 +1441,7 @@ class TUI:
         row = y + half
         if row < h - 4:
             if L.messenger_port:
-                txt = ("sets the Messenger on %s, %s chart  (S: send the panel  F: firmware)"
+                txt = ("sets the Messenger on %s, %s chart  (T: send the panel  F: firmware)"
                        % (L.messenger_port, L.messenger_firmware))
                 self.addstr(scr, row, 2, txt[:max(0, w - 4)], C("green"))
             else:
@@ -1650,8 +1714,14 @@ class TUI:
             self.synth_reset()
         elif self.pane == 3 and c == ord("M"):
             self.synth_hardware()
-        elif self.pane == 3 and c == ord("S"):
+        elif self.pane == 3 and c == ord("T"):
             self.synth_send()
+        elif self.pane == 3 and c == ord("B"):
+            self.synth_switch_layer()
+        elif self.pane == 3 and c == ord("0"):
+            self.synth_zero()
+        elif self.pane == 3 and c == ord("D"):
+            self.synth_defaults()
         elif self.pane == 3 and c == ord("F"):
             self.synth_firmware()
         elif self.pane == 2 and c in (ord("a"), ord("r"), ord("d"), ord("b"),

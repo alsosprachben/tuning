@@ -408,18 +408,26 @@ def bipolar(v, span):
     return (max(0.0, min(1.0, v)) - 0.5) * 2.0 * span
 
 
-def panel_of(props, overrides=None):
+def panel_of(props, overrides=None, layer='a'):
     """A voice's knobs: the panel's defaults, the voice's patch over them
     (its class's `messenger` dict), TUNING_MOOG_PANEL over that (JSON knob
     positions, for a file render -- the panel a file cannot turn), and a
-    part's own settings over everything."""
+    part's own settings over everything. Layer 'b' is a LAYERED voice's
+    second Messenger: its class's `messenger_b`, TUNING_MOOG_PANEL_B."""
     out = dict(PANEL)
-    out.update(getattr(props, 'messenger', None) or {})
-    env = os.environ.get('TUNING_MOOG_PANEL')
+    out.update(getattr(props, 'messenger' if layer == 'a' else 'messenger_b', None) or {})
+    env = os.environ.get('TUNING_MOOG_PANEL' if layer == 'a' else 'TUNING_MOOG_PANEL_B')
     if env:
         out.update({k: v for k, v in json.loads(env).items() if k in PANEL})
     out.update(overrides or {})
     return out
+
+
+def layers_of(props):
+    """A LAYERED VOICE is two Messengers on one MIDI channel -- as a Moog Muse
+    stacks its two timbres on a key -- each a whole panel (MF-104M included),
+    their sounds summed: ('a', 'b') when the class declares `messenger_b`."""
+    return ('a', 'b') if getattr(props, 'messenger_b', None) else ('a',)
 
 
 # ---------------------------------------------------------------- to partials

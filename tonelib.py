@@ -10035,6 +10035,36 @@ class MoogEchoesFX(EchoesFXProperties):
     )
 
 
+class MoogNewAgePad(NewAgePadProperties):
+    """GM 88 on a Moog: "Fantasia", a glassy bell over a soft pad -- two
+    sounds on one key, which one Messenger cannot make and two can. A LAYERED
+    voice (moog.layers_of): layer A the pad, two saws eight cents apart under
+    a low ladder, swelling in over a third of a second and letting go slowly;
+    layer B the crystal's anchored FM bell (98) -- carrier 2 sqrt(2), OSC 1 on
+    the key -- struck, mixed under the pad, its filter closing as it rings,
+    so the glass is at the front of the note and the pad is what stays.
+    When a Messenger is plugged in, layer A is what it is set to."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted), both
+    # layers together
+    initial_gain = NewAgePadProperties.initial_gain * 10 ** (9.8 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
+        osc1_level=0.75, osc2_level=0.75,
+        cutoff=0.55, resonance=0.1, eg_amount=0.6, kb_track=2.0 / 3.0,
+        f_attack=0.6, f_decay=0.7, f_sustain=0.7, f_release=0.75,
+        a_attack=0.62, a_decay=0.6, a_sustain=1.0, a_release=0.76,
+    )
+    messenger_b = dict(
+        osc1_wave=0.4, osc2_wave=0.4, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
+        osc1_level=0.25, osc2_level=0.55,
+        cutoff=0.62, resonance=0.0, eg_amount=0.8, kb_track=1.0,
+        f_attack=0.0, f_decay=0.75, f_sustain=0.0, f_release=0.7,
+        a_attack=0.05, a_decay=0.78, a_sustain=0.0, a_release=0.7,
+        mod_dest=0, mod_amount=0.75,
+    )
+
+
 class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
     agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,

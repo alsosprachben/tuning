@@ -32,6 +32,7 @@ from tonelib import (
     MoogAtmosphereFX, MoogGoblinsFX, MoogSciFiFX,
     MoogBrightnessFX, MoogChoirPad, MoogBowedPad, MoogSynthVoice,
     MoogMetallicPad, MoogCrystalFX, MoogSynthDrum, MoogRainFX, MoogEchoesFX,
+    MoogNewAgePad,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -766,6 +767,7 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[118] = MoogSynthDrum           # F ENV -> OSC 2 FREQ: the tom's sweep
     PROGRAM_CLASS[96] = MoogRainFX               # FM droplets through the MF-104M
     PROGRAM_CLASS[102] = MoogEchoesFX            # a saw pluck through the MF-104M
+    PROGRAM_CLASS[88] = MoogNewAgePad            # LAYERED: a pad (A), an FM bell over it (B)
 
 # WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
 # family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit
