@@ -123,8 +123,13 @@ depth), and the SYNC SWEEP — OSC 2 FREQ moved by the contour or the LFO while 
 is synced, which moves the synced spectrum rather than the pitch. A moving
 shape's harmonics are worked out per 128 samples from its straight segments,
 exactly, and handed to the kernel as a complex gain, so a harmonic can pass
-through zero without a click. Not yet: 1>2 FM, the FB/EXT input, LFO 2, and
-GLIDE as a panel knob (CC5 portamento works).
+through zero without a click. And 1>2 FM: OSC 1's own wave modulates OSC 2's
+frequency (linear FM, an index of 3 at MOD AMOUNT's ends -- a guess), which is
+phase modulation by the integral of OSC 1's wave, worked out from its first
+eight harmonics sample by sample. The ladder is applied at each carrier, so a
+closed filter does not take out the sidebands above its cutoff -- a known
+simplification. Not yet: the FB/EXT input, LFO 2, and GLIDE as a panel knob
+(CC5 portamento works).
 
 **Playing it from a Messenger.** Give the part a channel (the `ch` column),
 then `M` on its panel: that channel's CCs are read by the Messenger's own

@@ -420,7 +420,8 @@ def panel_of(props, overrides=None):
 # ---------------------------------------------------------------- to partials
 # What the kernel is handed. Both renderers build a Moog note from these three,
 # so they cannot disagree about what a knob means.
-FT_W, KN_W = 13, 9      # must match FTW and KNW in synthkernel.c
+FT_W, KN_W = 30, 9      # must match FTW and KNW in synthkernel.c
+FT_FM = 16              # FT slot 12 flag: OSC 1 frequency-modulates OSC 2 (slots 13-29)
 FT_PITCH = 1            # FT slot 12, a flag: OSC 2 follows the note's pitch rows
 FT_SHAPE = {1: 2, 2: 4, 3: 8}   # ...and these: OSC 1 / OSC 2 / SUB's shape moves (rows)
 FMAX_HZ = 12000.0       # highest partial: past it a saw's harmonics are 27 dB
@@ -515,18 +516,52 @@ def _partials(panel, f0, fmax=FMAX_HZ):
     return out
 
 
-def ft_row(panel, f0, krow, pre_amp=False, flags=0):
+# ---------------------------------------------------------------- MOD: FM
+# 1 -> 2 FM: OSC 1's own wave modulates OSC 2's frequency -- linearly, a
+# deviation of I x OSC 1's frequency x OSC 1's wave, which is phase modulation
+# by the wave's integral A = sum_j (2|c_j|/j) sin(j theta1 + phi_j): harmonic k
+# of OSC 2 moves by k I A. OSC 1's first FM_J harmonics carry it (a saw's fall
+# as 1/j^2 in A). The index at MOD AMOUNT's ends is a guess until a Messenger is
+# recorded. |H| is taken at each carrier, so a closed ladder does not take the
+# sidebands above its cutoff out: a known simplification.
+FM_INDEX_MAX = 3.0
+FM_J = 8
+
+
+def fm_index(panel):
+    return bipolar(panel['mod_amount'], FM_INDEX_MAX) if int(panel['mod_dest']) == 0 else 0.0
+
+
+def fm_coeffs(panel, phi1=None):
+    """The modulator's B_j = (2|c_j|/j) e^{i(phi_j - j phi1)}, against the
+    phase OSC 1's fundamental partial carries (phi1: arg c_1 unless given),
+    so the kernel can read OSC 1's angle straight off that partial."""
+    c = osc_spectrum(panel['osc1_wave'], FM_J)
+    j = np.arange(1, FM_J + 1)
+    p1 = cmath.phase(c[0]) if phi1 is None else phi1
+    return 2.0 * np.abs(c) / j * np.exp(1j * (np.angle(c) - j * p1))
+
+
+def ft_row(panel, f0, krow, pre_amp=False, flags=0, fm_phi1=None):
     """The note's fixed row (FT): what is set at the key. Slot 10 keeps the
     key's own frequency, so a row can be rebuilt when a knob moves; slot 11
     says the partials already carry the filter at its sustain (sustain_gain)
     -- a voice with an amplifier after the ladder -- so the kernel applies
-    only the contour's movement about it."""
-    return [
+    only the contour's movement about it. Slot 12 is the flags; 13-29 are
+    1 -> 2 FM's index and modulator (fm_coeffs)."""
+    row = [
         (f0 / KB_REF_HZ) ** float(panel['kb_track']),
         knob_time(panel['f_attack']), knob_time(panel['f_decay']), knob_time(panel['f_release']),
         knob_time(panel['a_attack']), knob_time(panel['a_decay']), knob_time(panel['a_release']),
         float(panel['mode']), 1.0 if panel['res_bass'] else 0.0, float(krow), float(f0),
-        1.0 if pre_amp else 0.0, float(flags)]
+        1.0 if pre_amp else 0.0]
+    fi = fm_index(panel)
+    row.append(float((int(flags) & ~FT_FM) | (FT_FM if fi != 0.0 else 0)))
+    row.append(fi)
+    b = fm_coeffs(panel, fm_phi1) if fi != 0.0 else np.zeros(FM_J, complex)
+    for z in b:
+        row += [float(z.real), float(z.imag)]
+    return row
 
 
 def sustain_gain(panel, f0, f):

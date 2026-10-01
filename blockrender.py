@@ -61,7 +61,7 @@ over octave bands lets a near-silent octave dominate -- the same section reads
 
 Usage: python3 blockrender.py IN.mid OUT.wav [tuner] [a=432|c=256]
 """
-import sys, os, time, ctypes, subprocess, wave, math, re
+import sys, os, time, ctypes, subprocess, wave, math, re, cmath
 import numpy as np, mido
 import bisect as _bisect
 import mts as _MTS
@@ -1057,7 +1057,7 @@ def rank_speak_sec(events, on_sec, aj):
 PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch",
                 "logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw",
                 "tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR",
-                "gr","cr","br","p0R","pl","fx","mk","rdl")
+                "gr","cr","br","p0R","pl","fx","mk","rdl","fmw","fmp","fmpR","nfr")
 
 # LIVE'S MOOG TEMPLATES ARE KNOB-NEUTRAL (moog.weights): every harmonic of every
 # oscillator at unit weight and phase 0, so the slab can apply whatever the
@@ -1588,7 +1588,7 @@ def prepare(path, tuner='hybrid440'):
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl")}
+    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl","fmw","fmp","fmpR","nfr")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
@@ -1607,6 +1607,11 @@ def prepare(path, tuner='hybrid440'):
     # is drawn afresh per press) and has to know which part of an offset is
     # scatter to redraw and which is the room's, to keep.
     _RD = [0.0]
+    # 1 -> 2 FM: OSC 1's angular frequency and the phase its fundamental partial
+    # carries (moog.fm_coeffs), set while an FM'd OSC 2 is emitted. Each partial
+    # gets OSC 1's phase anchor for its OWN onset and ear delays -- an image's
+    # for an image -- exactly as OSC 1's partial there is anchored.
+    _FMW = [0.0]; _FMPH = [0.0]
     _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
     _MOOG_MPI, _MOOG_MPC, _MOOG_MPR = [], [], []   # per-note pitch rows (moog.pitch_rows)
     _MOOG_MKI, _MOOG_MPK, _MOOG_MPKN = [], [], [0]  # per-note shape rows (moog.shape_rows)
@@ -1692,6 +1697,14 @@ def prepare(path, tuner='hybrid440'):
         A["delL"].append(dl); A["delR"].append(dr)
         A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
         A["fx"].append(_FX[0]); A["mk"].append(_MK[0]); A["rdl"].append(_RD[0])
+        A["fmw"].append(_FMW[0])
+        # the onset's fraction of a sample, which the table's whole-sample
+        # `non` drops and the phase anchor above keeps: live needs it to move a
+        # partial's frequency without moving its phase (a room image's onset
+        # is hardly ever a whole sample)
+        A["nfr"].append(non - math.floor(non))
+        A["fmp"].append(-_FMW[0] * (non + dl) + _FMPH[0] if _FMW[0] else 0.0)
+        A["fmpR"].append(-_FMW[0] * (non + dr) + _FMPH[0] if _FMW[0] else 0.0)
         if _place is None and ampM > 0.0:
             # Q is how much louder this partial is toward the listener than its
             # own spherical average, so ampM^2/Q is the power it feeds the room.
@@ -2968,8 +2981,12 @@ def prepare(path, tuner='hybrid440'):
             else:
                 _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
             _cbw = (_CBW[0], _CBW[1])
+            _fmi = _MG.fm_index(_pan)
+            _fm1 = (2 * math.pi * f0 * _MG.osc_ratio(_pan, _MG.OSC1) / SR) if _fmi else 0.0
+            _fmph = cmath.phase(_MG.osc_spectrum(_pan['osc1_wave'], 1)[0]) if _fmi else 0.0
             for _osc, _k, _hf, _amp, _ph in _mparts:
                 _MK[0] = _osc * 4096 + _k
+                _FMW[0], _FMPH[0] = (_fm1, _fmph) if _osc == _MG.OSC2 else (0.0, 0.0)
                 # a noise band: its wash bandwidth, NEGATIVE, is what makes the
                 # kernel draw it as noise rather than as a tone (moog.NOISE)
                 _nz = _osc == _MG.NOISE
@@ -2979,18 +2996,25 @@ def prepare(path, tuner='hybrid440'):
                 # and the images doubled the dearest partials there are (a
                 # hash and a sine per sample). The tail still hears it.
                 _NOREFL[0] = _nz
-                _gM = props.gain * _amp * props.radiation_gain(_hf)
+                # THE HEAD, THE RADIATION AND THE BODY AT THE KEY'S HARMONIC: where
+                # live's knob-neutral template reads them (moog.weights), so the two
+                # agree for a transposed oscillator too -- a fourth up was 8e-3
+                # apart. The pitch, and the ladder before a valve, are the true one.
+                _hn = (f0 * _k if _osc in (_MG.OSC1, _MG.OSC2) else f0 * 0.5 * _k if _osc == _MG.SUB
+                       else f0 if _osc == _MG.SELF else _hf)
+                _gM = props.gain * _amp * props.radiation_gain(_hn)
                 if _body is not None:
-                    _gM *= float(_body(_hf))
+                    _gM *= float(_body(_hn))
                 if _pre and not MOOG_NEUTRAL and _osc != _MG.SELF:
                     _gM *= float(_MG.sustain_gain(_pan, f0, _hf))
-                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
-                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, noff, 1.0, _mre,
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hn, li),
+                             _gM * props.hrtf_gain(_hn, ri), _gM, _hn, non, noff, 1.0, _mre,
                              chiff, 0.0, 0.0, 0.0, 1.0,
                              0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
                              cc, crl, sjit, csc, -1, 0, ph0=_ph)
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
+            _FMW[0] = _FMPH[0] = 0.0
             _MK[0] = 0
             _FX[0] = -1
             _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
@@ -3498,7 +3522,8 @@ def prepare(path, tuner='hybrid440'):
                  ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
                  ("tbav","f4"),("tau","f4"),("tcut","f4"),
                  ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vdl","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
-                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4"),("rdl","f4")):
+                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4"),("rdl","f4"),
+                 ("fmw","f8"),("fmp","f8"),("fmpR","f8"),("nfr","f4")):
         prep[k] = arr(k, dt)
     return prep
 
@@ -3583,6 +3608,10 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     # its shape rows (moog.shape_rows); NULL: none moves
                     ip(a['MKI']) if a.get('MKI') is not None else None,
                     fp(a['MPK']) if a.get('MKI') is not None else None,
+                    # 1 -> 2 FM's OSC 1 angle per partial; NULL: no Moog table
+                    dp(sl('fmw')) if (a.get('FT') is not None and 'fmw' in a) else None,
+                    dp(sl('fmp')) if (a.get('FT') is not None and 'fmw' in a) else None,
+                    dp(sl('fmpR')) if (a.get('FT') is not None and 'fmw' in a) else None,
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)

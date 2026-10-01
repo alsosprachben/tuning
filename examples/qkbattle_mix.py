@@ -304,9 +304,10 @@ def only_notes(path, track, keep):
 
 
 # the mix's number, in every output name
-MIX = 'mix14'
+MIX = 'mix15'           # mix14 with the leads on the Moog (moog.py)
 VOICE_CODE = b''.join(open(os.path.join(HERE, f), 'rb').read()
-                      for f in ('tonelib.py', 'blockrender.py', 'synthkernel.c', 'chorus.py'))
+                      for f in ('tonelib.py', 'blockrender.py', 'synthkernel.c', 'chorus.py',
+                                'moog.py', 'patch_map.py'))
 
 
 def main(argv):

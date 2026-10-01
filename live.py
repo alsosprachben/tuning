@@ -91,10 +91,10 @@ from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHAN
 # delay is folded into the phase anchor, p0 = -om*(non + d) + ph0, so an ear
 # really does receive the partial late rather than merely receiving its envelope
 # late. See blockrender.emit_partial.
-COLS_F8 = ("om", "p0", "p0R")
+COLS_F8 = ("om", "p0", "p0R", "fmw", "fmp", "fmpR")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
-           "vd", "vr", "vp", "delL", "delR", "az", "rdl")
+           "vd", "vr", "vp", "delL", "delR", "az", "rdl", "nfr")
 # A GLIDE BELONGS TO THE PRESS, NOT TO THE VOICE, so these three are the one
 # group that is NOT copied from the template -- they are zeroed at stamp time
 # and written afterwards if this particular note-on is gliding. Templates are
@@ -726,6 +726,9 @@ class Slab:
         self.ms_par = np.zeros((MOOG_FT_ROWS, _MG.SHAPE_W), np.float64)
         self.ms_next = np.full(MOOG_FT_ROWS, -1, np.int64)   # the block its rows run on to
         self.ms_nj = np.zeros(MOOG_FT_ROWS, np.int64)
+        # 1 -> 2 FM: per FT row, its OSC 2 slots and the OSC 1 fundamental each
+        # reads its angle from (same note, same room image)
+        self.fm_map = {}
         # A MOOG SLOT'S OWN BASELINE. Its template is knob-neutral (every
         # harmonic at unit weight, phase 0, nominal frequency: moog.weights),
         # so the panel is applied here: mo_u is the slot's level at unit
@@ -1065,6 +1068,7 @@ class Slab:
         a["br"][idx] = -1     # live bends through retune, never through a row
         a["cr"][idx] = 0
         a["om"][idx] = tmpl["om"]
+        a["fmw"][idx] = 0.0   # no OSC 1 angle until moog_fm maps one (1 -> 2 FM)
         # Phase is anchored to the note's own onset: p0 = -om*non + ph0. Shift the
         # template's anchor from its build-time onset to this one.
         # Each player enters at their own instant, drawn fresh for this press.
@@ -1208,6 +1212,7 @@ class Slab:
             self.mo_ph[mo] = 0.0
             self.mo_r[mo] = 1.0
             self.moog_retimbre(mo, panel, None)
+        self.moog_fm(r, idx, panel)
         a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
         a["aLp"][idx] = a["aL"][idx]
         a["aRp"][idx] = a["aR"][idx]
@@ -1237,7 +1242,11 @@ class Slab:
             if n is None:
                 om0 = a["om"][idx]
                 om1 = om0 * sc
-                non = a["non"][idx].astype(np.float64)
+                # the template anchored the phase at the onset's EXACT sample,
+                # fraction and all (nfr): a room image's is hardly ever whole,
+                # and moving its frequency against the whole-sample onset moved
+                # its phase by (ratio - 1) x the fraction -- 1e-2 on a fourth
+                non = a["non"][idx].astype(np.float64) + a["nfr"][idx]
                 a["p0"][idx] -= (om1 - om0) * (non + a["delL"][idx])
                 a["p0R"][idx] -= (om1 - om0) * (non + a["delR"][idx])
                 a["om"][idx] = om1
@@ -1320,6 +1329,45 @@ class Slab:
             elif self.mp_on[r]:
                 self.mp_P[r, 0] = 0.0
                 self.mp_P[r, 5] = 0.0
+
+    def moog_fm(self, r, idx, panel):
+        """1 -> 2 FM for the note on FT row r: its row's modulator against the
+        phase live has put on OSC 1's fundamental (moog.fm_coeffs -- it can be
+        the coefficient's shifted by pi, a zero-crossing's sign), and which
+        OSC 1 slot each OSC 2 slot reads its angle from."""
+        a = self.a
+        W = _MG.FT_W
+        if _MG.fm_index(panel) == 0.0:
+            self.fm_map.pop(int(r), None)
+            self.FT[r * W + 12] = float(int(self.FT[r * W + 12]) & ~_MG.FT_FM)
+            return
+        mine = idx[a["fx"][idx] == r]
+        f1 = mine[a["mk"][mine] == _MG.OSC1 * 4096 + 1]
+        o2 = mine[a["mk"][mine] // 4096 == _MG.OSC2]
+        if not len(f1) or not len(o2):
+            return
+        row = self.FT[r * W:(r + 1) * W]
+        row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]), row[11] > 0.5, int(row[12]),
+                            float(self.mo_ph[f1[0]]))
+        key = lambda i: (round(float(a["delL"][i]), 2), round(float(a["delR"][i]), 2))
+        fund = {key(i): i for i in f1}
+        pairs = [(i, fund.get(key(i))) for i in o2]
+        pairs = [(i, j) for i, j in pairs if j is not None]
+        self.fm_map[int(r)] = (np.array([i for i, _ in pairs], np.int64),
+                               np.array([j for _, j in pairs], np.int64))
+
+    def moog_fm_block(self):
+        """OSC 1's frequency and phase anchors onto the OSC 2 slots it
+        modulates, for this block: copied, so they follow everything that moves
+        OSC 1 -- its knobs, a retune, a bend."""
+        if not self.fm_map:
+            return
+        d = np.concatenate([v[0] for v in self.fm_map.values()])
+        sidx = np.concatenate([v[1] for v in self.fm_map.values()])
+        a = self.a
+        a["fmw"][d] = a["om"][sidx]
+        a["fmp"][d] = a["p0"][sidx]
+        a["fmpR"][d] = a["p0R"][sidx]
 
     def moog_shape(self, idx, panel):
         """A knob changed which shapes move, or how: the notes' flags and
@@ -1754,8 +1802,10 @@ class Slab:
                         self.ft_cnt[q] = 0
                         self.mp_on[q] = False
                         self.ms_on[q] = False
+                        self.fm_map.pop(int(q), None)
                         self.ft_free.append(int(q))
                     self.a["fx"][live] = -1
+                    self.a["fmw"][live] = 0.0
             else:
                 keep.append((idx, off))
         self.retiring = keep
@@ -1908,6 +1958,7 @@ class Renderer:
         self.slab.prep()["kb0"] = n0 // moog_grid(B.BLK)
         self.slab.moog_pitch_block(n0, frames)
         self.slab.moog_shape_block(n0, frames)
+        self.slab.moog_fm_block()
         snd = self.send
         SL, SR = self.SL, self.SR
         if snd:
@@ -3994,7 +4045,7 @@ class Live:
     # as the Messenger's does.
     MOOG_GLIDE_PER_BLOCK = 0.01
     MOOG_GLIDES = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
-                   'sub_level', 'noise_level', 'osc2_freq', 'tune')
+                   'sub_level', 'noise_level', 'osc2_freq', 'tune', 'mod_amount')
 
     def _moog_panel_for(self, pid, ch):
         """The panel a part's notes on a channel play: its patch's knobs, the
@@ -4111,6 +4162,9 @@ class Live:
             if len(sw):              # a representation switched: no ramp across it
                 sl.a["aLp"][sw] = sl.a["aL"][sw]
                 sl.a["aRp"][sw] = sl.a["aR"][sw]
+            for r in np.unique(sl.a["fx"][idx]):
+                if r >= 0:
+                    sl.moog_fm(int(r), idx, panel)
         # an amplifier after the ladder (the charang) distorts what the filter
         # passed: its products are recomputed from the new levels
         if getattr(part.moog(), "amp_drive", 0.0):
@@ -10314,6 +10368,86 @@ def selftest():
     check("...and live plays each moving shape as the file renders it",
           all(_v < 1e-3 for _, _v in _mlw),
           "  (with the room's images: %s)" % ", ".join("%s %.1e" % _x for _x in _mlw))
+
+    # 1 -> 2 FM: OSC 1's own wave modulates OSC 2. A harmonic's waveform is
+    # cos(its phase + k I A(OSC 1's angle)), A the integral of OSC 1's wave
+    # (moog.fm_coeffs), and live plays it as the file renders it -- room
+    # images included, with OSC 2 transposed a fourth (which is what showed
+    # that a transposed partial's image needs its fractional onset: nfr).
+    _mwas = dict(T.MoogSawLead.messenger)
+    _menv = os.environ.get("TUNING_REFLECT")
+    os.environ["TUNING_REFLECT"] = "0"
+    try:
+        T.MoogSawLead.messenger = dict(_mwas, osc1_level=0.0, osc2_level=1.0, osc1_wave=_MG.TRI,
+                                       osc2_freq=0.5 + 5 / 14.0, cutoff=1.0, resonance=0.0, kb_track=0.0,
+                                       mod_dest=0, mod_amount=0.8, f_sustain=1.0, a_sustain=1.0)
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        _fq = _BRb.prepare(_mpath, "even")
+        _fpan = _MG.panel_of(T.MoogSawLead)
+        _fb = _MG.fm_coeffs(_fpan); _fI = _MG.fm_index(_fpan)
+        _fN = int(1.0 * _BRb.SR); _fw = []
+        for _k in (1, 3, 8):
+            _i1 = np.flatnonzero(_fq["mk"] == 2 * 4096 + _k)
+            _fs = {_kk: (np.ascontiguousarray(_v[_i1]) if isinstance(_v, np.ndarray) and _v.shape == (_fq["P"],) else _v)
+                   for _kk, _v in _fq.items()}
+            _fs["P"] = len(_i1)
+            _l = np.zeros(_fN, np.float32); _r = np.zeros(_fN, np.float32)
+            _BRb.synth_partials(_fs, 0, _fN, 0, _fs["P"], _l, _r)
+            _n = np.arange(_fN)
+            _ps1 = _fs["fmp"][0] + float(_fs["fmw"][0]) * _n
+            _A = sum(_fb[_j].real * np.sin((_j + 1) * _ps1) + _fb[_j].imag * np.cos((_j + 1) * _ps1)
+                     for _j in range(_MG.FM_J))
+            _ref = np.cos(_fs["p0"][0] + float(_fs["om"][0]) * _n + _k * _fI * _A)
+            _sg = slice(int(0.2 * _BRb.SR), int(0.9 * _BRb.SR))
+            _a, _b = _l[_sg].astype(float), _ref[_sg]
+            _g = float(np.dot(_a, _b) / np.dot(_b, _b))
+            _fw.append((_k, _k * abs(_fI) * float(np.max(np.abs(_A))),
+                        float(np.sqrt(((_a - _g * _b) ** 2).mean()) / np.sqrt((_a ** 2).mean()))))
+    finally:
+        T.MoogSawLead.messenger = _mwas
+        if _menv is None:
+            os.environ.pop("TUNING_REFLECT", None)
+        else:
+            os.environ["TUNING_REFLECT"] = _menv
+    check("1->2 FM moves OSC 2 by the integral of OSC 1's wave, exactly",
+          all(_v < 1e-4 for _, _, _v in _fw),
+          "  (a triangle OSC 1: %s)" % ", ".join("harmonic %d at %.1f rad, residual %.1e" % _x for _x in _fw))
+    _menv2 = os.environ.get("TUNING_MOOG_PANEL")
+    os.environ["TUNING_MOOG_PANEL"] = _mjson.dumps(dict(mod_dest=0, mod_amount=0.8, osc1_level=0.4,
+                                                       osc2_level=0.8, osc2_freq=0.5 + 5 / 14.0))
+    try:
+        _lv = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _lv.warm()
+        _lo = []
+        def _lp():
+            _n0 = _lv.n; _lv.apply(_n0); _lv.sweep(_n0); _lv.slab.reap(_n0)
+            _lo.append(np.array(_lv.renderer.render(_n0, 128)[0])); _lv.n = _n0 + 128
+        _lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _lp()
+        _lix = np.flatnonzero(_lv.slab.busy); _lrd = _lv.slab.a["rdl"][_lix]
+        _lon = int(_lv.slab.a["non"][_lix][_lrd == 0][0])
+        while _lv.n < _lon + _BRb.SR:
+            _lp()
+        _lv.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0)); _lp()
+        _loff = int(_lv.slab.a["noff"][_lix][_lrd == 0][0])
+        for _ in range(int(0.8 * _BRb.SR / 128)):
+            _lp()
+        _lL = np.concatenate(_lo).astype(float)
+        _lq = _BRb.prepare(_mpath, "even")
+        _lq = dict(_lq, non=_lq["non"] + _lon, noff=_lq["noff"] - int(_BRb.SR) + _loff,
+                   p0=_lq["p0"] - _lq["om"] * _lon, p0R=_lq["p0R"] - _lq["om"] * _lon,
+                   fmp=_lq["fmp"] - _lq["fmw"] * _lon, fmpR=_lq["fmpR"] - _lq["fmw"] * _lon)
+        _lF = _BRb.synth_window(_lq, 0, len(_lL))[0].astype(float)
+        _la, _lb = _lL[_lon:], _lF[_lon:]
+        _lg = float(np.dot(_la, _lb) / np.dot(_la, _la))
+        _lres = float(np.sqrt(((_lg * _la - _lb) ** 2).mean()) / np.sqrt((_lb ** 2).mean()))
+    finally:
+        if _menv2 is None:
+            os.environ.pop("TUNING_MOOG_PANEL", None)
+        else:
+            os.environ["TUNING_MOOG_PANEL"] = _menv2
+    check("...and live plays it as the file renders it, room images and all",
+          _lres < 1e-5, "  (OSC 2 a fourth up: residual %.1e)" % _lres)
 
     # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
     # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.

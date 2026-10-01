@@ -16,6 +16,7 @@ rendered in the studio at the same level as the plain patch:
     syncsweep  OSC 2 synced, its frequency thrown up by the contour: the sync sweep
     wavenv     F ENV -> OSC 2 WAVE, triangle to narrow pulse on each key
     lfosub     LFO 1 -> SUB WAVE, the sub breathing between square and pulse
+    fm         1 -> 2 FM: a triangle OSC 1 modulating OSC 2 a fifth up
 """
 import json
 import os
@@ -48,6 +49,10 @@ SETTINGS = {
     # LFO 1 -> SUB WAVE: the sub breathing between square and pulse
     'lfosub': dict(osc1_level=0.5, osc2_level=0.0, sub_level=1.0, sub_wave=0.6,
                    lfo1_dest=3, lfo1_depth=1.0, lfo1_rate=0.55),
+    # 1 -> 2 FM: OSC 1 (a triangle, silent in the mix) modulating OSC 2 a
+    # fifth up -- the metallic, clangorous Moog FM
+    'fm': dict(osc1_level=0.0, osc1_wave=0.4, osc2_level=1.0, osc2_freq=1.0, mod_dest=0,
+               mod_amount=0.75, cutoff=0.7),
 }
 
 

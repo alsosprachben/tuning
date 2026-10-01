@@ -147,9 +147,12 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
 // amount, the two sustains), one entry per grid point so a knob never steps
 // at a block boundary. fx < 0, or no fx at all, is every other voice, whose
 // arithmetic is untouched.
-#define FTW 13          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp flags
+#define FTW 30          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp flags
+                        //     fm_index, then FM_J complex modulator coefficients
+#define FM_J 8
 #define FT_PITCH 1      // flags: OSC 2 follows its note's pitch rows (MPI/MPC/MPR)
                         // 2 / 4 / 8: OSC 1 / OSC 2 / SUB's shape moves (MKI/MPK)
+                        // 16: 1 -> 2 FM (FT 13-29, and OSC 1's phase in fmw/fmp/fmpR)
 #define KNW 9           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
                         //     lfo_hz lfo_octaves lfo_shape lfo_reset
 #define MOOG_GRID 128   // samples between evaluations: the live block, so a
@@ -456,6 +459,7 @@ void synth_voice(
     const float* ampLp, const float* ampRp, const int* mkr,
     const int* MPI, const double* MPC, const float* MPR,
     const int* MKI, const float* MPK,
+    const double* fmw, const double* fmp, const double* fmpR,
     float sfloor, float spow, float shmax, float shref, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
@@ -703,6 +707,10 @@ void synth_voice(
                 // A MOVING SHAPE (moog.shape_rows): this partial's complex
                 // coefficient at each grid point, from its note's rows
                 float cRe[65], cIm[65]; int shm=0; const float* mkp=0; long mks=0; const int* mki=0;
+                // 1 -> 2 FM: OSC 1's angle, from its frequency and phase anchor as
+                // copied onto this OSC 2 partial (fmw, fmp, fmpR)
+                int fmo = ftr && fmw && ((int)ftr[12] & 16) && mkr && (mkr[p]>>12)==2 && fmw[p]>0.0;
+                float fmI = fmo ? ftr[13] : 0.f; int fmk = fmo ? (mkr[p]&4095) : 0;
                 if(ftr && MKI && MPK && mkr){
                     int o=mkr[p]>>12, bit = o==1 ? 2 : o==2 ? 4 : o==3 ? 8 : 0;
                     if(bit && ((int)ftr[12] & bit)){
@@ -736,6 +744,11 @@ void synth_voice(
                             // swept up past the top it would alias: fade it out
                             float fr=fhzj/SRATE_F;
                             fade = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
+                        }
+                        if(fmo){
+                            // a carrier whose deviation would reach Nyquist fades out
+                            float fr=(fhzj+(float)fmk*fabsf(fmI)*(float)(fmw[p]*SRATE_D/6.283185307179586))/SRATE_F;
+                            fade *= fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
                         }
                         float t=(float)(nn-a)/SRATE_F;
                         float fe=moog_adsr(t,fA,fD,kn[3],fR,toff);
@@ -830,6 +843,15 @@ void synth_voice(
                 long s0 = ns>c0 ? ns : c0, s1 = ne<c1 ? ne : c1;
                 if(s0>=s1) continue;
                 float a0L=gLm[cl], a1L=gLm[cl+1], a0R=gRm[cl], a1R=gRm[cl+1];
+                float z1r=0.f, z1i=0.f, r1r=1.f, r1i=0.f;
+                if(fmo){
+                    // OSC 1's angle at the cell's start, exactly; its vibrato and
+                    // bend (bph) scale with frequency, as every partial's do
+                    double w1=fmw[p], ps=fmp[p]+w1*(double)s0+bph*(w1/w);
+                    z1r=(float)cos(ps); z1i=(float)sin(ps);
+                    double w1v=(double)winst*(w1/w);
+                    r1r=(float)cos(w1v); r1i=(float)sin(w1v);
+                }
                 if(pm){
                     // re-anchor the phase at the cell's start, exactly, and turn
                     // at this cell's own rate: a 512-sample file block and a
@@ -865,10 +887,26 @@ void synth_voice(
                         float cn=cosf(jn), sn=sinf(jn);
                         sL = zrL*cn - ziL*sn; sR = zrR*cn - ziR*sn;
                     }
+                    float czL=zrL, czR=zrR, sgL=ziL, sgR=ziR;
+                    if(fmo){
+                        // A = sum_j Re(B_j) sin(j th1) + Im(B_j) cos(j th1): the
+                        // integral of OSC 1's wave; OSC 2's harmonic k moves by k I A
+                        float pr=z1r, pi=z1i, A=0.f;
+                        const float* B=ftr+14;
+                        for(int jj=0;jj<FM_J;jj++){
+                            A += B[2*jj]*pi + B[2*jj+1]*pr;
+                            float tr=pr*z1r-pi*z1i; pi=pr*z1i+pi*z1r; pr=tr;
+                        }
+                        float dl=(float)fmk*fmI*A, cd=cosf(dl), sd=sinf(dl);
+                        czL=zrL*cd-ziL*sd; sgL=zrL*sd+ziL*cd;
+                        czR=zrR*cd-ziR*sd; sgR=zrR*sd+ziR*cd;
+                        sL=czL; sR=czR;
+                        float t1=z1r*r1r-z1i*r1i; z1i=z1r*r1i+z1i*r1r; z1r=t1;
+                    }
                     if(shm){
                         // Re(c e^{i theta}) with c moving across the cell
                         float gr=cRe[cl]+(cRe[cl+1]-cRe[cl])*t, gi=cIm[cl]+(cIm[cl+1]-cIm[cl])*t;
-                        sL = gr*zrL - gi*ziL; sR = gr*zrR - gi*ziR;
+                        sL = gr*czL - gi*sgL; sR = gr*czR - gi*sgR;
                     }
                     if(jfa>0.f){
                         double sec=(double)n/SRATE_D;
