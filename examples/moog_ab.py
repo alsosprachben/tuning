@@ -31,7 +31,7 @@ CHORDS = [(48, 55, 60, 64), (45, 52, 57, 60), (41, 48, 53, 57), (43, 50, 55, 59)
 CHORD_PHRASE = ([(i * 4.0, n, 4.0) for i, c in enumerate(CHORDS) for n in c]
                 + [(16.0 + i * 1.0, n, 0.9) for i, c in enumerate(CHORDS * 2) for n in c]
                 + [(24.0, n, 6.0) for n in CHORDS[0]])
-CHORDAL = {50, 51, 88, 89, 90, 91, 92, 93, 94, 95, 97, 99, 101, 103}
+CHORDAL = {50, 51, 54, 88, 89, 90, 91, 92, 93, 94, 95, 97, 99, 100, 101, 103}
 
 # where each program is played, in semitones from the phrase as written
 REGISTER = {38: -24, 39: -24}

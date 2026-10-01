@@ -8748,13 +8748,13 @@ def selftest():
           _hilo(_t1) - _hilo(_t0) > 6.0 and abs(_pw) < 0.01,
           "  (+%.1f dB of upper partials against the lower, total power %+.3f dB "
           "-- colour, not level)" % (_hilo(_t1) - _hilo(_t0), _pw))
-    # The leads, basses and brass are a Moog now (moog.py), whose CC71 is
-    # its ladder's RESONANCE; FX 5 (brightness) stays additive and keeps the
-    # virtual corner this check is about.
+    # Most of the synth bank is a Moog now (moog.py), whose CC71 is its
+    # ladder's RESONANCE; FX 7 (echoes) stays additive and keeps the virtual
+    # corner this check is about.
     import patch_map as _PMr
-    _r0, _r1 = _scp(100, []), _scp(100, [(71, 127)])
+    _r0, _r1 = _scp(102, []), _scp(102, [(71, 127)])
     _nf1 = np.asarray(_r0["nf"])
-    _near = np.abs(_nf1 / _PMr.property_class_for_program(100).bore_corner_hz - 1.0) < 0.15
+    _near = np.abs(_nf1 / _PMr.property_class_for_program(102).bore_corner_hz - 1.0) < 0.15
     _rg = 10.0 * math.log10((np.asarray(_r1["aM"])[_near] ** 2).sum()
                             / (np.asarray(_r0["aM"])[_near] ** 2).sum())
     check("CC71 on a synth lead is a resonant peak at its filter's corner",

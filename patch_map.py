@@ -30,6 +30,7 @@ from tonelib import (
     MoogSynthStrings1, MoogSynthStrings2, MoogWarmPad, MoogPolysynthPad,
     MoogHaloPad, MoogSweepPad, MoogSoundtrackPad,
     MoogAtmosphereFX, MoogGoblinsFX, MoogSciFiFX,
+    MoogBrightnessFX, MoogChoirPad, MoogBowedPad, MoogSynthVoice,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -736,7 +737,9 @@ PROGRAM_CLASS[63] = SynthBrass2Properties  # the soft pad: slower, shallower
 # through a ladder actually makes, as the leads (80-87) are. The additive
 # classes above stay as their bases and as the A/B: TUNING_MOOG=0 keeps them.
 # The programs whose mechanism is NOT subtractive -- stretched or inharmonic
-# partials, formants, echo taps -- stay additive. See tonelib, below the leads.
+# partials, echo taps (88, 93, 96, 98, 102) -- stay additive. Formants are not
+# a reason: a choir or a synth voice is the Moog sung through them, as GM 85
+# is. See tonelib, below the leads.
 if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[38] = MoogSynthBass1           # saw over a 16' saw, low ladder
     PROGRAM_CLASS[39] = MoogSynthBass2           # square and SUB, resonant
@@ -752,6 +755,10 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[99] = MoogAtmosphereFX         # a saw and the NOISE oscillator
     PROGRAM_CLASS[101] = MoogGoblinsFX           # two wobbles: the voice, and OSC 2
     PROGRAM_CLASS[103] = MoogSciFiFX             # PWM squares, a resonant contour
+    PROGRAM_CLASS[100] = MoogBrightnessFX        # a hard front on an open ladder
+    PROGRAM_CLASS[91] = MoogChoirPad             # the ladder, then the /O/ tract
+    PROGRAM_CLASS[54] = MoogSynthVoice           # the ladder, then the sung tract
+    PROGRAM_CLASS[92] = MoogBowedPad             # band pass, resonant, slow
 
 # WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
 # family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit

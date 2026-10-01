@@ -9871,6 +9871,59 @@ class MoogSciFiFX(SciFiFXProperties):
         lfo1_rate=0.55, lfo1_shape=0, lfo1_depth=0.75, lfo1_dest=2,
     )
 
+class MoogBrightnessFX(BrightnessFXProperties):
+    """GM 100 on a Moog: the hard front on an open ladder. Two saws six cents
+    apart, a 12 ms amp attack, the cutoff high with a short contour on top --
+    plain subtractive, which is all the additive voice's formant was standing
+    in for."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = BrightnessFXProperties.initial_gain * 10 ** (10.0 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.78, resonance=0.2, eg_amount=0.6, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.6, f_sustain=0.6, f_release=0.68,
+        a_attack=0.27, a_decay=0.75, a_sustain=0.8, a_release=0.68,
+    )
+
+
+class MoogChoirPad(ChoirPadProperties):
+    """GM 91 on a Moog: two saws and a swell, through the ladder and THEN
+    the class's three vocal formants (its open /O/) -- the body after the
+    instrument, as the voice lead (GM 85) has it. The formants are not a Moog
+    part; they are a tract the Moog sings through."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = ChoirPadProperties.initial_gain * 10 ** (8.1 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.7,
+        cutoff=0.7, resonance=0.0, eg_amount=0.55, kb_track=1.0,
+        f_attack=0.6, f_decay=0.7, f_sustain=0.75, f_release=0.72,
+        a_attack=0.6, a_decay=0.6, a_sustain=1.0, a_release=0.72,
+    )
+
+    def moog_body(self, partial_hz):
+        return self.bore_gain(partial_hz) * self._bore_norm()
+
+
+class MoogBowedPad(BowedPadProperties):
+    """GM 92 on a Moog: bowed glass as a RESONANCE excited slowly. The ladder
+    in BAND PASS, resonant, tracking the key at the fifth harmonic, so each
+    note rings high and narrow over a saw that swells in over four tenths of
+    a second -- what the additive voice did with a narrow formant at 3 kHz."""
+    moog = True
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = BowedPadProperties.initial_gain * 10 ** (9.3 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.6,
+        mode=2, cutoff=0.604, resonance=0.7, eg_amount=0.5, kb_track=1.0,
+        f_attack=0.6, f_decay=0.7, f_sustain=1.0, f_release=0.76,
+        a_attack=0.656, a_decay=0.6, a_sustain=1.0, a_release=0.76,
+    )
+
 
 class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
@@ -15031,6 +15084,28 @@ class SynthVoiceProperties(VocalProperties):
     section_spread_cents = 4.0
     section_vibrato_cents = 3.0
     initial_gain = (1.0 / 4542 / (VocalProperties.section_players ** 0.5)) * 0.6823   # -3.32 dB, see VocalProperties
+
+
+class MoogSynthVoice(SynthVoiceProperties):
+    """GM 54 on a Moog: two saws through the ladder and then this class's
+    own sung tract -- its "eh", or the vowel the file's lyrics ask for, since
+    the sung machinery (_sung_formants) sets `formants` per note and the body
+    reads them. A synthesizer singing, which is what the program names."""
+    moog = True
+    # at the sung voice's level (examples/moog_ab.py, K-weighted). 63 dB is
+    # scale, not loudness: a sung note's gain is spread over a section of
+    # singers and a glottal series, and a Moog note is one voice.
+    initial_gain = SynthVoiceProperties.initial_gain * 10 ** (62.8 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.6,
+        cutoff=0.68, resonance=0.0, eg_amount=0.55, kb_track=1.0,
+        f_attack=0.54, f_decay=0.7, f_sustain=0.75, f_release=0.65,
+        a_attack=0.54, a_decay=0.6, a_sustain=1.0, a_release=0.65,
+    )
+
+    def moog_body(self, partial_hz):
+        return self.bore_gain(partial_hz) * self._bore_norm()
 
 
 # --- Sound effects (GM 120-127) --------------------------------------------
