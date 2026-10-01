@@ -336,7 +336,7 @@ def knob_lfo_rate(v):
 
 LFO_OCTAVES = 3.0   # LFO 1 DEPTH fully either way moves the cutoff this far
 LFO_SHAPES = ('triangle', 'sawtooth', 'ramp', 'square')
-LFO_DESTS = ('cutoff', 'osc 2 freq', 'osc 1 wave', 'sub wave')   # only cutoff, yet
+LFO_DESTS = ('cutoff', 'osc 2 freq', 'osc 1 wave', 'sub wave')
 
 
 def lfo(x, shape):
@@ -422,6 +422,7 @@ def panel_of(props, overrides=None):
 # so they cannot disagree about what a knob means.
 FT_W, KN_W = 13, 9      # must match FTW and KNW in synthkernel.c
 FT_PITCH = 1            # FT slot 12, a flag: OSC 2 follows the note's pitch rows
+FT_SHAPE = {1: 2, 2: 4, 3: 8}   # ...and these: OSC 1 / OSC 2 / SUB's shape moves (rows)
 FMAX_HZ = 12000.0       # highest partial: past it a saw's harmonics are 27 dB
                         # down at 440 Hz, the ladder usually has them lower
                         # still, and three oscillators' worth is the CPU bill
@@ -488,10 +489,15 @@ def _partials(panel, f0, fmax=FMAX_HZ):
     osc2 = ((OSC2, f1, panel['osc2_level'],
              lambda n: sync_spectrum(panel['osc2_wave'], f2 / f1, n)) if sync else
             (OSC2, f2, panel['osc2_level'], lambda n: osc_spectrum(panel['osc2_wave'], n)))
+    moving = shape_flags(panel)
     for osc, f, lvl, c in (
             (OSC1, f1, panel['osc1_level'], lambda n: osc_spectrum(panel['osc1_wave'], n)),
             osc2,
             (SUB, f1 * 0.5, panel['sub_level'], lambda n: sub_spectrum(panel['sub_wave'], n))):
+        if moving & FT_SHAPE[osc]:
+            # ITS SHAPE MOVES: the kernel multiplies in the coefficient from the
+            # note's shape rows, so the partial carries only 2 x level
+            c = lambda n: np.ones(n, complex)
         if lvl <= 0.0 or f <= 0.0:
             continue
         n = min(OSC_HARMONICS if osc != SUB else SUB_HARMONICS, int(fmax // f))
@@ -578,6 +584,8 @@ def weights(panel, mk, nf, fmax=FMAX_HZ):
         else:
             c = spec(panel[shape], n)
             r = osc_ratio(panel, o)
+        if shape_flags(panel) & FT_SHAPE[o]:
+            c = np.ones(n, complex)                 # the shape rows carry it
         kk = np.clip(k[m], 1, n) - 1
         rt[m] = r
         w[m] = 2.0 * np.abs(c[kk]) * float(panel[lvl])
@@ -691,6 +699,121 @@ def pitch_params(panel):
             1.0 if panel['lfo1_reset'] else 0.0)
 
 
+# ---------------------------------------------------------------- MOD: shape
+# THE WAVESHAPES THAT MOVE: F ENV -> OSC 2 WAVE and -> SUB WAVE (the MOD
+# section), LFO 1 -> OSC 1 WAVE and -> SUB WAVE, and the SYNC SWEEP -- OSC 2
+# FREQ moved (by the contour or LFO 1) while it is synced, which moves the
+# synced spectrum and not the pitch. Unknown depths, chosen: MOD AMOUNT at 100%
+# sweeps the whole WAVESHAPE travel, LFO 1 at full depth half of it.
+MOD_WAVE_SPAN = 1.0
+LFO_WAVE_SPAN = 0.5
+SHAPE_K = OSC_HARMONICS          # coefficients per oscillator per grid point
+SHAPE_W = 25                     # shape_params' length
+
+
+def shape_flags(panel):
+    """Which oscillators' shapes move: FT_SHAPE bits."""
+    f = 0
+    amt = panel['mod_amount'] != 0.5
+    dep = panel['lfo1_depth'] != 0.5
+    md, ld = int(panel['mod_dest']), int(panel['lfo1_dest'])
+    if (md == 2 and amt) or (panel['sync'] and ((md == 1 and amt) or (ld == 1 and dep))):
+        f |= FT_SHAPE[OSC2]
+    if (md == 3 and amt) or (ld == 3 and dep):
+        f |= FT_SHAPE[SUB]
+    if ld == 2 and dep:
+        f |= FT_SHAPE[OSC1]
+    return f
+
+
+def shape_params(panel):
+    """What the shape rows need of the panel, as one vector (SHAPE_W)."""
+    md, ld = int(panel['mod_dest']), int(panel['lfo1_dest'])
+    pp = pitch_params(dict(panel, sync=False))      # the sweep's ratio, if synced
+    v = np.zeros(SHAPE_W)
+    v[0] = shape_flags(panel)
+    v[1], v[2], v[3] = panel['osc1_wave'], panel['osc2_wave'], panel['sub_wave']
+    v[4] = md if md in (2, 3) else 0
+    v[5] = bipolar(panel['mod_amount'], MOD_WAVE_SPAN / 2.0)
+    v[6] = {2: 1, 3: 3}.get(ld, 0)
+    v[7] = bipolar(panel['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
+    v[8], v[9], v[10] = knob_lfo_rate(panel['lfo1_rate']), int(panel['lfo1_shape']), 1.0 if panel['lfo1_reset'] else 0.0
+    v[11], v[12] = knob_time(panel['f_attack']), knob_time(panel['f_decay'])
+    v[13], v[14] = float(panel['f_sustain']), knob_time(panel['f_release'])
+    v[15] = (osc_ratio(panel, OSC2) / osc_ratio(panel, OSC1)) if panel['sync'] else 0.0
+    if pp is not None and panel['sync']:
+        v[16:25] = pp
+    return v
+
+
+def shape_values(g, a0, toff, par, sr):
+    """At absolute samples g, for notes keyed at a0, released at toff: the
+    shapes of OSC 1, OSC 2 and the SUB, and OSC 2's sync ratio (0: free).
+    par is (..., SHAPE_W); everything broadcasts."""
+    par = np.asarray(par, float)
+    g = np.asarray(g, float)
+    q = lambda i: par[..., i]
+    t = (g - a0) / sr
+    fe = np.where(t < 0.0, 0.0, _adsr_v(t, q(11), q(12), q(13), q(14), (toff - a0) / sr))
+    tl = np.where(q(10) > 0.5, t, g / sr)
+    ph = (tl * q(8)) % 1.0
+    sh = q(9)
+    lv = np.select([sh == 0, sh == 1, sh == 2],
+                   [1.0 - 4.0 * np.abs(ph - 0.5), 2.0 * ph - 1.0, 1.0 - 2.0 * ph],
+                   np.where(ph < 0.5, 1.0, -1.0))
+    s1 = q(1) + np.where(q(6) == 1, q(7) * lv, 0.0)
+    s2 = q(2) + np.where(q(4) == 2, q(5) * fe, 0.0)
+    ss = q(3) + np.where(q(4) == 3, q(5) * fe, 0.0) + np.where(q(6) == 3, q(7) * lv, 0.0)
+    P = tuple(par[..., 16 + i] for i in range(9))
+    rt = pitch_ratio(g, a0, toff, P, sr)
+    r = np.where(q(15) > 0.0, q(15) * rt, 0.0)
+    clip = lambda x: np.clip(x, 0.0, 1.0)
+    return clip(s1), clip(s2), clip(ss), r
+
+
+def shape_rows_c(par, a0, toff, j0, nj, sr, mg, base, stride, offs, out, K=SHAPE_K):
+    """The shape rows of several notes, written into `out` (synthkernel.c
+    moog_shape_rows): what both renderers call."""
+    import ctypes
+    lib = _lib()
+    if not getattr(lib, '_shape_typed', False):
+        d, l, i4 = ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_long), ctypes.POINTER(ctypes.c_int)
+        lib.moog_shape_rows.argtypes = [ctypes.c_int, d, d, d, l, i4, ctypes.c_int, ctypes.c_double,
+                                        ctypes.c_int, l, i4, i4, ctypes.POINTER(ctypes.c_float)]
+        lib.moog_shape_rows.restype = None
+        lib._shape_typed = True
+    par = np.ascontiguousarray(np.asarray(par, np.float64).reshape(-1, SHAPE_W))
+    n = len(par)
+    f8 = lambda v: np.ascontiguousarray(np.broadcast_to(np.asarray(v, np.float64), (n,)))
+    i8 = lambda v: np.ascontiguousarray(np.broadcast_to(np.asarray(v, np.int64), (n,)))
+    i4 = lambda v, m=1: np.ascontiguousarray(np.broadcast_to(np.asarray(v, np.int32), (n * m,) if m == 1 else (n, m)).reshape(-1))
+    a0, toff, j0, base = f8(a0), f8(toff), i8(j0), i8(base)
+    nj, stride, offs = i4(nj), i4(stride), i4(offs, 3)
+    P = lambda x, t: x.ctypes.data_as(ctypes.POINTER(t))
+    lib.moog_shape_rows(n, P(par, ctypes.c_double), P(a0, ctypes.c_double), P(toff, ctypes.c_double),
+                        P(j0, ctypes.c_long), P(nj, ctypes.c_int), int(mg), float(sr), int(K),
+                        P(base, ctypes.c_long), P(stride, ctypes.c_int), P(offs, ctypes.c_int),
+                        P(out, ctypes.c_float))
+
+
+def shape_rows(par, a0, toff, end, sr, mg=MG):
+    """A note's shape rows for the file renderer: (j0, n, stride, offsets,
+    data) -- per grid point, for each oscillator whose shape moves, its K
+    complex coefficients as float pairs; offsets -1 for one that does not."""
+    flags = int(par[0])
+    j0 = int(a0 // mg)
+    n = max(2, int(-(-end // mg)) - j0 + 1)
+    offs, nslot = [-1, -1, -1], 0
+    for i, o in enumerate((OSC1, OSC2, SUB)):
+        if flags & FT_SHAPE[o]:
+            offs[i] = nslot * SHAPE_K * 2
+            nslot += 1
+    stride = nslot * SHAPE_K * 2
+    out = np.zeros(n * stride, np.float32)
+    shape_rows_c(par, a0, toff, j0, n, sr, mg, 0, stride, offs, out)
+    return j0, n, stride, offs, out
+
+
 def _adsr_v(t, A, D, S, R, toff):
     """adsr() with every argument an array (numpy broadcasting)."""
     t = np.asarray(t, float)
@@ -700,7 +823,8 @@ def _adsr_v(t, A, D, S, R, toff):
         att = 1.5 * (1.0 - np.exp(-tt * math.log(3.0) / np.maximum(A, 1e-6)))
         dec = S + (1.0 - S) * np.exp(-(tt - A) / (np.maximum(D, 1e-6) / 4.0))
         return np.where(before, 0.0, np.where(tt < A, att, dec))
-    rel = held(toff) * np.exp(-(t - toff) / (np.maximum(R, 1e-6) / 4.0))
+    with np.errstate(over='ignore', invalid='ignore'):   # toff inf: held, rel unused
+        rel = held(toff) * np.exp(-(t - toff) / (np.maximum(R, 1e-6) / 4.0))
     return np.where(t >= toff, rel, held(t))
 
 
@@ -792,6 +916,31 @@ def pitch_cells_c(g, a0, toff, P, sr, mg=MG):
     dp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
     _lib().moog_pitch_cells(n, dp(g), dp(a0), dp(toff), dp(Pm), float(sr), int(mg), dp(dc), dp(r))
     return dc, r
+
+
+def coeff_rows(kind, s, r, K=OSC_HARMONICS):
+    """c_k, k = 1..K, of WAVESHAPE (kind 0) or SUB WAVE (kind 1) at each shape
+    in s, OSC 2 synced at ratio r where r > 0 -- in C (moog_coeff_rows), for a
+    shape that moves: an (n, K) complex array."""
+    import ctypes
+    s = np.ascontiguousarray(np.asarray(s, np.float64).ravel())
+    n = len(s)
+    kind = np.ascontiguousarray(np.broadcast_to(np.asarray(kind, np.int32), (n,)))
+    r = np.ascontiguousarray(np.broadcast_to(np.asarray(r, np.float64), (n,)))
+    out = np.zeros(n * K * 2, np.float32)
+    lib = _lib()
+    if not getattr(lib, '_coeff_typed', False):
+        d = ctypes.POINTER(ctypes.c_double)
+        lib.moog_coeff_rows.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_int), d, d, ctypes.c_int,
+                                        ctypes.POINTER(ctypes.c_float)]
+        lib.moog_coeff_rows.restype = None
+        lib._coeff_typed = True
+    lib.moog_coeff_rows(n, kind.ctypes.data_as(ctypes.POINTER(ctypes.c_int)),
+                        s.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
+                        r.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), int(K),
+                        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)))
+    o = out.reshape(n, K, 2).astype(np.float64)
+    return o[..., 0] + 1j * o[..., 1]
 
 
 def pitch_rows(P, a0, toff, end, sr, mg=MG):
@@ -958,6 +1107,17 @@ def selftest():
     check("the C cells are the numpy reference's",
           np.allclose(dcc, dc, rtol=1e-12, atol=1e-9) and np.allclose(dlc, dl, rtol=1e-12, atol=1e-9),
           "(worst %.1e samples, with and without LFO 1)" % max(np.abs(dcc - dc).max(), np.abs(dlc - dl).max()))
+    qs = np.arange(Q + 1) / float(Q)
+    cw = coeff_rows(0, qs, 0.0)
+    cs = coeff_rows(1, qs, 0.0, SUB_HARMONICS)
+    ew = max(np.abs(cw[i] - osc_spectrum(v, 64)).max() for i, v in enumerate(qs))
+    es = max(np.abs(cs[i] - sub_spectrum(v, SUB_HARMONICS)).max() for i, v in enumerate(qs[:-1]))
+    rs = [1.0, 1.37, 2.0, 2.5, 3.99, 7.3]
+    ey = max(np.abs(coeff_rows(0, v, rr)[0] - sync_spectrum(v, rr, 64)).max()
+             for v in (0.1, 0.4, 0.448, 0.5, 0.552, 0.6, 0.8) for rr in rs)
+    check("the C waveshape coefficients are moog.py's, free and synced",
+          ew < 1e-6 and es < 1e-6 and ey < 1e-6,
+          "(every knob position: worst %.1e / %.1e sub / %.1e synced, float32)" % (ew, es, ey))
     check("the pitch rows' phase is the closed form's",
           abs(num / ref - 1) < 1e-9, "(%.1f samples of extra phase, rel err %.1e)" % (ref, abs(num / ref - 1)))
     check("the noise bank is white noise of NOISE_RMS",

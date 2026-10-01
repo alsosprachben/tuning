@@ -116,10 +116,15 @@ contour — up to four octaves either way at MOD AMOUNT's ends, a guess until a
 Messenger is recorded — and LFO 1 can sweep OSC 2 FREQ too (an octave at full
 depth). OSC 2's phase is the pitch's integral, worked out per 128 samples and
 handed to the kernel as rows, so a file and the player sweep identically and a
-knob turned mid-sweep changes only what is still to come. Not yet: the MOD
-section's 1>2 FM and its two waveshape routes, LFO 1's waveshape destinations,
-the sync sweep, the FB/EXT input, LFO 2, and GLIDE as a panel knob (CC5
-portamento works).
+knob turned mid-sweep changes only what is still to come. The waveshapes move
+too: F ENV>OSC 2 WAVE and F ENV>SUB WAVE (MOD AMOUNT at its ends sweeps the
+whole WAVESHAPE travel), LFO 1 on OSC 1 WAVE or SUB WAVE (half of it at full
+depth), and the SYNC SWEEP — OSC 2 FREQ moved by the contour or the LFO while it
+is synced, which moves the synced spectrum rather than the pitch. A moving
+shape's harmonics are worked out per 128 samples from its straight segments,
+exactly, and handed to the kernel as a complex gain, so a harmonic can pass
+through zero without a click. Not yet: 1>2 FM, the FB/EXT input, LFO 2, and
+GLIDE as a panel knob (CC5 portamento works).
 
 **Playing it from a Messenger.** Give the part a channel (the `ch` column),
 then `M` on its panel: that channel's CCs are read by the Messenger's own

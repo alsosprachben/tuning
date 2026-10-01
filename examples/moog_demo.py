@@ -13,6 +13,9 @@ rendered in the studio at the same level as the plain patch:
     noise      the noise oscillator alone through the ladder and its contour
     penv       MOD: F ENV -> OSC 2 FREQ, two octaves up on the key and back
     lfopitch   LFO 1 -> OSC 2 FREQ, a slow semitone either side of OSC 1
+    syncsweep  OSC 2 synced, its frequency thrown up by the contour: the sync sweep
+    wavenv     F ENV -> OSC 2 WAVE, triangle to narrow pulse on each key
+    lfosub     LFO 1 -> SUB WAVE, the sub breathing between square and pulse
 """
 import json
 import os
@@ -35,6 +38,16 @@ SETTINGS = {
                  osc2_level=0.8),
     # LFO 1 on OSC 2 FREQ: OSC 2 wanders a semitone either side of OSC 1
     'lfopitch': dict(lfo1_dest=1, lfo1_depth=0.5 + 0.5 / 12.0, lfo1_rate=0.35, osc2_level=0.8),
+    # THE SYNC SWEEP: OSC 2 alone, synced, its frequency thrown up by the
+    # contour -- the spectrum tears upward on the key and settles
+    'syncsweep': dict(osc1_level=0.0, osc2_level=1.0, sync=True, mod_dest=1, mod_amount=0.72,
+                      f_decay=0.6, f_sustain=0.15, cutoff=0.75),
+    # F ENV -> OSC 2 WAVE: OSC 2 from a triangle to a narrow pulse on the key
+    'wavenv': dict(osc1_level=0.0, osc2_level=1.0, osc2_wave=0.4, mod_dest=2, mod_amount=1.0,
+                   f_decay=0.6, f_sustain=0.2),
+    # LFO 1 -> SUB WAVE: the sub breathing between square and pulse
+    'lfosub': dict(osc1_level=0.5, osc2_level=0.0, sub_level=1.0, sub_wave=0.6,
+                   lfo1_dest=3, lfo1_depth=1.0, lfo1_rate=0.55),
 }
 
 

@@ -1825,9 +1825,9 @@ def synth_fmt(kind, v):
     if kind == "lfodepth":
         return "%+.1f oct" % MG.bipolar(v, MG.LFO_OCTAVES)
     if kind == "lfodest":
-        return MG.LFO_DESTS[int(v)] + ("" if int(v) in (0, 1) else " (not yet)")
+        return MG.LFO_DESTS[int(v)]
     if kind == "moddest":
-        return MG.MOD_DESTS[int(v)] + ("" if int(v) == 1 else " (not yet)")
+        return MG.MOD_DESTS[int(v)] + (" (not yet)" if int(v) == 0 else "")
     if kind == "modamt":
         return "%+.0f%%" % MG.bipolar(v, 100.0)
     if kind == "time":

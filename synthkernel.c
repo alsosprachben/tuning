@@ -149,6 +149,7 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
 // arithmetic is untouched.
 #define FTW 13          // FT: kbfac fA fD fR aA aD aR mode res_bass krow f0 pre_amp flags
 #define FT_PITCH 1      // flags: OSC 2 follows its note's pitch rows (MPI/MPC/MPR)
+                        // 2 / 4 / 8: OSC 1 / OSC 2 / SUB's shape moves (MKI/MPK)
 #define KNW 9           // KN: cutoff_hz k eg_octaves f_sustain a_sustain
                         //     lfo_hz lfo_octaves lfo_shape lfo_reset
 #define MOOG_GRID 128   // samples between evaluations: the live block, so a
@@ -229,6 +230,211 @@ void moog_pitch_cells(int n, const double* g, const double* a0, const double* to
     }
 }
 
+// THE WAVESHAPES' COEFFICIENTS, in C: moog.osc_spectrum / sub_spectrum /
+// sync_spectrum for a shape that MOVES within a note (the MOD section's F ENV ->
+// OSC 2 WAVE / SUB WAVE, LFO 1 -> OSC 1 WAVE / SUB WAVE, and the sync sweep).
+// Both renderers build a note's coefficient rows from this, and the kernel
+// applies them as a complex gain. Straight segments, exactly as moog.py builds
+// them (not quantised: a sweep is continuous), integrated exactly; each
+// harmonic's exponentials are the last one's times a fixed step, so there is
+// no sine per harmonic. SYNC is a geometric series over OSC 2's whole cycles
+// plus the part-cycle at the end, so its cost does not grow with the ratio.
+typedef struct { double t0, t1, y0, y1; } mseg;
+static int ms_tri(mseg* o, double peak){
+    if(peak>=1.0){ o[0]=(mseg){0.0,1.0,-1.0,1.0}; return 1; }
+    o[0]=(mseg){0.0,peak,-1.0,1.0}; o[1]=(mseg){peak,1.0,1.0,-1.0}; return 2;
+}
+static int ms_pulse(mseg* o, double d){
+    o[0]=(mseg){0.0,d,1.0,1.0}; o[1]=(mseg){d,1.0,-1.0,-1.0}; return 2;
+}
+static double ms_reflect(double x){
+    x=fmod(x+1.0,4.0); if(x<0.0)x+=4.0;
+    return x<=2.0 ? x-1.0 : 3.0-x;
+}
+// a triangle folder after `g` (moog._fold): split at every odd level crossed
+static int ms_fold(const mseg* in, int n, double g, mseg* o){
+    int m=0;
+    for(int i=0;i<n;i++){
+        double a=g*in[i].y0, b=g*in[i].y1, t0=in[i].t0, t1=in[i].t1;
+        double pts[16]; int np=0; pts[np++]=a;
+        double lo=a<b?a:b, hi=a<b?b:a;
+        double c[12]; int nc=0;
+        for(int j=(int)floor((lo-1.0)/2.0); j<=(int)ceil((hi-1.0)/2.0); j++){
+            double v=2.0*j+1.0; if(v>lo && v<hi && nc<12) c[nc++]=v;
+        }
+        if(a<=b) for(int j=0;j<nc;j++) pts[np++]=c[j]; else for(int j=nc-1;j>=0;j--) pts[np++]=c[j];
+        pts[np++]=b;
+        for(int j=0;j+1<np;j++){
+            double u=pts[j], v=pts[j+1];
+            double s0 = b!=a ? t0+(t1-t0)*(u-a)/(b-a) : t0, s1 = b!=a ? t0+(t1-t0)*(v-a)/(b-a) : t1;
+            o[m++]=(mseg){s0,s1,ms_reflect(u),ms_reflect(v)};
+        }
+    }
+    return m;
+}
+// gain, then a hard limit at +-1 (moog._clip)
+static int ms_clip(const mseg* in, int n, double g, mseg* o){
+    int m=0;
+    for(int i=0;i<n;i++){
+        double a=g*in[i].y0, b=g*in[i].y1, t0=in[i].t0, t1=in[i].t1;
+        double pts[4]; int np=0; pts[np++]=a;
+        if(a<=b){ if(-1.0>a && -1.0<b) pts[np++]=-1.0; if(1.0>a && 1.0<b) pts[np++]=1.0; }
+        else    { if(1.0<a && 1.0>b) pts[np++]=1.0; if(-1.0<a && -1.0>b) pts[np++]=-1.0; }
+        pts[np++]=b;
+        for(int j=0;j+1<np;j++){
+            double u=pts[j], v=pts[j+1];
+            double s0 = b!=a ? t0+(t1-t0)*(u-a)/(b-a) : t0, s1 = b!=a ? t0+(t1-t0)*(v-a)/(b-a) : t1;
+            o[m++]=(mseg){s0,s1,fmax(-1.0,fmin(1.0,u)),fmax(-1.0,fmin(1.0,v))};
+        }
+    }
+    return m;
+}
+// WAVESHAPE (kind 0) or SUB WAVE (kind 1) at s: its parts, weighted (moog._osc_parts)
+static int ms_parts(int kind, double s, double* wt, mseg seg[2][32], int* ns){
+    mseg tmp[4];
+    if(s<0.0)s=0.0; if(s>1.0)s=1.0;
+    if(kind==1){
+        if(s<0.4){ double u=s/0.4; double g=1.0/fmax(1e-3,1.0-u);
+                   int n=ms_tri(tmp,0.5); ns[0]=ms_clip(tmp,n,g,seg[0]); wt[0]=1.0; return 1; }
+        double d=0.5-(0.5-0.02)*(s-0.4)/(1.0-0.4);
+        ns[0]=ms_pulse(seg[0],d); wt[0]=1.0; return 1;
+    }
+    if(s<0.4){ double g=1.0+(5.0-1.0)*(0.4-s)/0.4; int n=ms_tri(tmp,0.5);
+               ns[0]=ms_fold(tmp,n,g,seg[0]); wt[0]=1.0; return 1; }
+    if(s<0.5){ ns[0]=ms_tri(seg[0],0.5+0.5*(s-0.4)/0.1); wt[0]=1.0; return 1; }
+    if(s<0.6){ double a=(s-0.5)/0.1; ns[0]=ms_tri(seg[0],1.0); wt[0]=1.0-a;
+               ns[1]=ms_pulse(seg[1],0.5); wt[1]=a; return 2; }
+    ns[0]=ms_pulse(seg[0],0.5-(0.5-0.02)*(s-0.6)/0.4); wt[0]=1.0; return 1;
+}
+// sum over segments (clipped to [0,uend]) of the integral of y e^{-2 pi i nu u},
+// for nu = k*nu0, k = 1..K, added times `sc` into (re, im)
+static void ms_accum(const mseg* sg, int n, double nu0, double uend, int K, double sc,
+                     double* re, double* im){
+    for(int i=0;i<n;i++){
+        double t0=sg[i].t0, t1=sg[i].t1, y0=sg[i].y0, y1=sg[i].y1;
+        if(t0>=uend || t1<=t0) continue;
+        if(t1>uend){ y1=y0+(y1-y0)*(uend-t0)/(t1-t0); t1=uend; }
+        double m=(y1-y0)/(t1-t0);
+        double w0=6.283185307179586*nu0;
+        double s0r=cos(w0*t0), s0i=-sin(w0*t0), s1r=cos(w0*t1), s1i=-sin(w0*t1);   // per-k steps
+        double e0r=1.0, e0i=0.0, e1r=1.0, e1i=0.0;
+        for(int k=1;k<=K;k++){
+            double tr;
+            tr=e0r*s0r-e0i*s0i; e0i=e0r*s0i+e0i*s0r; e0r=tr;
+            tr=e1r*s1r-e1i*s1i; e1i=e1r*s1i+e1i*s1r; e1r=tr;
+            double w=w0*k;
+            // i (y1 E1 - y0 E0) / w  +  m (E1 - E0) / w^2
+            double ar=y1*e1r-y0*e0r, ai=y1*e1i-y0*e0i;
+            re[k-1]+=sc*(-ai/w + m*(e1r-e0r)/(w*w));
+            im[k-1]+=sc*( ar/w + m*(e1i-e0i)/(w*w));
+        }
+    }
+}
+void moog_coeff_rows(int n, const int* kind, const double* s, const double* r, int K, float* out){
+    double re[128], im[128], bre[128], bim[128], tre[128], tim[128];
+    mseg seg[2][32]; int ns[2]; double wt[2];
+    if(K>128) K=128;
+    for(int i=0;i<n;i++){
+        int np=ms_parts(kind[i], s[i], wt, seg, ns);
+        for(int k=0;k<K;k++){ re[k]=im[k]=0.0; }
+        double rr=r[i];
+        if(!(rr>0.0) || kind[i]==1){                     // free-running: harmonics of the wave
+            for(int q=0;q<np;q++) ms_accum(seg[q],ns[q],1.0,1.0,K,wt[q],re,im);
+        } else {                                          // synced to OSC 1 at ratio rr
+            int M=(int)floor(rr+1e-12); double fr=rr-M;
+            for(int k=0;k<K;k++){ bre[k]=bim[k]=tre[k]=tim[k]=0.0; }
+            for(int q=0;q<np;q++){
+                ms_accum(seg[q],ns[q],1.0/rr,1.0,K,wt[q],bre,bim);
+                if(fr>1e-12) ms_accum(seg[q],ns[q],1.0/rr,fr,K,wt[q],tre,tim);
+            }
+            double zr0=cos(6.283185307179586/rr), zi0=-sin(6.283185307179586/rr);
+            double zMr0=cos(6.283185307179586*M/rr), zMi0=-sin(6.283185307179586*M/rr);
+            double zr=1.0, zi=0.0, zMr=1.0, zMi=0.0;
+            for(int k=1;k<=K;k++){
+                double tr;
+                tr=zr*zr0-zi*zi0; zi=zr*zi0+zi*zr0; zr=tr;
+                tr=zMr*zMr0-zMi*zMi0; zMi=zMr*zMi0+zMi*zMr0; zMr=tr;
+                double sr, si;                             // sum_{m<M} z^m
+                double dr=1.0-zr, di=-zi, dd=dr*dr+di*di;
+                if(dd<1e-20){ sr=(double)M; si=0.0; }
+                else { double nr=1.0-zMr, ni=-zMi; sr=(nr*dr+ni*di)/dd; si=(ni*dr-nr*di)/dd; }
+                double cr=bre[k-1]*sr-bim[k-1]*si, ci=bre[k-1]*si+bim[k-1]*sr;
+                cr+=tre[k-1]*zMr-tim[k-1]*zMi; ci+=tre[k-1]*zMi+tim[k-1]*zMr;
+                re[k-1]=cr/rr; im[k-1]=ci/rr;
+            }
+        }
+        for(int k=0;k<K;k++){ out[((long)i*K+k)*2]=(float)re[k]; out[((long)i*K+k)*2+1]=(float)im[k]; }
+    }
+}
+
+// ONE OSCILLATOR'S COEFFICIENTS at shape s (sync ratio r), K of them, as float
+// pairs into out -- moog_coeff_rows' body, for the row builder below.
+static void ms_coeff_one(int kind, double s, double rr, int K, float* out){
+    double re[128], im[128], bre[128], bim[128], tre[128], tim[128];
+    mseg seg[2][32]; int ns[2]; double wt[2];
+    int np=ms_parts(kind, s, wt, seg, ns);
+    for(int k=0;k<K;k++){ re[k]=im[k]=0.0; }
+    if(!(rr>0.0) || kind==1){
+        for(int q=0;q<np;q++) ms_accum(seg[q],ns[q],1.0,1.0,K,wt[q],re,im);
+    } else {
+        int M=(int)floor(rr+1e-12); double fr=rr-M;
+        for(int k=0;k<K;k++){ bre[k]=bim[k]=tre[k]=tim[k]=0.0; }
+        for(int q=0;q<np;q++){
+            ms_accum(seg[q],ns[q],1.0/rr,1.0,K,wt[q],bre,bim);
+            if(fr>1e-12) ms_accum(seg[q],ns[q],1.0/rr,fr,K,wt[q],tre,tim);
+        }
+        double zr0=cos(6.283185307179586/rr), zi0=-sin(6.283185307179586/rr);
+        double zMr0=cos(6.283185307179586*M/rr), zMi0=-sin(6.283185307179586*M/rr);
+        double zr=1.0, zi=0.0, zMr=1.0, zMi=0.0;
+        for(int k=1;k<=K;k++){
+            double tr;
+            tr=zr*zr0-zi*zi0; zi=zr*zi0+zi*zr0; zr=tr;
+            tr=zMr*zMr0-zMi*zMi0; zMi=zMr*zMi0+zMi*zMr0; zMr=tr;
+            double sr, si, dr=1.0-zr, di=-zi, dd=dr*dr+di*di;
+            if(dd<1e-20){ sr=(double)M; si=0.0; }
+            else { double nr=1.0-zMr, ni=-zMi; sr=(nr*dr+ni*di)/dd; si=(ni*dr-nr*di)/dd; }
+            double cr=bre[k-1]*sr-bim[k-1]*si, ci=bre[k-1]*si+bim[k-1]*sr;
+            cr+=tre[k-1]*zMr-tim[k-1]*zMi; ci+=tre[k-1]*zMi+tim[k-1]*zMr;
+            re[k-1]=cr/rr; im[k-1]=ci/rr;
+        }
+    }
+    for(int k=0;k<K;k++){ out[2*k]=(float)re[k]; out[2*k+1]=(float)im[k]; }
+}
+// THE SHAPE ROWS, whole: for each note, at each of its grid points, the shapes
+// its contour and LFO 1 have moved OSC 1, OSC 2 and the SUB to (moog.
+// shape_values) and each moving one's coefficients, written into out at
+// base + m*stride + offs[slot]. par is SHAPE_W (25) per note. Both renderers
+// build their rows with this one function.
+void moog_shape_rows(int nrows, const double* par, const double* a0, const double* toff,
+                     const long* j0, const int* nj, int mg, double sr, int K,
+                     const long* base, const int* stride, const int* offs, float* out){
+    for(int i=0;i<nrows;i++){
+        const double* q=par+(long)i*25;
+        int fl=(int)q[0];
+        for(int m=0;m<nj[i];m++){
+            double g=(double)((j0[i]+m)*(long)mg);
+            double t=(g-a0[i])/sr, fe;
+            if(t<0.0) fe=0.0;
+            else { double to=(toff[i]-a0[i])/sr;
+                   fe = t>=to ? mp_held(to,q[11],q[12],q[13])*exp(-(t-to)/(fmax(q[14],1e-6)/4.0))
+                              : mp_held(t,q[11],q[12],q[13]); }
+            double tl = q[10]>0.5 ? t : g/sr;
+            double ph=tl*q[8]; ph-=floor(ph);
+            int sh=(int)q[9];
+            double lv = sh==0 ? 1.0-4.0*fabs(ph-0.5) : sh==1 ? 2.0*ph-1.0 : sh==2 ? 1.0-2.0*ph : (ph<0.5?1.0:-1.0);
+            double s1=q[1]+(q[6]==1.0 ? q[7]*lv : 0.0);
+            double s2=q[2]+(q[4]==2.0 ? q[5]*fe : 0.0);
+            double ss=q[3]+(q[4]==3.0 ? q[5]*fe : 0.0)+(q[6]==3.0 ? q[7]*lv : 0.0);
+            double r = q[15]>0.0 ? q[15]*mp_ratio(g,a0[i],toff[i],q+16,sr) : 0.0;
+            s1=fmin(1.0,fmax(0.0,s1)); s2=fmin(1.0,fmax(0.0,s2)); ss=fmin(1.0,fmax(0.0,ss));
+            float* o=out+base[i]+(long)m*stride[i];
+            if((fl&2) && offs[i*3+0]>=0) ms_coeff_one(0,s1,0.0,K,o+offs[i*3+0]);
+            if((fl&4) && offs[i*3+1]>=0) ms_coeff_one(0,s2,r,K,o+offs[i*3+1]);
+            if((fl&8) && offs[i*3+2]>=0) ms_coeff_one(1,ss,0.0,K,o+offs[i*3+2]);
+        }
+    }
+}
+
 // Renders absolute samples [n0, n0+winlen) into outL/outR[0 .. winlen). Phase is
 // analytic (ph0 + w*n_absolute), so windows are stateless -- a player can call
 // this per audio block with no carried state. render()/play both use it.
@@ -249,6 +455,7 @@ void synth_voice(
     const int* fxr, const float* FT, const float* KN, long knk, long kb0,
     const float* ampLp, const float* ampRp, const int* mkr,
     const int* MPI, const double* MPC, const float* MPR,
+    const int* MKI, const float* MPK,
     float sfloor, float spow, float shmax, float shref, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
@@ -493,6 +700,17 @@ void synth_voice(
                 // changes only what is still to come.
                 double mCp[65]; int pm=0;
                 if(ftr && MPI && ((int)ftr[12] & FT_PITCH) && mkr && (mkr[p]>>12)==2) pm=1;
+                // A MOVING SHAPE (moog.shape_rows): this partial's complex
+                // coefficient at each grid point, from its note's rows
+                float cRe[65], cIm[65]; int shm=0; const float* mkp=0; long mks=0; const int* mki=0;
+                if(ftr && MKI && MPK && mkr){
+                    int o=mkr[p]>>12, bit = o==1 ? 2 : o==2 ? 4 : o==3 ? 8 : 0;
+                    if(bit && ((int)ftr[12] & bit)){
+                        mki=MKI+(long)fxp*7;
+                        int off = mki[4+(o-1)];
+                        if(off>=0){ shm=1; mks=mki[3]; mkp=MPK+mki[0]+off+2*((mkr[p]&4095)-1); }
+                    }
+                }
                 if(ftr){
                     j0=(int)(bs0/mg); int nj=BLK/mg+1;
                     float kbf=ftr[0], fA=ftr[1], fD=ftr[2], fR=ftr[3], aA=ftr[4], aD=ftr[5], aR2=ftr[6];
@@ -508,6 +726,10 @@ void synth_voice(
                         long ki=(long)(j0+j)-kb0; if(ki<0)ki=0; if(ki>knk-1)ki=knk-1;
                         const float* kn=KN+(krow*knk+ki)*KNW;
                         float fhzj=fhz, fade=1.f;
+                        if(shm){
+                            long mi=(long)(j0+j)-mki[1]; if(mi<0)mi=0; if(mi>mki[2]-1)mi=mki[2]-1;
+                            cRe[j]=mkp[mi*mks]; cIm[j]=mkp[mi*mks+1];
+                        }
                         if(pm){
                             long mi=(long)(j0+j)-mpi[1]; if(mi<0)mi=0; if(mi>mpi[2]-1)mi=mpi[2]-1;
                             mCp[j]=MPC[mpi[0]+mi]; fhzj=fhz*MPR[mpi[0]+mi];
@@ -642,6 +864,11 @@ void synth_voice(
                         float jn=6.2831853f*(float)(nh0+ndh*uf);
                         float cn=cosf(jn), sn=sinf(jn);
                         sL = zrL*cn - ziL*sn; sR = zrR*cn - ziR*sn;
+                    }
+                    if(shm){
+                        // Re(c e^{i theta}) with c moving across the cell
+                        float gr=cRe[cl]+(cRe[cl+1]-cRe[cl])*t, gi=cIm[cl]+(cIm[cl+1]-cIm[cl])*t;
+                        sL = gr*zrL - gi*ziL; sR = gr*zrR - gi*ziR;
                     }
                     if(jfa>0.f){
                         double sec=(double)n/SRATE_D;

@@ -1609,6 +1609,7 @@ def prepare(path, tuner='hybrid440'):
     _RD = [0.0]
     _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
     _MOOG_MPI, _MOOG_MPC, _MOOG_MPR = [], [], []   # per-note pitch rows (moog.pitch_rows)
+    _MOOG_MKI, _MOOG_MPK, _MOOG_MPKN = [], [], [0]  # per-note shape rows (moog.shape_rows)
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     # Reflections cost about 7x the partials, since every one of them is
     # audible and nothing prunes. Worth it for a render you will listen to,
@@ -2935,8 +2936,18 @@ def prepare(path, tuner='hybrid440'):
                 _MOOG_MPC.extend(_mc.tolist()); _MOOG_MPR.extend(_mr.tolist())
             else:
                 _MOOG_MPI.append([0, 0, 1])
+            # ...AND ITS SHAPE ROWS, if a shape moves (moog.shape_rows)
+            _msf = _MG.shape_flags(_pan)
+            if _msf:
+                _mj0, _mn, _mst, _moff, _mdat = _MG.shape_rows(
+                    _MG.shape_params(_pan), float(non), float(noff),
+                    float(noff) + _MG.release_span(_pan) * SR + 4096.0, SR, _MG.MG)
+                _MOOG_MKI.append([_MOOG_MPKN[0], _mj0, _mn, _mst] + _moff)
+                _MOOG_MPK.append(_mdat); _MOOG_MPKN[0] += len(_mdat)
+            else:
+                _MOOG_MKI.append([0, 0, 1, 0, -1, -1, -1])
             _MOOG_FT.append(_MG.ft_row(_pan, f0, _MOOG_KROW[(ch, _knr)], _pre,
-                                       _MG.FT_PITCH if _mpp is not None else 0))
+                                       (_MG.FT_PITCH if _mpp is not None else 0) | _msf))
             _mre = max(1.0, _MG.release_span(_pan) * SR)
             vb = props.voice_vibrato(f0, 0)
             _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
@@ -3472,8 +3483,11 @@ def prepare(path, tuner='hybrid440'):
     MPI = np.ascontiguousarray(np.array(_MOOG_MPI, np.int32).reshape(-1)) if _mpon else None
     MPC = np.ascontiguousarray(np.array(_MOOG_MPC or [0.0], np.float64)) if _mpon else None
     MPR = np.ascontiguousarray(np.array(_MOOG_MPR or [1.0], np.float32)) if _mpon else None
+    _mkon = any(int(r[12]) & 14 for r in _MOOG_FT) if _MOOG_FT else False
+    MKI = np.ascontiguousarray(np.array(_MOOG_MKI, np.int32).reshape(-1)) if _mkon else None
+    MPK = np.ascontiguousarray(np.concatenate(_MOOG_MPK).astype(np.float32)) if _mkon else None
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
-                FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR,
+                FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH))
@@ -3566,6 +3580,9 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     ip(a['MPI']) if a.get('MPI') is not None else None,
                     dp(a['MPC']) if a.get('MPI') is not None else None,
                     fp(a['MPR']) if a.get('MPI') is not None else None,
+                    # its shape rows (moog.shape_rows); NULL: none moves
+                    ip(a['MKI']) if a.get('MKI') is not None else None,
+                    fp(a['MPK']) if a.get('MKI') is not None else None,
                     ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
                     ctypes.c_long(SR),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)
