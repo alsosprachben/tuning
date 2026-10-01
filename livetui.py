@@ -1309,11 +1309,10 @@ class TUI:
         if p.cc_map == "messenger":
             p.cc_map = "gm"
             self.say("part %d: General MIDI CCs again" % (self.row + 1))
-        elif p.channel is None:
-            self.say("give the part a channel first (the ch column) -- the Messenger's")
         else:
             p.cc_map = "messenger"
-            self.say("part %d reads a Messenger on channel %d" % (self.row + 1, p.channel + 1))
+            self.say("part %d reads a Messenger on %s" % (
+                self.row + 1, "every channel" if p.channel is None else "channel %d" % (p.channel + 1)))
         self.live.dirty = True
 
     def draw_synth(self, scr, y, w, h):
@@ -1327,8 +1326,9 @@ class TUI:
             return y + 2
         self.addstr(scr, y, 2, "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 18, "part %d, %s" % (self.row + 1, p.label()), C("dim"))
-        hw = ("reads a Messenger on ch %d  (M: stop)" % (p.channel + 1)
-              if p.cc_map == "messenger" else "M: read a Messenger on this part's channel")
+        hw = (("reads a Messenger on %s  (M: stop)"
+               % ("every channel" if p.channel is None else "ch %d" % (p.channel + 1)))
+              if p.cc_map == "messenger" else "M: read a Messenger's knobs")
         self.addstr(scr, y, max(50, w - len(hw) - 2), hw[:max(0, w - 52)],
                     C("green") if p.cc_map == "messenger" else C("dim"))
         y += 1
@@ -1543,7 +1543,7 @@ class TUI:
             "  up down           select a knob     - + / left right  turn it",
             "                    (shift: ten times as far); a switch steps",
             "  space             back to where the patch has it",
-            "  M                 read a Moog Messenger on the part's channel: its",
+            "  M                 read a Moog Messenger on the part's channel(s): its",
             "                    knobs turn these (its own CC chart, 14-bit), the",
             "                    wheel, pedal and volume stay General MIDI's",
             "  a knob you have moved shows yellow, and is saved with the part.",

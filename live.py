@@ -4083,10 +4083,12 @@ class Live:
     def _messenger_cc(self, ch, cc, value):
         """A CC on a channel where a part reads the Messenger's chart
         (moog.MESSENGER_CC): turn that part's knob and say so, or leave the
-        message to General MIDI. Only on an EXPLICIT channel -- a part that
-        hears every channel cannot read one chart on all of them."""
-        mine = [p for p in self.parts if p.cc_map == "messenger" and p.channel == ch
-                and p.moog() is not None]
+        message to General MIDI. A part that hears every channel reads it on
+        every channel: one keyboard into an omni part is the ordinary rig, and
+        refusing it left a Messenger's TUNE panning the part (CC10 is pan to
+        General MIDI) -- Ben, the first time he played one."""
+        mine = [p for p in self.parts if p.cc_map == "messenger"
+                and (p.channel is None or p.channel == ch) and p.moog() is not None]
         if not mine:
             return False
         if cc in _MG.MESSENGER_LSB:                 # the fine half of a knob

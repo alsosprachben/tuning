@@ -131,9 +131,9 @@ closed filter does not take out the sidebands above its cutoff -- a known
 simplification. Not yet: the FB/EXT input, LFO 2, and GLIDE as a panel knob
 (CC5 portamento works).
 
-**Playing it from a Messenger.** Give the part a channel (the `ch` column),
-then `M` on its panel: that channel's CCs are read by the Messenger's own
-chart (its manual's Appendix A, 14-bit, bipolar knobs centred at 8192) instead
+**Playing it from a Messenger.** `M` on the part's panel: the CCs it hears
+— on its channel, or on every channel if it listens to all of them — are read
+by the Messenger's own chart (its manual's Appendix A, 14-bit, bipolar knobs centred at 8192) instead
 of General MIDI's, which disagree about half the numbers — CC10 is TUNE, not
 pan. The mod wheel, volume, expression and sustain stay General MIDI's. Panel
 controls the simulator does not model yet (FB, LFO 2, the envelope loops)
