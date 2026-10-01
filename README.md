@@ -99,14 +99,16 @@ and the NOISE oscillator), brightness (100), goblins (101, OSC 2 drifting
 against the voice's own deep wobble) and sci-fi (103, PWM squares under a
 resonant contour) -- and the Synth Drum (118), the MOD section's filter
 contour sweeping OSC 2 down an octave onto the key -- each note its own
-voice, a poly Moog, with OSC 2 detuned for width and no chorus. What is
-stretched or echoed (88, 96, 102) stays additive. `TUNING_MOOG=0` puts every
-one of them back, for A/B. The fourth pane (`tab` three times) is the panel of
+voice, a poly Moog, with OSC 2 detuned for width and no chorus. Rain (96) and
+Echoes (102) go through Moog's own MF-104M Analog Delay (`mf104.py`), which is
+a section of the same panel: each repeat is one more trip round its bucket
+brigade, darker than the last. Only New Age (88), a bell over a pad, stays
+additive. `TUNING_MOOG=0` puts every one of them back, for A/B. The fourth pane (`tab` three times) is the panel of
 the selected part:
 
 | key | what it does |
 |---|---|
-| up / down | select a knob: OSC 1, OSC 2 (with SYNC 1>2), TUNE, SUB, MIXER (with NOISE), FILTER, F ENV, A ENV, LFO 1 |
+| up / down | select a knob: OSC 1, OSC 2 (with SYNC 1>2), MOD, TUNE, SUB, MIXER (with NOISE), FILTER, F ENV, A ENV, LFO 1, MF-104 (the delay) |
 | `-` `+`, left / right | turn it (`_` and shifted `+` ten times as far); a switch — OCTAVE, KB TRACK, MODE, RES BASS — steps |
 | space | back to where the patch has it |
 | `M` | read a **Messenger on the part's channel** — its knobs turn these |

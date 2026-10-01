@@ -424,7 +424,7 @@ identical tables.
   answer too. On the muted trumpet it's the mute's own resonance.
 - **On the Moog voices** (the leads GM 80–87, the synth basses 38/39, the
   synth brass 62/63, the string machines 50/51 and Synth Voice 54, the pads
-  89-95 and 97 and the effects 98-101 and 103 and the Synth Drum 118 — `moog.py`) the five that are its panel's
+  89-95 and 97 and the effects 96 and 98-103 and the Synth Drum 118 — `moog.py`) the five that are its panel's
   knobs turn them: brightness is CUTOFF (two octaves either way), resonance
   RESONANCE (half the knob), attack, decay and release the amp contour's
   (×/÷ 4). As on the hardware, a closed filter is quieter — the ladder is not

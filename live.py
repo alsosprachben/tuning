@@ -81,6 +81,7 @@ import mido
 import blockrender as B
 import ump as U
 import chorus as _CHR
+import mf104 as _MFD
 import moog as _MG
 import tonelib as T
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
@@ -2565,6 +2566,7 @@ class Live:
         self.messenger_firmware = "1.0.7+"
         self.messenger_q = None
         self.messenger_bend = 2.0       # the Messenger's pitch-bend range, semitones
+        self.mf104_groups = []          # (note key, its direct slot, [(repeat key, delay)])
         self.messenger_note = {}        # its MIDI channel -> (pid, channel, key) it is playing
         self.slab.lib = B.ensure_lib()
         self.slab.rate = float(rate)
@@ -3903,6 +3905,100 @@ class Live:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
                              vd=(v2 if v2 != 0.0 else None),
                              vrs=(r2 if r2 != 1.0 else None))
+        if part.moog() is not None and slots:
+            self._mf104(part, ch, note, tmpl, key, slots, scale, n0, b, _cp)
+
+    # THE MF-104M, LIVE (mf104.py): a Moog part whose panel has the pedal on
+    # stamps each repeat as its own key at n0 + k tau -- a future onset, which
+    # the slab already renders as silence until it arrives -- carrying only the
+    # partials whose repeat clears the floor, each at its own gain (k trips
+    # through the line's filter), so the file's expand and this agree partial
+    # for partial. A copy keeps the note's vibrato, delayed, or takes the
+    # pedal LFO's in its place; and it is released at the note's release plus
+    # its own delay (_mf104_reap), never by sweep(), which would cut it off at
+    # the original's note-off before it had sounded.
+    MF104_SLOT = "mf104"
+
+    def _mf104(self, part, ch, note, tmpl, key, slots, scale, n0, b, cpan):
+        pan = self._moog_panel_for(part.pid, ch)
+        st = _MFD.settings(pan)
+        if st is None:
+            return
+        a = self.slab.a
+        idx0 = np.fromiter(slots, np.int64, len(slots))
+        # each partial's sounding frequency, the bend taken back out as the
+        # file's rows have it
+        f = a["om"][idx0].astype(np.float64) * self.rate / (2.0 * math.pi) / (b if b else 1.0)
+        h = np.array([_MFD.bbd_gain(x, st["fc"]) for x in f])
+        # ONLY WHAT SOUNDS: live's Moog template carries every harmonic and
+        # the panel zeroes most (moog.weights); a repeat of a silent one is a
+        # slot for nothing -- sixteen repeats of a thousand filled the slab
+        snd = (np.abs(a["aL"][idx0]) + np.abs(a["aR"][idx0])) > 0.0
+        P = int(tmpl["P"])
+        # ...AND ON THE NOTE'S OWN ONSET: a Moog note is stamped with a scatter
+        # drawn for that press, and a repeat drawing its own landed a few
+        # hundred samples off k tau -- the first one inside the dry sound
+        on = int(min(a["non"][i] - a["rdl"][i] for i in slots))
+        group = []
+        tpi = 2.0 * math.pi
+        # each partial's level against the note's loudest, as the file's pass
+        # measures it (live's levels are the file's times one constant)
+        lvl = np.maximum(np.abs(a["aL"][idx0]), np.abs(a["aR"][idx0])).astype(np.float64)
+        rel = lvl / lvl.max() if lvl.max() > 0.0 else lvl
+        for k, d, _g in _MFD.repeats(st, float(f[snd].min()) if snd.any() else 0.0, self.rate):
+            g = st["wet"] * st["fb"] ** (k - 1) * h ** k
+            m = (g * rel >= _MFD.REPEAT_FLOOR) & snd
+            if not m.any():
+                break
+            sub = {c: (v[m] if isinstance(v, np.ndarray) and v.shape[:1] == (P,) else v)
+                   for c, v in tmpl.items()}
+            sub["P"] = int(m.sum())
+            sub["scatter_ms"] = 0.0
+            ckey = (part.pid, ch, note, "%s%d_%d" % (self.MF104_SLOT, k, n0))
+            if not self.slab.stamp_cols(sub, sub["P"], ckey, on + d, scale, sub["hrel"],
+                                        sub.get("dur", 0), sub.get("oneshot")):
+                self.dropped += 1
+                break
+            cs = self.slab.last_slots
+            ci = np.fromiter(cs, np.int64, len(cs))
+            if cpan != T.GM_DEFAULT_PAN:
+                self.slab.repan(cs, cpan, T.GM_DEFAULT_PAN, self.rate, itd=True)
+            self.slab.channel_gain(cs, g[m].astype(np.float32))
+            om = a["om"][ci].astype(np.float64)
+            vb = [_MFD.lfo_vibrato(st, k, self.rate, w, float(a["non"][i]) / self.rate)
+                  for w, i in zip(om, ci)]
+            if vb[0] is not None:                   # the line's wobble, in place of the note's
+                a["vd"][ci] = [x[0] for x in vb]
+                a["vr"][ci] = [x[1] for x in vb]
+                a["vp"][ci] = [x[2] for x in vb]
+                a["vdl"][ci] = 0.0
+                dp = np.array([x[3] for x in vb])
+                a["p0"][ci] += dp
+                a["p0R"][ci] += dp
+                self.slab.vbase[ci] = a["vd"][ci]
+                self.slab.vrbase[ci] = a["vr"][ci]
+            else:                                   # the note's own vibrato, delayed
+                a["vp"][ci] -= tpi * a["vr"][ci] * d / self.rate
+            if b != 1.0:
+                self.slab.retune(cs, n0, om_scale=b)
+            group.append((ckey, d))
+        if group:
+            self.slab.channel_gain(slots, st["dry"])
+            direct = next((i for i in slots if a["rdl"][i] == 0), slots[0])
+            self.mf104_groups.append((key, int(direct), group))
+
+    def _mf104_reap(self, n0):
+        """Each repeat ends where its note ended, its own delay later."""
+        keep = []
+        for key, direct, group in self.mf104_groups:
+            if key in self.slab.live:
+                keep.append((key, direct, group))
+                continue
+            off = int(self.slab.a["noff"][direct])
+            for ckey, d in group:
+                if ckey in self.slab.live and not self.slab.oneshot.get(ckey):
+                    self.slab.release(ckey, off + d)
+        self.mf104_groups = keep
 
     def _chan_gain(self, ch):
         """CC7 x CC11, squared -- blockrender's (v7*v11)**2, one law.
@@ -5664,6 +5760,7 @@ class Live:
         """
         for k in [k for k in list(self.slab.live)
                   if k[3] not in ("amp", self.DRONE_SLOT)
+                  and not (isinstance(k[3], str) and k[3].startswith(self.MF104_SLOT))
                   and (k[1], k[2]) not in self.sost.get(k[1], ())
                   and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
@@ -5793,6 +5890,7 @@ class Live:
             self.apply(n0)
             self.sweep(n0)
             self._drone_reap(n0)
+            self._mf104_reap(n0)
             self.slab.reap(n0)
             if self.slab.tr_on.any():
                 # ONE RATE, from an absolute clock, so a held chord and a note
@@ -8890,13 +8988,13 @@ def selftest():
           _hilo(_t1) - _hilo(_t0) > 6.0 and abs(_pw) < 0.01,
           "  (+%.1f dB of upper partials against the lower, total power %+.3f dB "
           "-- colour, not level)" % (_hilo(_t1) - _hilo(_t0), _pw))
-    # Most of the synth bank is a Moog now (moog.py), whose CC71 is its
-    # ladder's RESONANCE; FX 7 (echoes) stays additive and keeps the virtual
-    # corner this check is about.
+    # The synth bank is a Moog now (moog.py), whose CC71 is its ladder's
+    # RESONANCE; Pad 1 (new age), the one program no Moog makes, stays
+    # additive and keeps the virtual corner this check is about.
     import patch_map as _PMr
-    _r0, _r1 = _scp(102, []), _scp(102, [(71, 127)])
+    _r0, _r1 = _scp(88, []), _scp(88, [(71, 127)])
     _nf1 = np.asarray(_r0["nf"])
-    _near = np.abs(_nf1 / _PMr.property_class_for_program(102).bore_corner_hz - 1.0) < 0.15
+    _near = np.abs(_nf1 / _PMr.property_class_for_program(88).bore_corner_hz - 1.0) < 0.15
     _rg = 10.0 * math.log10((np.asarray(_r1["aM"])[_near] ** 2).sum()
                             / (np.asarray(_r0["aM"])[_near] ** 2).sum())
     check("CC71 on a synth lead is a resonant peak at its filter's corner",
@@ -9536,7 +9634,10 @@ def selftest():
           "  (and with the pads, sixteen programs off a single class)")
     # Each has a mechanism the others do not, as the pads do.
     _fxm = {
-        "echo taps (96, 102)": {_g for _g in _fx if getattr(_fx[_g], "echo_taps", ())},
+        # an echo: the additive voices' repeated onsets, or on the Moog its
+        # MF-104M delay (mf104.py)
+        "echo taps (96, 102)": {_g for _g in _fx if getattr(_fx[_g], "echo_taps", ())
+                                or (getattr(_fx[_g], "messenger", None) or {}).get("mf104_on")},
         # breath: smeared partials, or on the Moog its NOISE oscillator
         "breath (99)": {_g for _g in _fx if _fx[_g].sustain_jitter > 0.3
                         or (getattr(_fx[_g], "messenger", None) or {}).get("noise_level", 0.0) > 0.0},
@@ -9551,8 +9652,10 @@ def selftest():
           "  (%s)" % "; ".join(_fxm))
     # THE TAPS ARE REPEATED ONSETS, NOT A DELAY LINE, and the docstring says so
     # at length. What is checkable is that they are evenly spaced, fall in gain,
-    # and sit at the note's own pitch bar a few cents of tape drift.
-    _ec = _fx[102](329.63, 0.0, 1.0, 1.0)
+    # and sit at the note's own pitch bar a few cents of tape drift. On the
+    # ADDITIVE voice, which TUNING_MOOG=0 restores: GM 102 itself is a Moog
+    # through the MF-104M now, a delay line (mf104.py).
+    _ec = _T.EchoesFXProperties(329.63, 0.0, 1.0, 1.0)
     _on = _ec.section_onsets_at(329.63)
     _gn = [_v[0] for _v in _ec.unison_voices(329.63, 1, 0.0)]
     _sp = [round(_on[_i + 1] - _on[_i], 4) for _i in range(len(_on) - 1)]
@@ -9565,8 +9668,10 @@ def selftest():
     # AND A TAP NEEDS A DECAYING NOTE. With a pad's sustain the repeats merged
     # into what they were repeating; GM 102 is percussive for that reason.
     check("...and the echoing voice decays, or the taps would merge",
-          _fx[102].sustain_level < 0.25 and _fx[102].decay_db > 4.0,
-          "  (sustain %.2f against the pads' 0.93)" % _fx[102].sustain_level)
+          _T.EchoesFXProperties.sustain_level < 0.25 and _T.EchoesFXProperties.decay_db > 4.0
+          and _MG.panel_of(_fx[102])["a_sustain"] < 0.25,
+          "  (sustain %.2f against the pads' 0.93; the Moog's amp contour as percussive)"
+          % _T.EchoesFXProperties.sustain_level)
     # The stretched effects obey the same cap the pads do.
     _oob = [_g for _g, _c in _fx.items() if _c.inharmonicity_coefficient > 0.0
             and 329.63 * _c.max_harmonic
@@ -10648,6 +10753,54 @@ def selftest():
           all(_r < 1e-5 and _z == 0.0 for _, _r, _z in _mfr),
           "  (a flat line, fully wet: %s)" % ", ".join("%s %.1e" % (_n, _r) for _n, _r, _ in _mfr))
     check("...and the pedal's physics hold (mf104.selftest)", _MFt.selftest())
+    # ...AND LIVE PLAYS IT AS THE FILE RENDERS IT: a held note through the
+    # pedal, OSC 2 a fourth up (the line filters each partial where it SOUNDS),
+    # the repeats stamped on the note's own onset, carrying only the partials
+    # that sound, and released after its note-off by their own delays -- not
+    # swept as stuck. The live template must not carry the file's repeats too.
+    _menv4 = os.environ.get("TUNING_MOOG_PANEL")
+    _mfp = dict(mf104_on=True, mf104_time=0.5, mf104_feedback=0.5, mf104_mix=0.5,
+                mf104_amount=0.0, osc2_level=0.8, osc2_freq=0.5 + 5 / 14.0)
+    os.environ["TUNING_MOOG_PANEL"] = _mjson.dumps(_mfp)
+    try:
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        _lv = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _lv.warm()
+        _lo = []
+        def _lp():
+            _n0 = _lv.n; _lv.apply(_n0); _lv.sweep(_n0); _lv.slab.reap(_n0); _lv._mf104_reap(_n0)
+            _lo.append(np.array(_lv.renderer.render(_n0, 128)[0])); _lv.n = _n0 + 128
+        _lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _lp()
+        _lix = np.flatnonzero(_lv.slab.busy); _lrd = _lv.slab.a["rdl"][_lix]
+        _lon = int(min(_lv.slab.a["non"][_lix][_lrd == 0]))
+        _mfn = sum(1 for _k in _lv.slab.live if isinstance(_k[3], str))
+        while _lv.n < _lon + _BRb.SR:
+            _lp()
+        _lv.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0)); _lp()
+        _loff = int(_lv.slab.a["noff"][_lix][_lrd == 0][0])
+        for _ in range(int(3.0 * _BRb.SR / 128)):
+            _lp()
+        _lL = np.concatenate(_lo).astype(float)
+        _lq = _BRb.prepare(_mpath, "even")
+        _lq = dict(_lq, non=_lq["non"] + _lon, noff=_lq["noff"] - int(_BRb.SR) + _loff,
+                   p0=_lq["p0"] - _lq["om"] * _lon, p0R=_lq["p0R"] - _lq["om"] * _lon,
+                   fmp=_lq["fmp"] - _lq["fmw"] * _lon, fmpR=_lq["fmpR"] - _lq["fmw"] * _lon)
+        _lF = _BRb.synth_window(_lq, 0, len(_lL))[0].astype(float)
+        _la, _lb = _lL[_lon:], _lF[_lon:]
+        _lg = float(np.dot(_la, _lb) / np.dot(_la, _la))
+        _mfres = float(np.sqrt(((_lg * _la - _lb) ** 2).mean()) / np.sqrt((_lb ** 2).mean()))
+        _mfstuck = _lv.stuck
+        _lv.shutdown()
+    finally:
+        if _menv4 is None:
+            os.environ.pop("TUNING_MOOG_PANEL", None)
+        else:
+            os.environ["TUNING_MOOG_PANEL"] = _menv4
+    check("...and live plays the pedal as the file renders it",
+          _mfres < 1e-5 and _mfstuck == 0 and _mfn > 2,
+          "  (%d repeats stamped, released after the note, none stuck: residual %.1e)"
+          % (_mfn, _mfres))
 
     # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
     # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.

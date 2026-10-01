@@ -67,7 +67,13 @@ RANGES = ((0.040, 0.400, 3000.0), (0.080, 0.800, 1700.0))
 FILTER_POLES = 4                 # the anti-alias low-pass's order: not in the
                                  # manual, a constant for the ear to check
 FB_AT_8 = 0.98                   # FEEDBACK at "8": the echoes all but sustain
-REPEAT_FLOOR = 3e-4              # a repeat under -70 dB of its partial is dropped
+REPEAT_FLOOR = 1e-3              # a repeat under -60 dB of its NOTE's loudest
+                                 # partial is dropped -- inaudible under the note.
+                                 # Of its own partial (-70) kept a weak harmonic's
+                                 # repeats nobody hears: a held 8-note chord at
+                                 # FEEDBACK 0.5 cost 4.8 ms of a 2.67 ms block live;
+                                 # here, 2.5-2.7 (4 notes: 2.0). A held chord through
+                                 # a feedback line IS every repeat sounding at once.
 MAX_REPEATS = 24
 RATE_LO, RATE_HI = 0.05, 50.0    # LFO RATE, Hz, panel range
 OCT_AT_9 = 1.0                   # AMOUNT 0.9: +-1 octave of delay time, the
@@ -138,15 +144,16 @@ def bbd_gain(f_hz, fc):
     return (1.0 + x * x) ** (-FILTER_POLES / 2.0)
 
 
-def repeats(st, f_hz, sr):
+def repeats(st, f_hz, sr, rel=1.0):
     """[(k, delay samples, gain)] for a partial at f_hz, until a repeat falls
-    under REPEAT_FLOOR of the partial."""
+    under REPEAT_FLOOR -- of the note's loudest partial, `rel` being this
+    partial's level against that one."""
     d = delay_samples(st, sr)
     h = bbd_gain(f_hz, st['fc'])
     out = []
     for k in range(1, MAX_REPEATS + 1):
         g = st['wet'] * (st['fb'] ** (k - 1)) * h ** k
-        if g < REPEAT_FLOOR:
+        if g * rel < REPEAT_FLOOR:
             break
         out.append((k, k * d, g))
     return out
@@ -185,10 +192,16 @@ def expand(A, notes, sr, cols, dup_fx=None):
     made, last = 0, 0
     tpi = 2.0 * math.pi
     for i0, i1, st in notes:
+        lv = [max(abs(float(A['aL'][i])), abs(float(A['aR'][i]))) for i in range(i0, i1)]
+        top = max(lv) if lv else 0.0
         for i in range(i0, i1):
             row = {k: A[k][i] for k in keys}
             om = float(row['om'])
-            for k, d, g in repeats(st, float(row['nf']), sr):
+            rel = lv[i - i0] / top if top > 0.0 else 0.0
+            # the line filters what SOUNDS: the partial's own frequency, not
+            # nf, which on a Moog is the key's nominal harmonic (a transposed
+            # OSC 2's is not where it sounds)
+            for k, d, g in repeats(st, om * sr / (2.0 * math.pi), sr, rel):
                 c = dict(row)
                 c['non'] = row['non'] + d
                 c['noff'] = row['noff'] + d

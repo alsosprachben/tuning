@@ -3018,7 +3018,9 @@ def prepare(path, tuner='hybrid440'):
                              0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
                              cc, crl, sjit, csc, -1, 0, ph0=_ph)
             _CBW[0], _CBW[1] = _cbw
-            _mfst = _MFD.settings(_pan)
+            # ...but not into a LIVE template (MOOG_NEUTRAL): live stamps its
+            # own repeats, and a template carrying the file's would be echoed twice
+            _mfst = None if MOOG_NEUTRAL else _MFD.settings(_pan)
             if _mfst is not None:
                 _MF104.append((_mf0, len(A['om']), _mfst))
             _NOREFL[0] = False

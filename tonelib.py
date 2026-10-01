@@ -9814,8 +9814,8 @@ class MoogSoundtrackPad(SoundtrackFXProperties):
 
 # THE THREE EFFECTS THAT ARE SUBTRACTIVE: a breath, a wobble and a sweep,
 # each a Moog mechanism -- the NOISE oscillator, LFO 1 on OSC 2's pitch, LFO 1
-# on the waveshape under a resonant contour. The rest of 96-103 is stretched,
-# inharmonic or echoed, and stays additive.
+# on the waveshape under a resonant contour. The rest of 96-103 came later:
+# metal from FM (98) and the echoes through the MF-104M (96, 102), below.
 
 class MoogAtmosphereFX(AtmosphereFXProperties):
     """GM 99 on a Moog: the breathy one. A saw and the NOISE oscillator
@@ -9981,6 +9981,57 @@ class MoogCrystalFX(CrystalFXProperties):
         f_attack=0.0, f_decay=0.78, f_sustain=0.0, f_release=0.75,
         a_attack=0.075, a_decay=0.8, a_sustain=0.0, a_release=0.75,
         mod_dest=0, mod_amount=0.75,
+    )
+
+
+# THE TWO ECHO PROGRAMS, through Moog's own delay. The additive voices made an
+# echo from repeated ONSETS (SynthEffectProperties.echo_taps), which their own
+# docstring says is not a delay line; these put the Moog through the MF-104M
+# (mf104.py), the pedal in the panel -- each repeat k trips round its line,
+# darker each time. Their echo_taps are cleared: the Moog branch never read
+# them, and a reader of the class should not think it does.
+
+class MoogRainFX(RainFXProperties):
+    """GM 96 on a Moog: droplets. The crystal's FM bell (98) made short and
+    bright -- carrier 2 sqrt(2) on OSC 1's anchor, the contour snapping open
+    and the amp gone in under half a second -- through the MF-104M on SHORT
+    at ~110 ms, feeding back ~0.55, mixed ~40%, with a faint slow wobble on
+    the line, the drift a bucket brigade has. The drops fall darker as they
+    repeat, which is the rain."""
+    moog = True
+    echo_taps = ()
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = RainFXProperties.initial_gain * 10 ** (12.9 / 20.0)
+    messenger = dict(
+        osc1_wave=0.4, osc2_wave=0.4, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
+        osc1_level=0.4, osc2_level=0.9,
+        cutoff=0.72, resonance=0.0, eg_amount=0.75, kb_track=1.0,
+        f_attack=0.0, f_decay=0.6, f_sustain=0.0, f_release=0.6,
+        a_attack=0.0, a_decay=0.65, a_sustain=0.0, a_release=0.6,
+        mod_dest=0, mod_amount=0.75,
+        mf104_on=True, mf104_range=0, mf104_time=0.439, mf104_feedback=0.449,
+        mf104_mix=0.4, mf104_rate=0.159, mf104_amount=0.06,
+    )
+
+
+class MoogEchoesFX(EchoesFXProperties):
+    """GM 102 on a Moog: "Echo Drops". A plucky pair of saws -- the filter
+    contour fast and to nothing, the amp percussive, as the additive voice's
+    own docstring found an echo needs (a delay is only heard when what it
+    repeats has ended) -- through the MF-104M on SHORT at ~160 ms, feeding
+    back ~0.6, mixed ~45%, a touch of wobble on the line."""
+    moog = True
+    echo_taps = ()
+    # at the additive voice's level (examples/moog_ab.py, K-weighted)
+    initial_gain = EchoesFXProperties.initial_gain * 10 ** (14.6 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 5.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.6,
+        cutoff=0.45, resonance=0.25, eg_amount=0.78, kb_track=2.0 / 3.0,
+        f_attack=0.0, f_decay=0.55, f_sustain=0.1, f_release=0.6,
+        a_attack=0.0, a_decay=0.66, a_sustain=0.1, a_release=0.6,
+        mf104_on=True, mf104_range=0, mf104_time=0.602, mf104_feedback=0.49,
+        mf104_mix=0.45, mf104_rate=0.201, mf104_amount=0.04,
     )
 
 

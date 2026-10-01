@@ -31,7 +31,7 @@ from tonelib import (
     MoogHaloPad, MoogSweepPad, MoogSoundtrackPad,
     MoogAtmosphereFX, MoogGoblinsFX, MoogSciFiFX,
     MoogBrightnessFX, MoogChoirPad, MoogBowedPad, MoogSynthVoice,
-    MoogMetallicPad, MoogCrystalFX, MoogSynthDrum,
+    MoogMetallicPad, MoogCrystalFX, MoogSynthDrum, MoogRainFX, MoogEchoesFX,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -737,10 +737,11 @@ PROGRAM_CLASS[63] = SynthBrass2Properties  # the soft pad: slower, shallower
 # THE SUBTRACTIVE BANK ON THE MOOG: the synth programs a two-oscillator synth
 # through a ladder actually makes, as the leads (80-87) are. The additive
 # classes above stay as their bases and as the A/B: TUNING_MOOG=0 keeps them.
-# The programs whose mechanism is NOT subtractive -- stretched or inharmonic
-# partials, echo taps (88, 96, 102) -- stay additive. Formants are not a reason:
-# a choir or a synth voice is the Moog sung through them, as GM 85 is. Nor is
-# metal, once FM makes it (93, 98). See tonelib, below the leads.
+# Only what no Moog makes stays additive: 88, a bell OVER a pad, two sounds in
+# one note. Formants are not a reason -- a choir or a synth voice is the Moog
+# sung through them, as GM 85 is; nor is metal, once FM makes it (93, 98); nor
+# an echo, once Moog's own MF-104M delay makes it (96, 102: mf104.py). See
+# tonelib, below the leads.
 if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[38] = MoogSynthBass1           # saw over a 16' saw, low ladder
     PROGRAM_CLASS[39] = MoogSynthBass2           # square and SUB, resonant
@@ -763,6 +764,8 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[93] = MoogMetallicPad          # FM, carrier 2.06 x the key: beats
     PROGRAM_CLASS[98] = MoogCrystalFX            # FM bell, carrier 2 sqrt(2), anchored
     PROGRAM_CLASS[118] = MoogSynthDrum           # F ENV -> OSC 2 FREQ: the tom's sweep
+    PROGRAM_CLASS[96] = MoogRainFX               # FM droplets through the MF-104M
+    PROGRAM_CLASS[102] = MoogEchoesFX            # a saw pluck through the MF-104M
 
 # WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
 # family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit

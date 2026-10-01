@@ -27,6 +27,7 @@ import mido
 import tonelib as T
 import live as LV
 import moog as MG
+import mf104 as MFD
 import percussion_map as PM
 
 locale.setlocale(locale.LC_ALL, "")
@@ -1353,6 +1354,7 @@ class TUI:
         y += 1
         half = (len(SYNTH_KNOBS) + 1) // 2
         last = [None, None]
+        pan = MG.panel_of(p.moog(), p.synth)
         for i, (sec, knob, label, kind) in enumerate(SYNTH_KNOBS):
             c = 0 if i < half else 1
             row = y + (i if i < half else i - half)
@@ -1366,7 +1368,7 @@ class TUI:
             v = self.synth_value(p, knob)
             own = knob in p.synth
             self.addstr(scr, row, x + 7, "%-10s" % label, curses.A_REVERSE if here else 0)
-            self.addstr(scr, row, x + 18, "%10s" % synth_fmt(kind, v),
+            self.addstr(scr, row, x + 18, "%10s" % synth_fmt(kind, v, pan),
                         (curses.A_BOLD if here else 0) | (C("yellow") if own else 0))
             if kind not in SYNTH_STEPS:
                 self.addstr(scr, row, x + 29, bar(v, 0.0, 1.0, 8), C("green") if here else C("dim"))
@@ -1810,14 +1812,35 @@ SYNTH_KNOBS = (
     ("LFO 1", "lfo1_depth", "depth", "lfodepth"),
     ("LFO 1", "lfo1_dest", "dest", "lfodest"),
     ("LFO 1", "lfo1_reset", "kb reset", "onoff"),
+    # THE MF-104M ANALOG DELAY after it (mf104.py): Moog's own echo, saved with
+    # the part and its preset like every knob here
+    ("MF-104", "mf104_on", "delay", "onoff"),
+    ("MF-104", "mf104_time", "time", "mftime"),
+    ("MF-104", "mf104_range", "range", "mfrange"),
+    ("MF-104", "mf104_feedback", "feedback", "mffb"),
+    ("MF-104", "mf104_mix", "mix", "level"),
+    ("MF-104", "mf104_rate", "lfo rate", "mfhz"),
+    ("MF-104", "mf104_amount", "lfo amount", "mfoct"),
 )
 SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 2.0 / 3.0, 1.0),
                "mode": (0, 1, 2, 3), "onoff": (False, True),
-               "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3), "moddest": (0, 1, 2, 3)}
+               "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3), "moddest": (0, 1, 2, 3),
+               "mfrange": (0, 1)}
 
 
-def synth_fmt(kind, v):
-    """A Messenger knob's value, in the panel's own terms."""
+def synth_fmt(kind, v, pan=None):
+    """A Messenger knob's value, in the panel's own terms (the pedal's TIME
+    reads against its RANGE, from the panel `pan`)."""
+    if kind == "mftime":
+        return "%d ms" % round(1000 * MFD.knob_time(v, int((pan or {}).get("mf104_range", 0))))
+    if kind == "mfrange":
+        return ("short", "long")[int(v)]
+    if kind == "mffb":
+        return "%.2f" % MFD.knob_feedback(v)
+    if kind == "mfhz":
+        return "%.2f Hz" % MFD.knob_rate(v)
+    if kind == "mfoct":
+        return "%.2f oct" % MFD.knob_amount(v)
     if kind == "foot":
         return "%d'" % int(v)
     if kind == "wave":
