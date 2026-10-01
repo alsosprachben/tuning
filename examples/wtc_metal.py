@@ -16,6 +16,9 @@ E minor, wtc2f10, by the same method -- --effects).
                                                            # slides, vibrato, entry scoops
     python3 examples/wtc_metal.py [wtc2f12] --effects --room-mics   # ...each amp with a
                                                            # close mic and a room mic
+    python3 examples/wtc_metal.py artfugue-001 --pairs     # a FOUR-voice fugue on the
+                                                           # metal6 guitars: SA on one, TB
+                                                           # on the other (PAIRS below)
 
 From the urtext's notation MIDI (wtc_fugue.py writes it), in strict time --
 no baroque rubato; metal is tight:
@@ -60,13 +63,21 @@ KEYS = {'wtc2f12': {5, 7, 8, 10, 0, 1, 3, 4}, 'wtc2f10': {4, 6, 7, 9, 11, 0, 2, 
 # recording runs 3:00 -- 116. The C# minor is 12/16, a bar of three quarters;
 # its *MM84 would run 2:32 where the fugue takes about two minutes -- a dotted
 # eighth at 72, ♩=108. The A minor's *MM72 runs 1:33, a recording 1:50: ♩=64.
-METER = {'wtc2f12': 2, 'wtc2f10': 4, 'wtc2f04': 3, 'wtc2f20': 4}
+# Contrapunctus 1 (Die Kunst der Fuge, the kern's own *MM100) is 2/2.
+METER = {'wtc2f12': 2, 'wtc2f10': 4, 'wtc2f04': 3, 'wtc2f20': 4, 'artfugue-001': 4}
 PICKUP = {'wtc2f10': 1}
-BPM = {'wtc2f12': 84.0, 'wtc2f10': 116.0, 'wtc2f04': 108.0, 'wtc2f20': 64.0}
+BPM = {'wtc2f12': 84.0, 'wtc2f10': 116.0, 'wtc2f04': 108.0, 'wtc2f20': 64.0,
+       'artfugue-001': 100.0}
 # THE VOICES' CHANNELS: 0 bottom, 1 middle, 2 top. Where the kern splits a
 # voice for a chord it writes the extra notes on channels 3 and up; each goes
 # to the voice sounding nearest it in pitch, unless the piece says otherwise.
-VOICE_OF = {'wtc2f12': {0: 0, 1: 1, 2: 2, 3: 2}}
+VOICE_OF = {'wtc2f12': {0: 0, 1: 1, 2: 2, 3: 2},
+            # four real voices, one a channel: 0 bass, 1 tenor, 2 alto, 3 soprano
+            'artfugue-001': {0: 0, 1: 1, 2: 2, 3: 3}}
+# THE PAIRS (Ben): a four-voice fugue on the two metal6 guitars, no trading --
+# soprano and alto on A (right), tenor and bass on B (left), B in drop D for
+# the bass's D2. Each guitar plays two lines, as A and B did with the middle.
+PAIRS = {'artfugue-001': {0: 'B', 1: 'B', 2: 'A', 3: 'A'}}
 NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
 
 # THE FUGUE'S ARCHITECTURE, for the drums: where the subject enters, and the
@@ -156,7 +167,10 @@ ENTRY_VOICE = {'wtc2f12': {1: 2, 5: 1, 12: 0, 29: 1, 41: 0, 51: 1, 75: 1},
                'wtc2f04': {1: 0, 2: 2, 5: 1, 16: 2, 17: 1, 20: 0, 30: 1, 61: 1, 66: 1},
                # a fraction of a bar where the entry is not the voice's first
                # note in it: at 13 the top runs up to the subject's A5 on beat 2
-               'wtc2f20': {1: 0, 3: 1, 6: 2, 13.25: 2, 21: 2, 26: 0}}
+               'wtc2f20': {1: 0, 3: 1, 6: 2, 13.25: 2, 21: 2, 26: 0},
+               # the exposition, voices as channels (VOICE_OF): alto, soprano,
+               # bass, tenor, four bars apart
+               'artfugue-001': {1: 2, 5: 3, 9: 0, 13: 1}}
 
 
 def guitar_mpe(notes, tpb, bpm, prog, pan, path, scoops):
@@ -521,9 +535,10 @@ def harmony(ns, beat, tpb, prev, diatonic=None):
 MICS = {'close': (0.5, 0.0), 'room': (3.0, -6.0)}
 
 
-def render_effects(name, ns, who, bar, pk, nbar, tpb, bpm, tag, room_mics=False):
+def render_effects(name, ns, who, bar, pk, nbar, tpb, bpm, tag, room_mics=False, pairs=None):
     """The hand-traded two guitars, each an MPE zone with slides, vibrato and
-    entry scoops; the same closing ritardando, the same mix."""
+    entry scoops; the same closing ritardando, the same mix. With `pairs`
+    ({voice: 'A' or 'B'}) each voice keeps its guitar, nothing traded."""
     import lib
     last = max(s for s, _e, _c, _n in ns)
     fin = pk + ((last - pk) // bar) * bar
@@ -537,11 +552,14 @@ def render_effects(name, ns, who, bar, pk, nbar, tpb, bpm, tag, room_mics=False)
         if t > r1:
             out += (t - r1) / lo
         return int(round(out))
-    voice = lambda c: 0 if c == 0 else (1 if c == 1 else 2)
+    voice = (lambda c: c) if pairs else (lambda c: 0 if c == 0 else (1 if c == 1 else 2))
     A, B = [], []
     for s, e, c, n in ns:
         v = voice(c)
-        g = 'A' if v == 2 else 'B' if v == 0 else ('A' if who[min(max(0, (s - pk) // bar), nbar - 1)] == 0 else 'B')
+        if pairs:
+            g = pairs[c]
+        else:
+            g = 'A' if v == 2 else 'B' if v == 0 else ('A' if who[min(max(0, (s - pk) // bar), nbar - 1)] == 0 else 'B')
         (A if g == 'A' else B).append((warp(s), warp(e), v, n))
     scoops = set()
     for bar1, v in ENTRY_VOICE.get(name, {}).items():
@@ -574,7 +592,7 @@ def render_effects(name, ns, who, bar, pk, nbar, tpb, bpm, tag, room_mics=False)
 
 def main(argv):
     args = argv[1:]
-    name = next((a for a in args if a.startswith('wtc')), 'wtc2f12')
+    name = next((a for a in args if a.startswith('wtc') or a.startswith('artfugue')), 'wtc2f12')
     # CHORD-OUT (Ben): no power-chord part at all. The two leads play their
     # lines, and wherever both attack TOGETHER each note becomes a power chord
     # -- note, fifth, octave -- so the harmony arrives where the voices meet.
@@ -612,6 +630,9 @@ def main(argv):
     bar, pk = METER.get(name, 2) * tpb, PICKUP.get(name, 0) * tpb
     nbar = (end - pk) // bar + 1
     bi = lambda t: min(max(0, (t - pk) // bar), nbar - 1)   # a tick's bar, from 0
+    if '--pairs' in args:
+        return render_effects(name, ns, None, bar, pk, nbar, tpb, bpm, '_metal6_pairs',
+                              room_mics='--room-mics' in args, pairs=PAIRS[name])
 
     ev = []                                   # (tick, order, message)
     def note(ch, n, t0, t1, v):
