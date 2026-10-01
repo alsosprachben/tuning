@@ -130,6 +130,7 @@ CONSONANT_REF = float(os.environ.get('TUNING_CONSONANT_REF', '0.30'))
 _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
 import chorus as _CHR
+import mf104 as _MFD
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
 # times the partial's frequency per second, which at 100000 is every sample --
@@ -1615,6 +1616,7 @@ def prepare(path, tuner='hybrid440'):
     _MOOG_FT, _MOOG_KN, _MOOG_KROW = [], [], {}   # per-note rows, per-channel knobs
     _MOOG_MPI, _MOOG_MPC, _MOOG_MPR = [], [], []   # per-note pitch rows (moog.pitch_rows)
     _MOOG_MKI, _MOOG_MPK, _MOOG_MPKN = [], [], [0]  # per-note shape rows (moog.shape_rows)
+    _MF104 = []         # (first row, end row, settings): notes through the MF-104M (mf104.py)
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     # Reflections cost about 7x the partials, since every one of them is
     # audible and nothing prunes. Worth it for a render you will listen to,
@@ -2981,6 +2983,9 @@ def prepare(path, tuner='hybrid440'):
             else:
                 _mparts = _MG.partials(_pan, f0, min(_MG.FMAX_HZ, SR / 2.0))
             _cbw = (_CBW[0], _CBW[1])
+            # THE MF-104M after it, if the panel has the pedal on: this note's
+            # rows, room images and all, are what its repeats are copied from
+            _mf0 = len(A['om'])
             _fmi = _MG.fm_index(_pan)
             _fm1 = (2 * math.pi * f0 * _MG.osc_ratio(_pan, _MG.OSC1) / SR) if _fmi else 0.0
             _fmph = cmath.phase(_MG.osc_spectrum(_pan['osc1_wave'], 1)[0]) if _fmi else 0.0
@@ -3013,6 +3018,9 @@ def prepare(path, tuner='hybrid440'):
                              0.0 if _nz else cv * props.chiff_harmonic_gain(_k),
                              cc, crl, sjit, csc, -1, 0, ph0=_ph)
             _CBW[0], _CBW[1] = _cbw
+            _mfst = _MFD.settings(_pan)
+            if _mfst is not None:
+                _MF104.append((_mf0, len(A['om']), _mfst))
             _NOREFL[0] = False
             _FMW[0] = _FMPH[0] = 0.0
             _MK[0] = 0
@@ -3398,6 +3406,38 @@ def prepare(path, tuner='hybrid440'):
     # simply which of two passes goes first, because both work on partials.
     # Distortion products emitted now are picked up by the rotor pass below and
     # given their Doppler and their level swing exactly as any other partial.
+    # THE MF-104M ANALOG DELAY, AND IT RUNS FIRST: the pedal is plugged
+    # straight into the Moog, so a valve after it (the charang's) hears the
+    # echoes, and every pass after this treats a repeat as any partial. A
+    # repeat whose note has pitch or shape rows reads a copy of its FT row
+    # whose row offsets are D later -- exact, D being whole grid points
+    # (mf104.GRID). The render grows to hold the last echo's release.
+    if _MF104:
+        _MF = _MFD
+        _mfdup = {}
+        def _mf_dup(fx, d):
+            ft = _MOOG_FT[fx]
+            fl = int(ft[12])
+            if not fl & (1 | 14):        # no pitch or shape rows: the contours
+                return None              # run from the copy's own onset already
+            if (fx, d) not in _mfdup:
+                g = d // _MF.GRID
+                _MOOG_FT.append(list(ft))
+                _mpi = list(_MOOG_MPI[fx])
+                if fl & 1:
+                    _mpi[1] += g
+                _MOOG_MPI.append(_mpi)
+                _mki = list(_MOOG_MKI[fx])
+                if fl & 14:
+                    _mki[1] += g
+                _MOOG_MKI.append(_mki)
+                _mfdup[(fx, d)] = len(_MOOG_FT) - 1
+            return _mfdup[(fx, d)]
+        _nm, _mlast = _MF.expand(A, _MF104, SR, PARTIAL_COLS + ('az', 'dr'), dup_fx=_mf_dup)
+        if _mlast + SR // 2 > N:
+            N = _mlast + SR // 2         # nblk stays: the kernel clamps every per-block row
+        print("  MF-104M: %d note(s), %d repeats" % (len(_MF104), _nm))
+
     if _AMP_CH and __import__('tubeamp').ENABLED:
         import tubeamp as _AMP
         _na = _AMP.expand(A, _AMP_CH, SR, PARTIAL_COLS + ('az', 'dr'),

@@ -65,6 +65,8 @@ import os
 
 import numpy as np
 
+import mf104
+
 # ---------------------------------------------------------------- the waves
 # A wave is one period on [0, 1) as straight segments (t0, t1, y0, y1).
 
@@ -395,6 +397,9 @@ PANEL = dict(
     sync=False,
     lfo1_rate=0.5, lfo1_shape=0, lfo1_depth=0.5, lfo1_dest=0, lfo1_reset=False,
     mod_amount=0.5, mod_dest=1,
+    # THE MF-104M ANALOG DELAY after it (mf104.py): Moog's own echo, in the
+    # panel so a part saves it and a preset recalls it as it does every knob
+    **mf104.PANEL,
 )
 
 

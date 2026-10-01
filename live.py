@@ -10481,6 +10481,45 @@ def selftest():
     check("...and live plays it as the file renders it, room images and all",
           _lres < 1e-5, "  (OSC 2 a fourth up: residual %.1e)" % _lres)
 
+    # THE MF-104M (mf104.py): a repeat IS the note, later. With the line's
+    # filter made flat, MIX fully wet and no feedback, the pedal's output is
+    # the dry render delayed by D -- room images, a Moog's pitch rows (read
+    # through a copied FT row, D grid points on) and 1->2 FM included. Then
+    # the pedal's own physics, in mf104.selftest.
+    import mf104 as _MFt
+    _mfw = _MFt.RANGES
+    _menv3 = os.environ.get("TUNING_MOOG_PANEL")
+    _mfr = []
+    try:
+        _MFt.RANGES = tuple((_lo, _hi, 1e12) for _lo, _hi, _f in _mfw)
+        _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
+        _mm.save(_mpath)
+        for _nm, _pn in (("saw", {}),
+                         ("pitch rows", dict(mod_dest=1, mod_amount=0.7, f_decay=0.6, f_sustain=0.0)),
+                         ("FM", dict(mod_dest=0, mod_amount=0.8, osc2_level=0.8, osc2_freq=0.5 + 5 / 14.0))):
+            os.environ["TUNING_MOOG_PANEL"] = _mjson.dumps(_pn)
+            _qa = _BRb.prepare(_mpath, "even")
+            _ya = _BRb.synth_window(_qa, 0, _qa["N"])[0].astype(float)
+            _on = dict(_pn, mf104_on=True, mf104_mix=1.0, mf104_feedback=0.0, mf104_amount=0.0)
+            os.environ["TUNING_MOOG_PANEL"] = _mjson.dumps(_on)
+            _qb = _BRb.prepare(_mpath, "even")
+            _yb = _BRb.synth_window(_qb, 0, _qb["N"])[0].astype(float)
+            _D = _MFt.delay_samples(_MFt.settings(_on), _BRb.SR)
+            _n = min(len(_ya), len(_yb) - _D)
+            _mfr.append((_nm, float(np.sqrt(((_yb[_D:_D + _n] - _ya[:_n]) ** 2).mean())
+                                    / np.sqrt((_ya[:_n] ** 2).mean())),
+                         float(np.abs(_yb[:_D]).max())))
+    finally:
+        _MFt.RANGES = _mfw
+        if _menv3 is None:
+            os.environ.pop("TUNING_MOOG_PANEL", None)
+        else:
+            os.environ["TUNING_MOOG_PANEL"] = _menv3
+    check("the MF-104M's repeat is the note itself, delayed",
+          all(_r < 1e-5 and _z == 0.0 for _, _r, _z in _mfr),
+          "  (a flat line, fully wet: %s)" % ", ".join("%s %.1e" % (_n, _r) for _n, _r, _ in _mfr))
+    check("...and the pedal's physics hold (mf104.selftest)", _MFt.selftest())
+
     # A MESSENGER ON THE CHANNEL: a part that reads its chart takes the
     # panel's CCs as knob turns, 14-bit, and General MIDI keeps the rest.
     _mx = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
