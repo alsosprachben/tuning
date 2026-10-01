@@ -522,10 +522,24 @@ def _partials(panel, f0, fmax=FMAX_HZ):
 # by the wave's integral A = sum_j (2|c_j|/j) sin(j theta1 + phi_j): harmonic k
 # of OSC 2 moves by k I A. OSC 1's first FM_J harmonics carry it (a saw's fall
 # as 1/j^2 in A). The index at MOD AMOUNT's ends is a guess until a Messenger is
-# recorded. |H| is taken at each carrier, so a closed ladder does not take the
-# sidebands above its cutoff out: a known simplification.
+# recorded. THE LADDER COMES AFTER: harmonic k is sum_m D_m e^{i(k th2 + m th1)}
+# (fm_sidebands), and each sideband is filtered at its own frequency
+# |k f2 + m f1| -- so a closing contour mellows an FM bell, as on the hardware.
+# The kernel does the same sum (synthkernel.c, fm_sidebands); filtering the
+# whole harmonic at its carrier, as it first did, was 0.17-0.91 off under a
+# shut ladder.
 FM_INDEX_MAX = 3.0
 FM_J = 8
+
+
+def fm_sidebands(panel, k, n=2048, phi1=None):
+    """Harmonic k's FM sidebands: (m, D_m), the Fourier coefficients of
+    e^{i k I A(th1)} over one turn of OSC 1 -- what the kernel weighs by the
+    ladder at k f2 + m f1, one sideband at a time."""
+    b = fm_coeffs(panel, phi1)
+    th = 2.0 * np.pi * np.arange(n) / n
+    a = sum(b[j].real * np.sin((j + 1) * th) + b[j].imag * np.cos((j + 1) * th) for j in range(FM_J))
+    return np.fft.fftfreq(n, 1.0 / n).astype(int), np.fft.fft(np.exp(1j * k * fm_index(panel) * a)) / n
 
 
 def fm_index(panel):

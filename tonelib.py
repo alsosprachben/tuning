@@ -9925,6 +9925,65 @@ class MoogBowedPad(BowedPadProperties):
     )
 
 
+# METAL FROM FM. A Moog player's metal is 1->2 FM at a ratio that is not a
+# whole number: the sidebands sit at |r*f + k*f|, and with r off the grid they
+# fall between the harmonics and beat instead of fusing. The modulator (OSC 1)
+# can only be on the key or an octave of it, so the ratio comes from OSC 2,
+# the carrier -- tuned off by OSC 2 FREQ and its footage -- and OSC 1's own
+# level is the anchor, or nothing. The index is fixed for the note, as MOD
+# AMOUNT is on the hardware; what darkens a ringing bell is the LADDER, which
+# comes after the FM and hears every sideband at its own frequency
+# (synthkernel.c, fm_sidebands) -- so a filter contour closing over the ring
+# mellows it, as the additive voices' upper partials dying first do.
+
+class MoogMetallicPad(MetallicPadProperties):
+    """GM 93 on a Moog: FM metal under a pad's swell. OSC 2, a triangle, at
+    4' and a few cents off a whole ratio to OSC 1 -- carrier 2.06 x the key
+    against a modulator on it -- so the sidebands land in pairs a few percent
+    either side of the odd harmonics, and beat: a clang that keeps its
+    pitch. Chosen by ear over a tritone carrier (examples/moog_fmbell.py).
+    The filter contour opens over 60 ms and settles over a second and a
+    half to a darker sustain, the clang mellowing under the swell -- chosen
+    by ear over a fixed filter, once the ladder heard each sideband."""
+    moog = True
+    # at the additive voice's level (examples/moog_fmbell.py, K-weighted)
+    initial_gain = MetallicPadProperties.initial_gain * 10 ** (7.8 / 20.0)
+    messenger = dict(
+        osc1_wave=0.4, osc2_wave=0.4, osc2_octave=4, osc2_freq=0.5 + 50.0 / 1400.0,
+        osc1_level=0.0, osc2_level=0.9,
+        cutoff=0.62, resonance=0.0, eg_amount=0.7, kb_track=1.0,
+        f_attack=0.45, f_decay=0.8, f_sustain=0.35, f_release=0.72,
+        a_attack=0.564, a_decay=0.6, a_sustain=1.0, a_release=0.72,
+        mod_dest=0, mod_amount=0.75,
+    )
+
+
+class MoogCrystalFX(CrystalFXProperties):
+    """GM 98 on a Moog: an FM bell, struck -- the classic layout, a strong
+    partial ON the key and inharmonic ones over it. OSC 2 a triangle at 4' a
+    tritone up -- carrier 2 sqrt(2) x the key, the most irrational ratio a
+    semitone knob reaches -- frequency-modulated by OSC 1 on the key at index
+    1.5, and OSC 1 itself in the mix as the anchor. Measured on a held C4:
+    1.00, 1.83, 2.82, 3.82 x the key. Without the anchor (a carrier at sqrt(2)
+    alone) the strongest components were 0.41 and 2.41 and nothing sat on the
+    written pitch; Ben chose this one by ear (examples/moog_fmbell.py).
+    A percussive amp contour rings it for a second and a half, and the
+    filter contour opens fully on the strike and closes over the ring, so
+    it MELLOWS as a struck bell does: measured on a held C4, the centroid
+    falls 955 -> 578 Hz in a second, where a fixed filter held 860-900."""
+    moog = True
+    # at the additive voice's level (examples/moog_fmbell.py, K-weighted)
+    initial_gain = CrystalFXProperties.initial_gain * 10 ** (5.8 / 20.0)
+    messenger = dict(
+        osc1_wave=0.4, osc2_wave=0.4, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
+        osc1_level=0.4, osc2_level=0.9,
+        cutoff=0.6, resonance=0.0, eg_amount=0.82, kb_track=1.0,
+        f_attack=0.0, f_decay=0.78, f_sustain=0.0, f_release=0.75,
+        a_attack=0.075, a_decay=0.8, a_sustain=0.0, a_release=0.75,
+        mod_dest=0, mod_amount=0.75,
+    )
+
+
 class MetalPercussionProperties(PercussionProperties):
     """Struck pitched metal/wood that rings with a clear-ish pitch (cowbell,
     agogo, triangle, woodblock, claves, ride bell): bright inharmonic modes,
@@ -11911,6 +11970,32 @@ class SynthDrumProperties(MembraneDrumProperties):
     harmonic_decay_db = 5.0
     sustain_level = 0.0
     initial_gain = MembraneDrumProperties.initial_gain
+
+
+class MoogSynthDrum(SynthDrumProperties):
+    """GM 118 on a Moog: the drum machine's tom as an analog synth makes it
+    -- the MOD section's F ENV -> OSC 2 FREQ. OSC 2, a triangle (nearly a
+    sine), carries the voice; the filter contour, fast and to nothing, both
+    snaps the ladder open on the strike and drops OSC 2 from an octave sharp
+    to the key in a sixth of a second -- the sweep that is the whole
+    signature (SynthDrumProperties) -- and a little NOISE through the same
+    ladder is the stick. The amp contour dies to -40 dB in about 1.4 s, the
+    additive drum's ring. Its tension_bend is off: the sweep is the MOD
+    section's now, and two would stack.
+
+    Only GM 118: the Electronic kit's kick and snare keep this class's base."""
+    moog = True
+    tension_bend = 0.0
+    tension_bend_max = 0.0
+    # at the additive drum's level (examples/moog_ab.py, K-weighted)
+    initial_gain = SynthDrumProperties.initial_gain * 10 ** (6.5 / 20.0)
+    messenger = dict(
+        osc1_level=0.0, osc2_wave=0.4, osc2_level=1.0, noise_level=0.12,
+        cutoff=0.55, resonance=0.2, eg_amount=0.75, kb_track=1.0,
+        f_attack=0.0, f_decay=0.55, f_sustain=0.0, f_release=0.55,
+        a_attack=0.0, a_decay=0.77, a_sustain=0.0, a_release=0.77,
+        mod_dest=1, mod_amount=0.5 + 1.0 / 8.0,     # +1 octave at the peak (MOD_PITCH_OCTAVES 4)
+    )
 
 
 class ElectronicKickProperties(SynthDrumProperties):

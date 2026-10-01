@@ -34,7 +34,7 @@ CHORD_PHRASE = ([(i * 4.0, n, 4.0) for i, c in enumerate(CHORDS) for n in c]
 CHORDAL = {50, 51, 54, 88, 89, 90, 91, 92, 93, 94, 95, 97, 99, 100, 101, 103}
 
 # where each program is played, in semitones from the phrase as written
-REGISTER = {38: -24, 39: -24}
+REGISTER = {38: -24, 39: -24, 118: -12}
 
 
 def phrase(prog, path):

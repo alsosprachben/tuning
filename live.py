@@ -7518,9 +7518,13 @@ def selftest():
     # AFTER this and its _sd was not yet bound, which the selftest caught by
     # crashing -- the third time in this session a check has been the thing
     # that found the mistake.
+    # The synth drum's fall is the MOD section's now (moog.py, F ENV -> OSC 2
+    # FREQ, positive), its tension_bend off so the two do not stack.
     _sd118 = _PMr.property_class_for_note(118, 60)
+    _sdm = getattr(_sd118, "messenger", None) or {}
     check("...and the bird's pitch RISES, where the synth drum's falls",
-          _bt.tension_bend < 0.0 and _sd118.tension_bend > 0.0,
+          _bt.tension_bend < 0.0
+          and (_sd118.tension_bend > 0.0 or (_sdm.get("mod_dest") == 1 and _sdm.get("mod_amount", 0.5) > 0.5)),
           "  (rendered on C6: 999 Hz, then 1040, then 1050 -- the written 1047)")
 
     # ------------------------------------------- the last two category errors
@@ -7560,10 +7564,19 @@ def selftest():
     # THE DRUM MACHINE'S SWEEP NEEDED NOTHING NEW. tension_bend is a pitch
     # transient that blooms and settles, written for the piano, where a hard
     # blow stretches the string. An 808 tom is the same shape and much more of
-    # it: start sharp, fall to pitch, in a fifth of a second.
+    # it: start sharp, fall to pitch, in a fifth of a second. On the Moog
+    # (GM 118 now) it is the MOD section's: the filter contour, fast and to
+    # nothing, takes OSC 2 from above the key down onto it -- measured on C3,
+    # ~210 Hz in the first 30 ms, on the key's 131 by 100 ms.
+    import moog as _MGsd
+    _sdp = _MGsd.panel_of(_sd) if getattr(_sd, "moog", False) else None
     check("...and the synth drum sweeps its pitch down, which is its whole sound",
-          _sd.tension_bend > 0.3 and _sd.tension_settle_time < 0.1,
-          "  (rendered on A2: 167 Hz at the onset, settling to 110)")
+          (_sd.tension_bend > 0.3 and _sd.tension_settle_time < 0.1)
+          or (_sdp is not None and int(_sdp["mod_dest"]) == 1 and _sdp["mod_amount"] > 0.55
+              and _sdp["f_sustain"] == 0.0 and _MGsd.knob_time(_sdp["f_decay"]) < 0.3),
+          "  (the MOD section: F ENV -> OSC 2 FREQ, +%.1f octave at the strike, gone in %.2f s)"
+          % ((_MGsd.bipolar(_sdp["mod_amount"], _MGsd.MOD_PITCH_OCTAVES),
+              _MGsd.knob_time(_sdp["f_decay"])) if _sdp else (0.0, 0.0)))
 
     # ------------------------------------------------------------ the ethnic
     import patch_map as _PMe
@@ -10376,22 +10389,30 @@ def selftest():
 
     # 1 -> 2 FM: OSC 1's own wave modulates OSC 2. A harmonic's waveform is
     # cos(its phase + k I A(OSC 1's angle)), A the integral of OSC 1's wave
-    # (moog.fm_coeffs), and live plays it as the file renders it -- room
-    # images included, with OSC 2 transposed a fourth (which is what showed
-    # that a transposed partial's image needs its fractional onset: nfr).
+    # (moog.fm_coeffs) -- and THEN the ladder, which on the hardware comes
+    # after the oscillators and so hears each SIDEBAND at its own frequency:
+    # the reference is sum_m D_m |H(k f2 + m f1)| e^{i(k th2 + m th1)}, D_m the
+    # Fourier coefficients of e^{i k I A}. Open and shut; filtering the whole
+    # harmonic at its carrier, as the kernel first did, was 0.17-0.91 off the
+    # shut one. And live plays it as the file renders it -- room images
+    # included, with OSC 2 transposed a fourth (which is what showed that a
+    # transposed partial's image needs its fractional onset: nfr).
     _mwas = dict(T.MoogSawLead.messenger)
     _menv = os.environ.get("TUNING_REFLECT")
     os.environ["TUNING_REFLECT"] = "0"
+    _fw = []
     try:
+      for _fcut, _fres in ((1.0, 0.0), (0.5, 0.3)):
         T.MoogSawLead.messenger = dict(_mwas, osc1_level=0.0, osc2_level=1.0, osc1_wave=_MG.TRI,
-                                       osc2_freq=0.5 + 5 / 14.0, cutoff=1.0, resonance=0.0, kb_track=0.0,
-                                       mod_dest=0, mod_amount=0.8, f_sustain=1.0, a_sustain=1.0)
+                                       osc2_freq=0.5 + 5 / 14.0, cutoff=_fcut, resonance=_fres, kb_track=0.0,
+                                       eg_amount=0.5, mod_dest=0, mod_amount=0.8, f_sustain=1.0, a_sustain=1.0)
         _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=81)
         _mm.save(_mpath)
         _fq = _BRb.prepare(_mpath, "even")
         _fpan = _MG.panel_of(T.MoogSawLead)
         _fb = _MG.fm_coeffs(_fpan); _fI = _MG.fm_index(_fpan)
-        _fN = int(1.0 * _BRb.SR); _fw = []
+        _ffc, _fkq = _MG.knob_cutoff(_fcut), _MG.knob_k(_fres)
+        _fN = int(1.0 * _BRb.SR)
         for _k in (1, 3, 8):
             _i1 = np.flatnonzero(_fq["mk"] == 2 * 4096 + _k)
             _fs = {_kk: (np.ascontiguousarray(_v[_i1]) if isinstance(_v, np.ndarray) and _v.shape == (_fq["P"],) else _v)
@@ -10401,13 +10422,18 @@ def selftest():
             _BRb.synth_partials(_fs, 0, _fN, 0, _fs["P"], _l, _r)
             _n = np.arange(_fN)
             _ps1 = _fs["fmp"][0] + float(_fs["fmw"][0]) * _n
-            _A = sum(_fb[_j].real * np.sin((_j + 1) * _ps1) + _fb[_j].imag * np.cos((_j + 1) * _ps1)
-                     for _j in range(_MG.FM_J))
-            _ref = np.cos(_fs["p0"][0] + float(_fs["om"][0]) * _n + _k * _fI * _A)
+            _fms, _D = _MG.fm_sidebands(_fpan, _k)
+            _kp = np.abs(_D) > 1e-9
+            _f2 = float(_fs["om"][0]) * _BRb.SR / (2 * np.pi)
+            _f1 = float(_fs["fmw"][0]) * _BRb.SR / (2 * np.pi)
+            _H = _MG.ladder_gain(np.abs(_f2 + _fms[_kp] * _f1), _ffc, _fkq)
+            _ref = np.zeros(_fN)
+            for _Dm, _Hm, _m in zip(_D[_kp], _H, _fms[_kp]):
+                _ref += (_Dm * _Hm * np.exp(1j * (_fs["p0"][0] + float(_fs["om"][0]) * _n + _m * _ps1))).real
             _sg = slice(int(0.2 * _BRb.SR), int(0.9 * _BRb.SR))
             _a, _b = _l[_sg].astype(float), _ref[_sg]
             _g = float(np.dot(_a, _b) / np.dot(_b, _b))
-            _fw.append((_k, _k * abs(_fI) * float(np.max(np.abs(_A))),
+            _fw.append((_fcut, _k, int(_kp.sum()),
                         float(np.sqrt(((_a - _g * _b) ** 2).mean()) / np.sqrt((_a ** 2).mean()))))
     finally:
         T.MoogSawLead.messenger = _mwas
@@ -10415,9 +10441,10 @@ def selftest():
             os.environ.pop("TUNING_REFLECT", None)
         else:
             os.environ["TUNING_REFLECT"] = _menv
-    check("1->2 FM moves OSC 2 by the integral of OSC 1's wave, exactly",
-          all(_v < 1e-4 for _, _, _v in _fw),
-          "  (a triangle OSC 1: %s)" % ", ".join("harmonic %d at %.1f rad, residual %.1e" % _x for _x in _fw))
+    check("1->2 FM moves OSC 2 by the integral of OSC 1's wave, each sideband through the ladder",
+          all(_v < 1e-4 for _, _, _, _v in _fw),
+          "  (a triangle OSC 1: %s)" % ", ".join("cutoff %.1f harmonic %d, %d sidebands, residual %.1e" % _x
+                                                for _x in _fw))
     _menv2 = os.environ.get("TUNING_MOOG_PANEL")
     os.environ["TUNING_MOOG_PANEL"] = _mjson.dumps(dict(mod_dest=0, mod_amount=0.8, osc1_level=0.4,
                                                        osc2_level=0.8, osc2_freq=0.5 + 5 / 14.0))

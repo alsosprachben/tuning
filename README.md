@@ -92,13 +92,17 @@ string machines (50/51) and the pads that are subtractive -- warm, polysynth,
 halo (squares and a breath of NOISE), sweep (LFO 1 on the cutoff, up and
 down) and soundtrack (97), the choir pad (91) and Synth Voice (54) sung through
 their formants after the ladder (54 sings the file's lyrics), bowed glass (92,
-the ladder in BAND PASS, resonant) -- and four effects: atmosphere (99, a saw
+the ladder in BAND PASS, resonant), the metallic pad (93) as FM at a ratio
+off the whole numbers, so its sidebands beat -- and five effects: crystal (98,
+an FM bell with a partial on the key), atmosphere (99, a saw
 and the NOISE oscillator), brightness (100), goblins (101, OSC 2 drifting
 against the voice's own deep wobble) and sci-fi (103, PWM squares under a
-resonant contour) -- each note its own voice, a poly Moog, with OSC 2
-detuned for width and no chorus. What is stretched,
-inharmonic or echoed (88, 93, 96, 98, 102) stays additive. `TUNING_MOOG=0` puts every one of them back, for A/B. The fourth pane (`tab` three times) is the panel of the
-selected part:
+resonant contour) -- and the Synth Drum (118), the MOD section's filter
+contour sweeping OSC 2 down an octave onto the key -- each note its own
+voice, a poly Moog, with OSC 2 detuned for width and no chorus. What is
+stretched or echoed (88, 96, 102) stays additive. `TUNING_MOOG=0` puts every
+one of them back, for A/B. The fourth pane (`tab` three times) is the panel of
+the selected part:
 
 | key | what it does |
 |---|---|

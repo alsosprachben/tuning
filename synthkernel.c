@@ -11,6 +11,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <omp.h>
 
 // THE SAMPLE RATE, at compile time. It was six hardcoded 44100s, so it could not
@@ -174,6 +175,131 @@ static inline float moog_ladder(float x, float k, int mode, int rb){
     float h=num/den;
     if(rb && mode<2) h*=1.f+k;
     return h;
+}
+
+// 1 -> 2 FM AS SIDEBANDS, so the ladder hears each one where it sounds. On the
+// hardware the FM is at the oscillator and the filter comes after it, so a
+// closing contour mellows an FM bell; filtering the whole modulated harmonic
+// at its carrier's frequency (as this kernel first did) left every sideband
+// at full strength over a shut ladder. A harmonic k phase-modulated by
+// k I A(th1) is sum_m D_m e^{i(k th2 + m th1)}, D_m the Fourier coefficients
+// of e^{i k I A} over one turn of OSC 1 -- note constants, computed here per
+// block by an N-point FFT, N enough to hold the deviation (k I max|A'|, in
+// units of f1) and OSC 1's own FM_J harmonics. Kept: the narrowest |m| <= M
+// holding all but FM_TAIL of the energy (which is 1). Wider than FM_SBMAX --
+// a low note, a high harmonic, a deep index -- and the caller falls back to
+// the unfiltered phase modulation, which is what that partial always had.
+#define FM_SBMAX 160
+#define FM_NMAX 512
+#define FM_TAIL 1e-11
+// A sideband this far under its own harmonic -- its D_m and the ladder there
+// together -- is not summed. RELATIVE, and decided per cell from that cell's
+// two grid points alone: a floor on the partial's absolute level, or on its
+// block's peak, made live (headroom, 128-sample blocks) drop different
+// sidebands from the file (512) and the two came apart by 2e-5.
+#define SB_TOL 1e-6f
+static void fm_fft(double* xr, double* xi, int n){
+    for(int i=1,j=0;i<n;i++){
+        int bit=n>>1; for(;j&bit;bit>>=1) j^=bit; j^=bit;
+        if(i<j){ double t=xr[i];xr[i]=xr[j];xr[j]=t; t=xi[i];xi[i]=xi[j];xi[j]=t; }
+    }
+    for(int len=2;len<=n;len<<=1){
+        double ang=-6.283185307179586/(double)len, wr=cos(ang), wi=sin(ang);
+        for(int i=0;i<n;i+=len){
+            double cr=1.0, ci=0.0;
+            for(int k=0;k<len/2;k++){
+                double ur=xr[i+k], ui=xi[i+k];
+                double vr=xr[i+k+len/2]*cr-xi[i+k+len/2]*ci, vi=xr[i+k+len/2]*ci+xi[i+k+len/2]*cr;
+                xr[i+k]=ur+vr; xi[i+k]=ui+vi; xr[i+k+len/2]=ur-vr; xi[i+k+len/2]=ui-vi;
+                double t=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=t;
+            }
+        }
+    }
+}
+// D_{-M..M} into Dr/Di (index m+M); returns M, or -1 to fall back
+static int fm_sidebands_calc(const float* B, float kI, float* Dr, float* Di){
+    double sj=0.0;
+    for(int j=0;j<FM_J;j++) sj+=(double)(j+1)*sqrt((double)B[2*j]*B[2*j]+(double)B[2*j+1]*B[2*j+1]);
+    double ext=fabs((double)kI)*sj+FM_J+10.0;
+    int n=32; while(n<2.0*ext && n<=FM_NMAX) n<<=1;
+    if(n>FM_NMAX) return -1;
+    double xr[FM_NMAX], xi[FM_NMAX];
+    for(int i=0;i<n;i++){
+        double th=6.283185307179586*(double)i/(double)n, A=0.0;
+        for(int j=0;j<FM_J;j++) A+=(double)B[2*j]*sin((j+1)*th)+(double)B[2*j+1]*cos((j+1)*th);
+        double ph=(double)kI*A; xr[i]=cos(ph)/(double)n; xi[i]=sin(ph)/(double)n;
+    }
+    fm_fft(xr,xi,n);
+    // the tail, from the outside in: the smallest M leaving < FM_TAIL outside
+    double tail=0.0; int M=n/2-1;
+    while(M>0){
+        int a=M, b=n-M;
+        double e=xr[a]*xr[a]+xi[a]*xi[a]+xr[b]*xr[b]+xi[b]*xi[b];
+        if(tail+e>=FM_TAIL) break;
+        tail+=e; M--;
+    }
+    if(M>FM_SBMAX) return -1;
+    for(int m=-M;m<=M;m++){
+        int i = m>=0 ? m : n+m;
+        Dr[m+M]=(float)xr[i]; Di[m+M]=(float)xi[i];
+    }
+    return M;
+}
+// ...REMEMBERED. D depends on k I and OSC 1's wave alone -- not on the pitch
+// or the block -- so the FFT runs once per (k I, wave) rather than once per
+// partial per block, which was nearly all of the cost. NOT ON THE NOTE EITHER,
+// once its phase is taken out: each note's B is anchored to the phase its own
+// OSC 1 fundamental carries (moog.fm_coeffs, phi1), B_j = B'_j e^{-i j psi},
+// so A(th) = A'(th - psi) and D_m = D'_m e^{-i m psi}. B' -- B_1 turned real
+// -- is the key, rounded to 1e-7 so two notes' float roundings of the one
+// wave share an entry, and D' is computed FROM the rounded key, so a hit is
+// bit for bit what a miss would have made.
+//
+// ONE CACHE FOR EVERY THREAD, direct-mapped. Per thread it was empty on every
+// call -- the kernel's threads do not outlive one -- and missed half its
+// lookups. Each entry carries a sequence count (a seqlock): odd while a
+// thread writes it, so a reader that sees it change under its copy, or odd,
+// computes its own, and a writer that cannot take an entry simply does not
+// publish. The copy is the caller's anyway: it turns D' by its own psi.
+typedef struct { int seq, M; float kI, B[2*FM_J]; float Dr[2*FM_SBMAX+1], Di[2*FM_SBMAX+1]; } fm_ent;
+#define FM_CACHE 512
+static fm_ent fm_cache[FM_CACHE];
+static int fm_sidebands(const float* B, float kI, float* Dr, float* Di, double* psi){
+    double b1=hypot((double)B[0],(double)B[1]);
+    double ps = b1>1e-9 ? -atan2((double)B[1],(double)B[0]) : 0.0;
+    float Bq[2*FM_J];
+    for(int j=0;j<FM_J;j++){
+        double c=cos((j+1)*ps), sn=sin((j+1)*ps);
+        double br=(double)B[2*j]*c-(double)B[2*j+1]*sn, bi=(double)B[2*j]*sn+(double)B[2*j+1]*c;
+        Bq[2*j]=(float)(nearbyint(br*1e7)*1e-7); Bq[2*j+1]=(float)(nearbyint(bi*1e7)*1e-7);
+    }
+    for(int j=0;j<2*FM_J;j++){   // -0 is +0: one key, not two
+        uint32_t u; memcpy(&u,Bq+j,4); if((u&0x7fffffffu)==0u){ u=0u; memcpy(Bq+j,&u,4); }
+    }
+    uint32_t h=2166136261u, u;
+    memcpy(&u,&kI,4); h=(h^u)*16777619u;
+    for(int j=0;j<2*FM_J;j++){ memcpy(&u,Bq+j,4); h=(h^u)*16777619u; }
+    // MIXED before the slot is taken: a multiply carries low bits only
+    // upward, and k I = 1.5, 3, 4.5 ... are floats whose low bits are all
+    // zero -- unmixed, every harmonic of a note fell in one slot
+    h^=h>>16; h*=0x85ebca6bu; h^=h>>13; h*=0xc2b2ae35u; h^=h>>16;
+    fm_ent* e=fm_cache+(h%FM_CACHE);
+    *psi=ps;
+    int s1=__atomic_load_n(&e->seq,__ATOMIC_ACQUIRE);
+    if(s1>0 && !(s1&1) && memcmp(&e->kI,&kI,4)==0 && memcmp(e->B,Bq,sizeof(e->B))==0){
+        int M=e->M;
+        if(M>=0){ memcpy(Dr,e->Dr,(2*M+1)*sizeof(float)); memcpy(Di,e->Di,(2*M+1)*sizeof(float)); }
+        __atomic_thread_fence(__ATOMIC_ACQUIRE);
+        if(__atomic_load_n(&e->seq,__ATOMIC_RELAXED)==s1) return M;
+    }
+    int M=fm_sidebands_calc(Bq,kI,Dr,Di);
+    int s0=__atomic_load_n(&e->seq,__ATOMIC_RELAXED);
+    if(!(s0&1) && __atomic_compare_exchange_n(&e->seq,&s0,s0+1,0,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED)){
+        e->M=M; e->kI=kI; memcpy(e->B,Bq,sizeof(e->B));
+        if(M>=0){ memcpy(e->Dr,Dr,(2*M+1)*sizeof(float)); memcpy(e->Di,Di,(2*M+1)*sizeof(float)); }
+        __atomic_store_n(&e->seq,s0+2,__ATOMIC_RELEASE);
+    }
+    return M;
 }
 
 // THE MOD SECTION'S PITCH ROWS, one cell each: moog.pitch_cells in C, because
@@ -711,6 +837,16 @@ void synth_voice(
                 // copied onto this OSC 2 partial (fmw, fmp, fmpR)
                 int fmo = ftr && fmw && ((int)ftr[12] & 16) && mkr && (mkr[p]>>12)==2 && fmw[p]>0.0;
                 float fmI = fmo ? ftr[13] : 0.f; int fmk = fmo ? (mkr[p]&4095) : 0;
+                // ...as SIDEBANDS where it can be (fm_sidebands): fms, M of
+                // them each side, and the ladder's cutoff, resonance and this
+                // harmonic's frequency at each grid point to weigh them by
+                float sbD0r[2*FM_SBMAX+1], sbD0i[2*FM_SBMAX+1]; double sbPsi=0.0;
+                float sbDr[2*FM_SBMAX+1], sbDi[2*FM_SBMAX+1];
+                float sbFc[65], sbK[65], sbF[65], sbBig=0.f; int sbMode=0, sbRb=0, fms=0, sbM=0;
+                if(fmo){
+                    sbM=fm_sidebands(ftr+14,(float)fmk*fmI,sbD0r,sbD0i,&sbPsi);
+                    fms = sbM>=0;
+                }
                 if(ftr && MKI && MPK && mkr){
                     int o=mkr[p]>>12, bit = o==1 ? 2 : o==2 ? 4 : o==3 ? 8 : 0;
                     if(bit && ((int)ftr[12] & bit)){
@@ -745,7 +881,7 @@ void synth_voice(
                             float fr=fhzj/SRATE_F;
                             fade = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
                         }
-                        if(fmo){
+                        if(fmo && !fms){
                             // a carrier whose deviation would reach Nyquist fades out
                             float fr=(fhzj+(float)fmk*fabsf(fmI)*(float)(fmw[p]*SRATE_D/6.283185307179586))/SRATE_F;
                             fade *= fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
@@ -764,8 +900,11 @@ void synth_voice(
                             fc*=exp2f(kn[6]*lv);
                         }
                         if(fc<1.f)fc=1.f;
-                        // the ladder's OWN sine (moog.SELF) is not filtered by it
-                        float h = selfosc ? 1.f : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade;
+                        // the ladder's OWN sine (moog.SELF) is not filtered by it;
+                        // an FM'd harmonic's sidebands are, each at its own
+                        // frequency, in the cell loop below
+                        float h = selfosc ? 1.f : fms ? fade : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade;
+                        if(fms){ sbFc[j]=fc; sbK[j]=kn[1]; sbF[j]=fhzj; sbMode=mode; sbRb=rb; }
                         if(pre && !selfosc){   // the partials carry the ladder at its sustain already
                             float fcs=kn[0]*kbf*exp2f(kn[2]*kn[3]); if(fcs<1.f)fcs=1.f;
                             h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
@@ -838,12 +977,37 @@ void synth_voice(
                 double nrate = noiz ? (double)nf*(double)(-chBW[p]) : 0.0;
                 uint64_t nseed = (uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
                 long long nui=-1; double nh0=0.0, ndh=0.0;
+                // THE SIDEBANDS WORTH WEIGHING: those whose D_m could reach
+                // SB_TOL through the ladder at its loudest -- a bound the
+                // resonance alone sets (the peak of a ladder at K_MAX, with
+                // room to spare), so it is the same in every block and
+                // either renderer -- and the far tail never costs a ladder
+                // evaluation; each grid point's gains are kept for the next
+                // cell, which starts where this one ends
+                int dlo=0, dhi=-1, hEndJ=-1;
+                float hEnd[2*FM_SBMAX+1];
+                if(fms){
+                    float td = SB_TOL/(1.5f*moog_ladder(1.f,3.9f,0,1));   // moog.K_MAX, RES BASS on
+                    for(dlo=0; dlo<=2*sbM; dlo++) if(fabsf(sbD0r[dlo])+fabsf(sbD0i[dlo])>td) break;
+                    for(dhi=2*sbM; dhi>=dlo; dhi--) if(fabsf(sbD0r[dhi])+fabsf(sbD0i[dhi])>td) break;
+                    // this note's own phase back on: D_m = D'_m e^{-i m psi}
+                    double er=cos(-(double)(dlo-sbM)*sbPsi), ei=sin(-(double)(dlo-sbM)*sbPsi);
+                    double sr=cos(-sbPsi), si=sin(-sbPsi);
+                    for(int i=dlo;i<=dhi;i++){
+                        sbDr[i]=(float)((double)sbD0r[i]*er-(double)sbD0i[i]*ei);
+                        sbDi[i]=(float)((double)sbD0r[i]*ei+(double)sbD0i[i]*er);
+                        double t=er*sr-ei*si; ei=er*si+ei*sr; er=t;
+                    }
+                }
                 for(int cl=0; cl<BLK/mg; cl++){
                 long c0=bs0+(long)cl*mg, c1=c0+mg;
                 long s0 = ns>c0 ? ns : c0, s1 = ne<c1 ? ne : c1;
                 if(s0>=s1) continue;
                 float a0L=gLm[cl], a1L=gLm[cl+1], a0R=gRm[cl], a1R=gRm[cl+1];
                 float z1r=0.f, z1i=0.f, r1r=1.f, r1i=0.f;
+                float g0r[2*FM_SBMAX+1], g0i[2*FM_SBMAX+1], dgr[2*FM_SBMAX+1], dgi[2*FM_SBMAX+1];
+                float pzr[2*FM_SBMAX+1], pzi[2*FM_SBMAX+1], prr[2*FM_SBMAX+1], pri[2*FM_SBMAX+1];
+                int slo=0, nsb=0;
                 if(fmo){
                     // OSC 1's angle at the cell's start, exactly; its vibrato and
                     // bend (bph) scale with frequency, as every partial's do
@@ -851,6 +1015,51 @@ void synth_voice(
                     z1r=(float)cos(ps); z1i=(float)sin(ps);
                     double w1v=(double)winst*(w1/w);
                     r1r=(float)cos(w1v); r1i=(float)sin(w1v);
+                    if(fms){
+                        // EACH SIDEBAND THROUGH THE LADDER at its own frequency
+                        // |k f2 + m f1|, at both ends of the cell, and faded as
+                        // it nears Nyquist -- one sideband at a time, where the
+                        // unfiltered path had to fade the whole harmonic
+                        float f1=(float)(w1v*SRATE_D/6.283185307179586);
+                        int reuse = hEndJ==cl;
+                        for(int i=dlo;i<=dhi;i++){
+                            float m=(float)(i-sbM), hg[2];
+                            for(int e = reuse ? 1 : 0; e<2; e++){
+                                float fs=fabsf(sbF[cl+e]+m*f1), fr=fs/SRATE_F;
+                                float nq = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
+                                hg[e] = nq>0.f ? moog_ladder(fs/sbFc[cl+e],sbK[cl+e],sbMode,sbRb)*nq : 0.f;
+                            }
+                            if(reuse) hg[0]=hEnd[i];
+                            hEnd[i]=hg[1];
+                            g0r[i]=sbDr[i]*hg[0]; g0i[i]=sbDi[i]*hg[0];
+                            dgr[i]=sbDr[i]*hg[1]-g0r[i]; dgi[i]=sbDi[i]*hg[1]-g0i[i];
+                        }
+                        hEndJ=cl+1;
+                        // ...and only the ones that sound (SB_TOL): a shut
+                        // ladder leaves a handful of a bell's dozens
+                        float tg = SB_TOL;
+                        int shi;
+                        for(slo=dlo; slo<=dhi; slo++)
+                            if(fmaxf(fabsf(g0r[slo])+fabsf(g0i[slo]),
+                                     fabsf(g0r[slo]+dgr[slo])+fabsf(g0i[slo]+dgi[slo]))>tg) break;
+                        for(shi=dhi; shi>=slo; shi--)
+                            if(fmaxf(fabsf(g0r[shi])+fabsf(g0i[shi]),
+                                     fabsf(g0r[shi]+dgr[shi])+fabsf(g0i[shi]+dgi[shi]))>tg) break;
+                        nsb=shi-slo+1;
+                        // EACH SIDEBAND ITS OWN PHASOR, e^{i m th1} turning at
+                        // m w1, as any partial is: independent, so the sum
+                        // below runs across them in vector lanes, where a
+                        // Horner chain is one long dependency. Set in double
+                        // at the cell's start, as OSC 1's angle is.
+                        double czr=cos((double)(slo-sbM)*ps), czi=sin((double)(slo-sbM)*ps);
+                        double crr=cos((double)(slo-sbM)*w1v), cri=sin((double)(slo-sbM)*w1v);
+                        double sr1=cos(ps), si1=sin(ps), tr1=cos(w1v), ti1=sin(w1v);
+                        for(int i=0;i<nsb;i++){
+                            pzr[i]=(float)czr; pzi[i]=(float)czi; prr[i]=(float)crr; pri[i]=(float)cri;
+                            double t=czr*sr1-czi*si1; czi=czr*si1+czi*sr1; czr=t;
+                            t=crr*tr1-cri*ti1; cri=crr*ti1+cri*tr1; crr=t;
+                        }
+                    }
                 }
                 if(pm){
                     // re-anchor the phase at the cell's start, exactly, and turn
@@ -888,7 +1097,20 @@ void synth_voice(
                         sL = zrL*cn - ziL*sn; sR = zrR*cn - ziR*sn;
                     }
                     float czL=zrL, czR=zrR, sgL=ziL, sgR=ziR;
-                    if(fmo){
+                    if(fms){
+                        // F = sum_m G_m(t) e^{i m th1}; the harmonic is
+                        // Re(e^{i k th2} F)
+                        const float *G0r=g0r+slo, *G0i=g0i+slo, *DGr=dgr+slo, *DGi=dgi+slo;
+                        float Fr=0.f, Fi=0.f;
+                        for(int i=0;i<nsb;i++){
+                            float gr=G0r[i]+DGr[i]*t, gi=G0i[i]+DGi[i]*t;
+                            Fr+=gr*pzr[i]-gi*pzi[i]; Fi+=gr*pzi[i]+gi*pzr[i];
+                            float tr=pzr[i]*prr[i]-pzi[i]*pri[i]; pzi[i]=pzr[i]*pri[i]+pzi[i]*prr[i]; pzr[i]=tr;
+                        }
+                        czL=zrL*Fr-ziL*Fi; sgL=zrL*Fi+ziL*Fr;
+                        czR=zrR*Fr-ziR*Fi; sgR=zrR*Fi+ziR*Fr;
+                        sL=czL; sR=czR;
+                    } else if(fmo){
                         // A = sum_j Re(B_j) sin(j th1) + Im(B_j) cos(j th1): the
                         // integral of OSC 1's wave; OSC 2's harmonic k moves by k I A
                         float pr=z1r, pi=z1i, A=0.f;

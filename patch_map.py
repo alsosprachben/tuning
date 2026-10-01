@@ -31,6 +31,7 @@ from tonelib import (
     MoogHaloPad, MoogSweepPad, MoogSoundtrackPad,
     MoogAtmosphereFX, MoogGoblinsFX, MoogSciFiFX,
     MoogBrightnessFX, MoogChoirPad, MoogBowedPad, MoogSynthVoice,
+    MoogMetallicPad, MoogCrystalFX, MoogSynthDrum,
     SawtoothSynthProperties,
     TriangleSynthProperties,
     ChiffLeadProperties,
@@ -737,9 +738,9 @@ PROGRAM_CLASS[63] = SynthBrass2Properties  # the soft pad: slower, shallower
 # through a ladder actually makes, as the leads (80-87) are. The additive
 # classes above stay as their bases and as the A/B: TUNING_MOOG=0 keeps them.
 # The programs whose mechanism is NOT subtractive -- stretched or inharmonic
-# partials, echo taps (88, 93, 96, 98, 102) -- stay additive. Formants are not
-# a reason: a choir or a synth voice is the Moog sung through them, as GM 85
-# is. See tonelib, below the leads.
+# partials, echo taps (88, 96, 102) -- stay additive. Formants are not a reason:
+# a choir or a synth voice is the Moog sung through them, as GM 85 is. Nor is
+# metal, once FM makes it (93, 98). See tonelib, below the leads.
 if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[38] = MoogSynthBass1           # saw over a 16' saw, low ladder
     PROGRAM_CLASS[39] = MoogSynthBass2           # square and SUB, resonant
@@ -759,6 +760,9 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[91] = MoogChoirPad             # the ladder, then the /O/ tract
     PROGRAM_CLASS[54] = MoogSynthVoice           # the ladder, then the sung tract
     PROGRAM_CLASS[92] = MoogBowedPad             # band pass, resonant, slow
+    PROGRAM_CLASS[93] = MoogMetallicPad          # FM, carrier 2.06 x the key: beats
+    PROGRAM_CLASS[98] = MoogCrystalFX            # FM bell, carrier 2 sqrt(2), anchored
+    PROGRAM_CLASS[118] = MoogSynthDrum           # F ENV -> OSC 2 FREQ: the tom's sweep
 
 # WHICH HARPSICHORD. The GM program says "harpsichord" and stops there, but the
 # family is wide -- HarpsichordProperties is fitted to a 1970s Zuckermann kit
