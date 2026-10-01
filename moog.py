@@ -717,6 +717,59 @@ def messenger_value(kind, msb, lsb=None):
     raise ValueError(kind)
 
 
+# THE FIRMWARE MOVED A KNOB. Before 1.0.7 SUB WAVE was on CC11 (and, 14-bit,
+# CC43) -- the release notes: "Expression Input now sends/receives on CC11.
+# SUB WAVE now sends/receives on CC71" -- and on Ben's own unit CC11 still
+# turns it (captured, SUB WAVE sweeping: CC11/43). Same chart otherwise.
+MESSENGER_CC_PRE107 = dict(MESSENGER_CC)
+MESSENGER_CC_PRE107.pop(71)
+MESSENGER_CC_PRE107[11] = ('sub_wave', '14')
+FIRMWARES = ('1.0.7+', 'pre-1.0.7')
+
+
+def messenger_chart(firmware='1.0.7+'):
+    """(the CC chart, its fine halves) for a Messenger on this firmware."""
+    ch = MESSENGER_CC_PRE107 if firmware == 'pre-1.0.7' else MESSENGER_CC
+    return ch, {cc + 32: cc for cc, v in ch.items() if v and v[1] == '14'}
+
+
+def messenger_cc_value(kind, v):
+    """A panel knob's value as the Messenger's CC: (MSB, LSB) for a 14-bit
+    knob, (value, None) otherwise -- messenger_value backwards, each switch
+    position at the middle of its range so a firmware's edges cannot move it."""
+    if kind == '14':
+        x = int(round(max(0.0, min(1.0, float(v))) * 16383))
+        return x >> 7, x & 0x7F
+    if kind == '7':
+        return int(round(max(0.0, min(1.0, float(v))) * 127)), None
+    if kind == 'foot':
+        return (4, 8, 16, 32).index(int(v)) * 32 + 16, None
+    if kind == 'track':
+        return (21 if v < 1.0 / 3.0 else 63 if v < 5.0 / 6.0 else 105), None
+    if kind == 'mode':
+        return int(v) * 32 + 16, None
+    if kind == 'onoff':
+        return (127 if v else 0), None
+    raise ValueError(kind)
+
+
+def messenger_messages(panel, firmware='1.0.7+', knobs=None):
+    """[(CC, value)] that set a Messenger's panel to `panel` -- every knob its
+    chart carries (or just `knobs`), the coarse half of a 14-bit knob first, as
+    the hardware reads them. What the Messenger has no CC for (GLIDE here, the
+    MF-104M, which is another box) is not sent."""
+    chart, _lsb = messenger_chart(firmware)
+    out = []
+    for cc, ent in sorted(chart.items()):
+        if ent is None or (knobs is not None and ent[0] not in knobs):
+            continue
+        hi, lo = messenger_cc_value(ent[1], panel[ent[0]])
+        out.append((cc, hi))
+        if lo is not None:
+            out.append((cc + 32, lo))
+    return out
+
+
 # Knobs by what moving one under a sounding note has to touch.
 KNOB_ROW = ('cutoff', 'resonance', 'eg_amount', 'f_sustain', 'a_sustain')     # KN, per block
 NOTE_ROW = ('kb_track', 'f_attack', 'f_decay', 'f_release', 'a_attack', 'a_decay',
@@ -1179,6 +1232,39 @@ def selftest():
           and np.allclose(NOISE_AMP ** 2 / NOISE_HZ, NOISE_AMP[0] ** 2 / NOISE_HZ[0]),
           "(%d bands, 40 Hz to %.1f kHz, power per band as its width)"
           % (len(NOISE_HZ), NOISE_HZ[-1] / 1000))
+    # THE CHART BACKWARDS: a panel sent to a Messenger and read back as the
+    # Messenger would send it lands on the same knobs -- 14-bit to 1/16383,
+    # every switch on its own position -- on either firmware's chart.
+    import random
+    rnd = random.Random(7)
+    worst, bad = 0.0, []
+    for fw in FIRMWARES:
+        chart, lsb = messenger_chart(fw)
+        for _ in range(50):
+            pan = dict(PANEL)
+            for knob, kind in (v for v in chart.values() if v):
+                pan[knob] = (rnd.random() if kind in ('14', '7') else
+                             rnd.choice((4, 8, 16, 32)) if kind == 'foot' else
+                             rnd.choice((0.0, 2.0 / 3.0, 1.0)) if kind == 'track' else
+                             rnd.randrange(4) if kind == 'mode' else rnd.random() < 0.5)
+            got, msb = {}, {}
+            for cc, val in messenger_messages(pan, fw):
+                if cc in lsb:
+                    knob, kind = chart[lsb[cc]]
+                    got[knob] = messenger_value(kind, msb[lsb[cc]], val)
+                elif chart.get(cc):
+                    knob, kind = chart[cc]
+                    msb[cc] = val
+                    got[knob] = messenger_value(kind, val)
+            for knob, v in got.items():
+                kind = next(e[1] for e in chart.values() if e and e[0] == knob)
+                if kind in ('14', '7'):
+                    worst = max(worst, abs(v - pan[knob]) * (16383 if kind == '14' else 127))
+                elif v != pan[knob]:
+                    bad.append((fw, knob))
+    check("a panel sent to a Messenger reads back as itself",
+          worst <= 0.5 + 1e-9 and not bad and ('sub_wave', '14') == MESSENGER_CC_PRE107[11],
+          "(half a step at worst, %d switches wrong; SUB WAVE on CC71, or CC11 before 1.0.7)" % len(bad))
     return ok
 
 

@@ -2557,6 +2557,15 @@ class Live:
         self.slab.panel_for = self._moog_panel_for
         self.moog_glide = {}            # part id -> {knob: where it has got to}
         self.msg_msb = {}               # (channel, CC) -> a Messenger knob's coarse half
+        # A MESSENGER TO SET: the output it is on (None: none), the firmware
+        # whose chart it reads (moog.FIRMWARES), and what is on its way to it --
+        # sent from a thread of its own, never the audio thread's
+        self.messenger_out = None
+        self.messenger_port = None
+        self.messenger_firmware = "1.0.7+"
+        self.messenger_q = None
+        self.messenger_bend = 2.0       # the Messenger's pitch-bend range, semitones
+        self.messenger_note = {}        # its MIDI channel -> (pid, channel, key) it is playing
         self.slab.lib = B.ensure_lib()
         self.slab.rate = float(rate)
         self.headroom_db = headroom_db
@@ -2995,7 +3004,105 @@ class Live:
         self.patch_go.set()
         self.amp_stop = True
         self.amp_go.set()
+        if self.messenger_q is not None:
+            self.messenger_q.put(None)
         self.renderer.close()
+
+    # ---- A MESSENGER TO SET ---------------------------------------------------
+    # Selecting a Moog program sets the player's own Messenger to it: the
+    # patch's knobs, and the part's over them, as the Messenger's CC chart
+    # (moog.messenger_messages) on the part's channel. A knob turned here
+    # follows; one turned THERE does not come back (set_synth's from_hardware),
+    # or each turn would echo. What the Messenger has no CC for -- GLIDE, the
+    # MF-104M (another box), polyphony, a voice lead's formants, our levels --
+    # stays ours, and our knob laws are still estimates until the hardware is
+    # recorded: close, not identical, which is exactly the comparison that
+    # calibrates them.
+    def open_messenger(self, port, firmware=None):
+        """Send to the MIDI output `port` (an open port, or a name to match);
+        None closes it. Returns the port's name, or None."""
+        if firmware is not None:
+            self.messenger_firmware = firmware
+        if self.messenger_q is not None:
+            self.messenger_q.put(None)
+            self.messenger_q = None
+        if self.messenger_out is not None and hasattr(self.messenger_out, "close"):
+            try:
+                self.messenger_out.close()
+            except Exception:
+                pass
+        self.messenger_out = self.messenger_port = None
+        if port is None:
+            return None
+        if isinstance(port, str):
+            names = mido.get_output_names()
+            name = next((n for n in names if port.lower() in n.lower()), None)
+            if name is None:
+                return None
+            port = mido.open_output(name)
+        self.messenger_out = port
+        self.messenger_port = getattr(port, "name", None) or str(port)
+        import queue
+        q = self.messenger_q = queue.Queue()
+        def run(q=q, out=port):
+            while True:
+                msg = q.get()
+                if msg is None:
+                    return
+                try:
+                    out.send(msg)
+                except Exception:
+                    pass
+        threading.Thread(target=run, daemon=True, name="messenger-out").start()
+        return self.messenger_port
+
+    def messenger_pitch(self, part, ch, note):
+        """Put the Messenger's note on OUR pitch: a pitch bend from the equal-
+        tempered A440 key it plays to where this part's tuner, the channel's
+        tuning and the wheel put it -- a temperament's cents, and a baroque
+        A415's whole semitone. The Messenger is monophonic, so its newest note
+        owns the channel's bend; sent as the note arrives (it starts on equal
+        temperament and is a few ms later on ours: a few cents, too fast and
+        too small to hear as a glide) and again when the wheel moves. Its
+        bend range must be what messenger_bend says. Returns cents, or None."""
+        if self.messenger_q is None or part is None or part.moog() is None:
+            return None
+        sn = note + part.transpose
+        if not 0 <= sn <= 127 or not 0 <= note <= 127:
+            return None
+        pf, pabs = self.pn_at.get((part.pid, ch, note), (1.0, False))
+        b = self.bend.get(ch, 1.0) * (pf if pabs else self._key_ratio(part, ch, note) * pf)
+        ours = float(part.patch.freqs()[sn]) * b
+        et = 440.0 * 2.0 ** ((note - 69) / 12.0)
+        cents = 1200.0 * math.log2(ours / et)
+        val = int(round(cents / (100.0 * self.messenger_bend) * 8192))
+        mch = part.channel if part.channel is not None else 0
+        self.messenger_note[mch] = (part.pid, ch, note)
+        self.messenger_q.put(mido.Message("pitchwheel", channel=mch,
+                                          pitch=max(-8192, min(8191, val))))
+        return cents
+
+    def _messenger_rebend(self, ch):
+        """The wheel moved on a channel: the Messenger's note follows."""
+        if self.messenger_q is None:
+            return
+        for mch, (pid, c, note) in list(self.messenger_note.items()):
+            if c == ch:
+                part = next((p for p in self.parts if p.pid == pid), None)
+                self.messenger_pitch(part, ch, note)
+
+    def messenger_sync(self, part, knobs=None):
+        """Set the Messenger to this part's panel (or just `knobs` of it).
+        Only queues: safe from the audio thread. Returns messages queued."""
+        if self.messenger_q is None or part is None or part.moog() is None:
+            return 0
+        pan = _MG.panel_of(part.moog(), part.synth)
+        ch = part.channel if part.channel is not None else 0
+        n = 0
+        for cc, val in _MG.messenger_messages(pan, self.messenger_firmware, knobs):
+            self.messenger_q.put(mido.Message("control_change", channel=ch, control=cc, value=val))
+            n += 1
+        return n
 
     def panic(self):
         """All notes off, the one thing you want when something drones."""
@@ -3781,6 +3888,8 @@ class Live:
         _pf, _pabs = self._pn_want(part, ch, note)
         self.pn_at[(part.pid, ch, note)] = (_pf, _pabs)
         b = self.bend.get(ch, 1.0) * (_pf if _pabs else self._key_ratio(part, ch, note) * _pf)
+        # ...AND A MESSENGER PLAYING THIS NOTE IS PUT ON THE SAME PITCH
+        self.messenger_pitch(part, ch, note)
         if str(part.patch.tuner).lower() == 'gm2' and not _pabs:
             self.mts_at[(part.pid, ch, note + part.transpose)] = \
                 self._mts_ratio(part, ch, note)
@@ -4091,31 +4200,34 @@ class Live:
                 and (p.channel is None or p.channel == ch) and p.moog() is not None]
         if not mine:
             return False
-        if cc in _MG.MESSENGER_LSB:                 # the fine half of a knob
-            hi = _MG.MESSENGER_LSB[cc]
+        # the chart of the firmware the Messenger runs (moog.messenger_chart)
+        chart, lsbs = _MG.messenger_chart(self.messenger_firmware)
+        if cc in lsbs:                              # the fine half of a knob
+            hi = lsbs[cc]
             msb = self.msg_msb.get((ch, hi))
             if msb is None:
                 return True
-            knob, kind = _MG.MESSENGER_CC[hi]
+            knob, kind = chart[hi]
             for p in mine:
-                self.set_synth(p, knob, _MG.messenger_value(kind, msb, value))
+                self.set_synth(p, knob, _MG.messenger_value(kind, msb, value), from_hardware=True)
             return True
-        if cc not in _MG.MESSENGER_CC:
+        if cc not in chart:
             return False                            # CC1, 7, 11, 64, 74 ...: GM's
-        ent = _MG.MESSENGER_CC[cc]
+        ent = chart[cc]
         if ent is None:
             return True                             # the panel's, not modelled yet
         knob, kind = ent
         if kind == '14':
             self.msg_msb[(ch, cc)] = value
         for p in mine:
-            self.set_synth(p, knob, _MG.messenger_value(kind, value))
+            self.set_synth(p, knob, _MG.messenger_value(kind, value), from_hardware=True)
         return True
 
-    def set_synth(self, part, knob, value):
+    def set_synth(self, part, knob, value, from_hardware=False):
         """Turn one of a Moog part's knobs -- from the TUI, or a Messenger's CC.
         The value is kept on the part (and so in a preset); what it does to
-        notes already sounding happens at the next block boundary."""
+        notes already sounding happens at the next block boundary. A turn that
+        did not come from the Messenger is sent to it (messenger_sync)."""
         if knob not in _MG.PANEL or part.moog() is None:
             return
         # THE PART HAS THE NEW VALUE AT ONCE, so the next press steps from it
@@ -4124,6 +4236,8 @@ class Live:
         # notes are gliding FROM.
         old = float(_MG.panel_of(part.moog(), part.synth)[knob])
         part.synth[knob] = value
+        if not from_hardware:
+            self.messenger_sync(part, (knob,))
         def go(n0, part=part, knob=knob, old=old):
             if knob in self.MOOG_GLIDES and any(k[0] == part.pid for k in self.slab.live):
                 self.moog_glide.setdefault(part.pid, {}).setdefault(knob, old)
@@ -4493,6 +4607,7 @@ class Live:
         if ratio == prev:
             return
         self.bend[ch] = ratio
+        self._messenger_rebend(ch)
         here = [p for p in self.parts if self._listens(p, ch)]
         rotors = [p for p in here if p.patch.leslie]
         if rotors:
@@ -5259,6 +5374,9 @@ class Live:
         OLD voice: its panel state, and its amplifier's products.
         """
         part.set_patch(patch)
+        # A MOOG PROGRAM SETS THE MESSENGER to it (queued, so the audio thread
+        # does not wait on MIDI)
+        self.messenger_sync(part)
         for d in (self.drive_step, self.trem_depth, self.clav_step,
                   self.detune_step, self.drone_count, self.drone_quiet):
             d.pop(part.pid, None)
@@ -5839,6 +5957,10 @@ def preset_from(live):
         room=getattr(live, "room_name", None),
         chanstate=scene_from(live),
         routes=[r.to_dict() for r in getattr(live, "routes", ())],
+        # the rig's Messenger: which firmware's chart, and the output it is on
+        messenger_firmware=getattr(live, "messenger_firmware", "1.0.7+"),
+        messenger_port=getattr(live, "messenger_port", None),
+        messenger_bend=getattr(live, "messenger_bend", 2.0),
     )
 
 
@@ -5881,6 +6003,13 @@ def apply_preset(live, preset, progress=None):
     live.set_routes([Route.from_dict(r) for r in preset.get("routes", [])])
     if preset.get("chanstate"):
         recall_scene(live, preset["chanstate"])
+    if preset.get("messenger_firmware") in _MG.FIRMWARES:
+        live.messenger_firmware = preset["messenger_firmware"]
+    if preset.get("messenger_bend"):
+        live.messenger_bend = float(preset["messenger_bend"])
+    # ...and its Moog parts set the Messenger, as selecting them would
+    for p in live.parts:
+        live.messenger_sync(p)
 
 
 # ---- SCENES AND THE SESSION -------------------------------------------------
@@ -10537,6 +10666,73 @@ def selftest():
           and not _mgm.parts[0].synth and Part.from_dict(_mxp.to_dict()).cc_map == "messenger",
           "  (CUTOFF 50/64 as fourteen bits, an octave switch, RES BASS, MODE, and "
           "CC10 as TUNE; a General MIDI part leaves CC19 alone)")
+    # A MESSENGER TO SET: selecting a Moog program sends its panel, as the
+    # Messenger's own chart, on the part's channel; a knob turned here follows;
+    # one turned on the Messenger is not sent back; and before firmware 1.0.7
+    # SUB WAVE is CC11 both ways. A recording port stands in for the hardware.
+    class _RecPort(object):
+        name = "test Messenger"
+        def __init__(self):
+            self.got = []
+        def send(self, m):
+            self.got.append(m)
+    def _drain(port, n, t=2.0):
+        t0 = time.monotonic()
+        while len(port.got) < n and time.monotonic() - t0 < t:
+            time.sleep(0.005)
+        time.sleep(0.02)
+        return list(port.got)
+    _ml = Live(program=80, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _mrp = _RecPort()
+    _ml.open_messenger(_mrp)
+    _mpt = _ml.parts[0]
+    _ml._swap_patch(_mpt, _mpt.patch, _ml.n)
+    _want = _MG.messenger_messages(_MG.panel_of(_mpt.moog(), _mpt.synth))
+    _sent = [(m.control, m.value) for m in _drain(_mrp, len(_want)) if m.type == "control_change"]
+    _ok_sel = _sent == _want and all(m.channel == 0 for m in _mrp.got)
+    _mrp.got.clear()
+    _ml.set_synth(_mpt, "cutoff", 0.3)
+    _one = [(m.control, m.value) for m in _drain(_mrp, 2)]
+    _ok_knob = [c for c, _ in _one] == [19, 51] and abs(((_one[0][1] << 7) | _one[1][1]) / 16383.0 - 0.3) < 1e-4
+    _mrp.got.clear()
+    _mpt.cc_map = "messenger"
+    _ml._messenger_cc(0, 19, 40)
+    _echo = _drain(_mrp, 1, 0.2)
+    _ml.messenger_firmware = "pre-1.0.7"
+    _ml.set_synth(_mpt, "sub_wave", 0.7, from_hardware=False)
+    _sub = [m.control for m in _drain(_mrp, 2)]
+    _ml._messenger_cc(0, 11, 20)
+    _ok_old = _sub == [11, 43] and abs(_mpt.synth.get("sub_wave", 0) - 20 / 127.0) < 1e-9
+    _ml.open_messenger(None)
+    _ml.shutdown()
+    check("a Moog program sets the player's Messenger to it",
+          _ok_sel and _ok_knob and not _echo and _ok_old,
+          "  (%d CCs on selecting GM 80; a knob follows as its two halves; a "
+          "Messenger's own turn is not echoed; SUB WAVE on CC11 before 1.0.7)" % len(_want))
+    # ...AND EACH NOTE IS BENT ONTO THIS RIG'S PITCH: the hybrid tuner's A415
+    # is a semitone under the Messenger's A440, its temperament a few cents
+    # more by key, and the wheel adds to both.
+    _mh = Live(program=80, rate=_BRb.SR, frames=128, verbose=False, tuner="hybrid")
+    _mh.warm()
+    _mhp = _RecPort()
+    _mh.open_messenger(_mhp)
+    _mhc = []
+    for _nt in (69, 64):
+        _mh.on_midi(mido.Message("note_on", channel=0, note=_nt, velocity=100)); _mh.apply(_mh.n)
+        _mhw = [m.pitch for m in _drain(_mhp, len(_mhc) + 1) if m.type == "pitchwheel"]
+        _ref = 1200.0 * math.log2(_mh.parts[0].patch.freqs()[_nt] / (440.0 * 2 ** ((_nt - 69) / 12.0)))
+        _mhc.append((_mhw[-1] / 8192.0 * 200.0, _ref))
+        _mh.on_midi(mido.Message("note_off", channel=0, note=_nt, velocity=0)); _mh.apply(_mh.n)
+    _mh.on_midi(mido.Message("note_on", channel=0, note=69, velocity=100)); _mh.apply(_mh.n)
+    _mh.on_midi(mido.Message("pitchwheel", channel=0, pitch=4096)); _mh.apply(_mh.n)
+    time.sleep(0.05)
+    _mhw2 = [m.pitch for m in _mhp.got if m.type == "pitchwheel"][-1] / 8192.0 * 200.0
+    _mh.open_messenger(None)
+    _mh.shutdown()
+    check("...and bends each note onto this rig's pitch",
+          all(abs(_c - _r) < 0.03 for _c, _r in _mhc) and abs(_mhw2 - (_mhc[0][1] + 100.0)) < 0.03,
+          "  (hybrid's A4 at %+.1f cents, its E4 %+.1f; the wheel a semitone up adds 100)"
+          % (_mhc[0][0], _mhc[1][0]))
     # THE CHARANG'S VALVE COMES AFTER ITS LADDER: its products carry no filter
     # row, its oscillators the ladder at its sustain for the valve to hear.
     _mm.tracks[0][1] = mido.Message("program_change", channel=0, program=84)
@@ -12603,6 +12799,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--program", type=int, default=56, help="GM program (default 56, trumpet)")
     ap.add_argument("--port", default=None, help="substring of the MIDI input port name")
+    ap.add_argument("--messenger", default=None, metavar="PORT",
+                    help="a Moog Messenger on this MIDI OUTPUT (substring of its name): "
+                         "selecting a Moog program sets it to the patch, and the panel's "
+                         "knobs follow ('none' to stop; remembered in the session)")
+    ap.add_argument("--messenger-firmware", default=None, choices=("1.0.7+", "pre-1.0.7"),
+                    help="the Messenger's CC chart: SUB WAVE on CC71, or CC11 before 1.0.7")
+    ap.add_argument("--messenger-bend", default=None, type=float, metavar="SEMITONES",
+                    help="the Messenger's pitch-bend range, as set on it (default 2): each "
+                         "note is bent onto this rig's tuning")
     ap.add_argument("--rate", type=int, default=48000)
     ap.add_argument("--frames", type=int, default=128,
                 help="audio block; also becomes the kernel control block (see docstring)")
@@ -12683,6 +12888,25 @@ def main():
             sys.stderr.write("  resumed the last session (--fresh to start clean)\n")
         except Exception as e:
             sys.stderr.write("  the last session would not apply (%s); starting clean\n" % e)
+    # THE MESSENGER TO SET, if one is named -- or the session's, if it is
+    # plugged in -- and its Moog parts set to their programs now it is open
+    _mport = a.messenger or (sess or {}).get("messenger_port")
+    if a.messenger_firmware:
+        live.messenger_firmware = a.messenger_firmware
+    if a.messenger_bend:
+        live.messenger_bend = a.messenger_bend
+    if _mport and _mport.lower() != "none":
+        try:
+            _mn = live.open_messenger(_mport)
+        except Exception:
+            _mn = None
+        if _mn:
+            _ms = sum(live.messenger_sync(p) for p in live.parts)
+            sys.stderr.write("  Messenger on %s (%s chart): %d CCs sent\n"
+                             % (_mn, live.messenger_firmware, _ms))
+        elif a.messenger:
+            sys.stderr.write("  no MIDI output matches %r (outputs: %s)\n"
+                             % (a.messenger, ", ".join(mido.get_output_names())))
     live.dirty = False
     if a.midi2 or a.midi2_pitch:
         import ump as _U

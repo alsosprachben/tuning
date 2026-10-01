@@ -110,9 +110,16 @@ the selected part:
 | `-` `+`, left / right | turn it (`_` and shifted `+` ten times as far); a switch — OCTAVE, KB TRACK, MODE, RES BASS — steps |
 | space | back to where the patch has it |
 | `M` | read a **Messenger on the part's channel** — its knobs turn these |
+| `S` | **set the Messenger** to this panel now (`live.py --messenger PORT` names its output) |
+| `F` | the Messenger's firmware: SUB WAVE on CC71, or CC11 before 1.0.7 |
 
 A knob you have moved reads yellow and is saved with the part, in the session
-and in presets. It moves notes already sounding: the waveshape, the mixer and
+and in presets. With a Messenger on a MIDI output (`--messenger PORT`, then
+remembered), selecting a Moog program sets the hardware to the patch -- every
+knob its CC chart carries, the part's over the patch's -- and a knob turned
+here follows; one turned on the Messenger is not sent back. What it has no CC
+for (GLIDE, the MF-104M, polyphony, a voice's formants) stays ours, and our
+knob laws are estimates: the hardware will be close, not identical. It moves notes already sounding: the waveshape, the mixer and
 the tuning glide there over a few blocks rather than jump, which on a
 waveshape — whose harmonics change phase, not only level — would click.
 `TUNING_MOOG=0` puts the old additive leads back for an A/B

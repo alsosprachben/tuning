@@ -1299,6 +1299,25 @@ class TUI:
         self.live.set_synth(p, knob, MG.panel_of(p.moog())[knob])
         p.synth.pop(knob, None)
 
+    def synth_send(self):
+        """Set the Messenger to this part's whole panel, now."""
+        p = self.synth_part()
+        if p is None:
+            return
+        n = self.live.messenger_sync(p)
+        self.say(("part %d: %d CCs to the Messenger" % (self.row + 1, n)) if n
+                 else "no Messenger to set (live.py --messenger PORT)")
+
+    def synth_firmware(self):
+        """Which firmware's CC chart the Messenger reads and sends: SUB WAVE
+        moved from CC11 to CC71 in 1.0.7."""
+        L = self.live
+        fws = MG.FIRMWARES
+        L.messenger_firmware = fws[(fws.index(L.messenger_firmware) + 1) % len(fws)]
+        L.dirty = True
+        self.say("the Messenger's chart: firmware %s (SUB WAVE on CC%s)"
+                 % (L.messenger_firmware, "11" if L.messenger_firmware == "pre-1.0.7" else "71"))
+
     def synth_hardware(self):
         """Read the Messenger's own CC chart on this part's channel, or stop.
         One channel, named: a part that hears all sixteen cannot read one
@@ -1322,7 +1341,7 @@ class TUI:
         p = self.synth_part()
         if p is None:
             self.addstr(scr, y, 2, "the selected part is not a Moog -- the synth panel is for "
-                        "the Moog leads (GM 80-87)", C("dim"))
+                        "the Moog voices (the synth programs)", C("dim"))
             return y + 2
         self.addstr(scr, y, 2, "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 18, "part %d, %s" % (self.row + 1, p.label()), C("dim"))
@@ -1351,7 +1370,18 @@ class TUI:
                         (curses.A_BOLD if here else 0) | (C("yellow") if own else 0))
             if kind not in SYNTH_STEPS:
                 self.addstr(scr, row, x + 29, bar(v, 0.0, 1.0, 8), C("green") if here else C("dim"))
-        return y + half + 1
+        # THE MESSENGER THIS PANEL SETS, if one is plugged in (--messenger)
+        L = self.live
+        row = y + half
+        if row < h - 4:
+            if L.messenger_port:
+                txt = ("sets the Messenger on %s, %s chart  (S: send the panel  F: firmware)"
+                       % (L.messenger_port, L.messenger_firmware))
+                self.addstr(scr, row, 2, txt[:max(0, w - 4)], C("green"))
+            else:
+                self.addstr(scr, row, 2, "no Messenger to set (live.py --messenger PORT)"[:max(0, w - 4)],
+                            C("dim"))
+        return y + half + 2
 
     def draw_meters(self, scr, y, w, h, s):
         C = self.C
@@ -1618,6 +1648,10 @@ class TUI:
             self.synth_reset()
         elif self.pane == 3 and c == ord("M"):
             self.synth_hardware()
+        elif self.pane == 3 and c == ord("S"):
+            self.synth_send()
+        elif self.pane == 3 and c == ord("F"):
+            self.synth_firmware()
         elif self.pane == 2 and c in (ord("a"), ord("r"), ord("d"), ord("b"),
                                       ord(" "), 10, 13):
             if c == ord("a"):
