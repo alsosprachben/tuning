@@ -704,6 +704,11 @@ MESSENGER_CC = {
     102: None, 107: None, 108: None, 112: None, 113: None, 114: None, 116: None,
     117: None, 118: None,
 }
+# THE OCTAVE SWITCH RISES WITH ITS CC: 0-31 is 32', 32-63 16', 64-95 8',
+# 96-127 4' -- measured on Ben's Messenger (1.1.0), A4 sounding at 112, 225,
+# 449 and 898 Hz for CC75 = 16, 48, 80, 112. The chart first had it the
+# other way round, and every patch sent to the hardware played an octave low.
+FOOT_CC = (32, 16, 8, 4)
 # the fine halves of the 14-bit knobs
 MESSENGER_LSB = {cc + 32: cc for cc, v in MESSENGER_CC.items() if v and v[1] == '14'}
 
@@ -715,7 +720,7 @@ def messenger_value(kind, msb, lsb=None):
     if kind == '7':
         return msb / 127.0
     if kind == 'foot':
-        return (4, 8, 16, 32)[min(3, msb // 32)]
+        return FOOT_CC[min(3, msb // 32)]
     if kind == 'track':                 # the manual: 0-42, 43-84, 85-126
         return 0.0 if msb <= 42 else 2.0 / 3.0 if msb <= 84 else 1.0
     if kind == 'mode':
@@ -751,7 +756,7 @@ def messenger_cc_value(kind, v):
     if kind == '7':
         return int(round(max(0.0, min(1.0, float(v))) * 127)), None
     if kind == 'foot':
-        return (4, 8, 16, 32).index(int(v)) * 32 + 16, None
+        return FOOT_CC.index(int(v)) * 32 + 16, None
     if kind == 'track':
         return (21 if v < 1.0 / 3.0 else 63 if v < 5.0 / 6.0 else 105), None
     if kind == 'mode':

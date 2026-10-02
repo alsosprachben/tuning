@@ -2813,6 +2813,7 @@ class Live:
         never sees a partial list. Notes belonging to parts that are going away
         are released; notes on parts that survive keep sounding."""
         keep = {p.pid for p in parts}
+        was = [(p.program, p.drums) for p in self.parts]
         # The swap is one assignment and safe here; letting go of the notes the
         # departing parts hold is NOT -- it pops from `live` while the callback
         # may be walking it -- so that part is asked for rather than done. The
@@ -2820,6 +2821,14 @@ class Live:
         # that is going, then release a block later.
         self.parts = tuple(parts)
         self._pin_patches()
+        # A NEW MOOG PROGRAM SETS THE MESSENGER. The TUI changes a program by
+        # rebuilding the part set and swapping it in here, not by _swap_patch,
+        # so selecting one sent nothing until T was pressed (Ben). Only where
+        # the program CHANGED: a rebuild for a level or a channel must not
+        # reset the hardware under the player's hands.
+        for i, p in enumerate(self.parts):
+            if i >= len(was) or was[i] != (p.program, p.drums):
+                self.messenger_sync(p)
 
         def go(n0):
             for k in [k for k in list(self.slab.live) if k[0] not in keep]:
@@ -11006,6 +11015,17 @@ def selftest():
     _want = _MG.messenger_messages(_MG.panel_of(_mpt.moog(), _mpt.synth))
     _sent = [(m.control, m.value) for m in _drain(_mrp, len(_want)) if m.type == "control_change"]
     _ok_sel = _sent == _want and all(m.channel == 0 for m in _mrp.got)
+    # ...AND THE TUI'S WAY: a program changed by rebuilding the part set
+    # (set_parts) sends it; a rebuild that changes no program sends nothing
+    _mrp.got.clear()
+    _ml.set_parts([Part.from_dict(dict(_mpt.to_dict(), program=81))])
+    _w81 = _MG.messenger_messages(_MG.panel_of(_ml.parts[0].moog(), {}))
+    _via = [(m.control, m.value) for m in _drain(_mrp, len(_w81))]
+    _mrp.got.clear()
+    _ml.set_parts([Part.from_dict(_ml.parts[0].to_dict())])
+    _quiet = _drain(_mrp, 1, 0.2)
+    _ok_sel = _ok_sel and _via == _w81 and not _quiet
+    _mpt = _ml.parts[0]
     _mrp.got.clear()
     _ml.set_synth(_mpt, "cutoff", 0.3)
     _one = [(m.control, m.value) for m in _drain(_mrp, 2)]
