@@ -80,7 +80,7 @@ what you can change about it, and the same two keys change every one of them.
 ### The synth panel
 
 The synth leads, GM 80–87, are a **Moog Messenger** (`moog.py`): two
-oscillators whose WAVESHAPE sweeps folded triangle → triangle → saw → square →
+oscillators whose WAVESHAPE crossfades folded triangle → triangle → saw → square →
 narrow pulse, a sub oscillator, and the four-mode transistor ladder with its
 two contours. Each lead is a patch on it — square, sawtooth, calliope
 (triangles), chiff (with its breath), charang (the ladder in front of a valve),
@@ -102,8 +102,9 @@ contour sweeping OSC 2 down an octave onto the key -- each note its own
 voice, a poly Moog, with OSC 2 detuned for width and no chorus. Rain (96) and
 Echoes (102) go through Moog's own MF-104M Analog Delay (`mf104.py`), which is
 a section of the same panel: each repeat is one more trip round its bucket
-brigade, darker than the last. Only New Age (88), a bell over a pad, stays
-additive. `TUNING_MOOG=0` puts every one of them back, for A/B. The fourth pane (`tab` three times) is the panel of
+brigade, darker than the last. New Age (88), a bell over a pad, is TWO
+Messengers on one key -- a layered voice. `TUNING_MOOG=0` puts the additive
+voices back, for A/B. The fourth pane (`tab` three times) is the panel of
 the selected part:
 
 | key | what it does |
@@ -123,40 +124,58 @@ and in presets. With a Messenger on a MIDI output (`--messenger PORT`, then
 remembered), selecting a Moog program sets the hardware to the patch -- every
 knob its CC chart carries, the part's over the patch's -- and a knob turned
 here follows; one turned on the Messenger is not sent back. What it has no CC
-for (GLIDE, the MF-104M, polyphony, a voice's formants) stays ours, and our
-knob laws are estimates: the hardware will be close, not identical. It moves notes already sounding: the waveshape, the mixer and
+for (GLIDE, the MF-104M, polyphony, a voice's formants) stays ours. The knob
+laws are the hardware's, measured (below), so the Messenger plays the patch
+as it sounds here -- on our pitch too: the Messenger's TUNE is sent so its A440
+is A440 (`moog.MESSENGER_TUNE_CENTS`, measured on Ben's unit), and each note
+bends onto the tuner's. It moves notes already sounding: the waveshape, the mixer and
 the tuning glide there over a few blocks rather than jump, which on a
 waveshape — whose harmonics change phase, not only level — would click.
 `TUNING_MOOG=0` puts the old additive leads back for an A/B
 (`examples/moog_ab.py`).
 
-**What the panel has, and what it does not yet.** LFO 1 sweeps the cutoff —
-triangle, rising saw, falling ramp or square, 0.05–12 Hz, up to three octaves
-either way, from the key (KB RESET) or free-running. SYNC 1>2 restarts OSC 2
+**Measured against the hardware.** Every law the patches use was fitted
+against Ben's Messenger, recorded through a mixer and back
+(`examples/messenger_fit.py`, one probe a law): the cutoff (189 Hz up, 11.14
+octaves a unit), resonance (singing from ~0.68), KB tracking (off or 1:1), EG
+AMOUNT (a signed square law), the contours (one time law for attack, decay and
+release, each stage overshooting where it stops), sustain (steeply curved),
+the waveshape and sub wave (crossfades between their landmark waves), the FM
+index, LFO 1 and MOD depths, the filter modes, the mixer and noise, and a gentle
+output stage after it all. Whole notes, attack to release, agree with the
+hardware within 0.6-2 dB rms on 28 of the 32 programs. Not fitted: the fold
+below the triangle (no patch uses it), and the hardware's FM past MOD AMOUNT
+~0.65, which is exponential -- the carrier drifts off the key -- where ours is
+linear. `coverage.md` rates them accordingly.
+
+**What the panel has, and what it does not yet.** LFO 1 moves the cutoff — a
+triangle both ways, or a falling saw, rising ramp or square one way (up past
+DEPTH's centre, down short of it), 0.05–44 Hz, its depth a cube of the knob's
+distance from the centre (87 x^3 octaves; ~11 at full), from the key (KB
+RESET) or free-running. SYNC 1>2 restarts OSC 2
 at every one of OSC 1's periods, and since the synced wave is still straight
 segments its spectrum is exact; turning OSC 2 FREQ under it is the classic
-tearing sweep. RESONANCE's last tenth brings in the ladder's own sine at the
+tearing sweep. RESONANCE from about 0.68 brings in the ladder's own sine at the
 cutoff — at the cutoff the filter contour *sustains* at: a sine that swept
 with the contour would need its phase integrated over the note's history,
 which the stateless kernel cannot carry (the resonant peak on the harmonics
 does sweep). The MOD section's F ENV>OSC 2 FREQ throws OSC 2's pitch with the filter
-contour — up to four octaves either way at MOD AMOUNT's ends, a guess until a
-Messenger is recorded — and LFO 1 can sweep OSC 2 FREQ too (an octave at full
-depth). OSC 2's phase is the pitch's integral, worked out per 128 samples and
+contour — five octaves either way at MOD AMOUNT's ends, linearly, as measured
+— and LFO 1 can sweep OSC 2 FREQ too (37.2 x^3 octaves). OSC 2's phase is the pitch's integral, worked out per 128 samples and
 handed to the kernel as rows, so a file and the player sweep identically and a
 knob turned mid-sweep changes only what is still to come. The waveshapes move
 too: F ENV>OSC 2 WAVE and F ENV>SUB WAVE (MOD AMOUNT at its ends sweeps the
-whole WAVESHAPE travel), LFO 1 on OSC 1 WAVE or SUB WAVE (half of it at full
-depth), and the SYNC SWEEP — OSC 2 FREQ moved by the contour or the LFO while it
+whole WAVESHAPE travel), LFO 1 on OSC 1 WAVE or SUB WAVE (7.8 x^3 of the knob:
+the cutoff's own law in knob units -- LFO 1 turns the knob it is sent to), and the SYNC SWEEP — OSC 2 FREQ moved by the contour or the LFO while it
 is synced, which moves the synced spectrum rather than the pitch. A moving
 shape's harmonics are worked out per 128 samples from its straight segments,
 exactly, and handed to the kernel as a complex gain, so a harmonic can pass
 through zero without a click. And 1>2 FM: OSC 1's own wave modulates OSC 2's
-frequency (linear FM, an index of 3 at MOD AMOUNT's ends -- a guess), which is
-phase modulation by the integral of OSC 1's wave, worked out from its first
-eight harmonics sample by sample. The ladder is applied at each carrier, so a
-closed filter does not take out the sidebands above its cutoff -- a known
-simplification. Not yet: the FB/EXT input, LFO 2, and GLIDE as a panel knob
+frequency (linear FM, its index against MOD AMOUNT measured: nothing to 0.52,
+then steeply -- 1.8 at 0.65), which is phase modulation by the integral of
+OSC 1's wave, worked out from its first eight harmonics sample by sample. The
+ladder filters each sideband at its own frequency, so a closing contour
+mellows an FM bell, as on the hardware. Not yet: the FB/EXT input, LFO 2, and GLIDE as a panel knob
 (CC5 portamento works).
 
 **Playing it from a Messenger.** `M` on the part's panel: the CCs it hears
@@ -165,8 +184,11 @@ by the Messenger's own chart (its manual's Appendix A, 14-bit, bipolar knobs cen
 of General MIDI's, which disagree about half the numbers — CC10 is TUNE, not
 pan. The mod wheel, volume, expression and sustain stay General MIDI's. Panel
 controls the simulator does not model yet (FB, LFO 2, the envelope loops)
-are taken and ignored rather than landing on a GM meaning. The ranges of the KB TRACKING
-and MODE switches are not in the manual; even thirds and quarters are assumed.
+are taken and ignored rather than landing on a GM meaning. The switches' ranges
+are not in the manual and were measured: KB TRACKING is off below 64 and 1:1
+from it; MODE answers LP4, LP2, band-pass, high-pass at 16, 48, 80 and 112 -- the
+middle of each quarter, which is what is sent (where its edges fall is not
+measured).
 
 ### Stops
 

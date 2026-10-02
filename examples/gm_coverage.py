@@ -28,6 +28,11 @@ instrument -- the Rhodes' high-speed camera papers, say -- are better than
 theory but are NOT audio, so those voices sit at 2 with a note. The point of
 the scale is to show where the model has been contradicted by reality, and only
 a recording can do that.
+
+A SYNTHESIZER IS AN INSTRUMENT TOO. The synth programs are Moog Messenger
+patches, and the Messenger engine is fitted against Ben's Messenger recorded
+(examples/messenger_fit.py) -- so a patch that is the Messenger alone is a 4,
+and one with a part the Messenger has not got is a 3.
 """
 import os
 import sys
@@ -99,8 +104,8 @@ RATED = {
  35:(3,"as 33, fretless -- loses its top rather than starting without it"),
  36:(3,"as 33, slap"),
  37:(3,"as 33, pop"),
- 38:(2,"a sawtooth under a resonant low-pass; the filter shuts while the amplitude holds, which is the pluck. Was the generic plucked string, i.e. no body and no filter"),
- 39:(2,"a SQUARE under a higher, more resonant filter -- odd harmonics only, so hollow where 38 is full, and an exact distinction rather than a tuned one"),
+ 38:(4,"a Messenger patch: a saw over OSC 2 on 16' (an octave, since a detune beats in the bass), the ladder low and a little resonant"),
+ 39:(4,"a Messenger patch: a square over the SUB's square, the resonance up and the contour snappier -- hollow and edged where 38 is round"),
  40:(4,"Iowa violin"),
  41:(4,"Iowa viola, fitted across registers"),
  42:(4,"Iowa cello"),
@@ -111,11 +116,11 @@ RATED = {
  47:(2,"analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set"),
  48:(3,"four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section; the ensemble treatment is theory"),
  49:(2,"its own slow-bowed class"),
- 50:(2,"a string MACHINE: one oscillator per key and a bucket-brigade chorus -- three copies at FIXED offsets, each swept at 0.35-0.85 Hz. Had rendered identically to GM 48"),
- 51:(2,"as 50, slower swell (300 ms) and a wider chorus. Darker and slower is one decision: an envelope that opens gently never reaches as far up the series"),
+ 50:(4,"a Messenger patch: the string machine without its chorus -- two saws seven cents apart, the ladder half open, amp and filter swelling together"),
+ 51:(4,"a Messenger patch: slower and darker than 50, the pair eleven cents apart so it beats faster"),
  52:(3,"vocal tract and formants; Ben's ear on the consonant balance"),
  53:(3,"as 52"),
- 54:(2,"its own class, theory"),
+ 54:(3,"two saws on the Messenger, then the class's own sung tract after it. The Messenger is measured; the formant body is theory"),
  55:(2,"its own class, theory"),
  56:(4,"Iowa trumpet, three registers"),
  57:(4,"Iowa tenor and bass trombone, refitted across registers"),
@@ -123,8 +128,8 @@ RATED = {
  59:(2,"its own class; the mute is theory"),
  60:(4,"Iowa horn, re-measured across four registers and pp/mf/ff"),
  61:(3,"brass_section over three MEASURED bodies (Iowa trumpet/trombone/tuba), five players each, crossfaded across the range handovers -- the hard break moved the spectrum 13.2 dB in one semitone and now moves 2.7"),
- 62:(2,"a sawtooth through a RESONANT filter, leaning trumpet-bright (resonance 1400 Hz); not the acoustic brass base, which carries a bore and a horn's intonation"),
- 63:(2,"the same synth leaning horn-soft (resonance 420 Hz, slower front); deliberately NOT tuned onto GM 60, which is itself synthesised -- resemblance there would be redundancy"),
+ 62:(4,"a Messenger patch: the brass stab -- the ladder nearly shut and a filter contour that opens three octaves in 60 ms and falls back: the blat"),
+ 63:(4,"a Messenger patch: the soft brass -- wider, darker, slower to open, so softer is darker too"),
  64:(4,"Iowa soprano sax"),
  65:(4,"Iowa alto sax"),
  66:(4,"the sax law, measured on soprano and alto and transposed"),
@@ -141,14 +146,14 @@ RATED = {
  77:(2,"a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled"),
  78:(2,"CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB)"),
  79:(2,"its own class -- a vessel flute, theory"),
- 80:(3,"a square EXACTLY: odd harmonics at 1/n, checked against the closed form to 6e-17. The section that had been making it a supersaw is off"),
- 81:(3,"a sawtooth EXACTLY: every harmonic at 1/n, to 1e-17"),
- 82:(3,"a TRIANGLE exactly -- odd harmonics at 1/n^2, which is why it is the soft one. The GM name misleads: a real calliope is a steam whistle organ"),
- 83:(2,"a saw with the organ's own chiff on the front, which is what the patch is named for"),
- 84:(2,"a saw through the valve the electric guitars use; amp_reference scales with its gain"),
- 85:(2,"an oscillator behind vocal formants (an open /a/ from vowels.py). FormantBody had to be wired in by hand -- the saw bypasses bore_gain"),
- 86:(3,"the waveform and its fifth, +700.0 cents exactly -- TEMPERED, since a GM oscillator is offset in semitones"),
- 87:(3,"the waveform and an octave below, -1200.0 cents; a ratio of 2 in any temperament"),
+ 80:(4,"a Messenger patch: a square with the SUB's square an octave under -- the weight a square lead has on a Moog and not on a chip"),
+ 81:(4,"a Messenger patch: the sawtooth lead as a Moog player sets it"),
+ 82:(4,"a Messenger patch: the calliope, a steam whistle -- two triangles an octave apart, the ladder wide open. The GM name misleads; the patch does not"),
+ 83:(4,"a Messenger patch: the NOISE oscillator through the same ladder as the saw, so the breath chuffs as the contour snaps open"),
+ 84:(3,"two saws on the Messenger and THEN the valve the electric guitars use -- the hardware's order. The Messenger is measured; the amp is the guitars' own model"),
+ 85:(3,"two saws and a slow breath on the Messenger, sung through the class's open /a/ after it. The Messenger is measured; the formants are theory"),
+ 86:(4,"a Messenger patch: OSC 2 FREQ fully up, a tempered fifth -- where the knob's travel ends"),
+ 87:(4,"a Messenger patch: OSC 2 on 16', the bass and the lead from one key, more resonance and a shorter contour for the punch"),
  104:(2,"its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording"),
  105:(2,"steel over a DRUMHEAD: a membrane is light and damped, so it cannot radiate below 380 Hz and it empties the string fast. Thin, quick and bright are one fact"),
  106:(2,"the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch"),
@@ -163,7 +168,7 @@ RATED = {
  115:(4,"Iowa woodblocks"),
  116:(2,"the membrane drum class"),
  117:(2,"the tom class"),
- 118:(2,"an 808 tom: an oscillator with a downward PITCH SWEEP, which is tension_bend and needed nothing new -- 167 Hz at the onset settling to a written 110"),
+ 118:(4,"a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves)"),
  119:(2,"the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere"),
  120:(3,"its own class -- slide, squeak and position shift; reworked against Ben's ear"),
  121:(2,"its own class, theory"),
@@ -180,22 +185,22 @@ for p in range(88, 104):
 # class has one the others do not; see tonelib.SynthPadProperties. 96-103 are
 # still the shared voice.
 RATED.update({
- 88:(2,"glassy: partials slightly STRETCHED (B=0.00035), so it shimmers where 93 clangs"),
- 89:(2,"the plain one, deliberately: a low cutoff and a wide chorus and nothing else -- the pad you put underneath something"),
- 90:(2,"really a poly patch: the only pad with a front fast enough (45 ms) to play chords in time"),
- 91:(2,"vocal formants, an open /O/ from vowels.py's own table, widened because a section's formants average many tracts"),
- 92:(2,"bowed glass: the longest swell in the family (420 ms) over a high narrow body. NOT a bowed string -- GM 48/49 are that"),
- 93:(2,"INHARMONIC, 18x the glassy pad's stretch -- the one pad distinction that is physics and not filtering. Capped at 14 partials, since the stretch grows as h^2"),
- 94:(2,"hollow: ODD HARMONICS ONLY, an exact distinction, with an airy formant high above it"),
- 95:(2,"the filter sweep IS the patch: h16 falls at 120 dB/s against the other pads' 18. The sweep back UP is not modelled, and says so"),
- 96:(2,"glassy droplets: the only voice with BOTH a stretch and repeated attacks"),
- 97:(2,"the widest chorus and the longest swell (550 ms) in the bank -- its character is WIDTH where the warm pad's is weight"),
- 98:(2,"the most inharmonic voice here, B=0.0105, capped at ten partials because the stretch grows as h^2"),
- 99:(2,"BREATH: sustain_jitter at the pan pipe's value, the only voice in these sixteen to use it"),
- 100:(2,"the hardest front (12 ms) with nothing rolled off above it -- quick AND wide open, where the polysynth pad is merely quick"),
- 101:(2,"a deep slow WOBBLE, 55 cents where a violinist uses 5, so it reads as an unstable instrument rather than expression -- and dark, because a wobble on a bright sound is a broken synth"),
- 102:(2,"four repeated ATTACKS 160 ms apart at falling gain. NOT a delay line, and sources.md records how far short it falls and why"),
- 103:(2,"odd harmonics AND a deep sweep: two exact mechanisms stacked rather than a new one"),
+ 88:(4,"TWO Messengers on one key (a layered voice): a pad of two saws under a low ladder and an FM bell over it. Ben: \"sounds amazing\""),
+ 89:(4,"a Messenger patch: two saws under a low ladder, a slow swell and a long release -- the pad you put underneath something"),
+ 90:(4,"a Messenger patch: open, a quick front and a contour that settles, so chords articulate a rhythm"),
+ 91:(3,"two saws and a swell on the Messenger, then the class's three vocal formants (its /O/). The Messenger is measured; the formants are theory"),
+ 92:(4,"a Messenger patch: bowed glass as a resonance excited slowly -- the ladder in BAND PASS (measured: 7.6 dB under the low-passes), tracking the key"),
+ 93:(4,"a Messenger patch: 1 -> 2 FM, the carrier a few cents off a whole ratio, so the sidebands land in pairs. The FM index is measured to 0.65, where this sits"),
+ 94:(4,"a Messenger patch: two squares six cents apart and a little of the NOISE oscillator through the same ladder -- the air the name means"),
+ 95:(4,"a Messenger patch: the sweep BOTH ways -- LFO 1 a slow triangle on the resonant cutoff, the rising half the additive pad could not make"),
+ 96:(3,"the crystal's FM bell (98) short and bright, through the MF-104M on SHORT. The Messenger is measured; the pedal is modelled, not recorded"),
+ 97:(4,"a Messenger patch: the longest swell and the widest pair (fourteen cents), a slower, shallower LFO on the cutoff -- width and drift"),
+ 98:(4,"a Messenger patch: an FM bell -- the carrier 2 sqrt(2) x the key, a strong partial ON the key and inharmonic ones over it"),
+ 99:(4,"a Messenger patch: a saw and the NOISE oscillator through the same ladder, so the breath is filtered with the tone and swells with it"),
+ 100:(4,"a Messenger patch: the hard front on an open ladder -- plain subtractive"),
+ 101:(4,"a Messenger patch: dark and wobbling -- the class's deep slow vibrato, and LFO 1 drifting OSC 2 alone, so the two slide against each other"),
+ 102:(3,"\"Echo Drops\": a plucky pair of saws on the Messenger through the MF-104M. The Messenger is measured; the pedal is modelled, not recorded"),
+ 103:(4,"a Messenger patch: two squares, LFO 1 working OSC 1's waveshape (pulse-width modulation) and a deep resonant contour"),
 })
 
 # ---- channel 10, the percussion note map --------------------------------
@@ -397,6 +402,19 @@ def main(argv):
     L.append("that are not audio -- the Rhodes' high-speed-camera papers -- are better than")
     L.append("theory but cannot contradict the model the way a recording can, so those")
     L.append("voices sit at 2 and say so.\n")
+    L.append("FOR A SYNTH PROGRAM THE INSTRUMENT IS A SYNTHESIZER. The 32 synth programs --")
+    L.append("basses, strings, brass, leads, pads, effects and the synth drum -- are")
+    L.append("patches on a Moog Messenger, and the Messenger")
+    L.append("engine in `moog.py` is fitted against Ben's own Messenger, recorded through a")
+    L.append("mixer and back (`examples/messenger_fit.py`): every knob law -- cutoff,")
+    L.append("resonance, the contours and sustain, waveshape and sub wave, FM index, LFO 1")
+    L.append("and MOD depths, the filter modes, the mixer, the noise and the output stage.")
+    L.append("Whole notes, attack to release, agree within 0.6-2 dB rms on 28 of 32")
+    L.append("programs. That is a recording of the instrument, so a pure Messenger patch")
+    L.append("is a 4; one with a part no Messenger has (the vocal formants after it, the")
+    L.append("guitars' valve, the MF-104M pedal, which is modelled and not recorded) is a 3.")
+    L.append("And the reference runs the other way too: a patch's knobs are the hardware's,")
+    L.append("so it plays on the Messenger itself.\n")
     hist = {k: 0 for k in range(5)}
     for p in range(128):
         hist[RATED[p][0]] += 1
