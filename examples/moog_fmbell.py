@@ -47,7 +47,13 @@ def main(argv):
         mid = os.path.join(out, '%d.mid' % prog)
         moog_ab.phrase(prog, mid)
         runs = [('A_additive', dict(env, TUNING_MOOG='0'))]
-        runs += [('B_%s' % name, dict(env, TUNING_MOOG='1', TUNING_MOOG_PANEL=json.dumps(over)))
+        # the candidates were written in the first model's knob units, before
+        # the Messenger was measured: converted as the patches were
+        import moog as MG
+        import patch_map as P
+        ctx = MG.panel_of(P.property_class_for_note(prog, 60))
+        runs += [('B_%s' % name, dict(env, TUNING_MOOG='1',
+                                      TUNING_MOOG_PANEL=json.dumps(MG.convert_v1(over, context=ctx))))
                  for name, over in cands]
         wavs = {}
         for tag, e in runs:

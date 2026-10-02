@@ -2537,6 +2537,8 @@ class Part:
             d["synth"] = dict(self.synth)
         if self.synth_b:
             d["synth_b"] = dict(self.synth_b)
+        if self.synth or self.synth_b:
+            d["synth_units"] = 2            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
         return d
@@ -2550,6 +2552,14 @@ class Part:
         p.muted = bool(d.get("muted", False))
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
+        # KNOBS SAVED BEFORE THE MESSENGER WAS MEASURED are in the first model's
+        # units: converted once, as the patches were, so they sound as saved
+        if (p.synth or p.synth_b) and int(d.get("synth_units", 1)) < 2:
+            vc = p.moog()
+            for lay, own in (('a', p.synth), ('b', p.synth_b)):
+                if own:
+                    ctx = _MG.panel_of(vc, None, lay) if vc is not None else dict(_MG.PANEL)
+                    own.update(_MG.convert_v1(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
@@ -10471,9 +10481,9 @@ def selftest():
     # rows are the phase's integral (moog.pitch_rows); the kernel re-anchors
     # each cell on them, so the swept phase is theirs, a file's 512-sample
     # blocks walk it as live's 128 do, and live builds them block by block.
-    _mpk = dict(osc1_level=0.0, osc2_level=1.0, cutoff=1.0, resonance=0.0, kb_track=0.0,
+    _mpk = _MG.convert_v1(dict(osc1_level=0.0, osc2_level=1.0, cutoff=1.0, resonance=0.0, kb_track=0.0,
                 mod_dest=1, mod_amount=0.9, f_attack=0.3, f_decay=0.55, f_sustain=0.2,
-                lfo1_dest=1, lfo1_depth=0.8, lfo1_rate=0.6, lfo1_reset=True)
+                lfo1_dest=1, lfo1_depth=0.8, lfo1_rate=0.6, lfo1_reset=True))   # written in the first knob units
     _mwas = dict(T.MoogSawLead.messenger)
     _menv = os.environ.get("TUNING_REFLECT")
     os.environ["TUNING_REFLECT"] = "0"
@@ -10986,7 +10996,7 @@ def selftest():
     _mgm.apply(_mgm.n)
     check("a part reading a Messenger takes its CC chart as the panel's knobs",
           abs(_mxp.synth.get("cutoff", 0) - (50 * 128 + 64) / 16383.0) < 1e-9
-          and _mxp.synth.get("osc1_octave") == 16 and _mxp.synth.get("res_bass") is True
+          and _mxp.synth.get("osc1_octave") == 8 and _mxp.synth.get("res_bass") is True
           and _mxp.synth.get("mode") == 1 and abs(_mxp.synth.get("tune", 0) - 0.5) < 1e-4
           and not _mgm.parts[0].synth and Part.from_dict(_mxp.to_dict()).cc_map == "messenger",
           "  (CUTOFF 50/64 as fourteen bits, an octave switch, RES BASS, MODE, and "

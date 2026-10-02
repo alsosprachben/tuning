@@ -1871,11 +1871,11 @@ SYNTH_KNOBS = (
     ("FILTER", "kb_track", "kb track", "track"),
     ("FILTER", "mode", "mode", "mode"),
     ("FILTER", "res_bass", "res bass", "onoff"),
-    ("F ENV", "f_attack", "attack", "time"),
+    ("F ENV", "f_attack", "attack", "atime"),
     ("F ENV", "f_decay", "decay", "time"),
     ("F ENV", "f_sustain", "sustain", "level"),
     ("F ENV", "f_release", "release", "time"),
-    ("A ENV", "a_attack", "attack", "time"),
+    ("A ENV", "a_attack", "attack", "atime"),
     ("A ENV", "a_decay", "decay", "time"),
     ("A ENV", "a_sustain", "sustain", "level"),
     ("A ENV", "a_release", "release", "time"),
@@ -1894,7 +1894,7 @@ SYNTH_KNOBS = (
     ("MF-104", "mf104_rate", "lfo rate", "mfhz"),
     ("MF-104", "mf104_amount", "lfo amount", "mfoct"),
 )
-SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 2.0 / 3.0, 1.0),
+SYNTH_STEPS = {"foot": (32, 16, 8, 4), "track": (0.0, 1.0),
                "mode": (0, 1, 2, 3), "onoff": (False, True),
                "lfoshape": (0, 1, 2, 3), "lfodest": (0, 1, 2, 3), "moddest": (0, 1, 2, 3),
                "mfrange": (0, 1)}
@@ -1940,7 +1940,7 @@ def synth_fmt(kind, v, pan=None):
         f = MG.knob_cutoff(v)
         return ("%.1f kHz" % (f / 1000.0)) if f >= 1000 else "%d Hz" % round(f)
     if kind == "oct":
-        return "%+.1f oct" % MG.bipolar(v, MG.EG_OCTAVES)
+        return "%+.1f oct" % MG.eg_octaves(v)
     if kind == "track":
         return {0.0: "off", 1.0: "1:1"}.get(round(v, 3), "2/3")
     if kind == "mode":
@@ -1959,8 +1959,8 @@ def synth_fmt(kind, v, pan=None):
         return MG.MOD_DESTS[int(v)]
     if kind == "modamt":
         return "%+.0f%%" % MG.bipolar(v, 100.0)
-    if kind == "time":
-        t = MG.knob_time(v)
+    if kind in ("time", "atime"):         # an attack has its own law (moog.knob_attack)
+        t = MG.knob_attack(v) if kind == "atime" else MG.knob_time(v)
         return ("%.2f s" % t) if t >= 1.0 else "%d ms" % round(t * 1000)
     return str(v)
 

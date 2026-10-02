@@ -142,11 +142,15 @@ def _clip(segs, gain):
     return out
 
 
-TRI, SAW, SQUARE = 0.4, 0.5, 0.6       # the landmarks on WAVESHAPE (0 = CCW)
+# The landmarks on WAVESHAPE (0 = CCW), where Ben's Messenger has them: its
+# harmonics matched against these spectra put the triangle at 0.35 and the
+# square at ~0.63-0.65 (examples/messenger_fit.py 'wave'); the saw is at 0.5.
+# The first model had 0.4 and 0.6. synthkernel.c's ms_parts mirrors them.
+TRI, SAW, SQUARE = 0.35, 0.5, 0.635
 FOLD_MAX = 5.0                         # the folder's gain at fully CCW
 PULSE_MIN = 0.02                       # the narrowest pulse, at fully CW
-Q = 250                                # knob positions cached: 250 steps put
-                                       # every landmark (0.4, 0.5, 0.6) on one
+Q = 400                                # knob positions cached: 400 steps put
+                                       # every landmark (0.35, 0.5, 0.635) on one
 
 
 def _osc_parts(s):
@@ -320,20 +324,76 @@ def adsr(t, A, D, S, R, t_off=None):
 
 
 # ---------------------------------------------------------------- the knobs
+# THE KNOBS' LAWS ARE BEN'S MESSENGER'S (1.1.0), measured through a mixer and
+# back (examples/messenger_fit.py, 2026-10-01): a knob here means what the
+# same knob position means on the hardware, so a panel sent to it is the
+# panel heard. Where the measurement did not reach, the law runs on
+# geometrically to the first model's end, and says so. The first laws are
+# kept as V1 below: every patch was converted through them (convert_v1), so
+# each sounds as it did and its knobs are now the hardware's.
+def _clip01(v):
+    return max(0.0, min(1.0, float(v)))
+
+
+def knob_attack(v):
+    """ATTACK: 1 ms fully CCW to 10 s fully CW, exponentially. Not yet refitted
+    -- the measurement (122 ms at 0.4 to 538 at 0.7, instant below) is rough."""
+    return 0.001 * 10000.0 ** _clip01(v)
+
+
+# DECAY and RELEASE, measured as 4 time constants: 1.19 s at 0.5, 1.92 at
+# 0.6, 3.1 at 0.7 -- e-folding every 1/4.75 of the knob. Below 0.5, not
+# measured: geometric down to the first model's 1 ms at 0.
+DR_MID_V, DR_MID_S, DR_RATE, DR_LO_S = 0.5, 1.19, 4.75, 0.001
+
+
 def knob_time(v):
-    """ATTACK/DECAY/RELEASE: 1 ms fully CCW to 10 s fully CW, exponentially."""
-    return 0.001 * 10000.0 ** max(0.0, min(1.0, v))
+    """DECAY / RELEASE (the time constant is a quarter of this)."""
+    v = _clip01(v)
+    if v >= DR_MID_V:
+        return DR_MID_S * math.exp(DR_RATE * (v - DR_MID_V))
+    return DR_LO_S * (DR_MID_S / DR_LO_S) ** (v / DR_MID_V)
+
+
+def time_knob(t):
+    """knob_time backwards."""
+    t = max(DR_LO_S, float(t))
+    if t >= DR_MID_S:
+        return _clip01(DR_MID_V + math.log(t / DR_MID_S) / DR_RATE)
+    return _clip01(DR_MID_V * math.log(t / DR_LO_S) / math.log(DR_MID_S / DR_LO_S))
+
+
+# CUTOFF: by white noise through the ladder, fitted with |H| above the
+# hardware's own floor (~60 dB under): 187 Hz fully CCW, 416 at 0.1, 884 at
+# 0.2, 1.88 k at 0.3, 4.12 k at 0.4, 9.3 k at 0.5 -- 11.14 octaves a unit, a
+# straight line to 0.05 octave; past 0.55 the corner is above the band. Its
+# BOTTOM IS ~190 Hz, not 20: a first fit, misled by the floor, guessed the
+# low end and put every converted patch's corner far too low on the knob.
+CUT_LO_HZ, CUT_OCT = 189.0, 11.14
 
 
 def knob_cutoff(v):
-    """CUTOFF: 20 Hz fully CCW to 20 kHz fully CW, exponentially."""
-    return 20.0 * 1000.0 ** max(0.0, min(1.0, v))
+    """CUTOFF: the ladder's corner, Hz."""
+    return CUT_LO_HZ * 2.0 ** (CUT_OCT * _clip01(v))
+
+
+def cutoff_knob(hz):
+    """knob_cutoff backwards."""
+    return _clip01(math.log2(max(float(hz), CUT_LO_HZ) / CUT_LO_HZ) / CUT_OCT)
+
+
+# LFO 1 RATE: 0.40 Hz at 0.3, 0.84 at 0.4, 1.55 at 0.5 -- 0.05 Hz to ~44 Hz
+# over the knob, where the first model had 12.
+LFO_RATE_LO, LFO_RATE_SPAN = 0.05, 870.0
 
 
 def knob_lfo_rate(v):
-    """LFO 1 RATE: 0.05 Hz fully CCW to 12 Hz fully CW, exponentially -- the
-    Messenger's default range."""
-    return 0.05 * 240.0 ** max(0.0, min(1.0, v))
+    """LFO 1 RATE, Hz."""
+    return LFO_RATE_LO * LFO_RATE_SPAN ** _clip01(v)
+
+
+def lfo_rate_knob(hz):
+    return _clip01(math.log(max(float(hz), LFO_RATE_LO) / LFO_RATE_LO) / math.log(LFO_RATE_SPAN))
 
 
 LFO_OCTAVES = 3.0   # LFO 1 DEPTH fully either way moves the cutoff this far
@@ -354,13 +414,17 @@ def lfo(x, shape):
 
 
 # SELF-OSCILLATION. The Messenger's resonance "self-oscillates to a sine at
-# fully clockwise"; here the last tenth of the knob brings in that sine, at the
-# cutoff, rising as the square of how far past 0.9 the knob is, up to SELF_AMP
+# fully clockwise"; measured, it sings alone from about 0.7 (a tone at the
+# corner, -39 dBFS there against a saw's -29 rms, -34 at full), and the
+# ladder's feedback rises 5.7 a unit of knob (fitted against |H|, 0.57 at 0.1
+# to 3.42 at 0.6) -- K_MAX by 0.684, where the sine begins. Past it the sine
+# comes in at the cutoff, rising as the square of how far past SELF_FROM, up to SELF_AMP
 # (about a saw's own level). The ladder's feedback itself stops at K_MAX, where
 # a partial on the peak is already 30 dB up. The sine stands at the cutoff the
 # contour SUSTAINS at: a sine that swept with the contour would need its phase
 # integrated over the note's history, which a stateless kernel cannot carry.
-SELF_FROM, SELF_AMP = 0.9, 0.5
+RES_PER_UNIT = 5.7
+SELF_FROM, SELF_AMP = K_MAX / RES_PER_UNIT, 0.5
 
 
 def self_amp(v):
@@ -368,23 +432,40 @@ def self_amp(v):
 
 
 def knob_k(v):
-    """RESONANCE: the ladder's feedback, 0 to K_MAX."""
-    return K_MAX * max(0.0, min(1.0, v))
+    """RESONANCE: the ladder's feedback, RES_PER_UNIT a unit of knob, to K_MAX."""
+    return min(K_MAX, RES_PER_UNIT * _clip01(v))
 
 
-EG_OCTAVES = 7.0    # EG AMOUNT fully CW opens the cutoff this far at the peak
+V1_EG_OCTAVES = 7.0    # the first model's EG AMOUNT: linear, +-7 octaves at the ends
+EG_CURVE = 45.0        # measured: the contour opens 45 x|x| octaves, x the knob off centre
+
+
+def eg_octaves(v):
+    """EG AMOUNT: how far the filter contour's peak moves the cutoff, in octaves.
+    Measured on the Messenger (examples/messenger_fit.py eg): centred, flat
+    near the detent and a square law away from it -- 45 x|x|, x = v - 0.5, fit
+    within a few percent from 0.25 to 0.8, about +-11 octaves at the ends."""
+    x = _clip01(v) - 0.5
+    return EG_CURVE * x * abs(x)
+
+
+def eg_knob(octaves):
+    return 0.5 + math.copysign(math.sqrt(abs(octaves) / EG_CURVE), octaves)
 KB_REF_HZ = 261.6256   # key tracking pivots on middle C, the 8' bottom key
 
 
 def cutoff_at(fc0, note_hz, track):
-    """KB TRACKING: the cutoff follows the key (track 1 = 1 V/oct, 2/3, 0)."""
+    """KB TRACKING: the cutoff follows the key -- OFF (0) or 1 V/oct (1), the
+    only two the hardware has: measured, CC78 below 64 is off and 64 up is
+    1:1 about middle C (A2's corner 1.25 octaves under, A4's 0.75 over), with
+    no 2/3 between -- the manual's three ranges are not what it does."""
     return fc0 * (note_hz / KB_REF_HZ) ** track
 
 
 # The panel, as knob name -> default (0..1 unless a switch). A lead is a dict
 # of overrides on these. Bipolar knobs (OSC 2 FREQ, TUNE, EG AMOUNT) are 0.5 at
 # the centre detent.
-PANEL = dict(
+PANEL_V1 = dict(          # the first model's units; PANEL itself is converted below
     osc1_octave=8, osc1_wave=SAW,
     osc2_octave=8, osc2_wave=SAW, osc2_freq=0.5, tune=0.5,
     sub_wave=SUB_SQUARE,
@@ -578,8 +659,8 @@ def ft_row(panel, f0, krow, pre_amp=False, flags=0, fm_phi1=None):
     1 -> 2 FM's index and modulator (fm_coeffs)."""
     row = [
         (f0 / KB_REF_HZ) ** float(panel['kb_track']),
-        knob_time(panel['f_attack']), knob_time(panel['f_decay']), knob_time(panel['f_release']),
-        knob_time(panel['a_attack']), knob_time(panel['a_decay']), knob_time(panel['a_release']),
+        knob_attack(panel['f_attack']), knob_time(panel['f_decay']), knob_time(panel['f_release']),
+        knob_attack(panel['a_attack']), knob_time(panel['a_decay']), knob_time(panel['a_release']),
         float(panel['mode']), 1.0 if panel['res_bass'] else 0.0, float(krow), float(f0),
         1.0 if pre_amp else 0.0]
     fi = fm_index(panel)
@@ -597,7 +678,7 @@ def sustain_gain(panel, f0, f):
     The amplifier's products are computed once, from this; the kernel then
     moves the partials by H(t) / H(sustain) (FT slot 11)."""
     fcs = (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
-           * 2.0 ** (bipolar(panel['eg_amount'], EG_OCTAVES) * float(panel['f_sustain'])))
+           * 2.0 ** (eg_octaves(panel['eg_amount']) * float(panel['f_sustain'])))
     return ladder_gain(f, max(fcs, 1.0), knob_k(panel['resonance']),
                        int(panel['mode']), bool(panel['res_bass']))
 
@@ -721,8 +802,8 @@ def messenger_value(kind, msb, lsb=None):
         return msb / 127.0
     if kind == 'foot':
         return FOOT_CC[min(3, msb // 32)]
-    if kind == 'track':                 # the manual: 0-42, 43-84, 85-126
-        return 0.0 if msb <= 42 else 2.0 / 3.0 if msb <= 84 else 1.0
+    if kind == 'track':                 # measured: OFF below 64, 1:1 from it
+        return 0.0 if msb < 64 else 1.0
     if kind == 'mode':
         return min(3, msb // 32)
     if kind == 'onoff':
@@ -758,7 +839,7 @@ def messenger_cc_value(kind, v):
     if kind == 'foot':
         return FOOT_CC.index(int(v)) * 32 + 16, None
     if kind == 'track':
-        return (21 if v < 1.0 / 3.0 else 63 if v < 5.0 / 6.0 else 105), None
+        return (32 if v < 0.5 else 96), None
     if kind == 'mode':
         return int(v) * 32 + 16, None
     if kind == 'onoff':
@@ -798,8 +879,90 @@ TIMBRE = ('osc1_wave', 'osc2_wave', 'sub_wave', 'osc1_level', 'osc2_level',
 # how far that is; four octaves is the choice until Ben's Messenger is
 # recorded, and an octave for the LFO's own reach at full depth.
 MOD_DESTS = ('1>2 FM', 'F ENV>OSC 2 FREQ', 'F ENV>OSC 2 WAVE', 'F ENV>SUB WAVE')
-MOD_PITCH_OCTAVES = 4.0
-LFO_PITCH_OCTAVES = 1.0
+# MEASURED: MOD AMOUNT moves OSC 2 exactly 10 octaves a unit of knob (+-0.498
+# octave at +-0.05) -- +-5 at full; LFO 1's full DEPTH on OSC 2 FREQ swings
+# it about +-4 octaves. The first model had 4 and 1.
+MOD_PITCH_OCTAVES = 5.0
+LFO_PITCH_OCTAVES = 4.0
+
+
+# ---------------------------------------------------------------- the first laws
+# V1: what the panel's knobs meant before Ben's Messenger was measured -- kept
+# to convert what was written in them (every patch, and any part's knobs saved
+# in a session or a preset before this) to the hardware's positions for the
+# SAME sound: through the physical quantity, the corner in Hz, the time in
+# seconds, the feedback, the rate, the pitch, onto the knob that gives it now.
+V1_TRI, V1_SQUARE = 0.4, 0.6
+V1_K_MAX = K_MAX
+V1_MOD_PITCH_OCTAVES, V1_LFO_PITCH_OCTAVES = 4.0, 1.0
+
+
+def v1_knob_time(v):
+    return 0.001 * 10000.0 ** _clip01(v)
+
+
+def v1_knob_cutoff(v):
+    return 20.0 * 1000.0 ** _clip01(v)
+
+
+def v1_knob_lfo_rate(v):
+    return 0.05 * 240.0 ** _clip01(v)
+
+
+def _wave_v1(v):
+    """A WAVESHAPE position, first landmarks to measured: piecewise linear,
+    so each region's shape is the same shape at the same fraction across it."""
+    xs, ys = (0.0, V1_TRI, SAW, V1_SQUARE, 1.0), (0.0, TRI, SAW, SQUARE, 1.0)
+    return float(np.interp(_clip01(v), xs, ys))
+
+
+def convert_v1(knobs, context=None):
+    """Knob positions written in the first model's units, as the measured
+    panel's for the same sound. `knobs` may be a whole panel or a few knobs;
+    `context` supplies the switches a knob's meaning depends on (MOD and LFO
+    1's destinations) when `knobs` does not carry them."""
+    ctx = dict(context or {})
+    ctx.update(knobs)
+    out = dict(knobs)
+    for k in ('f_decay', 'f_release', 'a_decay', 'a_release'):
+        if k in out:
+            out[k] = time_knob(v1_knob_time(out[k]))
+    if 'cutoff' in out:
+        out['cutoff'] = cutoff_knob(v1_knob_cutoff(out['cutoff']))
+    if 'resonance' in out:
+        v = _clip01(out['resonance'])
+        out['resonance'] = (V1_K_MAX * v / RES_PER_UNIT if v <= 0.9          # the same feedback
+                            else SELF_FROM + (v - 0.9) / 0.1 * (1.0 - SELF_FROM))   # the singing tenth
+    if 'eg_amount' in out:
+        out['eg_amount'] = eg_knob(bipolar(out['eg_amount'], V1_EG_OCTAVES))
+    if 'lfo1_rate' in out:
+        out['lfo1_rate'] = lfo_rate_knob(v1_knob_lfo_rate(out['lfo1_rate']))
+    if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) == 1:
+        out['mod_amount'] = 0.5 + (out['mod_amount'] - 0.5) * V1_MOD_PITCH_OCTAVES / MOD_PITCH_OCTAVES
+    if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) == 1:
+        out['lfo1_depth'] = 0.5 + (out['lfo1_depth'] - 0.5) * V1_LFO_PITCH_OCTAVES / LFO_PITCH_OCTAVES
+    # A SWEEP OF THE WAVESHAPE (LFO 1 on OSC 1 WAVE, or F ENV on OSC 2 WAVE)
+    # moves the KNOB, and the landmarks moved under it: its span is rescaled
+    # to cover the same shapes, the remapped ends of the old sweep -- exact at
+    # its ends, not between them, the remap being piecewise. (The spans
+    # themselves, LFO_WAVE_SPAN and MOD_WAVE_SPAN, are not yet measured.)
+    if 'lfo1_depth' in knobs and int(ctx.get('lfo1_dest', 0)) == 2 and 'osc1_wave' in ctx:
+        c, h = _clip01(ctx['osc1_wave']), bipolar(knobs['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
+        nh = math.copysign((_wave_v1(c + abs(h)) - _wave_v1(c - abs(h))) / 2.0, h)
+        out['lfo1_depth'] = 0.5 + nh / (LFO_WAVE_SPAN / 2.0) / 2.0
+    if 'mod_amount' in knobs and int(ctx.get('mod_dest', 1)) == 2 and 'osc2_wave' in ctx:
+        c, h = _clip01(ctx['osc2_wave']), bipolar(knobs['mod_amount'], MOD_WAVE_SPAN / 2.0)
+        nh = _wave_v1(c + h) - _wave_v1(c)
+        out['mod_amount'] = 0.5 + nh / (MOD_WAVE_SPAN / 2.0) / 2.0
+    for k in ('osc1_wave', 'osc2_wave'):
+        if k in out:
+            out[k] = _wave_v1(out[k])
+    if 'kb_track' in out:                   # OFF or 1:1: the first model's 2/3 is not
+        out['kb_track'] = 1.0 if float(out['kb_track']) >= 0.5 else 0.0   # a setting the hardware has
+    return out
+
+
+PANEL = convert_v1(PANEL_V1)
 MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)
 
 
@@ -813,7 +976,7 @@ def pitch_params(panel):
     al = bipolar(panel['lfo1_depth'], LFO_PITCH_OCTAVES) if int(panel['lfo1_dest']) == 1 else 0.0
     if ae == 0.0 and al == 0.0:
         return None
-    return (ae, knob_time(panel['f_attack']), knob_time(panel['f_decay']),
+    return (ae, knob_attack(panel['f_attack']), knob_time(panel['f_decay']),
             float(panel['f_sustain']), knob_time(panel['f_release']),
             al, knob_lfo_rate(panel['lfo1_rate']), float(int(panel['lfo1_shape'])),
             1.0 if panel['lfo1_reset'] else 0.0)
@@ -858,7 +1021,7 @@ def shape_params(panel):
     v[6] = {2: 1, 3: 3}.get(ld, 0)
     v[7] = bipolar(panel['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
     v[8], v[9], v[10] = knob_lfo_rate(panel['lfo1_rate']), int(panel['lfo1_shape']), 1.0 if panel['lfo1_reset'] else 0.0
-    v[11], v[12] = knob_time(panel['f_attack']), knob_time(panel['f_decay'])
+    v[11], v[12] = knob_attack(panel['f_attack']), knob_time(panel['f_decay'])
     v[13], v[14] = float(panel['f_sustain']), knob_time(panel['f_release'])
     v[15] = (osc_ratio(panel, OSC2) / osc_ratio(panel, OSC1)) if panel['sync'] else 0.0
     if pp is not None and panel['sync']:
@@ -1097,7 +1260,7 @@ def kn_row(panel):
     whose depth only reaches the cutoff when that is where it is sent."""
     on = int(panel['lfo1_dest']) == 0
     return [knob_cutoff(panel['cutoff']), knob_k(panel['resonance']),
-            bipolar(panel['eg_amount'], EG_OCTAVES),
+            eg_octaves(panel['eg_amount']),
             float(panel['f_sustain']), float(panel['a_sustain']),
             knob_lfo_rate(panel['lfo1_rate']),
             bipolar(panel['lfo1_depth'], LFO_OCTAVES) if on else 0.0,
@@ -1108,7 +1271,7 @@ def self_hz(panel, f0):
     """Where the ladder's own sine stands for a key at f0: the cutoff the
     filter contour sustains at, key tracking and all."""
     return (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
-            * 2.0 ** (bipolar(panel['eg_amount'], EG_OCTAVES) * float(panel['f_sustain'])))
+            * 2.0 ** (eg_octaves(panel['eg_amount']) * float(panel['f_sustain'])))
 
 
 def release_span(panel):
@@ -1122,15 +1285,15 @@ def gain_at(panel, f, t, t_off=None):
     """The reference for the kernel's per-partial gain at time t: the amp
     contour times the ladder at the cutoff the filter contour has reached.
     A partial at frequency f of a note at KB_REF_HZ (kbfac 1)."""
-    fe = adsr(t, knob_time(panel['f_attack']), knob_time(panel['f_decay']),
+    fe = adsr(t, knob_attack(panel['f_attack']), knob_time(panel['f_decay']),
               panel['f_sustain'], knob_time(panel['f_release']), t_off)
-    fc = knob_cutoff(panel['cutoff']) * 2.0 ** (bipolar(panel['eg_amount'], EG_OCTAVES) * fe)
+    fc = knob_cutoff(panel['cutoff']) * 2.0 ** (eg_octaves(panel['eg_amount']) * fe)
     kn = kn_row(panel)
     if kn[6]:        # LFO 1 on the cutoff: from the key (KB RESET), as tested
         fc = fc * 2.0 ** (kn[6] * lfo(np.asarray(t, float) * kn[5], int(kn[7])))
     h = ladder_gain(f, np.maximum(fc, 1.0), knob_k(panel['resonance']),
                     int(panel['mode']), bool(panel['res_bass']))
-    return adsr(t, knob_time(panel['a_attack']), knob_time(panel['a_decay']),
+    return adsr(t, knob_attack(panel['a_attack']), knob_time(panel['a_decay']),
                 panel['a_sustain'], knob_time(panel['a_release']), t_off) * h
 
 
@@ -1204,8 +1367,10 @@ def selftest():
     check("LFO 1's shapes: triangle, rising saw, falling ramp, square",
           np.allclose(lfo([0, 0.25, 0.5], 0), [-1, 0, 1]) and np.allclose(lfo([0, 0.5], 1), [-1, 0])
           and np.allclose(lfo([0, 0.5], 2), [1, 0]) and np.allclose(lfo([0.25, 0.75], 3), [1, -1]))
-    check("RESONANCE self-oscillates only at the top of its travel",
-          self_amp(0.9) == 0.0 and abs(self_amp(1.0) - SELF_AMP) < 1e-12 and self_amp(0.95) > 0)
+    check("RESONANCE sings alone from where the hardware does",
+          self_amp(SELF_FROM) == 0.0 and abs(self_amp(1.0) - SELF_AMP) < 1e-12
+          and self_amp(0.72) > 0 and abs(knob_k(SELF_FROM) - K_MAX) < 1e-12,
+          "(from %.3f, where the feedback reaches K_MAX: measured, about 0.7)" % SELF_FROM)
     # the pitch rows' quadrature against the closed form, through attack,
     # decay and release, over cells that straddle both corners
     sr = 48000.0
@@ -1234,7 +1399,7 @@ def selftest():
     es = max(np.abs(cs[i] - sub_spectrum(v, SUB_HARMONICS)).max() for i, v in enumerate(qs[:-1]))
     rs = [1.0, 1.37, 2.0, 2.5, 3.99, 7.3]
     ey = max(np.abs(coeff_rows(0, v, rr)[0] - sync_spectrum(v, rr, 64)).max()
-             for v in (0.1, 0.4, 0.448, 0.5, 0.552, 0.6, 0.8) for rr in rs)
+             for v in (0.1, 0.35, 0.4475, 0.5, 0.5525, 0.635, 0.8) for rr in rs)
     check("the C waveshape coefficients are moog.py's, free and synced",
           ew < 1e-6 and es < 1e-6 and ey < 1e-6,
           "(every knob position: worst %.1e / %.1e sub / %.1e synced, float32)" % (ew, es, ey))
@@ -1258,7 +1423,7 @@ def selftest():
             for knob, kind in (v for v in chart.values() if v):
                 pan[knob] = (rnd.random() if kind in ('14', '7') else
                              rnd.choice((4, 8, 16, 32)) if kind == 'foot' else
-                             rnd.choice((0.0, 2.0 / 3.0, 1.0)) if kind == 'track' else
+                             rnd.choice((0.0, 1.0)) if kind == 'track' else
                              rnd.randrange(4) if kind == 'mode' else rnd.random() < 0.5)
             got, msb = {}, {}
             for cc, val in messenger_messages(pan, fw):

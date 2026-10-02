@@ -418,6 +418,9 @@ static int ms_clip(const mseg* in, int n, double g, mseg* o){
     }
     return m;
 }
+#define MS_TRI 0.35      // moog.TRI, SAW, SQUARE: measured on Ben's Messenger
+#define MS_SAW 0.5
+#define MS_SQUARE 0.635
 // WAVESHAPE (kind 0) or SUB WAVE (kind 1) at s: its parts, weighted (moog._osc_parts)
 static int ms_parts(int kind, double s, double* wt, mseg seg[2][32], int* ns){
     mseg tmp[4];
@@ -428,12 +431,14 @@ static int ms_parts(int kind, double s, double* wt, mseg seg[2][32], int* ns){
         double d=0.5-(0.5-0.02)*(s-0.4)/(1.0-0.4);
         ns[0]=ms_pulse(seg[0],d); wt[0]=1.0; return 1;
     }
-    if(s<0.4){ double g=1.0+(5.0-1.0)*(0.4-s)/0.4; int n=ms_tri(tmp,0.5);
-               ns[0]=ms_fold(tmp,n,g,seg[0]); wt[0]=1.0; return 1; }
-    if(s<0.5){ ns[0]=ms_tri(seg[0],0.5+0.5*(s-0.4)/0.1); wt[0]=1.0; return 1; }
-    if(s<0.6){ double a=(s-0.5)/0.1; ns[0]=ms_tri(seg[0],1.0); wt[0]=1.0-a;
-               ns[1]=ms_pulse(seg[1],0.5); wt[1]=a; return 2; }
-    ns[0]=ms_pulse(seg[0],0.5-(0.5-0.02)*(s-0.6)/0.4); wt[0]=1.0; return 1;
+    // the landmarks where Ben's Messenger has them (moog.TRI, SAW, SQUARE)
+    const double T=MS_TRI, W=MS_SAW, Q=MS_SQUARE;
+    if(s<T){ double g=1.0+(5.0-1.0)*(T-s)/T; int n=ms_tri(tmp,0.5);
+             ns[0]=ms_fold(tmp,n,g,seg[0]); wt[0]=1.0; return 1; }
+    if(s<W){ ns[0]=ms_tri(seg[0],0.5+0.5*(s-T)/(W-T)); wt[0]=1.0; return 1; }
+    if(s<Q){ double a=(s-W)/(Q-W); ns[0]=ms_tri(seg[0],1.0); wt[0]=1.0-a;
+             ns[1]=ms_pulse(seg[1],0.5); wt[1]=a; return 2; }
+    ns[0]=ms_pulse(seg[0],0.5-(0.5-0.02)*(s-Q)/(1.0-Q)); wt[0]=1.0; return 1;
 }
 // sum over segments (clipped to [0,uend]) of the integral of y e^{-2 pi i nu u},
 // for nu = k*nu0, k = 1..K, added times `sc` into (re, im)

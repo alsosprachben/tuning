@@ -18,6 +18,27 @@ octave switch's chart was found to be backwards (moog.FOOT_CC).
 Tests:
   tune   TUNE across its travel: cents per unit of knob, and where its zero
          is against A440 (the model: +-moog.SEMIS, centred).
+  freq   OSC 2 FREQ, the same way, OSC 2 alone.
+  wave   WAVESHAPE: each knob position's harmonics against the model's
+         spectra (moog.osc_spectrum), and which model position each matches.
+  cutoff CUTOFF: a saw on A2, key tracking off; each setting's harmonics over
+         the open filter's, fitted with the ladder (moog.ladder_gain) for its
+         corner -- the knob's law (the model: 20 Hz * 1000^v).
+  res    RESONANCE at a fixed corner: the ladder's feedback k fitted at each
+         setting (the model: K_MAX * v), and where it starts to sing alone.
+  amp    the amp contour's ATTACK, DECAY and RELEASE times against the knob
+         (the model: 1 ms * 10^(4v); attack reaches the top at A, decay and
+         release are exponentials of time constant D/4, R/4).
+  lfo    LFO 1 on OSC 2's pitch: its RATE law (0.05 Hz * 240^v) and how far
+         DEPTH swings the pitch (LFO_PITCH_OCTAVES at full).
+  mod    the MOD section's F ENV -> OSC 2 FREQ at the contour's sustain: how
+         far MOD AMOUNT moves OSC 2 (MOD_PITCH_OCTAVES at full).
+  fm     1 -> 2 FM: triangles, carrier and modulator on the key; the
+         hardware's spectrum at each MOD AMOUNT against the model rendered at
+         trial values of FM_INDEX_MAX -- the one that matches is the fit.
+  eg     EG AMOUNT: the filter contour held at sustain 1.0, the corner's shift
+         from where CUTOFF alone puts it, per setting (the model: +-7 octaves
+         about 0.5).
 """
 import os
 import subprocess
@@ -38,10 +59,14 @@ OUT = os.path.join(os.environ.get('TMPDIR', '/tmp'), 'messenger_fit')
 
 # A PLAIN PANEL: one saw on the key, everything else out of the way -- the
 # filter open, no contour, no modulation -- so a measurement sees one law.
+# THE FILTER CONTOUR IS TAKEN OUT, not left at sustain: held at 1.0 with EG
+# AMOUNT at the model's centre it lifted every measured corner 3.8 octaves --
+# the hardware's EG AMOUNT is not centred where the model says (see 'eg').
 CAL = dict(MG.PANEL, osc1_octave=8, osc1_wave=MG.SAW, osc1_level=1.0, osc2_level=0.0,
            sub_level=0.0, noise_level=0.0, cutoff=1.0, resonance=0.0, eg_amount=0.5,
-           kb_track=1.0, mode=MG.LP4, f_sustain=1.0, a_attack=0.0, a_sustain=1.0,
-           a_release=0.3, tune=0.5, sync=False, mod_amount=0.5, lfo1_depth=0.5)
+           kb_track=1.0, mode=MG.LP4, f_attack=0.0, f_decay=0.3, f_sustain=0.0,
+           a_attack=0.0, a_sustain=1.0, a_release=0.3, tune=0.5, sync=False,
+           mod_amount=0.5, lfo1_depth=0.5)
 
 
 class Rig(object):
@@ -94,6 +119,8 @@ def pitch(seg):
     f = np.fft.rfftfreq(N, 1.0 / SR)
     pk, _ = find_peaks(X, height=X.max() * 0.15, distance=50)
     pk = pk[f[pk] > 20.0]
+    if not len(pk):
+        return float('nan')                 # silence, or nothing pitched
     i = int(pk.min())
     y0, y1, y2 = np.log(X[i - 1:i + 2])
     return f[i] + 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2) * (f[1] - f[0])
@@ -128,7 +155,485 @@ def test_tune(rig):
           % (c0, np.abs(res).max()))
 
 
-TESTS = {'tune': test_tune}
+def harmonics(seg, f0, K, sr=SR):
+    """|A_k| of harmonics 1..K of a note at f0 (each the peak near k f0).
+    `sr` the take's own rate: the file renderer's is 44.1 kHz, the mixer's
+    48 -- read at the wrong one, every frequency is off by 9%."""
+    N = 1 << 19
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N))
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    out = []
+    for k in range(1, K + 1):
+        b = (f > k * f0 * 0.985) & (f < k * f0 * 1.015)
+        out.append(X[b].max() if b.any() else 0.0)
+    return np.array(out)
+
+
+def sweep_pitch(rig, name, knob, base, vals, note=69):
+    rig.panel(base)
+    rig.out.send(mido.Message('pitchwheel', channel=0, pitch=0))
+    time.sleep(0.3)
+
+    def play(r):
+        for v in vals:
+            r.panel(dict(base, **{knob: v}), knobs=(knob,))
+            time.sleep(0.15)
+            r.note(note, 0.8)
+            time.sleep(0.25)
+    y = rig.take(name, len(vals) * 1.2 + 1.5, play)
+    return [(v, pitch(y[int((t + 0.2) * SR):int((t + 0.7) * SR)])) for v, t in zip(vals, rig.played)]
+
+
+def fit_semis(rows, ref, label):
+    for v, f0 in rows:
+        print('  %s %.2f   %8.2f Hz   %+8.1f cents' % (label, v, f0, 1200.0 * np.log2(f0 / ref)))
+    v = np.array([r[0] for r in rows]) - 0.5
+    c = np.array([1200.0 * np.log2(r[1] / ref) for r in rows])
+    k, c0 = np.polyfit(v, c, 1)
+    print('  fit: +-%.2f semitones at the ends (the model: +-%g); centre %+.1f cents; '
+          'worst off a straight line %.1f cents' % (k * 0.5 / 100.0, MG.SEMIS, c0,
+                                                    np.abs(c - (k * v + c0)).max()))
+    return k * 0.5 / 100.0, c0
+
+
+def test_freq(rig):
+    vals = [round(v, 2) for v in np.linspace(0.0, 1.0, 11)]
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc2_wave=MG.SAW, osc2_octave=8)
+    fit_semis(sweep_pitch(rig, 'freq', 'osc2_freq', base, vals), 440.0, 'OSC 2 FREQ')
+
+
+def test_wave(rig):
+    vals = [round(v, 2) for v in np.linspace(0.0, 1.0, 21)]
+    note, K = 45, 16                          # A2: sixteen harmonics well inside the band
+    rig.panel(CAL)
+    time.sleep(0.3)
+
+    def play(r):
+        for v in vals:
+            r.panel(dict(CAL, osc1_wave=v), knobs=('osc1_wave',))
+            time.sleep(0.15)
+            r.note(note, 0.8)
+            time.sleep(0.25)
+    y = rig.take('wave', len(vals) * 1.2 + 1.5, play)
+    grid = np.linspace(0.0, 1.0, 401)
+    # the model's spectra at every knob position, normalised to the fundamental
+    # ... and to the measured line's own tilt: the open ladder at 20 kHz
+    model = []
+    for g in grid:
+        a = 2.0 * np.abs(MG.osc_spectrum(g, K))
+        model.append(a / max(a[0], 1e-9))
+    model = np.array(model)
+    f0 = 110.0 * 2 ** (0.0)          # the key; the measured pitch is used below
+    print('  knob   h2/h1  h3/h1  h4/h1  h5/h1    best model position (dB rms off)')
+    out = []
+    for v, t in zip(vals, rig.played):
+        seg = y[int((t + 0.2) * SR):int((t + 0.7) * SR)]
+        fp = pitch(seg)
+        h = harmonics(seg, fp, K)
+        h = h / max(h[0], 1e-12)
+        lm = 20 * np.log10(np.maximum(model, 1e-4))
+        lh = 20 * np.log10(np.maximum(h, 1e-4))
+        err = np.sqrt(((lm - lh) ** 2).mean(axis=1))
+        j = int(np.argmin(err))
+        out.append((v, grid[j], err[j]))
+        print('  %.2f   %5.2f  %5.2f  %5.2f  %5.2f    %.3f (%.1f)' % (v, h[1], h[2], h[3], h[4], grid[j], err[j]))
+    return out
+
+
+def held(rig, name, base, knob, vals, note, dur=0.9):
+    """One held note per value of `knob`; each note's steady middle."""
+    rig.panel(base)
+    time.sleep(0.3)
+
+    def play(r):
+        for v in vals:
+            r.panel(dict(base, **{knob: v}), knobs=(knob,))
+            time.sleep(0.15)
+            r.note(note, dur)
+            time.sleep(0.25)
+    y = rig.take(name, len(vals) * (dur + 0.45) + 1.5, play)
+    return [(v, y[int((t + 0.25) * SR):int((t + dur - 0.1) * SR)]) for v, t in zip(vals, rig.played)]
+
+
+def fit_ladder(h, f, fc0=None, k0=None):
+    """The corner and feedback whose |H| best fits the measured gains h at
+    frequencies f (log error), by search. Returns (fc, k, dB rms off)."""
+    lh = 20 * np.log10(np.maximum(h, 1e-6))
+    best = None
+    fcs = np.geomspace(30.0, 18000.0, 400) if fc0 is None else [fc0]
+    ks = [0.0] if k0 is not None and k0 == 0 else (np.linspace(0.0, 3.99, 134) if k0 is None else [k0])
+    for fc in fcs:
+        for k in ks:
+            lm = 20 * np.log10(np.maximum(MG.ladder_gain(f, fc, k), 1e-6))
+            # ABOVE THE FLOOR ONLY: the hardware's own noise sits ~60 dB under
+            # the open filter, and fitting a corner to it put the low settings
+            # anywhere -- the low end looked unmeasurable until it was left out
+            w = (lh > -45)
+            e = np.sqrt(((lm - lh)[w] ** 2).mean())
+            if best is None or e < best[2]:
+                best = (fc, k, e)
+    return best
+
+
+def psd(seg, nper=4096):
+    """Welch power spectral density: (f, P)."""
+    from scipy.signal import welch
+    return welch(seg, SR, nperseg=nper)
+
+
+def test_cutoff(rig):
+    """By NOISE, not a saw's harmonics: white noise through the ladder over
+    the open ladder's noise is |H|^2 at every frequency, so the corner can be
+    fitted where a saw's harmonics have sunk into the floor (low settings) or
+    all lie under it (high)."""
+    base = dict(CAL, kb_track=0.0, resonance=0.0, osc1_level=0.0, noise_level=1.0)
+    vals = [1.0] + [round(v, 2) for v in np.linspace(0.0, 0.6, 13)]
+    takes = held(rig, 'cutoff', base, 'cutoff', vals, 69, dur=1.6)
+    f, P0 = psd(takes[0][1])
+    band = (f > 25.0) & (f < 16000.0)
+    open_h = MG.ladder_gain(f, MG.knob_cutoff(1.0), 0.0)
+    rows = []
+    print('  knob   fitted corner   (model)      dB rms off')
+    for v, seg in takes[1:]:
+        _f, P = psd(seg)
+        h = np.sqrt(P[band] / np.maximum(P0[band], 1e-30)) * open_h[band]
+        fc, _k, e = fit_ladder(h, f[band], k0=0)
+        rows.append((v, fc, e))
+        print('  %.2f   %9.1f Hz   (%7.1f)   %.1f' % (v, fc, MG.knob_cutoff(v), e))
+    ok = [r for r in rows if r[2] < 3.0 and 40.0 < r[1] < 15000.0]
+    v = np.array([r[0] for r in ok]); lf = np.log2([r[1] for r in ok])
+    print('  (the model now: %s)' % ' '.join('%.0f' % MG.knob_cutoff(x) for x in v))
+    v = np.array([r[0] for r in ok]); lf = np.log2([r[1] for r in ok])
+    a, b = np.polyfit(v, lf, 1)
+    print('  fit over %d good points: corner = %.1f Hz * 2^(%.2f v): %.1f Hz at 0, %.0f Hz at 1 '
+          '(the model: 20 Hz * 2^(%.2f v)); worst off the line %.2f octaves'
+          % (len(ok), 2 ** b, a, 2 ** b, 2 ** (a + b), np.log2(1000), np.abs(lf - (a * v + b)).max()))
+    return rows
+
+
+def test_cutoff_saw(rig):
+    note, f_key, K = 45, 110.0, 80
+    base = dict(CAL, kb_track=0.0, resonance=0.0, eg_amount=0.5)
+    vals = [1.0] + [round(v, 2) for v in np.linspace(0.25, 0.85, 13)]
+    takes = held(rig, 'cutoff', base, 'cutoff', vals, note)
+    ref_seg = takes[0][1]
+    f0 = pitch(ref_seg)
+    ref = harmonics(ref_seg, f0, K)
+    fk = f0 * np.arange(1, K + 1)
+    ref = ref / MG.ladder_gain(fk, MG.knob_cutoff(1.0), 0.0)      # the open filter's own tilt out
+    rows = []
+    print('  knob   fitted corner   (model)      dB rms off')
+    for v, seg in takes[1:]:
+        h = harmonics(seg, f0, K) / np.maximum(ref, 1e-12)
+        fc, _k, e = fit_ladder(h, fk, k0=0)
+        rows.append((v, fc))
+        print('  %.2f   %9.1f Hz   (%7.1f)   %.1f' % (v, fc, MG.knob_cutoff(v), e))
+    v = np.array([r[0] for r in rows]); lf = np.log2([r[1] for r in rows])
+    a, b = np.polyfit(v, lf, 1)
+    print('  fit: corner = %.1f Hz * 2^(%.2f v) -> %.1f Hz to %.0f Hz over the knob '
+          '(the model: 20 Hz to 20 kHz, %.2f octaves)' % (2 ** b, a, 2 ** b, 2 ** (a + b), np.log2(1000)))
+    return 2 ** b, a
+
+
+def test_res(rig):
+    note, K = 45, 80
+    base = dict(CAL, kb_track=0.0, cutoff=0.55, eg_amount=0.5)
+    vals = [round(v, 2) for v in np.linspace(0.0, 0.9, 10)]
+    takes = held(rig, 'res', dict(base, resonance=0.0, cutoff=1.0), 'resonance', [0.0], note)
+    f0 = pitch(takes[0][1])
+    fk = f0 * np.arange(1, K + 1)
+    ref = harmonics(takes[0][1], f0, K) / MG.ladder_gain(fk, MG.knob_cutoff(1.0), 0.0)
+    takes = held(rig, 'res', base, 'resonance', vals, note)
+    h0 = harmonics(takes[0][1], f0, K) / np.maximum(ref, 1e-12)
+    fc, _k, e = fit_ladder(h0, fk, k0=0)
+    print('  the corner at CUTOFF 0.55, no resonance: %.1f Hz (%.1f dB rms off)' % (fc, e))
+    print('  knob   fitted k   (model)   dB rms off')
+    rows = []
+    for v, seg in takes:
+        h = harmonics(seg, f0, K) / np.maximum(ref, 1e-12)
+        _fc, k, e = fit_ladder(h, fk, fc0=fc)
+        rows.append((v, k))
+        print('  %.2f   %6.2f    (%4.2f)    %.1f' % (v, k, MG.knob_k(v), e))
+    # SELF-OSCILLATION: the oscillators silent, the ladder alone
+    alone = dict(base, osc1_level=0.0)
+    sv = [round(v, 2) for v in np.linspace(0.7, 1.0, 7)]
+    takes = held(rig, 'selfosc', alone, 'resonance', sv, note)
+    print('  alone:  knob   level (dBFS)   tone at')
+    for v, seg in takes:
+        lv = 20 * np.log10(np.sqrt((seg ** 2).mean()) + 1e-12)
+        tone = pitch(seg) if lv > -60 else 0.0
+        print('          %.2f   %6.1f        %s' % (v, lv, ('%.0f Hz' % tone) if tone else '-'))
+    return rows
+
+
+def test_eg(rig):
+    """By noise, as the cutoff: the contour held at sustain 1.0, the corner at
+    each EG AMOUNT against the corner with no contour at all."""
+    base = dict(CAL, kb_track=0.0, resonance=0.0, osc1_level=0.0, noise_level=1.0, cutoff=0.15)
+    ref = held(rig, 'eg_open', dict(base, cutoff=1.0), 'cutoff', [1.0], 69, dur=1.6)[0][1]
+    f, P0 = psd(ref)
+    band = (f > 25.0) & (f < 16000.0)
+    open_h = MG.ladder_gain(f, MG.knob_cutoff(1.0), 0.0)
+
+    def corner(seg):
+        _f, P = psd(seg)
+        h = np.sqrt(P[band] / np.maximum(P0[band], 1e-30)) * open_h[band]
+        return fit_ladder(h, f[band], k0=0)
+    fz, _k, ez = corner(held(rig, 'eg_zero', base, 'cutoff', [0.15], 69, dur=1.6)[0][1])
+    print('  CUTOFF 0.15, no contour: corner %.1f Hz (%.1f dB off)' % (fz, ez))
+    vals = [round(v, 2) for v in np.linspace(0.0, 1.0, 21)]
+    takes = held(rig, 'eg', dict(base, f_sustain=1.0, f_decay=0.6), 'eg_amount', vals, 69, dur=1.6)
+    rows = []
+    print('  EG     corner      octaves from it   (the model)    dB off')
+    for v, seg in takes:
+        fc, _k, e = corner(seg)
+        rows.append((v, np.log2(fc / fz), e))
+        print('  %.2f  %8.1f Hz   %+6.2f           (%+5.2f)        %.1f'
+              % (v, fc, np.log2(fc / fz), MG.eg_octaves(v), e))
+    return rows, fz
+
+
+def envelope(seg, hop=48):
+    """RMS in 1 ms frames."""
+    n = len(seg) // hop
+    return np.sqrt((seg[:n * hop].reshape(n, hop) ** 2).mean(axis=1))
+
+
+def test_amp(rig):
+    base = dict(CAL, a_decay=0.8, a_release=0.5)
+    out = {}
+    # ATTACK: time to 90% of the plateau; the model's curve gets there at 0.834 A
+    vals = [0.3, 0.4, 0.5, 0.6, 0.7]
+    rig.panel(base); time.sleep(0.3)
+
+    def play_a(r):
+        for v in vals:
+            r.panel(dict(base, a_attack=v), knobs=('a_attack',)); time.sleep(0.15)
+            r.note(57, 2.0); time.sleep(0.6)
+    y = rig.take('attack', len(vals) * 2.75 + 1.5, play_a)
+    print('  ATTACK  knob   time (measured)   (model)')
+    for v, t in zip(vals, rig.played):
+        e = envelope(y[int(t * SR):int((t + 2.0) * SR)])
+        top = np.median(e[-300:])
+        i0 = int(np.argmax(e > top * 0.02)); i9 = int(np.argmax(e > top * 0.9))
+        a = (i9 - i0) / 1000.0 / 0.834
+        out.setdefault('attack', []).append((v, a))
+        print('          %.2f   %8.1f ms       (%7.1f)' % (v, 1000 * a, 1000 * MG.knob_time(v)))
+    # DECAY to nothing, and RELEASE: the time constant of a log-linear fall
+    for which in ('decay', 'release'):
+        vals = [0.4, 0.5, 0.6, 0.7]
+        b2 = dict(base, a_attack=0.0, a_sustain=0.0 if which == 'decay' else 1.0)
+        rig.panel(b2); time.sleep(0.3)
+        knob = 'a_decay' if which == 'decay' else 'a_release'
+
+        def play_d(r):
+            for v in vals:
+                r.panel(dict(b2, **{knob: v}), knobs=(knob,)); time.sleep(0.15)
+                r.note(57, 3.0 if which == 'decay' else 0.6); time.sleep(3.0 if which == 'release' else 0.4)
+        y = rig.take(which, len(vals) * 3.7 + 1.5, play_d)
+        print('  %-7s knob   time (measured)   (model)' % which.upper())
+        for v, t in zip(vals, rig.played):
+            st = t if which == 'decay' else t + 0.6
+            e = envelope(y[int(st * SR):int((st + 2.9) * SR)])
+            # FROM WHERE IT IS AT ITS TOP: the sound reaches the mixer some
+            # milliseconds after the MIDI, so the peak is found, not assumed
+            p = int(np.argmax(e[:400]))
+            top = e[p]
+            tail = e[p:]
+            end = int(np.argmax(tail < top * 0.05)) or len(tail)
+            idx = np.flatnonzero(tail[:end] < top * 0.8)
+            if len(idx) < 5:
+                print('          %.2f   (too short to fit)' % v)
+                continue
+            sl, _c = np.polyfit(idx / 1000.0, np.log(tail[idx]), 1)
+            tau = -1.0 / sl
+            out.setdefault(which, []).append((v, 4 * tau))
+            print('          %.2f   %8.1f ms       (%7.1f)   [tau %.1f ms]'
+                  % (v, 4000 * tau, 1000 * MG.knob_time(v), 1000 * tau))
+    for k, rows in out.items():
+        v = np.array([r[0] for r in rows]); lt = np.log10([max(r[1], 1e-5) for r in rows])
+        a, b = np.polyfit(v, lt, 1)
+        print('  %s fit: %.2f ms * 10^(%.2f v)  (the model: 1 ms * 10^(4 v))' % (k, 1000 * 10 ** b, a))
+    return out
+
+
+def notes_by_silence(y, quiet_db=-50.0, gap_ms=300):
+    """The take's notes as (onset frame, envelope) in 1 ms hops of a 10 ms
+    RMS -- found by the silences between them, not by when they were sent:
+    a slow attack has no edge to find, and a 1 ms frame on a 4.5 ms period
+    reads the waveform, not the envelope."""
+    c = np.cumsum(np.r_[0.0, y ** 2])
+    w, hop = SR // 100, SR // 1000
+    i = np.arange(0, len(y) - w, hop)
+    e = np.sqrt((c[i + w] - c[i]) / w)
+    quiet = e < np.percentile(e, 90) * 10 ** (quiet_db / 20.0)
+    starts, run = [], gap_ms
+    for j in range(1, len(e)):
+        run = run + 1 if quiet[j - 1] else 0
+        if not quiet[j] and run >= gap_ms:
+            starts.append(j)
+    return [(o, e[o:(starts[k + 1] if k + 1 < len(starts) else len(e))]) for k, o in enumerate(starts)]
+
+
+def test_attack(rig):
+    """ATTACK over its whole travel: the 10, 50 and 90% rise times, with
+    sustain full and notes long enough to finish (the shape: an RC charge
+    toward T, cut at 1, reaches them at -ln(1 - L/T) time constants); then
+    with sustain 0, where the peak lands -- when the charge is cut and the
+    decay begins."""
+    base = dict(CAL, a_decay=0.8, a_sustain=1.0, a_release=0.3)
+    vals = [round(v, 1) for v in np.linspace(0.0, 1.0, 11)]
+    durs = [4.5 if v < 0.75 else 14.0 for v in vals]
+    rig.panel(base); time.sleep(0.3)
+
+    def play(r):
+        for v, d in zip(vals, durs):
+            r.panel(dict(base, a_attack=v), knobs=('a_attack',)); time.sleep(0.15)
+            r.note(57, d); time.sleep(1.0)
+    y = rig.take('attack', sum(durs) + len(vals) * 1.3 + 1.5, play)
+    rows = []
+    print('  ATTACK   t10     t50     t90 ms   t50/t90  t10/t90')
+    for v, (o, seg) in zip(vals, notes_by_silence(y)):
+        top = seg.max()
+        t10, t50, t90 = [int(np.argmax(seg > top * f)) / 1000.0 for f in (0.1, 0.5, 0.9)]
+        rows.append((v, t10, t50, t90, top))
+        print('  %.1f  %7.0f %7.0f %7.0f    %.3f    %.3f' % (v, 1000 * t10, 1000 * t50, 1000 * t90,
+                                                         t50 / max(t90, 1e-3), t10 / max(t90, 1e-3)))
+    base0 = dict(base, a_sustain=0.0, a_decay=0.55)
+    pv = [0.3, 0.5, 0.7]
+    rig.panel(base0); time.sleep(0.3)
+
+    def play_p(r):
+        for v in pv:
+            r.panel(dict(base0, a_attack=v), knobs=('a_attack',)); time.sleep(0.15)
+            r.note(57, 5.0); time.sleep(1.0)
+    y = rig.take('attack_peak', len(pv) * 6.3 + 1.5, play_p)
+    print('  SUSTAIN 0: the peak, against the full-sustain t90 and its level')
+    for v, (o, seg) in zip(pv, notes_by_silence(y)):
+        full = [r for r in rows if r[0] == v][0]
+        p = int(np.argmax(seg))
+        print('  %.1f  peak at %5d ms  (t90 sustained %5.0f ms)  at %.3f of the sustained top'
+              % (v, p, 1000 * full[3], seg[p] / full[4]))
+    return rows
+
+
+def pitch_track(seg, hop=960, win=4096):
+    """f0 every 20 ms, from the lowest strong harmonic of each window."""
+    out = []
+    for i in range(0, len(seg) - win, hop):
+        out.append(pitch(seg[i:i + win]))
+    return np.array(out)
+
+
+def test_lfo(rig):
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc2_wave=MG.SAW, lfo1_dest=1,
+                lfo1_shape=0, lfo1_depth=1.0, lfo1_reset=True)
+    vals = [0.3, 0.4, 0.5]
+    rig.panel(base); time.sleep(0.3)
+
+    def play(r):
+        for v in vals:
+            r.panel(dict(base, lfo1_rate=v), knobs=('lfo1_rate',)); time.sleep(0.15)
+            r.note(57, 5.0); time.sleep(0.3)
+    y = rig.take('lfo', len(vals) * 5.45 + 1.5, play)
+    print('  RATE  knob   measured   (model)    pitch swing, octaves either way (model at full)')
+    for v, t in zip(vals, rig.played):
+        seg = y[int((t + 0.3) * SR):int((t + 4.9) * SR)]
+        lv = 20 * np.log10(np.sqrt((seg ** 2).mean()) + 1e-12)
+        tr = pitch_track(seg)
+        tr = tr[np.isfinite(tr)]
+        if len(tr) < 50:
+            print('        %.2f   no steady pitch (level %.1f dBFS)' % (v, lv))
+            continue
+        c = 1200 * np.log2(tr / np.median(tr))
+        F = np.abs(np.fft.rfft(c - c.mean(), 1 << 14)); fr = np.fft.rfftfreq(1 << 14, 0.02)
+        rate = fr[1 + np.argmax(F[1:])]
+        swing = (np.percentile(c, 98) - np.percentile(c, 2)) / 2400.0
+        print('        %.2f   %6.2f Hz  (%5.2f)    %.2f  (%.2f)' % (v, rate, MG.knob_lfo_rate(v), swing, MG.LFO_PITCH_OCTAVES))
+
+
+def test_mod(rig):
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc2_wave=MG.SAW, mod_dest=1,
+                f_attack=0.0, f_decay=0.3, f_sustain=1.0)
+    vals = [0.5, 0.55, 0.6, 0.65, 0.45, 0.4]
+    rig.panel(base); time.sleep(0.3)
+
+    def play(r):
+        for v in vals:
+            r.panel(dict(base, mod_amount=v), knobs=('mod_amount',)); time.sleep(0.15)
+            r.note(57, 1.0); time.sleep(0.25)
+    y = rig.take('mod', len(vals) * 1.4 + 1.5, play)
+    f00 = None
+    print('  MOD AMOUNT   OSC 2 at    octaves   (model)')
+    for v, t in zip(vals, rig.played):
+        f = pitch(y[int((t + 0.4) * SR):int((t + 0.9) * SR)])
+        if f00 is None:
+            f00 = f
+        print('  %.2f        %8.2f Hz  %+.3f   (%+.3f)' % (v, f, np.log2(f / f00), MG.bipolar(v, MG.MOD_PITCH_OCTAVES)))
+
+
+def model_harmonics(panel, note, K):
+    """The model's own render of one held note of `panel`: its harmonics."""
+    import json, tempfile
+    import blockrender as BR
+    path = os.path.join(tempfile.gettempdir(), 'mfit_note.mid')
+    m = mido.MidiFile(ticks_per_beat=480); t = mido.MidiTrack(); m.tracks.append(t)
+    t += [mido.MetaMessage('set_tempo', tempo=500000),
+          mido.Message('program_change', channel=0, program=81),
+          mido.Message('note_on', channel=0, note=note, velocity=100, time=0),
+          mido.Message('note_off', channel=0, note=note, velocity=0, time=960)]
+    m.save(path)
+    old = os.environ.get('TUNING_MOOG_PANEL'), os.environ.get('TUNING_REFLECT')
+    os.environ['TUNING_MOOG_PANEL'] = json.dumps(panel)
+    os.environ['TUNING_REFLECT'] = '0'
+    try:
+        q = BR.prepare(path, 'even')
+        y = BR.synth_window(q, 0, q['N'])[0].astype(float)
+    finally:
+        for k, v in zip(('TUNING_MOOG_PANEL', 'TUNING_REFLECT'), old):
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    seg = y[int(0.4 * BR.SR):int(0.9 * BR.SR)]
+    return harmonics(seg, 440.0 * 2 ** ((note - 69) / 12.0), K, BR.SR)
+
+
+def test_fm(rig):
+    note, K = 57, 12
+    HW_TRI = 0.35                       # the hardware's triangle (see 'wave')
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc1_wave=HW_TRI, osc2_wave=HW_TRI,
+                mod_dest=0)
+    vals = [0.5, 0.55, 0.6, 0.7, 0.8]
+    takes = held(rig, 'fm', base, 'mod_amount', vals, note)
+    trials = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
+    keep = MG.FM_INDEX_MAX
+    print('  MOD AMOUNT   best FM_INDEX_MAX   (dB rms off, of the trials %s)' % trials)
+    best_all = []
+    try:
+        # the grid on the NOTE's own pitch, the instrument being some cents
+        # sharp -- not on the lowest peak, which FM can move
+        f0 = pitch(takes[0][1])
+        for v, seg in takes:
+            h = harmonics(seg, f0, K); h = h / h.max()
+            errs = []
+            for tm in trials:
+                MG.FM_INDEX_MAX = tm
+                mh = model_harmonics(dict(base, osc1_wave=MG.TRI, osc2_wave=MG.TRI, mod_amount=v), note, K)
+                mh = mh / mh.max()
+                e = np.sqrt(((20 * np.log10(np.maximum(h, 1e-3)) - 20 * np.log10(np.maximum(mh, 1e-3))) ** 2).mean())
+                errs.append(e)
+            j = int(np.argmin(errs))
+            best_all.append(trials[j])
+            print('  %.2f          %.1f                 (%s)' % (v, trials[j], ' '.join('%.1f' % e for e in errs)))
+    finally:
+        MG.FM_INDEX_MAX = keep
+    return best_all
+
+
+TESTS = {'tune': test_tune, 'freq': test_freq, 'wave': test_wave, 'cutoff': test_cutoff,
+         'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'lfo': test_lfo, 'mod': test_mod,
+         'fm': test_fm}
 
 
 def main(argv):
