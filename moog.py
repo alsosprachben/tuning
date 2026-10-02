@@ -270,6 +270,14 @@ def sub_spectrum(shape, n):
 # ---------------------------------------------------------------- the ladder
 LP4, LP2, BP, HP = 0, 1, 2, 3
 MODES = ('4P LOW PASS', '2P LOW PASS', 'BAND PASS', 'HIGH PASS')
+# THE MODES, measured (examples/messenger_fit.py modes; noise at CUTOFF 0.35,
+# RESONANCE 0, |H| in half-octave steps): the two low-passes are the
+# ladder's own within a dB. The BAND PASS is the mixed poles' shape 7.6 dB
+# down with its corner 5% up (0.78 dB rms); the HIGH PASS 6.4 dB down, its
+# corner 9% down, and a LEAK of the dry signal under it -- flat at -23 dB
+# through the stop band (0.95 dB rms).
+BP_GAIN, BP_CORNER = 10 ** (-7.6 / 20.0), 1.05
+HP_GAIN, HP_CORNER, HP_LEAK = 10 ** (-6.4 / 20.0), 0.91, 0.071
 K_MAX = 3.9      # feedback at full RESONANCE: 4 is the edge of self-oscillation,
                  # where a partial on the peak would be amplified without limit
 
@@ -286,6 +294,7 @@ def ladder(f, fc, k, mode=LP4, res_bass=False):
     low-pass passes 1/(1+k). RES BASS restores it -- a gain of (1+k) on the
     low-pass modes, which is what compensation does -- so the peak stands up
     out of the passband instead of the passband sinking under the peak."""
+    fc = fc * (BP_CORNER if mode == BP else HP_CORNER if mode == HP else 1.0)
     g = 1.0 / (1.0 + 1j * np.asarray(f, float) / fc)
     u = 1.0 / (1.0 + k * g ** 4)
     if mode == LP4:
@@ -293,9 +302,9 @@ def ladder(f, fc, k, mode=LP4, res_bass=False):
     elif mode == LP2:
         h = g ** 2 * u
     elif mode == BP:
-        h = 4.0 * g ** 2 * (1.0 - g) ** 2 * u
+        h = BP_GAIN * 4.0 * g ** 2 * (1.0 - g) ** 2 * u
     else:
-        h = (1.0 - g) ** 2 * u
+        h = HP_GAIN * (1.0 - g) ** 2 * u + HP_LEAK
     if res_bass and mode in (LP4, LP2):
         h = h * (1.0 + k)
     return h
@@ -305,7 +314,7 @@ def ladder_gain(f, fc, k, mode=LP4, res_bass=False):
     """|H|, the magnitude alone -- what the kernel applies. The phase response
     is dropped, which only changes the wave's SHAPE, never what one hears,
     and is exact between partials at the same frequency."""
-    x = np.asarray(f, float) / fc
+    x = np.asarray(f, float) / (fc * (BP_CORNER if mode == BP else HP_CORNER if mode == HP else 1.0))
     # (1 + jx)^4 = (1 - 6x^2 + x^4) + j(4x - 4x^3): |den| = |(1+jx)^4 + k|
     re4, im4 = 1.0 - 6.0 * x * x + x ** 4, 4.0 * x - 4.0 * x ** 3
     den = np.hypot(re4 + k, im4)
@@ -314,9 +323,16 @@ def ladder_gain(f, fc, k, mode=LP4, res_bass=False):
     elif mode == LP2:
         num = 1.0 + x * x                       # |(1+jx)^2|
     elif mode == BP:
-        num = 4.0 * x * x                       # |4 (jx)^2|
+        num = BP_GAIN * 4.0 * x * x             # |4 (jx)^2|
     else:
-        num = x * x * (1.0 + x * x)             # |(jx)^2 (1+jx)^2|
+        # the leak adds to the high-pass itself, so the phase counts here:
+        # (jx)^2 (1+jx)^2 = (x^4 - x^2) - 2j x^3, over (1+jx)^4 + k
+        nr, ni = x ** 4 - x * x, -2.0 * x ** 3
+        dr = re4 + k
+        d2 = dr * dr + im4 * im4
+        hr = HP_GAIN * (nr * dr + ni * im4) / d2 + HP_LEAK
+        hi = HP_GAIN * (ni * dr - nr * im4) / d2
+        return np.hypot(hr, hi)
     h = num / den
     if res_bass and mode in (LP4, LP2):
         h = h * (1.0 + k)
@@ -485,21 +501,72 @@ def lfo_rate_knob(hz):
     return _clip01(math.log(max(float(hz), LFO_RATE_LO) / LFO_RATE_LO) / math.log(LFO_RATE_SPAN))
 
 
-LFO_OCTAVES = 3.0   # LFO 1 DEPTH fully either way moves the cutoff this far
+# LFO 1, measured (examples/messenger_fit.py lfo; a slow LFO from the key,
+# the cutoff by noise in 0.25 s windows, the pitch tracked): the TRIANGLE
+# swings both ways about the panel; the SAWTOOTH (falling, as Moog names it),
+# the RAMP (rising) and the SQUARE (high first) only one way -- up for DEPTH
+# past the centre, down short of it. DEPTH is a CUBE of its distance from
+# the centre: the cutoff 87 x^3 octaves (0.30 at 0.65, 1.36 at 0.75, 2.38 at
+# 0.8, each within 2%; ~11 at the end), the pitch 37.2 x^3 (35-37.4 a unit at
+# every depth 0.6-0.9), a waveshape 7.8 x^3 of its knob (a square LFO from the
+# triangle, the shifted wave read off its spectrum: 0.057 at 0.7, 0.112 at
+# 0.75, 0.515 at 0.9) -- which is the cutoff's law in the cutoff knob's own
+# units (87 / 11.14 = 7.81): LFO 1 turns the knob it is sent to.
+LFO_CUT_CUBE, LFO_PITCH_CUBE = 87.0, 37.2
+LFO_KNOB_CUBE = LFO_CUT_CUBE / 11.14
+V4_LFO_WAVE_SPAN = 0.5                 # the first models' reach on a waveshape, linear
+V4_LFO_OCTAVES, V4_LFO_PITCH_OCTAVES = 3.0, 4.0     # the first models': linear, bipolar
 LFO_SHAPES = ('triangle', 'sawtooth', 'ramp', 'square')
 LFO_DESTS = ('cutoff', 'osc 2 freq', 'osc 1 wave', 'sub wave')
 
 
 def lfo(x, shape):
-    """LFO 1 at phase x (cycles): -1..1. Sawtooth rises, ramp falls."""
+    """LFO 1 at phase x (cycles): the triangle -1..1, the others 0..1 -- the
+    sawtooth falling, the ramp rising, the square high for the first half."""
     x = np.asarray(x, float) % 1.0
     if shape == 0:
         return 1.0 - 4.0 * np.abs(x - 0.5)
     if shape == 1:
-        return 2.0 * x - 1.0
+        return 1.0 - x
     if shape == 2:
-        return 1.0 - 2.0 * x
-    return np.where(x < 0.5, 1.0, -1.0)
+        return x
+    return np.where(x < 0.5, 1.0, 0.0)
+
+
+def _cube(v, k):
+    x = _clip01(v) - 0.5
+    return k * x * x * x
+
+
+def _cube_knob(octaves, k):
+    return 0.5 + math.copysign(abs(octaves / k) ** (1.0 / 3.0), octaves)
+
+
+def lfo_cut_octaves(v):
+    """LFO 1 DEPTH on the cutoff: the octaves at the shape's +1."""
+    return _cube(v, LFO_CUT_CUBE)
+
+
+def lfo_cut_knob(octaves):
+    return _cube_knob(octaves, LFO_CUT_CUBE)
+
+
+def lfo_pitch_octaves(v):
+    """LFO 1 DEPTH on OSC 2's pitch: the octaves at the shape's +1."""
+    return _cube(v, LFO_PITCH_CUBE)
+
+
+def lfo_pitch_knob(octaves):
+    return _cube_knob(octaves, LFO_PITCH_CUBE)
+
+
+def lfo_wave_reach(v):
+    """LFO 1 DEPTH on a waveshape: the knob travel at the shape's +1."""
+    return _cube(v, LFO_KNOB_CUBE)
+
+
+def lfo_wave_knob(reach):
+    return _cube_knob(reach, LFO_KNOB_CUBE)
 
 
 # SELF-OSCILLATION. The Messenger's resonance "self-oscillates to a sine at
@@ -626,7 +693,11 @@ OSC1, OSC2, SUB, NOISE, SELF = 1, 2, 3, 4, 5
 # the amp contour shapes it -- the Messenger's mixer, filter, VCA.
 NOISE_LO_HZ, NOISE_STEP = 40.0, 2.0 ** (1.0 / 3.0)
 NOISE_BW = NOISE_STEP - 1.0          # a band's width, as a fraction of its centre
-NOISE_RMS = 0.5
+# measured against a saw at the same level: in 100 Hz-2 kHz (above it the
+# mixer's own roll-off takes as much as the noise does) its rms is 1.7 dB
+# under the saw's fundamental -- 4.6 dB over the first model's 0.5
+NOISE_RMS = 0.5 * 10 ** (4.6 / 20.0)
+V5_NOISE_RMS = 0.5
 
 
 def _noise_bank():
@@ -1026,20 +1097,23 @@ def _wave_v2(v):
     return float(np.interp(_clip01(v), xs, ys))
 
 
-def _wave_sweeps(knobs, ctx, out, remap):
+def _wave_sweeps(knobs, ctx, out, remap, cube=True):
     """A SWEEP OF THE WAVESHAPE (LFO 1 on OSC 1 WAVE, or F ENV on OSC 2 WAVE)
     moves the KNOB, and the landmarks moved under it: its span is rescaled to
     cover the same shapes, the remapped ends of the old sweep -- exact at its
-    ends, not between them, the remap being piecewise. (The spans themselves,
-    LFO_WAVE_SPAN and MOD_WAVE_SPAN, are not yet measured.)"""
+    ends, not between them, the remap being piecewise. `cube`: the new depth
+    in the measured laws (lfo_wave_reach, MOD_WAVE_REACH), else still in the
+    first models' (for convert_v4 to take on)."""
     if 'lfo1_depth' in knobs and int(ctx.get('lfo1_dest', 0)) == 2 and 'osc1_wave' in ctx:
-        c, h = _clip01(ctx['osc1_wave']), bipolar(knobs['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
+        c, h = _clip01(ctx['osc1_wave']), bipolar(knobs['lfo1_depth'], V4_LFO_WAVE_SPAN / 2.0)
         nh = math.copysign((remap(c + abs(h)) - remap(c - abs(h))) / 2.0, h)
-        out['lfo1_depth'] = 0.5 + nh / (LFO_WAVE_SPAN / 2.0) / 2.0
+        # the depth to LFO 1's own law (cube), or still the first models'
+        # (convert_v3: convert_v4 then takes it on)
+        out['lfo1_depth'] = lfo_wave_knob(nh) if cube else 0.5 + nh / (V4_LFO_WAVE_SPAN / 2.0) / 2.0
     if 'mod_amount' in knobs and int(ctx.get('mod_dest', 1)) == 2 and 'osc2_wave' in ctx:
-        c, h = _clip01(ctx['osc2_wave']), bipolar(knobs['mod_amount'], MOD_WAVE_SPAN / 2.0)
+        c, h = _clip01(ctx['osc2_wave']), bipolar(knobs['mod_amount'], V4_MOD_WAVE_SPAN / 2.0)
         nh = remap(c + h) - remap(c)
-        out['mod_amount'] = 0.5 + nh / (MOD_WAVE_SPAN / 2.0) / 2.0
+        out['mod_amount'] = 0.5 + (nh / MOD_WAVE_REACH if cube else nh / (V4_MOD_WAVE_SPAN / 2.0)) / 2.0
     for k in ('osc1_wave', 'osc2_wave'):
         if k in out:
             out[k] = remap(out[k])
@@ -1087,7 +1161,11 @@ def convert_v1(knobs, context=None):
     if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) == 0:
         out['mod_amount'] = fm_index_knob(bipolar(out['mod_amount'], V1_FM_INDEX_MAX))
     if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) == 1:
-        out['lfo1_depth'] = 0.5 + (out['lfo1_depth'] - 0.5) * V1_LFO_PITCH_OCTAVES / LFO_PITCH_OCTAVES
+        out['lfo1_depth'] = lfo_pitch_knob(bipolar(out['lfo1_depth'], V1_LFO_PITCH_OCTAVES))
+    if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) == 0:
+        out['lfo1_depth'] = lfo_cut_knob(bipolar(out['lfo1_depth'], V4_LFO_OCTAVES))
+    if 'lfo1_shape' in out and int(out['lfo1_shape']) in (1, 2):    # its saw rose: the ramp
+        out['lfo1_shape'] = 3 - int(out['lfo1_shape'])
     _wave_sweeps(knobs, ctx, out, _wave_v1)
     if 'kb_track' in out:                   # OFF or 1:1: the first model's 2/3 is not
         out['kb_track'] = 1.0 if float(out['kb_track']) >= 0.5 else 0.0   # a setting the hardware has
@@ -1120,7 +1198,7 @@ def convert_v3(knobs, context=None):
     ctx = dict(context or {})
     ctx.update(knobs)
     out = dict(knobs)
-    _wave_sweeps(knobs, ctx, out, _wave_v2)
+    _wave_sweeps(knobs, ctx, out, _wave_v2, cube=False)
     if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) == 0:      # 1 -> 2 FM's index
         out['mod_amount'] = fm_index_knob(bipolar(out['mod_amount'], V1_FM_INDEX_MAX))
     if 'sub_wave' in out:
@@ -1131,6 +1209,29 @@ def convert_v3(knobs, context=None):
 def _sub_v2(v):
     """A SUB WAVE position, the first models' square (0.4) to this one's."""
     return float(np.interp(_clip01(v), (0.0, V2_SUB_SQUARE, 1.0), (0.0, SUB_SQUARE, 1.0)))
+
+
+def convert_v4(knobs, context=None):
+    """A panel written before LFO 1 and MOD on the waveshapes were measured
+    (synth_units 4 and before: LFO 1's depth linear, 3 octaves on the cutoff,
+    4 on the pitch and a quarter of the knob on a wave either way at the
+    ends, every shape both ways; MOD's reach on a wave half its travel) as
+    this: each depth its swing. The triangle is exact; a sawtooth (which
+    rose) becomes the ramp."""
+    ctx = dict(context or {})
+    ctx.update(knobs)
+    out = dict(knobs)
+    if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) == 0:
+        out['lfo1_depth'] = lfo_cut_knob(bipolar(out['lfo1_depth'], V4_LFO_OCTAVES))
+    if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) == 1:
+        out['lfo1_depth'] = lfo_pitch_knob(bipolar(out['lfo1_depth'], V4_LFO_PITCH_OCTAVES))
+    if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) in (2, 3):
+        out['lfo1_depth'] = lfo_wave_knob(bipolar(out['lfo1_depth'], V4_LFO_WAVE_SPAN / 2.0))
+    if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) in (2, 3):
+        out['mod_amount'] = 0.5 + bipolar(out['mod_amount'], V4_MOD_WAVE_SPAN / 2.0) / MOD_WAVE_REACH / 2.0
+    if 'lfo1_shape' in out and int(out['lfo1_shape']) in (1, 2):
+        out['lfo1_shape'] = 3 - int(out['lfo1_shape'])
+    return out
 
 PANEL = convert_v1(PANEL_V1)
 MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)
@@ -1143,7 +1244,7 @@ def pitch_params(panel):
     if panel['sync']:
         return None
     ae = bipolar(panel['mod_amount'], MOD_PITCH_OCTAVES) if int(panel['mod_dest']) == 1 else 0.0
-    al = bipolar(panel['lfo1_depth'], LFO_PITCH_OCTAVES) if int(panel['lfo1_dest']) == 1 else 0.0
+    al = lfo_pitch_octaves(panel['lfo1_depth']) if int(panel['lfo1_dest']) == 1 else 0.0
     if ae == 0.0 and al == 0.0:
         return None
     return (ae, knob_attack(panel['f_attack']), knob_time(panel['f_decay']),
@@ -1156,10 +1257,13 @@ def pitch_params(panel):
 # THE WAVESHAPES THAT MOVE: F ENV -> OSC 2 WAVE and -> SUB WAVE (the MOD
 # section), LFO 1 -> OSC 1 WAVE and -> SUB WAVE, and the SYNC SWEEP -- OSC 2
 # FREQ moved (by the contour or LFO 1) while it is synced, which moves the
-# synced spectrum and not the pitch. Unknown depths, chosen: MOD AMOUNT at 100%
-# sweeps the whole WAVESHAPE travel, LFO 1 at full depth half of it.
-MOD_WAVE_SPAN = 1.0
-LFO_WAVE_SPAN = 0.5
+# synced spectrum and not the pitch. MOD AMOUNT, measured (the contour held at
+# full, the moved wave read off its spectrum), is linear and reaches the whole
+# WAVESHAPE travel either way at full: 2.02 of it a unit of knob at every
+# amount 0.55-0.8. (The first model meant that and reached half: its span was
+# read as +-SPAN/2.) LFO 1's reach is its cube (lfo_wave_reach).
+MOD_WAVE_REACH = 1.0
+V4_MOD_WAVE_SPAN = 1.0
 SHAPE_K = OSC_HARMONICS          # coefficients per oscillator per grid point
 SHAPE_W = 25                     # shape_params' length
 
@@ -1187,9 +1291,9 @@ def shape_params(panel):
     v[0] = shape_flags(panel)
     v[1], v[2], v[3] = panel['osc1_wave'], panel['osc2_wave'], panel['sub_wave']
     v[4] = md if md in (2, 3) else 0
-    v[5] = bipolar(panel['mod_amount'], MOD_WAVE_SPAN / 2.0)
+    v[5] = bipolar(panel['mod_amount'], MOD_WAVE_REACH)
     v[6] = {2: 1, 3: 3}.get(ld, 0)
-    v[7] = bipolar(panel['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
+    v[7] = lfo_wave_reach(panel['lfo1_depth'])
     v[8], v[9], v[10] = knob_lfo_rate(panel['lfo1_rate']), int(panel['lfo1_shape']), 1.0 if panel['lfo1_reset'] else 0.0
     v[11], v[12] = knob_attack(panel['f_attack']), knob_time(panel['f_decay'])
     v[13], v[14] = sustain_target(panel['f_sustain']), knob_time(panel['f_release'])
@@ -1293,8 +1397,8 @@ def pitch_ratio(n, a0, toff, P, sr):
         tl = np.where(lres > 0.5, t, np.asarray(n, float) / sr)
         ph = (tl * lhz) % 1.0
         lv = np.select([lsh == 0, lsh == 1, lsh == 2],
-                       [1.0 - 4.0 * np.abs(ph - 0.5), 2.0 * ph - 1.0, 1.0 - 2.0 * ph],
-                       np.where(ph < 0.5, 1.0, -1.0))
+                       [1.0 - 4.0 * np.abs(ph - 0.5), 1.0 - ph, ph],
+                       np.where(ph < 0.5, 1.0, 0.0))
         x = x + al * lv
     return np.where(t < 0.0, 1.0, 2.0 ** x)
 
@@ -1434,7 +1538,7 @@ def kn_row(panel):
             eg_octaves(panel['eg_amount']),
             sustain_target(panel['f_sustain']), sustain_target(panel['a_sustain']),
             knob_lfo_rate(panel['lfo1_rate']),
-            bipolar(panel['lfo1_depth'], LFO_OCTAVES) if on else 0.0,
+            lfo_cut_octaves(panel['lfo1_depth']) if on else 0.0,
             float(int(panel['lfo1_shape'])), 1.0 if panel['lfo1_reset'] else 0.0]
 
 
@@ -1538,9 +1642,9 @@ def selftest():
     err = np.median(np.abs(y - direct))
     check("...and between, the synced wave itself", err < 0.02,
           "(r 1.5: median err %.3f; the fundamental is OSC 1's, at %.2f)" % (err, s15[0]))
-    check("LFO 1's shapes: triangle, rising saw, falling ramp, square",
-          np.allclose(lfo([0, 0.25, 0.5], 0), [-1, 0, 1]) and np.allclose(lfo([0, 0.5], 1), [-1, 0])
-          and np.allclose(lfo([0, 0.5], 2), [1, 0]) and np.allclose(lfo([0.25, 0.75], 3), [1, -1]))
+    check("LFO 1's shapes: triangle both ways; falling saw, rising ramp, square one way",
+          np.allclose(lfo([0, 0.25, 0.5], 0), [-1, 0, 1]) and np.allclose(lfo([0, 0.5], 1), [1, 0.5])
+          and np.allclose(lfo([0, 0.5], 2), [0, 0.5]) and np.allclose(lfo([0.25, 0.75], 3), [1, 0]))
     check("RESONANCE sings alone from where the hardware does",
           self_amp(SELF_FROM) == 0.0 and abs(self_amp(1.0) - SELF_AMP) < 1e-12
           and self_amp(0.72) > 0 and abs(knob_k(SELF_FROM) - K_MAX) < 1e-12,

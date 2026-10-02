@@ -9518,7 +9518,7 @@ class MoogChiffLead(ChiffLeadProperties):
     initial_gain = ChiffLeadProperties.initial_gain * 10 ** (7.9 / 20.0)
     chiff_volume = 0.0
     messenger = dict(
-        osc1_wave=0.5, osc2_level=0.0, osc1_level=1.0, noise_level=0.2,
+        osc1_wave=0.5, osc2_level=0.0, osc1_level=1.0, noise_level=0.117769,
         cutoff=0.201155, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
         f_attack=0.0, f_decay=0.277265, f_sustain=0.515793, f_release=0.095069,
         a_attack=0.012614, a_decay=0.134897, a_sustain=0.974811, a_release=0.134897,
@@ -9775,7 +9775,7 @@ class MoogHaloPad(HaloPadProperties):
     initial_gain = HaloPadProperties.initial_gain * 10 ** (2.7 / 20.0)
     messenger = dict(
         osc1_wave=0.68, osc2_wave=0.68, osc2_freq=0.5 + 6.0 / 1400.0,
-        osc1_level=0.8, osc2_level=0.7, noise_level=0.08,
+        osc1_level=0.8, osc2_level=0.7, noise_level=0.047107,
         cutoff=0.29956, resonance=0.068421, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.337985, f_decay=0.401385, f_sustain=0.869694, f_release=0.489307,
         a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
@@ -9796,7 +9796,7 @@ class MoogSweepPad(SweepPadProperties):
         cutoff=0.111696, resonance=0.307895, eg_amount=0.5, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=1.0, f_release=0.471722,
         a_attack=0.30615, a_decay=0.249524, a_sustain=1.0, a_release=0.471722,
-        lfo1_rate=0.161946, lfo1_shape=0, lfo1_depth=0.8, lfo1_dest=0,
+        lfo1_rate=0.161946, lfo1_shape=0, lfo1_depth=0.774527, lfo1_dest=0,
     )
 
 
@@ -9813,7 +9813,7 @@ class MoogSoundtrackPad(SoundtrackFXProperties):
         cutoff=0.174317, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
         f_attack=0.50775, f_decay=0.489307, f_sustain=0.899117, f_release=0.544434,
         a_attack=0.44579, a_decay=0.249524, a_sustain=1.0, a_release=0.544434,
-        lfo1_rate=0.102026, lfo1_shape=0, lfo1_depth=0.68, lfo1_dest=0,
+        lfo1_rate=0.102026, lfo1_shape=0, lfo1_depth=0.731545, lfo1_dest=0,
     )
 
 
@@ -9833,7 +9833,7 @@ class MoogAtmosphereFX(AtmosphereFXProperties):
     initial_gain = AtmosphereFXProperties.initial_gain * 10 ** (12.4 / 20.0)
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.335, osc2_freq=0.5 + 5.0 / 1400.0,
-        osc1_level=0.7, osc2_level=0.5, noise_level=0.25,
+        osc1_level=0.7, osc2_level=0.5, noise_level=0.147211,
         cutoff=0.201155, resonance=0.102632, eg_amount=0.657762, kb_track=1.0,
         f_attack=0.353903, f_decay=0.401385, f_sustain=0.869694, f_release=0.489307,
         a_attack=0.358678, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
@@ -9854,7 +9854,7 @@ class MoogGoblinsFX(GoblinsFXProperties):
         cutoff=0.066966, resonance=0.205263, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=0.899117, f_release=0.436552,
         a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
-        lfo1_rate=0.388669, lfo1_shape=0, lfo1_depth=0.503125, lfo1_dest=1,
+        lfo1_rate=0.388669, lfo1_shape=0, lfo1_depth=0.587592, lfo1_dest=1,
     )
 
 
@@ -9873,7 +9873,7 @@ class MoogSciFiFX(SciFiFXProperties):
         cutoff=0.066966, resonance=0.410526, eg_amount=0.815524, kb_track=1.0,
         f_attack=0.30615, f_decay=0.619504, f_sustain=0.555275, f_release=0.436552,
         a_attack=0.125028, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
-        lfo1_rate=0.44535, lfo1_shape=0, lfo1_depth=0.814726, lfo1_dest=2,
+        lfo1_rate=0.44535, lfo1_shape=0, lfo1_depth=0.772117, lfo1_dest=2,
     )
 
 class MoogBrightnessFX(BrightnessFXProperties):
@@ -9920,11 +9920,11 @@ class MoogBowedPad(BowedPadProperties):
     a second -- what the additive voice did with a narrow formant at 3 kHz."""
     moog = True
     # at the additive voice's level (examples/moog_ab.py, K-weighted)
-    initial_gain = BowedPadProperties.initial_gain * 10 ** (9.3 / 20.0)
+    initial_gain = BowedPadProperties.initial_gain * 10 ** (16.9 / 20.0)   # 9.3 + the band-pass's 7.6
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
-        mode=2, cutoff=0.249463, resonance=0.478947, eg_amount=0.5, kb_track=1.0,
+        mode=2, cutoff=0.243144, resonance=0.478947, eg_amount=0.5, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=1.0, f_release=0.507281,
         a_attack=0.395288, a_decay=0.249524, a_sustain=1.0, a_release=0.507281,
     )
@@ -12076,7 +12076,7 @@ class MoogSynthDrum(SynthDrumProperties):
     # at the additive drum's level (examples/moog_ab.py, K-weighted)
     initial_gain = SynthDrumProperties.initial_gain * 10 ** (6.5 / 20.0)
     messenger = dict(
-        osc1_level=0.0, osc2_wave=0.335, osc2_level=1.0, noise_level=0.12,
+        osc1_level=0.0, osc2_wave=0.335, osc2_level=1.0, noise_level=0.070661,
         cutoff=0.201155, resonance=0.136842, eg_amount=0.778887, kb_track=1.0,
         f_attack=0.0, f_decay=0.185522, f_sustain=0.0, f_release=0.185522,
         a_attack=0.0, a_decay=0.525858, a_sustain=0.0, a_release=0.525858,

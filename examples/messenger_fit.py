@@ -751,9 +751,135 @@ def test_fm(rig):
     return rows
 
 
+def _wave_at(h, K=10):
+    """Where on WAVESHAPE (triangle up) a measured spectrum stands: the model's
+    position whose shape it is (that region now fits within 0.2-2 dB)."""
+    best = None
+    for g in np.linspace(MG.TRI, 1.0, 267):
+        e = _shape_err(2 * np.abs(MG.osc_spectrum(g, K)), h)
+        if best is None or e < best[0]:
+            best = (e, g)
+    return best[1], best[0]
+
+
+def _noise_corner(rig, base):
+    """A corner fitter for windows of a noise take, against the open ladder."""
+    ref = held(rig, 'corner_open', dict(base, cutoff=1.0), 'cutoff', [1.0], 69, dur=1.6)[0][1]
+    f, P0 = psd(ref)
+    band = (f > 25.0) & (f < 16000.0)
+    open_h = MG.ladder_gain(f, MG.knob_cutoff(1.0), 0.0)
+
+    def corner(seg):
+        _f, P = psd(seg, nper=2048)
+        h = np.sqrt(np.interp(f, _f, P)[band] / np.maximum(P0[band], 1e-30)) * open_h[band]
+        return fit_ladder(h, f[band], k0=0)[0]
+    return corner
+
+
+def test_lfocut(rig):
+    """LFO 1 on the cutoff: a slow square from the key (high first), the
+    corner in 0.25 s windows of noise -- its height against DEPTH (a cube),
+    and each shape's polarity (the triangle both ways, the rest one way)."""
+    base = dict(CAL, kb_track=0.0, resonance=0.0, osc1_level=0.0, noise_level=1.0, cutoff=0.15,
+                lfo1_dest=0, lfo1_shape=3, lfo1_rate=MG.lfo_rate_knob(0.5), lfo1_reset=True)
+    corner = _noise_corner(rig, dict(base, lfo1_depth=0.5))
+    rest = MG.knob_cutoff(0.15)
+    print('  DEPTH  shape      octaves re the panel: low .. high   (the model)')
+    for shape, vals in ((3, [0.6, 0.65, 0.7, 0.75, 0.8]), (0, [0.75, 0.25]), (3, [0.25]), (1, [0.75]), (2, [0.75])):
+        for v, seg in held(rig, 'lfocut%d' % shape, dict(base, lfo1_shape=shape), 'lfo1_depth', vals, 69, dur=4.2):
+            w = int(0.25 * SR)
+            o = np.log2(np.array([corner(seg[i:i + w]) for i in range(0, len(seg) - w, w)]) / rest)
+            lv = MG.lfo(np.linspace(0, 1, 64, endpoint=False), shape) * MG.lfo_cut_octaves(v)
+            print('  %.2f   %-9s  %+5.2f .. %+5.2f                    (%+5.2f .. %+5.2f)'
+                  % (v, MG.LFO_SHAPES[shape], np.percentile(o, 10), np.percentile(o, 90), lv.min(), lv.max()))
+
+
+def test_lfopitch(rig):
+    """LFO 1 on OSC 2's pitch: the triangle's swing against DEPTH, and the
+    square's polarity."""
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc2_wave=MG.SAW, lfo1_dest=1, lfo1_shape=0,
+                lfo1_rate=MG.lfo_rate_knob(0.5), lfo1_reset=True)
+    runs = [(0, v) for v in (0.6, 0.65, 0.7, 0.75, 0.8, 0.9)] + [(3, 0.7), (3, 0.3)]
+    rig.panel(base); time.sleep(0.3)
+
+    def play(r):
+        for sh, v in runs:
+            r.panel(dict(base, lfo1_shape=sh, lfo1_depth=v), knobs=('lfo1_shape', 'lfo1_depth')); time.sleep(0.2)
+            r.note(57, 4.2); time.sleep(0.4)
+    y = rig.take('lfopitch', len(runs) * 4.85 + 1.5, play)
+    f0 = 220.0 * 2 ** (TUNE_CENTS / 1200)
+    print('  shape     depth   octaves: low .. high   (the model)')
+    for (sh, v), t in zip(runs, rig.played):
+        tr = pitch_track(y[int((t + 0.1) * SR):int((t + 4.1) * SR)])
+        o = np.log2(tr[np.isfinite(tr)] / f0)
+        lv = MG.lfo(np.linspace(0, 1, 64, endpoint=False), sh) * MG.lfo_pitch_octaves(v)
+        print('  %-9s %.2f   %+5.2f .. %+5.2f       (%+5.2f .. %+5.2f)'
+              % (MG.LFO_SHAPES[sh], v, np.percentile(o, 3), np.percentile(o, 97), lv.min(), lv.max()))
+
+
+def test_lfowave(rig):
+    """LFO 1 and MOD on a waveshape: how far each moves the knob, the moved
+    wave read off its spectrum -- LFO 1 a square from the key (the high half
+    against the low), MOD the contour held at full."""
+    K = 10
+    f0 = 220.0 * 2 ** (TUNE_CENTS / 1200)
+    base = dict(CAL, osc1_level=1.0, osc2_level=0.0, cutoff=1.0, osc1_wave=0.35, lfo1_dest=2, lfo1_shape=3,
+                lfo1_rate=MG.lfo_rate_knob(0.4), lfo1_reset=True)
+    print('  LFO 1 DEPTH   reach   (the model)')
+    for v, seg in held(rig, 'lfowave', base, 'lfo1_depth', [0.6, 0.65, 0.7, 0.75, 0.8, 0.9], 57, dur=2.6):
+        hi, _e = _wave_at(harmonics(seg[int(0.3 * SR):int(1.1 * SR)], f0, K))
+        lo, _e = _wave_at(harmonics(seg[int(1.55 * SR):int(2.35 * SR)], f0, K))
+        print('  %.2f          %+.3f  (%+.3f)' % (v, hi - lo, MG.lfo_wave_reach(v)))
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc2_wave=0.35, mod_dest=2, f_attack=0.0, f_sustain=1.0, f_decay=0.3)
+    print('  MOD AMOUNT    reach   (the model)')
+    for v, seg in held(rig, 'modwave', base, 'mod_amount', [0.55, 0.6, 0.65, 0.7, 0.75, 0.8], 57, dur=1.2):
+        g, _e = _wave_at(harmonics(seg[int(0.4 * SR):], f0, K))
+        print('  %.2f          %+.3f  (%+.3f)' % (v, g - 0.35, MG.bipolar(v, MG.MOD_WAVE_REACH)))
+
+
+def test_modes(rig):
+    """MODE: |H| of each, by noise at CUTOFF 0.35, against the model's."""
+    base = dict(CAL, kb_track=0.0, resonance=0.0, osc1_level=0.0, noise_level=1.0, cutoff=0.35)
+    ref = held(rig, 'mode_open', dict(base, cutoff=1.0, mode=0), 'cutoff', [1.0], 69, dur=1.6)[0][1]
+    f, P0 = psd(ref)
+    open_h = MG.ladder_gain(f, MG.knob_cutoff(1.0), 0.0)
+    pts = 2.0 ** np.arange(6.5, 14.01, 0.5)
+    print('  Hz       ' + ' '.join('%6.0f' % p for p in pts))
+    for m, seg in held(rig, 'modes', base, 'mode', [0, 1, 2, 3], 69, dur=1.6):
+        _f, P = psd(seg)
+        h = np.sqrt(P / np.maximum(P0, 1e-30)) * open_h
+        hw = [20 * np.log10(np.median(h[(f > p / 1.05) & (f < p * 1.05)]) + 1e-9) for p in pts]
+        md = 20 * np.log10(MG.ladder_gain(pts, MG.knob_cutoff(0.35), 0.0, m) + 1e-9)
+        print('  %-8s ' % MG.MODES[m][:8] + ' '.join('%6.1f' % x for x in hw))
+        print('   model   ' + ' '.join('%6.1f' % x for x in md))
+
+
+def test_mixer(rig):
+    """The mixer: a level knob's law (OSC 1), and the noise against a saw in
+    100 Hz-2 kHz (above it the path's own roll-off takes the noise's top)."""
+    f0 = 220.0 * 2 ** (TUNE_CENTS / 1200)
+    vals = [1.0, 0.1, 0.3, 0.5, 0.7, 0.9]
+    takes = held(rig, 'mix', dict(CAL, osc1_wave=0.5, cutoff=1.0), 'osc1_level', vals, 57, dur=0.9)
+    ref = harmonics(takes[0][1], f0, 1)[0]
+    print('  OSC 1 LEVEL  dB re full  (the model)')
+    for v, seg in takes:
+        print('  %.1f          %+5.1f      (%+5.1f)' % (v, 20 * np.log10(harmonics(seg, f0, 1)[0] / ref), 20 * np.log10(v)))
+    saw = takes[0][1]
+    noise = held(rig, 'noise', dict(CAL, osc1_level=0.0, noise_level=1.0, cutoff=1.0), 'cutoff', [1.0], 57, dur=1.6)[0][1]
+    n = np.arange(len(saw)); w = np.hanning(len(saw))
+    a1 = 2 * abs(np.sum(saw * w * np.exp(-2j * np.pi * pitch(saw) * n / SR))) / w.sum()
+    X = np.fft.rfft(noise); fr = np.fft.rfftfreq(len(noise), 1.0 / SR)
+    X[(fr < 100) | (fr >= 2000)] = 0
+    nb = np.sqrt(np.mean(np.fft.irfft(X, len(noise)) ** 2))
+    md = MG.NOISE_RMS * np.sqrt(1900 / 10160.0) / (2 / np.pi / np.sqrt(2))
+    print('  NOISE in 100 Hz-2 kHz re the saw fundamental: %+.1f dB  (the model %+.1f)'
+          % (20 * np.log10(nb / (a1 / np.sqrt(2))), 20 * np.log10(md)))
+
+
 TESTS = {'tune': test_tune, 'freq': test_freq, 'wave': test_wave, 'cutoff': test_cutoff,
          'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'times': test_times, 'wavefull': test_wavefull, 'sub': test_sub, 'sustain': test_sustain, 'lfo': test_lfo, 'mod': test_mod,
-         'fm': test_fm}
+         'fm': test_fm, 'lfocut': test_lfocut, 'lfopitch': test_lfopitch, 'lfowave': test_lfowave,
+         'modes': test_modes, 'mixer': test_mixer}
 
 
 def main(argv):

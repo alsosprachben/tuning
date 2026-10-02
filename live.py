@@ -2538,7 +2538,7 @@ class Part:
         if self.synth_b:
             d["synth_b"] = dict(self.synth_b)
         if self.synth or self.synth_b:
-            d["synth_units"] = 4            # the Messenger's measured knobs (moog.py)
+            d["synth_units"] = 5            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
         return d
@@ -2554,10 +2554,10 @@ class Part:
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
         # KNOBS SAVED BEFORE THE MESSENGER WAS MEASURED are in the first model's
         # units; those saved before its contours were (synth_units 2) or its
-        # waveshape (3), in the later ones': converted once, as the patches
-        # were, so they sound as saved
+        # waveshape (3) or LFO 1 (4), in the later ones': converted once, as
+        # the patches were, so they sound as saved
         units = int(d.get("synth_units", 1))
-        if (p.synth or p.synth_b) and units < 4:
+        if (p.synth or p.synth_b) and units < 5:
             vc = p.moog()
             for lay, own in (('a', p.synth), ('b', p.synth_b)):
                 if own:
@@ -2567,7 +2567,9 @@ class Part:
                         continue
                     if units < 3:
                         own.update(_MG.convert_v2(own))
-                    own.update(_MG.convert_v3(own, context=ctx))
+                    if units < 4:
+                        own.update(_MG.convert_v3(own, context=ctx))
+                    own.update(_MG.convert_v4(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
@@ -10634,7 +10636,7 @@ def selftest():
                                            f_sustain=_MG.sustain_knob(0.4), **_k)    # held at 0.4
             return _BRb.synth_window(_BRb.prepare(_mpath, "even"), 0, int(2.0 * _BRb.SR))[0].astype(float)
         _mA = _msp(_mrs(osc2_wave=0.5, mod_dest=2, mod_amount=0.75))
-        _mB = _msp(_mrs(osc2_wave=0.6))                 # 0.5 + 0.5 x 0.4 of the sustain
+        _mB = _msp(_mrs(osc2_wave=0.5 + _MG.bipolar(0.75, _MG.MOD_WAVE_REACH) * 0.4))   # at 0.4 of the sustain
         _mdw = float(np.max(np.abs(20 * np.log10(_mA[0::2] / _mB[0::2]))))
         T.MoogSawLead.messenger = dict(_mwas, sync=True, mod_dest=1, mod_amount=0.6, f_sustain=_MG.sustain_knob(0.4))
         _rsus = float(_MG.shape_values(np.array([1.5 * _BRb.SR]), 0.0, np.inf,

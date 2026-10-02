@@ -1951,8 +1951,13 @@ def synth_fmt(kind, v, pan=None):
         return "%.2f Hz" % MG.knob_lfo_rate(v)
     if kind == "lfoshape":
         return MG.LFO_SHAPES[int(v)]
-    if kind == "lfodepth":
-        return "%+.1f oct" % MG.bipolar(v, MG.LFO_OCTAVES)
+    if kind == "lfodepth":                # its reach where it is sent (a cube: moog.lfo_*_octaves)
+        dest = int((pan or {}).get("lfo1_dest", 0))
+        if dest == 1:
+            return "%+.2f oct" % MG.lfo_pitch_octaves(v)
+        if dest >= 2:
+            return "%+.3f" % MG.lfo_wave_reach(v)
+        return "%+.2f oct" % MG.lfo_cut_octaves(v)
     if kind == "lfodest":
         return MG.LFO_DESTS[int(v)]
     if kind == "moddest":

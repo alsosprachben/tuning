@@ -175,10 +175,19 @@ static inline float moog_adsr(float t, float A, float D, float S, float R, float
     return moog_held(t,A,D,S);
 }
 static inline float moog_ladder(float x, float k, int mode, int rb){
-    // |H| = |num| / |(1+jx)^4 + k|, the modes mixing the poles (moog.ladder_gain)
+    // |H| = |num| / |(1+jx)^4 + k|, the modes mixing the poles (moog.ladder_gain);
+    // the band-pass and high-pass as measured: their corners moved, their
+    // gains under the low-passes', the high-pass over a leak of the dry signal
+    if(mode==2) x*=(float)(1.0/1.05);
+    else if(mode==3) x*=(float)(1.0/0.91);
     float x2=x*x, re4=1.f-6.f*x2+x2*x2+k, im4=4.f*x-4.f*x*x2;
+    if(mode==3){
+        float nr=x2*x2-x2, ni=-2.f*x2*x, d2=re4*re4+im4*im4;
+        float hr=0.47863f*(nr*re4+ni*im4)/d2+0.071f, hi=0.47863f*(ni*re4-nr*im4)/d2;
+        return sqrtf(hr*hr+hi*hi);
+    }
     float den=sqrtf(re4*re4+im4*im4);
-    float num = mode==0 ? 1.f : mode==1 ? 1.f+x2 : mode==2 ? 4.f*x2 : x2*(1.f+x2);
+    float num = mode==0 ? 1.f : mode==1 ? 1.f+x2 : 0.41687f*4.f*x2;   // moog.BP_GAIN
     float h=num/den;
     if(rb && mode<2) h*=1.f+k;
     return h;
@@ -329,7 +338,7 @@ static double mp_ratio(double nn, double a0, double toff, const double* q, doubl
         double tl = q[8]>0.5 ? t : nn/sr;
         double ph=tl*q[6]; ph-=floor(ph);
         int sh=(int)q[7];
-        double lv = sh==0 ? 1.0-4.0*fabs(ph-0.5) : sh==1 ? 2.0*ph-1.0 : sh==2 ? 1.0-2.0*ph : (ph<0.5?1.0:-1.0);
+        double lv = sh==0 ? 1.0-4.0*fabs(ph-0.5) : sh==1 ? 1.0-ph : sh==2 ? ph : (ph<0.5?1.0:0.0);   // moog.lfo
         x+=q[5]*lv;
     }
     return exp2(x);
@@ -570,7 +579,7 @@ void moog_shape_rows(int nrows, const double* par, const double* a0, const doubl
             double tl = q[10]>0.5 ? t : g/sr;
             double ph=tl*q[8]; ph-=floor(ph);
             int sh=(int)q[9];
-            double lv = sh==0 ? 1.0-4.0*fabs(ph-0.5) : sh==1 ? 2.0*ph-1.0 : sh==2 ? 1.0-2.0*ph : (ph<0.5?1.0:-1.0);
+            double lv = sh==0 ? 1.0-4.0*fabs(ph-0.5) : sh==1 ? 1.0-ph : sh==2 ? ph : (ph<0.5?1.0:0.0);   // moog.lfo
             double s1=q[1]+(q[6]==1.0 ? q[7]*lv : 0.0);
             double s2=q[2]+(q[4]==2.0 ? q[5]*fe : 0.0);
             double ss=q[3]+(q[4]==3.0 ? q[5]*fe : 0.0)+(q[6]==3.0 ? q[7]*lv : 0.0);
@@ -915,8 +924,8 @@ void synth_voice(
                             double tl = kn[8]>0.5f ? (double)(nn-a)/SRATE_D : (double)nn/SRATE_D;
                             double x=tl*(double)kn[5]; x-=floor(x);
                             int ls=(int)kn[7]; float xf=(float)x;
-                            float lv = ls==0 ? 1.f-4.f*fabsf(xf-0.5f) : ls==1 ? 2.f*xf-1.f
-                                     : ls==2 ? 1.f-2.f*xf : (xf<0.5f ? 1.f : -1.f);
+                            float lv = ls==0 ? 1.f-4.f*fabsf(xf-0.5f) : ls==1 ? 1.f-xf
+                                     : ls==2 ? xf : (xf<0.5f ? 1.f : 0.f);      // moog.lfo
                             fc*=exp2f(kn[6]*lv);
                         }
                         if(fc<1.f)fc=1.f;
