@@ -161,7 +161,7 @@ plays Standard, as does any program that is not a set.
 | 0 | Acoustic Grand Piano | `GrandPiano` | **4** | Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured |
 | 1 | Bright Acoustic Piano | `BrightPiano` | **2** | the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp |
 | 2 | Electric Grand Piano | `ElectricGrand` | **2** | a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference |
-| 3 | Honky-tonk Piano | `Honky` | **2** | the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it |
+| 3 | Honky-tonk Piano | `HonkyTonk` | **2** | the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it |
 | 4 | Electric Piano 1 | `Rhodes` | **2** | Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted |
 | 5 | Electric Piano 2 | `Wurlitzer` | **2** | Wurlitzer. Same machinery, 1/d pickup; no audio fitted |
 | 6 | Harpsichord | `Harpsichord` | **4** | VCSL recordings |
@@ -345,7 +345,7 @@ plays Standard, as does any program that is not a set.
 | 114 | Steel Drums | `SteelPan` | **4** | built from the instrument's design, then corrected against Freesound 742254 |
 | 115 | Woodblock | `WoodPercussion` | **4** | Iowa woodblocks |
 | 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |
-| 117 | Melodic Tom | ` by register` | **2** | the tom class |
+| 117 | Melodic Tom | `TomTom` | **2** | the tom class |
 | 118 | Synth Drum | `MoogSynthDrum` | **4** | a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves) |
 | 119 | Reverse Cymbal | `ReverseCymbal` | **2** | the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere |
 

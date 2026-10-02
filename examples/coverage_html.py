@@ -269,8 +269,11 @@ def build():
         "scale": scale,
         "families": families(),
         "perc": percussion(),
-        "ncat": len(cat),
-        "cats": ", ".join("%d %s" % (p, e(C.GM[p])) for p in cat),
+        "catline": ("The %d patches on a voice of the wrong physical kind are %s."
+                    % (len(cat), ", ".join("%d %s" % (p, e(C.GM[p])) for p in cat)) if cat else
+                    "None is played by a voice of the wrong physical kind: the last three were "
+                    "123 Bird Tweet, 124 Telephone Ring and 125 Helicopter."),
+        "nmoog": sum(1 for p in range(128) if getattr(C.patch_map.property_class_for_note(p, 60), "moog", False)),
         "n4": hist[4], "n3": hist[3], "n2": hist[2], "n1": hist[1],
         "pn4": ph[4], "pnperc": len(C.PERC_RATED),
     }
@@ -286,7 +289,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 
 <div class="wrap">
 <header>
-<div class="eyebrow">Physically-modelled additive synthesiser &middot; General MIDI</div>
+<div class="eyebrow">Physically-modelled synthesiser &middot; a Moog for the synths &middot; General MIDI</div>
 <h1>GM Patch Coverage</h1>
 <p class="standfirst">All 128 programs, rated by <em>how much reality has been allowed to contradict the model</em> &mdash; from a shared base standing in, through a voice derived from how the instrument works, to one fitted against a recording of the thing itself.</p>
 </header>
@@ -297,7 +300,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <div class="map"><div class="mapgrid">
 %(cells)s
 </div>
-<div class="legend">
+<div class="maplegend">
 <div class="lg"><span class="sw r1"></span>1 &nbsp;general class</div>
 <div class="lg"><span class="sw r2"></span>2 &nbsp;specific, theory</div>
 <div class="lg"><span class="sw r3"></span>3 &nbsp;specific, theory + ear</div>
@@ -316,7 +319,8 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 </ul>
 <p><strong>Nothing scores 0</strong>, because every program resolves to something &mdash; which is not the same as every program being served. The line that matters is the one at 4: audio of the instrument, analysed and fitted against. Published measurements that are not audio &mdash; the Rhodes&rsquo; high-speed-camera papers, the free reeds&rsquo; flow model &mdash; are better than theory, but they cannot contradict the model the way a recording can, so those voices sit at 2 and say why.</p>
 <p><strong>The class column is what the ROUTER returns, not the program map.</strong> Several programs are a family routed per note &mdash; the bowed and pizzicato ensembles, the brass section, the solo winds whose bottom octave is a different instrument &mdash; and reading the program map instead reports the no-note fallback. That is how GM 61 came to be listed as a trombone standing in for a whole section long after it had been routed to trumpet, trombone and tuba sections.</p>
-<p>Every one of the 128 programs now has a voice of its own kind; what remains is how much reality each has been allowed to contradict. The %(ncat)d patches on a voice of the wrong physical kind are %(cats)s.</p>
+<p><strong>For a synth program the instrument is a synthesizer.</strong> The %(nmoog)d synth programs &mdash; basses, strings, brass, leads, pads, effects and the synth drum &mdash; are patches on a Moog Messenger, and the Messenger engine is fitted against Ben&rsquo;s own Messenger, recorded through a mixer and back (<code>examples/messenger_fit.py</code>): every knob law the patches use, from the cutoff and the contours to the waveshape, the FM index, LFO 1 and the output stage. Whole notes, attack to release, agree with the hardware within 0.6&ndash;2 dB on 28 of the 32. That is a recording of the instrument, so a patch that is the Messenger alone is a 4; one with a part no Messenger has &mdash; vocal formants after it, the guitars&rsquo; valve, the MF-104M pedal, which is modelled and not recorded &mdash; is a 3. And the reference runs both ways: a patch&rsquo;s knobs are the hardware&rsquo;s, so it plays on the Messenger itself.</p>
+<p>Every one of the 128 programs now has a voice of its own kind; what remains is how much reality each has been allowed to contradict. %(catline)s</p>
 </section>
 
 %(families)s

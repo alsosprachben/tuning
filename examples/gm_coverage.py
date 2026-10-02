@@ -35,6 +35,7 @@ patches, and the Messenger engine is fitted against Ben's Messenger recorded
 and one with a part the Messenger has not got is a 3.
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -290,8 +291,10 @@ def _class_name(p):
         # A blended or sectioned class is named for what it is made of.
         for suffix in ("Section", "Tremolo", "Pizz"):
             n = n.replace(suffix, "")
-        if "To" in n:                      # a crossfade sits between two
-            n = n.split("To")[0]
+        # a crossfade sits between two, named AToB -- split only there: a
+        # bare "To" also starts TomTom and ends HonkyTonk, and splitting on
+        # it named GM 117 " by register" and GM 3 "Honky"
+        n = re.split(r"(?<=[a-z])To(?=[A-Z])", n)[0]
         if n and n not in names:
             names.append(n)
     if len(names) == 1:
