@@ -74,9 +74,10 @@ CAL = dict(MG.PANEL, osc1_octave=8, osc1_wave=MG.SAW, osc1_level=1.0, osc2_level
 # sent in that second loses its start -- a slow attack read as instant, until
 # it was seen that every "instant" note was the first of its take.
 PREROLL = 1.0
-# BEN'S MESSENGER PLAYS SHARP of its key, by this much ('tune'): the harmonic
-# probes look for it there
-TUNE_CENTS = 36.7
+# WHERE BEN'S MESSENGER PLAYS against its key, once the chart has put its
+# TUNE on A440 (moog.MESSENGER_TUNE_CENTS): the harmonic probes look for it
+# there. ('tune' reads it; before the chart's trim it was 36.7-40.5 sharp.)
+TUNE_CENTS = 0.0
 
 
 class Rig(object):
@@ -876,10 +877,57 @@ def test_mixer(rig):
           % (20 * np.log10(nb / (a1 / np.sqrt(2))), 20 * np.log10(md)))
 
 
+def test_topcut(rig):
+    """THE OUTPUT STAGE: a saw at A5 with the ladder wide open, its harmonics
+    against 1/k -- the roll-off that stays put however far CUTOFF goes (and a
+    resonant peak that leaves the band from 0.6 rather than standing at the
+    top: the ladder is not what stops it). Take the mixer's path ('path') out
+    of it to have the Messenger's own (moog.output_gain)."""
+    vals = [1.0, 0.8, 0.6]
+    takes = held(rig, 'topcut', dict(CAL, osc1_wave=0.5, kb_track=0.0), 'cutoff', vals, 81, dur=1.2)
+    f0 = pitch(takes[0][1])
+    k = np.arange(1, 19)
+    print('  CUTOFF  harmonics (kHz): dB under 1/k      (the model\'s output stage)')
+    for v, seg in takes:
+        h = harmonics(seg, f0, len(k))
+        d = 20 * np.log10(h / h[0]) + 20 * np.log10(k)
+        m = 20 * np.log10(MG.output_gain(k * f0) / MG.output_gain(f0))
+        print('  %.1f     %s' % (v, '  '.join('%.1fk:%+.1f(%+.1f)' % (kk * f0 / 1000, dd, mm)
+                                             for kk, dd, mm in zip(k[2::3], d[2::3], m[2::3]))))
+
+
+def test_path(rig):
+    """THE MIXER'S OWN PATH, for taking out of the others: a log sweep from this
+    laptop's headphone out into a mixer channel (--card's), recorded back over
+    USB, per third of an octave against 1 kHz. Plug the laptop into a channel
+    with FX/PC REC on first; the Messenger is not used."""
+    n = int(6.0 * SR)
+    t = np.arange(n) / float(SR)
+    K = 6.0 / np.log(22000.0 / 20.0)
+    y = 0.1 * np.sin(2 * np.pi * 20.0 * K * (np.exp(t / K) - 1))
+    y[:480] *= np.linspace(0, 1, 480); y[-480:] *= np.linspace(1, 0, 480)
+    path = os.path.join(OUT, 'sweep.wav')
+    wavfile.write(path, SR, (np.c_[y, y] * 32767).astype(np.int16))
+    r = rig.take('path', 9.0, lambda _r: subprocess.call(['paplay', path]))
+    R, P = np.fft.rfft(r, 2 * len(r)), np.fft.rfft(y, 2 * len(r))
+    lag = int(np.argmax(np.fft.irfft(R * np.conj(P))))
+    Pp, Pr = np.abs(np.fft.rfft(y)) ** 2, np.abs(np.fft.rfft(r[lag:lag + n])) ** 2
+    f = np.fft.rfftfreq(n, 1.0 / SR)
+    rows = []
+    for c in 2.0 ** np.arange(np.log2(40), np.log2(21000), 1 / 3.0):
+        m = (f >= c / 2 ** (1 / 6.0)) & (f < c * 2 ** (1 / 6.0))
+        rows.append((c, 10 * np.log10(Pr[m].sum() / Pp[m].sum())))
+    ref = [g for c, g in rows if c >= 1000][0]
+    print('  laptop -> mixer -> USB, dB re 1 kHz:')
+    print('  ' + '  '.join('%.0f:%+.1f' % (c, g - ref) for c, g in rows))
+    return rows
+
+
 TESTS = {'tune': test_tune, 'freq': test_freq, 'wave': test_wave, 'cutoff': test_cutoff,
          'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'times': test_times, 'wavefull': test_wavefull, 'sub': test_sub, 'sustain': test_sustain, 'lfo': test_lfo, 'mod': test_mod,
          'fm': test_fm, 'lfocut': test_lfocut, 'lfopitch': test_lfopitch, 'lfowave': test_lfowave,
-         'modes': test_modes, 'mixer': test_mixer}
+         'modes': test_modes, 'mixer': test_mixer,
+         'topcut': test_topcut, 'path': test_path}
 
 
 def main(argv):

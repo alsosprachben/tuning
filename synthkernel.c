@@ -174,6 +174,10 @@ static inline float moog_adsr(float t, float A, float D, float S, float R, float
     if(t>=toff) return fmaxf(0.f, (moog_held(toff,A,D,S)+(float)MS_UNDER)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f))-(float)MS_UNDER);
     return moog_held(t,A,D,S);
 }
+// the output stage after the ladder and VCA (moog.output_gain): one pole at
+// MS_OUT_HZ, every partial once -- sidebands and the ladder's own sine too
+#define MS_OUT_HZ 12500.f
+static inline float moog_out(float f){ float r=f/MS_OUT_HZ; return 1.f/sqrtf(1.f+r*r); }
 static inline float moog_ladder(float x, float k, int mode, int rb){
     // |H| = |num| / |(1+jx)^4 + k|, the modes mixing the poles (moog.ladder_gain);
     // the band-pass and high-pass as measured: their corners moved, their
@@ -932,7 +936,7 @@ void synth_voice(
                         // the ladder's OWN sine (moog.SELF) is not filtered by it;
                         // an FM'd harmonic's sidebands are, each at its own
                         // frequency, in the cell loop below
-                        float h = selfosc ? 1.f : fms ? fade : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade;
+                        float h = selfosc ? moog_out(fhzj) : fms ? fade : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade*moog_out(fhzj);
                         if(fms){ sbFc[j]=fc; sbK[j]=kn[1]; sbF[j]=fhzj; sbMode=mode; sbRb=rb; }
                         if(pre && !selfosc){   // the partials carry the ladder at its sustain already
                             float fcs=kn[0]*kbf*exp2f(kn[2]*fmaxf(kn[3],0.f)); if(fcs<1.f)fcs=1.f;
@@ -1056,7 +1060,7 @@ void synth_voice(
                             for(int e = reuse ? 1 : 0; e<2; e++){
                                 float fs=fabsf(sbF[cl+e]+m*f1), fr=fs/SRATE_F;
                                 float nq = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
-                                hg[e] = nq>0.f ? moog_ladder(fs/sbFc[cl+e],sbK[cl+e],sbMode,sbRb)*nq : 0.f;
+                                hg[e] = nq>0.f ? moog_ladder(fs/sbFc[cl+e],sbK[cl+e],sbMode,sbRb)*moog_out(fs)*nq : 0.f;
                             }
                             if(reuse) hg[0]=hEnd[i];
                             hEnd[i]=hg[1];

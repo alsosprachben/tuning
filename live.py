@@ -4373,7 +4373,7 @@ class Live:
         if ent is None:
             return True                             # the panel's, not modelled yet
         knob, kind = ent
-        if kind == '14':
+        if kind in _MG.FOURTEEN:
             self.msg_msb[(ch, cc)] = value
         for p in mine:
             self.set_synth(p, knob, _MG.messenger_value(kind, value), from_hardware=True)
@@ -10377,7 +10377,9 @@ def selftest():
         _mopen = _mnoise(cutoff=1.0)
         _mclosed = _mnoise(cutoff=0.5, kb_track=0.0)
         _mlad = np.array([20 * np.log10(_MG.ladder_gain(np.sqrt(_a * _b), _MG.knob_cutoff(0.5), 0.0)
-                                        / _MG.ladder_gain(np.sqrt(100 * 200), _MG.knob_cutoff(0.5), 0.0))
+                                        * _MG.output_gain(np.sqrt(_a * _b))
+                                        / _MG.ladder_gain(np.sqrt(100 * 200), _MG.knob_cutoff(0.5), 0.0)
+                                        / _MG.output_gain(np.sqrt(100 * 200)))
                           for _a, _b in _moct])
     finally:
         T.MoogSawLead.messenger = _mwas
@@ -10743,7 +10745,7 @@ def selftest():
             _kp = np.abs(_D) > 1e-9
             _f2 = float(_fs["om"][0]) * _BRb.SR / (2 * np.pi)
             _f1 = float(_fs["fmw"][0]) * _BRb.SR / (2 * np.pi)
-            _H = _MG.ladder_gain(np.abs(_f2 + _fms[_kp] * _f1), _ffc, _fkq)
+            _H = _MG.ladder_gain(np.abs(_f2 + _fms[_kp] * _f1), _ffc, _fkq) * _MG.output_gain(np.abs(_f2 + _fms[_kp] * _f1))
             _ref = np.zeros(_fN)
             for _Dm, _Hm, _m in zip(_D[_kp], _H, _fms[_kp]):
                 _ref += (_Dm * _Hm * np.exp(1j * (_fs["p0"][0] + float(_fs["om"][0]) * _n + _m * _ps1))).real
@@ -11008,7 +11010,7 @@ def selftest():
     check("a part reading a Messenger takes its CC chart as the panel's knobs",
           abs(_mxp.synth.get("cutoff", 0) - (50 * 128 + 64) / 16383.0) < 1e-9
           and _mxp.synth.get("osc1_octave") == 8 and _mxp.synth.get("res_bass") is True
-          and _mxp.synth.get("mode") == 1 and abs(_mxp.synth.get("tune", 0) - 0.5) < 1e-4
+          and _mxp.synth.get("mode") == 1 and abs(_mxp.synth.get("tune", 0) - _MG.messenger_value("tune", 64, 0)) < 1e-9
           and not _mgm.parts[0].synth and Part.from_dict(_mxp.to_dict()).cc_map == "messenger",
           "  (CUTOFF 50/64 as fourteen bits, an octave switch, RES BASS, MODE, and "
           "CC10 as TUNE; a General MIDI part leaves CC19 alone)")

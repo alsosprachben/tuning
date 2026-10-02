@@ -310,6 +310,21 @@ def ladder(f, fc, k, mode=LP4, res_bass=False):
     return h
 
 
+# THE OUTPUT STAGE: after the ladder and the VCA, a fixed gentle low-pass --
+# measured with the ladder wide open (CUTOFF 0.6-1, its own corner far above
+# the band: a resonant peak there leaves it, rather than standing at 20 kHz),
+# a saw's harmonics 1.4 dB under 1/k at 8 kHz and 4.3 at 16 kHz once the
+# mixer's own path (swept from the laptop: -1.2 and -3.8) is taken out --
+# one pole at 12.5 kHz (within 0.3 dB, 2.7-16 kHz).
+OUT_HZ = 12500.0
+
+
+def output_gain(f):
+    """|H| of the output stage at f: every partial passes it, sidebands and
+    the ladder's own sine included, once."""
+    return 1.0 / np.sqrt(1.0 + (np.asarray(f, float) / OUT_HZ) ** 2)
+
+
 def ladder_gain(f, fc, k, mode=LP4, res_bass=False):
     """|H|, the magnitude alone -- what the kernel applies. The phase response
     is dropped, which only changes the wave's SHAPE, never what one hears,
@@ -948,7 +963,7 @@ def apply_gm(panel, sd):
 # The switch ranges for KB TRACKING and MODE are not in the manual, which
 # gives only their positions; even thirds and quarters are the assumption.
 MESSENGER_CC = {
-    9: ('osc1_wave', '14'), 14: ('osc2_wave', '14'), 10: ('tune', '14'),
+    9: ('osc1_wave', '14'), 14: ('osc2_wave', '14'), 10: ('tune', 'tune'),
     12: ('osc2_freq', '14'), 15: ('osc1_level', '14'), 16: ('osc2_level', '14'),
     17: ('sub_level', '14'), 8: ('noise_level', '14'),
     19: ('cutoff', '14'), 21: ('resonance', '14'), 22: ('eg_amount', '14'),
@@ -970,13 +985,25 @@ MESSENGER_CC = {
 # other way round, and every patch sent to the hardware played an octave low.
 FOOT_CC = (32, 16, 8, 4)
 # the fine halves of the 14-bit knobs
-MESSENGER_LSB = {cc + 32: cc for cc, v in MESSENGER_CC.items() if v and v[1] == '14'}
+FOURTEEN = ('14', 'tune')
+MESSENGER_LSB = {cc + 32: cc for cc, v in MESSENGER_CC.items() if v and v[1] in FOURTEEN}
+# BEN'S MESSENGER'S A440 is not at its TUNE knob's centre: it plays 40.5 cents
+# sharp there (examples/messenger_fit.py tune; still so after its own tuning
+# procedure, and creeping -- 36.7, 38.5, 40.5 over one warm session -- so a
+# property of this unit: re-measure, and set this). TUNE is its master tune,
+# 1401 cents a unit, so the chart moves it by that much each way: the panel's
+# 0.5, A440 here, is sent as the hardware's own A440 and read back as 0.5.
+# (The panel's bottom 40 cents are then past the hardware knob's end.)
+MESSENGER_TUNE_CENTS = 40.5
+_TUNE_TRIM = MESSENGER_TUNE_CENTS / (2.0 * SEMIS * 100.0)
 
 
 def messenger_value(kind, msb, lsb=None):
     """A Messenger CC's value as the panel knob's (moog.PANEL units)."""
     if kind == '14':
         return ((msb << 7) | (lsb or 0)) / 16383.0 if lsb is not None else msb / 127.0
+    if kind == 'tune':
+        return messenger_value('14', msb, lsb) + _TUNE_TRIM
     if kind == '7':
         return msb / 127.0
     if kind == 'foot':
@@ -1003,7 +1030,7 @@ FIRMWARES = ('1.0.7+', 'pre-1.0.7')
 def messenger_chart(firmware='1.0.7+'):
     """(the CC chart, its fine halves) for a Messenger on this firmware."""
     ch = MESSENGER_CC_PRE107 if firmware == 'pre-1.0.7' else MESSENGER_CC
-    return ch, {cc + 32: cc for cc, v in ch.items() if v and v[1] == '14'}
+    return ch, {cc + 32: cc for cc, v in ch.items() if v and v[1] in FOURTEEN}
 
 
 def messenger_cc_value(kind, v):
@@ -1013,6 +1040,8 @@ def messenger_cc_value(kind, v):
     if kind == '14':
         x = int(round(max(0.0, min(1.0, float(v))) * 16383))
         return x >> 7, x & 0x7F
+    if kind == 'tune':
+        return messenger_cc_value('14', float(v) - _TUNE_TRIM)
     if kind == '7':
         return int(round(max(0.0, min(1.0, float(v))) * 127)), None
     if kind == 'foot':
@@ -1560,8 +1589,9 @@ def release_span(panel):
 
 def gain_at(panel, f, t, t_off=None):
     """The reference for the kernel's per-partial gain at time t: the amp
-    contour times the ladder at the cutoff the filter contour has reached.
-    A partial at frequency f of a note at KB_REF_HZ (kbfac 1)."""
+    contour times the ladder at the cutoff the filter contour has reached,
+    and the output stage. A partial at frequency f of a note at KB_REF_HZ
+    (kbfac 1)."""
     fe = adsr(t, knob_attack(panel['f_attack']), knob_time(panel['f_decay']),
               sustain_target(panel['f_sustain']), knob_time(panel['f_release']), t_off)
     fc = knob_cutoff(panel['cutoff']) * 2.0 ** (eg_octaves(panel['eg_amount']) * fe)
@@ -1569,7 +1599,7 @@ def gain_at(panel, f, t, t_off=None):
     if kn[6]:        # LFO 1 on the cutoff: from the key (KB RESET), as tested
         fc = fc * 2.0 ** (kn[6] * lfo(np.asarray(t, float) * kn[5], int(kn[7])))
     h = ladder_gain(f, np.maximum(fc, 1.0), knob_k(panel['resonance']),
-                    int(panel['mode']), bool(panel['res_bass']))
+                    int(panel['mode']), bool(panel['res_bass'])) * output_gain(f)
     return adsr(t, knob_attack(panel['a_attack']), knob_time(panel['a_decay']),
                 sustain_target(panel['a_sustain']), knob_time(panel['a_release']), t_off) * h
 
@@ -1703,6 +1733,7 @@ def selftest():
             pan = dict(PANEL)
             for knob, kind in (v for v in chart.values() if v):
                 pan[knob] = (rnd.random() if kind in ('14', '7') else
+                             rnd.uniform(_TUNE_TRIM, 1.0) if kind == 'tune' else   # what the hardware reaches
                              rnd.choice((4, 8, 16, 32)) if kind == 'foot' else
                              rnd.choice((0.0, 1.0)) if kind == 'track' else
                              rnd.randrange(4) if kind == 'mode' else rnd.random() < 0.5)
@@ -1717,8 +1748,8 @@ def selftest():
                     got[knob] = messenger_value(kind, val)
             for knob, v in got.items():
                 kind = next(e[1] for e in chart.values() if e and e[0] == knob)
-                if kind in ('14', '7'):
-                    worst = max(worst, abs(v - pan[knob]) * (16383 if kind == '14' else 127))
+                if kind in ('14', '7', 'tune'):
+                    worst = max(worst, abs(v - pan[knob]) * (127 if kind == '7' else 16383))
                 elif v != pan[knob]:
                     bad.append((fw, knob))
     check("a panel sent to a Messenger reads back as itself",
