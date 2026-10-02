@@ -383,6 +383,12 @@ static int ms_tri(mseg* o, double peak){
 static int ms_pulse(mseg* o, double d){
     o[0]=(mseg){0.0,d,1.0,1.0}; o[1]=(mseg){d,1.0,-1.0,-1.0}; return 2;
 }
+// the pulse about its three-quarter point (moog._pulse_centred): the square in
+// phase with the saw, as the Messenger crossfades them
+static int ms_pulse_c(mseg* o, double d, double c){
+    double a=c-d/2.0, b=c+d/2.0;
+    o[0]=(mseg){0.0,a,-1.0,-1.0}; o[1]=(mseg){a,b,1.0,1.0}; o[2]=(mseg){b,1.0,-1.0,-1.0}; return 3;
+}
 static double ms_reflect(double x){
     x=fmod(x+1.0,4.0); if(x<0.0)x+=4.0;
     return x<=2.0 ? x-1.0 : 3.0-x;
@@ -425,27 +431,29 @@ static int ms_clip(const mseg* in, int n, double g, mseg* o){
     }
     return m;
 }
-#define MS_TRI 0.35      // moog.TRI, SAW, SQUARE: measured on Ben's Messenger
+#define MS_TRI 0.335      // moog.TRI, SAW, SQUARE: measured on Ben's Messenger
 #define MS_SAW 0.5
-#define MS_SQUARE 0.635
+#define MS_SQUARE 0.68
 // WAVESHAPE (kind 0) or SUB WAVE (kind 1) at s: its parts, weighted (moog._osc_parts)
 static int ms_parts(int kind, double s, double* wt, mseg seg[2][32], int* ns){
     mseg tmp[4];
     if(s<0.0)s=0.0; if(s>1.0)s=1.0;
     if(kind==1){
-        if(s<0.4){ double u=s/0.4; double g=1.0/fmax(1e-3,1.0-u);
-                   int n=ms_tri(tmp,0.5); ns[0]=ms_clip(tmp,n,g,seg[0]); wt[0]=1.0; return 1; }
-        double d=0.5-(0.5-0.02)*(s-0.4)/(1.0-0.4);
-        ns[0]=ms_pulse(seg[0],d); wt[0]=1.0; return 1;
+        // moog.SUB_SQUARE, SUB_PULSE_MIN: triangle crossfaded to square, then the pulse
+        if(s<0.3){ double a=s/0.3; ns[0]=ms_tri(seg[0],0.5); wt[0]=1.0-a;
+                   ns[1]=ms_pulse_c(seg[1],0.5,0.5); wt[1]=a; return 2; }
+        double d=0.5-(0.5-0.0033)*(s-0.3)/(1.0-0.3);
+        ns[0]=ms_pulse_c(seg[0],d,0.5); wt[0]=1.0; return 1;
     }
     // the landmarks where Ben's Messenger has them (moog.TRI, SAW, SQUARE)
     const double T=MS_TRI, W=MS_SAW, Q=MS_SQUARE;
     if(s<T){ double g=1.0+(5.0-1.0)*(T-s)/T; int n=ms_tri(tmp,0.5);
              ns[0]=ms_fold(tmp,n,g,seg[0]); wt[0]=1.0; return 1; }
-    if(s<W){ ns[0]=ms_tri(seg[0],0.5+0.5*(s-T)/(W-T)); wt[0]=1.0; return 1; }
+    if(s<W){ double a=(s-T)/(W-T); ns[0]=ms_tri(seg[0],0.5); wt[0]=1.0-a;
+             ns[1]=ms_tri(seg[1],1.0); wt[1]=a; return 2; }
     if(s<Q){ double a=(s-W)/(Q-W); ns[0]=ms_tri(seg[0],1.0); wt[0]=1.0-a;
-             ns[1]=ms_pulse(seg[1],0.5); wt[1]=a; return 2; }
-    ns[0]=ms_pulse(seg[0],0.5-(0.5-0.02)*(s-Q)/(1.0-Q)); wt[0]=1.0; return 1;
+             ns[1]=ms_pulse_c(seg[1],0.5,0.75); wt[1]=a; return 2; }
+    ns[0]=ms_pulse_c(seg[0],0.5-(0.5-0.025)*(s-Q)/(1.0-Q),0.75); wt[0]=1.0; return 1;
 }
 // sum over segments (clipped to [0,uend]) of the integral of y e^{-2 pi i nu u},
 // for nu = k*nu0, k = 1..K, added times `sc` into (re, im)

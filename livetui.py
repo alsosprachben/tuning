@@ -1931,7 +1931,7 @@ def synth_fmt(kind, v, pan=None):
             return "square"
         if v < MG.SUB_SQUARE:
             return "triangle" if v < 1e-9 else "tri>sq"
-        return "pulse %d%%" % round(100 * (0.5 - (0.5 - MG.PULSE_MIN) * (v - MG.SUB_SQUARE) / (1 - MG.SUB_SQUARE)))
+        return "pulse %d%%" % round(100 * (0.5 - (0.5 - MG.SUB_PULSE_MIN) * (v - MG.SUB_SQUARE) / (1 - MG.SUB_SQUARE)))
     if kind == "semi":
         return "%+.2f st" % MG.bipolar(v, MG.SEMIS)
     if kind == "level":

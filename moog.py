@@ -102,6 +102,15 @@ def _pulse(duty):
     return [(0.0, duty, 1.0, 1.0), (duty, 1.0, -1.0, -1.0)]
 
 
+def _pulse_centred(duty, centre=0.75):
+    """+1 for `duty` of the period about `centre`. About the three-quarter
+    point the square (duty 0.5) is IN PHASE with the rising saw -- their
+    fundamentals add, as the Messenger's do across the crossfade; about the
+    half, with the triangle (the sub's). Narrowing it keeps that phase."""
+    a, b = centre - duty / 2.0, centre + duty / 2.0
+    return [(0.0, a, -1.0, -1.0), (a, b, 1.0, 1.0), (b, 1.0, -1.0, -1.0)]
+
+
 def _fold(segs, gain):
     """A triangle folder after `gain`: whatever passes +-1 is reflected back.
     Straight lines stay straight, so the result is split at every crossing of
@@ -142,15 +151,25 @@ def _clip(segs, gain):
     return out
 
 
-# The landmarks on WAVESHAPE (0 = CCW), where Ben's Messenger has them: its
-# harmonics matched against these spectra put the triangle at 0.35 and the
-# square at ~0.63-0.65 (examples/messenger_fit.py 'wave'); the saw is at 0.5.
-# The first model had 0.4 and 0.6. synthkernel.c's ms_parts mirrors them.
-TRI, SAW, SQUARE = 0.35, 0.5, 0.635
+# WAVESHAPE (0 = CCW), as Ben's Messenger has it -- the whole knob swept, h1
+# to h10 at every 0.025 (examples/messenger_fit.py 'wave'). Between its
+# landmarks it CROSSFADES the two waves, each swinging +-1 (their levels say
+# so: the square's fundamental 6.0 dB over the saw's, the triangle's 2.1):
+# triangle to saw from 0.335 to 0.5 (0.13-0.7 dB per position; a skew of the
+# triangle, the first model's, was 6-15 dB off), saw to square to 0.68 (the
+# odd harmonics hold at 1/k, the even fade; h2 and h4 null at 0.68), and past
+# it the pulse narrows to a duty of 0.025 at 1 (its nulls at k = 1/d). Below
+# the triangle the Messenger folds, and not as this folder does -- its fold has
+# no even harmonics, nulls the fundamental near 0.3, and fits neither a
+# reflecting nor a sine folder; no patch uses it, so it is left as it was.
+# The first model's landmarks were 0.4/0.5/0.6, the second's 0.35/0.5/0.635.
+# synthkernel.c's ms_parts mirrors all of it.
+TRI, SAW, SQUARE = 0.335, 0.5, 0.68
 FOLD_MAX = 5.0                         # the folder's gain at fully CCW
-PULSE_MIN = 0.02                       # the narrowest pulse, at fully CW
+PULSE_MIN = 0.025                      # the narrowest pulse, at fully CW
+SUB_PULSE_MIN = 0.0033                 # SUB WAVE's narrowest, at fully CW
 Q = 400                                # knob positions cached: 400 steps put
-                                       # every landmark (0.35, 0.5, 0.635) on one
+                                       # every landmark (0.335, 0.5, 0.68) on one
 
 
 def _osc_parts(s):
@@ -159,13 +178,14 @@ def _osc_parts(s):
     if s < TRI:                                    # folded triangle
         g = 1.0 + (FOLD_MAX - 1.0) * (TRI - s) / TRI
         return [(1.0, _fold(_skewed_triangle(0.5), g))]
-    if s < SAW:                                    # triangle skewed to a saw
-        return [(1.0, _skewed_triangle(0.5 + 0.5 * (s - TRI) / (SAW - TRI)))]
+    if s < SAW:                                    # triangle crossfaded to saw
+        a = (s - TRI) / (SAW - TRI)
+        return [(1.0 - a, _skewed_triangle(0.5)), (a, _skewed_triangle(1.0))]
     if s < SQUARE:                                 # saw crossfaded to square
         a = (s - SAW) / (SQUARE - SAW)
-        return [(1.0 - a, _skewed_triangle(1.0)), (a, _pulse(0.5))]
+        return [(1.0 - a, _skewed_triangle(1.0)), (a, _pulse_centred(0.5))]
     d = 0.5 - (0.5 - PULSE_MIN) * (s - SQUARE) / (1.0 - SQUARE)
-    return [(1.0, _pulse(d))]
+    return [(1.0, _pulse_centred(d))]
 
 
 @functools.lru_cache(maxsize=4 * Q)
@@ -220,18 +240,24 @@ def osc_spectrum(shape, n):
     return _osc_cached(q, int(n)).copy()
 
 
-SUB_SQUARE = 0.4                       # SUB WAVE's square, at ~11 o'clock
+# SUB WAVE, measured as WAVESHAPE was (h1-h10 at every 0.05): a triangle at
+# 0 CROSSFADED to a square at 0.3 (0.1-0.5 dB per position; the first model
+# clipped the triangle, 5-6 dB off -- the crossfade's thirds cancel near 0.05,
+# a clip's cannot), both about the half period, then a pulse narrowing to all
+# but nothing at 1 (its nulls at k = 1/d; h1 39.7 dB under the square's).
+SUB_SQUARE = 0.3
+V2_SUB_SQUARE = 0.4                    # the first models' (synth_units 3 and before)
 
 
 @functools.lru_cache(maxsize=4 * Q)
 def _sub_cached(q, n):
     s = q / float(Q)
-    if s < SUB_SQUARE:                             # triangle clipped to a square
-        u = s / SUB_SQUARE
-        g = 1.0 / max(1e-3, 1.0 - u)               # gain 1 (triangle) -> 1000
-        return _segments_coeffs(_clip(_skewed_triangle(0.5), g), n)
-    d = 0.5 - (0.5 - PULSE_MIN) * (s - SUB_SQUARE) / (1.0 - SUB_SQUARE)
-    return _segments_coeffs(_pulse(d), n)
+    if s < SUB_SQUARE:                             # triangle crossfaded to square
+        a = s / SUB_SQUARE
+        return ((1.0 - a) * _segments_coeffs(_skewed_triangle(0.5), n)
+                + a * _segments_coeffs(_pulse_centred(0.5, 0.5), n))
+    d = 0.5 - (0.5 - SUB_PULSE_MIN) * (s - SUB_SQUARE) / (1.0 - SUB_SQUARE)
+    return _segments_coeffs(_pulse_centred(d, 0.5), n)
 
 
 def sub_spectrum(shape, n):
@@ -678,15 +704,34 @@ def _partials(panel, f0, fmax=FMAX_HZ):
 # deviation of I x OSC 1's frequency x OSC 1's wave, which is phase modulation
 # by the wave's integral A = sum_j (2|c_j|/j) sin(j theta1 + phi_j): harmonic k
 # of OSC 2 moves by k I A. OSC 1's first FM_J harmonics carry it (a saw's fall
-# as 1/j^2 in A). The index at MOD AMOUNT's ends is a guess until a Messenger is
-# recorded. THE LADDER COMES AFTER: harmonic k is sum_m D_m e^{i(k th2 + m th1)}
+# as 1/j^2 in A). The index against MOD AMOUNT is measured (FM_INDEX_V/I).
+# THE LADDER COMES AFTER: harmonic k is sum_m D_m e^{i(k th2 + m th1)}
 # (fm_sidebands), and each sideband is filtered at its own frequency
 # |k f2 + m f1| -- so a closing contour mellows an FM bell, as on the hardware.
 # The kernel does the same sum (synthkernel.c, fm_sidebands); filtering the
 # whole harmonic at its carrier, as it first did, was 0.17-0.91 off under a
 # shut ladder.
-FM_INDEX_MAX = 3.0
 FM_J = 8
+# MOD AMOUNT on 1 -> 2 FM, measured (examples/messenger_fit.py fm; triangles
+# at unison): the index of the linear FM whose spectrum is the hardware's,
+# within 1 dB to 0.64 -- nothing to 0.52, then steeply. Past ~0.65 the
+# Messenger's FM is EXPONENTIAL: the carrier's mean pitch drifts off the
+# modulator's and every line splits (0.97 and 1.03 of the key at full), which
+# no index of this FM makes; the table goes on with the nearest fits (2-4 dB
+# off) and a guess at the end. Symmetric about the centre, as measured.
+FM_INDEX_V = (0.5, 0.525, 0.55, 0.5625, 0.575, 0.5875, 0.6, 0.625, 0.65, 0.675, 0.7, 0.75, 1.0)
+FM_INDEX_I = (0.0, 0.03, 0.12, 0.21, 0.31, 0.41, 0.93, 1.31, 1.80, 2.27, 2.40, 2.92, 4.0)
+V1_FM_INDEX_MAX = 3.0                  # the first models' index at either end, linear
+
+
+def fm_amount_index(v):
+    """MOD AMOUNT (on FM) as the index, signed about the centre."""
+    x = _clip01(v) - 0.5
+    return math.copysign(float(np.interp(0.5 + abs(x), FM_INDEX_V, FM_INDEX_I)), x)
+
+
+def fm_index_knob(index):
+    return 0.5 + math.copysign(float(np.interp(abs(index), FM_INDEX_I, FM_INDEX_V)) - 0.5, index)
 
 
 def fm_sidebands(panel, k, n=2048, phi1=None):
@@ -700,7 +745,7 @@ def fm_sidebands(panel, k, n=2048, phi1=None):
 
 
 def fm_index(panel):
-    return bipolar(panel['mod_amount'], FM_INDEX_MAX) if int(panel['mod_dest']) == 0 else 0.0
+    return fm_amount_index(panel['mod_amount']) if int(panel['mod_dest']) == 0 else 0.0
 
 
 def fm_coeffs(panel, phi1=None):
@@ -972,6 +1017,34 @@ def v1_knob_lfo_rate(v):
     return 0.05 * 240.0 ** _clip01(v)
 
 
+V2_TRI, V2_SQUARE = 0.35, 0.635
+
+
+def _wave_v2(v):
+    """A WAVESHAPE position, the second model's landmarks to these."""
+    xs, ys = (0.0, V2_TRI, SAW, V2_SQUARE, 1.0), (0.0, TRI, SAW, SQUARE, 1.0)
+    return float(np.interp(_clip01(v), xs, ys))
+
+
+def _wave_sweeps(knobs, ctx, out, remap):
+    """A SWEEP OF THE WAVESHAPE (LFO 1 on OSC 1 WAVE, or F ENV on OSC 2 WAVE)
+    moves the KNOB, and the landmarks moved under it: its span is rescaled to
+    cover the same shapes, the remapped ends of the old sweep -- exact at its
+    ends, not between them, the remap being piecewise. (The spans themselves,
+    LFO_WAVE_SPAN and MOD_WAVE_SPAN, are not yet measured.)"""
+    if 'lfo1_depth' in knobs and int(ctx.get('lfo1_dest', 0)) == 2 and 'osc1_wave' in ctx:
+        c, h = _clip01(ctx['osc1_wave']), bipolar(knobs['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
+        nh = math.copysign((remap(c + abs(h)) - remap(c - abs(h))) / 2.0, h)
+        out['lfo1_depth'] = 0.5 + nh / (LFO_WAVE_SPAN / 2.0) / 2.0
+    if 'mod_amount' in knobs and int(ctx.get('mod_dest', 1)) == 2 and 'osc2_wave' in ctx:
+        c, h = _clip01(ctx['osc2_wave']), bipolar(knobs['mod_amount'], MOD_WAVE_SPAN / 2.0)
+        nh = remap(c + h) - remap(c)
+        out['mod_amount'] = 0.5 + nh / (MOD_WAVE_SPAN / 2.0) / 2.0
+    for k in ('osc1_wave', 'osc2_wave'):
+        if k in out:
+            out[k] = remap(out[k])
+
+
 def _wave_v1(v):
     """A WAVESHAPE position, first landmarks to measured: piecewise linear,
     so each region's shape is the same shape at the same fraction across it."""
@@ -1011,24 +1084,11 @@ def convert_v1(knobs, context=None):
         out['lfo1_rate'] = lfo_rate_knob(v1_knob_lfo_rate(out['lfo1_rate']))
     if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) == 1:
         out['mod_amount'] = 0.5 + (out['mod_amount'] - 0.5) * V1_MOD_PITCH_OCTAVES / MOD_PITCH_OCTAVES
+    if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) == 0:
+        out['mod_amount'] = fm_index_knob(bipolar(out['mod_amount'], V1_FM_INDEX_MAX))
     if 'lfo1_depth' in out and int(ctx.get('lfo1_dest', 0)) == 1:
         out['lfo1_depth'] = 0.5 + (out['lfo1_depth'] - 0.5) * V1_LFO_PITCH_OCTAVES / LFO_PITCH_OCTAVES
-    # A SWEEP OF THE WAVESHAPE (LFO 1 on OSC 1 WAVE, or F ENV on OSC 2 WAVE)
-    # moves the KNOB, and the landmarks moved under it: its span is rescaled
-    # to cover the same shapes, the remapped ends of the old sweep -- exact at
-    # its ends, not between them, the remap being piecewise. (The spans
-    # themselves, LFO_WAVE_SPAN and MOD_WAVE_SPAN, are not yet measured.)
-    if 'lfo1_depth' in knobs and int(ctx.get('lfo1_dest', 0)) == 2 and 'osc1_wave' in ctx:
-        c, h = _clip01(ctx['osc1_wave']), bipolar(knobs['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
-        nh = math.copysign((_wave_v1(c + abs(h)) - _wave_v1(c - abs(h))) / 2.0, h)
-        out['lfo1_depth'] = 0.5 + nh / (LFO_WAVE_SPAN / 2.0) / 2.0
-    if 'mod_amount' in knobs and int(ctx.get('mod_dest', 1)) == 2 and 'osc2_wave' in ctx:
-        c, h = _clip01(ctx['osc2_wave']), bipolar(knobs['mod_amount'], MOD_WAVE_SPAN / 2.0)
-        nh = _wave_v1(c + h) - _wave_v1(c)
-        out['mod_amount'] = 0.5 + nh / (MOD_WAVE_SPAN / 2.0) / 2.0
-    for k in ('osc1_wave', 'osc2_wave'):
-        if k in out:
-            out[k] = _wave_v1(out[k])
+    _wave_sweeps(knobs, ctx, out, _wave_v1)
     if 'kb_track' in out:                   # OFF or 1:1: the first model's 2/3 is not
         out['kb_track'] = 1.0 if float(out['kb_track']) >= 0.5 else 0.0   # a setting the hardware has
     return out
@@ -1050,6 +1110,27 @@ def convert_v2(knobs):
         if k in out:
             out[k] = sustain_knob(float(out[k])) if float(out[k]) > 0.0 else 0.0
     return out
+
+
+def convert_v3(knobs, context=None):
+    """A panel written in the second waveshape (synth_units 3 and before: the
+    triangle at 0.35, the square at 0.635) as this: each wave its landmark,
+    and 1 -> 2 FM's MOD AMOUNT its index (the first models' linear 3 at the
+    ends)."""
+    ctx = dict(context or {})
+    ctx.update(knobs)
+    out = dict(knobs)
+    _wave_sweeps(knobs, ctx, out, _wave_v2)
+    if 'mod_amount' in out and int(ctx.get('mod_dest', 1)) == 0:      # 1 -> 2 FM's index
+        out['mod_amount'] = fm_index_knob(bipolar(out['mod_amount'], V1_FM_INDEX_MAX))
+    if 'sub_wave' in out:
+        out['sub_wave'] = _sub_v2(out['sub_wave'])
+    return out
+
+
+def _sub_v2(v):
+    """A SUB WAVE position, the first models' square (0.4) to this one's."""
+    return float(np.interp(_clip01(v), (0.0, V2_SUB_SQUARE, 1.0), (0.0, SUB_SQUARE, 1.0)))
 
 PANEL = convert_v1(PANEL_V1)
 MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)

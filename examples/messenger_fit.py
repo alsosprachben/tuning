@@ -74,6 +74,9 @@ CAL = dict(MG.PANEL, osc1_octave=8, osc1_wave=MG.SAW, osc1_level=1.0, osc2_level
 # sent in that second loses its start -- a slow attack read as instant, until
 # it was seen that every "instant" note was the first of its take.
 PREROLL = 1.0
+# BEN'S MESSENGER PLAYS SHARP of its key, by this much ('tune'): the harmonic
+# probes look for it there
+TUNE_CENTS = 36.7
 
 
 class Rig(object):
@@ -565,6 +568,72 @@ def test_times(rig):
     return out
 
 
+def _sweep_harmonics(rig, name, base, knob, vals, note, f0, K=10):
+    takes = held(rig, name, base, knob, vals, note, dur=0.9)
+    rows = {}
+    print('  %-6s h1 dB   h2..h%d dB re h1' % (knob, K))
+    for v, seg in takes:
+        h = harmonics(seg, f0, K); rows[v] = h
+        d = 20 * np.log10(np.maximum(h, 1e-9) / h[0])
+        print('  %.3f %6.1f  %s' % (v, 20 * np.log10(h[0] + 1e-12), ' '.join('%5.1f' % x for x in d[1:])))
+    return rows
+
+
+def _shape_err(model, h):
+    """dB rms between the shapes (each re its own h1), floored at -45."""
+    def db(x):
+        return 20 * np.log10(np.maximum(x, 1e-9))
+    m, d = db(model / model[0]), db(h / h[0])
+    sel = (d > -40) | (m > -40)
+    return float(np.sqrt(np.mean((np.clip(m, -45, 0) - np.clip(d, -45, 0))[sel] ** 2)))
+
+
+def test_wavefull(rig):
+    """WAVESHAPE over the whole knob, h1-h10 at every 0.025, against the
+    model's: shape error and h1 level (the waves all swing +-1, so the level
+    against the saw's checks the landmarks as well)."""
+    base = dict(CAL, osc1_level=1.0, osc2_level=0.0, cutoff=1.0)
+    vals = [round(v, 3) for v in np.arange(0.0, 1.0001, 0.025)]
+    rows = _sweep_harmonics(rig, 'wavefull', base, 'osc1_wave', vals, 57, 220.0 * 2 ** (TUNE_CENTS / 1200))
+    saw = rows[0.5][0] / (2 / np.pi)
+    print('  wave   shape err dB   h1 level hw-model dB')
+    for v, h in rows.items():
+        a = 2 * np.abs(MG.osc_spectrum(v, len(h)))
+        print('  %.3f   %5.2f        %+5.1f%s' % (v, _shape_err(a, h), 20 * np.log10(h[0] / saw / a[0]),
+                                                  '   (the fold: not fitted)' if v < MG.TRI else ''))
+    return rows
+
+
+def test_sub(rig):
+    """SUB WAVE over the whole knob, its own harmonics (half the key)."""
+    base = dict(CAL, osc1_level=0.0, osc2_level=0.0, sub_level=1.0, cutoff=1.0)
+    vals = [round(v, 3) for v in np.arange(0.0, 1.0001, 0.05)]
+    rows = _sweep_harmonics(rig, 'subfull', base, 'sub_wave', vals, 57, 110.0 * 2 ** (TUNE_CENTS / 1200))
+    print('  sub    shape err dB')
+    for v, h in rows.items():
+        print('  %.2f   %5.2f' % (v, _shape_err(2 * np.abs(MG.sub_spectrum(v, len(h))), h)))
+    return rows
+
+
+def test_sustain(rig):
+    """SUSTAIN: the level the amp contour settles at, against full."""
+    base = dict(CAL, a_attack=0.0, a_decay=0.3, a_release=0.3)
+    vals = [1.0, 0.0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0]
+    rig.panel(base); time.sleep(0.3)
+
+    def play(r):
+        for v in vals:
+            r.panel(dict(base, a_sustain=v), knobs=('a_sustain',)); time.sleep(0.15)
+            r.note(81, 2.0); time.sleep(0.8)
+    y = rig.take('sustain', len(vals) * 3.0 + 1.5, play)
+    lv = [np.sqrt(np.mean(y[int((t + 1.2) * SR):int((t + 1.9) * SR)] ** 2)) for t in rig.played]
+    ref = (lv[0] + lv[-1]) / 2.0
+    print('  SUSTAIN  level    (model)')
+    for v, l in zip(vals, lv):
+        print('  %.2f    %.4f   (%.4f)' % (v, l / ref, MG.sustain_level(v)))
+    return list(zip(vals, [l / ref for l in lv]))
+
+
 def pitch_track(seg, hop=960, win=4096):
     """f0 every 20 ms, from the lowest strong harmonic of each window."""
     out = []
@@ -648,39 +717,42 @@ def model_harmonics(panel, note, K):
 
 
 def test_fm(rig):
+    """1 -> 2 FM's index against MOD AMOUNT: triangles at unison, each take's
+    harmonics fitted by a linear FM of its own (numeric, its index in the
+    model's units -- they agree within 2%), energy-weighted. The error says
+    where the hardware stops being linear FM (from ~0.65: its exponential FM
+    drifts the carrier off the key, and the lines split)."""
     note, K = 57, 12
-    HW_TRI = 0.35                       # the hardware's triangle (see 'wave')
-    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc1_wave=HW_TRI, osc2_wave=HW_TRI,
-                mod_dest=0)
-    vals = [0.5, 0.55, 0.6, 0.7, 0.8]
-    takes = held(rig, 'fm', base, 'mod_amount', vals, note)
-    trials = [1.0, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
-    keep = MG.FM_INDEX_MAX
-    print('  MOD AMOUNT   best FM_INDEX_MAX   (dB rms off, of the trials %s)' % trials)
-    best_all = []
-    try:
-        # the grid on the NOTE's own pitch, the instrument being some cents
-        # sharp -- not on the lowest peak, which FM can move
-        f0 = pitch(takes[0][1])
-        for v, seg in takes:
-            h = harmonics(seg, f0, K); h = h / h.max()
-            errs = []
-            for tm in trials:
-                MG.FM_INDEX_MAX = tm
-                mh = model_harmonics(dict(base, osc1_wave=MG.TRI, osc2_wave=MG.TRI, mod_amount=v), note, K)
-                mh = mh / mh.max()
-                e = np.sqrt(((20 * np.log10(np.maximum(h, 1e-3)) - 20 * np.log10(np.maximum(mh, 1e-3))) ** 2).mean())
-                errs.append(e)
-            j = int(np.argmin(errs))
-            best_all.append(trials[j])
-            print('  %.2f          %.1f                 (%s)' % (v, trials[j], ' '.join('%.1f' % e for e in errs)))
-    finally:
-        MG.FM_INDEX_MAX = keep
-    return best_all
+    base = dict(CAL, osc1_level=0.0, osc2_level=1.0, osc1_wave=MG.TRI, osc2_wave=MG.TRI, mod_dest=0)
+    vals = [round(v, 4) for v in np.arange(0.5, 0.7501, 0.0125)] + [0.45, 0.4, 0.35]
+    takes = held(rig, 'fm', base, 'mod_amount', vals, note, dur=0.9)
+    f0 = pitch(takes[0][1])
+    n = 1 << 14
+    t = np.arange(n) / float(n)
+    tri = lambda ph: 1 - 4 * np.abs((ph % 1.0) - 0.5)
+    a = np.cumsum(tri(t)) / n
+    a -= a.mean()
+
+    def spec(index):
+        c = np.fft.rfft(tri(t + index * a))[1:K + 1] / n
+        return 2 * np.abs(c)
+
+    def err(m, h):
+        m, h = m / np.sqrt((m ** 2).sum()), h / np.sqrt((h ** 2).sum())
+        w = np.maximum(h ** 2, m ** 2)
+        return float(np.sqrt(np.sum(w * (20 * np.log10(np.maximum(m, 1e-4) / np.maximum(h, 1e-4))) ** 2) / w.sum()))
+    rows = []
+    print('  MOD AMOUNT   index   (the model)   dB off')
+    for v, seg in takes:
+        h = harmonics(seg, f0, K)
+        e, i = min((err(spec(x), h), x) for x in np.linspace(0, 5, 1001))
+        rows.append((v, i / 1.019, e))
+        print('  %.4f      %5.2f   (%5.2f)      %.2f' % (v, i / 1.019, abs(MG.fm_amount_index(v)), e))
+    return rows
 
 
 TESTS = {'tune': test_tune, 'freq': test_freq, 'wave': test_wave, 'cutoff': test_cutoff,
-         'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'times': test_times, 'lfo': test_lfo, 'mod': test_mod,
+         'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'times': test_times, 'wavefull': test_wavefull, 'sub': test_sub, 'sustain': test_sustain, 'lfo': test_lfo, 'mod': test_mod,
          'fm': test_fm}
 
 

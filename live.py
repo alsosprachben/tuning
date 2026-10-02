@@ -2538,7 +2538,7 @@ class Part:
         if self.synth_b:
             d["synth_b"] = dict(self.synth_b)
         if self.synth or self.synth_b:
-            d["synth_units"] = 3            # the Messenger's measured knobs (moog.py)
+            d["synth_units"] = 4            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
         return d
@@ -2553,16 +2553,21 @@ class Part:
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
         # KNOBS SAVED BEFORE THE MESSENGER WAS MEASURED are in the first model's
-        # units, and those saved before its contours were (synth_units 2) in
-        # the second's: converted once, as the patches were, so they sound as
-        # saved
+        # units; those saved before its contours were (synth_units 2) or its
+        # waveshape (3), in the later ones': converted once, as the patches
+        # were, so they sound as saved
         units = int(d.get("synth_units", 1))
-        if (p.synth or p.synth_b) and units < 3:
+        if (p.synth or p.synth_b) and units < 4:
             vc = p.moog()
             for lay, own in (('a', p.synth), ('b', p.synth_b)):
                 if own:
                     ctx = _MG.panel_of(vc, None, lay) if vc is not None else dict(_MG.PANEL)
-                    own.update(_MG.convert_v1(own, context=ctx) if units < 2 else _MG.convert_v2(own))
+                    if units < 2:
+                        own.update(_MG.convert_v1(own, context=ctx))
+                        continue
+                    if units < 3:
+                        own.update(_MG.convert_v2(own))
+                    own.update(_MG.convert_v3(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
