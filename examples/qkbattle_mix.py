@@ -83,9 +83,9 @@ PARTS = [
     ('hi-hats',     1, HATS,     +5.0),
     ('crashes',     1, CRASHES,  +1.0),      # +4 was too loud, by ear
     ('pipe organ',  2, None,     +4.0),      # -2, then 6 dB up by ear
-    ('saw lead',    3, None,     +5.0),      # +1, then 6 dB up by ear; -2 once the attack was instant
+    ('saw lead',    3, None,     +7.0),      # +1, then 6 dB up by ear; -2 once the attack was instant; +2 on the Moog (below)
     ('drawbar',     4, None,     +9.0),      # +3, then 3 dB more twice by ear
-    ('square lead', 5, None,     +6.0),      # +2, +5, +8: its entrance must cut through; -2 once the attack was instant
+    ('square lead', 5, None,     +8.0),      # +2, +5, +8: its entrance must cut through; -2 once the attack was instant; +2 on the Moog
     ('piano',       6, None,     +7.0),      # +1, then 6 dB up by ear in the studio
     ('rock organ',  7, None,     +1.0),      # -5, then 3 dB up twice by ear
     ('woodblock',   8, None,     -6.0),
@@ -280,6 +280,31 @@ def make_loop(wav, dest, loop_s, marker_s):
     return dest, len(tail) / float(sr), after
 
 
+def make_repeats(wav, dest, loop_s, marker_s, times=5):
+    """The loop played `times` times, as a listener would hear it: the first
+    pass is the mix's own opening, from silence -- the folded tail belongs to
+    a REPEAT, under the start of the next pass, never to the very start --
+    then the folded loop, and after the last pass the real ring-out, [loop,
+    marker), so it ends as the music does rather than cut off mid-reverb."""
+    from scipy.io import wavfile
+    sr, x = wavfile.read(wav)
+    if np.issubdtype(x.dtype, np.integer):
+        x = x.astype(np.float64) / float(np.iinfo(x.dtype).max + 1)
+    else:
+        x = x.astype(np.float64)
+    L, M = int(round(loop_s * sr)), int(round(marker_s * sr))
+    head, tail = x[:L], x[L:M]
+    loop = head.copy()
+    n = min(len(tail), L)
+    loop[:n] += tail[:n]
+    y = np.concatenate([head] + [loop] * (times - 1) + [tail])
+    peak = np.abs(y).max()
+    if peak > 1.0:
+        y /= peak
+    wavfile.write(dest, sr, y.astype(np.float32))
+    return dest, len(y) / float(sr)
+
+
 def only_notes(path, track, keep):
     """Keep only the drum notes in `keep` -- a set, or ('rest', dropped) for
     every note NOT in `dropped` -- carrying the time of what is dropped to
@@ -304,7 +329,14 @@ def only_notes(path, track, keep):
 
 
 # the mix's number, in every output name
-MIX = 'mix15'           # mix14 with the leads on the Moog (moog.py)
+MIX = 'mix16'           # mix14 with the leads on the Moog (moog.py), its knobs measured
+# THE LEADS ON THE MOOG, +2 dB each. The Moog leads open with a bright blip --
+# the filter contour up ~3 octaves in 3.5 ms and back to a darker sustain in
+# 25-40 ms -- and a part's target is its loudness over the whole stem, so the
+# blip takes a share of it and the sustained line, which carries the tune,
+# sits under where the target says (Ben: "probably need to be a little louder
+# because of the new attack"). The -2 the instant additive attack earned is
+# given back.
 VOICE_CODE = b''.join(open(os.path.join(HERE, f), 'rb').read()
                       for f in ('tonelib.py', 'blockrender.py', 'synthkernel.c', 'chorus.py',
                                 'moog.py', 'patch_map.py'))
@@ -418,6 +450,11 @@ def main(argv):
     os.unlink(lw)
     print("  loop: %d bars, %.4f s; %.2f s of tail folded onto the start, its last "
           "half second %.0f dB under the peak -> %s" % (bars, loop_s, tail_s, residue, final))
+    rw, dur = make_repeats(wet, wet.replace('.wav', '.loop5.raw.wav'), loop_s, marker_s, 5)
+    five = wet.replace('.wav', '.loop5.wav')
+    subprocess.run(['sox', rw, '-b', '16', five, 'gain', '-n', '-1'], check=True)
+    os.unlink(rw)
+    print("  five passes, %.1f s, ringing out after the last -> %s" % (dur, lib.mp3(five)))
 
 
 if __name__ == '__main__':

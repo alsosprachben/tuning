@@ -113,11 +113,19 @@ def is_registerable(program):
 
 
 def read_parts(mid):
-    """One entry per track that plays: name, own programs, controllers, notes."""
+    """One entry per track that plays: name, own programs, controllers, notes.
+
+    A track that CHANGES INSTRUMENT partway -- a program change after its
+    first note -- is one part per instrument: Hines' Mars writes "Clarinet/
+    Pipe Organ" on one track, a clarinet that becomes the organ at 324 s, and
+    as one part the name made all 180 notes a clarinet, the organ's entry
+    included. Each part takes its own piece of an "A/B" name, or else the
+    track's name and the program it declared."""
     parts = []
     for ti, track in enumerate(mid.tracks):
         name = ''
         progs = []
+        pcs = []                                    # (tick, program)
         cc = defaultdict(list)
         held = {}
         notes = []
@@ -130,6 +138,7 @@ def read_parts(mid):
                 name = msg.name.strip()
             elif msg.type == 'program_change':
                 progs.append(msg.program)
+                pcs.append((now, msg.program))
             elif msg.type == 'control_change':
                 cc[msg.control].append((now, msg.value))
             elif msg.type == 'note_on' and msg.velocity:
@@ -139,11 +148,28 @@ def read_parts(mid):
             elif msg.type in ('note_off', 'note_on') and held.get(msg.note):
                 on, vel = held[msg.note].pop(0)
                 notes.append((on, now, msg.note, vel))
-        if notes:
-            parts.append({'track': ti, 'name': name or 'trk%d' % ti,
-                          'progs': progs, 'cc': cc, 'notes': sorted(notes),
-                          'was_drum': drum,
-                          'from_ch': min(chans) if chans else 0})
+        if not notes:
+            continue
+        notes.sort()
+        part = {'track': ti, 'name': name or 'trk%d' % ti, 'progs': progs, 'cc': cc,
+                'notes': notes, 'was_drum': drum, 'from_ch': min(chans) if chans else 0}
+        cuts = [(t, p) for t, p in pcs if t > notes[0][0]]
+        if not cuts:
+            parts.append(part)
+            continue
+        # the instrument at the first note, then one segment per change after it
+        start = [p for t, p in pcs if t <= notes[0][0]]
+        segs = [(0, start[-1] if start else None)] + cuts
+        pieces = [x.strip() for x in (name or '').split('/')]
+        for k, (t0, prog) in enumerate(segs):
+            t1 = segs[k + 1][0] if k + 1 < len(segs) else None
+            mine = [n for n in notes if n[0] >= t0 and (t1 is None or n[0] < t1)]
+            if not mine:
+                continue
+            nm = (pieces[k] if len(pieces) == len(segs) and pieces[k] else
+                  '%s (%s)' % (part['name'], prog))
+            parts.append(dict(part, name=nm, progs=[prog] if prog is not None else [],
+                              notes=mine))
     return parts
 
 
@@ -277,6 +303,13 @@ def build(mid, parts, assign):
             evs.append((max(0, on - 1),
                         mido.Message('control_change', channel=ch, control=7,
                                      value=value_at(p['cc'][7], on, 100), time=0)))
+            # CC11 too, for a part that writes it: expression on most voices,
+            # the STOP WORD on the church organ (CC11 bits 0-6) -- dropped, the
+            # organ fell back to its 8' alone
+            if p['cc'][11]:
+                evs.append((max(0, on - 1),
+                            mido.Message('control_change', channel=ch, control=11,
+                                         value=value_at(sorted(p['cc'][11]), on, 127), time=0)))
             if p['cc'][10]:
                 evs.append((max(0, on - 1),
                             mido.Message('control_change', channel=ch, control=10,
