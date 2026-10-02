@@ -192,7 +192,12 @@ median was fine (+1.3 dB) while the tenth percentile sat at -8.5, under the
 strings in exactly the quiet writing the movement is made of. Report the
 percentiles, not the mean: a median can be right while the piece is wrong.
 
-## Not yet ported
+## Neptune: its own script
 
-Neptune's receding all-female chorus. It has no text -- Holst writes it
-wordless -- so it needs the registration and the recession, not this pipeline.
+Neptune's receding all-female chorus has no text -- Holst writes it wordless --
+so it needs the registration and the recession, not this pipeline.
+`examples/neptune.py` is the whole of it, from CRM114's MIDI to the mp3: the
+file read track by track with mt32mux (it is written for an MT-32: three
+programs a channel), Holst's last bar repeated "until the sound is lost in the
+distance", the chorus on a constant /V/, and recede.py taking it away by
+distance and by volume. hybridmean at A = 440, the hall at wet +2.

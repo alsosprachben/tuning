@@ -3,17 +3,35 @@
 Additive synthesis where every voice is built from what the instrument physically
 does: air columns that mode-lock, bells that will not radiate below their flare
 cutoff, bars tuned by undercutting, membranes that go sharp when struck hard.
-There are no samples. The reasoning behind each voice lives in `tonelib.py`'s
-comments and in the commit messages, which are the real documentation; this file
-is only how to run it.
+There are no samples. The synthesizer programs are the one family modelled on
+another synthesizer: they are patches on a model of a Moog Messenger (`moog.py`),
+and that model is measured against a real one. The reasoning behind each voice
+lives in `tonelib.py`'s comments and in the commit messages, which are the real
+documentation; this file is only how to run it. `coverage.md` rates how far
+each of the 128 GM programs has been checked against the real instrument.
 
 Two front ends share one C kernel (`synthkernel.c`): an offline renderer and a
 live one. The kernel renders any absolute sample range statelessly, which is what
 makes both possible from the same code.
 
-## Play it live
+## Set it up
 
-Needs `python3-rtmidi` and `python3-pyaudio` (both apt).
+Linux, Python 3 and gcc with OpenMP. The Python side needs numpy, scipy and
+mido, and live playing needs python-rtmidi and PyAudio too:
+
+```sh
+sudo apt install gcc python3-numpy python3-scipy python3-mido python3-rtmidi python3-pyaudio
+```
+
+There is nothing to build by hand. The C kernel (`synthkernel.c`) compiles
+itself the first time it's imported, one `libsynth_RATE.so` per sample rate,
+and rebuilds whenever the source is newer; `convolver.c`, the live room tail,
+does the same. Both are compiled with `gcc -march=native`, so a library built
+on one machine is not for another. macOS is untested: Apple's clang has no
+OpenMP, and the compiler is named `gcc` in `blockrender.ensure_lib` and
+`live._conv_dll`.
+
+## Play it live
 
 Set the low-latency quantum **once per session** — it is a system-wide PipeWire
 setting and does not persist:
@@ -45,7 +63,7 @@ Ctrl-C stops.
 
 ```sh
 python3 live.py --list        # MIDI input names, to fill in --port
-python3 live.py --selftest    # 423 behaviour checks, no audio or MIDI needed
+python3 live.py --selftest    # 563 behaviour checks, no audio or MIDI needed
 python3 live.py --latency     # MIDI-to-DAC timing, measured as you play
 ```
 
@@ -79,10 +97,10 @@ what you can change about it, and the same two keys change every one of them.
 
 ### The synth panel
 
-The synth leads, GM 80–87, are a **Moog Messenger** (`moog.py`): two
-oscillators whose WAVESHAPE crossfades folded triangle → triangle → saw → square →
+Every synthesizer program, 32 of them, is a patch on a **Moog Messenger**
+(`moog.py`): two oscillators whose WAVESHAPE crossfades folded triangle → triangle → saw → square →
 narrow pulse, a sub oscillator, and the four-mode transistor ladder with its
-two contours. Each lead is a patch on it — square, sawtooth, calliope
+two contours. The leads (GM 80–87) are square, sawtooth, calliope
 (triangles), chiff (with its breath), charang (the ladder in front of a valve),
 voice (the ladder, then an open /a/), fifths (OSC 2 FREQ +7) and bass+lead
 (OSC 2 at 16'). The synth basses (38/39) and synth brass (62/63) are patches
@@ -104,7 +122,7 @@ Echoes (102) go through Moog's own MF-104M Analog Delay (`mf104.py`), which is
 a section of the same panel: each repeat is one more trip round its bucket
 brigade, darker than the last. New Age (88), a bell over a pad, is TWO
 Messengers on one key -- a layered voice. `TUNING_MOOG=0` puts the additive
-voices back, for A/B. The fourth pane (`tab` three times) is the panel of
+voices back for an A/B (`examples/moog_ab.py`). The fourth pane (`tab` three times) is the panel of
 the selected part:
 
 | key | what it does |
@@ -131,8 +149,10 @@ is A440 (`moog.MESSENGER_TUNE_CENTS`, measured on Ben's unit), and each note
 bends onto the tuner's. It moves notes already sounding: the waveshape, the mixer and
 the tuning glide there over a few blocks rather than jump, which on a
 waveshape — whose harmonics change phase, not only level — would click.
-`TUNING_MOOG=0` puts the old additive leads back for an A/B
-(`examples/moog_ab.py`).
+Each knob is drawn as a bar at eight steps a character, and one with a centre
+(TUNE, FREQ, EG and MOD AMOUNT, LFO DEPTH) grows either way from it. The
+Messenger, as it is set up, ignores velocity; a patch here plays louder for a
+harder key, because velocity is how this engine balances a mix.
 
 **Measured against the hardware.** Every law the patches use was fitted
 against Ben's Messenger, recorded through a mixer and back
@@ -147,6 +167,25 @@ hardware within 0.6-2 dB rms on 28 of the 32 programs. Not fitted: the fold
 below the triangle (no patch uses it), and the hardware's FM past MOD AMOUNT
 ~0.65, which is exponential -- the carrier drifts off the key -- where ours is
 linear. `coverage.md` rates them accordingly.
+
+**Fitting it to your own Messenger.** Plug its USB into the computer, for MIDI
+(it has no USB audio), and its audio out into an interface the computer can
+record from. Find the card with `arecord -l`, then:
+
+```sh
+python3 examples/messenger_fit.py tune --card 2            # where its A440 is
+python3 examples/messenger_fit.py cutoff eg times --card 2 # any probes, in turn
+```
+
+There is one probe a law, each printing the hardware against the model: `tune`,
+`freq`, `wave`, `cutoff`, `res`, `eg`, `amp`, `attack`, `times`, `sustain`, `wavefull`,
+`sub`, `fm`, `lfo`, `lfocut`, `lfopitch`, `lfowave`, `mod`, `modes`, `mixer` and
+`topcut`; `path` sweeps the interface itself (the laptop's headphones into it),
+to take its own roll-off out of the others. A unit's own calibration is one
+number: `moog.MESSENGER_TUNE_CENTS`, how far its A440 sits from its TUNE knob's
+centre, which drifts a few cents and is worth re-reading with `tune`. The
+other laws are taken to be the design rather than this unit, but only one
+Messenger has been measured.
 
 **What the panel has, and what it does not yet.** LFO 1 moves the cutoff — a
 triangle both ways, or a falling saw, rising ramp or square one way (up past

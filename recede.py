@@ -48,8 +48,12 @@ def main(argv):
         print("sample rates differ: %d vs %d" % (sr, sr2))
         return 1
 
-    n = min(len(band), len(receding))
-    band, receding = band[:n], receding[:n]
+    # The LONGER of the two, the other padded with silence: the receding part
+    # is often the one that goes on -- Neptune's chorus repeats past the end of
+    # the band by a minute -- and cutting to the shorter threw that away.
+    n = max(len(band), len(receding))
+    band = np.pad(band, ((0, n - len(band)), (0, 0)))
+    receding = np.pad(receding, ((0, n - len(receding)), (0, 0)))
     t = np.arange(n) / float(sr)
 
     # Direct sound falls with distance: 1/d in amplitude.
