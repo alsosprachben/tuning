@@ -1873,11 +1873,11 @@ SYNTH_KNOBS = (
     ("FILTER", "res_bass", "res bass", "onoff"),
     ("F ENV", "f_attack", "attack", "atime"),
     ("F ENV", "f_decay", "decay", "time"),
-    ("F ENV", "f_sustain", "sustain", "level"),
+    ("F ENV", "f_sustain", "sustain", "sustain"),
     ("F ENV", "f_release", "release", "time"),
     ("A ENV", "a_attack", "attack", "atime"),
     ("A ENV", "a_decay", "decay", "time"),
-    ("A ENV", "a_sustain", "sustain", "level"),
+    ("A ENV", "a_sustain", "sustain", "sustain"),
     ("A ENV", "a_release", "release", "time"),
     ("LFO 1", "lfo1_rate", "rate", "lfohz"),
     ("LFO 1", "lfo1_shape", "shape", "lfoshape"),
@@ -1959,6 +1959,9 @@ def synth_fmt(kind, v, pan=None):
         return MG.MOD_DESTS[int(v)]
     if kind == "modamt":
         return "%+.0f%%" % MG.bipolar(v, 100.0)
+    if kind == "sustain":                 # the level it holds: a steep law (moog.sustain_level)
+        lv = MG.sustain_level(v)
+        return "%.0f%%" % (100.0 * lv) if lv >= 0.005 else "closed"
     if kind in ("time", "atime"):         # an attack has its own law (moog.knob_attack)
         t = MG.knob_attack(v) if kind == "atime" else MG.knob_time(v)
         return ("%.2f s" % t) if t >= 1.0 else "%d ms" % round(t * 1000)

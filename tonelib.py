@@ -9482,8 +9482,8 @@ class MoogSawLead(SawtoothSynthProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,   # +6 cents
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.201155, resonance=0.171053, eg_amount=0.778887, kb_track=1.0,
-        f_attack=0.0, f_decay=0.35766, f_sustain=0.35, f_release=0.325145,
-        a_attack=0.1, a_decay=0.325145, a_sustain=1.0, a_release=0.351157,
+        f_attack=0.0, f_decay=0.185522, f_sustain=0.594757, f_release=0.134897,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.175397,
     )
 
 
@@ -9499,8 +9499,8 @@ class MoogCalliopeLead(TriangleSynthProperties):
     messenger = dict(
         osc1_wave=0.35, osc2_wave=0.35, osc2_octave=4, osc1_level=1.0, osc2_level=0.25,
         cutoff=0.424804, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
-        f_attack=0.2, f_decay=0.325145, f_sustain=0.6, f_release=0.325145,
-        a_attack=0.3, a_decay=0.325145, a_sustain=1.0, a_release=0.35766,
+        f_attack=0.028487, f_decay=0.134897, f_sustain=0.781424, f_release=0.134897,
+        a_attack=0.060231, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
     )
 
 
@@ -9520,8 +9520,8 @@ class MoogChiffLead(ChiffLeadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_level=0.0, osc1_level=1.0, noise_level=0.2,
         cutoff=0.201155, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
-        f_attack=0.0, f_decay=0.40318, f_sustain=0.25, f_release=0.292631,
-        a_attack=0.15, a_decay=0.325145, a_sustain=0.95, a_release=0.325145,
+        f_attack=0.0, f_decay=0.277265, f_sustain=0.515793, f_release=0.095069,
+        a_attack=0.012614, a_decay=0.134897, a_sustain=0.974811, a_release=0.134897,
     )
 
 
@@ -9542,8 +9542,8 @@ class MoogCharangLead(CharangLeadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 10.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.263777, resonance=0.239474, eg_amount=0.676383, kb_track=1.0,
-        f_attack=0.0, f_decay=0.325145, f_sustain=0.5, f_release=0.260116,
-        a_attack=0.05, a_decay=0.325145, a_sustain=1.0, a_release=0.292631,
+        f_attack=0.0, f_decay=0.134897, f_sustain=0.713203, f_release=0.079197,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.095069,
     )
 
 
@@ -9559,8 +9559,8 @@ class MoogVoiceLead(VoiceLeadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
         cutoff=0.335344, resonance=0.068421, eg_amount=0.676383, kb_track=1.0,
-        f_attack=0.35, f_decay=0.35766, f_sustain=0.6, f_release=0.325145,
-        a_attack=0.45, a_decay=0.325145, a_sustain=1.0, a_release=0.35766,
+        f_attack=0.076103, f_decay=0.185522, f_sustain=0.781424, f_release=0.134897,
+        a_attack=0.125028, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
     )
 
     def moog_body(self, partial_hz):
@@ -9578,8 +9578,8 @@ class MoogFifthsLead(FifthsLeadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=1.0, osc1_level=0.8, osc2_level=0.5,
         cutoff=0.201155, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
-        f_attack=0.0, f_decay=0.35766, f_sustain=0.35, f_release=0.325145,
-        a_attack=0.1, a_decay=0.325145, a_sustain=1.0, a_release=0.351157,
+        f_attack=0.0, f_decay=0.185522, f_sustain=0.594757, f_release=0.134897,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.175397,
     )
 
 
@@ -9594,8 +9594,8 @@ class MoogBassLead(BassLeadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_octave=16, osc1_level=0.8, osc2_level=0.7,
         cutoff=0.156425, resonance=0.205263, eg_amount=0.761619, kb_track=1.0,
-        f_attack=0.0, f_decay=0.325145, f_sustain=0.3, f_release=0.292631,
-        a_attack=0.05, a_decay=0.325145, a_sustain=1.0, a_release=0.325145,
+        f_attack=0.0, f_decay=0.134897, f_sustain=0.555275, f_release=0.095069,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.134897,
     )
 
 
@@ -9612,8 +9612,8 @@ class MoogSquareLead(SquareSynthProperties):
         osc1_wave=0.635, osc2_level=0.0, sub_wave=0.4, sub_level=0.5,
         osc1_level=1.0,
         cutoff=0.245885, resonance=0.102632, eg_amount=0.749444, kb_track=1.0,
-        f_attack=0.0, f_decay=0.325145, f_sustain=0.4, f_release=0.325145,
-        a_attack=0.05, a_decay=0.325145, a_sustain=1.0, a_release=0.325145,
+        f_attack=0.0, f_decay=0.134897, f_sustain=0.634239, f_release=0.134897,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.134897,
     )
 
 
@@ -9642,8 +9642,8 @@ class MoogSynthBass1(SynthBass1Properties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_octave=16, osc1_level=0.85, osc2_level=0.5,
         cutoff=0.156425, resonance=0.136842, eg_amount=0.761619, kb_track=1.0,
-        f_attack=0.0, f_decay=0.409683, f_sustain=0.2, f_release=0.35766,
-        a_attack=0.08, a_decay=0.325145, a_sustain=1.0, a_release=0.305637,
+        f_attack=0.0, f_decay=0.291137, f_sustain=0.466518, f_release=0.185522,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.104523,
     )
 
 
@@ -9657,8 +9657,8 @@ class MoogSynthBass2(SynthBass2Properties):
     messenger = dict(
         osc1_wave=0.635, osc2_level=0.0, sub_wave=0.4, sub_level=0.5, osc1_level=1.0,
         cutoff=0.210101, resonance=0.307895, eg_amount=0.749444, kb_track=1.0,
-        f_attack=0.0, f_decay=0.377169, f_sustain=0.25, f_release=0.325145,
-        a_attack=0.08, a_decay=0.325145, a_sustain=1.0, a_release=0.305637,
+        f_attack=0.0, f_decay=0.22178, f_sustain=0.515793, f_release=0.134897,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.104523,
     )
 
 
@@ -9675,8 +9675,8 @@ class MoogSynthBrass1(SynthBrass1Properties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.084858, resonance=0.102632, eg_amount=0.795146, kb_track=1.0,
-        f_attack=0.445, f_decay=0.422689, f_sustain=0.45, f_release=0.35766,
-        a_attack=0.37, a_decay=0.325145, a_sustain=1.0, a_release=0.35766,
+        f_attack=0.119966, f_decay=0.321666, f_sustain=0.673721, f_release=0.185522,
+        a_attack=0.082452, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
     )
 
 
@@ -9691,8 +9691,8 @@ class MoogSynthBrass2(SynthBrass2Properties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 11.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.049074, resonance=0.068421, eg_amount=0.736643, kb_track=1.0,
-        f_attack=0.54, f_decay=0.442198, f_sustain=0.55, f_release=0.390175,
-        a_attack=0.48, a_decay=0.325145, a_sustain=1.0, a_release=0.390175,
+        f_attack=0.22213, f_decay=0.369419, f_sustain=0.752001, f_release=0.249524,
+        a_attack=0.155403, a_decay=0.134897, a_sustain=1.0, a_release=0.249524,
     )
 
 
@@ -9714,8 +9714,8 @@ class MoogSynthStrings1(SynthStrings1Properties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 7.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.263777, resonance=0.0, eg_amount=0.657762, kb_track=1.0,
-        f_attack=0.52, f_decay=0.455204, f_sustain=0.7, f_release=0.455204,
-        a_attack=0.52, a_decay=0.390175, a_sustain=1.0, a_release=0.455204,
+        f_attack=0.195902, f_decay=0.401385, f_sustain=0.840271, f_release=0.401385,
+        a_attack=0.195902, a_decay=0.249524, a_sustain=1.0, a_release=0.401385,
     )
 
 
@@ -9729,8 +9729,8 @@ class MoogSynthStrings2(SynthStrings2Properties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 11.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.201155, resonance=0.0, eg_amount=0.657762, kb_track=1.0,
-        f_attack=0.62, f_decay=0.455204, f_sustain=0.75, f_release=0.468209,
-        a_attack=0.62, a_decay=0.390175, a_sustain=1.0, a_release=0.468209,
+        f_attack=0.337985, f_decay=0.401385, f_sustain=0.869694, f_release=0.436552,
+        a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
     )
 
 
@@ -9745,8 +9745,8 @@ class MoogWarmPad(WarmPadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 10.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.138533, resonance=0.034211, eg_amount=0.636626, kb_track=1.0,
-        f_attack=0.63, f_decay=0.455204, f_sustain=0.8, f_release=0.487718,
-        a_attack=0.63, a_decay=0.390175, a_sustain=1.0, a_release=0.487718,
+        f_attack=0.353903, f_decay=0.401385, f_sustain=0.899117, f_release=0.489307,
+        a_attack=0.353903, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
     )
 
 
@@ -9761,8 +9761,8 @@ class MoogPolysynthPad(PolysynthPadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 7.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.263777, resonance=0.102632, eg_amount=0.736643, kb_track=1.0,
-        f_attack=0.2, f_decay=0.40318, f_sustain=0.5, f_release=0.429192,
-        a_attack=0.41, a_decay=0.422689, a_sustain=0.85, a_release=0.429192,
+        f_attack=0.028487, f_decay=0.277265, f_sustain=0.713203, f_release=0.337583,
+        a_attack=0.095149, a_decay=0.321666, a_sustain=0.924433, a_release=0.337583,
     )
 
 
@@ -9777,8 +9777,8 @@ class MoogHaloPad(HaloPadProperties):
         osc1_wave=0.635, osc2_wave=0.635, osc2_freq=0.5 + 6.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.7, noise_level=0.08,
         cutoff=0.29956, resonance=0.068421, eg_amount=0.624722, kb_track=1.0,
-        f_attack=0.62, f_decay=0.455204, f_sustain=0.75, f_release=0.487718,
-        a_attack=0.62, a_decay=0.390175, a_sustain=1.0, a_release=0.487718,
+        f_attack=0.337985, f_decay=0.401385, f_sustain=0.869694, f_release=0.489307,
+        a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
     )
 
 
@@ -9794,8 +9794,8 @@ class MoogSweepPad(SweepPadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.111696, resonance=0.307895, eg_amount=0.5, kb_track=1.0,
-        f_attack=0.6, f_decay=0.455204, f_sustain=1.0, f_release=0.481215,
-        a_attack=0.6, a_decay=0.390175, a_sustain=1.0, a_release=0.481215,
+        f_attack=0.30615, f_decay=0.401385, f_sustain=1.0, f_release=0.471722,
+        a_attack=0.30615, a_decay=0.249524, a_sustain=1.0, a_release=0.471722,
         lfo1_rate=0.161946, lfo1_shape=0, lfo1_depth=0.8, lfo1_dest=0,
     )
 
@@ -9811,8 +9811,8 @@ class MoogSoundtrackPad(SoundtrackFXProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 14.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.174317, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
-        f_attack=0.72, f_decay=0.487718, f_sustain=0.8, f_release=0.521549,
-        a_attack=0.685, a_decay=0.390175, a_sustain=1.0, a_release=0.521549,
+        f_attack=0.50775, f_decay=0.489307, f_sustain=0.899117, f_release=0.544434,
+        a_attack=0.44579, a_decay=0.249524, a_sustain=1.0, a_release=0.544434,
         lfo1_rate=0.102026, lfo1_shape=0, lfo1_depth=0.68, lfo1_dest=0,
     )
 
@@ -9835,8 +9835,8 @@ class MoogAtmosphereFX(AtmosphereFXProperties):
         osc1_wave=0.5, osc2_wave=0.35, osc2_freq=0.5 + 5.0 / 1400.0,
         osc1_level=0.7, osc2_level=0.5, noise_level=0.25,
         cutoff=0.201155, resonance=0.102632, eg_amount=0.657762, kb_track=1.0,
-        f_attack=0.63, f_decay=0.455204, f_sustain=0.75, f_release=0.487718,
-        a_attack=0.633, a_decay=0.390175, a_sustain=1.0, a_release=0.487718,
+        f_attack=0.353903, f_decay=0.401385, f_sustain=0.869694, f_release=0.489307,
+        a_attack=0.358678, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
     )
 
 
@@ -9852,8 +9852,8 @@ class MoogGoblinsFX(GoblinsFXProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc1_level=0.8, osc2_level=0.8,
         cutoff=0.066966, resonance=0.205263, eg_amount=0.624722, kb_track=1.0,
-        f_attack=0.6, f_decay=0.455204, f_sustain=0.8, f_release=0.468209,
-        a_attack=0.62, a_decay=0.390175, a_sustain=1.0, a_release=0.468209,
+        f_attack=0.30615, f_decay=0.401385, f_sustain=0.899117, f_release=0.436552,
+        a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
         lfo1_rate=0.388669, lfo1_shape=0, lfo1_depth=0.503125, lfo1_dest=1,
     )
 
@@ -9871,8 +9871,8 @@ class MoogSciFiFX(SciFiFXProperties):
         osc1_wave=0.635, osc2_wave=0.635, osc2_freq=0.5 + 9.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
         cutoff=0.066966, resonance=0.410526, eg_amount=0.815524, kb_track=1.0,
-        f_attack=0.6, f_decay=0.59911, f_sustain=0.3, f_release=0.468209,
-        a_attack=0.45, a_decay=0.390175, a_sustain=1.0, a_release=0.468209,
+        f_attack=0.30615, f_decay=0.619504, f_sustain=0.555275, f_release=0.436552,
+        a_attack=0.125028, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
         lfo1_rate=0.44535, lfo1_shape=0, lfo1_depth=0.786563, lfo1_dest=2,
     )
 
@@ -9888,8 +9888,8 @@ class MoogBrightnessFX(BrightnessFXProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
         cutoff=0.406912, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
-        f_attack=0.0, f_decay=0.390175, f_sustain=0.6, f_release=0.442198,
-        a_attack=0.27, a_decay=0.487718, a_sustain=0.8, a_release=0.442198,
+        f_attack=0.0, f_decay=0.249524, f_sustain=0.781424, f_release=0.369419,
+        a_attack=0.050707, a_decay=0.489307, a_sustain=0.899117, a_release=0.369419,
     )
 
 
@@ -9905,8 +9905,8 @@ class MoogChoirPad(ChoirPadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.7,
         cutoff=0.335344, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
-        f_attack=0.6, f_decay=0.455204, f_sustain=0.75, f_release=0.468209,
-        a_attack=0.6, a_decay=0.390175, a_sustain=1.0, a_release=0.468209,
+        f_attack=0.30615, f_decay=0.401385, f_sustain=0.869694, f_release=0.436552,
+        a_attack=0.30615, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
     )
 
     def moog_body(self, partial_hz):
@@ -9925,8 +9925,8 @@ class MoogBowedPad(BowedPadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
         mode=2, cutoff=0.249463, resonance=0.478947, eg_amount=0.5, kb_track=1.0,
-        f_attack=0.6, f_decay=0.455204, f_sustain=1.0, f_release=0.494221,
-        a_attack=0.656, a_decay=0.390175, a_sustain=1.0, a_release=0.494221,
+        f_attack=0.30615, f_decay=0.401385, f_sustain=1.0, f_release=0.507281,
+        a_attack=0.395288, a_decay=0.249524, a_sustain=1.0, a_release=0.507281,
     )
 
 
@@ -9957,8 +9957,8 @@ class MoogMetallicPad(MetallicPadProperties):
         osc1_wave=0.35, osc2_wave=0.35, osc2_octave=4, osc2_freq=0.5 + 50.0 / 1400.0,
         osc1_level=0.0, osc2_level=0.9,
         cutoff=0.263777, resonance=0.0, eg_amount=0.749444, kb_track=1.0,
-        f_attack=0.45, f_decay=0.560329, f_sustain=0.35, f_release=0.468209,
-        a_attack=0.564, a_decay=0.390175, a_sustain=1.0, a_release=0.468209,
+        f_attack=0.125028, f_decay=0.581586, f_sustain=0.594757, f_release=0.436552,
+        a_attack=0.255422, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
         mod_dest=0, mod_amount=0.75,
     )
 
@@ -9983,8 +9983,8 @@ class MoogCrystalFX(CrystalFXProperties):
         osc1_wave=0.35, osc2_wave=0.35, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
         osc1_level=0.4, osc2_level=0.9,
         cutoff=0.245885, resonance=0.0, eg_amount=0.815524, kb_track=1.0,
-        f_attack=0.0, f_decay=0.521549, f_sustain=0.0, f_release=0.487718,
-        a_attack=0.075, a_decay=0.560329, a_sustain=0.0, a_release=0.487718,
+        f_attack=0.0, f_decay=0.544434, f_sustain=0.0, f_release=0.489307,
+        a_attack=0.0, a_decay=0.581586, a_sustain=0.0, a_release=0.489307,
         mod_dest=0, mod_amount=0.75,
     )
 
@@ -10011,8 +10011,8 @@ class MoogRainFX(RainFXProperties):
         osc1_wave=0.35, osc2_wave=0.35, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
         osc1_level=0.4, osc2_level=0.9,
         cutoff=0.353236, resonance=0.0, eg_amount=0.778887, kb_track=1.0,
-        f_attack=0.0, f_decay=0.390175, f_sustain=0.0, f_release=0.390175,
-        a_attack=0.0, a_decay=0.422689, a_sustain=0.0, a_release=0.390175,
+        f_attack=0.0, f_decay=0.249524, f_sustain=0.0, f_release=0.249524,
+        a_attack=0.0, a_decay=0.321666, a_sustain=0.0, a_release=0.249524,
         mod_dest=0, mod_amount=0.75,
         mf104_on=True, mf104_range=0, mf104_time=0.439, mf104_feedback=0.449,
         mf104_mix=0.4, mf104_rate=0.159, mf104_amount=0.06,
@@ -10033,8 +10033,8 @@ class MoogEchoesFX(EchoesFXProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 5.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
         cutoff=0.111696, resonance=0.171053, eg_amount=0.795146, kb_track=1.0,
-        f_attack=0.0, f_decay=0.35766, f_sustain=0.1, f_release=0.390175,
-        a_attack=0.0, a_decay=0.429192, a_sustain=0.1, a_release=0.390175,
+        f_attack=0.0, f_decay=0.185522, f_sustain=0.354911, f_release=0.249524,
+        a_attack=0.0, a_decay=0.337583, a_sustain=0.354911, a_release=0.249524,
         mf104_on=True, mf104_range=0, mf104_time=0.602, mf104_feedback=0.49,
         mf104_mix=0.45, mf104_rate=0.201, mf104_amount=0.04,
     )
@@ -10057,15 +10057,15 @@ class MoogNewAgePad(NewAgePadProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
         osc1_level=0.75, osc2_level=0.75,
         cutoff=0.201155, resonance=0.068421, eg_amount=0.676383, kb_track=1.0,
-        f_attack=0.6, f_decay=0.455204, f_sustain=0.7, f_release=0.487718,
-        a_attack=0.62, a_decay=0.390175, a_sustain=1.0, a_release=0.494221,
+        f_attack=0.30615, f_decay=0.401385, f_sustain=0.840271, f_release=0.489307,
+        a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.507281,
     )
     messenger_b = dict(
         osc1_wave=0.35, osc2_wave=0.35, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
         osc1_level=0.25, osc2_level=0.55,
         cutoff=0.263777, resonance=0.0, eg_amount=0.805505, kb_track=1.0,
-        f_attack=0.0, f_decay=0.487718, f_sustain=0.0, f_release=0.455204,
-        a_attack=0.05, a_decay=0.521549, a_sustain=0.0, a_release=0.455204,
+        f_attack=0.0, f_decay=0.489307, f_sustain=0.0, f_release=0.401385,
+        a_attack=0.0, a_decay=0.544434, a_sustain=0.0, a_release=0.401385,
         mod_dest=0, mod_amount=0.75,
     )
 
@@ -12078,8 +12078,8 @@ class MoogSynthDrum(SynthDrumProperties):
     messenger = dict(
         osc1_level=0.0, osc2_wave=0.35, osc2_level=1.0, noise_level=0.12,
         cutoff=0.201155, resonance=0.136842, eg_amount=0.778887, kb_track=1.0,
-        f_attack=0.0, f_decay=0.35766, f_sustain=0.0, f_release=0.35766,
-        a_attack=0.0, a_decay=0.502159, a_sustain=0.0, a_release=0.502159,
+        f_attack=0.0, f_decay=0.185522, f_sustain=0.0, f_release=0.185522,
+        a_attack=0.0, a_decay=0.525858, a_sustain=0.0, a_release=0.525858,
         mod_dest=1, mod_amount=0.6,     # +1 octave at the peak (MOD_PITCH_OCTAVES 5)
     )
 
@@ -15271,8 +15271,8 @@ class MoogSynthVoice(SynthVoiceProperties):
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
         cutoff=0.317452, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
-        f_attack=0.54, f_decay=0.455204, f_sustain=0.75, f_release=0.422689,
-        a_attack=0.54, a_decay=0.390175, a_sustain=1.0, a_release=0.422689,
+        f_attack=0.22213, f_decay=0.401385, f_sustain=0.869694, f_release=0.321666,
+        a_attack=0.22213, a_decay=0.249524, a_sustain=1.0, a_release=0.321666,
     )
 
     def moog_body(self, partial_hz):

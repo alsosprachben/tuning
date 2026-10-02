@@ -301,24 +301,27 @@ def ladder_gain(f, fc, k, mode=LP4, res_bass=False):
 def adsr(t, A, D, S, R, t_off=None):
     """The contour at time t (s) after the key went down, released at t_off.
 
-    Analog envelope generators charge and discharge a capacitor, so every
-    stage is exponential. The attack charges toward 1.5 and is cut at 1 --
-    which lands at exactly A seconds -- the decay falls toward S and the
-    release toward 0, each with a time constant a quarter of its knob's time
-    (98% of the way there by then). Stateless: the level at release is the
-    ADSR's own value at t_off, so the kernel can evaluate any instant alone."""
+    Every stage is exponential, each heading a little PAST where it stops,
+    as measured on the Messenger: the attack charges toward ATTACK_TARGET and
+    is cut at 1 -- which lands at exactly A seconds -- the decay falls toward
+    S, the release toward -EG_UNDER, and the contour stops at zero. S is the
+    decay's target (sustain_target), so a low SUSTAIN is below zero too: the
+    contour falls through and closes, as the hardware's does, about 25 dB
+    down. D and R are four time constants. Stateless: the level at release is
+    the ADSR's own value at t_off, so the kernel can evaluate any instant
+    alone."""
     t = np.asarray(t, float)
     def held(tt):
         before = tt < 0.0                        # the key is not down yet
         tt = np.maximum(tt, 0.0)
-        ta = max(A, 1e-6) / math.log(3.0)
-        att = 1.5 * (1.0 - np.exp(-tt / ta))
-        dec = S + (1.0 - S) * np.exp(-(tt - A) / (max(D, 1e-6) / 4.0))
+        ta = max(A, 1e-6) / _ATK_TO_1
+        att = ATTACK_TARGET * (1.0 - np.exp(-tt / ta))
+        dec = np.maximum(0.0, S + (1.0 - S) * np.exp(-(tt - A) / (max(D, 1e-6) / 4.0)))
         return np.where(before, 0.0, np.where(tt < A, att, dec))
     e = held(t)
     if t_off is not None:
         lo = held(np.asarray(t_off, float))
-        rel = lo * np.exp(-(t - t_off) / (max(R, 1e-6) / 4.0))
+        rel = np.maximum(0.0, (lo + EG_UNDER) * np.exp(-(t - t_off) / (max(R, 1e-6) / 4.0)) - EG_UNDER)
         e = np.where(t >= t_off, rel, e)
     return e
 
@@ -335,32 +338,92 @@ def _clip01(v):
     return max(0.0, min(1.0, float(v)))
 
 
+# THE CONTOURS, measured (examples/messenger_fit.py attack, times; A5 through
+# a 2.3 ms RMS). ATTACK, DECAY and RELEASE share one law: the time constant
+# below, the three agreeing within 5% at every position (the attack's from
+# its t90 / ln 10). Every stage overshoots where it stops: the attack charges
+# toward ATTACK_TARGET and the decay begins at 1 (t50/t90 = 0.30 throughout,
+# the peak with sustain 0 at 1.5 t90); decay and release fall toward
+# -EG_UNDER and the amplifier closes at zero -- a straight line in dB for
+# ~20 dB, then a plunge (fitted within 1 dB at every position, g 0.052-0.057).
+# Log-interpolated between the tenths; 0's is under the probe's resolution.
+EG_TAU = (0.001, 0.0182, 0.0452, 0.0878, 0.1566, 0.2644, 0.4341, 0.6990, 1.137, 1.892, 5.68)
+EG_UNDER = 0.055
+ATTACK_TARGET = 1.03
+_ATK_TO_1 = math.log(ATTACK_TARGET / (ATTACK_TARGET - 1.0))      # time constants to 1
+_ATK_T90 = math.log(10.0)                                         # ...to 90% of the target
+_EG_V = np.linspace(0.0, 1.0, len(EG_TAU))
+_EG_LOG = np.log(np.array(EG_TAU))
+
+
+def knob_tau(v):
+    """A contour knob's time constant, seconds."""
+    return float(np.exp(np.interp(_clip01(v), _EG_V, _EG_LOG)))
+
+
+def tau_knob(tau):
+    return float(np.interp(math.log(max(tau, 1e-6)), _EG_LOG, _EG_V))
+
+
 def knob_attack(v):
-    """ATTACK: 1 ms fully CCW to 10 s fully CW, exponentially. Not yet refitted
-    -- the measurement (122 ms at 0.4 to 538 at 0.7, instant below) is rough."""
-    return 0.001 * 10000.0 ** _clip01(v)
+    """ATTACK: the time to the top of the charge, in seconds."""
+    return knob_tau(v) * _ATK_TO_1
 
 
-# DECAY and RELEASE, measured as 4 time constants: 1.19 s at 0.5, 1.92 at
-# 0.6, 3.1 at 0.7 -- e-folding every 1/4.75 of the knob. Below 0.5, not
-# measured: geometric down to the first model's 1 ms at 0.
-DR_MID_V, DR_MID_S, DR_RATE, DR_LO_S = 0.5, 1.19, 4.75, 0.001
+def attack_knob(seconds):
+    return tau_knob(seconds / _ATK_TO_1)
 
 
 def knob_time(v):
-    """DECAY / RELEASE (the time constant is a quarter of this)."""
-    v = _clip01(v)
-    if v >= DR_MID_V:
-        return DR_MID_S * math.exp(DR_RATE * (v - DR_MID_V))
-    return DR_LO_S * (DR_MID_S / DR_LO_S) ** (v / DR_MID_V)
+    """DECAY / RELEASE: four time constants, the model's knob time."""
+    return 4.0 * knob_tau(v)
 
 
 def time_knob(t):
-    """knob_time backwards."""
-    t = max(DR_LO_S, float(t))
-    if t >= DR_MID_S:
-        return _clip01(DR_MID_V + math.log(t / DR_MID_S) / DR_RATE)
-    return _clip01(DR_MID_V * math.log(t / DR_LO_S) / math.log(DR_MID_S / DR_LO_S))
+    return tau_knob(t / 4.0)
+
+
+# SUSTAIN: the level the decay heads for, measured as where it settles (the
+# amp's, A5): nothing to 0.1, 0.006 at 0.25, 0.23 at 0.5, 0.55 at 0.75, 0.80
+# at 0.9 -- steeply curved, not the knob's position. Its bottom is the
+# release's -EG_UNDER (sustain 0 falls as a release does); between 0 and 0.25
+# not resolved, a line. The filter contour's sustain is taken to be the same
+# (one firmware contour; not measured through the ladder).
+SUS_V = (0.0, 0.25, 0.5, 0.75, 0.9, 1.0)
+SUS_TARGET = (-EG_UNDER, 0.006, 0.23, 0.5466, 0.8015, 1.0)
+
+
+def sustain_target(v):
+    """SUSTAIN: where the decay heads (below zero: it closes)."""
+    return float(np.interp(_clip01(v), SUS_V, SUS_TARGET))
+
+
+def sustain_knob(level):
+    return float(np.interp(level, SUS_TARGET, SUS_V))
+
+
+def sustain_level(v):
+    """What a SUSTAIN holds at: its target, or nothing."""
+    return max(0.0, sustain_target(v))
+
+
+# THE SECOND MODEL'S CONTOURS (synth_units 2, committed 52a805d): decay and
+# release 1.19 s at 0.5 e-folding every 1/4.75 above, geometric to 1 ms below;
+# the attack the first model's; sustain the level itself. convert_v2 maps a
+# panel written in them; convert_v1 goes straight to these laws.
+V2_DR = (0.5, 1.19, 4.75, 0.001)
+
+
+def v2_knob_time(v):
+    v = _clip01(v)
+    mv, ms, rate, lo = V2_DR
+    if v >= mv:
+        return ms * math.exp(rate * (v - mv))
+    return lo * (ms / lo) ** (v / mv)
+
+
+def v1_knob_attack(v):
+    return 0.001 * 10000.0 ** _clip01(v)
 
 
 # CUTOFF: by white noise through the ladder, fitted with |H| above the
@@ -678,7 +741,7 @@ def sustain_gain(panel, f0, f):
     The amplifier's products are computed once, from this; the kernel then
     moves the partials by H(t) / H(sustain) (FT slot 11)."""
     fcs = (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
-           * 2.0 ** (eg_octaves(panel['eg_amount']) * float(panel['f_sustain'])))
+           * 2.0 ** (eg_octaves(panel['eg_amount']) * sustain_level(panel['f_sustain'])))
     return ladder_gain(f, max(fcs, 1.0), knob_k(panel['resonance']),
                        int(panel['mode']), bool(panel['res_bass']))
 
@@ -927,6 +990,15 @@ def convert_v1(knobs, context=None):
     for k in ('f_decay', 'f_release', 'a_decay', 'a_release'):
         if k in out:
             out[k] = time_knob(v1_knob_time(out[k]))
+    for k in ('f_sustain', 'a_sustain'):     # the first model's sustain was the level
+        if k in out:
+            out[k] = sustain_knob(float(out[k])) if float(out[k]) > 0.0 else 0.0
+    # ATTACK keeps its t90 (0.834 of the first model's time, charging to 1.5):
+    # the curve is the hardware's now, so its corner comes a little later
+    for k in ('f_attack', 'a_attack'):
+        if k in out:
+            t90 = 0.834 * v1_knob_attack(out[k])
+            out[k] = attack_knob(t90 * _ATK_TO_1 / _ATK_T90)
     if 'cutoff' in out:
         out['cutoff'] = cutoff_knob(v1_knob_cutoff(out['cutoff']))
     if 'resonance' in out:
@@ -962,6 +1034,23 @@ def convert_v1(knobs, context=None):
     return out
 
 
+
+def convert_v2(knobs):
+    """A panel written in the second model's contours (synth_units 2) as these:
+    each decay and release keeps its time constant, each sustain its level."""
+    out = dict(knobs)
+    for k in ('f_decay', 'f_release', 'a_decay', 'a_release'):
+        if k in out:
+            out[k] = time_knob(v2_knob_time(out[k]))
+    for k in ('f_attack', 'a_attack'):       # the second model's own attack law
+        if k in out:
+            t90 = 0.834 * v1_knob_attack(out[k])
+            out[k] = attack_knob(t90 * _ATK_TO_1 / _ATK_T90)
+    for k in ('f_sustain', 'a_sustain'):
+        if k in out:
+            out[k] = sustain_knob(float(out[k])) if float(out[k]) > 0.0 else 0.0
+    return out
+
 PANEL = convert_v1(PANEL_V1)
 MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)
 
@@ -977,7 +1066,7 @@ def pitch_params(panel):
     if ae == 0.0 and al == 0.0:
         return None
     return (ae, knob_attack(panel['f_attack']), knob_time(panel['f_decay']),
-            float(panel['f_sustain']), knob_time(panel['f_release']),
+            sustain_target(panel['f_sustain']), knob_time(panel['f_release']),
             al, knob_lfo_rate(panel['lfo1_rate']), float(int(panel['lfo1_shape'])),
             1.0 if panel['lfo1_reset'] else 0.0)
 
@@ -1022,7 +1111,7 @@ def shape_params(panel):
     v[7] = bipolar(panel['lfo1_depth'], LFO_WAVE_SPAN / 2.0)
     v[8], v[9], v[10] = knob_lfo_rate(panel['lfo1_rate']), int(panel['lfo1_shape']), 1.0 if panel['lfo1_reset'] else 0.0
     v[11], v[12] = knob_attack(panel['f_attack']), knob_time(panel['f_decay'])
-    v[13], v[14] = float(panel['f_sustain']), knob_time(panel['f_release'])
+    v[13], v[14] = sustain_target(panel['f_sustain']), knob_time(panel['f_release'])
     v[15] = (osc_ratio(panel, OSC2) / osc_ratio(panel, OSC1)) if panel['sync'] else 0.0
     if pp is not None and panel['sync']:
         v[16:25] = pp
@@ -1103,11 +1192,12 @@ def _adsr_v(t, A, D, S, R, toff):
     def held(tt):
         before = tt < 0.0
         tt = np.maximum(tt, 0.0)
-        att = 1.5 * (1.0 - np.exp(-tt * math.log(3.0) / np.maximum(A, 1e-6)))
-        dec = S + (1.0 - S) * np.exp(-(tt - A) / (np.maximum(D, 1e-6) / 4.0))
+        att = ATTACK_TARGET * (1.0 - np.exp(-tt * _ATK_TO_1 / np.maximum(A, 1e-6)))
+        dec = np.maximum(0.0, S + (1.0 - S) * np.exp(-(tt - A) / (np.maximum(D, 1e-6) / 4.0)))
         return np.where(before, 0.0, np.where(tt < A, att, dec))
     with np.errstate(over='ignore', invalid='ignore'):   # toff inf: held, rel unused
-        rel = held(toff) * np.exp(-(t - toff) / (np.maximum(R, 1e-6) / 4.0))
+        rel = np.maximum(0.0, (held(toff) + EG_UNDER) * np.exp(-(t - toff) / (np.maximum(R, 1e-6) / 4.0))
+                         - EG_UNDER)
     return np.where(t >= toff, rel, held(t))
 
 
@@ -1261,7 +1351,7 @@ def kn_row(panel):
     on = int(panel['lfo1_dest']) == 0
     return [knob_cutoff(panel['cutoff']), knob_k(panel['resonance']),
             eg_octaves(panel['eg_amount']),
-            float(panel['f_sustain']), float(panel['a_sustain']),
+            sustain_target(panel['f_sustain']), sustain_target(panel['a_sustain']),
             knob_lfo_rate(panel['lfo1_rate']),
             bipolar(panel['lfo1_depth'], LFO_OCTAVES) if on else 0.0,
             float(int(panel['lfo1_shape'])), 1.0 if panel['lfo1_reset'] else 0.0]
@@ -1271,14 +1361,16 @@ def self_hz(panel, f0):
     """Where the ladder's own sine stands for a key at f0: the cutoff the
     filter contour sustains at, key tracking and all."""
     return (knob_cutoff(panel['cutoff']) * (f0 / KB_REF_HZ) ** float(panel['kb_track'])
-            * 2.0 ** (eg_octaves(panel['eg_amount']) * float(panel['f_sustain'])))
+            * 2.0 ** (eg_octaves(panel['eg_amount']) * sustain_level(panel['f_sustain'])))
 
 
 def release_span(panel):
-    """How long a released note sounds: 2.5 release times, -87 dB. At 1.5
-    (-52 dB) the tail was cut off audibly short -- a step to silence -- and
-    where the cut fell depended on the renderer's block size."""
-    return 2.5 * knob_time(panel['a_release'])
+    """How long a released note sounds: until the release, falling toward
+    -EG_UNDER, crosses zero from the top (ln((1 + g)/g) time constants), and
+    a time constant more. (Toward zero itself it never ended: 2.5 release
+    times, -87 dB, was the cut -- at 1.5 a step to silence was heard.)"""
+    tau = knob_tau(panel['a_release'])
+    return tau * (math.log((1.0 + EG_UNDER) / EG_UNDER) + 1.0)
 
 
 def gain_at(panel, f, t, t_off=None):
@@ -1286,7 +1378,7 @@ def gain_at(panel, f, t, t_off=None):
     contour times the ladder at the cutoff the filter contour has reached.
     A partial at frequency f of a note at KB_REF_HZ (kbfac 1)."""
     fe = adsr(t, knob_attack(panel['f_attack']), knob_time(panel['f_decay']),
-              panel['f_sustain'], knob_time(panel['f_release']), t_off)
+              sustain_target(panel['f_sustain']), knob_time(panel['f_release']), t_off)
     fc = knob_cutoff(panel['cutoff']) * 2.0 ** (eg_octaves(panel['eg_amount']) * fe)
     kn = kn_row(panel)
     if kn[6]:        # LFO 1 on the cutoff: from the key (KB RESET), as tested
@@ -1294,7 +1386,7 @@ def gain_at(panel, f, t, t_off=None):
     h = ladder_gain(f, np.maximum(fc, 1.0), knob_k(panel['resonance']),
                     int(panel['mode']), bool(panel['res_bass']))
     return adsr(t, knob_attack(panel['a_attack']), knob_time(panel['a_decay']),
-                panel['a_sustain'], knob_time(panel['a_release']), t_off) * h
+                sustain_target(panel['a_sustain']), knob_time(panel['a_release']), t_off) * h
 
 
 def selftest():
@@ -1346,9 +1438,10 @@ def selftest():
     e = adsr(np.array([0.0, 0.1, 0.1 + 5.0]), 0.1, 1.0, 0.4, 0.5)
     check("ADSR: 0 at the key, 1 at A, S after the decay",
           abs(e[0]) < 1e-12 and abs(e[1] - 1) < 1e-9 and abs(e[2] - 0.4) < 1e-6)
-    r = adsr(np.array([1.0, 1.5]), 0.01, 0.1, 0.6, 0.5, t_off=1.0)
-    check("ADSR: release starts at the held level and falls 98%",
-          abs(r[0] - 0.6) < 1e-6 and abs(r[1] / r[0] - math.exp(-4)) < 1e-9)
+    r = adsr(np.array([1.0, 1.125, 1.5]), 0.01, 0.1, 0.6, 0.5, t_off=1.0)
+    check("ADSR: release starts at the held level, falls past zero, and stops there",
+          abs(r[0] - 0.6) < 1e-6 and abs(r[1] - ((0.6 + EG_UNDER) * math.exp(-1) - EG_UNDER)) < 1e-9
+          and r[2] == 0.0)
     saw = osc_spectrum(SAW, 64)
     check("SYNC at unison is the free wave",
           np.allclose(sync_spectrum(SAW, 1.0, 64), saw, atol=1e-12))
@@ -1380,11 +1473,14 @@ def selftest():
     dc, _ = pitch_cells(g, a0, toff, P, sr)
     num = float(np.sum(dc))                          # integral of (R - 1), samples
     ae, fA, fD, fS, fR = P[:5]
-    lo = 1.5 * (1 - math.exp(-(toff - a0) / sr * math.log(3) / fA)) if (toff - a0) / sr < fA else         fS + (1 - fS) * math.exp(-((toff - a0) / sr - fA) / (fD / 4))
+    lo = ATTACK_TARGET * (1 - math.exp(-(toff - a0) / sr * _ATK_TO_1 / fA)) if (toff - a0) / sr < fA else         fS + (1 - fS) * math.exp(-((toff - a0) / sr - fA) / (fD / 4))
     T = (g[-1] + MG - a0) / sr
-    ref = (_stage_integral(ae, 1.5, -1.5, fA / math.log(3), 0.0, fA)
+    rz = (fR / 4) * math.log((lo + EG_UNDER) / EG_UNDER)     # the release reaches zero
+    tr = T - (toff - a0) / sr
+    ref = (_stage_integral(ae, ATTACK_TARGET, -ATTACK_TARGET, fA / _ATK_TO_1, 0.0, fA)
            + _stage_integral(ae, fS, 1 - fS, fD / 4, 0.0, (toff - a0) / sr - fA)
-           + _stage_integral(ae, 0.0, lo, fR / 4, 0.0, T - (toff - a0) / sr)) * sr
+           + _stage_integral(ae, -EG_UNDER, lo + EG_UNDER, fR / 4, 0.0, min(rz, tr))
+           + max(0.0, tr - rz)) * sr
     ref -= (g[-1] + MG - a0)                          # the "- 1" over the note's span
     dcc, rc = pitch_cells_c(g, a0, toff, P, sr)
     Pl = (2.0, 0.01, 0.2, 0.5, 0.2, 0.7, 3.3, 0.0, 1.0)

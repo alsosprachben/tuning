@@ -158,13 +158,20 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
                         //     lfo_hz lfo_octaves lfo_shape lfo_reset
 #define MOOG_GRID 128   // samples between evaluations: the live block, so a
                         // file render and the player land on the same points
+// THE CONTOURS (moog.adsr, measured): the attack charges toward MS_ATK_T and
+// is cut at 1, MS_ATK_K = ln(T/(T-1)) time constants in; the decay falls
+// toward S (the sustain's target, below zero for a low one), the release
+// toward -MS_UNDER, and the contour stops at zero
+#define MS_ATK_T 1.03
+#define MS_ATK_K 3.5361166995615263
+#define MS_UNDER 0.055
 static inline float moog_held(float tt, float A, float D, float S){
     if(tt<0.f) return 0.f;
-    if(tt<A) return 1.5f*(1.f-expf(-tt*1.0986123f/fmaxf(A,1e-6f)));
-    return S+(1.f-S)*expf(-(tt-A)/(fmaxf(D,1e-6f)*0.25f));
+    if(tt<A) return (float)MS_ATK_T*(1.f-expf(-tt*(float)MS_ATK_K/fmaxf(A,1e-6f)));
+    return fmaxf(0.f, S+(1.f-S)*expf(-(tt-A)/(fmaxf(D,1e-6f)*0.25f)));
 }
 static inline float moog_adsr(float t, float A, float D, float S, float R, float toff){
-    if(t>=toff) return moog_held(toff,A,D,S)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f));
+    if(t>=toff) return fmaxf(0.f, (moog_held(toff,A,D,S)+(float)MS_UNDER)*expf(-(t-toff)/(fmaxf(R,1e-6f)*0.25f))-(float)MS_UNDER);
     return moog_held(t,A,D,S);
 }
 static inline float moog_ladder(float x, float k, int mode, int rb){
@@ -308,14 +315,14 @@ static int fm_sidebands(const float* B, float kI, float* Dr, float* Di, double* 
 // P is n x 9: A_env fA fD fS fR A_lfo lfo_hz lfo_shape lfo_reset.
 static double mp_held(double tt, double A, double D, double S){
     if(tt<0.0) return 0.0;
-    if(tt<A) return 1.5*(1.0-exp(-tt*1.0986122886681098/fmax(A,1e-6)));
-    return S+(1.0-S)*exp(-(tt-A)/(fmax(D,1e-6)/4.0));
+    if(tt<A) return MS_ATK_T*(1.0-exp(-tt*MS_ATK_K/fmax(A,1e-6)));
+    return fmax(0.0, S+(1.0-S)*exp(-(tt-A)/(fmax(D,1e-6)/4.0)));
 }
 static double mp_ratio(double nn, double a0, double toff, const double* q, double sr){
     double t=(nn-a0)/sr;
     if(t<0.0) return 1.0;
     double to=(toff-a0)/sr, e;
-    if(t>=to) e=mp_held(to,q[1],q[2],q[3])*exp(-(t-to)/(fmax(q[4],1e-6)/4.0));
+    if(t>=to) e=fmax(0.0, (mp_held(to,q[1],q[2],q[3])+MS_UNDER)*exp(-(t-to)/(fmax(q[4],1e-6)/4.0))-MS_UNDER);
     else e=mp_held(t,q[1],q[2],q[3]);
     double x=q[0]*e;
     if(q[5]!=0.0){
@@ -550,7 +557,7 @@ void moog_shape_rows(int nrows, const double* par, const double* a0, const doubl
             double t=(g-a0[i])/sr, fe;
             if(t<0.0) fe=0.0;
             else { double to=(toff[i]-a0[i])/sr;
-                   fe = t>=to ? mp_held(to,q[11],q[12],q[13])*exp(-(t-to)/(fmax(q[14],1e-6)/4.0))
+                   fe = t>=to ? fmax(0.0, (mp_held(to,q[11],q[12],q[13])+MS_UNDER)*exp(-(t-to)/(fmax(q[14],1e-6)/4.0))-MS_UNDER)
                               : mp_held(t,q[11],q[12],q[13]); }
             double tl = q[10]>0.5 ? t : g/sr;
             double ph=tl*q[8]; ph-=floor(ph);
@@ -911,7 +918,7 @@ void synth_voice(
                         float h = selfosc ? 1.f : fms ? fade : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade;
                         if(fms){ sbFc[j]=fc; sbK[j]=kn[1]; sbF[j]=fhzj; sbMode=mode; sbRb=rb; }
                         if(pre && !selfosc){   // the partials carry the ladder at its sustain already
-                            float fcs=kn[0]*kbf*exp2f(kn[2]*kn[3]); if(fcs<1.f)fcs=1.f;
+                            float fcs=kn[0]*kbf*exp2f(kn[2]*fmaxf(kn[3],0.f)); if(fcs<1.f)fcs=1.f;
                             h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
                         }
                         gLm[j]=moog_adsr((float)(nn-a-dL)/SRATE_F,aA,aD,kn[4],aR2,toffL)*h;

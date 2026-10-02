@@ -69,6 +69,13 @@ CAL = dict(MG.PANEL, osc1_octave=8, osc1_wave=MG.SAW, osc1_level=1.0, osc2_level
            mod_amount=0.5, lfo1_depth=0.5)
 
 
+# THE MIXER'S CAPTURE COMES ALIVE about a second after arecord starts: the
+# file is digital zero until 1.01 s, whatever was played before it. A note
+# sent in that second loses its start -- a slow attack read as instant, until
+# it was seen that every "instant" note was the first of its take.
+PREROLL = 1.0
+
+
 class Rig(object):
     """The Messenger on MIDI and the mixer's card, recording one take at a time."""
 
@@ -91,10 +98,10 @@ class Rig(object):
         what it PLAYED -- an onset detector counted one note twice."""
         path = os.path.join(OUT, name + '.wav')
         rec = subprocess.Popen(['arecord', '-q', '-D', 'plughw:%d,0' % self.card, '-f', 'S16_LE',
-                                '-r', str(SR), '-c', '2', '-d', str(int(np.ceil(seconds))), path])
+                                '-r', str(SR), '-c', '2', '-d', str(int(np.ceil(seconds + PREROLL))), path])
         self.t0 = time.monotonic()
         self.played = []
-        time.sleep(0.5)
+        time.sleep(0.5 + PREROLL)
         play(self)
         rec.wait()
         sr, x = wavfile.read(path)
@@ -517,6 +524,47 @@ def test_attack(rig):
     return rows
 
 
+def test_times(rig):
+    """DECAY and RELEASE over their whole travel, as 4 time constants of a
+    log-linear fall (the model's knob time): A5, so a 2.3 ms RMS -- two
+    periods -- can follow the shortest; each note measured from where it
+    crosses 2% of its own top, never from where it was sent (see PREROLL)."""
+    base = dict(CAL, a_attack=0.0, a_decay=0.8, a_sustain=1.0, a_release=0.3)
+    vals = [round(v, 2) for v in np.arange(0.0, 0.81, 0.1)]
+    out = {}
+    for which in ('decay', 'release'):
+        knob = 'a_' + which
+        b2 = dict(base, a_sustain=0.0 if which == 'decay' else 1.0)
+        rig.panel(b2); time.sleep(0.3)
+        hold = (lambda v: 6.0) if which == 'decay' else (lambda v: 0.4)
+        gap = (lambda v: 0.3) if which == 'decay' else (lambda v: 6.0 if v > 0.6 else 3.0)
+
+        def play(r):
+            for v in vals:
+                r.panel(dict(b2, **{knob: v}), knobs=(knob,)); time.sleep(0.15)
+                r.note(81, hold(v)); time.sleep(gap(v))
+        y = rig.take('t_' + which, sum(hold(v) + gap(v) + 0.2 for v in vals) + 1.5, play)
+        c = np.cumsum(np.r_[0.0, y ** 2]); w, hop = int(SR * 0.0023), SR // 2000
+        i = np.arange(0, len(y) - w, hop)
+        e = np.sqrt((c[i + w] - c[i]) / w)                     # 0.5 ms hops
+        print('  %-7s knob   4 tau (ms)   (model)' % which.upper())
+        for v, t in zip(vals, rig.played):
+            a = int((t + 0.1) * 2000)
+            seg = e[a:a + int((hold(v) + gap(v) - 0.1) * 2000)]
+            top = seg.max(); on = int(np.argmax(seg > top * 0.02))
+            st = on + int(np.argmax(seg[on:])) if which == 'decay' else on + int(hold(v) * 2000) - 40
+            fall = seg[st:]
+            ref = fall[0] if which == 'decay' else np.median(seg[on + 200:st])
+            idx = np.flatnonzero((fall < ref * 0.7) & (fall > ref * 0.03))
+            idx = idx[idx < (np.argmax(fall < ref * 0.03) or len(fall))]
+            if len(idx) < 4:
+                print('          %.2f   (too short to fit)' % v); continue
+            sl, _c = np.polyfit(idx / 2000.0, np.log(fall[idx]), 1)
+            out.setdefault(which, []).append((v, -4.0 / sl))
+            print('          %.2f  %9.1f     (%8.1f)' % (v, -4000.0 / sl, 1000 * MG.knob_time(v)))
+    return out
+
+
 def pitch_track(seg, hop=960, win=4096):
     """f0 every 20 ms, from the lowest strong harmonic of each window."""
     out = []
@@ -632,7 +680,7 @@ def test_fm(rig):
 
 
 TESTS = {'tune': test_tune, 'freq': test_freq, 'wave': test_wave, 'cutoff': test_cutoff,
-         'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'lfo': test_lfo, 'mod': test_mod,
+         'res': test_res, 'eg': test_eg, 'amp': test_amp, 'attack': test_attack, 'times': test_times, 'lfo': test_lfo, 'mod': test_mod,
          'fm': test_fm}
 
 
