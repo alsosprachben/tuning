@@ -2003,6 +2003,103 @@ class Renderer:
         return L[:frames], R[:frames]
 
 
+
+# Below this many occupied slots the GPU renderer hands the block to the CPU:
+# the GPU's round trip and the setup have a floor (~0.42 ms) a light block does
+# not need. Measured (README): the GPU overtakes one CPU thread at ~1 000 slots
+# in a 128-frame block, and at ~2 000 in a 32-frame one, where the floor is
+# most of the budget.
+GPU_MIN = 1000
+GPU_MIN_SMALL = 2000            # blocks of 64 frames or fewer
+
+
+def gpu_min_for(frames):
+    return GPU_MIN_SMALL if frames <= 64 else GPU_MIN
+
+
+class GpuRenderer(Renderer):
+    """Render one block on the GPU (gpurender.py): the block setup on the CPU
+    through the same source synth_voice runs, the samples on the GPU.
+
+    A drop-in for Renderer -- the same render(), act, send pair and close() --
+    and a Renderer underneath it: a block it cannot take (fewer than gpu_min
+    occupied slots, or a callback asking for a frame count the stream was not
+    opened with) goes down the CPU path as before, threaded if asked.
+
+    backend "cl" is the GPU; "c" runs the same descriptors through the C
+    reference sample pass (voice_samples), for checking the setup on a machine
+    without one.
+
+    It is not bit-identical to the CPU: its phasors are evaluated, not turned
+    (voicedesc.h), and its partials are summed in another order. The selftest
+    holds it to the CPU at ~1e-5.
+    """
+
+    def __init__(self, slab, frames, nthreads=1, backend="cl", gpu_min=None, setup_threads=4):
+        super().__init__(slab, frames, nthreads)
+        import gpurender
+        self.backend = backend
+        self.gpu_min = gpu_min_for(frames) if gpu_min is None else gpu_min
+        self.tab = gpurender.BlockTables(setup_threads)
+        self.gpu = gpurender.Gpu() if backend == "cl" else None
+        self.idx = np.zeros(0, np.int64)
+        self.on_gpu = False                 # did the last block go to the GPU
+        self.ms_setup = self.ms_samples = 0.0
+
+    def bounds(self):
+        if self.slab.dirty:
+            self.idx = np.flatnonzero(self.slab.busy).astype(np.int64)
+        return super().bounds()
+
+    def render(self, n0, frames):
+        b = self.bounds()
+        if (b is None or self.act < self.gpu_min or frames != self.frames
+                or B.BLK != frames or n0 % frames):
+            self.on_gpu = False
+            return super().render(n0, frames)
+        self.on_gpu = True
+        sl = self.slab
+        sl.prep()["kb0"] = n0 // moog_grid(B.BLK)
+        sl.moog_pitch_block(n0, frames)
+        sl.moog_shape_block(n0, frames)
+        sl.moog_fm_block()
+        snd = self.send
+        t0 = time.perf_counter()
+        self.tab.setup(sl.prep(), self.idx, n0, snd)
+        t1 = time.perf_counter()
+        if self.gpu is not None:
+            L, R, SL, SR = self.gpu.samples(self.tab, n0, frames, snd)
+        else:
+            L, R, SL, SR = self.tab.samples_c(n0, frames, snd)
+        # the block's two halves, ms: for the meter and the timing tables
+        self.ms_setup, self.ms_samples = (t1 - t0) * 1e3, (time.perf_counter() - t1) * 1e3
+        sl.knobs_advance()
+        g = T.master_gain
+        self.L[:frames] = L * g; self.R[:frames] = R * g
+        np.clip(self.L, -1, 1, self.L); np.clip(self.R, -1, 1, self.R)
+        if snd:
+            self.SL[:frames] = SL * g; self.SR[:frames] = SR * g
+        return self.L[:frames], self.R[:frames]
+
+
+GPU_ERROR = None        # why the last GPU renderer asked for could not be made
+
+
+def make_renderer(slab, frames, threads=1, gpu=False):
+    """A Renderer, or a GpuRenderer when gpu is asked for and there is one to
+    be had: without pyopencl or a GPU it says why (GPU_ERROR) and plays on the
+    CPU rather than not at all."""
+    global GPU_ERROR
+    if gpu:
+        try:
+            r = GpuRenderer(slab, frames, threads)
+            GPU_ERROR = None
+            return r
+        except Exception as e:
+            GPU_ERROR = "%s: %s" % (type(e).__name__, e)
+    return Renderer(slab, frames, threads)
+
+
 # ---- patches: the expensive, shareable half of a part -------------------------
 
 # The honky-tonk's wheel positions, pre-warmed so sweeping it cannot miss.
@@ -2580,7 +2677,7 @@ class Part:
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=16384,
                  tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
-                 parts=None, threads=1):
+                 parts=None, threads=1, gpu=False):
         B.set_sample_rate(rate)
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.tuner = rate, frames, tuner
@@ -2603,7 +2700,7 @@ class Live:
         self.slab.rate = float(rate)
         self.headroom_db = headroom_db
         self.slab.headroom = 10.0 ** (-headroom_db / 20.0)
-        self.renderer = Renderer(self.slab, frames, threads)
+        self.renderer = make_renderer(self.slab, frames, threads, gpu)
         # The part set is swapped WHOLESALE by a single attribute assignment,
         # which is atomic under the GIL: the callback sees the old tuple or the
         # new one, never a half-built one. See set_parts().
@@ -6099,6 +6196,8 @@ class Live:
                     stuck=self.stuck, miss=self.misses,
                     render_ms=self.render_ms, render_max=self.render_max,
                     threads=self.renderer.K, active=self.renderer.act,
+                    gpu=isinstance(self.renderer, GpuRenderer),
+                    on_gpu=getattr(self.renderer, "on_gpu", False),
                     budget_ms=self.frames * 1000.0 / self.rate,
                     last_error=self.last_error)
 
@@ -6845,6 +6944,79 @@ def selftest():
           ok and lv.errors == 0, "" if lv.errors == 0 else "  (%s)" % lv.last_error)
     lv.down.clear(); lv.sweep(lv.n)
     leak(lv, "pool swap leaks no slots")
+    lv.renderer.close()
+
+    # 14b. THE GPU RENDERER plays what the CPU plays: the block setup through
+    # synth_voice's own source (voice_block), the samples evaluated rather than
+    # turned (voicedesc.h) -- through the C reference always, and on the GPU
+    # when there is one. A string chord through its chiff with the wheel in,
+    # and a Moog FM bell (its sidebands through the ladder), send bus on.
+    try:
+        import gpurender as _GR
+        _GR.Gpu()
+        _gpu_ok = True
+    except Exception as _e:
+        _gpu_ok = False
+        print("  (no OpenCL GPU here -- %s: the GPU checks run the C reference only)"
+              % type(_e).__name__)
+    def _gplay(prog, backend, swap_at=None):
+        lv = Live(program=prog, rate=48000, frames=128, verbose=False, tuner="even")
+        lv.warm()
+        if backend and swap_at is None:
+            lv.renderer.close()
+            lv.renderer = GpuRenderer(lv.slab, 128, 1, backend=backend, gpu_min=0)
+            lv.slab.dirty = True
+        lv.renderer.send = True
+        for nn in (48, 55, 60, 64):
+            lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=110))
+        out, gpu_blocks = [], 0
+        for blk in range(80):
+            if blk == 30:
+                lv.on_midi(mido.Message("control_change", channel=0, control=1, value=90))
+            if blk == 60:
+                for nn in (48, 55, 60, 64):
+                    lv.on_midi(mido.Message("note_off", channel=0, note=nn))
+            if blk == swap_at:
+                old = lv.renderer
+                lv.renderer = GpuRenderer(lv.slab, 128, 1, backend=backend, gpu_min=0)
+                lv.renderer.send = True
+                lv.slab.dirty = True
+                old.close()
+            _n0 = lv.n; lv.apply(_n0); lv.sweep(_n0); lv.slab.reap(_n0)
+            L, R = lv.renderer.render(_n0, 128)
+            gpu_blocks += bool(getattr(lv.renderer, "on_gpu", False))
+            out.append(np.concatenate([L, R, lv.renderer.SL[:128], lv.renderer.SR[:128]]))
+            lv.n = _n0 + 128
+        lv.down.clear(); lv.sweep(lv.n)
+        lv.renderer.close()
+        return np.concatenate(out).astype(float), gpu_blocks, lv
+    for _gp, _gname in ((48, "a string chord"), (98, "a Moog FM bell")):
+        _gref, _, _ = _gplay(_gp, None)
+        for _gb in ("c", "cl") if _gpu_ok else ("c",):
+            _go, _gn, _glv = _gplay(_gp, _gb)
+            _grel = float(np.abs(_go - _gref).max()) / max(float(np.abs(_gref).max()), 1e-30)
+            check("the %s renderer plays %s as the CPU does" % ("GPU" if _gb == "cl" else "GPU's C reference", _gname),
+                  _grel < 1e-5 and _gn == 80,
+                  "  (%.1e relative, %.0f dB down; %d of 80 blocks on it)"
+                  % (_grel, 20 * np.log10(max(_grel, 1e-30)), _gn))
+        leak(_glv, "the GPU renderer leaks no slots")
+    # ...and swapped in while the chord sounds, which is what the TUI's gpu
+    # control does: nothing but the last bits changes at the swap
+    _gref, _, _ = _gplay(48, None)
+    _go, _gn, _ = _gplay(48, "cl" if _gpu_ok else "c", swap_at=20)
+    _grel = float(np.abs(_go - _gref).max()) / max(float(np.abs(_gref).max()), 1e-30)
+    check("the GPU renderer can be swapped in while notes sound", _grel < 1e-5 and _gn == 60,
+          "  (%.1e relative; %d blocks on it)" % (_grel, _gn))
+    # ...and a light block stays on the CPU
+    lv = Live(program=56, rate=48000, frames=128, verbose=False)
+    lv.warm()
+    lv.renderer.close()
+    lv.renderer = GpuRenderer(lv.slab, 128, 1, backend="c", gpu_min=PARALLEL_MIN)
+    lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+    lv.apply(0); lv.callback(None, 128, None, 0)
+    check("a light block stays on the CPU under the GPU renderer",
+          not lv.renderer.on_gpu and 0 < lv.renderer.act < PARALLEL_MIN,
+          "  (%d active)" % lv.renderer.act)
     lv.renderer.close()
 
     # 15. fuzz every mode: no errors, no leaks
@@ -13177,6 +13349,9 @@ def main():
     ap.add_argument("--threads", type=int, default=1,
                 help="split the partial table across N threads (3 is usually best; "
                      "only engages above %d occupied slots)" % PARALLEL_MIN)
+    ap.add_argument("--gpu", action="store_true",
+                    help="render on the GPU (OpenCL; gpurender.py) above %d occupied slots "
+                         "(%d at 64 frames or fewer), the CPU below" % (GPU_MIN, GPU_MIN_SMALL))
     ap.add_argument("--preset", default=None, help="load this preset from presets.json at startup")
     ap.add_argument("--tui", action="store_true", help="full-screen synthesiser interface")
     ap.add_argument("--list", action="store_true", help="list MIDI inputs and exit")
@@ -13229,7 +13404,11 @@ def main():
 
     live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner,
                 drums=a.drums, headroom_db=a.headroom, capacity=a.capacity,
-                threads=a.threads, verbose=not a.tui)
+                threads=a.threads, gpu=a.gpu, verbose=not a.tui)
+    if a.gpu:
+        print("gpu: " + ("%s, above %d occupied slots" % (live.renderer.gpu.name, live.renderer.gpu_min)
+                         if isinstance(live.renderer, GpuRenderer)
+                         else "not available (%s) -- rendering on the CPU" % GPU_ERROR))
     # THE LAST SESSION, unless told otherwise: everything as it was left --
     # parts, globals, room, controls, routes and each channel's mix. A named
     # preset asked for on the command line wins over it.

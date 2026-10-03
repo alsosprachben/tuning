@@ -218,6 +218,9 @@ GLOBALS = (
     # same room. Stepping it re-builds the patches off the audio thread (the
     # sounding notes keep the old room) and crossfades the tail.
     ("room",       "room",   0.0,  float(len(LV.ROOM_NAMES) - 1), 1.0),
+    # THE GPU: the samples rendered on it (gpurender.py), the CPU taking the
+    # light blocks. Swapped like the threads, while notes sound.
+    ("gpu",        "onoff",  0.0,  1.0, 1.0),
 )
 
 # THE KEYS A PANEL CONTROL MAY BE BOUND TO: everything the panel does not
@@ -346,7 +349,8 @@ class TUI:
         return (self.master_db(), L.headroom_db, L.thresh, L.bend_range,
                 L.mod_cents, L.mod_rate, L.press_db,
                 float(L.renderer.K),
-                float(LV.ROOM_NAMES.index(L.room_name or "dry")))[i]
+                float(LV.ROOM_NAMES.index(L.room_name or "dry")),
+                1.0 if isinstance(L.renderer, LV.GpuRenderer) else 0.0)[i]
 
     def set_global(self, i, v):
         L = self.live
@@ -376,13 +380,23 @@ class TUI:
             if name != L.room_name:
                 L.set_room(name)
                 self.say("room: %s -- re-building the patches in it" % name)
+        elif i == 9:
+            on = v >= 0.5
+            if on != isinstance(L.renderer, LV.GpuRenderer):
+                old = L.renderer
+                L.renderer = LV.make_renderer(L.slab, L.frames, old.K, on)
+                L.slab.dirty = True
+                old.close()
+                if on and not isinstance(L.renderer, LV.GpuRenderer):
+                    self.say("gpu: not available -- %s" % LV.GPU_ERROR)
         else:
             # A new worker pool, swapped in by one atomic assignment. The old
             # one is told to stop; its threads are daemons and exit on their own.
             k = int(round(v))
             if k != L.renderer.K:
                 old = L.renderer
-                L.renderer = LV.Renderer(L.slab, L.frames, k)
+                L.renderer = LV.make_renderer(L.slab, L.frames, k,
+                                              isinstance(old, LV.GpuRenderer))
                 L.slab.dirty = True
                 old.close()
 
@@ -1473,7 +1487,8 @@ class TUI:
         self.addstr(scr, y, 6, bar(load, 0.0, 1.0, 22), C(lcol))
         self.addstr(scr, y, 30, "%.2f/%.2f ms  max %.2f%s"
                     % (s["render_ms"], s["budget_ms"], s["render_max"],
-                       ("  x%d" % s["threads"]) if s["threads"] > 1 else ""), C(lcol))
+                       (("  x%d" % s["threads"]) if s["threads"] > 1 else "")
+                       + ("  gpu" if s.get("on_gpu") else ("  (gpu)" if s.get("gpu") else ""))), C(lcol))
         ws = L.wheel_state()
         if ws:
             self.addstr(scr, y + 1, 2, "mod")
@@ -1615,6 +1630,9 @@ class TUI:
             "  threads           splits the partial table across cores. It only",
             "                    engages when the block is big enough to be worth",
             "                    it; 3 is usually best. Watch the cpu meter.",
+            "  gpu               renders the samples on the GPU (OpenCL); the CPU",
+            "                    still sets each partial's block up and takes the",
+            "                    light ones. The meter shows gpu while it is on it.",
             "",
             "on-screen controls and routes  (the third pane)",
             "  a                 add a control: any pedal, CC, the wheel, aftertouch,",
@@ -1978,6 +1996,8 @@ def fmt(v, unit):
         return LV.ROOM_NAMES[int(round(v))]
     if unit == "x":
         return "%d thread%s" % (int(v), "" if int(v) == 1 else "s")
+    if unit == "onoff":
+        return "on" if v >= 0.5 else "off"
     if unit == "dB":
         return "%+.1f dB" % v
     if unit == "cents":

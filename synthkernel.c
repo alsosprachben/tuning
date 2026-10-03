@@ -650,338 +650,10 @@ void synth_voice(
     for(long c=0;c<nchunks;c++){
         long cs=n0+c*CHUNK, ce=cs+CHUNK; if(ce>n0+winlen)ce=n0+winlen;
         for(int p=0;p<P;p++){
-            long a=non[p], off=noff[p], zend=off+(long)relS[p]+BLK;
-            if(a>=ce||zend<=cs) continue;
-            double w=omega[p]; float invf=1.f/fadeS[p], invr=1.f/relS[p];
-            float aL=ampL[p], aR=ampR[p], nf=nomfreq[p];
-            float swp = outSL ? sendW[p] : 0.f;
-            float sl=susL[p], af=aftL[p], lr=logr[p], lrA=logrA[p];
-            float cv=chVol[p], cc=chCyc[p], crl=chRel[p], sj=susJit[p], csc=chScale[p];
-            // a partial the mixer or the waveshape has set to nothing costs
-            // nothing (a Moog template carries every harmonic, some at zero)
-            int fxp = fxr ? fxr[p] : -1;
-            // A MOOG'S LEVEL MOVES ACROSS THE BLOCK, not at its edge: live
-            // re-weighs its partials when a knob turns, and a level that steps
-            // every block is a click (ampLp is the last block's; NULL offline,
-            // where nothing moves it). Every other voice: as before.
-            float aLp = (fxp>=0 && ampLp) ? ampLp[p] : aL, aRp = (fxp>=0 && ampRp) ? ampRp[p] : aR;
-            if(aL==0.f && aR==0.f && aLp==0.f && aRp==0.f) continue;
-            const float* ftr = fxp>=0 ? FT+(long)fxp*FTW : 0;
-            int mg = (BLK%MOOG_GRID==0 && BLK/MOOG_GRID<=64) ? MOOG_GRID : BLK;
-            int gr=grow[p]; const float* Grow = gr>=0 ? G+(long)gr*nblk : 0;
-            const float* Srow = gr>=0 ? S+(long)crow[p]*nblk : 0;
-            // PITCH BEND: a per-CHANNEL pair of rows, selected exactly as the
-            // organ's gate and shutter are. BR is the frequency ratio in force
-            // during each block and BC the extra phase accumulated up to the
-            // START of it, in samples -- see bend_blocks in blockrender.
-            int br=brow[p];
-            const float*  BRrow = br>=0 ? BR+(long)br*nblk : 0;
-            const double* BCrow = br>=0 ? BC+(long)br*nblk : 0;
-            // amplitude at absolute sample n (env * decay * gate * shutter). The
-            // envelope onset is shifted per ear by the HRTF path delay d (samples)
-            // -- the interaural time difference -- while the carrier phase (ph0)
-            // is not delayed, exactly as the reference does.
-            float dL=delL[p], dR=delR[p];
-            #define AMP(nn, b, d) ({ \
-                float tt=(float)((nn)-a-(d))/SRATE_F; \
-                float dc=sl+(1.f-sl)*((1.f-af)*expf(-tt*lr)+af*expf(-tt*lrA)); \
-                float e=sstep((float)((nn)-a-(d))*invf)*(1.f-sstep((float)((nn)-off-(d))*invr))*dc; \
-                float gg=1.f, sh=1.f; \
-                if(Grow){ int bb=(b)<nblk?(b):nblk-1; gg=Grow[bb]; float sw=Srow[bb]; \
-                    if(sw<1.f){ float lvl=sfloor+(1.f-sfloor)*powf(sw,spow); sh=lvl*expf(-(1.f-sw)*shmax*(nf/shref)); } } \
-                e*gg*sh; })
+            #include "voice_partial.inc"
             long bstart=(cs>a?cs:a)/BLK, bend=(ce<zend?ce:zend+1)/BLK+1;
             for(long b=bstart;b<bend;b++){
-                // Amp is interpolated across the FULL block [bs0,bs1); only the
-                // [ns,ne) slice inside this chunk/window is written. Using the true
-                // block bounds (not the clipped ones) makes the result independent
-                // of chunking/windowing -- a streamed window == the full render.
-                long bs0=b*BLK, bs1=bs0+BLK;
-                long ns=bs0<cs?cs:bs0, ne=bs1>ce?ce:bs1; if(ns>=ne)continue;
-                // Spelled exactly as it always was, and for every partial: moved
-                // inside a branch, gcc vectorised the four evaluations another way
-                // and the organ's swell moved by an ULP. A Moog ignores them.
-                float mL0=AMP(bs0,b,dL), mL1=AMP(bs1,b,dL), mR0=AMP(bs0,b,dR), mR1=AMP(bs1,b,dR);
-                if(!ftr && mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
-                // chiff fade for this block (state: attack/sustain/release). The
-                // attack chiff rides chiffS -- its OWN short, capped width, NOT the
-                // slow speech fade fadeS -- so a big pipe chuffs briefly, no hiss.
-                float jf=0.f; long mid=bs0+BLK/2; float invch=1.f/chiffS[p];
-                if(cv>0.f){
-                    // THE SUSTAINED WASH IS A FLOOR UNDER THE ATTACK HUMP, not a
-                    // level the hump drops to zero before reaching. The hump is
-                    // r*(1-r): it peaks at 0.25 and returns to 0 at chiffS, and
-                    // the sustain then began at sj -- so any voice whose sj is
-                    // large compared with 0.25 STEPPED UP when its hump ended.
-                    // The floor RISES with the hump's own progress (sj*s), so the
-                    // attack is untouched at t=0 and the two meet exactly where the
-                    // hump ends. A flat floor from t=0 would fix the step but raise
-                    // the attack peak, which clipped the triangle and the cabasa.
-                    // Inaudible where chiffS is a few ms, which is most voices;
-                    // on the chinese cymbal, chiffS 0.29 s against sj 1.0, it is
-                    // a burst of noise arriving a quarter second after the strike.
-                    // Ben: "sounding fine to start, then after a quarter second
-                    // or so, it suddenly adds noise."
-                    if(mid < a+(long)chiffS[p]){ float s=sstep((float)(mid-a)*invch); float r=sqrtf(s); jf=fmaxf(r*(1.f-r), sj*s); }
-                    // AND THE SAME ON THE WAY OUT. The attack floor rises so the
-                    // hump does not step up when it ends; the release had no floor
-                    // at all, so jf fell from sj to ZERO in one block at note-off
-                    // and humped back up -- a step in the noise at every note end.
-                    // Inaudible while the voice is buried; a solo line placed
-                    // forward puts it in the open, which is where Ben heard it:
-                    // "subtle clicking each note... an edge case involving attack
-                    // or release." The floor now FALLS as sj*(1-s), mirroring the
-                    // attack, so it leaves the sustain continuously and reaches
-                    // zero exactly when the release does.
-                    else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=fmaxf(r*(1.f-r)*crl, sj*(1.f-s)); }
-                    else jf=sj;
-                }
-                // Tension bend (piano strike): frequency starts sharp by
-                // tbav*e^{-t/tau} and settles, cut off at tcut. Phase is the exact
-                // integral to the block start; the recurrence uses the block-start
-                // instantaneous frequency. tbav==0 -> plain constant-frequency phasor.
-                // A partial can be BOTH vibrating and speaking. These two used to
-                // ASSIGN bph and winst, so whichever ran second threw the other
-                // away: mode lock is a driven air column (brass, mode_lock_spread
-                // = 0.003) and it silently deleted the mod wheel's vibrato for the
-                // whole life of the note -- after the transient it wrote back a
-                // plain w. Ben, playing: "the modulation value keeps getting
-                // pulled back to 0 ... on violin it is persisting, but not
-                // trumpet." Violin has mode_lock_spread = 0 and never entered the
-                // branch. They compose now: the phases add and the frequency
-                // factors multiply.
-                double bph=0.0, vibfac=1.0; float bendfac=1.f;
-                // PER-PLAYER VIBRATO. A section detuned to FIXED offsets beats at
-                // fixed rates forever: N voices held exactly apart are a comb whose
-                // notches march at constant speed, which is what a phaser is. Real
-                // players never hold a pitch -- each has its own vibrato, so the
-                // beat rates wander and never settle into a pattern.
-                //
-                // f(t) = fp*(1 + d*sin(2*pi*r*t + ph)), integrated ANALYTICALLY so
-                // the block stays stateless like every other path here:
-                //   phase(T) = 2*pi*fp*T + (fp*d/r)*(cos(ph) - cos(2*pi*r*T + ph))
-                // bph carries the second term to the block start; winst is the
-                // instantaneous frequency there, for the within-block recurrence.
-                if(vdep[p]!=0.f){
-                    // Absolute clock, not time-since-onset: a player does not
-                    // restart their vibrato for every note, and it keeps this
-                    // analytic integral on the same clock as the reference
-                    // renderer's sample-by-sample one. Integrated from note-on,
-                    // so the accumulated phase matches what the reference adds up.
-                    double d=vdep[p], r=vrate[p], vp0=vph[p];
-                    double fp=w*SRATE_D/6.283185307179586;
-                    double ta=(double)ns/SRATE_D, tb2=(double)ne/SRATE_D, ton=(double)a/SRATE_D;
-                    double w2=6.283185307179586*r;
-                    double dt=tb2-ta;
-                    if(vdl[p] > 0.f){
-                        // CC78: STRAIGHT, THEN BLOOMING. A held note on a string
-                        // or a voice starts without vibrato and the vibrato grows
-                        // in; the depth is d*g(t), and the phase and the block's
-                        // mean frequency both come from the exact integral of
-                        // that envelope rather than from the constant-depth form.
-                        double t1=ton+(double)vdl[p], t2=t1+VIB_BLOOM;
-                        double Sa=vib_ramp_integral(ta, t1, t2, w2, vp0);
-                        double Sb=vib_ramp_integral(tb2, t1, t2, w2, vp0);
-                        bph += 6.283185307179586*fp*d*Sa;
-                        vibfac = dt > 0.0 ? 1.0 + d*(Sb-Sa)/dt
-                                          : 1.0 + d*(ta>=t2 ? 1.0 : (ta>t1 ? (ta-t1)/VIB_BLOOM : 0.0))
-                                                   *sin(w2*ta+vp0);
-                    } else {
-                    bph += (fp*d/r)*(cos(w2*ton+vp0)-cos(w2*ta+vp0));
-                    // The recurrence holds one frequency for the whole block, so
-                    // use the block's EXACT MEAN frequency, not its value at the
-                    // start: that lands the phase at the block end exactly where
-                    // the integral says, leaving only a bounded, non-accumulating
-                    // error mid-block (each block re-anchors from bph anyway).
-                    double avg = dt > 0.0
-                        ? 1.0 + d*(cos(w2*ta+vp0)-cos(w2*tb2+vp0))/(w2*dt)
-                        : 1.0 + d*sin(w2*ta+vp0);
-                    vibfac = avg;
-                    }
-                }
-                if(tbav[p]!=0.f){
-                    float tb=tbav[p], ts=tau[p], cut=tcut[p];
-                    float trel=(float)(ns-a)/SRATE_F;
-                    float integ = tb*ts*(1.f - expf(-(trel<cut?trel:cut)/ts));
-                    bph += (double)w*SRATE_D*(double)integ;
-                    // kept in float, and summed in float, so a voice with only
-                    // this term rounds exactly as it did before it was factored out
-                    bendfac = 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
-                }
-                // PORTAMENTO, and it settles exponentially in LENGTH rather than
-                // in pitch -- which is the one thing that makes a modelled glide
-                // different from a synthesiser's. A trombone slide, a finger on a
-                // string and a slide whistle's plunger all move a LENGTH, and f is
-                // 1/L. So a hand settling toward its target position gives
-                // 1/(1 + g*e^{-t/tau}) in FREQUENCY, not the 1 + g*e^{-t/tau} the
-                // tension bend above uses. A glide up therefore accelerates in
-                // cents and a glide down decelerates, by the same amount, from the
-                // same hand. Nothing had to be tuned to get that; it is what the
-                // reciprocal does.
-                //
-                // g = f_target/f_source - 1, so t=0 gives exactly the source pitch
-                // and t->infinity the target the note was built at. g > -1 for any
-                // two real frequencies, so the denominator cannot vanish.
-                //
-                // Extra phase is the exact integral of (bendfac - 1):
-                //     tau * ln( (1 + g*e^{-t/tau}) / (1 + g) )
-                // zero at t=0 by construction, the same way BC is -- and frozen
-                // past the cutoff, where the instantaneous factor is already 1.
-                //
-                // MULTIPLIES, never assigns. This is the fourth modulator in this
-                // block and the rule the mode-lock bug wrote is now load-bearing
-                // four ways: phases ADD and frequency factors MULTIPLY.
-                if(gbav[p]!=0.f){
-                    float gg=gbav[p], gs=gtau[p], gcu=gcut[p];
-                    float trel=(float)(ns-a)/SRATE_F;
-                    float e=expf(-(trel<gcu?trel:gcu)/gs);
-                    bph += (double)w*SRATE_D*(double)(gs*logf((1.f+gg*e)/(1.f+gg)));
-                    if(trel<gcu) bendfac *= 1.f/(1.f+gg*e);
-                }
-                // PITCH BEND, and it is the THIRD modulator here, so it obeys
-                // the rule the comment at the top of this block was written to
-                // enforce: phases ADD and frequency factors MULTIPLY. Never
-                // assign -- that is the bug that deleted the mod wheel's
-                // vibrato on trumpet and left it on violin.
-                //
-                // A bend is a RATIO, so the phase a partial accrues over a
-                // block is w*(r-1)*BLK and the w factors out: the cumulative
-                // term is partial-INDEPENDENT, which is why one pair of rows
-                // serves a whole channel and the kernel stays stateless.
-                //
-                // ...AND IT ANCHORS AT ns, NOT AT bs0. A chunk boundary does
-                // not land on a block boundary (CHUNK is a second, BLK is 512),
-                // so once per chunk ns is clipped into the middle of a block.
-                // BC holds the integral to the block START, so the remainder
-                // from there to ns has to be added here. Anchoring at bs0
-                // instead is a phase error of up to w*(r-1)*BLK -- some 190
-                // radians during a full bend -- once per chunk, an audible
-                // click that would only ever appear on bent notes.
-                if(BRrow){
-                    int bb=(b)<nblk?(b):nblk-1;
-                    double rb=(double)BRrow[bb];
-                    bph += w*(BCrow[bb] + (rb-1.0)*(double)(ns-bs0));
-                    vibfac *= rb;
-                }
-                // With either term absent its factor is 1 and its phase 0, so a
-                // voice that has only one of them renders exactly as before.
-                float winst=(float)(w*vibfac*(double)bendfac);
-                // THE MOOG'S GAIN on its grid: the amp contour times the ladder
-                // at the cutoff the filter contour has reached, at the
-                // frequency this partial is sounding NOW (bend, glide and
-                // vibrato included, so the peak follows the note). The filter
-                // is shared by both ears; the contour's onset keeps each ear's
-                // own delay, as AMP's does.
-                float gLm[65], gRm[65]; int j0=0;
-                // THE MOD SECTION'S PITCH (moog.pitch_rows): an OSC 2 partial of
-                // a note with pitch rows sounds at its ratio R_j at each grid
-                // point, and carries the extra phase C_j accumulated to it --
-                // integrated in Python, cell by cell, so a knob turned mid-sweep
-                // changes only what is still to come.
-                double mCp[65]; int pm=0;
-                if(ftr && MPI && ((int)ftr[12] & FT_PITCH) && mkr && (mkr[p]>>12)==2) pm=1;
-                // A MOVING SHAPE (moog.shape_rows): this partial's complex
-                // coefficient at each grid point, from its note's rows
-                float cRe[65], cIm[65]; int shm=0; const float* mkp=0; long mks=0; const int* mki=0;
-                // 1 -> 2 FM: OSC 1's angle, from its frequency and phase anchor as
-                // copied onto this OSC 2 partial (fmw, fmp, fmpR)
-                int fmo = ftr && fmw && ((int)ftr[12] & 16) && mkr && (mkr[p]>>12)==2 && fmw[p]>0.0;
-                float fmI = fmo ? ftr[13] : 0.f; int fmk = fmo ? (mkr[p]&4095) : 0;
-                // ...as SIDEBANDS where it can be (fm_sidebands): fms, M of
-                // them each side, and the ladder's cutoff, resonance and this
-                // harmonic's frequency at each grid point to weigh them by
-                float sbD0r[2*FM_SBMAX+1], sbD0i[2*FM_SBMAX+1]; double sbPsi=0.0;
-                float sbDr[2*FM_SBMAX+1], sbDi[2*FM_SBMAX+1];
-                float sbFc[65], sbK[65], sbF[65], sbBig=0.f; int sbMode=0, sbRb=0, fms=0, sbM=0;
-                if(fmo){
-                    sbM=fm_sidebands(ftr+14,(float)fmk*fmI,sbD0r,sbD0i,&sbPsi);
-                    fms = sbM>=0;
-                }
-                if(ftr && MKI && MPK && mkr){
-                    int o=mkr[p]>>12, bit = o==1 ? 2 : o==2 ? 4 : o==3 ? 8 : 0;
-                    if(bit && ((int)ftr[12] & bit)){
-                        mki=MKI+(long)fxp*7;
-                        int off = mki[4+(o-1)];
-                        if(off>=0){ shm=1; mks=mki[3]; mkp=MPK+mki[0]+off+2*((mkr[p]&4095)-1); }
-                    }
-                }
-                if(ftr){
-                    j0=(int)(bs0/mg); int nj=BLK/mg+1;
-                    float kbf=ftr[0], fA=ftr[1], fD=ftr[2], fR=ftr[3], aA=ftr[4], aD=ftr[5], aR2=ftr[6];
-                    int mode=(int)ftr[7], rb=ftr[8]>0.5f, pre=ftr[11]>0.5f; long krow=(long)ftr[9];
-                    int selfosc = mkr && (mkr[p]>>12)==5;
-                    float fhz=winst*SRATE_F/6.2831853f;
-                    float toffL=(float)(off-a-(long)dL)/SRATE_F, toffR=(float)(off-a-(long)dR)/SRATE_F;
-                    float toff=(float)(off-a)/SRATE_F;
-                    float big=0.f;
-                    const int* mpi = pm ? MPI+(long)fxp*3 : 0;
-                    for(int j=0;j<nj;j++){
-                        long nn=(long)(j0+j)*mg;
-                        long ki=(long)(j0+j)-kb0; if(ki<0)ki=0; if(ki>knk-1)ki=knk-1;
-                        const float* kn=KN+(krow*knk+ki)*KNW;
-                        float fhzj=fhz, fade=1.f;
-                        if(shm){
-                            long mi=(long)(j0+j)-mki[1]; if(mi<0)mi=0; if(mi>mki[2]-1)mi=mki[2]-1;
-                            cRe[j]=mkp[mi*mks]; cIm[j]=mkp[mi*mks+1];
-                        }
-                        if(pm){
-                            long mi=(long)(j0+j)-mpi[1]; if(mi<0)mi=0; if(mi>mpi[2]-1)mi=mpi[2]-1;
-                            mCp[j]=MPC[mpi[0]+mi]; fhzj=fhz*MPR[mpi[0]+mi];
-                            // swept up past the top it would alias: fade it out
-                            float fr=fhzj/SRATE_F;
-                            fade = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
-                        }
-                        if(fmo && !fms){
-                            // a carrier whose deviation would reach Nyquist fades out
-                            float fr=(fhzj+(float)fmk*fabsf(fmI)*(float)(fmw[p]*SRATE_D/6.283185307179586))/SRATE_F;
-                            fade *= fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
-                        }
-                        float t=(float)(nn-a)/SRATE_F;
-                        float fe=moog_adsr(t,fA,fD,kn[3],fR,toff);
-                        float fc=kn[0]*kbf*exp2f(kn[2]*fe);
-                        if(kn[6]!=0.f && kn[5]>0.f){
-                            // LFO 1 on the cutoff: from the key (KB RESET) or
-                            // free-running on the absolute clock (moog.lfo)
-                            double tl = kn[8]>0.5f ? (double)(nn-a)/SRATE_D : (double)nn/SRATE_D;
-                            double x=tl*(double)kn[5]; x-=floor(x);
-                            int ls=(int)kn[7]; float xf=(float)x;
-                            float lv = ls==0 ? 1.f-4.f*fabsf(xf-0.5f) : ls==1 ? 1.f-xf
-                                     : ls==2 ? xf : (xf<0.5f ? 1.f : 0.f);      // moog.lfo
-                            fc*=exp2f(kn[6]*lv);
-                        }
-                        if(fc<1.f)fc=1.f;
-                        // the ladder's OWN sine (moog.SELF) is not filtered by it;
-                        // an FM'd harmonic's sidebands are, each at its own
-                        // frequency, in the cell loop below
-                        float h = selfosc ? moog_out(fhzj) : fms ? fade : moog_ladder(fhzj/fc,kn[1],mode,rb)*fade*moog_out(fhzj);
-                        if(fms){ sbFc[j]=fc; sbK[j]=kn[1]; sbF[j]=fhzj; sbMode=mode; sbRb=rb; }
-                        if(pre && !selfosc){   // the partials carry the ladder at its sustain already
-                            float fcs=kn[0]*kbf*exp2f(kn[2]*fmaxf(kn[3],0.f)); if(fcs<1.f)fcs=1.f;
-                            h/=fmaxf(moog_ladder(fhz/fcs,kn[1],mode,rb),1e-12f);
-                        }
-                        gLm[j]=moog_adsr((float)(nn-a-dL)/SRATE_F,aA,aD,kn[4],aR2,toffL)*h;
-                        gRm[j]=moog_adsr((float)(nn-a-dR)/SRATE_F,aA,aD,kn[4],aR2,toffR)*h;
-                        big=fmaxf(big,fmaxf(gLm[j],gRm[j]));
-                    }
-                    // silent for the whole block: above a closed ladder the
-                    // top harmonics of a lead mostly are. The level here is
-                    // BEFORE the master gain, where a note sits near -50 dBFS,
-                    // so 1e-8 is ~110 dB under it -- at 1e-6 it was 70, and a
-                    // renderer with a different headroom skipped different
-                    // partials (live against the file: 2.9e-4 apart).
-                    if(big*fmaxf(fabsf(aL),fabsf(aR))<=1e-8f) continue;
-                }
-                float invg=1.f/(float)mg;
-                double phL=ph0L[p]+w*(double)ns+bph, phR=ph0R[p]+w*(double)ns+bph;
-                float zrL=cos(phL),ziL=sin(phL),zrR=cos(phR),ziR=sin(phR);
-                float rr=cosf(winst),ri=sinf(winst);
-                float invb=1.f/(float)BLK;
-                float jfa=jf*cv*csc;
-                // the chiff index's step, once a partial a block (chiff_step);
-                // a negative wash bandwidth is a Moog noise band, not a chiff
-                uint64_t chk_hi=0, chk_lo=0;
-                if(jfa>0.f && chBW[p]>0.f)
-                    chiff_step((double)nf*(double)chBW[p]/SRATE_D, &chk_hi, &chk_lo);
+                #include "voice_block.inc"
                 // EVERY OTHER VOICE takes the loop it always took, spelled as it
                 // always was: -ffast-math contracts a restructured expression
                 // differently, and a render moves by an ULP. A MOOG runs the
@@ -1013,108 +685,9 @@ void synth_voice(
                     tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
                 }
                 } else {
-                // a Moog partial with a NEGATIVE wash bandwidth is a noise band
-                // (moog.NOISE): seeded by its note's onset and its own centre, so
-                // two notes' noise is not one noise twice
-                int noiz = chBW[p] < 0.f;
-                double nrate = noiz ? (double)nf*(double)(-chBW[p]) : 0.0;
-                uint64_t nseed = (uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
-                long long nui=-1; double nh0=0.0, ndh=0.0;
-                // THE SIDEBANDS WORTH WEIGHING: those whose D_m could reach
-                // SB_TOL through the ladder at its loudest -- a bound the
-                // resonance alone sets (the peak of a ladder at K_MAX, with
-                // room to spare), so it is the same in every block and
-                // either renderer -- and the far tail never costs a ladder
-                // evaluation; each grid point's gains are kept for the next
-                // cell, which starts where this one ends
-                int dlo=0, dhi=-1, hEndJ=-1;
-                float hEnd[2*FM_SBMAX+1];
-                if(fms){
-                    float td = SB_TOL/(1.5f*moog_ladder(1.f,3.9f,0,1));   // moog.K_MAX, RES BASS on
-                    for(dlo=0; dlo<=2*sbM; dlo++) if(fabsf(sbD0r[dlo])+fabsf(sbD0i[dlo])>td) break;
-                    for(dhi=2*sbM; dhi>=dlo; dhi--) if(fabsf(sbD0r[dhi])+fabsf(sbD0i[dhi])>td) break;
-                    // this note's own phase back on: D_m = D'_m e^{-i m psi}
-                    double er=cos(-(double)(dlo-sbM)*sbPsi), ei=sin(-(double)(dlo-sbM)*sbPsi);
-                    double sr=cos(-sbPsi), si=sin(-sbPsi);
-                    for(int i=dlo;i<=dhi;i++){
-                        sbDr[i]=(float)((double)sbD0r[i]*er-(double)sbD0i[i]*ei);
-                        sbDi[i]=(float)((double)sbD0r[i]*ei+(double)sbD0i[i]*er);
-                        double t=er*sr-ei*si; ei=er*si+ei*sr; er=t;
-                    }
-                }
+                #include "voice_moog.inc"
                 for(int cl=0; cl<BLK/mg; cl++){
-                long c0=bs0+(long)cl*mg, c1=c0+mg;
-                long s0 = ns>c0 ? ns : c0, s1 = ne<c1 ? ne : c1;
-                if(s0>=s1) continue;
-                float a0L=gLm[cl], a1L=gLm[cl+1], a0R=gRm[cl], a1R=gRm[cl+1];
-                float z1r=0.f, z1i=0.f, r1r=1.f, r1i=0.f;
-                float g0r[2*FM_SBMAX+1], g0i[2*FM_SBMAX+1], dgr[2*FM_SBMAX+1], dgi[2*FM_SBMAX+1];
-                float pzr[2*FM_SBMAX+1], pzi[2*FM_SBMAX+1], prr[2*FM_SBMAX+1], pri[2*FM_SBMAX+1];
-                int slo=0, nsb=0;
-                if(fmo){
-                    // OSC 1's angle at the cell's start, exactly; its vibrato and
-                    // bend (bph) scale with frequency, as every partial's do
-                    double w1=fmw[p], ps=fmp[p]+w1*(double)s0+bph*(w1/w);
-                    z1r=(float)cos(ps); z1i=(float)sin(ps);
-                    double w1v=(double)winst*(w1/w);
-                    r1r=(float)cos(w1v); r1i=(float)sin(w1v);
-                    if(fms){
-                        // EACH SIDEBAND THROUGH THE LADDER at its own frequency
-                        // |k f2 + m f1|, at both ends of the cell, and faded as
-                        // it nears Nyquist -- one sideband at a time, where the
-                        // unfiltered path had to fade the whole harmonic
-                        float f1=(float)(w1v*SRATE_D/6.283185307179586);
-                        int reuse = hEndJ==cl;
-                        for(int i=dlo;i<=dhi;i++){
-                            float m=(float)(i-sbM), hg[2];
-                            for(int e = reuse ? 1 : 0; e<2; e++){
-                                float fs=fabsf(sbF[cl+e]+m*f1), fr=fs/SRATE_F;
-                                float nq = fr<0.40f ? 1.f : fr>0.45f ? 0.f : (0.45f-fr)*20.f;
-                                hg[e] = nq>0.f ? moog_ladder(fs/sbFc[cl+e],sbK[cl+e],sbMode,sbRb)*moog_out(fs)*nq : 0.f;
-                            }
-                            if(reuse) hg[0]=hEnd[i];
-                            hEnd[i]=hg[1];
-                            g0r[i]=sbDr[i]*hg[0]; g0i[i]=sbDi[i]*hg[0];
-                            dgr[i]=sbDr[i]*hg[1]-g0r[i]; dgi[i]=sbDi[i]*hg[1]-g0i[i];
-                        }
-                        hEndJ=cl+1;
-                        // ...and only the ones that sound (SB_TOL): a shut
-                        // ladder leaves a handful of a bell's dozens
-                        float tg = SB_TOL;
-                        int shi;
-                        for(slo=dlo; slo<=dhi; slo++)
-                            if(fmaxf(fabsf(g0r[slo])+fabsf(g0i[slo]),
-                                     fabsf(g0r[slo]+dgr[slo])+fabsf(g0i[slo]+dgi[slo]))>tg) break;
-                        for(shi=dhi; shi>=slo; shi--)
-                            if(fmaxf(fabsf(g0r[shi])+fabsf(g0i[shi]),
-                                     fabsf(g0r[shi]+dgr[shi])+fabsf(g0i[shi]+dgi[shi]))>tg) break;
-                        nsb=shi-slo+1;
-                        // EACH SIDEBAND ITS OWN PHASOR, e^{i m th1} turning at
-                        // m w1, as any partial is: independent, so the sum
-                        // below runs across them in vector lanes, where a
-                        // Horner chain is one long dependency. Set in double
-                        // at the cell's start, as OSC 1's angle is.
-                        double czr=cos((double)(slo-sbM)*ps), czi=sin((double)(slo-sbM)*ps);
-                        double crr=cos((double)(slo-sbM)*w1v), cri=sin((double)(slo-sbM)*w1v);
-                        double sr1=cos(ps), si1=sin(ps), tr1=cos(w1v), ti1=sin(w1v);
-                        for(int i=0;i<nsb;i++){
-                            pzr[i]=(float)czr; pzi[i]=(float)czi; prr[i]=(float)crr; pri[i]=(float)cri;
-                            double t=czr*sr1-czi*si1; czi=czr*si1+czi*sr1; czr=t;
-                            t=crr*tr1-cri*ti1; cri=crr*ti1+cri*tr1; crr=t;
-                        }
-                    }
-                }
-                if(pm){
-                    // re-anchor the phase at the cell's start, exactly, and turn
-                    // at this cell's own rate: a 512-sample file block and a
-                    // 128-sample live one then walk the same phase
-                    double cs=mCp[cl]+(mCp[cl+1]-mCp[cl])*(double)(s0-c0)/(double)mg;
-                    double el=(double)winst*(double)(s0-ns)+w*cs;
-                    zrL=(float)cos(phL+el); ziL=(float)sin(phL+el);
-                    zrR=(float)cos(phR+el); ziR=(float)sin(phR+el);
-                    double wc=(double)winst+w*(mCp[cl+1]-mCp[cl])/(double)mg;
-                    rr=(float)cos(wc); ri=(float)sin(wc);
-                }
+                #include "voice_cell.inc"
                 for(long n=s0;n<s1;n++){
                     float t=(float)(n-c0)*invg, tb=(float)(n-bs0)*invb;
                     float mL=(a0L+(a1L-a0L)*t)*(aLp+(aL-aLp)*tb), mR=(a0R+(a1R-a0R)*t)*(aRp+(aR-aRp)*tb);
@@ -1201,3 +774,134 @@ void synth_voice(
         }
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// ONLY IN THE GPU'S BUILD (-DVOICE_BLOCK, libsynthgpu_<rate>.so): a second
+// caller of the shared helpers changes gcc's inlining in synth_voice, and the
+// CPU render must stay byte-for-byte what it was.
+#ifdef VOICE_BLOCK
+#include "voicedesc.h"
+// ---------------------------------------------------------------------------
+// THE BLOCK SETUP ALONE, for a renderer that does the samples elsewhere (the
+// GPU, gpurender.py). One block -- [n0, n0+BLK), n0 a multiple of BLK, which
+// is what live renders -- for the partials listed in idx, each written to its
+// descriptor D[i] (voicedesc.h): everything synth_voice works out per partial,
+// per block and per Moog cell before its sample loop, by the very same source
+// (the voice_*.inc fragments are included here and there alike, so the two
+// cannot come apart), stopping where the sample loop would start. A Moog
+// partial's cells go to C and its sidebands to SB, taken in order by a shared
+// count; counts[0..1] return how many of each were used. Returns 0, or -1 if
+// C or SB was too small (counts then hold what was asked for).
+//
+// The arguments are synth_voice's, less its outputs, its window and CHUNK.
+int voice_block(long n0, int BLK, int nblk, int P,
+    const double* omega, const double* ph0L, const double* ph0R,
+    const float* ampL, const float* ampR, const float* nomfreq,
+    const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
+    const float* logr, const float* logrA, const float* aftL, const float* susL,
+    const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
+    const float* chBW,
+    const float* tbav, const float* tau, const float* tcut,
+    const float* gbav, const float* gtau, const float* gcut,
+    const float* vdep, const float* vrate, const float* vph, const float* vdl,
+    const float* delL, const float* delR,
+    const int* grow, const int* crow, const float* G, const float* S,
+    const int* brow, const float* BR, const double* BC,
+    const int* fxr, const float* FT, const float* KN, long knk, long kb0,
+    const float* ampLp, const float* ampRp, const int* mkr,
+    const int* MPI, const double* MPC, const float* MPR,
+    const int* MKI, const float* MPK,
+    const double* fmw, const double* fmp, const double* fmpR,
+    float sfloor, float spow, float shmax, float shref,
+    const float* sendW, int send,
+    const long* idx, int nact, vdesc* D, vcell* C, int ccap, vsb* SB, int sbcap,
+    int nthr, int* counts)
+{
+    (void)P; (void)fmpR;
+    // the fragments' names for the window: one block, one chunk
+    const long cs=n0, ce=n0+BLK;
+    // the send weight is read when there is a send bus (voice_partial.inc)
+    const float* outSL = send ? sendW : 0;
+    int nc=0, nsbt=0, over=0;
+    #pragma omp parallel for schedule(dynamic,32) num_threads(nthr)
+    for(int ii=0; ii<nact; ii++){
+        int p=(int)idx[ii];
+        vdesc* d=D+ii;
+        d->kind=0;
+        #include "voice_partial.inc"
+        {
+        long b=n0/BLK;
+        #include "voice_block.inc"
+        d->ns=(int)(ns-n0); d->ne=(int)(ne-n0);
+        d->zLr=zrL; d->zLi=ziL; d->zRr=zrR; d->zRi=ziR; d->winst=winst;
+        d->mL0=mL0; d->mL1=mL1; d->mR0=mR0; d->mR1=mR1;
+        d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
+        d->jfa=jfa; d->cc=cc; d->swp=swp;
+        d->chk_hi=chk_hi; d->chk_lo=chk_lo;
+        d->flags=0; d->cell=0; d->nk_hi=d->nk_lo=d->nseed=0;
+        (void)rr; (void)ri; (void)invb;
+        if(!ftr){ d->kind=1; continue; }
+        #include "voice_moog.inc"
+        (void)nui; (void)nh0; (void)ndh;
+        // (cbase, not c0: the cell fragment's c0 is the cell's first sample)
+        int ncl=BLK/mg;
+        int cbase=__atomic_fetch_add(&nc, ncl, __ATOMIC_RELAXED);
+        if(cbase+ncl>ccap){ __atomic_store_n(&over, 1, __ATOMIC_RELAXED); continue; }
+        int fl=0;
+        if(noiz){ fl|=VD_NOISE; chiff_step(nrate/SRATE_D, &d->nk_hi, &d->nk_lo); d->nseed=nseed; }
+        if(shm) fl|=VD_SHAPE;
+        if(fms) fl|=VD_FMS; else if(fmo) fl|=VD_FMO;
+        if(pm) fl|=VD_PM;
+        for(int cl=0; cl<ncl; cl++) memset(C+cbase+cl, 0, sizeof(vcell));
+        for(int cl=0; cl<BLK/mg; cl++){
+        #include "voice_cell.inc"
+        vcell* v=C+cbase+cl;
+        v->s0=(int)(s0-n0); v->s1=(int)(s1-n0);
+        v->gL0=a0L; v->gL1=a1L; v->gR0=a0R; v->gR1=a1R;
+        if(shm){ v->cRe0=cRe[cl]; v->cIm0=cIm[cl]; v->cRe1=cRe[cl+1]; v->cIm1=cIm[cl+1]; }
+        if(pm){ v->zLr=zrL; v->zLi=ziL; v->zRr=zrR; v->zRi=ziR; v->wc=atan2f(ri, rr); }
+        if(fmo && !fms){
+            v->z1r=z1r; v->z1i=z1i; v->th1=atan2f(r1i, r1r); v->fmkI=(float)fmk*fmI;
+            for(int j=0;j<2*FM_J;j++) v->B[j]=ftr[14+j];
+        }
+        if(fms && nsb>0){
+            int s=__atomic_fetch_add(&nsbt, nsb, __ATOMIC_RELAXED);
+            if(s+nsb>sbcap){ __atomic_store_n(&over, 1, __ATOMIC_RELAXED); continue; }
+            v->sb=s; v->nsb=nsb;
+            for(int i=0;i<nsb;i++){
+                vsb* q=SB+s+i;
+                q->g0r=g0r[slo+i]; q->g0i=g0i[slo+i]; q->dgr=dgr[slo+i]; q->dgi=dgi[slo+i];
+                q->pzr=pzr[i]; q->pzi=pzi[i]; q->th=atan2f(pri[i], prr[i]); q->pad=0.f;
+            }
+        }
+        }
+        d->flags=fl; d->cell=cbase; d->kind=2;
+        }
+        #undef AMP
+    }
+    counts[0]=nc; counts[1]=nsbt;
+    return over ? -1 : 0;
+}
+
+// THE SAMPLE PASS IN C: voice_sample (voicedesc.h) over every descriptor and
+// sample -- the reference the GPU's kernel is held to, and the proof that a
+// descriptor carries everything synth_voice's sample loops use. Accumulates
+// into L/R (and SL/SR when non-NULL).
+void voice_samples(long n0, int BLK, int nact, const vdesc* D, const vcell* C, const vsb* SB,
+                   float* L, float* R, float* SL, float* SR)
+{
+    int mg = (BLK%MOOG_GRID==0 && BLK/MOOG_GRID<=64) ? MOOG_GRID : BLK;
+    float invb=1.f/(float)BLK, invg=1.f/(float)mg;
+    for(int ii=0; ii<nact; ii++)
+        for(int k=0;k<BLK;k++){
+            float o[4]={0.f,0.f,0.f,0.f};
+            voice_sample(D+ii, C, SB, k, (u64)(n0+k), invb, mg, invg, SL!=0, o);
+            L[k]+=o[0]; R[k]+=o[1];
+            if(SL){ SL[k]+=o[2]; SR[k]+=o[3]; }
+        }
+}
+
+// the descriptor sizes, for the host to check its layout against
+void voice_sizes(int* out){ out[0]=(int)sizeof(vdesc); out[1]=(int)sizeof(vcell); out[2]=(int)sizeof(vsb); }
+#endif

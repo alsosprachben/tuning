@@ -46,6 +46,7 @@ Then either open the panel:
 python3 live.py --tui --port "USB Midi" --frames 32
 python3 live.py --tui --port "USB Midi" --frames 32 --preset kit-and-strings
 python3 live.py --tui --port "USB Midi" --frames 32 --threads 3   # heavy polyphony
+python3 live.py --tui --port "USB Midi" --frames 128 --gpu        # heavier still (see The GPU)
 ```
 
 or name one voice and play it straight away:
@@ -490,6 +491,55 @@ Offline rendering never comes through this path and stays bit-identical.
 
 The kernel's own OpenMP does not help here: it parallelises over *time chunks*,
 and `synth_window` passes `CHUNK = SR`, so a 128-frame block is one chunk.
+
+### The GPU
+
+`--gpu` (or the panel's `gpu` control, which swaps it in while notes sound)
+renders the samples on the GPU — OpenCL, the Iris Xe here (`sudo apt install
+intel-opencl-icd python3-pyopencl`). Every voice goes: the chiff, vibrato and
+bends, the organ, and the whole Moog (its ladder grid, pitch and shape rows,
+noise bands and FM sidebands).
+
+A block is split in two (`voicedesc.h`). **The setup**, once a partial — its
+amplitude at the block's edges, the chiff's fade, vibrato and bends, the Moog's
+ladder on its grid, the phasor's anchor — stays on the CPU, four threads,
+because that is where the doubles are and the Iris has none. It is not a copy
+of `synth_voice`'s: it is the *same source* (`voice_*.inc`, included by both),
+so the two cannot drift; it is compiled into a library of its own
+(`libsynthgpu_<rate>.so`), because a second caller changed how gcc inlined
+`synth_voice`, and the CPU's library is byte-for-byte what it was. **The
+samples** go to the GPU, one work-item per sample and group of partials, every
+phasor evaluated directly (`z₀·e^{ikω}`) rather than turned, so a block's
+samples run side by side; within a block `kω` is a few hundred radians at most,
+which a float places to ~1e-5, the size of the recurrence's own rounding. The
+descriptor tables are never copied: the GPU reads the page-aligned memory the
+setup wrote (copying them, or mapping them, cost as much as the kernel).
+
+ms per block, 48 kHz, a string chord growing, median / 99th percentile:
+
+| active partials | 128 frames: 1 thread | 3 threads | GPU | 32 frames: 1 thread | GPU |
+|---|---|---|---|---|---|
+| 560 | 0.40 / 0.52 | 0.40 / 0.58 | 0.49 / 0.68 | 0.27 / 0.48 | 0.45 / 0.66 |
+| 1 120 | 0.65 / 0.77 | 0.73 / 1.13 | 0.55 / 0.77 | 0.40 / 0.59 | 0.51 / 0.79 |
+| 2 240 | 1.16 / 1.35 | 0.99 / 1.57 | 0.66 / 0.86 | 0.65 / 0.84 | 0.58 / 0.86 |
+| 3 360 | 1.67 / 1.95 | 1.23 / 1.71 | 0.77 / 1.02 | 0.93 / 1.52 | 0.66 / 1.06 |
+| 5 544 | 2.65 / 3.17 | 1.64 / 2.40 | 0.98 / 1.24 | 1.42 / 2.02 | 0.83 / 1.14 |
+
+The GPU has a floor — about 0.42 ms for the round trip and the setup however
+little there is — so below `GPU_MIN` occupied slots a block goes to the CPU
+path instead, threaded if `--threads` says so: 1 000 at 128 frames, 2 000 at
+64 or fewer. **It is a 128-frame tool.** At 32 frames the budget is 0.67 ms
+and the floor is most of it; past the point where the GPU wins, neither path
+fits. At 128 frames (2.67 ms) it carries 5 500 partials at a third of the
+budget, where one thread overruns. Above the floor the setup is about half
+the GPU's time (0.47 ms of 0.87 at 4 480 partials); the kernel is 0.17 ms.
+
+It is not bit-identical to the CPU — the phasors are evaluated, not turned,
+and the partials summed in another order — and it is held to it: across every
+synth program and the acoustic voices that exercise the setup, 4.3e-6 relative
+at worst (`examples/gpu_check.py`; the selftest asks 1e-5). The chiff's and the
+noise bands' random draws are indexed in exact integer arithmetic on both, so
+they pick the same draw. Offline rendering stays on the CPU, bit for bit.
 
 ### Real-time priority
 

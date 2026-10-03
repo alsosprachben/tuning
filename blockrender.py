@@ -163,13 +163,37 @@ def ensure_lib():
     # One .so per sample rate: SRATE is a compile-time constant in the kernel, so
     # that -ffast-math can fold the divisions exactly as it always did (see the
     # note above SRATE in synthkernel.c).
-    lib = os.path.join(HERE, "libsynth_%d.so" % SR)
-    if (not os.path.exists(lib)) or os.path.getmtime(src) > os.path.getmtime(lib):
+    return _build(src, "libsynth_%d.so" % SR, [], ["synth_voice"])
+
+
+# synth_voice's source is synthkernel.c AND the fragments it includes
+KERNEL_PARTS = ("synthkernel.c", "voice_partial.inc", "voice_block.inc", "voice_moog.inc",
+                "voice_cell.inc", "voicedesc.h")
+
+
+def _build(src, name, defs, funcs):
+    lib = os.path.join(HERE, name)
+    newest = max(os.path.getmtime(os.path.join(HERE, f)) for f in KERNEL_PARTS)
+    if (not os.path.exists(lib)) or newest > os.path.getmtime(lib):
+        # built to a temporary name and moved: a live engine and a render
+        # starting at once must never load a half-written library
+        tmp = "%s.%d.tmp" % (lib, os.getpid())
         subprocess.check_call(["gcc","-O3","-march=native","-ffast-math","-fopenmp","-shared","-fPIC",
-                               "-DSRATE=%d" % SR, src,"-o",lib,"-lm"])
+                               "-DSRATE=%d" % SR] + defs + [src,"-o",tmp,"-lm"])
+        os.replace(tmp, lib)
     dll = ctypes.CDLL(lib)
-    _declare(dll, src)
+    for f in funcs:
+        _declare(dll, src, f)
     return dll
+
+
+def ensure_gpu_lib():
+    """The kernel built with voice_block and voice_samples (-DVOICE_BLOCK): the
+    GPU renderer's block setup. A library of its own, because compiling them
+    beside synth_voice changes how gcc inlines it (see synthkernel.c)."""
+    src = os.path.join(HERE, "synthkernel.c")
+    return _build(src, "libsynthgpu_%d.so" % SR, ["-DVOICE_BLOCK"],
+                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes"])
 
 
 # The C argument types, READ OFF THE C. Without argtypes a ctypes call does no
@@ -193,10 +217,11 @@ _CTYPE = {"float*": ctypes.POINTER(ctypes.c_float),
           "int": ctypes.c_int, "long": ctypes.c_long}
 
 
-def _declare(dll, src):
+def _declare(dll, src, func="synth_voice"):
     try:
         text = open(src).read()
-        i = text.index("void synth_voice(")
+        m = re.search(r"\n(void|int) %s\(" % func, text)
+        i = m.start() + 1
         args = text[text.index("(", i) + 1:text.index(")", i)]
         # strip comments and line breaks, then one entry per comma
         args = re.sub(r"//[^\n]*", " ", args).replace("\n", " ")
@@ -208,9 +233,11 @@ def _declare(dll, src):
             # "float* outL" and "float *outL" and "float outL" all appear
             base, name = a.rsplit(" ", 1)
             star = "*" if ("*" in base or name.startswith("*")) else ""
-            out.append(_CTYPE[base.replace("*", "").strip() + star])
-        dll.synth_voice.argtypes = out
-        dll.synth_voice.restype = None
+            # the descriptor tables (voicedesc.h) go as plain pointers
+            out.append(_CTYPE.get(base.replace("*", "").strip() + star, ctypes.c_void_p))
+        fn = getattr(dll, func)
+        fn.argtypes = out
+        fn.restype = ctypes.c_int if m.group(1) == "int" else None
     except Exception:
         pass        # unchecked, exactly as before; never fatal
 
@@ -3627,13 +3654,26 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     ORDER of the float sum and so the last bits of the output; render() takes the
     whole table in one call and is unaffected."""
     a=prep; lib=a['lib']
-    dp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
-    lp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
+    fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     if i0 or i1 != a['P']:
         sl = lambda k: a[k][i0:i1]
     else:
         sl = lambda k: a[k]
-    lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),BLK,a['nblk'],i1-i0,
+    lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
+                    *_voice_args(a, sl, i1-i0),
+                    ctypes.c_long(SR),
+                    # the live room's send bus: NULL unless asked for (see synthkernel.c)
+                    fp(sl('sw')) if SndL is not None else None,
+                    fp(SndL) if SndL is not None else None,
+                    fp(SndR) if SndL is not None else None)
+
+
+def _voice_args(a, sl, P):
+    """synth_voice's arguments from BLK to the shutter's four scalars -- the
+    run voice_block (the GPU's block setup) takes too, in the same order."""
+    dp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    lp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
+    return (BLK,a['nblk'],P,
                     dp(sl('om')),dp(sl('p0')),dp(sl('p0R')),fp(sl('aL')),fp(sl('aR')),fp(sl('nf')),
                     lp(sl('non')),lp(sl('noff')),fp(sl('fa')),fp(sl('re')),fp(sl('ch')),fp(sl('logr')),fp(sl('logrA')),fp(sl('aft')),fp(sl('sus')),
                     fp(sl('cv')),fp(sl('cc')),fp(sl('crl')),fp(sl('sj')),fp(sl('csc')),fp(sl('cbw')),
@@ -3661,12 +3701,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     dp(sl('fmw')) if (a.get('FT') is not None and 'fmw' in a) else None,
                     dp(sl('fmp')) if (a.get('FT') is not None and 'fmw' in a) else None,
                     dp(sl('fmpR')) if (a.get('FT') is not None and 'fmw' in a) else None,
-                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
-                    ctypes.c_long(SR),
-                    # the live room's send bus: NULL unless asked for (see synthkernel.c)
-                    fp(sl('sw')) if SndL is not None else None,
-                    fp(SndL) if SndL is not None else None,
-                    fp(SndR) if SndL is not None else None)
+                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]))
 
 _NO_ROWS = np.zeros(16, np.float32)
 
