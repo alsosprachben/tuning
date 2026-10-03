@@ -7,6 +7,13 @@
                 double nrate = noiz ? (double)nf*(double)(-chBW[p]) : 0.0;
                 uint64_t nseed = (uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
                 long long nui=-1; double nh0=0.0, ndh=0.0;
+                // ITS DRAW INDEX, EXACT, as the chiff's is (chiff_step): it was
+                // (long long)(n/SRATE*nrate) in double, whose last bit decides a
+                // draw near every boundary differently from a float GPU's; now
+                // the step split into integer and 2^64ths, and floor(n*step) and
+                // its fraction from the 128-bit product, on any machine alike
+                uint64_t nk_hi=0, nk_lo=0;
+                if(noiz) chiff_step(nrate/SRATE_D, &nk_hi, &nk_lo);
                 // THE SIDEBANDS WORTH WEIGHING: those whose D_m could reach
                 // SB_TOL through the ladder at its loudest -- a bound the
                 // resonance alone sets (the peak of a ladder at K_MAX, with

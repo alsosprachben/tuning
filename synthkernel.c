@@ -701,11 +701,11 @@ void synth_voice(
                         // that jumps is a click at every draw, and a thousand
                         // of them leaked the low bands up the spectrum to a
                         // floor 45 dB down, which a closed ladder cannot take out.
-                        double sec=(double)n/SRATE_D, u=sec*nrate;
-                        long long ui=(long long)u; double uf=u-(double)ui;
-                        if(ui!=nui){   // a new draw: hash only then
-                            nui=ui; nh0=hash01(nseed+(uint64_t)ui);
-                            double h1=hash01(nseed+(uint64_t)(ui+1));
+                        uint64_t ui=chiff_index(n, nk_hi, nk_lo);
+                        double uf=(double)((uint64_t)n*nk_lo)*(1.0/18446744073709551616.0);
+                        if((long long)ui!=nui){   // a new draw: hash only then
+                            nui=(long long)ui; nh0=hash01(nseed+ui);
+                            double h1=hash01(nseed+ui+1);
                             ndh=h1-nh0; ndh-=floor(ndh+0.5);
                         }
                         float jn=6.2831853f*(float)(nh0+ndh*uf);
@@ -849,7 +849,7 @@ int voice_block(long n0, int BLK, int nblk, int P,
         int cbase=__atomic_fetch_add(&nc, ncl, __ATOMIC_RELAXED);
         if(cbase+ncl>ccap){ __atomic_store_n(&over, 1, __ATOMIC_RELAXED); continue; }
         int fl=0;
-        if(noiz){ fl|=VD_NOISE; chiff_step(nrate/SRATE_D, &d->nk_hi, &d->nk_lo); d->nseed=nseed; }
+        if(noiz){ fl|=VD_NOISE; d->nk_hi=nk_hi; d->nk_lo=nk_lo; d->nseed=nseed; }
         if(shm) fl|=VD_SHAPE;
         if(fms) fl|=VD_FMS; else if(fmo) fl|=VD_FMO;
         if(pm) fl|=VD_PM;
