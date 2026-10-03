@@ -9,6 +9,7 @@ import os
 import random as _random
 import re as _re
 from math import exp as _exp, log as _log, sin as _sin, cos as _cos, pi as _pi, sqrt as _sqrt
+from math import floor as _floor, ldexp as _ldexp
 verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 
 # Spatialization uses the Brown-Duda spherical-head model by default:
@@ -82,6 +83,28 @@ def rand(second, granularity=None):
     identical index.
     """
     x = int(second * (rand_granularity if granularity is None else granularity)) & 0xFFFFFFFFFFFFFFFF
+    x = (x + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    x ^= x >> 31
+    return (x >> 11) * (1.0 / 9007199254740992.0)
+
+
+# THE CHIFF'S INDEX, EXACT (synthkernel.c chiff_index): floor(n * f * gran /
+# sample_rate) from the step's integer part and its fraction scaled by 2^64, in
+# integers -- where it was floor(second * f * gran) in floating point, whose
+# last-bit rounding no GPU reproduces. midi.perform sets the rate.
+sample_rate = 44100
+
+
+def chiff_rand(second, frequency, granularity=None):
+    """rand() at the chiff's exact index for the sample at `second`."""
+    gran = rand_granularity if granularity is None else granularity
+    step = frequency * gran / float(sample_rate)
+    khi = int(_floor(step))
+    klo = int(_ldexp(step - khi, 64))
+    n = int(round(second * sample_rate))
+    x = (n * khi + ((n * klo) >> 64)) & 0xFFFFFFFFFFFFFFFF
     x = (x + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
     x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
     x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
@@ -649,8 +672,8 @@ class BasePartial:
                 jitter_fade = self.properties.sustain_jitter
 
             if jitter_fade > 0:
-                cycle_jitter = rand(second * frequency,
-                                    self.properties.chiff_bandwidth) * self.properties.chiff_cycle
+                cycle_jitter = chiff_rand(second, frequency,
+                                          self.properties.chiff_bandwidth) * self.properties.chiff_cycle
 
                 # base_frequency/440 scales chiff volume DOWN for big pipes; the
                 # per-partial chiff_hgain rolls off the upper harmonics (low chuff).

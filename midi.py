@@ -29,6 +29,8 @@ def perform(q, filename, sample_rate, sample_depth, sample_packing, channel, tun
     random.seed(a=0)
 
     midilib.set_tuner(tuner)
+    import tonelib
+    tonelib.sample_rate = sample_rate          # the chiff's exact index (tonelib.chiff_rand)
     p = SampleProgress(sample_rate, channel, 0.1)
 
     sampler = SynthSampler(channel, sample_rate, sample_depth, sample_packing)

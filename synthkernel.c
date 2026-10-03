@@ -76,6 +76,23 @@ static inline double hash01(uint64_t x) {
     return (double)(x >> 11) * (1.0 / 9007199254740992.0);
 }
 
+// THE CHIFF'S INDEX, EXACT. It was floor(sec * nf * gran) in double, and a
+// double's last-bit rounding of a product near 1e9-1e10 decided about one index
+// in 25,000 -- which no machine without IEEE doubles (a GPU's float units)
+// reproduces. Now: the step nf*gran/SRATE, a double, split into its integer part
+// and its fraction scaled by 2^64 (both exact, a double having 53 bits), and the
+// index floor(n * step) in integers, the 128-bit product's top half. Exact on
+// anything with 64-bit integers; the GPU path computes the identical value.
+static inline void chiff_step(double step, uint64_t* khi, uint64_t* klo){
+    double ip = floor(step);
+    *khi = (uint64_t)ip;
+    *klo = (uint64_t)ldexp(step - ip, 64);
+}
+static inline uint64_t chiff_index(long n, uint64_t khi, uint64_t klo){
+    uint64_t un = (uint64_t)n;
+    return un*khi + (uint64_t)(((unsigned __int128)un * klo) >> 64);
+}
+
 static inline float smoothstep(float x) {
     if (x <= 0.f) return 0.f;
     if (x >= 1.f) return 1.f;
@@ -960,6 +977,11 @@ void synth_voice(
                 float rr=cosf(winst),ri=sinf(winst);
                 float invb=1.f/(float)BLK;
                 float jfa=jf*cv*csc;
+                // the chiff index's step, once a partial a block (chiff_step);
+                // a negative wash bandwidth is a Moog noise band, not a chiff
+                uint64_t chk_hi=0, chk_lo=0;
+                if(jfa>0.f && chBW[p]>0.f)
+                    chiff_step((double)nf*(double)chBW[p]/SRATE_D, &chk_hi, &chk_lo);
                 // EVERY OTHER VOICE takes the loop it always took, spelled as it
                 // always was: -ffast-math contracts a restructured expression
                 // differently, and a render moves by an ULP. A MOOG runs the
@@ -970,7 +992,6 @@ void synth_voice(
                     float t=(float)(n-bs0)*invb; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
                     float sL=zrL, sR=zrR;
                     if(jfa>0.f){
-                        double sec=(double)n/SRATE_D;
                         // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per
                         // second, so gran IS the noise's bandwidth as a fraction of
                         // the partial's own frequency: at RAND_GRAN it is redrawn
@@ -980,19 +1001,8 @@ void synth_voice(
                         // cymbal's modes also fills the notches BETWEEN its bands.
                         // A smaller gran keeps each partial's noise around the
                         // partial, so the wash inherits the plate's own shape.
-                        double gbw=(double)chBW[p];
-                        // Two spellings, not a ternary: a voice that does not set
-                        // chiff_bandwidth must take the IDENTICAL expression it took
-                        // before this column existed. -ffast-math folds a constant
-                        // differently from a loaded value, and the index runs to
-                        // ~1e9, so a 1-ULP shift reseeds the hash completely --
-                        // same loudness and same spectrum to 0.01 dB, but not the
-                        // same samples, and every render in the corpus would move.
-                        float jit;
-                        if(gbw==(double)RAND_GRAN)
-                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
-                        else
-                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*gbw))*cc;
+                        // the index floor(n * nf * gran / SRATE), exactly (chiff_index)
+                        float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
                         float cj=cosf(jit),sj2=sinf(jit);
                         sL += (zrL*cj - ziL*sj2)*jfa;
                         sR += (zrR*cj - ziR*sj2)*jfa;
@@ -1164,7 +1174,6 @@ void synth_voice(
                         sL = gr*czL - gi*sgL; sR = gr*czR - gi*sgR;
                     }
                     if(jfa>0.f){
-                        double sec=(double)n/SRATE_D;
                         // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per
                         // second, so gran IS the noise's bandwidth as a fraction of
                         // the partial's own frequency: at RAND_GRAN it is redrawn
@@ -1174,19 +1183,8 @@ void synth_voice(
                         // cymbal's modes also fills the notches BETWEEN its bands.
                         // A smaller gran keeps each partial's noise around the
                         // partial, so the wash inherits the plate's own shape.
-                        double gbw=(double)chBW[p];
-                        // Two spellings, not a ternary: a voice that does not set
-                        // chiff_bandwidth must take the IDENTICAL expression it took
-                        // before this column existed. -ffast-math folds a constant
-                        // differently from a loaded value, and the index runs to
-                        // ~1e9, so a 1-ULP shift reseeds the hash completely --
-                        // same loudness and same spectrum to 0.01 dB, but not the
-                        // same samples, and every render in the corpus would move.
-                        float jit;
-                        if(gbw==(double)RAND_GRAN)
-                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*(double)RAND_GRAN))*cc;
-                        else
-                            jit=6.2831853f*(float)hash01((uint64_t)(long long)(sec*(double)nf*gbw))*cc;
+                        // the index floor(n * nf * gran / SRATE), exactly (chiff_index)
+                        float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
                         float cj=cosf(jit),sj2=sinf(jit);
                         sL += (zrL*cj - ziL*sj2)*jfa;
                         sR += (zrR*cj - ziR*sj2)*jfa;
