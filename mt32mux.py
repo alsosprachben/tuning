@@ -205,14 +205,25 @@ def seed_parts(parts, combined):
     percussion plays its first 40 seconds at -56 dB.
 
     So each part starts from the combined channel state at its first note, and
-    only then follows its own automation.
+    only then follows its own automation -- or, if it writes no volume of its
+    own, the channel's, as it did in the file.
     """
     for p in parts:
         first = p['notes'][0][0]
         for ctrl, default in ((7, 100), (10, 64)):
+            chan = sorted(combined.get(p['from_ch'], {}).get(ctrl, []))
             own = [e for e in sorted(p['cc'][ctrl]) if e[0] >= first]
-            was = value_at(sorted(combined.get(p['from_ch'], {}).get(ctrl, [])),
-                           first, default)
+            if ctrl == 7 and not p['cc'][ctrl]:
+                # A PART THAT WRITES NO VOLUME OF ITS OWN follows the channel's,
+                # as it did in the file: Saturn's bass flute, second harp and
+                # second violins share channels with tracks writing slow CC7
+                # crescendos (20 -> 64, 34 -> 76, 44 -> 88) under them. Seeded
+                # once at its first note, each was frozen at the foot of one --
+                # 15-35 dB under the orchestra -- for the whole piece.
+                p['cc'][ctrl] = [(0, value_at(chan, first, default))] + \
+                    [e for e in chan if e[0] > first]
+                continue
+            was = value_at(chan, first, default)
             p['cc'][ctrl] = [(0, was)] + own
     return parts
 
