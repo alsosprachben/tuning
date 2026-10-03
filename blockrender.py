@@ -158,6 +158,28 @@ def set_sample_rate(sr):
     SR = int(sr)
 HERE = os.path.dirname(os.path.abspath(__file__)); LIB = os.path.join(HERE, "libsynth.so")
 
+# what reflection_terms and hrtf_at read of a voice besides their arguments
+# (tonelib: reflection_terms, image_sources, surface_reflection,
+# directivity_gain, off_axis_angle, air_absorption_db_per_m, hrtf_at). A new
+# attribute read there must be added here, or prepare's memo goes stale:
+# examples/prepcheck.py compares the table with the memo against without.
+_REFL_ATTRS = ('radiation_distance', 'directivity_radius', 'directivity_floor',
+               'directivity_axis_deg', 'sound_speed', 'reflection_order',
+               'reflection_floor_db', 'reflection_fusion_s',
+               'room_left', 'room_right', 'room_back', 'room_front', 'room_floor', 'room_ceiling',
+               'air_temperature_c', 'air_pressure_kpa', 'air_humidity_pct', 'head_radius')
+
+
+PREP_MEMO = True        # False: every call made afresh (examples/prepcheck.py)
+PREP_MEMO_MAX = 50000   # entries before the memo is emptied (see prepare)
+PREP_MEMO_STATS = [0, 0, 0]     # lookups, misses, times emptied
+
+
+def _refl_state(props):
+    return (type(props), id(props.SURFACE_ALPHA), id(props.SURFACE_SCATTER)) + tuple(
+        getattr(props, a) for a in _REFL_ATTRS)
+
+
 def ensure_lib():
     src = os.path.join(HERE, "synthkernel.c")
     # One .so per sample rate: SRATE is a compile-time constant in the kernel, so
@@ -1663,6 +1685,16 @@ def prepare(path, tuner='hybrid440'):
     # the rotating speaker uses it, and only it knows the difference matters.
     _AZ = [0.0]
     _radius = [None]         # radiating aperture for THIS partial (organ ranks vary)
+    # THE EARLY REFLECTIONS, REMEMBERED. reflection_terms (and hrtf_at at each
+    # image) is a pure function of the partial's frequency, where its source
+    # stands, and the values below -- the voice's directivity, the room, the
+    # air -- and the same pitch from the same desk asks it the same question
+    # every time the note sounds. Keyed by those VALUES, not by the voice
+    # object: every note has an object of its own, so an object key never hits
+    # (and holds them all alive), and an id() key hits a dead note's recycled
+    # id -- which is how a first version of this got 0.2% of Mars's levels
+    # wrong. Kept for this render only, where the room cannot change.
+    _REFL = {}
     # How much power the sources actually put INTO the room, per octave, which
     # is what the diffuse tail is excited by. Accumulated on the direct partials
     # only: a reflection is that same power heard again, not more of it.
@@ -1763,11 +1795,25 @@ def prepare(path, tuner='hybrid440'):
         # the 2 m listener_distance -- that one is a stage image chosen to give
         # the head model sensible interaural cues, not a claim about where the
         # players are (see the radiation comment in tonelib).
-        for rg, rdelay, image in props.reflection_terms(
-                nomf, px, props.radiation_distance, pz, _radius[0]):
+        _rk = (nomf, px, pz, _radius[0]) + _refl_state(props)
+        _terms = _REFL.get(_rk) if PREP_MEMO else None
+        PREP_MEMO_STATS[0] += 1
+        if _terms is None:
+            PREP_MEMO_STATS[1] += 1
+            # BOUNDED: Valkyries (16M partials) ran a 7 GB machine into swap
+            # with the memo unbounded, and prepared slower than without it.
+            # Emptying it changes no result, only what is asked again.
+            if len(_REFL) >= PREP_MEMO_MAX:
+                _REFL.clear()
+                PREP_MEMO_STATS[2] += 1
+            _terms = [(rg, rdelay, image, props.hrtf_at(image[0], image[2], image[1]))
+                      for rg, rdelay, image in props.reflection_terms(
+                          nomf, px, props.radiation_distance, pz, _radius[0])]
+            if PREP_MEMO:
+                _REFL[_rk] = _terms
+        for rg, rdelay, image, (rli, rri, rld, rrd) in _terms:
             ix, iy, iz = image
             _AZ[0] = math.atan2(ix, max(iy, 1e-6))
-            rli, rri, rld, rrd = props.hrtf_at(ix, iz, iy)
             gm = ampM * rg
             # as the table will store it: onsets are kept as whole samples
             _RD[0] = float(int(non + rdelay*SR) - int(non))
