@@ -119,8 +119,9 @@ def read_parts(mid):
     first note -- is one part per instrument: Hines' Mars writes "Clarinet/
     Pipe Organ" on one track, a clarinet that becomes the organ at 324 s, and
     as one part the name made all 180 notes a clarinet, the organ's entry
-    included. Each part takes its own piece of an "A/B" name, or else the
-    track's name and the program it declared."""
+    included. Each part takes its own piece of the name; a track whose name
+    does not name its instruments stays one part, whatever programs it
+    sends."""
     parts = []
     for ti, track in enumerate(mid.tracks):
         name = ''
@@ -154,20 +155,24 @@ def read_parts(mid):
         part = {'track': ti, 'name': name or 'trk%d' % ti, 'progs': progs, 'cc': cc,
                 'notes': notes, 'was_drum': drum, 'from_ch': min(chans) if chans else 0}
         cuts = [(t, p) for t, p in pcs if t > notes[0][0]]
-        if not cuts:
+        pieces = [x.strip() for x in (name or '').split('/')]
+        # SPLIT ONLY WHERE THE NAME SAYS SO: one piece of an "A/B" name per
+        # instrument. A program change is not evidence of a new instrument in
+        # these files -- Jupiter's tracks change MT-32 patch mid-part (55/56,
+        # 36/37/49) on one instrument, and splitting at every change made 28
+        # parts 121.
+        if not cuts or len(pieces) != len(cuts) + 1 or not all(pieces):
             parts.append(part)
             continue
         # the instrument at the first note, then one segment per change after it
         start = [p for t, p in pcs if t <= notes[0][0]]
         segs = [(0, start[-1] if start else None)] + cuts
-        pieces = [x.strip() for x in (name or '').split('/')]
         for k, (t0, prog) in enumerate(segs):
             t1 = segs[k + 1][0] if k + 1 < len(segs) else None
             mine = [n for n in notes if n[0] >= t0 and (t1 is None or n[0] < t1)]
             if not mine:
                 continue
-            nm = (pieces[k] if len(pieces) == len(segs) and pieces[k] else
-                  '%s (%s)' % (part['name'], prog))
+            nm = pieces[k]
             parts.append(dict(part, name=nm, progs=[prog] if prog is not None else [],
                               notes=mine))
     return parts

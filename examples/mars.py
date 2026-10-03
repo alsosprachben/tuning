@@ -19,17 +19,34 @@ CC11 = 127 draws the full chorus, where without it the organ sounds its 8'
 alone.
 
 The hall at -3 dB wet; hybridmean at A = 440 (the September renders were plain
-hybrid, at the baroque 415). Not done, from the September notes: the file's
-dynamics are compressed (11.6 dB across its 30 s windows), and a fader ride to
-restore the crescendo to its collapse was suggested and not made.
+hybrid, at the baroque 415).
+
+THE BALANCE is not the file's alone: its CC7s and velocities were set for a GM
+synth, and these voices are not a GM synth's. So every part is rendered on its
+own, here and through two standard GM sets -- MuseScore's MS Basic and
+TiMidity's FluidR3 -- and measured K-weighted while it plays (lib.loudness);
+each engine is aligned to ours by its median over every part, and a part moves
+by how far it sits from the others against what both references give it --
+when they agree within 3 dB, and not at all when they do not ("no verdict").
+The stems are summed at those gains and the hall given once to the sum
+(lib.merge_room). Ben, on the first pass: "the french horns are too quiet.
+The organ is not loud enough."
 """
 import os
 import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(HERE, "examples"))
+import balance as B                                # noqa: E402
+
 URL = "https://www.classicalmidi.co.uk/468mars.mid"
 ROOM, WET, TUNER, MASTER_DB = "hall", "-3", "hybridmean:440", "-12"
+# BY EAR, on top of the references, where they split: Ben, on the first pass,
+# "the french horns are too quiet. The organ is not loud enough." FluidR3 has
+# the horns 4 dB up, MS Basic level; MS Basic would even lower the organ, but
+# its GM organ is one loud stop where this one is a registered full chorus.
+EAR = {"French Horn": +3.0, "Pipe Organ": +3.0}
 
 
 def run(cmd, env=None):
@@ -45,15 +62,8 @@ def main(argv):
         run(["curl", "-sfL", "--max-time", "60", "-A", "Mozilla/5.0", "-o", P("mars_hines.mid"), URL])
     run([sys.executable, os.path.join(HERE, "mt32mux.py"), P("mars_hines.mid"), P("mars_mux.mid")])
     env = {"TUNING_ROOM": ROOM, "TUNING_WET": WET, "TUNING_MASTER_DB": MASTER_DB}
-    run([sys.executable, os.path.join(HERE, "blockrender.py"), P("mars_mux.mid"), P("mars.dry.wav"), TUNER], env)
-    run([sys.executable, os.path.join(HERE, "roomtail.py"), P("mars.dry.wav"), P("mars.wav")], env)
-    run(["sox", P("mars.wav"), P("mars.norm.wav"), "gain", "-n", "-1"])
-    run(["lame", "-b", "320", "-h", "--quiet", "--tt", "Mars, the Bringer of War", "--ta", "Holst",
-         "--tl", "The Planets", P("mars.norm.wav"), P("mars.mp3")])
-    for f in ("mars.dry.wav", "mars.norm.wav", "mars.dry.room.json", "mars.dry.send.wav"):
-        if os.path.exists(P(f)):
-            os.remove(P(f))
-    print("  -> %s" % P("mars.mp3"))
+    rows = B.balance(P("mars_mux.mid"), out, env, TUNER, EAR)
+    print("  -> %s" % B.mix(rows, out, "mars", env, "Mars, the Bringer of War", "Holst", "The Planets"))
     return 0
 
 
