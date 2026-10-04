@@ -591,13 +591,13 @@ def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
     import numpy as np
     if not channels:
         return 0
-    mch = np.asarray(A['mch'])
-    dr = np.asarray(A['dr'])
-    non = np.asarray(A['non'], float)
-    noff = np.asarray(A['noff'], float)
-    om = np.asarray(A['om'], float)
-    aM = np.asarray(A['aM'], float)
-    p0 = np.asarray(A['p0'], float)
+    mch = np.array(A['mch'])
+    dr = np.array(A['dr'])
+    non = np.array(A['non'], float)
+    noff = np.array(A['noff'], float)
+    om = np.array(A['om'], float)
+    aM = np.array(A['aM'], float)
+    p0 = np.array(A['p0'], float)
     extra = {k: [] for k in cols}
     made = 0
     for ch, drive in channels.items():

@@ -171,15 +171,15 @@ def expand(A, channels, sr, cols=None, freq=None, table=None):
     """
     if not channels or not len(A.get('nf', ())):
         return 0
-    mch = np.asarray(A['mch'])
-    non = np.asarray(A['non'], float)
-    om = np.asarray(A['om'], float)
-    nf = np.asarray(A['nf'], float)
-    p0 = np.asarray(A['p0'], float)
-    p0R = np.asarray(A['p0R'], float)
-    aL = np.asarray(A['aL'], float)
-    aR = np.asarray(A['aR'], float)
-    aM = np.asarray(A['aM'], float)
+    mch = np.array(A['mch'])
+    non = np.array(A['non'], float)
+    om = np.array(A['om'], float)
+    nf = np.array(A['nf'], float)
+    p0 = np.array(A['p0'], float)
+    p0R = np.array(A['p0R'], float)
+    aL = np.array(A['aL'], float)
+    aR = np.array(A['aR'], float)
+    aM = np.array(A['aM'], float)
     keys = list(cols or A.keys())
     extra = {k: [] for k in keys}
     made = 0

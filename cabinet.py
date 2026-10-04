@@ -216,11 +216,11 @@ def expand(A, channels, sr=None, cols=None):
     """
     if not channels or not len(A.get('nf', ())):
         return 0
-    mch = np.asarray(A['mch'])
-    nf = np.asarray(A['nf'], float)
-    aL = np.asarray(A['aL'], float)
-    aR = np.asarray(A['aR'], float)
-    aM = np.asarray(A['aM'], float)
+    mch = np.array(A['mch'])
+    nf = np.array(A['nf'], float)
+    aL = np.array(A['aL'], float)
+    aR = np.array(A['aR'], float)
+    aM = np.array(A['aM'], float)
     done = 0
     for ch, name in channels.items():
         cab = get(name)
@@ -235,7 +235,9 @@ def expand(A, channels, sr=None, cols=None):
         aM[sel] *= g
         done += int(sel.sum())
     if done:
-        A['aL'][:] = aL.tolist()
-        A['aR'][:] = aR.tolist()
-        A['aM'][:] = aM.tolist()
+        for k, v in (('aL', aL), ('aR', aR), ('aM', aM)):
+            if isinstance(A[k], list):
+                A[k][:] = v.tolist()
+            else:                       # blockrender's typed column: in place
+                np.asarray(A[k])[:] = v
     return done

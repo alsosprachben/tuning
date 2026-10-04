@@ -170,6 +170,26 @@ _REFL_ATTRS = ('radiation_distance', 'directivity_radius', 'directivity_floor',
                'air_temperature_c', 'air_pressure_kpa', 'air_humidity_pct', 'head_radius')
 
 
+# A COLUMN'S STORAGE, by what reads it back before the table is final. A
+# column read back -- by the sound controllers, the clavinet's tone section,
+# or an effect that builds from the partials already there (sympathetic,
+# mf104, tubeamp, tremolo, chorus, cabinet, leslie read levels, phases,
+# frequencies, onsets, vibrato, ear delays) -- keeps the double it was
+# computed as. A float32 column nothing reads back is stored as float32 from
+# the start: array('f') rounds a double exactly as the final cast does. An
+# int32 column is stored as int32, and array('i') REFUSES a float, so a
+# column wrongly listed here fails loudly rather than rounding quietly.
+# examples/prepcheck.py --against compares the table with the last commit's.
+_COL_F4 = ("px", "pz", "fa", "ch", "aft", "sus", "cv", "cc", "crl", "sj", "csc", "cbw",
+           "tbav", "tau", "tcut", "gb", "gt", "gc", "vdl", "rdl", "nfr")
+_COL_I4 = ("mch", "br", "gr", "cr", "pl", "fx", "mk")
+
+
+def _dcol(name):
+    from array import array
+    return array('f' if name in _COL_F4 else 'i' if name in _COL_I4 else 'd')
+
+
 PREP_MEMO = True        # False: every call made afresh (examples/prepcheck.py)
 PREP_MEMO_MAX = 50000   # entries before the memo is emptied (see prepare)
 PREP_MEMO_STATS = [0, 0, 0]     # lookups, misses, times emptied
@@ -1638,7 +1658,12 @@ def prepare(path, tuner='hybrid440'):
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     # partial table
-    cols = {k:[] for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl","fmw","fmp","fmpR","nfr")}
+    # THE COLUMNS AS DOUBLES, not lists: a list holds a pointer and a float
+    # object a partial (32 bytes), array('d') the 8-byte double itself, and
+    # Valkyries' 16M partials ran a 7 GB machine out of memory. A double is
+    # what the list's float WAS, so the table converts to the same bits (and an
+    # int, a sample index or a row, fits one exactly).
+    cols = {k:_dcol(k) for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl","fmw","fmp","fmpR","nfr")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
@@ -3546,8 +3571,12 @@ def prepare(path, tuner='hybrid440'):
                 continue
             g = T.clav_tone_gain(np.asarray(nf)[sel], setting)
             for col in ('aL', 'aR', 'aM'):
+                # a typed column is scaled where it lies (asarray is a view
+                # of it); a list is rebuilt, as it always was
                 v = np.asarray(A[col]); v[sel] *= g
-                A[col] = list(v) if isinstance(A[col], list) else v
+                if isinstance(A[col], list):
+                    A[col] = list(v)
+                del v           # a live view would stop the column growing (BufferError)
             print("  clavinet: %s, %d partials through the tone section"
                   % (T.CLAV_TONE[setting][0], int(sel.sum())))
 
@@ -3602,7 +3631,14 @@ def prepare(path, tuner='hybrid440'):
                      sum(len(v) - 1 for v in _LESLIE_CH.values())))
 
     P = len(A["om"])
-    def arr(k,dt): return np.ascontiguousarray(np.array(A[k], dt))
+    def arr(k,dt):
+        col = A[k]
+        if getattr(col, 'typecode', None) == {'f4': 'f', 'i4': 'i'}.get(dt) and len(col):
+            a = np.frombuffer(col, dt)      # stored as it ends: no copy
+        else:
+            a = np.ascontiguousarray(np.array(col, dt))
+        A[k] = None             # each column freed as it is converted: never both at once
+        return a
     # Effective Q per band: direct energy over energy fed to the room. One
     # number per octave, derived from what this piece actually radiated rather
     # than guessed once for the whole orchestra.
