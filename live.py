@@ -1855,7 +1855,7 @@ class Renderer:
     3.0, brass 2.6, breath and seashore 2.4, flue organ 1.3.
 
     Why the kernel's own OpenMP does not do it: that parallelises over TIME
-    chunks, and synth_window passes CHUNK = SR, so a 128-frame block is a single
+    chunks of about a second (blockrender._chunk), so a 128-frame block is a single
     chunk and every core but one sits idle.
 
     THE SPLIT MUST FOLLOW THE OCCUPANCY, not the capacity. Slots are handed out

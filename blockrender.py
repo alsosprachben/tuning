@@ -3760,6 +3760,18 @@ def synth_window(prep, n0, winlen):
     L*=T.master_gain; R*=T.master_gain; np.clip(L,-1,1,L); np.clip(R,-1,1,R)
     return L,R
 
+# THE KERNEL'S TIME CHUNKS (its OpenMP splits a window into them) ARE A WHOLE
+# NUMBER OF BLOCKS: 86 x 512 = 44 032 samples, just under a second. They were
+# a second, 44 100, which no block divides, so the block a chunk edge fell in
+# was set up in two halves -- and a note whose onset landed exactly on the
+# edge lost the ramp that every other mid-block onset has (its first half was
+# a chunk in which the note did not yet exist): 251 blocks of Mars, up to
+# 2.4e-2. Whole blocks render alike however a render is cut -- the file, live
+# a block at a time, and the GPU.
+def _chunk():
+    return BLK * max(1, SR // BLK)
+
+
 def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     """Render partials [i0,i1) of `prep` into L/R, with no master gain and no
     clip. Partials are independent and the kernel accumulates into the buffers,
@@ -3767,7 +3779,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     is what live.py does, because ctypes releases the GIL. Splitting changes the
     ORDER of the float sum and so the last bits of the output; render() takes the
     whole table in one call and is unaffected."""
-    a=prep; lib=a['lib']
+    a=prep; lib=a['lib']; CHUNK=_chunk()
     fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     if i0 or i1 != a['P']:
         sl = lambda k: a[k][i0:i1]
@@ -3775,7 +3787,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
         sl = lambda k: a[k]
     lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
                     *_voice_args(a, sl, i1-i0),
-                    ctypes.c_long(SR),
+                    ctypes.c_long(CHUNK),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)
                     fp(sl('sw')) if SndL is not None else None,
                     fp(SndL) if SndL is not None else None,

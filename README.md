@@ -490,7 +490,7 @@ the single-threaded path in its last bits — measured 2.5e-6 relative, −112 d
 Offline rendering never comes through this path and stays bit-identical.
 
 The kernel's own OpenMP does not help here: it parallelises over *time chunks*,
-and `synth_window` passes `CHUNK = SR`, so a 128-frame block is one chunk.
+and its chunks are about a second (86 blocks), so a 128-frame block is one chunk.
 
 ### The GPU
 
@@ -547,14 +547,17 @@ blocks to a launch, the setup of the next window running while the GPU
 renders this one. The file's blocks are 512 samples, so each partial's carrier
 is re-anchored in double every 128 (`V_SUB`), keeping the float error where
 live's is. Whole Mars (6½ minutes, 2.0M partials): the kernel 48.1 → 16.4 s,
-the render 84.8 → 53.0 s, the rest being `prepare()`. Against the CPU it is
-within 1e-5 everywhere but one place, which is the CPU's: it renders a file in
-one-second chunks, 44 100 samples, not a whole number of blocks, and a note
-whose onset falls exactly on a chunk edge loses the ramp every other mid-block
-onset has (up to 2.4e-2 in Mars, where notes land on whole seconds).
-`examples/gpu_filecheck.py` compares the two on excerpts, against the CPU
-rendered block by block. It is never the default: the corpus and its golden
-hashes are the CPU's.
+the render 84.8 → 53.0 s, the rest being `prepare()`. Against the CPU: 9e-6
+of peak over the whole of Mars (`examples/gpu_filecheck.py` compares the two on
+excerpts). It is never the default: the corpus and its golden hashes are the
+CPU's.
+
+That 9e-6 needed the CPU fixed first. It rendered a file in one-second time
+chunks, 44 100 samples, which no block divides, so the block an edge fell in
+was set up in two halves -- and a note whose onset landed exactly on the edge
+lost the ramp every other mid-block onset has (2.4e-2 in Mars, whose notes land
+on whole seconds). The chunks are now 86 blocks (`blockrender._chunk`), and a
+render is the same however it is cut.
 
 ### Real-time priority
 

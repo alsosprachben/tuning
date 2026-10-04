@@ -40,10 +40,9 @@ def main(argv):
     for f in argv[1:]:
         prep = B.prepare(excerpt(f, seconds), "hybridmean:440")
         N, P = prep['N'], prep['P']
-        # the CPU in BLOCK-ALIGNED windows: synth_window's one window cuts
-        # its time chunks every second, and a block a chunk edge falls in is
-        # set up in two halves -- measured 2.3e-3 apart from the whole block
-        # where notes end there. The GPU takes whole blocks, as live does.
+        # the CPU in windows of whole blocks, as the GPU and live take them
+        # (since blockrender._chunk the CPU's own chunks are too; before it, a
+        # block a one-second chunk edge fell in was set up in two halves)
         L = np.zeros(N, np.float32); R = np.zeros(N, np.float32)
         t0 = time.time()
         W = B.BLK * (B.SR // B.BLK)
