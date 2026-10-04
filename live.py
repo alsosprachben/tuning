@@ -1791,7 +1791,10 @@ class Slab:
         """Return slots whose release has finished ringing."""
         keep = []
         for idx, off in self.retiring:
-            tail = off + float((self.a["re"][idx] + self.a["rdl"][idx]).max()) + B.BLK
+            # the release, the reflection's own delay, and each ear's: the
+            # envelope runs delL/delR late (synthkernel.c voice_partial.inc)
+            tail = off + float((self.a["re"][idx] + self.a["rdl"][idx]
+                                + np.maximum(self.a["delL"][idx], self.a["delR"][idx])).max()) + B.BLK + 1
             if n > tail:
                 self.a["non"][idx] = IDLE
                 live = idx[self.busy[idx]]

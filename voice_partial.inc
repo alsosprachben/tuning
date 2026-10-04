@@ -1,7 +1,14 @@
 // synth_voice's per-partial setup, shared verbatim with voice_block (see
 // the note above voice_block in synthkernel.c). In scope: p, cs, ce, and
 // the kernel's arguments; `continue` skips the partial.
-            long a=non[p], off=noff[p], zend=off+(long)relS[p]+BLK;
+            // THE END WAITS FOR THE EARS. Each ear's envelope runs delL/delR
+            // samples late (AMP below), so the release ends at noff + relS +
+            // that delay -- up to ~570 samples on a placed source, more than a
+            // block. Ending at noff + relS + BLK cut the release short wherever
+            // the delay passed a block, and where it was cut depended on the
+            // window (a long one granted a block a short one did not).
+            long a=non[p], off=noff[p];
+            long zend=off+(long)relS[p]+(long)ceilf(fmaxf(0.f, fmaxf(delL[p], delR[p])))+BLK;
             if(a>=ce||zend<=cs) continue;
             double w=omega[p]; float invf=1.f/fadeS[p], invr=1.f/relS[p];
             float aL=ampL[p], aR=ampR[p], nf=nomfreq[p];
