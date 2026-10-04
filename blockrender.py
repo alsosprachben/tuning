@@ -235,7 +235,7 @@ def ensure_gpu_lib():
     beside synth_voice changes how gcc inlines it (see synthkernel.c)."""
     src = os.path.join(HERE, "synthkernel.c")
     return _build(src, "libsynthgpu_%d.so" % SR, ["-DVOICE_BLOCK"],
-                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes"])
+                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack"])
 
 
 # The C argument types, READ OFF THE C. Without argtypes a ctypes call does no
@@ -3714,11 +3714,43 @@ def master_curve(mvol, n0, n):
     return g
 
 
+# THE GPU, for a whole file: --gpu or TUNING_GPU=1 (gpurender.FileRenderer).
+# Never the default -- it is held to the CPU at ~1e-5, not bit for bit, and
+# the corpus and its golden hashes are the CPU's.
+# (--gpu is read only when this file is run: live.py --gpu is live's own.)
+RENDER_GPU = os.environ.get('TUNING_GPU', '') not in ('', '0')
+_GPU = [None]
+
+
+def _gpu():
+    """The OpenCL device, made once; None (and why, once) when there is none."""
+    if _GPU[0] is None:
+        try:
+            import gpurender
+            _GPU[0] = gpurender.Gpu()
+            print("  gpu: %s" % _GPU[0].name)
+        except Exception as e:
+            print("  gpu: not available (%s: %s) -- rendering on the CPU" % (type(e).__name__, e))
+            _GPU[0] = False
+    return _GPU[0] or None
+
+
+def render_partials(prep, n0, winlen, L, R):
+    """Every partial of prep into L/R over [n0, n0+winlen): on the GPU when
+    asked for and the window is the whole file from 0, else synth_partials."""
+    if RENDER_GPU and n0 == 0 and _gpu() is not None:
+        import gpurender
+        gL, gR, _, _ = gpurender.FileRenderer(prep, _gpu()).render(winlen)
+        L += gL; R += gR
+    else:
+        synth_partials(prep, n0, winlen, 0, prep['P'], L, R)
+
+
 def synth_window(prep, n0, winlen):
     """Synthesise absolute samples [n0, n0+winlen) -> (L, R) float32, gained and
     clipped. Stateless (analytic phase), so a player calls it per audio block."""
     L=np.zeros(winlen,np.float32); R=np.zeros(winlen,np.float32)
-    synth_partials(prep, n0, winlen, 0, prep['P'], L, R)
+    render_partials(prep, n0, winlen, L, R)
     # Friction is not a partial. The consonant bursts are generated and mixed
     # here rather than scheduled as voices -- see noisegen.py for why.
     _NG.mix(L, R, n0, prep.get('cons_bursts'), SR)
@@ -3940,6 +3972,9 @@ def write_wav(path, L, R):
 
 
 if __name__=="__main__":
+    if '--gpu' in sys.argv:
+        RENDER_GPU = True
+        sys.argv.remove('--gpu')
     inp,outp=sys.argv[1],sys.argv[2]; tuner=sys.argv[3] if len(sys.argv)>3 else 'hybrid440'
     # Optional 4th argument sets the pitch everything tunes to: "a=432" names the
     # frequency of A4, "c=256" the frequency of middle C. Which end you give
@@ -4043,7 +4078,7 @@ if __name__=="__main__":
         _LAST_PREP['aR'] *= _g
         _bl = np.zeros(_LAST_PREP['N'], np.float32)
         _br = np.zeros(_LAST_PREP['N'], np.float32)
-        synth_partials(_LAST_PREP, 0, _LAST_PREP['N'], 0, _LAST_PREP['P'], _bl, _br)
+        render_partials(_LAST_PREP, 0, _LAST_PREP['N'], _bl, _br)
         _LAST_PREP['aL'][:], _LAST_PREP['aR'][:] = _sav
         # The room hears the device's output, so a master fader that moves
         # moves the send too -- otherwise fading a piece out would leave its

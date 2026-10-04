@@ -58,7 +58,16 @@ typedef struct {
     float mL0, mL1, mR0, mR1;    // kind 1: the amplitude at the block's edges
     float aL, aR, aLp, aRp;      // the partial's level (a Moog's: last block's, then this one's)
     float jfa, cc, swp;          // the chiff's level, its cycle, the send weight
+    float za[12];                // the carrier again at ns+128, +256, +384 (zLr zLi zRr zRi each)
 } vdesc;
+
+// THE CARRIER IS RE-ANCHORED EVERY V_SUB SAMPLES. A file renders in 512-sample
+// blocks, and z0 e^{i k w} at k up to 511 puts the angle out to ~1600 rad,
+// which a float places only to ~1e-4: -80 dB, against the -110 the live
+// block's 128 reaches. So the setup computes the carrier afresh, in double,
+// at each V_SUB samples of the block (za), and k never runs past V_SUB from
+// an anchor. A live block of 128 uses the first anchor alone, as it did.
+#define V_SUB 128
 
 // ONE MOOG CELL (a grid interval, MOOG_GRID samples): its gains at both ends,
 // and whatever turns within it
@@ -99,9 +108,16 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
                                 int k, u64 n, float invb, int mg, float invg, int send, float* o)
 {
     if(d->kind==0 || k<d->ns || k>=d->ne) return;
-    // both ears turn at one rate: one sine and cosine for the two
+    // both ears turn at one rate: one sine and cosine for the two, from the
+    // last anchor (V_SUB)
     float zrL, ziL, zrR, ziR;
-    V_TURN2(zrL, ziL, zrR, ziR, d->zLr, d->zLi, d->zRr, d->zRi, k-d->ns, d->winst);
+    int kk=k-d->ns, sub=kk/V_SUB;
+    if(sub==0){
+        V_TURN2(zrL, ziL, zrR, ziR, d->zLr, d->zLi, d->zRr, d->zRi, kk, d->winst);
+    } else {
+        const VGLOBAL float* a=d->za+4*(sub-1);
+        V_TURN2(zrL, ziL, zrR, ziR, a[0], a[1], a[2], a[3], kk-sub*V_SUB, d->winst);
+    }
     float tb=(float)k*invb, mL, mR, sL, sR;
     if(d->kind==1){
         mL=(d->mL0+(d->mL1-d->mL0)*tb)*d->aL; mR=(d->mR0+(d->mR1-d->mR0)*tb)*d->aR;

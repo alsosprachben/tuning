@@ -816,28 +816,43 @@ int voice_block(long n0, int BLK, int nblk, int P,
     float sfloor, float spow, float shmax, float shref,
     const float* sendW, int send,
     const long* idx, int nact, vdesc* D, vcell* C, int ccap, vsb* SB, int sbcap,
-    int nthr, int* counts)
+    int nthr, int* counts, int nb)
 {
     (void)P; (void)fmpR;
-    // the fragments' names for the window: one block, one chunk
-    const long cs=n0, ce=n0+BLK;
     // the send weight is read when there is a send bus (voice_partial.inc)
     const float* outSL = send ? sendW : 0;
     int nc=0, nsbt=0, over=0;
+    // nb BLOCKS from n0, each for every partial in idx: descriptor
+    // D[blk*nact + ii], so a file's window is one call (live's is one block).
+    // Cells and sidebands are taken by shared counts across all of them.
+    long tot=(long)nact*(nb>0?nb:1);
     #pragma omp parallel for schedule(dynamic,32) num_threads(nthr)
-    for(int ii=0; ii<nact; ii++){
+    for(long it=0; it<tot; it++){
+        int ii=(int)(it%nact);
+        long bn0=n0+(it/nact)*(long)BLK;
+        // the fragments' names for the window: one block, one chunk
+        const long cs=bn0, ce=bn0+BLK;
         int p=(int)idx[ii];
-        vdesc* d=D+ii;
+        vdesc* d=D+it;
         d->kind=0;
         #include "voice_partial.inc"
         {
-        long b=n0/BLK;
+        long b=bn0/BLK;
         #include "voice_block.inc"
-        d->ns=(int)(ns-n0); d->ne=(int)(ne-n0);
+        d->ns=(int)(ns-bn0); d->ne=(int)(ne-bn0);
         d->zLr=zrL; d->zLi=ziL; d->zRr=zrR; d->zRi=ziR; d->winst=winst;
         d->mL0=mL0; d->mL1=mL1; d->mR0=mR0; d->mR1=mR1;
         d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
         d->jfa=jfa; d->cc=cc; d->swp=swp;
+        // the carrier at each V_SUB samples into the block, in double, as the
+        // phasor's own steps of winst place it (voicedesc.h)
+        for(int j=1;j<4;j++){
+            if(ns+(long)j*V_SUB < ne){
+                double el=(double)winst*(double)(j*V_SUB);
+                d->za[4*(j-1)]=(float)cos(phL+el); d->za[4*(j-1)+1]=(float)sin(phL+el);
+                d->za[4*(j-1)+2]=(float)cos(phR+el); d->za[4*(j-1)+3]=(float)sin(phR+el);
+            } else for(int q=0;q<4;q++) d->za[4*(j-1)+q]=0.f;
+        }
         d->chk_hi=chk_hi; d->chk_lo=chk_lo;
         d->flags=0; d->cell=0; d->nk_hi=d->nk_lo=d->nseed=0;
         (void)rr; (void)ri; (void)invb;
@@ -857,7 +872,7 @@ int voice_block(long n0, int BLK, int nblk, int P,
         for(int cl=0; cl<BLK/mg; cl++){
         #include "voice_cell.inc"
         vcell* v=C+cbase+cl;
-        v->s0=(int)(s0-n0); v->s1=(int)(s1-n0);
+        v->s0=(int)(s0-bn0); v->s1=(int)(s1-bn0);
         v->gL0=a0L; v->gL1=a1L; v->gR0=a0R; v->gR1=a1R;
         if(shm){ v->cRe0=cRe[cl]; v->cIm0=cIm[cl]; v->cRe1=cRe[cl+1]; v->cIm1=cIm[cl+1]; }
         if(pm){ v->zLr=zrL; v->zLi=ziL; v->zRr=zrR; v->zRi=ziR; v->wc=atan2f(ri, rr); }
@@ -882,6 +897,21 @@ int voice_block(long n0, int BLK, int nblk, int P,
     }
     counts[0]=nc; counts[1]=nsbt;
     return over ? -1 : 0;
+}
+
+// EACH BLOCK'S SOUNDING ROWS, PACKED: voice_block over nb blocks leaves every
+// partial of the window in every block, silent ones as kind 0. Block blk's
+// rows D[blk*nact ..] are moved down over its silent ones, in order, and m[blk]
+// is how many sound -- so the GPU never walks a row that adds nothing.
+void voice_pack(vdesc* D, int nact, int nb, int* m)
+{
+    for(int blk=0; blk<nb; blk++){
+        vdesc* base=D+(long)blk*nact;
+        int k=0;
+        for(int i=0;i<nact;i++)
+            if(base[i].kind){ if(i!=k) base[k]=base[i]; k++; }
+        m[blk]=k;
+    }
 }
 
 // THE SAMPLE PASS IN C: voice_sample (voicedesc.h) over every descriptor and

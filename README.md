@@ -539,7 +539,22 @@ and the partials summed in another order — and it is held to it: across every
 synth program and the acoustic voices that exercise the setup, 4.3e-6 relative
 at worst (`examples/gpu_check.py`; the selftest asks 1e-5). The chiff's and the
 noise bands' random draws are indexed in exact integer arithmetic on both, so
-they pick the same draw. Offline rendering stays on the CPU, bit for bit.
+they pick the same draw.
+
+**Files too**, with `blockrender.py ... --gpu` (or `TUNING_GPU=1`, which the
+example scripts pass through): the same setup and sample pass, a window of 32
+blocks to a launch, the setup of the next window running while the GPU
+renders this one. The file's blocks are 512 samples, so each partial's carrier
+is re-anchored in double every 128 (`V_SUB`), keeping the float error where
+live's is. Whole Mars (6½ minutes, 2.0M partials): the kernel 48.1 → 16.4 s,
+the render 84.8 → 53.0 s, the rest being `prepare()`. Against the CPU it is
+within 1e-5 everywhere but one place, which is the CPU's: it renders a file in
+one-second chunks, 44 100 samples, not a whole number of blocks, and a note
+whose onset falls exactly on a chunk edge loses the ramp every other mid-block
+onset has (up to 2.4e-2 in Mars, where notes land on whole seconds).
+`examples/gpu_filecheck.py` compares the two on excerpts, against the CPU
+rendered block by block. It is never the default: the corpus and its golden
+hashes are the CPU's.
 
 ### Real-time priority
 
