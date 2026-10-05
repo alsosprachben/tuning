@@ -178,7 +178,12 @@ def path(freq_hz, x, z, fast=True):
     return path_at(freq_hz, azimuth(x, z), fast)
 
 
-def expand(A, channels, sr, cols):
+def make_rotors(channels):
+    """Each Leslie channel's horn and drum rotors, from its speed history."""
+    return {ch: (Rotor(True, req), Rotor(False, req)) for ch, req in channels.items()}
+
+
+def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None):
     """Give every partial of a Leslie voice its rotor, in place on the table.
 
     `channels` is {midi_channel: [(seconds, fast), ...]} -- the half-moon
@@ -208,12 +213,15 @@ def expand(A, channels, sr, cols):
     n = len(A['om'])
     if not channels:
         return 0
-    rotors = {}
-    for ch, req in channels.items():
-        rotors[ch] = (Rotor(True, req), Rotor(False, req))
+    # the streaming renderer passes the whole file's `loudest` (from a first,
+    # scanning run) and its rotors (built once), and a `meta` list that
+    # records (source row, lobe harmonic, sign index) per row appended
+    if rotors is None:
+        rotors = make_rotors(channels)
     extra = {k: [] for k in cols}
     made = 0
-    loudest = max(float(np.max(np.abs(A['aM']))), 1e-12) if n else 1.0
+    if loudest is None:
+        loudest = max(float(np.max(np.abs(A['aM']))), 1e-12) if n else 1.0
     for i in range(n):
         # 'mch' is the MIDI channel; 'ch' is CHIFF. Getting that wrong compares
         # a chiff amount against a channel number, matches nothing, and expands
@@ -269,7 +277,9 @@ def expand(A, channels, sr, cols):
         for k, ck in enumerate(cs, 1):
             if abs(ck) < 1e-3:
                 continue
-            for sign in (1.0, -1.0):
+            for si, sign in enumerate((1.0, -1.0)):
+                if meta is not None:
+                    meta.append((i, k, si))
                 for col in cols:
                     extra[col].append(A[col][i])
                 extra['om'][-1] = A['om'][i] + sign * k * dw

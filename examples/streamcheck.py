@@ -2,7 +2,7 @@
 """Does the streaming renderer render what the whole table renders, bit for bit?
 
     python3 examples/streamcheck.py FILE.mid [SECONDS]
-    python3 examples/streamcheck.py --passes
+    python3 examples/streamcheck.py --passes | --effects | --long
 
 Each file (or its first SECONDS, bitident's excerpt) is rendered twice: by
 streamrender.render -- notes emitted, windows rendered as they complete, rows
@@ -54,6 +54,41 @@ def passes_file():
     return path
 
 
+# --long: every pass the stream reproduces, each crossing many windows -- the
+# effects file's voices and a harmonium with its Tremolo stop drawn (stop
+# word bit 11 on CC44; bit 0, cor anglais, on CC43), phrases and held chords
+# over a minute and a half, the Moog through the MF-104M
+LONG = ((0, 104, {}), (1, 4, {1: 100}), (2, 7, {1: 90}), (3, 16, {1: 127}), (4, 29, {}),
+        (5, 81, {}), (6, 48, {93: 90, 91: 100}), (7, 61, {71: 100, 74: 30, 75: 90}),
+        (8, 44, {}), (10, 20, {43: 1, 44: 16}))
+
+
+def long_file(reps=12):
+    import mido
+    m = mido.MidiFile(ticks_per_beat=480)
+    for ch, prog, ccs in LONG:
+        tr = mido.MidiTrack()
+        m.tracks.append(tr)
+        tr.append(mido.Message('program_change', channel=ch, program=prog, time=0))
+        for cc, v in ccs.items():
+            tr.append(mido.Message('control_change', channel=ch, control=cc, value=v, time=0))
+        lo = 36 if prog == 29 else 48
+        for r in range(reps):
+            base = lo + (r * 5) % 12
+            for n in (0, 4, 7, 12, 7, 4):
+                tr.append(mido.Message('note_on', channel=ch, note=base + n, velocity=80 + (r * 7) % 40, time=0))
+                tr.append(mido.Message('note_off', channel=ch, note=base + n, time=120 + 40 * (ch % 3)))
+            for n in (0, 7, 16):
+                tr.append(mido.Message('note_on', channel=ch, note=base + n, velocity=90, time=0))
+            tr.append(mido.Message('note_off', channel=ch, note=base, time=960 + 120 * (ch % 4)))
+            tr.append(mido.Message('note_off', channel=ch, note=base + 7, time=240))
+            tr.append(mido.Message('note_off', channel=ch, note=base + 16, time=0))
+    path = os.path.join(tempfile.mkdtemp(prefix="streamcheck_"), "long.mid")
+    m.save(path)
+    os.environ.setdefault("TUNING_MOOG_PANEL", '{"mf104_on": 1, "mf104_mix": 0.5}')
+    return path
+
+
 def check(name, f, tuner="hybridmean:440"):
     t = time.time()
     try:
@@ -90,6 +125,11 @@ def check(name, f, tuner="hybridmean:440"):
 def main(argv):
     if "--passes" in argv:
         return 0 if check("passes", passes_file()) else 1
+    if "--long" in argv:
+        return 0 if check("long", long_file()) else 1
+    if "--effects" in argv:                 # prepcheck's file: every pass, the Leslie too
+        import prepcheck
+        return 0 if check("effects", prepcheck.effects_file()) else 1
     f = argv[1]
     name = os.path.basename(f)
     if len(argv) > 2:

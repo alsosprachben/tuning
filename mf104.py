@@ -179,7 +179,7 @@ def lfo_vibrato(st, k, sr, om, t_on):
             -2.0 * math.pi * f * dlt * math.sin(w * t_on + th))
 
 
-def expand(A, notes, sr, cols, dup_fx=None):
+def expand(A, notes, sr, cols, dup_fx=None, meta=None):
     """Add each pedal note's repeats to the partial table A, in place, and
     scale its dry rows by the crossfade. notes: [(first row, end row,
     settings)]. dup_fx(fx, D) gives a Moog row for a copy D samples late
@@ -228,6 +228,8 @@ def expand(A, notes, sr, cols, dup_fx=None):
                         c['fx'] = nf
                 for kk in keys:
                     extra[kk].append(c[kk])
+                if meta is not None:
+                    meta.append((i, k))
                 made += 1
                 last = max(last, int(c['noff']) + int(math.ceil(float(row.get('re', 0.0)))))
             for kk in ('aL', 'aR', 'aM'):

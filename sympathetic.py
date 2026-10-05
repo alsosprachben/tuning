@@ -163,7 +163,7 @@ def _at(props, freq):
     return v
 
 
-def expand(A, channels, sr, cols=None, freq=None, table=None):
+def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
     """Emit every channel's sympathetic notes, in place on the table.
 
     A struck note is one group of rows sharing an onset; each responder is that
@@ -203,6 +203,7 @@ def expand(A, channels, sr, cols=None, freq=None, table=None):
         cache = {}
         for _, idx in grp.items():
             ix = np.asarray(idx)
+            g0 = int(idx[0])                # (meta: the group, by its first row)
             # PER STRIKE, NOT PER CHANNEL. This used to ask responders() once,
             # with the channel's first note, and apply the answer to every
             # note after it -- so a sitar's sympathetic strings answered each
@@ -214,7 +215,7 @@ def expand(A, channels, sr, cols=None, freq=None, table=None):
             key = (id(tab), drv)
             if key not in cache:
                 cache[key] = responders(props, tab, f0=f0)
-            for semis, drive in cache[key]:
+            for ri, (semis, drive) in enumerate(cache[key]):
                 # AND THE PITCH IS THE TABLE'S. This was 2**(semis/12) -- an
                 # equal-tempered interval from the partial -- under every tuner,
                 # so a sitar tuned `just` had its sympathetic strings ring
@@ -232,6 +233,8 @@ def expand(A, channels, sr, cols=None, freq=None, table=None):
                 if not len(keep):
                     continue
                 for i in keep:
+                    if meta is not None:
+                        meta.append((ch, g0, ri, int(i)))
                     for k in keys:
                         extra[k].append(A[k][int(i)])
                     # Frequency scales; the phase anchor scales with it, since

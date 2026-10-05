@@ -46,7 +46,7 @@ WURLITZER_HZ = 5.5
 ENABLED = True
 
 
-def expand(A, channels, sr, cols, rows=None):
+def expand(A, channels, sr, cols, rows=None, meta=None):
     """Give every partial of a modulated voice its sideband pair, in place.
 
     `channels` is {midi_channel: (rate_hz, depth, stereo)} or, for a SECTION,
@@ -71,6 +71,8 @@ def expand(A, channels, sr, cols, rows=None):
     player they belong to, so the draw is deterministic per (channel, player)
     and every partial of one player agrees.
     """
+    # meta: a list given by the streaming renderer, which records (source row,
+    # 0 for the upper sideband and 1 for the lower) for every row appended
     if not ENABLED or not channels:
         return 0
     n = len(A['om'])
@@ -107,7 +109,9 @@ def expand(A, channels, sr, cols, rows=None):
             ph = rng.uniform(0.0, 2.0 * math.pi)
         dw = 2.0 * math.pi * rate / sr
         half = 0.5 * depth
-        for sign in (1.0, -1.0):
+        for si, sign in enumerate((1.0, -1.0)):
+            if meta is not None:
+                meta.append((i, si))
             for col in cols:
                 extra[col].append(A[col][i])
             extra['om'][-1] = A['om'][i] + sign * dw

@@ -570,7 +570,7 @@ def products(freqs, amps, phases, coeffs, keep=20, floor=1e-4, nyquist=None):
 
 
 def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
-           references=None, imbalances=None):
+           references=None, imbalances=None, meta=None):
     """Emit the amplifier's distortion partials, in place on the table.
 
     Runs BEFORE leslie.expand, which is the whole reason this can live in the
@@ -585,83 +585,98 @@ def expand(A, channels, sr, cols, keep=KEEP_PARTIALS, floor=PEAK_FLOOR,
     distortion ringing through a chord change that has already happened.
 
     So the piece is cut at every note boundary on the channel, and products are
-    formed per segment. A partial that spans two chords contributes to both,
-    with different partners each time.
+    formed per segment (segment(), which the streaming renderer calls itself,
+    a segment at a time). A partial that spans two chords contributes to both,
+    with different partners each time. meta: a list that records (channel,
+    the segment's start, the product's index in it) per row appended.
     """
     import numpy as np
     if not channels:
         return 0
     mch = np.array(A['mch'])
     dr = np.array(A['dr'])
-    non = np.array(A['non'], float)
-    noff = np.array(A['noff'], float)
-    om = np.array(A['om'], float)
-    aM = np.array(A['aM'], float)
-    p0 = np.array(A['p0'], float)
+    cols_ = dict(non=np.array(A['non'], float), noff=np.array(A['noff'], float),
+                 om=np.array(A['om'], float), aM=np.array(A['aM'], float),
+                 p0=np.array(A['p0'], float))
     extra = {k: [] for k in cols}
     made = 0
     for ch, drive in channels.items():
         if drive <= 0.0:
             continue
-        # NO LONGER CLAMPED AT THE BIAS. The old ceiling was the series'
-        # radius of convergence, not the amplifier's: past it the expansion
-        # diverged and the only honest thing was to refuse. The curve is
-        # evaluated now, so drive past cutoff is simply the clip, which is
-        # what a driven Leslie is.
-        drive = float(drive)
         rows = np.flatnonzero((mch == ch) & (dr > 0.5))
         if len(rows) < 2:
             continue
-        edges = np.unique(np.concatenate([non[rows], noff[rows]]))
+        edges = np.unique(np.concatenate([cols_['non'][rows], cols_['noff'][rows]]))
         for a, b in zip(edges[:-1], edges[1:]):
-            if b - a < sr * 0.01:            # shorter than 10 ms: no partner
-                continue
-            live = rows[(non[rows] <= a + 1e-6) & (noff[rows] >= b - 1e-6)]
-            if len(live) < 2:
-                continue
-            fs = om[live] * sr / (2.0 * np.pi)
-            # p0 anchors phase at sample 0, so the phase AT THIS SEGMENT is
-            # p0 + om*a -- using p0 alone would give every segment the phase it
-            # would have had at the start of the piece.
-            ps = p0[live] + om[live] * a
-            fs, as_, ps = combine(fs, aM[live], ps)
-            if len(fs) < 2:
-                continue
-            if len(fs) > keep:
-                sub = np.argsort(-as_)[:keep]
-                fs, as_, ps = fs[sub], as_[sub], ps[sub]
-            src = int(live[int(np.argmax(aM[live]))])
-            imb = (imbalances or {}).get(ch)
-            valve = {} if imb is None else {'imbalance': float(imb)}
-            for f, g, ph in emit(fs.tolist(), as_.tolist(), ps.tolist(),
-                                 sr, drive, floor=floor,
-                                 reference=(references or {}).get(ch),
-                                 **valve):
-                for k in cols:
-                    extra[k].append(A[k][src])
-                w = 2.0 * math.pi * f / sr
-                extra['om'][-1] = w
-                extra['nf'][-1] = f
-                extra['non'][-1] = int(a)
-                extra['noff'][-1] = int(b)
-                # back out an anchor at sample 0 from the phase wanted at `a`.
-                # The input phases are p0, the LEFT ear's (p0 = -om*(t + delL)),
-                # and a product's phase is a sum of them, so `ph` already carries
-                # the left ear's delay. The right ear hears the same amplifier
-                # delR samples later: p0R = p0 - w*(delR - delL).
-                extra['p0'][-1] = ph - w * a
-                extra['p0R'][-1] = ph - w * a - w * (A['delR'][src] - A['delL'][src])
-                # a product is the amplifier's, not the Moog's: no filter row
-                # (the ladder was before the valve) and no oscillator harmonic
-                if 'fx' in extra:
-                    extra['fx'][-1] = -1
-                if 'mk' in extra:
-                    extra['mk'][-1] = 0
-                sc = g / max(A['aM'][src], 1e-12)
-                extra['aL'][-1] = A['aL'][src] * sc
-                extra['aR'][-1] = A['aR'][src] * sc
-                extra['aM'][-1] = g
-                made += 1
+            made += segment(A, cols_, rows, ch, drive, a, b, sr, cols, extra, keep=keep,
+                            floor=floor, references=references, imbalances=imbalances, meta=meta)
     for k in cols:
         A[k].extend(extra[k])
+    return made
+
+
+def segment(A, arrs, rows, ch, drive, a, b, sr, cols, extra, keep=KEEP_PARTIALS,
+            floor=PEAK_FLOOR, references=None, imbalances=None, meta=None):
+    """One segment [a, b] of channel ch's amplifier: the products of the rows
+    sounding right across it, appended to `extra` (copied from the loudest of
+    them). arrs holds the table's non, noff, om, aM and p0 as float arrays;
+    rows, the channel's direct rows. Returns how many were made."""
+    import numpy as np
+    # NO LONGER CLAMPED AT THE BIAS. The old ceiling was the series' radius of
+    # convergence, not the amplifier's: past it the expansion diverged and the
+    # only honest thing was to refuse. The curve is evaluated now, so drive
+    # past cutoff is simply the clip, which is what a driven Leslie is.
+    drive = float(drive)
+    non, noff, om, aM, p0 = arrs['non'], arrs['noff'], arrs['om'], arrs['aM'], arrs['p0']
+    if b - a < sr * 0.01:            # shorter than 10 ms: no partner
+        return 0
+    live = rows[(non[rows] <= a + 1e-6) & (noff[rows] >= b - 1e-6)]
+    if len(live) < 2:
+        return 0
+    fs = om[live] * sr / (2.0 * np.pi)
+    # p0 anchors phase at sample 0, so the phase AT THIS SEGMENT is p0 + om*a
+    # -- using p0 alone would give every segment the phase it would have had
+    # at the start of the piece.
+    ps = p0[live] + om[live] * a
+    fs, as_, ps = combine(fs, aM[live], ps)
+    if len(fs) < 2:
+        return 0
+    if len(fs) > keep:
+        sub = np.argsort(-as_)[:keep]
+        fs, as_, ps = fs[sub], as_[sub], ps[sub]
+    src = int(live[int(np.argmax(aM[live]))])
+    imb = (imbalances or {}).get(ch)
+    valve = {} if imb is None else {'imbalance': float(imb)}
+    made = 0
+    for j, (f, g, ph) in enumerate(emit(fs.tolist(), as_.tolist(), ps.tolist(),
+                                        sr, drive, floor=floor,
+                                        reference=(references or {}).get(ch),
+                                        **valve)):
+        if meta is not None:
+            meta.append((ch, a, j))
+        for k in cols:
+            extra[k].append(A[k][src])
+        w = 2.0 * math.pi * f / sr
+        extra['om'][-1] = w
+        extra['nf'][-1] = f
+        extra['non'][-1] = int(a)
+        extra['noff'][-1] = int(b)
+        # back out an anchor at sample 0 from the phase wanted at `a`. The
+        # input phases are p0, the LEFT ear's (p0 = -om*(t + delL)), and a
+        # product's phase is a sum of them, so `ph` already carries the left
+        # ear's delay. The right ear hears the same amplifier delR samples
+        # later: p0R = p0 - w*(delR - delL).
+        extra['p0'][-1] = ph - w * a
+        extra['p0R'][-1] = ph - w * a - w * (A['delR'][src] - A['delL'][src])
+        # a product is the amplifier's, not the Moog's: no filter row (the
+        # ladder was before the valve) and no oscillator harmonic
+        if 'fx' in extra:
+            extra['fx'][-1] = -1
+        if 'mk' in extra:
+            extra['mk'][-1] = 0
+        sc = g / max(A['aM'][src], 1e-12)
+        extra['aL'][-1] = A['aL'][src] * sc
+        extra['aR'][-1] = A['aR'][src] * sc
+        extra['aM'][-1] = g
+        made += 1
     return made

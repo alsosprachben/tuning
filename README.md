@@ -726,6 +726,35 @@ applied afterwards. `midi.md` lists what it answers and what it leaves to
 `live.py`. A channel that sends CC91 also gets a `.send.wav` bus beside the
 wav, which `roomtail.py` picks up on its own.
 
+### Streamed: memory is what sounds at once
+
+A file is rendered **as its notes are emitted**, a window at a time, keeping
+only the partials still sounding (`streamrender.py`). Building the whole table
+first cost memory in proportion to the piece: Valkyries' 16 million rows, most
+of them chorus and tremolo copies, would not fit in 7 GB. Streamed, Valkyries
+peaks at 0.93 GB and Mars at 0.95 GB (it was 1.37), Mars about 10% slower.
+`TUNING_STREAM=0` builds the whole table as before.
+
+It is **bit for bit** the whole table's render, which is what makes it the
+default. `prepare(path, tuner, sink=)` hands each note's rows to the stream the
+moment they are final, and the stream runs every effect pass — sympathetic
+strings, MF-104M, tube amp, clavinet tone, harmonium and panel tremolo, chorus,
+cabinet, Leslie — in the whole table's order, each as soon as nothing still to
+come can change what it sees: a sympathetic onset bucket once no later note can
+join it, an amplifier segment once no pending row can start before it ends. The
+passes' own code makes the rows; each records where every row it adds came
+from, and that becomes the row's **order key**, its place in the whole table.
+A window's rows are sorted by those keys before rendering, so the kernel sums
+them in the order it would have. Files with a Leslie run a scanning pass first
+for the whole file's loudest row, which sets how much rotor lobe each partial
+gets, and take about twice as long.
+
+`examples/streamcheck.py` holds it to the whole table, mix and reverb send
+byte for byte: `--long` drives every pass across a minute of windows, and
+`TUNING_STREAM_BATCH=1` renders a window at a time, the strictest test of when
+a window can no longer change. The corpus, streamed, matches its golden hashes.
+Stems (`--stems`, `--objects`) and `--gpu` still build the whole table.
+
 ## Render the corpus
 
 ```sh

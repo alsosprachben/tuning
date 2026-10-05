@@ -2457,7 +2457,9 @@ def prepare(path, tuner='hybrid440', sink=None):
         sink.begin(dict(mod=sys.modules[__name__], room_bands=ROOM_BANDS,
                         lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
                         cons_bursts=cons_bursts, mvol=_mvol, moog_tables=_moog_tables,
-                        reverb=_REVERB_CH, qacc=_QACC,
+                        reverb=_REVERB_CH, qacc=_QACC, F=_F, ht_rows=_HT_ROWS,
+                        amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
+                        moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
                         effects=dict(sympathetic=_SYM_CH, mf104=_MF104, tubeamp=_AMP_CH,
                                      clavinet=_CLAV_CH, htremolo=_HTREM_CH, tremolo=_TREM_CH,
                                      chorus=_CHORUS_CH, cabinet=_CAB_CH, leslie=_LESLIE_CH)))
