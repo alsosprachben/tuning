@@ -2589,6 +2589,12 @@ class Part:
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
         self.synth_b = {}       # ...and a layered Moog's second Messenger's
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
+        # THE PART'S OWN PAN POT, a CC10 value, or None to follow its channel's
+        # CC10 as every part did before. Pan is per channel and a layer's parts
+        # share the keyboard's, so a double-tracked sound -- two passes of a
+        # synth panned apart, as on Journey's "Separate Ways" -- needs each
+        # part seated where the desk put it; the channel's CC10 then leaves it.
+        self.pan = None
         self.set_patch(patch)
 
     def set_patch(self, patch):
@@ -2651,6 +2657,8 @@ class Part:
             d["cc_map"] = self.cc_map
         if not self.fixed_touch:
             d["fixed_touch"] = False
+        if self.pan is not None:
+            d["pan"] = int(self.pan)
         return d
 
     @staticmethod
@@ -2682,6 +2690,7 @@ class Part:
                     own.update(_MG.convert_v4(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
         p.fixed_touch = bool(d.get("fixed_touch", True))
+        p.pan = None if d.get("pan") is None else max(0, min(127, int(d["pan"])))
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
             p.drawn = {r for r in p.drawn if r in patch.rank_names}
@@ -3644,7 +3653,10 @@ class Live:
                 was = self.cpan.get(ch, T.GM_DEFAULT_PAN)
                 if msg.value != was:
                     self.cpan[ch] = msg.value
-                    self.slab.repan(self._sounding(ch), msg.value, was,
+                    # ...but not a part with its own pan pot (Part.pan)
+                    _own = {p.pid for p in self.parts if p.pan is not None}
+                    _pids = None if not _own else {p.pid for p in self.parts if p.pan is None}
+                    self.slab.repan(self._sounding(ch, pids=_pids), msg.value, was,
                                     self.rate, itd=False)
             elif msg.control == 64:                 # sustain pedal
                 downp = msg.value >= 64
@@ -4005,7 +4017,7 @@ class Live:
         # already or the first block would wipe it -- the same trap the channel
         # fader fell into. Full transform here, delay included: this note has
         # not sounded yet, so there is no envelope to step.
-        _cp = self.cpan.get(ch, T.GM_DEFAULT_PAN)
+        _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
         if _cp != T.GM_DEFAULT_PAN and slots:
             self.slab.repan(slots, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
         # UNA CORDA, before those same captures and for the same reason.
@@ -10272,6 +10284,32 @@ def selftest():
           and abs(_off - 40.0 * math.log10(30 / 120.0)) < 0.5,
           "  (v30 against v120: %+.1f dB fixed, %+.1f dB following)" % (_on, _off))
     _lt.renderer.close()
+    # A PART'S OWN PAN POT seats it, and the channel's CC10 then leaves it --
+    # a layer's two passes stay where the desk put them (a head shadow, not a
+    # level pan: a middle-C saw at 20 is about 2 dB to the left, broadband)
+    _lp = Live(program=81, rate=48000, frames=128, verbose=False, tuner="even")
+    _lp.warm()
+    def _lr(_cc=None):
+        if _cc is not None:
+            _lp.on_midi(mido.Message("control_change", channel=0, control=10, value=_cc))
+        _lp.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+        _b = np.concatenate([np.frombuffer(_lp.callback(None, 128, None, 0)[0], np.float32)
+                             for _ in range(40)]).astype(float)
+        _lp.on_midi(mido.Message("note_off", channel=0, note=60))
+        for _ in range(600):
+            _lp.callback(None, 128, None, 0)
+        return 10.0 * math.log10(np.mean(_b[0::2] ** 2) / np.mean(_b[1::2] ** 2))
+    _lp.parts[0].pan = 20
+    _seat = _lr()
+    _held = _lr(127)
+    _lp.parts[0].pan = None
+    _follow = _lr()
+    _rt = Part.from_dict(dict(Part(_lp.parts[0].patch).to_dict(), pan=20)).pan
+    check("a part's own pan seats it, and the channel's CC10 leaves it",
+          _seat > 1.0 and abs(_held - _seat) < 0.2 and _follow < -1.0 and _rt == 20,
+          "  (pan 20: L %+.1f dB over R; after CC10 127 %+.1f; following CC10 127 %+.1f)"
+          % (_seat, _held, _follow))
+    _lp.renderer.close()
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
     # striking a string and is famously expressive; a harmonica has no key at
     # all, so the player's breath is both the valve and the dynamic.
