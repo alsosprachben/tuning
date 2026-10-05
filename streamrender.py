@@ -144,6 +144,20 @@ class WavOut:
         self.w.close()
 
 
+class WavOutMono(WavOut):
+    """blockrender.write_wav_mono's bytes, window by window."""
+
+    def __init__(self, path, sr):
+        import wave
+        self.w = wave.open(path, 'wb')
+        self.w.setnchannels(1); self.w.setsampwidth(4); self.w.setframerate(sr)
+        self.n = 0
+
+    def write(self, L, R=None):
+        self.w.writeframes((np.clip(L, -1, 1) * 2147483647.0).astype('<i4').tobytes())
+        self.n += len(L)
+
+
 class NotStreamable(Exception):
     """The file needs something the stream does not reproduce: render it whole."""
 
@@ -252,7 +266,8 @@ class Stream:
 
     BATCH = 8
 
-    def __init__(self, send='auto', batch=None, loudest=None, scan=False, out=None, send_out=None):
+    def __init__(self, send='auto', batch=None, loudest=None, scan=False, out=None, send_out=None,
+                 stems=None):
         # out / send_out: WAV paths to write the mix and the reverb send to as
         # they render (blockrender's command line); otherwise they are kept,
         # whole, in L, R, SL, SR.
@@ -263,6 +278,11 @@ class Stream:
         self.want_send = send
         self.incomplete = False
         self.out_path, self.send_path = out, send_out
+        # stems: dict(objects=bool, by='channel'|'source', outdir, base) --
+        # one signal per part instead of the mix, each written as it renders
+        self.stems = stems
+        self.groups = {}            # group -> dict(out=writer, path, bursts)
+        self.part_stats = {}        # group -> [rows, sum w, sum w*px, sum w*pz, sum px, sum pz]
         # TUNING_STREAM_BATCH=1: a window at a time, the strictest test of
         # when the stream decides a window can no longer change
         self.batch = batch or int(os.environ.get('TUNING_STREAM_BATCH', self.BATCH))
@@ -290,7 +310,11 @@ class Stream:
         self.B, self.ctx = B, ctx
         self.N = ctx['N']
         self.W = B._chunk()
-        if self.out_path:
+        if self.stems is not None:
+            self.wout = self.wsend = None
+            self.L = self.R = self.SL = self.SR = None
+            self.send = False
+        elif self.out_path:
             self.wout = WavOut(self.out_path, B.SR)
             self.wsend = WavOut(self.send_path, B.SR) if self.send_path else None
             self.L = self.R = self.SL = self.SR = None
@@ -300,7 +324,8 @@ class Stream:
             self.R = np.zeros(self.N, np.float32)
             self.SL = np.zeros(self.N, np.float32)
             self.SR = np.zeros(self.N, np.float32)
-        self.send = self.want_send
+        if self.stems is None:
+            self.send = self.want_send
         self.cols = None
         self.mfdup = {}
         self.mf_last = 0
@@ -337,6 +362,9 @@ class Stream:
                 self.wout.close()
                 if self.wsend is not None:
                     self.wsend.close()
+            if next_on is None and self.stems is not None:
+                for g in self.groups.values():
+                    g['out'].close()
 
     # -- a note arrives -------------------------------------------------------
     def _note(self, r, i0, i1):
@@ -392,6 +420,8 @@ class Stream:
                 else:
                     out['zend'] = self._zend(out)
                     out['nonL'] = out['non'].astype(np.int64)
+                    if self.stems is not None:
+                        self._count_group_rows(out)
                     self.store.append(out)
 
     def _pending_min(self):
@@ -746,6 +776,8 @@ class Stream:
                 sel.append({k: v[m] for k, v in c.items()})
         self.store = [c for c in self.store if c['zend'].max() > w1]
         n = w1 - w0
+        if self.stems is not None:
+            return self._render_stems(w0, w1, sel)
         if not sel:
             self._emit(w0, w1, np.zeros(n, np.float32), np.zeros(n, np.float32),
                        np.zeros(n, np.float32), np.zeros(n, np.float32))
@@ -780,6 +812,94 @@ class Stream:
             prep['aR'] = prep['aR'] * g
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
         self._emit(w0, w1, L, R, SL, SR_)
+
+    # -- stems and objects -------------------------------------------------------
+    def _group_keys(self, rows):
+        if self.stems['by'] == 'source':
+            return [tuple(x) for x in np.stack([rows['mch'].astype(np.int64), rows['pl'].astype(np.int64),
+                                                rows['gr'].astype(np.int64)], 1).tolist()]
+        return [(int(c),) for c in rows['mch'].tolist()]
+
+    def _group(self, key, w0):
+        """A part's writer, opened -- and, if it first sounds now, given the
+        windows before (its channel's bursts, which can start before its first
+        partial, through the fader, gain and clip, as the whole render's)."""
+        import os
+        g = self.groups.get(key)
+        if g is None:
+            ch = key[0]
+            path = os.path.join(self.stems['outdir'], '.%s.part%s.wav' % (
+                self.stems['base'], '_'.join('%d' % k for k in key)))
+            out = (WavOutMono if self.stems['objects'] else WavOut)(path, self.B.SR)
+            bursts = [b for b in (self.ctx['cons_bursts'] or ()) if len(b) < 6 or int(b[5]) == ch]
+            g = self.groups[key] = dict(out=out, path=path, rows=0, bursts=bursts,
+                                        w=0.0, wx=0.0, wz=0.0, n=0, sx=0.0, sz=0.0)
+            for a in range(0, w0, self.W * self.batch):
+                b = min(w0, a + self.W * self.batch)
+                self._stem_emit(g, a, b, np.zeros(b - a, np.float32), np.zeros(b - a, np.float32))
+        return g
+
+    def _render_stems(self, w0, w1, sel):
+        B = self.B
+        n = w1 - w0
+        done = set()
+        if sel:
+            rows = _cat(sel)
+            order = np.lexsort(rows['key'].T[::-1])
+            rows = _take(rows, order)
+            gk = self._group_keys(rows)
+            uniq = {}
+            for i, k in enumerate(gk):
+                uniq.setdefault(k, []).append(i)
+            base = dict(lib=self.ctx['lib'], N=self.N, nblk=self.ctx['nblk'], sh=self.ctx['sh'],
+                        G=self.ctx['G'], S=self.ctx['S'], BR=self.ctx['BR'], BC=self.ctx['BC'],
+                        knk=1, kb0=0, **self.ctx['moog_tables']())
+            for k, ix in uniq.items():
+                g = self._group(k, w0)
+                ix = np.array(ix)
+                prep = dict(base, P=len(ix))
+                for c, dt in B.FINAL_DTYPES:
+                    prep[c] = np.ascontiguousarray(rows[c][ix].astype(dt))
+                if self.stems['objects']:          # subset(objectify=True)'s rules
+                    prep['aL'] = prep['aR'] = np.ascontiguousarray(prep['aM'])
+                    prep['p0R'] = np.ascontiguousarray(prep['p0'])
+                    z = np.zeros(len(ix), np.float32)
+                    prep['delL'] = z; prep['delR'] = z.copy()
+                L = np.zeros(n, np.float32); R = np.zeros(n, np.float32)
+                B.synth_partials(prep, w0, n, 0, len(ix), L, R)
+                self._stem_emit(g, w0, w1, L, R)
+                done.add(k)
+        for k, g in self.groups.items():       # parts with nothing sounding: their bursts
+            if k not in done:
+                self._stem_emit(g, w0, w1, np.zeros(n, np.float32), np.zeros(n, np.float32))
+
+    def _stem_emit(self, g, w0, w1, L, R):
+        B = self.B
+        n = w1 - w0
+        B._NG.mix(L, R, w0, g['bursts'], B.SR)
+        mg = B.master_curve(self.ctx['mvol'](), w0, n)
+        if mg is not None:
+            L *= mg; R *= mg
+        L *= T_master_gain(); R *= T_master_gain()
+        np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
+        g['out'].write(L, R)
+
+    def _count_group_rows(self, out):
+        """Each part's rows, and its amplitude-weighted position (the
+        manifest's), as the rows become final."""
+        gk = self._group_keys(out)
+        idx = {}
+        for i, k in enumerate(gk):
+            idx.setdefault(k, []).append(i)
+        aM = out['aM'].astype(np.float32).astype(np.float64)
+        px = out['px'].astype(np.float32).astype(np.float64)
+        pz = out['pz'].astype(np.float32).astype(np.float64)
+        for k, ix in idx.items():
+            st = self.part_stats.setdefault(k, [0, 0.0, 0.0, 0.0, 0.0, 0.0])
+            ix = np.array(ix)
+            st[0] += len(ix)
+            st[1] += aM[ix].sum(); st[2] += (px[ix] * aM[ix]).sum(); st[3] += (pz[ix] * aM[ix]).sum()
+            st[4] += px[ix].sum(); st[5] += pz[ix].sum()
 
     def _emit(self, w0, w1, L, R, SL, SR_):
         """synth_window's finishing on this window -- bursts, master fader,
@@ -837,6 +957,47 @@ def render(path, tuner, B=None, out=None, send_out=None, send='auto'):
     s.check()
     s.info = info
     return s.L, s.R, s
+
+
+def render_stems(path, tuner, outdir, objects=False, by='channel', B=None):
+    """--stems / --objects, streamed: each part written to its own WAV in
+    outdir as it renders (named as blockrender names them, once every part is
+    known). Returns (the stream, [(key, position or None, file, partials)])."""
+    import os
+    if B is None:
+        import blockrender as B
+    base = os.path.splitext(os.path.basename(path))[0]
+    stems = dict(objects=objects, by=by, outdir=outdir, base=base)
+    loudest = None
+    while True:
+        s = Stream(loudest=loudest, stems=stems)
+        try:
+            s.info = B.prepare(path, tuner, sink=s)
+        except NeedLoudest:
+            sc = Stream(scan=True)
+            B.prepare(path, tuner, sink=sc)
+            loudest = max(sc.scan_max, 1e-12)
+            continue
+        break
+    s.check()
+    parts = []
+    seen = {}
+    for key in sorted(s.groups):
+        g = s.groups[key]
+        ch = key[0]
+        st = s.part_stats.get(key, [0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        if by == 'source':
+            i = seen[ch] = seen.get(ch, -1) + 1
+            name = "%s.ch%02d.s%02d" % (base, ch, i)
+            pos = ((st[2] / st[1], st[3] / st[1]) if st[1] > 0 else
+                   (st[4] / max(st[0], 1), st[5] / max(st[0], 1)))
+        else:
+            name = "%s.ch%02d" % (base, ch)
+            pos = None
+        f = os.path.join(outdir, name + ".wav")
+        os.replace(g['path'], f)
+        parts.append((ch, pos, f, st[0]))
+    return s, parts
 
 
 def result(s):

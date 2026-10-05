@@ -759,7 +759,9 @@ be cheaper, but switching it on moves the mix by an ulp under `-ffast-math`.
 byte for byte: `--long` drives every pass across a minute of windows, and
 `TUNING_STREAM_BATCH=1` renders a window at a time, the strictest test of when
 a window can no longer change. The corpus, streamed, matches its golden hashes.
-Stems (`--stems`, `--objects`) and `--gpu` still build the whole table.
+Stems and objects (`--stems`, `--objects`, `--by-source`) stream too, each part
+written to its own WAV as it renders, the manifest's positions accumulated as
+the rows pass; `--gpu` still builds the whole table.
 
 ## Render the corpus
 

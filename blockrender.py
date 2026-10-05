@@ -4087,7 +4087,23 @@ if __name__=="__main__":
         by = 'source' if '--by-source' in sys.argv else 'channel'
         t0 = time.time(); n = 0; tot = 0.0; P = 0; manifest = []
         seen = {}
-        for ch, pos, L, R, p in render_parts(inp, tuner, objects=(mode == 'objects'), by=by):
+        if RENDER_STREAM and not RENDER_GPU:
+            # STREAMED: every part written as it renders (streamrender.render_stems)
+            import streamrender as _STR
+            _s, _parts = _STR.render_stems(inp, tuner, outdir, objects=(mode == 'objects'), by=by,
+                                           B=sys.modules[__name__])
+            _LAST_PREP.clear(); _LAST_PREP.update(_STR.result(_s))
+            for ch, pos, f, p in _parts:
+                rec = {"file": os.path.basename(f), "channel": ch, "partials": p}
+                if pos is not None:
+                    rec["x_m"], rec["z_m"] = round(pos[0], 4), round(pos[1], 4)
+                manifest.append(rec)
+                print("  ch%-3d %s%8d partials -> %s"
+                      % (ch, "" if pos is None else "x=%+6.2f z=%+5.2f " % pos, p, f))
+                n += 1; P += p
+            tot = _s.N / float(SR)
+        for ch, pos, L, R, p in (() if (RENDER_STREAM and not RENDER_GPU) else
+                                 render_parts(inp, tuner, objects=(mode == 'objects'), by=by)):
             if pos is None:
                 name = "%s.ch%02d" % (base, ch)
             else:
