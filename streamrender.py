@@ -124,6 +124,26 @@ class LiveCount:
         return np.cumsum(s - e)[:n]
 
 
+class WavOut:
+    """A stereo WAV written as it renders, window by window -- the bytes
+    blockrender.write_wav would write for the whole (32-bit, clipped,
+    converted sample by sample)."""
+
+    def __init__(self, path, sr):
+        import wave
+        self.w = wave.open(path, 'wb')
+        self.w.setnchannels(2); self.w.setsampwidth(4); self.w.setframerate(sr)
+        self.n = 0
+
+    def write(self, L, R):
+        st = np.empty(len(L) * 2, np.float64); st[0::2] = L; st[1::2] = R
+        self.w.writeframes((np.clip(st, -1, 1) * 2147483647.0).astype('<i4').tobytes())
+        self.n += len(L)
+
+    def close(self):
+        self.w.close()
+
+
 class NotStreamable(Exception):
     """The file needs something the stream does not reproduce: render it whole."""
 
@@ -232,8 +252,17 @@ class Stream:
 
     BATCH = 8
 
-    def __init__(self, send='auto', batch=None, loudest=None, scan=False):
+    def __init__(self, send='auto', batch=None, loudest=None, scan=False, out=None, send_out=None):
+        # out / send_out: WAV paths to write the mix and the reverb send to as
+        # they render (blockrender's command line); otherwise they are kept,
+        # whole, in L, R, SL, SR.
+        # send: True renders the reverb send from the start; 'auto' only once
+        # two channels heard so far send differently (blockrender keeps a send
+        # bus only then) -- and if that is learnt after windows rendered
+        # without it, the stream is `incomplete` and render() runs it again.
         self.want_send = send
+        self.incomplete = False
+        self.out_path, self.send_path = out, send_out
         # TUNING_STREAM_BATCH=1: a window at a time, the strictest test of
         # when the stream decides a window can no longer change
         self.batch = batch or int(os.environ.get('TUNING_STREAM_BATCH', self.BATCH))
@@ -243,7 +272,6 @@ class Stream:
         self.heard = set()
         self.rows = 0
         self.rows_total = 0
-        self.incomplete = False
         self.peak_live = 0
         self.made = {}
         self.dried = set()
@@ -262,10 +290,16 @@ class Stream:
         self.B, self.ctx = B, ctx
         self.N = ctx['N']
         self.W = B._chunk()
-        self.L = np.zeros(self.N, np.float32)
-        self.R = np.zeros(self.N, np.float32)
-        self.SL = np.zeros(self.N, np.float32)
-        self.SR = np.zeros(self.N, np.float32)
+        if self.out_path:
+            self.wout = WavOut(self.out_path, B.SR)
+            self.wsend = WavOut(self.send_path, B.SR) if self.send_path else None
+            self.L = self.R = self.SL = self.SR = None
+        else:
+            self.wout = self.wsend = None
+            self.L = np.zeros(self.N, np.float32)
+            self.R = np.zeros(self.N, np.float32)
+            self.SL = np.zeros(self.N, np.float32)
+            self.SR = np.zeros(self.N, np.float32)
         self.send = self.want_send
         self.cols = None
         self.mfdup = {}
@@ -299,6 +333,10 @@ class Stream:
                 self.flush()
                 self._render(self.wi, self.batch)
                 self.wi += self.batch
+            if next_on is None and self.wout is not None:
+                self.wout.close()
+                if self.wsend is not None:
+                    self.wsend.close()
 
     # -- a note arrives -------------------------------------------------------
     def _note(self, r, i0, i1):
@@ -686,6 +724,8 @@ class Stream:
                 + np.ceil(dl).astype(np.int64) + self.B.BLK)
 
     def _grow(self, n):
+        if self.L is None:
+            return
         if n > len(self.L):
             for k in ('L', 'R', 'SL', 'SR'):
                 a = getattr(self, k)
@@ -705,7 +745,10 @@ class Stream:
             if m.any():
                 sel.append({k: v[m] for k, v in c.items()})
         self.store = [c for c in self.store if c['zend'].max() > w1]
+        n = w1 - w0
         if not sel:
+            self._emit(w0, w1, np.zeros(n, np.float32), np.zeros(n, np.float32),
+                       np.zeros(n, np.float32), np.zeros(n, np.float32))
             return
         rows = _cat(sel)
         order = np.lexsort(rows['key'].T[::-1])
@@ -716,16 +759,15 @@ class Stream:
                     knk=1, kb0=0, **self.ctx['moog_tables']())
         for k, dt in B.FINAL_DTYPES:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
-        n = w1 - w0
         L = np.zeros(n, np.float32); R = np.zeros(n, np.float32)
+        SL = np.zeros(n, np.float32); SR_ = np.zeros(n, np.float32)
         B.synth_partials(prep, w0, n, 0, P, L, R)
-        B._NG.mix(L, R, w0, self.ctx['cons_bursts'], B.SR)
-        mg = B.master_curve(self.ctx['mvol'](), w0, n)
-        if mg is not None:
-            L *= mg; R *= mg
-        L *= T_master_gain(); R *= T_master_gain()
-        np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
-        self.L[w0:w1] = L; self.R[w0:w1] = R
+        # THE SEND, A SECOND RENDER of the same rows at each channel's send, as
+        # blockrender's own send pass makes it. NOT the kernel's send bus in
+        # the same call: under -ffast-math switching that on contracts the
+        # mix's multiply-adds differently, and the mix moved by an ulp (the
+        # corpus hashes with it). Rendered once the channels heard send
+        # differently, which is when blockrender keeps a send at all.
         if self.send == 'auto' and self._split():
             self.send = True
             self.incomplete = wi > 0
@@ -736,10 +778,28 @@ class Stream:
                 g[prep['mch'] == c] = v
             prep['aL'] = prep['aL'] * g
             prep['aR'] = prep['aR'] * g
-            SL = np.zeros(n, np.float32); SR_ = np.zeros(n, np.float32)
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
-            if mg is not None:
-                SL *= mg; SR_ *= mg
+        self._emit(w0, w1, L, R, SL, SR_)
+
+    def _emit(self, w0, w1, L, R, SL, SR_):
+        """synth_window's finishing on this window -- bursts, master fader,
+        gain, clip; the send gets the fader alone -- and out to the arrays or
+        the files."""
+        B = self.B
+        n = w1 - w0
+        B._NG.mix(L, R, w0, self.ctx['cons_bursts'], B.SR)
+        mg = B.master_curve(self.ctx['mvol'](), w0, n)
+        if mg is not None:
+            L *= mg; R *= mg
+            SL *= mg; SR_ *= mg
+        L *= T_master_gain(); R *= T_master_gain()
+        np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
+        if self.wout is not None:
+            self.wout.write(L, R)
+            if self.wsend is not None:
+                self.wsend.write(SL, SR_)
+        else:
+            self.L[w0:w1] = L; self.R[w0:w1] = R
             self.SL[w0:w1] = SL; self.SR[w0:w1] = SR_
 
     def _split(self):
@@ -752,15 +812,17 @@ def T_master_gain():
     return T.master_gain
 
 
-def render(path, tuner, send='auto', B=None):
-    """A whole file, streamed: (L, R, the stream). Raises NotStreamable when
-    the file needs what the stream does not reproduce. A file with a Leslie
-    runs twice: a scanning run for the loudest row, then the render."""
+def render(path, tuner, B=None, out=None, send_out=None, send='auto'):
+    """A whole file, streamed: (L, R, the stream) -- or, given `out` (and
+    `send_out`), written to those WAVs as it renders, and (None, None, the
+    stream). Raises NotStreamable when the file needs what the stream does not
+    reproduce. A file with a Leslie runs twice: a scanning run for the
+    loudest row, then the render."""
     if B is None:
         import blockrender as B
     loudest = None
     while True:
-        s = Stream(send=send, loudest=loudest)
+        s = Stream(send=send, loudest=loudest, out=out, send_out=send_out)
         try:
             info = B.prepare(path, tuner, sink=s)
         except NeedLoudest:
@@ -783,4 +845,5 @@ def result(s):
     room_q = [(f, (d / r) if r > 0.0 else 1.0, d) for f, (d, r) in zip(s.ctx['room_bands'], s.ctx['qacc'])]
     return dict(room_q=room_q, reverb_send=dict(s.ctx['reverb']),
                 mch=np.array(sorted(s.heard), np.int32), N=s.N, total=s.ctx['total'],
-                mvol=s.ctx['mvol'](), stream_send=(s.SL, s.SR) if s.send is True else None)
+                mvol=s.ctx['mvol'](),
+                stream_send=None if s.send is not True else ((s.SL, s.SR) if s.SL is not None else s.send_path))

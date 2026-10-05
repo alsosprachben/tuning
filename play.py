@@ -34,21 +34,21 @@ def main():
 
     sys.stderr.write("preparing %s (%s) ...\n" % (path, tuner)); sys.stderr.flush()
     t0 = time.time()
-    prep = B.prepare(path, tuner)
-    L, R = B.synth_window(prep, 0, prep["N"])
+    # B.render: streamed (memory is what sounds), bit for bit the whole table
+    L, R, total, P, _ = B.render(path, tuner)
     peak = float(max(np.abs(L).max(), np.abs(R).max())) or 1.0
     g = 10 ** (-1.0 / 20.0) / peak                 # normalise to -1 dBFS
     st = np.empty(len(L) * 2, np.float32)
     st[0::2] = np.clip(L * g, -1, 1); st[1::2] = np.clip(R * g, -1, 1)
     data = (st * 2147483647.0).astype("<i4")
     sys.stderr.write("ready: %d partials, %.1fs audio, %.2fs to build+synth -- playing\n"
-                     % (prep["P"], prep["total"], time.time() - t0)); sys.stderr.flush()
+                     % (P, total, time.time() - t0)); sys.stderr.flush()
 
     proc = subprocess.Popen(player_cmd(), stdin=subprocess.PIPE)
     try:
         for i in range(0, len(L), CHUNK):
             proc.stdin.write(data[i * 2:(i + CHUNK) * 2].tobytes())
-            sys.stderr.write("\r  %5.1f / %.1f s" % (i / SR, prep["total"])); sys.stderr.flush()
+            sys.stderr.write("\r  %5.1f / %.1f s" % (i / SR, total)); sys.stderr.flush()
         proc.stdin.close(); proc.wait()
         sys.stderr.write("\n")
     except KeyboardInterrupt:

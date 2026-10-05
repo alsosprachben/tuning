@@ -4124,8 +4124,27 @@ if __name__=="__main__":
         print("blockrender %s: %d parts, %d partials, %.1fs audio, %.2fs = %.1fx realtime"
               % (mode, n, P, tot, dt, tot / dt if dt else 0.0))
         raise SystemExit(0)
-    t0=time.time(); L,R,total,P,kdt=render(inp,tuner); dt=time.time()-t0
-    write_wav(outp, L, R)
+    t0=time.time()
+    _streamed = False
+    if RENDER_STREAM and not RENDER_GPU:
+        # STREAMED TO DISK: the mix and its reverb send written as they render,
+        # so memory is what sounds, not the length of the piece; the send kept
+        # below only if the channels heard send differently
+        import streamrender as _STR
+        _send_tmp = os.path.splitext(outp)[0] + '.send.wav.part'
+        try:
+            _, _, _s = _STR.render(inp, tuner, B=sys.modules[__name__], out=outp, send_out=_send_tmp)
+            _LAST_PREP.clear(); _LAST_PREP.update(_STR.result(_s))
+            total, P, kdt = _s.ctx['total'], _s.rows_total, time.time() - t0
+            _streamed = True
+        except _STR.NotStreamable as e:
+            print("  stream: %s -- rendering the whole table" % e)
+            if os.path.exists(_send_tmp):
+                os.remove(_send_tmp)
+    if not _streamed:
+        L,R,total,P,kdt=render(inp,tuner)
+        write_wav(outp, L, R)
+    dt=time.time()-t0
     _rq = _LAST_PREP.get('room_q')
     _rs = _LAST_PREP.get('reverb_send') or {}
     if _rq:
@@ -4157,10 +4176,13 @@ if __name__=="__main__":
         # would call it split and pay for a second render.
         _heard = sorted(set(int(_c) for _c in np.unique(_mch)))
         _vals = {_rs.get(_c, 1.0) for _c in _heard}
-    if _rs and len(_vals) > 1 and _LAST_PREP.get('stream_send') is not None:
-        # streamed: the bus was rendered beside the mix, window by window
-        _bl, _br = _LAST_PREP['stream_send']
-        write_wav(os.path.splitext(outp)[0] + '.send.wav', _bl, _br)
+    _ss = _LAST_PREP.get('stream_send')
+    if _rs and len(_vals) > 1 and _ss is not None:
+        # streamed: the bus was rendered beside the mix, in the same kernel call
+        if isinstance(_ss, str):
+            os.replace(_ss, os.path.splitext(outp)[0] + '.send.wav')
+        else:
+            write_wav(os.path.splitext(outp)[0] + '.send.wav', _ss[0], _ss[1])
         print("  reverb send: %d channel(s) at their own distance, bus written"
               % len(_rs))
     elif _rs and len(_vals) > 1:
@@ -4183,4 +4205,6 @@ if __name__=="__main__":
         write_wav(os.path.splitext(outp)[0] + '.send.wav', _bl, _br)
         print("  reverb send: %d channel(s) at their own distance, bus written"
               % len(_rs))
+    if _streamed and os.path.exists(_send_tmp):
+        os.remove(_send_tmp)            # one send for all: roomtail scales the mix
     print("blockrender: %.1fs audio, %d partials, kernel %.2fs, total %.2fs = %.1fx realtime -> %s"%(total,P,kdt,dt,total/dt,outp))

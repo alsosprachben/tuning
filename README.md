@@ -749,6 +749,12 @@ them in the order it would have. Files with a Leslie run a scanning pass first
 for the whole file's loudest row, which sets how much rotor lobe each partial
 gets, and take about twice as long.
 
+`blockrender.py` writes the mix (and the reverb send) to disk as it renders,
+so not even the output is held whole; `render()` and `play.py` stream into
+memory. The send is a second render of each window, and only once the
+channels heard send differently: the kernel's send bus in the same call would
+be cheaper, but switching it on moves the mix by an ulp under `-ffast-math`.
+
 `examples/streamcheck.py` holds it to the whole table, mix and reverb send
 byte for byte: `--long` drives every pass across a minute of windows, and
 `TUNING_STREAM_BATCH=1` renders a window at a time, the strictest test of when
