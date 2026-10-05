@@ -3899,11 +3899,12 @@ RENDER_STREAM = os.environ.get('TUNING_STREAM', '1') not in ('0', 'off', '')
 
 
 def render(path, tuner='hybrid440'):
-    if RENDER_STREAM and not RENDER_GPU:
+    if RENDER_STREAM:
         import streamrender as _STR
         try:
             t0 = time.time()
-            L, R, s = _STR.render(path, tuner, B=sys.modules[__name__])
+            L, R, s = _STR.render(path, tuner, B=sys.modules[__name__],
+                                  gpu=_gpu() if RENDER_GPU else None)
             kdt = time.time() - t0
             _LAST_PREP.clear()
             _LAST_PREP.update(_STR.result(s))
@@ -4142,14 +4143,15 @@ if __name__=="__main__":
         raise SystemExit(0)
     t0=time.time()
     _streamed = False
-    if RENDER_STREAM and not RENDER_GPU:
+    if RENDER_STREAM:
         # STREAMED TO DISK: the mix and its reverb send written as they render,
         # so memory is what sounds, not the length of the piece; the send kept
         # below only if the channels heard send differently
         import streamrender as _STR
         _send_tmp = os.path.splitext(outp)[0] + '.send.wav.part'
         try:
-            _, _, _s = _STR.render(inp, tuner, B=sys.modules[__name__], out=outp, send_out=_send_tmp)
+            _, _, _s = _STR.render(inp, tuner, B=sys.modules[__name__], out=outp, send_out=_send_tmp,
+                                   gpu=_gpu() if RENDER_GPU else None)
             _LAST_PREP.clear(); _LAST_PREP.update(_STR.result(_s))
             total, P, kdt = _s.ctx['total'], _s.rows_total, time.time() - t0
             _streamed = True

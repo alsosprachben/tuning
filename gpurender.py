@@ -298,20 +298,24 @@ class FileRenderer:
                     + np.ceil(dl).astype(np.int64) + B.BLK)
         self.wins = [_Window(self.gpu.ctx), _Window(self.gpu.ctx)]
 
-    def render(self, N, send_w=None):
-        """Samples [0, N): (L, R, SL, SR), unscaled -- synth_partials' output.
-        send_w: per-partial send weights (the reverb bus), or None."""
+    def render(self, N, send_w=None, n0=0):
+        """Samples [n0, N): (L, R, SL, SR), unscaled -- synth_partials' output.
+        send_w: per-partial send weights (the reverb bus), or None. n0, a
+        multiple of the block: where to start (the stream renders a batch of
+        windows at a time)."""
         prep, BLK, W = self.prep, B.BLK, self.W
+        assert n0 % BLK == 0
+        self.n0 = n0
         send = send_w is not None
         prep['sw'] = (np.ascontiguousarray(send_w, np.float32) if send
                       else np.zeros(1, np.float32))
         self.args = B._voice_args(prep, lambda k: prep[k], prep['P'])
-        out = np.zeros((4, N), np.float32)
+        out = np.zeros((4, N - n0), np.float32)
         mg = moog_grid(BLK)
         nb = -(-N // BLK)
         self.ptr, self.active = 0, np.zeros(0, np.int64)
         turn = 0
-        for wb in range(0, nb, W):
+        for wb in range(n0 // BLK, nb, W):
             w = self.wins[turn]
             if w.pending:                   # this window's last launch, done first
                 self._collect(w, out, N)
@@ -392,7 +396,7 @@ class FileRenderer:
         s0 = 0
         for j, n in enumerate(blk_wg):
             if n:
-                a = (wb + j) * BLK
-                e = min(N, a + BLK)
+                a = (wb + j) * BLK - self.n0
+                e = min(N - self.n0, a + BLK)
                 out[:, a:e] += res[:, s0:s0 + n, :e - a].sum(1)
             s0 += n

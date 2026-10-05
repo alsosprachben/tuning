@@ -267,7 +267,7 @@ class Stream:
     BATCH = 8
 
     def __init__(self, send='auto', batch=None, loudest=None, scan=False, out=None, send_out=None,
-                 stems=None):
+                 stems=None, gpu=None):
         # out / send_out: WAV paths to write the mix and the reverb send to as
         # they render (blockrender's command line); otherwise they are kept,
         # whole, in L, R, SL, SR.
@@ -275,6 +275,10 @@ class Stream:
         # two channels heard so far send differently (blockrender keeps a send
         # bus only then) -- and if that is learnt after windows rendered
         # without it, the stream is `incomplete` and render() runs it again.
+        # gpu: a gpurender.Gpu -- the windows' samples on it (gpurender.
+        # FileRenderer), held to the CPU at 1e-5, not bit for bit; the send in
+        # the same pass, the kernel's send bus being the GPU's anyway
+        self.gpu = gpu
         self.want_send = send
         self.incomplete = False
         self.out_path, self.send_path = out, send_out
@@ -791,6 +795,17 @@ class Stream:
                     knk=1, kb0=0, **self.ctx['moog_tables']())
         for k, dt in B.FINAL_DTYPES:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
+        if self.gpu is not None:
+            import gpurender as GR
+            rs = self.ctx['reverb']
+            g = np.ones(P, np.float32)
+            for c, v in rs.items():
+                g[prep['mch'] == c] = v
+            if self.send == 'auto' and self._split():
+                self.send = True
+            L, R, SL, SR_ = GR.FileRenderer(prep, self.gpu).render(w1, send_w=g, n0=w0)
+            self._emit(w0, w1, L, R, SL, SR_)
+            return
         L = np.zeros(n, np.float32); R = np.zeros(n, np.float32)
         SL = np.zeros(n, np.float32); SR_ = np.zeros(n, np.float32)
         B.synth_partials(prep, w0, n, 0, P, L, R)
@@ -932,7 +947,7 @@ def T_master_gain():
     return T.master_gain
 
 
-def render(path, tuner, B=None, out=None, send_out=None, send='auto'):
+def render(path, tuner, B=None, out=None, send_out=None, send='auto', gpu=None):
     """A whole file, streamed: (L, R, the stream) -- or, given `out` (and
     `send_out`), written to those WAVs as it renders, and (None, None, the
     stream). Raises NotStreamable when the file needs what the stream does not
@@ -942,7 +957,8 @@ def render(path, tuner, B=None, out=None, send_out=None, send='auto'):
         import blockrender as B
     loudest = None
     while True:
-        s = Stream(send=send, loudest=loudest, out=out, send_out=send_out)
+        s = Stream(send=send if gpu is None else True, loudest=loudest, out=out,
+                   send_out=send_out, gpu=gpu)
         try:
             info = B.prepare(path, tuner, sink=s)
         except NeedLoudest:

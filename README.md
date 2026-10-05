@@ -761,7 +761,10 @@ byte for byte: `--long` drives every pass across a minute of windows, and
 a window can no longer change. The corpus, streamed, matches its golden hashes.
 Stems and objects (`--stems`, `--objects`, `--by-source`) stream too, each part
 written to its own WAV as it renders, the manifest's positions accumulated as
-the rows pass; `--gpu` still builds the whole table.
+the rows pass. `--gpu` streams as well, each batch of windows rendered on the
+GPU (the send in the same pass there, since the GPU is held to the CPU at
+1e-5 rather than bit for bit): Mars 70 s and 0.60 GB, against the CPU
+stream's 117 s and 0.22 GB, the two within 9e-6.
 
 ## Render the corpus
 
