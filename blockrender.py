@@ -1136,7 +1136,7 @@ PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa",
 MOOG_NEUTRAL = False
 
 
-def prepare(path, tuner='hybrid440'):
+def prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
     full window) and play.py (streamed windows)."""
@@ -1663,7 +1663,17 @@ def prepare(path, tuner='hybrid440'):
     # Valkyries' 16M partials ran a 7 GB machine out of memory. A double is
     # what the list's float WAS, so the table converts to the same bits (and an
     # int, a sample index or a row, fits one exactly).
-    cols = {k:_dcol(k) for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl","fmw","fmp","fmpR","nfr")}
+    # STREAMED (sink given): each note's rows go to sink(A, i0, i1) the moment
+    # they are final -- when the next note flushes its sound controllers --
+    # and the columns can let go of rows behind them (streamrender.PrefixCol,
+    # indexed by global row as these are). See streamrender.
+    if sink is not None:
+        import streamrender as _SR
+        _dcol_ = lambda k: _SR.PrefixCol(_dcol(k).typecode)         # noqa: E731
+    else:
+        _dcol_ = _dcol
+    _S0 = [None]             # the note being emitted: its first row (streamed only)
+    cols = {k:_dcol_(k) for k in ("az","dr","om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa","re","ch","logr","logrA","aft","sus","cv","cc","crl","sj","csc","cbw","tbav","tau","tcut","gb","gt","gc","vd","vr","vp","vdl","delL","delR","gr","cr","br","p0R","pl","fx","mk","rdl","fmw","fmp","fmpR","nfr")}
     A = cols  # alias
     _BR = [-1]               # per-note bend row, -1 = this note does not bend
     _TB = [0.0, 0.28, 1.8]   # per-note [tension_bend*attack_volume, settle_time, settle_cutoff]
@@ -2410,12 +2420,58 @@ def prepare(path, tuner='hybrid440'):
 
     _SND_PEND = [None]
     _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
+
+    def _mvol():
+        """MASTER VOLUME, the device's own fader: every channel, after
+        everything. A GM System On puts it back to full. Kept as (sample,
+        gain) steps and ramped where it is applied, in synth_window."""
+        _mv = [(_t, _q, _v) for _t, _k, _v, _q in master if _k == 'vol']
+        _mv += [(_t, _q, 1.0) for _t, _q in gmon]
+        _mv.sort(key=lambda e: (e[0], e[1]))
+        mv = [(int(round(_t * SR)), float(_g)) for _t, _q, _g in _mv]
+        if mv and all(abs(_g - 1.0) < 1e-12 for _, _g in mv):
+            mv = []                     # a file that only ever says "full"
+        return mv
+
+    def _moog_tables():
+        """THE MOOG'S ROWS (moog.py), as far as they have been built. None when
+        the file has no Moog note, and the kernel then never reads fx -- every
+        other file renders as it did."""
+        FT = (np.ascontiguousarray(np.array(_MOOG_FT, np.float32).reshape(-1))
+              if _MOOG_FT else None)
+        KN = (np.ascontiguousarray(np.array(_MOOG_KN, np.float32).reshape(-1))
+              if _MOOG_KN else None)
+        _mpon = any(int(r[12]) & 1 for r in _MOOG_FT) if _MOOG_FT else False
+        MPI = np.ascontiguousarray(np.array(_MOOG_MPI, np.int32).reshape(-1)) if _mpon else None
+        MPC = np.ascontiguousarray(np.array(_MOOG_MPC or [0.0], np.float64)) if _mpon else None
+        MPR = np.ascontiguousarray(np.array(_MOOG_MPR or [1.0], np.float32)) if _mpon else None
+        _mkon = any(int(r[12]) & 14 for r in _MOOG_FT) if _MOOG_FT else False
+        MKI = np.ascontiguousarray(np.array(_MOOG_MKI, np.int32).reshape(-1)) if _mkon else None
+        MPK = np.ascontiguousarray(np.concatenate(_MOOG_MPK).astype(np.float32)) if _mkon else None
+        return dict(FT=FT, KN=KN, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK)
+
+    if sink is not None and hasattr(sink, 'begin'):
+        # what a streamed render needs besides the rows: the kernel's whole-file
+        # rows and side tables, the bursts, the fader, and the per-channel
+        # settings the effects read (live dicts: filled as channels first sound)
+        sink.begin(dict(mod=sys.modules[__name__], room_bands=ROOM_BANDS,
+                        lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
+                        cons_bursts=cons_bursts, mvol=_mvol, moog_tables=_moog_tables,
+                        reverb=_REVERB_CH, qacc=_QACC,
+                        effects=dict(sympathetic=_SYM_CH, mf104=_MF104, tubeamp=_AMP_CH,
+                                     clavinet=_CLAV_CH, htremolo=_HTREM_CH, tremolo=_TREM_CH,
+                                     chorus=_CHORUS_CH, cabinet=_CAB_CH, leslie=_LESLIE_CH)))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
         if _HT_PEND[0] is not None:
             _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
+        if sink is not None:            # the last note's rows are final
+            if _S0[0] is not None:
+                # ...and every note to come starts at or after this one
+                sink(A, _S0[0], len(A['om']), int(on * SR))
+            _S0[0] = len(A['om'])
         _SV[0], _SV[1] = 0.0, 1.0; _VDL[0] = 0.0
         _MCH[0] = ch
         choked = None
@@ -3408,6 +3464,17 @@ def prepare(path, tuner='hybrid440'):
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
     if _HT_PEND[0] is not None:
         _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
+    if sink is not None:
+        if _S0[0] is not None:
+            sink(A, _S0[0], len(A['om']), None)
+        # the note rows only, so far: the post-passes and the windowed render
+        # are the next phases of the streaming renderer
+        return dict(N=N, nblk=nblk, P=len(A['om']), notes=len(notes),
+                    # which post-passes this file would run, by channel
+                    effects={k: sorted(v) for k, v in (
+                        ('sympathetic', _SYM_CH), ('mf104', {i for i, _, _ in _MF104}), ('tubeamp', _AMP_CH),
+                        ('clavinet', _CLAV_CH), ('harmonium tremolo', _HTREM_CH), ('tremolo', _TREM_CH),
+                        ('chorus', _CHORUS_CH), ('cabinet', _CAB_CH), ('leslie', _LESLIE_CH)) if v})
 
     # A CONSONANT IS SUNG BY THE SECTION, NOT BY A POINT.
     #
@@ -3649,41 +3716,29 @@ def prepare(path, tuner='hybrid440'):
     # MASTER VOLUME, the device's own fader: every channel, after everything.
     # A GM System On puts it back to full. Kept as (sample, gain) steps and
     # ramped where it is applied, in synth_window.
-    _mv = [(_t, _q, _v) for _t, _k, _v, _q in master if _k == 'vol']
-    _mv += [(_t, _q, 1.0) for _t, _q in gmon]
-    _mv.sort(key=lambda e: (e[0], e[1]))
-    mvol = [(int(round(_t * SR)), float(_g)) for _t, _q, _g in _mv]
-    if mvol and all(abs(_g - 1.0) < 1e-12 for _, _g in mvol):
-        mvol = []                       # a file that only ever says "full"
-    # THE MOOG'S ROWS (moog.py). None when the file has no Moog note, and the
-    # kernel then never reads fx -- every other file renders as it did.
-    FT = (np.ascontiguousarray(np.array(_MOOG_FT, np.float32).reshape(-1))
-          if _MOOG_FT else None)
-    KN = (np.ascontiguousarray(np.array(_MOOG_KN, np.float32).reshape(-1))
-          if _MOOG_KN else None)
-    _mpon = any(int(r[12]) & 1 for r in _MOOG_FT) if _MOOG_FT else False
-    MPI = np.ascontiguousarray(np.array(_MOOG_MPI, np.int32).reshape(-1)) if _mpon else None
-    MPC = np.ascontiguousarray(np.array(_MOOG_MPC or [0.0], np.float64)) if _mpon else None
-    MPR = np.ascontiguousarray(np.array(_MOOG_MPR or [1.0], np.float32)) if _mpon else None
-    _mkon = any(int(r[12]) & 14 for r in _MOOG_FT) if _MOOG_FT else False
-    MKI = np.ascontiguousarray(np.array(_MOOG_MKI, np.int32).reshape(-1)) if _mkon else None
-    MPK = np.ascontiguousarray(np.concatenate(_MOOG_MPK).astype(np.float32)) if _mkon else None
+    mvol = _mvol()
+    _mt = _moog_tables()
+    FT, KN, MPI, MPC, MPR, MKI, MPK = (_mt[k] for k in ('FT', 'KN', 'MPI', 'MPC', 'MPR', 'MKI', 'MPK'))
     prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
                 FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH))
-    for k,dt in (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("br","i4"),
-                 ("px","f4"),("pz","f4"),("nf","f4"),
-                 ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
-                 ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
-                 ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
-                 ("tbav","f4"),("tau","f4"),("tcut","f4"),
-                 ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vdl","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
-                 ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4"),("rdl","f4"),
-                 ("fmw","f8"),("fmp","f8"),("fmpR","f8"),("nfr","f4")):
+    for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep
+
+# The table's columns as the kernel takes them (prepare's last step; a
+# streamed window's table is converted the same way, streamrender)
+FINAL_DTYPES = (("az","f4"),("om","f8"),("p0","f8"),("aL","f4"),("aR","f4"),("aM","f4"),("mch","i4"),("br","i4"),
+                ("px","f4"),("pz","f4"),("nf","f4"),
+                ("non","i8"),("noff","i8"),("fa","f4"),("re","f4"),("ch","f4"),
+                ("logr","f4"),("logrA","f4"),("aft","f4"),("sus","f4"),
+                ("cv","f4"),("cc","f4"),("crl","f4"),("sj","f4"),("csc","f4"),("cbw","f4"),
+                ("tbav","f4"),("tau","f4"),("tcut","f4"),
+                ("gb","f4"),("gt","f4"),("gc","f4"),("vd","f4"),("vdl","f4"),("vr","f4"),("vp","f4"),("delL","f4"),("delR","f4"),
+                ("gr","i4"),("cr","i4"),("p0R","f8"),("pl","i4"),("fx","i4"),("mk","i4"),("rdl","f4"),
+                ("fmw","f8"),("fmp","f8"),("fmpR","f8"),("nfr","f4"))
 
 # How long a Master Volume change takes to arrive. A step in gain is a step in
 # the waveform, and a step is a click -- the same argument RETRIGGER_FADE makes
@@ -3834,8 +3889,27 @@ _NO_ROWS = np.zeros(16, np.float32)
 _LAST_PREP = {}
 
 
+# STREAMED by default (streamrender): the partials rendered a window at a time
+# as the notes are emitted, so memory is what sounds at once, not the piece --
+# bit for bit the whole table's render. TUNING_STREAM=0 builds the whole table;
+# a file using a pass the stream does not reproduce yet builds it anyway.
+RENDER_STREAM = os.environ.get('TUNING_STREAM', '1') not in ('0', 'off', '')
+
+
 def render(path, tuner='hybrid440'):
+    if RENDER_STREAM and not RENDER_GPU:
+        import streamrender as _STR
+        try:
+            t0 = time.time()
+            L, R, s = _STR.render(path, tuner, B=sys.modules[__name__])
+            kdt = time.time() - t0
+            _LAST_PREP.clear()
+            _LAST_PREP.update(_STR.result(s))
+            return L, R, s.ctx['total'], s.rows_total, kdt
+        except _STR.NotStreamable as e:
+            print("  stream: the %s pass is not streamed yet -- rendering the whole table" % e)
     prep = prepare(path, tuner)
+    _LAST_PREP.clear()
     _LAST_PREP.update(prep)
     t0=time.time(); L,R = synth_window(prep, 0, prep['N']); kdt=time.time()-t0
     return L,R,prep['total'],prep['P'],kdt
@@ -4081,7 +4155,13 @@ if __name__=="__main__":
         # would call it split and pay for a second render.
         _heard = sorted(set(int(_c) for _c in np.unique(_mch)))
         _vals = {_rs.get(_c, 1.0) for _c in _heard}
-    if _rs and len(_vals) > 1:
+    if _rs and len(_vals) > 1 and _LAST_PREP.get('stream_send') is not None:
+        # streamed: the bus was rendered beside the mix, window by window
+        _bl, _br = _LAST_PREP['stream_send']
+        write_wav(os.path.splitext(outp)[0] + '.send.wav', _bl, _br)
+        print("  reverb send: %d channel(s) at their own distance, bus written"
+              % len(_rs))
+    elif _rs and len(_vals) > 1:
         _g = np.ones(len(_mch), np.float32)
         for _c in _heard:
             _g[_mch == _c] = _rs.get(_c, 1.0)
