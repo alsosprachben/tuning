@@ -2413,9 +2413,13 @@ class Patch:
             # that anything added to those passes later is caught too.
             with quiet():
                 B.MOOG_NEUTRAL = True        # the slab applies the panel
+                # a fixed-touch voice's template at the jack's own level; the
+                # stamp applies velocity when the part's switch is off
+                T.FIXED_TOUCH = True
                 p = B.prepare(m, self.tuner)
         finally:
             B.MOOG_NEUTRAL = False
+            T.FIXED_TOUCH = False
             _L.SIDEBANDS = _was
             _TA.ENABLED = _wasa
         t = {k: np.array(p[k]) for k in ALL_COLS}
@@ -2577,6 +2581,10 @@ class Part:
         self.transpose = transpose
         self.level_db = level_db
         self.muted = False
+        # FIXED TOUCH: a voice whose key only trips a jack or opens a valve
+        # ignores velocity for its level -- on by default live, as on the
+        # instrument; off, it follows velocity as a GM module would
+        self.fixed_touch = True
         self.cres = 0.0
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
         self.synth_b = {}       # ...and a layered Moog's second Messenger's
@@ -2641,6 +2649,8 @@ class Part:
             d["synth_units"] = 5            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
+        if not self.fixed_touch:
+            d["fixed_touch"] = False
         return d
 
     @staticmethod
@@ -2671,6 +2681,7 @@ class Part:
                         own.update(_MG.convert_v3(own, context=ctx))
                     own.update(_MG.convert_v4(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
+        p.fixed_touch = bool(d.get("fixed_touch", True))
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
             p.drawn = {r for r in p.drawn if r in patch.rank_names}
@@ -2732,6 +2743,7 @@ class Live:
         self.chanstate = {}
         self.stopword = {}           # channel -> [CC43, CC44], a harmonium's stop word
         self.xnote = {}              # slot key -> the bellows (0..1) its Expression was stamped at
+        self.note_touch = {}         # (part, channel, note) -> its velocity's level, if the part follows it
         # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
         # MIDI 1.0 is being carried as MIDI 2.0; None means MIDI 1.0 straight in.
         self.midi2 = None
@@ -3954,6 +3966,12 @@ class Live:
         if part.patch.touch_sensitive:
             scale *= ((vel / 127.0) ** 2 /
                       max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9))
+        # A FIXED-TOUCH VOICE WITH ITS SWITCH OFF follows velocity as any voice
+        # does: its template is at the jack's level, which is velocity 127's
+        self.note_touch[(part.pid, ch, note)] = _tf = (
+            1.0 if (part.patch.touch_sensitive or part.fixed_touch) else (vel / 127.0) ** 2)
+        if not part.patch.touch_sensitive:
+            scale *= _tf
         self._amp_touch(part)
         if part.organ:
             # A pipe organ has no touch: a key is open or shut, and the wind
@@ -5869,7 +5887,8 @@ class Live:
         # scale computed in _note_on, because this branch returns before that
         # is used.
         if not self.slab.stamp_cols(cols, n, key, n0,
-                                    part.gain() * self._chan_gain(ch),
+                                    part.gain() * self._chan_gain(ch)
+                                    * self.note_touch.get((part.pid, ch, note), 1.0),
                                     hrel, 0, False):
             self.dropped += 1
             return
@@ -10211,15 +10230,48 @@ def selftest():
     # not the key, and they must still work -- an organ's swell box and an
     # accordion's bellows are exactly that, so a fixed-volume patch that ignored
     # them would be a worse model, not a purer one.
+    # With FIXED TOUCH in force, as live builds these voices (a file render
+    # does not: there velocity is the mix, note by note -- checked below).
     _hc = _PMt.property_class_for_note(6, 60)
-    _full = _hc(261.63, 0.0, 1.0, 1.0).gain
-    _soft_key = _hc(261.63, 0.0, (20 / 127.0) ** 2, 1.0).gain
-    _soft_cc = _hc(261.63, 0.0, 1.0, (20 / 127.0) ** 2).gain
+    T.FIXED_TOUCH = True
+    try:
+        _full = _hc(261.63, 0.0, 1.0, 1.0).gain
+        _soft_key = _hc(261.63, 0.0, (20 / 127.0) ** 2, 1.0).gain
+        _soft_cc = _hc(261.63, 0.0, 1.0, (20 / 127.0) ** 2).gain
+    finally:
+        T.FIXED_TOUCH = False
     check("...but channel volume still does, which is the swell and the bellows",
           abs(_soft_key - _full) < 1e-12 and _soft_cc < 0.1 * _full,
           "  (velocity 20 moves it %.2f dB, CC7 20 moves it %.1f)"
           % (20.0 * math.log10(_soft_key / _full),
              20.0 * math.log10(_soft_cc / _full)))
+    # ...AND A FILE'S VELOCITIES ARE ITS MIX. Fixed touch is the player's
+    # instrument, not the sequencer's: the Four Seasons' continuo harpsichord,
+    # written at velocity 45 under strings at 45-92, came up 18 dB while every
+    # file ignored them. Out of live, velocity sets the level, by the same law.
+    _soft_file = _hc(261.63, 0.0, (20 / 127.0) ** 2, 1.0).gain
+    check("...and a FILE's velocities set a fixed-touch voice's level, as its mix",
+          abs(20.0 * math.log10(_soft_file / _full) - 40.0 * math.log10(20 / 127.0)) < 0.01,
+          "  (velocity 20: %.2f dB, the law %.2f)"
+          % (20.0 * math.log10(_soft_file / _full), 40.0 * math.log10(20 / 127.0)))
+    # ...and live's per-part switch: on by default; off, velocity sets the level
+    _lt = Live(program=6, rate=48000, frames=128, verbose=False, tuner="even")
+    _lt.warm()
+    def _tl(_fixed, _v):
+        _lt.parts[0].fixed_touch = _fixed
+        _lt.on_midi(mido.Message("note_on", channel=0, note=60, velocity=_v))
+        _b = [np.frombuffer(_lt.callback(None, 128, None, 0)[0], np.float32) for _ in range(40)]
+        _lt.on_midi(mido.Message("note_off", channel=0, note=60))
+        for _ in range(400):
+            _lt.callback(None, 128, None, 0)
+        return 20.0 * math.log10(np.sqrt(np.mean(np.concatenate(_b).astype(float) ** 2)) + 1e-30)
+    _on = _tl(True, 30) - _tl(True, 120)
+    _off = _tl(False, 30) - _tl(False, 120)
+    check("live's touch switch: fixed by default, and off follows velocity",
+          Part(_lt.parts[0].patch).fixed_touch and abs(_on) < 0.1
+          and abs(_off - 40.0 * math.log10(30 / 120.0)) < 0.5,
+          "  (v30 against v120: %+.1f dB fixed, %+.1f dB following)" % (_on, _off))
+    _lt.renderer.close()
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
     # striking a string and is famously expressive; a harmonica has no key at
     # all, so the player's breath is both the valve and the dynamic.

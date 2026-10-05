@@ -877,6 +877,17 @@ def _strike_bit(frequency, harmonic):
     return (h >> 13) & 1
 
 
+# FIXED TOUCH: whether a voice whose key only trips a jack or opens a valve
+# (touch_sensitive = False: harpsichord, the organs, harmonium, accordions)
+# ignores velocity for its level. Off for rendering a FILE, where velocity is
+# the sequencer's mix, set note by note, and must be obeyed -- the Four
+# Seasons' continuo harpsichord written at velocity 45 came up 18 dB when it
+# was not. On for playing live, where velocity is the player's touch, which
+# such an instrument does not have (live.py builds those templates with it on,
+# and each part has a switch for it).
+FIXED_TOUCH = False
+
+
 class SynthProperties:
     # dB of attenuation for EVEN harmonics, or None to use odd_only absolutely.
     # See series_volume(): a real stopped pipe suppresses its even harmonics,
@@ -2301,9 +2312,12 @@ class SynthProperties:
 
         # attack_volume = per-note velocity gain, channel_volume = CC7*CC11
         # channel gain, both already squared to the MIDI (V/127)^2 law.
-        # touch_sensitive: a key that only trips a jack or opens a valve does not
-        # set the level. channel_volume is untouched -- see the note on the flag.
-        _touch = self.attack_volume if self.touch_sensitive else 1.0
+        # touch_sensitive False: a key that only trips a jack or opens a valve
+        # does not set the level -- but only where FIXED_TOUCH is in force,
+        # which live.py turns on for these voices (each part can turn it off).
+        # A FILE's velocities are its mix, note by note, and are always obeyed.
+        # channel_volume is untouched either way -- see the note on the flag.
+        _touch = self.attack_volume if (self.touch_sensitive or not FIXED_TOUCH) else 1.0
         self.gain = (self.initial_gain * db_amplitude(self.octave_gain * self.octave_position)
                      * db_amplitude(self.register_effort() + self.projection_db)
                      * _touch * self.channel_volume)

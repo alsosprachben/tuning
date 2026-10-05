@@ -3217,7 +3217,8 @@ def prepare(path, tuner='hybrid440', sink=None):
             # a pipe stands on is the parent's question, not the spectrum's.
             # This also moves the bagpipe's trumpet rank and the synth lead's
             # flute, both borrowed into voices with no touch of their own.
-            _rank_av = (vel/127.0)**2 if getattr(props, 'touch_sensitive', True) else 1.0
+            _rank_av = ((vel/127.0)**2 if (getattr(props, 'touch_sensitive', True) or not T.FIXED_TOUCH)
+                        else 1.0)
             spv = T.rank_spectrum(spec_cls)(f0, pan, _rank_av, chan_vol) if spec_cls else None
             hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
             # ...UNLESS THE BORROWED CLASS IS ITSELF AN ORGAN PIPE, when the rank

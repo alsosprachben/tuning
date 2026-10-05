@@ -179,9 +179,9 @@ class Builder(threading.Thread):
 # two keys (- and +) change every one of them, so there are no per-field modes to
 # remember. PATCH and TUNER are the only columns that cost a build.
 
-COLS = ("patch", "ch", "lo", "hi", "tr", "level", "tuner", "stops")
+COLS = ("patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops")
 COL_W = {"patch": 24, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8,
-         "tuner": 11, "stops": 11}
+         "tuner": 11, "touch": 6, "stops": 11}
 
 # Which columns open a picker on enter, and which take a typed value. Every
 # column answers enter with something -- it used to always open the patch
@@ -515,6 +515,8 @@ class TUI:
             p.level_db = max(LEVEL_DB_MIN,
                              min(LEVEL_DB_MAX,
                                  p.level_db + delta * (3.0 if big else 0.5)))
+        elif col == "touch":
+            self.toggle_touch(p)
         elif col == "stops":
             # -/+ adds and removes ranks in the organ's own crescendo order, so
             # the column behaves like every other one; enter is where you pick
@@ -672,8 +674,21 @@ class TUI:
             self.pick_tuner(scr)
         elif col == "stops":
             self.pick_stops(scr)
+        elif col == "touch":
+            self.toggle_touch(self.sel())
         else:
             self.type_value(scr, col)
+
+    def toggle_touch(self, p):
+        """FIXED TOUCH, for a voice whose key only trips a jack or opens a
+        valve: on, velocity does not set its level (the instrument's way); off,
+        it does (a GM module's). Other voices always follow velocity."""
+        if p is None or p.patch.touch_sensitive:
+            return
+        p.fixed_touch = not p.fixed_touch
+        self.say("part %d: %s" % (self.row + 1, "fixed touch -- the key sets no level"
+                                  if p.fixed_touch else "velocity sets the level"))
+        self.live.dirty = True
 
     def type_value(self, scr, col):
         """Type a value into a numeric column. Ranges take a note name too, so
@@ -1541,6 +1556,10 @@ class TUI:
             return "%+.1f dB" % p.level_db
         if c == "tuner":
             return p.tuner
+        if c == "touch":
+            if p.patch.touch_sensitive:
+                return "vel"
+            return "fixed" if p.fixed_touch else "vel"
         if c == "stops":
             if not p.organ:
                 return "-"
@@ -1611,10 +1630,19 @@ class TUI:
             "  enter             acts on the HIGHLIGHTED COLUMN:",
             "                      patch / tuner / stops -> a picker",
             "                      ch, lo, hi, tr, level -> type a value",
+            "                      touch -> fixed / vel (enter or - +)",
             "  a                 LAYER: duplicate this part over the same keys",
             "  s                 SPLIT: halve this part's range into two parts",
             "  d                 remove this part        m   mute / unmute",
             "  1..9, shift+1..9  on an organ part, draw or retire that stop",
+            "",
+            "touch",
+            "  fixed: a harpsichord, organ, harmonium or accordion ignores how",
+            "  hard the key goes down -- the jack or the valve sets the level,",
+            "  as on the instrument. vel: velocity sets it, as a GM module's",
+            "  would. Fixed by default; every other voice always follows",
+            "  velocity. (A file render always follows its velocities: there",
+            "  they are the mix.)",
             "",
             "stops",
             "  the mod wheel walks the crescendo order, which does NOT contain",
