@@ -41,11 +41,24 @@ def run(cmd, env=None):
 
 
 def fixed(src, dst):
+    """The two programs corrected, and the file's REVERB SENDS DROPPED. This
+    renderer reads CC91 as a distance (CC91/40 times the nominal one), and the
+    file's sequencer set 64-100 everywhere -- every section 1.6 to 2.5 times
+    farther back, the brass furthest -- written for a GM synth's reverb knob.
+    In the hall that was boomy (Ben: "It is very boomy"); without them every
+    section stands at the hall's own distance."""
     m = mido.MidiFile(src)
     for tr in m.tracks:
+        out, carry = mido.MidiTrack(), 0
         for msg in tr:
             if msg.type == 'program_change' and msg.channel in FIX and msg.program == FIX[msg.channel][0]:
                 msg.program = FIX[msg.channel][1]
+            if msg.type == 'control_change' and msg.control == 91:
+                carry += msg.time
+                continue
+            out.append(msg.copy(time=msg.time + carry))
+            carry = 0
+        tr[:] = out
     m.save(dst)
 
 
