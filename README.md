@@ -559,6 +559,10 @@ lost the ramp every other mid-block onset has (2.4e-2 in Mars, whose notes land
 on whole seconds). The chunks are now 86 blocks (`blockrender._chunk`), and a
 render is the same however it is cut.
 
+Starting live with `--gpu` also turns on a piano's free strings, the pedal's
+halo: see *The pedal's halo* under *Render a file*. That is decided when
+live starts, so the panel's `gpu` control does not bring them in.
+
 ### Real-time priority
 
 Worth checking before blaming the synth:
@@ -765,6 +769,68 @@ the rows pass. `--gpu` streams as well, each batch of windows rendered on the
 GPU (the send in the same pass there, since the GPU is held to the CPU at
 1e-5 rather than bit for bit): Mars 70 s and 0.60 GB, against the CPU
 stream's 117 s and 0.22 GB, the two within 9e-6.
+
+### The pedal's halo: the free strings
+
+With the damper pedal down, every string of a piano is free, and each strike
+drives the ones its partials land near, through the bridge. That is the
+pedal's halo. Lehtonen et al. (JASA 2007) measured three effects: the
+partials' decay changes, mostly in the middle register; the unison strings'
+beating changes; and the residual's energy grows. `register.py` models them
+for every piano, on by default (`TUNING_REGISTER=0` turns it off;
+`TUNING_REGISTER=4` makes it four times as strong). Nothing else has a
+coupling, so nothing else pays for it.
+
+**The register is the rendered strings.** Each key's modes come from the
+same functions the note loop emits its partials with, at the tuning in
+force. They carry the key's own inharmonicity, unison detune and pitch
+error, which is fixed per key, as a real piano's is. So what the register
+does with a temperament is what that temperament's strings would do. Under
+equal temperament, a fifth's partials meet 0.67 Hz apart and the free string
+rings at −12.3 dB. A just fifth, still 0.22 Hz off once inharmonicity
+stretches the partials, rings at −4.4. A just third rings at −13.6 against
+equal temperament's −35.4.
+
+**The response is solved, not assumed.** Each free mode is a damped
+resonator driven by each struck partial, in closed form, so the answer is
+exact at any frequency offset:
+
+- a **free part** at the mode's own pitch: the halo;
+- a **forced part** riding the struck note: the changed decay and beating.
+
+A hard strike's opening pitch glide is integrated where it matters. When a
+note's damper falls, its forced part fades into the free strings, so
+nothing steps. The hammer's knock kicks every free string a little. A string
+is free:
+
+- while the pedal is down;
+- while its own key is held, or held by the sostenuto;
+- always, above the dampers (the top 18 keys).
+
+The level was set by ear on *Ondine*, about 25 dB under the struck strings.
+
+It streams **bit for bit** like every other pass. `register.Channel` hands
+out a row only once nothing still to come can change it, and the whole
+table runs the same object to the end. All of *Ondine*, 1.7 million rows,
+matches byte for byte, mix and send. That piece renders in 126 s at 264 MB
+with the register, against 33 s without. `examples/pedal_register.py`
+checks four things:
+
+- the strings are the rendered ones (to 4e-16, under seven tuners and an
+  MTS dump);
+- the formula against a direct integration;
+- what each temperament does;
+- the pedal's behaviour.
+
+**Live**, it needs `--gpu`: a pedalled chord is a couple of thousand rows,
+and the slab doubles to 32,768 to hold them. The response is computed on a
+worker process of its own, because as a thread it held the interpreter lock
+long enough to break the audio budget. The worker starts with the first
+piano and builds its strings at warm-up. Its answers land a block or two
+after the strike. Dampers act on the audio thread at once. At 128 frames, a
+pedalled 10-note chord's blocks peak at 2.63 ms of their 2.67 ms budget
+(1.83 ms without the register), so on a busy machine or with bigger chords,
+it can underrun.
 
 ## Render the corpus
 

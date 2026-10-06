@@ -3978,11 +3978,12 @@ _LAST_PREP = {}
 # a file using a pass the stream does not reproduce yet builds it anyway.
 RENDER_STREAM = os.environ.get('TUNING_STREAM', '1') not in ('0', 'off', '')
 # THE FREE-STRING REGISTER (register.py): a piano's undamped strings answering
-# its strikes. On by TUNING_REGISTER=1 while it is being tuned by ear; the
-# stream does not carry it yet, so a render with it on is a whole-table one.
-REGISTER = os.environ.get('TUNING_REGISTER', '0') not in ('0', 'off', '')
-# ...and its LEVEL while the ear sets it: TUNING_REGISTER=4 is on, with the
-# class's coupling and knock times 4
+# its strikes -- the pedal's halo, true to the tuning. ON BY DEFAULT: only the
+# pianos have a coupling, so nothing else pays for it. TUNING_REGISTER=0 turns
+# it off (a pedalled piano piece renders some four times faster without it).
+REGISTER = os.environ.get('TUNING_REGISTER', '1') not in ('0', 'off', '')
+# ...and its LEVEL: TUNING_REGISTER=4 is on, with the class's coupling and
+# knock times 4 (Ben's ear set 1, against 4, on Ondine)
 try:
     REGISTER_SCALE = float(os.environ.get('TUNING_REGISTER', '1')) if REGISTER else 1.0
 except ValueError:

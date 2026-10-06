@@ -2412,15 +2412,21 @@ class Patch:
             # right for a render and is corruption for a curses screen -- the
             # TUI owns the terminal. Redirected rather than flag-guarded so
             # that anything added to those passes later is caught too.
+            _wasr = B.REGISTER
             with quiet():
                 B.MOOG_NEUTRAL = True        # the slab applies the panel
                 # a fixed-touch voice's template at the jack's own level; the
                 # stamp applies velocity when the part's switch is off
                 T.FIXED_TOUCH = True
+                # ...and a NOTE, not the free strings it would set ringing:
+                # live has its own register (_reg_*), driven by what is
+                # actually free when the note is played
+                B.REGISTER = False
                 p = B.prepare(m, self.tuner)
         finally:
             B.MOOG_NEUTRAL = False
             T.FIXED_TOUCH = False
+            B.REGISTER = _wasr
             _L.SIDEBANDS = _was
             _TA.ENABLED = _wasa
         t = {k: np.array(p[k]) for k in ALL_COLS}
@@ -4167,21 +4173,28 @@ class Live:
         self.reg_err = None
         self.reg_info = {}             # pid -> its strings' arrays, from the worker
         self.reg_asked = set()         # pids whose strings have been asked for
-        if self.reg_enabled:
-            # A PROCESS, not a thread: see register.live_worker. Spawned, not
-            # forked -- this process holds an OpenCL context and threads.
-            import multiprocessing as _mp
-            ctx = _mp.get_context('spawn')
-            self.reg_conn, child = ctx.Pipe()
-            self.reg_proc = ctx.Process(target=_RGM.live_worker, args=(child,), daemon=True)
-            self.reg_proc.start()
-            threading.Thread(target=self._reg_send, daemon=True, name="register-out").start()
-            threading.Thread(target=self._reg_recv, daemon=True, name="register-in").start()
+        self.reg_proc = None           # started with the first piano: _reg_start
+
+    def _reg_start(self):
+        """The worker, started with the first piano that needs strings -- a
+        rig with none never pays for it. A PROCESS, not a thread: see
+        register.live_worker. Spawned, not forked -- this process holds an
+        OpenCL context and threads."""
+        if self.reg_proc is not None:
+            return
+        import multiprocessing as _mp
+        ctx = _mp.get_context('spawn')
+        self.reg_conn, child = ctx.Pipe()
+        self.reg_proc = ctx.Process(target=_RGM.live_worker, args=(child,), daemon=True)
+        self.reg_proc.start()
+        threading.Thread(target=self._reg_send, daemon=True, name="register-out").start()
+        threading.Thread(target=self._reg_recv, daemon=True, name="register-in").start()
 
     def _reg_ask(self, part):
         """Ask the worker for a part's strings, once (warm() does it ahead)."""
         if part.pid in self.reg_asked:
             return
+        self._reg_start()
         self.reg_asked.add(part.pid)
         self.reg_jobs.append(('build', part.pid, part.patch._voice_class(60), part.patch.tuner,
                               self.rate, getattr(B, 'REGISTER_SCALE', 1.0)))
@@ -13677,7 +13690,14 @@ def selftest():
             _t.append(mido.Message("note_on" if _on else "note_off", channel=0, note=_n,
                                    velocity=90 if _on else 0, time=_tk - _now))
             _now = _tk
-        _p = B.prepare(_m, "hybrid")
+        # the NOTES' attacks: without the free strings, whose rows start at
+        # block edges near the onsets and are not any note's attack
+        _wr = B.REGISTER
+        B.REGISTER = False
+        try:
+            _p = B.prepare(_m, "hybrid")
+        finally:
+            B.REGISTER = _wr
         _non, _fa, _cw = (np.asarray(_p[k]) for k in ("non", "fa", "ch"))
         return {(_tk, _n): (np.unique(_fa[np.abs(_non - _tk / 960.0 * B.SR) < 200]),
                             np.unique(_cw[np.abs(_non - _tk / 960.0 * B.SR) < 200]))
