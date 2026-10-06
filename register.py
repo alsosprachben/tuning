@@ -649,3 +649,201 @@ def expand(A, channels, sr, blk, cols, meta=None):
             meta.extend((ch, r['kind'], r['src'], r['mode']) for r in recs)
         added += len(recs)
     return added
+
+
+# ------------------------------------------------------------------ live
+
+class LiveChannel(object):
+    """The register LIVE (live.py): the same strings and the same response,
+    driven by events as they happen. Nothing about the future is known, so
+    the caller says which strings are free at each event (the pedal, the keys
+    held, the undamped top), and damps strings itself when their dampers fall.
+    It runs on a worker thread; what it returns is placed on the audio thread
+    a block or two later, at the placing block -- never in the past, which
+    would start a row at full level, a click.
+
+    strike()  -> the modes to (re)stamp, each its state Z at sample `at`, and
+                 the forced coefficients, one per driver partial and stage
+    release() -> the hand-over at that strike's damper: the same, for the
+                 modes its forced part held
+    damp()    -> forget the modes whose dampers fell (the caller ended them)"""
+
+    def __init__(self, strings, props, sr, scale=1.0):
+        P = props
+        self.S, self.sr = strings, sr
+        self.kappa = float(getattr(P, 'register_gain', 0.0)) * scale
+        self.knock = float(getattr(P, 'register_knock_gain', 0.0)) * scale
+        self.fall = float(getattr(P, 'register_knock_falloff', 0.0))
+        self.top = int(getattr(P, 'damper_top', 128))
+        M = len(strings.f)
+        self.keyidx = {k: np.flatnonzero(strings.key == k) for k in strings.props}
+        self.Az = np.zeros(M, complex); self.nref = np.zeros(M)
+        self.Rz = np.zeros(M, complex); self.rref = np.zeros(M)    # what is stamped
+        self.stamped = np.zeros(M, bool)
+        self.held = {}               # strike id -> its forced parts, for the hand-over
+        self.loud = 0.0
+
+    def mask(self, keys):
+        m = np.zeros(len(self.S.f), bool)
+        for k in keys:
+            ix = self.keyidx.get(k)
+            if ix is not None:
+                m[ix] = True
+        return m
+
+    def _settle(self, touched, at):
+        """The touched modes whose stamped row has drifted: (modes, Z at `at`)."""
+        am, sr = self.S.alpha, self.sr
+        idx = np.flatnonzero(touched)
+        if not len(idx):
+            return idx, np.zeros(0, complex)
+        tz = self.Az[idx]
+        rz = np.where(self.stamped[idx],
+                      self.Rz[idx] * np.exp(-am[idx] * np.maximum(at - self.rref[idx], 0.0) / sr), 0)
+        floor = FLOOR * max(self.loud, 1e-30)
+        go = np.abs(tz - rz) > SPLIT * np.maximum(np.abs(tz), floor)
+        idx, z = idx[go], tz[go]
+        self.Rz[idx] = z; self.rref[idx] = at
+        self.stamped[idx] = np.abs(z) >= floor
+        return idx, z
+
+    def strike(self, sid, key, at, drv, free_keys):
+        """A strike at sample `at` of `key`, its stamped direct rows `drv`
+        ({om, p0, delL, aM, non, logr, logrA, aft, sus, tbav, tau, tcut, slot}),
+        with these keys' strings free."""
+        S, sr = self.S, self.sr
+        Wm, am = S.W, S.alpha
+        M = len(S.f)
+        free = self.mask(k for k in free_keys if k != key)
+        self.loud = max(self.loud, float(np.max(drv['aM'])) if len(drv['aM']) else 0.0)
+        floor = FLOOR * max(self.loud, 1e-30)
+        add = np.zeros(M, complex)
+        forced, keep = [], []
+        fi = np.flatnonzero(free)
+        if len(fi) and self.kappa > 0:
+            fW = Wm[fi]
+            for r in range(len(drv['om'])):
+                a_i = float(drv['aM'][r])
+                if a_i < floor:
+                    continue
+                om_i = float(drv['om'][r]); Wi = om_i * sr
+                n_i = float(drv['non'][r])
+                theta = om_i * n_i + float(drv['p0'][r]) + om_i * float(drv['delL'][r])
+                tb, ta, cu = float(drv['tbav'][r]), float(drv['tau'][r]), float(drv['tcut'][r])
+                for wgt, beta in stages(float(drv['aft'][r]), float(drv['sus'][r]),
+                                        float(drv['logr'][r]), float(drv['logrA'][r])):
+                    cmax = self.kappa * a_i * wgt
+                    if cmax <= 0:
+                        continue
+                    reach = cmax / (floor * SPLIT)
+                    lo = np.searchsorted(fW, Wi - reach); hi = np.searchsorted(fW, Wi + reach)
+                    if hi <= lo:
+                        continue
+                    j = fi[lo:hi]
+                    fr, fo = free_part(cmax * S.w[j], Wi, beta, Wm[j], am[j], tb, ta, cu,
+                                       need=floor * SPLIT)
+                    add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - at) / sr)
+                    F = complex(fo.sum())
+                    if abs(F) > floor * SPLIT:
+                        forced.append((int(drv['slot'][r]), wgt, beta, F / a_i))
+                    keep.append((j, fo, Wi, beta, theta, n_i, tb, ta, cu))
+        if self.knock > 0 and len(fi):
+            dk = np.abs(S.key[fi] - key)
+            amp = self.knock * self.loud_of(drv) * S.w[fi] * 10.0 ** (-self.fall * dk / 20.0)
+            add[fi] += amp * np.exp(1j * knock_phase(hash(('live', sid)), len(fi)))
+        self.held[sid] = keep
+        touched = np.abs(add) > 0
+        self.Az[touched] = self.Az[touched] * np.exp(
+            -am[touched] * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
+        self.nref[touched] = at
+        idx, z = self._settle(touched, at)
+        return idx, z, forced
+
+    @staticmethod
+    def loud_of(drv):
+        return float(np.max(drv['aM'])) if len(drv['aM']) else 0.0
+
+    def release(self, sid, at, free_keys):
+        """The strike's damper fell at sample `at`: what its forced part held
+        goes on at the free modes' own frequencies."""
+        keep = self.held.pop(sid, None)
+        if not keep:
+            return np.zeros(0, np.int64), np.zeros(0, complex)
+        S, sr = self.S, self.sr
+        Wm, am = S.W, S.alpha
+        free = self.mask(free_keys)
+        add = np.zeros(len(S.f), complex)
+        for j, fo, Wi, beta, theta, n_i, tb, ta, cu in keep:
+            tq = (at - n_i) / sr
+            gq = glide_phase(Wi, tb, ta, cu, tq)
+            add[j] += fo * np.exp(1j * (theta + Wi * tq + gq - Wm[j] * at / sr) - beta * tq)
+        add[~free] = 0
+        touched = np.abs(add) > 0
+        self.Az[touched] = self.Az[touched] * np.exp(
+            -am[touched] * np.maximum(at - self.nref[touched], 0.0) / sr) + add[touched]
+        self.nref[touched] = at
+        return self._settle(touched, at)
+
+    def damp(self, keys):
+        """These keys' dampers fell: their strings are at rest."""
+        m = self.mask(keys)
+        self.Az[m] = 0; self.Rz[m] = 0; self.stamped[m] = False
+
+
+def live_worker(conn):
+    """live.py's register worker, in a PROCESS of its own: the response is
+    Python-heavy, and a thread doing it took the interpreter lock from the
+    audio callback (a pedal-up block went 1.9 -> 6.7 ms against a 2.67 ms
+    budget). Jobs in, results out, over a pipe:
+
+      ('build', pid, pc, tuner, rate, scale)   -> ('built', pid, arrays)
+      ('strike', rid, sid, note, at, drv, free) -> ('free', rid, modes, z, at, floor)
+                                                   [+ ('forced', rid, note, forced, at)]
+      ('release', rid, sid, at, free)          -> ('free', ...)
+      ('damp', rid, keys); ('stop',)"""
+    import os
+    try:
+        os.nice(5)                     # below the audio, whose core this is not
+    except OSError:
+        pass
+    import blockrender as B
+    strings, chans = {}, {}
+    while True:
+        try:
+            job = conn.recv()
+        except EOFError:
+            return
+        kind = job[0]
+        if kind == 'stop':
+            return
+        try:
+            if kind == 'build':
+                pid, pc, tuner, rate, scale = job[1:]
+                Sg = Strings(pc, B.tuning_table(tuner), 0.0, 1.0, rate,
+                             (B.string_partial, B.partial_decay, B.unison_partial))
+                strings[pid] = (Sg, _isolated(pc, 261.63, 0.0, 1.0), rate, scale)
+                conn.send(('built', pid, dict(M=len(Sg.f), W=Sg.W, f=Sg.f, alpha=Sg.alpha,
+                                              key=Sg.key, string=Sg.string, hl=Sg.hl,
+                                              hr=Sg.hr, dl=Sg.dl, dr=Sg.dr)))
+                continue
+            rid = job[1]
+            lc = chans.get(rid)
+            if lc is None and rid[0] in strings:
+                Sg, props, rate, scale = strings[rid[0]]
+                lc = chans[rid] = LiveChannel(Sg, props, rate, scale)
+            if lc is None:
+                continue
+            if kind == 'strike':
+                sid, note, at, drv, free = job[2:]
+                idx, z, forced = lc.strike(sid, note, at, drv, free)
+                conn.send(('free', rid, idx, z, at, FLOOR * max(lc.loud, 1e-30)))
+                if forced:
+                    conn.send(('forced', rid, note, forced, at))
+            elif kind == 'release':
+                sid, at, free = job[2:]
+                idx, z = lc.release(sid, at, free)
+                conn.send(('free', rid, idx, z, at, FLOOR * max(lc.loud, 1e-30)))
+            elif kind == 'damp':
+                lc.damp(job[2])
+        except Exception as e:
+            conn.send(('error', None, "%s: %s" % (type(e).__name__, e)))

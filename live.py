@@ -84,6 +84,7 @@ import chorus as _CHR
 import mf104 as _MFD
 import moog as _MG
 import tonelib as T
+import register as _RGM     # the free-string register's physics (live: _reg_*)
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name)
 
@@ -2714,6 +2715,10 @@ class Live:
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.tuner = rate, frames, tuner
         self.verbose = verbose
+        # THE REGISTER IS THOUSANDS OF ROWS: a pedalled piano's free strings,
+        # one per string mode -- room made for them when it is on
+        if getattr(B, 'REGISTER', False) and gpu and capacity == 16384:
+            capacity = 32768
         self.slab = Slab(capacity)
         self.slab.panel_for = self._moog_panel_for
         self.moog_glide = {}            # part id -> {knob: where it has got to}
@@ -2943,6 +2948,7 @@ class Live:
         self.patch_err = None
         self.patch_thread = threading.Thread(target=self._patch_worker, daemon=True)
         self.patch_thread.start()
+        self._reg_init(gpu)
         self.thresh = 0.70      # soft-limiter knee; see Live.limit
         self.press_db = T.PRESS_DB      # one constant, shared with the file path
         self.press_tilt = T.PRESS_TILT
@@ -2991,6 +2997,14 @@ class Live:
         t0 = time.time()
         for p in self.parts:
             p.patch.warm(progress)
+            # ...and a piano's free strings, here and not at its first strike,
+            # where the build would contend with the audio thread
+            if self.reg_enabled and self._reg_voice(p, 60):
+                self._reg_ask(p)
+                _t = time.time()
+                while p.pid not in self.reg_info and time.time() - _t < 60.0 \
+                        and self.reg_err is None:
+                    time.sleep(0.02)
         if self.verbose:
             tot = sum(p.patch.partials for p in self.parts)
             nt = sum(len(p.patch.templates) for p in self.parts)
@@ -3332,6 +3346,13 @@ class Live:
                 except Exception as e:
                     self.errors += 1
                     self.last_error = "cmd: %s: %s" % (type(e).__name__, e)
+        if self.reg_enabled and (self.reg_pend or self.reg_out or self.reg_live
+                                 or self.reg_retire):
+            try:
+                self._reg_pump(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "register: %s: %s" % (type(e).__name__, e)
         if self.moog_glide:
             try:
                 self._moog_tick(n0)
@@ -3683,6 +3704,7 @@ class Live:
                     for k in [k for k in list(self.slab.live) if (k[1], k[2]) in gone]:
                         self.slab.release(k, n0)
                     self.pedalled -= gone
+                    self._reg_channel(ch, n0)
             elif msg.control == 93:                 # chorus send
                 # A setup for the notes to come, like the soft pedal: a copy of
                 # a note already sounding would have to start in the middle of
@@ -3748,6 +3770,7 @@ class Live:
                               and not (self.pedal.get(ch, False))]:
                         self.slab.release(k, n0)
                     self.pedalled -= _gone
+                    self._reg_channel(ch, n0)
             elif msg.control in (98, 99):           # NRPN select
                 # Selecting one must STOP a following CC6 from landing on
                 # whatever RPN was last chosen. Eight of them ARE read: GS's
@@ -3802,6 +3825,7 @@ class Live:
                             self.slab.a["re"][_ix], _fade)
                     self.slab.oneshot.pop(k, None)
                     self.slab.release(k, n0)
+                self._reg_channel(ch, n0, kill=True)
             elif msg.control == 123:                # all notes off
                 # The amplifier's partials hang off a key with no channel, so
                 # this sweep cannot see them -- but their parents are about to
@@ -4107,9 +4131,321 @@ class Live:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
                              vd=(v2 if v2 != 0.0 else None),
                              vrs=(r2 if r2 != 1.0 else None))
+        if self.reg_enabled and _lslots.get('a') and self._reg_voice(part, note):
+            self._reg_strike(part, ch, note, n0, tmpl, _lslots['a'])
         if part.moog() is not None and slots:
             for _ly, _ls in _lslots.items():         # each Messenger its own pedal
                 self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
+
+    # THE FREE-STRING REGISTER, LIVE (register.LiveChannel). A piano part's
+    # undamped strings answering its strikes, the file renderer's physics on a
+    # worker thread: the audio thread snapshots each strike's stamped direct
+    # rows and the keys free at that instant (the pedal, the keys held, the
+    # undamped top), the worker solves the response, and the next blocks place
+    # it -- at the placing block, never in the past. Free rows are the
+    # register's own slots, one per string mode, each retired exactly once: at
+    # its damper or under the floor. Forced rows ride their note's key
+    # (REG_FORCED) and go when it does. GPU only: a pedalled piano is thousands
+    # of rows.
+    REG_FORCED = "regF"
+    REG_PLACE_MAX = 256               # register rows placed per block, at most
+
+    def _reg_init(self, gpu):
+        self.reg_enabled = bool(getattr(B, 'REGISTER', False)) and bool(gpu)
+        self.reg = {}                  # (pid, ch) -> placement state
+        self.reg_pend = []             # strikes to snapshot this block
+        self.reg_jobs = collections.deque()
+        self.reg_out = collections.deque()
+        self.reg_go = threading.Event()
+        self.reg_stop = False
+        self.reg_sid = 0
+        self.reg_strike_of = {}        # (pid, ch, note) -> its latest strike's id
+        self.reg_live = False          # any free row to watch for the floor
+        self.reg_more = False          # this block's placing is spent
+        self.reg_retire = {}           # n0 -> slots closed this block (one entry each)
+        self.reg_dropped = 0
+        self.reg_err = None
+        self.reg_info = {}             # pid -> its strings' arrays, from the worker
+        self.reg_asked = set()         # pids whose strings have been asked for
+        if self.reg_enabled:
+            # A PROCESS, not a thread: see register.live_worker. Spawned, not
+            # forked -- this process holds an OpenCL context and threads.
+            import multiprocessing as _mp
+            ctx = _mp.get_context('spawn')
+            self.reg_conn, child = ctx.Pipe()
+            self.reg_proc = ctx.Process(target=_RGM.live_worker, args=(child,), daemon=True)
+            self.reg_proc.start()
+            threading.Thread(target=self._reg_send, daemon=True, name="register-out").start()
+            threading.Thread(target=self._reg_recv, daemon=True, name="register-in").start()
+
+    def _reg_ask(self, part):
+        """Ask the worker for a part's strings, once (warm() does it ahead)."""
+        if part.pid in self.reg_asked:
+            return
+        self.reg_asked.add(part.pid)
+        self.reg_jobs.append(('build', part.pid, part.patch._voice_class(60), part.patch.tuner,
+                              self.rate, getattr(B, 'REGISTER_SCALE', 1.0)))
+        self.reg_go.set()
+
+    def _reg_send(self):
+        while not self.reg_stop:
+            if not self.reg_go.wait(0.2):
+                continue
+            self.reg_go.clear()
+            while self.reg_jobs:
+                try:
+                    self.reg_conn.send(self.reg_jobs.popleft())
+                except Exception as e:
+                    self.reg_err = "send: %s: %s" % (type(e).__name__, e)
+
+    def _reg_recv(self):
+        while not self.reg_stop:
+            try:
+                got = self.reg_conn.recv()
+            except Exception as e:
+                self.reg_err = "recv: %s: %s" % (type(e).__name__, e)
+                return
+            if got[0] == 'built':
+                self.reg_info[got[1]] = got[2]
+            elif got[0] == 'error':
+                self.reg_err = got[2]
+            else:
+                self.reg_out.append(got)
+
+    def _reg_voice(self, part, note):
+        if part.organ or part.drums:
+            return False
+        pc = part.patch._voice_class(note)
+        return pc is not None and (getattr(pc, 'register_gain', 0.0) > 0.0
+                                   or getattr(pc, 'register_knock_gain', 0.0) > 0.0)
+
+    def _reg_free(self, part, ch):
+        """The keys whose strings are free on this channel, now."""
+        pc = part.patch._voice_class(60)
+        top = int(getattr(pc, 'damper_top', 128))
+        if self.pedal.get(ch, False):
+            return list(range(21, 109))
+        keys = {k[1] for k in self.down if k[0] == ch}
+        keys |= {k[1] for k in self.sost.get(ch, ())}
+        keys |= {k[1] for k in self.pedalled if k[0] == ch} if self.pedal.get(ch) else set()
+        return sorted(keys | set(range(top, 109)))
+
+    def _reg_strike(self, part, ch, note, n0, tmpl, slots):
+        rid = (part.pid, ch)
+        if rid not in self.reg:
+            pc = part.patch._voice_class(60)
+            row = {c: (np.asarray(v)[0] if isinstance(v, np.ndarray) and v.shape[:1] == (tmpl["P"],)
+                       else v) for c, v in tmpl.items() if c in ALL_COLS}
+            self.reg[rid] = dict(ready=False, part=part, row=row, M=0, slot_of=None,
+                                 rel=float(getattr(pc, 'release_valve_time', 0.12) or 0.12) * self.rate)
+            self._reg_ask(part)
+        self.reg_sid += 1
+        self.reg_strike_of[(part.pid, ch, note)] = self.reg_sid
+        self.reg_pend.append((rid, self.reg_sid, note, n0, list(slots)))
+
+    def _reg_damper(self, part, ch, n0, released=None, pedal_up=False):
+        """Dampers fell: end the rows of the strings no longer free, and tell
+        the worker -- and a strike whose own damper fell hands its forced part
+        over (release)."""
+        rid = (part.pid, ch)
+        st = self.reg.get(rid)
+        if st is None:
+            return
+        free = set(self._reg_free(part, ch))
+        if released is not None and released not in free:
+            sid = self.reg_strike_of.pop((part.pid, ch, released), None)
+            if sid is not None:
+                self.reg_jobs.append(('release', rid, sid, float(n0), sorted(free)))
+        if pedal_up:
+            for (pid, c, nt), sid in list(self.reg_strike_of.items()):
+                if pid == part.pid and c == ch and nt not in free:
+                    self.reg_strike_of.pop((pid, c, nt))
+                    self.reg_jobs.append(('release', rid, sid, float(n0), sorted(free)))
+        if st['ready']:
+            dead = ~np.isin(st['key'], sorted(free))
+            self._reg_close(st, np.flatnonzero(dead & (st['slot_of'] >= 0)), n0, st['rel'])
+        self.reg_jobs.append(('damp', rid, sorted(set(range(21, 109)) - free)))
+        self.reg_go.set()
+
+    def _reg_channel(self, ch, n0, kill=False):
+        """A pedal came up on this channel (or everything stopped, kill):
+        every register part on it damps what is no longer free."""
+        if not self.reg_enabled:
+            return
+        for rid, st in list(self.reg.items()):
+            if rid[1] != ch:
+                continue
+            if kill:
+                if st['ready']:
+                    self._reg_close(st, np.flatnonzero(st['slot_of'] >= 0), n0,
+                                    float(B.RETRIGGER_FADE * self.rate))
+                for k in [k for k in self.reg_strike_of if k[0] == rid[0] and k[1] == ch]:
+                    self.reg_strike_of.pop(k)
+                self.reg_jobs.append(('damp', rid, list(range(21, 109))))
+                self.reg_go.set()
+            else:
+                self._reg_damper(st['part'], ch, n0, pedal_up=True)
+
+    def _reg_close(self, st, modes, n0, re_):
+        """End these modes' free rows at n0 over re_ samples -- retired once."""
+        if not len(modes):
+            return
+        sl = st['slot_of'][modes]
+        st['slot_of'][modes] = -1
+        sl = sl[self.slab.busy[sl]]
+        if not len(sl):
+            return
+        self.slab.a["noff"][sl] = n0
+        self.slab.a["re"][sl] = re_
+        # ONE RETIRING ENTRY A BLOCK, not one a close: reap walks every entry
+        # every block, and a pedalled piano closes rows all the time
+        self.reg_retire.setdefault(n0, []).append(sl.astype(np.int64))
+
+    def _reg_pump(self, n0):
+        for rid, st in self.reg.items():
+            if not st['ready'] and rid[0] in self.reg_info:
+                info = self.reg_info[rid[0]]
+                st.update(info)
+                st['slot_of'] = np.full(info['M'], -1, np.int64)
+                st['n_floor'] = np.zeros(info['M'])
+                st['ready'] = True
+        # this block's strikes: their stamped direct rows, read now (after the
+        # note's pan and tuning), and the keys free now
+        for rid, sid, note, at, slots in self.reg_pend:
+            idx = np.fromiter(slots, np.int64, len(slots))
+            idx = idx[self.slab.busy[idx]]
+            if not len(idx):
+                continue
+            a = self.slab.a
+            dl = a["delL"][idx].astype(np.float64) + a["delR"][idx].astype(np.float64)
+            idx = idx[dl <= dl.min() + 2.0]          # the direct sound (see _amp_snapshot)
+            drv = dict(om=a["om"][idx].astype(np.float64), p0=a["p0"][idx].astype(np.float64),
+                       delL=a["delL"][idx].astype(np.float64),
+                       aM=0.5 * (self.slab.aL0[idx].astype(np.float64) + self.slab.aR0[idx]),
+                       non=a["non"][idx].astype(np.float64), slot=idx.copy())
+            for c in ("logr", "logrA", "aft", "sus", "tbav", "tau", "tcut"):
+                drv[c] = a[c][idx].astype(np.float64)
+            part = self.reg[rid]['part']
+            self.reg_jobs.append(('strike', rid, sid, note, float(at), drv,
+                                  self._reg_free(part, rid[1])))
+        if self.reg_pend:
+            self.reg_pend = []
+            self.reg_go.set()
+        # what the worker handed back: until a block's worth is placed
+        self.reg_more = False
+        self.reg_budget = self.REG_PLACE_MAX
+        while self.reg_out and not self.reg_more:
+            self._reg_place(n0, self.reg_out.popleft())
+        # rows fallen under the floor: ended (decay is all they would do)
+        if self.reg_live:
+            live = False
+            for st in self.reg.values():
+                if not st['ready']:
+                    continue
+                on = st['slot_of'] >= 0
+                if on.any():
+                    done = np.flatnonzero(on & (st['n_floor'] <= n0))
+                    self._reg_close(st, done, n0, float(B.BLK))
+                    live = live or bool((st['slot_of'] >= 0).any())
+            self.reg_live = live
+        for n, parts in self.reg_retire.items():
+            self.slab.retiring.append((np.concatenate(parts), n))
+        self.reg_retire = {}
+
+    def _reg_place(self, n0, job):
+        kind, rid = job[0], job[1]
+        st = self.reg.get(rid)
+        if st is None:
+            return
+        if not st['ready']:
+            return
+        if kind == 'free':
+            modes, z, at, floor = job[2], job[3], job[4], job[5]
+            if not len(modes):
+                return
+            nb = max(self.reg_budget, 1)
+            if len(modes) > nb:
+                # A BLOCK'S WORTH AT A TIME: the rest waits a block, each mode
+                # decayed to whenever it is placed (z is referenced to `at`)
+                self.reg_out.appendleft((kind, rid, modes[nb:], z[nb:], at, floor))
+                modes, z = modes[:nb], z[:nb]
+                self.reg_more = True
+            self.reg_budget -= len(modes)
+            if self.reg_budget <= 0:
+                self.reg_more = True
+            # every mode's old row gives way at this block to its new one
+            self._reg_close(st, modes[st['slot_of'][modes] >= 0], n0, float(B.BLK))
+            zz = z * np.exp(-st['alpha'][modes] * max(n0 - at, 0.0) / self.rate)
+            keep = np.abs(zz) >= floor
+            modes, zz = modes[keep], zz[keep]
+            n = len(modes)
+            if not n:
+                return
+            om = st['W'][modes] / self.rate
+            ph = np.angle(zz)
+            t = {c: np.full(n, v) for c, v in st['row'].items()}
+            mag = np.abs(zz) / max(self.slab.headroom, 1e-12)
+            t.update(om=om, p0=ph - om * st['dl'][modes], p0R=ph - om * st['dr'][modes],
+                     aL=(mag * st['hl'][modes]).astype(np.float32),
+                     aR=(mag * st['hr'][modes]).astype(np.float32),
+                     nf=st['f'][modes].astype(np.float32), nfr=st['f'][modes].astype(np.float32),
+                     non=np.full(n, n0, np.int64), fa=np.full(n, float(B.BLK), np.float32),
+                     logr=st['alpha'][modes].astype(np.float32),
+                     delL=st['dl'][modes].astype(np.float32), delR=st['dr'][modes].astype(np.float32),
+                     pl=st['string'][modes].astype(np.int32), rdl=np.zeros(n, np.float32))
+            for c in ("logrA", "aft", "sus", "cv", "sj", "crl", "csc", "cbw", "tbav", "tcut", "vd", "az"):
+                if c in t:
+                    t[c] = np.zeros(n, np.float32)
+            for c in ("fx",):
+                t[c] = np.full(n, -1, np.int32)
+            t["mk"] = np.zeros(n, np.int32)
+            t["P"] = n
+            key = (rid[0], rid[1], -2, "reg")
+            if not self.slab.stamp_cols(t, n, key, n0, 1.0, np.ones(n, np.float32), 0, False):
+                self.reg_dropped += n
+                return
+            got = np.asarray(self.slab.last_slots, np.int64)
+            self.slab.live.pop(key, None)          # the register keeps its own slots
+            _cp = self.cpan.get(rid[1], T.GM_DEFAULT_PAN)
+            if _cp != T.GM_DEFAULT_PAN:
+                self.slab.repan(list(got), _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
+            st['slot_of'][modes] = got
+            st['n_floor'][modes] = n0 + self.rate * np.log(np.maximum(np.abs(zz) / floor, 1.0)) \
+                / np.maximum(st['alpha'][modes], 1e-9)
+            self.reg_live = True
+            return
+        if kind == 'forced':
+            note, forced, at = job[2], job[3], job[4]
+            a = self.slab.a
+            key = (rid[0], rid[1], note, self.REG_FORCED)
+            ok = [(sl, w_, be, F) for sl, w_, be, F in forced
+                  if self.slab.busy[sl] and a["noff"][sl] >= n0]     # its note still sounding
+            if not ok:
+                return
+            self.reg_budget -= len(ok)
+            if self.reg_budget <= 0:
+                self.reg_more = True
+            sl = np.array([x[0] for x in ok], np.int64)
+            wgt = np.array([x[1] for x in ok]); beta = np.array([x[2] for x in ok])
+            F = np.array([x[3] for x in ok], complex)
+            n = len(sl)
+            age = np.maximum(n0 - a["non"][sl].astype(np.float64), 0.0) / self.rate
+            g = np.abs(F) * wgt * np.exp(-beta * age) / max(self.slab.headroom, 1e-12)
+            om = a["om"][sl].astype(np.float64)
+            ph = np.angle(F) + _RGM.glide_phase(om * self.rate, a["tbav"][sl].astype(np.float64),
+                                                a["tau"][sl].astype(np.float64),
+                                                a["tcut"][sl].astype(np.float64), age)
+            t = {c: a[c][sl].copy() for c in COLS_F4 + COLS_I4 + COLS_F8}
+            t.update(aL=(self.slab.aL0[sl] * g).astype(np.float32),
+                     aR=(self.slab.aR0[sl] * g).astype(np.float32),
+                     p0=a["p0"][sl] + ph, p0R=a["p0R"][sl] + ph,
+                     non=np.full(n, n0, np.int64), fa=np.full(n, float(B.BLK), np.float32),
+                     logr=beta.astype(np.float32), logrA=np.zeros(n, np.float32),
+                     aft=np.zeros(n, np.float32), sus=np.where(beta > 0, 0.0, 1.0).astype(np.float32),
+                     tbav=np.zeros(n, np.float32), rdl=np.zeros(n, np.float32))
+            t["P"] = n
+            if not self.slab.stamp_cols(t, n, key, n0, 1.0, np.ones(n, np.float32), 0, False):
+                self.reg_dropped += n
 
     # THE MF-104M, LIVE (mf104.py): a Moog part whose panel has the pedal on
     # stamps each repeat as its own key at n0 + k tau -- a future onset, which
@@ -4852,6 +5188,9 @@ class Live:
                 self.slab.release(k, n0)
         else:
             self.slab.release((part.pid, ch, note, None), n0)
+            if self.reg_enabled:
+                self.slab.release((part.pid, ch, note, self.REG_FORCED), n0)
+                self._reg_damper(part, ch, n0, released=note)
 
     def _half_moon(self, ch, pitch):
         """Step the rotor ladder on a wheel flick. See PW_FIRE.
@@ -10347,6 +10686,63 @@ def selftest():
           not _dflt[0] and abs(_dflt[1] - 40.0 * math.log10(30 / 120.0)) < 0.5 and abs(_fx) < 0.5,
           "  (Moog: v30 against v120 %+.1f dB by default, %+.1f fixed)" % (_dflt[1], _fx))
     _lp.renderer.close()
+    # THE FREE-STRING REGISTER, LIVE (register.LiveChannel, on its own worker
+    # process): a pedalled chord's free strings sound, survive the keys going
+    # up under the pedal, and are gone -- every slot back -- at pedal-up; a
+    # 10-note chord fits the slab; and the blocks keep their budget. GPU only.
+    _rgw = B.REGISTER
+    _swi = sys.getswitchinterval()
+    sys.setswitchinterval(0.0005)      # as main() runs live, which this measures
+    B.REGISTER = True
+    try:
+        _rl = Live(program=0, rate=48000, frames=128, verbose=False, tuner="hybrid440", gpu=True)
+    finally:
+        B.REGISTER = _rgw
+    if not _rl.reg_enabled:
+        check("the free-string register, live (needs the GPU)", True,
+              "  (skipped: %s)" % (GPU_ERROR or "no GPU renderer"))
+        _rl.renderer.close()
+    else:
+        _rl.warm()
+        _rts = []
+        def _rb(_n):
+            for _ in range(_n):
+                _t = time.perf_counter()
+                _rl.callback(None, 128, None, 0)
+                _rts.append((time.perf_counter() - _t) * 1000.0)
+                time.sleep(128.0 / 48000.0)
+        def _rrows():
+            return sum(int((_s['slot_of'] >= 0).sum()) for _s in _rl.reg.values() if _s.get('ready'))
+        _chord = (36, 43, 48, 52, 55, 60, 64, 67, 72, 76)
+        _rl.on_midi(mido.Message("control_change", channel=0, control=64, value=127))
+        for _n in _chord:
+            _rl.on_midi(mido.Message("note_on", channel=0, note=_n, velocity=90))
+        _rb(400)
+        _held = _rrows()
+        _used = _rl.slab.cap - len(_rl.slab.free)
+        for _n in _chord:
+            _rl.on_midi(mido.Message("note_off", channel=0, note=_n))
+        _rb(200)
+        _after_keys = _rrows()
+        _rl.on_midi(mido.Message("control_change", channel=0, control=64, value=0))
+        _rb(300)
+        _after_up = _rrows()
+        _left = _rl.slab.cap - len(_rl.slab.free)
+        _rts = np.array(_rts[1:])          # the first block warms the GPU, register or not
+        check("a pedalled chord's free strings sound, and stay while the pedal holds",
+              _held > 100 and _after_keys > 0 and _rl.reg_dropped == 0 and _rl.reg_err is None,
+              "  (%d register rows; %d after the keys are up; dropped %d)"
+              % (_held, _after_keys, _rl.reg_dropped))
+        check("...and are gone at pedal-up, every slot back",
+              _after_up == 0 and _left == 0,
+              "  (rows %d, slab used %d)" % (_after_up, _left))
+        check("...a 10-note chord fits the slab, and the blocks keep their budget",
+              _used < _rl.slab.cap and np.percentile(_rts, 99) < 128000.0 / 48000.0 / 1000.0 * 1000.0,
+              "  (slab %d of %d; block median %.2f ms, 99th %.2f, budget %.2f)"
+              % (_used, _rl.slab.cap, float(np.median(_rts)), float(np.percentile(_rts, 99)),
+                 128.0 / 48.0))
+        _rl.renderer.close()
+    sys.setswitchinterval(_swi)
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
     # striking a string and is famously expressive; a harmonica has no key at
     # all, so the player's breath is both the valve and the dynamic.
