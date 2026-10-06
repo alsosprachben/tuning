@@ -157,7 +157,6 @@
 /home/ben/Downloads/midi/wmetune2.mid
 /home/ben/Downloads/midi/work2.mid
 /home/ben/Downloads/midi/work.mid
-/tmp/claude-1000/-home-ben-repos-midgrid/995da13a-46bc-415f-93c3-09ac5f2168de/scratchpad/monocas2_lvl.mid
 /home/ben/Downloads/midi/546(2).mid
 /home/ben/Downloads/midi/546(4).mid
 /home/ben/Downloads/midi/547.MID
