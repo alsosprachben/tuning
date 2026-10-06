@@ -1022,6 +1022,15 @@ class SynthProperties:
     # voice but one. See sympathetic_partials() below for the mechanism and
     # what the steelpan recording says about it.
     sympathetic_gain = 0.0
+    # THE FREE-STRING REGISTER (register.py): a piano's undamped strings driven
+    # through the bridge. register_gain is the coupling (1/s); the knock is the
+    # hammer's broadband kick to every free string, falling with distance along
+    # the bridge in dB per key; damper_top is the first key with no damper.
+    # 0 = off, which is everything but the pianos.
+    register_gain = 0.0
+    register_knock_gain = 0.0
+    register_knock_falloff = 1.0
+    damper_top = 128
     sympathetic_span = 24        # semitones either side to consider
     sympathetic_max = 6          # most responders emitted per struck note
     sympathetic_floor = 0.02     # drop a responder quieter than this
@@ -3476,6 +3485,16 @@ class GrandPianoProperties(InharmonicStringProperties):
     # drawn once per key, see __init__.
     pitch_jitter_cents = 1.0
     timing_jitter_seconds = 0.002
+
+    # THE FREE STRINGS (register.py), with the dampers up: the coupling, the
+    # knock (re the strike's loudest partial, at the best-coupled mode) and its
+    # fall along the bridge -- set by ear, Ben's on Ondine (2026-10-05) against
+    # four times as much: about 25 dB under the struck strings. The top 18 keys
+    # have no damper at all and answer whatever the pedal does.
+    register_gain = 0.02
+    register_knock_gain = 0.005
+    register_knock_falloff = 1.0
+    damper_top = 91
 
     def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
                  effort=0.0):

@@ -9,8 +9,9 @@
 effect builds from the partials already in the table -- sitar (sympathetic
 strings), e-piano and tremolo strings (tremolo), clavinet (its tone section, CC1), organ (the
 Leslie), overdriven guitar (tube amp and cabinet), a Moog lead through the
-MF-104M, a string part sent to the chorus (CC93), and the sound controllers
-(CC71/74/75) -- since no one piece in the corpus plays them all.
+MF-104M, a string part sent to the chorus (CC93), the sound controllers
+(CC71/74/75), and a piano with its pedal down (the free-string register,
+with TUNING_REGISTER=1) -- since no one piece in the corpus plays them all.
 
 Each file is prepared twice and every array of the two partial tables
 compared by its SHA-1; the times and peak memory are printed.
@@ -88,7 +89,8 @@ def old_tree(rev):
 
 # (channel, program, controllers) for the --effects file
 EFFECTS = ((0, 104, {}), (1, 4, {1: 100}), (2, 7, {1: 90}), (3, 16, {1: 127}), (4, 29, {}),
-           (5, 81, {}), (6, 48, {93: 90}), (7, 61, {71: 100, 74: 30, 75: 90}), (8, 44, {}))
+           (5, 81, {}), (6, 48, {93: 90}), (7, 61, {71: 100, 74: 30, 75: 90}), (8, 44, {}),
+           (10, 0, {64: 127}))
 
 
 def effects_file():

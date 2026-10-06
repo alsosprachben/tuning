@@ -333,10 +333,15 @@ class Stream:
         self.cols = None
         self.mfdup = {}
         self.mf_last = 0
+        self.reg = {}               # channel -> register.Channel, in first-strike order
+        self.reg_next = {}          # channel -> its next strike to feed
 
     def __call__(self, A, i0, i1, next_on):
         if self.cols is None:
             self.cols = list(A)
+            self.dtypes = None
+        if self.dtypes is None and i1 > i0:
+            self.dtypes = {k: A[k].rows(i0, i0 + 1).dtype for k in A}
         if i1 > i0:
             r = {k: A[k].rows(i0, i1) for k in A}
             n = i1 - i0
@@ -346,9 +351,13 @@ class Stream:
                                        np.zeros((n, 0), np.int64), np.zeros(n, np.int64))
             self.heard.update(int(c) for c in np.unique(r['mch']))
             self._note(r, i0, i1)
+            self._register_feed(r, i0, i1)
         for k in A:
             A[k].drop_to(i1)
         T = float('inf') if next_on is None else next_on
+        # the register FIRST: the passes below read the horizon its pending
+        # rows hold, and at the end the amplifier must see it released
+        self._register(T)
         self._advance(T)
         if next_on is None:
             self.flush()
@@ -431,6 +440,8 @@ class Stream:
     def _pending_min(self):
         """The earliest onset any row not yet past passes 1-2 may have."""
         m = float('inf')
+        for C in self.reg.values():
+            m = min(m, C.pending_min())
         for rows in self.buckets.values():
             for note, sel in rows:
                 m = min(m, float(note['r']['non'][sel].min()))
@@ -477,6 +488,52 @@ class Stream:
                         np.array([x[2] for x in meta], np.int64)], 1)
         out['key'], out['klen'] = _key(lvl, r['key'][src], r['klen'][src])
         self._final(out)
+
+    # -- 1b. the free-string register ------------------------------------------
+    # register.Channel works incrementally already: fed each strike as its note
+    # arrives, advanced to the next onset, it hands out the rows nothing to come
+    # can change -- the same object, run the same way, that the whole table
+    # runs to the end at once. Their keys put them after every sympathetic row
+    # and before MF-104, channel by channel, (phase, seq) within.
+    REG_RANK0 = 1000000
+
+    def _register_feed(self, r, i0, i1):
+        recs = self.ctx['effects'].get('register') or {}
+        if not recs:
+            return
+        import register as RG
+        B = self.B
+        cols = B.PARTIAL_COLS + ('az', 'dr')
+        for ch, R in recs.items():
+            k = self.reg_next.get(ch, 0)
+            st = R['strikes']
+            while k < len(st) and st[k]['rows'][1] is not None and st[k]['rows'][1] <= i1:
+                x = st[k]
+                a, b = x['rows'][0] - i0, x['rows'][1] - i0
+                if ch not in self.reg:
+                    self.reg[ch] = RG.channel_for(ch, R, B.SR, B.BLK, cols,
+                                                  self.ctx['effects']['register_scale'],
+                                                  self.ctx['effects']['register_strings'],
+                                                  keep=False)
+                self.reg[ch].strike(x['key'], x['on'], x['held'], x['av'],
+                                    {c: r[c][a:b] for c in cols})
+                k += 1
+            self.reg_next[ch] = k
+
+    def _register(self, T):
+        for rank, (ch, C) in enumerate(self.reg.items()):
+            C.advance(T)
+            recs = C.take()
+            if not recs:
+                continue
+            n = len(recs)
+            out = {c: np.array([x['row'][c] for x in recs], dtype=self.dtypes[c])
+                   for c in self.cols}
+            lvl = np.stack([np.full(n, 1, np.int64), np.full(n, self.REG_RANK0 + rank, np.int64),
+                            np.array([x['phase'] for x in recs], np.int64),
+                            np.array([x['seq'] for x in recs], np.int64)], 1)
+            out['key'], out['klen'] = _key(lvl, np.zeros((n, 0), np.int64), np.zeros(n, np.int64))
+            self._final(out)
 
     # -- 2. MF-104 ----------------------------------------------------------
     def _mf104(self, note):

@@ -2288,6 +2288,10 @@ def prepare(path, tuner='hybrid440', sink=None):
     _CONS_SRC = {}
     _LESLIE_CH = {}
     _SYM_CH = {}
+    # THE FREE-STRING REGISTER: channel -> its class's strike list and setup,
+    # and the strike whose rows are being emitted (closed at the next note)
+    _REG_CH = {}
+    _REG_OPEN = [None]
     _AMP_CH = {}
     _AMP_REF = {}
     _AMP_IMB = {}
@@ -2493,11 +2497,19 @@ def prepare(path, tuner='hybrid440', sink=None):
                         moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
                         effects=dict(sympathetic=_SYM_CH, mf104=_MF104, tubeamp=_AMP_CH,
                                      clavinet=_CLAV_CH, htremolo=_HTREM_CH, tremolo=_TREM_CH,
-                                     chorus=_CHORUS_CH, cabinet=_CAB_CH, leslie=_LESLIE_CH)))
+                                     chorus=_CHORUS_CH, cabinet=_CAB_CH, leslie=_LESLIE_CH,
+                                     register=_REG_CH, register_scale=REGISTER_SCALE,
+                                     register_strings=(string_partial, partial_decay,
+                                                       unison_partial))))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
+        # the previous strike's rows end where this note's begin
+        _row0 = len(A['om'])
+        if _REG_OPEN[0] is not None:
+            _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], _row0); _REG_OPEN[0] = None
+        _raw_off = off           # when the KEY came up, before any pedal held it
         if _HT_PEND[0] is not None:
             _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
         if sink is not None:            # the last note's rows are final
@@ -2937,6 +2949,23 @@ def prepare(path, tuner='hybrid440', sink=None):
             _AMP_IMB[_MCH[0]] = getattr(props, 'amp_imbalance', None)
         if getattr(props, 'sympathetic_gain', 0.0) and _MCH[0] not in _SYM_CH:
             _SYM_CH[_MCH[0]] = props
+        if REGISTER and (getattr(props, 'register_gain', 0.0)
+                         or getattr(props, 'register_knock_gain', 0.0)):
+            if _MCH[0] not in _REG_CH:
+                # ITS STRINGS ARE BUILT HERE, at its first note, for both the
+                # whole table and the stream: whatever tonelib's per-note state
+                # is now (the soft pedal, honky_detune) is the instrument's at
+                # its first strike in either -- not "when the register ran".
+                import register as _REG
+                _REG_CH[_MCH[0]] = dict(pc=type(props), props=props, pan=pan, chan_vol=chan_vol,
+                                        table=FREQ_N, pedal=_PED_CH.get(ch, []), strikes=[],
+                                        strings=_REG.Strings(type(props), FREQ_N, pan, chan_vol, SR,
+                                                             (string_partial, partial_decay,
+                                                              unison_partial)))
+            _sost = _SOST_HELD.get((ch, note, on))
+            _REG_OPEN[0] = dict(key=note, on=on, rows=(_row0, None), av=props.attack_volume,
+                                held=max(_raw_off, _sost) if _sost is not None else _raw_off)
+            _REG_CH[_MCH[0]]['strikes'].append(_REG_OPEN[0])
         if getattr(props, 'cabinet', None) and _MCH[0] not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
             # anyone wants to play through -- it is the A/B that shows what the
@@ -3496,6 +3525,9 @@ def prepare(path, tuner='hybrid440', sink=None):
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
     if _HT_PEND[0] is not None:
         _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
+    # the last strike's rows end here -- before the stream hears them
+    if _REG_OPEN[0] is not None:
+        _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], len(A['om'])); _REG_OPEN[0] = None
     if sink is not None:
         if _S0[0] is not None:
             sink(A, _S0[0], len(A['om']), None)
@@ -3606,6 +3638,25 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _ns:
             print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
                   % (len(_SYM_CH), _ns))
+    # THE FREE-STRING REGISTER, right after: the strings nobody struck, each a
+    # string the note loop would have emitted (string_partial and its kin), at
+    # the tuning in force. See register.py.
+    if _REG_CH and sink is None:
+        import register as _REG
+        _rc = {}
+        _cols = PARTIAL_COLS + ('az', 'dr')
+        for _c, _R in _REG_CH.items():
+            _C = _REG.channel_for(_c, _R, SR, BLK, _cols, REGISTER_SCALE,
+                                  (string_partial, partial_decay, unison_partial))
+            for _x in _R['strikes']:
+                if _x['rows'][1] is None:
+                    continue
+                _r0, _r1 = _x['rows']
+                _C.strike(_x['key'], _x['on'], _x['held'], _x['av'],
+                          {k: np.array(A[k][_r0:_r1]) for k in _cols})
+            _rc[_c] = _C
+        _nr = _REG.expand(A, _rc, SR, BLK, _cols)
+        print("  register: %d channel(s), %d partials from the free strings" % (len(_rc), _nr))
 
     # THE AMPLIFIER, AND IT RUNS FIRST. A Leslie's chain is organ -> amp ->
     # crossover -> rotors, so the valve is upstream of the rotor; here that is
@@ -3926,6 +3977,16 @@ _LAST_PREP = {}
 # bit for bit the whole table's render. TUNING_STREAM=0 builds the whole table;
 # a file using a pass the stream does not reproduce yet builds it anyway.
 RENDER_STREAM = os.environ.get('TUNING_STREAM', '1') not in ('0', 'off', '')
+# THE FREE-STRING REGISTER (register.py): a piano's undamped strings answering
+# its strikes. On by TUNING_REGISTER=1 while it is being tuned by ear; the
+# stream does not carry it yet, so a render with it on is a whole-table one.
+REGISTER = os.environ.get('TUNING_REGISTER', '0') not in ('0', 'off', '')
+# ...and its LEVEL while the ear sets it: TUNING_REGISTER=4 is on, with the
+# class's coupling and knock times 4
+try:
+    REGISTER_SCALE = float(os.environ.get('TUNING_REGISTER', '1')) if REGISTER else 1.0
+except ValueError:
+    REGISTER_SCALE = 1.0
 
 
 def render(path, tuner='hybrid440'):
