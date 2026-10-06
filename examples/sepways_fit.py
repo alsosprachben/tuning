@@ -192,8 +192,9 @@ def double(panel, out, chorus=0):
 def preset(name="separate-ways"):
     """The double-tracked riff as a live preset: two Moog parts layered over
     the whole keyboard, one per pass, each with its pass's panel and its own
-    pan pot (live.Part.pan), in the hall. Written to presets.json. The left
-    pass's 7 ms lag is the second player's timing and is not in it."""
+    pan pot (live.Part.pan), fixed touch as a Jupiter-8's keyboard has, in
+    the hall. Written to presets.json. The left pass's 7 ms lag is the second
+    player's timing and is not in it."""
     sys.path.insert(0, HERE)
     import live
     parts = []
@@ -201,7 +202,8 @@ def preset(name="separate-ways"):
         synth = dict(FIT, tune=0.5 + tune / 1400.0, osc2_freq=0.5 + osc2 / 1400.0)
         parts.append(dict(program=81, drums=False, tuner="even", channel=None, lo=0, hi=127,
                           transpose=0, level_db=-3.0, muted=False, drawn=[],
-                          synth=synth, synth_units=5, pan=pan))
+                          synth=synth, synth_units=5, pan=pan,
+                          fixed_touch=True))     # a Jupiter-8 has no velocity
     d = live.load_presets()
     d[name] = dict(parts=parts, room=ROOM, master_db=-9.3, headroom_db=8.0, bend_range=2.0,
                    mod_cents=35.0, press_db=8.0, press_tilt=0.3, thresh=0.7, mod_rate=0.25,

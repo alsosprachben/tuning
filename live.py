@@ -2581,10 +2581,12 @@ class Part:
         self.transpose = transpose
         self.level_db = level_db
         self.muted = False
-        # FIXED TOUCH: a voice whose key only trips a jack or opens a valve
-        # ignores velocity for its level -- on by default live, as on the
-        # instrument; off, it follows velocity as a GM module would
-        self.fixed_touch = True
+        # FIXED TOUCH, a switch on every part: on, velocity does not set the
+        # level; off, it does. None is the patch's own way (touch_fixed): on
+        # for a voice whose key only trips a jack or opens a valve, as on the
+        # instrument, and off for the rest -- which a player may still want
+        # fixed, as a synth with no velocity (a Jupiter-8) plays every key alike
+        self.fixed_touch = None
         self.cres = 0.0
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
         self.synth_b = {}       # ...and a layered Moog's second Messenger's
@@ -2642,6 +2644,13 @@ class Part:
         vc = self.patch._voice_class(60 + self.transpose)
         return vc if getattr(vc, "moog", False) else None
 
+    def touch_fixed(self):
+        """Whether velocity leaves this part's level alone: its switch, or the
+        patch's own way when the switch is unset."""
+        if self.fixed_touch is None:
+            return not self.patch.touch_sensitive
+        return bool(self.fixed_touch)
+
     def to_dict(self):
         d = dict(program=self.program, drums=self.drums, tuner=self.tuner,
                  channel=self.channel, lo=self.lo, hi=self.hi,
@@ -2655,8 +2664,8 @@ class Part:
             d["synth_units"] = 5            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
-        if not self.fixed_touch:
-            d["fixed_touch"] = False
+        if self.fixed_touch is not None:
+            d["fixed_touch"] = bool(self.fixed_touch)
         if self.pan is not None:
             d["pan"] = int(self.pan)
         return d
@@ -2689,7 +2698,7 @@ class Part:
                         own.update(_MG.convert_v3(own, context=ctx))
                     own.update(_MG.convert_v4(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
-        p.fixed_touch = bool(d.get("fixed_touch", True))
+        p.fixed_touch = None if d.get("fixed_touch") is None else bool(d["fixed_touch"])
         p.pan = None if d.get("pan") is None else max(0, min(127, int(d["pan"])))
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
@@ -3974,14 +3983,22 @@ class Live:
         # carries the whole level -- attack_volume was neutralised when it was
         # built -- and trimming it by velocity is the touch sensitivity the
         # class spent a paragraph refusing. See Patch.touch_sensitive.
+        #
+        # ...AND A TOUCH-SENSITIVE VOICE WITH FIXED TOUCH SWITCHED ON is trimmed
+        # to velocity 127's level instead, every key alike; its timbre still
+        # comes from the bucket, as a fixed voice's brightness still follows
+        # the player's effort. On a Moog, whose tone barely follows velocity
+        # (0.2 dB of RMS from v30 to v120), it is nearly all of it -- a
+        # Jupiter-8's keyboard.
         scale = part.gain() * self._chan_gain(ch)
+        _fixed = part.touch_fixed()
         if part.patch.touch_sensitive:
-            scale *= ((vel / 127.0) ** 2 /
+            scale *= (((127.0 if _fixed else vel) / 127.0) ** 2 /
                       max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9))
         # A FIXED-TOUCH VOICE WITH ITS SWITCH OFF follows velocity as any voice
         # does: its template is at the jack's level, which is velocity 127's
         self.note_touch[(part.pid, ch, note)] = _tf = (
-            1.0 if (part.patch.touch_sensitive or part.fixed_touch) else (vel / 127.0) ** 2)
+            1.0 if (part.patch.touch_sensitive or _fixed) else (vel / 127.0) ** 2)
         if not part.patch.touch_sensitive:
             scale *= _tf
         self._amp_touch(part)
@@ -10280,7 +10297,7 @@ def selftest():
     _on = _tl(True, 30) - _tl(True, 120)
     _off = _tl(False, 30) - _tl(False, 120)
     check("live's touch switch: fixed by default, and off follows velocity",
-          Part(_lt.parts[0].patch).fixed_touch and abs(_on) < 0.1
+          Part(_lt.parts[0].patch).touch_fixed() and abs(_on) < 0.1
           and abs(_off - 40.0 * math.log10(30 / 120.0)) < 0.5,
           "  (v30 against v120: %+.1f dB fixed, %+.1f dB following)" % (_on, _off))
     _lt.renderer.close()
@@ -10309,6 +10326,26 @@ def selftest():
           _seat > 1.0 and abs(_held - _seat) < 0.2 and _follow < -1.0 and _rt == 20,
           "  (pan 20: L %+.1f dB over R; after CC10 127 %+.1f; following CC10 127 %+.1f)"
           % (_seat, _held, _follow))
+    # ...AND THE SWITCH IS ON EVERY PART: a touch-sensitive voice follows
+    # velocity by default, and fixed plays every key alike -- a Moog as a
+    # Jupiter-8's keyboard does
+    _lp.parts[0].pan = None
+    def _vl(_v):
+        _lp.on_midi(mido.Message("note_on", channel=0, note=60, velocity=_v))
+        _b = np.concatenate([np.frombuffer(_lp.callback(None, 128, None, 0)[0], np.float32)
+                             for _ in range(40)]).astype(float)
+        _lp.on_midi(mido.Message("note_off", channel=0, note=60))
+        for _ in range(600):
+            _lp.callback(None, 128, None, 0)
+        return 20.0 * math.log10(np.sqrt(np.mean(_b ** 2)) + 1e-30)
+    _lp.parts[0].fixed_touch = None
+    _dflt = (_lp.parts[0].touch_fixed(), _vl(30) - _vl(120))
+    _lp.parts[0].fixed_touch = True
+    _fx = _vl(30) - _vl(120)
+    check("fixed touch is a switch on every part, each patch its own way by default",
+          # (fixed is the LEVEL: the bucket's timbre still moves the RMS ~0.2 dB)
+          not _dflt[0] and abs(_dflt[1] - 40.0 * math.log10(30 / 120.0)) < 0.5 and abs(_fx) < 0.5,
+          "  (Moog: v30 against v120 %+.1f dB by default, %+.1f fixed)" % (_dflt[1], _fx))
     _lp.renderer.close()
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
     # striking a string and is famously expressive; a harmonica has no key at

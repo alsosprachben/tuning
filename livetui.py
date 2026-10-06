@@ -680,12 +680,12 @@ class TUI:
             self.type_value(scr, col)
 
     def toggle_touch(self, p):
-        """FIXED TOUCH, for a voice whose key only trips a jack or opens a
-        valve: on, velocity does not set its level (the instrument's way); off,
-        it does (a GM module's). Other voices always follow velocity."""
-        if p is None or p.patch.touch_sensitive:
+        """FIXED TOUCH, on any part: on, velocity does not set its level; off,
+        it does. Each patch starts its own way -- fixed for a key that only
+        trips a jack or opens a valve, velocity for the rest."""
+        if p is None:
             return
-        p.fixed_touch = not p.fixed_touch
+        p.fixed_touch = not p.touch_fixed()
         self.say("part %d: %s" % (self.row + 1, "fixed touch -- the key sets no level"
                                   if p.fixed_touch else "velocity sets the level"))
         self.live.dirty = True
@@ -1557,9 +1557,7 @@ class TUI:
         if c == "tuner":
             return p.tuner
         if c == "touch":
-            if p.patch.touch_sensitive:
-                return "vel"
-            return "fixed" if p.fixed_touch else "vel"
+            return "fixed" if p.touch_fixed() else "vel"
         if c == "stops":
             if not p.organ:
                 return "-"
