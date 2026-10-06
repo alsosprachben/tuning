@@ -3471,8 +3471,9 @@ class GrandPianoProperties(InharmonicStringProperties):
     # fractional sharpening at full amplitude and velocity (0.008 ~ 14 cents).
     tension_bend = 0.008
 
-    # Natural per-note jitter so same-pitch doublings beat and stagger instead of
-    # locking into a machine-gun unison (now that every strike is phase-coherent).
+    # Natural per-KEY pitch error so doublings beat and stagger instead of
+    # locking into a machine-gun unison (now that every strike is phase-coherent);
+    # drawn once per key, see __init__.
     pitch_jitter_cents = 1.0
     timing_jitter_seconds = 0.002
 
@@ -3491,6 +3492,19 @@ class GrandPianoProperties(InharmonicStringProperties):
         rng = _random.Random(midi)
         lo, hi = self.string_detune_range
         self.note_detune_cents = (-rng.uniform(lo, hi), rng.uniform(lo, hi))
+        # THE KEY'S PITCH ERROR IS A FACT OF THE INSTRUMENT, not of the strike,
+        # as Ben specified when the strings were first detuned (792e20b): fixed
+        # per key. f7d02f8 drew it from the global stream for every NOTE, so the
+        # same key struck twice came out up to 2 cents apart -- no string does
+        # that, and a key's strike and its free strings must share ONE tuning
+        # for a temperament to be heard as itself. Drawn from
+        # the key's own generator, after its detune; the base class's draw from
+        # the global stream above is still made, and simply not used, so every
+        # other random draw in a render lands where it did. Doublings still
+        # beat: two keys, two errors.
+        if self.pitch_jitter_cents:
+            self.pitch_jitter = 2.0 ** (rng.uniform(-self.pitch_jitter_cents,
+                                                    self.pitch_jitter_cents) / 1200.0) - 1.0
 
     def string_count_for_frequency(self, frequency):
         # Full-upright stringing (the owner's instrument): single wound monochord
