@@ -1136,6 +1136,37 @@ PARTIAL_COLS = ("om","p0","aL","aR","aM","mch","px","pz","nf","non","noff","fa",
 MOOG_NEUTRAL = False
 
 
+# THE STRING, ONE SOURCE OF TRUTH. A partial's frequency and decays, and a
+# unison string's, as the note loop emits them -- and as the free-string
+# register (register.py) builds the strings that were not struck. Shared, not
+# copied, so a struck partial and the same string ringing sympathetically
+# cannot disagree by so much as a rounding: the register's response to a
+# tuning is only as true as its strings are the strings that are played.
+def string_partial(props, f0, ratio, m, B):
+    """Partial m of a string at f0 (a rank's footage `ratio`), stretched by its
+    inharmonicity B: (h, Hz), or None past the voice's last mode."""
+    mr = props.mode_ratio(m)
+    if mr <= 0.0:
+        return None
+    h = ratio*mr; stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0; hf = f0*h*stretch
+    return h, hf
+
+
+def partial_decay(rp, f0, m):
+    """Partial m's decay: (dB/s, its log rate, the aftersound's share, the
+    aftersound's log rate) -- the kernel's logr / aft / logrA."""
+    dbps = rp.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
+    aftL, adbps = rp.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
+    return dbps, logr, aftL, logrA
+
+
+def unison_partial(hf, off_hz, dr, ud):
+    """A unison string's partial from the main string's: (Hz, its log rate)."""
+    uf = hf*(1.0+dr) + off_hz
+    ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
+    return uf, ulr
+
+
 def prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
@@ -3288,9 +3319,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                     if bmode == 'truncate': continue
                     while f0*eff_ratio > ceiling and eff_ratio >= 2.0: eff_ratio *= 0.5
                 for m in range(1, props.max_harmonic+1):
-                    mr = props.mode_ratio(m)
-                    if mr <= 0.0: break
-                    h = eff_ratio*mr; stretch = (1.0+0.5*(h*h-1.0)*rank_B) if rank_B>0 else 1.0; hf = f0*h*stretch
+                    _hh = string_partial(props, f0, eff_ratio, m, rank_B)
+                    if _hh is None: break
+                    h, hf = _hh
                     if hf > SR/2: break
                     hv = hv_fn(m)
                     if hv == 0.0: continue
@@ -3301,8 +3332,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # its fade, which would leave it decaying while it faded in.
                     pdelay = props.bloom_delay_for(hf)*SR
                     pfade = fade_r
-                    dbps = rp.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
-                    aftL, adbps = rp.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
+                    dbps, logr, aftL, logrA = partial_decay(rp, f0, m)
                     # What the instrument radiates toward here: directivity at
                     # this partial's frequency, less what the air ate on the way.
                     # The head model is applied on top of it, not instead of it.
@@ -3368,9 +3398,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                     for ui, (gm, off_hz, dr, ud, uph) in enumerate(_uv):
                         vb = props.voice_vibrato(f0, ui + 1)
                         _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
-                        uf = hf*(1.0+dr) + off_hz
+                        uf, ulr = unison_partial(hf, off_hz, dr, ud)
                         if uf <= 0 or uf > SR/2: continue
-                        ulr = math.log(T.db_ratio(ud)) if ud>0 else 0.0
                         ugL, ugR = gL*gm, gR*gm
                         if seats and ui + 1 < len(seats):
                             # this player's chair, not the section's centre. The
