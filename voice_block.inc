@@ -11,6 +11,8 @@
                 // inside a branch, gcc vectorised the four evaluations another way
                 // and the organ's swell moved by an ULP. A Moog ignores them.
                 float mL0=AMP(bs0,b,dL), mL1=AMP(bs1,b,dL), mR0=AMP(bs0,b,dR), mR1=AMP(bs1,b,dR);
+                if(BLrow){ long bb=b<nblk?b:nblk-1; float w0=BLrow[bb], w1=BLrow[bb+1];
+                    mL0*=w0; mR0*=w0; mL1*=w1; mR1*=w1; }
                 if(!ftr && mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
                 // chiff fade for this block (state: attack/sustain/release). The
                 // attack chiff rides chiffS -- its OWN short, capped width, NOT the

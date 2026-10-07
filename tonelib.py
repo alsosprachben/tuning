@@ -1035,6 +1035,22 @@ class SynthProperties:
     wind_skirt_db = None
     wind_skirt_hz = 1.0             # its width: the wider of this (Hz) ...
     wind_skirt_rel = None           # ... and this fraction of the partial
+    # THE CHEST'S WIND (wind.py): how a pipe answers its pressure p (1 =
+    # static) -- frequency as p**wind_pitch_exp, amplitude as p**wind_level_exp
+    # -- and, on the organ that owns a chest, how that pressure moves: its slow
+    # wander (RMS fraction, Hz), its sag under load (fraction per unit of draw,
+    # an 8' middle C being one; the bellows' resonance and damping), and its
+    # Tremulant (rate, depth, how fast it builds). 0 = none.
+    wind_pitch_exp = 0.0
+    wind_level_exp = 0.0
+    wind_wander_rms = 0.0
+    wind_wander_hz = 0.5
+    wind_sag_per_unit = 0.0
+    wind_sag_hz = 4.0
+    wind_sag_zeta = 0.35
+    tremulant_hz = 5.6
+    tremulant_depth = 0.0
+    tremulant_tau = 0.25
     register_knock_gain = 0.0
     register_knock_falloff = 1.0
     damper_top = 128
@@ -4207,6 +4223,11 @@ class StoppedPipeProperties(SynthProperties):
     wind_skirt_db = -24.0
     wind_skirt_hz = 10.0
     wind_skirt_rel = 0.03
+    # ITS PRESSURE (wind.py): Pykett's stopped pipe, f = 0.0829 p + 170.2 Hz
+    # about 80 mm wg, is p**0.0375 -- 10% more wind, 6.5 cents sharp. Its
+    # level as p**1 is a starting value for the ear. Every flue inherits both.
+    wind_pitch_exp = 0.0375
+    wind_level_exp = 1.0
     # CC71-78: a stopped pipe blown by a player, the pan flute.
     sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # A DRIVEN AIR COLUMN HAS NO DAMPER: the tone stops when the wind does, and
@@ -4483,6 +4504,14 @@ class RockOrganProperties(TonewheelProperties):
 
 
 class OrganProperties(StoppedPipeProperties):
+    # THE CHEST (wind.py), shared by every rank on a division's channel: a
+    # wander under Pitea's bound (0.3% RMS is 0.2 cents on a flue), a sag of
+    # 0.05% per unit of draw through a bellows resonant at 4 Hz, damping 0.35,
+    # and a gentle Tremulant, +-10% at 5.6 Hz -- all starting values for the
+    # ear. The wander and the sag follow TUNING_WIND; the Tremulant is a stop.
+    wind_wander_rms = 0.003
+    wind_sag_per_unit = 0.0005
+    tremulant_depth = 0.10
     # ---------------------------------------------------------- pipe scaling
     #
     # A rank's directivity is not a fixed aperture, because a rank is not one
@@ -4735,6 +4764,10 @@ class ReedOrganProperties(OrganProperties):
     wind_skirt_db = -32.0
     wind_skirt_hz = 8.0
     wind_skirt_rel = 0.025
+    # ITS PRESSURE: the tongue holds the pitch (Pykett: a tremulant hardly
+    # moves a reed's), the level moves more than a flue's. Starting values.
+    wind_pitch_exp = 0.01
+    wind_level_exp = 1.5
     # Borrowed as a RANK (the church organ's reed stops), it is this pipe
     # entire -- its own ceiling, decay, chiff and sustain -- not a spectrum laid
     # on the host's. See blockrender's rank loop.
@@ -5131,6 +5164,18 @@ ReedOrganFreeProperties.stop_rows = [
 # that Expression puts the pressure under the feet; the slope is this model's
 # own gate-to-brightness ratio, halved to stay inside one register's voicing.
 HARMONIUM_EXPRESSION_TILT = 0.8
+
+
+def rank_wind_class(host, rank):
+    """Whose wind a rank's pipes answer (wind.py): its own pipe class if it
+    names one, else the spectrum it borrows if that is a pipe's, else the
+    host's -- blockrender's rule for the skirts, by class."""
+    rest = rank[3:]
+    if len(rest) > 2 and rest[2] is not None:
+        return rest[2]
+    if rest and rest[0] is not None and getattr(rest[0], 'wind_skirt_db', None) is not None:
+        return rest[0]
+    return host
 
 
 def stop_drawn_at(events, t):
@@ -5568,6 +5613,12 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("bourdon 16", 0.5, 0.60, StoppedPipeProperties),
 ]
+# THE TREMULANT, bit 13, the last of the 14-bit word: no pipes, a valve that
+# pulses the wind every rank of the division stands on (wind.py). A stop with
+# no ratio has a gate and no partials, as the harmonium's Tremolo has.
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
+    ("tremulant", None, 0.0),
+]
 # HOW THE CONSOLE SHOWS THEM, which is not the bit order: the bits are the file
 # format and grew one addition at a time, so they must never move. A stop jamb
 # reads the flue chorus from the gravest pitch down to the Mixtur, the mutations
@@ -5579,7 +5630,7 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
 FlueOrganProperties.stop_rows = [
     ["principal 16", "bourdon 16", "principal 8", "flute 8", "|",
      "quint 5-1/3", "octave 4", "quint 2-2/3", "super octave 2", "mixture III"],
-    ["reed 16", "reed 8", "trumpet 8", "reed 4"],
+    ["reed 16", "reed 8", "trumpet 8", "reed 4", "|", "tremulant"],
 ]
 
 # RENAMED RANKS, old -> new, so a preset, a session or a script written before

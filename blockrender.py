@@ -1484,6 +1484,57 @@ def prepare(path, tuner='hybrid440', sink=None):
                 Srows[_r] = np.clip((_L - fg) / (1.0 - fg), 0.0, 1.0) ** (1.0 / pg)
             else:
                 Srows[_r] = np.ones_like(_s)      # a law with no range: open
+    # THE CHEST'S WIND (wind.py): one pressure per organ channel -- a division
+    # stands on its own chest -- moved by its wander and its sag under the
+    # pipes speaking (TUNING_WIND) and by the Tremulant when drawn (a stop, on
+    # whatever TUNING_WIND says). Every rank answers it by its family: the
+    # pitch rides a bend row per (channel, family), the level that row's BL.
+    # Built whole here, before any note, so a stream is the table by
+    # construction. A channel with neither gets no rows, and renders as it did.
+    _WROWS = {}              # channel -> {(a, b): (ratio per block, level at block edges)}
+    wrow_key = {}            # (channel, rank) -> (a, b)
+    for ch, _plist in ch_progs.items():
+        prog = next((q for q in dict.fromkeys(_plist)
+                     if getattr(property_class_for_program(q), 'registerable', False)), None)
+        if prog is None:
+            continue
+        pc = property_class_for_program(prog)
+        if getattr(pc, 'wind_skirt_db', None) is None or not getattr(pc, 'wind_pitch_exp', 0.0):
+            continue                            # not a pipe organ
+        _tr = rankev_of[ch].get('tremulant', ())
+        _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
+        if not (WIND or _trem_on):
+            continue
+        import wind as _WND
+        _bt = (np.arange(nblk) + 0.5) * BLK / SR
+        _trem = np.zeros(nblk)
+        for _t, tg in _tr:                      # the stop's draw, a step per block
+            _trem[_bt >= _t] = tg
+        _dem = np.zeros(nblk + 1)
+        _ranks = [r for r in pc.stop_ranks if r[1] is not None]
+        for _n in notes:
+            if _n[0] != ch or property_class_for_program(_n[6]) is not pc:
+                continue
+            _f = 440.0 * 2.0 ** ((_n[1] - 69) / 12.0)
+            _b0 = min(nblk, int(_n[2] * SR / BLK)); _b1 = min(nblk, int(_n[3] * SR / BLK) + 1)
+            if _b1 <= _b0:
+                continue
+            for r in _ranks:
+                _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
+                _w = sum(_WND.pipe_draw(_f * q) for q in _rat)
+                _dem[_b0:_b1] += _w * Grows[grow_of[(ch, r[0])]][_b0:_b1]
+        _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=(WIND_SCALE if WIND else 0.0))
+        _p = _wd.blocks(_dem[:nblk], _trem)
+        _WROWS[ch] = {}
+        for r in _ranks:
+            _wc = T.rank_wind_class(pc, r)
+            _ab = (float(_wc.wind_pitch_exp), float(_wc.wind_level_exp))
+            wrow_key[(ch, r[0])] = _ab
+            if _ab not in _WROWS[ch]:
+                _WROWS[ch][_ab] = _WND.pitch_level(_p, *_ab)
+        if _VERBOSE_WIND:
+            print("  wind ch%d: pressure %.4f..%.4f, peak draw %.1f units%s"
+                  % (ch, _p.min(), _p.max(), _dem.max(), ", tremulant" if _trem_on else ""))
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
 
@@ -1597,6 +1648,18 @@ def prepare(path, tuner='hybrid440', sink=None):
     for _c, _ev in _BGEST.items():
         _r, _cc = bend_blocks(_ev, nblk)
         brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+    # the wind's rows (above): a bend row per (channel, family), its phase the
+    # running sum of its ratio exactly as bend_blocks makes it, and its level
+    wrow_of = {}; _BLrows = {}
+    for _c, _fams in _WROWS.items():
+        for _ab, (_r, _lv) in _fams.items():
+            _r = _r.astype(np.float32)          # the ratio the kernel reads, summed as it is
+            _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+            _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _BLrows[_i] = _lv.astype(np.float32)
+            for (_c2, _k), _ab2 in wrow_key.items():
+                if _c2 == _c and _ab2 == _ab:
+                    wrow_of[(_c, _k)] = _i
     # MPE, PER NOTE: the member's bend plus the manager's, in semitones -- a
     # product of ratios (M1-100-UM Appendix C). The value in force at Note On
     # goes into that note's f0; what moves afterwards is the note's own row:
@@ -1688,6 +1751,11 @@ def prepare(path, tuner='hybrid440', sink=None):
             _PN_AT[(ch, note, on)] = (p0, b0, row)
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
+    BL = None
+    if _BLrows:
+        BL = np.ones((len(BRrows), nblk + 1), np.float32)
+        for _i, _lv in _BLrows.items():
+            BL[_i] = _lv
     # partial table
     # THE COLUMNS AS DOUBLES, not lists: a list holds a pointer and a float
     # object a partial (32 bytes), array('d') the 8-byte double itself, and
@@ -2490,7 +2558,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         # rows and side tables, the bursts, the fader, and the per-channel
         # settings the effects read (live dicts: filled as channels first sound)
         sink.begin(dict(mod=sys.modules[__name__], room_bands=ROOM_BANDS,
-                        lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
+                        lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC, BL=BL,
                         cons_bursts=cons_bursts, mvol=_mvol, moog_tables=_moog_tables,
                         reverb=_REVERB_CH, qacc=_QACC, F=_F, ht_rows=_HT_ROWS,
                         amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
@@ -3262,6 +3330,9 @@ def prepare(path, tuner='hybrid440', sink=None):
             if len(rest) > 3 and rest[3] is not None and not (rest[3][0] <= note <= rest[3][1]):
                 continue
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
+            # the chest's wind (wind.py): this rank's family's row on its channel
+            if organ and (ch, key) in wrow_of:
+                _BR[0] = wrow_of[(ch, key)]
             dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
             # "BORROW THIS VOICE'S SPECTRUM ONLY" -- and the line under that
             # comment handed the borrowed class a velocity as well, so it also
@@ -3826,7 +3897,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     mvol = _mvol()
     _mt = _moog_tables()
     FT, KN, MPI, MPC, MPR, MKI, MPK = (_mt[k] for k in ('FT', 'KN', 'MPI', 'MPC', 'MPR', 'MKI', 'MPK'))
-    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC,
+    prep = dict(lib=lib, P=P, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC, BL=BL,
                 FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
@@ -3970,6 +4041,8 @@ def _voice_args(a, sl, P):
                     fp(sl('vd')),fp(sl('vr')),fp(sl('vp')),fp(sl('vdl')),fp(sl('delL')),fp(sl('delR')),
                     ip(sl('gr')),ip(sl('cr')),fp(a['G']),fp(a['S']),
                     ip(sl('br')),fp(a['BR']),dp(a['BC']),
+                    # the wind's level on a bend row, at block edges (wind.py); NULL: none
+                    fp(a['BL']) if a.get('BL') is not None else None,
                     # the Moog's filter and contours (moog.py): NULL fx is no
                     # Moog in this table, and the kernel never reads FT or KN
                     ip(sl('fx')) if a.get('FT') is not None else None,
@@ -4018,6 +4091,7 @@ try:
 except ValueError:
     WIND_SCALE = 1.0
 WIND_PARTIALS = 16          # the skirts' cost is a row a partial: the lower ones carry it
+_VERBOSE_WIND = os.environ.get('TUNING_WIND_VERBOSE', '0') not in ('0', '')
 # ...and its LEVEL: TUNING_REGISTER=4 is on, with the class's coupling and
 # knock times 4 (Ben's ear set 1, against 4, on Ondine)
 try:

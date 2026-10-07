@@ -35,6 +35,10 @@
             int br=brow[p];
             const float*  BRrow = br>=0 ? BR+(long)br*nblk : 0;
             const double* BCrow = br>=0 ? BC+(long)br*nblk : 0;
+            // THE WIND'S LEVEL (wind.py), on the same row as its pitch: at the
+            // block's edges, nblk+1 of them, so it moves within a block as the
+            // tremulant must. NULL for every render without a wind.
+            const float*  BLrow = (br>=0 && BL) ? BL+(long)br*(nblk+1) : 0;
             // amplitude at absolute sample n (env * decay * gate * shutter). The
             // envelope onset is shifted per ear by the HRTF path delay d (samples)
             // -- the interaural time difference -- while the carrier phase (ph0)

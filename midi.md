@@ -1001,6 +1001,22 @@ float32. Live, as with the fader, a CC11 move also reaches the notes already
 sounding under Expression. The mod wheel is not a crescendo here: the
 harmonium has none.
 
+## The pipe organ's Tremulant and wind
+
+**Bit 13 of the pipe organ's stop word (CC43 = 64) is the Tremulant.** It has
+no pipes: it pulses the wind that every rank on the channel stands on, ±10%
+at 5.6 Hz, so a flue wavers about ±6.5 cents and ±0.8 dB with it, pitch and
+level together, and a reed in level more than in pitch. Drawn, it builds in
+over a quarter second; put in, it dies away as fast. A channel is a division
+and a division is a chest: a tremulant on one channel leaves the others still.
+
+**The chest's own wind** is `TUNING_WIND` (off by default; a number scales
+it), as the pipes' turbulence is: a slow wander under Pitea's bound, and a
+sag when a chord draws its wind — the bellows dips, overshoots a little and
+settles a shade flat (`wind.py`; `examples/organ_chest_check.py`). The
+Tremulant is a stop and does not wait for it. Live has both, per organ part,
+the Tremulant drawn from the panel.
+
 ## Tuning by SysEx
 
 GM2 Scale/Octave Tuning, both byte forms, one offset per pitch class applied

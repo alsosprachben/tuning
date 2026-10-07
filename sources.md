@@ -5525,3 +5525,34 @@ fourth pipe (400 pipes):
 The noise's band follows the pipe's pitch, sitting around its lower partials
 rather than as a flat hiss: the resonator filters the jet's turbulence, so
 much of the wind is heard as skirts on the partials.
+
+## The chest's wind — pressure, sag and the Tremulant (added for wind.py)
+
+**What a pipe does with its pressure.** Colin Pykett, *Tremulant Simulation
+in Digital Organs* (<http://www.colinpykett.org.uk/digitaltrems.htm>, read
+2026-10-06): a stopped pipe near F below middle C measured as
+f = 0.0829 p + 170.2 Hz for 50 < p < 110 mm wg, every harmonic moving in
+proportion. About 80 mm that is f ∝ p^0.0375: 10% more wind, 6.5 cents
+sharp. Flues go sharper and louder as the pressure rises; reeds hardly move
+in pitch. `wind_pitch_exp` 0.0375 for the flues is that; the reed's 0.01 and
+both families' level exponents (flue 1.0, reed 1.5) are starting values, for
+the ear.
+
+**The Tremulant.** Pykett gives up to 75% peak-to-peak pressure swing as
+typical of a strong tremulant (a church organ's fluework ±30 mm about 80 mm
+wg; a theatre organ ±100 mm about 250 mm), waveforms from sinusoidal to
+asymmetric, and no rate. The default here is a gentle one, ±10% at 5.6 Hz,
+sinusoidal, building in over a quarter second, for the ear to set.
+
+**The wander's bound.** Abel, Ahnert and Bergweiler measured 160 Pa with
+6 Pa RMS at a pipe foot (3.75%), which includes the foot's own turbulence.
+Pitea bounds what the chest can share: a C4 principal wanders 0.47 cents in
+all, its partials' level wobbles uncorrelated (above), so a shared pressure
+must sit well under it. 0.3% RMS is 0.2 cents on a flue.
+
+**The sag.** No measurement of a chest's pressure under a chord turned up.
+The model is a bellows as a resonant second-order system (4 Hz, damping
+0.35) driven by the pipes' draw, each going as its windway, roughly its
+diameter: (f / 261.6)^-0.75 of an 8′ middle C. 0.05% per unit sags a
+five-note plenum chord in the bass (67 units) by 2.6 cents at its deepest,
+0.14 s in, settling at 2.0 (`examples/organ_chest_check.py`). By ear.

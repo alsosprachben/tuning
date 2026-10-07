@@ -106,6 +106,9 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
 COLS_F4_NOTE = ("gb", "gt", "gc", "vdl")   # + CC78's vibrato delay: also a press
 COLS_I8 = ("non", "noff")
 COLS_I4 = ("gr", "cr", "br", "pl", "fx", "mk")
+# THE ORGAN'S WIND, live: how many bend rows the slab keeps for it, one per
+# (part, family of pipe) -- a flue and a reed answer the chest differently.
+WIND_ROWS = 32
 
 # ---- CC10, and what pan actually IS in this renderer ------------------------
 # NOT A PAN LAW. The file path puts CC10 into channel_pan, which becomes a
@@ -804,8 +807,13 @@ class Slab:
         # Non-organ voices never read G/S, but the kernel still wants pointers.
         self.G = np.ones((1, 1), np.float32)
         self.S = np.ones((1, 1), np.float32)
-        self.BR = np.ones((1, 1), np.float32)     # inert: see prep()
-        self.BC = np.zeros((1, 1), np.float64)
+        # Row 0 is inert (see prep()); rows 1.. are the organ's WIND (wind.py),
+        # one per (part, family), rewritten every callback by Live._wind_block:
+        # this block's pitch ratio, the phase it has accrued to the block's
+        # start, and its level at the block's two edges. The arrays never move.
+        self.BR = np.ones((WIND_ROWS + 1, 1), np.float32)
+        self.BC = np.zeros((WIND_ROWS + 1, 1), np.float64)
+        self.BL = np.ones((WIND_ROWS + 1, 2), np.float32)
         self.sh = (0.06, 1.6, 3.5, 1500.0)
         self._prep_cache = None
         self.rate = 48000.0   # set by Live; needed by retune()
@@ -1033,9 +1041,11 @@ class Slab:
             # phase. So live hands the kernel one row of ones and one of zeros
             # and every slot's br stays -1, which takes the same code path the
             # kernel took before the rows existed. (Unifying the two is a
-            # tempting follow-up and deliberately not this change.)
+            # tempting follow-up and deliberately not this change.) The one
+            # exception is the organ's wind, rows 1.., which a whole division
+            # rides at once and which moves every block (Live._wind_block).
             d.update(lib=self.lib, P=self.cap, nblk=1, G=self.G, S=self.S,
-                     BR=self.BR, BC=self.BC, sh=self.sh,
+                     BR=self.BR, BC=self.BC, BL=self.BL, sh=self.sh,
                      FT=self.FT, KN=self.KN, knk=2, kb0=0,
                      MPI=self.MPI, MPC=self.MPC, MPR=self.MPR, MKI=self.MKI, MPK=self.MPK)
             self._prep_cache = d
@@ -1753,6 +1763,12 @@ class Slab:
         # that p0 + om*n be unbroken, so the difference between the ears carries
         # through untouched -- the note bends without moving in the room.
         step = (om0 - om1) * n - (after - before)
+        # A SLOT ON A WIND ROW carries om*BC of the wind's accrued phase as
+        # well (the kernel adds it), so a new om moves that term too.
+        if om_scale is not None:
+            br = a["br"][idx]
+            if (br >= 0).any():
+                step -= (om1 - om0) * np.where(br >= 0, self.BC[np.maximum(br, 0), 0], 0.0)
         a["p0"][idx] += step
         a["p0R"][idx] += step
         if om_scale is not None:
@@ -2252,6 +2268,11 @@ class Patch:
         self.stop_tremolo_hz = float(getattr(pc, "stop_tremolo_hz", 0.0)) if pc else 0.0
         self.stop_tremolo_depth = float(getattr(pc, "stop_tremolo_depth", 0.0)) if pc else 0.0
         self.percussion_ranks = tuple(getattr(pc, "percussion_ranks", ())) if pc else ()
+        # THE CHEST'S WIND (wind.py): a pipe organ's class, or None -- a voice
+        # whose pipes answer a shared pressure (Live._wind_block)
+        self.wind_pc = (pc if pc is not None and getattr(pc, "registerable", False)
+                        and getattr(pc, "wind_skirt_db", None) is not None
+                        and getattr(pc, "wind_pitch_exp", 0.0) else None)
         self.percussion_attack_s = float(getattr(pc, "percussion_attack_s", 0.0)) if pc else 0.0
         # Where this voice's stop word lives: CC11/43 on the pipe organ and the
         # harpsichord, CC43/44 on the harmonium (its CC11 is the bellows).
@@ -2755,6 +2776,8 @@ class Live:
         # retires ranks OUT of the slab, so a held note could lose every rank it
         # had and vanish from the only record that it was still down.
         self.down = set()
+        self.wind_st = {}               # part id -> its chest (see _wind_block)
+        self.wind_next = 1              # the slab's next free wind row
         self.stuck = 0
         self.misses = 0         # templates asked for that were never built
         self.measure = False    # --latency: record MIDI-to-DAC for each note
@@ -6275,6 +6298,10 @@ class Live:
             return
         if part.patch.stop_word_ccs == (43, 44):
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
+        if part.patch.wind_pc is not None:
+            _wr = self._wind_row(part, rank)
+            if _wr > 0:
+                self.slab.a["br"][np.asarray(self.slab.last_slots, np.int64)] = _wr
         # A REGISTERABLE VOICE STILL TAKES A TUNING, even though it takes no
         # bend. `_note_on` returns here before every per-channel pitch
         # adjustment, which is right for the wheel -- an organ has no pitch
@@ -6296,6 +6323,65 @@ class Live:
         if part.patch.leslie:
             self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
                                  n0, self.rotor_horn.rate, self.rotor_drum.rate)
+
+    # ---- the organ's wind (wind.py) ------------------------------------------
+    # One chest per pipe-organ part: its pressure moved by the wander and the
+    # sag under the pipes it is sounding (TUNING_WIND, as the file renderer
+    # reads it) and by the Tremulant when drawn. Each family of pipe on it --
+    # a flue, a reed -- rides one of the slab's bend rows, which the kernel
+    # reads as the file renderer's: this block's ratio, the phase accrued to
+    # its start, its level at its two edges. A part's rows exist from its first
+    # drawn rank, so a Tremulant drawn under a held chord takes the chord too;
+    # a row at rest is a ratio of 1, no phase and a level of 1, which the
+    # kernel's arithmetic leaves exact.
+    def _wind_row(self, part, rank):
+        """The slab row `rank` of this organ part rides (0: none, rows spent)."""
+        st = self.wind_st.get(part.pid)
+        if st is None:
+            import wind as _WND
+            pc = part.patch.wind_pc
+            st = dict(wind=_WND.Wind(pc, B.BLK / float(self.rate), seed=part.pid,
+                                     scale=(B.WIND_SCALE if B.WIND else 0.0)),
+                      rows={}, rank_row={}, acc={}, ratios={})
+            for r in part.patch.stop_ranks:
+                if r[1] is None:
+                    continue
+                wc = T.rank_wind_class(pc, r)
+                ab = (float(wc.wind_pitch_exp), float(wc.wind_level_exp))
+                if ab not in st["rows"]:
+                    if self.wind_next > WIND_ROWS:
+                        continue
+                    st["rows"][ab] = self.wind_next
+                    st["acc"][self.wind_next] = 0.0
+                    self.wind_next += 1
+                st["rank_row"][r[0]] = st["rows"][ab]
+                st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
+            self.wind_st[part.pid] = st
+        return st["rank_row"].get(rank, 0)
+
+    def _wind_block(self, n0, frames):
+        """Every organ part's chest, one block on: its rows for this block."""
+        import wind as _WND
+        sl = self.slab
+        for part in self.parts:
+            st = self.wind_st.get(part.pid)
+            if st is None:
+                continue
+            ratios = st["ratios"]
+            dem = 0.0
+            for k in sl.live:
+                if k[0] == part.pid and len(k) == 4 and k[3] in ratios:
+                    f = 440.0 * 2.0 ** ((k[2] + part.transpose - 69) / 12.0)
+                    dem += sum(_WND.pipe_draw(f * q) for q in ratios[k[3]])
+            trem = 1.0 if "tremulant" in part.drawn else 0.0
+            p = st["wind"].blocks((dem,), (trem,))[0]
+            for (a, b), row in st["rows"].items():
+                r, lv = _WND.pitch_level(p[None, :], a, b)
+                sl.BR[row, 0] = r[0]
+                sl.BC[row, 0] = st["acc"][row]
+                sl.BL[row, 0] = lv[0]
+                sl.BL[row, 1] = lv[1]
+                st["acc"][row] += (float(sl.BR[row, 0]) - 1.0) * frames
 
     def _listens(self, part, ch):
         return (part.channel is None or part.channel == self._pc(ch)) and not part.muted
@@ -6463,6 +6549,8 @@ class Live:
         n0 = self.n
         t0 = time.perf_counter()
         try:
+            if self.wind_st:
+                self._wind_block(n0, frame_count)
             self.apply(n0)
             self.sweep(n0)
             self._drone_reap(n0)
@@ -13809,7 +13897,111 @@ def selftest():
           "  (redirect_stdout was process-wide: two builds racing left stdout a "
           "StringIO for good, and the selftest went on silently)")
 
+    wind_selftest(check)
+
     print("\n  %s" % ("all passed" if not fails else "FAILED: %s" % ", ".join(fails)))
+    return 1 if fails else 0
+
+
+def wind_selftest(check=None):
+    """THE ORGAN'S WIND, live (wind.py), against the file renderer's numbers:
+    the Tremulant swings a held pipe at its rate and depth, pitch and level
+    together, and a chord's draw sags the chest as wind.py's arithmetic says.
+    Runnable alone: python3 -c "import live; live.wind_selftest()"."""
+    import wind as _WND
+    fails = []
+    if check is None:
+        def check(name, ok, detail=""):
+            print("   %-54s %s%s" % (name, "ok" if ok else "FAIL", detail), flush=True)
+            if not ok:
+                fails.append(name)
+    from scipy.signal import butter, sosfiltfilt, hilbert
+    pc = T.FlueOrganProperties
+    rate, fr = 48000, 128
+
+    def word(lv, w):
+        # live's pipe organ is registered from the panel, not by CC11/43
+        names = lv.parts[0].patch.rank_names
+        lv.set_stops(lv.parts[0], {names[i] for i in range(len(names)) if (w >> i) & 1}, lv.n)
+
+    def run(lv, secs, rows=None):
+        buf = []
+        for _ in range(int(secs * rate) // fr):
+            b, _f = lv.callback(None, fr, None, 0)
+            buf.append(np.frombuffer(b, np.float32))
+            if rows is not None:
+                rows.append(float(lv.slab.BR[1, 0]))
+        return np.concatenate(buf)
+
+    # the Tremulant on a held A4, principal 8: wind or no wind, it is a stop
+    lv = Live(program=19, rate=rate, frames=fr, verbose=False)
+    lv.warm()
+    word(lv, (1 << 13) | 1)
+    lv.on_midi(mido.Message("note_on", channel=0, note=69, velocity=100))
+    x = run(lv, 3.0)
+    x = x.reshape(-1, 2).mean(1)
+    sos = butter(4, [440.0 * 0.93, 440.0 * 1.07], btype="band", fs=rate, output="sos")
+    a = hilbert(sosfiltfilt(sos, x))
+    f = np.diff(np.unwrap(np.angle(a))) * rate / (2 * np.pi)
+    g = 20 * np.log10(np.abs(a)[1:] + 1e-12)
+    s_ = slice(int(1.2 * rate), int(2.9 * rate))
+    c = 1200 * np.log2(f[s_] / np.median(f[s_]))
+    g = g[s_] - np.median(g[s_])
+    fq = np.fft.rfftfreq(len(c), 1.0 / rate)
+    hz = fq[1 + np.argmax(np.abs(np.fft.rfft(c - c.mean()))[1:])]
+    pp = np.percentile(c, 99.5) - np.percentile(c, 0.5)
+    want = 1200 * pc.wind_pitch_exp * np.log2((1 + pc.tremulant_depth) / (1 - pc.tremulant_depth))
+    r = np.corrcoef(c, g)[0, 1]
+    check("the Tremulant swings a held pipe, live as in the file",
+          abs(hz - pc.tremulant_hz) < 0.6 and abs(pp - want) < 0.15 * want and r > 0.9,
+          "  (%.2f Hz, %.1f cents p-p against %.1f, pitch~level r=%.2f)" % (hz, pp, want, r))
+    lv.on_midi(mido.Message("note_off", channel=0, note=69, velocity=0))
+
+    # the sag: a held F#4 on the plenum, a chord in the bass a second in
+    was = (B.WIND, B.WIND_SCALE)
+    B.WIND, B.WIND_SCALE = True, 1.0
+    try:
+        lv = Live(program=19, rate=rate, frames=fr, verbose=False)
+        lv.warm()
+        plenum = 0xFF | (1 << 12)
+        word(lv, plenum)
+        lv.on_midi(mido.Message("note_on", channel=0, note=66, velocity=100))
+        rows = []
+        run(lv, 1.0, rows)
+        i0 = len(rows)
+        for n in (41, 48, 53, 57, 60):
+            lv.on_midi(mido.Message("note_on", channel=0, note=n, velocity=100))
+        t0 = time.perf_counter()
+        run(lv, 1.5, rows)
+        el = time.perf_counter() - t0
+        rk = [rr for i, rr in enumerate(pc.stop_ranks) if (plenum >> i) & 1 and rr[1] is not None]
+
+        def units(n):
+            fn = 440.0 * 2 ** ((n - 69) / 12.0)
+            return sum(_WND.pipe_draw(fn * q) for rr in rk
+                       for q in (rr[1] if isinstance(rr[1], (list, tuple)) else [rr[1]]))
+        cents = 1200 * np.log2(np.asarray(rows))
+        wd = _WND.Wind(pc, fr / float(rate), scale=1.0)
+        wd.wander_rms = 0.0
+        dem = np.full(len(rows), units(66))
+        dem[i0:] += sum(units(n) for n in (41, 48, 53, 57, 60))
+        pm = 1200 * np.log2(_WND.pitch_level(wd.blocks(dem, np.zeros(len(rows))), pc.wind_pitch_exp, 1.0)[0])
+        got = (cents[i0:].min() - np.median(cents[i0 - 40:i0]), cents[-40:].mean() - np.median(cents[i0 - 40:i0]))
+        exp = (pm[i0:].min() - pm[i0 - 1], pm[-1] - pm[i0 - 1])
+        check("a chord's draw sags the chest live as wind.py says",
+              abs(got[0] - exp[0]) < 0.35 * abs(exp[0]) + 0.3 and abs(got[1] - exp[1]) < 0.35 * abs(exp[1]) + 0.3,
+              "  (deepest %.2f, settled %.2f cents; the model %.2f, %.2f)" % (got + exp))
+        # the wind's own share of a callback, against a 2.7 ms block
+        st = next(iter(lv.wind_st.values()))
+        t1 = time.perf_counter()
+        for _ in range(200):
+            lv._wind_block(lv.n, fr)
+        per = (time.perf_counter() - t1) / 200 * 1e3
+        check("the wind costs a callback little", per < 0.25,
+              "  (%.3f ms a block of %.2f ms, %d rows; whole callbacks %.2f ms)"
+              % (per, 1e3 * fr / rate, len(st["rows"]), 1e3 * el / (1.5 * rate / fr)))
+    finally:
+        B.WIND, B.WIND_SCALE = was
     return 1 if fails else 0
 
 
