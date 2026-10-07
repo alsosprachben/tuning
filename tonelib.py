@@ -15743,16 +15743,63 @@ class ApplauseProperties(BreathNoiseProperties):
     initial_gain = BreathNoiseProperties.initial_gain
 
 
+N_WAVE_PEAK = 0.6626     # an N-wave of length T peaks in spectrum at this / T
+
+
+_PULSE_CACHE = {}
+
+
+def pulse_series(T, t0, period, fmax, taper):
+    """An N-wave as a sum of cosines: (hz, amp, phase) at the harmonics of
+    1/period, whose sum over [0, period) is the pulse -- a jump to +1 at t0,
+    a straight fall to -1 at t0 + T, and back to 0 -- and nothing else.
+
+    A sum of steady partials is periodic, so the pulse would repeat every
+    period; the caller gates every partial with the SAME envelope, open across
+    the pulse and shut before the next. Outside the pulse the sum is zero (the
+    residual is 2e-4 of the peak, the band limit's), so where the gate opens
+    and closes it multiplies nothing and its shape cannot be heard. Band-
+    limited to fmax with a raised-cosine taper from `taper`, which keeps the
+    jumps' Gibbs ringing small: a real shock's rise is microseconds, but no
+    microphone or loudspeaker reproduces it."""
+    key = (round(T, 7), round(t0, 7), round(period, 7), fmax, taper)
+    if key in _PULSE_CACHE:
+        return _PULSE_CACHE[key]
+    import numpy as np
+    sr = 4 * fmax
+    n = int(round(sr * period))
+    t = np.arange(n) / sr
+    x = np.zeros(n)
+    m = (t >= t0) & (t < t0 + T)
+    x[m] = 1.0 - 2.0 * (t[m] - t0) / T
+    X = np.fft.rfft(x) * (2.0 / n)
+    f = np.arange(len(X)) / period
+    keep = (f > 0) & (f <= fmax)
+    w = np.where(f < taper, 1.0, 0.5 * (1.0 + np.cos(np.pi * (f - taper) / (fmax - taper))))
+    out = [(float(fi), float(ai), float(pi)) for fi, ai, pi in
+           zip(f[keep], (np.abs(X) * w)[keep], np.angle(X)[keep])]
+    _PULSE_CACHE[key] = out
+    return out
+
+
 class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     """GM 127. A crack: everything at once and then gone. One-shot, because
     nothing about releasing a key stops a gunshot -- and the six of them in
     A-Team are written as short notes, so honouring note-off would clip the
-    report to nothing."""
+    report to nothing.
+
+    THE SOUND IS AN N-WAVE (`pulse` below), emitted by blockrender in place of
+    the harmonic series. The series' attributes -- max_harmonic, the decay,
+    the chiff -- are what the voice was before it, a click of inharmonic
+    partials, and are no longer heard; Ben, by ear: the N-wave is much better.
+    """
     one_shot = True
     release_floor_db = -50.0
     # Levelled to sit ~6 dB OVER the orchestra rather than with it: a gunshot is
     # supposed to be the loudest thing in the piece, but not to swamp it.
-    initial_gain = 1.0 / 13
+    # x3.57 for the N-wave: the same energy over the shot's first 100 ms as
+    # the click it replaced, which carried 11 dB more at 1/13.
+    initial_gain = 3.57 / 13
     max_harmonic = 72
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 60.0
     tonal_dampening = 0.12         # flattest of all: no pitch survives
@@ -15777,6 +15824,32 @@ class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     chiff_min_valve_time = 0.001   # instantaneous
     chiff_max_valve_time = 0.004
     hf_corner_hz = 8000.0
+    # IT STANDS BACK. With no CC91 of its own the shot stands at 127's
+    # distance, 3.2 times the nominal (11.8 m in the hall): past the critical
+    # distance, so the room it fires in is most of what is heard -- the room's
+    # energy is +7.6 dB over the shot's first 10 ms, against -1.4 at GM's
+    # default 40. Chosen by ear
+    # from examples/gunshot_distance_ab.py's 40 / 90 / 127.
+    reverb_distance = 127 / 40.0
+    # THE SHOT IS AN N-WAVE, not a click of partials. A muzzle blast at a
+    # distance is a pressure jump, a straight fall through zero to an equal
+    # suction, and a jump back -- a few milliseconds in all (Maher, "Acoustical
+    # characterization of gunshots", 2007). Its spectrum peaks at
+    # N_WAVE_PEAK / T and falls with nulls above, so the pulse's length is its
+    # colour: a long one booms, a short one cracks. THE KEY SETS THE CALIBRE:
+    # the length is chosen so that peak sits on the key's frequency -- G3, as
+    # A-Team writes it, is 3.4 ms; an octave down is twice as long. Emitted by
+    # blockrender as pulse_series, gated (see there), in place of the series
+    # above, whose decay and chiff it does not use.
+    pulse = True
+    pulse_ms_range = (0.4, 15.0)
+    pulse_fmax = 18000.0
+    pulse_taper = 12000.0
+
+    def pulse_length(self, f_key):
+        """The N-wave's length, in seconds, for a key of f_key Hz."""
+        lo, hi = self.pulse_ms_range
+        return min(hi, max(lo, 1000.0 * N_WAVE_PEAK / max(f_key, 1.0))) / 1000.0
 
 
 class SynthTone(BaseTone):

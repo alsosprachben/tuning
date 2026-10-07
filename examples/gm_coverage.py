@@ -67,7 +67,7 @@ Applause,Gunshot""".replace("\n", "").split(",")
 
 # program: (rating, note). The note earns the rating or explains the gap.
 RATED = {
- 0:(4,"Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured"),
+ 0:(4,"Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured; the undamped strings ring sympathetically (the free-string register)"),
  1:(2,"the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp"),
  2:(2,"a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference"),
  3:(2,"the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it"),
@@ -86,7 +86,7 @@ RATED = {
  16:(3,"tonewheel + Leslie, worked over extensively by ear"),
  17:(3,"tonewheel, percussive tap"),
  18:(3,"tonewheel, overdriven"),
- 19:(3,"flue pipes; registration built on Geer and judged by ear"),
+ 19:(3,"flue pipes; registration built on Geer and judged by ear. The wind is fitted to Pitea's recorded pipes -- the jet's turbulence as noise skirts, the reeds' attack rush -- but the pipes' tone is not, so it stays a 3. A shared wind per division (sag under a chord) and a Tremulant stop, off by default until judged by ear"),
  20:(2,"a French harmonium: free reeds, four registers split bass/treble, celeste, Expression/Percussion/Tremolo on CC43/44"),
  21:(2,"AccordionProperties: musette, the reed banks deliberately offset ~16 cents"),
  22:(2,"HarmonicaProperties: one free reed inside a cupped-hand formant pair"),
@@ -178,7 +178,7 @@ RATED = {
  124:(2,"a BELL struck 21 times a second by a clapper alternating between two gongs. The thing in the room, not the 440+480 Hz ringback the exchange sends the caller"),
  125:(2,"the BLADE PASSING FREQUENCY: a sawtooth at 16.3 Hz with partials every 16.3 up to 1 kHz. The only voice whose fundamental is below hearing -- the series above it IS the sound"),
  126:(2,"its own class, theory"),
- 127:(2,"its own class, theory"),
+ 127:(2,"an N-wave whose length the key sets (its spectrum peaks on the key), the tail the room, standing back at 127's distance. Published measurements, no recording"),
 }
 for p in range(88, 104):
     RATED[p] = (1, "one BowedStringProperties serves all sixteen pads and FX")

@@ -579,6 +579,13 @@ room modes are fed by the dry signal, as `roomtail.main` feeds them. So a
 channel sent back rings more, not longer, and its dry sound is bit-identical
 either way.
 
+**A voice can bring its own distance.** Where a channel sends no CC91, a voice
+with a `reverb_distance` (tonelib) stands there instead, in both renderers.
+Only the gunshot has one: 127's distance, 3.2 times the nominal, chosen by ear
+from `examples/gunshot_distance_ab.py`. It is a pressure pulse, an N-wave, whose tail is the room,
+and standing back past the critical distance makes the room most of what is
+heard. A CC91 on the channel overrides it, as a desk's send would.
+
 **One difference remains: the directivity.** The file renderer weights the tail
 by the Q it measured over the *piece*. Live uses the energy-weighted Q of the
 templates the rig has built. Both keep the room bass-wet and treble-dry, but

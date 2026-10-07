@@ -689,6 +689,12 @@ class Slab:
         # stamp time from `send`, and rewritten when the channel's CC91 moves.
         self.a["sw"] = np.ones(capacity, np.float32)
         self.send = [1.0] * 256     # a MIDI 2.0 channel is group * 16 + channel
+        # A VOICE'S OWN DISTANCE (tonelib reverb_distance: the gunshot stands
+        # back) applies on a channel that has sent no CC91 -- `send_said` is
+        # the channels that have. While such a slot sounds at a distance its
+        # channel's `send` does not say, the send bus must run: `odd_until`.
+        self.send_said = set()
+        self.odd_until = 0
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
         self.a["br"][:] = -1            # -1 = no bend row; live bends via retune
         self.a["fx"][:] = -1            # -1 = not a Moog note (moog.py)
@@ -1137,7 +1143,18 @@ class Slab:
         mv = float(np.mean(tmpl["vd"])) if n else 0.0
         self.vsc[idx] = (tmpl["vd"] / mv) if mv > 1e-12 else 1.0
         _kc = key[1] if len(key) > 1 and isinstance(key[1], int) else None
-        a["sw"][idx] = self.send[_kc] if _kc is not None and 0 <= _kc < 256 else 1.0
+        _sw = self.send[_kc] if _kc is not None and 0 <= _kc < 256 else 1.0
+        _rd = tmpl.get("send")
+        if _rd is not None and _kc is not None and _kc not in self.send_said:
+            if _rd != _sw:
+                # a one-shot's partials are gone a little past its noff (3 s
+                # is more than any release); a held note's end is not known,
+                # so the bus stays on
+                self.odd_until = max(self.odd_until,
+                                     int(n0 + dur + (int(rd.max()) if n else 0) + 3 * self.rate)
+                                     if oneshot else (1 << 62))
+            _sw = _rd
+        a["sw"][idx] = _sw
         self.live.setdefault(key, []).extend(slots)
         # THE SLOTS JUST ALLOCATED, which is not the same as live[key]: that
         # accumulates, by design -- a key is stamped once per rank, and a
@@ -2476,6 +2493,7 @@ class Patch:
         t["oneshot"] = bool(t["P"]) and getattr(self._voice_class(note),
                                                 "one_shot", False)
         t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
+        t["send"] = getattr(self._voice_class(note), "reverb_distance", None)
         t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
         # WHICH PARTIALS' FADE IS THE ATTACK, for a slur to shorten (_slur_stamp):
         # those sharing the note's main fade. A bloom copy swells in on its own
@@ -3695,6 +3713,7 @@ class Live:
                 # sounding: moving back is not a note-on event.
                 _v = msg.value / float(B.GM_DEFAULT_REVERB)
                 self.slab.send[ch] = _v
+                self.slab.send_said.add(ch)
                 _ix = [i for k, sl in self.slab.live.items()
                        if len(k) > 1 and k[1] == ch for i in sl]
                 if _ix:
@@ -6588,7 +6607,8 @@ class Live:
             # renderer's own shortcut. Only channels that DIFFER need the bus.
             _room_on = self.room is not None or self._room_prev is not None
             _snd = self.slab.send
-            self._send_uniform = _snd[0] if all(v == _snd[0] for v in _snd) else None
+            self._send_uniform = (_snd[0] if all(v == _snd[0] for v in _snd)
+                                  and n0 >= self.slab.odd_until else None)
             self.renderer.send = _room_on and self._send_uniform is None
             L, R = self.renderer.render(n0, frame_count)
         except Exception as e:
@@ -13037,6 +13057,23 @@ def selftest():
           and _sc3.vol.get(1) == 77 and _sc3.slab.send[1] == 0.5,
           "  (parts, routes, panel controls and channel 2's mix: volume 77 and "
           "half the room distance)")
+    # A VOICE'S OWN DISTANCE: the gunshot stands back where no CC91 says
+    # otherwise, and a CC91 moves it as it moves any channel.
+    _gs = Live(program=127, rate=48000, frames=128, verbose=False)
+    _gs.enable_room("hall"); _gs.warm()
+
+    def _gsw(note):
+        _s = [i for k, v in _gs.slab.live.items() if len(k) > 2 and k[2] == note for i in v]
+        return bool(_s) and set(np.round(_gs.slab.a["sw"][_s].astype(np.float64), 3).tolist())
+    _gs.on_midi(_M("note_on", channel=0, note=55, velocity=120))
+    _gs.callback(None, 128, None, 0)
+    _g0, _gb = _gsw(55), _gs.renderer.send
+    _gs.on_midi(_cc_(0, 91, 64)); _gs.callback(None, 128, None, 0)
+    _gs.on_midi(_M("note_on", channel=0, note=57, velocity=120)); _gs.callback(None, 128, None, 0)
+    check("the gunshot stands at 127's distance with no CC91, and a CC91 moves it",
+          _g0 == {round(127 / 40.0, 3)} and _gb and _gsw(55) == {1.6} and _gsw(57) == {1.6},
+          "  (3.175 stamped and the send bus on while it sounds; CC91 64 then "
+          "rewrites it and the next shot to 1.6)")
     # A HAND REGISTRATION SURVIVES, whatever the wheel was left at. Ben drew an
     # organ's stops with the number keys; the session saved them and the wheel's
     # 126, and the restore replayed the wheel -- the crescendo pedal -- which
@@ -13187,11 +13224,13 @@ def selftest():
     _olines = _uO.stops_lines(_ocp, 72)
     check("the organ's stops are shown in console order, flues on the digits, reeds shifted",
           _ocp.patch.stop_display[:3] == ["principal 16", "bourdon 16", "principal 8"]
-          and _ocp.patch.stop_rows[1] == ["reed 16", "reed 8", "trumpet 8", "reed 4"]
+          and _ocp.patch.stop_rows[1] == ["reed 16", "reed 8", "trumpet 8", "reed 4", "tremulant"]
           and _ocp.drawn == {"principal 8", "bourdon 16", "trumpet 8"}
           and _ostr.index("principal 16") < _ostr.index("mixture III") < _ostr.index("reed 16")
-          and all(len(l) <= 72 for l in _olines) and _olines[-1].strip().startswith(
-              _tuiH.STOP_LABELS[(1, 0)]),
+          and all(len(l) <= 72 for l in _olines) and _olines[-2].strip().startswith(
+              _tuiH.STOP_LABELS[(1, 0)])
+          # the Tremulant is no reed: on the shifted row, past a break, alone
+          and _olines[-1].strip().startswith(_tuiH.STOP_LABELS[(1, 4)] + " tremulant"),
           "  (%s; shift+3 is %r here, from %s)"
           % (" / ".join(_olines), _sh3, _tuiH.STOP_KEYS_FROM))
     # WHAT SHIFT TYPES IS THE KEYBOARD'S, read from the keymap: a German board

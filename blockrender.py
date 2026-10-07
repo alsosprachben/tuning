@@ -3109,6 +3109,11 @@ def prepare(path, tuner='hybrid440', sink=None):
             _c91 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 91]
             if _c91:
                 _REVERB_CH[_MCH[0]] = _c91[0] / float(GM_DEFAULT_REVERB)
+            elif getattr(props, 'reverb_distance', None) is not None:
+                # A VOICE'S OWN DISTANCE, where the file says none: the
+                # gunshot stands back (tonelib.GunshotProperties). A CC91 on
+                # the channel overrides it, as a desk's send would.
+                _REVERB_CH[_MCH[0]] = float(props.reverb_distance)
         if _MCH[0] not in _CHORUS_CH:
             _c93 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
             if _c93 and _c93[0] > 0:
@@ -3320,6 +3325,33 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _FX[0] = -1
                 _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
             _SND_PEND[0] = None      # its CC74/71 moved the ladder, not sound_shape
+            stops = ()
+        if getattr(props, 'pulse', False):
+            # A PRESSURE PULSE (the gunshot's N-wave, tonelib.pulse_series): a
+            # waveform written as one period of a Fourier series, every
+            # partial under ONE gate. The kernel evaluates a gate at block
+            # edges and ramps between them, so the gate is opened a full two
+            # blocks before the pulse and shut a block after it, and the
+            # period is long enough that the next pulse falls after it has
+            # shut. Where it ramps, the series sums to zero -- so the ramps
+            # multiply nothing, and the pulse is the waveform exactly. The
+            # onset is moved earlier by the lead, so the pulse lands on the
+            # note (live: the lead is two of its own short blocks, 5 ms).
+            _T = props.pulse_length(f0)
+            _lead = 2.0 * BLK
+            _rel = 0.002 * SR
+            _gate = _lead + _T * SR + BLK
+            _per = (_gate + _rel + BLK + 0.002 * SR) / SR
+            _pnon = max(0.0, non - _lead)
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            for _hf, _amp, _ph in T.pulse_series(_T, _lead / SR, _per, props.pulse_fmax,
+                                                 props.pulse_taper):
+                _gM = props.gain * _amp * props.radiation_gain(_hf)
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _pnon, _pnon + _gate,
+                             1.0, _rel, chiff, 0.0, 0.0, 0.0, 1.0, 0.0,
+                             cc, crl, 0.0, csc, -1, 0, ph0=_ph)
             stops = ()
         for key, ratio, gain, *rest in stops:
             # A stop with no pipes (the harmonium's Expression, Percussion,
