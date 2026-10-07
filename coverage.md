@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 46 | 36% |
+| 2 specific, theory | 44 | 34% |
 | 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 55 | 43% |
+| 4 specific, reference audio | 57 | 45% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -210,7 +210,7 @@ plays Standard, as does any program that is not a set.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 32 | Acoustic Bass | `AcousticBass` | **2** | the upright PLUCKED: GM 43's measured body with a plucked base, comb at the quarter point |
+| 32 | Acoustic Bass | `AcousticBass` | **4** | Iowa double bass pizzicato, 83 notes: the decay rising with the note, the stretch, the pluck's colour, and a pluck point that rises up each string as the finger shortens it (0.23 of the open string, measured), moved by CC74 from the bridge to the middle. Ben, by ear: so much better |
 | 33 | Electric Bass (finger) | `FingeredBass` | **3** | electric bass family, cabinet and amp; judged by ear |
 | 34 | Electric Bass (pick) | `PickedBass` | **3** | as 33, pick |
 | 35 | Fretless Bass | `FretlessBass` | **3** | as 33, fretless -- loses its top rather than starting without it |
@@ -228,7 +228,7 @@ plays Standard, as does any program that is not a set.
 | 42 | Cello | `Contrabass/Cello by register` | **4** | Iowa cello |
 | 43 | Contrabass | `Contrabass` | **4** | Iowa double bass |
 | 44 | Tremolo Strings | `Contrabass/Cello/Viola/Violin by register` | **2** | tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase |
-| 45 | Pizzicato Strings | `Contrabass/Cello/Viola/Violin by register` | **2** | pizzicato(): the MEASURED body of whichever instrument the register picks, plucked -- and the ring scales with register, 2.35 s at E1 to 0.42 at E5 |
+| 45 | Pizzicato Strings | `Contrabass/Cello/Viola/Violin by register` | **4** | Iowa pizzicato for all four instruments, 341 notes: each one's decay, stretch and pluck colour, on the measured bodies. The violin's and viola's decay is two-stage, fast then a faint slow tail (approved by ear). The cello's and bass's pluck points are measured; the violin's and viola's are the fingerboard's end, which Iowa cannot resolve. CC74 moves the pluck from the bridge (127) to the middle of the string (0) |
 | 46 | Orchestral Harp | `Harp` | **2** | Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings |
 | 47 | Timpani | `Timpani` | **2** | analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set |
 

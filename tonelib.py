@@ -6177,6 +6177,30 @@ class PizzicatoStringsProperties(FormantBody, SectionMixin, PluckedStringPropert
     tonal_dampening = 1.45
     max_harmonic = 40
 
+    # THE PLUCK POINT FOLLOWS THE NOTE (stopped_pluck_point), from the open
+    # strings and the open-string point each instrument's PIZZ_FIT gives;
+    # strike_point above is only the fallback for a class with none.
+    open_strings = ()
+    pluck_open = None
+    # ...and CC74 moves it (pluck_point_moved): brightness, on a plucked string
+    sound_controls = frozenset(('brightness', 'decay', 'release'))
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        if self.pluck_open and self.open_strings:
+            self.strike_point = stopped_pluck_point(frequency, self.open_strings, self.pluck_open)
+
+    # THE DOUBLE DECAY, where an instrument's PIZZ_FIT gives one: the string's
+    # motion across the top couples hard into the body and dies fast, along
+    # it carries on -- the piano's aftersound, in the kernel's own form.
+    aftersound_fraction = 0.0      # amplitude share of the slow stage
+    aftersound_ratio = 1.0         # its rate, as a fraction of the fast one
+
+    def aftersound(self, frequency, decay_rate):
+        if self.aftersound_fraction <= 0.0:
+            return (0.0, decay_rate)
+        return (self.aftersound_fraction, decay_rate * self.aftersound_ratio)
+
     section_players = 6
     section_spread_cents = 8.0          # wider than the bowed section's 6
     section_vibrato_cents = 0.0         # a pizz note has no time to vibrate
@@ -6517,6 +6541,119 @@ _SLOW_BOW = {}
 _PIZZICATO = {}
 
 
+def stopped_pluck_point(frequency, open_strings, pluck_open):
+    """Where a pluck lands, as a fraction of the SOUNDING string, for a note.
+
+    A player plucks a roughly fixed distance from the bridge, near the end of
+    the fingerboard. Stopping the string shortens what sounds, so that fixed
+    distance is a growing fraction of it: pluck_open * 2^(k/12), k semitones
+    above the open string. Past the middle it folds back -- a pluck at 1 - p
+    excites the same comb as one at p. The note is taken on the highest open
+    string at or below it: first position, where a pizzicato part mostly
+    lives. Measured on Iowa's cello and bass, string by string
+    (examples/pizz_fit.py): the cello's C string reads 0.30 open, 0.41 a fourth
+    up, 0.48 at the octave and 0.03 at the octave and a sixth."""
+    n = 69.0 + 12.0 * _log(max(float(frequency), 1.0) / 440.0) / _log(2.0)
+    below = [o for o in open_strings if o <= n + 0.5]
+    o = max(below) if below else min(open_strings)
+    p = (pluck_open * 2.0 ** ((n - o) / 12.0)) % 1.0
+    return max(0.02, min(p, 1.0 - p))
+
+
+# CC74 ON A PLUCKED STRING IS WHERE THE FINGER GOES. Toward the bridge is
+# brighter and thinner, out over the fingerboard is rounder: the one tone
+# control a pizzicato player has, and what GM 2's "brightness" names on an
+# instrument with no filter. 64, or no message, is the instrument's own point
+# (stopped_pluck_point); 127 is at the bridge and 0 the middle of what sounds,
+# the darkest a pluck can be -- geometric either way, on the SOUNDING string's
+# fraction, so every note moves the same way at every stop. It is an onset
+# fact: a string already ringing was plucked where it was plucked.
+PLUCK_BRIGHT = 0.06
+PLUCK_DARK = 0.5
+
+
+def pluck_point_moved(p, d):
+    """The pluck point p (a fraction of the sounding string) moved by CC74's d."""
+    if d >= 0.0:
+        return p * (min(PLUCK_BRIGHT, p) / p) ** d
+    return p * (PLUCK_DARK / p) ** (-d)
+
+
+def pluck_shape(cls, nf, d):
+    """Per-partial gain taking a note's comb from its own pluck point to the
+    moved one -- the ratio of tonelib's comb at the two, partial by partial.
+    The partial's index is read off its frequency under the note's stretch."""
+    import numpy as np
+    nf = np.asarray(nf, dtype=np.float64)
+    f0 = max(float(nf.min()), 1e-9)
+    props = cls(f0)
+    p0 = props.strike_point
+    p1 = pluck_point_moved(p0, d)
+    B = props.inharmonicity_coefficient
+    hm = np.arange(1, (props.max_harmonic or 64) + 1, dtype=np.float64)
+    r = hm * (1.0 + 0.5 * (hm * hm - 1.0) * B)
+    m = hm[np.argmin(np.abs(np.log(nf / f0)[:, None] - np.log(r)[None, :]), axis=1)]
+    dp = props.strike_depth
+
+    def comb(p):
+        return (1.0 - dp) + dp * np.abs(np.sin(m * np.pi * p))
+    return comb(p1) / np.maximum(comb(p0), 1e-3)
+
+
+# EACH INSTRUMENT'S PIZZICATO, fitted to Iowa's (examples/pizz_fit.py, every
+# mf pizz the collection has: 86 violin notes, 81 viola, 91 cello, 83 bass).
+# The decay is tonelib's own law, D = (decay_db + harmonic_decay_db m)
+# (f0/415)^slope; the pluck point rises along each string (stopped_pluck_point).
+# The cello's and the bass's pluck points are MEASURED -- 0.29 and 0.23 at the
+# open string, 20 and 24 cm from the bridge, the ends of their fingerboards.
+# The violin's and viola's combs are too weak to read on notes that short
+# (the fit swings from 0.05 to 0.36 with which notes are trusted), so theirs
+# is the geometry -- a fingerboard ending a fifth of the way from the bridge
+# -- and not a measurement. The STRETCH is measured for all four, the median
+# of each set's notes: a quarter to two-thirds the generic plucked string's
+# 1.29e-3, which every one of them had been wearing, the bass the exception.
+# THE PLUCK'S COLOUR -- the ladder's slope, how the slope moves with register
+# and how deep the finger's notch is -- fitted to the ladders of every note
+# (pizz_fit.py --tilt, partials 2-10): the median miss falls from 10-16 dB to
+# 7-8, the rest being the recordings' own spread from note to note (11-20 dB
+# a partial). Steep -- 1/m^2.2 to 1/m^2.9 -- because a fingertip is soft
+# and wide; and the notch half-filled, for the same reason.
+# THE VIOLIN'S AND VIOLA'S DECAY IS TWO-STAGE. Their per-partial slopes,
+# read from 5 to 25 dB down past the attack, miss what their envelopes do in
+# the first 50 ms: the recordings lose 7-9 dB there that a single exponential
+# keeps. Fitted to every note's fundamental at 50-800 ms instead (pizz_fit.py
+# --envelope, restarted from nine points, above -45 dB where the files are not
+# yet edited to silence): a fast stage about 1.8 times the per-partial rate,
+# and a slow one -- 6% of the amplitude at 0.12 of the rate for the violin,
+# 4% at 0.08 for the viola. The median miss goes from 6.6 to 4.3 dB and from
+# 5.6 to 4.8. The upper partials keep the split the per-partial fit found.
+# The cello and bass fit a double decay too, but their single one was
+# approved by ear, and stands.
+# THE LEVEL IS NOT THE FIT'S. Each keeps the energy it was balanced to against
+# the measured violin (examples/pizz_level.py: the fit moved them +0.1, +0.2,
+# +1.7 and +1.0 dB), so 0.2383 is scaled per instrument.
+PIZZ_FIT = {
+    "ViolinProperties": dict(decay_db=49.47, harmonic_decay_db=15.53, decay_register_slope=1.640,
+                             aftersound_fraction=0.06, aftersound_ratio=0.12,
+                             open_strings=(55, 62, 69, 76), pluck_open=0.20, inharmonicity_coefficient=4.4e-4,
+                             tonal_dampening=2.30, octave_dampening=-0.90, strike_depth=0.50,
+                             initial_gain=0.2917),
+    "ViolaProperties": dict(decay_db=46.00, harmonic_decay_db=23.00, decay_register_slope=1.050,
+                            aftersound_fraction=0.04, aftersound_ratio=0.08,
+                            open_strings=(48, 55, 62, 69), pluck_open=0.20, inharmonicity_coefficient=4.5e-4,
+                            tonal_dampening=2.50, octave_dampening=-0.10, strike_depth=0.50,
+                            initial_gain=0.2998),
+    "CelloProperties": dict(decay_db=22.20, harmonic_decay_db=7.88, decay_register_slope=0.795,
+                            open_strings=(36, 43, 50, 57), pluck_open=0.29, inharmonicity_coefficient=2.7e-4,
+                            tonal_dampening=2.20, octave_dampening=0.10, strike_depth=0.50,
+                             initial_gain=0.1959),
+    "ContrabassProperties": dict(decay_db=17.02, harmonic_decay_db=7.94, decay_register_slope=0.580,
+                                 open_strings=(28, 33, 38, 43), pluck_open=0.23, inharmonicity_coefficient=8.6e-4,
+                                 tonal_dampening=2.90, octave_dampening=0.20, strike_depth=0.20,
+                             initial_gain=0.2135),
+}
+
+
 def pizzicato(cls):
     """The same BODY, plucked -- GM 45. Cached per class, as slow_bow is.
 
@@ -6548,6 +6685,8 @@ def pizzicato(cls):
             "bell_cutoff_hz": cls.bell_cutoff_hz,
             "bell_order": cls.bell_order,
             "__doc__": "%s's body, plucked -- GM 45." % cls.__name__,
+            # ...and that instrument's own pizzicato, fitted (PIZZ_FIT)
+            **PIZZ_FIT.get(cls.__name__, {}),
         })
         _PIZZICATO[cls] = got
     return got
@@ -7213,15 +7352,32 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
     # before this was measured. strike_point is the physical comb the class
     # documents, |sin(n*pi*p)|.
     strike_point = 0.25
-    strike_depth = 0.75             # a finger is wide, so the notch is not total
+    strike_depth = PIZZ_FIT["ContrabassProperties"]["strike_depth"]   # measured: a wide finger
     strike_fills_with_force = False # and it releases rather than compressing
 
-    # The thump: high partials go in a moment, the fundamental stays under them.
-    decay_db = 1.2
-    harmonic_decay_db = 2.6
+    # THE PLUCK POINT AND THE DECAY ARE NOW MEASURED: Iowa's 83 bass pizz
+    # notes (examples/pizz_fit.py, PIZZ_FIT). The point is 0.23 of the open
+    # string -- 24 cm from the bridge, where the docstring's 25-30 said -- and
+    # it rises up each string as the finger shortens it (stopped_pluck_point);
+    # strike_point above is the fallback only. The decay was 1.2 + 2.6 m dB/s
+    # at every pitch, which rang 2-3 s; the recording's notes last 0.8-1.5 s
+    # and their decay rises with the note.
+    open_strings = PIZZ_FIT["ContrabassProperties"]["open_strings"]
+    pluck_open = PIZZ_FIT["ContrabassProperties"]["pluck_open"]
+    decay_db = PIZZ_FIT["ContrabassProperties"]["decay_db"]
+    harmonic_decay_db = PIZZ_FIT["ContrabassProperties"]["harmonic_decay_db"]
+    decay_register_slope = PIZZ_FIT["ContrabassProperties"]["decay_register_slope"]
+    inharmonicity_coefficient = PIZZ_FIT["ContrabassProperties"]["inharmonicity_coefficient"]
+    octave_dampening = PIZZ_FIT["ContrabassProperties"]["octave_dampening"]
 
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        if self.pluck_open and self.open_strings:
+            self.strike_point = stopped_pluck_point(frequency, self.open_strings, self.pluck_open)
+
+    sound_controls = PizzicatoStringsProperties.sound_controls   # CC74, the pluck point
     max_harmonic = 40               # as the contrabass has; the body is spent
-    tonal_dampening = 1.35          # a soft, wide finger, not a plectrum
+    tonal_dampening = PIZZ_FIT["ContrabassProperties"]["tonal_dampening"]  # measured, steep
 
     # Balance-normalised against the grand piano on E1/A1/E2 at velocity 100.
     # Exactly 20.0 dB per decade of this knob -- pure linear, unlike the piano's
@@ -7237,7 +7393,9 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
     # measured bowed twin. A pizzicato attack is brighter and punchier than a
     # bowed one, not louder than an amplifier. This puts it at -9.4, with the
     # electric bass and the electric guitar.
-    initial_gain = 0.1900
+    # x1.080 after the Iowa fit, which made it 0.67 dB quieter on the same
+    # passage (examples/pizz_level.py): the balance stands.
+    initial_gain = 0.2052
 
 
 class SteelGuitarProperties(NylonGuitarProperties):
@@ -14101,6 +14259,8 @@ def sound_shape(cls, nf, d_bright, d_res):
 
       brightness, effort voices:   (f/f0)^(effort_tilt * dB / 6.0206), the
                                    aftertouch law -- a harder breath
+      brightness, a plucked section: the pluck point moved (pluck_shape), as
+                                   the ratio of the comb at the two points
       brightness, synthesisers:    the low-pass corner moved, as a ratio of the
                                    voice's own filter to the moved one
       resonance, synthesisers:     a resonant peak at that corner, as a ratio
@@ -14117,7 +14277,9 @@ def sound_shape(cls, nf, d_bright, d_res):
     if d_bright and 'brightness' in ctl:
         et = getattr(cls, 'effort_tilt', 0.0)
         corner = getattr(cls, 'bore_corner_hz', 0.0)
-        if et:
+        if getattr(cls, 'pluck_open', None) and getattr(cls, 'open_strings', ()):
+            g *= pluck_shape(cls, nf, d_bright)
+        elif et:
             k = et * (SOUND_EFFORT_DB * d_bright) / 6.0206
             g *= (nf / max(float(nf.min()), 1e-9)) ** k
         elif corner:

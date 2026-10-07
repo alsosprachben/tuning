@@ -214,7 +214,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="cell r3" title="30 Distortion Guitar &mdash; specific, theory + ear">3</div>
 <div class="cell r3" title="31 Guitar Harmonics &mdash; specific, theory + ear">3</div>
 <div class="fam">Bass</div>
-<div class="cell r2" title="32 Acoustic Bass &mdash; specific, theory">2</div>
+<div class="cell r4" title="32 Acoustic Bass &mdash; specific, reference audio">4</div>
 <div class="cell r3" title="33 Electric Bass (finger) &mdash; specific, theory + ear">3</div>
 <div class="cell r3" title="34 Electric Bass (pick) &mdash; specific, theory + ear">3</div>
 <div class="cell r3" title="35 Fretless Bass &mdash; specific, theory + ear">3</div>
@@ -228,7 +228,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <div class="cell r4" title="42 Cello &mdash; specific, reference audio">4</div>
 <div class="cell r4" title="43 Contrabass &mdash; specific, reference audio">4</div>
 <div class="cell r2" title="44 Tremolo Strings &mdash; specific, theory">2</div>
-<div class="cell r2" title="45 Pizzicato Strings &mdash; specific, theory">2</div>
+<div class="cell r4" title="45 Pizzicato Strings &mdash; specific, reference audio">4</div>
 <div class="cell r2" title="46 Orchestral Harp &mdash; specific, theory">2</div>
 <div class="cell r2" title="47 Timpani &mdash; specific, theory">2</div>
 <div class="fam">Ensemble</div>
@@ -334,9 +334,9 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Where it stands</h2>
 <div class="bar">
-<span class="r2" style="flex:46">46</span>
+<span class="r2" style="flex:44">44</span>
 <span class="r3" style="flex:27">27</span>
-<span class="r4" style="flex:55">55</span>
+<span class="r4" style="flex:57">57</span>
 </div>
 <ul class="scalelist">
 <li><span class="n"><span class="sw r0"></span>0</span><span class="t">nothing</span><span class="d">no voice at all</span></li>
@@ -446,7 +446,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <div class="fambox">
 <div class="famhead"><h3>Bass</h3><span class="rng">32&ndash;39</span><span class="pips">
-<span class="pip r2"></span>
+<span class="pip r4"></span>
 <span class="pip r3"></span>
 <span class="pip r3"></span>
 <span class="pip r3"></span>
@@ -456,7 +456,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <span class="pip r4"></span>
 </span></div>
 <div class="tscroll"><table><tr><th></th><th>Patch</th><th>Class</th><th></th><th>Notes</th></tr>
-<tr><td class="num">32</td><td class="nm">Acoustic Bass</td><td class="cls">AcousticBass</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the upright PLUCKED: GM 43&#x27;s measured body with a plucked base, comb at the quarter point</td></tr>
+<tr><td class="num">32</td><td class="nm">Acoustic Bass</td><td class="cls">AcousticBass</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa double bass pizzicato, 83 notes: the decay rising with the note, the stretch, the pluck&#x27;s colour, and a pluck point that rises up each string as the finger shortens it (0.23 of the open string, measured), moved by CC74 from the bridge to the middle. Ben, by ear: so much better</td></tr>
 <tr><td class="num">33</td><td class="nm">Electric Bass (finger)</td><td class="cls">FingeredBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">electric bass family, cabinet and amp; judged by ear</td></tr>
 <tr><td class="num">34</td><td class="nm">Electric Bass (pick)</td><td class="cls">PickedBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 33, pick</td></tr>
 <tr><td class="num">35</td><td class="nm">Fretless Bass</td><td class="cls">FretlessBass</td><td class="rt"><span class="chip r3">3</span></td><td class="note">as 33, fretless -- loses its top rather than starting without it</td></tr>
@@ -474,7 +474,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <span class="pip r4"></span>
 <span class="pip r4"></span>
 <span class="pip r2"></span>
-<span class="pip r2"></span>
+<span class="pip r4"></span>
 <span class="pip r2"></span>
 <span class="pip r2"></span>
 </span></div>
@@ -484,7 +484,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="num">42</td><td class="nm">Cello</td><td class="cls">Contrabass/Cello by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa cello</td></tr>
 <tr><td class="num">43</td><td class="nm">Contrabass</td><td class="cls">Contrabass</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa double bass</td></tr>
 <tr><td class="num">44</td><td class="nm">Tremolo Strings</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase</td></tr>
-<tr><td class="num">45</td><td class="nm">Pizzicato Strings</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r2">2</span></td><td class="note">pizzicato(): the MEASURED body of whichever instrument the register picks, plucked -- and the ring scales with register, 2.35 s at E1 to 0.42 at E5</td></tr>
+<tr><td class="num">45</td><td class="nm">Pizzicato Strings</td><td class="cls">Contrabass/Cello/Viola/Violin by register</td><td class="rt"><span class="chip r4">4</span></td><td class="note">Iowa pizzicato for all four instruments, 341 notes: each one&#x27;s decay, stretch and pluck colour, on the measured bodies. The violin&#x27;s and viola&#x27;s decay is two-stage, fast then a faint slow tail (approved by ear). The cello&#x27;s and bass&#x27;s pluck points are measured; the violin&#x27;s and viola&#x27;s are the fingerboard&#x27;s end, which Iowa cannot resolve. CC74 moves the pluck from the bridge (127) to the middle of the string (0)</td></tr>
 <tr><td class="num">46</td><td class="nm">Orchestral Harp</td><td class="cls">Harp</td><td class="rt"><span class="chip r2">2</span></td><td class="note">Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings</td></tr>
 <tr><td class="num">47</td><td class="nm">Timpani</td><td class="cls">Timpani</td><td class="rt"><span class="chip r2">2</span></td><td class="note">analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set</td></tr>
 </table></div></div>

@@ -405,7 +405,8 @@ identical tables.
 |---|---|---|
 | synthesisers | 31 | all eight |
 | winds, bowed strings, voices | 33 | attack, release, vibrato |
-| struck and plucked strings | 33 | decay, release |
+| struck and plucked strings | 31 | decay, release |
+| the pizzicato section, the acoustic bass | 2 | brightness (as the pluck point), decay, release |
 | one-shots (mallets, drums) | 16 | decay |
 | brass, and the clarinet | 6 | brightness (as effort), attack, release, vibrato |
 | the muted trumpet | 1 | the same, plus resonance (its mute's Q) |
@@ -418,6 +419,15 @@ identical tables.
   corner, two octaves either way. Either way it is **colour, not level**: a
   trumpet at CC74 = 127 gains 11.9 dB of upper partials against the lower, and
   its total power moves +0.000 dB.
+- **On a pizzicato string** (GM 45, and GM 32, whose bass is the same
+  pluck) brightness is **where the finger plucks**. At 64 the point is the
+  instrument's own, fitted to Iowa where it could be read. CC74 = 127 moves
+  it to the bridge (6% of the sounding string), thin and bright. CC74 = 0
+  moves it to the middle, the darkest a pluck can be. The law is geometric
+  either way, on the sounding string's fraction, and the comb moves partial
+  by partial, power-normalised like every other brightness. It is an onset
+  fact, as attack is: live, a string already ringing keeps where it was
+  plucked, and the next note takes the new point.
 - **Resonance** is the Q of a synthesiser's low-pass at its corner, as the
   ratio of a resonant two-pole response to a Butterworth one. That ratio is
   exactly 1 at CC71 = 64, so the saw and square leads, which have no formants,

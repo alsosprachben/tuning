@@ -4820,6 +4820,8 @@ class Live:
                     continue
                 sd = self._snd_for(part, ch, k[2])
                 cls = part.patch._voice_class(k[2] + part.transpose)
+                if getattr(cls, 'pluck_open', None):
+                    continue        # plucked where it was plucked: CC74 waits for the next
                 base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
                 g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
                                   sd.get('resonance', 0.0))
@@ -9701,7 +9703,8 @@ def selftest():
         ('attack', 'brightness', 'decay', 'release', 'resonance', 'vib_delay',
          'vib_depth', 'vib_rate'): 31,                          # synthesisers
         ('attack', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 33,  # winds, bows, voices
-        ('decay', 'release'): 33,                               # struck and plucked
+        ('decay', 'release'): 31,                               # struck and plucked
+        ('brightness', 'decay', 'release'): 2,                  # pizzicato, GM 32: the pluck point
         ('decay',): 16,                                         # one-shots
         (): 7,                                                  # organs, harpsichord, bagpipe, hit
         ('attack', 'brightness', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 6,  # effort
@@ -12140,21 +12143,26 @@ def selftest():
           and cb2.decay_db == 0.0 and ab.decay_db > 0.0,
           "  (the bow sustains at %.1f dB/s; the pluck decays at %.1f)"
           % (cb2.decay_db, ab.decay_db))
-    # The pluck point: a quarter of the way from the bridge, where the hand goes
-    # at the end of the fingerboard, so the comb nulls at the 4th where a
-    # guitar's nulls at the 7th. That low notch is why pizzicato is dark.
-    _lv = [ab(82.4, 0.0, 1.0, 1.0).harmonic_volume(h) for h in range(1, 10)]
+    # The pluck point: measured on Iowa's bass (tonelib.PIZZ_FIT), 0.23 of the
+    # open string from the bridge (E2 is the D string a tone up: 0.26), where the hand goes at the end of the
+    # fingerboard, so the comb dips at the 4th where a guitar's nulls at the
+    # 7th. A broad fingertip leaves the notch shallow (strike_depth 0.2), so it
+    # is read against the same note with no comb at all.
+    _abn = ab(82.4, 0.0, 1.0, 1.0)
+    _lv = [_abn.harmonic_volume(h) for h in range(1, 10)]
     _db = [20 * _math.log10(max(v, 1e-15) / _lv[0]) for v in _lv]
-    check("...plucked a quarter along, so the comb nulls at the 4th partial",
-          ab.strike_point == 0.25 and _db[3] < _db[2] - 5.0 and _db[3] < _db[4] - 5.0
-          and _db[7] < _db[6] - 5.0,
-          "  (h3 %+.0f, h4 %+.0f, h5 %+.0f dB -- and h8 %+.0f)"
-          % (_db[2], _db[3], _db[4], _db[7]))
+    _abn.strike_depth = 0.0
+    _fl = [_abn.harmonic_volume(h) for h in range(1, 10)]
+    _cm = [20 * _math.log10(max(_lv[h], 1e-15) / _fl[h]) for h in range(9)]
+    check("...plucked near a quarter along, so the comb dips at the 4th partial",
+          abs(_abn.strike_point - _T.stopped_pluck_point(82.4, ab.open_strings, ab.pluck_open)) < 1e-9
+          and min(range(1, 8), key=lambda h: _cm[h]) == 3 and _cm[3] < _cm[2] - 0.5,
+          "  (comb at h3 %+.1f, h4 %+.1f, h5 %+.1f dB)" % (_cm[2], _cm[3], _cm[4]))
     # AND IT USES strike_point, NOT plucked_harmonic. The latter is the legacy
     # path and is not a pluck POSITION: it builds divisor entries for 1..P-1, so
     # setting it to 4 zeroed every 6th partial. Measured, and then fixed.
     check("...using the physical comb and not the legacy divisor list",
-          ab.strike_point is not None and _db[5] > _db[3],
+          ab.strike_point is not None and _db[5] > -60.0,
           "  (h6 %+.0f dB, which the legacy path silenced entirely)" % _db[5])
 
     # ---- the steel-string, which had no body at all --------------------------
