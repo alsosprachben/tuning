@@ -3489,6 +3489,24 @@ def prepare(path, tuner='hybrid440', sink=None):
                         emit_partial(2*math.pi*hf/SR, gL*_wg, gR*_wg, gM*_wg, hf, non_m, noff, pfade,
                                      rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level, 0.0, cc_r,
                                      crl, 0.0, csc, gr, cr)
+                        # THE ATTACK'S RUSH (wind_attack_db): a reed's tongue
+                        # beats before its resonator has hold of it, and the wind
+                        # rushes past -- a burst of noise at the onset, louder
+                        # than the sustained skirt, wider, and dying away on its
+                        # own: a decay with no sustain, so it ends where it should
+                        # however long the key is held, live as in a file.
+                        _wad = getattr(_wsrc, 'wind_attack_db', None) if WIND_ATTACK else None
+                        if _wad is not None:
+                            # ...falling up the keyboard (wind_attack_slope, dB an
+                            # octave above middle C), as Pitea's does
+                            _wad = float(_wad) - float(_wsrc.wind_attack_slope) * math.log2(f0 / 261.6)
+                            _ag = _wg * 10.0 ** (_wad / 20.0)
+                            _CBW[0] = -max(float(_wsrc.wind_skirt_hz) / hf,
+                                           float(_wsrc.wind_attack_rel))
+                            _alr = math.log(T.db_ratio(float(_wsrc.wind_attack_dbps)))
+                            emit_partial(2*math.pi*hf/SR, gL*_ag, gR*_ag, gM*_ag, hf, non_m, noff,
+                                         float(_wsrc.wind_attack_fade_s) * SR, rel_r, chiff_r,
+                                         _alr, 0.0, 0.0, 0.0, 0.0, cc_r, crl, 0.0, csc, gr, cr)
                         _CBW[0], _CBW[1] = _cbw_keep
                         _NOREFL[0] = False
                     # THE LATE ARRIVAL. A second copy of this partial, quieter
@@ -4091,6 +4109,9 @@ try:
 except ValueError:
     WIND_SCALE = 1.0
 WIND_PARTIALS = 16          # the skirts' cost is a row a partial: the lower ones carry it
+# ...and the reeds' attack rush with it (wind_attack_db), unless this is 0:
+# so the burst can be heard against the wind without it
+WIND_ATTACK = os.environ.get('TUNING_WIND_ATTACK', '1') not in ('0', 'off', '')
 _VERBOSE_WIND = os.environ.get('TUNING_WIND_VERBOSE', '0') not in ('0', '')
 # ...and its LEVEL: TUNING_REGISTER=4 is on, with the class's coupling and
 # knock times 4 (Ben's ear set 1, against 4, on Ondine)

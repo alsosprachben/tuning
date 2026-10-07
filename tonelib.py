@@ -1035,6 +1035,14 @@ class SynthProperties:
     wind_skirt_db = None
     wind_skirt_hz = 1.0             # its width: the wider of this (Hz) ...
     wind_skirt_rel = None           # ... and this fraction of the partial
+    # ...and the ATTACK'S RUSH: a burst over the skirt at the onset, this many
+    # dB above it, this wide (fraction of the partial), rising over fade_s and
+    # dying at dbps with no sustain. None = none.
+    wind_attack_db = None
+    wind_attack_slope = 0.0
+    wind_attack_rel = 0.06
+    wind_attack_dbps = 250.0
+    wind_attack_fade_s = 0.004
     # THE CHEST'S WIND (wind.py): how a pipe answers its pressure p (1 =
     # static) -- frequency as p**wind_pitch_exp, amplitude as p**wind_level_exp
     # -- and, on the organ that owns a chest, how that pressure moves: its slow
@@ -4764,6 +4772,16 @@ class ReedOrganProperties(OrganProperties):
     wind_skirt_db = -32.0
     wind_skirt_hz = 8.0
     wind_skirt_rel = 0.025
+    # THE ATTACK'S RUSH: Pitea's reeds have more noise between their partials
+    # in the first 80 ms than in the sustain -- +14.5, +14.0, +12.6, +10.0 dB
+    # at C3 to C6. A burst 24 dB over the skirt at middle C, 3.5 dB less an
+    # octave up, half an octave wide (it is a rush, not a line), dying at 100
+    # dB/s, measures +15.7, +13.5, +13.9, +9.4 (examples/organ_wind_check.py
+    # --attack), the sustain's noise untouched.
+    wind_attack_db = 24.0
+    wind_attack_slope = 3.5
+    wind_attack_rel = 0.5
+    wind_attack_dbps = 100.0
     # ITS PRESSURE: the tongue holds the pitch (Pykett: a tremulant hardly
     # moves a reed's), the level moves more than a flue's. Starting values.
     wind_pitch_exp = 0.01

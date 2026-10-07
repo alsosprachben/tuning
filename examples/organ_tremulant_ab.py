@@ -33,7 +33,7 @@ FLUTE8, OCTAVE4, BOURDON16, TREMULANT = 1 << 6, 1 << 1, 1 << 12, 1 << 13
 PARTS = {"Cantus Firmus": (0, FLUTE8 | OCTAVE4), "Accomp 8": (1, FLUTE8), "Ped 8": (2, BOURDON16 | FLUTE8)}
 
 
-def register(src, dst, trem):
+def register(src, dst, trem, parts=None):
     m = mido.MidiFile(src)
     out = mido.MidiFile(type=1, ticks_per_beat=m.ticks_per_beat)
     for tr in m.tracks:
@@ -41,9 +41,10 @@ def register(src, dst, trem):
         if not any(e.type == "note_on" for e in tr):
             out.tracks.append(tr.copy())             # the conductor: tempo, meter
             continue
-        if name not in PARTS:
+        parts_ = parts or PARTS
+        if name not in parts_:
             continue
-        ch, word = PARTS[name]
+        ch, word = parts_[name]
         if trem and ch == 0:
             word |= TREMULANT
         t = mido.MidiTrack()
