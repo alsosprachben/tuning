@@ -210,7 +210,7 @@ def ensure_lib():
 
 # synth_voice's source is synthkernel.c AND the fragments it includes
 KERNEL_PARTS = ("synthkernel.c", "voice_partial.inc", "voice_block.inc", "voice_moog.inc",
-                "voice_cell.inc", "voicedesc.h")
+                "voice_cell.inc", "voice_noise.inc", "voicedesc.h")
 
 
 def _build(src, name, defs, funcs):
@@ -3396,6 +3396,30 @@ def prepare(path, tuner='hybrid440', sink=None):
                     emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, rel_r, chiff_r,
                                  logr, logrA, aftL, rp.sustain_level, cvp, cc_r, crl, sjit, csc,
                                  gr, cr, ph0=mph)
+                    # THE WIND'S SKIRT on this partial (see WIND): a noise band
+                    # at its frequency, its envelope and damper, no chiff of its
+                    # own, no room images (the tail still hears it)
+                    # WHOSE wind: the rank's own pipe if it has one (a reed, a
+                    # trumpet on its reed pipe), else the spectrum it borrows if
+                    # that is a pipe's (the flute 8 is a stopped pipe), else the host's
+                    _wsrc = rp if rp is not props else (
+                        spv if (spv is not None and getattr(spv, 'wind_skirt_db', None) is not None)
+                        else rp)
+                    _wsk = getattr(_wsrc, 'wind_skirt_db', None) if (WIND and organ) else None
+                    if _wsk is not None and m <= WIND_PARTIALS:
+                        _wg = 10.0 ** (_wsk / 20.0) * WIND_SCALE
+                        _cbw_keep = (_CBW[0], _CBW[1])
+                        # its width: the wider of a floor in Hz (wind_skirt_hz) and a
+                        # fraction of the partial's own frequency (wind_skirt_rel: a
+                        # resonance of constant Q is wider the higher it is)
+                        _wrel = getattr(_wsrc, 'wind_skirt_rel', None) or 0.0
+                        _CBW[0], _CBW[1] = -max(float(_wsrc.wind_skirt_hz) / hf, float(_wrel)), 0.0
+                        _NOREFL[0] = True
+                        emit_partial(2*math.pi*hf/SR, gL*_wg, gR*_wg, gM*_wg, hf, non_m, noff, pfade,
+                                     rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level, 0.0, cc_r,
+                                     crl, 0.0, csc, gr, cr)
+                        _CBW[0], _CBW[1] = _cbw_keep
+                        _NOREFL[0] = False
                     # THE LATE ARRIVAL. A second copy of this partial, quieter
                     # and starting pdelay later: the cascade adds energy to the
                     # middle of the spectrum rather than holding the middle back.
@@ -3982,6 +4006,18 @@ RENDER_STREAM = os.environ.get('TUNING_STREAM', '1') not in ('0', 'off', '')
 # pianos have a coupling, so nothing else pays for it. TUNING_REGISTER=0 turns
 # it off (a pedalled piano piece renders some four times faster without it).
 REGISTER = os.environ.get('TUNING_REGISTER', '1') not in ('0', 'off', '')
+# THE ORGAN'S WIND, per pipe (examples/organ_wind_measure.py, sources.md): each
+# partial of a registered rank wears a narrow band of noise -- the jet's
+# turbulence, filtered by the pipe's own resonance -- so it flutters on its own
+# a few times a second, as Pitea's pipes do (their partials' level wobbles are
+# uncorrelated: turbulence, not the bellows). TUNING_WIND=1 turns it on, a
+# number scales it; off by default until Ben has heard it.
+WIND = os.environ.get('TUNING_WIND', '0') not in ('0', 'off', '')
+try:
+    WIND_SCALE = float(os.environ.get('TUNING_WIND', '1')) if WIND else 1.0
+except ValueError:
+    WIND_SCALE = 1.0
+WIND_PARTIALS = 16          # the skirts' cost is a row a partial: the lower ones carry it
 # ...and its LEVEL: TUNING_REGISTER=4 is on, with the class's coupling and
 # knock times 4 (Ben's ear set 1, against 4, on Ondine)
 try:

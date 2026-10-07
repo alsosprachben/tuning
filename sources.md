@@ -5479,3 +5479,49 @@ manager's offset to the member's. These are Appendix D's own suggestions,
 and "the actual implementation is left to the manufacturer". An MCM
 identical to the one in force resets nothing, because the reset in §2.2.3
 is for channels "entering or leaving MPE control".
+
+## Pipe-organ wind — Lars Palo's Piteå sample set (added for the organ's wind)
+
+**The set.** *Piteå School of Music* (Grönlunds Orgelbyggeri, 1989; 3 manuals
+and pedal, 35 stops), sampled in December 2010 by Lars Palo with two Studio
+Projects B1 condensers, built into a GrandOrgue sample set by Lars Palo,
+Graham Goode and Panos Ghekas. **CC BY-SA 2.5.** Downloaded 2026-10-06 from
+<https://familjenpalo.se/vpo/download/> (`PiteaMHS20250727.orgue`, 1.05 GB,
+a zip of 14,130 samples, every CRC checked), unpacked to
+`~/Documents/refs/organ/pitea/` — outside the repo, as the Iowa files are. Its
+`.wav` files are WavPack; `sox` reads them.
+
+**Measured from the base organ only** (`PiteaMHS.organ`): the "extended"
+definition adds pipes from another organ whose samples were "digitally
+re-worked to have the reverb tails approximately match", by the set's README.
+
+**It was noise-reduced** — "Noise reduction of the samples was made with Nick
+Appletons Noise Reduce software" (its OrganInfo page): a profile of the room's
+own noise subtracted from every sample. So the steady wind noise measured from
+it is a **lower bound**; the pitch and level wander, the partials' noise
+skirts, the attack, and the noise's trend with the pipe where it stands clear
+of the room survive. Ben's call: measure it as a lower bound and set the
+model's levels by ear.
+
+**The samples are not all sustain.** Each carries its pipe's release and decay
+after the steady tone (about the last 1.5 s); measuring to the end of the file
+read that decay as 14 dB of "level wander" and 136 cents of "pitch wander".
+The steady window is the plateau, ending where the level first falls 3 dB.
+
+`examples/organ_wind_measure.py SETDIR` measures every single-pipe stop: the
+noise between the partials (each partial's line out to the widest of 4 bins,
+2 Hz and 5 cents), with the release tail's floor taken out; the partials'
+skirts; the strongest partial's pitch and level wander over the plateau; the
+attack's noise against the sustain's. Medians by family and octave, every
+fourth pipe (400 pipes):
+
+| family | noise re tone | skirts | pitch wander | level wander | attack vs sustain |
+|---|---|---|---|---|---|
+| principal, 131 Hz → 4 kHz | −32.7 → −27.3 dB, rising as the pipes shrink | −26 dB | 0.8 → 0.2 c | 0.2 → 0.8 dB | about level |
+| flute | −25 to −29 dB, flat with pitch | −21 to −29 dB | 1.6 → 0.3 c | 0.2 → 0.7 dB | −5 to −10 dB |
+| string | −32 → −42 dB, *falling* as they shrink | −33 to −40 dB | 0.9 → 0.1 c | about 0.2 dB | +5 to +12 dB |
+| reed | −27 to −34 dB, flat | −28 to −35 dB | about 0.3 c | 0.1 → 0.8 dB | +12 to +15 dB |
+
+The noise's band follows the pipe's pitch, sitting around its lower partials
+rather than as a flat hiss: the resonator filters the jet's turbulence, so
+much of the wind is heard as skirts on the partials.

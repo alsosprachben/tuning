@@ -122,6 +122,15 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
     if(d->kind==1){
         mL=(d->mL0+(d->mL1-d->mL0)*tb)*d->aL; mR=(d->mR0+(d->mR1-d->mR0)*tb)*d->aR;
         sL=zrL; sR=zrR;
+        if(d->flags & VD_NOISE){
+            // an ordinary noise band (voice_noise.inc), as the Moog's below
+            u64 ui=n*d->nk_hi+v_mulhi(n, d->nk_lo);
+            float uf=(float)(n*d->nk_lo)*(1.0f/18446744073709551616.0f);
+            float h0=v_hash01(d->nseed+ui), dh=v_hash01(d->nseed+ui+1)-h0;
+            dh-=VFLOOR(dh+0.5f);
+            float jn=6.2831853f*(h0+dh*uf), cn=VCOS(jn), sn=VSIN(jn);
+            sL=zrL*cn-ziL*sn; sR=zrR*cn-ziR*sn;
+        }
     } else {
         int cl=k/mg; const VGLOBAL vcell* v=C+d->cell+cl;
         float t=(float)(k-cl*mg)*invg;

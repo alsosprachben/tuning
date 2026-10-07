@@ -659,7 +659,9 @@ void synth_voice(
                 // differently, and a render moves by an ULP. A MOOG runs the
                 // same body over grid cells, each interpolated between its own
                 // two grid gains; the phasor runs on across them untouched.
-                if(!ftr){
+                if(!ftr && chBW[p]<0.f){
+                #include "voice_noise.inc"
+                } else if(!ftr){
                 for(long n=ns;n<ne;n++){
                     float t=(float)(n-bs0)*invb; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
                     float sL=zrL, sR=zrR;
@@ -856,7 +858,17 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->chk_hi=chk_hi; d->chk_lo=chk_lo;
         d->flags=0; d->cell=0; d->nk_hi=d->nk_lo=d->nseed=0;
         (void)rr; (void)ri; (void)invb;
-        if(!ftr){ d->kind=1; continue; }
+        if(!ftr){
+            // an ordinary noise band (voice_noise.inc): the Moog's draw, seeded alike
+            if(chBW[p]<0.f){
+                uint64_t gh=0, gl=0;
+                chiff_step((double)nf*(double)(-chBW[p])/SRATE_D, &gh, &gl);
+                d->flags=VD_NOISE; d->nk_hi=gh; d->nk_lo=gl;
+                d->jfa=0.f;      // a noise band has no chiff of its own (voice_noise.inc)
+                d->nseed=(uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
+            }
+            d->kind=1; continue;
+        }
         #include "voice_moog.inc"
         (void)nui; (void)nh0; (void)ndh;
         // (cbase, not c0: the cell fragment's c0 is the cell's first sample)

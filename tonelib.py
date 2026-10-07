@@ -1028,6 +1028,13 @@ class SynthProperties:
     # the bridge in dB per key; damper_top is the first key with no damper.
     # 0 = off, which is everything but the pianos.
     register_gain = 0.0
+    # THE ORGAN'S WIND (blockrender.WIND): each partial of a registered rank
+    # wears a band of noise this far under it (dB) and this wide (Hz) -- the
+    # jet's turbulence through the pipe's resonance. Measured per family from
+    # Pitea (sources.md); a LOWER BOUND, that set being noise-reduced. None = none.
+    wind_skirt_db = None
+    wind_skirt_hz = 1.0             # its width: the wider of this (Hz) ...
+    wind_skirt_rel = None           # ... and this fraction of the partial
     register_knock_gain = 0.0
     register_knock_falloff = 1.0
     damper_top = 128
@@ -4188,6 +4195,18 @@ class WurlitzerProperties(ElectricPianoProperties):
 
 
 class StoppedPipeProperties(SynthProperties):
+    # THE WIND (blockrender.WIND), for a stopped flute rank (Gedackt, Bourdon,
+    # Koppelflojt): a band of noise 24 dB under each partial, as wide as the
+    # wider of 10 Hz and 3% of the partial -- a resonance of constant Q, with a
+    # floor the bass pipes need. FITTED, our pipes rendered and measured as
+    # Pitea's were (examples/organ_wind_check.py), C3 to C6: noise -29.0,
+    # -25.5, -25.7, -24.8 dB under the tone and wander 1.53, 0.94, 0.62, 0.48
+    # cents, against Pitea's -26.2, -27.7, -25.2, -28.1 dB and 1.60, 0.94,
+    # 0.71, 0.45 c (sources.md). An organ rank only: a flute voice keeps its
+    # own breath.
+    wind_skirt_db = -24.0
+    wind_skirt_hz = 10.0
+    wind_skirt_rel = 0.03
     # CC71-78: a stopped pipe blown by a player, the pan flute.
     sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     # A DRIVEN AIR COLUMN HAS NO DAMPER: the tone stops when the wind does, and
@@ -4595,6 +4614,15 @@ class OrganProperties(StoppedPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
+    # THE WIND: principals and octaves -- 26 dB under each partial, the wider
+    # of 6 Hz and 2% of it, fitted as the flute's was. C3 to C6, noise -37.6,
+    # -31.6, -28.2, -28.7 dB and wander 0.71, 0.48, 0.35, 0.28 cents, against
+    # Pitea's -32.7, -32.0, -29.7, -28.9 dB and 0.77, 0.47, 0.35, 0.30 c: the
+    # smaller pipe the noisier, as Ben hears it, because a mode's resonance
+    # widens with its frequency (sources.md).
+    wind_skirt_db = -26.0
+    wind_skirt_hz = 6.0
+    wind_skirt_rel = 0.02
     # A pallet valve is open or shut and a pipe is cut to length.
     pitch_bendable = False
     # NO TOUCH. A pipe organ key opens a pallet valve. The pipe then speaks at
@@ -4699,6 +4727,14 @@ class FlueOrganProperties(OrganProperties):
 
 
 class ReedOrganProperties(OrganProperties):
+    # THE WIND: trumpets, basun, cromorne -- 32 dB under each partial, the
+    # wider of 8 Hz and 2.5% of it. C3 to C6, noise -36.7, -34.0, -34.4, -33.4
+    # dB and wander 0.44, 0.31, 0.22, 0.17 cents, against Pitea's -33.3,
+    # -34.4, -33.3, -30.9 dB and 0.29, 0.20, 0.15, 0.30 c. A reed's tone is
+    # held by its tongue; its turbulence is quieter against it than a flue's.
+    wind_skirt_db = -32.0
+    wind_skirt_hz = 8.0
+    wind_skirt_rel = 0.025
     # Borrowed as a RANK (the church organ's reed stops), it is this pipe
     # entire -- its own ceiling, decay, chiff and sustain -- not a spectrum laid
     # on the host's. See blockrender's rank loop.
