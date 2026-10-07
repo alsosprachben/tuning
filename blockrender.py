@@ -4475,6 +4475,8 @@ if __name__=="__main__":
         _mg = master_curve(_LAST_PREP.get('mvol'), 0, _LAST_PREP['N'])
         if _mg is not None:
             _bl *= _mg; _br *= _mg
+        # ...and the master gain, as the mix has it (streamrender._emit)
+        _bl *= T.master_gain; _br *= T.master_gain
         write_wav(os.path.splitext(outp)[0] + '.send.wav', _bl, _br)
         print("  reverb send: %d channel(s) at their own distance, bus written"
               % len(_rs))

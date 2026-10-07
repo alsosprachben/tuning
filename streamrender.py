@@ -975,8 +975,8 @@ class Stream:
 
     def _emit(self, w0, w1, L, R, SL, SR_):
         """synth_window's finishing on this window -- bursts, master fader,
-        gain, clip; the send gets the fader alone -- and out to the arrays or
-        the files."""
+        gain, clip; the send gets the fader and the gain, not the clip -- and
+        out to the arrays or the files."""
         B = self.B
         n = w1 - w0
         B._NG.mix(L, R, w0, self.ctx['cons_bursts'], B.SR)
@@ -985,6 +985,11 @@ class Stream:
             L *= mg; R *= mg
             SL *= mg; SR_ *= mg
         L *= T_master_gain(); R *= T_master_gain()
+        # THE SEND AT THE MIX'S GAIN. roomtail convolves it against the mix as
+        # written, master gain and all; without it the room stood 9-14 dB too
+        # loud (the master's own dB) on every file whose channels sent
+        # differently -- A-Team's band, once its gun stood back.
+        SL *= T_master_gain(); SR_ *= T_master_gain()
         np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
         if self.wout is not None:
             self.wout.write(L, R)
