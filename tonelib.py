@@ -807,7 +807,7 @@ class SimplePartial(BasePartial):
             t = second - self.sustain.start_second.get()
             if 0.0 <= t < self.properties.tension_settle_cutoff:
                 env = _exp(-t / self.properties.tension_settle_time)
-                f *= 1.0 + tb * self.properties.attack_volume * env
+                f *= 1.0 + tb * self.properties.tension_stroke() * env
         # Pipe speech transient: a pipe's PASSIVE resonances are mildly inharmonic
         # (the open-end correction shrinks with frequency, so upper modes sit sharp),
         # but a sounding pipe is a nonlinearly DRIVEN oscillator -- the jet (or reed
@@ -1193,6 +1193,16 @@ class SynthProperties:
     # the sound rather than a bloom on it wants far more: a slide up the neck
     # sweeps a fifth, not 68 cents. See GuitarFretNoiseProperties.
     tension_bend_max = 0.04
+    # How the bend follows the stroke: attack_volume ** this. 1 (the default)
+    # is the piano's, proportional to the strike. A drumhead's is far flatter:
+    # DRSKit's toms glide 60 cents at 22 dB under their loudest stroke and 310
+    # at 5 dB under -- a fifth of the bend for a seventh of the amplitude
+    # (examples/drum_fit.py).
+    tension_bend_power = 1.0
+
+    def tension_stroke(self):
+        av = self.attack_volume
+        return av if self.tension_bend_power == 1.0 else max(av, 0.0) ** self.tension_bend_power
 
     # Per-note natural jitter (0 = off). Now that every strike is phase-coherent,
     # two voices on the same pitch would align TOO perfectly (a machine-gun,
@@ -1293,6 +1303,18 @@ class SynthProperties:
     # more. So the bloom is an extra, later copy of the mid partials, and the
     # partials themselves are never delayed. 0 = no late copy.
     bloom_gain = 0.0
+    # AND HOW MUCH THE CASCADE CARRIES GROWS WITH THE STROKE: bloom_gain is the
+    # late copy at full velocity, times attack_volume ** this below it. A soft
+    # stroke stays in the linear regime and blooms not at all; measured on
+    # DRSKit's crashes (examples/crash_fit.py), 2-8 kHz swells 10-15 dB over
+    # the strike on a hard hit and stays flat on a soft one. 0 = fixed.
+    bloom_gain_slope = 0.0
+    # AND ONLY IN ITS BAND. False gives every partial the late copy at
+    # bloom_gain, its DELAY alone shaped by the band -- so a copy big enough to
+    # swell the top also raised the bass and the strike, everywhere at once.
+    # True shapes the gain as the delay is (bloom_gain_for): the swell DRSKit's
+    # crashes show, 2-8 kHz rising while 250 Hz falls away.
+    bloom_banded = False
     # How long the late copy takes to swell in, as a multiple of its own delay.
     # The kernel already times each partial's decay from its own onset (a =
     # non[p]), so the copy decays from when it arrives; what it lacked was a rise
@@ -1343,6 +1365,12 @@ class SynthProperties:
         from math import log, exp
         d = abs(log(frequency / self.bloom_center_hz) / log(2.0) / self.bloom_octaves)
         return self.bloom_seconds * exp(-0.5 * d ** self.bloom_shape)
+
+    def bloom_gain_for(self, frequency):
+        """The late copy's gain at this partial (see bloom_banded)."""
+        if not self.bloom_banded or self.bloom_seconds <= 0.0:
+            return self.bloom_gain
+        return self.bloom_gain * self.bloom_delay_for(frequency) / self.bloom_seconds
 
     def speech_time(self, fixed, frequency):
         """Full onset/release ramp: the fixed valve/attack floor plus, for pipes,
@@ -2295,6 +2323,8 @@ class SynthProperties:
             # a ghost note does not arrive a second late.
             av = max(float(attack_volume), 1e-3) ** -abs(self.bloom_slope)
             self.bloom_seconds = self.bloom_seconds * min(av, self.bloom_stretch_max)
+        if self.bloom_gain > 0.0 and self.bloom_gain_slope:
+            self.bloom_gain = self.bloom_gain * max(float(attack_volume), 1e-3) ** self.bloom_gain_slope
 
         if self.strike_wobble_hz > 0.0 and self.strike_wobble_gain > 0.0:
             self.unison_detune = (self.strike_wobble_hz,)
@@ -5722,57 +5752,71 @@ class TrumpetProperties(CylindricalBrassProperties):
 
 
 class MutedTrumpetProperties(TrumpetProperties):
-    """GM 59, with the mute actually there.
+    """GM 59: the trumpet in a HARMON mute, stem out -- the Miles Davis sound,
+    and what "muted trumpet" means when nobody says which.
 
-    Program 59 was TrumpetProperties with a comment saying "mute not modelled",
-    so a muted part played open. A straight mute is a cone pushed into the bell
-    with a narrow annular gap left for the air, and it does three separate
-    things, all of which this model already has somewhere to put:
+    A mute is a filter on the bell, and here it is MEASURED rather than built:
+    VSCO 2 Community Edition's trumpet holds the same notes open, in a harmon
+    and in a straight mute (CC0; examples/mute_fit.py), so each partial's level
+    muted minus open, pitch by pitch and dynamic by dynamic, is the mute's
+    response at that partial's frequency -- the trumpet cancels and the mute is
+    left. Twelve pairs, 138 partials, carried as third-octave bands
+    (mute_response) and interpolated in log frequency.
 
-    The bell gets acoustically SMALLER. A brass bell is a high-pass -- below its
-    cutoff the wave reflects back down the tube instead of radiating -- and
-    shrinking the opening raises that cutoff. So the fundamental and the low
-    harmonics, which an open trumpet radiates poorly already, are cut further.
-    That, not added brightness, is why a muted trumpet reads as thin and nasal.
+    It had been a straight mute built from theory: the bell's high-pass raised
+    to 2.4 kHz and one broad cavity peak at 1.9 kHz, 5 dB down. The harmon does
+    something no single peak does. It takes the trumpet's whole body away --
+    20 to 40 dB under 1.6 kHz, with a notch near 1.3 kHz -- and leaves a band
+    from 2 kHz up level with the open horn, climbing to +5 dB past 5 kHz: thin,
+    buzzing, close. Fitted to the old terms it missed by 7.5 dB, its parameters
+    pinned at their bounds. Overall it costs 14.5 dB (initial_gain); a
+    composer writing con sordino expects it.
 
-    The mute CAVITY resonates. The volume inside the cone with its gap gives a
-    broad peak in the upper middle -- around 1.9 kHz for a straight mute -- and
-    that peak is the sound people actually identify as "muted".
+    The table holds everything the mute changes as a microphone hears it --
+    the bell's cutoff, the smaller aperture's spread -- so the open trumpet's
+    bell and directivity stand under it unchanged, and nothing is counted
+    twice.
 
-    The aperture is smaller, so it is LESS directional, not more. Directivity
-    goes as k*a, and a mute takes the radiating radius from the bell's 62 mm to
-    something nearer 25 mm, which moves ka = 1 from about 880 Hz up past 2 kHz.
-    An open trumpet beams its top at the audience; a muted one spreads it. This
-    falls straight out of the piston model already in SynthProperties.
-
-    And it is quieter, which is the point of a mute. No equal-loudness trim
-    here: the level drop is the instrument, not the fit, and a composer writing
-    con sordino expects it.
+    The STRAIGHT mute measured the same way (-25 dB under 600 Hz, level by 2
+    kHz, +2 to +10 above; 12.3 dB down overall) is in mute_fit.py's output,
+    for when a file asks for it as a variation (patch_map.VARIATIONS).
     """
     # CC71-78: and a mute is a resonator with a Q -- the one acoustic resonance
     # a player puts in.
     sound_controls = BrassProperties.sound_controls | frozenset(('resonance',))
-    # The mute's opening rather than the bell's: ka = 1 near 2.2 kHz, so it
-    # stays omnidirectional through most of its range.
-    directivity_radius = 0.025
-    # Raised from the open bell's 1600 Hz: a smaller mouth radiates less low.
-    bell_cutoff_hz = 2400.0
-    bell_order = 5.0
-    # The cavity peak. Broad (low Q) because the gap damps it heavily.
-    mute_resonance_hz = 1900.0
+    # muted minus open, dB, by frequency (Hz): examples/mute_fit.py --table
+    mute_response = ((200, -11.6), (252, -11.6), (317, -11.6), (400, -16.5), (504, -19.9),
+                     (635, -31.4), (800, -33.3), (1008, -28.1), (1270, -41.0), (1600, -19.2),
+                     (2016, -11.7), (2540, -1.4), (3200, -8.7), (4032, -2.0), (5080, 5.3),
+                     (6400, 2.7), (8063, 5.8))
+    # CC71's handle: the band the harmon leaves, which a cupped hand sharpens or
+    # spreads. Not applied at rest (tonelib.sound_shape takes its ratio only).
+    mute_resonance_hz = 2540.0
     mute_resonance_q = 1.4
     mute_resonance_db = 6.0
-    # A straight mute costs about 5 dB on top of what the raised cutoff removes.
-    initial_gain = TrumpetProperties.initial_gain * (10.0 ** (-5.0 / 20.0))
+    # THE LEVEL IS NOT IN THE TABLE'S HANDS. bore_gain is power-normalised per
+    # note -- colour, not volume -- so the table's 14.5 dB loss came back out
+    # (the render read -0.7 dB against the open trumpet). The mute's cost goes
+    # on the gain instead, as the theory mute's 5 dB did: 13.8 dB more brings
+    # the render to the recordings' -14.5.
+    initial_gain = TrumpetProperties.initial_gain * (10.0 ** (-13.8 / 20.0))
 
     def bore_gain(self, partial_hz):
         g = super(MutedTrumpetProperties, self).bore_gain(partial_hz)
-        if self.mute_resonance_hz and self.mute_resonance_db:
-            r = partial_hz / self.mute_resonance_hz
-            if r > 0.0:
-                boost = 10.0 ** (self.mute_resonance_db / 20.0) - 1.0
-                g *= 1.0 + boost / (1.0 + (self.mute_resonance_q * (r - 1.0 / r)) ** 2)
-        return g
+        t = self.mute_response
+        if partial_hz <= 0.0:
+            return g
+        x = _log(partial_hz)
+        if partial_hz <= t[0][0]:
+            db = t[0][1]
+        elif partial_hz >= t[-1][0]:
+            db = t[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(t, t[1:]):
+                if partial_hz <= f1:
+                    db = d0 + (d1 - d0) * (x - _log(f0)) / (_log(f1) - _log(f0))
+                    break
+        return g * 10.0 ** (db / 20.0)
 
 class TromboneProperties(CylindricalBrassProperties):
     # Radiating aperture: bell 216 mm.
@@ -7994,146 +8038,233 @@ class SurdoProperties(ShelledDrumProperties):
     max_harmonic = 10
 
 
-class TomTomProperties(MembraneDrumProperties):
-    """A tom: TWO heads over a closed shell, which the bare Bessel set is not.
+class KitDrumProperties(MembraneDrumProperties):
+    """A kit drum MEASURED: DrumGizmo's DRSKit (CC-BY 4.0), on its close
+    microphones, ~30 strokes a drum (examples/drum_fit.py).
 
-    MembraneDrumProperties carries the modes of a circular membrane IN VACUO --
-    1 : 1.593 : 2.136 : ... -- and that is the textbook idealisation of a head
-    with no air on either side. A conga or a timbale is close to it, because the
-    shell is open at the bottom and there is no cavity to speak of. A tom is not:
-    it has a second head, and the air trapped between them couples the two.
+    The kick and the toms had been physics -- the Bessel zeros, then the air
+    between two heads splitting the axisymmetric modes, then a Helmholtz port
+    under the kick -- with the gains and the decays judgement, because Iowa
+    has no drum kit. Measured, they missed in the four ways that make a drum:
 
-    ONLY THE MODES THAT CHANGE THE ENCLOSED VOLUME FEEL THAT SPRING, and for a
-    circular membrane that is exactly the axisymmetric (0,n) family. Any mode
-    with a nodal diameter has equal and opposite lobes whose volume displacement
-    cancels, so (1,1), (2,1), (3,1) and the rest do not compress the air and do
-    not move at all. Each (0,n) mode instead becomes a DOUBLET: the heads moving
-    in the same spatial direction leave the volume alone and stay put, while the
-    heads moving oppositely compress the air and rise to f*sqrt(1+k).
+      the RING: a tom's fundamental falls 13-45 dB/s, where the class fell
+      80-150 -- it was gone in a third of a second, a floor tom rings for two;
+      the HEAD: a kick's modes above its thump sit 4-15 dB under it, where the
+      class had them 20-40 down;
+      the STICK: the click of stick or beater on the head is 30-60 dB under
+      the fundamental from 500 Hz to 6 kHz, and it was simply absent;
+      the GLIDE: a struck head is stretched and starts 150-350 cents sharp,
+      settling in ~0.1 s -- a fifth of that at pp -- where the class bent 50.
 
-    Treating the mode as a piston of effective area 2*pi*a^2*J1(j0n)/j0n against
-    an adiabatic volume pi*a^2*L, with modal mass sigma*pi*a^2*J1(j0n)^2:
+    THE MODES are each drum's own, read where they settle: DRUM_MODES rows of
+    (ratio, dB under the first at stroke_ref_db, the mode's amplitude dB/s).
+    A two-headed drum is not a membrane in vacuo, and the ratios show it --
+    the kick's batter head, beater side, carries its own series from 1.49 and
+    the resonant head another from 1.95 -- so they are carried as read, not
+    derived.
 
-        k_n = 8*rho*c^2 / (L * sigma * omega_n^2 * j0n^2)
+    THE DECAY is two-stage where the recording says so: each mode at its own
+    rate, and a share slow_share of it left ringing at slow_dbs (the shell's
+    rate) -- tonelib's aftersound. The kick has none: its head modes simply
+    die fast, 35-120 dB/s against a tom's 10-45. That IS the damping (DRSKit's
+    kick, ~0.4 s to -40 dB, is felt- or pillow-damped); a remainder the fit
+    put at 4 dB/s is the room the close microphones still hear.
 
-    and since omega_n scales as j0n, k falls as 1/j0n^4 -- so the fundamental
-    splits hugely and (0,2) and (0,3) barely at all. For a 12x8 rack tom at
-    130 Hz with a 7.5 mil head (sigma 0.26 kg/m^2): the (0,1) partner lands at
-    2.556, (0,2) at 2.513 and (0,3) at 3.658.
-
-    CROSS-CHECK, because there is no drum recording anywhere in this collection
-    to fit against. The same formula applied to a kettledrum says its (0,1) mode
-    is pushed far up and radiates strongly -- which is precisely why a timpano's
-    pitch comes from (1,1) to (5,1) and never from its fundamental, as
-    TimpaniProperties already describes. That account falls out of this rather
-    than being put into it.
-
-    STILL PHYSICS, NOT MEASUREMENT, and on the same footing as the Bessel zeros
-    it extends: the ratios are derived, the geometry is stated, and nothing here
-    has been checked against a tom. Two effects are knowingly left out. Air MASS
-    loading lowers every mode, the low ones most, which would compress the whole
-    set slightly. And the air modes are the only ones that move net air, so they
-    radiate efficiently and should decay faster than their neighbours -- the
-    engine's decay is a function of frequency alone, so it cannot single them
-    out. A real shell is also vented, which relieves the spring below the vent's
-    own resonance; this is the sealed-cavity limit.
+    THE CLICK is the head's high modes, which the stick drives and the head
+    loses in tens of ms: click_per_band partials per third-octave from
+    CLICK_HZ0 up, at fixed places (absolute Hz -- a stick is a stick, whatever
+    the drum is tuned to), with CLICK_DB the level each band reads at, dying
+    at click_dbs. A harder stroke brings it up click_stroke_slope dB per dB of
+    stroke against the modes: the stick's contact gets shorter.
     """
-    mode_ratios = (1.000, 1.593, 2.136, 2.295, 2.513, 2.556, 2.653, 2.917,
-                   3.155, 3.500, 3.599, 3.647, 3.658, 4.059, 4.132)
-    mode_gains  = (1.000, 0.475, 0.297, 0.265, 0.229, 0.223, 0.210, 0.180,
-                   0.159, 0.135, 0.129, 0.126, 0.126, 0.106, 0.103)
-    max_harmonic = 15
-    # the three air partners add a little energy; trimmed back so the family
-    # sits exactly where it did before this class existed
-    initial_gain = (1.0 / 2.5) * 0.9772
+    DRUM_MODES = ((1.0, 0.0, 40.0),)
+    stroke_ref_db = -12.0
+    slow_share = 0.0
+    slow_dbs = 0.0
+    CLICK_HZ0 = 500.0
+    CLICK_DB = ()
+    # what reading the click back off a render takes from CLICK_DB (examples/
+    # drum_fit.py --cal): a 20 ms window over three fast partials a band reads
+    # 24-31 dB under their own level. One number a drum -- band by band it
+    # came out +-10 dB from its neighbours, which is three random partials
+    # and not the drum
+    click_cal_db = 0.0
+    click_per_band = 3
+    click_dbs = 480.0
+    click_stroke_slope = 0.7
+
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    tonal_dampening = 1.0
+    # the glide, measured: not the piano's register law, and far past its cap
+    tension_bend_slope = 0.0
+    tension_bend_max = 0.5
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        n = len(cls.DRUM_MODES) + cls.click_per_band * len(cls.CLICK_DB)
+        # placeholders: mode_ratio() answers; these only make the set "measured"
+        cls.mode_ratios = tuple(r[0] for r in cls.DRUM_MODES) + (0.0,) * (n - len(cls.DRUM_MODES))
+        cls.mode_gains = (1.0,) * n
+        cls.max_harmonic = n
+
+    def _click(self, harmonic):
+        j = harmonic - len(self.DRUM_MODES) - 1
+        if j < 0:
+            return None
+        b, k = divmod(j, self.click_per_band)
+        if b >= len(self.CLICK_DB):
+            return None
+        # k evenly through the band, nudged off the grid by a fixed fraction so
+        # two drums' clicks do not share partials
+        x = (k + 0.5) / self.click_per_band - 0.5 + 0.3 * (((b * 7 + k * 13) * 0.6180339887) % 1.0 - 0.5) / self.click_per_band
+        return b, self.CLICK_HZ0 * 2.0 ** ((b + x) / 3.0)
+
+    def _f0(self):
+        return self.frequency_x * (2.0 ** self.octave_position)
+
+    def mode_ratio(self, m):
+        if 1 <= m <= len(self.DRUM_MODES):
+            return self.DRUM_MODES[m - 1][0]
+        c = self._click(m)
+        return c[1] / self._f0() if c else 0.0
+
+    def _stroke_db(self):
+        return max(-40.0, 20.0 * _log(max(self.attack_volume, 1e-6)) / _log(10.0)) - self.stroke_ref_db
+
+    def series_volume(self, harmonic):
+        if 1 <= harmonic <= len(self.DRUM_MODES):
+            return self.gain * 10.0 ** (self.DRUM_MODES[harmonic - 1][1] / 20.0)
+        c = self._click(harmonic)
+        if c is None:
+            return 0.0
+        db = self.CLICK_DB[c[0]] + self.click_cal_db + self.click_stroke_slope * self._stroke_db()
+        return self.gain * 10.0 ** (db / 20.0) / self.click_per_band ** 0.5
+
+    def harmonic_decay(self, harmonic):
+        # tonelib's D is half the amplitude dB/s
+        if 1 <= harmonic <= len(self.DRUM_MODES):
+            return 0.5 * self.DRUM_MODES[harmonic - 1][2]
+        return 0.5 * self.click_dbs if self._click(harmonic) else 0.0
+
+    def aftersound(self, frequency, decay_rate):
+        # the click is not the shell's: it has no remainder
+        if self.slow_share <= 0.0 or decay_rate >= 0.5 * self.click_dbs:
+            return (0.0, decay_rate)
+        return (self.slow_share, min(decay_rate, 0.5 * self.slow_dbs))
+
+
+class TomTomProperties(KitDrumProperties):
+    """GM 45-50: DRSKit's rack tom, 122 Hz where it settles. Four modes within
+    30 dB of the first, at 1.48, 1.76 and 2.26 -- not the Bessel 1.59 2.14
+    2.30 the class carried, nor the air partners it had derived from them.
+    (The derivation, two heads coupled through the trapped air, is still the
+    reason the set is not a membrane's; the numbers are now read.)"""
+    DRUM_MODES = (
+        (1.000, 0.0, 45.0),
+        (1.477, -20.9, 30.0),
+        (1.755, -20.2, 35.0),
+        (2.259, -12.5, 266.0),
+    )
+    stroke_ref_db = -12.8
+    slow_share = 0.16
+    slow_dbs = 28.0
+    CLICK_DB = (-31, -38, -40, -38, -41, -46, -48, -50, -53, -56, -61, -66, -76, -89)
+    click_cal_db = 28.5
+    click_dbs = 490.0
+    click_stroke_slope = 0.8
+    # 66 cents at -22 dB, 187 at -13, 312 at -5: bend = 0.27 * stroke**0.84
+    tension_bend = 0.27
+    tension_bend_power = 0.84
+    tension_settle_time = 0.085
+    tension_settle_cutoff = 0.8
+    # held at the level the old class was balanced to (loudest 150 ms, GM
+    # 45-50 at velocity 100): the measured head is 4.6 dB louder for the gain
+    initial_gain = 0.2355
 
 
 class FloorTomProperties(TomTomProperties):
-    """GM 41 and 43: a 16x16 floor tom at 87 Hz. Deeper shell and a lower head,
-    which pull k in opposite directions -- more depth is a softer air spring,
-    a lower fundamental a weaker membrane one -- and the fundamental wins, so a
-    floor tom's air partner sits HIGHER than a rack tom's, at 2.679."""
-    mode_ratios = (1.000, 1.593, 2.136, 2.295, 2.538, 2.653, 2.679, 2.917,
-                   3.155, 3.500, 3.599, 3.647, 3.665, 4.059, 4.132)
-    mode_gains  = (1.000, 0.475, 0.297, 0.265, 0.225, 0.210, 0.207, 0.180,
-                   0.159, 0.135, 0.129, 0.126, 0.125, 0.106, 0.103)
+    """GM 41 and 43: DRSKit's floor tom, 81 Hz. It RINGS: its fundamental
+    falls 13 dB/s, three times slower than the rack tom's -- a big slack head
+    with a deep shell and nothing touching it -- and its modes above sit
+    nearer, 9-13 dB down at 1.63, 2.01 and 2.35."""
+    DRUM_MODES = (
+        (1.000, 0.0, 13.0),
+        (1.631, -8.4, 45.0),
+        (2.012, -8.5, 195.0),
+        (2.349, -10.9, 110.0),
+        (2.971, -18.4, 30.0),
+    )
+    stroke_ref_db = -12.0
+    slow_share = 0.37
+    slow_dbs = 24.0
+    CLICK_DB = (-33, -31, -39, -42, -39, -43, -46, -50, -55, -60, -64, -72, -79, -81)
+    click_cal_db = 30.5
+    click_dbs = 460.0
+    initial_gain = 0.1989       # held, as the rack tom's: -6.0 dB
+    # 154 cents at -12 dB, 275 at -1: 0.18 * stroke**0.5
+    tension_bend = 0.18
+    tension_bend_power = 0.5
 
 
 class HighTomProperties(TomTomProperties):
-    """GM 48 and 50: a 10x7 rack tom at 165 Hz. The tightest head in the family
-    and the shallowest shell, and here the head wins: the air partner is the
-    lowest of the three at 2.219, close enough to (0,2) at 2.295 to beat with
-    it, which is the small tom's characteristic tightness."""
-    mode_ratios = (1.000, 1.593, 2.136, 2.219, 2.295, 2.452, 2.653, 2.917,
-                   3.155, 3.500, 3.599, 3.641, 3.647, 4.059, 4.132)
-    mode_gains  = (1.000, 0.475, 0.297, 0.279, 0.265, 0.238, 0.210, 0.180,
-                   0.159, 0.135, 0.129, 0.126, 0.126, 0.106, 0.103)
+    """GM 48 and 50: the rack tom, tuned up. DRSKit has one rack tom; the
+    class had derived a separate air partner for a 10x7, and there is nothing
+    measured to tell the two apart."""
 
 
-class KickDrumProperties(MembraneDrumProperties):
-    """A bass drum: a PORTED cavity, which is a bass-reflex box with a drumhead
-    for a driver.
+class KickDrumProperties(KitDrumProperties):
+    """GM 35 and 36: DRSKit's kick, beater rebounding, 44 Hz where it settles.
 
-    This was a tom with the decay turned up and tonal_dampening raised, on the
-    bare Bessel set -- a membrane in vacuo. A kick is not that. Its front head is
-    normally ported, and a port is not a leak: the plug of air in the hole has
-    mass, the cavity behind it has compliance, and together they are a Helmholtz
-    resonator coupled to the batter head exactly as a reflex port couples to a
-    loudspeaker cone.
+    THE THUMP IS THE DRUM'S AIR, both heads moving together: the one mode
+    both close microphones see at full level. Above it each head has its own
+    series, and the microphones split them: the batter head, beater side, at
+    1.49 and 2.22 (the (1,1) and (2,1), air-loaded nearly into 2:3, as a
+    timpano's are), the resonant head at 1.95 and 3.00 -- tuned higher than
+    the batter, as a kick's front head usually is. The class had derived a
+    Helmholtz port and put the head modes four times up; this kick is not
+    ported (or not so that it shows), and its head modes sit within 4-15 dB
+    of the thump.
 
-        head    M_as = sigma*pi*a^2*J1(j01)^2 / A_eff^2,  A_eff = 2*pi*a^2*J1(j01)/j01
-        cavity  C_ab = V/(rho*c^2)
-        port    M_ap = rho*L_eff/A_p,  L_eff ~ 1.7*r for a flanged hole
-        alpha = C_as/C_ab,   h = omega_port/omega_head
+    DAMPED, like a pillowed kick: ~0.4 s to -40 dB. The head modes go at
+    40-130 dB/s against a tom's 13-45 -- the pillow presses on the head and not
+    on the air -- while the thump falls 49. The beater's click is 30 dB under
+    the thump at 500 Hz and 60 at 4 kHz.
 
-    and the roots of u^2 - u(1 + h^2 + alpha*h^2) + h^2 = 0 are the drum's two
-    resonances. For a 22x16 shell with a 5" port and a 10 mil head whose own
-    (0,1) is 62 Hz: the port resonates at 59.2 Hz, alpha is 4.52, and the roots
-    are 0.394 and 2.424 of the head -- 24 Hz and 150 Hz.
+    The head modes' rates are fitted to BANDS (drum_fit.py --bands), not mode
+    by mode: 1.485 and 1.598 are 7% apart, each per-mode reading took their
+    shared skirt, and the pair rang 7-14 dB over the recording from 0.1 s on,
+    covering the thump with 90-150 Hz. Nothing was missing below it: under
+    20 Hz every microphone, the room's included, reads 40-50 dB down.
 
-    SO THE THUMP IS THE PORT, NOT THE HEAD. That is the whole point of the
-    model, and it is why a kick reads as a thump plus a knock rather than as a
-    low tom: the head's own modes are pushed up into a cluster from 250 Hz, and
-    what you hear at the bottom is the cavity breathing through the hole. The
-    ratios below are normalised to the AIR mode rather than to the head, so the
-    base frequency still means what it always did -- the drum's sounding
-    fundamental, 62 Hz for GM 36 -- and the pitch tuned by ear does not move.
-    What changes is everything above it:
-
-        band            30-60  60-120  120-250  250-500  500-1k
-        bare Bessel      -8.7    -0.7    -19.9    -50.7   -70.5
-        ported cavity    -8.4    -0.7    -47.9    -42.1   -59.4
-
-    The thump is untouched and the 120-250 Hz shelf -- the boxy region, where a
-    real kick is cut and where the old model put the whole Bessel cluster --
-    drops 28 dB, reappearing an octave up as knock.
-
-    The (0,2) and (0,3) modes sit far above the port's own resonance, where the
-    plug is inertial and the cavity is effectively SEALED, so they take the
-    closed-cavity split instead (see TomTomProperties). Modes with a nodal
-    diameter move no net air and are untouched.
-
-    NO REFERENCE, and one omission that matters more here than in the toms. A
-    real kick is damped with a pillow or a felt strip against the head, which
-    kills the 250-650 Hz head cluster -- the boxy region -- while barely
-    touching the port mode, because that is a cavity resonance and not a head
-    one. This engine's decay is a function of frequency alone, so it cannot damp
-    the head modes selectively; the 1/ratio**1.6 gain law already puts that
-    cluster about 20 dB down, which stands in for the pillow without being it.
-    If this reads as boxy, that is the missing piece, and the honest fix is
-    per-mode damping rather than a gain tweak.
+    Played at its own pitch: 44.4 Hz for 36, and 35 two semitones under, as
+    the GM map's placeholder 62 and 55 had been.
     """
-    # air/port mode first, then the head's own modes above it
-    mode_ratios = (1.000, 4.044, 5.423, 5.826, 6.153, 6.708, 6.735, 7.405,
-                   8.009, 8.885, 9.137, 9.258, 9.379, 10.304, 10.490)
-    mode_gains  = (1.000, 0.106, 0.069, 0.063, 0.058, 0.051, 0.051, 0.044,
-                   0.039, 0.033, 0.032, 0.031, 0.031, 0.026, 0.026)
-    max_harmonic = 15
-    initial_gain = 0.952381  # solved to hold the level the ear had set
-    tension_bend = 0.045       # a kick drops hardest of all: a slack, wide head
-    tension_settle_time = 0.13
-    tonal_dampening = 1.9      # darker/rounder: fundamental-dominant thump
-    decay_db = 24.0            # more body (louder-perceived); rings ~1.1 s
+    DRUM_MODES = (
+        (1.000, 0.0, 49.0),
+        (1.485, -7.4, 40.0),
+        (1.598, -6.1, 75.0),
+        (1.947, -5.8, 90.0),
+        (2.220, -5.6, 80.0),
+        (2.765, -2.3, 100.0),
+        (3.000, -4.2, 75.0),
+        (3.265, -3.4, 130.0),
+        (3.492, -0.5, 130.0),
+        (3.712, -4.7, 125.0),
+        (4.045, -9.5, 115.0),
+    )
+    stroke_ref_db = -12.2
+    CLICK_DB = (-30, -38, -39, -41, -43, -49, -51, -56, -59, -64, -68, -77, -83, -89)
+    click_cal_db = 24.0
+    click_dbs = 470.0
+    click_stroke_slope = 0.6
+    # 152 cents at 25 ms and -24 dB, 215 at -12, 297 at -3: 0.31 * stroke**0.35
+    tension_bend = 0.31
+    tension_bend_power = 0.35
+    tension_settle_time = 0.11
+    tension_settle_cutoff = 1.0
+    # held at the level the ear had set (GM 35/36, loudest 150 ms): -8.9 dB
+    initial_gain = 0.3418
 
 
 # --- Struck bars and plates (GM 8-15) --------------------------------------
@@ -11502,11 +11633,48 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     # renders exactly as before.
     aftersound_fraction = 0.0      # share of the energy on the slow component
     aftersound_ratio = 1.0         # its rate, as a fraction of the fast one
+    # OR ITS OWN RATE, amplitude dB/s, the same at every frequency: the metal's
+    # loss once the strike's energy has settled. Measured on DRSKit's crashes
+    # (examples/crash_fit.py), every band from 250 Hz to 16 kHz falls 10-13
+    # dB/s after the first second, however fast it fell before; a ratio of
+    # each mode's fast rate cannot say that -- the fit chose 0.06 to hold the
+    # bass up, and that held the top at 2 dB/s, a crash that would not stop.
+    # 0 = use the ratio.
+    aftersound_dbs = 0.0
 
     def aftersound(self, frequency, decay_rate):
         if self.aftersound_fraction <= 0.0:
             return (0.0, decay_rate)
+        if self.aftersound_dbs > 0.0:
+            # tonelib's D is half the amplitude dB/s
+            return (self.aftersound_fraction, min(decay_rate, 0.5 * self.aftersound_dbs))
         return (self.aftersound_fraction, decay_rate * self.aftersound_ratio)
+
+    # A SPECTRAL TRIM, (Hz, dB) points interpolated in log frequency and held
+    # flat past the ends, on every partial by where it sounds. A measured
+    # mode set's gains were read off one recording; a trim refits their
+    # balance against another without rewriting three hundred numbers, and is
+    # solved inside the same fit as the decay (the two are one fit: see the
+    # reverted ring-decay commit, a48fb97). Empty = untouched.
+    band_trim_db = ()
+
+    def harmonic_volume(self, harmonic):
+        v = super().harmonic_volume(harmonic)
+        if not self.band_trim_db or v == 0.0:
+            return v
+        from math import log
+        f = self.frequency_x * (2.0 ** self.octave_position) * self.mode_ratio(harmonic)
+        pts = self.band_trim_db
+        if f <= pts[0][0]:
+            db = pts[0][1]
+        elif f >= pts[-1][0]:
+            db = pts[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                if f < f1:
+                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                    break
+        return v * 10.0 ** (db / 20.0)
 
     ring_peak_hz = 0.0
     ring_decay_floor = 14.4        # dB/s at the peak
@@ -11896,6 +12064,38 @@ class CrashCymbal1Properties(CymbalProperties):
     had no low end: 100-500 Hz came out 7.6 dB under the recording while
     10-16 kHz ran 2 dB over. Thin and fizzy where the recording is full.
     Band rms error 3.61 -> 1.98 dB.
+
+    REFITTED TO A KIT CRASH HIT HARD (examples/crash_fit.py): DRSKit's left
+    crash, the stick's shank on the edge, eleven strokes over 37 dB, read on
+    the overheads. Ben: "fix the crash cymbals, the ones that are not hit very
+    heavy in the Iowa samples." Iowa's strokes are a percussionist controlling
+    a suspended plate, and never leave the linear regime; a kit crash does,
+    and that is a different sound, not a louder one:
+
+      * THE CASCADE. The shank excites the low modes, and 250-500 Hz dumps
+        at ~150 dB/s while 2-8 kHz SWELLS 5-15 dB over 30-250 ms -- the
+        plate's nonlinearity carrying the energy up. A soft stroke does not
+        swell. Carried by a banded late copy (bloom_banded) at ~9 kHz whose
+        gain follows the stroke (bloom_gain_slope). SCATTERED (bloom_scatter
+        1.0), because the fit left the arrivals in order up the spectrum --
+        each band peaking later than the one below, 18, 57, 60, 89 ms -- and
+        Ben heard that at once: "a weird initial upward sweep." The recording
+        rises too, but out of order (the hardest stroke: 2-4 kHz at 215 ms,
+        4-8 kHz at 99), and scattered the fit improves, 3.92 -> 3.72 dB.
+      * THE TAIL. After a second every band falls 10-13 dB/s, the metal's own
+        loss. The ring below had its slow stage as 0.06 of each mode's fast
+        rate, which held the top at 2 dB/s: a crash that would not stop.
+        aftersound_dbs sets it outright (8.5 fitted; t-40 5 s -> 3 s).
+      * THE BALANCE: band_trim_db, solved inside the same fit as the decay
+        (they are one fit; see the reverted a48fb97). Over the Iowa mode
+        gains it adds 9-14 dB at 350-700 Hz -- the shank's thud -- and takes
+        15 dB off the top octave.
+
+    Weighted band-by-time error over soft, mid and loud strokes 7.1 -> 3.9
+    dB. The level is held to Ben's balance (loudest 150 ms at velocity 100,
+    -33.9 dB both ways). The bloom, ring and noise history below is how the
+    Iowa fit got here; the numbers it quotes are superseded where the
+    attributes now say otherwise.
     """
     # A CRASH IS A CONTINUUM, NOT A LINE SPECTRUM, and half our energy was one
     # low tone. Ben, on the A/B against the clash: "our crashes sound completely
@@ -12058,8 +12258,8 @@ class CrashCymbal1Properties(CymbalProperties):
                    0.9350, 0.9865, 1.0000, 0.9155, 0.9144, 0.8943, 0.8453, 0.7422,
                    0.7284, 0.6775, 0.6402, 0.6330)
     max_harmonic = 300
-    aftersound_fraction = 0.08
-    aftersound_ratio = 0.06
+    aftersound_fraction = 0.2243
+    aftersound_ratio = 0.0620125
     # Each mode gets its own strike sign (see strike_phase_spread): with 300
     # modes all starting in phase the note peaked 16.0 dB above its own loudness against the 18" clash's 14.7.
     # AND ITS PARTIALS WERE HALF IN PHASE. At 0.5 the mode signs are only
@@ -12092,7 +12292,7 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
     #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
-    ring_peak_hz = 2000
+    ring_peak_hz = 3467
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
     # and no delayed peak appears at all, which is a threshold, not a gradient.
@@ -12198,13 +12398,13 @@ class CrashCymbal1Properties(CymbalProperties):
     # measurement cannot tell 0.15 from 0 and a real crash does take tens of
     # milliseconds to spread energy through the plate. If it should be audible
     # again that is an ear call, not a fit -- the fit says it earns nothing.
-    bloom_seconds = 0.008
-    bloom_gain = 0.15
-    bloom_center_hz = 1834.48
-    bloom_octaves = 1.73876
-    ring_decay_floor = 20
-    ring_decay_below = 8
-    ring_decay_above = 8
+    bloom_seconds = 0.03475
+    bloom_gain = 4.93
+    bloom_center_hz = 8956
+    bloom_octaves = 1.49
+    ring_decay_floor = 23.99
+    ring_decay_below = 14.3
+    ring_decay_above = 9.466
     decay_db = 108.636
     harmonic_decay_db = 0.0200571
     hf_corner_hz = 12305.2
@@ -12248,9 +12448,9 @@ class CrashCymbal1Properties(CymbalProperties):
     #
     # Fitted to the clash trajectory at full velocity. The mode set is still this
     # plate's own recording; only how hard it is hit comes from the clash.
-    chiff_volume = 3.99359
+    chiff_volume = 1.624
     sustain_jitter = 0.02
-    chiff_width = 0.25078
+    chiff_width = 0.3283
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
     strike_noise_slope = 0.8321
@@ -12269,7 +12469,13 @@ class CrashCymbal1Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.196926
+    bloom_swell = 1.0
+    bloom_gain_slope = 0.8398
+    band_trim_db = ((354, 9.1), (707, 14.4), (1414, -1.9), (2828, -3.8), (5657, -2.8), (11314, -15.0))
+    bloom_banded = True
+    aftersound_dbs = 8.5
+    bloom_scatter = 1.0
+    initial_gain = 0.120310
 
 class TelephoneRingProperties(MetalPercussionProperties):
     """GM 124. A BELL STRUCK TWENTY TIMES A SECOND, which is what a telephone is.
@@ -12493,7 +12699,13 @@ class ReverseCymbalProperties(CrashCymbal1Properties):
     decay_db = 0.0
     harmonic_decay_db = 0.0
     sustain_level = 1.0
-    initial_gain = CrashCymbal1Properties.initial_gain
+    # NO CASCADE: the late copy is the plate carrying a strike's energy upward,
+    # and a reversed crash has no strike -- it swells into its cut-off.
+    bloom_gain = 0.0
+    # The level as it was balanced, held through crash 1's refit to DRSKit
+    # (its loudest 150 ms, -26.2 dB at velocity 100, measured both ways): the
+    # refit's spectrum and ring read 5.2 dB louder on this envelope.
+    initial_gain = 0.107970
 
 
 class SynthDrumProperties(MembraneDrumProperties):
@@ -12677,6 +12889,14 @@ class CrashCymbal2Properties(CymbalProperties):
     for two crashes and they were the same voice 20 Hz apart; these are two
     different cymbals, and the 18" is the darker and longer of the pair.
     Band rms error 4.17 -> 3.13 dB.
+
+    REFITTED TO A KIT CRASH HIT HARD, as Crash Cymbal 1 was (see there):
+    DRSKit's right crash, twelve shank strokes. The same three findings --
+    the cascade's swell, here centred at 4.5 kHz and narrower; a slow stage
+    at its own 6.3 dB/s; the trim, +6-14 dB at 350-700 Hz and -7 at the top.
+    Weighted error 5.5 -> 3.6 dB; level held (-34.4 dB). Its 8 kHz tail
+    past 1.5 s still rings 10-25 dB long against a recording that has
+    gone to its floor there -- 50-75 dB under the strike.
     """
     # A CRASH IS A CONTINUUM, NOT A LINE SPECTRUM, and half our energy was one
     # low tone. Ben, on the A/B against the clash: "our crashes sound completely
@@ -12839,8 +13059,8 @@ class CrashCymbal2Properties(CymbalProperties):
                    0.8928, 0.8861, 0.8785, 0.8697, 0.8621, 0.8241, 0.7985, 0.7097,
                    0.6986, 0.6819, 0.6616, 0.5800)
     max_harmonic = 300
-    aftersound_fraction = 0.08
-    aftersound_ratio = 0.06
+    aftersound_fraction = 0.123
+    aftersound_ratio = 0.13987
     # Each mode gets its own strike sign (see strike_phase_spread): with 300
     # modes all starting in phase the note peaked 21.5 dB above its own loudness against the 17" clash's 13.1.
     strike_phase_spread = 1.0
@@ -12859,7 +13079,7 @@ class CrashCymbal2Properties(CymbalProperties):
     #
     #     crash 1   grid 5.57 -> 4.94 dB   line excess 5.3 -> 3.7   chiff 11.3 -> 4.0
     #     crash 2   grid 7.02 -> 3.63      line excess 6.5 -> 7.0   chiff  6.9 -> 4.0
-    ring_peak_hz = 2672.65
+    ring_peak_hz = 3416
     # The bloom. Sized from the takes that actually bloom rather than the median
     # of all of them: at the median 139 ms the strike transient still outranks it
     # and no delayed peak appears at all, which is a threshold, not a gradient.
@@ -12885,12 +13105,12 @@ class CrashCymbal2Properties(CymbalProperties):
     #
     # (crash 2's target attack is 26 ms and its bloom_seconds now 16 -- which is
     # its recording saying it does not bloom, rather than a knob turned down.)
-    bloom_seconds = 0.0161662
-    bloom_center_hz = 5661.91
-    bloom_octaves = 1.70142
-    ring_decay_floor = 44.2985
-    ring_decay_below = 6.65704
-    ring_decay_above = 151.364
+    bloom_seconds = 0.03415
+    bloom_center_hz = 4474
+    bloom_octaves = 0.8995
+    ring_decay_floor = 42.48
+    ring_decay_below = 11
+    ring_decay_above = 123.2
     decay_db = 5.69981
     harmonic_decay_db = 0.325081
     hf_corner_hz = 38680.9
@@ -12934,9 +13154,9 @@ class CrashCymbal2Properties(CymbalProperties):
     #
     # Fitted to the clash trajectory at full velocity. The mode set is still this
     # plate's own recording; only how hard it is hit comes from the clash.
-    chiff_volume = 3.99984
+    chiff_volume = 4.79
     sustain_jitter = 0.0113248
-    chiff_width = 0.367686
+    chiff_width = 1.028
     # how much noisier this plate gets as it is struck harder, fitted so the
     # flatness at the mf velocity matches the mf recording.
     strike_noise_slope = 0.6763
@@ -12955,7 +13175,13 @@ class CrashCymbal2Properties(CymbalProperties):
     # ...then the whole group down 8 dB together, so the balance above is kept
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
-    initial_gain = 0.088314
+    bloom_gain = 1.654
+    bloom_swell = 0.8055
+    bloom_gain_slope = 1.121
+    band_trim_db = ((354, 5.8), (707, 14.5), (1414, -7.0), (2828, -1.9), (5657, -3.8), (11314, -7.6))
+    bloom_banded = True
+    aftersound_dbs = 6.275
+    initial_gain = 0.068317
 
 class SplashCymbalProperties(CymbalProperties):
     """GM 55, Splash Cymbal.

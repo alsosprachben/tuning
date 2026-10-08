@@ -89,8 +89,10 @@ G = GuiroProperties             # struck wood, but the noisiest of it
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
-    35: ("Acoustic Bass Drum", K, 55.0),
-    36: ("Bass Drum 1",        K, 62.0),
+    # DRSKit's kick settles at 44.4 Hz (KickDrumProperties); 35, the
+    # "acoustic" bass drum, the deeper of the two, the same 2 semitones under
+    35: ("Acoustic Bass Drum", K, 39.4),
+    36: ("Bass Drum 1",        K, 44.4),
     37: ("Side Stick",      SideStickProperties, 407.4),
     38: ("Acoustic Snare",     S, 260.0),
     39: ("Hand Clap",          HandClapProperties, 310.4),
@@ -380,8 +382,10 @@ def percussion_for_note(note, kit=0):
 # These are the instruments' own ring times, and the engines set each drum's
 # decay from them at note construction.
 PERCUSSION_RING = {
-    35: 0.40, 36: 0.35, 37: 0.055, 38: 0.35, 39: 0.100, 40: 0.30, 41: 0.60,
-    43: 0.60, 45: 0.55, 47: 0.50, 48: 0.45,
+    # The kick and the toms (35, 36, 41-50) carry their measured rings in their
+    # classes (tonelib.KitDrumProperties), mode by mode: a single ring time
+    # here would rescale all of them by the first mode's.
+    37: 0.055, 38: 0.35, 39: 0.100, 40: 0.30,
     # ONE PLATE, THREE DAMPINGS. These are no longer three separately measured
     # decays: the hats share a mode set and a loss curve, and the ring is the
     # uniform part of the contact damping -- how hard the articulation holds the
@@ -406,7 +410,7 @@ PERCUSSION_RING = {
     # modes."
     42: 1.38, 44: 2.11, 46: 0.23,
     # MEASURED rings, fitted with each plate's mode set against its recording.
-    49: 0.61, 50: 0.40, 51: 0.50, 52: 0.62,
+    49: 0.61, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 0.34, 54: 0.180, 55: 0.41,
     56: 0.40, 57: 1.69, 58: 0.020, 59: 0.48, 60: 0.30, 61: 0.35, 62: 0.20,

@@ -3144,7 +3144,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         crl = getattr(props,'chiff_release',1.0) or 0.0; sjit = props.sustain_jitter; csc = f0/440.0
         _CBW[0] = getattr(props,'chiff_bandwidth',None) or RAND_GRAN
         _CBW[1] = getattr(props,'chiff_bandwidth_hz',None) or 0.0
-        _TB[0] = getattr(props,'tension_bend',0.0) * props.attack_volume
+        _TB[0] = getattr(props,'tension_bend',0.0) * props.tension_stroke()
         _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
         _TBN = (_TB[0], _TB[1], _TB[2])   # note-level bend, restored per partial
@@ -3552,7 +3552,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # middle of the spectrum rather than holding the middle back.
                     # See SynthProperties.bloom_gain.
                     if pdelay > 0.0 and props.bloom_gain > 0.0:
-                        bg = props.bloom_gain
+                        bg = props.bloom_gain_for(hf)
                         # It SWELLS, it does not spike. Given the same fast onset
                         # as the partial it accompanies, a copy loud enough to
                         # matter simply becomes the loudest thing in the note and
