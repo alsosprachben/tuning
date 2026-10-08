@@ -6184,6 +6184,7 @@ class PizzicatoStringsProperties(FormantBody, SectionMixin, PluckedStringPropert
     pluck_open = None
     # ...and CC74 moves it (pluck_point_moved): brightness, on a plucked string
     sound_controls = frozenset(('brightness', 'decay', 'release'))
+    pluck_point_control = True
 
     def __init__(self, frequency=256.0, *args, **kwargs):
         super().__init__(frequency, *args, **kwargs)
@@ -6219,18 +6220,24 @@ class HarpProperties(FormantBody, PluckedStringProperties):
 
     WHAT MAKES A HARP SOUND LIKE ONE is where it is plucked and with what. A
     harpist plucks with the flesh of the finger, not a nail or a plectrum, well
-    in toward the middle of the string -- and a centre pluck is the darkest
-    place there is, because the comb |sin(n*pi*p)| puts its first null at
-    n = 1/p. At p = 0.38 that is the third partial, so the fundamental carries
-    the note and the low harmonics are already thinned. That, and not a filter,
-    is why a harp is mellow.
+    AT the middle of the string -- and a centre pluck is the darkest place
+    there is, because the comb |sin(n*pi*p)| nulls every partial at a multiple
+    of 1/p. At the middle that is every EVEN one: the fundamental carries the
+    note over odd partials alone, and that, and not a filter, is why a harp is
+    mellow. Measured (examples/harp_fit.py): the comb reads 0.46-0.50 on every
+    note clear enough to read, and the ladders agree only there; the even
+    partials sit 15-25 dB under their neighbours. It had been 0.38, asserted.
 
-    AND IT RINGS. The strings are anchored directly into the soundboard with no
-    bridge in between, which is why a harp is loud for its size and why an
-    undamped note sings on for seconds. Nothing here damps it: the decay is slow
-    and the upper partials only a little faster.
+    AND IT RINGS -- LOW. The strings are anchored directly into the soundboard
+    with no bridge in between, which is why a harp is loud for its size and why
+    a bass note sings on for ten seconds. But the same board drains a short
+    string fast: measured, the fundamental falls 3 dB/s in the second octave,
+    20 in the fourth and 50 in the sixth, and middle C is 30 dB down in 1.7 s.
+    It had rung at one slow rate across the compass, the treble twenty times
+    too long.
 
-    NOT MEASURED. Rated 2.
+    MEASURED on VSCO 2 Community Edition's harp (CC0: 23 plucks, E1 to F7;
+    ~/Documents/refs/sources.md), with the pizzicato's tools.
     """
     # A tapered spruce soundboard over a long tapering box: a broad low
     # resonance where the body is deep, a second where it is shallow. Asserted
@@ -6240,23 +6247,45 @@ class HarpProperties(FormantBody, PluckedStringProperties):
     bore_corner_hz = 3600.0             # finger flesh: no top end to speak of
     bore_order = 2.0
     bell_cutoff_hz = 90.0               # a big box, but not an infinite one
-    bell_order = 2.0
+    bell_order = 4.0                    # fitted: the lowest fundamentals barely radiate
 
-    # Plucked in toward the middle. The null at h3 is the instrument's voice.
-    strike_point = 0.38
-    strike_depth = 0.80
+    # FITTED (examples/harp_fit.py), every note's ladder, partials 2-10: the
+    # point the comb reads, a notch the finger's width leaves 30% filled, a
+    # gentle slope that does not move with register. The median miss goes
+    # from 7.5 dB to 6.0 -- the rest is each recorded note's own body, one
+    # sample a note.
+    strike_point = 0.48
+    strike_depth = 0.70
     strike_fills_with_force = False
+    # CC74 moves it, as on the pizzicato (pluck_point_moved): toward 127 the
+    # harpist's PRES DE LA TABLE, plucking down by the soundboard, thin and
+    # guitar-like. The middle is already the darkest point there is, so under
+    # 64 there is almost nowhere left to go.
+    sound_controls = frozenset(('brightness', 'decay', 'release'))
+    pluck_point_control = True
 
-    # Anchored into the board and undamped: this is the longest sustain of any
-    # plucked voice in the bank, which is the other half of sounding like a harp.
-    decay_db = 0.35
-    harmonic_decay_db = 0.9
+    # The decay in tonelib's law, D = (decay_db + harmonic_decay_db m)
+    # (f0/415)^slope. Its step per partial is the per-partial fit's (every
+    # partial of every note, read 5-25 dB down); its level and slope are the
+    # FUNDAMENTAL's, read from 0.1 s to 3 s on every note (median miss 1.9
+    # dB) -- the per-partial fit alone left the middle octaves ringing twice
+    # as long as the recording, and the fundamental is what is heard ring. A
+    # two-stage fit reads only the pluck's first 50 ms transient and, at the
+    # top, the recording's floor, so the harp is one stage.
+    decay_db = 6.72
+    harmonic_decay_db = 4.33
+    decay_register_slope = 0.985
+    # The stretch, the median of the notes that show one: a seventh of the
+    # generic plucked string's 1.29e-3, which the harp had been wearing.
+    inharmonicity_coefficient = 1.8e-4
     harmonic_decay_dampening = 0.0
-    tonal_dampening = 1.25
+    tonal_dampening = 1.10
     max_harmonic = 48
 
-    # Balance-normalised against the measured violin, as the pizzicato is.
-    initial_gain = 0.1183
+    # Balance-normalised against the measured violin, as the pizzicato is --
+    # and kept there through the fit (examples/harp_level.py: it moved the
+    # passage's energy -1.41 dB, so 0.1183 x 1.176).
+    initial_gain = 0.1391
 
 
 class BowedStringProperties(SectionMixin, StoppedPipeProperties):
@@ -6567,7 +6596,8 @@ def stopped_pluck_point(frequency, open_strings, pluck_open):
 # (stopped_pluck_point); 127 is at the bridge and 0 the middle of what sounds,
 # the darkest a pluck can be -- geometric either way, on the SOUNDING string's
 # fraction, so every note moves the same way at every stop. It is an onset
-# fact: a string already ringing was plucked where it was plucked.
+# fact: a string already ringing was plucked where it was plucked. A class
+# opts in with pluck_point_control.
 PLUCK_BRIGHT = 0.06
 PLUCK_DARK = 0.5
 
@@ -7376,6 +7406,7 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
             self.strike_point = stopped_pluck_point(frequency, self.open_strings, self.pluck_open)
 
     sound_controls = PizzicatoStringsProperties.sound_controls   # CC74, the pluck point
+    pluck_point_control = True
     max_harmonic = 40               # as the contrabass has; the body is spent
     tonal_dampening = PIZZ_FIT["ContrabassProperties"]["tonal_dampening"]  # measured, steep
 
@@ -14243,6 +14274,22 @@ def sound_controls_of(cls):
     return getattr(cls, 'sound_controls', frozenset())
 
 
+def sound_control_meaning(cls, name):
+    """What one granted CC71-78 does on this instrument, in a few words --
+    the branch sound_shape (or the time and vibrato laws) takes for it."""
+    if name == 'brightness':
+        if getattr(cls, 'pluck_point_control', False):
+            return 'pluck point'
+        if getattr(cls, 'effort_tilt', 0.0):
+            return 'effort'
+        return 'filter cutoff'
+    if name == 'resonance':
+        return 'mute resonance' if getattr(cls, 'mute_resonance_q', 0.0) else 'filter Q'
+    return {'attack': 'attack time', 'decay': 'ring time', 'release': 'release time',
+            'vib_rate': 'vibrato rate', 'vib_depth': 'vibrato depth',
+            'vib_delay': 'vibrato delay'}[name]
+
+
 def _two_pole(x, q):
     """|H| of a two-pole low-pass at x = f/fc, with quality q."""
     import numpy as np
@@ -14277,7 +14324,7 @@ def sound_shape(cls, nf, d_bright, d_res):
     if d_bright and 'brightness' in ctl:
         et = getattr(cls, 'effort_tilt', 0.0)
         corner = getattr(cls, 'bore_corner_hz', 0.0)
-        if getattr(cls, 'pluck_open', None) and getattr(cls, 'open_strings', ()):
+        if getattr(cls, 'pluck_point_control', False):
             g *= pluck_shape(cls, nf, d_bright)
         elif et:
             k = et * (SOUND_EFFORT_DB * d_bright) / 6.0206

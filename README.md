@@ -138,6 +138,22 @@ the selected part:
 | `B` | a **layered** voice's other Messenger (GM 88): edit layer B, and back to A |
 | `F` | the Messenger's firmware: SUB WAVE on CC71, or CC11 before 1.0.7 |
 
+**On a part that is not a Moog** the same pane says first what the two
+wheels are on its voice -- the mod wheel vibrato, a crescendo pedal, a
+tremolo's depth, the tone rockers, the drones, an amp's drive or a Leslie's
+swell (`Live.wheel_roles`, the answer the CC1 branch itself acts on); the
+pitch wheel a bend of so many semitones, or on a rotor part the half-moon,
+with the speed it is at -- and whether a route has taken either. Then it
+lists what its program answers of CC71-78 (`tonelib.sound_controls_of`, the table both renderers
+obey): each control, what it does on that instrument -- CC74 is a pizzicato's
+or a harp's pluck point, a trumpet's effort, a synth's cutoff -- where the
+channel has it, and the Messenger knob that turns it. `M` there makes the
+Messenger's knobs those controllers (`moog.MESSENGER_GM`): CUTOFF is CC74,
+RESONANCE CC71, the amp envelope's ATTACK, DECAY and RELEASE CC73, 75 and
+72, LFO 1's RATE and DEPTH the vibrato's. Its centre is the voice as it
+stands. The rest of its chart is still taken, so its TUNE (CC10) does not
+pan the part.
+
 A knob you have moved reads yellow and is saved with the part, in the session
 and in presets. With a Messenger on a MIDI output (`--messenger PORT`, then
 remembered), selecting a Moog program sets the hardware to the patch -- every

@@ -2955,6 +2955,7 @@ class Live:
         # string vibrato actually sits.
         self.mod_rate = 0.25    # +25% rate at full wheel
         self.modw = {}          # channel -> wheel position 0..1
+        self.wheel_at = {}      # channel -> the mod wheel's last CC1, whatever it means there
         # Which way the half-moon switch is thrown, per channel. A tonewheel
         # voice has no crescendo pedal -- that is a pipe-organ control -- so on
         # those parts the mod wheel is the rotor instead. The VOICE decides
@@ -3541,7 +3542,7 @@ class Live:
         elif msg.type == "polytouch":
             for slots, tilt in self._press_groups(ch, note=msg.note):
                 self.slab.press(slots, msg.value / 127.0, self.press_db, tilt)
-        elif msg.type == "control_change" and self._messenger_cc(ch, msg.control, msg.value):
+        elif msg.type == "control_change" and self._messenger_cc(ch, msg.control, msg.value, n0):
             pass            # a Messenger's panel, on a part that reads its chart
         elif msg.type == "control_change":
             if msg.control == 1:
@@ -3550,43 +3551,18 @@ class Live:
                 # VIBRATO on everything else, and with layers it can be both at
                 # once -- so each part is asked separately rather than the whole
                 # channel taking one branch.
+                self.wheel_at[ch] = msg.value
+                # WHICH IT IS, per part, is wheel_roles: one answer for this
+                # branch and for the panel that shows it.
                 here = [p for p in parts if self._listens(p, ch)]
-                amped = [p for p in here if p.patch.amp_drive > 0.0]
-                # The crescendo pedal is an organ WITH a crescendo order; the
-                # harmonium has stops and no crescendo, so its wheel stays the
-                # vibrato it always was.
-                organs = [p for p in here if p.organ and not p.patch.leslie
-                          and p.patch.cres_order]
-                # AND ON A VOICE WITH A TREMOLO THE WHEEL IS THE DEPTH KNOB.
-                # On a Rhodes suitcase and a Wurlitzer that is the one control
-                # a player moves while playing, so it takes the wheel ahead of
-                # the vibrato -- a tine cannot be given a pitch vibrato anyway,
-                # since nothing about the instrument can bend it.
-                tremmed = [p for p in here if p.patch.tremolo_depth > 0.0]
-                # AND ON A CLAVINET THE WHEEL IS THE TONE ROCKERS. Four of the
-                # six switches left of a D6's keyboard are the tone section, so
-                # the wheel sweeps them darkest to brightest. It reaches notes
-                # already sounding, which is what flipping a rocker does: the
-                # filter is in the preamp, downstream of every ringing string.
-                clavs = [p for p in here if p.patch.clav_panel]
-                # AND ON A HONKY-TONK THE WHEEL IS HOW FAR OUT OF TUNE. Only the
-                # pre-warmed positions exist, so it snaps between them rather
-                # than sweeping -- a miss here would be a dropped note.
-                detuners = [p for p in here if p.patch.detune_wheel]
-                # AND ON A BAGPIPE THE WHEEL IS HOW MANY DRONES ARE UNCORKED.
-                # This is the bug Ben heard: with no branch of its own the
-                # bagpipe fell into `others` and CC1 gave it 35 cents of
-                # vibrato -- on the one instrument in the bank that has no
-                # vibrato at all, since a bag under constant pressure is what
-                # a piper is FOR.
-                dronists = [p for p in here if p.patch.drone_wheel]
-                others = [p for p in here
-                          if not (p.organ and p.patch.cres_order) and not p.patch.leslie
-                          and p.patch.amp_drive <= 0.0
-                          and p.patch.tremolo_depth <= 0.0
-                          and not p.patch.clav_panel
-                          and not p.patch.detune_wheel
-                          and not p.patch.drone_wheel]
+                roles = {p.pid: self.wheel_roles(p) for p in here}
+                amped = [p for p in here if 'drive' in roles[p.pid]]
+                organs = [p for p in here if 'crescendo' in roles[p.pid]]
+                tremmed = [p for p in here if 'tremolo' in roles[p.pid]]
+                clavs = [p for p in here if 'tone' in roles[p.pid]]
+                detuners = [p for p in here if 'detune' in roles[p.pid]]
+                dronists = [p for p in here if 'drones' in roles[p.pid]]
+                others = [p for p in here if 'vibrato' in roles[p.pid]]
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -4820,7 +4796,7 @@ class Live:
                     continue
                 sd = self._snd_for(part, ch, k[2])
                 cls = part.patch._voice_class(k[2] + part.transpose)
-                if getattr(cls, 'pluck_open', None):
+                if getattr(cls, 'pluck_point_control', False):
                     continue        # plucked where it was plucked: CC74 waits for the next
                 base = self.slab.aL0[idx] / np.maximum(self.slab.sg[idx], 1e-12)
                 g = T.sound_shape(cls, a["nf"][idx], sd.get('brightness', 0.0),
@@ -4885,17 +4861,24 @@ class Live:
                 self.moog_glide.pop(gk, None)
             self._moog_refresh(part, n0)
 
-    def _messenger_cc(self, ch, cc, value):
+    def _messenger_cc(self, ch, cc, value, n0=0):
         """A CC on a channel where a part reads the Messenger's chart
         (moog.MESSENGER_CC): turn that part's knob and say so, or leave the
         message to General MIDI. A part that hears every channel reads it on
         every channel: one keyboard into an omni part is the ordinary rig, and
         refusing it left a Messenger's TUNE panning the part (CC10 is pan to
-        General MIDI) -- Ben, the first time he played one."""
-        mine = [p for p in self.parts if p.cc_map == "messenger"
-                and (p.channel is None or p.channel == ch) and p.moog() is not None]
-        if not mine:
+        General MIDI) -- Ben, the first time he played one.
+
+        ON A PART THAT IS NOT A MOOG the knobs with a General MIDI counterpart
+        (moog.MESSENGER_GM) turn that sound controller instead -- CUTOFF is
+        CC74, whatever brightness means on the instrument -- and the rest of
+        the chart is still taken, so a Messenger's TUNE does not pan a piano."""
+        hears = [p for p in self.parts if p.cc_map == "messenger"
+                 and (p.channel is None or p.channel == ch)]
+        if not hears:
             return False
+        mine = [p for p in hears if p.moog() is not None]
+        gm = any(p.moog() is None for p in hears)
         # the chart of the firmware the Messenger runs (moog.messenger_chart)
         chart, lsbs = _MG.messenger_chart(self.messenger_firmware)
         if cc in lsbs:                              # the fine half of a knob
@@ -4904,20 +4887,137 @@ class Live:
             if msb is None:
                 return True
             knob, kind = chart[hi]
-            for p in mine:
-                self.set_synth(p, knob, _MG.messenger_value(kind, msb, value), from_hardware=True)
-            return True
-        if cc not in chart:
-            return False                            # CC1, 7, 11, 64, 74 ...: GM's
-        ent = chart[cc]
-        if ent is None:
-            return True                             # the panel's, not modelled yet
-        knob, kind = ent
-        if kind in _MG.FOURTEEN:
-            self.msg_msb[(ch, cc)] = value
+            v = _MG.messenger_value(kind, msb, value)
+        else:
+            if cc not in chart:
+                return False                        # CC1, 7, 11, 64, 74 ...: GM's
+            ent = chart[cc]
+            if ent is None:
+                return True                         # the panel's, not modelled yet
+            knob, kind = ent
+            if kind in _MG.FOURTEEN:
+                self.msg_msb[(ch, cc)] = value
+            v = _MG.messenger_value(kind, value)
         for p in mine:
-            self.set_synth(p, knob, _MG.messenger_value(kind, value), from_hardware=True)
+            self.set_synth(p, knob, v, from_hardware=True)
+        if gm and knob in _MG.MESSENGER_GM:
+            self._sound_cc(ch, _MG.MESSENGER_GM[knob], max(0.0, min(127.0, 127.0 * float(v))),
+                           n0, self.parts)
         return True
+
+    WHEEL_MEANING = {'drive': 'amp drive', 'crescendo': 'crescendo pedal',
+                     'tremolo': 'tremolo depth', 'tone': 'tone rockers',
+                     'detune': 'detuning', 'drones': 'drones (0: the chanter alone)',
+                     'vibrato': 'vibrato'}
+
+    def wheel_roles(self, part):
+        """What the mod wheel is on this part -- the CC1 branch asks this, and
+        so does the panel. Not exclusive: a voice can have an amplifier AND a
+        tremolo, and both answer.
+
+        THE MOD WHEEL IS A CRESCENDO PEDAL on an organ part and VIBRATO on
+        everything else, and with layers it can be both at once -- so each
+        part is asked separately rather than the whole channel taking one
+        branch. The crescendo pedal is an organ WITH a crescendo order; the
+        harmonium has stops and no crescendo, so its wheel stays the vibrato
+        it always was.
+
+        AND ON A VOICE WITH AN AMPLIFIER THE WHEEL IS ITS GAIN -- a Leslie's
+        swell pedal, a guitar amp's own knob. ON A VOICE WITH A TREMOLO IT IS
+        THE DEPTH KNOB: on a Rhodes suitcase and a Wurlitzer that is the one
+        control a player moves while playing, and a tine cannot be given a
+        pitch vibrato anyway. ON A CLAVINET IT IS THE TONE ROCKERS, swept
+        darkest to brightest. ON A HONKY-TONK IT IS HOW FAR OUT OF TUNE.
+
+        AND ON A BAGPIPE IT IS HOW MANY DRONES ARE UNCORKED. This is the bug
+        Ben heard: with no branch of its own the bagpipe fell into vibrato and
+        CC1 gave it 35 cents of it -- on the one instrument in the bank that
+        has no vibrato at all, since a bag under constant pressure is what a
+        piper is FOR."""
+        pt = part.patch
+        r = []
+        if pt.amp_drive > 0.0:
+            r.append('drive')
+        if part.organ and not pt.leslie and pt.cres_order:
+            r.append('crescendo')
+        if pt.tremolo_depth > 0.0:
+            r.append('tremolo')
+        if pt.clav_panel:
+            r.append('tone')
+        if pt.detune_wheel:
+            r.append('detune')
+        if pt.drone_wheel:
+            r.append('drones')
+        if not r and not (part.organ and pt.cres_order) and not pt.leslie:
+            r.append('vibrato')
+        return r
+
+    def _routes_from(self, part, kind, n=None):
+        """The panel's routes whose source is this control on the part's
+        channel: a route REPLACES what the control does unless it keeps it."""
+        return [r for r in self.routes if r.src[0] == kind
+                and (n is None or (len(r.src) > 1 and r.src[1] == n))
+                and (r.channel is None or part.channel is None or r.channel == part.channel)]
+
+    def _with_routes(self, what, routes):
+        """`what` a control does, as a route leaves it: replaced by any route
+        that does not keep its source, added to by one that does."""
+        if not routes:
+            return what
+        dst = ", ".join("%s%s" % (r.dst, (" (%s)" % r.src[1]) if r.src[0] == "bend"
+                                  and len(r.src) > 1 and r.src[1] != "both" else "")
+                        for r in routes)
+        if all(r.keep for r in routes) and what:
+            return "%s, and routed to %s" % (what, dst)
+        return "routed to %s" % dst
+
+    def mod_wheel_meaning(self, part):
+        """CC1 on this part, in words, with any route on it; None if nothing."""
+        if part.drums:
+            return None
+        r = self.wheel_roles(part)
+        what = ", ".join('swell pedal' if (k == 'drive' and part.patch.leslie)
+                         else self.WHEEL_MEANING[k] for k in r) or None
+        return self._with_routes(what, self._routes_from(part, "cc", 1))
+
+    def pitch_wheel_meaning(self, part):
+        """The pitch wheel on this part, in words, with any route on it. On a
+        rotor part it is the half-moon (PW_FIRE): a flick up is faster, down
+        slower, and it springs back. Everywhere else live bends -- a player's
+        wheel is a gesture, even on a voice the file renderer will not bend."""
+        if part.drums:
+            return None
+        if part.patch.leslie:
+            what = ("rotor speed: flick up faster, down slower (now %s)"
+                    % ("stop", "chorale", "tremolo")[self.half_moon])
+        else:
+            ch = 0 if part.channel is None else part.channel
+            what = "bend +/-%g semitones" % self._bend_range(ch)
+        return self._with_routes(what, self._routes_from(part, "bend"))
+
+    def part_controls(self, part):
+        """What this part's program answers of CC71-78, for the panel: one
+        (name, cc, meaning, share, d) a control, by CC number -- `share` the
+        fraction of the keyboard whose instrument has it (an ensemble routes
+        each register to its own), `d` the channel's setting now (0 = the
+        voice as it stands). Read off tonelib.sound_controls_of, the table
+        both renderers obey, so the panel cannot claim what the sound does
+        not do."""
+        if part.drums:
+            return []
+        got, n = {}, 0
+        for note in range(21, 109):
+            cls = part.patch._voice_class(note + part.transpose)
+            if cls is None:
+                continue
+            n += 1
+            for name in T.sound_controls_of(cls):
+                g = got.setdefault(name, [0, T.sound_control_meaning(cls, name)])
+                g[0] += 1
+        cc_of = {v: k for k, v in T.SOUND_CC.items()}
+        sd = self.snd.get(0 if part.channel is None else part.channel) or {}
+        return [(name, cc_of[name], m, c / float(max(n, 1)), sd.get(name, 0.0))
+                for name, (c, m) in sorted(got.items(), key=lambda kv: cc_of[kv[0]])]
 
     def set_synth(self, part, knob, value, from_hardware=False, layer='a'):
         """Turn one of a Moog part's knobs -- from the TUI, or a Messenger's CC.
@@ -9703,8 +9803,8 @@ def selftest():
         ('attack', 'brightness', 'decay', 'release', 'resonance', 'vib_delay',
          'vib_depth', 'vib_rate'): 31,                          # synthesisers
         ('attack', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 33,  # winds, bows, voices
-        ('decay', 'release'): 31,                               # struck and plucked
-        ('brightness', 'decay', 'release'): 2,                  # pizzicato, GM 32: the pluck point
+        ('decay', 'release'): 30,                               # struck and plucked
+        ('brightness', 'decay', 'release'): 3,                  # pizzicato, GM 32, harp: the pluck point
         ('decay',): 16,                                         # one-shots
         (): 7,                                                  # organs, harpsichord, bagpipe, hit
         ('attack', 'brightness', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 6,  # effort
@@ -11826,6 +11926,43 @@ def selftest():
     for _c, _v in ((19, 50), (51, 64), (75, 70), (79, 100), (109, 40), (10, 64), (42, 0)):
         _mx.on_midi(mido.Message("control_change", channel=0, control=_c, value=_v))
     _mx.apply(_mx.n)
+    # ...AND ON A PART THAT IS NOT A MOOG the knobs with a General MIDI
+    # counterpart turn its sound controllers: CUTOFF a pizzicato's pluck
+    # point, AMP RELEASE its release; TUNE (CC10) still pans nothing.
+    _mz = Live(program=45, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+    _mzp = _mz.parts[0]; _mzp.channel = 0; _mzp.cc_map = "messenger"
+    for _c, _v in ((19, 127), (51, 127), (31, 0), (10, 100)):
+        _mz.on_midi(mido.Message("control_change", channel=0, control=_c, value=_v))
+    _mz.apply(_mz.n)
+    _mzs = _mz.snd.get(0, {})
+    _mzc = {r[0]: r for r in _mz.part_controls(_mzp)}
+    check("a Messenger's knobs turn a non-Moog part's sound controllers",
+          abs(_mzs.get("brightness", 0) - _T.sound_offset(127)) < 1e-9
+          and abs(_mzs.get("release", 0) + 1.0) < 1e-9 and 0 not in _mz.cpan
+          and _mzc.get("brightness", (0, 0, ""))[2] == "pluck point"
+          and set(_mzc) == {"brightness", "decay", "release"},
+          "  (GM 45: CUTOFF -> CC74, the pluck point, %+.2f; AMP RELEASE -> CC72, %+.2f; "
+          "the panel lists %s)" % (_mzs.get("brightness", 0), _mzs.get("release", 0),
+                                   ", ".join("CC%d %s" % (r[1], r[2]) for r in _mzc.values())))
+    _mz.shutdown()
+    # THE PANEL SAYS WHAT THE WHEELS ARE, from the CC1 branch's own answer
+    # (wheel_roles): a Leslie organ's pitch wheel is its half-moon, and a route
+    # that takes the wheel says so.
+    _wm = {}
+    for _g in (18, 4, 7, 109, 3, 40):
+        _wl = Live(program=_g, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
+        _wm[_g] = (_wl.mod_wheel_meaning(_wl.parts[0]), _wl.pitch_wheel_meaning(_wl.parts[0]))
+        if _g == 40:
+            _wl.routes = (Route(("bend", "up"), "sustain"),)
+            _wm["route"] = _wl.pitch_wheel_meaning(_wl.parts[0])
+        _wl.shutdown()
+    check("the panel names what each wheel is on the voice",
+          _wm[18] == ("swell pedal", "rotor speed: flick up faster, down slower (now chorale)")
+          and _wm[4][0] == "tremolo depth" and _wm[7][0] == "tone rockers"
+          and _wm[109][0].startswith("drones") and _wm[3][0] == "detuning"
+          and _wm[40] == ("vibrato", "bend +/-2 semitones")
+          and _wm["route"] == "routed to sustain (up)",
+          "  (%s)" % "; ".join("%s: %s / %s" % (k, *v) for k, v in _wm.items() if k != "route"))
     _mgm = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
     _mgm.on_midi(mido.Message("control_change", channel=0, control=19, value=50))
     _mgm.apply(_mgm.n)
@@ -12045,16 +12182,23 @@ def selftest():
     # plucked voice, and it was 2.2 s to -30 dB before it was measured.
     _pz = _PMs.property_class_for_program(45)
     _hp = _PMs.property_class_for_program(46)
+    # Both measured now (examples/pizz_fit.py, harp_fit.py), so compared on
+    # one note, A3, each with its own register law: the cello's pizz against
+    # the harp's fundamental.
+    def _d1(_c, _f):
+        _i = _c(_f, 0.0, 1.0, 1.0)
+        return (_i.decay_db + _i.harmonic_decay_db) * _i.decay_register_factor
+    _dpz, _dhp = _d1(_PMs.property_class_for_note(45, 57), 220.0), _d1(_hp, 220.0)
     check("a pizzicato note dies and a harp note rings",
-          _pz.decay_db > 10.0 * _hp.decay_db and _hp.decay_db < 1.0,
-          "  (pizz %.1f dB/s, harp %.2f)" % (_pz.decay_db, _hp.decay_db))
-    # A HARP IS PLUCKED IN TOWARD THE MIDDLE, which is the darkest place there
-    # is: the comb's first null lands on a low partial and that, not a filter,
-    # is why a harp is mellow.
-    check("the harp is plucked near the middle, the pizz near the end",
-          0.30 < _hp.strike_point < 0.45 and _pz.strike_point < 0.25,
-          "  (harp nulls at h%.1f, pizz at h%.1f)"
-          % (1.0 / _hp.strike_point, 1.0 / _pz.strike_point))
+          _dpz > 2.5 * _dhp,
+          "  (A3: pizz %.1f, harp %.1f -- measured, %.0fx)" % (_dpz, _dhp, _dpz / _dhp))
+    # A HARP IS PLUCKED AT THE MIDDLE, the darkest place there is: the comb
+    # thins every even partial, and that, not a filter, is why a harp is
+    # mellow. Measured: 0.46-0.50 on every note whose comb reads clearly.
+    check("the harp is plucked at the middle, the pizz near the end",
+          0.45 < _hp.strike_point <= 0.5 and _pz.strike_point < 0.25,
+          "  (harp %.2f: the even partials thinned; pizz %.2f)"
+          % (_hp.strike_point, _pz.strike_point))
     # GM 44 IS AN ARTICULATION AND RIDES ON THE REGISTER'S BODY. A low tremolo
     # is a CELLO section bowing tremolo. A TremoloStringsProperties(Violin) was
     # written first and the per-note router silently overrode it -- 44 is in

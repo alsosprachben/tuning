@@ -405,8 +405,8 @@ identical tables.
 |---|---|---|
 | synthesisers | 31 | all eight |
 | winds, bowed strings, voices | 33 | attack, release, vibrato |
-| struck and plucked strings | 31 | decay, release |
-| the pizzicato section, the acoustic bass | 2 | brightness (as the pluck point), decay, release |
+| struck and plucked strings | 30 | decay, release |
+| the pizzicato section, the acoustic bass, the harp | 3 | brightness (as the pluck point), decay, release |
 | one-shots (mallets, drums) | 16 | decay |
 | brass, and the clarinet | 6 | brightness (as effort), attack, release, vibrato |
 | the muted trumpet | 1 | the same, plus resonance (its mute's Q) |
@@ -427,7 +427,10 @@ identical tables.
   either way, on the sounding string's fraction, and the comb moves partial
   by partial, power-normalised like every other brightness. It is an onset
   fact, as attack is: live, a string already ringing keeps where it was
-  plucked, and the next note takes the new point.
+  plucked, and the next note takes the new point. **The harp** (GM 46)
+  answers the same way, from its measured point at the middle of the string:
+  toward 127 is *près de la table*, plucked down by the soundboard, and
+  below 64 there is almost nowhere darker to go.
 - **Resonance** is the Q of a synthesiser's low-pass at its corner, as the
   ratio of a resonant two-pole response to a Butterworth one. That ratio is
   exactly 1 at CC71 = 64, so the saw and square leads, which have no formants,

@@ -164,7 +164,7 @@ def pluck_profile(rows, base, b0s=np.arange(0.08, 0.401, 0.02)):
     return out
 
 
-def fit_tilt(rows, base, coarse=False):
+def fit_tilt(rows, base, coarse=False, sds=(0.0, 0.2, 0.35, 0.5, 0.7)):
     """tonal_dampening, octave_dampening and strike_depth: the pluck ladder's
     slope, how the slope moves with register, and how deep the finger's notch
     is -- against every note's ladder, partials 2-10 where the recording is
@@ -176,7 +176,7 @@ def fit_tilt(rows, base, coarse=False):
     ods = np.arange(-1.0, 0.81, 0.2) if coarse else np.arange(-1.0, 0.81, 0.1)
     for td in tds:
         for od in ods:
-            for sd in (0.0, 0.2, 0.35, 0.5, 0.7):
+            for sd in sds:
                 cls = type("Fit", (base,), dict(tonal_dampening=td, octave_dampening=od,
                                                 strike_depth=sd))
                 errs = []

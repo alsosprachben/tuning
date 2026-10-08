@@ -113,7 +113,7 @@ RATED = {
  43:(4,"Iowa double bass"),
  44:(2,"tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase"),
  45:(4,"Iowa pizzicato for all four instruments, 341 notes: each one's decay, stretch and pluck colour, on the measured bodies. The violin's and viola's decay is two-stage, fast then a faint slow tail (approved by ear). The cello's and bass's pluck points are measured; the violin's and viola's are the fingerboard's end, which Iowa cannot resolve. CC74 moves the pluck from the bridge (127) to the middle of the string (0)"),
- 46:(2,"Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings"),
+ 46:(4,"VSCO 2 CE's harp (CC0), 23 plucks E1-F7: plucked at the middle of the string (0.48, measured -- the even partials thinned), the decay rising with the note from 3 dB/s in the bass to 50 at the top, the stretch, a low end the board cannot radiate. CC74 moves the pluck toward the soundboard (pres de la table). Ben, by ear: sounds great"),
  47:(2,"analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set"),
  48:(3,"four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section; the ensemble treatment is theory"),
  49:(2,"its own slow-bowed class"),

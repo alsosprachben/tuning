@@ -1411,9 +1411,10 @@ class TUI:
     def synth_hardware(self):
         """Read the Messenger's own CC chart on this part's channel, or stop.
         One channel, named: a part that hears all sixteen cannot read one
-        instrument's chart on every one of them."""
-        p = self.synth_part()
-        if p is None:
+        instrument's chart on every one of them. On a part that is not a
+        Moog, the knobs turn its sound controllers (moog.MESSENGER_GM)."""
+        p = self.sel()
+        if p is None or p.drums:
             return
         if p.cc_map == "messenger":
             p.cc_map = "gm"
@@ -1430,9 +1431,7 @@ class TUI:
         y += 1
         p = self.synth_part()
         if p is None:
-            self.addstr(scr, y, 2, "the selected part is not a Moog -- the synth panel is for "
-                        "the Moog voices (the synth programs)", C("dim"))
-            return y + 2
+            return self.draw_sound_controls(scr, y, w, h)
         _layered = len(MG.layers_of(p.moog())) > 1
         self.addstr(scr, y, 2, ("MOOG MESSENGER %s" % self.synth_layer(p).upper()) if _layered
                     else "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
@@ -1479,6 +1478,63 @@ class TUI:
                 self.addstr(scr, row, 2, "no Messenger to set (live.py --messenger PORT)"[:max(0, w - 4)],
                             C("dim"))
         return y + half + 2
+
+    def draw_sound_controls(self, scr, y, w, h):
+        """A part that is NOT a Moog: what its program answers of CC71-78,
+        what each does on this instrument, where it stands on the channel,
+        and the Messenger knob that turns it once the part reads one (M)."""
+        C = self.C
+        p = self.sel()
+        if p is None or p.drums:
+            self.addstr(scr, y, 2, "a drum part answers only decay -- the synth panel is for "
+                        "a melodic part", C("dim"))
+            return y + 2
+        self.addstr(scr, y, 2, "CONTROLS", curses.A_BOLD | C("cyan"))
+        self.addstr(scr, y, 12, "part %d, %s" % (self.row + 1, p.label()), C("dim"))
+        reads = p.cc_map == "messenger"
+        hw = (("Messenger knobs on %s  (M: stop)"
+               % ("every channel" if p.channel is None else "ch %d" % (p.channel + 1)))
+              if reads else "M: turn these from a Messenger's knobs")
+        self.addstr(scr, y, max(50, w - len(hw) - 2), hw[:max(0, w - 52)],
+                    C("green") if reads else C("dim"))
+        y += 1
+        # THE TWO WHEELS FIRST: what each is on this part (live.wheel_roles,
+        # the CC1 branch's own answer), and where it stands
+        L = self.live
+        ch = 0 if p.channel is None else p.channel
+        for name, meaning, at in (
+                ("mod", L.mod_wheel_meaning(p), L.wheel_at.get(ch, 0) / 127.0),
+                ("pitch", L.pitch_wheel_meaning(p), 0.5 + L.wheel.get(ch, 0) / 16384.0)):
+            if y >= h - 4:
+                break
+            self.addstr(scr, y, 2, "%-5s" % name, C("dim"))
+            self.addstr(scr, y, 8, signed_bar(at, 4) if name == "pitch" else bar(at, 0.0, 1.0, 9),
+                        C("dim"))
+            self.addstr(scr, y, 20, (meaning or "nothing on this voice")[:max(0, w - 22)],
+                        0 if meaning else C("dim"))
+            y += 1
+        rows = self.live.part_controls(p)
+        if not rows:
+            self.addstr(scr, y, 2, "answers none of CC71-78: set up by its stops, or nothing a "
+                        "player's knob reaches", C("dim"))
+            return y + 2
+        knob_of = {cc: k for k, cc in MG.MESSENGER_GM.items()}
+        label = {k: ("%s %s" % (sec, lab)).upper() for sec, k, lab, _ in SYNTH_KNOBS}
+        for name, cc, meaning, share, d in rows:
+            if y >= h - 4:
+                break
+            self.addstr(scr, y, 2, "CC%d" % cc, C("dim"))
+            self.addstr(scr, y, 8, "%-15s" % meaning, curses.A_BOLD if d else 0)
+            self.addstr(scr, y, 24, signed_bar(0.5 + 0.5 * d, 4), C("green") if d else C("dim"))
+            self.addstr(scr, y, 35, "%+4.0f" % (64 * d), C("yellow") if d else C("dim"))
+            k = knob_of.get(cc)
+            txt = (("<- %s" % label.get(k, k)) if k else "<- no Messenger knob")
+            if share < 0.999:
+                txt += "  (%d%% of the keys)" % round(100 * share)
+            self.addstr(scr, y, 42, txt[:max(0, w - 44)],
+                        (C("green") if reads else C("dim")) if k else C("dim"))
+            y += 1
+        return y + 1
 
     def draw_meters(self, scr, y, w, h, s):
         C = self.C

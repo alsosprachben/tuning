@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 44 | 34% |
+| 2 specific, theory | 43 | 34% |
 | 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 57 | 45% |
+| 4 specific, reference audio | 58 | 45% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -229,7 +229,7 @@ plays Standard, as does any program that is not a set.
 | 43 | Contrabass | `Contrabass` | **4** | Iowa double bass |
 | 44 | Tremolo Strings | `Contrabass/Cello/Viola/Violin by register` | **2** | tremolo_bow(): the articulation applied to whichever body the register picks -- amplitude modulation, per-player rate and phase |
 | 45 | Pizzicato Strings | `Contrabass/Cello/Viola/Violin by register` | **4** | Iowa pizzicato for all four instruments, 341 notes: each one's decay, stretch and pluck colour, on the measured bodies. The violin's and viola's decay is two-stage, fast then a faint slow tail (approved by ear). The cello's and bass's pluck points are measured; the violin's and viola's are the fingerboard's end, which Iowa cannot resolve. CC74 moves the pluck from the bridge (127) to the middle of the string (0) |
-| 46 | Orchestral Harp | `Harp` | **2** | Harp: plucked in toward the middle (the comb nulls at h2.6, which is why it is mellow) and anchored into the board, so it rings |
+| 46 | Orchestral Harp | `Harp` | **4** | VSCO 2 CE's harp (CC0), 23 plucks E1-F7: plucked at the middle of the string (0.48, measured -- the even partials thinned), the decay rising with the note from 3 dB/s in the bass to 50 at the top, the stretch, a low end the board cannot radiate. CC74 moves the pluck toward the soundboard (pres de la table). Ben, by ear: sounds great |
 | 47 | Timpani | `Timpani` | **2** | analytic: the Bessel zeros of a clamped circular membrane. No recording exists in the set |
 
 ## 48-55 Ensemble

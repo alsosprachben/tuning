@@ -941,6 +941,17 @@ GM_SOUND = {'brightness': ('cutoff', 0.2), 'resonance': ('resonance', 0.5),
             'decay': ('a_decay', 0.15)}
 
 
+# THE OTHER WAY ROUND: a Messenger's knobs on a part that is NOT a Moog. Each
+# knob that has a General MIDI counterpart turns that sound controller (CC71-
+# 78), so the hardware's CUTOFF is a piano's nothing and a pizzicato's pluck
+# point -- whatever brightness means on the instrument (tonelib.sound_shape).
+# GM_SOUND's pairs, inverted, and the LFO as the vibrato; the delay has no
+# knob. The knob's whole travel is the controller's, its centre the voice as
+# it stands.
+MESSENGER_GM = {'cutoff': 74, 'resonance': 71, 'a_attack': 73, 'a_decay': 75,
+                'a_release': 72, 'lfo1_rate': 76, 'lfo1_depth': 77}
+
+
 def apply_gm(panel, sd):
     """The panel with GM sound-controller offsets `sd` (name -> -1..+1) on it."""
     if not sd:
