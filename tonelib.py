@@ -6748,7 +6748,7 @@ def tremolo_bow(cls):
     is how the error was found. The articulation has to ride on whichever body
     the register picks, the same way slow_bow does for GM 49.
 
-    THE STROKE. Rapid unmeasured bowing, eight to twelve strokes a second. What
+    THE STROKE. Rapid unmeasured bowing, eleven strokes a second, measured. What
     it does to the sound is amplitude modulation, and this renderer makes that
     out of partials rather than out of an LFO:
 
@@ -6763,22 +6763,32 @@ def tremolo_bow(cls):
     that sounds like an effect pedal bolted to an orchestra. tremolo_scatter
     gives each player their own rate and phase; see tremolo.py.
 
-    AND IT IS BRIGHTER. A reversal every 105 ms means the note lives in its
+    AND IT IS BRIGHTER. A reversal every 90 ms means the note lives in its
     attack, so the upper partials never settle the way a long stroke lets them.
     """
     got = _TREMOLO_BOW.get(cls)
     if got is None:
         got = type(cls.__name__.replace("Properties", "") + "TremoloProperties",
                    (cls,), {
-            # Mid-range of the orchestral eight-to-twelve, and well clear of the
-            # 4.6-6.4 Hz this same section's VIBRATO runs at: the two must not
-            # be confusable, and a tremolo that landed in the vibrato band would
-            # simply read as a nervous player.
-            "tremolo_hz": 9.5,
-            "tremolo_depth": 0.70,        # the string never actually stops
+            # MEASURED on VSCO 2 Community Edition's violin, viola and cello
+            # section tremolos (CC0, 70 notes at two dynamics;
+            # examples/trem_fit.py), off the summed section the way an ear
+            # gets it, and the model rendered and read the same way:
+            #   the RATE, read where the bow's scrape lives (2-6 kHz): 10.9 Hz
+            #   soft, 11.8 loud, every section -- faster than the 9.5 this was,
+            #   and still well clear of the section's 4.6-6.4 Hz vibrato;
+            #   the SPREAD of the players' rates, the stroke peak's width: 0.7
+            #   to 1.4 Hz -- a section bows together more than +/-20% supposed
+            #   (that smeared it 2.4 Hz wide); +/-8% lands on it;
+            #   the DEPTH the section keeps, the swing within 1.5 Hz of the
+            #   stroke: 0.21 -- 0.50 a player gives it, where 0.70 gave 0.29.
+            #   (The envelope's whole swing is no measure: seven players a
+            #   few cents apart beat, and with the tremolo off it reads 0.41.)
+            "tremolo_hz": 11.3,
+            "tremolo_depth": 0.50,        # the string never actually stops
             "tremolo_stereo": False,
             "tremolo_intrinsic": True,    # GM 44 IS tremolo, not a wheel effect
-            "tremolo_scatter": 0.20,      # +/-20% of rate per player, free phase
+            "tremolo_scatter": 0.08,      # +/-8% of rate per player, free phase
             # The bite of a reversal every 105 ms.
             "tonal_dampening": max(0.2, cls.tonal_dampening - 0.25),
             "__doc__": "%s bowed tremolo, GM 44." % cls.__name__,

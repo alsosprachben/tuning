@@ -3069,11 +3069,17 @@ def prepare(path, tuner='hybrid440', sink=None):
             if getattr(props, 'tremolo_intrinsic', False):
                 # AN INTRINSIC TREMOLO IS NOT A WHEEL EFFECT. GM 44 is called
                 # Tremolo Strings: the stroke is the patch, so it is on at full
-                # depth with no CC1 in the file, and the wheel scales it around
-                # that rather than switching it on. A Rhodes is the other case
-                # and keeps the behaviour above -- its panel default is off.
-                _dep = float(props.tremolo_depth) * (
-                    (_c1[0] / 64.0) if _c1 else 1.0)
+                # depth whatever CC1 says. Roland's SC-55 "Tremolo Str" is a
+                # recording of a section bowing tremolo (its manual's instrument
+                # table, p.66: one partial, no variation) -- the stroke is in
+                # the sample and nothing turns it -- and its wheel is the pitch
+                # vibrato every GS tone's is. So CC1 here is what it is on the
+                # other bowed strings (the vibrato, a gesture: live's, not a
+                # file's), and what live's panel says. It had scaled the depth
+                # around full, which thinned a file's tremolo wherever it asked
+                # for vibrato. A Rhodes is the other case and keeps the
+                # behaviour below -- its panel default is off.
+                _dep = float(props.tremolo_depth)
             else:
                 _dep = float(props.tremolo_depth) * (_c1[0] / 127.0 if _c1 else 0.0)
             if _dep > 0.0:
