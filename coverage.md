@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 39 | 30% |
+| 2 specific, theory | 38 | 30% |
 | 3 specific, theory + ear | 26 | 20% |
-| 4 specific, reference audio | 63 | 49% |
+| 4 specific, reference audio | 64 | 50% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -48,40 +48,41 @@ so it plays on the Messenger itself.
 
 51 notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and
 hand percussion and **no drum kit at all** -- no snare, no bass drum, no
-toms, which is 9630 of that collection's 12781 percussion notes. This table
-splits almost exactly along that line.
+toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's
+DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the toms and the crashes
+hit hard; the snare is still unmeasured.
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 27 | 53% |
-| 3 specific, theory + ear | 5 | 10% |
-| 4 specific, reference audio | 19 | 37% |
+| 2 specific, theory | 21 | 41% |
+| 3 specific, theory + ear | 3 | 6% |
+| 4 specific, reference audio | 27 | 53% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 35 | Acoustic Bass Drum | `KickDrum` | **3** | no reference -- Iowa has no drum kit. Analytic membrane, pitch tuned by ear |
-| 36 | Bass Drum 1 | `KickDrum` | **3** | as 35, tuned higher |
+| 35 | Acoustic Bass Drum | `KickDrum` | **4** | DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper |
+| 36 | Bass Drum 1 | `KickDrum` | **4** | as 35, at the recorded kick's own 44.4 Hz |
 | 37 | Side Stick | `SideStick` | **2** | its own class, theory |
 | 38 | Acoustic Snare | `SnareDrum` | **3** | NO REFERENCE, and it says so. Analytic Bessel modes plus the snare wires; ear |
 | 39 | Hand Clap | `HandClap` | **2** | its own class, theory |
 | 40 | Electric Snare | `ElectricSnare` | **2** | a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all |
-| 41 | Low Floor Tom | `FloorTom` | **2** | floor tom, analytic membrane |
+| 41 | Low Floor Tom | `FloorTom` | **4** | DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear |
 | 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | Iowa hi-hat, five takes |
-| 43 | High Floor Tom | `FloorTom` | **2** | as 41, higher |
+| 43 | High Floor Tom | `FloorTom` | **4** | as 41, higher |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Iowa hi-hat, foot-close take |
-| 45 | Low Tom | `TomTom` | **2** | tom, analytic membrane |
+| 45 | Low Tom | `TomTom` | **4** | DRSKit's rack tom, 27 strokes on its close mic: modes 1 : 1.477 : 1.755 : 2.259, the stick's click 30-60 dB under the fundamental to 6 kHz, a glide that grows with the stroke. Ben, by ear |
 | 46 | Open Hi-Hat | `OpenHiHat` | **4** | Iowa hi-hat, open |
-| 47 | Low-Mid Tom | `TomTom` | **2** | as 45, higher |
-| 48 | Hi-Mid Tom | `HighTom` | **2** | high tom, analytic membrane |
-| 49 | Crash Cymbal 1 | `CrashCymbal1` | **4** | Iowa 17" suspended crash, stick on the bow |
-| 50 | High Tom | `HighTom` | **2** | as 48, higher |
+| 47 | Low-Mid Tom | `TomTom` | **4** | as 45, higher |
+| 48 | Hi-Mid Tom | `HighTom` | **4** | as 45, higher |
+| 49 | Crash Cymbal 1 | `CrashCymbal1` | **4** | Iowa 17" suspended crash for the modes, refitted to DRSKit's left crash hit HARD with the stick's shank (11 strokes over 37 dB): the cascade's swell of 2-8 kHz after the strike, scattered (in order it glided), growing with the stroke; a slow ring at its own 8.5 dB/s; the shank's thud. Ben, by ear: sounds great |
+| 50 | High Tom | `HighTom` | **4** | as 45, higher |
 | 51 | Ride Cymbal 1 | `RideCymbal` | **4** | Iowa 21" ride, bow |
 | 52 | Chinese Cymbal | `ChineseCymbal` | **4** | Iowa chinese, 16/19/20" |
 | 53 | Ride Bell | `RideBell` | **4** | Iowa ride bell -- the ping is mode 8.1, not the fundamental |
 | 54 | Tambourine | `NoiseDrum` | **2** | generic noise body, but its own rattle: 14 jingles. Iowa HAS tambourines; they were not taken |
 | 55 | Splash Cymbal | `SplashCymbal` | **4** | Iowa splash |
 | 56 | Cowbell | `Cowbell` | **2** | its own class, theory |
-| 57 | Crash Cymbal 2 | `CrashCymbal2` | **4** | Iowa 20" and 13" suspended crash |
+| 57 | Crash Cymbal 2 | `CrashCymbal2` | **4** | Iowa 18" suspended crash for the modes, refitted to DRSKit's right crash hit hard (12 shank strokes), as 49. Ben, by ear: sounds good |
 | 58 | Vibraslap | `NoiseDrum` | **2** | generic noise body with its own rattle |
 | 59 | Ride Cymbal 2 | `CrashRide` | **4** | GM wants two rides and Iowa has one; this is that measurement on a larger plate |
 | 60 | Hi Bongo | `Bongo` | **2** | a BONGO: the tightest head and shortest shell in the kit, so the shell does almost nothing and you hear the head alone. Fingers, not a stick |
@@ -252,7 +253,7 @@ plays Standard, as does any program that is not a set.
 | 56 | Trumpet | `ConicalBrass/Trombone/Trumpet by register` | **4** | Iowa trumpet, three registers |
 | 57 | Trombone | `BassTrombone/Trombone by register` | **4** | Iowa tenor and bass trombone, refitted across registers |
 | 58 | Tuba | `ConicalBrass` | **4** | Iowa tuba |
-| 59 | Muted Trumpet | `MutedTrumpet` | **2** | its own class; the mute is theory |
+| 59 | Muted Trumpet | `MutedTrumpet` | **4** | the Iowa trumpet through a MEASURED harmon mute, stem out: VSCO 2 CE's trumpet open and muted at the same pitches, each partial's level muted minus open read as the mute's response. Ben, by ear: sounds fine |
 | 60 | French Horn | `ConicalBrass/Horn by register` | **4** | Iowa horn, re-measured across four registers and pp/mf/ff |
 | 61 | Brass Section | `ConicalBrass/Trombone/Trumpet by register` | **3** | brass_section over three MEASURED bodies (Iowa trumpet/trombone/tuba), five players each, crossfaded across the range handovers -- the hard break moved the spectrum 13.2 dB in one semitone and now moves 2.7 |
 | 62 | Synth Brass 1 | `MoogSynthBrass1` | **4** | a Messenger patch: the brass stab -- the ladder nearly shut and a filter contour that opens three octaves in 60 ms and falls back: the blat |

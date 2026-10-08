@@ -126,7 +126,7 @@ RATED = {
  56:(4,"Iowa trumpet, three registers"),
  57:(4,"Iowa tenor and bass trombone, refitted across registers"),
  58:(4,"Iowa tuba"),
- 59:(2,"its own class; the mute is theory"),
+ 59:(4,"the Iowa trumpet through a MEASURED harmon mute, stem out: VSCO 2 CE's trumpet open and muted at the same pitches, each partial's level muted minus open read as the mute's response. Ben, by ear: sounds fine"),
  60:(4,"Iowa horn, re-measured across four registers and pp/mf/ff"),
  61:(3,"brass_section over three MEASURED bodies (Iowa trumpet/trombone/tuba), five players each, crossfaded across the range handovers -- the hard break moved the spectrum 13.2 dB in one semitone and now moves 2.7"),
  62:(4,"a Messenger patch: the brass stab -- the ladder nearly shut and a filter contour that opens three octaves in 60 ms and falls back: the blat"),
@@ -207,32 +207,34 @@ RATED.update({
 # ---- channel 10, the percussion note map --------------------------------
 # Iowa's percussion pages carry cymbals, crotales and hand percussion -- and NO
 # DRUM KIT AT ALL: no snare, no bass drum, no toms, which is 9630 of the
-# collection's 12781 percussion notes. So this table splits almost exactly along
-# that line, and the classes that have no reference say so themselves.
+# collection's 12781 percussion notes. DrumGizmo's DRSKit (CC-BY 4.0) fills
+# the kick, the toms, and the crashes struck the way a kit drummer strikes
+# them; the snare is still unmeasured, and the classes that have no reference
+# say so themselves.
 PERC_RATED = {
- 35:(3,"no reference -- Iowa has no drum kit. Analytic membrane, pitch tuned by ear"),
- 36:(3,"as 35, tuned higher"),
+ 35:(4,"DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper"),
+ 36:(4,"as 35, at the recorded kick's own 44.4 Hz"),
  37:(2,"its own class, theory"),
  38:(3,"NO REFERENCE, and it says so. Analytic Bessel modes plus the snare wires; ear"),
  39:(2,"its own class, theory"),
  40:(2,"a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all"),
- 41:(2,"floor tom, analytic membrane"),
+ 41:(4,"DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear"),
  42:(4,"Iowa hi-hat, five takes"),
- 43:(2,"as 41, higher"),
+ 43:(4,"as 41, higher"),
  44:(4,"Iowa hi-hat, foot-close take"),
- 45:(2,"tom, analytic membrane"),
+ 45:(4,"DRSKit's rack tom, 27 strokes on its close mic: modes 1 : 1.477 : 1.755 : 2.259, the stick's click 30-60 dB under the fundamental to 6 kHz, a glide that grows with the stroke. Ben, by ear"),
  46:(4,"Iowa hi-hat, open"),
- 47:(2,"as 45, higher"),
- 48:(2,"high tom, analytic membrane"),
- 49:(4,"Iowa 17\" suspended crash, stick on the bow"),
- 50:(2,"as 48, higher"),
+ 47:(4,"as 45, higher"),
+ 48:(4,"as 45, higher"),
+ 49:(4,"Iowa 17\" suspended crash for the modes, refitted to DRSKit's left crash hit HARD with the stick's shank (11 strokes over 37 dB): the cascade's swell of 2-8 kHz after the strike, scattered (in order it glided), growing with the stroke; a slow ring at its own 8.5 dB/s; the shank's thud. Ben, by ear: sounds great"),
+ 50:(4,"as 45, higher"),
  51:(4,"Iowa 21\" ride, bow"),
  52:(4,"Iowa chinese, 16/19/20\""),
  53:(4,"Iowa ride bell -- the ping is mode 8.1, not the fundamental"),
  54:(2,"generic noise body, but its own rattle: 14 jingles. Iowa HAS tambourines; they were not taken"),
  55:(4,"Iowa splash"),
  56:(2,"its own class, theory"),
- 57:(4,"Iowa 20\" and 13\" suspended crash"),
+ 57:(4,"Iowa 18\" suspended crash for the modes, refitted to DRSKit's right crash hit hard (12 shank strokes), as 49. Ben, by ear: sounds good"),
  58:(2,"generic noise body with its own rattle"),
  59:(4,"GM wants two rides and Iowa has one; this is that measurement on a larger plate"),
  60:(2,"a BONGO: the tightest head and shortest shell in the kit, so the shell does almost nothing and you hear the head alone. Fingers, not a stick"),
@@ -314,8 +316,9 @@ def percussion_table():
     L.append("%d notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and"
              % tot)
     L.append("hand percussion and **no drum kit at all** -- no snare, no bass drum, no")
-    L.append("toms, which is 9630 of that collection's 12781 percussion notes. This table")
-    L.append("splits almost exactly along that line.\n")
+    L.append("toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's")
+    L.append("DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the toms and the crashes")
+    L.append("hit hard; the snare is still unmeasured.\n")
     L.append("| rating | notes | share |")
     L.append("|---|---|---|")
     for k in range(5):
