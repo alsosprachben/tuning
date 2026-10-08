@@ -6422,9 +6422,17 @@ class BowedStringProperties(SectionMixin, StoppedPipeProperties):
     # mod wheel takes its per-player proportions from exactly that, so a resting
     # depth of 0 makes a wheel-up write one flat value over the whole section
     # again (measured: 7 distinct depths at any rest > 0, 1 at rest = 0). Shallow
-    # is fine, absent is not. 5 cents rests as a shimmer and the wheel deepens it
-    # to 35-45, which is where real expressive string vibrato sits.
-    section_vibrato_cents = 5.0        # +/- depth
+    # is fine, absent is not.
+    #
+    # 15 CENTS, MEASURED. It was 5, "a section's collective warmth", and the
+    # wheel deepened it to 35-45. Read off VSCO 2 Community Edition's sustained
+    # violin, viola and cello sections (CC0, 75 notes; examples/sect_fit.py):
+    # the section's level swings 0.20 in the 4-12 Hz band, where the players'
+    # vibratos keep the beating between them moving; at 5 cents the render
+    # swung 0.12 there and left the beating as a slow drift instead, and +/-15
+    # lands on 0.21. The recordings carry their room, which smooths a swing, so
+    # 0.20 is if anything a floor. The wheel adds its 35 on top, as before.
+    section_vibrato_cents = 15.0       # +/- depth
     section_vibrato_hz = (4.6, 6.4)    # each player at their own rate
 
     # 1/n-ish spectrum: brighter than an organ, no octave-modulo steps
@@ -6805,7 +6813,12 @@ def slow_bow(cls):
     if got is None:
         got = type(cls.__name__.replace("Properties", "") + "SlowProperties", (cls,), {
             "chiff_min_valve_time": 0.12,
-            "chiff_max_valve_time": 0.30,
+            "chiff_max_valve_time": 0.30,       # and so the release, as it was
+            # THE ENTRY, MEASURED: a section swelling in softly, as VSCO 2 CE's
+            # soft layers do (examples/sect_fit.py), rises 10-90% in 420-1400
+            # ms, median 660 -- where GM 48's loud entries take 50-340 and this
+            # took 170. 1.1 s of attack is what reads back as 660.
+            "attack_time": 1.1,
             "tonal_dampening": cls.tonal_dampening + 0.25,
             "max_harmonic": 32,
             "__doc__": "%s with the slow bow of GM 49." % cls.__name__,

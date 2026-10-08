@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 40 | 31% |
-| 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 61 | 48% |
+| 2 specific, theory | 39 | 30% |
+| 3 specific, theory + ear | 26 | 20% |
+| 4 specific, reference audio | 63 | 49% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -236,8 +236,8 @@ plays Standard, as does any program that is not a set.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 48 | String Ensemble 1 | `Contrabass/Cello/Viola/Violin by register` | **3** | four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section; the ensemble treatment is theory |
-| 49 | String Ensemble 2 | `ContrabassSlow/CelloSlow/ViolaSlow/ViolinSlow by register` | **2** | its own slow-bowed class |
+| 48 | String Ensemble 1 | `Contrabass/Cello/Viola/Violin by register` | **4** | four MEASURED bodies (Iowa violin/viola/cello/bass) routed per register, each in a section -- and the section itself fitted to VSCO 2 CE's sustained violin, viola and cello sections (75 notes): +/-15 cents of vibrato a player, where 5 left the beating as a slow drift (examples/sect_fit.py). Ben, by ear: sounds great |
+| 49 | String Ensemble 2 | `ContrabassSlow/CelloSlow/ViolaSlow/ViolinSlow by register` | **4** | slow_bow() on the same measured section: the entry a soft section swells in with, read off VSCO 2 CE's soft layers (rise 420-1400 ms, median 660; 1.1 s of attack), where it had taken 170 -- the pad Roland's SlowStr is. Ben, by ear: sounds great |
 | 50 | Synth Strings 1 | `MoogSynthStrings1` | **4** | a Messenger patch: the string machine without its chorus -- two saws seven cents apart, the ladder half open, amp and filter swelling together |
 | 51 | Synth Strings 2 | `MoogSynthStrings2` | **4** | a Messenger patch: slower and darker than 50, the pair eleven cents apart so it beats faster |
 | 52 | Choir Aahs | `ChoirAahs` | **3** | vocal tract and formants; Ben's ear on the consonant balance |
