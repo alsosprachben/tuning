@@ -920,6 +920,8 @@ class SynthProperties:
     # The measured LEVEL of each of those modes, one per entry in mode_ratios.
     # None means the ordinary series_volume applies.
     mode_gains = None
+    mode_stroke_tilt = 0.0        # dB / octave of mode ratio / dB of stroke (TimpaniProperties)
+    mode_stroke_ref_db = 0.0      # the stroke level, 20 log10 attack_volume, mode_gains were read at
 
     # ...AND HOW MUCH IT SUPPRESSES THEM DEPENDS ON THE PITCH. A stopped
     # cylinder is only stopped while the tonehole lattice below the first open
@@ -2466,10 +2468,18 @@ class SynthProperties:
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
 
-        # A measured mode set answers directly: no series, no comb, no tilt.
+        # A measured mode set answers directly: no series, no comb, no tilt --
+        # except a STROKE's, where one is measured (mode_stroke_tilt): a harder
+        # stroke tilts the modes toward the top, in dB per octave of mode ratio
+        # per dB of stroke, about the stroke level the gains were read at.
         if self.mode_gains is not None:
             if 1 <= harmonic <= len(self.mode_gains):
-                return self.gain * self.mode_gains[harmonic - 1]
+                g = self.gain * self.mode_gains[harmonic - 1]
+                if self.mode_stroke_tilt:
+                    sdb = max(-40.0, 20.0 * _log(max(self.attack_volume, 1e-6)) / _log(10.0))
+                    g *= 10.0 ** (self.mode_stroke_tilt * _log(self.mode_ratio(harmonic)) / _log(2.0)
+                                  * (sdb - self.mode_stroke_ref_db) / 20.0)
+                return g
             return 0.0
 
         if harmonic % 2 == 0:
@@ -8386,15 +8396,51 @@ class TimpaniProperties(MembraneDrumProperties):
     ratios are the idealisation, not the instrument. This class used to carry
     the idealisation.
 
-    Iowa has no timpani, so neither set is fitted to a recording here. These are
-    the standard measured ratios rather than the textbook ones -- better
-    sourced, still not verified against a reference in this collection.
+    MEASURED on VSCO 2 Community Edition's timpani (CC0: five drums, three
+    stroke layers, two takes; examples/timpani_fit.py). The ratios come out
+    1 : 1.488 : 1.963 : 2.456 : 2.809 -- the literature's within 0.6% but for
+    the fifth, 3% flatter. What the recordings add is everything else:
+
+      the levels: at mf the (2,1) is 2 dB under the principal and the rest
+      13-22 dB down -- the asserted gains had the (2,1) 5 dB OVER it and the
+      upper modes 15 dB too hot;
+      the stroke: soft to loud the upper modes rise by 0.56 dB per octave of
+      ratio for every dB of stroke -- a pp timpano is nearly a sine and an ff
+      one rings with its overtones -- where the class had one colour at every
+      velocity (mode_stroke_tilt);
+      the decays: the (2,1) and (3,1) outlast the principal by two to three
+      times, so a struck note's colour SHIFTS as it rings -- under the first
+      second the principal fades and the fifth above it carries (heard in the
+      recordings on the two highest drums). The class had decay rising with
+      every mode. And a high drum dies faster than a low one (register slope
+      0.47).
     """
-    mode_ratios = (1.00, 1.50, 1.97, 2.44, 2.90)
-    mode_gains  = (0.55, 1.00, 0.70, 0.42, 0.22)
+    mode_ratios = (1.000, 1.488, 1.963, 2.456, 2.809)
+    # At mf the recordings read 0 -1.9 -13.2 -21.0 -21.7 dB over 50-300 ms;
+    # over that window the principal is already fading faster than the modes
+    # above it, so the gains sit under the reading by what the same window
+    # reads off the render (examples/timpani_fit.py --model): 0 +3.0 +3.6
+    # +2.9 -0.5 dB.
+    mode_gains  = (1.0, 0.569, 0.145, 0.064, 0.087)
+    mode_stroke_tilt = 0.56
+    # mf, the layer the gains were read at, is 11 dB under the loudest; the
+    # loudest is velocity 127 here, so mf is attack_volume -11 dB (velocity 67)
+    mode_stroke_ref_db = -11.0
     inharmonicity_coefficient = 0.0    # the ratios are absolute
     inharmonicity_dynamic = False
     max_harmonic = 5
+
+    # EACH MODE'S OWN DECAY (tonelib's D, half the amplitude dB/s) at 415 Hz,
+    # with one register law: fitted over 140 mode decays (median |log err|
+    # 0.32). At a drum's own pitch -- 90 to 190 Hz -- the principal falls about
+    # 20-40 dB/s and the (2,1) and (3,1) half that or less.
+    mode_decays = (23.8, 10.9, 8.2, 10.9, 24.6)
+    decay_register_slope = 0.47
+
+    def harmonic_decay(self, harmonic):
+        if 1 <= harmonic <= len(self.mode_decays):
+            return self.mode_decays[harmonic - 1] * self.decay_register_factor
+        return super().harmonic_decay(harmonic)
 
     # Less drift than a tom: a timpano's head is already at high tension to be
     # tuned at all, so the same stroke stretches it proportionally less -- and a
@@ -8415,16 +8461,10 @@ class TimpaniProperties(MembraneDrumProperties):
     # measurement. A timpano is a big drum and the balance here was set before
     # any of the percussion was measured; if the kit is ever levelled as a whole
     # this is the first number to revisit.
-    initial_gain = (1.0 / 7.3) * 1.659
+    # ...and kept there through the fit (examples/timpani_level.py: it moved
+    # the strokes' energy -0.50 dB, so x 1.059).
+    initial_gain = (1.0 / 7.3) * 1.659 * 1.059
     tonal_dampening = 1.75
-    # A kettle sings rather than thumps, and its higher modes go first. The old
-    # implementation smuggled the modes in as unison voices and scaled each
-    # one's decay by its RATIO -- 10.5 12.9 15.1 17.3 19.5 dB/s. mode_ratios
-    # indexes decay by mode NUMBER instead, so these coefficients are
-    # re-derived to land on the same profile: 10.5 12.8 15.1 17.4 19.7.
-    decay_db = 8.2
-    harmonic_decay_db = 2.3
-    harmonic_decay_dampening = 0.0
 
 
 class NoisyPercussionMixin:
