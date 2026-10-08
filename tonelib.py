@@ -1366,6 +1366,15 @@ class SynthProperties:
         d = abs(log(frequency / self.bloom_center_hz) / log(2.0) / self.bloom_octaves)
         return self.bloom_seconds * exp(-0.5 * d ** self.bloom_shape)
 
+    # PER-PARTIAL JITTER. sustain_jitter is the note's, every partial alike;
+    # a voice whose partials are two different things -- a snare's head, which
+    # rings, and its wires, which buzz -- sets jitter_by_partial and answers
+    # partial_jitter(harmonic). False renders exactly as before.
+    jitter_by_partial = False
+
+    def partial_jitter(self, harmonic):
+        return self.sustain_jitter
+
     def bloom_gain_for(self, frequency):
         """The late copy's gain at this partial (see bloom_banded)."""
         if not self.bloom_banded or self.bloom_seconds <= 0.0:
@@ -8092,6 +8101,12 @@ class KitDrumProperties(MembraneDrumProperties):
     click_per_band = 3
     click_dbs = 480.0
     click_stroke_slope = 0.7
+    # A STICK ARRIVES AT ONCE. attack_time None derives the onset from
+    # chiff_max_valve_time, a pipe's valve, 10 ms here -- harmless while the
+    # kernel smeared every onset over its block anyway, and the whole front of
+    # a snare once it stopped (see voice_block.inc): the hit swelled in over
+    # 6 ms where DRSKit's peaks in 1.5.
+    attack_time = 0.001
 
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
@@ -8211,6 +8226,9 @@ class HighTomProperties(TomTomProperties):
     """GM 48 and 50: the rack tom, tuned up. DRSKit has one rack tom; the
     class had derived a separate air partner for a 10x7, and there is nothing
     measured to tell the two apart."""
+    # held to Ben's balance for 48 and 50 once the onset stopped smearing
+    # (voice_block.inc): the sharper strike read 0.9 and 1.6 dB louder up here
+    initial_gain = TomTomProperties.initial_gain * 10 ** (-1.25 / 20.0)
 
 
 class KickDrumProperties(KitDrumProperties):
@@ -8264,7 +8282,7 @@ class KickDrumProperties(KitDrumProperties):
     tension_settle_time = 0.11
     tension_settle_cutoff = 1.0
     # held at the level the ear had set (GM 35/36, loudest 150 ms): -8.9 dB
-    initial_gain = 0.3418
+    initial_gain = 0.308157
 
 
 # --- Struck bars and plates (GM 8-15) --------------------------------------
@@ -8696,7 +8714,34 @@ class NoisyPercussionMixin:
         # mode set that is not f0*m. (chiff_harmonic_gain below is already handed
         # a ratio by both renderers, so it needs no conversion.) Identity for
         # every harmonic voice.
-        return 0.0 if v == 0.0 else v * self._hf_rolloff(self.mode_ratio(harmonic))
+        if v == 0.0:
+            return 0.0
+        return v * self._hf_rolloff(self.mode_ratio(harmonic)) * self._band_trim(harmonic)
+
+    # A SPECTRAL TRIM, (Hz, dB) points interpolated in log frequency and held
+    # flat past the ends, on every partial by where it sounds. A measured
+    # mode set's gains were read off one recording; a trim refits their
+    # balance against another without rewriting three hundred numbers, and is
+    # solved inside the same fit as the decay (the two are one fit: see the
+    # reverted ring-decay commit, a48fb97). Empty = untouched.
+    band_trim_db = ()
+
+    def _band_trim(self, harmonic):
+        if not self.band_trim_db:
+            return 1.0
+        from math import log
+        f = self.frequency_x * (2.0 ** self.octave_position) * self.mode_ratio(harmonic)
+        pts = self.band_trim_db
+        if f <= pts[0][0]:
+            db = pts[0][1]
+        elif f >= pts[-1][0]:
+            db = pts[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                if f < f1:
+                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                    break
+        return 10.0 ** (db / 20.0)
 
     def chiff_harmonic_gain(self, harmonic):
         # The WASH needs the roll-off too, and it is the larger half of the
@@ -8835,6 +8880,105 @@ class SnareDrumProperties(NoisyPercussionMixin, PercussionProperties):
     # all; 26 dB across the dynamic was never defensible. Still judgement, and
     # still Ben's ear as the outer loop.
     strike_noise_slope = 0.35
+
+
+class AcousticSnareProperties(NoisyPercussionMixin, KitDrumProperties):
+    """GM 38: DRSKit's snare, wires on, a stick on the head (examples/
+    snare_fit.py). SnareDrumProperties stays as theory built it -- the base of
+    the electric, gated and brush snares, which are other instruments.
+
+    A KIT DRUM WHOSE CLICK DOES NOT STOP. The head is a tom's head tuned up:
+    196 Hz on every stroke, modes 1 : 1.476 : 1.728 : 1.969 : 2.366 against
+    the rack tom's 1 : 1.477 : 1.755 : 2.259, read from the first 60 ms
+    (by 0.15 s, where drum_fit reads a tom, the snare is 50 dB down and its
+    microphones hear the rack tom ringing in sympathy). But it is choked:
+    the thump falls ~30 dB in its first 50 ms.
+
+    THE WIRES are the click series carried on: the same third-octave bands
+    from 500 Hz, at the levels the stick-and-wires burst reads at, but dying
+    at ~150 dB/s rather than a tom's ~480, and denser -- and NOISE, not tone:
+    banded chiff (chiff_bandwidth) around each wire partial, so the buzz has
+    the bands' shape. White, it put 8 kHz 15-45 dB over the recording.
+    The head's own decay is fund_dbs and head_dbs (the fit's two rates).
+
+    FITTED on the band-by-time grid (examples/snare_fit.py) over ghost, mid
+    and loud strokes: the head goes at 605 and 447 dB/s with 2% left at 63;
+    the wires at 138 dB/s, at the same level against the head however hard
+    the stroke (click_stroke_slope 0: the fit's 0.37 put the loud strokes'
+    wires 8-13 dB over); the noise 0.27 of each wire partial wide. Error 8.3
+    -> 5.0 dB (with the signs below), within ~5 dB from 15 to 250 ms on a
+    loud stroke.
+
+    EACH PARTIAL ITS OWN STRIKE SIGN (strike_phase_spread 1). Ninety-six wire
+    partials spaced evenly in log frequency and all starting in phase are not
+    a buzz but a comb, and a comb in phase sweeps: Ben heard "a downward
+    phaser... pew pew laser gun", and the spectrum read moving down 3-5
+    steps of 1/24 octave every 4 ms for 50 ms, where the recording's stands
+    still. Signed at random it stands still too (-1.10 -> -0.05 a frame).
+    The tom's click never showed it: three partials a band, gone in 10 ms.
+
+    WHAT IT CANNOT DO is the first 10 ms -- the crack, which is most of a
+    snare. The fast renderer ramps every onset over one 512-sample block, so
+    1-2 kHz reads 20-40 dB under the recording in the first 5 ms whatever
+    these numbers say; the fit is levelled on the energy after 15 ms so that
+    it does not bend the decay to pay for it. The level is held to the old
+    snare's (-38.7 dB, its loudest 150 ms at velocity 100).
+    """
+    DRUM_MODES = ((1.000, 0.0, 450.0), (1.476, -18.1, 450.0), (1.728, -16.5, 450.0),
+                  (1.969, -18.9, 450.0), (2.366, -12.6, 450.0), (3.066, -18.9, 450.0),
+                  (3.607, -18.3, 450.0), (3.893, -24.0, 450.0), (4.497, -29.6, 450.0),
+                  (4.755, -25.4, 450.0), (5.066, -26.9, 450.0), (5.372, -26.7, 450.0))
+    fund_dbs = 447.226
+    head_dbs = 443.687
+    stroke_ref_db = -11.0
+    slow_share = 0.022166
+    slow_dbs = 68.7346
+    # the loud strokes' burst, 0-20 ms, re the first mode (drum_fit.py --inst=snare)
+    CLICK_DB = (2, -4, -7, -11, -13, -14, -17, -20, -21, -23, -25, -29, -33, -34)
+    click_cal_db = 5.24041
+    click_per_band = 24
+    click_dbs = 151.503
+    click_stroke_slope = 0.0506741
+    tension_bend = 0.0
+    chiff_volume = 2.19329
+    chiff_width = 0.0511461
+    chiff_cycle = 0.9
+    chiff_bandwidth = 0.226908
+    sustain_jitter = 0.0551615
+    hf_corner_hz = 1.0e6
+    one_shot = True
+    release_floor_db = -60.0
+    band_trim_db = ((177, 2.8), (354, -5.0), (707, -12.0), (1414, -3.2), (2828, 2.6), (5657, 9.2), (11314, 5.5))
+    strike_phase_spread = 1.0
+    initial_gain = 0.197585
+
+    # THE WIRES ARE NOISE, THE HEAD IS NOT. With the noise only a banded chiff
+    # around each wire partial, the wires read as a chord: spectral flatness
+    # over 1-8 kHz 0.12 at 15-60 ms and 0.01 by 100 ms, where the recording's
+    # buzz holds 0.44-0.53 (the old white-wash snare, 0.52-0.61, sounded more
+    # like a snare for exactly that reason -- Ben: "the old one still sounds way
+    # more like a snare"). So every wire partial is fully jittered, and there
+    # are 24 a band rather than 6, which brings it to 0.55 and 0.40; the head's
+    # modes keep sustain_jitter and their pitch.
+    jitter_by_partial = True
+    wire_jitter = 1.0
+
+    def partial_jitter(self, harmonic):
+        return self.wire_jitter if harmonic > len(self.DRUM_MODES) else self.sustain_jitter
+
+    def harmonic_decay(self, harmonic):
+        if harmonic == 1:
+            return 0.5 * self.fund_dbs
+        if 2 <= harmonic <= len(self.DRUM_MODES):
+            return 0.5 * self.head_dbs
+        return super().harmonic_decay(harmonic)
+
+    def aftersound(self, frequency, decay_rate):
+        # the slow remainder is the shell's, on the head modes alone: the
+        # wires stop when the head stops throwing them
+        if self.slow_share <= 0.0 or decay_rate < 0.5 * min(self.fund_dbs, self.head_dbs) - 1e-9:
+            return (0.0, decay_rate)
+        return (self.slow_share, min(decay_rate, 0.5 * self.slow_dbs))
 
 
 class ElectricSnareProperties(SnareDrumProperties):
@@ -11649,32 +11793,6 @@ class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
             # tonelib's D is half the amplitude dB/s
             return (self.aftersound_fraction, min(decay_rate, 0.5 * self.aftersound_dbs))
         return (self.aftersound_fraction, decay_rate * self.aftersound_ratio)
-
-    # A SPECTRAL TRIM, (Hz, dB) points interpolated in log frequency and held
-    # flat past the ends, on every partial by where it sounds. A measured
-    # mode set's gains were read off one recording; a trim refits their
-    # balance against another without rewriting three hundred numbers, and is
-    # solved inside the same fit as the decay (the two are one fit: see the
-    # reverted ring-decay commit, a48fb97). Empty = untouched.
-    band_trim_db = ()
-
-    def harmonic_volume(self, harmonic):
-        v = super().harmonic_volume(harmonic)
-        if not self.band_trim_db or v == 0.0:
-            return v
-        from math import log
-        f = self.frequency_x * (2.0 ** self.octave_position) * self.mode_ratio(harmonic)
-        pts = self.band_trim_db
-        if f <= pts[0][0]:
-            db = pts[0][1]
-        elif f >= pts[-1][0]:
-            db = pts[-1][1]
-        else:
-            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
-                if f < f1:
-                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
-                    break
-        return v * 10.0 ** (db / 20.0)
 
     ring_peak_hz = 0.0
     ring_decay_floor = 14.4        # dB/s at the peak

@@ -208,14 +208,13 @@ RATED.update({
 # Iowa's percussion pages carry cymbals, crotales and hand percussion -- and NO
 # DRUM KIT AT ALL: no snare, no bass drum, no toms, which is 9630 of the
 # collection's 12781 percussion notes. DrumGizmo's DRSKit (CC-BY 4.0) fills
-# the kick, the toms, and the crashes struck the way a kit drummer strikes
-# them; the snare is still unmeasured, and the classes that have no reference
-# say so themselves.
+# the kick, the snare, the toms, and the crashes struck the way a kit drummer
+# strikes them; the classes that have no reference say so themselves.
 PERC_RATED = {
  35:(4,"DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper"),
  36:(4,"as 35, at the recorded kick's own 44.4 Hz"),
  37:(2,"its own class, theory"),
- 38:(3,"NO REFERENCE, and it says so. Analytic Bessel modes plus the snare wires; ear"),
+ 38:(4,"DRSKit's snare (29 strokes, top and bottom mics): the head at 196 Hz with a tom's modes, choked in 50 ms; the wires a buzz of jittered noise in third-octave bands, fitted on band, onset balance and flatness (a chord of sines at the right band levels was not a snare; neither was a comb in phase -- \"pew pew\"). Needed the renderer's onsets to start on their own sample. Ben, by ear: sounds so much better"),
  39:(2,"its own class, theory"),
  40:(2,"a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all"),
  41:(4,"DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear"),
@@ -317,8 +316,8 @@ def percussion_table():
              % tot)
     L.append("hand percussion and **no drum kit at all** -- no snare, no bass drum, no")
     L.append("toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's")
-    L.append("DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the toms and the crashes")
-    L.append("hit hard; the snare is still unmeasured.\n")
+    L.append("DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and")
+    L.append("the crashes hit hard.\n")
     L.append("| rating | notes | share |")
     L.append("|---|---|---|")
     for k in range(5):

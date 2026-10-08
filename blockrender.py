@@ -3142,6 +3142,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             _DL[0] = _sd0*SR; _DL[1] = _sd1*SR
         cv = props.chiff_volume; cc = props.chiff_cycle
         crl = getattr(props,'chiff_release',1.0) or 0.0; sjit = props.sustain_jitter; csc = f0/440.0
+        sjit_n = sjit; _pjit = getattr(props, 'jitter_by_partial', False)
         _CBW[0] = getattr(props,'chiff_bandwidth',None) or RAND_GRAN
         _CBW[1] = getattr(props,'chiff_bandwidth_hz',None) or 0.0
         _TB[0] = getattr(props,'tension_bend',0.0) * props.tension_stroke()
@@ -3463,6 +3464,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                     if hf > SR/2: break
                     hv = hv_fn(m)
                     if hv == 0.0: continue
+                    # each partial's own jitter where the voice says so (a snare's
+                    # wires are noise, its head is not); else the note's
+                    sjit = rp.partial_jitter(m) if _pjit else sjit_n
                     # PER-PARTIAL ARRIVAL. A struck plate's middle spectrum
                     # arrives hundreds of ms after the strike (see
                     # SynthProperties.bloom_delay_for). This DELAYS the partial --

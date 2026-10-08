@@ -166,7 +166,10 @@ def norm(g):
 def weights(rec):
     # the tail counts: weighted by level alone, a ring 15 dB too long at 2.5 s
     # cost the first fit almost nothing, and that is a crash that will not stop
-    return np.clip((rec + 75.0) / 45.0, 0.15, 1.0) * COL_W
+    # and a cell under -100 dB is past the end of the file (DRSKit's soft
+    # snare strokes stop at 0.25 s): silence, not a level, so it weighs nothing
+    w = np.clip((rec + 75.0) / 45.0, 0.15, 1.0) * COL_W
+    return np.where(rec < -100.0, 0.0, w)
 
 
 def score(model, recs):

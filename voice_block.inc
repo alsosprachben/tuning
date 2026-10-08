@@ -13,6 +13,41 @@
                 float mL0=AMP(bs0,b,dL), mL1=AMP(bs1,b,dL), mR0=AMP(bs0,b,dR), mR1=AMP(bs1,b,dR);
                 if(BLrow){ long bb=b<nblk?b:nblk-1; float w0=BLrow[bb], w1=BLrow[bb+1];
                     mL0*=w0; mR0*=w0; mL1*=w1; mR1*=w1; }
+                // THE ONSET BLOCK STARTS AT THE ONSET. The amplitude is a line
+                // across each block, and in the block a partial starts in that
+                // line ran from the block's START: every onset was smeared over
+                // up to a block (512 samples, 10.7 ms), sounding before its note
+                // did. A ringing drum hides that; a snare, most of it gone in
+                // 50 ms, became a swell -- Ben: "the old one still sounds way
+                // more like a snare". Now the line starts at the onset sample
+                // and nothing is written before it. An attack that ends inside
+                // this block starts halfway through it, at the level it ends
+                // on (sharp, as a strike is); a longer one ramps from zero, from
+                // the onset rather than the block's start. The line is carried
+                // as the two numbers the block already had -- a start sample
+                // (ns) and a start gain (mL0, re-aimed so the line through the
+                // block's end passes through it) -- so the live descriptors and
+                // the GPU follow without change.
+                {
+                    float dmin=fminf(dL,dR);
+                    long sA=a+(long)ceilf(dmin);
+                    if(sA>bs0 && sA<bs1){
+                        long sF=sA+(long)fadeS[p];
+                        long s0=sF<bs1 ? sA+(long)(0.5f*fadeS[p]) : sA;
+                        if(s0>=bs1) s0=bs1-1;
+                        float g0L=0.f, g0R=0.f;
+                        if(sF<bs1){
+                            g0L=AMP(sF,b,dL); g0R=AMP(sF,b,dR);
+                            if(BLrow){ long bb=b<nblk?b:nblk-1;
+                                float wq=BLrow[bb]+(BLrow[bb+1]-BLrow[bb])*(float)(sF-bs0)/(float)BLK;
+                                g0L*=wq; g0R*=wq; }
+                        }
+                        float kq=(float)BLK/(float)(bs1-s0);
+                        mL0=mL1-(mL1-g0L)*kq; mR0=mR1-(mR1-g0R)*kq;
+                        if(ns<s0) ns=s0;
+                        if(ns>=ne) continue;
+                    }
+                }
                 if(!ftr && mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
                 // chiff fade for this block (state: attack/sustain/release). The
                 // attack chiff rides chiffS -- its OWN short, capped width, NOT the

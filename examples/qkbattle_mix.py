@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ben's qkbttl02 (a 1990s sound-card piece) remixed so every part is heard.
 
-    python3 examples/qkbattle_mix.py [SRC.mid] [outdir]
+    python3 examples/qkbattle_mix.py [SRC.mid] [outdir] [--bpm=N]
 
 WHY IT NEEDS A MIX. The file's CC7 values were set by ear on a 90s sound card,
 whose synth leads were far hotter than these voices. Rendered here, each part
@@ -342,10 +342,30 @@ VOICE_CODE = b''.join(open(os.path.join(HERE, f), 'rb').read()
                                 'moog.py', 'patch_map.py'))
 
 
+def retempo(src, dest, bpm):
+    """The file at another tempo: every set_tempo set to `bpm`. This one has a
+    single tempo, so nothing is scaled -- the ticks stand, and every time the
+    mix takes from the file (the loop point, the wheel's spans) follows."""
+    m = mido.MidiFile(src)
+    for tr in m.tracks:
+        for i, e in enumerate(tr):
+            if e.type == 'set_tempo':
+                tr[i] = e.copy(tempo=mido.bpm2tempo(bpm))
+    m.save(dest)
+    return dest
+
+
 def main(argv):
+    bpm = next((float(a.split('=', 1)[1]) for a in argv if a.startswith('--bpm=')), None)
+    argv = [a for a in argv if not a.startswith('--')]
     src = os.path.expanduser(argv[1] if len(argv) > 1 else '~/Downloads/midi/qkbttl02.mid')
     outdir = os.path.expanduser(argv[2] if len(argv) > 2 else '~/Downloads/bwx-renders/qkbttl02_mix')
     os.makedirs(outdir, exist_ok=True)
+    if bpm:
+        # Ben: "render qkbttle02, but at the tempo of qkbttle03" -- 230 bpm
+        # where qkbttl02 is written at 288
+        stem0 = os.path.splitext(os.path.basename(src))[0]
+        src = retempo(src, os.path.join(outdir, '%s_%gbpm.mid' % (stem0, bpm)), bpm)
     stem = os.path.splitext(os.path.basename(src))[0]
     mid = steady_organ(src, os.path.join(outdir, stem + '_steady.mid'))
     base_env = {'TUNING_MASTER_DB': '-14', 'TUNING_ROOM': ROOM, 'TUNING_KIT_VIEW': KIT_VIEW}

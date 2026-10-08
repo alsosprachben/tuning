@@ -58,6 +58,7 @@ INST = {
     "tom1":    ("Tom1", ("Tom1",), (48, 50)),
     "tom2":    ("Tom2", ("Tom2",), (43, 45)),
     "tom3":    ("Tom3", ("Tom3",), (41,)),
+    "snare":   ("Snare", ("Snare_top", "Snare_bottom"), (38,)),
 }
 WHOLE_T = (0.05, 0.1, 0.2, 0.3, 0.5, 0.8, 1.2)
 GLIDE_T = (0.010, 0.025, 0.050, 0.100, 0.200)
@@ -402,7 +403,7 @@ BANDS_T = (0.03, 0.1, 0.2, 0.3, 0.6)
 BANDS_R = ((0.8, 1.35), (1.4, 2.4), (2.6, 4.3))
 
 
-def band_env(chs, sr, f0):
+def band_shape(chs, sr, f0):
     """Power in three bands about f0 -- the thump, the head modes up to 2.4,
     the modes above -- at BANDS_T, in dB re the thump's peak. Per-mode levels
     misread two modes 7% apart (each takes the shared skirt, and their sum
@@ -441,11 +442,11 @@ def bands(refs, pick):
         n = len(strokes)
         for nm, grp in (("soft", strokes[n // 6:n // 3]), ("mid", strokes[n // 2:2 * n // 3]),
                         ("loud", strokes[-n // 6:])):
-            row("rec " + nm, np.mean([band_env(c, sr, settled) for _, c, sr in grp], 0))
+            row("rec " + nm, np.mean([band_shape(c, sr, settled) for _, c, sr in grp], 0))
         for v in (50, 90, 127):
             L, R = B.render(note_file(0, note, vel=v, hold=1.5))[:2]
             x = np.asarray(L, np.float64) + np.asarray(R, np.float64)
-            row("model v%d" % v, band_env([x], B.SR, f0))
+            row("model v%d" % v, band_shape([x], B.SR, f0))
 
 
 def main(argv):

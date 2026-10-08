@@ -28,6 +28,7 @@ from tonelib import (
     NoiseDrumProperties,
     MetalPercussionProperties,
     SnareDrumProperties,
+    AcousticSnareProperties,
     CymbalProperties,
     RideBellProperties,
     CrashCymbal1Properties,
@@ -94,7 +95,8 @@ PERCUSSION = {
     35: ("Acoustic Bass Drum", K, 39.4),
     36: ("Bass Drum 1",        K, 44.4),
     37: ("Side Stick",      SideStickProperties, 407.4),
-    38: ("Acoustic Snare",     S, 260.0),
+    # DRSKit's snare head, 196 Hz on every stroke (AcousticSnareProperties)
+    38: ("Acoustic Snare",     AcousticSnareProperties, 195.1),
     39: ("Hand Clap",          HandClapProperties, 310.4),
     40: ("Electric Snare",     ElectricSnareProperties, 275.0),
     41: ("Low Floor Tom",      TF, 87.0),
@@ -382,10 +384,11 @@ def percussion_for_note(note, kit=0):
 # These are the instruments' own ring times, and the engines set each drum's
 # decay from them at note construction.
 PERCUSSION_RING = {
-    # The kick and the toms (35, 36, 41-50) carry their measured rings in their
-    # classes (tonelib.KitDrumProperties), mode by mode: a single ring time
-    # here would rescale all of them by the first mode's.
-    37: 0.055, 38: 0.35, 39: 0.100, 40: 0.30,
+    # The kick, the toms and the snare (35, 36, 38, 41-50) carry their
+    # measured rings in their classes (tonelib.KitDrumProperties), mode by
+    # mode: a single ring time here would rescale all of them by the first
+    # mode's.
+    37: 0.055, 39: 0.100, 40: 0.30,
     # ONE PLATE, THREE DAMPINGS. These are no longer three separately measured
     # decays: the hats share a mode set and a loss curve, and the ring is the
     # uniform part of the contact damping -- how hard the articulation holds the

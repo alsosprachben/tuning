@@ -15,6 +15,8 @@ examples/pizz_ab.py's recipe:
   cathartic  the first 45 s of Cathartic Age.mid (a busy kick)
   crashes    each crash alone at four strokes, left to ring, then both over a
              beat at mf and ff
+  snare      the snare alone at six strokes, then a beat with ghost notes and a
+             roll, at mf and ff
 
 Default outdir ~/Downloads/drums.
 """
@@ -128,6 +130,54 @@ def crashes(dst):
     return dst
 
 
+def snare(dst):
+    """The snare alone at six strokes, ghost to rimshot-hard, each left to
+    ring; then a beat with backbeats and ghost notes, at mf and ff."""
+    m = mido.MidiFile(ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    ev = []
+    now = 0
+    q = 480
+
+    def hit(tk, n, v):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + 60, "note_off", n, 0))
+    for v in (30, 50, 70, 90, 110, 127):
+        hit(now, 38, v)
+        now += 2 * q
+    for v in (90, 122):
+        for bar in range(4):
+            for b in range(4):
+                s_ = now + b * q
+                if b in (0, 2):
+                    hit(s_, 36, int(v * 0.85))
+                if b in (1, 3):
+                    hit(s_, 38, v)
+                for e in range(4):
+                    hit(s_ + e * q // 4, 42, int(v * (0.55 if e % 2 else 0.7)))
+                # ghost notes on the e and a of 2 and 4
+                if b in (1, 3):
+                    hit(s_ + 3 * q // 4, 38, 32)
+                if b in (0, 2):
+                    hit(s_ + 3 * q // 4, 38, 28)
+            now += 4 * q
+        # a sixteenth-note roll into the next
+        for i in range(16):
+            hit(now + i * q // 4, 38, int(v * (0.5 + 0.5 * i / 15)))
+        now += 4 * q
+    hit(now, 36, 110)
+    hit(now, 49, 110)
+    ev.sort(key=lambda e: (e[0], e[1] == "note_on"))
+    last = 0
+    for tk, kind, n, v in ev:
+        t.append(mido.Message(kind, channel=9, note=n, velocity=v, time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
 def render(mid, wav, which, tree):
     env = dict(os.environ, TUNING_ROOM="hall", TUNING_MASTER_DB="-14")
     dry = wav[:-4] + "_dry.wav"
@@ -174,7 +224,8 @@ def main(argv):
             os.symlink(os.path.join(HERE, f), os.path.join(old, f))
     try:
         srcs = {"groove": groove(os.path.join(d, "groove.mid")),
-                "crashes": crashes(os.path.join(d, "crashes.mid"))}
+                "crashes": crashes(os.path.join(d, "crashes.mid")),
+                "snare": snare(os.path.join(d, "snare.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p
