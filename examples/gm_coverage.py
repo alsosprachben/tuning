@@ -81,7 +81,7 @@ RATED = {
  11:(4,"Iowa vibraphone. The motor tremolo that gives it its name is NOT modelled"),
  12:(4,"Iowa marimba"),
  13:(4,"Iowa xylophone"),
- 14:(2,"tubes at 2:3:4:5"),
+ 14:(4,"VSCO 2 CE's chimes (CC0), C4 G4 C5 F5: a free-free tube's modes, the note an octave under the fourth -- plus the hum a third above it and a mode a sixth below, rising with pitch; the upper modes compressing as the tube shortens; each mode's own ring, the hum outlasting the rest. Renders read back on the fitted lines. Ben, by ear: sounds great"),
  15:(2,"struck steel courses; the stiffness is estimated"),
  16:(3,"tonewheel + Leslie, worked over extensively by ear"),
  17:(3,"tonewheel, percussive tap"),

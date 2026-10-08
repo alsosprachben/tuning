@@ -8350,28 +8350,78 @@ class TubularBellProperties(TunedBarProperties):
     """Long brass tubes -- and the clearest missing-fundamental instrument in
     the orchestra.
 
-    A tubular bell's tuned modes run 2 : 3 : 4 (: 5 : 6), and there is NO partial
-    at the pitch you hear: the ear reconstructs the fundamental an octave below
-    the lowest one. That is why a tubular bell's note is faintly ambiguous, and
-    why it does not sound like the bar instruments despite being hit with the
-    same mallet.
+    A chime is a free-free TUBE: its modes run near (2n+1)^2, and the note
+    heard is the octave under the fourth mode, which the fifth and sixth sit
+    near 3/2 and 2 of -- so there is NO partial at the pitch you hear: the ear
+    reconstructs it. That is why a tubular bell's note is faintly ambiguous,
+    and why it does not sound like the bar instruments despite being hit with
+    the same mallet.
 
-    An earlier note here said the engine could not omit the first partial. That
-    was true before bar_modes existed; it simply starts at 2, so the written note
-    sounds as the fundamental the partials imply rather than as a partial itself.
+    MEASURED on VSCO 2 Community Edition's (CC0: C4, G4, C5, F5;
+    examples/tubular_fit.py). It had been the idealisation: harmonics 2 to 6
+    of the written note, at set levels and one decay law. The tube has more:
+
+      UNDER the note a mode at 1.23 of it -- a third above the pitch heard,
+      the hum a chime is known by -- 18 dB under the fourth mode at C4 and
+      level with it by F5, and outlasting it; and one at 0.63, a sixth under,
+      rising from -40 dB to -13. The lowest, at 0.24, radiates under -37 dB
+      and is left out.
+      OVER it the modes COMPRESS as the tube shortens: the sixth runs 4.09
+      at C4 to 3.95 at F5, the eighth 6.76 to 6.29 -- so each ratio is a line
+      in octaves, not a constant.
+      AND RING by mode: the low ones for many seconds, the eighth and above
+      in one or two, and a short tube faster than a long one (register slope
+      1.23).
+
+    Four notes over an octave and a half, so each line is a two-point-plus
+    fit; outside C4-F5 it is held at the ends.
     """
-    bar_modes = ((2, 1.0), (3, 0.75), (4, 0.50), (5, 0.30), (6, 0.16))
-    max_harmonic = 6
+    # (ratio to the written note at G4, its change per octave, level dB under
+    #  the fourth mode at G4, its change per octave, tonelib's D at 415 Hz)
+    # The levels are the fitted lines' plus what the same 20-300 ms window
+    # reads off the render short of them (examples/tubular_fit.py --model): a
+    # mode that dies fast reads low over a window, so its gain sits higher.
+    TUBE_MODES = (
+        (0.631, +0.012, -28.1, 15.5, 1.24),
+        (1.230, +0.011, -13.0, 10.9, 1.52),
+        (2.006, +0.002, 0.0, 0.0, 1.88),
+        (2.948, -0.033, 0.3, -6.7, 3.60),
+        (4.034, -0.098, 3.8, -6.9, 8.37),
+        (5.248, -0.203, -0.3, -11.2, 11.31),
+        (6.573, -0.337, -4.4, -24.0, 15.89),
+        (7.992, -0.521, -4.0, -26.5, 21.12),
+        (9.502, -0.708, 5.2, -2.7, 30.25),
+    )
+    TUBE_REF_HZ = 392.0
+    mode_ratios = tuple(m[0] for m in TUBE_MODES)       # at G4; mode_ratio moves them
+    max_harmonic = len(TUBE_MODES)
+    decay_register_slope = 1.23
     release_floor_db = -60.0     # it must be allowed to ring out
-    initial_gain = 1.0 / 7.9
+    # Kept at the level it was balanced to (examples/tubular_level.py: the
+    # fit's extra modes and slow hum moved the strokes' energy +3.54 dB).
+    initial_gain = 1.0 / 7.9 * 0.665
     tonal_dampening = 1.0
-    decay_db = 0.55
-    # It is the PER-HARMONIC decay that sets a bell's ring, not decay_db: these
-    # modes are harmonics 2-6, so at 2.0 dB each the upper ones were gone in
-    # 3.5 s however slow the overall decay was -- lowering decay_db from 1.2 to
-    # 0.55 moved it by a third of a second. At 0.5 it rings ~7.5 s, a struck
-    # chime the player has not yet damped.
-    harmonic_decay_db = 0.5
+
+    def _tube_oct(self):
+        f = self.frequency_x * (2.0 ** getattr(self, 'octave_position', 0.0))
+        return max(-0.6, min(0.85, _log(f / self.TUBE_REF_HZ) / _log(2.0)))
+
+    def mode_ratio(self, m):
+        if 1 <= m <= len(self.TUBE_MODES):
+            r, rk = self.TUBE_MODES[m - 1][:2]
+            return r + rk * self._tube_oct()
+        return 0.0
+
+    def series_volume(self, harmonic):
+        if 1 <= harmonic <= len(self.TUBE_MODES):
+            l, lk = self.TUBE_MODES[harmonic - 1][2:4]
+            return self.gain * 10.0 ** ((l + lk * self._tube_oct()) / 20.0)
+        return 0.0
+
+    def harmonic_decay(self, harmonic):
+        if 1 <= harmonic <= len(self.TUBE_MODES):
+            return self.TUBE_MODES[harmonic - 1][4] * self.decay_register_factor
+        return super().harmonic_decay(harmonic)
 
 
 class TimpaniProperties(MembraneDrumProperties):

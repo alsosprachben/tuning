@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 42 | 33% |
+| 2 specific, theory | 41 | 32% |
 | 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 59 | 46% |
+| 4 specific, reference audio | 60 | 47% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -177,7 +177,7 @@ plays Standard, as does any program that is not a set.
 | 11 | Vibraphone | `Vibraphone` | **4** | Iowa vibraphone. The motor tremolo that gives it its name is NOT modelled |
 | 12 | Marimba | `Marimba` | **4** | Iowa marimba |
 | 13 | Xylophone | `Xylophone` | **4** | Iowa xylophone |
-| 14 | Tubular Bells | `TubularBell` | **2** | tubes at 2:3:4:5 |
+| 14 | Tubular Bells | `TubularBell` | **4** | VSCO 2 CE's chimes (CC0), C4 G4 C5 F5: a free-free tube's modes, the note an octave under the fourth -- plus the hum a third above it and a mode a sixth below, rising with pitch; the upper modes compressing as the tube shortens; each mode's own ring, the hum outlasting the rest. Renders read back on the fitted lines. Ben, by ear: sounds great |
 | 15 | Dulcimer | `HammeredDulcimer` | **2** | struck steel courses; the stiffness is estimated |
 
 ## 16-23 Organ
