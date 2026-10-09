@@ -54,9 +54,9 @@ the crashes hit hard.
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 19 | 37% |
-| 3 specific, theory + ear | 2 | 4% |
-| 4 specific, reference audio | 30 | 59% |
+| 2 specific, theory | 10 | 20% |
+| 3 specific, theory + ear | 3 | 6% |
+| 4 specific, reference audio | 38 | 75% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -81,21 +81,21 @@ the crashes hit hard.
 | 53 | Ride Bell | `RideBell` | **4** | Iowa ride bell -- the ping is mode 8.1, not the fundamental |
 | 54 | Tambourine | `Tambourine` | **4** | Iowa's tambourines, fitted: 77 measured jingle modes in four clusters, the hand's slap on the head, and each stroke catching the jingles differently (alike, a run of strokes rang metallic) |
 | 55 | Splash Cymbal | `SplashCymbal` | **4** | Iowa splash |
-| 56 | Cowbell | `Cowbell` | **2** | its own class, theory |
+| 56 | Cowbell | `CowbellStroke` | **4** | VSCO-2 CE (CC0) cowbell, fitted: 28 measured modes each at its own rate, clean; the strike dense and noisy from 400 Hz, its attack contrast matched. Ben: better than the first fit, which was jittery and modal |
 | 57 | Crash Cymbal 2 | `CrashCymbal2` | **4** | Iowa 18" suspended crash for the modes, refitted to DRSKit's right crash hit hard (12 shank strokes), as 49. Ben, by ear: sounds good |
 | 58 | Vibraslap | `NoiseDrum` | **2** | generic noise body with its own rattle |
 | 59 | Ride Cymbal 2 | `CrashRide` | **4** | GM wants two rides and Iowa has one; this is that measurement on a larger plate |
-| 60 | Hi Bongo | `Bongo` | **2** | a BONGO: the tightest head and shortest shell in the kit, so the shell does almost nothing and you hear the head alone. Fingers, not a stick |
-| 61 | Low Bongo | `Bongo` | **2** | as 60, lower |
-| 62 | Mute Hi Conga | `Conga` | **2** | a CONGA: a tall wooden cavity resonating at 128 Hz, BELOW its own 210 Hz head -- which is why a conga speaks from under the head. Muted; see 63 |
-| 63 | Open Hi Conga | `Conga` | **2** | as 62, open -- percussion_map already rings the two differently, which is what a hand on the head does |
-| 64 | Low Conga | `Conga` | **2** | as 62, the low drum |
+| 60 | Hi Bongo | `BongoHigh` | **4** | VSCO-2 CE (CC0) high bongo (161 Hz), fitted: measured modes ringing clean, the slap a dense noisy strike, strokes varying as the takes do |
+| 61 | Low Bongo | `BongoLow` | **4** | as 60, the low bongo (142 Hz) |
+| 62 | Mute Hi Conga | `CongaMute` | **4** | VSCO-2 CE (CC0) quinto tapped: the high conga muted |
+| 63 | Open Hi Conga | `CongaOpen` | **4** | VSCO-2 CE (CC0) quinto open (216 Hz), 13 measured modes -- one left out, the glide smeared into a peak that beat at 16 Hz |
+| 64 | Low Conga | `CongaLow` | **4** | VSCO-2 CE (CC0) conga, the middle of its three (164 Hz), open at three dynamics |
 | 65 | High Timbale | `Timbale` | **2** | a TIMBALE: a METAL shell with no bottom head, ringing to 3900 Hz where the head reaches 1116 and holding it three times longer than wood. Sticks |
 | 66 | Low Timbale | `Timbale` | **2** | as 65, lower |
-| 67 | High Agogo | `Agogo` | **2** | its own class, theory |
-| 68 | Low Agogo | `Agogo` | **2** | as 67, lower |
+| 67 | High Agogo | `AgogoHigh` | **4** | VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes |
+| 68 | Low Agogo | `AgogoLow` | **4** | VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67 |
 | 69 | Cabasa | `Cabasa` | **2** | its own class -- a shaken rattle, theory |
-| 70 | Maracas | `Rattle` | **2** | its own class -- a shaken rattle, theory |
+| 70 | Maracas | `Maracas` | **3** | VSCO-2 CE (CC0) maracas: the burst kept, its colour matched band by band, the shake SETTLING (thinning, falling impacts at random times) where it stopped dead. Closer by Ben's ear; the strokes vary in shape and the fit matches their average -- a different strategy is next |
 | 71 | Short Whistle | `SambaWhistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
 | 72 | Long Whistle | `SambaWhistle` | **3** | as 71, longer |
 | 73 | Short Guiro | `Guiro` | **4** | Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window |

@@ -9158,6 +9158,297 @@ class TambourineProperties(NoisyPercussionMixin, KitDrumProperties):
         return super().harmonic_decay(harmonic)
 
 
+class MeasuredStrokeProperties(NoisyPercussionMixin, KitDrumProperties):
+    """A struck instrument read off a recording, the way the tambourine was:
+    its resolved modes as DRUM_MODES (ratio to the note's pitch, dB re the
+    strongest, each mode's own rate), the strike as the click series, and a
+    fit (examples/perc_fit.py) for what the modes read alone cannot give --
+    how fast they really die together (ring_scale), the noise each carries
+    (mode_jitter), the strike's level and rate, the band balance.
+
+    EACH STROKE ITS OWN. Every stroke draws each mode's level afresh
+    (mode_scatter_db, SynthProperties.stroke_scatter), set from the
+    recording's own repeated takes: rendered alike, a run of strokes is one
+    chord repeated, which the tambourine taught us reads as metal.
+    """
+    DRUM_MODES = ((1.0, 0.0, 40.0),)
+    ring_scale = 1.0
+    stroke_ref_db = -11.0
+    slow_share = 0.05
+    slow_dbs = 60.0
+    CLICK_HZ0 = 200.0
+    # the strike to 16 kHz: 20 third-octaves from 200 Hz. KitDrum's 14 stop
+    # at 4 kHz, and a hand's slap or a stick on a bell is not over there --
+    # with nothing of its own in 8-16 kHz the fit boosted whatever stray
+    # partials fell in that band by 18-38 dB
+    CLICK_DB = (0,) * 20
+    click_cal_db = 0.0
+    click_per_band = 6
+    click_dbs = 400.0
+    click_stroke_slope = 0.3
+    tension_bend = 0.0
+    chiff_volume = 1.0
+    chiff_width = 0.05
+    chiff_cycle = 0.9
+    chiff_bandwidth = 0.05
+    sustain_jitter = 0.05
+    mode_jitter = 0.05
+    jitter_by_partial = True
+    stroke_scatter = True
+    mode_scatter_db = 0.0
+    strike_phase_spread = 1.0
+    hf_corner_hz = 1.0e6
+    one_shot = True
+    release_floor_db = -60.0
+    band_trim_db = ()
+    initial_gain = 0.1
+
+    def partial_jitter(self, harmonic):
+        return self.mode_jitter if harmonic <= len(self.DRUM_MODES) else self.sustain_jitter
+
+    def stroke_scatter_db(self, harmonic):
+        return self.mode_scatter_db if harmonic <= len(self.DRUM_MODES) else 0.0
+
+    def harmonic_decay(self, harmonic):
+        if 1 <= harmonic <= len(self.DRUM_MODES):
+            return 0.5 * self.ring_scale * self.DRUM_MODES[harmonic - 1][2]
+        return super().harmonic_decay(harmonic)
+
+
+class CowbellStrokeProperties(MeasuredStrokeProperties):
+    """GM 56: VSCO-2 CE's cowbell (Cowbell1), struck at four dynamics, two takes each. 466 Hz."""
+    DRUM_MODES = ((0.8837, -28.4, 213), (0.9256, -15.6, 123), (0.9993, 0.0, 114),
+                  (1.0455, -6.4, 125), (1.0801, -11.7, 117), (1.1393, -24.3, 311),
+                  (1.1899, -28.5, 89), (1.9682, -27.2, 120), (2.0649, -25.6, 356),
+                  (2.1357, -8.3, 114), (2.2209, -27.5, 115), (2.5010, -28.9, 130),
+                  (2.9545, -20.7, 81), (3.0382, -18.8, 62), (3.5090, -27.0, 123),
+                  (3.6129, -16.7, 229), (3.8729, -15.5, 279), (4.0158, -18.0, 239),
+                  (4.1689, -25.7, 138), (4.2555, -27.7, 158), (4.4230, -26.4, 104),
+                  (4.6974, -28.6, 148), (5.4439, -10.5, 299), (5.7212, -26.3, 392),
+                  (6.0649, -26.4, 114), (6.4201, -28.8, 179), (7.4497, -29.9, 419),
+                  (9.1652, -27.6, 131))
+    # FITTED (examples/perc_fit.py cowbell; each mode's rate off its own envelope,
+    # the bell clean and the strike the noise, and the attack's contrast): 21.9 -> 7.6 dB.
+    # Ben, on the first fit: "a bit jittery, not as sharp of an attack, and a
+    # bit more modal" -- its modes carried jitter 0.34, so the top fell only
+    # 2.3 dB from the strike's first 3 ms to 5-15 ms where VSCO's falls 4.7
+    # (now 4.0), and its strike reached under the bell (125-250 Hz 20-30 dB
+    # over). Still more tonal than the recording in 1-12 kHz: flatness 0.008
+    # against 0.017
+    slow_share = 0.0899705
+    slow_dbs = 28.8682
+    click_cal_db = 0.628543
+    click_dbs = 1327.67
+    click_stroke_slope = 0.159113
+    chiff_volume = 3.78837
+    chiff_width = 0.771172
+    chiff_bandwidth = 0.0557787
+    mode_jitter = 0.0
+    sustain_jitter = 0.556826
+    band_trim_db = ((177, -10.7), (354, -1.2), (707, -1.2), (1414, 3.1), (2828, 8.7), (5657, 4.1), (11314, -2.9))
+    initial_gain = 0.163921      # held at the old voice's level, -37.4 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    click_per_band = 24        # the strike dense and noisy; the bell's modes ring clean
+    CLICK_HZ0 = 400.0          # and nothing of it under the bell: 125-250 Hz read 20-30 dB over VSCO's
+
+
+class AgogoHighProperties(MeasuredStrokeProperties):
+    """GM 67: VSCO's agogo bell 2, the high bell, 1228 Hz."""
+    DRUM_MODES = ((0.9157, -29.8, 143), (0.9332, -28.7, 187), (0.9984, 0.0, 87),
+                  (1.0412, -24.9, 16), (1.0625, -25.6, 233), (1.1392, -28.9, 120),
+                  (2.3568, -27.0, 14), (3.2336, -30.0, 151), (3.3942, -29.4, 198),
+                  (3.5657, -22.2, 78), (3.6588, -10.5, 70), (4.0402, -1.2, 66),
+                  (4.1991, -19.5, 144), (4.7372, -29.7, 177), (4.9745, -11.0, 94),
+                  (5.2430, -9.0, 156), (5.4770, -29.9, 214), (5.7346, -27.3, 161),
+                  (6.0984, -27.9, 188), (6.3729, -23.8, 155), (7.0048, -18.5, 164),
+                  (7.1390, -22.4, 135), (7.2618, -26.0, 193), (8.3741, -19.9, 231),
+                  (9.5189, -29.8, 241))
+    # FITTED (examples/perc_fit.py agogo_hi, each mode's rate read off its own envelope): 14.7 -> 5.6 dB
+    slow_share = 0.0512184
+    slow_dbs = 41.9842
+    click_cal_db = 1.08772
+    click_dbs = 2564.15
+    click_stroke_slope = 0.229766
+    chiff_volume = 1.07756
+    chiff_width = 0.111785
+    chiff_bandwidth = 0.114102
+    mode_jitter = 0.169163
+    sustain_jitter = 0.0395423
+    band_trim_db = ((177, -11.4), (354, -10.2), (707, 1.5), (1414, 3.9), (2828, 5.3), (5657, 0.7), (11314, 10.2))
+    mode_scatter_db = 3.2      # takes of one stroke differ 5.5 dB; unscattered, ours 4.5
+    initial_gain = 0.089219      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+
+
+class AgogoLowProperties(MeasuredStrokeProperties):
+    """GM 68: VSCO's agogo bell 3, the low bell, 696 Hz -- 9.8 semitones under the high one."""
+    DRUM_MODES = ((0.9108, -25.9, 178), (1.0007, 0.0, 107), (2.6907, -12.9, 81),
+                  (3.1818, -26.7, 111), (4.0800, -23.9, 106), (5.0101, -19.1, 168),
+                  (5.4287, -17.0, 117), (6.5058, -27.7, 186), (6.9022, -19.3, 129),
+                  (8.5381, -22.2, 186), (9.4005, -27.7, 272))
+    # FITTED (examples/perc_fit.py agogo_lo, each mode's rate read off its own envelope): 23.3 -> 5.0 dB
+    slow_share = 0.082836
+    slow_dbs = 56.8516
+    click_cal_db = 1.05796
+    click_dbs = 190.86
+    click_stroke_slope = 0.264144
+    chiff_volume = 10.1584
+    chiff_width = 0.0239683
+    chiff_bandwidth = 0.0478191
+    mode_jitter = 0.745236
+    sustain_jitter = 0.0266345
+    band_trim_db = ((177, -19.0), (354, -16.5), (707, 0.3), (1414, -1.1), (2828, 7.6), (5657, 15.6), (11314, 13.2))
+    mode_scatter_db = 9.0      # takes of one stroke differ 6.6 dB; unscattered, ours 4.0
+    initial_gain = 0.005096      # held at the old voice's level, -36.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+
+
+class CongaMuteProperties(MeasuredStrokeProperties):
+    """GM 62: VSCO-2 CE's quinto, tapped -- the high conga muted. 209 Hz."""
+    DRUM_MODES = ((0.7663, -17.3, 49), (0.8242, -23.7, 31), (0.9981, 0.0, 87),
+                  (1.2074, -22.9, 95), (1.4424, -23.3, 36), (1.5551, -14.6, 39),
+                  (1.8320, -22.1, 110), (1.8900, -19.8, 33), (2.0606, -15.1, 34),
+                  (2.2280, -20.5, 69), (2.3343, -13.8, 153), (2.4470, -14.6, 42),
+                  (2.5500, -21.0, 56), (2.6434, -18.7, 123), (2.7689, -7.6, 62),
+                  (2.9975, -16.8, 72), (3.0748, -14.9, 84), (3.1456, -14.6, 61),
+                  (3.2454, -14.7, 194), (3.4547, -17.8, 111), (3.5610, -10.9, 267),
+                  (3.6672, -9.2, 211), (3.8829, -16.8, 159), (4.1051, -22.4, 87),
+                  (4.2274, -18.6, 67), (4.3111, -18.8, 125), (4.5752, -7.8, 126),
+                  (4.8070, -10.2, 185), (5.0452, -12.1, 80), (5.1837, -8.1, 121),
+                  (5.3028, -8.9, 131), (5.6538, -12.0, 92), (5.8308, -11.9, 170),
+                  (6.0755, -12.5, 177), (6.2880, -18.1, 73), (6.4522, -9.1, 229),
+                  (6.6390, -10.8, 167), (6.9448, -13.9, 157), (7.0833, -15.9, 130),
+                  (7.2572, -17.4, 122), (7.5598, -8.8, 180), (7.8721, -10.9, 228),
+                  (8.1844, -14.2, 183), (8.4420, -11.0, 160), (8.7833, -15.4, 230),
+                  (9.3628, -18.2, 89), (9.7621, -20.1, 282), (9.9713, -17.5, 154),
+                  (10.4285, -17.7, 171), (10.9437, -19.6, 163), (11.3912, -17.4, 174),
+                  (11.7003, -14.2, 172), (12.1028, -17.7, 279), (12.3410, -13.8, 220),
+                  (12.7467, -11.6, 242), (13.3005, -18.9, 150), (13.9348, -22.6, 168),
+                  (14.4048, -22.4, 127), (14.9039, -18.3, 125), (15.1743, -19.1, 247),
+                  (15.6734, -20.1, 188), (16.2401, -20.6, 171), (16.9162, -16.8, 244),
+                  (17.3830, -20.6, 101), (18.1944, -18.9, 129), (19.0766, -16.7, 224))
+    # FITTED (examples/perc_fit.py conga_mute; modes' rates off their own envelopes, the
+    # head clean and the slap's partials the noise -- see DRUM_PARAMS): 26.8 -> 6.1 dB
+    slow_share = 0.127961
+    slow_dbs = 14.4664
+    click_cal_db = 0.516324
+    click_dbs = 90.8509
+    click_stroke_slope = 0.110745
+    chiff_volume = 3.43515
+    chiff_width = 0.0370003
+    chiff_bandwidth = 0.152535
+    mode_jitter = 0.0
+    sustain_jitter = 0.229568
+    band_trim_db = ((177, -7.4), (354, -7.0), (707, -1.8), (1414, 1.5), (2828, 3.0), (5657, 10.0), (11314, 1.6))
+    mode_scatter_db = 6.0      # takes of one stroke differ 7.2 dB; unscattered, ours 6.1
+    initial_gain = 0.039599      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+
+
+class CongaOpenProperties(MeasuredStrokeProperties):
+    """GM 63: VSCO-2 CE's quinto, the highest conga, an open tone at three dynamics. 216 Hz.
+
+    One peak is left out: 200 Hz, 16 Hz under the fundamental, within 3 dB
+    of it in the first 45 ms and 20 under by 125 ms -- the head's own glide
+    smeared into a second peak as likely as a mode, and as two steady modes
+    the pair beat at 16 Hz, a dip at 30-60 ms the recording does not have."""
+    DRUM_MODES = ((0.7103, -32.9, 82), (0.7913, -30.8, 74), (0.8411, -29.2, 106),
+                  (1.0031, 0.0, 80), (1.1464, -34.9, 63),
+                  (1.6106, -14.7, 80), (1.6761, -25.1, 83), (1.7602, -39.6, 127),
+                  (2.2462, -34.2, 115), (2.3988, -25.3, 236), (2.5608, -37.9, 208),
+                  (2.6979, -34.5, 107))
+    # FITTED (examples/perc_fit.py conga_open; modes' rates off their own envelopes, the
+    # head clean and the slap's partials the noise -- see DRUM_PARAMS): 20.8 -> 6.1 dB
+    slow_share = 0.0808754
+    slow_dbs = 27.7106
+    click_cal_db = 0.571137
+    click_dbs = 88.2205
+    click_stroke_slope = 0.148007
+    chiff_volume = 1.33158
+    chiff_width = 0.0289514
+    chiff_bandwidth = 0.237383
+    mode_jitter = 0.0
+    sustain_jitter = 0.183586
+    band_trim_db = ((177, 28.0), (354, 17.1), (707, 3.2), (1414, -7.2), (2828, -11.9), (5657, -12.5), (11314, -16.7))
+    mode_scatter_db = 2.7      # takes of one stroke differ 5.4 dB; unscattered, ours 4.7
+    initial_gain = 0.009428      # held at the old voice's level, -36.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+
+
+class CongaLowProperties(MeasuredStrokeProperties):
+    """GM 64: VSCO-2 CE's conga, the middle drum of the three, open, at three dynamics: 164 Hz, 4.8 semitones under the quinto (its tumba, at 138, is the lower one GM has no note for)."""
+    DRUM_MODES = ((0.7960, -24.1, 40), (0.8699, -26.6, 115), (0.9971, 0.0, 57),
+                  (1.1243, -22.7, 128), (1.2145, -25.2, 80), (1.3622, -29.0, 185),
+                  (1.5756, -26.1, 83), (1.7849, -32.2, 85), (1.9203, -33.9, 105),
+                  (2.1090, -20.4, 94), (2.2157, -18.4, 106), (2.4455, -27.2, 118),
+                  (2.8804, -39.9, 186), (2.9666, -39.7, 279), (3.1512, -33.4, 237),
+                  (3.3605, -39.6, 127), (3.4795, -30.1, 196), (4.1893, -38.8, 178))
+    # FITTED (examples/perc_fit.py conga_low; modes' rates off their own envelopes, the
+    # head clean and the slap's partials the noise -- see DRUM_PARAMS): 18.8 -> 6.3 dB
+    slow_share = 0.0058028
+    slow_dbs = 133.571
+    click_cal_db = 10.4686
+    click_dbs = 91.7949
+    click_stroke_slope = 0.708129
+    chiff_volume = 0.171165
+    chiff_width = 0.0144972
+    chiff_bandwidth = 0.239463
+    mode_jitter = 0.0
+    sustain_jitter = 0.477114
+    band_trim_db = ((177, 32.8), (354, 13.7), (707, 2.1), (1414, -5.9), (2828, -11.4), (5657, -13.8), (11314, -17.5))
+    mode_scatter_db = 3.5      # takes of one stroke differ 6.0 dB; unscattered, ours 4.9
+    initial_gain = 0.001691      # held at the old voice's level, -36.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+
+
+class BongoHighProperties(MeasuredStrokeProperties):
+    """GM 60: VSCO's high bongo, two strokes. 161 Hz -- open tones, lower than a bongo's slap."""
+    DRUM_MODES = ((0.8986, -20.7, 96), (1.0031, 0.0, 127), (1.1577, -23.5, 130),
+                  (1.2455, -21.1, 110), (1.6259, -24.5, 92), (1.8139, -23.8, 108),
+                  (1.9435, -24.6, 107), (2.1985, -18.2, 156), (2.3447, -19.7, 220),
+                  (2.4242, -21.0, 235), (2.8338, -24.5, 141))
+    # FITTED (examples/perc_fit.py bongo_hi; modes' rates off their own envelopes, the
+    # head clean and the slap's partials the noise -- see DRUM_PARAMS): 17.0 -> 6.0 dB
+    slow_share = 0.0507604
+    slow_dbs = 68.7396
+    click_cal_db = 0.821998
+    click_dbs = 83.2483
+    click_stroke_slope = 0.224034
+    chiff_volume = 1.75291
+    chiff_width = 0.0262713
+    chiff_bandwidth = 0.0845262
+    mode_jitter = 0.0
+    sustain_jitter = 0.34188
+    band_trim_db = ((177, 21.4), (354, 13.4), (707, 5.2), (1414, -5.0), (2828, -8.2), (5657, -9.7), (11314, -17.0))
+    mode_scatter_db = 5.0      # takes of one stroke differ 5.5 dB; unscattered, ours 4.5
+    initial_gain = 0.010612      # held at the old voice's level, -40.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+
+
+class BongoLowProperties(MeasuredStrokeProperties):
+    """GM 61: VSCO's low bongo, two strokes. 142 Hz."""
+    DRUM_MODES = ((1.0046, 0.0, 91), (1.1657, -22.0, 88), (1.2984, -22.6, 164),
+                  (1.4169, -13.1, 114), (1.6017, -16.6, 135), (1.8339, -12.4, 106),
+                  (2.0424, -7.4, 127), (2.1799, -15.5, 171), (2.2841, -13.3, 168),
+                  (2.4026, -13.9, 96), (2.5211, -14.8, 124), (2.6632, -17.9, 214),
+                  (2.8006, -16.9, 97), (2.9333, -20.3, 120), (3.1940, -19.5, 177),
+                  (3.3503, -22.7, 133), (3.5209, -23.5, 121), (3.9190, -23.7, 206),
+                  (4.0564, -24.3, 173), (4.7909, -24.5, 198), (4.9379, -24.8, 251))
+    # FITTED (examples/perc_fit.py bongo_lo; modes' rates off their own envelopes, the
+    # head clean and the slap's partials the noise -- see DRUM_PARAMS): 12.5 -> 5.7 dB
+    slow_share = 0.0550124
+    slow_dbs = 28.1246
+    click_cal_db = 0.998591
+    click_dbs = 122.818
+    click_stroke_slope = 0.323804
+    chiff_volume = 1.45719
+    chiff_width = 0.0388661
+    chiff_bandwidth = 0.131826
+    mode_jitter = 0.0
+    sustain_jitter = 0.323591
+    band_trim_db = ((177, 20.5), (354, 16.8), (707, 4.1), (1414, -3.5), (2828, -8.7), (5657, -11.2), (11314, -18.0))
+    mode_scatter_db = 7.0      # takes of one stroke differ 6.0 dB; unscattered, ours 4.5
+    initial_gain = 0.009961      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+
+
 class ElectricSnareProperties(SnareDrumProperties):
     """Note 40. A drum machine's snare, which is not a snare drum.
 
@@ -11421,6 +11712,32 @@ class RattleProperties(NoisyPercussionMixin, PercussionProperties):
                    0.8109, 0.7775, 0.7433, 0.7089, 0.6747, 0.6411, 0.6085, 0.5772,
                    0.5474, 0.5194, 0.4933, 0.4691)
     max_harmonic = 44
+
+
+class MaracasProperties(RattleProperties):
+    """GM 70: one impact of the maracas' seeds, fitted (examples/perc_fit.py
+    maracas) to VSCO's five single strokes, with the burst's own numbers in
+    PERCUSSION_RATTLE and PERCUSSION_RING beside it: 13.8 -> 3.2 dB.
+
+    The colour was 20-35 dB too heavy under 1 kHz, where the seeds on the
+    gourd sit at 2-8 kHz. And the BURST was front-loaded: VSCO's strokes hold
+    their level for ~120 ms and then drop, where the rattle's impacts fell to
+    a quarter across it -- so they fall to 0.75 now (fall 0.25), 270 a
+    second, each ringing 7.7 ms. And then it SETTLES (percussion_map.
+    _settling_rattle): 0.32 s of thinning, falling impacts, 39 dB down, at
+    random times -- the first fit stopped dead (Ben: "suddenly dying out").
+
+    LESS NOISE THAN IT HAD. Recorded, the strokes are not white -- 0.185
+    flatness over 1-12 kHz, the gourd's resonances standing out at 3-5.5 kHz
+    -- and the fit took the wash out to get there. What keeps it from a
+    pitch (Ben, once: "too much tonality") is the burst's own scatter: each
+    impact at its own pitch scale."""
+    decay_db = 1.95003
+    harmonic_decay_db = 14.872
+    chiff_volume = 0.000965759
+    sustain_jitter = 0.00134683
+    band_trim_db = ((178, -9.3), (224, -11.4), (283, 8.1), (356, -25.4), (449, -29.3), (566, -22.1), (713, -22.5), (898, -13.1), (1131, -18.0), (1425, -17.5), (1796, -19.3), (2263, -20.8), (2851, 5.2), (3592, 16.6), (4525, 11.9), (5702, 20.6), (7184, 18.9), (9051, 19.7), (11404, 17.5), (14368, 7.8))
+    initial_gain = 0.056578      # held at the old maracas' level, -30.1 dB (velocity 100, a 1.5 s note, its loudest 150 ms -- read as it was)
 
 
 class CabasaProperties(RattleProperties):

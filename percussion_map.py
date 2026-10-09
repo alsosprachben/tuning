@@ -39,9 +39,18 @@ from tonelib import (
     CrashRideProperties,
     SideStickProperties,
     TambourineProperties,
+    CowbellStrokeProperties,
+    AgogoHighProperties,
+    AgogoLowProperties,
+    CongaMuteProperties,
+    CongaOpenProperties,
+    CongaLowProperties,
+    BongoHighProperties,
+    BongoLowProperties,
     HandClapProperties,
     WoodPercussionProperties,
     RattleProperties,
+    MaracasProperties,
     CabasaProperties,
     SambaWhistleProperties,
     ClavesProperties,
@@ -117,7 +126,7 @@ PERCUSSION = {
     53: ("Ride Bell",         R, 147.5),
     54: ("Tambourine",         TambourineProperties, 1000.0),
     55: ("Splash Cymbal",      SplashCymbalProperties, 143.3),
-    56: ("Cowbell",            CowbellProperties, 540.0),
+    56: ("Cowbell",            CowbellStrokeProperties, 466.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
     58: ("Vibraslap",          N, 300.0),
     # GM wants two RIDES here, not two articulations of one: 51 and 59 are
@@ -125,17 +134,17 @@ PERCUSSION = {
     # ride, so this is its 20" plate -- the biggest and lowest in the set -- and
     # so a crash-ride rather than a second dark ride. See CrashRideProperties.
     59: ("Ride Cymbal 2",     CrashRideProperties, 151.7),
-    60: ("Hi Bongo",           BO, 260.0),
-    61: ("Low Bongo",          BO, 200.0),
-    62: ("Mute Hi Conga",      CO, 230.0),
-    63: ("Open Hi Conga",      CO, 210.0),
-    64: ("Low Conga",          CO, 160.0),
+    60: ("Hi Bongo",           BongoHighProperties, 161.0),
+    61: ("Low Bongo",          BongoLowProperties, 142.0),
+    62: ("Mute Hi Conga",      CongaMuteProperties, 209.0),
+    63: ("Open Hi Conga",      CongaOpenProperties, 216.0),
+    64: ("Low Conga",          CongaLowProperties, 164.0),
     65: ("High Timbale",       TI, 270.0),
     66: ("Low Timbale",        TI, 220.0),
-    67: ("High Agogo",         AgogoProperties, 700.0),
-    68: ("Low Agogo",          AgogoProperties, 560.0),
+    67: ("High Agogo",         AgogoHighProperties, 1228.0),
+    68: ("Low Agogo",          AgogoLowProperties, 696.0),
     69: ("Cabasa",             CabasaProperties, 482.5),
-    70: ("Maracas",            RattleProperties, 386.0),
+    70: ("Maracas",            MaracasProperties, 386.0),
     # ROLAND NAMES THE PITCH, not just the length. GM calls 71 and 72 "Short
     # Whistle" and "Long Whistle" and says nothing more, so the reading everyone
     # implements is the SC-55's -- the same argument SlowBowedStringProperties
@@ -418,9 +427,11 @@ PERCUSSION_RING = {
     49: 0.61, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 0.34, 55: 0.41,
-    56: 0.40, 57: 1.69, 58: 0.020, 59: 0.48, 60: 0.30, 61: 0.35, 62: 0.20,
-    63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.010,
-    70: 0.012, 71: 0.280, 72: 0.850,
+    # (56, 60-64, 67, 68 carry their measured rings in their classes:
+    #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
+    57: 1.69, 58: 0.020, 59: 0.48,
+    65: 0.30, 66: 0.35, 69: 0.010,
+    70: 0.0088, 71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
     # fairly closed. Measured on the Iowa guiro, the envelope after the last
     # ridge falls 10 dB in 3-5 ms and 20 dB in 15-21 ms, against a woodblock's
@@ -651,16 +662,66 @@ PERCUSSION_RASP = {
 # is regular and speeds up as the hand does. A rattle's contents are loose: the
 # gaps grow as the burst dies, and the impacts land where they land.
 #
-# (span seconds, impacts). PERCUSSION_RING then gives the ring of ONE impact,
+# (span seconds, impacts[, fall[, settle s, settle dB[, accent s, accent dB]]]). PERCUSSION_RING then gives the ring of ONE impact,
 # exactly as it gives the ring of one guiro ridge.
 #
 # NO REFERENCE. Iowa has no rattle of any kind, so the counts and spans below are
 # physics and judgement, not measurement -- the same footing as the membranes.
 # What is not judgement is the STRUCTURE: a burst of impacts rather than a single
 # pitched stroke, which is the part that was wrong.
+def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0, accent_db=0.0):
+    """A shake that SETTLES: (start, end, level, pitch) impacts.
+
+    VSCO's maraca strokes peak and then die away smoothly over 0.25-0.4 s,
+    30-40 dB, the seeds settling, with a bump where a few hit again. The
+    burst below stopped dead when its last impact rang out -- 60 dB in 20
+    ms (Ben: "It seems to be suddenly dying out ... need to diminish in volume
+    as it shakes"). So: the shake itself, n impacts over span falling by
+    `fall` as before, then the settle -- impacts thinning (their rate halving
+    every third of settle_s) and falling settle_db over settle_s.
+
+    AND AT RANDOM. The burst's timing and pitch came from a hash of the
+    impact's index, so every maraca note was the same pattern of clicks at
+    near-even spacing: a buzz, and the same buzz each time (the tambourine's
+    lesson, inside one note). Here every impact time is a Poisson draw and
+    every impact its own level (+-3 dB) and pitch scale, seeded by the note
+    and its time, so the render is still deterministic.
+
+    THE HAND STOPS. A recorded stroke opens with a spike -- the seeds thrown
+    against the gourd together as the hand reverses -- and the body follows
+    5-10 dB under it; a uniform burst had no such contrast (Ben, comparing:
+    "the timing difference"). accent_s is how long that first throw lasts,
+    accent_db how far the rest of the shake sits under it.
+    """
+    import math
+    import random
+    rng = random.Random(note * 1000003 + int(round(on * 1e4)))
+    rate0 = n / span
+    tau = settle_s / 3.0 / math.log(2.0)
+    out = []
+    t = 0.0
+    while True:
+        r = rate0 if t < span else rate0 * math.exp(-(t - span) / tau)
+        t += rng.expovariate(r)
+        if t >= span + settle_s:
+            break
+        if t < span:
+            level = (1.0 - fall * t / span) ** 1.4
+        else:
+            level = (1.0 - fall) ** 1.4 * 10.0 ** (-settle_db * (t - span) / settle_s / 20.0)
+        if t >= accent_s:
+            level *= 10.0 ** (-accent_db / 20.0)
+        level *= 10.0 ** (rng.uniform(-3.0, 3.0) / 20.0)
+        pitch = 2.0 ** (rng.uniform(-0.31, 0.31))
+        out.append((on + t, on + t + 0.9 / r, level, pitch))
+    return out or [(on, on + span, 1.0)]
+
+
 PERCUSSION_RATTLE = {
     69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
-    70: (0.10, 18),      # maracas: seeds in a gourd, a short dry burst
+    # maracas: seeds in a gourd, VSCO's (examples/perc_fit.py) -- the shake, then its
+    # settle (seconds, dB): see _settling_rattle
+    70: (0.10, 27, 0.21, 0.26, 44.1, 0.014, 3.8),
     # A VIBRASLAP IS ALL RATTLE. A wooden ball on a rod strikes a box of loose
     # metal pins and they clatter for over a second, thinning as they settle --
     # the longest and densest burst of the four, and it was a single hit.
@@ -734,7 +795,10 @@ def rasp_strokes(note, on, off, rng=None):
 
     rattle = PERCUSSION_RATTLE.get(note)
     if rattle is not None:
-        span, n = rattle
+        span, n = rattle[:2]
+        # how far the impacts fall across the burst: 0.75 unless the entry
+        # says (the maracas, measured, hold up longer -- see their entry)
+        fall = rattle[2] if len(rattle) > 2 else 0.75
         # The RATE is the instrument and the duration is the gesture -- the same
         # argument the guiro table makes about carved ridges. A longer shake is
         # more impacts at the same rate, not the same few spread thinner.
@@ -758,6 +822,8 @@ def rasp_strokes(note, on, off, rng=None):
             span = want
         if n < 2:
             return [(on, on + span, 1.0)]
+        if len(rattle) > 3:
+            return _settling_rattle(note, on, span, n, fall, *rattle[3:])
         # Gaps OPEN as the burst dies -- the contents are loose and settling,
         # which is the opposite of the guiro's carved ridges closing up as the
         # hand accelerates. Level falls with them.
@@ -768,7 +834,7 @@ def rasp_strokes(note, on, off, rng=None):
         for k in range(n):
             frac = k / float(n - 1)
             jitter = ((k * 2654435761) % 1000 / 1000.0 - 0.5) * 0.55
-            level = (1.0 - 0.75 * frac) ** 1.4
+            level = (1.0 - fall * frac) ** 1.4
             step = w[k] * scale
             # NO TWO IMPACTS ALIKE. Every seed struck the same note before, forty
             # times a shake, and a repeated identical spectrum is a pitch however

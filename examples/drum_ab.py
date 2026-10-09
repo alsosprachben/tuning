@@ -23,6 +23,8 @@ examples/pizz_ab.py's recipe:
              clave at mf and f, then off-beats beside a snare backbeat
   tambourine the tambourine alone at six strokes, on 2 and 4, in eighths, then
              a written-out roll
+  latin      the hand percussion (56, 60-64, 67, 68, 70) alone, three strokes
+             each, then a son groove with all of them
 
 Default outdir ~/Downloads/drums.
 """
@@ -269,6 +271,48 @@ def tambourine(dst):
     return _save(dst, ev)
 
 
+def latin(dst):
+    """The hand percussion alone -- cowbell, agogo high and low, the three
+    congas (muted, open, low), the two bongos, maracas -- each at three
+    strokes; then two bars of a son groove, four times over: campana on the
+    beat, agogo, a conga tumbao (muted on 2, open tones on 4 and its and),
+    bongo martillo, maracas in eighths, kick on 1 and 3."""
+    ev = []
+    q = 480
+
+    def hit(tk, n, v, d=60):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + d, "note_off", n, 0))
+    now = 0
+    for n in (56, 67, 68, 62, 63, 64, 60, 61, 70):
+        for v in (50, 90, 120):
+            hit(now, n, v, 200 if n == 70 else 60)
+            now += q
+        now += q
+    for rep in range(4):
+        for bar in range(2):
+            for b in range(4):
+                tk = now + b * q
+                hit(tk, 56, 100 if b == 0 else 85)
+                if b in (0, 2):
+                    hit(tk, 36, 80)
+                hit(tk, 70, 75, 200)
+                hit(tk + q // 2, 70, 60, 200)
+                hit(tk, 60, 95 if b == 0 else 70)
+                hit(tk + q // 2, 61 if b % 2 else 60, 65)
+                if b == 1:
+                    hit(tk, 62, 85)
+                if b == 3:
+                    hit(tk, 63, 100)
+                    hit(tk + q // 2, 64 if bar else 63, 95)
+                if (bar * 4 + b) % 3 == 0:
+                    hit(tk + q // 2, 67, 80)
+                if (bar * 4 + b) % 3 == 1:
+                    hit(tk, 68, 80)
+            now += 4 * q
+    return _save(dst, ev)
+
+
 def melodic_tom(dst):
     """GM 117 on a melodic channel: single strokes down the range, left to
     ring (the floor tom under G2, the rack tom from G2 up), a fill
@@ -359,7 +403,8 @@ def main(argv):
                 "snare": snare(os.path.join(d, "snare.mid")),
                 "melodic_tom": melodic_tom(os.path.join(d, "melodic_tom.mid")),
                 "sidestick": sidestick(os.path.join(d, "sidestick.mid")),
-                "tambourine": tambourine(os.path.join(d, "tambourine.mid"))}
+                "tambourine": tambourine(os.path.join(d, "tambourine.mid")),
+                "latin": latin(os.path.join(d, "latin.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p
