@@ -168,7 +168,7 @@ RATED = {
  114:(4,"built from the instrument's design, then corrected against Freesound 742254"),
  115:(4,"Iowa woodblocks"),
  116:(2,"the membrane drum class"),
- 117:(2,"the tom class"),
+ 117:(4,"DRSKit's two toms, measured, by register: the floor tom under G2, the rack tom from G2 up. A melodic tom part is a set of drums, not one drum retuned"),
  118:(4,"a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves)"),
  119:(2,"the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere"),
  120:(3,"its own class -- slide, squeak and position shift; reworked against Ben's ear"),

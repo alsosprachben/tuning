@@ -95,6 +95,7 @@ from tonelib import (
     AgogoProperties,
     MembraneDrumProperties,
     TomTomProperties,
+    FloorTomProperties,
     ApplauseProperties,
     SteelPanProperties,
     SitarProperties,
@@ -686,6 +687,13 @@ SOLO_SPLIT = {
     73: ((55, BassFluteProperties),      # Flute, bottom B3 (C4 without a B foot)
          (59, AltoFluteProperties),
          (128, OpenPipeProperties)),
+    # --- a melodic tom part is a set of toms, and under ~100 Hz the drum is a
+    # FLOOR tom: DRSKit's sits at 81 Hz and rings ~2.5 s on its own modes (1 :
+    # 1.631 : 2.012 ...), its rack tom at 122 Hz and under one second. Split
+    # at G2, 98 Hz, the two drums' recorded pitches' geometric mean. There is
+    # no smaller tom to measure, so the rack tom carries the rest.
+    117: ((43, FloorTomProperties),
+          (128, TomTomProperties)),
 }
 
 

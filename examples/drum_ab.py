@@ -17,6 +17,8 @@ examples/pizz_ab.py's recipe:
              beat at mf and ff
   snare      the snare alone at six strokes, then a beat with ghost notes and a
              roll, at mf and ff
+  melodic_tom  GM 117: strokes down the range, a fill across the floor/rack
+             split, a tune over a floor-tom pedal
 
 Default outdir ~/Downloads/drums.
 """
@@ -178,6 +180,46 @@ def snare(dst):
     return dst
 
 
+def melodic_tom(dst):
+    """GM 117 on a melodic channel: single strokes down the range, left to
+    ring (the floor tom under G2, the rack tom from G2 up), a fill
+    descending across the split, and a tune of toms in thirds over a
+    floor-tom pedal."""
+    m = mido.MidiFile(ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    t.append(mido.Message("program_change", channel=0, program=117, time=0))
+    ev = []
+    now = 0
+    q = 480
+
+    def hit(tk, n, v, d=120):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + d, "note_off", n, 0))
+    for n in (67, 60, 55, 48, 43, 40, 36, 31):
+        hit(now, n, 100)
+        now += 3 * q
+    for v in (80, 115):
+        for i, n in enumerate((67, 64, 60, 57, 55, 52, 48, 45, 43, 41, 40, 38, 36, 35, 33, 31)):
+            hit(now + i * q // 4, n, v if i % 4 == 0 else int(v * 0.85))
+        now += 4 * q + 2 * q
+    tune = (60, 64, 67, 64, 62, 65, 69, 65, 64, 67, 72, 67, 65, 62, 60, 55)
+    for i, n in enumerate(tune):
+        hit(now + i * q // 2, n, 90 if i % 2 == 0 else 75)
+        if i % 4 == 0:
+            hit(now + i * q // 2, 36, 95)
+    now += 8 * q
+    hit(now, 31, 110)
+    ev.sort(key=lambda e: (e[0], e[1] == "note_on"))
+    last = 0
+    for tk, kind, n, v in ev:
+        t.append(mido.Message(kind, channel=0, note=n, velocity=v, time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
 def render(mid, wav, which, tree):
     env = dict(os.environ, TUNING_ROOM="hall", TUNING_MASTER_DB="-14")
     dry = wav[:-4] + "_dry.wav"
@@ -225,7 +267,8 @@ def main(argv):
     try:
         srcs = {"groove": groove(os.path.join(d, "groove.mid")),
                 "crashes": crashes(os.path.join(d, "crashes.mid")),
-                "snare": snare(os.path.join(d, "snare.mid"))}
+                "snare": snare(os.path.join(d, "snare.mid")),
+                "melodic_tom": melodic_tom(os.path.join(d, "melodic_tom.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p

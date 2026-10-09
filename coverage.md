@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 38 | 30% |
+| 2 specific, theory | 37 | 29% |
 | 3 specific, theory + ear | 26 | 20% |
-| 4 specific, reference audio | 64 | 50% |
+| 4 specific, reference audio | 65 | 51% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -346,7 +346,7 @@ plays Standard, as does any program that is not a set.
 | 114 | Steel Drums | `SteelPan` | **4** | built from the instrument's design, then corrected against Freesound 742254 |
 | 115 | Woodblock | `WoodPercussion` | **4** | Iowa woodblocks |
 | 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |
-| 117 | Melodic Tom | `TomTom` | **2** | the tom class |
+| 117 | Melodic Tom | `FloorTom/TomTom by register` | **4** | DRSKit's two toms, measured, by register: the floor tom under G2, the rack tom from G2 up. A melodic tom part is a set of drums, not one drum retuned |
 | 118 | Synth Drum | `MoogSynthDrum` | **4** | a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves) |
 | 119 | Reverse Cymbal | `ReverseCymbal` | **2** | the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere |
 
