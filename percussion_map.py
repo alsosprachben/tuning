@@ -51,6 +51,7 @@ from tonelib import (
     WoodPercussionProperties,
     RattleProperties,
     MaracasProperties,
+    VibraslapProperties,
     CabasaProperties,
     SambaWhistleProperties,
     ClavesProperties,
@@ -128,7 +129,7 @@ PERCUSSION = {
     55: ("Splash Cymbal",      SplashCymbalProperties, 143.3),
     56: ("Cowbell",            CowbellStrokeProperties, 466.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
-    58: ("Vibraslap",          N, 300.0),
+    58: ("Vibraslap",          VibraslapProperties, 300.0),
     # GM wants two RIDES here, not two articulations of one: 51 and 59 are
     # different plates and 53 is the bell of whichever carries it. Iowa has one
     # ride, so this is its 20" plate -- the biggest and lowest in the set -- and
@@ -429,7 +430,7 @@ PERCUSSION_RING = {
     53: 0.34, 55: 0.41,
     # (56, 60-64, 67, 68 carry their measured rings in their classes:
     #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
-    57: 1.69, 58: 0.020, 59: 0.48,
+    57: 1.69, 58: 0.098, 59: 0.48,
     65: 0.30, 66: 0.35, 69: 0.010,
     70: 0.0094, 71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
@@ -534,7 +535,6 @@ PERCUSSION_LEVEL = {
     # and they agree on the kick to 2.5 dB (examples/kit_levels.py). Ben, on
     # a bossa nova: "the bass drum seems rather loud compared to the rest".
     35: 0.7964, 36: 0.7964,      # bass drum
-    58: 12.1336,        # vibraslap +21.9 dB: the burst spreads the energy
     84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
     37: 1.0000,   # held against the wash-floor fix
     55: 0.5533,   # held against the wash-floor fix
@@ -725,15 +725,45 @@ def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0,
     return out or [(on, on + span, 1.0)]
 
 
+# A VIBRASLAP IS PERIODIC. VSCO's four takes (vibraslap1-4) clatter at a steady
+# 55 Hz envelope -- the rod swings at ~27 Hz and the pins strike its box on
+# each half -- for 2.4-3.5 s, falling only 7-9 dB over the first 1.5, and the
+# length is the instrument's, not the note's: it is struck once and left. So
+# not a rattle burst scaled to the gesture, but a train of impacts at the rod's
+# rate: (rate Hz, seconds, dB fallen over them, timing jitter as a fraction of
+# a period, level scatter dB, and how far the first impact -- the ball's
+# strike that sets it going -- stands above). Fitted (examples/perc_fit.py
+# vibraslap, 31.3 -> 2.6 dB): each strike rings 0.1 s (PERCUSSION_RING), so
+# they overlap into a steady clatter, as smooth as the takes (+-0.35 dB); the
+# early impacts' ring carries the attack, and the first stands only 0.55 over.
+PERCUSSION_TRAIN = {
+    58: (55.0, 2.58, 10.7, 0.08, 0.35, 0.55),
+}
+
+
+def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0):
+    """(start, end, level, pitch) for a PERCUSSION_TRAIN note: impacts at a
+    steady rate, each its own time (within jit of a period), level and
+    pitch, seeded by the note and its time."""
+    import random
+    rng = random.Random(note * 1000003 + int(round(on * 1e4)))
+    out = []
+    n = int(rate * secs)
+    for k in range(n):
+        t = (k + rng.uniform(-jit, jit)) / rate
+        level = 10.0 ** ((-fall_db * t / secs + rng.uniform(-scatter_db, scatter_db)
+                          + (strike_db if k == 0 else 0.0)) / 20.0)
+        out.append((on + max(0.0, t), on + max(0.0, t) + 0.9 / rate, level, 2.0 ** rng.uniform(-0.1, 0.1)))
+    return out
+
+
 PERCUSSION_RATTLE = {
     69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
     # maracas: seeds in a gourd, VSCO's (examples/perc_fit.py) -- the shake, then its
     # settle (seconds, dB): see _settling_rattle
     70: (0.10, 40, 0.19, 0.28, 41.9, 0.0, 0.0, 0.065),
-    # A VIBRASLAP IS ALL RATTLE. A wooden ball on a rod strikes a box of loose
-    # metal pins and they clatter for over a second, thinning as they settle --
-    # the longest and densest burst of the four, and it was a single hit.
-    58: (1.10, 80),      # vibraslap: pins in a resonator box, ~73/s
+    # (58, the vibraslap, was here: 80 impacts over 1.1 s, a guess. Measured,
+    #  it is a periodic train -- see PERCUSSION_TRAIN)
 }
 
 
@@ -800,6 +830,10 @@ def rasp_strokes(note, on, off, rng=None):
             ratio = 2.0 ** (semis * frac / 12.0)
             out.append((max(on, t + jitter), t + span / n, level, ratio))
         return out
+
+    train = PERCUSSION_TRAIN.get(note)
+    if train is not None:
+        return _impact_train(note, on, *train)
 
     rattle = PERCUSSION_RATTLE.get(note)
     if rattle is not None:

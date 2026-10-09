@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 37 | 29% |
+| 2 specific, theory | 36 | 28% |
 | 3 specific, theory + ear | 26 | 20% |
-| 4 specific, reference audio | 65 | 51% |
+| 4 specific, reference audio | 66 | 52% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -54,9 +54,9 @@ the crashes hit hard.
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 10 | 20% |
+| 2 specific, theory | 9 | 18% |
 | 3 specific, theory + ear | 3 | 6% |
-| 4 specific, reference audio | 38 | 75% |
+| 4 specific, reference audio | 39 | 76% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -83,7 +83,7 @@ the crashes hit hard.
 | 55 | Splash Cymbal | `SplashCymbal` | **4** | Iowa splash |
 | 56 | Cowbell | `CowbellStroke` | **4** | VSCO-2 CE (CC0) cowbell, fitted: 28 measured modes each at its own rate, clean; the strike dense and noisy from 400 Hz, its attack contrast matched. Ben: better than the first fit, which was jittery and modal |
 | 57 | Crash Cymbal 2 | `CrashCymbal2` | **4** | Iowa 18" suspended crash for the modes, refitted to DRSKit's right crash hit hard (12 shank strokes), as 49. Ben, by ear: sounds good |
-| 58 | Vibraslap | `NoiseDrum` | **2** | generic noise body with its own rattle |
+| 58 | Vibraslap | `Vibraslap` | **4** | VSCO-2 CE (CC0) vibraslap: the beads in the box a periodic train at 55 Hz falling over 2.6 s, each impact soft-onset, the colour matched in third octaves. Ben: a lot better than expected |
 | 59 | Ride Cymbal 2 | `CrashRide` | **4** | GM wants two rides and Iowa has one; this is that measurement on a larger plate |
 | 60 | Hi Bongo | `BongoHigh` | **4** | VSCO-2 CE (CC0) high bongo (161 Hz), fitted: measured modes ringing clean, the slap a dense noisy strike, strokes varying as the takes do |
 | 61 | Low Bongo | `BongoLow` | **4** | as 60, the low bongo (142 Hz) |
@@ -342,7 +342,7 @@ plays Standard, as does any program that is not a set.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 112 | Tinkle Bell | `Crotale` | **4** | Iowa crotales, 25 pitches |
-| 113 | Agogo | `Agogo` | **2** | its own class, theory |
+| 113 | Agogo | `MelodicAgogoLow/MelodicAgogoHigh by register` | **4** | VSCO-2 CE (CC0) agogo bells 2 and 3, played as a melodic instrument: the high bell above note 82, the low below, each fitted stroke carrying its band colour with the note. Ben: sounds good |
 | 114 | Steel Drums | `SteelPan` | **4** | built from the instrument's design, then corrected against Freesound 742254 |
 | 115 | Woodblock | `WoodPercussion` | **4** | Iowa woodblocks |
 | 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |

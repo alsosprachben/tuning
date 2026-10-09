@@ -9207,7 +9207,17 @@ class MeasuredStrokeProperties(NoisyPercussionMixin, KitDrumProperties):
         return self.mode_jitter if harmonic <= len(self.DRUM_MODES) else self.sustain_jitter
 
     def stroke_scatter_db(self, harmonic):
-        return self.mode_scatter_db if harmonic <= len(self.DRUM_MODES) else 0.0
+        # NOT THE STRONGEST MODES. They set the stroke's level, and VSCO's takes
+        # hold their level (the low agogo's five within 3 dB) while their weaker
+        # modes come and go; scattering its one dominant mode swung the low
+        # bell's strokes 13 dB
+        g = self.DRUM_MODES[harmonic - 1][1] if harmonic <= len(self.DRUM_MODES) else 0.0
+        if harmonic > len(self.DRUM_MODES) or g > -6.0:
+            return 0.0
+        # ...and none scattered past them: a 2.5-sigma draw stays under the
+        # strongest mode. The low agogo's second mode, 12.9 dB down, drawn at
+        # 9 dB, came out OVER its fundamental one stroke in eight
+        return min(self.mode_scatter_db, -g / 2.5)
 
     def harmonic_decay(self, harmonic):
         if 1 <= harmonic <= len(self.DRUM_MODES):
@@ -9275,7 +9285,7 @@ class AgogoHighProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.0395423
     band_trim_db = ((177, -11.4), (354, -10.2), (707, 1.5), (1414, 3.9), (2828, 5.3), (5657, 0.7), (11314, 10.2))
     mode_scatter_db = 3.2      # takes of one stroke differ 5.5 dB; unscattered, ours 4.5
-    initial_gain = 0.089219      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.098502      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
 
 
 class AgogoLowProperties(MeasuredStrokeProperties):
@@ -9297,7 +9307,70 @@ class AgogoLowProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.0266345
     band_trim_db = ((177, -19.0), (354, -16.5), (707, 0.3), (1414, -1.1), (2828, 7.6), (5657, 15.6), (11314, 13.2))
     mode_scatter_db = 9.0      # takes of one stroke differ 6.6 dB; unscattered, ours 4.0
-    initial_gain = 0.005096      # held at the old voice's level, -36.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.010307      # held at the old voice's level, -36.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+
+
+class MelodicAgogoHighProperties(AgogoHighProperties):
+    """GM program 113 above A#5: the measured high agogo bell (GM 56's kit
+    note 67) played as a pitched part, at the program's old level."""
+    # the program's old level at the bell's own pitch (-25.1 dB at velocity 100): +13.7 dB
+    initial_gain = AgogoHighProperties.initial_gain * 10 ** (13.71 / 20.0)
+
+    # THE BELL'S COLOUR MOVES WITH IT. band_trim_db is measured at the bell's
+    # recorded pitch, in Hz; played a fifth lower, its modes slid into bands
+    # trimmed for other ones, and the part fell 11 dB at middle C and rose 8
+    # at the top. Read at the recorded pitch's ratios instead, the trim is the
+    # bell's own, transposed with it (a smaller bell is a scaled one). The
+    # strike stays in Hz: a stick is a stick.
+    RECORDED_HZ = 1228.0
+
+    def _band_trim(self, harmonic):
+        if not self.band_trim_db or harmonic > len(self.DRUM_MODES):
+            return super()._band_trim(harmonic)
+        from math import log
+        f = self.RECORDED_HZ * self.mode_ratio(harmonic)
+        pts = self.band_trim_db
+        if f <= pts[0][0]:
+            db = pts[0][1]
+        elif f >= pts[-1][0]:
+            db = pts[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                if f < f1:
+                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                    break
+        return 10.0 ** (db / 20.0)
+
+
+class MelodicAgogoLowProperties(AgogoLowProperties):
+    """GM program 113 under A#5: the measured low bell (kit note 68)."""
+    # the program's old level at the bell's own pitch (-23.4 dB at velocity 100): +13.7 dB
+    initial_gain = AgogoLowProperties.initial_gain * 10 ** (13.71 / 20.0)
+
+    # THE BELL'S COLOUR MOVES WITH IT. band_trim_db is measured at the bell's
+    # recorded pitch, in Hz; played a fifth lower, its modes slid into bands
+    # trimmed for other ones, and the part fell 11 dB at middle C and rose 8
+    # at the top. Read at the recorded pitch's ratios instead, the trim is the
+    # bell's own, transposed with it (a smaller bell is a scaled one). The
+    # strike stays in Hz: a stick is a stick.
+    RECORDED_HZ = 696.0
+
+    def _band_trim(self, harmonic):
+        if not self.band_trim_db or harmonic > len(self.DRUM_MODES):
+            return super()._band_trim(harmonic)
+        from math import log
+        f = self.RECORDED_HZ * self.mode_ratio(harmonic)
+        pts = self.band_trim_db
+        if f <= pts[0][0]:
+            db = pts[0][1]
+        elif f >= pts[-1][0]:
+            db = pts[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                if f < f1:
+                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                    break
+        return 10.0 ** (db / 20.0)
 
 
 class CongaMuteProperties(MeasuredStrokeProperties):
@@ -9338,7 +9411,7 @@ class CongaMuteProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.229568
     band_trim_db = ((177, -7.4), (354, -7.0), (707, -1.8), (1414, 1.5), (2828, 3.0), (5657, 10.0), (11314, 1.6))
     mode_scatter_db = 6.0      # takes of one stroke differ 7.2 dB; unscattered, ours 6.1
-    initial_gain = 0.039599      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.039761      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
 
 
@@ -9368,7 +9441,7 @@ class CongaOpenProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.183586
     band_trim_db = ((177, 28.0), (354, 17.1), (707, 3.2), (1414, -7.2), (2828, -11.9), (5657, -12.5), (11314, -16.7))
     mode_scatter_db = 2.7      # takes of one stroke differ 5.4 dB; unscattered, ours 4.7
-    initial_gain = 0.009428      # held at the old voice's level, -36.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.010433      # held at the old voice's level, -36.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
 
 
@@ -9394,7 +9467,7 @@ class CongaLowProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.477114
     band_trim_db = ((177, 32.8), (354, 13.7), (707, 2.1), (1414, -5.9), (2828, -11.4), (5657, -13.8), (11314, -17.5))
     mode_scatter_db = 3.5      # takes of one stroke differ 6.0 dB; unscattered, ours 4.9
-    initial_gain = 0.001691      # held at the old voice's level, -36.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.001763      # held at the old voice's level, -36.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
 
 
@@ -9418,7 +9491,7 @@ class BongoHighProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.34188
     band_trim_db = ((177, 21.4), (354, 13.4), (707, 5.2), (1414, -5.0), (2828, -8.2), (5657, -9.7), (11314, -17.0))
     mode_scatter_db = 5.0      # takes of one stroke differ 5.5 dB; unscattered, ours 4.5
-    initial_gain = 0.010612      # held at the old voice's level, -40.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.010824      # held at the old voice's level, -40.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
 
 
@@ -9445,7 +9518,7 @@ class BongoLowProperties(MeasuredStrokeProperties):
     sustain_jitter = 0.323591
     band_trim_db = ((177, 20.5), (354, 16.8), (707, 4.1), (1414, -3.5), (2828, -8.7), (5657, -11.2), (11314, -18.0))
     mode_scatter_db = 7.0      # takes of one stroke differ 6.0 dB; unscattered, ours 4.5
-    initial_gain = 0.009961      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.010901      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
 
 
@@ -11747,6 +11820,24 @@ class MaracasProperties(RattleProperties):
     sustain_jitter = 0.00134683
     band_trim_db = ((178, -9.3), (224, -11.4), (283, 8.1), (356, -25.4), (449, -29.3), (566, -22.1), (713, -22.5), (898, -13.1), (1131, -18.0), (1425, -17.5), (1796, -19.3), (2263, -20.8), (2851, 5.2), (3592, 16.6), (4525, 11.9), (5702, 20.6), (7184, 18.9), (9051, 19.7), (11404, 17.5), (14368, 7.8))
     initial_gain = 0.024530      # held at the old maracas' level, -30.1 dB (velocity 100, a 1.5 s note, its loudest 150 ms -- read as it was)
+
+
+class VibraslapProperties(RattleProperties):
+    """GM 58: one strike of a vibraslap's pins on its box, as
+    percussion_map.PERCUSSION_TRAIN repeats it -- fitted (examples/
+    perc_fit.py vibraslap) to VSCO's four takes.
+
+    SOFT STRIKES. 55 onsets a second at the rattle's 1.5 ms attack splattered
+    the partials' energy 15-22 dB over the takes at 250-650 Hz -- no partial
+    sits there; it was the onsets -- and the trim, chasing it, ran to -100 dB
+    without moving it. The pins land softer: 6.3 ms."""
+    decay_db = 14.9021
+    harmonic_decay_db = 2.08158
+    chiff_volume = 0.605633
+    sustain_jitter = 1.0758
+    band_trim_db = ((178, -86.6), (224, -63.0), (283, -66.2), (356, -69.0), (449, -61.1), (566, -52.3), (713, -30.3), (898, 5.1), (1131, -3.7), (1425, -23.2), (1796, -17.2), (2263, -6.0), (2851, 9.8), (3592, 9.8), (4525, 14.1), (5702, 20.5), (7184, 17.8), (9051, 21.3), (11404, 1.3), (14368, -54.7))
+    attack_time = 0.00632758
+    initial_gain = 0.053767      # held at the old vibraslap's level for a long note, -44.4 dB (velocity 100, its loudest 150 ms); a short one now rings the same
 
 
 class CabasaProperties(RattleProperties):

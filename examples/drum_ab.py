@@ -25,6 +25,8 @@ examples/pizz_ab.py's recipe:
              a written-out roll
   latin      the hand percussion (56, 60-64, 67, 68, 70) alone, three strokes
              each, then a son groove with all of them
+  bells      the vibraslap (58), short notes and a long one; the melodic agogo
+             (program 113) across its split; the kit agogos (67, 68)
 
 Default outdir ~/Downloads/drums.
 """
@@ -313,6 +315,51 @@ def latin(dst):
     return _save(dst, ev)
 
 
+def bells(dst):
+    """The vibraslap alone at three strokes, short notes and a long one (it
+    rings its own length either way); then the melodic agogo (program 113):
+    a run up from C4 to C7 across the A#5 split, then a samba bell pattern
+    on the two bells' own pitches, and the kit agogos (67, 68) beside it."""
+    ev = []
+    q = 480
+
+    def hit(tk, n, v, d=60, ch=9):
+        ev.append((tk, "note_on", n, v, ch))
+        ev.append((tk + d, "note_off", n, 0, ch))
+    now = 0
+    for v, d in ((70, 60), (100, 60), (120, 1920)):
+        hit(now, 58, v, d)
+        now += 8 * q
+    ev.append((now, "program_change", 113, 0, 0))
+    for n in range(60, 97, 2):
+        hit(now, n, 95, 200, 0)
+        now += q // 2
+    now += q
+    for rep in range(4):
+        for k, (n, v) in enumerate(((77, 100), (77, 70), (87, 95), (87, 70), (77, 100), (87, 80), (87, 70), (77, 90))):
+            hit(now + k * q // 2, n, v, 200, 0)
+        now += 4 * q
+    for rep in range(2):
+        for k, (n, v) in enumerate(((68, 100), (68, 70), (67, 95), (67, 70), (68, 100), (67, 80), (67, 70), (68, 90))):
+            hit(now + k * q // 2, n, v)
+        now += 4 * q
+    m = mido.MidiFile(ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    ev.sort(key=lambda e: (e[0], e[1] != "program_change", e[1] == "note_on"))
+    last = 0
+    for e in ev:
+        tk, kind = e[0], e[1]
+        if kind == "program_change":
+            t.append(mido.Message("program_change", channel=e[4], program=e[2], time=tk - last))
+        else:
+            t.append(mido.Message(kind, channel=e[4], note=e[2], velocity=e[3], time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
 def melodic_tom(dst):
     """GM 117 on a melodic channel: single strokes down the range, left to
     ring (the floor tom under G2, the rack tom from G2 up), a fill
@@ -404,7 +451,8 @@ def main(argv):
                 "melodic_tom": melodic_tom(os.path.join(d, "melodic_tom.mid")),
                 "sidestick": sidestick(os.path.join(d, "sidestick.mid")),
                 "tambourine": tambourine(os.path.join(d, "tambourine.mid")),
-                "latin": latin(os.path.join(d, "latin.mid"))}
+                "latin": latin(os.path.join(d, "latin.mid")),
+                "bells": bells(os.path.join(d, "bells.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p

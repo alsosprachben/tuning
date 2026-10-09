@@ -11,6 +11,8 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    MelodicAgogoHighProperties,
+    MelodicAgogoLowProperties,
     AcousticBassProperties,
     SteelGuitarProperties,
     BrightPianoProperties,
@@ -694,6 +696,12 @@ SOLO_SPLIT = {
     # no smaller tom to measure, so the rack tom carries the rest.
     117: ((43, FloorTomProperties),
           (128, TomTomProperties)),
+    # --- an agogo is TWO bells, and a melodic agogo part is played across
+    # them: VSCO-2 CE's low bell rings at 696 Hz, its high one at 1228 (kit
+    # notes 68 and 67, measured). Split at A#5, 932 Hz, near their geometric
+    # mean (924).
+    113: ((82, MelodicAgogoLowProperties),
+          (128, MelodicAgogoHighProperties)),
 }
 
 

@@ -106,6 +106,17 @@ INSTS = {
                       hold=0.4, keep_trim=True,
                       params=("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db",
                               "@rise_s")),
+    # a periodic train of pin strikes, 2.4-3.5 s whatever the note
+    # (percussion_map.PERCUSSION_TRAIN): windows out to 2.4 s
+    "vibraslap": dict(note=58, glob=_V1 + "varWood/vibraslap[0-9].wav", groups=None,
+                      band=(300, 16000), floor=-20, flat=(1000, 12000), hold=0.25,
+                      T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25),
+                         (0.25, 0.50), (0.50, 1.00), (1.0, 1.6), (1.6, 2.4)),
+                      # attack_time: 55 onsets a second at 1.5 ms splattered the
+                      # partials' energy 15-22 dB over the takes at 250-650 Hz
+                      params=("decay_db", "harmonic_decay_db", "chiff_volume", "sustain_jitter",
+                              "@impact_ring", "@train_secs", "@train_fall", "@train_scatter",
+                              "@train_strike", "attack_time")),
     "bongo_lo":  dict(note=61, glob=_V1 + "drums/other/Bongos/LowBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
@@ -269,6 +280,7 @@ def flatness(chs, sr, lo, hi):
     return float(np.exp(np.mean(np.log(P))) / np.mean(P))
 
 
+_TRAIN_SLOT = {"@train_secs": 1, "@train_fall": 2, "@train_scatter": 4, "@train_strike": 5}
 _RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6, "@rise_s": 7}
 
 
@@ -282,6 +294,8 @@ def _get(cls, note, k):
     if k == "@rattle_fall":
         r = PM.PERCUSSION_RATTLE[note]
         return r[2] if len(r) > 2 else 0.75
+    if k in _TRAIN_SLOT:
+        return PM.PERCUSSION_TRAIN[note][_TRAIN_SLOT[k]]
     if k in _RATTLE_SLOT:
         return PM.PERCUSSION_RATTLE[note][_RATTLE_SLOT[k]]
     return getattr(cls, k)
@@ -298,6 +312,10 @@ def _set(cls, note, k, v):
         r = list(PM.PERCUSSION_RATTLE[note])
         r[2] = min(0.99, float(v))
         PM.PERCUSSION_RATTLE[note] = tuple(r)
+    elif k in _TRAIN_SLOT:
+        r = list(PM.PERCUSSION_TRAIN[note])
+        r[_TRAIN_SLOT[k]] = float(v)
+        PM.PERCUSSION_TRAIN[note] = tuple(r)
     elif k in _RATTLE_SLOT:
         r = list(PM.PERCUSSION_RATTLE[note])
         r[_RATTLE_SLOT[k]] = float(v)
@@ -389,6 +407,9 @@ def main(argv):
     spec = INSTS[inst]
     if "params" in spec:
         C.PARAMS = spec["params"]
+    if "T" in spec:
+        C.T = spec["T"]
+        C.COL_W = np.array([0.3] + [1.0] * (len(C.T) - 1))
     HOLD[0] = float(next((a.split("=")[1] for a in argv if a.startswith("--hold=")), spec.get("hold", 1.0)))
     os.environ.setdefault("TUNING_REFLECT", "0")
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
