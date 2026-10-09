@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit the kit's snare (GM 38) to DrumGizmo DRSKit's.
 
-    python3 examples/snare_fit.py [REFS] [--modes] [--model] [--fit [--maxfev=N]]
+    python3 examples/snare_fit.py [REFS] [--rim] [--modes] [--model] [--fit [--maxfev=N]]
 
 REFS (default ~/Documents/refs/drums/drskit) holds Snare/ as
 examples/remote_zip.py pulled it from DRSKit 2.1 (CC-BY 4.0; ~/Documents/refs/
@@ -21,6 +21,11 @@ drum has fallen 50 dB and what is left is the rack tom ringing in sympathy
   --model  the band-by-time grid, recorded against our render, as
            examples/crash_fit.py reads a crash, on windows sized to a snare
   --fit    the class's decay and wires, with the band trim solved inside
+  --rim    the SIDE STICK (GM 37) instead: Snare_rim/, the same drum played
+           with the stick laid across it and its shaft struck on the rim.
+           DRSKit maps it to 37, and so does CrocellKit's (drums/crocell),
+           whose separate RimShot (40) is ~15 dB louder; these are 18 dB
+           under the snare, a cross-stick's level, not a rimshot's
 """
 import glob
 import os
@@ -35,7 +40,7 @@ sys.path.insert(0, HERE)
 import crash_fit as C  # noqa: E402
 from drum_fit import CH, read  # noqa: E402
 
-NOTE = 38
+NOTE, FOLDER = (37, "Snare_rim") if "--rim" in sys.argv else (38, "Snare")
 MICS = ("Snare_top", "Snare_bottom")
 # a snare is over in a third of a second: windows sized to it
 C.EDGES = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
@@ -61,7 +66,7 @@ C.norm = _norm
 # stroke law; the noise that makes them a buzz rather than a chord
 C.PARAMS = ("fund_dbs", "head_dbs", "slow_share", "slow_dbs", "click_cal_db", "click_dbs",
             "click_stroke_slope", "chiff_volume", "chiff_width", "chiff_bandwidth",
-            "sustain_jitter")
+            "sustain_jitter") + (("rim_dbs",) if NOTE == 37 else ())
 C.FLOOR = {"sustain_jitter": 0.005, "slow_share": 0.005, "click_stroke_slope": 0.05,
            "click_cal_db": 1.0}
 _render = C.render
@@ -70,13 +75,17 @@ C.render = lambda note, vel, secs=1.0: _render(note, vel, secs)   # a snare is o
 
 def strokes(refs):
     out = []
-    for p in sorted(glob.glob(os.path.join(refs, "Snare", "*.wav")), key=C.layer_of):
+    for p in sorted(glob.glob(os.path.join(refs, FOLDER, "*.wav")), key=C.layer_of):
         a, sr = read(p)
+        # DrumGizmo trims each take where it falls under its noise: the rim's
+        # at 0.13-0.34 s, 45-75 dB down. Zeros after the cut read as -200 in
+        # the grid, and cells under -100 weigh nothing
+        a = np.pad(a, ((0, max(0, sr - len(a))), (0, 0)))
         out.append((C.layer_of(p), [a[:, CH[m]] for m in MICS], sr))
     return out
 
 
-def modes(ss, lo=150.0, hi=2500.0, floor_db=-30.0):
+def modes(ss, lo=150.0, hi=2500.0 if NOTE == 38 else 4000.0, floor_db=-30.0):
     acc = None
     for _, chs, sr in ss[len(ss) // 2:]:
         t0 = C.onset(chs, sr)
@@ -199,8 +208,8 @@ def main(argv):
     top = max(r[1] for r in rows)
     rflat = [np.mean([flat[r[0]] for r in rows if sel(r[1] - top)], 0) for sel in (
         lambda d: d <= -15.0, lambda d: -12.0 <= d <= -6.0, lambda d: d >= -3.0)]
-    print("== DRSKit snare, %d strokes, levels %s dB re the loudest" % (
-        len(rows), " ".join("%.0f" % (l - max(r[1] for r in rows)) for _, l, _ in rows)))
+    print("== DRSKit %s, %d strokes, levels %s dB re the loudest" % (
+        FOLDER, len(rows), " ".join("%.0f" % (l - max(r[1] for r in rows)) for _, l, _ in rows)))
     cache = {}
     if "--fit" in argv:
         vels = [C.model_velocity(NOTE, gs[g][0], cache) for g in C.GROUPS]

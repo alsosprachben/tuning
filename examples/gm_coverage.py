@@ -213,7 +213,7 @@ RATED.update({
 PERC_RATED = {
  35:(4,"DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper"),
  36:(4,"as 35, at the recorded kick's own 44.4 Hz"),
- 37:(2,"its own class, theory"),
+ 37:(4,"DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick)"),
  38:(4,"DRSKit's snare (29 strokes, top and bottom mics): the head at 196 Hz with a tom's modes, choked in 50 ms; the wires a buzz of jittered noise in third-octave bands, fitted on band, onset balance and flatness (a chord of sines at the right band levels was not a snare; neither was a comb in phase -- \"pew pew\"). Needed the renderer's onsets to start on their own sample. Ben, by ear: sounds so much better"),
  39:(2,"its own class, theory"),
  40:(2,"a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all"),
@@ -230,7 +230,7 @@ PERC_RATED = {
  51:(4,"Iowa 21\" ride, bow"),
  52:(4,"Iowa chinese, 16/19/20\""),
  53:(4,"Iowa ride bell -- the ping is mode 8.1, not the fundamental"),
- 54:(2,"generic noise body, but its own rattle: 14 jingles. Iowa HAS tambourines; they were not taken"),
+ 54:(4,"Iowa's tambourines, fitted: 77 measured jingle modes in four clusters, the hand's slap on the head, and each stroke catching the jingles differently (alike, a run of strokes rang metallic)"),
  55:(4,"Iowa splash"),
  56:(2,"its own class, theory"),
  57:(4,"Iowa 18\" suspended crash for the modes, refitted to DRSKit's right crash hit hard (12 shank strokes), as 49. Ben, by ear: sounds good"),

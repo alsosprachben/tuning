@@ -38,6 +38,7 @@ from tonelib import (
     RideCymbalProperties,
     CrashRideProperties,
     SideStickProperties,
+    TambourineProperties,
     HandClapProperties,
     WoodPercussionProperties,
     RattleProperties,
@@ -94,7 +95,7 @@ PERCUSSION = {
     # "acoustic" bass drum, the deeper of the two, the same 2 semitones under
     35: ("Acoustic Bass Drum", K, 39.4),
     36: ("Bass Drum 1",        K, 44.4),
-    37: ("Side Stick",      SideStickProperties, 407.4),
+    37: ("Side Stick",      SideStickProperties, 195.1),
     # DRSKit's snare head, 196 Hz on every stroke (AcousticSnareProperties)
     38: ("Acoustic Snare",     AcousticSnareProperties, 195.1),
     39: ("Hand Clap",          HandClapProperties, 310.4),
@@ -114,7 +115,7 @@ PERCUSSION = {
     # MEASURED: Iowa 21ride.stick.bell. 345 Hz is the LOWEST mode; the ping a
     # drummer hears is the strongest one, at ratio 8.1 = 2795 Hz. It was 660.
     53: ("Ride Bell",         R, 147.5),
-    54: ("Tambourine",         N, 600.0),
+    54: ("Tambourine",         TambourineProperties, 1000.0),
     55: ("Splash Cymbal",      SplashCymbalProperties, 143.3),
     56: ("Cowbell",            CowbellProperties, 540.0),
     57: ("Crash Cymbal 2",     CrashCymbal2Properties, 333.7),
@@ -318,8 +319,9 @@ KIT_RING = {24: {36: 0.55, 41: 0.95, 43: 0.95, 45: 0.9, 47: 0.9, 48: 0.85, 50: 0
 # ...and its LEVELS, matched to the Standard note each replaces (loudness over
 # the first 150 ms, examples/drumset_check.py). A set is a different
 # instrument, not a louder one: a file balanced its drums against its band
-# with velocities, and swapping the kit must not undo that.
-KIT_LEVEL = {24: {36: 3.467, 38: 0.603, 40: 0.519, 41: 0.851, 43: 0.861, 45: 0.822, 47: 0.871, 48: 0.912, 50: 0.813},
+# with velocities, and swapping the kit must not undo that. (36 and 38 moved
+# with Standard's kick and snare when those were rebalanced, -7 and +5 dB.)
+KIT_LEVEL = {24: {36: 1.549, 38: 1.072, 40: 0.519, 41: 0.851, 43: 0.861, 45: 0.822, 47: 0.871, 48: 0.912, 50: 0.813},
              40: {39: 1.148, 40: 0.135}}
 
 
@@ -384,11 +386,11 @@ def percussion_for_note(note, kit=0):
 # These are the instruments' own ring times, and the engines set each drum's
 # decay from them at note construction.
 PERCUSSION_RING = {
-    # The kick, the toms and the snare (35, 36, 38, 41-50) carry their
+    # The kick, the toms, the snare and its side stick (35-38, 41-50) carry their
     # measured rings in their classes (tonelib.KitDrumProperties), mode by
     # mode: a single ring time here would rescale all of them by the first
     # mode's.
-    37: 0.055, 39: 0.100, 40: 0.30,
+    39: 0.100, 40: 0.30,
     # ONE PLATE, THREE DAMPINGS. These are no longer three separately measured
     # decays: the hats share a mode set and a loss curve, and the ring is the
     # uniform part of the contact damping -- how hard the articulation holds the
@@ -415,7 +417,7 @@ PERCUSSION_RING = {
     # MEASURED rings, fitted with each plate's mode set against its recording.
     49: 0.61, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
-    53: 0.34, 54: 0.180, 55: 0.41,
+    53: 0.34, 55: 0.41,
     56: 0.40, 57: 1.69, 58: 0.020, 59: 0.48, 60: 0.30, 61: 0.35, 62: 0.20,
     63: 0.35, 64: 0.40, 65: 0.30, 66: 0.35, 67: 0.25, 68: 0.30, 69: 0.010,
     70: 0.012, 71: 0.280, 72: 0.850,
@@ -515,7 +517,12 @@ PERCUSSION_LEVEL = {
     # two resonances instead of one Bessel cluster, so the same class gain is
     # slightly quieter. The class itself is at its ceiling, and the trim is
     # where the headroom note above says this belongs.
-    35: 1.783, 36: 1.783,      # bass drum
+    # ...and then 7 dB down (2026-10-08), with the snare 5 up: the kick sat
+    # 11.5 dB over the snare (K-weighted, velocity 100) where FluidR3,
+    # GeneralUser GS and MuseScore General all put it within 3 dB of it --
+    # and they agree on the kick to 2.5 dB (examples/kit_levels.py). Ben, on
+    # a bossa nova: "the bass drum seems rather loud compared to the rest".
+    35: 0.7964, 36: 0.7964,      # bass drum
     58: 12.1336,        # vibraslap +21.9 dB: the burst spreads the energy
     84: 0.483,       # bell tree -6.3 dB: 22 bars share the gesture
     37: 1.0000,   # held against the wash-floor fix
@@ -652,7 +659,6 @@ PERCUSSION_RASP = {
 # What is not judgement is the STRUCTURE: a burst of impacts rather than a single
 # pitched stroke, which is the part that was wrong.
 PERCUSSION_RATTLE = {
-    54: (0.24, 14),      # tambourine: a dozen or so jingle pairs, each ringing on
     69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
     70: (0.10, 18),      # maracas: seeds in a gourd, a short dry burst
     # A VIBRASLAP IS ALL RATTLE. A wooden ball on a rod strikes a box of loose

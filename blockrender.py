@@ -1014,6 +1014,46 @@ def sota_message(cents, channels=range(16), two_byte=True, realtime=False):
     return out
 
 
+# THE RENDER ENDS WHEN THE MUSIC DOES, NOT WHEN THE FILE DOES. It used to
+# stop one second after the last MIDI event, whatever was still sounding: a
+# crash on the final beat was cut 14 dB down at 1.25 s, and the room tail,
+# added after, rang on past the cut (Ben: "crashes at the end of a recording
+# seem to be stopped short, then the room tail hangs"). Every partial's
+# envelope is known in closed form (voice_partial.inc's AMP), so the render
+# runs on to the last sample any partial is still above RING_FLOOR -- an
+# absolute level, -100 dB on the output scale, so the streaming renderer,
+# which never sees the whole table at once, reaches the same length. A
+# one-shot's note is a fixed 8 s; this ends it where it has actually died.
+RING_FLOOR = 1e-5
+RING_MAX = 30.0              # seconds past the file's end, at most
+
+
+def ring_last(r):
+    """The last sample any of these partials sounds above RING_FLOOR: rows as
+    a dict of columns (numpy arrays or array.array). 0 if none does."""
+    a = np.maximum(np.abs(np.asarray(r['aL'], np.float64)), np.abs(np.asarray(r['aR'], np.float64)))
+    if not len(a):
+        return 0
+    sl = np.asarray(r['sus'], np.float64)
+    af = np.asarray(r['aft'], np.float64)
+    out = np.zeros(len(a))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t = np.zeros(len(a))
+        for c, lr in (((1.0 - sl) * (1.0 - af) * a, np.asarray(r['logr'], np.float64)),
+                      ((1.0 - sl) * af * a, np.asarray(r['logrA'], np.float64))):
+            loud = c > RING_FLOOR
+            tt = np.where(lr > 0.0, np.log(np.where(loud, c, 1.0) / RING_FLOOR) / np.where(lr > 0.0, lr, 1.0), np.inf)
+            t = np.maximum(t, np.where(loud, tt, 0.0))
+        # a sustain above the floor holds until the release
+        t = np.where(sl * a > RING_FLOOR, np.inf, t)
+    non = np.asarray(r['non'], np.float64)
+    stop = np.asarray(r['noff'], np.float64) + np.asarray(r['re'], np.float64)
+    out = np.minimum(stop, non + t * SR)
+    out = np.where(a > RING_FLOOR, out, 0.0)
+    out += np.maximum(np.asarray(r['delL'], np.float64), np.asarray(r['delR'], np.float64))
+    return int(np.ceil(out.max()))
+
+
 def bend_blocks(events, nblk):
     """Per-block (mean ratio, cumulative extra phase) for one channel's bend.
 
@@ -3506,6 +3546,12 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # to its nodes; see SynthProperties.strike_phase_spread.
                     sps = props.strike_phase_spread
                     mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
+                    # ...and how hard this stroke caught it (SynthProperties.stroke_scatter)
+                    if getattr(rp, 'stroke_scatter', False):
+                        _ssd = rp.stroke_scatter_db(m)
+                        if _ssd > 0.0:
+                            _sk = 10.0 ** (random.gauss(0.0, _ssd) / 20.0)
+                            gL *= _sk; gR *= _sk; gM *= _sk
                     emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, rel_r, chiff_r,
                                  logr, logrA, aftL, rp.sustain_level, cvp, cc_r, crl, sjit, csc,
                                  gr, cr, ph0=mph)
@@ -3849,6 +3895,16 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _mlast + SR // 2 > N:
             N = _mlast + SR // 2         # nblk stays: the kernel clamps every per-block row
         print("  MF-104M: %d note(s), %d repeats" % (len(_MF104), _nm))
+
+    # ...and on to where the last partial dies (RING_FLOOR), in chunks so a
+    # long piece's table is never copied whole
+    _rl = 0
+    for _j in range(0, len(A['om']), 1 << 20):
+        _rl = max(_rl, ring_last({k: A[k][_j:_j + (1 << 20)] for k in
+                                  ('aL', 'aR', 'sus', 'aft', 'logr', 'logrA', 'non', 'noff', 're', 'delL', 'delR')}))
+    _rl = min(_rl + BLK, int((total + RING_MAX) * SR))
+    if _rl > N:
+        N = _rl                          # nblk stays, as above
 
     if _AMP_CH and __import__('tubeamp').ENABLED:
         import tubeamp as _AMP

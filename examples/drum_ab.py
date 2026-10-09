@@ -19,6 +19,10 @@ examples/pizz_ab.py's recipe:
              roll, at mf and ff
   melodic_tom  GM 117: strokes down the range, a fill across the floor/rack
              split, a tune over a floor-tom pedal
+  sidestick  the side stick alone at six strokes, a bossa nova on the 3-2
+             clave at mf and f, then off-beats beside a snare backbeat
+  tambourine the tambourine alone at six strokes, on 2 and 4, in eighths, then
+             a written-out roll
 
 Default outdir ~/Downloads/drums.
 """
@@ -180,6 +184,91 @@ def snare(dst):
     return dst
 
 
+def _save(dst, ev):
+    m = mido.MidiFile(ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    ev.sort(key=lambda e: (e[0], e[1] == "note_on"))
+    last = 0
+    for tk, kind, n, v in ev:
+        t.append(mido.Message(kind, channel=9, note=n, velocity=v, time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
+def sidestick(dst):
+    """The side stick alone at six strokes, then a bossa nova: the
+    cross-stick on the clave's 3-2 under eighth-note hats and the kick's
+    1 and the and of 2, at mf and f; then a snare backbeat beside it."""
+    ev = []
+    q = 480
+
+    def hit(tk, n, v):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + 60, "note_off", n, 0))
+    now = 0
+    for v in (30, 50, 70, 90, 110, 127):
+        hit(now, 37, v)
+        now += 2 * q
+    clave = (0, 3, 6, 10, 12)          # 3-2 son clave, in eighths over two bars
+    for v in (80, 110):
+        for rep in range(3):
+            for e in range(16):
+                tk = now + e * q // 2
+                hit(tk, 42, int(v * (0.6 if e % 2 else 0.75)))
+                if e % 4 in (0, 3):
+                    hit(tk, 36, int(v * 0.8))
+                if e in clave:
+                    hit(tk, 37, v)
+            now += 8 * q
+    for bar in range(2):
+        for b in range(4):
+            tk = now + b * q
+            hit(tk, 42, 80)
+            hit(tk + q // 2, 42, 60)
+            hit(tk, 36 if b in (0, 2) else 38, 100)
+            hit(tk + q // 2, 37, 90)
+        now += 4 * q
+    return _save(dst, ev)
+
+
+def tambourine(dst):
+    """The tambourine alone at six strokes, then on 2 and 4 over a beat,
+    then in eighths, then a written-out roll of short notes (as Holst's
+    Jupiter writes it)."""
+    ev = []
+    q = 480
+
+    def hit(tk, n, v, d=60):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + d, "note_off", n, 0))
+    now = 0
+    for v in (30, 50, 70, 90, 110, 127):
+        hit(now, 54, v)
+        now += 2 * q
+    for eighths in (False, True):
+        for bar in range(4):
+            for b in range(4):
+                tk = now + b * q
+                hit(tk, 36 if b in (0, 2) else 38, 100)
+                hit(tk, 42, 80)
+                hit(tk + q // 2, 42, 60)
+                if eighths:
+                    hit(tk, 54, 100 if b in (1, 3) else 80)
+                    hit(tk + q // 2, 54, 70)
+                elif b in (1, 3):
+                    hit(tk, 54, 105)
+            now += 4 * q
+    for i in range(32):
+        hit(now + i * 60, 54, int(60 + 50 * i / 31), 50)
+    now += 32 * 60 + q
+    hit(now, 54, 120)
+    hit(now, 36, 110)
+    return _save(dst, ev)
+
+
 def melodic_tom(dst):
     """GM 117 on a melodic channel: single strokes down the range, left to
     ring (the floor tom under G2, the rack tom from G2 up), a fill
@@ -268,7 +357,9 @@ def main(argv):
         srcs = {"groove": groove(os.path.join(d, "groove.mid")),
                 "crashes": crashes(os.path.join(d, "crashes.mid")),
                 "snare": snare(os.path.join(d, "snare.mid")),
-                "melodic_tom": melodic_tom(os.path.join(d, "melodic_tom.mid"))}
+                "melodic_tom": melodic_tom(os.path.join(d, "melodic_tom.mid")),
+                "sidestick": sidestick(os.path.join(d, "sidestick.mid")),
+                "tambourine": tambourine(os.path.join(d, "tambourine.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p

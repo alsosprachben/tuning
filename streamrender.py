@@ -333,6 +333,7 @@ class Stream:
         self.cols = None
         self.mfdup = {}
         self.mf_last = 0
+        self.ring_last = 0          # where the last partial dies (blockrender.ring_last)
         self.reg = {}               # channel -> register.Channel, in first-strike order
         self.reg_next = {}          # channel -> its next strike to feed
 
@@ -350,6 +351,7 @@ class Stream:
                                                  np.zeros(n, np.int64), np.zeros(n, np.int64)], 1),
                                        np.zeros((n, 0), np.int64), np.zeros(n, np.int64))
             self.heard.update(int(c) for c in np.unique(r['mch']))
+            self.ring_last = max(self.ring_last, self.B.ring_last(r))
             self._note(r, i0, i1)
             self._register_feed(r, i0, i1)
         for k in A:
@@ -365,6 +367,8 @@ class Stream:
             limit = self._horizon(T)
             if next_on is None:
                 self.N = max(self.N, self.mf_last + self.B.SR // 2) if self.mf_last else self.N
+                self.N = max(self.N, min(self.ring_last + self.B.BLK,
+                                         int((self.ctx['total'] + self.B.RING_MAX) * self.B.SR)))
                 self._grow(self.N)
             while (self.wi + self.batch) * self.W <= min(limit, self.N) or \
                     (next_on is None and self.wi * self.W < self.N):

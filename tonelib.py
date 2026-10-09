@@ -1375,6 +1375,18 @@ class SynthProperties:
     def partial_jitter(self, harmonic):
         return self.sustain_jitter
 
+    # PER-STROKE SCATTER. A struck set of loose resonators -- a tambourine's
+    # jingles -- is excited differently by every stroke: which jingles the
+    # hand catches, and how hard, is chance. Rendered at one gain a mode, every
+    # stroke is the same chord, and a run of them reads as one ringing metal
+    # thing. A voice that sets stroke_scatter draws each mode's level afresh
+    # each note, stroke_scatter_db(harmonic) dB standard deviation, from the
+    # renderer's seeded stream. False draws nothing, so renders exactly as before.
+    stroke_scatter = False
+
+    def stroke_scatter_db(self, harmonic):
+        return 0.0
+
     def bloom_gain_for(self, frequency):
         """The late copy's gain at this partial (see bloom_banded)."""
         if not self.bloom_banded or self.bloom_seconds <= 0.0:
@@ -8921,8 +8933,10 @@ class AcousticSnareProperties(NoisyPercussionMixin, KitDrumProperties):
     snare. The fast renderer ramps every onset over one 512-sample block, so
     1-2 kHz reads 20-40 dB under the recording in the first 5 ms whatever
     these numbers say; the fit is levelled on the energy after 15 ms so that
-    it does not bend the decay to pay for it. The level is held to the old
-    snare's (-38.7 dB, its loudest 150 ms at velocity 100).
+    it does not bend the decay to pay for it. The level was held to the old
+    snare's (-38.7 dB, its loudest 150 ms at velocity 100), then raised 5 dB
+    with the kick down 7: three GM SoundFonts keep the kick within 3 dB of
+    the snare, and ours had it 11.5 over (examples/kit_levels.py).
     """
     DRUM_MODES = ((1.000, 0.0, 450.0), (1.476, -18.1, 450.0), (1.728, -16.5, 450.0),
                   (1.969, -18.9, 450.0), (2.366, -12.6, 450.0), (3.066, -18.9, 450.0),
@@ -8950,7 +8964,7 @@ class AcousticSnareProperties(NoisyPercussionMixin, KitDrumProperties):
     release_floor_db = -60.0
     band_trim_db = ((177, 2.8), (354, -5.0), (707, -12.0), (1414, -3.2), (2828, 2.6), (5657, 9.2), (11314, 5.5))
     strike_phase_spread = 1.0
-    initial_gain = 0.197585
+    initial_gain = 0.351361
 
     # THE WIRES ARE NOISE, THE HEAD IS NOT. With the noise only a banded chiff
     # around each wire partial, the wires read as a chord: spectral flatness
@@ -8979,6 +8993,169 @@ class AcousticSnareProperties(NoisyPercussionMixin, KitDrumProperties):
         if self.slow_share <= 0.0 or decay_rate < 0.5 * min(self.fund_dbs, self.head_dbs) - 1e-9:
             return (0.0, decay_rate)
         return (self.slow_share, min(decay_rate, 0.5 * self.slow_dbs))
+
+
+class SideStickProperties(AcousticSnareProperties):
+    """GM 37: DRSKit's cross-stick (Snare_rim), the snare above played with
+    the stick laid across the head and its shaft struck on the rim
+    (examples/snare_fit.py --rim). It replaces a theory class built as a
+    woodblock: a click with no drum under it.
+
+    THE SAME DRUM, PLAYED ANOTHER WAY. The head still sounds at 196 Hz and
+    the wires still answer, but the stick lying on the head loads and damps
+    it, so its modes move (308 and 358 Hz where the stick-struck head reads
+    288 and 337), and the rim and the stick's shaft add their own click:
+    1.05 kHz within 4 dB of the head and 1.93 kHz within 9, ringing well
+    into the wires. Read from the first 60 ms of the upper half of the
+    strokes, peaks within 13 dB of the strongest.
+
+    AT A CROSS-STICK'S LEVEL. Both DRSKit and CrocellKit (drums/crocell) map
+    a "rim" to 37 at about 18 dB under their snare, and Crocell's separate
+    rimshot (on 40) is 15 dB over its rim: these are cross-sticks, not
+    rimshots. DrumGizmo trims each take at its noise, here 0.13-0.34 s and
+    45-75 dB down, so the fit sees only what is there.
+    """
+    # (ratio to 195.1 Hz, gain dB re the strongest); the third value is
+    # unused, harmonic_decay below answers
+    DRUM_MODES = ((1.000, -1.0, 0.0), (1.579, -1.0, 0.0), (1.835, 0.0, 0.0),
+                  (2.599, -9.0, 0.0), (4.746, -9.0, 0.0), (5.361, -4.0, 0.0),
+                  (6.248, -9.0, 0.0), (9.236, -13.0, 0.0), (9.887, -9.0, 0.0))
+    RIM_FROM = 5                     # modes from here on are the rim's and the stick's
+    # FITTED on the band-by-time grid (examples/snare_fit.py --rim) over
+    # ghost, mid and loud strokes, from the snare's own numbers: 8.5 -> 6.6
+    # dB (the grid alone 3.7). What moved is what a cross-stick is -- the
+    # wires die faster (220 dB/s against 150: the stick on the head chokes
+    # them) and the rim's click goes at 370; the head and the noise stayed
+    # within a few per cent of the snare's.
+    fund_dbs = 490.271
+    head_dbs = 412.998
+    slow_share = 0.0246047
+    slow_dbs = 66.1646
+    click_cal_db = 4.84276
+    click_dbs = 219.661
+    click_stroke_slope = 0.0571073
+    chiff_volume = 2.18849
+    chiff_width = 0.0481315
+    chiff_bandwidth = 0.233011
+    sustain_jitter = 0.0518694
+    rim_dbs = 367.954
+    band_trim_db = ((177, 4.2), (354, -8.9), (707, -14.2), (1414, -1.7), (2828, 5.8), (5657, 10.5), (11314, 4.3))
+    # HELD at the old side stick's level, 3 dB under the snare (-43.8 dB, its
+    # loudest 150 ms at velocity 100; +5 dB since, with the snare). DRSKit's
+    # own puts it 20.6 dB under, on the same two microphones: a cross-stick IS that much quieter in the room.
+    # But not in a kit part: there it left the side stick 31 dB under the kick
+    # in a bossa nova, and Ben, at that level: "the bass drum seems rather loud
+    # compared to the rest". The close microphones measure the drum, not the
+    # balance a drummer plays it at.
+    initial_gain = 0.288035
+
+    def harmonic_decay(self, harmonic):
+        if self.RIM_FROM <= harmonic <= len(self.DRUM_MODES):
+            return 0.5 * self.rim_dbs
+        return super().harmonic_decay(harmonic)
+
+
+class TambourineProperties(NoisyPercussionMixin, KitDrumProperties):
+    """GM 54: Iowa's tambourine 2, struck (examples/tamb_fit.py), in place of
+    a noise drum shaken fourteen times with no recording behind it.
+
+    THE JINGLES ARE METAL, AND THEY RING. A tambourine's sound is not a hiss:
+    the 20-200 ms spectrum is resolved peaks standing 10-20 dB over what is
+    between them (flatness 0.06-0.12, where noise reads 1), in four clusters
+    -- 4.4, 6.2, 10.8 and 17.5 kHz on this one -- each a few dozen peaks
+    within +-5%: every pair of jingles its own small cymbal, none quite like
+    its neighbour. So the jingles are DRUM_MODES, read off the recording
+    (ratios to 1 kHz, dB re the strongest, each mode's own rate between
+    30-90 and 120-250 ms, scaled together by jingle_scale), and the cluster
+    is the irregularity: no comb to sweep.
+
+    THE HAND ON THE HEAD is the click series from 200 Hz: the slap the
+    strongest thing under 2 kHz for the first 10 ms, gone by 30.
+
+    NOT A RATTLE ANY MORE. PERCUSSION_RATTLE struck it fourteen times over a
+    quarter second at scattered pitches; a jingle has one pitch, and the
+    recorded stroke is one decay with the clash of the jingles in it -- each
+    mode's own noise (jingle_jitter), not more strokes. A written-out roll
+    is the notes, as the score writes them.
+    """
+    DRUM_MODES = ((4.2319, -23.1, 76), (4.2925, -10.7, 102), (4.3860, -7.7, 20),
+                  (4.4352, -11.8, 95), (4.4870, -18.9, 41), (4.5105, -17.3, 124),
+                  (4.6095, -17.5, 83), (4.6599, -22.1, 20), (4.7252, -22.4, 20),
+                  (4.8409, -20.0, 43), (4.8685, -13.0, 50), (4.9042, -14.1, 122),
+                  (4.9526, -19.4, 20), (4.9856, -18.8, 20), (5.0219, -23.1, 56),
+                  (5.1141, -15.0, 126), (5.1619, -23.2, 106), (5.1976, -23.7, 73),
+                  (5.2575, -18.5, 20), (5.3106, -13.6, 59), (5.3665, -22.1, 20),
+                  (5.4042, -23.2, 20), (5.4815, -17.3, 36), (5.5192, -14.7, 20),
+                  (5.6511, -16.8, 20), (5.7924, -24.8, 39), (5.9297, -23.5, 74),
+                  (5.9970, -24.4, 85), (6.0710, -20.1, 72), (6.1612, -8.8, 81),
+                  (6.2265, -8.8, 88), (6.2736, -8.0, 88), (6.3106, -8.2, 91),
+                  (6.3610, -10.5, 20), (6.3900, -10.9, 42), (6.5098, -20.3, 103),
+                  (6.5380, -21.2, 69), (7.2365, -22.6, 20), (8.1537, -23.9, 85),
+                  (8.2533, -19.8, 20), (9.8636, -21.6, 20), (10.0399, -19.5, 150),
+                  (10.1489, -18.6, 59), (10.2088, -19.2, 118), (10.2969, -11.0, 67),
+                  (10.4618, -9.2, 28), (10.6024, -5.7, 20), (10.7525, -7.1, 67),
+                  (10.8453, 0.0, 130), (10.9550, -3.6, 74), (11.0842, -8.9, 45),
+                  (11.1744, -9.1, 20), (11.3467, -14.6, 69), (11.4833, -18.4, 73),
+                  (13.0868, -19.2, 20), (13.2961, -13.4, 80), (13.4455, -14.9, 48),
+                  (13.5316, -12.7, 30), (13.8788, -15.8, 108), (14.0471, -18.0, 93),
+                  (14.1729, -17.8, 36), (14.5484, -19.8, 35), (16.4803, -21.4, 57),
+                  (16.6977, -21.4, 22), (16.8470, -20.4, 146), (17.0287, -13.3, 85),
+                  (17.1202, -11.6, 165), (17.3127, -6.7, 162), (17.5206, -9.8, 71),
+                  (17.6155, -11.6, 120), (17.7790, -7.5, 130), (17.9937, -12.2, 168),
+                  (18.2117, -15.2, 103), (18.3719, -12.7, 135), (18.4667, -14.3, 99),
+                  (18.7157, -19.9, 101))
+    # FITTED on the band-by-time grid and the jingles' flatness (examples/
+    # tamb_fit.py) over Iowa's three tambourines at pp, mf and ff: 12.9 ->
+    # 4.5 dB, flatness 0.10 against 0.11 recorded. The jingles die nearly
+    # four times as fast as their modes read one by one (jingle_scale 3.9:
+    # read singly, a mode's rate is its neighbours' leakage as much as its
+    # own), each with half its amplitude its own noise (jingle_jitter): the
+    # clash of the jingles. The slap goes at 114 dB/s.
+    jingle_scale = 3.85832
+    stroke_ref_db = -11.0
+    slow_share = 0.086643
+    slow_dbs = 69.6031
+    CLICK_HZ0 = 200.0
+    CLICK_DB = (0,) * 14
+    click_cal_db = 1.29823
+    click_per_band = 6
+    click_dbs = 114.069
+    click_stroke_slope = 0.090065
+    tension_bend = 0.0
+    chiff_volume = 0.840457
+    chiff_width = 0.0204494
+    chiff_cycle = 0.9
+    chiff_bandwidth = 0.090983
+    sustain_jitter = 0.0317199
+    jingle_jitter = 0.53851
+    jitter_by_partial = True
+    strike_phase_spread = 1.0
+    hf_corner_hz = 1.0e6
+    one_shot = True
+    release_floor_db = -60.0
+    band_trim_db = ((354, -13.7), (707, -10.5), (1414, -6.7), (2828, -1.0), (5657, 15.5), (11314, 16.4))
+    # HELD at the old tambourine's level (-34.9 dB, its loudest 150 ms at
+    # velocity 100): Iowa's session says nothing about where it sits in a kit
+    initial_gain = 0.017551      # (the scatter adds 5.5 dB on average: taken back)
+
+    # NO TWO STROKES ALIKE (SynthProperties.stroke_scatter). Ben: "a little
+    # metallic, still". Within one stroke the model is no more tonal than
+    # Iowa's (flatness ~0.1 both), but four strokes rendered alike correlated
+    # 0.93 band by band, 2.7 dB apart; two strokes of one recorded tambourine
+    # differ 5.8 dB. Each jingle mode now draws its level afresh each stroke.
+    stroke_scatter = True
+    jingle_scatter_db = 7.0
+
+    def stroke_scatter_db(self, harmonic):
+        return self.jingle_scatter_db if harmonic <= len(self.DRUM_MODES) else 0.0
+
+    def partial_jitter(self, harmonic):
+        return self.jingle_jitter if harmonic <= len(self.DRUM_MODES) else self.sustain_jitter
+
+    def harmonic_decay(self, harmonic):
+        if 1 <= harmonic <= len(self.DRUM_MODES):
+            return 0.5 * self.jingle_scale * self.DRUM_MODES[harmonic - 1][2]
+        return super().harmonic_decay(harmonic)
 
 
 class ElectricSnareProperties(SnareDrumProperties):
@@ -11510,68 +11687,6 @@ class HandClapProperties(NoiseDrumProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
 
-
-class SideStickProperties(WoodPercussionProperties):
-    """GM 37, side stick: the shaft of the stick on the RIM, no wires at all.
-
-    It shared SnareDrumProperties, which gave a rim click a set of snare wires
-    it does not have and a membrane it barely excites. A cross-stick is wood
-    against wood and metal -- short, dry and pitched by the shell, much closer to
-    a woodblock than to the drum it is played on. Judgement, like the snare
-    above: there is no Iowa reference for any of this.
-    """
-    # A SIDE STICK IS A CLICK, NOT A NOTE. It carried a stretched harmonic
-    # series on a 340 Hz base, and 69 per cent of its energy sat in one narrow
-    # band there -- a pitched wooden note with a click on it. Ben: "side stick
-    # and hand clap ... are not atonal enough."
-    #
-    # A stick laid across a rim and struck against it radiates from a short,
-    # heavily damped contact: broad, bright, and with no mode standing out of
-    # the others. So a dense set with a broad hump about 2.1 kHz and a floor
-    # under it, nothing dominant, and enough wash to fill between the modes.
-    # Measured, share of the energy in the strongest narrow band:
-    #
-    #     stretched harmonic series   69.4 per cent   centroid  470 Hz
-    #     dense hump, wash 0.35        5.7            centroid 1017
-    #     dense hump, wash 4.0          5.5            centroid 2002
-    #
-    # For scale the maracas sit at 4.1 and the closed hat at 5.6, so under about
-    # six is what atonal means in this kit.
-    mode_ratios = (1.0000, 1.1245, 1.1907, 1.2605, 1.3340, 1.5000, 1.5883, 1.6814,
-                   1.7797, 2.0008, 2.1187, 2.2430, 2.3741, 2.6688, 2.8261, 2.9921,
-                   3.1671, 3.5598, 3.7697, 3.9913, 4.2249, 4.7482, 5.0284, 5.3241,
-                   5.6360, 5.9650, 6.7074, 7.1020, 7.5184, 7.9575, 8.9468, 9.4736,
-                   10.0294, 10.6155, 11.9338, 12.6370, 13.3788, 14.1613, 15.9180, 16.8566,
-                   17.8468, 18.8913, 21.2323, 22.4849, 23.8067, 25.2010, 26.6713, 29.9924,
-                   31.7567, 33.6179, 35.5807, 40.0063)
-    mode_gains  = (0.4211, 0.4445, 0.4698, 0.4970, 0.5259, 0.5564, 0.5884, 0.6215,
-                   0.6555, 0.6900, 0.7247, 0.7591, 0.7929, 0.8256, 0.8567, 0.8858,
-                   0.9124, 0.9362, 0.9566, 0.9734, 0.9864, 0.9952, 0.9998, 1.0000,
-                   0.9959, 0.9874, 0.9749, 0.9584, 0.9383, 0.9149, 0.8886, 0.8597,
-                   0.8288, 0.7962, 0.7625, 0.7281, 0.6934, 0.6588, 0.6248, 0.5916,
-                   0.5595, 0.5288, 0.4997, 0.4724, 0.4469, 0.4233, 0.4016, 0.3819,
-                   0.3641, 0.3481, 0.3339, 0.3213)
-    max_harmonic = 52
-    inharmonicity_coefficient = 0.0
-    inharmonicity_dynamic = False
-    chiff_volume = 4.0
-    # A CLICK HAS NO ENVELOPE TO SPEAK OF. attack_time was None, which makes
-    # blockrender derive the onset ramp from chiff_max_valve_time -- the trap
-    # that had every crash sounding lightly touched. Here that is 4 ms and so
-    # the attack was already sharp, but it is pinned rather than inherited so a
-    # later change to the chiff cannot slow the click down.
-    attack_time = 0.0015
-    sustain_jitter = 0.30
-
-    one_shot = True
-    release_floor_db = -50.0
-    decay_db = 150.0                # a click, gone in well under a tenth
-    harmonic_decay_db = 30.0
-    # (chiff_volume and sustain_jitter are set above, with the mode set: the
-    #  wash is what fills between 52 modes so the click has no gaps to ring in)
-    chiff_width = 0.012
-    strike_noise_slope = 0.8
-    initial_gain = 0.252227
 
 class GuiroProperties(WoodPercussionProperties):
     """The guiro's body: struck wood, but the NOISIEST wood in the kit.
