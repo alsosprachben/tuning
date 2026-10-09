@@ -22,7 +22,7 @@
 #define VOICEDESC_H
 
 #ifdef __OPENCL_VERSION__
-typedef ulong u64; typedef int i32;
+typedef ulong u64; typedef int i32; typedef long i64;
 #define VGLOBAL __global
 #define VCOS cos
 #define VSIN sin
@@ -31,7 +31,7 @@ static inline u64 v_mulhi(u64 a, u64 b){ return mul_hi(a, b); }
 #else
 #include <stdint.h>
 #include <math.h>
-typedef uint64_t u64; typedef int32_t i32;
+typedef uint64_t u64; typedef int32_t i32; typedef int64_t i64;
 #define VGLOBAL
 #define VCOS cosf
 #define VSIN sinf
@@ -96,6 +96,25 @@ static inline float v_hash01(u64 x){
     return (float)(x >> 11) * (1.0f / 9007199254740992.0f);
 }
 
+// A NOISE BAND'S PHASE at draw ui and fraction uf: the draw's value joined to
+// the next's the short way round. Which way is short is decided EXACTLY as
+// the CPU's double arithmetic decides it (voice_noise.inc: ndh = h1 - h0,
+// ndh -= floor(ndh + 0.5)), from the hashes' 53-bit integers: in floats, two
+// draws almost exactly half a turn apart went round the other way now and
+// then, and for one draw (~27 samples at 6.6 kHz) the GPU's phase swept the
+// wrong way -- samba's shakes, 1.7e-2 of the peak at one instant.
+static inline float v_noise_phase(u64 seed, u64 ui, float uf){
+    u64 x0=seed+ui, x1=seed+ui+1;
+    x0 += 0x9E3779B97F4A7C15UL; x0 = (x0 ^ (x0 >> 30)) * 0xBF58476D1CE4E5B9UL;
+    x0 = (x0 ^ (x0 >> 27)) * 0x94D049BB133111EBUL; x0 ^= x0 >> 31;
+    x1 += 0x9E3779B97F4A7C15UL; x1 = (x1 ^ (x1 >> 30)) * 0xBF58476D1CE4E5B9UL;
+    x1 = (x1 ^ (x1 >> 27)) * 0x94D049BB133111EBUL; x1 ^= x1 >> 31;
+    i64 a=(i64)(x0 >> 11), d=(i64)(x1 >> 11) - a;
+    const i64 H=(i64)1 << 52, F=(i64)1 << 53;
+    if(d >= H) d -= F; else if(d < -H) d += F;
+    return (float)a*(1.0f/9007199254740992.0f) + (float)d*(1.0f/9007199254740992.0f)*uf;
+}
+
 // a phasor z0 turned k steps of w: z0 e^{i k w}
 #define V_TURN(r, i, z0r, z0i, k, w) { float a_=(float)(k)*(w), c_=VCOS(a_), s_=VSIN(a_); \
     r=(z0r)*c_-(z0i)*s_; i=(z0r)*s_+(z0i)*c_; }
@@ -132,9 +151,7 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
             // an ordinary noise band (voice_noise.inc), as the Moog's below
             u64 ui=n*d->nk_hi+v_mulhi(n, d->nk_lo);
             float uf=(float)(n*d->nk_lo)*(1.0f/18446744073709551616.0f);
-            float h0=v_hash01(d->nseed+ui), dh=v_hash01(d->nseed+ui+1)-h0;
-            dh-=VFLOOR(dh+0.5f);
-            float jn=6.2831853f*(h0+dh*uf), cn=VCOS(jn), sn=VSIN(jn);
+            float jn=6.2831853f*v_noise_phase(d->nseed, ui, uf), cn=VCOS(jn), sn=VSIN(jn);
             sL=zrL*cn-ziL*sn; sR=zrR*cn-ziR*sn;
         }
     } else {
@@ -151,9 +168,7 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
             // the draw index floor(n * nrate / SRATE) and its fraction, exactly
             u64 ui=n*d->nk_hi+v_mulhi(n, d->nk_lo);
             float uf=(float)(n*d->nk_lo)*(1.0f/18446744073709551616.0f);
-            float h0=v_hash01(d->nseed+ui), dh=v_hash01(d->nseed+ui+1)-h0;
-            dh-=VFLOOR(dh+0.5f);
-            float jn=6.2831853f*(h0+dh*uf), cn=VCOS(jn), sn=VSIN(jn);
+            float jn=6.2831853f*v_noise_phase(d->nseed, ui, uf), cn=VCOS(jn), sn=VSIN(jn);
             sL=zrL*cn-ziL*sn; sR=zrR*cn-ziR*sn;
         }
         float czL=zrL, czR=zrR, sgL=ziL, sgR=ziR;
