@@ -13,6 +13,7 @@ in power.
              strongest, in the instrument's band -- as (ratio to the note's
              pitch, dB re the strongest, amplitude dB/s read between two
              windows). The DRUM_MODES the class carries.
+             (--group=NAME: from that group's strokes instead of the loudest)
   --scatter  how much two takes of one stroke differ, band by band (1/48
              octave, 3-16 kHz or the instrument's band), against the model's
              -- what mode_scatter_db is set from (the tambourine's lesson:
@@ -23,6 +24,8 @@ in power.
   --trim3[=N]  N passes (3) refining the class's band_trim_db in third
              octaves, written into tonelib.py
   --env      10 ms envelope, recorded against the model
+  --grain    noise or clicks: the shake's kurtosis and 1 ms spread, recorded,
+             as a shaped noise would read, and the model
   --level    the level a refit is held at (velocity 100, loudest 150 ms),
              at the fit's note length and at 1.5 s
 
@@ -73,6 +76,8 @@ DRUM_PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs", "click_str
 # the cabasa's moved its render by 1e-3 of its peak -- so a rattle's colour is
 # all in band_trim_db
 RATTLE_PARAMS = ("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db", "@rise_s")
+# a shake as shaped noise: its envelope, and the note length it was played at
+SHAKE_PARAMS = ("rise_s", "settle_s", "settle_db", "@shake_s")
 
 # note, files, how they group into soft/mid/loud (None: one group), the
 # modes' band and floor, the flatness band
@@ -104,27 +109,20 @@ INSTS = {
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
     # the SINGLE strokes only: maraca1 and 4 are two strokes, 3 three quick hits
+    # THE SHAKES ARE NOISE (tonelib.ShakenNoiseProperties; --grain): their
+    # envelope is fitted here, their spectrum by --trim3 into noise_bands. A
+    # shake lasts half its note, so the stroke's length is fitted as the note's
+    # (@shake_s: the hold that makes it), the convention left alone.
+    # the SINGLE strokes only: maraca1 and 4 are two strokes, 3 three quick hits
     "maracas":   dict(note=70, glob=_V1 + "varWood/maraca[25].wav", groups=None,
                       band=(1000, 16000), floor=-20, flat=(1000, 12000),
-                      # A RATTLE'S BURST IS HALF THE NOTE (PERCUSSION_RATTLE): a
-                      # 1 s note is a half-second shake. A VSCO stroke shakes for
-                      # ~50 ms and then settles for 0.3 s, so a 0.12 s note -- an
-                      # eighth at 250 bpm, where maraca parts mostly live -- with
-                      # the settle carrying the tail. 0.4 s first: a 0.2 s shake,
-                      # flat until 200 ms where the recording falls from 100.
-                      # The third-octave trim is kept (keep_trim): the spectrum
-                      # was matched to the recordings band by band, by ear
-                      hold=0.4, keep_trim=True,
-                      params=("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db",
-                              "@rise_s")),
+                      hold=0.228, params=SHAKE_PARAMS),
     # one twist each: cabasa_4 has two more bursts after its first, 5 is two
     # strokes. A twist swells in ~40 ms, scrapes ~150 ms and settles 40 dB in
-    # 0.3 s -- the maracas' shape, so their machinery (_settling_rattle),
-    # except that its settle hardly thins (@settle_thin)
+    # 0.3 s
     "cabasa":    dict(note=69, glob=_V1 + "varMetal/various/cabasa_[1236].wav", groups=None,
                       band=(1000, 16000), floor=-20, flat=(1000, 12000),
-                      hold=0.4, keep_trim=True,
-                      params=RATTLE_PARAMS + ("@settle_thin",)),
+                      hold=0.223, params=SHAKE_PARAMS),
     # a periodic train of pin strikes, 2.4-3.5 s whatever the note
     # (percussion_map.PERCUSSION_TRAIN): windows out to 2.4 s
     "vibraslap": dict(note=58, glob=_V1 + "varWood/vibraslap[0-9].wav", groups=None,
@@ -139,6 +137,32 @@ INSTS = {
     "bongo_lo":  dict(note=61, glob=_V1 + "drums/other/Bongos/LowBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
+    # GM 116, a PROGRAM: VSCO's "giant ethnic" drum struck with sticks, as a
+    # taiko is with bachi -- a barrel drum at 65.9 Hz, ringing 0.3-0.6 s to
+    # -40 dB, its loud strokes leaning on modes at 109 and 131 Hz. Fitted at
+    # note 36 (C2, 65.4 Hz), the nearest; the class carries its modes as
+    # ratios, so every note is this drum retuned. Ten strokes, ppp to fff.
+    "taiko":     dict(program=116, note=36, f0=65.9,
+                      glob=_V1 + "drums/other/ethnic/giant/sticks/EthnicLargeSticks_hit_*.wav",
+                      groups=lambda p: {"ppp": "soft", "pp": "soft", "p": "soft", "mp": "mid", "mf": "mid",
+                                        "f": "loud", "fff": "loud"}[_dyn(p)],
+                      # flatness where a stick stroke still speaks: over 1-8 kHz
+                      # the pp-ppp takes are their own noise floor (0.34)
+                      band=(40, 4000), floor=-35, flat=(500, 4000),
+                      # the grid's octaves from 31 Hz: from 125 it never saw the
+                      # drum, whose fundamental and strike modes lie at 66-131
+                      edges=(31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000),
+                      T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25),
+                         (0.25, 0.50), (0.50, 0.90)),
+                      # ring_scale free: the modes' own rates, read through a
+                      # +-1.5% band, ring half as fast as the bands they sit in
+                      # fall (250-500 Hz: 110-150 dB/s against ~220)
+                      # NO FLATNESS TERM: the takes read 0.10, 0.016 and 0.08 at
+                      # soft, mid and loud -- their noise, not the drum's -- and
+                      # chasing it held the strike ringing (click_dbs 71) and the
+                      # trims at +-30 dB
+                      flat_weight=0.0,
+                      params=DRUM_PARAMS + ("ring_scale",)),
 }
 
 C.EDGES = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
@@ -148,7 +172,42 @@ C.CENTRES = tuple(float(np.sqrt(a * b)) for a, b in zip(C.EDGES[:-1], C.EDGES[1:
 C.COL_W = np.array([0.3] + [1.0] * (len(C.T) - 1))
 _render = C.render
 HOLD = [1.0]
-C.render = lambda note, vel, secs=None: _render(note, vel, HOLD[0] if secs is None else secs)
+# A PROGRAM'S VOICE, not a drum note's (the taiko, GM 116): rendered on a
+# melodic channel at the note nearest the recorded pitch -- PROG[0] is the
+# program, None for a drum note
+PROG = [None]
+
+
+def _render_program(note, vel, secs):
+    import mido
+    import blockrender as B
+    m = mido.MidiFile(type=1, ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    t.append(mido.Message("program_change", channel=0, program=PROG[0], time=0))
+    t.append(mido.Message("note_on", channel=0, note=note, velocity=vel, time=0))
+    t.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=int(secs * 960)))
+    L, R = B.render(m)[:2]
+    return [np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR
+
+
+C.render = lambda note, vel, secs=None: (_render_program if PROG[0] is not None else _render)(
+    note, vel, HOLD[0] if secs is None else secs)
+
+
+def inst_class(spec):
+    """The class a fit adjusts: a drum note's, or the program's at its note."""
+    import percussion_map as PM
+    if "program" in spec:
+        import patch_map
+        return patch_map.property_class_for_note(spec["program"], spec["note"])
+    return PM.PERCUSSION[spec["note"]][1]
+
+
+def inst_f0(spec):
+    import percussion_map as PM
+    return spec["f0"] if "f0" in spec else PM.PERCUSSION[spec["note"]][2]
 C.PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs",
             "click_stroke_slope", "chiff_volume", "chiff_width", "chiff_bandwidth",
             "mode_jitter", "sustain_jitter")
@@ -186,12 +245,15 @@ def grouped(ss):
     return out
 
 
+GROUP = [None]       # --group=NAME: read the modes off that group, not the loudest
+
+
 def modes(inst, f0):
     spec = INSTS[inst]
     lo, hi = spec["band"]
     ss = strokes(inst)
     gs = grouped(ss)
-    loud = gs[list(gs)[-1]][2]
+    loud = gs[GROUP[0] or list(gs)[-1]][2]
     win = ((0.01, 0.15), (0.02, 0.06), (0.10, 0.20))
     acc = [0.0, 0.0, 0.0]
     for p in loud:
@@ -278,8 +340,11 @@ def scatter(inst):
     t = mido.MidiTrack()
     m.tracks.append(t)
     for k in range(4):
-        t.append(mido.Message("note_on", channel=9, note=spec["note"], velocity=100, time=0 if k == 0 else 900))
-        t.append(mido.Message("note_off", channel=9, note=spec["note"], velocity=0, time=60))
+        ch = 0 if PROG[0] is not None else 9
+        if k == 0 and PROG[0] is not None:
+            t.append(mido.Message("program_change", channel=0, program=PROG[0], time=0))
+        t.append(mido.Message("note_on", channel=ch, note=spec["note"], velocity=100, time=0 if k == 0 else 900))
+        t.append(mido.Message("note_off", channel=ch, note=spec["note"], velocity=0, time=60))
     path = tempfile.mktemp(suffix=".mid")
     m.save(path)
     L, R = B.render(path)[:2]
@@ -305,6 +370,8 @@ _RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6
 
 def _get(cls, note, k):
     import percussion_map as PM
+    if k == "@shake_s":
+        return HOLD[0] * cls.shake_frac
     if k == "@rattle_rate":
         span, n = PM.PERCUSSION_RATTLE[note][:2]
         return n / span
@@ -324,7 +391,9 @@ def _set(cls, note, k, v):
     """A class attribute, or one of the rattle's own numbers in the map
     (whose per-note ring classes are cached, so the cache goes)."""
     import percussion_map as PM
-    if k == "@rattle_rate":
+    if k == "@shake_s":
+        HOLD[0] = float(v) / cls.shake_frac
+    elif k == "@rattle_rate":
         span = PM.PERCUSSION_RATTLE[note][0]
         PM.PERCUSSION_RATTLE[note] = (span, max(2, int(round(v * span)))) + tuple(PM.PERCUSSION_RATTLE[note][2:])
     elif k == "@rattle_fall":
@@ -383,7 +452,7 @@ def fit(inst, recs, rflat, vels, maxfev):
     import percussion_map as PM
     spec = INSTS[inst]
     note = spec["note"]
-    cls = PM.PERCUSSION[note][1]
+    cls = inst_class(spec)
     if not spec.get("keep_trim"):
         cls.band_trim_db = ()
     x0 = [max(float(_get(cls, note, k)), C.FLOOR.get(k, 1e-3)) for k in C.PARAMS]
@@ -404,6 +473,7 @@ def fit(inst, recs, rflat, vels, maxfev):
         econ = abs(contrast(sum(chs), sr) - rcon) if rcon is not None else 0.0
         e, trim = C.score(model, recs)
         ef = float(np.sqrt(np.mean(np.square(10 * np.log10(np.array(mflat) / np.array(rflat))))))
+        ef *= spec.get("flat_weight", 1.0)
         ec = max(0.0, mcrack - rcrack)
         tot = float(np.sqrt(e * e + ef * ef + ec * ec + econ * econ))
         if tot < best[0]:
@@ -418,6 +488,53 @@ def fit(inst, recs, rflat, vels, maxfev):
              options={"maxfev": maxfev, "initial_simplex": simplex, "xatol": 0.02, "fatol": 0.02,
                       "adaptive": True})
     return best
+
+
+# GRAIN: is a shake noise, or clicks? Each band's signal is divided by its own
+# 20 ms RMS (the shake's swell and settle out of the way) where that is within
+# 20 dB of its peak, and read two ways: the kurtosis of what is left (3 for
+# Gaussian noise; a train of separable clicks reads far higher) and the spread
+# in dB of its 1 ms energies. NOISE is the same band's spectrum with random
+# phases -- what a shaped noise in its place would read. A recording near the
+# noise row needs no events; one above it has clicks a noise would lose.
+GRAIN_BANDS = ((1000, 4000), (4000, 16000))
+
+
+def _grain(x, sr, lo, hi):
+    from scipy.signal import butter, sosfiltfilt
+    t0 = C.onset([x], sr)
+    y = sosfiltfilt(butter(4, [lo, hi], btype="band", fs=sr, output="sos"), x[t0:t0 + int(1.0 * sr)])
+    w = int(0.02 * sr)
+    slow = np.sqrt(np.convolve(y * y, np.ones(w) / w, "same")) + 1e-12
+    live = slow > slow.max() * 0.1
+    live[:int(0.01 * sr)] = False
+    z = (y / slow)[live]
+    k = float(np.mean(z ** 4) / np.mean(z ** 2) ** 2)
+    n = int(0.001 * sr)
+    e = np.array([np.mean(z[i:i + n] ** 2) for i in range(0, len(z) - n, n)])
+    return k, float(np.std(10 * np.log10(e + 1e-12)))
+
+
+def _noise_like(x, sr, seed):
+    t0 = C.onset([x], sr)
+    seg = x[t0:t0 + int(1.0 * sr)]
+    X = np.abs(np.fft.rfft(seg))
+    ph = np.random.default_rng(seed).uniform(0, 2 * np.pi, len(X))
+    return np.concatenate((np.zeros(t0), np.fft.irfft(X * np.exp(1j * ph), len(seg))))
+
+
+def grain(inst):
+    rec = [sum(load(p)[0]) for p in files(inst)]
+    mod = [sum(C.render(INSTS[inst]["note"], v)[0]) for v in (60, 90, 120)]
+    rows = (("recorded", rec), ("noise", [_noise_like(x, 44100, i) for i, x in enumerate(rec)]),
+            ("model", mod))
+    print("%-10s" % "" + "".join("  %5d-%-5d Hz: kurt 1ms dB" % b for b in GRAIN_BANDS))
+    for name, xs in rows:
+        cells = []
+        for lo, hi in GRAIN_BANDS:
+            g = np.array([_grain(x, 44100, lo, hi) for x in xs])
+            cells.append("%20.1f %6.1f" % (g[:, 0].mean(), g[:, 1].mean()))
+        print("%-10s" % name + "".join(cells))
 
 
 def held_level(note, hold):
@@ -470,13 +587,15 @@ def ltas3(chs, sr, dur=1.5):
 
 def trim3(inst, passes):
     """Refine the class's band_trim_db in third octaves, writing each pass
-    into tonelib.py."""
+    into tonelib.py -- or a shaken noise's noise_bands, which ARE its
+    spectrum (no body under them to trim)."""
     import percussion_map as PM
     note = INSTS[inst]["note"]
-    cls = PM.PERCUSSION[note][1]
+    cls = inst_class(INSTS[inst])
     path = os.path.join(HERE, "tonelib.py")
     r = np.mean([ltas3(*load(p)) for p in files(inst)], 0)
     keep = (_C3 >= 250) & (_C3 <= 14000)
+    attr = "noise_bands" if getattr(cls, "shake_noise", False) else "band_trim_db"
     for it in range(passes + 1):
         m = np.mean([ltas3(*C.render(note, v)) for v in (60, 90, 120)], 0)
         d = r - m
@@ -485,20 +604,20 @@ def trim3(inst, passes):
             it, np.sqrt(np.mean(d[keep] ** 2)), -d[k], _C3[k]), flush=True)
         if it == passes:
             break
-        old = cls.band_trim_db or ((1000.0, 0.0),)
+        old = getattr(cls, attr) or ((1000.0, 0.0),)
         of, od = np.array([p[0] for p in old], float), np.array([p[1] for p in old], float)
         pts = tuple((float(cf), float(np.interp(np.log(cf), np.log(of), od)
                                       + (np.clip(dd, -12, 12) if kk else min(0.0, dd))))
                     for cf, dd, kk in zip(_C3, d, keep) if 160 <= cf <= 16000)
-        cls.band_trim_db = pts
+        setattr(cls, attr, pts)
         PM._RING_CLASSES.clear()
         s = open(path).read()
         a = s.index("class %s(" % cls.__name__)
         b = s.index("\n\n\n", a)
-        txt = "    band_trim_db = (" + ", ".join("(%.0f, %.1f)" % p for p in pts) + ")"
+        txt = "    %s = (" % attr + ", ".join("(%.0f, %.1f)" % p for p in pts) + ")"
         blk = s[a:b]
-        if re.search(r"^    band_trim_db = ", blk, re.M):
-            blk = re.sub(r"^    band_trim_db = .*$", lambda _: txt, blk, flags=re.M)
+        if re.search(r"^    %s = " % attr, blk, re.M):
+            blk = re.sub(r"^    %s = .*$" % attr, lambda _: txt, blk, flags=re.M)
         else:
             blk = blk + "\n" + txt
         open(path, "w").write(s[:a] + blk + s[b:])
@@ -514,12 +633,17 @@ def main(argv):
     if "T" in spec:
         C.T = spec["T"]
         C.COL_W = np.array([0.3] + [1.0] * (len(C.T) - 1))
+    if "edges" in spec:
+        C.EDGES = spec["edges"]
+        C.CENTRES = tuple(float(np.sqrt(a * b)) for a, b in zip(C.EDGES[:-1], C.EDGES[1:]))
     HOLD[0] = float(next((a.split("=")[1] for a in argv if a.startswith("--hold=")), spec.get("hold", 1.0)))
     os.environ.setdefault("TUNING_REFLECT", "0")
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
     import percussion_map as PM
-    f0 = PM.PERCUSSION[spec["note"]][2]
+    PROG[0] = spec.get("program")
+    f0 = inst_f0(spec)
     if "--modes" in argv:
+        GROUP[0] = next((a.split("=")[1] for a in argv if a.startswith("--group=")), None)
         ms = modes(inst, f0)
         print("== %s: %d modes over %.1f Hz" % (inst, len(ms), f0))
         print("    DRUM_MODES = (%s)" % ", ".join("(%.4f, %.1f, %.0f)" % m for m in ms))
@@ -530,6 +654,9 @@ def main(argv):
         return 0
     if "--env" in argv:
         envelope(inst)
+        return 0
+    if "--grain" in argv:
+        grain(inst)
         return 0
     trim = next((a for a in argv if a.startswith("--trim3")), None)
     if trim:

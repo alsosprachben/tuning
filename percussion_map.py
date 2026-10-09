@@ -431,8 +431,9 @@ PERCUSSION_RING = {
     # (56, 60-64, 67, 68 carry their measured rings in their classes:
     #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
     57: 1.69, 58: 0.098, 59: 0.48,
-    65: 0.30, 66: 0.35, 69: 0.00963,
-    70: 0.0094, 71: 0.280, 72: 0.850,
+    65: 0.30, 66: 0.35,
+    # (69, 70: shaped noise now, tonelib.ShakenNoiseProperties -- no impacts to ring)
+    71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
     # fairly closed. Measured on the Iowa guiro, the envelope after the last
     # ridge falls 10 dB in 3-5 ms and 20 dB in 15-21 ms, against a woodblock's
@@ -765,11 +766,10 @@ def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0)
 
 
 PERCUSSION_RATTLE = {
-    # cabasa: steel beads twisted on a ridged cylinder, VSCO's (examples/perc_fit.py)
-    69: (0.10, 58, 0.120, 0.374, 26.0, 0.0, 0.0, 0.0479, 0.505),
-    # maracas: seeds in a gourd, VSCO's (examples/perc_fit.py) -- the shake, then its
-    # settle (seconds, dB): see _settling_rattle
-    70: (0.10, 40, 0.19, 0.28, 41.9, 0.0, 0.0, 0.065),
+    # (69 and 70, the cabasa and maracas, were here: a settling burst of
+    #  impacts, fitted to VSCO's takes. Measured for grain, those takes are
+    #  noise, not clicks -- tonelib.ShakenNoiseProperties, whose shake is an
+    #  envelope; _settling_rattle stays for whatever does click)
     # (58, the vibraslap, was here: 80 impacts over 1.1 s, a guess. Measured,
     #  it is a periodic train -- see PERCUSSION_TRAIN)
 }

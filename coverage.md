@@ -39,8 +39,8 @@ so it plays on the Messenger itself.
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
 | 2 specific, theory | 35 | 27% |
-| 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 66 | 52% |
+| 3 specific, theory + ear | 26 | 20% |
+| 4 specific, reference audio | 67 | 52% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -55,8 +55,8 @@ the crashes hit hard.
 | rating | notes | share |
 |---|---|---|
 | 2 specific, theory | 8 | 16% |
-| 3 specific, theory + ear | 4 | 8% |
-| 4 specific, reference audio | 39 | 76% |
+| 3 specific, theory + ear | 2 | 4% |
+| 4 specific, reference audio | 41 | 80% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -94,8 +94,8 @@ the crashes hit hard.
 | 66 | Low Timbale | `Timbale` | **2** | as 65, lower |
 | 67 | High Agogo | `AgogoHigh` | **4** | VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes |
 | 68 | Low Agogo | `AgogoLow` | **4** | VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67 |
-| 69 | Cabasa | `Cabasa` | **3** | VSCO-2 CE (CC0) cabasa: the maracas' shake fitted to four single twists -- a swell, ~575 impacts a second, a settle that FADES without thinning (the beads stay on the ridges), colour matched in third octaves. Ben: sounds fine; still events where a shaped noise belongs, as the maracas |
-| 70 | Maracas | `Maracas` | **3** | VSCO-2 CE (CC0) maracas: the rattle kept, its colour matched in third octaves, the shake fitted to the SINGLE strokes (two of the five files are two strokes, one three) -- a swell in, ~400 impacts a second, then a settle at random times where it stopped dead. Ben: as close as this recording goes; its single strokes are quiet takes with their noise in them |
+| 69 | Cabasa | `Cabasa` | **4** | VSCO-2 CE (CC0) cabasa as SHAPED NOISE: measured, a twist is noise (its grain is its own spectrum with random phases), so the recording's third-octave spectrum as noise rows under the fitted swell, shake and 0.33 s settle -- colour within 0.3 dB, envelope 3.0. The impact burst before it clicked where the takes do not. Ben: sounds great |
+| 70 | Maracas | `Maracas` | **4** | VSCO-2 CE (CC0) maracas as SHAPED NOISE, fitted to the SINGLE strokes (two of the five files are two strokes, one three): the recording's spectrum as noise rows, a swell, the shake, a 0.29 s settle falling 40 dB -- colour within 0.8 dB but for the gourd's 2.3 kHz cliff, envelope 3.2. A little seed-click grain above 4 kHz is the recording's and not ours. Ben: sounds great |
 | 71 | Short Whistle | `SambaWhistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
 | 72 | Long Whistle | `SambaWhistle` | **3** | as 71, longer |
 | 73 | Short Guiro | `Guiro` | **4** | Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window |
@@ -145,7 +145,7 @@ plays Standard, as does any program that is not a set.
 | 47 | Elec Mid Tom 1 | `SynthDrum` | **2** | as 41 |
 | 48 | Elec Hi Tom 2 | `SynthDrum` | **2** | as 41 |
 | 50 | Elec Hi Tom 1 | `SynthDrum` | **2** | as 41 |
-| 52 | Reverse Cymbal | `ReverseCymbal` | **3** | GM 119's reverse cymbal: a measured crash, swelling to the written note-off. Ben's ear, in thememat (2026-09-23): good |
+| 52 | Reverse Cymbal | `ReverseCymbal` | **4** | GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off |
 
 ### 40 Brush
 
@@ -348,7 +348,7 @@ plays Standard, as does any program that is not a set.
 | 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |
 | 117 | Melodic Tom | `FloorTom/TomTom by register` | **4** | DRSKit's two toms, measured, by register: the floor tom under G2, the rack tom from G2 up. A melodic tom part is a set of drums, not one drum retuned |
 | 118 | Synth Drum | `MoogSynthDrum` | **4** | a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves) |
-| 119 | Reverse Cymbal | `ReverseCymbal` | **3** | the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere. Ben, having heard it many times: a 3 |
+| 119 | Reverse Cymbal | `ReverseCymbal` | **4** | the fitted crash (Iowa's modes, refitted to DRSKit) PLAYED BACKWARDS, literally: every partial emitted time-reversed -- each decay a growth at its own rate, each phase mirrored so the modes arrive together as they set out, the strike's wash a swell before the arrival. Against the forward crash flipped, 0.4 dB rms in every band (examples/reverse_check.py). It was one shared swell over the modes; Ben: sounds great |
 
 ## 120-127 Sound Effects
 
@@ -365,7 +365,7 @@ plays Standard, as does any program that is not a set.
 
 ## The class tree
 
-279 classes.
+280 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -431,7 +431,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4)
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4)
-          - `ReverseCymbal` -- GM 119 Reverse Cymbal (3), set 24 52 Reverse Cymbal (3)
+          - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
         - `CrashRide` -- 59 Ride Cymbal 2 (4)
         - `HiHat`
@@ -478,9 +478,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `HandClap` -- 39 Hand Clap (2)
       - `OrchestraHit` -- GM 55 Orchestra Hit (2)
       - `Rattle` [NoisyPercussionMixin]
-        - `Cabasa` -- 69 Cabasa (3)
-        - `Maracas` -- 70 Maracas (3)
         - `Vibraslap` -- 58 Vibraslap (4)
+      - `ShakenNoise` [NoisyPercussionMixin]
+        - `Cabasa` -- 69 Cabasa (4)
+        - `Maracas` -- 70 Maracas (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (3)
         - `BrushTap` -- set 40 38 Brush Tap (3)

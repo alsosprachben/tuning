@@ -1874,10 +1874,78 @@ def prepare(path, tuner='hybrid440', sink=None):
     # only: a reflection is that same power heard again, not more of it.
     ROOM_BANDS = (63.0, 125.0, 250.0, 500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0)
     _QACC = [[0.0, 0.0] for _ in ROOM_BANDS]   # [sum a^2, sum a^2/Q] per band
+    # PLAYED BACKWARDS (tonelib.ReverseCymbalProperties): (the note's onset,
+    # its arrival), in samples, while such a note emits; None otherwise.
+    _REV = [None]
+    REV_FLOOR = math.log(1e5)    # a reversed decay starts 100 dB under its arrival
+
+    def _reverse_partial(om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
+                         crl, sj, csc, gr, cr, ph0):
+        """One partial of the forward note, emitted TIME-REVERSED: what a tape
+        of it played backwards is. Each decay is a growth at its own rate, so
+        the longest-lived modes rise first and the brief ones -- the bright
+        upper modes, the stick's strike -- surge in at the end; a partial that
+        started d after the forward onset ends d before the arrival. Each of
+        the two decays (the kernel's logr and its aftersound, logrA) is its own
+        row, begun where it is REV_FLOOR under its end (or at the note's
+        onset, faded in), so no growth is ever more than 100 dB. The attack's
+        chiff, a hump of wash just after the strike, becomes a swell of noise
+        (a noise row, the wash's width) just before the arrival."""
+        n0, arr = _REV[0]
+        end = arr - (non - n0)
+        if end <= n0:
+            return
+        _REV[0] = None                             # its own rows are forward rows
+        try:
+            _reverse_rows(n0, end, om, ampL, ampR, ampM, nomf, fa, ch, logr, logrA, aft, sus, cv, cc,
+                          crl, sj, csc, gr, cr, ph0)
+        finally:
+            _REV[0] = (n0, arr)
+
+    def _reverse_rows(n0, end, om, ampL, ampR, ampM, nomf, fa, ch, logr, logrA, aft, sus, cv, cc,
+                      crl, sj, csc, gr, cr, ph0):
+        _out = max(fa, 0.001 * SR)                 # the forward fade-in, now the cut-off
+        _out = min(_out, 0.5 * (end - n0))
+        # ...AND THE PHASE MIRRORED: cos(w t + ph0) backwards is cos(w t' - ph0),
+        # so each row reaches -ph0 at its end, where the forward one began at
+        # ph0. The modes that set out together at the strike arrive together:
+        # turned through whatever phase their spans gave them, the crash's
+        # arrival summed incoherently, 4-5 dB short of the strike it mirrors.
+        def _ph(start):
+            return -ph0 - om * _PJ[0] * (end - start)
+        for w, lr in (((1.0 - sus) * (1.0 - aft), logr), ((1.0 - sus) * aft, logrA), (sus, 0.0)):
+            if w <= 0.0:
+                continue
+            span = REV_FLOOR / lr * SR if lr > 0.0 else end - n0
+            start = max(n0, end - span)
+            g = w * math.exp(-lr * (end - start) / SR)
+            fin = 0.01 * SR if start <= n0 else 0.001 * SR
+            # the forward fade-in, reversed, is a fade-out ENDING at the arrival
+            emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, end - _out),
+                         fin, _out, ch, -lr, 0.0, 0.0, 0.0, 0.0, cc, crl, sj, csc, gr, cr, _ph(start))
+        jp = cv * csc * 0.25                       # the hump's peak, r(1-r) at r = 1/2
+        if jp > 0.0 and ch > 0.0:
+            _cbw = (_CBW[0], _CBW[1])
+            _CBW[0], _CBW[1] = -max(abs(_cbw[0]), 1e-3), 0.0
+            _nr = _NOREFL[0]
+            _NOREFL[0] = True
+            start = max(n0, end - ch)
+            pk = end - ch / 3.0                    # the forward hump peaks a third in
+            g = jp * (1.0 - sus) * (1.0 - aft) * math.exp(-logr * (ch / 3.0) / SR)
+            emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, pk),
+                         max(1.0, pk - start), max(1.0, end - pk), ch, 0.0, 0.0, 0.0, 1.0, 0.0,
+                         cc, crl, 0.0, csc, gr, cr, _ph(start))
+            _CBW[0], _CBW[1] = _cbw
+            _NOREFL[0] = _nr
+
     def emit_partial(om, ampL, ampR, ampM, nomf, non, noff, fa, re, ch, logr, logrA, aft, sus, cv, cc, crl, sj, csc, gr, cr, ph0=0.0,
                      _place=None):
         # _place is (delL, delR, px, pz) for an image source; None means the
         # direct sound, which also emits the images.
+        if _REV[0] is not None and _place is None:
+            _reverse_partial(om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
+                             crl, sj, csc, gr, cr, ph0)
+            return
         om = om * _PJ[0]
         dl, dr, px, pz = _place if _place else (_DL[0], _DL[1], _PX[0], _PZ[0])
         if _place is None:
@@ -2836,6 +2904,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                     vbase = _VOW.VOWELS.get(rows[i][1])
             props.formants = props._sung_formants(_tess.get(ch, f0),
                                                   part=_parts.get(ch), base=vbase)
+        # how long the key was held, before a one-shot's extension: a shaken
+        # noise (tonelib.ShakenNoiseProperties) shakes for a share of it
+        _held = off - on
         # A one-shot voice (cymbal, struck drum) ignores note-off and rings out
         # on its own decay; the reference skips release() for these.
         if getattr(pc, 'one_shot', False):
@@ -2977,6 +3048,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         chiff = max(1e-4, min(props.chiff_time(f0, at), 0.45*dur))*SR
         # per-note timing jitter delays the strike; pitch jitter detunes the whole note
         non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
+        # a reversed note's partials are emitted backwards, ending at its note-off (_reverse_partial)
+        _REV[0] = (non, noff) if getattr(props, 'played_backwards', False) else None
         _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
         # ...AND WHETHER THIS NOTE CAN BE BENT AT ALL. Per NOTE and not per
         # channel, because a channel can change program mid-piece (passac.mid
@@ -3373,6 +3446,47 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
             _SND_PEND[0] = None      # its CC74/71 moved the ladder, not sound_shape
             stops = ()
+        if getattr(props, 'shake_noise', False):
+            # A SHAKE AS SHAPED NOISE (tonelib.ShakenNoiseProperties): its
+            # spectrum as noise bands (a negative wash bandwidth, the kernel's
+            # noise row), each band twice -- the shake, swelling in over rise_s
+            # and held for shake_frac of the note, then the settle, falling
+            # settle_db over settle_s. The settle fades in over the shake's
+            # last _xf while the shake fades out over the first half of it, so
+            # the two (uncorrelated: their onsets seed them) meet at no more
+            # than +1 dB rather than dipping 3. No room images, as any noise.
+            _shk = max(props.shake_min_s, _held * props.shake_frac)
+            _xf = min(props.shake_xfade_s, 0.5 * _shk)
+            _rise = max(1e-4, min(props.rise_s, _shk - _xf)) * SR
+            _slr = math.log(10.0) / 20.0 * props.settle_db / props.settle_s
+            _sgain = math.exp(_slr * _xf)       # the settle's own fall over its fade, given back
+            _son = non + (_shk - _xf) * SR
+            _cbw = (_CBW[0], _CBW[1])
+            _CBW[0], _CBW[1] = -props.noise_rel, 0.0
+            _NOREFL[0] = True
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            # EACH BAND SEVERAL ROWS, spread across it: a noise row turns its
+            # phase but keeps its level, so one a band is smoother than noise
+            # (kurtosis 2.5 where the takes read 3.0); a few summed are not
+            _k = int(props.noise_rows)
+            _rows = [(_bf * 2.0 ** ((_j - 0.5 * (_k - 1)) / (3.0 * _k)), _db - 10.0 * math.log10(_k))
+                     for _bf, _db in props.noise_bands for _j in range(_k)]
+            for _hf, _db in _rows:
+                if _hf >= 0.45 * SR:
+                    continue
+                _gM = props.gain * 10.0 ** (_db / 20.0) * props.radiation_gain(_hf)
+                _gl, _gr = props.hrtf_gain(_hf, li), props.hrtf_gain(_hf, ri)
+                _om = 2 * math.pi * _hf / SR
+                emit_partial(_om, _gM * _gl, _gM * _gr, _gM, _hf, non, non + (_shk - 0.5 * _xf) * SR,
+                             _rise, _xf * SR, chiff, 0.0, 0.0, 0.0, 1.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+                _g2 = _gM * _sgain
+                emit_partial(_om, _g2 * _gl, _g2 * _gr, _g2, _hf, _son,
+                             _son + (_xf + 4.0 * props.settle_s) * SR, _xf * SR, 0.02 * SR, chiff,
+                             _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+            _CBW[0], _CBW[1] = _cbw
+            _NOREFL[0] = False
+            stops = ()
         if getattr(props, 'pulse', False):
             # A PRESSURE PULSE (the gunshot's N-wave, tonelib.pulse_series): a
             # waveform written as one period of a Fourier series, every
@@ -3723,6 +3837,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                              noff, noff + props.release_click_s * SR,
                              max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
                              cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
+    _REV[0] = None
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
     if _HT_PEND[0] is not None:
         _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None

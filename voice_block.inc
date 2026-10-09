@@ -48,6 +48,32 @@
                         if(ns>=ne) continue;
                     }
                 }
+                // ...AND A GROWTH'S BLOCK ENDS AT ITS CUT, the onset's rule
+                // mirrored. Only a partial that GROWS (a negative decay rate: a
+                // note played backwards, blockrender._reverse_partial) peaks at
+                // its release, and a release a millisecond long inside a block
+                // left the line running from the block's start to zero at its
+                // end, past the peak -- the reversed crash's arrival came out
+                // 5-7 dB short. So where such a release ends inside the block,
+                // the line runs to the level the release starts from, halfway
+                // through it, and nothing is written after. Every other partial
+                // is untouched: none has a negative rate.
+                if(lr<0.f){
+                    float dmin=fminf(dL,dR);
+                    long sR=off+(long)ceilf(dmin), sE=sR+(long)relS[p];
+                    if(sR>bs0 && sR<bs1 && sE<=bs1){
+                        long s1=sR+(long)(0.5f*relS[p]);
+                        if(s1<=bs0) s1=bs0+1;
+                        float g1L=AMP(sR,b,dL), g1R=AMP(sR,b,dR);
+                        if(BLrow){ long bb=b<nblk?b:nblk-1;
+                            float wq=BLrow[bb]+(BLrow[bb+1]-BLrow[bb])*(float)(sR-bs0)/(float)BLK;
+                            g1L*=wq; g1R*=wq; }
+                        float kq=(float)BLK/(float)(s1-bs0);
+                        mL1=mL0+(g1L-mL0)*kq; mR1=mR0+(g1R-mR0)*kq;
+                        if(ne>s1) ne=s1;
+                        if(ns>=ne) continue;
+                    }
+                }
                 if(!ftr && mL0<=1e-7f && mL1<=1e-7f && mR0<=1e-7f && mR1<=1e-7f) continue;
                 // chiff fade for this block (state: attack/sustain/release). The
                 // attack chiff rides chiffS -- its OWN short, capped width, NOT the

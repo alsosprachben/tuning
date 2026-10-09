@@ -11749,6 +11749,9 @@ class RattleProperties(NoisyPercussionMixin, PercussionProperties):
     pitch however flat any single window looks. Ben: "The Maracas seem to have
     too much tonality."
 
+    (The cabasa and maracas have since left this class: measured, a shake is
+    noise -- ShakenNoiseProperties. It stays for what does click.)
+
     Two things fix it and both are what the instrument does. The body becomes a
     dense inharmonic set with a broad hump and no dominant mode -- a click, not
     a note. And the impacts stop being identical: real seeds hit different parts
@@ -11787,39 +11790,84 @@ class RattleProperties(NoisyPercussionMixin, PercussionProperties):
     max_harmonic = 44
 
 
-class MaracasProperties(RattleProperties):
-    """GM 70: one impact of the maracas' seeds, fitted (examples/perc_fit.py
-    maracas) to VSCO's SINGLE strokes, with the shake's own numbers in
-    PERCUSSION_RATTLE and PERCUSSION_RING beside it (percussion_map.
-    _settling_rattle).
+class ShakenNoiseProperties(NoisyPercussionMixin, PercussionProperties):
+    """A shake as one sound: shaped NOISE, not a burst of impacts.
 
-    THE COLOUR, matched in third octaves: it was 20-35 dB too heavy under
-    1 kHz, then -- the octave trim unable to reach inside an octave -- 4-15
-    dB too strong at 450 Hz and 1.8-2.3 kHz (Ben: the low end), now within
-    ~2 dB from 350 Hz to 14 kHz.
+    Hundreds of beads or seeds a second, each ringing ~10 ms, overlap five
+    deep, and what reaches the ear is noise with the shake's envelope.
+    Measured (examples/perc_fit.py --grain), VSCO's cabasa and maracas are
+    as smooth as their own spectrum with random phases -- kurtosis 3.0, 1 ms
+    energies spread 1.7-3.3 dB -- where the impacts that modelled them read
+    4.1-5.0 and 5.3-6.8 dB: clicks the instrument does not make. And each
+    impact was one 44-mode body rescaled, so its hump had to be trimmed flat
+    (-21 to +19 dB) under a colour that is simply noise's.
 
-    THE SHAKE. Of VSCO's five files two are two strokes and one three quick
-    hits (Ben heard it: "a two stroke and a single stroke"); fitted to all
-    five, their second hits read as an opening spike. The single strokes
-    SWELL in over ~65 ms, shake ~400 times a second, and then SETTLE --
-    0.28 s of thinning impacts falling 42 dB, at random times, seeded per
-    note -- where the first version stopped dead ("suddenly dying out").
-    Grid 2.6 dB at a 0.4 s note; the plateau runs long at that length (the
-    shake is half the note), right at an eighth.
+    So the spectrum is the recording's: noise_bands, (Hz, dB) in third
+    octaves, each a noise row (the kernel's: a random phase redrawn
+    noise_rel * f times a second, no carrier), and the gesture is the
+    envelope -- a swell over rise_s, held for shake_frac of the note (the
+    rattles' convention: the duration is the gesture), then the settle,
+    settle_db over settle_s (blockrender, shake_noise). One shake costs ~40
+    rows where its impacts cost ~25,000 partials.
+    """
+    shake_noise = True
+    one_shot = True
+    noise_rel = 0.25
+    noise_rows = 4
+    noise_bands = ((1000.0, 0.0),)
+    shake_frac = 0.5
+    shake_min_s = 0.03
+    shake_xfade_s = 0.02
+    rise_s = 0.05
+    settle_s = 0.3
+    settle_db = 30.0
+    chiff_volume = 0.0
+    sustain_jitter = 0.0
+    initial_gain = 0.03
 
-    AS CLOSE AS THIS RECORDING GOES (Ben). The single strokes are quiet
-    takes, their noise ~27 dB under them, and that is in what was fitted.
+class CabasaProperties(ShakenNoiseProperties):
+    """GM 69: a cabasa's steel beads twisted on its ridged cylinder, as
+    shaped noise, fitted (examples/perc_fit.py cabasa) to VSCO's four single
+    twists.
 
-    LESS NOISE THAN IT HAD. Recorded, the strokes are not white -- the
-    gourd's resonances stand out at 3-5.5 kHz -- so the wash came out; what
-    keeps it from a pitch (Ben, once: "too much tonality") is each impact
-    at its own pitch scale."""
-    decay_db = 1.95003
-    harmonic_decay_db = 14.872
-    chiff_volume = 0.000965759
-    sustain_jitter = 0.00134683
-    band_trim_db = ((178, -9.3), (224, -11.4), (283, 8.1), (356, -25.4), (449, -29.3), (566, -22.1), (713, -22.5), (898, -13.1), (1131, -18.0), (1425, -17.5), (1796, -19.3), (2263, -20.8), (2851, 5.2), (3592, 16.6), (4525, 11.9), (5702, 20.6), (7184, 18.9), (9051, 19.7), (11404, 17.5), (14368, 7.8))
-    initial_gain = 0.024530      # held at the old maracas' level, -30.1 dB (velocity 100, a 1.5 s note, its loudest 150 ms -- read as it was)
+    A swell of 24 ms, a scrape, and a settle falling 33 dB over 0.33 s -- a
+    fade, the beads staying on the ridges as the hand slows. Each recorded
+    twist is a 0.11 s shake, so a 0.22 s note. Colour within 0.3 dB in third
+    octaves (250 Hz-14 kHz), envelope within 3.0 dB in 10 ms windows, and
+    its grain the recording's (kurtosis 2.8 against 3.0). Ben: "Sounds great."
+
+    It was a settling burst of impacts (8851c7e): ~575 a second, the trims
+    -21 to +19 dB flattening one resonator's hump, 1 ms energies jumping
+    5.4 dB where the takes jump 3.0."""
+    noise_bands = ((178, -36.2), (224, -44.5), (283, -37.9), (356, -42.7), (449, -40.5), (566, -39.3), (713, -39.7), (898, -33.8), (1131, -32.2), (1425, -27.4), (1796, -27.5), (2263, -29.9), (2851, -18.9), (3592, -9.0), (4525, -11.4), (5702, -8.6), (7184, -8.2), (9051, -7.1), (11404, -7.8), (14368, -17.0))
+    rise_s = 0.02422
+    settle_s = 0.3342
+    settle_db = 33.28
+    initial_gain = 0.112881      # held at the impact cabasa's level where it is played, -30.1 dB (velocity 100, a 0.22 s note -- the recorded stroke's -- its loudest 150 ms); a 1.5 s shake now 2.6 dB under it
+
+
+class MaracasProperties(ShakenNoiseProperties):
+    """GM 70: the maracas' seeds against the gourd, as shaped noise, fitted
+    (examples/perc_fit.py maracas) to VSCO's SINGLE strokes (maraca2 and 5;
+    1 and 4 are two strokes, 3 three quick hits -- Ben heard it first).
+
+    A swell of 33 ms, the shake, then the settle, 40 dB over 0.29 s. Each
+    recorded stroke is a 0.11 s shake, so a 0.22 s note. Colour within 0.8
+    dB in third octaves -- except the gourd's cliff, 16 dB inside a third
+    octave at 2.3 kHz, which the noise rows leak 3 dB over however far that
+    band is cut (it is, to -91) -- and envelope within 3.2 dB in 10 ms
+    windows. The takes have a little grain above 4 kHz (kurtosis 3.6, the
+    seeds' clicks) that smooth noise does not; a light click layer would add
+    it if it is missed. Ben: "Sounds great."
+
+    It was a settling burst of impacts (a45ba54), each one 44-mode body,
+    its 1 ms energies jumping 6.8 dB where the takes jump 3.3: the "low end"
+    and the "repeating" Ben heard in it."""
+    noise_bands = ((178, -33.4), (224, -40.5), (283, -31.1), (356, -39.9), (449, -40.6), (566, -38.1), (713, -39.8), (898, -35.8), (1131, -29.5), (1425, -34.0), (1796, -36.1), (2263, -90.7), (2851, -20.6), (3592, -5.2), (4525, -9.6), (5702, -4.1), (7184, -8.1), (9051, -8.0), (11404, -19.3), (14368, -37.2))
+    rise_s = 0.03294
+    settle_s = 0.2915
+    settle_db = 40.17
+    initial_gain = 0.077736      # held at the impact maracas's level where it is played, -30.7 dB (velocity 100, a 0.22 s note -- the recorded stroke's -- its loudest 150 ms); a 1.5 s shake now 4.0 dB under it
 
 
 class VibraslapProperties(RattleProperties):
@@ -11838,43 +11886,6 @@ class VibraslapProperties(RattleProperties):
     band_trim_db = ((178, -86.6), (224, -63.0), (283, -66.2), (356, -69.0), (449, -61.1), (566, -52.3), (713, -30.3), (898, 5.1), (1131, -3.7), (1425, -23.2), (1796, -17.2), (2263, -6.0), (2851, 9.8), (3592, 9.8), (4525, 14.1), (5702, 20.5), (7184, 17.8), (9051, 21.3), (11404, 1.3), (14368, -54.7))
     attack_time = 0.00632758
     initial_gain = 0.053767      # held at the old vibraslap's level for a long note, -44.4 dB (velocity 100, its loudest 150 ms); a short one now rings the same
-
-
-class CabasaProperties(RattleProperties):
-    """GM 69: one impact of a cabasa's steel beads on its ridged cylinder,
-    fitted (examples/perc_fit.py cabasa) to VSCO's four single twists, with
-    the shake's own numbers in PERCUSSION_RATTLE and PERCUSSION_RING.
-
-    THE MARACAS' SHAPE, NOT THEIR SETTLE. A twist swells in ~50 ms, scrapes
-    ~575 impacts a second and settles 26 dB over 0.37 s -- but the beads stay
-    on the ridges as the hand slows, so the settle hardly thins (thin 0.5,
-    where a maraca's seeds, coming to rest one by one, halve their rate three
-    times). Thinned like the maracas it broke into lone clicks with silence
-    between, 60-70 dB jumps. Envelope within 2.9 dB rms of the takes in 10 ms
-    windows; colour within 1.35 dB in third octaves, 250 Hz-14 kHz.
-
-    STILL EVENTS. The trims run -21 to +19 dB, flattening this body's hump
-    under a colour that is noise's: the next step is the shake as shaped
-    noise rather than thousands of copies of one resonator."""
-    mode_ratios = (1.0000, 1.1454, 1.2228, 1.3052, 1.3927, 1.5949, 1.7028, 1.8176,
-                   1.9395, 2.2207, 2.3712, 2.5311, 2.7010, 3.0922, 3.3018, 3.5247,
-                   3.7615, 4.3055, 4.5976, 4.9082, 5.2383, 5.9950, 6.4020, 6.8348,
-                   7.2949, 7.7836, 8.9144, 9.5176, 10.1587, 10.8399, 12.4126, 13.2532,
-                   14.1467, 15.0962, 17.2836, 18.4548, 19.7001, 21.0234, 24.0657, 25.6978,
-                   27.4332, 29.2775, 33.5088, 35.7832)
-    mode_gains  = (0.3464, 0.3563, 0.3678, 0.3811, 0.3963, 0.4135, 0.4329, 0.4545,
-                   0.4783, 0.5043, 0.5324, 0.5625, 0.5945, 0.6280, 0.6626, 0.6981,
-                   0.7340, 0.7697, 0.8048, 0.8386, 0.8706, 0.9001, 0.9268, 0.9499,
-                   0.9691, 0.9840, 0.9942, 0.9996, 1.0000, 0.9954, 0.9859, 0.9718,
-                   0.9532, 0.9307, 0.9046, 0.8754, 0.8438, 0.8102, 0.7754, 0.7397,
-                   0.7038, 0.6682, 0.6334, 0.5997)
-    max_harmonic = 44
-    decay_db = 1.95003
-    harmonic_decay_db = 14.872
-    chiff_volume = 0.000965759
-    sustain_jitter = 0.00134683
-    band_trim_db = ((178, -9.3), (224, -10.5), (283, 4.8), (356, -11.5), (449, -17.4), (566, -16.9), (713, -16.6), (898, -11.3), (1131, -20.7), (1425, -1.0), (1796, -2.9), (2263, -7.7), (2851, 5.1), (3592, 12.1), (4525, 9.1), (5702, 13.4), (7184, 13.4), (9051, 17.7), (11404, 19.2), (14368, 15.9))
-    initial_gain = 0.029418      # held at the old cabasa's level, -26.6 dB (velocity 100, a 1.5 s note, its loudest 150 ms)
 
 
 class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
@@ -13323,57 +13334,32 @@ class BirdTweetProperties(MetalPercussionProperties):
 
 
 class ReverseCymbalProperties(CrashCymbal1Properties):
-    """GM 119. A crash cymbal played BACKWARDS, which the coverage doc listed as
-    a category error needing machinery this renderer did not have.
+    """GM 119. The fitted crash (CrashCymbal1Properties: 300 modes from Iowa,
+    refitted to DRSKit) PLAYED BACKWARDS -- which is what GM's reverse cymbal
+    is, a crash sample reversed -- so it ends on its note-off, the arrival.
 
-    It has it, and the machinery is the attack. Everything else in this bank
-    decays -- a partial can be made to fall faster than its neighbour but not to
-    rise -- so a reversed envelope looked impossible. But an ATTACK is a rise,
-    and the only thing standing in the way was blockrender's flat cap of 0.45 of
-    the note's duration, which is right for every acoustic voice and wrong for
-    this one. With attack_fraction_max raised, the attack IS the note: it swells
-    for almost its whole length and then stops dead, which is what a reversed
-    tape does.
+    LITERALLY BACKWARDS (blockrender._reverse_partial). Each partial of the
+    forward note is emitted time-reversed: its decay becomes a growth at the
+    same rate, so the long-lived low modes rise first, from far back, and the
+    brief ones -- the bright upper modes, the stick's strike, the chiff's wash
+    -- surge in at the very end; that order is the sound of a reversed crash.
+    Each partial's two decays (the ring and its aftersound) rise as two rows,
+    each from 100 dB under its arrival, or from the note's onset, faded in, as
+    a tape cut in the middle of the tail would be.
 
-    THE SPECTRUM IS THE MEASURED CYMBAL'S, unchanged. This inherits
-    CrashCymbal1Properties and its 300 modes from the Iowa recording -- playing
-    a cymbal backwards does not change which modes a cymbal has, only when you
-    hear them, so there was nothing to re-fit and nothing to assert. The one
-    thing reversal genuinely changes in the spectrum is the ORDER the modes
-    arrive in, since a real reversed recording brings the longest-lived ones up
-    first; that is not modelled, and it is the honest gap here.
+    It was an approximation: these modes, their decays switched off, under one
+    shared swell held across the note -- the order the modes arrive in not
+    modelled, which its docstring said. Ben, asking why a reversed recording
+    was not rated as one: it was not one. Now it is.
+
+    NOT A ONE-SHOT: a reversed tape stops when it stops, and the effect exists
+    to arrive, so the written note-off is the arrival.
     """
-    # The note is the swell. 0.92 rather than 1.0 so a release still exists to
-    # stop it with: a reversed cymbal ends abruptly, but a step is a click.
-    attack_fraction_max = 0.92
-    attack_time = 6.0           # longer than any note; the cap is what binds
-    release_valve_time = 0.010  # it stops dead
-
-    # AND IT IS NOT A ONE-SHOT, which every other cymbal here is. A struck
-    # cymbal ignores note-off and rings out because nothing stops it, so
-    # blockrender extends it to 8 s -- and with the attack capped at a fraction
-    # of the DURATION, that made this voice swell for 7.4 s whatever was
-    # written. Measured, a 3-second note peaked at 4.84 s: past its own end.
-    #
-    # A reverse cymbal is the opposite case. It is a recording played backwards
-    # and it stops when the recording stops, which is the whole point of the
-    # effect: it exists to ARRIVE somewhere, and an arrival that lands a second
-    # and a half after the downbeat is not one. So the written note-off is the
-    # arrival, and the swell is fitted to it.
+    played_backwards = True
     one_shot = False
-
-    # NOT decaying while it swells. The crash it inherits from falls away over
-    # seconds, which fought the rise and left a hump in the middle.
-    decay_db = 0.0
-    harmonic_decay_db = 0.0
-    sustain_level = 1.0
-    # NO CASCADE: the late copy is the plate carrying a strike's energy upward,
-    # and a reversed crash has no strike -- it swells into its cut-off.
-    bloom_gain = 0.0
-    # The level as it was balanced, held through crash 1's refit to DRSKit
-    # (its loudest 150 ms, -26.2 dB at velocity 100, measured both ways): the
-    # refit's spectrum and ring read 5.2 dB louder on this envelope.
-    initial_gain = 0.107970
+    # The level as it was, -26.0 dB (velocity 100, its loudest 150 ms; the old
+    # swell read -25.8, -26.2 and -25.9 at 1, 2 and 4 s notes)
+    initial_gain = 0.214686
 
 
 class SynthDrumProperties(MembraneDrumProperties):

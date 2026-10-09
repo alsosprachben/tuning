@@ -27,6 +27,8 @@ examples/pizz_ab.py's recipe:
              each, then a son groove with all of them
   bells      the vibraslap (58), short notes and a long one; the melodic agogo
              (program 113) across its split; the kit agogos (67, 68)
+  reverse    the reverse cymbal (GM 119): swells of one, two and four beats
+             alone, then each into a crash over a beat
   cabasa     the cabasa (69) alone at six strokes, in a bossa's sixteenths,
              then in eighths against the maracas
 
@@ -317,6 +319,41 @@ def latin(dst):
     return _save(dst, ev)
 
 
+def reverse(dst):
+    """The reverse cymbal (GM 119) alone, swells of one, two and four beats
+    each arriving on a downbeat; then the same three into a crash (49) and a
+    kick on the arrival, over a beat."""
+    q = 480
+    m = mido.MidiFile(ticks_per_beat=q)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    t.append(mido.Message("program_change", channel=0, program=119, time=0))
+    ev = []
+    now = 0
+    for into in (False, True):
+        for beats in (1, 2, 4):
+            arr = now + 8 * q
+            ev.append((arr - beats * q, mido.Message("note_on", channel=0, note=60, velocity=100)))
+            ev.append((arr, mido.Message("note_off", channel=0, note=60, velocity=0)))
+            if into:
+                for n, v in ((49, 110), (36, 100)):
+                    ev.append((arr, mido.Message("note_on", channel=9, note=n, velocity=v)))
+                    ev.append((arr + 60, mido.Message("note_off", channel=9, note=n, velocity=0)))
+                for b in range(0, 8, 2):
+                    for n, v in ((42, 70), (38 if b % 4 == 2 else 36, 85)):
+                        ev.append((now + b * q, mido.Message("note_on", channel=9, note=n, velocity=v)))
+                        ev.append((now + b * q + 60, mido.Message("note_off", channel=9, note=n, velocity=0)))
+            now = arr + 4 * q
+    ev.sort(key=lambda e: (e[0], e[1].type == "note_on"))
+    last = 0
+    for tk, msg in ev:
+        t.append(msg.copy(time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
 def cabasa(dst):
     """The cabasa (69) alone at six strokes, a beat apart, each a 0.4 s twist
     (the shake is half the note); then a bossa nova's sixteenths, accented on
@@ -483,7 +520,8 @@ def main(argv):
                 "tambourine": tambourine(os.path.join(d, "tambourine.mid")),
                 "latin": latin(os.path.join(d, "latin.mid")),
                 "bells": bells(os.path.join(d, "bells.mid")),
-                "cabasa": cabasa(os.path.join(d, "cabasa.mid"))}
+                "cabasa": cabasa(os.path.join(d, "cabasa.mid")),
+                "reverse": reverse(os.path.join(d, "reverse.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p
