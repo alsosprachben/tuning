@@ -20,6 +20,11 @@ in power.
   --model    the band-by-time grid, recorded against our render
   --fit      the decay, strike and noise, the band trim solved inside, and
              the modes' flatness in the instrument's band
+  --trim3[=N]  N passes (3) refining the class's band_trim_db in third
+             octaves, written into tonelib.py
+  --env      10 ms envelope, recorded against the model
+  --level    the level a refit is held at (velocity 100, loudest 150 ms),
+             at the fit's note length and at 1.5 s
 
 The grid is examples/crash_fit.py's, on windows sized to these (most are
 40 dB down by 0.3-0.6 s). The files are trimmed close at both ends, so a
@@ -62,6 +67,12 @@ def _dyn(p):
 # lives, 1-8 kHz -- under 4 kHz the head's modes are all the flatness reads.
 DRUM_PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs", "click_stroke_slope",
                "chiff_volume", "chiff_width", "chiff_bandwidth", "sustain_jitter")
+
+# a rattle's own numbers in percussion_map. Not its one impact's decay or
+# noise: rung ~8 ms (PERCUSSION_RING), an impact is over before they act --
+# the cabasa's moved its render by 1e-3 of its peak -- so a rattle's colour is
+# all in band_trim_db
+RATTLE_PARAMS = ("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db", "@rise_s")
 
 # note, files, how they group into soft/mid/loud (None: one group), the
 # modes' band and floor, the flatness band
@@ -106,6 +117,14 @@ INSTS = {
                       hold=0.4, keep_trim=True,
                       params=("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db",
                               "@rise_s")),
+    # one twist each: cabasa_4 has two more bursts after its first, 5 is two
+    # strokes. A twist swells in ~40 ms, scrapes ~150 ms and settles 40 dB in
+    # 0.3 s -- the maracas' shape, so their machinery (_settling_rattle),
+    # except that its settle hardly thins (@settle_thin)
+    "cabasa":    dict(note=69, glob=_V1 + "varMetal/various/cabasa_[1236].wav", groups=None,
+                      band=(1000, 16000), floor=-20, flat=(1000, 12000),
+                      hold=0.4, keep_trim=True,
+                      params=RATTLE_PARAMS + ("@settle_thin",)),
     # a periodic train of pin strikes, 2.4-3.5 s whatever the note
     # (percussion_map.PERCUSSION_TRAIN): windows out to 2.4 s
     "vibraslap": dict(note=58, glob=_V1 + "varWood/vibraslap[0-9].wav", groups=None,
@@ -281,7 +300,7 @@ def flatness(chs, sr, lo, hi):
 
 
 _TRAIN_SLOT = {"@train_secs": 1, "@train_fall": 2, "@train_scatter": 4, "@train_strike": 5}
-_RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6, "@rise_s": 7}
+_RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6, "@rise_s": 7, "@settle_thin": 8}
 
 
 def _get(cls, note, k):
@@ -401,6 +420,91 @@ def fit(inst, recs, rflat, vels, maxfev):
     return best
 
 
+def held_level(note, hold):
+    """The level a voice is held at when refitted: velocity 100, its loudest
+    150 ms, one note of the given length (C.level)."""
+    chs, sr = C.render(note, 100, hold)
+    return C.level(chs, sr)
+
+
+def envelope(inst, n=40, ms=10):
+    """10 ms windows, dB re each stroke's energy, recorded against the model
+    (velocities 60, 90, 120 at the fit's note length), power-averaged."""
+    def env(x, sr):
+        t0 = C.onset([x], sr)
+        k = int(ms / 1000.0 * sr)
+        e = np.array([np.mean(x[t0 + i * k:t0 + (i + 1) * k] ** 2) for i in range(n)])
+        return 10 * np.log10(e / e.sum() + 1e-12)
+
+    def avg(rows):
+        return 10 * np.log10(np.mean(10 ** (np.array(rows) / 10), 0))
+    r = avg([env(sum(load(p)[0]), 44100) for p in files(inst)])
+    m = avg([env(sum(C.render(INSTS[inst]["note"], v)[0]), 44100) for v in (60, 90, 120)])
+    print("%d ms windows, dB re the stroke's energy" % ms)
+    print("rec   " + " ".join("%4.0f" % v for v in r))
+    print("model " + " ".join("%4.0f" % v for v in m))
+    print("diff  " + " ".join("%+4.0f" % v for v in m - r))
+    w = r > -40
+    print("rms diff where the recording is within 40 dB: %.2f dB" % np.sqrt(np.mean((m - r)[w] ** 2)))
+
+
+# THIRD OCTAVES. The octave trim cannot reach inside an octave: the maracas
+# came out 4-15 dB strong at 450 Hz and 1.8-2.3 kHz with every octave matched
+# (Ben heard it as low end). So the colour is matched again on a third-octave
+# long-term spectrum, each band's error added to the class's band_trim_db,
+# clipped to 12 dB a pass; under 250 Hz only cut (what little a recording
+# has there is room and handling, and a boost would chase it).
+_E3 = 2 ** np.arange(np.log2(100), np.log2(20000), 1 / 3.0)
+_C3 = np.sqrt(_E3[:-1] * _E3[1:])
+
+
+def ltas3(chs, sr, dur=1.5):
+    x = sum(chs)
+    t0 = C.onset([x], sr)
+    seg = x[t0:t0 + int(dur * sr)]
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), 1 << 17)) ** 2
+    f = np.fft.rfftfreq(1 << 17, 1.0 / sr)
+    b = np.array([X[(f >= lo) & (f < hi)].sum() for lo, hi in zip(_E3[:-1], _E3[1:])])
+    return 10 * np.log10(b / b.sum() + 1e-30)
+
+
+def trim3(inst, passes):
+    """Refine the class's band_trim_db in third octaves, writing each pass
+    into tonelib.py."""
+    import percussion_map as PM
+    note = INSTS[inst]["note"]
+    cls = PM.PERCUSSION[note][1]
+    path = os.path.join(HERE, "tonelib.py")
+    r = np.mean([ltas3(*load(p)) for p in files(inst)], 0)
+    keep = (_C3 >= 250) & (_C3 <= 14000)
+    for it in range(passes + 1):
+        m = np.mean([ltas3(*C.render(note, v)) for v in (60, 90, 120)], 0)
+        d = r - m
+        k = int(np.argmax(np.abs(d * keep)))
+        print("pass %d  rms(model-rec) 250-14k %.2f dB  worst %+.1f at %.0f Hz" % (
+            it, np.sqrt(np.mean(d[keep] ** 2)), -d[k], _C3[k]), flush=True)
+        if it == passes:
+            break
+        old = cls.band_trim_db or ((1000.0, 0.0),)
+        of, od = np.array([p[0] for p in old], float), np.array([p[1] for p in old], float)
+        pts = tuple((float(cf), float(np.interp(np.log(cf), np.log(of), od)
+                                      + (np.clip(dd, -12, 12) if kk else min(0.0, dd))))
+                    for cf, dd, kk in zip(_C3, d, keep) if 160 <= cf <= 16000)
+        cls.band_trim_db = pts
+        PM._RING_CLASSES.clear()
+        s = open(path).read()
+        a = s.index("class %s(" % cls.__name__)
+        b = s.index("\n\n\n", a)
+        txt = "    band_trim_db = (" + ", ".join("(%.0f, %.1f)" % p for p in pts) + ")"
+        blk = s[a:b]
+        if re.search(r"^    band_trim_db = ", blk, re.M):
+            blk = re.sub(r"^    band_trim_db = .*$", lambda _: txt, blk, flags=re.M)
+        else:
+            blk = blk + "\n" + txt
+        open(path, "w").write(s[:a] + blk + s[b:])
+    print("model - rec  " + " ".join("%.0f:%+.1f" % (cf, -dd) for cf, dd in zip(_C3, d)))
+
+
 def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
     inst = pos[0]
@@ -419,6 +523,17 @@ def main(argv):
         ms = modes(inst, f0)
         print("== %s: %d modes over %.1f Hz" % (inst, len(ms), f0))
         print("    DRUM_MODES = (%s)" % ", ".join("(%.4f, %.1f, %.0f)" % m for m in ms))
+        return 0
+    if "--level" in argv:
+        for h in (HOLD[0], 1.5):
+            print("%d hold %.2f: %.2f dB" % (spec["note"], h, held_level(spec["note"], h)))
+        return 0
+    if "--env" in argv:
+        envelope(inst)
+        return 0
+    trim = next((a for a in argv if a.startswith("--trim3")), None)
+    if trim:
+        trim3(inst, int(trim.split("=")[1]) if "=" in trim else 3)
         return 0
     if "--scatter" in argv:
         r, m = scatter(inst)

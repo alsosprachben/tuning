@@ -431,7 +431,7 @@ PERCUSSION_RING = {
     # (56, 60-64, 67, 68 carry their measured rings in their classes:
     #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
     57: 1.69, 58: 0.098, 59: 0.48,
-    65: 0.30, 66: 0.35, 69: 0.010,
+    65: 0.30, 66: 0.35, 69: 0.00963,
     70: 0.0094, 71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
     # fairly closed. Measured on the Iowa guiro, the envelope after the last
@@ -669,7 +669,8 @@ PERCUSSION_RASP = {
 # physics and judgement, not measurement -- the same footing as the membranes.
 # What is not judgement is the STRUCTURE: a burst of impacts rather than a single
 # pitched stroke, which is the part that was wrong.
-def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0, accent_db=0.0, rise_s=0.0):
+def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0, accent_db=0.0, rise_s=0.0,
+                     thin=3.0):
     """A shake that SETTLES: (start, end, level, pitch) impacts.
 
     VSCO's maraca strokes peak and then die away smoothly over 0.25-0.4 s,
@@ -698,12 +699,18 @@ def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0,
     single strokes do not open with a spike at all -- they SWELL, 35-75 ms,
     as the seeds get going (Ben heard it first: "a two stroke and a single
     stroke"). rise_s is that swell, a linear ramp of the impacts' level.
+
+    NOT EVERY RATTLE THINS. A maraca's seeds come to rest one by one, so its
+    impacts thin (their rate halving `thin` times over the settle, 3); a
+    cabasa's beads stay on the ridges and keep scraping as the hand slows --
+    its settle is a smooth fade, and thinned three times it broke into lone
+    clicks with silence between, 60-70 dB jumps (perc_fit's crackle).
     """
     import math
     import random
     rng = random.Random(note * 1000003 + int(round(on * 1e4)))
     rate0 = n / span
-    tau = settle_s / 3.0 / math.log(2.0)
+    tau = settle_s / thin / math.log(2.0) if thin > 0 else float("inf")
     out = []
     t = 0.0
     while True:
@@ -758,7 +765,8 @@ def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0)
 
 
 PERCUSSION_RATTLE = {
-    69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
+    # cabasa: steel beads twisted on a ridged cylinder, VSCO's (examples/perc_fit.py)
+    69: (0.10, 58, 0.120, 0.374, 26.0, 0.0, 0.0, 0.0479, 0.505),
     # maracas: seeds in a gourd, VSCO's (examples/perc_fit.py) -- the shake, then its
     # settle (seconds, dB): see _settling_rattle
     70: (0.10, 40, 0.19, 0.28, 41.9, 0.0, 0.0, 0.065),

@@ -11841,9 +11841,21 @@ class VibraslapProperties(RattleProperties):
 
 
 class CabasaProperties(RattleProperties):
-    """GM 69. Steel ball chain twisted against a ridged metal cylinder --
-    brighter and harder than a gourd, with the beads audible individually.
-    Its hump sits an octave above the maracas'."""
+    """GM 69: one impact of a cabasa's steel beads on its ridged cylinder,
+    fitted (examples/perc_fit.py cabasa) to VSCO's four single twists, with
+    the shake's own numbers in PERCUSSION_RATTLE and PERCUSSION_RING.
+
+    THE MARACAS' SHAPE, NOT THEIR SETTLE. A twist swells in ~50 ms, scrapes
+    ~575 impacts a second and settles 26 dB over 0.37 s -- but the beads stay
+    on the ridges as the hand slows, so the settle hardly thins (thin 0.5,
+    where a maraca's seeds, coming to rest one by one, halve their rate three
+    times). Thinned like the maracas it broke into lone clicks with silence
+    between, 60-70 dB jumps. Envelope within 2.9 dB rms of the takes in 10 ms
+    windows; colour within 1.35 dB in third octaves, 250 Hz-14 kHz.
+
+    STILL EVENTS. The trims run -21 to +19 dB, flattening this body's hump
+    under a colour that is noise's: the next step is the shake as shaped
+    noise rather than thousands of copies of one resonator."""
     mode_ratios = (1.0000, 1.1454, 1.2228, 1.3052, 1.3927, 1.5949, 1.7028, 1.8176,
                    1.9395, 2.2207, 2.3712, 2.5311, 2.7010, 3.0922, 3.3018, 3.5247,
                    3.7615, 4.3055, 4.5976, 4.9082, 5.2383, 5.9950, 6.4020, 6.8348,
@@ -11857,6 +11869,12 @@ class CabasaProperties(RattleProperties):
                    0.9532, 0.9307, 0.9046, 0.8754, 0.8438, 0.8102, 0.7754, 0.7397,
                    0.7038, 0.6682, 0.6334, 0.5997)
     max_harmonic = 44
+    decay_db = 1.95003
+    harmonic_decay_db = 14.872
+    chiff_volume = 0.000965759
+    sustain_jitter = 0.00134683
+    band_trim_db = ((178, -9.3), (224, -10.5), (283, 4.8), (356, -11.5), (449, -17.4), (566, -16.9), (713, -16.6), (898, -11.3), (1131, -20.7), (1425, -1.0), (1796, -2.9), (2263, -7.7), (2851, 5.1), (3592, 12.1), (4525, 9.1), (5702, 13.4), (7184, 13.4), (9051, 17.7), (11404, 19.2), (14368, 15.9))
+    initial_gain = 0.029418      # held at the old cabasa's level, -26.6 dB (velocity 100, a 1.5 s note, its loudest 150 ms)
 
 
 class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):

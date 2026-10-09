@@ -27,6 +27,8 @@ examples/pizz_ab.py's recipe:
              each, then a son groove with all of them
   bells      the vibraslap (58), short notes and a long one; the melodic agogo
              (program 113) across its split; the kit agogos (67, 68)
+  cabasa     the cabasa (69) alone at six strokes, in a bossa's sixteenths,
+             then in eighths against the maracas
 
 Default outdir ~/Downloads/drums.
 """
@@ -315,6 +317,34 @@ def latin(dst):
     return _save(dst, ev)
 
 
+def cabasa(dst):
+    """The cabasa (69) alone at six strokes, a beat apart, each a 0.4 s twist
+    (the shake is half the note); then a bossa nova's sixteenths, accented on
+    the beat, over a kick; then the maracas (70) beside it in eighths."""
+    ev = []
+    q = 480
+
+    def hit(tk, n, v, d=400):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + d, "note_off", n, 0))
+    now = 0
+    for v in (40, 60, 80, 100, 115, 127):
+        hit(now, 69, v)
+        now += 2 * q
+    for rep in range(4):
+        for k in range(16):
+            hit(now + k * q // 4, 69, 95 if k % 4 == 0 else 60, 100)
+            if k % 8 == 0:
+                hit(now + k * q // 4, 36, 80, 60)
+        now += 4 * q
+    for rep in range(4):
+        for k in range(8):
+            hit(now + k * q // 2, 69, 90 if k % 2 == 0 else 65, 200)
+            hit(now + k * q // 2 + q // 4, 70, 70, 200)
+        now += 4 * q
+    return _save(dst, ev)
+
+
 def bells(dst):
     """The vibraslap alone at three strokes, short notes and a long one (it
     rings its own length either way); then the melodic agogo (program 113):
@@ -452,7 +482,8 @@ def main(argv):
                 "sidestick": sidestick(os.path.join(d, "sidestick.mid")),
                 "tambourine": tambourine(os.path.join(d, "tambourine.mid")),
                 "latin": latin(os.path.join(d, "latin.mid")),
-                "bells": bells(os.path.join(d, "bells.mid"))}
+                "bells": bells(os.path.join(d, "bells.mid")),
+                "cabasa": cabasa(os.path.join(d, "cabasa.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p

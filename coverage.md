@@ -38,8 +38,8 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 36 | 28% |
-| 3 specific, theory + ear | 26 | 20% |
+| 2 specific, theory | 35 | 27% |
+| 3 specific, theory + ear | 27 | 21% |
 | 4 specific, reference audio | 66 | 52% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
@@ -54,8 +54,8 @@ the crashes hit hard.
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 9 | 18% |
-| 3 specific, theory + ear | 3 | 6% |
+| 2 specific, theory | 8 | 16% |
+| 3 specific, theory + ear | 4 | 8% |
 | 4 specific, reference audio | 39 | 76% |
 
 | # | note | class | | notes |
@@ -94,7 +94,7 @@ the crashes hit hard.
 | 66 | Low Timbale | `Timbale` | **2** | as 65, lower |
 | 67 | High Agogo | `AgogoHigh` | **4** | VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes |
 | 68 | Low Agogo | `AgogoLow` | **4** | VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67 |
-| 69 | Cabasa | `Cabasa` | **2** | its own class -- a shaken rattle, theory |
+| 69 | Cabasa | `Cabasa` | **3** | VSCO-2 CE (CC0) cabasa: the maracas' shake fitted to four single twists -- a swell, ~575 impacts a second, a settle that FADES without thinning (the beads stay on the ridges), colour matched in third octaves. Ben: sounds fine; still events where a shaped noise belongs, as the maracas |
 | 70 | Maracas | `Maracas` | **3** | VSCO-2 CE (CC0) maracas: the rattle kept, its colour matched in third octaves, the shake fitted to the SINGLE strokes (two of the five files are two strokes, one three) -- a swell in, ~400 impacts a second, then a settle at random times where it stopped dead. Ben: as close as this recording goes; its single strokes are quiet takes with their noise in them |
 | 71 | Short Whistle | `SambaWhistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
 | 72 | Long Whistle | `SambaWhistle` | **3** | as 71, longer |
@@ -348,7 +348,7 @@ plays Standard, as does any program that is not a set.
 | 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |
 | 117 | Melodic Tom | `FloorTom/TomTom by register` | **4** | DRSKit's two toms, measured, by register: the floor tom under G2, the rack tom from G2 up. A melodic tom part is a set of drums, not one drum retuned |
 | 118 | Synth Drum | `MoogSynthDrum` | **4** | a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves) |
-| 119 | Reverse Cymbal | `ReverseCymbal` | **2** | the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere |
+| 119 | Reverse Cymbal | `ReverseCymbal` | **3** | the MEASURED Iowa crash played BACKWARDS. The one voice here whose envelope rises: the rise is the attack, freed past blockrender's 45%-of-the-note cap, and it is not a one-shot because it exists to ARRIVE somewhere. Ben, having heard it many times: a 3 |
 
 ## 120-127 Sound Effects
 
