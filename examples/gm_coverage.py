@@ -388,6 +388,96 @@ def drum_set_table():
     return "\n".join(L)
 
 
+# THE CLASS TREE. Every class a program or a drum note is routed to, hung
+# under its PHYSICAL base -- the first base that is itself a voice class
+# (tonelib's convention: a class sits below what it physically is, struck or
+# plucked or blown; mixins such as NoisyPercussionMixin add a behaviour and are
+# listed beside the name, not as a branch). Asked of the router at every note,
+# as _class_name is, so a split family shows each of its members.
+
+def _primary_base(c):
+    import tonelib
+    for b in c.__bases__:
+        if isinstance(b, type) and issubclass(b, tonelib.SynthProperties):
+            return b
+    return None
+
+
+def _mixins(c):
+    import tonelib
+    return [b.__name__ for b in c.__bases__
+            if isinstance(b, type) and not issubclass(b, tonelib.SynthProperties) and b is not object]
+
+
+def class_users():
+    """{class: [(kind, number, name, rating)]}, kind 'gm', 'perc' or 'kit<k>'."""
+    import percussion_map as PM
+    users = {}
+    for p in range(128):
+        seen = []
+        for n in range(128):
+            c = patch_map.property_class_for_note(p, n)
+            if c not in seen:
+                seen.append(c)
+        for c in seen:
+            users.setdefault(c, []).append(("gm", p, GM[p], RATED[p][0]))
+    for n in sorted(PERC_RATED):
+        users.setdefault(PM.PERCUSSION[n][1], []).append(("perc", n, PM.PERCUSSION[n][0], PERC_RATED[n][0]))
+    for k in sorted(KIT_RATED):
+        for n in sorted(KIT_RATED[k]):
+            users.setdefault(PM.KITS[k][n][1], []).append(("kit%d" % k, n, PM.KITS[k][n][0], KIT_RATED[k][n][0]))
+    return users
+
+
+def class_tree():
+    """[(class, users, children)] from the roots down, children by name."""
+    users = class_users()
+    kids = {}
+    nodes = set()
+    for c in users:
+        while c is not None and c not in nodes:
+            nodes.add(c)
+            b = _primary_base(c)
+            kids.setdefault(b, []).append(c)
+            c = b
+
+    def grow(c):
+        return (c, users.get(c, []), [grow(k) for k in sorted(kids.get(c, []), key=lambda k: k.__name__)])
+    return [grow(r) for r in sorted(kids.get(None, []), key=lambda k: k.__name__)]
+
+
+def short(c):
+    return c.__name__.replace("Properties", "") or c.__name__
+
+
+def class_tree_md():
+    tree = class_tree()
+    n = [0]
+    L = ["## The class tree\n",
+         "Every voice class a program or a drum note is routed to, under its physical",
+         "base (the first base that is itself a voice class; mixins in brackets). After",
+         "each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes",
+         "(`set k n`) that use it, with their ratings.\n"]
+
+    def walk(node, depth):
+        c, us, ch = node
+        n[0] += 1
+        mx = _mixins(c)
+        tags = ", ".join(("GM %d %s" % (num, name) if kind == "gm" else
+                          "%d %s" % (num, name) if kind == "perc" else
+                          "set %s %d %s" % (kind[3:], num, name)) + " (%d)" % r
+                         for kind, num, name, r in us)
+        L.append("%s- `%s`%s%s" % ("  " * depth, short(c), " [%s]" % ", ".join(mx) if mx else "",
+                                  " -- " + tags if tags else ""))
+        for k in ch:
+            walk(k, depth + 1)
+    for r in tree:
+        walk(r, 0)
+    L.insert(1, "%d classes.\n" % n[0])
+    L.append("")
+    return "\n".join(L)
+
+
 def main(argv):
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')
@@ -453,6 +543,7 @@ def main(argv):
             L.append("| %d | %s | `%s` | **%d** | %s |"
                      % (p, GM[p], cls.replace("Properties", ""), r, note))
         L.append("")
+    L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)
     print("  %s" % "  ".join("%d:%d" % (k, hist[k]) for k in range(5)))

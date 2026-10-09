@@ -188,6 +188,31 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 .scell b{display:block; font-size:11px; font-weight:500}
 .scell.err{outline:1.5px dashed var(--warn); outline-offset:-2px}
 .kitnote{display:flex; gap:10px; align-items:flex-start; font-size:13.5px; color:var(--muted)}
+
+/* ---- the class tree ------------------------------------------------------ */
+.tree{background:var(--card); border:1px solid var(--rule); border-radius:4px;
+  padding:18px 18px 18px 8px; box-shadow:var(--shadow)}
+.tree ul{list-style:none; margin:0; padding-left:16px; border-left:1px solid var(--rule-2)}
+.tree > ul{border-left:none; padding-left:6px}
+.tree li{margin:2px 0}
+.tree summary{cursor:pointer; list-style:none; display:flex; align-items:baseline}
+.tree summary::-webkit-details-marker{display:none}
+.tree summary::before{content:"▸"; display:inline-block; flex:none; width:14px; color:var(--muted);
+  font-size:11px; transition:transform .12s}
+.tree details[open] > summary::before{transform:rotate(90deg)}
+.tree .leaf{padding-left:14px}
+.node{display:inline-flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px; vertical-align:top}
+.cn{font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--accent); font-weight:500}
+.mx{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted)}
+.us{display:inline-flex; flex-wrap:wrap; gap:3px}
+.u{font-family:"IBM Plex Mono",monospace; font-size:10.5px; padding:1px 5px; border-radius:2px;
+  color:#fff; white-space:nowrap}
+.u.r1,.u.r0{color:var(--ink)}
+.tbtn{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--accent);
+  background:transparent; border:1px solid var(--rule); border-radius:3px;
+  padding:5px 10px; margin:0 0 10px 10px; cursor:pointer}
+.tbtn:hover{border-color:var(--accent)}
+.cnt{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--muted)}
 @media (max-width:720px){
   .scalelist li{grid-template-columns:38px 1fr; }
   .scalelist .d{grid-column:2}
@@ -247,6 +272,39 @@ def percussion():
     return "\n".join(strip)
 
 
+def tree():
+    """The class tree (gm_coverage.class_tree), collapsible below two levels."""
+    n = [0]
+
+    def label(c, us, size):
+        mx = C._mixins(c)
+        tags = "".join(
+            '<span class="u r%d" title="%s">%s</span>'
+            % (r, e(name), e("GM %d" % num if kind == "gm" else "%d" % num if kind == "perc"
+                             else "set %s:%d" % (kind[3:], num)))
+            for kind, num, name, r in us)
+        return ('<span class="node"><span class="cn" title="%s">%s</span>%s%s%s</span>'
+                % (e(c.__name__), e(C.short(c)),
+                   '<span class="mx">+ %s</span>' % e(", ".join(mx)) if mx else "",
+                   '<span class="cnt">%d below</span>' % size if size else "",
+                   '<span class="us">%s</span>' % tags if tags else ""))
+
+    def count(node):
+        return sum(1 + count(k) for k in node[2])
+
+    def walk(node, depth):
+        c, us, ch = node
+        n[0] += 1
+        if not ch:
+            return '<li class="leaf">%s</li>' % label(c, us, 0)
+        inner = "".join(walk(k, depth + 1) for k in ch)
+        return ('<li><details%s><summary>%s</summary><ul>%s</ul></details></li>'
+                % (" open" if depth < 2 else "", label(c, us, count(node)), inner))
+    body = "".join(walk(r, 0) for r in C.class_tree())
+    return ('<div class="tree"><button type="button" class="tbtn" id="treeall">Expand all</button>'
+            '<ul>%s</ul></div>' % body, n[0])
+
+
 def build():
     hist = [0, 0, 0, 0, 0]
     for p in range(128):
@@ -262,8 +320,10 @@ def build():
     for n in C.PERC_RATED:
         ph[C.PERC_RATED[n][0]] += 1
 
+    tree_html, ncls = tree()
     return TEMPLATE % {
         "css": CSS,
+        "tree": tree_html, "ncls": ncls,
         "cells": cells(),
         "bar": bar,
         "scale": scale,
@@ -334,6 +394,32 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 </div>
 </div>
 </section>
+
+<section>
+<h2>The class tree</h2>
+<p>Every one of the %(ncls)d voice classes a program or a drum note is routed to, hung under its <strong>physical</strong> base &mdash; what the instrument is, struck or plucked or blown &mdash; with any mixin that adds a behaviour beside its name. After each, the programs (<code>GM n</code>), percussion notes and drum-set notes that play it, coloured by their rating. A branch with nothing beside it is a shared base no patch plays directly.</p>
+%(tree)s
+</section>
+<script>
+(function(){
+  var b = document.getElementById("treeall");
+  if (!b) return;
+  var all = function(){ return document.querySelectorAll(".tree details"); };
+  // which way the button goes: expand unless every branch is already open
+  var sync = function(){
+    var d = all(), open = true;
+    for (var i = 0; i < d.length; i++) if (!d[i].open) { open = false; break; }
+    b.textContent = open ? "Collapse all" : "Expand all";
+    return open;
+  };
+  b.addEventListener("click", function(){
+    var shut = sync(), d = all();
+    for (var i = 0; i < d.length; i++) d[i].open = !shut;
+    sync();
+  });
+  document.querySelector(".tree").addEventListener("toggle", sync, true);
+})();
+</script>
 
 </div>
 """

@@ -363,3 +363,292 @@ plays Standard, as does any program that is not a set.
 | 126 | Applause | `Applause` | **2** | its own class, theory |
 | 127 | Gunshot | `Gunshot` | **2** | an N-wave whose length the key sets (its spectrum peaks on the key), the tail the room, standing back at 127's distance. Published measurements, no recording |
 
+## The class tree
+
+279 classes.
+
+Every voice class a program or a drum note is routed to, under its physical
+base (the first base that is itself a voice class; mixins in brackets). After
+each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
+(`set k n`) that use it, with their ratings.
+
+- `Synth`
+  - `Cuica` -- 79 Open Cuica (2)
+    - `MuteCuica` -- 78 Mute Cuica (2)
+  - `FreeReed`
+    - `Accordion` -- GM 21 Accordion (2)
+      - `TangoAccordion` -- GM 23 Tango Accordion (2)
+    - `Harmonica` [FormantBody] -- GM 22 Harmonica (2)
+    - `ReedOrganFree` -- GM 20 Reed Organ (2)
+  - `PluckedString`
+    - `AcousticBass` [FormantBody] -- GM 32 Acoustic Bass (4)
+    - `ElectricGuitar` -- GM 27 Electric Guitar (clean) (3)
+      - `DistortionGuitar` -- GM 30 Distortion Guitar (3)
+      - `ElectricBass`
+        - `FingeredBass` -- GM 33 Electric Bass (finger) (3)
+        - `FretlessBass` -- GM 35 Fretless Bass (3)
+        - `PickedBass` -- GM 34 Electric Bass (pick) (3)
+        - `SlapBass` -- GM 36 Slap Bass 1 (3)
+          - `PoppedBass` -- GM 37 Slap Bass 2 (3)
+      - `GuitarHarmonics` -- GM 31 Guitar Harmonics (3)
+      - `JazzGuitar` -- GM 26 Electric Guitar (jazz) (3)
+      - `MutedGuitar` -- GM 28 Electric Guitar (muted) (3)
+      - `OverdrivenGuitar` -- GM 29 Overdriven Guitar (3)
+    - `ElectricPiano`
+      - `Rhodes` -- GM 4 Electric Piano 1 (2)
+      - `Wurlitzer` -- GM 5 Electric Piano 2 (2)
+    - `GuitarFretNoise` [NoisyPercussionMixin, FormantBody] -- GM 120 Guitar Fret Noise (3)
+    - `Harp` [FormantBody] -- GM 46 Orchestral Harp (4)
+    - `HarpsiBase` [FormantBody]
+      - `Harpsichord` -- GM 6 Harpsichord (4)
+    - `InharmonicString`
+      - `Clavinet` -- GM 7 Clavinet (2)
+      - `GrandPiano` -- GM 0 Acoustic Grand Piano (4)
+        - `BrightPiano` -- GM 1 Bright Acoustic Piano (2)
+        - `ElectricGrand` -- GM 2 Electric Grand Piano (2)
+        - `HonkyTonk` -- GM 3 Honky-tonk Piano (2)
+      - `HammeredDulcimer` -- GM 15 Dulcimer (2)
+    - `Kalimba` [FormantBody] -- GM 108 Kalimba (2)
+    - `Koto` [FormantBody] -- GM 107 Koto (2)
+    - `Mallet`
+      - `StruckBar`
+        - `Celesta` -- GM 8 Celesta (2)
+        - `Glockenspiel` -- GM 9 Glockenspiel (4)
+        - `MusicBox` -- GM 10 Music Box (2)
+      - `TunedBar`
+        - `Crotale` -- GM 112 Tinkle Bell (4), 84 Belltree (4)
+        - `TubularBell` -- GM 14 Tubular Bells (4)
+        - `UndercutBar`
+          - `Marimba` -- GM 12 Marimba (4)
+          - `Vibraphone` -- GM 11 Vibraphone (4)
+        - `Xylophone` -- GM 13 Xylophone (4)
+    - `MembraneBody` [FormantBody]
+      - `Banjo` -- GM 105 Banjo (2)
+      - `Shamisen` -- GM 106 Shamisen (2)
+    - `NylonGuitar` [FormantBody] -- GM 24 Acoustic Guitar (nylon) (4)
+      - `SteelGuitar` -- GM 25 Acoustic Guitar (steel) (2)
+    - `Percussion`
+      - `Cymbal` [NoisyPercussionMixin]
+        - `ChineseCymbal` -- 52 Chinese Cymbal (4)
+        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4)
+          - `ReverseCymbal` -- GM 119 Reverse Cymbal (3), set 24 52 Reverse Cymbal (3)
+        - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
+        - `CrashRide` -- 59 Ride Cymbal 2 (4)
+        - `HiHat`
+          - `ClosedHiHat` -- 42 Closed Hi-Hat (4)
+          - `OpenHiHat` -- 46 Open Hi-Hat (4)
+          - `PedalHiHat` -- 44 Pedal Hi-Hat (4)
+        - `RideBell` -- 53 Ride Bell (4)
+        - `RideCymbal` -- 51 Ride Cymbal 1 (4)
+        - `SplashCymbal` -- 55 Splash Cymbal (4)
+      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (2)
+      - `MembraneDrum` -- GM 116 Taiko Drum (2)
+        - `KitDrum`
+          - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
+            - `SideStick` -- 37 Side Stick (4)
+          - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
+          - `MeasuredStroke` [NoisyPercussionMixin]
+            - `AgogoHigh` -- 67 High Agogo (4)
+              - `MelodicAgogoHigh` -- GM 113 Agogo (4)
+            - `AgogoLow` -- 68 Low Agogo (4)
+              - `MelodicAgogoLow` -- GM 113 Agogo (4)
+            - `BongoHigh` -- 60 Hi Bongo (4)
+            - `BongoLow` -- 61 Low Bongo (4)
+            - `CongaLow` -- 64 Low Conga (4)
+            - `CongaMute` -- 62 Mute Hi Conga (4)
+            - `CongaOpen` -- 63 Open Hi Conga (4)
+            - `CowbellStroke` -- 56 Cowbell (4)
+          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4)
+          - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4)
+            - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)
+            - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4)
+        - `ShelledDrum`
+          - `Surdo` -- 86 Mute Surdo (2), 87 Open Surdo (2)
+          - `Timbale` -- 65 High Timbale (2), 66 Low Timbale (2)
+        - `SynthDrum` -- set 24 41 Elec Low Tom 2 (2), set 24 43 Elec Low Tom 1 (2), set 24 45 Elec Mid Tom 2 (2), set 24 47 Elec Mid Tom 1 (2), set 24 48 Elec Hi Tom 2 (2), set 24 50 Elec Hi Tom 1 (2)
+          - `ElectronicKick` -- set 24 36 Elec BD (2)
+          - `MoogSynthDrum` -- GM 118 Synth Drum (4)
+        - `Timpani` -- GM 47 Timpani (4)
+      - `MetalPercussion`
+        - `BirdTweet` -- GM 123 Bird Tweet (2)
+        - `SteelPan` -- GM 114 Steel Drums (4)
+        - `TelephoneRing` -- GM 124 Telephone Ring (2)
+        - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4)
+      - `NoiseDrum` [NoisyPercussionMixin]
+        - `HandClap` -- 39 Hand Clap (2)
+      - `OrchestraHit` -- GM 55 Orchestra Hit (2)
+      - `Rattle` [NoisyPercussionMixin]
+        - `Cabasa` -- 69 Cabasa (3)
+        - `Maracas` -- 70 Maracas (3)
+        - `Vibraslap` -- 58 Vibraslap (4)
+      - `SnareDrum` [NoisyPercussionMixin]
+        - `BrushSwirl` -- set 40 40 Brush Swirl (3)
+        - `BrushTap` -- set 40 38 Brush Tap (3)
+          - `BrushSlap` -- set 40 39 Brush Slap (3)
+        - `ElectricSnare` -- 40 Electric Snare (2)
+          - `ElectronicSnare` -- set 24 38 Elec SD (2)
+        - `GatedSnare` -- set 24 40 Gated SD (2)
+      - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
+        - `Castanets` -- 85 Castanets (4)
+        - `Claves` -- 75 Claves (4)
+        - `Guiro` -- 73 Short Guiro (4), 74 Long Guiro (4)
+        - `WoodBlockHi` -- 76 Hi Wood Block (4)
+          - `WoodBlockLo` -- 77 Low Wood Block (4)
+    - `PizzicatoStrings` [FormantBody, SectionMixin]
+      - `CelloPizz` -- GM 45 Pizzicato Strings (4)
+      - `ContrabassPizz` -- GM 45 Pizzicato Strings (4)
+      - `ViolaPizz` -- GM 45 Pizzicato Strings (4)
+      - `ViolinPizz` -- GM 45 Pizzicato Strings (4)
+    - `Sitar` -- GM 104 Sitar (2)
+  - `StoppedPipe`
+    - `BowedString` [SectionMixin]
+      - `Cello` [FormantBody] -- GM 40 Violin (4), GM 41 Viola (4), GM 42 Cello (4), GM 48 String Ensemble 1 (4)
+        - `CelloSlow` -- GM 49 String Ensemble 2 (4)
+        - `CelloTremolo` -- GM 44 Tremolo Strings (4)
+      - `Contrabass` [FormantBody] -- GM 40 Violin (4), GM 41 Viola (4), GM 42 Cello (4), GM 43 Contrabass (4), GM 48 String Ensemble 1 (4)
+        - `ContrabassSlow` -- GM 49 String Ensemble 2 (4)
+        - `ContrabassTremolo` -- GM 44 Tremolo Strings (4)
+      - `SawtoothSynth`
+        - `BassLead`
+          - `MoogBassLead` -- GM 87 Lead 8 (bass+lead) (4)
+        - `CharangLead`
+          - `MoogCharangLead` -- GM 84 Lead 5 (charang) (3)
+        - `ChiffLead`
+          - `MoogChiffLead` -- GM 83 Lead 4 (chiff) (4)
+        - `FifthsLead`
+          - `MoogFifthsLead` -- GM 86 Lead 7 (fifths) (4)
+        - `Helicopter` -- GM 125 Helicopter (2)
+        - `MoogSawLead` -- GM 81 Lead 2 (sawtooth) (4)
+        - `SquareSynth`
+          - `MoogSquareLead` -- GM 80 Lead 1 (square) (4)
+          - `TriangleSynth`
+            - `MoogCalliopeLead` -- GM 82 Lead 3 (calliope) (4)
+        - `SynthBass` [FormantBody]
+          - `SynthBass1`
+            - `MoogSynthBass1` -- GM 38 Synth Bass 1 (4)
+          - `SynthBass2`
+            - `MoogSynthBass2` -- GM 39 Synth Bass 2 (4)
+        - `SynthBrass` [FormantBody]
+          - `SynthBrass1`
+            - `MoogSynthBrass1` -- GM 62 Synth Brass 1 (4)
+          - `SynthBrass2`
+            - `MoogSynthBrass2` -- GM 63 Synth Brass 2 (4)
+        - `SynthPad` [FormantBody]
+          - `BowedPad`
+            - `MoogBowedPad` -- GM 92 Pad 5 (bowed) (4)
+          - `ChoirPad`
+            - `MoogChoirPad` -- GM 91 Pad 4 (choir) (3)
+          - `HaloPad`
+            - `MoogHaloPad` -- GM 94 Pad 7 (halo) (4)
+          - `MetallicPad`
+            - `MoogMetallicPad` -- GM 93 Pad 6 (metallic) (4)
+          - `NewAgePad`
+            - `MoogNewAgePad` -- GM 88 Pad 1 (new age) (4)
+          - `PolysynthPad`
+            - `MoogPolysynthPad` -- GM 90 Pad 3 (polysynth) (4)
+          - `SweepPad`
+            - `MoogSweepPad` -- GM 95 Pad 8 (sweep) (4)
+          - `SynthEffect`
+            - `AtmosphereFX`
+              - `MoogAtmosphereFX` -- GM 99 FX 4 (atmosphere) (4)
+            - `BrightnessFX`
+              - `MoogBrightnessFX` -- GM 100 FX 5 (brightness) (4)
+            - `CrystalFX`
+              - `MoogCrystalFX` -- GM 98 FX 3 (crystal) (4)
+            - `EchoesFX`
+              - `MoogEchoesFX` -- GM 102 FX 7 (echoes) (3)
+            - `GoblinsFX`
+              - `MoogGoblinsFX` -- GM 101 FX 6 (goblins) (4)
+            - `RainFX`
+              - `MoogRainFX` -- GM 96 FX 1 (rain) (3)
+            - `SciFiFX`
+              - `MoogSciFiFX` -- GM 103 FX 8 (sci-fi) (4)
+            - `SoundtrackFX`
+              - `MoogSoundtrackPad` -- GM 97 FX 2 (soundtrack) (4)
+          - `WarmPad`
+            - `MoogWarmPad` -- GM 89 Pad 2 (warm) (4)
+        - `SynthStrings` [FormantBody]
+          - `SynthStrings1`
+            - `MoogSynthStrings1` -- GM 50 Synth Strings 1 (4)
+          - `SynthStrings2`
+            - `MoogSynthStrings2` -- GM 51 Synth Strings 2 (4)
+        - `VoiceLead` [FormantBody]
+          - `MoogVoiceLead` -- GM 85 Lead 6 (voice) (3)
+      - `Viola` [FormantBody] -- GM 40 Violin (4), GM 41 Viola (4), GM 48 String Ensemble 1 (4)
+        - `ViolaSlow` -- GM 49 String Ensemble 2 (4)
+        - `ViolaTremolo` -- GM 44 Tremolo Strings (4)
+      - `Violin` [FormantBody] -- GM 40 Violin (4), GM 48 String Ensemble 1 (4)
+        - `SoloViolin` -- GM 110 Fiddle (4)
+        - `ViolinSlow` -- GM 49 String Ensemble 2 (4)
+        - `ViolinTremolo` -- GM 44 Tremolo Strings (4)
+      - `Vocal` [FormantBody]
+        - `ChoirAahs` [_VocalBody] -- GM 52 Choir Aahs (3)
+        - `SynthVoice`
+          - `MoogSynthVoice` -- GM 54 Synth Choir (3)
+        - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (3)
+    - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (2)
+      - `Applause` -- GM 126 Applause (2)
+      - `Seashore` -- GM 122 Seashore (2)
+    - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
+      - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
+      - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
+      - `Recorder` -- GM 74 Recorder (2)
+      - `Shakuhachi` -- GM 77 Shakuhachi (2)
+      - `VesselFlute`
+        - `BlownBottle` -- GM 76 Blown Bottle (2)
+        - `Ocarina` -- GM 79 Ocarina (2)
+          - `SambaWhistle` -- 71 Short Whistle (3), 72 Long Whistle (3)
+        - `Whistle` -- GM 78 Whistle (2)
+    - `Organ`
+      - `Brass`
+        - `ConicalBrass` -- GM 56 Trumpet (4), GM 58 Tuba (4), GM 60 French Horn (4)
+          - `ConicalBrassSection` [SectionMixin] -- GM 61 Brass Section (3)
+          - `ConicalBrassToTrombone00`
+            - `ConicalBrassToTrombone00Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `ConicalBrassToTrombone17`
+            - `ConicalBrassToTrombone17Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `ConicalBrassToTrombone33`
+            - `ConicalBrassToTrombone33Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `ConicalBrassToTrombone50`
+            - `ConicalBrassToTrombone50Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `ConicalBrassToTrombone67`
+            - `ConicalBrassToTrombone67Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `ConicalBrassToTrombone83`
+            - `ConicalBrassToTrombone83Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `Horn` -- GM 60 French Horn (4)
+        - `CylindricalBrass`
+          - `Trombone` -- GM 56 Trumpet (4), GM 57 Trombone (4)
+            - `BassTrombone` -- GM 57 Trombone (4)
+            - `TromboneSection` [SectionMixin] -- GM 61 Brass Section (3)
+            - `TromboneToTrumpet00`
+              - `TromboneToTrumpet00Section` [SectionMixin] -- GM 61 Brass Section (3)
+            - `TromboneToTrumpet17`
+              - `TromboneToTrumpet17Section` [SectionMixin] -- GM 61 Brass Section (3)
+            - `TromboneToTrumpet33`
+              - `TromboneToTrumpet33Section` [SectionMixin] -- GM 61 Brass Section (3)
+            - `TromboneToTrumpet50`
+              - `TromboneToTrumpet50Section` [SectionMixin] -- GM 61 Brass Section (3)
+            - `TromboneToTrumpet67`
+              - `TromboneToTrumpet67Section` [SectionMixin] -- GM 61 Brass Section (3)
+            - `TromboneToTrumpet83`
+              - `TromboneToTrumpet83Section` [SectionMixin] -- GM 61 Brass Section (3)
+          - `Trumpet` -- GM 56 Trumpet (4)
+            - `MutedTrumpet` -- GM 59 Muted Trumpet (4)
+            - `TrumpetSection` [SectionMixin] -- GM 61 Brass Section (3)
+      - `FlueOrgan` -- GM 19 Church Organ (3)
+      - `ReedOrgan`
+        - `CylindricalReed`
+          - `Clarinet` -- GM 71 Clarinet (4)
+            - `BassClarinet` -- GM 71 Clarinet (4)
+          - `ConicalReed` [FormantBody] -- GM 68 Oboe (4), GM 69 English Horn (4)
+            - `Bassoon` -- GM 70 Bassoon (4)
+            - `Saxophone` -- GM 64 Soprano Sax (4), GM 65 Alto Sax (4), GM 66 Tenor Sax (4), GM 67 Baritone Sax (4)
+        - `ReedPipe`
+          - `Bagpipe` -- GM 109 Bag pipe (3)
+          - `Shanai` -- GM 111 Shanai (2)
+    - `PanFlute` -- GM 75 Pan Flute (2)
+  - `Tonewheel`
+    - `DrawbarOrgan` -- GM 16 Drawbar Organ (3)
+    - `PercussiveOrgan` -- GM 17 Percussive Organ (3)
+    - `RockOrgan` -- GM 18 Rock Organ (3)
+
