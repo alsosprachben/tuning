@@ -242,7 +242,7 @@ PERC_RATED = {
  67:(4,"VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes"),
  68:(4,"VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67"),
  69:(2,"its own class -- a shaken rattle, theory"),
- 70:(3,"VSCO-2 CE (CC0) maracas: the burst kept, its colour matched band by band, the shake SETTLING (thinning, falling impacts at random times) where it stopped dead. Closer by Ben's ear; the strokes vary in shape and the fit matches their average -- a different strategy is next"),
+ 70:(3,"VSCO-2 CE (CC0) maracas: the rattle kept, its colour matched in third octaves, the shake fitted to the SINGLE strokes (two of the five files are two strokes, one three) -- a swell in, ~400 impacts a second, then a settle at random times where it stopped dead. Ben: as close as this recording goes; its single strokes are quiet takes with their noise in them"),
  71:(3,"NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven"),
  72:(3,"as 71, longer"),
  73:(4,"Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window"),

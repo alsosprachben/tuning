@@ -11716,28 +11716,37 @@ class RattleProperties(NoisyPercussionMixin, PercussionProperties):
 
 class MaracasProperties(RattleProperties):
     """GM 70: one impact of the maracas' seeds, fitted (examples/perc_fit.py
-    maracas) to VSCO's five single strokes, with the burst's own numbers in
-    PERCUSSION_RATTLE and PERCUSSION_RING beside it: 13.8 -> 3.2 dB.
+    maracas) to VSCO's SINGLE strokes, with the shake's own numbers in
+    PERCUSSION_RATTLE and PERCUSSION_RING beside it (percussion_map.
+    _settling_rattle).
 
-    The colour was 20-35 dB too heavy under 1 kHz, where the seeds on the
-    gourd sit at 2-8 kHz. And the BURST was front-loaded: VSCO's strokes hold
-    their level for ~120 ms and then drop, where the rattle's impacts fell to
-    a quarter across it -- so they fall to 0.75 now (fall 0.25), 270 a
-    second, each ringing 7.7 ms. And then it SETTLES (percussion_map.
-    _settling_rattle): 0.32 s of thinning, falling impacts, 39 dB down, at
-    random times -- the first fit stopped dead (Ben: "suddenly dying out").
+    THE COLOUR, matched in third octaves: it was 20-35 dB too heavy under
+    1 kHz, then -- the octave trim unable to reach inside an octave -- 4-15
+    dB too strong at 450 Hz and 1.8-2.3 kHz (Ben: the low end), now within
+    ~2 dB from 350 Hz to 14 kHz.
 
-    LESS NOISE THAN IT HAD. Recorded, the strokes are not white -- 0.185
-    flatness over 1-12 kHz, the gourd's resonances standing out at 3-5.5 kHz
-    -- and the fit took the wash out to get there. What keeps it from a
-    pitch (Ben, once: "too much tonality") is the burst's own scatter: each
-    impact at its own pitch scale."""
+    THE SHAKE. Of VSCO's five files two are two strokes and one three quick
+    hits (Ben heard it: "a two stroke and a single stroke"); fitted to all
+    five, their second hits read as an opening spike. The single strokes
+    SWELL in over ~65 ms, shake ~400 times a second, and then SETTLE --
+    0.28 s of thinning impacts falling 42 dB, at random times, seeded per
+    note -- where the first version stopped dead ("suddenly dying out").
+    Grid 2.6 dB at a 0.4 s note; the plateau runs long at that length (the
+    shake is half the note), right at an eighth.
+
+    AS CLOSE AS THIS RECORDING GOES (Ben). The single strokes are quiet
+    takes, their noise ~27 dB under them, and that is in what was fitted.
+
+    LESS NOISE THAN IT HAD. Recorded, the strokes are not white -- the
+    gourd's resonances stand out at 3-5.5 kHz -- so the wash came out; what
+    keeps it from a pitch (Ben, once: "too much tonality") is each impact
+    at its own pitch scale."""
     decay_db = 1.95003
     harmonic_decay_db = 14.872
     chiff_volume = 0.000965759
     sustain_jitter = 0.00134683
     band_trim_db = ((178, -9.3), (224, -11.4), (283, 8.1), (356, -25.4), (449, -29.3), (566, -22.1), (713, -22.5), (898, -13.1), (1131, -18.0), (1425, -17.5), (1796, -19.3), (2263, -20.8), (2851, 5.2), (3592, 16.6), (4525, 11.9), (5702, 20.6), (7184, 18.9), (9051, 19.7), (11404, 17.5), (14368, 7.8))
-    initial_gain = 0.056578      # held at the old maracas' level, -30.1 dB (velocity 100, a 1.5 s note, its loudest 150 ms -- read as it was)
+    initial_gain = 0.024530      # held at the old maracas' level, -30.1 dB (velocity 100, a 1.5 s note, its loudest 150 ms -- read as it was)
 
 
 class CabasaProperties(RattleProperties):

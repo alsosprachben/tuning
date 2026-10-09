@@ -92,7 +92,8 @@ INSTS = {
     "bongo_hi":  dict(note=60, glob=_V1 + "drums/other/Bongos/HighBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
-    "maracas":   dict(note=70, glob=_V1 + "varWood/maraca[0-9].wav", groups=None,
+    # the SINGLE strokes only: maraca1 and 4 are two strokes, 3 three quick hits
+    "maracas":   dict(note=70, glob=_V1 + "varWood/maraca[25].wav", groups=None,
                       band=(1000, 16000), floor=-20, flat=(1000, 12000),
                       # A RATTLE'S BURST IS HALF THE NOTE (PERCUSSION_RATTLE): a
                       # 1 s note is a half-second shake. A VSCO stroke shakes for
@@ -104,7 +105,7 @@ INSTS = {
                       # was matched to the recordings band by band, by ear
                       hold=0.4, keep_trim=True,
                       params=("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db",
-                              "@accent_s", "@accent_db")),
+                              "@rise_s")),
     "bongo_lo":  dict(note=61, glob=_V1 + "drums/other/Bongos/LowBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
@@ -268,7 +269,7 @@ def flatness(chs, sr, lo, hi):
     return float(np.exp(np.mean(np.log(P))) / np.mean(P))
 
 
-_RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6}
+_RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6, "@rise_s": 7}
 
 
 def _get(cls, note, k):
@@ -388,7 +389,7 @@ def main(argv):
     spec = INSTS[inst]
     if "params" in spec:
         C.PARAMS = spec["params"]
-    HOLD[0] = spec.get("hold", 1.0)
+    HOLD[0] = float(next((a.split("=")[1] for a in argv if a.startswith("--hold=")), spec.get("hold", 1.0)))
     os.environ.setdefault("TUNING_REFLECT", "0")
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
     import percussion_map as PM

@@ -431,7 +431,7 @@ PERCUSSION_RING = {
     #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
     57: 1.69, 58: 0.020, 59: 0.48,
     65: 0.30, 66: 0.35, 69: 0.010,
-    70: 0.0088, 71: 0.280, 72: 0.850,
+    70: 0.0094, 71: 0.280, 72: 0.850,
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
     # fairly closed. Measured on the Iowa guiro, the envelope after the last
     # ridge falls 10 dB in 3-5 ms and 20 dB in 15-21 ms, against a woodblock's
@@ -669,7 +669,7 @@ PERCUSSION_RASP = {
 # physics and judgement, not measurement -- the same footing as the membranes.
 # What is not judgement is the STRUCTURE: a burst of impacts rather than a single
 # pitched stroke, which is the part that was wrong.
-def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0, accent_db=0.0):
+def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0, accent_db=0.0, rise_s=0.0):
     """A shake that SETTLES: (start, end, level, pitch) impacts.
 
     VSCO's maraca strokes peak and then die away smoothly over 0.25-0.4 s,
@@ -692,6 +692,12 @@ def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0,
     5-10 dB under it; a uniform burst had no such contrast (Ben, comparing:
     "the timing difference"). accent_s is how long that first throw lasts,
     accent_db how far the rest of the shake sits under it.
+
+    ...BUT THAT SPIKE WAS A SECOND STROKE'S. Two of VSCO's five maraca files
+    are two strokes (peaks 85-100 ms apart) and one is three quick hits; the
+    single strokes do not open with a spike at all -- they SWELL, 35-75 ms,
+    as the seeds get going (Ben heard it first: "a two stroke and a single
+    stroke"). rise_s is that swell, a linear ramp of the impacts' level.
     """
     import math
     import random
@@ -711,6 +717,8 @@ def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0,
             level = (1.0 - fall) ** 1.4 * 10.0 ** (-settle_db * (t - span) / settle_s / 20.0)
         if t >= accent_s:
             level *= 10.0 ** (-accent_db / 20.0)
+        if rise_s > 0.0 and t < rise_s:
+            level *= t / rise_s
         level *= 10.0 ** (rng.uniform(-3.0, 3.0) / 20.0)
         pitch = 2.0 ** (rng.uniform(-0.31, 0.31))
         out.append((on + t, on + t + 0.9 / r, level, pitch))
@@ -721,7 +729,7 @@ PERCUSSION_RATTLE = {
     69: (0.20, 40),      # cabasa: steel ball chain on a ridged cylinder, dense
     # maracas: seeds in a gourd, VSCO's (examples/perc_fit.py) -- the shake, then its
     # settle (seconds, dB): see _settling_rattle
-    70: (0.10, 27, 0.21, 0.26, 44.1, 0.014, 3.8),
+    70: (0.10, 40, 0.19, 0.28, 41.9, 0.0, 0.0, 0.065),
     # A VIBRASLAP IS ALL RATTLE. A wooden ball on a rod strikes a box of loose
     # metal pins and they clatter for over a second, thinning as they settle --
     # the longest and densest burst of the four, and it was a single hit.
