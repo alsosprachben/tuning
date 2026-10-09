@@ -68,9 +68,9 @@ Applause,Gunshot""".replace("\n", "").split(",")
 # program: (rating, note). The note earns the rating or explains the gap.
 RATED = {
  0:(4,"Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured; the undamped strings ring sympathetically (the free-string register)"),
- 1:(2,"the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp"),
+ 1:(4,"an UPRIGHT, measured (VSCO-2 CE, Ivy Audio's): inharmonicity by partial peaks (short wound bass 4-9x the grand's, the scale break at C#3-F3), spectrum, decay and register levels fitted per key (examples/upright_fit.py), a hammer contact shortening with force. A small board's brightness, which GM's name asks for; the grand voiced hard is kept as a voicing. Ben: very close, then great once the attack's knee went in"),
  2:(2,"a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference"),
- 3:(2,"the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it"),
+ 3:(3,"the measured upright (GM 1) with the tuner's hand off: unisons 8-20 cents, CC1 the wheel. The upright is fitted; the detune is judged from beat rates, not measured"),
  4:(2,"Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted"),
  5:(2,"Wurlitzer. Same machinery, 1/d pickup; no audio fitted"),
  6:(4,"VCSL recordings"),
@@ -167,7 +167,7 @@ RATED = {
  113:(4,"VSCO-2 CE (CC0) agogo bells 2 and 3, played as a melodic instrument: the high bell above note 82, the low below, each fitted stroke carrying its band colour with the note. Ben: sounds good"),
  114:(4,"built from the instrument's design, then corrected against Freesound 742254"),
  115:(4,"Iowa woodblocks"),
- 116:(2,"the membrane drum class"),
+ 116:(4,"VSCO-2 CE (CC0) giant drum struck with sticks, as a taiko with bachi: 28 measured modes as ratios to the played note, its colour moving with it (PlayedAtPitchMixin). Fitted on the first 250 ms with the strike dying as a stick's does -- the takes' late energy is their room. Ben: sounds great"),
  117:(4,"DRSKit's two toms, measured, by register: the floor tom under G2, the rack tom from G2 up. A melodic tom part is a set of drums, not one drum retuned"),
  118:(4,"a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves)"),
  119:(4,"the fitted crash (Iowa's modes, refitted to DRSKit) PLAYED BACKWARDS, literally: every partial emitted time-reversed -- each decay a growth at its own rate, each phase mirrored so the modes arrive together as they set out, the strike's wash a swell before the arrival. Against the forward crash flipped, 0.4 dB rms in every band (examples/reverse_check.py). It was one shared swell over the modes; Ben: sounds great"),

@@ -8073,7 +8073,7 @@ def selftest():
     # pointed at one long ago; its neighbours were left behind.
     for _p, _c in ((15, _T.HammeredDulcimerProperties),
                    (112, _T.CrotaleProperties), (113, _T.AgogoProperties),
-                   (116, _T.MembraneDrumProperties), (117, _T.TomTomProperties),
+                   (116, _T.TaikoProperties), (117, _T.TomTomProperties),
                    (126, _T.ApplauseProperties)):
         if _PM.property_class_for_program(_p) is not _c:
             break
@@ -8443,10 +8443,15 @@ def selftest():
           and _PM.property_class_for_program(6) is _T.HarpsichordProperties,
           "  (every one of GM 0-7 is now its own instrument)")
 
-    # ---- the bright piano: the same instrument, voiced hard ------------------
-    check("the bright piano is the grand with harder hammers",
-          _PM.property_class_for_program(1) is _T.BrightPianoProperties
-          and issubclass(_T.BrightPianoProperties, _T.GrandPianoProperties))
+    # ---- the bright piano: the measured upright -----------------------------
+    # GM 1 was the grand voiced hard (BrightPianoProperties, kept below as a
+    # voicing); it is now the upright, measured (VSCO-2 CE), whose small board
+    # and short strings make the brightness GM's name asks for
+    check("the bright piano is the measured upright",
+          _PM.property_class_for_program(1) is _T.UprightPianoProperties
+          and issubclass(_T.UprightPianoProperties, _T.GrandPianoProperties))
+    check("...and the hard-voiced grand is still a voicing of the grand",
+          issubclass(_T.BrightPianoProperties, _T.GrandPianoProperties))
     bp, gp2 = _T.BrightPianoProperties, _T.GrandPianoProperties
     check("...a shorter contact time, which IS the hammer's low-pass",
           bp.hammer_corner_hz > gp2.hammer_corner_hz * 1.4,
@@ -8527,33 +8532,31 @@ def selftest():
     # very little else -- what separates a bongo from a surdo is the SHELL, and
     # what separates a timbale from a conga is what the shell is made of.
     _kit = {_n: _PMk.PERCUSSION[_n][1] for _n in (60, 61, 62, 63, 64, 65, 66, 86, 87)}
-    check("the kit's hand drums are four instruments, not one",
-          len({_c.__name__ for _c in _kit.values()}) == 4
-          and _kit[60] is _T.BongoProperties and _kit[65] is _T.TimbaleProperties,
-          "  (bongo, conga, timbale, surdo across nine notes)")
-    # A SHELL RADIATES ON ITS OWN; it does not filter the head. The first
-    # version made it a formant, and measured against the head's modes three of
-    # the four shells had nothing to filter: a conga's cavity sits near 128 Hz
-    # and a surdo's near 52, BELOW the lowest mode, while a timbale's steel
-    # rings above 1280 and the highest mode reaches 1116.
-    _cg = _kit[63](210.0, 0.0, 1.0, 1.0)
-    _shell = [210.0 * (1.0 + _v[2]) for _v in _cg.unison_voices(210.0, 1, 30.0)]
+    # ...and since then the bongos and congas are MEASURED (VSCO-2 CE, examples/
+    # perc_fit.py): their shells are in their recorded modes. The timbale and the
+    # surdo, with no recording, keep the modelled shell.
+    check("the kit's hand drums are their own instruments",
+          all(issubclass(_kit[_n], _T.MeasuredStrokeProperties) for _n in (60, 61, 62, 63, 64))
+          and _kit[65] is _T.TimbaleProperties and _kit[86] is _T.SurdoProperties,
+          "  (bongos and congas measured; timbale and surdo modelled, shells and all)")
+    _sd = _kit[86](66.0, 0.0, 1.0, 1.0)
+    _shell = [66.0 * (1.0 + _v[2]) for _v in _sd.unison_voices(66.0, 1, 30.0)]
     check("...and a shell RADIATES, where a formant could only have filtered",
-          _shell and min(_shell) < 210.0 * _kit[63].mode_ratios[0],
-          "  (the conga's %.0f Hz sits under its own %.0f Hz head)"
-          % (min(_shell), 210.0))
+          _shell and min(_shell) < 66.0 * _kit[86].mode_ratios[0],
+          "  (the surdo's %.0f Hz sits under its own %.0f Hz head)"
+          % (min(_shell) if _shell else 0.0, 66.0))
     _tb = _kit[65](270.0, 0.0, 1.0, 1.0)
     _tshell = [270.0 * (1.0 + _v[2]) for _v in _tb.unison_voices(270.0, 1, 30.0)]
-    check("...and the timbale's steel rings above the head, where wood cannot",
+    check("...and the timbale's steel rings above the head, and longer",
           max(_tshell) > 270.0 * _kit[65].mode_ratios[-1] * 1.5
-          and _kit[65].shell_decay_db < _kit[63].shell_decay_db,
+          and _kit[65].shell_decay_db < _kit[86].shell_decay_db,
           "  (%.0f Hz against a head reaching %.0f, and it holds it longer)"
           % (max(_tshell), 270.0 * _kit[65].mode_ratios[-1]))
     # ...AND ONCE PER NOTE, NOT PER MODE. A shell is one resonance; emitting it
     # under every harmonic would put twelve copies of it in the sound.
     check("...and the shell is emitted once, not under every mode",
-          len(_cg.unison_voices(210.0, 1, 30.0)) > 0
-          and not _cg.unison_voices(210.0, 2, 30.0),
+          len(_sd.unison_voices(66.0, 1, 30.0)) > 0
+          and not _sd.unison_voices(66.0, 2, 30.0),
           "  (under harmonic 1 only)")
     # AN ELECTRIC SNARE IS A MACHINE, not the acoustic snare at another pitch.
     _es = _PMk.PERCUSSION[40][1]
@@ -8628,20 +8631,20 @@ def selftest():
           and not issubclass(_rc, _T.MalletProperties)
           and issubclass(_rc, _T.CrashCymbal1Properties),
           "  (an 808 tom and the MEASURED crash, reversed)")
-    # A REVERSE CYMBAL IS THE ONE VOICE WHOSE ENVELOPE RISES. Everything else
-    # in this bank decays; a partial can be made to fall faster than its
-    # neighbour but not to rise. The rise is the ATTACK, and the only thing
-    # in the way was blockrender's flat cap of 0.45 of the note's duration --
-    # right for every acoustic voice and wrong for this one.
-    check("...and the reverse cymbal's attack may outlast half its note",
-          _rc.attack_fraction_max > 0.85
-          and _T.SynthProperties.attack_fraction_max == 0.45
+    # A REVERSE CYMBAL IS THE ONE VOICE WHOSE ENVELOPE RISES -- now literally:
+    # the fitted crash's every partial emitted time-reversed (blockrender.
+    # _reverse_partial), each decay a growth at its own rate, so the long modes
+    # rise first and the bright ones surge in at the end. It was a shared swell
+    # (the attack let past blockrender's 45% cap), which the order of arrival
+    # gave away; examples/reverse_check.py sets it against the crash flipped.
+    check("...and the reverse cymbal is the crash played backwards",
+          getattr(_rc, "played_backwards", False)
+          and not getattr(_T.CrashCymbal1Properties, "played_backwards", False)
           and [_n for _n, _c in vars(_T).items()
-               if isinstance(_c, type)
-               and getattr(_c, "attack_fraction_max", 0.45) != 0.45]
+               if isinstance(_c, type) and getattr(_c, "played_backwards", False)]
           == ["ReverseCymbalProperties"],
-          "  (%.0f%% of the note against everything else's 45%%)"
-          % (100 * _rc.attack_fraction_max))
+          "  (each partial reversed; the attack cap untouched at %.0f%%)"
+          % (100 * _T.SynthProperties.attack_fraction_max))
     # ...AND IT IS NOT A ONE-SHOT, which every other cymbal is. A struck cymbal
     # ignores note-off and rings out because nothing stops it; blockrender
     # extends it to 8 s, and with the attack capped at a FRACTION of the
@@ -12358,13 +12361,14 @@ def selftest():
           % (st.inharmonicity_coefficient / ny.inharmonicity_coefficient))
 
     # ---- the honky-tonk: the same piano, badly tuned -------------------------
-    check("the honky-tonk is the grand with the tuner's hand off",
+    check("the honky-tonk is the upright with the tuner's hand off",
           _PM.property_class_for_program(3) is _T.HonkyTonkProperties
-          and issubclass(_T.HonkyTonkProperties, _T.GrandPianoProperties))
+          and issubclass(_T.HonkyTonkProperties, _T.UprightPianoProperties))
     ht, gp = _T.HonkyTonkProperties, _T.GrandPianoProperties
-    # The VOICE is one number. Everything else on the class is the wheel.
+    # The VOICE is one number. Everything else on the class is the wheel, and
+    # its level (a balance, held at the old GM 3's, not a voice).
     _tonal = [k for k in ht.__dict__
-              if not k.startswith("_") and k not in ("detune_wheel",)]
+              if not k.startswith("_") and k not in ("detune_wheel", "initial_gain")]
     check("...and it needed no new mechanism, only a wider range",
           ht.string_detune_range[0] > gp.string_detune_range[1] * 4.0
           and _tonal == ["string_detune_range"],

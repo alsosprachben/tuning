@@ -25,11 +25,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # voicedesc.h's structs, field for field (checked against the C and the GPU
 # compiler's sizeof when the library and the program load)
 VDESC = np.dtype([("chk_hi", "u8"), ("chk_lo", "u8"), ("nk_hi", "u8"), ("nk_lo", "u8"), ("nseed", "u8"),
-                  ("ns", "i4"), ("ne", "i4"), ("kind", "i4"), ("flags", "i4"), ("cell", "i4"), ("pad0", "i4"),
+                  ("ns", "i4"), ("ne", "i4"), ("kind", "i4"), ("flags", "i4"), ("cell", "i4"), ("kn", "i4"),
                   ("zLr", "f4"), ("zLi", "f4"), ("zRr", "f4"), ("zRi", "f4"), ("winst", "f4"),
                   ("mL0", "f4"), ("mL1", "f4"), ("mR0", "f4"), ("mR1", "f4"),
                   ("aL", "f4"), ("aR", "f4"), ("aLp", "f4"), ("aRp", "f4"),
-                  ("jfa", "f4"), ("cc", "f4"), ("swp", "f4"), ("za", "f4", 12)])
+                  ("jfa", "f4"), ("cc", "f4"), ("swp", "f4"), ("kgL", "f4"), ("kgR", "f4"),
+                  ("za", "f4", 12)])
 VCELL = np.dtype([("s0", "i4"), ("s1", "i4"), ("sb", "i4"), ("nsb", "i4"),
                   ("g", "f4", 4), ("c", "f4", 4), ("z", "f4", 4), ("wc", "f4"),
                   ("z1r", "f4"), ("z1i", "f4"), ("th1", "f4"), ("fmkI", "f4"),

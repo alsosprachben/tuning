@@ -28,12 +28,25 @@
                 // (ns) and a start gain (mL0, re-aimed so the line through the
                 // block's end passes through it) -- so the live descriptors and
                 // the GPU follow without change.
+                //
+                // ...BUT A STEP IS ONLY A STRIKE. An attack of several ms (the
+                // upright's 4-8, the grand's 3) made a step too, wherever it fit
+                // inside its first block -- so the same key clicked or did not by
+                // where its onset fell: the grand's E5 read -21 dB of early treble
+                // at most positions and -50 at the rest (Ben: "a little clicky,
+                // but only on some of the attacks"). Past KNEE_MIN the block has
+                // a KNEE: a ramp from zero at the onset to the attack's own level
+                // at its end (kN, kgL/kgR), then the line as before. A strike
+                // (KNEE_MIN or less: a kit's sticks, beaters and hands) keeps its step.
+                // Not on a noise row or a Moog partial, whose loops are their own.
+                long kN=0, kA=0; float kgL=0.f, kgR=0.f;
                 {
                     float dmin=fminf(dL,dR);
                     long sA=a+(long)ceilf(dmin);
                     if(sA>bs0 && sA<bs1){
                         long sF=sA+(long)fadeS[p];
-                        long s0=sF<bs1 ? sA+(long)(0.5f*fadeS[p]) : sA;
+                        int knee = sF<bs1 && fadeS[p]>KNEE_MIN && !ftr && chBW[p]>=0.f;
+                        long s0=sF<bs1 ? (knee ? sF : sA+(long)(0.5f*fadeS[p])) : sA;
                         if(s0>=bs1) s0=bs1-1;
                         float g0L=0.f, g0R=0.f;
                         if(sF<bs1){
@@ -44,7 +57,11 @@
                         }
                         float kq=(float)BLK/(float)(bs1-s0);
                         mL0=mL1-(mL1-g0L)*kq; mR0=mR1-(mR1-g0R)*kq;
-                        if(ns<s0) ns=s0;
+                        if(knee){
+                            // the line from the knee on; before it, the ramp
+                            kN=sF; kA=sA; kgL=g0L; kgR=g0R;
+                            if(ns<sA) ns=sA;
+                        } else if(ns<s0) ns=s0;
                         if(ns>=ne) continue;
                     }
                 }

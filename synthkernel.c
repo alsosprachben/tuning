@@ -27,6 +27,13 @@
 #endif
 #define SRATE_D ((double)SRATE)
 #define SRATE_F ((float)SRATE)
+// THE LONGEST ATTACK THAT IS A STRIKE (voice_block.inc's onset rule): one this
+// short starts as a step, one longer ramps through a knee. Just past 1.5 ms:
+// the cymbals and hats are 1.5 exactly (66.15 samples), and at 0.0015 float
+// rounding sent their attacks both ways. The woodblocks, claves and guiros
+// (4 ms by their classes) ramp: their step was the same position-dependent
+// click as the pianos' (Ben: go ahead).
+#define KNEE_MIN (0.0016f*SRATE_F)
 
 /* CC78, vibrato delay: how long a delayed vibrato takes to bloom in once its
    delay has passed. tonelib.VIB_BLOOM_S must match; the selftest reads both. */
@@ -659,6 +666,27 @@ void synth_voice(
                 // differently, and a render moves by an ULP. A MOOG runs the
                 // same body over grid cells, each interpolated between its own
                 // two grid gains; the phasor runs on across them untouched.
+                // THE KNEE (voice_block.inc): the attack's own ramp, from its
+                // onset to its end, before the block's line takes over -- a loop
+                // of its own, so the one below is spelled as it always was
+                if(kN>ns){
+                    long ke=kN<ne?kN:ne; float ik=1.f/(float)(kN-kA);
+                    for(long n=ns;n<ke;n++){
+                        float r=(float)(n-kA)*ik; float mL=kgL*r*aL, mR=kgR*r*aR;
+                        float sL=zrL, sR=zrR;
+                        if(jfa>0.f){
+                            float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
+                            float cj=cosf(jit),sj2=sinf(jit);
+                            sL += (zrL*cj - ziL*sj2)*jfa;
+                            sR += (zrR*cj - ziR*sj2)*jfa;
+                        }
+                        outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+                        if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
+                        float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
+                        tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+                    }
+                    ns=ke;
+                }
                 if(!ftr && chBW[p]<0.f){
                 #include "voice_noise.inc"
                 } else if(!ftr){
@@ -846,6 +874,8 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->mL0=mL0; d->mL1=mL1; d->mR0=mR0; d->mR1=mR1;
         d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
         d->jfa=jfa; d->cc=cc; d->swp=swp;
+        // the knee: its sample from the block's start (0, none), its gains
+        d->kn=kN>ns ? (int)(kN-bn0) : 0; d->kgL=kgL; d->kgR=kgR; (void)kA;
         // the carrier at each V_SUB samples into the block, in double, as the
         // phasor's own steps of winst place it (voicedesc.h)
         for(int j=1;j<4;j++){

@@ -52,12 +52,13 @@ typedef struct {
     u64 chk_hi, chk_lo;          // the chiff's index step (chiff_step)
     u64 nk_hi, nk_lo, nseed;     // the noise band's draw step and seed
     i32 ns, ne;                  // samples [ns, ne) of the block, from its start
-    i32 kind, flags, cell, pad0;
+    i32 kind, flags, cell, kn;   // kn: the attack's knee, samples from the block's start (0: none)
     float zLr, zLi, zRr, zRi;    // the carrier at ns, each ear
     float winst;                 // its step, radians a sample
     float mL0, mL1, mR0, mR1;    // kind 1: the amplitude at the block's edges
     float aL, aR, aLp, aRp;      // the partial's level (a Moog's: last block's, then this one's)
     float jfa, cc, swp;          // the chiff's level, its cycle, the send weight
+    float kgL, kgR;              // kind 1: the amplitude at the knee (voice_block.inc), each ear
     float za[12];                // the carrier again at ns+128, +256, +384 (zLr zLi zRr zRi each)
 } vdesc;
 
@@ -121,6 +122,11 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
     float tb=(float)k*invb, mL, mR, sL, sR;
     if(d->kind==1){
         mL=(d->mL0+(d->mL1-d->mL0)*tb)*d->aL; mR=(d->mR0+(d->mR1-d->mR0)*tb)*d->aR;
+        if(k<d->kn){
+            // the attack's ramp, up to its knee (voice_block.inc)
+            float r=(float)(k-d->ns)/(float)(d->kn-d->ns);
+            mL=d->kgL*r*d->aL; mR=d->kgR*r*d->aR;
+        }
         sL=zrL; sR=zrR;
         if(d->flags & VD_NOISE){
             // an ordinary noise band (voice_noise.inc), as the Moog's below

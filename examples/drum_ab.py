@@ -27,6 +27,12 @@ examples/pizz_ab.py's recipe:
              each, then a son groove with all of them
   bells      the vibraslap (58), short notes and a long one; the melodic agogo
              (program 113) across its split; the kit agogos (67, 68)
+  plucks     the guitar, plucked bass, marimba, vibraphone and xylophone in
+             turn, fast repeated onsets
+  pianos     GM 0, 1 and 3 in turn, one phrase each: an arpeggio C2-C7,
+             chords across the registers, a melody over a bass
+  taiko      GM 116: six strokes on C2, pp to fff; a don-doko pattern; two
+             drums a fourth apart trading phrases
   reverse    the reverse cymbal (GM 119): swells of one, two and four beats
              alone, then each into a crash over a beat
   cabasa     the cabasa (69) alone at six strokes, in a bossa's sixteenths,
@@ -319,6 +325,119 @@ def latin(dst):
     return _save(dst, ev)
 
 
+def plucks(dst):
+    """The voices whose attacks were measured (examples/attack_audit.py), each
+    in turn: the nylon guitar (24) arpeggiating, the plucked bass (32) walking,
+    then the marimba (12), vibraphone (11) and xylophone (13) in eighths --
+    fast repeated onsets, where an attack's click shows."""
+    q = 480
+    m = mido.MidiFile(ticks_per_beat=q)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    ev = []
+    now = 0
+    phrases = (
+        (24, [52, 55, 59, 64, 67, 64, 59, 55] * 2, q // 2, 85),
+        (32, [36, 40, 43, 45, 48, 47, 45, 43, 41, 43, 45, 47], q, 90),
+        (12, [72, 74, 76, 79, 81, 79, 76, 74] * 2, q // 2, 80),
+        (11, [64, 67, 71, 74, 76, 74, 71, 67] * 2, q // 2, 80),
+        (13, [79, 81, 83, 86, 88, 86, 83, 81] * 2, q // 2, 85),
+    )
+    for prog, notes, step, vel in phrases:
+        ev.append((now, mido.Message("program_change", channel=0, program=prog)))
+        for i, n in enumerate(notes):
+            ev.append((now + i * step, mido.Message("note_on", channel=0, note=n, velocity=vel)))
+            ev.append((now + i * step + step, mido.Message("note_off", channel=0, note=n, velocity=0)))
+        now += len(notes) * step + 2 * q
+    ev.sort(key=lambda e: (e[0], e[1].type != "program_change", e[1].type == "note_on"))
+    last = 0
+    for tk, msg in ev:
+        t.append(msg.copy(time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
+def pianos(dst):
+    """GM 0, 1 and 3 in turn, the same phrase on each: an arpeggio from C2
+    up to C7, block chords across the registers left to ring, then a melody
+    over a bass. For the upright (GM 1) and the honky-tonk built on it (GM 3),
+    with the grand (GM 0) as the reference."""
+    q = 480
+    m = mido.MidiFile(ticks_per_beat=q)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    ev = []
+    now = 0
+    for prog in (0, 1, 3):
+        ev.append((now, mido.Message("program_change", channel=0, program=prog)))
+
+        def hit(tk, n, v, d):
+            ev.append((tk, mido.Message("note_on", channel=0, note=n, velocity=v)))
+            ev.append((tk + d, mido.Message("note_off", channel=0, note=n, velocity=0)))
+        for i, n in enumerate(range(36, 97, 4)):
+            hit(now + i * q // 4, n, 80, q // 4)
+        now += 5 * q
+        for chord, v in (((36, 43, 48, 52), 90), ((48, 55, 60, 64), 80), ((60, 64, 67, 72), 75),
+                         ((72, 76, 79, 84), 70)):
+            for n in chord:
+                hit(now, n, v, 2 * q)
+            now += 3 * q
+        for i, (mel, bass) in enumerate(((76, 48), (74, 55), (72, 52), (74, 55), (76, 48), (76, 55),
+                                         (76, 52), (74, 43), (74, 50), (74, 47), (76, 48), (79, 55))):
+            hit(now + i * q, mel, 85, q)
+            hit(now + i * q, bass, 65, q)
+        now += 14 * q
+    ev.sort(key=lambda e: (e[0], e[1].type != "program_change", e[1].type == "note_on"))
+    last = 0
+    for tk, msg in ev:
+        t.append(msg.copy(time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
+def taiko(dst):
+    """GM 116, the taiko: six strokes on C2 from pp to fff, left to ring; a
+    don-doko pattern on C2 with the accents up a fifth (G2); then two drums
+    a fourth apart (C2, F2) trading phrases over a slow pulse."""
+    q = 480
+    m = mido.MidiFile(ticks_per_beat=q)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=600000, time=0))
+    t.append(mido.Message("program_change", channel=0, program=116, time=0))
+    ev = []
+
+    def hit(tk, n, v, d=240):
+        ev.append((tk, "note_on", n, v))
+        ev.append((tk + d, "note_off", n, 0))
+    now = 0
+    for v in (30, 55, 80, 100, 115, 127):
+        hit(now, 36, v, 960)
+        now += 3 * q
+    for rep in range(4):
+        # don . do-ko don . don do-ko, accents on the fifth
+        for off, n, v in ((0, 43, 120), (2, 36, 80), (3, 36, 70), (4, 36, 100), (6, 43, 115),
+                          (8, 36, 90), (10, 36, 80), (11, 36, 70)):
+            hit(now + off * q // 2, n, v)
+        now += 6 * q
+    for rep in range(4):
+        for off, n, v in ((0, 36, 115), (1, 36, 70), (2, 41, 105), (3, 41, 75), (4, 36, 110),
+                          (5, 41, 80), (6, 41, 110), (7, 36, 90)):
+            hit(now + off * q // 2, n, v)
+        now += 4 * q
+    ev.sort(key=lambda e: (e[0], e[1] == "note_on"))
+    last = 0
+    for tk, kind, n, v in ev:
+        t.append(mido.Message(kind, channel=0, note=n, velocity=v, time=tk - last))
+        last = tk
+    m.save(dst)
+    return dst
+
+
 def reverse(dst):
     """The reverse cymbal (GM 119) alone, swells of one, two and four beats
     each arriving on a downbeat; then the same three into a crash (49) and a
@@ -521,7 +640,10 @@ def main(argv):
                 "latin": latin(os.path.join(d, "latin.mid")),
                 "bells": bells(os.path.join(d, "bells.mid")),
                 "cabasa": cabasa(os.path.join(d, "cabasa.mid")),
-                "reverse": reverse(os.path.join(d, "reverse.mid"))}
+                "reverse": reverse(os.path.join(d, "reverse.mid")),
+                "taiko": taiko(os.path.join(d, "taiko.mid")),
+                "pianos": pianos(os.path.join(d, "pianos.mid")),
+                "plucks": plucks(os.path.join(d, "plucks.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p

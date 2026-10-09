@@ -21,6 +21,8 @@ in power.
   --model    the band-by-time grid, recorded against our render
   --fit      the decay, strike and noise, the band trim solved inside, and
              the modes' flatness in the instrument's band
+  --write    with --fit: the result written into the class (write_fit)
+  --attack   with --fit: the attack refit (ATTACK_REFIT), the onset's time free
   --trim3[=N]  N passes (3) refining the class's band_trim_db in third
              octaves, written into tonelib.py
   --env      10 ms envelope, recorded against the model
@@ -78,6 +80,14 @@ DRUM_PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs", "click_str
 RATTLE_PARAMS = ("@rattle_rate", "@impact_ring", "@rattle_fall", "@settle_s", "@settle_db", "@rise_s")
 # a shake as shaped noise: its envelope, and the note length it was played at
 SHAKE_PARAMS = ("rise_s", "settle_s", "settle_db", "@shake_s")
+
+# THE ATTACK REFIT (--attack): the voices whose onset spiked where the takes
+# build -- on the 1 ms step since the snare's onset rule, their top fell 10-25
+# dB after the first 3 ms where the takes' rises (Ben: "some of the percussion
+# ... seems to need the attack re-fitted"). The taiko's method: the attack
+# judged by dynamic (contrast and early treble), the trims kept in the render,
+# the onset's time free.
+ATTACK_REFIT = ("agogo_hi", "agogo_lo", "conga_open", "conga_low", "bongo_hi", "bongo_lo")
 
 # note, files, how they group into soft/mid/loud (None: one group), the
 # modes' band and floor, the flatness band
@@ -152,8 +162,14 @@ INSTS = {
                       # the grid's octaves from 31 Hz: from 125 it never saw the
                       # drum, whose fundamental and strike modes lie at 66-131
                       edges=(31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000),
-                      T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25),
-                         (0.25, 0.50), (0.50, 0.90)),
+                      # THE FIRST 250 ms ONLY, and the strike and the modes' rates
+                      # HELD: judged to 0.9 s, the fit rang the strike's noise
+                      # 0.4 s (click_dbs 73-87) and sped the modes (ring_scale
+                      # 1.41) to imitate the takes' late energy -- their ROOM,
+                      # 0.8-4 kHz holding 7 dB under its early level in every
+                      # band -- and dry, that is a trash can (Ben). The hall is
+                      # ours to add; the strike dies as a stick's does.
+                      T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25)),
                       # ring_scale free: the modes' own rates, read through a
                       # +-1.5% band, ring half as fast as the bands they sit in
                       # fall (250-500 Hz: 110-150 dB/s against ~220)
@@ -162,7 +178,20 @@ INSTS = {
                       # chasing it held the strike ringing (click_dbs 71) and the
                       # trims at +-30 dB
                       flat_weight=0.0,
-                      params=DRUM_PARAMS + ("ring_scale",)),
+                      # THE ATTACK, judged (Ben: "a little bit of a click on the
+                      # attack that is not on the recording ... the tap a little
+                      # softer"): the top fell 32 dB from the first 3 ms where
+                      # the takes fall 0.7, the first 5 ms' treble -14 dB re the
+                      # body against -40 -- so the contrast term on, and the
+                      # onset's time free (it was the class's 1 ms)
+                      contrast=True, attack_groups=True,
+                      # the trims kept in the render: solved on paper, they boosted
+                      # the low modes 30 dB AFTER the fit had judged the attack
+                      # without them -- and that boost, switched on in 1 ms, is
+                      # the click. The onset held at 6 ms (the takes rise 10)
+                      # the trims kept in the render, the attack judged on what plays
+                      keep_trim=True,
+                      params=tuple(k for k in DRUM_PARAMS if k != "click_dbs")),
 }
 
 C.EDGES = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
@@ -447,6 +476,19 @@ def contrast(y, sr):
     return float(10 * np.log10((a + 1e-30) / (b + 1e-30)))
 
 
+def early_treble(y, sr):
+    """The first 5 ms above 2 kHz against the body's first 50 ms under 500
+    Hz, dB: how much a stroke's strike stands out of it. VSCO's taiko: -21
+    at fff to -59 at pp; ours, onset 1 ms under +30 dB trims, -14 at every
+    velocity -- the low modes switched on in a millisecond splatter."""
+    from scipy.signal import butter, sosfiltfilt
+    t0 = C.onset([y], sr)
+    h = sosfiltfilt(butter(4, 2000, btype="high", fs=sr, output="sos"), y)
+    lo = sosfiltfilt(butter(4, 500, btype="low", fs=sr, output="sos"), y)
+    return float(10 * np.log10((np.mean(h[t0:t0 + int(0.005 * sr)] ** 2) + 1e-30)
+                               / (np.mean(lo[t0:t0 + int(0.05 * sr)] ** 2) + 1e-30)))
+
+
 def fit(inst, recs, rflat, vels, maxfev):
     from scipy.optimize import minimize
     import percussion_map as PM
@@ -458,19 +500,32 @@ def fit(inst, recs, rflat, vels, maxfev):
     x0 = [max(float(_get(cls, note, k)), C.FLOOR.get(k, 1e-3)) for k in C.PARAMS]
     rcrack = max(crackle(sum(load(p)[0]), 44100) for p in files(inst))
     rcon = float(np.mean([contrast(sum(load(p)[0]), 44100) for p in files(inst)])) if spec.get("contrast") else None
+    # ...or BY DYNAMIC (attack_groups): each group's contrast and early treble
+    # against ours at its velocity -- a stick's brightness grows with force,
+    # and the loudest stroke alone let the soft ones click
+    rgrp = None
+    if spec.get("attack_groups"):
+        gs = grouped(strokes(inst))
+        rgrp = [(float(np.mean([contrast(sum(load(p)[0]), 44100) for p in gs[g][2]])),
+                 float(np.mean([early_treble(sum(load(p)[0]), 44100) for p in gs[g][2]]))) for g in gs]
     best = [1e9, None, None]
 
     def f(z):
         vals = np.exp(z) * np.array(x0)
         for k, v in zip(C.PARAMS, vals):
             _set(cls, note, k, v)
-        model, mflat, mcrack = [], [], 0.0
+        model, mflat, mcrack, matk = [], [], 0.0, []
         for v in vels:
             chs, sr = C.render(note, v)
             model.append(C.norm(C.grid(chs, sr)))
             mflat.append(flatness(chs, sr, *spec["flat"]))
             mcrack = max(mcrack, crackle(sum(chs), sr))
+            if rgrp is not None:
+                matk.append((contrast(sum(chs), sr), early_treble(sum(chs), sr)))
         econ = abs(contrast(sum(chs), sr) - rcon) if rcon is not None else 0.0
+        if rgrp is not None:
+            econ = float(np.sqrt(np.mean([(a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
+                                          for a, b in zip(matk, rgrp)]) / 2.0))
         e, trim = C.score(model, recs)
         ef = float(np.sqrt(np.mean(np.square(10 * np.log10(np.array(mflat) / np.array(rflat))))))
         ef *= spec.get("flat_weight", 1.0)
@@ -624,12 +679,48 @@ def trim3(inst, passes):
     print("model - rec  " + " ".join("%.0f:%+.1f" % (cf, -dd) for cf, dd in zip(_C3, d)))
 
 
+def write_fit(inst, spec, vals, trim):
+    """--write: the fitted class attributes into tonelib.py, each replaced in
+    the class's own block or added to it; band_trim_db the solved trim, ADDED
+    to the class's own where the fit kept it in the render (keep_trim). @-
+    parameters (the map's own numbers) are printed, not written."""
+    cls = inst_class(spec).__name__
+    path = os.path.join(HERE, "tonelib.py")
+    src = open(path).read()
+    a = src.index("class %s(" % cls)
+    b = src.index("\n\n\nclass ", a)
+    blk = src[a:b]
+    for k, v in zip(C.PARAMS, vals):
+        if k.startswith("@"):
+            continue
+        line = "    %s = %.6g" % (k, v)
+        if re.search(r"^    %s = " % k, blk, re.M):
+            blk = re.sub(r"^    %s = [^#\n]*" % k, lambda _: line + "  ", blk, count=1, flags=re.M)
+        else:
+            blk = blk + "\n" + line
+    old = dict(getattr(inst_class(spec), "band_trim_db", ()) or ()) if spec.get("keep_trim") else {}
+    pts = tuple((round(c), round(float(t) + float(old.get(round(c), 0.0)), 1)) for c, t in zip(C.CENTRES, trim))
+    txt = "    band_trim_db = %s" % (pts,)
+    if re.search(r"^    band_trim_db = ", blk, re.M):
+        blk = re.sub(r"^    band_trim_db = .*$", lambda _: txt, blk, count=1, flags=re.M)
+    else:
+        blk = blk + "\n" + txt
+    open(path, "w").write(src[:a] + blk + src[b:])
+    for f in glob.glob(os.path.join(HERE, "__pycache__", "tonelib.*.pyc")):
+        os.remove(f)
+    print("    written to %s" % cls)
+
+
 def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
     inst = pos[0]
     spec = INSTS[inst]
     if "params" in spec:
         C.PARAMS = spec["params"]
+    if "--attack" in argv:
+        spec = dict(spec, contrast=True, attack_groups=True, keep_trim=True)
+        INSTS[inst] = spec
+        C.PARAMS = tuple(spec.get("params", C.PARAMS)) + ("attack_time",)
     if "T" in spec:
         C.T = spec["T"]
         C.COL_W = np.array([0.3] + [1.0] * (len(C.T) - 1))
@@ -692,6 +783,8 @@ def main(argv):
         for k, v in zip(C.PARAMS, vals):
             print("    %s = %.6g" % (k, v))
         print("    band_trim_db = (%s)" % ", ".join("(%.0f, %.1f)" % (c, t) for c, t in zip(C.CENTRES, trim)))
+        if "--write" in argv:
+            write_fit(inst, spec, vals, trim)
         return 0
     for g in names:
         drop, gr, _ = gs[g]

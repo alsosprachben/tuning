@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    TaikoProperties,
     MelodicAgogoHighProperties,
     MelodicAgogoLowProperties,
     AcousticBassProperties,
@@ -19,6 +20,7 @@ from tonelib import (
     ClavinetProperties,
     ElectricGrandProperties,
     HonkyTonkProperties,
+    UprightPianoProperties,
     RhodesProperties,
     WurlitzerProperties,
     MutedTrumpetProperties,
@@ -181,11 +183,11 @@ _fill(6, 7, HarpsichordProperties)
 # contact time, and felt that spreads about half as much under force so the
 # strike comb keeps its notch. GM names no instrument, and its own Wide/Dark
 # variations say brightness is a timbral axis rather than another piano.
-PROGRAM_CLASS[1] = BrightPianoProperties   # the grand, voiced hard
+PROGRAM_CLASS[1] = UprightPianoProperties  # the upright, measured: a small board's brightness
 # ...and 3 (Honky-tonk) is the same piano with the tuner's hand off. The grand
 # already models a unison as one string at pitch and two mistuned around it; a
 # honky-tonk just widens that range from under 2 cents to 8-20.
-PROGRAM_CLASS[3] = HonkyTonkProperties     # the grand, badly tuned
+PROGRAM_CLASS[3] = HonkyTonkProperties     # the upright, badly tuned
 # ...and 2 (Electric Grand) is a Yamaha CP-70: a real grand action and real
 # strings, but with NO SOUNDBOARD and a piezo under the bridge, and short enough
 # that its bass strings are a twelfth as stiff-tuned again as a concert grand's.
@@ -482,7 +484,7 @@ _fill(120, 127, MalletProperties)
 # lifted, so note length is the file's opinion and not the instrument's.
 PROGRAM_CLASS[112] = CrotaleProperties          # small tuned bells
 PROGRAM_CLASS[113] = AgogoProperties            # the class is named for it
-PROGRAM_CLASS[116] = MembraneDrumProperties     # a big drum, not a bar
+PROGRAM_CLASS[116] = TaikoProperties            # a big barrel drum, measured (VSCO-2 CE)
 PROGRAM_CLASS[117] = TomTomProperties           # likewise, and pitched
 PROGRAM_CLASS[114] = SteelPanProperties          # tuned 1:2:3, not a bar
 # The two CATEGORY ERRORS in this family, both on the generic mallet base.

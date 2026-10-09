@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 35 | 27% |
-| 3 specific, theory + ear | 26 | 20% |
-| 4 specific, reference audio | 67 | 52% |
+| 2 specific, theory | 32 | 25% |
+| 3 specific, theory + ear | 27 | 21% |
+| 4 specific, reference audio | 69 | 54% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -160,9 +160,9 @@ plays Standard, as does any program that is not a set.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 0 | Acoustic Grand Piano | `GrandPiano` | **4** | Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured; the undamped strings ring sympathetically (the free-string register) |
-| 1 | Bright Acoustic Piano | `BrightPiano` | **2** | the grand voiced HARD: shorter hammer contact, felt that spreads half as much. Tells most at pp |
+| 1 | Bright Acoustic Piano | `UprightPiano` | **4** | an UPRIGHT, measured (VSCO-2 CE, Ivy Audio's): inharmonicity by partial peaks (short wound bass 4-9x the grand's, the scale break at C#3-F3), spectrum, decay and register levels fitted per key (examples/upright_fit.py), a hammer contact shortening with force. A small board's brightness, which GM's name asks for; the grand voiced hard is kept as a voicing. Ben: very close, then great once the attack's knee went in |
 | 2 | Electric Grand Piano | `ElectricGrand` | **2** | a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference |
-| 3 | Honky-tonk Piano | `HonkyTonk` | **2** | the grand with the tuner's hand off: the unison range widened from under 2 cents to 8-20, CC1 scales it |
+| 3 | Honky-tonk Piano | `HonkyTonk` | **3** | the measured upright (GM 1) with the tuner's hand off: unisons 8-20 cents, CC1 the wheel. The upright is fitted; the detune is judged from beat rates, not measured |
 | 4 | Electric Piano 1 | `Rhodes` | **2** | Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted |
 | 5 | Electric Piano 2 | `Wurlitzer` | **2** | Wurlitzer. Same machinery, 1/d pickup; no audio fitted |
 | 6 | Harpsichord | `Harpsichord` | **4** | VCSL recordings |
@@ -345,7 +345,7 @@ plays Standard, as does any program that is not a set.
 | 113 | Agogo | `MelodicAgogoLow/MelodicAgogoHigh by register` | **4** | VSCO-2 CE (CC0) agogo bells 2 and 3, played as a melodic instrument: the high bell above note 82, the low below, each fitted stroke carrying its band colour with the note. Ben: sounds good |
 | 114 | Steel Drums | `SteelPan` | **4** | built from the instrument's design, then corrected against Freesound 742254 |
 | 115 | Woodblock | `WoodPercussion` | **4** | Iowa woodblocks |
-| 116 | Taiko Drum | `MembraneDrum` | **2** | the membrane drum class |
+| 116 | Taiko Drum | `Taiko` | **4** | VSCO-2 CE (CC0) giant drum struck with sticks, as a taiko with bachi: 28 measured modes as ratios to the played note, its colour moving with it (PlayedAtPitchMixin). Fitted on the first 250 ms with the strike dying as a stick's does -- the takes' late energy is their room. Ben: sounds great |
 | 117 | Melodic Tom | `FloorTom/TomTom by register` | **4** | DRSKit's two toms, measured, by register: the floor tom under G2, the rack tom from G2 up. A melodic tom part is a set of drums, not one drum retuned |
 | 118 | Synth Drum | `MoogSynthDrum` | **4** | a Messenger patch: the drum machine's tom as an analog synth makes it -- the MOD section's F ENV on OSC 2's pitch (measured: linear, +-5 octaves) |
 | 119 | Reverse Cymbal | `ReverseCymbal` | **4** | the fitted crash (Iowa's modes, refitted to DRSKit) PLAYED BACKWARDS, literally: every partial emitted time-reversed -- each decay a growth at its own rate, each phase mirrored so the modes arrive together as they set out, the strike's wash a swell before the arrival. Against the forward crash flipped, 0.4 dB rms in every band (examples/reverse_check.py). It was one shared swell over the modes; Ben: sounds great |
@@ -365,7 +365,7 @@ plays Standard, as does any program that is not a set.
 
 ## The class tree
 
-280 classes.
+281 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -404,9 +404,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `InharmonicString`
       - `Clavinet` -- GM 7 Clavinet (2)
       - `GrandPiano` -- GM 0 Acoustic Grand Piano (4)
-        - `BrightPiano` -- GM 1 Bright Acoustic Piano (2)
         - `ElectricGrand` -- GM 2 Electric Grand Piano (2)
-        - `HonkyTonk` -- GM 3 Honky-tonk Piano (2)
+        - `UprightPiano` -- GM 1 Bright Acoustic Piano (4)
+          - `HonkyTonk` -- GM 3 Honky-tonk Piano (3)
       - `HammeredDulcimer` -- GM 15 Dulcimer (2)
     - `Kalimba` [FormantBody] -- GM 108 Kalimba (2)
     - `Koto` [FormantBody] -- GM 107 Koto (2)
@@ -442,22 +442,23 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `RideCymbal` -- 51 Ride Cymbal 1 (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
       - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (2)
-      - `MembraneDrum` -- GM 116 Taiko Drum (2)
+      - `MembraneDrum`
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
             - `SideStick` -- 37 Side Stick (4)
           - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4)
-              - `MelodicAgogoHigh` -- GM 113 Agogo (4)
+              - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
             - `AgogoLow` -- 68 Low Agogo (4)
-              - `MelodicAgogoLow` -- GM 113 Agogo (4)
+              - `MelodicAgogoLow` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
             - `BongoHigh` -- 60 Hi Bongo (4)
             - `BongoLow` -- 61 Low Bongo (4)
             - `CongaLow` -- 64 Low Conga (4)
             - `CongaMute` -- 62 Mute Hi Conga (4)
             - `CongaOpen` -- 63 Open Hi Conga (4)
             - `CowbellStroke` -- 56 Cowbell (4)
+            - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4)
           - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)

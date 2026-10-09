@@ -3266,6 +3266,10 @@ class HammeredDulcimerProperties(InharmonicStringProperties):
     unison_detune = (0.35, 0.5)  # courses, beating: the shimmer
     decay_db = 1.5               # no dampers
     harmonic_decay_db = 2.5
+    # LIGHT WOODEN HAMMERS, 2 ms -- by analogy with the measured hard-mallet
+    # xylophone (examples/attack_audit.py, 2 ms); at an instant attack, contrast
+    # +5.5.
+    attack_time = 0.002
 
 
 # The Clavinet D6's tone rockers. Six switches sit left of the keyboard: the
@@ -3701,6 +3705,115 @@ class GrandPianoProperties(InharmonicStringProperties):
 honky_detune = 1.0
 
 
+class UprightPianoProperties(GrandPianoProperties):
+    """An UPRIGHT piano, measured: VSCO-2 Community Edition's (Simon Dalzell /
+    Ivy Audio, CC0 there; sources.md), 23 keys a major third apart, A0 to C8,
+    at three dynamics -- the first piano here fitted to a recording of one
+    (the grand's stretch is a published Steinway B model). examples/
+    upright_fit.py measures the recordings and our render the same way.
+
+    The grand's machinery -- hammer, unisons, aftersound, phantoms -- with an
+    upright's strings and board:
+
+      * SHORT BASS STRINGS. A wound string's stiffness is set by how short it
+        is, and an upright's bass is a metre where a Steinway B's is two: its
+        inharmonicity there is 4-9x the grand's (B 6.2e-4 at A0, 2.75e-4 at
+        A1, against 0.4-0.7). Measured, by partial peaks from each key's own
+        pitch: B = 5.19e-3 f^-0.70 on the wound strings, then the SCALE BREAK
+        between C#3 and F3, where the plain steel begins and B jumps from 1.8
+        to 3.6e-4, then B = 5.06e-7 f^1.195 -- through the middle the grand's
+        own law, near enough.
+    """
+    # the measured B law: wound strings below the break, plain steel above
+    upright_break_hz = 155.0
+    wound_B = (5.19e-3, -0.700)
+    plain_B = (5.06e-7, 1.195)
+
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        k, p = self.wound_B if frequency < self.upright_break_hz else self.plain_B
+        return k * float(frequency) ** p
+
+    # THE LEVEL ACROSS THE KEYBOARD, as recorded: (Hz, dB) re A4, applied over
+    # the grand's own register law (examples/upright_fit.py --fit=register).
+    # The grand's bass stands 15 dB over its A4 and its top octave 22-38 under;
+    # this upright's bass is level with its A4 and its top 12-18 under.
+    # FITTED (examples/upright_fit.py --fit=decay: each band's T20 where the
+    # note has partials, as log ratios; 5.7 -> 4.6 dB). The upper partials ring
+    # far longer than the grand's (harmonic_decay_db 0.19 against 1.5 -- at A2
+    # the 0.5-2 kHz bands take 6-7 s to fall 20 dB), and the two-string tenor
+    # sings longest (aftersound 0.65).
+    decay_db = 15.38
+    harmonic_decay_db = 0.188128
+    decay_register_slope = 0.593938
+    aftersound_level_1 = 0.352568
+    aftersound_level_2 = 0.646365
+    aftersound_level_3 = 0.135807
+    aftersound_decay_ratio = 0.318946
+    register_level_db = ((27.5, -9.2), (34.6, -7.4), (43.7, -7.9), (55.0, -5.1), (69.3, -2.2), (87.3, -2.1), (110.0, -4.5), (138.6, -5.7), (174.6, -8.4), (220.0, -10.9), (277.2, -7.8), (349.2, -3.3), (440.0, 0.4), (554.4, -0.7), (698.5, -5.0), (880.0, -8.5), (1108.7, -7.9), (1396.9, -4.1), (1760.0, 2.0), (2217.5, 4.4), (2793.8, 5.0), (3520.0, 10.4), (4186.0, 20.4))   # fitted after the decay: 5.9 -> 1.2 dB rms
+
+    # THE HAMMER'S CONTACT, shortening with force: the onset, from 8.0 ms at
+    # nothing to 4.0 at velocity 127, linear in attack_volume ((v/127)^2). At
+    # the grand's fixed 3 ms the upright CLICKED (Ben: "a little clicky
+    # attack"): its strongest partials, switched on that fast, splattered the
+    # first 5 ms' treble 20-35 dB over the takes' at mf (-19 to -31 dB re
+    # the body, against -40 to -67), the top falling 5-21 dB after its first
+    # 3 ms where theirs does not fall. One fixed onset could not serve both:
+    # 6 ms matches mf and leaves f 10-20 dB dull. The f takes' early treble
+    # runs -31 to -65 dB key to key, so the hard end is coarse: 4 ms, 13.6
+    # dB rms over six keys at f, against ~18 at 3.
+    hammer_contact_s = (0.0080, 0.0040)
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        soft, hard = self.hammer_contact_s
+        self.attack_time = soft + (hard - soft) * self.attack_volume
+        pts = self.register_level_db
+        if pts:
+            from math import log
+            f = float(frequency)
+            if f <= pts[0][0]:
+                db = pts[0][1]
+            elif f >= pts[-1][0]:
+                db = pts[-1][1]
+            else:
+                for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                    if f < f1:
+                        db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                        break
+            self.gain *= 10.0 ** (db / 20.0)
+
+    # A SMALL BOARD. Its bass fundamentals sit 25-45 dB under the strongest
+    # partial (the 3rd-5th in the bottom octave): it barely radiates below
+    # ~120 Hz, and falls faster than the grand's 12 dB/octave -- so the low
+    # roll-off has an order of its own (board_low_order), fitted.
+    # FITTED (examples/upright_fit.py --fit=spectrum: each key's third-octave
+    # spectrum, 30-530 ms, at p and f; 11.6 -> 8.8 dB, every register within
+    # ~7 dB). The board's orders held, not fitted -- free, the fit made a brick
+    # wall at 37 Hz and switched the top roll-off off: 8 here, where 4 left
+    # the bottom octave's 50 Hz band 15 dB high.
+    board_low_order = 8.0
+    board_low_hz = 99.6682
+    board_high_hz = 22296.8
+    board_body_hz = 346.472
+    board_body_gain = 0.0562881
+    # THE WHOLE INSTRUMENT IS DARKER, by about 6 dB an octave from the bottom
+    # of the tenor up: the fit put that in the felt's corner, at 189 Hz and
+    # first order, opening with force as a hammer's does. No felt filters at
+    # 189 Hz -- this is the instrument as miked (an upright, closed, its board
+    # facing the wall) standing in the hammer's knob, and the knob to revisit
+    # if the upright sounds woolly.
+    hammer_corner_hz = 189.3
+    hammer_order = 0.948085
+
+    def soundboard_gain(self, fn):
+        body = 1.0 + self.board_body_gain * _exp(
+            -(_log(fn / self.board_body_hz) ** 2) / (2.0 * self.board_body_width ** 2))
+        high = 1.0 / (1.0 + (fn / self.board_high_hz) ** self.board_high_order)
+        low = 1.0 / (1.0 + (self.board_low_hz / fn) ** self.board_low_order)
+        return body * high * low
+    initial_gain = 0.498615      # held at the old GM 1's level, -42.9 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
+
+
 class BrightPianoProperties(GrandPianoProperties):
     """GM 1. The same piano, voiced hard -- which is what a technician does.
 
@@ -3777,8 +3890,9 @@ class BrightPianoProperties(GrandPianoProperties):
     board_body_gain = 0.30          # and carries less low-mid warmth, against 0.6
 
 
-class HonkyTonkProperties(GrandPianoProperties):
-    """GM 3. The same piano, badly tuned -- which is all a honky-tonk is.
+class HonkyTonkProperties(UprightPianoProperties):
+    """GM 3. The UPRIGHT, badly tuned -- which is all a honky-tonk is (the
+    saloon's piano was an upright; this was the grand until there was one).
 
     It was the acoustic grand unchanged, and the fix needs no new mechanism at
     all: the grand ALREADY models a real unison as one string at pitch and two
@@ -3820,6 +3934,7 @@ class HonkyTonkProperties(GrandPianoProperties):
         lo, hi = type(self).string_detune_range
         self.string_detune_range = (lo * honky_detune, hi * honky_detune)
         super().__init__(frequency, *args, **kwargs)
+    initial_gain = 0.468372      # held at the old GM 3's level, -45.0 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
 
 
 class ElectricGrandProperties(GrandPianoProperties):
@@ -6361,6 +6476,13 @@ class HarpProperties(FormantBody, PluckedStringProperties):
     # and kept there through the fit (examples/harp_level.py: it moved the
     # passage's energy -1.41 dB, so 0.1183 x 1.176).
     initial_gain = 0.1391
+    # THE FINGER LETS GO OVER 3 ms. At an instant attack every partial started
+    # at full level on its first sample, and that edge clicked (Ben, of
+    # Neptune: "plenty of sounds ... did it"): the top fell 19-35 dB after the
+    # first 3 ms where VSCO's plucks do not fall (-34 to +1), the first 5 ms'
+    # treble 20-37 dB over theirs. Measured against the plucks at mf, 3 ms:
+    # contrast -9.7 against -11.3, early treble -52.1 against -51.2.
+    attack_time = 0.003
 
 
 class BowedStringProperties(SectionMixin, StoppedPipeProperties):
@@ -7120,6 +7242,11 @@ class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     # equal-velocity balance predates it, and the fit moved this voice's total
     # energy by that much.
     initial_gain = PluckedStringProperties.initial_gain * 0.9947
+    # THE FINGER LETS GO OVER 3 ms (examples/attack_audit.py guitar): at an
+    # instant attack the top fell 16 dB after its first 3 ms and the first 3 ms'
+    # treble stood 39 dB over Iowa's 34 plucks (contrast -9, early -50); at 3
+    # ms, -12.6 and -42.7.
+    attack_time = 0.003
 
 
 class ElectricGuitarProperties(PluckedStringProperties):
@@ -7245,6 +7372,11 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # against -- what changed is the recognition that an amplifier sits between
     # that reference and these voices.
     initial_gain = 0.0869
+    # A PICK LETS GO IN 2 ms -- by analogy: no electric guitar recording here;
+    # the nylon guitar's measured finger takes 3 (examples/attack_audit.py), and
+    # a plectrum is quicker. At an instant attack every pluck clicked (contrast
+    # +6 to +11).
+    attack_time = 0.002
 
 class ElectricBassProperties(ElectricGuitarProperties):
     """A solid-body electric bass: the guitar's physics on a longer string.
@@ -7309,6 +7441,10 @@ class ElectricBassProperties(ElectricGuitarProperties):
     # so the relationships between them -- a palm mute quieter, a slap brighter
     # -- are exactly as they were.
     initial_gain = 0.2790
+    # THE FINGER LETS GO OVER 5 ms -- by analogy with the measured double bass
+    # pizzicato (examples/attack_audit.py pizz_bass, 5 ms: 34.7 -> 3.2 dB). At
+    # an instant attack every pluck clicked (contrast +9 to +11).
+    attack_time = 0.005
 
 class FingeredBassProperties(ElectricBassProperties):
     """GM 33. Two fingers alternating over the neck pickup.
@@ -7330,6 +7466,8 @@ class PickedBassProperties(ElectricBassProperties):
     """
     strike_point = 0.09
     strike_depth = 0.90
+    # A PICK, 2 ms -- as the electric guitar's (by analogy).
+    attack_time = 0.002
 
 
 class FretlessBassProperties(ElectricBassProperties):
@@ -7397,6 +7535,9 @@ class SlapBassProperties(ElectricBassProperties):
     amp_reference = 0.2289 * 1.43 * _thumb
     amp_drive = 1.45
     amp_imbalance = 0.35
+    # THE SLAP STAYS SHARP: a thumb striking the string, and the pop a string
+    # snapped off the frets -- the edge is the sound. Not the finger's 5 ms.
+    attack_time = 0
 
 
 class PoppedBassProperties(SlapBassProperties):
@@ -7525,6 +7666,11 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
     # x1.080 after the Iowa fit, which made it 0.67 dB quieter on the same
     # passage (examples/pizz_level.py): the balance stands.
     initial_gain = 0.2052
+    # THE FINGER LETS GO OVER 5 ms (examples/attack_audit.py pizz_bass): at an
+    # instant attack the top fell 32 dB after its first 3 ms and the first 3 ms'
+    # treble stood 35 dB over Iowa's 83 plucks (contrast -4, early -55); at 5
+    # ms, -2.5 and -54.5.
+    attack_time = 0.005
 
 
 class SteelGuitarProperties(NylonGuitarProperties):
@@ -8360,6 +8506,14 @@ class CelestaProperties(StruckBarProperties):
     tonal_dampening = 1.7        # felt: the top is simply not excited
     decay_db = 9.0
     harmonic_decay_db = 5.0
+    # FELT TAKES 2 ms. At an instant attack the plates CLICKED (Ben, of
+    # Neptune, where the celesta plays 2238 notes): the top fell 15 dB after its
+    # first 3 ms. No celesta recording here, so by its nearest measured
+    # relative: Iowa's glockenspiel, plastic mallets on steel, starts with
+    # contrast +0.5 dB and early treble -44 re the body; felt lands softer,
+    # and 2 ms puts the celesta just under it (-5.7, -45). By analogy, not
+    # measured.
+    attack_time = 0.002
 
 
 class MusicBoxProperties(StruckBarProperties):
@@ -8424,6 +8578,10 @@ class VibraphoneProperties(UndercutBarProperties):
     tonal_dampening = 1.5
     decay_db = 3.2      # ~3.5 s: a vibraphone rings a long time
     harmonic_decay_db = 4.0
+    # THE MALLET'S CONTACT, 3 ms (examples/attack_audit.py vibraphone): at an
+    # instant attack, contrast +9 and early treble 29 dB over the recording's
+    # (+0.2, -44); 3 ms scores 10.3 dB against 21.4.
+    attack_time = 0.003
 
 
 class MarimbaProperties(UndercutBarProperties):
@@ -8440,6 +8598,10 @@ class MarimbaProperties(UndercutBarProperties):
     # A marimba's overtones die almost immediately and leave a near-pure tone,
     # which is what makes it mellow.
     harmonic_decay_db = 22.0
+    # A YARN MALLET'S CONTACT, ~2.5 ms (examples/attack_audit.py marimba): at an
+    # instant attack the bars clicked, contrast +14 and early treble 25 dB over
+    # Iowa's yarn mf (+1.8, -40); 2-3 ms scores best (8.4 dB against 19.6).
+    attack_time = 0.0025
 
 
 class XylophoneProperties(TunedBarProperties):
@@ -8462,6 +8624,12 @@ class XylophoneProperties(TunedBarProperties):
     decay_db = 15.0              # T60 ~0.69 s, measured (Iowa): dry, but not as
                                  # dry as the 0.2 s I had asserted
     harmonic_decay_db = 26.0     # the twelfth must fall ~39 dB in 0.35 s
+    # THE MALLET'S CONTACT, 2 ms (examples/attack_audit.py xylophone): at an
+    # instant attack, contrast +52 against the hard-rubber recording's +2.8. At
+    # 2 ms, +15 and an early treble 16 dB under the recording's (its contact
+    # noise, which the model lacks); the best of the onsets tried (17.2 dB
+    # against 37.5). Under 1.6 ms the onset is a strike's step, and spikes.
+    attack_time = 0.002
 
 
 class CrotaleProperties(TunedBarProperties):
@@ -9273,19 +9441,20 @@ class AgogoHighProperties(MeasuredStrokeProperties):
                   (7.1390, -22.4, 135), (7.2618, -26.0, 193), (8.3741, -19.9, 231),
                   (9.5189, -29.8, 241))
     # FITTED (examples/perc_fit.py agogo_hi, each mode's rate read off its own envelope): 14.7 -> 5.6 dB
-    slow_share = 0.0512184
-    slow_dbs = 41.9842
-    click_cal_db = 1.08772
-    click_dbs = 2564.15
-    click_stroke_slope = 0.229766
-    chiff_volume = 1.07756
-    chiff_width = 0.111785
-    chiff_bandwidth = 0.114102
-    mode_jitter = 0.169163
-    sustain_jitter = 0.0395423
-    band_trim_db = ((177, -11.4), (354, -10.2), (707, 1.5), (1414, 3.9), (2828, 5.3), (5657, 0.7), (11314, 10.2))
+    slow_share = 0.050576  
+    slow_dbs = 42.5175  
+    click_cal_db = 1.07408  
+    click_dbs = 2392.18  
+    click_stroke_slope = 0.226884  
+    chiff_volume = 1.09125  
+    chiff_width = 0.0878925  
+    chiff_bandwidth = 0.15606  
+    mode_jitter = 0.13646  
+    sustain_jitter = 0.0400446  
+    band_trim_db = ((177, -28.9), (354, -24.9), (707, 5.1), (1414, 13.5), (2828, 10.7), (5657, 5.2), (11314, 19.3))
     mode_scatter_db = 3.2      # takes of one stroke differ 5.5 dB; unscattered, ours 4.5
-    initial_gain = 0.098502      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.051765      # held at the old voice's level, -37.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    attack_time = 0.004  
 
 
 class AgogoLowProperties(MeasuredStrokeProperties):
@@ -9295,82 +9464,121 @@ class AgogoLowProperties(MeasuredStrokeProperties):
                   (5.4287, -17.0, 117), (6.5058, -27.7, 186), (6.9022, -19.3, 129),
                   (8.5381, -22.2, 186), (9.4005, -27.7, 272))
     # FITTED (examples/perc_fit.py agogo_lo, each mode's rate read off its own envelope): 23.3 -> 5.0 dB
-    slow_share = 0.082836
-    slow_dbs = 56.8516
-    click_cal_db = 1.05796
-    click_dbs = 190.86
-    click_stroke_slope = 0.264144
-    chiff_volume = 10.1584
-    chiff_width = 0.0239683
-    chiff_bandwidth = 0.0478191
-    mode_jitter = 0.745236
-    sustain_jitter = 0.0266345
-    band_trim_db = ((177, -19.0), (354, -16.5), (707, 0.3), (1414, -1.1), (2828, 7.6), (5657, 15.6), (11314, 13.2))
+    slow_share = 0.0698606  
+    slow_dbs = 46.3021  
+    click_cal_db = 0.832605  
+    click_dbs = 155.292  
+    click_stroke_slope = 0.191521  
+    chiff_volume = 10.5252  
+    chiff_width = 0.0562527  
+    chiff_bandwidth = 0.0374582  
+    mode_jitter = 0.628006  
+    sustain_jitter = 0.0267118  
+    band_trim_db = ((177, -25.2), (354, -22.1), (707, 13.7), (1414, -1.2), (2828, 5.8), (5657, 17.8), (11314, 11.4))
     mode_scatter_db = 9.0      # takes of one stroke differ 6.6 dB; unscattered, ours 4.0
-    initial_gain = 0.010307      # held at the old voice's level, -36.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.006078      # held at the old voice's level, -36.6 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    attack_time = 0.000537276
 
 
-class MelodicAgogoHighProperties(AgogoHighProperties):
+class PlayedAtPitchMixin:
+    """A measured stroke PLAYED AS A PITCHED PART (a program, not a drum
+    note): its modes are ratios to the played note, and so is its colour.
+
+    THE COLOUR MOVES WITH IT. band_trim_db is measured at the instrument's
+    recorded pitch, in Hz; played a fifth lower, its modes slid into bands
+    trimmed for other ones, and the melodic agogo fell 11 dB at middle C and
+    rose 8 at the top. Read at the recorded pitch's ratios instead
+    (RECORDED_HZ), the trim is the instrument's own, transposed with it (a
+    smaller bell, a smaller drum, is a scaled one). The strike stays in Hz:
+    a stick is a stick.
+    """
+    RECORDED_HZ = None
+
+    def _band_trim(self, harmonic):
+        if not self.band_trim_db or harmonic > len(self.DRUM_MODES):
+            return super()._band_trim(harmonic)
+        from math import log
+        f = self.RECORDED_HZ * self.mode_ratio(harmonic)
+        pts = self.band_trim_db
+        if f <= pts[0][0]:
+            db = pts[0][1]
+        elif f >= pts[-1][0]:
+            db = pts[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                if f < f1:
+                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                    break
+        return 10.0 ** (db / 20.0)
+
+
+class MelodicAgogoHighProperties(PlayedAtPitchMixin, AgogoHighProperties):
     """GM program 113 above A#5: the measured high agogo bell (GM 56's kit
     note 67) played as a pitched part, at the program's old level."""
     # the program's old level at the bell's own pitch (-25.1 dB at velocity 100): +13.7 dB
     initial_gain = AgogoHighProperties.initial_gain * 10 ** (13.71 / 20.0)
 
-    # THE BELL'S COLOUR MOVES WITH IT. band_trim_db is measured at the bell's
-    # recorded pitch, in Hz; played a fifth lower, its modes slid into bands
-    # trimmed for other ones, and the part fell 11 dB at middle C and rose 8
-    # at the top. Read at the recorded pitch's ratios instead, the trim is the
-    # bell's own, transposed with it (a smaller bell is a scaled one). The
-    # strike stays in Hz: a stick is a stick.
+    # its colour moves with it (PlayedAtPitchMixin)
     RECORDED_HZ = 1228.0
 
-    def _band_trim(self, harmonic):
-        if not self.band_trim_db or harmonic > len(self.DRUM_MODES):
-            return super()._band_trim(harmonic)
-        from math import log
-        f = self.RECORDED_HZ * self.mode_ratio(harmonic)
-        pts = self.band_trim_db
-        if f <= pts[0][0]:
-            db = pts[0][1]
-        elif f >= pts[-1][0]:
-            db = pts[-1][1]
-        else:
-            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
-                if f < f1:
-                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
-                    break
-        return 10.0 ** (db / 20.0)
 
-
-class MelodicAgogoLowProperties(AgogoLowProperties):
+class MelodicAgogoLowProperties(PlayedAtPitchMixin, AgogoLowProperties):
     """GM program 113 under A#5: the measured low bell (kit note 68)."""
     # the program's old level at the bell's own pitch (-23.4 dB at velocity 100): +13.7 dB
     initial_gain = AgogoLowProperties.initial_gain * 10 ** (13.71 / 20.0)
 
-    # THE BELL'S COLOUR MOVES WITH IT. band_trim_db is measured at the bell's
-    # recorded pitch, in Hz; played a fifth lower, its modes slid into bands
-    # trimmed for other ones, and the part fell 11 dB at middle C and rose 8
-    # at the top. Read at the recorded pitch's ratios instead, the trim is the
-    # bell's own, transposed with it (a smaller bell is a scaled one). The
-    # strike stays in Hz: a stick is a stick.
+    # its colour moves with it (PlayedAtPitchMixin)
     RECORDED_HZ = 696.0
 
-    def _band_trim(self, harmonic):
-        if not self.band_trim_db or harmonic > len(self.DRUM_MODES):
-            return super()._band_trim(harmonic)
-        from math import log
-        f = self.RECORDED_HZ * self.mode_ratio(harmonic)
-        pts = self.band_trim_db
-        if f <= pts[0][0]:
-            db = pts[0][1]
-        elif f >= pts[-1][0]:
-            db = pts[-1][1]
-        else:
-            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
-                if f < f1:
-                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
-                    break
-        return 10.0 ** (db / 20.0)
+
+class TaikoProperties(PlayedAtPitchMixin, MeasuredStrokeProperties):
+    """GM 116: a big barrel drum struck with sticks, as a taiko is with
+    bachi -- VSCO-2 CE's "giant ethnic" drum (CC0), ten stick strokes from
+    ppp to fff, played as a pitched part: its modes are ratios to the note.
+
+    Recorded at 65.9 Hz (C2), ringing 0.3-0.6 s to -40 dB. The fundamental
+    rings longest and is the pitch heard; the strike leans on the mode at
+    1.70 (112 Hz), 12 dB over it in the first 150 ms of a middling stroke,
+    and harder strokes lean further (17 dB at f-fff, 5 at pp). Modes from
+    the mp-mf strokes, each at its own rate.
+    """
+    DRUM_MODES = ((1.0109, -11.7, 40), (1.2355, -22.6, 23), (1.6950, 0.0, 98),
+                  (1.9707, -7.5, 77), (2.2158, -13.7, 129), (2.5834, -20.6, 63),
+                  (2.8795, -22.0, 95), (3.2573, -22.5, 125), (3.4411, -22.2, 110),
+                  (3.8190, -17.3, 143), (4.1968, -21.4, 148), (4.4520, -19.4, 117),
+                  (4.6052, -18.0, 149), (4.8094, -13.1, 130), (5.0443, -23.6, 123),
+                  (5.3302, -23.9, 141), (5.6467, -29.3, 167), (6.3922, -32.4, 181),
+                  (6.9538, -22.4, 255), (7.2499, -34.7, 290), (7.6992, -22.7, 264),
+                  (8.1485, -28.5, 110), (8.7509, -23.5, 65), (10.4358, -25.0, 89),
+                  (11.1199, -33.6, 222), (11.3956, -31.8, 167), (13.3868, -34.7, 139),
+                  (14.7653, -30.4, 222))
+    RECORDED_HZ = 65.9
+    # FITTED (examples/perc_fit.py taiko) on the FIRST 250 ms, the strike's
+    # decay and the modes' own rates held, the attack judged by dynamic with
+    # the trims in the render: grid 6.4 dB; the core (100-160 Hz) within 4 dB
+    # early at every dynamic; early treble re the body -49 / -29 / -28 at
+    # soft / mid / loud against the takes' -53 / -37 / -25. Ben: "Sounds great
+    # now." Judged to 0.9 s, the fit chased the takes' ROOM (0.8-4 kHz held
+    # 7 dB under its early level late, every band alike) with a strike rung
+    # 0.4 s and modes sped x1.4 -- dry, a trash can (Ben). No flatness term:
+    # the takes' noise reads 0.10 / 0.016 / 0.08, which no drum does. The
+    # trims still run +28 to -32 dB: a cleaner mode set is the next step if
+    # it is wanted.
+    slow_share = 0.0130386
+    slow_dbs = 230.228
+    click_cal_db = 1.75623
+    click_dbs = 600.0            # held: a stick's impact noise dies in ~0.1 s (the fit's 87 rang 0.4 s: Ben's trash can)
+    click_stroke_slope = 1.93621
+    chiff_volume = 2.32404
+    chiff_width = 0.617255
+    chiff_bandwidth = 0.0533172
+    sustain_jitter = 0.0172733
+    ring_scale = 1.0             # held: the modes' own measured rates
+    band_trim_db = ((44, 14.4), (88, 27.6), (177, 11.5), (354, 12.4), (707, 4.6), (1414, -2.4), (2828, -11.9), (5657, -24.7), (11314, -31.5))
+    attack_time = 0.006          # held: the takes rise in 10 ms, and at 1 ms the trimmed-up low modes splattered (Ben: a click)
+    click_per_band = 24
+    initial_gain = 0.017231      # held at the old program 116's level, -33.0 dB (velocity 100, a 1 s note, its loudest 150 ms, C2-C5 alike)
+    mode_jitter = 0.0
 
 
 class CongaMuteProperties(MeasuredStrokeProperties):
@@ -9429,20 +9637,21 @@ class CongaOpenProperties(MeasuredStrokeProperties):
                   (2.6979, -34.5, 107))
     # FITTED (examples/perc_fit.py conga_open; modes' rates off their own envelopes, the
     # head clean and the slap's partials the noise -- see DRUM_PARAMS): 20.8 -> 6.1 dB
-    slow_share = 0.0808754
-    slow_dbs = 27.7106
-    click_cal_db = 0.571137
-    click_dbs = 88.2205
-    click_stroke_slope = 0.148007
-    chiff_volume = 1.33158
-    chiff_width = 0.0289514
-    chiff_bandwidth = 0.237383
+    slow_share = 0.0787317  
+    slow_dbs = 26.6091  
+    click_cal_db = 1.22134  
+    click_dbs = 90.1762  
+    click_stroke_slope = 0.133705  
+    chiff_volume = 1.58084  
+    chiff_width = 0.0429714  
+    chiff_bandwidth = 0.243711  
     mode_jitter = 0.0
-    sustain_jitter = 0.183586
-    band_trim_db = ((177, 28.0), (354, 17.1), (707, 3.2), (1414, -7.2), (2828, -11.9), (5657, -12.5), (11314, -16.7))
+    sustain_jitter = 0.159903  
+    band_trim_db = ((177, 31.6), (354, 16.9), (707, 0.8), (1414, -8.1), (2828, -12.1), (5657, -11.9), (11314, -17.2))
     mode_scatter_db = 2.7      # takes of one stroke differ 5.4 dB; unscattered, ours 4.7
-    initial_gain = 0.010433      # held at the old voice's level, -36.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.007724      # held at the old voice's level, -36.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+    attack_time = 0.00155233
 
 
 class CongaLowProperties(MeasuredStrokeProperties):
@@ -9455,20 +9664,21 @@ class CongaLowProperties(MeasuredStrokeProperties):
                   (3.3605, -39.6, 127), (3.4795, -30.1, 196), (4.1893, -38.8, 178))
     # FITTED (examples/perc_fit.py conga_low; modes' rates off their own envelopes, the
     # head clean and the slap's partials the noise -- see DRUM_PARAMS): 18.8 -> 6.3 dB
-    slow_share = 0.0058028
-    slow_dbs = 133.571
-    click_cal_db = 10.4686
-    click_dbs = 91.7949
-    click_stroke_slope = 0.708129
-    chiff_volume = 0.171165
-    chiff_width = 0.0144972
-    chiff_bandwidth = 0.239463
+    slow_share = 0.00540355  
+    slow_dbs = 113.698  
+    click_cal_db = 7.94916  
+    click_dbs = 82.9933  
+    click_stroke_slope = 0.505167  
+    chiff_volume = 0.167759  
+    chiff_width = 0.0159495  
+    chiff_bandwidth = 0.288044  
     mode_jitter = 0.0
-    sustain_jitter = 0.477114
-    band_trim_db = ((177, 32.8), (354, 13.7), (707, 2.1), (1414, -5.9), (2828, -11.4), (5657, -13.8), (11314, -17.5))
+    sustain_jitter = 0.781851  
+    band_trim_db = ((177, 36.5), (354, 10.9), (707, 1.9), (1414, -5.9), (2828, -11.7), (5657, -13.5), (11314, -18.1))
     mode_scatter_db = 3.5      # takes of one stroke differ 6.0 dB; unscattered, ours 4.9
-    initial_gain = 0.001763      # held at the old voice's level, -36.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.001904      # held at the old voice's level, -36.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+    attack_time = 0.00154922
 
 
 class BongoHighProperties(MeasuredStrokeProperties):
@@ -9479,20 +9689,21 @@ class BongoHighProperties(MeasuredStrokeProperties):
                   (2.4242, -21.0, 235), (2.8338, -24.5, 141))
     # FITTED (examples/perc_fit.py bongo_hi; modes' rates off their own envelopes, the
     # head clean and the slap's partials the noise -- see DRUM_PARAMS): 17.0 -> 6.0 dB
-    slow_share = 0.0507604
-    slow_dbs = 68.7396
-    click_cal_db = 0.821998
-    click_dbs = 83.2483
-    click_stroke_slope = 0.224034
-    chiff_volume = 1.75291
-    chiff_width = 0.0262713
-    chiff_bandwidth = 0.0845262
+    slow_share = 0.0394914  
+    slow_dbs = 84.8122  
+    click_cal_db = 0.802994  
+    click_dbs = 87.3713  
+    click_stroke_slope = 0.260402  
+    chiff_volume = 1.68007  
+    chiff_width = 0.0392436  
+    chiff_bandwidth = 0.0436578  
     mode_jitter = 0.0
-    sustain_jitter = 0.34188
-    band_trim_db = ((177, 21.4), (354, 13.4), (707, 5.2), (1414, -5.0), (2828, -8.2), (5657, -9.7), (11314, -17.0))
+    sustain_jitter = 0.373447  
+    band_trim_db = ((177, 24.6), (354, 13.0), (707, 3.4), (1414, -5.5), (2828, -8.5), (5657, -9.0), (11314, -18.0))
     mode_scatter_db = 5.0      # takes of one stroke differ 5.5 dB; unscattered, ours 4.5
-    initial_gain = 0.010824      # held at the old voice's level, -40.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.008700      # held at the old voice's level, -40.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+    attack_time = 0.00280073
 
 
 class BongoLowProperties(MeasuredStrokeProperties):
@@ -9506,20 +9717,21 @@ class BongoLowProperties(MeasuredStrokeProperties):
                   (4.0564, -24.3, 173), (4.7909, -24.5, 198), (4.9379, -24.8, 251))
     # FITTED (examples/perc_fit.py bongo_lo; modes' rates off their own envelopes, the
     # head clean and the slap's partials the noise -- see DRUM_PARAMS): 12.5 -> 5.7 dB
-    slow_share = 0.0550124
-    slow_dbs = 28.1246
-    click_cal_db = 0.998591
-    click_dbs = 122.818
-    click_stroke_slope = 0.323804
-    chiff_volume = 1.45719
-    chiff_width = 0.0388661
-    chiff_bandwidth = 0.131826
+    slow_share = 0.0415596  
+    slow_dbs = 44.6768  
+    click_cal_db = 1.34137  
+    click_dbs = 140.375  
+    click_stroke_slope = 0.600441  
+    chiff_volume = 1.30504  
+    chiff_width = 0.034999  
+    chiff_bandwidth = 0.170362  
     mode_jitter = 0.0
-    sustain_jitter = 0.323591
-    band_trim_db = ((177, 20.5), (354, 16.8), (707, 4.1), (1414, -3.5), (2828, -8.7), (5657, -11.2), (11314, -18.0))
+    sustain_jitter = 0.498753  
+    band_trim_db = ((177, 19.9), (354, 18.7), (707, 3.3), (1414, -3.6), (2828, -8.9), (5657, -10.7), (11314, -18.8))
     mode_scatter_db = 7.0      # takes of one stroke differ 6.0 dB; unscattered, ours 4.5
-    initial_gain = 0.010901      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
+    initial_gain = 0.009096      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
+    attack_time = 0.00233535
 
 
 class ElectricSnareProperties(SnareDrumProperties):
@@ -14623,6 +14835,9 @@ class BanjoProperties(MembraneBodyProperties):
     # passage in the same room -- the plucked family's reference-audio member.
     initial_gain = 0.0818031
                     # balance-normalised below
+    # FINGERPICKS, 2 ms -- by analogy with a pick; at an instant attack,
+    # contrast +8.
+    attack_time = 0.002
 
 
 class ShamisenProperties(MembraneBodyProperties):
@@ -14697,6 +14912,9 @@ class KotoProperties(FormantBody, PluckedStringProperties):
     tonal_dampening = 1.35
     max_harmonic = 40
     initial_gain = 0.0571298
+    # THE TSUME (plectrum) LETS GO IN 2 ms -- by analogy with a pick; at an
+    # instant attack, contrast +27.
+    attack_time = 0.002
 
 
 class KalimbaProperties(FormantBody, PluckedStringProperties):
@@ -14745,6 +14963,9 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     initial_gain = 0.056563
+    # A THUMB ON THE TINE, 3 ms -- by analogy with the measured finger plucks
+    # (harp, guitar: 3 ms); at an instant attack, contrast +26.
+    attack_time = 0.003
 
 
 # HOW LOUD THE DRONES ARE, 0 to switch them off entirely. A bagpipe patch that
