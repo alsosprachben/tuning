@@ -3176,11 +3176,16 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _VDL[0] = T.sound_vib_delay(_sd['vib_delay'])
             _SND_PEND[0] = (len(A['om']), pc, _sd)
         # The ATTACK's share of the note is a property, because a reverse cymbal
-        # needs almost all of it; see SynthProperties.attack_fraction_max. The
-        # RELEASE keeps the flat 0.45: nothing wants a release longer than that,
-        # and a reverse cymbal in particular wants a short one -- it stops dead.
+        # needs almost all of it; see SynthProperties.attack_fraction_max. So is
+        # the RELEASE's (release_fraction_max): 0.45 for a damper or a bow, and
+        # none for a voice whose release is its own length, whatever the note
+        # (a plucked string's ring after the finger lifts, GS's per-tone
+        # release). It had been a flat 0.45 "because nothing wants more", and
+        # an eighth-note koto was cut dead.
         _afm = getattr(props, 'attack_fraction_max', 0.45)
-        fade = max(1e-4, min(at, _afm*dur))*SR; rel = max(1e-4, min(rt, 0.45*dur))*SR
+        _rfm = getattr(props, 'release_fraction_max', 0.45)
+        fade = max(1e-4, min(at, _afm*dur))*SR
+        rel = max(1e-4, rt if _rfm is None else min(rt, _rfm*dur))*SR
         # ...and no longer than until this same string is plucked again, but
         # never SHORTER than a steal fade. A sampler stealing a voice does not
         # cut it, it fades it over a few milliseconds, because a cut is a step

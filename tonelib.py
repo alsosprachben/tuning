@@ -2191,6 +2191,16 @@ class SynthProperties:
     # reversal. See ReverseCymbalProperties.
     attack_fraction_max = 0.45
 
+    # ...AND HOW MUCH MAY BE RELEASE: the same 0.45, which keeps a short note
+    # from ringing on longer than it sounded -- right for a key's damper and a
+    # bow. NOT for an instrument whose note-off starts a release of its own
+    # length: a plucked string's ring after the finger lifts, a voice's tail.
+    # GS makes it a per-tone preset, whatever the note's length (VE-GS Pro MIDI
+    # Implementation), and an eighth-note koto capped at 0.45 of itself was cut
+    # dead (Ben, the Prophet's Song: "notes are ended earlier than they
+    # should be"). None = no cap.
+    release_fraction_max = 0.45
+
     # AND HOW LATE AN EXTRA VOICE MAY ENTER, as a fraction of the note. The
     # renderer caps a section player's entry at 0.25 of the duration so that a
     # scattered entrance cannot begin after a short note has ended, which is
@@ -3304,6 +3314,12 @@ class HammeredDulcimerProperties(InharmonicStringProperties):
     The stiffness is ESTIMATED -- thin steel on a short scale, so more than a
     harpsichord's iron and far less than a piano's wound bass.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 1.70 s (1.60, 7.89, 1.60, 1.79), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.751
+    release_fraction_max = None
     strike_point = 1.0 / 5       # struck well in from the bridge
     strike_depth = 0.90
     strike_fills_with_force = False
@@ -6545,6 +6561,12 @@ class PizzicatoStringsProperties(FormantBody, SectionMixin, PluckedStringPropert
 
     NOT MEASURED. The body is; the pluck is argued. Rated 2.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 5.00 s (10.08, 4.00, 6.00, 2.85), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap. A section's pizz rings on in the room as much as the string.
+    release_valve_time = 2.216
+    release_fraction_max = None
     # The measured violin body, unchanged -- see ViolinProperties.
     formants = ((2300.0, 1400.0, 0.55),)
     formant_floor = 0.05
@@ -6650,6 +6672,12 @@ class HarpProperties(FormantBody, PluckedStringProperties):
     MEASURED on VSCO 2 Community Edition's harp (CC0: 23 plucks, E1 to F7;
     ~/Documents/refs/sources.md), with the pizzicato's tools.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 7.30 s (9.60, 5.00, 9.60, 2.62), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 3.236
+    release_fraction_max = None
     # A tapered spruce soundboard over a long tapering box: a broad low
     # resonance where the body is deep, a second where it is shallow. Asserted
     # from the shape of the instrument, not from a recording.
@@ -7312,6 +7340,12 @@ class SitarProperties(PluckedStringProperties):
     measurement to put in it, so it is left out rather than invented -- the
     same call as the electric guitars, where the amplifier is the colour.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 4.50 s (5.00, 4.00, 5.00, 3.97), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 1.994
+    release_fraction_max = None
     # A mizrab is a hard wire plectrum, plucked close to the bridge: a narrow
     # exciter at fixed force, so the comb notch stays deep.
     strike_point = 0.10
@@ -7443,6 +7477,12 @@ class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     model can follow: an unconstrained 32-bin body fitted straight to the
     recording still leaves 6.27 dB.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.67 s (1.60, 0.72, 0.60, 0.61), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.295
+    release_fraction_max = None
     # The two low poles are narrow (Q ~ 15 and 12) and carry the body; the two
     # broad upper ones carry its top. b1 sits on the search's lower bound, so
     # the recording would take a narrower resonance still than this allows.
@@ -7509,6 +7549,12 @@ class ElectricGuitarProperties(PluckedStringProperties):
     That is also why it can be amplified to the point of feedback, which this
     does not model.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.54 s (0.60, 0.40, 0.60, 0.48), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.240
+    release_fraction_max = None
 
     # A pick is hard, narrow and plucks at whatever force the player uses, so
     # the notch does NOT fill the way a felt hammer's does -- same argument as
@@ -7674,6 +7720,12 @@ class FingeredBassProperties(ElectricBassProperties):
     itself rather than pointing at a class called "electric bass" and leaving
     the reader to guess which technique it means.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.18 s (0.20, 0.16, 0.20, 0.16), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.080
+    release_fraction_max = None
 
 
 class PickedBassProperties(ElectricBassProperties):
@@ -7685,6 +7737,12 @@ class PickedBassProperties(ElectricBassProperties):
     played nearer the bridge, which moves the notch up. That is the whole
     difference between the two GM slots, and it is a difference in the player.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.20 s (0.20, 0.50, 0.20, 0.12), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.089
+    release_fraction_max = None
     strike_point = 0.09
     strike_depth = 0.90
     # A PICK, 2 ms -- as the electric guitar's (by analogy).
@@ -7710,6 +7768,12 @@ class FretlessBassProperties(ElectricBassProperties):
     instrument and why the reach is a long one: a bass neck is long, and
     players use it.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.20 s (0.20, 0.30, 0.20, 0.18), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.089
+    release_fraction_max = None
     glide_mechanism = 'stop'
     glide_reach_semitones = 12.0
     harmonic_decay_db = 4.0       # vs 1.0: the top goes, the fundamental stays
@@ -7736,6 +7800,12 @@ class SlapBassProperties(ElectricBassProperties):
     The drive is up as well, because a slapped bass is the one case where a
     bass player does push the front end.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.20 s (0.20, 0.20, 0.20, 0.07), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.089
+    release_fraction_max = None
     strike_point = 0.06
     strike_depth = 1.00
     pickup_points = (0.081,)      # Jazz bridge pickup, 70 mm of 864
@@ -7770,6 +7840,12 @@ class PoppedBassProperties(SlapBassProperties):
     releases, so it hits the frets harder and drives the amplifier harder.
     Nothing here is a measurement.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.18 s (0.20, 0.10, 0.20, 0.15), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.078
+    release_fraction_max = None
     # ...and it costs level to take it, because the extra drive compresses.
     # Measured, the harder setting alone put GM 37 1.5 dB UNDER GM 36, which
     # is backwards for the more aggressive of the pair. A pop pulls the string
@@ -7820,6 +7896,12 @@ class AcousticBassProperties(FormantBody, PluckedStringProperties):
     pluck point from where a player's hand goes, the decay rates by ear against
     what a walking bass does. The instrument is right; the gesture is argued.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.34 s (0.16, 0.81, 0.40, 0.28), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.150
+    release_fraction_max = None
 
     # THE CONTRABASS'S MEASURED BODY, copied verbatim. If that fit is ever
     # revised these should move with it -- they are the same instrument.
@@ -7942,6 +8024,12 @@ class SteelGuitarProperties(NylonGuitarProperties):
     not derivable here and those formants were fitted jointly with the rest of
     the nylon. Moving them would be guessing at somebody else's fit.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.53 s (5.51, 0.45, 0.60, 0.29), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.233
+    release_fraction_max = None
 
     # Steel's low internal loss: the high partials survive where nylon's die.
     # The largest of the differences, and the reason the instrument rings.
@@ -7980,6 +8068,12 @@ class JazzGuitarProperties(ElectricGuitarProperties):
 
     Three nulls converging on the 4th harmonic is the sound.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.20 s (0.08, 0.38, 0.08, 0.32), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.089
+    release_fraction_max = None
     pickup_points = (0.230, 0.258)      # neck humbucker, 18 mm coil spacing
     # A '57 Classic: 8.0 kOhm for the pair, so 4.0 per coil against a Strat
     # coil's 5.8. Each coil is SMALLER, and the pickup is still hotter overall
@@ -8021,6 +8115,12 @@ class MutedGuitarProperties(ElectricGuitarProperties):
     a voice that simply rolled the treble off would get the chug and lose the
     click.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.32 s (0.40, 0.12, 0.40, 0.24), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.143
+    release_fraction_max = None
     pickup_points = (0.10,)             # near the bridge, where the hand is
     pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
     amp_reference = 0.1772 * 1.07
@@ -8044,6 +8144,12 @@ class OverdrivenGuitarProperties(ElectricGuitarProperties):
 
     Bridge pickup, because that is what the position is for.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.27 s (0.16, 0.34, 0.30, 0.24), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.120
+    release_fraction_max = None
     pickup_points = (0.10,)
     pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
     amp_reference = 0.1772 * 1.07
@@ -8063,6 +8169,12 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     push the front end, and its own 36th-harmonic null keeps the very top from
     turning to hash before the speaker gets to it.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.31 s (0.24, 0.40, 0.39, 0.19), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.139
+    release_fraction_max = None
     pickup_points = (0.049, 0.077)      # bridge humbucker
     # "Hot enough to push the front end" is a NUMBER, and the docstring above
     # has been claiming it without the model being able to say it. A Duncan
@@ -8095,6 +8207,12 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     It rings, too, because the finger is at a node and a node is not moving:
     the touch selects rather than damps. Decay is left at the base voice's.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.22 s (0.00, 0.24, 0.20, 0.24), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.098
+    release_fraction_max = None
     harmonic_touch = 2                  # touched at 1/2: the twelfth fret
     strike_point = 0.13                 # struck near the bridge, as one does
     amp_drive = 0.45
@@ -15033,6 +15151,12 @@ class BanjoProperties(MembraneBodyProperties):
 
     ASSERTED, NOT MEASURED. Neither collection has one.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 5.41 s (10.00, 0.75, 10.00, 0.82), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap. The sets split (FluidR3/MuseScore 10 s, GeneralUser/TimGM6mb 0.8): the median sits between.
+    release_valve_time = 2.398
+    release_fraction_max = None
     strike_point = 0.12
     strike_depth = 0.85
     strike_fills_with_force = False
@@ -15071,6 +15195,12 @@ class ShamisenProperties(MembraneBodyProperties):
     fingerpick is narrow: the comb notch fills and the attack is a thud rather
     than a click.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 1.25 s (1.25, 1.99, 1.25, 1.06), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 0.554
+    release_fraction_max = None
     strike_point = 0.18
     strike_depth = 0.55         # a wide plectrum fills its own notch
     strike_fills_with_force = False
@@ -15099,6 +15229,12 @@ class KotoProperties(FormantBody, PluckedStringProperties):
 
     ASSERTED, NOT MEASURED.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 2.36 s (2.40, 2.25, 2.40, 2.32), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 1.046
+    release_fraction_max = None
     # A long light box: a broad low resonance and a second in the low-mid,
     # with plenty radiated below them -- a koto has real bottom.
     formants = ((280.0, 200.0, 0.75), (900.0, 700.0, 0.45))
@@ -15172,6 +15308,12 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 
     ASSERTED, NOT MEASURED.
     """
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 2.58 s (4.00, 1.16, 4.00, 1.16), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap.
+    release_valve_time = 1.144
+    release_fraction_max = None
     mode_ratios = (1.0, 2.0, 6.4)
     mode_gains = (1.0, 0.02897, 0.18914)
     max_harmonic = 3
@@ -17210,6 +17352,12 @@ class _VocalBody:
 
 class ChoirAahsProperties(_VocalBody, VocalProperties):
     """GM 52. An open "ah": the first formant high and the tract wide open."""
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 1.75 s (2.40, 1.80, 1.70, 1.20), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap. A choir's tail: the singers stop, the hall does not at once.
+    release_valve_time = 0.776
+    release_fraction_max = None
     # BALANCE, per vowel: the formant filter is power-normalised, but the vowels
     # still land differently because they weight the source's harmonics
     # differently -- "oo" throws away everything above its low F2. Measured
@@ -17222,6 +17370,12 @@ class VoiceOohsProperties(_VocalBody, VocalProperties):
     """GM 53. A rounded "oo": lips narrowed, so F1 and F2 drop a long way and
     the vowel goes dark. The single biggest audible difference between vowels
     is F2, and it moves by more than an octave between these two."""
+    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
+    # consensus, no recording holding a released note -- the median of four
+    # sets' releases, 0.90 s (0.96, 0.83, 1.02, 0.83), to our smoothstep's -40 dB at the same
+    # time, 0.443 R; and no 0.45-of-the-note cap. Our voices had BowedString's 0.10 s.
+    release_valve_time = 0.397
+    release_fraction_max = None
     formants = ((300.0, 90.0, 1.00), (870.0, 100.0, 0.42), (2240.0, 140.0, 0.12))
     bore_corner_hz = 3000.0
     initial_gain = (1.0 / 6127 / (VocalProperties.section_players ** 0.5)) * 1.2134   # +1.68 dB, see VocalProperties

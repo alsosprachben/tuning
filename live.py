@@ -10530,6 +10530,48 @@ def selftest():
     check("...and an mt32mux-stamped channel keeps the onset rule its stamps assume",
           _fs == [] and _fp == [0],
           "  (fader rows: stamped before every note %s, one plain move under a held note %s)" % (_fs, _fp))
+    # A NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py). A plucked
+    # string had no release at all -- 1e-4 s, the floor -- and a 0.45-of-the-
+    # note cap besides, so an eighth-note koto died in 20 ms (Ben, the
+    # Prophet's Song: "notes are ended earlier than they should be"). Now GM's
+    # consensus: an eighth note's tail falls 40 dB in about the time the sets'
+    # release takes (40/96 of it; shorter on a voice whose own decay runs on
+    # underneath, as a sample's does), live's template carries the same
+    # release, and a voice left alone (the piano, measured) keeps its own.
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples"))
+    import gm_release as _GMR
+    import patch_map as _patch_map
+    _rp = (24, 30, 33, 46, 53, 107)
+    _gmc = _GMR.consensus(_rp)
+    _tails, _bad = [], []
+    for _p in _rp:
+        _nt = 40 if 32 <= _p <= 37 else 62
+        _m = mido.MidiFile(type=1, ticks_per_beat=480); _t = mido.MidiTrack(); _m.tracks.append(_t)
+        for _msg in (mido.Message("program_change", channel=0, program=_p, time=0),
+                     mido.Message("note_on", channel=0, note=_nt, velocity=90, time=0),
+                     mido.Message("note_off", channel=0, note=_nt, velocity=0, time=240),
+                     mido.Message("note_off", channel=0, note=1, velocity=0, time=480 * 10)):
+            _t.append(_msg)
+        _x = _fmono(_m)
+        _w = int(0.01 * B.SR)
+        _e = 20 * np.log10(np.sqrt(np.convolve(_x * _x, np.ones(_w) / _w, "same")) + 1e-12)
+        _i = np.flatnonzero(_e[int(0.25 * B.SR):] < _e[int(0.24 * B.SR)] - 40)
+        _got = _i[0] / B.SR if len(_i) else float("nan")
+        _want = _gmc[_p][0] * 40 / 96.0
+        _l = Live(program=_p, rate=48000, frames=128, verbose=False); _l.warm()
+        _l.on_midi(mido.Message("note_on", channel=0, note=_nt, velocity=90)); _l.apply(0)
+        _ks = [_k for _k in _l.slab.live if _k[2] == _nt]
+        _re = float(np.max(_l.slab.a["re"][_l.slab.live[_ks[0]]])) / 48000.0 if _ks else 0.0
+        _l.renderer.close()
+        _rvt = _patch_map.property_class_for_program(_p).release_valve_time
+        _tails.append("%d %.2f/%.2f s" % (_p, _got, _want))
+        if not (0.5 * _want <= _got <= 1.3 * _want) or abs(_re - _rvt) > 2e-3:
+            _bad.append("%d (tail %.2f s against %.2f, live re %.3f against %.3f)" % (_p, _got, _want, _re, _rvt))
+    _pre = _patch_map.property_class_for_program(0)
+    check("a note-off is a release, not a cut: GM's consensus, live as the file",
+          not _bad and _pre.release_valve_time == 0.12 and _pre.release_fraction_max == 0.45,
+          "  (-40 dB after an eighth note's off, ours/consensus: %s; the piano's own 0.12 s kept)" % ", ".join(_tails)
+          if not _bad else "  (%s)" % "; ".join(_bad))
     # A DRONE SPANS THE PHRASE, LIVE TOO, and live has no far side of the rest
     # to look at -- so part_break_s is spent as a HOLD instead. The drones stay
     # up through a gap between notes and are let down only once the piper has
