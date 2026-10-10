@@ -441,7 +441,9 @@ def fit_strike(cls, prog, passes=3, dyn=2):
     the gaps in both), written into tonelib.py each pass."""
     import re as _re
     recs = recordings(dyn)
-    keys = [k for k in STRIKE_KEYS if k in recs]
+    # A3 up, from whichever keys the reference sampled (the Steinway every
+    # second key, the upright every fourth)
+    keys = [k for k in STRIKE_KEYS if k in recs] or [k for k in sorted(recs) if 57 <= k <= 96]
     rec = {k: strike_noise(*load(recs[k]), k)[0] for k in keys}
     path = os.path.join(HERE, "tonelib.py")
     for it in range(passes + 1):

@@ -3865,10 +3865,13 @@ class UprightPianoProperties(GrandPianoProperties):
         high = 1.0 / (1.0 + (fn / self.board_high_hz) ** self.board_high_order)
         low = 1.0 / (1.0 + (self.board_low_hz / fn) ** self.board_low_order)
         return body * high * low
-    initial_gain = 0.400376      # held at the old GM 1's level, -42.9 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
+    initial_gain = 0.250217      # held at the old GM 1's level, -42.9 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
     unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
     string_gain = (0.28, 0.20)   # its unisons as they were voiced
-    strike_noise_db = ()   # no strike noise yet: the grand's is the Steinway's
+    # THE HAMMER'S STRIKE, its own (examples/upright_fit.py --fit=strike against
+    # VSCO's upright), started from the grand's
+    strike_noise_db = ((45, -42.4), (57, -42.4), (71, -44.1), (90, -47.2), (113, -25.4), (143, -21.3), (180, -25.3), (226, -27.4), (285, -46.5), (359, -20.1), (453, -20.7), (570, -21.5), (718, -24.5), (905, -33.3), (1140, -35.8), (1437, -38.9), (1810, -45.5), (2281, -51.0), (2874, -56.1), (3620, -61.2), (4561, -61.4), (5747, -59.0), (7241, -64.2), (9123, -67.3), (11494, -74.5))
+    strike_noise_slope = 3.885
 
 
 class BrightPianoProperties(GrandPianoProperties):
@@ -3997,7 +4000,7 @@ class HonkyTonkProperties(UprightPianoProperties):
         lo, hi = type(self).string_detune_range
         self.string_detune_range = (lo * honky_detune, hi * honky_detune)
         super().__init__(frequency, *args, **kwargs)
-    initial_gain = 0.381001      # held at the old GM 3's level, -45.0 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
+    initial_gain = 0.230026      # held at the old GM 3's level, -45.0 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
 
 
 class ElectricGrandProperties(GrandPianoProperties):

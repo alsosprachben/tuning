@@ -12417,7 +12417,7 @@ def selftest():
 
     def _unison(cc):
         t = bh.get(69, 100, cc)
-        nf = np.asarray(t["nf"])
+        nf = np.asarray(t["nf"])[np.asarray(t["cbw"]) >= 0]   # the strings, not the strike's noise bands
         u = np.unique(np.round(nf[nf < nf.min() * 1.05], 3))
         mid = u[len(u) // 2]
         return [1200 * _math.log2(v / mid) for v in u]
