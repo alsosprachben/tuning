@@ -149,6 +149,14 @@ from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
 # latency and a filter we did not choose.
 SR = 44100
 TAU = 0.015; BLK = 512
+# How long after its note-off a note still counts as sounding, for deciding
+# whether a channel's fader moves under it (prepare, THE CHANNEL FADER): its
+# release, a pedal's tail, a ring.
+FADER_TAIL = 2.0
+# A channel is mt32mux-STAMPED (its CC7 a snapshot for the next note, not a
+# fader) when this share of its notes has a CC7 at most STAMP_S before it.
+STAMPED_SHARE = 0.9
+STAMP_S = 0.005
 
 
 def set_sample_rate(sr):
@@ -1108,6 +1116,18 @@ def onepole_blocks(events, nblk, default):
         if t1 < 1e17: v = target + (v - target) * np.exp(-(t1 - t0) / TAU)
     return out
 
+def onepole_edges(events, nblk, default):
+    """onepole_blocks at the nblk+1 block EDGES rather than the centres: a
+    bend row's level (BL), which the kernel ramps across each block. The same
+    fader inertia (TAU), so a CC7 step is a 15 ms glide and not a click."""
+    te = np.arange(nblk + 1) * BLK / SR
+    out = np.empty(nblk + 1, np.float32); segs = [(0.0, default)] + list(events); v = default
+    for k, (t0, target) in enumerate(segs):
+        t1 = segs[k + 1][0] if k + 1 < len(segs) else 1e18
+        m = (te >= t0) & (te < t1); out[m] = target + (v - target) * np.exp(-(te[m] - t0) / TAU)
+        if t1 < 1e17: v = target + (v - target) * np.exp(-(t1 - t0) / TAU)
+    return out
+
 # How long a voice takes to get out of the way when its own pitch is struck
 # again. Not a cut: a cut is a step and a step is a click. Samplers call this
 # stealing and give it a few milliseconds for exactly this reason.
@@ -1842,6 +1862,84 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _r, _cc = bend_blocks(ev, nblk)
                 row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
             _PN_AT[(ch, note, on)] = (p0, b0, row)
+    # THE CHANNEL FADER, MID-NOTE. A note took CC7 x CC11 (squared) once, at
+    # its onset, so a swell or a fade written over a held note did nothing
+    # here -- while live, a fader in someone's hand, moved the notes already
+    # sounding (Ben, the Prophet's Song's sea: "needs to fade out"). Now a
+    # channel whose CC7 or CC11 MOVES while one of its notes sounds (its
+    # release with it, FADER_TAIL) carries the level as a row: its notes are
+    # emitted at unity and every row they ride takes the level as BL -- the
+    # channel's bend and breath rows, its notes' own MPE and per-note rows,
+    # and for everything else a level-only row (emit_partial). A channel
+    # that only sets its level between notes is untouched, folded in at
+    # onset as it always was, so its render is the same to the bit.
+    # Not an organ whose CC11 is its stop word and CC7 its swell: those
+    # have their own rows (registration_blocks). Keyed as _MCH is: an MPE
+    # member's note by its zone's manager.
+    _LROW = {}
+    _org = {}
+
+    def _plain(_pg, _nt):
+        if isinstance(_pg, DrumProgram):
+            return True
+        _k = (_pg, _nt)
+        if _k not in _org:
+            _pc = property_class_for_note(_pg, _nt)
+            _org[_k] = not (getattr(_pc, 'registerable', False)
+                            and getattr(_pc, 'stop_word_ccs', (11, 43)) == (11, 43))
+        return _org[_k]
+    _spans = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if _plain(_pg, _nt):
+            _spans.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append((_on, _of + FADER_TAIL))
+    # ...BUT NOT A STAMPED CHANNEL. mt32mux carries several parts on one
+    # channel by putting each part's CC7 (and CC11) a tick before EVERY note
+    # it plays, for the note to snapshot at its onset -- so another part's
+    # note still sounding sees the stamp as a fader move, and would be
+    # rescaled by a level that is not its own. A channel where nearly every
+    # note (STAMPED_SHARE) has a CC7 within STAMP_S before it is stamped,
+    # and keeps the onset rule the stamps were written for. No ordinary
+    # file sends a volume before every note.
+    _ons = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        _ons.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append(_on)
+    for _c in list(_spans):
+        _t7 = np.array(sorted(_t for _t, _cc, _val in ccs.get(_c, []) if _cc == 7))
+        _o = np.array(sorted(_ons.get(_c, [])))
+        if len(_t7) and len(_o):
+            _k = np.searchsorted(_t7, _o + 1e-9, side='right') - 1
+            _hit = (_k >= 0) & ((_o - _t7[np.maximum(_k, 0)]) <= STAMP_S)
+            if _hit.mean() >= STAMPED_SHARE:
+                del _spans[_c]
+    for _c, _sp in _spans.items():
+        _v7, _v11, _fev = T.GM_DEFAULT_VOLUME, T.GM_DEFAULT_EXPRESSION, []
+        _lv = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
+        for _t, _cc, _val in in_order(ccs.get(_c, [])):
+            if _cc == 7:
+                _v7 = _val
+            elif _cc == 11:
+                _v11 = _val
+            elif _cc == 121:
+                _v11 = 127                      # reset: expression back up, volume kept
+            else:
+                continue
+            _g = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
+            if _g != _lv and any(_a < _t < _b for _a, _b in _sp):
+                _LROW[_c] = None
+            _fev.append((_t, _g))
+            _lv = _g
+        if _c not in _LROW:
+            continue
+        _L = onepole_edges(_fev, nblk, ((T.GM_DEFAULT_VOLUME / 127.0) * (T.GM_DEFAULT_EXPRESSION / 127.0)) ** 2)
+        _own = [brow_of.get(_c)] + list(bbrow_of.get(_c, ()))
+        _own += [_r for (_ch, _nt, _on), (_r0, _r) in _MPE_AT.items() if _mpe_member.get((_ch, _nt, _on)) == _c]
+        _own += [_x[2] for (_ch, _nt, _on), _x in _PN_AT.items() if _mpe_member.get((_ch, _nt, _on), _ch) == _c]
+        for _r in set(_own):
+            if _r is not None and _r >= 0:
+                _BLrows[_r] = (_BLrows[_r] * _L) if _r in _BLrows else _L.copy()
+        _i = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
+        _BLrows[_i] = _L
+        _LROW[_c] = _i
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     BL = None
@@ -1900,6 +1998,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     REFLECT = (os.environ.get('TUNING_REFLECT', '1') not in ('0', 'off', '')
                and '--no-reflect' not in sys.argv)
     _MCH = [0]               # MIDI channel of the note being emitted (stem/object export)
+    _LV = [-1]               # its channel's fader row, if the fader moves under it (THE CHANNEL FADER)
     # Where this partial is actually radiating FROM. A section is not one
     # source: section_position_x seats each player at their own desk, and
     # rank_position_x stands each drawstop at its own place in the case. The
@@ -2051,7 +2150,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         A["vd"].append(_vd0); A["vr"].append(_VB[1] * _SV[1]); A["vp"].append(_VB[2])
         A["vdl"].append(_VDL[0])
         A["delL"].append(dl); A["delR"].append(dr)
-        A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0]); A["pl"].append(_PL[0])
+        A["gr"].append(gr); A["cr"].append(cr); A["br"].append(_BR[0] if (_BR[0] >= 0 or _LV[0] < 0) else _LV[0]); A["pl"].append(_PL[0])
         A["fx"].append(_FX[0]); A["mk"].append(_MK[0]); A["rdl"].append(_RD[0])
         A["fmw"].append(_FMW[0])
         # the onset's fraction of a sample, which the table's whole-sample
@@ -2748,6 +2847,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             _S0[0] = len(A['om'])
         _SV[0], _SV[1] = 0.0, 1.0; _VDL[0] = 0.0
         _MCH[0] = ch
+        _LV[0] = -1
         choked = None
         if (ch, note) in choke_at:
             choked = next((t for t in choke_at[(ch, note)] if t > on + 1e-4), None)
@@ -2930,6 +3030,13 @@ def prepare(path, tuner='hybrid440', sink=None):
                                  else len(getattr(pc, 'drone_ratios', ())))
             T.bagpipe_drones = _DRONE_CH[ch]
         T.soft_pedal_down = _soft_at(ch, on)
+        # ...and on a channel whose fader moves under its notes, the note is
+        # at unity and the fader is its row (THE CHANNEL FADER, above)
+        if not (organ and getattr(pc, 'stop_word_ccs', (11, 43)) == (11, 43)):
+            _lk = _mpe_member.get((ch, note, on), ch)
+            if _lk in _LROW:
+                chan_vol = 1.0
+                _LV[0] = _LROW[_lk]
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         if _press:
             # ...and the LEVEL half of it. `gain` is read lazily inside
@@ -4325,7 +4432,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                 FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
-                room_q=room_q, reverb_send=dict(_REVERB_CH))
+                room_q=room_q, reverb_send=dict(_REVERB_CH),
+                fader_rows=dict(_LROW))      # THE CHANNEL FADER: {channel: row}
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep

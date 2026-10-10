@@ -3634,14 +3634,13 @@ class Live:
                 was = self.cgain.get(ch, 1.0)
                 if g != was:
                     self.cgain[ch] = g
-                    # ...AND IT REACHES A NOTE ALREADY SOUNDING, which the file
-                    # path cannot do: offline a note's amplitude is fixed when
-                    # its partials are emitted, so CC7 is read once at note-on
-                    # and a swell written mid-note does nothing. Live has a
-                    # fader in someone's hand, and on an organ or a bagpipe
+                    # ...AND IT REACHES A NOTE ALREADY SOUNDING, as the file
+                    # path's does now too (blockrender, THE CHANNEL FADER: a
+                    # row, ramped through the fader's 15 ms inertia, where
+                    # this steps at the callback). On an organ or a bagpipe
                     # CC11 IS the swell box and the only expression there is.
-                    # The DIFFERENCE is that and only that: a note stamped at
-                    # this setting comes out identical either way.
+                    # A note stamped at this setting comes out identical
+                    # either way.
                     self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
                 if msg.control == 11 and self.xnote:
                     # THE HARMONIUM'S EXPRESSION: its bellows brighten as well
@@ -10404,10 +10403,9 @@ def selftest():
           abs(_g7 - _want) < 0.05 and abs(_g11 - _want) < 0.05,
           "  (CC 40 gives %+.1f and %+.1f dB against (40/127)^2 = %+.1f)"
           % (_g7, _g11, _want))
-    # AND A SWELL REACHES A NOTE ALREADY SOUNDING, which is the one place live
-    # goes further than the file path: offline an amplitude is fixed when the
-    # partials are emitted, so CC11 is read once at note-on. On an organ or a
-    # bagpipe that pedal IS the expression, and here there is a foot on it.
+    # AND A SWELL REACHES A NOTE ALREADY SOUNDING -- on the file path too,
+    # since THE CHANNEL FADER (checked below). On an organ or a bagpipe that
+    # pedal IS the expression, and here there is a foot on it.
     _lv7.on_midi(mido.Message("control_change", channel=0, control=7, value=127))
     _lv7.on_midi(mido.Message("control_change", channel=0, control=11, value=127))
     _lv7.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
@@ -10466,6 +10464,72 @@ def selftest():
           "  (%+.1f dB under a held note, and the same message twice adds %+.2f)"
           % (20 * _math.log10(_a1 / _a0), 20 * _math.log10(_a2 / _a1)))
     _lv7.renderer.close()
+    # ...AND NOW THE FILE PATH DOES TOO (blockrender, THE CHANNEL FADER): a
+    # CC7/CC11 that moves under a sounding note is a row, ramped at block
+    # edges through the fader's 15 ms inertia. Held flute, CC11 127 -> 64 a
+    # second in: the same law live meets above, a glide and not a step; and
+    # a file whose fader moves only between its notes renders to the bit as
+    # it did (its level folded in at the onset, untouched).
+    def _ffile(evs):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=73, time=0))
+        _last = 0
+        for _tk, _msg in sorted(evs, key=lambda e: e[0]):
+            _t.append(_msg.copy(time=_tk - _last)); _last = _tk
+        return _m
+
+    def _fmono(m):
+        _L, _R = B.render(m)[:2]
+        return 0.5 * (np.asarray(_L, np.float64) + np.asarray(_R, np.float64))
+    _on = (0, mido.Message("note_on", channel=0, note=72, velocity=90))
+    _of = (2880, mido.Message("note_off", channel=0, note=72, velocity=0))
+    _x = _fmono(_ffile([_on, _of, (960, mido.Message("control_change", channel=0, control=11, value=64))]))
+    _rms = lambda a, b: _math.sqrt(float(np.mean(_x[int(a * B.SR):int(b * B.SR)] ** 2)))
+    _fd = 20 * _math.log10(_rms(1.4, 1.9) / _rms(0.5, 0.95))
+    # the glide: 10-90 % of the step in dB, on a 5 ms envelope (1 ms ripples
+    # on a 523 Hz tone and read 125 ms); the 15 ms inertia makes it ~45 ms
+    _w = int(0.005 * B.SR)
+    _e = 20 * np.log10(np.sqrt(np.convolve(_x * _x, np.ones(_w) / _w, "same"))[int(0.9 * B.SR):int(1.3 * B.SR)] + 1e-12)
+    _e0, _e1 = np.median(_e[:int(0.08 * B.SR)]), np.median(_e[-int(0.1 * B.SR):])
+    _i10 = int(np.argmax(_e < _e0 + 0.1 * (_e1 - _e0))); _i90 = int(np.argmax(_e < _e0 + 0.9 * (_e1 - _e0)))
+    _gl = 1000.0 * (_i90 - _i10) / B.SR
+    _wantf = 20 * _math.log10((64 / 127.0) ** 2)
+    check("the file path's fader reaches a held note, on live's law, gliding",
+          abs(_fd - _wantf) < 0.3 and 15.0 < _gl < 60.0,
+          "  (CC11 127 -> 64 under a held flute: %+.2f dB against %+.2f; 10-90 %% in %.0f ms)"
+          % (_fd, _wantf, _gl))
+    _xa = _fmono(_ffile([(0, mido.Message("control_change", channel=0, control=11, value=64)), _on, _of]))
+    _xb = _fmono(_ffile([(0, mido.Message("control_change", channel=0, control=11, value=64)), _on, _of,
+                         (2880 + 960 * 3, mido.Message("control_change", channel=0, control=11, value=127))]))
+    _n = min(len(_xa), len(_xb))
+    check("...and a fader moved only between notes leaves the render as it was",
+          np.array_equal(_xa[:_n], _xb[:_n]),
+          "  (the note at CC11 64, then CC11 127 three seconds after its release: identical samples)")
+    # ...AND A STAMPED CHANNEL IS NOT A FADER: mt32mux carries two parts on
+    # one channel with each one's CC7 a tick before every note it plays, for
+    # the onset to snapshot. Its channel takes no fader row; the same
+    # channel with one plain move under a held note does. (prepare reports
+    # the rows: two flutes on one channel share a breath, so comparing the
+    # sound against two channels would measure that instead.)
+    def _stamp(stamped):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t); _ev = []
+        for _vol, _a, _b, _n in ((100, 0, 2880, 72), (40, 959, 1400, 60), (40, 1919, 2400, 64)):
+            _ev += [(max(0, _a - 2), mido.Message("program_change", channel=0, program=73)),
+                    (_a, mido.Message("note_on", channel=0, note=_n, velocity=90)),
+                    (_b, mido.Message("note_off", channel=0, note=_n, velocity=0))]
+            if stamped or _a == 959:
+                _ev.append((max(0, _a - 1), mido.Message("control_change", channel=0, control=7, value=_vol)))
+        _last = 0
+        for _tk, _msg in sorted(_ev, key=lambda e: e[0]):
+            _t.append(_msg.copy(time=_tk - _last)); _last = _tk
+        _f = os.path.join(tempfile.mkdtemp(), "stamp.mid"); _m.save(_f)
+        return sorted(B.prepare(_f).get("fader_rows", {}))
+    _fs, _fp = _stamp(True), _stamp(False)
+    check("...and an mt32mux-stamped channel keeps the onset rule its stamps assume",
+          _fs == [] and _fp == [0],
+          "  (fader rows: stamped before every note %s, one plain move under a held note %s)" % (_fs, _fp))
     # A DRONE SPANS THE PHRASE, LIVE TOO, and live has no far side of the rest
     # to look at -- so part_break_s is spent as a HOLD instead. The drones stay
     # up through a gap between notes and are let down only once the piper has
