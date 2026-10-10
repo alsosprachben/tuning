@@ -34,6 +34,9 @@ NOTE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 # name: (program, velocity, ("single", glob) | ("run", file, first MIDI note, count))
 SOURCES = {
     "harp":       (46, 80, [("single", "harp/raw/KSHarp_*_mf.wav")]),
+    # VCSL's Dan Tranh (the koto's steel-strung cousin), mf, staged under its
+    # sounding names by examples/koto_fit.py
+    "koto":       (107, 80, [("single", "vcsl/dantranh/sounding_mf/*.wav")]),
     # VCSL's Steinway B, no pedal, the middle layer (normalized: levels say nothing)
     "grand":      (0, 80, [("single", "vcsl/steinway/JHPiano_NoSus_Close_*_vl3_rr1.wav")]),
     "crotales":   (112, 120, [("single", "cr_*.ff.aiff")]),

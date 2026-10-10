@@ -1058,6 +1058,26 @@ class SynthProperties:
     breath_noise_wobble_db = 0.0
     breath_noise_wobble_hz = 10.0
     breath_noise_wobble_share = 0.0
+    breath_noise_rows = 1          # rows a band (several: as rough as noise)
+    # THE OTHER TINES (a kalimba): plucking one tine rings the rest through
+    # the bridge, at THEIR frequencies, whatever note is played -- rows of
+    # (Hz, dB re the note's gain, decay dB/s), emitted with every note; a row
+    # within ring_skip of one of the note's own modes is that tine itself and
+    # is left out. () = none.
+    ring_db = ()
+    ring_skip = 0.03
+    # A FLAM: the strike (strike_noise_db) fired strike_flam times, at offsets
+    # within strike_flam_s and levels within strike_flam_db under the loudest
+    # (an ensemble clap: several hands). 0 or 1 = one strike.
+    strike_flam = 0
+    strike_flam_s = 0.055
+    strike_flam_db = 13.0
+    # GRAINS: sparse events through a held note (an ocean drum's beads landing)
+    # -- rows of (lo Hz, hi Hz, per second, dB re the note's gain, dB scatter,
+    # decay dB/s): each a damped sine at a log-uniform frequency in the band,
+    # at Poisson instants, its level up to the scatter under the row's, on the
+    # breath noise's swell if the channel has one. () = none.
+    grains = ()
     # ...and its PITCH: harder breath, sharper note -- this many cents rms, the
     # same kind of slow noise at its own corner, breath_pitch_share of it the
     # tone's level wobble. A bend row per channel. 0 = steady.
@@ -5267,6 +5287,28 @@ class FreeReedProperties(SynthProperties):
     reed_edge = 0.15
     reed_spread = 0.15
     reed_points = 21            # gate positions averaged over
+    # THE TONGUE ITSELF RADIATES: besides the flow it chops, the swinging reed
+    # pushes air directly, at the fundamental and nothing else -- a sine added
+    # to the flow, this fraction of the swing. 0 = the flow alone (the
+    # accordion, the harmonium); the harmonica measures it (h1 stands 8-13 dB
+    # clear of h2-h5, with h12 only 20 dB down: no pulse shape does both).
+    reed_direct = 0.0
+    # ...and the gate MOVES WITH THE REGISTER, this much an octave from 415
+    # Hz: a short stiff high reed opens its slot for more of its cycle than a
+    # long low one. The harmonica's recordings: a null near h4 in the low
+    # notes (open about a quarter of the cycle), weak evens at the top (about
+    # half). 0 = one gate for every note (the accordion, the harmonium).
+    reed_gate_per_octave = 0.0
+    # ...and EVERY REED IS ITS OWN: filed, set and gapped by hand, and sat in
+    # its own chamber of the comb, so each key's ladder has its own holes and
+    # peaks where the flow model draws one smooth curve. Each harmonic of each
+    # key is scaled by sqrt(E^q / Gamma(1+q)), E a unit exponential fixed by
+    # the key and the harmonic (the same every render): power kept on
+    # average; at q = 1 the statistic of random interference -- deep holes,
+    # gentle peaks -- and deeper above it. q = reed_scatter plus
+    # reed_scatter_per_octave an octave from 415 Hz. 0 = every reed alike.
+    reed_scatter = 0.0
+    reed_scatter_per_octave = 0.0
     max_harmonic = 32
 
     # A free reed does not decay -- the wind holds it -- but it does BLOOM: the
@@ -5289,8 +5331,9 @@ class FreeReedProperties(SynthProperties):
 
     def _reed_series(self):
         """The flow spectrum, once per (geometry, length). Cached per class."""
-        key = (self.reed_gate, self.reed_edge, self.reed_spread,
-               self.reed_points, self.max_harmonic)
+        gate = self.reed_gate + self.reed_gate_per_octave * getattr(self, 'octave_position', 0.0)
+        key = (round(gate, 6), self.reed_edge, self.reed_spread,
+               self.reed_points, self.max_harmonic, self.reed_direct)
         got = _FREE_REED_CACHE.get(key)
         if got is not None:
             return got
@@ -5300,14 +5343,14 @@ class FreeReedProperties(SynthProperties):
         u = _np.sin(2.0 * _np.pi * t)
         power = _np.zeros(n // 2 + 1)
         if self.reed_spread > 0.0 and self.reed_points > 1:
-            gates = _np.linspace(self.reed_gate - self.reed_spread,
-                                 self.reed_gate + self.reed_spread,
+            gates = _np.linspace(gate - self.reed_spread,
+                                 gate + self.reed_spread,
                                  self.reed_points)
         else:
-            gates = (self.reed_gate,)
+            gates = (gate,)
         for g0 in gates:
             x = _np.clip((u - g0) / max(self.reed_edge, 1e-6) + 0.5, 0.0, 1.0)
-            a = u * (x * x * (3.0 - 2.0 * x))
+            a = u * (x * x * (3.0 - 2.0 * x)) + self.reed_direct * u
             power += (_np.abs(_np.fft.rfft(a)) / float(n)) ** 2
         mag = _np.sqrt(power / len(gates))
         top = min(self.max_harmonic, len(mag) - 1)
@@ -5322,7 +5365,22 @@ class FreeReedProperties(SynthProperties):
         series = self._reed_series()
         if harmonic >= len(series):
             return 0.0
-        return self.gain * series[harmonic]
+        v = self.gain * series[harmonic]
+        # THE EVEN BALANCE, which this override had skipped: the base class's
+        # series_volume applies it, and a free reed replaces that method. The
+        # harmonica's fit moved even_harmonic_db for three rounds to no effect
+        # (its evens weaken up the compass: wind_fit.py). None (the accordion,
+        # the harmonium) is unchanged.
+        if harmonic % 2 == 0 and self.even_harmonic_db is not None:
+            v *= 10.0 ** (self.even_harmonic_db / 20.0)
+        q = self.reed_scatter + self.reed_scatter_per_octave * getattr(self, 'octave_position', 0.0)
+        if self.reed_scatter and q > 0.0 and harmonic > 1:
+            import math as _m
+            import random as _random
+            k = int(round(12.0 * getattr(self, 'octave_position', 0.0)))
+            e = _random.Random(k * 7919 + harmonic * 104729 + 17).expovariate(1.0)
+            v *= _m.sqrt(e ** q / _m.gamma(1.0 + q))
+        return v
 
 
 class ReedOrganFreeProperties(FreeReedProperties):
@@ -5606,15 +5664,55 @@ class HarmonicaProperties(FormantBody, FreeReedProperties):
     # A cupped hand around a small instrument: a broad vocal-tract-like peak
     # low down and a bright one where the comb and the cup ring. Asserted from
     # the size of the cavity, not measured -- see sources.md.
-    formants = ((750.0, 500.0, 0.55), (2400.0, 1600.0, 0.75))
-    formant_floor = 0.22
-    bore_corner_hz = 6500.0             # small and bright
+    # ...and a third, broad and high: the reed's own edge tones above 8 kHz.
+    # The fit had stopped at h12 and never saw them; measured by ABSOLUTE
+    # frequency over all thirty notes, ours ran +4 dB under the takes at
+    # 8.5 kHz and +8 to +10 from 10.8 to 17 kHz (Ben: "still needs more
+    # harmonics"). Fitted to that gap (examples/wind_fit.py --top).
+    formants = ((750.0, 500.0, 0.3), (7049.0, 1600.0, 2.361), (14620.0, 8538.0, 2.467))
+    # and ours ran 3-7 dB hot at 1.0-1.7 kHz (h2-h4 of the middle register),
+    # by the same measure: a shallow notch
+    antiformants = ((1350.0, 600.0, 0.55),)
+    formant_floor = 0.9885
+    bore_corner_hz = 19900.0# small and bright
     bore_order = 2
     bell_cutoff_hz = 0.0
     bell_order = 1
 
-    reed_gate = 0.62                    # a small stiff tongue: buzzier
+    reed_gate = 1.024
+    reed_gate_per_octave = 0.0
+    # EACH REED ITS OWN LADDER (Ben: "the harmonic pattern is too smooth ...
+    # the low notes seem to have more mid-range"). Every recorded note is
+    # jagged -- 12.0 / 9.6 / 8.6 dB rough (sd of h2-h12 steps, low / mid /
+    # high), its deepest hole 31 / 27 / 32 dB down -- where ours read 3.4 /
+    # 3.1 / 7.7 and 16 / 18 / 36. Fitting the pulse's geometry to that ran
+    # the body to its bounds (the three harmonicas share no one reed), so
+    # it is the measured statistic: fitted 12.2 / 8.4 / 7.8 rough, holes
+    # 32 / 28 / 36, the ladder's register means held (the low one's excess
+    # +4.8 dB -> -0.8)
+    reed_scatter = 1.193
+    reed_scatter_per_octave = -0.7587
+    reed_edge = 0.007984
+    reed_spread = 0.02781
+    reed_direct = 0.02916
+    even_harmonic_db = 0.0
+    even_harmonic_db_per_octave = -3.5
+    max_harmonic = 64
     initial_gain = 0.05713
+    breath_noise_db = ((160, -51.8), (202, -42.4), (255, -48.4), (321, -44.1), (404, -40.8), (509, -47.3), (641, -49.3), (808, -45.6), (1018, -48.0), (1283, -38.3), (1616, -37.7), (2036, -35.7), (2566, -31.6), (3233, -34.0), (4073, -31.3), (5132, -28.7), (6465, -26.8), (8146, -27.8), (10263, -28.5), (12931, -31.3))
+    breath_wobble_db = 0.6002
+    breath_wobble_hz = 3.046
+    breath_noise_wobble_db = 1.038
+    breath_noise_wobble_hz = 10.82
+    breath_noise_wobble_share = 0.14
+    breath_pitch_cents = 0.6
+    breath_pitch_hz = 4.0
+    breath_pitch_share = -0.2
+    wind_skirt_always = True
+    wind_skirt_db = -29.75
+    wind_skirt_harmonic_db = 3.227
+    wind_skirt_hz = 5.305
+    wind_skirt_rel = 0.002305
 
 
 class SectionMixin:
@@ -12430,44 +12528,33 @@ class TriangleProperties(MetalPercussionProperties):
 
 
 class HandClapProperties(NoiseDrumProperties):
-    """GM 39. Two hands colliding: a broadband burst with no pitch in it.
+    """GM 39. Hands clapping -- SEVERAL hands, not quite together.
 
-    It shared NoiseDrumProperties with the rattles, on a 260 Hz base, and 16
-    per cent of its energy sat in one narrow band there. A dense hump about
-    1.5 kHz with a floor under it takes that to 2.6 -- below the maracas.
+    FITTED to VCSL's ensemble claps (CC0, Clap_rr1-6; examples/clap_fit.py).
+    A GM hand clap is what drum machines mean by one: a flam of hands. The
+    takes hold 5-9 sub-claps over 50-60 ms, each within 13 dB of the loudest
+    and dying in a few ms (the tail after the last, 240-800 dB/s), with the
+    colour a broad hump at 1-2 kHz -- 15 dB down at 400 Hz, 10 by 10-13 kHz.
 
-    THE WASH STAYS WHITE, and that is a decision rather than an oversight.
-    Banding it (chiff_bandwidth) pulls the centroid from 5.5 kHz down to 1.0,
-    which is closer to where a clap sounds -- but it concentrates the noise
-    onto the modes and the strongest band goes back up to 7.8 per cent, which
-    is the thing being fixed. A clap is two hands slapping: the noise radiates
-    straight off them, it is not a plate's modes broadened by coupling, so
-    white is the right model and the brightness is the price.
+    So it is the hammer's strike (strike_noise_db: noise rows, a third octave
+    apart) fired strike_flam times. It was 52 noise-washed modes on a 260 Hz
+    base, one burst, centred at 5.5 kHz; a clap has no modes to wash.
     """
-    mode_ratios = (1.0000, 1.1276, 1.1972, 1.2708, 1.3486, 1.5205, 1.6144, 1.7137,
-                   1.8187, 2.0503, 2.1769, 2.3109, 2.4527, 2.7646, 2.9355, 3.1164,
-                   3.3076, 3.7279, 3.9585, 4.2025, 4.4606, 5.0267, 5.3378, 5.6670,
-                   6.0153, 6.3837, 7.1977, 7.6420, 8.1120, 8.6090, 9.7056, 10.3051,
-                   10.9393, 11.6101, 13.0873, 13.8961, 14.7519, 15.6571, 17.6472, 18.7384,
-                   19.8932, 21.1147, 23.7956, 25.2680, 26.8261, 28.4744, 30.2175, 34.0725,
-                   36.1749, 38.3991, 40.7515, 45.9447)
-    mode_gains  = (0.4987, 0.5258, 0.5542, 0.5840, 0.6147, 0.6463, 0.6784, 0.7108,
-                   0.7431, 0.7751, 0.8062, 0.8362, 0.8647, 0.8914, 0.9158, 0.9376,
-                   0.9565, 0.9723, 0.9847, 0.9935, 0.9987, 1.0000, 0.9975, 0.9913,
-                   0.9814, 0.9680, 0.9512, 0.9314, 0.9088, 0.8837, 0.8565, 0.8275,
-                   0.7971, 0.7657, 0.7336, 0.7012, 0.6689, 0.6369, 0.6055, 0.5751,
-                   0.5457, 0.5176, 0.4910, 0.4659, 0.4424, 0.4207, 0.4006, 0.3822,
-                   0.3655, 0.3504, 0.3368, 0.3246)
-    max_harmonic = 52
-    # AND IT WAS SWELLING. attack_time was None, so the onset ramp came from
-    # chiff_max_valve_time at 10 ms and the clap took 23.6 ms to reach its own
-    # peak -- a swell, not a slap. Ben: "side stick has too much of an
-    # envelope? They both do." Pinned at 2 ms it peaks at 5.1.
-    attack_time = 0.002
-    initial_gain = 0.069836
+    max_harmonic = 1
+    mode_ratios = (1.0,)
+    mode_gains = (0.0,)
+    chiff_volume = 0.0
+    sustain_jitter = 0.0
+    attack_time = 0.0005
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
-
+    strike_flam = 7
+    strike_flam_s = 0.065
+    strike_flam_db = 13.0
+    strike_noise_dbs = 1000.0
+    strike_noise_fade_s = 0.0005
+    strike_noise_db = ((101, -18.1), (127, -26.1), (160, -16.5), (202, -21.8), (254, -19.1), (320, -14.4), (404, -9.4), (509, -10.8), (641, -9.9), (808, -3.5), (1018, 4.3), (1282, 0.8), (1616, 6.5), (2036, 6.1), (2565, 5.1), (3232, 7.1), (4072, 8.2), (5131, 3.5), (6465, -2.2), (8145, -3.7), (10263, 0.8), (12930, -2.1))
+    initial_gain = 0.069836
 
 class GuiroProperties(WoodPercussionProperties):
     """The guiro's body: struck wood, but the NOISIEST wood in the kit.
@@ -15018,27 +15105,47 @@ class KotoProperties(FormantBody, PluckedStringProperties):
     formant_floor = 0.16
     bore_corner_hz = 3200.0
     bore_order = 2.0
-    bell_cutoff_hz = 110.0
-    bell_order = 2.0
+    bell_cutoff_hz = 450.0
+    bell_order = 4.0
 
     # Tsume: picks on three fingers, plucked well away from the bridge.
-    strike_point = 0.22
-    strike_depth = 0.70
+    strike_point = 0.351
+    strike_depth = 0.0
     strike_fills_with_force = False
 
     # Long, slack, silk: almost no stiffness, and it rings.
     inharmonicity_coefficient = 6.0e-06
     inharmonicity_dynamic = False
-    decay_db = 0.9
-    harmonic_decay_db = 1.3
+    decay_db = 8.59
+    harmonic_decay_db = 2.00
     harmonic_decay_dampening = 0.0
-    tonal_dampening = 1.35
+    decay_register_slope = 0.669
+    tonal_dampening = 0.80
+    octave_dampening = -0.70
     max_harmonic = 40
-    initial_gain = 0.0571298
+    initial_gain = 0.0411004      # held at the asserted koto's level, -47.9 dB (velocity 100, 1.5 s, C3-C6)
     # THE TSUME (plectrum) LETS GO IN 2 ms -- by analogy with a pick; at an
     # instant attack, contrast +27.
     attack_time = 0.002
+    # THE TSUME OFF THE STRING: the plectrum's scrape, noise in the first
+    # tens of ms (examples/koto_fit.py --fit=pluck; attack_audit reads the
+    # recording's early top 13 dB over a clean 2 ms onset's).
+    strike_noise_db = ((157, -58.2), (198, -41.0), (249, -22.0), (314, -20.1), (396, -29.7), (499, -22.1), (629, -27.8), (792, -14.3), (998, -18.1), (1257, -15.3), (1584, -19.1), (1996, -24.8), (2514, -32.1), (3168, -19.8), (3991, -17.0), (5029, -17.6), (6336, -19.2), (7982, -20.1), (10057, -23.1), (12671, -36.3))
+    strike_noise_dbs = 250.0
+    strike_noise_fade_s = 0.002
 
+    # THE OTHER TWELVE STRINGS (Ben: "doesn't it need sympathetic
+    # vibrations?"): a koto's strings are open and undamped, and every pluck
+    # rings the rest through the bridges and the box at THEIR pitches. The
+    # Dan Tranh measures it -- 15-18 peaks off the plucked note's harmonics,
+    # recurring in most of 48 takes, 41 dB (median) under the plucked
+    # fundamental, dying 10-40 dB/s, faster up the compass (koto_fit.py
+    # --ring) -- at its own tuning. These are the koto's: hirajoshi on D,
+    # equal-tempered at A440, at the measured level and decays; D4 3 dB up,
+    # strings 1 and 5 both sounding it.
+    ring_db = ((196.0, -45.9, 15.5), (220.0, -47.4, 13.1), (233.08, -46.9, 15.5), (293.66, -41.6, 16.5),
+               (311.13, -46.9, 18.2), (392.0, -42.2, 22.5), (440.0, -44.2, 27.6), (466.16, -42.2, 30.8),
+               (587.33, -41.3, 30.8), (622.25, -41.0, 38.0), (783.99, -41.9, 34.4), (880.0, -41.2, 38.0))
 
 class KalimbaProperties(FormantBody, PluckedStringProperties):
     """GM 108. A plucked metal TINE, which is not a string and not a bar.
@@ -15065,30 +15172,39 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 
     ASSERTED, NOT MEASURED.
     """
-    mode_ratios = (1.0, 6.267, 17.55)
-    mode_gains = (1.0, 0.16, 0.05)
+    mode_ratios = (1.0, 2.0, 6.4)
+    mode_gains = (1.0, 0.02897, 0.18914)
     max_harmonic = 3
 
     # A slotted wooden box or a gourd: one broad resonance, and it is what
     # makes a kalimba audible at all -- the tine alone moves almost no air.
-    formants = ((420.0, 500.0, 0.85),)
+    formants = ((313.71, 418.21, 2.1786),)
     formant_floor = 0.22
-    bore_corner_hz = 4500.0
+    bore_corner_hz = 16755.0
     bore_order = 2.0
-    bell_cutoff_hz = 180.0
-    bell_order = 2.0
+    bell_cutoff_hz = 195.26
+    bell_order = 4.3281
 
     # Metal, plucked and undamped: the fundamental rings and the high modes go
     # first, which is what a thin tine's radiation does.
-    decay_db = 1.8
-    harmonic_decay_db = 2.6
-    harmonic_decay_dampening = 0.0
+    decay_db = 3.5321
+    harmonic_decay_db = 21.706
+    harmonic_decay_dampening = -0.55082
+    decay_register_slope = 0.70704
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     initial_gain = 0.056563
     # A THUMB ON THE TINE, 3 ms -- by analogy with the measured finger plucks
     # (harp, guitar: 3 ms); at an instant attack, contrast +26.
     attack_time = 0.003
+    ring_db = ((101, -67.1, 20.5), (120, -56.5, 30.6), (159, -39.0, 37.0), (180, -47.5, 26.9), (200, -36.9, 54.5), (241, -37.6, 36.6), (270, -26.3, 29.2), (287, -26.8, 46.4), (320, -27.5, 43.3), (349, -37.4, 39.3), (358, -36.7, 18.6), (380, -32.5, 20.2), (396, -29.2, 20.9), (410, -26.7, 74.3), (459, -49.2, 28.6), (478, -37.6, 40.8), (505, -49.3, 25.5), (541, -35.9, 64.9), (558, -48.3, 28.7), (572, -40.1, 53.2), (588, -49.0, 44.1), (635, -18.8, 68.2), (671, -32.9, 75.8), (708, -19.5, 91.3), (738, -44.2, 78.3), (782, -49.5, 82.4), (825, -48.8, 66.7), (853, -45.2, 70.5), (898, -29.5, 110.8), (936, -38.2, 94.5), (953, -36.5, 98.2), (1013, -52.2, 84.0), (1165, -44.7, 104.6), (4610, -40.9, 126.1))
+    # THE THUMB ON THE TINE (Ben: "missing whatever is hammering or
+    # plucking"): the first 30 ms carry noise between the partials 22-36 dB
+    # under the window from 1.5 to 10 kHz, and ours none; it falls 9-10 dB by
+    # 30-80 ms. The hammer's strike rows (examples/kalimba_fit.py --fit=pluck).
+    strike_noise_db = ((157, -33.2), (198, -26.5), (249, -26.1), (314, -16.1), (396, -13.2), (499, -21.0), (629, -34.8), (792, -24.5), (998, -29.0), (1257, -30.6), (1584, -22.6), (1996, -24.2), (2514, -23.0), (3168, -19.4), (3991, -19.2), (5029, -22.7), (6336, -17.6), (7982, -22.9), (10057, -24.4), (12671, -26.2))
+    strike_noise_dbs = 250.0
+    strike_noise_fade_s = 0.001
 
 
 # HOW LOUD THE DRONES ARE, 0 to switch them off entirely. A bagpipe patch that
@@ -16245,21 +16361,27 @@ class SambaWhistleProperties(OcarinaProperties):
                    9.8225, 10.3999, 11.0112, 11.6584, 12.3437, 13.0692, 13.8374, 14.6508,
                    15.5120, 16.4238, 17.3891, 18.4113, 19.4935, 20.6393, 21.8525, 23.1369,
                    24.4969, 25.9368, 27.4614, 29.0756, 30.7846, 32.5941, 34.5100, 36.5385)
-    mode_gains = (0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
-                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
-                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
-                   0.0500, 0.0500, 0.0500, 1.0000, 0.0500, 0.0500, 0.0500, 0.0500,
-                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.2200,
-                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
-                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500,
-                   0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500, 0.0500)
+    #
+    # NONE OF THE AIR IS UNDER THE TONE. VCSL's ball whistle has nothing
+    # between 250 Hz and 2 kHz (-53 dB re the whole, against the bed's -20):
+    # the jet's air sits above the chamber. Under it the weak modes were the
+    # pea's swing and chop made audible as a low thud on every turn (Ben:
+    # "a low-end thud each wiggle of the bead"). So the bed starts at the tone.
+    mode_gains = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                   0.0, 0.0, 0.0, 1.0000, 0.0120, 0.0120, 0.0120, 0.0120,
+                   0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.2200,
+                   0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120,
+                   0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120,
+                   0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120, 0.0120)
     max_harmonic = 64
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
 
     tonal_dampening = 3.4
-    sustain_jitter = 3.0           # a whistle is mostly air
-    chiff_volume = 6.0
+    sustain_jitter = 0.15
+    chiff_volume = 1.0
     one_shot = False
     initial_gain = OcarinaProperties.initial_gain
 
@@ -16294,8 +16416,8 @@ class SambaWhistleProperties(OcarinaProperties):
     # And seven comb harmonics is a very sharp interruption; four is a softer
     # one, which is what a ball rolling round a chamber does rather than a
     # shutter. It also halves the partners, from fourteen per partial to eight.
-    unison_detune = (25.0, 50.0, 75.0, 100.0)
-    unison_gain = 0.20
+    unison_detune = (60.0, 120.0, 180.0, 240.0)
+    unison_gain = 0.5
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         """The pea's comb: partners at +-k*25 Hz with gains falling as 1/k,
@@ -16333,6 +16455,39 @@ class SambaWhistleProperties(OcarinaProperties):
     breath_noise_wobble_db = 0.0
     breath_pitch_cents = 0.0
     release_valve_time = None
+
+    # THE PEA SWINGS THE PITCH as well as chopping the level: VCSL's ball
+    # whistle moves 80 cents rms at ~30 Hz (examples/whistle_fit.py). A
+    # voice vibrato at that rate and depth (a sine's peak is sqrt 2 its rms).
+    pea_vibrato_cents = 80.0
+    pea_vibrato_hz = 30.0
+
+    def voice_vibrato(self, frequency, index):
+        d = 2.0 ** (self.pea_vibrato_cents * 1.4142 / 1200.0) - 1.0
+        return (d, self.pea_vibrato_hz, 0.0)
+
+
+
+
+class ShortWhistleProperties(SambaWhistleProperties):
+    """PERCUSSION 71: a short blast -- blown, held, stopped, not struck and
+    left to ring. VCSL's short ball whistle sounds 0.19 s."""
+    one_shot = True
+    gate_time = 0.19
+    # and the short blast's pea swings wider and faster (144 cents at 40 Hz
+    # measured; 200 asked, as the short blast's own onset hides some) and
+    # chops deeper (6.3 dB rms)
+    pea_vibrato_cents = 200.0
+    pea_vibrato_hz = 40.0
+    unison_gain = 0.6
+    chiff_volume = 0.35            # in a 0.2 s blast the attack's air is most of it
+
+
+class LongWhistleProperties(SambaWhistleProperties):
+    """PERCUSSION 72: the long blast, 0.89 s (VCSL's long ball whistle)."""
+    one_shot = True
+    gate_time = 0.89
+    unison_gain = 0.38             # the pea's chop, 5.1 dB rms
 
 class BlownBottleProperties(VesselFluteProperties):
     """GM 76. The same Helmholtz body, driven by a MUCH WORSE EDGE.
@@ -17362,16 +17517,39 @@ class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):
 
 
 class SeashoreProperties(BreathNoiseProperties):
-    """GM 122. Surf: the same noise, slower and darker -- it swells in and
-    ebbs out rather than starting, and the sea has far more low in it than a
-    breath does."""
-    initial_gain = 1.0 / 13071      # levelled: see BreathNoiseProperties
-    tonal_dampening = 0.5          # darker than breath: weighted low
-    hf_corner_hz = 3500.0
-    chiff_min_valve_time = 0.35    # swells in
-    chiff_max_valve_time = 0.9
-    chiff_release = 1.0
+    """GM 122. The sea as the orchestra makes it: an OCEAN DRUM, beads rolled
+    across a drumhead as the frame is tilted.
 
+    FITTED to VCSL's three ocean-drum takes (CC0; examples/seashore_fit.py).
+    It had asserted surf "slower and darker ... far more low in it than a
+    breath": the recordings say the opposite -- a hiss peaking at 1.3-2.6 kHz,
+    20-30 dB down under 300 Hz, rolling off above 4 kHz -- swelling
+    irregularly, a swell every 0.4-2 s, the level moving 6-10 dB, the hiss
+    smooth below 4 kHz -- and above it the beads' own ticks, one by one.
+
+    So it is no partials at all: the breath's noise table (breath_noise_db,
+    held for the note) on the breath's own slow swell (breath_noise_wobble,
+    per channel, ramped at block edges). It had been 64 stretched partials
+    dithered into noise, which piled up at the played key (254 Hz at C4).
+    """
+    max_harmonic = 1
+    mode_ratios = (1.0,)
+    mode_gains = (0.0,)
+    inharmonicity_coefficient = 0.0      # a mode set is never also stretched
+    chiff_volume = 0.0
+    sustain_jitter = 0.0
+    breath_noise_fade_s = 0.35     # swells in
+    breath_noise_db = ((63, 21.3), (80, 20.4), (101, 24.5), (127, 15.7), (160, 20.7), (202, 14.6), (254, 27.4), (320, 28.6), (404, 39.4), (509, 48.1), (641, 46.2), (808, 47.3), (1018, 47.0), (1282, 50.7), (1616, 54.2), (2036, 54.3), (2565, 52.9), (3232, 51.8), (4072, 51.5), (5131, 50.5), (6465, 49.4), (8145, 44.2), (10263, 39.2), (12930, 35.4))
+    breath_noise_wobble_db = 1.178
+    breath_noise_wobble_hz = 0.5331
+    # THE BEADS' TICKS (Ben: "missing the dripping sounds ... blending into
+    # the high-end"): the takes' 8-16 kHz is impulsive (band kurtosis 10.1,
+    # 9.4, 3.7 against noise's 3), everything under 4 kHz is not (2.8-3.0).
+    # Damped sines from 6.5 kHz up, 14 a second, a millisecond long, on the
+    # swell; fitted with the table's top, which they share (seashore_fit.py)
+    breath_noise_rows = 3          # the hiss as rough as the takes' (one row a band read 2.5)
+    grains = ((6500.0, 16000.0, 14.0, 66.5, 6.0, 10000.0),)
+    initial_gain = 1.0 / 13071      # the table carries the level, held at the asserted sea's (-42.5 dB)
 
 class ApplauseProperties(BreathNoiseProperties):
     """GM 126. A room full of hands, which is noise but not surf.

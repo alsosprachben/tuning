@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 30 | 23% |
+| 2 specific, theory | 26 | 20% |
 | 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 71 | 55% |
+| 4 specific, reference audio | 75 | 59% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -54,9 +54,8 @@ the crashes hit hard.
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 8 | 16% |
-| 3 specific, theory + ear | 2 | 4% |
-| 4 specific, reference audio | 41 | 80% |
+| 2 specific, theory | 7 | 14% |
+| 4 specific, reference audio | 44 | 86% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -64,7 +63,7 @@ the crashes hit hard.
 | 36 | Bass Drum 1 | `KickDrum` | **4** | as 35, at the recorded kick's own 44.4 Hz |
 | 37 | Side Stick | `SideStick` | **4** | DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick) |
 | 38 | Acoustic Snare | `AcousticSnare` | **4** | DRSKit's snare (29 strokes, top and bottom mics): the head at 196 Hz with a tom's modes, choked in 50 ms; the wires a buzz of jittered noise in third-octave bands, fitted on band, onset balance and flatness (a chord of sines at the right band levels was not a snare; neither was a comb in phase -- "pew pew"). Needed the renderer's onsets to start on their own sample. Ben, by ear: sounds so much better |
-| 39 | Hand Clap | `HandClap` | **2** | its own class, theory |
+| 39 | Hand Clap | `HandClap` | **4** | VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great |
 | 40 | Electric Snare | `ElectricSnare` | **2** | a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all |
 | 41 | Low Floor Tom | `FloorTom` | **4** | DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear |
 | 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | Iowa hi-hat, five takes |
@@ -96,8 +95,8 @@ the crashes hit hard.
 | 68 | Low Agogo | `AgogoLow` | **4** | VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67 |
 | 69 | Cabasa | `Cabasa` | **4** | VSCO-2 CE (CC0) cabasa as SHAPED NOISE: measured, a twist is noise (its grain is its own spectrum with random phases), so the recording's third-octave spectrum as noise rows under the fitted swell, shake and 0.33 s settle -- colour within 0.3 dB, envelope 3.0. The impact burst before it clicked where the takes do not. Ben: sounds great |
 | 70 | Maracas | `Maracas` | **4** | VSCO-2 CE (CC0) maracas as SHAPED NOISE, fitted to the SINGLE strokes (two of the five files are two strokes, one three): the recording's spectrum as noise rows, a swell, the shake, a 0.29 s settle falling 40 dB -- colour within 0.8 dB but for the gourd's 2.3 kHz cliff, envelope 3.2. A little seed-click grain above 4 kHz is the recording's and not ours. Ben: sounds great |
-| 71 | Short Whistle | `SambaWhistle` | **3** | NO REFERENCE, and it says so. Ben on the first version: the whistles were noise driven |
-| 72 | Long Whistle | `SambaWhistle` | **3** | as 71, longer |
+| 71 | Short Whistle | `ShortWhistle` | **4** | VCSL ball whistle, short blast (CC0, examples/whistle_fit.py): one tone at 2.7 kHz, the pea swinging it 144 cents at 40 Hz and chopping it, a 0.19 s blast; the air above the tone only. Ben: sounds good |
+| 72 | Long Whistle | `LongWhistle` | **4** | as 71, the long blast (0.89 s, 80 cents at 30 Hz) |
 | 73 | Short Guiro | `Guiro` | **4** | Iowa guiro, both directions -- four rounds of measuring the right thing in the wrong window |
 | 74 | Long Guiro | `Guiro` | **4** | as 73, the long scrape |
 | 75 | Claves | `Claves` | **4** | Iowa claves, three pairs |
@@ -191,7 +190,7 @@ plays Standard, as does any program that is not a set.
 | 19 | Church Organ | `FlueOrgan` | **3** | flue pipes; registration built on Geer and judged by ear. The wind is fitted to Pitea's recorded pipes -- the jet's turbulence as noise skirts, the reeds' attack rush -- but the pipes' tone is not, so it stays a 3. A shared wind per division (sag under a chord) and a Tremulant stop, off by default until judged by ear |
 | 20 | Reed Organ | `ReedOrganFree` | **2** | a French harmonium: free reeds, four registers split bass/treble, celeste, Expression/Percussion/Tremolo on CC43/44 |
 | 21 | Accordion | `Accordion` | **2** | AccordionProperties: musette, the reed banks deliberately offset ~16 cents |
-| 22 | Harmonica | `Harmonica` | **2** | HarmonicaProperties: one free reed inside a cupped-hand formant pair |
+| 22 | Harmonica | `Harmonica` | **4** | VCSL Hohner Special 20s and Super 64 (CC0), 30 sustains (examples/wind_fit.py): the reed's flow and the tongue's own sine, the cupped hands and a broad top fitted by absolute frequency to 17 kHz, each reed its own jagged ladder (the takes' roughness and holes), breath, flutter and wobble. Ben: very close, sounding real; the lowest and highest notes slightly off |
 | 23 | Tango Accordion | `TangoAccordion` | **2** | TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is |
 
 ## 24-31 Guitar
@@ -331,8 +330,8 @@ plays Standard, as does any program that is not a set.
 | 104 | Sitar | `Sitar` | **2** | its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording |
 | 105 | Banjo | `Banjo` | **2** | steel over a DRUMHEAD: a membrane is light and damped, so it cannot radiate below 380 Hz and it empties the string fast. Thin, quick and bright are one fact |
 | 106 | Shamisen | `Shamisen` | **2** | the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch |
-| 107 | Koto | `Koto` | **2** | long slack silk over a light WOODEN box: the banjo's opposite in every way. Movable bridges mean uniform, very low inharmonicity across the compass |
-| 108 | Kalimba | `Kalimba` | **2** | a plucked CANTILEVER, 1 : 6.267 : 17.55 -- not the mallet base's struck bar. The Rhodes tine's ratios, undamped, so the overtones ping above the note |
+| 107 | Koto | `Koto` | **4** | VCSL Dan Tranh (CC0), its nearest recorded cousin (examples/koto_fit.py): decay laws, pluck point, the box's low cut (450 Hz measured), the tsume's strike; the other twelve strings ringing in sympathy at the measured level and decays, in hirajoshi, tuned through the tuner. Silk inharmonicity kept. Ben: sounds fine |
+| 108 | Kalimba | `Kalimba` | **4** | VCSL kalimba (CC0, examples/kalimba_fit.py): measured tine modes 1 : 2 : 6.4, the other tines ringing sympathetically at their own pitches and decays, the thumb's strike. Ben: great |
 | 109 | Bag pipe | `Bagpipe` | **3** | the DRONES: two tenors and a bass at a FIXED 220/220.4/110 Hz whatever the melody does, which no other voice here can do. They belong to the PART -- sounding once across a played phrase, not restarting per note -- and CC1 corks them one at a time, 0 to 3, because a piper corks rather than turns down. Not touch sensitive: a bag holds one pressure, so CC7/CC11 are the whole dynamic |
 | 110 | Fiddle | `SoloViolin` | **4** | the measured violin, given solo treatment |
 | 111 | Shanai | `Shanai` | **2** | a CONE, so the even harmonics the chanter's class suppressed come back -- a shawm is an oboe's geometry, not a bagpipe's |
@@ -356,7 +355,7 @@ plays Standard, as does any program that is not a set.
 |---|---|---|---|---|
 | 120 | Guitar Fret Noise | `GuitarFretNoise` | **3** | its own class -- slide, squeak and position shift; reworked against Ben's ear |
 | 121 | Breath Noise | `BreathNoise` | **2** | its own class, theory |
-| 122 | Seashore | `Seashore` | **2** | its own class, theory |
+| 122 | Seashore | `Seashore` | **4** | VCSL ocean drum (CC0, examples/seashore_fit.py): a hiss of its measured colour on its slow irregular swell, and the beads' ticks above 8 kHz one by one. Ben: sounds great |
 | 123 | Bird Tweet | `BirdTweet` | **2** | a CHIRP: a nearly pure tone whose pitch RISES (tension_bend negative, where the synth drum's is positive), repeated four times -- 999 Hz climbing to a written 1047 |
 | 124 | Telephone Ring | `TelephoneRing` | **2** | a BELL struck 21 times a second by a clapper alternating between two gongs. The thing in the room, not the 440+480 Hz ringback the exchange sends the caller |
 | 125 | Helicopter | `Helicopter` | **2** | the BLADE PASSING FREQUENCY: a sawtooth at 16.3 Hz with partials every 16.3 up to 1 kHz. The only voice whose fundamental is below hearing -- the series above it IS the sound |
@@ -365,7 +364,7 @@ plays Standard, as does any program that is not a set.
 
 ## The class tree
 
-281 classes.
+283 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -378,7 +377,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
   - `FreeReed`
     - `Accordion` -- GM 21 Accordion (2)
       - `TangoAccordion` -- GM 23 Tango Accordion (2)
-    - `Harmonica` [FormantBody] -- GM 22 Harmonica (2)
+    - `Harmonica` [FormantBody] -- GM 22 Harmonica (4)
     - `ReedOrganFree` -- GM 20 Reed Organ (2)
   - `PluckedString`
     - `AcousticBass` [FormantBody] -- GM 32 Acoustic Bass (4)
@@ -408,8 +407,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `UprightPiano` -- GM 1 Bright Acoustic Piano (4)
           - `HonkyTonk` -- GM 3 Honky-tonk Piano (3)
       - `HammeredDulcimer` -- GM 15 Dulcimer (2)
-    - `Kalimba` [FormantBody] -- GM 108 Kalimba (2)
-    - `Koto` [FormantBody] -- GM 107 Koto (2)
+    - `Kalimba` [FormantBody] -- GM 108 Kalimba (4)
+    - `Koto` [FormantBody] -- GM 107 Koto (4)
     - `Mallet`
       - `StruckBar`
         - `Celesta` -- GM 8 Celesta (2)
@@ -476,7 +475,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `TelephoneRing` -- GM 124 Telephone Ring (2)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4)
       - `NoiseDrum` [NoisyPercussionMixin]
-        - `HandClap` -- 39 Hand Clap (2)
+        - `HandClap` -- 39 Hand Clap (4)
       - `OrchestraHit` -- GM 55 Orchestra Hit (2)
       - `Rattle` [NoisyPercussionMixin]
         - `Vibraslap` -- 58 Vibraslap (4)
@@ -590,7 +589,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (3)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (2)
       - `Applause` -- GM 126 Applause (2)
-      - `Seashore` -- GM 122 Seashore (2)
+      - `Seashore` -- GM 122 Seashore (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
@@ -599,7 +598,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `VesselFlute`
         - `BlownBottle` -- GM 76 Blown Bottle (2)
         - `Ocarina` -- GM 79 Ocarina (4)
-          - `SambaWhistle` -- 71 Short Whistle (3), 72 Long Whistle (3)
+          - `SambaWhistle`
+            - `LongWhistle` -- 72 Long Whistle (4)
+            - `ShortWhistle` -- 71 Short Whistle (4)
         - `Whistle` -- GM 78 Whistle (2)
     - `Organ`
       - `Brass`

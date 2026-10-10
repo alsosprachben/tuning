@@ -8686,16 +8686,16 @@ def selftest():
           _eth[108] is _T.KalimbaProperties and _eth[109] is _T.BagpipeProperties
           and _eth[111] is _T.ShanaiProperties,
           "  (kalimba, bagpipe and shanai reached, not clobbered)")
-    # A KALIMBA IS A CANTILEVER, not a bar and not a string. A free-free bar
-    # runs 1 : 3 : 5 and a clamped-free cantilever 1 : 6.267 : 17.55, which is
-    # why a kalimba's overtones sit above the note as separate pings instead of
-    # fusing into it. Same ratios as a Rhodes tine, for the same reason.
+    # A KALIMBA IS A CANTILEVER, not a bar and not a string -- but a TAPERED,
+    # weighted one, rung against its bridge. Measured on VCSL's Tanzanian
+    # mbira (examples/kalimba_fit.py): the fundamental, an OCTAVE (the tine
+    # against the bridge) and the cantilever's second mode at x6.0-6.6 -- not
+    # the ideal 6.267 the class asserted, and nowhere near a bar's x3-4.
     _ka = _eth[108](261.63, 0.0, 1.0, 1.0)
     check("...and the kalimba rings as a CANTILEVER, not as a bar",
-          abs(_ka.mode_ratio(2) - 6.267) < 0.01
-          and abs(_ka.mode_ratio(3) - 17.55) < 0.01,
-          "  (1 : %.3f : %.2f, where a marimba bar is 1 : 4 : 10)"
-          % (_ka.mode_ratio(2), _ka.mode_ratio(3)))
+          abs(_ka.mode_ratio(2) - 2.0) < 0.01 and 6.0 <= _ka.mode_ratio(3) <= 6.7,
+          "  (1 : %.3f : %.2f -- the bridge's octave and the tapered tine's second mode;"
+          " a marimba bar is 1 : 4 : 10)" % (_ka.mode_ratio(2), _ka.mode_ratio(3)))
     # A DRONE DOES NOT FOLLOW THE MELODY, which is the one thing no other voice
     # in this bank does: every other user of unison_voices returns a RATIO and
     # so tracks the note by construction.
@@ -9361,8 +9361,8 @@ def selftest():
                       "%d classes, all distinct" % len(_cls)))
     _sw = _PMp.PERCUSSION[71][1]
     check("...so the referee's whistle is built from the referee's whistle",
-          _sw.__name__ == "SambaWhistleProperties" and len(_sw.unison_detune) == 4,
-          "  (%d detuned voices at %s cents -- the pea; the human whistle has "
+          issubclass(_sw, _T.SambaWhistleProperties) and len(_sw.unison_detune) == 4,
+          "  (%d detuned voices at %s Hz -- the pea; the human whistle has "
           "none, and until the rename this is the class it was using)"
           % (len(_sw.unison_detune),
              "/".join("%g" % _c for _c in _sw.unison_detune)))
@@ -10490,11 +10490,13 @@ def selftest():
           not _eth[111].odd_only and _sh.harmonic_volume(2) > 0.0,
           "  (a shawm is an oboe's geometry, not a chanter's)")
     # A MEMBRANE CANNOT RADIATE LOW. The banjo and the shamisen are the only
-    # plucked voices here whose body is a stretched skin.
+    # plucked voices here whose body is a stretched skin. (The koto was the
+    # contrast, its wooden box asserted to radiate low; fitted to VCSL's Dan
+    # Tranh, its cousin, the box rolls off under 450 Hz -- so it is reported
+    # here, not held against them.)
     check("...and the two drumhead instruments cannot radiate their bottom",
-          _eth[105].bell_cutoff_hz > 300.0 and _eth[106].bell_cutoff_hz > 300.0
-          and _eth[107].bell_cutoff_hz < 200.0,
-          "  (banjo %.0f Hz and shamisen %.0f, against the koto's wooden %.0f)"
+          _eth[105].bell_cutoff_hz > 300.0 and _eth[106].bell_cutoff_hz > 300.0,
+          "  (banjo %.0f Hz and shamisen %.0f, the koto's box, measured, %.0f)"
           % (_eth[105].bell_cutoff_hz, _eth[106].bell_cutoff_hz,
              _eth[107].bell_cutoff_hz))
 

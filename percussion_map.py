@@ -53,7 +53,7 @@ from tonelib import (
     MaracasProperties,
     VibraslapProperties,
     CabasaProperties,
-    SambaWhistleProperties,
+    SambaWhistleProperties, ShortWhistleProperties, LongWhistleProperties,
     ClavesProperties,
     WoodBlockHiProperties,
     WoodBlockLoProperties,
@@ -163,8 +163,8 @@ PERCUSSION = {
     # pressure-driven resonator goes sharp under pressure -- the same mechanism
     # as the attack sweep in SambaWhistleProperties, where the tone rises into place
     # as the jet establishes.
-    71: ("Short Whistle",      SambaWhistleProperties, 694.9),
-    72: ("Long Whistle",       SambaWhistleProperties, 520.0),
+    71: ("Short Whistle",      ShortWhistleProperties, 587.2),   # its tone at 2723 Hz (VCSL's ball whistle)
+    72: ("Long Whistle",       LongWhistleProperties, 575.6),   # its tone at 2659 Hz
     # MEASURED: the Iowa guiro body rings at 1175 Hz, not 520-560 -- and it is a
     # STRUCK WOODEN BODY, not noise. Spectral flatness on one ridge is 0.0044
     # (away) and 0.0056 (toward), against a clave's 0.0002 and a woodblock's
@@ -433,7 +433,8 @@ PERCUSSION_RING = {
     57: 1.69, 58: 0.098, 59: 0.48,
     65: 0.30, 66: 0.35,
     # (69, 70: shaped noise now, tonelib.ShakenNoiseProperties -- no impacts to ring)
-    71: 0.280, 72: 0.850,
+    # (71, 72: blown, not struck -- a held blast of their own length,
+    #  tonelib.ShortWhistleProperties / LongWhistleProperties, no ring)
     # A GUIRO IS HELD IN THE HAND, and the hand damps the gourd -- which is also
     # fairly closed. Measured on the Iowa guiro, the envelope after the last
     # ridge falls 10 dB in 3-5 ms and 20 dB in 15-21 ms, against a woodblock's
@@ -501,8 +502,8 @@ PERCUSSION_LEVEL = {
     54: 1.1874, # tambourine +1.6 dB
     69: 2.1697, # cabasa +28.9 dB
     70: 2.6794, # maracas +30.3 dB
-    71: 53.6422,  # whistle short: the burst spreads the energy
-    72: 29.9953, # whistle long +5.7 dB
+    71: 87.7984,  # whistle short, held at its old level (fitted to VCSL's ball whistle: -4.28 dB without)
+    72: 82.4220, # whistle long, held at its old level (-8.77 dB without)
     # A surdo is the biggest drum in a samba and carries the whole groove, but
     # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
     # UNDER the kick. Open surdo now sits a little above it, muted a little

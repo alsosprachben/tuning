@@ -3521,15 +3521,57 @@ def prepare(path, tuner='hybrid440', sink=None):
             # ONE ROW A BAND, and gone by 0.25 s (62 dB down at its 250 dB/s):
             # two a band, held 0.5 s, took live's ten-note chord past its block
             # budget (99th percentile 2.71 ms of 2.67)
-            for _hf, _db in props.strike_noise_db:
-                if _hf >= 0.45 * SR:
-                    continue
-                _gM = props.gain * 10.0 ** ((_db + _reg) / 20.0)
-                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
-                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, non + 0.25 * SR,
-                             _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+            # A FLAM (strike_flam > 1: an ensemble clap): that many strikes,
+            # each at its own offset within strike_flam_s and its own level
+            # within strike_flam_db under the loudest -- several hands not quite
+            # together. Drawn from the note itself, so a render repeats.
+            _bursts = [(0.0, 0.0)]
+            _nfl = int(getattr(props, 'strike_flam', 0) or 0)
+            if _nfl > 1:
+                _frng = random.Random(int(round(on * 1e6)) * 131 + note * 7 + ch)
+                _bursts = [(_frng.uniform(0.0, props.strike_flam_s), -_frng.uniform(0.0, props.strike_flam_db))
+                           for _ in range(_nfl)]
+                _t0 = min(b[0] for b in _bursts); _l0 = max(b[1] for b in _bursts)
+                _bursts = [(t - _t0, l - _l0) for t, l in _bursts]
+            for _boff, _bdb in _bursts:
+                _bon = non + _boff * SR
+                for _hf, _db in props.strike_noise_db:
+                    if _hf >= 0.45 * SR:
+                        continue
+                    _gM = props.gain * 10.0 ** ((_db + _reg + _bdb) / 20.0)
+                    emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                                 _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _bon, _bon + 0.25 * SR,
+                                 _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
+        if getattr(props, 'ring_db', ()):
+            # THE OTHER TINES (tonelib.SynthProperties.ring_db): fixed
+            # frequencies, the instrument's own, rung through the bridge by
+            # every pluck -- sines, each dying at its own rate. A row on one of
+            # this note's own modes is the plucked tine itself: skipped. No
+            # damper lifts them: they ring 4 s (76 dB at the slowest, 19 dB/s).
+            _own = [f0 * r for r in (props.mode_ratios or (1.0, 2.0))] + [2.0 * f0]
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            # their phases from the note, not the render's seeded stream, which
+            # every later note's jitter draws from
+            _rrng = random.Random(int(round(on * 1e6)) * 137 + note * 11 + ch)
+            for _hf, _db, _dps in props.ring_db:
+                # ...TUNED AS THE NOTES ARE: a row is the nearest key and its
+                # offset from 12-TET at A440 (none for the koto's strings, the
+                # measured tines' own for the kalimba), so the other strings
+                # sit in the tuning the music is played in -- the key's
+                # frequency in the table in force at this note's onset
+                _rk = int(round(69.0 + 12.0 * math.log2(_hf / 440.0)))
+                if _rk in FREQ_N:
+                    _hf = FREQ_N[_rk] * _hf / (440.0 * 2.0 ** ((_rk - 69.0) / 12.0))
+                if _hf >= 0.45 * SR or any(abs(_hf / _q - 1.0) < props.ring_skip for _q in _own):
+                    continue
+                _gM = props.gain * 10.0 ** (_db / 20.0)
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, max(noff, non + 4.0 * SR),
+                             fade, rel, chiff, math.log(10.0) / 20.0 * _dps, 0.0, 0.0, 0.0, 0.0,
+                             cc, crl, 0.0, csc, -1, 0, ph0=_rrng.random() * 2.0 * math.pi)
         if getattr(props, 'breath_noise_db', ()):
             # THE BREATH (tonelib.SynthProperties.breath_noise_db): the jet's
             # own noise, held for the note -- the strike's rows, but sustained
@@ -3547,13 +3589,48 @@ def prepare(path, tuner='hybrid440', sink=None):
             _bkeep = _BR[0]
             if ch in bbrow_of and props.breath_noise_wobble_db > 0.0:
                 _BR[0] = bbrow_of[ch][1]
-            for _hf, _db in props.breath_noise_db:
+            # EACH BAND breath_noise_rows ROWS, spread across it: one noise row
+            # keeps its level as it turns, smoother than noise (an ocean drum's
+            # hiss read kurtosis 2.5 on one, the takes 3.0); a few summed are not
+            _k = int(getattr(props, 'breath_noise_rows', 1))
+            for _hf, _db in [(_bf * 2.0 ** ((_j - 0.5 * (_k - 1)) / (3.0 * _k)), _bd - 10.0 * math.log10(_k))
+                             for _bf, _bd in props.breath_noise_db for _j in range(_k)]:
                 if _hf >= 0.45 * SR:
                     continue
                 _gM = props.gain * 10.0 ** (_db / 20.0)
                 emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
                              _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, noff,
                              _bfade, rel, chiff, 0.0, 0.0, 0.0, 1.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+            _BR[0] = _bkeep
+            _CBW[0], _CBW[1] = _cbw
+            _NOREFL[0] = False
+        if getattr(props, 'grains', ()):
+            # GRAINS (tonelib.SynthProperties.grains): sparse damped sines at
+            # Poisson instants through the held note -- an ocean drum's beads
+            # landing on the head (the drips) and on each other (the ticks).
+            # Drawn from the note, so a render repeats; on the breath noise's
+            # swell (the beads run as the frame tilts); no room images.
+            _cbw = (_CBW[0], _CBW[1])
+            _CBW[0], _CBW[1] = 0.0, 0.0
+            _NOREFL[0] = True
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            _bkeep = _BR[0]
+            if ch in bbrow_of and props.breath_noise_wobble_db > 0.0:
+                _BR[0] = bbrow_of[ch][1]
+            _grng = random.Random(int(round(on * 1e6)) * 139 + note * 13 + ch)
+            for _lo, _hi, _rate, _db, _dsc, _dps in props.grains:
+                _t = non + _grng.expovariate(_rate) * SR
+                _glr = math.log(10.0) / 20.0 * _dps
+                while _t < noff:
+                    _hf = _lo * (_hi / _lo) ** _grng.random()
+                    _gM = props.gain * 10.0 ** ((_db - _grng.uniform(0.0, _dsc)) / 20.0)
+                    if _hf < 0.45 * SR:
+                        emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                                     _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _t, _t + 0.1 * SR,
+                                     8.0, 0.005 * SR, chiff, _glr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc,
+                                     -1, 0, ph0=_grng.random() * 2.0 * math.pi)
+                    _t += _grng.expovariate(_rate) * SR
             _BR[0] = _bkeep
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False

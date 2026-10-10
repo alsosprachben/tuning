@@ -501,6 +501,20 @@ def cabasa(dst):
     return _save(dst, ev)
 
 
+def whistles(dst):
+    """The samba whistles: three short blasts (71) and three long (72), each
+    written as a short tick -- a whistle blows its own length -- two beats
+    apart (tempo 120: 1 s), velocity 100."""
+    ev = []
+    q = 480
+    now = 0
+    for n in (71, 71, 71, 72, 72, 72):
+        ev.append((now, "note_on", n, 100))
+        ev.append((now + 60, "note_off", n, 0))
+        now += 2 * q
+    return _save(dst, ev)
+
+
 def bells(dst):
     """The vibraslap alone at three strokes, short notes and a long one (it
     rings its own length either way); then the melodic agogo (program 113):
@@ -643,7 +657,8 @@ def main(argv):
                 "reverse": reverse(os.path.join(d, "reverse.mid")),
                 "taiko": taiko(os.path.join(d, "taiko.mid")),
                 "pianos": pianos(os.path.join(d, "pianos.mid")),
-                "plucks": plucks(os.path.join(d, "plucks.mid"))}
+                "plucks": plucks(os.path.join(d, "plucks.mid")),
+                "whistles": whistles(os.path.join(d, "whistles.mid"))}
         p = os.path.join(d, "qkbttl03.mid")
         excerpt(os.path.expanduser("~/Downloads/midi/qkbttl03.mid"), 45.0).save(p)
         srcs["qkbttl03"] = p

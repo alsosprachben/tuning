@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Fit a sustained fipple voice -- the recorder (GM 74), the ocarina (GM 79) --
-to VCSL's sustains (CC0; ~/Documents/refs/vcsl/{recorder,ocarina}, sources.md).
+"""Fit a sustained wind voice -- the recorder (GM 74), the ocarina (GM 79), the
+harmonica (GM 22) --
+to VCSL's sustains (CC0; ~/Documents/refs/vcsl/{recorder,ocarina,harmonica}, sources.md).
 
     wind_fit.py --voice=recorder              measure: recorded against ours
     wind_fit.py --voice=recorder --fit        fit the spectrum knobs
     wind_fit.py --voice=ocarina --fit=breath  fit sustain_jitter to the breath
+    wind_fit.py --voice=harmonica --top       the ladder by absolute frequency, to 20 kHz
+    wind_fit.py --voice=harmonica --fit=scatter  each reed's own ladder, to the roughness
 
 Everything is measured the same way on both sides, over the steady part of the
 note (0.4-1.9 s after it speaks), so the fit is fitted to the measurement made
@@ -39,6 +42,9 @@ VOICES = {
     "recorder": (74, "RecorderProperties", "recorder", "*Recorder_Sus_*.wav"),
     # GM 79: the typical (alto C) ocarina; the small one is the sopranino.
     "ocarina": (79, "OcarinaProperties", "ocarina", "*.wav"),
+    # GM 22: Hohner's Special 20 in C and in F (diatonic) and the Super 64
+    # (chromatic), Normal sustains -- a free reed, named an octave low too.
+    "harmonica": (22, "HarmonicaProperties", "harmonica", "*.wav"),
 }
 T0, T1 = 0.4, 1.9
 VEL = 80
@@ -215,8 +221,38 @@ def error(keys, rec, ours, parts=False):
         w = np.isfinite(r) & np.isfinite(o)
         out["breath"].extend((o - r)[w])
     rms = {k: float(np.sqrt(np.mean(np.square(v)))) for k, v in out.items() if v}
-    e = float(np.sqrt(np.mean(np.square(sum(out.values(), [])))))
+    # The breath is reported, not fitted here: it has its own fit (fit_breath),
+    # and a voice with none yet is 100 dB off, which would swamp the spectrum.
+    e = float(np.sqrt(np.mean(np.square(out["ladder"] + out["thirds"]))))
     return (e, rms) if parts else e
+
+
+def getk(cls, k):
+    """A knob: an attribute, or an element of a tuple one by dotted index
+    (formants.1.2 is the second formant's gain)."""
+    name, *idx = k.split(".")
+    v = getattr(cls, name)
+    for i in idx:
+        v = v[int(i)]
+    return v
+
+
+def setk(cls, k, q):
+    name, *idx = k.split(".")
+    if not idx:
+        setattr(cls, name, q)
+        return
+
+    def put(t, path):
+        t = list(t)
+        t[path[0]] = q if len(path) == 1 else put(t[path[0]], path[1:])
+        return tuple(t)
+    setattr(cls, name, put(getattr(cls, name), [int(i) for i in idx]))
+
+
+BOUNDS = {"reed_gate": (-0.6, 1.08), "reed_gate_per_octave": (-0.6, 0.6), "reed_edge": (0.003, 0.5), "reed_spread": (0.02, 0.4),
+          "bore_corner_hz": (2000.0, 20000.0), "formants.1.2": (0.05, 2.5), "formants.0.2": (0.05, 2.5),
+          "formant_floor": (0.05, 1.0), "formants.1.0": (1000.0, 8000.0), "reed_direct": (0.001, 1.0)}
 
 
 def fit(voice, prog, cls, knobs, maxfev=150):
@@ -226,19 +262,31 @@ def fit(voice, prog, cls, knobs, maxfev=150):
         x, sr = load(p)
         refs.append((key, analyse(x, sr, key)))
     # dB knobs (even_harmonic_db) move additively, 10 dB a unit; the rest in log.
-    db = np.array([k.endswith("_db") for k in knobs])
-    start = {"even_harmonic_db": -6.0, "chiff_bandwidth": 0.5}
-    x0 = np.array([float(getattr(cls, k) if getattr(cls, k) is not None else start[k]) for k in knobs])
+    db = np.array([k.endswith("_db") or "_db_" in k or k.endswith("_per_octave") for k in knobs])
+    step = np.array([10.0 if "_db" in k else 0.5 for k in knobs])     # dB, or a gate
+    start = {"even_harmonic_db": -6.0, "chiff_bandwidth": 0.5, "even_harmonic_db_per_octave": 0.0,
+             "reed_gate_per_octave": 0.0}
+    x0 = np.array([float(getk(cls, k) if getk(cls, k) is not None else start[k]) for k in knobs])
     best = [1e9, x0]
 
     def val(z):
-        return np.where(db, x0 + 10.0 * z, np.exp(z) * x0)
+        return np.where(db, x0 + step * z, np.exp(z) * x0)
 
     def f(z):
         v = val(z)
         for k, q in zip(knobs, v):
-            setattr(cls, k, float(q))
-        ours = [analyse(*render(prog, key), key) for key, _ in refs]
+            setk(cls, k, float(q))
+        # Outside its physical range a knob is a bad fit, not a solution: free,
+        # the harmonica's fit switched its case off (360 kHz) and made a +18 dB
+        # formant at 7 kHz do the reed's work. And a geometry that silences
+        # the voice (a reed gate past ~1.1: the tongue never clears its slot)
+        # is a bad fit, not a crash.
+        if any(k in BOUNDS and not BOUNDS[k][0] <= q <= BOUNDS[k][1] for k, q in zip(knobs, v)):
+            return 1e3
+        try:
+            ours = [analyse(*render(prog, key), key) for key, _ in refs]
+        except (IndexError, ValueError, TypeError):
+            return 1e3
         e, parts = error([k for k, _ in refs], [r for _, r in refs], ours, True)
         if e < best[0]:
             best[:] = [e, v]
@@ -250,7 +298,7 @@ def fit(voice, prog, cls, knobs, maxfev=150):
     minimize(f, np.zeros(n), method="Nelder-Mead",
              options={"maxfev": maxfev, "initial_simplex": simplex, "xatol": 0.02, "fatol": 0.02})
     for k, q in zip(knobs, best[1]):
-        setattr(cls, k, float(q))
+        setk(cls, k, float(q))
     return best
 
 
@@ -328,6 +376,323 @@ def ab(voice, prog, out, n=7, head=2.0, xf=0.1):
     w.writeframes((z * 32767).astype("<i2").tobytes()); w.close()
 
 
+def turbulence(x, sr, key, t0=0.5, t1=4.0, nh=6, hop=0.01):
+    """Each harmonic's level over the sustain: its wobble (dB rms, after a
+    0.5 s running mean takes the player's swell out), the wobble's rate
+    (median frequency of its modulation spectrum, Hz), and how the harmonics
+    move together (mean correlation of h1's wobble with each of h2..). And the
+    breath's colour: the spectrum midway between harmonics, third-octave
+    bands, dB re the fundamental."""
+    i = speaks(x, sr)
+    seg = x[i + int(t0 * sr): i + int(t1 * sr)]
+    if len(seg) < int(1.5 * sr):
+        return None
+    f0 = f0_near(seg[:int(1.0 * sr)], sr, key)
+    win = int(0.04 * sr)
+    h = int(hop * sr)
+    w = np.hanning(win)
+    fr = np.fft.rfftfreq(win * 4, 1.0 / sr)
+    env = []
+    for a in range(0, len(seg) - win, h):
+        X = np.abs(np.fft.rfft(seg[a:a + win] * w, win * 4))
+        env.append([X[np.argmin(np.abs(fr - m * f0))] for m in range(1, nh + 1)])
+    env = 20 * np.log10(np.array(env) + 1e-12)
+    k = int(0.5 / hop)
+    smooth = np.array([np.convolve(c, np.ones(k) / k, "same") for c in env.T]).T
+    d = (env - smooth)[k:-k]
+    lvl = env.mean(0) - env.mean(0)[0]
+    rms = d.std(0)
+    rate = []
+    for c in d.T:
+        P = np.abs(np.fft.rfft(c * np.hanning(len(c)))) ** 2
+        f = np.fft.rfftfreq(len(c), hop)
+        cs = np.cumsum(P[1:])
+        rate.append(f[1:][np.searchsorted(cs, cs[-1] / 2)])
+    corr = [np.corrcoef(d[:, 0], d[:, j])[0, 1] for j in range(1, nh)]
+    # THE SHARED PART: the mean wobble of h1-h4 (what the harmonics do
+    # together -- the breath's pressure), and the BREATH NOISE's own level:
+    # each frame's median between the harmonics, 1-5 kHz, its wobble and its
+    # correlation with the shared part. And the fundamental's pitch, cents.
+    com = d[:, :4].mean(1)
+    mids, pitch = [], []
+    for a in range(0, len(seg) - win, h):
+        X = np.abs(np.fft.rfft(seg[a:a + win] * w, win * 4))
+        ph = (fr / f0) % 1.0
+        sel = (ph > 0.3) & (ph < 0.7) & (fr > 1000) & (fr < 5000)
+        mids.append(20 * np.log10(np.median(X[sel]) + 1e-12))
+        k1 = int(np.argmin(np.abs(fr - f0)))
+        y0, y1, y2 = np.log(X[k1 - 1:k1 + 2] + 1e-30)
+        dd = y0 - 2 * y1 + y2
+        pitch.append(1200 * np.log2((k1 + (0.5 * (y0 - y2) / dd if dd else 0)) * (fr[1]) / f0))
+    mids, pitch = np.array(mids), np.array(pitch)
+    nz = mids - np.convolve(mids, np.ones(k) / k, "same")
+    pz = pitch - np.convolve(pitch, np.ones(k) / k, "same")
+    nz, pz = nz[k:-k], pz[k:-k]
+
+    def _rate(c):
+        P = np.abs(np.fft.rfft(c * np.hanning(len(c)))) ** 2
+        f = np.fft.rfftfreq(len(c), hop)
+        cs = np.cumsum(P[1:])
+        return f[1:][np.searchsorted(cs, cs[-1] / 2)]
+    shared = np.array([com.std(), _rate(com), nz.std(), _rate(nz), np.corrcoef(com, nz)[0, 1],
+                       pz.std(), np.corrcoef(com, pz)[0, 1]])
+    N = 1 << 19
+    seg2 = seg[:int(1.5 * sr)]
+    X = np.abs(np.fft.rfft(seg2 * np.hanning(len(seg2)), N)) ** 2
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    ph = (f / f0) % 1.0
+    mid = (ph > 0.3) & (ph < 0.7) & (f > 0.5 * f0)
+    ref = X[np.argmin(np.abs(f - f0))]
+    col = []
+    for lo, hi in zip(E3[:-1], E3[1:]):
+        m = mid & (f >= lo) & (f < hi)
+        col.append(10 * np.log10(np.median(X[m]) / ref + 1e-30) if m.sum() > 4 else np.nan)
+    return dict(lvl=lvl, rms=rms, rate=np.array(rate), corr=np.array(corr), colour=np.array(col),
+                shared=shared)
+
+
+def turb_report(voice, prog):
+    rec, ours = [], []
+    for key, p in recordings(voice):
+        x, sr = load(p)
+        r = turbulence(x, sr, key)
+        if r is None:
+            continue
+        y, sr2 = render(prog, key, 4.5)
+        rec.append(r)
+        ours.append(turbulence(y, sr2, key))
+    for fld, lab in (("lvl", "level dB"), ("rms", "wobble dB rms"), ("rate", "wobble rate Hz"), ("corr", "corr with h1")):
+        for name, rows in (("recorded", rec), ("ours", ours)):
+            print("  %-15s %-9s " % (lab, name) + " ".join("%6.2f" % v for v in table(rows, fld, 6)))
+    print("  shared:         tone dB, Hz | breath dB, Hz, corr w/ tone | pitch cents, corr w/ tone")
+    for name, rows in (("recorded", rec), ("ours", ours)):
+        print("  %-15s " % name + " ".join("%6.2f" % v for v in table(rows, "shared", 7)))
+    cen = np.sqrt(E3[:-1] * E3[1:])
+    sel = [i for i, c in enumerate(cen) if 300 < c < 16000][::2]
+    print("  breath colour (midway, dB re h1) at " + " ".join("%6d" % cen[i] for i in sel))
+    for name, rows in (("recorded", rec), ("ours", ours)):
+        m = table(rows, "colour", len(cen))
+        print("  %-36s" % name + " ".join("%6.1f" % m[i] for i in sel))
+
+
+CEN = np.sqrt(E3[:-1] * E3[1:])
+
+
+def fit_breath(voice, prog, cls, passes=4, step=2):
+    """--fit=breath: breath_noise_db, band by band, toward the recordings'
+    breath colour (the spectrum midway between harmonics, dB re h1, mean over
+    the notes): each pass adds recorded - ours to every band both measure;
+    a band no note measures (under the lowest fundamental) takes its
+    neighbour's. Every STEP-th note."""
+    refs = []
+    for key, p in recordings(voice)[::step]:
+        x, sr = load(p)
+        r = turbulence(x, sr, key)
+        if r is not None:
+            refs.append((key, r))
+    rec = table([r for _, r in refs], "colour", len(CEN))
+    keep = [i for i, c in enumerate(CEN) if 150 < c < 18000]
+    if not cls.breath_noise_db:
+        cls.breath_noise_db = tuple((int(round(CEN[i])), 0.0) for i in keep)
+    tab = dict(cls.breath_noise_db)
+    for n in range(passes + 1):
+        ours = table([turbulence(*render(prog, key, 2.4), key) for key, _ in refs], "colour", len(CEN))
+        d = rec - ours
+        ok = [i for i in keep if np.isfinite(d[i])]
+        print("  pass %d: breath colour rec - ours, rms %.1f dB" % (n, np.sqrt(np.mean(d[ok] ** 2))), flush=True)
+        if n == passes:
+            break
+        for i in keep:
+            j = i if np.isfinite(d[i]) else min(ok, key=lambda q: abs(q - i))
+            hz = int(round(CEN[i]))
+            tab[hz] = tab.get(hz, 0.0) + float(d[j])
+        cls.breath_noise_db = tuple((hz, round(db, 1)) for hz, db in sorted(tab.items()))
+    print("    breath_noise_db = %s" % (cls.breath_noise_db,))
+    print("  " + "  ".join("%d %+.0f/%+.0f" % (CEN[i], rec[i], ours[i]) for i in keep[::2]))
+
+
+SKIRT = ("wind_skirt_db", "wind_skirt_harmonic_db", "wind_skirt_hz", "wind_skirt_rel")
+
+
+def fit_skirt(voice, prog, cls, step=3, maxfev=80):
+    """--fit=skirt: the harmonics' turbulence -- the skirt's level, its rise
+    with harmonic number and its width -- against the recordings' wobble (dB
+    rms, h1-h6) and its rate (log2 of the ratio, weighted 3: an octave off in
+    rate costs as much as 3 dB of depth). Mean over every STEP-th note."""
+    from scipy.optimize import minimize
+    refs = []
+    for key, p in recordings(voice)[::step]:
+        x, sr = load(p)
+        r = turbulence(x, sr, key)
+        if r is not None:
+            refs.append((key, r))
+    R = [r for _, r in refs]
+    rms_r, rate_r = table(R, "rms", 6), table(R, "rate", 6)
+    add = np.array([k.endswith("_db") for k in SKIRT])
+    x0 = np.array([float(getattr(cls, k) or 0.0) for k in SKIRT])
+    best = [1e9, x0]
+
+    def f(z):
+        v = np.where(add, x0 + 6.0 * z, np.exp(z) * x0)
+        for k, q in zip(SKIRT, v):
+            setattr(cls, k, float(q))
+        O = [turbulence(*render(prog, key, 4.5), key) for key, _ in refs]
+        a = table(O, "rms", 6) - rms_r
+        b = 3.0 * np.log2(table(O, "rate", 6) / rate_r)
+        e = float(np.sqrt(np.mean(np.concatenate([a, b]) ** 2)))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %5.2f  depth %s  rate %s  %s" % (e, " ".join("%+.1f" % q for q in a),
+                  " ".join("%+.1f" % q for q in b / 3.0), " ".join("%s=%.4g" % kv for kv in zip(SKIRT, v))), flush=True)
+        return e
+    n = len(SKIRT)
+    simplex = np.vstack([np.zeros(n)] + [0.5 * np.eye(n)[i] for i in range(n)])
+    minimize(f, np.zeros(n), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": simplex, "xatol": 0.02, "fatol": 0.02})
+    for k, q in zip(SKIRT, best[1]):
+        setattr(cls, k, float(q))
+        print("    %s = %.4g" % (k, q))
+
+
+WOBBLE = ("breath_wobble_db", "breath_wobble_hz", "breath_noise_wobble_db", "breath_noise_wobble_hz")
+
+
+def fit_wobble(voice, prog, cls, step=3, maxfev=60):
+    """--fit=wobble: the player's breath -- the tone's shared level wobble and
+    the breath noise's own, each a depth and a corner -- against the
+    recordings' shared wobble (h1-h4 together), the breath's wobble, and each
+    harmonic's (h1-h6, so the flutter stays fitted): depths in dB, rates as
+    3 log2 of the ratio. The share (their correlation) is set, not fitted."""
+    from scipy.optimize import minimize
+    refs = []
+    for key, p in recordings(voice)[::step]:
+        x, sr = load(p)
+        r = turbulence(x, sr, key)
+        if r is not None:
+            refs.append((key, r))
+    R = [r for _, r in refs]
+    sh_r, rms_r = table(R, "shared", 7), table(R, "rms", 6)
+    x0 = np.array([max(float(getattr(cls, k)), 0.5) for k in WOBBLE])
+    best = [1e9, x0]
+
+    def f(z):
+        v = np.exp(z) * x0
+        for k, q in zip(WOBBLE, v):
+            setattr(cls, k, float(q))
+        O = [turbulence(*render(prog, key, 4.5), key) for key, _ in refs]
+        sh, rms = table(O, "shared", 7), table(O, "rms", 6)
+        e = np.concatenate([[sh[0] - sh_r[0], sh[2] - sh_r[2]],
+                            3.0 * np.log2([sh[1] / sh_r[1], sh[3] / sh_r[3]]), rms - rms_r])
+        err = float(np.sqrt(np.mean(e ** 2)))
+        if err < best[0]:
+            best[:] = [err, v]
+            print("  %5.2f  shared %.2f/%.2f dB %.1f/%.1f Hz  breath %.2f/%.2f dB %.1f/%.1f Hz  h %s  %s"
+                  % (err, sh[0], sh_r[0], sh[1], sh_r[1], sh[2], sh_r[2], sh[3], sh_r[3],
+                     " ".join("%+.1f" % q for q in rms - rms_r),
+                     " ".join("%s=%.4g" % kv for kv in zip(WOBBLE, v))), flush=True)
+        return err
+    n = len(WOBBLE)
+    simplex = np.vstack([np.zeros(n)] + [0.4 * np.eye(n)[i] for i in range(n)])
+    minimize(f, np.zeros(n), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": simplex, "xatol": 0.02, "fatol": 0.02})
+    for k, q in zip(WOBBLE, best[1]):
+        setattr(cls, k, float(q))
+        print("    %s = %.4g" % (k, q))
+
+
+def top(voice, prog, nh=64):
+    """THE LADDER BY ABSOLUTE FREQUENCY, to 20 kHz: recorded minus ours for
+    every harmonic of every note (standing within 60 dB), the median in each
+    third octave, pooled and by register. The fit's ladder stops at h12, so a
+    body's top (the harmonica's above 8 kHz) is invisible to it -- and the
+    renderer's listening path (air, directivity, room) is itself 7-10 dB down
+    at 10 kHz, which a voice's body must make up. A gap the same in every
+    register is the body's; one that changes sign is the instruments'."""
+    global NH
+    NH = nh
+    B = 2 ** np.arange(np.log2(300), np.log2(20000), 1 / 3.0)
+    acc = {g: [[] for _ in B] for g in range(4)}
+    for key, p in recordings(voice):
+        x, sr = load(p)
+        r = analyse(x, sr, key)
+        y, sr2 = render(prog, key)
+        o = analyse(y, sr2, key)
+        g = next(i for i, (lo, hi) in enumerate(REGISTERS) if lo <= key < hi)
+        for h in range(1, min(len(r["ladder"]), len(o["ladder"]))):
+            if r["ladder"][h] < -60:
+                continue
+            i = int(np.searchsorted(B, (h + 1) * r["f0"])) - 1
+            if 0 <= i < len(B):
+                for gg in (g, 3):
+                    acc[gg][i].append(r["ladder"][h] - o["ladder"][h])
+    print("  band Hz   pooled       low          mid          high      (recorded - ours, dB, n)")
+    for i, b in enumerate(B):
+        print("  %6d " % (b * 2 ** (1 / 6.0)) + " ".join(
+            ("%+6.1f(%3d)  " % (np.median(acc[g][i]), len(acc[g][i]))) if acc[g][i] else "     -       "
+            for g in (3, 0, 1, 2)))
+
+
+# THE RENDERER'S LISTENING PATH (air, directivity, the room), measured by
+# rendering a flat series at E5: dB at Hz. The scatter fit reads the model's
+# own harmonic levels rather than rendering 30 notes a step, so it adds this.
+PATH_HZ = (0, 652, 1305, 2611, 3917, 5223, 6529, 7835, 9141, 10447, 11753, 13059, 15671, 18283, 22050)
+PATH_DB = (0, 0, -1.2, -2.1, -2.9, -3.8, -5.0, -6.3, -7.9, -9.8, -11.9, -14.4, -20.9, -35.7, -60)
+
+
+def rough(ladder):
+    """How jagged a ladder is: the sd of its steps, h2-h12, dB."""
+    l = np.asarray(ladder[1:12])
+    return float(np.std(np.diff(l[np.isfinite(l)])))
+
+
+def fit_scatter(voice, prog, cls, nh=24):
+    """EACH REED ITS OWN LADDER (FreeReedProperties.reed_scatter): fit the
+    scatter's depth and its slope an octave to each register's roughness
+    (rough(), the mean over its notes) and its deepest hole h2-h12 (0.3 the
+    weight), reading the model's harmonic levels plus the listening path."""
+    from scipy.optimize import minimize
+    rec = []
+    for key, p in recordings(voice):
+        x, sr = load(p)
+        global NH
+        NH = nh
+        r = analyse(x, sr, key)
+        rec.append((key, r["ladder"][:nh], r["f0"]))
+
+    def ours():
+        rows = []
+        for key, _, f0 in rec:
+            q = cls(f0)
+            v = np.array([q.harmonic_volume(h) for h in range(1, nh + 1)])
+            f = f0 * np.arange(1, nh + 1)
+            l = 20 * np.log10(v / v[0] + 1e-9) + np.interp(f, PATH_HZ, PATH_DB) - np.interp(f0, PATH_HZ, PATH_DB)
+            l[f > 0.45 * 44100] = np.nan
+            rows.append((key, l))
+        return rows
+
+    def summary(rows):
+        out = []
+        for lo, hi in REGISTERS:
+            rs = [l for k, l in rows if lo <= k < hi]
+            out.append((np.mean([rough(l) for l in rs]), np.mean([np.nanmin(l[1:12]) for l in rs])))
+        return np.array(out)
+
+    R = summary([(k, l) for k, l, _ in rec])
+
+    def err(v):
+        cls.reed_scatter, cls.reed_scatter_per_octave = float(v[0]), float(v[1])
+        d = summary(ours()) - R
+        return float(np.sum(d[:, 0] ** 2) + 0.3 * np.sum(d[:, 1] ** 2))
+
+    best = min((minimize(err, np.array(x0), method="Nelder-Mead") for x0 in ([1.0, 0.0], [2.0, -0.5], [0.5, 0.3])),
+               key=lambda r: r.fun)
+    err(best.x)
+    O = summary(ours())
+    for (lo, hi), r, o in zip(REGISTERS, R, O):
+        print("  keys %3d-%3d  rough %.1f (recorded %.1f)  deepest %.1f (%.1f)" % (lo, hi - 1, o[0], r[0], o[1], r[1]))
+    print("    reed_scatter = %.4g\n    reed_scatter_per_octave = %.4g" % tuple(best.x))
+
+
 def main(argv):
     spec = next((a.split("=", 1)[1] for a in argv if a.startswith("--inharm=")), None)
     if spec:
@@ -340,6 +705,9 @@ def main(argv):
         fitarg = None
     elif fitarg == "--fit=wobble":
         fit_wobble(voice, prog, cls)
+        return 0
+    elif fitarg == "--fit=scatter":
+        fit_scatter(voice, prog, cls)
         return 0
     elif fitarg == "--fit=skirt":
         fit_skirt(voice, prog, cls)
@@ -354,6 +722,8 @@ def main(argv):
             print("    %s = %.4g" % (k, q))
     if "--turb" in argv:
         return turb_report(voice, prog) or 0
+    if "--top" in argv:
+        return top(voice, prog) or 0
     out = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab=")), None)
     if out:
         return ab(voice, prog, out) or 0
