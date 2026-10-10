@@ -3792,18 +3792,18 @@ class UprightPianoProperties(GrandPianoProperties):
     # The grand's bass stands 15 dB over its A4 and its top octave 22-38 under;
     # this upright's bass is level with its A4 and its top 12-18 under.
     # FITTED (examples/upright_fit.py --fit=decay: each band's T20 where the
-    # note has partials, as log ratios; 5.7 -> 4.6 dB). The upper partials ring
-    # far longer than the grand's (harmonic_decay_db 0.19 against 1.5 -- at A2
-    # the 0.5-2 kHz bands take 6-7 s to fall 20 dB), and the two-string tenor
-    # sings longest (aftersound 0.65).
-    decay_db = 15.38
-    harmonic_decay_db = 0.188128
-    decay_register_slope = 0.593938
-    aftersound_level_1 = 0.352568
-    aftersound_level_2 = 0.646365
-    aftersound_level_3 = 0.135807
-    aftersound_decay_ratio = 0.318946
-    register_level_db = ((27.5, -9.2), (34.6, -7.4), (43.7, -7.9), (55.0, -5.1), (69.3, -2.2), (87.3, -2.1), (110.0, -4.5), (138.6, -5.7), (174.6, -8.4), (220.0, -10.9), (277.2, -7.8), (349.2, -3.3), (440.0, 0.4), (554.4, -0.7), (698.5, -5.0), (880.0, -8.5), (1108.7, -7.9), (1396.9, -4.1), (1760.0, 2.0), (2217.5, 4.4), (2793.8, 5.0), (3520.0, 10.4), (4186.0, 20.4))   # fitted after the decay: 5.9 -> 1.2 dB rms
+    # note has partials, and the note's level at 1 and 2 s -- fitted to T20
+    # alone its treble died 15-45 dB short at 2 s, as the grand's did; 10.1 ->
+    # 5.7 dB). The decay steepens little up the keyboard (0.40), and the slow
+    # tail is most of a one- or two-string note (aftersound 0.62, 0.75).
+    decay_db = 11.5486
+    harmonic_decay_db = 0.226406
+    decay_register_slope = 0.402621
+    aftersound_level_1 = 0.618596
+    aftersound_level_2 = 0.745124
+    aftersound_level_3 = 0.207194
+    aftersound_decay_ratio = 0.260474
+    register_level_db = ((27.5, -7.4), (34.6, -5.8), (43.7, -6.0), (55.0, -3.7), (69.3, -0.1), (87.3, -0.7), (110.0, -2.8), (138.6, -3.7), (174.6, -7.0), (220.0, -9.1), (277.2, -6.5), (349.2, -1.6), (440.0, 1.7), (554.4, 0.5), (698.5, -3.6), (880.0, -8.0), (1108.7, -6.8), (1396.9, -3.6), (1760.0, 2.3), (2217.5, 5.3), (2793.8, 4.6), (3520.0, 10.6), (4186.0, 20.5))   # refitted after the tail's decay: 1.6 -> 0.9 dB rms
 
     # THE HAMMER'S CONTACT, shortening with force: the onset, from 8.0 ms at
     # nothing to 4.0 at velocity 127, linear in attack_volume ((v/127)^2). At
@@ -3865,7 +3865,7 @@ class UprightPianoProperties(GrandPianoProperties):
         high = 1.0 / (1.0 + (fn / self.board_high_hz) ** self.board_high_order)
         low = 1.0 / (1.0 + (self.board_low_hz / fn) ** self.board_low_order)
         return body * high * low
-    initial_gain = 0.498615      # held at the old GM 1's level, -42.9 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
+    initial_gain = 0.400376      # held at the old GM 1's level, -42.9 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
     unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
     string_gain = (0.28, 0.20)   # its unisons as they were voiced
     strike_noise_db = ()   # no strike noise yet: the grand's is the Steinway's
@@ -3997,7 +3997,7 @@ class HonkyTonkProperties(UprightPianoProperties):
         lo, hi = type(self).string_detune_range
         self.string_detune_range = (lo * honky_detune, hi * honky_detune)
         super().__init__(frequency, *args, **kwargs)
-    initial_gain = 0.468372      # held at the old GM 3's level, -45.0 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
+    initial_gain = 0.381001      # held at the old GM 3's level, -45.0 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
 
 
 class ElectricGrandProperties(GrandPianoProperties):
