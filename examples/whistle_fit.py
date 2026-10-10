@@ -81,6 +81,21 @@ def render(note, secs=1.0):
     return 0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64)), B.SR
 
 
+BANDS = ((20, 100), (100, 250), (250, 500), (500, 1000), (1000, 2000), (2000, 4000), (4000, 8000), (8000, 16000))
+
+
+def bands(x, sr):
+    """Where the energy sits, dB re the whole (the held part): the ball
+    whistle has nothing between 250 Hz and 2 kHz (-53 dB), the air above
+    the tone. Our weak modes UNDER the tone read -20 there, swung and
+    chopped by the pea into a thud (Ben) -- which is why the bed now starts
+    at the tone (SambaWhistleProperties.mode_gains)."""
+    seg, _ = held(x, sr)
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)))) ** 2
+    f = np.fft.rfftfreq(len(seg), 1.0 / sr)
+    return [10 * np.log10(X[(f >= lo) & (f < hi)].sum() / X.sum() + 1e-15) for lo, hi in BANDS]
+
+
 FMT = ("%-6s %-9s dur %.2fs  f0 %5.0f Hz  h2 %+4.0f h3 %+4.0f dB  AM %4.1f dB at %3.0f Hz  "
        "FM %4.0f c at %3.0f Hz  air %+4.0f dB")
 
@@ -94,6 +109,10 @@ def report():
         o = measure(y, sr2)
         for name, d in (("recorded", r), ("ours", o)):
             print(FMT % (kind, name, d["dur"], d["f0"], d["h2"], d["h3"], d["am"], d["amr"], d["fm"], d["fmr"], d["air"]))
+        for name, (z, zr) in (("recorded", (x.astype(np.float64), sr)), ("ours", (y, sr2))):
+            print("%-6s %-9s bands dB re the whole, %s Hz: %s" % (
+                kind, name, "/".join("%d" % lo for lo, _ in BANDS),
+                " ".join("%+.0f" % v for v in bands(z, zr))))
 
 
 def ab(out):

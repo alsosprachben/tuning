@@ -10572,6 +10572,29 @@ def selftest():
           not _bad and _pre.release_valve_time == 0.12 and _pre.release_fraction_max == 0.45,
           "  (-40 dB after an eighth note's off, ours/consensus: %s; the piano's own 0.12 s kept)" % ", ".join(_tails)
           if not _bad else "  (%s)" % "; ".join(_bad))
+    # THE OTHER STRINGS ARE TUNED AS THE NOTES ARE (blockrender, ring_db): a
+    # ring row is its nearest key and that key's offset from 12-TET, at the
+    # key's frequency in the tuner's table. Under hybrid440 D4 and G4 sit
+    # 1.2 and 2.2 cents under equal temperament; the koto's sympathetic D4
+    # and G4 must sound there, not at the 293.66 and 392.00 they are written.
+    _tab = B.tuning_table("hybrid440")
+    _m = mido.MidiFile(type=1, ticks_per_beat=480); _t = mido.MidiTrack(); _m.tracks.append(_t)
+    for _msg in (mido.Message("program_change", channel=0, program=107, time=0),
+                 mido.Message("note_on", channel=0, note=60, velocity=90, time=0),
+                 mido.Message("note_off", channel=0, note=60, velocity=0, time=2880)):
+        _t.append(_msg)
+    _x = _fmono(_m)[int(0.05 * B.SR):int(2.5 * B.SR)]
+    _N = 1 << 21
+    _X = np.abs(np.fft.rfft(_x * np.hanning(len(_x)), _N)); _f = np.fft.rfftfreq(_N, 1.0 / B.SR)
+    _rc = []
+    for _k in (62, 67):
+        _w = _tab[_k]
+        _s = (_f > _w * 0.99) & (_f < _w * 1.01)
+        _rc.append(1200 * _math.log2(_f[np.flatnonzero(_s)[np.argmax(_X[_s])]] / _w))
+    check("...and the koto's other strings ring in the tuner's tuning",
+          all(abs(_c) < 0.1 for _c in _rc),
+          "  (its D4 and G4 at %+.2f and %+.2f cents from hybrid440's table, which is itself %+.1f and %+.1f from 12-TET)"
+          % (_rc[0], _rc[1], 1200 * _math.log2(_tab[62] / 293.6648), 1200 * _math.log2(_tab[67] / 391.9954)))
     # A DRONE SPANS THE PHRASE, LIVE TOO, and live has no far side of the rest
     # to look at -- so part_break_s is spent as a HOLD instead. The drones stay
     # up through a gap between notes and are let down only once the piper has
