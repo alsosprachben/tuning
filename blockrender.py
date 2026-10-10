@@ -1575,6 +1575,44 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _VERBOSE_WIND:
             print("  wind ch%d: pressure %.4f..%.4f, peak draw %.1f units%s"
                   % (ch, _p.min(), _p.max(), _dem.max(), ", tremulant" if _trem_on else ""))
+    # THE PLAYER'S BREATH (tonelib.SynthProperties.breath_wobble_db): on a
+    # channel a played pipe sounds on, the tone's level, the breath noise's
+    # level and the pitch -- each slow noise (one pole at its corner, unit
+    # variance from the first edge). The levels ride BEND ROWS' levels (BL,
+    # below), given at block EDGES and ramped across each block: as gate rows,
+    # held a block, every 11.6 ms step on a loud fundamental was a click and
+    # the breath crackled (kurtosis 21 against the recordings' 4). Seeded by
+    # the channel, built whole here: a stream is the table by construction.
+    _BREATH = {}             # ch -> (tone level at edges, noise level at edges, pitch ratio a block)
+    for ch, _plist in ch_progs.items():
+        if ch in crow_of:
+            continue
+        pc = next((c for c in (property_class_for_program(q) for q in dict.fromkeys(_plist))
+                   if getattr(c, 'breath_wobble_db', 0.0) > 0.0
+                   or getattr(c, 'breath_noise_wobble_db', 0.0) > 0.0
+                   or getattr(c, 'breath_pitch_cents', 0.0) > 0.0), None)
+        if pc is None:
+            continue
+        _rng = np.random.default_rng(9173 + ch)
+
+        def _wander(fc):
+            a = math.exp(-2.0 * math.pi * fc * BLK / SR)
+            b = math.sqrt(1.0 - a * a)
+            z = _rng.standard_normal(nblk + 1)
+            y = np.empty(nblk + 1)
+            y[0] = z[0]
+            for i in range(1, nblk + 1):
+                y[i] = a * y[i - 1] + b * z[i]
+            return y
+        _tz = _wander(pc.breath_wobble_hz)
+        _sh = float(pc.breath_noise_wobble_share)
+        _nz = _sh * _tz + math.sqrt(max(0.0, 1.0 - _sh * _sh)) * _wander(pc.breath_noise_wobble_hz)
+        _ps = float(pc.breath_pitch_share)
+        _pz = _ps * _tz + math.sqrt(max(0.0, 1.0 - _ps * _ps)) * _wander(pc.breath_pitch_hz)
+        _pzb = 0.5 * (_pz[:-1] + _pz[1:])                 # a block's pitch: its edges' mean
+        _BREATH[ch] = (10.0 ** (pc.breath_wobble_db * _tz / 20.0),
+                       10.0 ** (pc.breath_noise_wobble_db * _nz / 20.0),
+                       2.0 ** (pc.breath_pitch_cents * _pzb / 1200.0))
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
 
@@ -1688,9 +1726,24 @@ def prepare(path, tuner='hybrid440', sink=None):
     for _c, _ev in _BGEST.items():
         _r, _cc = bend_blocks(_ev, nblk)
         brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+    # THE BREATH'S ROWS (above): per channel, a bend row carrying the pitch
+    # (times the channel's gesture, if it has one; the phase summed exactly as
+    # bend_blocks sums it) with the TONE'S level as its BL, and an unbent row
+    # with the BREATH NOISE'S level. Only a note of a breathing class takes them.
+    bbrow_of = {}; _BLrows = {}
+    for _c, (_tl, _nl, _rt) in _BREATH.items():
+        _r = _rt.astype(np.float32)
+        if _c in brow_of:
+            _r = (BRrows[brow_of[_c]].astype(np.float64) * _r).astype(np.float32)
+        _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+        _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+        _BLrows[_i] = _tl.astype(np.float32)
+        _j = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
+        _BLrows[_j] = _nl.astype(np.float32)
+        bbrow_of[_c] = (_i, _j)
     # the wind's rows (above): a bend row per (channel, family), its phase the
     # running sum of its ratio exactly as bend_blocks makes it, and its level
-    wrow_of = {}; _BLrows = {}
+    wrow_of = {}
     for _c, _fams in _WROWS.items():
         for _ab, (_r, _lv) in _fams.items():
             _r = _r.astype(np.float32)          # the ratio the kernel reads, summed as it is
@@ -3056,6 +3109,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         # cycles six of them), so each note is judged by its own class.
         _BR[0] = (brow_of.get(ch, -1)
                   if getattr(pc, 'pitch_bendable', True) else -1)
+        if ch in bbrow_of and (props.breath_pitch_cents > 0.0 or props.breath_wobble_db > 0.0):
+            _BR[0] = bbrow_of[ch][0]    # the player's breath: the tone's level and pitch
         if _pna and _pna[2] >= 0:
             _BR[0] = _pna[2]            # its own row: per-note pitch that moves
         _mpa = _MPE_AT.get((ch, note, on))
@@ -3475,6 +3530,33 @@ def prepare(path, tuner='hybrid440', sink=None):
                              _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
+        if getattr(props, 'breath_noise_db', ()):
+            # THE BREATH (tonelib.SynthProperties.breath_noise_db): the jet's
+            # own noise, held for the note -- the strike's rows, but sustained
+            # and released with the note. Its colour is its own table (a
+            # recorder's peaks near 1.3 kHz whatever the note), not skirts on
+            # the partials, which put it where the partials are.
+            _cbw = (_CBW[0], _CBW[1])
+            _CBW[0], _CBW[1] = -0.25, 0.0
+            _NOREFL[0] = True
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            _bfade = max(1.0, props.breath_noise_fade_s * SR)
+            # ...wavering on its own gate row (breath_noise_wobble_db), if the
+            # channel has one
+            _bkeep = _BR[0]
+            if ch in bbrow_of and props.breath_noise_wobble_db > 0.0:
+                _BR[0] = bbrow_of[ch][1]
+            for _hf, _db in props.breath_noise_db:
+                if _hf >= 0.45 * SR:
+                    continue
+                _gM = props.gain * 10.0 ** (_db / 20.0)
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, noff,
+                             _bfade, rel, chiff, 0.0, 0.0, 0.0, 1.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+            _BR[0] = _bkeep
+            _CBW[0], _CBW[1] = _cbw
+            _NOREFL[0] = False
         if getattr(props, 'shake_noise', False):
             # A SHAKE AS SHAPED NOISE (tonelib.ShakenNoiseProperties): its
             # spectrum as noise bands (a negative wash bandwidth, the kernel's
@@ -3707,9 +3789,14 @@ def prepare(path, tuner='hybrid440', sink=None):
                     _wsrc = rp if rp is not props else (
                         spv if (spv is not None and getattr(spv, 'wind_skirt_db', None) is not None)
                         else rp)
-                    _wsk = getattr(_wsrc, 'wind_skirt_db', None) if (WIND and organ) else None
+                    # ...or a PLAYED pipe's, always (wind_skirt_always: a recorder's
+                    # harmonics flutter whatever TUNING_WIND says), rising with
+                    # the harmonic number (wind_skirt_harmonic_db)
+                    _walw = getattr(_wsrc, 'wind_skirt_always', False)
+                    _wsk = getattr(_wsrc, 'wind_skirt_db', None) if ((WIND and organ) or _walw) else None
                     if _wsk is not None and m <= WIND_PARTIALS:
-                        _wg = 10.0 ** (_wsk / 20.0) * WIND_SCALE
+                        _wg = 10.0 ** ((_wsk + _wsrc.wind_skirt_harmonic_db * math.log2(m)) / 20.0) \
+                            * (1.0 if _walw else WIND_SCALE)
                         _cbw_keep = (_CBW[0], _CBW[1])
                         # its width: the wider of a floor in Hz (wind_skirt_hz) and a
                         # fraction of the partial's own frequency (wind_skirt_rel: a

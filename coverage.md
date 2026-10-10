@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 32 | 25% |
+| 2 specific, theory | 30 | 23% |
 | 3 specific, theory + ear | 27 | 21% |
-| 4 specific, reference audio | 69 | 54% |
+| 4 specific, reference audio | 71 | 55% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -278,12 +278,12 @@ plays Standard, as does any program that is not a set.
 |---|---|---|---|---|
 | 72 | Piccolo | `BassFlute/OpenPipe by register` | **4** | the flute law, measured across bass, alto and concert flute |
 | 73 | Flute | `BassFlute/OpenPipe by register` | **4** | Iowa flute (nonvib -- vibrato smears the harmonics) |
-| 74 | Recorder | `Recorder` | **2** | a fipple DUCT: the windway is built in, so the jet is identical every time and the tone is purer than the flute's by 3 dB at h2 |
+| 74 | Recorder | `Recorder` | **4** | VCSL baroque soprano, alto and tenor recorders (CC0), 38 sustains (examples/wind_fit.py): harmonic to 0.3 cents, odd-dominant (h2 -33, h3 -24), its breath a hiss of its own colour, each harmonic fluttering on its own and the whole tone and pitch wavering with the breath; attack and release fitted. Ben: sounds great |
 | 75 | Pan Flute | `PanFlute` | **2** | a CLOSED tube (odd harmonics, already right) that had no breath at all -- StoppedPipe ships sustain_jitter 0, so it rendered as an organ's Gedackt |
 | 76 | Blown Bottle | `BlownBottle` | **2** | its own class, theory |
 | 77 | Shakuhachi | `Shakuhachi` | **2** | a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled |
 | 78 | Whistle | `Whistle` | **2** | CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB) |
-| 79 | Ocarina | `Ocarina` | **2** | its own class -- a vessel flute, theory |
+| 79 | Ocarina | `Ocarina` | **4** | VCSL typical and small ocarinas (CC0), 21 sustains (examples/wind_fit.py): near-pure (h2 -44), its breath, flutter, shared wobble (2.4 dB) and pitch wander (5.6 cents) fitted, a soft chiff. Ben: sounds great |
 
 ## 80-87 Synth Lead
 
@@ -594,11 +594,11 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
-      - `Recorder` -- GM 74 Recorder (2)
+      - `Recorder` -- GM 74 Recorder (4)
       - `Shakuhachi` -- GM 77 Shakuhachi (2)
       - `VesselFlute`
         - `BlownBottle` -- GM 76 Blown Bottle (2)
-        - `Ocarina` -- GM 79 Ocarina (2)
+        - `Ocarina` -- GM 79 Ocarina (4)
           - `SambaWhistle` -- 71 Short Whistle (3), 72 Long Whistle (3)
         - `Whistle` -- GM 78 Whistle (2)
     - `Organ`

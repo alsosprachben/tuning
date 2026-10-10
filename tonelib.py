@@ -1037,6 +1037,33 @@ class SynthProperties:
     wind_skirt_db = None
     wind_skirt_hz = 1.0             # its width: the wider of this (Hz) ...
     wind_skirt_rel = None           # ... and this fraction of the partial
+    # ...and on a PLAYED pipe (a recorder, an ocarina) the skirt is the
+    # harmonics' own turbulence, always on, not the organ's TUNING_WIND: its
+    # level rising this many dB a doubling of the harmonic number (the upper
+    # harmonics flutter more, examples/wind_fit.py --turb).
+    wind_skirt_always = False
+    wind_skirt_harmonic_db = 0.0
+    # THE BREATH: noise rows a third octave apart, held for the note (Hz, dB
+    # re the note's gain), fading in over breath_noise_fade_s -- the jet's own
+    # noise, with its own colour, not a skirt on any partial. () = none.
+    breath_noise_db = ()
+    breath_noise_fade_s = 0.03
+    # THE PLAYER'S BREATH WAVERS (examples/wind_fit.py --turb): one level per
+    # channel, slow filtered noise -- the tone's (partials and their flutter
+    # together) this many dB rms, its corner this many Hz; the breath noise's
+    # own, mostly independent of the tone's (breath_noise_wobble_share of it
+    # shared). Built whole before any note, as gate rows. 0 = steady.
+    breath_wobble_db = 0.0
+    breath_wobble_hz = 5.0
+    breath_noise_wobble_db = 0.0
+    breath_noise_wobble_hz = 10.0
+    breath_noise_wobble_share = 0.0
+    # ...and its PITCH: harder breath, sharper note -- this many cents rms, the
+    # same kind of slow noise at its own corner, breath_pitch_share of it the
+    # tone's level wobble. A bend row per channel. 0 = steady.
+    breath_pitch_cents = 0.0
+    breath_pitch_hz = 5.0
+    breath_pitch_share = 0.0
     # ...and the ATTACK'S RUSH: a burst over the skirt at the onset, this many
     # dB above it, this wide (fraction of the partial), rising over fade_s and
     # dying at dbps with no sustain. None = none.
@@ -16005,6 +16032,16 @@ class OpenPipeProperties(StoppedPipeProperties):
     # approved by ear.
     sustain_jitter = 0.2
 
+    # HARMONIC, MEASURED. A sounding pipe is mode-locked: the jet drives every
+    # partial at an exact multiple of one period. This family had borrowed the
+    # hybrid tuner's Steinway stretch (StoppedPipeProperties) so its octave
+    # would lock to the tuner's -- about 40 cents across h1-h10 at 500 Hz,
+    # piano-sized. VCSL's recorders sit within 0.3 cents of a harmonic series to
+    # h9 and its ocarinas within 2.5 (examples/wind_fit.py). Zero for the
+    # whole open-pipe family, until each is fitted on its own.
+    inharmonicity_dynamic = False
+    inharmonicity_coefficient = 0.0
+
     odd_only = False
     # FITTED across B3B4, C5B5 and C6B6: RMS 9.27 -> 3.28 dB.
     # Its own gain, trimmed for the fit: it used to inherit
@@ -16072,8 +16109,50 @@ class OcarinaProperties(VesselFluteProperties):
     of the air goes into driving the resonance and the tone dominates the
     breath. Hence a modest chiff, and the pure singing quality the instrument is
     known for."""
-    chiff_volume = 1.0
+    # Its chiff a puff, not a spit: at 1.0 the 3-12 kHz band jumped 10 dB
+    # over the sustain at the onset, the recordings' 3.5.
+    chiff_volume = 0.5
     chiff_cycle = 0.2
+    # Its release: the typical ocarina's recordings fall 20 dB in 29 ms
+    # (median; the small one's files are cut off, so not those); ours in 12.
+    release_valve_time = 0.10
+    # FITTED to VCSL's typical and small ocarinas (CC0; 21 sustains, A4-B6
+    # sounding) by examples/wind_fit.py --voice=ocarina, register means of
+    # ladder, third-octave bands and breath: 9.5 -> 5.4 dB. Purer even than
+    # the body's asserted numbers: h2 -44, h4 -57, h8 -75 under the
+    # fundamental, harmonic within the measurement (2.5 cents). Like the
+    # recorder, its fipple drives near-symmetrically -- the evens sit under
+    # the odds.
+    # The blown bottle keeps the shared body: no reference for it.
+    tonal_dampening = 3.856
+    bore_corner_hz = 4168.0
+    bore_order = 1.868
+    even_harmonic_db = -11.75
+    # Its breath as the recorder's: the harmonics' flutter as skirts, the
+    # jet's hiss as its own table (see RecorderProperties). Its harmonics
+    # flutter partly together (correlation 0.3-0.5): the vessel couples them.
+    # FITTED as the recorder's: colour to 0.1 dB on the fitted notes, the
+    # flutter within 1 dB from h4 up; h1-h3 flutter less than the recordings'
+    # and the shared part (their correlation) is not modelled.
+    sustain_jitter = 0.0
+    wind_skirt_always = True
+    wind_skirt_db = -23.98
+    # THE PLAYER'S BREATH (wind_fit.py --fit=wobble): the vessel wavers as
+    # one, 2.4 dB rms, and its pitch with it (5.6 cents; a vessel has no
+    # tube to hold it). Its hiss barely wavers on its own: what reads as the
+    # breath's wobble is mostly the tone's, through the flutter skirts.
+    breath_wobble_db = 1.718
+    breath_wobble_hz = 5.669
+    breath_noise_wobble_db = 0.4786
+    breath_noise_wobble_hz = 21.54
+    breath_noise_wobble_share = 0.18
+    breath_pitch_cents = 6.41
+    breath_pitch_hz = 3.4
+    breath_pitch_share = 0.36
+    wind_skirt_harmonic_db = 11.16
+    wind_skirt_hz = 1.746
+    wind_skirt_rel = 0.02179
+    breath_noise_db = ((160, -13.1), (202, -13.1), (255, -13.1), (321, -7.8), (404, -5.9), (509, 1.9), (641, 0.4), (808, 4.8), (1018, 1.1), (1283, 10.4), (1616, 16.8), (2036, 8.0), (2566, 6.7), (3233, 4.9), (4073, 6.9), (5132, 12.7), (6465, 10.7), (8146, 9.2), (10263, 4.5), (12931, -4.0))
 
 
 class SambaWhistleProperties(OcarinaProperties):
@@ -16242,6 +16321,19 @@ class SambaWhistleProperties(OcarinaProperties):
     tension_settle_time = 0.045    # and up into place inside 50 ms
     tension_settle_cutoff = 3.0
 
+    # NOT THE OCARINA'S FIT: a pea whistle is no ocarina, and the fit to VCSL's
+    # ocarinas (its spectrum, its flutter, its breath and wobble, its release)
+    # is held off here -- what this voice had before that fit.
+    bore_corner_hz = 2200.0
+    bore_order = 2.0
+    even_harmonic_db = None
+    wind_skirt_always = False
+    breath_noise_db = ()
+    breath_wobble_db = 0.0
+    breath_noise_wobble_db = 0.0
+    breath_pitch_cents = 0.0
+    release_valve_time = None
+
 class BlownBottleProperties(VesselFluteProperties):
     """GM 76. The same Helmholtz body, driven by a MUCH WORSE EDGE.
 
@@ -16306,24 +16398,65 @@ class RecorderProperties(OpenPipeProperties):
     # A narrow cylindrical bore, and a duct that puts the jet where it belongs:
     # strong fundamental, and less of the upper development a flute gets from a
     # jet the player is steering.
-    # Purer than the flute, and audibly so rather than arguably so: at 1.55 this
-    # sat 0.9 dB from the flute at the second harmonic, which is a difference
-    # no one could hear and not much of a claim. How MUCH purer is a judgement
-    # -- there is no recorder in the reference set -- but that it is purer
-    # follows from the duct, and it should be worth saying.
-    tonal_dampening = 1.90
+    # FITTED to VCSL's baroque soprano, alto and tenor recorders (CC0; 38
+    # sustains, C4-C7 sounding) by examples/wind_fit.py --voice=recorder,
+    # against register means of the ladder, the third-octave bands and the
+    # breath: 8.7 -> 5.0 dB. The asserted "purer than the flute" was right and
+    # then some: h2 sits 33 dB under the fundamental, not 13.
+    #
+    # ODD-DOMINANT, which nothing had said: h2 -33, h3 -24, h4 -41, h5 -35. A
+    # duct aims the jet at the labium's centre, so it drives nearly
+    # symmetrically and the even harmonics are the weak ones -- a flautist's
+    # lips set it off-centre. Hence even_harmonic_db.
+    tonal_dampening = 1.864
     max_harmonic = 32
-    bore_corner_hz = 2600.0
+    bore_corner_hz = 6651.0
+    bore_order = 1.577
+    even_harmonic_db = -14.77
     octave_dampening = 0.0
 
     # The fixed windway again: a crisp, repeatable speech, shorter than a
     # flute's because there is no lip to find the edge with.
     chiff_volume = 1.15
+    # ...but NOT SUDDEN (Ben): the recordings take 68 ms from 10% to 90% of
+    # their sustain (median, C4-C7); ours took 13 off the chiff's valve time.
+    # 0.15 s through the speech law gives 54 overall, 78 on the fundamental.
+    attack_time = 0.15
+    # ...and its RELEASE, which was as abrupt (Ben): the recordings fall 20 dB
+    # in a median 90 ms after the breath stops (their -40 at 205 ms is mostly
+    # the room); ours fell 20 dB in 13 ms. 0.27 s through the speech law: 89.
+    release_valve_time = 0.27
     chiff_min_valve_time = 0.008
     chiff_max_valve_time = 0.020
-    # Less breath past the edge than any other member of this family: a duct
-    # aims the whole jet at the labium, which is what a duct is for.
-    sustain_jitter = 0.12
+    # THE BREATH IS TWO THINGS (examples/wind_fit.py --turb), and one white
+    # wash (sustain_jitter) was neither. The HARMONICS FLUTTER: each one's
+    # level wobbles on its own (correlation with h1 ~0.1), slowly (3-6 Hz),
+    # more the higher it is (0.9 dB rms at h1, 3-4 by h5) -- a narrow skirt
+    # on each partial, always on. And the JET HISSES with its own colour,
+    # whatever the note: flat to 800 Hz, a peak near 1.3 kHz, falling from
+    # 4 kHz -- noise rows held for the note (breath_noise_db).
+    # FITTED (wind_fit.py, fit_breath then fit_skirt): the colour to 0.1 dB
+    # on the fitted notes; the flutter's depth and rate within 0.4 dB and an
+    # octave's fifth from h3 up, where h1 and h2 still flutter less than the
+    # recordings' (0.3 and 0.8 dB rms against 0.9 and 2.6).
+    sustain_jitter = 0.0
+    wind_skirt_always = True
+    wind_skirt_db = -23.51
+    # THE PLAYER'S BREATH (wind_fit.py --fit=wobble): the whole tone wavers
+    # 1.4 dB rms together, slowly; the hiss on its own, faster; the pitch with
+    # the breath, harder blowing sharper.
+    breath_wobble_db = 1.398
+    breath_wobble_hz = 3.414
+    breath_noise_wobble_db = 2.243
+    breath_noise_wobble_hz = 4.905
+    breath_noise_wobble_share = 0.12
+    breath_pitch_cents = 2.49
+    breath_pitch_hz = 3.4
+    breath_pitch_share = 0.24
+    wind_skirt_harmonic_db = 7.746
+    wind_skirt_hz = 6.265
+    wind_skirt_rel = 0.006199
+    breath_noise_db = ((160, -11.2), (202, -4.0), (255, -9.0), (321, -2.0), (404, 2.1), (509, -1.5), (641, 2.7), (808, 0.5), (1018, 4.2), (1283, 9.4), (1616, 12.0), (2036, 8.5), (2566, 11.1), (3233, 12.1), (4073, 8.1), (5132, 9.0), (6465, 8.0), (8146, 2.8), (10263, 1.7), (12931, -0.8))
 
     # The pressure bloom as the jet establishes -- an attack transient that
     # settles to the tuned pitch, not a sustained offset. See the docstring.
