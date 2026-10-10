@@ -159,7 +159,7 @@ plays Standard, as does any program that is not a set.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 0 | Acoustic Grand Piano | `GrandPiano` | **4** | Iowa samples; Steinway B inharmonicity fit, soundboard and stretch measured; the undamped strings ring sympathetically (the free-string register) |
+| 0 | Acoustic Grand Piano | `GrandPiano` | **4** | FITTED TO A STEINWAY B (VCSL, CC0; examples/upright_fit.py --ref=steinway) -- the model whose published law it had: inharmonicity by partial peaks (the real bass ~3x stiffer), spectrum and board, decay with its late tail, a 2 ms hammer, the strike's thump and noise (a pluck without them, Ben), unisons beating slowly and irregularly as the B's do (one ratio made a phaser). Levels held: VCSL's are normalized. The undamped strings ring sympathetically (the free-string register) |
 | 1 | Bright Acoustic Piano | `UprightPiano` | **4** | an UPRIGHT, measured (VSCO-2 CE, Ivy Audio's): inharmonicity by partial peaks (short wound bass 4-9x the grand's, the scale break at C#3-F3), spectrum, decay and register levels fitted per key (examples/upright_fit.py), a hammer contact shortening with force. A small board's brightness, which GM's name asks for; the grand voiced hard is kept as a voicing. Ben: very close, then great once the attack's knee went in |
 | 2 | Electric Grand Piano | `ElectricGrand` | **2** | a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference |
 | 3 | Honky-tonk Piano | `HonkyTonk` | **3** | the measured upright (GM 1) with the tuner's hand off: unisons 8-20 cents, CC1 the wheel. The upright is fitted; the detune is judged from beat rates, not measured |

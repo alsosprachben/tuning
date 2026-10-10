@@ -34,6 +34,8 @@ NOTE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
 # name: (program, velocity, ("single", glob) | ("run", file, first MIDI note, count))
 SOURCES = {
     "harp":       (46, 80, [("single", "harp/raw/KSHarp_*_mf.wav")]),
+    # VCSL's Steinway B, no pedal, the middle layer (normalized: levels say nothing)
+    "grand":      (0, 80, [("single", "vcsl/steinway/JHPiano_NoSus_Close_*_vl3_rr1.wav")]),
     "crotales":   (112, 120, [("single", "cr_*.ff.aiff")]),
     "pizz_bass":  (32, 80, [("single", "pizz/bass/*.sul?.wav")]),
     "xylophone":  (13, 80, [("run", "xylophone_C5B5.wav", 72, 12)]),

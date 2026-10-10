@@ -3436,13 +3436,21 @@ class GrandPianoProperties(InharmonicStringProperties):
     # a peak normalise and these voices play alone -- and the organ family is
     # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
     # survives untouched.
-    initial_gain = 0.07178438693
+    # held at the published-model grand's mean level, C1-C7 at velocity 100
+    # (-43.7 dB): refitted -- its bass radiating less, its unisons fuller -- the mean moved
+    initial_gain = 0.07076933308
     # empirical inharmonicity model for Steinway B
-    a = 5.22964e-6
-    b = 1.21012e-6
-    c = 8.3666e-10
-    d = -0.007927
-    e = 0.429601
+    # THE STRINGS' STIFFNESS, MEASURED (examples/upright_fit.py --ref=steinway,
+    # VCSL's Steinway B: each key's partial peaks from its own pitch, three
+    # layers alike): the same form a + b f + c f^2 + d/f + e/f^2, refitted --
+    # the published Steinway B law it was understated the real one's bass about
+    # 3x (1.2-1.6e-4 from D1 to D3 against 0.7-0.9) and its upper middle by
+    # 20-30 percent. rms error in log B 0.337 -> 0.187 over A#0-C7.
+    a = -0.000325186
+    b = 2.18432e-06
+    c = 7.02417e-10
+    d = 0.0240955
+    e = -0.313135
 
     # Keyboard pan: negative flips the pitch->position sign so the bass sits LEFT
     # and the treble RIGHT (a player's-eye view). This is the default spread, so
@@ -3455,7 +3463,14 @@ class GrandPianoProperties(InharmonicStringProperties):
     # vs C4 ~3.9), while the treble decays a touch faster (C6 ~8.6). Mid (C4) sits
     # at octave_position 0 so the slope leaves it untouched; steepening it slows
     # the bass ring and speeds the treble to match the reference.
-    decay_register_slope = 0.85
+    # THE DECAY, MEASURED (examples/upright_fit.py --ref=steinway --fit=decay:
+    # each band's T20 where the key has partials, and the note's level at 1
+    # and 2 s -- fitted to T20 alone the treble died 10-80 dB too soon after
+    # its first 20 (Ben: "a little faster decay up high"); 12.1 -> 5.3 dB):
+    # the upper partials ring far longer than the published model had them
+    # (harmonic_decay_db 0.45, was 1.5), the decay steepens less up the
+    # keyboard (0.74, was 0.85), and the slow tail is a larger share.
+    decay_register_slope = 0.738839
 
     # --- Prompt vs aftersound (Weinreich double decay) ---
     # A real piano note FADES FAST at first (the in-phase string mode dumps energy
@@ -3466,8 +3481,8 @@ class GrandPianoProperties(InharmonicStringProperties):
     # decay_db is that prompt floor (added to every partial before the register
     # tilt); harmonic_decay_db keeps the top decaying faster still (tone darkens
     # as it fades); the aftersound_* below carry the quiet, long tail.
-    decay_db = 13.0
-    harmonic_decay_db = 1.5
+    decay_db = 9.00463
+    harmonic_decay_db = 0.453843
 
     # --- Real string-count-per-note, with the coupled-string two-stage decay ---
     # A piano strings each note with 1, 2, or 3 unison strings by register. The
@@ -3489,18 +3504,42 @@ class GrandPianoProperties(InharmonicStringProperties):
     #     realign -- shimmer, not throb. The cents are ASYMMETRIC so 3 strings
     #     never share a beat rate. The fundamental barely beats (slow, subtle);
     #     the interest climbs with the harmonic number, as on a real piano.
-    aftersound_decay_ratio = 0.13      # slow tail decays this fraction as fast as the prompt
+    aftersound_decay_ratio = 0.326029      # slow tail decays this fraction as fast as the prompt
                                        # (~0.12 measured: prompt ~20 dB/s, singing tail ~2.5 dB/s)
-    aftersound_level_1 = 0.28          # single wound bass string -- rings long/full (soundboard-coupled)
-    aftersound_level_2 = 0.18          # slow-tail energy fraction, 2-string tenor
-    aftersound_level_3 = 0.16          # ...3-string treble (more strings -> more sing)
+    aftersound_level_1 = 0.266664          # single wound bass string -- rings long/full (soundboard-coupled)
+    aftersound_level_2 = 0.3709          # slow-tail energy fraction, 2-string tenor
+    aftersound_level_3 = 0.283217          # ...3-string treble (more strings -> more sing)
     # Per-note UNIQUE unison detune: each note's 2nd/3rd strings are mistuned by a
     # random amount within this |cents| range, seeded deterministically per pitch
     # in __init__ (so a given note is always the same, but no two notes share a
     # detune -- avoiding the identical-every-note "wavetable" sound). One flat, one
     # sharp, so the pair straddles the tuned pitch and the note stays in tune.
     string_detune_range = (0.5, 1.7)    # min..max |cents| of the extra strings
-    string_gain = (0.28, 0.20)          # extras well below the main so the unison beats
+    # THE UNISON'S BEATS, NOT A PHASER (Ben, on the refitted grand: "a tad bit
+    # of a phaser feel in the decay"). Detuned by one ratio, a string's partial
+    # n beat at n times its fundamental's rate -- A#2's partials 1-8 at exactly
+    # 0.104 Hz x n, a comb sweeping the spectrum, which is a phaser. The
+    # Steinway B's beat slowly and irregularly, 0.1-0.4 Hz whatever n
+    # (examples/upright_fit.py --beats): bridge coupling and string-to-string
+    # differences scatter them. So each extra string's partial is offset in Hz,
+    # drawn per partial (fixed per key), 0.05-0.4 Hz either way: the B's rates
+    # at every key measured, whatever the register.
+    unison_beat_scatter = True
+    # The B's own 0.05-0.4. Widened to 0.4-1.5 while a phaser was being hunted,
+    # it was not the unison: the attack was a pluck's, partials with no strike
+    # under them (strike_noise_db). With the strike in, Ben chose the measured
+    # unison back by ear.
+    unison_beat_hz = (0.05, 0.4)
+    # THE HAMMER'S STRIKE: noise rows at each note's onset (blockrender), a
+    # third-octave table (Hz, dB re the note's gain) shifted by
+    # strike_noise_slope dB an octave from A4, falling strike_noise_dbs (dB/s),
+    # in over strike_noise_fade_s. Fitted by examples/upright_fit.py
+    # --ref=steinway --fit=strike.
+    strike_noise_db = ((45, -28.2), (57, -24.7), (71, -18.0), (90, -18.8), (113, -12.2), (143, -14.1), (180, -24.0), (226, -25.4), (285, -26.6), (359, -12.1), (453, -14.9), (570, -13.6), (718, -14.3), (905, -13.5), (1140, -11.9), (1437, -19.3), (1810, -19.6), (2281, -24.6), (2874, -27.5), (3620, -29.7), (4561, -35.9), (5747, -39.8), (7241, -52.0), (9123, -55.5), (11494, -65.3))
+    strike_noise_slope = -1.597
+    strike_noise_dbs = 250.0
+    strike_noise_fade_s = 0.001
+    string_gain = (0.7, 0.6)         # the Steinway's beating depth (4-5 dB of wobble, --beats); was (0.28, 0.20), a quarter of it
                                         # shallowly (a shimmer) instead of to deep nulls (a phaser)
 
     # Regulate the string-count breaks: a real piano is voiced so the monochord ->
@@ -3546,27 +3585,32 @@ class GrandPianoProperties(InharmonicStringProperties):
     # corner, so louder notes are brighter -- the piano's dynamic timbre. Model it
     # as a soft low-pass on the harmonic amplitudes above hammer_corner_hz, the
     # corner opening with velocity (attack_volume).
-    hammer_corner_hz = 4000.0    # low-pass corner at mid velocity; raise = brighter
-    hammer_order = 2.0           # rolloff steepness above the corner (~6*order dB/oct)
+    hammer_corner_hz = 3542.03    # low-pass corner at mid velocity; raise = brighter
+    hammer_order = 4.22103           # rolloff steepness above the corner (~6*order dB/oct)
 
     # Hammer contact time: a few ms of onset ramp so the strike isn't a
     # one-sample step (a click). Real contact runs ~1 ms treble to ~4 ms bass;
     # a single mid value is a good first approximation.
-    attack_time = 0.003
-
-    # --- Soundboard body response ---
+    # the Steinway's attacks match 2 ms best (examples/attack_audit.py grand: 10.1 dB
+    # against 11.9 at the 3 ms it had)
+    attack_time = 0.002
     # A fixed body filter applied per partial by absolute frequency (independent
     # of velocity, unlike the hammer). It gives the tone its wooden body: a broad
     # low-mid warmth resonance, a roll-off of the extreme top (the board does not
     # radiate the highest partials efficiently), and a sub-bass radiation loss.
     # It also darkens the upper-mid partials whose string-group beating reads as a
     # phaser, so the shimmer sits under a fixed formant instead of sweeping bare.
-    board_body_hz = 240.0        # centre of the low-mid warmth boost
+    board_body_hz = 342.934        # centre of the low-mid warmth boost
     board_body_width = 1.05      # half-width in octaves (log-gaussian)
-    board_body_gain = 0.6        # peak boost (0.6 -> ~+4 dB) at board_body_hz
-    board_high_hz = 2600.0       # radiation roll-off corner up top
+    board_body_gain = 0.0129673        # peak boost (0.6 -> ~+4 dB) at board_body_hz
+    board_high_hz = 9787.16       # radiation roll-off corner up top
     board_high_order = 1.6       # gentle (~10 dB/oct) high roll-off
-    board_low_hz = 35.0          # sub-bass radiation roll-off (6 dB/oct below)
+    # THE BOARD AND THE FELT, MEASURED (examples/upright_fit.py --ref=steinway
+    # --fit=spectrum: each key's third-octave spectrum at p and f; 10.8 -> 8.8
+    # dB): the real B radiates its bass fundamentals less (82 Hz corner, was
+    # 35), rolls off far higher (9.8 kHz, was 2.6), has no low-mid warmth boost
+    # to speak of, and its felt cuts steeper above 3.5 kHz (order 4.2).
+    board_low_hz = 82.5496          # sub-bass radiation roll-off (6 dB/oct below)
 
     # --- Tension modulation (pitch drifts down as the note decays) ---
     # A struck string's large initial displacement stretches it, raising tension
@@ -3605,6 +3649,7 @@ class GrandPianoProperties(InharmonicStringProperties):
         from math import log
         midi = int(round(69.0 + 12.0 * log(float(frequency) / 440.0) / log(2)))
         rng = _random.Random(midi)
+        self._unison_key = midi
         lo, hi = self.string_detune_range
         self.note_detune_cents = (-rng.uniform(lo, hi), rng.uniform(lo, hi))
         # THE KEY'S PITCH ERROR IS A FACT OF THE INSTRUMENT, not of the strike,
@@ -3672,6 +3717,15 @@ class GrandPianoProperties(InharmonicStringProperties):
             if g < 1e-3:
                 continue
             ratio = 2.0 ** (self.note_detune_cents[i] / 1200.0) - 1.0
+            if self.unison_beat_scatter:
+                # EACH PARTIAL BEATS AT ITS OWN SLOW RATE: the string's offset
+                # in Hz, scattered per partial within what its fundamental
+                # beats at (unison_beat_scatter, below).
+                r = _random.Random(self._unison_key * 7919 + i * 104729 + harmonic)
+                lo_hz, hi_hz = self.unison_beat_hz
+                off = r.uniform(lo_hz, hi_hz) * (1.0 if r.random() < 0.5 else -1.0)
+                voices.append((g, off, 0.0, harmonic_decay, 0.0))
+                continue
             # phase 0: a hammer excites all three strings in the same instant.
             voices.append((g, 0.0, ratio, harmonic_decay, 0.0))
         return voices
@@ -3812,6 +3866,9 @@ class UprightPianoProperties(GrandPianoProperties):
         low = 1.0 / (1.0 + (self.board_low_hz / fn) ** self.board_low_order)
         return body * high * low
     initial_gain = 0.498615      # held at the old GM 1's level, -42.9 dB (velocity 100, 1.5 s notes, C2-C6, their loudest 150 ms)
+    unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
+    string_gain = (0.28, 0.20)   # its unisons as they were voiced
+    strike_noise_db = ()   # no strike noise yet: the grand's is the Steinway's
 
 
 class BrightPianoProperties(GrandPianoProperties):
@@ -3865,7 +3922,13 @@ class BrightPianoProperties(GrandPianoProperties):
     # 21.8 dB per decade of this knob rather than 20, the phantom partials
     # again being sum-tones that scale as its square.
     initial_gain = 0.093189
-    hammer_corner_hz = 7000.0       # ~0.14 ms of contact, against 0.25
+    # A VOICING OF THE GRAND, so relative to it: the grand was refitted to a
+    # Steinway B (its board now rolls off at 9.8 kHz, not 2.6), and these were
+    # written as absolute numbers against the old one -- left so, "bright"
+    # would have been darker than the grand it voices. The same ratios as
+    # first voiced: contact 1.75x shorter, the board 2.1x higher, half the
+    # low-mid warmth.
+    hammer_corner_hz = GrandPianoProperties.hammer_corner_hz * 1.75
     strike_fill_fraction = 0.45     # hard felt spreads about half as much
 
     # AND A BRIGHTER BOARD, because the hammer alone cannot be heard. Measured:
@@ -3886,8 +3949,8 @@ class BrightPianoProperties(GrandPianoProperties):
     # there is no fit to break; it is also no longer only a voicing, and the
     # class name should be read as "a brighter piano" rather than "the same
     # piano voiced".
-    board_high_hz = 5500.0          # the board radiates higher, against 2600
-    board_body_gain = 0.30          # and carries less low-mid warmth, against 0.6
+    board_high_hz = GrandPianoProperties.board_high_hz * 2.1154
+    board_body_gain = GrandPianoProperties.board_body_gain * 0.5
 
 
 class HonkyTonkProperties(UprightPianoProperties):
@@ -4054,6 +4117,33 @@ class ElectricGrandProperties(GrandPianoProperties):
             slope = max(fn / max(f0, 1e-9), 1.0) ** self.bridge_force_power
         return self.bridge_gain * slope / (
             1.0 + (fn / self.bridge_corner_hz) ** self.bridge_order)
+    # THE OLD GRAND LAW, PINNED: this scales the grand's B for a CP-70's
+    # short strings, and the grand's was refitted to the Steinway B; the
+    # electric grand was voiced on the published law, so it keeps it.
+    a = 5.22964e-6
+    b = 1.21012e-6
+    c = 8.3666e-10
+    d = -0.007927
+    e = 0.429601
+    # ...and the old board and felt, pinned likewise (the grand's were refitted)
+    board_low_hz = 35.0
+    board_high_hz = 2600.0
+    hammer_corner_hz = 4000.0
+    hammer_order = 2.0
+    board_body_hz = 240.0
+    board_body_gain = 0.6
+    # ...and the old decay, pinned likewise
+    decay_db = 13.0
+    harmonic_decay_db = 1.5
+    decay_register_slope = 0.85
+    aftersound_level_1 = 0.28
+    aftersound_level_2 = 0.18
+    aftersound_level_3 = 0.16
+    aftersound_decay_ratio = 0.13
+    attack_time = 0.003           # the grand's old onset, pinned likewise
+    unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
+    string_gain = (0.28, 0.20)   # its unisons as they were voiced
+    strike_noise_db = ()   # no strike noise yet: the grand's is the Steinway's
 
 
 # One waveshaper answer per (curve, offset, deflection). A note asks for it up to
@@ -4072,6 +4162,7 @@ ep_voicing = os.environ.get("TUNING_EP_VOICING", "")
 # harmonics means anything until the control has been heard to be dull. The
 # same discipline that caught the A415 assumption and the steelpan's stretch.
 ep_control = os.environ.get("TUNING_EP_CONTROL", "") not in ("", "0")
+
 
 
 class ElectricPianoProperties(PluckedStringProperties):
@@ -4476,9 +4567,11 @@ class StoppedPipeProperties(SynthProperties):
     # -- only the bare blown pipe stretches dynamically.)
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic
     inharmonicity_dynamic = True
-    a, b, c, d, e = (GrandPianoProperties.a, GrandPianoProperties.b,
-                 GrandPianoProperties.c, GrandPianoProperties.d,
-                 GrandPianoProperties.e)
+    # THE TUNER'S COEFFICIENTS, not the grand's: these must be the ones the
+    # hybrid tuner bends its octaves along (../path/path.py keeps them), and
+    # the grand's own have since been refitted to a recorded Steinway B --
+    # borrowed from it, every flute, ocarina and recorder in the corpus moved.
+    a, b, c, d, e = (5.22964e-6, 1.21012e-6, 8.3666e-10, -0.007927, 0.429601)
     inharmonicity_coefficient_func = InharmonicStringProperties.inharmonicity_coefficient_func
     inharmonicity_coefficient_for_frequency = InharmonicStringProperties.inharmonicity_coefficient_for_frequency
 

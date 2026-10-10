@@ -3446,6 +3446,35 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
             _SND_PEND[0] = None      # its CC74/71 moved the ladder, not sound_shape
             stops = ()
+        if getattr(props, 'strike_noise_db', ()):
+            # THE HAMMER'S STRIKE (tonelib.GrandPianoProperties.strike_noise_db):
+            # the felt's impact, the key bottoming, the board knocked -- a thump
+            # under the note and noise between its partials, dying in tens of
+            # ms. Without it a piano's attack is its partials alone, which is a
+            # pluck (Ben). Noise rows a third octave apart, one to a band, their
+            # level (Hz, dB re the note's gain) shifted by strike_noise_slope dB
+            # an octave from A4, falling strike_noise_dbs; no room images, as
+            # any noise. Emitted beside the note's partials, not instead.
+            _cbw = (_CBW[0], _CBW[1])
+            _CBW[0], _CBW[1] = -0.25, 0.0
+            _NOREFL[0] = True
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            _slr = math.log(10.0) / 20.0 * props.strike_noise_dbs
+            _reg = props.strike_noise_slope * math.log2(max(f0, 1.0) / 440.0)
+            _sfade = max(1.0, props.strike_noise_fade_s * SR)
+            # ONE ROW A BAND, and gone by 0.25 s (62 dB down at its 250 dB/s):
+            # two a band, held 0.5 s, took live's ten-note chord past its block
+            # budget (99th percentile 2.71 ms of 2.67)
+            for _hf, _db in props.strike_noise_db:
+                if _hf >= 0.45 * SR:
+                    continue
+                _gM = props.gain * 10.0 ** ((_db + _reg) / 20.0)
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, non + 0.25 * SR,
+                             _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+            _CBW[0], _CBW[1] = _cbw
+            _NOREFL[0] = False
         if getattr(props, 'shake_noise', False):
             # A SHAKE AS SHAPED NOISE (tonelib.ShakenNoiseProperties): its
             # spectrum as noise bands (a negative wash bandwidth, the kernel's

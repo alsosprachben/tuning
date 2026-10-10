@@ -12450,9 +12450,13 @@ def selftest():
           "  (%.1fx at E1, ceiling %.1fx)"
           % (_b(eg, 41.2) / _b(ag, 41.2),
              (eg.reference_string_max_m / eg.case_string_max_m) ** 4))
+    # ...THE STRING IT SCALES is the published Steinway B law, which it keeps
+    # (pinned: the grand itself has since been refitted to a recorded B)
+    _pub = lambda f: _T.InharmonicStringProperties.inharmonicity_coefficient_func(
+        None, float(f), eg.a, eg.b, eg.c, eg.d, eg.e)
     check("...while ABOVE the knee the two are identical, as the scaling says",
-          abs(_b(eg, knee * 1.4) / _b(ag, knee * 1.4) - 1.0) < 1e-9
-          and abs(_b(eg, 1046.5) / _b(ag, 1046.5) - 1.0) < 1e-9,
+          abs(_b(eg, knee * 1.4) / _pub(knee * 1.4) - 1.0) < 1e-9
+          and abs(_b(eg, 1046.5) / _pub(1046.5) - 1.0) < 1e-9,
           "  (the CP-70's case binds below %.0f Hz; above that, same string)" % knee)
     # A piezo under the bridge is not a soundboard: no body resonance, and above
     # all no sub-bass RADIATION loss, which is the term a board has and a pickup

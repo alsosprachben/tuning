@@ -3,7 +3,7 @@
 Ivy Audio's upright, CC0 in VSCO-2 CE; sources.md), and our render the same
 way.
 
-    python3 examples/upright_fit.py [--dyn=2] [--program=P] [--class=NAME] [--notes=21,45,...]
+    python3 examples/upright_fit.py [--ref=steinway] [--dyn=2] [--program=P] [--class=NAME] [--notes=21,45,...]
 
 Each recorded note is read from its KNOWN key (Keys/Upright Piano/
 MappingChart.txt: file index k is key 21 + 2k, the last 108), not from an f0
@@ -18,7 +18,8 @@ beating between strings and falling in two stages. Per note:
           (energy in 50 ms windows): the two-stage decay read whole
   level   the loudest 150 ms, dB, per dynamic
 
---fit=decay fits the decay rates and the aftersound to each band's T20.
+--beats compares each partial's level wobble in the decay (the unison's
+beating: a phaser, overdone). --fit=decay fits the decay rates and the aftersound to each band's T20.
 --fit=register sets the level across the keyboard (register_level_db) to
 the recording's, re A4, at mf. --fit=spectrum [--maxfev=N] fits the board and the felt to the ladders
 (SPECTRUM, FIT_KEYS, at dynamics 1 and 3); pair it with --class.
@@ -26,6 +27,7 @@ the recording's, re A4, at mf. --fit=spectrum [--maxfev=N] fits the board and th
 and the same for our render of PROGRAM (default 0) at that key, velocity
 40/80/120 for dynamics 1/2/3, the note held 6 s. Recordings are 16 s, held.
 """
+import glob
 import os
 import sys
 
@@ -45,7 +47,26 @@ def key_of(k):
     return 108 if k == 44 else 21 + 2 * k
 
 
+# THE REFERENCE (--ref=): the upright, or VCSL's Steinway B (CC0, Versilian
+# Community Sample Library: "Grand Piano, Steinway B", no pedal, close mics,
+# 42 keys a whole tone apart A#0-G#7, layers vl2-vl4). The Steinway's samples
+# are NORMALIZED (its NORMALIZED.txt), so its levels -- by key and by layer --
+# say nothing: its spectra, decays and inharmonicity do.
+REF = ["upright"]
+STEINWAY = os.path.expanduser("~/Documents/refs/vcsl/steinway")
+STEINWAY_KEYS = (22, 30, 38, 46, 54, 62, 70, 78, 86, 94, 102)
+
+
 def recordings(dyn):
+    if REF[0] == "steinway":
+        import glob as _g
+        out = {}
+        for p in _g.glob(os.path.join(STEINWAY, "JHPiano_NoSus_Close_*_vl%d_rr1.wav" % (dyn + 1))):
+            nm = os.path.basename(p).split("_")[3]
+            k = (int(nm[-1]) + 1) * 12 + {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[nm[0]] \
+                + (1 if "#" in nm else 0)
+            out[k] = p
+        return out
     out = {}
     for k in range(0, 45, 2):
         p = os.path.join(REFS, "Player_dyn%d_rr1_%03d.wav" % (dyn, k))
@@ -295,6 +316,19 @@ def fit_register(cls, prog, dyn=2, rounds=6):
 DECAY = ("decay_db", "harmonic_decay_db", "decay_register_slope", "aftersound_level_1",
          "aftersound_level_2", "aftersound_level_3", "aftersound_decay_ratio")
 DECAY_HOLD = 8.0
+# THE TAIL, TOO: T20 is the first 20 dB, and fitted to it alone the grand's
+# treble matched there and then died 10-80 dB too soon (D6 at 2 s: -88 dB re
+# its peak against the Steinway's -32 -- Ben: "a little faster decay up high").
+LATE_S = (1.0, 2.0)
+
+
+def late(x, sr):
+    """The note's level at LATE_S, dB re its loudest 50 ms in the first 0.2 s."""
+    t0 = onset(x, sr)
+    w = int(0.05 * sr)
+    pk = max(np.mean(x[t0 + i:t0 + i + w] ** 2) for i in range(0, int(0.2 * sr), w // 2))
+    return [10 * np.log10(np.mean(x[t0 + int(t * sr):t0 + int(t * sr) + w] ** 2) / pk + 1e-30)
+            for t in LATE_S]
 
 
 def fit_decay(cls, prog, maxfev, dyn=2):
@@ -306,7 +340,7 @@ def fit_decay(cls, prog, maxfev, dyn=2):
         f0 = 440.0 * 2 ** ((k - 69) / 12.0)
         t = np.array([d[0] for d in band_decay(x, sr)])
         ok = np.array([hi > f0 for _, hi in BANDS]) & np.isfinite(t) & (t > 0.1) & (t < DECAY_HOLD)
-        rec[k] = (t, ok)
+        rec[k] = (t, ok, late(x, sr))
     x0 = np.array([float(getattr(cls, p)) for p in DECAY])
     best = [1e9, None]
 
@@ -315,11 +349,14 @@ def fit_decay(cls, prog, maxfev, dyn=2):
         for p_, q in zip(DECAY, v):
             setattr(cls, p_, float(q))
         errs = []
-        for k, (t, ok) in rec.items():
+        for k, (t, ok, lt) in rec.items():
             y, sr = render(prog, k, VEL[dyn], DECAY_HOLD)
             m = np.array([d[0] for d in band_decay(y, sr)])
             m = np.where(np.isfinite(m), m, DECAY_HOLD)
             errs.extend(20 * np.log10(np.maximum(m[ok], 0.05) / t[ok]))
+            # ...and the tail after them: the whole note's level at 1 and 2 s
+            lm = late(y, sr)
+            errs.extend(max(b, -90.0) - a for a, b in zip(lt, lm) if a > -45.0)
         e = float(np.sqrt(np.mean(np.square(errs))))
         if e < best[0]:
             best[:] = [e, v]
@@ -333,6 +370,117 @@ def fit_decay(cls, prog, maxfev, dyn=2):
     return best
 
 
+def beating(x, sr, key, nmax=8, a=0.3, b=3.0):
+    """Each partial's level wobble in the decay, a to b s after the onset:
+    the partial band-passed around its (inharmonic) frequency, its 10 ms dB
+    envelope less a straight line (the decay), and the wobble's spread (dB)
+    and main rate (Hz) -- what the unison's beating does to it. [(n, dB, Hz)]"""
+    from scipy.signal import butter, sosfiltfilt
+    found, f0, B = partials(x, sr, key, nmax)
+    t0 = onset(x, sr)
+    out = []
+    for n, fn, _ in found[:nmax]:
+        bw = max(4.0, 0.03 * fn)
+        if fn + bw > 0.45 * sr or fn - bw < 20:
+            continue
+        y = sosfiltfilt(butter(2, [fn - bw, fn + bw], btype="band", fs=sr, output="sos"),
+                        x[t0 + int(a * sr):t0 + int(b * sr)])
+        w = int(0.01 * sr)
+        e = 10 * np.log10(np.array([np.mean(y[i:i + w] ** 2) for i in range(0, len(y) - w, w)]) + 1e-30)
+        if len(e) < 20 or e.max() - e.min() > 80:
+            continue
+        t = np.arange(len(e)) * 0.01
+        r = e - np.polyval(np.polyfit(t, e, 1), t)
+        spec = np.abs(np.fft.rfft(r * np.hanning(len(r)))) ** 2
+        fr = np.fft.rfftfreq(len(r), 0.01)
+        out.append((n, float(np.std(r)), float(fr[1 + int(np.argmax(spec[1:]))])))
+    return out
+
+
+# THE STRIKE'S NOISE (--strike): a hammer is not a pluck -- the felt's impact,
+# the key bottoming, the board knocked into motion put a thump under the note
+# and noise between its partials, and from the tenor up a Steinway's first 30
+# ms carry 20-60 dB more of both than our grand did (Ben: "more like a pluck
+# than a hammer"). Read here as the spectrum OUTSIDE the partials, in third
+# octaves, dB re the whole first 30 ms; and how far it falls by 30-80 ms.
+S3 = 2 ** np.arange(np.log2(40), np.log2(14000), 1 / 3.0)
+S3C = np.sqrt(S3[:-1] * S3[1:])
+
+
+def strike_noise(x, sr, key, a=0.0, b=0.03):
+    found, f0, B = partials(x, sr, key, 40)
+    t0 = onset(x, sr)
+    n = 1 << 15
+    f = np.fft.rfftfreq(n, 1.0 / sr)
+    near = np.zeros_like(f, bool)
+    for _, fn, _ in found:
+        near |= np.abs(f - fn) < max(0.12 * f0, 15.0)
+
+    def spec(a_, b_):
+        seg = x[t0 + int(a_ * sr):t0 + int(b_ * sr)]
+        X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), n)) ** 2 / len(seg)
+        return X
+    X0 = spec(a, b)
+    tot = X0.sum()
+    out = []
+    for lo, hi in zip(S3[:-1], S3[1:]):
+        m = (f >= lo) & (f < hi) & ~near
+        out.append(10 * np.log10(X0[m].mean() * ((f >= lo) & (f < hi)).sum() / tot + 1e-30) if m.any() else np.nan)
+    X1 = spec(0.03, 0.08)
+    off = ~near & (f > 200) & (f < 12000)
+    fall = 10 * np.log10(X1[off].sum() / max(X0[off].sum(), 1e-30) + 1e-30)
+    return np.array(out), fall
+
+
+STRIKE_KEYS = (58, 62, 66, 70, 74, 78, 82, 86, 90, 94)
+
+
+def fit_strike(cls, prog, passes=3, dyn=2):
+    """strike_noise_db and strike_noise_slope to the recordings' strike noise
+    (strike_noise) over STRIKE_KEYS, A#3 up (below it the dense partials fill
+    the gaps in both), written into tonelib.py each pass."""
+    import re as _re
+    recs = recordings(dyn)
+    keys = [k for k in STRIKE_KEYS if k in recs]
+    rec = {k: strike_noise(*load(recs[k]), k)[0] for k in keys}
+    path = os.path.join(HERE, "tonelib.py")
+    for it in range(passes + 1):
+        D = []
+        for k in keys:
+            o = strike_noise(*render(prog, k, VEL[dyn], 1.0), k)[0]
+            D.append(rec[k] - o)
+        D = np.array(D)
+        ok = np.isfinite(D)
+        e = float(np.sqrt(np.mean(D[ok] ** 2)))
+        print("  pass %d: strike noise rec - ours, rms %.1f dB" % (it, e), flush=True)
+        if it == passes:
+            break
+        band = np.array([np.nanmean(np.where(ok[:, j], D[:, j], np.nan)) if ok[:, j].any() else 0.0
+                         for j in range(D.shape[1])])
+        reg = np.log2(np.array([440.0 * 2 ** ((k - 69) / 12.0) for k in keys]) / 440.0)
+        km = np.array([np.nanmean(np.where(ok[i], D[i], np.nan) - band) for i in range(len(keys))])
+        slope_c = float(np.polyfit(reg, km, 1)[0]) if len(keys) > 2 else 0.0
+        old = dict(cls.strike_noise_db)
+        new = tuple((int(round(c)), round(float(np.interp(np.log(c), np.log(list(old)), list(old.values()))
+                                                  + np.clip(b, -12, 12)), 1))
+                    for c, b in zip(S3C, band))
+        cls.strike_noise_db = new
+        cls.strike_noise_slope = float(cls.strike_noise_slope + 0.7 * slope_c)
+        src = open(path).read()
+        a = src.index("class %s(" % cls.__name__)
+        lines = src[a:].split("\n")
+        end = next(j for j, l in enumerate(lines[1:], 1) if l and not l[0].isspace())
+        body = "\n".join(lines[:end])
+        body = _re.sub(r"^    strike_noise_db = \(.*?\)\)\n", lambda _: "    strike_noise_db = %s\n" % (new,),
+                       body, count=1, flags=_re.M | _re.S)
+        body = _re.sub(r"^    strike_noise_slope = .*$", lambda _: "    strike_noise_slope = %.3f" % cls.strike_noise_slope,
+                       body, count=1, flags=_re.M)
+        open(path, "w").write(src[:a] + body + "\n" + "\n".join(lines[end:]))
+        for f_ in glob.glob(os.path.join(HERE, "__pycache__", "tonelib.*.pyc")):
+            os.remove(f_)
+    print("    strike_noise_slope = %.3f" % cls.strike_noise_slope)
+
+
 def name(key):
     return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][key % 12] + str(key // 12 - 1)
 
@@ -343,7 +491,41 @@ def main(argv):
     dyn = int(next((a.split("=")[1] for a in argv if a.startswith("--dyn=")), 2))
     prog = next((int(a.split("=")[1]) for a in argv if a.startswith("--program=")), 0)
     only = next((a.split("=")[1] for a in argv if a.startswith("--notes=")), None)
+    if any(a == "--ref=steinway" for a in argv):
+        REF[0] = "steinway"
+        global FIT_KEYS
+        FIT_KEYS = STEINWAY_KEYS
     use_class(argv, prog)
+    if "--fit=strike" in argv:
+        import patch_map
+        fit_strike(patch_map.PROGRAM_CLASS[prog], prog)
+        return 0
+    if "--strike" in argv:
+        recs = recordings(dyn)
+        keys = sorted(recs) if not only else [int(k) for k in only.split(",")]
+        print("key  strike noise outside the partials, dB re the first 30 ms, by third octave from 40 Hz (every 3rd); its fall by 30-80 ms")
+        for key in keys:
+            r, rf = strike_noise(*load(recs[key]), key)
+            o, of = strike_noise(*render(prog, key, VEL[dyn], 1.0), key)
+            print("%-4s rec  %s  fall %5.1f" % (name(key), " ".join("%4.0f" % v if np.isfinite(v) else "   ." for v in r[::3]), rf))
+            print("     ours %s  fall %5.1f" % (" ".join("%4.0f" % v if np.isfinite(v) else "   ." for v in o[::3]), of))
+        return 0
+    if "--beats" in argv:
+        recs = recordings(dyn)
+        keys = sorted(recs) if not only else [int(k) for k in only.split(",")]
+        print("key   partial: wobble dB / rate Hz, recorded | ours  (0.3-3 s)")
+        for key in keys:
+            x, sr = load(recs[key])
+            y, sr2 = render(prog, key, VEL[dyn], 4.0)
+            r = {n: (d, f) for n, d, f in beating(x, sr, key)}
+            o = {n: (d, f) for n, d, f in beating(y, sr2, key)}
+            row = ["%d: %.1f/%.1f | %.1f/%.1f" % (n, r[n][0], r[n][1], o[n][0], o[n][1])
+                   for n in sorted(set(r) & set(o))]
+            print("%-4s %s" % (name(key), "   ".join(row)))
+            ra = np.mean([v[0] for v in r.values()]) if r else 0
+            oa = np.mean([v[0] for v in o.values()]) if o else 0
+            print("      mean wobble: recorded %.2f dB, ours %.2f dB" % (ra, oa))
+        return 0
     if "--fit=decay" in argv:
         import patch_map
         cls = patch_map.PROGRAM_CLASS[prog]
