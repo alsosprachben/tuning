@@ -1048,6 +1048,14 @@ class SynthProperties:
     # noise, with its own colour, not a skirt on any partial. () = none.
     breath_noise_db = ()
     breath_noise_fade_s = 0.03
+    # A LOW REGISTER OF ITS OWN: a second measured series and breath, for the
+    # notes under register_low_hz[0]; over register_low_hz[1] the tables
+    # above; between, the two blended in dB along log frequency. A player's
+    # low notes can be another tone, breathier and buzzier, than its high ones
+    # (the shakuhachi's otsu). None / () = the one table everywhere.
+    mode_gains_low = None
+    breath_noise_low_db = ()
+    register_low_hz = (0.0, 0.0)
     # THE PLAYER'S BREATH WAVERS (examples/wind_fit.py --turb): one level per
     # channel, slow filtered noise -- the tone's (partials and their flutter
     # together) this many dB rms, its corner this many Hz; the breath noise's
@@ -2604,8 +2612,9 @@ class SynthProperties:
         # stroke tilts the modes toward the top, in dB per octave of mode ratio
         # per dB of stroke, about the stroke level the gains were read at.
         if self.mode_gains is not None:
-            if 1 <= harmonic <= len(self.mode_gains):
-                g = self.gain * self.mode_gains[harmonic - 1]
+            mg = self.mode_gains_here()
+            if 1 <= harmonic <= len(mg):
+                g = self.gain * mg[harmonic - 1]
                 if self.mode_stroke_tilt:
                     sdb = max(-40.0, 20.0 * _log(max(self.attack_volume, 1e-6)) / _log(10.0))
                     g *= 10.0 ** (self.mode_stroke_tilt * _log(self.mode_ratio(harmonic)) / _log(2.0)
@@ -2892,6 +2901,48 @@ class SynthProperties:
         x = min(1.0, abs(octaves) / span)
         tilt = self.register_tilt_db * max(-span, min(span, octaves))
         return self.register_effort_db * (x * x) + tilt
+
+    def register_low_share(self, frequency):
+        """How much of the low register's tables a note at FREQUENCY plays: 1
+        under register_low_hz[0], 0 over [1], a log-frequency ramp between."""
+        lo, hi = self.register_low_hz
+        if frequency <= lo:
+            return 1.0
+        if frequency >= hi:
+            return 0.0
+        return _log(hi / float(frequency)) / _log(hi / lo)
+
+    @staticmethod
+    def _blend_db(a, b, w):
+        """a and b (linear gains) blended W of the way from b to a, in dB."""
+        if w <= 0.0:
+            return b
+        if w >= 1.0:
+            return a
+        return max(a, 1e-12) ** w * max(b, 1e-12) ** (1.0 - w)
+
+    def mode_gains_here(self):
+        """mode_gains at this note: with a low register, blended toward it."""
+        if self.mode_gains_low is None:
+            return self.mode_gains
+        w = self.register_low_share(self.frequency_x * (2.0 ** self.octave_position))
+        n = max(len(self.mode_gains), len(self.mode_gains_low))
+        hi = tuple(self.mode_gains) + (0.0,) * (n - len(self.mode_gains))
+        lo = tuple(self.mode_gains_low) + (0.0,) * (n - len(self.mode_gains_low))
+        return tuple(self._blend_db(l, h, w) if (l or h) else 0.0 for l, h in zip(lo, hi))
+
+    def breath_noise_at(self, frequency):
+        """breath_noise_db for a note at FREQUENCY: with a low register, its
+        table blended in by band (the two tables share their bands)."""
+        if not self.breath_noise_low_db:
+            return self.breath_noise_db
+        w = self.register_low_share(frequency)
+        if w <= 0.0:
+            return self.breath_noise_db
+        if w >= 1.0:
+            return self.breath_noise_low_db
+        low = dict(self.breath_noise_low_db)
+        return tuple((hz, w * low.get(hz, db) + (1.0 - w) * db) for hz, db in self.breath_noise_db)
 
     def register_effort(self):
         return self.register_effort_at(self.frequency_x * (2.0 ** self.octave_position))
@@ -17342,15 +17393,39 @@ class BlownBottleProperties(VesselFluteProperties):
 
     NOT MEASURED, like its parent -- asserted from how the instrument is played.
     """
-    chiff_volume = 2.0
-    chiff_cycle = 0.7
-    chiff_release = 0.8
-    # the breath keeps moving while the note is held (cf. BreathNoiseProperties)
-    sustain_jitter = 0.5
-    # a badly coupled jet drives the resonance weakly: even less series than an
-    # ocarina, and a softer top.
-    tonal_dampening = 3.9
-    bore_corner_hz = 1600.0
+    # MEASURED (examples/wind_fit.py --voice=bottle): the docstring's breath-
+    # with-a-weak-tone is not what blown bottles do. Five bottles (Sadiquecat's,
+    # CC0) and a cider bottle (cabled_mess', CC0), 18 held notes: NEARLY A SINE,
+    # h2 -39 and h3 -50 dB, the breath between the harmonics -65 to -81 dB --
+    # where this rendered h2 -25, a flat floor of noise at -41 and breath at
+    # -51. So the breath is the ocarina's machinery (noise rows of a measured
+    # colour, the wobble), its numbers refitted to the bottle, not a white wash
+    # on every partial
+    chiff_volume = 0.5
+    chiff_cycle = 0.2
+    sustain_jitter = 0.0
+    # THE MEASURED SERIES, as a table: a Helmholtz resonator is a sine by nature
+    # and what harmonics it has are the jet's, so the tilt knobs could not reach
+    # it (h2 left at -24 against -39, 12.9 dB). The median of the 18 notes, h1-h12
+    mode_gains = (1.00000, 0.01084, 0.00302, 0.00146, 0.00072, 0.00204, 0.00063, 0.00027, 0.00036, 0.00155, 0.00037, 0.00021)
+    max_harmonic = 12
+    bore_corner_hz = 20000.0      # the body passes it flat: the table is the sound
+    bore_order = 0.13
+    # THE BREATH, its colour fitted between the harmonics (wind_fit.py --fit=breath,
+    # rms 67.7 -> 0.0 dB): -62 to -100 dB re the tone, darkening upward
+    breath_noise_db = ((160, -49.5), (202, -44.7), (255, -44.1), (321, -41.3), (404, -38.4), (509, -42.3),
+                       (641, -46.6), (808, -44.9), (1018, -45.4), (1283, -41.8), (1616, -41.9),
+                       (2036, -39.9), (2566, -45.8), (3233, -46.5), (4073, -50.3), (5132, -50.3),
+                       (6465, -51.9), (8146, -49.4), (10263, -51.4), (12931, -65.7))
+    # THE PLAYER'S BREATH WAVERING (wind_fit.py --fit=wobble, 1.16): the tone
+    # 0.67 dB at ~3 Hz, the breath noise 2.1 dB at ~6 Hz
+    breath_wobble_db = 0.6742
+    breath_wobble_hz = 3.282
+    breath_noise_wobble_db = 2.075
+    breath_noise_wobble_hz = 6.441
+    # HELD at its level before the fit (-44.37 dB, the mean of G3-G4's first
+    # second at velocity 100): the table plays without the series' own scale
+    initial_gain = VesselFluteProperties.initial_gain * 10 ** (54.521 / 20.0)
 
 # ----------------------------------------------------------- the rest of 72-79
 # The pipe family was two measured flutes (72, 73), two vessel flutes (76, 79),
@@ -17474,21 +17549,70 @@ class PanFluteProperties(StoppedPipeProperties):
     couples into the resonance and stays as turbulence. That noise is not a
     defect of the instrument; it is most of its sound.
     """
-    # Broadens every partial into a band: the sustained-chiff mechanism, which
-    # is what breath past an edge actually does to a spectrum.
-    sustain_jitter = 0.55
+    # MEASURED (examples/wind_fit.py --voice=panflute): mrshoes' scale (CC BY 3.0),
+    # j008b's melody and PanPiper5's zanka (CC0), 35 stable notes. Its breath is
+    # QUIET: -64 to -71 dB between the harmonics, where the white wash below
+    # (sustain_jitter 0.55) put -54 and a flat floor at -45 over every
+    # harmonic from h6. So, as the ocarina's and the bottle's: the wash off and
+    # the breath noise rows of a measured colour
+    sustain_jitter = 0.0
     chiff_volume = 1.8
     chiff_min_valve_time = 0.018
     chiff_max_valve_time = 0.055
 
-    # Odd-only is inherited and is the point. A wide, short tube: the series
-    # falls away fast above the first few.
-    tonal_dampening = 2.4
-    max_harmonic = 24
-    bore_corner_hz = 2200.0
-    bore_order = 2.0
+    # CLOSED, BUT NOT ODD-ONLY: the evens stand 14 dB under the odds (h2 -38,
+    # h4 -45, against h3 -24, h5 -32) -- a real tube's end is not ideal, as the
+    # clarinet's is not. The series as a TABLE, the 35 notes' median h1-h12
+    # (h13-16 the same alternation, falling): the tilt knobs could not hold the
+    # odds and the evens apart (18.2 dB, the odds 20 dB over). Fitted with the
+    # breath note by note, D4-A5 (wind_fit.py --fit=tables)
+    mode_gains = (1.00000, 0.01512, 0.08430, 0.00605, 0.02201, 0.00228, 0.00961, 0.00192, 0.00542,
+                  0.00179, 0.00354, 0.00099, 0.00192, 0.00103, 0.00166, 0.00118)
+    max_harmonic = 48
+    register_low_hz = (146.8, 293.7)
+    # THE LOW REGISTER, ITS OWN TABLES: zanka's D3, a bass pipe an octave under
+    # the rest, is another tone -- h3-h9 15-20 dB richer and the breath 15-20 dB
+    # louder over 300 Hz-10 kHz (the wide tube's jet couples less of itself).
+    # One note, so measured, not generalised: wholly it at D3, the upper
+    # tables from D4, a log ramp between (wind_fit.py --fit=tables --keys=50-50
+    # --low --nh=48: 13.5/15.8 -> 1.1/0.1 dB, the series to h48, 7 kHz -- to
+    # h16 it stopped at 2.4 kHz, and Ben heard its top missing; the rest,
+    # --keys=62-99: 3.3/4.9 -> 0.3/0.2)
+    mode_gains_low = (1.00000, 0.03626, 0.04974, 0.00350, 0.10227, 0.00134, 0.06390, 0.00278, 0.03946,
+                      0.01471, 0.02858, 0.00884, 0.01518, 0.01607, 0.02233, 0.01665, 0.01101, 0.00282,
+                      0.01864, 0.00582, 0.01694, 0.01259, 0.00533, 0.00690, 0.01241, 0.00982, 0.01720,
+                      0.00666, 0.00866, 0.00904, 0.01024, 0.01248, 0.00671, 0.00671, 0.00389, 0.00907,
+                      0.00527, 0.00527, 0.00233, 0.00552, 0.00454, 0.00518, 0.00264, 0.00299, 0.00299,
+                      0.00665, 0.00665, 0.00727)
+    breath_noise_low_db = ((160, -37.3), (202, -39.2), (255, -29.0), (321, -24.6), (404, -25.4),
+                           (509, -18.9), (641, -30.4), (808, -24.6), (1018, -22.9), (1283, -26.3),
+                           (1616, -24.3), (2036, -26.5), (2566, -26.4), (3233, -25.8), (4073, -29.4),
+                           (5132, -26.1), (6465, -26.3), (8146, -20.2), (10263, -30.4), (12931, -40.9))
+    bore_corner_hz = 20000.0
+    bore_order = 0.13
+    # HARMONIC: the stopped pipe's stretch (B 1.7e-3 at C5, the organ rank's,
+    # inherited) put h8 at 8.2x, where every take reads within a few cents of
+    # the series -- a blown tube is driven, and mode-locks
+    inharmonicity_coefficient = 0.0
+    inharmonicity_dynamic = False
+    # THE BREATH, the same notes, between the harmonics and under the
+    # fundamental: -64 to -70 dB re the tone, with more of it up the spectrum
+    # than the bottle's
+    breath_noise_db = ((160, -51.0), (202, -53.2), (255, -55.7), (321, -58.9), (404, -56.0),
+                       (509, -54.9), (641, -46.3), (808, -51.5), (1018, -47.9), (1283, -46.4),
+                       (1616, -45.0), (2036, -43.3), (2566, -43.1), (3233, -41.2), (4073, -38.3),
+                       (5132, -42.8), (6465, -36.4), (8146, -41.7), (10263, -44.5), (12931, -48.3))
+    # THE PLAYER'S BREATH WAVERING (wind_fit.py --fit=wobble, 0.86): the tone
+    # 2.6 dB at ~6 Hz -- a pan pipe's breath is a vibrato of level -- the
+    # noise 1.0 dB, slowly
+    breath_wobble_db = 2.577
+    breath_wobble_hz = 6.254
+    breath_noise_wobble_db = 1.049
+    breath_noise_wobble_hz = 1.104
 
-    initial_gain = 7.51211e-05          # against the measured flute, as above
+    # HELD at its level before the fit (-43.43 dB, the mean of D4-G5's first
+    # second at velocity 100): the table plays without the series' own scale
+    initial_gain = 7.51211e-05 * 10 ** (59.135 / 20.0)
 
 
 class ShakuhachiProperties(OpenPipeProperties):
@@ -17512,18 +17636,73 @@ class ShakuhachiProperties(OpenPipeProperties):
     recorder's pressure-sharpening does: it is a gesture the player makes, not a
     property of the note. Left for whoever wires a breath controller.
     """
-    sustain_jitter = 0.62
+    # MEASURED (examples/wind_fit.py --voice=shakuhachi): UncleSigmund's
+    # (CC BY 3.0) and gonzooka's (CC0) playing, 49 stable notes. The rich
+    # series and the breath blurring every partial were the theory; these two
+    # players' tone, high, is purer than that -- gonzooka's h2 -23, h3 -40 dB,
+    # the breath -63 to -89 dB re the fundamental -- and low, UncleSigmund's,
+    # it is the theory's: h2 -6, h3 -7, h8-h16 near -35, the breath -47 to
+    # -62 (two registers' tables, register_low_hz below). The wash
+    # (sustain_jitter 0.62) put -54 under every note
+    sustain_jitter = 0.0
     chiff_volume = 1.5
     chiff_min_valve_time = 0.020
     chiff_max_valve_time = 0.060
 
-    # Wide bore, strong low end, and a rich series -- the notch is a hard edge
-    # and drives the upper partials well even as the breath blurs them.
-    tonal_dampening = 1.15
+    # The series as a TABLE: gonzooka's notes from G4, fitted with the breath
+    # note by note (wind_fit.py --fit=tables) -- h2 -23, h3 -40, h4 -52, and
+    # from h7 at the takes' floor, near -75
+    mode_gains = (1.00000, 0.06067, 0.00936, 0.00230, 0.00127, 0.00083, 0.00022, 0.00013, 0.00012,
+                  0.00007, 0.00010, 0.00005, 0.00005, 0.00004, 0.00005, 0.00001)
     max_harmonic = 40
-    bore_corner_hz = 3400.0
+    register_low_hz = (311.1, 392.0)
+    # TWO TONES, BY REGISTER: UncleSigmund's notes (A3-D#4, a long flute's
+    # otsu) are breathy and buzzy -- the breath 20-35 dB and h5-h16 15-35 dB
+    # over gonzooka's pure ones (D#4-A#5), and over the one median table, which
+    # sat between them and fitted neither (Ben: the low notes short of their
+    # noise and buzz up top). At D#4, where both play, both tones: it is the
+    # player as much as the register. Each fitted alone (wind_fit.py
+    # --fit=tables): the low tables wholly to D#4, the high from G4, a log
+    # ramp between (--match=uncle --low --nh=40: 0.7/1.3 dB at the end --
+    # the low series runs to h40, its buzz near -45 dB to 9 kHz, where h16
+    # stopped at 3.5 kHz; --keys=67-99 --match=gonzooka --nh=16: 0.4/0.0)
+    mode_gains_low = (1.00000, 0.32359, 0.19500, 0.04235, 0.02435, 0.01103, 0.00510, 0.00352, 0.00111,
+                      0.00311, 0.00444, 0.00325, 0.00180, 0.00192, 0.00117, 0.00111, 0.00753, 0.00474,
+                      0.00457, 0.00276, 0.00263, 0.00245, 0.00231, 0.00241, 0.00196, 0.00123, 0.00177,
+                      0.00112, 0.00083, 0.00082, 0.00146, 0.00125, 0.00108, 0.00060, 0.00083, 0.00090,
+                      0.00049, 0.00082, 0.00050, 0.00136)
+    breath_noise_low_db = ((160, -67.6), (202, -49.6), (255, -50.2), (321, -54.4), (404, -80.9),
+                           (509, -45.9), (641, -41.1), (808, -38.6), (1018, -32.0), (1283, -28.3),
+                           (1616, -27.9), (2036, -23.4), (2566, -20.4), (3233, -20.2), (4073, -22.4),
+                           (5132, -24.5), (6465, -29.1), (8146, -40.5), (10263, -38.1), (12931, -39.6))
+    bore_corner_hz = 20000.0
+    bore_order = 0.13
+    # THE BREATH, the same notes, between the harmonics and under the
+    # fundamental (-63 to -89 dB re it)
+    breath_noise_db = ((160, -59.8), (202, -58.2), (255, -53.5), (321, -45.7), (404, -45.2),
+                       (509, -43.5), (641, -45.5), (808, -48.9), (1018, -47.6), (1283, -47.4),
+                       (1616, -51.6), (2036, -52.2), (2566, -57.3), (3233, -55.7), (4073, -57.4),
+                       (5132, -57.8), (6465, -56.1), (8146, -55.4), (10263, -55.4), (12931, -55.4))
+    # THE BREATH WAVERING, and EACH HARMONIC'S OWN FLUTTER. The first fit
+    # (--fit=wobble alone) made the tone swell 8.2 dB at 0.87 Hz, every
+    # harmonic locked to h1 (corr 0.99): a fog horn (Ben), where the takes hold
+    # within ~2 dB and their harmonics flicker apart (corr 0.1-0.2) at 5-10 Hz.
+    # So the skirt first (--fit=skirt: 2.8 -> 1.8 dB), the turbulence on each
+    # harmonic, rising 8.4 dB a doubling up the series -- then the shared
+    # waver (--fit=wobble, 1.30): 2.5 dB at ~6 Hz, the breath noise 1.2 dB
+    breath_wobble_db = 2.463
+    breath_wobble_hz = 6.087
+    breath_noise_wobble_db = 1.229
+    breath_noise_wobble_hz = 14.93
+    wind_skirt_always = True
+    wind_skirt_db = -15.0
+    wind_skirt_harmonic_db = 8.389
+    wind_skirt_hz = 6.138
+    wind_skirt_rel = 0.009883
 
-    initial_gain = 6.68141e-05          # against the measured flute, as above
+    # HELD at its level before the fit (-44.93 dB, the mean of A3-C5's first
+    # second at velocity 100), again after the flutter and the tables' refit
+    initial_gain = 6.68141e-05 * 10 ** (57.931 / 20.0)
 
 
 class WhistleProperties(VesselFluteProperties):
@@ -17550,19 +17729,44 @@ class WhistleProperties(VesselFluteProperties):
     RecorderProperties with a wider bore, not this.
     """
     # Purer than the ocarina, which at least has a chamber with real walls and
-    # finger holes breaking it up. A whistle is almost the fundamental alone.
-    tonal_dampening = 5.2
-    max_harmonic = 8
-    bore_corner_hz = 1800.0
-    bore_order = 2.0
+    # finger holes breaking it up. A whistle is almost the fundamental alone --
+    # MEASURED (examples/wind_fit.py --voice=whistle: nbild's held note and
+    # oscarboyle's tune, CC0, 9 stable notes): h2 -43, h3 -57 dB and the rest
+    # at the takes' floor. The series a TABLE, h1-h6 (the tilt knobs and the
+    # wash had h3-h12 flat at -46), fitted with the breath (--fit=tables)
+    mode_gains = (1.00000, 0.01140, 0.00459, 0.00153, 0.00073, 0.00027)
+    max_harmonic = 6
+    bore_corner_hz = 20000.0
+    bore_order = 0.13
 
-    # Lips are a poor edge but a small one: some breath, far less than a bottle.
-    sustain_jitter = 0.22
+    # Lips are a poor edge but a small one: some breath, far less than a bottle
+    # -- as noise rows of a measured colour, the wash off (it read -54 dB between
+    # the harmonics, the takes -59 to -77)
+    sustain_jitter = 0.0
+    # THE BREATH, fitted with the series note by note over all nine notes at
+    # their full length (wind_fit.py --fit=tables: 15.2 -> 0.1 dB), UNDER the
+    # fundamental as well as between the harmonics: a whistle's lowest
+    # harmonic gap starts above 1.5 kHz, so the gaps never saw the band below
+    # the tone, and the table held there at -30 had the breath 13-22 dB over
+    # the takes -- the hiss Ben heard as louder than the recording
+    breath_noise_db = ((160, -49.4), (202, -53.0), (255, -51.7), (321, -49.8), (404, -49.5),
+                       (509, -48.5), (641, -48.7), (808, -49.4), (1018, -47.3), (1283, -50.7),
+                       (1616, -37.4), (2036, -34.7), (2566, -40.3), (3233, -36.6), (4073, -43.7),
+                       (5132, -32.4), (6465, -37.6), (8146, -43.2), (10263, -45.2), (12931, -45.1))
+    # THE BREATH WAVERING, read off the one held note (nbild's, 7 s: the tune's
+    # notes are too short for the wobble's window, and the fit cannot run on
+    # one): the tone 3.2 dB at ~4 Hz, the breath noise 1.2 dB at ~8.5 Hz
+    breath_wobble_db = 3.23
+    breath_wobble_hz = 4.07
+    breath_noise_wobble_db = 1.16
+    breath_noise_wobble_hz = 8.54
     chiff_volume = 0.55
     chiff_min_valve_time = 0.012
     chiff_max_valve_time = 0.040
 
-    initial_gain = 0.000152137          # against the measured flute, as above
+    # HELD at its level before the fit (-42.32 dB, the mean of G5-G6's first
+    # second at velocity 100): the table plays without the series' own scale
+    initial_gain = 0.000152137 * 10 ** (54.637 / 20.0)
 
 
 class AltoFluteProperties(OpenPipeProperties):

@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 25 | 20% |
+| 2 specific, theory | 21 | 16% |
 | 3 specific, theory + ear | 16 | 12% |
-| 4 specific, reference audio | 87 | 68% |
+| 4 specific, reference audio | 91 | 71% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -279,10 +279,10 @@ plays Standard, as does any program that is not a set.
 | 72 | Piccolo | `BassFlute/OpenPipe by register` | **4** | the flute law, measured across bass, alto and concert flute |
 | 73 | Flute | `BassFlute/OpenPipe by register` | **4** | Iowa flute (nonvib -- vibrato smears the harmonics) |
 | 74 | Recorder | `Recorder` | **4** | VCSL baroque soprano, alto and tenor recorders (CC0), 38 sustains (examples/wind_fit.py): harmonic to 0.3 cents, odd-dominant (h2 -33, h3 -24), its breath a hiss of its own colour, each harmonic fluttering on its own and the whole tone and pitch wavering with the breath; attack and release fitted. Ben: sounds great |
-| 75 | Pan Flute | `PanFlute` | **2** | a CLOSED tube (odd harmonics, already right) that had no breath at all -- StoppedPipe ships sustain_jitter 0, so it rendered as an organ's Gedackt |
-| 76 | Blown Bottle | `BlownBottle` | **2** | its own class, theory |
-| 77 | Shakuhachi | `Shakuhachi` | **2** | a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled |
-| 78 | Whistle | `Whistle` | **2** | CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB) |
+| 75 | Pan Flute | `PanFlute` | **4** | Freesound pan pipes (mrshoes CC BY 3.0, j008b and PanPiper5 CC0), 35 notes (examples/wind_fit.py --fit=tables): closed but not odd-only -- the evens 14 dB under the odds; harmonic, not the stopped rank's stretch; quiet breath (-64 to -70 dB) of its own colour; the bass pipe's D3 its own low-register tables, breathier and rich to h48. Ben: sounds good |
+| 76 | Blown Bottle | `BlownBottle` | **4** | Freesound blown bottles, 18 notes (examples/wind_fit.py): near-pure, a measured series and breath, the breath wavering slowly. Ben: sounds good |
+| 77 | Shakuhachi | `Shakuhachi` | **4** | Freesound shakuhachi (UncleSigmund CC BY 3.0, gonzooka CC0), 49 notes (examples/wind_fit.py --fit=tables): two tones by register -- the low breathy and buzzy to h40, the high near-pure -- each harmonic fluttering on its own and a 2.5 dB shared waver (a locked 8 dB swell was a fog horn); meri/kari not modelled. Ben: sounds good |
+| 78 | Whistle | `Whistle` | **4** | CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe. Freesound whistling (nbild, oscarboyle CC0), 9 notes (examples/wind_fit.py --fit=tables): h2 -43, h3 -57, its breath measured under the tone as well as between the harmonics. Ben: sounds good |
 | 79 | Ocarina | `Ocarina` | **4** | VCSL typical and small ocarinas (CC0), 21 sustains (examples/wind_fit.py): near-pure (h2 -44), its breath, flutter, shared wobble (2.4 dB) and pitch wander (5.6 cents) fitted, a soft chiff. Ben: sounds great |
 
 ## 80-87 Synth Lead
@@ -597,14 +597,14 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `Recorder` -- GM 74 Recorder (4)
-      - `Shakuhachi` -- GM 77 Shakuhachi (2)
+      - `Shakuhachi` -- GM 77 Shakuhachi (4)
       - `VesselFlute`
-        - `BlownBottle` -- GM 76 Blown Bottle (2)
+        - `BlownBottle` -- GM 76 Blown Bottle (4)
         - `Ocarina` -- GM 79 Ocarina (4)
           - `SambaWhistle`
             - `LongWhistle` -- 72 Long Whistle (4)
             - `ShortWhistle` -- 71 Short Whistle (4)
-        - `Whistle` -- GM 78 Whistle (2)
+        - `Whistle` -- GM 78 Whistle (4)
     - `Organ`
       - `Brass`
         - `ConicalBrass` -- GM 56 Trumpet (4), GM 58 Tuba (4), GM 60 French Horn (4)
@@ -652,7 +652,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `ReedPipe`
           - `Bagpipe` -- GM 109 Bag pipe (3)
           - `Shanai` -- GM 111 Shanai (2)
-    - `PanFlute` -- GM 75 Pan Flute (2)
+    - `PanFlute` -- GM 75 Pan Flute (4)
   - `Tonewheel`
     - `DrawbarOrgan` -- GM 16 Drawbar Organ (3)
     - `PercussiveOrgan` -- GM 17 Percussive Organ (3)

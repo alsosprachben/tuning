@@ -4,6 +4,7 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
 
     python3 examples/freesound_slice.py timbales
     python3 examples/freesound_slice.py surdo
+    python3 examples/freesound_slice.py pipes
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
 refs/sources.md), one 75 s mp3 decoded to float. 53 onsets (a rise of 20 dB in
@@ -36,7 +37,18 @@ and its 55-80 Hz band stays under its first 60 ms' peak from 60 to 150 ms
 (one in the fourth bar swells 3 dB there: another stroke on it). Mono, written as a
 stereo pair of the same channel into ~/Documents/refs/freesound/surdo/hits/
 {open,mute}_<n>.wav.
+
+PIPES (GM 75-78; ~/Documents/refs/sources.md "Pipes"): the pan flute, blown
+bottle, shakuhachi and whistle takes are scales, melodies and held tones, not
+one note a file, so each is pitch-tracked (YIN, 10 ms) and its STABLE notes
+cut out: a run of frames periodic (aperiodicity < 0.2), within 25 dB of the
+take's loudest and within 35 cents of their own median for at least a
+voice's MIN_LEN, cut 50 ms either side. Written (16-bit PCM, each at its own
+peak) as <note><octave>_<take>_<n>.wav
+under ~/Documents/refs/freesound/staged/<voice>/, the note the nearest to its
+median pitch -- the sounding pitch, as examples/wind_fit.py reads it.
 """
+import glob
 import os
 import subprocess
 import sys
@@ -141,5 +153,102 @@ def surdo():
     print(n, "->", out)
 
 
+NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+# voice: [(take glob under REFS, its tag, fmin, fmax, MIN_LEN s)]
+PIPES = {
+    "bottle": [("bottle/sadiquecat/*.wav", "sadiq", 100, 600, 2.5),
+               ("bottle/cabled_mess/*.wav", "cabled", 100, 600, 0.8)],
+    "panflute": [("panflute/278175__*.wav", "mrshoes", 200, 1500, 0.5),
+                 ("panflute/84748__*.wav", "j008b", 200, 1500, 0.4),
+                 ("panflute/427080__*.wav", "zanka", 100, 400, 0.6)],
+    "shakuhachi": [("shakuhachi/61498__*.wav", "uncle", 150, 1200, 0.8),
+                   ("shakuhachi/486487__*.wav", "gonzooka", 150, 1200, 0.8)],
+    "whistle": [("whistle/233569__*.aiff", "nbild", 500, 3000, 1.0),
+                ("whistle/790454__*.wav", "oscar", 500, 3000, 0.2)],
+}
+
+
+def track(x, sr, fmin, fmax, hop=0.01, win=0.04):
+    """(f0, aperiodicity, level dB) per hop: YIN's cumulative-mean-normalised
+    difference, the difference function from an FFT autocorrelation."""
+    n, h = int(win * sr), int(hop * sr)
+    tmin, tmax = int(sr / fmax), min(int(sr / fmin), n // 2)
+    out = []
+    for i in range(0, len(x) - n, h):
+        seg = x[i:i + n] - x[i:i + n].mean()
+        W = n // 2
+        a = seg[:W]
+        e = np.cumsum(np.concatenate(([0.0], seg * seg)))
+        F = np.fft.rfft(seg, 2 * n)
+        A = np.fft.rfft(a, 2 * n)
+        cc = np.fft.irfft(np.conj(A) * F, 2 * n)[:W + 1]
+        t = np.arange(W + 1)
+        d = e[W] + (e[t + W] - e[t]) - 2 * cc
+        d[0] = 0.0
+        c = np.cumsum(d[1:])
+        dn = np.ones_like(d)
+        dn[1:] = d[1:] * np.arange(1, W + 1) / np.maximum(c, 1e-20)
+        # THE FIRST DIP UNDER 0.15, then down to its own minimum -- YIN's rule.
+        # The deepest one is not the period: a near-sine (a bottle, a whistle)
+        # dips as low at every multiple of it, and the tracker leapt octaves
+        # (121 against 253 Hz on a bottle), breaking every run it was in
+        under = np.flatnonzero(dn[tmin:tmax] < 0.15)
+        if len(under):
+            k = tmin + int(under[0])
+            while k + 1 < tmax and dn[k + 1] < dn[k]:
+                k += 1
+        else:
+            k = tmin + int(np.argmin(dn[tmin:tmax]))
+        if 0 < k < W:
+            y0, y1, y2 = dn[k - 1:k + 2]
+            dd = y0 - 2 * y1 + y2
+            kf = k + (0.5 * (y0 - y2) / dd if dd > 0 else 0.0)
+        else:
+            kf = k
+        out.append((sr / kf, float(dn[k]), 10 * np.log10(np.mean(seg * seg) + 1e-20)))
+    return np.array(out)
+
+
+def pipes():
+    from scipy.io import wavfile
+    for voice, takes in PIPES.items():
+        out = os.path.join(REFS, "staged", voice)
+        os.makedirs(out, exist_ok=True)
+        for f in glob.glob(os.path.join(out, "*.wav")):
+            os.remove(f)
+        n = 0
+        for pat, tag, fmin, fmax, min_len in takes:
+            for src in sorted(glob.glob(os.path.join(REFS, pat))):
+                with tempfile.TemporaryDirectory() as d:
+                    wav = os.path.join(d, "t.wav")
+                    subprocess.run(["sox", src, "-e", "floating-point", "-b", "32", "-c", "1", wav],
+                                   check=True, stderr=subprocess.DEVNULL)
+                    a, sr = read(wav)
+                x = a if a.ndim == 1 else a.mean(1)
+                T = track(x, sr, fmin, fmax)
+                ok = (T[:, 1] < 0.2) & (T[:, 2] > T[:, 2].max() - 25.0)
+                k = 0
+                while k < len(T):
+                    if not ok[k]:
+                        k += 1
+                        continue
+                    j = k
+                    while j + 1 < len(T) and ok[j + 1] and abs(1200 * np.log2(T[j + 1, 0] / np.median(T[k:j + 1, 0]))) < 35:
+                        j += 1
+                    if (j - k + 1) * 0.01 >= min_len:
+                        f0 = float(np.median(T[k:j + 1, 0]))
+                        midi = int(round(69 + 12 * np.log2(f0 / 440.0)))
+                        a0, a1 = max(0, int((k * 0.01 - 0.05) * sr)), int(((j + 1) * 0.01 + 0.09) * sr)
+                        name = "%s%d_%s_%d.wav" % (NAMES[midi % 12], midi // 12 - 1, tag, n)
+                        # 16-bit PCM, each at its own peak: voicefit's reader takes PCM
+                        # only, and a note's level is no part of a spectral fit
+                        seg = x[a0:a1]
+                        seg = seg / max(np.abs(seg).max(), 1e-9) * 0.9
+                        wavfile.write(os.path.join(out, name), sr, (seg * 32767).astype(np.int16))
+                        n += 1
+                    k = j + 1
+        print("%-10s %3d stable notes -> %s" % (voice, n, out))
+
+
 if __name__ == "__main__":
-    {"timbales": timbales, "surdo": surdo}[sys.argv[1]]()
+    {"timbales": timbales, "surdo": surdo, "pipes": pipes}[sys.argv[1]]()

@@ -3737,7 +3737,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             # hiss read kurtosis 2.5 on one, the takes 3.0); a few summed are not
             _k = int(getattr(props, 'breath_noise_rows', 1))
             for _hf, _db in [(_bf * 2.0 ** ((_j - 0.5 * (_k - 1)) / (3.0 * _k)), _bd - 10.0 * math.log10(_k))
-                             for _bf, _bd in props.breath_noise_db for _j in range(_k)]:
+                             for _bf, _bd in props.breath_noise_at(f0) for _j in range(_k)]:
                 if _hf >= 0.45 * SR:
                     continue
                 _gM = props.gain * 10.0 ** (_db / 20.0)

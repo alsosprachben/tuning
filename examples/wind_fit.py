@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Fit a sustained wind voice -- the recorder (GM 74), the ocarina (GM 79), the
 harmonica (GM 22) --
-to VCSL's sustains (CC0; ~/Documents/refs/vcsl/{recorder,ocarina,harmonica}, sources.md).
+to VCSL's sustains (CC0; ~/Documents/refs/vcsl/{recorder,ocarina,harmonica}, sources.md),
+and the pan flute, blown bottle, shakuhachi and whistle (GM 75-78) to Freesound
+takes' stable notes (examples/freesound_slice.py pipes; VOICE_OPTS).
 
     wind_fit.py --voice=recorder              measure: recorded against ours
     wind_fit.py --voice=recorder --fit        fit the spectrum knobs
     wind_fit.py --voice=ocarina --fit=breath  fit sustain_jitter to the breath
     wind_fit.py --voice=harmonica --top       the ladder by absolute frequency, to 20 kHz
     wind_fit.py --voice=harmonica --fit=scatter  each reed's own ladder, to the roughness
+    wind_fit.py --voice=shakuhachi --fit=tables [--keys=57-62] [--match=uncle] [--low]
+                                              the series and breath tables, note by note
 
 Everything is measured the same way on both sides, over the steady part of the
 note (0.4-1.9 s after it speaks), so the fit is fitted to the measurement made
@@ -45,6 +49,23 @@ VOICES = {
     # GM 22: Hohner's Special 20 in C and in F (diatonic) and the Super 64
     # (chromatic), Normal sustains -- a free reed, named an octave low too.
     "harmonica": (22, "HarmonicaProperties", "harmonica", "*.wav"),
+    # GM 75-78: Freesound takes (sources.md "Pipes"), their STABLE notes cut and
+    # named by sounding pitch by examples/freesound_slice.py pipes
+    "panflute": (75, "PanFluteProperties", "panflute", "*.wav"),
+    "bottle": (76, "BlownBottleProperties", "bottle", "*.wav"),
+    "shakuhachi": (77, "ShakuhachiProperties", "shakuhachi", "*.wav"),
+    "whistle": (78, "WhistleProperties", "whistle", "*.wav"),
+}
+# WHERE A VOICE'S NOTES ARE, how they are named and how long they hold: VCSL's
+# are an octave low and sustained for seconds; the staged Freesound notes are
+# named as they sound and many are short -- a scale's, a melody's -- so each is
+# measured over a window its notes have (a note shorter than it is measured
+# over what it has)
+VOICE_OPTS = {
+    "panflute": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.15, t1=0.6),
+    "bottle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.4, t1=1.9),
+    "shakuhachi": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.15, t1=0.7),
+    "whistle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.08, t1=0.25),
 }
 T0, T1 = 0.4, 1.9
 VEL = 80
@@ -54,11 +75,14 @@ E3 = 2 ** np.arange(np.log2(45), np.log2(16000), 1 / 3.0)
 
 def recordings(voice):
     _, _, d, pat = VOICES[voice]
+    o = VOICE_OPTS.get(voice, {})
+    refs = os.path.expanduser(o.get("refs", REFS))
+    shift = 12 * o.get("octave", 1)
     out = []
-    for p in sorted(glob.glob(os.path.join(REFS, d, pat))):
+    for p in sorted(glob.glob(os.path.join(refs, d, pat))):
         n = V.note_of(p)
         if n is not None:
-            out.append((n + 12, p))
+            out.append((n + shift, p))
     return out
 
 
@@ -349,6 +373,21 @@ def ab(voice, prog, out, n=7, head=2.0, xf=0.1):
     for key, p in pick:
         x, sr = load(p)
         i = speaks(x, sr)
+        if len(x) - i < int((head + 0.6) * sr):
+            # A SHORT NOTE (a staged melody's, a scale's): played whole, and
+            # ours held as long -- there is no sustain to splice
+            x = x[i:]
+            y, sr2 = render(prog, key, len(x) / sr)
+            j = speaks(y, sr2)
+            y = y[j:j + int((len(x) / sr + 0.4) * sr2)]
+            if sr2 != sr:
+                y = resample_poly(y, sr, sr2)
+            m = min(len(x), len(y))
+            y = y * np.sqrt(np.mean(x[:m] ** 2) / max(np.mean(y[:m] ** 2), 1e-30))
+            gap = np.zeros(int(0.35 * sr))
+            parts += [x, gap, y, gap, gap]
+            print("  %s key %d (whole)" % (os.path.basename(p), key))
+            continue
         w = int(0.005 * sr)
         e = np.sqrt(np.convolve(x * x, np.ones(w) / w, "same"))
         st = np.median(e[i + int(0.5 * sr):i + int(1.5 * sr)])
@@ -512,6 +551,92 @@ def fit_breath(voice, prog, cls, passes=4, step=2):
 
 
 SKIRT = ("wind_skirt_db", "wind_skirt_harmonic_db", "wind_skirt_hz", "wind_skirt_rel")
+
+
+def spectra(x, sr, key, nh):
+    """--fit=tables' measurement, over the note's window (T0-T1, or what a short
+    note has): each harmonic's peak to NH, and the breath by third-octave band
+    -- the median between the harmonics, and UNDER the fundamental too (a high
+    whistle's breath is mostly there, where the gaps never look) -- all dB re
+    the fundamental's peak."""
+    i = speaks(x, sr)
+    seg = x[i + int(T0 * sr): i + int(T1 * sr)]
+    seg = seg - seg.mean()
+    f0 = f0_near(seg, sr, key)
+    N = 1 << 18
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N)) ** 2
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    h = []
+    for m in range(1, nh + 1):
+        b = (f > m * f0 * 0.97) & (f < m * f0 * 1.03)
+        h.append(X[b].max() if b.any() and m * f0 < 0.45 * sr else np.nan)
+    h = np.array(h)
+    ph = (f / f0) % 1.0
+    gap = (((ph > 0.3) & (ph < 0.7)) | (f < 0.7 * f0)) & (f > 100)
+    col = []
+    for lo, hi in zip(E3[:-1], E3[1:]):
+        m = gap & (f >= lo) & (f < hi) & (f < 0.45 * sr)
+        col.append(10 * np.log10(np.median(X[m]) / h[0] + 1e-30) if m.sum() > 4 else np.nan)
+    return 10 * np.log10(h / h[0] + 1e-30), np.array(col)
+
+
+def fit_tables(voice, prog, cls, argv, passes=3):
+    """--fit=tables [--keys=LO-HI] [--match=TEXT] [--low]: the series and the
+    breath together, note by note at full length, as TABLES -- mode_gains (to
+    max_harmonic) and breath_noise_db -- each pass adding recorded - ours (the
+    notes' median) to every harmonic and band; --nh=N to hN, the table grown
+    (max_harmonic must let it sound). --keys and --match take a part
+    of the notes (one player's, one register's); --low fits that part into
+    mode_gains_low / breath_noise_low_db instead (register_low_hz sends those
+    notes there)."""
+    keys = next((a.split("=")[1] for a in argv if a.startswith("--keys=")), None)
+    match = next((a.split("=")[1] for a in argv if a.startswith("--match=")), None)
+    low = "--low" in argv
+    picked = []
+    for key, p in recordings(voice):
+        if keys and not int(keys.split("-")[0]) <= key <= int(keys.split("-")[1]):
+            continue
+        if match and match not in os.path.basename(p):
+            continue
+        picked.append((key, p))
+    nh = int(next((a.split("=")[1] for a in argv if a.startswith("--nh=")), cls.max_harmonic))
+    import warnings
+    warnings.simplefilter("ignore")
+    rec = [spectra(*load(p), key, nh) for key, p in picked]
+    lens = [len(load(p)[0]) / load(p)[1] for _, p in picked]
+    R_h, R_c = np.nanmedian([r[0] for r in rec], 0), np.nanmedian([r[1] for r in rec], 0)
+    gname, bname = ("mode_gains_low", "breath_noise_low_db") if low else ("mode_gains", "breath_noise_db")
+    if getattr(cls, gname) is None:
+        setattr(cls, gname, tuple(cls.mode_gains))
+    if not getattr(cls, bname):
+        setattr(cls, bname, tuple(cls.breath_noise_db))
+    print("  %d notes: %s" % (len(picked), " ".join(os.path.basename(p)[:-4] for _, p in picked)))
+    for n in range(passes + 1):
+        ours = [spectra(*render(prog, key, max(L, T1 + 0.5)), key, nh) for (key, _), L in zip(picked, lens)]
+        O_h, O_c = np.nanmedian([o[0] for o in ours], 0), np.nanmedian([o[1] for o in ours], 0)
+        dh, dc = R_h - O_h, R_c - O_c
+        tab = dict(getattr(cls, bname))
+        bands = [i for i, c in enumerate(CEN) if int(round(c)) in tab]
+        ok = [i for i in bands if np.isfinite(dc[i])]
+        print("  pass %d: series rec - ours rms %.1f dB (h2-h%d), breath %.1f dB (%d bands)"
+              % (n, np.sqrt(np.nanmean(dh[1:] ** 2)), nh, np.sqrt(np.mean(dc[ok] ** 2)), len(ok)), flush=True)
+        if n == passes:
+            break
+        g = list(getattr(cls, gname))
+        g += [g[-1]] * (nh - len(g))         # a longer series starts level with its last
+        for m in range(1, nh):
+            if np.isfinite(dh[m]):
+                g[m] = g[m] * 10 ** (dh[m] / 20.0)
+        setattr(cls, gname, tuple(g))
+        for i in bands:
+            j = i if np.isfinite(dc[i]) else min(ok, key=lambda q: abs(q - i))
+            hz = int(round(CEN[i]))
+            tab[hz] += float(dc[j])
+        setattr(cls, bname, tuple((hz, round(db, 1)) for hz, db in sorted(tab.items())))
+    print("    %s = (%s)" % (gname, ", ".join("%.5f" % v for v in getattr(cls, gname))))
+    print("    %s = %s" % (bname, getattr(cls, bname)))
+    print("  series rec/ours " + " ".join("%+.0f/%+.0f" % (r, o) for r, o in zip(R_h, O_h)))
+    print("  breath rec/ours " + " ".join("%d %+.0f/%+.0f" % (CEN[i], R_c[i], O_c[i]) for i in bands[::2]))
 
 
 def fit_skirt(voice, prog, cls, step=3, maxfev=80):
@@ -698,6 +823,9 @@ def main(argv):
     if spec:
         return inharm(spec) or 0
     voice = next((a.split("=")[1] for a in argv if a.startswith("--voice=")), "recorder")
+    global T0, T1
+    T0 = VOICE_OPTS.get(voice, {}).get("t0", T0)
+    T1 = VOICE_OPTS.get(voice, {}).get("t1", T1)
     prog, cls = use_class(voice)
     fitarg = next((a for a in argv if a.startswith("--fit")), None)
     if fitarg == "--fit=breath":
@@ -708,6 +836,9 @@ def main(argv):
         return 0
     elif fitarg == "--fit=scatter":
         fit_scatter(voice, prog, cls)
+        return 0
+    elif fitarg == "--fit=tables":
+        fit_tables(voice, prog, cls, argv)
         return 0
     elif fitarg == "--fit=skirt":
         fit_skirt(voice, prog, cls)

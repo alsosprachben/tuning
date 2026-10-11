@@ -11178,27 +11178,33 @@ def selftest():
           len({_c.__name__ for _c in _pipes.values()}) >= 6,
           "  (%d distinct classes over the eight programs)"
           % len({_c.__name__ for _c in _pipes.values()}))
-    # A PAN PIPE IS CLOSED AT THE BOTTOM, and nothing else in the family is.
-    # That is not a colour: a stopped tube resonates at ODD multiples and
-    # overblows at the twelfth rather than the octave.
+    # A PAN PIPE IS CLOSED AT THE BOTTOM, and nothing else in the family is --
+    # but MEASURED (examples/wind_fit.py, 35 notes) closed is not odd-only: the
+    # evens stand ~14 dB under the odds, present, as the clarinet's are. The
+    # stopped rank's absolute odd_only (an organ Gedackt) is not this.
     _pf = _pipes[75](523.25, 0.0, 1.0, 1.0)
-    _evens = max(_pf.harmonic_volume(_k) / _pf.harmonic_volume(1) for _k in (2, 4, 6))
-    check("the pan pipe is a CLOSED tube and the rest are open",
-          _pipes[75].odd_only and _evens < 1e-6
+    _hd = lambda _k: 20.0 * math.log10(max(_pf.harmonic_volume(_k), 1e-12) / _pf.harmonic_volume(1))
+    _ev = sum(_hd(_k) for _k in (2, 4, 6)) / 3.0
+    _od = sum(_hd(_k) for _k in (3, 5, 7)) / 3.0
+    check("the pan pipe is a CLOSED tube, its evens under its odds, and the rest are open",
+          _od - _ev > 8.0 and _ev > -80.0
           and not any(_pipes[_g].odd_only for _g in (72, 73, 74, 77, 78, 79)),
-          "  (its evens are absent by construction; no other pipe's are)")
-    # ...AND IT IS THE BREATH THAT WAS MISSING. StoppedPipeProperties ships
-    # sustain_jitter = 0, so GM 75 rendered as a clean odd-harmonic tone -- an
-    # organ's Gedackt rank, which is what that class is for and is not a pan
-    # pipe. The player blows across an open tube top with no windway and no
-    # labium; most of that jet never couples in, and the noise is most of the
-    # sound.
-    check("...and the breathy pipes are breathier than the ducted one",
-          _pipes[75].sustain_jitter > 3.0 * _pipes[74].sustain_jitter
-          and _pipes[77].sustain_jitter > _pipes[75].sustain_jitter,
-          "  (recorder %.2f, pan pipe %.2f, shakuhachi %.2f)"
-          % (_pipes[74].sustain_jitter, _pipes[75].sustain_jitter,
-             _pipes[77].sustain_jitter))
+          "  (evens h2/4/6 %.1f dB, odds h3/5/7 %.1f)" % (_ev, _od))
+    # ...AND THE BREATH IS ITS OWN COLOUR, NOT A WASH -- and it is the LOW
+    # notes that are breathy. Measured, the takes' breath sits -63 to -90 dB
+    # under the high notes' tone, where the white wash (sustain_jitter) put
+    # -54 under every note; the shakuhachi's low player (A3-D#4) and the pan
+    # pipe's bass D3 are 15-35 dB breathier than the notes above them, and
+    # each has a low register's tables (register_low_hz) to say so.
+    def _bmean(_c, _hz):
+        _t = _c(_hz, 0.0, 1.0, 1.0).breath_noise_at(_hz)
+        return sum(_d for _f, _d in _t if 1000 <= _f <= 8000) / max(1, sum(1 for _f, _d in _t if 1000 <= _f <= 8000))
+    _bl = {_g: _bmean(_pipes[_g], _lo) - _bmean(_pipes[_g], _hi)
+           for _g, _lo, _hi in ((75, 146.8, 523.25), (77, 220.0, 523.25))}
+    check("...and the breath is a colour of its own, the low notes the breathier",
+          all(_pipes[_g].sustain_jitter == 0.0 and _pipes[_g].breath_noise_db for _g in (75, 76, 77, 78))
+          and all(_v > 10.0 for _v in _bl.values()),
+          "  (low over high, 1-8 kHz: pan pipe %+.1f dB, shakuhachi %+.1f)" % (_bl[75], _bl[77]))
     # A HUMAN WHISTLE IS A HELMHOLTZ RESONATOR, NOT A PIPE. One resonance tuned
     # by the tongue -- no registers, no overblowing, no fingering -- which is
     # why it is the closest thing to a sine a person makes. It belongs with the
