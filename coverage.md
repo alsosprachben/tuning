@@ -50,12 +50,13 @@ so it plays on the Messenger itself.
 hand percussion and **no drum kit at all** -- no snare, no bass drum, no
 toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's
 DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and
-the crashes hit hard.
+the crashes hit hard; VSCO-2 CE and VCSL (CC0) the hand percussion, the
+claps, the whistles and the second snare; Freesound takes the timbales, the
+surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 | rating | notes | share |
 |---|---|---|
-| 2 specific, theory | 7 | 14% |
-| 4 specific, reference audio | 44 | 86% |
+| 4 specific, reference audio | 51 | 100% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -64,7 +65,7 @@ the crashes hit hard.
 | 37 | Side Stick | `SideStick` | **4** | DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick) |
 | 38 | Acoustic Snare | `AcousticSnare` | **4** | DRSKit's snare (29 strokes, top and bottom mics): the head at 196 Hz with a tom's modes, choked in 50 ms; the wires a buzz of jittered noise in third-octave bands, fitted on band, onset balance and flatness (a chord of sines at the right band levels was not a snare; neither was a comb in phase -- "pew pew"). Needed the renderer's onsets to start on their own sample. Ben, by ear: sounds so much better |
 | 39 | Hand Clap | `HandClap` | **4** | VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great |
-| 40 | Electric Snare | `ElectricSnare` | **2** | a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all |
+| 40 | Snare Drum 2 | `SnareDrum2` | **4** | Roland's SNARE DRUM 2 (SC-55 p.70), a second acoustic snare: VCSL's Modern 1 (CC0), wires on, ten hits over 30 dB on a stereo pair (examples/snare_fit.py --vcsl). Its own head -- lowest mode 192.5 Hz, the loudest 435 -- and stick burst; 8.3 -> 6.9 dB. 2.5 dB under 38, where three GM sets keep theirs. The drum machine's snare is the Electronic set's |
 | 41 | Low Floor Tom | `FloorTom` | **4** | DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear |
 | 42 | Closed Hi-Hat | `ClosedHiHat` | **4** | Iowa hi-hat, five takes |
 | 43 | High Floor Tom | `FloorTom` | **4** | as 41, higher |
@@ -89,8 +90,8 @@ the crashes hit hard.
 | 62 | Mute Hi Conga | `CongaMute` | **4** | VSCO-2 CE (CC0) quinto tapped: the high conga muted |
 | 63 | Open Hi Conga | `CongaOpen` | **4** | VSCO-2 CE (CC0) quinto open (216 Hz), 13 measured modes -- one left out, the glide smeared into a peak that beat at 16 Hz |
 | 64 | Low Conga | `CongaLow` | **4** | VSCO-2 CE (CC0) conga, the middle of its three (164 Hz), open at three dynamics |
-| 65 | High Timbale | `Timbale` | **2** | a TIMBALE: a METAL shell with no bottom head, ringing to 3900 Hz where the head reaches 1116 and holding it three times longer than wood. Sticks |
-| 66 | Low Timbale | `Timbale` | **2** | as 65, lower |
+| 65 | High Timbale | `TimbaleHigh` | **4** | hello_flowers' timbales (freesound 41196, CC0), the high drum's ten free strokes cut from 50 hits (examples/freesound_slice.py): 46 measured modes ringing to 3.8 kHz, 224 Hz; fitted to 5.1 dB. The strike dense, jittered and SCATTERED in its bands (click_scatter): on an even grid its partials beat in a sweep -- Ben: "a phaser in the initial attack" |
+| 66 | Low Timbale | `TimbaleLow` | **4** | as 65, the low drum's nine (186 Hz, 33 modes), fitted to 6.3 dB |
 | 67 | High Agogo | `AgogoHigh` | **4** | VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes |
 | 68 | Low Agogo | `AgogoLow` | **4** | VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67 |
 | 69 | Cabasa | `Cabasa` | **4** | VSCO-2 CE (CC0) cabasa as SHAPED NOISE: measured, a twist is noise (its grain is its own spectrum with random phases), so the recording's third-octave spectrum as noise rows under the fitted swell, shake and 0.33 s settle -- colour within 0.3 dB, envelope 3.0. The impact burst before it clicked where the takes do not. Ben: sounds great |
@@ -102,14 +103,14 @@ the crashes hit hard.
 | 75 | Claves | `Claves` | **4** | Iowa claves, three pairs |
 | 76 | Hi Wood Block | `WoodBlockHi` | **4** | Iowa woodblocks, four sizes |
 | 77 | Low Wood Block | `WoodBlockLo` | **4** | as 76, the low block |
-| 78 | Mute Cuica | `MuteCuica` | **2** | its own FRICTION voice: sawtooth drive, axisymmetric modes only, mode-locked, glides up into pitch |
-| 79 | Open Cuica | `Cuica` | **2** | as 78, lower and gliding the other way. No reference -- Iowa has no friction drum |
+| 78 | Mute Cuica | `MuteCuica` | **4** | reinsamba's cuica (freesound pack 1339, CC-BY), the high takes: a squeak WHOOPING UP ~700 cents into ~790 Hz in 0.15 s, its own measured spectrum (h2 -23, h3 -21 dB), a one-shot gesture as every GM set plays it |
+| 79 | Open Cuica | `Cuica` | **4** | the FRICTION drum, on reinsamba's 13 close, dry takes (freesound pack 1339, CC-BY): rubbed UP into ~355 Hz from ~305, a 0.15 s gesture (gated: a one-tick note sounds), nearly a sine (h2 -14, h3 -27 dB) -- read first off a stairwell's takes, which had smeared it bright; at the GM sets' level against the snare |
 | 80 | Mute Triangle | `Triangle` | **4** | Iowa triangles, 6" and 8" |
 | 81 | Open Triangle | `Triangle` | **4** | as 80, undamped |
 | 84 | Belltree | `Crotale` | **4** | the measured crotales, cascaded -- 22 of them over 30 units |
 | 85 | Castanets | `Castanets` | **4** | Iowa castanets |
-| 86 | Mute Surdo | `Surdo` | **2** | a SURDO: two feet across, its shell resonating at 52 Hz under a 66 Hz head. Muted -- a hand laid flat straight after the beater |
-| 87 | Open Surdo | `Surdo` | **2** | as 86, open, and it rings nearly four times as long |
+| 86 | Mute Surdo | `SurdoMute` | **4** | as 87, the hand: the takes' muted strokes ring as the open ones for 0.2 s, then fall 25-30 dB in 40-60 ms (read in the head's own band) -- the open drum gated; the softer strike fitted, 2.1 dB |
+| 87 | Open Surdo | `SurdoOpen` | **4** | plotzki's samba surdo (freesound 36127, CC0), its open strokes: 21 modes from 66.7 Hz (a 40-49 Hz hump left out), fitted to 0.4 s -- the take's other drum rings past it -- 8.4 -> 3.2 dB |
 
 ## Drum sets: the program on a drum channel
 
@@ -282,7 +283,7 @@ plays Standard, as does any program that is not a set.
 | 76 | Blown Bottle | `BlownBottle` | **2** | its own class, theory |
 | 77 | Shakuhachi | `Shakuhachi` | **2** | a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled |
 | 78 | Whistle | `Whistle` | **2** | CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB) |
-| 79 | Ocarina | `Ocarina` | **4** | VCSL typical and small ocarinas (CC0), 21 sustains (examples/wind_fit.py): near-pure (h2 -44), its breath, flutter, shared wobble (2.4 dB) and pitch wander (5.6 cents) fitted, a soft chiff. Ben: sounds great |
+| 79 | Ocarina | `Ocarina` | **4** | the FRICTION drum, on reinsamba's 13 close, dry takes (freesound pack 1339, CC-BY): rubbed UP into ~355 Hz from ~305, a 0.15 s gesture (gated: a one-tick note sounds), nearly a sine (h2 -14, h3 -27 dB) -- read first off a stairwell's takes, which had smeared it bright; at the GM sets' level against the snare |
 
 ## 80-87 Synth Lead
 
@@ -364,7 +365,7 @@ plays Standard, as does any program that is not a set.
 
 ## The class tree
 
-283 classes.
+285 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -372,8 +373,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
 (`set k n`) that use it, with their ratings.
 
 - `Synth`
-  - `Cuica` -- 79 Open Cuica (2)
-    - `MuteCuica` -- 78 Mute Cuica (2)
+  - `Cuica` -- 79 Open Cuica (4)
+    - `MuteCuica` -- 78 Mute Cuica (4)
   - `FreeReed`
     - `Accordion` -- GM 21 Accordion (2)
       - `TangoAccordion` -- GM 23 Tango Accordion (2)
@@ -445,6 +446,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
             - `SideStick` -- 37 Side Stick (4)
+            - `SnareDrum2` -- 40 Snare Drum 2 (4)
           - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4)
@@ -457,14 +459,15 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `CongaMute` -- 62 Mute Hi Conga (4)
             - `CongaOpen` -- 63 Open Hi Conga (4)
             - `CowbellStroke` -- 56 Cowbell (4)
+            - `SurdoOpen` -- 87 Open Surdo (4)
+              - `SurdoMute` -- 86 Mute Surdo (4)
             - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4)
+            - `TimbaleHigh` -- 65 High Timbale (4)
+            - `TimbaleLow` -- 66 Low Timbale (4)
           - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4)
-        - `ShelledDrum`
-          - `Surdo` -- 86 Mute Surdo (2), 87 Open Surdo (2)
-          - `Timbale` -- 65 High Timbale (2), 66 Low Timbale (2)
         - `SynthDrum` -- set 24 41 Elec Low Tom 2 (2), set 24 43 Elec Low Tom 1 (2), set 24 45 Elec Mid Tom 2 (2), set 24 47 Elec Mid Tom 1 (2), set 24 48 Elec Hi Tom 2 (2), set 24 50 Elec Hi Tom 1 (2)
           - `ElectronicKick` -- set 24 36 Elec BD (2)
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
@@ -486,7 +489,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `BrushSwirl` -- set 40 40 Brush Swirl (3)
         - `BrushTap` -- set 40 38 Brush Tap (3)
           - `BrushSlap` -- set 40 39 Brush Slap (3)
-        - `ElectricSnare` -- 40 Electric Snare (2)
+        - `ElectricSnare`
           - `ElectronicSnare` -- set 24 38 Elec SD (2)
         - `GatedSnare` -- set 24 40 Gated SD (2)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)

@@ -8551,36 +8551,46 @@ def selftest():
     # very little else -- what separates a bongo from a surdo is the SHELL, and
     # what separates a timbale from a conga is what the shell is made of.
     _kit = {_n: _PMk.PERCUSSION[_n][1] for _n in (60, 61, 62, 63, 64, 65, 66, 86, 87)}
-    # ...and since then the bongos and congas are MEASURED (VSCO-2 CE, examples/
-    # perc_fit.py): their shells are in their recorded modes. The timbale and the
-    # surdo, with no recording, keep the modelled shell.
-    check("the kit's hand drums are their own instruments",
-          all(issubclass(_kit[_n], _T.MeasuredStrokeProperties) for _n in (60, 61, 62, 63, 64))
-          and _kit[65] is _T.TimbaleProperties and _kit[86] is _T.SurdoProperties,
-          "  (bongos and congas measured; timbale and surdo modelled, shells and all)")
-    _sd = _kit[86](66.0, 0.0, 1.0, 1.0)
-    _shell = [66.0 * (1.0 + _v[2]) for _v in _sd.unison_voices(66.0, 1, 30.0)]
-    check("...and a shell RADIATES, where a formant could only have filtered",
-          _shell and min(_shell) < 66.0 * _kit[86].mode_ratios[0],
-          "  (the surdo's %.0f Hz sits under its own %.0f Hz head)"
-          % (min(_shell) if _shell else 0.0, 66.0))
-    _tb = _kit[65](270.0, 0.0, 1.0, 1.0)
-    _tshell = [270.0 * (1.0 + _v[2]) for _v in _tb.unison_voices(270.0, 1, 30.0)]
-    check("...and the timbale's steel rings above the head, and longer",
-          max(_tshell) > 270.0 * _kit[65].mode_ratios[-1] * 1.5
-          and _kit[65].shell_decay_db < _kit[86].shell_decay_db,
-          "  (%.0f Hz against a head reaching %.0f, and it holds it longer)"
-          % (max(_tshell), 270.0 * _kit[65].mode_ratios[-1]))
-    # ...AND ONCE PER NOTE, NOT PER MODE. A shell is one resonance; emitting it
-    # under every harmonic would put twelve copies of it in the sound.
-    check("...and the shell is emitted once, not under every mode",
-          len(_sd.unison_voices(66.0, 1, 30.0)) > 0
-          and not _sd.unison_voices(66.0, 2, 30.0),
-          "  (under harmonic 1 only)")
-    # AN ELECTRIC SNARE IS A MACHINE, not the acoustic snare at another pitch.
-    _es = _PMk.PERCUSSION[40][1]
+    # ...and now all nine are MEASURED (examples/perc_fit.py): the bongos and
+    # congas off VSCO-2 CE, the timbales and the surdo off Freesound takes. The
+    # shells are in their recorded modes.
+    check("the kit's hand drums are their own instruments, each measured",
+          all(issubclass(_kit[_n], _T.MeasuredStrokeProperties) for _n in _kit)
+          and len({_kit[_n] for _n in (60, 62, 65, 86)}) == 4,
+          "  (bongos, congas, timbales and surdo, each off its own recording)")
+    # THE TIMBALE'S STEEL RINGS above its head, where a wooden shell is quiet:
+    # its measured modes reach 3.8 kHz, the surdo's stop near 600 Hz
+    _hi = lambda c, f0: f0 * max(_r for _r, _g, _d in c.DRUM_MODES if _g > -30.0)
+    check("...and the timbale's steel rings far above its head, the surdo's does not",
+          _hi(_kit[65], 224.1) > 3000.0 and _hi(_kit[87], 66.7) < 1000.0,
+          "  (timbale to %.0f Hz, surdo to %.0f)" % (_hi(_kit[65], 224.1), _hi(_kit[87], 66.7)))
+    # THE MUTED SURDO IS THE OPEN ONE STOPPED: the same modes, and a hand
+    check("...and the muted surdo is the open drum, gated by the hand",
+          issubclass(_kit[86], _kit[87]) and _kit[86].DRUM_MODES == _kit[87].DRUM_MODES
+          and _kit[86].gate_time and not getattr(_kit[87], "gate_time", None),
+          "  (gate %.2f s)" % (_kit[86].gate_time or 0.0))
+    # A STRIKE ON AN EVEN GRID BEATS IN A SWEEP (Ben: "a phaser in the initial
+    # attack"): the timbales' partials scattered in their bands
+    _tb = _kit[65](224.1, 0.0, 1.0, 1.0)
+    _cf = sorted(_tb._click(_m)[1] for _m in range(len(_tb.DRUM_MODES) + 1, _tb.max_harmonic + 1)
+                 if _tb._click(_m) and _tb._click(_m)[0] == 6)
+    _gaps = np.diff(np.log2(_cf))
+    check("...and the timbale's strike is scattered, not a grid that sweeps",
+          _kit[65].click_scatter and float(np.std(_gaps) / np.mean(_gaps)) > 0.25,
+          "  (one band's partials: spacing varies %.0f%%)" % (100 * float(np.std(_gaps) / np.mean(_gaps))))
+    # 40 IS ROLAND'S "SNARE DRUM 2" (SC-55 p.70): a second acoustic snare,
+    # its own drum (VCSL's) -- not 38 at another pitch.
+    _s2 = _PMk.PERCUSSION[40][1]
+    check("...note 40 is a second acoustic snare, its own drum and not 38 retuned",
+          issubclass(_s2, _T.AcousticSnareProperties)
+          and _s2.DRUM_MODES != _T.AcousticSnareProperties.DRUM_MODES
+          and _s2.CLICK_DB != _T.AcousticSnareProperties.CLICK_DB,
+          "  (%s, lowest mode %.1f Hz)" % (_s2.__name__, _PMk.PERCUSSION[40][2]))
+    # AN ELECTRIC SNARE IS A MACHINE, not the acoustic snare at another pitch:
+    # the Electronic set's 38
+    _es = _PMk.KITS[24][38][1]
     check("...and the electric snare is a drum machine, not a retuned snare",
-          _es is _T.ElectricSnareProperties and _es.tension_bend > 0.0
+          issubclass(_es, _T.ElectricSnareProperties) and _es.tension_bend > 0.0
           and not _es.strike_noise_slope,
           "  (its body DROPS, and it does not get rattlier when hit harder)")
 
@@ -12948,37 +12958,38 @@ def selftest():
           and not issubclass(_T.CuicaProperties, _T.PercussionProperties),
           "  (and not under PercussionProperties, whose docstring says struck)")
     cu = _T.CuicaProperties(260.0, 0.0, 1.0, 1.0)
-    # Driven, so it rings while it is driven. A struck membrane's fast decay was
-    # modelling the wrong thing entirely.
-    check("...it is driven, so it sustains rather than decays",
-          cu.decay_db == 0.0 and cu.harmonic_decay_db == 0.0 and cu.one_shot is False)
-    # A sawtooth drive, as on a bowed string: harmonics go as 1/n.
-    h2 = 20 * _math.log10(cu.harmonic_volume(2) / cu.harmonic_volume(1))
-    h4 = 20 * _math.log10(cu.harmonic_volume(4) / cu.harmonic_volume(1))
-    check("...with a sawtooth's 1/n series, like the bowed string it resembles",
-          abs(h2 + 6.0) < 0.6 and abs(h4 + 12.0) < 0.8,
-          "  (h2 %.1f dB, h4 %.1f)" % (h2, h4))
-    # DRIVEN AT THE CENTRE, so only the axisymmetric modes can speak: every mode
-    # with an angular node has a node exactly where the stick is tied. These are
-    # j(0,n)/j(0,1), and they are what the onset must depart to.
-    AXI = (1.0, 2.29542, 3.59848, 4.90334, 6.20875)
-    got = [h * (1.0 + cu.mode_lock_offset_for(h)) for h in range(1, 6)]
-    worst = max(abs(g - w) for g, w in zip(got, AXI))
-    check("...and its onset is the AXISYMMETRIC membrane, not the whole Bessel set",
-          worst < 0.01 and cu.mode_ratios is None,
-          "  (worst %.4f against j(0,n)/j(0,1); %s)"
-          % (worst, "steady tone harmonic" if cu.mode_ratios is None else "STEADY IS NOT HARMONIC"))
-    # ...but because it is driven it mode-locks, so the STEADY tone is harmonic,
-    # exactly the argument the organ pipes make.
-    check("...which the drive then pulls into a harmonic tone",
-          cu.mode_lock_spread > 0.0 and cu.mode_lock_time > 0.0
+    # Driven, so it does not decay as a struck head does -- but a stroke of the
+    # stick is a GESTURE, as every GM set plays it: a one-shot, gated at the
+    # rub's own length, so a one-tick drum-track note still sounds.
+    check("...it is driven, and a stroke of the stick is one gesture",
+          cu.decay_db == 0.0 and cu.harmonic_decay_db == 0.0 and cu.one_shot
+          and 0.1 < _T.MuteCuicaProperties.gate_time < cu.gate_time < 0.6,
+          "  (gated %.2f s open, %.2f mute)" % (cu.gate_time, _T.MuteCuicaProperties.gate_time))
+    # A sawtooth drive -- but what is heard is what the head and the cloth
+    # leave of it, MEASURED over whole strokes of reinsamba's low cuica: the
+    # EVEN harmonics strong (the bark -- Ben: "the dog aspect is missing"),
+    # h4 over its neighbours h3 and h5, where a sawtooth's 1/n falls smoothly
+    _hv = [20 * _math.log10(cu.harmonic_volume(k) / cu.harmonic_volume(1)) for k in range(1, 7)]
+    check("...with the measured series, the even harmonics strong",
+          _hv[3] > _hv[2] + 6.0 and _hv[3] > _hv[4] + 6.0 and _hv[1] > -3.0,
+          "  (h2 %.1f, h3 %.1f, h4 %.1f, h5 %.1f dB; a sawtooth's 1/n: -6, -9.5, -12, -14)"
+          % (_hv[1], _hv[2], _hv[3], _hv[4]))
+    # ONE HARMONIC TONE, SWEEPING. The passive membrane's inharmonic onset
+    # (j(0,n)/j(0,1), carried as a mode lock) is OFF: the renderer gives a
+    # locked partial the lock's glide instead of the finger's, so h2 and h3
+    # sat on the note while h1 swept, holding the ear -- Ben: "the ascending
+    # sweep is not as represented". reinsamba's strokes are periodic within
+    # ~40 ms and sweep as one tone.
+    check("...and its stroke sweeps as one harmonic tone",
+          cu.mode_lock_spread == 0.0 and cu.mode_ratios is None
           and all(cu.mode_ratio(h) == float(h) for h in range(1, 8)),
-          "  (locks in %.0f ms)" % (1000 * cu.mode_lock_time))
+          "  (no mode lock: every harmonic carries the finger's glide)")
     # The other hand: a finger on the head changes the tension, and a membrane's
-    # pitch goes as sqrt(T). GM gives two notes, so they glide opposite ways.
-    mu = _T.MuteCuicaProperties(420.0, 0.0, 1.0, 1.0)
-    check("...and the two notes glide in opposite directions",
-          mu.tension_bend < 0.0 < cu.tension_bend
+    # pitch goes as sqrt(T). MEASURED on reinsamba's takes, both notes are
+    # rubbed UP into pitch -- the squeak far further than the low drum.
+    mu = _T.MuteCuicaProperties(790.0, 0.0, 1.0, 1.0)
+    check("...and both notes rise into pitch, the squeak furthest",
+          mu.tension_bend < cu.tension_bend < 0.0
           and abs(cu.tension_bend) > 8.0 * _T.GrandPianoProperties.tension_bend,
           "  (mute %+.0f cents, open %+.0f, against a piano's %+.0f)"
           % (1200 * _math.log2(1 + mu.tension_bend), 1200 * _math.log2(1 + cu.tension_bend),

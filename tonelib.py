@@ -1072,6 +1072,14 @@ class SynthProperties:
     strike_flam = 0
     strike_flam_s = 0.055
     strike_flam_db = 13.0
+    # A LATE STRIKE: the strike (strike_noise_db) fired strike_noise_at seconds
+    # after the onset rather than at it, its table moved strike_noise_cal_db.
+    # A muted surdo's hand: the beater is the note's own strike, and the hand
+    # that lands 0.22 s later and stops the head is this one -- louder than
+    # the beater from 0.5 to 4 kHz (tonelib.SurdoMuteProperties). 0, 0 = the
+    # strike at the onset, as every voice before it.
+    strike_noise_at = 0.0
+    strike_noise_cal_db = 0.0
     # GRAINS: sparse events through a held note (an ocean drum's beads landing)
     # -- rows of (lo Hz, hi Hz, per second, dB re the note's gain, dB scatter,
     # decay dB/s): each a damped sine at a log-uniform frequency in the band,
@@ -8866,6 +8874,12 @@ class KitDrumProperties(MembraneDrumProperties):
     stroke_ref_db = -12.0
     slow_share = 0.0
     slow_dbs = 0.0
+    # THE REMAINDER IS LOW. slow_share at slow_dbs held every mode, so a
+    # timbale's 2-4 kHz died at its slow rate with the rest (45-90 dB/s in
+    # every octave, where the takes' 2 and 4 kHz fall at 138-161): Ben,
+    # "slightly more metallic than the recording". None = every mode, as
+    # every drum fitted before it.
+    slow_max_hz = None
     CLICK_HZ0 = 500.0
     CLICK_DB = ()
     # what reading the click back off a render takes from CLICK_DB (examples/
@@ -8875,6 +8889,15 @@ class KitDrumProperties(MembraneDrumProperties):
     # and not the drum
     click_cal_db = 0.0
     click_per_band = 3
+    # THE CLICK'S PARTIALS EVENLY SPACED BEAT IN A SWEEP. Neighbours a fixed
+    # fraction of an octave apart beat at a rate proportional to their
+    # frequency, so the beats' maxima lie along t * f = const: a phaser. Ben
+    # heard it on the first timbale ("a phaser in the initial attack"), and
+    # denser partials only made it finer (a 24-a-band strike still moved
+    # 2-ms frames 42% of the time where the takes move 8-10%). 1 = each
+    # partial anywhere in its band, by a hash; 0 = the grid every drum fitted
+    # before this was fitted with.
+    click_scatter = 0.0
     click_dbs = 480.0
     click_stroke_slope = 0.7
     # A STICK ARRIVES AT ONCE. attack_time None derives the onset from
@@ -8906,6 +8929,12 @@ class KitDrumProperties(MembraneDrumProperties):
         b, k = divmod(j, self.click_per_band)
         if b >= len(self.CLICK_DB):
             return None
+        if self.click_scatter:
+            # ANYWHERE IN THE BAND, by a hash of (band, partial): see
+            # click_scatter. Fixed per drum, so a stroke is still a stroke
+            h = ((b * 1000003 + k * 7919 + 12345) * 2654435761) % 4294967296 / 4294967296.0
+            x = (h - 0.5) * self.click_scatter + (1.0 - self.click_scatter) * ((k + 0.5) / self.click_per_band - 0.5)
+            return b, self.CLICK_HZ0 * 2.0 ** ((b + x) / 3.0)
         # k evenly through the band, nudged off the grid by a fixed fraction so
         # two drums' clicks do not share partials
         x = (k + 0.5) / self.click_per_band - 0.5 + 0.3 * (((b * 7 + k * 13) * 0.6180339887) % 1.0 - 0.5) / self.click_per_band
@@ -8937,6 +8966,14 @@ class KitDrumProperties(MembraneDrumProperties):
         if 1 <= harmonic <= len(self.DRUM_MODES):
             return 0.5 * self.DRUM_MODES[harmonic - 1][2]
         return 0.5 * self.click_dbs if self._click(harmonic) else 0.0
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        # the renderer asks this with partial m (blockrender.partial_decay):
+        # a mode above slow_max_hz has no remainder, where the drum sets one;
+        # with it None this answers as aftersound(), every other drum unchanged
+        if self.slow_max_hz and f0 * self.mode_ratio(m) > self.slow_max_hz:
+            return (0.0, decay_rate)
+        return self.aftersound(f0, decay_rate)
 
     def aftersound(self, frequency, decay_rate):
         # the click is not the shell's: it has no remainder
@@ -9841,6 +9878,52 @@ class SideStickProperties(AcousticSnareProperties):
         return super().harmonic_decay(harmonic)
 
 
+class SnareDrum2Properties(AcousticSnareProperties):
+    """GM 40 as Roland's Standard set has it, "Snare Drum 2" (SC-55 manual
+    p.70): a second acoustic snare, not GM's drum-machine "Electric Snare"
+    (ElectricSnareProperties, still the Electronic set's 38). VCSL's "Snare
+    Drum, Modern 1", wires on (examples/snare_fit.py --vcsl): ten hits in five
+    layers over 30 dB, on a stereo pair rather than close microphones.
+
+    ANOTHER DRUM, NOT 38 RETUNED. Its lowest mode is 192.5 Hz, as DRSKit's,
+    but it is not the loudest: the head speaks at 435 Hz (x2.26), 8.5 dB
+    over it, with a dense cluster from x1.2 to x1.77 -- a tighter head over
+    a deeper shell. Read from the first 60 ms of the upper half of the hits.
+    Three GM SoundFonts keep their 40 ~2.5 dB under their 38 and brighter.
+    """
+    # (ratio to 192.5 Hz, gain dB re the first mode, unused: harmonic_decay answers)
+    DRUM_MODES = ((1.000, 0.0, 450.0), (1.199, 5.5, 450.0), (1.448, -4.5, 450.0),
+                  (1.629, 2.8, 450.0), (1.769, 0.2, 450.0), (2.259, 8.5, 450.0),
+                  (2.822, 5.1, 450.0), (3.427, -5.5, 450.0), (4.077, -7.5, 450.0),
+                  (4.483, -6.7, 450.0), (5.042, -14.9, 450.0), (5.486, -13.0, 450.0))
+    # the loud hits' burst, 0-20 ms, re the first mode (snare_fit.py --vcsl --click)
+    CLICK_DB = (-2, -8, -18, -23, -17, -21, -26, -28, -32, -33, -35, -36, -40, -39)
+    # FITTED on the band-by-time grid (examples/snare_fit.py --vcsl) over soft,
+    # mid and loud hits, from 38's numbers: 8.3 -> 6.9 dB. The head dies a
+    # little slower at its first mode and faster above it (388 and 563 dB/s
+    # against 447 and 444), the wires slower (126 against 152): a drum heard
+    # from the pair, the room in its tail
+    fund_dbs = 388.298
+    head_dbs = 562.989
+    slow_share = 0.0234912
+    slow_dbs = 60.3523
+    click_cal_db = 5.0589
+    click_dbs = 125.81
+    click_stroke_slope = 0.0448064
+    chiff_volume = 2.84157
+    chiff_width = 0.0488848
+    chiff_bandwidth = 0.228498
+    sustain_jitter = 0.0622825
+    band_trim_db = ((177, 2.9), (354, -4.6), (707, -12.4), (1414, 0.1), (2828, 10.7), (5657, 16.4), (11314, 10.1))
+    # ...the top three octaves then raised 3-8 dB: Ben, on the A/B, "a little
+    # darker than the recording", and 2-16 kHz read 4-9 dB under it in the
+    # attack, body and tail alike (examples/stroke_ab.py snare2 --bands)
+    # 2.5 dB under the kit's 38 (-38.3 dB, its loudest 150 ms at velocity
+    # 100): where FluidR3, GeneralUser GS and MuseScore General all keep their
+    # 40 against their 38 (examples/kit_levels.py's reading)
+    initial_gain = 0.214662
+
+
 class TambourineProperties(NoisyPercussionMixin, KitDrumProperties):
     """GM 54: Iowa's tambourine 2, struck (examples/tamb_fit.py), in place of
     a noise drum shaken fourteen times with no recording behind it.
@@ -10350,6 +10433,170 @@ class BongoLowProperties(MeasuredStrokeProperties):
     initial_gain = 0.009096      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
     attack_time = 0.00233535
+
+
+class TimbaleHighProperties(MeasuredStrokeProperties):
+    """GM 65: hello_flowers' timbales (freesound 41196, CC0), the high drum's
+    free strokes, ten (examples/freesound_slice.py, examples/perc_fit.py
+    timbale_hi). 224 Hz. TimbaleProperties stays as theory built it."""
+    DRUM_MODES = ((0.9999, -0.1, 118), (1.0570, -9.0, 94), (1.1591, -19.2, 149),
+                  (1.2341, -28.2, 131), (1.3062, -26.5, 148), (1.3602, -27.0, 181),
+                  (2.0058, -11.4, 73), (2.8526, 0.0, 72), (3.0658, -24.1, 444),
+                  (3.7054, -18.0, 65), (4.0657, -29.1, 122), (4.5131, -17.0, 41),
+                  (4.6993, -27.3, 191), (4.8975, -29.0, 239), (5.3268, -20.0, 36),
+                  (5.6241, -17.4, 159), (5.8854, -28.0, 303), (6.1316, -18.1, 41),
+                  (6.5249, -16.5, 165), (6.6811, -28.8, 256), (6.9273, -17.6, 65),
+                  (7.4348, -17.5, 120), (7.6690, -15.0, 141), (8.4167, -18.4, 215),
+                  (8.5968, -22.7, 263), (8.8310, -21.7, 313), (9.2184, -20.5, 131),
+                  (9.3926, -20.1, 168), (10.0501, -16.7, 145), (10.3594, -19.4, 197),
+                  (10.6357, -21.6, 174), (10.8999, -20.0, 154), (11.3143, -20.7, 185),
+                  (11.6926, -17.4, 182), (12.1340, -25.3, 145), (12.5304, -26.1, 236),
+                  (12.9238, -30.0, 239), (13.3261, -27.4, 215), (13.8306, -25.7, 237),
+                  (14.0888, -24.6, 244), (14.4161, -27.3, 239), (14.8815, -22.1, 213),
+                  (15.9055, -28.7, 233), (16.1817, -28.0, 289), (16.5030, -28.6, 274),
+                  (16.9684, -28.3, 287))
+    mode_scatter_db = 4.0      # takes of one stroke differ 6.7 dB; unscattered, ours 5.7
+    initial_gain = 0.093218      # held at the old voice's level, -35.69 dB (velocity 100, its loudest 150 ms)
+    slow_share = 0.0989087  
+    slow_dbs = 21.7764  
+    click_cal_db = 1.64962  
+    click_dbs = 705.583  
+    click_stroke_slope = 0.243972  
+    chiff_volume = 7.93127  
+    chiff_width = 0.0667479  
+    chiff_bandwidth = 0.0330064  
+    sustain_jitter = 0.591294  
+    band_trim_db = ((177, 4.0), (354, -0.6), (707, -1.5), (1414, 3.1), (2828, 7.2), (5657, 4.7), (11314, -16.9))
+    # THE STRIKE DENSE AND NOISY, as the bongos' slap and the snare's wires.
+    # Six near-pure partials a third-octave (jitter 0.03) beat with their
+    # neighbours, and a grid of beats wavers: Ben, on the first fit: "the high
+    # timbale has a phaser in the initial attack". 24 a band, jittered into
+    # a noise, stand still
+    click_per_band = 24
+    click_scatter = 1.0        # and anywhere in their band: an even grid of them beats in a sweep
+
+
+
+class TimbaleLowProperties(MeasuredStrokeProperties):
+    """GM 66: as 65, the low drum's free strokes, nine. 186 Hz, a minor third
+    under the high."""
+    DRUM_MODES = ((0.9278, -14.9, 102), (1.0144, 0.0, 92), (1.1299, -16.7, 234),
+                  (1.3104, -29.2, 227), (1.4007, -27.3, 154), (1.5343, -29.4, 131),
+                  (1.6029, -26.8, 211), (1.8628, -9.2, 45), (2.0469, -7.4, 54),
+                  (2.7148, -13.5, 237), (2.8267, -9.0, 52), (3.1913, -21.4, 320),
+                  (3.4729, -13.3, 79), (3.7220, -30.0, 200), (3.8519, -28.6, 277),
+                  (4.2923, -14.1, 176), (4.5595, -16.0, 146), (4.9097, -20.0, 74),
+                  (5.0577, -17.2, 116), (5.6208, -18.6, 142), (6.1262, -29.1, 217),
+                  (6.3392, -28.6, 196), (6.4836, -27.2, 75), (7.9746, -24.0, 153),
+                  (8.4511, -29.6, 194), (8.7074, -28.7, 119), (9.0648, -29.4, 161),
+                  (10.1226, -28.6, 183), (10.9457, -28.4, 133), (11.2706, -24.5, 251),
+                  (12.7362, -29.4, 239), (13.2922, -28.3, 208), (16.4149, -29.2, 289))
+    mode_scatter_db = 6.0      # takes of one stroke differ 8.1 dB; unscattered, ours 5.4
+    initial_gain = 0.100348      # held at the old voice's level, -35.33 dB (velocity 100, its loudest 150 ms)
+    slow_share = 0.279664  
+    slow_dbs = 65.3448  
+    click_cal_db = 1.41824  
+    click_dbs = 486.717  
+    click_stroke_slope = 0.249644  
+    chiff_volume = 7.71036  
+    chiff_width = 0.0329651  
+    chiff_bandwidth = 0.0608292  
+    sustain_jitter = 0.153684  
+    band_trim_db = ((177, 6.0), (354, 0.9), (707, 4.6), (1414, -0.2), (2828, 5.1), (5657, -3.2), (11314, -13.2))
+    # THE STRIKE DENSE AND NOISY, as the bongos' slap and the snare's wires.
+    # Six near-pure partials a third-octave (jitter 0.03) beat with their
+    # neighbours, and a grid of beats wavers: Ben, on the first fit: "the high
+    # timbale has a phaser in the initial attack". 24 a band, jittered into
+    # a noise, stand still
+    click_per_band = 24
+    click_scatter = 1.0        # and anywhere in their band: an even grid of them beats in a sweep
+
+    ring_scale = 0.985959
+    # THE REMAINDER BELOW 800 Hz ONLY. Ben: "slightly more metallic than the
+    # recording" -- its 2 and 4 kHz died at the remainder's rate (86-88 dB/s)
+    # where the takes' fall at 138-160; above 800 Hz the modes now go at
+    # their own, 129 and 148 (the takes' slowest octave is 500 Hz, 56 dB/s)
+    slow_max_hz = 800.0
+
+
+
+class SurdoOpenProperties(MeasuredStrokeProperties):
+    """GM 87: plotzki's samba surdo (freesound 36127, CC0), the strokes left
+    to ring (examples/freesound_slice.py surdo, examples/perc_fit.py
+    surdo_open). 66.7 Hz. SurdoProperties stays as theory built it."""
+    # the head's modes from 67 Hz (perc_fit --modes). Under it the reader
+    # found thirteen "modes" one FFT bin apart from 40 to 49 Hz, 28-34 dB
+    # down: a smooth hump, not a series -- left out
+    DRUM_MODES = ((1.0102, 0.0, 39), (1.2628, -25.8, 76), (1.6691, -17.7, 63), (2.0095, -10.0, 45),
+                  (2.4158, -16.7, 96), (2.6134, -12.5, 46), (2.9868, -22.3, 43),
+                  (3.2174, -23.9, 38), (3.3821, -23.5, 56), (3.6347, -30.3, 127),
+                  (4.0739, -20.6, 66), (4.3923, -33.9, 49), (4.7986, -30.9, 37),
+                  (5.0731, -21.9, 64), (5.6551, -27.7, 111), (6.0724, -21.9, 133),
+                  (6.7862, -29.6, 200), (7.0826, -26.8, 125), (7.5878, -31.1, 185),
+                  (8.1368, -34.8, 91), (9.0482, -29.3, 228))
+    mode_scatter_db = 0.0      # takes of one stroke differ 4.1 dB; unscattered, ours 4.1
+    initial_gain = 0.079891      # held at the old voice's level, -22.80 dB (velocity 100, its loudest 150 ms)
+    slow_share = 0.0389456
+    slow_dbs = 61.6058
+    click_cal_db = 0.960724
+    click_dbs = 120.469
+    click_stroke_slope = 0.153075
+    chiff_volume = 4.49192
+    chiff_width = 0.0369666
+    chiff_bandwidth = 0.138574
+    sustain_jitter = 0.170942
+    band_trim_db = ((44, 23.3), (88, 20.0), (177, 17.6), (354, 7.7), (707, 2.1), (1414, -4.9), (2828, -13.0), (5657, -22.5), (11314, -30.3))
+    ring_scale = 0.420264
+
+
+
+class SurdoMuteProperties(SurdoOpenProperties):
+    """GM 86: the same drum, and a hand that lands on the head and stops it.
+    Read off the same take, the second stroke of each pair (examples/
+    freesound_slice.py surdo).
+
+    THE HAND IS A STROKE TOO. Ben: "the muting is missing its attack." In the
+    head's own band (55-80 Hz) the muted strokes ring as the open ones for
+    ~0.2 s; then, at 0.20-0.26 s (median 0.22), the hand LANDS -- 0.5-4 kHz
+    jumps 14-15 dB OVER the beater's own attack there -- and the head falls
+    25-30 dB in 40-60 ms. (The first reading took that slap for something
+    else in the take and judged the stroke short of it.) So: the open drum's
+    modes, gated where the hand lands (gate_time, released over
+    release_valve_time), and the hand's slap a late strike (strike_noise_at,
+    tonelib.SynthProperties) -- its third-octave colour read in the 30 ms
+    after it lands, the ring before it taken out in power: a thud at 125-160
+    Hz, falling 25 dB through the mids and 35-45 by 4-10 kHz. The open
+    strokes are stopped by a hand too, later (~0.4 s) and softer (-16 dB):
+    in a drum part that is this note after an 87 (EXC6, percussion_map)."""
+    # THE BEATER SOFTER: its strike table 45 dB under the open stroke's flat
+    # one, click_cal_db bringing it up (a fit's parameters are scaled, so a
+    # positive one) -- held at the open's, 0.25-8 kHz read 10-29 dB over
+    # the takes through the first 60 ms; the strike and the noise on the
+    # modes (chiff) each made half of it
+    CLICK_DB = (-45,) * 20
+    click_cal_db = 0.447486  
+    gate_time = 0.22
+    # the head falls 25-30 dB in 40-60 ms under the hand, then holds a -35 to
+    # -45 dB remainder this release cannot (it ends in silence)
+    release_valve_time = 0.08
+    band_trim_db = ((44, 5.8), (88, 3.0), (177, 1.0), (354, -0.5), (707, 0.4), (1414, 1.9), (2828, 1.1), (5657, -3.6), (11314, -9.1))
+    initial_gain = 0.463431      # held at the old voice's level, -25.68 dB
+    # the hand's slap (third-octave Hz, dB): its measured colour, 40 dB under
+    # its loudest band -- strike_noise_cal_db brings it up (a fit's
+    # parameters are scaled, so a positive one)
+    strike_noise_db = ((125, -40.1), (157, -40.0), (198, -46.8), (250, -54.0), (315, -62.6),
+                       (397, -60.3), (500, -56.6), (630, -58.2), (794, -64.1), (1000, -63.9),
+                       (1260, -71.1), (1587, -71.3), (2000, -72.9), (2520, -75.1), (3175, -77.4),
+                       (4000, -77.2), (5040, -75.8), (6350, -78.2), (8000, -85.5), (10079, -84.5),
+                       (12699, -92.3), (16000, -102.5))
+    strike_noise_at = 0.22
+    strike_noise_cal_db = 41.4764  
+    strike_noise_dbs = 350.0      # MEASURED: 0.5-4 kHz falls from +15 to -13 dB re the beater in ~80 ms
+    strike_noise_fade_s = 0.001
+    # no noise on the modes: fitted free it rose to 32 and filled the attack's
+    # top 11-36 dB over the takes, whose beater has almost none there
+    chiff_volume = 0.0
+    attack_time = 0.00455716  
 
 
 class ElectricSnareProperties(SnareDrumProperties):
@@ -12250,7 +12497,9 @@ class CuicaProperties(SynthProperties):
     axisymmetric ratios the engine's existing law reproduces them to three
     decimal places: 2.296, 3.597, 4.905, 6.208, rms 0.0004. A cuica's onset is
     therefore a genuine squeak from a wildly inharmonic membrane settling into a
-    harmonic tone, which is most of what makes it recognisable.
+    harmonic tone, which is most of what makes it recognisable. (So the theory
+    said. Measured, the strokes are harmonic within ~40 ms and the sweep is the
+    finger's: the lock is off -- see mode_lock_spread.)
 
     THE PITCH IS THE OTHER HAND. "The pitch is increased or decreased by
     changing the pressure on the head" -- a finger pressed near the centre
@@ -12260,14 +12509,19 @@ class CuicaProperties(SynthProperties):
     it is an order of magnitude larger and why tension_bend_slope is zero: the
     glide is a finger, not a register.
 
-    WHICH WAY IT GLIDES IS A CHOICE, not a measurement. GM gives two notes and
-    does not say what they do, so they are set to glide in OPPOSITE directions
-    -- the mute rises into pitch, the open falls away from it -- which is what
-    makes an alternating 78/79 figure sound like the instrument talking. Any
-    real player does both on either.
+    BOTH NOTES RISE, MEASURED. reinsamba's cuica (freesound pack 1339,
+    CC-BY; ~/Documents/refs/sources.md), 13 close, dry takes in two
+    registers, pitch-tracked stroke by stroke (YIN): the low drum (79) is
+    rubbed up into ~355 Hz from ~305 -- 200-360 cents in ~0.18 s, a 0.2 s
+    stroke -- and the high squeak (78) whoops up into ~790 Hz from ~525,
+    ~700 cents in 0.15 s. (They had been set to glide opposite ways, the
+    mute up and the open down, by choice: GM says nothing, and no recording
+    was on hand. Ben, on that: "missing the pitch bends".)
 
-    NO REFERENCE. Iowa has no cuica and no friction drum of any kind. The
-    mechanism above is measured physics; the numbers below are not.
+    ITS SPECTRUM, MEASURED on the same takes' periodic frames: nearly a
+    sine, as the GM sets' cuicas are -- the low drum h2 -14, h3 -27, h4 -33
+    dB; the squeak h2 -23, h3 -21, h4 -34. The drive is a sawtooth; the head
+    and the cloth take all but the first few harmonics.
     """
 
     # Supplied rather than inherited. The attributes below live on
@@ -12288,42 +12542,123 @@ class CuicaProperties(SynthProperties):
     one_shot = False
     decay_db = 0.0
     harmonic_decay_db = 0.0
-    attack_time = 0.018           # friction takes a moment to catch
+    attack_time = 0.05            # a stroke SWELLS: reinsamba's rise ~15 dB over 40-60 ms, the sweep heard through it
     max_harmonic = 24
-    tonal_dampening = 1.0         # a sawtooth drive: harmonics go as 1/n
+    tonal_dampening = 1.0         # (mode_gains below answer: the measured series)
     octave_dampening = 0.0
 
     # The passive membrane, as an ONSET departure from harmonic. Fitted to
-    # j(0,n)/j(0,1) = 1, 2.295, 3.598, 4.903, 6.209 -- rms 0.0004.
-    mode_lock_spread = 0.2748
+    # j(0,n)/j(0,1) = 1, 2.295, 3.598, 4.903, 6.209 -- rms 0.0004 -- and
+    # then OFF (spread 0): the renderer gives a mode-locked partial the lock's
+    # glide INSTEAD of the finger's, so only h1 swept and h2-h3 sat on the
+    # note from the start, holding the ear there. Ben: "the ascending sweep is
+    # not as represented as the original recording." reinsamba's strokes are
+    # periodic within ~40 ms and sweep as one harmonic tone.
+    mode_lock_spread = 0.0
     mode_lock_knee = 1.8522
     mode_lock_time = 0.060        # slower than a pipe's 0.035: a weaker drive
 
     # The damp cloth on the stick. Broadband, and it lasts as long as the stroke.
-    chiff_volume = 0.55
+    # the cloth's noise, white and quiet: it is the takes' 8-16 kHz (-52 to -56
+    # dB re the fundamental's octave), where the harmonics stop. (At 0.55 it
+    # had read 12-16 dB over -- most of that the glide's block-edge phase
+    # steps, since fixed in voice_block.inc)
+    chiff_volume = 0.6
+    # THE ROUGH EDGE. Ben: "still missing the rough edge of the bark ... the
+    # rubbing part". In reinsamba's strokes h1-h3 are clean lines but from h4
+    # up every harmonic is a speckled band -- the cloth slipping and catching
+    # on the stick -- and each stroke opens on 30-60 ms of noise filling
+    # between the harmonics to 3 kHz before the tone takes. So: the upper
+    # harmonics jittered (rough_jitter from rough_from), the noise kept around
+    # each one (chiff_bandwidth), and the cloth's catch a burst at the onset
+    # (strike_noise_db, below).
+    jitter_by_partial = True
+    rough_from = 4
+    rough_jitter = 1.0
+    chiff_bandwidth = 0.05        # +-5%: at 10% the top octaves read 13-15 dB over the takes'
+
+    def partial_jitter(self, harmonic):
+        return self.rough_jitter if harmonic >= self.rough_from else self.sustain_jitter
+
+    # THE CLOTH CATCHING, before the tone takes: noise rows, MEASURED in the
+    # first 40 ms of reinsamba's low strokes between the onset's own
+    # harmonics (Hz, dB re the tone's fundamental) -- ~-30 dB at 0.4-0.8 kHz,
+    # -46 by 2 kHz, -59 by 4 -- dying ~20 dB over the 40 ms. The tone swells
+    # in under it (attack_time), so the catch is heard first
+    strike_noise_db = ((198, -45.0), (250, -36.0), (315, -30.0), (397, -28.0), (500, -31.0),
+                       (630, -30.0), (794, -31.0), (1000, -35.0), (1260, -36.0), (1587, -42.0),
+                       (2000, -46.0), (2520, -52.0), (3175, -55.0), (4000, -59.0), (5040, -64.0),
+                       (6350, -68.0), (8000, -70.0))
+    strike_noise_dbs = 300.0      # the catch lasts 30-60 ms in the takes
+    strike_noise_cal_db = 15.0   # the table is a BAND's level; a row carries less
+    strike_noise_fade_s = 0.003   # in over 3 ms: at 2 its first ms read -8.9 dB of the peak; now -22, the takes -15 to -29
     chiff_cycle = 0.9
     chiff_min_valve_time = 0.004
     chiff_max_valve_time = 0.03
 
-    # The other hand. Open: the finger lifts, the head slackens, the pitch falls
-    # away from the note. ~155 cents at full stroke.
-    tension_bend = 0.095
-    tension_bend_max = 0.30
+    # The other hand: the finger's pressure rising through the stroke, the head
+    # tightening, the pitch rising INTO the note (measured, see above).
+    tension_bend = -0.20          # rubbed UP into the note: ~260 cents heard from ~305 Hz (reinsamba)
+    tension_bend_max = 0.60
     tension_bend_slope = 0.0      # a finger, not a register
-    tension_settle_time = 0.13
+    tension_bend_power = 0.0      # ...nor the stroke: the whole glide at any velocity
+    tension_settle_time = 0.10    # rising through the stroke, there by its end -- Ben: "missing the pitch bends"
     tension_settle_cutoff = 0.9
 
-    initial_gain = 1.0 / 9.0
+    # AT THE SETS' BALANCE, not 12-17 dB under the snare where it was: against
+    # their own 38, FluidR3 puts its cuicas 5-8 dB over and GeneralUser GS 3-5
+    # under (MuseScore is FluidR3's). The mean of the two: 79 +1.5 dB re the
+    # kit's 38 (-34.3 dB, its loudest 150 ms at velocity 100), 78 +0.6
+    initial_gain = 0.258976
+
+    # MEASURED: reinsamba's low takes (6, 5), harmonic levels over WHOLE
+    # strokes, +-7% around each (the sweep moves them): h2 -4.5, h3 -22.5, h4
+    # -14, h5 -38, h6 -33.5 dB ... the EVEN harmonics strong. Read first off
+    # the takes' steadiest frames only (h2 -14, h4 -33) -- which are where a
+    # stroke is NOT sweeping, and not barking. Ben: "missing some upper
+    # harmonics ... it almost sounds like a dog barking, and the dog aspect is
+    # missing". h13-16 continue the fall, -3 dB a harmonic. The table then
+    # moved by what a render read against the takes (+5 to +11 dB, h2-h12):
+    # what is heard is the table through the voice's own shaping
+    mode_gains = (1.0000, 1.0593, 0.1496, 0.4466, 0.0282, 0.0595, 0.0107, 0.0224,
+                  0.0133, 0.0210, 0.0235, 0.0126, 0.0045, 0.0033, 0.0023, 0.0015)
+    max_harmonic = 16
+
+    # A GESTURE, NOT A HELD NOTE. Every GM set plays 78 and 79 as one stroke
+    # of the stick whatever the key's length -- FluidR3, GeneralUser GS and
+    # MuseScore General: the open 0.25-0.5 s, the mute 0.12-0.2 s
+    # (examples/gm_release.py's sets, pitch-tracked). Sustained only while
+    # held, a one-tick drum-track note was silent. So a one-shot, gated as
+    # the whistles are: the rub's own length, then the cloth leaves the stick.
+    one_shot = True
+    gate_time = 0.15              # reinsamba's low strokes swell in 40-80 ms and are 26 dB down by 0.16 s
+    release_valve_time = 0.06
 
 
 class MuteCuicaProperties(CuicaProperties):
-    """GM 78. The same drum with the finger pressed: tighter, higher, shorter,
-    and gliding the other way -- UP into the note as the pressure comes on."""
+    """GM 78. The same drum with the finger pressed: tighter and higher, a
+    squeak WHOOPING UP into the note. reinsamba's high takes (2, 3, 4):
+    ~790 Hz, rising ~700 cents from ~525 in 0.15 s strokes; their own
+    spectrum, h2 -23, h3 -21, h4 -34 dB. (It had been the GM sets' 620 Hz
+    and the low drum's spectrum darkened by judgement: no recording.)"""
 
-    tension_bend = -0.085         # starts flat and rises to pitch
-    tension_settle_time = 0.10
+    tension_bend = -0.42          # starts far under: ~650 cents heard from ~550 Hz (reinsamba take 2)
+    tension_settle_time = 0.06    # most of the whoop in the first 0.1 s
     chiff_volume = 0.38           # the finger damps the head, and the noise with it
-    tonal_dampening = 1.25        # and takes the top off
+    # MEASURED: reinsamba's high takes (2, 3, 4), median re h1 in their steadiest
+    # frames, then moved by what a render read against WHOLE strokes of takes
+    # 2 and 3 (h5 -40, h7 -55, and a band at h11-h12, -50, the steady frames
+    # had put 10-20 dB lower)
+    mode_gains = (1.0000, 0.0965, 0.1122, 0.0309, 0.0241, 0.0062, 0.0048, 0.0019,
+                  0.0013, 0.0006, 0.0127, 0.0060, 0.0045, 0.0045, 0.0036, 0.0036)
+    # NO CLOTH CATCH: the low drum's (strike_noise_db), inherited, put this
+    # stroke's first millisecond at -6.5 dB of its peak -- Ben: "a click at
+    # the beginning of the upper one" -- where reinsamba's squeaks start at -30
+    # to -34 and swell; without it ours does, -31.6, -24.5, -19.2 at 1, 3, 6 ms
+    strike_noise_db = ()
+    gate_time = 0.14              # take 2's whoops: their peak at 0.06-0.1 s, 26 dB down by 0.18
+    release_valve_time = 0.04
+    initial_gain = 0.500907   # -35.2 dB, +0.6 re the kit's 38 (see above)
 
 
 class CowbellProperties(MetalPercussionProperties):

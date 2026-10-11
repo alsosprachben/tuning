@@ -146,7 +146,7 @@ RATED = {
  76:(2,"its own class, theory"),
  77:(2,"a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled"),
  78:(2,"CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB)"),
- 79:(4,"VCSL typical and small ocarinas (CC0), 21 sustains (examples/wind_fit.py): near-pure (h2 -44), its breath, flutter, shared wobble (2.4 dB) and pitch wander (5.6 cents) fitted, a soft chiff. Ben: sounds great"),
+ 79:(4,"the FRICTION drum, on reinsamba's 13 close, dry takes (freesound pack 1339, CC-BY): rubbed UP into ~355 Hz from ~305, a 0.15 s gesture (gated: a one-tick note sounds), nearly a sine (h2 -14, h3 -27 dB) -- read first off a stairwell's takes, which had smeared it bright; at the GM sets' level against the snare"),
  80:(4,"a Messenger patch: a square with the SUB's square an octave under -- the weight a square lead has on a Moog and not on a chip"),
  81:(4,"a Messenger patch: the sawtooth lead as a Moog player sets it"),
  82:(4,"a Messenger patch: the calliope, a steam whistle -- two triangles an octave apart, the ladder wide open. The GM name misleads; the patch does not"),
@@ -216,7 +216,7 @@ PERC_RATED = {
  37:(4,"DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick)"),
  38:(4,"DRSKit's snare (29 strokes, top and bottom mics): the head at 196 Hz with a tom's modes, choked in 50 ms; the wires a buzz of jittered noise in third-octave bands, fitted on band, onset balance and flatness (a chord of sines at the right band levels was not a snare; neither was a comb in phase -- \"pew pew\"). Needed the renderer's onsets to start on their own sample. Ben, by ear: sounds so much better"),
  39:(4,"VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great"),
- 40:(2,"a DRUM MACHINE's snare, not the acoustic one retuned: a short noise burst over a body that DROPS (tension_bend), and no wires at all"),
+ 40:(4,"Roland's SNARE DRUM 2 (SC-55 p.70), a second acoustic snare: VCSL's Modern 1 (CC0), wires on, ten hits over 30 dB on a stereo pair (examples/snare_fit.py --vcsl). Its own head -- lowest mode 192.5 Hz, the loudest 435 -- and stick burst; 8.3 -> 6.9 dB. 2.5 dB under 38, where three GM sets keep theirs. The drum machine's snare is the Electronic set's"),
  41:(4,"DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear"),
  42:(4,"Iowa hi-hat, five takes"),
  43:(4,"as 41, higher"),
@@ -238,7 +238,7 @@ PERC_RATED = {
  59:(4,"GM wants two rides and Iowa has one; this is that measurement on a larger plate"),
  60:(4,"VSCO-2 CE (CC0) high bongo (161 Hz), fitted: measured modes ringing clean, the slap a dense noisy strike, strokes varying as the takes do"),
  61:(4,"as 60, the low bongo (142 Hz)"), 62:(4,"VSCO-2 CE (CC0) quinto tapped: the high conga muted"), 63:(4,"VSCO-2 CE (CC0) quinto open (216 Hz), 13 measured modes -- one left out, the glide smeared into a peak that beat at 16 Hz"), 64:(4,"VSCO-2 CE (CC0) conga, the middle of its three (164 Hz), open at three dynamics"),
- 65:(2,"a TIMBALE: a METAL shell with no bottom head, ringing to 3900 Hz where the head reaches 1116 and holding it three times longer than wood. Sticks"), 66:(2,"as 65, lower"),
+ 65:(4,"hello_flowers' timbales (freesound 41196, CC0), the high drum's ten free strokes cut from 50 hits (examples/freesound_slice.py): 46 measured modes ringing to 3.8 kHz, 224 Hz; fitted to 5.1 dB. The strike dense, jittered and SCATTERED in its bands (click_scatter): on an even grid its partials beat in a sweep -- Ben: \"a phaser in the initial attack\""), 66:(4,"as 65, the low drum's nine (186 Hz, 33 modes), fitted to 6.3 dB"),
  67:(4,"VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes"),
  68:(4,"VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67"),
  69:(4,"VSCO-2 CE (CC0) cabasa as SHAPED NOISE: measured, a twist is noise (its grain is its own spectrum with random phases), so the recording's third-octave spectrum as noise rows under the fitted swell, shake and 0.33 s settle -- colour within 0.3 dB, envelope 3.0. The impact burst before it clicked where the takes do not. Ben: sounds great"),
@@ -250,14 +250,14 @@ PERC_RATED = {
  75:(4,"Iowa claves, three pairs"),
  76:(4,"Iowa woodblocks, four sizes"),
  77:(4,"as 76, the low block"),
- 78:(2,"its own FRICTION voice: sawtooth drive, axisymmetric modes only, mode-locked, glides up into pitch"),
- 79:(2,"as 78, lower and gliding the other way. No reference -- Iowa has no friction drum"),
+ 78:(4,"reinsamba's cuica (freesound pack 1339, CC-BY), the high takes: a squeak WHOOPING UP ~700 cents into ~790 Hz in 0.15 s, its own measured spectrum (h2 -23, h3 -21 dB), a one-shot gesture as every GM set plays it"),
+ 79:(4,"the FRICTION drum, on reinsamba's 13 close, dry takes (freesound pack 1339, CC-BY): rubbed UP into ~355 Hz from ~305, a 0.15 s gesture (gated: a one-tick note sounds), nearly a sine (h2 -14, h3 -27 dB) -- read first off a stairwell's takes, which had smeared it bright; at the GM sets' level against the snare"),
  80:(4,"Iowa triangles, 6\" and 8\""),
  81:(4,"as 80, undamped"),
  84:(4,"the measured crotales, cascaded -- 22 of them over 30 units"),
  85:(4,"Iowa castanets"),
- 86:(2,"a SURDO: two feet across, its shell resonating at 52 Hz under a 66 Hz head. Muted -- a hand laid flat straight after the beater"),
- 87:(2,"as 86, open, and it rings nearly four times as long"),
+ 86:(4,"as 87, the hand: the takes' muted strokes ring as the open ones for 0.2 s, then fall 25-30 dB in 40-60 ms (read in the head's own band) -- the open drum gated; the softer strike fitted, 2.1 dB"),
+ 87:(4,"plotzki's samba surdo (freesound 36127, CC0), its open strokes: 21 modes from 66.7 Hz (a 40-49 Hz hump left out), fitted to 0.4 s -- the take's other drum rings past it -- 8.4 -> 3.2 dB"),
 }
 
 FAMILY = [(0,"Piano"),(8,"Chromatic Percussion"),(16,"Organ"),(24,"Guitar"),(32,"Bass"),
@@ -317,7 +317,9 @@ def percussion_table():
     L.append("hand percussion and **no drum kit at all** -- no snare, no bass drum, no")
     L.append("toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's")
     L.append("DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and")
-    L.append("the crashes hit hard.\n")
+    L.append("the crashes hit hard; VSCO-2 CE and VCSL (CC0) the hand percussion, the")
+    L.append("claps, the whistles and the second snare; Freesound takes the timbales, the")
+    L.append("surdo (CC0) and the cuica (reinsamba, CC-BY).\n")
     L.append("| rating | notes | share |")
     L.append("|---|---|---|")
     for k in range(5):

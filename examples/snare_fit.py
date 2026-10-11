@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit the kit's snare (GM 38) to DrumGizmo DRSKit's.
 
-    python3 examples/snare_fit.py [REFS] [--rim] [--modes] [--model] [--fit [--maxfev=N]]
+    python3 examples/snare_fit.py [REFS] [--rim | --vcsl] [--modes] [--click] [--model] [--fit [--maxfev=N]]
 
 REFS (default ~/Documents/refs/drums/drskit) holds Snare/ as
 examples/remote_zip.py pulled it from DRSKit 2.1 (CC-BY 4.0; ~/Documents/refs/
@@ -26,6 +26,14 @@ drum has fallen 50 dB and what is left is the rack tom ringing in sympathy
            DRSKit maps it to 37, and so does CrocellKit's (drums/crocell),
            whose separate RimShot (40) is ~15 dB louder; these are 18 dB
            under the snare, a cross-stick's level, not a rimshot's
+  --vcsl   SNARE DRUM 2 (GM 40, as Roland's Standard set has it, SC-55
+           manual p.70) instead: VCSL's "Snare Drum, Modern 1" (CC0;
+           ~/Documents/refs/vcsl/snare), its Snare2_HitSN_* -- wires on, ten
+           hits in five layers over 30 dB, one stereo pair a stroke, the two
+           sides summed in power as the two close mics are. Another drum,
+           not 38 retuned: GM sets keep 40 ~2.5 dB under 38 and brighter
+  --click  the stick's burst (CLICK_DB): third-octave levels over the first
+           20 ms of the loud strokes, re the first mode (drum_fit.measure)
 """
 import glob
 import os
@@ -40,8 +48,12 @@ sys.path.insert(0, HERE)
 import crash_fit as C  # noqa: E402
 from drum_fit import CH, read  # noqa: E402
 
-NOTE, FOLDER = (37, "Snare_rim") if "--rim" in sys.argv else (38, "Snare")
+VCSL = "--vcsl" in sys.argv
+NOTE, FOLDER = (37, "Snare_rim") if "--rim" in sys.argv else (40, "Snare2_HitSN_*") if VCSL else (38, "Snare")
 MICS = ("Snare_top", "Snare_bottom")
+# VCSL's layers: v<layer>_rr<take>; mid is wider than DRSKit's, whose layers
+# bunch at the loud end -- VCSL's five are spread evenly over 30 dB
+MID = (-14.0, -5.0) if VCSL else (-12.0, -6.0)
 # a snare is over in a third of a second: windows sized to it
 C.EDGES = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
 C.T = ((0.000, 0.005), (0.005, 0.015), (0.015, 0.030), (0.030, 0.060), (0.060, 0.100),
@@ -73,8 +85,20 @@ _render = C.render
 C.render = lambda note, vel, secs=1.0: _render(note, vel, secs)   # a snare is over in 0.7 s
 
 
+def vcsl_layer(p):
+    import re
+    m = re.search(r"_v(\d+)_rr(\d+)", os.path.basename(p))
+    return 10 * int(m.group(1)) + int(m.group(2))
+
+
 def strokes(refs):
     out = []
+    if VCSL:
+        for p in sorted(glob.glob(os.path.join(refs, FOLDER + ".wav")), key=vcsl_layer):
+            a, sr = read(p)
+            a = np.pad(a, ((0, max(0, sr - len(a))), (0, 0)))
+            out.append((vcsl_layer(p), [a[:, 0], a[:, 1]], sr))
+        return out
     for p in sorted(glob.glob(os.path.join(refs, FOLDER, "*.wav")), key=C.layer_of):
         a, sr = read(p)
         # DrumGizmo trims each take where it falls under its noise: the rim's
@@ -85,7 +109,7 @@ def strokes(refs):
     return out
 
 
-def modes(ss, lo=150.0, hi=2500.0 if NOTE == 38 else 4000.0, floor_db=-30.0):
+def modes(ss, lo=150.0, hi=4000.0 if NOTE == 37 else 2500.0, floor_db=-30.0):
     acc = None
     for _, chs, sr in ss[len(ss) // 2:]:
         t0 = C.onset(chs, sr)
@@ -182,7 +206,7 @@ def grouped(rows):
     note. soft = 15 dB and more under the loudest, mid 6-12, loud the top 3."""
     top = max(l for _, l, _ in rows)
     picks = {"soft": [r for r in rows if r[1] - top <= -15.0],
-             "mid": [r for r in rows if -12.0 <= r[1] - top <= -6.0],
+             "mid": [r for r in rows if MID[0] <= r[1] - top <= MID[1]],
              "loud": [r for r in rows if r[1] - top >= -3.0]}
     return {g: (float(np.mean([r[1] for r in rr])) - top,
                 np.mean([r[2] - r[2].max() for r in rr], 0)) for g, rr in picks.items()}
@@ -190,7 +214,8 @@ def grouped(rows):
 
 def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
-    refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/drums/drskit")
+    refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/vcsl/snare" if VCSL else
+                                                 "~/Documents/refs/drums/drskit")
     os.environ.setdefault("TUNING_REFLECT", "0")
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
     ss = strokes(refs)
@@ -202,14 +227,22 @@ def main(argv):
         # the gains re the FIRST mode, which is what mode_gains[0] = 1 means
         g0 = ms[0][1]
         print("    re the first: (%s)" % ", ".join("%.3f" % (g / g0) for _, g in ms))
+    if "--click" in argv:
+        import drum_fit as D
+        ms, f1 = modes(ss)
+        top = max(C.level(chs, sr) for _, chs, sr in ss)
+        cl = [D.measure(chs, sr, [f1 * r for r, _ in ms], f1)["click"] for _, chs, sr in ss
+              if C.level(chs, sr) - top >= -3.0]
+        print("    CLICK_DB = (%s)   (%s Hz)" % (", ".join("%.0f" % v for v in np.median(cl, 0)),
+                                               ",".join("%.0f" % c for c in D.CLICK_BANDS)))
     rows = [(l, C.level(chs, sr), C.grid(chs, sr)) for l, chs, sr in ss]
     flat = {l: flatness(chs, sr) for l, chs, sr in ss}
     gs = grouped(rows)
     top = max(r[1] for r in rows)
     rflat = [np.mean([flat[r[0]] for r in rows if sel(r[1] - top)], 0) for sel in (
-        lambda d: d <= -15.0, lambda d: -12.0 <= d <= -6.0, lambda d: d >= -3.0)]
-    print("== DRSKit %s, %d strokes, levels %s dB re the loudest" % (
-        FOLDER, len(rows), " ".join("%.0f" % (l - max(r[1] for r in rows)) for _, l, _ in rows)))
+        lambda d: d <= -15.0, lambda d: MID[0] <= d <= MID[1], lambda d: d >= -3.0)]
+    print("== %s %s, %d strokes, levels %s dB re the loudest" % (
+        "VCSL" if VCSL else "DRSKit", FOLDER, len(rows), " ".join("%.0f" % (l - max(r[1] for r in rows)) for _, l, _ in rows)))
     cache = {}
     if "--fit" in argv:
         vels = [C.model_velocity(NOTE, gs[g][0], cache) for g in C.GROUPS]

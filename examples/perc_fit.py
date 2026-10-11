@@ -147,6 +147,48 @@ INSTS = {
     "bongo_lo":  dict(note=61, glob=_V1 + "drums/other/Bongos/LowBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
+    # hello_flowers' timbales (freesound 41196, CC0), one hit a file as
+    # examples/freesound_slice.py cut them: the free strokes, the player's
+    # own mix of centre and edge. A metal shell, one head, sticks: the ring
+    # reaches to ~4 kHz, so the modes are read to 6
+    "timbale_hi": dict(note=65, glob=os.path.expanduser("~/Documents/refs/freesound/timbales/hits/high_*.wav"),
+                       groups=None, band=(150, 6000), floor=-30, flat=(1000, 8000),
+                       params=DRUM_PARAMS),
+    # ring_scale free on the low drum: Ben, "slightly more metallic than the
+    # recording", and from 150 to 500 ms its 1 and 4 kHz rang 11 and 15 dB
+    # long (examples/stroke_ab.py timbale_lo --bands)
+    "timbale_lo": dict(note=66, glob=os.path.expanduser("~/Documents/refs/freesound/timbales/hits/low_*.wav"),
+                       groups=None, band=(150, 6000), floor=-30, flat=(1000, 8000),
+                       params=DRUM_PARAMS + ("ring_scale",)),
+    # plotzki's samba surdo (freesound 36127, CC0), as freesound_slice.py
+    # cut it: three open strokes, three muted. The grid's octaves from 31 Hz,
+    # as the taiko's: the head is at 67 Hz. The open strokes are cut at the
+    # next beat (0.55 s), and the take's other drum (~120 Hz) rings into
+    # their last 150 ms: judged to 0.4 s. ring_scale free, as the taiko's:
+    # held at the modes' own rates, 0.5-8 kHz rang 5-13 dB long from 60 to
+    # 250 ms (9.0 dB)
+    "surdo_open": dict(note=87, glob=os.path.expanduser("~/Documents/refs/freesound/surdo/hits/open_*.wav"),
+                       groups=None, band=(40, 3000), floor=-35, flat=(500, 4000),
+                       edges=(31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000),
+                       T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25),
+                          (0.25, 0.40)),
+                       params=DRUM_PARAMS + ("ring_scale",)),
+    # the muted stroke: the open drum's modes, the hand where it lands
+    # (tonelib.SurdoMuteProperties). Fitted: the beater's strike -- held at
+    # the open stroke's, 0.25-8 kHz read 10-25 dB over the takes in the first
+    # 60 ms -- and the hand's slap. Judged through the hand, to 0.30 s
+    "surdo_mute": dict(note=86, glob=os.path.expanduser("~/Documents/refs/freesound/surdo/hits/mute_*.wav"),
+                       groups=None, band=(40, 3000), floor=-35, flat=(500, 4000),
+                       edges=(31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000),
+                       T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.20),
+                          (0.20, 0.26), (0.26, 0.30)),
+                       # LEVELS ONLY. With the rates free too, the fit held the
+                       # beater ringing (20 dB/s) and the slap undying (1e-5) to
+                       # fill the take's remainder under the hand, which the
+                       # gate's release, ending in silence, cannot: the slap's
+                       # rate is read off the take (350 dB/s), the beater's is
+                       # the open stroke's
+                       flat_weight=0.0, params=("click_cal_db", "attack_time", "strike_noise_cal_db")),
     # GM 116, a PROGRAM: VSCO's "giant ethnic" drum struck with sticks, as a
     # taiko is with bachi -- a barrel drum at 65.9 Hz, ringing 0.3-0.6 s to
     # -40 dB, its loud strokes leaning on modes at 109 and 131 Hz. Fitted at

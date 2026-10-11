@@ -1216,7 +1216,11 @@ def partial_decay(rp, f0, m):
     """Partial m's decay: (dB/s, its log rate, the aftersound's share, the
     aftersound's log rate) -- the kernel's logr / aft / logrA."""
     dbps = rp.harmonic_decay(m); logr = math.log(T.db_ratio(dbps)) if dbps>0 else 0.0
-    aftL, adbps = rp.aftersound(f0, dbps); logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
+    # aftersound() is asked with the NOTE's frequency (a register law); a voice
+    # whose remainder depends on the partial's own answers aftersound_partial
+    _ap = getattr(rp, 'aftersound_partial', None)
+    aftL, adbps = _ap(f0, m, dbps) if _ap is not None else rp.aftersound(f0, dbps)
+    logrA = math.log(T.db_ratio(adbps)) if adbps>0 else 0.0
     return dbps, logr, aftL, logrA
 
 
@@ -3645,12 +3649,16 @@ def prepare(path, tuner='hybrid440', sink=None):
                            for _ in range(_nfl)]
                 _t0 = min(b[0] for b in _bursts); _l0 = max(b[1] for b in _bursts)
                 _bursts = [(t - _t0, l - _l0) for t, l in _bursts]
+            # ...AND A LATE ONE (strike_noise_at: a surdo's hand), its table
+            # moved strike_noise_cal_db
+            _sat = (getattr(props, 'strike_noise_at', 0.0) or 0.0) * SR
+            _scal = getattr(props, 'strike_noise_cal_db', 0.0) or 0.0
             for _boff, _bdb in _bursts:
-                _bon = non + _boff * SR
+                _bon = non + _sat + _boff * SR
                 for _hf, _db in props.strike_noise_db:
                     if _hf >= 0.45 * SR:
                         continue
-                    _gM = props.gain * 10.0 ** ((_db + _reg + _bdb) / 20.0)
+                    _gM = props.gain * 10.0 ** ((_db + _reg + _bdb + _scal) / 20.0)
                     emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
                                  _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _bon, _bon + 0.25 * SR,
                                  _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)

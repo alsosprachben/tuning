@@ -193,9 +193,22 @@
                     float trel=(float)(ns-a)/SRATE_F;
                     float integ = tb*ts*(1.f - expf(-(trel<cut?trel:cut)/ts));
                     bph += (double)w*SRATE_D*(double)integ;
-                    // kept in float, and summed in float, so a voice with only
-                    // this term rounds exactly as it did before it was factored out
-                    bendfac = 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
+                    // THE BLOCK'S MEAN FREQUENCY, as the vibrato above takes, not
+                    // its value at the block start. The recurrence holds one
+                    // frequency for the block and the next block re-anchors from
+                    // the exact integral, so a start-of-block frequency leaves a
+                    // phase step at every block edge of w*(mean-start)*BLK. A
+                    // piano's strike bend (tb ~0.01, tau 0.28 s) never noticed;
+                    // a cuica's glide (tb -0.2, tau 0.1 s) moves its 16th
+                    // harmonic ~130 Hz inside one block, and the steps -- several
+                    // radians, 86 a second -- were a hiss 9-12 dB over the
+                    // recording's from 8 to 22 kHz. The mean lands each block end
+                    // exactly where the integral says.
+                    float trel1=(float)(ne-a)/SRATE_F;
+                    float integ1 = tb*ts*(1.f - expf(-(trel1<cut?trel1:cut)/ts));
+                    float dtb = trel1 - trel;
+                    bendfac = dtb > 0.f ? 1.f + (integ1 - integ)/dtb
+                                        : 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
                 }
                 // PORTAMENTO, and it settles exponentially in LENGTH rather than
                 // in pitch -- which is the one thing that makes a modelled glide

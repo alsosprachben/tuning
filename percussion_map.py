@@ -17,8 +17,13 @@ from tonelib import (
     BongoProperties,
     CongaProperties,
     TimbaleProperties,
+    TimbaleHighProperties,
+    TimbaleLowProperties,
     SurdoProperties,
+    SurdoOpenProperties,
+    SurdoMuteProperties,
     ElectricSnareProperties,
+    SnareDrum2Properties,
     CuicaProperties,
     MuteCuicaProperties,
     TomTomProperties,
@@ -109,7 +114,8 @@ PERCUSSION = {
     # DRSKit's snare head, 196 Hz on every stroke (AcousticSnareProperties)
     38: ("Acoustic Snare",     AcousticSnareProperties, 195.1),
     39: ("Hand Clap",          HandClapProperties, 310.4),
-    40: ("Electric Snare",     ElectricSnareProperties, 275.0),
+    # Roland's "Snare Drum 2" (SC-55 p.70): VCSL's Modern 1, lowest mode 192.5 Hz
+    40: ("Snare Drum 2",       SnareDrum2Properties, 192.5),
     41: ("Low Floor Tom",      TF, 87.0),
     42: ("Closed Hi-Hat",   ClosedHiHatProperties, 248.4),
     43: ("High Floor Tom",     TF, 98.0),
@@ -140,8 +146,9 @@ PERCUSSION = {
     62: ("Mute Hi Conga",      CongaMuteProperties, 209.0),
     63: ("Open Hi Conga",      CongaOpenProperties, 216.0),
     64: ("Low Conga",          CongaLowProperties, 164.0),
-    65: ("High Timbale",       TI, 270.0),
-    66: ("Low Timbale",        TI, 220.0),
+    # hello_flowers' pair (freesound 41196): the free strokes' lowest modes
+    65: ("High Timbale",       TimbaleHighProperties, 224.1),
+    66: ("Low Timbale",        TimbaleLowProperties, 186.4),
     67: ("High Agogo",         AgogoHighProperties, 1228.0),
     68: ("Low Agogo",          AgogoLowProperties, 696.0),
     69: ("Cabasa",             CabasaProperties, 482.5),
@@ -193,8 +200,9 @@ PERCUSSION = {
     # the drive mode-locks them into a harmonic tone. See CuicaProperties.
     # The mute is the finger pressed on the head: tighter, higher, and gliding
     # UP into the note where the open one falls away from it.
-    78: ("Mute Cuica",         MuteCuicaProperties, 420.0),
-    79: ("Open Cuica",         CuicaProperties, 260.0),
+    # reinsamba's cuica (freesound pack 1339): where each register's strokes arrive
+    78: ("Mute Cuica",         MuteCuicaProperties, 790.0),
+    79: ("Open Cuica",         CuicaProperties, 355.0),
     # MEASURED: the Iowa 6" triangle sounds 1927 Hz and the 8" 1497 -- a
     # triangle is a bent BAR and rings far higher than 1000. Its upper modes
     # come out at 2.0, 3.2, 4.2 and 5.3 x f1, dense and inharmonic as a bent bar
@@ -210,8 +218,9 @@ PERCUSSION = {
     # 86 and 87 were unmapped too. A surdo is the big Brazilian bass drum that
     # carries a samba -- a large membrane, deeper than a floor tom, and the
     # muted stroke is the same head with a hand on it.
-    86: ("Mute Surdo",         SU, 70.0),
-    87: ("Open Surdo",         SU, 66.0),
+    # plotzki's (freesound 36127): its strokes settle at 66.7 Hz
+    86: ("Mute Surdo",         SurdoMuteProperties, 66.7),
+    87: ("Open Surdo",         SurdoOpenProperties, 66.7),
 }
 
 GM_PERCUSSION_CHANNEL = 9  # 0-based; GM drum channel is "10" one-based
@@ -400,7 +409,7 @@ PERCUSSION_RING = {
     # measured rings in their classes (tonelib.KitDrumProperties), mode by
     # mode: a single ring time here would rescale all of them by the first
     # mode's.
-    39: 0.100, 40: 0.30,
+    39: 0.100,
     # ONE PLATE, THREE DAMPINGS. These are no longer three separately measured
     # decays: the hats share a mode set and a loss curve, and the ring is the
     # uniform part of the contact damping -- how hard the articulation holds the
@@ -428,10 +437,9 @@ PERCUSSION_RING = {
     49: 0.61, 51: 0.50, 52: 0.62,
     # MEASURED: -10 dB at 0.17 s, -20 at 0.69, -40 at 2.69 -> T60 near 4 s.
     53: 0.34, 55: 0.41,
-    # (56, 60-64, 67, 68 carry their measured rings in their classes:
+    # (56, 60-68 carry their measured rings in their classes:
     #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
     57: 1.69, 58: 0.098, 59: 0.48,
-    65: 0.30, 66: 0.35,
     # (69, 70: shaped noise now, tonelib.ShakenNoiseProperties -- no impacts to ring)
     # (71, 72: blown, not struck -- a held blast of their own length,
     #  tonelib.ShortWhistleProperties / LongWhistleProperties, no ring)
@@ -449,7 +457,12 @@ PERCUSSION_RING = {
     # (0.012 and below overflow db_ratio in tonelib -- 60/ring becomes a decay
     # rate that 10**(db/10) cannot represent. 0.020 is comfortably clear of it.)
     73: 0.020, 74: 0.020, 75: 0.184, 76: 0.026,
-    77: 0.115, 78: 0.30, 79: 0.50,
+    77: 0.115,
+    # the cuicas HOLD and then stop: a stroke of the stick is gated
+    # (tonelib.CuicaProperties.gate_time), and under the gate the GM sets
+    # sit within 1-7 dB of their peak (78 to 0.1 s, 79 to 0.15-0.2) -- so a
+    # long ring, the gate doing the ending
+    78: 1.0, 79: 2.0,
     # A TRIANGLE RINGS FOR A VERY LONG TIME, and 0.60/1.50 was not close.
     # Measured T60 on the Iowa triangles: 12.8 s on the 8" and 30.0 s on the 6".
     # Held to 6.0 and 2.0 rather than the measured figures: the open triangle is
@@ -459,7 +472,6 @@ PERCUSSION_RING = {
     # castanets are a dry clack; a belltree rings like the crotale it is
     85: 0.163, 84: 8.00,
     # a surdo rings long open and is stopped dead by the hand
-    86: 0.25, 87: 0.90,
 }
 
 
@@ -504,11 +516,6 @@ PERCUSSION_LEVEL = {
     70: 2.6794, # maracas +30.3 dB
     71: 87.7984,  # whistle short, held at its old level (fitted to VCSL's ball whistle: -4.28 dB without)
     72: 82.4220, # whistle long, held at its old level (-8.77 dB without)
-    # A surdo is the biggest drum in a samba and carries the whole groove, but
-    # a 66 Hz membrane radiates poorly in this model and it arrived 7-12 dB
-    # UNDER the kick. Open surdo now sits a little above it, muted a little
-    # below -- which is the relationship the two have on a real bateria.
-    86: 3.0, 87: 3.0,
     # The open hat sat 9.4 dB above the closed one. An open hat IS louder -- more
     # metal is free to move -- but not by that much; on a kit it is a few dB, and
     # at nine the closed strokes vanish between the open ones.
@@ -601,6 +608,12 @@ PERCUSSION_CHOKE = [
     {73, 74},            # short / long guiro
     {78, 79},            # mute / open cuica
     {80, 81},            # mute / open triangle
+    # mute / open surdo: Roland's EXC6 (SC-55 manual p.70, the drum set table,
+    # with the five above as EXC1-5). How a drum part stops a ringing surdo:
+    # an 86 after an 87 is the hand landing on the open head -- Ben, on the
+    # Freesound take: "the surdo_open original recording seems to have a hand
+    # muting it"
+    {86, 87},
 ]
 
 _CHOKE_OF = {}
