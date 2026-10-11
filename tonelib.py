@@ -1218,6 +1218,13 @@ class SynthProperties:
     # Resistance stands in for turns at a fixed wire gauge, which is how these
     # are specified and published.
     pickup_turns = 1.0
+    # ...AND ITS ELECTRICAL LOAD: a coil's inductance against the cable's
+    # capacitance is a resonant low-pass -- a peak, then about -12 dB an
+    # octave above it -- read at each partial's own frequency. A single coil
+    # sits higher than a humbucker, which is much of why it is the brighter of
+    # the two. 0 = no resonance (a pickup that is only its combs).
+    pickup_resonance_hz = 0.0
+    pickup_q = 1.0
 
     # Chorus/ensemble: extra unison voices detuned by these Hz offsets, each
     # scaled by unison_gain. Empty = a single voice (no beating).
@@ -2657,6 +2664,13 @@ class SynthProperties:
                 g *= abs(_sin(x) / x)
         if self.pickup_velocity:
             g *= harmonic
+        if self.pickup_resonance_hz:
+            # HARMONIC is the STRING's mode (series_volume passes sm), so the
+            # partial's frequency is the string's pitch -- the note's, over a
+            # touched harmonic's touch -- times it
+            f = (self.frequency_x * (2.0 ** self.octave_position) * harmonic
+                 / (self.harmonic_touch or 1))
+            g *= _two_pole(f / self.pickup_resonance_hz, self.pickup_q)
         return g
 
     def harmonic_volume(self, harmonic):
@@ -7549,6 +7563,21 @@ class ElectricGuitarProperties(PluckedStringProperties):
     That is also why it can be amplified to the point of feedback, which this
     does not model.
     """
+    # THE SPECTRUM, FITTED (examples/egtr_fit.py --ladder=27) to IDMT-SMT-
+    # Guitar's Stratocaster on its NECK single coil, DI, 78 notes each at its
+    # own fret: the ladder's miss 5.33 -> 4.23 dB (median, h2-h10). The coil
+    # moves to where that guitar has it, ~160 mm of 648 (it sat at the middle
+    # one, 0.154); the pick, its notch and the tilt fitted; and the coil's
+    # load, a resonance at 5.0 kHz (Q 1.19) -- measured into a LINE input,
+    # which loads a pickup harder than an amplifier does: through a real amp
+    # the peak would stand sharper. The muted guitar and the harmonics keep
+    # their own pick and coil, and take the string, the tilt and the load.
+    pickup_points = (0.247,)
+    strike_point = 0.1826
+    strike_depth = 0.842
+    tonal_dampening = 1.865
+    pickup_resonance_hz = 5025.0
+    pickup_q = 1.186
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.54 s (0.60, 0.40, 0.60, 0.48), to our smoothstep's -40 dB at the same
@@ -7559,17 +7588,13 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # A pick is hard, narrow and plucks at whatever force the player uses, so
     # the notch does NOT fill the way a felt hammer's does -- same argument as
     # the harpsichord's quill. Not quite a point, though: a pick flexes.
-    strike_point = 0.19
     strike_fills_with_force = False
-    strike_depth = 0.85
 
     # Stratocaster middle pickup: 100 mm from the bridge on a 648 mm scale.
-    pickup_points = (0.154,)
     pickup_width = 0.014          # ~9 mm coil, so its sinc null is past h64
     pickup_velocity = True        # -dPhi/dt: the +6 dB/octave is the magnet
 
     # 1/n^2 from the pluck; pickup_velocity supplies the n that makes it 1/n.
-    tonal_dampening = 2.0
     octave_dampening = 0.0        # the magnet does not care what note it is
 
     # ESTIMATED, NOT MEASURED, and flagged as such. Plain steel trebles and a
@@ -7578,6 +7603,58 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # wire. Partial frequencies are the one thing a recording gives up
     # unconditionally, so this is worth measuring properly if a steel-string
     # reference ever turns up.
+    # THE STRING, MEASURED (examples/egtr_fit.py --string=guitar): Fraunhofer's
+    # IDMT-SMT-Guitar, DI -- a Stratocaster and an Ibanez RG2820 on four pickup
+    # setups, 306 notes, frets 0-12 on all six strings. It had rung on a flat
+    # harmonic_decay of 1 and nothing else (2 dB/s a harmonic on the envelope)
+    # and a B of 5e-5; the strings measure 5-15 dB/s at the fundamental and
+    # 15-30 above, faster up the neck, and B 4e-4 at E2 falling to 1e-4 at E4
+    # (the wound low strings stiff, the plain top ones not). The decay as
+    # pizz_fit's law, halved to the class's dB (median |log err| 0.30 over 2492
+    # partials: the strings beat); B as k f0^p (0.52).
+    decay_db = 2.685
+    harmonic_decay_db = 1.429
+    decay_register_slope = 0.205
+    inharmonicity_dynamic = True
+    inharmonicity_law = (0.02293, -0.913)
+
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        k, p = self.inharmonicity_law
+        return k * float(frequency) ** p
+
+    # A FRETTED NOTE IS A SHORTER STRING. The pickup and the pick stay where
+    # they are -- a fixed distance from the bridge -- so as a finger stops the
+    # string shorter, both become a larger fraction of it: the recorded combs
+    # climb up the neck (a neck coil's 0.18 on the open low strings, 0.31 and
+    # 0.44 higher up; IDMT-SMT-Guitar). The note goes where a player puts it
+    # by default, the lowest fret: the highest open string at or under it.
+    # Both fractions scale by 2^(fret/12). () = unfretted (every note open).
+    open_strings_hz = (82.41, 110.0, 146.83, 196.0, 246.94, 329.63)
+    fret_max = 24.0                # a note above the neck sounds from its top fret
+
+    def harmonic_decay(self, harmonic):
+        # A TOUCHED HARMONIC'S PARTIAL m IS STRING MODE n m of a string n times
+        # lower, and damps as that mode of that string does: the measured law
+        # (decay_db + harmonic_decay_db k) (f_string / 415)^slope at k = n m.
+        n = self.harmonic_touch or 1
+        if n == 1:
+            return super().harmonic_decay(harmonic)
+        return ((self.decay_db + self.harmonic_decay_db * n * harmonic)
+                * self.decay_register_factor * n ** (-self.decay_register_slope))
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        if self.open_strings_hz:
+            # the STRING's pitch: a touched harmonic sounds its touch above it
+            # (GM 31: fretted by its sounding pitch, F#5 went to the 14th fret,
+            # its coil to mid-string, on every surviving mode's node: silence)
+            f0 = float(frequency) / (self.harmonic_touch or 1)
+            under = [o for o in self.open_strings_hz if o <= f0 * 1.0001]
+            o = max(under) if under else min(self.open_strings_hz)
+            sc = min(max(1.0, f0 / o), 2.0 ** (self.fret_max / 12.0))
+            self.fret = 12.0 * _log(sc) / _log(2.0)
+            self.pickup_points = tuple(min(q * sc, 0.5) for q in self.pickup_points)
+            self.strike_point = min(self.strike_point * sc, 0.5)
     inharmonicity_coefficient = 5.0e-05
 
     # A clean valve amplifier is not a distortion-free one -- it is one worked
@@ -7597,7 +7674,7 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # files never do: Riffsym writes all 727 of its notes at velocity 100, so
     # its distortion guitars sat at 0.620 of nominal for ever. attack_volume
     # is (vel/127)^2, so that is the square and not the ratio -- 4.1 dB.
-    amp_reference = 0.1772
+    amp_reference = 0.16477010310701956
 
     # A CLEAN VALVE AMPLIFIER IS STILL SINGLE-ENDED. Its preamp is one valve
     # with nothing to cancel against, so even at this drive the distortion it
@@ -7638,7 +7715,8 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # and they are the reference the rest of the plucked family is placed
     # against -- what changed is the recognition that an amplifier sits between
     # that reference and these voices.
-    initial_gain = 0.0869
+    initial_gain = 0.0808043   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     # A PICK LETS GO IN 2 ms -- by analogy: no electric guitar recording here;
     # the nylon guitar's measured finger takes 3 (examples/attack_audit.py), and
     # a plectrum is quicker. At an instant attack every pluck clicked (contrast
@@ -7675,10 +7753,29 @@ class ElectricBassProperties(ElectricGuitarProperties):
     two nearly cancel. ESTIMATED, like the guitar's, and worth measuring if a
     reference ever turns up.
     """
-    pickup_points = (0.191,)      # Precision-style split coil, 165 mm of 864
+    # THE SPECTRUM, FITTED (examples/egtr_fit.py --ladder=33/34) to IDMT-SMT-
+    # Bass, DI, three basses on both pickups: a Jazz bass's two coils (~85 and
+    # ~145 mm of 864); the pickup's load at 4.87 kHz, Q 1.05, from the PICK's
+    # fit and shared by every hand -- it is electrical, and fitted free the
+    # finger's came out at 2.6 kHz, the fit dulling the pickup for want of a
+    # soft wide finger; the finger itself is the rest (7.68 -> 4.79 dB).
+    pickup_points = (0.098, 0.168)
+    strike_point = 0.09142
+    strike_depth = 1.0
+    tonal_dampening = 2.461
+    pickup_resonance_hz = 4867.0
+    pickup_q = 1.046
     pickup_width = 0.0116         # ~10 mm coil
-    strike_point = 0.12           # plucked over the pickup, as a hand does
-    strike_depth = 0.55           # a fingertip is broad: a shallow notch
+    # THE STRING, MEASURED (examples/egtr_fit.py --string=bass): IDMT-SMT-Bass,
+    # DI -- a Fame Baphomet, a Warwick and a Yamaha BB604, finger and pick on
+    # both pickups, 260 notes. It had inherited the guitar's flat decay and a B
+    # of 2e-5; the strings measure 3-6 dB/s at the fundamental and 10-25 above,
+    # and B 1.3e-4, flat across the neck (median |log err| 0.33 and 0.42).
+    decay_db = 2.007
+    harmonic_decay_db = 1.598
+    decay_register_slope = 0.457
+    inharmonicity_law = (1.538e-4, -0.037)
+    open_strings_hz = (41.2, 55.0, 73.42, 98.0)
     inharmonicity_coefficient = 2.0e-05
     amp_drive = 0.28
     amp_imbalance = 0.20
@@ -7720,11 +7817,15 @@ class FingeredBassProperties(ElectricBassProperties):
     itself rather than pointing at a class called "electric bass" and leaving
     the reader to guess which technique it means.
     """
-    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
-    # consensus, no recording holding a released note -- the median of four
-    # sets' releases, 0.18 s (0.20, 0.16, 0.20, 0.16), to our smoothstep's -40 dB at the same
-    # time, 0.443 R; and no 0.45-of-the-note cap.
-    release_valve_time = 0.080
+    initial_gain = 0.292777   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.4804061311827956
+    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
+    # IDMT-SMT-Bass stops every note by hand at ~2 s; 437 FS damps on three
+    # basses fall a median 109 dB/s, -40 dB in 0.37 s, our smoothstep's -40 dB
+    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
+    # gentler than their envelopes.
+    release_valve_time = 0.390
     release_fraction_max = None
 
 
@@ -7737,14 +7838,20 @@ class PickedBassProperties(ElectricBassProperties):
     played nearer the bridge, which moves the notch up. That is the whole
     difference between the two GM slots, and it is a difference in the player.
     """
-    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
-    # consensus, no recording holding a released note -- the median of four
-    # sets' releases, 0.20 s (0.20, 0.50, 0.20, 0.12), to our smoothstep's -40 dB at the same
-    # time, 0.443 R; and no 0.45-of-the-note cap.
-    release_valve_time = 0.089
+    initial_gain = 0.113129   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.18562887526881716
+    # FITTED (--ladder=34) to the pick on all three basses: 5.56 -> 4.30 dB.
+    strike_point = 0.09704
+    strike_depth = 0.9494
+    tonal_dampening = 1.784
+    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
+    # IDMT-SMT-Bass stops every note by hand at ~2 s; 463 PK damps on three
+    # basses fall a median 120 dB/s, -40 dB in 0.33 s, our smoothstep's -40 dB
+    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
+    # gentler than their envelopes.
+    release_valve_time = 0.355
     release_fraction_max = None
-    strike_point = 0.09
-    strike_depth = 0.90
     # A PICK, 2 ms -- as the electric guitar's (by analogy).
     attack_time = 0.002
 
@@ -7768,16 +7875,22 @@ class FretlessBassProperties(ElectricBassProperties):
     instrument and why the reach is a long one: a bass neck is long, and
     players use it.
     """
-    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
-    # consensus, no recording holding a released note -- the median of four
-    # sets' releases, 0.20 s (0.20, 0.30, 0.20, 0.18), to our smoothstep's -40 dB at the same
-    # time, 0.443 R; and no 0.45-of-the-note cap.
-    release_valve_time = 0.089
+    initial_gain = 0.245687   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.4031380236559139
+    # THE NOTE-OFF IS THE PLAYER'S DAMP: no fretless was recorded, and a hand
+    # damps it as it damps the fretted bass -- the finger style's measured
+    # release (examples/egtr_fit.py --damp).
+    release_valve_time = 0.390
     release_fraction_max = None
     glide_mechanism = 'stop'
     glide_reach_semitones = 12.0
-    harmonic_decay_db = 4.0       # vs 1.0: the top goes, the fundamental stays
-    strike_depth = 0.45           # played with more flesh, as fretless is
+    # four times the fretted bass's harmonic damping, as it was by ear -- now
+    # on the measured string (no fretless was recorded)
+    harmonic_decay_db = 4.0 * 1.598
+    # played with more flesh, as fretless is: the fretted finger's notch less
+    # a little, in the ratio it had by ear (0.45 to 0.55) on the fitted 1.0
+    strike_depth = 1.0 * 0.45 / 0.55
 
 
 class SlapBassProperties(ElectricBassProperties):
@@ -7800,15 +7913,20 @@ class SlapBassProperties(ElectricBassProperties):
     The drive is up as well, because a slapped bass is the one case where a
     bass player does push the front end.
     """
-    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
-    # consensus, no recording holding a released note -- the median of four
-    # sets' releases, 0.20 s (0.20, 0.20, 0.20, 0.07), to our smoothstep's -40 dB at the same
-    # time, 0.443 R; and no 0.45-of-the-note cap.
-    release_valve_time = 0.089
+    # FITTED (--ladder=36) to the slap thumb on all three basses: 10.2 -> 7.9 dB.
+    # The rest is the string slapping the frets in its first 60 ms, a buzz
+    # this voice does not model.
+    pickup_points = (0.098, 0.168)
+    strike_point = 0.09256
+    strike_depth = 0.9445
+    tonal_dampening = 1.797
+    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
+    # IDMT-SMT-Bass stops every note by hand at ~2 s; 446 ST damps on three
+    # basses fall a median 116 dB/s, -40 dB in 0.34 s, our smoothstep's -40 dB
+    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
+    # gentler than their envelopes.
+    release_valve_time = 0.368
     release_fraction_max = None
-    strike_point = 0.06
-    strike_depth = 1.00
-    pickup_points = (0.081,)      # Jazz bridge pickup, 70 mm of 864
     # 7.5 kOhm against the Precision split coil's ~5.25 per half. A Jazz bridge
     # pickup is wound hot for the same reason every bridge pickup is: it sits
     # where the string barely moves. Same correction as the guitars'.
@@ -7822,8 +7940,9 @@ class SlapBassProperties(ElectricBassProperties):
     # A factor of two in amplitude is a conservative reading of that, and it
     # is why a bass rig has a compressor on it.
     _thumb = 2.0
-    initial_gain = 0.2790 * _thumb
-    amp_reference = 0.2289 * 1.43 * _thumb
+    initial_gain = 0.149728   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.3513262871397849
     amp_drive = 1.45
     amp_imbalance = 0.35
     # THE SLAP STAYS SHARP: a thumb striking the string, and the pop a string
@@ -7840,19 +7959,25 @@ class PoppedBassProperties(SlapBassProperties):
     releases, so it hits the frets harder and drives the amplifier harder.
     Nothing here is a measurement.
     """
-    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
-    # consensus, no recording holding a released note -- the median of four
-    # sets' releases, 0.18 s (0.20, 0.10, 0.20, 0.15), to our smoothstep's -40 dB at the same
-    # time, 0.443 R; and no 0.45-of-the-note cap.
-    release_valve_time = 0.078
+    # FITTED (--ladder=37) to the slap pluck on all three basses: 10.8 -> 6.3 dB.
+    strike_point = 0.09513
+    strike_depth = 0.6564
+    tonal_dampening = 2.184
+    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
+    # IDMT-SMT-Bass stops every note by hand at ~2 s; 458 SP damps on three
+    # basses fall a median 105 dB/s, -40 dB in 0.38 s, our smoothstep's -40 dB
+    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
+    # gentler than their envelopes.
+    release_valve_time = 0.404
     release_fraction_max = None
     # ...and it costs level to take it, because the extra drive compresses.
     # Measured, the harder setting alone put GM 37 1.5 dB UNDER GM 36, which
     # is backwards for the more aggressive of the pair. A pop pulls the string
     # further before it lets go, so it arrives with more of everything.
     _pop = 1.25
-    initial_gain = 0.2790 * 2.0 * _pop
-    amp_reference = 0.2289 * 1.43 * 2.0 * _pop
+    initial_gain = 0.228738   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.5367177299354837
     amp_drive = 3.41
     amp_imbalance = 0.45
 
@@ -8068,6 +8193,12 @@ class JazzGuitarProperties(ElectricGuitarProperties):
 
     Three nulls converging on the 4th harmonic is the sound.
     """
+    # FITTED (--ladder=26) to the RG2820's NECK humbucker, DI: 8.95 -> 5.40 dB.
+    strike_point = 0.1923
+    strike_depth = 0.8113
+    tonal_dampening = 1.95
+    pickup_resonance_hz = 5971.0
+    pickup_q = 1.153
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.20 s (0.08, 0.38, 0.08, 0.32), to our smoothstep's -40 dB at the same
@@ -8091,10 +8222,9 @@ class JazzGuitarProperties(ElectricGuitarProperties):
     # the clean guitar, warm rather than loud. Both numbers scale together,
     # so the valve sees exactly what it saw and only the level moves.
     _knob = 0.66
-    initial_gain = 0.0869 * _knob
-    amp_reference = 0.1772 * 1.38 * _knob   # the pair reads 1.38x a single coil
-    strike_point = 0.25                 # picked toward the neck, softly
-    strike_depth = 0.7                  # a thumb or a soft pick is not a point
+    initial_gain = 0.0692627   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.1949047595765247
     amp_drive = 0.34
     amp_imbalance = 0.35
 
@@ -8102,19 +8232,23 @@ class JazzGuitarProperties(ElectricGuitarProperties):
 class MutedGuitarProperties(ElectricGuitarProperties):
     """GM 28. The picking hand's palm resting on the strings at the bridge.
 
-    A palm mute is a DAMPER, and damping is a decay rate, not a filter. The
-    heel of the hand loads the string where it crosses the bridge and takes the
-    energy out fast -- fastest from the modes that move most under it, which is
-    the high ones. So this is the base voice with its decay opened up by an
-    order of magnitude: h1 falls at 38 dB/s where an open string falls at 1,
-    and h8 at 94.
+    A palm mute is a DAMPER, and damping is a decay rate. The heel of the
+    hand loads the string where it crosses the bridge and takes the energy
+    out fast -- fastest from the modes that move most under it, the high ones,
+    and the higher up the neck the faster.
 
-    What it is NOT is a low-pass. The attack is undamped -- the palm cannot act
-    before the pick does -- so a palm mute starts as bright as an open note and
-    then loses its top in a fraction of a second. That ORDER is the sound, and
-    a voice that simply rolled the treble off would get the chug and lose the
-    click.
+    MEASURED (examples/egtr_fit.py --mute, --fit-technique=mute), IDMT-SMT-
+    Guitar's dataset 2: three guitars, five palm-muted notes at the fifth fret
+    of every string, each against the same note open. The mute decays 3.6-5.5
+    x the open string (medians, h1-h4) -- not the order of magnitude this said
+    by ear -- and steeply more up the neck (h1 ~36 dB/s at A2, ~120 at A4). And
+    it IS partly a low-pass: at onset the muted note matches the open one to
+    h4 and then falls away (h5 -22 dB against -14, h6 -30 against -13) -- the
+    palm is on the string before the pick leaves it. So the click survives
+    and the top above it does not.
     """
+    initial_gain = 0.0995397   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.32 s (0.40, 0.12, 0.40, 0.24), to our smoothstep's -40 dB at the same
@@ -8123,10 +8257,17 @@ class MutedGuitarProperties(ElectricGuitarProperties):
     release_fraction_max = None
     pickup_points = (0.10,)             # near the bridge, where the hand is
     pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
-    amp_reference = 0.1772 * 1.07
-    strike_point = 0.10
-    decay_db = 30.0                     # dB/s on the fundamental
-    harmonic_decay_db = 8.0             # ...and far faster up the series
+    amp_reference = 0.21718210907710012
+    strike_point = 0.1396
+    # FITTED (--fit-technique=mute, 87 notes): the decay law, (a + b m)
+    # (f0/415)^s halved to the class's dB (median |log err| 0.57 -- a palm is
+    # not placed the same twice), and the pick, its notch and the tilt against
+    # the onset ladders (13.5 -> 5.6 dB)
+    decay_db = 48.33
+    harmonic_decay_db = 9.202
+    decay_register_slope = 0.8949
+    strike_depth = 0.7927
+    tonal_dampening = 2.742
     amp_drive = 1.98
     amp_imbalance = 0.50
 
@@ -8144,15 +8285,26 @@ class OverdrivenGuitarProperties(ElectricGuitarProperties):
 
     Bridge pickup, because that is what the position is for.
     """
+    initial_gain = 0.0741522   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    # FITTED to the RG2820's BRIDGE humbucker, DI (the same pickup as GM 30, its fit): the
+    # string and the pickup; the amplifier after it is unchanged.
+    strike_point = 0.165
+    strike_depth = 0.7716
+    tonal_dampening = 2.284
+    pickup_resonance_hz = 4827.0
+    pickup_q = 0.7739
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.27 s (0.16, 0.34, 0.30, 0.24), to our smoothstep's -40 dB at the same
     # time, 0.443 R; and no 0.45-of-the-note cap.
     release_valve_time = 0.120
     release_fraction_max = None
-    pickup_points = (0.10,)
+    # the bridge HUMBUCKER its spectrum was fitted on (the references have no
+    # bridge single coil); still wound hotter, as a bridge pickup is
+    pickup_points = (0.049, 0.077)
     pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
-    amp_reference = 0.1772 * 1.07
+    amp_reference = 0.3235800628032221
     amp_drive = 4.45
     amp_imbalance = 0.60
 
@@ -8169,6 +8321,15 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     push the front end, and its own 36th-harmonic null keeps the very top from
     turning to hash before the speaker gets to it.
     """
+    initial_gain = 0.106201   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    # FITTED to the RG2820's BRIDGE humbucker, DI (--ladder=30, 6.25 -> 3.40 dB): the
+    # string and the pickup; the amplifier after it is unchanged.
+    strike_point = 0.165
+    strike_depth = 0.7716
+    tonal_dampening = 2.284
+    pickup_resonance_hz = 4827.0
+    pickup_q = 0.7739
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.31 s (0.24, 0.40, 0.39, 0.19), to our smoothstep's -40 dB at the same
@@ -8184,8 +8345,7 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     # QUIETEST on the instrument, 7.7 dB under the clean voice, which is how
     # GM 30 ended up below GM 29.
     pickup_turns = 1.43
-    amp_reference = 0.1772 * 2.86
-    strike_point = 0.13
+    amp_reference = 0.6193534774683545
     amp_drive = 14.43
     amp_imbalance = 0.80
 
@@ -8207,6 +8367,9 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     It rings, too, because the finger is at a node and a node is not moving:
     the touch selects rather than damps. Decay is left at the base voice's.
     """
+    initial_gain = 0.281322   # held at its level before the IDMT fit (egtr_fit.py), with
+    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    amp_reference = 0.5736508446490218
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.22 s (0.00, 0.24, 0.20, 0.24), to our smoothstep's -40 dB at the same
@@ -8214,7 +8377,51 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     release_valve_time = 0.098
     release_fraction_max = None
     harmonic_touch = 2                  # touched at 1/2: the twelfth fret
-    strike_point = 0.13                 # struck near the bridge, as one does
+    # ...BUT A PLAYER CHOOSES THE TOUCH TO SUIT THE NOTE. Natural harmonics are
+    # played on open strings, over the nodes at frets 12, 7, 5 and 4 (or 9) --
+    # harmonics 2, 3, 4, 5 (IDMT-SMT-Guitar's dataset 2 has all of them) -- so
+    # each note takes a touch that puts its string near the nut. One touch for every note fretted G#6 at the 16th, its coil past
+    # the middle of the string and onto every surviving mode's node: silence.
+    touches = (2, 3, 4, 5)
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        if self.touches:
+            f0 = float(frequency)
+
+            def fret(n):
+                fs = f0 / n
+                under = [o for o in self.open_strings_hz if o <= fs * 1.0001]
+                return 12.0 * _log(fs / max(under)) / _log(2.0) if under else 99.0
+            # ...and among those near the nut (within 4 frets), the one the coil
+            # and the pick reach best: a touch whose mode has a node under the
+            # pickup is a harmonic the player cannot hear (the neck coil sits
+            # at 0.247, a quarter -- the 4th harmonic's node: 30 dB down)
+            def heard(n):
+                sc = 2.0 ** (fret(n) / 12.0)
+                q = abs(sum(_sin(n * _pi * min(c * sc, 0.5)) for c in self.pickup_points))
+                return q * abs(_sin(n * _pi * min(self.strike_point * sc, 0.5)))
+            near = [n for n in self.touches if fret(n) <= 4.0] or list(self.touches)
+            self.harmonic_touch = max(near, key=lambda n: (heard(n), -n))
+        super().__init__(frequency, *args, **kwargs)
+    # FITTED (examples/egtr_fit.py --fit-technique=harm): 90 natural harmonics
+    # on three guitars, each at its own touch on its open string -- the pick,
+    # its notch, the tilt, and the COIL, since a touched harmonic reads only
+    # modes n m and dataset 2 does not say which pickups were on (it went to
+    # 0.153, a Stratocaster's middle): onset ladder 15.2 -> 8.2 dB. A recorded
+    # harmonic is nearly a sine -- h3 26 dB down, h5 48 in the fifth octave.
+    strike_point = 0.1264
+    strike_depth = 0.7767
+    tonal_dampening = 2.636
+    pickup_points = (0.1529,)
+    # ...and its partials die nearly alike (7, 12, 15, 14 dB/s, h1-h4): the
+    # decay of the partial HEARD, fitted on its own (360 partials, median
+    # |log err| 0.31), not the open string's mode n m
+    decay_db = 3.999
+    harmonic_decay_db = 0.7957
+    decay_register_slope = -0.08967
+
+    def harmonic_decay(self, harmonic):
+        return SynthProperties.harmonic_decay(self, harmonic)
     amp_drive = 0.45
 
 

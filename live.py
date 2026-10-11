@@ -8048,10 +8048,17 @@ def selftest():
           "  (%.2f < %.2f < %.2f)" % (inst[27].amp_drive, inst[29].amp_drive,
                                       inst[30].amp_drive))
     # A PALM MUTE IS A DAMPER, so it has to be a decay and not a filter.
-    check("the muted voice damps, and by an order of magnitude",
-          inst[28].harmonic_decay(1) > 10.0 * inst[27].harmonic_decay(1),
-          "  (%.1f vs %.1f dB/s)" % (inst[28].harmonic_decay(1),
-                                     inst[27].harmonic_decay(1)))
+    # ...and by what a palm does, MEASURED (egtr_fit.py --mute): against the same
+    # guitar, string and fret unmuted, the mute decays 3.6-5.5 x (medians,
+    # h1-h4), quartiles 1.7-11.6 -- not the order of magnitude this asserted
+    # before there was a recording.
+    # at A2, the fifth fret of the low E, where the palm was measured
+    _m28, _o27 = _T.MutedGuitarProperties(110.0, 0.0, 1.0, 1.0), _T.ElectricGuitarProperties(110.0, 0.0, 1.0, 1.0)
+    check("the muted voice damps, as much as a palm does",
+          3.0 < _m28.harmonic_decay(1) / _o27.harmonic_decay(1) < 12.0,
+          "  (%.1f vs %.1f dB/s at A2, x %.1f; measured x 4.0, quartiles 1.7-11.6)"
+          % (_m28.harmonic_decay(1), _o27.harmonic_decay(1),
+             _m28.harmonic_decay(1) / _o27.harmonic_decay(1)))
 
     def _h1_share(g):
         v = np.array([g.harmonic_volume(h) for h in range(1, 33)])
@@ -8297,8 +8304,12 @@ def selftest():
           and abs(_mean_h(binst[35]) - _mean_h(binst[33])) < 0.5,
           "  (h8 decays %.0f vs %.0f dB/s, same spectrum)"
           % (binst[35].harmonic_decay(8), binst[33].harmonic_decay(8)))
+    # brighter by what the recordings say: the slap thumb's fit stands 1.26 x
+    # the finger's mean harmonic (egtr_fit.py --ladder=36, 33); the 1.5 here
+    # was asserted before there was a recording
     check("a slap is the brightest of them",
-          _mean_h(binst[36]) > 1.5 * _mean_h(binst[33]),
+          _mean_h(binst[36]) > 1.15 * _mean_h(binst[33])
+          and _mean_h(binst[36]) >= max(_mean_h(binst[n]) for n in (33, 35, 37)),
           "  (mean harmonic %.1f vs %.1f)" % (_mean_h(binst[36]), _mean_h(binst[33])))
     # A BASS CABINET REACHES WHERE A GUITAR CABINET GIVES UP: the low E's
     # FUNDAMENTAL is the note, at 41 Hz.
@@ -8371,8 +8382,11 @@ def selftest():
     # The coil's own aperture sinc is in there too, so build the expectation
     # rather than assuming h1 escapes it.
     _x = math.pi * inst[30].pickup_width
+    # ...and the coils' electrical load, a resonance read at the partial's
+    # frequency (pickup_resonance_hz; IDMT-fitted)
     _expect = (abs(math.sin(math.pi * 0.049) + math.sin(math.pi * 0.077))
-               * abs(math.sin(_x) / _x) * inst[30].pickup_turns)
+               * abs(math.sin(_x) / _x) * inst[30].pickup_turns
+               * _T._two_pole(329.63 / inst[30].pickup_resonance_hz, inst[30].pickup_q))
     check("a humbucker's coils are in series, not averaged",
           abs(_pk(inst[30], 1) - _expect) < 1e-12,
           "  (h1 reads %.4f = both coils summed, x %.2f turns)"
@@ -8393,8 +8407,10 @@ def selftest():
                         for h in range(1, 25)]
     class _NoTurns(_T.DistortionGuitarProperties):
         pickup_turns = 1.0
+    # at the SAME note: a pickup's tone moves with the note now (its load is
+    # read at each partial's frequency, its comb at each note's fret)
     _w = max(abs(a - b) for a, b in zip(_shape(inst[30]),
-                                        _shape(_NoTurns(220.0, 0.0, 1.0, 1.0))))
+                                        _shape(_NoTurns(329.63, 0.0, 1.0, 1.0))))
     check("...and the turns set the level without touching the tone",
           _w < 1e-9, "  (worst shape deviation %.1e over 24 harmonics)" % _w)
     # THE INVERSIONS THEMSELVES. Rendered levels are in examples/levels.py;
@@ -8404,12 +8420,16 @@ def selftest():
           "  (h1 %.3f vs %.3f)" % (_pk(inst[30], 1), _pk(inst[29], 1)))
     # ...and a slap, whose brightness costs it the bottom of a 1/n series, gets
     # its level back from the arm rather than from a filter.
+    # Read as ENERGY AT THE PICKUP: the gains now hold each voice at its level
+    # through a fitted spectrum (egtr_fit.py), so a gain alone says how bright
+    # the voice came out, not how hard the string was hit.
+    def _arrives(g, top=40):
+        return math.sqrt(sum(g.harmonic_volume(h) ** 2 for h in range(1, top)))
     check("a slap arrives harder than a pluck, and says so as momentum",
-          binst[36].initial_gain > 1.5 * binst[33].initial_gain
-          and binst[37].initial_gain > binst[36].initial_gain,
-          "  (finger %.3f, slap %.3f, pop %.3f)"
-          % (binst[33].initial_gain, binst[36].initial_gain,
-             binst[37].initial_gain))
+          _arrives(binst[36]) > 1.5 * _arrives(binst[33])
+          and _arrives(binst[37]) > _arrives(binst[36]),
+          "  (energy at the pickup: finger %.3f, slap %.3f, pop %.3f)"
+          % (_arrives(binst[33]), _arrives(binst[36]), _arrives(binst[37])))
     # THE REPO RULE: initial_gain and amp_reference move together, or the
     # louder voice is also a more distorted one.
     # Each family has its own base ratio (a bass rig is not a guitar rig), and
@@ -10542,6 +10562,7 @@ def selftest():
     import gm_release as _GMR
     import patch_map as _patch_map
     _rp = (24, 30, 33, 46, 53, 107)
+    _MEASURED_REL = {33: 0.390}         # the finger bass's damp, measured
     _gmc = _GMR.consensus(_rp)
     _tails, _bad = [], []
     for _p in _rp:
@@ -10557,7 +10578,16 @@ def selftest():
         _e = 20 * np.log10(np.sqrt(np.convolve(_x * _x, np.ones(_w) / _w, "same")) + 1e-12)
         _i = np.flatnonzero(_e[int(0.25 * B.SR):] < _e[int(0.24 * B.SR)] - 40)
         _got = _i[0] / B.SR if len(_i) else float("nan")
-        _want = _gmc[_p][0] * 40 / 96.0
+        # the tail against the class's own release (its smoothstep's -40 dB
+        # at 0.94 of it); the release against GM's consensus, except where a
+        # recording measured it (the basses' damp, egtr_fit.py --damp)
+        _rvt0 = _patch_map.property_class_for_program(_p).release_valve_time
+        _want = 0.94 * _rvt0
+        if _p in _MEASURED_REL:
+            if abs(_rvt0 - _MEASURED_REL[_p]) > 1e-3:
+                _bad.append("%d release %.3f, measured %.3f" % (_p, _rvt0, _MEASURED_REL[_p]))
+        elif abs(_rvt0 - _GMR.L_PER_R * _gmc[_p][0]) > 2e-3:
+            _bad.append("%d release %.3f, consensus %.3f" % (_p, _rvt0, _GMR.L_PER_R * _gmc[_p][0]))
         _l = Live(program=_p, rate=48000, frames=128, verbose=False); _l.warm()
         _l.on_midi(mido.Message("note_on", channel=0, note=_nt, velocity=90)); _l.apply(0)
         _ks = [_k for _k in _l.slab.live if _k[2] == _nt]
@@ -10568,9 +10598,9 @@ def selftest():
         if not (0.5 * _want <= _got <= 1.3 * _want) or abs(_re - _rvt) > 2e-3:
             _bad.append("%d (tail %.2f s against %.2f, live re %.3f against %.3f)" % (_p, _got, _want, _re, _rvt))
     _pre = _patch_map.property_class_for_program(0)
-    check("a note-off is a release, not a cut: GM's consensus, live as the file",
+    check("a note-off is a release, not a cut: measured or GM's consensus, live as the file",
           not _bad and _pre.release_valve_time == 0.12 and _pre.release_fraction_max == 0.45,
-          "  (-40 dB after an eighth note's off, ours/consensus: %s; the piano's own 0.12 s kept)" % ", ".join(_tails)
+          "  (-40 dB after an eighth note's off, ours/its release's: %s; the piano's own 0.12 s kept)" % ", ".join(_tails)
           if not _bad else "  (%s)" % "; ".join(_bad))
     # THE OTHER STRINGS ARE TUNED AS THE NOTES ARE (blockrender, ring_db): a
     # ring row is its nearest key and that key's offset from 12-TET, at the
