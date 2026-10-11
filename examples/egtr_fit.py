@@ -15,6 +15,8 @@ redistributed; ~/Documents/refs/idmt, sources.md).
     egtr_fit.py --technique=mute|harm   palm-muted or harmonic notes: recorded against ours
     egtr_fit.py --fit-technique=mute|harm   GM 28/31's pluck, notch, tilt and decay law
     egtr_fit.py --abtech=mute|harm:OUT.wav  recorded notes, each then ours (DI)
+    egtr_fit.py --pluck=harm                the harmonics' pluck: strike_noise_db fitted
+    egtr_fit.py --leak                      the touched string's other modes, in its place
     egtr_fit.py --abdamp=PROG:OUT.wav   recorded notes through their damp, each then ours
 
 BOTH ARE DI RECORDINGS: "the guitars were mostly plugged directly into the
@@ -713,6 +715,172 @@ def fit_technique(kind):
     return dict(zip(knobs, v)), dec
 
 
+S3 = 2 ** np.arange(np.log2(140), np.log2(16000), 1 / 3.0)
+
+
+def between(x, sr, f0, t0, a=0.0, b=0.03):
+    """THE PLUCK UNDER A HARMONIC: third-octave bands BETWEEN the sounding
+    note's partials (each masked, +-12 % of f0), over A-B seconds after the
+    onset T0 (samples), dB re the window's whole energy -- koto_fit.pluck's
+    measure, on a segment. On a touched string that is the pick's click and
+    the modes the finger has not yet killed."""
+    n = 1 << 15
+    f = np.fft.rfftfreq(n, 1.0 / sr)
+    near = np.zeros_like(f, bool)
+    for m in range(1, 200):
+        if m * f0 > 0.5 * sr:
+            break
+        near |= np.abs(f - m * f0) < max(0.12 * f0, 15.0)
+    seg = x[t0 + int(a * sr):t0 + int(b * sr)]
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), n)) ** 2 / len(seg)
+    tot = X.sum()
+    out = []
+    for lo, hi in zip(S3[:-1], S3[1:]):
+        m_ = (f >= lo) & (f < hi) & ~near
+        out.append(10 * np.log10(X[m_].mean() * ((f >= lo) & (f < hi)).sum() / tot + 1e-30)
+                   if m_.sum() > 3 else np.nan)
+    return np.array(out), 10 * np.log10(X[~near].sum() + 1e-30)
+
+
+def _onset(x, sr):
+    w = max(1, int(0.001 * sr))
+    e = np.sqrt(np.convolve(x * x, np.ones(w) / w, "same"))
+    return int(np.flatnonzero(e > e.max() * 0.1)[0])
+
+
+def harm_pluck(passes=4, dbs=None):
+    """--pluck=harm: the harmonics' pluck (Ben: "missing the pluck sound").
+    Each recorded harmonic's between-the-partials bands over its first 30 ms
+    and how far that energy has fallen by 30-80 ms; ours (GM 31, DI) measured
+    the same way at the same pitch; strike_noise_db, a third-octave table,
+    moved band by band toward the recordings (the median of recorded - ours),
+    and strike_noise_dbs set from the measured fall."""
+    from voicefit import mono
+    import tonelib
+    import patch_map
+    cls = tonelib.GuitarHarmonicsProperties
+    cen = np.sqrt(S3[:-1] * S3[1:])
+    R, falls, keys = [], [], []
+    cache = {}
+    for wav, a, b, f0, fret, n in technique_notes("harm"):
+        if wav not in cache:
+            x, sr = mono(wav)
+            cache[wav] = (np.asarray(x, np.float64), sr)
+        x, sr = cache[wav]
+        seg = x[int(a * sr) - int(0.02 * sr):int(b * sr)]
+        t0 = _onset(seg, sr)
+        b0, e0 = between(seg, sr, f0, t0, 0.0, 0.03)
+        _, e1 = between(seg, sr, f0, t0, 0.03, 0.08)
+        R.append(b0); falls.append((e0 - e1) / 0.05 * 0.5)
+        keys.append(int(round(69 + 12 * np.log2(f0 / 440.0))))
+    rate = float(np.median(falls))           # dB/s of the inter-partial energy, halved
+    if not getattr(cls, "strike_noise_db", ()):
+        cls.strike_noise_db = tuple((int(round(c)), -20.0) for c in cen)
+    # THE FALL IS FITTED, NOT TAKEN: between-the-partials energy on OUR render
+    # also holds the partials' slow skirts, so a table set to the recordings'
+    # rate measured 100-126 dB/s where they read 230-280 (Ben: the low notes
+    # "could use a little bit tighter pick"). Scanned (scratch pluckfall):
+    # 320 reads 250-260 in octaves 4-5, as recorded.
+    cls.strike_noise_dbs = dbs if dbs else round(max(rate, 50.0), 1)
+    cls.strike_noise_fade_s = 0.001
+    keep = patch_map.PROGRAM_CLASS.get(31)
+    patch_map.PROGRAM_CLASS[31] = di_class(31)
+    tmp = os.path.join(MODEL, "_p.wav")
+    os.makedirs(MODEL, exist_ok=True)
+    import warnings
+    warnings.simplefilter("ignore")
+    try:
+        for k in range(passes + 1):
+            patch_map.PROGRAM_CLASS[31] = di_class(31)
+            O, done = [], {}
+            for key in keys:
+                if key not in done:
+                    render_note(31, key, tmp, secs=0.5)
+                    y, sr = mono(tmp)
+                    y = np.asarray(y, np.float64)
+                    done[key] = between(y, sr, 440.0 * 2 ** ((key - 69) / 12.0), _onset(y, sr))[0]
+                O.append(done[key])
+            d = np.nanmedian(np.array(R) - np.array(O), 0)
+            print("  pass %d: pluck bands rec - ours, rms %.1f dB (fall %.0f dB/s halved)"
+                  % (k, np.sqrt(np.nanmean(d ** 2)), cls.strike_noise_dbs), flush=True)
+            if k == passes:
+                break
+            cls.strike_noise_db = tuple((hz, round(db + (float(dd) if np.isfinite(dd) else 0.0), 1))
+                                        for (hz, db), dd in zip(cls.strike_noise_db, d))
+    finally:
+        if keep is not None:
+            patch_map.PROGRAM_CLASS[31] = keep
+    print("    strike_noise_db = %s" % (cls.strike_noise_db,))
+    print("    strike_noise_dbs = %.1f\n    strike_noise_fade_s = 0.001" % cls.strike_noise_dbs)
+
+
+def fit_leak(levels=(-20.0, -12.0, -6.0, 0.0), rates=(200.0, 400.0, 800.0), step=2, noise=False):
+    """--leak: the touched string's other modes (tonelib touch_leak_db,
+    touch_leak_dbs), in place of the noise pluck. A grid, each point rendered
+    at every STEP-th recorded harmonic and scored three ways, summed: the
+    first 30 ms between the partials (between(), median band difference), how
+    far that falls by 30-80 ms, and the onset ladder (h2-h6, where a killed
+    mode near a harmonic shows)."""
+    from voicefit import mono
+    import patch_map
+    import warnings
+    warnings.simplefilter("ignore")
+    notes = technique_notes("harm")[::step]
+    cache, R = {}, []
+    for wav, a, b, f0, fret, n in notes:
+        if wav not in cache:
+            x, sr = mono(wav)
+            cache[wav] = (np.asarray(x, np.float64), sr)
+        x, sr = cache[wav]
+        seg = x[int(a * sr) - int(0.02 * sr):int(b * sr)]
+        t0 = _onset(seg, sr)
+        b0, e0 = between(seg, sr, f0, t0)
+        _, e1 = between(seg, sr, f0, t0, 0.03, 0.08)
+        L = seg_ladder(seg, sr, f0, t0 / sr, len(seg) / sr, nm=6)
+        R.append((f0, b0, e0 - e1, L))
+    base = di_class(31)
+    tmp = os.path.join(MODEL, "_l.wav")
+    os.makedirs(MODEL, exist_ok=True)
+    keep = patch_map.PROGRAM_CLASS.get(31)
+    best = None
+    try:
+        for lv in levels:
+            for rt in rates:
+                d = dict(touch_leak_db=lv, touch_leak_dbs=rt)
+                if not noise:
+                    d["strike_noise_db"] = ()
+                cls = type("L", (base,), d)
+                patch_map.PROGRAM_CLASS[31] = cls
+                eb, ef, el, done = [], [], [], {}
+                for f0, b0, fall, L in R:
+                    key = int(round(69 + 12 * np.log2(f0 / 440.0)))
+                    if key not in done:
+                        render_note(31, key, tmp, secs=0.6)
+                        y, sr = mono(tmp)
+                        y = np.asarray(y, np.float64)
+                        u0 = _onset(y, sr)
+                        o0, g0 = between(y, sr, f0, u0)
+                        _, g1 = between(y, sr, f0, u0, 0.03, 0.08)
+                        done[key] = (o0, g0 - g1, seg_ladder(y, sr, f0, u0 / sr, len(y) / sr, nm=6))
+                    o0, ofall, M = done[key]
+                    eb.append(np.nanmedian(np.abs(o0 - b0)))
+                    ef.append(abs(ofall - fall))
+                    if L is not None and M is not None and len(L) >= 6 and len(M) >= 6:
+                        ok = L[1:] > -60
+                        el.extend(np.abs(M[1:] - L[1:])[ok])
+                sc = float(np.median(eb) + 0.5 * np.median(ef) + np.median(el))
+                print("  leak %s dB, %4.0f dB/s%s: between %.1f dB, fall miss %.1f dB, onset ladder %.1f dB -> %.1f"
+                      % ("none" if lv is None else "%+5.1f" % lv, rt, " + noise" if noise else "",
+                         np.median(eb), np.median(ef), np.median(el), sc), flush=True)
+                if best is None or sc < best[0]:
+                    best = (sc, lv, rt)
+    finally:
+        if keep is not None:
+            patch_map.PROGRAM_CLASS[31] = keep
+    print("    touch_leak_db = %.1f\n    touch_leak_dbs = %.0f" % best[1:])
+    return best
+
+
 def ab_technique(kind, out, n=8):
     """--abtech=mute|harm:OUT.wav: N of dataset 2's palm-muted or harmonic
     notes across the range, each recorded then ours (GM 28 or 31, DI, at the
@@ -869,6 +1037,19 @@ def main(argv):
             print("  %-34s %3d notes" % (s, len(glob.glob(os.path.join(STAGED, s, "*.wav")))))
         return 0
     for a in argv:
+        if a == "--leak":
+            fit_leak()
+            return 0
+        if a.startswith("--leak="):
+            # --leak=LEVEL,RATE[,noise]: one point, scored the same way; a LEVEL
+            # of 'none' is the noise pluck alone
+            v = a.split("=")[1].split(",")
+            fit_leak(levels=(None if v[0] == "none" else float(v[0]),), rates=(float(v[1]),),
+                     noise=len(v) > 2)
+            return 0
+        if a == "--pluck=harm":
+            harm_pluck(dbs=320.0)
+            return 0
         if a.startswith("--abtech="):
             k, out = a.split("=", 1)[1].split(":", 1)
             ab_technique(k, out)

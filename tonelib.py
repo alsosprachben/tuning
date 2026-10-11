@@ -1225,6 +1225,14 @@ class SynthProperties:
     # the two. 0 = no resonance (a pickup that is only its combs).
     pickup_resonance_hz = 0.0
     pickup_q = 1.0
+    # A TOUCHED STRING'S OTHER MODES (harmonic_touch > 1). The pick strikes the
+    # whole string; the modes with no node under the finger sound for a moment
+    # before it kills them, at their own frequencies -- k/n of the note, not
+    # its harmonics. touch_leak_db: their level against what each would have
+    # untouched (the same pick, tilt and coil); touch_leak_dbs: how fast the
+    # finger kills them, envelope dB/s. None = the touch is perfect at once.
+    touch_leak_db = None
+    touch_leak_dbs = 400.0
 
     # Chorus/ensemble: extra unison voices detuned by these Hz offsets, each
     # scaled by unison_gain. Empty = a single voice (no beating).
@@ -2642,6 +2650,27 @@ class SynthProperties:
         if harmonic % 2 == 0 and self.even_harmonic_db is not None:
             v *= 10.0 ** (self.even_harmonic_db / 20.0)
         return v
+
+    def touch_leak_modes(self, top=48):
+        """[(k, amplitude)] for the string modes a touch kills (k not a
+        multiple of harmonic_touch), each at what it would have untouched --
+        the series' pluck comb, tilt and coil at mode k (pickup_gain reads mode
+        k at the string's own pitch times k) -- scaled by touch_leak_db."""
+        n = self.harmonic_touch or 1
+        if n < 2 or self.touch_leak_db is None:
+            return []
+        lk = 10.0 ** (self.touch_leak_db / 20.0)
+        out = []
+        for k in range(1, top + 1):
+            if k % n == 0:
+                continue
+            comb = ((1.0 - self.strike_depth) + self.strike_depth * abs(_sin(k * _pi * self.strike_point))
+                    if self.strike_point else 1.0)
+            v = self.gain / (k ** self.attack_dampening) * comb
+            if self.pickup_points:
+                v *= self.pickup_gain(k)
+            out.append((k, v * lk))
+        return out
 
     def pickup_gain(self, harmonic):
         """What a magnetic pickup reads of mode n. 1.0 for anything without one."""
@@ -8367,9 +8396,9 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     It rings, too, because the finger is at a node and a node is not moving:
     the touch selects rather than damps. Decay is left at the base voice's.
     """
-    initial_gain = 0.281322   # held at its level before the IDMT fit (egtr_fit.py), with
+    initial_gain = 0.242078   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
-    amp_reference = 0.5736508446490218
+    amp_reference = 0.49362740621403906
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.22 s (0.00, 0.24, 0.20, 0.24), to our smoothstep's -40 dB at the same
@@ -8413,15 +8442,58 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     strike_depth = 0.7767
     tonal_dampening = 2.636
     pickup_points = (0.1529,)
-    # ...and its partials die nearly alike (7, 12, 15, 14 dB/s, h1-h4): the
-    # decay of the partial HEARD, fitted on its own (360 partials, median
-    # |log err| 0.31), not the open string's mode n m
-    decay_db = 3.999
-    harmonic_decay_db = 0.7957
-    decay_register_slope = -0.08967
+    # ...and its decay is the partial HEARD's, not the open string's mode n m.
+    # The fundamental's from a line through each note (360 partials). The
+    # harmonics' NOT: a recorded harmonic grows purer as it sustains -- over
+    # 0.2-0.8 s its h3-h6 stand 50-79 dB under h1, where at onset they stood
+    # 26-48 -- the touching finger's width, damping the high modes that move
+    # inside it. A line through the whole note averaged that early fall with
+    # the floor after it (0.80); fitted instead to the sustained ladder by
+    # render (scratch harmdamp, 45 notes), 7.5: miss 19.4 -> 10.7 dB. Forcing
+    # each note onto the recording's own touch changed nothing (Ben asked):
+    # it was the damping, not the touch. ...And on the HARMONICS ONLY: the law
+    # is decay_db + harmonic_decay_db m, so 7.5 a harmonic took the
+    # fundamental from its measured 4.8 to 11.5 too, and every note decayed
+    # 21-25 dB/s where the recordings' do 6-11 (Ben: the first and last "decayed
+    # faster than the recordings by a significant amount"). decay_db carries
+    # the difference, so h1 keeps the measured 3.999 + 0.796 and only the
+    # partials above it steepen.
+    decay_db = 3.999 + 0.7957 - 7.5
+    harmonic_decay_db = 7.5
+    # ...and faster up the neck: the whole note's envelope falls 6.6 dB/s under
+    # 300 Hz, 8.2, 10.9, then 19.8 over 1.2 kHz -- (f0/415)^0.648 over 89
+    # harmonics (median |log err| 0.28); the line through each partial had read
+    # -0.09, its early fall biasing it
+    decay_register_slope = 0.648
 
     def harmonic_decay(self, harmonic):
         return SynthProperties.harmonic_decay(self, harmonic)
+
+    # THE PLUCK (Ben, on the A/B: "missing the pluck sound"). The pick strikes
+    # the WHOLE string; for the first moments every mode sounds, and the pick
+    # clicks, before the touching finger kills the modes that have no node
+    # under it -- so a harmonic does not start pure. Measured between the
+    # sounding partials over each recorded harmonic's first 30 ms (90 notes),
+    # third-octave bands fitted (examples/egtr_fit.py --pluck=harm, 23.5 ->
+    # 0.3 dB rms): mostly 250 Hz-2.5 kHz, the killed low modes. And TIGHT:
+    # the recordings' pluck dies 230-280 dB/s in every octave; set to that
+    # rate, ours measured 100-126 above the third octave (Ben: the low notes
+    # "could use a little bit tighter pick"), so the rate is fitted to the
+    # measured fall -- 320 reads 250-260 -- and the bands refitted at it.
+    strike_noise_db = ((157, -40.5), (198, -43.5), (249, -36.4), (314, -48.7), (396, -29.2), (499, -30.7),
+                       (629, -35.6), (792, -33.8), (998, -31.0), (1257, -34.3), (1584, -33.8), (1996, -35.7),
+                       (2514, -40.7), (3168, -45.3), (3991, -48.5), (5029, -59.0), (6336, -62.6),
+                       (7982, -66.6), (10057, -77.3), (12671, -80.4))
+    strike_noise_dbs = 320.0
+    strike_noise_fade_s = 0.001
+    # ...AND THE MODES THE FINGER KILLS, as partials at their own frequencies
+    # (k/n of the note) rather than noise: each at the strength the pick and
+    # coil give it untouched, dying 400 dB/s (examples/egtr_fit.py --leak:
+    # the grid's best, 0 dB at 400). By the measures here a tie with the noise
+    # pluck alone (20.1 against 20.0) -- third octaves cannot tell a pitched
+    # mode from noise of its energy; Ben's ear decides.
+    touch_leak_db = 0.0
+    touch_leak_dbs = 400.0
     amp_drive = 0.45
 
 

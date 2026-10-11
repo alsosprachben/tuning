@@ -3684,6 +3684,29 @@ def prepare(path, tuner='hybrid440', sink=None):
                              _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, max(noff, non + 4.0 * SR),
                              fade, rel, chiff, math.log(10.0) / 20.0 * _dps, 0.0, 0.0, 0.0, 0.0,
                              cc, crl, 0.0, csc, -1, 0, ph0=_rrng.random() * 2.0 * math.pi)
+        if getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1:
+            # A TOUCHED STRING'S OTHER MODES (tonelib.SynthProperties.touch_leak_db):
+            # the modes the finger kills sound for a moment first, at k/n of
+            # the note -- between its harmonics, not on them -- each as the
+            # string would have it untouched, dying at touch_leak_dbs. Their
+            # phases from the note, as the ring rows' are.
+            _n = props.harmonic_touch
+            _fs = f0 / _n
+            _Bs = (props.inharmonicity_coefficient_for_frequency(_fs)
+                   if props.inharmonicity_dynamic else props.inharmonicity_coefficient)
+            _PL[0] = 0
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            _lrng = random.Random(int(round(on * 1e6)) * 149 + note * 17 + ch)
+            _llr = math.log(10.0) / 20.0 * props.touch_leak_dbs
+            for _k, _a in props.touch_leak_modes():
+                _hf = _fs * _k * (1.0 + 0.5 * (_k * _k - 1.0) * _Bs if _Bs > 0 else 1.0)
+                if _hf >= 0.45 * SR:
+                    continue
+                _gM = _a * props.radiation_gain(_hf)
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, max(noff, non + 0.5 * SR),
+                             fade, rel, chiff, _llr, 0.0, 0.0, 0.0, 0.0,
+                             cc, crl, 0.0, csc, -1, 0, ph0=_lrng.random() * 2.0 * math.pi)
         if getattr(props, 'breath_noise_db', ()):
             # THE BREATH (tonelib.SynthProperties.breath_noise_db): the jet's
             # own noise, held for the note -- the strike's rows, but sustained
