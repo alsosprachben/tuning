@@ -5,6 +5,7 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
     python3 examples/freesound_slice.py timbales
     python3 examples/freesound_slice.py surdo
     python3 examples/freesound_slice.py pipes
+    python3 examples/freesound_slice.py bagpipe
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
 refs/sources.md), one 75 s mp3 decoded to float. 53 onsets (a rise of 20 dB in
@@ -250,5 +251,43 @@ def pipes():
         print("%-10s %3d stable notes -> %s" % (voice, n, out))
 
 
+# THE CHANTER'S NINE NOTES, by the note a file plays them at: BagpipeProperties'
+# scale_cents is degrees of Low A = MIDI 69, so Low G is 67 and High A 81
+CHANTER = {"low-g": "G4", "low-a": "A4", "b": "B4", "c": "C#5", "d": "D5",
+           "e": "E5", "f": "F#5", "high-g": "G5", "high-a": "A5"}
+
+
+def bagpipe():
+    """IowaSpaceWizard's chanter notes (sources.md "Ethnic programs"; CC0): MP3s
+    of one held note each, ~4.5 s of it and the rest of the 31 s silence.
+    Decoded (lame), cut to where it sounds (within 40 dB of its peak, 50 ms
+    either side) and named by the note that plays it -- the WRITTEN note: this
+    chanter's Low A is 487 Hz, which examples/wind_fit.py renders at by a
+    static bend (VOICE_OPTS tonic_cents). The drones' take staged beside them
+    whole, as drones.wav."""
+    from scipy.io import wavfile
+    out = os.path.join(REFS, "staged", "bagpipe")
+    os.makedirs(out, exist_ok=True)
+    for f in glob.glob(os.path.join(out, "*.wav")):
+        os.remove(f)
+    for src in sorted(glob.glob(os.path.join(REFS, "bagpipe/iowaspacewizard/*.mp3"))):
+        nm = next((k for k in sorted(CHANTER, key=len, reverse=True) if src.endswith("chanter-%s.mp3" % k)), None)
+        if nm is None and not src.endswith("drones.mp3"):
+            continue
+        with tempfile.TemporaryDirectory() as d:
+            wav = os.path.join(d, "t.wav")
+            subprocess.run(["lame", "--quiet", "--decode", src, wav], check=True)
+            sr, a = wavfile.read(wav)
+        x = (a if a.ndim == 1 else a.mean(1)).astype(np.float64)
+        w = int(0.01 * sr)
+        e = 10 * np.log10(np.convolve(x * x, np.ones(w) / w, "same") + 1e-20)
+        on = np.flatnonzero(e > e.max() - 40.0)
+        seg = x[max(0, on[0] - int(0.05 * sr)):on[-1] + int(0.05 * sr)]
+        seg = seg / max(np.abs(seg).max(), 1e-9) * 0.9
+        name = "drones.wav" if nm is None else "%s_iowa_%s.wav" % (CHANTER[nm], nm)
+        wavfile.write(os.path.join(out, name), sr, (seg * 32767).astype(np.int16))
+        print("  %-22s %.2f s" % (name, len(seg) / sr))
+
+
 if __name__ == "__main__":
-    {"timbales": timbales, "surdo": surdo, "pipes": pipes}[sys.argv[1]]()
+    {"timbales": timbales, "surdo": surdo, "pipes": pipes, "bagpipe": bagpipe}[sys.argv[1]]()

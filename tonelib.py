@@ -1425,6 +1425,18 @@ class SynthProperties:
     # 0.0 keeps every partial in phase, which is every other voice in this file.
     # 1.0 gives each mode its own sign, drawn once and deterministically.
     strike_phase_spread = 0.0
+    # ...AND A SUSTAINED VOICE'S PARTIALS EACH THEIR OWN PHASE, uniform over
+    # this fraction of a turn, drawn from the note. In phase, a bright series
+    # sums to one sharp pulse a period: the highs come as a click a cycle
+    # rather than an edge. A reed through a bore and a room arrives scrambled
+    # -- measured on the Highland chanter, crest 2.5-3.3 where in phase ours
+    # was 4-6, and its band over 4 kHz kurtosis ~2.5 (smooth) against 5-15
+    # (bursts). 0 = every partial in phase, as every other voice.
+    partial_phase_spread = 0.0
+    # A SLUR ENDS THE NOTE IT LEAVES: a note the next one slurs from stops in
+    # the legato time instead of ringing its release under the new note (the
+    # exciter moved to the new pitch). Off = every voice as it was.
+    slur_cuts_release = False
 
     def bloom_delay_for(self, frequency):
         """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.
@@ -16738,191 +16750,6 @@ bagpipe_drones = int(os.environ.get("TUNING_BAGPIPE_DRONE", "3") or 3)
 bagpipe_tonic_hz = 440.0
 
 
-class BagpipeProperties(ReedPipeProperties):
-    """GM 109. A chanter, and the DRONES -- which are the instrument.
-
-    109 and 111 shared one ReedPipeProperties, and the thing that most obviously
-    separates a bagpipe from a shawm is not its reed: it is that a bagpipe plays
-    a continuous drone underneath everything, at a FIXED pitch, which never
-    changes with the melody. No other voice in this bank does that.
-
-    A FIXED PITCH IS EXPRESSIBLE, and it takes one line. unison_voices is handed
-    the note's own frequency, so a voice at `drone_hz / frequency` sounds at
-    drone_hz whatever is played -- every other user of that hook returns a
-    RATIO, which tracks the note by construction. A drone is the one thing that
-    must not.
-
-    AND IT IS A CHANNEL EVENT, which took the renderer change this class
-    first only promised. The drones were attached to the note and so
-    restarted on every one. They now sound ONCE for the channel, from its
-    first note-on to its last note-off, which is what a bag under pressure
-    does -- see unison_spans_part on SynthProperties.
-
-    AND CC1 CORKS THEM, which is not a hedge. Including the drones matches the
-    reference implementation and the program's own name -- a bagpipe without
-    them is a chanter, which is a different instrument -- but an arranger who
-    writes the drone as held notes in the score would then have it TWICE, and a
-    voice cannot detect that.
-
-    ON THE WHEEL, AND READ ONCE. No real module gives you this: General MIDI
-    specifies no control and the SC-55 bakes the drone into the patch. But CC1
-    in this renderer is consistently the one panel control a voice has -- the
-    Rhodes' tremolo depth, the Hammond's half-moon switch, the clavinet's tone
-    rockers, the honky-tonk's detune -- and there is a real-instrument answer
-    too: a piper CORKS a drone before playing, not during. Playing with one
-    tenor corked is ordinary practice. So it is a setup value taken from the
-    channel's first CC1, exactly as the clavinet's rockers and the amplifier's
-    drive are, rather than a control moved mid-phrase.
-
-    64 is the voiced default and 0 corks them all, which is the honky-tonk's
-    convention: a file with no CC1 gets the instrument as voiced, because the
-    default position of a bagpipe is DRONING. (The Rhodes is the opposite case
-    -- its panel default is off, so silence is what no CC1 should give.)
-    TUNING_BAGPIPE_DRONE sets it for a whole render.
-
-    THREE DRONES, NOT TWO, and the third is the point. A Highland pipe carries
-    TWO TENOR drones at A3 and one BASS at A2 -- and the two tenors are at the
-    same nominal pitch, which makes them a chorus rather than a doubling. They
-    beat, they always beat, and a piper spends real effort getting that beat
-    slow: "drone lock" is the sound of two reeds almost agreeing. Rendering one
-    tenor loses it completely, which is what this class did first.
-
-    Three cents apart is about 0.38 Hz at A3 -- a shimmer over a couple of
-    seconds, which is a well-tuned pipe. A badly tuned one beats far faster and
-    is unmistakable; that is the same knob, turned up.
-
-    THE PITCH IS FIXED BECAUSE THE INSTRUMENT IS. A chanter has nine notes and
-    the drones are tuned to it, so a piper cannot change key -- which means a
-    drone that ignores the melody is not a limitation of this model, it is the
-    instrument. (The chanter's A is famously sharp of concert, nearer 480 Hz
-    than 440, but the drones are tuned to the chanter rather than to a fork, so
-    what matters here is the interval and not the reference.)
-    """
-    # CC71-78: NOTHING: the bag is at the pressure the arm holds, the chanter
-    # has no dynamics, and a piper does not vibrate.
-    sound_controls = frozenset()
-    # Nine holes and a bag at constant pressure: see scale_cents.
-    pitch_bendable = False
-    # Two tenors and a bass. The tenors are a chorus: same nominal pitch, a few
-    # cents apart, beating slowly.
-    # THE DRONES ARE THE PART, NOT THE NOTE. Ben: "The drones seem to me
-    # to be a channel event?" -- and they are. A real drone sounds
-    # continuously from the moment the bag is under pressure; attaching it
-    # to the note made it restart on every one, inaudible on a legato line
-    # and wrong on a detached one. This tells the renderer to emit them
-    # once for the channel, across its whole range.
-    unison_spans_part = True
-    drone_wheel = True          # CC1 corks them; see the docstring
-
-    # AND IT IS NOT TOUCH SENSITIVE, which is the same argument as the organ's
-    # and reaches it by a different route. Ben: "it should be more like an
-    # organ: not touch sensitive. Channel volumes only."
-    #
-    # A BAG IS A PRESSURE REGULATOR. That is what it is FOR: the piper's arm
-    # holds the bag at a constant pressure and the reeds see that pressure and
-    # nothing else, which is precisely why a piper can breathe without the
-    # sound stopping. There is no dynamic marking in pipe music and no way to
-    # play one -- a Highland pipe has exactly one volume, and the expression is
-    # entirely in grace notes and in time.
-    #
-    # It got True by default rather than by a claim: ReedPipeProperties sits
-    # under ReedOrganProperties, but the False lives on FlueOrganProperties, so
-    # the whole reed-pipe chain fell through to SynthProperties' default. That
-    # is right for the shanai, which is mouth-blown -- a shawm player's breath
-    # IS the dynamic -- and wrong for the one pipe with a bag in the way.
-    #
-    # ONLY attack_volume IS NEUTRALISED, as everywhere: CC7 and CC11 still
-    # work, and on a pipe band that is the only balance there is.
-    touch_sensitive = False
-
-    # A BAGPIPE IS ALWAYS LEGATO, and it is the only voice in this bank for
-    # which that is a fact about the instrument rather than a choice by the
-    # player. Every other voice that declares legato_attack_s -- the clarinet,
-    # the flute, the bowed strings -- is describing a SLUR, which a player
-    # elects instead of tonguing or re-bowing. A piper has no such election:
-    # the reed is fed by a bag under constant arm pressure, there is no tongue
-    # anywhere near it, and the chanter cannot be stopped. Notes change by
-    # moving fingers on a sounding pipe, and that is the only way they change.
-    #
-    # Hence a legato attack shorter than any other voice's, and hence also the
-    # grace notes in examples/scotland.py: with no way to put a gap between two
-    # of the same note, a piper flicks a higher finger for a few milliseconds,
-    # and that flick is the instrument's entire articulation.
-    legato_attack_s = 0.004     # the clarinet's is 0.012, and it can tongue
-
-    # ---- THE PIPER'S SCALE, which is not a temperament ---------------------
-    # Nine holes, cut once, and the reason they are where they are is sounding
-    # three feet away over the piper's shoulder. Every note of a chanter is
-    # tuned to BEAT CLEANLY AGAINST A FIXED A DRONE, which makes the scale
-    # just intonation on Low A and not a compromise between keys -- a pipe
-    # cannot change key, so it has nothing to compromise for.
-    #
-    #        Low G   -204   9/8 below the tonic
-    #        Low A      0   the drone's own note
-    #        B       +204   9/8
-    #        C#      +386   5/4   (14 cents FLAT of equal, and audibly so)
-    #        D       +498   4/3
-    #        E       +702   3/2
-    #        F#      +884   5/3   (16 cents flat)
-    #        High G  +996   16/9  the famous flat seventh: there is no leading
-    #                             tone on a chanter, which is why a song has to
-    #                             be adapted rather than transposed to play it
-    #        High A +1200
-    #
-    # THE TONIC STILL FOLLOWS THE RENDER'S TEMPERAMENT, so a pipe band sits
-    # with an orchestra at whatever pitch the orchestra is at; only the
-    # intervals inside the instrument are the instrument's own. (A real chanter
-    # is also famously sharp -- its A is nearer 470 or 480 Hz than 440 -- but
-    # that is a reference and not a scale, and pinning it here would make the
-    # patch unable to play with anything else. The interval is the physics.)
-    scale_tonic_note = 69                       # Low A
-    scale_cents = {-2: -203.910, 0: 0.0, 2: 203.910, 4: 386.314,
-                   5: 498.045, 7: 701.955, 9: 884.359, 10: 996.090,
-                   12: 1200.0}
-
-    # AND THE DRONES ARE RATIOS OF THAT TONIC, not frequencies. They were
-    # absolute -- 220, 220.4 and 110 Hz -- which is exactly right under equal
-    # temperament at A=440 and silently wrong under every other tuner this
-    # renderer has: at `hybrid` the chanter drops to A=415 and the drones
-    # stayed at 440, a hundred cents out against the one note they exist to
-    # reinforce. A drone is tuned TO THE CHANTER, by ear, before playing.
-    #
-    # Two tenors an octave below Low A and a bass two octaves below; the three
-    # cents between the tenors is the beat, and it is a ratio too.
-    drone_ratios = (0.5, 0.5 * 2.0 ** (3.0 / 1200.0), 0.25)
-    # NOT EQUAL, and that matters more than it looks. At 0.34 against 0.32 the
-    # two tenors very nearly cancel at the trough of their beat -- measured in
-    # a rendered tune the 220 Hz band fell to 0.02 of its peak, a 34 dB null.
-    # Two reeds in two pipes never do that: they differ in reed, in bore and in
-    # how far each sits from the ear, so the beat is a breathing rather than a
-    # gap. Unequal gains put the trough at about a quarter rather than at zero.
-    drone_gain = (0.36, 0.25, 0.30)
-
-    # A chanter is a loud, bright, double-reed pipe with a narrow conical bore.
-    tonal_dampening = 1.05
-    max_harmonic = 40
-    # Against the MEASURED oboe (GM 68), not the plucked anchor: this class
-    # inherits the organ's gain scale, where 0.02 is a hundred times hot.
-    initial_gain = 0.000163928
-
-    @property
-    def drone_hz(self):
-        """The drones, in Hz, against wherever the render put Low A."""
-        return tuple(bagpipe_tonic_hz * r for r in self.drone_ratios)
-
-    def unison_voices(self, frequency, harmonic, harmonic_decay):
-        f = float(frequency)
-        n = max(0, min(int(bagpipe_drones), len(self.drone_ratios)))
-        if f <= 0.0 or not n:
-            return []
-        # A SLICE, because drone_hz is already in the order a piper corks them:
-        # (tenor, tenor, bass). Taking the first n therefore walks the
-        # instrument's own history backwards, and every intermediate state is a
-        # pipe somebody once played.
-        return [(g, 0.0, hz / f - 1.0, harmonic_decay, 0.0)
-                for hz, g in zip(self.drone_hz[:n], self.drone_gain[:n])]
-
-
 class ShanaiProperties(ReedPipeProperties):
     """GM 111. A double reed in a CONICAL bore, and no drone at all.
 
@@ -17850,6 +17677,406 @@ class ConicalReedProperties(FormantBody, CylindricalReedProperties):
     bore_corner_hz = 5000.0
     bore_order = 1.6
 
+
+
+class BagpipeProperties(ConicalReedProperties):
+    """GM 109. A chanter, and the DRONES -- which are the instrument.
+
+    109 and 111 shared one ReedPipeProperties, and the thing that most obviously
+    separates a bagpipe from a shawm is not its reed: it is that a bagpipe plays
+    a continuous drone underneath everything, at a FIXED pitch, which never
+    changes with the melody. No other voice in this bank does that.
+
+    A FIXED PITCH IS EXPRESSIBLE, and it takes one line. unison_voices is handed
+    the note's own frequency, so a voice at `drone_hz / frequency` sounds at
+    drone_hz whatever is played -- every other user of that hook returns a
+    RATIO, which tracks the note by construction. A drone is the one thing that
+    must not.
+
+    AND IT IS A CHANNEL EVENT, which took the renderer change this class
+    first only promised. The drones were attached to the note and so
+    restarted on every one. They now sound ONCE for the channel, from its
+    first note-on to its last note-off, which is what a bag under pressure
+    does -- see unison_spans_part on SynthProperties.
+
+    AND CC1 CORKS THEM, which is not a hedge. Including the drones matches the
+    reference implementation and the program's own name -- a bagpipe without
+    them is a chanter, which is a different instrument -- but an arranger who
+    writes the drone as held notes in the score would then have it TWICE, and a
+    voice cannot detect that.
+
+    ON THE WHEEL, AND READ ONCE. No real module gives you this: General MIDI
+    specifies no control and the SC-55 bakes the drone into the patch. But CC1
+    in this renderer is consistently the one panel control a voice has -- the
+    Rhodes' tremolo depth, the Hammond's half-moon switch, the clavinet's tone
+    rockers, the honky-tonk's detune -- and there is a real-instrument answer
+    too: a piper CORKS a drone before playing, not during. Playing with one
+    tenor corked is ordinary practice. So it is a setup value taken from the
+    channel's first CC1, exactly as the clavinet's rockers and the amplifier's
+    drive are, rather than a control moved mid-phrase.
+
+    64 is the voiced default and 0 corks them all, which is the honky-tonk's
+    convention: a file with no CC1 gets the instrument as voiced, because the
+    default position of a bagpipe is DRONING. (The Rhodes is the opposite case
+    -- its panel default is off, so silence is what no CC1 should give.)
+    TUNING_BAGPIPE_DRONE sets it for a whole render.
+
+    THREE DRONES, NOT TWO, and the third is the point. A Highland pipe carries
+    TWO TENOR drones at A3 and one BASS at A2 -- and the two tenors are at the
+    same nominal pitch, which makes them a chorus rather than a doubling. They
+    beat, they always beat, and a piper spends real effort getting that beat
+    slow: "drone lock" is the sound of two reeds almost agreeing. Rendering one
+    tenor loses it completely, which is what this class did first.
+
+    Three cents apart is about 0.38 Hz at A3 -- a shimmer over a couple of
+    seconds, which is a well-tuned pipe. A badly tuned one beats far faster and
+    is unmistakable; that is the same knob, turned up.
+
+    THE PITCH IS FIXED BECAUSE THE INSTRUMENT IS. A chanter has nine notes and
+    the drones are tuned to it, so a piper cannot change key -- which means a
+    drone that ignores the melody is not a limitation of this model, it is the
+    instrument. (The chanter's A is famously sharp of concert, nearer 480 Hz
+    than 440, but the drones are tuned to the chanter rather than to a fork, so
+    what matters here is the interval and not the reference.)
+    """
+    # CC71-78: NOTHING: the bag is at the pressure the arm holds, the chanter
+    # has no dynamics, and a piper does not vibrate.
+    sound_controls = frozenset()
+    # Nine holes and a bag at constant pressure: see scale_cents.
+    pitch_bendable = False
+    # Two tenors and a bass. The tenors are a chorus: same nominal pitch, a few
+    # cents apart, beating slowly.
+    # THE DRONES ARE THE PART, NOT THE NOTE. Ben: "The drones seem to me
+    # to be a channel event?" -- and they are. A real drone sounds
+    # continuously from the moment the bag is under pressure; attaching it
+    # to the note made it restart on every one, inaudible on a legato line
+    # and wrong on a detached one. This tells the renderer to emit them
+    # once for the channel, across its whole range.
+    unison_spans_part = True
+    drone_wheel = True          # CC1 corks them; see the docstring
+
+    # AND IT IS NOT TOUCH SENSITIVE, which is the same argument as the organ's
+    # and reaches it by a different route. Ben: "it should be more like an
+    # organ: not touch sensitive. Channel volumes only."
+    #
+    # A BAG IS A PRESSURE REGULATOR. That is what it is FOR: the piper's arm
+    # holds the bag at a constant pressure and the reeds see that pressure and
+    # nothing else, which is precisely why a piper can breathe without the
+    # sound stopping. There is no dynamic marking in pipe music and no way to
+    # play one -- a Highland pipe has exactly one volume, and the expression is
+    # entirely in grace notes and in time.
+    #
+    # It got True by default rather than by a claim: ReedPipeProperties sits
+    # under ReedOrganProperties, but the False lives on FlueOrganProperties, so
+    # the whole reed-pipe chain fell through to SynthProperties' default. That
+    # is right for the shanai, which is mouth-blown -- a shawm player's breath
+    # IS the dynamic -- and wrong for the one pipe with a bag in the way.
+    #
+    # ONLY attack_volume IS NEUTRALISED, as everywhere: CC7 and CC11 still
+    # work, and on a pipe band that is the only balance there is.
+    touch_sensitive = False
+
+    # A BAGPIPE IS ALWAYS LEGATO, and it is the only voice in this bank for
+    # which that is a fact about the instrument rather than a choice by the
+    # player. Every other voice that declares legato_attack_s -- the clarinet,
+    # the flute, the bowed strings -- is describing a SLUR, which a player
+    # elects instead of tonguing or re-bowing. A piper has no such election:
+    # the reed is fed by a bag under constant arm pressure, there is no tongue
+    # anywhere near it, and the chanter cannot be stopped. Notes change by
+    # moving fingers on a sounding pipe, and that is the only way they change.
+    #
+    # Hence a legato attack shorter than any other voice's, and hence also the
+    # grace notes in examples/scotland.py: with no way to put a gap between two
+    # of the same note, a piper flicks a higher finger for a few milliseconds,
+    # and that flick is the instrument's entire articulation.
+    legato_attack_s = 0.004     # the clarinet's is 0.012, and it can tongue
+    # ...AND THE NOTE IT LEAVES STOPS THERE: the finger moves, the old pitch is
+    # gone -- the 80 ms release below is the reed stopping, at a phrase's end
+    slur_cuts_release = True
+    # ...AND WHERE A NOTE DOES START FROM SILENCE (the pipe struck in, a
+    # sample's first note) or stop, MEASURED on the chanter takes: it rises
+    # -30 to -5 dB in ~15 ms and settles the last few dB over ~80 (a reed
+    # catching up to the bag's pressure), and it falls 10 dB in ~25 ms before
+    # the room takes over. The class had neither -- both at the renderer's
+    # 0.1 ms floor, a click each end (Ben: "completely off"). A smoothstep
+    # of 25 ms on (the reed organ's 4 ms was a key on a wind chest), 80 off
+    attack_time = 0.032
+    release_valve_time = 0.080
+    # ...AND NO RUSH. The reed organ's onset burst (wind_attack_db, 24 dB over
+    # the skirt) came with the skirt, a tap on every note (Ben: "clicky, like a
+    # tap, rather than a flue-like attack"): over 3 kHz ours was within 6 dB in
+    # 2 ms, the takes' in 12-14, every band up together by ~34 ms
+    wind_attack_db = None
+
+    # ---- THE PIPER'S SCALE, which is not a temperament ---------------------
+    # Nine holes, cut once, and the reason they are where they are is sounding
+    # three feet away over the piper's shoulder. Every note of a chanter is
+    # tuned to BEAT CLEANLY AGAINST A FIXED A DRONE, which makes the scale
+    # just intonation on Low A and not a compromise between keys -- a pipe
+    # cannot change key, so it has nothing to compromise for.
+    #
+    #        Low G   -204   9/8 below the tonic
+    #        Low A      0   the drone's own note
+    #        B       +204   9/8
+    #        C#      +386   5/4   (14 cents FLAT of equal, and audibly so)
+    #        D       +498   4/3
+    #        E       +702   3/2
+    #        F#      +884   5/3   (16 cents flat)
+    #        High G  +996   16/9  the famous flat seventh: there is no leading
+    #                             tone on a chanter, which is why a song has to
+    #                             be adapted rather than transposed to play it
+    #        High A +1200
+    #
+    # THE TONIC STILL FOLLOWS THE RENDER'S TEMPERAMENT, so a pipe band sits
+    # with an orchestra at whatever pitch the orchestra is at; only the
+    # intervals inside the instrument are the instrument's own. (A real chanter
+    # is also famously sharp -- its A is nearer 470 or 480 Hz than 440 -- but
+    # that is a reference and not a scale, and pinning it here would make the
+    # patch unable to play with anything else. The interval is the physics.)
+    #
+    # ...AND THEN MEASURED, and a real chanter is not the table. IowaSpaceWizard's
+    # (median pitch of each held note, re its Low A at 487.2 Hz):
+    #
+    #        Low G   -228   24 under 9/8 -- nearly 8/7 (-231), the septimal
+    #        B       +204   9/8
+    #        C#      +392   5/4, 6 sharp
+    #        D       +517   18 SHARP of 4/3 -- the Highland D, famously
+    #        E       +717   15 sharp of 3/2
+    #        F#      +886   5/3
+    #        High G +1016   20 sharp of 16/9
+    #        High A +1215   15 sharp of the octave: the top of a cone overblows
+    #                       wide
+    #
+    # The JI reading holds for B, C# and F#; the rest are where pipers cut
+    # them, and one chanter is what was measured -- so these are its numbers,
+    # not a law. The tonic is still the render's A.
+    scale_tonic_note = 69                       # Low A
+    scale_cents = {-2: -228.4, 0: 0.0, 2: 203.5, 4: 392.4,
+                   5: 516.5, 7: 717.1, 9: 886.1, 10: 1015.7,
+                   12: 1214.6}
+
+    # AND THE DRONES ARE RATIOS OF THAT TONIC, not frequencies. They were
+    # absolute -- 220, 220.4 and 110 Hz -- which is exactly right under equal
+    # temperament at A=440 and silently wrong under every other tuner this
+    # renderer has: at `hybrid` the chanter drops to A=415 and the drones
+    # stayed at 440, a hundred cents out against the one note they exist to
+    # reinforce. A drone is tuned TO THE CHANTER, by ear, before playing.
+    #
+    # Two tenors an octave below Low A and a bass two octaves below; the three
+    # cents between the tenors is the beat, and it is a ratio too.
+    drone_ratios = (0.5, 0.5 * 2.0 ** (3.0 / 1200.0), 0.25)
+    # ...MEASURED (IowaSpaceWizard's drones, against his chanter's Low A at
+    # 487.2 Hz): the tenors at 244.2-244.7 Hz, 4-7 cents SHARP of the octave
+    # under it and ~0.4 Hz apart; the bass at 122.4, 8.5 cents sharp. A
+    # piper sets the drones a hair above the chanter's A, so the A they
+    # reinforce beats slowly against them rather than locking
+    drone_ratios = (0.5 * 2.0 ** (4.6 / 1200.0), 0.5 * 2.0 ** (7.4 / 1200.0), 0.25 * 2.0 ** (8.5 / 1200.0))
+    # Each drone's level is its own class's now (BagpipeDroneProperties); live
+    # stamps those voices' templates at these unit gains
+    drone_gain = (1.0, 1.0, 1.0)
+
+    # A CONICAL DOUBLE REED, MEASURED -- IowaSpaceWizard's Highland chanter,
+    # its nine notes alone (Freesound pack 29644, CC0; examples/wind_fit.py
+    # --voice=bagpipe). This class sat on the organ's STOPPED pipe, odd_only:
+    # its evens were 100 dB down. A chanter's bore is a cone, as the oboe's is,
+    # and it sounds every harmonic -- h2 level with h1, h3-h4 within a dB, h12
+    # still -18 -- so it is the conical reed's, with the series fitted
+    # (wind_fit.py --fit=..., the register means 4.9 dB) where the class had it
+    # 25-35 dB dark by h6
+    tonal_dampening = 0.05868
+    octave_dampening = 0.008087
+    bore_corner_hz = 10300.0
+    bore_order = 4.346
+    formants = ((1300.0, 700.0, 0.6731), (3000.0, 1400.0, 0.05973))
+    max_harmonic = 40
+    # EACH HARMONIC ITS OWN PHASE (SynthProperties.partial_phase_spread): in
+    # phase the bright series summed to a click a period, crest 4-6 against
+    # the takes' 2.5-3.3 -- Ben: the middle too bright, the reedy edge gone
+    partial_phase_spread = 1.0
+    # THE REED'S FLUTTER, each harmonic its own (the wind skirt): the takes'
+    # harmonics waver 0.2-1.5 dB at ~3 Hz, half-shared at most; ours held to
+    # 0.1. Fitted (wind_fit.py --fit=skirt, 0.29): small -- a bag is a
+    # pressure regulator -- but it is the difference between a reed and an
+    # oscillator
+    wind_skirt_always = True
+    wind_skirt_db = -34.58
+    wind_skirt_harmonic_db = 4.09
+    wind_skirt_hz = 3.149
+    wind_skirt_rel = 0.003004
+    # ...and the arm on the bag: the whole tone 0.6 dB at ~3 Hz, the reed's
+    # hiss 1.3 dB faster (wind_fit.py --fit=wobble, 0.17)
+    breath_wobble_db = 0.6174
+    breath_wobble_hz = 3.149
+    breath_noise_wobble_db = 1.28
+    breath_noise_wobble_hz = 9.564
+    # ...AND ITS COLOUR WHERE IT SOUNDS (wind_fit.py --fit=body: the harmonics
+    # pooled by third-octave, 4.1 -> 1.9 dB): a peak at 2.5 kHz and a dip at
+    # 3.2 under it in six of the nine notes, kept as fitted from 2 kHz up;
+    # under 2 kHz each band holds a note's h1 or h2 alone and the fit swung
+    # +-7 dB band to band on them, so there it is smoothed (1-2-1)
+    body_trim_db = ((404, 2.1), (509, 2.1), (641, 0.6), (808, -1.5), (1018, -1.6), (1283, -2.9),
+                    (1616, -2.8), (2036, 0.6), (2566, 8.4), (3233, -8.2), (4073, 5.9), (5132, -1.9),
+                    (6465, 6.3), (8146, -1.9), (10263, -3.6), (12931, -0.6))
+    # THE REED'S NOISE, its colour fitted between the harmonics (wind_fit.py
+    # --fit=breath, 23.9 -> 0.0 dB on the mean): -60 to -77 dB re the tone,
+    # rising to 4 kHz -- the bag holds the pressure, but the jet through a
+    # double reed is as turbulent as an oboe's; the class had none. And it
+    # CLIMBS WITH THE NOTE: read note by note (the gaps and under the
+    # fundamental), Low G-B sit 3-15 dB under the mean colour and High G-A
+    # 2-10 over it, most above 3 kHz -- a higher note's reed opening is
+    # smaller and its jet faster. So two tables, Low G's and High A's, and a
+    # log ramp between (register_low_hz)
+    breath_noise_db = ((160, -3.8), (202, -3.8), (255, -3.8), (321, 2.3), (404, 6.3), (509, 9.9),
+                       (641, 11.9), (808, 7.6), (1018, 11.3), (1283, 16.7), (1616, 21.1), (2036, 21.8),
+                       (2566, 25.3), (3233, 31.0), (4073, 38.0), (5132, 39.5), (6465, 40.6),
+                       (8146, 41.9), (10263, 40.7), (12931, 37.7))
+    breath_noise_low_db = ((160, -4.0), (202, -4.0), (255, -4.0), (321, 2.1), (404, 6.1), (509, 9.7),
+                           (641, 11.7), (808, 7.4), (1018, 11.1), (1283, 18.7), (1616, 23.1),
+                           (2036, 21.3), (2566, 24.8), (3233, 23.0), (4073, 23.2), (5132, 24.7),
+                           (6465, 24.9), (8146, 21.1), (10263, 19.9), (12931, 15.7))
+    register_low_hz = (427.0, 982.0)
+    # Against the MEASURED oboe (GM 68), not the plucked anchor: this class
+    # inherits the organ's gain scale, where 0.02 is a hundred times hot.
+    # HELD at its level before the fit (-40.89 dB, the mean of Low G-High A's
+    # first second at velocity 100, drones up): the brighter cone and the
+    # drones' balance had it 11.8 dB over
+    initial_gain = 0.000163928 * 10 ** (-11.784 / 20.0)
+
+    @property
+    def drone_hz(self):
+        """The drones, in Hz, against wherever the render put Low A."""
+        return tuple(bagpipe_tonic_hz * r for r in self.drone_ratios)
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        """None: the drones are their OWN voices now (BagpipeDroneProperties,
+        sounded as notes of the part by blockrender -- see drone_classes).
+        They were the chanter's own series transposed down, which is a cone's
+        colour on a cylinder."""
+        return []
+
+
+class BagpipeDroneProperties(CylindricalReedProperties):
+    """A Highland drone: a CYLINDER on a single cane reed, its own voice.
+
+    The drones had been the chanter's series transposed down (unison_voices on
+    the chanter's partials, a tilt to dull them) -- a cone's colour on a
+    cylinder, and one note's colour on all three. Ben: "we have the expression
+    wheel tied to drone stops, so we need to model them separately." So each
+    drone is a note of the part (blockrender inserts them under every phrase
+    the chanter plays, CC1 corking them tenor, tenor, bass), at the drone's
+    note on program 109 (patch_map: 57 the tenors, 45 the bass), pitched off
+    the chanter's Low A by scale_cents as the chanter's holes are.
+
+    MEASURED, AND WHERE IT IS NOT. Two takes of the three drones together
+    (IowaSpaceWizard's, CC0; iainmccurdy's, CC BY 4.0), and no recording found
+    of a drone alone. The bass alone sounds the odd multiples of its pitch;
+    every even multiple holds a bass harmonic and a tenor's together (Ben: the
+    tenors' octave rebuilds the bass's evens, so the mixture hides them).
+    SEPARATED BY PITCH: the drones are different reeds, the tenors 3.7 cents
+    off twice the bass (flat in one take, sharp in the other), so in 4 s
+    frames the bass's harmonics stand exactly on its multiples (its pitch read
+    off its odd ones) and a tenor's that far off them -- resolvable to ~x12.
+    Both takes: the bass's evens are NOT weak (h2 -4/+6, h4 0/+2 dB re h1;
+    h3 -5/-7), and the tenor has a strong h1 and h2 and a weak h3 (-17).
+    Paquier, Koehl & Moign 2016 (Acta Acustica 102(4)) recorded each drone
+    alone and found the tenors listeners prefer have a strong fundamental and
+    little high-harmonic energy; above h6 the tenor falls 12.5 dB an octave,
+    their clean tenor, where the takes cannot separate it.
+
+    THE VARIATION, stated: the two sets differ by 1-16 dB multiple by multiple
+    (median 4); the tenors sit flat of the bass in one and sharp in the other;
+    and the split is the pitch separation only to ~x12 -- above it, what the
+    fit of the mixture left. Reeds and pipers differ by that much; these are
+    one mean, not a law. (A first split, by assuming the tenors clean and the
+    bass's evens weak, missed both takes' mixtures by 5-9 dB.)
+    """
+    registerable = False
+    touch_sensitive = False
+    pitch_bendable = False
+    sound_controls = frozenset()
+    scale_tonic_note = 69
+    # the drones' cents under Low A: the chanter's own drone_ratios
+    max_harmonic = 40
+    bore_corner_hz = 20000.0
+    bore_order = 0.13
+    sustain_jitter = 0.0
+    # each partial its own phase, as the chanter's (partial_phase_spread)
+    partial_phase_spread = 1.0
+    # the reed's flutter and the arm on the bag: the chanter's fitted values,
+    # one bag feeding all four reeds
+    wind_skirt_always = True
+    wind_skirt_db = -34.58
+    wind_skirt_harmonic_db = 4.09
+    wind_skirt_hz = 3.149
+    wind_skirt_rel = 0.003004
+    breath_wobble_db = 0.6174
+    breath_wobble_hz = 3.149
+    wind_attack_db = None       # no reed-organ rush at the strike-in either
+    # THE STRIKE-IN IS THE PIPER'S: how fast the bag comes up. The first note's
+    # velocity (a bagpipe has no other use for it) sets it, a soft strike
+    # 0.6 s -- IowaSpaceWizard's take, the bass rising 20 dB and the tenors 26
+    # in that -- and a hard one 0.1 s. Ben: in a real setting the drones are
+    # not that slow, and the speed varies with the bag
+    strike_in_s = (0.6, 0.1)
+    attack_time = 0.2
+    # ...and they die as the bag goes down
+    release_valve_time = 0.4
+    # LEVELS, MEASURED on IowaSpaceWizard's takes (the chanter and the drones at
+    # the recorder's one gain): the three together 8.1 dB under the chanter,
+    # the tenors +3.75 over the bass (the split above); each class's own --
+    # the tenors' and the bass's (below) then fitted with their series so the
+    # three are -8.0 dB under the chanter and the mixture the takes' mean
+    initial_gain = 0.005877
+
+
+class BagpipeTenorDroneProperties(BagpipeDroneProperties):
+    """A tenor drone, an octave under Low A. SEPARATED BY PITCH (see the bass
+    drone): h1 0, h2 +2.5, h3 -17, h4 0, h5 -18.5, h6 -10 dB -- the two takes'
+    mean, re its own h1, its stronger tenor; h7 on falling 12.5 dB an octave
+    (the paper's clean tenor). Its h1 stands level with the bass's."""
+    mode_gains = (1.00000, 3.15741, 0.34666, 1.54812, 0.34308, 0.55551, 0.22984, 0.17630, 0.14151,
+                  0.11148, 0.09444, 0.07849, 0.06696, 0.05765, 0.04964, 0.04485, 0.03776, 0.03381,
+                  0.03065, 0.02726)
+    max_harmonic = 20
+    scale_cents = {-12: 1200.0 * _log(BagpipeProperties.drone_ratios[0] * 2.0) / _log(2.0) - 1200.0}
+
+
+class BagpipeTenor2DroneProperties(BagpipeTenorDroneProperties):
+    """The other tenor: the same drone, a few cents apart -- the beat."""
+    scale_cents = {-12: 1200.0 * _log(BagpipeProperties.drone_ratios[1] * 2.0) / _log(2.0) - 1200.0}
+
+
+class BagpipeBassDroneProperties(BagpipeDroneProperties):
+    """The bass drone, two octaves under Low A: its odd harmonics read off the
+    takes' odd multiples (the two sets' mean), its evens what the split left."""
+    initial_gain = 0.010900
+    # SEPARATED BY PITCH (Ben: the tenors' octave rebuilds the bass's even
+    # harmonics, so the mixture hides them): the drones are different reeds,
+    # and the tenors sit 3.7 cents off twice the bass (flat in one take, sharp
+    # in the other). In 4 s frames the bass's own harmonics stand EXACTLY on
+    # its multiples (its pitch read off its odd ones, the bass's alone) and a
+    # tenor's that far off them -- resolvable to ~x12, past which the bass's
+    # wobble smears the gap. Both takes: the bass's evens are NOT weak --
+    # h2 -4/+6, h4 0/+2 dB re h1, the odds h3 -5/-7. h1-h12 the two takes'
+    # mean; h13-h40 the mixture fit's (where the tenors have little)
+    # ...THEN THROUGH THE RENDERER: one correction a multiple of the bass,
+    # applied alike to the bass's partial there and the tenor's, fitted so the
+    # three drones' mixture is the takes' mean x1-x40 (0.07 dB) -- the split
+    # between them stays the pitch-separated one; the renderer's own colour
+    # (5-9 dB under the tables at x3-x11) is what moved
+    mode_gains = (1.00000, 1.07380, 0.64302, 2.54246, 0.69628, 0.58999, 0.44652, 0.46852, 0.66375,
+                  0.77861, 0.07612, 0.14145, 0.85389, 0.45817, 0.31904, 0.42396, 0.05681, 0.24968,
+                  0.13258, 0.07897, 0.19302, 0.13120, 0.03467, 0.09462, 0.03838, 0.08428, 0.03547,
+                  0.11121, 0.04110, 0.06911, 0.03917, 0.03514, 0.02253, 0.03438, 0.02347, 0.03231,
+                  0.01213, 0.01633, 0.02174, 0.02282)
+    scale_cents = {-24: 1200.0 * _log(BagpipeProperties.drone_ratios[2] * 4.0) / _log(2.0) - 2400.0}
+
+
+# the drones a bagpipe part sounds, in the order a piper corks them, and the
+# note each sounds as (blockrender inserts them; patch_map maps the notes)
+BagpipeProperties.drone_classes = ((57, BagpipeTenorDroneProperties),
+                                   (57, BagpipeTenor2DroneProperties),
+                                   (45, BagpipeBassDroneProperties))
 
 class BassoonProperties(ConicalReedProperties):
     """The bassoon's resonance sits far lower than the oboe's -- measured at its

@@ -798,6 +798,7 @@ class Slab:
         self.last_slots = []
         self.free = collections.deque(range(capacity))
         self.retiring = []              # slots released, still ringing out
+        self.last_release = {}          # key -> (slots, when): the latest release of each
         # A slot can be scheduled for retirement twice -- stamp() schedules a
         # one-shot's natural end, and choking it pops `oneshot` and calls
         # release(), which schedules it again -- so freeing has to be idempotent
@@ -1816,6 +1817,10 @@ class Slab:
         # a reflection stops as late as it started
         self.a["noff"][idx] = n + self.a["rdl"][idx].astype(np.int64)
         self.retiring.append((idx, n))
+        if len(key) == 4 and key[3] is None:
+            # for a slur to cut (Live._slur_cut): a played note's key only --
+            # the chorus and MF-104 keys carry their onset and would pile up
+            self.last_release[key] = (idx, n)
         fr = self.a["fx"][idx]
         fr = np.unique(fr[fr >= 0])
         if len(fr):
@@ -2260,6 +2265,10 @@ class Patch:
         # hundred cents out against the one note it exists to reinforce.
         self.drone_ratios = tuple(getattr(pc, "drone_ratios", ())) if pc else ()
         self.drone_gain = tuple(getattr(pc, "drone_gain", ())) if pc else ()
+        # ...and the NOTE each drone sounds as: its own voice's (tonelib
+        # BagpipeDroneProperties, patch_map's drone notes), not the key nearest
+        # its frequency -- under a low tuner that key is a chanter note
+        self.drone_notes = tuple(n for n, _ in getattr(pc, "drone_classes", ())) if pc else ()
         self.scale_tonic_note = getattr(pc, "scale_tonic_note", None) if pc else None
         self.part_break_s = float(getattr(pc, "part_break_s", 2.0)) if pc else 2.0
         self.detune_wheel = (not drums) and bool(getattr(pc, "detune_wheel", False))
@@ -4657,7 +4666,12 @@ class Live:
         # the chanter, so retuning the channel has to move both or the pipe
         # goes out with itself -- the same argument that made the drones
         # ratios of the tonic rather than absolute Hz.
-        hz = float(np.asarray(t["nf"])[:t["P"]].min())
+        # the partial NEAREST the tuner's own pitch for it: the lowest one is
+        # not the tonic once a voice has breath-noise rows under its note
+        nf = np.asarray(t["nf"])[:t["P"]]
+        F = part.patch.freqs()
+        ref = F[n] if 0 <= n < len(F) and F[n] > 0.0 else float(nf.min())
+        hz = float(nf[int(np.argmin(np.abs(np.log(np.maximum(nf, 1e-6) / ref))))])
         return hz if ch is None else hz * self._key_ratio(part, ch, n)
 
     def master_gain(self, L, R, n):
@@ -5173,8 +5187,38 @@ class Live:
         slur = g is not None and (
             any(k in self.down for k in g["keys"])
             or (g["off"] is not None and n0 - g["off"] <= LEGATO_GAP_S * self.rate))
+        if slur:
+            self._slur_cut(g["keys"], n0)
         self.onset_group[lk] = {"on": n0, "keys": {(ch, note)}, "off": None, "slur": slur}
         return slur
+
+    def _slur_cut(self, keys, n0):
+        """A SLUR ENDS THE NOTE IT LEAVES, for a voice that says so
+        (tonelib slur_cuts_release; blockrender's _SLUR_OUT): the notes this
+        slurred one follows stop in the legato time instead of ringing their
+        release under it. A key still down gets the short release before it
+        is let go; one let go this very block (a file's note-off and note-on
+        together) is shortened before any of its release has played. One let
+        go earlier, inside the legato gap, is left: shortening a release
+        part-way through would jump its level."""
+        by_pid = {p.pid: p for p in self.parts}
+        a = self.slab.a
+        for (c, nt) in keys:
+            for p in by_pid.values():
+                key = (p.pid, c, nt, None)
+                pc = p.patch._voice_class(nt + p.transpose) if hasattr(p.patch, "_voice_class") else None
+                if pc is None or not getattr(pc, "slur_cuts_release", False):
+                    continue
+                short = np.float32(max(B.RETRIGGER_FADE, getattr(pc, "legato_attack_s", 0.0) or 0.0) * B.SR)
+                slots = self.slab.live.get(key)
+                if slots:
+                    idx = np.fromiter(slots, np.int64, len(slots))
+                elif key in self.slab.last_release and self.slab.last_release[key][1] >= n0:
+                    idx = self.slab.last_release[key][0]
+                else:
+                    continue
+                a["re"][idx] = np.minimum(a["re"][idx], short)
+                self.slab.dirty = True
 
     def _legato_off(self, ch, note, n0):
         """The group's END is its last key up, as offline it is the latest
@@ -5286,7 +5330,8 @@ class Live:
                 # 102 cents below the file's. The correction is read off the
                 # template's OWN fundamental rather than assumed, so it holds
                 # whatever tuner the part is on.
-                note = int(round(69.0 + 12.0 * math.log2(hz / 440.0)))
+                note = (part.patch.drone_notes[i] if i < len(part.patch.drone_notes)
+                        else int(round(69.0 + 12.0 * math.log2(hz / 440.0))))
                 if not MELODIC_RANGE[0] <= note <= MELODIC_RANGE[1]:
                     continue
                 tmpl = part.patch.get(note, 100, part.patch.leslie_default)
@@ -5300,7 +5345,12 @@ class Live:
                     self.dropped += 1
                     continue
                 slots = self.slab.live.get(key)
-                f0 = float(np.asarray(tmpl["nf"])[:tmpl["P"]].min())
+                # the template's own fundamental: the partial nearest its key's
+                # pitch, not the lowest (a noise row can sit under a note)
+                _nf = np.asarray(tmpl["nf"])[:tmpl["P"]]
+                _Fd = part.patch.freqs()
+                _ref = _Fd[note] if 0 <= note < len(_Fd) and _Fd[note] > 0.0 else float(_nf.min())
+                f0 = float(_nf[int(np.argmin(np.abs(np.log(np.maximum(_nf, 1e-6) / _ref))))])
                 if slots is not None and f0 > 0.0 and abs(hz / f0 - 1.0) > 1e-9:
                     # ...and this is also what puts the two tenors three cents
                     # apart, since drone_hz already carries that and both land
@@ -8738,57 +8788,61 @@ def selftest():
           abs(_ka.mode_ratio(2) - 2.0) < 0.01 and 6.0 <= _ka.mode_ratio(3) <= 6.7,
           "  (1 : %.3f : %.2f -- the bridge's octave and the tapered tine's second mode;"
           " a marimba bar is 1 : 4 : 10)" % (_ka.mode_ratio(2), _ka.mode_ratio(3)))
-    # A DRONE DOES NOT FOLLOW THE MELODY, which is the one thing no other voice
-    # in this bank does: every other user of unison_voices returns a RATIO and
-    # so tracks the note by construction.
-    _dr = []
-    for _m in (55, 67, 79):
-        _f = 440.0 * 2.0 ** ((_m - 69) / 12.0)
-        _q = _eth[109](_f, 0.0, 1.0, 1.0)
-        _dr.append(tuple(round(_f * (1.0 + _v[2]), 2)
-                         for _v in _q.unison_voices(_f, 1, 0.0)))
+    # THE DRONES ARE THEIR OWN VOICES, NOTES OF THE PART (tonelib
+    # BagpipeDroneProperties): a cylinder on a cane reed each, not the chanter's
+    # cone transposed down. The renderer sounds them under each phrase, so they
+    # are read here off what it actually inserted (blockrender.LAST_DRONES).
+    import blockrender as _Bbp
+
+    def _bp_prep(cc1=None, notes=(67, 74, 79)):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480); _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=109, time=0))
+        if cc1 is not None:
+            _t.append(mido.Message("control_change", channel=0, control=1, value=cc1, time=0))
+        for _n in notes:
+            _t.append(mido.Message("note_on", channel=0, note=_n, velocity=100, time=0))
+            _t.append(mido.Message("note_off", channel=0, note=_n, velocity=0, time=240))
+        return _Bbp.prepare(_m), list(_Bbp.LAST_DRONES)
+    # A DRONE DOES NOT FOLLOW THE MELODY: three of them, each held from the
+    # phrase's first note to its last, at a pitch the moving line never touches
+    _pbp, _ld = _bp_prep()
+    _nfb = np.asarray(_pbp["nf"])
+    _dhz = [440.0 * 2.0 ** (_T.BagpipeTenorDroneProperties.scale_cents[-12] / 1200.0),
+            440.0 * 2.0 ** (_T.BagpipeTenor2DroneProperties.scale_cents[-12] / 1200.0),
+            440.0 * 2.0 ** (_T.BagpipeBassDroneProperties.scale_cents[-24] / 1200.0)]
     check("...and the bagpipe's drones hold while the melody moves",
-          len(set(_dr)) == 1 and len(_dr[0]) == 3,
-          "  (%s Hz at every pitch)" % ", ".join("%.1f" % _x for _x in _dr[0]))
+          sorted(_d[4] for _d in _ld) == ["BagpipeBassDroneProperties", "BagpipeTenor2DroneProperties",
+                                          "BagpipeTenorDroneProperties"]
+          and all(abs(_d[2]) < 1e-3 and abs(_d[3] - 0.75) < 1e-3 for _d in _ld)
+          and all(np.min(np.abs(_nfb - _h)) < 0.05 for _h in _dhz),
+          "  (%s Hz, each from the phrase's first note to its last)"
+          % ", ".join("%.2f" % _h for _h in _dhz))
     # THREE DRONES, AND TWO OF THEM ARE THE SAME NOTE. A Highland pipe carries
     # two TENORS at A3 and one bass at A2, and the tenors are a chorus rather
     # than a doubling: they beat, always, and a piper's "drone lock" is the
-    # sound of two reeds almost agreeing. Rendering one tenor loses it, which
-    # is what this class did first -- Ben asked whether the drone should not be
-    # "a small chorus of all of the drones of the bag", and it should.
-    _ten = sorted(_x for _x in _dr[0] if _x > 150.0)
+    # sound of two reeds almost agreeing.
     check("...and its two tenors beat, which is what drone lock is",
-          len(_ten) == 2 and 0.05 < abs(_ten[1] - _ten[0]) < 2.0,
+          0.05 < abs(_dhz[1] - _dhz[0]) < 2.0,
           "  (%.2f Hz apart: one beat every %.1f s, a well-tuned pipe)"
-          % (abs(_ten[1] - _ten[0]), 1.0 / max(abs(_ten[1] - _ten[0]), 1e-9)))
+          % (abs(_dhz[1] - _dhz[0]), 1.0 / max(abs(_dhz[1] - _dhz[0]), 1e-9)))
     # CC1 SAYS HOW MANY, NOT HOW LOUD. A piper does not turn a drone down, they
     # CORK it -- so the wheel selects a count out of the set the instrument has,
     # and each step is a pipe that existed: the Great Highland Bagpipe carried
     # two tenors for most of its history and the bass drone was added later.
-    _was = _T.bagpipe_drones
-    _counts = []
-    try:
-        for _n in (0, 1, 2, 3):
-            _T.bagpipe_drones = _n
-            _counts.append(len(_eth[109](392.0, 0.0, 1.0, 1.0)
-                               .unison_voices(392.0, 1, 0.0)))
-    finally:
-        _T.bagpipe_drones = _was
+    _counts, _two = [], None
+    for _v in (0, 42, 85, 127):
+        _ldv = _bp_prep(_v)[1]
+        _counts.append(len(_ldv))
+        if _v == 85:
+            _two = sorted(_d[4] for _d in _ldv)
     check("...and CC1 corks them one at a time, rather than turning them down",
           _counts == [0, 1, 2, 3],
           "  (0 is the chanter alone; 2 is the pipe before the bass drone)")
-    # ...AND THE ORDER IS THE INSTRUMENT'S OWN. drone_hz is (tenor, tenor, bass),
-    # so the count is a slice and every intermediate state is playable.
-    _T.bagpipe_drones = 2
-    try:
-        _two = sorted(392.0 * (1.0 + _v[2]) for _v in
-                      _eth[109](392.0, 0.0, 1.0, 1.0).unison_voices(392.0, 1, 0.0))
-    finally:
-        _T.bagpipe_drones = _was
+    # ...AND THE ORDER IS THE INSTRUMENT'S OWN: (tenor, tenor, bass), so the
+    # count is a slice and every intermediate state is playable.
     check("...and two drones means two TENORS, not a tenor and the bass",
-          len(_two) == 2 and min(_two) > 150.0,
-          "  (%s Hz -- the two-drone pipe, not half of the modern one)"
-          % ", ".join("%.0f" % _x for _x in _two))
+          _two == ["BagpipeTenor2DroneProperties", "BagpipeTenorDroneProperties"],
+          "  (%s -- the two-drone pipe, not half of the modern one)" % ", ".join(_two or ()))
     # AND THEY BELONG TO THE PART. Ben: "The drones seem to me to be a channel
     # event?" -- they are, and attaching them to the note made them restart on
     # every one. The flag is general; the bagpipe is the only voice that sets
@@ -8821,11 +8875,17 @@ def selftest():
           % (len(_bpb.drone_ratios), len(_bpb.speeds)))
     # THE CHANTER TEMPLATE IS THE CHANTER. If a drone were baked in, the
     # template for a high note would carry partials down at 110 and 220 Hz.
-    _nf = np.asarray(_bpb.get(74, 100, _bpb.leslie_default)["nf"])
+    # (Its reed's breath-noise rows start at 160 Hz -- noise, not a drone: so
+    # the test is no TONAL partial on a drone's pitch or its harmonics.)
+    _tb = _bpb.get(74, 100, _bpb.leslie_default)
+    _nf = np.asarray(_tb["nf"])[:_tb["P"]]
+    _dhz = [440.0 * _r for _r in _bpb.drone_ratios]
+    _hit = [float(_x) for _x in _nf
+            if any(abs(_x - _k * _h) < 2.0 for _h in _dhz for _k in range(1, 3))]
     check("...so a chanter note carries no 220 Hz drone of its own",
-          float(_nf.min()) > 300.0,
-          "  (lowest partial %.0f Hz on a written D5, well above the drones)"
-          % float(_nf.min()))
+          not _hit,
+          "  (no partial of a written D5 within 2 Hz of a drone or its octave)"
+          if not _hit else "  (partials at %s Hz)" % ", ".join("%.1f" % _x for _x in _hit[:6]))
 
     def _bp_drones():
         return sorted(k[2] for k in lvbp.slab.live if k[3] == lvbp.DRONE_SLOT)
@@ -8858,11 +8918,18 @@ def selftest():
     # drone 102 cents below the one the renderer writes. The correction is read
     # off the template's own fundamental, which is also what puts the two
     # tenors three cents apart when they land on the same key.
-    _dr_f = sorted(float(lvbp.slab.a["om"][lvbp.slab.live[_k]].min())
-                   * lvbp.rate / (2.0 * _math.pi)
-                   for _k in lvbp.slab.live if _k[3] == lvbp.DRONE_SLOT)
     _want_f = sorted(lvbp._tonic_hz(lvbp.parts[0]) * _r
                      for _r in _bpb.drone_ratios)
+    # each drone's FUNDAMENTAL: its partial nearest a drone pitch -- not its
+    # lowest, which since the drones are their own voices can be a noise row
+    _dr_f = []
+    for _k in lvbp.slab.live:
+        if _k[3] != lvbp.DRONE_SLOT:
+            continue
+        _fq = np.asarray(lvbp.slab.a["om"][lvbp.slab.live[_k]], np.float64) * lvbp.rate / (2.0 * _math.pi)
+        _fq = _fq[_fq > 1.0]
+        _dr_f.append(float(min(_fq, key=lambda _x: min(abs(_math.log(_x / _w)) for _w in _want_f))))
+    _dr_f.sort()
     check("...at the file's own drone pitches, not the nearest key's",
           len(_dr_f) == 3
           and max(abs(a / b - 1.0) for a, b in zip(_dr_f, _want_f)) < 1e-6,
@@ -10348,27 +10415,26 @@ def selftest():
     _lvs.shutdown(); _lv2.shutdown()
 
     # ---- THE PIPER'S SCALE, which is not a temperament ----------------------
-    # Nine holes cut once, and every one of them tuned to beat cleanly against
-    # a fixed A drone -- which makes the scale just intonation on Low A rather
-    # than a compromise between keys. A pipe cannot change key, so it has
-    # nothing to compromise for.
+    # Nine holes cut once on Low A, and a pipe cannot change key. The class had
+    # them as just intonation; MEASURED (a Highland chanter, IowaSpaceWizard's,
+    # examples/wind_fit.py --voice=bagpipe) B, C# and F# are the pure 9/8, 5/4
+    # and 5/3, and the rest are where pipers cut them -- D 18 cents sharp of a
+    # fourth, Low G nearly 8/7.
     _bp = _eth[109]
-    _ratio = {0: 1.0, 2: 9.0 / 8, 4: 5.0 / 4, 5: 4.0 / 3, 7: 3.0 / 2,
-              9: 5.0 / 3, 10: 16.0 / 9, 12: 2.0, -2: 8.0 / 9}
-    _worst = max(abs(_bp.scale_cents[_k]
-                     - 1200.0 * _math.log2(_v)) for _k, _v in _ratio.items())
-    check("a chanter's nine holes are just intonation on Low A, not a temperament",
+    _ratio = {2: 9.0 / 8, 4: 5.0 / 4, 9: 5.0 / 3}
+    _ji = max(abs(_bp.scale_cents[_k] - 1200.0 * _math.log2(_v)) for _k, _v in _ratio.items())
+    _et = max(abs(_c - 100.0 * _k) for _k, _c in _bp.scale_cents.items())
+    check("a chanter's nine holes are its own scale on Low A, not a temperament",
           _bp.scale_tonic_note == 69 and len(_bp.scale_cents) == 9
-          and _worst < 0.01,
-          "  (worst departure from the pure ratio %.3f cents)" % _worst)
-    # THE FLAT SEVENTH IS THE ONE EVERYBODY HEARS: 16/9 is 996 cents, four
-    # under equal, and there is no leading tone anywhere on the instrument --
-    # which is why a song has to be adapted rather than transposed to play it.
-    check("...with a flat seventh and a flat third, where equal has neither",
-          abs(_bp.scale_cents[10] - 996.09) < 0.01
-          and abs(_bp.scale_cents[4] - 386.31) < 0.01,
-          "  (High G %.0f cents against equal's 1000, C# %.0f against 400)"
-          % (_bp.scale_cents[10], _bp.scale_cents[4]))
+          and _ji < 7.0 and _et > 10.0,
+          "  (B, C#, F# within %.1f cents of 9/8, 5/4, 5/3; %.0f from equal at worst)" % (_ji, _et))
+    # THE HIGHLAND D IS SHARP, and the seventh is a minor one: there is no
+    # leading tone anywhere on the instrument -- which is why a song has to be
+    # adapted rather than transposed to play it.
+    check("...with its D sharp of a fourth and a minor seventh, no leading tone",
+          _bp.scale_cents[5] - 498.04 > 10.0 and _bp.scale_cents[10] < 1050.0,
+          "  (D %+.0f cents over 4/3; High G %.0f, where a leading tone is 1100)"
+          % (_bp.scale_cents[5] - 498.04, _bp.scale_cents[10]))
     # AND THE DRONES ARE TUNED TO THE CHANTER, which is what a piper does by
     # ear before playing. They were absolute Hz -- right at A=440 and a hundred
     # cents out at `hybrid`'s A=415, against the one note they reinforce.
@@ -10388,11 +10454,13 @@ def selftest():
                   for _x, _y in zip(_d1, _d4)),
           "  (Low A %.0f and %.0f Hz; the drones follow it, %.0f cents down)"
           % (_a4, _a1, 1200 * _math.log2(_d1[0] / _d4[0])))
+    # (measured, each a few cents SHARP of the chanter's A: a piper sets them so)
+    _dc = [1200.0 * _math.log2(_r / _o) for _r, _o in zip(_bp.drone_ratios, (0.5, 0.5, 0.25))]
     check("...and they are RATIOS now, so nothing is nailed to 440",
           not hasattr(_T.SynthProperties, "drone_ratios")
-          and abs(_bp.drone_ratios[0] - 0.5) < 1e-12
-          and abs(_bp.drone_ratios[2] - 0.25) < 1e-12,
-          "  (two tenors an octave under Low A, a bass two octaves under)")
+          and all(0.0 < _c < 12.0 for _c in _dc) and abs(_dc[0] - _dc[1]) > 1.0,
+          "  (two tenors an octave under Low A, a bass two octaves under: %s cents sharp)"
+          % ", ".join("%+.1f" % _c for _c in _dc))
 
     def _live_level(_lv, _ch=0, note=60, vel=100, cc7=None, cc11=None):
         for _c, _v in ((7, cc7), (11, cc11)):

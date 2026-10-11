@@ -39,8 +39,8 @@ so it plays on the Messenger itself.
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
 | 2 specific, theory | 21 | 16% |
-| 3 specific, theory + ear | 16 | 12% |
-| 4 specific, reference audio | 91 | 71% |
+| 3 specific, theory + ear | 15 | 12% |
+| 4 specific, reference audio | 92 | 72% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -333,7 +333,7 @@ plays Standard, as does any program that is not a set.
 | 106 | Shamisen | `Shamisen` | **2** | the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch |
 | 107 | Koto | `Koto` | **4** | VCSL Dan Tranh (CC0), its nearest recorded cousin (examples/koto_fit.py): decay laws, pluck point, the box's low cut (450 Hz measured), the tsume's strike; the other twelve strings ringing in sympathy at the measured level and decays, in hirajoshi, tuned through the tuner. Silk inharmonicity kept. Ben: sounds fine |
 | 108 | Kalimba | `Kalimba` | **4** | VCSL kalimba (CC0, examples/kalimba_fit.py): measured tine modes 1 : 2 : 6.4, the other tines ringing sympathetically at their own pitches and decays, the thumb's strike. Ben: great |
-| 109 | Bag pipe | `Bagpipe` | **3** | the DRONES: two tenors and a bass at a FIXED 220/220.4/110 Hz whatever the melody does, which no other voice here can do. They belong to the PART -- sounding once across a played phrase, not restarting per note -- and CC1 corks them one at a time, 0 to 3, because a piper corks rather than turns down. Not touch sensitive: a bag holds one pressure, so CC7/CC11 are the whole dynamic |
+| 109 | Bag pipe | `Bagpipe` | **4** | Freesound IowaSpaceWizard chanter, its nine notes, and the drones (CC0) with iainmccurdy's (CC BY 4.0) (examples/wind_fit.py --voice=bagpipe): the chanter a CONE (it sat on the organ's stopped pipe, evens 100 dB down), its colour by absolute frequency, its measured scale (Low G -228, the D 18 sharp), reed noise climbing the chanter, each harmonic its own phase and flutter, a 32 ms attack with no reed-organ rush; the drones their OWN voices -- tenor, tenor, bass, CC1 corking them -- split from the mixture by pitch (the bass's evens are not weak), a struck-in swell set by velocity; a slur ends the note it leaves. Ben: perfect |
 | 110 | Fiddle | `SoloViolin` | **4** | the measured violin, given solo treatment |
 | 111 | Shanai | `Shanai` | **2** | a CONE, so the even harmonics the chanter's class suppressed come back -- a shawm is an oboe's geometry, not a bagpipe's |
 
@@ -365,7 +365,7 @@ plays Standard, as does any program that is not a set.
 
 ## The class tree
 
-285 classes.
+288 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -644,13 +644,16 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `FlueOrgan` -- GM 19 Church Organ (3)
       - `ReedOrgan`
         - `CylindricalReed`
+          - `BagpipeDrone`
+            - `BagpipeBassDrone` -- GM 109 Bag pipe (4)
+            - `BagpipeTenorDrone` -- GM 109 Bag pipe (4)
           - `Clarinet` -- GM 71 Clarinet (4)
             - `BassClarinet` -- GM 71 Clarinet (4)
           - `ConicalReed` [FormantBody] -- GM 68 Oboe (4), GM 69 English Horn (4)
+            - `Bagpipe` -- GM 109 Bag pipe (4)
             - `Bassoon` -- GM 70 Bassoon (4)
             - `Saxophone` -- GM 64 Soprano Sax (4), GM 65 Alto Sax (4), GM 66 Tenor Sax (4), GM 67 Baritone Sax (4)
         - `ReedPipe`
-          - `Bagpipe` -- GM 109 Bag pipe (3)
           - `Shanai` -- GM 111 Shanai (2)
     - `PanFlute` -- GM 75 Pan Flute (4)
   - `Tonewheel`

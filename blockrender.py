@@ -1132,6 +1132,7 @@ def onepole_edges(events, nblk, default):
 # again. Not a cut: a cut is a step and a step is a click. Samplers call this
 # stealing and give it a few milliseconds for exactly this reason.
 RETRIGGER_FADE = 0.004
+LAST_DRONES = []        # see prepare(): the drone notes it last inserted
 
 # GM's default reverb send. It is also the value that means "the distance this
 # room was placed for", so a file that never sends CC91 is unchanged.
@@ -2667,6 +2668,36 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _ph.append((_on, _off))
         _PHRASE_CH[_c] = _ph
     _SPANNED = set()          # (channel, phrase index) already emitted
+    # THE DRONES ARE NOTES OF THE PART, each its own voice (tonelib
+    # BagpipeDroneProperties): under every phrase a bagpipe channel plays, the
+    # drones its CC1 leaves uncorked (the first CC1, read once, as below), from
+    # the phrase's first note-on to its last note-off, at the velocity of its
+    # first note (which sets the strike-in). Each is keyed to its class here:
+    # the two tenors share a note, so the second starts a microsecond later.
+    _DRONE_PC = {}
+    _dnew = []
+    for _c, _ph in _PHRASE_CH.items():
+        _bpc = None
+        for _p in {_e[6] for _e in notes if _e[0] == _c}:
+            if getattr(property_class_for_program(_p), 'drone_classes', None):
+                _bpc = property_class_for_program(_p)
+        if _bpc is None or is_drum(next(_e[6] for _e in notes if _e[0] == _c)):
+            continue
+        _c1 = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == 1]
+        _nd = int(round(_c1[0] / 127.0 * 3.0)) if _c1 else len(_bpc.drone_classes)
+        for _a, _b in _ph:
+            _first = min((_e for _e in notes if _e[0] == _c and _a <= _e[2] <= _b),
+                         key=lambda _e: _e[2])
+            for _i, (_dn, _dcls) in enumerate(_bpc.drone_classes[:_nd]):
+                _don = _a + 1e-6 * _i
+                _dnew.append((_c, _dn, _don, _b, _first[4], _first[5], _first[6]))
+                _DRONE_PC[(_c, _dn, _don)] = _dcls
+    notes = notes + _dnew
+    # what the last prepare() sounded as drones: (channel, note, on, off, class
+    # name), for the selftests to read
+    global LAST_DRONES
+    LAST_DRONES = sorted((_d[0], _d[1], _d[2], _d[3], _DRONE_PC[(_d[0], _d[1], _d[2])].__name__)
+                         for _d in _dnew)
 
     def _phrase_of(_c, _on):
         """Which phrase a note falls in, and that phrase's span."""
@@ -2755,6 +2786,32 @@ def prepare(path, tuner='hybrid440', sink=None):
                                         _cg * math.sqrt(max(0.0, 0.5 * (1.0 + _pan))),
                                         _stop_shape(_ck, _row[1]), _ch))
     notes = sorted(notes, key=lambda e: (e[2], e[0], e[1]))
+    # A SLUR ENDS THE NOTE IT LEAVES. The slurred note's attack is the voice's
+    # legato one (slur_attack, below); the note it follows must stop as the new
+    # one sounds, not ring its whole release under it -- on a chanter the
+    # finger moves and the old pitch is gone, and an 80 ms release under every
+    # change sounds as a release and a fresh attack (Ben, of Scotland the
+    # Brave). The notes a slurred note FOLLOWS on its channel (sounding up to
+    # its onset, or ending within the file's legato tolerance before it), for
+    # a voice that says so (SynthProperties.slur_cuts_release).
+    _SLUR_OUT = set()
+    _socc = {}
+    _sl_on = {}
+    for _e in notes:
+        _k = _socc.get((_e[0], _e[1]), 0); _socc[(_e[0], _e[1])] = _k + 1
+        if (_e[0], _e[1], _k) in legato:
+            _sl_on.setdefault(_e[0], []).append(_e[2])
+    if _sl_on:
+        import bisect as _bis
+        for _v in _sl_on.values():
+            _v.sort()
+        for _e in notes:
+            _v = _sl_on.get(_e[0])
+            if not _v:
+                continue
+            _q = _bis.bisect_right(_v, _e[2])       # the first slurred onset after this one
+            if _q < len(_v) and _e[3] >= _v[_q] - 0.02:
+                _SLUR_OUT.add((_e[0], _e[1], _e[2]))
 
     def _snd_finish(_p):
         """Brightness, resonance and decay on the partials one note made.
@@ -2874,7 +2931,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             organ = False; chan_vol = (v7*v11)**2
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
-            pc = property_class_for_note(prog, note)
+            pc = _DRONE_PC.get((ch, note, on)) or property_class_for_note(prog, note)
             organ = getattr(pc,'registerable',False)
             # An organ's CC7 is its swell shutter and its CC11 half the stop
             # word, so its channel gain is 1 and the swell row does the rest; a
@@ -3136,6 +3193,12 @@ def prepare(path, tuner='hybrid440', sink=None):
             props.inharmonicity_coefficient = props.inharmonicity_coefficient_for_frequency(f0)
         B = props.inharmonicity_coefficient; dur = off-on
         at = props.attack_time if props.attack_time is not None else props.chiff_max_valve_time
+        # A STRIKE-IN SET BY THE HAND: a voice whose onset is how fast something
+        # comes up to pressure (a bagpipe drone: the bag) takes it from the
+        # velocity, soft to hard (SynthProperties.strike_in_s)
+        _si = getattr(props, 'strike_in_s', None)
+        if _si:
+            at = _si[0] + (_si[1] - _si[0]) * min(1.0, max(0.0, vel / 127.0))
         # SLUR: the previous note on this channel ran up to this one, so the
         # exciter never stopped and there is no onset to make. Only voices with
         # an exciter that can carry declare legato_attack_s; see tonelib.
@@ -3190,6 +3253,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         _rfm = getattr(props, 'release_fraction_max', 0.45)
         fade = max(1e-4, min(at, _afm*dur))*SR
         rel = max(1e-4, rt if _rfm is None else min(rt, _rfm*dur))*SR
+        if (ch, note, on) in _SLUR_OUT and getattr(props, 'slur_cuts_release', False):
+            rel = min(rel, max(RETRIGGER_FADE, getattr(props, 'legato_attack_s', 0.0) or 0.0) * SR)
         # ...and no longer than until this same string is plucked again, but
         # never SHORTER than a steal fade. A sampler stealing a voice does not
         # cut it, it fades it over a few milliseconds, because a cut is a step
@@ -3942,6 +4007,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                 if ceiling and sub >= 2.0 and f0*sub > ceiling:
                     if bmode == 'truncate': continue
                     while f0*eff_ratio > ceiling and eff_ratio >= 2.0: eff_ratio *= 0.5
+                _pps = getattr(props, 'partial_phase_spread', 0.0)
+                _prng = random.Random(int(round(on * 1e6)) * 151 + note * 19 + ch) if _pps > 0.0 else None
                 for m in range(1, props.max_harmonic+1):
                     _hh = string_partial(props, f0, eff_ratio, m, rank_B)
                     if _hh is None: break
@@ -3991,6 +4058,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # to its nodes; see SynthProperties.strike_phase_spread.
                     sps = props.strike_phase_spread
                     mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
+                    if _prng is not None:
+                        # each partial its own phase (SynthProperties.partial_phase_spread)
+                        mph += 2.0 * math.pi * _pps * _prng.random()
                     # ...and how hard this stroke caught it (SynthProperties.stroke_scatter)
                     if getattr(rp, 'stroke_scatter', False):
                         _ssd = rp.stroke_scatter_db(m)
@@ -4107,7 +4177,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                             noff_u = _pspan[1]*SR
                         emit_partial(2*math.pi*uf/SR, ugL, ugR, gM*gm, uf, non_u, noff_u, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
-                                     2*math.pi*uph)
+                                     2*math.pi*uph + (2.0 * math.pi * _pps * _prng.random()
+                                                      if _prng is not None else 0.0))
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
                     _PL[0] = 0
                     _PX[0] = getattr(props,'position_x',0.0)

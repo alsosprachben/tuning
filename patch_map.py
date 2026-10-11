@@ -459,6 +459,10 @@ PROGRAM_CLASS[106] = ShamisenProperties   # the same head, plus a sawari buzz
 PROGRAM_CLASS[107] = KotoProperties       # long slack silk over a light wooden box
 PROGRAM_CLASS[108] = KalimbaProperties    # a CANTILEVER: 1 : 6.267 : 17.55
 PROGRAM_CLASS[109] = BagpipeProperties    # the drones, at a pitch the melody cannot move
+# ...and its drones' notes, the first class each note names (the tenors share one)
+DRONE_NOTES = {109: {}}
+for _dn, _dc in BagpipeProperties.drone_classes:
+    DRONE_NOTES[109].setdefault(_dn, _dc)
 PROGRAM_CLASS[111] = ShanaiProperties     # a cone, so the evens come back
 # 108, 109 and 111 are set above and were being overwritten HERE -- the same
 # shape as GM 32, where PROGRAM_CLASS[32] sat above a _fill that clobbered it:
@@ -732,6 +736,13 @@ def property_class_for_note(program, note):
                 if prog == 44:
                     return tremolo_bow(cls)
                 return cls
+    # A BAGPIPE'S DRONES are notes of their own (tonelib BagpipeDroneProperties):
+    # the notes they sound as are those voices, wherever they come from --
+    # blockrender's drone notes, live's drone templates, or a drone an arranger
+    # wrote into the part
+    dn = DRONE_NOTES.get(prog)
+    if dn and note in dn:
+        return dn[note]
     split = SOLO_SPLIT.get(prog)
     if split is not None:
         for hi, cls in split:

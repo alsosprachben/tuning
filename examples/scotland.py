@@ -132,7 +132,10 @@ def build(sharp=False):
     tr.append(mido.MetaMessage("set_tempo", tempo=int(60e6 / ABC_Q), time=0))
     tr.append(mido.Message("program_change", channel=0, program=109, time=0))
     tr.append(mido.Message("control_change", channel=0, control=7, value=100, time=0))
-    tr.append(mido.Message("control_change", channel=0, control=1, value=64, time=0))
+    # CC1 is how many drones sound, round(v / 127 * 3): 64 had corked the bass
+    # (two drones), and the bass is a drone of its own now (tonelib
+    # BagpipeBassDroneProperties) -- all three, as a pipe band plays
+    tr.append(mido.Message("control_change", channel=0, control=1, value=127, time=0))
     if sharp:
         tr.append(mido.Message("pitchwheel", channel=0, pitch=2730, time=0))
 

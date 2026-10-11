@@ -10,6 +10,7 @@ takes' stable notes (examples/freesound_slice.py pipes; VOICE_OPTS).
     wind_fit.py --voice=ocarina --fit=breath  fit sustain_jitter to the breath
     wind_fit.py --voice=harmonica --top       the ladder by absolute frequency, to 20 kHz
     wind_fit.py --voice=harmonica --fit=scatter  each reed's own ladder, to the roughness
+    wind_fit.py --voice=bagpipe --fit=body     body_trim_db, the harmonics by where they sound
     wind_fit.py --voice=shakuhachi --fit=tables [--keys=57-62] [--match=uncle] [--low]
                                               the series and breath tables, note by note
 
@@ -55,6 +56,9 @@ VOICES = {
     "bottle": (76, "BlownBottleProperties", "bottle", "*.wav"),
     "shakuhachi": (77, "ShakuhachiProperties", "shakuhachi", "*.wav"),
     "whistle": (78, "WhistleProperties", "whistle", "*.wav"),
+    # GM 109: IowaSpaceWizard's Highland chanter, its nine notes alone (the
+    # drones corked), staged by examples/freesound_slice.py bagpipe
+    "bagpipe": (109, "BagpipeProperties", "bagpipe", "*_iowa_*.wav"),
 }
 # WHERE A VOICE'S NOTES ARE, how they are named and how long they hold: VCSL's
 # are an octave low and sustained for seconds; the staged Freesound notes are
@@ -66,7 +70,17 @@ VOICE_OPTS = {
     "bottle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.4, t1=1.9),
     "shakuhachi": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.15, t1=0.7),
     "whistle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.08, t1=0.25),
+    # THE CHANTER IS AT ITS OWN PITCH: Low A 487.27 Hz, 176.7 cents over A=440.
+    # Its files are named by the note that plays each degree, and ours are
+    # rendered there under a static bend of as much (a tuning, which every
+    # voice honours, the drones following) -- so the two sound at the same
+    # Hz and a bore's or a reed's colour lines up where it is. CC1 0 corks
+    # the drones: the takes are the chanter alone
+    "bagpipe": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.5, t1=3.5,
+                    tonic_cents=176.7, cc1=0),
 }
+TONIC_CENTS = 0.0
+CC1 = None
 T0, T1 = 0.4, 1.9
 VEL = 80
 NH = 12
@@ -97,7 +111,7 @@ def speaks(x, sr):
 def f0_near(seg, sr, key):
     """Autocorrelation within a semitone of the expected pitch: unseeded it
     locks an octave low on a third of these."""
-    f = 440.0 * 2 ** ((key - 69) / 12.0)
+    f = 440.0 * 2 ** ((key - 69) / 12.0 + TONIC_CENTS / 1200.0)
     got = V.detect_f0(seg, sr, f / 1.06, f * 1.06)
     if got:
         return got
@@ -172,6 +186,10 @@ def render(program, key, secs=2.4):
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
     t.append(mido.Message("program_change", channel=0, program=program, time=0))
+    if TONIC_CENTS:
+        t.append(mido.Message("pitchwheel", channel=0, pitch=int(round(TONIC_CENTS / 200.0 * 8191)), time=0))
+    if CC1 is not None:
+        t.append(mido.Message("control_change", channel=0, control=1, value=CC1, time=0))
     t.append(mido.Message("note_on", channel=0, note=key, velocity=VEL, time=0))
     t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
     L, R = B.render(m)[:2]
@@ -275,7 +293,7 @@ def setk(cls, k, q):
 
 
 BOUNDS = {"reed_gate": (-0.6, 1.08), "reed_gate_per_octave": (-0.6, 0.6), "reed_edge": (0.003, 0.5), "reed_spread": (0.02, 0.4),
-          "bore_corner_hz": (2000.0, 20000.0), "formants.1.2": (0.05, 2.5), "formants.0.2": (0.05, 2.5),
+          "bore_corner_hz": (2000.0, 20000.0), "formants.1.2": (0.05, 2.5), "formants.0.2": (0.05, 6.0),
           "formant_floor": (0.05, 1.0), "formants.1.0": (1000.0, 8000.0), "reed_direct": (0.001, 1.0)}
 
 
@@ -639,6 +657,61 @@ def fit_tables(voice, prog, cls, argv, passes=3):
     print("  breath rec/ours " + " ".join("%d %+.0f/%+.0f" % (CEN[i], R_c[i], O_c[i]) for i in bands[::2]))
 
 
+def harm_bands(x, sr, key):
+    """Each harmonic's level by WHERE IT SOUNDS: third-octave bands (CEN), the
+    harmonics in each pooled, dB re the note's harmonic power -- the window
+    T0-T1. A body's or a bore's resonance stays put while the harmonics slide
+    through it, so it is read in Hz, not by harmonic number."""
+    i = speaks(x, sr)
+    seg = x[i + int(T0 * sr): i + int(T1 * sr)]
+    seg = seg - seg.mean()
+    f0 = f0_near(seg, sr, key)
+    N = 1 << 18
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N)) ** 2
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    hz, p = [], []
+    m = 1
+    while m * f0 < min(16000.0, 0.45 * sr):
+        b = (f > m * f0 * 0.98) & (f < m * f0 * 1.02)
+        hz.append(m * f0); p.append(X[b].max())
+        m += 1
+    hz, p = np.array(hz), np.array(p)
+    db = 10 * np.log10(p / p.sum() + 1e-30)
+    out = np.full(len(CEN), np.nan)
+    for k, c in enumerate(CEN):
+        w = np.abs(np.log2(hz / c)) <= 1 / 6.0
+        if w.any():
+            out[k] = 10 * np.log10(np.mean(10 ** (db[w] / 10)))
+    return out
+
+
+def fit_body(voice, prog, cls, passes=4):
+    """--fit=body: FormantBody.body_trim_db, by absolute frequency, toward the
+    recordings' harmonics pooled by where they sound (harm_bands; the notes'
+    median), each pass adding half of recorded - ours (its median removed:
+    colour, not level) to every band both measure."""
+    import warnings
+    warnings.simplefilter("ignore")
+    picked = recordings(voice)
+    R = np.nanmedian([harm_bands(*load(p), key) for key, p in picked], 0)
+    trim = dict((int(round(c)), v) for c, v in (cls.body_trim_db or ()))
+    for n in range(passes + 1):
+        O = np.nanmedian([harm_bands(*render(prog, key, T1 + 0.5), key) for key, _ in picked], 0)
+        d = R - O
+        ok = np.isfinite(d)
+        d = d - np.nanmedian(d)
+        print("  pass %d: harmonics by band, rec - ours, rms %.2f dB over %d bands"
+              % (n, np.sqrt(np.nanmean(d[ok] ** 2)), ok.sum()), flush=True)
+        print("    " + " ".join("%d:%+.1f" % (CEN[k], d[k]) for k in range(len(CEN)) if ok[k]))
+        if n == passes:
+            break
+        for k in np.flatnonzero(ok):
+            c = int(round(CEN[k]))
+            trim[c] = trim.get(c, 0.0) + 0.5 * float(d[k])
+        cls.body_trim_db = tuple((c, round(v, 1)) for c, v in sorted(trim.items()))
+    print("    body_trim_db = %s" % (cls.body_trim_db,))
+
+
 def fit_skirt(voice, prog, cls, step=3, maxfev=80):
     """--fit=skirt: the harmonics' turbulence -- the skirt's level, its rise
     with harmonic number and its width -- against the recordings' wobble (dB
@@ -823,9 +896,11 @@ def main(argv):
     if spec:
         return inharm(spec) or 0
     voice = next((a.split("=")[1] for a in argv if a.startswith("--voice=")), "recorder")
-    global T0, T1
+    global T0, T1, TONIC_CENTS, CC1
     T0 = VOICE_OPTS.get(voice, {}).get("t0", T0)
     T1 = VOICE_OPTS.get(voice, {}).get("t1", T1)
+    TONIC_CENTS = VOICE_OPTS.get(voice, {}).get("tonic_cents", 0.0)
+    CC1 = VOICE_OPTS.get(voice, {}).get("cc1")
     prog, cls = use_class(voice)
     fitarg = next((a for a in argv if a.startswith("--fit")), None)
     if fitarg == "--fit=breath":
@@ -836,6 +911,9 @@ def main(argv):
         return 0
     elif fitarg == "--fit=scatter":
         fit_scatter(voice, prog, cls)
+        return 0
+    elif fitarg == "--fit=body":
+        fit_body(voice, prog, cls)
         return 0
     elif fitarg == "--fit=tables":
         fit_tables(voice, prog, cls, argv)
