@@ -8297,13 +8297,26 @@ def selftest():
     check("a pick is brighter than a finger",
           _mean_h(binst[34]) > _mean_h(binst[33]),
           "  (mean harmonic %.1f vs %.1f)" % (_mean_h(binst[34]), _mean_h(binst[33])))
-    # FRETLESS IS A TERMINATION, NOT A FILTER: the string stops on wood, which
-    # is lossy up high, so the harmonics GO rather than never arriving.
-    check("fretless loses its top rather than starting without it",
-          binst[35].harmonic_decay(8) > 3.0 * binst[33].harmonic_decay(8)
-          and abs(_mean_h(binst[35]) - _mean_h(binst[33])) < 0.5,
-          "  (h8 decays %.0f vs %.0f dB/s, same spectrum)"
-          % (binst[35].harmonic_decay(8), binst[33].harmonic_decay(8)))
+    # FRETLESS, MEASURED (egtr_fit.py --string=fretless, --envelope=35): it
+    # was built as a lossy termination, its top GOING four times faster than
+    # a fretted bass's. The recordings say otherwise: its partials decay as a
+    # fretted bass's, within 25%, and the top is simply not there -- a
+    # low-pass, flatwounds on wood, 10-18 dB under a fretted bass above 1 kHz.
+    # (its top read at A2, against the same voice without its low-pass: at E1
+    # sixteen harmonics end at 660 Hz, where a 644 Hz low-pass has barely
+    # begun, and a power-weighted mean harmonic is h1-h3's whatever the top does)
+    _q35 = binst[35]
+    _c35 = type(_q35)
+
+    def _top(q, f0=110.0, cut=1000.0):
+        v = [q.harmonic_volume(h) ** 2 for h in range(1, 40)]
+        return 10 * np.log10(sum(x for h, x in enumerate(v, 1) if h * f0 > cut) / sum(v) + 1e-30)
+    _lp, _nolp = _top(_c35(110.0, 0.0, 1.0, 1.0)), _top(type("NoLP", (_c35,), {"lowpass_hz": None})(110.0, 0.0, 1.0, 1.0))
+    check("fretless: its top decays as a fretted bass's, and is low-passed instead",
+          0.75 < _q35.harmonic_decay(8) / binst[33].harmonic_decay(8) < 1.6
+          and _q35.lowpass_hz and _q35.lowpass_hz < 1000.0 and _lp < _nolp - 10.0,
+          "  (h8 decays %.1f vs %.1f dB/s; low-pass %.0f Hz: above 1 kHz %.0f dB, %.0f without)"
+          % (_q35.harmonic_decay(8), binst[33].harmonic_decay(8), _q35.lowpass_hz or 0.0, _lp, _nolp))
     # brighter by what the recordings say: the slap thumb's fit stands 1.26 x
     # the finger's mean harmonic (egtr_fit.py --ladder=36, 33); the 1.5 here
     # was asserted before there was a recording
@@ -12501,11 +12514,15 @@ def selftest():
           issubclass(st, _T.FormantBody) and st.formants == ny.formants
           and not issubclass(gen, _T.FormantBody) and gen.bore_corner_hz == 0.0,
           "  (the measured classical's body, inherited unshifted)")
-    # Steel's low internal loss against nylon's viscoelasticity. The largest of
-    # the differences and the reason the instrument rings.
-    check("...whose high partials survive, where nylon eats its own",
-          st.harmonic_decay_db < ny.harmonic_decay_db * 0.7,
-          "  (%.2f against %.2f dB/s per mode)" % (st.harmonic_decay_db, ny.harmonic_decay_db))
+    # ITS STRING, MEASURED (egtr_fit.py --string=steel, GuitarSet): it had been
+    # given harmonic damping alone and rang every note alike. Now the law the
+    # electrics carry -- a floor, a harmonic term, a register slope -- so a
+    # high note dies faster than a low one, as the recording's do
+    _s110, _s440 = st(110.0, 0.0, 1.0, 1.0), st(440.0, 0.0, 1.0, 1.0)
+    check("...whose string decays by the measured law, faster up the neck",
+          st.decay_db > 0.0 and st.decay_register_slope > 0.0
+          and _s440.harmonic_decay(1) > _s110.harmonic_decay(1) * 1.3,
+          "  (h1 %.1f dB/s at A2, %.1f at A4)" % (_s110.harmonic_decay(1), _s440.harmonic_decay(1)))
     # The nylon MEASURED nothing above 8 kHz, -46 to -61 dB. A steel-string's
     # bronze basses put real energy up there; that is the target.
     def _above(cls, k=8000.0):
@@ -12523,13 +12540,15 @@ def selftest():
     check("...and real energy above 8 kHz, where the classical measured none",
           _above(st) > _above(ny) + 8.0,
           "  (%+.1f dB against the nylon's %+.1f)" % (_above(st), _above(ny)))
-    # AND THE OBVIOUS DERIVATION IS A DEAD END, recorded so nobody repeats it:
-    # steel's modulus is ~50x nylon's, but a steel string for the same note is
-    # less than half the diameter and d enters SQUARED. 35%, not 50x.
-    check("...with inharmonicity only 35% up, which is the whole of that story",
-          abs(st.inharmonicity_coefficient / ny.inharmonicity_coefficient - 1.35) < 0.01,
-          "  (x%.2f -- the modulus and the gauge nearly cancel)"
-          % (st.inharmonicity_coefficient / ny.inharmonicity_coefficient))
+    # THE OBVIOUS DERIVATION WAS A DEAD END, and so was the less obvious one:
+    # steel's modulus is ~50x nylon's but its gauge nearly cancels that -- and
+    # MEASURED (GuitarSet, 292 notes) the stretch is far UNDER even the nylon's
+    # x1.35, 1-2.4e-4 falling up the neck
+    _b82, _b330 = (st(f, 0.0, 1.0, 1.0).inharmonicity_coefficient_for_frequency(f) for f in (82.4, 330.0))
+    check("...with the stretch measured: far under the derivation, falling up the neck",
+          st.inharmonicity_dynamic and _b82 < 5e-4 and _b330 < _b82,
+          "  (B %.1e at E2, %.1e at E4; the derivation had %.1e)"
+          % (_b82, _b330, ny.inharmonicity_coefficient * 1.35))
 
     # ---- the honky-tonk: the same piano, badly tuned -------------------------
     check("the honky-tonk is the upright with the tuner's hand off",

@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 26 | 20% |
-| 3 specific, theory + ear | 17 | 13% |
-| 4 specific, reference audio | 85 | 66% |
+| 2 specific, theory | 25 | 20% |
+| 3 specific, theory + ear | 16 | 12% |
+| 4 specific, reference audio | 87 | 68% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -199,7 +199,7 @@ plays Standard, as does any program that is not a set.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 24 | Acoustic Guitar (nylon) | `NylonGuitar` | **4** | Iowa classical guitar, six strings measured sul A/B/D/E/G |
-| 25 | Acoustic Guitar (steel) | `SteelGuitar` | **2** | the measured classical's body with a steel string on it: less damping, a pick, 35% more stretch |
+| 25 | Acoustic Guitar (steel) | `SteelGuitar` | **4** | NYU's GuitarSet (CC BY 4.0), a steel-string acoustic on a microphone: 493 notes that sound alone in its 360 takes. The string measured (examples/egtr_fit.py --string=steel: decay 10-30 dB/s rising with the note, the stretch 1-2.4e-4 -- the derivation had 1.7e-3), the classical's borrowed body refitted to it by absolute frequency (examples/steel_fit.py: less mid honk, 3-6 kHz presence; 3.3 -> 1.2 dB). Ben: good |
 | 26 | Electric Guitar (jazz) | `JazzGuitar` | **4** | Fraunhofer IDMT-SMT-Guitar (CC BY-NC-ND, measured only), DI, the RG2820's neck humbucker (examples/egtr_fit.py): the family's string measured on 306 notes (decay 5-30 dB/s, rising with the harmonic and up the neck; stretch 4e-4 at E2 to 1e-4 at E4), each note fretted where a player puts it so the pick and coil combs climb the neck, the pick, notch, tilt and the coil's load fitted (ladder 8.95 -> 5.40 dB); amp and cabinet after, unchanged |
 | 27 | Electric Guitar (clean) | `ElectricGuitar` | **4** | as 26, on the Stratocaster's neck single coil (the voice moved there from the middle one): ladder 5.33 -> 4.23 dB, the coil's load 5.0 kHz. Ben, DI A/B: very, very close |
 | 28 | Electric Guitar (muted) | `MutedGuitar` | **4** | as 26, the palm mute MEASURED (IDMT-SMT-Guitar dataset 2: three guitars, five muted notes at the fifth fret of every string, each against the same note open): the decay 3.6-5.5 x the open string, steeply more up the neck (h1 ~36 dB/s at A2, ~120 at A4), and a partial low-pass at onset (equal to h4, then h5/h6 8-17 dB under the open note) -- onset ladder 13.5 -> 5.6 dB. Ben, DI A/B: close |
@@ -214,7 +214,7 @@ plays Standard, as does any program that is not a set.
 | 32 | Acoustic Bass | `AcousticBass` | **4** | Iowa double bass pizzicato, 83 notes: the decay rising with the note, the stretch, the pluck's colour, and a pluck point that rises up each string as the finger shortens it (0.23 of the open string, measured), moved by CC74 from the bridge to the middle. Ben, by ear: so much better |
 | 33 | Electric Bass (finger) | `FingeredBass` | **4** | Fraunhofer IDMT-SMT-Bass (CC BY-NC-ND, measured only), DI, three basses on both coils (examples/egtr_fit.py): the string measured (decay 3-25 dB/s, stretch 1.3e-4), fretted, the Jazz pickups and their load (4.9 kHz, shared by every hand), the finger's pluck fitted (ladder 7.68 -> 4.79 dB), and the player's damp measured as its release (0.39 s, where GM sets gave 0.08). Ben: very, very close; the release sounds good |
 | 34 | Electric Bass (pick) | `PickedBass` | **4** | as 33, the pick: ladder 5.56 -> 4.30 dB, its damp 0.36 s |
-| 35 | Fretless Bass | `FretlessBass` | **3** | as 33, fretless -- loses its top rather than starting without it; the measured string, coils and damp, no fretless recorded |
+| 35 | Fretless Bass | `FretlessBass` | **4** | two fretless basses on Freesound (FaireDesVagues' stopped notes, CC BY 3.0; mrforfs' flatwound open strings, CC0): its decay law measured -- the upper partials do NOT go faster than a fretted bass's (the old 4x was a guess) -- and a LOW-PASS at 644 Hz, ~24 dB/oct, where both fall 10-18 dB under a fretted bass (examples/egtr_fit.py --envelope=35; 9.55 -> 1.19 dB). Ben: perfect |
 | 36 | Slap Bass 1 | `SlapBass` | **4** | as 33, the slap thumb: ladder 10.2 -> 7.9 dB (the rest the string slapping the frets, not modelled), its damp 0.37 s |
 | 37 | Slap Bass 2 | `PoppedBass` | **4** | as 33, the slap pluck: ladder 10.8 -> 6.3 dB, its damp 0.40 s |
 | 38 | Synth Bass 1 | `MoogSynthBass1` | **4** | a Messenger patch: a saw over OSC 2 on 16' (an octave, since a detune beats in the bass), the ladder low and a little resonant |
@@ -283,7 +283,7 @@ plays Standard, as does any program that is not a set.
 | 76 | Blown Bottle | `BlownBottle` | **2** | its own class, theory |
 | 77 | Shakuhachi | `Shakuhachi` | **2** | a knife-edge notch and the breathiest voice in the family; meri/kari belong on a controller and are not modelled |
 | 78 | Whistle | `Whistle` | **2** | CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe -- one resonance tuned by the tongue, and nearly a sine (h2 -33 dB) |
-| 79 | Ocarina | `Ocarina` | **4** | the FRICTION drum, on reinsamba's 13 close, dry takes (freesound pack 1339, CC-BY): rubbed UP into ~355 Hz from ~305, a 0.15 s gesture (gated: a one-tick note sounds), nearly a sine (h2 -14, h3 -27 dB) -- read first off a stairwell's takes, which had smeared it bright; at the GM sets' level against the snare |
+| 79 | Ocarina | `Ocarina` | **4** | VCSL typical and small ocarinas (CC0), 21 sustains (examples/wind_fit.py): near-pure (h2 -44), its breath, flutter, shared wobble (2.4 dB) and pitch wander (5.6 cents) fitted, a soft chiff. Ben: sounds great |
 
 ## 80-87 Synth Lead
 
@@ -386,7 +386,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `DistortionGuitar` -- GM 30 Distortion Guitar (4)
       - `ElectricBass`
         - `FingeredBass` -- GM 33 Electric Bass (finger) (4)
-        - `FretlessBass` -- GM 35 Fretless Bass (3)
+        - `FretlessBass` -- GM 35 Fretless Bass (4)
         - `PickedBass` -- GM 34 Electric Bass (pick) (4)
         - `SlapBass` -- GM 36 Slap Bass 1 (4)
           - `PoppedBass` -- GM 37 Slap Bass 2 (4)
@@ -426,7 +426,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Banjo` -- GM 105 Banjo (2)
       - `Shamisen` -- GM 106 Shamisen (2)
     - `NylonGuitar` [FormantBody] -- GM 24 Acoustic Guitar (nylon) (4)
-      - `SteelGuitar` -- GM 25 Acoustic Guitar (steel) (2)
+      - `SteelGuitar` -- GM 25 Acoustic Guitar (steel) (4)
     - `Percussion`
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4)

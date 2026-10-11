@@ -2708,7 +2708,17 @@ class SynthProperties:
             f = (self.frequency_x * (2.0 ** self.octave_position) * harmonic
                  / (self.harmonic_touch or 1))
             g *= _two_pole(f / self.pickup_resonance_hz, self.pickup_q)
+        if self.lowpass_hz:
+            # A DARK STRING: flatwounds stopped on wood, and a tone knob down --
+            # a low-pass at a fixed frequency whatever the note (lowpass_hz,
+            # lowpass_order * 6 dB/octave above it). None = none.
+            f = (self.frequency_x * (2.0 ** self.octave_position) * harmonic
+                 / (self.harmonic_touch or 1))
+            g /= (1.0 + (f / self.lowpass_hz) ** (2 * self.lowpass_order)) ** 0.5
         return g
+
+    lowpass_hz = None
+    lowpass_order = 2.0
 
     def harmonic_volume(self, harmonic):
         """What leaves the instrument: the body's series, shaped by the bore."""
@@ -2955,7 +2965,30 @@ class FormantBody:
         if self.bell_cutoff_hz:
             x = (partial_hz / self.bell_cutoff_hz) ** self.bell_order
             g *= x / (1.0 + x)
+        if self.body_trim_db:
+            g *= self._body_trim(partial_hz)
         return g
+
+    # A BODY MEASURED AGAINST ANOTHER: (Hz, dB) points, interpolated in log
+    # frequency and held flat past the ends, on every partial by where it
+    # sounds. A voice that borrows a measured body (the steel-string the
+    # Iowa classical's) refits it against its own recording without
+    # rewriting the formants that body was fitted as. Empty = untouched.
+    body_trim_db = ()
+
+    def _body_trim(self, f):
+        from math import log
+        pts = self.body_trim_db
+        if f <= pts[0][0]:
+            db = pts[0][1]
+        elif f >= pts[-1][0]:
+            db = pts[-1][1]
+        else:
+            for (f0, d0), (f1, d1) in zip(pts[:-1], pts[1:]):
+                if f < f1:
+                    db = d0 + (d1 - d0) * log(f / f0) / log(f1 / f0)
+                    break
+        return 10.0 ** (db / 20.0)
 
 
 class PluckedStringProperties(SynthProperties):
@@ -7896,38 +7929,61 @@ class PickedBassProperties(ElectricBassProperties):
 class FretlessBassProperties(ElectricBassProperties):
     """GM 35. No frets, so the string stops on WOOD.
 
-    The one physical difference, and it is a termination: a fretted note ends
-    on a hard metal wire, which reflects the high partials almost perfectly,
-    and a fretless note ends on fingerboard timber under a fingertip, which
-    does not. A lossy termination is a DECAY, not a filter -- the note starts
-    with its harmonics and loses them, which is the "mwah" a fretless has and
-    a fretted bass does not, and it is why simply darkening the voice would be
-    wrong: that would take the top off the attack, where it really is present.
+    MEASURED (examples/egtr_fit.py --string=fretless, --ladder=35): FaireDesVagues'
+    fretless (Freesound, CC BY 3.0), fifteen notes into a line input, eleven of
+    them STOPPED on the wood, and mrforfs' open strings (CC0) beside them.
 
-    So the fundamental rings as long as ever and the upper partials go four
-    times faster.
+    IT DOES NOT LOSE ITS TOP FASTER. The class was built on a lossy
+    termination -- the fingertip on timber reflecting the high partials
+    poorly, so "the fundamental rings as long as ever and the upper partials
+    go four times faster" (harmonic_decay_db four times the fretted bass's,
+    set by ear with no recording). Measured, the stopped notes' partials
+    decay at 6-14 dB/s an octave up, as the fretted IDMT basses' do (3-16):
+    the fitted harmonic damping 1.741 against the fretted family's 1.598.
+    What the recording has instead is MORE top, held: its ladder brighter
+    above h6 (h7-h10 -25 to -27 dB where a fretted bass reads near -38), the
+    whole note ringing ~4 s to -30 dB against the fretted 2.2. The "mwah" is
+    upper partials that STAY, not ones that go.
 
     AND THE SAME ABSENCE MAKES IT THE GLIDING BASS. With no frets there is
     nothing to step on, which is why the slides are the sound of the
     instrument and why the reach is a long one: a bass neck is long, and
     players use it.
     """
-    initial_gain = 0.245687   # held at its level before the IDMT fit (egtr_fit.py), with
+    initial_gain = 0.159977   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
-    amp_reference = 0.4031380236559139
-    # THE NOTE-OFF IS THE PLAYER'S DAMP: no fretless was recorded, and a hand
-    # damps it as it damps the fretted bass -- the finger style's measured
-    # release (examples/egtr_fit.py --damp).
+    amp_reference = 0.2624992665055191
+    # THE NOTE-OFF IS THE PLAYER'S DAMP: the fretless takes ring out, none
+    # damped, and a hand damps it as it damps the fretted bass -- the finger
+    # style's measured release (examples/egtr_fit.py --damp).
     release_valve_time = 0.390
     release_fraction_max = None
     glide_mechanism = 'stop'
     glide_reach_semitones = 12.0
-    # four times the fretted bass's harmonic damping, as it was by ear -- now
-    # on the measured string (no fretless was recorded)
-    harmonic_decay_db = 4.0 * 1.598
-    # played with more flesh, as fretless is: the fretted finger's notch less
-    # a little, in the ratio it had by ear (0.45 to 0.55) on the fitted 1.0
-    strike_depth = 1.0 * 0.45 / 0.55
+    # THE FRETLESS'S OWN STRING (egtr_fit.py --string=fretless, its eleven
+    # stopped notes, 88 partial decays; median |log err| 0.19): its decay law.
+    # The stretch stays the family's -- three stretches read, too few to fit
+    decay_db = 6.249
+    harmonic_decay_db = 1.741
+    decay_register_slope = 0.570
+    # ITS PLUCK AND PICKUPS (egtr_fit.py --ladder=35, all fifteen at their
+    # own positions; a Jazz bass's two coils assumed, the bass unnamed):
+    # ladder miss 5.75 -> 3.14 dB
+    strike_point = 0.09459
+    strike_depth = 0.8304
+    pickup_resonance_hz = 6560.0
+    pickup_q = 1.037
+    # A DARK STRING, AND THE TOP IS WHERE IT SHOWS (egtr_fit.py --envelope=35:
+    # every harmonic of the fifteen by WHERE IT SOUNDS): both fretless basses,
+    # FaireDesVagues' and mrforfs' flatwounds, fall 10-18 dB under a fretted
+    # bass above 1 kHz, at one frequency whatever the note -- a low-pass, the
+    # flatwounds and the wood (Ben: "fretless bass amps usually have a low
+    # pass filter"). Judged on h2-h10 the fit could not see it and left the
+    # top bright to 3 kHz -- "starts too high" -- with the pickups' comb laid
+    # bare up there: "a phaser". Envelope miss 9.55 -> 1.19 dB
+    lowpass_hz = 643.7
+    lowpass_order = 3.955
+    tonal_dampening = 2.155
 
 
 class SlapBassProperties(ElectricBassProperties):
@@ -8179,9 +8235,10 @@ class SteelGuitarProperties(NylonGuitarProperties):
     is a DECAY difference rather than a spectral one -- harmonic_decay_db, not
     inharmonicity.
 
-    NO REFERENCE. There is no steel-string in the set; the numbers below are
-    aimed at the nylon's measured description of one, which is not the same
-    thing as measuring one. The body is the classical's, unshifted: a
+    NO REFERENCE, then: there was no steel-string in the set. Now there is
+    (GuitarSet, below), and it overturned the string: the decay and the
+    stretch are measured, and the stretch is far LESS than the derivation
+    gave. The body is the classical's, unshifted: a
     dreadnought is bigger and its air resonance sits lower, but by how much is
     not derivable here and those formants were fitted jointly with the rest of
     the nylon. Moving them would be guessing at somebody else's fit.
@@ -8193,9 +8250,19 @@ class SteelGuitarProperties(NylonGuitarProperties):
     release_valve_time = 0.233
     release_fraction_max = None
 
-    # Steel's low internal loss: the high partials survive where nylon's die.
-    # The largest of the differences, and the reason the instrument rings.
-    harmonic_decay_db = 0.55
+    # THE STEEL STRING, MEASURED (examples/egtr_fit.py --string=steel): NYU's
+    # GuitarSet (CC BY 4.0), a steel-string acoustic on a microphone, 493 notes
+    # sounding alone in its 360 takes, 2776 partial decays. The law the
+    # electrics carry, (decay_db + harmonic_decay_db m) (f0/415)^slope -- where
+    # this had harmonic damping alone (0.55), no floor and no register law,
+    # and so rang every note alike, its partials at 1-8 dB/s against the
+    # recording's 10-30 (median |log err| 0.30)
+    decay_db = 7.788
+    harmonic_decay_db = 0.854
+    decay_register_slope = 0.387
+    # HELD at its level before the fit (-47.05 dB, the mean of E2-E5's first
+    # second at velocity 100): the measured decay took 4.9 dB of it
+    initial_gain = NylonGuitarProperties.initial_gain * 10 ** (4.858 / 20.0)
 
     # A pick is hard and narrow where flesh and nail are soft and wide, so the
     # source ladder tilts less steeply. The pluck POINT is unchanged -- both
@@ -8208,9 +8275,19 @@ class SteelGuitarProperties(NylonGuitarProperties):
     # it is set where the >8 kHz band stops being empty.
     bore_corner_hz = 7000.0
 
-    # x1.35 exactly, from Q*d^2/rho above. Real, and the least of it.
-    inharmonicity_coefficient = NylonGuitarProperties.inharmonicity_coefficient * 1.35
+    # THE STRETCH, MEASURED on the same notes (292 of them): B = k f0^p,
+    # 2.4e-4 at 82 Hz falling to 9.9e-5 at 330 -- where the derivation above
+    # (the nylon's x1.35) put 1.7e-3 on every note, seven to seventeen times
+    # too much. The scatter is wide (median |log err| 0.64: a microphone and
+    # a body, not a pickup), the level is not in doubt
+    inharmonicity_dynamic = True
+    inharmonicity_law = (0.004139, -0.643)
+    inharmonicity_coefficient = 1.6e-4
 
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        k, p = self.inharmonicity_law
+        return k * float(frequency) ** p
+    body_trim_db = ((126, -6.3), (159, 1.8), (200, 6.1), (252, 0.7), (317, 0.0), (400, -4.5), (504, -1.9), (635, -2.7), (800, -3.6), (1008, -7.4), (1270, -6.2), (1600, -0.3), (2016, 0.1), (2540, 0.5), (3200, 6.3), (4032, 5.4), (5080, 4.0), (6400, 4.0), (8063, 0.7), (10159, -0.3), (12800, -7.3))
 
 class JazzGuitarProperties(ElectricGuitarProperties):
     """GM 26. A neck humbucker, picked with the thumb side of the hand.

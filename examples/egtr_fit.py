@@ -4,11 +4,13 @@ IDMT-SMT-Guitar and IDMT-SMT-Bass (CC BY-NC-ND 4.0: measured only, never
 redistributed; ~/Documents/refs/idmt, sources.md).
 
     egtr_fit.py --stage                 link every single note under its sounding name
+                                        (and cut GuitarSet's isolated notes, GM 25)
     egtr_fit.py SET [SET ...]           measure: recorded against ours, by octave
     egtr_fit.py --list                  the sets
     egtr_fit.py SET --model=PROG        ...and ours, DI, at every third of its notes
-    egtr_fit.py --string=guitar|bass    the family's decay law and stretch law
+    egtr_fit.py --string=guitar|bass|fretless|steel    the family's decay law and stretch law
     egtr_fit.py --ladder=PROG           the program's pick, notch, tilt, pickup resonance
+    egtr_fit.py --envelope=PROG         its top: the pickup's resonance, Q and tilt, by absolute frequency
     egtr_fit.py --ab=PROG:OUT.wav       recorded notes, each then ours (DI)
     egtr_fit.py --damp                  the basses' release, from the damps ending their notes
     egtr_fit.py --mute                  the palm mute's decay against the open string
@@ -107,8 +109,91 @@ def stage():
         _link(wav, os.path.join(STAGED, "bass_%s_%s_%s" % (BASSES[b], PICKUPS[p], st)),
               BASS_OPEN[s] + f, s, f)
         n += 1
+    n += stage_fretless()
+    n += stage_guitarset()
     print("  staged %d notes in %d sets (%d bass files on an unplaceable string 5 left out)"
           % (n, len(sets()), skipped))
+
+
+# THE FRETLESS (GM 35), from Freesound (~/Documents/refs/sources.md): no IDMT
+# fretless. FaireDesVagues' 15 notes (CC BY 3.0), a four-string into a Zoom H2's
+# line input, named by pitch (checked: each within 13 cents -- a fretless's own
+# intonation); four of them open strings (E1 A1 D2 G2), eleven STOPPED on the
+# wood, placed where a player puts them (the lowest string, frets 0-4, the
+# G string above). mrforfs' open strings (CC0), a five-string B0 E1 A1 D2 G2 on
+# the neck pickup, the bridge pickup and both: string 0 its low B.
+FRETLESS = os.path.expanduser("~/Documents/refs/freesound/fretless")
+FDV_PLACE = {"e1": (1, 0), "f1": (1, 1), "g1": (1, 3), "a1": (2, 0), "b1": (2, 2), "c2": (2, 3),
+             "d2": (3, 0), "e2": (3, 2), "f2": (3, 3), "g2": (4, 0), "a2": (4, 2), "b2": (4, 4),
+             "c3": (4, 5), "d3": (4, 7), "e3": (4, 9)}
+MRF_OPEN = {"b": (0, 23), "e": (1, 28), "a": (2, 33), "d": (3, 38), "g": (4, 43)}
+
+
+def stage_fretless():
+    n = 0
+    for p in glob.glob(os.path.join(FRETLESS, "fairedesvagues", "*fdv_basse1_*.wav")):
+        key = re.search(r"fdv_basse1_([a-g]\d)\.wav$", p).group(1)
+        s, f = FDV_PLACE[key]
+        midi = BASS_OPEN[s] + f
+        _link(p, os.path.join(STAGED, "fretless_fdv"), midi, s, f)
+        if f:
+            _link(p, os.path.join(STAGED, "fretless_fdv_stopped"), midi, s, f)
+        n += 1
+    for p in glob.glob(os.path.join(FRETLESS, "mrforfs", "*fretless-bass-open-*.wav")):
+        m = re.search(r"open-([a-g])-(neck|bridge|both)", p)
+        s, midi = MRF_OPEN[m.group(1)]
+        _link(p, os.path.join(STAGED, "fretless_open_%s" % m.group(2)), midi, s, 0)
+        n += 1
+    return n
+
+
+# THE STEEL-STRING (GM 25): NYU's GuitarSet (CC BY 4.0; sources.md), a steel-string
+# acoustic on a MICROPHONE -- no DI here: what is measured is the string, the
+# pluck and the BODY, as GM 25 renders them. Recorded as music, so a note is
+# taken only where it sounds ALONE: no other note starting within 0.6 s of it
+# or still sounding at its onset, and at least 0.4 s long by the annotation
+# (JAMS note_midi, per string). 493 of 62476. Each cut from 50 ms before its
+# onset to the next note (at most 3 s) and written -- clips, not links -- as
+# <note><octave>.s<string>f<fret>.wav, strings numbered 1-6 from the low E.
+GUITARSET = os.path.expanduser("~/Documents/refs/guitarset")
+GS_OPEN = (40, 45, 50, 55, 59, 64)
+
+
+def stage_guitarset():
+    import json
+    from scipy.io import wavfile
+    out = os.path.join(STAGED, "acoustic_steel_mic")
+    if os.path.isdir(out) and glob.glob(os.path.join(out, "*.wav")):
+        return len(glob.glob(os.path.join(out, "*.wav")))
+    os.makedirs(out, exist_ok=True)
+    n = 0
+    for jp in sorted(glob.glob(os.path.join(GUITARSET, "annotation", "*.jams"))):
+        wav = os.path.join(GUITARSET, "audio_mono-mic", os.path.basename(jp)[:-5] + "_mic.wav")
+        if not os.path.exists(wav):
+            continue
+        notes = []
+        for a in json.load(open(jp))["annotations"]:
+            if a["namespace"] == "note_midi":
+                st = int(a["annotation_metadata"]["data_source"])
+                notes += [(d["time"], d["time"] + d["duration"], d["value"], st) for d in a["data"]]
+        notes.sort()
+        sr, x = None, None
+        for k, (t0, t1, m, st) in enumerate(notes):
+            if t1 - t0 < 0.4 or any(o is not notes[k] and o[0] < t0 + 0.6 and o[1] > t0 - 0.05 for o in notes):
+                continue
+            if x is None:
+                sr, x = wavfile.read(wav)
+            nxt = min([o[0] for o in notes if o[0] > t0] + [t0 + 3.0])
+            midi = int(round(m))
+            fret = midi - GS_OPEN[st]
+            if not 0 <= fret <= 22:
+                continue
+            seg = x[max(0, int((t0 - 0.05) * sr)):int(min(nxt, t0 + 3.0) * sr)]
+            dst = os.path.join(out, "%s.s%df%02d.%s_%d.wav" % (_name(midi), st + 1, fret,
+                                                               os.path.basename(jp)[:-5].replace(".", ""), k))
+            wavfile.write(dst, sr, seg)
+            n += 1
+    return n
 
 
 def sets():
@@ -184,6 +269,12 @@ def decay_report(paths, title):
 STRING_SETS = {
     "guitar": ("strat_neck_sc", "ibanez_bridge_hu", "ibanez_neck_hu", "ibanez_bridge_neck_sc"),
     "bass": tuple("bass_%s_both_%s" % (b, st) for b in ("fame", "warwick", "yamaha") for st in ("FS", "PK")),
+    # the fretless's own string: its STOPPED notes, where the finger on the
+    # wood is the termination (FretlessBassProperties)
+    "fretless": ("fretless_fdv_stopped",),
+    # the steel-string acoustic (GM 25): GuitarSet's isolated notes, on a
+    # microphone -- the string's decay heard through the body
+    "steel": ("acoustic_steel_mic",),
 }
 REF_HZ = 415.0
 
@@ -244,6 +335,11 @@ PROGRAM_SETS = {
     34: tuple("bass_%s_both_PK" % b for b in ("fame", "warwick", "yamaha")),
     36: tuple("bass_%s_both_ST" % b for b in ("fame", "warwick", "yamaha")),
     37: tuple("bass_%s_both_SP" % b for b in ("fame", "warwick", "yamaha")),
+    # the fretless: FaireDesVagues' fifteen, open and stopped
+    35: ("fretless_fdv",),
+    # the steel-string acoustic: GuitarSet's notes that sound alone, on its
+    # microphone (the --ab's reference; its body is examples/steel_fit.py's)
+    25: ("acoustic_steel_mic",),
 }
 # THE PICKUPS THE REFERENCES WERE PLAYED ON, as fractions of a 648 mm scale
 # from the bridge: a Stratocaster neck coil ~160 mm (0.247, its ~9 mm coil
@@ -260,6 +356,8 @@ PICKUP_GEOMETRY = {
     34: dict(pickup_points=(0.098, 0.168)),
     36: dict(pickup_points=(0.098, 0.168)),
     37: dict(pickup_points=(0.098, 0.168)),
+    # FaireDesVagues does not say which bass: a Jazz bass's two coils, as 33's
+    35: dict(pickup_points=(0.098, 0.168)),
 }
 BASS_PICKUP = (4867.0, 1.046)      # --ladder=34's, the pick's
 LADDER_KNOBS = ("strike_point", "strike_depth", "tonal_dampening", "pickup_resonance_hz", "pickup_q")
@@ -280,21 +378,30 @@ def ladder_at(cls, f0, fret, nm=10, vel=80):
     return 20 * np.log10(np.maximum(a, 1e-12) / max(a[0], 1e-12)) - 2 * 0.035 * (D - D[0])
 
 
-def ladder_obs(names):
+# HOW HIGH A PROGRAM'S LADDER IS JUDGED. h2-h10 by default; the fretless to
+# h16, all pizz_measure reads: judged to h10 it fitted its pickup's
+# resonance at 6.6 kHz, past every harmonic it saw (h10 of E2 is 820 Hz),
+# and rang bright to 3 kHz where FaireDesVagues' falls 40-55 dB by h12-16 --
+# Ben: "starts too high", and its pickups' comb, laid bare up there, "a
+# phaser"
+LADDER_NM = {35: 16}
+
+
+def ladder_obs(names, nm=10):
     obs = []
     for name in names:
         for p in sorted(glob.glob(os.path.join(STAGED, name, "*.wav"))):
             r = measure(p)
-            fret = int(re.search(r"f(\d+)\.wav$", p).group(1))
-            if r and len(r["ladder"]) >= 10:
-                obs.append((r["f0"], fret, np.asarray(r["ladder"][:10])))
+            fret = int(re.search(r"f(\d+)\.", os.path.basename(p)).group(1))
+            if r and len(r["ladder"]) >= nm:
+                obs.append((r["f0"], fret, np.asarray(r["ladder"][:nm])))
     return obs
 
 
 def ladder_error(cls, obs):
     errs = []
     for f0, fret, L in obs:
-        M = ladder_at(cls, f0, fret)
+        M = ladder_at(cls, f0, fret, nm=len(L))
         ok = L[1:] > -60
         errs.extend(np.abs(M[1:] - L[1:])[ok])
     return float(np.median(errs))
@@ -311,7 +418,7 @@ def fit_ladder(prog, knobs=LADDER_KNOBS, **fixed):
                 dict(PICKUP_GEOMETRY.get(prog, {}), **fixed))
     if "pickup_resonance_hz" in knobs and not base.pickup_resonance_hz:
         base.pickup_resonance_hz, base.pickup_q = 4000.0, 1.0
-    obs = ladder_obs(PROGRAM_SETS[prog])
+    obs = ladder_obs(PROGRAM_SETS[prog], LADDER_NM.get(prog, 10))
     x0 = np.log([getattr(base, k) or 1e-3 for k in knobs])
     e0 = ladder_error(type("Fit", (base,), {}), obs)
 
@@ -330,6 +437,85 @@ def fit_ladder(prog, knobs=LADDER_KNOBS, **fixed):
     print("  GM %d: %d notes, ladder miss %.2f dB (from %.2f)" % (prog, len(obs), r.fun, e0))
     for k, q in zip(knobs, v):
         print("    %s = %.4g" % (k, q))
+    return dict(zip(knobs, v)), r.fun
+
+
+ENV_BANDS = 50.0 * 2 ** (np.arange(0, 22) / 3.0)        # 50 Hz .. 6.4 kHz
+
+
+def env_obs(names):
+    """The recorded envelope BY ABSOLUTE FREQUENCY (examples/steel_fit.py's:
+    every harmonic of every note, 40-140 ms, each note's level removed,
+    third-octave medians), and each note's (f0, fret) to place ours at."""
+    import steel_fit as SF
+    SF.BANDS = ENV_BANDS
+    paths = [p for name in names for p in sorted(glob.glob(os.path.join(STAGED, name, "*.wav")))]
+    R, n = SF.envelope(paths)
+    notes = []
+    for p in paths:
+        r = measure(p)
+        if r:
+            notes.append((r["f0"], int(re.search(r"f(\d+)\.", os.path.basename(p)).group(1))))
+    return R, notes
+
+
+def env_model(cls, notes):
+    """Ours, the same way, from the class's own harmonic levels (ladder_at)."""
+    pool = [[] for _ in ENV_BANDS]
+    for f0, fret in notes:
+        nm = int(min(6000.0 / f0, 80))
+        L = ladder_at(cls, f0, fret, nm=nm)
+        hz = f0 * np.arange(1, nm + 1)
+        ref = (hz > 150) & (hz < 3000)
+        if not ref.any():
+            continue
+        L = L - 10 * np.log10(np.mean(10 ** (L[ref] / 10)))
+        for h, d in zip(hz, L):
+            k = int(np.argmin(np.abs(np.log2(h / ENV_BANDS))))
+            if abs(np.log2(h / ENV_BANDS[k])) <= 1 / 6.0:
+                pool[k].append(d)
+    return np.array([np.median(v) if len(v) >= 5 else np.nan for v in pool])
+
+
+def fit_envelope(prog, knobs=("lowpass_hz", "lowpass_order", "tonal_dampening")):
+    """--envelope=PROG: the knobs that shape the TOP, fitted on the envelope
+    by absolute frequency (bands with 5+ harmonics, down to -60 dB), where a
+    ladder of the first ten or sixteen harmonics never reaches it. The
+    pickup's two-pole resonance could not reach it (it sat at 9 kHz, 1-3 kHz
+    15-20 dB over FaireDesVagues'): a LOW-PASS (tonelib lowpass_hz, its order)
+    at one frequency whatever the note, which is what the takes show."""
+    from scipy.optimize import minimize
+    import patch_map
+    R, notes = env_obs(PROGRAM_SETS[prog])
+    base = type("Base", (patch_map.property_class_for_program(prog),), dict(PICKUP_GEOMETRY.get(prog, {})))
+    lo = dict(BOUNDS, lowpass_hz=(150.0, 12000.0), lowpass_order=(0.5, 6.0))
+
+    def err(cls):
+        M = env_model(cls, notes)
+        ok = np.isfinite(R) & np.isfinite(M) & (R > -60)
+        d = M[ok] - R[ok]
+        # the MEAN: a median let the top bands -- the ones in question --
+        # sit 20-40 dB out and scored 0.72 dB
+        return float(np.mean(np.abs(d - np.mean(d))))
+    start = dict(lowpass_hz=800.0, lowpass_order=2.0)
+    x0 = np.log([getattr(base, k) or start[k] for k in knobs])
+    e0 = err(type("Fit", (base,), {}))
+
+    def f(x):
+        v = np.exp(x)
+        pen = sum(max(0.0, lo[k][0] - q) + max(0.0, q - lo[k][1]) for k, q in zip(knobs, v))
+        return 100.0 + pen if pen else err(type("Fit", (base,), dict(zip(knobs, v))))
+    sim = np.vstack([x0] + [x0 + 0.6 * np.eye(len(x0))[i] for i in range(len(x0))])
+    r = minimize(f, x0, method="Nelder-Mead", options=dict(maxfev=400, xatol=1e-3, fatol=1e-3,
+                                                          initial_simplex=sim))
+    v = np.exp(r.x)
+    M = env_model(type("Fit", (base,), dict(zip(knobs, v))), notes)
+    print("  GM %d: %d notes, envelope miss %.2f dB (from %.2f)" % (prog, len(notes), r.fun, e0))
+    for k, q in zip(knobs, v):
+        print("    %s = %.4g" % (k, q))
+    print("   band Hz  " + " ".join("%5.0f" % c for c in ENV_BANDS))
+    print("   recorded " + " ".join("%5.0f" % q if np.isfinite(q) else "   --" for q in R))
+    print("   ours     " + " ".join("%5.0f" % q if np.isfinite(q) else "   --" for q in M))
     return dict(zip(knobs, v)), r.fun
 
 
@@ -1074,6 +1260,9 @@ def main(argv):
         if a.startswith("--ab="):
             g, out = a.split("=", 1)[1].split(":", 1)
             ab(int(g), out)
+            return 0
+        if a.startswith("--envelope="):
+            fit_envelope(int(a.split("=")[1]))
             return 0
         if a.startswith("--ladder="):
             g = int(a.split("=")[1])
