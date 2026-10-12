@@ -144,6 +144,12 @@ def set_tuner(name):
     """A registry name, then optionally @KEY and/or :A4 -- `hybrid@D:466`."""
     global tuner_class
     key = name.lower()
+    # INDIAN INTONATION has its own grammar -- raga:<system>[/<raga>]@<Sa>[:<Sa Hz>]
+    # -- since its tonic is Sa and its pitch Sa's (ragas.py)
+    if key.startswith("raga:"):
+        import ragas
+        tuner_class = ragas.tuner_class(key)
+        return
     tonic = pitch = None
     if ":" in key:
         key, pitch = key.split(":", 1)

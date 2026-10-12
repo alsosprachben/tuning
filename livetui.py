@@ -70,7 +70,10 @@ Applause,Gunshot""".replace("\n", "").split(",")
 TUNERS = ["hybrid440", "hybrid", "hybridharm", "hybridharm440", "hybridmean", "hybridmeanpiano", "stretchedhelmholtz", "gm2", "even",
           "stretch", "werckmeister", "sankey", "meantone", "just", "pyth",
           "well", "linear", "linear5", "linearwell", "bechstein", "spiral",
-          "semi", "dynamic", "path"]
+          "semi", "dynamic", "path",
+          # INDIAN INTONATION (ragas.py), Sa on C#: a part's own tuner, so the
+          # sitar's part picks one while the rest keep theirs
+          "raga:et@c#", "raga:just5@c#", "raga:pythagorean@c#", "raga:bel_todi/todi@c#"]
 
 # One line each, so the picker says what a temperament is for rather than only
 # what it is called. These are the working notes from midilib/tunelib, not a
@@ -100,6 +103,10 @@ TUNER_NOTE = {
     "semi":       "semitone-based",
     "dynamic":    "solved once over the keyboard (only midi.py retunes per chord)",
     "path":       "follows a written path of notes",
+    "raga:et@c#":          "Indian, Sa C#: equal (Serra 2011: sung Hindustani sits nearest it)",
+    "raga:just5@c#":       "Indian, Sa C#: 5-limit just (theory)",
+    "raga:pythagorean@c#": "Indian, Sa C#: Pythagorean (theory)",
+    "raga:bel_todi/todi@c#": "Indian, Sa C#: Todi as Bel measured it, near Pythagorean",
 }
 
 
@@ -227,7 +234,7 @@ GLOBALS = (
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
 HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNR")))   # N/R: scenes
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNRE")))  # N/R: scenes; E: Eastern tuning
 
 
 # THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
@@ -404,7 +411,7 @@ class TUI:
     def rebuild(self, label, specs):
         """Replace the whole part set from a list of spec dicts, off-thread."""
         def job(progress):
-            parts = [LV.Part.from_dict(s, progress) for s in specs]
+            parts = [LV.Part.from_dict(s, progress, getattr(self.live, "eastern", None)) for s in specs]
             self.live.set_parts(parts)
         self.builder.submit(label, job)
 
@@ -724,15 +731,59 @@ class TUI:
         p = self.sel()
         if p is None:
             return
-        start = TUNERS.index(p.tuner) if p.tuner in TUNERS else 0
+        own = getattr(p, "base_tuner", p.tuner)
+        start = TUNERS.index(own) if own in TUNERS else 0
         pick = self.menu(scr, "temperament for part %d" % (self.row + 1),
                          ["%-12s %s" % (t, TUNER_NOTE.get(t, "")) for t in TUNERS],
                          start)
-        if pick is None or TUNERS[pick] == p.tuner:
+        if pick is None or TUNERS[pick] == own:
             return
         specs = self.specs()
         specs[self.row]["tuner"] = TUNERS[pick]
         self.rebuild("%s / %s" % (patch_label(specs[self.row]), TUNERS[pick]), specs)
+
+    def pick_eastern(self, scr):
+        """THE EASTERN TUNING, the rig's secondary (ragas.py): a SYSTEM of swara
+        positions (theory, Bel's Todi, the 27 measured from Saraga), a RAGA (its
+        swaras: the meend's detents) and where SA sits. Every part whose voice
+        is an Indian instrument plays it; the rest keep their own tuner, and a
+        part given a raga in its temperament column keeps that one."""
+        import ragas
+        cur = getattr(self.live, "eastern", None)
+        systems = sorted(ragas.SYSTEMS, key=lambda k: (k.startswith("saraga_"), k))
+        items = ["off -- every part on its own tuner"] + [
+            "%-26s %s" % (k, (ragas.SYSTEMS[k]["kind"] + ": " + ragas.SYSTEMS[k]["source"])[:60])
+            for k in systems]
+        try:
+            cs, cr, ck, _ = ragas.parse(cur) if cur else (None, None, 1, None)
+        except ValueError:
+            cs, cr, ck = None, None, 1
+        start = systems.index(cs) + 1 if cs in systems else 0
+        pick = self.menu(scr, "Eastern tuning: system", items, start)
+        if pick is None:
+            return
+        if pick == 0:
+            self.live.set_eastern(None)
+            self.say("Eastern tuning off: every part on its own tuner")
+            return
+        system = systems[pick - 1]
+        own = system in ragas.RAGAS
+        rg = [None] + sorted(r for r in ragas.RAGAS if not r.startswith("saraga_"))
+        ritems = [("(its own swaras)" if own else "(all twelve swaras)")] + [
+            "%-10s %s" % (r, " ".join(ragas.SWARAS[i] for i in ragas.RAGAS[r])) for r in rg[1:]]
+        rp = self.menu(scr, "Eastern tuning: raga (the meend's detents)", ritems,
+                       rg.index(cr) if cr in rg else 0)
+        if rp is None:
+            return
+        keys = ("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b")
+        kp = self.menu(scr, "Eastern tuning: Sa", [k.upper() for k in keys], ck)
+        if kp is None:
+            return
+        spec = "raga:%s%s@%s" % (system, "/" + rg[rp] if rg[rp] else "", keys[kp])
+        self.live.set_eastern(spec)
+        n = sum(1 for p in self.parts()
+                if LV.tuner_for(p.program, p.drums, getattr(p, "base_tuner", p.tuner), spec) != getattr(p, "base_tuner", p.tuner))
+        self.say("Eastern tuning %s: %d part(s) re-tuning" % (spec, n))
 
     def pick_stops(self, scr):
         """Draw stops by name.
@@ -1218,6 +1269,8 @@ class TUI:
         self.addstr(scr, y, 1, "tuning", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 8, "%d Hz   %d frames   %.1f ms/block"
                     % (L.rate, L.frames, s["budget_ms"]), C("dim"))
+        if getattr(L, "eastern", None):
+            self.addstr(scr, y, 40, ("eastern " + L.eastern)[:max(0, w - 82)], C("cyan"))
         pn = self.port_name + ("  " + L.midi2_label if L.midi2_label else "") \
             + ("  " + L.mpe_label() if L.mpe else "")
         self.addstr(scr, y, max(40, w - len(pn) - 2), pn[:max(0, w - 42)], C("dim"))
@@ -1611,6 +1664,9 @@ class TUI:
         if c == "level":
             return "%+.1f dB" % p.level_db
         if c == "tuner":
+            # a part sounding the rig's Eastern tuning says so (E sets it)
+            if p.tuner != getattr(p, "base_tuner", p.tuner):
+                return "E " + p.tuner.split(":", 1)[1].split("@")[0]
             return p.tuner
         if c == "touch":
             return "fixed" if p.touch_fixed() else "vel"
@@ -1751,6 +1807,7 @@ class TUI:
             "presets",
             "  S save   L load   -- presets.json, data only; voices live in tonelib.py",
             "  N save   R recall a SCENE: every channel's controls as MIDI events",
+            "  E        the EASTERN tuning: a raga system and Sa for every Indian voice",
             "    (volume, pan, expression, CC91, sound controls, tuning, mono --",
             "    not the pedals or the wheel), recalled on top of this setup",
             "  the whole session is saved as you go and resumed next time;",
@@ -1880,6 +1937,8 @@ class TUI:
             self.save_preset(scr)
         elif c == ord("L"):
             self.load_preset(scr)
+        elif c == ord("E"):
+            self.pick_eastern(scr)
         elif c == ord("P"):
             # panic, the one thing you want when something drones
             self.live.panic()

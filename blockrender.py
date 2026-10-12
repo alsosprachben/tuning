@@ -1132,6 +1132,7 @@ def onepole_edges(events, nblk, default):
 # again. Not a cut: a cut is a step and a step is a click. Samplers call this
 # stealing and give it a few milliseconds for exactly this reason.
 RETRIGGER_FADE = 0.004
+EASTERN = None          # the secondary tuning's spec (ragas.py); eastern= on the command line
 LAST_DRONES = []        # see prepare(): the drone notes it last inserted
 
 # GM's default reverb send. It is also the value that means "the distance this
@@ -1239,6 +1240,26 @@ def prepare(path, tuner='hybrid440', sink=None):
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
     FREQ = tuning_table(tuner)
+    # A SECONDARY TUNING for the Eastern instruments (ragas.py): the classes that
+    # declare tuning_family = 'indian' play this table, the rest the render's.
+    # Sa sits at the primary tuner's own pitch for its key unless the spec
+    # names one, so Sa coincides with the Western instruments. None = off.
+    FREQ_E = None
+    _east = EASTERN or os.environ.get('TUNING_EASTERN') or None
+    if _east:
+        import ragas
+        _sys_e, _raga_e, _sa_key, _sa_hz = ragas.parse(_east)
+        FREQ_E = ragas.table(_east, sa_hz=FREQ.get(ragas.sa_note(_sa_key)))
+        T.raga_sa_note = ragas.sa_note(_sa_key)
+        T.raga_spec = _east
+    elif str(tuner).lower().startswith('raga:'):
+        # ...or the render's own tuner IS a raga's: Sa is then its Sa
+        import ragas
+        T.raga_sa_note = ragas.sa_note(ragas.parse(tuner)[2])
+        T.raga_spec = tuner
+    else:
+        T.raga_sa_note = None
+        T.raga_spec = None
     ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
     rpns, master, gmon = _sys['rpns'], _sys['master'], _sys['gmon']
     _pwseq = _sys['pwseq']
@@ -1338,6 +1359,13 @@ def prepare(path, tuner='hybrid440', sink=None):
             return FREQ
         _i = _bisect.bisect_right([_x[0] for _x in _tl], _t + 1e-9) - 1
         return _tl[max(0, _i)][1]
+
+    def _F_SYM(c, t):
+        """The table a channel's SYMPATHETIC strings are tuned in: _F's, or
+        under a secondary tuning the raga's for an Indian instrument (FREQ_E)."""
+        if FREQ_E is not None and getattr(_SYM_CH.get(c), 'tuning_family', None) == 'indian':
+            return FREQ_E
+        return _F(c, t)
 
     # ------------------------------------------- CHANNEL MODE, CC123 to CC127
     #
@@ -1728,7 +1756,16 @@ def prepare(path, tuner='hybrid440', sink=None):
             if _m is not None and _m != _n[0]:
                 _mpe_member[(_n[0], _n[1], _n[2])] = _m
     _mchans = {k[0] for k in _mpe_member}
-    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set())) - _mchans
+    # A MEEND IS THE NOTE'S, NOT THE CHANNEL'S (tonelib.meend_cents): a channel
+    # whose notes lock their bend to the tuning's swaras (bend_detents) has its
+    # wheel read per note below (_MEEND_AT), and is left out of the channel's
+    # tuning/gesture split here so the bend is not applied twice
+    _MEEND_CH = set()
+    for _n in notes:
+        if (_n[0] in _pwseq and not isinstance(_n[6], DrumProgram)
+                and getattr(property_class_for_note(_n[6], _n[1]), 'bend_detents', False)):
+            _MEEND_CH.add(_n[0])
+    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set())) - _mchans - _MEEND_CH
     for _c in _pchans:
         _ev = _pitch_stream(_c)
         _f = _first_on.get(_c)
@@ -1748,6 +1785,51 @@ def prepare(path, tuner='hybrid440', sink=None):
         if any(abs(_r - 1.0) > 1e-9 for _, _r in _res):
             _BGEST[_c] = _res
     BRrows=[]; BCrows=[]; brow_of={}
+    # THE MEEND, per note: the wheel's pull, from this note, mapped through the
+    # tuning's swaras above it (tonelib.meend_detents/meend_cents) -- the
+    # secondary tuning's raga when one is set, else every key of the table the
+    # note is tuned in -- over the file's RPN 0 range, or the class's own when
+    # it sets none. (ratio at Note On, its own row), as _MPE_AT.
+    _MEEND_AT = {}
+    if _MEEND_CH:
+        import ragas as _RG
+        for _n in notes:
+            _c, _nt, _on, _off = _n[0], _n[1], _n[2], _n[3]
+            if _c not in _MEEND_CH or isinstance(_n[6], DrumProgram):
+                continue
+            _pcm = property_class_for_note(_n[6], _nt)
+            if not getattr(_pcm, 'bend_detents', False):
+                continue
+            _ind = getattr(_pcm, 'tuning_family', None) == 'indian'
+            _tab = FREQ_E if (FREQ_E is not None and _ind) else _F(_c, _on)
+            _sa = (T.raga_sa_note if (T.raga_sa_note is not None and (_ind or FREQ_E is None))
+                   else int(getattr(_pcm, 'sympathetic_tonic', 60)))
+            if _sa not in _tab or _nt not in _tab:
+                continue
+            if T.raga_spec and (_ind or FREQ_E is None):
+                _sy, _rg, _, _ = _RG.parse(T.raga_spec)
+                _sw = [_cv for _, _cv in _RG.swaras(_sy, _rg)]
+            else:
+                _sw = [1200.0 * math.log2(_tab[_sa + _k] / _tab[_sa]) for _k in range(12)]
+            _nc = 1200.0 * math.log2(_tab[_nt] / _tab[_sa])
+            _rng = [(_t, _v) for _t, _k, _v, _q in rpns.get(_c, ()) if _k == 'range']
+            _rst = ([_v for _t, _v in _rng if _t <= _on + 1e-9] or [None])[-1]
+            if _rst is None:
+                _rst = float(getattr(_pcm, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
+            _det = T.meend_detents(_nc, _sw, 100.0 * _rst)
+            _st = float(getattr(_pcm, 'meend_strength', 0.6))
+
+            def _ratio(_w):
+                return 2.0 ** (T.meend_cents(100.0 * _rst * _w / 8192.0, _det, _st) / 1200.0)
+            _wseq = sorted((_t, _p) for _t, _q, _p in _pwseq.get(_c, ()))
+            _w0 = ([_p for _t, _p in _wseq if _t <= _on + 1e-9] or [0])[-1]
+            _r0 = _ratio(_w0)
+            _mv = [(_t, _ratio(_p) / _r0) for _t, _p in _wseq if _on + 1e-9 < _t <= _off]
+            _row = -1
+            if any(abs(_r - 1.0) > 1e-9 for _, _r in _mv):
+                _r, _cc = bend_blocks(_mv, nblk)
+                _row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _MEEND_AT[(_c, _nt, _on)] = (_r0, _row)
     for _c, _ev in _BGEST.items():
         _r, _cc = bend_blocks(_ev, nblk)
         brow_of[_c] = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
@@ -1981,6 +2063,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     _FX = [-1]               # the Moog filter row of this note (moog.py), -1 = none
     _MK = [0]                # a Moog partial's oscillator * 4096 + harmonic, 0 = none
     _NOREFL = [False]        # emit no room images for this partial (noise: see below)
+    _LATE = [False]     # rows of a late copy (bloom): dr 0.75 direct, 0.25 an image -- see sympathetic.expand
     # A ROOM IMAGE'S EXTRA PATH, in samples: how much later than its direct
     # sound it starts and stops. Already in its `non`/`noff` here; recorded on
     # its own because live re-times every onset at stamp (a section's scatter
@@ -2132,7 +2215,10 @@ def prepare(path, tuner='hybrid440', sink=None):
         # partial and its own reflection would be two copies of one voltage
         # beating against each other, which happens in the room and not in the
         # valve.
-        A["dr"].append(1.0 if _place is None else 0.0)
+        # ...and a LATE COPY's (the bloom) 0.75 and 0.25: still direct and an
+        # image either side of 0.5, as every reader tests, but marked, so the
+        # sympathetic pass does not take its late arrivals for new strikes
+        A["dr"].append((0.75 if _LATE[0] else 1.0) if _place is None else (0.25 if _LATE[0] else 0.0))
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -2881,7 +2967,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         sink.begin(dict(mod=sys.modules[__name__], room_bands=ROOM_BANDS,
                         lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC, BL=BL,
                         cons_bursts=cons_bursts, mvol=_mvol, moog_tables=_moog_tables,
-                        reverb=_REVERB_CH, qacc=_QACC, F=_F, ht_rows=_HT_ROWS,
+                        reverb=_REVERB_CH, qacc=_QACC, F=_F_SYM, ht_rows=_HT_ROWS,
                         amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
                         moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
                         effects=dict(sympathetic=_SYM_CH, mf104=_MF104, tubeamp=_AMP_CH,
@@ -2940,6 +3026,8 @@ def prepare(path, tuner='hybrid440', sink=None):
             chan_vol = (1.0 if organ and getattr(pc, 'stop_word_ccs', (11, 43)) == (11, 43)
                         else (v7*v11)**2)
             FREQ_N = _F(ch, on)
+            if FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian':
+                FREQ_N = FREQ_E         # the secondary tuning: see FREQ_E above
             # MIDI 2.0 PER-NOTE PITCH is absolute and outranks the tuner, MTS
             # and the channel's scale/octave table (M2-104 7.4.15); static bend
             # and channel tuning still offset it, below. See _PN_AT.
@@ -2951,6 +3039,9 @@ def prepare(path, tuner='hybrid440', sink=None):
             _mpa = _MPE_AT.get((ch, note, on))
             if _mpa:
                 f0 *= _mpa[0]           # this note's own MPE bend at Note On
+            _mea = _MEEND_AT.get((ch, note, on))
+            if _mea:
+                f0 *= _mea[0]           # this note's meend at Note On
             # A WRITTEN NOTE IS NOT ALWAYS A PITCH. A helicopter's note chooses
             # a blade passing rate, which is four octaves under where it is
             # written; see SynthProperties.sounding_octaves. Applied HERE,
@@ -3297,6 +3388,9 @@ def prepare(path, tuner='hybrid440', sink=None):
         _mpa = _MPE_AT.get((ch, note, on))
         if _mpa is not None:
             _BR[0] = _mpa[1]            # MPE: the note's own row, or none
+        _mea = _MEEND_AT.get((ch, note, on))
+        if _mea is not None:
+            _BR[0] = _mea[1]            # the meend: the note's own row, or none
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate
@@ -4134,9 +4228,11 @@ def prepare(path, tuner='hybrid440', sink=None):
                         sc = props.bloom_scatter
                         pd = pdelay*(1.0 - sc + 2.0*sc*random.random()) if sc > 0.0 else pdelay
                         bfade = max(1e-4, min(props.bloom_swell*pd/SR, 0.45*dur))*SR
+                        _LATE[0] = True
                         emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, gM*bg, hf, non_m+pd, noff,
                                      bfade, rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level,
                                      cvp, cc_r, crl, sjit, csc, gr, cr)
+                        _LATE[0] = False
                     transverse.append((hf, hv, dbps))
                     # A DRONE IS THE PART, NOT THE NOTE: emit it once for the
                     # channel, spanning its whole range, and skip it on every
@@ -4352,12 +4448,15 @@ def prepare(path, tuner='hybrid440', sink=None):
     # amplifier would be handed -- and part of what a room would hear. See
     # sympathetic.py, and note that a steelpan's coupling turned out to be a
     # mechanical kick through shared steel rather than resonance.
+    _sym0 = _sym1 = len(A['om'])         # the sympathetic rows: [_sym0, _sym1)
     if _SYM_CH:
         import sympathetic as _SYM
         # The table in force at each strike -- the tuner's, or under gm2 the
         # channel's MTS table -- rather than one global FREQ for the piece.
+        # ...and an Indian instrument's under a secondary tuning, the raga's
         _ns = _SYM.expand(A, _SYM_CH, SR, PARTIAL_COLS + ('az', 'dr'),
-                          table=_F)
+                          table=_F_SYM)
+        _sym1 = len(A['om'])
         if _ns:
             print("  sympathetic: %d channel(s), %d partials from notes nobody hit"
                   % (len(_SYM_CH), _ns))
@@ -4540,7 +4639,10 @@ def prepare(path, tuner='hybrid440', sink=None):
                 mvol=mvol,
                 cons_bursts=cons_bursts,
                 room_q=room_q, reverb_send=dict(_REVERB_CH),
-                fader_rows=dict(_LROW))      # THE CHANNEL FADER: {channel: row}
+                fader_rows=dict(_LROW),      # THE CHANNEL FADER: {channel: row}
+                # which rows are sympathetic strings' (live's meend leaves them
+                # at their own pitch: Live._meend_retune)
+                sym_rows=(_sym0, _sym1))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep
@@ -4914,6 +5016,12 @@ if __name__=="__main__":
     # matters -- a temperament's own A-to-C ratio is not equal temperament's, so
     # c=256 lands on a different A in each one. Omit it to keep each
     # temperament's own reference. See tunelib.set_reference.
+    # eastern=raga:<system>[/<raga>]@<Sa>[:Hz] anywhere after the tuner: the
+    # secondary tuning for the Eastern instruments (ragas.py)
+    for _a in list(sys.argv[3:]):
+        if _a.lower().startswith('eastern='):
+            EASTERN = _a.split('=', 1)[1]
+            sys.argv.remove(_a)
     if len(sys.argv)>4 and not sys.argv[4].startswith('--'):
         k,_,v = sys.argv[4].partition('=')
         if k.strip().lower() not in ('a','c') or not v:

@@ -72,6 +72,10 @@ def responders(props, freq=None, f0=None):
         # sounds like, and it is coincidence doing it: an exact unison is
         # exactly in the resonance, and two cents away is already outside it.
         tonic = int(getattr(props, 'sympathetic_tonic', 60))
+        # ...UNLESS A SECONDARY TUNING SETS SA (ragas.py): an Indian instrument's
+        # strings are tuned to the raga on its Sa, wherever Sa is
+        if getattr(props, 'tuning_family', None) == 'indian' and getattr(T, 'raga_sa_note', None) is not None:
+            tonic = int(T.raga_sa_note)
         # THIS STRIKE'S pitch when the caller knows it, which expand now does:
         # the props are the channel's FIRST note, and a sitar's strings are
         # fixed while the melody moves, so the first note's pitch is the wrong
@@ -180,6 +184,7 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
     aL = np.array(A['aL'], float)
     aR = np.array(A['aR'], float)
     aM = np.array(A['aM'], float)
+    dr = np.array(A['dr'], float) if 'dr' in A else np.ones(len(aM))
     keys = list(cols or A.keys())
     extra = {k: [] for k in keys}
     made = 0
@@ -191,7 +196,11 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
     for ch, props in channels.items():
         if getattr(props, 'sympathetic_gain', 0.0) <= 0.0:
             continue
-        rows = np.flatnonzero(mch == ch)
+        # NOT A LATE COPY'S ROWS (a bloom's, dr 0.75/0.25): their scattered
+        # arrivals grouped as dozens of strikes, each pitched at its own lowest
+        # partial -- strings answering notes nobody played, and a sitar's
+        # template 28 couplings deep instead of one
+        rows = np.flatnonzero((mch == ch) & ~np.isin(np.round(dr, 2), (0.75, 0.25)))
         if not len(rows):
             continue
         # One struck note is one onset. Rounded, because a section's entry
@@ -243,6 +252,11 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
                     extra['nf'][-1] = nf[i] * ratio
                     extra['p0'][-1] = p0[i] * ratio
                     extra['p0R'][-1] = p0R[i] * ratio
+                    # ...AND A MEEND DOES NOT CARRY THEM: the string tuned to
+                    # the starting note keeps its own pitch while the played
+                    # one is pulled (tonelib bend_detents)
+                    if 'br' in extra and getattr(props, 'bend_detents', False):
+                        extra['br'][-1] = -1
                     extra['aL'][-1] = aL[i] * drive
                     extra['aR'][-1] = aR[i] * drive
                     extra['aM'][-1] = aM[i] * drive

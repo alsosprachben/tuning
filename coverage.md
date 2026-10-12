@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 21 | 16% |
+| 2 specific, theory | 20 | 16% |
 | 3 specific, theory + ear | 15 | 12% |
-| 4 specific, reference audio | 92 | 72% |
+| 4 specific, reference audio | 93 | 73% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -328,7 +328,7 @@ plays Standard, as does any program that is not a set.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 104 | Sitar | `Sitar` | **2** | its own class; sympathetic strings and jawari, but the responder set is ASSERTED -- no recording |
+| 104 | Sitar | `Sitar` | **4** | Freesound sitars: a Ma string struck four times (CC0) and chinpen's D4 strokes (CC BY 3.0) (examples/pluck_fit.py): the decay law and its register slope on both; the gourd by absolute frequency, the jawari as the body falling away under a buzz that is there at once and rises quickly (a short banded late copy), each partial its own phase, a 1.5 ms onset -- all on the Ma take, chinpen's sitar having no growing buzz. Its sympathetic strings tuned on Sa; Indian intonation as a secondary tuning (ragas.py: just, Pythagorean, equal, Bel's Todi, 27 ragas measured from Saraga) and a meend that locks the wheel to the raga's swaras. Ben: sounds great |
 | 105 | Banjo | `Banjo` | **2** | steel over a DRUMHEAD: a membrane is light and damped, so it cannot radiate below 380 Hz and it empties the string fast. Thin, quick and bright are one fact |
 | 106 | Shamisen | `Shamisen` | **2** | the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch |
 | 107 | Koto | `Koto` | **4** | VCSL Dan Tranh (CC0), its nearest recorded cousin (examples/koto_fit.py): decay laws, pluck point, the box's low cut (450 Hz measured), the tsume's strike; the other twelve strings ringing in sympathy at the measured level and decays, in hirajoshi, tuned through the tuner. Silk inharmonicity kept. Ben: sounds fine |
@@ -503,7 +503,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `ContrabassPizz` -- GM 45 Pizzicato Strings (4)
       - `ViolaPizz` -- GM 45 Pizzicato Strings (4)
       - `ViolinPizz` -- GM 45 Pizzicato Strings (4)
-    - `Sitar` -- GM 104 Sitar (2)
+    - `Sitar` [FormantBody] -- GM 104 Sitar (4)
   - `StoppedPipe`
     - `BowedString` [SectionMixin]
       - `Cello` [FormantBody] -- GM 40 Violin (4), GM 41 Viola (4), GM 42 Cello (4), GM 48 String Ensemble 1 (4)

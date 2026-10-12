@@ -1,0 +1,522 @@
+#!/usr/bin/env python3
+"""Fit a plucked voice to single-pluck takes: the sitar (GM 104) to Freesound's sitar
+takes, the banjo (GM 105) to the Windsor SoundFont's plucks (sources.md "Ethnic programs").
+
+    python3 examples/pluck_fit.py --voice=sitar|banjo [...]   (sitar if omitted)
+
+    python3 examples/pluck_fit.py --stage            cut the takes into one pluck a file
+    python3 examples/pluck_fit.py                    measure: recorded against ours
+    python3 examples/pluck_fit.py --fit=decay        decay_db, harmonic_decay_db, the register slope
+    python3 examples/pluck_fit.py --fit=body         body_trim_db, by absolute frequency
+    python3 examples/pluck_fit.py --fit=jawari       the buzz's growth: a banded late copy (bloom)
+    python3 examples/pluck_fit.py --fit=prompt       the low partials' prompt fall (two-stage decay)
+    python3 examples/pluck_fit.py --ab=OUT.wav       recorded, then ours, pluck by pluck
+    (--take=ma fits to one take only)
+
+THE NOTES. Two strings, two players:
+  ma       the main string's Ma, struck once and left to ring ~10 s, four times
+           (freesound 42192, CC0): 169 Hz
+  chinpen  one note struck thirteen times, 0.8-5 s apart (42268, CC BY 3.0):
+           292 Hz; the strokes with 2.5 s and more to the next are taken
+Each is staged under ~/Documents/refs/freesound/staged/sitar/ as
+<label>_<n>.wav with its measured f0 in the name (f0_<Hz>), and ours is
+rendered at THAT pitch, by a secondary tuning whose Sa is it (a sitar's
+wheel is a meend, not a bend), so a gourd's colour lines up where it sounds.
+
+MEASURED THE SAME WAY ON BOTH SIDES, per pluck:
+  DECAY   each harmonic's level in 0.2 s frames every 0.1 s, its slope (dB/s)
+          from 0.3 s to 5 s while within 45 dB of its peak
+  LADDER  each harmonic at 0.15 s and at 2 s, dB re the fundamental at 0.15 s
+  BANDS   at 0.1-0.3 s, the harmonics pooled by third-octave of where they
+          sound, re the note's harmonic power (the body's colour)
+"""
+import glob
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, HERE)
+os.environ.setdefault("TUNING_REFLECT", "0")
+
+REFS = os.path.expanduser("~/Documents/refs/freesound")
+STAGED = os.path.join(REFS, "staged", "sitar")
+PROG = 104
+CLS = "SitarProperties"
+# voice: (program, class, staged folder)
+VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoProperties", "banjo")}
+NH = 24
+HOP, WIN = 0.1, 0.2
+CEN = 2 ** np.arange(np.log2(160), np.log2(13000), 1 / 3.0)
+
+
+def read(path):
+    with tempfile.TemporaryDirectory() as d:
+        wav = os.path.join(d, "t.wav")
+        subprocess.run(["sox", path, "-c", "1", "-b", "16", wav], check=True)
+        import wave
+        w = wave.open(wav)
+        sr = w.getframerate()
+        x = np.frombuffer(w.readframes(w.getnframes()), "<i2").astype(np.float64) / 32768.0
+    return x, sr
+
+
+def onsets(x, sr, top_db=35.0, min_gap=0.3):
+    w = int(0.01 * sr)
+    en = 10 * np.log10(np.convolve(x * x, np.ones(w) / w, "same") + 1e-12)[::w]
+    ons = [i for i in range(5, len(en)) if en[i] - en[i - 5] > 10 and en[i] > en.max() - top_db]
+    out = []
+    for i in ons:
+        if not out or i - out[-1] > min_gap / 0.01:
+            out.append(i)
+    return [i * 0.01 for i in out]
+
+
+def f0_of(seg, sr, lo, hi):
+    N = 1 << 19
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N))
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    b = (f > lo) & (f < hi)
+    k = np.flatnonzero(b)[np.argmax(X[b])]
+    y0, y1, y2 = np.log(X[k - 1:k + 2] + 1e-30)
+    d = y0 - 2 * y1 + y2
+    return f[k] + (0.5 * (y0 - y2) / d if d else 0.0) * (f[1] - f[0])
+
+
+# label: (file under REFS, f0 search Hz, min seconds to the next pluck)
+TAKES = {"ma": ("sitar/42192__*.flac", (150, 190), 5.0),
+         "chinpen": ("sitar/42268__*.wav", (270, 310), 2.5)}
+
+
+def stage():
+    from scipy.io import wavfile
+    os.makedirs(STAGED, exist_ok=True)
+    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+        os.remove(f)
+    for label, (pat, (lo, hi), min_next) in TAKES.items():
+        src = glob.glob(os.path.join(REFS, pat))[0]
+        x, sr = read(src)
+        ons = onsets(x, sr) + [len(x) / sr]
+        n = 0
+        for a, b in zip(ons[:-1], ons[1:]):
+            if b - a < min_next:
+                continue
+            seg = x[max(0, int((a - 0.02) * sr)):int((b - 0.05) * sr)]
+            f0 = f0_of(seg[int(0.1 * sr):int(1.0 * sr)], sr, lo, hi)
+            name = "%s_%d_f0_%.2f.wav" % (label, n, f0)
+            wavfile.write(os.path.join(STAGED, name), sr,
+                          (seg / max(np.abs(seg).max(), 1e-9) * 0.9 * 32767).astype(np.int16))
+            print("  %-28s %.2f s" % (name, len(seg) / sr))
+            n += 1
+
+
+def plucks():
+    """[(f0, path, take label)] of the staged plucks."""
+    out = []
+    for p in sorted(glob.glob(os.path.join(STAGED, "*.wav"))):
+        m = re.search(r"([a-z]+)_\d+_f0_([0-9.]+)\.wav$", p)
+        out.append((float(m.group(2)), p, m.group(1)))
+    return out
+
+
+def render(f0, secs):
+    """Ours at f0 exactly. An Indian voice by the TUNING (a sitar's wheel is a
+    meend, which locks to swaras): a secondary equal tuning whose Sa is this
+    pluck's pitch, the note played on Sa. Any other by a static bend from the
+    nearest note (2 semitones' range): a tuning, which every voice honours."""
+    import mido
+    import blockrender as B
+    import tonelib as T
+    indian = getattr(getattr(T, CLS), "tuning_family", None) == "indian"
+    names = ("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b")
+    near = int(round(69 + 12 * np.log2(f0 / 440.0)))
+    note = 60 + near % 12 if indian else near
+    m = mido.MidiFile(type=1, ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    t.append(mido.Message("program_change", channel=0, program=PROG, time=0))
+    if not indian:
+        cents = 1200 * np.log2(f0 / (440.0 * 2 ** ((near - 69) / 12.0)))
+        t.append(mido.Message("pitchwheel", channel=0, pitch=int(round(cents / 200.0 * 8191)), time=0))
+    t.append(mido.Message("note_on", channel=0, note=note, velocity=100, time=0))
+    t.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=int(secs * 960)))
+    B.EASTERN = "raga:et@%s:%.4f" % (names[near % 12], f0) if indian else None
+    try:
+        L, R = B.render(m)[:2]
+    finally:
+        B.EASTERN = None
+    return 0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64)), B.SR
+
+
+def measure(x, sr, f0):
+    """(decay dB/s h1-NH, ladder at 0.15 s, ladder at 2 s, bands) for one pluck."""
+    w = int(0.005 * sr)
+    e = np.convolve(x * x, np.ones(w) / w, "same")
+    a = int(np.flatnonzero(e > e.max() * 0.01)[0])
+    W = int(WIN * sr)
+    win = np.hanning(W)
+    Nf = 1 << 15
+    fs = np.fft.rfftfreq(Nf, 1.0 / sr)
+    L = []
+    for j in range(int(5.0 / HOP)):
+        s = x[a + int(j * HOP * sr): a + int(j * HOP * sr) + W]
+        if len(s) < W:
+            break
+        X = np.abs(np.fft.rfft(s * win, Nf))
+        L.append([20 * np.log10(X[np.abs(fs - k * f0) < 4 + 0.01 * k * f0].max() + 1e-9)
+                  for k in range(1, NH + 1)])
+    L = np.array(L)
+    tt = np.arange(len(L)) * HOP + WIN / 2
+    rate = []
+    for k in range(NH):
+        y = L[:, k]
+        ok = (tt > 0.3) & (y > y.max() - 45)
+        rate.append(-np.polyfit(tt[ok], y[ok], 1)[0] if ok.sum() > 5 else np.nan)
+    ref = L[0, 0]
+    j2 = min(len(L) - 1, int(round((2.0 - WIN / 2) / HOP)))
+    # the body's colour: harmonics to 13 kHz, 0.1-0.3 s
+    s = x[a + int(0.1 * sr): a + int(0.3 * sr)]
+    N = 1 << 17
+    X = np.abs(np.fft.rfft(s * np.hanning(len(s)), N)) ** 2
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    hz, p = [], []
+    m = 1
+    while m * f0 < min(13000.0, 0.45 * sr):
+        b = (f > m * f0 * 0.98) & (f < m * f0 * 1.02)
+        hz.append(m * f0)
+        p.append(X[b].max())
+        m += 1
+    hz, p = np.array(hz), np.array(p)
+    db = 10 * np.log10(p / p.sum() + 1e-30)
+    bands = np.full(len(CEN), np.nan)
+    for k, c in enumerate(CEN):
+        sel = np.abs(np.log2(hz / c)) <= 1 / 6.0
+        if sel.any():
+            bands[k] = 10 * np.log10(np.mean(10 ** (db[sel] / 10)))
+    return np.array(rate), L[0] - ref, L[j2] - ref, bands
+
+
+def both(step=1):
+    rec, ours = [], []
+    for f0, p, lab in plucks()[::step]:
+        x, sr = read(p)
+        rec.append((lab, f0, measure(x, sr, f0)))
+        y, s2 = render(f0, 6.0)
+        ours.append((lab, f0, measure(y, s2, f0)))
+    return rec, ours
+
+
+def report():
+    rec, ours = both()
+
+    def key(lab, f0):
+        return (lab, int(round(12 * np.log2(f0 / 440.0))))
+    for k in sorted({key(l, f) for l, f, _ in rec}, key=lambda q: (q[0], q[1])):
+        sel = [i for i, (l, f, _) in enumerate(rec) if key(l, f) == k]
+        f0 = np.median([rec[i][1] for i in sel])
+        print("  == %s (%.1f Hz, %d plucks), h1-h16" % (k[0], f0, len(sel)))
+        for name, kk in (("decay dB/s", 0), ("ladder 0.15 s", 1), ("ladder 2 s", 2)):
+            R = np.nanmedian([rec[i][2][kk] for i in sel], 0)
+            O = np.nanmedian([ours[i][2][kk] for i in sel], 0)
+            print("  %-14s rec  %s" % (name, " ".join("%5.1f" % v for v in R[:16])))
+            print("  %-14s ours %s" % ("", " ".join("%5.1f" % v for v in O[:16])))
+    R = np.nanmedian([m[3] for _, _, m in rec], 0)
+    O = np.nanmedian([m[3] for _, _, m in ours], 0)
+    d = R - O
+    print("  bands rec-ours " + " ".join("%d:%+.1f" % (c, v) for c, v in zip(CEN, d) if np.isfinite(v)))
+
+
+def fit_decay(maxfev=60):
+    """--fit=decay: the string's decay law -- its rate, its rise with harmonic
+    number and its register slope -- against each take's measured decay of
+    h1-h12 (dB/s, the plucks' median), at each take's own pitch: two pitches,
+    so the slope is fitted on the two. Nelder-Mead, the rates' rms."""
+    from scipy.optimize import minimize
+    import tonelib as T
+    cls = getattr(T, CLS)
+    groups = {}
+    for f0, p, lab in plucks():
+        x, sr = read(p)
+        groups.setdefault(lab, []).append((f0, measure(x, sr, f0)[0]))
+    targets = [(float(np.median([f for f, _ in v])), np.nanmedian([r for _, r in v], 0)[:12])
+               for v in groups.values()]
+    x0 = np.array([float(getattr(cls, k)) for k in DECAY])
+    best = [1e9, x0]
+
+    def f(z):
+        v = np.array([x0[0] * np.exp(z[0]), x0[1] * np.exp(z[1]), z[2]])
+        for k, q in zip(DECAY, v):
+            setattr(cls, k, float(q))
+        err = []
+        for f0, R in targets:
+            y, sr = render(f0, 4.0)
+            O = measure(y, sr, f0)[0][:12]
+            ok = np.isfinite(R) & np.isfinite(O)
+            err.extend((O - R)[ok])
+        e = float(np.sqrt(np.mean(np.square(err))))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %5.2f dB/s  %s" % (e, " ".join("%s=%.4g" % kv for kv in zip(DECAY, v))), flush=True)
+        return e
+    minimize(f, np.zeros(3), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(3), np.diag([0.4, 0.5, 0.4])]),
+                      "xatol": 0.02, "fatol": 0.05})
+    for k, q in zip(DECAY, best[1]):
+        print("    %s = %.4g" % (k, q))
+
+
+def fit_body(passes=4):
+    """--fit=body: FormantBody.body_trim_db by absolute frequency -- every
+    harmonic of every pluck at 0.1-0.3 s pooled by third-octave of where it
+    sounds (both takes), each pass adding half of recorded - ours, the median
+    removed (colour, not level), as steel_fit.py --body does."""
+    import tonelib as T
+    cls = getattr(T, CLS)
+    ps = [q for q in plucks() if not TAKE or q[2] == TAKE]
+    R = np.nanmedian([measure(*read(p), f0)[3] for f0, p, _ in ps], 0)
+    trim = dict((int(round(c)), v) for c, v in (cls.body_trim_db or ()))
+    for n in range(passes + 1):
+        O = np.nanmedian([measure(*render(f0, 1.0), f0)[3] for f0, _, _ in ps[::2]], 0)
+        d = R - O
+        ok = np.isfinite(d)
+        d = d - np.nanmedian(d)
+        print("  pass %d: rms %.2f dB  %s" % (n, np.sqrt(np.nanmean(d[ok] ** 2)),
+              " ".join("%d:%+.1f" % (CEN[k], d[k]) for k in np.flatnonzero(ok))), flush=True)
+        if n == passes:
+            break
+        for k in np.flatnonzero(ok):
+            c = int(round(CEN[k]))
+            trim[c] = trim.get(c, 0.0) + 0.5 * float(d[k])
+        cls.body_trim_db = tuple((c, round(v, 1)) for c, v in sorted(trim.items()))
+    print("    body_trim_db = %s" % (cls.body_trim_db,))
+
+
+def ab(out, secs=5.0):
+    """--ab=OUT.wav: each take's plucks (the Ma string's four, three of
+    chinpen's strokes), recorded then ours at its pitch, level-matched over
+    the first second."""
+    import wave
+    from scipy.signal import resample_poly
+    parts, sr = [], 44100
+    ps = plucks()
+    pick = [p for p in ps if p[2] == "ma"] + [p for p in ps if p[2] == "chinpen"][:3]
+    for f0, p, lab in pick:
+        x, sr = read(p)
+        x = x[:int(secs * sr)]
+        y, s2 = render(f0, min(secs, len(x) / sr))
+        w = int(0.005 * s2)
+        e = np.convolve(y * y, np.ones(w) / w, "same")
+        y = y[max(0, int(np.flatnonzero(e > e.max() * 0.01)[0]) - int(0.02 * s2)):]
+        if s2 != sr:
+            y = resample_poly(y, sr, s2)
+        y = y[:len(x)]
+        g = np.sqrt(np.mean(x[:sr] ** 2) / max(np.mean(y[:sr] ** 2), 1e-30))
+        gap = np.zeros(int(0.4 * sr))
+        parts += [x, gap, y * g, gap, gap]
+        print("  %s %.1f Hz" % (os.path.basename(p), f0))
+    z = np.concatenate(parts)
+    z *= 0.5 / np.abs(z).max()
+    w = wave.open(out, "wb")
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+    w.writeframes((z * 32767).astype("<i2").tobytes()); w.close()
+
+
+JBANDS = ((1500, 3000), (3000, 6000), (6000, 12000))
+JAWARI = ("bloom_seconds", "bloom_center_hz", "bloom_octaves", "bloom_gain", "bloom_scatter")
+
+
+def band_course(x, sr, secs=1.5, hop=0.05):
+    """Each of JBANDS' level every HOP s for SECS from the pluck, dB re the
+    band under 1 kHz at the same time: the buzz's growth, as a shape."""
+    from scipy.signal import butter, sosfilt
+    w = int(0.005 * sr)
+    e = np.convolve(x * x, np.ones(w) / w, "same")
+    a = int(np.flatnonzero(e > e.max() * 0.01)[0])
+    seg = x[a:a + int((secs + hop) * sr)]
+    lo = sosfilt(butter(4, 1000, "lp", fs=sr, output="sos"), seg)
+    h = int(hop * sr)
+    out = []
+    for f1, f2 in JBANDS:
+        b = sosfilt(butter(4, [f1, f2], "bp", fs=sr, output="sos"), seg)
+        out.append([10 * np.log10(np.mean(b[i:i + h] ** 2) / max(np.mean(lo[i:i + h] ** 2), 1e-30))
+                    for i in range(0, int(secs * sr), h)])
+    return np.array(out)
+
+
+def fit_jawari(maxfev=70):
+    """--fit=jawari: the buzz's growth as a late copy of the upper partials
+    (SynthProperties' bloom, banded): its delay, the band's centre and width,
+    the copy's gain and the arrivals' scatter, against each take's high bands
+    over the first 1.5 s re the band under 1 kHz (band_course), the plucks'
+    median, both takes."""
+    from scipy.optimize import minimize
+    import tonelib as T
+    cls = getattr(T, CLS)
+    cls.bloom_banded = True
+    cls.bloom_swell = 1.0
+    groups = {}
+    for f0, p, lab in plucks():
+        if TAKE and lab != TAKE:
+            continue
+        groups.setdefault(lab, []).append((f0, band_course(*read(p))))
+    targets = [(float(np.median([f for f, _ in v])), np.median([c for _, c in v], 0)) for v in groups.values()]
+    x0 = np.array([0.20, 3500.0, 1.2, 3.0, 0.5])
+    best = [1e9, x0]
+
+    def val(z):
+        return np.array([x0[0] * np.exp(z[0]), x0[1] * np.exp(z[1]), x0[2] * np.exp(z[2]),
+                         x0[3] * np.exp(z[3]), min(1.0, max(0.0, x0[4] + z[4]))])
+
+    def f(z):
+        v = val(z)
+        for k, q in zip(JAWARI, v):
+            setattr(cls, k, float(q))
+        err = []
+        for f0, R in targets:
+            O = band_course(*render(f0, 1.8))
+            err.extend((O - R).ravel())
+        e = float(np.sqrt(np.mean(np.square(err))))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %5.2f dB  %s" % (e, " ".join("%s=%.4g" % kv for kv in zip(JAWARI, v))), flush=True)
+        return e
+    minimize(f, np.zeros(5), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(5), np.diag([0.5, 0.4, 0.4, 0.6, 0.3])]),
+                      "xatol": 0.02, "fatol": 0.05})
+    for k, q in zip(JAWARI, best[1]):
+        print("    %s = %.4g" % (k, q))
+
+
+PBANDS = ((0, 1000), (1500, 3000), (3000, 6000), (6000, 12000))
+PROMPT = ("prompt_dbs", "aftersound_share", "prompt_max_hz")
+
+
+def early_course(x, sr, secs=0.6, hop=0.02):
+    """Each of PBANDS' level every HOP s for SECS from the pluck, each re its
+    own mean: the SHAPE of each band's first half-second, its level apart."""
+    from scipy.signal import butter, sosfilt
+    w = int(0.002 * sr)
+    e = np.convolve(x * x, np.ones(w) / w, "same")
+    a = int(np.flatnonzero(e > e.max() * 0.01)[0])
+    seg = x[a:a + int((secs + hop) * sr)]
+    h = int(hop * sr)
+    out = []
+    for f1, f2 in PBANDS:
+        y = (sosfilt(butter(4, f2, "lp", fs=sr, output="sos"), seg) if f1 == 0
+             else sosfilt(butter(4, [f1, f2], "bp", fs=sr, output="sos"), seg))
+        v = np.array([10 * np.log10(np.mean(y[i:i + h] ** 2) + 1e-20) for i in range(0, int(secs * sr), h)])
+        out.append(v - v.mean())
+    return np.array(out)
+
+
+def fit_prompt(maxfev=50):
+    """--fit=prompt: the low partials' two-stage decay -- a prompt rate under
+    a frequency, a share of it remaining at the law's own rate -- against the
+    take's bands' first 0.6 s, each band's shape (early_course)."""
+    from scipy.optimize import minimize
+    import tonelib as T
+    cls = getattr(T, CLS)
+    g = [(f0, early_course(*read(p))) for f0, p, lab in plucks() if not TAKE or lab == TAKE]
+    f0 = float(np.median([f for f, _ in g]))
+    R = np.median([c for _, c in g], 0)
+    x0 = np.array([15.0, 0.3, 1200.0])
+    best = [1e9, x0]
+
+    def val(z):
+        return np.array([x0[0] * np.exp(z[0]), min(0.95, max(0.01, x0[1] + z[1])), x0[2] * np.exp(z[2])])
+
+    def f(z):
+        v = val(z)
+        for k, q in zip(PROMPT, v):
+            setattr(cls, k, float(q))
+        O = early_course(*render(f0, 1.0))
+        e = float(np.sqrt(np.mean((O - R) ** 2)))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %5.2f dB  %s" % (e, " ".join("%s=%.4g" % kv for kv in zip(PROMPT, v))), flush=True)
+        return e
+    minimize(f, np.zeros(3), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(3), np.diag([0.6, 0.25, 0.5])]),
+                      "xatol": 0.02, "fatol": 0.03})
+    for k, q in zip(PROMPT, best[1]):
+        print("    %s = %.4g" % (k, q))
+
+
+QUICK = ("bloom_seconds", "bloom_gain", "bloom_center_hz", "bloom_octaves")
+
+
+def fit_quick(maxfev=50):
+    """--fit=quick: the buzz's QUICK rise -- a short late copy of the upper
+    partials, little scattered -- against every band's first 0.6 s
+    (early_course), the prompt fall in place."""
+    from scipy.optimize import minimize
+    import tonelib as T
+    cls = getattr(T, CLS)
+    cls.bloom_banded = True
+    cls.bloom_swell = 0.5
+    cls.bloom_scatter = 0.2
+    g = [(f0, early_course(*read(p))) for f0, p, lab in plucks() if not TAKE or lab == TAKE]
+    f0 = float(np.median([f for f, _ in g]))
+    R = np.median([c for _, c in g], 0)
+    x0 = np.array([0.05, 1.0, 5000.0, 1.5])
+    best = [1e9, x0]
+
+    def f(z):
+        v = x0 * np.exp(z)
+        for k, q in zip(QUICK, v):
+            setattr(cls, k, float(q))
+        O = early_course(*render(f0, 1.0))
+        e = float(np.sqrt(np.mean((O - R) ** 2)))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %5.2f dB  %s" % (e, " ".join("%s=%.4g" % kv for kv in zip(QUICK, v))), flush=True)
+        return e
+    minimize(f, np.zeros(4), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(4), np.diag([0.5, 0.7, 0.4, 0.4])]),
+                      "xatol": 0.02, "fatol": 0.03})
+    for k, q in zip(QUICK, best[1]):
+        print("    %s = %.4g" % (k, q))
+
+
+TAKE = None     # --take=ma: fit to one take's plucks only
+
+
+def main(argv):
+    global TAKE, PROG, CLS, STAGED
+    TAKE = next((a.split("=", 1)[1] for a in argv if a.startswith("--take=")), None)
+    voice = next((a.split("=", 1)[1] for a in argv if a.startswith("--voice=")), "sitar")
+    PROG, CLS, folder = VOICES[voice]
+    STAGED = os.path.join(REFS, "staged", folder)
+    if "--stage" in argv:
+        stage()
+        return 0
+    if "--fit=decay" in argv:
+        fit_decay()
+        return 0
+    out = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab=")), None)
+    if out:
+        ab(out)
+        return 0
+    if "--fit=quick" in argv:
+        fit_quick()
+        return 0
+    if "--fit=prompt" in argv:
+        fit_prompt()
+        return 0
+    if "--fit=jawari" in argv:
+        fit_jawari()
+        return 0
+    if "--fit=body" in argv:
+        fit_body()
+        return 0
+    report()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

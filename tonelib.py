@@ -1437,6 +1437,10 @@ class SynthProperties:
     # the legato time instead of ringing its release under the new note (the
     # exciter moved to the new pitch). Off = every voice as it was.
     slur_cuts_release = False
+    # WHICH TUNING FAMILY this instrument is tuned in. None is the render's
+    # tuner; 'indian' plays a secondary tuning when one is set (ragas.py,
+    # blockrender's eastern=, live's --eastern), its sympathetic strings on Sa.
+    tuning_family = None
 
     def bloom_delay_for(self, frequency):
         """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.
@@ -7454,7 +7458,7 @@ class SlowBowedStringProperties(BowedStringProperties):
 
 # --- The guitar box (GM 24) --------------------------------------------------
 
-class SitarProperties(PluckedStringProperties):
+class SitarProperties(FormantBody, PluckedStringProperties):
     """GM 104. A long steel string over a curved bridge, and thirteen more
     strings underneath that nobody touches.
 
@@ -7487,6 +7491,18 @@ class SitarProperties(PluckedStringProperties):
     measurement to put in it, so it is left out rather than invented -- the
     same call as the electric guitars, where the amplifier is the colour.
     """
+    # an Indian instrument: a secondary tuning (ragas.py) tunes it, when set
+    tuning_family = 'indian'
+    # THE MEEND (tonelib.meend_cents): the wheel pulls the string UP across the
+    # fret, soft-locking on the swaras of the tuning in force (a secondary
+    # tuning's raga, else every key of the render's tuner), over a 7-semitone
+    # pull when the file sets no range of its own (Ben). meend_strength 0 is
+    # a plain bend; ~0.6 dwells; 1 nearly steps. The sympathetic strings do
+    # not bend: the string tuned to the starting note keeps ringing at its own
+    # pitch through a meend (Chiruthapudi, ISMIR 2022 LBD)
+    bend_detents = True
+    bend_range_semitones = 7.0
+    meend_strength = 0.6
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 4.50 s (5.00, 4.00, 5.00, 3.97), to our smoothstep's -40 dB at the same
@@ -7504,14 +7520,100 @@ class SitarProperties(PluckedStringProperties):
     # base's 1.0 is the part that makes it a jawari rather than a bright pluck.
     tonal_dampening = 0.55
     max_harmonic = 64
+    # A GOURD, by absolute frequency (FormantBody with no formants of its own:
+    # a flat floor, the colour all in body_trim_db, fitted below); the corner
+    # far above hearing, since the base had none
+    formant_floor = 1.0
+    bore_corner_hz = 1.0e6
+    bore_order = 1.0
+    # FITTED (pluck_fit.py --fit=body --take=ma, with the buzz's quick rise on; 2.9 dB): the Ma
+    # string's harmonics by where they sound at 0.1-0.3 s. A gourd that cannot
+    # radiate the 169 Hz fundamental (30 dB under h2-h5 in the take) and a top
+    # falling from 5 kHz. One string at one pitch puts one to three harmonics
+    # in each band, so the fit swung band to band: capped at +-24 dB and
+    # smoothed (1-2-1), and the 160 Hz band, which holds only that fundamental,
+    # set 24 dB under its neighbour rather than fitted (the fit ran it to -56)
+    body_trim_db = ((160, -7.3), (320, 16.7), (508, 10.0), (640, 6.8), (806, 8.0), (1016, 4.7),
+                    (1280, 2.2), (1613, 4.4), (2032, 1.4), (2560, -2.5), (3225, -4.8),
+                    (4064, -8.8), (5120, -9.6), (6451, -12.2), (8127, -19.1), (10240, -20.3),
+                    (12902, -15.2))
     # A SITAR RINGS FOR SECONDS, NOT FOR HALF A MINUTE. The first version had
     # 0.8, which is 32 s to fall 40 dB -- and since Q comes from the decay,
     # that put the modes at Q 12000 and made every sympathetic coupling
     # vanish. 5.0 is 7.3 s and Q 2800, which is still a very sharp resonance
     # and is what a long steel string on a light bridge actually is.
-    decay_db = 5.0
-    harmonic_decay_db = 0.45
+    # ...THEN MEASURED (examples/pluck_fit.py --fit=decay, Freesound: a Ma
+    # string struck four times at 169 Hz, CC0; chinpen's D4 at 291 Hz, ten
+    # strokes, CC BY 3.0): the low harmonics fall 4.5 dB/s at 169 Hz and 11 at
+    # 291, the top faster (h12 13 dB/s at 169). Rate, rise and a register
+    # slope fitted on both (h1-h12, 7.8 -> 4.6 dB/s rms, chinpen's own
+    # harmonic-to-harmonic scatter the most of what is left). THE SLOPE IS
+    # TWO SITARS: 1.67 an octave is the two takes' difference, and a player's
+    # stroke and an instrument's are in it as much as pitch
+    decay_db = 10.43
+    harmonic_decay_db = 0.6068
+    decay_register_slope = 1.668
     harmonic_decay_dampening = 0.0
+    # THE BUZZ IS THERE AT ONCE; THE BODY OF THE NOTE FALLS AWAY UNDER IT.
+    # Measured on the Ma take at 10 ms steps: the bands over 1.5 kHz are
+    # present from the pluck and near steady for 300 ms, while the band under
+    # 1 kHz drops ~9 dB in that time -- far faster than the 4.5 dB/s its
+    # fundamental decays at afterwards. A first reading of the bands RELATIVE
+    # to the low one took that for the top growing, and a late copy of the
+    # upper partials (the bloom) gave it a swell -- Ben: "a little slow ...
+    # interpolated a bit too much", the attack soft. So: no late copy, and a
+    # TWO-STAGE decay on the low partials instead (a prompt fall, then the
+    # fitted law as the remainder): prompt_dbs on every partial under
+    # prompt_max_hz, aftersound_share of it decaying at the law's own rate
+    # (pluck_fit.py --fit=prompt)
+    # (pluck_fit.py --fit=prompt --take=ma: 3.48 -> 3.05 dB on the bands'
+    # first 0.6 s, the low band's fall now the take's.) ...AND THE TOP DOES
+    # RISE, but QUICKLY and a little: 6-8 dB over the first 80-160 ms, then
+    # held -- a short late copy, barely scattered (--fit=quick: 3.05 ->
+    # 1.71 dB): 64 ms late, swelling in half that, 8 dB, centred at 4.4 kHz
+    bloom_banded = True
+    bloom_swell = 0.5
+    bloom_scatter = 0.2
+    bloom_seconds = 0.06418
+    bloom_gain = 2.542
+    bloom_center_hz = 4354.0
+    bloom_octaves = 1.6
+    # ...AND THE ONSET IS NOT A CLICK. With every partial starting in phase,
+    # the bright series summed to a spike at the pluck -- the band over 6 kHz
+    # 18 dB over its own level for 2 ms -- and to a pulse every cycle after it,
+    # swinging 15-20 dB, where the Ma take's top is level from the first 2 ms
+    # and steady (the jawari and the gourd scramble it). Each partial its own
+    # phase, and the attack 1.5 ms where it had the renderer's floor: the band's
+    # first 8 ms +3 -4 -6 -7 dB re its level, the take's -1 -8 -2 -3 (Ben:
+    # "now there is a click on the attack", once the slow swell no longer hid it)
+    partial_phase_spread = 1.0
+    attack_time = 0.0015
+    prompt_max_hz = 976.0
+    prompt_dbs = 26.26
+    aftersound_share = 0.2308
+
+    def harmonic_decay(self, harmonic):
+        base = super().harmonic_decay(harmonic)
+        if self.prompt_max_hz:
+            f = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+            if f < self.prompt_max_hz:
+                return max(base, self.prompt_dbs)
+        return base
+
+    def ring_decay(self, harmonic):
+        """The string's RING: the decay law without the prompt fall -- what
+        a sympathetic string rings at, and its resonance's width (Q)."""
+        return super().harmonic_decay(harmonic)
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        if self.prompt_max_hz and self.aftersound_share > 0.0 and f0 * m < self.prompt_max_hz:
+            return (self.aftersound_share, super().harmonic_decay(m))
+        return (0.0, decay_rate)
+
+    # HELD at its level before the fit (-58.94 dB, the mean of G3-C5's first
+    # second at velocity 100), after the gourd, the buzz's quick rise and the
+    # prompt fall moved it
+    initial_gain = 0.02 * 10 ** (-0.395 / 20.0)
     inharmonicity_coefficient = 3.0e-05     # long steel, estimated
 
     # THIRTEEN TARAF STRINGS under the frets, tuned to the raga and not
@@ -16726,6 +16828,48 @@ def channel_pitch_ratio(range_st, wheel, coarse_st, fine_cents,
     return 2.0 ** (st / 12.0)
 
 
+def meend_cents(pull_cents, detents, strength):
+    """A MEEND: a string pulled across its fret, dwelling on the swaras it
+    passes (Ben: "pitch bend can pitch-lock to scale notes in-between").
+
+    PULL_CENTS is where a plain bend would put the pitch, above the played
+    note; DETENTS the swaras above it within the pull, in cents above it,
+    ascending, 0 (the note itself) first; STRENGTH 0..1 how much of each span's
+    travel holds: within each span, STRENGTH/2 of it at each end stays on that
+    end's swara and the middle moves on a smoothstep -- a soft lock, not a
+    snap, which would sound as a fret change. Past the last detent the pitch
+    holds there. Below zero: no pull (a string only rises from its fret).
+    Returns the pitch in cents above the note."""
+    if pull_cents <= 0.0 or not detents:
+        return 0.0
+    if strength <= 0.0:
+        return pull_cents
+    for a, b in zip(detents[:-1], detents[1:]):
+        if pull_cents <= b:
+            u = (pull_cents - a) / max(b - a, 1e-9)
+            h = 0.5 * min(strength, 0.98)
+            if u <= h:
+                return a
+            if u >= 1.0 - h:
+                return b
+            v = (u - h) / (1.0 - 2.0 * h)
+            return a + (b - a) * v * v * (3.0 - 2.0 * v)
+    return detents[-1]
+
+
+def meend_detents(note_cents_re_sa, swara_cents, range_cents):
+    """The swaras a pull from a note at NOTE_CENTS_RE_SA can reach: [0, ...]
+    in cents above the note, within RANGE_CENTS, from SWARA_CENTS (re Sa, one
+    octave, the raga's) repeated in every octave."""
+    out = [0.0]
+    for k in range(-1, 4):
+        for c in swara_cents:
+            d = c + 1200.0 * k - note_cents_re_sa
+            if 1.0 < d <= range_cents + 1e-6:
+                out.append(d)
+    return sorted(set(round(x, 6) for x in out))
+
+
 # Master Volume, Universal Realtime F0 7F dd 04 01 ll mm F7. Roland's text says
 # the LSB "will be handled as 00H"; it is read here, since a device that uses
 # it is not wrong. The LAW is the one CC7 uses, squared, because the GM 2 text
@@ -16748,6 +16892,10 @@ bagpipe_drones = int(os.environ.get("TUNING_BAGPIPE_DRONE", "3") or 3)
 # 440 is the fallback and the equal-tempered answer, so nothing that never sets
 # it moves. See BagpipeProperties.drone_ratios.
 bagpipe_tonic_hz = 440.0
+# THE SECONDARY TUNING (ragas.py), published by blockrender.prepare as the
+# bagpipe's tonic is: Sa's MIDI note and the spec, or None when there is none
+raga_sa_note = None
+raga_spec = None
 
 
 class ShanaiProperties(ReedPipeProperties):
@@ -16765,6 +16913,8 @@ class ShanaiProperties(ReedPipeProperties):
 
     ASSERTED, NOT MEASURED.
     """
+    # an Indian instrument: a secondary tuning (ragas.py) tunes it, when set
+    tuning_family = 'indian'
     odd_only = False
     even_harmonic_db = None
     # A shehnai player CAN tongue, so this is a slur they elect -- the clarinet's
@@ -19546,7 +19696,11 @@ def _mode_bandwidth(p, harmonic):
     6.2 dB/s is 0.11 Hz wide, a Q above two thousand. That sharpness is the
     whole reason coincidence and contact give different answers.
     """
-    r = max(p.harmonic_decay(harmonic), 1e-6)
+    # the string's RING, where a voice tells it from its note's prompt fall
+    # (SitarProperties.ring_decay): a string answering in sympathy rings at
+    # its long-term rate, and the prompt is the plucked note's body falling
+    _rd = getattr(p, 'ring_decay', None)
+    r = max(_rd(harmonic) if _rd is not None else p.harmonic_decay(harmonic), 1e-6)
     tau = 8.685889638 / r
     return 1.0 / (2.0 * _pi * tau)
 

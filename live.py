@@ -2483,6 +2483,11 @@ class Patch:
         _vc = self._voice_class(note)
         t["panel"] = _MG.panel_of(_vc) if getattr(_vc, "moog", False) else None
         t["room_q"] = p.get("room_q")      # what the live room's Q is built from
+        # THE SYMPATHETIC STRINGS' ROWS, which a meend leaves at their own pitch
+        t["sym"] = np.zeros(int(t["P"]), bool)
+        _sr = p.get("sym_rows")
+        if _sr and _sr[1] > _sr[0]:
+            t["sym"][_sr[0]:min(_sr[1], int(t["P"]))] = True
         nf = t["nf"].astype(np.float64)
         # An unmapped drum note builds NOTHING: percussion_for_note has no
         # voice for it and prepare() emits no partials. A zero-partial
@@ -2621,6 +2626,25 @@ def pin_patches(keys):
 _PART_IDS = itertools.count(1)
 
 
+def tuner_for(program, drums, tuner, eastern):
+    """The tuner a part plays: its own (TUNER), unless the rig has a
+    secondary (Eastern) tuning (ragas.py) and the part's voice is an Indian
+    instrument (tonelib tuning_family) -- then that, with Sa at the part's own
+    tuner's pitch for its key, as the file renderer's eastern= places it. A
+    part whose own tuner is already a raga's keeps it: chosen for that part."""
+    if not eastern or drums or str(tuner).lower().startswith("raga:"):
+        return tuner
+    pc = __import__("patch_map").property_class_for_program(int(program))
+    if getattr(pc, "tuning_family", None) != "indian":
+        return tuner
+    import ragas
+    _sys, _raga, _key, _hz = ragas.parse(eastern)
+    if _hz is not None:
+        return eastern
+    _f = B.tuning_table(tuner).get(ragas.sa_note(_key))
+    return "%s:%.6f" % (eastern, _f) if _f else eastern
+
+
 class Part:
     """One patch assignment: a Patch, listening on a channel over a key range.
 
@@ -2652,6 +2676,11 @@ class Part:
         # synth panned apart, as on Journey's "Separate Ways" -- needs each
         # part seated where the desk put it; the channel's CC10 then leaves it.
         self.pan = None
+        # THE PART'S OWN TUNER, as chosen: the render's, or a raga picked for
+        # this part. Its patch may sound a DERIVED one -- the rig's secondary
+        # (Eastern) tuning, for an Indian instrument -- which is never saved as
+        # the part's choice and never outlives the voice it was derived for
+        self.base_tuner = patch.tuner
         self.set_patch(patch)
 
     def set_patch(self, patch):
@@ -2707,7 +2736,7 @@ class Part:
         return bool(self.fixed_touch)
 
     def to_dict(self):
-        d = dict(program=self.program, drums=self.drums, tuner=self.tuner,
+        d = dict(program=self.program, drums=self.drums, tuner=self.base_tuner,
                  channel=self.channel, lo=self.lo, hi=self.hi,
                  transpose=self.transpose, level_db=self.level_db,
                  muted=self.muted, drawn=sorted(self.drawn))
@@ -2726,11 +2755,14 @@ class Part:
         return d
 
     @staticmethod
-    def from_dict(d, progress=None):
+    def from_dict(d, progress=None, eastern=None):
+        _base = d.get("tuner", "hybrid")
         patch = patch_for(d.get("program", 56), d.get("drums", False),
-                        d.get("tuner", "hybrid"), progress)
+                          tuner_for(d.get("program", 56), d.get("drums", False), _base, eastern),
+                          progress)
         p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
+        p.base_tuner = _base
         p.muted = bool(d.get("muted", False))
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
@@ -2764,10 +2796,14 @@ class Part:
 class Live:
     def __init__(self, program=56, rate=48000, frames=128, capacity=16384,
                  tuner="hybrid", verbose=True, drums=False, headroom_db=4.0,
-                 parts=None, threads=1, gpu=False):
+                 parts=None, threads=1, gpu=False, eastern=None):
         B.set_sample_rate(rate)
         B.BLK = frames          # see BLOCK ALIGNMENT in the module docstring
         self.rate, self.frames, self.tuner = rate, frames, tuner
+        # THE SECONDARY TUNING (ragas.py): a part whose voice is an Indian
+        # instrument plays it, the rest the part's own tuner -- as the file
+        # renderer's eastern= does. None = off.
+        self.eastern = eastern
         self.verbose = verbose
         # THE REGISTER IS THOUSANDS OF ROWS: a pedalled piano's free strings,
         # one per string mode -- room made for them when it is on
@@ -2796,7 +2832,9 @@ class Live:
         # which is atomic under the GIL: the callback sees the old tuple or the
         # new one, never a half-built one. See set_parts().
         if parts is None:
-            parts = (Part(Patch(program, bool(drums), tuner)),)
+            _p0 = Part(Patch(program, bool(drums), self._tuner_for(program, bool(drums), tuner)))
+            _p0.base_tuner = tuner          # the rig's tuner; its patch may sound the Eastern one
+            parts = (_p0,)
         self.parts = tuple(parts)
         # WHICH KEYS ARE DOWN, tracked explicitly. It used to be inferred from
         # what the slab was sounding, which is not the same thing: the crescendo
@@ -2919,6 +2957,7 @@ class Live:
         import mts as _MTSm
         self.mts = _MTSm.TuningStore()
         self.mts_at = {}        # (pid, channel, key) -> MTS ratio last applied
+        self.meend_at = {}      # note key -> (meend ratio last applied, its sympathetic mask)
         # CC71-78: channel -> {control name: d}, only the ones not at 64.
         self.snd = {}
         self.nrpn = {}          # channel -> the NRPN selected, for GS's sound NRPNs
@@ -3904,7 +3943,7 @@ class Live:
                 if not self._listens(part, ch):
                     continue
                 _pd = _dr if (_said and part.channel == ch) else part.drums
-                want = (_prog, _pd, part.tuner)
+                want = (_prog, _pd, self._tuner_for(_prog, _pd, part.base_tuner))
                 if (part.patch.program, part.patch.drums, part.patch.tuner) == want:
                     continue
                 self.patch_reqs.append((part.pid, want))
@@ -4148,6 +4187,11 @@ class Live:
         _pf, _pabs = self._pn_want(part, ch, note)
         self.pn_at[(part.pid, ch, note)] = (_pf, _pabs)
         b = self.bend.get(ch, 1.0) * (_pf if _pabs else self._key_ratio(part, ch, note) * _pf)
+        # ...OR A MEEND'S, for a voice that locks its bend to the tuning's swaras
+        _mr = self._meend_ratio(part, ch, note)
+        if _mr is not None:
+            b = b / self.bend.get(ch, 1.0) * _mr
+            self.meend_at[key] = (_mr, tmpl.get("sym"))
         # ...AND A MESSENGER PLAYING THIS NOTE IS PUT ON THE SAME PITCH
         self.messenger_pitch(part, ch, note)
         if str(part.patch.tuner).lower() == 'gm2' and not _pabs:
@@ -4673,6 +4717,28 @@ class Live:
         ref = F[n] if 0 <= n < len(F) and F[n] > 0.0 else float(nf.min())
         hz = float(nf[int(np.argmin(np.abs(np.log(np.maximum(nf, 1e-6) / ref))))])
         return hz if ch is None else hz * self._key_ratio(part, ch, n)
+
+    def _tuner_for(self, program, drums, tuner):
+        """The tuner a part with this program plays (tuner_for)."""
+        return tuner_for(program, drums, tuner, self.eastern)
+
+    def set_eastern(self, spec):
+        """THE SECONDARY (EASTERN) TUNING, changed while playing: every part
+        whose voice is an Indian instrument is rebuilt in it (or back in its
+        own, with None), through the patch worker as a program change is --
+        notes sounding keep the voice they started in."""
+        if spec:
+            import ragas
+            ragas.parse(spec)               # refuse a bad spec before anything moves
+        self.eastern = spec or None
+        for part in self.parts:
+            want = (part.program, part.drums,
+                    self._tuner_for(part.program, part.drums, part.base_tuner))
+            if (part.patch.program, part.patch.drums, part.patch.tuner) != want:
+                self.patch_reqs.append((part.pid, want))
+        if self.patch_reqs:
+            self.patch_go.set()
+        self.dirty = True
 
     def master_gain(self, L, R, n):
         """Master Volume on one block, ramped toward the last value asked for.
@@ -5468,11 +5534,17 @@ class Live:
             self._mpe_repitch(ch, ratio, n0)
             return
         prev = self.bend.get(ch, 1.0)
+        here = [p for p in self.parts if self._listens(p, ch)]
+        # A MEEND MOVES EACH NOTE BY ITS OWN SWARAS (tonelib.meend_cents), so
+        # its parts are retuned key by key and kept out of the channel's ratio
+        _mee = {p.pid for p in here if self._meend_part(p)}
+        if _mee:
+            self._meend_retune(ch, _mee, n0)
+            here = [p for p in here if p.pid not in _mee]
         if ratio == prev:
             return
         self.bend[ch] = ratio
         self._messenger_rebend(ch)
-        here = [p for p in self.parts if self._listens(p, ch)]
         rotors = [p for p in here if p.patch.leslie]
         if rotors:
             # A layered rig can have a Hammond and a lead on one channel, and
@@ -5483,8 +5555,67 @@ class Live:
                                  om_scale=ratio / prev)
                 self._repitch_amp(keep, n0, ratio / prev)
         else:
-            self.slab.retune(self._sounding(ch), n0, om_scale=ratio / prev)
+            self.slab.retune(self._sounding(ch, pids={p.pid for p in here}) if _mee
+                             else self._sounding(ch), n0, om_scale=ratio / prev)
             self._repitch_amp({p.pid for p in here}, n0, ratio / prev)
+
+    # ---- THE MEEND, live (tonelib.meend_cents; blockrender's _MEEND_AT) --------
+    def _meend_part(self, part):
+        pc = None if part.drums else __import__("patch_map").property_class_for_program(part.patch.program)
+        return bool(getattr(pc, "bend_detents", False))
+
+    def _meend_ratio(self, part, ch, note):
+        """This note's pitch ratio under the wheel, as a meend: the tuning's
+        swaras above it (the part's raga, else every key of its tuner), Sa the
+        raga's or the class's, over the channel's RPN 0 range or the class's
+        own -- what the file renderer computes per note. None for a voice
+        without detents."""
+        pc = part.patch._voice_class(note + part.transpose)
+        if not getattr(pc, "bend_detents", False):
+            return None
+        F = part.patch.freqs()
+        n = note + part.transpose
+        tun = str(part.patch.tuner).lower()
+        if tun.startswith("raga:"):
+            import ragas
+            sy, rg, key, _ = ragas.parse(tun)
+            sa = ragas.sa_note(key)
+            sw = [c for _, c in ragas.swaras(sy, rg)]
+        else:
+            sa = int(getattr(pc, "sympathetic_tonic", 60))
+            sw = [1200.0 * math.log2(F[sa + k] / F[sa]) for k in range(12)]
+        if not (0 <= n < len(F) and 0 <= sa < len(F)) or F[n] <= 0 or F[sa] <= 0:
+            return None
+        rng = self.brange.get(ch)
+        if rng is None:
+            rng = float(getattr(pc, "bend_range_semitones", self.bend_range))
+        det = T.meend_detents(1200.0 * math.log2(F[n] / F[sa]), sw, 100.0 * rng)
+        pull = 100.0 * rng * self.wheel.get(ch, 0) / 8192.0
+        rest = T.channel_pitch_ratio(rng, 0, self.coarse.get(ch, 0.0), self.fine.get(ch, 0.0),
+                                     self.master_coarse, self.master_fine)
+        return rest * 2.0 ** (T.meend_cents(pull, det, float(getattr(pc, "meend_strength", 0.6))) / 1200.0)
+
+    def _meend_retune(self, ch, pids, n0):
+        """Move each sounding meend note to its own ratio -- its played rows
+        only: the sympathetic strings keep their pitch (a string tuned to the
+        starting note rings on through the pull)."""
+        by = {p.pid: p for p in self.parts}
+        for k, slots in list(self.slab.live.items()):
+            if k[0] not in pids or k[1] != ch or k[3] is not None or not slots:
+                continue
+            got = self.meend_at.get(k)
+            if got is None:
+                continue
+            r = self._meend_ratio(by[k[0]], ch, k[2])
+            if r is None or r == got[0]:
+                continue
+            idx = list(slots)
+            sym = got[1]
+            if sym is not None and len(sym) == len(idx):
+                idx = [i for i, m in zip(idx, sym) if not m]
+            if idx:
+                self.slab.retune(idx, n0, om_scale=r / got[0])
+            self.meend_at[k] = (r, sym)
 
     def _mpe_repitch(self, ch, ratio, n0):
         """MPE's pitch: a note's bend is its member's plus its manager's, in
@@ -6032,7 +6163,7 @@ class Live:
             self._resota(ch, n0)
         self.cgain.clear()
         for part in self.parts:
-            want = (0, part.drums, part.tuner)
+            want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner))
             if (part.patch.program, part.patch.drums, part.patch.tuner) != want:
                 self.patch_reqs.append((part.pid, want))
         if self.patch_reqs:
@@ -6896,6 +7027,8 @@ def preset_from(live):
         messenger_firmware=getattr(live, "messenger_firmware", "1.0.7+"),
         messenger_port=getattr(live, "messenger_port", None),
         messenger_bend=getattr(live, "messenger_bend", 2.0),
+        # the secondary (Eastern) tuning, ragas.py's spec, or None
+        eastern=getattr(live, "eastern", None),
     )
 
 
@@ -6915,7 +7048,11 @@ def save_preset(name, live, path=PRESET_PATH):
 
 def apply_preset(live, preset, progress=None):
     """Rebuild the part set from a preset. BLOCKS while patches build."""
-    parts = [Part.from_dict(pd, progress) for pd in preset.get("parts", [])]
+    # the rig's secondary (Eastern) tuning, before the parts it tunes are built
+    if "eastern" in preset:
+        live.eastern = preset.get("eastern") or None
+    parts = [Part.from_dict(pd, progress, getattr(live, "eastern", None))
+             for pd in preset.get("parts", [])]
     if not parts:
         return
     live.set_parts(parts)
@@ -8237,9 +8374,11 @@ def selftest():
     # Q COMES FROM THE DECAY, so an unphysical ring makes an unphysical
     # resonance: at the first draft's 0.8 dB/s the modes were Q 12000 and
     # nothing could couple to anything.
+    # (its RING: the law without the note's prompt fall, which the measured
+    # sitar has -- the body dropping away under the buzz)
     check("...and it rings for seconds, not half a minute",
-          3.0 < 40.0 / _si.harmonic_decay(1) < 15.0,
-          "  (%.1f s to fall 40 dB)" % (40.0 / _si.harmonic_decay(1)))
+          3.0 < 40.0 / _si.ring_decay(1) < 15.0,
+          "  (%.1f s to fall 40 dB)" % (40.0 / _si.ring_decay(1)))
 
     # THE PREDICTION, AND IT IS A LARGE ONE. Coincidence needs the driver's
     # partial to land INSIDE the responder's resonance, which at Q 2800 is a
@@ -9901,6 +10040,149 @@ def selftest():
           len(set(_cnt)) > 1,
           "  (off-series partials per strike %s -- it used to be the FIRST "
           "note's answer, reused for every note after it)" % _cnt)
+
+    # ---- INDIAN INTONATION, A SECONDARY TUNING (ragas.py) --------------------
+    # Measured Hindustani intonation is not one just table (Serra 2011: sung
+    # intervals nearer equal; Bel: Todi near Pythagorean), so a tuning is a
+    # SYSTEM of swara positions on a movable Sa, and it tunes the Indian
+    # instruments while the rest keep the render's tuner.
+    import ragas as _RGs
+    import blockrender as _Bra
+    _tt = _RGs.table("raga:bel_todi/todi@c#")
+    _tc = [1200.0 * _math.log2(_tt[61 + _i] / _tt[61]) for _i in range(12)]
+    _J = _Bra.tuning_table("just")
+    _jt = _RGs.table("raga:just5@c")
+    _jd = [1200.0 * _math.log2(_jt[_n] / _J[_n]) for _n in range(36, 96)]
+    check("an Indian tuning is a system's swaras on a movable Sa",
+          max(abs(_a - _b) for _a, _b in zip(_tc, _RGs.SYSTEMS["bel_todi"]["cents"])) < 1e-6
+          and max(_jd) - min(_jd) < 1e-6,
+          "  (Todi on C#: re %.0f, ga %.0f, dha %.0f, Ni %.0f cents, as Bel measured; just5 on C is "
+          "JustTuner's ratios)" % (_tc[1], _tc[3], _tc[8], _tc[11]))
+
+    def _mix(eastern, notes=(61, 65)):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        for _ch, _pg in ((0, 104), (1, 0)):
+            _t = mido.MidiTrack(); _m.tracks.append(_t)
+            _t.append(mido.Message("program_change", channel=_ch, program=_pg, time=0))
+            for _n in notes:
+                _t.append(mido.Message("note_on", channel=_ch, note=_n, velocity=90, time=0))
+                _t.append(mido.Message("note_off", channel=_ch, note=_n, velocity=0, time=480))
+        _Bra.EASTERN = eastern
+        try:
+            _p = _Bra.prepare(_m)
+        finally:
+            _Bra.EASTERN = None
+        _nf, _mc, _no = np.asarray(_p["nf"]), np.asarray(_p["mch"]), np.asarray(_p["non"])
+        _o = {}
+        for _ch in (0, 1):
+            for _k, (_t0, _w) in enumerate(((0.0, 277.18), (0.5, 349.23))):
+                _sel = np.flatnonzero((_mc == _ch) & (np.abs(_no / _Bra.SR - _t0) < 0.02))
+                _o[(_ch, _k)] = float(_nf[_sel[np.argmin(np.abs(np.log(_nf[_sel] / _w)))]])
+        return _o
+    _o0, _o1 = _mix(None), _mix("raga:pythagorean@c#")
+    _ga = 1200.0 * _math.log2(_o1[(0, 1)] / _o1[(0, 0)])
+    check("...and as a SECONDARY tuning it moves the Indian instrument only",
+          abs(_ga - 1200.0 * _math.log2(81.0 / 64.0)) < 1.0
+          and _o0[(1, 0)] == _o1[(1, 0)] and _o0[(1, 1)] == _o1[(1, 1)],
+          "  (the sitar's Ga %.1f cents over Sa, Pythagorean; the piano's notes unchanged)" % _ga)
+    # ...AND THE SYMPATHETIC STRINGS ARE TUNED ON SA, wherever Sa is: they
+    # were pinned to C because the just tuner's tonic was
+    import sympathetic as _SYMs
+    _was_sa = _T.raga_sa_note
+    try:
+        _T.raga_sa_note = 62
+        _td = _RGs.table("raga:just5@d")
+        _sp = _T.SitarProperties(_td[62], 0.0, 1.0, 1.0)
+        _rs = _SYMs.responders(_sp, _td, f0=_td[62])
+        _okd = all((62 + _s) - 62 in [_o for _o in _T.SitarProperties.sympathetic_strings] for _s, _ in _rs)
+    finally:
+        _T.raga_sa_note = _was_sa
+    check("...and the sitar's sympathetic strings are tuned on that Sa",
+          _rs and _okd,
+          "  (Sa on D: %d strings answer a struck Sa, each at its offset from D)" % len(_rs))
+
+    # THE MEEND (tonelib.meend_cents): the wheel pulls the string UP across the
+    # fret and the pitch dwells on the tuning's swaras -- Ben's soft lock.
+    _det = _T.meend_detents(0.0, [_c for _, _c in _RGs.swaras("just5", "bilaval")], 700.0)
+    _held = [_T.meend_cents(_p, _det, 0.6) for _p in (204.0 * 0.9, 204.0 * 1.1, 386.0 * 1.02, 498.0 * 1.05)]
+    check("a meend dwells on the raga's swaras and only pulls up",
+          abs(_held[0] - 204.0) < 3.0 and abs(_held[1] - 204.0) < 3.0
+          and abs(_held[2] - 386.31) < 3.0 and abs(_held[3] - 498.04) < 3.0
+          and _T.meend_cents(-300.0, _det, 0.6) == 0.0 and 316.0 not in [round(_d) for _d in _det],
+          "  (a pull near Re, Ga, Ma holds on them; below the fret does nothing; "
+          "komal ga, not in Bilaval, is no detent)")
+
+    def _meend_file():
+        _m = mido.MidiFile(type=1, ticks_per_beat=480); _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+        _t.append(mido.Message("program_change", channel=0, program=104, time=0))
+        _t.append(mido.Message("note_on", channel=0, note=61, velocity=100, time=0))
+        _t.append(mido.Message("pitchwheel", channel=0, pitch=3000, time=480))
+        _t.append(mido.Message("note_off", channel=0, note=61, velocity=0, time=480))
+        return _m
+    _Bra.EASTERN = "raga:just5/bilaval@c#"
+    try:
+        _pm = _Bra.prepare(_meend_file())
+    finally:
+        _Bra.EASTERN = None
+    _br = np.asarray(_pm["br"]); _s0, _s1 = _pm["sym_rows"]
+    _rows = sorted({int(_x) for _x in _br[:_s0] if _x >= 0})
+    _fr = float(_pm["BR"][_rows[0]][int(0.8 * _Bra.SR / _Bra.BLK)]) if _rows else 0.0
+    _symbent = bool((_br[_s0:_s1] >= 0).any())
+    lvm = Live(program=104, rate=_Bra.SR, frames=_Bra.BLK, tuner="hybrid440", verbose=False,
+               eastern="raga:just5/bilaval@c#"); lvm.warm()
+    lvm.on_midi(mido.Message("note_on", channel=0, note=61, velocity=100)); lvm.apply(0)
+    _km = [_k for _k in lvm.slab.live if _k[2] == 61 and _k[3] is None][0]
+    lvm.on_midi(mido.Message("pitchwheel", channel=0, pitch=3000)); lvm.apply(0)
+    _lr = lvm.meend_at[_km][0]
+    lvm.renderer.close()
+    check("...and the file and live pull it to the same pitch, the strings unbent",
+          _rows and abs(1200.0 * _math.log2(_fr / _lr)) < 0.5 and not _symbent,
+          "  (wheel 3000 of 8191 over 7 semitones: file %.1f, live %.1f cents; sympathetic rows "
+          "%s)" % (1200.0 * _math.log2(max(_fr, 1e-9)), 1200.0 * _math.log2(_lr),
+                   "bent" if _symbent else "unbent"))
+
+    # THE RIG'S EASTERN TUNING, live (Live.set_eastern; the panel's E): every
+    # Indian voice's part plays it, the rest keep their own tuner; the session
+    # keeps it and each part's OWN choice; a program change to a Western voice
+    # goes back to the part's own tuner, not the derived one.
+    lve = Live(program=0, rate=48000, frames=128, tuner="hybrid440", verbose=False)
+    lve.set_parts([Part(patch_for(104, False, "hybrid440"), channel=0),
+                   Part(patch_for(0, False, "hybrid440"), channel=1)])
+    lve.set_eastern("raga:bel_todi/todi@c#")
+    _t0 = time.time()
+    while time.time() - _t0 < 120 and lve.parts[0].tuner == "hybrid440":
+        lve.apply(0)
+        time.sleep(0.1)
+    # ...AND THE WORKER DONE WARMING before anything else builds: it warms
+    # OUTSIDE the patch lock, and a second build running beside it (this
+    # test's preset reload) has been seen to leave the renderer's state wrong
+    # for later builds -- the charang's distortion went to nothing
+    while time.time() - _t0 < 300 and (lve.patch_busy or lve.patch_label or lve.patch_reqs):
+        lve.apply(0)
+        time.sleep(0.1)
+    _east = [p.tuner for p in lve.parts]
+    _pre = preset_from(lve)
+    lve2 = Live(program=0, rate=48000, frames=128, tuner="hybrid440", verbose=False)
+    apply_preset(lve2, _pre)
+    # (the worker told to stop FIRST: the request is read, not built -- a build
+    # left running in the background shares the renderer's globals with every
+    # check after this one, and turned the charang's distortion off)
+    lve.patch_stop = True
+    lve.on_midi(mido.Message("program_change", channel=0, program=0)); lve.apply(0)
+    _back = [_w for _, _w in lve.patch_reqs][:1]
+    lve.shutdown(); lve2.shutdown()
+    # ...and WAITED FOR: shutdown only flags the worker, and a template build
+    # already running would go on setting the renderer's globals
+    lve.patch_thread.join(120); lve2.patch_thread.join(120)
+    check("the rig's Eastern tuning tunes its Indian voices and no others",
+          _east[0].startswith("raga:bel_todi/todi@c#") and _east[1] == "hybrid440"
+          and _pre.get("eastern") == "raga:bel_todi/todi@c#"
+          and [d["tuner"] for d in _pre["parts"]] == ["hybrid440", "hybrid440"]
+          and lve2.parts[0].tuner == _east[0] and lve2.parts[1].tuner == "hybrid440"
+          and _back == [(0, False, "hybrid440")],
+          "  (the sitar's part on %s, the piano's on its own; kept by the session; "
+          "a program change to a piano goes back to the part's own)" % _east[0])
 
     # ---- CC71-78, THE SOUND CONTROLLERS -------------------------------------
     #
@@ -14547,6 +14829,8 @@ def main():
     ap.add_argument("--frames", type=int, default=128,
                 help="audio block; also becomes the kernel control block (see docstring)")
     ap.add_argument("--tuner", default="hybrid")
+    ap.add_argument("--eastern", default=None,
+                    help="a secondary tuning for the Indian instruments, e.g. raga:bel_todi/todi@c# (ragas.py)")
     ap.add_argument("--drums", action="store_true", help="GM percussion: notes are drums, not pitches")
     ap.add_argument("--headroom", type=float, default=4.0, help="dB of headroom (live cannot normalise)")
     ap.add_argument("--capacity", type=int, default=16384, help="partial slots (layering needs more)")
@@ -14606,7 +14890,7 @@ def main():
     # a build that does not glitch.
     sys.setswitchinterval(0.0005)
 
-    live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner,
+    live = Live(program=a.program, rate=a.rate, frames=a.frames, tuner=a.tuner, eastern=a.eastern,
                 drums=a.drums, headroom_db=a.headroom, capacity=a.capacity,
                 threads=a.threads, gpu=a.gpu, verbose=not a.tui)
     if a.gpu:
