@@ -1,0 +1,17 @@
+# Ben's brother's 7.1.4, as described (2026-09-07), channels in CICP 19 order.
+# az anticlockwise (positive = LEFT), el above horizontal. Two readings to confirm:
+#   rears "50" and "52" taken from the BACK wall -> 130 and 128
+#   heights "13 up" and "24 up" taken from the horizontal (not 77 / 66)
+speakers:
+  - {channel: 0,  names: M+030, position: {az: 24.0,   el: 0.0, r: 1.0}}
+  - {channel: 1,  names: M-030, position: {az: -24.0,  el: 0.0, r: 1.0}}
+  - {channel: 2,  names: M+000, position: {az: 0.0,    el: 0.0, r: 1.0}}
+  - {channel: 3,  names: LFE1}
+  - {channel: 4,  names: M+135, position: {az: 130.0,  el: 0.0, r: 1.0}}
+  - {channel: 5,  names: M-135, position: {az: -130.0, el: 0.0, r: 1.0}}
+  - {channel: 6,  names: M+090, position: {az: 90.0,   el: 0.0, r: 1.0}}
+  - {channel: 7,  names: M-090, position: {az: -90.0,  el: 0.0, r: 1.0}}
+  - {channel: 8,  names: U+045, position: {az: 38.0,   el: 13.0, r: 1.0}}
+  - {channel: 9,  names: U-045, position: {az: -38.0,  el: 13.0, r: 1.0}}
+  - {channel: 10, names: U+135, position: {az: 128.0,  el: 24.0, r: 1.0}}
+  - {channel: 11, names: U-135, position: {az: -128.0, el: 24.0, r: 1.0}}

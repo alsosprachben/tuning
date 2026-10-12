@@ -208,6 +208,37 @@ def write_adm(path, signals, meta, sample_rate, bits=24, programme='render'):
     return n, ch, duration
 
 
+class _Mapped:
+    """A mono WAV's samples as floats, read from disk a slice at a time.
+
+    write_adm only ever slices a second at a time, so nothing needs the whole
+    signal in memory: 30 organ ranks over seven minutes are 4.4 GB as float64,
+    on a machine with 7."""
+
+    def __init__(self, raw, scale):
+        self.raw, self.scale = raw, scale
+
+    def __len__(self):
+        return len(self.raw)
+
+    def __getitem__(self, sl):
+        return self.raw[sl].astype(np.float64) / self.scale
+
+
+def _data_offset(path):
+    """Byte offset of the WAV's data chunk (the wave module does not say)."""
+    with open(path, 'rb') as fh:
+        fh.seek(12)
+        while True:
+            head = fh.read(8)
+            if len(head) < 8:
+                raise SystemExit("%s: no data chunk" % path)
+            tag, size = head[:4], struct.unpack('<I', head[4:])[0]
+            if tag == b'data':
+                return fh.tell()
+            fh.seek(size + (size & 1), 1)
+
+
 def read_mono(path):
     """One channel of a WAV as floats. An object render is already mono; a stem
     is not, and averaging one would fold a placed source back to a point, so
@@ -215,18 +246,18 @@ def read_mono(path):
     w = wave.open(path, 'rb')
     n, sw, sr, nch = (w.getnframes(), w.getsampwidth(),
                       w.getframerate(), w.getnchannels())
-    data = w.readframes(n)
     w.close()
     if sw == 4:
-        a = np.frombuffer(data, '<i4').astype(np.float64) / 2147483647.0
+        dt, scale = '<i4', 2147483647.0
     elif sw == 2:
-        a = np.frombuffer(data, '<i2').astype(np.float64) / 32767.0
+        dt, scale = '<i2', 32767.0
     else:
         raise SystemExit("%s: unsupported sample width %d" % (path, sw))
     if nch != 1:
         raise SystemExit("%s has %d channels; ADM objects are mono -- render "
                          "with --objects, not --stems" % (path, nch))
-    return a, sr
+    raw = np.memmap(path, dt, 'r', offset=_data_offset(path), shape=(n,))
+    return _Mapped(raw, scale), sr
 
 
 def main(argv):
