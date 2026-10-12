@@ -10,11 +10,11 @@ carries both: a plain multichannel WAV with two extra RIFF chunks --
     axml   the ADM metadata itself (ITU-R BS.2076), as XML
 
 and it is the one worth writing because it is the common input to everything
-else. Dolby's renderer ingests it, and so do the MPEG-H authoring tools, which
-matters because neither Atmos nor MPEG-H can be encoded from here: Atmos needs
-a licensed encoder, and Fraunhofer's open MPEG-H release is a decoder. ADM BWF
-is an open ITU standard with no such gate, so this is the furthest the pipeline
-can go on its own -- and far enough, since it is what the licensed tools eat.
+else. Dolby's renderer ingests it, and so do the MPEG-H authoring tools and
+the EBU's open renderer (EAR). Atmos cannot be encoded from here -- it needs a
+licensed encoder -- but MPEG-H can: Ittiam's libmpeghe is an open-source
+encoder (no patent grant), and examples/immersive.py takes this file through
+EAR to a 7.1.4 bed and on to MPEG-H.
 
 Coordinates. The model puts the listener at the origin with +x right, +y
 forward and +z up, in metres. ADM's polar convention has azimuth 0 ahead and
