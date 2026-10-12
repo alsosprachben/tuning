@@ -3,7 +3,12 @@
 
     python3 examples/immersive.py OBJECTS_DIR DRY.wav OUTDIR LAYOUT.yaml
             (e.g. examples/brother_714.yaml)
-            [--room church] [--br 1024000]
+            [--room church] [--br 1024000] [--clean]
+
+--clean deletes each intermediate once the next stage has it (the object WAVs
+after the ADM BWF, the direct bed after the mix, the decoded check after the
+check): a 12-minute piece is 6 GB of objects and 6 GB of ADM, and without it
+both sit on disk with everything after them.
 
 OBJECTS_DIR is `blockrender --objects DIR --by-source --no-reflect`; DRY.wav is
 the same score rendered the ordinary way (stereo, with its .room.json), which
@@ -188,12 +193,19 @@ def main(argv):
     objdir, dry, outdir, layout = argv[1:5]
     room = argv[argv.index('--room') + 1] if '--room' in argv else 'church'
     br = argv[argv.index('--br') + 1] if '--br' in argv else '1024000'
+    clean = '--clean' in argv
     os.makedirs(outdir, exist_ok=True)
     stem = os.path.splitext(os.path.basename(dry))[0].replace('.dry', '')
 
     adm = os.path.join(outdir, stem + '.adm.wav')
-    if not os.path.exists(adm) or os.path.getmtime(adm) < os.path.getmtime(objdir):
+    import glob
+    _man = glob.glob(os.path.join(objdir, '*.objects.json'))
+    if not os.path.exists(adm) or not _man or os.path.getmtime(adm) < os.path.getmtime(_man[0]):
         run([sys.executable, os.path.join(ROOT, 'admbwf.py'), objdir, adm, '--bits', '24'])
+    if clean:
+        for f in os.listdir(objdir):
+            if f.endswith('.wav'):
+                os.remove(os.path.join(objdir, f))
     direct = os.path.join(outdir, stem + '.direct.wav')
     run([EAR, '-s', '4+7+0', '-l', layout, '--output-gain-db', '-%g' % EAR_HEADROOM_DB,
          '--fail-on-overload', adm, direct])
@@ -214,6 +226,8 @@ def main(argv):
     for a in range(0, di[5], BLOCK):
         b = read_block(direct, di, a, BLOCK)
         mix[a:a + len(b)] += (b * gd).astype(np.float32)
+    if clean:
+        os.remove(direct)
     mix[:, LFE] = 0.0
     peak = max(float(np.abs(mix[a:a + BLOCK]).max()) for a in range(0, len(mix), BLOCK))
     g = 10 ** (-1.0 / 20) / peak
@@ -265,6 +279,8 @@ def main(argv):
         ok &= best == c
         print("     %-4s r %.4f  SNR %5.1f dB  best match %s" % (names[c], r, snr, names[best]))
     print("   channel order %s" % ("intact" if ok else "SCRAMBLED"))
+    if clean:
+        os.remove(back)
     print("  -> %s\n  -> %s\n  -> %s" % (mp4, bed, adm))
     return 0 if ok else 1
 

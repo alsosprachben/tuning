@@ -168,11 +168,12 @@ def write_adm(path, signals, meta, sample_rate, bits=24, programme='render'):
 
     frame = ch * (bits // 8)
     size = n * frame
-    if size > 0xFFFFFFFF - (1 << 20):
-        raise SystemExit(
-            "%.1f GB of audio exceeds what a RIFF WAV can address; write fewer "
-            "objects or a lower bit depth (RF64 is not implemented)."
-            % (size / 1e9))
+    # PAST 4 GB THE FILE IS BW64 (ITU-R BS.2088): the RIFF and data sizes are
+    # 0xFFFFFFFF and the real ones sit in a ds64 chunk right after WAVE. EAR and
+    # the authoring tools read it; a plain RIFF reader would not, so below the
+    # limit the file stays plain RIFF. BWV 542, 52 ranks over 12 minutes, is
+    # 5.6 GB at 24-bit.
+    big = size > 0xFFFFFFFF - (1 << 20)
 
     # Interleave a second at a time. Materialising the whole thing first costs
     # channels * frames * 8 bytes -- 7.4 GB for a 40-object Neptune, which
@@ -180,15 +181,24 @@ def write_adm(path, signals, meta, sample_rate, bits=24, programme='render'):
     # hang rather than reporting anything.
     fmt = struct.pack('<HHIIHH', 1, ch, sample_rate,
                       sample_rate * frame, frame, bits)
-    head = (b'WAVE' + _chunk(b'fmt ', fmt)
+    body = (_chunk(b'fmt ', fmt)
             + _chunk(b'chna', build_chna(ch))
             + _chunk(b'axml', build_axml(meta, duration, sample_rate, bits, programme)))
     data_pad = size % 2
-    riff = len(head) + 8 + size + data_pad
+    ds64_len = 8 + 28 if big else 0
+    riff = 4 + ds64_len + len(body) + 8 + size + data_pad
+    if big:
+        head = (b'WAVE' + _chunk(b'ds64', struct.pack('<3QI', riff, size, n, 0)) + body)
+    else:
+        head = b'WAVE' + body
     step = sample_rate
     with open(path, 'wb') as fh:
-        fh.write(b'RIFF' + struct.pack('<I', riff) + head)
-        fh.write(b'data' + struct.pack('<I', size))
+        if big:
+            fh.write(b'BW64' + struct.pack('<I', 0xFFFFFFFF) + head)
+            fh.write(b'data' + struct.pack('<I', 0xFFFFFFFF))
+        else:
+            fh.write(b'RIFF' + struct.pack('<I', riff) + head)
+            fh.write(b'data' + struct.pack('<I', size))
         buf = np.empty((step, ch), np.float64)
         for start in range(0, n, step):
             m = min(step, n - start)
