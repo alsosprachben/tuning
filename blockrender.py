@@ -4228,6 +4228,28 @@ def prepare(path, tuner='hybrid440', sink=None):
             # always speak at note onset.
             if organ:
                 sp = rank_speak_sec(rankev_of[ch][key], on, getattr(props,'attack_jitter',0.0))
+                # A STOP DRAWN AFTER THE KEY LIFTED DOES NOT SPEAK on it: the
+                # pallet is shut, as live stamps a drawn rank on the keys still
+                # down and no others. Its gate opened on the note's release tail
+                # (Ben, BuxWV 161: "registration changes bled a tiny fraction of
+                # a second into the releases")
+                # The DRAW is compared, not the speech: the attack jitter would
+                # otherwise push a short note's rank past its own key-up, and a
+                # rank drawn at the onset always speaks.
+                _dr = rank_speak_sec(rankev_of[ch][key], on, 0.0)
+                if _dr is not None and _dr > on and _dr >= _raw_off:
+                    continue
+                # ...nor one pushed in before the key-up and drawn again in the
+                # release: what it had ends at the key-up. Only a rank that
+                # spoke: one never drawn for the note is gated silent already,
+                # and its release is left exactly as it was.
+                if _dr is not None:
+                    _drawn_off = 0.0
+                    for _t, _tg in rankev_of[ch][key]:
+                        if _t <= _raw_off: _drawn_off = _tg
+                        else: break
+                    if _drawn_off < 0.5:
+                        rel_r = 1.0
                 # ...and a Hammond's drawbar speaks when ITS contact closes
                 # (tonelib.contact_offset_s): the key click
                 if sp is not None:

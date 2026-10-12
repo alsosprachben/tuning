@@ -12942,6 +12942,34 @@ def selftest():
           "  (tremolo %.1f Hz against vibrato %.1f-%.1f)"
           % ((_t_hi.tremolo_hz,) + tuple(_t_hi.section_vibrato_hz)))
 
+    # ------------------------------------------- a stop drawn after the key-up
+    # The file renderer started a rank at its first draw even when the key had
+    # already lifted, so a stop drawn in a chord's release opened on its tail
+    # (Ben, BuxWV 161: "registration changes bled a tiny fraction of a second
+    # into the releases"). Live stamps a drawn rank on keys still down only.
+    _snames = [r[0] for r in _T.FlueOrganProperties.stop_ranks]
+    _w0 = 1 << _snames.index("principal 8")
+    _w1 = _w0 | (1 << _snames.index("reed 8"))
+    _bm = mido.MidiFile(type=1, ticks_per_beat=480); _bt = mido.MidiTrack(); _bm.tracks.append(_bt)
+    for _msg in (mido.Message("program_change", channel=0, program=19, time=0),
+                 mido.Message("control_change", channel=0, control=43, value=0, time=0),
+                 mido.Message("control_change", channel=0, control=11, value=_w0, time=0),
+                 mido.Message("note_on", channel=0, note=60, velocity=100, time=0),
+                 mido.Message("note_off", channel=0, note=60, velocity=0, time=960),
+                 mido.Message("control_change", channel=0, control=43, value=_w1 >> 7, time=24),
+                 mido.Message("control_change", channel=0, control=11, value=_w1 & 127, time=0),
+                 mido.Message("note_on", channel=0, note=72, velocity=100, time=960),
+                 mido.Message("note_off", channel=0, note=72, velocity=0, time=480)):
+        _bt.append(_msg)
+    _bq = _BRb.prepare(_bm, "hybrid")
+    _breed = np.asarray(_bq["gr"]) == _snames.index("reed 8")
+    _bnon = np.asarray(_bq["non"]) / _BRb.SR
+    _bled = int(np.sum(_breed & (_bnon >= 1.0) & (_bnon < 1.5)))
+    _bnext = int(np.sum(_breed & (_bnon > 1.5)))
+    check("a stop drawn after the key lifted does not speak in that note's release",
+          _bled == 0 and _bnext > 0,
+          "  (%d reed rows on the released C4, %d on the next note)" % (_bled, _bnext))
+
     # ---------------------------------------------------------- free reeds
     # GM 20-23 were all rendering as ReedOrganProperties, which is a pipe
     # organ's reed RANK: a beating reed with a resonator behind it. All four are
