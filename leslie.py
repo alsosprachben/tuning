@@ -46,7 +46,18 @@ import math
 import numpy as np
 
 # A 122-style cabinet.
-HORN_RADIUS = 0.17          # m, the horn mouth's throw
+# ...MEASURED against hammondman's "Rok organ" on the fast rotor, partial by
+# partial over 630 Hz-4 kHz (each partial's pitch wobble and level swing): the
+# 0.17 m throw and the narrow lobe warbled 1.5-2x the take's pitch above 1 kHz
+# and swung up to twice its depth at 2.5-4 kHz (Ben: the original's shimmer
+# we were missing, and ours too much up top). A 0.11 m throw, the lobe's floor
+# 0.30 and its narrowing 4 (HORN_FLOOR, HORN_SHARPNESS): 6.9 -> 4.7 dB rms over
+# the bands. What is left is the take's wobble FALLING with pitch (16.6 cents
+# at 630-1000 Hz to 6.9 at 2.5-4 kHz), which a Doppler -- a fixed fraction of
+# the pitch -- cannot do: the room's diffuse field averaging the treble, which
+# this renderer's discrete images do only in part (over 4 kHz they beat, 25 dB
+# swings, whatever the lobe)
+HORN_RADIUS = 0.11          # m, the horn mouth's throw (as it reaches the listener)
 DRUM_RADIUS = 0.10          # m, the bass rotor's port
 CROSSOVER_HZ = 800.0        # horn above, drum below
 SLOW_HZ = 0.80              # chorale
@@ -70,8 +81,20 @@ SIDEBANDS = True
 HARMONICS = 3
 # The bass rotor is a scoop with a fixed driver, not a horn being swung, so its
 # pattern is blunt: measured live, its swing has a second harmonic of 0.11
-# against the horn's 0.50.
-DRUM_BLUNT = 0.5
+# against the horn's 0.50. Its lobe is drum_beam's: half the horn's sharpness,
+# DRUM_DEPTH of its depth -- and directional from DRUM_REF_HZ, not the horn's
+# 700: the scoop is wide, so it beams far lower down than a horn mouth does.
+#
+# ...MEASURED (hammondman's "Rok organ", freesound pack 15120, CC0; sources.md
+# "Organs and free reeds"; one mic): on the fast rotor the fundamentals under
+# the crossover swing as deep as the horn's -- 3-5 dB at 98-175 Hz, 5-15 at
+# 220-700 -- where this lobe, the horn's law halved, swung them 0.3-2 dB. The
+# horn's own (8.6 dB at 1 kHz) already matched. Directional from 160 Hz at
+# 0.9 of the horn's depth puts the drum's swing at the take's median within
+# 0.1 dB below 175 Hz and 1.7 above (the rates were already the take's: the
+# horn 6.6 Hz, the drum 6.1)
+DRUM_DEPTH = 0.9
+DRUM_REF_HZ = 160.0
 
 # A partial this far below the loudest keeps the whole lobe; below the second
 # threshold it keeps only the first harmonic, and below that the rotor still
@@ -88,6 +111,52 @@ FULL_LOBE = 0.01
 SOME_LOBE = 0.001
 
 
+# THE CABINET'S OWN RESPONSE, by absolute frequency, dB: what the rotors do
+# not -- the bass rotor's drum hollowing the mids under the crossover, the
+# horn's presence peak, its fall above 4 kHz. MEASURED, from the residual of
+# the drawbar derivation (examples/drawbar_fit.py): with each take's drawbar
+# setting solved, what was left lay on ONE curve by absolute frequency in both
+# of hammondman's packs, slow and fast (sources.md "Organs and free reeds") --
+# the dip at 400-640 Hz (-5 to -11) and the peak at 1.3-1.6 kHz (+5 to +9)
+# in each -- so the cabinet, not either room. The two averaged where both
+# reach; over 2 kHz the fast pack's alone (the slow pack's notes stop there);
+# the slow pack's +10-13 at 160-200 Hz, in it alone, left out as its room.
+# Held flat outside the table's ends.
+CABINET_DB = ((253.0, 0.0), (319.0, -1.0), (403.0, -8.0), (507.0, -8.0), (639.0, -6.0),
+              (806.0, -3.0), (1015.0, 1.0), (1279.0, 5.5), (1612.0, 7.5), (2031.0, 3.0),
+              (2559.0, 2.0), (3225.0, 2.0), (4063.0, -8.0), (5119.0, -4.0), (6450.0, -14.0))
+
+
+# THE CROSSOVER'S SLOPES: power-complementary, 2nd order -- 12 dB an octave
+# each side of CROSSOVER_HZ -- so a partial near it goes out by both rotors.
+# A copy is made for the other rotor's share when it is within XOVER_FLOOR
+# (-20 dB: about 255 Hz to 2.5 kHz); under that the pitch's rotor takes all.
+XOVER_FLOOR = 0.1
+XOVER_K = 10                 # meta's lobe-harmonic code for the other rotor's copy
+
+
+def crossover_weights(f):
+    """(horn, drum) amplitude shares of a partial at f: their squares sum to
+    one -- the copies swing and Doppler apart, so they add as power."""
+    x4 = (max(f, 1e-9) / CROSSOVER_HZ) ** 4
+    return math.sqrt(x4 / (1.0 + x4)), math.sqrt(1.0 / (1.0 + x4))
+
+
+def cabinet_gain(freq_hz):
+    """CABINET_DB at freq_hz, as a linear gain (log-frequency interpolation)."""
+    pts = CABINET_DB
+    if freq_hz <= pts[0][0]:
+        db = pts[0][1]
+    elif freq_hz >= pts[-1][0]:
+        db = pts[-1][1]
+    else:
+        for (f0, d0), (f1, d1) in zip(pts, pts[1:]):
+            if freq_hz <= f1:
+                db = d0 + (d1 - d0) * math.log(freq_hz / f0) / math.log(f1 / f0)
+                break
+    return 10.0 ** (db / 20.0)
+
+
 def azimuth(x, z):
     """Where a receiver sits, as seen from the cabinet."""
     return math.atan2(x, max(z, 1e-6))
@@ -98,7 +167,11 @@ def doppler_depth(radius, rate_hz):
     return 2.0 * math.pi * radius * rate_hz / C_SOUND
 
 
-def beam(freq_hz, floor=0.06):
+HORN_FLOOR = 0.30           # the horn lobe's floor at the top (beam): how deep its swing goes
+HORN_SHARPNESS = 4.0        # ...and how far it narrows toward the top -- both as HORN_RADIUS
+
+
+def beam(freq_hz, floor=None, ref_hz=700.0, sharpness=None):
     """The horn's pattern: (floor, sharpness) of a lobe that narrows with pitch.
 
     A horn is directional in proportion to its mouth against the wavelength, so
@@ -113,10 +186,23 @@ def beam(freq_hz, floor=0.06):
     level swing as 1 + m*cos(t) -- which is exactly the first Fourier term and
     nothing else -- leaves it out. A tremolo pedal is a sine; a Leslie is not.
     """
-    x = (freq_hz / 700.0) ** 2
-    sharp = 0.6 + 9.0 * x / (1.0 + x)        # omni in the bass, a beam on top
+    if floor is None:
+        floor = HORN_FLOOR
+    if sharpness is None:
+        sharpness = HORN_SHARPNESS
+    x = (freq_hz / ref_hz) ** 2
+    sharp = 0.6 + sharpness * x / (1.0 + x)  # omni in the bass, a beam on top
     fl = 1.0 - (1.0 - floor) * x / (1.0 + x)  # ...and a deeper swing with it
     return fl, sharp
+
+
+def drum_beam(freq_hz):
+    """The BASS ROTOR's lobe, (floor, sharpness) as beam's: a scoop round a
+    fixed driver -- blunter (half the sharpness, never under 0.5), DRUM_DEPTH
+    of the depth, directional from DRUM_REF_HZ. One law for both renderers
+    (offline blunted the swing's harmonics, live the lobe: they differed)."""
+    fl, sharp = beam(freq_hz, floor=0.06, ref_hz=DRUM_REF_HZ, sharpness=9.0)   # as fitted
+    return 1.0 - (1.0 - fl) * DRUM_DEPTH, max(sharp * 0.5, 0.5)
 
 
 def beam_gain(theta, fl, sharp):
@@ -131,7 +217,7 @@ def beam_gain(theta, fl, sharp):
     return fl + (1.0 - fl) * c
 
 
-def beam_harmonics(freq_hz, n=4, points=512):
+def beam_harmonics(freq_hz, n=4, points=512, horn=True):
     """[c1, c2, ...] of the lobe, as a cosine series about its own mean.
 
     The offline path has no gain that changes with time -- the render is one
@@ -140,7 +226,7 @@ def beam_harmonics(freq_hz, n=4, points=512):
     three to be worth the name.
     """
     import numpy as _np
-    fl, sharp = beam(freq_hz)
+    fl, sharp = beam(freq_hz) if horn else drum_beam(freq_hz)
     # from 0, so index 0 IS the lobe's peak: sampling from -pi puts the
     # peak in the middle of the array and every odd coefficient comes out
     # negated, which reconstructs a lobe pointing the wrong way.
@@ -183,7 +269,7 @@ def make_rotors(channels):
     return {ch: (Rotor(True, req), Rotor(False, req)) for ch, req in channels.items()}
 
 
-def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None):
+def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=None):
     """Give every partial of a Leslie voice its rotor, in place on the table.
 
     `channels` is {midi_channel: [(seconds, fast), ...]} -- the half-moon
@@ -222,19 +308,15 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None):
     made = 0
     if loudest is None:
         loudest = max(float(np.max(np.abs(A['aM']))), 1e-12) if n else 1.0
-    for i in range(n):
-        # 'mch' is the MIDI channel; 'ch' is CHIFF. Getting that wrong compares
-        # a chiff amount against a channel number, matches nothing, and expands
-        # no partials -- silently, because the report is guarded on the count.
-        ch = int(A['mch'][i])
-        if ch not in rotors:
-            continue
-        f = A['nf'][i]
-        if f <= 0.0:
-            continue
-        horn = f >= CROSSOVER_HZ
-        rotor = rotors[ch][0 if horn else 1]
-        t_on = A['non'][i] / float(sr)
+
+    def rotate(r, horn, i, kbase):
+        """Put row r (a dict of its columns) on a rotor: its Doppler in the
+        vibrato columns, and the level swing's sideband rows appended to
+        extra -- each recorded in meta as (source row, lobe harmonic + kbase,
+        sign). Returns how many sidebands it made."""
+        f = r['nf']
+        rotor = rotors[int(r['mch'])][0 if horn else 1]
+        t_on = r['non'] / float(sr)
         rate, angle = rotor.at(t_on)
         if not horn:
             rate *= abs(DRUM_RATIO)
@@ -243,17 +325,17 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None):
         fm = doppler_depth(radius, rate)
         # The kernel's modulator is sin(2*pi*rate*t + vp) on an absolute clock,
         # and what is wanted is sin(angle(t) - azimuth). Equate them at t_on.
-        ph = angle - 2.0 * math.pi * rate * t_on - A['az'][i]
-        A['vd'][i] = fm
-        A['vr'][i] = rate
-        A['vp'][i] = math.atan2(math.sin(ph), math.cos(ph))
+        ph = angle - 2.0 * math.pi * rate * t_on - r['az']
+        r['vd'] = fm
+        r['vr'] = rate
+        r['vp'] = math.atan2(math.sin(ph), math.cos(ph))
         # A STOPPED ROTOR HAS NO SIDEBANDS. At rate 0 they would land exactly
         # on the carrier and simply add level -- a brake that makes the organ
         # louder, which is not what a brake does.
         if not SIDEBANDS or rate < 0.05:
             if rate < 0.05:
-                A['vd'][i] = 0.0
-            continue
+                r['vd'] = 0.0
+            return 0
         # ONE SIDEBAND PAIR PER HARMONIC OF THE LOBE. A cosine needed one pair
         # and made a tremolo; a beam swept past a listener is a pulse, and its
         # second and third harmonics are the chop. Offline there is no gain
@@ -266,29 +348,79 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None):
         # from the amplifier is -- the 3rd harmonic of its level swing is 50 dB
         # down and costs a partial pair to say so. Spending the full lobe on
         # everything made the rotor multiply the amplifier's output by seven.
-        rel = A['aM'][i] / loudest
+        rel = r['aM'] / loudest
         want = HARMONICS if rel > FULL_LOBE else (1 if rel > SOME_LOBE else 0)
         if want == 0:
-            continue
-        cs = beam_harmonics(f, want)
-        if not horn:
-            cs = [c * DRUM_BLUNT for c in cs]
+            return 0
+        cs = beam_harmonics(f, want, horn=horn)
         dw = 2.0 * math.pi * rate / sr
+        got = 0
         for k, ck in enumerate(cs, 1):
             if abs(ck) < 1e-3:
                 continue
             for si, sign in enumerate((1.0, -1.0)):
                 if meta is not None:
-                    meta.append((i, k, si))
+                    meta.append((i, k + kbase, si))
                 for col in cols:
-                    extra[col].append(A[col][i])
-                extra['om'][-1] = A['om'][i] + sign * k * dw
-                extra['aL'][-1] = A['aL'][i] * ck * 0.5
-                extra['aR'][-1] = A['aR'][i] * ck * 0.5
-                extra['aM'][-1] = A['aM'][i] * ck * 0.5
-                extra['p0'][-1] = A['p0'][i] + sign * k * A['vp'][i]
-                extra['p0R'][-1] = A['p0R'][i] + sign * k * A['vp'][i]
-                made += 1
+                    extra[col].append(r[col])
+                extra['om'][-1] = r['om'] + sign * k * dw
+                extra['aL'][-1] = r['aL'] * ck * 0.5
+                extra['aR'][-1] = r['aR'] * ck * 0.5
+                extra['aM'][-1] = r['aM'] * ck * 0.5
+                extra['p0'][-1] = r['p0'] + sign * k * r['vp']
+                extra['p0R'][-1] = r['p0R'] + sign * k * r['vp']
+                got += 1
+        return got
+
+    for i in range(n):
+        # 'mch' is the MIDI channel; 'ch' is CHIFF. Getting that wrong compares
+        # a chiff amount against a channel number, matches nothing, and expands
+        # no partials -- silently, because the report is guarded on the count.
+        ch = int(A['mch'][i])
+        if ch not in rotors:
+            continue
+        f = A['nf'][i]
+        if f <= 0.0:
+            continue
+        horn = f >= CROSSOVER_HZ
+        # the cabinet's own colour, on every row it radiates -- applied here,
+        # before the sidebands copy the row, so they carry it; live's templates
+        # pass through here too (sidebands off), so both renderers have it once
+        _cg = cabinet_gain(f)
+        # ...AND THE CROSSOVER IS A SLOPE, NOT A LINE (crossover_weights): near
+        # it a partial leaves by BOTH rotors -- two Dopplers, two swings, beating
+        # against each other, the shimmer of a real cabinet (Ben: "an element in
+        # the original that we are missing"). The rotor its pitch picks keeps
+        # the row; the other's share, when within XOVER_FLOOR, is a copy on the
+        # other rotor (recorded in flips for live, in meta as k + XOVER_K)
+        wh, wd = crossover_weights(f)
+        wp, ws = (wh, wd) if horn else (wd, wh)
+        if ws < XOVER_FLOOR:
+            wp, ws = 1.0, 0.0
+        r = {col: A[col][i] for col in cols}
+        twin = None
+        if ws > 0.0:
+            twin = dict(r)
+            for col in ('aL', 'aR', 'aM'):
+                twin[col] = r[col] * _cg * ws
+        for col in ('aL', 'aR', 'aM'):
+            r[col] = r[col] * _cg * wp
+            A[col][i] = r[col]
+        made += rotate(r, horn, i, 0)
+        A['vd'][i], A['vr'][i], A['vp'][i] = r['vd'], r['vr'], r['vp']
+        if twin is not None:
+            # the copy on the other rotor: first its carrier, then its sidebands
+            if flips is not None:
+                flips.append(n + len(extra['om']))
+            if meta is not None:
+                meta.append((i, XOVER_K, 2))
+            pos = len(extra['om'])
+            for col in cols:
+                extra[col].append(twin[col])
+            made += rotate(twin, not horn, i, XOVER_K)
+            for col in ('vd', 'vr', 'vp'):
+                extra[col][pos] = twin[col]
+            made += 1
     for k in cols:
         A[k].extend(extra[k])
     return made

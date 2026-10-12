@@ -1596,7 +1596,8 @@ def prepare(path, tuner='hybrid440', sink=None):
             continue                            # not a pipe organ
         _tr = rankev_of[ch].get('tremulant', ())
         _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
-        if not (WIND or _trem_on):
+        _wsc = wind_scale_for(pc)
+        if not (_wsc or _trem_on):
             continue
         import wind as _WND
         _bt = (np.arange(nblk) + 0.5) * BLK / SR
@@ -1616,7 +1617,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
                 _w = sum(_WND.pipe_draw(_f * q) for q in _rat)
                 _dem[_b0:_b1] += _w * Grows[grow_of[(ch, r[0])]][_b0:_b1]
-        _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=(WIND_SCALE if WIND else 0.0))
+        _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
         _p = _wd.blocks(_dem[:nblk], _trem)
         _WROWS[ch] = {}
         for r in _ranks:
@@ -2027,6 +2028,40 @@ def prepare(path, tuner='hybrid440', sink=None):
         _i = len(BRrows); BRrows.append(np.ones(nblk, np.float32)); BCrows.append(np.zeros(nblk))
         _BLrows[_i] = _L
         _LROW[_c] = _i
+    # A NOTE RIDES ONE BEND ROW, so a note with a row of its own -- MIDI 2.0
+    # per-note pitch, MPE, a meend, the channel's gesture or the player's
+    # breath -- on an organ chest rides their PRODUCT: its own ratio and level
+    # times its family's wind row's. The rank loop used to put it on the wind
+    # row alone, and the note's own pitch was lost the day the shared wind
+    # came on by default (live's Clip File test). (base row, wind row) -> row.
+    wcombo = {}
+    if wrow_of:
+        _wch = {}
+        for (_c, _k), _w in wrow_of.items():
+            _wch.setdefault(_c, set()).add(_w)
+        _bases = {}
+        for _c, _r in brow_of.items():
+            _bases.setdefault(_c, set()).add(_r)
+        for _c, _rs in bbrow_of.items():
+            _bases.setdefault(_c, set()).add(_rs[0])
+        for (_c, _nt, _on), _x in _PN_AT.items():
+            _bases.setdefault(_c, set()).add(_x[2])
+        for (_c, _nt, _on), _x in _MPE_AT.items():
+            _bases.setdefault(_c, set()).add(_x[1])
+        for (_c, _nt, _on), _x in _MEEND_AT.items():
+            _bases.setdefault(_c, set()).add(_x[1])
+        for _c, _ws in _wch.items():
+            for _b in _bases.get(_c, ()):
+                if _b is None or _b < 0:
+                    continue
+                for _w in _ws:
+                    _r = (BRrows[_b].astype(np.float64) * BRrows[_w].astype(np.float64)).astype(np.float32)
+                    _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
+                    _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+                    if _b in _BLrows or _w in _BLrows:
+                        _one = np.ones(nblk + 1, np.float32)
+                        _BLrows[_i] = _BLrows.get(_b, _one) * _BLrows.get(_w, _one)
+                    wcombo[(_b, _w)] = _i
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     BL = None
@@ -2934,6 +2969,57 @@ def prepare(path, tuner='hybrid440', sink=None):
     _SND_PEND = [None]
     _SV = [0.0, 1.0]         # per-note CC77 depth offset d, CC76 rate scale
 
+    def _push_finish(_p):
+        """THE BELLOWS' PUSH (tonelib.bellows_push_gain): a note from silence,
+        on a voice whose wind is a player's arm, swells over its first tenth of
+        a second and eases back -- the reed driven harder, louder and (low
+        down) brighter. A transient COPY of the note's finished rows, the
+        direct sound and its images, at the same frequency and phase so it adds
+        to the note coherently: rising over bellows_push_rise_s, dying at
+        bellows_push_dbs to nothing, each partial scaled by
+        tonelib.bellows_push_weight. Its rows are recorded (_PUSH_ROWS) so live
+        drops them from a legato note."""
+        if _p is None:
+            return
+        _i0, _pc0, _f00, _dt, _sfa = _p
+        _i1 = len(A['om'])
+        if _i1 <= _i0:
+            return
+        # A RANK THAT SPEAKS AS ITSELF (_PUSH_SEG) overshoots as itself: its
+        # class's push, its harmonics counted from its own pitch
+        _segs = [(_i0, _pc0, _f00)] + [g for g in _PUSH_SEG if g[0] >= _i0]
+        _keys = list(A.keys())
+        _r0 = _i1
+        _si = 0
+        for _j in range(_i0, _i1):
+            while _si + 1 < len(_segs) and _segs[_si + 1][0] <= _j:
+                _si += 1
+            _pc, _f0 = _segs[_si][1], _segs[_si][2]
+            if not getattr(_pc, 'bellows_push_gain', 0.0):
+                continue
+            _fa = float(_pc.bellows_push_rise_s) * SR
+            _w = T.bellows_push_weight(_pc, float(A['nf'][_j]) / max(_f0, 1e-9), _f0)
+            # A SLURRED NOTE TAKES THE PUSH OVER where it stands (_dt after it
+            # began), rising with the note's own legato attack: the swell is
+            # the bellows', not the note's, and it does not stop at a slur
+            _env = T.bellows_push_env(_pc, _dt, _w) if _dt > 0.0 else 1.0
+            if _w * _env <= 1e-4:
+                continue
+            for _k in _keys:
+                A[_k].append(A[_k][_j])
+            A['aL'][-1] *= _w * _env; A['aR'][-1] *= _w * _env; A['aM'][-1] *= _w * _env
+            A['fa'][-1] = _fa if _dt <= 0.0 else _sfa
+            A['logr'][-1] = T.bellows_push_rate(_pc, _w) * math.log(10.0) / 20.0
+            A['logrA'][-1] = 0.0; A['aft'][-1] = 0.0; A['sus'][-1] = 0.0
+        if len(A['om']) > _r0:
+            _PUSH_ROWS.append((_r0, len(A['om'])))
+
+    _PUSH_PEND = [None]
+    _PUSH_SEG = []          # (first row, speech class, pitch) per rank that speaks as itself
+    _PUSH_ROWS = []
+    _PUSH_T0 = {}           # channel -> when its bellows' push began (a note from silence)
+    _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
+
     def _mvol():
         """MASTER VOLUME, the device's own fader: every channel, after
         everything. A GM System On puts it back to full. Kept as (sample,
@@ -2983,6 +3069,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
+        _push_finish(_PUSH_PEND[0]); _PUSH_PEND[0] = None; del _PUSH_SEG[:]
         # the previous strike's rows end where this note's begin
         _row0 = len(A['om'])
         if _REG_OPEN[0] is not None:
@@ -3306,6 +3393,19 @@ def prepare(path, tuner='hybrid440', sink=None):
         # It could not have: these notes did not exist when the file was parsed.
         if (ch, note, on) in _GLISS or (ch, note, on) in _MONO_SLUR:
             at = T.slur_attack(at, props)
+        # ...AND A NOTE FROM SILENCE IS A PUSH OF THE BELLOWS (_push_finish); a
+        # slurred one is not -- the bellows is already moving
+        if getattr(props, 'bellows_push_gain', 0.0) and getattr(props, 'bellows_push_every_note', False):
+            # A PIPE'S SPEECH, not a bellows: every pipe that speaks overshoots
+            _PUSH_PEND[0] = (_row0, props, f0, 0.0, 0.0)
+        elif getattr(props, 'bellows_push_gain', 0.0):
+            if ((ch, note, _occ.get((ch, note), 0)) not in legato
+                    and (ch, note, on) not in _GLISS and (ch, note, on) not in _MONO_SLUR):
+                _PUSH_T0[ch] = on
+                _PUSH_PEND[0] = (_row0, props, f0, 0.0, 0.0)
+            elif ch in _PUSH_T0:
+                # ...and carried over a slur, where it has got to
+                _PUSH_PEND[0] = (_row0, props, f0, on - _PUSH_T0[ch], at * SR)
         _occ[(ch, note)] = _occ.get((ch, note), 0) + 1
         rt = props.release_valve_time if props.release_valve_time is not None else props.chiff_max_valve_time
         # Pipe speech scales with wavelength: add speech_cycles periods of the
@@ -4017,6 +4117,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                              1.0, _rel, chiff, 0.0, 0.0, 0.0, 1.0, 0.0,
                              cc, crl, 0.0, csc, -1, 0, ph0=_ph)
             stops = ()
+        _bnote = _BR[0]          # the note's own row, which a chest row multiplies
         for key, ratio, gain, *rest in stops:
             # A stop with no pipes (the harmonium's Expression, Percussion,
             # Tremolo) has a gate and no partials; a rank with a key range (its
@@ -4028,7 +4129,8 @@ def prepare(path, tuner='hybrid440', sink=None):
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
             # the chest's wind (wind.py): this rank's family's row on its channel
             if organ and (ch, key) in wrow_of:
-                _BR[0] = wrow_of[(ch, key)]
+                _w = wrow_of[(ch, key)]
+                _BR[0] = wcombo.get((_bnote, _w), _w) if _bnote >= 0 else _w
             dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
             # "BORROW THIS VOICE'S SPECTRUM ONLY" -- and the line under that
             # comment handed the borrowed class a velocity as well, so it also
@@ -4048,6 +4150,19 @@ def prepare(path, tuner='hybrid440', sink=None):
                         else 1.0)
             spv = T.rank_spectrum(spec_cls)(f0, pan, _rank_av, chan_vol) if spec_cls else None
             hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
+            # A RANK'S REGISTER IS ITS OWN PITCH: a voice with measured series by
+            # register (mode_gains_low) takes the table at the rank's sounding
+            # pitch, not the key's -- the shape only, its level as the class sets
+            # it (the church organ's 4' over a low key is a middle-register pipe)
+            # -- and so does a borrowed spectrum with tables of its own (the
+            # console's Gedakt and reeds, measured on Pitea's)
+            _tsrc = spv or props
+            if (organ and (getattr(_tsrc, 'mode_gains_low', None) is not None
+                           or getattr(_tsrc, 'mode_gains_points', None))
+                    and not isinstance(ratio, (list, tuple)) and ratio != 1.0):
+                _mgn, _mgr = _tsrc.mode_gains_here(), _tsrc.mode_gains_at(f0 * ratio)
+                hv_fn = (lambda m, _b=_tsrc.harmonic_volume, _n=_mgn, _r=_mgr:
+                         _b(m) * (_r[m - 1] / _n[m - 1]) if m - 1 < len(_n) and _n[m - 1] > 0 else 0.0)
             # ...UNLESS THE BORROWED CLASS IS ITSELF AN ORGAN PIPE, when the rank
             # IS that pipe: its ceiling (where its upperwork breaks back), its
             # decay, its chiff -- a reed has none -- and its sustain are its own,
@@ -4069,22 +4184,38 @@ def prepare(path, tuner='hybrid440', sink=None):
                 rp = spv
             else:
                 rp = props
-            cv_r = rp.chiff_volume if rp is not props else cv
-            cc_r = rp.chiff_cycle if rp is not props else cc
+            # EACH PIPE SPEAKS AS ITSELF (props.rank_speech_own_pitch, the church
+            # organ): its speech, harmonic order and overshoot are its own
+            # class's -- the pipe reed's, or a borrowed spectrum's that says
+            # rank_speech (the Gedakt) -- and timed by its OWN pitch, so a 4'
+            # over a key speaks as the 4' pipe it is. Otherwise the host's,
+            # by the key, as before.
+            _own = organ and getattr(props, 'rank_speech_own_pitch', False)
+            _sc = (rp if rp is not props else
+                   spv if (_own and spv is not None and getattr(spv, 'rank_speech', False)) else props)
+            _f0s = (f0 * (min(ratio) if isinstance(ratio, (list, tuple)) else ratio)
+                    if _own and ratio else f0)
+            if _own:
+                _PUSH_SEG.append((len(A['om']), _sc, _f0s))
+            # ...and its CHIFF, the edge's spit: the pipe's own, where it is a
+            # pipe of its own (a Gedakt's is not a principal's)
+            _cp = _sc if _sc is not props else rp
+            cv_r = _cp.chiff_volume if _cp is not props else cv
+            cc_r = _cp.chiff_cycle if _cp is not props else cc
             # Its speech too: the attack, release and chiff times were set per
             # NOTE from the host's pipe, so the rank's are the host's scaled by
             # its own speech against the host's -- which keeps whatever the note
             # already folded in (a slur, CC73, the caps).
-            if rp is not props:
-                def _speech(pp):
+            if _sc is not props or _f0s != f0:
+                def _speech(pp, ff):
                     a = pp.attack_time if pp.attack_time is not None else pp.chiff_max_valve_time
                     r = pp.release_valve_time if pp.release_valve_time is not None else pp.chiff_max_valve_time
-                    return pp.speech_time(a, f0), pp.speech_time(r, f0)
-                _ha, _hr = _speech(props); _ra, _rr = _speech(rp)
+                    return pp.speech_time(a, ff), pp.speech_time(r, ff)
+                _ha, _hr = _speech(props, f0); _ra, _rr = _speech(_sc, _f0s)
                 fade_r = fade * (_ra / _ha) if _ha > 0 else fade
                 rel_r = rel * (_rr / _hr) if _hr > 0 else rel
                 _hc = props.chiff_time(f0, _ha)
-                chiff_r = chiff * (rp.chiff_time(f0, _ra) / _hc) if _hc > 0 else chiff
+                chiff_r = chiff * (_sc.chiff_time(_f0s, _ra) / _hc) if _hc > 0 else chiff
             else:
                 fade_r, rel_r, chiff_r = fade, rel, chiff
             if _hperc and key in getattr(props, 'percussion_ranks', ()):
@@ -4097,7 +4228,36 @@ def prepare(path, tuner='hybrid440', sink=None):
             # always speak at note onset.
             if organ:
                 sp = rank_speak_sec(rankev_of[ch][key], on, getattr(props,'attack_jitter',0.0))
+                # ...and a Hammond's drawbar speaks when ITS contact closes
+                # (tonelib.contact_offset_s): the key click
+                if sp is not None:
+                    sp += T.contact_offset_s(props, key, note)
                 non_r = sp*SR if sp is not None else non
+                # ...AND IT BOUNCES: a burst of noise at that contact, its own
+                # drawbar's (its gate row, so a stop pushed in silences it and
+                # live stamps it with the rank) -- the click's broadband part
+                # (tonelib.TonewheelProperties.contact_noise_db)
+                if sp is not None and getattr(props, 'contact_noise_db', ()):
+                    _cbw = (_CBW[0], _CBW[1])
+                    _CBW[0], _CBW[1] = -0.25, 0.0
+                    _NOREFL[0] = True
+                    _pl_keep = _PL[0]
+                    _PL[0] = 0
+                    _clr = math.log(10.0) / 20.0 * props.contact_noise_dbs
+                    _cgr = grow_of[(ch, key)] if organ else -1
+                    # dB re THIS DRAWBAR's own fundamental, as the stop sets it
+                    _cref = hv_fn(1) * gain
+                    for _hf, _db in props.contact_noise_db:
+                        if _hf >= 0.45 * SR:
+                            continue
+                        _gM = _cref * 10.0 ** (_db / 20.0)
+                        emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                                     _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non_r, non_r + 0.1 * SR,
+                                     1.0, 0.002 * SR, 0.0, _clr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc,
+                                     _cgr, crow_of[ch] if organ else 0)
+                    _CBW[0], _CBW[1] = _cbw
+                    _NOREFL[0] = False
+                    _PL[0] = _pl_keep
             else:
                 non_r = non
             # Place this drawstop at its case position (shared across a compound rank).
@@ -4109,11 +4269,54 @@ def prepare(path, tuner='hybrid440', sink=None):
             # Compound rank (Mixtur): ratio is a LIST of footages; else a scalar. Each
             # sub-footage breaks back on the note's grid past the ceiling (mirrors
             # tonelib._build_registered_partials); only upperwork (>=2) breaks.
-            for sub in (ratio if isinstance(ratio,(list,tuple)) else [ratio]):
+            # A HAMMOND'S LEAKAGE (tonelib.TonewheelProperties.drawbar_leak_db):
+            # a drawn drawbar's closed contact carries the other wheel
+            # positions faintly -- sines at the other drawbars' frequencies,
+            # under this one's fundamental, on its own gate and envelope (so a
+            # stop pushed in takes its leak with it, and live stamps it with
+            # the rank)
+            _lk = getattr(props, 'drawbar_leak_db', None)
+            if organ and _lk is not None and not isinstance(ratio, (list, tuple)):
+                _lrng = random.Random(int(round(on * 1e6)) * 157 + note * 23 + ch + 7 * len(key))
+                _lref = hv_fn(1) * gain * 10.0 ** (_lk / 20.0)
+                _pl_keep = _PL[0]
+                _PL[0] = 0
+                for _ok, _orat, *_or in stops:
+                    if _orat is None or isinstance(_orat, (list, tuple)) or _ok == key:
+                        continue
+                    _lf = f0 * _orat
+                    if _lf >= 0.45 * SR:
+                        continue
+                    _lg = _lref * props.radiation_gain(_lf, radius=_radius[0])
+                    emit_partial(2*math.pi*_lf/SR, _lg*props.hrtf_gain(_lf, li), _lg*props.hrtf_gain(_lf, ri),
+                                 _lg, _lf, non_r, noff, fade_r, rel_r, 0.0, 0.0, 0.0, 0.0,
+                                 props.sustain_level, 0.0, cc, crl, 0.0, csc, gr, cr,
+                                 ph0=2.0 * math.pi * _lrng.random())
+                _PL[0] = _pl_keep
+            _subs, _comp = ((T.mixture_ratios(props, key, ratio, f0)) if isinstance(ratio, (list, tuple))
+                            else ([ratio], False))
+            for sub in _subs:
                 eff_ratio = sub
-                if ceiling and sub >= 2.0 and f0*sub > ceiling:
+                # ...EACH MIXTURE PIPE ITS OWN REGISTER: the measured tables at
+                # the pipe's pitch, as a single rank's are
+                hv_sub = hv_fn
+                if (organ and isinstance(ratio, (list, tuple)) and getattr(_tsrc, 'mode_gains_points', None)
+                        and sub != 1.0):
+                    _mgn, _mgr = _tsrc.mode_gains_here(), _tsrc.mode_gains_at(f0 * sub)
+                    hv_sub = (lambda m, _b=_tsrc.harmonic_volume, _n=_mgn, _r=_mgr:
+                              _b(m) * (_r[m - 1] / _n[m - 1]) if m - 1 < len(_n) and _n[m - 1] > 0 else 0.0)
+                # only a MIXTURE breaks back (tonelib, the same): a single
+                # upperwork stop runs the full compass; a composed one is
+                # broken back by its composition (tonelib.mixture_ratios)
+                if (ceiling and not _comp and isinstance(ratio, (list, tuple)) and sub >= 2.0
+                        and f0*sub > ceiling):
                     if bmode == 'truncate': continue
                     while f0*eff_ratio > ceiling and eff_ratio >= 2.0: eff_ratio *= 0.5
+                # ...AND A RANK THE TUNER LEFT A LITTLE OUT (tonelib.rank_detune_cents):
+                # each key's own few cents, so its pair with the foundation beats
+                _rdt = T.rank_detune_cents(props, key, note)
+                if _rdt:
+                    eff_ratio *= 2.0 ** (_rdt / 1200.0)
                 _pps = getattr(props, 'partial_phase_spread', 0.0)
                 _prng = random.Random(int(round(on * 1e6)) * 151 + note * 19 + ch) if _pps > 0.0 else None
                 for m in range(1, props.max_harmonic+1):
@@ -4121,7 +4324,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     if _hh is None: break
                     h, hf = _hh
                     if hf > SR/2: break
-                    hv = hv_fn(m)
+                    hv = hv_sub(m)
                     if hv == 0.0: continue
                     # each partial's own jitter where the voice says so (a snare's
                     # wires are noise, its head is not); else the note's
@@ -4133,6 +4336,18 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # its fade, which would leave it decaying while it faded in.
                     pdelay = props.bloom_delay_for(hf)*SR
                     pfade = fade_r
+                    # A PIPE'S UPPER HARMONICS SPEAK FIRST (SynthProperties.
+                    # speech_harmonic_exp): harmonic m builds in m^-exp of the
+                    # speech, the fundamental slowest -- the jet catches the
+                    # upper modes before the pipe settles on its note
+                    _she = getattr(_sc, 'speech_harmonic_exp', 0.0)
+                    if _she and m > 1:
+                        pfade = max(1.0, fade_r * m ** (-_she))
+                    # ...AND ITS RELEASE IS ITS OWN, band by band (tonelib.
+                    # release_band_scale): as the wind falls a pipe may let its
+                    # fundamental go and ring on in an upper band -- the release's
+                    # squeak, Pitea's, on some pipes and not others
+                    prel = rel_r * T.release_band_scale(_sc, key, note, m) if _own else rel_r
                     dbps, logr, aftL, logrA = partial_decay(rp, f0, m)
                     # What the instrument radiates toward here: directivity at
                     # this partial's frequency, less what the air ate on the way.
@@ -4147,7 +4362,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     if _hx is not None:
                         gM *= float(T.harmonium_expression_gain(h, _hx))
                     gL = gM*props.hrtf_gain(hf, li); gR = gM*props.hrtf_gain(hf, ri)
-                    cvp = cv_r * rp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
+                    cvp = cv_r * _cp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                     if mls > 0.0:
                         mlo = props.mode_lock_offset_for(m)
                         _TB[0], _TB[1], _TB[2] = (mlo, props.mode_lock_time, props.mode_lock_time*6.0) \
@@ -4174,7 +4389,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                         if _ssd > 0.0:
                             _sk = 10.0 ** (random.gauss(0.0, _ssd) / 20.0)
                             gL *= _sk; gR *= _sk; gM *= _sk
-                    emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, rel_r, chiff_r,
+                    emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, prel, chiff_r,
                                  logr, logrA, aftL, rp.sustain_level, cvp, cc_r, crl, sjit, csc,
                                  gr, cr, ph0=mph)
                     # THE WIND'S SKIRT on this partial (see WIND): a noise band
@@ -4202,7 +4417,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                         _CBW[0], _CBW[1] = -max(float(_wsrc.wind_skirt_hz) / hf, float(_wrel)), 0.0
                         _NOREFL[0] = True
                         emit_partial(2*math.pi*hf/SR, gL*_wg, gR*_wg, gM*_wg, hf, non_m, noff, pfade,
-                                     rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level, 0.0, cc_r,
+                                     prel, chiff_r, logr, logrA, aftL, rp.sustain_level, 0.0, cc_r,
                                      crl, 0.0, csc, gr, cr)
                         # THE ATTACK'S RUSH (wind_attack_db): a reed's tongue
                         # beats before its resonator has hold of it, and the wind
@@ -4355,6 +4570,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                              cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
     _REV[0] = None
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
+    _push_finish(_PUSH_PEND[0])
     if _HT_PEND[0] is not None:
         _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
     # the last strike's rows end here -- before the stream hears them
@@ -4619,7 +4835,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     # That difference is the effect; see leslie.py.
     if _LESLIE_CH:
         import leslie as _LES
-        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az', 'dr'), flips=_LFLIP)
         if _n:
             print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
                   % (len(_LESLIE_CH), _n,
@@ -4655,7 +4871,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 fader_rows=dict(_LROW),      # THE CHANNEL FADER: {channel: row}
                 # which rows are sympathetic strings' (live's meend leaves them
                 # at their own pitch: Live._meend_retune)
-                sym_rows=(_sym0, _sym1), ring_rows=list(_RING))
+                sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep
@@ -4840,6 +5056,9 @@ REGISTER = os.environ.get('TUNING_REGISTER', '1') not in ('0', 'off', '')
 # uncorrelated: turbulence, not the bellows). TUNING_WIND=1 turns it on, a
 # number scales it; off by default until Ben has heard it.
 WIND = os.environ.get('TUNING_WIND', '0') not in ('0', 'off', '')
+# ...unset, a pipe organ whose class says shared_wind has it at its own
+# flexibility (wind_flex); 0/off turns every chest's swing off
+WIND_OFF = os.environ.get('TUNING_WIND') in ('0', 'off')
 try:
     WIND_SCALE = float(os.environ.get('TUNING_WIND', '1')) if WIND else 1.0
 except ValueError:
@@ -4855,6 +5074,17 @@ try:
     REGISTER_SCALE = float(os.environ.get('TUNING_REGISTER', '1')) if REGISTER else 1.0
 except ValueError:
     REGISTER_SCALE = 1.0
+
+
+def wind_scale_for(pc):
+    """THE SHARED WIND's swing scale for an organ class (wind.py): TUNING_WIND
+    if set, else the class's own flexibility where it has the shared wind by
+    default, else none. Both renderers ask this."""
+    if WIND:
+        return WIND_SCALE
+    if WIND_OFF or not getattr(pc, 'shared_wind', False):
+        return 0.0
+    return float(getattr(pc, 'wind_flex', 1.0))
 
 
 def render(path, tuner='hybrid440'):

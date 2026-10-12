@@ -83,14 +83,14 @@ RATED = {
  13:(4,"Iowa xylophone"),
  14:(4,"VSCO 2 CE's chimes (CC0), C4 G4 C5 F5: a free-free tube's modes, the note an octave under the fourth -- plus the hum a third above it and a mode a sixth below, rising with pitch; the upper modes compressing as the tube shortens; each mode's own ring, the hum outlasting the rest. Renders read back on the fitted lines. Ben, by ear: sounds great"),
  15:(2,"struck steel courses; the stiffness is estimated"),
- 16:(3,"tonewheel + Leslie, worked over extensively by ear"),
- 17:(3,"tonewheel, percussive tap"),
- 18:(3,"tonewheel, overdriven"),
- 19:(3,"flue pipes; registration built on Geer and judged by ear. The wind is fitted to Pitea's recorded pipes -- the jet's turbulence as noise skirts, the reeds' attack rush -- but the pipes' tone is not, so it stays a 3. A shared wind per division (sag under a chord) and a Tremulant stop, off by default until judged by ear"),
- 20:(2,"a French harmonium: free reeds, four registers split bass/treble, celeste, Expression/Percussion/Tremolo on CC43/44"),
- 21:(2,"AccordionProperties: musette, the reed banks deliberately offset ~16 cents"),
+ 16:(4,"hammondman's tonewheel organ through a Leslie, two packs (freesound 18844, 15120, CC0): the recordings' drawbar settings DERIVED from their spectra (examples/drawbar_fit.py) and the model's drawbars, gains and foldback validated on them to 3.5 dB rms -- 23 notes slow, 17 fast; the Leslie measured: the bass rotor directional from 160 Hz (it barely swung), the cabinet's response (a dip at 400-640 Hz, the horn's 1.5 kHz peak), a two-rotor crossover (partials near 800 Hz from both: the shimmer), the horn's throw and lobe refitted (6.9 -> 4.7 dB); and the wheels -- the KEY CLICK as the contacts make it (each drawbar's at its own instant over 15 ms, at the wheel's running phase, a bounce of noise; within ~1 dB of the takes' burst), their own harmonics 8-17 dB purer, the takes' leakage at the unpulled drawbars (-48 dB). Ben: drawbar and Leslie sound great; the click sounds good"),
+ 17:(3,"tonewheel, percussive tap. The drawbars, Leslie and cabinet are GM 16's, measured; the percussion tap is asserted -- no recording has it"),
+ 18:(4,"as 16, the rok pack's fast rotor and its drawbars (00 8876 034) measured; and its overdrive, from the energy off the drawbars' harmonics: only to the edge of breakup (drive 1.53 -> 0.92, the recording's 41 dB under the drawbars). Ben: sounds great"),
+ 19:(4,"FITTED TO PITEA'S PIPES (Lars Palo's set of the Gronlund organ, CC BY-SA 2.5; examples/pitea_fit.py): the Principal 8, Octave 4 and Super Octave 2 each their own measured series, h1-h32 at three anchor pitches, within 0.9 dB rms; the pipe's SPEECH fitted register by register -- 24 of its own periods, the upper harmonics first, h2-h4 overshooting ~+6 dB mid-keyboard, the release as long as the speech, and each pipe's release its own, an upper band ringing on past the fundamental on some (the release's squeak, fitted to the spread across 33 pipes) -- and the wind before it (the jet's turbulence, the reeds' attack rush). Pitea's fundamentals swing 15 dB key to key with its hall's modes; the tables keep the median and leave the room out. A shared wind per division, on by default -- a chord breathes as it enters and lifts, every pipe on the chest hearing it -- and a Tremulant. Every other stop is rated in the stops map. Ben: sounds great"),
+ 20:(4,"donyaquick's harmonium (freesound 330410, CC0), all 32 keys G2-D5 held 7-12 s (examples/wind_fit.py --voice=reedorgan): it plays an 8' and a 4' -- its evens beat, each key's 4' 0.4-12 cents sharp (rank_detune) -- so ours is measured at 8'+4'; the foundation reed fitted far brighter (gate 0.52 -> 1.07), the 4' voiced as it and at twice the level, the series within 2.5 dB rms, the partials' odd/even cents the take's; the reed's hiss between the harmonics. The French registers re-anchored on it. Ben: sounds great"),
+ 21:(4,"hammondman's Hohner on musette (freesound pack 18842, CC0), 15 keys A3-E6 (examples/wind_fit.py --voice=accordion): the musette's detune measured -- 16.0 cents at A4, as asserted, narrowing 3.3 an octave -- and no 16'; the reed bright and HOLLOW (odd harmonics strong, evens 4.8 dB down), the box's colour by absolute frequency (FormantBody), the reeds' hiss; and the BELLOWS' PUSH on a note from silence -- a +10 dB swell at 0.1 s, brightening the bass far more than the treble, every partial settling together -- carried over a slur where it stands. Ben: sounds great"),
  22:(4,"VCSL Hohner Special 20s and Super 64 (CC0), 30 sustains (examples/wind_fit.py): the reed's flow and the tongue's own sine, the cupped hands and a broad top fitted by absolute frequency to 17 kHz, each reed its own jagged ladder (the takes' roughness and holes), breath, flutter and wobble. Ben: very close, sounding real; the lowest and highest notes slightly off"),
- 23:(2,"TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is"),
+ 23:(2,"TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is. The box, reeds' hiss and hollowness are GM 21's, measured; the dry tuning and the 16' are asserted -- no bandoneon recording"),
  24:(4,"Iowa classical guitar, six strings measured sul A/B/D/E/G"),
  25:(4,"NYU's GuitarSet (CC BY 4.0), a steel-string acoustic on a microphone: 493 notes that sound alone in its 360 takes. The string measured (examples/egtr_fit.py --string=steel: decay 10-30 dB/s rising with the note, the stretch 1-2.4e-4 -- the derivation had 1.7e-3), the classical's borrowed body refitted to it by absolute frequency (examples/steel_fit.py: less mid honk, 3-6 kHz presence; 3.3 -> 1.2 dB). Ben: good"),
  26:(4,"Fraunhofer IDMT-SMT-Guitar (CC BY-NC-ND, measured only), DI, the RG2820's neck humbucker (examples/egtr_fit.py): the family's string measured on 306 notes (decay 5-30 dB/s, rising with the harmonic and up the neck; stretch 4e-4 at E2 to 1e-4 at E4), each note fretted where a player puts it so the pick and coil combs climb the neck, the pick, notch, tilt and the coil's load fitted (ladder 8.95 -> 5.40 dB); amp and cabinet after, unchanged"),
@@ -390,6 +390,126 @@ def drum_set_table():
     return "\n".join(L)
 
 
+# ---- stops: the registers WITHIN a program ---------------------------------------
+# A program's rating is its default registration's. A registerable program has
+# other stops, and each is its own claim -- the harmonium take plays two of its
+# nine reeds, Pitea's principals measured three of the console's fourteen. So
+# each is rated here on the same scale, by the stop's name as the class's
+# stop_ranks spells it (read from the code, checked against it: a stop renamed
+# or added without a rating fails the build). CONTROLS are the rest of the
+# console -- the Leslie's speeds, the accordion's banks -- that are not stops.
+# Each entry: (programs, what the panel is, {stop: (rating, note)},
+#              [(control, rating, note)]).
+STOP_RATED = [
+ ((6,), "the harpsichord's registers (CC11 stop word)", {
+    "8":       (4, "the lower 8': VCSL's English harpsichord, the GM 6 fit"),
+    "8-upper": (2, "plucked near the nut (1/22): the nasal comb, from the jack's position. No recording of a second 8'"),
+    "4":       (2, "the octave choir: the 8''s string at twice the pitch. No recording of it"),
+    "lute":    (2, "the buff: pads at the nut, the upper partials and the decay cut. No recording of it"),
+  }, []),
+ ((16, 17, 18), "the tonewheel's nine drawbars", {
+    "8":     (4, "pulled in both of hammondman's packs; drawbar_fit.py derives the settings (tonewheel 00 7880 000, rok 00 8876 034) and the model explains every note to 3.0-3.9 dB rms"),
+    "4":     (4, "as 8: both packs, 3.4-3.6 dB"),
+    "2-2/3": (4, "as 8: both packs, 2.9-4.1 dB -- the tempered twelfth"),
+    "2":     (4, "the rok pack, 3.6 dB"),
+    "1-1/3": (4, "the rok pack, 4.0 dB"),
+    "1":     (4, "the rok pack, 3.1 dB, with the foldback above the 91st wheel"),
+    "16":    (2, "never pulled in a take: its wheels are built as the measured bars' are, its level asserted"),
+    "5-1/3": (2, "never pulled in a take, as 16"),
+    "1-3/5": (2, "never pulled in a take: the tempered seventeenth, 13.7 cents sharp, asserted"),
+  }, [
+    ("Leslie slow (chorale)", 4, "the tonewheel pack: the bass rotor's lobe from 160 Hz, the cabinet's response, the crossover's shimmer"),
+    ("Leslie fast (tremolo)", 4, "the rok pack: the horn's throw and lobe refitted, 6.9 -> 4.7 dB"),
+    ("key click and leakage", 4, "every drawbar's contact at its own instant over 15 ms, the bounce's noise, the unpulled wheels at -48 dB: within ~1 dB of the takes"),
+    ("percussion (GM 17)", 2, "the second- or third-harmonic tap and its decay: asserted, no take has it"),
+    ("overdrive (GM 18)", 4, "the rok pack's energy off the drawbars' harmonics: to the edge of breakup, drive 0.92"),
+  ]),
+ ((19,), "the church organ's console (14-bit stop word, CC11 | CC43<<7)", {
+    "principal 8":    (4, "Pitea's HV Principal 8: its own series at three anchor pitches, its speech and overshoot fitted register by register, its wind. Ben: sounds great"),
+    "octave 4":       (4, "Pitea's HV Oktava 4: its own series, brighter over the middle keys than the 8' at the same pitch; the speech the 8''s law at its pitch"),
+    "super octave 2": (4, "Pitea's HV Oktava 2: its own series, near-pure in the treble (h2 33 dB down)"),
+    "quint 2-2/3":    (4, "Pitea's Positiv Kvinta 2 2/3: its own series at its pitch, its speech the principal's law at its own pitch (its overshoot on its own harmonics, not the key's)"),
+    "quint 5-1/3":    (2, "as the 2 2/3, an octave down. Pitea's only 5 1/3 is in the pedal mixture"),
+    "principal 16":   (2, "the 8''s series an octave down, asserted. Pitea has no open 16' on a manual"),
+    "flute 8":        (4, "Pitea's Positiv Gedakt 8 (examples/pitea_stops.py): its own series at three anchor pitches, read at the rank's pitch (h3 12-20 dB down, the evens 30-50); its speech fitted (24 of its own periods, no overshoot -- it had taken the principal's); its wind fitted before. Level held"),
+    "bourdon 16":     (4, "Pitea's Huvudverk Gedackt Pommer 16, as the flute 8: its series, its speech (12 periods, the upper harmonics a little ahead)"),
+    "mixture III":    (4, "Pitea's Huvudverk Mixtur IV, its harmonics read key by key: the composition breaking back at every C (1 1/3 1 2/3, then 2 1 1/3 1, 2 2/3 2 1 1/3, 4 2 2/3 2 -- the IV's lowest three), each pipe the principal's measured series at its own pitch; within 2-5 dB of the IV's three, its fourth rank absent"),
+    "reed 8":         (4, "Pitea's Positiv Cromorne 8: its series -- the evens there, which the odd-only reed had not -- its speech (12 periods, no overshoot), its wind and attack rush fitted before. Heard as BuxWV 140's fugue reed"),
+    "reed 16":        (4, "the extended set's Basson 16, as reed 8. Heard as BuxWV 161's Posaune"),
+    "reed 4":         (4, "Pitea's Svallverk Clarion 4, as reed 8: bright to h7, speaking slowly (18 periods over an 80 ms valve)"),
+    "trumpet 8":      (4, "Pitea's Huvudverk Trumpet 8, as reed 8: its own series in place of the orchestral trumpet's, which a forced stiffness had cut off above 2.6 kHz; speech 18 periods. Trimmed by ear in BuxWV 161"),
+    "tremulant":      (2, "no pipes: a valve pulsing the division's wind. Off by default until judged by ear"),
+  }, [
+    ("pipe speech and release", 4, "fitted on the Principal 8 by register; every flue rank takes the law at its own pitch"),
+    ("shared wind (the chest)", 3, "every pipe on the chest hears the others' demand: a chord dips the pressure as it enters and surges it as it lifts, a reservoir ringing at 4 Hz and a regulator restoring it -- the form the physics' (Pykett, Carlsson 2002, the Rodgers wind patent), the size Ben's ear's (flexibility 1 of off/1/2.5/8: a five-note chord takes ~2 cents from a held note). No recording of one organ's coupling was fitted: it varies organ to organ. On by default"),
+    ("the key's groove", 2, "not modelled: the stops on a key share its channel, so a release drains faster with more drawn, and the pipes go flat as it drains (Pitea's reeds 35-68 cents at C3-C4)"),
+  ]),
+ ((20,), "the harmonium's registers (CC43/44 stop word: bass | treble at E4/F4)", {
+    "cor anglais 1": (4, "the bass 8' foundation: donyaquick's harmonium, 32 keys, the series within 2.5 dB rms"),
+    "flute 1":       (4, "the treble 8' foundation, as cor anglais 1"),
+    "clairon 3":     (4, "the bass 4': the take's other reed, each key 0.4-12 cents sharp of its octave, voiced as the foundation at 1.2x its level"),
+    "fifre 3":       (4, "the treble 4', as clairon 3"),
+    "bourdon 2":     (2, "the bass 16', darker (gate 0.90, corner 3 kHz): re-anchored on the fitted foundation, its voicing asserted"),
+    "clarinette 2":  (2, "the treble 16', covered (gate 0.85, corner 2.6 kHz): as bourdon 2"),
+    "basson 4":      (2, "the bass 8' solo, reedy (gate 1.08, corner 8 kHz): re-anchored as bourdon 2"),
+    "hautbois 4":    (2, "the treble 8' solo, as basson 4"),
+    "celeste":       (2, "a 16' reed tuned +12 cents: EB1911 says only 'not quite in unison', the amount a choice"),
+    "expression":    (2, "the reservoir shut, the feet the wind: brightness with pressure, asserted"),
+    "percussion":    (2, "a hammer on the front 8' reeds at key-down, asserted"),
+    "tremolo":       (2, "a small bellows fluttering the trunk, asserted"),
+  }, []),
+ ((21, 23), "the accordion's reed banks (no stops: GM gives each box its own program)", {}, [
+    ("musette (GM 21)", 4, "two 8' banks, the wet one 16.0 cents at A4 narrowing 3.3 an octave, no 16': measured on hammondman's Hohner"),
+    ("bellows push (GM 21)", 4, "the swell from silence, carried over a slur: measured on the same take"),
+    ("bandoneon (GM 23)", 2, "the same measured box tuned dry (3 cents) with a 16' bank at 0.75: asserted, no bandoneon recording"),
+  ]),
+ ((55,), "the orchestra hit's sections (CC11, all seven drawn by default)", {
+    "bass":   (2, "the tuba's conical brass two octaves down: a measured voice, its part in the hit asserted"),
+    "tenor":  (2, "the trombone an octave down, as bass"),
+    "horn":   (2, "the horn at pitch, as bass"),
+    "string": (2, "the bowed strings marcato, as bass"),
+    "tpt":    (2, "the trumpet an octave up, as bass"),
+    "wind":   (2, "flutes and oboes as a stopped pipe an octave up, as bass"),
+    "picc":   (2, "the piccolo two octaves up, as bass"),
+  }, []),
+]
+
+
+def stops():
+    """[(programs, panel, [(bit, stop, rating, note)], controls)], the stop names
+    read from each program's class and checked against STOP_RATED."""
+    out = []
+    for progs, panel, rated, controls in STOP_RATED:
+        cls = patch_map.property_class_for_note(progs[0], 60)
+        names = [r[0] for r in getattr(cls, "stop_ranks", None) or []] if rated else []
+        missing = [n for n in names if n not in rated]
+        extra = [n for n in rated if n not in names]
+        if missing or extra:
+            raise SystemExit("STOP_RATED for GM %s (%s) does not match its stop_ranks: unrated %s, unknown %s"
+                             % (progs[0], cls.__name__, missing, extra))
+        rows = [(i, n) + rated[n] for i, n in enumerate(names)]
+        out.append((progs, panel, rows, controls))
+    return out
+
+
+def stops_md():
+    L = ["## Stops: the registers within a program\n",
+         "A program's rating is its default registration's. Each stop of a",
+         "registerable program is its own claim, rated on the same scale; the",
+         "names are the code's (`stop_ranks`), and the bit is the stop word's.",
+         "Controls are the rest of the console that are not stops.\n"]
+    for progs, panel, rows, controls in stops():
+        L.append("### %s -- %s\n" % (", ".join("%d %s" % (p, GM[p]) for p in progs), panel))
+        L.append("| bit | stop | | notes |")
+        L.append("|---|---|---|---|")
+        for i, n, r, note in rows:
+            L.append("| %d | %s | **%d** | %s |" % (i, n, r, note))
+        for n, r, note in controls:
+            L.append("| -- | %s | **%d** | %s |" % (n, r, note))
+        L.append("")
+    return "\n".join(L)
+
+
 # THE CLASS TREE. Every class a program or a drum note is routed to, hung
 # under its PHYSICAL base -- the first base that is itself a voice class
 # (tonelib's convention: a class sits below what it physically is, struck or
@@ -545,6 +665,7 @@ def main(argv):
             L.append("| %d | %s | `%s` | **%d** | %s |"
                      % (p, GM[p], cls.replace("Properties", ""), r, note))
         L.append("")
+    L.append(stops_md())
     L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)

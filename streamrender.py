@@ -737,7 +737,10 @@ class Stream:
         meta = []
         LE.expand(mini, channels, self.B.SR, self.cols, meta=meta,
                   loudest=self.loudest, rotors=self.rotors)
-        for k in ('vd', 'vr', 'vp'):                         # in place
+        # in place: the rotor's vibrato, and the cabinet's colour on each row
+        # (leslie.cabinet_gain) -- which the old copy-back dropped, so a stream
+        # render had the cabinet on the sidebands alone and prepare() on all
+        for k in ('vd', 'vr', 'vp', 'aL', 'aR', 'aM'):
             r[k] = np.array(mini[k][:n0], dtype=r[k].dtype)
         if not meta:
             return None

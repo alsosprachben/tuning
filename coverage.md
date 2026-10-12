@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 17 | 13% |
-| 3 specific, theory + ear | 17 | 13% |
-| 4 specific, reference audio | 94 | 73% |
+| 2 specific, theory | 15 | 12% |
+| 3 specific, theory + ear | 14 | 11% |
+| 4 specific, reference audio | 99 | 77% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -185,14 +185,14 @@ plays Standard, as does any program that is not a set.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 16 | Drawbar Organ | `DrawbarOrgan` | **3** | tonewheel + Leslie, worked over extensively by ear |
-| 17 | Percussive Organ | `PercussiveOrgan` | **3** | tonewheel, percussive tap |
-| 18 | Rock Organ | `RockOrgan` | **3** | tonewheel, overdriven |
-| 19 | Church Organ | `FlueOrgan` | **3** | flue pipes; registration built on Geer and judged by ear. The wind is fitted to Pitea's recorded pipes -- the jet's turbulence as noise skirts, the reeds' attack rush -- but the pipes' tone is not, so it stays a 3. A shared wind per division (sag under a chord) and a Tremulant stop, off by default until judged by ear |
-| 20 | Reed Organ | `ReedOrganFree` | **2** | a French harmonium: free reeds, four registers split bass/treble, celeste, Expression/Percussion/Tremolo on CC43/44 |
-| 21 | Accordion | `Accordion` | **2** | AccordionProperties: musette, the reed banks deliberately offset ~16 cents |
+| 16 | Drawbar Organ | `DrawbarOrgan` | **4** | hammondman's tonewheel organ through a Leslie, two packs (freesound 18844, 15120, CC0): the recordings' drawbar settings DERIVED from their spectra (examples/drawbar_fit.py) and the model's drawbars, gains and foldback validated on them to 3.5 dB rms -- 23 notes slow, 17 fast; the Leslie measured: the bass rotor directional from 160 Hz (it barely swung), the cabinet's response (a dip at 400-640 Hz, the horn's 1.5 kHz peak), a two-rotor crossover (partials near 800 Hz from both: the shimmer), the horn's throw and lobe refitted (6.9 -> 4.7 dB); and the wheels -- the KEY CLICK as the contacts make it (each drawbar's at its own instant over 15 ms, at the wheel's running phase, a bounce of noise; within ~1 dB of the takes' burst), their own harmonics 8-17 dB purer, the takes' leakage at the unpulled drawbars (-48 dB). Ben: drawbar and Leslie sound great; the click sounds good |
+| 17 | Percussive Organ | `PercussiveOrgan` | **3** | tonewheel, percussive tap. The drawbars, Leslie and cabinet are GM 16's, measured; the percussion tap is asserted -- no recording has it |
+| 18 | Rock Organ | `RockOrgan` | **4** | as 16, the rok pack's fast rotor and its drawbars (00 8876 034) measured; and its overdrive, from the energy off the drawbars' harmonics: only to the edge of breakup (drive 1.53 -> 0.92, the recording's 41 dB under the drawbars). Ben: sounds great |
+| 19 | Church Organ | `FlueOrgan` | **4** | FITTED TO PITEA'S PIPES (Lars Palo's set of the Gronlund organ, CC BY-SA 2.5; examples/pitea_fit.py): the Principal 8, Octave 4 and Super Octave 2 each their own measured series, h1-h32 at three anchor pitches, within 0.9 dB rms; the pipe's SPEECH fitted register by register -- 24 of its own periods, the upper harmonics first, h2-h4 overshooting ~+6 dB mid-keyboard, the release as long as the speech, and each pipe's release its own, an upper band ringing on past the fundamental on some (the release's squeak, fitted to the spread across 33 pipes) -- and the wind before it (the jet's turbulence, the reeds' attack rush). Pitea's fundamentals swing 15 dB key to key with its hall's modes; the tables keep the median and leave the room out. A shared wind per division, on by default -- a chord breathes as it enters and lifts, every pipe on the chest hearing it -- and a Tremulant. Every other stop is rated in the stops map. Ben: sounds great |
+| 20 | Reed Organ | `ReedOrganFree` | **4** | donyaquick's harmonium (freesound 330410, CC0), all 32 keys G2-D5 held 7-12 s (examples/wind_fit.py --voice=reedorgan): it plays an 8' and a 4' -- its evens beat, each key's 4' 0.4-12 cents sharp (rank_detune) -- so ours is measured at 8'+4'; the foundation reed fitted far brighter (gate 0.52 -> 1.07), the 4' voiced as it and at twice the level, the series within 2.5 dB rms, the partials' odd/even cents the take's; the reed's hiss between the harmonics. The French registers re-anchored on it. Ben: sounds great |
+| 21 | Accordion | `Accordion` | **4** | hammondman's Hohner on musette (freesound pack 18842, CC0), 15 keys A3-E6 (examples/wind_fit.py --voice=accordion): the musette's detune measured -- 16.0 cents at A4, as asserted, narrowing 3.3 an octave -- and no 16'; the reed bright and HOLLOW (odd harmonics strong, evens 4.8 dB down), the box's colour by absolute frequency (FormantBody), the reeds' hiss; and the BELLOWS' PUSH on a note from silence -- a +10 dB swell at 0.1 s, brightening the bass far more than the treble, every partial settling together -- carried over a slur where it stands. Ben: sounds great |
 | 22 | Harmonica | `Harmonica` | **4** | VCSL Hohner Special 20s and Super 64 (CC0), 30 sustains (examples/wind_fit.py): the reed's flow and the tongue's own sine, the cupped hands and a broad top fitted by absolute frequency to 17 kHz, each reed its own jagged ladder (the takes' roughness and holes), breath, flutter and wobble. Ben: very close, sounding real; the lowest and highest notes slightly off |
-| 23 | Tango Accordion | `TangoAccordion` | **2** | TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is |
+| 23 | Tango Accordion | `TangoAccordion` | **2** | TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is. The box, reeds' hiss and hollowness are GM 21's, measured; the dry tuning and the 16' are asserted -- no bandoneon recording |
 
 ## 24-31 Guitar
 
@@ -363,6 +363,100 @@ plays Standard, as does any program that is not a set.
 | 126 | Applause | `Applause` | **2** | its own class, theory |
 | 127 | Gunshot | `Gunshot` | **2** | an N-wave whose length the key sets (its spectrum peaks on the key), the tail the room, standing back at 127's distance. Published measurements, no recording |
 
+## Stops: the registers within a program
+
+A program's rating is its default registration's. Each stop of a
+registerable program is its own claim, rated on the same scale; the
+names are the code's (`stop_ranks`), and the bit is the stop word's.
+Controls are the rest of the console that are not stops.
+
+### 6 Harpsichord -- the harpsichord's registers (CC11 stop word)
+
+| bit | stop | | notes |
+|---|---|---|---|
+| 0 | 8 | **4** | the lower 8': VCSL's English harpsichord, the GM 6 fit |
+| 1 | 8-upper | **2** | plucked near the nut (1/22): the nasal comb, from the jack's position. No recording of a second 8' |
+| 2 | 4 | **2** | the octave choir: the 8''s string at twice the pitch. No recording of it |
+| 3 | lute | **2** | the buff: pads at the nut, the upper partials and the decay cut. No recording of it |
+
+### 16 Drawbar Organ, 17 Percussive Organ, 18 Rock Organ -- the tonewheel's nine drawbars
+
+| bit | stop | | notes |
+|---|---|---|---|
+| 0 | 16 | **2** | never pulled in a take: its wheels are built as the measured bars' are, its level asserted |
+| 1 | 5-1/3 | **2** | never pulled in a take, as 16 |
+| 2 | 8 | **4** | pulled in both of hammondman's packs; drawbar_fit.py derives the settings (tonewheel 00 7880 000, rok 00 8876 034) and the model explains every note to 3.0-3.9 dB rms |
+| 3 | 4 | **4** | as 8: both packs, 3.4-3.6 dB |
+| 4 | 2-2/3 | **4** | as 8: both packs, 2.9-4.1 dB -- the tempered twelfth |
+| 5 | 2 | **4** | the rok pack, 3.6 dB |
+| 6 | 1-3/5 | **2** | never pulled in a take: the tempered seventeenth, 13.7 cents sharp, asserted |
+| 7 | 1-1/3 | **4** | the rok pack, 4.0 dB |
+| 8 | 1 | **4** | the rok pack, 3.1 dB, with the foldback above the 91st wheel |
+| -- | Leslie slow (chorale) | **4** | the tonewheel pack: the bass rotor's lobe from 160 Hz, the cabinet's response, the crossover's shimmer |
+| -- | Leslie fast (tremolo) | **4** | the rok pack: the horn's throw and lobe refitted, 6.9 -> 4.7 dB |
+| -- | key click and leakage | **4** | every drawbar's contact at its own instant over 15 ms, the bounce's noise, the unpulled wheels at -48 dB: within ~1 dB of the takes |
+| -- | percussion (GM 17) | **2** | the second- or third-harmonic tap and its decay: asserted, no take has it |
+| -- | overdrive (GM 18) | **4** | the rok pack's energy off the drawbars' harmonics: to the edge of breakup, drive 0.92 |
+
+### 19 Church Organ -- the church organ's console (14-bit stop word, CC11 | CC43<<7)
+
+| bit | stop | | notes |
+|---|---|---|---|
+| 0 | principal 8 | **4** | Pitea's HV Principal 8: its own series at three anchor pitches, its speech and overshoot fitted register by register, its wind. Ben: sounds great |
+| 1 | octave 4 | **4** | Pitea's HV Oktava 4: its own series, brighter over the middle keys than the 8' at the same pitch; the speech the 8''s law at its pitch |
+| 2 | super octave 2 | **4** | Pitea's HV Oktava 2: its own series, near-pure in the treble (h2 33 dB down) |
+| 3 | quint 2-2/3 | **4** | Pitea's Positiv Kvinta 2 2/3: its own series at its pitch, its speech the principal's law at its own pitch (its overshoot on its own harmonics, not the key's) |
+| 4 | principal 16 | **2** | the 8''s series an octave down, asserted. Pitea has no open 16' on a manual |
+| 5 | quint 5-1/3 | **2** | as the 2 2/3, an octave down. Pitea's only 5 1/3 is in the pedal mixture |
+| 6 | flute 8 | **4** | Pitea's Positiv Gedakt 8 (examples/pitea_stops.py): its own series at three anchor pitches, read at the rank's pitch (h3 12-20 dB down, the evens 30-50); its speech fitted (24 of its own periods, no overshoot -- it had taken the principal's); its wind fitted before. Level held |
+| 7 | mixture III | **4** | Pitea's Huvudverk Mixtur IV, its harmonics read key by key: the composition breaking back at every C (1 1/3 1 2/3, then 2 1 1/3 1, 2 2/3 2 1 1/3, 4 2 2/3 2 -- the IV's lowest three), each pipe the principal's measured series at its own pitch; within 2-5 dB of the IV's three, its fourth rank absent |
+| 8 | reed 8 | **4** | Pitea's Positiv Cromorne 8: its series -- the evens there, which the odd-only reed had not -- its speech (12 periods, no overshoot), its wind and attack rush fitted before. Heard as BuxWV 140's fugue reed |
+| 9 | reed 16 | **4** | the extended set's Basson 16, as reed 8. Heard as BuxWV 161's Posaune |
+| 10 | reed 4 | **4** | Pitea's Svallverk Clarion 4, as reed 8: bright to h7, speaking slowly (18 periods over an 80 ms valve) |
+| 11 | trumpet 8 | **4** | Pitea's Huvudverk Trumpet 8, as reed 8: its own series in place of the orchestral trumpet's, which a forced stiffness had cut off above 2.6 kHz; speech 18 periods. Trimmed by ear in BuxWV 161 |
+| 12 | bourdon 16 | **4** | Pitea's Huvudverk Gedackt Pommer 16, as the flute 8: its series, its speech (12 periods, the upper harmonics a little ahead) |
+| 13 | tremulant | **2** | no pipes: a valve pulsing the division's wind. Off by default until judged by ear |
+| -- | pipe speech and release | **4** | fitted on the Principal 8 by register; every flue rank takes the law at its own pitch |
+| -- | shared wind (the chest) | **3** | every pipe on the chest hears the others' demand: a chord dips the pressure as it enters and surges it as it lifts, a reservoir ringing at 4 Hz and a regulator restoring it -- the form the physics' (Pykett, Carlsson 2002, the Rodgers wind patent), the size Ben's ear's (flexibility 1 of off/1/2.5/8: a five-note chord takes ~2 cents from a held note). No recording of one organ's coupling was fitted: it varies organ to organ. On by default |
+| -- | the key's groove | **2** | not modelled: the stops on a key share its channel, so a release drains faster with more drawn, and the pipes go flat as it drains (Pitea's reeds 35-68 cents at C3-C4) |
+
+### 20 Reed Organ -- the harmonium's registers (CC43/44 stop word: bass | treble at E4/F4)
+
+| bit | stop | | notes |
+|---|---|---|---|
+| 0 | cor anglais 1 | **4** | the bass 8' foundation: donyaquick's harmonium, 32 keys, the series within 2.5 dB rms |
+| 1 | bourdon 2 | **2** | the bass 16', darker (gate 0.90, corner 3 kHz): re-anchored on the fitted foundation, its voicing asserted |
+| 2 | clairon 3 | **4** | the bass 4': the take's other reed, each key 0.4-12 cents sharp of its octave, voiced as the foundation at 1.2x its level |
+| 3 | basson 4 | **2** | the bass 8' solo, reedy (gate 1.08, corner 8 kHz): re-anchored as bourdon 2 |
+| 4 | flute 1 | **4** | the treble 8' foundation, as cor anglais 1 |
+| 5 | clarinette 2 | **2** | the treble 16', covered (gate 0.85, corner 2.6 kHz): as bourdon 2 |
+| 6 | fifre 3 | **4** | the treble 4', as clairon 3 |
+| 7 | hautbois 4 | **2** | the treble 8' solo, as basson 4 |
+| 8 | celeste | **2** | a 16' reed tuned +12 cents: EB1911 says only 'not quite in unison', the amount a choice |
+| 9 | expression | **2** | the reservoir shut, the feet the wind: brightness with pressure, asserted |
+| 10 | percussion | **2** | a hammer on the front 8' reeds at key-down, asserted |
+| 11 | tremolo | **2** | a small bellows fluttering the trunk, asserted |
+
+### 21 Accordion, 23 Tango Accordion -- the accordion's reed banks (no stops: GM gives each box its own program)
+
+| bit | stop | | notes |
+|---|---|---|---|
+| -- | musette (GM 21) | **4** | two 8' banks, the wet one 16.0 cents at A4 narrowing 3.3 an octave, no 16': measured on hammondman's Hohner |
+| -- | bellows push (GM 21) | **4** | the swell from silence, carried over a slur: measured on the same take |
+| -- | bandoneon (GM 23) | **2** | the same measured box tuned dry (3 cents) with a 16' bank at 0.75: asserted, no bandoneon recording |
+
+### 55 Orchestra Hit -- the orchestra hit's sections (CC11, all seven drawn by default)
+
+| bit | stop | | notes |
+|---|---|---|---|
+| 0 | bass | **2** | the tuba's conical brass two octaves down: a measured voice, its part in the hit asserted |
+| 1 | tenor | **2** | the trombone an octave down, as bass |
+| 2 | horn | **2** | the horn at pitch, as bass |
+| 3 | string | **2** | the bowed strings marcato, as bass |
+| 4 | tpt | **2** | the trumpet an octave up, as bass |
+| 5 | wind | **2** | flutes and oboes as a stopped pipe an octave up, as bass |
+| 6 | picc | **2** | the piccolo two octaves up, as bass |
+
 ## The class tree
 
 287 classes.
@@ -376,10 +470,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
   - `Cuica` -- 79 Open Cuica (4)
     - `MuteCuica` -- 78 Mute Cuica (4)
   - `FreeReed`
-    - `Accordion` -- GM 21 Accordion (2)
+    - `Accordion` [FormantBody] -- GM 21 Accordion (4)
       - `TangoAccordion` -- GM 23 Tango Accordion (2)
     - `Harmonica` [FormantBody] -- GM 22 Harmonica (4)
-    - `ReedOrganFree` -- GM 20 Reed Organ (2)
+    - `ReedOrganFree` -- GM 20 Reed Organ (4)
   - `PluckedString`
     - `AcousticBass` [FormantBody] -- GM 32 Acoustic Bass (4)
     - `ElectricGuitar` -- GM 27 Electric Guitar (clean) (4)
@@ -641,7 +735,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `Trumpet` -- GM 56 Trumpet (4)
             - `MutedTrumpet` -- GM 59 Muted Trumpet (4)
             - `TrumpetSection` [SectionMixin] -- GM 61 Brass Section (3)
-      - `FlueOrgan` -- GM 19 Church Organ (3)
+      - `FlueOrgan` -- GM 19 Church Organ (4)
       - `ReedOrgan`
         - `CylindricalReed`
           - `BagpipeDrone`
@@ -656,7 +750,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `Shanai` -- GM 111 Shanai (3)
     - `PanFlute` -- GM 75 Pan Flute (4)
   - `Tonewheel`
-    - `DrawbarOrgan` -- GM 16 Drawbar Organ (3)
+    - `DrawbarOrgan` -- GM 16 Drawbar Organ (4)
     - `PercussiveOrgan` -- GM 17 Percussive Organ (3)
-    - `RockOrgan` -- GM 18 Rock Organ (3)
+    - `RockOrgan` -- GM 18 Rock Organ (4)
 

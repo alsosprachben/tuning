@@ -140,6 +140,7 @@ p{margin:0; max-width:66ch; color:var(--ink-2)}
 .scalelist .t{font-weight:600; color:var(--ink)}
 .scalelist .d{color:var(--muted); font-size:13.5px}
 
+.stopstack{display:grid; gap:18px}
 /* ---- tables -------------------------------------------------------------- */
 .fambox{border:1px solid var(--rule); border-radius:4px; background:var(--card); overflow:hidden}
 .famhead{
@@ -272,6 +273,28 @@ def percussion():
     return "\n".join(strip)
 
 
+def stops():
+    """The stops map (gm_coverage.stops): one box per registerable program,
+    a pip per stop, then the stops by bit and the controls after."""
+    out = []
+    for progs, panel, rows, controls in C.stops():
+        items = [(str(i), n, r, note) for i, n, r, note in rows] + \
+                [("&ndash;", n, r, note) for n, r, note in controls]
+        pips = "\n".join('<span class="pip r%d" title="%s"></span>' % (r, e(n)) for _, n, r, _ in items)
+        trs = "\n".join('<tr><td class="num">%s</td><td class="nm">%s</td>'
+                        '<td class="rt"><span class="chip r%d">%d</span></td>'
+                        '<td class="note">%s</td></tr>' % (b, e(n), r, r, e(note))
+                        for b, n, r, note in items)
+        out.append(
+            '<div class="fambox">\n'
+            '<div class="famhead"><h3>%s</h3><span class="rng">%s</span>'
+            '<span class="pips">\n%s\n</span></div>\n'
+            '<div class="tscroll"><table><tr><th>Bit</th><th>Stop</th>'
+            '<th></th><th>Notes</th></tr>\n%s\n</table></div></div>'
+            % (" &middot; ".join("%d %s" % (p, e(C.GM[p])) for p in progs), e(panel), pips, trs))
+    return "\n".join(out)
+
+
 def tree():
     """The class tree (gm_coverage.class_tree), collapsible below two levels."""
     n = [0]
@@ -329,6 +352,9 @@ def build():
         "scale": scale,
         "families": families(),
         "perc": percussion(),
+        "stops": stops(),
+        "nstop": sum(len(r) + len(c) for _, _, r, c in C.stops()),
+        "nstop4": sum(1 for _, _, r, c in C.stops() for x in list(r) + list(c) if x[-2] == 4),
         "catline": ("The %d patches on a voice of the wrong physical kind are %s."
                     % (len(cat), ", ".join("%d %s" % (p, e(C.GM[p])) for p in cat)) if cat else
                     "None is played by a voice of the wrong physical kind: the last three were "
@@ -392,6 +418,14 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <div class="strip">
 %(perc)s
 </div>
+</div>
+</section>
+
+<section>
+<h2>Stops: the registers within a program</h2>
+<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. %(nstop4)d of the %(nstop)d are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
+<div class="stopstack">
+%(stops)s
 </div>
 </section>
 

@@ -10,7 +10,9 @@ takes' stable notes (examples/freesound_slice.py pipes; VOICE_OPTS).
     wind_fit.py --voice=ocarina --fit=breath  fit sustain_jitter to the breath
     wind_fit.py --voice=harmonica --top       the ladder by absolute frequency, to 20 kHz
     wind_fit.py --voice=harmonica --fit=scatter  each reed's own ladder, to the roughness
+    wind_fit.py --voice=accordion --fit=push   the bellows' push on a note from silence
     wind_fit.py --voice=bagpipe --fit=body     body_trim_db, the harmonics by where they sound
+    (and the harmonium, GM 20, --voice=reedorgan; the shanai, GM 111)
     wind_fit.py --voice=shakuhachi --fit=tables [--keys=57-62] [--match=uncle] [--low] [--breath]
                                               the series and breath tables, note by note
 
@@ -63,6 +65,12 @@ VOICES = {
     # shehnai found), its stable notes staged by examples/freesound_slice.py
     # pipes shanai -- G4 and a flat E5, eight notes in all
     "shanai": (111, "ShanaiProperties", "shanai", "*_cdrk_*.wav"),
+    # GM 20: donyaquick's harmonium, its 32 keys G2-D5 held 7-12 s (CC0),
+    # staged by examples/freesound_slice.py harmonium
+    "reedorgan": (20, "ReedOrganFreeProperties", "reedorgan", "*_donya_*.wav"),
+    # GM 21: hammondman's Hohner on musette, 15 keys A3-E6 (CC0), staged by
+    # examples/freesound_slice.py accordion
+    "accordion": (21, "AccordionProperties", "accordion", "*_hwav_*.wav"),
 }
 # WHERE A VOICE'S NOTES ARE, how they are named and how long they hold: VCSL's
 # are an octave low and sustained for seconds; the staged Freesound notes are
@@ -80,6 +88,15 @@ VOICE_OPTS = {
     # voice honours, the drones following) -- so the two sound at the same
     # Hz and a bore's or a reed's colour lines up where it is. CC1 0 corks
     # the drones: the takes are the chanter alone
+    # THE HARMONIUM IS AT ITS OWN PITCH, ~9 cents sharp of A440 (every key):
+    # rendered there, as the chanter is
+    # ...AND IT PLAYS AN 8' AND A 4' TOGETHER (the even harmonics beat): ours
+    # with registers 1 and 3 drawn in both halves, stop word 85 on CC43
+    "reedorgan": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.5, t1=4.0,
+                      tonic_cents=9.0, ccs=((43, 85), (44, 0))),
+    # the musette's keys hold 1.4-2.3 s, ~8 cents sharp of A440
+    "accordion": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.25, t1=1.2,
+                      tonic_cents=8.0),
     # the zurna's notes are short: its E5s hold 0.4 s, its G4s 0.85
     "shanai": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.1, t1=0.38),
     "bagpipe": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.5, t1=3.5,
@@ -87,6 +104,7 @@ VOICE_OPTS = {
 }
 TONIC_CENTS = 0.0
 CC1 = None
+CCS = ()          # (cc, value) sent before the note: a registration (VOICE_OPTS ccs)
 T0, T1 = 0.4, 1.9
 VEL = 80
 NH = 12
@@ -196,6 +214,8 @@ def render(program, key, secs=2.4):
         t.append(mido.Message("pitchwheel", channel=0, pitch=int(round(TONIC_CENTS / 200.0 * 8191)), time=0))
     if CC1 is not None:
         t.append(mido.Message("control_change", channel=0, control=1, value=CC1, time=0))
+    for _cc, _v in CCS:
+        t.append(mido.Message("control_change", channel=0, control=_cc, value=_v, time=0))
     t.append(mido.Message("note_on", channel=0, note=key, velocity=VEL, time=0))
     t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
     L, R = B.render(m)[:2]
@@ -539,6 +559,80 @@ def turb_report(voice, prog):
 
 
 CEN = np.sqrt(E3[:-1] * E3[1:])
+
+
+PUSH = ("bellows_push_gain", "bellows_push_rise_s", "bellows_push_dbs", "bellows_push_tilt",
+        "bellows_push_tilt_per_octave")
+PUSH_T = (0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5)
+
+
+def push_shape(x, sr, key):
+    """A note's onset against its steady level (0.6-1.0 s after it speaks):
+    the level, dB, at PUSH_T; and how much brighter it is at its loudest in the
+    first 0.4 s -- h3-h8's power over h1's, dB re the same at 0.8 s."""
+    w = int(0.01 * sr)
+    e = np.sqrt(np.convolve(x * x, np.ones(w) / w, "same"))
+    a = int(np.flatnonzero(e > e.max() * 0.03)[0])
+    st = np.median(e[a + int(0.6 * sr):a + int(1.0 * sr)])
+    lv = np.array([20 * np.log10(e[a + int(t * sr)] / st + 1e-9) for t in PUSH_T])
+    pk = int(np.argmax(e[a:a + int(0.4 * sr)]))
+    f0 = 440.0 * 2 ** ((key - 69) / 12.0 + TONIC_CENTS / 1200.0)
+    win = int(0.04 * sr)
+    fr = np.fft.rfftfreq(win * 4, 1.0 / sr)
+
+    def tilt(i):
+        X = np.abs(np.fft.rfft(x[i:i + win] * np.hanning(win), win * 4))
+        hs = [X[np.abs(fr - k * f0) < 0.2 * f0].max() for k in range(1, 9)]
+        return 10 * np.log10(sum(h * h for h in hs[2:]) / hs[0] ** 2)
+    return lv, tilt(a + pk) - tilt(a + int(0.8 * sr))
+
+
+def fit_push(voice, prog, cls, maxfev=80):
+    """--fit=push: the bellows' push (tonelib.bellows_push_weight) -- its
+    gain, rise, decay and tilt with its slope up the keyboard -- against each
+    key's onset: its level at PUSH_T re its steady level, and how much
+    brighter it is at its peak (push_shape). The error: the level's rms, key
+    by key, and the brightening's TREND -- its line against octave, at A4 and
+    its slope -- not key by key: a musette's harmonics beat 12-19 dB, so one
+    40 ms window at the peak scatters 5-7 dB even on this model, which has no
+    randomness in it."""
+    from scipy.optimize import minimize
+    import warnings
+    warnings.simplefilter("ignore")
+    refs = [(key, push_shape(*load(p), key)) for key, p in recordings(voice)]
+    x0 = np.array([float(getattr(cls, k)) for k in PUSH])
+    lin = np.array([False, False, False, True, True])
+    best = [1e9, x0]
+
+    def val(z):
+        return np.where(lin, x0 + 0.3 * z, x0 * np.exp(z))
+
+    def f(z):
+        v = val(z)
+        for k, q in zip(PUSH, v):
+            setattr(cls, k, float(q))
+        el, ob_ = [], []
+        for key, (lv, bt) in refs:
+            y, sr = render(prog, key, 1.6)
+            ol, ob = push_shape(y, sr, key)
+            el.extend(ol - lv)
+            ob_.append(ob)
+        oc = np.array([(k - 69) / 12.0 for k, _ in refs])
+        rb = np.polyfit(oc, [b for _, (_, b) in refs], 1)
+        obf = np.polyfit(oc, ob_, 1)
+        eb = [obf[1] - rb[1], obf[0] - rb[0]]       # at A4, and an octave's change
+        e = float(np.sqrt(np.mean(np.square(el)) + 0.25 * np.mean(np.square(eb))))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %5.2f (level %.2f dB, brightening %.2f dB)  %s" % (
+                e, np.sqrt(np.mean(np.square(el))), np.sqrt(np.mean(np.square(eb))),
+                " ".join("%s=%.4g" % (k[13:], q) for k, q in zip(PUSH, v))), flush=True)
+        return e
+    minimize(f, np.zeros(len(PUSH)), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(len(PUSH)), 0.4 * np.eye(len(PUSH))]),
+                      "xatol": 0.02, "fatol": 0.02})
+    for k, q in zip(PUSH, best[1]):
+        print("    %s = %.4g" % (k, q))
 
 
 def fit_breath(voice, prog, cls, passes=4, step=2):
@@ -907,11 +1001,12 @@ def main(argv):
     if spec:
         return inharm(spec) or 0
     voice = next((a.split("=")[1] for a in argv if a.startswith("--voice=")), "recorder")
-    global T0, T1, TONIC_CENTS, CC1
+    global T0, T1, TONIC_CENTS, CC1, CCS
     T0 = VOICE_OPTS.get(voice, {}).get("t0", T0)
     T1 = VOICE_OPTS.get(voice, {}).get("t1", T1)
     TONIC_CENTS = VOICE_OPTS.get(voice, {}).get("tonic_cents", 0.0)
     CC1 = VOICE_OPTS.get(voice, {}).get("cc1")
+    CCS = VOICE_OPTS.get(voice, {}).get("ccs", ())
     prog, cls = use_class(voice)
     fitarg = next((a for a in argv if a.startswith("--fit")), None)
     if fitarg == "--fit=breath":
@@ -922,6 +1017,9 @@ def main(argv):
         return 0
     elif fitarg == "--fit=scatter":
         fit_scatter(voice, prog, cls)
+        return 0
+    elif fitarg == "--fit=push":
+        fit_push(voice, prog, cls)
         return 0
     elif fitarg == "--fit=body":
         fit_body(voice, prog, cls)

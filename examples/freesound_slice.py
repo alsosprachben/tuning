@@ -6,6 +6,8 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
     python3 examples/freesound_slice.py surdo
     python3 examples/freesound_slice.py pipes [VOICE ...]
     python3 examples/freesound_slice.py bagpipe
+    python3 examples/freesound_slice.py harmonium
+    python3 examples/freesound_slice.py accordion
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
 refs/sources.md), one 75 s mp3 decoded to float. 53 onsets (a rise of 20 dB in
@@ -214,8 +216,81 @@ def track(x, sr, fmin, fmax, hop=0.01, win=0.04):
     return np.array(out)
 
 
-def pipes(only=None):
+def stage_runs(x, sr, out, tag, fmin, fmax, min_len, n=0):
+    """x's STABLE notes into OUT as <note><octave>_<tag>_<n>.wav: runs of
+    periodic frames (aperiodicity < 0.2) within 25 dB of the loudest and
+    within 35 cents of their own median, MIN_LEN s or more, cut 50 ms either
+    side. Returns the next n."""
     from scipy.io import wavfile
+    T = track(x, sr, fmin, fmax)
+    ok = (T[:, 1] < 0.2) & (T[:, 2] > T[:, 2].max() - 25.0)
+    k = 0
+    while k < len(T):
+        if not ok[k]:
+            k += 1
+            continue
+        j = k
+        while j + 1 < len(T) and ok[j + 1] and abs(1200 * np.log2(T[j + 1, 0] / np.median(T[k:j + 1, 0]))) < 35:
+            j += 1
+        if (j - k + 1) * 0.01 >= min_len:
+            f0 = float(np.median(T[k:j + 1, 0]))
+            midi = int(round(69 + 12 * np.log2(f0 / 440.0)))
+            a0, a1 = max(0, int((k * 0.01 - 0.05) * sr)), int(((j + 1) * 0.01 + 0.09) * sr)
+            name = "%s%d_%s_%d.wav" % (NAMES[midi % 12], midi // 12 - 1, tag, n)
+            # 16-bit PCM, each at its own peak: voicefit's reader takes PCM
+            # only, and a note's level is no part of a spectral fit
+            seg = x[a0:a1]
+            seg = seg / max(np.abs(seg).max(), 1e-9) * 0.9
+            wavfile.write(os.path.join(out, name), sr, (seg * 32767).astype(np.int16))
+            n += 1
+        k = j + 1
+    return n
+
+
+def harmonium():
+    """donyaquick's harmonium (freesound 330410, CC0; sources.md "Organs and
+    free reeds"): 7.5 min at 96 kHz, every key and every drone separately --
+    the keys chromatic G2-D5, each held 7-12 s, from 71.5 s to 374 s (before
+    them a passage of short repeated notes, after them the drone stops, both
+    left out). The keys' stable runs, 5 s or more, staged as the pipes are."""
+    out = os.path.join(REFS, "staged", "reedorgan")
+    os.makedirs(out, exist_ok=True)
+    for f in glob.glob(os.path.join(out, "*.wav")):
+        os.remove(f)
+    src = glob.glob(os.path.join(REFS, "harmonium/330410__*.wav"))[0]
+    with tempfile.TemporaryDirectory() as d:
+        wav = os.path.join(d, "t.wav")
+        subprocess.run(["sox", src, "-r", "48000", "-e", "floating-point", "-b", "32", "-c", "1", wav,
+                        "trim", "71.5", "=374.0"], check=True, stderr=subprocess.DEVNULL)
+        a, sr = read(wav)
+    x = a if a.ndim == 1 else a.mean(1)
+    n = stage_runs(x, sr, out, "donya", 80, 800, 5.0)
+    print("reedorgan  %3d stable notes -> %s" % (n, out))
+
+
+def accordion():
+    """hammondman's Hohner on musette (freesound pack 18842, CC0; sources.md
+    "Organs and free reeds"): 15 single keys, 32 kHz, 1.4-2.3 s. Named an
+    octave under what they sound, so each is named here by its tracked
+    pitch (the median of its periodic frames)."""
+    from scipy.io import wavfile
+    out = os.path.join(REFS, "staged", "accordion")
+    os.makedirs(out, exist_ok=True)
+    for f in glob.glob(os.path.join(out, "*.wav")):
+        os.remove(f)
+    for n, src in enumerate(sorted(glob.glob(os.path.join(REFS, "accordion/hammondman_wav/*.wav")))):
+        a, sr = read(src)
+        x = (a if a.ndim == 1 else a.mean(1)).astype(np.float64)
+        T = track(x, sr, 60, 1500)
+        f0 = float(np.median(T[T[:, 1] < 0.2, 0]))
+        midi = int(round(69 + 12 * np.log2(f0 / 440.0)))
+        name = "%s%d_hwav_%d.wav" % (NAMES[midi % 12], midi // 12 - 1, n)
+        x = x / max(np.abs(x).max(), 1e-9) * 0.9
+        wavfile.write(os.path.join(out, name), sr, (x * 32767).astype(np.int16))
+    print("accordion  %3d keys -> %s" % (n + 1, out))
+
+
+def pipes(only=None):
     for voice, takes in PIPES.items():
         if only and voice not in only:
             continue
@@ -232,28 +307,7 @@ def pipes(only=None):
                                    check=True, stderr=subprocess.DEVNULL)
                     a, sr = read(wav)
                 x = a if a.ndim == 1 else a.mean(1)
-                T = track(x, sr, fmin, fmax)
-                ok = (T[:, 1] < 0.2) & (T[:, 2] > T[:, 2].max() - 25.0)
-                k = 0
-                while k < len(T):
-                    if not ok[k]:
-                        k += 1
-                        continue
-                    j = k
-                    while j + 1 < len(T) and ok[j + 1] and abs(1200 * np.log2(T[j + 1, 0] / np.median(T[k:j + 1, 0]))) < 35:
-                        j += 1
-                    if (j - k + 1) * 0.01 >= min_len:
-                        f0 = float(np.median(T[k:j + 1, 0]))
-                        midi = int(round(69 + 12 * np.log2(f0 / 440.0)))
-                        a0, a1 = max(0, int((k * 0.01 - 0.05) * sr)), int(((j + 1) * 0.01 + 0.09) * sr)
-                        name = "%s%d_%s_%d.wav" % (NAMES[midi % 12], midi // 12 - 1, tag, n)
-                        # 16-bit PCM, each at its own peak: voicefit's reader takes PCM
-                        # only, and a note's level is no part of a spectral fit
-                        seg = x[a0:a1]
-                        seg = seg / max(np.abs(seg).max(), 1e-9) * 0.9
-                        wavfile.write(os.path.join(out, name), sr, (seg * 32767).astype(np.int16))
-                        n += 1
-                    k = j + 1
+                n = stage_runs(x, sr, out, tag, fmin, fmax, min_len, n)
         print("%-10s %3d stable notes -> %s" % (voice, n, out))
 
 
@@ -299,4 +353,5 @@ if __name__ == "__main__":
     if sys.argv[1] == "pipes":
         pipes(sys.argv[2:])
     else:
-        {"timbales": timbales, "surdo": surdo, "bagpipe": bagpipe}[sys.argv[1]]()
+        {"timbales": timbales, "surdo": surdo, "bagpipe": bagpipe, "harmonium": harmonium,
+         "accordion": accordion}[sys.argv[1]]()

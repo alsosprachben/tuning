@@ -1121,6 +1121,16 @@ class SynthProperties:
     wind_sag_per_unit = 0.0
     wind_sag_hz = 4.0
     wind_sag_zeta = 0.35
+    # ...the regulator that restores it (seconds, how fully), the most the
+    # swing can be (a fraction of static), the shared wind's FLEXIBILITY (the
+    # swing's scale, by ear), and whether a render has the shared wind
+    # without being asked (TUNING_WIND unset; TUNING_WIND=0 turns it off, a
+    # number sets the scale)
+    wind_regulator_s = 0.0
+    wind_regulator_restore = 1.0
+    wind_sag_max = 0.0
+    wind_flex = 1.0
+    shared_wind = False
     tremulant_hz = 5.6
     tremulant_depth = 0.0
     tremulant_tau = 0.25
@@ -2942,9 +2952,31 @@ class SynthProperties:
 
     def mode_gains_here(self):
         """mode_gains at this note: with a low register, blended toward it."""
+        return self.mode_gains_at(self.frequency_x * (2.0 ** self.octave_position))
+
+    def mode_gains_at(self, frequency):
+        """mode_gains for a sound at FREQUENCY -- an organ rank's own pitch, not
+        its key's: a 4' over a low key is the middle register's pipe."""
+        pts = getattr(self, 'mode_gains_points', None)
+        if pts:
+            # MEASURED TABLES AT ANCHOR PITCHES (Hz, gains): between two, the
+            # gains blended in dB along log frequency; held past the ends. A
+            # register need not lie between its neighbours -- the Pitea organ's
+            # 4' and 2' are brightest over the middle keys
+            if frequency <= pts[0][0]:
+                return pts[0][1]
+            if frequency >= pts[-1][0]:
+                return pts[-1][1]
+            for (fa, ga), (fb, gb) in zip(pts, pts[1:]):
+                if frequency <= fb:
+                    w = _log(fb / frequency) / _log(fb / fa)      # share of the lower
+                    n = max(len(ga), len(gb))
+                    ga = tuple(ga) + (0.0,) * (n - len(ga))
+                    gb = tuple(gb) + (0.0,) * (n - len(gb))
+                    return tuple(self._blend_db(x, y, w) if (x or y) else 0.0 for x, y in zip(ga, gb))
         if self.mode_gains_low is None:
             return self.mode_gains
-        w = self.register_low_share(self.frequency_x * (2.0 ** self.octave_position))
+        w = self.register_low_share(frequency)
         n = max(len(self.mode_gains), len(self.mode_gains_low))
         hi = tuple(self.mode_gains) + (0.0,) * (n - len(self.mode_gains))
         lo = tuple(self.mode_gains_low) + (0.0,) * (n - len(self.mode_gains_low))
@@ -4855,7 +4887,7 @@ class TonewheelProperties(SynthProperties):
     # harmonics, so the cap belongs up here. Wheel purity is tonal_dampening's
     # job and it does it: h2 at -21 dB, h3 at -33, near enough a sine.
     max_harmonic = 24
-    tonal_dampening = 3.5
+    tonal_dampening = 5.0       # measured: see drawbar_leak_db
     odd_only = False
 
     # NO REGISTER SLOPE. Every note is the same nine wheels through the same
@@ -4900,11 +4932,40 @@ class TonewheelProperties(SynthProperties):
     # close within a millisecond or so of each other and each one steps its
     # wheel in from silence; the step IS the click, and it is broadband because
     # it is a step. Give the envelope a millisecond and it arrives on its own.
-    attack_time = 0.0015
     decay_db = 0.0                   # a wheel does not decay
     harmonic_decay_db = 0.0
     harmonic_decay_dampening = 0.0
     sustain_level = 1.0
+    # THE KEY CLICK (Ben, live: "quite a click on the Rock Organ's attack,
+    # especially the lower you go"). A key closes nine busbar contacts as it
+    # travels, one a drawbar: each wheel switched in at its own instant, at
+    # whatever phase it has spun to, and each contact BOUNCING -- a burst of
+    # noise -- as it closes. The voice had every wheel in together, at phase
+    # zero, on a 1.5 ms ramp: a splatter, too loud in the bass (G2's burst over
+    # 3 kHz 20-23 dB under the note, the takes' 25-27) and no rise at all (the
+    # takes reach -6 dB in ~9 ms). FITTED against hammondman's two packs at
+    # their derived drawbars (examples/drawbar_fit.py), key by key
+    # -- the burst over 3 kHz in a note's first 10 ms, against its steady treble,
+    # both packs at their derived drawbars, with the wheels' purity and leakage
+    # below: the bass and treble each within ~1 dB of the takes' (11 dB rms key
+    # by key: a slow rotor scatters single notes). Contacts over 15 ms, each
+    # wheel rising over 8 ms from its own (the bounce, averaged), each burst 47
+    # dB under its drawbar's fundamental, flat 1-13 kHz, gone at 250 dB/s
+    contact_spread_s = 0.015
+    attack_time = 0.008
+    partial_phase_spread = 1.0
+    contact_noise_db = tuple((hz, -47.0) for hz in (1018, 1283, 1616, 2036, 2566, 3233, 4073, 5132,
+                                                     6465, 8146, 10263, 12931))
+    contact_noise_dbs = 250.0
+    # THE WHEELS, NEITHER PURE NOR ALONE. A wheel's own 2nd harmonic, read where
+    # it lands on an unpulled drawbar (the slow pack's 2' and 1 1/3', the M100's
+    # 4'), was 8-17 dB hot at tonal_dampening 3.5; 5.0 puts them within 2 dB
+    # (the M100's 1 1/3' 8 over). And where no drawn wheel's harmonic reaches,
+    # the takes still sound -44 to -51 dB under the loudest drawbar (the M100's
+    # 16' -69): LEAKAGE, each drawn drawbar's contact carrying the other wheel
+    # positions -- this voice had none (-74 to -103). drawbar_leak_db: the
+    # other eight positions, under each drawn drawbar's fundamental
+    drawbar_leak_db = -48.0      # the B3 pack's 16', 5 1/3', 1 3/5' within ~2 dB (the M100, a spinet, leaks less)
 
     # DRAWBARS ARE A REGISTRATION, the same machinery the pipe organ and the
     # harpsichord use: CC11 carries the low seven and CC43 the high. Without
@@ -4962,6 +5023,11 @@ class DrawbarOrganProperties(TonewheelProperties):
     """GM 16. The console itself, no percussion, rotor on chorale."""
     leslie = True
     leslie_fast = False
+    # HELD at its level (the mean of C4-G5's first second at velocity 100)
+    # through the Leslie's measurement (leslie.py: the cabinet's response, the
+    # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
+    # click, their purity, their leakage)
+    initial_gain = TonewheelProperties.initial_gain * 10 ** (0.937 / 20.0)
 
 
 class PercussiveOrganProperties(TonewheelProperties):
@@ -4973,12 +5039,19 @@ class PercussiveOrganProperties(TonewheelProperties):
     fast-decaying top over a flat sustain, which is the part that reads.
     """
     default_stops = 0b000001111      # 888 8
+    # the percussion tap is a fast attack: its 1.5 ms kept, under the contacts
+    attack_time = 0.0015
     decay_db = 3.0
     harmonic_decay_db = 9.0          # the tap, and it is all in the upper wheels
     harmonic_decay_dampening = 0.0
     sustain_level = 0.80
     leslie = True
     leslie_fast = False
+    # HELD at its level (the mean of C4-G5's first second at velocity 100)
+    # through the Leslie's measurement (leslie.py: the cabinet's response, the
+    # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
+    # click, their purity, their leakage)
+    initial_gain = TonewheelProperties.initial_gain * 10 ** (0.152 / 20.0)
 
 
 class RockOrganProperties(TonewheelProperties):
@@ -4986,6 +5059,11 @@ class RockOrganProperties(TonewheelProperties):
     default_stops = 0b100000111      # 888 000 008
     leslie = True
     leslie_fast = True
+    # HELD at its level (the mean of C4-G5's first second at velocity 100)
+    # through the Leslie's measurement (leslie.py: the cabinet's response, the
+    # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
+    # click, their purity, their leakage)
+    initial_gain = TonewheelProperties.initial_gain * 10 ** (1.800 / 20.0)
     # RE-VOICED after tubeamp's units fix. The distortion had been arriving with
     # the valve stage's own gain still on it -- 8 to 9.5 dB hot against a dry path
     # at unity -- so every drive in this file was set to sound right through an
@@ -4997,17 +5075,32 @@ class RockOrganProperties(TonewheelProperties):
     # The ratios are not constant -- 1.7x here, 4.8x on the distortion guitar --
     # because the curve compresses: recovering the same distortion from a stage
     # that is already working harder costs disproportionately more drive.
-    amp_drive = 1.53
+    # ...AND THEN MEASURED: hammondman's "Rok organ" (sources.md "Organs and free
+    # reeds"), its drawbars derived (examples/drawbar_fit.py), is driven only to
+    # the edge of breakup -- its energy off the drawbars' harmonics 41 dB under
+    # them, 3 dB over this voice with the amplifier out -- and 1.53 put ours 6
+    # dB grittier. 0.92 matches it (Ben: "use 0.92")
+    amp_drive = 0.92
 
 
 class OrganProperties(StoppedPipeProperties):
     # THE CHEST (wind.py), shared by every rank on a division's channel: a
-    # wander under Pitea's bound (0.3% RMS is 0.2 cents on a flue), a sag of
-    # 0.05% per unit of draw through a bellows resonant at 4 Hz, damping 0.35,
-    # and a gentle Tremulant, +-10% at 5.6 Hz -- all starting values for the
-    # ear. The wander and the sag follow TUNING_WIND; the Tremulant is a stop.
+    # wander under Pitea's bound (0.3% RMS is 0.2 cents on a flue), and a
+    # SWING under the pipes' demand -- 0.4% of the pressure per unit of draw
+    # (an 8' middle C one unit: an eight-unit chord dips 3%) at wind_flex 1,
+    # through a reservoir resonant at 4 Hz, damped 0.3 (a cycle or two of
+    # ringing), its regulator restoring the static pressure over a quarter
+    # second and the swing saturating at 25% -- so a chord breathes in as it
+    # enters and out as it lifts, and every pipe on the chest hears it: the
+    # coupling a single-note sample set cannot have. Its size is the organ's
+    # character, set by ear (wind_flex); its form is the physics'. A gentle
+    # Tremulant, +-10% at 5.6 Hz, is a stop.
     wind_wander_rms = 0.003
-    wind_sag_per_unit = 0.0005
+    wind_sag_per_unit = 0.004
+    wind_sag_zeta = 0.3
+    wind_regulator_s = 0.25
+    wind_regulator_restore = 1.0
+    wind_sag_max = 0.25
     tremulant_depth = 0.10
     # ---------------------------------------------------------- pipe scaling
     #
@@ -5168,13 +5261,42 @@ class FlueOrganProperties(OrganProperties):
     # reed's 1.4 is not an error to be corrected, it is the other half of the
     # distinction.
     tonal_dampening = 2.2
+    # ...MEASURED (sources.md "Pipe organ": the Pitea organ's HV Principal 8,
+    # pipe by pipe; examples/pitea_fit.py): a principal is ROUND -- h2 and h3
+    # 5-8 dB under the fundamental in the bass, where this law had them 11-17
+    # -- and its top falls ever faster, -4.15 (log2 n)^2 dB (h8 -37, h16 -67,
+    # where this had -32 and -43), 12-27 dB too bright from 2 to 8 kHz. No
+    # power law with a corner does both (pitea_fit.py --fit=tone: 10 dB rms at
+    # best), and up the keyboard the treble's h2 sits 10 dB lower again -- so
+    # the series is MEASURED TABLES at three anchor pitches, the median pipe's
+    # ladder to h32 of the keys to B2, C3-B4 and from C5, blended between
+    # (pitea_fit.py --fit=tables: within 0.4 dB rms in each register)
+    mode_gains_points = (
+        (58.3, (1.00000, 0.60428, 0.43414, 0.16270, 0.06117, 0.04470, 0.02607, 0.01421, 0.00627,
+                  0.01034, 0.00626, 0.00698, 0.00301, 0.00157, 0.00155, 0.00049, 0.00040, 0.00022,
+                  0.00011, 0.00018, 0.00011, 0.00019, 0.00055, 0.00048, 0.00017, 0.00041, 0.00016,
+                  0.00019, 0.00029, 0.00016, 0.00013, 0.00023)),
+        (233.1, (1.00000, 0.36067, 0.15752, 0.05844, 0.02144, 0.01760, 0.00953, 0.00780, 0.00570,
+                  0.00474, 0.00289, 0.00269, 0.00059, 0.00100, 0.00016, 0.00034, 0.00013, 0.00016,
+                  0.00013, 0.00008, 0.00019, 0.00013, 0.00008, 0.00009, 0.00006, 0.00005, 0.00006,
+                  0.00005, 0.00003, 0.00008, 0.00004, 0.00004)),
+        (1046.5, (1.00000, 0.18939, 0.07052, 0.02231, 0.01499, 0.01015, 0.00554, 0.00634, 0.00352,
+                  0.00197, 0.00131, 0.00023, 0.00161, 0.00099, 0.00094, 0.00084, 0.00088, 0.00055,
+                  0.00020, 0.00230, 0.00025, 0.00052, 0.00049, 0.00035, 0.00014, 0.00014, 0.00014,
+                  0.00014, 0.00014, 0.00014, 0.00014, 0.00014)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
 
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
     # a peak normalise and these voices play alone -- and the organ family is
     # shifted by ONE common factor, so the reed-versus-flue balance tuned by ear
     # survives untouched.
-    initial_gain = 0.0001294572617
+    # x498.5: the comb's absolute scale, which the power law carried and the
+    # measured tables (mode_gains, relative to the fundamental) do not -- a
+    # constant at every pitch; GM 19 had fallen 54 dB without it
+    initial_gain = 0.0001294572617 * 498.50 * 10 ** (-0.278 / 20.0)   # ...held through the speech fit
     # Flue pipes have pitched partials, so like the bare blown pipe they must
     # track whatever tuning renders them or their octaves beat. Under the hybrid
     # (Steinway-B) tuning -- the temperament for dense Baroque counterpoint --
@@ -5203,7 +5325,44 @@ class FlueOrganProperties(OrganProperties):
     # ~70 ms, middle C in ~25 ms, the top in ~12 ms.
     chiff_min_valve_time = 0.004
     chiff_max_valve_time = 0.008
-    speech_cycles = 4.0
+    # A PIPE SPEAKS, AND OVERSHOOTS (Ben: "a little attack swell with breath").
+    # MEASURED on the Pitea organ's HV Principal 8, every other pipe
+    # (examples/pitea_speech.py): its UPPER harmonics speak first -- at middle
+    # C h2-h4 are up while the fundamental is still 21 dB down -- and overshoot
+    # their steady level, +7 dB at ~65 ms over the middle keys, +1 to +3 in the
+    # bass and treble; the fundamental reaching -3 dB at 130 ms in the bass, 65
+    # in the middle, 10 at the top. Every harmonic had come in at once, in 4
+    # periods. Fitted (Nelder-Mead on the registers' medians): the speech 23.8
+    # periods, harmonic m in m^-0.77 of it, and the overshoot a band around h3
+    # (the push, every note: a pipe speaks, a bellows is not involved),
+    # strongest over the middle keys. The speech is the release's ramp too:
+    # ~370 ms at 65 Hz, 24 ms at 1 kHz -- a long pipe rings down slowly
+    speech_cycles = 23.76
+    speech_harmonic_exp = 0.766
+    # ...each rank by its OWN pipe: a 4' over a key speaks as the 4' does, and
+    # a rank whose class says rank_speech (the Gedakt) speaks as that class
+    rank_speech_own_pitch = True
+    # THE SHARED WIND ON (wind.py, OrganProperties): every chest breathes under
+    # its chords unless TUNING_WIND=0 -- at flexibility 1, Ben's choice from
+    # off, 1, 2.5 and 8 (examples/wind_ab.py): a five-note chord takes about
+    # 2 cents from a held note as it enters and gives it back as it lifts
+    shared_wind = True
+    wind_flex = 1.0
+    # ...AND EACH PIPE RELEASES AS ITSELF (tonelib.release_band_scale): Pitea's
+    # principals let the fundamental go first on most pipes and ring on in an
+    # upper band on some -- 2x and more on one in five, the release's squeak.
+    # Fitted to the spread across 33 pipes of the 8', 4' and 2' through the
+    # matched hall (examples/pitea_release.py --fit=release): 0.74 -> 0.45
+    # octaves rms over the bands' 20th/50th/80th percentiles
+    release_band_mu = 0.5
+    release_band_sigma = 1.0
+    bellows_push_every_note = True
+    bellows_push_band = (3.0, 0.6)
+    bellows_push_gain = 2.801
+    bellows_push_rise_s = 0.1054
+    bellows_push_dbs = 42.11
+    bellows_push_settle_db = -20.0
+    bellows_push_register = ((65.0, -10.42), (200.0, 0.0), (1000.0, -5.14))
 
     # Chiff = the pipe SPEAKING. A pipe can only radiate at the frequencies it
     # resonates, so the onset transient is shaped by the same modes as the steady
@@ -5219,8 +5378,10 @@ class FlueOrganProperties(OrganProperties):
     chiff_harmonic_span = None
     chiff_volume = 1.3
 
-    # Upperwork breaks back near c'' -- the top of the manual loses the 2'/mixtures,
-    # so an ascending run re-colors at the peak instead of climbing (see OrganProperties).
+    # A MIXTURE breaks back near c'' -- so an ascending run re-colors at the peak
+    # instead of climbing (see OrganProperties). Not a single 2' or quint: the
+    # Pitea organ's Oktava 2 runs its whole compass, 61 pipes to C7 at 8.4 kHz,
+    # where this broke it back from C5 and played a 4' (examples/pitea_fit.py)
     pipe_ceiling_hz = 2100.0
 
     # --- Stop list (drawn via CC11 bitfield / CC4 crescendo) ---
@@ -5250,6 +5411,58 @@ class FlueOrganProperties(OrganProperties):
     # Rollschweller draw order for the CC4 crescendo pedal: brighten, then weight.
     crescendo_order = ["principal 8", "octave 4", "super octave 2", "quint 2-2/3",
                        "principal 16", "quint 5-1/3"]
+
+
+class PrincipalOctave4Properties(FlueOrganProperties):
+    """The church organ's OCTAVE 4': a principal, voiced as its own rank -- the
+    Pitea organ's HV Oktava 4 is brighter over the middle keys than its
+    Principal 8 at the same sounding pitch, so not the 8' scaled up. Its
+    series measured as the 8''s is (examples/pitea_fit.py --fit=tables)."""
+    mode_gains_points = (
+        (164.8, (1.00000, 0.25069, 0.16055, 0.03147, 0.02093, 0.00757, 0.00908, 0.00983, 0.00848,
+                 0.00419, 0.00380, 0.00357, 0.00053, 0.00101, 0.00032, 0.00016, 0.00014, 0.00015,
+                 0.00010, 0.00009, 0.00010, 0.00013, 0.00016, 0.00013, 0.00011, 0.00011, 0.00011,
+                 0.00013, 0.00012, 0.00013, 0.00008, 0.00007)),
+        (466.2, (1.00000, 0.70565, 0.23812, 0.09536, 0.05609, 0.02763, 0.01190, 0.00691, 0.00457,
+                 0.00177, 0.00072, 0.00048, 0.00115, 0.00044, 0.00041, 0.00039, 0.00029, 0.00032,
+                 0.00031, 0.00026, 0.00015, 0.00025, 0.00010, 0.00010, 0.00012, 0.00009, 0.00011,
+                 0.00012, 0.00009, 0.00009, 0.00009, 0.00020)),
+        (2093.0, (1.00000, 0.15101, 0.07767, 0.01373, 0.00735, 0.00340, 0.00287, 0.00241, 0.00104,
+                  0.00075, 0.00027, 0.00094, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041,
+                  0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041,
+                  0.00041, 0.00041, 0.00041, 0.00041, 0.00041)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+
+
+class PrincipalOctave2Properties(FlueOrganProperties):
+    """The SUPER OCTAVE 2': the HV Oktava 2, its own tables likewise -- and in
+    the treble near-pure (h2 33 dB down), the small pipe's."""
+    mode_gains_points = (
+        (329.6, (1.00000, 0.06490, 0.07149, 0.02803, 0.00978, 0.00550, 0.00851, 0.00464, 0.00276,
+                 0.00236, 0.00112, 0.00085, 0.00041, 0.00027, 0.00016, 0.00008, 0.00024, 0.00007,
+                 0.00007, 0.00007, 0.00004, 0.00004, 0.00004, 0.00005, 0.00005, 0.00003, 0.00003,
+                 0.00004, 0.00003, 0.00004, 0.00004, 0.00007)),
+        (932.3, (1.00000, 0.51460, 0.12151, 0.03504, 0.03117, 0.03121, 0.00618, 0.01104, 0.00254,
+                 0.00073, 0.00078, 0.00062, 0.00025, 0.00032, 0.00030, 0.00052, 0.00021, 0.00095,
+                 0.00035, 0.00019, 0.00020, 0.00020, 0.00024, 0.00035, 0.00007, 0.00007, 0.00007,
+                 0.00007, 0.00007, 0.00007, 0.00007, 0.00007)),
+        (4186.0, (1.00000, 0.01201, 0.03137, 0.00392, 0.00936, 0.00028, 0.00167, 0.00167, 0.00167,
+                  0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167,
+                  0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167,
+                  0.00167, 0.00167, 0.00167, 0.00167, 0.00167)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+
+
+# each measured rank its own pipe's series
+FlueOrganProperties.stop_ranks = [
+    (r[0], r[1], r[2], {"octave 4": PrincipalOctave4Properties,
+                        "super octave 2": PrincipalOctave2Properties}[r[0]]) + tuple(r[4:])
+    if r[0] in ("octave 4", "super octave 2") else r
+    for r in FlueOrganProperties.stop_ranks]
 
 
 class ReedOrganProperties(OrganProperties):
@@ -5586,14 +5799,34 @@ class ReedOrganFreeProperties(FreeReedProperties):
     sound_controls = frozenset(('attack', 'release'))
     # A big instrument with a wooden case over the reed pans: rounder than an
     # accordion held against the chest, and the case takes more off the top.
-    bore_corner_hz = 4200.0
-    reed_gate = 0.52
+    # ...MEASURED (donyaquick's harmonium, sources.md "Organs and free reeds";
+    # examples/wind_fit.py --voice=reedorgan --fit=reed_gate,reed_edge,
+    # bore_corner_hz, its 32 keys G2-D5 against ours at 8' + 4' as it plays):
+    # the reed swings nearly as far as it can before its slot clears (gate
+    # 0.52 asserted -> 1.069, the model's ceiling ~1.08) -- a bright reed
+    # under a case that rounds it from 4.1 kHz. The odd harmonics, the 8'
+    # alone, within 3 dB of the take's to h11 (they were 10-13 dB dark)
+    bore_corner_hz = 4148.0
+    reed_gate = 1.069
+    reed_edge = 0.003018
+    # THE REED'S HISS, between the harmonics and under the fundamental, read
+    # over each key's whole steady window (wind_fit.py --fit=tables --breath,
+    # 4.5 -> 0.0 dB over 20 bands; the class had none): -65 to -70 dB re the
+    # fundamental to 1 kHz, falling to -104 by 10 kHz. (--fit=breath's 40 ms
+    # frames read the 4''s beating partials smeared into the gaps as hiss,
+    # and put it 7 dB hot)
+    breath_noise_db = ((160, -47.7), (202, -52.0), (255, -42.2), (321, -42.7), (404, -38.5), (509, -36.4),
+                       (641, -38.3), (808, -38.3), (1018, -37.5), (1283, -40.0), (1616, -42.1), (2036, -42.7),
+                       (2566, -43.3), (3233, -41.2), (4073, -42.4), (5132, -45.2), (6465, -49.4), (8146, -54.4),
+                       (10263, -59.4), (12931, -59.8))
     # Balance-normalised against the CHURCH ORGAN (GM 19) on the same passage
     # in the same room -- the acoustic member of this family and the nearest
     # neighbour in the bank. These voices normalise their own series to h1 = 1,
     # where the pipe classes carry the comb's absolute scale, so the numbers
     # here are ~500x what a pipe voice's look like and mean the same thing.
-    initial_gain = 0.05964
+    # ...and HELD there through the harmonium fit (-44.61 dB, the mean of
+    # C4-G5's first second at velocity 100): the brighter reed had it 4.6 over
+    initial_gain = 0.05964 * 10 ** (-4.594 / 20.0)
 
     registerable = True
     # ...AND STILL PLAYED, not only set up: its onset and release (CC73/72)
@@ -5603,6 +5836,12 @@ class ReedOrganFreeProperties(FreeReedProperties):
     stop_word_ccs = (43, 44)
     # Registers 1 in both halves: the plain 8-foot, what GM 20 has always been.
     default_stops = (1 << 0) | (1 << 4)
+    # THE 4-FOOT IS TUNED REED BY REED, NOT TO THE OCTAVE: donyaquick's
+    # harmonium (sources.md "Organs and free reeds") plays an 8' and a 4'
+    # together -- its even harmonics swing 5-13 dB where its odd ones hold to
+    # 1-3, and beat 0.15-5 Hz, a key's 4' 0.4-12 cents off its 8' (median
+    # 2.6). Each key its own (tonelib.rank_detune_cents)
+    rank_detune = {"clairon 3": 2.6, "fifre 3": 2.6}
     # No crescendo pedal on a harmonium: the mod wheel does not draw its stops.
     crescendo_order = []
 
@@ -5614,8 +5853,11 @@ class ReedOrganFreeProperties(FreeReedProperties):
 # slot clears, the shorter the pulse -- running from -31 dB of energy at h6 and
 # above (gate 0) to -18 dB (gate 0.8); the closing (reed_edge) moves it by a dB.
 # So the registers sit along that axis, with the case (bore_corner_hz) opened or
-# closed to match. Chosen, not fitted -- there is no recording to fit -- and
-# Ben's ear is the outer loop.
+# closed to match. Chosen, not fitted, and Ben's ear is the outer loop -- but
+# RE-ANCHORED on the foundation the harmonium take fitted (gate 1.069 where
+# 0.52 was assumed): the darker registers keep their offset below it, and the
+# brighter one, with no room left above, opens its case instead. The 4' is
+# the exception, MEASURED: see HarmoniumClaironProperties.
 #
 # ONE THING THIS MODEL CANNOT DO is a HOLLOW reed. Its evens always equal or
 # beat its odds, and darker means MORE even (a half-wave pulse is mostly even
@@ -5625,28 +5867,32 @@ class ReedOrganFreeProperties(FreeReedProperties):
 class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     """2 Bourdon, 16-foot: dark and weighty, the double diapason under the
     foundation."""
-    reed_gate = 0.35
+    reed_gate = 0.90            # 0.17 under the foundation, as it was
     bore_corner_hz = 3000.0
 
 
 class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     """2 Clarinette, treble 16-foot: dark and covered. Not hollow -- see above:
     that is the cavity this model lacks."""
-    reed_gate = 0.30
+    reed_gate = 0.85            # 0.22 under the foundation, as it was
     bore_corner_hz = 2600.0
 
 
 class HarmoniumClaironProperties(ReedOrganFreeProperties):
-    """3 Clairon / Fifre, 4-foot: the bright octave above."""
-    reed_gate = 0.65
-    bore_corner_hz = 5600.0
+    """3 Clairon / Fifre, 4-foot: the octave above -- MEASURED, the one
+    register the harmonium take plays besides the foundation. Voiced as the
+    foundation is (its own darker voicing, gate 0.65, left the take's h6-h12
+    5-10 dB short), and LOUDER than assumed: stop_ranks' 1.2, not 0.6 -- the
+    take's 4' fundamental (its h2) stands 3 dB over the 8''s. With both, the
+    series to h12 within 2.7 dB rms. Sharp of the octave key by key
+    (rank_detune)."""
 
 
 class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     """4 Basson / Hautbois, 8-foot: reedy and nasal, the treble's solo stop and
     the bass's bassoon -- the shortest pulse and the most open case."""
-    reed_gate = 0.80
-    bore_corner_hz = 6400.0
+    reed_gate = 1.08            # the ceiling: the foundation sits just under it,
+    bore_corner_hz = 8000.0     # so its brightness is the case's, opened further
 
 
 # THE VOIX CELESTE'S DETUNE, in cents. EB1911 says only "not quite in unison";
@@ -5668,11 +5914,11 @@ _TREBLE = (HARMONIUM_SPLIT, 127)
 ReedOrganFreeProperties.stop_ranks = [
     ("cor anglais 1", 1.0, 1.00, None, False, None, _BASS),
     ("bourdon 2",     0.5, 0.80, HarmoniumBourdonProperties, False, None, _BASS),
-    ("clairon 3",     2.0, 0.60, HarmoniumClaironProperties, False, None, _BASS),
+    ("clairon 3",     2.0, 1.20, HarmoniumClaironProperties, False, None, _BASS),
     ("basson 4",      1.0, 0.85, HarmoniumHautboisProperties, False, None, _BASS),
     ("flute 1",       1.0, 1.00, None, False, None, _TREBLE),
     ("clarinette 2",  0.5, 0.80, HarmoniumClarinetteProperties, False, None, _TREBLE),
-    ("fifre 3",       2.0, 0.60, HarmoniumClaironProperties, False, None, _TREBLE),
+    ("fifre 3",       2.0, 1.20, HarmoniumClaironProperties, False, None, _TREBLE),
     ("hautbois 4",    1.0, 0.85, HarmoniumHautboisProperties, False, None, _TREBLE),
     ("celeste",       0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 1200.0), 0.70,
                       HarmoniumBourdonProperties, False, None, _TREBLE),
@@ -5760,7 +6006,7 @@ ReedOrganFreeProperties.stop_tremolo_hz = 5.5
 ReedOrganFreeProperties.stop_tremolo_depth = 0.22
 
 
-class AccordionProperties(FreeReedProperties):
+class AccordionProperties(FormantBody, FreeReedProperties):
     """GM 21: two or three reed banks per note, DELIBERATELY mistuned.
 
     Musette. This is the signature of the instrument and it is a different thing
@@ -5775,24 +6021,80 @@ class AccordionProperties(FreeReedProperties):
     this voice from GM 23, which is the same instrument tuned dry.
     """
     # 8' + a wet 8'. A third bank (16') for gravity, tuned true.
+    # ...MEASURED, the musette: hammondman's Hohner (sources.md "Organs and
+    # free reeds"), 15 keys A3-E6, every harmonic beating 12-19 dB. The wet
+    # reed 16.0 cents sharp at A4 -- the 16 asserted -- and less up the
+    # keyboard, -3.3 cents an octave (18-20 in the bass, 8-13 at the top: the
+    # beat still quickening, 2.3 Hz to 9), 1.8 cents rms about that line.
+    # And NO 16': nothing an octave down (-64 dB median), so the classic
+    # two-middle-reed musette, the 16' out
     reed_detune_cents = (16.0, 0.0)
-    reed_bank_gain = (0.85, 0.55)
-    reed_bank_ratio = (1.0, 0.5)        # unison, and an octave below
+    reed_detune_per_octave = (-3.32, 0.0)
+    reed_bank_gain = (0.85, 0.0)
+    reed_bank_ratio = (1.0, 0.5)        # unison, and an octave below (silent)
 
     # Held against the chest with the grille facing out: brighter than the
     # harmonium's cabinet.
-    bore_corner_hz = 5600.0
-    reed_gate = 0.58
-    initial_gain = 0.03588
+    # ...MEASURED, the reed and the box (examples/wind_fit.py --voice=accordion
+    # --fit=reed_gate,reed_edge,bore_corner_hz,even_harmonic_db): the musette's
+    # keys are bright and HOLLOW -- h3 within 3 dB of the fundamental, h2 and
+    # h4 11-13 under -- where this voice was dark (h3 -14) and as even as odd.
+    # The reed at the model's ceiling (gate 0.58 -> 1.08), the grille open to
+    # 9.8 kHz, the evens 4 dB down
+    bore_corner_hz = 9823.0
+    reed_gate = 1.08
+    reed_edge = 0.003125        # refit with the box in place (3.94 dB; ladder 3.4)
+    even_harmonic_db = -4.753
+    # ...AND THE BOX'S OWN COLOUR, by absolute frequency (--fit=body, the keys'
+    # harmonics pooled by third-octave, 6.0 -> 0.6 dB rms): a dip at 1-2.6 kHz,
+    # the reed block's lift at 4-5 kHz, and a fall from 8 kHz the grille's
+    body_trim_db = ((202, 0.7), (255, 5.2), (321, 1.4), (404, 2.4), (509, -0.6), (641, 2.5), (808, 2.7),
+                    (1018, -5.1), (1283, -4.8), (1616, -2.6), (2036, -3.9), (2566, -3.3), (3233, -0.2),
+                    (4073, 6.3), (5132, 3.5), (6465, 2.3), (8146, -1.3), (10263, -8.5), (12931, -13.0))
+    # THE REEDS' HISS, between the harmonics and under the fundamental
+    # (--fit=tables --breath, 10.3 -> 0.1 dB over 20 bands; the voice had none):
+    # -70 to -76 dB re the fundamental, a little more at 4-5 kHz, the block's
+    breath_noise_db = ((160, -60.3), (202, -55.9), (255, -58.5), (321, -56.0), (404, -55.3), (509, -49.7),
+                       (641, -48.2), (808, -46.3), (1018, -49.1), (1283, -42.8), (1616, -44.0), (2036, -43.5),
+                       (2566, -43.0), (3233, -45.2), (4073, -35.8), (5132, -34.1), (6465, -39.7), (8146, -44.8),
+                       (10263, -43.6), (12931, -48.2))
+    # THE BELLOWS' PUSH (Ben: "a pressure/volume swell at the attack"),
+    # MEASURED on the musette's keys: up to the steady level in ~20 ms, then on
+    # up to +7 to +13.5 dB (median +9.7) at 0.06-0.21 s and easing back -- +5
+    # at 0.3 s, +2 at 0.5 -- and the low keys' upper harmonics jumping 15-27
+    # dB at the peak where the top keys' barely move. The player's arm, so ONLY
+    # FROM SILENCE: a slurred note's bellows is already moving (Ben). Not by
+    # velocity: absolute velocity is the mix, not the push. Its shape fitted
+    # (examples/wind_fit.py --voice=accordion --fit=push: the level within 2.7
+    # dB rms key by key at 0.03-0.5 s, the brightening's trend within 1.2 --
+    # read as a line against octave: one window at the peak scatters 5-7 dB on
+    # a musette's beating). Rising 0.12 s, the fundamental easing at 13 dB/s
+    # and every partial's excess down to -20 dB of its steady tone together
+    # (bellows_push_rate). The level hold below is the steady tone's, the push
+    # on top of it. A SLURRED note takes the push over where it stands
+    bellows_push_gain = 1.121
+    bellows_push_rise_s = 0.1164
+    bellows_push_dbs = 13.37
+    bellows_push_tilt = 1.005
+    bellows_push_tilt_per_octave = -0.07522
+    bellows_push_settle_db = -20.0     # every partial's excess at -20 dB together
+    # HELD at its level before the fit (-44.81 dB, the mean of C4-G5's first
+    # second at velocity 100): brighter, and the 16' out, had it 1.2 over
+    initial_gain = 0.03588 * 10 ** (-1.178 / 20.0)
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         # Each extra bank is a whole reed set, so it carries the full series at
         # its own ratio -- an octave bank is not a detune, it is another reed.
         out = []
-        for g, cents, ratio in zip(self.reed_bank_gain, self.reed_detune_cents,
-                                   self.reed_bank_ratio):
+        slope = getattr(self, 'reed_detune_per_octave', None) or (0.0,) * len(self.reed_bank_gain)
+        octv = _log(max(frequency, 1e-9) / 440.0) / _log(2.0)
+        for g, cents, ratio, per in zip(self.reed_bank_gain, self.reed_detune_cents,
+                                        self.reed_bank_ratio, slope):
             if g <= 0.0:
                 continue
+            # a bank's offset can move with the note (the musette's narrows up
+            # the keyboard): cents at A4, and so many an octave
+            cents = cents + per * octv
             det = 2.0 ** (cents / 1200.0) - 1.0
             # A bank sounds at `ratio` times the note, so the partial this voice
             # adds sits at ratio*(1+det) of where the main voice's does.
@@ -5809,10 +6111,13 @@ class TangoAccordionProperties(AccordionProperties):
     because the instrument's voice is its gravity.
     """
     reed_detune_cents = (3.0, 0.0)
+    reed_detune_per_octave = (0.0, 0.0)     # asserted flat; the musette's slope is the musette's
     reed_bank_gain = (0.80, 0.75)
     bore_corner_hz = 4600.0             # darker: a squarer, heavier box
     reed_gate = 0.50
-    initial_gain = 0.03282
+    # HELD at its level (-45.36 dB, as above) when GM 21's box was measured
+    # under it: 1.3 dB under
+    initial_gain = 0.03282 * 10 ** (1.298 / 20.0)
 
 
 class HarmonicaProperties(FormantBody, FreeReedProperties):
@@ -6169,9 +6474,260 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute 8", 1
 # footages; the build loops expand it, each sub-rank breaking back on the note's grid
 # (so all stay hybrid-locked). Drawn by bit 7 (14-bit stop word: CC11 | CC43<<7).
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture III", [6.0, 8.0, 12.0], 0.28)]
+# ...ITS COMPOSITION, PITEA'S: the Huvudverk's Mixtur IV breaks back at every
+# C -- 1 1/3 1 2/3 1/2 at C2, 2 1 1/3 1 2/3 at C3, 2 2/3 2 1 1/3 1 at C4,
+# 4 2 2/3 2 1 1/3 from C5 (examples/pitea_stops.py, its harmonics key by
+# key) -- and a Mixtur III is that composition's lowest three. Each break a
+# quarter-tone under its C, so a tuner cannot move a key across it. It was
+# broken back at the pipe ceiling, which kept the 1 1/3 doubled and no 2 2/3
+# from C4 up.
+FlueOrganProperties.mixture_compositions = {
+    "mixture III": ((0.0, (6.0, 8.0, 12.0)), (127.1, (4.0, 6.0, 8.0)),
+                    (254.2, (3.0, 4.0, 6.0)), (508.4, (2.0, 3.0, 4.0))),
+}
 # Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
 # peroration crowns without blaring (also relieves the dense close's headroom).
 ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, CylindricalBrassProperties, True)]
+
+# THE CONSOLE'S OTHER STOPS, EACH ITS PITEA STOP'S PIPE (examples/
+# pitea_stops.py; sources.md "Pipe organ"). The principals were fitted first
+# (pitea_fit.py); these took the 8''s speech and overshoot by inheritance,
+# and Pitea says no stopped pipe or reed of its overshoots, its reeds speak
+# slowly in the bass where ours spoke at once, and its Cromorne and Clarion
+# have the even harmonics our odd-only reed had not. So each is a class of its
+# own: the stop's measured series at three anchor pitches (mode_gains_points,
+# read at the rank's own pitch), its own speech (rank_speech, timed by its own
+# pitch -- FlueOrganProperties.rank_speech_own_pitch), no overshoot, and its
+# level HELD where the console's balance had it by ear.
+class OrganGedaktProperties(StoppedPipeProperties):
+    """The flute 8: Pitea's Positiv Gedakt 8, a stopped pipe."""
+    mode_gains_points = (
+        (82.4, (1.00000, 0.00323, 0.11786, 0.00163, 0.00971, 0.00265, 0.00035, 0.00069, 0.00046,
+                0.00058, 0.00015, 0.00032, 0.00018, 0.00008, 0.00012, 0.00007, 0.00011, 0.00010,
+                0.00010, 0.00008, 0.00012, 0.00009, 0.00007, 0.00010, 0.00010, 0.00010, 0.00009,
+                0.00005, 0.00007, 0.00008, 0.00004, 0.00006)),
+        (233.1, (1.00000, 0.00611, 0.09539, 0.00329, 0.00612, 0.00215, 0.00085, 0.00143, 0.00018,
+                 0.00043, 0.00034, 0.00010, 0.00013, 0.00007, 0.00007, 0.00006, 0.00005, 0.00005,
+                 0.00009, 0.00004, 0.00003, 0.00003, 0.00006, 0.00004, 0.00006, 0.00004, 0.00003,
+                 0.00006, 0.00003, 0.00005, 0.00005, 0.00004)),
+        (1046.5, (1.00000, 0.03429, 0.01675, 0.02057, 0.00448, 0.00227, 0.00260, 0.00099, 0.00054,
+                  0.00020, 0.00013, 0.00011, 0.00013, 0.00009, 0.00010, 0.00006, 0.00008, 0.00006,
+                  0.00009, 0.00006, 0.00005, 0.00008, 0.00007, 0.00005, 0.00005, 0.00005, 0.00005,
+                  0.00005, 0.00005, 0.00005, 0.00005, 0.00005)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-43.31 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +53.990 dB
+    initial_gain = 0.0001474056604 * 10 ** (53.990 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 4.71 -> 3.56 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.018
+    rank_speech = True
+    bellows_push_gain = 0.0
+    # NO CHIFF: Pitea's Gedakt and Pommer speak with their top band within
+    # 1-4 dB of its steady level; the principal's chiff, which this rank took
+    # from its host, put 17-34 dB of hiss above 2 kHz on every attack
+    chiff_volume = 0.0
+    # its release, as the principal's: a narrower spread, no lean (22 pipes
+    # of the Gedakt and Pommer: 0.55 -> 0.36 octaves)
+    release_band_mu = 0.0
+    release_band_sigma = 0.5
+
+
+class OrganBourdonProperties(OrganGedaktProperties):
+    """The bourdon 16: Pitea's Huvudverk Gedackt Pommer 16."""
+    mode_gains_points = (
+        (41.2, (1.00000, 0.03818, 1.96011, 0.02700, 0.13387, 0.03375, 0.00166, 0.01230, 0.00338,
+                0.00573, 0.00181, 0.00375, 0.00064, 0.00153, 0.00045, 0.00058, 0.00046, 0.00059,
+                0.00040, 0.00025, 0.00028, 0.00031, 0.00030, 0.00024, 0.00030, 0.00022, 0.00031,
+                0.00024, 0.00030, 0.00033, 0.00028, 0.00018)),
+        (116.5, (1.00000, 0.00219, 0.15692, 0.00260, 0.00775, 0.00514, 0.00225, 0.00270, 0.00046,
+                 0.00066, 0.00076, 0.00019, 0.00033, 0.00017, 0.00018, 0.00012, 0.00016, 0.00017,
+                 0.00013, 0.00015, 0.00008, 0.00010, 0.00008, 0.00010, 0.00011, 0.00010, 0.00009,
+                 0.00006, 0.00010, 0.00007, 0.00008, 0.00006)),
+        (523.3, (1.00000, 0.01726, 0.03280, 0.03051, 0.00808, 0.01616, 0.00513, 0.00154, 0.00168,
+                 0.00145, 0.00039, 0.00038, 0.00020, 0.00019, 0.00015, 0.00010, 0.00011, 0.00005,
+                 0.00013, 0.00015, 0.00010, 0.00007, 0.00013, 0.00005, 0.00006, 0.00004, 0.00004,
+                 0.00012, 0.00007, 0.00005, 0.00004, 0.00008)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-43.59 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +51.290 dB
+    initial_gain = 0.0001474056604 * 10 ** (51.290 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 6.97 -> 4.45 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 12.0
+    speech_harmonic_exp = 0.6
+    attack_time = 0.018
+
+
+class OrganCromorneProperties(ReedOrganProperties):
+    """The reed 8: Pitea's Positiv Cromorne 8 -- a half-length cylinder, odd
+    harmonics strong and the evens there under them."""
+    mode_gains_points = (
+        (82.4, (1.00000, 0.96005, 2.35545, 0.88137, 0.91192, 1.60361, 0.33569, 3.34922, 0.78773,
+                0.81993, 1.02279, 0.37718, 0.89393, 0.40186, 0.37173, 0.72347, 0.26238, 0.10859,
+                0.13803, 0.18997, 0.08271, 0.06244, 0.07435, 0.05658, 0.11780, 0.03836, 0.04749,
+                0.09724, 0.07730, 0.03024, 0.02088, 0.03751)),
+        (233.1, (1.00000, 0.40528, 2.73857, 0.50505, 1.00922, 0.66132, 0.70560, 1.05838, 0.62288,
+                 0.61093, 0.30734, 0.26796, 0.16428, 0.20415, 0.08760, 0.09054, 0.06860, 0.06218,
+                 0.07375, 0.05660, 0.03647, 0.04366, 0.02408, 0.03262, 0.01073, 0.00785, 0.02221,
+                 0.01941, 0.01173, 0.01001, 0.00702, 0.00427)),
+        (1046.5, (1.00000, 0.14447, 0.23694, 0.14610, 0.08080, 0.05889, 0.01029, 0.01953, 0.00341,
+                  0.00381, 0.00228, 0.00617, 0.01517, 0.00252, 0.00281, 0.00058, 0.00091, 0.00057,
+                  0.00016, 0.00065, 0.00052, 0.00020, 0.00149, 0.00002, 0.00035, 0.00035, 0.00035,
+                  0.00035, 0.00035, 0.00035, 0.00035, 0.00035)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-37.52 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +44.140 dB
+    initial_gain = 0.0001967750377 * 10 ** (44.140 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 3.70 -> 3.03 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 12.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.016
+    odd_only = False
+    bellows_push_gain = 0.0
+    # its release, as the principal's: no lean, the principal's spread (43
+    # pipes of the Cromorne, Clarion, Trumpet and Basson: 0.52 -> 0.32 octaves)
+    release_band_mu = 0.0
+    release_band_sigma = 1.0
+
+
+class OrganBassonProperties(OrganCromorneProperties):
+    """The reed 16: the extended set's Basson 16."""
+    mode_gains_points = (
+        (41.2, (1.00000, 1.98831, 2.01947, 2.91987, 1.43767, 2.39116, 3.78631, 2.98500, 0.93168,
+                0.92568, 0.65155, 0.96656, 0.47315, 0.66797, 0.29428, 0.19782, 0.18754, 0.09107,
+                0.34156, 0.27011, 0.11720, 0.06916, 0.08045, 0.08750, 0.08813, 0.03340, 0.04397,
+                0.04170, 0.05440, 0.07980, 0.08468, 0.04421)),
+        (116.5, (1.00000, 1.03628, 1.00629, 0.96319, 1.37598, 0.64909, 0.72471, 0.43346, 0.25110,
+                 0.11308, 0.05130, 0.07370, 0.05851, 0.06049, 0.06314, 0.04244, 0.03156, 0.01291,
+                 0.01567, 0.02358, 0.02565, 0.02142, 0.02953, 0.02218, 0.01179, 0.02096, 0.02955,
+                 0.01576, 0.01378, 0.01065, 0.01982, 0.01237)),
+        (457.3, (1.00000, 0.81693, 1.32137, 1.23943, 0.27574, 0.28763, 0.17586, 0.13778, 0.06700,
+                 0.05424, 0.03102, 0.02152, 0.02179, 0.01898, 0.01339, 0.00961, 0.01026, 0.01223,
+                 0.01294, 0.00180, 0.00342, 0.00335, 0.00117, 0.00175, 0.00058, 0.00068, 0.00026,
+                 0.00042, 0.00049, 0.00089, 0.00020, 0.00008)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-40.30 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +42.090 dB
+    initial_gain = 0.0001967750377 * 10 ** (42.090 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 4.00 -> 4.00 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 12.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.016
+
+
+class OrganClarionProperties(OrganCromorneProperties):
+    """The reed 4: Pitea's Svallverk Clarion 4, a trumpet's conical resonator."""
+    mode_gains_points = (
+        (164.8, (1.00000, 0.46789, 0.36270, 0.46484, 0.31583, 0.65204, 0.96597, 0.60783, 0.26180,
+                 0.14070, 0.08495, 0.16056, 0.04714, 0.09775, 0.03941, 0.04544, 0.01914, 0.02280,
+                 0.02099, 0.01227, 0.01627, 0.00947, 0.01128, 0.00695, 0.01071, 0.01431, 0.00458,
+                 0.00482, 0.00488, 0.00482, 0.00678, 0.00572)),
+        (466.2, (1.00000, 1.09333, 2.09904, 1.67136, 0.66479, 0.81616, 0.35655, 0.12675, 0.05061,
+                 0.02054, 0.04088, 0.02994, 0.01543, 0.02690, 0.01064, 0.00794, 0.03800, 0.00773,
+                 0.02459, 0.01433, 0.00503, 0.00503, 0.00398, 0.00314, 0.00392, 0.00147, 0.00548,
+                 0.00460, 0.00369, 0.00113, 0.00109, 0.00541)),
+        (2093.0, (1.00000, 0.15899, 0.08891, 0.01575, 0.00473, 0.01207, 0.00422, 0.00225, 0.00081,
+                  0.00328, 0.00583, 0.00301, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319,
+                  0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319,
+                  0.00319, 0.00319, 0.00319, 0.00319, 0.00319)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-42.78 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +49.540 dB
+    initial_gain = 0.0001967750377 * 10 ** (49.540 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 3.58 -> 2.37 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 18.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.08
+
+
+class OrganTrumpetProperties(OrganCromorneProperties):
+    """The trumpet 8: Pitea's Huvudverk Trumpet 8. It was the orchestral
+    trumpet's spectrum on this pipe; now the organ trumpet's own."""
+    mode_gains_points = (
+        (82.4, (1.00000, 0.65860, 1.34161, 0.46132, 0.60764, 0.68614, 0.83538, 0.86784, 0.49457,
+                0.39719, 0.26518, 0.18652, 0.12385, 0.28241, 0.19400, 0.21162, 0.14679, 0.09917,
+                0.05934, 0.05762, 0.04414, 0.01856, 0.01606, 0.02311, 0.04565, 0.05397, 0.05668,
+                0.02234, 0.03797, 0.04262, 0.03663, 0.02180)),
+        (233.1, (1.00000, 0.51566, 0.59676, 0.34512, 0.81701, 0.82615, 1.33235, 0.43506, 0.25684,
+                 0.08518, 0.13689, 0.04524, 0.10110, 0.04591, 0.06214, 0.03418, 0.02849, 0.02677,
+                 0.03316, 0.01867, 0.02487, 0.01029, 0.01474, 0.00714, 0.00822, 0.00820, 0.00706,
+                 0.00639, 0.00826, 0.00519, 0.00432, 0.00417)),
+        (1046.5, (1.00000, 0.96657, 0.57111, 0.32386, 0.15432, 0.04872, 0.01029, 0.00275, 0.00491,
+                  0.00352, 0.00106, 0.00150, 0.00136, 0.00049, 0.00060, 0.00022, 0.00018, 0.00012,
+                  0.00054, 0.00023, 0.00017, 0.00015, 0.00007, 0.00054, 0.00054, 0.00054, 0.00054,
+                  0.00054, 0.00054, 0.00054, 0.00054, 0.00054)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-42.42 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +51.420 dB
+    initial_gain = 0.0001967750377 * 10 ** (51.420 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 4.43 -> 4.25 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 18.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.03
+
+
+class OrganQuintProperties(FlueOrganProperties):
+    """The quint 2 2/3: Pitea's Positiv Kvinta 2 2/3, a principal-scaled pipe
+    with its own series."""
+    mode_gains_points = (
+        (247.2, (1.00000, 0.07578, 0.06382, 0.03151, 0.00920, 0.01353, 0.00255, 0.00431, 0.00127,
+                 0.00120, 0.00043, 0.00014, 0.00022, 0.00035, 0.00016, 0.00007, 0.00006, 0.00004,
+                 0.00006, 0.00006, 0.00004, 0.00005, 0.00005, 0.00004, 0.00006, 0.00005, 0.00005,
+                 0.00005, 0.00006, 0.00005, 0.00013, 0.00004)),
+        (699.2, (1.00000, 0.23676, 0.06528, 0.02392, 0.01427, 0.01467, 0.00548, 0.00228, 0.00125,
+                 0.00049, 0.00026, 0.00044, 0.00037, 0.00017, 0.00043, 0.00045, 0.00061, 0.00059,
+                 0.00059, 0.00025, 0.00026, 0.00022, 0.00017, 0.00019, 0.00014, 0.00018, 0.00017,
+                 0.00017, 0.00014, 0.00014, 0.00006, 0.00019)),
+        (3139.5, (1.00000, 0.03817, 0.04166, 0.00517, 0.00120, 0.00069, 0.00039, 0.00018, 0.00052,
+                  0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052,
+                  0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052,
+                  0.00052, 0.00052, 0.00052, 0.00052, 0.00052)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    # HELD at the console's level (-47.44 dB, pitea_stops.level) through
+    # the measured series, which carries no comb's scale: +0.300 dB
+    initial_gain = 0.0625016639 * 10 ** (0.300 / 20.0)
+    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
+    # --fit=speech; the courses' rms 5.20 -> 4.98 dB): periods of its own pitch,
+    # how far its upper harmonics lead, the valve's floor -- no overshoot
+    speech_cycles = 23.76
+    speech_harmonic_exp = 0.0
+    attack_time = 0.03
+    rank_speech = True
+
 
 # THE REEDS ARE ON THE CONSOLE TOO. A pipe organ is one instrument: flue ranks
 # and reed ranks on one set of stop knobs, and GM gives it one program, 19. The
@@ -6184,10 +6740,10 @@ ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1
 # the flute and the harpsichord's upper 8' do). Hand-drawn: the crescendo pedal
 # walks the flue chorus, and a reed is a registration choice, as a Mixtur is.
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
-    ("reed 8",  1.0, 1.00, ReedOrganProperties),
-    ("reed 16", 0.5, 0.72, ReedOrganProperties),
-    ("reed 4",  2.0, 0.55, ReedOrganProperties),
-    ("trumpet 8", 1.0, 0.42, CylindricalBrassProperties, True, ReedOrganProperties),
+    ("reed 8",  1.0, 1.00, OrganCromorneProperties),
+    ("reed 16", 0.5, 0.72, OrganBassonProperties),
+    ("reed 4",  2.0, 0.55, OrganClarionProperties),
+    ("trumpet 8", 1.0, 0.42, OrganTrumpetProperties),
 ]
 # THE BOURDON 16', bit 12: the manual's usual 16', and a STOPPED one -- a
 # stopped pipe sounds an octave below its length, so it is half the size and a
@@ -6196,7 +6752,7 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
 # Built as the 8' flute is, the stopped spectrum on the flue's pipe; hand-drawn,
 # after every existing bit, so nothing already written moves.
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
-    ("bourdon 16", 0.5, 0.60, StoppedPipeProperties),
+    ("bourdon 16", 0.5, 0.60, OrganBourdonProperties),
 ]
 # THE TREMULANT, bit 13, the last of the 14-bit word: no pipes, a valve that
 # pulses the wind every rank of the division stands on (wind.py). A stop with
@@ -6204,6 +6760,13 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("tremulant", None, 0.0),
 ]
+# ...and the flute 8 and the quint, defined before their Pitea pipes were,
+# take them here (the bit order is untouched)
+FlueOrganProperties.stop_ranks = [
+    (r[0], r[1], r[2], {"flute 8": OrganGedaktProperties,
+                        "quint 2-2/3": OrganQuintProperties}[r[0]]) + tuple(r[4:])
+    if r[0] in ("flute 8", "quint 2-2/3") else r
+    for r in FlueOrganProperties.stop_ranks]
 # HOW THE CONSOLE SHOWS THEM, which is not the bit order: the bits are the file
 # format and grew one addition at a time, so they must never move. A stop jamb
 # reads the flue chorus from the gravest pitch down to the Mixtur, the mutations
@@ -15968,6 +16531,15 @@ class SynthLeadProperties(FlueOrganProperties):
     simple waveform leads; the drawbars are not.
     """
     registerable = False
+    # its own series, not the church organ's measured principal tables
+    mode_gains = None
+    mode_gains_low = None
+    initial_gain = 0.0001294572617      # ...and its own gain with it
+    speech_cycles = 4.0                  # ...and its own speech, no overshoot
+    speech_harmonic_exp = 0.0
+    bellows_push_gain = 0.0
+    shared_wind = False                  # ...and no chest: a lead is one voice
+    rank_speech_own_pitch = False
 
 
 class ReedPipeProperties(ReedOrganProperties):
@@ -17002,6 +17574,144 @@ bagpipe_tonic_hz = 440.0
 # THE SECONDARY TUNING (ragas.py), published by blockrender.prepare as the
 # bagpipe's tonic is: Sa's MIDI note and the spec, or None when there is none
 raga_sa_note = None
+
+
+def _push_register_db(cls, f0):
+    """bellows_push_register (Hz, dB) points at the note's pitch: log-
+    interpolated, held past the ends; 0 for a voice without them."""
+    pts = getattr(cls, 'bellows_push_register', None)
+    if not pts:
+        return 0.0
+    if f0 <= pts[0][0]:
+        return pts[0][1]
+    if f0 >= pts[-1][0]:
+        return pts[-1][1]
+    for (fa, da), (fb, db) in zip(pts, pts[1:]):
+        if f0 <= fb:
+            return da + (db - da) * _log(f0 / fa) / _log(fb / fa)
+    return pts[-1][1]
+
+
+def bellows_push_weight(cls, h, f0):
+    """THE BELLOWS' PUSH, partial by partial (blockrender._push_finish): how
+    much of partial h (its frequency over the note's) the push copy carries
+    at its peak -- bellows_push_gain, tilted up the series by h to a power
+    that shrinks up the keyboard: bellows_push_tilt at A4 and
+    bellows_push_tilt_per_octave an octave, never below 0. A free reed driven
+    harder swings further and its pulse sharpens; a long bass tongue does so
+    far more than a short treble one, which only gets louder."""
+    g = float(getattr(cls, 'bellows_push_gain', 0.0) or 0.0)
+    if g <= 0.0:
+        return 0.0
+    g *= 10.0 ** (_push_register_db(cls, f0) / 20.0)
+    band = getattr(cls, 'bellows_push_band', None)
+    if band:
+        # ...OR A BAND OF HARMONICS (a pipe's speech: h2-h4 overshoot, not the
+        # fundamental): a bell on log harmonic number, (centre, octaves wide)
+        hc, wo = band
+        if h < 1.5:
+            return 0.0
+        return g * _exp(-0.5 * (_log(h / hc) / _log(2.0) / wo) ** 2)
+    tilt = (float(getattr(cls, 'bellows_push_tilt', 0.0))
+            + float(getattr(cls, 'bellows_push_tilt_per_octave', 0.0)) * _log(max(f0, 1e-9) / 440.0) / _log(2.0))
+    return g * max(h, 1.0) ** max(tilt, 0.0)
+
+
+def bellows_push_rate(cls, w):
+    """dB/s for a push row of peak weight w (bellows_push_weight): the
+    pressure eases for every partial at once, so each row's excess falls to
+    bellows_push_settle_db of the steady tone at the SAME moment as the
+    fundamental's -- a brighter row (larger w) falls faster. One rate for all
+    left a bass note's 10th harmonic, 25 dB up at the peak, bright for 1.5-2 s
+    after its fundamental had settled (Ben: "too bright in general")."""
+    d0 = float(cls.bellows_push_dbs)
+    g = float(getattr(cls, 'bellows_push_gain', 0.0) or 0.0)
+    eps = 10.0 ** (float(getattr(cls, 'bellows_push_settle_db', -20.0)) / 20.0)
+    if g <= eps or w <= eps:
+        return d0
+    return d0 * _log(w / eps) / _log(g / eps)
+
+
+def bellows_push_env(cls, dt, w):
+    """Where a push row of weight w stands DT seconds after its push began,
+    as a fraction of its peak weight: the rise (linear, bellows_push_rise_s)
+    times its fall (bellows_push_rate). What a slurred note takes over."""
+    if dt <= 0.0:
+        return 0.0
+    r = max(float(cls.bellows_push_rise_s), 1e-4)
+    return min(1.0, dt / r) * 10.0 ** (-bellows_push_rate(cls, w) * dt / 20.0)
+
+
+def contact_offset_s(cls, rank, note):
+    """WHEN THIS DRAWBAR'S CONTACT CLOSES, seconds after the key goes down: a
+    Hammond key closes nine busbar contacts, one a drawbar, not quite at once
+    -- each wheel switched in at its own instant is the KEY CLICK. Fixed per
+    (drawbar, key), irregular, uniform over 0..contact_spread_s; 0 for a voice
+    without one. (Not attack_jitter: that is drawn per note instance, and the
+    renderers would disagree.)"""
+    spread = float(getattr(cls, 'contact_spread_s', 0.0) or 0.0)
+    if spread <= 0.0:
+        return 0.0
+    import random as _r
+    import zlib as _z
+    return spread * _r.Random(_z.crc32(("%s|%d|contact" % (rank, int(note))).encode())).random()
+
+
+def mixture_ratios(props, key, ratio, f0):
+    """A compound rank's footages at a key of pitch F0, and whether they are a
+    COMPOSITION (props.mixture_compositions: each octave's own ranks, broken
+    back by the builder, as Pitea's Mixtur is at every C) -- else the stop's
+    own list, broken back at the pipe ceiling as before."""
+    comp = (getattr(props, 'mixture_compositions', None) or {}).get(key)
+    if not comp:
+        return list(ratio), False
+    got = comp[0][1]
+    for hz, rs in comp:
+        if f0 >= hz:
+            got = rs
+    return list(got), True
+
+
+def rank_detune_cents(cls, rank, note):
+    """A RANK'S OWN MISTUNING AT THIS KEY, in cents: none unless the class names
+    the rank in rank_detune (rank name -> median |cents|). A reed organ's
+    ranks are tuned reed by reed, so a key's 4-foot sits a few cents off its
+    8-foot and the pair beats -- at its own rate on every key (the harmonium
+    take: 0.4-12 cents, median 2.6). Fixed per (rank, key), irregular across
+    the keys: cents drawn log-normally about the median, the spread the
+    take's (a tail to ~5x), and SHARP -- the take's 4' sits above its 8' (its
+    even partials' cents over the odds' on nearly every key), as a tuner
+    leaves an upper rank bright rather than dull."""
+    med = (getattr(cls, 'rank_detune', None) or {}).get(rank)
+    if not med:
+        return 0.0
+    import random as _r
+    import zlib as _z
+    # a CRC, not hash(): a string's hash changes from run to run
+    g = _r.Random(_z.crc32(("%s|%d|rank_detune" % (rank, int(note))).encode()))
+    return med * _exp(0.9 * g.gauss(0.0, 1.0))
+def release_band_scale(cls, rank, note, m):
+    """A PIPE'S OWN RELEASE, harmonic band by band: how much longer than its
+    fundamental harmonic m takes to die when the key lifts. Pitea's release
+    samples (examples/pitea_release.py) are irregular pipe to pipe -- on a
+    principal a band outlasts the fundamental 2x or more on one pipe in five,
+    and on some it rises as it goes, the release's squeak -- about a mild
+    lean of the upper bands to linger. So fixed per (rank, key, band),
+    irregular across the keys: 2 ** (release_band_mu + release_band_sigma * z)
+    octaves, z a standard normal drawn per band (h2-4, h5-8, h9 and up),
+    clipped at 2.5 sigma; 1 for the fundamental and where the class has none."""
+    sd = float(getattr(cls, 'release_band_sigma', 0.0) or 0.0)
+    mu = float(getattr(cls, 'release_band_mu', 0.0) or 0.0)
+    if m <= 1 or (sd <= 0.0 and mu == 0.0):
+        return 1.0
+    b = 1 if m <= 4 else 2 if m <= 8 else 3
+    import random as _r
+    import zlib as _z
+    g = _r.Random(_z.crc32(("%s|%d|%d|release_band" % (rank, int(note), b)).encode()))
+    z = max(-2.5, min(2.5, g.gauss(0.0, 1.0)))
+    return 2.0 ** (mu + sd * z)
+
+
 raga_spec = None
 
 
@@ -19606,6 +20316,9 @@ class SynthTone(BaseTone):
             # A Mixtur is a COMPOUND rank -- ratio is a LIST of footages, each built and
             # broken back on its own. A plain stop has a single scalar ratio.
             sub_ratios = ratio if isinstance(ratio, (list, tuple)) else [ratio]
+            _comp = False
+            if isinstance(ratio, (list, tuple)):
+                sub_ratios, _comp = mixture_ratios(props, key, ratio, f)
             for sub in sub_ratios:
                 # Rank break-back: past the pipe ceiling a high rank has no pipes, so it
                 # FOLDS an octave (repeats) -- a Mixtur's composition break, why the top
@@ -19613,7 +20326,10 @@ class SynthTone(BaseTone):
                 # the stretched grid, so it stays hybrid-LOCKED (not a naive freq halve).
                 # Only upperwork (>=2) breaks; the 8'/16'/quint foundation keeps its pipes.
                 eff_ratio = sub
-                if ceiling and sub >= 2.0 and f * sub > ceiling:
+                # only a MIXTURE breaks back: a single upperwork stop runs the
+                # full compass (the Pitea organ's Oktava 2, to C7 at 8.4 kHz)
+                if (ceiling and not _comp and isinstance(ratio, (list, tuple)) and sub >= 2.0
+                        and f * sub > ceiling):
                     if mode == 'truncate':
                         continue                  # no pipes past the ceiling -> silent (top THINS)
                     while f * eff_ratio > ceiling and eff_ratio >= 2.0:

@@ -865,7 +865,7 @@ class Slab:
         # a limiter behind. Set by Live from --headroom.
         self.headroom = 1.0
 
-    def leslie_arm(self, slots, az, nf, n=None, horn_rate=None, drum_rate=None):
+    def leslie_arm(self, slots, az, nf, n=None, horn_rate=None, drum_rate=None, flip=None):
         """Record what the callback needs to swing these partials.
 
         PASS THE RATES. The Doppler base written here is the deviation at
@@ -886,6 +886,9 @@ class Slab:
         idx = np.fromiter(slots, np.int64, len(slots))
         nf = np.asarray(nf, np.float64)
         horn = nf >= _L.CROSSOVER_HZ
+        # a crossover copy is on the OTHER rotor (leslie.crossover_weights)
+        if flip is not None and len(flip) == len(horn):
+            horn = horn ^ np.asarray(flip, bool)
         # THE LOBE ITSELF, not its first Fourier term. Live this is a gain, so
         # the exact pattern costs no more than a cosine did -- and a cosine is
         # what makes a rotating speaker sound like a tremolo pedal. The drum
@@ -894,10 +897,8 @@ class Slab:
         fl = np.empty(len(nf), np.float32)
         sh = np.empty(len(nf), np.float32)
         for j, f in enumerate(nf):
-            a, b = _L.beam(float(f))
+            a, b = _L.beam(float(f)) if horn[j] else _L.drum_beam(float(f))
             fl[j], sh[j] = a, b
-        sh = np.where(horn, sh, np.maximum(sh * 0.5, 0.5))
-        fl = np.where(horn, fl, 1.0 - (1.0 - fl) * 0.5)
         self.ls_on[idx] = True
         self.ls_ph[idx] = np.asarray(az, np.float32)
         self.ls_horn[idx] = horn
@@ -1112,6 +1113,9 @@ class Slab:
             newnon = (n0 + offs[pl]).astype(np.int64) + rd
         else:
             newnon = n0 + rd
+        # a Hammond drawbar speaks when its contact closes (t["cof"])
+        if tmpl.get("cof") is not None and len(tmpl["cof"]) == n:
+            newnon = newnon + tmpl["cof"]
         # p0 = -om*(non + ear delay) + ph0, so moving the onset moves the phase
         # anchor with it. Written against the template's OWN onsets, which makes
         # it correct whether or not they differ from each other.
@@ -2493,6 +2497,25 @@ class Patch:
         t["ring"] = np.zeros(int(t["P"]), bool)
         for _a, _b in (p.get("ring_rows") or ()):
             t["ring"][_a:min(_b, int(t["P"]))] = True
+        # ...AND THE BELLOWS' PUSH (blockrender._push_finish): the template is a
+        # note from silence, so it has them; a slurred note drops them
+        t["push"] = np.zeros(int(t["P"]), bool)
+        for _a, _b in (p.get("push_rows") or ()):
+            t["push"][_a:min(_b, int(t["P"]))] = True
+        # ...AND A HAMMOND'S CONTACTS (tonelib.contact_offset_s): each drawbar
+        # speaks a little after the key, at its own instant -- the click. The
+        # template's onsets carry it; the stamp keeps it (newnon), for this voice
+        # only, where every other voice's onsets are reset to the press
+        t["cof"] = None
+        if t["P"] and getattr(self._voice_class(note), "contact_spread_s", 0.0):
+            _base = t["non"] - t["rdl"]
+            t["cof"] = (_base - _base.min()).astype(np.int64)
+        # ...AND THE LESLIE'S CROSSOVER COPIES (leslie.crossover_weights): rows
+        # on the rotor their pitch would not pick, which leslie_arm must flip
+        t["lflip"] = np.zeros(int(t["P"]), bool)
+        _lf = [i for i in (p.get("leslie_flip") or ()) if i < int(t["P"])]
+        if _lf:
+            t["lflip"][_lf] = True
         nf = t["nf"].astype(np.float64)
         # An unmapped drum note builds NOTHING: percussion_for_note has no
         # voice for it and prepare() emits no partials. A zero-partial
@@ -2530,6 +2553,9 @@ class Patch:
                 if not msk.any():
                     continue
                 cols = {k: t[k][msk] for k in ALL_COLS}
+                cols["lflip"] = t["lflip"][msk]     # the Leslie crossover's copies, per stop
+                if t["cof"] is not None:
+                    cols["cof"] = t["cof"][msk]     # ...and when each drawbar's contact closes
                 t["ranks"][nm] = (cols, int(msk.sum()), t["hrel"][msk])
         t["vel"] = vel
         return t
@@ -2964,6 +2990,7 @@ class Live:
         self.mts_at = {}        # (pid, channel, key) -> MTS ratio last applied
         self.meend_at = {}      # note key -> (meend ratio last applied, its sympathetic mask)
         self.sym_at = {}        # note key -> its fixed open strings' rows (a mask): no wheel
+        self.push_t0 = {}       # channel -> sample its bellows' push began (a note from silence)
         # CC71-78: channel -> {control name: d}, only the ones not at 64.
         self.snd = {}
         self.nrpn = {}          # channel -> the NRPN selected, for GS's sound NRPNs
@@ -4151,7 +4178,11 @@ class Live:
         if self._glide_from is not None and slots:
             self._glide(part, ch, note, slots)
         if self._slur and slots:
-            self._slur_stamp(part, note, tmpl)
+            self._slur_stamp(part, note, tmpl, ch, n0)
+        elif slots and tmpl.get("push") is not None and tmpl["push"].any():
+            # A NOTE FROM SILENCE IS A PUSH OF THE BELLOWS: when it began, for
+            # a slur to take over (_slur_stamp)
+            self.push_t0[ch] = n0
         if part.drums:
             # CHOKE, live. Offline this is done by scanning FORWARD for
             # the next strike in the exclusive class and truncating the
@@ -5311,7 +5342,7 @@ class Live:
         if g is not None and (ch, note) in g["keys"]:
             g["off"] = n0 if g["off"] is None else max(g["off"], n0)
 
-    def _slur_stamp(self, part, note, tmpl):
+    def _slur_stamp(self, part, note, tmpl, ch=None, n0=None):
         """Give the slots just stamped the voice's legato attack.
 
         The template was built with the full attack; tonelib's slur_fade gives
@@ -5321,6 +5352,37 @@ class Live:
         fade is the attack move (tmpl["fa_at"]). Before _sound_stamp, so CC73
         scales the result, which is the order the file renderer applies them.
         """
+        # A SLURRED NOTE MAKES NO PUSH OF ITS OWN -- the bellows is already
+        # moving -- but TAKES OVER the one under way, where it stands
+        # (blockrender._push_finish: the template, a note from silence, has
+        # the rows at their peak weight; each is scaled by its rise and its own
+        # fall, tonelib.bellows_push_env, and rises with the slur's attack)
+        _pm = tmpl.get("push")
+        sl0 = self.slab.last_slots
+        if _pm is not None and _pm.any() and sl0 is not None and len(sl0) == len(_pm):
+            _pi = np.fromiter(sl0, np.int64, len(sl0))[_pm]
+            _t0 = self.push_t0.get(ch) if ch is not None else None
+            _pcp = part.patch._voice_class(note + part.transpose)
+            if _t0 is not None and n0 is not None and n0 > _t0:
+                _dt = (n0 - _t0) / float(B.SR)
+                _rise = max(float(getattr(_pcp, "bellows_push_rise_s", 0.1)), 1e-4)
+                _lr = self.slab.a["logr"][_pi].astype(np.float64)
+                _env = (min(1.0, _dt / _rise) * np.exp(-_lr * _dt)).astype(np.float32)
+                _sfa = T.slur_fade(_pcp, part.patch.freqs()[note + part.transpose])
+                _sfa = np.float32(max(1e-4, _sfa[0]) * B.SR) if _sfa else np.float32(0.005 * B.SR)
+                self.slab.a["fa"][_pi] = np.minimum(self.slab.a["fa"][_pi], _sfa)
+            else:
+                _env = np.float32(0.0)
+            for _c in ("aL", "aR", "aM"):
+                if _c in self.slab.a:
+                    self.slab.a[_c][_pi] = self.slab.a[_c][_pi] * _env
+            # ...and any level a rig had cached from them (the Leslie's, the
+            # clavinet's tone), which would put them back
+            for _c in ("ls_aL", "ls_aR", "cv_aL", "cv_aR"):
+                _arr = getattr(self.slab, _c, None)
+                if _arr is not None:
+                    _arr[_pi] = _arr[_pi] * _env
+            self.slab.dirty = True
         tgt = note + part.transpose
         pc = part.patch._voice_class(tgt)
         F = part.patch.freqs()
@@ -6610,10 +6672,14 @@ class Live:
 
     def _h8(self, part, note):
         """hrel is against the template's lowest partial; the Expression law
-        wants h against the note's 8-foot pitch. The template is built with
-        every stop drawn, so its lowest partial is the lowest footage whose key
-        range holds this key."""
+        wants h against the note's 8-foot pitch. Read off the template: its
+        lowest row over the tuner's pitch for the key -- not the lowest
+        footage, which the reeds' hiss rows sit under (wind_fit's harmonium)."""
         tgt = note + part.transpose
+        F = part.patch.freqs()
+        t = part.patch.get(tgt, 100, part.patch.leslie_default) if 0 <= tgt < len(F) else None
+        if t is not None and int(t.get("P", 0)) and F[tgt] > 0.0:
+            return float(np.min(np.asarray(t["nf"]))) / float(F[tgt])     # hrel's own min
         fs = [r[1] for r in part.patch.stop_ranks
               if r[1] is not None and not isinstance(r[1], (list, tuple))
               and (len(r) < 7 or r[6] is None or r[6][0] <= tgt <= r[6][1])]
@@ -6687,7 +6753,8 @@ class Live:
             self.slab.retune(self.slab.last_slots, n0, om_scale=_sr)
         if part.patch.leslie:
             self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
-                                 n0, self.rotor_horn.rate, self.rotor_drum.rate)
+                                 n0, self.rotor_horn.rate, self.rotor_drum.rate,
+                                 flip=cols.get("lflip"))
 
     # ---- the organ's wind (wind.py) ------------------------------------------
     # One chest per pipe-organ part: its pressure moved by the wander and the
@@ -6705,8 +6772,9 @@ class Live:
         if st is None:
             import wind as _WND
             pc = part.patch.wind_pc
+            _wsc = B.wind_scale_for(pc)
             st = dict(wind=_WND.Wind(pc, B.BLK / float(self.rate), seed=part.pid,
-                                     scale=(B.WIND_SCALE if B.WIND else 0.0)),
+                                     scale=_wsc, wander_scale=(1.0 if _wsc else 0.0)),
                       rows={}, rank_row={}, acc={}, ratios={})
             for r in part.patch.stop_ranks:
                 if r[1] is None:
@@ -8011,6 +8079,9 @@ def selftest():
     lv.apply(lv.n)
     drove = settle()
     one = len(lv.slab.live.get(key, []))
+    _ampe = lambda: float(sum(float(lv.slab.a["aL"][i]) ** 2 + float(lv.slab.a["aR"][i]) ** 2
+                              for i in lv.slab.live.get(key, [])))
+    e_one = _ampe()
     check("wheel up: the stage distorts", drove and one > 0, "  (%d partials)" % one)
     # THE BUG THIS EXISTS FOR. sweep() releases anything whose key is not
     # down, and the amplifier's key carries no note -- so it was released on
@@ -8030,8 +8101,14 @@ def selftest():
         lv.on_midi(mido.Message("note_on", channel=0, note=nn, velocity=100))
     lv.apply(lv.n); settle()
     many = len(lv.slab.live.get(key, []))
-    check("a chord makes more distortion than one key", many > one,
-          "  (%d vs %d partials)" % (many, one))
+    # ENERGY, not a count: one Hammond key already fills the amplifier's peaks
+    # down to its floor (-60 dB re its loudest), so a chord's extra products
+    # can trade places with ones under that floor -- 150 against 149 one day,
+    # 149 against 149 the next, as earlier tests moved the random phases
+    e_many = _ampe()
+    check("a chord makes more distortion than one key", e_many > 1.5 * e_one,
+          "  (%.1f dB more distortion energy; %d vs %d partials)"
+          % (10 * math.log10(max(e_many, 1e-30) / max(e_one, 1e-30)), many, one))
     # The products die with the chord that made them: their lifetime is the
     # intersection of their parents', which with nothing sounding is nothing.
     lv.on_midi(mido.Message("control_change", channel=0, control=123, value=0))
@@ -14204,7 +14281,18 @@ def selftest():
                         (1920, _U.m2_per_note_bend(0, 0, 64, 0xFFFFFFFF)),
                         (2880, _U.m2_note_off(0, 0, 60, 0)), (2880, _U.m2_note_off(0, 0, 64, 0))],
                   tpq=480)
-    _po = B.prepare(_cp, "hybrid"); os.unlink(_cp)
+    # ...with the chest's wind OFF for the exact check (its measured wander
+    # moves an organ's pitch ~0.2 cent, as it should), and ON to see the
+    # note's own pitch survive it (blockrender's wcombo: one row, the product)
+    _swk = T.FlueOrganProperties.shared_wind
+    T.FlueOrganProperties.shared_wind = True
+    _pw = B.prepare(_cp, "hybrid")
+    T.FlueOrganProperties.shared_wind = False
+    try:
+        _po = B.prepare(_cp, "hybrid")
+    finally:
+        T.FlueOrganProperties.shared_wind = _swk
+    os.unlink(_cp)
     _om = np.asarray(_po["om"], float); _gr = np.asarray(_po["gr"]); _brr = np.asarray(_po["br"])
     _BRm = np.asarray(_po["BR"], float)
     _hzq = lambda s_: 440.0 * 2 ** ((s_ - 69) / 12)
@@ -14223,6 +14311,14 @@ def selftest():
           "  (Pitch 7.9 %+.1e c at onset, under a tuner whose own E4 is %+.1f c off; a plain "
           "C4 moved by Pitch 7.25 %+.1e c from the spec; per-note bend %+.4f c)"
           % (_e79, 1200 * math.log2(_Fh[64] / _hzq(64)), _m725, _mb))
+    _omw = np.asarray(_pw["om"], float); _grw = np.asarray(_pw["gr"]); _brw = np.asarray(_pw["br"])
+    _BRw = np.asarray(_pw["BR"], float); _r8w = _grw == _grw.min()
+    _iw = int(np.argmin(abs(_omw[_r8w] * B.SR / (2 * math.pi) - _lo[0])))
+    _mw = (1200 * math.log2(_BRw[int(_brw[_r8w][_iw])][_bk(1.5)])
+           - 1200 * math.log2(_hzq(59.5) / _Fh[60]))
+    check("...and with the organ's shared wind on, the note's own pitch rides with it",
+          abs(_mw) < 1.0,
+          "  (Pitch 7.25 %+.2f c from the spec under the chest's wander)" % _mw)
     # GROUPS: sixteen MIDI 2.0 groups of sixteen channels. A note on group 1
     # is channel 16, and a Scale/Octave SysEx sent on group 1 tunes group 1.
     _lg2 = Live(program=0, rate=48000, frames=128, verbose=False); _lg2.warm()
@@ -14655,6 +14751,38 @@ def selftest():
     def _lgsame(f, l):
         return f.keys() == l.keys() and all(
             np.array_equal(f[k][0], l[k][0]) and np.array_equal(f[k][1], l[k][1]) for k in f)
+
+    # THE BELLOWS' PUSH (tonelib.bellows_push_weight): a note from silence
+    # swells; a slurred one makes no push of its own but TAKES OVER the one
+    # under way, where it stands -- the file and live alike
+    _pm = mido.MidiFile(type=1, ticks_per_beat=480); _pt = mido.MidiTrack(); _pm.tracks.append(_pt)
+    _pt.append(mido.Message("program_change", channel=0, program=21, time=0))
+    for _m in (("note_on", 60, 0), ("note_on", 62, 235), ("note_off", 60, 5), ("note_off", 62, 480)):
+        _pt.append(mido.Message(_m[0], channel=0, note=_m[1], velocity=100 if _m[0] == "note_on" else 0, time=_m[2]))
+    _pp = B.prepare(_pm)
+    _pnon = np.asarray(_pp["non"]); _pal_f = np.abs(np.asarray(_pp["aL"]))
+    _pr = {int(_pnon[_a]): float(_pal_f[_a:_b].sum()) for _a, _b in _pp["push_rows"]}
+    _pon = sorted(_pr)
+    _lp = Live(program=21, rate=B.SR, frames=128, verbose=False, tuner="hybrid440"); _lp.warm()
+    _pg = {}
+    for _n0, _ty, _nn in ((0, "note_on", 60), (_pon[-1] if len(_pon) > 1 else int(0.245 * B.SR), "note_on", 62),
+                          (int(0.25 * B.SR), "note_off", 60)):
+        _lp.on_midi(mido.Message(_ty, channel=0, note=_nn, velocity=100 if _ty == "note_on" else 0))
+        _lp.apply(_n0)
+        if _ty == "note_on":
+            _tm = _lp.parts[0].patch.get(_nn, 100, _lp.parts[0].patch.leslie_default)
+            _pg[_nn] = [i for i, m in zip(_lp.slab.last_slots, _tm["push"]) if m]
+    # the push slots are the template's (its "push" mask, as _slur_stamp reads
+    # them) -- not "the ones that fall fast": the fitted push's weak rows fall
+    # slower than the reed's sustain test once read
+    _pal = np.abs(np.asarray(_lp.slab.a["aL"]))
+    _plv = {_k: float(sum(_pal[_i] for _i in _v)) for _k, _v in _pg.items()}
+    _lp.shutdown()
+    _rf = _pr[_pon[1]] / _pr[_pon[0]] if len(_pon) > 1 else 0.0
+    _rl = _plv[62] / _plv[60] if _plv.get(60) else 0.0
+    check("the accordion's bellows push: from silence, carried over a slur where it stands (file and live)",
+          len(_pon) == 2 and 0.0 < _rf < 1.0 and abs(_rl / _rf - 1.0) < 0.05,
+          "  (the slurred note takes %.2f of the push in the file, %.2f live)" % (_rf, _rl))
 
     _tr = [(0, 1, 60), (480, 1, 62), (960, 0, 60), (1440, 0, 62)]
     _f, _l = _lgfile(71, _tr, True), _lglive(71, _tr, True)

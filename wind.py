@@ -22,6 +22,18 @@ hear its pressure. Three things move it:
         windway, roughly as its diameter: (f / 261.6 Hz)^-0.75, an 8'
         principal's middle C being one unit.
 
+        ...AND THE REGULATOR BRINGS IT BACK. A reservoir's weights and springs
+        restore the static pressure after the swing (wind_regulator_s, the time
+        it takes, wind_regulator_restore how fully): what is left of a held
+        chord is a breath at its entry and its release, not a lasting dip --
+        a released chord's surge the mirror of its entry's sag. And a chest
+        has a limit: the swing saturates at wind_sag_max of the static, so a
+        full organ is not a negative pressure. The shared wind's FLEXIBILITY
+        (wind_flex, by ear: a steady modern regulator to a breathing
+        historical one) scales the swing; the forms are the physics' (the
+        Rodgers wind patent: slightly to moderately underdamped, a cycle or
+        two of ringing; Carlsson 2002: the trunks dominate; Pykett).
+
   trem  THE TREMULANT, a stop: a valve or beater that pulses the wind. A
         sinusoid at rate_hz, depth (fraction of the static pressure) building
         in over a quarter second when drawn and dying away when put in. Colin
@@ -62,10 +74,18 @@ class Wind:
     """
     SUB = 8                 # pressure points per block, for the pitch's mean
 
-    def __init__(self, props, blk_s, seed=0, scale=1.0):
+    def __init__(self, props, blk_s, seed=0, scale=1.0, wander_scale=None):
         self.blk_s = float(blk_s)
         self.scale = float(scale)
-        self.wander_rms = float(getattr(props, 'wind_wander_rms', 0.0)) * self.scale
+        # the wander is MEASURED (Pitea), not a matter of flexibility: on at
+        # its own level whenever the shared wind is
+        ws = self.scale if wander_scale is None else float(wander_scale)
+        self.wander_rms = float(getattr(props, 'wind_wander_rms', 0.0)) * ws
+        self.reg_s = float(getattr(props, 'wind_regulator_s', 0.0) or 0.0)
+        self.reg_restore = float(getattr(props, 'wind_regulator_restore', 1.0))
+        self.sag_max = float(getattr(props, 'wind_sag_max', 0.0) or 0.0)
+        self.ra = math.exp(-self.blk_s / self.reg_s) if self.reg_s > 0.0 else None
+        self.r1 = 0.0
         self.wander_hz = float(getattr(props, 'wind_wander_hz', 0.5))
         self.sag_per_unit = float(getattr(props, 'wind_sag_per_unit', 0.0)) * self.scale
         self.sag_hz = float(getattr(props, 'wind_sag_hz', 4.0))
@@ -100,6 +120,12 @@ class Wind:
         self.tdecay = math.exp(-self.blk_s / max(1e-6, self.trem_tau))
         self.was_on = False
 
+    def _dev(self):
+        """The pressure's fall below static: the swing less the regulator's
+        restoring, saturating at sag_max."""
+        d = self.s1 - (self.reg_restore * self.r1 if self.ra is not None else 0.0)
+        return _sat(d, self.sag_max)
+
     def blocks(self, demand, trem):
         """Pressure for len(demand) blocks: (n, SUB + 1) points, each block's
         evenly spaced across it from its start to its end -- which is the next
@@ -118,13 +144,17 @@ class Wind:
                 self.w1 = self.wa * self.w1 + (1.0 - self.wa) * noise[b]
                 self.w2 = self.wa * self.w2 + (1.0 - self.wa) * self.w1
             wv = (w0 + (self.w2 - w0) * frac) * (self.wgain * self.wander_rms)
-            # the sag, likewise
-            s0 = self.s1
+            # the sag, likewise: the reservoir's swing (s), less what the
+            # regulator has restored (r, following it), saturating
+            s0 = self._dev()
             if self.sag_per_unit > 0.0:
                 s = self.c1 * self.s1 + self.c2 * self.s2 + self.g * self.d1
                 self.s2, self.s1 = self.s1, s
                 self.d1 = float(demand[b]) * self.sag_per_unit
-            sv = s0 + (self.s1 - s0) * frac
+                if self.ra is not None:
+                    self.r1 = self.ra * self.r1 + (1.0 - self.ra) * self.s1
+            s1 = self._dev()
+            sv = s0 + (s1 - s0) * frac
             # the tremulant: the beater restarts when the stop is drawn
             on = trem[b] >= 0.5
             if on and not self.was_on and self.te < 1e-4:
@@ -144,6 +174,10 @@ class Wind:
             self.tph = (self.tph + self.trem_hz * self.blk_s) % 1.0
             out[b] = 1.0 + wv - sv + tv
         return out
+
+
+def _sat(x, m):
+    return m * math.tanh(x / m) if m > 0.0 else x
 
 
 def pitch_level(p, a, b):
