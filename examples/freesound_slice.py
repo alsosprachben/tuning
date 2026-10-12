@@ -4,7 +4,7 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
 
     python3 examples/freesound_slice.py timbales
     python3 examples/freesound_slice.py surdo
-    python3 examples/freesound_slice.py pipes
+    python3 examples/freesound_slice.py pipes [VOICE ...]
     python3 examples/freesound_slice.py bagpipe
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
@@ -39,8 +39,9 @@ and its 55-80 Hz band stays under its first 60 ms' peak from 60 to 150 ms
 stereo pair of the same channel into ~/Documents/refs/freesound/surdo/hits/
 {open,mute}_<n>.wav.
 
-PIPES (GM 75-78; ~/Documents/refs/sources.md "Pipes"): the pan flute, blown
-bottle, shakuhachi and whistle takes are scales, melodies and held tones, not
+PIPES (GM 75-78; ~/Documents/refs/sources.md "Pipes"), and the zurna standing
+in for the shanai (GM 111; "Ethnic programs"): the pan flute, blown
+bottle, shakuhachi, whistle and zurna takes are scales, melodies and held tones, not
 one note a file, so each is pitch-tracked (YIN, 10 ms) and its STABLE notes
 cut out: a run of frames periodic (aperiodicity < 0.2), within 25 dB of the
 take's loudest and within 35 cents of their own median for at least a
@@ -166,6 +167,9 @@ PIPES = {
                    ("shakuhachi/486487__*.wav", "gonzooka", 150, 1200, 0.8)],
     "whistle": [("whistle/233569__*.aiff", "nbild", 500, 3000, 1.0),
                 ("whistle/790454__*.wav", "oscar", 500, 3000, 0.2)],
+    # GM 111 by proxy: cdrk's Turkish zurna, four shots of a held G4 rising to
+    # a short E5 (a little flat of it, 636-658 Hz) -- the same conical shawm
+    "shanai": [("zurna/18661__*.flac", "cdrk", 150, 1500, 0.3)],
 }
 
 
@@ -210,9 +214,11 @@ def track(x, sr, fmin, fmax, hop=0.01, win=0.04):
     return np.array(out)
 
 
-def pipes():
+def pipes(only=None):
     from scipy.io import wavfile
     for voice, takes in PIPES.items():
+        if only and voice not in only:
+            continue
         out = os.path.join(REFS, "staged", voice)
         os.makedirs(out, exist_ok=True)
         for f in glob.glob(os.path.join(out, "*.wav")):
@@ -290,4 +296,7 @@ def bagpipe():
 
 
 if __name__ == "__main__":
-    {"timbales": timbales, "surdo": surdo, "pipes": pipes, "bagpipe": bagpipe}[sys.argv[1]]()
+    if sys.argv[1] == "pipes":
+        pipes(sys.argv[2:])
+    else:
+        {"timbales": timbales, "surdo": surdo, "bagpipe": bagpipe}[sys.argv[1]]()

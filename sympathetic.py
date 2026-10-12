@@ -90,7 +90,10 @@ def responders(props, freq=None, f0=None):
             drv = _nearest_key(freq, f0)
         else:
             drv = int(round(69 + 12 * np.log2(max(f0, 1e-9) / 440.0)))
-        for off in strings:
+        # EACH STRING ITS OWN LEVEL, when the class gives them (dB, by string):
+        # a shamisen's sawari string answers louder than the other two
+        sdb = tuple(getattr(props, 'sympathetic_string_db', ())) or (0.0,) * len(strings)
+        for off, odb in zip(strings, sdb):
             pitch = tonic + int(off)
             s = pitch - drv
             if s == 0:
@@ -101,7 +104,11 @@ def responders(props, freq=None, f0=None):
             # -- so only the octave coincided and the fifths, which are the
             # reason to use a just tuner at all, never rang.
             rf = freq[pitch] if (freq and pitch in freq) else f0 * 2.0 ** (s / 12.0)
-            d = _coupling(props, _at(props, rf), g)
+            # ...OR KICKED, WHICH A SKIN DOES: a shamisen's open strings ring
+            # at their own harmonics, the ones that do NOT coincide with the
+            # note's (the second string's 3rd, 5th and 7th under a bass-string
+            # pluck), so the coupling is the body's and every string takes it
+            d = (g if mode == 'contact' else _coupling(props, _at(props, rf), g)) * 10.0 ** (odb / 20.0)
             if d >= floor:
                 out.append((s, d))
         out.sort(key=lambda sd: -sd[1])
@@ -200,7 +207,11 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
         # arrivals grouped as dozens of strikes, each pitched at its own lowest
         # partial -- strings answering notes nobody played, and a sitar's
         # template 28 couplings deep instead of one
-        rows = np.flatnonzero((mch == ch) & ~np.isin(np.round(dr, 2), (0.75, 0.25)))
+        # ...NOR A RING ROW'S (dr 0.9/0.1: the koto's or banjo's other strings,
+        # a drumhead's modes): fixed frequencies of the instrument, not this
+        # note -- the lowest of a banjo's (its head at 190 Hz) was read as the
+        # strike's pitch over every note above it, and would be copied as one
+        rows = np.flatnonzero((mch == ch) & ~np.isin(np.round(dr, 2), (0.75, 0.25, 0.9, 0.1)))
         if not len(rows):
             continue
         # One struck note is one onset. Rounded, because a section's entry
@@ -210,6 +221,18 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
         for i in rows:
             grp.setdefault(int(round(non[i] / 64.0)), []).append(i)
         cache = {}
+        # A KICKED STRING RINGS ON ITS OWN LAW: a contact responder in a fixed
+        # set (the shamisen's) is struck through the skin, not plucked, so its
+        # copy of the note does not carry the bachi's prompt fall (logr, the
+        # share aft) -- only the remainder's rate, logrA, at full share
+        ring_law = (getattr(props, 'sympathetic_mode', '') == 'contact'
+                    and bool(getattr(props, 'sympathetic_strings', ())))
+        # A FIXED OPEN STRING IS WHERE IT WAS TUNED, whatever the wheel: its
+        # pitch is the table's, not the played note's times an interval (a
+        # bend in force at the pluck moved the strings with it), and it takes
+        # no bend row after (the take's: what rings in sympathy stays put
+        # while the played string is pulled)
+        fixed = bool(getattr(props, 'sympathetic_strings', ()))
         for _, idx in grp.items():
             ix = np.asarray(idx)
             g0 = int(idx[0])                # (meta: the group, by its first row)
@@ -232,7 +255,9 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
                 # tuned to, which at Q ~2800 is several bandwidths: the fifths
                 # a just tuner exists for could not coincide. The equal ratio
                 # remains only for a key outside the table.
-                if tab and drv is not None and (drv + semis) in tab and tab[drv] > 0:
+                if fixed and tab and drv is not None and (drv + semis) in tab and f0 > 0:
+                    ratio = float(tab[drv + semis]) / f0
+                elif tab and drv is not None and (drv + semis) in tab and tab[drv] > 0:
                     ratio = float(tab[drv + semis]) / float(tab[drv])
                 else:
                     ratio = 2.0 ** (semis / 12.0)
@@ -255,8 +280,11 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
                     # ...AND A MEEND DOES NOT CARRY THEM: the string tuned to
                     # the starting note keeps its own pitch while the played
                     # one is pulled (tonelib bend_detents)
-                    if 'br' in extra and getattr(props, 'bend_detents', False):
+                    if 'br' in extra and (fixed or getattr(props, 'bend_detents', False)):
                         extra['br'][-1] = -1
+                    if ring_law and 'aft' in extra and extra['aft'][-1] > 0.0:
+                        extra['logr'][-1] = extra['logrA'][-1]
+                        extra['aft'][-1] = 0.0
                     extra['aL'][-1] = aL[i] * drive
                     extra['aR'][-1] = aR[i] * drive
                     extra['aM'][-1] = aM[i] * drive

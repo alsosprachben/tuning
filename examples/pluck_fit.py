@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fit a plucked voice to single-pluck takes: the sitar (GM 104) to Freesound's sitar
-takes, the banjo (GM 105) to the Windsor SoundFont's plucks (sources.md "Ethnic programs").
+takes, the banjo (GM 105) to the Windsor SoundFont's plucks, the shamisen (GM 106) to
+a live festival take's isolated plucks (sources.md "Ethnic programs").
 
     python3 examples/pluck_fit.py --voice=sitar|banjo [...]   (sitar if omitted)
 
@@ -48,9 +49,27 @@ STAGED = os.path.join(REFS, "staged", "sitar")
 PROG = 104
 CLS = "SitarProperties"
 # voice: (program, class, staged folder)
-VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoProperties", "banjo")}
+VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoProperties", "banjo"),
+          "shamisen": (106, "ShamisenProperties", "shamisen")}
 NH = 24
 HOP, WIN = 0.1, 0.2
+# THE DECAY'S WINDOW: from T_DECAY to T_END s after the pluck. A live take's
+# plucks (the shamisen's) ring 0.3-0.7 s before the next, so they are read in
+# short frames over their first 0.3 s (VOICE_OPTS); a sitar's ring for seconds
+T_DECAY, T_END = 0.3, 5.0
+# ...and the prompt fall's (--fit=prompt): its bands read over P_SECS, from
+# PROMPT_X0 (the shamisen's knock is on every partial, so from 6 kHz)
+P_SECS = 0.6
+PROMPT_X0 = (15.0, 0.3, 1200.0)
+# ...and the render's TUNER: None the renderer's own. A voice with tuned open
+# strings ringing in sympathy (the shamisen's) is rendered where the take's
+# instrument was tuned -- its strings follow the table, so a pluck bent to the
+# take's pitch off an A440 table would sit up to 45 cents off its own strings
+TUNER = None
+VOICE_OPTS = {"shamisen": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3,
+                               P_SECS=0.3, PROMPT_X0=(30.0, 0.15, 6000.0),
+                               # C#3, its sympathetic_tonic, at the bass string's 142.2 Hz
+                               TUNER="hybrid:454.81")}
 CEN = 2 ** np.arange(np.log2(160), np.log2(13000), 1 / 3.0)
 
 
@@ -90,6 +109,43 @@ def f0_of(seg, sr, lo, hi):
 # label: (file under REFS, f0 search Hz, min seconds to the next pluck)
 TAKES = {"ma": ("sitar/42192__*.flac", (150, 190), 5.0),
          "chinpen": ("sitar/42268__*.wav", (270, 310), 2.5)}
+
+
+def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3):
+    """THE SHAMISEN'S PLUCKS, out of RTB45's live festival take (freesound
+    195521, CC BY 4.0; sources.md "Ethnic programs"): every onset (a 12 dB
+    rise in 10 ms, over -40 dB) that rings MIN_NEXT s or more before the next,
+    whose first 0.3 s is pitched (YIN periodic in 60% of frames) and steady
+    (pitch sd under 30 cents) -- fourteen in four minutes, twelve of them the
+    open bass string at 142 Hz, the one with the sawari. Each cut from 20 ms
+    before its onset to 20 ms before the next."""
+    from scipy.io import wavfile
+    sys.path.insert(0, os.path.join(HERE, "examples"))
+    from freesound_slice import onsets as fs_onsets, track
+    os.makedirs(STAGED, exist_ok=True)
+    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+        os.remove(f)
+    x, sr = read(glob.glob(os.path.join(REFS, pat))[0])
+    on = fs_onsets(x, sr, rise_db=12.0, top_db=-40.0, gap=0.08) + [len(x)]
+    n = 0
+    for i, j in zip(on[:-1], on[1:]):
+        if j - i < min_next * sr:
+            continue
+        T = track(x[i:j], sr, 100, 1500)
+        if len(T) < 12:
+            continue
+        t = T[3:30]
+        f = float(np.median(t[:, 0]))
+        if (t[:, 1] < 0.2).mean() <= 0.6 or np.std(1200 * np.log2(t[:, 0] / f)) >= 30:
+            continue
+        seg = x[max(0, i - int(0.02 * sr)):j - int(0.02 * sr)]
+        # THE TRACKER'S MEDIAN, not a spectral peak: over 0.3 s the peak's
+        # bins are 4 Hz wide and it scattered 132-148 Hz around a steady 142
+        name = "%s_%d_f0_%.2f.wav" % (label, n, f)
+        wavfile.write(os.path.join(STAGED, name), sr,
+                      (seg / max(np.abs(seg).max(), 1e-9) * 0.9 * 32767).astype(np.int16))
+        print("  %-28s %.2f s" % (name, len(seg) / sr))
+        n += 1
 
 
 def stage():
@@ -133,7 +189,11 @@ def render(f0, secs):
     import tonelib as T
     indian = getattr(getattr(T, CLS), "tuning_family", None) == "indian"
     names = ("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b")
-    near = int(round(69 + 12 * np.log2(f0 / 440.0)))
+    tab = B.tuning_table(TUNER) if TUNER else None
+    if tab:
+        near = min(tab, key=lambda n: abs(np.log2(tab[n] / f0)))
+    else:
+        near = int(round(69 + 12 * np.log2(f0 / 440.0)))
     note = 60 + near % 12 if indian else near
     m = mido.MidiFile(type=1, ticks_per_beat=480)
     t = mido.MidiTrack()
@@ -141,13 +201,13 @@ def render(f0, secs):
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
     t.append(mido.Message("program_change", channel=0, program=PROG, time=0))
     if not indian:
-        cents = 1200 * np.log2(f0 / (440.0 * 2 ** ((near - 69) / 12.0)))
+        cents = 1200 * np.log2(f0 / (tab[near] if tab else 440.0 * 2 ** ((near - 69) / 12.0)))
         t.append(mido.Message("pitchwheel", channel=0, pitch=int(round(cents / 200.0 * 8191)), time=0))
     t.append(mido.Message("note_on", channel=0, note=note, velocity=100, time=0))
     t.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=int(secs * 960)))
     B.EASTERN = "raga:et@%s:%.4f" % (names[near % 12], f0) if indian else None
     try:
-        L, R = B.render(m)[:2]
+        L, R = (B.render(m, TUNER) if TUNER else B.render(m))[:2]
     finally:
         B.EASTERN = None
     return 0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64)), B.SR
@@ -163,7 +223,7 @@ def measure(x, sr, f0):
     Nf = 1 << 15
     fs = np.fft.rfftfreq(Nf, 1.0 / sr)
     L = []
-    for j in range(int(5.0 / HOP)):
+    for j in range(int(T_END / HOP)):
         s = x[a + int(j * HOP * sr): a + int(j * HOP * sr) + W]
         if len(s) < W:
             break
@@ -175,7 +235,7 @@ def measure(x, sr, f0):
     rate = []
     for k in range(NH):
         y = L[:, k]
-        ok = (tt > 0.3) & (y > y.max() - 45)
+        ok = (tt > T_DECAY) & (y > y.max() - 45)
         rate.append(-np.polyfit(tt[ok], y[ok], 1)[0] if ok.sum() > 5 else np.nan)
     ref = L[0, 0]
     j2 = min(len(L) - 1, int(round((2.0 - WIN / 2) / HOP)))
@@ -231,6 +291,9 @@ def report():
     print("  bands rec-ours " + " ".join("%d:%+.1f" % (c, v) for c, v in zip(CEN, d) if np.isfinite(v)))
 
 
+DECAY = ("decay_db", "harmonic_decay_db", "decay_register_slope")
+
+
 def fit_decay(maxfev=60):
     """--fit=decay: the string's decay law -- its rate, its rise with harmonic
     number and its register slope -- against each take's measured decay of
@@ -241,8 +304,11 @@ def fit_decay(maxfev=60):
     cls = getattr(T, CLS)
     groups = {}
     for f0, p, lab in plucks():
+        if TAKE and lab != TAKE:
+            continue
         x, sr = read(p)
-        groups.setdefault(lab, []).append((f0, measure(x, sr, f0)[0]))
+        # by take AND pitch: a take of four strings is four pitches
+        groups.setdefault((lab, int(round(12 * np.log2(f0 / 440.0)))), []).append((f0, measure(x, sr, f0)[0]))
     targets = [(float(np.median([f for f, _ in v])), np.nanmedian([r for _, r in v], 0)[:12])
                for v in groups.values()]
     x0 = np.array([float(getattr(cls, k)) for k in DECAY])
@@ -290,8 +356,10 @@ def fit_body(passes=4):
         if n == passes:
             break
         for k in np.flatnonzero(ok):
+            if CEN[k] > TOP_HZ:
+                continue        # over the top a take's noise, not its harmonics
             c = int(round(CEN[k]))
-            trim[c] = trim.get(c, 0.0) + 0.5 * float(d[k])
+            trim[c] = max(-24.0, min(24.0, trim.get(c, 0.0) + 0.5 * float(d[k])))
         cls.body_trim_db = tuple((c, round(v, 1)) for c, v in sorted(trim.items()))
     print("    body_trim_db = %s" % (cls.body_trim_db,))
 
@@ -304,7 +372,25 @@ def ab(out, secs=5.0):
     from scipy.signal import resample_poly
     parts, sr = [], 44100
     ps = plucks()
-    pick = [p for p in ps if p[2] == "ma"] + [p for p in ps if p[2] == "chinpen"][:3]
+    labs = []
+    for q in ps:
+        if q[2] not in labs:
+            labs.append(q[2])
+    # the sitar's Ma plucks first, then up to four of every take -- or, from a
+    # live take of short plucks (the shamisen's), the longest at each pitch
+    # and then the longest of the rest, to six
+    labs.sort(key=lambda l: (l != "ma", l))
+    if T_END < 1.0:
+        pick = []
+        for l in labs:
+            rs = sorted([r for r in ps if r[2] == l], key=lambda r: -len(read(r[1])[0]))
+            by = {}
+            for r in rs:
+                by.setdefault(int(round(12 * np.log2(r[0] / 440.0))), r)
+            first = list(by.values())
+            pick += first + [r for r in rs if r not in first][:max(0, 6 - len(first))]
+    else:
+        pick = [q for l in labs for q in [r for r in ps if r[2] == l][:4]]
     for f0, p, lab in pick:
         x, sr = read(p)
         x = x[:int(secs * sr)]
@@ -396,10 +482,11 @@ PBANDS = ((0, 1000), (1500, 3000), (3000, 6000), (6000, 12000))
 PROMPT = ("prompt_dbs", "aftersound_share", "prompt_max_hz")
 
 
-def early_course(x, sr, secs=0.6, hop=0.02):
+def early_course(x, sr, secs=None, hop=0.02):
     """Each of PBANDS' level every HOP s for SECS from the pluck, each re its
     own mean: the SHAPE of each band's first half-second, its level apart."""
     from scipy.signal import butter, sosfilt
+    secs = secs or P_SECS
     w = int(0.002 * sr)
     e = np.convolve(x * x, np.ones(w) / w, "same")
     a = int(np.flatnonzero(e > e.max() * 0.01)[0])
@@ -424,7 +511,7 @@ def fit_prompt(maxfev=50):
     g = [(f0, early_course(*read(p))) for f0, p, lab in plucks() if not TAKE or lab == TAKE]
     f0 = float(np.median([f for f, _ in g]))
     R = np.median([c for _, c in g], 0)
-    x0 = np.array([15.0, 0.3, 1200.0])
+    x0 = np.array(PROMPT_X0)
     best = [1e9, x0]
 
     def val(z):
@@ -484,6 +571,7 @@ def fit_quick(maxfev=50):
 
 
 TAKE = None     # --take=ma: fit to one take's plucks only
+TOP_HZ = 11500.0   # the body fit's last band: above it one pluck's noise, not harmonics
 
 
 def main(argv):
@@ -492,8 +580,9 @@ def main(argv):
     voice = next((a.split("=", 1)[1] for a in argv if a.startswith("--voice=")), "sitar")
     PROG, CLS, folder = VOICES[voice]
     STAGED = os.path.join(REFS, "staged", folder)
+    globals().update(VOICE_OPTS.get(voice, {}))
     if "--stage" in argv:
-        stage()
+        stage_live() if voice == "shamisen" else stage()
         return 0
     if "--fit=decay" in argv:
         fit_decay()

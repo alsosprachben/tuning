@@ -2064,6 +2064,8 @@ def prepare(path, tuner='hybrid440', sink=None):
     _MK = [0]                # a Moog partial's oscillator * 4096 + harmonic, 0 = none
     _NOREFL = [False]        # emit no room images for this partial (noise: see below)
     _LATE = [False]     # rows of a late copy (bloom): dr 0.75 direct, 0.25 an image -- see sympathetic.expand
+    _RING = []          # [(first, end)] of each note's ring rows: off the wheel (live reads them too)
+    _RINGF = [False]    # emitting ring rows: dr 0.9 direct, 0.1 an image -- see sympathetic.expand
     # A ROOM IMAGE'S EXTRA PATH, in samples: how much later than its direct
     # sound it starts and stops. Already in its `non`/`noff` here; recorded on
     # its own because live re-times every onset at stamp (a section's scatter
@@ -2218,7 +2220,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         # ...and a LATE COPY's (the bloom) 0.75 and 0.25: still direct and an
         # image either side of 0.5, as every reader tests, but marked, so the
         # sympathetic pass does not take its late arrivals for new strikes
-        A["dr"].append((0.75 if _LATE[0] else 1.0) if _place is None else (0.25 if _LATE[0] else 0.0))
+        A["dr"].append((0.75 if _LATE[0] else 0.9 if _RINGF[0] else 1.0) if _place is None
+                       else (0.25 if _LATE[0] else 0.1 if _RINGF[0] else 0.0))
         A["nf"].append(nomf); A["non"].append(non); A["noff"].append(noff); A["fa"].append(fa); A["re"].append(re); A["ch"].append(ch)
         A["logr"].append(logr); A["logrA"].append(logrA); A["aft"].append(aft); A["sus"].append(sus)
         A["cv"].append(cv); A["cc"].append(cc); A["crl"].append(crl); A["sj"].append(sj); A["csc"].append(csc)
@@ -3835,6 +3838,12 @@ def prepare(path, tuner='hybrid440', sink=None):
             # their phases from the note, not the render's seeded stream, which
             # every later note's jitter draws from
             _rrng = random.Random(int(round(on * 1e6)) * 137 + note * 11 + ch)
+            # ...AND OFF THE WHEEL: another string, a tine, a drumhead does not
+            # move when the played string is bent (no bend row; the fader's
+            # still) -- the banjo's G3 string was following a semitone's bend
+            _r0, _bkeep = len(A['om']), _BR[0]
+            _BR[0] = -1
+            _RINGF[0] = True
             for _hf, _db, _dps in props.ring_db:
                 # ...TUNED AS THE NOTES ARE: a row is the nearest key and its
                 # offset from 12-TET at A440 (none for the koto's strings, the
@@ -3851,6 +3860,10 @@ def prepare(path, tuner='hybrid440', sink=None):
                              _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, max(noff, non + 4.0 * SR),
                              fade, rel, chiff, math.log(10.0) / 20.0 * _dps, 0.0, 0.0, 0.0, 0.0,
                              cc, crl, 0.0, csc, -1, 0, ph0=_rrng.random() * 2.0 * math.pi)
+            _BR[0] = _bkeep
+            _RINGF[0] = False
+            if len(A['om']) > _r0:
+                _RING.append((_r0, len(A['om'])))
         if getattr(props, 'touch_leak_db', None) is not None and (props.harmonic_touch or 1) > 1:
             # A TOUCHED STRING'S OTHER MODES (tonelib.SynthProperties.touch_leak_db):
             # the modes the finger kills sound for a moment first, at k/n of
@@ -4642,7 +4655,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 fader_rows=dict(_LROW),      # THE CHANNEL FADER: {channel: row}
                 # which rows are sympathetic strings' (live's meend leaves them
                 # at their own pitch: Live._meend_retune)
-                sym_rows=(_sym0, _sym1))
+                sym_rows=(_sym0, _sym1), ring_rows=list(_RING))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep

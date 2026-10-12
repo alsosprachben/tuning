@@ -11,7 +11,7 @@ takes' stable notes (examples/freesound_slice.py pipes; VOICE_OPTS).
     wind_fit.py --voice=harmonica --top       the ladder by absolute frequency, to 20 kHz
     wind_fit.py --voice=harmonica --fit=scatter  each reed's own ladder, to the roughness
     wind_fit.py --voice=bagpipe --fit=body     body_trim_db, the harmonics by where they sound
-    wind_fit.py --voice=shakuhachi --fit=tables [--keys=57-62] [--match=uncle] [--low]
+    wind_fit.py --voice=shakuhachi --fit=tables [--keys=57-62] [--match=uncle] [--low] [--breath]
                                               the series and breath tables, note by note
 
 Everything is measured the same way on both sides, over the steady part of the
@@ -59,6 +59,10 @@ VOICES = {
     # GM 109: IowaSpaceWizard's Highland chanter, its nine notes alone (the
     # drones corked), staged by examples/freesound_slice.py bagpipe
     "bagpipe": (109, "BagpipeProperties", "bagpipe", "*_iowa_*.wav"),
+    # GM 111: cdrk's Turkish zurna standing in for the shehnai (no open-licence
+    # shehnai found), its stable notes staged by examples/freesound_slice.py
+    # pipes shanai -- G4 and a flat E5, eight notes in all
+    "shanai": (111, "ShanaiProperties", "shanai", "*_cdrk_*.wav"),
 }
 # WHERE A VOICE'S NOTES ARE, how they are named and how long they hold: VCSL's
 # are an octave low and sustained for seconds; the staged Freesound notes are
@@ -76,6 +80,8 @@ VOICE_OPTS = {
     # voice honours, the drones following) -- so the two sound at the same
     # Hz and a bore's or a reed's colour lines up where it is. CC1 0 corks
     # the drones: the takes are the chanter alone
+    # the zurna's notes are short: its E5s hold 0.4 s, its G4s 0.85
+    "shanai": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.1, t1=0.38),
     "bagpipe": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.5, t1=3.5,
                     tonic_cents=176.7, cc1=0),
 }
@@ -606,7 +612,10 @@ def fit_tables(voice, prog, cls, argv, passes=3):
     (max_harmonic must let it sound). --keys and --match take a part
     of the notes (one player's, one register's); --low fits that part into
     mode_gains_low / breath_noise_low_db instead (register_low_hz sends those
-    notes there)."""
+    notes there). --breath fits the breath table alone, the series left to
+    --fit=body (a short take's two pitches cannot tell a formant from a
+    series)."""
+    breath_only = "--breath" in argv
     keys = next((a.split("=")[1] for a in argv if a.startswith("--keys=")), None)
     match = next((a.split("=")[1] for a in argv if a.startswith("--match=")), None)
     low = "--low" in argv
@@ -624,7 +633,7 @@ def fit_tables(voice, prog, cls, argv, passes=3):
     lens = [len(load(p)[0]) / load(p)[1] for _, p in picked]
     R_h, R_c = np.nanmedian([r[0] for r in rec], 0), np.nanmedian([r[1] for r in rec], 0)
     gname, bname = ("mode_gains_low", "breath_noise_low_db") if low else ("mode_gains", "breath_noise_db")
-    if getattr(cls, gname) is None:
+    if getattr(cls, gname) is None and not breath_only:
         setattr(cls, gname, tuple(cls.mode_gains))
     if not getattr(cls, bname):
         setattr(cls, bname, tuple(cls.breath_noise_db))
@@ -640,18 +649,20 @@ def fit_tables(voice, prog, cls, argv, passes=3):
               % (n, np.sqrt(np.nanmean(dh[1:] ** 2)), nh, np.sqrt(np.mean(dc[ok] ** 2)), len(ok)), flush=True)
         if n == passes:
             break
-        g = list(getattr(cls, gname))
-        g += [g[-1]] * (nh - len(g))         # a longer series starts level with its last
-        for m in range(1, nh):
-            if np.isfinite(dh[m]):
-                g[m] = g[m] * 10 ** (dh[m] / 20.0)
-        setattr(cls, gname, tuple(g))
+        if not breath_only:
+            g = list(getattr(cls, gname))
+            g += [g[-1]] * (nh - len(g))         # a longer series starts level with its last
+            for m in range(1, nh):
+                if np.isfinite(dh[m]):
+                    g[m] = g[m] * 10 ** (dh[m] / 20.0)
+            setattr(cls, gname, tuple(g))
         for i in bands:
             j = i if np.isfinite(dc[i]) else min(ok, key=lambda q: abs(q - i))
             hz = int(round(CEN[i]))
             tab[hz] += float(dc[j])
         setattr(cls, bname, tuple((hz, round(db, 1)) for hz, db in sorted(tab.items())))
-    print("    %s = (%s)" % (gname, ", ".join("%.5f" % v for v in getattr(cls, gname))))
+    if not breath_only:
+        print("    %s = (%s)" % (gname, ", ".join("%.5f" % v for v in getattr(cls, gname))))
     print("    %s = %s" % (bname, getattr(cls, bname)))
     print("  series rec/ours " + " ".join("%+.0f/%+.0f" % (r, o) for r, o in zip(R_h, O_h)))
     print("  breath rec/ours " + " ".join("%d %+.0f/%+.0f" % (CEN[i], R_c[i], O_c[i]) for i in bands[::2]))

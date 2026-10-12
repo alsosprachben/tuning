@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 20 | 16% |
-| 3 specific, theory + ear | 15 | 12% |
-| 4 specific, reference audio | 93 | 73% |
+| 2 specific, theory | 17 | 13% |
+| 3 specific, theory + ear | 17 | 13% |
+| 4 specific, reference audio | 94 | 73% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -329,13 +329,13 @@ plays Standard, as does any program that is not a set.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 104 | Sitar | `Sitar` | **4** | Freesound sitars: a Ma string struck four times (CC0) and chinpen's D4 strokes (CC BY 3.0) (examples/pluck_fit.py): the decay law and its register slope on both; the gourd by absolute frequency, the jawari as the body falling away under a buzz that is there at once and rises quickly (a short banded late copy), each partial its own phase, a 1.5 ms onset -- all on the Ma take, chinpen's sitar having no growing buzz. Its sympathetic strings tuned on Sa; Indian intonation as a secondary tuning (ragas.py: just, Pythagorean, equal, Bel's Todi, 27 ragas measured from Saraga) and a meend that locks the wheel to the raga's swaras. Ben: sounds great |
-| 105 | Banjo | `Banjo` | **2** | steel over a DRUMHEAD: a membrane is light and damped, so it cannot radiate below 380 Hz and it empties the string fast. Thin, quick and bright are one fact |
-| 106 | Shamisen | `Shamisen` | **2** | the same head, plus a SAWARI buzz modelled as the sitar models its jawari, and a wide bachi that fills its own comb notch |
+| 105 | Banjo | `Banjo` | **4** | the Windsor banjo SoundFont's open-string plucks (public domain; examples/pluck_fit.py --voice=banjo): decay law and register slope, the head's colour by absolute frequency (it radiates down to 100 Hz, not the 380 asserted), the head's own brief modes 190-1480 Hz for the hollow knock, the other open-G strings ringing in sympathy ~36 dB under; a note-off damps it in 0.35 s (the short GM sets'; Roland publishes none). Ben: sounds great |
+| 106 | Shamisen | `Shamisen` | **3** | RTB45's Ueno festival take (freesound 195521, CC BY 4.0), its 14 plucks that ring alone, 0.3-0.7 s (examples/pluck_fit.py --voice=shamisen): no comb notch (the bachi fills it), silk's near-harmonic series (it had the banjo's steel), bright to 13.6 kHz, the bachi's knock a two-stage decay, its colour by absolute frequency; the other open strings kicked through the skin in niagari on C#3, the sawari string loudest, unmoved by the wheel. One string at two pitches, the ring past 0.7 s and the sawari's buzz unmeasured. Ben: sounds good |
 | 107 | Koto | `Koto` | **4** | VCSL Dan Tranh (CC0), its nearest recorded cousin (examples/koto_fit.py): decay laws, pluck point, the box's low cut (450 Hz measured), the tsume's strike; the other twelve strings ringing in sympathy at the measured level and decays, in hirajoshi, tuned through the tuner. Silk inharmonicity kept. Ben: sounds fine |
 | 108 | Kalimba | `Kalimba` | **4** | VCSL kalimba (CC0, examples/kalimba_fit.py): measured tine modes 1 : 2 : 6.4, the other tines ringing sympathetically at their own pitches and decays, the thumb's strike. Ben: great |
 | 109 | Bag pipe | `Bagpipe` | **4** | Freesound IowaSpaceWizard chanter, its nine notes, and the drones (CC0) with iainmccurdy's (CC BY 4.0) (examples/wind_fit.py --voice=bagpipe): the chanter a CONE (it sat on the organ's stopped pipe, evens 100 dB down), its colour by absolute frequency, its measured scale (Low G -228, the D 18 sharp), reed noise climbing the chanter, each harmonic its own phase and flutter, a 32 ms attack with no reed-organ rush; the drones their OWN voices -- tenor, tenor, bass, CC1 corking them -- split from the mixture by pitch (the bass's evens are not weak), a struck-in swell set by velocity; a slur ends the note it leaves. Ben: perfect |
 | 110 | Fiddle | `SoloViolin` | **4** | the measured violin, given solo treatment |
-| 111 | Shanai | `Shanai` | **2** | a CONE, so the even harmonics the chanter's class suppressed come back -- a shawm is an oboe's geometry, not a bagpipe's |
+| 111 | Shanai | `Shanai` | **3** | by PROXY: cdrk's Turkish zurna (freesound 18661, CC BY 4.0; no open shehnai recording), G4 and E5 (examples/wind_fit.py --voice=shanai, examples/shanai_ab.py): a cone seeded from the fitted chanter, its colour by absolute frequency, its reed hiss between the harmonics, a tongued 16 ms onset. Checked against the GM sets' shehnai samples (examples/gm_samples.py 111), which agree on the weak fundamental and not on the zurna's fading upper one, so that was left out. Ben: sounds good |
 
 ## 112-119 Percussive
 
@@ -365,7 +365,7 @@ plays Standard, as does any program that is not a set.
 
 ## The class tree
 
-288 classes.
+287 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -423,8 +423,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `Vibraphone` -- GM 11 Vibraphone (4)
         - `Xylophone` -- GM 13 Xylophone (4)
     - `MembraneBody` [FormantBody]
-      - `Banjo` -- GM 105 Banjo (2)
-      - `Shamisen` -- GM 106 Shamisen (2)
+      - `Banjo` -- GM 105 Banjo (4)
+      - `Shamisen` [PromptDecay] -- GM 106 Shamisen (3)
     - `NylonGuitar` [FormantBody] -- GM 24 Acoustic Guitar (nylon) (4)
       - `SteelGuitar` -- GM 25 Acoustic Guitar (steel) (4)
     - `Percussion`
@@ -503,7 +503,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `ContrabassPizz` -- GM 45 Pizzicato Strings (4)
       - `ViolaPizz` -- GM 45 Pizzicato Strings (4)
       - `ViolinPizz` -- GM 45 Pizzicato Strings (4)
-    - `Sitar` [FormantBody] -- GM 104 Sitar (4)
+    - `Sitar` [PromptDecay, FormantBody] -- GM 104 Sitar (4)
   - `StoppedPipe`
     - `BowedString` [SectionMixin]
       - `Cello` [FormantBody] -- GM 40 Violin (4), GM 41 Viola (4), GM 42 Cello (4), GM 48 String Ensemble 1 (4)
@@ -653,8 +653,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `Bagpipe` -- GM 109 Bag pipe (4)
             - `Bassoon` -- GM 70 Bassoon (4)
             - `Saxophone` -- GM 64 Soprano Sax (4), GM 65 Alto Sax (4), GM 66 Tenor Sax (4), GM 67 Baritone Sax (4)
-        - `ReedPipe`
-          - `Shanai` -- GM 111 Shanai (2)
+            - `Shanai` -- GM 111 Shanai (3)
     - `PanFlute` -- GM 75 Pan Flute (4)
   - `Tonewheel`
     - `DrawbarOrgan` -- GM 16 Drawbar Organ (3)

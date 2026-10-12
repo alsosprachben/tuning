@@ -2488,6 +2488,11 @@ class Patch:
         _sr = p.get("sym_rows")
         if _sr and _sr[1] > _sr[0]:
             t["sym"][_sr[0]:min(_sr[1], int(t["P"]))] = True
+        # ...AND THE RING ROWS (the koto's, banjo's, kalimba's other strings and
+        # tines, the banjo's head): never on the wheel, a meend's or any other
+        t["ring"] = np.zeros(int(t["P"]), bool)
+        for _a, _b in (p.get("ring_rows") or ()):
+            t["ring"][_a:min(_b, int(t["P"]))] = True
         nf = t["nf"].astype(np.float64)
         # An unmapped drum note builds NOTHING: percussion_for_note has no
         # voice for it and prepare() emits no partials. A zero-partial
@@ -2958,6 +2963,7 @@ class Live:
         self.mts = _MTSm.TuningStore()
         self.mts_at = {}        # (pid, channel, key) -> MTS ratio last applied
         self.meend_at = {}      # note key -> (meend ratio last applied, its sympathetic mask)
+        self.sym_at = {}        # note key -> its fixed open strings' rows (a mask): no wheel
         # CC71-78: channel -> {control name: d}, only the ones not at 64.
         self.snd = {}
         self.nrpn = {}          # channel -> the NRPN selected, for GS's sound NRPNs
@@ -4203,6 +4209,18 @@ class Live:
         sva, svr = self._snd_vib(part, ch, slots)
         v2 = v + sva
         r2 = (1.0 + self.mod_rate * w) * svr
+        # THE OPEN STRINGS ARE NOT ON THE WHEEL (a sitar's taraf, a shamisen's
+        # strings): their rows take the note's tuning but not the pull, now
+        # or later (_repitch, _meend_retune)
+        _sm = self._fixed_sym(part, note, tmpl, slots)
+        if _sm is not None:
+            self.sym_at[key] = _sm
+            _bs = b / self._wheel_share(part, ch, note, _mr)
+            for _sel, _r in ((True, _bs), (False, b)):
+                _ix = [i for i, m in zip(slots, _sm) if m == _sel]
+                if _r != 1.0 and _ix:
+                    self.slab.retune(_ix, n0, om_scale=_r)
+            b = 1.0                   # applied; the vibrato below, on every row
         if b != 1.0 or v2 != 0.0 or r2 != 1.0:
             self.slab.retune(slots, n0, om_scale=(b if b != 1.0 else None),
                              vd=(v2 if v2 != 0.0 else None),
@@ -5555,9 +5573,55 @@ class Live:
                                  om_scale=ratio / prev)
                 self._repitch_amp(keep, n0, ratio / prev)
         else:
-            self.slab.retune(self._sounding(ch, pids={p.pid for p in here}) if _mee
-                             else self._sounding(ch), n0, om_scale=ratio / prev)
+            sl = (self._sounding(ch, pids={p.pid for p in here}) if _mee
+                  else self._sounding(ch))
+            # ...AND A FIXED OPEN STRING STAYS AT ITS PITCH (_fixed_sym)
+            _fx = self._fixed_sym_slots(ch, {p.pid for p in here})
+            if _fx:
+                sl = [i for i in sl if i not in _fx]
+            self.slab.retune(sl, n0, om_scale=ratio / prev)
             self._repitch_amp({p.pid for p in here}, n0, ratio / prev)
+
+    # ---- FIXED OPEN STRINGS: a sympathy the wheel does not move -------------
+    def _fixed_sym(self, part, note, tmpl, slots):
+        """This note's template mask of the rows the wheel does not move -- its
+        fixed open strings' (a sitar's taraf, a shamisen's) and its ring rows
+        (a koto's, a banjo's other strings and head) -- or None."""
+        pc = part.patch._voice_class(note + part.transpose)
+        sm = np.zeros(len(slots), bool)
+        sy = tmpl.get("sym")
+        if getattr(pc, "sympathetic_strings", ()) and sy is not None and len(sy) == len(slots):
+            sm |= np.asarray(sy, bool)
+        rg = tmpl.get("ring")
+        if rg is not None and len(rg) == len(slots):
+            sm |= np.asarray(rg, bool)
+        return sm if sm.any() else None
+
+    def _wheel_share(self, part, ch, note, mr=None):
+        """The part of this note's pitch ratio that is the WHEEL's pull: the
+        meend's (mr) over the tuning alone, else the channel's bend over it."""
+        rng = self._bend_range(ch)
+        if mr is not None:
+            pc = part.patch._voice_class(note + part.transpose)
+            rng = self.brange.get(ch)
+            if rng is None:
+                rng = float(getattr(pc, "bend_range_semitones", self.bend_range))
+        rest = T.channel_pitch_ratio(rng, 0, self.coarse.get(ch, 0.0), self.fine.get(ch, 0.0),
+                                     self.master_coarse, self.master_fine)
+        whole = mr if mr is not None else self.bend.get(ch, 1.0)
+        return whole / rest if rest > 0 else 1.0
+
+    def _fixed_sym_slots(self, ch, pids):
+        """Every sounding slot on this channel, of these parts, that is a fixed
+        open string's row -- what a wheel move leaves where it is."""
+        out = set()
+        for k, slots in self.slab.live.items():
+            if k[0] not in pids or k[1] != ch or not slots:
+                continue
+            sm = self.sym_at.get(k)
+            if sm is not None and len(sm) == len(slots):
+                out.update(i for i, m in zip(slots, sm) if m)
+        return out
 
     # ---- THE MEEND, live (tonelib.meend_cents; blockrender's _MEEND_AT) --------
     def _meend_part(self, part):
@@ -5610,7 +5674,7 @@ class Live:
             if r is None or r == got[0]:
                 continue
             idx = list(slots)
-            sym = got[1]
+            sym = self.sym_at.get(k, got[1])       # every row off the wheel (_fixed_sym)
             if sym is not None and len(sym) == len(idx):
                 idx = [i for i, m in zip(idx, sym) if not m]
             if idx:
@@ -10142,6 +10206,36 @@ def selftest():
           "%s)" % (1200.0 * _math.log2(max(_fr, 1e-9)), 1200.0 * _math.log2(_lr),
                    "bent" if _symbent else "unbent"))
 
+    # THE OPEN STRINGS ARE NOT ON THE WHEEL, ANY BEND (Ben: "the sympathetic
+    # things don't move with the thing you are bending"): a shamisen's other
+    # strings ring on at their pitch while the played one is bent -- moved
+    # after the pluck, or already bent at it
+    # ...and a banjo's other strings and head, its ring rows, the same
+    for _gp, _gn, _gname in ((106, 49, "a shamisen's open strings"),
+                             (105, 62, "a banjo's other strings and head")):
+        lvs = Live(program=_gp, rate=_Bra.SR, frames=_Bra.BLK, tuner="hybrid440", verbose=False); lvs.warm()
+        lvs.on_midi(mido.Message("note_on", channel=0, note=_gn, velocity=100)); lvs.apply(0)
+        _ks = [_k for _k in lvs.slab.live if _k[2] == _gn and _k[3] is None][0]
+        _sl = list(lvs.slab.live[_ks]); _sm = lvs.sym_at.get(_ks)
+        _om0 = lvs.slab.a["om"][_sl].astype(np.float64)
+        lvs.on_midi(mido.Message("pitchwheel", channel=0, pitch=4096)); lvs.apply(0)
+        _om1 = lvs.slab.a["om"][_sl].astype(np.float64)
+        lvs.on_midi(mido.Message("note_off", channel=0, note=_gn, velocity=0)); lvs.apply(0)
+        lvs.on_midi(mido.Message("note_on", channel=0, note=_gn, velocity=100)); lvs.apply(0)
+        _ks2 = [_k for _k in lvs.slab.live if _k[2] == _gn and _k[3] is None and list(lvs.slab.live[_k]) != _sl]
+        _om2 = (lvs.slab.a["om"][list(lvs.slab.live[_ks2[0]])].astype(np.float64) if _ks2 else np.zeros(0))
+        lvs.renderer.close()
+        _st = 2.0 ** (1.0 / 12.0)
+        _ok = (_sm is not None and _sm.any() and len(_om2) == len(_om0)
+               and np.allclose(_om1[_sm], _om0[_sm], rtol=1e-6)
+               and np.allclose(_om1[~_sm] / _om0[~_sm], _st, rtol=1e-4)
+               and np.allclose(_om2[_sm], _om0[_sm], rtol=1e-6)
+               and np.allclose(_om2[~_sm] / _om0[~_sm], _st, rtol=1e-4))
+        check("...and %s hold their pitch through any bend" % _gname,
+              _ok, "  (%d of %d rows: unmoved by a semitone's wheel after the pluck "
+              "and before the next; the played rows moved)"
+              % (int(_sm.sum()) if _sm is not None else 0, len(_sl)))
+
     # THE RIG'S EASTERN TUNING, live (Live.set_eastern; the panel's E): every
     # Indian voice's part plays it, the rest keep their own tuner; the session
     # keeps it and each part's OWN choice; a program change to a Western voice
@@ -11021,13 +11115,15 @@ def selftest():
     check("...and the shanai's cone brings the even harmonics back",
           not _eth[111].odd_only and _sh.harmonic_volume(2) > 0.0,
           "  (a shawm is an oboe's geometry, not a chanter's)")
-    # A MEMBRANE CANNOT RADIATE LOW. The banjo and the shamisen are the only
-    # plucked voices here whose body is a stretched skin. (The koto was the
-    # contrast, its wooden box asserted to radiate low; fitted to VCSL's Dan
-    # Tranh, its cousin, the box rolls off under 450 Hz -- so it is reported
-    # here, not held against them.)
-    check("...and the two drumhead instruments cannot radiate their bottom",
-          _eth[105].bell_cutoff_hz > 300.0 and _eth[106].bell_cutoff_hz > 300.0,
+    # A MEMBRANE CANNOT RADIATE LOW -- asserted for both drumhead voices, and
+    # the banjo's measurement contradicted it: the Windsor plucks' D3 and G3
+    # fundamentals stand level with their h2, so its head radiates its lowest
+    # string (bell_cutoff 100 Hz). The shamisen's take agrees with the claim
+    # (its colour fit -10 to -11 dB at 200-250 Hz), so it keeps its cut. (The
+    # koto's box, fitted to VCSL's Dan Tranh, rolls off under 450 Hz --
+    # reported here, not held against them.)
+    check("...and the banjo's head radiates its low D, the shamisen's skin not its bottom",
+          _eth[105].bell_cutoff_hz < 146.8 and _eth[106].bell_cutoff_hz > 300.0,
           "  (banjo %.0f Hz and shamisen %.0f, the koto's box, measured, %.0f)"
           % (_eth[105].bell_cutoff_hz, _eth[106].bell_cutoff_hz,
              _eth[107].bell_cutoff_hz))

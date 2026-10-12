@@ -1163,6 +1163,9 @@ class SynthProperties:
     # interval rule above.
     sympathetic_strings = ()
     sympathetic_tonic = 61       # MIDI note of Sa; a sitar is commonly at C#
+    # ...and each string's own level, dB, in sympathetic_strings' order
+    # () = all at sympathetic_gain
+    sympathetic_string_db = ()
     # Extra distance for crossing an octave, in the same steps. A tenor pan's
     # inner ring is the octave above its outer one, so an octave is close.
     sympathetic_octave_step = 0.5
@@ -7458,7 +7461,36 @@ class SlowBowedStringProperties(BowedStringProperties):
 
 # --- The guitar box (GM 24) --------------------------------------------------
 
-class SitarProperties(FormantBody, PluckedStringProperties):
+class PromptDecay:
+    """A TWO-STAGE DECAY for a plucked string: every partial under
+    prompt_max_hz falls at prompt_dbs at first, and aftersound_share of it
+    rings on at the class's own decay law (the renderer's aftersound). The
+    sitar's low partials falling away under its buzz; the shamisen's bachi
+    knock dying into the string's ring. prompt_max_hz 0 = the law alone."""
+    prompt_max_hz = 0.0
+    prompt_dbs = 0.0
+    aftersound_share = 0.0
+
+    def harmonic_decay(self, harmonic):
+        base = super().harmonic_decay(harmonic)
+        if self.prompt_max_hz:
+            f = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+            if f < self.prompt_max_hz:
+                return max(base, self.prompt_dbs)
+        return base
+
+    def ring_decay(self, harmonic):
+        """The string's RING: the decay law without the prompt fall -- what
+        a sympathetic string rings at, and its resonance's width (Q)."""
+        return super().harmonic_decay(harmonic)
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        if self.prompt_max_hz and self.aftersound_share > 0.0 and f0 * m < self.prompt_max_hz:
+            return (self.aftersound_share, super().harmonic_decay(m))
+        return (0.0, decay_rate)
+
+
+class SitarProperties(PromptDecay, FormantBody, PluckedStringProperties):
     """GM 104. A long steel string over a curved bridge, and thirteen more
     strings underneath that nobody touches.
 
@@ -7591,24 +7623,6 @@ class SitarProperties(FormantBody, PluckedStringProperties):
     prompt_max_hz = 976.0
     prompt_dbs = 26.26
     aftersound_share = 0.2308
-
-    def harmonic_decay(self, harmonic):
-        base = super().harmonic_decay(harmonic)
-        if self.prompt_max_hz:
-            f = self.frequency_x * (2.0 ** self.octave_position) * harmonic
-            if f < self.prompt_max_hz:
-                return max(base, self.prompt_dbs)
-        return base
-
-    def ring_decay(self, harmonic):
-        """The string's RING: the decay law without the prompt fall -- what
-        a sympathetic string rings at, and its resonance's width (Q)."""
-        return super().harmonic_decay(harmonic)
-
-    def aftersound_partial(self, f0, m, decay_rate):
-        if self.prompt_max_hz and self.aftersound_share > 0.0 and f0 * m < self.prompt_max_hz:
-            return (self.aftersound_share, super().harmonic_decay(m))
-        return (0.0, decay_rate)
 
     # HELD at its level before the fit (-58.94 dB, the mean of G3-C5's first
     # second at velocity 100), after the gourd, the buzz's quick rise and the
@@ -16007,11 +16021,12 @@ class BanjoProperties(MembraneBodyProperties):
 
     ASSERTED, NOT MEASURED. Neither collection has one.
     """
-    # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
-    # consensus, no recording holding a released note -- the median of four
-    # sets' releases, 5.41 s (10.00, 0.75, 10.00, 0.82), to our smoothstep's -40 dB at the same
-    # time, 0.443 R; and no 0.45-of-the-note cap. The sets split (FluidR3/MuseScore 10 s, GeneralUser/TimGM6mb 0.8): the median sits between.
-    release_valve_time = 2.398
+    # THE NOTE-OFF IS A DAMPING HAND, NOT A RING-OUT. examples/gm_release.py's
+    # four sets split (FluidR3/MuseScore 10 s, GeneralUser/TimGM6mb 0.75 and
+    # 0.82) and their 5.41 s median rang on past the note-off; Ben's ear took
+    # the short sets' ~0.8 s, to our smoothstep's -40 dB at the same time,
+    # 0.443 R. No 0.45-of-the-note cap. Roland publishes no value.
+    release_valve_time = 0.35
     release_fraction_max = None
     strike_point = 0.12
     strike_depth = 0.85
@@ -16019,18 +16034,61 @@ class BanjoProperties(MembraneBodyProperties):
     inharmonicity_coefficient = 8.0e-05     # short steel, estimated
     inharmonicity_dynamic = False
     tonal_dampening = 0.80                  # steel: brighter than silk
-    decay_db = 5.2
-    bell_cutoff_hz = 380.0                  # a small head, and a tight one
+    # MEASURED (examples/pluck_fit.py --voice=banjo --fit=decay, the Windsor
+    # SoundFont's four open strings, D3 G3 B3 D4, public domain): the low
+    # harmonics fall 6-20 dB/s and the top barely faster (15-35 by h12), where
+    # the class had the top dying at 60 dB/s; a register slope over the four
+    # pitches (25.1 -> 6.6 dB/s rms, the takes' own harmonic-to-harmonic
+    # scatter the most of what is left)
+    decay_db = 10.06
+    harmonic_decay_db = 0.4252
+    decay_register_slope = 0.4615
+    # A SMALL HEAD, BUT IT RADIATES THE LOW STRINGS: the 380 Hz cut asserted
+    # here is contradicted by the Windsor plucks, whose D3 and G3 fundamentals
+    # (146, 196 Hz) stand level with their h2 -- the colour fit ran the band
+    # under it to +32 dB fighting it. 100 Hz, the head's colour in the trim below
+    bell_cutoff_hz = 100.0
+    # THE DRUM, AND THE OTHER STRINGS (Ben: "missing the hollow tone of the
+    # drum, and maybe some sympathetic vibration from the strings"). Measured
+    # on the Windsor plucks, the peaks OFF the plucked note's harmonics:
+    #   the HEAD: in the first 80 ms, recurring across the four plucks near
+    #     460, 540, 700, 835, 940 and 1060 Hz (and slower near 190, 1180,
+    #     1480), 16-25 dB under the note's peak, dying 40-250 dB/s -- the
+    #     hollow knock a guitar's wooden box does not have;
+    #   the OTHER STRINGS, open and undamped: from 0.3 s, the open strings
+    #     ringing ~28 dB under (B3 under a plucked D4; D3 under G3 and B3),
+    #     slowly. Open G (g4 D3 G3 B3 D4), named at A440 and TUNED AS THE
+    #     NOTES ARE (blockrender's ring rows: each to its key in the table in
+    #     force at the pluck), unbent by the wheel; the plucked string itself
+    #     skipped (ring_skip).
+    # (Hz, dB re the note, dB/s) as ring rows, the koto's mechanism -- the
+    # levels then set so the energy off the note's harmonics is the plucks'
+    # (median, first 80 ms and 0.3-1.5 s, within ~2 dB)
+    ring_db = ((190.0, -18.0, 42.0), (460.0, -14.0, 150.0), (540.0, -13.0, 200.0),
+               (700.0, -17.0, 160.0), (835.0, -16.0, 100.0), (940.0, -15.0, 70.0),
+               (1060.0, -15.0, 150.0), (1180.0, -18.0, 40.0), (1480.0, -16.0, 35.0),
+               (146.83, -36.0, 15.0), (196.0, -36.0, 15.0), (246.94, -36.0, 15.0),
+               (293.66, -36.0, 15.0), (392.0, -36.0, 15.0))
+    # THE HEAD'S COLOUR, by absolute frequency (pluck_fit.py --voice=banjo
+    # --fit=body: the four plucks' harmonics pooled by where they sound, 13.4
+    # -> 2 dB a band to 10 kHz; capped at +-24, and over 11.5 kHz left out --
+    # one pluck's noise there, not harmonics): strong under 400 Hz, a lift at
+    # 0.8 and 1.6 kHz, and 5-9 dB down from 2 kHz
+    body_trim_db = ((202, 21.5), (320, 8.4), (403, 5.8), (640, -5.1), (806, 11.4), (1016, 1.9),
+                    (1280, 4.2), (1613, 8.3), (2032, -5.2), (2560, -5.4), (3225, -9.0),
+                    (4064, -5.0), (5120, 0.1), (6451, -4.9), (8127, -5.1), (10240, -1.8))
     # Balance-normalised against the MEASURED nylon guitar (GM 24) on the same
     # passage in the same room -- the plucked family's reference-audio member.
-    initial_gain = 0.0818031
+    # ...and HELD there after the fit (the mean of D3-G4's first second at
+    # velocity 100, -51.53 dB): the measured decay and head had it 2.5 over
+    initial_gain = 0.0818031 * 10 ** (-2.515 / 20.0)
                     # balance-normalised below
     # FINGERPICKS, 2 ms -- by analogy with a pick; at an instant attack,
     # contrast +8.
     attack_time = 0.002
 
 
-class ShamisenProperties(MembraneBodyProperties):
+class ShamisenProperties(PromptDecay, MembraneBodyProperties):
     """GM 106. Silk over a skin, struck with a bachi -- and a SAWARI buzz.
 
     The sawari is the same idea as the sitar's jawari and is the reason both
@@ -16058,13 +16116,62 @@ class ShamisenProperties(MembraneBodyProperties):
     release_valve_time = 0.554
     release_fraction_max = None
     strike_point = 0.18
-    strike_depth = 0.55         # a wide plectrum fills its own notch
+    # NO NOTCH AT ALL, MEASURED (examples/pluck_fit.py --voice=shamisen): the
+    # live take's plucks have h8-h11 within a few dB of their neighbours,
+    # where a 0.55 comb cut them 30-40 dB -- the bachi's broad blade fills it
+    strike_depth = 0.0
+    # SILK, NOT STEEL: the take's h2-h13 sit within 3 cents of the series,
+    # where the banjo's steel (B 1.3e-3, inherited) put h9 75 cents sharp --
+    # out of every window that looks for it. Within 3 cents to h13 bounds B
+    # under ~2e-5; the koto's silk is 6e-6
+    inharmonicity_coefficient = 1.0e-05
     strike_fills_with_force = False
+    # THE BACHI'S KNOCK DIES; THE STRING RINGS ON. Over the first 0.2 s every
+    # harmonic falls ~20 dB at 80-130 dB/s, then holds near level as far as
+    # the take lets it ring (0.68 s at most) -- two stages, not one rate (a
+    # single law fitted to the first 0.3 s came out at 4.6x the decay). So
+    # the sitar's two-stage decay (PromptDecay), on every partial to 6 kHz,
+    # fitted to the four bands' course over the first 0.3 s
+    # (pluck_fit.py --voice=shamisen --fit=prompt, 3.10 dB); the law below
+    # is the ring under it
+    prompt_dbs = 113.1
+    aftersound_share = 0.1882
+    prompt_max_hz = 6239.0
     tonal_dampening = 0.45      # the sawari: shallower even than the sitar's
     harmonic_decay_db = 0.9     # ...and the top survives
     decay_db = 3.8
-    max_harmonic = 64
-    initial_gain = 0.032913
+    # ITS COLOUR WHERE IT SOUNDS (pluck_fit.py --voice=shamisen --fit=body,
+    # with the knock in place: 24.6 -> 0.44 dB rms at 0.1-0.3 s). Fitted on
+    # one string at two pitches, so a band below 2 kHz is one harmonic's --
+    # the skin's resonances and the bachi read together
+    body_trim_db = ((202, -11.1), (254, -9.8), (403, -4.0), (508, -5.7), (640, 8.1), (806, 13.4),
+                    (1016, -1.8), (1280, 9.9), (1613, 4.0), (2032, -14.2), (2560, -16.4), (3225, -7.5),
+                    (4064, 2.0), (5120, -1.5), (6451, -2.3), (8127, 7.0), (10240, -2.6))
+    # the bass string's 142 Hz to 13.6 kHz: at 64 harmonics it stopped at 9.1,
+    # and the take is bright to the top
+    max_harmonic = 96
+    # THE OTHER OPEN STRINGS, KICKED THROUGH THE SKIN. Under a bass-string
+    # pluck the take has peaks at 641, 1066 and 1488 Hz in nearly every one:
+    # the 3rd, 5th and 7th harmonics of 213 Hz, a fifth up -- the second
+    # string ringing, 6-17 dB under the strongest peak and as strong at
+    # 0.12-0.3 s as at first (its evens land on the bass string's own). Under
+    # a 190 Hz pluck, 5, 6, 7, 9 and 10 x 142: the bass string, the sawari's
+    # sympathy. Not coincidence -- these are the harmonics that do NOT meet
+    # the note's -- so 'contact' over a fixed set: niagari (root, fifth,
+    # octave), on C#3, the nearest note to the take's 142 Hz
+    sympathetic_mode = 'contact'
+    sympathetic_strings = (0, 7, 12)
+    sympathetic_tonic = 49
+    # The levels against the take's peaks (median, re the strongest): the
+    # fifth's under a bass pluck -30 dB, the bass's under a 190 Hz one -20 --
+    # the sawari string answering 7 dB the louder
+    sympathetic_gain = 0.032
+    sympathetic_string_db = (7.0, 0.0, 0.0)
+    sympathetic_max = 3
+    sympathetic_floor = 0.0
+    # HELD at its level before the fit (-50.24 dB, the mean of C4-G5's first
+    # second at velocity 100): the knock's fall had it 7.0 dB under
+    initial_gain = 0.032913 * 10 ** (6.989 / 20.0)
 
 
 class KotoProperties(FormantBody, PluckedStringProperties):
@@ -16896,34 +17003,6 @@ bagpipe_tonic_hz = 440.0
 # bagpipe's tonic is: Sa's MIDI note and the spec, or None when there is none
 raga_sa_note = None
 raga_spec = None
-
-
-class ShanaiProperties(ReedPipeProperties):
-    """GM 111. A double reed in a CONICAL bore, and no drone at all.
-
-    The other half of the pair 109 and 111 used to share. A shehnai is a shawm:
-    a wide double reed driving a conical bore that flares to a metal bell, which
-    is an oboe's geometry rather than a bagpipe chanter's, and it is played with
-    no drone from the instrument itself -- the drone in the ensemble comes from
-    a second player on a sur peti or a second shehnai.
-
-    A CONE PASSES THE WHOLE SERIES where a cylinder favours the odd, so the even
-    harmonics that ReedOrganProperties suppresses have to come back. Bright and
-    nasal with it: the reed is wide and the bell is metal.
-
-    ASSERTED, NOT MEASURED.
-    """
-    # an Indian instrument: a secondary tuning (ragas.py) tunes it, when set
-    tuning_family = 'indian'
-    odd_only = False
-    even_harmonic_db = None
-    # A shehnai player CAN tongue, so this is a slur they elect -- the clarinet's
-    # value, and the distinction the bagpipe above does not get to make.
-    legato_attack_s = 0.012
-    tonal_dampening = 0.85      # brighter and more nasal than the chanter
-    max_harmonic = 48
-    bore_corner_hz = 4200.0
-    initial_gain = 0.000174797
 
 
 class OpenPipeProperties(StoppedPipeProperties):
@@ -17827,6 +17906,87 @@ class ConicalReedProperties(FormantBody, CylindricalReedProperties):
     bore_corner_hz = 5000.0
     bore_order = 1.6
 
+
+
+class ShanaiProperties(ConicalReedProperties):
+    """GM 111. A double reed in a CONICAL bore, and no drone at all.
+
+    The other half of the pair 109 and 111 used to share. A shehnai is a shawm:
+    a wide double reed driving a conical bore that flares to a metal bell, which
+    is an oboe's geometry rather than a bagpipe chanter's, and it is played with
+    no drone from the instrument itself -- the drone in the ensemble comes from
+    a second player on a sur peti or a second shehnai.
+
+    A CONE PASSES THE WHOLE SERIES where a cylinder favours the odd, so the even
+    harmonics that ReedOrganProperties suppresses have to come back. Bright and
+    nasal with it: the reed is wide and the bell is metal.
+
+    MEASURED BY PROXY. No shehnai recording under an open licence was found;
+    cdrk's Turkish zurna (freesound 18661, CC BY 4.0; sources.md "Ethnic
+    programs") is the same instrument family -- a wide double reed, often
+    lip-free on a pirouette, a conical bore and a flared bell -- and its four
+    shots give eight stable notes, G4 and a flat E5 (examples/freesound_slice.py
+    pipes shanai; examples/wind_fit.py --voice=shanai). The reed pipe this class
+    sat on had the series falling from the fundamental, -25 dB by h12; the
+    zurna's fundamental is the WEAKEST harmonic it has, h2-h10 6-15 dB over it,
+    and its reed hiss sits ~50 dB under the tone where ours had none. So it is
+    seeded from the conical reed this bank has already fitted -- the Highland
+    chanter's (BagpipeProperties) -- and fitted from there.
+    """
+    # an Indian instrument: a secondary tuning (ragas.py) tunes it, when set
+    tuning_family = 'indian'
+    # A shehnai player CAN tongue, so this is a slur they elect -- the clarinet's
+    # value, and the distinction the bagpipe above does not get to make.
+    legato_attack_s = 0.012
+    # THE SERIES, SEEDED FROM THE CHANTER'S FIT (BagpipeProperties): the cone's
+    # tilt and formants, the reed's flutter and the breath's wobble, its 32 ms
+    # onset and 80 ms stop. The zurna's notes are too short (0.4-0.85 s) to
+    # fit a flutter or a wobble of their own, so those stay the chanter's
+    tonal_dampening = 0.05868
+    octave_dampening = 0.008087
+    bore_corner_hz = 10300.0
+    bore_order = 4.346
+    formants = ((1300.0, 700.0, 0.6731), (3000.0, 1400.0, 0.05973))
+    max_harmonic = 40
+    partial_phase_spread = 1.0
+    wind_skirt_always = True
+    wind_skirt_db = -34.58
+    wind_skirt_harmonic_db = 4.09
+    wind_skirt_hz = 3.149
+    wind_skirt_rel = 0.003004
+    breath_wobble_db = 0.6174
+    breath_wobble_hz = 3.149
+    breath_noise_wobble_db = 1.28
+    breath_noise_wobble_hz = 9.564
+    # THE REED'S HISS, fitted between the harmonics and under the fundamental
+    # (wind_fit.py --fit=tables --breath, 17.6 -> 0.3 dB over 20 bands): -50
+    # to -73 dB re the fundamental, strongest at 1.6-6.5 kHz
+    breath_noise_db = ((160, -18.1), (202, -17.1), (255, -19.0), (321, -12.3), (404, 4.5), (509, -7.9),
+                       (641, -10.2), (808, 11.8), (1018, 2.3), (1283, 12.8), (1616, 13.4), (2036, 11.5),
+                       (2566, 11.6), (3233, 15.4), (4073, 21.6), (5132, 22.6), (6465, 22.2), (8146, 8.4),
+                       (10263, 10.2), (12931, 2.6))
+    # ITS COLOUR WHERE IT SOUNDS (wind_fit.py --fit=body, 11.1 -> 0.5 dB rms):
+    # a lift at 1.6 kHz and 3-5 kHz, and a steep fall from 8 kHz -- the bell's
+    # radiation is not the chanter's
+    body_trim_db = ((404, -3.7), (808, -2.3), (1283, 1.9), (1616, 6.2), (2036, 0.2),
+                    (2566, -0.9), (3233, 4.7), (4073, 7.1), (5132, 5.0), (6465, 0.3), (8146, -19.0),
+                    (10263, -18.2), (12931, -29.8))
+    # ...BUT NOT THE ZURNA'S UPPER FUNDAMENTAL. Its E5s' h1 sits 19-20 dB
+    # under h2 (G4's 4), and the body fit cut that as a 16 dB hole at 641 Hz,
+    # the one band only E5's h1 lands in. The GM sets' shehnai samples
+    # (examples/gm_samples.py 111: FluidR3's, which MuseScore reuses, and
+    # GeneralUser's, which TimGM6mb does) agree with the zurna's G4, h2 +3 to
+    # +5 over h1, and NOT with its E5 -- +2 to +7 at 520-650 Hz. So the band
+    # is left out: the fade is the zurna's own, a proxy's, not a shehnai's
+    # TONGUED, NOT BAG-FED: the zurna speaks -30 to -5 dB in 8-9 ms, the
+    # chanter's 32 ms onset took 18; it stops as the chanter does, the rest
+    # of its fall (55 ms to -40 against our 30) the room
+    attack_time = 0.016
+    release_valve_time = 0.080
+    wind_attack_db = None
+    # HELD at its level before the fit (-40.65 dB, the mean of C4-G5's first
+    # second at velocity 100): the brighter cone had it 10.6 dB over
+    initial_gain = 0.000174797 * 10 ** (-10.778 / 20.0)
 
 
 class BagpipeProperties(ConicalReedProperties):
