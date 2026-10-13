@@ -3927,9 +3927,16 @@ def prepare(path, tuner='hybrid440', sink=None):
             # it (the harpsichord's pluck), else strike_noise_slope -- which on
             # SynthProperties also scales the CHIFF by attack_volume, a second
             # meaning a new voice need not inherit
+            # ...read within strike_noise_span_hz where a class names one: a
+            # slope fitted over a recorded compass is not extrapolated past it
+            _sspan = getattr(props, 'strike_noise_span_hz', None)
+            _sf0 = min(max(f0, _sspan[0]), _sspan[1]) if _sspan else f0
             _reg = getattr(props, 'strike_noise_octave_db', props.strike_noise_slope) \
-                * math.log2(max(f0, 1.0) / 440.0)
+                * math.log2(max(_sf0, 1.0) / 440.0)
             _sfade = max(1.0, props.strike_noise_fade_s * SR)
+            # ...and its length a class may lengthen (strike_noise_len_s): a
+            # slower strike than the grand's is still heard at 0.25 s
+            _slen = (getattr(props, 'strike_noise_len_s', None) or 0.25) * SR
             # ONE ROW A BAND, and gone by 0.25 s (62 dB down at its 250 dB/s):
             # two a band, held 0.5 s, took live's ten-note chord past its block
             # budget (99th percentile 2.71 ms of 2.67)
@@ -3956,7 +3963,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                         continue
                     _gM = props.gain * 10.0 ** ((_db + _reg + _bdb + _scal) / 20.0)
                     emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
-                                 _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _bon, _bon + 0.25 * SR,
+                                 _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _bon, _bon + _slen,
                                  _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
@@ -4384,6 +4391,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     eff_ratio *= 2.0 ** (_rdt / 1200.0)
                 _pps = getattr(props, 'partial_phase_spread', 0.0)
                 _prng = random.Random(int(round(on * 1e6)) * 151 + note * 19 + ch) if _pps > 0.0 else None
+                _ushare = getattr(props, 'unison_shares_phase', False)
                 # ...AND ON A CLASS WITH CHOIRS, ITS CHOIR'S OWN WIRE (tonelib.
                 # choir_stiffness, choir_partial_hz): the same string register.
                 # Strings builds, so a free choir and a drawn one are one string
@@ -4455,6 +4463,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     if _prng is not None:
                         # each partial its own phase (SynthProperties.partial_phase_spread)
                         mph += 2.0 * math.pi * _pps * _prng.random()
+                    _mph_course = mph
                     # ...and how hard this stroke caught it (SynthProperties.stroke_scatter)
                     if getattr(rp, 'stroke_scatter', False):
                         _ssd = rp.stroke_scatter_db(m)
@@ -4592,7 +4601,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                             noff_u = _pspan[1]*SR
                         emit_partial(2*math.pi*uf/SR, ugL, ugR, gM*gm, uf, non_u, noff_u, pfade, rel, chiff,
                                      ulr, logrA, aftL, props.sustain_level, cvp, cc, crl, sjit, csc, gr, cr,
-                                     2*math.pi*uph + (2.0 * math.pi * _pps * _prng.random()
+                                     2*math.pi*uph + (_mph_course if _ushare else
+                                                      2.0 * math.pi * _pps * _prng.random()
                                                       if _prng is not None else 0.0))
                     _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0    # main voice only within this harmonic
                     _PL[0] = 0

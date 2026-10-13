@@ -73,6 +73,15 @@ SPLIT = 1e-2                     # a change under -40 dB of a mode waits for the
 CHOIR = 16                       # a mode's string index: choir * CHOIR + its unison
 
 
+def floor_of(props):
+    """Where a free string's row ends, re the strike's loudest partial: FLOOR,
+    or the class's register_floor_db -- a voice whose strings ring on under a
+    soft note (the dulcimer's: nothing damps them, and a high note's knock
+    starts its bass courses near -60) is cut while still heard at FLOOR."""
+    db = getattr(props, 'register_floor_db', None)
+    return FLOOR if db is None else 10.0 ** (db / 20.0)
+
+
 class Strings(object):
     """Every string of every key of one piano class at one tuning, as arrays:
     a mode is (key, string, harmonic) at its emitted frequency and decay."""
@@ -100,8 +109,11 @@ class Strings(object):
         # class's string does -- the same string the note loop's rank plucks.
         # A piano has one row: its unisons are strings OF that row.
         choirs = getattr(pc, 'string_choirs', None) or (("", 1.0, None),)
+        # A BANK OF COURSES (tonelib.HammeredDulcimerProperties.course_keys):
+        # only the pitches the instrument has strings at
+        ck = getattr(pc, 'course_keys', None)
         for key in KEYS:
-            if key not in table:
+            if key not in table or (ck is not None and key not in ck):
                 continue
             f0 = float(table[key])
             p = _isolated(pc, f0, pan, chan_vol)
@@ -166,10 +178,57 @@ class Strings(object):
         # A BUFFED CHOIR (tonelib buff_choirs) is its plain choir's string with
         # the pad on: one or the other answers, never both -- the buffed one
         # while its stop is drawn (it is plucked), the plain one otherwise
+        # ...OR BY KEY (tonelib key_bridge: the dulcimer's bass and treble
+        # bridges), and a key's PARTNER (bridge_partner: the other length of
+        # its own string, past the treble bridge), coupled partner_coupling
+        # times the board's
+        kb = getattr(pc, 'key_bridge', None)
+        self.keybridge = None
+        if kb is not None:
+            self.keybridge = {k: kb(p_, k) for k, p_ in self.props.items()}
+            self.bridge = np.array([self.keybridge[int(k)] for k in self.key], np.int64)
+        self.knock_tilt = float(getattr(pc, 'register_knock_tilt', 0.0) or 0.0)
+        kp = getattr(pc, 'register_knock_profile', None)
+        self.knock_profile = (np.array([q[0] for q in kp], float),
+                              np.array([q[1] for q in kp], float)) if kp else None
+        self.partner = dict(getattr(pc, 'bridge_partner', None) or {})
+        self.partner_k = float(getattr(pc, 'partner_coupling', 1.0))
         names = [c[0] for c in choirs]
         bc = getattr(pc, 'buff_choirs', None) or {}
         self.buffs = [(names.index(b), names.index(a)) for b, a in bc.items()
                       if b in names and a in names]
+
+    def coupling(self, j, key, choir=None):
+        """The bridge's weight from a driver on `key` (its choir, if any) to
+        modes j: the board's admittance at each, across bridges at
+        cross_bridge_coupling, and on the key's partner at partner_coupling.
+        Channel and LiveChannel both ask here, so the two cannot disagree."""
+        wj = self.w[j]
+        if choir is not None:
+            wj = wj * np.where(self.bridge[j] == self.choir_bridges[choir], 1.0, self.cross)
+        elif self.keybridge is not None and key in self.keybridge:
+            wj = wj * np.where(self.bridge[j] == self.keybridge[key], 1.0, self.cross)
+        pk = self.partner.get(key)
+        if pk is not None:
+            wj = wj * np.where(self.key[j] == pk, self.partner_k, 1.0)
+        return wj
+
+    def knock_shape(self, j, key, fall):
+        """The knock's level on modes j from a stroke on `key`: falling `fall`
+        dB a semitone either way -- or, where the class measured it
+        (register_knock_profile: (signed semitones, dB) from the struck key,
+        interpolated, held past its ends), by how far above or below."""
+        dk = self.key[j] - key
+        prof = self.knock_profile
+        g = (10.0 ** (np.interp(dk, prof[0], prof[1]) / 20.0) if prof
+             else 10.0 ** (-fall * np.abs(dk) / 20.0))
+        # ...AND BY EACH MODE'S FREQUENCY (register_knock_tilt): a kick gives a
+        # string a velocity, and a mode's displacement goes as its velocity
+        # over its frequency -- the kicked string is not as bright as a struck
+        # one. 0 (every other voice): each mode alike, as it was.
+        if self.knock_tilt:
+            g = g * (self.f[j] / 1000.0) ** (-self.knock_tilt)
+        return g
 
     def free_choirs(self, plucked):
         """Which choirs may answer, for a strike plucking `plucked` (None: a
@@ -331,6 +390,7 @@ class Channel(object):
         self.knock = float(getattr(P, 'register_knock_gain', 0.0)) * scale
         self.fall = float(getattr(P, 'register_knock_falloff', 0.0))
         self.top = int(getattr(P, 'damper_top', 128))
+        self.fl = floor_of(P)
         self.rel = float(getattr(P, 'release_valve_time', 0.12) or 0.12) * sr
         self.pedal = [(a * sr, b * sr) for a, b in pedal]
         self.holds = {}              # key -> [(n0, n1)] known so far
@@ -388,7 +448,7 @@ class Channel(object):
 
     @property
     def floor(self):
-        return FLOOR * max(self.loud, 1e-30)
+        return self.fl * max(self.loud, 1e-30)
 
     # -- strikes in -----------------------------------------------------------
     def strike(self, key, on, held, av, rows, plucked=None, choirs=None):
@@ -513,8 +573,7 @@ class Channel(object):
                     if hi <= lo:
                         continue
                     j = fi[lo:hi]
-                    wj = S.w[j] if st['choir'] is None else S.w[j] * np.where(
-                        S.bridge[j] == S.choir_bridges[st['choir'][r]], 1.0, S.cross)
+                    wj = S.coupling(j, st['key'], None if st['choir'] is None else st['choir'][r])
                     fr, fo = free_part(cmax * wj, Wi, beta, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
                     # free: from the driver's onset, at the mode's own frequency
@@ -529,9 +588,10 @@ class Channel(object):
                     xfer[j] += fo * np.exp(1j * (theta + Wi * tq + gq - Wm[j] * n_off / sr)
                                            - beta * tq)
             if self.knock > 0:
-                dk = np.abs(S.key[fi] - st['key'])
-                amp = self.knock * float(np.max(drv['aM'])) * S.w[fi] \
-                    * 10.0 ** (-self.fall * dk / 20.0)
+                # through the bridge as the drive is: across bridges, and onto
+                # the struck string's own other length (S.coupling)
+                amp = self.knock * float(np.max(drv['aM'])) * S.coupling(fi, st['key']) \
+                    * S.knock_shape(fi, st['key'], self.fall)
                 add[fi] += amp * np.exp(1j * knock_phase(hash((self.ch, si)), len(fi)))
             if n_off is not None and np.any(xfer):
                 pb = int(math.ceil((n_off + re_off) / blk)) * blk
@@ -742,6 +802,7 @@ class LiveChannel(object):
         self.knock = float(getattr(P, 'register_knock_gain', 0.0)) * scale
         self.fall = float(getattr(P, 'register_knock_falloff', 0.0))
         self.top = int(getattr(P, 'damper_top', 128))
+        self.fl = floor_of(P)
         M = len(strings.f)
         self.keyidx = {k: np.flatnonzero(strings.key == k) for k in strings.props}
         self.Az = np.zeros(M, complex); self.nref = np.zeros(M)
@@ -767,7 +828,7 @@ class LiveChannel(object):
         tz = self.Az[idx]
         rz = np.where(self.stamped[idx],
                       self.Rz[idx] * np.exp(-am[idx] * np.maximum(at - self.rref[idx], 0.0) / sr), 0)
-        floor = FLOOR * max(self.loud, 1e-30)
+        floor = self.fl * max(self.loud, 1e-30)
         go = np.abs(tz - rz) > SPLIT * np.maximum(np.abs(tz), floor)
         idx, z = idx[go], tz[go]
         self.Rz[idx] = z; self.rref[idx] = at
@@ -788,7 +849,7 @@ class LiveChannel(object):
             free[ix[~np.isin(S.string[ix] // CHOIR, list(plucked))]] = True
         free &= S.free_choirs(plucked)[S.string // CHOIR]     # a buff's string, or its plain one
         self.loud = max(self.loud, float(np.max(drv['aM'])) if len(drv['aM']) else 0.0)
-        floor = FLOOR * max(self.loud, 1e-30)
+        floor = self.fl * max(self.loud, 1e-30)
         add = np.zeros(M, complex)
         forced, keep = [], []
         fi = np.flatnonzero(free)
@@ -812,8 +873,7 @@ class LiveChannel(object):
                     if hi <= lo:
                         continue
                     j = fi[lo:hi]
-                    wj = S.w[j] if 'choir' not in drv else S.w[j] * np.where(
-                        S.bridge[j] == S.choir_bridges[int(drv['choir'][r])], 1.0, S.cross)
+                    wj = S.coupling(j, key, int(drv['choir'][r]) if 'choir' in drv else None)
                     fr, fo = free_part(cmax * wj, Wi, beta, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
                     add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - at) / sr)
@@ -822,8 +882,7 @@ class LiveChannel(object):
                         forced.append((int(drv['slot'][r]), wgt, beta, F / a_i))
                     keep.append((j, fo, Wi, beta, theta, n_i, tb, ta, cu))
         if self.knock > 0 and len(fi):
-            dk = np.abs(S.key[fi] - key)
-            amp = self.knock * self.loud_of(drv) * S.w[fi] * 10.0 ** (-self.fall * dk / 20.0)
+            amp = self.knock * self.loud_of(drv) * S.coupling(fi, key) * S.knock_shape(fi, key, self.fall)
             add[fi] += amp * np.exp(1j * knock_phase(hash(('live', sid)), len(fi)))
         self.held[sid] = keep
         touched = np.abs(add) > 0
@@ -910,13 +969,13 @@ def live_worker(conn):
             if kind == 'strike':
                 sid, note, at, drv, free = job[2:7]
                 idx, z, forced = lc.strike(sid, note, at, drv, free, job[7] if len(job) > 7 else None)
-                conn.send(('free', rid, idx, z, at, FLOOR * max(lc.loud, 1e-30)))
+                conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
                 if forced:
                     conn.send(('forced', rid, note, forced, at))
             elif kind == 'release':
                 sid, at, free = job[2:]
                 idx, z = lc.release(sid, at, free)
-                conn.send(('free', rid, idx, z, at, FLOOR * max(lc.loud, 1e-30)))
+                conn.send(('free', rid, idx, z, at, lc.fl * max(lc.loud, 1e-30)))
             elif kind == 'damp':
                 lc.damp(job[2])
         except Exception as e:

@@ -113,6 +113,15 @@ def identity():
     hl = midi(os.path.join(d, "keys_harpsi_lute.mid"),
               [(0.0, 'control_change', dict(control=11, value=15))] + ev, program=6)
     cases.append(("harpsichord, every stop", hl, 'hybrid440'))
+    # THE DULCIMER'S BANK (tonelib.HammeredDulcimerProperties.course_keys):
+    # every course its own strings, each partial beating at its own offset,
+    # the decay by Hz -- struck on courses, since only they have strings
+    dv = []
+    for i, k in enumerate((50, 55, 62, 67, 74, 79, 84, 89)):
+        dv += [(0.5 * i, 'note_on', dict(note=k, velocity=80)),
+               (0.5 * i + 0.3, 'note_off', dict(note=k))]
+    hd = midi(os.path.join(d, "keys_dulcimer.mid"), dv, program=15)
+    cases += [("dulcimer, %s" % t, hd, t) for t in ('hybrid440', 'werckmeister')]
     for label, path, tuner in cases:
         g = captured(path, tuner)
         (ch, C), = g['channels'].items()

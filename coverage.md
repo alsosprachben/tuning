@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 15 | 12% |
+| 2 specific, theory | 14 | 11% |
 | 3 specific, theory + ear | 14 | 11% |
-| 4 specific, reference audio | 99 | 77% |
+| 4 specific, reference audio | 100 | 78% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -179,7 +179,7 @@ plays Standard, as does any program that is not a set.
 | 12 | Marimba | `Marimba` | **4** | Iowa marimba |
 | 13 | Xylophone | `Xylophone` | **4** | Iowa xylophone |
 | 14 | Tubular Bells | `TubularBell` | **4** | VSCO 2 CE's chimes (CC0), C4 G4 C5 F5: a free-free tube's modes, the note an octave under the fourth -- plus the hum a third above it and a mode a sixth below, rising with pitch; the upper modes compressing as the tube shortens; each mode's own ring, the hum outlasting the rest. Renders read back on the fitted lines. Ben, by ear: sounds great |
-| 15 | Dulcimer | `HammeredDulcimer` | **2** | struck steel courses; the stiffness is estimated |
+| 15 | Dulcimer | `HammeredDulcimer` | **4** | FITTED TO KEVIN KEMP'S 17/16 DULCIMER (Pianobook "Lite Hammered Dulcimer", measured only; examples/dulcimer_fit.py), 33 notes D3-F6: the stiffness by bridge (the bass courses 3e-5, the treble stepping to 1.6e-4 and rising), no fixed strike notch (a hand's hammer lands anywhere), the decay by the partial's Hz in every register, the ladder and body read at the partials' own peaks, each partial's course beating at its own rate (all in step had been a phaser), and the box knocked by every stroke (140-510 Hz, gone in a tenth of a second). A BANK OF STRINGS and no dampers: every course free, driven through two bridges, the treble string's other length ringing a fifth away, the stroke's kick ringing the strings below the note and not those above (register.py). Ben: sounds perfect |
 
 ## 16-23 Organ
 
@@ -501,7 +501,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `ElectricGrand` -- GM 2 Electric Grand Piano (2)
         - `UprightPiano` -- GM 1 Bright Acoustic Piano (4)
           - `HonkyTonk` -- GM 3 Honky-tonk Piano (3)
-      - `HammeredDulcimer` -- GM 15 Dulcimer (2)
+      - `HammeredDulcimer` [FormantBody] -- GM 15 Dulcimer (4)
     - `Kalimba` [FormantBody] -- GM 108 Kalimba (4)
     - `Koto` [FormantBody] -- GM 107 Koto (4)
     - `Mallet`
