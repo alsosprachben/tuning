@@ -48,14 +48,14 @@ def check(name, ok, detail=""):
         FAILS.append(name)
 
 
-def midi(path, events, tpb=480):
+def midi(path, events, tpb=480, program=0):
     """events: (seconds, msg-type, kwargs), written at 120 bpm."""
     import mido
     m = mido.MidiFile(ticks_per_beat=tpb)
     t = mido.MidiTrack()
     m.tracks.append(t)
     t.append(mido.MetaMessage('set_tempo', tempo=500000, time=0))
-    t.append(mido.Message('program_change', program=0, time=0))
+    t.append(mido.Message('program_change', program=program, time=0))
     now = 0
     for sec, kind, kw in sorted(events, key=lambda e: e[0]):
         tick = int(round(sec * 2 * tpb))
@@ -102,6 +102,17 @@ def identity():
     subprocess.run([sys.executable, os.path.join(HERE, "examples", "tuning_sysex.py"), "--mts",
                     "--tuner", "stretch", src, mts], check=True, stdout=subprocess.DEVNULL)
     cases.append(("MTS (stretch, as gm2)", mts, "gm2"))
+    # THE HARPSICHORD'S CHOIRS (tonelib.HarpsichordProperties.string_choirs):
+    # every choir drawn -- the 8', the upper 8', the 4' -- so every string of
+    # a key is plucked, and each must be the partial its rank emits: its own
+    # cents, its own wire, the 4' its own string at twice the pitch
+    hp = midi(os.path.join(d, "keys_harpsi.mid"),
+              [(0.0, 'control_change', dict(control=11, value=7))] + ev, program=6)
+    cases += [("harpsichord, %s" % t, hp, t) for t in ('hybrid440', 'werckmeister')]
+    # ...and the lute too: its buffed string is choir A's, at A's pitch
+    hl = midi(os.path.join(d, "keys_harpsi_lute.mid"),
+              [(0.0, 'control_change', dict(control=11, value=15))] + ev, program=6)
+    cases.append(("harpsichord, every stop", hl, 'hybrid440'))
     for label, path, tuner in cases:
         g = captured(path, tuner)
         (ch, C), = g['channels'].items()
@@ -262,8 +273,57 @@ def pedal():
           "  (largest change between 20 ms windows %.1f dB)" % step)
 
 
+def choirs():
+    """THE HARPSICHORD'S CHOIRS (tonelib.HarpsichordProperties.string_choirs):
+    a key lifts every choir's damper, so the strings its stops do not pluck
+    answer through the bridge while it is held, and the plucked choir never
+    answers itself. Read from each mode's state after the strike (Az: nonzero
+    where the bridge drove it)."""
+    print("choirs: a harpsichord key's undrawn choirs answer, the plucked one does not")
+    import tonelib as T
+    d = tempfile.mkdtemp(prefix="register_")
+    for label, word, want in (("the 8' alone", 1, {1, 2}), ("the lute (choir A, buffed)", 8, {1, 2}),
+                              ("every choir drawn", 7, set()),
+                              # the pad is on choir A's strings: its plain
+                              # string is buffed, and does not answer
+                              ("the upper 8' with the lute", 10, {2})):
+        path = midi(os.path.join(d, "h%d.mid" % word),
+                    [(0.0, 'control_change', dict(control=11, value=word)),
+                     (0.1, 'note_on', dict(note=60, velocity=90)), (2.1, 'note_off', dict(note=60))],
+                    program=6)
+        g = captured(path, 'hybrid440')
+        (ch, C), = g['channels'].items()
+        S = C.S
+        own = S.key == 60
+        hit = {int(c) for c in np.unique(S.string[own & (np.abs(C.Az) > 0)] // R.CHOIR)}
+        check("%-28s plucks %s; its key's choirs answering %s" % (label, C.strikes[0]['plucked'], sorted(hit)),
+              hit == want, "  (want %s)" % sorted(want))
+    # ...and the 4' across its own bridge answers at cross_bridge_coupling,
+    # the 8' on the shared one in full: its free energy against full coupling
+    path = os.path.join(d, "h1.mid")
+    hp = T.HarpsichordProperties
+    keep = hp.cross_bridge_coupling
+    e = {}
+    for x in (1.0, keep):
+        hp.cross_bridge_coupling = x
+        C = next(iter(captured(path, 'hybrid440')['channels'].values()))
+        own = C.S.key == 60
+        e[x] = (float(np.sum(np.abs(C.Az[own & (C.S.string // R.CHOIR == 2)]) ** 2)),
+                float(np.sum(np.abs(C.Az[own & (C.S.string // R.CHOIR == 1)]) ** 2)))
+    hp.cross_bridge_coupling = keep
+    d4 = 10 * math.log10(e[keep][0] / e[1.0][0])
+    d8 = 10 * math.log10(e[keep][1] / e[1.0][1])
+    check("the 4' answers across its own bridge, %.1f of the coupling" % keep,
+          abs(d4 - 20 * math.log10(keep)) < 0.5 and abs(d8) < 0.01,
+          "  (4' %+.1f dB, the other 8' %+.1f)" % (d4, d8))
+    c = T.choir_cents(T.HarpsichordProperties, 'B', 60)
+    check("choir B sits its own cents off A, the same each time",
+          1.0 <= c <= 10.0 and c == T.choir_cents(T.HarpsichordProperties, 'B', 60),
+          "  (%.2f cents at C4)" % c)
+
+
 def main(argv):
-    which = argv[1:] or ['identity', 'equation', 'tuning', 'pedal']
+    which = argv[1:] or ['identity', 'equation', 'tuning', 'pedal', 'choirs']
     for w in which:
         globals()[w]()
     print("\n  %s" % ("all passed" if not FAILS else "FAILED: " + ", ".join(FAILS)))

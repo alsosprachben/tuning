@@ -808,20 +808,20 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 
 <section>
 <h2>Stops: the registers within a program</h2>
-<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. 29 of the 57 are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
+<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. 31 of the 57 are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
 <div class="stopstack">
 <div class="fambox">
 <div class="famhead"><h3>6 Harpsichord</h3><span class="rng">the harpsichord&#x27;s registers (CC11 stop word)</span><span class="pips">
 <span class="pip r4" title="8"></span>
-<span class="pip r2" title="8-upper"></span>
+<span class="pip r4" title="8-upper"></span>
 <span class="pip r2" title="4"></span>
-<span class="pip r2" title="lute"></span>
+<span class="pip r4" title="lute"></span>
 </span></div>
 <div class="tscroll"><table><tr><th>Bit</th><th>Stop</th><th></th><th>Notes</th></tr>
-<tr><td class="num">0</td><td class="nm">8</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the lower 8&#x27;: VCSL&#x27;s English harpsichord, the GM 6 fit</td></tr>
-<tr><td class="num">1</td><td class="nm">8-upper</td><td class="rt"><span class="chip r2">2</span></td><td class="note">plucked near the nut (1/22): the nasal comb, from the jack&#x27;s position. No recording of a second 8&#x27;</td></tr>
-<tr><td class="num">2</td><td class="nm">4</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the octave choir: the 8&#x27;&#x27;s string at twice the pitch. No recording of it</td></tr>
-<tr><td class="num">3</td><td class="nm">lute</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the buff: pads at the nut, the upper partials and the decay cut. No recording of it</td></tr>
+<tr><td class="num">0</td><td class="nm">8</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the lower 8&#x27;: VCSL&#x27;s English harpsichord over the whole band -- ladder, body, decay as m^0.6, partials to 16 kHz, the quill&#x27;s catch before it slips -- and a string among three: the key&#x27;s other choirs answer through the bridge (register.py), each its own cents and wire</td></tr>
+<tr><td class="num">1</td><td class="nm">8-upper</td><td class="rt"><span class="chip r4">4</span></td><td class="note">VCSL&#x27;s Flemish harpsichord, each 8&#x27; recorded alone: plucked nearer the nut (comb 0.087 against 0.120, carried as the ratio, 0.083) and dying 1.31x as fast; its ladder could not be resolved from the pair and is the 8&#x27;&#x27;s. Plucks ~3 ms after the lower 8&#x27; (asserted: no coupled recording)</td></tr>
+<tr><td class="num">2</td><td class="nm">4</td><td class="rt"><span class="chip r2">2</span></td><td class="note">its own string at twice the pitch -- its decay and ladder at that pitch -- on its own bridge (half the coupling, asserted). No recording of it</td></tr>
+<tr><td class="num">3</td><td class="nm">lute</td><td class="rt"><span class="chip r4">4</span></td><td class="note">VCSL&#x27;s English Lute set against its Normal: the buff dulls the treble and spares the bass (4.7 dB), the buffed string dies fast (0.72 log rate), and its tail is the other 8&#x27; answering, which fitted the register&#x27;s coupling; the pad damps choir A&#x27;s string whichever jack plucks it</td></tr>
 </table></div></div>
 <div class="fambox">
 <div class="famhead"><h3>16 Drawbar Organ &middot; 17 Percussive Organ &middot; 18 Rock Organ</h3><span class="rng">the tonewheel&#x27;s nine drawbars</span><span class="pips">

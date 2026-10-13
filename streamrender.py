@@ -519,8 +519,12 @@ class Stream:
                                                   self.ctx['effects']['register_scale'],
                                                   self.ctx['effects']['register_strings'],
                                                   keep=False)
-                self.reg[ch].strike(x['key'], x['on'], x['held'], x['av'],
-                                    {c: r[c][a:b] for c in cols})
+                rows = {c: r[c][a:b] for c in cols}
+                if x.get('gr') is not None:      # its drawn ranks only (blockrender._strike_rows)
+                    keep = np.isin(rows['gr'], x['gr'])
+                    rows = {c: v[keep] for c, v in rows.items()}
+                self.reg[ch].strike(x['key'], x['on'], x['held'], x['av'], rows, x.get('plucked'),
+                                    [x['grc'][int(g)] for g in rows['gr']] if x.get('grc') else None)
                 k += 1
             self.reg_next[ch] = k
 

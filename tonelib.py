@@ -916,6 +916,9 @@ class SynthProperties:
     #
     # None means the old behaviour, which is every voice that has one.
     mode_ratios = None
+    # Partials up to this many Hz, the note's max_harmonic set from its pitch
+    # (see __init__); None, the class's fixed count.
+    max_partial_hz = None
 
     # The measured LEVEL of each of those modes, one per entry in mode_ratios.
     # None means the ordinary series_volume applies.
@@ -2474,6 +2477,13 @@ class SynthProperties:
         from math import log
         self.octave_position = (log(float(frequency) / self.frequency_x) / log(2))
 
+        # A CEILING IN HERTZ, NOT A COUNT (max_partial_hz): 64 harmonics end a
+        # 65 Hz string at 4.2 kHz, and a harpsichord's bass rings to 16 --
+        # that top is the metallic buzz Ben missed ("more buzz in the 8").
+        # Every loop over a note's partials reads its own max_harmonic.
+        if self.max_partial_hz and frequency:
+            self.max_harmonic = max(1, int(self.max_partial_hz / float(frequency)))
+
         # Register-dependent decay rate: < 1 slows the bass, > 1 speeds the treble
         # (heavy vs light, lightly- vs heavily-damped strings). 0 slope = flat.
         self.decay_register_factor = 2.0 ** (self.decay_register_slope * self.octave_position)
@@ -3238,8 +3248,32 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     #
     # The recordings' own ladder scatters 12-20 dB from note to note, so 5 dB rms
     # is close to what this data can resolve; it is not a claim of 5 dB accuracy.
-    tonal_dampening = 0.75
-    octave_dampening = 0.02
+    #
+    # ...AND PAST THE 16TH HARMONIC IT WAS WRONG. Fitted on harmonics 1-16 and
+    # pooled, it had one slope at every pitch, and extended up the series it
+    # rolled the bass's top off 20-25 dB under the recordings: their C2 carries
+    # harmonics 30-66 at -7 to +11 dB re its fundamental, ours at -25. That top
+    # is the metallic buzz (Ben: "missing some metallic buzz ... more buzz in
+    # the 8"). Refitted over the WHOLE band -- third octaves from each key's
+    # fundamental up, 30-530 ms, every single-note key of the English Normal
+    # set (examples/harpsi_fit.py spectrum), with partials to 16 kHz
+    # (max_partial_hz): 11.59 -> 9.23 dB. The slope now steepens up the
+    # compass: nearly flat in the bass, where a long string's fundamental
+    # radiates poorly and its top does not; much as before in the treble.
+    # (Refitted after the decay below was: with the top dying at the recordings'
+    # rate rather than 80-100 dB/s, 0.459/0.246 left 8-16 kHz 12 dB over them --
+    # Ben: "a little too metallic. In the right direction, just a little too
+    # far". 9.96 -> 8.37 dB.)
+    tonal_dampening = 0.756
+    octave_dampening = 0.202
+    # ...and what the harmonic law cannot say, the BODY by absolute frequency:
+    # after it, the residual held one shape in every register (under 6-11 dB at
+    # 80-320 Hz, over 4-7 at 1.3-2.6 kHz, under 3-6 past 5 kHz). Fitted as
+    # steel_fit --body fits one (examples/harpsi_fit.py body), smoothed to an
+    # octave -- unsmoothed it ran to its clip in a sawtooth on the few bass keys
+    # that reach the low bands: 9.25 -> 8.50 dB. Body-plus-room, as the formant
+    # below is: one microphone cannot divide them.
+    body_trim_db = ((80, 7.5), (101, 6.5), (127, 7.7), (160, 6.4), (202, 7.2), (255, 4.8), (321, 3.0), (404, 0.5), (509, -0.9), (641, -1.4), (808, -1.3), (1018, -2.5), (1283, -2.7), (1616, -4.8), (2036, -4.1), (2566, -3.5), (3233, -1.7), (4073, -0.4), (5132, 0.7), (6465, 2.7), (8146, 3.8), (10263, 4.4))
     # THE SOUNDBOARD. Measured with `voicefit.py formants`, which is the comb
     # method run on the other axis: a pluck comb and a series tilt are fixed in
     # HARMONIC NUMBER, a body resonance is fixed in FREQUENCY, so averaging every
@@ -3343,9 +3377,25 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     inharmonicity_dynamic = False
     inharmonicity_coefficient = 3.51e-05
     # Plucked strings sing then die; the treble dies faster than the bass.
-    decay_db = 3.2
-    harmonic_decay_db = 1.5
-    decay_register_slope = 0.42
+    #
+    # FITTED OVER THE WHOLE BAND, third octave by third octave, every key of
+    # the English Normal set (examples/harpsi_fit.py decay; the log of each
+    # band's rate, so 4 dB/s against 8 is the miss 40 against 80 is). 3.2 /
+    # 1.5 per harmonic, linear, had been set on the first harmonics, and with
+    # partials to 16 kHz it ran the bass's top out at 80-100+ dB/s against
+    # the recordings' 15-25: a bright attack collapsing, heard as a phaser
+    # (Ben: "decaying the metallic upper harmonics too quickly"). The decay
+    # grows as m^0.6, not m; and steeper up the compass (the treble had rung
+    # 10-25 dB long by 1-2 s). 0.957 -> 0.653 in log rate:
+    #
+    #     dB/s, median     recorded  model      recorded  model
+    #     bass  < 1 kHz      10.1     8.6   4-13k   26.4   22.7
+    #     tenor              19.0    13.9           33.7   30.4
+    #     treble             21.1    16.5           40.5   41.4
+    decay_db = 4.62
+    harmonic_decay_db = 2.29
+    harmonic_decay_dampening = -0.404
+    decay_register_slope = 0.715
     # The jack: a short bright tick as the plectrum lets go, and -- unlike an organ,
     # which cannot chiff on release -- a real THUD as the damper lands on note-off.
     chiff_volume = 0.55
@@ -3355,24 +3405,112 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     chiff_harmonic_span = None        # the tick follows the string's own spectrum
     attack_time = 0.002               # the pluck releases almost instantly
 
+    # THE QUILL CATCHES BEFORE IT LETS GO. Every VCSL set's attack sits 20-30
+    # dB down for a few ms before it jumps to full -- the plectrum pushing the
+    # string aside, then slipping off it: measured from each note's onset on
+    # the English Normal set (examples/harpsi_fit.py's kin, the onset envelope
+    # at 1 ms), median by register,
+    #
+    #     ms from onset      1    2    4    5         ours (a 2 ms ramp)
+    #     tenor  dB        -27  -23  -19   -9         -11   -3   -5   -4
+    #     treble dB        -21  -12   -4   -4          -9   -2   -1   -1
+    #
+    # broadband (as much under 1 kHz as over 2), so the string itself already
+    # moving, not a noise. A ramp cannot hold at -25 and then snap; so the
+    # note's partials sound quietly through the catch and the pluck proper
+    # starts at its end, in a fast snap, phase-continuous (blockrender). Its
+    # length follows the register (the tenor's 4.5 ms, the treble's 3; the
+    # bass's could not be read, its maximum outside the window: 5, asserted).
+    # The catch RISES -- the quill pushing the string further until it slips
+    # (the tenor's -27, -23, -19 dB): a fade up to pre_pluck_db at the slip.
+    pre_pluck_points = ((65.0, 0.006), (250.0, 0.0055), (900.0, 0.0035))
+    pre_pluck_db = -16.0
+    pre_pluck_snap_s = 0.0005
+    pre_pluck_partials = 24
+
+    def pre_pluck_s(self, f0):
+        """How long the quill holds the string before it slips, at this pitch."""
+        from math import log
+        pts = self.pre_pluck_points
+        if f0 <= pts[0][0]:
+            return pts[0][1]
+        if f0 >= pts[-1][0]:
+            return pts[-1][1]
+        for (fa, ta), (fb, tb) in zip(pts[:-1], pts[1:]):
+            if f0 <= fb:
+                return ta + (tb - ta) * log(f0 / fa) / log(fb / fa)
+
 
 class HarpsiUpperProperties(HarpsiBase):
     """Upper-manual 8': the jack plucks very close to the nut, so the comb nulls
     start high and the low harmonics are weak -- the classic nasal, reedy colour."""
-    strike_point = 0.045              # ~1/22 of the string
-    # Shifted with the base (-0.80): this was 1.30 against a base of 1.55, a
-    # brighter upper manual, and holding it fixed while the base moved would
-    # have made the upper manual the DULLER of the two.
-    tonal_dampening = 0.50            # brighter still
+    # MEASURED, on VCSL's Flemish harpsichord, recorded one 8' at a time (its
+    # High and Low sets: the same pitch, labelled an octave under it). The
+    # High is plucked nearer the nut -- comb 0.087 (1/11.5) against the Low's
+    # 0.120 (1/8.3) -- so it is the upper 8'. Carried to this instrument's
+    # 8' (0.115) as that ratio: 0.083. The 1/22 that stood here was asserted,
+    # twice as near the nut as the Flemish plucks.
+    strike_point = 0.083
+    tonal_dampening = 0.756
+    # ...and it dies 1.31x as fast as the Low (median of 14 keys, room-free:
+    # one instrument, one room), on the 8''s decay law
+    decay_db = 4.62 * 1.31
+    harmonic_decay_db = 2.29 * 1.31
+    # A REGISTER IS ITS OWN ROW OF JACKS, so its decay and its quill's tick are
+    # its own and not the 8''s -- borrowing the spectrum only, as an organ's
+    # cross-family stop does, left every register ringing exactly as long as
+    # the 8' (the lute's decay_db below had never sounded). See blockrender's
+    # rank_is_pipe.
+    rank_is_pipe = True
 
 
 class HarpsiLuteProperties(HarpsiBase):
     """Lute (buff) stop: leather pads press the strings at the nut, killing the
     upper partials and shortening the decay -- a dry, dull pizzicato."""
-    strike_point = 0.11
-    tonal_dampening = 1.60            # shifted with the base (-0.80); still the dullest
-    decay_db = 11.0
-    harmonic_decay_db = 3.0
+    rank_is_pipe = True               # its decay is its own (see HarpsiUpperProperties)
+    # FITTED to VCSL's English harpsichord, its Lute set against its Normal --
+    # one instrument, one room, so the difference is room-free -- through the
+    # renderer, register by register (examples/harpsi_fit.py):
+    #
+    #     lute minus 8', dB    m=2    4     6     8    10    12
+    #     bass, recorded      -1.4  -2.1  -6.4  -3.9 -10.2 -14.9
+    #     tenor               -0.7  -4.5  -8.2 -17.1 -18.5 -16.4
+    #     treble              -8.4 -14.8 -19.6 -21.0 -20.3  -9.7
+    #
+    # THE BUFF DULLS THE TREBLE AND HARDLY TOUCHES THE BASS: a pad at the nut
+    # takes more of a short string than of a long one. One tilt at every pitch
+    # (1.60, octave_dampening the base's 0.02) was 9.45 dB rms from that; a
+    # tilt that steepens up the compass, and the pluck below, 4.4.
+    #
+    # The pluck does not move: comb 0.1155 on the Lute set, 0.1150 on the
+    # Normal -- the same jacks. 0.11 here put a notch at the 9th harmonic that
+    # the recordings do not have.
+    #
+    # ITS DECAY IS THE BUFFED STRING'S ALONE. A Lute note falls fast and then
+    # holds on a tail 5-16 cents off (median 5.8) -- the key's OTHER 8', free
+    # and answering through the bridge (HarpsichordProperties.string_choirs).
+    # A decay fitted to the whole envelope (2.65x the 8''s) took that tail for
+    # the buffed string's own and rang it too long. Fitted instead with the
+    # register on, the envelope (harmonics 1-2, 0.1-2 s, every key) and the
+    # tail's pitch together (examples/harpsi_fit.py envfit --shift-weight=1):
+    # the level alone fits the buffed string ringing on as well as the other
+    # string answering (7.79 dB against 7.72) and only the pitch tells them
+    # apart -- here the tail 2.2 cents from the recording's, against 4.4.
+    # Its fall steepens up the compass more than the 8''s: the pad takes more
+    # of a short string (decay_register_slope 0.87 against 0.42).
+    # (Its tilt refitted against the 8' refitted over the whole band -- the
+    # ladder fit is a difference, so it moves with the 8': 7.13 -> 4.74 dB.)
+    strike_point = 0.115
+    tonal_dampening = 1.095
+    octave_dampening = 0.370
+    decay_db = 14.46
+    harmonic_decay_db = 2.89
+    harmonic_decay_dampening = 0.016   # its own: the buff takes the top fast, the 8''s m^0.6 law does not
+    decay_register_slope = 0.823
+    # ...and refitted over the whole band as the 8' was (harpsi_fit.py decay
+    # --stop=lute): 0.942 -> 0.719 in log rate. The buffed string's upper
+    # bands die FAST -- the recordings' 1-4 kHz 55-97 dB/s, 4-13 kHz 95-120 --
+    # what lingers is the other 8' answering, the register's tail.
     chiff_volume = 0.30
 
 
@@ -3397,6 +3535,92 @@ class HarpsichordProperties(HarpsiBase):
         ("lute",    1.0, 0.50, HarpsiLuteProperties),
     ]
     crescendo_order = ["8", "8-upper", "4", "lute"]
+
+    # THE STRINGS ARE THE INSTRUMENT; THE STOPS ARE WHICH OF THEM A KEY PLUCKS.
+    # Every key has a string in each CHOIR -- the two 8's and the 4' -- and the
+    # key lifts every choir's jack, so every choir's damper, whatever is drawn:
+    # a stop only decides which jacks' quills meet their strings. The lute is
+    # not a string of its own but a buff pad on choir A's.
+    #
+    # So the strings a stop does not pluck are FREE while the key is down, and
+    # ring through the bridge (register.py, the piano's free-string register):
+    # measured on VCSL's English set, whose Lute recordings end on a tail 5-16
+    # cents from the plucked string at the same pitch -- the other 8', which
+    # the buff exposes by killing the plucked one (the normal set's tail stays
+    # within a cent: there the plucked string drowns it).
+    #
+    # (name, footage ratio, the class whose string it is -- None, this one)
+    string_choirs = (("A", 1.0, None), ("B", 1.0, HarpsiUpperProperties), ("C", 2.0, None),
+                     ("A~", 1.0, HarpsiLuteProperties))
+    rank_choirs = {"8": "A", "8-upper": "B", "4": "C", "lute": "A~"}
+    # THE BUFF IS ON A STRING, NOT A JACK. The lute stop presses a pad on
+    # choir A's strings, all of them, whichever jack plucks them -- so while it
+    # is drawn, choir A answers the bridge as a buffed string does, dying at
+    # the lute's fitted rate (HarpsiLuteProperties: the recordings' buffed
+    # string), and not at a plain one's. "A~" is choir A's string with the pad
+    # on: the same string -- its cents, its wire -- standing in for A while
+    # the lute is drawn (register.Strings.free_choirs).
+    buff_choirs = {"A~": "A"}
+    # Each choir tuned a little off choir A, fixed per key (rank_detune_cents):
+    # one tuner, three rows of strings, never exactly together. B's range is
+    # the Lute tails' (C3 up, +0.7 to +15.5 cents, median 5.8, nearly all
+    # sharp); C's, which no recording isolates, is a guess, kept narrower.
+    choir_detune_cents = {"B": (1.0, 10.0), "C": (1.0, 5.0)}
+    # ...and each its own wire, so the pair does not beat as one comb (Ben:
+    # "some phaser down low"): its stiffness within +-30% of choir A's -- the
+    # measured inharmonicity scatters more than that key to key, 1.3-6e-5 --
+    # and every partial within the piano's measured unison scatter
+    choir_stiffness_spread = 0.3
+    choir_beat_hz = (0.05, 0.4)
+    # ...AND WHICH BRIDGE IT CROSSES. The two 8's share one bridge; the 4'
+    # has its own, nearer the spine, on the same soundboard. Strings on one
+    # bridge drive each other directly; across bridges only through the board,
+    # so more weakly -- both ways: a plucked 4' moves the 8's as little as a
+    # plucked 8' moves the 4'. register_gain is fitted on the Lute's tail,
+    # which is the OTHER 8' (same bridge); no recording isolates the 4''s
+    # answer, so the cross-bridge share is asserted, at half (Ben: yes).
+    choir_bridge = {"A": 0, "B": 0, "C": 1, "A~": 0}
+    cross_bridge_coupling = 0.5
+    # THE JACKS PLUCK ONE AFTER ANOTHER. ASSERTED, TO BE CHECKED AGAINST A
+    # COUPLED RECORDING (none is free: VCSL's five harpsichords are each one
+    # choir, their attacks a single quill; Freesound has nothing registered).
+    # A harpsichord is regulated so its drawn jacks meet their strings at
+    # slightly different depths of the key's travel -- fractions of a
+    # millimetre -- which lightens the touch and spreads the attack. A key
+    # goes down ~10 mm in 20-50 ms, so 0.5-1 mm is 1-5 ms: the upper 8' 3 ms
+    # after the lower, the 4' after both, each key's jacks a little
+    # irregular. (The Bezemer harpsichord on Hauptwerk.nl documents ~20 ms
+    # between its two 8's -- the far end; tonelib.contact_offset_s.) The lute
+    # is the lower 8''s jack on its buffed string.
+    jack_offset_ms = {"8": 0.0, "lute": 0.0, "8-upper": 3.0, "4": 6.0}
+    jack_scatter_ms = 1.0
+    # ...AND EACH JACK FALLS BACK ON ITS OWN: one release click a jack drawn at
+    # the key-up, each at its jack's offset and its own phase (blockrender).
+    # ASSERTED as the stagger is: release_click_db is ONE jack's, measured on
+    # the single-choir VCSL releases; that N jacks click N times is the
+    # mechanism, not a measurement.
+    # How hard the bridge drives the free choirs: fitted with the Lute's own
+    # decay (above, HarpsiLuteProperties). Checked on the Normal set, which
+    # the fit never saw: there the tail stays on the plucked string's pitch,
+    # 0.7 cents median from the recording's (0.6 uncoupled) -- the other
+    # choirs ring, under the string that was plucked, as they do.
+    register_gain = 0.54
+    register_knock_gain = 0.0
+
+    # THE METALLIC BUZZ IS THE STRING'S OWN TOP. Ben, on the model against
+    # the recordings: "more buzz in the 8". The recordings' 4-8 kHz is 12 dB
+    # over ours in the first 0.3 s and 8-16 kHz 30 dB over -- and it decays as
+    # a string does (15-25 dB/s in the bass), not as a pluck's noise. Ours
+    # stopped at 64 harmonics: 4.2 kHz on C2, 8.4 on C3. Partials to 16 kHz.
+    max_partial_hz = 16000.0
+    # ...AND NOT IN PHASE. Hundreds of stretched partials starting together sum
+    # to one click, which the string's dispersion then smears into a sweep --
+    # the top racing ahead of the bottom, every note: a phaser on the first
+    # four notes, and no tuning or choir change touched it (their partials
+    # wobble 0.15 dB with the free choirs on, off or in tune). A quill does not
+    # let go as an ideal impulse. Ben, A/B of five changes: "Random partial
+    # phases is the best." (SynthProperties.partial_phase_spread)
+    partial_phase_spread = 1.0
 
 
 class HarpsiRossProperties(HarpsichordProperties):
@@ -17649,11 +17873,19 @@ def contact_offset_s(cls, rank, note):
     (drawbar, key), irregular, uniform over 0..contact_spread_s; 0 for a voice
     without one. (Not attack_jitter: that is drawn per note instance, and the
     renderers would disagree.)"""
+    # ...OR WHEN THIS STOP'S JACK MEETS ITS STRING (jack_offset_ms, the
+    # harpsichord): regulated to pluck one after another down the key's
+    # travel, fixed per (stop, key), with its own few tenths of a millimetre
+    import random as _r
+    import zlib as _z
+    jo = getattr(cls, 'jack_offset_ms', None)
+    if jo:
+        sc = float(getattr(cls, 'jack_scatter_ms', 0.0) or 0.0)
+        g = _r.Random(_z.crc32(("%s|%d|jack" % (rank, int(note))).encode()))
+        return max(0.0, float(jo.get(rank, 0.0)) + g.uniform(-sc, sc)) / 1000.0
     spread = float(getattr(cls, 'contact_spread_s', 0.0) or 0.0)
     if spread <= 0.0:
         return 0.0
-    import random as _r
-    import zlib as _z
     return spread * _r.Random(_z.crc32(("%s|%d|contact" % (rank, int(note))).encode())).random()
 
 
@@ -17681,7 +17913,14 @@ def rank_detune_cents(cls, rank, note):
     the keys: cents drawn log-normally about the median, the spread the
     take's (a tail to ~5x), and SHARP -- the take's 4' sits above its 8' (its
     even partials' cents over the odds' on nearly every key), as a tuner
-    leaves an upper rank bright rather than dull."""
+    leaves an upper rank bright rather than dull.
+
+    ON A CLASS WITH CHOIRS (rank_choirs, the harpsichord) a rank sounds its
+    choir's string, so ranks on one choir share its cents -- the lute IS the
+    8''s string -- and the cents are the choir's: choir_cents."""
+    choirs = getattr(cls, 'rank_choirs', None)
+    if choirs:
+        return choir_cents(cls, choirs.get(rank, rank), note)
     med = (getattr(cls, 'rank_detune', None) or {}).get(rank)
     if not med:
         return 0.0
@@ -17690,6 +17929,75 @@ def rank_detune_cents(cls, rank, note):
     # a CRC, not hash(): a string's hash changes from run to run
     g = _r.Random(_z.crc32(("%s|%d|rank_detune" % (rank, int(note))).encode()))
     return med * _exp(0.9 * g.gauss(0.0, 1.0))
+
+
+def choir_cents(cls, choir, note):
+    """A CHOIR'S STRING ON THIS KEY against choir A's, in cents: drawn once per
+    (choir, key) within choir_detune_cents, so the note loop's rank and the
+    register's free string (register.Strings) are the same string by
+    construction. No span, no offset."""
+    choir = (getattr(cls, 'buff_choirs', None) or {}).get(choir, choir)   # a buffed string is its string
+    span = (getattr(cls, 'choir_detune_cents', None) or {}).get(choir)
+    if not span:
+        return 0.0
+    import random as _r
+    import zlib as _z
+    g = _r.Random(_z.crc32(("%s|%d|choir" % (choir, int(note))).encode()))
+    return g.uniform(span[0], span[1])
+
+
+def own_string(props, f, pan, attack_volume, channel_volume):
+    """A choir's string at its own pitch f -- the host's class built there, for
+    its spectrum and decay -- without moving the random stream every later
+    note draws its jitter from (a constructor draws its own)."""
+    import random as _r
+    st = _r.getstate()
+    try:
+        return rank_spectrum(type(props))(f, pan, attack_volume, channel_volume)
+    finally:
+        _r.setstate(st)
+
+
+def choir_of(cls, rank):
+    """The choir a rank plucks (rank_choirs), or None on a class without."""
+    choirs = getattr(cls, 'rank_choirs', None)
+    return choirs.get(rank, rank) if choirs else None
+
+
+def choir_stiffness(cls, choir, note):
+    """A CHOIR'S STRING IS ITS OWN WIRE: its inharmonicity against choir A's,
+    as a factor, drawn once per (choir, key) within choir_stiffness_spread.
+
+    A second string a few cents off by ONE RATIO beats on harmonic m at m
+    times its fundamental's rate -- an evenly spaced comb sweeping the
+    spectrum, a phaser (Ben, on the string bank: "some phaser down low"; the
+    piano's unisons did the same). Two wires never share a stiffness, and
+    the difference grows as m cubed, so the beat rates stop lining up past
+    the first few partials -- which is the instrument, not a fix to it."""
+    choir = (getattr(cls, 'buff_choirs', None) or {}).get(choir, choir)   # a buffed string is its string
+    s = getattr(cls, 'choir_stiffness_spread', 0.0)
+    if not s or not choir or choir == 'A':
+        return 1.0
+    import random as _r
+    import zlib as _z
+    g = _r.Random(_z.crc32(("%s|%d|stiff" % (choir, int(note))).encode()))
+    return 1.0 + g.uniform(-s, s)
+
+
+def choir_partial_hz(cls, choir, note, m):
+    """...and each of its partials a little off where its wire puts it: Hz,
+    fixed per (choir, key, partial), within choir_beat_hz either way -- the
+    piano's unison_beat_hz scatter (bridge coupling, string to string)."""
+    choir = (getattr(cls, 'buff_choirs', None) or {}).get(choir, choir)   # a buffed string is its string
+    span = getattr(cls, 'choir_beat_hz', None)
+    if not span or not choir or choir == 'A':
+        return 0.0
+    import random as _r
+    import zlib as _z
+    g = _r.Random(_z.crc32(("%s|%d|%d|beat" % (choir, int(note), int(m))).encode()))
+    return g.uniform(span[0], span[1]) * (1.0 if g.random() < 0.5 else -1.0)
+
+
 def release_band_scale(cls, rank, note, m):
     """A PIPE'S OWN RELEASE, harmonic band by band: how much longer than its
     fundamental harmonic m takes to die when the key lifts. Pitea's release

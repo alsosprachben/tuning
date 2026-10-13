@@ -402,10 +402,10 @@ def drum_set_table():
 #              [(control, rating, note)]).
 STOP_RATED = [
  ((6,), "the harpsichord's registers (CC11 stop word)", {
-    "8":       (4, "the lower 8': VCSL's English harpsichord, the GM 6 fit"),
-    "8-upper": (2, "plucked near the nut (1/22): the nasal comb, from the jack's position. No recording of a second 8'"),
-    "4":       (2, "the octave choir: the 8''s string at twice the pitch. No recording of it"),
-    "lute":    (2, "the buff: pads at the nut, the upper partials and the decay cut. No recording of it"),
+    "8":       (4, "the lower 8': VCSL's English harpsichord over the whole band -- ladder, body, decay as m^0.6, partials to 16 kHz, the quill's catch before it slips -- and a string among three: the key's other choirs answer through the bridge (register.py), each its own cents and wire"),
+    "8-upper": (4, "VCSL's Flemish harpsichord, each 8' recorded alone: plucked nearer the nut (comb 0.087 against 0.120, carried as the ratio, 0.083) and dying 1.31x as fast; its ladder could not be resolved from the pair and is the 8''s. Plucks ~3 ms after the lower 8' (asserted: no coupled recording)"),
+    "4":       (2, "its own string at twice the pitch -- its decay and ladder at that pitch -- on its own bridge (half the coupling, asserted). No recording of it"),
+    "lute":    (4, "VCSL's English Lute set against its Normal: the buff dulls the treble and spares the bass (4.7 dB), the buffed string dies fast (0.72 log rate), and its tail is the other 8' answering, which fitted the register's coupling; the pad damps choir A's string whichever jack plucks it"),
   }, []),
  ((16, 17, 18), "the tonewheel's nine drawbars", {
     "8":     (4, "pulled in both of hammondman's packs; drawbar_fit.py derives the settings (tonewheel 00 7880 000, rok 00 8876 034) and the model explains every note to 3.0-3.9 dB rms"),

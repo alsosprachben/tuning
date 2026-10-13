@@ -2507,7 +2507,8 @@ class Patch:
         # template's onsets carry it; the stamp keeps it (newnon), for this voice
         # only, where every other voice's onsets are reset to the press
         t["cof"] = None
-        if t["P"] and getattr(self._voice_class(note), "contact_spread_s", 0.0):
+        if t["P"] and (getattr(self._voice_class(note), "contact_spread_s", 0.0)
+                       or getattr(self._voice_class(note), "jack_offset_ms", None)):   # ...or a harpsichord's jacks
             _base = t["non"] - t["rdl"]
             t["cof"] = (_base - _base.min()).astype(np.int64)
         # ...AND THE LESLIE'S CROSSOVER COPIES (leslie.crossover_weights): rows
@@ -4136,6 +4137,19 @@ class Live:
             # does the rest. Velocity is deliberately ignored.
             for rank in part.drawn:
                 self._draw(part, tmpl, ch, note, rank, n0)
+            # ...AND A HARPSICHORD'S KEY LIFTS EVERY CHOIR'S DAMPER: the strings
+            # its drawn stops pluck drive the rest through the bridge, its own
+            # key's undrawn choirs among them (register.py, as the file does)
+            if self.reg_enabled and self._reg_voice(part, note):
+                pc = part.patch._voice_class(note + part.transpose)
+                ci = {c[0]: i for i, c in enumerate(pc.string_choirs)}
+                drawn = [r for r in part.drawn if (part.pid, ch, note, r) in self.slab.live
+                         and pc.rank_choirs.get(r, r) in ci]
+                sc = {int(s): ci[pc.rank_choirs.get(r, r)]
+                      for r in drawn for s in self.slab.live[(part.pid, ch, note, r)]}
+                if sc:
+                    self._reg_strike(part, ch, note, n0, tmpl, list(sc),
+                                     sorted(set(sc.values())), sc)
             return
         key = (part.pid, ch, note, None)
         # THE SAME STRING STRUCK AGAIN, pedal or no pedal: the last strike on
@@ -4363,24 +4377,31 @@ class Live:
                 self.reg_out.append(got)
 
     def _reg_voice(self, part, note):
-        if part.organ or part.drums:
+        if part.drums:
             return False
         pc = part.patch._voice_class(note)
-        return pc is not None and (getattr(pc, 'register_gain', 0.0) > 0.0
-                                   or getattr(pc, 'register_knock_gain', 0.0) > 0.0)
+        # a pipe has no strings to answer; a harpsichord's choirs do -- it is
+        # registerable, so it plays the organ path, and was shut out with it
+        if pc is None or (part.organ and not getattr(pc, 'string_choirs', None)):
+            return False
+        return (getattr(pc, 'register_gain', 0.0) > 0.0
+                or getattr(pc, 'register_knock_gain', 0.0) > 0.0)
 
     def _reg_free(self, part, ch):
         """The keys whose strings are free on this channel, now."""
         pc = part.patch._voice_class(60)
         top = int(getattr(pc, 'damper_top', 128))
-        if self.pedal.get(ch, False):
+        # a voice with no damper pedal (the harpsichord) frees nothing at
+        # CC64 or CC66, as its notes ignore them: its keys held, no more
+        pedals = getattr(pc, 'damper_pedal', True)
+        if pedals and self.pedal.get(ch, False):
             return list(range(21, 109))
         keys = {k[1] for k in self.down if k[0] == ch}
-        keys |= {k[1] for k in self.sost.get(ch, ())}
-        keys |= {k[1] for k in self.pedalled if k[0] == ch} if self.pedal.get(ch) else set()
+        if pedals:
+            keys |= {k[1] for k in self.sost.get(ch, ())}
         return sorted(keys | set(range(top, 109)))
 
-    def _reg_strike(self, part, ch, note, n0, tmpl, slots):
+    def _reg_strike(self, part, ch, note, n0, tmpl, slots, plucked=None, slot_choir=None):
         rid = (part.pid, ch)
         if rid not in self.reg:
             pc = part.patch._voice_class(60)
@@ -4391,7 +4412,7 @@ class Live:
             self._reg_ask(part)
         self.reg_sid += 1
         self.reg_strike_of[(part.pid, ch, note)] = self.reg_sid
-        self.reg_pend.append((rid, self.reg_sid, note, n0, list(slots)))
+        self.reg_pend.append((rid, self.reg_sid, note, n0, list(slots), plucked, slot_choir))
 
     def _reg_damper(self, part, ch, n0, released=None, pedal_up=False):
         """Dampers fell: end the rows of the strings no longer free, and tell
@@ -4461,7 +4482,7 @@ class Live:
                 st['ready'] = True
         # this block's strikes: their stamped direct rows, read now (after the
         # note's pan and tuning), and the keys free now
-        for rid, sid, note, at, slots in self.reg_pend:
+        for rid, sid, note, at, slots, plucked, slot_choir in self.reg_pend:
             idx = np.fromiter(slots, np.int64, len(slots))
             idx = idx[self.slab.busy[idx]]
             if not len(idx):
@@ -4475,9 +4496,11 @@ class Live:
                        non=a["non"][idx].astype(np.float64), slot=idx.copy())
             for c in ("logr", "logrA", "aft", "sus", "tbav", "tau", "tcut"):
                 drv[c] = a[c][idx].astype(np.float64)
+            if slot_choir:                 # each row's choir: the bridge it drives through
+                drv["choir"] = np.array([slot_choir.get(int(i), 0) for i in idx], np.int64)
             part = self.reg[rid]['part']
             self.reg_jobs.append(('strike', rid, sid, note, float(at), drv,
-                                  self._reg_free(part, rid[1])))
+                                  self._reg_free(part, rid[1]), plucked))
         if self.reg_pend:
             self.reg_pend = []
             self.reg_go.set()
@@ -5555,7 +5578,9 @@ class Live:
         if part.organ:
             for k in [k for k in list(self.slab.live)
                       if k[0] == part.pid and k[1] == ch and k[2] == note]:
-                self.slab.release(k, n0)
+                self.slab.release(k, n0)          # its ranks, and their forced register rows
+            if self.reg_enabled and self._reg_voice(part, note):
+                self._reg_damper(part, ch, n0, released=note)   # every choir's damper falls
         else:
             self.slab.release((part.pid, ch, note, None), n0)
             if self.reg_enabled:
@@ -11723,6 +11748,33 @@ def selftest():
               "  (the key's rows by strike %s; forced %s; slab %s)"
               % ([r[0] for r in _rk], [r[1] for r in _rk], [r[2] for r in _rk]))
         _rl.renderer.close()
+        # THE HARPSICHORD'S CHOIRS, LIVE. A key lifts every choir's damper, so
+        # the choirs its stops do not pluck ring through the bridge while it is
+        # down, and stop when it comes up -- as the file renders it
+        # (examples/pedal_register.py choirs). Registerable, it plays the organ
+        # path, which the register had been shut out of.
+        B.REGISTER = True
+        try:
+            _hl = Live(program=6, rate=48000, frames=128, verbose=False, tuner="hybrid440", gpu=True)
+        finally:
+            B.REGISTER = _rgw
+        _hl.warm()
+        def _hb(_n):
+            for _ in range(_n):
+                _hl.callback(None, 128, None, 0)
+                time.sleep(128.0 / 48000.0)
+        def _hrows():
+            return sum(int((_s['slot_of'] >= 0).sum()) for _s in _hl.reg.values() if _s.get('ready'))
+        _hl.on_midi(mido.Message("note_on", channel=0, note=48, velocity=90))
+        _hb(300)
+        _hheld = _hrows()
+        _hl.on_midi(mido.Message("note_off", channel=0, note=48))
+        _hb(300)
+        _hup = _hrows()
+        check("a harpsichord key's undrawn choirs ring while it is down, and stop at key-up",
+              _hheld > 0 and _hup == 0 and _hl.reg_dropped == 0 and _hl.reg_err is None,
+              "  (%d free rows held, %d after; drawn %s)" % (_hheld, _hup, sorted(_hl.parts[0].drawn)))
+        _hl.renderer.close()
     sys.setswitchinterval(_swi)
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
     # striking a string and is famously expressive; a harmonica has no key at

@@ -1233,6 +1233,17 @@ def unison_partial(hf, off_hz, dr, ud):
     return uf, ulr
 
 
+def _strike_rows(A, r0, r1, cols, grs=None):
+    """A strike's rows for the register, {column: array}: on a voice with
+    choirs, only the ranks drawn at its key-down (their gate rows, `grs`) --
+    an undrawn rank's partials are emitted gated shut and pluck nothing."""
+    rows = {k: np.array(A[k][r0:r1]) for k in cols}
+    if grs is not None:
+        keep = np.isin(rows['gr'], grs)
+        rows = {k: v[keep] for k, v in rows.items()}
+    return rows
+
+
 def prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
@@ -3571,14 +3582,32 @@ def prepare(path, tuner='hybrid440', sink=None):
                 # is now (the soft pedal, honky_detune) is the instrument's at
                 # its first strike in either -- not "when the register ran".
                 import register as _REG
+                # (a voice with no damper pedal -- the harpsichord -- frees
+                # nothing at CC64, as its notes ignore it)
                 _REG_CH[_MCH[0]] = dict(pc=type(props), props=props, pan=pan, chan_vol=chan_vol,
-                                        table=FREQ_N, pedal=_PED_CH.get(ch, []), strikes=[],
+                                        table=FREQ_N, strikes=[],
+                                        pedal=(_PED_CH.get(ch, []) if getattr(props, 'damper_pedal', True)
+                                               else []),
                                         strings=_REG.Strings(type(props), FREQ_N, pan, chan_vol, SR,
                                                              (string_partial, partial_decay,
                                                               unison_partial)))
             _sost = _SOST_HELD.get((ch, note, on))
             _REG_OPEN[0] = dict(key=note, on=on, rows=(_row0, None), av=props.attack_volume,
                                 held=max(_raw_off, _sost) if _sost is not None else _raw_off)
+            # THE CHOIRS IT PLUCKS (tonelib string_choirs): the ranks drawn at
+            # the key-down, each on its choir's string. Only their rows drive
+            # the bridge -- an undrawn rank's are emitted gated shut -- and the
+            # key's other choirs are free while it is down.
+            _chs = getattr(props, 'string_choirs', None)
+            if _chs and organ and ch in rankev_of:
+                _ci = {c[0]: i for i, c in enumerate(_chs)}
+                _drawn = [r[0] for r in props.stop_ranks
+                          if next((v for t, v in reversed(rankev_of[ch][r[0]]) if t <= on), 0.0) >= 0.5]
+                _REG_OPEN[0]['plucked'] = sorted({_ci[props.rank_choirs.get(k, k)] for k in _drawn})
+                _REG_OPEN[0]['gr'] = [grow_of[(ch, k)] for k in _drawn]
+                # ...and each drawn rank's choir, by its gate row: which bridge
+                # its partials drive the free strings through
+                _REG_OPEN[0]['grc'] = {grow_of[(ch, k)]: _ci[props.rank_choirs.get(k, k)] for k in _drawn}
             _REG_CH[_MCH[0]]['strikes'].append(_REG_OPEN[0])
         if getattr(props, 'cabinet', None) and _MCH[0] not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
@@ -3894,7 +3923,12 @@ def prepare(path, tuner='hybrid440', sink=None):
             _PL[0] = 0
             _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
             _slr = math.log(10.0) / 20.0 * props.strike_noise_dbs
-            _reg = props.strike_noise_slope * math.log2(max(f0, 1.0) / 440.0)
+            # dB an octave from A4: strike_noise_octave_db where a class names
+            # it (the harpsichord's pluck), else strike_noise_slope -- which on
+            # SynthProperties also scales the CHIFF by attack_volume, a second
+            # meaning a new voice need not inherit
+            _reg = getattr(props, 'strike_noise_octave_db', props.strike_noise_slope) \
+                * math.log2(max(f0, 1.0) / 440.0)
             _sfade = max(1.0, props.strike_noise_fade_s * SR)
             # ONE ROW A BAND, and gone by 0.25 s (62 dB down at its 250 dB/s):
             # two a band, held 0.5 s, took live's ten-note chord past its block
@@ -4149,6 +4183,15 @@ def prepare(path, tuner='hybrid440', sink=None):
             _rank_av = ((vel/127.0)**2 if (getattr(props, 'touch_sensitive', True) or not T.FIXED_TOUCH)
                         else 1.0)
             spv = T.rank_spectrum(spec_cls)(f0, pan, _rank_av, chan_vol) if spec_cls else None
+            # A CHOIR AT ANOTHER FOOTAGE IS ITS OWN STRING (tonelib string_choirs):
+            # the harpsichord's 4' is a string at twice the key's pitch, its
+            # spectrum and decay that string's -- not the 8''s read at 2m, which
+            # rang it as long as the 8' and coloured it by the key's register.
+            # register.Strings builds the same string (tonelib.own_string).
+            _ownstr = None
+            if (spv is None and getattr(props, 'string_choirs', None)
+                    and not isinstance(ratio, (list, tuple)) and ratio != 1.0):
+                _ownstr = spv = T.own_string(props, f0 * ratio, pan, _rank_av, chan_vol)
             hv_fn = spv.harmonic_volume if spv else props.harmonic_volume
             # A RANK'S REGISTER IS ITS OWN PITCH: a voice with measured series by
             # register (mode_gains_low) takes the table at the rank's sounding
@@ -4180,7 +4223,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             pipe_cls = rest[2] if len(rest) > 2 else None
             if pipe_cls is not None:
                 rp = T.rank_spectrum(pipe_cls)(f0, pan, _rank_av, chan_vol)
-            elif spv is not None and getattr(spv, 'rank_is_pipe', False):
+            elif spv is not None and (getattr(spv, 'rank_is_pipe', False) or _ownstr is not None):
                 rp = spv
             else:
                 rp = props
@@ -4341,10 +4384,17 @@ def prepare(path, tuner='hybrid440', sink=None):
                     eff_ratio *= 2.0 ** (_rdt / 1200.0)
                 _pps = getattr(props, 'partial_phase_spread', 0.0)
                 _prng = random.Random(int(round(on * 1e6)) * 151 + note * 19 + ch) if _pps > 0.0 else None
+                # ...AND ON A CLASS WITH CHOIRS, ITS CHOIR'S OWN WIRE (tonelib.
+                # choir_stiffness, choir_partial_hz): the same string register.
+                # Strings builds, so a free choir and a drawn one are one string
+                _cho = T.choir_of(props, key)
+                _cB = rank_B * T.choir_stiffness(props, _cho, note) if _cho else rank_B
                 for m in range(1, props.max_harmonic+1):
-                    _hh = string_partial(props, f0, eff_ratio, m, rank_B)
+                    _hh = string_partial(props, f0, eff_ratio, m, _cB)
                     if _hh is None: break
                     h, hf = _hh
+                    if _cho:
+                        hf += T.choir_partial_hz(props, _cho, note, m)
                     if hf > SR/2: break
                     hv = hv_sub(m)
                     if hv == 0.0: continue
@@ -4411,6 +4461,25 @@ def prepare(path, tuner='hybrid440', sink=None):
                         if _ssd > 0.0:
                             _sk = 10.0 ** (random.gauss(0.0, _ssd) / 20.0)
                             gL *= _sk; gR *= _sk; gM *= _sk
+                    # THE QUILL CATCHES BEFORE IT LETS GO (tonelib.HarpsiBase.
+                    # pre_pluck_s): the string already moving, quietly, while the
+                    # plectrum pushes it; the pluck proper at the slip, a snap,
+                    # its phase continuing the catch's
+                    if hasattr(rp, 'pre_pluck_s') and m <= rp.pre_pluck_partials:
+                        _tp = rp.pre_pluck_s(f0) * SR
+                        _gp = 10.0 ** (rp.pre_pluck_db / 20.0)
+                        emit_partial(2*math.pi*hf/SR, gL*_gp, gR*_gp, gM*_gp, hf, non_m, non_m + _tp,
+                                     _tp, rp.pre_pluck_snap_s*SR, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                     cc_r, crl, sjit, csc, gr, cr, ph0=mph)
+                        mph += 2*math.pi*hf/SR * _tp
+                        non_m += _tp
+                        pfade = min(pfade, rp.pre_pluck_snap_s*SR)
+                    elif hasattr(rp, 'pre_pluck_s'):
+                        # the partials past the catch's: they start at the slip too
+                        _tp = rp.pre_pluck_s(f0) * SR
+                        mph += 2*math.pi*hf/SR * _tp
+                        non_m += _tp
+                        pfade = min(pfade, rp.pre_pluck_snap_s*SR)
                     emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, noff, pfade, prel, chiff_r,
                                  logr, logrA, aftL, rp.sustain_level, cvp, cc_r, crl, sjit, csc,
                                  gr, cr, ph0=mph)
@@ -4573,23 +4642,37 @@ def prepare(path, tuner='hybrid440', sink=None):
         if cdb is not None and props.release_click_modes:
             cg = gain * (10.0 ** (cdb / 20.0))
             cdec = math.log(T.db_ratio(props.release_click_decay_db))
-            for chz, camp in props.release_click_modes:
-                if chz >= SR / 2:
-                    continue
-                a_ = cg * camp * props.radiation_gain(chz)
-                # A floor of its own, relative to the NOTE's gain rather than an
-                # absolute level, so a quiet note does not keep its mechanism
-                # after its tone has gone. That is exactly what a voice whose
-                # CC11 was misread as expression sounded like -- all clicks and
-                # no instrument -- because the note's partials were culled and
-                # the mechanism, having no floor, was not.
-                if a_ < 3e-3 * gain:
-                    continue
-                emit_partial(2 * math.pi * chz / SR, a_ * props.hrtf_gain(chz, li),
-                             a_ * props.hrtf_gain(chz, ri), a_, chz,
-                             noff, noff + props.release_click_s * SR,
-                             max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
-                             cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0)
+            # ONE CLICK A JACK (tonelib.HarpsichordProperties.jack_offset_ms): on
+            # a voice with choirs, every stop drawn at the key-up has its own
+            # jack falling back, at its own offset and its own phase -- in phase
+            # a few ms apart, identical clicks would comb. Otherwise one click.
+            _jacks = [(0.0, None)]
+            if organ and getattr(props, 'string_choirs', None) and ch in rankev_of:
+                _jacks = [(T.contact_offset_s(props, r[0], note), r[0]) for r in props.stop_ranks
+                          if next((v for t, v in reversed(rankev_of[ch][r[0]]) if t <= _raw_off), 0.0) >= 0.5]
+            for _jo, _jr in _jacks:
+                import zlib as _zl
+                _jph = (random.Random(_zl.crc32(("%s|%d|click" % (_jr, note)).encode())).random()
+                        * 2.0 * math.pi) if _jr is not None else 0.0
+                for chz, camp in props.release_click_modes:
+                    if chz >= SR / 2:
+                        continue
+                    a_ = cg * camp * props.radiation_gain(chz)
+                    # A floor of its own, relative to the NOTE's gain rather than an
+                    # absolute level, so a quiet note does not keep its mechanism
+                    # after its tone has gone. That is exactly what a voice whose
+                    # CC11 was misread as expression sounded like -- all clicks and
+                    # no instrument -- because the note's partials were culled and
+                    # the mechanism, having no floor, was not.
+                    if a_ < 3e-3 * gain:
+                        continue
+                    _non = noff + _jo * SR
+                    emit_partial(2 * math.pi * chz / SR, a_ * props.hrtf_gain(chz, li),
+                                 a_ * props.hrtf_gain(chz, ri), a_, chz,
+                                 _non, _non + props.release_click_s * SR,
+                                 max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
+                                 cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0,
+                                 ph0=_jph)
     _REV[0] = None
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
     _push_finish(_PUSH_PEND[0])
@@ -4725,8 +4808,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                 if _x['rows'][1] is None:
                     continue
                 _r0, _r1 = _x['rows']
-                _C.strike(_x['key'], _x['on'], _x['held'], _x['av'],
-                          {k: np.array(A[k][_r0:_r1]) for k in _cols})
+                _rows = _strike_rows(A, _r0, _r1, _cols, _x.get('gr'))
+                _C.strike(_x['key'], _x['on'], _x['held'], _x['av'], _rows, _x.get('plucked'),
+                          [_x['grc'][int(g)] for g in _rows['gr']] if _x.get('grc') else None)
             _rc[_c] = _C
         _nr = _REG.expand(A, _rc, SR, BLK, _cols)
         print("  register: %d channel(s), %d partials from the free strings" % (len(_rc), _nr))

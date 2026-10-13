@@ -70,6 +70,7 @@ TAU = 2.0 * math.pi
 KEYS = range(21, 109)            # A0..C8, the piano's 88
 FLOOR = 1e-3                     # -60 dB of the strike's loudest partial
 SPLIT = 1e-2                     # a change under -40 dB of a mode waits for the next
+CHOIR = 16                       # a mode's string index: choir * CHOIR + its unison
 
 
 class Strings(object):
@@ -93,6 +94,12 @@ class Strings(object):
         sp, sa, sm = bridge
         k_, s_, m_, f_, a_, w_, hl_, hr_, dl_, dr_, px_ = ([] for _ in range(11))
         self.props = {}
+        # THE CHOIRS (tonelib.HarpsichordProperties.string_choirs): a key with
+        # several rows of strings has one series per row, each at its footage
+        # and its own few cents (tonelib.choir_cents), decaying as its own
+        # class's string does -- the same string the note loop's rank plucks.
+        # A piano has one row: its unisons are strings OF that row.
+        choirs = getattr(pc, 'string_choirs', None) or (("", 1.0, None),)
         for key in KEYS:
             if key not in table:
                 continue
@@ -105,31 +112,43 @@ class Strings(object):
             dl = getattr(p, 'left_hrtf_delay', 0.0) * sr
             dr = getattr(p, 'right_hrtf_delay', 0.0) * sr
             px = getattr(p, 'position_x', 0.0)
-            for m in range(1, p.max_harmonic + 1):
-                hh = sp(p, f0, 1.0, m, B)
-                if hh is None:
-                    break
-                h, hf = hh
-                if hf > sr / 2:
-                    break
-                if p.harmonic_volume(m) == 0.0:
-                    continue            # the note loop emits no such partial
-                dbps, logr, aftL, logrA = sa(p, f0, m)
-                strings = [(0, hf, logrA if logrA > 0 else logr)]
-                for ui, (gm, off_hz, drr, ud, uph) in enumerate(p.unison_voices(f0, m, dbps)):
-                    uf, ulr = sm(hf, off_hz, drr, ud)
-                    if uf <= 0 or uf > sr / 2:
-                        continue
-                    _, uadb = p.aftersound(f0, ud)
-                    ua = math.log(T.db_ratio(uadb)) if uadb > 0 else ulr
-                    strings.append((ui + 1, uf, ua))
-                # the bridge's admittance at the mode, which couples it both ways
-                w = p.soundboard_gain(hf) * p.radiation_gain(hf)
-                for si, fz, al in strings:
-                    k_.append(key); s_.append(si); m_.append(m)
-                    f_.append(fz * pj); a_.append(al); w_.append(w)
-                    hl_.append(p.hrtf_gain(hf, li)); hr_.append(p.hrtf_gain(hf, ri))
-                    dl_.append(dl); dr_.append(dr); px_.append(px)
+            board = getattr(p, 'soundboard_gain', None) or p.bore_gain
+            for ci, (cname, ratio, ccls) in enumerate(choirs):
+                # its own class's string -- or, at another footage (the 4'), the
+                # host's string at that pitch, as the rank loop builds it
+                cp = (_isolated(T.rank_spectrum(ccls), f0, pan, chan_vol) if ccls is not None
+                      else _isolated(T.rank_spectrum(pc), f0 * ratio, pan, chan_vol) if ratio != 1.0
+                      else p)
+                cr = ratio * 2.0 ** (T.choir_cents(pc, cname, key) / 1200.0) if cname else ratio
+                cB = B * T.choir_stiffness(pc, cname, key) if cname else B   # its own wire
+                for m in range(1, p.max_harmonic + 1):
+                    hh = sp(p, f0, cr, m, cB)
+                    if hh is None:
+                        break
+                    h, hf = hh
+                    if cname:
+                        hf += T.choir_partial_hz(pc, cname, key, m)
+                    if hf > sr / 2:
+                        break
+                    if cp.harmonic_volume(m) == 0.0:
+                        continue            # the note loop emits no such partial
+                    dbps, logr, aftL, logrA = sa(cp, f0, m)
+                    strings = [(ci * CHOIR, hf, logrA if logrA > 0 else logr)]
+                    for ui, (gm, off_hz, drr, ud, uph) in enumerate(p.unison_voices(f0, m, dbps)):
+                        uf, ulr = sm(hf, off_hz, drr, ud)
+                        if uf <= 0 or uf > sr / 2:
+                            continue
+                        _, uadb = p.aftersound(f0, ud)
+                        ua = math.log(T.db_ratio(uadb)) if uadb > 0 else ulr
+                        strings.append((ci * CHOIR + ui + 1, uf, ua))
+                    # the bridge's admittance at the mode, which couples it both ways
+                    # (a piano's board; a harpsichord's body is its FormantBody)
+                    w = board(hf) * p.radiation_gain(hf)
+                    for si, fz, al in strings:
+                        k_.append(key); s_.append(si); m_.append(m)
+                        f_.append(fz * pj); a_.append(al); w_.append(w)
+                        hl_.append(p.hrtf_gain(hf, li)); hr_.append(p.hrtf_gain(hf, ri))
+                        dl_.append(dl); dr_.append(dr); px_.append(px)
         o = np.argsort(np.asarray(f_), kind='stable')
         A = lambda v, t=np.float64: np.asarray(v, t)[o]          # noqa: E731
         self.key, self.string, self.harm = A(k_, np.int64), A(s_, np.int64), A(m_, np.int64)
@@ -137,6 +156,32 @@ class Strings(object):
         self.w = self.w / max(float(self.w.max()), 1e-30)
         self.hl, self.hr, self.dl, self.dr, self.px = A(hl_), A(hr_), A(dl_), A(dr_), A(px_)
         self.W = TAU * self.f
+        # THE BRIDGES (tonelib choir_bridge): which each choir's strings cross.
+        # One bridge couples directly; across bridges, through the board, at
+        # cross_bridge_coupling -- the harpsichord's 4' against its 8's
+        cb = getattr(pc, 'choir_bridge', None) or {}
+        self.choir_bridges = np.array([cb.get(c[0], 0) for c in choirs], np.int64)
+        self.bridge = self.choir_bridges[self.string // CHOIR]
+        self.cross = float(getattr(pc, 'cross_bridge_coupling', 1.0))
+        # A BUFFED CHOIR (tonelib buff_choirs) is its plain choir's string with
+        # the pad on: one or the other answers, never both -- the buffed one
+        # while its stop is drawn (it is plucked), the plain one otherwise
+        names = [c[0] for c in choirs]
+        bc = getattr(pc, 'buff_choirs', None) or {}
+        self.buffs = [(names.index(b), names.index(a)) for b, a in bc.items()
+                      if b in names and a in names]
+
+    def free_choirs(self, plucked):
+        """Which choirs may answer, for a strike plucking `plucked` (None: a
+        piano's, every choir one): a buffed choir while its stop is drawn,
+        in place of its plain one."""
+        ok = np.ones(len(self.choir_bridges), bool)
+        for b, a in self.buffs:
+            if plucked is not None and b in plucked:
+                ok[a] = False
+            else:
+                ok[b] = False
+        return ok
 
 
 def _isolated(pc, f0, pan, chan_vol):
@@ -346,19 +391,34 @@ class Channel(object):
         return FLOOR * max(self.loud, 1e-30)
 
     # -- strikes in -----------------------------------------------------------
-    def strike(self, key, on, held, av, rows):
+    def strike(self, key, on, held, av, rows, plucked=None, choirs=None):
         """A strike: its key, onset and the time its key came up (s), and its
-        rows as {column: array} -- every column, the whole note."""
+        rows as {column: array} -- every column, the whole note. `plucked`:
+        the choirs it plucked (Strings' choir indices); None, every string of
+        the key -- a piano's hammer strikes them all. On a harpsichord the
+        key's other choirs are undamped and free while it is down. `choirs`:
+        each row's choir (Strings' index), for its bridge; None, all one."""
         sr, blk = self.sr, self.blk
         d = np.flatnonzero(np.asarray(rows['dr']) > 0.5)
-        self.holds.setdefault(key, []).append((on * sr, held * sr))
+        # ITS OWN KEY'S FREE CHOIRS ARE FREE FROM ITS BLOCK. The strike is
+        # worked at the block its partials start in, which begins up to a
+        # block before the key goes down; a hold from the key-down left the
+        # key's undrawn choirs damped at that instant, and their free part
+        # was dropped -- only the forced part, at the plucked string's own
+        # pitch, ever sounded. (A piano strikes every string of its key, and
+        # its holds stay where they were.)
+        n_on = on * sr
+        if plucked is not None and len(d):
+            n_on = min(n_on, int(float(np.asarray(rows['non'])[d].min()) // blk) * blk)
+        self.holds.setdefault(key, []).append((n_on, held * sr))
         self.spans.pop(key, None)
         self.endmemo.pop(key, None)
         if not len(d):
             return
         si = len(self.strikes)
         drv = {c: np.asarray(rows[c])[d] for c in self.cols}
-        self.strikes.append(dict(key=key, av=av, drv=drv))
+        self.strikes.append(dict(key=key, av=av, drv=drv, plucked=plucked,
+                                 choir=None if choirs is None else np.asarray(choirs)[d]))
         b = int(float(drv['non'].min()) // blk) * blk
         self.groups.setdefault(b, []).append(si)
         if self.template is None:
@@ -420,9 +480,14 @@ class Channel(object):
             self.loud = max(self.loud, float(np.max(np.abs(drv['aM']))))
             floor = self.floor
             free = np.zeros(M, bool)
+            okc = S.free_choirs(st['plucked'])[S.string // CHOIR]
             for k, ix in self.keyidx.items():
-                if k != st['key'] and self.span_end(k, b) is not None:
-                    free[ix] = True
+                if k != st['key']:
+                    if self.span_end(k, b) is not None:
+                        free[ix[okc[ix]]] = True
+                elif st['plucked'] is not None and self.span_end(k, b) is not None:
+                    # its own key: every choir but the plucked ones
+                    free[ix[okc[ix] & ~np.isin(S.string[ix] // CHOIR, list(st['plucked']))]] = True
             if not free.any():
                 continue
             fi = np.flatnonzero(free)
@@ -448,7 +513,9 @@ class Channel(object):
                     if hi <= lo:
                         continue
                     j = fi[lo:hi]
-                    fr, fo = free_part(cmax * S.w[j], Wi, beta, Wm[j], am[j], tb, ta, cu,
+                    wj = S.w[j] if st['choir'] is None else S.w[j] * np.where(
+                        S.bridge[j] == S.choir_bridges[st['choir'][r]], 1.0, S.cross)
+                    fr, fo = free_part(cmax * wj, Wi, beta, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
                     # free: from the driver's onset, at the mode's own frequency
                     add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - b) / sr)
@@ -707,14 +774,19 @@ class LiveChannel(object):
         self.stamped[idx] = np.abs(z) >= floor
         return idx, z
 
-    def strike(self, sid, key, at, drv, free_keys):
+    def strike(self, sid, key, at, drv, free_keys, plucked=None):
         """A strike at sample `at` of `key`, its stamped direct rows `drv`
         ({om, p0, delL, aM, non, logr, logrA, aft, sus, tbav, tau, tcut, slot}),
-        with these keys' strings free."""
+        with these keys' strings free. `plucked`, as Channel.strike's: the
+        choirs it plucked; its key's others are free while it is held."""
         S, sr = self.S, self.sr
         Wm, am = S.W, S.alpha
         M = len(S.f)
         free = self.mask(k for k in free_keys if k != key)
+        if plucked is not None and key in free_keys and key in self.keyidx:
+            ix = self.keyidx[key]
+            free[ix[~np.isin(S.string[ix] // CHOIR, list(plucked))]] = True
+        free &= S.free_choirs(plucked)[S.string // CHOIR]     # a buff's string, or its plain one
         self.loud = max(self.loud, float(np.max(drv['aM'])) if len(drv['aM']) else 0.0)
         floor = FLOOR * max(self.loud, 1e-30)
         add = np.zeros(M, complex)
@@ -740,7 +812,9 @@ class LiveChannel(object):
                     if hi <= lo:
                         continue
                     j = fi[lo:hi]
-                    fr, fo = free_part(cmax * S.w[j], Wi, beta, Wm[j], am[j], tb, ta, cu,
+                    wj = S.w[j] if 'choir' not in drv else S.w[j] * np.where(
+                        S.bridge[j] == S.choir_bridges[int(drv['choir'][r])], 1.0, S.cross)
+                    fr, fo = free_part(cmax * wj, Wi, beta, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
                     add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - at) / sr)
                     F = complex(fo.sum())
@@ -797,7 +871,7 @@ def live_worker(conn):
     budget). Jobs in, results out, over a pipe:
 
       ('build', pid, pc, tuner, rate, scale)   -> ('built', pid, arrays)
-      ('strike', rid, sid, note, at, drv, free) -> ('free', rid, modes, z, at, floor)
+      ('strike', rid, sid, note, at, drv, free[, plucked]) -> ('free', rid, modes, z, at, floor)
                                                    [+ ('forced', rid, note, forced, at)]
       ('release', rid, sid, at, free)          -> ('free', ...)
       ('damp', rid, keys); ('stop',)"""
@@ -834,8 +908,8 @@ def live_worker(conn):
             if lc is None:
                 continue
             if kind == 'strike':
-                sid, note, at, drv, free = job[2:]
-                idx, z, forced = lc.strike(sid, note, at, drv, free)
+                sid, note, at, drv, free = job[2:7]
+                idx, z, forced = lc.strike(sid, note, at, drv, free, job[7] if len(job) > 7 else None)
                 conn.send(('free', rid, idx, z, at, FLOOR * max(lc.loud, 1e-30)))
                 if forced:
                     conn.send(('forced', rid, note, forced, at))
