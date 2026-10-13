@@ -4137,6 +4137,23 @@ class Live:
                 self._draw(part, tmpl, ch, note, rank, n0)
             return
         key = (part.pid, ch, note, None)
+        # THE SAME STRING STRUCK AGAIN, pedal or no pedal: the last strike on
+        # it stops, over the steal-fade, as the file renderer clamps it (there
+        # is one string, and two copies of it beat). Without this a pedalled
+        # arpeggio stacked a whole note's rows per strike on the same seven
+        # keys until the slab filled -- Ben had to reset the pedal mid-phrase.
+        # Its forced register rows (REG_FORCED) go with it: they ride the
+        # note's key and were let go only at its note-off, which the pedal
+        # holds back, so they stacked the same way.
+        if part.patch.damper_pedal and self.slab.live.get(key) and not self.slab.oneshot.get(key):
+            for _k in (key, (part.pid, ch, note, self.REG_FORCED)):
+                _sl = self.slab.live.get(_k)
+                if not _sl:
+                    continue
+                _ix = np.fromiter(_sl, np.int64, len(_sl))
+                self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix],
+                                                    np.float32(B.RETRIGGER_FADE * self.rate))
+                self.slab.release(_k, n0)
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
@@ -11677,6 +11694,32 @@ def selftest():
               "  (slab %d of %d; block median %.2f ms, 99th %.2f, budget %.2f)"
               % (_used, _rl.slab.cap, float(np.median(_rts)), float(np.percentile(_rts, 99)),
                  128.0 / 48.0))
+        # A KEY STRUCK AGAIN UNDER THE PEDAL stops its last strike, as the
+        # file renderer clamps it: one string. Live stacked every strike's
+        # rows -- and their forced register rows -- until the pedal came up,
+        # and a pedalled arpeggio filled the slab in 14 s (Ben: "it doesn't
+        # stabilize ... I need to reset the pedal before I run out of compute").
+        _rp = _rl.parts[0].pid
+        _rts = []                          # _rb's timings, spent on the check above
+        _rl.on_midi(mido.Message("control_change", channel=0, control=64, value=127))
+        _rk = []
+        for _ in range(5):
+            _rl.on_midi(mido.Message("note_on", channel=0, note=60, velocity=90))
+            _rb(60)
+            _rl.on_midi(mido.Message("note_off", channel=0, note=60))
+            _rb(60)
+            _rk.append((len(_rl.slab.live.get((_rp, 0, 60, None), ())),
+                        len(_rl.slab.live.get((_rp, 0, 60, _rl.REG_FORCED), ())),
+                        _rl.slab.cap - len(_rl.slab.free)))
+        _rl.on_midi(mido.Message("control_change", channel=0, control=64, value=0))
+        _rb(300)
+        check("a key struck again under the pedal stops its last strike, forced rows and all",
+              # (the slab may still creep: the free strings' own modes, one
+              # row each, fill toward their count -- but not a strike a strike)
+              _rk[-1][0] == _rk[0][0] and _rk[-1][1] <= _rk[0][1]
+              and _rk[-1][2] - _rk[-3][2] < _rk[0][0],
+              "  (the key's rows by strike %s; forced %s; slab %s)"
+              % ([r[0] for r in _rk], [r[1] for r in _rk], [r[2] for r in _rk]))
         _rl.renderer.close()
     sys.setswitchinterval(_swi)
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
