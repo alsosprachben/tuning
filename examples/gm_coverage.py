@@ -73,7 +73,7 @@ RATED = {
  3:(3,"the measured upright (GM 1) with the tuner's hand off: unisons 8-20 cents, CC1 the wheel. The upright is fitted; the detune is judged from beat rates, not measured"),
  4:(2,"Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted"),
  5:(2,"Wurlitzer. Same machinery, 1/d pickup; no audio fitted"),
- 6:(4,"VCSL recordings"),
+ 6:(4,"FITTED TO VCSL'S HARPSICHORDS (CC0; examples/harpsi_fit.py): the English Normal and Lute sets and the Flemish High and Low, each stop measured as its difference from the 8' on one instrument, so the room drops out. A STRING BANK, like the piano: every choir on a key is present, each slightly apart in cents, stiffness and partial tuning, and the stops (the CC11 word, rated below) choose which the jacks pluck; a key lifts every damper, so the undrawn choirs ring through the bridge. The quill plucks at fixed force, so the comb never fills and there are no dynamics. The ladder and body over the whole band, partials to 16 kHz, the decay by band (log-rate error 0.96 -> 0.65), random partial phases (in phase they swept like a phaser, Ben), and the quill's catch before it slips (3.5-6 ms, measured). Ben: sounds great"),
  7:(2,"its own voice: struck at the anvil, magnetic pickups whose fraction climbs with pitch. No reference"),
  8:(2,"struck steel plate, felt hammer"),
  9:(4,"Iowa orchestra bells"),
