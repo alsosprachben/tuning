@@ -4,6 +4,7 @@
     python3 examples/immersive.py OBJECTS_DIR DRY.wav OUTDIR LAYOUT.yaml
             (e.g. examples/brother_714.yaml)
             [--room church] [--br 1024000] [--clean]
+    python3 examples/immersive.py encode BED.714.wav OUT.mp4 [--br 576000]
 
 --clean deletes each intermediate once the next stage has it (the object WAVs
 after the ADM BWF, the direct bed after the mix, the decoded check after the
@@ -242,9 +243,18 @@ def main(argv):
     os.remove(bed44)
 
     mp4 = os.path.join(outdir, stem + '.mpegh.mp4')
+    ok = encode_and_check(bed, mp4, br, os.path.join(outdir, stem + '.decoded.wav'), clean)
+    print("  -> %s\n  -> %s\n  -> %s" % (mp4, bed, adm))
+    return 0 if ok else 1
+
+
+def encode_and_check(bed, mp4, br, back, clean=False):
+    """BED (12 channels, CICP 19 order, 48 kHz) to MPEG-H, decoded back and
+    compared speaker by speaker. The encoder's own defaults stand -- since
+    the CLI options patch (Seth's player), Baseline profile, no m4ds box,
+    the configuration repeated every 48 frames."""
     run([ENC, '-ifile:' + bed, '-ofile:' + mp4, '-cicp:19', '-op_fmt:3', '-br:' + br],
         stdout=subprocess.DEVNULL)
-    back = os.path.join(outdir, stem + '.decoded.wav')
     run([DEC, '-ifile:' + mp4, '-ofile:' + back, '-pcmsz:24'],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -281,9 +291,15 @@ def main(argv):
     print("   channel order %s" % ("intact" if ok else "SCRAMBLED"))
     if clean:
         os.remove(back)
-    print("  -> %s\n  -> %s\n  -> %s" % (mp4, bed, adm))
-    return 0 if ok else 1
+    return ok
 
 
 if __name__ == '__main__':
+    # immersive.py encode BED.714.wav OUT.mp4 [--br N]: a bed already made,
+    # encoded again (a new encoder) and checked
+    if len(sys.argv) > 1 and sys.argv[1] == 'encode':
+        _a = [x for x in sys.argv[2:] if not x.startswith('--')]
+        _br = sys.argv[sys.argv.index('--br') + 1] if '--br' in sys.argv else '576000'
+        _a = [x for x in _a if x != _br]
+        sys.exit(0 if encode_and_check(_a[0], _a[1], _br, _a[1] + '.decoded.wav', clean=True) else 1)
     sys.exit(main(sys.argv))
