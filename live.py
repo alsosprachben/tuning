@@ -3134,6 +3134,7 @@ class Live:
                 while p.pid not in self.reg_info and time.time() - _t < 60.0 \
                         and self.reg_err is None:
                     time.sleep(0.02)
+        _gc_freeze()
         if self.verbose:
             tot = sum(p.patch.partials for p in self.parts)
             nt = sum(len(p.patch.templates) for p in self.parts)
@@ -6479,6 +6480,7 @@ class Live:
                     self.patch_err = "%s: %s" % (type(e).__name__, e)
                     self.patch_label = None
             self._fill_misses()
+            _gc_freeze()        # what this pass built, out of the collector's sweep
             self.patch_busy = False
           except BaseException as e:
             # A builder thread that dies silently takes the feature with it and
@@ -15046,6 +15048,21 @@ def wind_selftest(check=None):
     finally:
         B.WIND, B.WIND_SCALE = was
     return 1 if fails else 0
+
+
+def _gc_freeze():
+    """Move every object alive now out of the cycle collector's sweep.
+
+    A FULL COLLECTION STOPS THE AUDIO THREAD. Python's generation-2 pass walks
+    every tracked object -- templates, patches, their arrays' owners -- with
+    the GIL held, and a warmed piano rig made that 9.5-10.7 ms: four times in
+    48 s of pedalled chords, against a 10.7 ms output buffer, and the two
+    underruns measured were two of them. Frozen after the build, a full pass
+    costs under 1.1 ms. Nothing leaks by it: a patch evicted later is freed by
+    its reference count (measured), which freezing does not touch; only a
+    reference CYCLE alive at the freeze is kept, and the builds make none."""
+    import gc
+    gc.freeze()
 
 
 def open_stream(live, rate, frames):
