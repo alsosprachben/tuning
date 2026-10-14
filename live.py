@@ -8519,10 +8519,12 @@ def selftest():
     check("a melodic tom now thumps instead of ringing",
           _drum.harmonic_decay(1) > 4.0 * _bar.harmonic_decay(1),
           "  (%.0f vs %.0f dB/s)" % (_drum.harmonic_decay(1), _bar.harmonic_decay(1)))
+    # ...and no series at all now: an audience is its claps, the hand clap's
+    # noise burst fired through the note (applause_fit.py)
     check("applause is noise, not a tuned bar",
-          _mh(_T.ApplauseProperties) > 3.0 * _mh(_T.MalletProperties),
-          "  (mean harmonic %.1f vs %.1f)"
-          % (_mh(_T.ApplauseProperties), _mh(_T.MalletProperties)))
+          tuple(_T.ApplauseProperties.mode_gains) == (0.0,) and _T.ApplauseProperties.strike_flam_rate > 0.0
+          and bool(_T.ApplauseProperties.strike_noise_db),
+          "  (no series; %.0f claps a second)" % _T.ApplauseProperties.strike_flam_rate)
     # STRUCK, NOT PLUCKED: the hierarchy's whole distinction. A struck voice
     # names its strike point; the generic plucked base has none.
     check("a hammered dulcimer is struck, not plucked",
@@ -8789,11 +8791,13 @@ def selftest():
           and max(lo_f, hi_f) < 1.6 * min(lo_f, hi_f),
           "  (centroid %.0f Hz at 110 Hz, %.0f Hz three octaves up)"
           % (lo_f, hi_f))
-    # ...where a voice that follows its note moves with it, by definition.
-    br_lo = _centroid(_T.BreathNoiseProperties, 110.0)
-    br_hi = _centroid(_T.BreathNoiseProperties, 880.0)
-    check("...unlike breath, which has no band to keep",
-          br_hi > 1.8 * br_lo, "  (breath moves %.0f -> %.0f Hz)" % (br_lo, br_hi))
+    # ...and breath has no note to follow at all now: a breath has no pitch,
+    # so its series is silent and its colour a fixed noise table, held
+    # (breath_fit.py) -- it had followed the key, brightest at 16 kHz
+    _br = _T.BreathNoiseProperties(220.0, 0.0, 1.0, 1.0)
+    check("...and breath, a noise of its own, keeps no band of the note's",
+          all(_br.harmonic_volume(h) == 0.0 for h in range(1, 9)) and len(_br.breath_noise_db) > 10,
+          "  (series silent; %d noise rows, the same at every key)" % len(_br.breath_noise_db))
     # Only WOUND strings squeak, so it must fall away up the register.
     hi = _T.GuitarFretNoiseProperties(3520.0, 0.0, 1.0, 1.0)
     check("it fades where the strings would be plain",
@@ -9043,11 +9047,13 @@ def selftest():
     # room, not the 440+480 Hz ringback the exchange sends the caller. The
     # repetition is GM 102's mechanism, whose limitation there (repeated ONSETS
     # rather than a repeated signal) is exactly right for a clapper.
+    # ...EACH GONG twenty times a second, the other between (phone_fit.py:
+    # the 20 Hz ringing current; strokes alternate, so one every 25 ms)
     _on = _tp(261.63, 0.0, 1.0, 1.0).section_onsets_at(261.63)
-    _gap = _on[2] - _on[1]
-    check("...and the telephone's clapper strikes about twenty times a second",
+    _gap = float(np.mean(np.diff(_on[1::2])))
+    check("...and the telephone's clapper strikes each gong about twenty times a second",
           18.0 < 1.0 / _gap < 24.0 and _on[-1] > 0.5,
-          "  (%d strikes %.0f ms apart, spanning %.2f s of the note)"
+          "  (%d strokes, each gong's %.0f ms apart, spanning %.2f s of the note)"
           % (len(_on) - 1, 1000 * _gap, _on[-1]))
     # ...which needed the entry cap raised, or the bell rings for the first
     # quarter of each burst and then sits silent.
@@ -9077,10 +9083,12 @@ def selftest():
     # FREQ, positive), its tension_bend off so the two do not stack.
     _sd118 = _PMr.property_class_for_note(118, 60)
     _sdm = getattr(_sd118, "messenger", None) or {}
-    check("...and the bird's pitch RISES, where the synth drum's falls",
-          _bt.tension_bend < 0.0
+    # ...and MEASURED, the bird's sweep FALLS (bird_fit.py: sparrows' cheeps
+    # drop ~900-1300 cents) -- as the synth drum's does
+    check("...and the bird's pitch FALLS to its note, as the synth drum's does",
+          _bt.tension_bend > 0.0
           and (_sd118.tension_bend > 0.0 or (_sdm.get("mod_dest") == 1 and _sdm.get("mod_amount", 0.5) > 0.5)),
-          "  (rendered on C6: 999 Hz, then 1040, then 1050 -- the written 1047)")
+          "  (starts %.0f%% sharp, settles in %.0f ms)" % (100 * _bt.tension_bend, 1000 * _bt.tension_settle_time))
 
     # ------------------------------------------- the last two category errors
     import patch_map as _PMc
@@ -10460,9 +10468,9 @@ def selftest():
         ('attack', 'brightness', 'decay', 'release', 'resonance', 'vib_delay',
          'vib_depth', 'vib_rate'): 31,                          # synthesisers
         ('attack', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 33,  # winds, bows, voices
-        ('decay', 'release'): 30,                               # struck and plucked
+        ('decay', 'release'): 29,                               # struck and plucked
         ('brightness', 'decay', 'release'): 3,                  # pizzicato, GM 32, harp: the pluck point
-        ('decay',): 16,                                         # one-shots
+        ('decay',): 17,                                         # one-shots (the telephone's gongs ring out)
         (): 7,                                                  # organs, harpsichord, bagpipe, hit
         ('attack', 'brightness', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 6,  # effort
         ('attack', 'release'): 1,                               # the reed organ
@@ -13492,6 +13500,93 @@ def selftest():
           _b2 > 50.0 and abs(_b4) < 20.0 and abs(_lv(_yc2) - _lv(_yc4)) < 6.0,
           "  (h4 reaches -6 dB %+.0f ms after h1 at C2, %+.0f at C4; C2 %+.1f dB re C4)"
           % (_b2, _b4, _lv(_yc2) - _lv(_yc4)))
+
+    # ---- the sound effects, fitted to recordings (examples/*_fit.py) -------
+    def _sfx(prog, key, secs, vel=100, side=None):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=prog, time=0))
+        _t.append(mido.Message("note_on", channel=0, note=key, velocity=vel, time=0))
+        _t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
+        # AT THE FILE RENDERER'S BLOCK (512), as the fits were made: live's
+        # 128 (B.BLK, set by a Live above) renders noise rows differently --
+        # the gunshot's blast 12 dB weaker at the top -- a live/file gap of
+        # its own, not the voice's
+        _blk = B.BLK
+        B.BLK = 512
+        try:
+            _L, _R = B.render(_m)[:2]
+        finally:
+            B.BLK = _blk
+        # one ear (side 0): the two ears' sum combs the top wherever the key
+        # places the voice off centre
+        y = (np.asarray(_L, np.float64) if side == 0 else
+             0.5 * (np.asarray(_L, np.float64) + np.asarray(_R, np.float64)))
+        return y[int(np.flatnonzero(np.abs(y) > 0.01 * np.abs(y).max())[0]):]
+
+    def _bands(y, edges):
+        X = np.abs(np.fft.rfft(y * np.hanning(len(y)), 1 << 17)) ** 2
+        f = np.fft.rfftfreq(1 << 17, 1.0 / B.SR)
+        return [10 * _math.log10(X[(f >= a) & (f < b)].sum() + 1e-30) for a, b in edges]
+    # THE TELEPHONE IS TWO GONGS a major third and a quarter apart, struck
+    # alternately by a loose clapper (phone_fit.py): not a pair 9 cents apart
+    # on a grid
+    _tp = _T.TelephoneRingProperties(1661.0, 0.0, 0.6, 1.0)
+    _on = _tp.section_onsets_at(1661.0)
+    _gaps = np.diff(_on[1:41])
+    _uv = _tp.unison_voices(1661.0, 1, 1.0)
+    check("a telephone's two gongs are 437 cents apart, struck alternately and loosely",
+          abs(1200 * _math.log2(_tp.mode_ratios[4]) + 437.0) < 20.0
+          and all((_uv[i][0] > 0.0) == ((i + 1) % 2 == 0) for i in range(20))
+          and 0.003 < float(np.std(_gaps)) < 0.012 and _on[1:41] == _tp.section_onsets_at(1661.0)[1:41],
+          "  (gong B at %+.0f cents; strokes %.1f ms apart, %.1f ms sd, the same every ring)"
+          % (1200 * _math.log2(_tp.mode_ratios[4]), 1e3 * float(np.mean(_gaps)), 1e3 * float(np.std(_gaps))))
+    # THE HELICOPTER'S ENERGY IS 80 Hz-1.3 kHz, not under 40 (heli_fit.py),
+    # its series running past 1.3 kHz
+    _hy = _sfx(125, 60, 3.0)[int(0.8 * B.SR):int(2.8 * B.SR)]
+    _hb = _bands(_hy, ((20, 40), (80, 1300), (2000, 5000)))
+    check("a helicopter's energy is in its blade harmonics, not its sub-audible pulse",
+          _hb[1] - _hb[0] > 10.0 and _hb[1] - _hb[2] < 25.0 and _T.HelicopterProperties.max_harmonic >= 300,
+          "  (80 Hz-1.3 kHz %+.0f dB over 20-40 Hz; 2-5 kHz %+.0f dB under it)" % (_hb[1] - _hb[0], _hb[1] - _hb[2]))
+    # THE GUNSHOT'S BLAST NOISE: at 15 m the shot falls ~3 dB an octave over
+    # its 125-250 Hz peak where an N-wave alone falls ~6 (gunshot_fit.py)
+    def _gtop():
+        _gb = _bands(_sfx(127, 55, 1.0)[:int(0.02 * B.SR)], ((125, 500), (4000, 16000)))
+        return _gb[0] - _gb[1]
+    _gw = _gtop()
+    _gkeep = _T.GunshotProperties.strike_noise_db
+    _T.GunshotProperties.strike_noise_db = ()
+    _gn = _gtop()
+    _T.GunshotProperties.strike_noise_db = _gkeep
+    check("a gunshot carries its blast's noise high, not the N-wave alone",
+          _gn - _gw > 10.0,
+          "  (4-16 kHz under 125-500 Hz in the first 20 ms: %.1f dB, the N-wave alone %.1f; the shots 3-4.5)"
+          % (_gw, _gn))
+    # THE APPLAUSE IS CLAPS: the level over 5 ms swings ~3 dB sd at 1-6 kHz,
+    # as the audiences' do, where a wash's swings under 1 (applause_fit.py)
+    from scipy.signal import butter as _bt, sosfiltfilt as _sff
+    _ay = _sfx(126, 60, 3.0)[int(0.5 * B.SR):int(2.5 * B.SR)]
+    _ab = _sff(_bt(2, [1000, 6000], btype="band", fs=B.SR, output="sos"), _ay)
+    _w5 = int(0.005 * B.SR)
+    _ae = np.sqrt(np.convolve(_ab * _ab, np.ones(_w5) / _w5, "valid"))[::_w5]
+    _asd = float(np.std(20 * np.log10(_ae + 1e-12)))
+    check("applause is claps landing, not a wash",
+          2.0 < _asd < 5.0, "  (the 5 ms level's sd %.1f dB; the audiences' 2.2-4.4)" % _asd)
+    # THE BREATH HAS NO PITCH: its colour the same an octave apart (breath_fit.py)
+    _b1 = np.array(_bands(_sfx(121, 48, 1.5, side=0)[int(0.4 * B.SR):], ((400, 800), (800, 1600), (1600, 3200), (3200, 6400))))
+    _b2 = np.array(_bands(_sfx(121, 72, 1.5, side=0)[int(0.4 * B.SR):], ((400, 800), (800, 1600), (1600, 3200), (3200, 6400))))
+    _bd = (_b1 - _b1.max()) - (_b2 - _b2.max())
+    check("a breath's colour does not follow the key",
+          float(np.max(np.abs(_bd))) < 3.0, "  (C3 against C5, by octave: %s dB)" % " ".join("%+.1f" % v for v in _bd))
+    # THE BIRD'S CHIRPS FALL (bird_fit.py): sparrows' cheeps drop ~900-1300
+    # cents, the class had them rising
+    _by = _sfx(123, 100, 0.5)
+    _bn = 1024
+    _bfr = [np.argmax(np.abs(np.fft.rfft(_by[i:i + _bn] * np.hanning(_bn), 4096)))
+            for i in (int(0.004 * B.SR), int(0.08 * B.SR))]
+    check("a bird's chirp falls, as the sparrows' do",
+          _bfr[0] > _bfr[1] * 2 ** (300 / 1200.0),
+          "  (%+.0f cents over its first 80 ms)" % (1200 * _math.log2(_bfr[1] / _bfr[0])))
 
     def _rh(f0=261.63, vel=100, cls=_T.RhodesProperties):
         return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)

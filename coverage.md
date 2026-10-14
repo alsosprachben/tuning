@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 7 | 5% |
+| 2 specific, theory | 1 | 1% |
 | 3 specific, theory + ear | 14 | 11% |
-| 4 specific, reference audio | 107 | 84% |
+| 4 specific, reference audio | 113 | 88% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -355,13 +355,13 @@ plays Standard, as does any program that is not a set.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 120 | Guitar Fret Noise | `GuitarFretNoise` | **3** | its own class -- slide, squeak and position shift; reworked against Ben's ear |
-| 121 | Breath Noise | `BreathNoise` | **2** | its own class, theory |
+| 121 | Breath Noise | `BreathNoise` | **4** | FITTED TO TWO TAKES OF BREATHING (Freesound, CC0; examples/breath_fit.py): a breath has no pitch, so no series -- it had been 64 partials at the key dithered into noise, its colour following the key, brightest at 16 kHz -- but a noise table of the breaths' own colour from 250 Hz up (under it the takes are the breath on the microphone), held for the note and swelling in. Roland's tone here is 'Fl. Keyclick' (SC-55 p.67); this follows GM's name. Ben: good |
 | 122 | Seashore | `Seashore` | **4** | VCSL ocean drum (CC0, examples/seashore_fit.py): a hiss of its measured colour on its slow irregular swell, and the beads' ticks above 8 kHz one by one. Ben: sounds great |
-| 123 | Bird Tweet | `BirdTweet` | **2** | a CHIRP: a nearly pure tone whose pitch RISES (tension_bend negative, where the synth drum's is positive), repeated four times -- 999 Hz climbing to a written 1047 |
-| 124 | Telephone Ring | `TelephoneRing` | **2** | a BELL struck 21 times a second by a clapper alternating between two gongs. The thing in the room, not the 440+480 Hz ringback the exchange sends the caller |
-| 125 | Helicopter | `Helicopter` | **2** | the BLADE PASSING FREQUENCY: a sawtooth at 16.3 Hz with partials every 16.3 up to 1 kHz. The only voice whose fundamental is below hearing -- the series above it IS the sound |
-| 126 | Applause | `Applause` | **2** | its own class, theory |
-| 127 | Gunshot | `Gunshot` | **2** | an N-wave whose length the key sets (its spectrum peaks on the key), the tail the room, standing back at 127's distance. Published measurements, no recording |
+| 123 | Bird Tweet | `BirdTweet` | **4** | FITTED TO THREE BIRDS (Freesound, CC0; examples/bird_fit.py): the chirp FALLS -- house sparrows' cheeps drop ~900-1300 cents in 100-140 ms, a white-crowned sparrow's trill notes 150-600 cents, 68-120 ms apart -- where the class had it rising a major third; four chirps at the trill's spacing, each gone before the next, nearly pure (h2 -30 dB, h3 -40). GS has one Bird tone (SC-55 p.68). Ben: sounds fine |
+| 124 | Telephone Ring | `TelephoneRing` | **4** | FITTED TO BELL TELEPHONES (Freesound, CC0; examples/phone_fit.py): TRP's two gongs struck one at a time, a Stromberg-Carlson and a Western Electric ringing -- the Bell System's pair in all three, 437 cents apart (the class had them 9), each a dome's modes with its own decay, levels to the ringing phones within ~1 dB; one clapper striking each gong 20 times a second (the ringing current), the other between, LOOSELY -- each stroke its own offset (~5 ms), phase and level, where a grid locked the dings (Ben); ringing on ~24 dB/s after the burst. Ben: sounds good |
+| 125 | Helicopter | `Helicopter` | **4** | FITTED TO THREE PASSES (Freesound, CC0; examples/heli_fit.py): the blade passes' harmonics from 80 Hz to ~5 kHz (300 of them) with the rotor's wash under them as noise rows, together within 0.7 dB rms an octave, and the chop 11.0 dB against the passes' 11.2 -- a bare saw had put its energy under 40 Hz, nothing past 1 kHz, a 35 dB chop. The note picks the rotor (four octaves down). Ben: sounds good |
+| 126 | Applause | `Applause` | **4** | FITTED TO THREE AUDIENCES (Freesound, CC0; examples/applause_fit.py): CLAPS, the hand clap's own noise burst (GM 39's, fitted) fired ~274 times a second through the note at levels within 13 dB -- every octave 125 Hz-16 kHz within 1 dB, the 5 ms level's swing 3.3 dB sd as theirs (a wash's 0.8). Damped-sine grains were tried and pinged ('seashore drips'). Heard in the hall against crisper and wider-spread variants: the fitted kept (Ben) |
+| 127 | Gunshot | `Gunshot` | **4** | an N-wave whose length the key sets, standing back at 127's distance with the room its tail; and FITTED (examples/gunshot_fit.py) to a 9 mm at 15 m (Freesound, CC0): the blast's own noise beside the N-wave, which alone fell ~6 dB an octave where the shot falls ~3 -- every octave of the first 20 ms within 1 dB but 125 Hz, the 5-20 ms boom -3.5 dB against -3.8. Heard in the hall. Ben: sounds good |
 
 ## Stops: the registers within a program
 
@@ -535,7 +535,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `RideBell` -- 53 Ride Bell (4)
         - `RideCymbal` -- 51 Ride Cymbal 1 (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
-      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (2)
+      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4)
       - `MembraneDrum`
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
@@ -567,9 +567,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
         - `Timpani` -- GM 47 Timpani (4)
       - `MetalPercussion`
-        - `BirdTweet` -- GM 123 Bird Tweet (2)
+        - `BirdTweet` -- GM 123 Bird Tweet (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
-        - `TelephoneRing` -- GM 124 Telephone Ring (2)
+        - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4)
       - `NoiseDrum` [NoisyPercussionMixin]
         - `HandClap` -- 39 Hand Clap (4)
@@ -615,7 +615,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `MoogChiffLead` -- GM 83 Lead 4 (chiff) (4)
         - `FifthsLead`
           - `MoogFifthsLead` -- GM 86 Lead 7 (fifths) (4)
-        - `Helicopter` -- GM 125 Helicopter (2)
+        - `Helicopter` -- GM 125 Helicopter (4)
         - `MoogSawLead` -- GM 81 Lead 2 (sawtooth) (4)
         - `SquareSynth`
           - `MoogSquareLead` -- GM 80 Lead 1 (square) (4)
@@ -684,8 +684,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SynthVoice`
           - `MoogSynthVoice` -- GM 54 Synth Choir (3)
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (3)
-    - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (2)
-      - `Applause` -- GM 126 Applause (2)
+    - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
+      - `Applause` -- GM 126 Applause (4)
       - `Seashore` -- GM 122 Seashore (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)

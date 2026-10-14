@@ -3949,9 +3949,17 @@ def prepare(path, tuner='hybrid440', sink=None):
             # together. Drawn from the note itself, so a render repeats.
             _bursts = [(0.0, 0.0)]
             _nfl = int(getattr(props, 'strike_flam', 0) or 0)
+            # ...OR A CROWD (strike_flam_rate: bursts a second through the
+            # whole held note -- an audience's claps), each at its own instant
+            # and level within strike_flam_db
+            _frate = getattr(props, 'strike_flam_rate', 0.0) or 0.0
+            _fspan = props.strike_flam_s
+            if _frate > 0.0:
+                _fspan = max(0.0, (noff - non) / SR)
+                _nfl = max(2, int(round(_frate * _fspan)))
             if _nfl > 1:
                 _frng = random.Random(int(round(on * 1e6)) * 131 + note * 7 + ch)
-                _bursts = [(_frng.uniform(0.0, props.strike_flam_s), -_frng.uniform(0.0, props.strike_flam_db))
+                _bursts = [(_frng.uniform(0.0, _fspan), -_frng.uniform(0.0, props.strike_flam_db))
                            for _ in range(_nfl)]
                 _t0 = min(b[0] for b in _bursts); _l0 = max(b[1] for b in _bursts)
                 _bursts = [(t - _t0, l - _l0) for t, l in _bursts]
@@ -4601,7 +4609,17 @@ def prepare(path, tuner='hybrid440', sink=None):
                     _pi, _pspan = _phrase_of(ch, on) if _spans_part else (0, None)
                     _uv = () if (_spans_part and (ch, _pi) in _SPANNED) \
                         else props.unison_voices(f0, m, dbps)
+                    _udrop = getattr(props, 'unison_drop_late', False)
+                    _ofm = getattr(props, 'unison_onset_fraction_max', 0.25)
                     for ui, (gm, off_hz, dr, ud, uph) in enumerate(_uv):
+                        # A STRIKE THE NOTE DOES NOT REACH, OR THAT MISSES THIS
+                        # MODE, IS NOT EMITTED (unison_drop_late: a telephone's
+                        # clapper strikes for as long as the ring is written,
+                        # and each stroke rings one gong) -- not moved to the
+                        # note's end, where a short ring's later strokes piled
+                        if _udrop and (gm <= 0.0 or (onsets and ui + 1 < len(onsets)
+                                                     and onsets[ui + 1] >= _ofm * dur)):
+                            continue
                         vb = props.voice_vibrato(f0, ui + 1)
                         _VB[0], _VB[1], _VB[2] = vb if vb else (0.0, 5.5, 0.0)
                         uf, ulr = unison_partial(hf, off_hz, dr, ud)
@@ -4622,7 +4640,6 @@ def prepare(path, tuner='hybrid440', sink=None):
                         # section's scatter must not begin after a short note
                         # ends, but a telephone's clapper strikes for the whole
                         # ring. See SynthProperties.unison_onset_fraction_max.
-                        _ofm = getattr(props, 'unison_onset_fraction_max', 0.25)
                         non_u = non_r + (min(onsets[ui+1], _ofm*dur)*SR
                                          if (onsets and ui+1 < len(onsets)) else 0.0)
                         noff_u = noff

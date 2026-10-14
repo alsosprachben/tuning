@@ -1083,6 +1083,9 @@ class SynthProperties:
     strike_flam = 0
     strike_flam_s = 0.055
     strike_flam_db = 13.0
+    # ...or, strike_flam_rate > 0, that many strikes a SECOND scattered
+    # through the whole held note (an audience: every hand its own clap)
+    strike_flam_rate = 0.0
     # A LATE STRIKE: the strike (strike_noise_db) fired strike_noise_at seconds
     # after the onset rather than at it, its table moved strike_noise_cal_db.
     # A muted surdo's hand: the beater is the note's own strike, and the hand
@@ -2294,6 +2297,10 @@ class SynthProperties:
     # the ring lasts, so its strikes must span the whole note and not its first
     # quarter. See TelephoneRingProperties.
     unison_onset_fraction_max = 0.25
+    # ...and a voice whose strikes run on a fixed clock (a telephone's
+    # clapper) drops a strike the note does not reach, and one with no gain
+    # for this mode, rather than moving it to the note's end
+    unison_drop_late = False
 
     # WHAT THE WRITTEN NOTE MEANS, in octaves. Zero for every instrument: a
     # written C sounds a C. A HELICOPTER is not an instrument -- its "pitch" is
@@ -16135,7 +16142,7 @@ class CrashCymbal1Properties(CymbalProperties):
     bloom_scatter = 1.0
     initial_gain = 0.120310
 
-class TelephoneRingProperties(MetalPercussionProperties):
+class TelephoneRingProperties(ModeDecays, MetalPercussionProperties):
     """GM 124. A BELL STRUCK TWENTY TIMES A SECOND, which is what a telephone is.
 
     Ben: "Telephone ring is just a percussion instrument repeated, like the bell
@@ -16158,50 +16165,83 @@ class TelephoneRingProperties(MetalPercussionProperties):
     -- otherwise the bell rings for the first quarter of each burst and then
     sits silent, which is not a telephone.
 
+    MEASURED (examples/phone_fit.py; sources.md "Sound effects"): TRP's two
+    gongs struck one at a time, and a Stromberg-Carlson 1543 and a Western
+    Electric 500 ringing -- the same Bell System pair in all three. Not a
+    pair a few cents apart: two gongs 437 cents apart (~1615 and ~1254 Hz),
+    each a dome's modes (2.6x, 4.7x, 7.2x its own note), the lower one
+    carrying the most of its energy up in them; struck by one clapper
+    ALTERNATELY, each gong every 50 ms -- the 20 Hz ringing current -- the
+    other between; ringing on ~24 dB/s once the burst stops. The note is
+    gong A's pitch (G6 + ~35 cents on the phones).
+
     THE CADENCE IS THE SCORE'S, not the voice's. British ring is two short
     bursts and a long gap, American one long burst and a longer gap, and a voice
     that baked either in would be wrong wherever it went. The note IS the burst.
     """
-    # A small steel gong pair. Two gongs tuned slightly apart is what gives a
-    # telephone its warble, and the second is a cent-level offset rather than a
-    # separate mode -- so it is in the taps below, not here.
-    # NOT ALSO STRETCHED. MetalPercussionProperties carries an
-    # inharmonicity coefficient of 0.026, and a stated mode set riding a
-    # stiffness stretch on top of it lands at neither -- which is exactly
-    # the bug that put the steelpan's octave 66 cents sharp. The selftest
-    # check written for that caught this one before it was ever heard.
+    # THE TWO GONGS, A's modes then B's, as multiples of A's note: A at 1,
+    # 2.581, 4.643, 7.129; B (1254.3 / 1614.6 of A) at 1, 2.631, 4.747,
+    # 7.289, 10.246 of its own. Read off TRP's single strikes.
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
-    mode_ratios = (1.0, 2.76, 5.40, 8.93)
-    mode_gains = (1.0, 0.62, 0.30, 0.12)
-    max_harmonic = 4
+    mode_ratios = (1.0, 2.581, 4.643, 7.129, 0.7768, 2.0438, 3.6875, 5.6622, 7.9591)
+    GONG = (0, 0, 0, 0, 1, 1, 1, 1, 1)
+    # ...their levels calibrated through the renderer to the two ringing
+    # phones' mean in a burst (phone_fit.py calibrate: each mode within ~1 dB
+    # of the shape): A's 4.6x the loudest, B's own 4.7x next
+    mode_gains = (0.0596, 0.1083, 1.0, 0.2423, 0.179, 0.053, 0.8254, 0.0405, 0.1299)
+    # each mode's own decay, tonelib's D (half the band's dB/s): the low
+    # modes at the ring-out the ringing phones measure (~24 dB/s; a gong left
+    # alone rings at 9-14), the high ones at their own (43-83)
+    mode_decays = (12.0, 12.0, 22.0, 41.0, 12.0, 12.0, 12.0, 21.7, 36.7)
+    decay_register_slope = 0.0
+    max_harmonic = 9
 
-    # THE CLAPPER. About twenty strikes a second is a common armature rate;
-    # these are 48 ms apart, and they do not fall away, because an electromagnet
-    # does not get tired. Alternating gongs: the taps sit a few cents apart, the
-    # two bells the clapper is bouncing between.
-    ring_taps = tuple(0.048 * (i + 1) for i in range(18))
-    ring_detune_cents = 9.0     # the second gong
-    ring_gain = 0.92
-    unison_onset_fraction_max = 0.96
+    # THE CLAPPER: a stroke every 25 ms, alternating -- gong A on the even
+    # strokes (the note's own onset is A's), B on the odd; four seconds of
+    # them, the ones past the note's end dropped (unison_drop_late)
+    ring_period = 0.025
+    ring_taps = tuple(0.025 * (i + 1) for i in range(160))
+    ring_gain = 1.0
+    # ...AND A LOOSE ONE (Ben: "the recording seems to be more jittery in
+    # exactly the phase it re-hits the chime"): each gong's strokes come
+    # 45-51 ms apart scattering 7-11 ms sd on the two phones (the onset
+    # reading's own share in that), the clapper bouncing -- on a grid, every
+    # stroke landed at the same phase of the ring and the dings locked. So
+    # each stroke its own offset (ring_jitter_s sd), phase and level
+    # (ring_level_db, uniform under), drawn from the stroke's number and the
+    # pitch: a ring repeats exactly, a different key differs.
+    ring_jitter_s = 0.005
+    ring_level_db = 4.0
+    unison_onset_fraction_max = 1.0
+    unison_drop_late = True
 
-    decay_db = 26.0             # each strike is short: the next one is coming
-    harmonic_decay_db = 9.0
     sustain_level = 0.0
-    one_shot = False            # the ring lasts as long as it is written to
-    initial_gain = MetalPercussionProperties.initial_gain
+    # ...and it RINGS ON when the burst stops: the gongs are not damped by
+    # the note-off, they ring out
+    one_shot = True
+    # its level held at the old class's at a phone's own pitch (G#6, the
+    # loudest half-second): the energy now sits in the gongs' 7-9 kHz modes,
+    # and the strokes, no longer in phase, add 6.9 dB more
+    initial_gain = MetalPercussionProperties.initial_gain * 10 ** ((12.69 - 6.86) / 20.0)
+
+    def _stroke(self, frequency, i):
+        """Stroke i's (offset s, level factor, phase in cycles), fixed."""
+        r = _random.Random(int(round(frequency * 16.0)) * 7919 + i * 104729 + 124)
+        return (r.gauss(0.0, self.ring_jitter_s), 10.0 ** (-r.uniform(0.0, self.ring_level_db) / 20.0), r.random())
 
     def section_onsets_at(self, frequency):
-        return [0.0] + list(self.ring_taps)
+        return [0.0] + [max(0.001, t + self._stroke(frequency, i)[0]) for i, t in enumerate(self.ring_taps)]
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
-        # Alternate gongs: every other strike is the other bell.
+        # stroke i+1 rings gong (i+1) % 2: A on even strokes, B on odd -- at
+        # its own level and its own phase
+        g = self.GONG[harmonic - 1] if 1 <= harmonic <= len(self.GONG) else 0
         out = []
         for i in range(len(self.ring_taps)):
-            det = (2.0 ** (self.ring_detune_cents / 1200.0) - 1.0) if i % 2 else 0.0
-            out.append((self.ring_gain, 0.0, det, harmonic_decay, 0.0))
+            _, lv, ph = self._stroke(frequency, i)
+            out.append((self.ring_gain * lv if (i + 1) % 2 == g else 0.0, 0.0, 0.0, harmonic_decay, ph))
         return out
-
 
 class HelicopterProperties(SawtoothSynthProperties):
     """GM 125. THE BLADE PASSING FREQUENCY, which is a sawtooth at 15 Hz.
@@ -16231,7 +16271,10 @@ class HelicopterProperties(SawtoothSynthProperties):
     # Four octaves down: the note chooses the rotor, not the pitch.
     sounding_octaves = -4.0
 
-    max_harmonic = 64           # the audible sound is ALL harmonics, no fundamental
+    # the audible sound is ALL harmonics: to ~5 kHz (Ben: "could benefit
+    # from more harmonics"; at 80 they had stopped at 1.3 kHz, the wash alone
+    # above)
+    max_harmonic = 300
     decay_db = 0.0
     harmonic_decay_db = 0.0
     sustain_level = 1.0
@@ -16239,13 +16282,33 @@ class HelicopterProperties(SawtoothSynthProperties):
     speech_cycles = 0.0
     chiff_volume = 0.0
 
-    sustain_jitter = 0.75       # the wash: broader than any other voice here
+    sustain_jitter = 0.2        # a little life in the rotor; the wash is the rows below
     section_players = 1
     section_spread_cents = 0.0
     section_vibrato_cents = 0.0
 
-    initial_gain = 0.02         # balance-normalised below
+    # held at the old saw's level above 80 Hz at middle C (its energy had
+    # been sub-audible, at 16-40 Hz: level by what is heard)
+    initial_gain = 0.02 * 10 ** (1.85 / 20.0)
 
+    def harmonic_volume(self, harmonic):
+        # THE MEASURED SERIES (mode_gains), where the sawtooth's is a bare 1/n
+        # that never reads one
+        if not self.mode_gains:
+            return super().harmonic_volume(harmonic)
+        if harmonic > len(self.mode_gains):
+            return 0.0
+        return self.gain * self.mode_gains[harmonic - 1]
+    # MEASURED (examples/heli_fit.py; three CC0 passes, sources.md "Sound
+    # effects"): near the closest point the energy runs 80 Hz-1.3 kHz, little
+    # at 20-40, ~18 dB down by 2.5 kHz and ~40 by 5; the chop swings 7-13 dB,
+    # a steady wash under the blade passes. Ours had been a bare saw: its
+    # energy at 20-40 Hz, nothing past 1 kHz, a 35 dB chop. The series by
+    # octave and the wash (third-octave rows held for the note, 8.5 dB under
+    # the series where both are) fitted together: 0.7 dB rms over the
+    # octaves, the chop 11.0 dB against 11.2, the series to h300 (~5 kHz).
+    mode_gains = (0.010503, 0.005252, 0.093145, 0.069859, 0.049803, 0.041503, 0.035574, 0.031127, 0.027669, 0.057693, 0.052449, 0.048078, 0.04438, 0.04121, 0.038462, 0.036058, 0.033937, 0.032052, 0.030365, 0.052203, 0.049717, 0.047457, 0.045394, 0.043503, 0.041763, 0.040156, 0.038669, 0.037288, 0.036002, 0.034802, 0.033679, 0.032627, 0.031638, 0.030708, 0.02983, 0.029002, 0.028218, 0.027475, 0.026771, 0.018548, 0.018096, 0.017665, 0.017254, 0.016862, 0.016487, 0.016129, 0.015786, 0.015457, 0.015141, 0.014838, 0.014548, 0.014268, 0.013999, 0.013739, 0.01349, 0.013249, 0.013016, 0.012792, 0.012575, 0.012365, 0.012163, 0.011967, 0.011777, 0.011593, 0.011414, 0.011241, 0.011073, 0.010911, 0.010753, 0.010599, 0.01045, 0.010305, 0.010163, 0.010026, 0.009892, 0.009762, 0.009635, 0.009512, 0.008233, 0.00813, 0.00803, 0.007932, 0.007836, 0.007743, 0.007652, 0.007563, 0.007476, 0.007391, 0.007308, 0.007227, 0.007147, 0.00707, 0.006994, 0.006919, 0.006846, 0.006775, 0.006705, 0.006637, 0.00657, 0.006504, 0.00644, 0.006377, 0.006315, 0.006254, 0.006194, 0.006136, 0.006079, 0.006022, 0.005967, 0.005913, 0.00586, 0.005807, 0.005756, 0.005705, 0.005656, 0.005607, 0.005559, 0.005512, 0.005466, 0.00542, 0.005375, 0.005331, 0.005288, 0.005245, 0.005203, 0.005162, 0.005121, 0.005081, 0.005042, 0.005003, 0.004965, 0.004927, 0.00489, 0.004854, 0.004818, 0.004782, 0.004748, 0.004713, 0.004679, 0.004646, 0.004613, 0.00458, 0.004548, 0.004517, 0.004486, 0.004455, 0.004425, 0.004395, 0.004365, 0.004336, 0.004307, 0.004279, 0.004251, 0.004223, 0.004196, 0.004169, 0.001518, 0.001509, 0.001499, 0.00149, 0.001481, 0.001471, 0.001462, 0.001454, 0.001445, 0.001436, 0.001427, 0.001419, 0.001411, 0.001402, 0.001394, 0.001386, 0.001378, 0.00137, 0.001362, 0.001354, 0.001347, 0.001339, 0.001332, 0.001324, 0.001317, 0.00131, 0.001303, 0.001296, 0.001289, 0.001282, 0.001275, 0.001268, 0.001261, 0.001255, 0.001248, 0.001242, 0.001235, 0.001229, 0.001222, 0.001216, 0.00121, 0.001204, 0.001198, 0.001192, 0.001186, 0.00118, 0.001174, 0.001169, 0.001163, 0.001157, 0.001152, 0.001146, 0.001141, 0.001135, 0.00113, 0.001124, 0.001119, 0.001114, 0.001109, 0.001104, 0.001099, 0.001093, 0.001088, 0.001084, 0.001079, 0.001074, 0.001069, 0.001064, 0.001059, 0.001055, 0.00105, 0.001046, 0.001041, 0.001036, 0.001032, 0.001028, 0.001023, 0.001019, 0.001014, 0.00101, 0.001006, 0.001002, 0.000997, 0.000993, 0.000989, 0.000985, 0.000981, 0.000977, 0.000973, 0.000969, 0.000965, 0.000961, 0.000957, 0.000954, 0.00095, 0.000946, 0.000942, 0.000939, 0.000935, 0.000931, 0.000928, 0.000924, 0.00092, 0.000917, 0.000913, 0.00091, 0.000906, 0.000903, 0.0009, 0.000896, 0.000893, 0.000889, 0.000886, 0.000883, 0.00088, 0.000876, 0.000873, 0.00087, 0.000867, 0.000864, 0.000861, 0.000857, 0.000854, 0.000851, 0.000848, 0.000845, 0.000842, 0.000839, 0.000836, 0.000833, 0.000831, 0.000828, 0.000825, 0.000822, 0.000819, 0.000816, 0.000814, 0.000811, 0.000808, 0.000805, 0.000803, 0.0008, 0.000797, 0.000795)
+    breath_noise_db = ((20, -60.2), (25, -60.2), (32, -60.2), (40, -31.7), (50, -31.7), (63, -31.7), (80, -32.7), (101, -32.7), (127, -32.7), (160, -25.4), (202, -25.4), (254, -25.4), (320, -20.3), (403, -20.3), (508, -20.3), (640, -23.2), (806, -23.2), (1016, -23.2), (1280, -24.4), (1613, -24.4), (2032, -24.4), (2560, -33.1), (3225, -33.1), (4064, -33.1), (5120, -56.0), (6451, -56.0), (8127, -56.0), (10240, -71.1), (12902, -71.1), (16255, -71.1))
 
 class BirdTweetProperties(MetalPercussionProperties):
     """GM 123. A CHIRP: a nearly pure tone whose pitch sweeps, fast.
@@ -16268,49 +16331,49 @@ class BirdTweetProperties(MetalPercussionProperties):
     of the identity as the sweep -- so this uses the telephone's clapper
     mechanism at a bird's rate. Four chirps in a third of a second.
 
-    ASSERTED, NOT MEASURED, and the gap is worth naming: real birdsong sweeps
-    are not exponential settles, they are arbitrary contours, and several
-    species sweep DOWN or up-then-down. This is one chirp shape standing in for
-    a very large family.
+    MEASURED (examples/bird_fit.py; three CC0 takes, sources.md "Sound
+    effects"), and the sweep had been backwards: house sparrows' cheeps fall
+    ~900-1300 cents in 100-140 ms (4.2-6.3 kHz down to 2.3-3.3, a brief lift
+    first), a white-crowned sparrow's trill notes 150-600 cents in 50-100 ms,
+    68-120 ms apart. A syrinx is nearly pure: h2 ~30 dB down, h3 ~40. So each
+    chirp starts high and FALLS to the written pitch, the chirps at the
+    trill's spacing, level. Real contours are a family; this is its middle.
     """
-    # Two partials and a whisper of a third: a syrinx is close to a sine.
-    # NOT ALSO STRETCHED. MetalPercussionProperties carries an
-    # inharmonicity coefficient of 0.026, and a stated mode set riding a
-    # stiffness stretch on top of it lands at neither -- which is exactly
-    # the bug that put the steelpan's octave 66 cents sharp. The selftest
-    # check written for that caught this one before it was ever heard.
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
     mode_ratios = (1.0, 2.0, 3.0)
-    mode_gains = (1.0, 0.09, 0.02)
+    mode_gains = (1.0, 0.032, 0.01)          # h2 -30 dB, h3 -40: measured
     max_harmonic = 3
 
-    # UP a major third in a tenth of a second, and it is the sweep that makes it
-    # a bird. Negative: start flat, climb to the written pitch.
-    tension_bend = -0.20
-    tension_bend_max = 0.30
+    # DOWN nearly an octave in a tenth of a second: start 75% sharp and
+    # settle to the written pitch. Not scaled by register (a bird is not a
+    # string: the sweep is the call's, at 4 kHz as at 2) nor by velocity.
+    tension_bend = 0.75
+    tension_bend_max = 0.80
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
     tension_settle_time = 0.035
     tension_settle_cutoff = 0.4
 
-    chirp_taps = (0.085, 0.170, 0.255)
+    chirp_taps = (0.11, 0.22, 0.33)
     unison_onset_fraction_max = 0.92
     chirp_gain = 0.85
 
-    decay_db = 16.0
+    # each chirp gone ~25 dB before the next, as the trill's are
+    decay_db = 150.0
     harmonic_decay_db = 6.0
     sustain_level = 0.0
     one_shot = False
-    initial_gain = MetalPercussionProperties.initial_gain
+    # its level held at the old chirps' over the phrase (short chirps carry
+    # less): +10.4 dB
+    initial_gain = MetalPercussionProperties.initial_gain * 10 ** (10.4 / 20.0)
 
     def section_onsets_at(self, frequency):
         return [0.0] + list(self.chirp_taps)
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
-        # Each chirp a little higher than the last, as a bird's phrase rises.
-        return [(self.chirp_gain, 0.0, 2.0 ** (0.9 * (i + 1) / 12.0) - 1.0,
-                 harmonic_decay, 0.0)
-                for i in range(len(self.chirp_taps))]
-
+        # the trill's notes level: each chirp at the written pitch
+        return [(self.chirp_gain, 0.0, 0.0, harmonic_decay, 0.0) for _ in self.chirp_taps]
 
 class ReverseCymbalProperties(CrashCymbal1Properties):
     """GM 119. The fitted crash (CrashCymbal1Properties: 300 modes from Iowa,
@@ -20889,7 +20952,9 @@ class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):
     # BALANCE. Unmeasured, the wash came out 16 dB over a trumpet -- a broadband
     # voice fills far more of the spectrum than a tone of the same peak does.
     # Levelled to the orchestra like everything else.
-    initial_gain = 1.0 / 28395
+    # ...and held there by the table now (the old series' level at C4,
+    # above 80 Hz); the same at every key, a breath having none
+    initial_gain = 1.0 / 28395 * 10 ** (78.46 / 20.0)
     max_harmonic = 64
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 45.0
     inharmonicity_dynamic = False
@@ -20900,7 +20965,20 @@ class BreathNoiseProperties(NoisyPercussionMixin, StoppedPipeProperties):
     sustain_jitter = 1.0           # the breath keeps moving while it is held
     hf_corner_hz = 7000.0
     mode_lock_spread = 0.0
-
+    # NO PITCH (examples/breath_fit.py; two CC0 takes of breathing, sources.md
+    # "Sound effects"): a breath's colour is the same whatever key, so the
+    # series is silent -- it had been 64 partials at the key dithered into
+    # noise, its colour following the key, brightest at 16 kHz -- and the
+    # breath is the noise table, held for the note and swelling in, as the
+    # seashore's is
+    max_harmonic = 1
+    mode_ratios = (1.0,)
+    mode_gains = (0.0,)
+    inharmonicity_coefficient = 0.0
+    chiff_volume = 0.0
+    sustain_jitter = 0.0
+    breath_noise_fade_s = 0.128
+    breath_noise_db = ((63, -51.0), (80, -51.0), (101, -51.0), (127, -51.0), (160, -51.0), (202, -51.0), (250, -31.0), (315, -29.4), (397, -25.4), (500, -25.0), (630, -25.0), (794, -31.0), (1000, -27.5), (1260, -21.1), (1587, -24.7), (2000, -30.5), (2520, -29.3), (3175, -29.3), (4000, -25.8), (5040, -27.1), (6350, -25.2), (8000, -25.3), (10079, -25.9), (12699, -21.1), (16000, -20.8))
 
 class SeashoreProperties(BreathNoiseProperties):
     """GM 122. The sea as the orchestra makes it: an OCEAN DRUM, beads rolled
@@ -20956,8 +21034,27 @@ class ApplauseProperties(BreathNoiseProperties):
     chiff_min_valve_time = 0.02    # claps start; they do not swell
     chiff_max_valve_time = 0.06
     chiff_release = 0.5
-    initial_gain = BreathNoiseProperties.initial_gain
-
+    # held at the old wash's level above 80 Hz (C4, the loudest half-second)
+    initial_gain = 1.0 / 28395 * 10 ** (51.2 / 20.0)
+    # THE WASH OFF: an audience is its claps (below), not the breath's
+    # noise bed -- a measured mode set of one silent mode
+    mode_gains = (0.0,)
+    breath_noise_db = ()            # the breath's own table is the breath's
+    # THE CLAPS (examples/applause_fit.py; three CC0 audiences, sources.md
+    # "Sound effects"): energy peaking at 1-2 kHz, falling 10-20 dB by 8
+    # kHz; the level over 5 ms swinging 3.3 dB sd (a wash's 0.8) -- claps
+    # landing. Each the hand clap's own burst (HandClapProperties: noise rows
+    # a third octave apart, dying in a few ms), fired strike_flam_rate times
+    # a second through the note at levels within strike_flam_db. Damped sines
+    # had been tried first: pings, "more like seashore drips than distinct
+    # claps" (Ben). Its colour and rate fitted to the audiences.
+    strike_noise_db = ((101, -27.6), (127, -35.6), (160, -26.0), (202, -22.2), (254, -19.5), (320, -14.8), (404, -3.2), (509, -4.6), (641, -3.7), (808, -1.0), (1018, 6.8), (1282, 3.3), (1616, 6.3), (2036, 5.9), (2565, 4.9), (3232, -3.8), (4072, -2.7), (5131, -7.4), (6465, -6.6), (8145, -8.1), (10263, -3.6), (12930, -11.5))
+    strike_noise_dbs = 600.0
+    strike_noise_fade_s = 0.0005
+    strike_noise_octave_db = 0.0
+    strike_noise_len_s = 0.05
+    strike_flam_rate = 274.2
+    strike_flam_db = 13.0
 
 N_WAVE_PEAK = 0.6626     # an N-wave of length T peaks in spectrum at this / T
 
@@ -20997,7 +21094,6 @@ def pulse_series(T, t0, period, fmax, taper):
     _PULSE_CACHE[key] = out
     return out
 
-
 class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     """GM 127. A crack: everything at once and then gone. One-shot, because
     nothing about releasing a key stops a gunshot -- and the six of them in
@@ -21015,7 +21111,9 @@ class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     # supposed to be the loudest thing in the piece, but not to swamp it.
     # x3.57 for the N-wave: the same energy over the shot's first 100 ms as
     # the click it replaced, which carried 11 dB more at 1/13.
-    initial_gain = 3.57 / 13
+    # ...and the blast's noise beside it given back (-2.8 dB at G3, the
+    # first 100 ms): the shot keeps its place over the orchestra
+    initial_gain = 3.57 / 13 * 10 ** (-2.8 / 20.0)
     max_harmonic = 72
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 60.0
     tonal_dampening = 0.12         # flattest of all: no pitch survives
@@ -21062,11 +21160,25 @@ class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     pulse_fmax = 18000.0
     pulse_taper = 12000.0
 
+    # ...AND THE BLAST'S NOISE BESIDE IT (examples/gunshot_fit.py;
+    # johanwestling's 9 mm at 15 m, CC0, sources.md "Sound effects"): the
+    # shot falls only ~3 dB an octave above its 125-250 Hz peak, -20 dB at 16
+    # kHz, where the N-wave alone falls ~6 -- 9-17 dB short at 2-16 kHz --
+    # and holds -4 dB at 5-20 ms, the boom, where the N-wave alone is -16.
+    # Third-octave rows by octave and their fall fitted on the first 20 ms at
+    # G3: every octave within 1 dB but 125 Hz (ours 7 over, the N-wave's own
+    # peak), the 5-20 ms window -3.5 against -3.8. The tail past it is the
+    # room's, as above.
+    strike_noise_db = ((50, -17.8), (63, -17.8), (79, -17.8), (100, -40.1), (126, -40.1), (159, -40.1), (200, -24.2), (252, -24.2), (317, -24.2), (400, -30.1), (504, -30.1), (635, -30.1), (800, -21.4), (1008, -21.4), (1270, -21.4), (1600, -21.8), (2016, -21.8), (2540, -21.8), (3200, -24.7), (4032, -24.7), (5080, -24.7), (6400, -22.7), (8063, -22.7), (10159, -22.7), (12800, -30.2), (16127, -30.2))
+    strike_noise_dbs = 188.8
+    strike_noise_fade_s = 0.0002
+    strike_noise_octave_db = 0.0
+    strike_noise_len_s = 0.3
+
     def pulse_length(self, f_key):
         """The N-wave's length, in seconds, for a key of f_key Hz."""
         lo, hi = self.pulse_ms_range
         return min(hi, max(lo, 1000.0 * N_WAVE_PEAK / max(f_key, 1.0))) / 1000.0
-
 
 class SynthTone(BaseTone):
     synth_id = 0
