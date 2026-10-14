@@ -3028,6 +3028,9 @@ def prepare(path, tuner='hybrid440', sink=None):
     _PUSH_PEND = [None]
     _PUSH_SEG = []          # (first row, speech class, pitch) per rank that speaks as itself
     _PUSH_ROWS = []
+    # THE KEY-UP'S OWN ROWS (release_click_*): an event AT note-off, so live
+    # leaves them out of the note's stamp and stamps them at the key-up
+    _REL_ROWS = []
     _PUSH_T0 = {}           # channel -> when its bellows' push began (a note from silence)
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
@@ -4658,6 +4661,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         # clicks quietly. Voices that leave release_click_db at None -- every
         # voice but this one -- emit nothing and cost nothing.
         cdb = getattr(props, 'release_click_db', None)
+        _rel0 = len(A['om'])
         if cdb is not None and props.release_click_modes:
             cg = gain * (10.0 ** (cdb / 20.0))
             cdec = math.log(T.db_ratio(props.release_click_decay_db))
@@ -4692,6 +4696,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                                  max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
                                  cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0,
                                  ph0=_jph)
+        if len(A['om']) > _rel0:
+            _REL_ROWS.append((_rel0, len(A['om'])))
     _REV[0] = None
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
     _push_finish(_PUSH_PEND[0])
@@ -4996,7 +5002,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                 fader_rows=dict(_LROW),      # THE CHANNEL FADER: {channel: row}
                 # which rows are sympathetic strings' (live's meend leaves them
                 # at their own pitch: Live._meend_retune)
-                sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP))
+                sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP),
+                rel_rows=list(_REL_ROWS))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep

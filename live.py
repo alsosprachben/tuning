@@ -2558,6 +2558,29 @@ class Patch:
                 if t["cof"] is not None:
                     cols["cof"] = t["cof"][msk]     # ...and when each drawbar's contact closes
                 t["ranks"][nm] = (cols, int(msk.sum()), t["hrel"][msk])
+        # THE KEY-UP'S ROWS (blockrender's rel_rows: release_click_*) are an
+        # event AT note-off; stamped with the note they would sound at every
+        # PRESS, since a stamp moves each row's onset to it. So they leave the
+        # note and become their own one-shot, stamped at the key-up
+        # (_note_off). The organ path stamps by rank and never stamps them.
+        t["rel"] = None
+        _rr = [(a_, min(b_, int(t["P"]))) for a_, b_ in (p.get("rel_rows") or ()) if a_ < int(t["P"])]
+        if _rr and not self.organ:
+            msk = np.zeros(int(t["P"]), bool)
+            for a_, b_ in _rr:
+                msk[a_:b_] = True
+            per_row = [k for k, v in t.items()
+                       if isinstance(v, np.ndarray) and v.shape[:1] == (int(t["P"]),)]
+            rel = {k: t[k][msk] for k in per_row}
+            n_rel = int(msk.sum())
+            rel["P"] = n_rel
+            # its own onset is its anchor: the stamp puts it at the key-up
+            rel["dur"] = int(rel["noff"].max() - rel["non"].min()) if n_rel else 0
+            rel["oneshot"] = True
+            for k in per_row:
+                t[k] = t[k][~msk]
+            t["P"] = int((~msk).sum())
+            t["rel"] = rel
         t["vel"] = vel
         return t
 
@@ -3022,6 +3045,7 @@ class Live:
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
+        self.held_tmpl = {}     # (pid, ch, note) -> (template, scale): its key-up event
         self.mod = {}           # channel -> current vibrato depth (fraction)
         self.trem_depth = {}    # pid -> current tremolo/pan depth (fraction)
         self.detune_step = {}   # pid -> which pre-warmed detune the wheel is on
@@ -4172,6 +4196,8 @@ class Live:
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
+        if tmpl.get("rel"):
+            self.held_tmpl[(part.pid, ch, note)] = (tmpl, scale)
         # A LAYERED MOOG (moog.layers_of): the same knob-neutral template again
         # for its second Messenger, under the SAME key -- so everything below,
         # and note-off, acts on both -- each stamp's rows reading its own panel.
@@ -5583,9 +5609,29 @@ class Live:
                 self._reg_damper(part, ch, n0, released=note)   # every choir's damper falls
         else:
             self.slab.release((part.pid, ch, note, None), n0)
+            self._key_up_event(part, ch, note, n0)
             if self.reg_enabled:
                 self.slab.release((part.pid, ch, note, self.REG_FORCED), n0)
                 self._reg_damper(part, ch, n0, released=note)
+
+    def _key_up_event(self, part, ch, note, n0):
+        """The mechanism letting go (tonelib release_click_*): the template's
+        key-up rows, stamped now as a one-shot at the note's own level."""
+        st = self.held_tmpl.pop((part.pid, ch, note), None)
+        if st is None:
+            return
+        tmpl, scale = st
+        rel = tmpl.get("rel")
+        if not rel or not rel["P"]:
+            return
+        key = (part.pid, ch, note, "keyup")
+        if not self.slab.stamp_cols(rel, rel["P"], key, n0, scale, rel["hrel"], rel["dur"], True):
+            return
+        got = list(self.slab.last_slots)
+        self.slab.live.pop(key, None)       # it retires on its own; never released
+        _cp = self.cpan.get(ch, T.GM_DEFAULT_PAN)
+        if _cp != T.GM_DEFAULT_PAN:
+            self.slab.repan(got, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
 
     def _half_moon(self, ch, pitch):
         """Step the rotor ladder on a wheel flick. See PW_FIRE.
@@ -13575,15 +13621,21 @@ def selftest():
     # traps the string against the anvil -- so its comb RISES through the
     # audible range instead of notching inside it.
     check("...it is struck at the string's own end, so the comb rises",
-          cv.strike_point > 0.0 and 1.0 / cv.strike_point > 24.0
+          cv.strike_point > 0.0 and 1.0 / cv.strike_point > 20.0
           and cv.strike_fills_with_force is False,
           "  (first null at partial %.0f; a piano notches at %.0f)"
           % (1.0 / cv.strike_point, 1.0 / _T.GrandPianoProperties.strike_point))
+    # Measured (clav_fit.py, the Aalto D6): its bass holds h2-h8 at or over
+    # the fundamental -- Bb2 about +4 dB on average -- where a plucked
+    # harpsichord's fall away; up the keyboard the D6 darkens fast.
     up = lambda q: 10 * _math.log10(sum((q.harmonic_volume(h) / q.harmonic_volume(1)) ** 2
-                                        for h in range(2, 17)))
-    check("...which makes it buzz where a harpsichord rings",
-          up(cv) > up(hc) + 3.0,
-          "  (%+.1f dB above the fundamental against %+.1f)" % (up(cv), up(hc)))
+                                        for h in range(2, 9)) / 7.0)
+    cvb = _T.ClavinetProperties(116.5, 0.0, (100 / 127.0) ** 2, 1.0)
+    hcb = _T.HarpsichordProperties(116.5, 0.0, (100 / 127.0) ** 2, 1.0)
+    check("...which makes its bass buzz where a harpsichord's rings",
+          up(cvb) > 0.0 and up(cvb) > up(hcb) + 3.0,
+          "  (Bb2, h2-h8 %+.1f dB re h1 on average against %+.1f; the take's ~+4)"
+          % (up(cvb), up(hcb)))
     # THE MAGNET, which the harpsichord voice it borrowed did not have at all.
     check("...and it has pickups, which the harpsichord has none of",
           cv.pickup_points and cv.pickup_velocity is True
@@ -13593,8 +13645,10 @@ def selftest():
     # No other voice here does this: a guitar's nut is fixed, so its fraction is.
     lo = _T.ClavinetProperties(65.4, 0.0, 1.0, 1.0).pickup_points[0]
     hi = _T.ClavinetProperties(1046.5, 0.0, 1.0, 1.0).pickup_points[0]
+    # (the DAFx-12 geometry: the centre pickup 18.5 cm from the termination
+    # under F1 to 6.5 under E6, on strings from ~1 m to ~0.25 m)
     check("...whose fraction climbs toward the treble, unlike any other voice",
-          hi > lo * 1.8 and _T.ElectricGuitarProperties.pickup_points
+          hi > lo * 1.4 and _T.ElectricGuitarProperties.pickup_points
           == _T.ElectricGuitarProperties(82.4, 0.0, 1.0, 1.0).pickup_points,
           "  (%.3f at C2, %.3f at C6; a guitar's does not move)" % (lo, hi))
     # The paper: the key, its rebound and the tangent on the anvil mask the
@@ -13603,6 +13657,66 @@ def selftest():
           cv.chiff_volume > 0.0 and cv.strike_noise_slope > 0.0
           and cv.chiff_max_valve_time < 0.01,
           "  (%.0f ms of broadband, rising with velocity)" % (1000 * cv.chiff_max_valve_time))
+
+    # THE KEY LETTING GO (release_click_*, measured on the D6's key-ups): an
+    # event AT note-off. Live builds each note's template from a rendered note,
+    # and a stamp moves every row's onset to the PRESS, so its key-up rows are
+    # split off and stamped at the key-up (_key_up_event) -- never at the press.
+    def _keyup_run(click):
+        was = _T.ClavinetProperties.release_click_db
+        _T.ClavinetProperties.release_click_db = was if click else None
+        lvk = Live(program=7, rate=48000, frames=128, verbose=False); lvk.warm()
+        out = []
+        def _pk(sec):
+            for _ in range(int(sec * 48000) // 128):
+                b, _f = lvk.callback(None, 128, None, 0)
+                out.append(np.frombuffer(b, np.float32)[0::2].astype(float))
+        lvk.on_midi(mido.Message("note_on", channel=0, note=52, velocity=100)); _pk(0.6)
+        lvk.on_midi(mido.Message("note_off", channel=0, note=52, velocity=0)); _pk(0.3)
+        lvk.renderer.close()
+        _T.ClavinetProperties.release_click_db = was
+        return np.concatenate(out)
+    _ka, _kb = _keyup_run(True), _keyup_run(False)
+    _kd = _ka - _kb
+    _seg = lambda x, a, b: 10 * _math.log10(np.mean(x[int(a * 48000):int(b * 48000)] ** 2) + 1e-30)
+    check("the clavinet's key-up thumps at the key-up, live, and not at the press",
+          _seg(_kd, 0.0, 0.59) < -200.0 and -50.0 < _seg(_kd, 0.6, 0.65) - _seg(_kb, 0.0, 0.05) < -20.0,
+          "  (before the key-up %.0f dB; after it %+.1f dB re the strike)"
+          % (_seg(_kd, 0.0, 0.59), _seg(_kd, 0.6, 0.65) - _seg(_kb, 0.0, 0.05)))
+
+    # THE ELECTRIC PIANOS' REGISTER, LEVEL (octave_gain): the swing fitted for
+    # timbre is far wider in the bass and the level had ridden on it -- the
+    # Rhodes 43 dB from C2 to C7. Gwazda's Wurlitzer DI holds within ~5 dB from
+    # C2 to F#5, and a voiced Rhodes is set as even.
+    def _lvl(prog, key, v=100):
+        """A rendered note's level, rms over its first 300 ms (dB): read off a
+        render, not the layers at the strike -- a wide bass swing's
+        fundamental starts low and builds, which the strike undercounts."""
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=prog, time=0))
+        _t.append(mido.Message("note_on", channel=0, note=key, velocity=v, time=0))
+        _t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=768))
+        _L, _R = B.render(_m)[:2]
+        y = 0.5 * (np.asarray(_L, np.float64) + np.asarray(_R, np.float64))
+        i0 = int(np.flatnonzero(np.abs(y) > 0.01 * np.abs(y).max())[0])
+        return 10 * _math.log10(np.mean(y[i0:i0 + int(0.3 * B.SR)] ** 2) + 1e-30)
+    _sp = {}
+    for _pg, _nm in ((4, "Rhodes"), (5, "Wurlitzer")):
+        _ls = [_lvl(_pg, k) for k in (36, 48, 60, 72)]
+        _sp[_nm] = max(_ls) - min(_ls)
+    check("the electric pianos are level across C2-C5, as the instrument is voiced",
+          all(v < 8.0 for v in _sp.values()),
+          "  (spread at v100: %s dB)" % ", ".join("%s %.1f" % kv for kv in _sp.items()))
+    # ...and a hard bass note is never quieter than a softer one: past the
+    # swing's ceiling the level law divides by the swing the tine makes, not
+    # the one velocity^p would have made (C2 had grown QUIETER v96-v127, just
+    # as its buzz arrived). Past v96 the extra swing goes into the buzz and
+    # the flattened, building fundamental, so the level itself barely moves.
+    _rc = [_lvl(4, 36, v) for v in (64, 96, 112, 127)]
+    check("a Rhodes bass note does not lose level as it is struck harder",
+          _rc[-1] >= max(_rc) - 0.5 and _rc[0] < _rc[-1] - 2.0,
+          "  (C2 at v64 96 112 127: %s dB re v127)" % " ".join("%+.1f" % (v - _rc[-1]) for v in _rc))
 
     # ---- and the tone rockers on the wheel ----------------------------------
     # Six switches sit left of a D6's keyboard; four of them are the tone
