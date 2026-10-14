@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 14 | 11% |
+| 2 specific, theory | 12 | 9% |
 | 3 specific, theory + ear | 14 | 11% |
-| 4 specific, reference audio | 100 | 78% |
+| 4 specific, reference audio | 102 | 80% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -163,8 +163,8 @@ plays Standard, as does any program that is not a set.
 | 1 | Bright Acoustic Piano | `UprightPiano` | **4** | an UPRIGHT, measured (VSCO-2 CE, Ivy Audio's): inharmonicity by partial peaks (short wound bass 4-9x the grand's, the scale break at C#3-F3), spectrum, decay with its late tail and register levels fitted per key (examples/upright_fit.py), a hammer contact shortening with force. A small board's brightness, which GM's name asks for; the grand voiced hard is kept as a voicing. Ben: very close, then great once the attack's knee went in |
 | 2 | Electric Grand Piano | `ElectricGrand` | **2** | a CP-70: short strings so 12x the bass stretch, no soundboard, a piezo on the bridge. Derived, no reference |
 | 3 | Honky-tonk Piano | `HonkyTonk` | **3** | the measured upright (GM 1) with the tuner's hand off: unisons 8-20 cents, CC1 the wheel. The upright is fitted; the detune is judged from beat rates, not measured |
-| 4 | Electric Piano 1 | `Rhodes` | **2** | Rhodes. Built on two papers' high-speed-camera measurements, but NO audio fitted |
-| 5 | Electric Piano 2 | `Wurlitzer` | **2** | Wurlitzer. Same machinery, 1/d pickup; no audio fitted |
+| 4 | Electric Piano 1 | `Rhodes` | **4** | FITTED TO LEARMAN'S 1977 MARK I off the harp connector (jRhodes3d, CC BY-NC, measured only; examples/rhodes_fit.py), on what his EQ cancels -- the growl a harder layer adds, the hard attack's first 50 ms, the bark's fade, the decay (a tine sings 3-4x longer than we had it), the bass h1 BUILDING for seconds (F1 peaks 3.9 s in): the paper's own pickup (DAFx-17), a point tip over the magnet's frustum face on an arc, so a wide bass swing spikes each half cycle; each harmonic a sum of decaying layers, the swing's power series, at its true phase. Then voiced by ear: a forte that buzzes in the bass, mf untouched, and the buzz dying away faster than the tone (a wide swing damps faster). Ben, live: good and distinct from the Wurlitzer |
+| 5 | Electric Piano 2 | `Wurlitzer` | **4** | FITTED TO GWAZDA'S BALTIWURLI, a 200A (measured only; examples/wurli_fit.py), DI and speaker sets, the takes the recording's clipper spared: the reed swings through a SLOT in the plate (Pfeifle & Muenster, DAFx-17), a square-edged bump, not the one-sided 1/d first read (ladder h2-h32 14.6 -> 10.8 dB rms) -- centred it loses the fundamental; each harmonic's envelope a signed sum of exponentials, so a wide bass swing buzzes to h32 against the edges and its fundamental builds back as the swing decays (the lingering low attack, Ben); each layer at its true phase in the wave (in phase, a flat top came out lopsided); the reed's decay by register (log-rate 0.35); the action's thump from the Mech set, at the pack's own mix. Not modelled: a fixed ring near 387 Hz from E5 up. Ben: better on the low buzz; kept; live, good and distinct from the Rhodes |
 | 6 | Harpsichord | `Harpsichord` | **4** | FITTED TO VCSL'S HARPSICHORDS (CC0; examples/harpsi_fit.py): the English Normal and Lute sets and the Flemish High and Low, each stop measured as its difference from the 8' on one instrument, so the room drops out. A STRING BANK, like the piano: every choir on a key is present, each slightly apart in cents, stiffness and partial tuning, and the stops (the CC11 word, rated below) choose which the jacks pluck; a key lifts every damper, so the undrawn choirs ring through the bridge. The quill plucks at fixed force, so the comb never fills and there are no dynamics. The ladder and body over the whole band, partials to 16 kHz, the decay by band (log-rate error 0.96 -> 0.65), random partial phases (in phase they swept like a phaser, Ben), and the quill's catch before it slips (3.5-6 ms, measured). Ben: sounds great |
 | 7 | Clavinet | `Clavinet` | **2** | its own voice: struck at the anvil, magnetic pickups whose fraction climbs with pitch. No reference |
 
@@ -489,8 +489,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `MutedGuitar` -- GM 28 Electric Guitar (muted) (4)
       - `OverdrivenGuitar` -- GM 29 Overdriven Guitar (4)
     - `ElectricPiano`
-      - `Rhodes` -- GM 4 Electric Piano 1 (2)
-      - `Wurlitzer` -- GM 5 Electric Piano 2 (2)
+      - `Rhodes` -- GM 4 Electric Piano 1 (4)
+      - `Wurlitzer` -- GM 5 Electric Piano 2 (4)
     - `GuitarFretNoise` [NoisyPercussionMixin, FormantBody] -- GM 120 Guitar Fret Noise (3)
     - `Harp` [FormantBody] -- GM 46 Orchestral Harp (4)
     - `HarpsiBase` [FormantBody]

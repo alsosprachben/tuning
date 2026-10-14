@@ -4851,12 +4851,15 @@ class ElectricPianoProperties(PluckedStringProperties):
         221 dB down, and by 0.5 it is 14.6 dB OVER the octave.
 
       * HARMONIC k GROWS AS A^k, so if the tine's deflection decays at D dB/s
-        then harmonic k decays at k*D. That is already this engine's decay law
-        (harmonic_decay_db * h, with decay_db and harmonic_decay_dampening both
-        zero), so the growl fading into a bell as the note rings -- the Rhodes'
-        whole signature -- costs nothing and needs no time-varying spectrum.
-        Fitted slopes of log a_k against log A: 0.992, 1.995, 2.993, 3.995,
-        4.994, 5.995, against a wanted 1..6.
+        then harmonic k decays at k*D -- to leading order. Exactly, harmonic k
+        is a power series in A with the powers k, k+2, k+4..., so its envelope
+        is a signed sum of exponentials at k*D, (k+2)*D...; each term is a
+        partial of its own, a layer at harmonic k's pitch (_pickup_layers).
+        For a gentle bell curve the first term is nearly all of it (fitted
+        slopes of log a_k against log A: 0.992, 1.995, 2.993, 3.995, 4.994,
+        5.995, against a wanted 1..6), and the growl fades into a bell as the
+        note rings -- the Rhodes' whole signature -- with no time-varying
+        spectrum. A curve with edges (the Wurlitzer's slot) needs the rest.
 
     And because one sine through a waveshaper gives an EXACTLY HARMONIC series,
     none of this goes near tubeamp -- which exists precisely because distortion
@@ -4904,8 +4907,10 @@ class ElectricPianoProperties(PluckedStringProperties):
     pickup_deflection = 0.25      # swing at velocity 127, middle register
     pickup_deflection_max = 1.10  # past this the tine has left the field
     deflection_register_slope = -0.50   # per octave: low tines swing wider
-    pickup_harmonics = 16         # the curve is spent long before this
-    pickup_floor_db = -90.0       # and the tail below this is not worth a partial
+    deflection_velocity_power = 1.0     # swing as velocity^this
+    swing_damping = 0.0                 # extra decay of a wide swing (_pickup_layers)
+    pickup_harmonics = 16         # a bell curve is spent long before this
+    pickup_floor_db = -90.0       # and a layer below this is not worth a partial
 
     # ---- the tonebar ----------------------------------------------------
     # Fitted to the nine tine/tonebar pairs in ISMA 2014 Table 1 (16% rms).
@@ -4927,7 +4932,7 @@ class ElectricPianoProperties(PluckedStringProperties):
 
     # ---- the ring -------------------------------------------------------
     # decay_db and harmonic_decay_dampening MUST stay at zero: that is what
-    # makes the inherited law exactly k*D, which is what A^k demands.
+    # makes each layer's law exactly n*D, which is what A^n demands.
     decay_db = 0.0
     harmonic_decay_dampening = 0.0
     harmonic_decay_db = 10.0
@@ -4953,59 +4958,151 @@ class ElectricPianoProperties(PluckedStringProperties):
             self.pickup_offset = float(ep_voicing)
         f0 = float(frequency)
         tb = self.tonebar_hz_coeff * (f0 ** self.tonebar_hz_power)
-        # A Gaussian's harmonics fall off a CLIFF -- at a middle-register
-        # velocity the 10th is already 133 dB down -- so carrying the whole
-        # series would spend partials on nothing. Trim to where the curve dies.
-        series = self._pickup_series()
-        top = self.pickup_harmonics
-        if series[0] > 0.0:
-            floor = series[0] * (10.0 ** (self.pickup_floor_db / 20.0))
-            while top > 1 and series[top - 1] < floor:
-                top -= 1
-        self._series = series[:top]
+        # EACH HARMONIC AS THE SWING DECAYS (pickup_layers). The reed's swing
+        # falls as A0 e^{-Dt}, and harmonic k of the pickup's curve at swing A
+        # is a power series in A with only the powers k, k+2, k+4... So its
+        # envelope is EXACTLY a sum of exponentials at k D, (k+2) D, ...,
+        # signed -- not one exponential at k D, which holds only where the
+        # curve is gentle. Through a slot the bark at a wide swing collapses
+        # while the fundamental, flattened at first, comes back: each term a
+        # layer, a mode at harmonic k's pitch with its own decay and sign.
+        self._layers = self._pickup_layers()
+        top = len(self._layers)
         self.pickup_harmonics = top
-        self.mode_ratios = (tuple(float(m) for m in range(1, top + 1))
+        self.mode_ratios = (tuple(float(q[0]) for q in self._layers)
                             + tuple(tb * r / f0 for r in self.tonebar_mode_ratios))
         self.max_harmonic = len(self.mode_ratios)
 
     def pickup_flux(self, u):
-        """Flux through the coil with the tine u from the axis. The curve IS the
-        instrument, so this is the one thing a subclass must answer."""
+        """Flux through the coil with the tine u from the axis, u an array. The
+        curve IS the instrument, so this is the one thing a subclass must
+        answer."""
         raise NotImplementedError
+
+    def _flux_key(self):
+        """What else the curve depends on, for the layers' cache."""
+        return ()
 
     def _deflection(self):
         """How far the tine swings, in units of the field's width.
 
-        Proportional to hammer velocity, and wider at the bottom of the compass.
-        attack_volume is the GM square law, so velocity is its square root."""
+        As hammer velocity to deflection_velocity_power, and wider at the
+        bottom of the compass. attack_volume is the GM square law, so velocity
+        is its square root."""
         a = (self.pickup_deflection
              * (2.0 ** (self.deflection_register_slope * self.octave_position))
-             * _sqrt(max(self.attack_volume, 1e-4)))
+             * _sqrt(max(self.attack_volume, 1e-4)) ** self.deflection_velocity_power)
         return min(a, self.pickup_deflection_max)
 
-    def _pickup_series(self):
-        """What the coil makes of one sine: the harmonics of the waveshaped flux."""
-        a = self._deflection()
-        key = (type(self).__name__, round(self.pickup_offset, 4), round(a, 4),
-               self.pickup_harmonics, ep_control)
+    # The terms of each harmonic's envelope (n = k, k+2, ...); past
+    # pickup_layer_terms the rest is folded into the fit.
+    pickup_layer_terms = 4
+    # ...and none past this: the DI takes hold nothing much over ~7 kHz (E4 at
+    # MF is -95 dB by h32, 10.5 kHz), and a C4's h48 at 12.5 kHz was 4 layers
+    # of nothing. The bass's buzz (C2's h32, 2 kHz) is far under it.
+    pickup_max_hz = 7000.0
+
+    def _pickup_layers(self):
+        """[(k, n, w, phase)]: harmonic k's envelope as the sum of w e^{-n D t},
+        fitted to its signed level along the swing's decay -- the coil's EMF,
+        -dPhi/dt, so times k (the magnet's +6 dB/octave). Layers under
+        pickup_floor_db of the loudest dropped."""
+        import numpy as np
+        a0 = self._deflection()
+        key = (type(self).__name__, round(self.pickup_offset, 4), round(a0, 4),
+               self.pickup_harmonics, self.pickup_layer_terms, ep_control,
+               getattr(self, 'pickup_slot_q', None), getattr(self, 'pickup_slot_p', None),
+               self._flux_key(), self.swing_damping,
+               round(self.frequency_x * (2.0 ** self.octave_position), 2))
         out = _EP_PICKUP_CACHE.get(key)
         if out is not None:
             return out
-        n = 256
-        x0 = self.pickup_offset
-        flux = (lambda u: u) if ep_control else self.pickup_flux
-        phi = [flux(x0 + a * _sin(2.0 * _pi * i / n)) for i in range(n)]
-        s = []
-        for k in range(1, self.pickup_harmonics + 1):
-            re = sum(phi[i] * _cos(2.0 * _pi * k * i / n) for i in range(n)) * 2.0 / n
-            im = sum(phi[i] * _sin(2.0 * _pi * k * i / n) for i in range(n)) * 2.0 / n
-            # The coil reads the EMF, -dPhi/dt, and differentiation multiplies
-            # partial k by k. This is the magnet's +6 dB/octave, arrived at the
-            # same way pickup_velocity does it for a guitar.
-            s.append(k * _sqrt(re * re + im * im))
-        out = tuple(s)
+        # The swing, A/A0, as it decays -- sampled GEOMETRICALLY in time from the
+        # strike: a bass tine's swing loses 0.1 of its log in the first second,
+        # so an even grid over its whole fall (to e^-7) left the attack between
+        # two points, free for cancelling weights to do anything in.
+        xs = np.exp(-np.concatenate(([0.0], np.geomspace(1e-4, 7.0, 63))))
+        th = 2.0 * np.pi * np.arange(256) / 256
+        flux = (lambda u: u) if ep_control else self.pickup_flux     # numpy in, numpy out
+        # ...and a wide swing loses itself faster than a small one (the tine
+        # flexed hard, its air and its mount): dA/dt = -(D + D2 A^2) A, so with
+        # x = e^{-Dt}, A = A0 x / sqrt(1 + rho A0^2 (1 - x^2)), rho = D2/D per
+        # field-width squared. The buzz a wide swing makes collapses while the
+        # tone the small swing makes sings on (Ben: the buzz's sustain was too
+        # much, even low). 0 is the linear law.
+        rho = self.swing_damping
+        sw = a0 * xs / np.sqrt(1.0 + rho * a0 * a0 * (1.0 - xs * xs))
+        F = np.array([flux(self.pickup_offset + a * np.sin(th)) for a in sw])
+        layers = []
+        J = self.pickup_layer_terms
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        kmax = self.pickup_harmonics
+        if self.pickup_max_hz:
+            kmax = max(1, min(kmax, int(self.pickup_max_hz / f0)))
+        for k in range(1, kmax + 1):
+            c = (F * np.exp(-1j * k * th)).mean(1) * 2.0
+            ref = c[0] if abs(c[0]) > 1e-15 else c[np.argmax(np.abs(c))]
+            sgn = np.real(c * np.conj(ref)) / max(abs(ref), 1e-30)    # signed, along its start
+            # WHICH POWERS. Small, harmonic k is A^k, A^(k+2)... -- but a swing
+            # several widths wide is not small, and there harmonic k hardly
+            # moves as the swing decays (a bass tine's h30 is 0.5 dB down after
+            # 80 ms): four near-equal fast powers could only fake that with big
+            # weights of opposite sign, cancelling at the strike and drifting
+            # apart -- the hard attack's top came in 10-15 dB thin and swelled
+            # over 50-80 ms (Ben: "the hard attack is not quite full"). So each
+            # harmonic chooses its J powers, greedily, from the series' own and
+            # slower ones, its strike level held exactly (row 0, weighted).
+            cands = sorted({float(k + 2 * j) for j in range(J)}
+                           | {max(1.0, k / 2.0 ** i) for i in range(1, 6)}
+                           | {float(k * 2 ** i) for i in range(1, 4)})
+            pin = np.ones(len(xs))
+            pin[0] = 30.0
+            chosen, w = [], None
+            for _ in range(J):
+                best = None
+                for n in cands:
+                    if n in chosen:
+                        continue
+                    ns = chosen + [n]
+                    P = np.array([[x ** m for m in ns] for x in xs]) * pin[:, None]
+                    ww, *_ = np.linalg.lstsq(P.T @ P + 1e-9 * np.eye(len(ns)), P.T @ (sgn * pin),
+                                             rcond=None)
+                    r = float(np.sum((P @ ww - sgn * pin) ** 2))
+                    if best is None or r < best[0]:
+                        best = (r, n, ww)
+                chosen.append(best[1])
+                w = best[2]
+            # ...AND ITS PHASE in the wave: the coil reads -dPhi/dt, i k times
+            # the flux's coefficient, as cos(k theta + phase) -- the kernel's
+            # own form. All in phase, a slot's flat top came out a peak on one
+            # side (8-9 dB lopsided where the takes are within 2).
+            ph = float(np.angle(1j * ref))
+            for n, wj in sorted(zip(chosen, w)):
+                layers.append((k, n, float(k * wj), ph))
+        # The floor drops a HARMONIC, never one of its layers: a layer is half
+        # of a sum, and the other half alone is a different envelope.
+        lev = {}
+        for q in layers:
+            lev[q[0]] = lev.get(q[0], 0.0) + q[2]
+        top = max(abs(v) for v in lev.values()) or 1.0
+        floor = top * 10.0 ** (self.pickup_floor_db / 20.0)
+        out = tuple(q for q in layers if abs(lev[q[0]]) >= floor)
         _EP_PICKUP_CACHE[key] = out
         return out
+
+    def harmonic_level(self, k):
+        """Harmonic k's level at the strike: its layers summed (|sum of w|),
+        times the gain -- what harmonic_volume(k) meant before the layers."""
+        v = sum(q[2] for q in self._layers if q[0] == k)
+        return self.gain * abs(v) * self._level_law()
+
+    def mode_phase(self, harmonic):
+        """Where a layer starts: its harmonic's phase in the wave, and half a
+        turn more if its term is negative. 0 for the tonebar."""
+        if 1 <= harmonic <= self.pickup_harmonics:
+            k, n, w, ph = self._layers[harmonic - 1]
+            return ph + (_pi if w < 0.0 else 0.0)
+        return 0.0
 
     def series_volume(self, harmonic):
         # THE LEVEL FOLLOWS VELOCITY, NOT ITS SQUARE. attack_volume is (v/127)^2,
@@ -5014,15 +5111,26 @@ class ElectricPianoProperties(PluckedStringProperties):
         # in velocity. The growl is what keeps the square and steeper, since
         # harmonic k goes as A^k -- which is the measured behaviour: velocity
         # changes the sound more than it changes the volume.
-        av = max(self.attack_volume, 1e-4)
         np_, nb = self.pickup_harmonics, len(self.tonebar_gains)
         if harmonic < 1 or harmonic > np_ + nb:
             return 0.0
         if harmonic > np_:
             v = self.tonebar_gains[harmonic - np_ - 1] * self._deflection()
         else:
-            v = self._series[harmonic - 1]
-        return self.gain * v / av
+            v = abs(self._layers[harmonic - 1][2])
+        return self.gain * v * self._level_law()
+
+    def _level_law(self):
+        """What turns the swing's spectrum into a level that follows VELOCITY:
+        1/attack_volume undoes the GM square law, and a swing grown as
+        velocity^p (deflection_velocity_power) is taken back to velocity^1 --
+        the paper's claim, "a change in volume to lesser extent than in sound"
+        (ISMA 2014). Fitted at p 2.06 the Rhodes' level ran 30 dB over v35-127,
+        wider than a piano's 25, its growl only 16; this returns the level to
+        ~11 dB and leaves the growl, which is the swing's SHAPE, whole (Ben:
+        "restore the behavior"). At p 1 it is 1/attack_volume, as it was."""
+        av = max(self.attack_volume, 1e-4)
+        return _sqrt(av) ** (1.0 - self.deflection_velocity_power) / av
 
     def harmonic_decay(self, harmonic):
         if harmonic > self.pickup_harmonics:
@@ -5030,21 +5138,73 @@ class ElectricPianoProperties(PluckedStringProperties):
             # sinusoidal again 10-14 ms after the strike. No register factor --
             # a tick is a tick everywhere on the keyboard.
             return self.tonebar_decay_db
-        # k*D, because harmonic k of a waveshaped sine goes as A^k.
-        return super().harmonic_decay(harmonic)
+        # n*D for the layer's term A^n: the swing decays at D (one harmonic's
+        # small-signal rate, harmonic_decay_db re the register)
+        n = self._layers[harmonic - 1][1]
+        return self.harmonic_decay_db * n * self.decay_register_factor
 
 
 class RhodesProperties(ElectricPianoProperties):
-    """GM 4, Electric Piano 1: a Fender Rhodes. Electromagnetic, so a bell curve.
+    """GM 4, Electric Piano 1: a Fender Rhodes. Electromagnetic: a tine's tip
+    over a magnet's face.
 
     "The flattened sides of the frustum focuses the magnet field in the center
-    showing an approximate bell curve characteristic" (DAGA 2017). A Gaussian is
-    an extremely smooth nonlinearity, so its harmonics fall off a cliff -- at
-    equal drive h8 sits 120 dB down, against 86 for the Wurlitzer's pole. That
-    cliff is why a Rhodes bells where a Wurlitzer barks.
+    showing an approximate bell curve characteristic" (DAGA 2017) -- and so it
+    was first modelled, as a Gaussian. Against Learman's Mark I that could not
+    bark: a Gaussian's harmonics fall off a cliff however wide the swing. The
+    field is now the paper's own construction (DAFx-17; pickup_flux below), a
+    point tip over the frustum's face on an arc, whose tails let a wide bass
+    swing spike each half cycle -- the forte bark -- while a small one stays a
+    bell: the Rhodes' range between the two is velocity and register.
+
+    FITTED to Learman's 1977 Mark I off the harp connector (examples/
+    rhodes_fit.py), then voiced by ear for the style: a forte that buzzes,
+    and a buzz that dies away under the tone (pickup_deflection_max,
+    swing_damping).
     """
     # A struck tine keeps the pitch its length gives it.
     pitch_bendable = False
+
+    # FITTED to Learman's 1977 Mark I, harp connector (jRhodes3d, samples CC BY-NC,
+    # measured only; examples/rhodes_fit.py fit), on what his EQ cancels: the
+    # growl a harder layer adds over the softest, the bark's fade from the
+    # strike to 0.6-1.0 s, the hard layer's first 50 ms, h1-h3's decay, and
+    # when the bass's h1 peaks: 8.97 dB rms with the paper's pickup (attack
+    # 9.1, growl 9.7, bark 7.4, decay 4.2, build 1.0), where the Gaussian
+    # started at 19.2 without the attack. The takes' bass h1 BUILDS for seconds -- F1
+    # peaks 3.9 s in, D3 1.1 -- which is the bass tine swinging past the
+    # field's width: the fundamental flattened, coming back as the swing
+    # decays (_pickup_layers). So the swing is far wider than the paper-
+    # derived 0.25 had it, and grows faster than velocity (a hard layer's
+    # h3 is 35-50 dB over the softest's, re h1, where ours made 24).
+    pickup_offset = 0.531
+    pickup_deflection = 0.748
+    # THE PLAYING STYLE, SET BY EAR past the fit (which put this at 3.07):
+    # a forte that BUZZES. The ceiling only binds at the bottom of the
+    # keyboard played hard, so raising it adds bark to a hard bass note and
+    # leaves mf alone -- F1 at v120, h17-h32 -24 -> -10 dB re its loudest
+    # (Learman's takes -5), at v70 unchanged. Ben: "make sure we can have a
+    # buzz-enabled force, because that is the style of playing."
+    pickup_deflection_max = 4.5
+    deflection_register_slope = -1.080
+    deflection_velocity_power = 2.058
+    # ...and the buzz does not hang on: a wide swing loses itself faster than
+    # a small one (_pickup_layers), so the bark collapses while the tone sings
+    # on -- F1 hard, h17-h32 -10 dB at the strike, -22 by 1 s, -27 by 2 s,
+    # where the linear swing held -12 and -17. By ear (Ben: "the sustain of
+    # the buzz is actually too much, even on the low notes").
+    swing_damping = 0.15
+    # A tine sings 3-4 times longer than the 10 dB/s had it: B3's h1 at 3.8
+    # dB/s, A5's 7.9, C7's 34.
+    harmonic_decay_db = 4.139
+    decay_register_slope = 0.975
+    # THE BASS BUZZES FAR UP ITS SERIES. A hard bass layer holds h17-h32 at
+    # up to +10 dB re h1 and h33-h48 near 0 (B1), straight off the harp --
+    # no amp to drive -- a swing many field-widths wide crossing the
+    # magnet's peak as a sharp pulse each half cycle. The bell curve's h16
+    # stopped it dead (Ben: "not doing the bright, metallic buzz on the low
+    # notes" at mf and f). pickup_max_hz still bounds the treble.
+    pickup_harmonics = 48
 
     cabinet = "rhodes"
     # The panel calls it vibrato; it is a stereo PAN between the suitcase's two
@@ -5053,31 +5213,83 @@ class RhodesProperties(ElectricPianoProperties):
     tremolo_depth = 0.60
     tremolo_stereo = True
 
+    # THE PICKUP AS THE PAPER BUILDS IT (Pfeifle & Muenster, DAFx-17, 5.4).
+    # The tine's tip is a POINT moving over the magnet's face, and the field
+    # there is a magnetic charge sheet on the face's real profile -- B_z =
+    # integral of sigma dz / |r|^3 over it (their eq. 7) -- a FRUSTUM: a flat
+    # top (half-width 1, the unit every length here is in), its sides sloping
+    # away from the tine, pickup_side wide and pickup_side_depth deep. And the
+    # tip does not swing on a line but on an ARC about the tine's fixing
+    # (their eq. 8): at deflection d its gap is pickup_gap + r - sqrt(r^2 -
+    # d^2), nearest mid-swing, drawing back at the ends -- so a wide bass
+    # swing crosses the face close and leaves it far, a sharp spike each half
+    # cycle. r is the tine's free length, longer down the keyboard: a
+    # cantilever of one diameter goes as f ~ 1/L^2, so r = tine_arc *
+    # 2^(-octave/2). The earlier one-line curves (a Gaussian; then
+    # (1 + |u|^p)^-q) could not make the hard bass's spike: crest factor 7-9
+    # dB where Learman's takes have 10-13, h17-h48 10-24 dB short (Ben: "the
+    # paper model made the biggest leaps").
+    pickup_gap = 0.491
+    pickup_side = 0.713
+    pickup_side_depth = 1.413
+    tine_arc = 33.9
+
+    def _flux_key(self):
+        return (self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc)
+
     def pickup_flux(self, u):
-        return _exp(-u * u)
+        import numpy as np
+        u = np.asarray(u, dtype=float)
+        r = max(self.tine_arc, 2.0) * 2.0 ** (-0.5 * self.octave_position)
+        g = max(self.pickup_gap, 0.02)
+        d = np.clip(u - self.pickup_offset, -0.999 * r, 0.999 * r)
+        z = g + r - np.sqrt(r * r - d * d)
+        q = self._face()
+        return self._field(u, z, q) / self._field(np.zeros(1), np.full(1, g), q)[0]
+
+    def _face(self):
+        """The face's profile, sampled: (x, height, dx), height 0 on the flat
+        top and falling away from the tine down the sides."""
+        import numpy as np
+        sd = max(self.pickup_side, 0.05)
+        e = 1.0 + sd
+        x = np.linspace(-e, e, 241)
+        h = -max(self.pickup_side_depth, 0.0) * np.clip((np.abs(x) - 1.0) / sd, 0.0, 1.0)
+        return x, h, x[1] - x[0]
+
+    @staticmethod
+    def _field(X, Z, q):
+        import numpy as np
+        x, h, dx = q
+        dz = Z.reshape(-1, 1) - h
+        out = (dz / ((X.reshape(-1, 1) - x) ** 2 + dz * dz) ** 1.5).sum(1) * dx
+        return out.reshape(np.shape(X))
 
 
 class WurlitzerProperties(ElectricPianoProperties):
-    """GM 5, Electric Piano 2: a Wurlitzer. Electrostatic, so a pole.
+    """GM 5, Electric Piano 2: a Wurlitzer. Electrostatic, through a slot.
 
     Not a Rhodes with a filter on it -- a different instrument sharing one
     mechanism. Both are a struck steel bar whose sound is made by its pickup;
-    what differs is the CURVE, and two structural facts follow from it.
+    what differs is the CURVE.
 
-    A ONE-SIDED PLATE IS ASYMMETRIC WHEREVER THE REED SITS. "A steel plate
-    impacted by a hammer vibrates as an electrode of a capacitor... analogous to
-    a capacitor microphone, the capacity varies inversely proportional to the
-    distance between the electrodes" (DAGA 2017). A Rhodes' magnet is symmetric
-    about the tine, which is why centring it kills the fundamental and why
-    voicing it is a real adjustment. A Wurlitzer's plate is on ONE side of the
-    reed, so 1/d is lopsided at every rest position and there is no centred
-    case to find. pickup_offset survives as the gap, not as a voicing screw.
+    THE REED SWINGS THROUGH A SLOT IN THE PLATE. "A steel plate impacted by a
+    hammer vibrates as an electrode of a capacitor" (DAGA 2017), and the plate
+    "has cutouts at the position of the reed for each note... the reeds are
+    designed to vibrate freely between the symmetric cutouts" (DAFx-17). So
+    the capacitance is a square-edged bump about the plate's plane, symmetric
+    like the Rhodes' magnet -- centred, the fundamental goes -- and the reed
+    rests off the plane, pickup_offset, a voicing as the tine's is. This was
+    first read as a one-sided plate's 1/d, a pole; fitted to the DI takes the
+    slot wins on every count (the comments at pickup_offset and pickup_slot_q).
 
-    AND A POLE DOES NOT FALL OFF A CLIFF. A Gaussian is entire, so the Rhodes'
-    harmonics collapse faster and faster -- h2 at -4 dB, h8 at -104, h12 at
-    -195. 1/d has a pole, so its harmonics fall GEOMETRICALLY, about 10 dB each:
-    -6, -25, -47, -69, -92, -116 at the same drive. That straight line in dB is
-    the bark, and it is the whole difference between the two instruments.
+    A SQUARE EDGE BUZZES, AND THE BUZZ DECAYS BACK INTO THE TONE. A wide bass
+    swing crosses the slot's edges: the fundamental is flattened and its energy
+    thrown up the series, to h32 and past at C2. As the swing decays the reed
+    falls back inside the slot and the fundamental comes back up -- the bass's
+    slow, lingering attack. Each harmonic's envelope is therefore a signed sum
+    of exponentials, not one (ElectricPianoProperties._pickup_layers), which
+    is the "non-exponential decay" the DAGA paper reports.
 
     NO TONEBAR. "The reeds vibrate freely, providing a surface area large enough
     to produce a measurable change in capacitance" -- there is no second prong
@@ -5085,13 +5297,13 @@ class WurlitzerProperties(ElectricPianoProperties):
     attack and tonebar_gains is empty. A Wurlitzer's attack is the hammer, not a
     ringing bar.
 
-    WHAT IS NOT MODELLED. "The specific pickup geometry leads to a highly
-    complex decay characteristic showing interesting effects like non-exponential
-    decay characteristics and beating of higher partials" (DAGA 2017). Both are
-    real and neither is here: this voice decays exponentially, per partial, at
-    k*D like its sibling. The beating in particular would need the reed's own
-    higher modes, and the same paper's camera says the motion is "approximately
-    sinusoidal", so where it comes from is not settled by the measurement.
+    WHAT IS NOT MODELLED. The beating of higher partials (DAGA 2017): it would
+    need the reed's own higher modes, and the same paper's camera says the
+    motion is "approximately sinusoidal", so where it comes from is not settled
+    by the measurement. A fixed ring near 387 Hz (with 522, 655, 868, 924) in
+    the DI takes from E5 up, the same under every note: the reed bar, or the
+    undamped top reeds -- measured, not yet modelled. And the takes' 60 Hz
+    mains hum, which is the recording's.
 
     A NOTE ON THE SENSING CONVENTION, since it decides everything. Taken as
     charge on a fixed-voltage plate, the signal follows C and therefore 1/d, and
@@ -5100,26 +5312,58 @@ class WurlitzerProperties(ElectricPianoProperties):
     condenser microphone's whole virtue. The paper is explicit that the pickup is
     what shapes this instrument's timbre and that "higher velocity results in a
     richer harmonic sound", which only the first reading produces, so that is the
-    one followed. It is an interpretation of a circuit, not a measurement of one.
+    one followed; the slot's curve is then C against the reed's height.
     """
     # A struck reed, the same as the tine: nothing bends it.
     pitch_bendable = False
-    # Fitted the same way the Rhodes was, to a Wurlitzer's own register and
-    # velocity behaviour: barkier everywhere and much barkier dug into.
-    # 1.4 dB rms against five targets.
-    pickup_offset = 0.05          # the gap, not a voicing screw: see above
-    pickup_deflection = 0.50
-    pickup_deflection_max = 0.70  # u must stay well clear of the pole at -1
-    deflection_register_slope = -0.30
+    # THE PICKUP, FITTED to Gwazda's 200A DI (examples/wurli_fit.py pickup:
+    # every note's h2-h8 at P and MF and the two F takes the recording's
+    # clipper spared, at the strike and again at 0.6-1.0 s). The reed rests
+    # half a slot-width off the plate's plane and swings across it, wider down
+    # the keyboard. Against the one-sided 1/d curve, fitted the same way:
+    # the bass's fundamental now builds as the takes' do, peaking at ~1.07 s
+    # on C2 and G2 (the takes 1.07, 1.08; 1/d 0.1-0.3), and the middle's h5-h7
+    # come up to the takes', the odd ones the stronger (A3: -19 -26 -44
+    # against -18 -28 -27). Their plateau past h8 (-35 to -49 dB) is still
+    # under-made by a rounded slot; the square edges below (pickup_slot_p)
+    # bring it up.
+    # The swing goes as velocity itself: deflection_velocity_power fitted
+    # free with the swing came out 1.05 (11.48 -> 11.40 dB rms, nothing), so
+    # left at 1 -- where the Rhodes' tine wants 1.45.
+    pickup_offset = 0.568         # the reed's rest, off the plate's plane
+    pickup_deflection = 0.975
+    pickup_deflection_max = 2.339
+    deflection_register_slope = -0.760
 
     # A free reed with nothing bolted to it.
     tonebar_mode_ratios = ()
     tonebar_gains = ()
 
-    # It does not sing as long as a Rhodes: a small reed, a felt damper and no
-    # tonebar feeding energy back into it.
-    harmonic_decay_db = 16.0
-    decay_register_slope = 0.45
+    # THE REED'S DECAY, MEASURED (examples/wurli_fit.py decay, Gwazda's 200A
+    # DI, h1-h3 at MF and F): the k*D law holds -- harmonic k at k times the
+    # reed's rate -- but the rate DOUBLES AN OCTAVE, ~2 dB/s at C2 to ~44 at
+    # F#6. The bass sings far longer than the 16 dB/s here had it (14 at C2):
+    # log-rate rms 0.51 -> 0.35 refitted on the slot's layers, on the takes
+    # the recording's clipper left alone (wurli_fit.py: every F take below C7
+    # is clipped at -3 dBFS). harmonic_decay_db is the swing's own rate at the
+    # reference: each layer A^n falls n times it.
+    harmonic_decay_db = 7.13
+    decay_register_slope = 0.91
+
+    # THE ACTION: the hammer, the key and the damper, heard inside the case --
+    # a thump in the first tens of ms, 60 Hz to ~2 kHz, strongest at 240-480
+    # Hz, the same under every note (Gwazda's Mech set; examples/wurli_fit.py
+    # action). Its level under the speaker is the pack's own mix, -11.6 dB
+    # for the mechanical group against -1.4 for the speaker: the author's
+    # ear, not a measurement. Its fall, ~25-30 dB by 0.1 s. Fitted at the
+    # output, cabinet in, 20.4 -> 9.7 dB rms over the nine Mech takes (most
+    # of it each take's own scatter), the table smoothed: the real thump is
+    # heard in the room and this one passes through the speaker, so its top
+    # bands carry the cabinet's roll-off undone.
+    strike_noise_db = ((45, -13.5), (57, -11.4), (71, -10.3), (90, -13.0), (113, -19.1), (143, -26.9), (180, -32.3), (226, -31.9), (285, -29.2), (359, -28.3), (453, -28.1), (570, -26.2), (718, -22.3), (905, -18.5), (1140, -16.2), (1437, -15.8), (1810, -17.6), (2281, -20.5), (2874, -22.2), (3620, -20.6), (4561, -15.6), (5747, -8.2), (7241, -2.3), (9123, 1.0), (11494, 3.1))
+    strike_noise_slope = 0.0
+    strike_noise_dbs = 250.0
+    strike_noise_fade_s = 0.001
 
     cabinet = "wurlitzer"
     # A true amplitude tremolo, in ONE channel -- a Wurlitzer has one amplifier
@@ -5134,8 +5378,33 @@ class WurlitzerProperties(ElectricPianoProperties):
     # small cabinet's midrange doing what a small cabinet does.
     initial_gain = 0.31831274
 
+    # THE REED SWINGS THROUGH A SLOT. "The charged plate has cutouts at the
+    # position of the reed for each note of the instrument. The reeds are
+    # designed to vibrate freely between the symmetric cutouts" (Pfeifle &
+    # Muenster, DAFx-17; their capacitance is a field simulation through that
+    # geometry). So the capacitance peaks with the reed in the plate's plane
+    # and falls away either side -- a symmetric bump, (1 + u^2)^-q, u the
+    # reed's height off the plane in units of the slot's width, q the
+    # sharpness of its edges -- not a one-sided plate's 1/d, which the DAGA
+    # paper's sentence had been read as. A swing across the plane flattens
+    # the fundamental and throws its energy into the harmonics, the odd ones
+    # strongest off-centre: the bark, and Gwazda's DI's odd-harmonic plateau
+    # (-35 to -49 dB from h5 at MF) that 1/d could not make; as the swing
+    # decays the fundamental comes back (pickup_layers): the bass's slow,
+    # lingering attack (Ben).
+    pickup_slot_q = 0.905
+    # ...and how square its edges are: (1 + |u|^p)^-q, p 2 a Lorentzian. The
+    # takes' bass buzzes to h32 and past at MF (-16 to -41 dB at C2-G2,
+    # 1-2 kHz), where a rounded slot's series is spent by h16. Fitted on
+    # h2-h32 (wurli_fit.py pickup), the edges come out square-ish: 14.6 ->
+    # 11.5 dB rms (p 3.18), and 10.8 (p 2.59) refitted once the layers could
+    # follow a wide swing's attack (_pickup_layers: its powers chosen, the
+    # strike sampled densely).
+    pickup_slot_p = 2.589
+    pickup_harmonics = 48
+
     def pickup_flux(self, u):
-        return 1.0 / (1.0 + u)
+        return (1.0 + abs(u) ** self.pickup_slot_p) ** (-self.pickup_slot_q)
 
 
 

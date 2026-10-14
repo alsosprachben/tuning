@@ -64,6 +64,32 @@ Steel Drums,Woodblock,Taiko Drum,Melodic Tom,Synth Drum,Reverse Cymbal,
 Guitar Fret Noise,Breath Noise,Seashore,Bird Tweet,Telephone Ring,Helicopter,
 Applause,Gunshot""".replace("\n", "").split(",")
 
+# ...AND WHAT A VOICE IS MODELLED ON, where that is one instrument a word can
+# name (examples/gm_coverage.py has the measurements): shown in parentheses
+# after the GM name -- "Electric Piano 1 (Rhodes)". Display only; GM itself
+# stays the GM names (voice_ab.py makes file names of them).
+MODELLED = {0: "Steinway", 2: "CP-70", 4: "Rhodes", 5: "Wurlitzer", 7: "Clavinet",
+            16: "Hammond", 17: "Hammond", 18: "Hammond", 19: "Gr\u00f6nlund",
+            26: "Ibanez", 27: "Stratocaster", 28: "Ibanez", 29: "Ibanez", 30: "Ibanez",
+            80: "Moog", 81: "Moog", 107: "\u0110\u00e0n Tranh"}
+
+
+def gm_label(p):
+    if p >= len(GM):
+        return "?"
+    return GM[p] + (" (%s)" % MODELLED[p] if p in MODELLED else "")
+
+
+def gm_label_short(p, width):
+    """gm_label within a column: past it, the GM name's own qualifier goes
+    and Electric/Acoustic shorten -- "E. Guitar (Stratocaster)" -- so the
+    model still shows; the picker has the whole name."""
+    s = gm_label(p)
+    if len(s) <= width or p not in MODELLED:
+        return s
+    base = GM[p].split(" (")[0].replace("Electric ", "E. ").replace("Acoustic ", "A. ")
+    return "%s (%s)" % (base, MODELLED[p])
+
 # Every tuner in midilib.tuner_registry. This list was hand-kept and had drifted
 # four entries short of the registry -- hybrid440, the general default, among
 # them -- so it is now the registry, in the order the picker wants.
@@ -187,7 +213,7 @@ class Builder(threading.Thread):
 # remember. PATCH and TUNER are the only columns that cost a build.
 
 COLS = ("patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops")
-COL_W = {"patch": 24, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8,
+COL_W = {"patch": 33, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8,
          "tuner": 11, "touch": 6, "stops": 11}
 
 # Which columns open a picker on enter, and which take a typed value. Every
@@ -875,7 +901,7 @@ class TUI:
         # is the set. One not built says so, and plays Standard.
         sets = sorted(PM.DRUM_SETS)
         items = ["-- %s kit" % PM.drum_set_name(k) for k in sets] + \
-                ["%3d  %s" % (i, GM[i]) for i in range(len(GM))]
+                ["%3d  %s" % (i, gm_label(i)) for i in range(len(GM))]
         start = (sets.index(p.program) if p.drums and p.program in sets
                  else 0 if p.drums else len(sets) + p.program)
         pick = self.menu(scr, "patch for part %d" % (self.row + 1), items, start)
@@ -1652,7 +1678,7 @@ class TUI:
     def cell(self, p, c):
         if c == "patch":
             return ("-- %s kit" % PM.drum_set_name(p.program) if p.drums
-                    else "%3d %s" % (p.program, GM[p.program] if p.program < len(GM) else "?"))
+                    else "%3d %s" % (p.program, gm_label_short(p.program, COL_W["patch"] - 5)))
         if c == "ch":
             return "all" if p.channel is None else str(p.channel + 1)
         if c == "lo":
@@ -2004,7 +2030,7 @@ def patch_label(spec):
     if spec.get("drums"):
         return "%s kit" % PM.drum_set_name(spec.get("program", 0))
     p = spec.get("program", 0)
-    return GM[p] if p < len(GM) else str(p)
+    return gm_label(p) if p < len(GM) else str(p)
 
 
 # THE MESSENGER'S KNOBS, laid out as its panel is: (section, moog.PANEL name,

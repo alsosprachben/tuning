@@ -47,7 +47,9 @@ def band(cls, f0=261.63, vel=100, hmax=8):
     at two velocities would compare two different bands."""
     q = cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
     top = getattr(q, "pickup_harmonics", q.max_harmonic)
-    v = [q.harmonic_volume(h) if h <= top else 0.0 for h in range(1, hmax + 1)]
+    lv = getattr(q, "harmonic_level", None)
+    v = [lv(h) if lv else q.harmonic_volume(h) if h <= top else 0.0
+         for h in range(1, hmax + 1)]
     tot = math.sqrt(sum(x * x for x in v))
     up = math.sqrt(sum(x * x for x in v[1:]))
     return 20 * math.log10(tot), 20 * math.log10(up / v[0])
@@ -79,18 +81,22 @@ def main(argv):
                       (0.60, "well off the axis")):
         cls = type("V", (T.RhodesProperties,), {"pickup_offset": off})
         q = voice(261.63, 100, cls)
-        r = q.harmonic_volume(1) / q.harmonic_volume(2)
+        r = q.harmonic_level(1) / q.harmonic_level(2)
         print("   %.2f    %+8.1f dB   %s" % (off, 20 * math.log10(max(r, 1e-300)), what))
 
     hdr("3. Harmonic k decays k times as fast as the tine")
-    print("  because harmonic k of a waveshaped sine goes as A^k. This is not")
-    print("  fitted -- it is the engine's own decay law with decay_db at zero.")
+    print("  because harmonic k of a waveshaped sine goes as A^k, to leading")
+    print("  order; the rest of its power series (A^(k+2)...) are further layers.")
+    print("  Not fitted -- the engine's own decay law with decay_db at zero.")
     q = voice(87.31, 120)
     d1 = q.harmonic_decay(1)
-    print("   partial   dB/s    ratio to h1   -40 dB in")
-    for h in range(1, min(7, q.pickup_harmonics + 1)):
+    print("   partial   term   level     dB/s    ratio to h1   -40 dB in")
+    for h, (k, n, w, _ph) in enumerate(q._layers, 1):
+        if k > 6:
+            break
         d = q.harmonic_decay(h)
-        print("   h%-6d  %6.2f   %8.2f      %5.2f s" % (h, d, d / d1, 40 / d))
+        print("   h%-6d  A^%-3d  %+6.1f dB  %6.2f   %8.2f      %5.2f s"
+              % (k, n, 20 * math.log10(abs(w) / abs(q._layers[0][2])), d, d / d1, 40 / d))
     print("  so a hard bass note starts with a growl and ends as a bell, which")
     print("  is the Rhodes' signature and costs nothing to say.")
 
@@ -113,7 +119,7 @@ def main(argv):
         q = voice(f, 100)
         print("   %-5s  %12.3f   %+6.1f   %+6.1f dB   %d"
               % (nm, q._deflection(), band(T.RhodesProperties, f, 100)[1],
-                 20 * math.log10(q.harmonic_volume(2) / q.harmonic_volume(1)),
+                 20 * math.log10(q.harmonic_level(2) / q.harmonic_level(1)),
                  q.max_harmonic))
 
     hdr("6. The transient")

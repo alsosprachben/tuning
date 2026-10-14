@@ -13323,7 +13323,9 @@ def selftest():
     rp = _rh()
     # A waveshaped SINE gives back an exactly harmonic series -- no stiffness,
     # no stretch. A tine is not a string and has neither.
-    worst = max(abs(rp.mode_ratio(h) - h) for h in range(1, rp.pickup_harmonics + 1))
+    # (Each partial is a LAYER of harmonic k's envelope, at k times the pitch.)
+    worst = max(abs(rp.mode_ratio(h) - rp._layers[h - 1][0])
+                for h in range(1, rp.pickup_harmonics + 1))
     check("a tine's partials are exactly harmonic, unlike a string's",
           worst < 1e-12 and rp.inharmonicity_coefficient == 0.0,
           "  (worst departure %.1e)" % worst)
@@ -13333,21 +13335,29 @@ def selftest():
     class _Centred(_T.RhodesProperties):
         pickup_offset = 0.0
     cen = _rh(cls=_Centred)
-    ratio = cen.harmonic_volume(1) / cen.harmonic_volume(2)
+    ratio = cen.harmonic_level(1) / cen.harmonic_level(2)
     check("centre the tine and the fundamental disappears",
-          ratio < 1e-6 and cen.harmonic_volume(2) > 0.0,
+          ratio < 1e-6 and cen.harmonic_level(2) > 0.0,
           "  (h1 %.0f dB under h2; offset 0.30 gives %+.1f)"
           % (20 * _math.log10(max(ratio, 1e-300)),
-             20 * _math.log10(rp.harmonic_volume(1) / rp.harmonic_volume(2))))
+             20 * _math.log10(rp.harmonic_level(1) / rp.harmonic_level(2))))
 
-    # Harmonic k of a waveshaped sine goes as A^k, so it must decay k times as
-    # fast as the deflection does. This is the engine's own law with decay_db
-    # and harmonic_decay_dampening at zero -- if either drifts off zero, the
-    # growl stops decaying into the bell and this catches it.
+    # Harmonic k of a waveshaped sine is a power series in the swing A with
+    # only the powers k, k+2, k+4..., so its envelope is a sum of exponentials
+    # at k, k+2... times the swing's decay -- each a layer, decaying at n
+    # times the tine's rate. A GENTLE swing keeps the series' own powers (its
+    # leading term A^k: the growl decaying into the bell, at no cost); a wide
+    # one may choose slower ones (_pickup_layers), so that is checked soft.
     d1 = rp.harmonic_decay(1)
-    err = max(abs(rp.harmonic_decay(k) / d1 - k) for k in range(1, rp.pickup_harmonics + 1))
-    check("harmonic k decays k times as fast as the tine",
-          err < 1e-9, "  (worst ratio error %.1e)" % err)
+    err = max(abs(rp.harmonic_decay(h) / d1 - n) for h, (k, n, _w, _p) in enumerate(rp._layers, 1))
+    soft, lead = _rh(vel=35), {}
+    for k, n, w, _p in soft._layers:
+        if k not in lead or abs(w) > abs(lead[k][1]):
+            lead[k] = (n, w)
+    check("harmonic k's layers decay n times as fast as the tine, led by A^k when gentle",
+          err < 1e-9 and rp._layers[0][:2] == (1, 1) and all(v[0] == k for k, v in lead.items()),
+          "  (worst ratio error %.1e; soft C4's leading powers %s)"
+          % (err, [lead[k][0] for k in sorted(lead)]))
 
     def _band(cls, f0=261.63, vel=100, hmax=8):
         """Level and growl over a FIXED band. The series is trimmed where the
@@ -13355,7 +13365,9 @@ def selftest():
         them" at two velocities would compare two different bands."""
         q = cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
         top = getattr(q, "pickup_harmonics", q.max_harmonic)
-        v = [q.harmonic_volume(h) if h <= top else 0.0 for h in range(1, hmax + 1)]
+        lv = getattr(q, "harmonic_level", None)
+        v = [lv(h) if lv else q.harmonic_volume(h) if h <= top else 0.0
+             for h in range(1, hmax + 1)]
         tot = _math.sqrt(sum(x * x for x in v))
         up = _math.sqrt(sum(x * x for x in v[1:]))
         return 20 * _math.log10(tot), 20 * _math.log10(up / v[0])
@@ -13370,8 +13382,11 @@ def selftest():
     # the comparison that makes the claim mean something.
     plo, phi = _band(_T.GrandPianoProperties, vel=35), _band(_T.GrandPianoProperties, vel=127)
     rlo, rhi = _band(_T.RhodesProperties, vel=35), _band(_T.RhodesProperties, vel=127)
-    check("velocity changes a Rhodes' volume half as much as a piano's",
-          (rhi[0] - rlo[0]) < 0.5 * (phi[0] - plo[0]),
+    # (Half as much, before the swing was fitted to grow as velocity^2; the
+    # level is taken back to velocity by _level_law, and what is left over is
+    # the growl's own energy above h1 at forte.)
+    check("velocity changes a Rhodes' volume less than a piano's",
+          (rhi[0] - rlo[0]) < 0.75 * (phi[0] - plo[0]),
           "  (%+.1f dB against the piano's %+.1f)"
           % (rhi[0] - rlo[0], phi[0] - plo[0]))
     check("...and its timbre far more, which is what the tine is for",
@@ -13407,12 +13422,18 @@ def selftest():
           % (20 * _math.log10(_CAB.get("rhodes").gain(55.0)),
              20 * _math.log10(_CAB.get("guitar12").gain(55.0))))
 
-    # It is cheap, and it gets cheaper when played softly -- the curve's tail
-    # falls below audibility and those partials are never emitted.
-    check("a Rhodes note costs a fraction of a piano note",
-          _rh(vel=127).max_harmonic < 30 and _rh(vel=35).max_harmonic < _rh(vel=127).max_harmonic,
-          "  (%d partials at v127, %d at v35)"
-          % (_rh(vel=127).max_harmonic, _rh(vel=35).max_harmonic))
+    # It gets cheaper when played softly -- the curve's tail falls below
+    # audibility and those partials are never emitted -- and costs most at the
+    # bottom played hard, where the buzz runs to h48 (pickup_max_hz bounds the
+    # rest). Its widest note, C2 at v127, against a piano's.
+    _pn = _T.GrandPianoProperties(65.4, 0.0, 1.0, 1.0).max_harmonic
+    check("a Rhodes note costs at most a few piano notes, and less played softly",
+          _rh(65.4, 127).max_harmonic <= 4 * _pn
+          and _rh(vel=35).max_harmonic < _rh(vel=127).max_harmonic
+          and _rh(1046.5, 127).max_harmonic < _pn,
+          "  (%d partials at C2 v127 against the piano's %d; C4 %d at v127, %d at v35)"
+          % (_rh(65.4, 127).max_harmonic, _pn, _rh(vel=127).max_harmonic,
+             _rh(vel=35).max_harmonic))
 
     # ---- and the suitcase's pan vibrato -------------------------------------
     lv = Live(program=4, rate=48000, frames=128, verbose=False); lv.warm()
@@ -13477,34 +13498,61 @@ def selftest():
           _PM.property_class_for_program(5) is _T.WurlitzerProperties)
     wp = _rh(261.63, 127, _T.WurlitzerProperties)
     rp2 = _rh(261.63, 127)
-    # A Gaussian is entire and its harmonics collapse faster and faster; 1/d has
-    # a pole and its harmonics fall off GEOMETRICALLY. That straight line in dB
-    # is the bark, and it is the whole difference between the two instruments.
-    def _lad(q, n=6):
-        return [20 * _math.log10(max(q.harmonic_volume(h), 1e-300) / q.harmonic_volume(1))
-                for h in range(1, n + 1) if h <= q.pickup_harmonics]
-    lw, lr = _lad(wp), _lad(rp2)
-    # the Rhodes' steps GROW; the Wurlitzer's stay about the same size
-    dw = [lw[i] - lw[i + 1] for i in range(len(lw) - 1)]
-    dr = [lr[i] - lr[i + 1] for i in range(len(lr) - 1)]
-    check("a pole falls off geometrically where a bell curve falls off a cliff",
-          max(dw) - min(dw) < 5.0 and max(dr) - min(dr) > 8.0,
-          "  (Wurlitzer steps %.0f-%.0f dB, Rhodes %.0f-%.0f)"
-          % (min(dw), max(dw), min(dr), max(dr)))
-    check("...so it keeps its upper harmonics and barks",
-          wp.harmonic_volume(5) / wp.harmonic_volume(1)
-          > 20.0 * rp2.harmonic_volume(5) / rp2.harmonic_volume(1),
-          "  (h5 at %.0f dB against the Rhodes' %.0f)"
-          % (_lad(wp, 5)[-1], _lad(rp2, 5)[-1] if len(_lad(rp2, 5)) >= 5 else float('nan')))
-    # A magnet is symmetric about the tine, so centring it kills the fundamental.
-    # A capacitor plate is on ONE side, so there is no centred case to find.
+    def _env(q, k, t):
+        """Harmonic k's level t seconds in: its layers, each at its own decay."""
+        return abs(sum(w * _T.db_ratio(q.harmonic_decay(h)) ** (-t)
+                       for h, (kk, _n, w, _p) in enumerate(q._layers, 1) if kk == k))
+
+    def _lad(q, n=6, t=0.1):
+        return [20 * _math.log10(max(_env(q, h, t), 1e-300) / _env(q, 1, t))
+                for h in range(1, n + 1)]
+    # THE TWO VOICINGS: a Wurlitzer barks at mf already, where a Rhodes is
+    # still a bell and barks only when struck hard (its swing grows as
+    # velocity^2, rhodes_fit.py) -- the two instruments' playing styles.
+    w64, r64 = _rh(261.63, 64, _T.WurlitzerProperties), _rh(261.63, 64)
+    check("at mf a Wurlitzer barks where a Rhodes is still a bell",
+          _lad(w64, 5)[-1] > _lad(r64, 5)[-1] + 15.0,
+          "  (C4 v64, h5 at %.0f dB re h1 against the Rhodes' %.0f)"
+          % (_lad(w64, 5)[-1], _lad(r64, 5)[-1]))
+    # THE PLATE IS A SLOT. The reed swings between symmetric cutouts in the
+    # charged plate (Pfeifle & Muenster, DAFx-17), so the curve is a square-
+    # edged bump, not a one-sided 1/d -- and a symmetric field centred on the
+    # reed loses its fundamental, as the Rhodes' does.
     class _WC(_T.WurlitzerProperties):
         pickup_offset = 0.0
     wc = _rh(261.63, 100, _WC)
-    check("a one-sided plate is asymmetric wherever the reed sits",
-          wc.harmonic_volume(1) > wc.harmonic_volume(2) > 0.0,
-          "  (h1 %+.1f dB over h2 at rest position 0, where the tine loses it entirely)"
-          % (20 * _math.log10(wc.harmonic_volume(1) / wc.harmonic_volume(2))))
+    check("centre the reed in its slot and the fundamental disappears",
+          wc.harmonic_level(1) < 1e-6 * wc.harmonic_level(2) and wc.harmonic_level(2) > 0.0,
+          "  (h1 %.0f dB under h2)"
+          % (20 * _math.log10(max(wc.harmonic_level(1), 1e-300) / wc.harmonic_level(2))))
+    # A wide bass swing crosses the slot's square edges and buzzes: the DI
+    # takes hold C2 at MF to h32 (-16 to -41 dB). A Rhodes' bass buzzes too,
+    # but only for force (Ben: "a buzz-enabled force").
+    def _buzz(q):
+        top = max(_env(q, k, 0.1) for k in range(1, 33))
+        return 20 * _math.log10(max(_env(q, k, 0.1) for k in range(17, 33)) / top)
+    wb = _rh(65.4, 92, _T.WurlitzerProperties)
+    w64b, r64b, r127b = _rh(65.4, 64, _T.WurlitzerProperties), _rh(65.4, 64), _rh(65.4, 127)
+    check("the low reeds buzz past h16 at mf; a low tine's buzz waits for force",
+          _buzz(wb) > -40.0 and _buzz(w64b) > _buzz(r64b) + 10.0 and _buzz(r127b) > _buzz(r64b) + 20.0,
+          "  (C2, 0.1 s in, h17-h32 re the loudest: Wurlitzer v64 %.0f, v92 %.0f dB; "
+          "Rhodes v64 %.0f, v127 %.0f)" % (_buzz(w64b), _buzz(wb), _buzz(r64b), _buzz(r127b)))
+    # ...and the swing, flattened against the edges at first, decays back into
+    # the slot's middle: the bass fundamental BUILDS after the strike (the takes
+    # peak near a second in), where the middle's starts at its peak.
+    _ts = [0.05 * i for i in range(61)]
+    _pk = lambda q: max(_ts, key=lambda t: _env(q, 1, t))
+    check("the bass fundamental builds after the strike, the middle's does not",
+          _pk(wb) > 0.5 and _pk(_rh(261.63, 92, _T.WurlitzerProperties)) == 0.0,
+          "  (C2's h1 peaks %.2f s in, %.1f dB over its start)"
+          % (_pk(wb), 20 * _math.log10(_env(wb, 1, _pk(wb)) / _env(wb, 1, 0.0))))
+    # Cost: the layers stop at pickup_max_hz, so the bass carries most.
+    check("a Wurlitzer note costs at most a few piano notes, and the treble less",
+          _rh(65.4, 127, _T.WurlitzerProperties).max_harmonic <= 4 * _pn
+          and _rh(1046.5, 127, _T.WurlitzerProperties).max_harmonic < _pn,
+          "  (C2 %d partials, C4 %d, C6 %d; a piano's %d)"
+          % tuple([_rh(f, 127, _T.WurlitzerProperties).max_harmonic
+                   for f in (65.4, 261.63, 1046.5)] + [_pn]))
     check("a free reed has no tonebar to ring",
           wp.tonebar_gains == () and wp.max_harmonic == wp.pickup_harmonics
           and len(rp2.tonebar_gains) > 0)

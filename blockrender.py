@@ -4460,6 +4460,15 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # to its nodes; see SynthProperties.strike_phase_spread.
                     sps = props.strike_phase_spread
                     mph = (math.pi*random.getrandbits(1)*sps) if sps > 0.0 else 0.0
+                    # A MODE'S OWN PHASE (SynthProperties.mode_phase): where the
+                    # waveform puts it -- the electric pianos' harmonics at the
+                    # phases their pickup gives them, so the wave has its real
+                    # shape (flat against the slot's maximum, not peaky), and a
+                    # layer whose term is negative half a turn round, so layers
+                    # at one pitch sum to a signed envelope
+                    _mph = getattr(rp, 'mode_phase', None)
+                    if _mph is not None:
+                        mph += _mph(m)
                     if _prng is not None:
                         # each partial its own phase (SynthProperties.partial_phase_spread)
                         mph += 2.0 * math.pi * _pps * _prng.random()
