@@ -4432,8 +4432,20 @@ def prepare(path, tuner='hybrid440', sink=None):
                     # speech, the fundamental slowest -- the jet catches the
                     # upper modes before the pipe settles on its note
                     _she = getattr(_sc, 'speech_harmonic_exp', 0.0)
+                    # ...the exponent moving with the register (tonelib.
+                    # speech_harmonic_exp_per_octave): a bandoneon's bass
+                    # blooms, its treble barely
+                    _sho = getattr(_sc, 'speech_harmonic_exp_per_octave', 0.0)
+                    if _sho:
+                        # ...and never past together: a reed's upper harmonics
+                        # do not lead its note, so above where the bloom runs
+                        # out they all speak at once
+                        _she = min(0.0, _she + _sho * math.log2(max(_f0s, 1.0) / 415.0))
                     if _she and m > 1:
-                        pfade = max(1.0, fade_r * m ** (-_she))
+                        # ...counted up to speech_harmonic_cap: a reed's whole
+                        # upper spectrum waits on its swing together
+                        _shc = getattr(_sc, 'speech_harmonic_cap', None)
+                        pfade = max(1.0, fade_r * (min(m, _shc) if _shc else m) ** (-_she))
                     # ...AND ITS RELEASE IS ITS OWN, band by band (tonelib.
                     # release_band_scale): as the wind falls a pipe may let its
                     # fundamental go and ring on in an upper band -- the release's

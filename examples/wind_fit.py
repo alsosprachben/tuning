@@ -11,6 +11,10 @@ takes' stable notes (examples/freesound_slice.py pipes; VOICE_OPTS).
     wind_fit.py --voice=harmonica --top       the ladder by absolute frequency, to 20 kHz
     wind_fit.py --voice=harmonica --fit=scatter  each reed's own ladder, to the roughness
     wind_fit.py --voice=accordion --fit=push   the bellows' push on a note from silence
+    wind_fit.py --voice=bandoneon --fit=speech how fast a note speaks (a grid)
+    wind_fit.py --voice=bandoneon --fit=bloom  ...harmonic by harmonic, by register
+    wind_fit.py --voice=bandoneon --fit=top:reed_spread,reed_spread_per_octave
+                                              knobs to the harmonics by band to 11 kHz
     wind_fit.py --voice=bagpipe --fit=body     body_trim_db, the harmonics by where they sound
     (and the harmonium, GM 20, --voice=reedorgan; the shanai, GM 111)
     wind_fit.py --voice=shakuhachi --fit=tables [--keys=57-62] [--match=uncle] [--low] [--breath]
@@ -71,6 +75,9 @@ VOICES = {
     # GM 21: hammondman's Hohner on musette, 15 keys A3-E6 (CC0), staged by
     # examples/freesound_slice.py accordion
     "accordion": (21, "AccordionProperties", "accordion", "*_hwav_*.wav"),
+    # GM 23: Joerg Bleymehl's bandoneon_v2 SoundFont, a 1930 ELA, its 12 notes
+    # C2-F6 written out by examples/sf2_extract.py (measured only)
+    "bandoneon": (23, "TangoAccordionProperties", "bleymehl_wav", "*_bley_*.wav"),
 }
 # WHERE A VOICE'S NOTES ARE, how they are named and how long they hold: VCSL's
 # are an octave low and sustained for seconds; the staged Freesound notes are
@@ -97,6 +104,9 @@ VOICE_OPTS = {
     # the musette's keys hold 1.4-2.3 s, ~8 cents sharp of A440
     "accordion": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.25, t1=1.2,
                       tonic_cents=8.0),
+    # the bandoneon's notes hold 1.6-3 s, ~10.5 cents sharp of A440 (A=443)
+    "bandoneon": dict(refs="~/Documents/refs/bandoneon", octave=0, t0=0.3, t1=1.4,
+                      tonic_cents=10.5),
     # the zurna's notes are short: its E5s hold 0.4 s, its G4s 0.85
     "shanai": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.1, t1=0.38),
     "bagpipe": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.5, t1=3.5,
@@ -318,7 +328,7 @@ def setk(cls, k, q):
     setattr(cls, name, put(getattr(cls, name), [int(i) for i in idx]))
 
 
-BOUNDS = {"reed_gate": (-0.6, 1.08), "reed_gate_per_octave": (-0.6, 0.6), "reed_edge": (0.003, 0.5), "reed_spread": (0.02, 0.4),
+BOUNDS = {"reed_spread_per_octave": (-0.3, 0.3), "reed_gate": (-0.6, 1.08), "reed_gate_per_octave": (-0.6, 0.6), "reed_edge": (0.003, 0.5), "reed_spread": (0.02, 0.4),
           "bore_corner_hz": (2000.0, 20000.0), "formants.1.2": (0.05, 2.5), "formants.0.2": (0.05, 6.0),
           "formant_floor": (0.05, 1.0), "formants.1.0": (1000.0, 8000.0), "reed_direct": (0.001, 1.0)}
 
@@ -403,7 +413,7 @@ def inharm(spec):
     print("  |dev| max   %.2f cents over %d notes (a partial near the noise reads loose)" % (np.nanmax(np.abs(np.concatenate([r["cents"][:10] for r in rows]))), len(rows)))
 
 
-def ab(voice, prog, out, n=7, head=2.0, xf=0.1):
+def ab(voice, prog, out, n=7, head=2.0, xf=0.1, keys=None):
     """--ab=OUT.wav: each recording, then ours at the same pitch, matched in
     level -- every n-th note across the compass. A recording sustains 6-20 s,
     so it is its first HEAD seconds spliced (an XF crossfade, inside its
@@ -412,7 +422,8 @@ def ab(voice, prog, out, n=7, head=2.0, xf=0.1):
     import wave
     from scipy.signal import resample_poly
     recs = sorted(recordings(voice))
-    pick = [recs[int(i)] for i in np.linspace(0, len(recs) - 1, n)]
+    pick = ([r for r in recs if r[0] in keys] if keys else
+            [recs[int(i)] for i in np.linspace(0, len(recs) - 1, n)])
     parts, sr = [], 44100
     for key, p in pick:
         x, sr = load(p)
@@ -587,7 +598,169 @@ def push_shape(x, sr, key):
     return lv, tilt(a + pk) - tilt(a + int(0.8 * sr))
 
 
-def fit_push(voice, prog, cls, maxfev=80):
+SPEECH_W = ((0.0, 0.03), (0.03, 0.06), (0.06, 0.12))
+
+
+def onset_db(x, sr):
+    """The note's level in SPEECH_W after it starts (first within 26 dB of
+    its peak), dB re its steady level 0.8-1.2 s in."""
+    a = int(np.flatnonzero(np.abs(x) > 0.05 * np.abs(x).max())[0])
+    st = 10 * np.log10(np.mean(x[a + int(0.8 * sr):a + int(1.2 * sr)] ** 2) + 1e-20)
+    return np.array([10 * np.log10(np.mean(x[a + int(p * sr):a + int(q * sr)] ** 2) + 1e-20) - st
+                     for p, q in SPEECH_W])
+
+
+def fit_speech(voice, prog, cls):
+    """--fit=speech: how fast a note speaks -- attack_time (s) plus
+    speech_cycles of the fundamental (FreeReedProperties) -- by a grid against
+    each key's level over its first 120 ms (SPEECH_W, re its steady level),
+    with the push fitted as it stands. The rms over keys and windows."""
+    refs = [(key, onset_db(*load(p))) for key, p in recordings(voice)]
+    best = None
+    for at in (0.008, 0.015, 0.025, 0.035, 0.05):
+        for sc in (0.0, 3.0, 6.0, 10.0):
+            cls.attack_time, cls.speech_cycles = at, sc
+            d = np.array([onset_db(*render(prog, key, 1.6)) - r for key, r in refs])
+            e = float(np.sqrt(np.mean(d ** 2)))
+            print("  attack_time %.3f speech_cycles %4.1f: %.2f dB  (by window %s)" % (
+                at, sc, e, " ".join("%+.1f" % v for v in np.median(d, 0))), flush=True)
+            if best is None or e < best[0]:
+                best = (e, at, sc)
+    print("    attack_time = %.3f\n    speech_cycles = %.1f   (%.2f dB)" % (best[1], best[2], best[0]))
+
+
+TOP_E = (500, 1000, 2000, 3000, 4000, 6000, 8000, 11000)
+
+
+def top_bands(x, sr, f0, t0=0.4, t1=1.3):
+    """The HARMONICS' share of the note's energy in TOP_E's bands, dB, over
+    t0-t1 s after it speaks -- by absolute frequency, so a bass note's h50-h120
+    are read where a ladder to h12 stops at 0.8 kHz."""
+    a = speaks(x, sr)
+    seg = x[a + int(t0 * sr):a + int(t1 * sr)]
+    N = 1 << 18
+    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N)) ** 2
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    h = np.zeros_like(f, bool)
+    for m in range(1, int(0.45 * sr / f0)):
+        h |= np.abs(f - m * f0) < 0.12 * f0
+    tot = X.sum()
+    return np.array([10 * np.log10(X[(f >= lo) & (f < hi) & h].sum() / tot + 1e-30)
+                     for lo, hi in zip(TOP_E[:-1], TOP_E[1:])])
+
+
+def fit_top(voice, prog, cls, knobs, maxfev=80):
+    """--fit=top:KNOB,...: those knobs against every note's top_bands (rms of
+    recorded - ours over notes and bands). The bandoneon's bass is bright to
+    8 kHz where its treble is not (Ben: "the low notes need some more
+    harmonics ... a reed brightness"): reed_spread and its slope an octave."""
+    from scipy.optimize import minimize
+    tc = 2 ** (TONIC_CENTS / 1200.0)
+    refs = [(key, top_bands(*load(p), 440.0 * 2 ** ((key - 69) / 12.0) * tc)) for key, p in recordings(voice)]
+    x0 = np.array([float(getk(cls, k)) for k in knobs])
+    lin = np.array([k.endswith("_per_octave") or k.endswith("_db") for k in knobs])
+    best = [1e9, x0]
+
+    def val(z):
+        return np.where(lin, x0 + 0.05 * z, x0 * np.exp(z))
+
+    def f(z):
+        v = val(z)
+        if any(k in BOUNDS and not BOUNDS[k][0] <= q <= BOUNDS[k][1] for k, q in zip(knobs, v)):
+            return 1e3
+        for k, q in zip(knobs, v):
+            setk(cls, k, float(q))
+        d = np.array([r - top_bands(*render(prog, key, 1.6), 440.0 * 2 ** ((key - 69) / 12.0) * tc)
+                      for key, r in refs])
+        e = float(np.sqrt(np.mean(d ** 2)))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %.2f dB  %s   by note %s" % (e, " ".join("%s=%.4g" % kv for kv in zip(knobs, v)),
+                  " ".join("%d:%+.0f" % (k, m) for (k, _), m in zip(refs, d.mean(1)))), flush=True)
+        return e
+    minimize(f, np.zeros(len(knobs)), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(len(knobs)), 0.5 * np.eye(len(knobs))]),
+                      "xatol": 0.02, "fatol": 0.02})
+    for k, q in zip(knobs, best[1]):
+        setk(cls, k, float(q))
+        print("    %s = %.4g" % (k, q))
+
+
+BLOOM_H = (0, 1, 2, 3, 4, 6, 8)        # 0: the whole note
+
+
+def rise_times(x, sr, f0):
+    """Each of BLOOM_H's time (s) to come within 6 and within 1 dB of its
+    steady level (0.8-1.2 s in), from the note's start; NaN for a harmonic
+    30 dB under the strongest (too weak to time)."""
+    from scipy.signal import butter, sosfiltfilt, hilbert
+    a = int(np.flatnonzero(np.abs(x) > 0.02 * np.abs(x).max())[0])
+    out, lv = [], []
+    for h in BLOOM_H:
+        if h * f0 > 0.4 * sr:
+            out.append((np.nan, np.nan)); lv.append(-200.0)
+            continue
+        y = x if h == 0 else sosfiltfilt(butter(2, [h * f0 * 0.96, h * f0 * 1.04], btype="band", fs=sr, output="sos"), x)
+        e = np.abs(hilbert(y))
+        w = int(0.01 * sr)
+        e = np.convolve(e, np.ones(w) / w, "same")
+        st = np.median(e[a + int(0.8 * sr):a + int(1.2 * sr)])
+        lv.append(20 * np.log10(st + 1e-20))
+        out.append(tuple(np.flatnonzero(e[a:] > st * 10 ** (-db / 20.0))[0] / sr for db in (6.0, 1.0)))
+    out = np.array(out, float)
+    out[np.array(lv) < max(lv) - 30.0] = np.nan
+    return out
+
+
+def fit_bloom(voice, prog, cls, maxfev=60):
+    """--fit=bloom: how a note speaks, harmonic by harmonic -- attack_time,
+    speech_cycles, speech_harmonic_exp and its slope an octave
+    (speech_harmonic_exp_per_octave) -- against each key's BLOOM_H rise times
+    (rise_times; 0 the whole note, counted twice), the error the rms of
+    log2(ours / recorded), times floored at 5 ms. The per-harmonic times
+    scatter note to note, and Nelder-Mead settles anywhere near 1.06-1.14
+    octaves: the bandoneon's values were read off C2, F2 and C3 by hand and
+    this scored them (the bass 1.30 -> 1.01). A bandoneon's bass reed has its fundamental at once and its
+    upper harmonics 4-6 times later; its treble all together (Ben: "a much
+    softer attack ... more like a pressure swell")."""
+    from scipy.optimize import minimize
+    import warnings
+    warnings.simplefilter("ignore")
+    tc = 2 ** (TONIC_CENTS / 1200.0)
+    refs = [(key, rise_times(*load(p), 440.0 * 2 ** ((key - 69) / 12.0) * tc)) for key, p in recordings(voice)]
+    K = ("attack_time", "speech_cycles", "speech_harmonic_exp", "speech_harmonic_exp_per_octave")
+    x0 = np.array([float(getattr(cls, k)) for k in K])
+    lin = np.array([False, False, True, True])
+    best = [1e9, x0]
+
+    def val(z):
+        return np.where(lin, x0 + 0.3 * z, x0 * np.exp(z))
+
+    def f(z):
+        v = val(z)
+        for k, q in zip(K, v):
+            setattr(cls, k, float(q))
+        d = []
+        for key, r in refs:
+            y, sr = render(prog, key, 1.6)
+            o = rise_times(y, sr, 440.0 * 2 ** ((key - 69) / 12.0) * tc)
+            ok = np.isfinite(r) & np.isfinite(o)
+            dd = np.log2(np.maximum(o, 0.005) / np.maximum(r, 0.005))
+            d.extend(dd[ok])
+            d.extend(dd[0][ok[0]])      # the whole note twice: what the ear calls the attack
+        e = float(np.sqrt(np.mean(np.square(d))))
+        if e < best[0]:
+            best[:] = [e, v]
+            print("  %.3f octaves  %s" % (e, " ".join("%s=%.4g" % kv for kv in zip(K, v))), flush=True)
+        return e
+    minimize(f, np.zeros(len(K)), method="Nelder-Mead",
+             options={"maxfev": maxfev, "initial_simplex": np.vstack([np.zeros(len(K)), 0.5 * np.eye(len(K))]),
+                      "xatol": 0.02, "fatol": 0.005})
+    for k, q in zip(K, best[1]):
+        print("    %s = %.4g" % (k, q))
+
+
+def fit_push(voice, prog, cls, maxfev=80, hold=()):
     """--fit=push: the bellows' push (tonelib.bellows_push_weight) -- its
     gain, rise, decay and tilt with its slope up the keyboard -- against each
     key's onset: its level at PUSH_T re its steady level, and how much
@@ -595,13 +768,16 @@ def fit_push(voice, prog, cls, maxfev=80):
     by key, and the brightening's TREND -- its line against octave, at A4 and
     its slope -- not key by key: a musette's harmonics beat 12-19 dB, so one
     40 ms window at the peak scatters 5-7 dB even on this model, which has no
-    randomness in it."""
+    randomness in it. --hold=NAME,... keeps those knobs where the class has
+    them (the bandoneon's decay: free, a slow sag carried the push's extra
+    brightness into the steady tone the spectrum is fitted on)."""
     from scipy.optimize import minimize
     import warnings
     warnings.simplefilter("ignore")
+    PUSH = tuple(k for k in globals()["PUSH"] if k not in hold)
     refs = [(key, push_shape(*load(p), key)) for key, p in recordings(voice)]
     x0 = np.array([float(getattr(cls, k)) for k in PUSH])
-    lin = np.array([False, False, False, True, True])
+    lin = np.array([k.startswith("bellows_push_tilt") for k in PUSH])
     best = [1e9, x0]
 
     def val(z):
@@ -1018,8 +1194,18 @@ def main(argv):
     elif fitarg == "--fit=scatter":
         fit_scatter(voice, prog, cls)
         return 0
+    elif fitarg and fitarg.startswith("--fit=top:"):
+        fit_top(voice, prog, cls, fitarg.split(":", 1)[1].split(","))
+        return 0
+    elif fitarg == "--fit=bloom":
+        fit_bloom(voice, prog, cls)
+        return 0
+    elif fitarg == "--fit=speech":
+        fit_speech(voice, prog, cls)
+        return 0
     elif fitarg == "--fit=push":
-        fit_push(voice, prog, cls)
+        hold = next((a.split("=", 1)[1].split(",") for a in argv if a.startswith("--hold=")), ())
+        fit_push(voice, prog, cls, hold=tuple(hold))
         return 0
     elif fitarg == "--fit=body":
         fit_body(voice, prog, cls)
@@ -1044,7 +1230,8 @@ def main(argv):
         return top(voice, prog) or 0
     out = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab=")), None)
     if out:
-        return ab(voice, prog, out) or 0
+        ks = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab-keys=")), None)
+        return ab(voice, prog, out, keys={int(k) for k in ks.split(",")} if ks else None) or 0
     report(voice, prog)
     return 0
 

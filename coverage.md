@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 8 | 6% |
+| 2 specific, theory | 7 | 5% |
 | 3 specific, theory + ear | 14 | 11% |
-| 4 specific, reference audio | 106 | 83% |
+| 4 specific, reference audio | 107 | 84% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -192,7 +192,7 @@ plays Standard, as does any program that is not a set.
 | 20 | Reed Organ | `ReedOrganFree` | **4** | donyaquick's harmonium (freesound 330410, CC0), all 32 keys G2-D5 held 7-12 s (examples/wind_fit.py --voice=reedorgan): it plays an 8' and a 4' -- its evens beat, each key's 4' 0.4-12 cents sharp (rank_detune) -- so ours is measured at 8'+4'; the foundation reed fitted far brighter (gate 0.52 -> 1.07), the 4' voiced as it and at twice the level, the series within 2.5 dB rms, the partials' odd/even cents the take's; the reed's hiss between the harmonics. The French registers re-anchored on it. Ben: sounds great |
 | 21 | Accordion | `Accordion` | **4** | hammondman's Hohner on musette (freesound pack 18842, CC0), 15 keys A3-E6 (examples/wind_fit.py --voice=accordion): the musette's detune measured -- 16.0 cents at A4, as asserted, narrowing 3.3 an octave -- and no 16'; the reed bright and HOLLOW (odd harmonics strong, evens 4.8 dB down), the box's colour by absolute frequency (FormantBody), the reeds' hiss; and the BELLOWS' PUSH on a note from silence -- a +10 dB swell at 0.1 s, brightening the bass far more than the treble, every partial settling together -- carried over a slur where it stands. Ben: sounds great |
 | 22 | Harmonica | `Harmonica` | **4** | VCSL Hohner Special 20s and Super 64 (CC0), 30 sustains (examples/wind_fit.py): the reed's flow and the tongue's own sine, the cupped hands and a broad top fitted by absolute frequency to 17 kHz, each reed its own jagged ladder (the takes' roughness and holes), breath, flutter and wobble. Ben: very close, sounding real; the lowest and highest notes slightly off |
-| 23 | Tango Accordion | `TangoAccordion` | **2** | TangoAccordionProperties: the same box tuned DRY (~3 cents), which is what a bandoneon is. The box, reeds' hiss and hollowness are GM 21's, measured; the dry tuning and the 16' are asserted -- no bandoneon recording |
+| 23 | Tango Accordion | `TangoAccordion` | **4** | FITTED TO A 1930 ELA BANDONEON (Joerg Bleymehl's bandoneon_v2 SoundFont, twelve notes C2-F6, measured only; examples/wind_fit.py --voice=bandoneon): the second reed an OCTAVE ABOVE, quiet (-13.5 dB) and ~2.5 cents off -- the class had a 16' under the note, so GM 23 sounded an octave low -- and no wet unison; a bright reed, brightest in the bass and ringing there to 8 kHz and past (harmonics by Hz, to 12 kHz, where 32 had ended C2 at 2.1); the box, hardly radiating the bass fundamentals; the reeds' hiss and the bass reeds' buzz; a push a fifth of the musette's; the big bass reeds BLOOMING, their upper harmonics after the note (Ben: 'a pressure swell'). The SoundFont is peak-normalised: the level across the keyboard held. Ben: sounds great |
 
 ## 24-31 Guitar
 
@@ -443,7 +443,7 @@ Controls are the rest of the console that are not stops.
 |---|---|---|---|
 | -- | musette (GM 21) | **4** | two 8' banks, the wet one 16.0 cents at A4 narrowing 3.3 an octave, no 16': measured on hammondman's Hohner |
 | -- | bellows push (GM 21) | **4** | the swell from silence, carried over a slur: measured on the same take |
-| -- | bandoneon (GM 23) | **2** | the same measured box tuned dry (3 cents) with a 16' bank at 0.75: asserted, no bandoneon recording |
+| -- | bandoneon (GM 23) | **4** | two reeds a tone, the second an OCTAVE ABOVE at -13.5 dB and ~2.5 cents, no wet unison: measured on Bleymehl's 1930 ELA (the 16' it had sounded GM 23 an octave low) |
 
 ### 55 Orchestra Hit -- the orchestra hit's sections (CC11, all seven drawn by default)
 
@@ -471,7 +471,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `MuteCuica` -- 78 Mute Cuica (4)
   - `FreeReed`
     - `Accordion` [FormantBody] -- GM 21 Accordion (4)
-      - `TangoAccordion` -- GM 23 Tango Accordion (2)
+      - `TangoAccordion` -- GM 23 Tango Accordion (4)
     - `Harmonica` [FormantBody] -- GM 22 Harmonica (4)
     - `ReedOrganFree` -- GM 20 Reed Organ (4)
   - `PluckedString`

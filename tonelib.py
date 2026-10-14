@@ -1355,6 +1355,18 @@ class SynthProperties:
     # (struck strings and brass, whose speech is set by the excitation, not the
     # air column). See speech_time() and hammer_down/hammer_up.
     speech_cycles = 0.0
+    # HARMONIC m BUILDS IN m^-speech_harmonic_exp OF THE SPEECH (a pipe's
+    # upper modes first, exp > 0; a free reed's last, exp < 0, its tone
+    # brightening as the tongue's swing grows), the exponent moving
+    # speech_harmonic_exp_per_octave an octave from 415 Hz -- a big bass
+    # reed blooms far more than a small treble one -- and, so moved, never
+    # past 0: above where the bloom runs out, all together. 0 and 0 =
+    # together.
+    speech_harmonic_exp = 0.0
+    speech_harmonic_exp_per_octave = 0.0
+    # ...counting harmonics only up to this one (None = all): past it the
+    # upper spectrum speaks together, as a bass reed's waits on its swing
+    speech_harmonic_cap = None
 
     # THE BLOOM. A struck plate does not put all its energy in at the strike: it
     # is driven hard enough to go nonlinear, and energy cascades UPWARD out of
@@ -6478,6 +6490,11 @@ class FreeReedProperties(SynthProperties):
     # notes (open about a quarter of the cycle), weak evens at the top (about
     # half). 0 = one gate for every note (the accordion, the harmonium).
     reed_gate_per_octave = 0.0
+    # ...and its SPREAD by register, this much an octave from 415 Hz: a
+    # bandoneon's big bass reed is far brighter in its upper harmonics (a
+    # narrower spread: fewer half-open gates averaging its edges away) than
+    # its treble. 0 = one spread.
+    reed_spread_per_octave = 0.0
     # ...and EVERY REED IS ITS OWN: filed, set and gapped by hand, and sat in
     # its own chamber of the comb, so each key's ladder has its own holes and
     # peaks where the flow model draws one smooth curve. Each harmonic of each
@@ -6511,7 +6528,17 @@ class FreeReedProperties(SynthProperties):
     def _reed_series(self):
         """The flow spectrum, once per (geometry, length). Cached per class."""
         gate = self.reed_gate + self.reed_gate_per_octave * getattr(self, 'octave_position', 0.0)
-        key = (round(gate, 6), self.reed_edge, self.reed_spread,
+        # ...held at the ceiling a fitted gate has (1.08: past it the tongue
+        # never clears its slot, and the series is silence). A slope carried
+        # down the keyboard would cross it: the bandoneon's C2 went silent
+        if self.reed_gate_per_octave:
+            gate = min(gate, 1.08)
+        # ...and the spread of gates (the swing's averaging) by register too:
+        # reed_spread_per_octave an octave from 415 Hz, held at 0.01 or more
+        spread = self.reed_spread
+        if self.reed_spread_per_octave:
+            spread = max(0.01, spread + self.reed_spread_per_octave * getattr(self, 'octave_position', 0.0))
+        key = (round(gate, 6), self.reed_edge, round(spread, 6),
                self.reed_points, self.max_harmonic, self.reed_direct)
         got = _FREE_REED_CACHE.get(key)
         if got is not None:
@@ -6521,9 +6548,9 @@ class FreeReedProperties(SynthProperties):
         t = _np.arange(n) / float(n)
         u = _np.sin(2.0 * _np.pi * t)
         power = _np.zeros(n // 2 + 1)
-        if self.reed_spread > 0.0 and self.reed_points > 1:
-            gates = _np.linspace(gate - self.reed_spread,
-                                 gate + self.reed_spread,
+        if spread > 0.0 and self.reed_points > 1:
+            gates = _np.linspace(gate - spread,
+                                 gate + spread,
                                  self.reed_points)
         else:
             gates = (gate,)
@@ -6899,21 +6926,111 @@ class AccordionProperties(FormantBody, FreeReedProperties):
 
 
 class TangoAccordionProperties(AccordionProperties):
-    """GM 23, the bandoneon: the same instrument tuned DRY.
+    """GM 23, the bandoneon: two reeds a tone, an octave apart, tuned DRY.
 
-    A bandoneon is not a musette box. The tremolo that defines GM 21 is most of
-    what a tango player does not want, so the wet bank comes down to a couple of
-    cents -- enough to thicken, not enough to warble -- and the 16' comes up,
-    because the instrument's voice is its gravity.
+    A bandoneon is not a musette box: no wet unison, no tremolo. MEASURED on
+    Joerg Bleymehl's 1930 ELA (his bandoneon_v2 SoundFont, twelve notes C2-F6,
+    measured only; examples/wind_fit.py --voice=bandoneon). The class had
+    asserted a 3-cent wet unison and a 16' under it, at a dark gate: the
+    recording has the second reed an OCTAVE ABOVE, quiet, a few cents off; a
+    bright reed, brightest in the bass and ringing there to 8 kHz; a box that
+    hardly radiates the bass fundamentals; a hiss, and a bass buzz; a small
+    slow push; and big bass reeds that bloom, their upper harmonics coming in
+    after the note. Ben: "sounds great". Its level is the old class's: the
+    SoundFont's notes are peak-normalised.
     """
-    reed_detune_cents = (3.0, 0.0)
-    reed_detune_per_octave = (0.0, 0.0)     # asserted flat; the musette's slope is the musette's
-    reed_bank_gain = (0.80, 0.75)
-    bore_corner_hz = 4600.0             # darker: a squarer, heavier box
-    reed_gate = 0.50
-    # HELD at its level (-45.36 dB, as above) when GM 21's box was measured
-    # under it: 1.3 dB under
-    initial_gain = 0.03282 * 10 ** (1.298 / 20.0)
+    # TWO REEDS A TONE, THE SECOND AN OCTAVE ABOVE (Bleymehl's 1930 ELA, sources.md):
+    # every note's lowest pitch is its own -- nothing an octave under it, 35-83
+    # dB down -- and its h2 sits off twice h1 by up to 6 cents, which one free
+    # reed cannot do. The octave reed beats ~+3 cents at A4 and C5, +1.5 at G5
+    # (the beat doubling with the harmonic, as an octave's does); the bass
+    # scatters within about 3. No wet unison: dry is the instrument.
+    reed_detune_cents = (2.5,)
+    reed_detune_per_octave = (0.0,)
+    # ...and QUIET: in the treble h2 sits 12-28 dB under h1, which an octave
+    # reed of the main one's strength could not allow -- fitted -13.5 dB
+    reed_bank_gain = (0.2123,)
+    reed_bank_ratio = (2.0,)
+    # THE REED AND THE BOX, MEASURED (examples/wind_fit.py --voice=bandoneon
+    # --fit=reed_gate,reed_gate_per_octave,reed_edge,bore_corner_hz,
+    # even_harmonic_db,reed_bank_gain.0, refitted with the box and hiss
+    # in place: ladder and thirds 9.9 -> 6.15 dB, the push below in place): far
+    # brighter and less hollow than the gate 0.50 and 4.6 kHz asserted, h3
+    # within 4 dB of h1 where ours was 16 under. The gate at its ceiling at
+    # 415 Hz and opening up the keyboard: the bass a narrow pulse (C2's h2
+    # and h3 15-22 dB over its fundamental), the treble rounder
+    bore_corner_hz = 4970.0
+    reed_gate = 1.08
+    reed_gate_per_octave = -0.3986
+    reed_edge = 0.00507
+    even_harmonic_db = -4.325
+    # TO 12 kHz, NOT TO h32 (Ben: "the low notes need some more harmonics
+    # ... just a reed brightness"): the free reeds' 32 harmonics end C2 at
+    # 2.1 kHz, and the ELA's C2 rings to 8 kHz and past -- 2-8 kHz was 10-25
+    # dB short in the bass, C2-G3; the ladder fit, read to h12, never saw it.
+    # And the bass reed brighter in its upper harmonics: its gates' spread
+    # narrowing down the keyboard (--fit=top:reed_spread,
+    # reed_spread_per_octave,bore_corner_hz, the harmonics by band to 11
+    # kHz, note by note: 8.4 -> 7.6 dB; C2 within ~5 dB to 16 kHz, F2's own
+    # reed still 16-28 dB brighter above 3 kHz than the model)
+    max_partial_hz = 12000.0
+    reed_spread = 0.1766
+    reed_spread_per_octave = 0.0358
+    # ...AND ITS BOX, by absolute frequency (--fit=body, the notes' harmonics
+    # pooled by third-octave, 5.6 -> 1.9 dB rms): the bass fundamentals barely
+    # radiate -- C2 and F2 sit 15-22 dB under their own h2 and h3 -- a dip at
+    # 1.3 kHz and a lift at 4 kHz. Twelve notes: the table is as coarse as they
+    body_trim_db = ((64, -5.8), (80, -19.3), (127, 2.7), (160, 2.9), (202, -4.9), (255, -2.9), (321, 3.2),
+                    (404, 4.9), (509, 6.4), (641, 1.6), (808, 2.1), (1018, -4.5), (1283, -11.9), (1616, 2.0),
+                    (2036, -3.2), (2566, -2.7), (3233, -8.3), (4073, 7.2), (5132, 2.4), (6465, -2.5),
+                    (8146, -5.4), (10263, 1.0), (12931, 1.9))
+    # THE REEDS' HISS, between the harmonics (--fit=tables --breath, refitted with the push
+    # in place: 0.0 dB over 20 bands): louder than the musette's under it, most at
+    # 0.4-0.8 kHz, the bass side's big reeds
+    breath_noise_db = ((160, -53.6), (202, -55.7), (255, -54.1), (321, -50.8), (404, -40.3), (509, -48.7),
+                       (641, -42.3), (808, -45.1), (1018, -45.2), (1283, -52.5), (1616, -43.5), (2036, -49.4),
+                       (2566, -47.9), (3233, -47.1), (4073, -46.7), (5132, -51.0), (6465, -52.0), (8146, -51.1),
+                       (10263, -52.5), (12931, -52.8))
+    # ...AND THE BASS REEDS' OWN, under 90 Hz (C2, F2; blended to 130):
+    # 7-11 dB more between their harmonics than the upper keys' (Ben: "you
+    # found actual noise buzz, too? We can model that"), --fit=tables
+    # --breath --low --keys=36-41 (16.9 -> 0.2 dB over 20 bands; dB re
+    # the bass's weak fundamental, ~20 under its own h2-h3)
+    register_low_hz = (90.0, 130.0)
+    breath_noise_low_db = ((160, -37.7), (202, -38.2), (255, -26.4), (321, -26.9), (404, -24.5), (509, -28.3),
+                           (641, -28.5), (808, -28.7), (1018, -32.4), (1283, -36.9), (1616, -31.5), (2036, -29.2),
+                           (2566, -33.7), (3233, -30.0), (4073, -25.5), (5132, -32.2), (6465, -38.5), (8146, -44.1),
+                           (10263, -47.9), (12931, -44.4))
+    # THE BELLOWS' PUSH, its own (wind_fit.py --voice=bandoneon --fit=push
+    # --hold=bellows_push_dbs; level 3.1 dB rms, brightening 0.2): the
+    # musette's swell, +9.7 dB, is a fifth of that here, rising slower (0.21 s)
+    # and brightening the high keys more. Its fall held at the musette's: free,
+    # it sagged at 4 dB/s and carried the push's brightness into the steady
+    # tone, where the spectrum fit could not then get under 7 dB
+    bellows_push_gain = 0.3935
+    bellows_push_rise_s = 0.2075
+    bellows_push_dbs = 13.37
+    bellows_push_tilt = 1.045
+    bellows_push_tilt_per_octave = 0.4468
+    # ...AND THE BASS BLOOMS (Ben: "the lower notes have a much softer attack
+    # in the recording ... more like a pressure swell"): C2's fundamental is
+    # there at once and its upper harmonics come 4-6 times later (h3-h8 within
+    # 1 dB at 190-310 ms), F2's ~2-3 times, C3's and up together. A 40 ms
+    # floor and three cycles; harmonic m in m^-exp of it, exp -1.8 at C2
+    # rising 1.75 an octave to 0 just above C3 (never past it), counted to h6
+    # -- a big reed's upper spectrum waits on its swing. Read off the bass's
+    # rise times (examples/wind_fit.py --fit=bloom scores it: C2-C3 1.30 ->
+    # 1.01 octaves rms); the per-harmonic times scatter, so loosely held
+    attack_time = 0.04
+    speech_cycles = 3.0
+    speech_harmonic_exp = 2.9
+    speech_harmonic_exp_per_octave = 1.75
+    speech_harmonic_cap = 6
+    # LEVEL HELD (the SoundFont's notes are peak-normalised: no register in
+    # them): the old class's level, and its curve across the keyboard within
+    # 2.4 dB C2-F6 -- octave_gain gives back the tilt the fitted reed adds
+    octave_gain = 0.785
+    initial_gain = 0.0669952
 
 
 class HarmonicaProperties(FormantBody, FreeReedProperties):

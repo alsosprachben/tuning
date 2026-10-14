@@ -13149,10 +13149,13 @@ def selftest():
           _worst[0] > 10.0 ** (-55.0 / 20.0),
           "  (deepest partial h%d at %.1f dB)" % (_worst[1], 20.0 * math.log10(_worst[0])))
     # WET AGAINST DRY is the whole of GM 21 versus GM 23. An accordion's banks
-    # are deliberately offset (musette); a bandoneon's are not.
+    # are deliberately offset (musette); a bandoneon's are not. The beat is
+    # read where the second reed lands -- the musette's on the note, the
+    # bandoneon's an octave above it -- against the main reed's partial there.
     def _beat(g):
         q = _PM.property_class_for_program(g)(261.63, 0.0, 1.0, 1.0)
-        return abs(261.63 * (1.0 + q.unison_voices(261.63, 1, 0.0)[0][2]) - 261.63)
+        r = q.reed_bank_ratio[0]
+        return abs(261.63 * (1.0 + q.unison_voices(261.63, 1, 0.0)[0][2]) - 261.63 * r)
     _wet, _dry = _beat(21), _beat(23)
     check("the accordion is tuned wet and the bandoneon dry",
           _wet > 3.0 * _dry and _wet > 1.0,
@@ -13440,6 +13443,55 @@ def selftest():
           _sm > -15.0 and _sc < _sm - 15.0,
           "  (3-12 kHz between the partials, first 5 ms, re the fundamental: %+.1f dB, the celesta %+.1f)"
           % (_sm, _sc))
+
+    # ---- the bandoneon: Bleymehl's 1930 ELA (examples/wind_fit.py) ---------
+    # TWO REEDS A TONE, THE SECOND AN OCTAVE ABOVE, quiet and a few cents off
+    # -- the class had a 16' under the note, so GM 23 sounded an octave low
+    def _bando(key, secs=1.4):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=23, time=0))
+        _t.append(mido.Message("note_on", channel=0, note=key, velocity=90, time=0))
+        _t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
+        _L, _R = B.render(_m)[:2]
+        y = 0.5 * (np.asarray(_L, np.float64) + np.asarray(_R, np.float64))
+        return y[int(np.flatnonzero(np.abs(y) > 0.01 * np.abs(y).max())[0]):]
+    _tg = _T.TangoAccordionProperties
+    _yc4, _yc2 = _bando(60), _bando(36)
+    _fx = np.fft.rfftfreq(1 << 17, 1.0 / B.SR)
+    _spec = lambda y: np.abs(np.fft.rfft(y[int(0.5 * B.SR):int(1.2 * B.SR)] * np.hanning(int(0.7 * B.SR)), 1 << 17)) ** 2
+    _pk = lambda X, fc: X[np.abs(_fx - fc) < 0.02 * fc].max()
+    _X4 = _spec(_yc4)
+    _sub = 10 * _math.log10(_pk(_X4, 130.81) / _pk(_X4, 261.63))
+    check("the bandoneon's second reed sounds an octave ABOVE, quiet, a few cents off",
+          tuple(_tg.reed_bank_ratio) == (2.0,) and _tg.reed_bank_gain[0] < 0.3
+          and 1.0 < _tg.reed_detune_cents[0] < 4.0 and _sub < -40.0,
+          "  (C4: an octave under it %+.0f dB; the octave reed %.1f dB, %+.1f cents)"
+          % (_sub, 20 * _math.log10(_tg.reed_bank_gain[0]), _tg.reed_detune_cents[0]))
+    # ITS BASS RINGS HIGH: by Hz, not by count -- 32 harmonics ended C2 at 2.1
+    # kHz where the ELA's rings to 8 (Ben: "just a reed brightness")
+    _X2 = _spec(_yc2)
+    _hi = 10 * _math.log10(_X2[_fx > 2500].sum() / _X2.sum())
+    check("...its bass rings past 2.5 kHz, harmonics by Hz not by count",
+          _tg(65.41, 0.0, 0.5, 1.0).max_harmonic >= 150 and _hi > -32.0,
+          "  (C2: %d harmonics; above 2.5 kHz %+.1f dB of the note)" % (_tg(65.41, 0.0, 0.5, 1.0).max_harmonic, _hi))
+    # ...THE BASS BLOOMS: a big reed's fundamental at once and its upper
+    # harmonics after (Ben: "a much softer attack ... a pressure swell"); from
+    # C3 up, together. And its gate, carried down the keyboard past the
+    # slot's ceiling, is held there: C2 had gone silent.
+    def _t6(y, f0, h):
+        from scipy.signal import butter, sosfiltfilt, hilbert
+        b = sosfiltfilt(butter(2, [h * f0 * 0.96, h * f0 * 1.04], btype="band", fs=B.SR, output="sos"), y)
+        e = np.convolve(np.abs(hilbert(b)), np.ones(480) / 480.0, "same")
+        st = np.median(e[int(0.8 * B.SR):int(1.2 * B.SR)])
+        return np.flatnonzero(e > st * 10 ** (-6 / 20.0))[0] / B.SR * 1e3
+    _b2 = _t6(_yc2, 65.41, 4) - _t6(_yc2, 65.41, 1)
+    _b4 = _t6(_yc4, 261.63, 4) - _t6(_yc4, 261.63, 1)
+    _lv = lambda y: 10 * _math.log10(np.mean(y[int(0.5 * B.SR):int(1.2 * B.SR)] ** 2))
+    check("...its bass blooms, its upper harmonics after the note; from C3 up, together",
+          _b2 > 50.0 and abs(_b4) < 20.0 and abs(_lv(_yc2) - _lv(_yc4)) < 6.0,
+          "  (h4 reaches -6 dB %+.0f ms after h1 at C2, %+.0f at C4; C2 %+.1f dB re C4)"
+          % (_b2, _b4, _lv(_yc2) - _lv(_yc4)))
 
     def _rh(f0=261.63, vel=100, cls=_T.RhodesProperties):
         return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
