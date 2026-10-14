@@ -4295,6 +4295,15 @@ class GrandPianoProperties(InharmonicStringProperties):
     # corner opening with velocity (attack_volume).
     hammer_corner_hz = 3542.03    # low-pass corner at mid velocity; raise = brighter
     hammer_order = 4.22103           # rolloff steepness above the corner (~6*order dB/oct)
+    # ...and how far velocity opens it: the corner at hammer_corner_hz times
+    # (hammer_open_lo + hammer_open_slope * attack_volume) -- 0.7x at the
+    # softest touch to 1.4x at the hardest, a 2:1 swing, for this piano.
+    hammer_open_lo = 0.7
+    hammer_open_slope = 0.7
+    # ...and with register: the hammers are lighter and harder up the
+    # keyboard, the contact shorter, the corner higher -- octaves of corner
+    # per octave of the note. 0 for this piano: one corner everywhere.
+    hammer_register_slope = 0.0
 
     # Hammer contact time: a few ms of onset ramp so the strike isn't a
     # one-sample step (a click). Real contact runs ~1 ms treble to ~4 ms bass;
@@ -4447,7 +4456,8 @@ class GrandPianoProperties(InharmonicStringProperties):
         # brighten the tone. (Note frequency is not stored raw; recover it from
         # octave_position = log2(f0 / frequency_x).)
         fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
-        fc = self.hammer_corner_hz * (0.7 + 0.7 * self.attack_volume)
+        fc = (self.hammer_corner_hz * (self.hammer_open_lo + self.hammer_open_slope * self.attack_volume)
+              * 2.0 ** (self.hammer_register_slope * self.octave_position))
         return v / (1.0 + (fn / fc) ** self.hammer_order) * self.soundboard_gain(fn)
 
     def soundboard_gain(self, fn):
@@ -4764,12 +4774,18 @@ class ElectricGrandProperties(GrandPianoProperties):
     strike comb at 1/7, the velocity-dependent hammer low-pass, the unison
     dance and the phantom partials. This is a piano.
 
-    NO REFERENCE, so this sits at 2. The +6 dB/octave and the 1/L^4 law are
-    derived; the two CASE LENGTHS are facts about the instruments; and
-    bridge_corner_hz is an estimate standing in for the mechanical coupling
-    between string, bridge and pickup, which is the one number here with
-    nothing behind it. How many strings per note a CP-70 uses is also
-    unverified -- the unison behaviour is inherited unchanged.
+    MEASURED since: Pianobook's "David's CP70" (Conner Sawchuk; 31 keys F1-Eb7,
+    4-7 layers each at their recorded levels; measured only), read through
+    examples/upright_fit.py --ref=cp70. The 1/L^4 law held -- F1's B 12.6e-4
+    recorded against 12.0 derived -- and three things were fitted: the decay
+    (a fundamental that sings over fast upper partials, 8.6 -> 6.8 dB on
+    T20), the hammers' brightness swinging far with velocity (13.4 -> 10.3
+    dB on the soft and hard layers' spectra; the bridge's own roll-off came
+    out unneeded), and the register's level (4.3 -> 3.5 dB). What is left,
+    ~10 dB, comes key by key -- one instrument's strings and hammers, not a
+    law (Ben: "simply variation in the physical properties"). How many
+    strings per note a CP-70 uses is still unverified -- the unison
+    behaviour is inherited unchanged. Ben: sounds great.
     """
 
     # L = C/f until the case runs out. C from a grand's C4 string, 0.62 m.
@@ -4796,8 +4812,11 @@ class ElectricGrandProperties(GrandPianoProperties):
     # DIRECTION is defensible, the number is an estimate.
     bridge_corner_hz = 4000.0
     bridge_order = 1.6
-    initial_gain = 0.088489
+    initial_gain = 0.115586      # C3/C4/C5 at v100 matched on rms to the grand piano (was -2.3 dB over)
     bridge_gain = 1.0               # neutral: the board's three terms became one
+    # THE REGISTER'S LEVEL, to David's CP70's own (its files keep their
+    # levels): a line through the gap, 4.3 -> 3.5 dB rms re the keys' mean.
+    octave_gain = 1.45
 
     # BALANCE, and it is not linear in this knob. Measured on four notes at
     # velocity 100 with the master well clear of any ceiling, level against
@@ -4839,18 +4858,31 @@ class ElectricGrandProperties(GrandPianoProperties):
     # ...and the old board and felt, pinned likewise (the grand's were refitted)
     board_low_hz = 35.0
     board_high_hz = 2600.0
-    hammer_corner_hz = 4000.0
+    # THE HAMMERS, FITTED (upright_fit.py --ref=cp70 --fit=spectrum, its soft
+    # and hard layers together): the corner ~260 Hz at the softest touch to
+    # ~18 kHz at the hardest -- dark soft, bright hard, the CP-70's "ambiguous
+    # dynamic range" (Sawchuk) -- where the grand's opens only 2:1.
+    hammer_corner_hz = 24.6624
     hammer_order = 2.0
+    hammer_open_lo = 1.504
+    hammer_open_slope = 900.8
+    hammer_register_slope = 0.0
+    tonal_dampening = 1.275
     board_body_hz = 240.0
     board_body_gain = 0.6
-    # ...and the old decay, pinned likewise
-    decay_db = 13.0
-    harmonic_decay_db = 1.5
-    decay_register_slope = 0.85
-    aftersound_level_1 = 0.28
-    aftersound_level_2 = 0.18
-    aftersound_level_3 = 0.16
-    aftersound_decay_ratio = 0.13
+    # THE DECAY, FITTED to David's CP70 (Pianobook, measured only;
+    # examples/upright_fit.py --ref=cp70 --fit=decay): every octave band's
+    # T20 at the middle layer, 8.56 -> 6.78 dB. The CP-70's thick, clean
+    # bottom is a FUNDAMENTAL that sings -- F1's 63-125 Hz band 13.6 s to
+    # fall 20 dB -- over upper partials gone in 0.2-0.5 s; the grand's
+    # pinned decay had it the other way round (2.6 s and 3-4 s).
+    decay_db = 2.746
+    harmonic_decay_db = 3.275
+    decay_register_slope = 0.831
+    aftersound_level_1 = 0.138
+    aftersound_level_2 = 0.140
+    aftersound_level_3 = 0.266
+    aftersound_decay_ratio = 0.527
     attack_time = 0.003           # the grand's old onset, pinned likewise
     unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
     string_gain = (0.28, 0.20)   # its unisons as they were voiced

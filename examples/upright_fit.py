@@ -3,7 +3,7 @@
 Ivy Audio's upright, CC0 in VSCO-2 CE; sources.md), and our render the same
 way.
 
-    python3 examples/upright_fit.py [--ref=steinway] [--dyn=2] [--program=P] [--class=NAME] [--notes=21,45,...]
+    python3 examples/upright_fit.py [--ref=steinway|cp70] [--dyn=2] [--program=P] [--class=NAME] [--notes=21,45,...]
 
 Each recorded note is read from its KNOWN key (Keys/Upright Piano/
 MappingChart.txt: file index k is key 21 + 2k, the last 108), not from an f0
@@ -19,10 +19,13 @@ beating between strings and falling in two stages. Per note:
   level   the loudest 150 ms, dB, per dynamic
 
 --beats compares each partial's level wobble in the decay (the unison's
-beating: a phaser, overdone). --fit=decay fits the decay rates and the aftersound to each band's T20.
+beating: a phaser, overdone). --fit=decay fits the decay rates and the aftersound to each band's T20
+(--decay=a,b names other parameters).
+--ab=OUT renders the recording then ours, every other key at dynamics 1 and 3.
 --fit=register sets the level across the keyboard (register_level_db) to
 the recording's, re A4, at mf. --fit=spectrum [--maxfev=N] fits the board and the felt to the ladders
-(SPECTRUM, FIT_KEYS, at dynamics 1 and 3); pair it with --class.
+(SPECTRUM, FIT_KEYS, at dynamics 1 and 3; --spectrum=a,b names other
+parameters); pair it with --class.
 
 and the same for our render of PROGRAM (default 0) at that key, velocity
 40/80/120 for dynamics 1/2/3, the note held 6 s. Recordings are 16 s, held.
@@ -57,7 +60,63 @@ STEINWAY = os.path.expanduser("~/Documents/refs/vcsl/steinway")
 STEINWAY_KEYS = (22, 30, 38, 46, 54, 62, 70, 78, 86, 94, 102)
 
 
+# ...or Pianobook's "David's CP70" (--ref=cp70; Conner Sawchuk's recording of
+# a friend's Yamaha CP-70, measured only, never redistributed; sources.md):
+# 31 keys F1-Eb7, five semitones apart in two interleaved chains, 4-7 layers
+# a key, straight off the instrument into a desk ("some clipping from the
+# board into the interface": every clipped take is dropped). The files keep
+# their recorded levels -- kinwie's sfz map adds up to +37 dB to the soft
+# layers -- so its levels by key AND by layer are the instrument's. Dynamic 1
+# is a key's softest layer, 2 its middle, 3 its hardest; each rendered at the
+# middle of that layer's velocity range in the map (CP70_VEL).
+CP70 = os.path.expanduser("~/Documents/refs/cp70/davids/David's CP70/David's CP70 Samples")
+CP70_SFZ = os.path.expanduser("~/Documents/refs/cp70/davids_sfz/Davids CP70/David's CP70.sfz")
+CP70_VEL = {}
+
+
+def _cp70_map():
+    """{key: [(lovel, hivel, path), ...] softest first}, from the sfz map."""
+    import re
+    out = {}
+    key = None
+    for line in open(CP70_SFZ):
+        m = re.search(r"<group>.*pitch_keycenter=(\d+)", line)
+        if m:
+            key = int(m.group(1))
+            continue
+        m = re.search(r"<region>\s*lovel=(\d+)\s+hivel=(\d+).*sample=(.+?\.wav)", line)
+        if m and key is not None:
+            out.setdefault(key, []).append((int(m.group(1)), int(m.group(2)),
+                                            os.path.join(CP70, m.group(3))))
+    return {k: sorted(set(v)) for k, v in out.items()}
+
+
+def vel_for(key, dyn):
+    """Our velocity for a recorded key and dynamic: the CP70 layer's own
+    (CP70_VEL, filled by recordings()), else VEL."""
+    return CP70_VEL.get((key, dyn), VEL[dyn])
+
+
+def _clipped(p):
+    """Held at digital full scale. A quiet 16-bit take repeats its top value by
+    quantisation alone (four soft layers peak at 0.1-1.3% and did), so only a
+    take near full scale can have clipped there. (The readme's clipping was
+    "from the board into the interface" -- in the desk, under full scale;
+    nothing here reaches it.)"""
+    x, _ = load(p)
+    pk = np.abs(x).max()
+    return pk > 0.5 and int((np.abs(x) >= 0.999 * pk).sum()) > 8
+
+
 def recordings(dyn):
+    if REF[0] == "cp70":
+        out = {}
+        for k, lay in _cp70_map().items():
+            lo, hi, p = lay[0] if dyn == 1 else lay[-1] if dyn == 3 else lay[len(lay) // 2]
+            if os.path.exists(p) and not _clipped(p):
+                out[k] = p
+                CP70_VEL[(k, dyn)] = (lo + hi) // 2
+        return out
     if REF[0] == "steinway":
         import glob as _g
         out = {}
@@ -224,7 +283,8 @@ def fit_spectrum(cls, prog, maxfev):
         for k in FIT_KEYS:
             x, sr = load(recs[k])
             rec[(d, k)] = thirds(x, sr, k)
-    x0 = np.array([float(getattr(cls, p)) for p in SPECTRUM])
+    # a parameter at 0 cannot move under exp scaling; start it small
+    x0 = np.array([float(getattr(cls, p)) or 0.05 for p in SPECTRUM])
     best = [1e9, None]
 
     def f(z):
@@ -233,10 +293,14 @@ def fit_spectrum(cls, prog, maxfev):
             setattr(cls, p_, float(q))
         errs = []
         for (d, k), r in rec.items():
-            y, sr = render(prog, k, VEL[d], 0.7)
+            y, sr = render(prog, k, vel_for(k, d), 0.7)
             m = thirds(y, sr, k)
-            w = r > -40         # NaN (under the fundamental) compares False
-            errs.extend((m - r)[w])
+            # A band counts where EITHER is within 40 dB of its peak, both
+            # floored at -60: masked by the recording alone, a band ours makes
+            # too bright where the recording is quiet was never an error --
+            # the CP-70's F6 h3, -56 recorded against ours -27, unseen.
+            w = (r > -40) | (m > -40)       # NaN (under the fundamental) compares False
+            errs.extend((np.maximum(m, -60) - np.maximum(r, -60))[w & np.isfinite(r) & np.isfinite(m)])
         e = float(np.sqrt(np.mean(np.square(errs))))
         if e < best[0]:
             best[:] = [e, v]
@@ -260,11 +324,12 @@ def residuals(cls, prog):
         for k in FIT_KEYS:
             x, sr = load(recs[k])
             r = thirds(x, sr, k)
-            y, sr2 = render(prog, k, VEL[d], 0.7)
+            y, sr2 = render(prog, k, vel_for(k, d), 0.7)
             m = thirds(y, sr2, k)
             for rg in regs:
                 if rg[0] <= k <= rg[1]:
-                    acc[rg].append(np.where(r > -40, m - r, np.nan))
+                    acc[rg].append(np.where((r > -40) | (m > -40),
+                                            np.maximum(m, -60) - np.maximum(r, -60), np.nan))
     cen = np.sqrt(E3[:-1] * E3[1:])
     print("  residual (ours - recorded, dB) by register; bands: " +
           " ".join("%d" % c for c in cen[::3]))
@@ -287,7 +352,7 @@ def fit_register(cls, prog, dyn=2, rounds=6):
     keys = sorted(recs)
     rl = {k: level(*load(recs[k])) for k in keys}
     for it in range(rounds + 1):
-        ol = {k: level(*render(prog, k, VEL[dyn], 0.7)) for k in keys}
+        ol = {k: level(*render(prog, k, vel_for(k, dyn), 0.7)) for k in keys}
         d = np.array([(rl[k] - rl[69]) - (ol[k] - ol[69]) for k in keys])
         print("  round %d: ours - recorded re A4, rms %.2f dB, worst %+.1f" % (
             it, np.sqrt(np.mean(d ** 2)), -d[np.argmax(np.abs(d))]), flush=True)
@@ -341,7 +406,7 @@ def fit_decay(cls, prog, maxfev, dyn=2):
         t = np.array([d[0] for d in band_decay(x, sr)])
         ok = np.array([hi > f0 for _, hi in BANDS]) & np.isfinite(t) & (t > 0.1) & (t < DECAY_HOLD)
         rec[k] = (t, ok, late(x, sr))
-    x0 = np.array([float(getattr(cls, p)) for p in DECAY])
+    x0 = np.array([float(getattr(cls, p)) or 1.0 for p in DECAY])   # a term at 0 starts at 1
     best = [1e9, None]
 
     def f(z):
@@ -350,7 +415,7 @@ def fit_decay(cls, prog, maxfev, dyn=2):
             setattr(cls, p_, float(q))
         errs = []
         for k, (t, ok, lt) in rec.items():
-            y, sr = render(prog, k, VEL[dyn], DECAY_HOLD)
+            y, sr = render(prog, k, vel_for(k, dyn), DECAY_HOLD)
             m = np.array([d[0] for d in band_decay(y, sr)])
             m = np.where(np.isfinite(m), m, DECAY_HOLD)
             errs.extend(20 * np.log10(np.maximum(m[ok], 0.05) / t[ok]))
@@ -449,7 +514,7 @@ def fit_strike(cls, prog, passes=3, dyn=2):
     for it in range(passes + 1):
         D = []
         for k in keys:
-            o = strike_noise(*render(prog, k, VEL[dyn], 1.0), k)[0]
+            o = strike_noise(*render(prog, k, vel_for(k, dyn), 1.0), k)[0]
             D.append(rec[k] - o)
         D = np.array(D)
         ok = np.isfinite(D)
@@ -483,6 +548,26 @@ def fit_strike(cls, prog, passes=3, dyn=2):
     print("    strike_noise_slope = %.3f" % cls.strike_noise_slope)
 
 
+def ab(prog, out, dyns=(1, 3), note_s=2.5):
+    """--ab=OUT: every other recorded key, low to high, each dynamic in
+    turn: the recording, then ours at that key and layer's velocity, then a
+    rest; each pair peak-normalised alike (harpsi_ab.fit_note)."""
+    import harpsi_ab as A
+    from roomtail import write_wav
+    A.NOTE_S = note_s
+    gap, rest = np.zeros(int(A.GAP_S * A.SR)), np.zeros(int(0.6 * A.SR))
+    parts = []
+    recs = {d: recordings(d) for d in dyns}
+    for k in FIT_KEYS:
+        for d in dyns:
+            if k not in recs[d]:
+                continue
+            y, sr = render(prog, k, vel_for(k, d), note_s + 0.5)
+            parts += [A.fit_note(*load(recs[d][k])), gap, A.fit_note(y, sr), rest]
+    x = np.concatenate(parts)
+    write_wav(out, np.stack([x, x], 1), A.SR)
+
+
 def name(key):
     return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][key % 12] + str(key // 12 - 1)
 
@@ -493,11 +578,18 @@ def main(argv):
     dyn = int(next((a.split("=")[1] for a in argv if a.startswith("--dyn=")), 2))
     prog = next((int(a.split("=")[1]) for a in argv if a.startswith("--program=")), 0)
     only = next((a.split("=")[1] for a in argv if a.startswith("--notes=")), None)
+    global FIT_KEYS
     if any(a == "--ref=steinway" for a in argv):
         REF[0] = "steinway"
-        global FIT_KEYS
         FIT_KEYS = STEINWAY_KEYS
+    if any(a == "--ref=cp70" for a in argv):
+        REF[0] = "cp70"
+        FIT_KEYS = tuple(sorted(_cp70_map()))[::2]
     use_class(argv, prog)
+    _ab = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab=")), None)
+    if _ab:
+        ab(prog, _ab)
+        return 0
     if "--fit=strike" in argv:
         import patch_map
         fit_strike(patch_map.PROGRAM_CLASS[prog], prog)
@@ -508,7 +600,7 @@ def main(argv):
         print("key  strike noise outside the partials, dB re the first 30 ms, by third octave from 40 Hz (every 3rd); its fall by 30-80 ms")
         for key in keys:
             r, rf = strike_noise(*load(recs[key]), key)
-            o, of = strike_noise(*render(prog, key, VEL[dyn], 1.0), key)
+            o, of = strike_noise(*render(prog, key, vel_for(key, dyn), 1.0), key)
             print("%-4s rec  %s  fall %5.1f" % (name(key), " ".join("%4.0f" % v if np.isfinite(v) else "   ." for v in r[::3]), rf))
             print("     ours %s  fall %5.1f" % (" ".join("%4.0f" % v if np.isfinite(v) else "   ." for v in o[::3]), of))
         return 0
@@ -518,7 +610,7 @@ def main(argv):
         print("key   partial: wobble dB / rate Hz, recorded | ours  (0.3-3 s)")
         for key in keys:
             x, sr = load(recs[key])
-            y, sr2 = render(prog, key, VEL[dyn], 4.0)
+            y, sr2 = render(prog, key, vel_for(key, dyn), 4.0)
             r = {n: (d, f) for n, d, f in beating(x, sr, key)}
             o = {n: (d, f) for n, d, f in beating(y, sr2, key)}
             row = ["%d: %.1f/%.1f | %.1f/%.1f" % (n, r[n][0], r[n][1], o[n][0], o[n][1])
@@ -529,6 +621,10 @@ def main(argv):
             print("      mean wobble: recorded %.2f dB, ours %.2f dB" % (ra, oa))
         return 0
     if "--fit=decay" in argv:
+        global DECAY
+        _dc = next((a.split("=", 1)[1] for a in argv if a.startswith("--decay=")), None)
+        if _dc:                      # other parameters (GM 2's Hz law)
+            DECAY = tuple(_dc.split(","))
         import patch_map
         cls = patch_map.PROGRAM_CLASS[prog]
         e, v = fit_decay(cls, prog, int(next((a.split("=")[1] for a in argv
@@ -542,6 +638,10 @@ def main(argv):
         fit_register(patch_map.PROGRAM_CLASS[prog], prog)
         return 0
     if "--fit=spectrum" in argv:
+        global SPECTRUM
+        _sp = next((a.split("=", 1)[1] for a in argv if a.startswith("--spectrum=")), None)
+        if _sp:                      # a class whose spectrum is not a board's (GM 2's bridge)
+            SPECTRUM = tuple(_sp.split(","))
         import patch_map
         cls = patch_map.PROGRAM_CLASS[prog]
         e, v = fit_spectrum(cls, prog, int(next((a.split("=")[1] for a in argv
@@ -559,7 +659,7 @@ def main(argv):
     for key in keys:
         x, sr = load(recs[key])
         r = measure(x, sr, key)
-        y, sr2 = render(prog, key, VEL[dyn])
+        y, sr2 = render(prog, key, vel_for(key, dyn))
         m = measure(y, sr2, key)
         print("%-4s rec  f0 %7.2f  B %5.2f  lvl %6.1f  ladder %s" % (
             name(key), r["f0"], r["B"] * 1e4, r["level"], " ".join("%4.0f" % v for v in r["ladder"][:8])))

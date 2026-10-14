@@ -13363,6 +13363,27 @@ def selftest():
           eg.bridge_force_power == 0.0 and hasattr(eg, "bridge_force_power"),
           "  (bridge force goes as n*A_n, but the A_n here is a generic tilt)")
 
+    # MEASURED on David's CP70 (upright_fit.py --ref=cp70): the thick, clean
+    # bottom is a FUNDAMENTAL that sings over upper partials that do not --
+    # F1's lowest band 13.6 s to fall 20 dB, its upper ones 0.2-0.5 s.
+    _eg, _ag = _T.ElectricGrandProperties(55.0, 0.0, 0.5, 1.0), _T.GrandPianoProperties(55.0, 0.0, 0.5, 1.0)
+    check("its fundamental outlasts a concert grand's, its upper partials do not",
+          _eg.harmonic_decay(1) < 0.7 * _ag.harmonic_decay(1)
+          and _eg.harmonic_decay(8) > 1.3 * _ag.harmonic_decay(8),
+          "  (A1: h1 %.1f dB/s against %.1f; h8 %.1f against %.1f)"
+          % (_eg.harmonic_decay(1), _ag.harmonic_decay(1), _eg.harmonic_decay(8), _ag.harmonic_decay(8)))
+    # ...and its hammers swing its brightness far further with velocity: dark
+    # when soft, bright when hard (hammer_open_*, fitted on its soft and hard
+    # layers together).
+    def _swing(C, f=220.0):
+        lo, hi = C(f, 0.0, (20 / 127.0) ** 2, 1.0), C(f, 0.0, 1.0, 1.0)
+        r = lambda q: 20 * _math.log10(q.harmonic_volume(8) / q.harmonic_volume(1))
+        return r(hi) - r(lo)
+    check("...and velocity swings its brightness far more than a concert grand's",
+          _swing(_T.ElectricGrandProperties) > _swing(_T.GrandPianoProperties) + 10.0,
+          "  (A3, h8 re h1 from v20 to v127: %+.1f dB against %+.1f)"
+          % (_swing(_T.ElectricGrandProperties), _swing(_T.GrandPianoProperties)))
+
     def _rh(f0=261.63, vel=100, cls=_T.RhodesProperties):
         return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
 
