@@ -1091,6 +1091,10 @@ class SynthProperties:
     # strike at the onset, as every voice before it.
     strike_noise_at = 0.0
     strike_noise_cal_db = 0.0
+    # A TAIL: the strike's table again, strike_noise_tail[0] dB under it and
+    # falling strike_noise_tail[1] dB/s (a music box: the pin's snap, then the
+    # comb's buzz). None = the strike alone.
+    strike_noise_tail = None
     # GRAINS: sparse events through a held note (an ocean drum's beads landing)
     # -- rows of (lo Hz, hi Hz, per second, dB re the note's gain, dB scatter,
     # decay dB/s): each a damped sine at a log-uniform frequency in the band,
@@ -10764,14 +10768,45 @@ class GlockenspielProperties(StruckBarProperties):
     harmonic_decay_db = 0.6      # see TubularBell: this is what caps the ring
 
 
-class CelestaProperties(StruckBarProperties):
-    """Steel plates struck through felt, each over a wooden resonator. The felt
-    is what separates it from a glockenspiel -- a soft hammer cannot excite the
-    high modes, so it is the same bar sounding much gentler."""
-    initial_gain = 1.0 / 2.7
-    tonal_dampening = 1.7        # felt: the top is simply not excited
-    decay_db = 9.0
-    harmonic_decay_db = 5.0
+class ModeDecays:
+    """Each measured mode's OWN decay (mode_decays: tonelib's D, half the band's
+    dB/s, at 415 Hz), with one register law -- the timpani's arrangement, for a
+    voice whose modes at nearly the same ratio decay at rates ten times apart
+    (a celesta's 2nd harmonic and its bar's 2.76 mode)."""
+    mode_decays = ()
+
+    def harmonic_decay(self, harmonic):
+        if 1 <= harmonic <= len(self.mode_decays):
+            return self.mode_decays[harmonic - 1] * self.decay_register_factor
+        return super().harmonic_decay(harmonic)
+
+
+class CelestaProperties(ModeDecays, StruckBarProperties):
+    """GM 8. Steel plates struck through felt, each over a wooden resonator. The
+    felt is what separates it from a glockenspiel -- a soft hammer cannot
+    excite the high modes, so it is the same bar sounding much gentler.
+
+    MEASURED (examples/steelbar_fit.py; Macsat-Rd's twelve notes, A4-G#5, CC0;
+    sources.md), and the plate is the smallest part of it:
+      * the FUNDAMENTAL, all but alone: everything else 38-50 dB down;
+      * EXACT HARMONICS -- 2x, 3x, 5x, 7x -- decaying WITH the fundamental (D
+        2-7 at 415 Hz): integer ratios a free plate cannot make, so its motion
+        or its radiation through the resonator, the glow under a held chord
+        ("Neptune");
+      * the PLATE'S OWN MODES, a free bar's 2.76x and 5.42x, 43-47 dB down and
+        gone in a fraction of a second (D 62-77): the felt barely reaches them.
+    The class had the free bar's modes alone, at a felt tilt -- no harmonics.
+    The register slope comes from one octave of notes, so it is weakly held.
+    """
+    # the old class's level held (its felt tilt
+    # had the plates 7.5 dB under the measured set's), mean over C4-C8
+    initial_gain = 0.156004
+    inharmonicity_coefficient = 0.0      # the ratios are absolute
+    mode_ratios = (1.0, 2.0, 2.76, 3.0, 5.0, 5.42, 7.0)
+    mode_gains = (1.0, 0.006, 0.02414, 0.01327, 0.00387, 0.02074, 0.01632)
+    mode_decays = (5.23, 6.52, 62.27, 4.17, 1.52, 77.0, 2.96)
+    decay_register_slope = 0.137
+    max_harmonic = 7
     # FELT TAKES 2 ms. At an instant attack the plates CLICKED (Ben, of
     # Neptune, where the celesta plays 2238 notes): the top fell 15 dB after its
     # first 3 ms. No celesta recording here, so by its nearest measured
@@ -10782,15 +10817,77 @@ class CelestaProperties(StruckBarProperties):
     attack_time = 0.002
 
 
-class MusicBoxProperties(StruckBarProperties):
-    """A plucked steel comb tooth: a bar fixed at ONE end rather than free at
-    both, plucked by a pin. Bright and short, and small -- the teeth are tiny,
-    so there is very little of it."""
-    initial_gain = 1.0 / 2.7
-    tonal_dampening = 1.1
-    decay_db = 17.5              # ~0.8 s
-    harmonic_decay_db = 6.0
+class MusicBoxProperties(ModeDecays, StruckBarProperties):
+    """GM 10. A plucked steel comb tooth: a CANTILEVER, fixed at one end and
+    plucked by a pin at the other -- not the free bar this had (1 : 2.756).
 
+    MEASURED (examples/steelbar_fit.py; folkman's box in D, 16 teeth F#5-E7,
+    and rbnuser's 13, D5-G7; both CC0; sources.md):
+      * the FUNDAMENTAL, dominant;
+      * EXACT HARMONICS, 2x at -23 dB, 3x at -35, 4x-5x near -47: as the
+        celesta's, integer ratios no cantilever makes;
+      * the TOOTH'S OWN MODES: ~6x (a cantilever's 6.27, lowered by the taper)
+        and 17.6x, the third bending mode, at -33 dB on the low teeth (the
+        high teeth's is above hearing). A mode near 10-15x wanders box to box
+        and tooth to tooth and reads mostly as the floor: not modelled;
+      * a decay climbing the comb, about doubling each octave (slope 1.0):
+        ~20 dB/s at D5, 100-140 at G7.
+    Bright and short, and small -- the teeth are tiny, so there is very
+    little of it.
+    """
+    # the old class's level held over the comb,
+    # D5-G7 (the measured set and slope are 21.6 dB over the old)
+    initial_gain = 0.030842
+    inharmonicity_coefficient = 0.0      # the ratios are absolute
+    mode_ratios = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 0.5, 17.6)
+    mode_gains = (1.0, 0.10249, 0.0431, 0.01242, 0.00489, 0.01171, 0.0, 0.07358)
+    mode_decays = (5.02, 9.24, 8.72, 9.69, 7.76, 14.85, 4.9, 17.66)
+    decay_register_slope = 1.005
+    max_harmonic = 8
+    # THE TOOTH AN OCTAVE BELOW (mode 0.5): its second harmonic is the struck
+    # note, so it rings at its own pitch -- on SOME keys, the comb's coupling
+    # being tooth by tooth: of 14 takes whose box has that tooth, 4 ring it
+    # (E6 -> E5 and G6 -> G5 at -40 dB, E7 -> E6 -52, rbnuser's C7 -57), at
+    # ~35 dB/s (mode_decays: D 17 at its pitch, given at the struck note's).
+    # Which keys, and how loud, drawn per key (Random(key)): octave_ring_share
+    # of them, uniform in octave_ring_db. Only where the tooth EXISTS: an
+    # octave under the comb's lowest (octave_ring_lowest_hz, D5 in both boxes)
+    # there is none; past the top of the comb one is assumed (Ben).
+    # NO TOUCH: the comb is plucked by the cylinder's pins, each lifting its
+    # tooth as far as the pin is tall and letting go -- nothing a player sets.
+    # Live plays it at one level (FIXED_TOUCH); a file's velocities, its mix,
+    # are obeyed as for the harpsichord.
+    touch_sensitive = False
+    # LOUDER UP THE COMB, ~8.6 dB an octave more than the modes alone give
+    # (8.9 in folkman's box, 8.3 in rbnuser's: two recorders, one slope) --
+    # a tiny low tooth moves little air
+    octave_gain = 8.6
+    octave_ring_share = 0.3
+    octave_ring_db = (-52.0, -35.0)
+    octave_ring_lowest_hz = 587.33
+
+    def mode_gains_here(self):
+        g = list(super().mode_gains_here())
+        f = self.frequency_x * (2.0 ** self.octave_position)
+        key = int(round(69 + 12 * _log(f / 440.0) / _log(2.0)))
+        rng = _random.Random(key * 7919 + 10)
+        draw, lev = rng.random(), rng.uniform(*self.octave_ring_db)
+        on = f / 2.0 >= self.octave_ring_lowest_hz * 2.0 ** (-0.5 / 12.0) and draw < self.octave_ring_share
+        g[6] = 10.0 ** (lev / 20.0) if on else 0.0
+        return tuple(g)
+    # THE PIN'S SNAP (examples/steelbar_fit.py pluck): between the partials
+    # the takes hold a broadband click 0-5 ms, as loud as the fundamental
+    # above 3 kHz and gone ~20 dB by 10 ms, then the comb's buzz under it
+    # (19 dB down, ~250 dB/s) to 60 ms -- "most of the attacks have more on
+    # the high end" (Ben). Ours had the partials alone. The fitted table,
+    # smoothed a quarter-half-quarter across its bands (the partials leave
+    # some bands few bins between them); quieter up the comb, -4 dB an octave.
+    strike_noise_db = ((281, -64.0), (354, -47.0), (445, -26.6), (561, -19.7), (707, -25.4), (891, -25.7), (1122, -15.7), (1414, -13.0), (1782, -16.5), (2245, -11.1), (2828, -4.8), (3564, -1.4), (4490, 2.2), (5657, 2.0), (7127, -3.1), (8980, -6.5), (11314, -3.5))
+    strike_noise_octave_db = -4.026
+    strike_noise_dbs = 4921.0
+    strike_noise_fade_s = 0.0005
+    strike_noise_tail = (-19.01, 249.1)
+    strike_noise_len_s = 0.25
 
 class TunedBarProperties(MalletProperties):
     """A bar undercut so its overtones land on WHOLE-NUMBER ratios.

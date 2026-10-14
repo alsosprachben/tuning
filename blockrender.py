@@ -3959,7 +3959,15 @@ def prepare(path, tuner='hybrid440', sink=None):
             # moved strike_noise_cal_db
             _sat = (getattr(props, 'strike_noise_at', 0.0) or 0.0) * SR
             _scal = getattr(props, 'strike_noise_cal_db', 0.0) or 0.0
-            for _boff, _bdb in _bursts:
+            # ...AND A SLOWER TAIL under it (strike_noise_tail: dB re the
+            # strike, its own dB/s): the table again, quieter and longer -- a
+            # music box's pin snaps off the tooth and is gone in 5 ms, while
+            # the comb's own buzz under it lasts tens
+            _bursts = [(b, d, _slr) for b, d in _bursts]
+            _stail = getattr(props, 'strike_noise_tail', None)
+            if _stail:
+                _bursts += [(b, d + _stail[0], math.log(10.0) / 20.0 * _stail[1]) for b, d, _ in _bursts]
+            for _boff, _bdb, _slr in _bursts:
                 _bon = non + _sat + _boff * SR
                 for _hf, _db in props.strike_noise_db:
                     if _hf >= 0.45 * SR:

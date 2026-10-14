@@ -13384,6 +13384,63 @@ def selftest():
           "  (A3, h8 re h1 from v20 to v127: %+.1f dB against %+.1f)"
           % (_swing(_T.ElectricGrandProperties), _swing(_T.GrandPianoProperties)))
 
+    # ---- the steel bars: celesta and music box (examples/steelbar_fit.py) ----
+    # MEASURED, both alike in kind: a dominant fundamental, EXACT harmonics
+    # decaying with it (integer ratios no free bar or cantilever makes), and
+    # the bar's own modes, quiet and fast.
+    _ce = _T.CelestaProperties(659.26, 0.0, 0.5, 1.0)
+    _rr = list(_ce.mode_ratios)
+    _hd = lambda q, r: q.harmonic_decay(list(q.mode_ratios).index(r) + 1)
+    check("a celesta's plate modes die ten times faster than its harmonics",
+          2.0 in _rr and 3.0 in _rr and 2.76 in _rr
+          and _hd(_ce, 2.76) > 8.0 * _hd(_ce, 2.0) and _hd(_ce, 5.42) > 8.0 * _hd(_ce, 5.0),
+          "  (E5: 2x %.1f, the plate's 2.76x %.1f; 5x %.1f, 5.42x %.1f)"
+          % (_hd(_ce, 2.0), _hd(_ce, 2.76), _hd(_ce, 5.0), _hd(_ce, 5.42)))
+    _mb = _T.MusicBoxProperties
+    check("a music box's tooth is a cantilever, not a free bar",
+          not any(abs(r - 2.756) < 0.05 for r in _mb.mode_ratios)
+          and 6.0 in _mb.mode_ratios and 17.6 in _mb.mode_ratios,
+          "  (modes %s)" % (tuple(_mb.mode_ratios),))
+    check("...whose decay climbs the comb, about doubling an octave",
+          0.8 < _mb.decay_register_slope < 1.2
+          and _mb(1174.66, 0.0, 0.5, 1.0).harmonic_decay(1) > 1.7 * _mb(587.33, 0.0, 0.5, 1.0).harmonic_decay(1))
+    # NO TOUCH ON A MUSIC BOX: the pins pluck; a celesta has a keyboard action.
+    check("the music box ignores touch live, the celesta keeps it",
+          not _mb.touch_sensitive and _T.CelestaProperties.touch_sensitive)
+    # THE TOOTH AN OCTAVE BELOW rings on SOME keys (4 of 14 measured), and
+    # only where that tooth exists: none an octave under the comb's lowest
+    # (D5); past its top, one is assumed (Ben).
+    _ob = lambda k: _mb(440.0 * 2 ** ((k - 69) / 12.0), 0.0, 0.5, 1.0).mode_gains_here()[6]
+    _rings = [k for k in range(74, 109) if _ob(k) > 0.0]
+    check("the music box rings the tooth an octave below on some keys, never below D6",
+          _rings and min(_rings) >= 86 and 0.15 < len(_rings) / 23.0 < 0.5
+          and _ob(_rings[0]) == _ob(_rings[0]),
+          "  (keys %s)" % _rings)
+    # THE PIN'S SNAP: a broadband click as loud as the fundamental above 3 kHz
+    # in the first 5 ms, the comb's buzz under it; the celesta's felt has none.
+    def _snap(prog, key):
+        _m = mido.MidiFile(type=1, ticks_per_beat=480)
+        _t = mido.MidiTrack(); _m.tracks.append(_t)
+        _t.append(mido.Message("program_change", channel=0, program=prog, time=0))
+        _t.append(mido.Message("note_on", channel=0, note=key, velocity=90, time=0))
+        _t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=480))
+        _L, _R = B.render(_m)[:2]
+        y = 0.5 * (np.asarray(_L, np.float64) + np.asarray(_R, np.float64))
+        i0 = int(np.flatnonzero(np.abs(y) > 0.01 * np.abs(y).max())[0])
+        _f = np.fft.rfftfreq(1 << 15, 1.0 / B.SR)
+        _sp = lambda a, b: np.abs(np.fft.rfft(y[i0 + int(a * B.SR):i0 + int(b * B.SR)], 1 << 15)) ** 2 / (b - a)
+        _f0 = 440.0 * 2 ** ((key - 69) / 12.0)
+        _h = np.ones_like(_f, bool)
+        for _r in range(1, 30):
+            _h &= np.abs(_f - _r * _f0) > 0.15 * _f0
+        _hi = (_f > 3000) & (_f < 12000) & _h
+        return 10 * _math.log10(_sp(0.0, 0.005)[_hi].sum() / _sp(0.03, 0.13)[np.abs(_f - _f0) < 30].sum())
+    _sm, _sc = _snap(10, 81), _snap(8, 76)
+    check("a music box's pin snaps, a celesta's felt does not",
+          _sm > -15.0 and _sc < _sm - 15.0,
+          "  (3-12 kHz between the partials, first 5 ms, re the fundamental: %+.1f dB, the celesta %+.1f)"
+          % (_sm, _sc))
+
     def _rh(f0=261.63, vel=100, cls=_T.RhodesProperties):
         return cls(f0, 0.0, (vel / 127.0) ** 2, 1.0)
 

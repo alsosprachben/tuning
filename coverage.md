@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 10 | 8% |
+| 2 specific, theory | 8 | 6% |
 | 3 specific, theory + ear | 14 | 11% |
-| 4 specific, reference audio | 104 | 81% |
+| 4 specific, reference audio | 106 | 83% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -172,9 +172,9 @@ plays Standard, as does any program that is not a set.
 
 | # | patch | class | | notes |
 |---|---|---|---|---|
-| 8 | Celesta | `Celesta` | **2** | struck steel plate, felt hammer |
+| 8 | Celesta | `Celesta` | **4** | FITTED TO MACSAT-RD'S CELESTA (Freesound, CC0; twelve notes A4-G#5; examples/steelbar_fit.py): a fundamental all but alone, EXACT harmonics 2x-7x decaying with it (the glow under a held chord), and the plate's own free-bar modes, 2.76x and 5.42x, 43-47 dB down and dying ten times faster -- the class had the plate's modes alone, no harmonics; each mode's own level and decay, the levels calibrated through the renderer. Touch kept (a keyboard action); the felt's 2 ms landing validated against the takes' first 5 ms. One octave measured, so the register is weakly held. Ben: a perfect fit |
 | 9 | Glockenspiel | `Glockenspiel` | **4** | Iowa orchestra bells |
-| 10 | Music Box | `MusicBox` | **2** | plucked steel comb tooth. Its docstring claims a cantilever; its numbers are a free-free bar |
+| 10 | Music Box | `MusicBox` | **4** | FITTED TO TWO BOXES (Freesound, CC0: folkman's in D, 16 teeth, and rbnuser's 13; examples/steelbar_fit.py): the tooth a CANTILEVER (its ~6x and 17.6x), not the free bar the class had, with exact harmonics; each mode's level and decay, the decay doubling up the comb, the level rising 8.6 dB an octave (both boxes agree); THE PIN'S SNAP -- broadband, as loud as the fundamental above 3 kHz for 5 ms, then the comb's buzz to 60 ms (a slower strike-noise tail); the tooth an octave below ringing on some keys (4 of 14 measured), only where that tooth exists. No touch live: the pins pluck. Not modelled: the neighbouring teeth's ring (up to -34 dB). Ben: perfect |
 | 11 | Vibraphone | `Vibraphone` | **4** | Iowa vibraphone. The motor tremolo that gives it its name is NOT modelled |
 | 12 | Marimba | `Marimba` | **4** | Iowa marimba |
 | 13 | Xylophone | `Xylophone` | **4** | Iowa xylophone |
@@ -506,9 +506,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `Koto` [FormantBody] -- GM 107 Koto (4)
     - `Mallet`
       - `StruckBar`
-        - `Celesta` -- GM 8 Celesta (2)
+        - `Celesta` [ModeDecays] -- GM 8 Celesta (4)
         - `Glockenspiel` -- GM 9 Glockenspiel (4)
-        - `MusicBox` -- GM 10 Music Box (2)
+        - `MusicBox` [ModeDecays] -- GM 10 Music Box (4)
       - `TunedBar`
         - `Crotale` -- GM 112 Tinkle Bell (4), 84 Belltree (4)
         - `TubularBell` -- GM 14 Tubular Bells (4)
