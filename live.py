@@ -2185,6 +2185,13 @@ class Patch:
         # up. None = scale by each chord's own peak, which is right for a
         # keyboard and wrong for anything with a picking hand.
         self.amp_reference = None if drums else getattr(pc, "amp_reference", None)
+        # ...BY THE PROGRAM'S TRIM (patch_map.PROGRAM_TRIM_DB), which the
+        # templates carry: the bank's balance is a level after the amplifier,
+        # as offline (blockrender scales its reference by the channel volume
+        # the trim rides on) -- not a drive. Left alone, a guitar trimmed up
+        # distorted more live, a Hammond trimmed down less.
+        if self.amp_reference:
+            self.amp_reference *= __import__("patch_map").program_trim(program)
         # AND THE IMBALANCE, which live never carried. Offline passes each voice
         # its own (blockrender's _AMP_IMB); live passed none, so tubeamp's
         # default of 0.06 applied -- a balanced push-pull pair with its even
@@ -13508,16 +13515,7 @@ def selftest():
         _t.append(mido.Message("program_change", channel=0, program=prog, time=0))
         _t.append(mido.Message("note_on", channel=0, note=key, velocity=vel, time=0))
         _t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
-        # AT THE FILE RENDERER'S BLOCK (512), as the fits were made: live's
-        # 128 (B.BLK, set by a Live above) renders noise rows differently --
-        # the gunshot's blast 12 dB weaker at the top -- a live/file gap of
-        # its own, not the voice's
-        _blk = B.BLK
-        B.BLK = 512
-        try:
-            _L, _R = B.render(_m)[:2]
-        finally:
-            B.BLK = _blk
+        _L, _R = B.render(_m)[:2]
         # one ear (side 0): the two ears' sum combs the top wherever the key
         # places the voice off centre
         y = (np.asarray(_L, np.float64) if side == 0 else
@@ -13558,6 +13556,10 @@ def selftest():
     _T.GunshotProperties.strike_noise_db = ()
     _gn = _gtop()
     _T.GunshotProperties.strike_noise_db = _gkeep
+    # ...AND THE N-WAVE ON THE NOTE, at any block (live's 128 is set above):
+    # a note in a render's first two blocks had put it up to 23 ms late,
+    # behind its own blast -- which read as a live/file difference in the
+    # noise rows that was not one
     check("a gunshot carries its blast's noise high, not the N-wave alone",
           _gn - _gw > 10.0,
           "  (4-16 kHz under 125-500 Hz in the first 20 ms: %.1f dB, the N-wave alone %.1f; the shots 3-4.5)"

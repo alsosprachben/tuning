@@ -21111,9 +21111,9 @@ class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     # supposed to be the loudest thing in the piece, but not to swamp it.
     # x3.57 for the N-wave: the same energy over the shot's first 100 ms as
     # the click it replaced, which carried 11 dB more at 1/13.
-    # ...and the blast's noise beside it given back (-2.8 dB at G3, the
+    # ...and the blast's noise beside it given back (-4.2 dB at G3, the
     # first 100 ms): the shot keeps its place over the orchestra
-    initial_gain = 3.57 / 13 * 10 ** (-2.8 / 20.0)
+    initial_gain = 3.57 / 13 * 10 ** (-4.17 / 20.0)
     max_harmonic = 72
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 60.0
     tonal_dampening = 0.12         # flattest of all: no pitch survives
@@ -21163,18 +21163,21 @@ class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     # ...AND THE BLAST'S NOISE BESIDE IT (examples/gunshot_fit.py;
     # johanwestling's 9 mm at 15 m, CC0, sources.md "Sound effects"): the
     # shot falls only ~3 dB an octave above its 125-250 Hz peak, -20 dB at 16
-    # kHz, where the N-wave alone falls ~6 -- 9-17 dB short at 2-16 kHz --
-    # and holds -4 dB at 5-20 ms, the boom, where the N-wave alone is -16.
-    # Third-octave rows by octave and their fall fitted on the first 20 ms at
-    # G3: every octave within 1 dB but 125 Hz (ours 7 over, the N-wave's own
-    # peak), the 5-20 ms window -3.5 against -3.8. The tail past it is the
-    # room's, as above.
-    strike_noise_db = ((50, -17.8), (63, -17.8), (79, -17.8), (100, -40.1), (126, -40.1), (159, -40.1), (200, -24.2), (252, -24.2), (317, -24.2), (400, -30.1), (504, -30.1), (635, -30.1), (800, -21.4), (1008, -21.4), (1270, -21.4), (1600, -21.8), (2016, -21.8), (2540, -21.8), (3200, -24.7), (4032, -24.7), (5080, -24.7), (6400, -22.7), (8063, -22.7), (10159, -22.7), (12800, -30.2), (16127, -30.2))
-    strike_noise_dbs = 188.8
+    # kHz, where the N-wave alone falls ~6. Third-octave rows by octave and
+    # their fall fitted on the first 20 ms at G3 WITH the N-wave on the note
+    # (a note in a render's first two blocks had put it up to 23 ms late,
+    # behind its own blast -- blockrender, the pulse): every octave within 1
+    # dB but 125 and 250 Hz (3 under). The tail past it is the room's, as
+    # above.
+    strike_noise_db = ((50, -19.9), (63, -19.9), (79, -19.9), (100, -52.9), (126, -52.9), (159, -52.9), (200, -54.2), (252, -54.2), (317, -54.2), (400, -38.3), (504, -38.3), (635, -38.3), (800, -26.6), (1008, -26.6), (1270, -26.6), (1600, -25.9), (2016, -25.9), (2540, -25.9), (3200, -29.2), (4032, -29.2), (5080, -29.2), (6400, -27.0), (8063, -27.0), (10159, -27.0), (12800, -34.8), (16127, -34.8))
+    strike_noise_dbs = 50.0
     strike_noise_fade_s = 0.0002
     strike_noise_octave_db = 0.0
-    strike_noise_len_s = 0.3
-
+    # ...and the boom under it (the shot holds -4 dB at 5-20 ms): the table
+    # again 6 dB under, falling 60 dB/s -- -7.1 there; the rest is the
+    # ground's reflection, low, and the room's
+    strike_noise_tail = (-6.0, 60.0)
+    strike_noise_len_s = 1.0
     def pulse_length(self, f_key):
         """The N-wave's length, in seconds, for a key of f_key Hz."""
         lo, hi = self.pulse_ms_range

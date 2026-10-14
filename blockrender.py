@@ -136,7 +136,7 @@ import mf104 as _MFD
 # times the partial's frequency per second, which at 100000 is every sample --
 # a white wash. See chiff_bandwidth.
 RAND_GRAN = 100000.0
-from patch_map import property_class_for_program, property_class_for_note
+from patch_map import property_class_for_program, property_class_for_note, program_trim
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
                             GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program)
@@ -3293,6 +3293,9 @@ def prepare(path, tuner='hybrid440', sink=None):
             if _lk in _LROW:
                 chan_vol = 1.0
                 _LV[0] = _LROW[_lk]
+        # THE BANK'S BALANCE (patch_map.PROGRAM_TRIM_DB): the program's own
+        # level against GeneralUser GS's, on the channel volume
+        chan_vol *= program_trim(prog, drum is not None)
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         if _press:
             # ...and the LEVEL half of it. `gain` is read lazily inside
@@ -4167,9 +4170,16 @@ def prepare(path, tuner='hybrid440', sink=None):
             _gate = _lead + _T * SR + BLK
             _per = (_gate + _rel + BLK + 0.002 * SR) / SR
             _pnon = max(0.0, non - _lead)
+            # ...AND A NOTE INSIDE THE FIRST TWO BLOCKS keeps its time: the
+            # gate cannot open before the render does, so the pulse sits
+            # NON into the series rather than a full lead -- where it had
+            # landed up to two blocks late (23 ms at the file's 512, 5 ms at
+            # live's 128) behind its own blast. Its first block's ramp then
+            # touches the pulse; a later note is as before
+            _t0 = _lead if non >= _lead else non
             _PL[0] = 0
             _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
-            for _hf, _amp, _ph in T.pulse_series(_T, _lead / SR, _per, props.pulse_fmax,
+            for _hf, _amp, _ph in T.pulse_series(_T, _t0 / SR, _per, props.pulse_fmax,
                                                  props.pulse_taper):
                 _gM = props.gain * _amp * props.radiation_gain(_hf)
                 emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),

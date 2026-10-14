@@ -36,8 +36,17 @@ Two things are not free:
                        Jupiter's timpani, Saturn's bells -- are moved off, and
                        are the reason to run mt32check.py first.
 
+THE MT-32'S VELOCITY IS NOT GM's (--velocity=): an MT-32 spans about 30
+dB from velocity 1 to 127 (measured for ScummVM, 2003: an MU5 35, an SB-Live
+54), where this renderer's GM law, (v/127)^2, spans 84 -- so a part written
+soft for an MT-32 comes out far softer here (Ben, of Jupiter: "way too much
+dynamic range"). 'scummvm' maps v -> 3/4 v + 32, that tracker's by-ear
+conversion -- THE DEFAULT: heard on Jupiter against the file's own and
+against 'span30' (127 (v/127)^(30/84), the measured span on our law), "it
+could be how Jupiter was mixed" (Ben). 'none' keeps the file's velocities.
+
 Usage:
-    python3 mt32mux.py IN.mid OUT.mid [--dry-run] [--name NAME=PROGRAM ...]
+    python3 mt32mux.py IN.mid OUT.mid [--dry-run] [--name NAME=PROGRAM ...] [--velocity=scummvm|span30|none]
 """
 
 import sys
@@ -287,7 +296,14 @@ def value_at(timeline, tick, default):
     return v
 
 
-def build(mid, parts, assign):
+# MT-32 velocity -> GM (see THE MT-32'S VELOCITY above)
+VMAP = {
+    "scummvm": lambda v: max(1, min(127, int(round(0.75 * v + 32)))),
+    "span30": lambda v: max(1, min(127, int(round(127.0 * (v / 127.0) ** (30.0 / 84.0))))),
+}
+
+
+def build(mid, parts, assign, vmap=None):
     out = mido.MidiFile(type=1, ticks_per_beat=mid.ticks_per_beat)
 
     meta = mido.MidiTrack()
@@ -331,7 +347,7 @@ def build(mid, parts, assign):
                             mido.Message('control_change', channel=ch, control=10,
                                          value=value_at(p['cc'][10], on, 64), time=0)))
             evs.append((on, mido.Message('note_on', channel=ch, note=note,
-                                         velocity=vel, time=0)))
+                                         velocity=VMAP[vmap](vel) if vmap else vel, time=0)))
             evs.append((off, mido.Message('note_off', channel=ch, note=note,
                                           velocity=0, time=0)))
         evs.sort(key=lambda x: x[0])
@@ -349,6 +365,11 @@ def main(argv):
         return 2
     inp, outp = argv[1], argv[2]
     dry = '--dry-run' in argv
+    vmap = next((a.split('=', 1)[1] for a in argv if a.startswith('--velocity=')), 'scummvm')
+    vmap = None if vmap == 'none' else vmap
+    if vmap and vmap not in VMAP:
+        print("   --velocity= is one of %s" % ", ".join(sorted(VMAP)))
+        return 2
     overrides = {}
     for i, a in enumerate(argv):
         if a == '--name' and i + 1 < len(argv):
@@ -386,7 +407,9 @@ def main(argv):
         print("   NOTE: %d overlaps remain -- those notes will truncate each"
               " other. Split the part or accept it." % left)
     if not dry:
-        build(mid, parts, assign).save(outp)
+        build(mid, parts, assign, vmap).save(outp)
+        if vmap:
+            print("   velocities mapped MT-32 -> GM (%s)" % vmap)
         print("   written")
     return 0
 

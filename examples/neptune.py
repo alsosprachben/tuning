@@ -74,6 +74,10 @@ def build_midi(src, dst):
     mid = mido.MidiFile(src)
     tpb = mid.ticks_per_beat
     parts = M.seed_parts(M.read_parts(mid), M.channel_cc(mid))
+    # THE MT-32'S VELOCITIES, mapped as mt32mux maps them by default
+    # (scummvm: 3/4 v + 32) -- the file's notes, before the ending is built
+    for p in parts:
+        p['notes'] = [(on, off, n, M.VMAP['scummvm'](v)) for on, off, n, v in p['notes']]
     for p in parts:
         low = p['name'].lower()
         p['percussive'] = False
@@ -121,10 +125,14 @@ def build_midi(src, dst):
             A, B, E = tick(s), tick(s + bar * 0.6), tick(s + bar)
             p['notes'] += [(A, B - 8, n, 30) for n in a] + [(B, E - 8, n, 26) for n in b]
         p['notes'].sort()
-    # one continuous diminuendo, 30 -> 6, over the file's last bars and the repeats
+    # one continuous diminuendo over the file's last bars and the repeats: from
+    # the chorus's own level, now mapped (30 -> 54, scummvm), to the same 6 --
+    # the file's 30 had matched its unmapped chorus; left at 30 it stepped down
+    # ~5 dB where the diminuendo began
     onsets = sorted({on for p in parts if p['name'] in ENDING
                      for on, _, _, _ in p['notes'] if sec(on) >= 439.0})
-    V = {tk: max(5, int(round(30 * (6 / 30) ** (i / (len(onsets) - 1)))))
+    v0 = M.VMAP['scummvm'](30)
+    V = {tk: max(5, int(round(v0 * (6 / v0) ** (i / (len(onsets) - 1)))))
          for i, tk in enumerate(onsets)}
     for p in parts:
         if p['name'] in ENDING:
