@@ -9,7 +9,14 @@ twelve movement files, gp_v01 .. gp_v12: Spring 1-3, Summer 4-6, Autumn 7-9,
 Winter 10-12. Cleaned into cl_01 .. cl_12 as the September renders were: the
 synth-string pad the sequencer laid under the band (GM 50) is dropped -- an
 eighteenth-century string band has no pad, and it was a third of the notes --
-and the acoustic bass (GM 32, a jazz pizzicato) becomes a contrabass (43). The September renders (v6, v7) were made from a script in a
+and the acoustic bass (GM 32, a jazz pizzicato) becomes a contrabass (43).
+THE SCORE SAYS BOWED (Dover's Op. 8 full score, ed. Selfridge-Field, read
+2026-10-15): the Violoncello; Basso continuo is never marked pizzicato at any
+movement's start; Spring's Danza pastorale holds it as a drone in dotted
+whole notes, Winter's finale writes "Arcate lunghe, e tasto solo", and even
+in Winter's Largo, where the violins play "Pizziccati forte", the continuo's
+eighths are plain and "sempre piano". The sequencer meant pizzicato only once,
+and said so with GM 45 (those violins). The September renders (v6, v7) were made from a script in a
 scratch directory, which a reboot took with it; this is that script, kept.
 
 THE SOLOIST IN FRONT. A GM violin is a section, and there is no program that

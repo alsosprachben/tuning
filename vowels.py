@@ -31,7 +31,7 @@ its values exactly), extended with the standard continental vowels.
 # tonelib's _VocalBody scales all of it to whatever body is singing. Centres
 # are Peterson & Barney where they overlap it; bandwidths widen with openness
 # and the upper formants weaken as the vowel closes, which is why "oo" is dark.
-VOWELS = {
+SPOKEN = {
     'a': ((730.0, 130.0, 1.00), (1090.0,  90.0, 0.55), (2440.0, 130.0, 0.22)),
     'E': ((530.0, 120.0, 1.00), (1840.0, 220.0, 0.55), (2480.0, 260.0, 0.25)),
     'e': ((390.0, 110.0, 1.00), (2100.0, 240.0, 0.50), (2600.0, 260.0, 0.22)),
@@ -61,6 +61,40 @@ VOWELS = {
     # chorus usually gets rendered as.
     'V': ((640.0, 120.0, 1.00), (1190.0, 200.0, 0.52), (2390.0, 250.0, 0.20)),
 }
+
+# THE SUNG VOWELS, MEASURED (../tuning/examples/choir_fit.py vowel): VocalSet's
+# long tones, every voice type by the type its readme names, each vowel's four
+# formants fitted on Choir Aahs's own source -- the slope, floor, mouth and a
+# woman's weaker cluster held -- for the ensemble-average body that
+# _VocalBody scales. The table above is SPOKEN English (Peterson & Barney), three
+# formants and no singer's cluster: against these singers it was 4.8-9.9 dB
+# off, the cluster at 2.6-3.5 kHz missing entirely; fitted, 3.2-4.1 dB.
+#
+# VocalSet's "e" is sung OPEN (F1 562), so it is /E/ here -- which is what
+# Latin and Italian "e" already map to; its "o" sits nearer the closed /o/.
+MEASURED = {
+    'a': ((743.0, 285.0, 1.000), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)),
+    'E': ((562.0, 135.0, 1.000), (1695.0, 354.0, 0.818), (2429.0, 478.0, 0.547), (3153.0, 698.0, 0.558)),
+    'i': ((304.0, 158.0, 1.000), (2141.0, 285.0, 2.182), (2703.0, 119.0, 2.768), (3329.0, 514.0, 1.357)),
+    'o': ((450.0, 248.0, 1.000), (809.0, 250.0, 1.248), (2883.0, 569.0, 0.879), (3490.0, 150.0, 0.762)),
+    'u': ((334.0, 227.0, 1.000), (803.0, 284.0, 0.479), (2614.0, 450.0, 0.733), (3465.0, 150.0, 0.485)),
+}
+
+
+def _sung(v):
+    """A vowel nobody in VocalSet sang: its own F1 and F2 (where it sits is
+    what makes it that vowel), and everything else -- their widths and
+    levels, and the whole upper cluster -- from the measured vowel nearest it
+    in (log F1, log F2). Neptune's /V/ takes its cluster from /a/."""
+    from math import log
+    f1, f2 = SPOKEN[v][0][0], SPOKEN[v][1][0]
+    near = min(MEASURED, key=lambda m: (log(f1 / MEASURED[m][0][0]) ** 2
+                                        + log(f2 / MEASURED[m][1][0]) ** 2))
+    m = MEASURED[near]
+    return ((f1,) + m[0][1:], (f2,) + m[1][1:]) + m[2:]
+
+
+VOWELS = {v: MEASURED.get(v) or _sung(v) for v in SPOKEN}
 
 # Digraphs first, longest match wins. The value is the HELD vowel.
 LATIN = [('ae', 'E'), ('oe', 'E'), ('au', 'a'), ('eu', 'E'), ('qu', None),

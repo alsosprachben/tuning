@@ -20605,6 +20605,14 @@ class _VocalBody:
         if self.vocal_flat:
             self.formant_floor = 1.0
             return ()
+        # THE BREATH IS SUNG THROUGH THE SAME TRACT. breath_noise_db was fitted
+        # on the class's own vowel, so a syllable that sings another vowel
+        # keeps, as its reference, what the class's vowel would have been on
+        # this body -- breath_noise_at reshapes the air by the difference.
+        # Without it every /i/ and /u/ carried an "ah" whispered under it
+        # (Ben, the Lacrimosa: "I hear 'ah' on top of sung vowels").
+        self._breath_ref = (self._sung_formants(frequency, part=part)
+                            if base is not None and base is not type(self).formants else None)
         # base overrides the class vowel, so a sung TEXT can choose it
         base = base if base is not None else type(self).formants
         if not base or not self.tract_ratio:
@@ -20671,6 +20679,25 @@ class _VocalBody:
         if new > c:
             out[0] = (new, bw * (new / c) ** 0.5, a)
         return out
+
+    def breath_noise_at(self, frequency):
+        """The class's air, through the vowel actually sung: each row moved by
+        how much more or less this vowel's tract passes it than the vowel the
+        rows were fitted on (the same body, the same floor and mouth, so only
+        the resonances differ)."""
+        rows = super().breath_noise_at(frequency)
+        ref = getattr(self, '_breath_ref', None)
+        if not ref or not rows or tuple(ref) == tuple(self.formants):
+            return rows
+
+        def g(f, fm):
+            v = self.formant_floor
+            for centre, bandwidth, amp in fm:
+                d = (f - centre) / (bandwidth * 0.5)
+                v += amp / (1.0 + d * d)
+            return v
+        return tuple((hz, db + 20.0 * _log(g(hz, self.formants) / g(hz, ref)) / _log(10.0))
+                     for hz, db in rows)
 
     def __init__(self, frequency=256.0, *args, **kwargs):
         super().__init__(frequency, *args, **kwargs)
