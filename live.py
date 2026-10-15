@@ -2419,12 +2419,15 @@ class Patch:
             # Every REED, that is: the harmonium's Expression, Percussion and
             # Tremolo are drawn on the stamped slots, and built into the
             # template they would be in every note whether drawn or not.
-            if self.stop_word_ccs == (11, 43):
-                _w = (1 << 14) - 1
+            if self.stop_word_ccs[0] == 11:
+                _w = (1 << (7 * len(self.stop_word_ccs))) - 1
             else:
                 _w = sum(1 << i for i, r in enumerate(self.stop_ranks) if r[1] is not None)
-            for _swc, _v in zip(self.stop_word_ccs, (_w & 0x7F, (_w >> 7) & 0x7F)):
-                tr.append(mido.Message("control_change", channel=ch, control=_swc, value=_v, time=0))
+            # seven bits a controller, every controller the word has (the church
+            # organ's four: CC11, CC43, CC44, CC45)
+            for _i, _swc in enumerate(self.stop_word_ccs):
+                tr.append(mido.Message("control_change", channel=ch, control=_swc,
+                                       value=(_w >> (7 * _i)) & 0x7F, time=0))
         if self.drone_wheel and fast is None:
             # CORK THEM FOR THE BUILD, and say so in the MIDI rather than by
             # setting the module global -- blockrender reads the CHANNEL'S OWN
@@ -8266,6 +8269,16 @@ def selftest():
     # A Hammond has no pitch bend and no mod wheel, so both are free for the
     # controls it does have: the half-moon switch and the swell pedal.
     import leslie as _LES
+    # A FRESH PATCH, as when this block runs alone. The distortion checks below
+    # read an amplifier's products off a patch that earlier tests may have
+    # built and left in the shared cache (_PATCHES); with the Orchestra Hit's
+    # new layers in the session, "a chord makes more distortion than one key"
+    # read 1.5 dB in the full run where this block alone reads 2.9 every time
+    # -- nothing about the organ or its amplifier changed. Dropping program
+    # 18's cached patches makes the block independent of what ran before it.
+    with _PATCH_LOCK:
+        for _k in [k for k in _PATCHES if k[0] == 18]:
+            del _PATCHES[_k]
     lv = Live(program=18, rate=44100, frames=128, verbose=False); lv.warm()
     pid = lv.parts[0].pid
 
@@ -14827,10 +14840,14 @@ def selftest():
           and _ocp.patch.stop_rows[1] == ["reed 16", "reed 8", "trumpet 8", "reed 4", "tremulant"]
           and _ocp.drawn == {"principal 8", "bourdon 16", "trumpet 8"}
           and _ostr.index("principal 16") < _ostr.index("mixture III") < _ostr.index("reed 16")
-          and all(len(l) <= 72 for l in _olines) and _olines[-2].strip().startswith(
-              _tuiH.STOP_LABELS[(1, 0)])
+          and all(len(l) <= 72 for l in _olines)
+          and any(l.strip().startswith(_tuiH.STOP_LABELS[(1, 0)]) for l in _olines)
           # the Tremulant is no reed: on the shifted row, past a break, alone
-          and _olines[-1].strip().startswith(_tuiH.STOP_LABELS[(1, 4)] + " tremulant"),
+          and any(l.strip().startswith(_tuiH.STOP_LABELS[(1, 4)] + " tremulant") for l in _olines)
+          # ...and the recorded ranks (bits 14-24) on Alt and Alt+shift, after it
+          and any(l.strip().startswith("\u2325" + _tuiH.STOP_LABELS[(0, 0)] + " koppelflute 4") for l in _olines)
+          and any(l.strip().startswith("\u2325" + _tuiH.STOP_LABELS[(1, 0)] + " gamba 8") for l in _olines)
+          and _ostr.index("tremulant") < _ostr.index("koppelflute 4") < _ostr.index("trompette 8"),
           "  (%s; shift+3 is %r here, from %s)"
           % (" / ".join(_olines), _sh3, _tuiH.STOP_KEYS_FROM))
     # WHAT SHIFT TYPES IS THE KEYBOARD'S, read from the keymap: a German board

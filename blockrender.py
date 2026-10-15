@@ -1144,24 +1144,30 @@ def registration_blocks(ch, prop, ccs, nblk):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
     # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
-    ev = in_order(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); mlo = ds & 0x7F; mhi = (ds >> 7) & 0x7F; cres = 0.0; vol = 1.0
     # WHERE THE STOP WORD LIVES. CC11/CC43 on the pipe organ and the harpsichord,
     # where CC7 is the swell shutter. A voice can put it elsewhere -- the
     # harmonium's is CC43/CC44, CC11 being its bellows -- and then CC7 and CC11
     # stay the channel's volume and expression, as on any other voice.
-    lo_cc, hi_cc = getattr(prop, 'stop_word_ccs', (11, 43))
-    swells = (lo_cc, hi_cc) == (11, 43)
+    # SEVEN BITS A CONTROLLER, as many controllers as the voice names: the
+    # church organ's is CC11 | CC43<<7 | CC44<<14 | CC45<<21, 28 stops (its
+    # recorded Pitea ranks past bit 13). A file that sends only CC11/CC43 draws
+    # what it always drew: the higher bytes start at the default's.
+    wccs = tuple(getattr(prop, 'stop_word_ccs', (11, 43)))
+    ev = in_order(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); cres = 0.0; vol = 1.0
+    wbytes = [(ds >> (7 * i)) & 0x7F for i in range(len(wccs))]
+    swells = wccs[0] == 11
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     def emit(t):
-        mask = mlo | (mhi << 7)
+        mask = 0
+        for i, b in enumerate(wbytes):
+            mask |= b << (7 * i)
         nd = int(cres*len(order)+1e-9); drawn = set(order[:nd])
         for i, r in enumerate(ranks):
             k = r[0]; rank_ev[k].append((t, 1.0 if ((mask>>i)&1 or k in drawn) else 0.0))
         swell_ev.append((t, vol))
     emit(0.0)
     for t, cc, val in ev:
-        if cc==lo_cc: mlo=val
-        elif cc==hi_cc: mhi=val
+        if cc in wccs: wbytes[wccs.index(cc)] = val
         elif cc==4: cres=val/127.0
         elif cc==7 and swells: vol=val/127.0
         else: continue
@@ -1563,7 +1569,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         rankev_of[ch]=rev
         crow_of[ch]=len(Srows); Srows.append(s)
         for r in pr.stop_ranks: k=r[0]; grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
-        if getattr(pr, 'stop_word_ccs', (11, 43)) == (11, 43):   # only what swells shapes the swell
+        if tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11:   # only what swells shapes the swell
             _laws.append((crow_of[ch], (pr.swell_floor, pr.swell_gain_power,
                                         pr.swell_hf_max, pr.swell_hf_ref_hz)))
     # ONE SWELL LAW PER RENDER, BUT EVERY ORGAN'S OWN LEVEL. The kernel applies
@@ -1985,7 +1991,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _k not in _org:
             _pc = property_class_for_note(_pg, _nt)
             _org[_k] = not (getattr(_pc, 'registerable', False)
-                            and getattr(_pc, 'stop_word_ccs', (11, 43)) == (11, 43))
+                            and tuple(getattr(_pc, 'stop_word_ccs', (11, 43)))[0] == 11)
         return _org[_k]
     _spans = {}
     for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
@@ -3192,7 +3198,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             # word, so its channel gain is 1 and the swell row does the rest; a
             # voice whose stop word lives elsewhere (the harmonium) keeps the
             # volume and expression every other voice has.
-            chan_vol = (1.0 if organ and getattr(pc, 'stop_word_ccs', (11, 43)) == (11, 43)
+            chan_vol = (1.0 if organ and tuple(getattr(pc, 'stop_word_ccs', (11, 43)))[0] == 11
                         else (v7*v11)**2)
             FREQ_N = _F(ch, on)
             if FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian':
@@ -3353,7 +3359,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         T.soft_pedal_down = _soft_at(ch, on)
         # ...and on a channel whose fader moves under its notes, the note is
         # at unity and the fader is its row (THE CHANNEL FADER, above)
-        if not (organ and getattr(pc, 'stop_word_ccs', (11, 43)) == (11, 43)):
+        if not (organ and tuple(getattr(pc, 'stop_word_ccs', (11, 43)))[0] == 11):
             _lk = _mpe_member.get((ch, note, on), ch)
             if _lk in _LROW:
                 chan_vol = 1.0
@@ -4052,8 +4058,53 @@ def prepare(path, tuner='hybrid440', sink=None):
                     emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
                                  _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _bon, _bon + _slen,
                                  _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+            # ...AND MORE STRUCK THINGS THAN ONE (strike_noise_layers: (table,
+            # rise s, dB/s, length s) each): an orchestra hit's bass drum, which
+            # BLOOMS -- its boom peaks 50-100 ms in -- and its cymbal, which
+            # rings on above the rest. One table has one rise and one fall; a
+            # drum and a cymbal do not share them.
+            for _ltab, _lrise, _ldbs, _llen in getattr(props, 'strike_noise_layers', ()):
+                _lslr = math.log(10.0) / 20.0 * _ldbs
+                for _hf, _db in _ltab:
+                    if _hf >= 0.45 * SR:
+                        continue
+                    _gM = props.gain * 10.0 ** ((_db + _reg) / 20.0)
+                    emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                                 _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, non + _llen * SR,
+                                 max(1.0, _lrise * SR), 0.01 * SR, chiff, _lslr, 0.0, 0.0, 0.0, 0.0,
+                                 cc, crl, 0.0, csc, -1, 0)
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
+        if getattr(props, 'struck_layer', None):
+            # A STRUCK, PITCHED LAYER (tonelib.SynthProperties.struck_layer):
+            # another instrument struck with the note -- an orchestra hit's
+            # TIMPANI on its root -- as that instrument's own modes (a kettle's
+            # 1 : 1.488 : 1.963 ..., its measured levels), tuned to the note
+            # moved by octaves into the drum's range, with its own rise and
+            # fall. A rank cannot do it: a rank's partials sit on the
+            # harmonic series whatever class lends them their levels.
+            _scls, _sdb, _srise, _sdbs = props.struck_layer
+            _lo, _hi = getattr(props, 'struck_layer_range', (73.42, 146.83))
+            _ft = f0
+            while _ft >= _hi:
+                _ft *= 0.5
+            while _ft < _lo:
+                _ft *= 2.0
+            _sp = T.rank_spectrum(_scls)(_ft, pan, 1.0, chan_vol)
+            _nm = len(getattr(_sp, 'mode_ratios', None) or ()) or 8
+            _hv = [_sp.harmonic_volume(_m) for _m in range(1, _nm + 1)]
+            _hmax = max(_hv) if _hv and max(_hv) > 0.0 else 1.0
+            _sslr = math.log(10.0) / 20.0 * _sdbs
+            _srng = random.Random(int(round(on * 1e6)) * 149 + note * 13 + ch)
+            for _m, _h in enumerate(_hv, 1):
+                _hf = _ft * _sp.mode_ratio(_m)
+                if _h <= 0.0 or _hf >= 0.45 * SR:
+                    continue
+                _gM = props.gain * 10.0 ** (_sdb / 20.0) * _h / _hmax
+                emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                             _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non, non + 1.5 * SR,
+                             max(1.0, _srise * SR), rel, 0.0, _sslr, 0.0, 0.0, 0.0, 0.0,
+                             cc, crl, 0.0, csc, -1, 0, ph0=_srng.random() * 2.0 * math.pi)
         if getattr(props, 'ring_db', ()):
             # THE OTHER TINES (tonelib.SynthProperties.ring_db): fixed
             # frequencies, the instrument's own, rung through the bridge by

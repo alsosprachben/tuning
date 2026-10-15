@@ -50,6 +50,18 @@ MORE_STOPS = {
     "reed 16":     ("Basson16",      "Basson 16 (the extended set's second organ)"),
     "reed 4":      ("SVClarion4",    "Svallverk Clarion 4"),
     "trumpet 8":   ("HVTrumpet8",    "Huvudverk Trumpet 8"),
+    # the recorded ranks added on bits 14-24 (tonelib, "THE RECORDED RANKS")
+    "koppelflute 4":    ("POSKoppelflojt4", "Positiv Koppelflöjt 4"),
+    "waldflute 2":      ("POSValdflojt2",   "Positiv Valdflöjt 2"),
+    "nazard 2-2/3":     ("Nazard",          "Nazard 2 2/3"),
+    "tierce 1-3/5":     ("Tierce",          "Tierce 1 3/5"),
+    "subbass 16":       ("PEDSubbas16",     "Pedal Subbas 16"),
+    "contrabassoon 32": ("Kontrabasun32",   "Pedal Kontrabasun 32"),
+    "gamba 8":          ("SVGamba8",        "Svallverk Gamba 8"),
+    "celeste 8":        ("SVVoixCeleste8",  "Svallverk Voix celeste 8"),
+    "oboe 8":           ("SVOboe8",         "Svallverk Oboe 8"),
+    "vox humana 8":     ("VoixHumaine8",    "Voix humaine 8 (the extended set's second organ)"),
+    "trompette 8":      ("SVTrHarm8",       "Svallverk Trompette harmonique 8"),
 }
 FOLDER = dict(RANKS, **{k: v[0] for k, v in MORE_STOPS.items()})
 NH = 32
@@ -230,6 +242,9 @@ def fit_tables(passes=3, rank="principal 8"):
         a = int(np.flatnonzero(np.abs(x[:, 0]) > np.abs(x[:, 0]).max() * 0.01)[0])
         f0 = 440.0 * 2 ** ((key - 69) / 12.0) * row[1]
         groups[gi].append((key, f0, measure(x[a:], sr, f0)[0]))
+    # A RANK'S OWN COMPASS: a pedal rank (the Subbas to F4, the Kontrabasun to
+    # F4) has no treble group -- its anchors are the registers it reaches
+    groups = [g for g in groups if g]
     R = [np.nanmedian([r for _, _, r in g], 0) for g in groups]
     # anchored at the RANK's pitch, where the renderer reads them (mode_gains_at)
     anchors = [float(np.exp(np.mean([np.log(f0) for _, f0, _ in g]))) for g in groups]

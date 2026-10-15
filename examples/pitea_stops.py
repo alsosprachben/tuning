@@ -27,7 +27,38 @@ import pitea_fit as P  # noqa: E402
 import pitea_speech as S  # noqa: E402
 import tonelib as T  # noqa: E402
 
-STOPS = P.MORE_STOPS
+STOPS = dict(P.MORE_STOPS)
+# STOPS PITEA DOES NOT HAVE, MEASURED ON PIPES IT DOES: a pipe is a pipe at its
+# own pitch. Each borrows by key range: (lowest key, folder, key shift).
+#   principal 16  an octave down: the Principal 8's pipe at key-12, and for its
+#                 bottom octave the pedal Oktava 8's (open, principal scale,
+#                 down to C1 at 32.7 Hz) -- an organ's own extension
+#   quint 5-1/3   the Kvinta 2 2/3's pipe at key-12, which sounds the 5 1/3's
+#                 pitch (3 x pitch(key-12) = 1.5 x pitch(key)); from C3, the
+#                 Kvinta having nothing under its own C2
+# (The pedal Mixtur's "quint" is the plein-jeu's 2 2/3, HarmonicNumber 24 in
+# PiteaExtended.organ: no true 5 1/3 rank exists in the set.)
+BORROWED = {
+    "principal 16": ("HVPrincipal8 an octave down; pedal Oktava 8 under C3",
+                     ((36, "PEDOktava8", -12), (48, "HVPrincipal8", -12))),
+    "quint 5-1/3":  ("Positiv Kvinta 2 2/3, its pipe an octave down",
+                     ((48, "POSKvinta223", -12),)),
+}
+for _k, (_w, _r) in BORROWED.items():
+    STOPS[_k] = (_r[-1][1], _w)
+
+
+def pipe_file(stop, key):
+    """The recorded pipe that sounds STOP's pitch at KEY, or None."""
+    if stop in BORROWED:
+        use = [r for r in BORROWED[stop][1] if key >= r[0]]
+        if not use:
+            return None
+        _, folder, sh = use[-1]
+        p = glob.glob(os.path.join(P.PITEA, folder, "%03d-*.wav" % (key + sh)))
+    else:
+        p = glob.glob(os.path.join(P.PITEA, STOPS[stop][0], "%03d-*.wav" % key))
+    return p[0] if p else None
 T_ATT = (0.0, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12, 0.2, 0.3)
 NAMES = ("fund", "h2-4", "h5+", "breath")
 
@@ -58,11 +89,11 @@ def main(argv):
         ratio = ratio_of(stop)
         print("== %s against %s" % (stop, what), flush=True)
         for key in keys:
-            p = glob.glob(os.path.join(P.PITEA, folder, "%03d-*.wav" % key))
+            p = pipe_file(stop, key)
             if not p:
                 continue
             f0 = 440.0 * 2 ** ((key - 69) / 12.0) * ratio
-            x, sr = P.read(p[0])
+            x, sr = P.read(p)
             a = S.onset(x)
             y, s2 = P.render(stop, key, 3.0)
             lr = P.measure(x[a:], sr, f0)[0]
@@ -125,11 +156,11 @@ def fit_speech(stop, rounds=2):
     ratio = ratio_of(stop)
     rec = {}
     for key in SPEECH_KEYS:
-        p = glob.glob(os.path.join(P.PITEA, folder, "%03d-*.wav" % key))
+        p = pipe_file(stop, key)
         if not p:
             continue
         f0 = 440.0 * 2 ** ((key - 69) / 12.0) * ratio
-        x, sr = P.read(p[0])
+        x, sr = P.read(p)
         a = S.onset(x)
         rec[key] = (f0, np.clip(S.courses(x, sr, f0, a, SPEECH_T, ref=S.steady(x, sr, f0, a))[:, :3], -30, 10))
 

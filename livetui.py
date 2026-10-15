@@ -1715,7 +1715,8 @@ class TUI:
                         lines.append(cur.rstrip()); cur = "       "
                     continue
                 i += 1
-                k = STOP_LABELS.get((row, i), "") if row < 2 else ""
+                # rows 2 and 3 are Alt and Alt+shift on the same keys
+                k = (("\u2325" if row >= 2 else "") + STOP_LABELS.get((row % 2, i), "")) if row < 4 else ""
                 item = ("%s[%s]" % (k, r)) if r in p.drawn else ("%s %s " % (k, r))
                 if len(cur) + len(item) + 1 > width and cur.strip():
                     lines.append(cur.rstrip()); cur = "       "
@@ -1863,6 +1864,14 @@ class TUI:
         if c == ord("q"):
             return False
         if c == 27:
+            # ALT+DIGIT is ESC then the digit, and read as two keys it toggled
+            # the FIRST row's stop. The next key, if it is a stop key, is the
+            # third row's (Alt+digit) or the fourth's (Alt+shift+digit): the
+            # church organ's recorded Pitea ranks, bits 14 and up.
+            n = scr.getch()
+            if 0 < n < 0x110000 and chr(n) in STOP_KEYS:
+                row, i = STOP_KEYS[chr(n)]
+                self.toggle_stop(i, row + 2)
             return True     # never quit on ESC: a half-read arrow key is an ESC
         # A bound hotkey fires from ANY pane: a pedal you have to tab to first
         # is no pedal. bind_hotkey only ever hands out keys nothing else uses.

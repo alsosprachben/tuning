@@ -38,9 +38,9 @@ so it plays on the Messenger itself.
 |---|---|---|
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
-| 2 specific, theory | 1 | 1% |
-| 3 specific, theory + ear | 12 | 9% |
-| 4 specific, reference audio | 115 | 90% |
+| 2 specific, theory | 0 | 0% |
+| 3 specific, theory + ear | 9 | 7% |
+| 4 specific, reference audio | 119 | 93% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -243,8 +243,8 @@ plays Standard, as does any program that is not a set.
 | 51 | Synth Strings 2 | `MoogSynthStrings2` | **4** | a Messenger patch: slower and darker than 50, the pair eleven cents apart so it beats faster |
 | 52 | Choir Aahs | `ChoirAahs` | **4** | FITTED TO VOCALSET'S LONG TONES (CC BY 4.0, measured only; examples/choir_fit.py): 20 conservatory singers, each by the voice type their readme names, every frame's harmonics -- the vibrato sweeps them across the tract. The old "ah" was 10 dB short at F2 and 20-30 dB short at 2.4-3.4 kHz, the singer's formant, and so it was against all four GM sets' choirs; weighted rms 11.1 -> 3.2 dB. A woman's whole cluster is weaker (not only the top formant), and a declared countertenor keeps a tenth of it (one singer: an estimate). The section from Dagstuhl ChoirSet's larynx microphones: each singer 14-22 cents off the note, vibrato +/-12 at 4.4-5.5 Hz. The air between the harmonics (51-77 dB under them, in the tract's shape; the room 15-25 dB under that), and EFFORT: +0.23 dB/octave brighter per dB louder, from 109 messa di voce notes. Not modelled: each singer's slow drift (8.5 cents rms under 1 Hz, independent between singers) and the harmonics' level swing under vibrato (under 1 dB at a choir's depth). Ben: sounds great, the wider section even better; the breath and effort, great |
 | 53 | Voice Oohs | `VoiceOohs` | **4** | as 52, on "u": 11.7 -> 3.2 dB; its F3 is a woman's strongest peak up there, which is why the cluster rule covers every formant above F2 |
-| 54 | Synth Choir | `MoogSynthVoice` | **3** | two saws on the Messenger, then the class's own sung tract after it. The Messenger is measured; the formant body is theory |
-| 55 | Orchestra Hit | `OrchestraHit` | **2** | its own class, theory |
+| 54 | Synth Choir | `MoogSynthVoice` | **4** | two saws on the Messenger, then the class's own sung tract after it -- now the MEASURED sung /E/ (VocalSet, vowels.MEASURED), four formants and the singer's cluster, the tract's measured floor and mouth (it had the spoken three, and a 4 kHz mouth that hid the cluster: 2.4-3.6 kHz +13 dB). Both halves measured. Ben, A/B (examples/synthvoice_ab.py): sounds great |
+| 55 | Orchestra Hit | `OrchestraHit` | **4** | FITTED TO WHAT GM PLAYS (examples/orchhit_fit.py): the patch is the Fairlight-era SAMPLE, one recorded orchestral stab, so the GM sets' own hits are the instrument (FluidR3/MuseScore, GeneralUser GS, TimGM6mb; measured only). A root and its FIFTH (horns re-voiced onto it, winds onto the twelfth), flat across the octaves, a quarter of it noise, short (-20 dB at ~0.3 s; it rang 1.4 s) -- and the PERCUSSION: 55-74% of their power is under 400 Hz, the impact and then the chord's root three and four octaves down, so a TIMPANI on the root (our fitted kettle's own modes, a new pitched layer) and a cymbal above. A/B'd against FluidR3's own hit. Ben: sounds great now |
 
 ## 56-63 Brass
 
@@ -294,7 +294,7 @@ plays Standard, as does any program that is not a set.
 | 82 | Lead 3 (calliope) | `MoogCalliopeLead` | **4** | a Messenger patch: the calliope, a steam whistle -- two triangles an octave apart, the ladder wide open. The GM name misleads; the patch does not |
 | 83 | Lead 4 (chiff) | `MoogChiffLead` | **4** | a Messenger patch: the NOISE oscillator through the same ladder as the saw, so the breath chuffs as the contour snaps open |
 | 84 | Lead 5 (charang) | `MoogCharangLead` | **3** | two saws on the Messenger and THEN the valve the electric guitars use -- the hardware's order. The Messenger is measured; the amp is the guitars' own model |
-| 85 | Lead 6 (voice) | `MoogVoiceLead` | **3** | two saws and a slow breath on the Messenger, sung through the class's open /a/ after it. The Messenger is measured; the formants are theory |
+| 85 | Lead 6 (voice) | `MoogVoiceLead` | **4** | two saws and a slow breath on the Messenger, sung through the class's open /a/ after it -- now the MEASURED sung /a/ (VocalSet, vowels.py), with the tract's measured mouth; the Messenger and the vowel both measured. Ben, A/B (examples/synthvoice_ab.py): sounds great |
 | 86 | Lead 7 (fifths) | `MoogFifthsLead` | **4** | a Messenger patch: OSC 2 FREQ fully up, a tempered fifth -- where the knob's travel ends |
 | 87 | Lead 8 (bass+lead) | `MoogBassLead` | **4** | a Messenger patch: OSC 2 on 16', the bass and the lead from one key, more resonance and a shorter contour for the punch |
 
@@ -305,7 +305,7 @@ plays Standard, as does any program that is not a set.
 | 88 | Pad 1 (new age) | `MoogNewAgePad` | **4** | TWO Messengers on one key (a layered voice): a pad of two saws under a low ladder and an FM bell over it. Ben: "sounds amazing" |
 | 89 | Pad 2 (warm) | `MoogWarmPad` | **4** | a Messenger patch: two saws under a low ladder, a slow swell and a long release -- the pad you put underneath something |
 | 90 | Pad 3 (polysynth) | `MoogPolysynthPad` | **4** | a Messenger patch: open, a quick front and a contour that settles, so chords articulate a rhythm |
-| 91 | Pad 4 (choir) | `MoogChoirPad` | **3** | two saws and a swell on the Messenger, then the class's three vocal formants (its /O/). The Messenger is measured; the formants are theory |
+| 91 | Pad 4 (choir) | `MoogChoirPad` | **4** | two saws and a swell on the Messenger, then the class's three vocal formants (its /O/) -- now /O/ on the measured /o/'s widths, levels and singer's cluster, widened x1.5 for a section (VocalSet, vowels.py), with the tract's measured mouth; the Messenger and the vowel both measured. Ben, A/B (examples/synthvoice_ab.py): sounds great |
 | 92 | Pad 5 (bowed) | `MoogBowedPad` | **4** | a Messenger patch: bowed glass as a resonance excited slowly -- the ladder in BAND PASS (measured: 7.6 dB under the low-passes), tracking the key |
 | 93 | Pad 6 (metallic) | `MoogMetallicPad` | **4** | a Messenger patch: 1 -> 2 FM, the carrier a few cents off a whole ratio, so the sidebands land in pairs. The FM index is measured to 0.65, where this sits |
 | 94 | Pad 7 (halo) | `MoogHaloPad` | **4** | a Messenger patch: two squares six cents apart and a little of the NOISE oscillator through the same ladder -- the air the name means |
@@ -398,7 +398,7 @@ Controls are the rest of the console that are not stops.
 | -- | percussion (GM 17) | **2** | the second- or third-harmonic tap and its decay: asserted, no take has it |
 | -- | overdrive (GM 18) | **4** | the rok pack's energy off the drawbars' harmonics: to the edge of breakup, drive 0.92 |
 
-### 19 Church Organ -- the church organ's console (14-bit stop word, CC11 | CC43<<7)
+### 19 Church Organ -- the church organ's console (28-bit stop word, CC11 | CC43<<7 | CC44<<14 | CC45<<21)
 
 | bit | stop | | notes |
 |---|---|---|---|
@@ -406,8 +406,8 @@ Controls are the rest of the console that are not stops.
 | 1 | octave 4 | **4** | Pitea's HV Oktava 4: its own series, brighter over the middle keys than the 8' at the same pitch; the speech the 8''s law at its pitch |
 | 2 | super octave 2 | **4** | Pitea's HV Oktava 2: its own series, near-pure in the treble (h2 33 dB down) |
 | 3 | quint 2-2/3 | **4** | Pitea's Positiv Kvinta 2 2/3: its own series at its pitch, its speech the principal's law at its own pitch (its overshoot on its own harmonics, not the key's) |
-| 4 | principal 16 | **2** | the 8''s series an octave down, asserted. Pitea has no open 16' on a manual |
-| 5 | quint 5-1/3 | **2** | as the 2 2/3, an octave down. Pitea's only 5 1/3 is in the pedal mixture |
+| 4 | principal 16 | **2** | the 8''s series an octave down, asserted. Pitea has no open 16' on a manual; measured against the Principal 8's pipe an octave down and the pedal Oktava 8's under C3 (examples/pitea_stops.py BORROWED), it reads the 8''s measured series at the pitch it SOUNDS, as every rank does (ours at key 72 within ~1 dB of our principal 8 at key 60): a single Pitea pipe varies from the register's median by up to 17 dB in h2, which the fit's medians smooth. So from C3 up it is the measured principal; its bottom octave (32-62 Hz) is the 8''s lowest table carried down, asserted |
+| 5 | quint 5-1/3 | **2** | as the 2 2/3, an octave down, asserted. Pitea has no 5 1/3 at all (its pedal mixture's quint is the plein-jeu's 2 2/3, HarmonicNumber 24); measured against the Kvinta 2 2/3's pipe an octave down (examples/pitea_stops.py BORROWED), it is close from C4 up and brighter than the pipe at C3 |
 | 6 | flute 8 | **4** | Pitea's Positiv Gedakt 8 (examples/pitea_stops.py): its own series at three anchor pitches, read at the rank's pitch (h3 12-20 dB down, the evens 30-50); its speech fitted (24 of its own periods, no overshoot -- it had taken the principal's); its wind fitted before. Level held |
 | 7 | mixture III | **4** | Pitea's Huvudverk Mixtur IV, its harmonics read key by key: the composition breaking back at every C (1 1/3 1 2/3, then 2 1 1/3 1, 2 2/3 2 1 1/3, 4 2 2/3 2 -- the IV's lowest three), each pipe the principal's measured series at its own pitch; within 2-5 dB of the IV's three, its fourth rank absent |
 | 8 | reed 8 | **4** | Pitea's Positiv Cromorne 8: its series -- the evens there, which the odd-only reed had not -- its speech (12 periods, no overshoot), its wind and attack rush fitted before. Heard as BuxWV 140's fugue reed |
@@ -416,6 +416,17 @@ Controls are the rest of the console that are not stops.
 | 11 | trumpet 8 | **4** | Pitea's Huvudverk Trumpet 8, as reed 8: its own series in place of the orchestral trumpet's, which a forced stiffness had cut off above 2.6 kHz; speech 18 periods. Trimmed by ear in BuxWV 161 |
 | 12 | bourdon 16 | **4** | Pitea's Huvudverk Gedackt Pommer 16, as the flute 8: its series, its speech (12 periods, the upper harmonics a little ahead) |
 | 13 | tremulant | **2** | no pipes: a valve pulsing the division's wind. Off by default until judged by ear |
+| 14 | koppelflute 4 | **4** | Pitea's Positiv Koppelflöjt 4 (bit 14): its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 15 | waldflute 2 | **4** | Pitea's Positiv Valdflöjt 2 (bit 15): its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 16 | nazard 2-2/3 | **4** | Pitea's Nazard (bit 16): the flute twelfth, the Sesquialtera's fifth: its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 17 | tierce 1-3/5 | **4** | Pitea's Tierce (bit 17), tuned near pure as recorded: its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 18 | subbass 16 | **4** | Pitea's pedal Subbas 16 (bit 18); its speech the least fitted (9 dB: a wide stopped bass builds slowly): its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 19 | contrabassoon 32 | **4** | Pitea's pedal Kontrabasun 32 (bit 19), the reed an octave under the 16'. Ben: insane: its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 20 | gamba 8 | **4** | Pitea's swell Gamba 8 (bit 20) at Pitea's own soft level (-19 dB re the Principal 8); speech 8 dB off (a string's slow build): its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 21 | celeste 8 | **4** | Pitea's swell Voix celeste 8 (bit 21), +17.9 cents measured against its Gamba, from C3; drawn with it, it beats: its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 22 | oboe 8 | **4** | Pitea's swell Oboe 8 (bit 22): its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 23 | vox humana 8 | **4** | the Voix humaine 8 of the extended set's second organ (bit 23), the Grönlund having none: its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
+| 24 | trompette 8 | **4** | Pitea's swell Trompette harmonique 8 (bit 24): its own series at its anchor pitches, its speech and its level by Pitea's own balance, fitted to its pipes (examples/pitea_newranks.py). Ben, examples/organ_newstops_demo.py: they sound incredible |
 | -- | pipe speech and release | **4** | fitted on the Principal 8 by register; every flue rank takes the law at its own pitch |
 | -- | shared wind (the chest) | **3** | every pipe on the chest hears the others' demand: a chord dips the pressure as it enters and surges it as it lifts, a reservoir ringing at 4 Hz and a regulator restoring it -- the form the physics' (Pykett, Carlsson 2002, the Rodgers wind patent), the size Ben's ear's (flexibility 1 of off/1/2.5/8: a five-note chord takes ~2 cents from a held note). No recording of one organ's coupling was fitted: it varies organ to organ. On by default |
 | -- | the key's groove | **2** | not modelled: the stops on a key share its channel, so a release drains faster with more drawn, and the pipes go flat as it drains (Pitea's reeds 35-68 cents at C3-C4) |
@@ -449,13 +460,13 @@ Controls are the rest of the console that are not stops.
 
 | bit | stop | | notes |
 |---|---|---|---|
-| 0 | bass | **2** | the tuba's conical brass two octaves down: a measured voice, its part in the hit asserted |
-| 1 | tenor | **2** | the trombone an octave down, as bass |
-| 2 | horn | **2** | the horn at pitch, as bass |
-| 3 | string | **2** | the bowed strings marcato, as bass |
-| 4 | tpt | **2** | the trumpet an octave up, as bass |
-| 5 | wind | **2** | flutes and oboes as a stopped pipe an octave up, as bass |
-| 6 | picc | **2** | the piccolo two octaves up, as bass |
+| 0 | bass | **4** | the tuba's conical brass two octaves down: a measured voice, its level in the hit FITTED to the GM sets' hits with the rest (examples/orchhit_fit.py) |
+| 1 | tenor | **4** | the trombone an octave down, as bass |
+| 2 | horn | **4** | the horn on the FIFTH (x1.5), re-voiced for the fifth the GM hits carry; as bass |
+| 3 | string | **4** | the bowed strings marcato, as bass |
+| 4 | tpt | **4** | the trumpet an octave up, as bass |
+| 5 | wind | **4** | flutes and oboes as a stopped pipe on the TWELFTH (x3), re-voiced with the horns; as bass |
+| 6 | picc | **4** | the piccolo two octaves up, as bass |
 
 ## The class tree
 
@@ -573,7 +584,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4)
       - `NoiseDrum` [NoisyPercussionMixin]
         - `HandClap` -- 39 Hand Clap (4)
-      - `OrchestraHit` -- GM 55 Orchestra Hit (2)
+      - `OrchestraHit` -- GM 55 Orchestra Hit (4)
       - `Rattle` [NoisyPercussionMixin]
         - `Vibraslap` -- 58 Vibraslap (4)
       - `ShakenNoise` [NoisyPercussionMixin]
@@ -635,7 +646,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `BowedPad`
             - `MoogBowedPad` -- GM 92 Pad 5 (bowed) (4)
           - `ChoirPad`
-            - `MoogChoirPad` -- GM 91 Pad 4 (choir) (3)
+            - `MoogChoirPad` -- GM 91 Pad 4 (choir) (4)
           - `HaloPad`
             - `MoogHaloPad` -- GM 94 Pad 7 (halo) (4)
           - `MetallicPad`
@@ -671,7 +682,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SynthStrings2`
             - `MoogSynthStrings2` -- GM 51 Synth Strings 2 (4)
         - `VoiceLead` [FormantBody]
-          - `MoogVoiceLead` -- GM 85 Lead 6 (voice) (3)
+          - `MoogVoiceLead` -- GM 85 Lead 6 (voice) (4)
       - `Viola` [FormantBody] -- GM 40 Violin (4), GM 41 Viola (4), GM 48 String Ensemble 1 (4)
         - `ViolaSlow` -- GM 49 String Ensemble 2 (4)
         - `ViolaTremolo` -- GM 44 Tremolo Strings (4)
@@ -682,7 +693,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Vocal` [FormantBody]
         - `ChoirAahs` [_VocalBody] -- GM 52 Choir Aahs (4)
         - `SynthVoice`
-          - `MoogSynthVoice` -- GM 54 Synth Choir (3)
+          - `MoogSynthVoice` -- GM 54 Synth Choir (4)
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)

@@ -1098,6 +1098,16 @@ class SynthProperties:
     # falling strike_noise_tail[1] dB/s (a music box: the pin's snap, then the
     # comb's buzz). None = the strike alone.
     strike_noise_tail = None
+    # MORE STRUCK THINGS: further noise tables beside strike_noise_db, each
+    # ((Hz, dB re the note's gain), ...), its rise (s), its fall (dB/s) and its
+    # length (s) -- an orchestra hit's bass drum blooming under its cymbal.
+    # () = none.
+    strike_noise_layers = ()
+    # A STRUCK, PITCHED LAYER: (class, dB re the note's gain, rise s, dB/s) --
+    # that class's own modes at the note moved by octaves into
+    # struck_layer_range (Hz). An orchestra hit's timpani. None = none.
+    struck_layer = None
+    struck_layer_range = (73.42, 146.83)        # D2-D3: a timpani's low drum
     # GRAINS: sparse events through a held note (an ocean drum's beads landing)
     # -- rows of (lo Hz, hi Hz, per second, dB re the note's gain, dB scatter,
     # decay dB/s): each a damped sine at a log-uniform frequency in the band,
@@ -7701,6 +7711,276 @@ FlueOrganProperties.stop_rows = [
     ["reed 16", "reed 8", "trumpet 8", "reed 4", "|", "tremulant"],
 ]
 
+
+# ---- THE RECORDED RANKS PITEA HAS AND THE CONSOLE DID NOT (bits 14-24) -------
+# Ben: "start adding ranks that we can find recordings for". Each is a Pitea
+# stop's own pipes (examples/pitea_fit.py --fit=tables for its series,
+# examples/pitea_stops.py --fit=speech for its speech, pitea_stops.level for
+# its level against the Principal 8 by Pitea's own balance). The 14-bit word was
+# full, so the church organ's word is now CC11 | CC43<<7 | CC44<<14 | CC45<<21:
+# a file that sends only CC11/CC43 draws what it always drew. The Grönlund
+# organ's own ranks where it has one (its swell is in tune; the extended set's
+# French second organ sits 4-18 cents sharp), the Voix humaine from that second
+# organ, Grönlund having none.
+class OrganKoppelfluteProperties(OrganGedaktProperties):
+    """koppelflute 4: Pitea's Positiv Koppelflöjt 4, a chimney flute."""
+    mode_gains_points = (
+        (164.8, (1.00000, 0.00545, 0.02486, 0.06449, 0.00599, 0.00300, 0.00232, 0.00087, 0.00053, 0.00067, 0.00029, 0.00028, 0.00028, 0.00031, 0.00036, 0.00018, 0.00017, 0.00018, 0.00030, 0.00015, 0.00010, 0.00010, 0.00007, 0.00011, 0.00009, 0.00012, 0.00012, 0.00013, 0.00008, 0.00008, 0.00006, 0.00007)),
+        (466.2, (1.00000, 0.01062, 0.02578, 0.00808, 0.00649, 0.00345, 0.00098, 0.00023, 0.00031, 0.00010, 0.00010, 0.00008, 0.00015, 0.00004, 0.00013, 0.00005, 0.00007, 0.00005, 0.00013, 0.00005, 0.00009, 0.00006, 0.00008, 0.00008, 0.00009, 0.00006, 0.00013, 0.00007, 0.00006, 0.00010, 0.00004, 0.00003)),
+        (2093.0, (1.00000, 0.05192, 0.02050, 0.01166, 0.00456, 0.01174, 0.00325, 0.00095, 0.00112, 0.00131, 0.00441, 0.00019, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008, 0.00008)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -9.2 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0524327
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.018
+    rank_speech = True
+
+
+class OrganWaldfluteProperties(OrganGedaktProperties):
+    """waldflute 2: Pitea's Positiv Valdflöjt 2, an open wide flute."""
+    mode_gains_points = (
+        (329.6, (1.00000, 0.02194, 0.01762, 0.00563, 0.01421, 0.00621, 0.00800, 0.00253, 0.00166, 0.00109, 0.00023, 0.00013, 0.00014, 0.00012, 0.00024, 0.00022, 0.00011, 0.00019, 0.00010, 0.00011, 0.00011, 0.00008, 0.00009, 0.00008, 0.00010, 0.00008, 0.00009, 0.00009, 0.00009, 0.00011, 0.00010, 0.00009)),
+        (932.3, (1.00000, 0.02293, 0.01726, 0.01498, 0.02170, 0.01983, 0.00402, 0.00151, 0.00194, 0.00024, 0.00070, 0.00027, 0.00042, 0.00017, 0.00010, 0.00007, 0.00016, 0.00006, 0.00022, 0.00005, 0.00016, 0.00013, 0.00012, 0.00010, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005)),
+        (4186.0, (1.00000, 0.04833, 0.01048, 0.00896, 0.00436, 0.00114, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226, 0.00226)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -7.7 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0722659
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 48.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.018
+    rank_speech = True
+
+
+class OrganNazardProperties(OrganGedaktProperties):
+    """nazard 2-2/3: the flute twelfth (Pitea's Nazard), the Sesquialtera's
+    and the Cornet's fifth -- where the quint 2-2/3 is the principal's."""
+    mode_gains_points = (
+        (247.2, (1.00000, 0.07444, 0.06731, 0.03042, 0.01007, 0.01499, 0.00308, 0.00385, 0.00077, 0.00008, 0.00017, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001)),
+        (699.2, (1.00000, 0.23568, 0.07570, 0.02843, 0.02234, 0.01816, 0.00997, 0.00541, 0.00211, 0.00041, 0.00001, 0.00003, 0.00003, 0.00002, 0.00003, 0.00002, 0.00004, 0.00008, 0.00003, 0.00007, 0.00008, 0.00005, 0.00006, 0.00004, 0.00003, 0.00003, 0.00004, 0.00003, 0.00002, 0.00001, 0.00001, 0.00001)),
+        (3139.5, (1.00000, 0.03711, 0.04904, 0.00651, 0.00139, 0.00080, 0.00045, 0.00000, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001, 0.00001)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -16.7 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0285209
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 32.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.03
+    rank_speech = True
+
+
+class OrganTierceProperties(OrganGedaktProperties):
+    """tierce 1-3/5: the seventeenth (Pitea's Tierce), with the nazard the
+    Sesquialtera; tuned near pure, as the recording is."""
+    mode_gains_points = (
+        (412.0, (1.00000, 0.08861, 0.03742, 0.01714, 0.02149, 0.01065, 0.00123, 0.00187, 0.00037, 0.00055, 0.00001, 0.00000, 0.00001, 0.00001, 0.00001, 0.00001, 0.00002, 0.00002, 0.00002, 0.00002, 0.00002, 0.00001, 0.00001, 0.00002, 0.00002, 0.00002, 0.00002, 0.00002, 0.00002, 0.00002, 0.00002, 0.00002)),
+        (1165.4, (1.00000, 0.11380, 0.02947, 0.01929, 0.00870, 0.00420, 0.00466, 0.00201, 0.00167, 0.00142, 0.00034, 0.00009, 0.00245, 0.00090, 0.00021, 0.00001, 0.00001, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
+        (5232.5, (1.00000, 0.10804, 0.00902, 0.00297, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462, 0.00462)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -17.4 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0319721
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 48.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.03
+    rank_speech = True
+
+
+class OrganSubbassProperties(OrganBourdonProperties):
+    """subbass 16: Pitea's pedal Subbas 16, a wide stopped bass."""
+    mode_gains_points = (
+        (46.2, (1.00000, 0.01779, 0.18223, 0.01486, 0.11464, 0.01189, 0.00257, 0.00531, 0.00355, 0.00158, 0.00175, 0.00167, 0.00079, 0.00073, 0.00051, 0.00022, 0.00033, 0.00025, 0.00021, 0.00017, 0.00023, 0.00034, 0.00034, 0.00017, 0.00024, 0.00019, 0.00030, 0.00019, 0.00015, 0.00014, 0.00016, 0.00016)),
+        (116.5, (1.00000, 0.02172, 0.09270, 0.00817, 0.00230, 0.00254, 0.00044, 0.00053, 0.00043, 0.00026, 0.00025, 0.00025, 0.00019, 0.00015, 0.00016, 0.00018, 0.00017, 0.00013, 0.00010, 0.00010, 0.00011, 0.00022, 0.00011, 0.00013, 0.00017, 0.00010, 0.00011, 0.00010, 0.00016, 0.00012, 0.00008, 0.00009)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -2.1 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.074294
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.9
+    attack_time = 0.03
+    rank_speech = True
+
+
+class OrganContrabassoonProperties(OrganBassonProperties):
+    """contrabassoon 32: Pitea's pedal Kontrabasun 32, the reed an octave under
+    the 16' (its pipes C2-F4 of the key's 8': the pedal's own compass)."""
+    mode_gains_points = (
+        (20.6, (1.00000, 9.56042, 2.74933, 3.46900, 7.09219, 3.54635, 7.95631, 2.48553, 12.12862, 7.07753, 11.33064, 5.29933, 5.19664, 4.09022, 3.06033, 3.79741, 2.47256, 10.79251, 3.00903, 4.94197, 4.60446, 3.06815, 4.73683, 1.65186, 1.03859, 1.17723, 1.17259, 0.63084, 0.34042, 0.31453, 0.47225, 0.17789)),
+        (51.9, (1.00000, 10.93260, 6.54034, 15.83809, 10.48818, 7.98286, 8.38057, 10.69512, 14.09567, 6.48076, 8.57777, 4.17658, 3.72727, 2.13235, 2.35907, 1.70580, 2.04100, 1.10047, 1.32281, 0.68186, 0.73446, 1.07704, 0.72966, 0.24347, 0.83391, 0.94264, 0.29389, 0.46045, 0.26546, 0.37976, 0.16665, 0.28053)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- +5.7 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.00780187
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 8.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.016
+    rank_speech = True
+
+
+class OrganGambaProperties(FlueOrganProperties):
+    """gamba 8: Pitea's swell Gamba 8, the narrow string flue."""
+    mode_gains_points = (
+        (82.4, (1.00000, 1.24157, 0.27426, 0.50928, 0.40299, 0.11080, 0.04275, 0.08888, 0.10934, 0.04093, 0.01230, 0.02838, 0.01693, 0.00727, 0.00559, 0.00289, 0.00214, 0.00259, 0.00147, 0.00129, 0.00056, 0.00053, 0.00074, 0.00056, 0.00074, 0.00061, 0.00025, 0.00042, 0.00080, 0.00039, 0.00036, 0.00049)),
+        (233.1, (1.00000, 0.89728, 0.58301, 0.17502, 0.02695, 0.03191, 0.01414, 0.01684, 0.00526, 0.00386, 0.00271, 0.00174, 0.00064, 0.00184, 0.00079, 0.00033, 0.00032, 0.00031, 0.00019, 0.00022, 0.00021, 0.00019, 0.00023, 0.00033, 0.00025, 0.00023, 0.00023, 0.00028, 0.00016, 0.00028, 0.00032, 0.00021)),
+        (1046.5, (1.00000, 0.44093, 0.08783, 0.04779, 0.02202, 0.01576, 0.00833, 0.00538, 0.00527, 0.00329, 0.00145, 0.00069, 0.00016, 0.00019, 0.00013, 0.00003, 0.00006, 0.00004, 0.00007, 0.00004, 0.00012, 0.00016, 0.00009, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -18.9 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0122469
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 23.76
+    speech_harmonic_exp = 0.766
+    attack_time = 0.008
+    rank_speech = True
+
+
+class OrganCelesteProperties(OrganGambaProperties):
+    """celeste 8: Pitea's swell Voix céleste 8 -- the gamba's twin tuned sharp,
+    +17.9 cents at C4 measured against the swell's own Gamba, from C3 up as a
+    celeste is built; drawn WITH the gamba, it beats."""
+    mode_gains_points = (
+        (235.5, (1.00000, 0.57452, 0.28241, 0.11720, 0.07562, 0.05610, 0.01843, 0.02636, 0.01761, 0.01125, 0.01173, 0.00397, 0.00227, 0.00095, 0.00041, 0.00108, 0.00011, 0.00025, 0.00006, 0.00013, 0.00007, 0.00011, 0.00011, 0.00011, 0.00006, 0.00006, 0.00006, 0.00007, 0.00009, 0.00008, 0.00010, 0.00006)),
+        (1057.4, (1.00000, 0.46547, 0.19279, 0.08214, 0.03165, 0.02278, 0.01684, 0.00520, 0.00895, 0.00328, 0.00174, 0.00084, 0.00058, 0.00102, 0.00024, 0.00001, 0.00006, 0.00006, 0.00009, 0.00003, 0.00005, 0.00004, 0.00006, 0.00006, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -22.2 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.00979799
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 23.76
+    speech_harmonic_exp = 0.766
+    attack_time = 0.008
+    rank_speech = True
+
+
+class OrganOboeProperties(OrganCromorneProperties):
+    """oboe 8: Pitea's swell Oboe 8, the conical solo reed."""
+    mode_gains_points = (
+        (82.4, (1.00000, 2.45236, 7.30909, 5.29941, 7.23038, 8.59170, 4.34197, 4.16833, 0.97487, 1.14382, 0.33691, 0.62765, 1.20390, 1.22862, 0.53591, 0.84752, 0.58906, 0.39868, 0.19632, 0.17192, 0.46714, 0.43013, 0.32231, 0.30639, 0.12498, 0.12067, 0.13405, 0.35879, 0.10531, 0.14037, 0.07918, 0.06559)),
+        (233.1, (1.00000, 1.84674, 2.34852, 0.84339, 0.85286, 0.48471, 0.16906, 0.07639, 0.15060, 0.03462, 0.03972, 0.04473, 0.00821, 0.01938, 0.00731, 0.01044, 0.02253, 0.00601, 0.00661, 0.00751, 0.00784, 0.00357, 0.00684, 0.00402, 0.00359, 0.00582, 0.00122, 0.00146, 0.00087, 0.00223, 0.00252, 0.00138)),
+        (1046.5, (1.00000, 0.76868, 0.29559, 0.13191, 0.04463, 0.01106, 0.02510, 0.07333, 0.07739, 0.01952, 0.04447, 0.02330, 0.03881, 0.05920, 0.00164, 0.00324, 0.00353, 0.00303, 0.00510, 0.00210, 0.00140, 0.00082, 0.00022, 0.00479, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -9.0 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0140562
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.03
+    rank_speech = True
+
+
+class OrganVoxHumanaProperties(OrganCromorneProperties):
+    """vox humana 8: the Voix humaine 8 of the extended set's second organ (the
+    Grönlund has none), the short-resonator reed made for the tremulant."""
+    mode_gains_points = (
+        (82.4, (1.00000, 5.31128, 8.72974, 2.11375, 5.28185, 1.80042, 2.34231, 3.75676, 3.00466, 11.55581, 3.85067, 8.83570, 5.09166, 5.05702, 13.52639, 2.95180, 10.59970, 1.29986, 3.07758, 3.72597, 2.78949, 1.76347, 1.77024, 3.22923, 1.90479, 1.88870, 2.78263, 1.76421, 1.81652, 1.09377, 0.52438, 0.62857)),
+        (233.1, (1.00000, 0.18214, 2.51424, 0.36896, 3.74441, 1.71998, 1.75494, 1.51425, 0.46799, 0.51808, 0.38355, 0.12927, 0.17516, 0.10505, 0.08402, 0.03143, 0.09197, 0.04380, 0.03204, 0.02065, 0.04128, 0.02943, 0.02125, 0.01581, 0.00808, 0.02581, 0.02149, 0.03961, 0.02253, 0.00922, 0.00314, 0.00277)),
+        (932.3, (1.00000, 0.98667, 2.73114, 2.48532, 2.02150, 0.38860, 0.20787, 0.36287, 0.16320, 0.08260, 0.03582, 0.04779, 0.04670, 0.02180, 0.02857, 0.13686, 0.00203, 0.00520, 0.00597, 0.00817, 0.08859, 0.04907, 0.22634, 0.04652, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -13.2 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.00647702
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 2.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.08
+    rank_speech = True
+
+
+class OrganTrompetteProperties(OrganTrumpetProperties):
+    """trompette 8: Pitea's swell Trompette harmonique 8, the French chorus
+    reed beside the Huvudverk's Trumpet."""
+    mode_gains_points = (
+        (82.4, (1.00000, 0.62728, 1.10923, 0.83976, 0.94780, 1.12612, 1.18762, 2.42268, 1.57267, 1.05398, 0.85527, 0.77782, 0.53982, 0.71635, 0.83657, 0.68499, 0.35035, 0.43506, 0.28335, 0.25964, 0.12077, 0.12995, 0.05161, 0.04077, 0.04573, 0.03750, 0.03843, 0.03331, 0.04047, 0.04665, 0.03685, 0.05086)),
+        (233.1, (1.00000, 0.94072, 0.76121, 0.88651, 0.88626, 0.69608, 1.09569, 0.72140, 0.59657, 0.62238, 0.41841, 0.37909, 0.20577, 0.07548, 0.11457, 0.05705, 0.04864, 0.03155, 0.03678, 0.01641, 0.01523, 0.01465, 0.01907, 0.01039, 0.01102, 0.00633, 0.00665, 0.00885, 0.00306, 0.00433, 0.00437, 0.00419)),
+        (1046.5, (1.00000, 0.95244, 0.29462, 0.33808, 0.16544, 0.05732, 0.02820, 0.00497, 0.00951, 0.00545, 0.00438, 0.00150, 0.00088, 0.00145, 0.00028, 0.00048, 0.00063, 0.00136, 0.00122, 0.01140, 0.00073, 0.00030, 0.00095, 0.00079, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: Pitea's own balance -- -3.9 dB re its Principal 8 on the same
+    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
+    initial_gain = 0.0418949
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.05
+    rank_speech = True
+
+
+CELESTE_CENTS = 17.9
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
+    ("koppelflute 4",    2.0,  0.45, OrganKoppelfluteProperties),          # bit 14
+    ("waldflute 2",      4.0,  0.40, OrganWaldfluteProperties),            # bit 15
+    ("nazard 2-2/3",     3.0,  0.35, OrganNazardProperties),               # bit 16
+    ("tierce 1-3/5",     5.0,  0.30, OrganTierceProperties),               # bit 17
+    ("subbass 16",       0.5,  0.70, OrganSubbassProperties),              # bit 18
+    ("contrabassoon 32", 0.25, 0.60, OrganContrabassoonProperties),        # bit 19
+    ("gamba 8",          1.0,  0.45, OrganGambaProperties),                # bit 20
+    ("celeste 8", 2.0 ** (CELESTE_CENTS / 1200.0), 0.45, OrganCelesteProperties,
+     False, None, (48, 127)),                                              # bit 21
+    ("oboe 8",           1.0,  0.50, OrganOboeProperties),                 # bit 22
+    ("vox humana 8",     1.0,  0.45, OrganVoxHumanaProperties),            # bit 23
+    ("trompette 8",      1.0,  0.50, OrganTrompetteProperties),            # bit 24
+]
+FlueOrganProperties.stop_word_ccs = (11, 43, 44, 45)
+# the panel's third row (Alt+digit): the flutes and mutations, then the pedal;
+# its fourth (Alt+shift+digit): the strings, then the solo reeds
+FlueOrganProperties.stop_rows = FlueOrganProperties.stop_rows + [
+    ["koppelflute 4", "waldflute 2", "nazard 2-2/3", "tierce 1-3/5", "|",
+     "subbass 16", "contrabassoon 32"],
+    ["gamba 8", "celeste 8", "|", "oboe 8", "vox humana 8", "trompette 8"],
+]
+
 # RENAMED RANKS, old -> new, so a preset, a session or a script written before
 # still draws them. Applied only where the NEW name is one of the voice's ranks:
 # the harpsichord still has an "8" and a "4", and they are its own.
@@ -10306,24 +10586,37 @@ class OrchestraHitProperties(PercussionProperties):
       a hit sounding like one synthetic click. strike_phase_spread is already the
       mechanism for exactly that, from the hi-hat.
 
-    FITTED against a reference built from this file's own voices: thirteen
-    already-calibrated orchestral parts playing one ff chord in octaves. There is
-    no Iowa recording of an orchestra hit, and the orchestra we already model is
-    the only self-consistent standard for the orchestra-in-one-note.
+    FIRST fitted against a reference built from this file's own voices --
+    thirteen calibrated orchestral parts playing one ff chord in octaves, there
+    being no Iowa recording of a hit. NOW FITTED TO THE GM SETS' OWN HITS
+    (examples/orchhit_fit.py; see stop_ranks): an orchestra hit is a SAMPLE, the
+    Fairlight's stab, so what GM plays is the instrument -- a root and its fifth,
+    flat across six octaves, a quarter of it noise, and short.
     """
     registerable = True
     default_stops = 0b1111111    # all seven: a hit is the whole band at once
     # The scoring, as a stop list: (name, footage, gain, whose spectrum).
     # Bits 0-6 of the CC11 stop word, so a default expression of 127 draws the
     # whole band -- which is the only registration a hit is ever played in.
+    #
+    # FITTED (examples/orchhit_fit.py) TO WHAT GM PLAYS. The patch is the
+    # Fairlight-era SAMPLE -- one recorded orchestral stab -- so the GM sets'
+    # own hits are the instrument (FluidR3/MuseScore's G#6 and G#7, GeneralUser
+    # GS's two, TimGM6mb's): a ROOT AND ITS FIFTH (the fifth 4-7 dB under, no
+    # third), the octaves -2..+3 within 0-6 dB of each other, 7-12 dB of it
+    # NOISE, and gone fast (-20 dB at 0.24-0.47 s). Ours was the root alone,
+    # falling 15-32 dB into the top octave, clean (noise -35 dB), with a 1.1-
+    # 1.4 s tail: score 6899 -> 956. The fifth is a RE-VOICING, not a rank
+    # more (CC11's stop word has seven bits): the horns on the fifth, the winds
+    # on the twelfth, as an orchestra voices a power chord.
     stop_ranks = [
-        ("bass",    0.25, 1.593, ConicalBrassProperties),   # basses, tuba: 2 octaves down
-        ("tenor",   0.5,  1.180, TromboneProperties),       # trombones, cellos
-        ("horn",    1.0,  0.538, HornProperties),           # horns at the written pitch
-        ("string",  1.0,  0.673, BowedStringProperties),    # the strings, marcato
-        ("tpt",     2.0,  0.430, TrumpetProperties),        # trumpets an octave up
-        ("wind",    2.0,  0.338, StoppedPipeProperties),    # flutes and oboes with them
-        ("picc",    4.0,  0.348, StoppedPipeProperties),    # piccolo on the top octave
+        ("bass",    0.25, 1.179, ConicalBrassProperties),   # basses, tuba: 2 octaves down
+        ("tenor",   0.5,  1.365, TromboneProperties),       # trombones, cellos
+        ("horn",    1.5,  0.387, HornProperties),           # horns on the FIFTH
+        ("string",  1.0,  1.872, BowedStringProperties),    # the strings, marcato
+        ("tpt",     2.0,  0.993, TrumpetProperties),        # trumpets an octave up
+        ("wind",    3.0,  1.052, StoppedPipeProperties),    # flutes and oboes on the twelfth
+        ("picc",    4.0,  0.214, StoppedPipeProperties),    # piccolo on the top octave
     ]
     crescendo_order = ["string", "bass", "tenor", "horn", "tpt", "wind", "picc"]
 
@@ -10346,8 +10639,31 @@ class OrchestraHitProperties(PercussionProperties):
     release_floor_db = -40.0
 
     max_harmonic = 32           # per rank, and there are seven of them
-    decay_db = 12.0             # fitted to the reference envelope; see the note below
-    harmonic_decay_db = 2.0
+    decay_db = 29.37            # fitted to the GM hits (was 12, to our own orchestra)
+    harmonic_decay_db = -0.236
+    # THE NOISE IN IT, the GM hits' own colour (their spectrum's floor per third
+    # octave, 0-60 ms from the peak, median of the hits): broad, falling from
+    # ~-17 dB at 100-300 Hz to -28 at 2-6 kHz -- the cymbal, the bass drum, the
+    # brass's rasp and the sampler's grit. Its level and fall fitted with the
+    # rest (+30.6 dB, 49 dB/s): noise -5..-6 dB of the hit against their -7..-12.
+    strike_noise_db = ((45, 7.6), (56, 11.6), (71, 9.6), (90, 14.6), (113, 12.6), (142, 13.6), (180, 14.6), (226, 10.6), (285, 9.6), (360, 11.6), (453, 9.6), (571, 6.6), (720, 5.6), (907, 4.6), (1142, 6.6), (1440, 2.6), (1814, 2.6), (2285, 4.6), (2880, 4.6), (3628, 2.6), (4571, 4.6), (5760, 4.6), (7257, 0.6), (9143, 2.6), (11520, -5.4), (14514, -3.4))
+    strike_noise_dbs = 49.4
+    strike_noise_len_s = 1.0
+    strike_noise_fade_s = 0.001
+    strike_noise_slope = 0.0
+    # THE PERCUSSION (Ben: "are we missing percussion from ours?"). The GM hits
+    # keep 55-74% of their power under 400 Hz: in the first 40 ms near-flat
+    # noise (the impact), then PITCHED -- the chord's own root and fifth three
+    # and four octaves under the key (G#1 52 Hz, D#2 78, G#2 104): timpani and
+    # low brass, hit hard. Ours had 38-58%, its lowest content two octaves
+    # under the key. So: a TIMPANI on the root (Ben: "Add tympani?"), our
+    # fitted kettle's own modes moved into D2-D3, and the cymbal above the
+    # rest, fitted with the low end in the score -- a noise bass drum the fit
+    # would not keep at any level (it bought the 50 ms bloom with the tail).
+    # struck_layer is set below TimpaniProperties, which this file defines later
+    strike_noise_layers = (
+        (((5760, 17.4), (7257, 17.4), (9143, 17.4), (11520, 17.4), (14514, 17.4)), 0.001, 60.3, 0.8),
+    )
     # ONE decay law cannot hold both ends of this envelope, because the thing
     # being matched is a SUM: the strings and brass stop when the players stop,
     # while the bass drum and the cymbal ring on underneath them. Fitting the
@@ -11355,6 +11671,10 @@ class TimpaniProperties(MembraneDrumProperties):
     initial_gain = (1.0 / 7.3) * 1.659 * 1.059
     tonal_dampening = 1.75
 
+
+
+# GM 55's timpani (see OrchestraHitProperties): defined here, after the kettle.
+OrchestraHitProperties.struck_layer = (TimpaniProperties, -9.1, 0.029, 19.7)
 
 class NoisyPercussionMixin:
     """A radiation roll-off for the percussion voices that carry a noise wash.
@@ -12678,10 +12998,14 @@ class VoiceLeadProperties(FormantBody, SawtoothSynthProperties):
     overlaps them), copied rather than imported: tonelib does not depend on the
     singing pipeline and should not start here for three numbers.
     """
-    # vowels.py VOWELS['a'], an adult male tract.
-    formants = ((730.0, 130.0, 1.00), (1090.0, 90.0, 0.55), (2440.0, 130.0, 0.22))
-    formant_floor = 0.06
-    bore_corner_hz = 4000.0
+    # vowels.py MEASURED['a']: the SUNG /a/ (VocalSet, examples/choir_fit.py
+    # vowel), four formants and the singer's cluster, with the tract's measured
+    # floor and mouth as Choir Aahs has them. It had the spoken table's three
+    # and a 4 kHz mouth, which took the cluster away.
+    formants = ((743.0, 285.0, 1.000), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732),
+                (3412.0, 697.0, 0.566))
+    formant_floor = 0.0341
+    bore_corner_hz = 11843.0
     bore_order = 2.0
     bell_cutoff_hz = 0.0
     bell_order = 1.0
@@ -12852,11 +13176,16 @@ class ChoirPadProperties(SynthPadProperties):
     A THIRD FORMANT AND A FLOOR, because a choir is many people. The floor is
     what a section passes between its resonances; a soloist's is lower.
     """
-    # vowels.py VOWELS['O'], widened: a section's formants are the average of
-    # many tracts and so are broader than any one singer's.
-    formants = ((570.0, 180.0, 1.00), (840.0, 220.0, 0.70), (2410.0, 400.0, 0.30))
+    # vowels.py VOWELS['O'] -- its own F1 and F2, the measured /o/'s widths,
+    # levels and singer's cluster (VocalSet) -- WIDENED x1.5: a section's
+    # formants are the average of many tracts and so broader than any one
+    # singer's (the widening asserted, as before). The tract's measured mouth;
+    # the floor kept higher than a soloist's, a choir passing more between its
+    # resonances.
+    formants = ((570.0, 372.0, 1.000), (840.0, 375.0, 1.248), (2883.0, 854.0, 0.879),
+                (3490.0, 225.0, 0.762))
     formant_floor = 0.10
-    bore_corner_hz = 3600.0
+    bore_corner_hz = 11843.0
     attack_time = 0.24
     chorus_cents = (-9.0, 6.0, 14.0)
     initial_gain = 0.0453122
@@ -20784,7 +21113,14 @@ class SynthVoiceProperties(VocalProperties):
     """GM 54. A synthesized voice: an "eh" between the other two, and steadier
     than people are -- less spread, less vibrato, because the thing being
     imitated is a synthesizer imitating a choir."""
-    formants = ((530.0, 110.0, 1.00), (1840.0, 110.0, 0.55), (2480.0, 140.0, 0.25))
+    # THE MEASURED SUNG /E/ (vowels.MEASURED, VocalSet's open "e" -- the "eh"
+    # this patch always meant), with the tract's measured floor and mouth as
+    # Choir Aahs has them: the spoken three-formant "eh" it had stopped at
+    # 2.5 kHz and its 4 kHz mouth took the singer's cluster with it.
+    formants = ((562.0, 135.0, 1.000), (1695.0, 354.0, 0.818), (2429.0, 478.0, 0.547),
+                (3153.0, 698.0, 0.558))
+    formant_floor = 0.0341
+    bore_corner_hz = 11843.0
     section_spread_cents = 4.0
     section_vibrato_cents = 3.0
     initial_gain = (1.0 / 4542 / (VocalProperties.section_players ** 0.5)) * 0.6823   # -3.32 dB, see VocalProperties

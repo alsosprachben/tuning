@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Buxtehude, Passacaglia in D minor BuxWV 161 -- as one long crescendo.
 
-    python3 examples/buxwv161.py SCORE.mid [outdir]
+    python3 examples/buxwv161.py SCORE.mid [outdir] [--colours]
 
 SCORE is the four-channel score (buxtehude_passacaglia_registered.mid): 0 the
 manual, 1 the pedal, 2 the pedal reed, 3 the manual reed. The reed channels
@@ -42,9 +42,12 @@ out. What is left is a strong fundamental, no second, and a third at -9 dB,
 which is within a decibel of the REED's own spectrum. Ben heard the opening
 pedal as a reed and it was one, in every way that a spectrum can be.
 
-UNDER IT, THE BOURDON 16'. Stopped 16' + stopped 8' is the classic quiet pedal:
+UNDER IT, THE SUBBASS 16'. Stopped 16' + stopped 8' is the classic quiet pedal:
 the octave below gives the ground a floor without any of the open rank's
-brightness. Nothing is taken away, so it stays drawn to the end.
+brightness. Nothing is taken away, so it stays drawn to the end. It was the
+manual's Bourdon 16' standing in; Pitea's own pedal Subbas (bit 18) is the
+stop. And the return's pedal reed stands on the 32' (the Kontrabasun, bit 19)
+under the Posaune: the weight the big North German pedals had.
 """
 import math
 import os
@@ -109,19 +112,35 @@ RAW = {
         # approach, and it is played on everything
         (ENCORE,    ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])],
     # pedal flue
-    1: [(0.0,           ['bourdon 16', 'flute 8']),               # stopped, not open
-        (KEY['F'],  ['bourdon 16', 'principal 8']),                    # principal, with the manual
-        (KEY['A'],  ['bourdon 16', 'principal 16', 'principal 8', 'octave 4']),
-        (KEY['D2'], ['bourdon 16', 'principal 16', 'principal 8', 'octave 4', 'quint 5-1/3'])],
+    1: [(0.0,           ['subbass 16', 'flute 8']),               # stopped, not open
+        (KEY['F'],  ['subbass 16', 'principal 8']),                    # principal, with the manual
+        (KEY['A'],  ['subbass 16', 'principal 16', 'principal 8', 'octave 4']),
+        (KEY['D2'], ['subbass 16', 'principal 16', 'principal 8', 'octave 4', 'quint 5-1/3'])],
     # pedal reed: the weight of the return. The pedal rests from the end of
     # the whole note to the return, so a 16' drawn at the wall was never heard
     # alone -- and drawn there it swelled the held whole note.
     2: [(0.0,           []),
-        (KEY['D2'], ['reed 16', 'reed 8'])],
+        (KEY['D2'], ['reed 16', 'reed 8', 'contrabassoon 32'])],   # + the 32' reed under the return
     # manual reed: the last statement only
     3: [(0.0,           []),
         (LAST,      ['trumpet 8'])],
 }
+
+
+# THE SECTION-COLOURS VERSION (--colours), beside the crescendo for Ben's ear:
+# the two middle sections each on a colour of the console's recorded ranks
+# instead of the build -- F major on the flute chorus (Gedackt 8, Koppelflote 4,
+# Waldflote 2), A minor on the Sesquialtera (Nazard and Tierce over the flute
+# 8) -- and the return's full registration arriving with the encore's chords
+# as in the crescendo. It takes stops away at each key change, which the
+# crescendo never does: that is the difference being heard. The pedal, the
+# reeds, the encore and the tempo are the crescendo's.
+RAW_COLOURS = dict(RAW)
+RAW_COLOURS[0] = [
+    (0.0,       ['flute 8']),
+    (KEY['F'],  ['flute 8', 'koppelflute 4', 'waldflute 2']),
+    (KEY['A'],  ['flute 8', 'nazard 2-2/3', 'tierce 1-3/5']),
+    (ENCORE,    ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])]
 
 
 # THE ENCORE. The chords before the return are played as an encore: the
@@ -270,7 +289,7 @@ def to_console(src, dest):
 def main(argv):
     if len(argv) < 2:
         print(__doc__.strip()); return 2
-    outdir = argv[2] if len(argv) > 2 else '.'
+    outdir = argv[2] if len(argv) > 2 and not argv[2].startswith('--') else '.'
     os.makedirs(outdir, exist_ok=True)
     score = to_console(argv[1], os.path.join(outdir, 'buxwv161_console.mid'))
     global _SPANS, PLAN
@@ -291,7 +310,8 @@ def main(argv):
         if ch in (1, 2) and t == KEY['D2']:
             return ahead
         return at_raw(warp_time(t))
-    PLAN = {ch: [(when(ch, t), ns) for t, ns in spec] for ch, spec in RAW.items()}
+    raw = RAW_COLOURS if '--colours' in argv else RAW
+    PLAN = {ch: [(when(ch, t), ns) for t, ns in spec] for ch, spec in raw.items()}
     graded = os.path.join(outdir, 'buxwv161_graded.mid')
     lib.set_stops(score, graded, PLAN)
     return organ.main([argv[0], graded, outdir, '--tuner', TUNER])
