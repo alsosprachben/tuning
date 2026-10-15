@@ -166,6 +166,12 @@ ALL_COLS = COLS_F8 + COLS_F4 + COLS_F4_NOTE + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
 
+# TUNING_CLIPLOG=PATH: when a block peaks over CLIPLOG_PEAK (or is not finite),
+# append the loudest sounding rows and what owns each to PATH -- to catch an
+# intermittent burst in the act. Off by default; once a second at most.
+CLIPLOG = os.environ.get('TUNING_CLIPLOG') or None
+CLIPLOG_PEAK = float(os.environ.get('TUNING_CLIPLOG_PEAK', '0.5'))
+
 # ---- the half-moon, on the pitch wheel --------------------------------------
 # A HAMMOND HAS NO PITCH BEND. The tonewheels are driven by a synchronous motor
 # off the mains, so the pitch is the mains frequency and there is nothing to
@@ -1125,6 +1131,12 @@ class Slab:
         # A sustaining voice is held until the key is released; a struck one
         # already knows how long it rings and must not be cut short by note-off.
         a["noff"][idx] = (n0 + dur + rd) if oneshot else IDLE
+        # a row with its own end (t["rof"]: the quill's catch) stops there
+        if tmpl.get("rof") is not None and len(tmpl["rof"]) == n:
+            _own = tmpl["rof"] >= 0
+            if _own.any():
+                _on = np.broadcast_to(np.asarray(newnon, np.int64), (n,))
+                a["noff"][idx[_own]] = _on[_own] + tmpl["rof"][_own]
         if oneshot:
             self.retiring.append((idx, n0 + dur))
         if vel_scale != 1.0:
@@ -1818,8 +1830,10 @@ class Slab:
             self.oneshot.pop(key, None)
             return                      # struck: it rings out, note-off is not a stop
         idx = np.fromiter(slots, np.int64, len(slots))
-        # a reflection stops as late as it started
-        self.a["noff"][idx] = n + self.a["rdl"][idx].astype(np.int64)
+        # a reflection stops as late as it started -- and a row that has
+        # already ended on its own (the quill's catch) is not brought back
+        self.a["noff"][idx] = np.minimum(self.a["noff"][idx],
+                                         n + self.a["rdl"][idx].astype(np.int64))
         self.retiring.append((idx, n))
         if len(key) == 4 and key[3] is None:
             # for a slur to cut (Live._slur_cut): a played note's key only --
@@ -2518,6 +2532,19 @@ class Patch:
                        or getattr(self._voice_class(note), "jack_offset_ms", None)):   # ...or a harpsichord's jacks
             _base = t["non"] - t["rdl"]
             t["cof"] = (_base - _base.min()).astype(np.int64)
+        # ...AND THE QUILL'S CATCH ENDS AT THE SLIP (blockrender: pre_pluck_s).
+        # Its rows carry their own note-off, a few ms after their onset; the
+        # stamp put every row's at the key-up, so the catch -- 16 dB under the
+        # pluck, undecaying -- held under the key once the pluck had fallen
+        # past it (Ben: "all of its stops sustain forever after a couple
+        # seconds"). A catch row keeps its length from its onset; -1 is the
+        # key's. BY ITS LENGTH, a few ms (pre_pluck_points: 3.5-6), not by
+        # "shorter than the longest": each stop is built to its own length,
+        # and that test cut the 4' and the lute at theirs, 1.5 s in.
+        t["rof"] = None
+        if t["P"] and hasattr(self._voice_class(note), "pre_pluck_s"):
+            _len = (t["noff"] - t["non"]).astype(np.int64)
+            t["rof"] = np.where(_len <= int(0.02 * B.SR), _len, -1).astype(np.int64)
         # ...AND THE LESLIE'S CROSSOVER COPIES (leslie.crossover_weights): rows
         # on the rotor their pitch would not pick, which leslie_arm must flip
         t["lflip"] = np.zeros(int(t["P"]), bool)
@@ -2564,6 +2591,8 @@ class Patch:
                 cols["lflip"] = t["lflip"][msk]     # the Leslie crossover's copies, per stop
                 if t["cof"] is not None:
                     cols["cof"] = t["cof"][msk]     # ...and when each drawbar's contact closes
+                if t["rof"] is not None:
+                    cols["rof"] = t["rof"][msk]     # ...and the catch's own end
                 t["ranks"][nm] = (cols, int(msk.sum()), t["hrel"][msk])
         # THE KEY-UP'S ROWS (blockrender's rel_rows: release_click_*) are an
         # event AT note-off; stamped with the note they would sound at every
@@ -2588,6 +2617,23 @@ class Patch:
                 t[k] = t[k][~msk]
             t["P"] = int((~msk).sum())
             t["rel"] = rel
+        # ...AND ON THE ORGAN PATH, ONE CLICK A JACK (blockrender's rel_jacks):
+        # a harpsichord's key-up lets every drawn stop's jack fall back, each
+        # at its own offset. Its rows carry no rank (gr -1), so no stop ever
+        # stamped them and live's key-up was silent (Ben: "on release, should
+        # there not be a little click?"). Kept per stop, stamped at the key-up
+        # for the stops drawn then (_key_up_jacks).
+        t["rel_rank"] = {}
+        if self.organ and t["P"]:
+            for a_, b_, rk, jo in (p.get("rel_jacks") or ()):
+                if a_ >= int(t["P"]):
+                    continue
+                b_ = min(b_, int(t["P"]))
+                cols = {k: t[k][a_:b_] for k in ALL_COLS}
+                cols["hrel"] = t["hrel"][a_:b_]
+                cols["cof"] = np.full(b_ - a_, int(round(jo * B.SR)), np.int64)
+                cols["dur"] = int((t["noff"][a_:b_] - t["non"][a_:b_]).max()) + int(cols["cof"][0])
+                t["rel_rank"][rk] = cols
         t["vel"] = vel
         return t
 
@@ -3053,6 +3099,12 @@ class Live:
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
         self.held_tmpl = {}     # (pid, ch, note) -> (template, scale): its key-up event
+        # TUNING_CLIPLOG: a loud block's rows, named (_clip_snap, _clip_write)
+        self._clip_at = -(1 << 62)
+        self._clip_q = collections.deque(maxlen=64)
+        self._clip_ev = threading.Event()
+        if CLIPLOG:
+            threading.Thread(target=self._clip_write, daemon=True).start()
         self.mod = {}           # channel -> current vibrato depth (fraction)
         self.trem_depth = {}    # pid -> current tremolo/pan depth (fraction)
         self.detune_step = {}   # pid -> which pre-warmed detune the wheel is on
@@ -4168,6 +4220,8 @@ class Live:
             # does the rest. Velocity is deliberately ignored.
             for rank in part.drawn:
                 self._draw(part, tmpl, ch, note, rank, n0)
+            if tmpl.get("rel_rank"):
+                self.held_tmpl[(part.pid, ch, note)] = (tmpl, None)   # its jacks' clicks, at key-up
             # ...AND A HARPSICHORD'S KEY LIFTS EVERY CHOIR'S DAMPER: the strings
             # its drawn stops pluck drive the rest through the bridge, its own
             # key's undrawn choirs among them (register.py, as the file does)
@@ -4176,8 +4230,13 @@ class Live:
                 ci = {c[0]: i for i, c in enumerate(pc.string_choirs)}
                 drawn = [r for r in part.drawn if (part.pid, ch, note, r) in self.slab.live
                          and pc.rank_choirs.get(r, r) in ci]
+                # ...the pluck's rows only: the quill's catch ends at the slip
+                # (its own noff), and as a driver of the worker's undecaying
+                # forced rows it held the free strings at its pitch forever
+                _noff = self.slab.a["noff"]
                 sc = {int(s): ci[pc.rank_choirs.get(r, r)]
-                      for r in drawn for s in self.slab.live[(part.pid, ch, note, r)]}
+                      for r in drawn for s in self.slab.live[(part.pid, ch, note, r)]
+                      if _noff[s] == IDLE}
                 if sc:
                     self._reg_strike(part, ch, note, n0, tmpl, list(sc),
                                      sorted(set(sc.values())), sc)
@@ -4624,8 +4683,19 @@ class Live:
             note, forced, at = job[2], job[3], job[4]
             a = self.slab.a
             key = (rid[0], rid[1], note, self.REG_FORCED)
+            # its note still sounding -- and still ITS note. The reply comes
+            # back late (a low key has the most free strings to answer), and a
+            # tapped key's rows can be freed by then and the slot stamped
+            # again, by the next note or a jack's click: "busy, not yet off"
+            # passed, the copy took the new row's pitch at the old strike's
+            # level, undecaying under this key until it was struck again (Ben:
+            # "loud buzz that clips ... it clears when I press the note
+            # again"). A strike's rows start within its jacks' offsets and the
+            # quill's catch, ~13 ms; a reused slot, a release later.
+            _win = 0.05 * self.rate
             ok = [(sl, w_, be, F) for sl, w_, be, F in forced
-                  if self.slab.busy[sl] and a["noff"][sl] >= n0]     # its note still sounding
+                  if self.slab.busy[sl] and a["noff"][sl] >= n0
+                  and 0.0 <= float(a["non"][sl] - at) - float(a["rdl"][sl]) <= _win]
             if not ok:
                 return
             self.reg_budget -= len(ok)
@@ -5609,9 +5679,12 @@ class Live:
                     ch, n0, int(part.patch.part_break_s * self.rate))
             return
         if part.organ:
+            _sounded = {k[3] for k in self.slab.live
+                        if k[0] == part.pid and k[1] == ch and k[2] == note}
             for k in [k for k in list(self.slab.live)
                       if k[0] == part.pid and k[1] == ch and k[2] == note]:
                 self.slab.release(k, n0)          # its ranks, and their forced register rows
+            self._key_up_jacks(part, ch, note, n0, _sounded)
             if self.reg_enabled and self._reg_voice(part, note):
                 self._reg_damper(part, ch, n0, released=note)   # every choir's damper falls
         else:
@@ -5620,6 +5693,82 @@ class Live:
             if self.reg_enabled:
                 self.slab.release((part.pid, ch, note, self.REG_FORCED), n0)
                 self._reg_damper(part, ch, n0, released=note)
+
+    def _clip_snap(self, n0, p):
+        """TUNING_CLIPLOG: a block over CLIPLOG_PEAK (or not finite). The
+        loudest sounding rows, copied here -- a few arrays, once a second at
+        most -- and named off the audio thread (_clip_write)."""
+        a, sl = self.slab.a, self.slab
+        busy = np.flatnonzero(sl.busy)
+        if not len(busy):
+            return
+        on = busy[a["non"][busy] <= n0 + 128]
+        lvl = np.abs(a["aL"][on]) + np.abs(a["aR"][on])
+        bad = ~np.isfinite(lvl)
+        k = min(16, len(on))
+        top = on[np.argpartition(-np.where(bad, np.inf, lvl), k - 1)[:k]] if k else on
+        cols = {c: a[c][top].copy() for c in ("nf", "om", "aL", "aR", "logr", "logrA", "sus", "aft",
+                                               "re", "fa", "non", "noff", "rdl", "gr", "pl", "fx")}
+        self._clip_q.append((time.time(), n0, p, top.copy(), cols, self.n))
+        self._clip_ev.set()
+
+    def _clip_write(self):
+        path = os.path.expanduser(CLIPLOG)
+        while True:
+            self._clip_ev.wait(); self._clip_ev.clear()
+            while self._clip_q:
+                when, n0, p, top, cols, _n = self._clip_q.popleft()
+                own = {}
+                try:
+                    for k, v in list(self.slab.live.items()):
+                        for s in list(v):
+                            own[int(s)] = str(k)
+                    for rid, st in list(self.reg.items()):
+                        so = st.get('slot_of')
+                        if st.get('ready') and so is not None:
+                            for m in np.flatnonzero(so >= 0):
+                                own.setdefault(int(so[m]), "register free %s mode %d" % (rid, m))
+                except Exception as e:
+                    own[-1] = "(owners unreadable: %s)" % e
+                down = sorted(self.down)
+                with open(path, "a") as f:
+                    f.write("%s  block at sample %d  peak %s  keys down %s  drawn %s\n" % (
+                        time.strftime("%H:%M:%S", time.localtime(when)), n0,
+                        "%.3f (%.1f dBFS)" % (p, 20 * math.log10(p)) if p > 0 and math.isfinite(p) else repr(p),
+                        down, [sorted(pt.drawn) for pt in self.parts]))
+                    order = np.argsort(-(np.abs(cols["aL"]) + np.abs(cols["aR"])))
+                    for i in order:
+                        f.write("   slot %6d %8.1f Hz  aL %7.1f aR %7.1f dB  logr %.3g logrA %.3g sus %.3g aft %.3g"
+                                "  re %.0f  age %.3f s  off %s  gr %d  %s\n" % (
+                                    top[i], cols["nf"][i],
+                                    20 * math.log10(abs(float(cols["aL"][i])) + 1e-30),
+                                    20 * math.log10(abs(float(cols["aR"][i])) + 1e-30),
+                                    cols["logr"][i], cols["logrA"][i], cols["sus"][i], cols["aft"][i],
+                                    cols["re"][i], (n0 - int(cols["non"][i])) / float(self.rate),
+                                    "held" if int(cols["noff"][i]) == IDLE else "%+.3f s" % ((int(cols["noff"][i]) - n0) / float(self.rate)),
+                                    int(cols["gr"][i]), own.get(int(top[i]), "unowned (one-shot or retiring)")))
+
+    def _key_up_jacks(self, part, ch, note, n0, sounded):
+        """A harpsichord's jacks falling back: one click a stop that sounded
+        on this key, at the note's own level, as a one-shot."""
+        st = self.held_tmpl.pop((part.pid, ch, note), None)
+        tmpl = st[0] if st else None       # the template the note was stamped from
+        if tmpl is None or not tmpl.get("rel_rank"):
+            return
+        scale = (part.gain() * self._chan_gain(ch)
+                 * self.note_touch.get((part.pid, ch, note), 1.0))
+        _cp = self.cpan.get(ch, T.GM_DEFAULT_PAN)
+        for rank, rel in tmpl["rel_rank"].items():
+            if rank not in sounded:
+                continue
+            n = len(rel["om"])
+            key = (part.pid, ch, note, "keyup:" + rank)
+            if not self.slab.stamp_cols(rel, n, key, n0, scale, rel["hrel"], rel["dur"], True):
+                continue
+            got = list(self.slab.last_slots)
+            self.slab.live.pop(key, None)       # it retires on its own; never released
+            if _cp != T.GM_DEFAULT_PAN:
+                self.slab.repan(got, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
 
     def _key_up_event(self, part, ch, note, n0):
         """The mechanism letting go (tonelib release_click_*): the template's
@@ -7154,6 +7303,9 @@ class Live:
             self.render_max = self.render_ms
         self.n = n0 + frame_count
         p = float(max(np.abs(L).max(), np.abs(R).max()))
+        if CLIPLOG and (not (p < CLIPLOG_PEAK)) and n0 - self._clip_at > self.rate:
+            self._clip_at = n0
+            self._clip_snap(n0, p)
         self.last_peak = p          # this block only, so a meter can fall back
         if p > self.peak:
             self.peak = p
@@ -11836,6 +11988,58 @@ def selftest():
               _hheld > 0 and _hup == 0 and _hl.reg_dropped == 0 and _hl.reg_err is None,
               "  (%d free rows held, %d after; drawn %s)" % (_hheld, _hup, sorted(_hl.parts[0].drawn)))
         _hl.renderer.close()
+        # A HELD HARPSICHORD NOTE DECAYS, EVERY STOP. The quill's catch -- rows
+        # 16 dB under the pluck, ending at the slip -- was stamped with the
+        # key's note-off, and held undecaying (and drove the free strings at
+        # its pitch) once the pluck fell past it: every stop sat ~13 dB down
+        # from 2 s on, for as long as the key was held. Measured: 0.3-0.8 s
+        # against 2.5-3.0 s, which must fall, and must still sound (each stop
+        # rings on its own length, not the catch's).
+        _hd = {}
+        for _hs in ("8", "4"):
+            B.REGISTER = True
+            try:
+                _hk = Live(program=6, rate=48000, frames=128, verbose=False, tuner="hybrid440", gpu=True)
+            finally:
+                B.REGISTER = _rgw
+            _hk.warm()
+            _hk.set_stops(_hk.parts[0], {_hs})
+            _hk.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+            _hx = []
+            for _ in range(int(3.0 * 48000) // 128):
+                _hx.append(np.frombuffer(_hk.callback(None, 128, None, 0)[0], np.float32)[0::2].copy())
+                time.sleep(128.0 / 48000.0)
+            _hk.renderer.close()
+            _hx = np.concatenate(_hx).astype(np.float64)
+            _hr = lambda _a, _b: 20.0 * math.log10(
+                math.sqrt(float(np.mean(_hx[int(_a * 48000):int(_b * 48000)] ** 2))) + 1e-12)
+            _hd[_hs] = (_hr(0.3, 0.8), _hr(2.5, 3.0))
+        # ...AND ITS KEY-UP CLICKS: each drawn stop's jack falls back (the
+        # file's rel_jacks). The organ path stamps by rank, the clicks carry
+        # none, and live's key-up was silent. The lute's strings are long
+        # gone by 1 s above 2 kHz, so the band there is the click's.
+        _hk = Live(program=6, rate=48000, frames=128, verbose=False, tuner="hybrid440", gpu=True)
+        _hk.warm()
+        _hk.set_stops(_hk.parts[0], {"lute"})
+        _hk.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+        _hx = [np.frombuffer(_hk.callback(None, 128, None, 0)[0], np.float32)[0::2].copy()
+               for _ in range(375)]
+        _hk.on_midi(mido.Message("note_off", channel=0, note=60))
+        _hx += [np.frombuffer(_hk.callback(None, 128, None, 0)[0], np.float32)[0::2].copy()
+                for _ in range(40)]
+        _hk.renderer.close()
+        from scipy.signal import butter as _bt, sosfilt as _sf
+        _hx = _sf(_bt(4, [2000, 9000], 'bandpass', fs=48000, output='sos'),
+                  np.concatenate(_hx).astype(np.float64))
+        _hu = 375 * 128
+        _hc = [20.0 * math.log10(math.sqrt(float(np.mean(_s ** 2))) + 1e-12)
+               for _s in (_hx[_hu - 2400:_hu - 480], _hx[_hu + 96:_hu + 2400])]
+        check("...and its key-up clicks, a jack falling back for each stop drawn",
+              _hc[1] - _hc[0] > 20.0,
+              "  (lute C4, 2-9 kHz: %.0f dB before the key-up, %.0f after)" % tuple(_hc))
+        check("a held harpsichord note decays on every stop, and rings its own length",
+              all(_e - _l > 15.0 and _l > -200.0 for _e, _l in _hd.values()),
+              "  (%s)" % "; ".join("%s' %.0f -> %.0f dB" % (_s, _e, _l) for _s, (_e, _l) in _hd.items()))
     sys.setswitchinterval(_swi)
     # AND THE VOICES THAT DO HAVE TOUCH MUST KEEP IT. A clavinet is a tangent
     # striking a string and is famously expressive; a harmonica has no key at

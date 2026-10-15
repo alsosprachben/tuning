@@ -3031,6 +3031,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     # THE KEY-UP'S OWN ROWS (release_click_*): an event AT note-off, so live
     # leaves them out of the note's stamp and stamps them at the key-up
     _REL_ROWS = []
+    _REL_JACKS = []         # (first, end, rank, jack offset s): the click rows of each jack
     _PUSH_T0 = {}           # channel -> when its bellows' push began (a note from silence)
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
@@ -4721,6 +4722,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _jacks = [(T.contact_offset_s(props, r[0], note), r[0]) for r in props.stop_ranks
                           if next((v for t, v in reversed(rankev_of[ch][r[0]]) if t <= _raw_off), 0.0) >= 0.5]
             for _jo, _jr in _jacks:
+                _j0 = len(A['om'])
                 import zlib as _zl
                 _jph = (random.Random(_zl.crc32(("%s|%d|click" % (_jr, note)).encode())).random()
                         * 2.0 * math.pi) if _jr is not None else 0.0
@@ -4743,6 +4745,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                                  max(1e-4, 0.0005) * SR, max(1e-4, 0.002) * SR, chiff,
                                  cdec, cdec, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, csc, -1, 0,
                                  ph0=_jph)
+                # whose jack: live's organ path stamps the drawn stops' own
+                if _jr is not None and len(A['om']) > _j0:
+                    _REL_JACKS.append((_j0, len(A['om']), _jr, _jo))
         if len(A['om']) > _rel0:
             _REL_ROWS.append((_rel0, len(A['om'])))
     _REV[0] = None
@@ -5050,7 +5055,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 # which rows are sympathetic strings' (live's meend leaves them
                 # at their own pitch: Live._meend_retune)
                 sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP),
-                rel_rows=list(_REL_ROWS))
+                rel_rows=list(_REL_ROWS), rel_jacks=list(_REL_JACKS))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
     return prep

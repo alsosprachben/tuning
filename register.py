@@ -281,6 +281,34 @@ def glide_phase(Wi, tb, tau, cut, t):
 
 NEAR = 30.0                      # pairs within this many glide-widths are integrated
 STEP = 0.02                      # s: the glide's curvature is ~80 rad/s^2 at most
+ROWS_OVER = 1.0                  # a pair's two rows at most this times its driver
+
+
+def coincident(cw, Wi, bi, Wm, am):
+    """The driver's decay per pair, raised where the pair COINCIDES.
+
+    A free mode at its driver's pitch AND decay -- a harpsichord's lower 8',
+    which no choir detune moves, an octave apart on a pure octave, its decay
+    by absolute frequency, so G1's h2 is G2's h1 in both -- makes D -> 0, and
+    the closed form's free and forced parts, c/D each, grow without bound and
+    cancel to the true c t. Exactly, in the file; live places them from two
+    replies a few ms apart with each its own ear gains, and a 0.1 dB miss
+    between two rows 35 dB over their driver clipped (Ben: "the G an octave
+    above ... sympathetic to an extreme"). So the driven part of such a pair
+    decays faster by just enough that neither row outgrows the driver (cw =
+    kappa * the pair's coupling, ROWS_OVER the driver's level): the sum is
+    (c/D')(e^{D't} - 1), still c t until 1/(cw/ROWS_OVER) -- about 2.3 s on
+    the harpsichord (cw ~0.43/s) -- and then no louder than its driver. The
+    file's exact c t had grown past it: a one-way drive, no pull back on the
+    string driving it, so a free string 14 dB over the one exciting it --
+    289 pairs of 1.6 million in bwx15.mid's first 20 s. Every other pair: bi."""
+    D = (1j * Wi - bi) - (1j * Wm - am)
+    thr = np.asarray(cw, float) / ROWS_OVER
+    close = np.abs(D) < thr
+    # past the faster of the two, so Re D' <= -thr and |D'| >= thr: adding thr
+    # to bi alone could carry a mode that decays faster than its driver
+    # THROUGH zero
+    return np.where(close, np.maximum(bi, am) + thr, bi), close
 
 
 def _glide_grid(cut, tau):
@@ -574,19 +602,24 @@ class Channel(object):
                         continue
                     j = fi[lo:hi]
                     wj = S.coupling(j, st['key'], None if st['choir'] is None else st['choir'][r])
-                    fr, fo = free_part(cmax * wj, Wi, beta, Wm[j], am[j], tb, ta, cu,
+                    bj, close = coincident(self.kappa * wgt * wj, Wi, beta, Wm[j], am[j])
+                    fr, fo = free_part(cmax * wj, Wi, bj, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
                     # free: from the driver's onset, at the mode's own frequency
                     add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - b) / sr)
-                    # forced: one row riding this driver's stage, relative to it
-                    F = complex(fo.sum())
+                    # forced: one row riding this driver's stage, relative to it --
+                    # and one more for each coincident pair, at its own decay
+                    F = complex(fo[~close].sum())
                     if abs(F) > floor * SPLIT:
                         self._forced(drv, r, beta, F / a_i, si)
+                    for k in np.flatnonzero(close):
+                        if abs(fo[k]) > floor * SPLIT:
+                            self._forced(drv, r, float(bj[k]), complex(fo[k]) / a_i, si)
                     # what the forced part holds when this driver's damper falls
                     tq = (n_off - n_i) / sr
                     gq = glide_phase(Wi, tb, ta, cu, tq)
                     xfer[j] += fo * np.exp(1j * (theta + Wi * tq + gq - Wm[j] * n_off / sr)
-                                           - beta * tq)
+                                           - bj * tq)
             if self.knock > 0:
                 # through the bridge as the drive is: across bridges, and onto
                 # the struck string's own other length (S.coupling)
@@ -874,13 +907,18 @@ class LiveChannel(object):
                         continue
                     j = fi[lo:hi]
                     wj = S.coupling(j, key, int(drv['choir'][r]) if 'choir' in drv else None)
-                    fr, fo = free_part(cmax * wj, Wi, beta, Wm[j], am[j], tb, ta, cu,
+                    bj, close = coincident(self.kappa * wgt * wj, Wi, beta, Wm[j], am[j])
+                    fr, fo = free_part(cmax * wj, Wi, bj, Wm[j], am[j], tb, ta, cu,
                                        need=floor * SPLIT)
                     add[j] += fr * np.exp(1j * (theta - Wm[j] * n_i / sr) + am[j] * (n_i - at) / sr)
-                    F = complex(fo.sum())
+                    # as Channel.strike: a coincident pair's forced part its own row
+                    F = complex(fo[~close].sum())
                     if abs(F) > floor * SPLIT:
                         forced.append((int(drv['slot'][r]), wgt, beta, F / a_i))
-                    keep.append((j, fo, Wi, beta, theta, n_i, tb, ta, cu))
+                    for k in np.flatnonzero(close):
+                        if abs(fo[k]) > floor * SPLIT:
+                            forced.append((int(drv['slot'][r]), wgt, float(bj[k]), complex(fo[k]) / a_i))
+                    keep.append((j, fo, Wi, bj, theta, n_i, tb, ta, cu))
         if self.knock > 0 and len(fi):
             amp = self.knock * self.loud_of(drv) * S.coupling(fi, key) * S.knock_shape(fi, key, self.fall)
             add[fi] += amp * np.exp(1j * knock_phase(hash(('live', sid)), len(fi)))
