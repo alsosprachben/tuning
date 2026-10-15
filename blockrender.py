@@ -3064,13 +3064,77 @@ def prepare(path, tuner='hybrid440', sink=None):
         MPK = np.ascontiguousarray(np.concatenate(_MOOG_MPK).astype(np.float32)) if _mkon else None
         return dict(FT=FT, KN=KN, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK)
 
+    def _cons_expand(_bi, _b):
+        """One burst as its EMISSIONS (see below): a seat each, the room's
+        images, a stable id. Shared by the whole-file path and the stream,
+        which expands each as soon as its channel has a source -- the
+        stream used to mix the raw bursts, and crashed on them."""
+        _s, _n, _ctr, _bw, _amp, _gl, _gr, _shape, _bch = _b
+        _src = _CONS_SRC.get(_bch)
+        _fc = float(_ctr) or 3000.0
+        _g = math.sqrt(_gl * _gl + _gr * _gr)
+        _emit = []
+        _seats = None
+        if _src is not None:
+            _pr = _src[0]
+            try:
+                _seats = _pr.section_seats()
+            except Exception:
+                _seats = None
+        if _seats:
+            _ns = len(_seats)
+            _sc = _g / math.sqrt(_ns)
+            for _si, (_li, _ri, _ld, _rd) in enumerate(_seats):
+                # deterministic scatter, +-1 of a raised span, no RNG state
+                # Deterministic, so a render repeats, but it has to be a real
+                # hash: taking three windows of ONE multiply gave three views
+                # of the same bits, and the seven "random" offsets came out a
+                # straight line -- singers walking in evenly, which is not
+                # scatter, it is a canon.
+                _j = 0.0
+                for _k in range(3):
+                    _hv = (_bi * 0x9E3779B1) ^ (_si * 0x85EBCA6B) ^ (_k * 0xC2B2AE35)
+                    _hv = (_hv ^ (_hv >> 15)) * 0x2545F491
+                    _hv = (_hv ^ (_hv >> 13)) & 0xFFFFFFFF
+                    _j += _hv / 4294967295.0 - 0.5
+                _dj = int(CONSONANT_SCATTER * SR * (_j / 3.0) * 6.0)
+                _emit.append((_s + int(_ld * SR) + _dj, _s + int(_rd * SR) + _dj,
+                              _sc * _pr.hrtf_gain(_fc, _li),
+                              _sc * _pr.hrtf_gain(_fc, _ri), _si))
+        else:
+            _emit.append((_s, _s, _gl, _gr, 0))
+        if REFLECT and _src is not None:
+            _pr, _px, _pz, _rad = _src
+            try:
+                _terms = _pr.reflection_terms(_fc, _px, _pr.radiation_distance,
+                                              _pz, _rad)
+            except Exception:
+                _terms = []
+            for _ti, (_rg, _rdelay, _image) in enumerate(_terms):
+                _ix, _iy, _iz = _image
+                _d = math.sqrt(_ix*_ix + _iy*_iy + _iz*_iz) or 1e-9
+                _ip = max(-1.0, min(1.0, _ix / _d))
+                _rs = _s + int(_rdelay * SR)
+                _rgain = _g * float(_rg)
+                _emit.append((_rs, _rs,
+                              _rgain * math.sqrt(max(0.0, 0.5 * (1.0 - _ip))),
+                              _rgain * math.sqrt(max(0.0, 0.5 * (1.0 + _ip))),
+                              100 + _ti))
+        # AND A STABLE ID. noisegen seeds each burst's noise from its position
+        # in the list, so filtering the list for a stem renumbers every burst
+        # and it comes out as DIFFERENT noise -- which is why the stems did not
+        # sum back to the mix. The index into the full list is the thing that
+        # does not move.
+        return (_n, _ctr, _bw, _shape, tuple(_emit), _bch, _bi)
+
     if sink is not None and hasattr(sink, 'begin'):
         # what a streamed render needs besides the rows: the kernel's whole-file
         # rows and side tables, the bursts, the fader, and the per-channel
         # settings the effects read (live dicts: filled as channels first sound)
         sink.begin(dict(mod=sys.modules[__name__], room_bands=ROOM_BANDS,
                         lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC, BL=BL,
-                        cons_bursts=cons_bursts, mvol=_mvol, moog_tables=_moog_tables,
+                        cons_bursts=cons_bursts, cons_expand=_cons_expand, cons_src=_CONS_SRC,
+                        mvol=_mvol, moog_tables=_moog_tables,
                         reverb=_REVERB_CH, qacc=_QACC, F=_F_SYM, ht_rows=_HT_ROWS,
                         amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
                         moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
@@ -4793,66 +4857,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     # frequency-dependent, and a consonant lives two octaves above a vowel --
     # and panned from the IMAGE's direction, not the source's, which is what
     # makes a reflection widen rather than thicken.
-    _out = []
-    for _bi, _b in enumerate(cons_bursts):
-        _s, _n, _ctr, _bw, _amp, _gl, _gr, _shape, _bch = _b
-        _src = _CONS_SRC.get(_bch)
-        _fc = float(_ctr) or 3000.0
-        _g = math.sqrt(_gl * _gl + _gr * _gr)
-        _emit = []
-        _seats = None
-        if _src is not None:
-            _pr = _src[0]
-            try:
-                _seats = _pr.section_seats()
-            except Exception:
-                _seats = None
-        if _seats:
-            _ns = len(_seats)
-            _sc = _g / math.sqrt(_ns)
-            for _si, (_li, _ri, _ld, _rd) in enumerate(_seats):
-                # deterministic scatter, +-1 of a raised span, no RNG state
-                # Deterministic, so a render repeats, but it has to be a real
-                # hash: taking three windows of ONE multiply gave three views
-                # of the same bits, and the seven "random" offsets came out a
-                # straight line -- singers walking in evenly, which is not
-                # scatter, it is a canon.
-                _j = 0.0
-                for _k in range(3):
-                    _hv = (_bi * 0x9E3779B1) ^ (_si * 0x85EBCA6B) ^ (_k * 0xC2B2AE35)
-                    _hv = (_hv ^ (_hv >> 15)) * 0x2545F491
-                    _hv = (_hv ^ (_hv >> 13)) & 0xFFFFFFFF
-                    _j += _hv / 4294967295.0 - 0.5
-                _dj = int(CONSONANT_SCATTER * SR * (_j / 3.0) * 6.0)
-                _emit.append((_s + int(_ld * SR) + _dj, _s + int(_rd * SR) + _dj,
-                              _sc * _pr.hrtf_gain(_fc, _li),
-                              _sc * _pr.hrtf_gain(_fc, _ri), _si))
-        else:
-            _emit.append((_s, _s, _gl, _gr, 0))
-        if REFLECT and _src is not None:
-            _pr, _px, _pz, _rad = _src
-            try:
-                _terms = _pr.reflection_terms(_fc, _px, _pr.radiation_distance,
-                                              _pz, _rad)
-            except Exception:
-                _terms = []
-            for _ti, (_rg, _rdelay, _image) in enumerate(_terms):
-                _ix, _iy, _iz = _image
-                _d = math.sqrt(_ix*_ix + _iy*_iy + _iz*_iz) or 1e-9
-                _ip = max(-1.0, min(1.0, _ix / _d))
-                _rs = _s + int(_rdelay * SR)
-                _rgain = _g * float(_rg)
-                _emit.append((_rs, _rs,
-                              _rgain * math.sqrt(max(0.0, 0.5 * (1.0 - _ip))),
-                              _rgain * math.sqrt(max(0.0, 0.5 * (1.0 + _ip))),
-                              100 + _ti))
-        # AND A STABLE ID. noisegen seeds each burst's noise from its position
-        # in the list, so filtering the list for a stem renumbers every burst
-        # and it comes out as DIFFERENT noise -- which is why the stems did not
-        # sum back to the mix. The index into the full list is the thing that
-        # does not move.
-        _out.append((_n, _ctr, _bw, _shape, tuple(_emit), _bch, _bi))
-    cons_bursts = _out
+    cons_bursts = [_cons_expand(_bi, _b) for _bi, _b in enumerate(cons_bursts)]
 
     # THE NOTES NOBODY HIT, AND THEY RUN BEFORE THE AMPLIFIER. A sympathetic
     # note is part of what the instrument produces, so it is part of what an

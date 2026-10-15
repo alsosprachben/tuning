@@ -312,6 +312,15 @@ class Stream:
     def begin(self, ctx):
         B = ctx['mod']
         self.B, self.ctx = B, ctx
+        # THE CONSONANTS, EXPANDED AS THEIR CHANNELS SOUND. prepare's bursts
+        # are raw until a channel's first note gives them a source (seats,
+        # room images); the whole-file path expands them all at the end, and
+        # the stream had been mixing them raw -- which crashed on every file
+        # with lyrics. Each is expanded by prepare's own function the moment
+        # its source exists, so it comes out as the whole-file path's; and no
+        # window is rendered past a burst still waiting (_burst_hold).
+        self.xb = {}                  # burst index -> its emissions
+        self.xbl = []                 # the expanded bursts, in index order
         self.N = ctx['N']
         self.W = B._chunk()
         if self.stems is not None:
@@ -370,6 +379,8 @@ class Stream:
                 self.N = max(self.N, min(self.ring_last + self.B.BLK,
                                          int((self.ctx['total'] + self.B.RING_MAX) * self.B.SR)))
                 self._grow(self.N)
+            self._expand_bursts(next_on is None)
+            limit = min(limit, self._burst_hold())
             while (self.wi + self.batch) * self.W <= min(limit, self.N) or \
                     (next_on is None and self.wi * self.W < self.N):
                 self.flush()
@@ -455,6 +466,31 @@ class Stream:
 
     def _amp_horizon(self, T):
         return min(T, self._pending_min())
+
+    def _expand_bursts(self, final=False):
+        raw = self.ctx.get('cons_bursts') or ()
+        if len(self.xb) == len(raw):
+            return
+        src, expand = self.ctx['cons_src'], self.ctx['cons_expand']
+        grew = False
+        for i, b in enumerate(raw):
+            if i not in self.xb and (final or b[8] in src):
+                self.xb[i] = expand(i, b)
+                grew = True
+        if grew:
+            self.xbl = [self.xb[i] for i in sorted(self.xb)]
+
+    def _burst_hold(self):
+        """Render no further than a quarter second before the earliest burst
+        whose channel has not sounded yet (a seat's scatter and ear delay
+        move an emission by milliseconds, never by that)."""
+        raw = self.ctx.get('cons_bursts') or ()
+        h = float('inf')
+        if len(self.xb) < len(raw):
+            for i, b in enumerate(raw):
+                if i not in self.xb:
+                    h = min(h, b[0] - self.B.SR // 4)
+        return h
 
     def _horizon(self, T):
         """Windows ending at or before this can be rendered: no row still in
@@ -914,8 +950,7 @@ class Stream:
             path = os.path.join(self.stems['outdir'], '.%s.part%s.wav' % (
                 self.stems['base'], '_'.join('%d' % k for k in key)))
             out = (WavOutMono if self.stems['objects'] else WavOut)(path, self.B.SR)
-            bursts = [b for b in (self.ctx['cons_bursts'] or ()) if len(b) < 6 or int(b[5]) == ch]
-            g = self.groups[key] = dict(out=out, path=path, rows=0, bursts=bursts,
+            g = self.groups[key] = dict(out=out, path=path, rows=0, ch=ch,
                                         w=0.0, wx=0.0, wz=0.0, n=0, sx=0.0, sz=0.0)
             for a in range(0, w0, self.W * self.batch):
                 b = min(w0, a + self.W * self.batch)
@@ -959,7 +994,7 @@ class Stream:
     def _stem_emit(self, g, w0, w1, L, R):
         B = self.B
         n = w1 - w0
-        B._NG.mix(L, R, w0, g['bursts'], B.SR)
+        B._NG.mix(L, R, w0, [b for b in self.xbl if int(b[5]) == g['ch']], B.SR)
         mg = B.master_curve(self.ctx['mvol'](), w0, n)
         if mg is not None:
             L *= mg; R *= mg
@@ -990,7 +1025,7 @@ class Stream:
         out to the arrays or the files."""
         B = self.B
         n = w1 - w0
-        B._NG.mix(L, R, w0, self.ctx['cons_bursts'], B.SR)
+        B._NG.mix(L, R, w0, self.xbl, B.SR)
         mg = B.master_curve(self.ctx['mvol'](), w0, n)
         if mg is not None:
             L *= mg; R *= mg
