@@ -20587,6 +20587,13 @@ class _VocalBody:
     # making the vowel duller.
     female_top_formant = 0.55
     singers_formant_hz = 2600.0
+    # EFFORT (choir_fit.py effort): a singer brightens +0.23 dB per octave of
+    # harmonic number for every dB louder, measured on VocalSet's messa di
+    # voce -- 109 notes swelling pp to ff and back inside one take, at one
+    # gain, so the formants stand still and only the source moves (r +0.6).
+    # Between the clarinet's +0.13 and the horn's +0.44; the women most
+    # (+0.28-0.31), the tenors least (+0.13).
+    effort_tilt = 0.23
 
     # TUNING_VOCAL_FLAT=1 renders the SOURCE only -- the glottal buzz with its
     # pitch, vibrato, section spread and mouth radiation, and no tract at all --
@@ -20698,6 +20705,16 @@ class ChoirAahsProperties(_VocalBody, VocalProperties):
     bore_corner_hz = 11843.0
     female_top_formant = 0.653    # measured: the sopranos' and mezzos' cluster is weaker
     max_harmonic = 64             # 48 stopped a bass's C3 at 6.3 kHz
+    # THE AIR IN THE VOICE (choir_fit.py breath): VocalSet's straight takes
+    # between their harmonics sit 51-77 dB under the harmonic power per bin,
+    # in the tract's own shape (most at F1-F2, a second hump at the singer's
+    # formant), and the room in the same takes' silence 15-25 dB under that:
+    # aspiration, not the room. Rows fitted by rendering one singer at every
+    # key the takes sang and measuring the gaps the same way (24 -> 1.9 dB).
+    breath_noise_db = ((177, -35.1), (223, -40.0), (281, -25.5), (354, 0.9), (445, -0.2),
+                       (561, 11.5), (707, 15.6), (891, 11.7), (1122, 10.9), (1414, 7.4),
+                       (1782, 2.7), (2245, 2.3), (2828, 13.6), (3564, 14.3), (4490, 3.3),
+                       (5657, 1.7))
     # BALANCE, per vowel: the formant filter is power-normalised, but the vowels
     # still land differently because they weight the source's harmonics
     # differently -- "oo" throws away everything above its low F2. Measured
@@ -20726,6 +20743,11 @@ class VoiceOohsProperties(_VocalBody, VocalProperties):
     bore_corner_hz = 5233.0
     female_top_formant = 0.209
     max_harmonic = 64
+    # the air, fitted as "ah"'s (24 -> 1.5 dB): darker, as the vowel is
+    breath_noise_db = ((177, -36.1), (223, -40.0), (281, -20.7), (354, 12.2), (445, 2.1),
+                       (561, -3.6), (707, 1.8), (891, 5.3), (1122, -1.4), (1414, -0.8),
+                       (1782, -2.5), (2245, -1.3), (2828, -0.4), (3564, -2.7), (4490, -7.3),
+                       (5657, -5.0))
     initial_gain = (1.0 / 6127 / (VocalProperties.section_players ** 0.5)) * 1.2134   # +1.68 dB, see VocalProperties
 
 

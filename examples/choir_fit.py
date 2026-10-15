@@ -42,7 +42,7 @@ FR, HOP = 4096, 1024
 
 
 def takes():
-    for p in sorted(glob.glob(os.path.join(REFS, "*", "long_tones", "*", "*_long_*_[au].wav"))):
+    for p in sorted(glob.glob(os.path.join(REFS, "*", "long_tones", "*", "*_long_*_[aeiou].wav"))):
         b = os.path.basename(p)[:-4].split("_")
         if b[2] in TECHS:
             yield p, b[0], b[2], b[3]
@@ -225,11 +225,12 @@ def solo(cls, **over):
 
 def ours(vt, vowel, key, over=None, tag=""):
     import patch_map
-    d = MODEL + tag
+    d = MODEL + (tag or TAG)
     os.makedirs(d, exist_ok=True)
     p = os.path.join(d, "%s_%s_%d.wav" % (vt, vowel, key))
     if not os.path.exists(p):
-        prog = PROG[vowel]
+        prog = VOWEL_PROG.get(vowel) or PROG.get(vowel, 52)
+        over = over if over is not None else VOWEL_OVER.get(vowel)
         keep = patch_map.PROGRAM_CLASS.get(prog)
         base = patch_map.property_class_for_program(prog)
         patch_map.PROGRAM_CLASS[prog] = (type("Section", (base,), dict(over or {})) if vt == "choir"
@@ -245,7 +246,7 @@ def ours(vt, vowel, key, over=None, tag=""):
 
 def recorded(techs=("straight", "forte", "pp")):
     """{(type, vowel): [(f0 of the note, frame f0, k, dB re frame)]}, cached."""
-    cache = os.path.join(MODEL, "rec_%s.npz" % "_".join(techs))
+    cache = os.path.join(MODEL, "rec_%s_aeiou.npz" % "_".join(techs))
     if os.path.exists(cache):
         z = np.load(cache, allow_pickle=True)
         return z["rec"].item()
@@ -301,7 +302,16 @@ NF = 4                          # formants fitted: F1, F2, F3 and the singer's
 # Powell trades them: unbounded, "ah"'s F2 left for 3.5 kHz and a fourth
 # formant went to 7.9 kHz to chase the top bands.
 RANGES = {"a": ((500, 1100), (900, 1600), (1900, 2800), (2500, 3800)),
+          "e": ((280, 650), (1500, 2500), (2300, 3200), (2900, 4200)),
+          "i": ((200, 420), (1800, 2900), (2500, 3500), (3000, 4300)),
+          "o": ((300, 650), (600, 1150), (1900, 2900), (2500, 3800)),
           "u": ((220, 500), (550, 1100), (1900, 2800), (2500, 3800))}
+# The vowels no GM program is: sung on Choir Aahs's source with their own
+# formants -- which is what a lyric does (blockrender hands _sung_formants the
+# syllable's vowel as `base`, on whatever program the file plays).
+VOWEL_OVER = {}
+VOWEL_PROG = {}                 # a vowel fit sings every vowel on GM 52
+TAG = ""                        # the render cache's suffix (a vowel fit has its own)
 # Bandwidth floors (Hz): a tract's losses do not allow narrower, and the fit
 # went to 40-100 Hz on F3, which under a 5 Hz vibrato would whistle.
 BW_MIN = (60.0, 80.0, 100.0, 150.0)
@@ -439,6 +449,64 @@ def fit_part(vt):
         print("   %s before " % vow + " ".join("%+.0f" % v for v in b0))
         print("   %s after  " % vow + " ".join("%+.0f" % v for v in b1))
     return r.x
+
+
+def fit_vowel(vow):
+    """One vowel's four formants on Choir Aahs's fitted source (its slope,
+    floor, mouth and the women's cluster held): the table a sung SYLLABLE
+    uses (vowels.VOWELS), measured where VocalSet sang it. Starts from the
+    table's own three formants and a fourth at the singer's cluster."""
+    from scipy.optimize import minimize
+    import vowels as W
+    P0 = current("a")
+    start = list(W.VOWELS[vow])[:NF]
+    while len(start) < NF:
+        start.append((3300.0, 500.0, 0.3))
+    P0 = dict(P0, formants=tuple(start))
+    global TAG
+    TAG = "_vowel"
+    VOWEL_OVER[vow] = {"formants": P0["formants"]}
+    VOWEL_PROG[vow] = 52
+    groups = build_groups(vow, SHARED, P0)
+    nb = len(EDGES) - 1
+
+    def unpack(x):
+        return tuple((np.exp(x[3 * i]), np.exp(x[3 * i + 1]), 1.0 if i == 0 else np.exp(x[3 * i + 2]))
+                     for i in range(NF))
+
+    def loss(x, report=False):
+        P = dict(P0, formants=unpack(x))
+        L, out = 0.0, []
+        for g in groups:
+            m = framenorm(analytic(P, g["ratio"], g["f0n"], g["f0"], g["k"], g["cluster"]) + g["res"], g["fid"])
+            e = m - g["db"]
+            bands = []
+            for b in range(nb):
+                sl = g["band"] == b
+                if sl.sum() < 8:
+                    continue
+                r, med = np.median(g["db"][sl]), np.median(e[sl])
+                L += (1.0 if r > -45 else 0.3) * med * med
+                bands.append(med)
+            out.append((g["vt"], bands))
+        return (L, out) if report else L
+
+    x0 = np.log(np.array(start)).ravel()
+    bounds = []
+    for i, (lo, hi) in enumerate(RANGES[vow]):
+        bounds += [(np.log(lo), np.log(hi)), (np.log(BW_MIN[i]), np.log(700.0)), (np.log(0.003), np.log(3.0))]
+    x0 = np.clip(x0, [b[0] for b in bounds], [b[1] for b in bounds])
+    L0 = loss(x0)
+    r = minimize(loss, x0, method="Powell", bounds=bounds, options=dict(maxiter=20000, xtol=1e-3, ftol=1e-6))
+    L1, rep = loss(r.x, True)
+    n = sum(len(b) for _, b in rep)
+    fm = unpack(r.x)
+    print("\n== /%s/: weighted rms %.1f -> %.1f dB over %d bands (from the old table + a 4th)"
+          % (vow, np.sqrt(L0 / n), np.sqrt(L1 / n), n))
+    print("   '%s': (%s)," % (vow, ", ".join("(%.0f.0, %.0f.0, %.3f)" % f for f in fm)))
+    for vt, b in rep:
+        print("   %-12s " % vt + " ".join("%+.0f" % v for v in b))
+    return fm
 
 
 def fit(vow, free_ratio=False):
@@ -692,17 +760,38 @@ def locus_midi(out, take="DCS_LI_FullChoir_Take01", prog=52, tempo_scale=1.0,
     m.save(out)
 
 
-def ab(out_dir, roots, tags, names=("Soprano", "Alto", "Tenor", "Bass")):
+def messa_midi(out, prog=52, names=("Soprano", "Alto", "Tenor", "Bass")):
+    """A MESSA DI VOCE in steps: one SATB chord (C3 C4 E4 G4) sung nine
+    times, 1.2 s each, its channel pressure 0 -> 127 -> 0. Offline a pressure
+    is one number a note (blockrender._pressure_of), so the swell is a stair:
+    each chord louder and -- by effort_tilt -- brighter than the last."""
+    import mido
+    m = mido.MidiFile(type=1, ticks_per_beat=960)          # 1920 ticks/s
+    steps = (0, 32, 64, 96, 127, 96, 64, 32, 0)
+    for c, (name, key) in enumerate(zip(names, (67, 64, 60, 48))):
+        t = mido.MidiTrack()
+        m.tracks.append(t)
+        t.append(mido.MetaMessage("track_name", name=name, time=0))
+        t.append(mido.Message("program_change", channel=c, program=prog, time=0))
+        for pr in steps:
+            t.append(mido.Message("aftertouch", channel=c, value=pr, time=0))
+            t.append(mido.Message("note_on", channel=c, note=key, velocity=80, time=0))
+            t.append(mido.Message("note_off", channel=c, note=key, velocity=0, time=int(1.2 * 1920)))
+            t.append(mido.Message("aftertouch", channel=c, value=0, time=int(0.15 * 1920)))
+    m.save(out)
+
+
+def ab(out_dir, roots, tags, names=("Soprano", "Alto", "Tenor", "Bass"), piece="locus"):
     """Locus iste rendered once per tree (a copy of HEAD against the working
     one: blockrender's workers are spawned, so a class patched in this process
     would not reach them), the hall at -3 dB wet, hybridmean at 440."""
     import subprocess
     os.makedirs(out_dir, exist_ok=True)
-    mid = os.path.join(out_dir, "locus_iste_%s.mid" % names[1].lower())
-    locus_midi(mid, names=names)
+    mid = os.path.join(out_dir, "%s_%s.mid" % (piece, names[1].lower()))
+    (messa_midi if piece == "messa" else locus_midi)(mid, names=names)
     env = dict(os.environ, TUNING_ROOM="hall", TUNING_WET="-3", TUNING_MASTER_DB="-12")
     for root, tag in zip(roots, tags):
-        P = lambda f: os.path.join(out_dir, "locus_%s%s" % (tag, f))       # noqa: E731
+        P = lambda f: os.path.join(out_dir, "%s_%s%s" % (piece, tag, f))   # noqa: E731
         subprocess.check_call([sys.executable, os.path.join(root, "blockrender.py"), mid,
                                P(".dry.wav"), "hybridmean:440"], env=env, cwd=root)
         subprocess.check_call([sys.executable, os.path.join(HERE, "roomtail.py"),
@@ -712,6 +801,189 @@ def ab(out_dir, roots, tags, names=("Soprano", "Alto", "Tenor", "Bass")):
         for f in (".dry.wav", ".norm.wav", ".wav"):
             os.remove(P(f))
         print("  -> %s" % P(".mp3"), flush=True)
+
+
+def effort():
+    """effort_tilt from MESSA DI VOCE: the swell pp -> ff -> pp inside one
+    take, at one gain (VocalSet's takes are not normalised but their gain is
+    not consistent either -- forte measured no louder than straight). Per
+    frame the ladder's slope in dB per doubling of harmonic number (h1 up to
+    5 kHz) and the frame's level; per note the slope regressed on the level.
+    Inside one note the formants stand still, so what moves is the source."""
+    out = {}
+    for p, s_, tech, vow in takes():
+        if tech != "messa":
+            continue
+        x, sr = V.mono(p)
+        for a, b, f0n in notes(x, sr):
+            # the WHOLE swell, not just its loud middle: notes() trims to 15 dB
+            # of each note's peak, which a messa di voce fills
+            L, S = [], []
+            for i, f0, _ in track(x, sr, a, b, f0n):
+                h = ladder_frame(x, sr, i, f0)
+                h = [(fk, db) for fk, db in h if fk <= TOP_HZ]
+                if len(h) < 5:
+                    continue
+                k = np.round(np.array([q[0] for q in h]) / f0)
+                db = np.array([q[1] for q in h])
+                seg = x[i:i + FR]
+                L.append(20 * np.log10(np.sqrt(np.mean(seg * seg)) + 1e-12))
+                S.append(np.polyfit(np.log2(k), db, 1)[0])
+            L, S = np.array(L), np.array(S)
+            if len(L) < 30 or L.max() - L.min() < 6:
+                continue
+            fit = np.polyfit(L, S, 1)
+            r = np.corrcoef(L, S)[0, 1]
+            out.setdefault(TYPES[s_], []).append((fit[0], r, L.max() - L.min(), f0n))
+    allv = []
+    print("  type          notes  dB/oct per dB (median, IQR)    r median   swing dB")
+    for vt in ("soprano", "mezzo", "countertenor", "tenor", "baritone", "bass"):
+        v = np.array(out.get(vt, []))
+        if not len(v):
+            continue
+        allv += list(v)
+        print("  %-12s  %3d    %+.3f (%+.3f..%+.3f)       %+.2f      %.1f"
+              % (vt, len(v), np.median(v[:, 0]), np.percentile(v[:, 0], 25),
+                 np.percentile(v[:, 0], 75), np.median(v[:, 1]), np.median(v[:, 2])))
+    v = np.array(allv)
+    print("  all           %3d    %+.3f   (brass: trombone +0.68, horn +0.44, clarinet +0.13)"
+          % (len(v), np.median(v[:, 0])))
+
+
+E3 = 125.0 * 2 ** (np.arange(0, 18) / 3.0)          # third octaves, 140 Hz-5.7 kHz
+
+
+def gaps(x, sr, spans, step=4):
+    """{band lo: [dB]}: the spectrum's floor midway between the harmonics,
+    per Hz of band, against the frame's harmonic power -- the air in the
+    voice, wherever the harmonics are not."""
+    N = 1 << 15
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    out = {}
+    for a, b, f0n in spans:
+        for i, f0, _ in track(x, sr, a, b, f0n)[::step]:
+            X = np.abs(np.fft.rfft(x[i:i + FR] * np.hanning(FR), N)) ** 2
+            kk = np.arange(1, int(min(E3[-1], 0.45 * sr) / f0))
+            hp = sum(X[(f > k * f0 - 0.25 * f0) & (f < k * f0 + 0.25 * f0)].max() for k in kk)
+            mids = (kk[:-1] + 0.5) * f0
+            gap = np.array([np.median(X[(f > m - 0.1 * f0) & (f < m + 0.1 * f0)]) for m in mids])
+            for lo, hi in zip(E3, E3[1:]):
+                sel = (mids >= lo) & (mids < hi)
+                if sel.any():
+                    out.setdefault(lo, []).append(10 * np.log10(np.median(gap[sel]) / hp + 1e-30))
+    return out
+
+
+def breath_target(vow):
+    """The recorded air, STRAIGHT takes (their +/-15-25 cents of vibrato is
+    ours; the vibrato takes smear harmonics into the gaps), every voice type
+    but the countertenor's falsetto; and the keys sung, per type. The room,
+    measured the same way in each take's silence, is 15-25 dB under it: this
+    is the voice."""
+    pooled, keys = {}, {}
+    for p, s_, tech, v in takes():
+        if tech != "straight" or v != vow or TYPES[s_] not in SHARED:
+            continue
+        x, sr = V.mono(p)
+        ns = notes(x, sr)
+        for lo, d in gaps(x, sr, ns).items():
+            pooled.setdefault(lo, []).extend(d)
+        for a, b, f0n in ns:
+            keys.setdefault(TYPES[s_], set()).add(int(round(69 + 12 * np.log2(f0n / 440.0))))
+    return {lo: float(np.median(d)) for lo, d in pooled.items()}, keys
+
+
+def breath_ours(vow, keys, table, tag):
+    import shutil
+    pooled = {}
+    d = MODEL + tag
+    shutil.rmtree(d, ignore_errors=True)
+    for vt, ks in sorted(keys.items()):
+        for k in sorted(ks):
+            ours(vt, vow, k, dict(breath_noise_db=tuple(table)), tag)
+            p = os.path.join(d, "%s_%s_%d.wav" % (vt, vow, k))
+            x, sr = V.mono(p)
+            f0 = 440.0 * 2 ** ((k - 69) / 12.0)
+            for lo, dd in gaps(x, sr, [(int(0.8 * sr), int(3.6 * sr), f0)]).items():
+                pooled.setdefault(lo, []).extend(dd)
+    return {lo: float(np.median(dd)) for lo, dd in pooled.items()}
+
+
+def breath_fit(vow, iters=4):
+    """breath_noise_db, a row a third octave, fitted by rendering: start at
+    -40 dB, render one singer at every key the straight takes sang, measure
+    the gaps the same way, move each row by the difference, again."""
+    tgt, keys = breath_target(vow)
+    bands = [lo for lo in E3[:-1] if lo in tgt]
+    centre = {lo: round(float((lo * lo * 2 ** (1 / 3.0)) ** 0.5), 1) for lo in bands}
+    table = {lo: -40.0 for lo in bands}
+    for it in range(iters + 1):
+        got = breath_ours(vow, keys, [(centre[lo], table[lo]) for lo in bands], "_breath")
+        err = {lo: tgt[lo] - got.get(lo, np.nan) for lo in bands}
+        e = np.array([v for v in err.values() if np.isfinite(v)])
+        print("  %s pass %d: rms %.1f dB  (worst %+.1f)" % (vow, it, np.sqrt(np.mean(e ** 2)),
+              e[np.argmax(np.abs(e))]), flush=True)
+        if it == iters:
+            break
+        for lo in bands:
+            if np.isfinite(err[lo]):
+                # a row also lifts its neighbours' gaps: move by most of it
+                table[lo] = float(np.clip(table[lo] + 0.8 * err[lo], -120.0, 20.0))
+    print("  %s band   target   ours   row dB" % vow)
+    for lo in bands:
+        print("   %6.0f  %6.1f  %6.1f  %6.1f" % (centre[lo], tgt[lo], got.get(lo, np.nan), table[lo]))
+    print("  breath_noise_db = (%s)" % ", ".join("(%.0f, %.1f)" % (centre[lo], table[lo]) for lo in bands))
+    return table
+
+
+def wander():
+    """The slow drift inside a held note, and how much of it two singers of
+    one part SHARE. Per note of 1.2 s or more, each singer's pitch with the
+    vibrato averaged out (0.25 s) and the note's own median removed; its rms,
+    its spectrum's half-power corner, and the correlation between the two
+    singers -- shared drift a section can carry on one bend row, its own
+    drift each singer must carry alone."""
+    rms, corner, corr, shared = [], [], [], []
+    for sc in sorted(glob.glob(os.path.join(DCS, "annotations_csv_scorerepresentation",
+                                            "*_FullChoir_*_Stereo_STM_?.csv"))):
+        b = os.path.basename(sc)
+        stem, part = b.split("_Stereo_STM_")[0], b[-5]
+        tr = [dcs_f0(stem, part + n) for n in "12"]
+        if any(t is None for t in tr):
+            continue
+        for on, off, midi in np.atleast_2d(np.loadtxt(sc, delimiter=",")):
+            a, z = on + 0.2, off - 0.1
+            if z - a < 1.2:
+                continue
+            cs = []
+            for t in tr:
+                m = (t[:, 0] >= a) & (t[:, 0] < z)
+                c = 1200 * np.log2(t[m, 1] / 440.0) - 100 * (midi - 69)
+                ok = (t[m, 2] > 0.6) & (np.abs(c - np.median(c)) < 150)
+                if ok.mean() < 0.9:
+                    cs.append(None); continue
+                c = np.interp(np.arange(len(c)), np.flatnonzero(ok), c[ok])
+                w = 25
+                tr_ = np.convolve(c, np.ones(w) / w, "same")[w:-w]
+                cs.append(tr_ - np.median(tr_))
+            for c in cs:
+                if c is None or len(c) < 60:
+                    continue
+                rms.append(c.std())
+                P = np.abs(np.fft.rfft((c - c.mean()) * np.hanning(len(c)), 8 * len(c))) ** 2
+                fr = np.fft.rfftfreq(8 * len(c), 0.01)
+                cum = np.cumsum(P[1:]) / P[1:].sum()
+                corner.append(fr[1:][np.searchsorted(cum, 0.5)])
+            if all(c is not None for c in cs) and len(cs[0]) >= 60 and len(cs[0]) == len(cs[1]):
+                r = np.corrcoef(cs[0], cs[1])[0, 1]
+                corr.append(r)
+                shared.append(np.std((cs[0] + cs[1]) / 2))
+    rms, corner, corr = np.array(rms), np.array(corner), np.array(corr)
+    print("  %d singer-notes of 1.2 s or more" % len(rms))
+    print("  drift rms %.1f cents (median; IQR %.1f-%.1f), half its power under %.2f Hz"
+          % (np.median(rms), np.percentile(rms, 25), np.percentile(rms, 75), np.median(corner)))
+    print("  two singers of a part: correlation %.2f median (IQR %.2f..%.2f); their mean drifts %.1f cents rms"
+          % (np.median(corr), np.percentile(corr, 25), np.percentile(corr, 75), np.median(shared)))
 
 
 def main(argv):
@@ -725,6 +997,20 @@ def main(argv):
                      np.median([r["vib_cents"] for r in rr]),
                      min(r["vib_cents"] for r in rr), max(r["vib_cents"] for r in rr),
                      np.median([r["vib_hz"] for r in rr])))
+        return 0
+    if cmd == "wander":
+        wander()
+        return 0
+    if cmd == "effort":
+        effort()
+        return 0
+    if cmd == "breath":
+        for vow in [a for a in argv[2:] if not a.startswith("--")] or ("a", "u"):
+            breath_fit(vow)
+        return 0
+    if cmd == "vowel":
+        for v in [a for a in argv[2:] if not a.startswith("--")] or "aeiou":
+            fit_vowel(v)
         return 0
     if cmd == "part":
         for vt in argv[2:]:
@@ -740,7 +1026,8 @@ def main(argv):
         # --alto=NAME declares the alto line as another part (Countertenor)
         alto = next((a.split("=", 1)[1] for a in argv if a.startswith("--alto=")), "Alto")
         pairs = [a.split("=", 1) for a in argv[3:] if not a.startswith("--")]
-        ab(argv[2], [r for _, r in pairs], [t for t, _ in pairs], ("Soprano", alto, "Tenor", "Bass"))
+        piece = next((a.split("=", 1)[1] for a in argv if a.startswith("--piece=")), "locus")
+        ab(argv[2], [r for _, r in pairs], [t for t, _ in pairs], ("Soprano", alto, "Tenor", "Bass"), piece)
         return 0
     if cmd == "section":
         section()
