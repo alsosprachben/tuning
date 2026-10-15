@@ -39,8 +39,8 @@ so it plays on the Messenger itself.
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
 | 2 specific, theory | 1 | 1% |
-| 3 specific, theory + ear | 14 | 11% |
-| 4 specific, reference audio | 113 | 88% |
+| 3 specific, theory + ear | 12 | 9% |
+| 4 specific, reference audio | 115 | 90% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -241,8 +241,8 @@ plays Standard, as does any program that is not a set.
 | 49 | String Ensemble 2 | `ContrabassSlow/CelloSlow/ViolaSlow/ViolinSlow by register` | **4** | slow_bow() on the same measured section: the entry a soft section swells in with, read off VSCO 2 CE's soft layers (rise 420-1400 ms, median 660; 1.1 s of attack), where it had taken 170 -- the pad Roland's SlowStr is. Ben, by ear: sounds great |
 | 50 | Synth Strings 1 | `MoogSynthStrings1` | **4** | a Messenger patch: the string machine without its chorus -- two saws seven cents apart, the ladder half open, amp and filter swelling together |
 | 51 | Synth Strings 2 | `MoogSynthStrings2` | **4** | a Messenger patch: slower and darker than 50, the pair eleven cents apart so it beats faster |
-| 52 | Choir Aahs | `ChoirAahs` | **3** | vocal tract and formants; Ben's ear on the consonant balance |
-| 53 | Voice Oohs | `VoiceOohs` | **3** | as 52 |
+| 52 | Choir Aahs | `ChoirAahs` | **4** | FITTED TO VOCALSET'S LONG TONES (CC BY 4.0, measured only; examples/choir_fit.py): 20 conservatory singers, each by the voice type their readme names, every frame's harmonics -- the vibrato sweeps them across the tract. The old "ah" was 10 dB short at F2 and 20-30 dB short at 2.4-3.4 kHz, the singer's formant, and so it was against all four GM sets' choirs; weighted rms 11.1 -> 3.2 dB. A woman's whole cluster is weaker (not only the top formant), and a declared countertenor keeps a tenth of it (one singer: an estimate). The section from Dagstuhl ChoirSet's larynx microphones: each singer 14-22 cents off the note, vibrato +/-12 at 4.4-5.5 Hz. Ben: sounds great, the wider section even better |
+| 53 | Voice Oohs | `VoiceOohs` | **4** | as 52, on "u": 11.7 -> 3.2 dB; its F3 is a woman's strongest peak up there, which is why the cluster rule covers every formant above F2 |
 | 54 | Synth Choir | `MoogSynthVoice` | **3** | two saws on the Messenger, then the class's own sung tract after it. The Messenger is measured; the formant body is theory |
 | 55 | Orchestra Hit | `OrchestraHit` | **2** | its own class, theory |
 
@@ -680,10 +680,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `ViolinSlow` -- GM 49 String Ensemble 2 (4)
         - `ViolinTremolo` -- GM 44 Tremolo Strings (4)
       - `Vocal` [FormantBody]
-        - `ChoirAahs` [_VocalBody] -- GM 52 Choir Aahs (3)
+        - `ChoirAahs` [_VocalBody] -- GM 52 Choir Aahs (4)
         - `SynthVoice`
           - `MoogSynthVoice` -- GM 54 Synth Choir (3)
-        - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (3)
+        - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
       - `Seashore` -- GM 122 Seashore (4)

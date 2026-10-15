@@ -20458,9 +20458,17 @@ class VocalProperties(FormantBody, BowedStringProperties):
     # under the strings while the synth voice sat 3.3 over. All three now land on
     # the string reference, as the equal-velocity convention asks.
 
-    section_spread_cents = 8.0
-    section_vibrato_cents = 7.0
-    section_vibrato_hz = (4.8, 6.2)
+    # THE SECTION, MEASURED on Dagstuhl ChoirSet's full choir (examples/
+    # choir_fit.py section): two singers a part on larynx microphones, CREPE
+    # pitch against the time-aligned score of Bruckner's Locus iste. Each
+    # singer sits 14-22 cents (sd) off the note, note to note -- uniform
+    # +/-24 is sd 14; it was +/-8, sd 4.6. Vibrato +/-9-16 cents by part
+    # (median ~12, which 14 x the 0.7-1.0 draw gives) at 4.4-5.5 Hz; it was
+    # +/-7 at 4.8-6.2. An amateur choir, so the edge of plausible -- and the
+    # one Ben's ear preferred, against the old section and the vowels alone.
+    section_spread_cents = 24.0
+    section_vibrato_cents = 14.0
+    section_vibrato_hz = (4.2, 5.8)
 
     # (centre Hz, bandwidth Hz, amplitude). Default is "ah".
     formants = ((700.0, 130.0, 1.00), (1220.0, 90.0, 0.50), (2600.0, 130.0, 0.22))
@@ -20485,7 +20493,9 @@ VOICE_BODIES = {
     'baritone':     0.94,
     'tenor':        0.97,
     'tenore':       0.97,   # the Italian, as LilyPond and Italian scores write it
-    'countertenor': 0.98,   # male tract, alto range: the case inference cannot do
+    # male tract, alto range: the case inference cannot do. 0.90 measured on
+    # VocalSet's one countertenor (examples/choir_fit.py part), from 0.98
+    'countertenor': 0.90,
     'contralto':    1.03,
     'alto':         1.05,
     'mezzo':        1.07,
@@ -20501,6 +20511,17 @@ VOICE_BODIES = {
     # inferred from pitch can produce that; only a declaration can.
     'castrato':     0.90,
     'sopranist':    0.95,   # a modern male alto/soprano: adult tract, falsetto
+}
+
+
+# What a declared part does to the SINGER'S CLUSTER (every formant above F2),
+# as a gain on its formants, beside the tract ratio above. FALSETTO HAS NONE:
+# VocalSet's countertenor, sung on the fitted vowels with only this, his ratio
+# and his source slope free, keeps 0.10 of it (-20 dB; weighted rms 9.0 ->
+# 4.4 dB over both vowels), while his source slope is the others' to within
+# 0.4 dB/octave. One singer: his, and an estimate.
+VOICE_CLUSTER = {
+    'countertenor': 0.10,
 }
 
 
@@ -20558,9 +20579,12 @@ class _VocalBody:
     voice_crossover_oct = 0.20  # sharp: the key is a stable part tessitura,
                                 # not a per-note pitch, so nothing can flip
     # The singer's formant (~2.8-3 kHz) is a trained MALE phenomenon; sopranos
-    # have far less of it, so the top resonance is not shared either -- but only
-    # when the top resonance IS one. "Oo" puts its third formant at 2240 Hz,
-    # below the cluster, and attenuating that is just making the vowel duller.
+    # have far less of it, so the resonances that make it are not shared either
+    # -- every one above F2 that lands in the cluster, not only the last: a
+    # woman's "oo" F3 (2635 x 1.09) is the strongest peak up there, and with
+    # only the top formant weakened VocalSet's sopranos sat 15-22 dB under ours
+    # at 1.7-3.4 kHz. Below the cluster nothing is touched; that would only be
+    # making the vowel duller.
     female_top_formant = 0.55
     singers_formant_hz = 2600.0
 
@@ -20581,12 +20605,13 @@ class _VocalBody:
         if part:
             # Declared. No crossover, no draw, no broadening: we were told.
             ratio = VOICE_BODIES[part]
+            cluster = VOICE_CLUSTER.get(part, 1.0)
             out = []
             for i, (centre, bandwidth, amp) in enumerate(base):
                 a = amp * (self.female_top_formant
-                           if (ratio > 1.0 and i == len(base) - 1
+                           if (ratio > 1.0 and i >= 2
                                and centre * ratio >= self.singers_formant_hz)
-                           else 1.0)
+                           else 1.0) * (cluster if i >= 2 else 1.0)
                 out.append((centre * ratio, bandwidth * ratio, a))
             return tuple(self._formant_tune(out, float(frequency) or 1.0))
         f = float(frequency) or 1.0
@@ -20609,7 +20634,7 @@ class _VocalBody:
         out = []
         for i, (centre, bandwidth, amp) in enumerate(base):
             a = amp
-            if i == len(base) - 1 and centre * ratio >= self.singers_formant_hz:
+            if i >= 2 and centre * ratio >= self.singers_formant_hz:
                 a *= (1.0 - w) + w * self.female_top_formant
             out.append((centre * ratio, bandwidth * ratio * blend, a))
         # FORMANT TUNING. A soprano above about G5 sings a fundamental higher
@@ -20653,6 +20678,26 @@ class ChoirAahsProperties(_VocalBody, VocalProperties):
     # time, 0.443 R; and no 0.45-of-the-note cap. A choir's tail: the singers stop, the hall does not at once.
     release_valve_time = 0.776
     release_fraction_max = None
+    # THE VOWEL, FITTED (examples/choir_fit.py) to VocalSet's long tones: 20
+    # conservatory singers, each body by the voice type its readme names,
+    # straight/forte/pp, every frame's harmonics -- the vibrato sweeps them
+    # across the tract, so a held note samples the filter between them. The
+    # old "ah" (one averaged speaker, 700/1220/2600 Hz, -11 dB/octave source)
+    # sat 10 dB short at F2 and 20-30 dB short at 2.4-3.4 kHz, the SINGER'S
+    # FORMANT -- and so did it against all four GM sets' choirs (FluidR3,
+    # GeneralUser GS, MuseScore, TimGM6mb), which carry that cluster at -26 to
+    # -30 dB where ours was at -47 to -58. Weighted rms 11.1 -> 3.2 dB across
+    # soprano, mezzo, tenor, baritone and bass. Bandwidths held at a tract's
+    # floor (F3 went to 40 Hz free, which a 5 Hz vibrato would make whistle).
+    # The countertenor is not in it: he sat 12-20 dB bright from 1 kHz up, and
+    # what he lacks is the cluster, not a vowel -- see VOICE_CLUSTER.
+    formants = ((759.0, 330.0, 1.00), (1105.0, 94.0, 1.498), (2799.0, 275.0, 0.681),
+                (3427.0, 700.0, 0.513))
+    formant_floor = 0.0341
+    tonal_dampening = 1.448       # -8.7 dB/octave: a sung source, not a spoken one
+    bore_corner_hz = 11843.0
+    female_top_formant = 0.653    # measured: the sopranos' and mezzos' cluster is weaker
+    max_harmonic = 64             # 48 stopped a bass's C3 at 6.3 kHz
     # BALANCE, per vowel: the formant filter is power-normalised, but the vowels
     # still land differently because they weight the source's harmonics
     # differently -- "oo" throws away everything above its low F2. Measured
@@ -20671,8 +20716,16 @@ class VoiceOohsProperties(_VocalBody, VocalProperties):
     # time, 0.443 R; and no 0.45-of-the-note cap. Our voices had BowedString's 0.10 s.
     release_valve_time = 0.397
     release_fraction_max = None
-    formants = ((300.0, 90.0, 1.00), (870.0, 100.0, 0.42), (2240.0, 140.0, 0.12))
-    bore_corner_hz = 3000.0
+    # FITTED as "ah" above (examples/choir_fit.py), 11.7 -> 3.2 dB. Its F3 is
+    # the strongest peak in a woman's cluster, which is why female_top_formant
+    # weakens every cluster formant and not only the last.
+    formants = ((358.0, 263.0, 1.00), (817.0, 232.0, 0.555), (2605.0, 410.0, 1.238),
+                (3441.0, 150.0, 1.718))
+    formant_floor = 0.0568
+    tonal_dampening = 1.540
+    bore_corner_hz = 5233.0
+    female_top_formant = 0.209
+    max_harmonic = 64
     initial_gain = (1.0 / 6127 / (VocalProperties.section_players ** 0.5)) * 1.2134   # +1.68 dB, see VocalProperties
 
 
