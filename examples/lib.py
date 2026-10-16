@@ -333,8 +333,10 @@ def set_stops(src, dest, draw, verbose=True):
     its place on the ascending run before the ending does not earn it in bar
     one, and left drawn throughout it is simply a thick piece.
 
-    The stop word is 14 bits, CC11 carrying the low seven and CC43 the high
-    seven, indexed against the voice's own stop_ranks. NOTE THAT CC11 IS NOT
+    The stop word is seven bits a controller, in the voice's own order
+    (tonelib stop_word_ccs: the church organ's CC11, CC43, CC44, CC45 -- 28
+    bits, its recorded ranks past bit 13), indexed against its stop_ranks.
+    The bytes past CC43 are written only when a word uses them. NOTE THAT CC11 IS NOT
     EXPRESSION on a pipe voice -- it is half the stop word, and treating it as
     a volume curve draws stops instead of shaping a line.
 
@@ -364,7 +366,7 @@ def set_stops(src, dest, draw, verbose=True):
         nt.name = t.name
         carry = 0
         for e in t:
-            if e.type == 'control_change' and e.control in (11, 43):
+            if e.type == 'control_change' and e.control in (11, 43, 44, 45):
                 if ch in draw:
                     carry += e.time       # keep the timing, drop the event
                     continue
@@ -397,14 +399,19 @@ def set_stops(src, dest, draw, verbose=True):
                 acc += e.time
                 abst.append(acc)
             items = list(zip(abst, nt))
+            # THE WHOLE WORD. Written as CC11/CC43 alone, every stop past bit
+            # 13 (the recorded ranks) was silently dropped: BuxWV 161's Subbass
+            # and 32' and its section colours never sounded.
+            import patch_map
+            wccs = tuple(getattr(patch_map.property_class_for_program(prog.get(ch, 19)),
+                                 'stop_word_ccs', (11, 43)))
+            wide = any(word(ns) >> 14 for _, ns in spec)
             for sec, ns in spec:
                 tick = int(round(sec * tps))
                 w = word(ns)
-                items.append((tick, mido.Message('control_change', channel=ch,
-                                                 control=11, value=w & 0x7F)))
-                items.append((tick, mido.Message('control_change', channel=ch,
-                                                 control=43,
-                                                 value=(w >> 7) & 0x7F)))
+                for i, cc in enumerate(wccs if wide else wccs[:2]):
+                    items.append((tick, mido.Message('control_change', channel=ch,
+                                                     control=cc, value=(w >> (7 * i)) & 0x7F)))
                 if verbose:
                     print("  ch%-2d at %6.1f s  %s" % (ch, sec, ', '.join(ns)))
             # program change must still precede the stops it applies to

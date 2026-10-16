@@ -2,7 +2,11 @@
 """The church organ's recorded ranks on bits 14-24, each fitted to its Pitea
 stop and written into its class in tonelib.py.
 
-    python3 -I examples/pitea_newranks.py [--stop=NAME ...] [--dry]
+    python3 -I examples/pitea_newranks.py [--stop=NAME ...] [--dry] [--hold-level]
+
+--hold-level keeps the stop's level where the console has it (ours measured
+before the fit, restored after) instead of Pitea's balance: for a stop measured
+on BORROWED pipes, whose recorded level is another rank's.
 
 Per stop, in order (the tools the console's other Pitea stops were built
 with):
@@ -91,8 +95,12 @@ def body(cls, stop, rec_d, ours_ref):
               "    mode_gains_low = None",
               "    max_harmonic = 32",
               "    bore_corner_hz = 0.0",
-              "    # LEVEL: Pitea's own balance -- %+.1f dB re its Principal 8 on the same" % rec_d,
-              "    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours",
+              ("    # LEVEL: HELD where the console had it, %+.1f dB re our principal 8 --" % rec_d
+               if "--hold-level" in sys.argv else
+               "    # LEVEL: Pitea's own balance -- %+.1f dB re its Principal 8 on the same" % rec_d),
+              ("    # borrowed pipes carry another rank's level (pitea_newranks.py --hold-level)"
+               if "--hold-level" in sys.argv else
+               "    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours"),
               "    initial_gain = %.6g" % cls.initial_gain,
               "    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)",
               "    speech_cycles = %r" % cls.speech_cycles,
@@ -109,7 +117,7 @@ def write(cls, text):
     assert m, cls.__name__
     end = m.end()
     # replace whatever fitted body followed the docstring before (a rerun)
-    nxt = re.compile(r"\n(class |CELESTE_CENTS|FlueOrganProperties\.)").search(s, end)
+    nxt = re.compile(r"\n(class |CELESTE_CENTS|FlueOrganProperties\.|# \.\.\.and the two stops)").search(s, end)
     s = s[:end] + text + "\n" + s[nxt.start():]
     open(p, "w").write(s)
 
@@ -124,9 +132,10 @@ def main(argv):
     for stop in stops:
         cls = PS._rank_class(stop)
         print("\n== %s (%s, %s)" % (stop, cls.__name__, P.FOLDER[stop]), flush=True)
+        hold = ours_level(stop) - ref_ours if "--hold-level" in argv else None
         P.fit_tables(rank=stop)
         PS.fit_speech(stop)
-        rec_d = rec_level(stop) - ref_rec
+        rec_d = hold if hold is not None else rec_level(stop) - ref_rec
         for _ in range(2):
             d = (ref_ours + rec_d) - ours_level(stop)
             cls.initial_gain *= 10 ** (d / 20.0)

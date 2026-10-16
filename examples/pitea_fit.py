@@ -63,7 +63,41 @@ MORE_STOPS = {
     "vox humana 8":     ("VoixHumaine8",    "Voix humaine 8 (the extended set's second organ)"),
     "trompette 8":      ("SVTrHarm8",       "Svallverk Trompette harmonique 8"),
 }
+# STOPS PITEA DOES NOT HAVE, MEASURED ON PIPES IT DOES: a pipe is a pipe at its
+# own pitch. Each borrows by key range: (lowest key, folder, key shift).
+#   principal 16  an octave down: the Principal 8's pipe at key-12, and for its
+#                 bottom octave the pedal Oktava 8's (open, principal scale,
+#                 down to C1 at 32.7 Hz) -- an organ's own extension
+#   quint 5-1/3   the Kvinta 2 2/3's pipe at key-12, which sounds the 5 1/3's
+#                 pitch (3 x pitch(key-12) = 1.5 x pitch(key)); from C3, the
+#                 Kvinta having nothing under its own C2
+# (The pedal Mixtur's "quint" is the plein-jeu's 2 2/3, HarmonicNumber 24 in
+# PiteaExtended.organ: no true 5 1/3 rank exists in the set.)
+BORROWED = {
+    "principal 16": ("HVPrincipal8 an octave down; pedal Oktava 8 under C3",
+                     ((36, "PEDOktava8", -12), (48, "HVPrincipal8", -12))),
+    "quint 5-1/3":  ("Positiv Kvinta 2 2/3, its pipe an octave down",
+                     ((48, "POSKvinta223", -12),)),
+}
+
+
+for _k, (_w, _r) in BORROWED.items():
+    MORE_STOPS[_k] = (_r[-1][1], _w)
 FOLDER = dict(RANKS, **{k: v[0] for k, v in MORE_STOPS.items()})
+
+
+def pipe_file(stop, key):
+    """The recorded pipe that sounds STOP's pitch at KEY, or None: its own
+    rank's file at KEY, or a BORROWED rank's at KEY + its shift."""
+    if stop in BORROWED:
+        use = [r for r in BORROWED[stop][1] if key >= r[0]]
+        if not use:
+            return None
+        _, folder, sh = use[-1]
+        p = glob.glob(os.path.join(PITEA, folder, "%03d-*.wav" % (key + sh)))
+    else:
+        p = glob.glob(os.path.join(PITEA, FOLDER[stop], "%03d-*.wav" % key))
+    return p[0] if p else None
 NH = 32
 T0, T1 = 1.0, 3.0
 CEN = 2 ** np.arange(np.log2(50), np.log2(13000), 1 / 3.0)
@@ -112,6 +146,11 @@ def measure(x, sr, f0):
 
 
 def pipes(rank):
+    """[(the KEY it is played from, path)], every STEP-th: a borrowed stop's
+    are the pipes that sound its pitch on each key (pipe_file)."""
+    if rank in BORROWED:
+        out = [(k, pipe_file(rank, k)) for k in range(24, 109)]
+        return [(k, p) for k, p in out if p][::STEP]
     out = []
     for p in sorted(glob.glob(os.path.join(PITEA, FOLDER[rank], "[0-9][0-9][0-9]-*.wav"))):
         out.append((int(os.path.basename(p)[:3]), p))

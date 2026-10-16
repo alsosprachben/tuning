@@ -7957,6 +7957,62 @@ class OrganTrompetteProperties(OrganTrumpetProperties):
     rank_speech = True
 
 
+class OrganPrincipal16Properties(FlueOrganProperties):
+    """principal 16: an open principal an octave down -- measured on the pipes
+    that sound its pitch (examples/pitea_stops.py BORROWED): the Principal 8's
+    from C3, the pedal Oktava 8's (open, down to C1) under it. Pitea has no
+    open 16' on a manual; a pipe is a pipe at its own pitch."""
+    mode_gains_points = (
+        (41.2, (1.00000, 1.16052, 0.45923, 0.12654, 0.07740, 0.03497, 0.02858, 0.02234, 0.00809, 0.01711, 0.00622, 0.00770, 0.00341, 0.00283, 0.00277, 0.00087, 0.00051, 0.00044, 0.00037, 0.00033, 0.00030, 0.00035, 0.00039, 0.00041, 0.00029, 0.00033, 0.00031, 0.00024, 0.00028, 0.00021, 0.00018, 0.00018)),
+        (116.5, (1.00000, 0.50132, 0.28316, 0.06792, 0.03512, 0.01750, 0.01115, 0.00899, 0.00406, 0.00517, 0.00336, 0.00389, 0.00093, 0.00077, 0.00023, 0.00014, 0.00010, 0.00013, 0.00007, 0.00005, 0.00006, 0.00007, 0.00011, 0.00018, 0.00008, 0.00006, 0.00010, 0.00006, 0.00003, 0.00007, 0.00005, 0.00005)),
+        (523.3, (1.00000, 0.26416, 0.14329, 0.04677, 0.01540, 0.01144, 0.01457, 0.00610, 0.01075, 0.00285, 0.00174, 0.00052, 0.00146, 0.00110, 0.00059, 0.00127, 0.00088, 0.00024, 0.00028, 0.00045, 0.00033, 0.00034, 0.00018, 0.00019, 0.00008, 0.00011, 0.00008, 0.00009, 0.00024, 0.00015, 0.00011, 0.00005)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: HELD where the console had it, -1.4 dB re our principal 8 --
+    # borrowed pipes carry another rank's level (pitea_newranks.py --hold-level)
+    initial_gain = 0.060425
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 23.76
+    speech_harmonic_exp = 0.766
+    attack_time = 0.008
+    rank_speech = True
+
+
+class OrganQuint513Properties(FlueOrganProperties):
+    """quint 5-1/3: the principal quint an octave under the 2-2/3 -- measured
+    on the Kvinta 2 2/3's pipes an octave down, which sound its pitch, from C3.
+    Pitea has no 5 1/3 rank (its pedal mixture's quint is the plein-jeu's
+    2 2/3)."""
+    mode_gains_points = (
+        (349.6, (1.00000, 0.12036, 0.06570, 0.03123, 0.01195, 0.01403, 0.00345, 0.00350, 0.00131, 0.00070, 0.00037, 0.00023, 0.00027, 0.00028, 0.00023, 0.00013, 0.00016, 0.00017, 0.00023, 0.00016, 0.00011, 0.00012, 0.00008, 0.00010, 0.00011, 0.00011, 0.00009, 0.00008, 0.00009, 0.00008, 0.00012, 0.00008)),
+        (1569.8, (1.00000, 0.13594, 0.04976, 0.00874, 0.00620, 0.00907, 0.00324, 0.00209, 0.00146, 0.00065, 0.00030, 0.00054, 0.00086, 0.00015, 0.00050, 0.00202, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # LEVEL: HELD where the console had it, -9.5 dB re our principal 8 --
+    # borrowed pipes carry another rank's level (pitea_newranks.py --hold-level)
+    initial_gain = 0.0651913
+    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
+    speech_cycles = 23.76
+    speech_harmonic_exp = 0.766
+    attack_time = 0.008
+    rank_speech = True
+
+
+# ...and the two stops that had no pipes of their own take their classes here
+# (the bit order is untouched)
+FlueOrganProperties.stop_ranks = [
+    (r[0], r[1], r[2], {"principal 16": OrganPrincipal16Properties,
+                        "quint 5-1/3": OrganQuint513Properties}[r[0]]) + tuple(r[4:])
+    if r[0] in ("principal 16", "quint 5-1/3") else r
+    for r in FlueOrganProperties.stop_ranks]
+
+
 CELESTE_CENTS = 17.9
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("koppelflute 4",    2.0,  0.45, OrganKoppelfluteProperties),          # bit 14

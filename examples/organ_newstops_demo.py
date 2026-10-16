@@ -39,13 +39,22 @@ REGS = [
     ("plenum over the pedal's 16 and 32", ("principal 8", "octave 4", "super octave 2", "mixture III"),
      ("subbass 16", "contrabassoon 32", "principal 8")),
 ]
+# --set=p16: the two stops refitted on BORROWED pipes (pitea_newranks.py
+# --hold-level), alone enough to hear: the 16' under the 8', and the 5 1/3 in
+# a plenum -- an A/B between trees
+REGS_P16 = [
+    ("principal 8 and 16", ("principal 8", "principal 16"), None),
+    ("principal 16 alone", ("principal 16",), None),
+    ("plenum with the quint 5 1/3", ("principal 16", "principal 8", "quint 5-1/3", "octave 4",
+                                     "quint 2-2/3", "super octave 2"), None),
+]
 # A Bach-ish chorale phrase in C: (soprano, alto, tenor), bass -- half notes
 UPPER = [(72, 67, 64), (71, 67, 62), (69, 65, 60), (67, 64, 60), (69, 64, 60), (71, 67, 62),
          (72, 67, 64), (72, 67, 64)]
 BASS = [48, 43, 41, 48, 45, 43, 36, 36]
 
 
-def build(out):
+def build(out, REGS=REGS):
     m = mido.MidiFile(type=1, ticks_per_beat=480)
     beat, half = 480, 960
     man, ped = mido.MidiTrack(), mido.MidiTrack()
@@ -80,15 +89,19 @@ def build(out):
 
 
 def main(argv):
-    out = argv[1] if len(argv) > 1 else os.path.expanduser("~/Downloads/organ_newstops")
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    out = args[0] if args else os.path.expanduser("~/Downloads/organ_newstops")
+    regs, tag = (REGS_P16, "p16") if "--set=p16" in argv else (REGS, "newstops")
+    root = next((a.split("=", 1)[1] for a in argv if a.startswith("--root=")), HERE)   # an A/B tree
+    tag += next(("_" + a.split("=", 1)[1] for a in argv if a.startswith("--tag=")), "")
     os.makedirs(out, exist_ok=True)
-    mid = os.path.join(out, "newstops.mid")
-    for label, i in build(mid):
+    mid = os.path.join(out, tag + ".mid")
+    for label, i in build(mid, regs):
         print("  %d  %s" % (i + 1, label))
     env = dict(os.environ, TUNING_ROOM="church", TUNING_WET="-3", TUNING_MASTER_DB="-12")
-    P = lambda f: os.path.join(out, "newstops" + f)          # noqa: E731
-    subprocess.check_call([sys.executable, os.path.join(HERE, "blockrender.py"), mid, P(".dry.wav"),
-                           "hybridmean:466"], env=env)
+    P = lambda f: os.path.join(out, tag + f)                 # noqa: E731
+    subprocess.check_call([sys.executable, os.path.join(root, "blockrender.py"), mid, P(".dry.wav"),
+                           "hybridmean:466"], env=env, cwd=root)
     subprocess.check_call([sys.executable, os.path.join(HERE, "roomtail.py"), P(".dry.wav"), P(".wav")], env=env)
     subprocess.check_call(["sox", P(".wav"), P(".norm.wav"), "gain", "-n", "-1"])
     subprocess.check_call(["lame", "-b", "256", "--quiet", P(".norm.wav"), P(".mp3")])

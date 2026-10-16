@@ -28,37 +28,10 @@ import pitea_speech as S  # noqa: E402
 import tonelib as T  # noqa: E402
 
 STOPS = dict(P.MORE_STOPS)
-# STOPS PITEA DOES NOT HAVE, MEASURED ON PIPES IT DOES: a pipe is a pipe at its
-# own pitch. Each borrows by key range: (lowest key, folder, key shift).
-#   principal 16  an octave down: the Principal 8's pipe at key-12, and for its
-#                 bottom octave the pedal Oktava 8's (open, principal scale,
-#                 down to C1 at 32.7 Hz) -- an organ's own extension
-#   quint 5-1/3   the Kvinta 2 2/3's pipe at key-12, which sounds the 5 1/3's
-#                 pitch (3 x pitch(key-12) = 1.5 x pitch(key)); from C3, the
-#                 Kvinta having nothing under its own C2
-# (The pedal Mixtur's "quint" is the plein-jeu's 2 2/3, HarmonicNumber 24 in
-# PiteaExtended.organ: no true 5 1/3 rank exists in the set.)
-BORROWED = {
-    "principal 16": ("HVPrincipal8 an octave down; pedal Oktava 8 under C3",
-                     ((36, "PEDOktava8", -12), (48, "HVPrincipal8", -12))),
-    "quint 5-1/3":  ("Positiv Kvinta 2 2/3, its pipe an octave down",
-                     ((48, "POSKvinta223", -12),)),
-}
-for _k, (_w, _r) in BORROWED.items():
-    STOPS[_k] = (_r[-1][1], _w)
-
-
+BORROWED = P.BORROWED          # stops measured on pipes of another rank (pitea_fit)
 def pipe_file(stop, key):
     """The recorded pipe that sounds STOP's pitch at KEY, or None."""
-    if stop in BORROWED:
-        use = [r for r in BORROWED[stop][1] if key >= r[0]]
-        if not use:
-            return None
-        _, folder, sh = use[-1]
-        p = glob.glob(os.path.join(P.PITEA, folder, "%03d-*.wav" % (key + sh)))
-    else:
-        p = glob.glob(os.path.join(P.PITEA, STOPS[stop][0], "%03d-*.wav" % key))
-    return p[0] if p else None
+    return P.pipe_file(stop, key)
 T_ATT = (0.0, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12, 0.2, 0.3)
 NAMES = ("fund", "h2-4", "h5+", "breath")
 
