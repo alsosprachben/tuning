@@ -2230,6 +2230,10 @@ class Patch:
         self.tremolo_hz = 0.0 if drums else float(getattr(pc, "tremolo_hz", 0.0))
         self.tremolo_depth = 0.0 if drums else float(getattr(pc, "tremolo_depth", 0.0))
         self.tremolo_stereo = (not drums) and bool(getattr(pc, "tremolo_stereo", False))
+        # what the wheel may do when nothing else claims it (tonelib
+        # Synth.wheel_vibrato / wheel_swell): a vibrato, an expression pedal
+        self.wheel_vibrato = (not drums) and bool(getattr(pc, "wheel_vibrato", True))
+        self.wheel_swell = (not drums) and bool(getattr(pc, "wheel_swell", False))
         # NO SPEED AXIS. It existed because the rotor was baked into the
         # partials; now both the level swing and the Doppler are driven from
         # the callback, so one template serves every speed and the cache is a
@@ -2572,7 +2576,18 @@ class Patch:
         # floor. Cutting a ringing bar in 0.1 ms is a click.
         t["oneshot"] = bool(t["P"]) and getattr(self._voice_class(note),
                                                 "one_shot", False)
-        t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
+        # A ONE-SHOT'S LENGTH IS ITS LONGEST ROW'S, and each row ends at its own
+        # (the rof below). It was row 0's, and the music box's row 0 is the
+        # pin's snap, a 0.23 s noise burst: every tooth was cut there, its
+        # ring 7-12 s long offline (Ben: "cuts off after like a quarter of a
+        # second on every note").
+        if t["P"] and t["oneshot"]:
+            t["dur"] = int((t["noff"] - t["non"]).max())
+        else:
+            t["dur"] = int(t["noff"][0] - t["non"][0]) if t["P"] else 0
+        # ...and every row of a one-shot keeps the length it has offline (rof)
+        if t["P"] and t["oneshot"]:
+            t["rof"] = (t["noff"] - t["non"]).astype(np.int64)
         t["send"] = getattr(self._voice_class(note), "reverb_distance", None)
         t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
         # WHICH PARTIALS' FADE IS THE ATTACK, for a slur to shorten (_slur_stamp):
@@ -2770,6 +2785,7 @@ class Part:
         self.lo, self.hi = lo, hi
         self.transpose = transpose
         self.level_db = level_db
+        self.swell = 1.0        # the mod wheel as an expression pedal (wheel_swell)
         self.muted = False
         # FIXED TOUCH, a switch on every part: on, velocity does not set the
         # level; off, it does. None is the patch's own way (touch_fixed): on
@@ -2825,7 +2841,7 @@ class Part:
                 and self.lo <= note <= self.hi and not self.muted)
 
     def gain(self):
-        return 10.0 ** (self.level_db / 20.0)
+        return 10.0 ** (self.level_db / 20.0) * self.swell
 
     def label(self):
         if self.drums:
@@ -3732,6 +3748,17 @@ class Live:
                 detuners = [p for p in here if 'detune' in roles[p.pid]]
                 dronists = [p for p in here if 'drones' in roles[p.pid]]
                 others = [p for p in here if 'vibrato' in roles[p.pid]]
+                for p in [p for p in here if 'swell' in roles[p.pid]]:
+                    # THE EXPRESSION PEDAL: CC11's squared law on the part, the
+                    # notes sounding rescaled as CC11 rescales them. An
+                    # untouched wheel is the pedal open (Part.swell 1.0). Floored
+                    # at -80 dB: the sounding notes move by ratio, and a ratio
+                    # cannot come back from zero.
+                    sw = max((msg.value / 127.0) ** 2, 1e-4)
+                    was = p.swell
+                    p.swell = sw
+                    if sw != was:
+                        self.slab.channel_gain(self._sounding(ch, pids={p.pid}), sw / was)
                 if amped:
                     # THE WHEEL IS THE GAIN KNOB. On a Leslie it is the swell
                     # pedal, which sits in FRONT of a fixed-gain amplifier; on
@@ -5183,7 +5210,7 @@ class Live:
     WHEEL_MEANING = {'drive': 'amp drive', 'crescendo': 'crescendo pedal',
                      'tremolo': 'tremolo depth', 'tone': 'tone rockers',
                      'detune': 'detuning', 'drones': 'drones (0: the chanter alone)',
-                     'vibrato': 'vibrato'}
+                     'vibrato': 'vibrato', 'swell': 'swell pedal'}
 
     def wheel_roles(self, part):
         """What the mod wheel is on this part -- the CC1 branch asks this, and
@@ -5223,7 +5250,16 @@ class Live:
             r.append('detune')
         if pt.drone_wheel:
             r.append('drones')
-        if not r and not (part.organ and pt.cres_order) and not pt.leslie:
+        # AND WHERE THE INSTRUMENT CANNOT BEND AFTER ITS ATTACK -- a hammer,
+        # a mallet, a stick, a noise (tonelib Synth.wheel_vibrato) -- NOTHING:
+        # the vibrato default had given a piano, a glockenspiel and a gunshot
+        # 35 cents, and the vibraphone its pitch wobbling under its motor
+        # (Ben: "I don't think that is supposed to happen"). A drawbar organ
+        # with no drive takes it as its expression pedal (wheel_swell).
+        if not r and pt.wheel_swell:
+            r.append('swell')
+        if not r and not (part.organ and pt.cres_order) and not pt.leslie \
+                and pt.wheel_vibrato:
             r.append('vibrato')
         return r
 
@@ -10690,9 +10726,9 @@ def selftest():
         ('attack', 'brightness', 'decay', 'release', 'resonance', 'vib_delay',
          'vib_depth', 'vib_rate'): 31,                          # synthesisers
         ('attack', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 33,  # winds, bows, voices
-        ('decay', 'release'): 29,                               # struck and plucked
+        ('decay', 'release'): 32,                               # struck and plucked, and the damped bars
         ('brightness', 'decay', 'release'): 3,                  # pizzicato, GM 32, harp: the pluck point
-        ('decay',): 17,                                         # one-shots (the telephone's gongs ring out)
+        ('decay',): 14,                                         # one-shots (the telephone's gongs ring out)
         (): 7,                                                  # organs, harpsichord, bagpipe, hit
         ('attack', 'brightness', 'release', 'vib_delay', 'vib_depth', 'vib_rate'): 6,  # effort
         ('attack', 'release'): 1,                               # the reed organ
@@ -13092,7 +13128,7 @@ def selftest():
     # (wheel_roles): a Leslie organ's pitch wheel is its half-moon, and a route
     # that takes the wheel says so.
     _wm = {}
-    for _g in (18, 4, 7, 109, 3, 40):
+    for _g in (18, 4, 7, 109, 3, 40, 0, 11, 16, 21):
         _wl = Live(program=_g, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
         _wm[_g] = (_wl.mod_wheel_meaning(_wl.parts[0]), _wl.pitch_wheel_meaning(_wl.parts[0]))
         if _g == 40:
@@ -13104,8 +13140,33 @@ def selftest():
           and _wm[4][0] == "tremolo depth" and _wm[7][0] == "tone rockers"
           and _wm[109][0].startswith("drones") and _wm[3][0] == "detuning"
           and _wm[40] == ("vibrato", "bend +/-2 semitones")
+          # a hammer has no vibrato; a motor, a bellows shake and a drawbar
+          # organ's pedal are what their wheels are
+          and _wm[0][0] is None and _wm[11][0] == "tremolo depth"
+          and _wm[21][0] == "tremolo depth" and _wm[16][0] == "swell pedal"
           and _wm["route"] == "routed to sustain (up)",
           "  (%s)" % "; ".join("%s: %s / %s" % (k, *v) for k, v in _wm.items() if k != "route"))
+    # THE DRAWBAR ORGAN'S WHEEL IS ITS EXPRESSION PEDAL: a held chord falls by
+    # CC11's law when the wheel comes back to half, and an untouched wheel is
+    # the pedal open
+    _sw = Live(program=16, rate=48000, frames=128, verbose=False, tuner="even"); _sw.warm()
+    def _swrms(nb):
+        _o = []
+        for _ in range(nb):
+            _x, _ = _sw.callback(None, 128, None, 0)
+            _x = np.frombuffer(_x, np.float32) if isinstance(_x, (bytes, bytearray)) else np.asarray(_x, np.float32)
+            _o.append(_x)
+        _o = np.concatenate(_o)
+        return 20 * math.log10(float(np.sqrt(np.mean(_o ** 2))) + 1e-12)
+    _sw.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100)); _swrms(200)
+    _sw0 = _swrms(1500)              # 4 s: the Leslie swings the level
+    _sw.on_midi(mido.Message("control_change", channel=0, control=1, value=64)); _swrms(20)
+    _sw1 = _swrms(1500)
+    _sw.shutdown()
+    _swant = 40 * math.log10(64 / 127.0)
+    check("the drawbar organ's mod wheel is its swell pedal",
+          abs((_sw1 - _sw0) - _swant) < 1.0,
+          "  (wheel at 64: %+.1f dB, CC11's law %+.1f)" % (_sw1 - _sw0, _swant))
     _mgm = Live(program=81, rate=_BRb.SR, frames=128, verbose=False, tuner="even")
     _mgm.on_midi(mido.Message("control_change", channel=0, control=19, value=50))
     _mgm.apply(_mgm.n)

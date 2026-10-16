@@ -1232,6 +1232,46 @@ def partial_decay(rp, f0, m):
     return dbps, logr, aftL, logrA
 
 
+ONE_SHOT_FLOOR_DB = 80.0
+ONE_SHOT_MIN_S, ONE_SHOT_MAX_S = 8.0, 60.0
+
+
+def one_shot_ring(rp, f0):
+    """How long a melodic one-shot (a bar, a bell: note-off means nothing to
+    it) is held: until its last partial is ONE_SHOT_FLOOR_DB under the note's
+    loudest -- each partial from its own level, through either stage of its
+    decay -- between 8 and 60 s. It had been a flat 8 s, which cut a
+    glockenspiel ringing at 1.9 dB/s off at -15 dB (Ben: "its decay goes to
+    zero too early ... should probably make it 80"). BY LEVEL, not the slowest
+    partial: a pedal hi-hat's first modes sit 30 dB under its top and keep a
+    -34 dB aftersound, and timed alone they held a chick for a minute. Never
+    shorter than the 8 s it was; a partial that does not decay keeps that.
+    A drum kit keeps the flat 8 s (see the caller)."""
+    hv = []
+    for m in range(1, min(int(getattr(rp, 'max_harmonic', 8) or 8), 512) + 1):
+        try:
+            v = rp.harmonic_volume(m)
+        except (IndexError, ValueError, ZeroDivisionError):
+            break
+        if v and v > 0.0:
+            hv.append((m, v))
+    if not hv:
+        return ONE_SHOT_MIN_S
+    top = max(v for _m, v in hv)
+    t = 0.0
+    for m, v in hv:
+        room = ONE_SHOT_FLOOR_DB + 20.0 * math.log10(v / top)    # dB above the floor
+        if room <= 0.0:
+            continue
+        dbps, _lr, aft, lrA = partial_decay(rp, f0, m)
+        if dbps > 0:
+            t = max(t, room / dbps)
+        adbps = lrA * 20.0 / math.log(10.0)
+        if aft > 0 and adbps > 0 and room + 20.0 * math.log10(aft) > 0.0:
+            t = max(t, (room + 20.0 * math.log10(aft)) / adbps)
+    return min(max(t, ONE_SHOT_MIN_S), ONE_SHOT_MAX_S)
+
+
 def unison_partial(hf, off_hz, dr, ud):
     """A unison string's partial from the main string's: (Hz, its log rate)."""
     uf = hf*(1.0+dr) + off_hz
@@ -3403,7 +3443,10 @@ def prepare(path, tuner='hybrid440', sink=None):
             # ...unless it is GATED, when it stops where the gate closes,
             # whatever the key did: see tonelib.GatedSnareProperties.
             _gate = getattr(pc, 'gate_time', None)
-            off = (on + _gate) if _gate else max(off, on + 8.0)
+            # A KIT keeps the flat hold: a ride's 1240 partials held to -80 dB
+            # (32 s) a hit, on eighths, would fill live's slab
+            off = (on + _gate) if _gate else max(off, on + (ONE_SHOT_MIN_S if drum is not None
+                                                           else one_shot_ring(props, f0)))
         # THE PEDAL, between the two of them on purpose. After the one-shot
         # extension, because a cymbal has no damper to lift and must not be
         # pedalled; before the choke override below, so a closed hi-hat still

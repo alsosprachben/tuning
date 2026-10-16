@@ -1000,6 +1000,17 @@ class SynthProperties:
     tremolo_hz = 0.0
     tremolo_depth = 0.0
     tremolo_stereo = False
+    # CAN THE PLAYER BEND IT AFTER THE ATTACK? The mod wheel's default is a
+    # pitch vibrato (live's wheel_roles), which is right for a bow, a breath,
+    # a voice or a fretting finger and wrong for a hammer, a mallet, a stick
+    # or a noise: once struck the pitch is the bar's. False gives the wheel
+    # nothing to do there, and the panel says so. Roland GS vibratos every
+    # tone alike (MOD LFO1 PITCH DEPTH 10 on every part); Ben chose the
+    # instrument over the module.
+    wheel_vibrato = True
+    # AN ORGAN'S EXPRESSION PEDAL ON THE WHEEL: the level, by CC11's law. Only
+    # where nothing else wants the wheel (a rock organ's is its drive).
+    wheel_swell = False
 
     # How hard the valve stage is driven, in units of its own grid bias. 0 is a
     # clean signal path. The tonewheel overrides this with its own discussion.
@@ -3767,6 +3778,7 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     Dulcimer", measured only; examples/dulcimer_fit.py): 33 notes D3-F6, one
     take each, one condenser.
     """
+    wheel_vibrato = False       # a hammer: no vibrato after the attack (Synth.wheel_vibrato)
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 1.70 s (1.60, 7.89, 1.60, 1.79), to our smoothstep's -40 dB at the same
@@ -4167,6 +4179,7 @@ class ClavinetProperties(InharmonicStringProperties):
 
 
 class GrandPianoProperties(InharmonicStringProperties):
+    wheel_vibrato = False       # a hammer: no vibrato after the attack (Synth.wheel_vibrato)
     # CC71-78: a struck string: how long it rings, and how the damper lands;
     # nothing to brighten, no onset to slow.
     sound_controls = frozenset(('decay', 'release'))
@@ -5846,6 +5859,7 @@ class TonewheelProperties(SynthProperties):
 
 class DrawbarOrganProperties(TonewheelProperties):
     """GM 16. The console itself, no percussion, rotor on chorale."""
+    wheel_swell = True          # the expression pedal on the wheel (Synth.wheel_swell)
     leslie = True
     leslie_fast = False
     # HELD at its level (the mean of C4-G5's first second at velocity 100)
@@ -5863,6 +5877,7 @@ class PercussiveOrganProperties(TonewheelProperties):
     does not model. What it does model is the SHAPE: an attack with a bright,
     fast-decaying top over a flat sustain, which is the part that reads.
     """
+    wheel_swell = True          # the expression pedal on the wheel (Synth.wheel_swell)
     default_stops = 0b000001111      # 888 8
     # the percussion tap is a fast attack: its 1.5 ms kept, under the contacts
     attack_time = 0.0015
@@ -6634,6 +6649,11 @@ class ReedOrganFreeProperties(FreeReedProperties):
     default registration, register 1 in both halves, which is exactly the single
     8-foot rank this voice was before it had stops.
     """
+    # THE WHEEL IS THE TREMULANT (tremolo.py): a level swing, mono, not a pitch
+    # vibrato -- a harmonium's wind tremulant shakes the pressure, and a tongue holds its pitch. Not fitted: 6.0 Hz, 0.3 at a full wheel.
+    tremolo_hz = 6.0
+    tremolo_depth = 0.3
+    tremolo_stereo = False
     # CC71-78: a pumped reed ORGAN: an onset and a release, and nobody's hand
     # on a vibrato.
     sound_controls = frozenset(('attack', 'release'))
@@ -6860,6 +6880,11 @@ class AccordionProperties(FormantBody, FreeReedProperties):
     So the offsets here are SYSTEMATIC, not drawn -- and they are what separates
     this voice from GM 23, which is the same instrument tuned dry.
     """
+    # THE WHEEL IS THE BELLOWS SHAKE (tremolo.py): a level swing, mono, not a pitch
+    # vibrato -- the player's arm jolting the bellows, the pressure and so the level swinging. Not fitted: 6.0 Hz, 0.6 at a full wheel.
+    tremolo_hz = 6.0
+    tremolo_depth = 0.6
+    tremolo_stereo = False
     # 8' + a wet 8'. A third bank (16') for gravity, tuned true.
     # ...MEASURED, the musette: hammondman's Hohner (sources.md "Organs and
     # free reeds"), 15 keys A3-E6, every harmonic beating 12-19 dB. The wet
@@ -7062,6 +7087,11 @@ class HarmonicaProperties(FormantBody, FreeReedProperties):
     One reed per note, so no banks and no musette: a harmonica's warble comes
     from the player, not from the tuning.
     """
+    # THE WHEEL IS THE CUPPED HAND (tremolo.py): a level swing, mono, not a pitch
+    # vibrato -- opening and closing over the holes. Not fitted: 5.0 Hz, 0.5 at a full wheel.
+    tremolo_hz = 5.0
+    tremolo_depth = 0.5
+    tremolo_stereo = False
     # The one free reed a player blows directly: breath is the dynamic, and
     # there is no key in between. See FreeReedProperties.
     touch_sensitive = True
@@ -8487,6 +8517,7 @@ class MalletProperties(PluckedStringProperties):
     marimba, xylophone, tubular bells) and struck ethnic/percussive metal
     (kalimba, steel drums, tinkle bell, agogo, woodblock). A first generic
     voice; a true modal-bar model is the realism step."""
+    wheel_vibrato = False       # a mallet: no vibrato after the attack (Synth.wheel_vibrato)
     # A struck bar keeps the pitch it was cut to.
     pitch_bendable = False
     inharmonicity_coefficient = SynthProperties.inharmonicity_coefficient_2nd_harmonic * 6.0
@@ -8645,6 +8676,7 @@ class HarpProperties(FormantBody, PluckedStringProperties):
     MEASURED on VSCO 2 Community Edition's harp (CC0: 23 plucks, E1 to F7;
     ~/Documents/refs/sources.md), with the pizzicato's tools.
     """
+    wheel_vibrato = False       # a pluck, no stopping finger: no vibrato after the attack (Synth.wheel_vibrato)
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 7.30 s (9.60, 5.00, 9.60, 2.62), to our smoothstep's -40 dB at the same
@@ -10598,6 +10630,7 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
 
 class PercussionProperties(PluckedStringProperties):
     """Base drum voice: struck onset, no chiff jitter, fast decay."""
+    wheel_vibrato = False       # a stick, a hand: no vibrato after the attack (Synth.wheel_vibrato)
     # A GATED one-shot stops here, in seconds from the strike, instead of
     # ringing out: see GatedSnareProperties. None is every other struck voice.
     gate_time = None
@@ -11304,6 +11337,18 @@ class CelestaProperties(ModeDecays, StruckBarProperties):
     The class had the free bar's modes alone, at a felt tilt -- no harmonics.
     The register slope comes from one octave of notes, so it is weakly held.
     """
+    # A DAMPER, NOT A ONE-SHOT: felt dampers on every plate, lifted by its
+    # sustain pedal, as a piano's, so key-up damps it and the damper pedal
+    # (CC64) holds it. It had inherited the struck bars' one_shot and rang
+    # out whatever the key or the foot did (Ben: "Doesn't vibraphone have a
+    # pedal for damping or sustain?"). Roland GS starts a tone's release at
+    # note-off and holds it under Hold 1; the length is the GM sets' median
+    # release (examples/gm_release.py: 2.80 s to -96 dB) at our fade's -40
+    # dB, 1.241 s.
+    one_shot = False
+    damper_pedal = True
+    release_valve_time = 1.241
+    release_fraction_max = None
     # the old class's level held (its felt tilt
     # had the plates 7.5 dB under the measured set's), mean over C4-C8
     initial_gain = 0.156004
@@ -11443,6 +11488,29 @@ class VibraphoneProperties(UndercutBarProperties):
     """Aluminium bars over tuned resonators, with a damper pedal: mellow and
     very long-ringing. (The motor-driven fans that give a vibraphone its name
     modulate the resonators; that tremolo is not modelled here.)"""
+    # A DAMPER, NOT A ONE-SHOT: a felt damper bar rests on the bars and the
+    # pedal lifts it, so key-up damps it and the damper pedal (CC64) holds
+    # it. It had inherited the struck bars' one_shot and rang out whatever
+    # the key or the foot did (Ben: "Doesn't vibraphone have a pedal for
+    # damping or sustain?"). Roland GS starts a tone's release at note-off
+    # and holds it under Hold 1; the length is the GM sets' median release
+    # (examples/gm_release.py: 1.14 s to -96 dB) at our fade's -40 dB, 0.505
+    # s.
+    # THE MOTOR, ON THE MOD WHEEL (tremolo.py): its discs open and close the
+    # resonators' tops, so the LEVEL swings and the pitch does not. With no
+    # tremolo the wheel fell to the default pitch vibrato, 35 cents -- Ben: "it
+    # sounds like the pitch bends with the amplitude ... I don't think that is
+    # supposed to happen". Mono (one motor, one shaft), 5 Hz (a motor runs
+    # ~1-12; 4-6 is the usual setting), half the level at a full wheel. One
+    # depth for every partial: the tubes reinforce mostly the fundamental, so
+    # the upper modes swing more here than on the instrument. Not fitted.
+    tremolo_hz = 5.0
+    tremolo_depth = 0.5
+    tremolo_stereo = False
+    one_shot = False
+    damper_pedal = True
+    release_valve_time = 0.505
+    release_fraction_max = None
     initial_gain = 1.0 / 5.8
     tonal_dampening = 1.5
     decay_db = 3.2      # ~3.5 s: a vibraphone rings a long time
@@ -11618,6 +11686,18 @@ class TubularBellProperties(TunedBarProperties):
     max_harmonic = len(TUBE_MODES)
     decay_register_slope = 1.23
     release_floor_db = -60.0     # it must be allowed to ring out
+    # A DAMPER, NOT A ONE-SHOT: a damper bar on the tubes' tops, lifted by
+    # the pedal, so key-up damps it and the damper pedal (CC64) holds it. It
+    # had inherited the struck bars' one_shot and rang out whatever the key
+    # or the foot did (Ben: "Doesn't vibraphone have a pedal for damping or
+    # sustain?"). Roland GS starts a tone's release at note-off and holds it
+    # under Hold 1; the length is the GM sets' median release
+    # (examples/gm_release.py: 10.89 s to -96 dB) at our fade's -40 dB,
+    # 4.825 s.
+    one_shot = False
+    damper_pedal = True
+    release_valve_time = 4.825
+    release_fraction_max = None
     # Kept at the level it was balanced to (examples/tubular_level.py: the
     # fit's extra modes and slow hum moved the strokes' energy +3.54 dB).
     initial_gain = 1.0 / 7.9 * 0.665
@@ -11754,6 +11834,7 @@ class NoisyPercussionMixin:
 
     So the partials fall away above hf_corner_hz at hf_order * 6 dB/octave.
     """
+    wheel_vibrato = False       # a noise: no vibrato after the attack (Synth.wheel_vibrato)
     hf_corner_hz = 9000.0
     hf_order = 1.5
 
@@ -16663,6 +16744,7 @@ class HelicopterProperties(SawtoothSynthProperties):
     broadband, and sustain_jitter broadens every partial into a band -- the same
     mechanism the pan pipe uses for air past an edge, turned well up.
     """
+    wheel_vibrato = False       # a machine: no vibrato after the attack (Synth.wheel_vibrato)
     # Four octaves down: the note chooses the rotor, not the pitch.
     sounding_octaves = -4.0
 
@@ -18307,6 +18389,7 @@ class KalimbaProperties(FormantBody, PluckedStringProperties):
 
     ASSERTED, NOT MEASURED.
     """
+    wheel_vibrato = False       # a thumb on a tine: no vibrato after the attack (Synth.wheel_vibrato)
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 2.58 s (4.00, 1.16, 4.00, 1.16), to our smoothstep's -40 dB at the same
