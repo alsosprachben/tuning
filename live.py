@@ -15775,9 +15775,21 @@ def wind_selftest(check=None):
           "  (%.2f Hz, %.1f cents p-p against %.1f, pitch~level r=%.2f)" % (hz, pp, want, r))
     lv.on_midi(mido.Message("note_off", channel=0, note=69, velocity=0))
 
-    # the sag: a held F#4 on the plenum, a chord in the bass a second in
+    # the sag: a held F#4 on the plenum, a chord in the bass a second in.
+    # THE WANDER OFF ON BOTH SIDES. The model below has none; the live chest
+    # had its measured 0.47 cents, seeded by the part's id -- a process-wide
+    # counter -- so which stretch of it the two 0.1 s windows caught depended
+    # on how many parts earlier tests had made, and the settled reading
+    # passed or failed by test order (0.39 cents against -0.01, alone).
     was = (B.WIND, B.WIND_SCALE)
     B.WIND, B.WIND_SCALE = True, 1.0
+    _Wind0 = _WND.Wind
+
+    class _StillWind(_Wind0):
+        def __init__(self, *a, **k):
+            _Wind0.__init__(self, *a, **k)
+            self.wander_rms = 0.0
+    _WND.Wind = _StillWind
     try:
         lv = Live(program=19, rate=rate, frames=fr, verbose=False)
         lv.warm()
@@ -15820,6 +15832,7 @@ def wind_selftest(check=None):
               % (per, 1e3 * fr / rate, len(st["rows"]), 1e3 * el / (1.5 * rate / fr)))
     finally:
         B.WIND, B.WIND_SCALE = was
+        _WND.Wind = _Wind0
     return 1 if fails else 0
 
 
