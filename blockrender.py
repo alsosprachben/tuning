@@ -3843,6 +3843,13 @@ def prepare(path, tuner='hybrid440', sink=None):
         _TB[0] = getattr(props,'tension_bend',0.0) * props.tension_stroke()
         _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
+        # A DRUM MACHINE'S SWEEP (tonelib tension_log): the same start, 1 +
+        # bend, but falling evenly in PITCH, as an exponential control voltage
+        # does; the kernel takes it as the start's ln-ratio and a NEGATIVE
+        # cutoff (synthkernel.c tbend_integral)
+        if getattr(props, 'tension_log', False) and _TB[0] > -1.0:
+            _TB[0] = math.log1p(_TB[0])
+            _TB[2] = -abs(_TB[2])
         _TBN = (_TB[0], _TB[1], _TB[2])   # note-level bend, restored per partial
 
         # ------------------------------------------------ THE GLIDE, per note
@@ -4057,6 +4064,11 @@ def prepare(path, tuner='hybrid440', sink=None):
             # ...and its length a class may lengthen (strike_noise_len_s): a
             # slower strike than the grand's is still heard at 0.25 s
             _slen = (getattr(props, 'strike_noise_len_s', None) or 0.25) * SR
+            # ...and a GATE closes it with the note (gate_time: a gated snare, a
+            # drum machine's pad), as an amplifier closing cuts all it passes:
+            # the Electronic toms' strike had rung on at -40 to -50 dB past it
+            if getattr(props, 'gate_time', None) and getattr(props, 'one_shot', False):
+                _slen = min(_slen, max(1.0, noff - non))
             # ONE ROW A BAND, and gone by 0.25 s (62 dB down at its 250 dB/s):
             # two a band, held 0.5 s, took live's ten-note chord past its block
             # budget (99th percentile 2.71 ms of 2.67)

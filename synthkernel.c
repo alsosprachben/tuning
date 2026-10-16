@@ -39,6 +39,43 @@
    delay has passed. tonelib.VIB_BLOOM_S must match; the selftest reads both. */
 #define VIB_BLOOM 0.25
 
+/* A DRUM MACHINE'S SWEEP, the tension bend's second shape (a NEGATIVE cutoff,
+   |cut| the time): f/f0 = e^{tb e^{-t/tau}} -- an exponential control voltage,
+   so the PITCH falls exponentially from the start's ln-ratio tb -- where the
+   strike's bend is f/f0 = 1 + tb e^{-t/tau}. Its phase, the integral of
+   (f/f0 - 1), is the series tau sum_k tb^k/(k k!) (1 - e^{-k t/tau}), whose
+   first term is the linear bend exactly: closed form, so a block re-anchors
+   from it as the linear one does; |tb| <= ~2 (7x) converges to double
+   precision in under 30 terms.
+
+   OUT OF LINE, AND AFTER the linear bend rather than around it: the linear
+   lines in voice_block.inc are left exactly as they were, because branching
+   them changed what gcc made of them under -ffast-math and moved 94 of the
+   corpus's 167 files by a rounding. */
+static double tbend_series(double tb, double tau, double c, double t) {
+    double tt = t < c ? t : c, e = exp(-tt / tau);
+    double sum = 0.0, term = 1.0, ek = 1.0;
+    for (int k = 1; k <= 40; k++) {
+        term *= tb / (double)k;
+        ek *= e;
+        sum += term * (1.0 - ek) / (double)k;
+        if (fabs(term) < 1e-17 * (fabs(sum) + 1e-30)) break;
+    }
+    return tau * sum;
+}
+
+__attribute__((noinline))
+static void tbend_log(float tb, float ts, float cut, float t0, float t1,
+                      float* integ, float* bendfac) {
+    double c = -(double)cut;
+    double i0 = tbend_series(tb, ts, c, t0), i1 = tbend_series(tb, ts, c, t1);
+    *integ = (float)i0;
+    double dt = (double)t1 - (double)t0;
+    *bendfac = (float)(dt > 0.0 ? 1.0 + (i1 - i0) / dt
+                                : 1.0 + (t0 < c ? expm1(tb * exp(-t0 / ts)) : 0.0));
+}
+
+
 /* The integral of g(s)*sin(w2*s + ph) from note-on to x, where the depth
    envelope g is 0 until t1, rises linearly to 1 over [t1, t2], and stays 1.
    Closed form, by parts on the ramp -- so a delayed vibrato keeps the EXACT

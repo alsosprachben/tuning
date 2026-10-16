@@ -209,6 +209,17 @@
                     float dtb = trel1 - trel;
                     bendfac = dtb > 0.f ? 1.f + (integ1 - integ)/dtb
                                         : 1.f + (trel<cut ? tb*expf(-trel/ts) : 0.f);
+                    // A DRUM MACHINE'S SWEEP (a negative cutoff, synthkernel.c
+                    // tbend_log): linear in pitch, not frequency. It REPLACES the
+                    // lines above rather than branching them, and out of line:
+                    // a branch around them changed what gcc made of the linear
+                    // bend, and 94 of 167 corpus files moved by a rounding.
+                    if(cut < 0.f){
+                        float il, bl;
+                        tbend_log(tb, ts, cut, trel, trel1, &il, &bl);
+                        bph += (double)w*SRATE_D*(double)(il - integ);
+                        bendfac = bl;
+                    }
                 }
                 // PORTAMENTO, and it settles exponentially in LENGTH rather than
                 // in pitch -- which is the one thing that makes a modelled glide

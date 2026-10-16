@@ -136,15 +136,15 @@ plays Standard, as does any program that is not a set.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 36 | Elec BD | `ElectronicKick` | **2** | a synth tom tuned down to a kick: the same downward sweep, narrower and faster |
-| 38 | Elec SD | `ElectronicSnare` | **2** | the Simmons snare: the drum machine's snare with its body let loose -- it sweeps as the toms do |
-| 40 | Gated SD | `GatedSnare` | **2** | an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s |
-| 41 | Elec Low Tom 2 | `SynthDrum` | **2** | GM 118's synth tom at the Standard tom's pitch, given a drum's ring (0.85-0.95 s to silence) in place of its melodic one |
-| 43 | Elec Low Tom 1 | `SynthDrum` | **2** | as 41 |
-| 45 | Elec Mid Tom 2 | `SynthDrum` | **2** | as 41 |
-| 47 | Elec Mid Tom 1 | `SynthDrum` | **2** | as 41 |
-| 48 | Elec Hi Tom 2 | `SynthDrum` | **2** | as 41 |
-| 50 | Elec Hi Tom 1 | `SynthDrum` | **2** | as 41 |
+| 36 | Elec BD | `ElectronicKick` | **3** | FITTED TO GENERALUSER GS's Electronic kit (examples/elkit_fit.py --target=GeneralUser; Ben chose the GS-modelled set over the median of three): a drum machine's box hit -- ONE sine, its pitch falling evenly in pitch (the kernel's new log sweep, tension_log) 124 -> 50 Hz as its 129 -> 51, the same at every velocity, no click |
+| 38 | Elec SD | `ElectronicSnare` | **3** | fitted to GeneralUser GS: tuned to its 168 Hz (220 had put the body an octave up), the wires' noise rising to 4-8 kHz |
+| 40 | Gated SD | `GatedSnare` | **2** | an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s; its level now against the snare as GeneralUser's |
+| 41 | Elec Low Tom 2 | `ElectronicTom` | **3** | fitted to GeneralUser GS: GM 118's synth tom as its own class (ElectronicTom), an octave-and-more log sweep to GeneralUser's pitch, the pad's noisy top (-20 to -30 dB, 0.5-4 kHz), and its amplifier CLOSING -- a gate per tom (KIT_GATE), 0.68 s here to 0.33 s on 50, as GeneralUser's stop dead at ~-32 dB. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py) |
+| 43 | Elec Low Tom 1 | `ElectronicTom` | **3** | as 41 |
+| 45 | Elec Mid Tom 2 | `ElectronicTom` | **3** | as 41 |
+| 47 | Elec Mid Tom 1 | `ElectronicTom` | **3** | as 41 |
+| 48 | Elec Hi Tom 2 | `ElectronicTom` | **3** | as 41 |
+| 50 | Elec Hi Tom 1 | `ElectronicTom` | **3** | as 41 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off |
 
 ### 40 Brush
@@ -470,7 +470,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-287 classes.
+288 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -573,8 +573,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4)
-        - `SynthDrum` -- set 24 41 Elec Low Tom 2 (2), set 24 43 Elec Low Tom 1 (2), set 24 45 Elec Mid Tom 2 (2), set 24 47 Elec Mid Tom 1 (2), set 24 48 Elec Hi Tom 2 (2), set 24 50 Elec Hi Tom 1 (2)
-          - `ElectronicKick` -- set 24 36 Elec BD (2)
+        - `SynthDrum`
+          - `ElectronicKick` -- set 24 36 Elec BD (3)
+          - `ElectronicTom` -- set 24 41 Elec Low Tom 2 (3), set 24 43 Elec Low Tom 1 (3), set 24 45 Elec Mid Tom 2 (3), set 24 47 Elec Mid Tom 1 (3), set 24 48 Elec Hi Tom 2 (3), set 24 50 Elec Hi Tom 1 (3)
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
         - `Timpani` -- GM 47 Timpani (4)
       - `MetalPercussion`
@@ -595,7 +596,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `BrushTap` -- set 40 38 Brush Tap (3)
           - `BrushSlap` -- set 40 39 Brush Slap (3)
         - `ElectricSnare`
-          - `ElectronicSnare` -- set 24 38 Elec SD (2)
+          - `ElectronicSnare` -- set 24 38 Elec SD (3)
         - `GatedSnare` -- set 24 40 Gated SD (2)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4)

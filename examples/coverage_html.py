@@ -273,6 +273,54 @@ def percussion():
     return "\n".join(strip)
 
 
+def note_table(rows):
+    """A table of drum notes as the families' tables are: (note, name, class,
+    rating, notes) -- the same columns coverage.md gives them."""
+    trs = "\n".join('<tr><td class="num">%d</td><td class="nm">%s</td><td class="cls">%s</td>'
+                    '<td class="rt"><span class="chip r%d">%d</span></td><td class="note">%s</td></tr>'
+                    % (n, e(name), e(cls.replace("Properties", "")), r, r, e(note))
+                    for n, name, cls, r, note in rows)
+    return ('<div class="tscroll"><table><tr><th></th><th>Note</th><th>Class</th><th></th>'
+            '<th>Notes</th></tr>\n%s\n</table></div>' % trs)
+
+
+def percussion_notes():
+    """Channel 10's notes, every one, as coverage.md lists them."""
+    ph = [0] * 5
+    for n in C.PERC_RATED:
+        ph[C.PERC_RATED[n][0]] += 1
+    tot = len(C.PERC_RATED)
+    share = "\n".join('<tr><td><span class="chip r%d">%d</span> %s</td><td class="num">%d</td>'
+                      '<td class="num">%d%%</td></tr>' % (k, k, e(C.LEVEL[k]), ph[k], round(100 * ph[k] / tot))
+                      for k in range(5) if ph[k])
+    rows = [(n, PM.PERCUSSION[n][0], PM.PERCUSSION[n][1].__name__) + tuple(C.PERC_RATED[n])
+            for n in sorted(C.PERC_RATED)]
+    return ('<div class="tscroll"><table><tr><th>Rating</th><th>Notes</th><th>Share</th></tr>\n%s\n'
+            '</table></div>\n%s' % (share, note_table(rows)))
+
+
+def drum_sets():
+    """The drum sets, by the program that selects them, and each built set's
+    notes -- coverage.md's drum_set_table."""
+    sets = []
+    for k in sorted(PM.DRUM_SETS):
+        built = ("the note map above" if k == 0 else "yes" if k in PM.KITS else
+                 "= Standard on the SC-55" if PM.DRUM_SETS[k] in ("Standard", "Jazz")
+                 else "no &mdash; plays Standard")
+        sets.append('<tr><td class="num">%d</td><td class="nm">%s</td><td class="note">%s</td></tr>'
+                    % (k, e(PM.DRUM_SETS[k]), built))
+    out = ['<div class="tscroll"><table><tr><th>Program</th><th>Set</th><th>Built</th></tr>\n%s\n'
+           '</table></div>' % "\n".join(sets)]
+    for k in sorted(C.KIT_RATED):
+        pips = "\n".join('<span class="pip r%d"></span>' % C.KIT_RATED[k][n][0] for n in sorted(C.KIT_RATED[k]))
+        rows = [(n, PM.KITS[k][n][0], PM.KITS[k][n][1].__name__) + tuple(C.KIT_RATED[k][n])
+                for n in sorted(C.KIT_RATED[k])]
+        out.append('<div class="fambox">\n<div class="famhead"><h3>%s</h3><span class="rng">program %d</span>'
+                   '<span class="pips">\n%s\n</span></div>\n%s</div>'
+                   % (e(PM.DRUM_SETS[k]), k, pips, note_table(rows)))
+    return "\n".join(out)
+
+
 def stops():
     """The stops map (gm_coverage.stops): one box per registerable program,
     a pip per stop, then the stops by bit and the controls after."""
@@ -352,6 +400,8 @@ def build():
         "scale": scale,
         "families": families(),
         "perc": percussion(),
+        "percnotes": percussion_notes(),
+        "drumsets": drum_sets(),
         "stops": stops(),
         "nstop": sum(len(r) + len(c) for _, _, r, c in C.stops()),
         "nstop4": sum(1 for _, _, r, c in C.stops() for x in list(r) + list(c) if x[-2] == 4),
@@ -413,12 +463,21 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 
 <section>
 <h2>Channel 10: the percussion note map</h2>
-<p>A separate specification from the 128 programs, and the place where the reference corpus divides most sharply. Iowa&rsquo;s percussion pages carry cymbals, crotales and hand percussion &mdash; and <strong>no drum kit at all</strong>: no snare, no bass drum, no toms, which is 9,630 of that collection&rsquo;s 12,781 percussion notes. %(pn4)d of the %(pnperc)d mapped notes are fitted against a recording.</p>
+<p>A separate specification from the 128 programs, and the place where the reference corpus divides most sharply. Iowa&rsquo;s percussion pages carry cymbals, crotales and hand percussion &mdash; and <strong>no drum kit at all</strong>: no snare, no bass drum, no toms, which is 9,630 of that collection&rsquo;s 12,781 percussion notes. DrumGizmo&rsquo;s DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and the crashes hit hard; VSCO-2 CE and VCSL (CC0) the hand percussion, the claps, the whistles and the second snare; Freesound takes the timbales, the surdo (CC0) and the cuica (reinsamba, CC-BY). %(pn4)d of the %(pnperc)d mapped notes are fitted against a recording.</p>
 <div class="map">
 <div class="strip">
 %(perc)s
 </div>
 </div>
+<div class="fambox">
+%(percnotes)s
+</div>
+</section>
+
+<section>
+<h2>Drum sets: the program on a drum channel</h2>
+<p>The program on a drum channel is the drum <em>set</em> (SC-55 owner&rsquo;s manual p.21), and a set changes only some notes &mdash; every blank in the manual&rsquo;s table is &ldquo;same as Standard&rdquo;. The SC-55 has ten; a set not built here plays Standard, as does any program that is not a set. Each built set lists only the notes it changes.</p>
+%(drumsets)s
 </section>
 
 <section>

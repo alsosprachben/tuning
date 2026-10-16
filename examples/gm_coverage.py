@@ -341,16 +341,18 @@ def percussion_table():
 # Only the notes a set CHANGES; every other note is Standard's, rated above. The
 # contents are the SC-55 owner's manual's drum set table (p.70-71); the sounds
 # are theory, and their level and length are matched to the Standard note each
-# replaces (examples/drumset_check.py). No reference audio exists for any of
+# replaces (examples/drumset_check.py). No reference audio exists for most of
 # them. Ben's ear has had its turn on what he heard -- all of Brush, and the
-# one Electronic note thememat plays -- which is 3; the rest stay at 2.
+# one Electronic note thememat plays -- which is 3; the rest stay at 2. The
+# Electronic kick, snare and toms are FITTED to GeneralUser GS's samples
+# (examples/elkit_fit.py), 3 until Ben's ear on the gated toms.
 KIT_RATED = {
     24: {
-        36: (2, "a synth tom tuned down to a kick: the same downward sweep, narrower and faster"),
-        38: (2, "the Simmons snare: the drum machine's snare with its body let loose -- it sweeps as the toms do"),
-        40: (2, "an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s"),
-        41: (2, "GM 118's synth tom at the Standard tom's pitch, given a drum's ring (0.85-0.95 s to silence) in place of its melodic one"),
-        43: (2, "as 41"), 45: (2, "as 41"), 47: (2, "as 41"), 48: (2, "as 41"), 50: (2, "as 41"),
+        36: (3, "FITTED TO GENERALUSER GS's Electronic kit (examples/elkit_fit.py --target=GeneralUser; Ben chose the GS-modelled set over the median of three): a drum machine's box hit -- ONE sine, its pitch falling evenly in pitch (the kernel's new log sweep, tension_log) 124 -> 50 Hz as its 129 -> 51, the same at every velocity, no click"),
+        38: (3, "fitted to GeneralUser GS: tuned to its 168 Hz (220 had put the body an octave up), the wires' noise rising to 4-8 kHz"),
+        40: (2, "an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s; its level now against the snare as GeneralUser's"),
+        41: (3, "fitted to GeneralUser GS: GM 118's synth tom as its own class (ElectronicTom), an octave-and-more log sweep to GeneralUser's pitch, the pad's noisy top (-20 to -30 dB, 0.5-4 kHz), and its amplifier CLOSING -- a gate per tom (KIT_GATE), 0.68 s here to 0.33 s on 50, as GeneralUser's stop dead at ~-32 dB. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py)"),
+        43: (3, "as 41"), 45: (3, "as 41"), 47: (3, "as 41"), 48: (3, "as 41"), 50: (3, "as 41"),
         52: (4, "GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off"),
     },
     40: {

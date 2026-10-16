@@ -275,8 +275,27 @@ def stages(aft, sus, logr, logrA):
 
 
 def glide_phase(Wi, tb, tau, cut, t):
-    """The kernel's tension glide, as phase added to W_i t: W_i tb tau (1 - e^{-min(t,cut)/tau})."""
-    return Wi * tb * tau * (1.0 - np.exp(-np.minimum(t, cut) / tau))
+    """The kernel's tension glide, as phase added to W_i t: W_i tb tau (1 - e^{-min(t,cut)/tau});
+    a NEGATIVE cut is the drum machine's sweep, f/f0 = e^{tb e^{-t/tau}}, its
+    integral tau sum_k tb^k/(k k!) (1 - e^{-k t/tau}) (synthkernel.c
+    tbend_integral)."""
+    tb, tau, cut, t = np.broadcast_arrays(*(np.asarray(v, np.float64) for v in (tb, tau, cut, t)))
+    out = Wi * tb * tau * (1.0 - np.exp(-np.minimum(t, np.abs(cut)) / tau))
+    lg = cut < 0
+    if np.any(lg):
+        e = np.exp(-np.minimum(t, -cut) / tau)
+        acc, term, ek = np.zeros(t.shape), np.ones(t.shape), np.ones(t.shape)
+        for k in range(1, 41):
+            term = term * tb / k
+            ek = ek * e
+            acc = acc + term * (1.0 - ek) / k
+        out = np.where(lg, np.asarray(Wi, np.float64) * tau * acc, out)
+    return out if out.shape else float(out)
+
+
+def glide_start(tb, cut):
+    """The glide's start, f/f0 - 1: tb, or e^tb - 1 for a sweep (cut < 0)."""
+    return np.where(np.asarray(cut) < 0, np.expm1(tb), tb)
 
 
 NEAR = 30.0                      # pairs within this many glide-widths are integrated
@@ -342,21 +361,22 @@ def free_part(c, Wi, bi, Wm, am, tb=0.0, tau=1.0, cut=0.0, need=0.0):
     forced = c / D
     if not np.any(tb):
         return (-forced[0], forced[0]) if scalar else (-forced, forced)
-    D0 = (1j * Wi * (1.0 + tb) - bi) - (1j * Wm - am)
+    D0 = (1j * Wi * (1.0 + glide_start(tb, cut)) - bi) - (1j * Wm - am)
     free = -c / D0
-    width = np.abs(Wi * tb) + np.abs(am - bi) + 1.0
+    width = np.abs(Wi * glide_start(tb, cut)) + np.abs(am - bi) + 1.0
     # integrated where the glide matters AND the answer can reach `need` (a
     # pair whose whole response is under it has an adiabatic error under it too)
     near = (tb != 0) & (np.abs(Wi - Wm) < NEAR * width) & (np.abs(free) >= need)
     if np.any(near):
         wi, wm, b_, a_, cc = Wi[near], Wm[near], bi[near], am[near], c[near]
         tb_, ta_, cu_ = tb[near], tau[near], cut[near]
+        ca_ = np.abs(cu_)               # the cut as a time; its sign is the shape
         # one grid for all (the glide's settle time and cut are the strike's)
-        grid = _glide_grid(float(cu_.max()), float(ta_.max()))
+        grid = _glide_grid(float(ca_.max()), float(ta_.max()))
 
         def integral(tt):
-            tt = tt[:, None] * np.ones_like(cu_)[None, :]
-            tt = np.minimum(tt, cu_[None, :])
+            tt = tt[:, None] * np.ones_like(ca_)[None, :]
+            tt = np.minimum(tt, ca_[None, :])
             g = 1j * ((wi - wm) * tt + glide_phase(wi, tb_, ta_, cu_, tt)) + (a_ - b_) * tt
             dt = tt[1:] - tt[:-1]
             sl = (g[1:] - g[:-1]) / np.where(dt > 0, dt, 1.0)
@@ -370,8 +390,8 @@ def free_part(c, Wi, bi, Wm, am, tb=0.0, tau=1.0, cut=0.0, need=0.0):
         half = np.sort(np.concatenate([grid, 0.5 * (grid[1:] + grid[:-1])]))
         y = cc * (4.0 * integral(half) - integral(grid)) / 3.0
         # after the cut: constant frequency, its phase carrying the glide
-        th = glide_phase(wi, tb_, ta_, cu_, cu_)
-        free[near] = y - forced[near] * np.exp(1j * th + (1j * (wi - wm) + (a_ - b_)) * cu_)
+        th = glide_phase(wi, tb_, ta_, cu_, ca_)
+        free[near] = y - forced[near] * np.exp(1j * th + (1j * (wi - wm) + (a_ - b_)) * ca_)
     return (free[0], forced[0]) if scalar else (free, forced)
 
 

@@ -1321,6 +1321,12 @@ class SynthProperties:
     # at 5 dB under -- a fifth of the bend for a seventh of the amplitude
     # (examples/drum_fit.py).
     tension_bend_power = 1.0
+    # THE BEND'S SHAPE. False: a strike stretching a string, the excess
+    # FREQUENCY falling exponentially (f = f0 (1 + b e^{-t/tau})). True: a drum
+    # machine's sweep, an exponential control voltage, the PITCH falling
+    # exponentially from the same start (f = f0 (1 + b)^{e^{-t/tau}}) -- quick
+    # through the top, lingering near the note (synthkernel.c tbend_integral).
+    tension_log = False
 
     def tension_stroke(self):
         av = self.attack_volume
@@ -16947,24 +16953,67 @@ class MoogSynthDrum(SynthDrumProperties):
 
 
 class ElectronicKickProperties(SynthDrumProperties):
-    """Note 36 of the Electronic set (SC-55 p.70, "Elec BD"). A synth tom
-    tuned down to a kick: the same oscillator and the same downward sweep, but
-    a narrower one and a faster one -- a kick has to land on the beat, so its
-    fall must be over before the next sixteenth, and a fifth of drop at 55 Hz
-    already sounds like the pad it is.
+    """Note 36 of the Electronic set (SC-55 p.70, "Elec BD"). A drum
+    machine's kick: one sine falling an octave and more as it rings out (see
+    the fit below), on every velocity alike.
 
     NOT register-scaled: tension_bend_slope is 0, so the drop is what is
     written here at any tuning, the argument GuitarFretNoiseProperties makes.
     """
-    tension_bend = 0.45
-    tension_bend_max = 0.45
     tension_bend_slope = 0.0
-    tension_settle_time = 0.035
     tension_settle_cutoff = 0.35
-    mode_ratios = (1.0, 1.58)
-    mode_gains = (1.0, 0.08)
-    max_harmonic = 2
+    # FITTED (examples/elkit_fit.py --fit=kick --target=GeneralUser) to
+    # GeneralUser GS: the sweep 132 -> 55 Hz with a 50 ms half-time, as its
+    # 129 -> 51, -10/-20/-40 dB at 81/141/280 ms (its 46/149/290), and no
+    # click -- the fit took the strike out, GeneralUser's kick has nothing
+    # above it. Score 51 -> 22 (from the two-mode drum at 47). The search's
+    # own pick scored 17 with a slower sweep that lingered high, its body an
+    # octave up (the 125 Hz octave over the 63) -- this is a scan's.
+    tension_log = True          # a drum machine's sweep, linear in pitch
+    tension_bend = 4.0
+    tension_bend_max = 4.0
+    tension_settle_time = 0.08
+    # A BOX HIT, NOT A DRUM (Ben: "It sounds like maybe just a sine wave, for
+    # bandpass box hits"): a drum machine's kick is a resonant filter or a
+    # bridged-T pinged by a pulse -- ONE sine, its pitch falling as the ping
+    # dies. GeneralUser GS's has nothing above it (-33 dB at 250 Hz, -44
+    # at 500). So one partial, and the sweep the SAME at every
+    # velocity: a drum machine's pitch envelope is a circuit's, not a blow's
+    # (tension_bend_power 0: tension_stroke is 1).
+    mode_ratios = (1.0,)
+    mode_gains = (1.0,)
+    max_harmonic = 1
+    tension_bend_power = 0.0
     decay_db = 7.0
+
+
+class ElectronicTomProperties(SynthDrumProperties):
+    """Notes 41-50 of the Electronic set (SC-55 p.70, "Elec Tom"). The Simmons
+    tom: GM 118's synth tom at the Standard toms' pitches, with the pad's own
+    ring (percussion_map.KIT_RING) -- and fitted to what the GM sets play
+    (examples/elkit_fit.py --fit=toms --target=GeneralUser): GeneralUser GS,
+    the GS-modelled set, at Ben's choice over the median of the three (which
+    disagree: TimGM6mb's toms do not sweep at all).
+
+    THE SWEEP IS THE SOUND: an octave and more, falling evenly in pitch as a
+    drum machine's does (tension_log), each tom tuned to where GeneralUser's
+    lands (percussion_map; GeneralUser 2.1-2.4x, half-time 90-150 ms). THE
+    PAD'S TOP: -20 to -30 dB in every octave from 500 Hz to 4 kHz, where GM
+    118's three modes had nothing above 500 Hz (-65 to -107) -- a strike,
+    -35.9 dB at 1 kHz falling 5.4 an octave and 29 dB/s. Score 45 -> 14."""
+    tension_log = True          # a drum machine's sweep, linear in pitch
+    tension_bend = 3.448
+    tension_bend_max = 3.448
+    tension_settle_time = 0.1859
+    strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
+                             round(-35.9 - 5.4 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
+                            for k in range(15))
+    strike_noise_dbs = 29.0
+    # THE PAD'S AMPLIFIER CLOSING (percussion_map.KIT_GATE, a note's own gate
+    # time): GeneralUser's toms fall 30 dB in under 50 ms from about -32
+    release_valve_time = 0.020
+    strike_noise_len_s = 1.0
+    strike_noise_fade_s = 0.001
 
 
 class ElectronicSnareProperties(ElectricSnareProperties):
@@ -16974,12 +17023,24 @@ class ElectronicSnareProperties(ElectricSnareProperties):
     pad pitch-sweeps its snare as it does its toms, and that "pew" under the
     noise is the sound of the whole decade.
     """
-    tension_bend = 0.35
     tension_bend_max = 0.50
     tension_bend_slope = 0.0
-    tension_settle_time = 0.045
     tension_settle_cutoff = 0.4
-    decay_db = 32.0             # a little longer than the 808's crack
+    # FITTED (examples/elkit_fit.py --fit=snare --target=GeneralUser) to
+    # GeneralUser GS, tuned to its 168 Hz (percussion_map), where 220 had left
+    # the body an octave up (-37 dB in the 125 Hz octave; GeneralUser -5). All
+    # but no sweep, and the wires' noise from the strike, -31.8 dB at 1 kHz
+    # RISING 6.2 an octave -- GeneralUser's snare is brightest at 4-8 kHz --
+    # falling 51 dB/s. Score 27 -> 20.
+    tension_bend = 0.038
+    tension_settle_time = 0.1375
+    decay_db = 43.17
+    strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
+                             round(-31.8 + 6.2 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
+                            for k in range(15))
+    strike_noise_dbs = 51.0
+    strike_noise_len_s = 1.0
+    strike_noise_fade_s = 0.001
 
 
 class GatedSnareProperties(SnareDrumProperties):

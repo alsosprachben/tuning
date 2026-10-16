@@ -72,6 +72,7 @@ from tonelib import (
     OpenHiHatProperties,
     GuiroProperties,
     SynthDrumProperties,
+    ElectronicTomProperties,
     ReverseCymbalProperties,
     ElectronicKickProperties,
     ElectronicSnareProperties,
@@ -300,15 +301,15 @@ DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
 # pitches, so a fill written for one kit lands in the same places on the other.
 KITS = {
     24: {
-        36: ("Elec BD",          ElectronicKickProperties, 55.0),
-        38: ("Elec SD",          ElectronicSnareProperties, 220.0),
+        36: ("Elec BD",          ElectronicKickProperties, 47.4),    # GeneralUser GS's (elkit_fit.py)
+        38: ("Elec SD",          ElectronicSnareProperties, 168.2),    # GeneralUser GS's (elkit_fit.py)
         40: ("Gated SD",         GatedSnareProperties, 260.0),
-        41: ("Elec Low Tom 2",   SynthDrumProperties, 87.0),
-        43: ("Elec Low Tom 1",   SynthDrumProperties, 98.0),
-        45: ("Elec Mid Tom 2",   SynthDrumProperties, 110.0),
-        47: ("Elec Mid Tom 1",   SynthDrumProperties, 130.0),
-        48: ("Elec Hi Tom 2",    SynthDrumProperties, 150.0),
-        50: ("Elec Hi Tom 1",    SynthDrumProperties, 175.0),
+        41: ("Elec Low Tom 2",   ElectronicTomProperties, 49.0),
+        43: ("Elec Low Tom 1",   ElectronicTomProperties, 51.5),
+        45: ("Elec Mid Tom 2",   ElectronicTomProperties, 57.5),
+        47: ("Elec Mid Tom 1",   ElectronicTomProperties, 70.3),
+        48: ("Elec Hi Tom 2",    ElectronicTomProperties, 74.8),
+        50: ("Elec Hi Tom 1",    ElectronicTomProperties, 80.4),
         52: ("Reverse Cymbal",   ReverseCymbalProperties, 181.9),
     },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
@@ -328,7 +329,18 @@ KITS = {
 # ELECTRONIC'S RINGS: GM 118's decay is a melodic voice's, 1.4 s to -40 dB, which
 # is four times a tom and turns a fill into a drone. A Simmons tom is long for a
 # drum and short for a note; its kick is a thump with a tail.
-KIT_RING = {24: {36: 0.55, 41: 0.95, 43: 0.95, 45: 0.9, 47: 0.9, 48: 0.85, 50: 0.85}}
+# FITTED (examples/elkit_fit.py --target=GeneralUser): the toms shorten up the
+# kit; each tuned so the pitch a render reads where it fades (the sweep
+# still settling there) is where GeneralUser's reads: ~0.9x its end -- (48 between its neighbours:
+# GeneralUser's 47 and 48 both end at 79 Hz).
+KIT_RING = {24: {36: 0.488, 41: 1.404, 43: 1.262, 45: 1.121, 47: 0.979, 48: 0.837, 50: 0.696}}
+# ...AND THEIR GATES: the Electronic toms stop dead where the pad's amplifier
+# closes. GeneralUser GS's decay as ours do and then fall 30 dB in under 50 ms
+# from about -32 dB -- at 0.70, 0.55 and 0.35 s on 41, 45 and 50 (the rest
+# between) -- where ours rang on to -40 at 0.77, 0.64 and 0.46 s and past
+# (examples/elkit_fit.py). The note's length, as GatedSnareProperties.gate_time
+# is, closing over the class's release_valve_time.
+KIT_GATE = {24: {41: 0.68, 43: 0.62, 45: 0.53, 47: 0.45, 48: 0.39, 50: 0.33}}
 # BRUSH is balanced against its own tap instead, which lands on Standard's snare
 # unaided: a slap does not replace a hand clap nor a swirl an electric snare,
 # whatever key they share. The slap sits ~3 dB over the tap and the swirl
@@ -340,7 +352,12 @@ KIT_RING = {24: {36: 0.55, 41: 0.95, 43: 0.95, 45: 0.9, 47: 0.9, 48: 0.85, 50: 0
 # instrument, not a louder one: a file balanced its drums against its band
 # with velocities, and swapping the kit must not undo that. (36 and 38 moved
 # with Standard's kick and snare when those were rebalanced, -7 and +5 dB.)
-KIT_LEVEL = {24: {36: 1.549, 38: 1.072, 40: 0.519, 41: 0.851, 43: 0.861, 45: 0.822, 47: 0.871, 48: 0.912, 50: 0.813},
+# ELECTRONIC'S, 2026-10-15: the snare on the Standard snare (drumset_check.py),
+# and every other note where GeneralUser GS sits against ITS snare, K-weighted
+# (examples/elkit_balance.py). Each note on its own key's Standard note had
+# left the kick 1.2 dB and the toms 4-12 dB under (Ben: "Our kick seems
+# quieter").
+KIT_LEVEL = {24: {36: 2.372, 38: 2.214, 40: 1.454, 41: 1.642, 43: 1.715, 45: 1.747, 47: 1.755, 48: 1.765, 50: 1.778},
              40: {39: 1.148, 40: 0.135}}
 
 
@@ -563,13 +580,15 @@ def _with_ring(cls, note, kit=0):
     from properties that do not exist yet when the note is created, so there is
     no moment at which an instance could be adjusted in time.
     """
+    gate = None
     if kit:
         ring = KIT_RING.get(kit, {}).get(note)
         trim = KIT_LEVEL.get(kit, {}).get(note)
+        gate = KIT_GATE.get(kit, {}).get(note)
     else:
         ring = PERCUSSION_RING.get(note)
         trim = PERCUSSION_LEVEL.get(note)
-    if not ring and not trim:
+    if not ring and not trim and not gate:
         return cls
     key = (cls.__name__, note, kit)
     if key not in _RING_CLASSES:
@@ -588,6 +607,7 @@ def _with_ring(cls, note, kit=0):
         attrs = {}
         if ring: attrs["harmonic_decay"] = harmonic_decay
         if trim: attrs["initial_gain"] = cls.initial_gain * trim
+        if gate: attrs["gate_time"] = gate
         _RING_CLASSES[key] = type("%s_n%d%s" % (cls.__name__, note,
                                                "_k%d" % kit if kit else ""),
                                   (cls,), attrs)
