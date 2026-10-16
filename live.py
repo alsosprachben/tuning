@@ -6841,6 +6841,25 @@ class Live:
         f = om * float(self.rate) / (2.0 * np.pi)
         aM = 0.5 * (self.slab.aL0[idx].astype(np.float64)
                     + self.slab.aR0[idx].astype(np.float64))
+        # AT THE LEVEL THEY HAVE NOW, not the level they were struck at. The
+        # stage is rebuilt whenever the held set changes, and fed each parent's
+        # STARTING amplitude it re-drove a decayed note as if just struck: hold
+        # a note 3 s, tap another, and the first came back 8-12 dB louder
+        # through the distortion and stayed there (Ben, on the Distortion
+        # Guitar: "an increase in volume" at the second note's key-up). The
+        # kernel's own decay (voice_partial.inc AMP: a two-stage fall over a
+        # sustain floor) and, for a key already up, its release ramp -- but not
+        # the attack ramp: at a note's own onset that is zero, and the products
+        # fade in on their own copy of it (stamp_amp).
+        sa = self.slab.a
+        t = np.maximum(0.0, n0 - sa["non"][idx].astype(np.float64)) / float(self.rate)
+        sl = sa["sus"][idx].astype(np.float64)
+        af = sa["aft"][idx].astype(np.float64)
+        dc = sl + (1.0 - sl) * ((1.0 - af) * np.exp(-t * sa["logr"][idx].astype(np.float64))
+                                + af * np.exp(-t * sa["logrA"][idx].astype(np.float64)))
+        rx = np.clip((n0 - sa["noff"][idx].astype(np.float64))
+                     / np.maximum(sa["re"][idx].astype(np.float64), 1.0), 0.0, 1.0)
+        aM = aM * dc * (1.0 - rx * rx * (3.0 - 2.0 * rx))
         ph = self.slab.a["p0"][idx].astype(np.float64) + om * n0
         ok = np.flatnonzero((f > MIN_AMP_HZ) & (aM > 0.0))
         if len(ok) < 2:
@@ -8331,6 +8350,37 @@ def selftest():
     flick(1.0); flick(0.0)
     check("the wheel does not BEND a Hammond",
           np.allclose(om0, lv.slab.a["om"][ix]))
+
+    # ---- a tapped note leaves the held one's distortion where it was -------
+    # The amplifier is rebuilt whenever the held set changes; it used to be fed
+    # each parent's STARTING level, so a note held 3 s came back 8-12 dB louder
+    # through the distortion once a second note had been pressed and released
+    # under it (Ben, the Distortion Guitar). Same note, same Live, with and
+    # without the tap: after the tap's release has died, the two must agree.
+    _gl = Live(program=30, rate=48000, frames=128, verbose=False); _gl.warm()
+
+    def _gtrace(tap):
+        out = []
+
+        def run(nb):
+            for _ in range(nb):
+                o, _ = _gl.callback(None, 128, None, 0)
+                o = np.frombuffer(o, np.float32) if isinstance(o, (bytes, bytearray)) else np.asarray(o, np.float32)
+                out.append(o.reshape(-1, 2).mean(1) if o.size == 256 else o)
+        _gl.on_midi(mido.Message("note_on", channel=0, note=40, velocity=100)); run(1125)
+        if tap:
+            _gl.on_midi(mido.Message("note_on", channel=0, note=47, velocity=100)); run(113)
+            _gl.on_midi(mido.Message("note_off", channel=0, note=47, velocity=64)); run(375)
+        else:
+            run(488)
+        _gl.on_midi(mido.Message("note_off", channel=0, note=40, velocity=64)); run(150)
+        x = np.concatenate(out)
+        a0, a1 = int(3.6 * 48000), int(4.1 * 48000)        # the tap long gone, A still held
+        return 20 * math.log10(float(np.sqrt(np.mean(x[a0:a1] ** 2))) + 1e-12)
+    _g0, _g1 = _gtrace(False), _gtrace(True)
+    check("a note tapped under a held one leaves its distortion where it was",
+          abs(_g1 - _g0) < 2.0, "  (held E2 alone %.1f dB; after a B2 tapped at 3 s, %.1f)" % (_g0, _g1))
+    _gl.renderer.close()
 
     # ---- the mod wheel is the swell pedal ----------------------------------
     key = lv._amp_key(pid)

@@ -9590,6 +9590,16 @@ class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     # treble stood 39 dB over Iowa's 34 plucks (contrast -9, early -50); at 3
     # ms, -12.6 and -42.7.
     attack_time = 0.003
+    # ITS DECAY, FITTED at last (examples/nylon_decay_fit.py, voicefit.py
+    # decay): Iowa's runs split at their onsets and each note named by its own
+    # pitch, 26 takes of 87 long enough to read. The spectrum and body above were
+    # fitted in August, the decay never: decay_db sat at 0, and a held E3 fell
+    # 2-3 dB/s, twenty seconds to 60 dB (Ben: "a very long sustain"). Now
+    # ~11 dB/s at E3, rising with the note (0.545 an octave) and faster on the
+    # upper partials. One instrument, so the scatter is wide: 1.4-27 dB/s.
+    decay_db = 5.307
+    harmonic_decay_db = 3.972
+    decay_register_slope = 0.545
 
 
 class ElectricGuitarProperties(PluckedStringProperties):
