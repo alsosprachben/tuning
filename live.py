@@ -9282,11 +9282,12 @@ def selftest():
           and _s2.CLICK_DB != _T.AcousticSnareProperties.CLICK_DB,
           "  (%s, lowest mode %.1f Hz)" % (_s2.__name__, _PMk.PERCUSSION[40][2]))
     # AN ELECTRIC SNARE IS A MACHINE, not the acoustic snare at another pitch:
-    # the Electronic set's 38
+    # the Electronic set's 38 -- the SDS-V's snare module (simmons.py) since it
+    # was fitted to a real Simmons, the 808-style ElectricSnare before
     _es = _PMk.KITS[24][38][1]
     check("...and the electric snare is a drum machine, not a retuned snare",
-          issubclass(_es, _T.ElectricSnareProperties) and _es.tension_bend > 0.0
-          and not _es.strike_noise_slope,
+          issubclass(_es, (_T.ElectricSnareProperties, _T.SimmonsProperties))
+          and _es.tension_bend > 0.0 and not _es.strike_noise_slope,
           "  (its body DROPS, and it does not get rattlier when hit harder)")
 
     # --------------------------------------- the three "recordings of the world"

@@ -4120,6 +4120,9 @@ def prepare(path, tuner='hybrid440', sink=None):
             # drum and a cymbal do not share them.
             for _ltab, _lrise, _ldbs, _llen in getattr(props, 'strike_noise_layers', ()):
                 _lslr = math.log(10.0) / 20.0 * _ldbs
+                # ...closed by a gate with the note, as the strike is
+                if getattr(props, 'gate_time', None) and getattr(props, 'one_shot', False):
+                    _llen = min(_llen, max(1.0, noff - non) / SR)
                 for _hf, _db in _ltab:
                     if _hf >= 0.45 * SR:
                         continue

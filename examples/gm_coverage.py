@@ -344,15 +344,16 @@ def percussion_table():
 # replaces (examples/drumset_check.py). No reference audio exists for most of
 # them. Ben's ear has had its turn on what he heard -- all of Brush, and the
 # one Electronic note thememat plays -- which is 3; the rest stay at 2. The
-# Electronic kick, snare and toms are FITTED to GeneralUser GS's samples
-# (examples/elkit_fit.py), 3 until Ben's ear on the gated toms.
+# Electronic set is a SIMMONS SDS-V on its own engine (simmons.py), its
+# patches fitted to a real Simmons's hits chosen by GeneralUser's (two levels,
+# examples/elkit_fit.py), and Ben has heard it: 4.
 KIT_RATED = {
     24: {
-        36: (3, "FITTED TO GENERALUSER GS's Electronic kit (examples/elkit_fit.py --target=GeneralUser; Ben chose the GS-modelled set over the median of three): a drum machine's box hit -- ONE sine, its pitch falling evenly in pitch (the kernel's new log sweep, tension_log) 124 -> 50 Hz as its 129 -> 51, the same at every velocity, no click"),
-        38: (3, "fitted to GeneralUser GS: tuned to its 168 Hz (220 had put the body an octave up), the wires' noise rising to 4-8 kHz"),
-        40: (2, "an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s; its level now against the snare as GeneralUser's"),
-        41: (3, "fitted to GeneralUser GS: GM 118's synth tom as its own class (ElectronicTom), an octave-and-more log sweep to GeneralUser's pitch, the pad's noisy top (-20 to -30 dB, 0.5-4 kHz), and its amplifier CLOSING -- a gate per tom (KIT_GATE), 0.68 s here to 0.33 s on 50, as GeneralUser's stop dead at ~-32 dB. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py)"),
-        43: (3, "as 41"), 45: (3, "as 41"), 47: (3, "as 41"), 48: (3, "as 41"), 50: (3, "as 41"),
+        36: (4, "THE SIMMONS SDS-V, AS AN ENGINE (simmons.py: the circuit as partials, every drum a patch of knobs, as the synths are Messenger patches): its bass drum module FITTED BY TWO LEVELS -- GeneralUser GS's Elec BD picks the closest of tarane468's real Simmons hits (Freesound, CC0; hit 30), and the patch is fitted to that hit at its pitch, 28 Hz (examples/elkit_fit.py --select, --fit=skick --real). The bend falls evenly in pitch (the kernel's log sweep). Ben: sounds great -- the vintage sound is the point"),
+        38: (4, "the SDS-V's snare module on the same engine: one oscillator near 450 Hz under its noise, fitted to the real Simmons snare GeneralUser's is closest to (hit 36), score 7.6 -- its decay within a few ms of the hit's. The two-tone snare fitted to GeneralUser itself stays in the code (ElectronicSnareProperties)"),
+        40: (4, "an acoustic snare behind a GATE, fitted to GeneralUser GS (examples/elkit_fit.py --fit=gated, and its envelope to the gate within 3.8 dB rms): a loud room falling into a 0.40 s gate, tuned to 290 Hz. Ben: good"),
+        41: (4, "the SDS-V's tom modules: one patch, each tom its own TONE and DECAY, the bend following the strike and the noise filter darkening with it; fitted to the real Simmons's NOISY toms GeneralUser's are closest to (hits 31, 35), each tom at GeneralUser's tuning, ringing out ungated as a Simmons does. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py). Ben: sounds great"),
+        43: (4, "as 41"), 45: (4, "as 41"), 47: (4, "as 41"), 48: (4, "as 41"), 50: (4, "as 41"),
         52: (4, "GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off"),
     },
     40: {

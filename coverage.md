@@ -136,15 +136,15 @@ plays Standard, as does any program that is not a set.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 36 | Elec BD | `ElectronicKick` | **3** | FITTED TO GENERALUSER GS's Electronic kit (examples/elkit_fit.py --target=GeneralUser; Ben chose the GS-modelled set over the median of three): a drum machine's box hit -- ONE sine, its pitch falling evenly in pitch (the kernel's new log sweep, tension_log) 124 -> 50 Hz as its 129 -> 51, the same at every velocity, no click |
-| 38 | Elec SD | `ElectronicSnare` | **3** | fitted to GeneralUser GS: tuned to its 168 Hz (220 had put the body an octave up), the wires' noise rising to 4-8 kHz |
-| 40 | Gated SD | `GatedSnare` | **2** | an acoustic snare behind a GATE: the room tail holds, then stops dead at 0.30 s; its level now against the snare as GeneralUser's |
-| 41 | Elec Low Tom 2 | `ElectronicTom` | **3** | fitted to GeneralUser GS: GM 118's synth tom as its own class (ElectronicTom), an octave-and-more log sweep to GeneralUser's pitch, the pad's noisy top (-20 to -30 dB, 0.5-4 kHz), and its amplifier CLOSING -- a gate per tom (KIT_GATE), 0.68 s here to 0.33 s on 50, as GeneralUser's stop dead at ~-32 dB. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py) |
-| 43 | Elec Low Tom 1 | `ElectronicTom` | **3** | as 41 |
-| 45 | Elec Mid Tom 2 | `ElectronicTom` | **3** | as 41 |
-| 47 | Elec Mid Tom 1 | `ElectronicTom` | **3** | as 41 |
-| 48 | Elec Hi Tom 2 | `ElectronicTom` | **3** | as 41 |
-| 50 | Elec Hi Tom 1 | `ElectronicTom` | **3** | as 41 |
+| 36 | Elec BD | `ElectronicKick` | **4** | THE SIMMONS SDS-V, AS AN ENGINE (simmons.py: the circuit as partials, every drum a patch of knobs, as the synths are Messenger patches): its bass drum module FITTED BY TWO LEVELS -- GeneralUser GS's Elec BD picks the closest of tarane468's real Simmons hits (Freesound, CC0; hit 30), and the patch is fitted to that hit at its pitch, 28 Hz (examples/elkit_fit.py --select, --fit=skick --real). The bend falls evenly in pitch (the kernel's log sweep). Ben: sounds great -- the vintage sound is the point |
+| 38 | Elec SD | `SimmonsSnare` | **4** | the SDS-V's snare module on the same engine: one oscillator near 450 Hz under its noise, fitted to the real Simmons snare GeneralUser's is closest to (hit 36), score 7.6 -- its decay within a few ms of the hit's. The two-tone snare fitted to GeneralUser itself stays in the code (ElectronicSnareProperties) |
+| 40 | Gated SD | `GatedSnare` | **4** | an acoustic snare behind a GATE, fitted to GeneralUser GS (examples/elkit_fit.py --fit=gated, and its envelope to the gate within 3.8 dB rms): a loud room falling into a 0.40 s gate, tuned to 290 Hz. Ben: good |
+| 41 | Elec Low Tom 2 | `ElectronicTom41` | **4** | the SDS-V's tom modules: one patch, each tom its own TONE and DECAY, the bend following the strike and the noise filter darkening with it; fitted to the real Simmons's NOISY toms GeneralUser's are closest to (hits 31, 35), each tom at GeneralUser's tuning, ringing out ungated as a Simmons does. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py). Ben: sounds great |
+| 43 | Elec Low Tom 1 | `ElectronicTom43` | **4** | as 41 |
+| 45 | Elec Mid Tom 2 | `ElectronicTom45` | **4** | as 41 |
+| 47 | Elec Mid Tom 1 | `ElectronicTom47` | **4** | as 41 |
+| 48 | Elec Hi Tom 2 | `ElectronicTom48` | **4** | as 41 |
+| 50 | Elec Hi Tom 1 | `ElectronicTom50` | **4** | as 41 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off |
 
 ### 40 Brush
@@ -470,7 +470,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-288 classes.
+294 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -574,9 +574,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4)
         - `SynthDrum`
-          - `ElectronicKick` -- set 24 36 Elec BD (3)
-          - `ElectronicTom` -- set 24 41 Elec Low Tom 2 (3), set 24 43 Elec Low Tom 1 (3), set 24 45 Elec Mid Tom 2 (3), set 24 47 Elec Mid Tom 1 (3), set 24 48 Elec Hi Tom 2 (3), set 24 50 Elec Hi Tom 1 (3)
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
+          - `Simmons` [ModeDecays]
+            - `ElectronicKick` -- set 24 36 Elec BD (4)
+            - `ElectronicTom`
+              - `ElectronicTom41` -- set 24 41 Elec Low Tom 2 (4)
+              - `ElectronicTom43` -- set 24 43 Elec Low Tom 1 (4)
+              - `ElectronicTom45` -- set 24 45 Elec Mid Tom 2 (4)
+              - `ElectronicTom47` -- set 24 47 Elec Mid Tom 1 (4)
+              - `ElectronicTom48` -- set 24 48 Elec Hi Tom 2 (4)
+              - `ElectronicTom50` -- set 24 50 Elec Hi Tom 1 (4)
+            - `SimmonsSnare` -- set 24 38 Elec SD (4)
         - `Timpani` -- GM 47 Timpani (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
@@ -595,9 +603,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `BrushSwirl` -- set 40 40 Brush Swirl (3)
         - `BrushTap` -- set 40 38 Brush Tap (3)
           - `BrushSlap` -- set 40 39 Brush Slap (3)
-        - `ElectricSnare`
-          - `ElectronicSnare` -- set 24 38 Elec SD (3)
-        - `GatedSnare` -- set 24 40 Gated SD (2)
+        - `GatedSnare` -- set 24 40 Gated SD (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4)
         - `Claves` -- 75 Claves (4)

@@ -16952,71 +16952,96 @@ class MoogSynthDrum(SynthDrumProperties):
     )
 
 
-class ElectronicKickProperties(SynthDrumProperties):
-    """Note 36 of the Electronic set (SC-55 p.70, "Elec BD"). A drum
-    machine's kick: one sine falling an octave and more as it rings out (see
-    the fit below), on every velocity alike.
+class SimmonsProperties(ModeDecays, SynthDrumProperties):
+    """A SIMMONS SDS-V VOICE (simmons.py): a patch -- `simmons`, the panel's
+    knobs in physical units -- on the one engine, as a Messenger patch is on
+    moog.py. The circuit becomes partials there; this class only carries what
+    it hands the kernel, set when a subclass is defined. A subclass's own
+    `simmons` is laid over its parent's, so a kit's toms share a patch and
+    each changes only what its module's knobs did (simmons_voice)."""
+    one_shot = True
+    simmons = {}
 
-    NOT register-scaled: tension_bend_slope is 0, so the drop is what is
-    written here at any tuning, the argument GuitarFretNoiseProperties makes.
-    """
-    tension_bend_slope = 0.0
-    tension_settle_cutoff = 0.35
-    # FITTED (examples/elkit_fit.py --fit=kick --target=GeneralUser) to
-    # GeneralUser GS: the sweep 132 -> 55 Hz with a 50 ms half-time, as its
-    # 129 -> 51, -10/-20/-40 dB at 81/141/280 ms (its 46/149/290), and no
-    # click -- the fit took the strike out, GeneralUser's kick has nothing
-    # above it. Score 51 -> 22 (from the two-mode drum at 47). The search's
-    # own pick scored 17 with a slower sweep that lingered high, its body an
-    # octave up (the 125 Hz octave over the 63) -- this is a scan's.
-    tension_log = True          # a drum machine's sweep, linear in pitch
-    tension_bend = 4.0
-    tension_bend_max = 4.0
-    tension_settle_time = 0.08
-    # A BOX HIT, NOT A DRUM (Ben: "It sounds like maybe just a sine wave, for
-    # bandpass box hits"): a drum machine's kick is a resonant filter or a
-    # bridged-T pinged by a pulse -- ONE sine, its pitch falling as the ping
-    # dies. GeneralUser GS's has nothing above it (-33 dB at 250 Hz, -44
-    # at 500). So one partial, and the sweep the SAME at every
-    # velocity: a drum machine's pitch envelope is a circuit's, not a blow's
-    # (tension_bend_power 0: tension_stroke is 1).
-    mode_ratios = (1.0,)
-    mode_gains = (1.0,)
-    max_harmonic = 1
-    tension_bend_power = 0.0
-    decay_db = 7.0
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        import simmons as _SM
+        patch = {}
+        for k in reversed(cls.__mro__):
+            patch.update(vars(k).get("simmons", {}) or {})
+        cls.simmons_patch = _SM.panel_of(patch)
+        for name, value in _SM.voice_attrs(patch).items():
+            setattr(cls, name, value)
 
 
-class ElectronicTomProperties(SynthDrumProperties):
-    """Notes 41-50 of the Electronic set (SC-55 p.70, "Elec Tom"). The Simmons
-    tom: GM 118's synth tom at the Standard toms' pitches, with the pad's own
-    ring (percussion_map.KIT_RING) -- and fitted to what the GM sets play
-    (examples/elkit_fit.py --fit=toms --target=GeneralUser): GeneralUser GS,
-    the GS-modelled set, at Ben's choice over the median of the three (which
-    disagree: TimGM6mb's toms do not sweep at all).
-
-    THE SWEEP IS THE SOUND: an octave and more, falling evenly in pitch as a
-    drum machine's does (tension_log), each tom tuned to where GeneralUser's
-    lands (percussion_map; GeneralUser 2.1-2.4x, half-time 90-150 ms). THE
-    PAD'S TOP: -20 to -30 dB in every octave from 500 Hz to 4 kHz, where GM
-    118's three modes had nothing above 500 Hz (-65 to -107) -- a strike,
-    -35.9 dB at 1 kHz falling 5.4 an octave and 29 dB/s. Score 45 -> 14."""
-    tension_log = True          # a drum machine's sweep, linear in pitch
-    tension_bend = 3.448
-    tension_bend_max = 3.448
-    tension_settle_time = 0.1859
-    strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
-                             round(-35.9 - 5.4 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
-                            for k in range(15))
-    strike_noise_dbs = 29.0
-    # THE PAD'S AMPLIFIER CLOSING (percussion_map.KIT_GATE, a note's own gate
-    # time): GeneralUser's toms fall 30 dB in under 50 ms from about -32
-    release_valve_time = 0.020
-    strike_noise_len_s = 1.0
-    strike_noise_fade_s = 0.001
+def simmons_refresh(cls):
+    """Derive a Simmons class's attributes again, and its subclasses' (a kit's
+    per-note voices), after its `simmons` knobs have been turned in place --
+    examples/elkit_fit.py fitting a patch."""
+    import simmons as _SM
+    patch = {}
+    for k in reversed(cls.__mro__):
+        patch.update(vars(k).get("simmons", {}) or {})
+    cls.simmons_patch = _SM.panel_of(patch)
+    for name, value in _SM.voice_attrs(patch).items():
+        setattr(cls, name, value)
+    for sub in cls.__subclasses__():
+        simmons_refresh(sub)
 
 
-class ElectronicSnareProperties(ElectricSnareProperties):
+_SIMMONS_VOICES = {}
+
+
+def simmons_voice(base, name, **knobs):
+    """A subclass of a Simmons patch with some knobs turned: one module of a
+    kit (a tom's TONE and DECAY), cached by its name."""
+    if name not in _SIMMONS_VOICES:
+        _SIMMONS_VOICES[name] = type(name, (base,), {"simmons": dict(knobs)})
+    return _SIMMONS_VOICES[name]
+
+
+class ElectronicKickProperties(SimmonsProperties):
+    """Note 36 of the Electronic set (SC-55 p.70, "Elec BD"): the SDS-V's bass
+    drum module -- a filtered triangle bent down from BEND octaves up. FITTED
+    BY TWO LEVELS (examples/elkit_fit.py --select, then --fit=skick --real):
+    of tarane468's real Simmons hits (Freesound, CC0) GeneralUser's Elec BD is
+    closest to hit 30, a bass drum, and the patch is fitted to THAT, at its
+    pitch -- 28 Hz, where GeneralUser's kick sits at 51. Score 26 -> 18. Its
+    loud click the fit found in the bend's start, not in the click (-93 dB)."""
+    simmons = {"tone_hz": 28.26, "tone_lp_hz": 55.5, "bend_oct": 2.471, "bend_ratio": 1.537,
+               "decay_s": 0.363, "noise_hz": 992.0, "noise_bend_oct": 1.317,
+               "noise_db": -95.3, "click_db": -93.1, "click_dbs": 341.0}
+
+
+class ElectronicTomProperties(SimmonsProperties):
+    """Notes 41-50 of the Electronic set ("Elec Tom"): the SDS-V's tom modules,
+    one patch, each tom its own TONE and DECAY (percussion_map: simmons_voice).
+    The bend follows the strike (the second envelope output), and the noise
+    filter darkens with it. FITTED BY TWO LEVELS: GeneralUser's toms are
+    closest to tarane468's NOISY toms (hits 31, 35; the pure 18 won the two
+    lowest, but one module is one setting), and the patch is fitted to those,
+    each at its hit's pitch -- score 23 -> 12. In the kit each tom keeps
+    GeneralUser's tuning, and rings out ungated as a Simmons does."""
+    simmons = {"tone_hz": 64.6, "tone_lp_hz": 249.4, "bend_oct": 2.535, "bend_ratio": 1.561,
+               "bend_velocity": True, "decay_s": 0.75, "noise_hz": 2433.0,
+               "noise_bend_oct": 0.923, "noise_db": -26.9, "click_db": -27.5, "click_dbs": 75.8}
+
+
+class SimmonsSnareProperties(SimmonsProperties):
+    """The SDS-V's snare module: one oscillator under its noise, the noise
+    filter left out of the bend's reach (VSDSX: the snare's noise VCF is not
+    on the envelope). FITTED to a real Simmons snare (examples/elkit_fit.py
+    --fit=ssnare: hit 36 of tarane468's Freesound pack, chosen as the one
+    GeneralUser's Elec SD is closest to). The kit's snare; the two-tone
+    ElectronicSnareProperties, fitted to GeneralUser itself, stays for an A/B."""
+    # Score 42 -> 7.6, the closest fit in the kit: -10/-20/-40 dB at
+    # 41/134/305 ms against the hit's 41/122/303. The fit gave its noise filter
+    # half an octave of bend, which the circuit is said not to have.
+    simmons = {"tone_hz": 453.5, "tone_lp_hz": 601.0, "bend_oct": 0.460, "bend_ratio": 0.366,
+               "decay_s": 0.498, "noise_hz": 5833.0, "noise_bend_oct": 0.566,
+               "noise_db": -18.9, "click_db": -17.0, "click_dbs": 164.0}
+
+
+class ElectronicSnareProperties(ModeDecays, ElectricSnareProperties):
     """Note 38 of the Electronic set ("Elec SD"). The Simmons snare, which is
     the drum machine's snare with its body let loose: where note 40 of the
     Standard kit is an 808 -- a crack, a body that barely drops -- a Simmons
@@ -17029,16 +17054,37 @@ class ElectronicSnareProperties(ElectricSnareProperties):
     # FITTED (examples/elkit_fit.py --fit=snare --target=GeneralUser) to
     # GeneralUser GS, tuned to its 168 Hz (percussion_map), where 220 had left
     # the body an octave up (-37 dB in the 125 Hz octave; GeneralUser -5). All
-    # but no sweep, and the wires' noise from the strike, -31.8 dB at 1 kHz
-    # RISING 6.2 an octave -- GeneralUser's snare is brightest at 4-8 kHz --
-    # falling 51 dB/s. Score 27 -> 20.
-    tension_bend = 0.038
-    tension_settle_time = 0.1375
-    decay_db = 43.17
+    # but no sweep, and the wires' noise from the strike, -28.9 dB at 1 kHz
+    # RISING 4.5 an octave -- GeneralUser's snare is brightest at 4-8 kHz --
+    # falling with the drum (below: -25 dB, 105 dB/s, set by its track); and its GATE
+    # (percussion_map.KIT_GATE): GeneralUser's
+    # stops dead at 0.31 s, -32 dB, where ours rang on. Score 25 -> 17.
+    # TWO TONES, NOT A HEAD (Ben: "need more drum sound"): GeneralUser's
+    # Electronic snare is a two-oscillator voice -- 167 Hz and 234 Hz, 1.40 --
+    # the low one gone in ~100 ms (~190 dB/s), the upper one starting 15 dB
+    # under it and decaying half as fast (~100), so after 100 ms it carries
+    # the drum to the gate. Ours had the acoustic head's modes (1.59, 2.14 ...)
+    # all falling together. mode_decays are tonelib D (the amplitude falls
+    # twice that in dB/s).
+    mode_ratios = (1.0, 1.40)
+    mode_gains = (1.0, 0.126)
+    max_harmonic = 2
+    mode_decays = (110.0, 50.0)
+    tension_bend = 0.052
+    tension_settle_time = 0.058
+    decay_db = 46.82
     strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
-                             round(-31.8 + 6.2 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
+                             round(-25.0 + 4.5 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
                             for k in range(15))
-    strike_noise_dbs = 51.0
+    strike_noise_dbs = 105.0
+    # ONE NOISE, WITH THE DRUM (Ben: "The noise stays weirdly constant over
+    # the snare's drum. They don't go together."): the acoustic snare's wire
+    # chiff, inherited, was a second noise -- a burst, then the strike's
+    # 45 dB/s left hanging under tones falling 100-190. A drum machine's noise
+    # goes through the tones' amplifier: GeneralUser's holds ~60 ms and falls
+    # ~70-80 dB/s with them.
+    chiff_volume = 0.0
+    release_valve_time = 0.020      # its gate's close (percussion_map.KIT_GATE)
     strike_noise_len_s = 1.0
     strike_noise_fade_s = 0.001
 
@@ -17053,10 +17099,28 @@ class GatedSnareProperties(SnareDrumProperties):
     other struck voice is allowed to ring, and release_valve_time is the
     gate's own close -- fast, but not a step, because a step is a click.
     """
-    decay_db = 14.0
     harmonic_decay_db = 10.0
-    gate_time = 0.30
     release_valve_time = 0.015
+    # FITTED to GeneralUser GS (examples/elkit_fit.py --fit=gated --target=
+    # GeneralUser, then scans): THE ROOM IS THE NOISE, loud -- -12 dB at 1 kHz,
+    # flat, falling 60 dB/s into the gate -- so the top is up (ours had been
+    # -20 dB from 1 to 4 kHz) and the level falls as GeneralUser's does to the
+    # gate, within 3.8 dB rms every 50 ms (0 -7 -11 -15 -17 -20 -24 -26 dB
+    # against 0 -3 -7 -8 -14 -17 -24 -30). The search's three decay points
+    # preferred a 5 dB/s room that held flat at -10 dB to the gate. Tuned to
+    # 290 Hz (percussion_map), which keeps its body in the 250 Hz octave as
+    # GeneralUser's has: its tracker's 390 Hz is an overtone. The gate at
+    # 0.40 s, where GeneralUser's falls 35 dB.
+    decay_db = 23.33
+    gate_time = 0.40
+    tension_bend = 0.028
+    tension_settle_time = 0.1543
+    strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
+                             round(-12.0 + 0.3 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
+                            for k in range(15))
+    strike_noise_dbs = 60.0
+    strike_noise_len_s = 1.0
+    strike_noise_fade_s = 0.001
 
 
 # ---- the Brush set (SC-55 p.70, program 40): three notes, all on the snare ---

@@ -3,6 +3,8 @@
 sets play.
 
     python3 -I examples/elkit_fit.py            measure: each set's kit, then ours
+    python3 -I examples/elkit_fit.py --fit=skick|stoms --target=GeneralUser
+                                                fit a Simmons patch's KNOBS (simmons.py)
     python3 -I examples/elkit_fit.py --fit=toms|kick|snare [--target=GeneralUser]
                                                 fit ours to the sets' median, or
                                                 to one set (tuned to its pitches)
@@ -143,6 +145,7 @@ GROUPS = {
     "toms":  ("ElectronicTomProperties", (41, 45, 50)),
     "kick":  ("ElectronicKickProperties", (36,)),
     "snare": ("ElectronicSnareProperties", (38,)),
+    "gated": ("GatedSnareProperties", (40,)),
 }
 # the kit's tuning of these notes, x: the sets' median pitch over ours. The
 # kick ends at 94, 51 and 47 Hz (ours 55); the snare starts at 133, 168 and
@@ -273,6 +276,146 @@ def fit(group, sets, d, own=False):
     return r.x
 
 
+# ---- the Simmons patches (simmons.py): fit the KNOBS ------------------------
+# A drum on the SDS-V engine is fitted as its panel, not as tonelib numbers:
+# the knobs are the parameters, so what is fitted is what the patch says.
+SIMMONS = {
+    "skick": ("ElectronicKickProperties", (36,)),
+    "stoms": ("ElectronicTomProperties", (41, 45, 50)),
+    "ssnare": ("SimmonsSnareProperties", (38,)),
+}
+# LEVEL TWO's notes and hits: each note rendered at its hit's pitch, the hit
+# measured as the target. The toms are one module, so the shared patch is fitted
+# to the NOISY toms the selection picked (31 for 45-48, 35 for 50; 35 for 41,
+# where the pure 18 won -- one module is one setting).
+REAL = {"skick": {36: 30}, "ssnare": {38: 36}, "stoms": {45: 31, 50: 35, 41: 35}}
+# (knob, log-scaled?, step) -- a log knob is fitted as its logarithm
+S_KNOBS = (("bend_oct", False, 0.4), ("bend_ratio", True, 0.4), ("decay_s", True, 0.3),
+           ("tone_lp_hz", True, 0.5), ("noise_hz", True, 0.5), ("noise_bend_oct", False, 0.5),
+           ("noise_db", False, 6.0), ("click_db", False, 6.0), ("click_dbs", True, 0.5))
+
+
+def s_apply(cls, notes, x, base_decays):
+    """x over the knobs; on a kit whose notes are their own voices (the toms),
+    decay_s is a SCALE over each one's own DECAY."""
+    import tonelib as T
+    import percussion_map as P
+    knobs = {}
+    for (k, lg, _), v in zip(S_KNOBS, x):
+        knobs[k] = float(np.exp(v)) if lg else float(v)
+    scale = knobs.pop("decay_s") if base_decays else None
+    if scale is None:
+        cls.simmons = dict(cls.simmons, decay_s=knobs.pop("decay_s") if "decay_s" in knobs else cls.simmons["decay_s"], **knobs)
+    else:
+        cls.simmons = dict(cls.simmons, **knobs)
+        for sub, d0 in base_decays.items():
+            sub.simmons = dict(sub.simmons, decay_s=d0 * scale)
+    T.simmons_refresh(cls)
+    P._RING_CLASSES.clear()
+
+
+def s_fit(group, sets, d, real=False):
+    """real: level two -- the targets are tarane468's hits (REAL), each note
+    tuned to its hit."""
+    from scipy.optimize import minimize
+    import tonelib as T
+    import percussion_map as P
+    cls_name, notes = SIMMONS[group]
+    cls = getattr(T, cls_name)
+    if real:
+        hits = REAL[group]
+        notes = tuple(sorted(hits))
+        tg = {n: target_of(measure(*pack_hit(hits[n]))) for n in notes}
+        for n in notes:                       # play each note at its hit's pitch
+            nm, cl, _fq = P.KITS[KIT][n]
+            if cl.__name__.startswith("ElectronicTom") and cl is not cls:
+                cl.simmons = dict(cl.simmons, tone_hz=tg[n]["low"])
+            else:
+                cl = cls
+                cls.simmons = dict(cls.simmons, tone_hz=tg[n]["low"])
+            P.KITS[KIT][n] = (nm, cl, tg[n]["low"])
+        # ...and UNGATED: the gates are GeneralUser's (KIT_GATE); a Simmons
+        # module's body simply decays
+        for n in notes:
+            P.KIT_GATE.get(KIT, {}).pop(n, None)
+        T.simmons_refresh(cls)
+        P._RING_CLASSES.clear()
+        print("   real targets: %s" % ", ".join("%d <- hit %d (%.1f Hz)" % (n, hits[n], tg[n]["low"]) for n in notes))
+    else:
+        tg = targets(sets, notes, d)
+    # the toms: each note its own voice under the patch, its own DECAY
+    subs = {P.KITS[KIT][n][1]: P.KITS[KIT][n][1].simmons.get("decay_s") for n in notes} \
+        if P.KITS[KIT][notes[0]][1] is not cls else {}
+    pan = cls.simmons_patch
+    x0 = np.array([np.log(pan[k]) if lg else pan[k] for k, lg, _ in S_KNOBS])
+    if subs:
+        x0[2] = 0.0                                   # decay: a scale, from 1
+    step = np.array([s for _, _, s in S_KNOBS])
+
+    def f(x):
+        s_apply(cls, notes, x, subs)
+        tot = sum(score(measure(*ours(n, d)), tg[n]) for n in notes) / len(notes)
+        print("   %.2f  %s" % (tot, " ".join("%.3f" % v for v in x)), flush=True)
+        return tot
+    r = minimize(f, x0, method="Nelder-Mead",
+                 options=dict(initial_simplex=np.vstack([x0] + [x0 + np.eye(len(x0))[i] * step[i]
+                                                                 for i in range(len(x0))]),
+                              maxfev=260, xatol=0.01, fatol=0.05))
+    s_apply(cls, notes, r.x, subs)
+    print("FITTED %s  score %.2f" % (group, r.fun))
+    print("   patch: %s" % {k: round(v, 4) if isinstance(v, float) else v for k, v in cls.simmons.items()})
+    for sub in subs:
+        print("   %s decay_s %.3f" % (sub.__name__, sub.simmons["decay_s"]))
+    for n in notes:
+        print("== %d %s   (target: ratio %.2f, half %.0f ms, -10/-20/-40 %s ms, noise %+.0f)"
+              % (n, NOTES[n], tg[n]["ratio"], 1000 * tg[n]["half"],
+                 "/".join("%.0f" % (1000 * v) for v in tg[n]["times"]), tg[n]["noise"]))
+        print("   %-22s octaves 31-8k: %s" % ("target", " ".join("%+4.0f" % v for v in tg[n]["octs"])))
+        show("ours, fitted", measure(*ours(n, d)))
+    return r.x
+
+
+# ---- a TWO-LEVEL fit: a real Simmons, chosen by GeneralUser ----------------
+# GeneralUser GS is someone's samples of an idea of the set; tarane468's
+# Freesound pack (CC0, ~/Documents/refs/freesound_simmons_tarane468) is a real
+# Simmons. Level one picks, for each Electronic note, the pack's hit that
+# GeneralUser's note is closest to (the same score); level two fits the
+# Simmons patch to the picked hits -- their pitch included.
+PACK = os.path.expanduser("~/Documents/refs/freesound_simmons_tarane468/pack")
+# Ben, by ear: 18-25 pure toms (a low bass at 18-19), 30 a bass drum, 31-35
+# and 37 noisy toms, 36 and 38 snares, 2 and 26 claps
+CANDIDATES = {36: (30, 18, 19, 35, 37), 38: (36, 38),
+              41: (18, 19, 20, 21, 22, 23, 24, 25, 31, 32, 33, 34, 35, 37)}
+CANDIDATES.update({n: CANDIDATES[41] for n in (43, 45, 47, 48, 50)})
+
+
+def pack_hit(n):
+    import glob
+    return read(glob.glob(os.path.join(PACK, "*-%d.wav" % n))[0])
+
+
+def target_of(m):
+    """One measured hit as a fit target (targets()' form)."""
+    return dict(ratio=(m["f0"] / m["f1"]) if np.isfinite(m["f0"]) and m["f1"] > 0 else 1.0,
+                half=m["half"], times=np.asarray(m["times"]), octs=np.asarray(m["octs"]),
+                noise=m["noise"], low=float(min(m["f0"], m["f1"])))
+
+
+def select(sets, d, notes=None):
+    """Level one: each note's closest pack hit to GeneralUser's."""
+    gu = [(n, p) for n, p in sets if n.startswith("GeneralUser")]
+    notes = notes or sorted(CANDIDATES)
+    tg = targets(gu, notes, d)
+    hits = {h: measure(*pack_hit(h)) for h in sorted({h for n in notes for h in CANDIDATES[n]})}
+    pick = {}
+    for n in notes:
+        ranked = sorted((score(hits[h], tg[n]), h) for h in CANDIDATES[n])
+        pick[n] = ranked[0][1]
+        print("  %d %-16s -> hit %2d  (score %.1f; then %s)" % (
+            n, NOTES[n], ranked[0][1], ranked[0][0], ", ".join("%d %.1f" % (h, sc) for sc, h in ranked[1:4])))
+    return pick, hits
+
+
 def main(argv):
     from gm_release import SETS
     sets = [(n, p) for n, p in SETS if p and os.path.exists(p) and not n.startswith("MuseScore")]
@@ -283,6 +426,12 @@ def main(argv):
     if tgt:
         sets = [(n, p) for n, p in sets if n.lower().startswith(tgt.lower())]
     with tempfile.TemporaryDirectory() as d:
+        if "--select" in argv:
+            select(sets, d)
+            return 0
+        if grp in SIMMONS:
+            s_fit(grp, sets, d, real="--real" in argv)
+            return 0
         if grp:
             fit(grp, sets, d, own=bool(tgt))
             return 0

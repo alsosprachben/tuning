@@ -12,6 +12,7 @@ base_frequency, pan) or None if the note is unmapped (silent). `kit` is the
 drum set, chosen by program change on the drum channel: see KITS.
 """
 
+import tonelib as _T
 from tonelib import (
     MembraneDrumProperties,
     BongoProperties,
@@ -73,6 +74,7 @@ from tonelib import (
     GuiroProperties,
     SynthDrumProperties,
     ElectronicTomProperties,
+    SimmonsSnareProperties,
     ReverseCymbalProperties,
     ElectronicKickProperties,
     ElectronicSnareProperties,
@@ -301,15 +303,21 @@ DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
 # pitches, so a fill written for one kit lands in the same places on the other.
 KITS = {
     24: {
-        36: ("Elec BD",          ElectronicKickProperties, 47.4),    # GeneralUser GS's (elkit_fit.py)
-        38: ("Elec SD",          ElectronicSnareProperties, 168.2),    # GeneralUser GS's (elkit_fit.py)
-        40: ("Gated SD",         GatedSnareProperties, 260.0),
-        41: ("Elec Low Tom 2",   ElectronicTomProperties, 49.0),
-        43: ("Elec Low Tom 1",   ElectronicTomProperties, 51.5),
-        45: ("Elec Mid Tom 2",   ElectronicTomProperties, 57.5),
-        47: ("Elec Mid Tom 1",   ElectronicTomProperties, 70.3),
-        48: ("Elec Hi Tom 2",    ElectronicTomProperties, 74.8),
-        50: ("Elec Hi Tom 1",    ElectronicTomProperties, 80.4),
+        36: ("Elec BD",          ElectronicKickProperties, 28.3),    # a real Simmons's (elkit_fit.py)
+        38: ("Elec SD",          SimmonsSnareProperties, 453.5),    # a real Simmons's (elkit_fit.py)
+        40: ("Gated SD",         GatedSnareProperties, 290.0),    # its body as GeneralUser GS's (elkit_fit.py)
+        41: ("Elec Low Tom 2", _T.simmons_voice(ElectronicTomProperties, "ElectronicTom41",
+                                    tone_hz=42.8, decay_s=1.005), 42.8),
+        43: ("Elec Low Tom 1", _T.simmons_voice(ElectronicTomProperties, "ElectronicTom43",
+                                    tone_hz=45.8, decay_s=0.925), 45.8),
+        45: ("Elec Mid Tom 2", _T.simmons_voice(ElectronicTomProperties, "ElectronicTom45",
+                                    tone_hz=53.4, decay_s=0.864), 53.4),
+        47: ("Elec Mid Tom 1", _T.simmons_voice(ElectronicTomProperties, "ElectronicTom47",
+                                    tone_hz=65.4, decay_s=0.784), 65.4),
+        48: ("Elec Hi Tom 2", _T.simmons_voice(ElectronicTomProperties, "ElectronicTom48",
+                                    tone_hz=69.9, decay_s=0.703), 69.9),
+        50: ("Elec Hi Tom 1", _T.simmons_voice(ElectronicTomProperties, "ElectronicTom50",
+                                    tone_hz=75.4, decay_s=0.623), 75.4),
         52: ("Reverse Cymbal",   ReverseCymbalProperties, 181.9),
     },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
@@ -333,14 +341,15 @@ KITS = {
 # kit; each tuned so the pitch a render reads where it fades (the sweep
 # still settling there) is where GeneralUser's reads: ~0.9x its end -- (48 between its neighbours:
 # GeneralUser's 47 and 48 both end at 79 Hz).
-KIT_RING = {24: {36: 0.488, 41: 1.404, 43: 1.262, 45: 1.121, 47: 0.979, 48: 0.837, 50: 0.696}}
+KIT_RING = {24: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
 # ...AND THEIR GATES: the Electronic toms stop dead where the pad's amplifier
 # closes. GeneralUser GS's decay as ours do and then fall 30 dB in under 50 ms
 # from about -32 dB -- at 0.70, 0.55 and 0.35 s on 41, 45 and 50 (the rest
 # between) -- where ours rang on to -40 at 0.77, 0.64 and 0.46 s and past
 # (examples/elkit_fit.py). The note's length, as GatedSnareProperties.gate_time
 # is, closing over the class's release_valve_time.
-KIT_GATE = {24: {41: 0.68, 43: 0.62, 45: 0.53, 47: 0.45, 48: 0.39, 50: 0.33}}
+# The Electronic snare too: GeneralUser's stops at 0.31 s, -32 dB.
+KIT_GATE = {24: {}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead, which lands on Standard's snare
 # unaided: a slap does not replace a hand clap nor a swirl an electric snare,
 # whatever key they share. The slap sits ~3 dB over the tap and the swirl
@@ -357,7 +366,7 @@ KIT_GATE = {24: {41: 0.68, 43: 0.62, 45: 0.53, 47: 0.45, 48: 0.39, 50: 0.33}}
 # (examples/elkit_balance.py). Each note on its own key's Standard note had
 # left the kick 1.2 dB and the toms 4-12 dB under (Ben: "Our kick seems
 # quieter").
-KIT_LEVEL = {24: {36: 2.372, 38: 2.214, 40: 1.454, 41: 1.642, 43: 1.715, 45: 1.747, 47: 1.755, 48: 1.765, 50: 1.778},
+KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
              40: {39: 1.148, 40: 0.135}}
 
 
