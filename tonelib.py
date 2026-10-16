@@ -888,6 +888,16 @@ def _strike_bit(frequency, harmonic):
 FIXED_TOUCH = False
 
 
+def _np_interp(x, xs, ys):
+    """Linear interpolation, held flat past the ends (xs ascending)."""
+    if x <= xs[0]:
+        return ys[0]
+    for (x0, y0), (x1, y1) in zip(zip(xs, ys), zip(xs[1:], ys[1:])):
+        if x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    return ys[-1]
+
+
 class SynthProperties:
     # dB of attenuation for EVEN harmonics, or None to use odd_only absolutely.
     # See series_volume(): a real stopped pipe suppresses its even harmonics,
@@ -1352,6 +1362,16 @@ class SynthProperties:
     # chiff_volume scales as attack_volume ** strike_noise_slope. 0 (the default)
     # is the old behaviour exactly, so only the voices that set it are affected.
     strike_noise_slope = 0.0
+    # ...BUT STRIKE FORCE IS EFFORT AND VOLUME BOTH. Where the noise is most of
+    # the voice, the effort was setting the volume too, far more steeply than
+    # the square law every voice's volume follows (Ben: "our drums use velocity
+    # for effort, but we probably need a volume aspect, too").
+    # strike_volume_trim_db, ((velocity, dB), ...), MEASURED for a voice by
+    # examples/drum_volume.py, puts its volume back on the square law at every
+    # velocity while the effort keeps its timbre -- the noise's share rising
+    # with the stroke as measured. () = untouched. A fixed exponent cannot do
+    # it: one large enough for the middle let the tone rise at soft strokes.
+    strike_volume_trim_db = ()
 
     # THE WOBBLE. Ben, on why a hard crash reads as a hit and not a strike: "the
     # cymbal is literally wobbling around from the drum stick pushing through it
@@ -2597,6 +2617,12 @@ class SynthProperties:
         self.gain = (self.initial_gain * db_amplitude(self.octave_gain * self.octave_position)
                      * db_amplitude(self.register_effort() + self.projection_db)
                      * _touch * self.channel_volume)
+        if self.strike_volume_trim_db:
+            # the volume back on the square law (see strike_volume_trim_db),
+            # read at the velocity the square-law attack_volume came from
+            _v = 127.0 * max(float(attack_volume), 0.0) ** 0.5
+            _vs, _ds = zip(*sorted(self.strike_volume_trim_db))
+            self.gain *= 10.0 ** (float(_np_interp(_v, _vs, _ds)) / 20.0)
 
         self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4  # meters
         self.position_y = 0.2  # meters
@@ -12685,6 +12711,9 @@ class CongaLowProperties(MeasuredStrokeProperties):
     initial_gain = 0.001904      # held at the old voice's level, -36.0 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
     attack_time = 0.00154922
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -1.7), (100, 0.0), (85, 1.1), (70, 2.3), (60, 3.1), (45, 4.5), (30, 5.8), (15, 6.9))
+
 
 
 class BongoHighProperties(MeasuredStrokeProperties):
@@ -12738,6 +12767,9 @@ class BongoLowProperties(MeasuredStrokeProperties):
     initial_gain = 0.009096      # held at the old voice's level, -39.1 dB (velocity 100, its loudest 150 ms, the mean of 12 strokes)
     click_per_band = 24        # the slap dense, as the snare's wires: its ring is noise
     attack_time = 0.00233535
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -2.2), (100, 0.0), (85, 1.4), (70, 2.8), (60, 3.8), (45, 5.1), (30, 6.0), (15, 6.3))
+
 
 
 class TimbaleHighProperties(MeasuredStrokeProperties):
@@ -16020,6 +16052,11 @@ class HiHatProperties(CymbalProperties):
     # driven into that nonlinearity is exactly what the three gestures differ in.
     strike_phase_spread = 1.0
     strike_noise_slope = 0.6
+    # THE WASH IS MOST OF A HAT: at 0.6 a hat at velocity 60 sat 28.5 dB under
+    # its 127, where the kick and snare sit 13 (and GeneralUser GS's hat 12) --
+    # a groove's offbeats all but vanished (Ben: "why can't we hear the hi-hat
+    # very well in ours?"). Each hat's strike_volume_trim_db below puts its
+    # volume back on the kit's law (examples/drum_volume.py).
 
 
 class ClosedHiHatProperties(HiHatProperties):
@@ -16085,6 +16122,10 @@ class ClosedHiHatProperties(HiHatProperties):
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
     initial_gain = (0.014036) * 1.2735   # +2.1 dB: K-weighted to the string reference
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -5.0), (100, 0.0), (85, 3.4), (70, 7.4), (60, 10.5), (45, 15.8), (30, 20.5), (15, 21.9))
+
+
 
 class PedalHiHatProperties(HiHatProperties):
     """GM 44. The foot closing the hats: two plates clapping together.
@@ -16138,6 +16179,10 @@ class PedalHiHatProperties(HiHatProperties):
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
     initial_gain = (0.098139) * 1.3964   # +2.9 dB: K-weighted to the string reference
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -4.8), (100, 0.0), (85, 3.0), (70, 6.1), (60, 7.8), (45, 9.5), (30, 9.9), (15, 9.9))
+
+
 
 class OpenHiHatProperties(HiHatProperties):
     """GM 46. Hats apart and ringing: the plate speaks.
@@ -16198,6 +16243,10 @@ class OpenHiHatProperties(HiHatProperties):
     # exactly where it was, so this commit changes the timbre and the decay
     # and nothing about the mix.
     initial_gain = (0.029231) * 1.2589   # +2.0 dB: K-weighted to the string reference
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -4.9), (100, 0.0), (85, 3.3), (70, 7.1), (60, 9.9), (45, 14.0), (30, 16.7), (15, 17.4))
+
+
 
 class CrashCymbal1Properties(CymbalProperties):
     """GM 49, Crash Cymbal 1. MEASURED: Iowa 17" suspended crash, stick on
@@ -16623,6 +16672,10 @@ class CrashCymbal1Properties(CymbalProperties):
     aftersound_dbs = 8.5
     bloom_scatter = 1.0
     initial_gain = 0.120310
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -3.1), (100, 0.0), (85, 1.2), (70, 2.6), (60, 3.2), (45, 3.4), (30, 3.6), (15, 3.6))
+
+
 
 class TelephoneRingProperties(ModeDecays, MetalPercussionProperties):
     """GM 124. A BELL STRUCK TWENTY TIMES A SECOND, which is what a telephone is.
@@ -16885,6 +16938,9 @@ class ReverseCymbalProperties(CrashCymbal1Properties):
     # The level as it was, -26.0 dB (velocity 100, its loudest 150 ms; the old
     # swell read -25.8, -26.2 and -25.9 at 1, 2 and 4 s notes)
     initial_gain = 0.214686
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -2.3), (100, 0.0), (85, 1.1), (70, 1.8), (60, 2.0), (45, 2.5), (30, 2.6), (15, 2.6))
+
 
 
 class SynthDrumProperties(MembraneDrumProperties):
@@ -17510,6 +17566,57 @@ class ConcertSnareProperties(SnareDrum2Properties):
                     (5657, 13.5), (11314, 11.1))
 
 
+class LiveRoom:
+    """A voice recorded in a SMALL LIVE ROOM, its own and not the hall's: hard
+    walls (4% absorption, little scatter) 1-3 m away, reflections to the third
+    order, the drum 1.49 m from the listener and facing them. Every voice can
+    carry its own walls (the reflection memo keys on them), and a sample with
+    its room baked in is exactly that: the room came with the recording.
+
+    FITTED (examples/roomset_fit.py) to what GeneralUser GS's Room toms carry
+    over its Standard toms: +5.4 dB of early reflections (8-80 ms against the
+    first 8) and +2.2 dB of top (2-8 kHz re 60-500 Hz). This room, at 0.7x
+    the size first tried, gives +4.6 and +2.8. Placing the hall's drum further
+    back gave +1 dB at most -- a tom's own ring fills its first 80 ms -- and
+    aiming it at the back wall darkened it 6-7 dB, its direct sound off axis:
+    the live room's hard walls are what brighten it."""
+    room_left = room_right = 1.75
+    room_front = 1.05
+    room_back = 2.8
+    room_ceiling = 1.82
+    room_floor = 1.0
+    reflection_order = 3
+    SURFACE_ALPHA = {w: (0.04, 0.04, 0.04, 0.048, 0.056, 0.064)
+                     for w in ('left', 'right', 'front', 'back', 'ceiling', 'floor')}
+    SURFACE_SCATTER = {w: (0.05, 0.05, 0.08, 0.10, 0.12, 0.15)
+                       for w in ('left', 'right', 'front', 'back', 'ceiling', 'floor')}
+    radiation_distance = 1.49
+
+
+# THE ROOM SET (program 8) and POWER (16), SC-55 p.70: "Room Low Tom 2" to
+# "Room Hi Tom 1", Power's toms the same, and Power's "MONDO Kick". Standard's
+# fitted drums in a live room of their own (LiveRoom), at Standard's pitches:
+# GeneralUser GS's Room toms are its Standard toms layered with "Room Tom"
+# takes, and what they gain over them is the room's early sound.
+class RoomTomProperties(LiveRoom, TomTomProperties):
+    """Room Mid Tom 2 and 1 (45, 47): Standard's rack tom in the live room."""
+
+
+class RoomFloorTomProperties(LiveRoom, FloorTomProperties):
+    """Room Low Tom 2 and 1 (41, 43): Standard's floor tom in the live room."""
+
+
+class RoomHighTomProperties(LiveRoom, HighTomProperties):
+    """Room Hi Tom 2 and 1 (48, 50): Standard's high tom in the live room."""
+
+
+class MondoKickProperties(LiveRoom, KickDrumProperties):
+    """Power's "MONDO Kick" (36, SC-55 p.70): Standard's kick in the live room.
+    GeneralUser GS's Power kick is another drum besides -- tuned higher (73 Hz
+    where its Standard kick settles at 35) and undamped; ours keeps Standard's
+    drum, for Ben's ear."""
+
+
 class BrushTapProperties(SnareDrum2Properties):
     """Note 38 of the Brush set (SC-55 p.70, "Brush Tap"): a brush tapped on
     the head, snares on. MEASURED (examples/snare_fit.py --brush=tap) on
@@ -17944,6 +18051,10 @@ class CrashCymbal2Properties(CymbalProperties):
     bloom_banded = True
     aftersound_dbs = 6.275
     initial_gain = 0.068317
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -3.0), (100, 0.0), (85, 0.7), (70, 1.0), (60, 1.0), (45, 1.2), (30, 1.2), (15, 1.2))
+
+
 
 class ConcertCymbal1Properties(CrashCymbal1Properties):
     """The ORCHESTRA set's CONCERT CYMBAL 1 (program 48, note 59, SC-55 manual
@@ -17970,6 +18081,8 @@ class ConcertCymbal1Properties(CrashCymbal1Properties):
     chiff_volume = 1.6399
     chiff_width = 0.265716
     band_trim_db = ((354, 11.3), (707, 8.4), (1414, -2.5), (2828, -4.6), (5657, -5.6), (11314, -6.9))
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -2.8), (100, 0.0), (85, 1.2), (70, 3.2), (60, 3.8), (45, 4.2), (30, 4.7), (15, 4.8))
 
 
 
@@ -17995,6 +18108,8 @@ class ConcertCymbal2Properties(CrashCymbal2Properties):
     chiff_volume = 4.13569
     chiff_width = 1.24474
     band_trim_db = ((354, 3.1), (707, 9.5), (1414, -1.6), (2828, -0.6), (5657, -5.0), (11314, -5.3))
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -3.4), (100, 0.0), (85, 1.2), (70, 1.6), (60, 2.0), (45, 2.0), (30, 2.1), (15, 2.1))
 
 
 
@@ -18129,6 +18244,10 @@ class SplashCymbalProperties(CymbalProperties):
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
     initial_gain = 0.299658
+    # VOLUME ON THE SQUARE LAW (examples/drum_volume.py): dB at each velocity
+    strike_volume_trim_db = ((127, -1.9), (100, 0.0), (85, 0.7), (70, 1.2), (60, 1.4), (45, 1.6), (30, 1.7), (15, 1.7))
+
+
 
 class ChineseCymbalProperties(CymbalProperties):
     """GM 52, Chinese Cymbal: a 16" china.

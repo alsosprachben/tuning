@@ -122,8 +122,8 @@ plays Standard, as does any program that is not a set.
 | program | set | built |
 |---|---|---|
 | 0 | Standard | the note map above |
-| 8 | Room | no -- plays Standard |
-| 16 | Power | no -- plays Standard |
+| 8 | Room | yes |
+| 16 | Power | yes |
 | 24 | Electronic | yes |
 | 25 | TR-808 | yes |
 | 32 | Jazz | = Standard on the SC-55 |
@@ -131,6 +131,30 @@ plays Standard, as does any program that is not a set.
 | 48 | Orchestra | yes |
 | 56 | SFX | no -- plays Standard |
 | 127 | CM-64/32L | no -- plays Standard |
+
+### 8 Room
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 41 | Room Low Tom 2 | `RoomFloorTom` | **4** | ROOM LOW TOM 2: Standard's floor tom in a small LIVE ROOM of its own (tonelib.LiveRoom: ~3.5 x 3.9 x 2.8 m, hard walls, reflections to the third order, the drum 1.5 m away facing the listener), fitted (examples/roomset_fit.py) to what GeneralUser GS's Room toms carry over its Standard toms: early reflections +4.5 dB against +5.4, top +3.0 against +2.2. The hall's drum moved further back gave +1 dB, aimed at the back wall 6-7 dB darker: the live room's hard walls make it roomier AND brighter. Ben: sounds great |
+| 43 | Room Low Tom 1 | `RoomFloorTom` | **4** | as 41 |
+| 45 | Room Mid Tom 2 | `RoomTom` | **4** | ROOM MID TOM 2: Standard's rack tom in the live room (as 41) |
+| 47 | Room Mid Tom 1 | `RoomTom` | **4** | as 45 |
+| 48 | Room Hi Tom 2 | `RoomHighTom` | **4** | ROOM HI TOM 2: Standard's high tom in the live room (as 41) |
+| 50 | Room Hi Tom 1 | `RoomHighTom` | **4** | as 48 |
+
+### 16 Power
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 36 | MONDO Kick | `MondoKick` | **4** | MONDO KICK: Standard's kick in the Room set's live room (tonelib.LiveRoom). GeneralUser GS's Power kick is another drum besides -- tuned higher, undamped; ours keeps Standard's, which Ben heard |
+| 38 | Gated SD | `GatedSnare` | **4** | GATED SD: the Electronic set's gated snare, as the manual names it, set against Standard's snare as GeneralUser's Power snare sits against its own |
+| 41 | Room Low Tom 2 | `RoomFloorTom` | **4** | the Room set's tom (as program 8) |
+| 43 | Room Low Tom 1 | `RoomFloorTom` | **4** | the Room set's tom (as program 8) |
+| 45 | Room Mid Tom 2 | `RoomTom` | **4** | the Room set's tom (as program 8) |
+| 47 | Room Mid Tom 1 | `RoomTom` | **4** | the Room set's tom (as program 8) |
+| 48 | Room Hi Tom 2 | `RoomHighTom` | **4** | the Room set's tom (as program 8) |
+| 50 | Room Hi Tom 1 | `RoomHighTom` | **4** | the Room set's tom (as program 8) |
 
 ### 24 Electronic
 
@@ -524,7 +548,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-315 classes.
+319 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -613,6 +637,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ConcertSnare` -- set 48 38 Concert SD (4), set 48 40 Concert SD (4)
           - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4)
+            - `MondoKick` [LiveRoom] -- set 16 36 MONDO Kick (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4)
               - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
@@ -632,7 +657,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)
+              - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4)
+              - `RoomHighTom` [LiveRoom] -- set 8 48 Room Hi Tom 2 (4), set 8 50 Room Hi Tom 1 (4), set 16 48 Room Hi Tom 2 (4), set 16 50 Room Hi Tom 1 (4)
+            - `RoomTom` [LiveRoom] -- set 8 45 Room Mid Tom 2 (4), set 8 47 Room Mid Tom 1 (4), set 16 45 Room Mid Tom 2 (4), set 16 47 Room Mid Tom 1 (4)
         - `SynthDrum`
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
           - `Simmons` [ModeDecays]
@@ -677,7 +705,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Maracas` -- 70 Maracas (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (4)
-        - `GatedSnare` -- set 24 40 Gated SD (4)
+        - `GatedSnare` -- set 16 38 Gated SD (4), set 24 40 Gated SD (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4)
         - `Claves` -- 75 Claves (4)

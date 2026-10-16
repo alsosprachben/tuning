@@ -78,6 +78,10 @@ from tonelib import (
     ReverseCymbalProperties,
     ElectronicKickProperties,
     ConcertBassDrumProperties,
+    RoomTomProperties,
+    RoomFloorTomProperties,
+    RoomHighTomProperties,
+    MondoKickProperties,
     ConcertCymbal1Properties,
     ConcertCymbal2Properties,
     ConcertSnareProperties,
@@ -393,6 +397,28 @@ KITS = {
         59: ("Concert Cymbal 1", ConcertCymbal1Properties, 288.3),
         88: ("Applause",         OrchestraApplauseProperties, 440.0),
     },
+    # ROOM, p.70: the six toms, "Room Low Tom 2" to "Room Hi Tom 1" -- Standard's
+    # toms placed further back (tonelib.FartherBack), at Standard's pitches.
+    8: {
+        41: ("Room Low Tom 2",   RoomFloorTomProperties, 87.0),
+        43: ("Room Low Tom 1",   RoomFloorTomProperties, 98.0),
+        45: ("Room Mid Tom 2",   RoomTomProperties, 110.0),
+        47: ("Room Mid Tom 1",   RoomTomProperties, 130.0),
+        48: ("Room Hi Tom 2",    RoomHighTomProperties, 150.0),
+        50: ("Room Hi Tom 1",    RoomHighTomProperties, 175.0),
+    },
+    # POWER, p.70: Room's toms, the "MONDO Kick" and the "Gated SD" -- the
+    # Electronic set's gated snare (its 40), as the manual names it.
+    16: {
+        36: ("MONDO Kick",       MondoKickProperties, 44.4),
+        38: ("Gated SD",         GatedSnareProperties, 290.0),
+        41: ("Room Low Tom 2",   RoomFloorTomProperties, 87.0),
+        43: ("Room Low Tom 1",   RoomFloorTomProperties, 98.0),
+        45: ("Room Mid Tom 2",   RoomTomProperties, 110.0),
+        47: ("Room Mid Tom 1",   RoomTomProperties, 130.0),
+        48: ("Room Hi Tom 2",    RoomHighTomProperties, 150.0),
+        50: ("Room Hi Tom 1",    RoomHighTomProperties, 175.0),
+    },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
     40: {
@@ -444,6 +470,8 @@ KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4}}     # the Simmons voices are not gate
 KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
              25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 8.462},
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
+             8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
+             16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
              40: {38: 0.490, 39: 0.570, 40: 0.011}}
 
 

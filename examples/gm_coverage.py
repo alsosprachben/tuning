@@ -352,7 +352,9 @@ def percussion_table():
 # grid plus the hit's band balance), and heard: 4. The Orchestra set too: its
 # concert drums and clashes fitted to VCSL (examples/orch_fit.py), the rest
 # Standard's fitted voices moved, and heard: 4. Brush too, fitted to Swirly
-# Drums (examples/snare_fit.py --brush, brush_fit.py), and heard: 4.
+# Drums (examples/snare_fit.py --brush, brush_fit.py), and heard: 4. Room and
+# Power: Standard's fitted drums in a live room of their own, its size fitted to
+# GeneralUser's (examples/roomset_fit.py), and heard: 4.
 _808 = ("THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- "
         "bridged-T resonators, and six square oscillators through band-passes -- every "
         "instrument a patch of knobs, read off the service notes' schematic where it fixes "
@@ -405,6 +407,16 @@ KIT_RATED = {
         70: (4, "the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), "
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
+    },
+    8: {
+        41: (4, "ROOM LOW TOM 2: Standard's floor tom in a small LIVE ROOM of its own (tonelib.LiveRoom: ~3.5 x 3.9 x 2.8 m, hard walls, reflections to the third order, the drum 1.5 m away facing the listener), fitted (examples/roomset_fit.py) to what GeneralUser GS's Room toms carry over its Standard toms: early reflections +4.5 dB against +5.4, top +3.0 against +2.2. The hall's drum moved further back gave +1 dB, aimed at the back wall 6-7 dB darker: the live room's hard walls make it roomier AND brighter. Ben: sounds great"),
+        43: (4, "as 41"), 45: (4, "ROOM MID TOM 2: Standard's rack tom in the live room (as 41)"),
+        47: (4, "as 45"), 48: (4, "ROOM HI TOM 2: Standard's high tom in the live room (as 41)"), 50: (4, "as 48"),
+    },
+    16: {
+        36: (4, "MONDO KICK: Standard's kick in the Room set's live room (tonelib.LiveRoom). GeneralUser GS's Power kick is another drum besides -- tuned higher, undamped; ours keeps Standard's, which Ben heard"),
+        38: (4, "GATED SD: the Electronic set's gated snare, as the manual names it, set against Standard's snare as GeneralUser's Power snare sits against its own"),
+        **{n: (4, "the Room set's tom (as program 8)") for n in (41, 43, 45, 47, 48, 50)},
     },
     48: {
         27: (4, "Standard's closed hi-hat, moved: the set's hats are EXC1 with 42/44/46 -- six keys, one pair of cymbals (percussion_map.KIT_CHOKE)"),
