@@ -396,8 +396,8 @@ KITS = {
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
     40: {
-        38: ("Brush Tap",        BrushTapProperties, 260.0),
-        39: ("Brush Slap",       BrushSlapProperties, 260.0),
+        38: ("Brush Tap",        BrushTapProperties, 191.8),
+        39: ("Brush Slap",       BrushSlapProperties, 171.6),
         40: ("Brush Swirl",      BrushSwirlProperties, 260.0),
     },
 }
@@ -423,11 +423,13 @@ KIT_RING = {24: {}, 25: {}, 48: {}}     # the Simmons voices' DECAY is their pat
 # is, closing over the class's release_valve_time.
 # The Electronic snare too: GeneralUser's stops at 0.31 s, -32 dB.
 KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
-# BRUSH is balanced against its own tap instead, which lands on Standard's snare
-# unaided: a slap does not replace a hand clap nor a swirl an electric snare,
-# whatever key they share. The slap sits ~3 dB over the tap and the swirl
-# ~5.5 dB under it -- a swirl is a texture under the band, not a stroke.
-# Judgement, for Ben's ear.
+# BRUSH is balanced against its own tap instead: a slap does not replace a
+# hand clap nor a swirl an electric snare, whatever key they share. Its tap
+# sits 11.3 dB under Standard's snare, where GeneralUser GS keeps its brush
+# tap under its own; the slap and swirl against the tap as GeneralUser has
+# them (examples/elkit_balance.py --kit=40). It had been judgement (a slap
+# ~3 dB over, a swirl ~5.5 under), before the brushes were fitted to
+# Swirly Drums' recordings.
 #
 # ...and its LEVELS, matched to the Standard note each replaces (loudness over
 # the first 150 ms, examples/drumset_check.py). A set is a different
@@ -442,7 +444,7 @@ KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4}}     # the Simmons voices are not gate
 KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
              25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 8.462},
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
-             40: {39: 1.148, 40: 0.135}}
+             40: {38: 0.490, 39: 0.570, 40: 0.011}}
 
 
 class DrumProgram(int):

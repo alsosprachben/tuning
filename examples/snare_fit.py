@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit the kit's snare (GM 38) to DrumGizmo DRSKit's.
 
-    python3 examples/snare_fit.py [REFS] [--rim | --vcsl | --concert] [--modes] [--click] [--model] [--fit [--maxfev=N]]
+    python3 examples/snare_fit.py [REFS] [--rim | --vcsl | --concert | --brush=tap|slap] [--modes] [--click] [--model] [--fit [--maxfev=N]]
 
 REFS (default ~/Documents/refs/drums/drskit) holds Snare/ as
 examples/remote_zip.py pulled it from DRSKit 2.1 (CC-BY 4.0; ~/Documents/refs/
@@ -37,6 +37,13 @@ drum has fallen 50 dB and what is left is the rack tom ringing in sympathy
            vcsl/snare_legacy), wires on, pppp-fff -- the drum GeneralUser GS's
            and FluidR3's Orchestra snares are both closest to (examples/
            orch_fit.py --select). Played from the Orchestra set
+  --brush=tap|slap the BRUSH set's (program 40, SC-55 p.70) Brush Tap (38) or
+           Brush Slap (39): Karoryfer's Swirly Drums (CC0; ~/Documents/refs/
+           swirly_drums_karoryfer), a kit played with brushes -- its center
+           hits (snare_main) or DIGS (snare_dig: the brush left on the head,
+           muting it), the articulations GeneralUser GS's and FluidR3's brush
+           samples both pick. Top and bottom microphones, summed in power as
+           DRSKit's two are; twelve layers, four takes each
   --click  the stick's burst (CLICK_DB): third-octave levels over the first
            20 ms of the loud strokes, re the first mode (drum_fit.measure)
 """
@@ -54,11 +61,15 @@ import crash_fit as C  # noqa: E402
 from drum_fit import CH, read  # noqa: E402
 
 CONCERT = "--concert" in sys.argv
+BRUSH = next((a.split("=")[1] for a in sys.argv if a.startswith("--brush=")), None)
 VCSL = "--vcsl" in sys.argv or CONCERT
 NOTE, FOLDER = ((37, "Snare_rim") if "--rim" in sys.argv else (38, "drum1_snare1_*_rr*") if CONCERT
                 else (40, "Snare2_HitSN_*") if VCSL else (38, "Snare"))
 if CONCERT:
     C.KIT = 48
+if BRUSH:
+    NOTE, FOLDER = (38, "snare_main") if BRUSH == "tap" else (39, "snare_dig")
+    C.KIT = 40
 MICS = ("Snare_top", "Snare_bottom")
 # VCSL's layers: v<layer>_rr<take>; mid is wider than DRSKit's, whose layers
 # bunch at the loud end -- VCSL's five are spread evenly over 30 dB
@@ -109,6 +120,17 @@ def vcsl_layer(p):
 
 def strokes(refs):
     out = []
+    if BRUSH:
+        import re
+        for p in sorted(glob.glob(os.path.join(refs, FOLDER, "*_top.wav")),
+                        key=lambda p: [int(v) for v in re.search(r"vl(\d+)_rr(\d+)", p).groups()]):
+            a, sr = read(p)
+            b, _ = read(p.replace("_top.wav", "_btm.wav"))
+            n = max(len(a), len(b), sr)
+            a, b = np.pad(a, ((0, n - len(a)), (0, 0))), np.pad(b, ((0, n - len(b)), (0, 0)))
+            m = re.search(r"vl(\d+)_rr(\d+)", p)
+            out.append((10 * int(m.group(1)) + int(m.group(2)), [a[:, 0], b[:, 0]], sr))
+        return out
     if VCSL:
         for p in sorted(glob.glob(os.path.join(refs, FOLDER + ".wav")), key=vcsl_layer):
             a, sr = read(p)
@@ -230,7 +252,8 @@ def grouped(rows):
 
 def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
-    refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/vcsl/snare_legacy" if CONCERT else
+    refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/swirly_drums_karoryfer" if BRUSH else
+                                                 "~/Documents/refs/vcsl/snare_legacy" if CONCERT else
                                                  "~/Documents/refs/vcsl/snare" if VCSL else
                                                  "~/Documents/refs/drums/drskit")
     os.environ.setdefault("TUNING_REFLECT", "0")
@@ -259,7 +282,7 @@ def main(argv):
     rflat = [np.mean([flat[r[0]] for r in rows if sel(r[1] - top)], 0) for sel in (
         lambda d: d <= -15.0, lambda d: MID[0] <= d <= MID[1], lambda d: d >= -3.0)]
     print("== %s %s, %d strokes, levels %s dB re the loudest" % (
-        "VCSL" if VCSL else "DRSKit", FOLDER, len(rows), " ".join("%.0f" % (l - max(r[1] for r in rows)) for _, l, _ in rows)))
+        "Swirly Drums" if BRUSH else "VCSL" if VCSL else "DRSKit", FOLDER, len(rows), " ".join("%.0f" % (l - max(r[1] for r in rows)) for _, l, _ in rows)))
     cache = {}
     if "--fit" in argv:
         vels = [C.model_velocity(NOTE, gs[g][0], cache) for g in C.GROUPS]

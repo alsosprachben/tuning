@@ -175,9 +175,9 @@ plays Standard, as does any program that is not a set.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 38 | Brush Tap | `BrushTap` | **3** | a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good |
-| 39 | Brush Slap | `BrushSlap` | **3** | a brush slapped FLAT: louder, and it lies on the head and chokes it. As 38 |
-| 40 | Brush Swirl | `BrushSwirl` | **3** | a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms. As 38 |
+| 38 | Brush Tap | `BrushTap` | **4** | a brush TAPPED, MEASURED on Karoryfer's Swirly Drums (CC0), a kit played with brushes: its center hits, the articulation GeneralUser GS's and FluidR3's taps both pick -- the head's 25 modes from 191.8 Hz and the brush's burst read off top and bottom microphones, Snare Drum 2's wires refitted to them (examples/snare_fit.py --brush=tap): 6.2 dB. 11.3 dB under Standard's snare, as GeneralUser keeps its tap |
+| 39 | Brush Slap | `BrushSlap` | **4** | a brush SLAPPED down and left on the head: Swirly Drums' DIG ("leaves the brush on the head, which mutes the sound"), both GM sets' pick -- its own modes from 171.6 Hz, the lowest choked most (snare_fit.py --brush=slap): 7.6 dB |
+| 40 | Brush Swirl | `BrushSwirl` | **4** | a brush SWEPT, fitted on two levels (examples/brush_fit.py): its texture to Swirly Drums' fastest plain stir -- friction noise as a band table over the head's noise-driven modes, the wires' sizzle to 12.7 kHz -- and its swish to GeneralUser GS's (one gesture, gone by ~0.8 s): 7.5 dB. Ben: "the swirl seems to need more harmonics or high-end" -- refitted from a darker skin take |
 
 ### 48 Orchestra
 
@@ -608,6 +608,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
             - `SideStick` -- 37 Side Stick (4)
             - `SnareDrum2` -- 40 Snare Drum 2 (4)
+              - `BrushTap` -- set 40 38 Brush Tap (4)
+                - `BrushSlap` -- set 40 39 Brush Slap (4)
               - `ConcertSnare` -- set 48 38 Concert SD (4), set 48 40 Concert SD (4)
           - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4)
@@ -674,9 +676,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Cabasa` -- 69 Cabasa (4)
         - `Maracas` -- 70 Maracas (4)
       - `SnareDrum` [NoisyPercussionMixin]
-        - `BrushSwirl` -- set 40 40 Brush Swirl (3)
-        - `BrushTap` -- set 40 38 Brush Tap (3)
-          - `BrushSlap` -- set 40 39 Brush Slap (3)
+        - `BrushSwirl` -- set 40 40 Brush Swirl (4)
         - `GatedSnare` -- set 24 40 Gated SD (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4)

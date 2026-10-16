@@ -351,7 +351,8 @@ def percussion_table():
 # real 808 (examples/tr808_fit.py; scores: dB rms over a time x third-octave
 # grid plus the hit's band balance), and heard: 4. The Orchestra set too: its
 # concert drums and clashes fitted to VCSL (examples/orch_fit.py), the rest
-# Standard's fitted voices moved, and heard: 4.
+# Standard's fitted voices moved, and heard: 4. Brush too, fitted to Swirly
+# Drums (examples/snare_fit.py --brush, brush_fit.py), and heard: 4.
 _808 = ("THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- "
         "bridged-T resonators, and six square oscillators through band-passes -- every "
         "instrument a patch of knobs, read off the service notes' schematic where it fixes "
@@ -421,9 +422,9 @@ KIT_RATED = {
         88: (4, "GM 126's applause (fitted to three Freesound halls) as a drum note: a one-shot, gated at 1.4 s as GeneralUser GS's sample lasts"),
     },
     40: {
-        38: (3, "a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good"),
-        39: (3, "a brush slapped FLAT: louder, and it lies on the head and chokes it. As 38"),
-        40: (3, "a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms. As 38"),
+        38: (4, "a brush TAPPED, MEASURED on Karoryfer's Swirly Drums (CC0), a kit played with brushes: its center hits, the articulation GeneralUser GS's and FluidR3's taps both pick -- the head's 25 modes from 191.8 Hz and the brush's burst read off top and bottom microphones, Snare Drum 2's wires refitted to them (examples/snare_fit.py --brush=tap): 6.2 dB. 11.3 dB under Standard's snare, as GeneralUser keeps its tap"),
+        39: (4, "a brush SLAPPED down and left on the head: Swirly Drums' DIG (\"leaves the brush on the head, which mutes the sound\"), both GM sets' pick -- its own modes from 171.6 Hz, the lowest choked most (snare_fit.py --brush=slap): 7.6 dB"),
+        40: (4, "a brush SWEPT, fitted on two levels (examples/brush_fit.py): its texture to Swirly Drums' fastest plain stir -- friction noise as a band table over the head's noise-driven modes, the wires' sizzle to 12.7 kHz -- and its swish to GeneralUser GS's (one gesture, gone by ~0.8 s): 7.5 dB. Ben: \"the swirl seems to need more harmonics or high-end\" -- refitted from a darker skin take"),
     },
 }
 

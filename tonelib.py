@@ -17510,27 +17510,107 @@ class ConcertSnareProperties(SnareDrum2Properties):
                     (5657, 13.5), (11314, 11.1))
 
 
-class BrushTapProperties(SnareDrumProperties):
-    """Note 38 of the Brush set: a brush tapped on the head, snares on."""
-    mode_gains = _BRUSH_GAINS
-    chiff_min_valve_time = 0.005    # the wires land over ~5-18 ms
-    chiff_max_valve_time = 0.018
-    attack_time = 0.006
-    chiff_volume = 9.0
-    tension_bend = 0.008            # a light blow stretches the head less
-    decay_db = 58.0                 # the brush stays on a moment and damps it
-    strike_noise_slope = 0.25
+class BrushTapProperties(SnareDrum2Properties):
+    """Note 38 of the Brush set (SC-55 p.70, "Brush Tap"): a brush tapped on
+    the head, snares on. MEASURED (examples/snare_fit.py --brush=tap) on
+    Karoryfer's Swirly Drums (CC0), a kit played with brushes: its center
+    hits, the articulation GeneralUser GS's and FluidR3's brush taps both
+    pick. Its head from the first 60 ms of the upper half of 48 hits, top
+    and bottom microphones: 191.8 Hz, the loudest mode at 1.62x. The wires
+    and head's rates start from Snare Drum 2's, refitted to these hits.
+    (It had been a theory -- a snare with its wires landing over 5-18 ms --
+    rated by ear alone.)"""
+    DRUM_MODES = ((1.000, 0.0, 450.0),
+                  (1.140, 0.3, 450.0),
+                  (1.621, 2.9, 450.0),
+                  (2.084, -3.5, 450.0),
+                  (2.312, -0.0, 450.0),
+                  (2.530, -8.0, 450.0),
+                  (2.965, -8.5, 450.0),
+                  (3.147, -6.7, 450.0),
+                  (3.337, -7.5, 450.0),
+                  (4.112, -9.9, 450.0),
+                  (4.495, -17.7, 450.0),
+                  (4.804, -10.9, 450.0),
+                  (5.277, -15.4, 450.0),
+                  (5.565, -14.3, 450.0),
+                  (6.074, -13.3, 450.0),
+                  (6.800, -14.8, 450.0),
+                  (7.463, -15.5, 450.0),
+                  (7.832, -15.1, 450.0),
+                  (8.786, -19.0, 450.0),
+                  (9.098, -18.0, 450.0),
+                  (9.712, -18.2, 450.0),
+                  (10.614, -19.7, 450.0),
+                  (11.056, -20.1, 450.0),
+                  (11.968, -18.2, 450.0),
+                  (12.386, -19.3, 450.0))
+    # the loud hits' burst, 0-20 ms, re the first mode (snare_fit.py --brush=tap --click)
+    CLICK_DB = (-8, -10, -17, -17, -21, -26, -29, -29, -29, -31, -32, -38, -37, -44)
+    # FITTED on the band-by-time grid (examples/snare_fit.py --brush=tap --fit):
+    # 6.2 dB over soft, mid and loud hits
+    fund_dbs = 465.425
+    head_dbs = 617.626
+    slow_share = 0.0267193
+    slow_dbs = 31.7439
+    click_cal_db = 5.87188
+    click_dbs = 176.445
+    click_stroke_slope = 0.0414162
+    chiff_volume = 2.87215
+    chiff_width = 0.031382
+    chiff_bandwidth = 0.294238
+    sustain_jitter = 0.0615041
+    band_trim_db = ((177, -3.2), (354, -0.1), (707, -5.6), (1414, -2.1), (2828, 2.2), (5657, 5.7), (11314, 3.1))
 
 
 class BrushSlapProperties(BrushTapProperties):
-    """Note 39: the brush slapped FLAT onto the head. More wires, harder, and
-    it lies there afterwards -- a loud wash with the head choked under it."""
-    chiff_min_valve_time = 0.003
-    chiff_max_valve_time = 0.010
-    attack_time = 0.003
-    chiff_volume = 16.0
-    chiff_width = 0.060
-    decay_db = 85.0
+    """Note 39 (SC-55 p.70, "Brush Slap"): the brush slapped FLAT and left
+    lying on the head -- Swirly Drums' DIG, "a hit that leaves the brush on
+    the head, which mutes the sound and keeps it from ringing" (its guide),
+    the articulation both GM sets' slaps pick (examples/snare_fit.py
+    --brush=slap). The brush on the head chokes its lowest mode most: from
+    171.6 Hz, 1.25x and 1.81x stand 14-15 dB over it."""
+    DRUM_MODES = ((1.000, 0.0, 450.0),
+                  (1.247, 14.9, 450.0),
+                  (1.812, 14.1, 450.0),
+                  (2.380, 5.9, 450.0),
+                  (2.580, 7.0, 450.0),
+                  (2.863, 1.6, 450.0),
+                  (3.302, 0.8, 450.0),
+                  (3.510, -0.6, 450.0),
+                  (3.937, 0.8, 450.0),
+                  (4.361, -3.3, 450.0),
+                  (4.482, -3.3, 450.0),
+                  (5.427, 1.4, 450.0),
+                  (5.816, -7.9, 450.0),
+                  (6.047, -7.1, 450.0),
+                  (6.612, 0.7, 450.0),
+                  (7.125, -8.5, 450.0),
+                  (7.694, -5.4, 450.0),
+                  (8.412, -8.7, 450.0),
+                  (8.918, -7.2, 450.0),
+                  (9.325, -9.5, 450.0),
+                  (9.710, -11.8, 450.0),
+                  (10.255, -9.4, 450.0),
+                  (10.890, -14.0, 450.0),
+                  (12.314, -12.2, 450.0),
+                  (13.369, -13.6, 450.0),
+                  (14.133, -11.7, 450.0))
+    CLICK_DB = (-16, -14, -19, -22, -25, -29, -31, -34, -36, -36, -36, -39, -41, -45)
+    # FITTED on the band-by-time grid (examples/snare_fit.py --brush=slap --fit):
+    # 7.6 dB over soft, mid and loud digs
+    fund_dbs = 497.529
+    head_dbs = 674.998
+    slow_share = 0.021815
+    slow_dbs = 41.2629
+    click_cal_db = 8.96783
+    click_dbs = 148.357
+    click_stroke_slope = 0.0450916
+    chiff_volume = 3.65925
+    chiff_width = 0.0352975
+    chiff_bandwidth = 0.331657
+    sustain_jitter = 0.0525521
+    band_trim_db = ((177, -6.5), (354, -2.2), (707, -3.9), (1414, -2.7), (2828, 3.7), (5657, 7.5), (11314, 4.0))
 
 
 class BrushSwirlProperties(SnareDrumProperties):
@@ -17538,16 +17618,31 @@ class BrushSwirlProperties(SnareDrumProperties):
     at all: friction drives the head CONTINUOUSLY, so what sounds is the head's
     own modes excited by noise -- each broadened into a band -- with the wires
     faintly buzzing under it. That is sustain_jitter at full with the strike
-    ramped away, and a slow decay rather than a ring."""
+    ramped away, and a slow decay rather than a ring.
+
+    FITTED ON TWO LEVELS (examples/brush_fit.py): its TEXTURE to Karoryfer's
+    Swirly Drums (CC0) stirring a head -- 6-13 s takes, never one gesture --
+    and its GESTURE to GeneralUser GS's swirl, one swish gone by ~0.8 s. The
+    head alone could not reach the brush's friction, broadband over the
+    head's modes, so it gains a NOISE LAYER: its band table (loudest 0.6-5
+    kHz), a rise longer than the swish, cut at 0.74 s. 22.2 -> 10.6."""
     mode_gains = _BRUSH_GAINS
-    chiff_volume = 6.0
+    chiff_volume = 21.479
     chiff_cycle = 1.0
     sustain_jitter = 1.0            # the noise runs the whole note
-    attack_time = 0.12              # it swells in; nothing strikes
+    attack_time = 0.013054# it swells in; nothing strikes
     tension_bend = 0.0
     strike_noise_slope = 0.0
-    decay_db = 9.0
+    decay_db = 21.8
     harmonic_decay_db = 6.0
+    # THE FRICTION (examples/brush_fit.py): a noise layer's band table, its
+    # linear rise, its fall and length -- the swish GeneralUser GS's swirl is,
+    # with the texture of Swirly Drums' stirring (CC0)
+    strike_noise_layers = ((((100, 6.18), (126, 6.18), (159, 6.18), (200, 6.18), (252, 6.45), (317, 14.23), (400, 22.0), (504, 29.64), (635, 33.1), (800, 36.57), (1008, 40.02), (1270, 42.95), (1600, 45.88), (2016, 48.9), (2540, 54.71), (3200, 60.51), (4032, 56.33), (5080, 52.13), (6400, 47.74), (8063, 43.35), (10159, 39.08), (12800, 34.96), (16127, 34.96)), 0.8828971940999961, 59.80816320330686, 0.735266181037887),)
+    strike_noise_db = ((100, -120.0), (126, -120.0), (159, -120.0), (200, -120.0), (252, -120.0), (317, -120.0), (400, -120.0), (504, -120.0), (635, -120.0), (800, -120.0), (1008, -120.0), (1270, -120.0), (1600, -120.0), (2016, -120.0), (2540, -120.0), (3200, -120.0), (4032, -120.0), (5080, -120.0), (6400, -120.0), (8063, -120.0), (10159, -120.0), (12800, -120.0), (16127, -120.0))
+    strike_noise_dbs = 600.0
+    strike_noise_len_s = 0.05
+    strike_noise_fade_s = 0.001
 
 
 
