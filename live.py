@@ -4343,7 +4343,7 @@ class Live:
             # earlier note to it. Live there is no forward to scan -- but
             # the strike that does the choking is happening right now, so
             # it is simply a note-off written into whatever is ringing.
-            grp = choke_group(snote)
+            grp = choke_group(snote, kit_for_program(part.program))
             if grp:
                 for k in [k for k in list(self.slab.live)
                           if k[0] == part.pid and k[2] != note

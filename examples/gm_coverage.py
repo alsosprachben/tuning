@@ -349,7 +349,9 @@ def percussion_table():
 # examples/elkit_fit.py), and Ben has heard it: 4. The TR-808 the same way
 # on its own engine (tr808.py), fitted to Michael Fischer's recordings of a
 # real 808 (examples/tr808_fit.py; scores: dB rms over a time x third-octave
-# grid plus the hit's band balance), and heard: 4.
+# grid plus the hit's band balance), and heard: 4. The Orchestra set too: its
+# concert drums and clashes fitted to VCSL (examples/orch_fit.py), the rest
+# Standard's fitted voices moved, and heard: 4.
 _808 = ("THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- "
         "bridged-T resonators, and six square oscillators through band-passes -- every "
         "instrument a patch of knobs, read off the service notes' schematic where it fixes "
@@ -402,6 +404,21 @@ KIT_RATED = {
         70: (4, "the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), "
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
+    },
+    48: {
+        27: (4, "Standard's closed hi-hat, moved: the set's hats are EXC1 with 42/44/46 -- six keys, one pair of cymbals (percussion_map.KIT_CHOKE)"),
+        28: (4, "Standard's pedal hi-hat, moved (as 27)"),
+        29: (4, "Standard's open hi-hat, moved (as 27)"),
+        30: (4, "Standard's ride, moved"),
+        35: (4, "CONCERT BD 2: the concert bass drum of 36 (ConcertBassDrum), the softer hit GeneralUser GS's picks"),
+        36: (4, "CONCERT BD 1, FITTED BY TWO LEVELS (examples/orch_fit.py): GeneralUser GS's Orchestra bass drum picks VCSL's \"Bass Drum 1\" (CC0), and the drum is fitted to its hit -- 73 modes read settled to -45 dB AND early to 3 kHz (a big head's upper modes are gone before a kick's are read), per-octave trims and rates: 10.7 dB. Balanced as GeneralUser's set (examples/elkit_balance.py --kit=48). Ben: sounds good"),
+        38: (4, "CONCERT SD: VCSL's legacy concert snare drum1 (CC0), the drum GeneralUser GS's and FluidR3's both pick: its own head (195 Hz, a flat field of modes to 12x) and stick burst, Snare Drum 2's head and wires, its bands trimmed (examples/snare_fit.py --concert): 6.9 dB"),
+        39: (4, "Standard's castanets (85), moved"),
+        40: (4, "as 38"),
+        **{n: (4, "TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's") for n in range(41, 54)},
+        57: (4, "CONCERT CYMBAL 2: a CLASHED pair, VCSL's \"Clash Cymbals 2\" (CC0, the pair both GM sets pick), on the kit crash fitted to its hits (examples/crash_fit.py --orch): 6.1 dB -- a clash's top dies far faster than a suspended crash's"),
+        59: (4, "CONCERT CYMBAL 1: VCSL's \"Clash Cymbals 1\", as 57: 5.2 dB"),
+        88: (4, "GM 126's applause (fitted to three Freesound halls) as a drum note: a one-shot, gated at 1.4 s as GeneralUser GS's sample lasts"),
     },
     40: {
         38: (3, "a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good"),

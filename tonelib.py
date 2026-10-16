@@ -17357,6 +17357,159 @@ class TR808CymbalProperties(TR808Properties):
              "noise_decay_s": 0.8983}
 
 
+class ConcertBassDrumProperties(KickDrumProperties):
+    """The ORCHESTRA set's CONCERT BD 1 and 2 (program 48, notes 36 and 35,
+    SC-55 manual p.70): a gran cassa, not a kit kick. VCSL's "Bass Drum 1"
+    (CC0; examples/orch_fit.py --bd), the drum GeneralUser GS's and FluidR3's
+    Orchestra bass drums are both closest to. Its modes read settled to -45
+    dB AND early (5-60 ms, to 3 kHz): a big head's upper modes are gone by
+    the 0.15 s a kick's are read at, and without them its body above 300 Hz
+    was 10-20 dB short.
+
+    A BIG HEAD, BARELY DAMPED: its lowest mode at 37.7 Hz is not its loudest
+    -- 1.9 to 2.5x it (72-93 Hz) stand 12-18 dB over it, the drum's "boom",
+    and its modes run dense to ~12x. They die at 10-40 dB/s, where a
+    pillowed kick's go at 40-130: the long rumble a concert bass drum is
+    struck for. Levels and decays read at the loud hits (-3 dB re the
+    loudest: 36 is fitted to one); the beater's felt puts the click 16-69 dB
+    under the first mode.
+    """
+    DRUM_MODES = (
+        (1.000, -12.9, 128.5),
+        (1.411, -8.1, 34.9),
+        (1.625, 3.8, 50.8),
+        (1.902, 10.0, 48.8),
+        (2.036, 11.0, 67.1),
+        (2.304, 10.6, 69.1),
+        (2.473, 8.1, 91.5),
+        (2.589, 4.8, 50.8),
+        (2.875, 0.4, 107.7),
+        (3.107, -0.2, 34.6),
+        (3.518, -10.9, 15.5),
+        (3.652, -11.4, 22.9),
+        (3.857, -11.4, 17.1),
+        (4.080, -9.7, 19.6),
+        (4.205, -9.6, 16.3),
+        (4.509, -10.4, 25.3),
+        (4.625, -11.9, 14.7),
+        (4.938, -14.7, 27.8),
+        (5.116, -14.6, 26.1),
+        (5.348, -14.4, 13.9),
+        (5.884, -13.1, 27.8),
+        (6.295, -11.2, 18.0),
+        (6.884, -4.6, 67.6),
+        (7.170, -7.7, 54.1),
+        (7.411, -13.5, 33.3),
+        (7.946, -14.7, 40.6),
+        (8.277, -16.4, 18.7),
+        (8.830, -19.2, 25.0),
+        (9.179, -17.6, 21.9),
+        (9.580, -17.1, 25.0),
+        (10.241, -13.2, 35.4),
+        (10.562, -11.5, 32.3),
+        (10.759, -11.3, 36.4),
+        (11.143, -11.3, 34.3),
+        (11.625, -12.6, 49.9),
+        (12.250, -14.9, 37.5),
+        (12.750, -14.1, 66.9),
+        (13.643, -11.7, 53.5),
+        (13.902, -12.7, 72.6),
+        (14.188, -12.7, 118.5),
+        (14.821, -13.6, 95.6),
+        (15.125, -16.9, 57.3),
+        (15.643, -18.0, 128.0),
+        (16.839, -16.7, 74.5),
+        (17.482, -17.6, 103.2),
+        (18.125, -20.1, 63.1),
+        (18.482, -17.2, 47.8),
+        (18.982, -14.3, 65.0),
+        (19.321, -14.3, 87.9),
+        (20.304, -14.8, 128.0),
+        (21.018, -21.1, 160.5),
+        (22.964, -19.0, 141.4),
+        (23.920, -19.0, 130.0),
+        (24.821, -19.9, 131.9),
+        (25.554, -11.6, 54.4),
+        (26.482, -13.1, 106.9),
+        (27.857, -14.7, 75.2),
+        (29.607, -14.9, 77.9),
+        (31.982, -17.8, 73.4),
+        (34.375, -18.5, 65.2),
+        (37.750, -18.1, 75.2),
+        (40.304, -20.7, 85.2),
+        (43.911, -23.2, 76.1),
+        (46.357, -24.3, 76.1),
+        (49.071, -22.7, 77.9),
+        (51.893, -21.1, 86.1),
+        (55.625, -25.3, 95.1),
+        (58.768, -27.0, 86.1),
+        (63.750, -28.1, 77.9),
+        (67.071, -27.0, 73.4),
+        (70.196, -27.0, 81.5),
+        (72.982, -28.3, 78.8),
+        (76.268, -30.3, 75.2),
+    )
+
+
+    stroke_ref_db = -3.0
+    CLICK_DB = (-16, -17, -19, -30, -30, -32, -35, -39, -40, -43, -51, -55, -60, -69)
+    click_dbs = 394.466
+    # the felt beater stretches a slack head little: ~100 cents, settling
+    tension_bend = 0.0308204
+    tension_bend_power = 0.35
+    tension_settle_time = 0.06
+    click_cal_db = 32.604
+    slow_share = 0.034939
+    slow_dbs = 7.02141
+
+
+
+class ConcertSnareProperties(SnareDrum2Properties):
+    """The ORCHESTRA set's CONCERT SD (program 48, notes 38 and 40, SC-55
+    manual p.70): VCSL's legacy concert snare "drum1" (CC0), wires on, the
+    drum GeneralUser GS's and FluidR3's Orchestra snares are both closest to
+    (examples/orch_fit.py --select). Its head read from the first 60 ms of
+    the upper half of its hits (examples/snare_fit.py --concert --modes):
+    195 Hz at the bottom, a flat field of modes to 12x -- a concert snare's
+    crisp, even spread, where a kit snare's head stands out at one mode."""
+    DRUM_MODES = ((1.000, 0.0, 450.0),
+                  (1.428, -17.5, 450.0),
+                  (1.607, -12.0, 450.0),
+                  (1.817, -20.8, 450.0),
+                  (2.093, -17.1, 450.0),
+                  (2.417, -16.1, 450.0),
+                  (2.690, -16.6, 450.0),
+                  (2.903, -16.5, 450.0),
+                  (3.124, -14.4, 450.0),
+                  (3.310, -18.4, 450.0),
+                  (3.666, -10.5, 450.0),
+                  (4.159, -19.8, 450.0),
+                  (4.628, -19.6, 450.0),
+                  (5.200, -22.2, 450.0),
+                  (5.976, -21.5, 450.0),
+                  (6.455, -23.7, 450.0),
+                  (7.045, -21.1, 450.0),
+                  (7.321, -23.2, 450.0),
+                  (7.759, -24.3, 450.0),
+                  (8.107, -23.1, 450.0),
+                  (8.700, -24.9, 450.0),
+                  (9.238, -22.3, 450.0),
+                  (9.914, -23.7, 450.0),
+                  (10.266, -23.0, 450.0),
+                  (10.948, -23.6, 450.0),
+                  (11.631, -22.9, 450.0),
+                  (12.352, -23.5, 450.0))
+    # the loud hits' burst, 0-20 ms, re the first mode (snare_fit.py --concert --click)
+    CLICK_DB = (-11, -15, -19, -26, -27, -26, -32, -35, -35, -35, -35, -35, -41, -45)
+    # FITTED on the band-by-time grid (examples/snare_fit.py --concert --fit):
+    # Snare Drum 2's head and wires (fitted to VCSL's Modern 1) carry over --
+    # refitting them from 38's numbers found 8.6 dB, keeping them 6.9 -- with
+    # the bands trimmed to this drum: 707 Hz down, 2.8-11 kHz up, a brighter
+    # crack over a quieter middle
+    band_trim_db = ((177, 4.8), (354, 1.6), (707, -14.7), (1414, -2.0), (2828, 8.8),
+                    (5657, 13.5), (11314, 11.1))
+
+
 class BrushTapProperties(SnareDrumProperties):
     """Note 38 of the Brush set: a brush tapped on the head, snares on."""
     mode_gains = _BRUSH_GAINS
@@ -17696,6 +17849,59 @@ class CrashCymbal2Properties(CymbalProperties):
     bloom_banded = True
     aftersound_dbs = 6.275
     initial_gain = 0.068317
+
+class ConcertCymbal1Properties(CrashCymbal1Properties):
+    """The ORCHESTRA set's CONCERT CYMBAL 1 (program 48, note 59, SC-55 manual
+    p.70): a pair of orchestral cymbals CLASHED, not a suspended crash --
+    VCSL's "Clash Cymbals 1" (CC0), the pair GeneralUser GS's is closest to
+    (examples/orch_fit.py --select). On the kit's crash, whose plate was
+    first modelled on Iowa's clash pair, fitted to its hits (examples/
+    crash_fit.py --orch)."""
+    # FITTED (examples/crash_fit.py --orch, the band-by-time grid over soft,
+    # mid and loud hits): 5.2 dB. A clashed pair's top dies far faster than a
+    # suspended crash's -- 4-8 kHz had rung 15-30 dB over the hits from 0.5 s
+    ring_peak_hz = 3483.05
+    ring_decay_floor = 13.0959
+    ring_decay_below = 11.0527
+    ring_decay_above = 6.10342
+    aftersound_fraction = 0.119403
+    aftersound_dbs = 7.98819
+    bloom_gain = 3.93429
+    bloom_seconds = 0.0168182
+    bloom_center_hz = 3224.36
+    bloom_octaves = 2.04106
+    bloom_swell = 0.586091
+    bloom_gain_slope = 0.952862
+    chiff_volume = 1.6399
+    chiff_width = 0.265716
+    band_trim_db = ((354, 11.3), (707, 8.4), (1414, -2.5), (2828, -4.6), (5657, -5.6), (11314, -6.9))
+
+
+
+class ConcertCymbal2Properties(CrashCymbal2Properties):
+    """The ORCHESTRA set's CONCERT CYMBAL 2 (program 48, note 57): VCSL's
+    "Clash Cymbals 2", the pair both GeneralUser GS's and FluidR3's are
+    closest to. As ConcertCymbal1Properties."""
+    # FITTED (examples/crash_fit.py --orch, the band-by-time grid over soft,
+    # mid and loud hits): 6.1 dB. A clashed pair's top dies far faster than a
+    # suspended crash's -- 4-8 kHz had rung 15-30 dB over the hits from 0.5 s
+    ring_peak_hz = 6487.91
+    ring_decay_floor = 32.9782
+    ring_decay_below = 5.1568
+    ring_decay_above = 108.409
+    aftersound_fraction = 0.512176
+    aftersound_dbs = 12.4119
+    bloom_gain = 1.86155
+    bloom_seconds = 0.0350837
+    bloom_center_hz = 3603.06
+    bloom_octaves = 1.81748
+    bloom_swell = 0.38891
+    bloom_gain_slope = 1.07907
+    chiff_volume = 4.13569
+    chiff_width = 1.24474
+    band_trim_db = ((354, 3.1), (707, 9.5), (1414, -1.6), (2828, -0.6), (5657, -5.0), (11314, -5.3))
+
+
 
 class SplashCymbalProperties(CymbalProperties):
     """GM 55, Splash Cymbal.
@@ -21983,6 +22189,15 @@ class ApplauseProperties(BreathNoiseProperties):
     strike_noise_len_s = 0.05
     strike_flam_rate = 274.2
     strike_flam_db = 13.0
+
+class OrchestraApplauseProperties(ApplauseProperties):
+    """The ORCHESTRA set's APPLAUSE (program 48, note 88, SC-55 manual p.70):
+    GM 126's hall of hands as a drum note. A drum part's note-off comes at
+    once, and a held noise voice would stop with it, so here it is a
+    one-shot -- its length the set's gate (percussion_map.KIT_GATE), as
+    GeneralUser GS's sample lasts (-40 dB at ~1.6 s)."""
+    one_shot = True
+
 
 N_WAVE_PEAK = 0.6626     # an N-wave of length T peaks in spectrum at this / T
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A built set's balance WITHIN itself, as GeneralUser GS has it.
 
-    python3 -I examples/elkit_balance.py [--kit=24|25] [--write]
+    python3 -I examples/elkit_balance.py [--kit=24|25|48] [--write]
 
 The snare stays where examples/drumset_check.py put it (on the Standard
 snare); every other Electronic note takes the K-weighted level GeneralUser GS
@@ -30,7 +30,8 @@ from kit_levels import kweight              # noqa: E402
 
 GU = os.path.expanduser("~/Documents/refs/soundfonts/GeneralUser-GS.sf2")
 NOTES = {24: (36, 40, 41, 43, 45, 47, 48, 50),
-         25: (36, 37, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 56, 62, 63, 64, 70, 75)}
+         25: (36, 37, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 56, 62, 63, 64, 70, 75),
+         48: (27, 28, 29, 30, 35, 36, 39, 40) + tuple(range(41, 54)) + (57, 59, 88)}
 
 
 def k150(x, sr):

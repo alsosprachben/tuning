@@ -77,6 +77,12 @@ from tonelib import (
     SimmonsSnareProperties,
     ReverseCymbalProperties,
     ElectronicKickProperties,
+    ConcertBassDrumProperties,
+    ConcertCymbal1Properties,
+    ConcertCymbal2Properties,
+    ConcertSnareProperties,
+    OrchestraApplauseProperties,
+    TimpaniProperties,
     TR808KickProperties,
     TR808SnareProperties,
     TR808TomProperties,
@@ -363,6 +369,30 @@ KITS = {
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
         75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),
     },
+    # ORCHESTRA, p.70: Roland's concert percussion. The hi-hats move to 27-29
+    # (EXC1 with 42/44/46: KIT_CHOKE) and a ride to 30; two concert bass
+    # drums, a concert snare on both snare keys, Standard's castanets on 39;
+    # the TIMPANI chromatically F to f, 41-53 -- F2-F3, so each key's MIDI
+    # pitch IS its drum's (FluidR3's 41 rings at 87.3 Hz) -- our fitted GM 47;
+    # two concert cymbals; applause. Fitted where VCSL has the instrument
+    # (examples/orch_fit.py: GeneralUser GS's sample picks the hit).
+    48: {
+        27: ("Closed Hi-Hat",    ClosedHiHatProperties, 248.4),
+        28: ("Pedal Hi-Hat",     PedalHiHatProperties, 248.4),
+        29: ("Open Hi-Hat",      OpenHiHatProperties, 248.4),
+        30: ("Ride Cymbal",      RideCymbalProperties, 147.5),
+        35: ("Concert BD 2",     ConcertBassDrumProperties, 37.7),
+        36: ("Concert BD 1",     ConcertBassDrumProperties, 37.7),
+        38: ("Concert SD",       ConcertSnareProperties, 195.1),
+        39: ("Castanets",        CastanetsProperties, 268.2),
+        40: ("Concert SD",       ConcertSnareProperties, 195.1),
+        **{n: ("Timpani " + nm, TimpaniProperties, 440.0 * 2 ** ((n - 69) / 12.0))
+           for n, nm in zip(range(41, 54), ("F", "F#", "G", "G#", "A", "A#", "B",
+                                            "c", "c#", "d", "d#", "e", "f"))},
+        57: ("Concert Cymbal 2", ConcertCymbal2Properties, 333.7),
+        59: ("Concert Cymbal 1", ConcertCymbal1Properties, 288.3),
+        88: ("Applause",         OrchestraApplauseProperties, 440.0),
+    },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
     40: {
@@ -384,7 +414,7 @@ KITS = {
 # kit; each tuned so the pitch a render reads where it fades (the sweep
 # still settling there) is where GeneralUser's reads: ~0.9x its end -- (48 between its neighbours:
 # GeneralUser's 47 and 48 both end at 79 Hz).
-KIT_RING = {24: {}, 25: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
+KIT_RING = {24: {}, 25: {}, 48: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
 # ...AND THEIR GATES: the Electronic toms stop dead where the pad's amplifier
 # closes. GeneralUser GS's decay as ours do and then fall 30 dB in under 50 ms
 # from about -32 dB -- at 0.70, 0.55 and 0.35 s on 41, 45 and 50 (the rest
@@ -392,7 +422,7 @@ KIT_RING = {24: {}, 25: {}}     # the Simmons voices' DECAY is their patch's (si
 # (examples/elkit_fit.py). The note's length, as GatedSnareProperties.gate_time
 # is, closing over the class's release_valve_time.
 # The Electronic snare too: GeneralUser's stops at 0.31 s, -32 dB.
-KIT_GATE = {24: {}, 25: {}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
+KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead, which lands on Standard's snare
 # unaided: a slap does not replace a hand clap nor a swirl an electric snare,
 # whatever key they share. The slap sits ~3 dB over the tap and the swirl
@@ -411,6 +441,7 @@ KIT_GATE = {24: {}, 25: {}}     # the Simmons voices are not gated: their bodies
 # quieter").
 KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
              25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 8.462},
+             48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              40: {39: 1.148, 40: 0.135}}
 
 
@@ -695,9 +726,19 @@ for _grp in PERCUSSION_CHOKE:
         _CHOKE_OF[_n] = _grp
 
 
-def choke_group(note):
-    """The set of notes this one silences (and is silenced by), or None."""
+# A SET'S OWN EXCLUSIVE CLASSES, where it moves an instrument to other keys:
+# the Orchestra set's hi-hats at 27-29 are EXC1 (SC-55 p.70) -- the same class
+# as 42/44/46, one pair of cymbals on six keys.
+KIT_CHOKE = {48: [{27, 28, 29, 42, 44, 46}]}
+
+
+def choke_group(note, kit=0):
+    """The notes a strike on this one stops, in this drum set."""
+    for grp in KIT_CHOKE.get(kit, ()):
+        if note in grp:
+            return grp
     return _CHOKE_OF.get(note)
+
 
 # SCRAPED instruments. A guiro is not struck -- a stick is dragged across a
 # ridged gourd, and what you hear is the individual ridges going past. As one

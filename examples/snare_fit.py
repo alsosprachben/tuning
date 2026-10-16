@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fit the kit's snare (GM 38) to DrumGizmo DRSKit's.
 
-    python3 examples/snare_fit.py [REFS] [--rim | --vcsl] [--modes] [--click] [--model] [--fit [--maxfev=N]]
+    python3 examples/snare_fit.py [REFS] [--rim | --vcsl | --concert] [--modes] [--click] [--model] [--fit [--maxfev=N]]
 
 REFS (default ~/Documents/refs/drums/drskit) holds Snare/ as
 examples/remote_zip.py pulled it from DRSKit 2.1 (CC-BY 4.0; ~/Documents/refs/
@@ -32,6 +32,11 @@ drum has fallen 50 dB and what is left is the rack tom ringing in sympathy
            hits in five layers over 30 dB, one stereo pair a stroke, the two
            sides summed in power as the two close mics are. Another drum,
            not 38 retuned: GM sets keep 40 ~2.5 dB under 38 and brighter
+  --concert the ORCHESTRA set's CONCERT SD (program 48, notes 38 and 40, SC-55
+           p.70): VCSL's legacy concert snare "drum1" (CC0; ~/Documents/refs/
+           vcsl/snare_legacy), wires on, pppp-fff -- the drum GeneralUser GS's
+           and FluidR3's Orchestra snares are both closest to (examples/
+           orch_fit.py --select). Played from the Orchestra set
   --click  the stick's burst (CLICK_DB): third-octave levels over the first
            20 ms of the loud strokes, re the first mode (drum_fit.measure)
 """
@@ -48,8 +53,12 @@ sys.path.insert(0, HERE)
 import crash_fit as C  # noqa: E402
 from drum_fit import CH, read  # noqa: E402
 
-VCSL = "--vcsl" in sys.argv
-NOTE, FOLDER = (37, "Snare_rim") if "--rim" in sys.argv else (40, "Snare2_HitSN_*") if VCSL else (38, "Snare")
+CONCERT = "--concert" in sys.argv
+VCSL = "--vcsl" in sys.argv or CONCERT
+NOTE, FOLDER = ((37, "Snare_rim") if "--rim" in sys.argv else (38, "drum1_snare1_*_rr*") if CONCERT
+                else (40, "Snare2_HitSN_*") if VCSL else (38, "Snare"))
+if CONCERT:
+    C.KIT = 48
 MICS = ("Snare_top", "Snare_bottom")
 # VCSL's layers: v<layer>_rr<take>; mid is wider than DRSKit's, whose layers
 # bunch at the loud end -- VCSL's five are spread evenly over 30 dB
@@ -85,9 +94,16 @@ _render = C.render
 C.render = lambda note, vel, secs=1.0: _render(note, vel, secs)   # a snare is over in 0.7 s
 
 
+_DYN = ("pppp", "ppp", "pp", "p", "mp", "mf", "f", "ff", "fff")
+
+
 def vcsl_layer(p):
     import re
-    m = re.search(r"_v(\d+)_rr(\d+)", os.path.basename(p))
+    b = os.path.basename(p)
+    m = re.search(r"_v(\d+)_rr(\d+)", b)
+    if m is None:                       # the legacy snares: _<dynamic>_rr<take>
+        m = re.search(r"_(p+|mp|mf|f+)_rr(\d+)", b)
+        return 10 * (_DYN.index(m.group(1)) + 1) + int(m.group(2))
     return 10 * int(m.group(1)) + int(m.group(2))
 
 
@@ -171,7 +187,7 @@ def full_score(model, recs, mflat, rflat):
 def fit(recs, rflat, vels, maxfev):
     from scipy.optimize import minimize
     import percussion_map as PM
-    cls = PM.PERCUSSION[NOTE][1]
+    cls = PM.KITS[C.KIT][NOTE][1] if C.KIT else PM.PERCUSSION[NOTE][1]
     cls.band_trim_db = ()
     x0 = [max(float(getattr(cls, k)), C.FLOOR.get(k, 1e-3)) for k in C.PARAMS]
     best = [1e9, None, None]
@@ -214,7 +230,8 @@ def grouped(rows):
 
 def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
-    refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/vcsl/snare" if VCSL else
+    refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/vcsl/snare_legacy" if CONCERT else
+                                                 "~/Documents/refs/vcsl/snare" if VCSL else
                                                  "~/Documents/refs/drums/drskit")
     os.environ.setdefault("TUNING_REFLECT", "0")
     os.environ.setdefault("TUNING_MASTER_DB", "-14")

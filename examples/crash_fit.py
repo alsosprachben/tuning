@@ -2,6 +2,13 @@
 """Fit the kit's crashes (GM 49, 57) to DrumGizmo DRSKit's, struck hard.
 
     python3 examples/crash_fit.py [REFS] [--model] [--fit [--maxfev=N]] [--crash=49,57]
+    python3 examples/crash_fit.py --orch [--model] [--fit]   the Orchestra set's 57 and 59
+
+--orch: the ORCHESTRA set's CONCERT CYMBALS (program 48, SC-55 p.70) to VCSL's
+clash pairs (CC0; ~/Documents/refs/vcsl/clash1, clash2; examples/orch_fit.py
+chose them): 59 to "Clash Cymbals 1", 57 to "Clash Cymbals 2", a stereo pair
+summed in power, played from the set (their own classes, so the kit's crashes
+are not moved). Their "short" (choked) hits are not strokes of this note.
 
 REFS (default ~/Documents/refs/drums/drskit) holds Crash_left_shank/ and
 Crash_right_shank/ as examples/remote_zip.py pulled them from DRSKit 2.1
@@ -86,7 +93,26 @@ def layer_of(p):
     return int(re.match(r"(\d+)-", os.path.basename(p)).group(1))
 
 
+ORCH = "--orch" in sys.argv
+ORCH_CLASH = {59: "clash1", 57: "clash2"}
+_DYN = ("pp", "mp", "mf", "f", "ff", "fff")
+
+
+def _orch_layer(p):
+    m = re.search(r"_(p+|mp|mf|f+)(\d+)\.wav$", os.path.basename(p))
+    return 10 * _DYN.index(m.group(1)) + int(m.group(2))
+
+
 def refs_for(refs, note):
+    if ORCH:
+        out = []
+        files = [p for p in glob.glob(os.path.join(os.path.expanduser("~/Documents/refs/vcsl"),
+                                                   ORCH_CLASH[note], "*.wav")) if "short" not in p]
+        for p in sorted(files, key=_orch_layer):
+            a, sr = read(p)
+            chs = [a[:, 0], a[:, -1]]
+            out.append((_orch_layer(p), level(chs, sr), grid(chs, sr)))
+        return out
     d = os.path.join(refs, CRASH[note])
     out = []
     for p in sorted(glob.glob(os.path.join(d, "*.wav")), key=layer_of):
@@ -109,10 +135,13 @@ def grouped(strokes):
     return out
 
 
+KIT = 0          # the drum set the note is played from (snare_fit.py --concert: 48)
+
+
 def render(note, vel, secs=4.2):
     import blockrender as B
     from drumset_check import note_file
-    L, R = B.render(note_file(0, note, vel=vel, hold=secs))[:2]
+    L, R = B.render(note_file(KIT, note, vel=vel, hold=secs))[:2]
     return [np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR
 
 
@@ -203,7 +232,7 @@ def set_params(cls, vals):
 def fit(note, recs, vels, maxfev):
     from scipy.optimize import minimize
     import percussion_map as PM
-    cls = PM.PERCUSSION[note][1]
+    cls = PM.KITS[KIT][note][1] if KIT else PM.PERCUSSION[note][1]
     cls.band_trim_db = ()
     x0 = [max(float(getattr(cls, k)), FLOOR.get(k, 1e-3)) for k in PARAMS]
     best = [1e9, None, None]
@@ -231,7 +260,10 @@ def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
     refs = pos[0] if pos else os.path.expanduser("~/Documents/refs/drums/drskit")
     notes = next((tuple(int(n) for n in a.split("=")[1].split(","))
-                  for a in argv if a.startswith("--crash=")), tuple(CRASH))
+                  for a in argv if a.startswith("--crash=")), tuple(ORCH_CLASH if ORCH else CRASH))
+    if ORCH:
+        global KIT
+        KIT = 48
     os.environ.setdefault("TUNING_REFLECT", "0")
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
     for note in notes:
@@ -251,7 +283,7 @@ def main(argv):
             continue
         gs = grouped(strokes)
         print("== GM %d: DRSKit %s, %d strokes, levels %s dB re the loudest" % (
-            note, CRASH[note], len(strokes),
+            note, (ORCH_CLASH if ORCH else CRASH)[note], len(strokes),
             " ".join("%.0f" % (l - max(s[1] for s in strokes)) for _, l, _ in strokes)))
         cache = {}
         for g in GROUPS:

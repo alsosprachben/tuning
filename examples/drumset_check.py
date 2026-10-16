@@ -60,6 +60,9 @@ def main():
         name = PM.KITS[kit][note][0]
         hold = 1.5 if note != 52 else 1.0
         a = measure(kit, note, hold)
+        if note not in PM.PERCUSSION:          # a key Standard leaves silent (Orchestra's 27-30)
+            print("  %4d  %-18s %8.1f %7.2fs   %-16s" % (note, name, a[0], a[1], "(none)"))
+            continue
         b = measure(0, note, hold)
         print("  %4d  %-18s %8.1f %7.2fs   %-16s %8.1f %7.2fs   %+6.1f%s" %
               (note, name, a[0], a[1], PM.PERCUSSION[note][0][:16], b[0], b[1],

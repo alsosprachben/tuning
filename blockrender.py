@@ -2437,8 +2437,10 @@ def prepare(path, tuner='hybrid440', sink=None):
     # PER CHANNEL: a hi-hat is one object in ONE kit. Keyed on the note alone,
     # a second drum channel (GM 2's CC0 = 120) would close the first one's hat.
     drum_ons = {}
+    kit_on = {}                 # each drum note's set: its exclusive classes are the set's
     for ch, note, on, off, vel, _, _pg in notes:
-        if is_drum(_pg) and choke_group(note) is not None:
+        if is_drum(_pg) and choke_group(note, kit_for_program(int(_pg))) is not None:
+            kit_on[(ch, note)] = kit_for_program(int(_pg))
             # A ridge WITHIN a scrape is not a new stroke: the gourd goes on
             # ringing as the stick moves to the next ridge, so only the start of
             # a scrape damps what came before it.
@@ -2446,7 +2448,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             drum_ons.setdefault((ch, note), []).append(on)
     choke_at = {}
     for (ch, note), ons in drum_ons.items():
-        grp = choke_group(note)
+        grp = choke_group(note, kit_on.get((ch, note), 0))
         later = sorted(t for (c2, n2), ts in drum_ons.items()
                        if c2 == ch and n2 in grp for t in ts)
         choke_at[(ch, note)] = later

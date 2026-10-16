@@ -128,7 +128,7 @@ plays Standard, as does any program that is not a set.
 | 25 | TR-808 | yes |
 | 32 | Jazz | = Standard on the SC-55 |
 | 40 | Brush | yes |
-| 48 | Orchestra | no -- plays Standard |
+| 48 | Orchestra | yes |
 | 56 | SFX | no -- plays Standard |
 | 127 | CM-64/32L | no -- plays Standard |
 
@@ -178,6 +178,36 @@ plays Standard, as does any program that is not a set.
 | 38 | Brush Tap | `BrushTap` | **3** | a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good |
 | 39 | Brush Slap | `BrushSlap` | **3** | a brush slapped FLAT: louder, and it lies on the head and chokes it. As 38 |
 | 40 | Brush Swirl | `BrushSwirl` | **3** | a brush SWEPT: no strike -- friction drives the head's modes as noise bands, swelling in over 120 ms. As 38 |
+
+### 48 Orchestra
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 27 | Closed Hi-Hat | `ClosedHiHat` | **4** | Standard's closed hi-hat, moved: the set's hats are EXC1 with 42/44/46 -- six keys, one pair of cymbals (percussion_map.KIT_CHOKE) |
+| 28 | Pedal Hi-Hat | `PedalHiHat` | **4** | Standard's pedal hi-hat, moved (as 27) |
+| 29 | Open Hi-Hat | `OpenHiHat` | **4** | Standard's open hi-hat, moved (as 27) |
+| 30 | Ride Cymbal | `RideCymbal` | **4** | Standard's ride, moved |
+| 35 | Concert BD 2 | `ConcertBassDrum` | **4** | CONCERT BD 2: the concert bass drum of 36 (ConcertBassDrum), the softer hit GeneralUser GS's picks |
+| 36 | Concert BD 1 | `ConcertBassDrum` | **4** | CONCERT BD 1, FITTED BY TWO LEVELS (examples/orch_fit.py): GeneralUser GS's Orchestra bass drum picks VCSL's "Bass Drum 1" (CC0), and the drum is fitted to its hit -- 73 modes read settled to -45 dB AND early to 3 kHz (a big head's upper modes are gone before a kick's are read), per-octave trims and rates: 10.7 dB. Balanced as GeneralUser's set (examples/elkit_balance.py --kit=48). Ben: sounds good |
+| 38 | Concert SD | `ConcertSnare` | **4** | CONCERT SD: VCSL's legacy concert snare drum1 (CC0), the drum GeneralUser GS's and FluidR3's both pick: its own head (195 Hz, a flat field of modes to 12x) and stick burst, Snare Drum 2's head and wires, its bands trimmed (examples/snare_fit.py --concert): 6.9 dB |
+| 39 | Castanets | `Castanets` | **4** | Standard's castanets (85), moved |
+| 40 | Concert SD | `ConcertSnare` | **4** | as 38 |
+| 41 | Timpani F | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 42 | Timpani F# | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 43 | Timpani G | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 44 | Timpani G# | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 45 | Timpani A | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 46 | Timpani A# | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 47 | Timpani B | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 48 | Timpani c | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 49 | Timpani c# | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 50 | Timpani d | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 51 | Timpani d# | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 52 | Timpani e | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 53 | Timpani f | `Timpani` | **4** | TIMPANI, chromatically F2-F3 (each key's MIDI pitch is its drum's: FluidR3's 41 rings at 87.3 Hz): GM 47's timpani, fitted to VSCO 2's |
+| 57 | Concert Cymbal 2 | `ConcertCymbal2` | **4** | CONCERT CYMBAL 2: a CLASHED pair, VCSL's "Clash Cymbals 2" (CC0, the pair both GM sets pick), on the kit crash fitted to its hits (examples/crash_fit.py --orch): 6.1 dB -- a clash's top dies far faster than a suspended crash's |
+| 59 | Concert Cymbal 1 | `ConcertCymbal1` | **4** | CONCERT CYMBAL 1: VCSL's "Clash Cymbals 1", as 57: 5.2 dB |
+| 88 | Applause | `OrchestraApplause` | **4** | GM 126's applause (fitted to three Freesound halls) as a drum note: a one-shot, gated at 1.4 s as GeneralUser GS's sample lasts |
 
 ## 0-7 Piano
 
@@ -494,7 +524,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-310 classes.
+315 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -560,15 +590,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4)
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4)
+          - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
+          - `ConcertCymbal2` -- set 48 57 Concert Cymbal 2 (4)
         - `CrashRide` -- 59 Ride Cymbal 2 (4)
         - `HiHat`
-          - `ClosedHiHat` -- 42 Closed Hi-Hat (4)
-          - `OpenHiHat` -- 46 Open Hi-Hat (4)
-          - `PedalHiHat` -- 44 Pedal Hi-Hat (4)
+          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4)
+          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4)
+          - `PedalHiHat` -- 44 Pedal Hi-Hat (4), set 48 28 Pedal Hi-Hat (4)
         - `RideBell` -- 53 Ride Bell (4)
-        - `RideCymbal` -- 51 Ride Cymbal 1 (4)
+        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 48 30 Ride Cymbal (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
       - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4)
       - `MembraneDrum`
@@ -576,7 +608,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
             - `SideStick` -- 37 Side Stick (4)
             - `SnareDrum2` -- 40 Snare Drum 2 (4)
+              - `ConcertSnare` -- set 48 38 Concert SD (4), set 48 40 Concert SD (4)
           - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
+            - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4)
               - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
@@ -625,7 +659,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4)
               - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4)
               - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4)
-        - `Timpani` -- GM 47 Timpani (4)
+        - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
@@ -645,7 +679,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `BrushSlap` -- set 40 39 Brush Slap (3)
         - `GatedSnare` -- set 24 40 Gated SD (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
-        - `Castanets` -- 85 Castanets (4)
+        - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4)
         - `Claves` -- 75 Claves (4)
         - `Guiro` -- 73 Short Guiro (4), 74 Long Guiro (4)
         - `WoodBlockHi` -- 76 Hi Wood Block (4)
@@ -744,6 +778,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
+        - `OrchestraApplause` -- set 48 88 Applause (4)
       - `Seashore` -- GM 122 Seashore (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
