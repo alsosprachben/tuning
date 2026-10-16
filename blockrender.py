@@ -1232,6 +1232,10 @@ def partial_decay(rp, f0, m):
     return dbps, logr, aftL, logrA
 
 
+# A drum machine's sweep carries its cutoff as -cut/TBEND_CUT_SCALE
+# (synthkernel.c); register.cut_time reads it back.
+TBEND_CUT_SCALE = 1048576.0
+
 ONE_SHOT_FLOOR_DB = 80.0
 ONE_SHOT_MIN_S, ONE_SHOT_MAX_S = 8.0, 60.0
 
@@ -3846,10 +3850,11 @@ def prepare(path, tuner='hybrid440', sink=None):
         # A DRUM MACHINE'S SWEEP (tonelib tension_log): the same start, 1 +
         # bend, but falling evenly in PITCH, as an exponential control voltage
         # does; the kernel takes it as the start's ln-ratio and a NEGATIVE
-        # cutoff (synthkernel.c tbend_integral)
+        # cutoff, scaled down (synthkernel.c tbend_log: the linear lines read
+        # it first, as a time, and must find it all but zero)
         if getattr(props, 'tension_log', False) and _TB[0] > -1.0:
             _TB[0] = math.log1p(_TB[0])
-            _TB[2] = -abs(_TB[2])
+            _TB[2] = -abs(_TB[2]) / TBEND_CUT_SCALE
         _TBN = (_TB[0], _TB[1], _TB[2])   # note-level bend, restored per partial
 
         # ------------------------------------------------ THE GLIDE, per note

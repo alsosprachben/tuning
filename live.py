@@ -15445,10 +15445,11 @@ def selftest():
           _PM is not None and __import__("patch_map").variation_class(5, 8)
           is __import__("patch_map").property_class_for_program(5))
     check("drum sets: the SC-55's numbers; only built ones sound as themselves",
-          [_PM.kit_for_program(k) for k in (0, 24, 25, 1, 20, 29, 30, 35, 47, 49, 60)]
-          == [0, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          [_PM.kit_for_program(k) for k in (0, 24, 25, 16, 1, 20, 29, 30, 35, 47, 49, 60)]
+          == [0, 24, 25, 0, 0, 0, 0, 0, 0, 0, 0, 0]
           and _PM.drum_set_name(24) == "Electronic"
-          and _PM.drum_set_name(25) == "TR-808 (plays Standard)"
+          and _PM.drum_set_name(25) == "TR-808"
+          and _PM.drum_set_name(16) == "Power (plays Standard)"
           and _PM.drum_set_name(32) == "Jazz",
           "  (the manual does not say what a non-set number does, so the "
           "corpus's 1, 20, 29, 30, 35, 47, 49, 60 play Standard, as before)")

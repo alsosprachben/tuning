@@ -17141,6 +17141,222 @@ class GatedSnareProperties(SnareDrumProperties):
 _BRUSH_GAINS = tuple(g ** 1.6 for g in SnareDrumProperties.mode_gains)
 
 
+class TR808Properties(ModeDecays, SynthDrumProperties):
+    """A ROLAND TR-808 VOICE (tr808.py): a patch -- `tr808`, its circuit's
+    knobs in physical units -- on one of the machine's two kinds of circuit
+    (bridged-T resonators, or the six square oscillators through band-passes),
+    as a Simmons patch is on simmons.py. The circuit becomes partials there;
+    this class carries what it hands the kernel, set when a subclass is
+    defined, and each partial's second decay stage (mode_after: (share, D)),
+    the kernel's aftersound -- a cymbal's harmonic in two bands at two rates,
+    the cowbell's abrupt drop into its tail."""
+    one_shot = True
+    tr808 = {}
+    mode_after = ()
+    mode_phases = ()
+    # AN 808 SPEAKS AT ONCE: the 10 ms fade-in a synth drum inherits swallowed
+    # the bass drum's first cycle (a partial dying in 1.5 ms never got past
+    # it). Each circuit sets its own (tr808.voice_attrs): a resonator 1.7 ms,
+    # just past the kernel's KNEE_MIN, so it ramps from zero -- the trigger
+    # reaches each network as a spike through a small RC (a tom's C73/R226),
+    # which smooths its start. A step (an impulse's jump, or a sine's corner
+    # started at each ear's own arrival) MEASURED worse: a clave's first 5 ms
+    # 20-35 dB of broadband over the 808's, the drums no better. The metal
+    # 0.3 ms, a step, its VCA's attack smoother ~0.1 ms (Werner's cymbal).
+    chiff_max_valve_time = 0.0003
+    speech_cycles = 0.0
+
+    def mode_phase(self, harmonic):
+        """Where a partial starts (radians): the bass drum's ring resuming
+        after its first, fast cycle."""
+        if 1 <= harmonic <= len(self.mode_phases):
+            return self.mode_phases[harmonic - 1]
+        return 0.0
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        tr808_refresh(cls, subclasses=False)
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        if 1 <= m <= len(self.mode_after):
+            share, d = self.mode_after[m - 1]
+            if share > 0.0:
+                return (share, d * self.decay_register_factor)
+        return (0.0, decay_rate)
+
+
+def tr808_refresh(cls, subclasses=True):
+    """Derive a TR-808 class's attributes from its patch (its own `tr808`
+    laid over its parents'), and its subclasses' -- after examples/tr808_fit.py
+    turns its knobs in place."""
+    import tr808 as _TR
+    patch = {}
+    for k in reversed(cls.__mro__):
+        patch.update(vars(k).get("tr808", {}) or {})
+    cls.tr808_patch = _TR.panel_of(patch)
+    cls.tr808_base_hz = _TR.base_hz(patch)
+    for name, value in _TR.voice_attrs(patch).items():
+        setattr(cls, name, value)
+    if subclasses:
+        for sub in cls.__subclasses__():
+            tr808_refresh(sub)
+
+
+_TR808_VOICES = {}
+
+
+def tr808_voice(base, name, **knobs):
+    """A subclass of a TR-808 patch with some knobs turned (a second tuning
+    of one of the machine's toms), cached by its name."""
+    if name not in _TR808_VOICES:
+        _TR808_VOICES[name] = type(name, (base,), {"tr808": dict(knobs)})
+    return _TR808_VOICES[name]
+
+
+# THE TR-808 SET (program 25 on the drum channel; SC-55 p.70). Each a patch,
+# FITTED to Michael Fischer's recordings of one 808 (serial 103852, every
+# knob at five positions; sources.md), the position each note plays chosen
+# by the GM sets (examples/tr808_fit.py: two levels, as the Simmons was).
+class TR808KickProperties(TR808Properties):
+    """808 Bass Drum: one bridged-T at ~50 Hz. Its first cycle runs at three
+    times that (the time constant halved while the trigger lasts) and the
+    pitch sighs down onto the tuning over ~80 ms."""
+    tr808 = {"tune_hz": 49.6, "decay_s": 0.9467, "h2_db": -47.2761, "h3_db": -59.3494,
+             "jump_ratio": 4.0725, "jump_db": -16.0807, "jump_ms": 3.2168,
+             "bend_oct": 0.8247, "bend_ms": 26.7711, "tone_delay_ms": 4.714,
+             "jump_phase": 4.7991, "click_db": -60.8123, "click_dbs": 4195.2715,
+             "click_tilt": -2.3778, "click_hp_hz": 20.0}
+
+
+class TR808SnareProperties(TR808Properties):
+    """808 Snare Drum: two bridged-Ts an octave apart (TONE their balance) and
+    SNAPPY, high-passed noise on its own envelope."""
+    tr808 = {"tune_hz": 172.3, "decay_s": 0.179, "res": ((1.9561, 8.6005, 0.0621),),
+             "jump_ratio": 1.5396, "jump_db": 4.9548, "jump_ms": 3.2851,
+             "noise_db": 11.878, "noise_hp_hz": 4468.6808, "noise_lp_hz": 4341.4115,
+             "noise_decay_s": 0.2266, "jump_phase": -0.4765, "click_db": -46.5722,
+             "click_dbs": 2624.2857, "click_tilt": -2.4304, "click_hp_hz": 20.0}
+
+
+class TR808TomProperties(TR808Properties):
+    """808 Low Tom: a bridged-T whose diodes start it a little sharp, and pink
+    noise beside it, decaying a little slower ("artificial reverberation")."""
+    tr808 = {"tune_hz": 92.9, "decay_s": 0.586, "jump_ratio": 0.9998, "jump_db": -14.8405,
+             "jump_ms": 24.2961, "bend_oct": -0.0256, "noise_db": -44.0524,
+             "noise_tilt": -3.0, "noise_lp_hz": 402.0, "noise_decay_s": 0.8534,
+             "jump_phase": -1.1555, "diodes": True, "noise_order": 1, "noise_hp_hz": 154.0,
+             "h3_db": -24.1195, "click_db": -51.8018, "click_dbs": 8480.471,
+             "click_tilt": -0.977, "click_hp_hz": 20.0}
+
+
+class TR808MidTomProperties(TR808TomProperties):
+    """808 Mid Tom."""
+    tr808 = {"tune_hz": 134.9, "decay_s": 0.3913, "noise_decay_s": 0.8849,
+             "jump_ratio": 2.5595, "jump_db": -18.3277, "jump_ms": 9.2256,
+             "bend_oct": 0.0214, "noise_db": -45.953, "jump_phase": 0.5633,
+             "noise_hp_hz": 219.0, "h3_db": -28.5183, "click_db": -66.9714,
+             "click_dbs": 5721.1654, "click_tilt": -1.0411}
+
+
+class TR808HiTomProperties(TR808TomProperties):
+    """808 Hi Tom."""
+    tr808 = {"tune_hz": 201.0, "decay_s": 0.2966, "noise_decay_s": 1.2487,
+             "jump_ratio": 4.1346, "jump_db": -14.6042, "jump_ms": 2.1084,
+             "bend_oct": -0.0071, "noise_db": -50.2666, "jump_phase": -5.2817,
+             "noise_hp_hz": 268.0, "h3_db": -32.1133, "click_db": -35.9684,
+             "click_dbs": 7368.0499, "click_tilt": -2.2306}
+
+
+class TR808CongaProperties(TR808Properties):
+    """808 Low Conga: the tom's circuit with a capacitor switched out -- higher,
+    shorter, and no noise."""
+    tr808 = {"tune_hz": 189.4, "decay_s": 0.5815, "jump_ratio": 6.0254,
+             "jump_db": -21.7379, "jump_ms": 1.3859, "bend_oct": -0.0086,
+             "jump_phase": 6.6383, "diodes": True, "h3_db": -76.7387, "click_db": -40.0659,
+             "click_dbs": 38219.3898, "click_tilt": 1.8654, "click_hp_hz": 20.0}
+
+
+class TR808MidCongaProperties(TR808CongaProperties):
+    """808 Mid Conga."""
+    tr808 = {"tune_hz": 265.1, "decay_s": 0.2651, "jump_ratio": 6.3835,
+             "jump_db": -37.7006, "jump_ms": 1.7739, "jump_phase": 2.7, "bend_oct": -0.004,
+             "h3_db": -81.7783, "click_db": -62.2596, "click_dbs": 13662.3358,
+             "click_tilt": 1.1968}
+
+
+class TR808HiCongaProperties(TR808CongaProperties):
+    """808 High Conga."""
+    tr808 = {"tune_hz": 412.3, "decay_s": 0.2746, "jump_ratio": 12.6927,
+             "jump_db": -52.4761, "jump_ms": 0.7464, "jump_phase": 7.5115,
+             "bend_oct": 0.0229, "h3_db": -50.682, "click_db": -62.9995,
+             "click_dbs": 14454.0082, "click_tilt": 6.5264}
+
+
+class TR808RimShotProperties(TR808Properties):
+    """808 Rim Shot: two bridged-Ts through a transistor VCA that adds
+    harmonics, gone in ~10 ms."""
+    tr808 = {"tune_hz": 479.6, "decay_s": 0.0327, "res": ((3.8225, -6.0, 0.0055),),
+             "jump_ratio": 1.8685, "jump_db": -99.0, "jump_ms": 1.0, "click_db": 2.2018,
+             "click_hp_hz": 861.8351, "click_dbs": 5801.4428, "click_lp_hz": 18742.3472,
+             "swing_db": 26.4113, "swing_bias": -0.2183, "out_hp_hz": 590.0,
+             "out_hp_q": 2.87, "step_db": -140.977, "tone_decay_s": 0.8892}
+
+
+class TR808ClavesProperties(TR808Properties):
+    """808 Claves: one bridged-T at ~2.4 kHz."""
+    tr808 = {"tune_hz": 2421.8, "decay_s": 0.0477, "click_db": -93.3488,
+             "click_dbs": 3741.9634, "click_tilt": -6.5588, "h2_db": -102.5326,
+             "h3_db": -101.0488, "jump_ratio": 2.1073, "jump_db": -97.4813}
+
+
+class TR808MaracasProperties(TR808Properties):
+    """808 Maracas: gated white noise through a high-pass, no tone at all."""
+    tr808 = {"tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": -2.6743,
+             "noise_hp_hz": 1061.0, "noise_decay_s": 0.3558, "noise_lp_hz": 20000.0,
+             "noise_tilt": 0.0, "noise_rise_ms": 15.5201, "noise_order": 1,
+             "noise_hp2_hz": 10600.0, "noise_hp2_q": 2.27, "noise_len_ms": 16.4793}
+
+
+# The six square oscillators, as THIS 808 has them (Fischer's cymbal and hats,
+# examples/tr808_fit.py --osc): the cowbell's two are the ones it was trimmed
+# to (nominally 540 and 800 Hz); the other four sit ~1.6x over the values the
+# schematic's components give.
+TR808_OSC_HZ = (345.5, 486.2, 558.5, 630.6, 823.9, 852.0)
+
+
+class TR808CowbellProperties(TR808Properties):
+    """808 Cowbell: two of the six oscillators through a band-pass; its
+    envelope drops abruptly, then a tail."""
+    tr808 = {"circuit": 'metal', "osc_hz": (558.5, 823.9), "osc_duty": 0.4454,
+             "bands": ((1222.0041, 1.6313, 0.0, 0.0737),), "after_db": -18.8817,
+             "after_s": 0.6848, "attack_ms": 3.4013}
+
+
+class TR808ClosedHatProperties(TR808Properties):
+    """808 Closed Hi-Hat: the six through the high band, its own short VCA and
+    a high-pass."""
+    tr808 = {"circuit": 'metal', "osc_hz": (345.5, 486.2, 558.5, 630.6, 823.9, 852.0),
+             "osc_duty": 0.4516, "bands": ((8486.5278, 1.5629, 0.0, 0.1073),),
+             "hp_hz": 15626.0721, "hp_q": 0.7135, "noise_db": -29.4945, "noise_bp": True,
+             "noise_decay_s": 0.1527}
+
+
+class TR808OpenHatProperties(TR808ClosedHatProperties):
+    """808 Open Hi-Hat: the same band, a longer VCA, a lower high-pass."""
+    tr808 = {"bands": ((7158.8915, 1.695, 0.0, 1.0744),), "hp_hz": 8667.1613,
+             "noise_decay_s": 1.1627, "hp_q": 1.155, "noise_db": -37.8141}
+
+
+class TR808CymbalProperties(TR808Properties):
+    """808 Cymbal: the six split into a low and a high band, the high one again
+    -- three VCAs, the highest shortest."""
+    tr808 = {"circuit": 'metal', "osc_hz": (345.5, 486.2, 558.5, 630.6, 823.9, 852.0),
+             "osc_duty": 0.6512,
+             "bands": ((3440.0, 0.4604, -7.6061, 2.8266), (7100.0, 2.7969, 5.2618, 0.8725), (10500.0, 1.5387, 3.5334, 0.1217)),
+             "hp_hz": 8311.2712, "noise_db": -29.4408, "noise_bp": True,
+             "noise_decay_s": 0.8983}
+
+
 class BrushTapProperties(SnareDrumProperties):
     """Note 38 of the Brush set: a brush tapped on the head, snares on."""
     mode_gains = _BRUSH_GAINS

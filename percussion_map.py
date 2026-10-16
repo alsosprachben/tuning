@@ -77,6 +77,21 @@ from tonelib import (
     SimmonsSnareProperties,
     ReverseCymbalProperties,
     ElectronicKickProperties,
+    TR808KickProperties,
+    TR808SnareProperties,
+    TR808TomProperties,
+    TR808MidTomProperties,
+    TR808HiTomProperties,
+    TR808CongaProperties,
+    TR808MidCongaProperties,
+    TR808HiCongaProperties,
+    TR808RimShotProperties,
+    TR808ClavesProperties,
+    TR808MaracasProperties,
+    TR808CowbellProperties,
+    TR808ClosedHatProperties,
+    TR808OpenHatProperties,
+    TR808CymbalProperties,
     ElectronicSnareProperties,
     GatedSnareProperties,
     BrushTapProperties,
@@ -320,6 +335,34 @@ KITS = {
                                     tone_hz=75.4, decay_s=0.623), 75.4),
         52: ("Reverse Cymbal",   ReverseCymbalProperties, 181.9),
     },
+    # TR-808, p.70: Roland's own drum machine, every note a patch on tr808.py
+    # FITTED to a real 808 (Michael Fischer's recordings; examples/tr808_fit.py).
+    # The six toms are the machine's three tom circuits at two tunings each:
+    # 41, 45, 48 at their fitted hits' own pitches, 43, 47, 50 where FluidR3
+    # plays them (Fischer's recordings repitched 2-3.5 semitones up, past the
+    # TUNING knob's reach -- a fill's six steps). The clap (39) is not in
+    # Roland's set and stays Standard's.
+    25: {
+        36: ("808 Bass Drum",    TR808KickProperties, TR808KickProperties.tr808_base_hz),
+        37: ("808 Rim Shot",     TR808RimShotProperties, TR808RimShotProperties.tr808_base_hz),
+        38: ("808 Snare Drum",   TR808SnareProperties, TR808SnareProperties.tr808_base_hz),
+        41: ("808 Low Tom 2",    TR808TomProperties, TR808TomProperties.tr808_base_hz),
+        42: ("808 CHH",          TR808ClosedHatProperties, TR808ClosedHatProperties.tr808_base_hz),
+        43: ("808 Low Tom 1",    TR808TomProperties, 116.0),
+        44: ("808 CHH",          TR808ClosedHatProperties, TR808ClosedHatProperties.tr808_base_hz),
+        45: ("808 Mid Tom 2",    TR808MidTomProperties, TR808MidTomProperties.tr808_base_hz),
+        46: ("808 OHH",          TR808OpenHatProperties, TR808OpenHatProperties.tr808_base_hz),
+        47: ("808 Mid Tom 1",    TR808MidTomProperties, 172.0),
+        48: ("808 Hi Tom 2",     TR808HiTomProperties, TR808HiTomProperties.tr808_base_hz),
+        49: ("808 Cymbal",       TR808CymbalProperties, TR808CymbalProperties.tr808_base_hz),
+        50: ("808 Hi Tom 1",     TR808HiTomProperties, 260.0),
+        56: ("808 Cowbell",      TR808CowbellProperties, TR808CowbellProperties.tr808_base_hz),
+        62: ("808 High Conga",   TR808HiCongaProperties, TR808HiCongaProperties.tr808_base_hz),
+        63: ("808 Mid Conga",    TR808MidCongaProperties, TR808MidCongaProperties.tr808_base_hz),
+        64: ("808 Low Conga",    TR808CongaProperties, TR808CongaProperties.tr808_base_hz),
+        70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
+        75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),
+    },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
     40: {
@@ -341,7 +384,7 @@ KITS = {
 # kit; each tuned so the pitch a render reads where it fades (the sweep
 # still settling there) is where GeneralUser's reads: ~0.9x its end -- (48 between its neighbours:
 # GeneralUser's 47 and 48 both end at 79 Hz).
-KIT_RING = {24: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
+KIT_RING = {24: {}, 25: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
 # ...AND THEIR GATES: the Electronic toms stop dead where the pad's amplifier
 # closes. GeneralUser GS's decay as ours do and then fall 30 dB in under 50 ms
 # from about -32 dB -- at 0.70, 0.55 and 0.35 s on 41, 45 and 50 (the rest
@@ -349,7 +392,7 @@ KIT_RING = {24: {}}     # the Simmons voices' DECAY is their patch's (simmons.py
 # (examples/elkit_fit.py). The note's length, as GatedSnareProperties.gate_time
 # is, closing over the class's release_valve_time.
 # The Electronic snare too: GeneralUser's stops at 0.31 s, -32 dB.
-KIT_GATE = {24: {}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
+KIT_GATE = {24: {}, 25: {}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead, which lands on Standard's snare
 # unaided: a slap does not replace a hand clap nor a swirl an electric snare,
 # whatever key they share. The slap sits ~3 dB over the tap and the swirl
@@ -367,6 +410,7 @@ KIT_GATE = {24: {}}     # the Simmons voices are not gated: their bodies decay (
 # left the kick 1.2 dB and the toms 4-12 dB under (Ben: "Our kick seems
 # quieter").
 KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.984, 47: 0.992, 48: 0.988, 50: 0.967},
+             25: {36: 2.445, 37: 0.298, 38: 0.479, 41: 1.649, 42: 0.151, 43: 1.790, 44: 0.139, 45: 2.023, 46: 0.195, 47: 2.163, 48: 2.523, 49: 0.319, 50: 2.807, 56: 1.763, 62: 2.439, 63: 2.470, 64: 1.675, 70: 0.550, 75: 8.462},
              40: {39: 1.148, 40: 0.135}}
 
 

@@ -346,7 +346,17 @@ def percussion_table():
 # one Electronic note thememat plays -- which is 3; the rest stay at 2. The
 # Electronic set is a SIMMONS SDS-V on its own engine (simmons.py), its
 # patches fitted to a real Simmons's hits chosen by GeneralUser's (two levels,
-# examples/elkit_fit.py), and Ben has heard it: 4.
+# examples/elkit_fit.py), and Ben has heard it: 4. The TR-808 the same way
+# on its own engine (tr808.py), fitted to Michael Fischer's recordings of a
+# real 808 (examples/tr808_fit.py; scores: dB rms over a time x third-octave
+# grid plus the hit's band balance), and heard: 4.
+_808 = ("THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- "
+        "bridged-T resonators, and six square oscillators through band-passes -- every "
+        "instrument a patch of knobs, read off the service notes' schematic where it fixes "
+        "them). FITTED BY TWO LEVELS to Michael Fischer's recordings of one 808 (every knob "
+        "at five positions): the GM set whose sample IS an 808 picks the setting, the patch "
+        "fits that hit (examples/tr808_fit.py). Balanced within itself as GeneralUser's "
+        "(examples/elkit_balance.py --kit=25). Ben: sounds incredible")
 KIT_RATED = {
     24: {
         36: (4, "THE SIMMONS SDS-V, AS AN ENGINE (simmons.py: the circuit as partials, every drum a patch of knobs, as the synths are Messenger patches): its bass drum module FITTED BY TWO LEVELS -- GeneralUser GS's Elec BD picks the closest of tarane468's real Simmons hits (Freesound, CC0; hit 30), and the patch is fitted to that hit at its pitch, 28 Hz (examples/elkit_fit.py --select, --fit=skick --real). The bend falls evenly in pitch (the kernel's log sweep). Ben: sounds great -- the vintage sound is the point"),
@@ -355,6 +365,43 @@ KIT_RATED = {
         41: (4, "the SDS-V's tom modules: one patch, each tom its own TONE and DECAY, the bend following the strike and the noise filter darkening with it; fitted to the real Simmons's NOISY toms GeneralUser's are closest to (hits 31, 35), each tom at GeneralUser's tuning, ringing out ungated as a Simmons does. The kit balanced within itself as GeneralUser's (examples/elkit_balance.py). Ben: sounds great"),
         43: (4, "as 41"), 45: (4, "as 41"), 47: (4, "as 41"), 48: (4, "as 41"), 50: (4, "as 41"),
         52: (4, "GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off"),
+    },
+    25: {
+        36: (4, _808 + ". The BASS DRUM: one network at 49.6 Hz, its first cycle at 4x (the time "
+             "constant halved while the trigger lasts), the pitch sighing 0.5 oct onto it; its "
+             "spectrum within 1-3 dB of the hit's to 8 kHz. Score 4.5 (BD0050)"),
+        37: (4, "the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one "
+             "polarity: their harmonics and intermodulation, each product decaying as the "
+             "networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). "
+             "Score 15.2 -- the rectifier's sharp 3-12 kHz edge is short"),
+        38: (4, "the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on "
+             "its own envelope. Score 5.2 (SD7575)"),
+        41: (4, "the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it "
+             "decays and their harmonics die faster; pink noise at 154-402 Hz on its own "
+             "envelope (the schematic's RCs). Score 5.0 (LT75)"),
+        43: (4, "as 41, played 2.8 semitones higher -- the SC-55's sixth tom where FluidR3 "
+             "plays it, past the TUNING knob's reach"),
+        45: (4, "the MID TOM, its own circuit: noise 219-482 Hz. Score 5.3 (MT50)"),
+        47: (4, "as 45, 2 semitones higher (as 43)"),
+        48: (4, "the HI TOM, its own circuit: noise 268-723 Hz. Score 6.7 (HT75)"),
+        50: (4, "as 48, 3.5 semitones higher (as 43)"),
+        42: (4, "the CLOSED HAT: the six oscillators (this 808's, read off its cymbal: 345.5, "
+             "486.2, 558.5, 630.6, 823.9, 852.0 Hz -- pulses, not squares) through the high "
+             "band, a short VCA and a high-pass. Score 5.8"),
+        44: (4, "as 42 (the SC-55's pedal hat is the 808's CHH)"),
+        46: (4, "the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 8.3 (OH75)"),
+        49: (4, "the CYMBAL: the six through three bands at the circuit's centres (Werner's "
+             "cymbal paper), each its own decay -- the kernel's two-stage decay per partial. "
+             "Score 7.1 (CY7500)"),
+        56: (4, "the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. "
+             "Score 10.7"),
+        62: (4, "the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no "
+             "noise. Score 9.3 (HC50)"),
+        63: (4, "the MID CONGA. Score 2.8 (MC25)"),
+        64: (4, "the LOW CONGA. Score 2.9 (LC25)"),
+        70: (4, "the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), "
+             "a gate that swells, holds and cuts. Score 10.0"),
+        75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
     },
     40: {
         38: (3, "a brush TAPPED: the wires land over 5-18 ms, and an area contact darkens the head's high modes. Ben's ear, brush_demo (2026-09-23): good"),

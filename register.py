@@ -274,16 +274,25 @@ def stages(aft, sus, logr, logrA):
     return out
 
 
+TBEND_CUT_SCALE = 1048576.0      # synthkernel.c: a sweep's cutoff, scaled down
+
+
+def cut_time(cut):
+    """A glide's cutoff as a time: a sweep (cut < 0) carries it scaled down."""
+    cut = np.asarray(cut, np.float64)
+    return np.where(cut < 0, -cut * TBEND_CUT_SCALE, cut)
+
+
 def glide_phase(Wi, tb, tau, cut, t):
     """The kernel's tension glide, as phase added to W_i t: W_i tb tau (1 - e^{-min(t,cut)/tau});
     a NEGATIVE cut is the drum machine's sweep, f/f0 = e^{tb e^{-t/tau}}, its
     integral tau sum_k tb^k/(k k!) (1 - e^{-k t/tau}) (synthkernel.c
     tbend_integral)."""
     tb, tau, cut, t = np.broadcast_arrays(*(np.asarray(v, np.float64) for v in (tb, tau, cut, t)))
-    out = Wi * tb * tau * (1.0 - np.exp(-np.minimum(t, np.abs(cut)) / tau))
+    out = Wi * tb * tau * (1.0 - np.exp(-np.minimum(t, cut_time(cut)) / tau))
     lg = cut < 0
     if np.any(lg):
-        e = np.exp(-np.minimum(t, -cut) / tau)
+        e = np.exp(-np.minimum(t, cut_time(cut)) / tau)
         acc, term, ek = np.zeros(t.shape), np.ones(t.shape), np.ones(t.shape)
         for k in range(1, 41):
             term = term * tb / k
@@ -370,7 +379,7 @@ def free_part(c, Wi, bi, Wm, am, tb=0.0, tau=1.0, cut=0.0, need=0.0):
     if np.any(near):
         wi, wm, b_, a_, cc = Wi[near], Wm[near], bi[near], am[near], c[near]
         tb_, ta_, cu_ = tb[near], tau[near], cut[near]
-        ca_ = np.abs(cu_)               # the cut as a time; its sign is the shape
+        ca_ = cut_time(cu_)             # the cut as a time; its sign is the shape
         # one grid for all (the glide's settle time and cut are the strike's)
         grid = _glide_grid(float(ca_.max()), float(ta_.max()))
 

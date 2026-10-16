@@ -64,10 +64,20 @@ static double tbend_series(double tb, double tau, double c, double t) {
     return tau * sum;
 }
 
+/* THE CUTOFF IS CARRIED SCALED DOWN by TBEND_CUT_SCALE. The linear bend's
+   lines run first, untouched, and read the negative cutoff as a time: they add
+   tb*tau*(1 - e^{-cut/tau}) to the phase and this path takes it back out. With
+   the cutoff as itself (-1.6 s on a 26 ms sweep) that term is e^{61}, ~1e26 --
+   the note's phase cannot survive being added to it and subtracted, and every
+   block edge stepped: a click 11.6 ms apart on every swept drum (an 808 kick's
+   >1 kHz band 20 dB over the machine's). Scaled, -cut/tau is ~1e-5 and the
+   term all but zero. Mirrored in blockrender.py and register.py. */
+#define TBEND_CUT_SCALE 1048576.0
+
 __attribute__((noinline))
 static void tbend_log(float tb, float ts, float cut, float t0, float t1,
                       float* integ, float* bendfac) {
-    double c = -(double)cut;
+    double c = -(double)cut * TBEND_CUT_SCALE;
     double i0 = tbend_series(tb, ts, c, t0), i1 = tbend_series(tb, ts, c, t1);
     *integ = (float)i0;
     double dt = (double)t1 - (double)t0;
