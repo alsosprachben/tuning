@@ -39,8 +39,8 @@ so it plays on the Messenger itself.
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
 | 2 specific, theory | 0 | 0% |
-| 3 specific, theory + ear | 9 | 7% |
-| 4 specific, reference audio | 119 | 93% |
+| 3 specific, theory + ear | 10 | 8% |
+| 4 specific, reference audio | 118 | 92% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -56,8 +56,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 | rating | notes | share |
 |---|---|---|
-| 3 specific, theory + ear | 2 | 3% |
-| 4 specific, reference audio | 57 | 97% |
+| 3 specific, theory + ear | 3 | 5% |
+| 4 specific, reference audio | 56 | 95% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -68,7 +68,7 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 31 | Sticks | `SfxSticks` | **4** | GS's Sticks, the SFX set's 43: two drumsticks clicked (Freesound, CC0; perc_fit sfx_sticks) |
 | 32 | Square Click | `SfxSquareClick` | **3** | GS's Square Click, the SFX set's 44: the 808 engine's click alone, fitted to GeneralUser GS's sample (examples/sfx808_fit.py) -- a synth sound, its sample the reference |
 | 33 | Metronome Click | `SfxMetronomeClick` | **4** | GS's Metronome Click, the SFX set's 45: a Wittner's tick (Freesound, CC0; perc_fit sfx_metronome) |
-| 34 | Metronome Bell | `SfxMetronomeBell` | **4** | GS's Metronome Bell, the SFX set's 46: a small steel gong struck once -- a rotary phone's (TRP, CC0); the one CC0 metronome bell, a plastic one's, rings at 9.45 kHz, a beep (Ben) |
+| 34 | Metronome Bell | `SfxMetronomeBell` | **3** | GS's Metronome Bell, the SFX set's 46: BY PROXY, a small steel gong struck once -- a rotary phone's (TRP, CC0), no metronome's; the one CC0 metronome bell, a plastic one's, rings at 9.45 kHz, a beep (Ben) |
 | 35 | Acoustic Bass Drum | `KickDrum` | **4** | DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper |
 | 36 | Bass Drum 1 | `KickDrum` | **4** | as 35, at the recorded kick's own 44.4 Hz |
 | 37 | Side Stick | `SideStick` | **4** | DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick) |
@@ -253,8 +253,8 @@ plays Standard, as does any program that is not a set.
 | 43 | Sticks | `SfxSticks` | **4** | STICKS: hickory sticks clicked (Freesound, CC0): their modes near 4 kHz, the strike fitted (perc_fit): 5.0 dB |
 | 44 | Square Click | `SfxSquareClick` | **3** | SQUARE CLICK: as Standard's 32 |
 | 45 | Metronome Click | `SfxMetronomeClick` | **4** | METRONOME CLICK: a Wittner Taktell Piccolo's tick (Freesound, CC0), eight ticks: 7.4 dB |
-| 46 | Metronome Bell | `SfxMetronomeBell` | **4** | METRONOME BELL: a rotary phone's 1615 Hz gong struck once (TRP, CC0): 5.7 dB -- the one CC0 metronome bell rings at 9.45 kHz, a beep (Ben) |
-| 47 | Guitar sliding finger | `SfxFretSlide` | **4** | GM 120's fret noise (fitted), a one-shot gated as GeneralUser GS's sample lasts (0.3 s) |
+| 46 | Metronome Bell | `SfxMetronomeBell` | **3** | METRONOME BELL: BY PROXY, a rotary phone's 1615 Hz gong struck once (TRP, CC0): 5.7 dB -- the one CC0 metronome bell rings at 9.45 kHz, a beep (Ben) |
+| 47 | Guitar sliding finger | `SfxFretSlide` | **3** | GM 120's fret noise (not fitted: its slide, squeak and shift reworked by Ben's ear), a one-shot gated as GeneralUser GS's sample lasts (0.3 s) |
 | 48 | Guitar cutting noise (down) | `SfxGuitarCutDown` | **4** | GUITAR CUTTING NOISE (DOWN): a muted strum on steel strings (Freesound, CC0), the strings' scrape at 0.14-3 kHz: 5.9 dB. A nylon guitar's take had been its body's thump -- a tom (Ben) |
 | 49 | Guitar cutting noise (up) | `SfxGuitarCutUp` | **4** | GUITAR CUTTING NOISE (UP): a hollowbody's bright muted strum (Freesound, CC0): 8.0 dB |
 | 50 | String slap of double bass | `SfxBassSlap` | **3** | STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
@@ -262,7 +262,7 @@ plays Standard, as does any program that is not a set.
 | 52 | Laughing | `SfxLaugh` | **4** | LAUGHING: a "ho ho ho" (Ben's call; a woman's laugh never read as one) -- a throat pulsed as a Freesound Santa says it (CC0): four arcing "ho"s and a long falling "hooo", each glottal pulse ringing his /o/'s formants (LPC: 500, 850 Hz, 2.5, 2.9, 5.7 kHz; examples/throat_fit.py), so the pitch slides through a fixed vowel. 2.1 s where GeneralUser GS's laugh is 0.9 |
 | 53 | Screaming | `SfxScream` | **4** | SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
 | 54 | Punch | `SfxPunch` | **4** | PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
-| 55 | Heart Beat | `SfxHeartbeat` | **4** | HEART BEAT: the heart's own waveform -- a standard ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
+| 55 | Heart Beat | `SfxHeartbeat` | **3** | HEART BEAT: not a recording -- the heart's own waveform, a textbook ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
 | 56 | Footsteps1 | `SfxFootstep` | **4** | FOOTSTEPS1: a hard shoe on stone (Freesound, CC0): the heel as shaped noise (colour 1.0 dB) and, 70 ms on, the sole 8 dB under, as the recorded steps pair |
 | 57 | Footsteps2 | `SfxFootstep` | **4** | FOOTSTEPS2: as 56, a semitone up, as GeneralUser GS has its pair |
 | 58 | Applause | `OrchestraApplause` | **4** | the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
@@ -284,12 +284,12 @@ plays Standard, as does any program that is not a set.
 | 74 | Lasergun | `SfxLaser` | **3** | LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
 | 75 | Explosion | `SfxExplosion` | **4** | EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
 | 76 | Dog | `SfxDog` | **4** | DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
-| 77 | Horse-Gallop | `SfxHoof` | **4** | HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
+| 77 | Horse-Gallop | `SfxHoof` | **3** | HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
 | 78 | Birds | `SfxBirds` | **4** | GM 123's bird (fitted), a one-shot gated 0.4 s |
 | 79 | Rain | `SfxRain` | **4** | RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
 | 80 | Thunder | `SfxThunder` | **4** | THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
 | 81 | Wind | `SfxWind` | **4** | WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
-| 82 | Sea Shore | `SfxSeashore` | **4** | GM 122's seashore (fitted), a one-shot gated 2.3 s |
+| 82 | Sea Shore | `SfxSeashore` | **3** | GM 122's seashore, a one-shot gated 2.3 s -- by proxy, fitted to an ocean drum, not the sea |
 | 83 | Stream | `SfxStream` | **4** | STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 84 | Bubble | `SfxBubble` | **4** | BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
 
@@ -334,7 +334,7 @@ plays Standard, as does any program that is not a set.
 | 76 | Laughing | `SfxLaugh` | **4** | the CM-32L's, as the SFX set's 52: LAUGHING: a "ho ho ho" (Ben's call; a woman's laugh never read as one) -- a throat pulsed as a Freesound Santa says it (CC0): four arcing "ho"s and a long falling "hooo", each glottal pulse ringing his /o/'s formants (LPC: 500, 850 Hz, 2.5, 2.9, 5.7 kHz; examples/throat_fit.py), so the pitch slides through a fixed vowel. 2.1 s where GeneralUser GS's laugh is 0.9 |
 | 77 | Screaming | `SfxScream` | **4** | the CM-32L's, as the SFX set's 53: SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
 | 78 | Punch | `SfxPunch` | **4** | the CM-32L's, as the SFX set's 54: PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
-| 79 | Heartbeat | `SfxHeartbeat` | **4** | the CM-32L's, as the SFX set's 55: HEART BEAT: the heart's own waveform -- a standard ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
+| 79 | Heartbeat | `SfxHeartbeat` | **3** | the CM-32L's, as the SFX set's 55: HEART BEAT: not a recording -- the heart's own waveform, a textbook ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
 | 80 | Footsteps 1 | `SfxFootstep` | **4** | the CM-32L's, as the SFX set's 56: FOOTSTEPS1: a hard shoe on stone (Freesound, CC0): the heel as shaped noise (colour 1.0 dB) and, 70 ms on, the sole 8 dB under, as the recorded steps pair |
 | 81 | Footsteps 2 | `SfxFootstep` | **4** | the CM-32L's, as the SFX set's 57: FOOTSTEPS2: as 56, a semitone up, as GeneralUser GS has its pair |
 | 82 | Applause | `OrchestraApplause` | **4** | the CM-32L's, as the SFX set's 58: the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
@@ -356,12 +356,12 @@ plays Standard, as does any program that is not a set.
 | 98 | Lasergun | `SfxLaser` | **3** | the CM-32L's, as the SFX set's 74: LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
 | 99 | Explosion | `SfxExplosion` | **4** | the CM-32L's, as the SFX set's 75: EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
 | 100 | Dog | `SfxDog` | **4** | the CM-32L's, as the SFX set's 76: DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
-| 101 | Horse | `SfxHoof` | **4** | the CM-32L's, as the SFX set's 77: HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
+| 101 | Horse | `SfxHoof` | **3** | the CM-32L's, as the SFX set's 77: HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
 | 102 | Birds | `SfxBirds` | **4** | the CM-32L's, as the SFX set's 78: GM 123's bird (fitted), a one-shot gated 0.4 s |
 | 103 | Rain | `SfxRain` | **4** | the CM-32L's, as the SFX set's 79: RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
 | 104 | Thunder | `SfxThunder` | **4** | the CM-32L's, as the SFX set's 80: THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
 | 105 | Wind | `SfxWind` | **4** | the CM-32L's, as the SFX set's 81: WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
-| 106 | Waves | `SfxSeashore` | **4** | the CM-32L's, as the SFX set's 82: GM 122's seashore (fitted), a one-shot gated 2.3 s |
+| 106 | Waves | `SfxSeashore` | **3** | the CM-32L's, as the SFX set's 82: GM 122's seashore, a one-shot gated 2.3 s -- by proxy, fitted to an ocean drum, not the sea |
 | 107 | Stream | `SfxStream` | **4** | the CM-32L's, as the SFX set's 83: STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 108 | Bubble | `SfxBubble` | **4** | the CM-32L's, as the SFX set's 84: BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
 
@@ -566,7 +566,7 @@ plays Standard, as does any program that is not a set.
 |---|---|---|---|---|
 | 120 | Guitar Fret Noise | `GuitarFretNoise` | **3** | its own class -- slide, squeak and position shift; reworked against Ben's ear |
 | 121 | Breath Noise | `BreathNoise` | **4** | FITTED TO TWO TAKES OF BREATHING (Freesound, CC0; examples/breath_fit.py): a breath has no pitch, so no series -- it had been 64 partials at the key dithered into noise, its colour following the key, brightest at 16 kHz -- but a noise table of the breaths' own colour from 250 Hz up (under it the takes are the breath on the microphone), held for the note and swelling in. Roland's tone here is 'Fl. Keyclick' (SC-55 p.67); this follows GM's name. Ben: good |
-| 122 | Seashore | `Seashore` | **4** | VCSL ocean drum (CC0, examples/seashore_fit.py): a hiss of its measured colour on its slow irregular swell, and the beads' ticks above 8 kHz one by one. Ben: sounds great |
+| 122 | Seashore | `Seashore` | **3** | BY PROXY: VCSL's ocean drum (CC0, examples/seashore_fit.py), the instrument that imitates the surf, not the sea: a hiss of its measured colour on its slow irregular swell, and the beads' ticks above 8 kHz one by one. Ben: sounds great |
 | 123 | Bird Tweet | `BirdTweet` | **4** | FITTED TO THREE BIRDS (Freesound, CC0; examples/bird_fit.py): the chirp FALLS -- house sparrows' cheeps drop ~900-1300 cents in 100-140 ms, a white-crowned sparrow's trill notes 150-600 cents, 68-120 ms apart -- where the class had it rising a major third; four chirps at the trill's spacing, each gone before the next, nearly pure (h2 -30 dB, h3 -40). GS has one Bird tone (SC-55 p.68). Ben: sounds fine |
 | 124 | Telephone Ring | `TelephoneRing` | **4** | FITTED TO BELL TELEPHONES (Freesound, CC0; examples/phone_fit.py): TRP's two gongs struck one at a time, a Stromberg-Carlson and a Western Electric ringing -- the Bell System's pair in all three, 437 cents apart (the class had them 9), each a dome's modes with its own decay, levels to the ringing phones within ~1 dB; one clapper striking each gong 20 times a second (the ringing current), the other between, LOOSELY -- each stroke its own offset (~5 ms), phase and level, where a grid locked the dings (Ben); ringing on ~24 dB/s after the burst. Ben: sounds good |
 | 125 | Helicopter | `Helicopter` | **4** | FITTED TO THREE PASSES (Freesound, CC0; examples/heli_fit.py): the blade passes' harmonics from 80 Hz to ~5 kHz (300 of them) with the rotor's wash under them as noise rows, together within 0.7 dB rms an octave, and the chop 11.0 dB against the passes' 11.2 -- a bare saw had put its energy under 40 Hz, nothing past 1 kHz, a 35 dB chop. The note picks the rotor (four octaves down). Ben: sounds good |
@@ -713,7 +713,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Rhodes` -- GM 4 Electric Piano 1 (4)
       - `Wurlitzer` -- GM 5 Electric Piano 2 (4)
     - `GuitarFretNoise` [NoisyPercussionMixin, FormantBody] -- GM 120 Guitar Fret Noise (3)
-      - `SfxFretSlide` -- set 56 47 Guitar sliding finger (4)
+      - `SfxFretSlide` -- set 56 47 Guitar sliding finger (3)
     - `Harp` [FormantBody] -- GM 46 Orchestral Harp (4)
     - `HarpsiBase` [FormantBody]
       - `Harpsichord` -- GM 6 Harpsichord (4)
@@ -787,9 +787,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxDoor` -- set 56 60 Door (4), set 127 84 Door (4)
             - `SfxGuitarCutDown` -- set 56 48 Guitar cutting noise (down) (4)
             - `SfxGuitarCutUp` -- set 56 49 Guitar cutting noise (up) (4)
-            - `SfxHoof` -- set 56 77 Horse-Gallop (4), set 127 101 Horse (4)
+            - `SfxHoof` -- set 56 77 Horse-Gallop (3), set 127 101 Horse (3)
             - `SfxKeyClick` -- set 56 51 Key Click (4)
-            - `SfxMetronomeBell` -- 34 Metronome Bell (4), set 56 46 Metronome Bell (4)
+            - `SfxMetronomeBell` -- 34 Metronome Bell (3), set 56 46 Metronome Bell (3)
             - `SfxMetronomeClick` -- 33 Metronome Click (4), set 56 45 Metronome Click (4)
             - `SfxSlap` -- 28 Slap (4), set 56 40 Slap (4)
             - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)
@@ -961,8 +961,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
         - `OrchestraApplause` -- set 48 88 Applause (4), set 56 58 Applause (4), set 127 82 Applause (4)
-      - `Seashore` -- GM 122 Seashore (4)
-        - `SfxSeashore` -- set 56 82 Sea Shore (4), set 127 106 Waves (4)
+      - `Seashore` -- GM 122 Seashore (3)
+        - `SfxSeashore` -- set 56 82 Sea Shore (3), set 127 106 Waves (3)
         - `SfxWeather`
           - `SfxBubble` -- set 56 84 Bubble (4), set 127 108 Bubble (4)
           - `SfxCarPass` -- set 56 65 Car-Pass (4), set 127 89 Car-pass (4)
@@ -970,7 +970,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxDoorCreak` -- set 56 59 Door Creaking (4), set 127 83 Creaking (4)
           - `SfxEngine` -- set 56 63 Car-Engine (4), set 127 87 Engine (4)
           - `SfxExplosion` -- set 56 75 Explosion (4), set 127 99 Explosion (4)
-          - `SfxHeartbeat` -- set 56 55 Heart Beat (4), set 127 79 Heartbeat (4)
+          - `SfxHeartbeat` -- set 56 55 Heart Beat (3), set 127 79 Heartbeat (3)
           - `SfxJet` -- set 56 69 Jetplane (4), set 127 93 Jet (4)
           - `SfxLaser` -- set 56 74 Lasergun (3), set 127 98 Lasergun (3)
           - `SfxRain` -- set 56 79 Rain (4), set 127 103 Rain (4)
