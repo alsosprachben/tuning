@@ -239,7 +239,15 @@ plays Standard, as does any program that is not a set.
 |---|---|---|---|---|
 | 47 | Guitar sliding finger | `SfxFretSlide` | **4** | GM 120's fret noise (fitted), a one-shot gated as GeneralUser GS's sample lasts (0.3 s) |
 | 58 | Applause | `OrchestraApplause` | **4** | the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
+| 63 | Car-Engine | `SfxEngine` | **4** | CAR ENGINE fitted to a Freesound idle (CC0, examples/weather_fit.py): its firing at 47.4 Hz and harmonics as partials, each standing out of the engine's noise as the recording's (h1-h6 within 2 dB; those barely over the noise held at their measured heights), the noise's colour 1.6 dB rms |
+| 64 | Car-Skid | `SfxSkid` | **4** | CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
+| 65 | Car-Pass | `SfxCarPass` | **4** | CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
+| 66 | Car-Crash | `SfxCrash` | **4** | CAR CRASH fitted to a Freesound crash with glass (CC0): its noise (0.2 dB rms) with glass clicks and metal rings as grains, holding 1.3 s and falling away over 0.6 s as the recording does |
+| 67 | Siren | `SfxSiren` | **4** | SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) winding up from half its pitch with the recording's 1.14 s time constant -- the wail's first 1.5 s, where GeneralUser GS's is a 0.3 s blip |
+| 68 | Train | `SfxTrain` | **4** | TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
+| 69 | Jetplane | `SfxJet` | **4** | JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
 | 70 | Helicopter | `SfxHelicopter` | **4** | GM 125's helicopter (fitted), a one-shot gated 3.75 s |
+| 71 | Starship | `SfxStarship` | **3** | STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet |
 | 72 | Gun Shot | `Gunshot` | **4** | GM 127's gunshot (fitted) |
 | 78 | Birds | `SfxBirds` | **4** | GM 123's bird (fitted), a one-shot gated 0.4 s |
 | 79 | Rain | `SfxRain` | **4** | RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
@@ -564,7 +572,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-329 classes.
+337 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -830,9 +838,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SfxSeashore` -- set 56 82 Sea Shore (4)
         - `SfxWeather`
           - `SfxBubble` -- set 56 84 Bubble (4)
+          - `SfxCarPass` -- set 56 65 Car-Pass (4)
+          - `SfxCrash` -- set 56 66 Car-Crash (4)
+          - `SfxEngine` -- set 56 63 Car-Engine (4)
+          - `SfxJet` -- set 56 69 Jetplane (4)
           - `SfxRain` -- set 56 79 Rain (4)
+          - `SfxSiren` -- set 56 67 Siren (4)
+          - `SfxSkid` -- set 56 64 Car-Skid (4)
+          - `SfxStarship` -- set 56 71 Starship (3)
           - `SfxStream` -- set 56 83 Stream (4)
           - `SfxThunder` -- set 56 80 Thunder (4)
+          - `SfxTrain` -- set 56 68 Train (4)
           - `SfxWind` -- set 56 81 Wind (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)

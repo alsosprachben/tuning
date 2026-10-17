@@ -45,18 +45,57 @@ VOICES = {
                 (40, 400)),
     "wind":    ("SfxWindProperties", 81, "wind/117611__swiftoid__wind_howl2_stereo.wav", None),
     "stream":  ("SfxStreamProperties", 83, "stream/382322__sterferny__stream.wav", (1000, 16000)),
+    # THE VEHICLES (63-69): read from a stretch of the recording (SEGMENT), the
+    # crash whole (SHORT); the train's FLAC decoded by sox into SCRATCH
+    "engine":  ("SfxEngineProperties", 63, "engine/433584__jackthemurray__car-starting-and-accelerating.wav", None),
+    "train":   ("SfxTrainProperties", 68, "train/567731__trp__200614-train-starts-rumble-clacks-speeds-up-passes-12pm.flac",
+                (200, 4000)),
+    "jet":     ("SfxJetProperties", 69, "jet/251966__clif_creates__jet-plane-8.wav", None),
+    "crash":   ("SfxCrashProperties", 66, "crash/592388__magnuswaker__car-crash-with-glass.wav", (2000, 12000)),
+    # the pitched ones' noise (their tones set from the recordings' peaks,
+    # tonelib); the siren has none
+    "skid":    ("SfxSkidProperties", 64, "skid/71741__audible-edge__nissan-maxima-handbrake-turn-04-25-2009.wav", None),
+    "carpass": ("SfxCarPassProperties", 65,
+                "carpass/380207__lunchmoney__car-passing-winter-day-wet-road-doppler-sound-devices-702-senn-k6.wav",
+                None),
+    # no recording: GeneralUser's patch as it means it, built by
+    # examples/starship_ref.py into a scratch WAV (load, below)
+    "starship": ("SfxStarshipProperties", 71, "STARSHIP", None),
 }
+SEGMENT = {"engine": (4.5, 10.0), "train": (10.0, 55.0), "jet": (5.0, 25.0),
+           "skid": (6.1, 6.9), "carpass": (3.5, 7.5)}
+SHORT = {"crash", "starship"}
+# A NOTE BESIDE THE NOISE: (f0 Hz, each harmonic's height over its local floor
+# in the recording, dB) -- the engine idle's firing (examples/weather_fit.py
+# reads it at --fit; tonelib.SfxEngineProperties)
+TONE = {"engine": 47.42}
 
 
-def load(path):
+def load(path, seg=None):
     from scipy.io import wavfile
     from scipy.signal import resample_poly
+    if path.endswith("STARSHIP"):
+        import subprocess
+        import tempfile
+        tmp = os.path.join(tempfile.mkdtemp(), "starship_ref.wav")
+        subprocess.run([sys.executable, "-I", os.path.join(HERE, "examples", "starship_ref.py"), tmp],
+                       check=True, stdout=subprocess.DEVNULL)
+        path = tmp
+    elif not path.endswith(".wav"):
+        # a FLAC or an MP3: decoded by sox to a scratch WAV beside nothing else
+        import subprocess
+        import tempfile
+        tmp = os.path.join(tempfile.mkdtemp(), "decoded.wav")
+        subprocess.run(["sox", path, tmp], check=True)
+        path = tmp
     sr, x = wavfile.read(path)
     x = x.astype(np.float64)
     x = x.mean(1) if x.ndim > 1 else x
     if sr != 44100:
         x = resample_poly(x, 441, sr // 100)
         sr = 44100
+    if seg is not None:
+        x = x[int(seg[0] * sr):int(seg[1] * sr)]
     return x[:int(90 * sr)] / (np.abs(x).max() + 1e-12), sr
 
 
@@ -96,10 +135,47 @@ def render(key):
     return 0.5 * (np.asarray(L, np.float64) + np.asarray(Rr, np.float64)), 44100
 
 
-def measure(x, sr, band):
-    m = S.measure(x, sr)
-    m["kurt"] = kurt(S.active(x, sr), sr, band)
+def measure(x, sr, band, short=False, f0=None):
+    if short or len(x) < 8 * sr:
+        # a SHORT sound (the crash, 2.6 s; the engine's 5.5 s of idle): its
+        # colour whole, from where it sounds -- no second trimmed off each
+        # end, no swell (its 3 s running mean needs more)
+        w = int(0.05 * sr)
+        e = np.sqrt(np.convolve(x * x, np.ones(w) / w, "same"))
+        on = np.flatnonzero(e > e.max() * 10 ** (-40 / 20))
+        x = x[on[0]:on[-1]]
+        N = 1 << 14
+        X = np.zeros(N // 2 + 1)
+        for a in range(0, max(1, len(x) - N), N // 4):
+            seg = x[a:a + N]
+            X += np.abs(np.fft.rfft(np.pad(seg, (0, N - len(seg))) * np.hanning(N))) ** 2
+        f = np.fft.rfftfreq(N, 1.0 / sr)
+        c = np.array([X[(f >= lo) & (f < hi)].sum() for lo, hi in zip(S.E3[:-1], S.E3[1:])])
+        m = dict(colour=10 * np.log10(c / c.max() + 1e-12), swell=0.0, rate=0.0,
+                 level=float(10 * np.log10(np.mean(x * x) + 1e-30)))
+        m["kurt"] = kurt(x, sr, band)
+    else:
+        m = S.measure(x, sr)
+        m["kurt"] = kurt(S.active(x, sr), sr, band)
+    if f0:
+        m["harm"] = harmonics(x, sr, f0)
     return m
+
+
+def harmonics(x, sr, f0, n=16):
+    """Each harmonic's peak over its local floor (+-12 Hz, its own +-3 Hz
+    left out), dB: how far the note stands out of the noise."""
+    x = x[:int(8 * sr)]
+    N = 1 << 19
+    X = np.abs(np.fft.rfft(x * np.hanning(len(x)), N))
+    f = np.fft.rfftfreq(N, 1.0 / sr)
+    out = []
+    for k in range(1, n + 1):
+        c = k * f0
+        pk = X[(f > c - 1.5) & (f < c + 1.5)].max()
+        fl = (f > c - 12) & (f < c + 12) & ~((f > c - 3) & (f < c + 3))
+        out.append(20 * np.log10(pk / (np.median(X[fl]) + 1e-12)))
+    return np.array(out)
 
 
 def show(voice, rec, ours):
@@ -116,7 +192,8 @@ def fit(voice, passes=6, write=False):
     import tonelib as T
     cname, key, path, band = VOICES[voice]
     cls = getattr(T, cname)
-    rec = measure(*load(os.path.join(R, path)), band)
+    short, f0 = voice in SHORT, TONE.get(voice)
+    rec = measure(*load(os.path.join(R, path), SEGMENT.get(voice)), band, short, f0)
     # START FROM THE RECORDING'S OWN COLOUR, on the seashore table's scale: a
     # row at every third octave from 50 Hz (the thunder's rumble is under the
     # sea's 63)
@@ -124,7 +201,7 @@ def fit(voice, passes=6, write=False):
                                 for c, v in zip(S.CEN, rec["colour"]) if 45 < c < 14000)
     target = None
     for n in range(passes + 1):
-        ours = measure(*render(key), band)
+        ours = measure(*render(key), band, short, f0)
         if target is None:
             target = ours["level"]
         d = rec["colour"] - ours["colour"]
@@ -135,7 +212,12 @@ def fit(voice, passes=6, write=False):
               flush=True)
         if n == passes:
             break
-        cls.breath_noise_db = tuple((hz, round(db + float(d[idx[hz]]) + (target - ours["level"]), 1))
+        # the level held where it began -- except under a note, where the
+        # noise moves against the note: down by how much less the firing
+        # stands out of it than the recording's (half the gap a pass; the
+        # colour alone cannot see it, the noise filling the firing's band)
+        lv = 0.5 * (ours["harm"][0] - rec["harm"][0]) if f0 else target - ours["level"]
+        cls.breath_noise_db = tuple((hz, round(db + float(d[idx[hz]]) + lv, 1))
                                     for hz, db in cls.breath_noise_db)
         # NO SWELL: the breath's swell rows are a CHANNEL's, built from its
         # melodic program, and a drum channel (its program the set) has none --
@@ -143,6 +225,19 @@ def fit(voice, passes=6, write=False):
         # first fit scaled the swell up ten passes running against nothing it
         # could move (8.4 million dB). A one-shot's gesture is its rise
         # (breath_noise_fade_s) and its gate.
+        if f0:
+            # each harmonic moved by how far it stands out of the noise against
+            # the recording's, against the firing's own gap -- the gains are a
+            # SHAPE (normalised to the strongest; the colour sets the note's
+            # level against the noise) -- half the gap a pass
+            dh = 0.5 * ((rec["harm"] - ours["harm"]) - (rec["harm"][0] - ours["harm"][0]))
+            # ...only those standing clear of the noise (18 dB): one a few dB
+            # over it reads the noise, not the harmonic, and the fit chased it
+            # to nothing (h8 at -101 dB) -- those keep their measured heights
+            dh = np.where(rec["harm"] >= 18.0, dh, 0.0)
+            cls.mode_gains = tuple(float(g * 10 ** (d / 20.0)) for g, d in zip(cls.mode_gains, dh))
+            print("     harmonics over the floor, ours - recorded: %s"
+                  % " ".join("%+.0f" % v for v in (ours["harm"] - rec["harm"])[:10]))
         if cls.grains and band is not None:
             dk = 6.0 * math.log(rec["kurt"] / max(ours["kurt"], 1.01))
             cls.grains = tuple((r[0], r[1], r[2], round(r[3] + dk + (target - ours["level"]), 1)) + tuple(r[4:])
@@ -155,11 +250,14 @@ def fit(voice, passes=6, write=False):
         i = s.index("class %s(" % cname)
         end = s.index("\nclass ", i + 1) if "\nclass " in s[i + 1:] else s.index("\n\nimport os as _os", i)
         body = re.sub(r"\n    # FITTED \(examples/weather_fit\.py\).*?(?=\n\n|\Z)", "", s[i:end], flags=re.S)
-        body = re.sub(r"\n    grains = [^\n]*", "", body)
+        body = re.sub(r"\n    grains = [^\n]*(\n              [^\n]*)?", "", body)
+        if f0:
+            body = re.sub(r"\n    mode_gains = [^\n]*", "", body)
         body = body.rstrip("\n") + (
             "\n    # FITTED (examples/weather_fit.py): colour rms %.1f dB to the recording\n"
             "    breath_noise_db = %r\n"
-            "    grains = %r\n" % (err, cls.breath_noise_db, cls.grains))
+            "    grains = %r\n" % (err, cls.breath_noise_db, cls.grains)
+            + ("    mode_gains = (%s)\n" % ", ".join("%.5g" % g for g in cls.mode_gains) if f0 else ""))
         s = s[:i] + body + "\n" + s[end:]
         open(path_t, "w").write(s)
         print("   wrote %s" % cname)
@@ -173,7 +271,9 @@ def main(argv):
                 write="--write" in argv)
         else:
             cname, key, path, band = VOICES[v]
-            show(v, measure(*load(os.path.join(R, path)), band), measure(*render(key), band))
+            short, f0 = v in SHORT, TONE.get(v)
+            show(v, measure(*load(os.path.join(R, path), SEGMENT.get(v)), band, short, f0),
+                 measure(*render(key), band, short, f0))
     return 0
 
 

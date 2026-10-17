@@ -87,6 +87,14 @@ from tonelib import (
     SfxWindProperties,
     SfxStreamProperties,
     SfxBubbleProperties,
+    SfxEngineProperties,
+    SfxTrainProperties,
+    SfxJetProperties,
+    SfxCrashProperties,
+    SfxSirenProperties,
+    SfxCarPassProperties,
+    SfxSkidProperties,
+    SfxStarshipProperties,
     GunshotProperties,
     RoomTomProperties,
     RoomFloorTomProperties,
@@ -444,6 +452,14 @@ KITS = {
         81: ("Wind",             SfxWindProperties, 261.63),
         83: ("Stream",           SfxStreamProperties, 261.63),
         84: ("Bubble",           SfxBubbleProperties, 261.63),
+        63: ("Car-Engine",       SfxEngineProperties, 47.42),
+        66: ("Car-Crash",        SfxCrashProperties, 261.63),
+        68: ("Train",            SfxTrainProperties, 261.63),
+        69: ("Jetplane",         SfxJetProperties, 261.63),
+        64: ("Car-Skid",         SfxSkidProperties, 1375.0),
+        65: ("Car-Pass",         SfxCarPassProperties, 108.0),
+        67: ("Siren",            SfxSirenProperties, 738.0),
+        71: ("Starship",         SfxStarshipProperties, 2315.0),
     },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
@@ -477,7 +493,9 @@ KIT_RING = {24: {}, 25: {}, 48: {}, 56: {}}     # the Simmons voices' DECAY is t
 KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4},
             # the SFX set's held voices, as long as GeneralUser GS's samples ring
             56: {47: 0.3, 58: 3.7, 70: 3.75, 78: 0.4, 82: 2.3,
-                 79: 2.75, 80: 1.0, 81: 1.6, 83: 2.75, 84: 0.4}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
+                 79: 2.75, 80: 1.0, 81: 1.6, 83: 2.75, 84: 0.4,
+                 63: 0.64, 66: 1.3, 68: 2.25, 69: 1.81,
+                 64: 0.45, 65: 0.75, 67: 1.5, 71: 1.5}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead: a slap does not replace a
 # hand clap nor a swirl an electric snare, whatever key they share. Its tap
 # sits 11.3 dB under Standard's snare, where GeneralUser GS keeps its brush
@@ -501,7 +519,7 @@ KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.9
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
              16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
-             56: {47: 59.315, 58: 0.137, 70: 0.575, 72: 3.108, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
+             56: {47: 59.315, 58: 0.137, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.575, 71: 1.119, 72: 3.108, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
              40: {38: 0.490, 39: 0.570, 40: 0.011}}
 
 

@@ -35,8 +35,13 @@ NOTES = {24: (36, 40, 41, 43, 45, 47, 48, 50),
          40: (39, 40),
          8: (41, 43, 45, 47, 48, 50),
          16: (36, 41, 43, 45, 47, 48, 50),
-         56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84)}
+         56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84, 63, 66, 68, 69, 64, 65, 67, 71)}
 ANCHOR_STANDARD = {56}
+# A KEY GENERALUSER RENDERS SILENT (timidity plays the SFX set's train as
+# nothing, -94 dBFS; the starship as a 4409 Hz whine, its noise once and
+# under its own attack, -48.8 dB): levelled to a stand-in key of its kind
+# instead -- the train and the starship to the jet, each a vehicle's held roar
+STAND_IN = {56: {68: 69, 71: 69}}
 
 
 def k150(x, sr):
@@ -58,7 +63,7 @@ def main(argv):
         g38, o38 = k150(*E.theirs(GU, 38, d)), k150(*E.ours(38, d))
         E.KIT = kit
         for n in NOTES[kit]:
-            g, o = k150(*E.theirs(GU, n, d)) - g38, k150(*E.ours(n, d)) - o38
+            g, o = k150(*E.theirs(GU, STAND_IN.get(kit, {}).get(n, n), d)) - g38, k150(*E.ours(n, d)) - o38
             miss[n] = g - o
             print("  %d %-16s GeneralUser %+5.1f  ours %+5.1f  (re the snare, K)  -> %+.1f dB"
                   % (n, P.KITS[kit][n][0], g, o, miss[n]))

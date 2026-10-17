@@ -23654,6 +23654,177 @@ class SfxBubbleProperties(SfxWeatherProperties):
     grains = ((300.0, 1200.0, 11.0, 50.0, 6.0, 220.0, 0.88, 0.008),)
 
 
+
+# THE SFX SET'S VEHICLES AND MACHINES (63-71, SC-55 p.71): the weather's
+# machinery, and where the thing has a NOTE -- an engine's firing -- its
+# harmonics as partials beside the noise. Each fitted to a Freesound
+# recording (CC0; examples/weather_fit.py, sources.md), gated to the length
+# GeneralUser GS's sample on its key rings.
+class SfxEngineProperties(SfxWeatherProperties):
+    """SFX 63, "Car-Engine": an engine idling -- measured off a recording of
+    one, its firing at 47.4 Hz standing 48 dB over the noise, the harmonics
+    falling 15, 24, ~30 dB and 40-60 by the sixteenth -- as partials (held,
+    a touch unsteady: the firing is not a clock) over the engine's noise.
+    Played at its firing (the key's base frequency)."""
+    mode_ratios = tuple(float(k) for k in range(1, 17))
+    max_harmonic = 16
+    # the seashore's gain is its noise table's (+50 dB rows); the firing's
+    # partials are at the gain itself -- levelled at the voice (elkit_balance)
+    initial_gain = 25184.0 / 13071
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    sustain_jitter = 0.02
+    breath_noise_fade_s = 0.06
+    # FITTED (examples/weather_fit.py): colour rms 1.6 dB to the recording
+    breath_noise_db = ((51, -20.0), (64, -80.0), (80, -80.0), (101, -24.9), (127, -32.0), (160, -25.4), (202, -36.1), (255, -26.5), (321, -24.5), (404, -38.6), (509, -80.0), (641, -20.5), (808, -31.6), (1018, -35.0), (1283, -32.4), (1616, -28.3), (2036, -27.5), (2566, -31.1), (3233, -33.1), (4073, -34.2), (5132, -32.7), (6465, -31.6), (8146, -40.1), (10263, -37.8), (12931, -47.4))
+    grains = ()
+    mode_gains = (1, 0.1694, 0.099715, 0.036284, 0.069153, 0.044864, 0.025, 0.0028184, 0.0044668, 0.0056234, 0.0025119, 0.0035481, 0.0089125, 0.014125, 0.015849, 0.0056234)
+
+
+class SfxTrainProperties(SfxWeatherProperties):
+    """SFX 68, "Train": a freight train's rumble (63-125 Hz) and the wheels'
+    clacks over the rail joints -- grains, each a cluster: a click."""
+    # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
+    breath_noise_db = ((51, 46.0), (64, 54.7), (80, 51.6), (101, 51.4), (127, 47.5), (160, 42.2), (202, 43.9), (255, 37.3), (321, 36.2), (404, 35.3), (509, 36.1), (641, 18.9), (808, 22.1), (1018, 34.3), (1283, 38.0), (1616, 38.3), (2036, 34.6), (2566, 28.4), (3233, 20.2), (4073, 31.9), (5132, 32.9), (6465, 24.4), (8146, 29.1), (10263, 25.6), (12931, 25.1))
+    grains = ((200.0, 4000.0, 4.0, 56.3, 6.0, 400.0, 1.0, 0.001, 8),)
+
+
+class SfxJetProperties(SfxWeatherProperties):
+    """SFX 69, "Jetplane": a jet overhead -- a broadband roar (125 Hz - 1 kHz
+    at its strongest), swelling in."""
+    breath_noise_fade_s = 0.35
+    # FITTED (examples/weather_fit.py): colour rms 0.0 dB to the recording
+    breath_noise_db = ((51, 46.2), (64, 47.1), (80, 48.9), (101, 47.7), (127, 51.4), (160, 50.7), (202, 51.7), (255, 52.6), (321, 53.1), (404, 53.5), (509, 54.1), (641, 54.1), (808, 54.9), (1018, 58.7), (1283, 59.4), (1616, 54.1), (2036, 48.1), (2566, 49.5), (3233, 52.7), (4073, 48.6), (5132, 46.2), (6465, 47.2), (8146, 38.1), (10263, 33.4), (12931, 23.3))
+    grains = ()
+
+
+class SfxCrashProperties(SfxWeatherProperties):
+    """SFX 66, "Car-Crash": the impact's noise with its debris in it -- glass
+    (clicks, high) and metal (rings, mid) as grains. Measured: it holds
+    for 1.3 s (the car still coming apart) and falls away over 0.6 s -- the
+    gate (percussion_map.KIT_GATE) and a long release, whatever the note."""
+    breath_noise_fade_s = 0.005
+    release_valve_time = 0.6
+    release_fraction_max = None
+    # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
+    breath_noise_db = ((51, 41.0), (64, 42.5), (80, 41.9), (101, 39.5), (127, 45.2), (160, 44.4), (202, 45.3), (255, 46.4), (321, 40.1), (404, 41.5), (509, 44.3), (641, 47.3), (808, 51.7), (1018, 51.2), (1283, 56.7), (1616, 60.3), (2036, 60.2), (2566, 51.4), (3233, 44.7), (4073, 46.6), (5132, 48.4), (6465, 52.9), (8146, 42.6), (10263, 44.0), (12931, 42.5))
+    grains = ((2000.0, 12000.0, 30.0, 71.1, 8.0, 600.0, 1.0, 0.001, 8), (300.0, 3000.0, 15.0, 60.1, 8.0, 120.0))
+
+
+
+# THE PITCHED VEHICLES: a NOTE that moves -- the siren winding up, a passing
+# car's Doppler fall -- as the tension bend (an exponential in pitch,
+# tension_log), whatever the stroke or register; the skid's squeal a wobble.
+class SfxSirenProperties(SfxWeatherProperties):
+    """SFX 67, "Siren": a fire engine's wail winding up, measured off a
+    recording of one -- a rotor's pulses, so a full series (h2 -6 dB, h3-h9
+    -14 to -22, h10-h12 -30 to -44), 45 dB over the street; and its rise,
+    from 0.52 of its pitch toward it with a 1.14 s time constant (382 Hz at
+    0.5 s, 592 at 1.75, 738 at the top). GeneralUser's own is a 0.3 s blip;
+    this is the wail's first second and a half. No noise of its own."""
+    mode_ratios = tuple(float(k) for k in range(1, 13))
+    mode_gains = (1, 0.5012, 0.1413, 0.1259, 0.1995, 0.08913, 0.1413, 0.1778, 0.07943, 0.02239, 0.03162, 0.00631)
+    max_harmonic = 12
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    breath_noise_db = ()
+    initial_gain = 0.05             # no noise table to carry its level
+    attack_time = 0.15
+    release_valve_time = 0.3
+    release_fraction_max = None
+    tension_log = True
+    tension_bend = -0.48
+    tension_bend_max = 1.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_settle_time = 1.14
+    tension_settle_cutoff = 3.0
+
+
+class SfxCarPassProperties(SfxWeatherProperties):
+    """SFX 65, "Car-Pass": a car going by on a wet road -- the tyres' noise
+    swelling to the pass and falling away, and its engine, one tone (26 dB
+    over the noise; its harmonics barely over it, -15 to -20 dB) falling
+    through the pass: a fast car's Doppler, GeneralUser's (312 to 242 Hz, an
+    exponential in pitch, 0.26 s), at the recording's engine (108 Hz after
+    the pass). The noise rides the same fall -- it is the same car."""
+    mode_ratios = (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    # at the noise table's scale (its rows +50 dB on the seashore's gain)
+    mode_gains = (400.0, 40.0, 40.0, 40.0, 40.0, 40.0)
+    max_harmonic = 6
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    attack_time = 0.3
+    breath_noise_fade_s = 0.3
+    release_valve_time = 0.4
+    release_fraction_max = None
+    tension_log = True
+    tension_bend = 0.54
+    tension_bend_max = 1.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_settle_time = 0.26
+    tension_settle_cutoff = 1.8
+    # FITTED (examples/weather_fit.py): colour rms 2.2 dB to the recording
+    breath_noise_db = ((51, 51.6), (64, 53.9), (80, -28.6), (101, -12.9), (127, 46.9), (160, 38.9), (202, 42.4), (255, 44.2), (321, 41.0), (404, 43.4), (509, 42.4), (641, 46.1), (808, 50.8), (1018, 49.7), (1283, 50.9), (1616, 51.1), (2036, 53.4), (2566, 52.1), (3233, 44.6), (4073, 41.9), (5132, 39.5), (6465, 42.0), (8146, 39.4), (10263, 32.9), (12931, 30.2))
+    grains = ()
+
+
+class SfxSkidProperties(SfxWeatherProperties):
+    """SFX 64, "Car-Skid": a tyre squealing -- stick-slip, a tone near 1.4
+    kHz 15 dB over the tyre's roar (h2 -17 dB, h3 -30), never steady:
+    measured, it hops 53 cents rms between near pitches, irregularly. Three
+    near pitches beating (0.955, 1, 1.04) under a slow swing of the lot."""
+    mode_ratios = (0.955, 1.0, 1.04, 2.0, 3.0)
+    mode_gains = (0.5, 1.0, 0.6, 0.14, 0.03)
+    max_harmonic = 5
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    attack_time = 0.12
+    breath_noise_fade_s = 0.1
+    release_valve_time = 0.2
+    release_fraction_max = None
+    skid_vibrato_cents = 50.0
+    skid_vibrato_hz = 2.3
+
+    def voice_vibrato(self, frequency, index):
+        d = 2.0 ** (self.skid_vibrato_cents * 1.4142 / 1200.0) - 1.0
+        return (d, self.skid_vibrato_hz, 0.0)
+    # FITTED (examples/weather_fit.py): colour rms 2.6 dB to the recording
+    breath_noise_db = ((51, 11.7), (64, 2.4), (80, 8.1), (101, 8.4), (127, 12.7), (160, 11.4), (202, 7.9), (255, 15.1), (321, 10.5), (404, 13.8), (509, 13.6), (641, -1.7), (808, -19.2), (1018, -43.2), (1283, 56.7), (1616, 34.4), (2036, -38.5), (2566, 34.7), (3233, 2.6), (4073, 29.4), (5132, 8.2), (6465, 13.5), (8146, 9.1), (10263, 8.1), (12931, 6.3))
+    grains = ()
+
+
+
+class SfxStarshipProperties(SfxWeatherProperties):
+    """SFX 71, "Starship": no recording of one exists, so GeneralUser GS's
+    patch as it means it (examples/starship_ref.py: timidity plays it wrong)
+    -- a hiss through a resonant low-pass (3.8 kHz, 12.8 dB), swelling in
+    over 0.21 s, and a buzz near 2.3 kHz warbling 581 cents at 10.9 Hz, 24 dB
+    under it, fading in over 0.84 s: the sci-fi warble."""
+    mode_ratios = (1.0, 2.0)
+    # at the noise table's scale: the buzz 23.7 dB under the hiss, as the
+    # reference has it
+    mode_gains = (51.3, 5.13)
+    max_harmonic = 2
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    attack_time = 0.84
+    breath_noise_fade_s = 0.21
+    release_valve_time = 0.3
+    release_fraction_max = None
+    starship_vibrato_cents = 581.0 / 1.4142     # the LFO's peak, as an rms
+    starship_vibrato_hz = 10.9
+
+    def voice_vibrato(self, frequency, index):
+        d = 2.0 ** (self.starship_vibrato_cents * 1.4142 / 1200.0) - 1.0
+        return (d, self.starship_vibrato_hz, 0.0)
+    # FITTED (examples/weather_fit.py): colour rms 4.1 dB to the recording
+    breath_noise_db = ((51, -29.9), (64, -40.7), (80, -28.2), (101, -28.4), (127, 2.3), (160, -42.1), (202, 1.0), (255, 4.7), (321, -23.8), (404, 29.3), (509, -33.7), (641, 2.4), (808, 14.5), (1018, 4.9), (1283, -128.5), (1616, 36.5), (2036, 30.2), (2566, 49.4), (3233, 54.5), (4073, 57.4), (5132, 43.9), (6465, 35.9), (8146, 16.7), (10263, 21.2), (12931, -9.7))
+    grains = ()
+
+
+
 import os as _os
 # The default room is the hall, and it needs the stagger as much as any other --
 # it is the one with three coincident surfaces.
