@@ -2,7 +2,10 @@
 """The SFX set (program 56 on the drum channel) for the ear.
 
     python3 -I examples/sfx_ab.py [OUTDIR]           # default ~/Downloads/sfx_ab
-    python3 -I examples/sfx_ab.py --vehicles [OUTDIR] # the vehicles (63-69)
+    python3 -I examples/sfx_ab.py --vehicles [OUTDIR] # the vehicles (63-71)
+    python3 -I examples/sfx_ab.py --rest [OUTDIR]     # the rest (39-62, 73-75)
+    python3 -I examples/sfx_ab.py --ours [OUTDIR]     # ours alone, every key in order, as a file
+                                                      # plays it (one render: the set's balance)
 
 For each key fitted to a recording (examples/weather_fit.py: rain, thunder,
 wind, stream; bubble from its recording's events): the recording -- a stretch
@@ -38,6 +41,23 @@ VEHICLES = ((63, "engine"), (66, "crash"), (68, "train"), (69, "jet"),
             (64, "skid"), (65, "carpass"), (67, "siren"), (71, "starship"))
 # ...and the one weather_fit does not fit (no noise): its wind-up
 SIREN = ("siren/819369__sapperlapje__fire-truck-siren.wav", (0.3, 2.3))
+# THE REST (39-75), --rest: (key, the recording's file or None, its stretch).
+# The struck ones a hit as examples/freesound_slice.py cut it; the High Q and
+# Square Click have none (GeneralUser's sample is the reference: ours, then
+# it). The applause and bubble again: Standard's vibraslap train and bell-tree
+# cascade no longer play on them (percussion_map.rasp_strokes)
+REST = ((39, None, None), (40, "slap/hits/slap_01.wav", None), (41, "scratch/610676__liftpizzas__scratch-4x.wav", (0.12, 0.55)),
+        (42, "scratch/610676__liftpizzas__scratch-4x.wav", (0.4, 0.8)), (43, "sticks/hits/sticks_01.wav", None),
+        (44, None, None), (45, "metronome/hits/metronome_01.wav", None), (46, "metronome/hits/bell_01.wav", None),
+        (48, "guitarcut/hits/cutdown_01.wav", None), (49, "guitarcut/hits/cutup_01.wav", None),
+        (50, "bassslap/hits/bassslap_01.wav", None), (51, "keyclick/hits/keyclick_01.wav", None),
+        (59, "doorcreak/316683__alex_hears_things__slow-door-hinges_nm.wav", (0.55, 3.4)),
+        (60, "door/hits/door_01.wav", None), (61, "scratch/128645__cityrocker__arrgh-scratch-wicked.wav", (0.05, 0.6)),
+        (62, "windchime/hits/chime_01.wav", None),
+        (73, "machinegun/693546__areniporgen__colt-m16a1.wav", (5.37, 6.9)),
+        (74, "laser/819682__hotpin7__blaster-pew.wav", None),
+        (75, "explosion/251401__felixblume__dynamite-explosion-in-the-mountain.wav", (0.0, 2.1)),
+        (58, None, None), (84, "bubbles/539823__ristooooo1__bubbles-001.wav", None))
 
 
 def excerpt(path, secs, seg=None):
@@ -53,6 +73,36 @@ def excerpt(path, secs, seg=None):
     return x
 
 
+def ours_in_order(out):
+    """Every key of the set, low to high, each after the last has rung out,
+    in ONE render on the drum channel -- the levels the set plays at."""
+    import mido
+    import percussion_map as P
+    import blockrender as B
+    from scipy.io import wavfile
+    m = mido.MidiFile(type=1, ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))      # 960 ticks a second
+    t.append(mido.Message("program_change", channel=9, program=56, time=0))
+    gap = 0
+    for key in sorted(P.KITS[56]):
+        ring = P.KIT_GATE[56].get(key, 1.0) + 0.6
+        t.append(mido.Message("note_on", channel=9, note=key, velocity=100, time=gap))
+        t.append(mido.Message("note_off", channel=9, note=key, velocity=0, time=60))
+        gap = int(ring * 960) - 60
+        print("  %d %s" % (key, P.KITS[56][key][0]))
+    t.append(mido.MetaMessage("end_of_track", time=gap + 960))
+    L, R = B.render(m)[:2]
+    w = np.stack([np.asarray(L, float), np.asarray(R, float)], 1)
+    w = 0.9 * w / np.abs(w).max()
+    dry = os.path.join(out, "ours.dry.wav")
+    wavfile.write(dry, B.SR, (w * 32767).astype(np.int16))
+    subprocess.check_call(["lame", "-b", "256", "--quiet", dry, os.path.join(out, "sfx_ours.mp3")])
+    os.remove(dry)
+    print("  -> " + os.path.join(out, "sfx_ours.mp3"))
+
+
 def main(argv):
     from scipy.io import wavfile
     import elkit_fit as E
@@ -61,7 +111,18 @@ def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     out = args[0] if args else os.path.expanduser("~/Downloads/sfx_ab")
     import weather_fit as W
-    if "--vehicles" in argv:
+    if "--ours" in argv:
+        ours_in_order(out)
+        return 0
+    if "--rest" in argv:
+        keys = list(REST)
+        name = "rest.mp3"
+        only = next((a.split("=")[1] for a in argv if a.startswith("--keys=")), None)
+        if only:
+            # --keys=48,49: just those, into their own file
+            keys = [k for k in keys if str(k[0]) in only.split(",")]
+            name = "keys_%s.mp3" % only.replace(",", "_")
+    elif "--vehicles" in argv:
         keys = [(k,) + (SIREN if v == "siren" else (W.VOICES[v][2], W.SEGMENT.get(v))) for k, v in VEHICLES]
         name = "vehicles.mp3"
     else:
@@ -74,7 +135,7 @@ def main(argv):
     with tempfile.TemporaryDirectory() as d:
         for key, path, seg in keys:
             secs = P.KIT_GATE[56].get(key, 2.0)
-            items = [excerpt(os.path.join(R, path), secs, seg)]
+            items = [excerpt(os.path.join(R, path), max(secs, 1.0), seg)] if path else []
             for f in (E.ours, lambda n, dd: E.theirs(GU, n, dd)):
                 x, _ = f(key, d)
                 x = np.asarray(x, float)

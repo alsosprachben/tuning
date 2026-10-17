@@ -46,7 +46,7 @@ so it plays on the Messenger itself.
 
 ## Channel 10: the percussion note map
 
-51 notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and
+59 notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and
 hand percussion and **no drum kit at all** -- no snare, no bass drum, no
 toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's
 DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and
@@ -56,10 +56,19 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 | rating | notes | share |
 |---|---|---|
-| 4 specific, reference audio | 51 | 100% |
+| 3 specific, theory + ear | 2 | 3% |
+| 4 specific, reference audio | 57 | 97% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 27 | High Q | `SfxHighQ` | **3** | GS's High Q, the SFX set's 39 (SfxHighQ): the 808 engine's resonator snapped down 5 octaves, fitted to GeneralUser GS's own sample's track -- stepped: the renderer holds a pitch a 11.6 ms block, and the sweep falls 4.5 octaves in 45 ms |
+| 28 | Slap | `SfxSlap` | **4** | GS's Slap, the SFX set's 40: a palm slap, fitted to Freesound slaps (CC0, examples/perc_fit.py sfx_slap) |
+| 29 | Scratch Push | `SfxScratchPush` | **4** | GS's Scratch Push, the SFX set's 41: a turntable's groove (Freesound, CC0), its colour bending up a fifth |
+| 30 | Scratch Pull | `SfxScratchPull` | **4** | GS's Scratch Pull, the SFX set's 42: the groove bending down from a fifth |
+| 31 | Sticks | `SfxSticks` | **4** | GS's Sticks, the SFX set's 43: two drumsticks clicked (Freesound, CC0; perc_fit sfx_sticks) |
+| 32 | Square Click | `SfxSquareClick` | **3** | GS's Square Click, the SFX set's 44: the 808 engine's click alone, fitted to GeneralUser GS's sample (examples/sfx808_fit.py) -- a synth sound, its sample the reference |
+| 33 | Metronome Click | `SfxMetronomeClick` | **4** | GS's Metronome Click, the SFX set's 45: a Wittner's tick (Freesound, CC0; perc_fit sfx_metronome) |
+| 34 | Metronome Bell | `SfxMetronomeBell` | **4** | GS's Metronome Bell, the SFX set's 46: a small steel gong struck once -- a rotary phone's (TRP, CC0); the one CC0 metronome bell, a plastic one's, rings at 9.45 kHz, a beep (Ben) |
 | 35 | Acoustic Bass Drum | `KickDrum` | **4** | DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper |
 | 36 | Bass Drum 1 | `KickDrum` | **4** | as 35, at the recorded kick's own 44.4 Hz |
 | 37 | Side Stick | `SideStick` | **4** | DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick) |
@@ -237,8 +246,24 @@ plays Standard, as does any program that is not a set.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 39 | High Q | `SfxHighQ` | **3** | HIGH Q: as Standard's 27 |
+| 40 | Slap | `SfxSlap` | **4** | SLAP: a palm slap, fitted to Freesound slaps (CC0, examples/perc_fit.py sfx_slap): 4.8 dB |
+| 41 | Scratch Push | `SfxScratchPush` | **4** | SCRATCH PUSH: a turntable's groove (Freesound, CC0; examples/weather_fit.py: 1.4 dB) sped up from still -- its colour rising a fifth (tension_log) |
+| 42 | Scratch Pull | `SfxScratchPull` | **4** | SCRATCH PULL: the groove dragged back, its colour falling from a fifth |
+| 43 | Sticks | `SfxSticks` | **4** | STICKS: hickory sticks clicked (Freesound, CC0): their modes near 4 kHz, the strike fitted (perc_fit): 5.0 dB |
+| 44 | Square Click | `SfxSquareClick` | **3** | SQUARE CLICK: as Standard's 32 |
+| 45 | Metronome Click | `SfxMetronomeClick` | **4** | METRONOME CLICK: a Wittner Taktell Piccolo's tick (Freesound, CC0), eight ticks: 7.4 dB |
+| 46 | Metronome Bell | `SfxMetronomeBell` | **4** | METRONOME BELL: a rotary phone's 1615 Hz gong struck once (TRP, CC0): 5.7 dB -- the one CC0 metronome bell rings at 9.45 kHz, a beep (Ben) |
 | 47 | Guitar sliding finger | `SfxFretSlide` | **4** | GM 120's fret noise (fitted), a one-shot gated as GeneralUser GS's sample lasts (0.3 s) |
+| 48 | Guitar cutting noise (down) | `SfxGuitarCutDown` | **4** | GUITAR CUTTING NOISE (DOWN): a muted strum on steel strings (Freesound, CC0), the strings' scrape at 0.14-3 kHz: 5.9 dB. A nylon guitar's take had been its body's thump -- a tom (Ben) |
+| 49 | Guitar cutting noise (up) | `SfxGuitarCutUp` | **4** | GUITAR CUTTING NOISE (UP): a hollowbody's bright muted strum (Freesound, CC0): 8.0 dB |
+| 50 | String slap of double bass | `SfxBassSlap` | **3** | STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
+| 51 | Key Click | `SfxKeyClick` | **4** | KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
 | 58 | Applause | `OrchestraApplause` | **4** | the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
+| 59 | Door Creaking | `SfxDoorCreak` | **4** | DOOR CREAKING: a hinge's stick-slip as a pulse train slowing 285 to 130 Hz (GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0): 1.6 dB |
+| 60 | Door | `SfxDoor` | **4** | DOOR: a wooden door slammed (Freesound, CC0): the slab, the latch, the frame (perc_fit): 6.5 dB |
+| 61 | Scratch | `SfxScratchPull` | **4** | SCRATCH: the Scratch Pull, as GeneralUser GS plays it |
+| 62 | Windchime | `SfxWindchime` | **3** | WINDCHIME: a metal chime tube struck, ringing out (Freesound, CC0): 13.0 dB -- one tube where GS's is a shaken set |
 | 63 | Car-Engine | `SfxEngine` | **4** | CAR ENGINE fitted to a Freesound idle (CC0, examples/weather_fit.py): its firing at 47.4 Hz and harmonics as partials, each standing out of the engine's noise as the recording's (h1-h6 within 2 dB; those barely over the noise held at their measured heights), the noise's colour 1.6 dB rms |
 | 64 | Car-Skid | `SfxSkid` | **4** | CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
 | 65 | Car-Pass | `SfxCarPass` | **4** | CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
@@ -246,16 +271,19 @@ plays Standard, as does any program that is not a set.
 | 67 | Siren | `SfxSiren` | **4** | SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) winding up from half its pitch with the recording's 1.14 s time constant -- the wail's first 1.5 s, where GeneralUser GS's is a 0.3 s blip |
 | 68 | Train | `SfxTrain` | **4** | TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
 | 69 | Jetplane | `SfxJet` | **4** | JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
-| 70 | Helicopter | `SfxHelicopter` | **4** | GM 125's helicopter (fitted), a one-shot gated 3.75 s |
+| 70 | Helicopter | `SfxHelicopter` | **4** | GM 125's helicopter (fitted), a one-shot gated 3.75 s, its key's note a rotor as the program's is (a written C4 at 16.3 Hz; it had buzzed at 261.6) |
 | 71 | Starship | `SfxStarship` | **3** | STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet |
 | 72 | Gun Shot | `Gunshot` | **4** | GM 127's gunshot (fitted) |
+| 73 | Machinegun | `SfxMachinegun` | **4** | MACHINEGUN: the set's gun shot (72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0) -- an impact train in the set's own stroke table (percussion_map.KIT_STROKES) |
+| 74 | Lasergun | `SfxLaser` | **3** | LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
+| 75 | Explosion | `SfxExplosion` | **4** | EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
 | 78 | Birds | `SfxBirds` | **4** | GM 123's bird (fitted), a one-shot gated 0.4 s |
 | 79 | Rain | `SfxRain` | **4** | RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
 | 80 | Thunder | `SfxThunder` | **4** | THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
 | 81 | Wind | `SfxWind` | **4** | WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
 | 82 | Sea Shore | `SfxSeashore` | **4** | GM 122's seashore (fitted), a one-shot gated 2.3 s |
 | 83 | Stream | `SfxStream` | **4** | STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
-| 84 | Bubble | `SfxBubble` | **4** | BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s |
+| 84 | Bubble | `SfxBubble` | **4** | BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
 
 ## 0-7 Piano
 
@@ -572,7 +600,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-337 classes.
+355 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -652,6 +680,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 48 30 Ride Cymbal (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
       - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4), set 56 72 Gun Shot (4)
+        - `SfxMachinegun` -- set 56 73 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
@@ -674,6 +703,16 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `CongaMute` -- 62 Mute Hi Conga (4)
             - `CongaOpen` -- 63 Open Hi Conga (4)
             - `CowbellStroke` -- 56 Cowbell (4)
+            - `SfxBassSlap` -- set 56 50 String slap of double bass (3)
+            - `SfxDoor` -- set 56 60 Door (4)
+            - `SfxGuitarCutDown` -- set 56 48 Guitar cutting noise (down) (4)
+            - `SfxGuitarCutUp` -- set 56 49 Guitar cutting noise (up) (4)
+            - `SfxKeyClick` -- set 56 51 Key Click (4)
+            - `SfxMetronomeBell` -- 34 Metronome Bell (4), set 56 46 Metronome Bell (4)
+            - `SfxMetronomeClick` -- 33 Metronome Click (4), set 56 45 Metronome Click (4)
+            - `SfxSlap` -- 28 Slap (4), set 56 40 Slap (4)
+            - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)
+            - `SfxWindchime` -- set 56 62 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4)
               - `SurdoMute` -- 86 Mute Surdo (4)
             - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4)
@@ -699,6 +738,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ElectronicTom50` -- set 24 50 Elec Hi Tom 1 (4)
             - `SimmonsSnare` -- set 24 38 Elec SD (4)
           - `TR808` [ModeDecays]
+            - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
+            - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
             - `TR808Claves` -- set 25 75 808 Claves (4)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4)
@@ -840,9 +881,14 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxBubble` -- set 56 84 Bubble (4)
           - `SfxCarPass` -- set 56 65 Car-Pass (4)
           - `SfxCrash` -- set 56 66 Car-Crash (4)
+          - `SfxDoorCreak` -- set 56 59 Door Creaking (4)
           - `SfxEngine` -- set 56 63 Car-Engine (4)
+          - `SfxExplosion` -- set 56 75 Explosion (4)
           - `SfxJet` -- set 56 69 Jetplane (4)
+          - `SfxLaser` -- set 56 74 Lasergun (3)
           - `SfxRain` -- set 56 79 Rain (4)
+          - `SfxScratchPush` -- 29 Scratch Push (4), set 56 41 Scratch Push (4)
+            - `SfxScratchPull` -- 30 Scratch Pull (4), set 56 42 Scratch Pull (4), set 56 61 Scratch (4)
           - `SfxSiren` -- set 56 67 Siren (4)
           - `SfxSkid` -- set 56 64 Car-Skid (4)
           - `SfxStarship` -- set 56 71 Starship (3)

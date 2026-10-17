@@ -2416,7 +2416,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
     for ev in notes:
         ch, note, on, off, vel, rest, pg = ev
-        strokes = rasp_strokes(note, on, off) if is_drum(pg) else None
+        strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
         if strokes is None:
             expanded.append(ev); continue
         for k, st in enumerate(strokes):
@@ -3235,6 +3235,12 @@ def prepare(path, tuner='hybrid440', sink=None):
             FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
+            # ...and a key's written pitch that picks a RATE, as the program's
+            # note does (sounding_octaves, below): the SFX set's helicopter had
+            # run its rotor at 261.6 Hz, four octaves fast -- a buzz
+            _so = getattr(pc, 'sounding_octaves', 0.0)
+            if _so:
+                f0 *= 2.0 ** _so
             organ = False; chan_vol = (v7*v11)**2
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
@@ -4289,7 +4295,11 @@ def prepare(path, tuner='hybrid440', sink=None):
                 if len(_row) > 6:
                     _rise, _gtau = _row[6], _row[7]
                     _GL[0], _GL[1], _GL[2] = 1.0 / _rise - 1.0, _gtau, _gtau * T.PORTA_SETTLE_TAUS
-                _t = non + _grng.expovariate(_rate) * SR
+                # ...ON A CLOCK where the rate is NEGATIVE: one every -1/rate s from
+                # the onset, each 7% rms off it (a machine gun's cyclic rate,
+                # 4.9 ms on its 69). Poisson rows draw as before
+                _per = -1.0 / _rate if _rate < 0.0 else 0.0
+                _t = non if _per else non + _grng.expovariate(_rate) * SR
                 _glr = math.log(10.0) / 20.0 * _dps
                 # ...and a CLUSTER where the row carries a ninth field: that many
                 # sines at one instant, each its own pitch across the band, at
@@ -4314,7 +4324,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                                          _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _t, _t + 0.1 * SR,
                                          8.0, 0.005 * SR, chiff, _glr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc,
                                          -1, 0, ph0=_grng.random() * 2.0 * math.pi)
-                    _t += _grng.expovariate(_rate) * SR
+                    _t += (max(0.2 * _per, _grng.gauss(_per, 0.07 * _per)) if _per
+                           else _grng.expovariate(_rate)) * SR
                 _GL[0], _GL[1], _GL[2] = _glkeep
             _BR[0] = _bkeep
             _CBW[0], _CBW[1] = _cbw

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A built set's balance WITHIN itself, as GeneralUser GS has it.
 
-    python3 -I examples/elkit_balance.py [--kit=8|16|24|25|40|48|56] [--write]
+    python3 -I examples/elkit_balance.py [--kit=0|8|16|24|25|40|48|56] [--write]
 
 The snare stays where examples/drumset_check.py put it (on the Standard
 snare); every other Electronic note takes the K-weighted level GeneralUser GS
@@ -29,13 +29,15 @@ import elkit_fit as E                       # noqa: E402
 from kit_levels import kweight              # noqa: E402
 
 GU = os.path.expanduser("~/Documents/refs/soundfonts/GeneralUser-GS.sf2")
-NOTES = {24: (36, 40, 41, 43, 45, 47, 48, 50),
+NOTES = {0: (27, 28, 29, 30, 31, 32, 33, 34),     # Standard's GS eight (PERCUSSION_LEVEL)
+         24: (36, 40, 41, 43, 45, 47, 48, 50),
          25: (36, 37, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 56, 62, 63, 64, 70, 75),
          48: (27, 28, 29, 30, 35, 36, 39, 40) + tuple(range(41, 54)) + (57, 59, 88),
          40: (39, 40),
          8: (41, 43, 45, 47, 48, 50),
          16: (36, 41, 43, 45, 47, 48, 50),
-         56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84, 63, 66, 68, 69, 64, 65, 67, 71)}
+         56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84, 63, 66, 68, 69, 64, 65, 67, 71,
+             39, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 59, 60, 61, 62, 73, 74, 75)}
 ANCHOR_STANDARD = {56}
 # A KEY GENERALUSER RENDERS SILENT (timidity plays the SFX set's train as
 # nothing, -94 dBFS; the starship as a 4409 Hz whine, its noise once and
@@ -66,7 +68,25 @@ def main(argv):
             g, o = k150(*E.theirs(GU, STAND_IN.get(kit, {}).get(n, n), d)) - g38, k150(*E.ours(n, d)) - o38
             miss[n] = g - o
             print("  %d %-16s GeneralUser %+5.1f  ours %+5.1f  (re the snare, K)  -> %+.1f dB"
-                  % (n, P.KITS[kit][n][0], g, o, miss[n]))
+                  % (n, (P.KITS[kit] if kit else P.PERCUSSION)[n][0], g, o, miss[n]))
+    if "--write" in argv and kit == 0:
+        # STANDARD's levels are PERCUSSION_LEVEL's: each note's trim set (or
+        # added after the table's opening comment), its old value carried
+        p = os.path.join(HERE, "percussion_map.py")
+        s = open(p).read()
+        base = s.index("PERCUSSION_LEVEL = {")
+        for n, dv in miss.items():
+            cur = P.PERCUSSION_LEVEL.get(n, 1.0) * 10 ** (dv / 20.0)
+            m = re.search(r"\n    %d: [0-9.]+," % n, s[base:])
+            line = "\n    %d: %.4f," % (n, cur)
+            if m:
+                s = s[:base + m.start()] + line + s[base + m.end():]
+            else:
+                k = s.index("\n    73: 5.0, 74: 5.0,", base)
+                s = s[:k] + line + "  # GS's %d, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)" % n + s[k:]
+            print("  PERCUSSION_LEVEL[%d] = %.4f" % (n, cur))
+        open(p, "w").write(s)
+        return 0
     if "--write" in argv:
         p = os.path.join(HERE, "percussion_map.py")
         s = open(p).read()

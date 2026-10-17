@@ -61,14 +61,30 @@ VOICES = {
     # no recording: GeneralUser's patch as it means it, built by
     # examples/starship_ref.py into a scratch WAV (load, below)
     "starship": ("SfxStarshipProperties", 71, "STARSHIP", None),
+    # THE REST (39-75): a blast, a turntable, a hinge, a rifle
+    "explosion": ("SfxExplosionProperties", 75, "explosion/251401__felixblume__dynamite-explosion-in-the-mountain.wav",
+                  None),
+    "scratch": ("SfxScratchPushProperties", 41, "scratch/610676__liftpizzas__scratch-4x.wav", None),
+    "creak":   ("SfxDoorCreakProperties", 59, "doorcreak/316683__alex_hears_things__slow-door-hinges_nm.wav", None),
+    "machinegun": ("SfxMachinegunProperties", 73, "machinegun/693546__areniporgen__colt-m16a1.wav", None),
 }
 SEGMENT = {"engine": (4.5, 10.0), "train": (10.0, 55.0), "jet": (5.0, 25.0),
-           "skid": (6.1, 6.9), "carpass": (3.5, 7.5)}
-SHORT = {"crash", "starship"}
+           "skid": (6.1, 6.9), "carpass": (3.5, 7.5),
+           "explosion": (0.0, 2.1), "scratch": (0.12, 0.55), "creak": (0.55, 3.4), "machinegun": (5.37, 6.9)}
+SHORT = {"crash", "starship", "explosion", "scratch", "creak", "machinegun"}
 # A NOTE BESIDE THE NOISE: (f0 Hz, each harmonic's height over its local floor
 # in the recording, dB) -- the engine idle's firing (examples/weather_fit.py
 # reads it at --fit; tonelib.SfxEngineProperties)
 TONE = {"engine": 47.42}
+# THE TABLE A VOICE'S COLOUR IS FITTED IN: the held noise's (breath_noise_db),
+# or another the class names, started from the class's own. (Not the machine
+# gun's strike: a strike's rows are noise bands, which swell ~0.1 s whatever
+# their rate -- no crack; its shots are grains on a clock)
+TABLE = {}
+# ...or a TONE'S HARMONICS, each moved by the colour where it sits at the
+# rate's middle (Hz). Not the creak's: its rate sweeps an octave, and alone
+# its harmonics left bands empty (14.9 dB) -- its noise is fitted under them
+HARMCOL = {}
 
 
 def load(path, seg=None):
@@ -197,15 +213,22 @@ def fit(voice, passes=6, write=False):
     # START FROM THE RECORDING'S OWN COLOUR, on the seashore table's scale: a
     # row at every third octave from 50 Hz (the thunder's rumble is under the
     # sea's 63)
-    cls.breath_noise_db = tuple((round(float(c)), round(float(v) + 54.0, 1))
-                                for c, v in zip(S.CEN, rec["colour"]) if 45 < c < 14000)
+    tab, hc = TABLE.get(voice, "breath_noise_db"), HARMCOL.get(voice)
+    if tab == "breath_noise_db" and not hc:
+        cls.breath_noise_db = tuple((round(float(c)), round(float(v) + 54.0, 1))
+                                    for c, v in zip(S.CEN, rec["colour"]) if 45 < c < 14000)
     target = None
     for n in range(passes + 1):
         ours = measure(*render(key), band, short, f0)
         if target is None:
             target = ours["level"]
         d = rec["colour"] - ours["colour"]
-        idx = {hz: int(np.argmin(np.abs(S.CEN - hz))) for hz, _ in cls.breath_noise_db}
+        if hc:
+            # each harmonic at the band its middle rate puts it in
+            idx = {k: int(np.argmin(np.abs(S.CEN - k * hc))) for k in range(1, len(cls.mode_gains) + 1)
+                   if k * hc < 14000}
+        else:
+            idx = {hz: int(np.argmin(np.abs(S.CEN - hz))) for hz, _ in getattr(cls, tab)}
         err = float(np.sqrt(np.mean([d[i] ** 2 for i in idx.values()])))
         print("  pass %d: colour rms %.1f dB; swell %.2f at %.2f Hz (rec %.2f at %.2f); kurtosis %.1f (rec %.1f)"
               % (n, err, ours["swell"], ours["rate"], rec["swell"], rec["rate"], ours["kurt"], rec["kurt"]),
@@ -217,8 +240,12 @@ def fit(voice, passes=6, write=False):
         # stands out of it than the recording's (half the gap a pass; the
         # colour alone cannot see it, the noise filling the firing's band)
         lv = 0.5 * (ours["harm"][0] - rec["harm"][0]) if f0 else target - ours["level"]
-        cls.breath_noise_db = tuple((hz, round(db + float(d[idx[hz]]) + lv, 1))
-                                    for hz, db in cls.breath_noise_db)
+        if hc:
+            # half the gap a pass: neighbouring harmonics share a band
+            cls.mode_gains = tuple(float(g * 10 ** ((0.5 * float(d[idx[k + 1]]) + lv) / 20.0)) if k + 1 in idx
+                                   else float(g) for k, g in enumerate(cls.mode_gains))
+        else:
+            setattr(cls, tab, tuple((hz, round(db + float(d[idx[hz]]) + lv, 1)) for hz, db in getattr(cls, tab)))
         # NO SWELL: the breath's swell rows are a CHANNEL's, built from its
         # melodic program, and a drum channel (its program the set) has none --
         # nor could one row serve wind, rain and thunder on one channel. A
@@ -250,14 +277,17 @@ def fit(voice, passes=6, write=False):
         i = s.index("class %s(" % cname)
         end = s.index("\nclass ", i + 1) if "\nclass " in s[i + 1:] else s.index("\n\nimport os as _os", i)
         body = re.sub(r"\n    # FITTED \(examples/weather_fit\.py\).*?(?=\n\n|\Z)", "", s[i:end], flags=re.S)
-        body = re.sub(r"\n    grains = [^\n]*(\n              [^\n]*)?", "", body)
-        if f0:
+        body = re.sub(r"\n    grains = [^\n]*(\n              [^\n]*)*", "", body)
+        if f0 or hc:
             body = re.sub(r"\n    mode_gains = [^\n]*", "", body)
+        if tab != "breath_noise_db":
+            body = re.sub(r"\n    %s = [^\n]*" % tab, "", body)
         body = body.rstrip("\n") + (
             "\n    # FITTED (examples/weather_fit.py): colour rms %.1f dB to the recording\n"
             "    breath_noise_db = %r\n"
             "    grains = %r\n" % (err, cls.breath_noise_db, cls.grains)
-            + ("    mode_gains = (%s)\n" % ", ".join("%.5g" % g for g in cls.mode_gains) if f0 else ""))
+            + ("    %s = %r\n" % (tab, getattr(cls, tab)) if tab != "breath_noise_db" else "")
+            + ("    mode_gains = (%s)\n" % ", ".join("%.5g" % g for g in cls.mode_gains) if f0 or hc else ""))
         s = s[:i] + body + "\n" + s[end:]
         open(path_t, "w").write(s)
         print("   wrote %s" % cname)

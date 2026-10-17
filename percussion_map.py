@@ -95,6 +95,24 @@ from tonelib import (
     SfxCarPassProperties,
     SfxSkidProperties,
     SfxStarshipProperties,
+    SfxHighQProperties,
+    SfxSquareClickProperties,
+    SfxMachinegunProperties,
+    SfxLaserProperties,
+    SfxScratchPushProperties,
+    SfxScratchPullProperties,
+    SfxDoorCreakProperties,
+    SfxExplosionProperties,
+    SfxSlapProperties,
+    SfxSticksProperties,
+    SfxMetronomeClickProperties,
+    SfxMetronomeBellProperties,
+    SfxGuitarCutDownProperties,
+    SfxGuitarCutUpProperties,
+    SfxBassSlapProperties,
+    SfxKeyClickProperties,
+    SfxDoorProperties,
+    SfxWindchimeProperties,
     GunshotProperties,
     RoomTomProperties,
     RoomFloorTomProperties,
@@ -152,6 +170,16 @@ G = GuiroProperties             # struck wood, but the noisiest of it
 
 # GM note -> (name, bucket, base Hz). Standard GM drum map, notes 35-81.
 PERCUSSION = {
+    # GS's EIGHT BELOW THE KICK (SC-55 p.69): the SFX set's 39-46, the same
+    # sounds on the same classes (each fitted there; its gate and level too)
+    27: ("High Q",             SfxHighQProperties, SfxHighQProperties.tr808_base_hz),
+    28: ("Slap",               SfxSlapProperties, 335.0),
+    29: ("Scratch Push",       SfxScratchPushProperties, 261.63),
+    30: ("Scratch Pull",       SfxScratchPullProperties, 261.63),
+    31: ("Sticks",             SfxSticksProperties, 4202.0),
+    32: ("Square Click",       SfxSquareClickProperties, SfxSquareClickProperties.tr808_base_hz),
+    33: ("Metronome Click",    SfxMetronomeClickProperties, 1415.0),
+    34: ("Metronome Bell",     SfxMetronomeBellProperties, 1615.0),
     # DRSKit's kick settles at 44.4 Hz (KickDrumProperties); 35, the
     # "acoustic" bass drum, the deeper of the two, the same 2 semitones under
     35: ("Acoustic Bass Drum", K, 39.4),
@@ -460,6 +488,25 @@ KITS = {
         65: ("Car-Pass",         SfxCarPassProperties, 108.0),
         67: ("Siren",            SfxSirenProperties, 738.0),
         71: ("Starship",         SfxStarshipProperties, 2315.0),
+        39: ("High Q",           SfxHighQProperties, SfxHighQProperties.tr808_base_hz),
+        44: ("Square Click",     SfxSquareClickProperties, SfxSquareClickProperties.tr808_base_hz),
+        41: ("Scratch Push",     SfxScratchPushProperties, 261.63),
+        42: ("Scratch Pull",     SfxScratchPullProperties, 261.63),
+        59: ("Door Creaking",    SfxDoorCreakProperties, 130.0),
+        61: ("Scratch",          SfxScratchPullProperties, 261.63),
+        73: ("Machinegun",       SfxMachinegunProperties, 261.63),
+        74: ("Lasergun",         SfxLaserProperties, 100.0),
+        75: ("Explosion",        SfxExplosionProperties, 261.63),
+        40: ("Slap",                SfxSlapProperties, 335.0),
+        43: ("Sticks",              SfxSticksProperties, 4202.0),
+        45: ("Metronome Click",     SfxMetronomeClickProperties, 1415.0),
+        46: ("Metronome Bell",      SfxMetronomeBellProperties, 1615.0),
+        48: ("Guitar cutting noise (down)", SfxGuitarCutDownProperties, 1444.0),
+        49: ("Guitar cutting noise (up)", SfxGuitarCutUpProperties, 1200.0),
+        50: ("String slap of double bass", SfxBassSlapProperties, 65.0),
+        51: ("Key Click",           SfxKeyClickProperties, 988.0),
+        60: ("Door",                SfxDoorProperties, 256.0),
+        62: ("Windchime",           SfxWindchimeProperties, 485.0),
     },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
@@ -491,11 +538,14 @@ KIT_RING = {24: {}, 25: {}, 48: {}, 56: {}}     # the Simmons voices' DECAY is t
 # is, closing over the class's release_valve_time.
 # The Electronic snare too: GeneralUser's stops at 0.31 s, -32 dB.
 KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4},
+            # Standard's GS eight (27-34), gated as the SFX set's 39-46
+            0: {27: 0.056, 29: 0.18, 30: 0.23},
             # the SFX set's held voices, as long as GeneralUser GS's samples ring
             56: {47: 0.3, 58: 3.7, 70: 3.75, 78: 0.4, 82: 2.3,
                  79: 2.75, 80: 1.0, 81: 1.6, 83: 2.75, 84: 0.4,
                  63: 0.64, 66: 1.3, 68: 2.25, 69: 1.81,
-                 64: 0.45, 65: 0.75, 67: 1.5, 71: 1.5}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
+                 64: 0.45, 65: 0.75, 67: 1.5, 71: 1.5,
+                 39: 0.056, 41: 0.18, 42: 0.23, 61: 0.23, 59: 0.6, 73: 0.7, 74: 0.33, 75: 0.6}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead: a slap does not replace a
 # hand clap nor a swirl an electric snare, whatever key they share. Its tap
 # sits 11.3 dB under Standard's snare, where GeneralUser GS keeps its brush
@@ -519,7 +569,7 @@ KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.9
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
              16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
-             56: {47: 59.315, 58: 0.137, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.575, 71: 1.119, 72: 3.108, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
+             56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.090, 46: 0.591, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
              40: {38: 0.490, 39: 0.570, 40: 0.011}}
 
 
@@ -692,6 +742,14 @@ PERCUSSION_LEVEL = {
     # A Jupiter roll is 154 strokes at velocity 125 with a 4.4 s ring, so it
     # accumulates about 20 dB over a single stroke no matter what this says --
     # that part is real and belongs to the score, not to the gain.
+    27: 0.8612,  # GS's 27, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    28: 0.0771,  # GS's 28, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    29: 0.9623,  # GS's 29, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    30: 0.9711,  # GS's 30, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    31: 0.2770,  # GS's 31, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    32: 0.4226,  # GS's 32, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    33: 0.1069,  # GS's 33, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    34: 0.8692,  # GS's 34, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
     73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
     # ...and the rattles for the same reason: a shake is now a burst of impacts,
     # each ringing 10-12 ms instead of one 250 ms hit, so the energy is spread
@@ -755,9 +813,13 @@ def _with_ring(cls, note, kit=0):
         ring = KIT_RING.get(kit, {}).get(note)
         trim = KIT_LEVEL.get(kit, {}).get(note)
         gate = KIT_GATE.get(kit, {}).get(note)
+        # ...or Standard's own, where the set plays Standard's instrument
+        if gate is None and note not in KITS.get(kit, {}):
+            gate = KIT_GATE.get(0, {}).get(note)
     else:
         ring = PERCUSSION_RING.get(note)
         trim = PERCUSSION_LEVEL.get(note)
+        gate = KIT_GATE.get(0, {}).get(note)
     if not ring and not trim and not gate:
         return cls
     key = (cls.__name__, note, kit)
@@ -823,6 +885,11 @@ def choke_group(note, kit=0):
     for grp in KIT_CHOKE.get(kit, ()):
         if note in grp:
             return grp
+    # ...and none of Standard's in a set that stands alone (KIT_ONLY): the SFX
+    # set's 79 is rain, not Standard's open cuica, and its thunder (80) had
+    # cut its wind (81) as a muted triangle cuts an open one
+    if kit in KIT_ONLY:
+        return None
     return _CHOKE_OF.get(note)
 
 
@@ -1010,7 +1077,22 @@ PERCUSSION_CASCADE = {
 }
 
 
-def rasp_strokes(note, on, off, rng=None):
+# A SET'S OWN STROKE TABLES, for a set that stands alone (KIT_ONLY): {kit:
+# {"cascade"|"train"|"rattle"|"rasp": {note: as Standard's table}}}
+KIT_STROKES = {
+    56: {
+        # the bubble: the bell tree's cascade, which it had by accident when Ben
+        # approved it -- a run of 22 rising, each its own bubbles
+        "cascade": {84: PERCUSSION_CASCADE[84]},
+        # THE MACHINE GUN: a shot every 69 ms (14.49 a second; an M16A1's
+        # burst, measured: 4.9 ms rms off the clock = 7%), 0.69 s of them, a
+        # dB of fall and +-1.5 dB shot to shot -- each shot a gunshot
+        "train": {73: (14.49, 0.69, 1.0, 0.07, 1.5)},
+    },
+}
+
+
+def rasp_strokes(note, on, off, rng=None, kit=0):
     """[(on, off, level)] for one scraped note, or None if it is not scraped.
 
     THE STROKE IS NOT EVEN, and both of the ways it is uneven are MEASURED off
@@ -1037,7 +1119,16 @@ def rasp_strokes(note, on, off, rng=None):
     at a regular spacing and only the hand varies, so the residual timing jitter
     stays small -- at +-9% it read as sloppy rather than human.
     """
-    cascade = PERCUSSION_CASCADE.get(note)
+    # A SET THAT STANDS ALONE (KIT_ONLY) HAS ITS OWN (KIT_STROKES): these are
+    # Standard's instruments by note number, and the SFX set's keys are others
+    # -- its applause (58) had been played as the vibraslap's train, its
+    # machine gun (73) as the guiro's 30 ridges. Its bubble keeps the bell
+    # tree's cascade on purpose: it is what Ben approved (a run of bubbles)
+    tabs = KIT_STROKES.get(kit, {}) if kit in KIT_ONLY else None
+
+    def table(name, std):
+        return tabs.get(name, {}).get(note) if tabs is not None else std.get(note)
+    cascade = table("cascade", PERCUSSION_CASCADE)
     if cascade is not None:
         span, n, semis = cascade
         if off > on:
@@ -1053,11 +1144,11 @@ def rasp_strokes(note, on, off, rng=None):
             out.append((max(on, t + jitter), t + span / n, level, ratio))
         return out
 
-    train = PERCUSSION_TRAIN.get(note)
+    train = table("train", PERCUSSION_TRAIN)
     if train is not None:
         return _impact_train(note, on, *train)
 
-    rattle = PERCUSSION_RATTLE.get(note)
+    rattle = table("rattle", PERCUSSION_RATTLE)
     if rattle is not None:
         span, n = rattle[:2]
         # how far the impacts fall across the burst: 0.75 unless the entry
@@ -1110,7 +1201,7 @@ def rasp_strokes(note, on, off, rng=None):
             t += step
         return out
 
-    spec = PERCUSSION_RASP.get(note)
+    spec = table("rasp", PERCUSSION_RASP)
     if spec is None:
         return None
     dur, n = spec

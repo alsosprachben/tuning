@@ -23825,6 +23825,300 @@ class SfxStarshipProperties(SfxWeatherProperties):
 
 
 
+class SfxSlapProperties(MeasuredStrokeProperties):
+    """SFX 40, "Slap": a palm slapping the body -- a thump under the skin's crack. Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_slap): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.3760, -0.3, 110), (0.4023, 0.0, 120), (0.4766, -4.1, 139), (0.5182, -3.8, 149), (0.5466, -4.4, 144), (0.5925, -6.1, 172), (0.6297, -5.8, 174), (0.6690, -7.3, 190), (0.7084, -8.7, 201), (0.7477, -10.0, 219), (0.7849, -9.6, 211), (0.8242, -9.6, 238), (0.8636, -11.4, 244), (0.9008, -11.5, 258), (0.9401, -13.7, 264), (0.9773, -13.6, 271), (1.0145, -15.0, 295), (1.0538, -15.7, 294), (1.1150, -17.1, 312), (1.1566, -17.2, 327), (1.2003, -18.2, 347), (1.2353, -18.0, 342), (1.2724, -17.2, 359), (1.3140, -16.3, 372), (1.3905, -16.3, 384), (1.4255, -17.4, 374), (1.4692, -17.7, 425), (1.5064, -20.2, 416), (1.5436, -17.9, 409), (1.5807, -18.6, 429), (1.6223, -20.1, 430), (1.6572, -20.0, 414), (1.6988, -19.3, 450), (1.7513, -19.6, 506), (1.8147, -20.8, 480), (1.8737, -19.6, 485), (2.0639, -19.6, 520), (2.1382, -21.6, 469), (2.1841, -22.1, 435), (2.2497, -20.6, 586), (2.3918, -21.6, 424), (2.5012, -25.2, 651), (2.6280, -23.1, 527), (2.7460, -23.0, 559), (2.8182, -24.1, 566), (2.8969, -22.6, 658), (2.9997, -24.5, 602), (3.0805, -24.1, 604), (3.1483, -23.6, 620), (3.2686, -24.0, 507), (3.3735, -24.8, 805), (3.4653, -24.6, 706), (3.5703, -25.1, 695), (3.6621, -24.8, 725), (3.8436, -25.5, 766), (3.9223, -24.8, 777), (4.1453, -24.4, 813), (4.2546, -25.3, 830), (4.3749, -25.5, 856), (4.6132, -24.6, 680), (4.7137, -23.7, 788), (4.8646, -22.7, 937), (5.1313, -23.6, 988), (5.3194, -23.5, 809), (5.4243, -22.1, 1036), (5.6495, -23.8, 1067), (5.8747, -23.3, 1149), (6.0911, -22.0, 1183), (6.3841, -23.8, 1263), (6.5918, -25.6, 825), (6.7645, -26.4, 1290), (6.8913, -23.9, 1304), (7.0159, -20.2, 945), (7.1865, -23.8, 818), (7.4904, -22.1, 1019), (7.6456, -22.0, 1119), (7.8314, -24.2, 940), (8.0020, -23.4, 951), (8.3737, -17.7, 923), (8.5529, -15.4, 1003), (8.9946, -18.5, 1070), (9.2088, -14.7, 1458), (9.4603, -13.8, 1726), (9.8560, -13.7, 972), (10.1249, -14.8, 1723), (10.6168, -11.9, 208), (10.9098, -15.0, 1802), (11.3580, -15.6, 1183), (11.5745, -13.1, 1899), (11.8827, -15.9, 2278), (12.2719, -17.3, 215), (12.7441, -14.8, 187), (12.9715, -19.9, 194), (13.3017, -13.8, 245), (14.0122, -15.0, 333), (14.3730, -15.3, 278), (14.7359, -12.6, 201), (15.0507, -14.1, 200), (15.4858, -14.2, 237), (15.8444, -14.7, 188), (16.1439, -15.2, 276), (16.5484, -10.9, 273), (16.8741, -14.2, 195), (17.2436, -12.6, 245), (17.8930, -7.3, 193), (18.4920, -9.2, 145), (18.9096, -12.0, 174), (19.6508, -11.7, 164), (20.3263, -11.8, 185), (20.8117, -9.9, 192), (21.9508, -13.2, 174), (23.2254, -15.0, 141))
+    slow_share = 0.0346243
+    slow_dbs = 36.5855
+    click_cal_db = 2.0993
+    click_dbs = 279.81
+    click_stroke_slope = 1.19525
+    chiff_volume = 22.7667
+    chiff_width = 0.0217755
+    chiff_bandwidth = 0.136312
+    sustain_jitter = 0.114342
+    band_trim_db = ((177, 11.8), (354, -1.8), (707, -2.8), (1414, -1.7), (2828, -0.5), (5657, 0.1), (11314, -5.1))
+
+
+class SfxSticksProperties(MeasuredStrokeProperties):
+    """SFX 43, "Sticks": two drumsticks clicked together -- hickory's ring near 4 kHz. Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_sticks): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.1691, -26.0, 578), (0.1788, -27.7, 545), (0.1985, -29.0, 395), (0.2615, -23.4, 556), (0.2702, -26.8, 644), (0.2789, -21.9, 917), (0.3137, -0.4, 591), (0.3301, -12.2, 447), (0.3483, -23.8, 447), (0.3608, -20.4, 383), (0.3873, -23.3, 447), (0.4335, -18.4, 683), (0.4621, -2.8, 519), (0.4793, -14.3, 391), (0.4989, -11.1, 462), (0.5158, -10.8, 422), (0.5269, -11.3, 420), (0.5389, -11.8, 355), (0.5557, -8.1, 999), (0.5731, -14.6, 376), (0.5834, -11.1, 419), (0.5989, -13.3, 383), (0.6101, -14.5, 352), (0.6275, -12.7, 502), (0.6535, -11.1, 362), (0.6794, -10.9, 445), (0.7145, -9.6, 720), (0.7406, -1.8, 425), (0.7990, -10.2, 435), (0.8147, -8.8, 446), (0.8400, -11.7, 400), (0.8658, -11.7, 350), (0.9266, -14.7, 419), (0.9608, -9.8, 413), (0.9958, -11.2, 456), (1.0343, -4.7, 351), (1.0728, 0.0, 379), (1.1410, -10.3, 532), (1.1997, -13.9, 456), (1.2304, -12.1, 414), (1.2761, -12.3, 466), (1.2982, -10.9, 391), (1.3521, -11.3, 434), (1.4258, -0.8, 486), (1.4687, -3.3, 422), (1.4936, -5.3, 472), (1.5415, -8.8, 459), (1.6798, -15.8, 494), (1.7664, -15.3, 548), (1.8209, -12.1, 478), (1.8985, -7.9, 438), (1.9510, -14.5, 493), (2.0742, -19.3, 554), (2.1913, -18.8, 504), (2.2534, -23.3, 545), (2.2963, -23.9, 457), (2.4183, -28.8, 399), (2.5874, -26.0, 449), (2.7014, -29.4, 429))
+    slow_share = 0.0485144
+    slow_dbs = 90.5081
+    click_cal_db = 1.48057
+    click_dbs = 918.177
+    click_stroke_slope = 0.351287
+    chiff_volume = 1.05121
+    chiff_width = 0.0317755
+    chiff_bandwidth = 0.0231947
+    sustain_jitter = 0.0292029
+    band_trim_db = ((177, -8.8), (354, -12.6), (707, -5.9), (1414, 8.9), (2828, 10.0), (5657, 7.2), (11314, 1.1))
+
+
+class SfxMetronomeClickProperties(MeasuredStrokeProperties):
+    """SFX 45, "Metronome Click": a Wittner's tick -- its escapement's knock, 1.4 kHz and up. Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_metronome): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.3733, -20.3, 272), (0.3923, -14.8, 313), (0.4166, -12.6, 333), (0.4366, -11.2, 291), (0.4580, -2.9, 219), (0.4879, -9.9, 189), (0.5245, -13.8, 254), (0.5469, -24.4, 202), (0.5745, -14.5, 457), (0.5921, -10.2, 193), (0.6040, -12.4, 118), (0.6187, -8.7, 253), (0.6406, -2.7, 181), (0.6677, -9.1, 241), (0.7219, -14.7, 327), (0.7533, -23.2, 332), (0.7728, -20.4, 172), (0.8013, -11.2, 206), (0.8579, -7.8, 313), (0.8979, -4.6, 213), (0.9326, -9.9, 769), (0.9977, 0.0, 323), (1.0500, -6.4, 197), (1.0776, -8.7, 1421), (1.0990, -9.8, 183), (1.1266, -12.2, 329), (1.1656, -17.9, 261), (1.2255, -12.0, 177), (1.2750, -4.5, 179), (1.3867, -12.3, 149), (1.4100, -12.4, 265), (1.5127, -9.2, 164), (1.5475, -13.3, 155), (1.5841, -15.6, 169), (1.6507, -20.1, 146), (1.7244, -18.4, 240), (1.8452, -7.5, 205), (1.9098, -13.8, 154), (1.9869, -15.9, 156), (2.0577, -10.1, 135), (2.1077, -12.3, 214), (2.2337, -4.2, 205), (2.2822, -4.8, 180), (2.3217, -4.7, 177), (2.3735, -6.1, 181), (2.5048, -6.0, 273), (2.5999, -10.6, 173), (2.7035, -11.2, 208), (2.7753, -10.9, 187), (2.9095, -12.5, 265), (3.0873, -10.6, 231), (3.1496, -11.8, 180), (3.2461, -17.8, 157), (3.3189, -14.2, 245), (3.3765, -17.5, 181), (3.4863, -21.3, 230), (3.5572, -19.9, 216), (3.6689, -16.2, 171), (3.7954, -17.3, 135), (3.8582, -15.6, 152), (3.9585, -13.7, 234), (4.0294, -17.0, 180), (4.1255, -18.8, 159), (4.2719, -19.3, 181), (4.4265, -16.0, 164), (4.6662, -12.5, 167), (4.7518, -12.8, 155), (4.8726, -16.3, 171), (5.1046, -21.4, 187), (5.2045, -20.3, 171), (5.3510, -19.4, 220), (5.4423, -19.7, 186), (5.5735, -19.7, 194), (5.7053, -21.2, 187), (5.8284, -22.0, 206), (5.9863, -21.9, 194), (6.1014, -21.8, 206), (6.2892, -21.4, 194), (6.4119, -21.8, 201), (6.5365, -21.8, 210), (6.6735, -21.1, 203), (6.8951, -25.2, 196), (7.0592, -29.3, 193), (7.6940, -27.6, 206), (8.0730, -29.1, 230), (8.4678, -29.4, 187))
+    slow_share = 0.0516598
+    slow_dbs = 17.0115
+    click_cal_db = 2.40981
+    click_dbs = 724.226
+    click_stroke_slope = 0.566064
+    chiff_volume = 11.1579
+    chiff_width = 0.0147935
+    chiff_bandwidth = 0.0517869
+    sustain_jitter = 0.0670335
+    band_trim_db = ((177, -2.3), (354, 1.1), (707, -1.2), (1414, 2.2), (2828, 1.7), (5657, 0.1), (11314, -1.7))
+
+
+class SfxMetronomeBellProperties(MeasuredStrokeProperties):
+    """SFX 46, "Metronome Bell": a metronome's bell on beat one -- a small steel gong
+    struck by a hammer, as a rotary phone's is (TRP's, its 1615 Hz gong struck
+    once; the one CC0 metronome bell, a plastic one's, rings at 9.45 kHz: a beep). Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_bell): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.9995, -5.7, 12), (2.5805, -9.2, 10), (4.6421, 0.0, 41), (7.1269, -3.7, 97))
+    slow_share = 0.0536589  
+    slow_dbs = 78.8925  
+    click_cal_db = 0.474302  
+    click_dbs = 5773.21  
+    click_stroke_slope = 0.111779  
+    chiff_volume = 0.0543207  
+    chiff_width = 0.0608042  
+    chiff_bandwidth = 0.0401244  
+    sustain_jitter = 0.0645266  
+    band_trim_db = ((177, 3.7), (354, -10.1), (707, -5.0), (1414, 0.4), (2828, 5.7), (5657, 0.0), (11314, 5.2))
+
+
+class SfxGuitarCutDownProperties(MeasuredStrokeProperties):
+    """SFX 48, "Guitar cutting noise (down)": muted strings strummed down -- the
+    chuck: the strings' scrape, 0.14-3 kHz (a steel-string guitar's; a nylon
+    one's take was its body's thump, a tom). Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_cutdown): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.0778, -3.2, 94), (0.0885, -12.0, 86), (0.1007, -11.3, 131), (0.1221, -19.6, 131), (0.1435, -13.4, 153), (0.1612, -19.0, 41), (0.1715, -20.8, 177), (0.1906, -9.8, 243), (0.2125, -14.7, 234), (0.2293, -21.4, 90), (0.2498, -26.7, 172), (0.2717, -14.7, 272), (0.2852, -16.7, 229), (0.3043, -10.3, 216), (0.3393, -3.8, 260), (0.3574, -14.2, 278), (0.3803, -6.1, 322), (0.3952, -3.4, 224), (0.4329, -14.8, 109), (0.4544, -12.9, 119), (0.4632, -13.1, 158), (0.4721, -14.1, 378), (0.5052, -8.1, 245), (0.5382, -9.9, 536), (0.5476, -9.9, 205), (0.5928, -19.9, 172), (0.6091, -21.1, 165), (0.6464, -24.5, 138), (0.6827, -15.6, 133), (0.7051, -7.0, 179), (0.7409, -12.7, 173), (0.7642, -9.0, 431), (0.7876, -16.0, 506), (0.8155, -12.4, 87), (0.8528, -15.7, 100), (0.8831, -17.0, 431), (0.9059, -11.9, 144), (0.9311, -21.6, 100), (0.9553, -12.2, 111), (0.9800, -6.3, 196), (1.0047, -12.4, 242), (1.0699, -4.5, 341), (1.1357, -4.2, 194), (1.1827, -10.1, 367), (1.2321, -7.5, 208), (1.3048, -10.3, 363), (1.3463, -9.3, 185), (1.4232, -14.1, 177), (1.5141, 0.0, 427), (1.6394, -14.3, 539), (1.7028, -16.5, 172), (1.7727, -6.5, 362), (1.8664, -9.1, 238), (1.9642, -14.9, 382), (2.0006, -15.2, 222), (2.1129, -25.3, 367), (2.1618, -24.4, 256), (2.2736, -28.0, 386), (2.3566, -28.1, 452), (2.5160, -26.8, 232), (2.5751, -29.5, 292), (2.7219, -26.9, 514), (2.8128, -25.9, 485), (2.8827, -25.8, 464), (2.9703, -23.0, 433), (3.0971, -26.5, 757), (3.1768, -18.1, 584), (3.3296, -25.6, 470), (3.8981, -29.2, 569), (4.1596, -28.2, 805))
+    slow_share = 0.0269822  
+    slow_dbs = 73.1766  
+    click_cal_db = 0.995211  
+    click_dbs = 516.579  
+    click_stroke_slope = 0.21713  
+    chiff_volume = 4.72072  
+    chiff_width = 0.100019  
+    chiff_bandwidth = 0.0685342  
+    sustain_jitter = 0.0522502  
+    ring_scale = 0.415786
+    band_trim_db = ((44, 9.8), (88, -7.4), (177, -8.2), (354, -3.6), (707, -0.8), (1414, 3.0), (2828, 6.4), (5657, 3.3), (11314, -2.6))
+
+
+class SfxGuitarCutUpProperties(MeasuredStrokeProperties):
+    """SFX 49, "Guitar cutting noise (up)": as 48, strummed up (a hollowbody's). Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_cutup): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.0940, -3.4, 103), (0.1154, 0.0, 115), (0.1453, -12.0, 66), (0.1648, -3.5, 106), (0.1782, -9.4, 116), (0.2081, -8.4, 205), (0.2393, -9.7, 157), (0.2777, -17.4, 178), (0.3009, -27.1, 113), (0.3259, -13.3, 212), (0.3455, -17.3, 263), (0.3705, -12.3, 47), (0.4047, -16.5, 199), (0.4230, -20.8, 147), (0.4535, -12.1, 182), (0.4993, -10.5, 129), (0.5353, -15.8, 49), (0.5530, -24.8, 214), (0.5682, -20.6, 300), (0.5841, -15.4, 257), (0.6000, -16.2, 296), (0.6519, -10.9, 530), (0.6964, -19.2, 239), (0.7288, -13.6, 65), (0.7489, -7.7, 84), (0.7684, -12.1, 237), (0.8185, -21.4, 95), (0.8844, -21.2, 194), (0.9125, -26.3, 217), (0.9546, -14.3, 412), (0.9973, -13.7, 180), (1.0498, -15.7, 142), (1.0901, -23.2, 476), (1.1169, -19.8, 285), (1.1725, -16.3, 252), (1.2372, -19.6, 208), (1.2628, -18.1, 341), (1.3214, -20.0, 213), (1.3782, -23.3, 248), (1.4166, -20.2, 366), (1.4532, -20.2, 313), (1.5027, -6.3, 315), (1.5747, -9.1, 427), (1.6174, -4.8, 319), (1.6779, -13.1, 363), (1.7578, -25.8, 322), (1.8829, -23.2, 210), (1.9562, -19.7, 180), (2.0068, -18.5, 145), (2.1393, -22.6, 282), (2.2070, -25.8, 259), (2.2467, -26.7, 265), (2.3779, -22.4, 372), (2.4829, -25.7, 190), (2.6105, -24.4, 284), (2.6941, -25.0, 172), (2.7985, -27.3, 180), (2.9987, -19.9, 371), (3.0725, -27.2, 317), (3.1293, -29.5, 269), (3.2257, -25.3, 295), (3.2935, -22.2, 376), (3.4271, -21.9, 323), (3.5492, -25.9, 170), (3.6475, -25.5, 194), (3.7183, -26.8, 226), (3.7811, -27.3, 249), (3.8635, -26.1, 267), (3.9856, -24.0, 445), (4.2633, -26.2, 336), (4.8285, -29.2, 276), (4.9255, -25.9, 179), (6.3190, -27.1, 350), (6.5424, -26.6, 780))
+    slow_share = 0.0654632  
+    slow_dbs = 157.57  
+    click_cal_db = 0.908041  
+    click_dbs = 143.09  
+    click_stroke_slope = 0.186578  
+    chiff_volume = 1.34657  
+    chiff_width = 0.0259414  
+    chiff_bandwidth = 0.173853  
+    sustain_jitter = 0.0732642  
+    ring_scale = 0.281019
+    band_trim_db = ((44, 19.8), (88, 7.2), (177, -2.9), (354, -0.3), (707, 0.0), (1414, -1.1), (2828, -4.6), (5657, -8.4), (11314, -9.6))
+
+
+class SfxBassSlapProperties(MeasuredStrokeProperties):
+    """SFX 50, "String slap of double bass": a hand slapping an upright's strings onto the fingerboard. Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_bassslap): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.6212, -28.7, 34), (0.6626, -28.0, 36), (0.6729, -24.7, 37), (0.6833, -22.2, 36), (0.7764, -13.7, 31), (1.0042, 0.0, 50), (1.2319, -21.1, 34), (1.5322, -10.9, 55), (1.9670, -5.7, 73), (2.2465, -21.5, 24), (2.4742, -26.1, 34), (2.6709, -11.1, 79), (2.8676, -10.3, 96), (3.0747, -3.7, 81), (3.7683, -16.3, 68), (3.9029, -15.5, 96), (4.1410, -19.0, 79), (4.3066, -24.3, 41), (4.6586, -25.0, 133), (4.9899, -14.7, 111), (5.5386, -13.7, 251), (5.9113, -24.7, 137), (6.4600, -14.2, 168), (6.7602, -18.6, 159), (7.1743, -21.3, 165), (7.7747, -23.0, 99), (8.5098, -28.5, 145), (8.7893, -29.4, 303), (9.1827, -24.8, 109), (11.0565, -28.8, 198), (11.2842, -28.9, 152), (11.8536, -24.7, 473), (12.7543, -24.9, 201), (13.4790, -23.4, 164), (15.1250, -28.6, 92), (18.2929, -25.7, 236))
+    slow_share = 0.0568761  
+    slow_dbs = 45.1232  
+    click_cal_db = 1  
+    click_dbs = 468.836  
+    click_stroke_slope = 0.223068  
+    chiff_volume = 3.8441  
+    chiff_width = 0.0494841  
+    chiff_bandwidth = 0.0495927  
+    sustain_jitter = 0.0520807  
+    band_trim_db = ((44, 3.2), (88, 3.1), (177, 4.6), (354, 4.5), (707, 6.2), (1414, 2.2), (2828, -2.3), (5657, -7.8), (11314, -13.7))
+    ring_scale = 1  
+
+
+class SfxKeyClickProperties(MeasuredStrokeProperties):
+    """SFX 51, "Key Click": a woodwind key struck, not blown (a saxophone's: no CC0 flute key clicks exist). Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_keyclick): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.2431, -21.9, 140), (0.2663, -28.7, 240), (0.2799, -27.8, 165), (0.3235, -21.4, 164), (0.3548, -24.1, 203), (0.3794, -28.2, 200), (0.4577, -21.2, 284), (0.4808, -26.5, 381), (0.5347, -20.8, 415), (0.5626, -25.2, 333), (0.6089, -27.6, 253), (0.6375, -28.5, 203), (0.6899, -21.9, 385), (0.7819, -16.0, 308), (0.8084, -7.4, 306), (0.8500, -16.0, 247), (0.8697, -13.6, 408), (0.9086, -16.6, 322), (0.9426, -3.5, 331), (0.9658, -2.6, 223), (0.9998, 0.0, 277), (1.0325, -15.4, 484), (1.0632, -19.5, 270), (1.1143, -13.7, 270), (1.1708, -17.7, 285), (1.4385, -25.5, 209), (1.5161, -28.3, 428), (1.7545, -28.7, 348), (1.9030, -29.5, 237), (2.1747, -29.1, 393), (2.2149, -27.5, 691), (2.3572, -29.1, 338))
+    slow_share = 0.0530427
+    slow_dbs = 99.2209
+    click_cal_db = 0.936608
+    click_dbs = 699.075
+    click_stroke_slope = 0.283815
+    chiff_volume = 0.766095
+    chiff_width = 0.0756122
+    chiff_bandwidth = 0.047861
+    sustain_jitter = 0.0534147
+    band_trim_db = ((177, 7.0), (354, -2.4), (707, 8.6), (1414, 6.0), (2828, -1.7), (5657, -8.3), (11314, -9.1))
+
+
+class SfxDoorProperties(MeasuredStrokeProperties):
+    """SFX 60, "Door": a wooden door slammed -- the slab's thump, the latch, the frame's rattle. Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_door): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.1574, -1.6, 33), (0.1602, -1.4, 34), (0.1631, -1.2, 34), (0.1659, -0.9, 35), (0.1688, -0.7, 31), (0.1717, -0.6, 30), (0.1745, -0.4, 35), (0.1774, -0.3, 37), (0.1802, -0.2, 36), (0.1831, -0.1, 40), (0.1860, -0.1, 33), (0.1888, -0.0, 34), (0.1917, 0.0, 36), (0.3519, -9.4, 66), (0.4835, -6.7, 75), (0.5808, -8.6, 64), (0.6981, -5.5, 73), (0.8583, -11.0, 56), (0.9670, -18.7, 94), (1.0929, -4.5, 110), (1.2703, -17.1, 52), (1.3447, -17.1, 75), (1.4305, -14.4, 139), (1.5478, -12.9, 157), (1.6937, -17.5, 133), (1.9140, -15.9, 149), (2.0227, -18.8, 259), (2.1343, -18.6, 178), (2.2516, -17.0, 89), (2.4662, -17.2, 117), (2.5835, -16.8, 103), (2.8667, -21.9, 135), (3.0155, -23.2, 145), (3.1500, -20.2, 127), (3.3560, -19.9, 196), (3.6535, -20.7, 148), (3.7479, -20.4, 147), (3.9539, -23.3, 176), (4.0798, -21.4, 159), (4.2229, -19.7, 117), (4.4317, -22.0, 109), (4.5204, -22.3, 97), (4.7092, -22.3, 146), (4.8552, -27.9, 163), (4.9925, -26.3, 100), (5.3015, -25.4, 144), (5.5532, -25.4, 133), (5.7735, -25.7, 129), (5.9710, -24.5, 54), (6.1569, -27.2, 111), (6.3000, -23.7, 103), (6.5317, -24.5, 90), (6.8321, -27.2, 224), (7.4329, -22.3, 154), (7.6017, -23.1, 258), (8.1682, -22.4, 246), (8.5545, -19.8, 151), (8.9750, -19.1, 132), (9.4614, -24.1, 112), (9.6416, -23.2, 153), (9.8906, -26.4, 137), (10.3083, -22.4, 139), (10.8232, -26.2, 130), (11.2953, -22.9, 165), (11.5700, -25.2, 140), (11.9905, -25.0, 148), (12.2423, -27.0, 158), (12.5370, -26.6, 152), (12.9719, -28.0, 108), (13.3553, -29.5, 94), (13.8044, -26.9, 146), (14.2822, -29.0, 154), (15.0719, -28.8, 132))
+    slow_share = 0.0525264
+    slow_dbs = 54.3778
+    click_cal_db = 0.639477
+    click_dbs = 65.0919
+    click_stroke_slope = 0.221516
+    chiff_volume = 4.78406
+    chiff_width = 0.0501723
+    chiff_bandwidth = 0.127271
+    sustain_jitter = 0.165476
+    band_trim_db = ((177, 9.5), (354, 5.2), (707, 0.6), (1414, 0.9), (2828, 0.6), (5657, -6.0), (11314, -10.8))
+
+
+class SfxWindchimeProperties(MeasuredStrokeProperties):
+    """SFX 62, "Windchime": a metal chime tube struck, ringing out. Fitted to Freesound recordings (CC0; examples/perc_fit.py
+    sfx_chime): the modes read off the hits, the strike and noise fitted."""
+    DRUM_MODES = ((0.9997, 0.0, 10), (2.6579, -8.2, 38), (4.9442, -13.7, 68), (7.5296, -25.4, 148), (7.7018, -17.5, 157), (9.3539, -25.8, 111), (11.2295, -23.3, 153))
+
+
+class SfxMachinegunProperties(GunshotProperties):
+    """SFX 73, "Machinegun": the set's gun shot (GM 127's, fitted) fired as a
+    rifle on full auto does -- a shot every 69 ms, 0.69 s of them, as a
+    Freesound M16A1 burst (CC0) measures (870 a minute, 4.9 ms rms off the
+    clock): an impact train (percussion_map.KIT_STROKES). As one note with
+    grains for cracks it was "completely off" (Ben)."""
+
+
+class SfxLaserProperties(SfxWeatherProperties):
+    """SFX 74, "Lasergun": the sci-fi "pew" -- a square wave (odd harmonics
+    at 1/k) swept down exponentially in pitch from 12x its note to it with a
+    0.1 s time constant, then held and cut, as a Freesound blaster (CC0)
+    measures (1.2 kHz to 100 Hz in 0.2 s, held to 0.33 s). GeneralUser GS's
+    is no reference: by the SF2 its envelope dies in 1 ms, and timidity plays
+    a flat whine."""
+    mode_ratios = (1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0)
+    mode_gains = (1.0, 1 / 3.0, 1 / 5.0, 1 / 7.0, 1 / 9.0, 1 / 11.0, 1 / 13.0, 1 / 15.0)
+    max_harmonic = 8
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    breath_noise_db = ()
+    initial_gain = 0.05
+    attack_time = 0.01
+    release_valve_time = 0.07
+    release_fraction_max = None
+    tension_log = True
+    tension_bend = 11.2
+    tension_bend_max = 12.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_settle_time = 0.1
+    tension_settle_cutoff = 1.0
+
+
+class SfxScratchPushProperties(SfxWeatherProperties):
+    """SFX 41, "Scratch Push": a record pushed forward under the needle --
+    the groove's sound (a Freesound turntable scratch, CC0: its energy at 1-2.5
+    kHz) sped up from still, so its whole colour rises (the noise rides the
+    bend, up a fifth), gone in a fifth of a second."""
+    breath_noise_fade_s = 0.02
+    release_valve_time = 0.03
+    release_fraction_max = None
+    tension_log = True
+    tension_bend = -0.4
+    tension_bend_max = 1.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_settle_time = 0.05
+    tension_settle_cutoff = 1.0
+    # FITTED (examples/weather_fit.py): colour rms 1.4 dB to the recording
+    breath_noise_db = ((51, 28.7), (64, 18.3), (80, 29.8), (101, 23.2), (127, 24.6), (160, 26.7), (202, 28.4), (255, 32.5), (321, 33.8), (404, 35.7), (509, 35.7), (641, 42.1), (808, 45.0), (1018, 52.8), (1283, 56.6), (1616, 55.6), (2036, 50.1), (2566, 52.8), (3233, 34.1), (4073, 48.0), (5132, 50.5), (6465, 42.9), (8146, 39.5), (10263, -18.5), (12931, 21.7))
+    grains = ()
+
+
+class SfxScratchPullProperties(SfxScratchPushProperties):
+    """SFX 42 and 61, "Scratch Pull" and "Scratch": the record dragged back
+    -- the same groove, its colour falling from a fifth above."""
+    tension_bend = 0.6
+
+
+class SfxDoorCreakProperties(SfxWeatherProperties):
+    """SFX 59, "Door Creaking": a hinge's stick-slip -- a pulse train, so a
+    rate's harmonics coloured by the door (a Freesound cupboard hinge, CC0:
+    its resonances near 0.65, 2 and 5.6 kHz), the rate slowing as the door
+    swings, 285 to 130 Hz over half a second as GeneralUser GS's falls."""
+    mode_ratios = tuple(float(k) for k in range(1, 41))
+    # the pulse train's harmonics on the noise table's scale (its rows +50 dB
+    # on the seashore's gain), shaped by the recording's colour where each sits
+    # at the rate's middle (190 Hz); the hinge's noise under them, fitted
+    mode_gains = (33.31, 36.08, 34.01, 69.53, 76.13, 76.13, 175.8, 222.5, 222.5, 275, 275, 275, 213.5, 213.5, 213.5, 151.7, 151.7, 151.7, 151.7, 131.4, 131.4, 131.4, 131.4, 131.4, 216.6, 216.6, 216.6, 216.6, 216.6, 216.6, 300, 300, 300, 300, 300, 300, 300, 300, 156.2, 156.2)
+    max_harmonic = 40
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    attack_time = 0.05
+    release_valve_time = 0.15
+    release_fraction_max = None
+    tension_log = True
+    tension_bend = 1.2
+    tension_bend_max = 2.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_settle_time = 0.3
+    tension_settle_cutoff = 2.0
+    # FITTED (examples/weather_fit.py): colour rms 1.6 dB to the recording
+    breath_noise_db = ((51, 31.3), (64, 29.7), (80, 38.8), (101, 35.1), (127, 19.4), (160, 27.7), (202, 33.5), (255, 37.4), (321, 35.3), (404, 33.3), (509, 4.4), (641, 47.3), (808, 39.0), (1018, 22.7), (1283, 55.9), (1616, 57.2), (2036, 54.3), (2566, 45.9), (3233, 29.9), (4073, 14.6), (5132, 43.8), (6465, 55.9), (8146, 47.5), (10263, 43.0), (12931, 47.1))
+    grains = ()
+
+
+class SfxExplosionProperties(SfxWeatherProperties):
+    """SFX 75, "Explosion": a blast's boom -- fitted to a Freesound dynamite
+    blast in the mountains (CC0; examples/weather_fit.py), most of it under 1
+    kHz -- at once, holding ~0.6 s and dying over the next second, as
+    GeneralUser GS's does."""
+    breath_noise_fade_s = 0.01
+    release_valve_time = 0.9
+    release_fraction_max = None
+
+
+# THE SFX SET'S ELECTRONIC CLICKS (39, 44): Roland's own synthesized sounds,
+# so the reference is GeneralUser GS's sample of each, and the instrument a
+# synth voice -- the TR-808 engine's resonator and click (tr808.py) fit them
+# as they fit the 808 (examples/sfx808_fit.py).
+    # FITTED (examples/weather_fit.py): colour rms 0.4 dB to the recording
+    breath_noise_db = ((51, 19.2), (64, 45.0), (80, 47.1), (101, 48.3), (127, 49.7), (160, 48.6), (202, 54.1), (255, 48.8), (321, 52.4), (404, 53.3), (509, 51.2), (641, 51.8), (808, 49.9), (1018, 50.7), (1283, 50.0), (1616, 50.8), (2036, 46.1), (2566, 39.9), (3233, 32.8), (4073, 28.0), (5132, 25.9), (6465, 16.6), (8146, 11.8), (10263, 9.4), (12931, 5.9))
+    grains = ()
+
+
+class SfxHighQProperties(TR808Properties):
+    """SFX 39, "High Q": a resonant filter snapped shut -- a sine swept
+    down from ~3.2 kHz toward ~100 Hz in a few tens of ms, exponentially in
+    pitch (the 808's bend)."""
+    # set from GeneralUser's track (examples/sfx808_fit.py's fitter tracks
+    # pitch in 20 ms windows, which a 4.5-octave fall in 45 ms outruns): ln(f /
+    # 100 Hz) falls 0.85x every 4 ms from 3.24 kHz -- 5 octaves, 24.6 ms --
+    # the level 6 dB down over its 56 ms, where the sample ends (the gate)
+    tr808 = {"tune_hz": 100.0, "decay_s": 0.57, "bend_oct": 5.3342, "bend_ms": 31.6061,
+             "h2_db": -29.1, "h3_db": -34.0}
+    slow_share = 0.0992258
+    slow_dbs = 45.0704
+    click_cal_db = 0.663206
+    click_dbs = 660.335
+    click_stroke_slope = 0.186949
+    chiff_volume = 1.38128
+    chiff_width = 0.0619027
+    chiff_bandwidth = 0.0754977
+    sustain_jitter = 0.0571051
+    band_trim_db = ((177, -5.3), (354, 1.1), (707, -2.5), (1414, 0.8), (2828, 0.5), (5657, 1.0), (11314, 4.5))
+
+
+class SfxSquareClickProperties(TR808Properties):
+    """SFX 44, "Square Click": one square pulse, 2.7 ms -- a click and no
+    tone (the 808's click, alone)."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.01, "click_db": 1.7549,
+             "click_dbs": 4198.5793, "click_tilt": -3.9428, "click_hp_hz": 464.517,
+             "click_lp_hz": 8132.4373}
+
+
 import os as _os
 # The default room is the hall, and it needs the stagger as much as any other --
 # it is the one with three coincident surfaces.

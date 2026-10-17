@@ -8,6 +8,7 @@ examples/perc_fit.py to read as it reads VSCO's one-stroke files.
     python3 examples/freesound_slice.py bagpipe
     python3 examples/freesound_slice.py harmonium
     python3 examples/freesound_slice.py accordion
+    python3 examples/freesound_slice.py sfx [NAME ...]   the SFX set's struck sounds (SFX)
 
 TIMBALES: hello_flowers' "50 Timbales Hits" (freesound 41196, CC0; ~/Documents/
 refs/sources.md), one 75 s mp3 decoded to float. 53 onsets (a rise of 20 dB in
@@ -349,9 +350,77 @@ def bagpipe():
         print("  %-22s %.2f s" % (name, len(seg) / sr))
 
 
+# THE SFX SET'S STRUCK SOUNDS (SC-55 p.71; sources.md): name -> (folder, file
+# globs, how many hits at most, each hit's longest). A file of one event is
+# taken whole, from 5 ms before its onset; a take of many (the slaps, the
+# metronome's 130 ticks) cut at its onsets, a hit running to the next.
+SFX = {
+    "slap":      ("slap", ("539163_*.wav", "125406_*.aiff"), 12, 0.4),
+    "sticks":    ("sticks", ("*.wav",), 4, 0.5),
+    "metronome": ("metronome", ("607216_*.wav",), 8, 0.5),
+    # the metronome's BELL from a rotary phone's gong struck once (TRP, its
+    # first strike, 1615 Hz): the plastic metronome's own rings at 9.45 kHz, a
+    # beep (Ben: "more of a click than the metronome click is")
+    "bell":      ("telephone_wav", ("616849_*.wav",), 1, 2.5),
+    "bassslap":  ("bassslap", ("*.wav",), 1, 1.9),
+    "keyclick":  ("keyclick", ("*.aiff",), 1, 0.2),
+    "door":      ("door", ("*.wav",), 2, 1.0),        # each file one slam, whole (WHOLE)
+    "chime":     ("windchime", ("398496_*.wav",), 1, 4.0),
+    # MUTED STRUMS ON STEEL STRINGS, the scrape GeneralUser's cuts are (centroid
+    # 0.5-1 kHz): SpeedY's nylon pair was the body's thump (130 Hz) -- a tom
+    "cutdown":   ("guitarcut", ("353605_*.wav",), 1, 0.6),
+    "cutup":     ("guitarcut", ("81403_*.wav",), 1, 0.5),
+}
+# one event a file however many onsets it holds: a slam's latch and rattle
+WHOLE = {"door"}
+# ...or the one event at this time (s) in a take of several: bsumusictech's
+# hollowbody, its bright strum (centroid 1.2 kHz) among body knocks
+PICK = {"cutup": 9.81}
+
+
+def sfx(names=None):
+    from scipy.io import wavfile
+    for name, (folder, globs, most, longest) in SFX.items():
+        if names and name not in names:
+            continue
+        out = os.path.join(REFS, folder, "hits")
+        os.makedirs(out, exist_ok=True)
+        for f in glob.glob(os.path.join(out, name + "_*.wav")):
+            os.remove(f)
+        n = 0
+        for g in globs:
+            for src in sorted(glob.glob(os.path.join(REFS, folder, g))):
+                with tempfile.TemporaryDirectory() as d:
+                    wav = os.path.join(d, "t.wav")
+                    subprocess.run(["sox", src, "-e", "floating-point", "-b", "32", "-c", "2", wav],
+                                   check=True, stderr=subprocess.DEVNULL)
+                    a, sr = read(wav)
+                x = a.sum(1)
+                x = x / max(np.abs(x).max(), 1e-12)
+                on = onsets(x, sr, rise_db=15.0, top_db=-35.0, gap=0.08) if most > 1 and name not in WHOLE else []
+                if name in PICK:
+                    allon = onsets(x, sr, rise_db=15.0, top_db=-35.0, gap=0.08)
+                    on = [min(allon, key=lambda o: abs(o / sr - PICK[name]))]
+                if not on:
+                    on = [int(np.argmax(np.abs(x) > 0.05))]
+                for s, t in zip(on, on[1:] + [len(x)]):
+                    if n >= most:
+                        break
+                    if len(on) > 1 and t - s < int(0.08 * sr):
+                        continue              # a hit cut short by the next
+                    pre = min(s, int(0.005 * sr))
+                    seg = a[s - pre:s + min(t - s, int(longest * sr))].astype(np.float32)
+                    n += 1
+                    wavfile.write(os.path.join(out, "%s_%02d.wav" % (name, n)), sr, seg)
+                    print("%s_%02d  %s t=%6.2f s  %.2f s" % (name, n, os.path.basename(src)[:30],
+                                                            s / sr, len(seg) / sr))
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "pipes":
         pipes(sys.argv[2:])
+    elif sys.argv[1] == "sfx":
+        sfx(sys.argv[2:])
     else:
         {"timbales": timbales, "surdo": surdo, "bagpipe": bagpipe, "harmonium": harmonium,
          "accordion": accordion}[sys.argv[1]]()

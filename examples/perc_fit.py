@@ -234,6 +234,32 @@ INSTS = {
                       # the trims kept in the render, the attack judged on what plays
                       keep_trim=True,
                       params=tuple(k for k in DRUM_PARAMS if k != "click_dbs")),
+    # THE SFX SET'S STRUCK SOUNDS (program 56 on the drum channel; SC-55
+    # p.71), Freesound recordings (CC0; sources.md) cut one hit a file by
+    # examples/freesound_slice.py sfx. Their keys are the SFX set's; the
+    # sticks, slap and metronome play Standard's 28, 31, 33-34 as well
+    **{name: dict(kit=56, note=note, glob=os.path.expanduser(
+        "~/Documents/refs/freesound/%s/hits/%s_*.wav" % (folder, hit)),
+        groups=None, band=band, floor=-30, flat=flat,
+        # the guitar's cuts and the bass slap ring free (ring_scale): held at
+        # the modes' own rates, their body's 65-100 Hz rang 0.6-0.8 s where the
+        # takes are gone by 0.2-0.6 -- a tom (Ben: "seem like drums")
+        params=DRUM_PARAMS + (("ring_scale",) if note in (48, 49, 50) else ()),
+        # ...judged from 31 Hz, as the surdo is: from 125 the grid never saw
+        # the body it was to damp (ring_scale stayed at 1)
+        **({"edges": (31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)}
+           if note in (48, 49, 50) else {}))
+       for name, note, folder, hit, band, flat in (
+           ("sfx_slap", 40, "slap", "slap", (100, 8000), (500, 8000)),
+           ("sfx_sticks", 43, "sticks", "sticks", (500, 16000), (1000, 16000)),
+           ("sfx_metronome", 45, "metronome", "metronome", (500, 16000), (1000, 16000)),
+           ("sfx_bell", 46, "telephone_wav", "bell", (500, 16000), (1000, 16000)),
+           ("sfx_cutdown", 48, "guitarcut", "cutdown", (100, 8000), (500, 8000)),
+           ("sfx_cutup", 49, "guitarcut", "cutup", (100, 8000), (500, 8000)),
+           ("sfx_bassslap", 50, "bassslap", "bassslap", (40, 4000), (500, 8000)),
+           ("sfx_keyclick", 51, "keyclick", "keyclick", (200, 8000), (500, 8000)),
+           ("sfx_door", 60, "door", "door", (40, 4000), (500, 8000)),
+           ("sfx_chime", 62, "windchime", "chime", (300, 16000), (1000, 16000)))},
 }
 
 C.EDGES = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
@@ -273,12 +299,16 @@ def inst_class(spec):
     if "program" in spec:
         import patch_map
         return patch_map.property_class_for_note(spec["program"], spec["note"])
+    if "kit" in spec:
+        return PM.KITS[spec["kit"]][spec["note"]][1]
     return PM.PERCUSSION[spec["note"]][1]
 
 
 def inst_f0(spec):
     import percussion_map as PM
-    return spec["f0"] if "f0" in spec else PM.PERCUSSION[spec["note"]][2]
+    if "f0" in spec:
+        return spec["f0"]
+    return (PM.KITS[spec["kit"]] if "kit" in spec else PM.PERCUSSION)[spec["note"]][2]
 C.PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs",
             "click_stroke_slope", "chiff_volume", "chiff_width", "chiff_bandwidth",
             "mode_jitter", "sustain_jitter")
@@ -753,6 +783,23 @@ def write_fit(inst, spec, vals, trim):
     print("    written to %s" % cls)
 
 
+def write_modes(spec, ms):
+    """--modes --write: the modes read into the class's DRUM_MODES."""
+    cls = inst_class(spec).__name__
+    path = os.path.join(HERE, "tonelib.py")
+    src = open(path).read()
+    a = src.index("class %s(" % cls)
+    b = src.index("\n\n\nclass ", a)
+    blk = src[a:b]
+    txt = "    DRUM_MODES = (%s)" % ", ".join("(%.4f, %.1f, %.0f)" % m for m in ms)
+    if re.search(r"^    DRUM_MODES = ", blk, re.M):
+        blk = re.sub(r"^    DRUM_MODES = .*$", lambda _: txt, blk, count=1, flags=re.M)
+    else:
+        blk = blk + "\n" + txt
+    open(path, "w").write(src[:a] + blk + src[b:])
+    print("    written to %s" % cls)
+
+
 def main(argv):
     pos = [a for a in argv[1:] if not a.startswith("--")]
     inst = pos[0]
@@ -774,12 +821,15 @@ def main(argv):
     os.environ.setdefault("TUNING_MASTER_DB", "-14")
     import percussion_map as PM
     PROG[0] = spec.get("program")
+    C.KIT = spec.get("kit", 0)      # a drum note in another set (the SFX set's)
     f0 = inst_f0(spec)
     if "--modes" in argv:
         GROUP[0] = next((a.split("=")[1] for a in argv if a.startswith("--group=")), None)
         ms = modes(inst, f0)
         print("== %s: %d modes over %.1f Hz" % (inst, len(ms), f0))
         print("    DRUM_MODES = (%s)" % ", ".join("(%.4f, %.1f, %.0f)" % m for m in ms))
+        if "--write" in argv:
+            write_modes(spec, ms)
         return 0
     if "--level" in argv:
         for h in (HOLD[0], 1.5):
