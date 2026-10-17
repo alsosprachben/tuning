@@ -67,11 +67,16 @@ VOICES = {
     "scratch": ("SfxScratchPushProperties", 41, "scratch/610676__liftpizzas__scratch-4x.wav", None),
     "creak":   ("SfxDoorCreakProperties", 59, "doorcreak/316683__alex_hears_things__slow-door-hinges_nm.wav", None),
     "machinegun": ("SfxMachinegunProperties", 73, "machinegun/693546__areniporgen__colt-m16a1.wav", None),
+    # THE VOICES (52, 53): a voice's harmonics set from the recording's own
+    # (tonelib), their breath fitted under them -- a woman's laugh, a girl's
+    # scream, at the recordings' own pitches
+    "laugh":   ("SfxLaughProperties", 52, "laugh/433921__kalibrk__woman-laugh.wav", None),
+    "scream":  ("SfxScreamProperties", 53, "scream/400183__tomattka__girl-screaming_01.wav", None),
 }
 SEGMENT = {"engine": (4.5, 10.0), "train": (10.0, 55.0), "jet": (5.0, 25.0),
            "skid": (6.1, 6.9), "carpass": (3.5, 7.5),
            "explosion": (0.0, 2.1), "scratch": (0.12, 0.55), "creak": (0.55, 3.4), "machinegun": (5.37, 6.9)}
-SHORT = {"crash", "starship", "explosion", "scratch", "creak", "machinegun"}
+SHORT = {"crash", "starship", "explosion", "scratch", "creak", "machinegun", "laugh", "scream"}
 # A NOTE BESIDE THE NOISE: (f0 Hz, each harmonic's height over its local floor
 # in the recording, dB) -- the engine idle's firing (examples/weather_fit.py
 # reads it at --fit; tonelib.SfxEngineProperties)
@@ -84,7 +89,12 @@ TABLE = {}
 # ...or a TONE'S HARMONICS, each moved by the colour where it sits at the
 # rate's middle (Hz). Not the creak's: its rate sweeps an octave, and alone
 # its harmonics left bands empty (14.9 dB) -- its noise is fitted under them
-HARMCOL = {}
+# The scream's: its harmonics stand 60 dB over its breath (the take steady,
+# clean to 7.4 kHz), which a colour fit of the noise alone filled in -- 60 dB
+# of noise in the fundamental's band. Its breath set 30 dB under the take's
+# colour, the harmonics fitted over it. The laugh's "ha"s are clean harmonics
+# too, its breath the "h" before them: 20 dB under
+HARMCOL = {"scream": 1243.0, "laugh": 337.0}
 
 
 def load(path, seg=None):
@@ -276,6 +286,11 @@ def fit(voice, passes=6, write=False):
         s = open(path_t).read()
         i = s.index("class %s(" % cname)
         end = s.index("\nclass ", i + 1) if "\nclass " in s[i + 1:] else s.index("\n\nimport os as _os", i)
+        # the class ends at its last indented line: a next section's comment
+        # header before the next class stays after the fit (it had been
+        # written under the explosion's following header)
+        tail = re.search(r"(\n(\n|#[^\n]*\n?)*)\Z", s[i:end])
+        end = i + tail.start() if tail else end
         body = re.sub(r"\n    # FITTED \(examples/weather_fit\.py\).*?(?=\n\n|\Z)", "", s[i:end], flags=re.S)
         body = re.sub(r"\n    grains = [^\n]*(\n              [^\n]*)*", "", body)
         if f0 or hc:
@@ -288,7 +303,7 @@ def fit(voice, passes=6, write=False):
             "    grains = %r\n" % (err, cls.breath_noise_db, cls.grains)
             + ("    %s = %r\n" % (tab, getattr(cls, tab)) if tab != "breath_noise_db" else "")
             + ("    mode_gains = (%s)\n" % ", ".join("%.5g" % g for g in cls.mode_gains) if f0 or hc else ""))
-        s = s[:i] + body + "\n" + s[end:]
+        s = s[:i] + body[:-1] + s[end:]      # the spacing after the class as it was
         open(path_t, "w").write(s)
         print("   wrote %s" % cname)
 

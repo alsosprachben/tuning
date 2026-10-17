@@ -4,6 +4,8 @@
     python3 -I examples/sfx_ab.py [OUTDIR]           # default ~/Downloads/sfx_ab
     python3 -I examples/sfx_ab.py --vehicles [OUTDIR] # the vehicles (63-71)
     python3 -I examples/sfx_ab.py --rest [OUTDIR]     # the rest (39-62, 73-75)
+    python3 -I examples/sfx_ab.py --human [OUTDIR]    # the human and animal keys (52-57, 76, 77)
+    python3 -I examples/sfx_ab.py --ours --human      # ...ours alone, in order
     python3 -I examples/sfx_ab.py --ours [OUTDIR]     # ours alone, every key in order, as a file
                                                       # plays it (one render: the set's balance)
 
@@ -58,6 +60,16 @@ REST = ((39, None, None), (40, "slap/hits/slap_01.wav", None), (41, "scratch/610
         (74, "laser/819682__hotpin7__blaster-pew.wav", None),
         (75, "explosion/251401__felixblume__dynamite-explosion-in-the-mountain.wav", (0.0, 2.1)),
         (58, None, None), (84, "bubbles/539823__ristooooo1__bubbles-001.wav", None))
+# THE HUMAN AND ANIMAL KEYS (52-57, 76, 77), --human: the laugh and scream
+# whole, a struck one's hit as freesound_slice cut it, the heart's lub-dub and
+# the horse's clops (a walk: GeneralUser's gallop is the pattern) a stretch
+HUMAN = ((52, "hohoho/110641__canucklovingbrit__santa-ho-ho-ho-1.wav", None),
+         (53, "scream/400183__tomattka__girl-screaming_01.wav", None),
+         (54, "punch/hits/punch_01.wav", None),
+         (55, "heartbeat/324211__yzeng__yidans-heartbeat.wav", (0.1, 0.75)),
+         (56, "footsteps/hits/footstep_02.wav", None), (57, "footsteps/hits/footstep_03.wav", None),
+         (76, "dog/hits/bark_01.wav", None),
+         (77, "horse/182504__swiftoid__horse-clip-clopping-downhill-stereo.wav", (7.2, 8.0)))
 
 
 def excerpt(path, secs, seg=None):
@@ -73,7 +85,7 @@ def excerpt(path, secs, seg=None):
     return x
 
 
-def ours_in_order(out):
+def ours_in_order(out, only=None, name="sfx_ours.mp3"):
     """Every key of the set, low to high, each after the last has rung out,
     in ONE render on the drum channel -- the levels the set plays at."""
     import mido
@@ -86,8 +98,11 @@ def ours_in_order(out):
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))      # 960 ticks a second
     t.append(mido.Message("program_change", channel=9, program=56, time=0))
     gap = 0
-    for key in sorted(P.KITS[56]):
+    for key in sorted(k for k in P.KITS[56] if only is None or k in only):
         ring = P.KIT_GATE[56].get(key, 1.0) + 0.6
+        pat = P.KIT_STROKES[56].get("pattern", {}).get(key)
+        if pat:
+            ring += pat[-1][0]                  # a patterned key to its last stroke
         t.append(mido.Message("note_on", channel=9, note=key, velocity=100, time=gap))
         t.append(mido.Message("note_off", channel=9, note=key, velocity=0, time=60))
         gap = int(ring * 960) - 60
@@ -98,9 +113,9 @@ def ours_in_order(out):
     w = 0.9 * w / np.abs(w).max()
     dry = os.path.join(out, "ours.dry.wav")
     wavfile.write(dry, B.SR, (w * 32767).astype(np.int16))
-    subprocess.check_call(["lame", "-b", "256", "--quiet", dry, os.path.join(out, "sfx_ours.mp3")])
+    subprocess.check_call(["lame", "-b", "256", "--quiet", dry, os.path.join(out, name)])
     os.remove(dry)
-    print("  -> " + os.path.join(out, "sfx_ours.mp3"))
+    print("  -> " + os.path.join(out, name))
 
 
 def main(argv):
@@ -112,7 +127,11 @@ def main(argv):
     out = args[0] if args else os.path.expanduser("~/Downloads/sfx_ab")
     import weather_fit as W
     if "--ours" in argv:
-        ours_in_order(out)
+        # --ours --human: just the human and animal keys
+        if "--human" in argv:
+            ours_in_order(out, {k for k, _, _ in HUMAN}, "human_ours.mp3")
+        else:
+            ours_in_order(out)
         return 0
     if "--rest" in argv:
         keys = list(REST)
@@ -122,6 +141,9 @@ def main(argv):
             # --keys=48,49: just those, into their own file
             keys = [k for k in keys if str(k[0]) in only.split(",")]
             name = "keys_%s.mp3" % only.replace(",", "_")
+    elif "--human" in argv:
+        keys = list(HUMAN)
+        name = "human.mp3"
     elif "--vehicles" in argv:
         keys = [(k,) + (SIREN if v == "siren" else (W.VOICES[v][2], W.SEGMENT.get(v))) for k, v in VEHICLES]
         name = "vehicles.mp3"
@@ -135,6 +157,10 @@ def main(argv):
     with tempfile.TemporaryDirectory() as d:
         for key, path, seg in keys:
             secs = P.KIT_GATE[56].get(key, 2.0)
+            pat = P.KIT_STROKES[56].get("pattern", {}).get(key)
+            if pat:
+                # a patterned key (the laugh, heart, gallop) to its last stroke's end
+                secs = pat[-1][0] + P.KIT_GATE[56].get(key, 0.5)
             items = [excerpt(os.path.join(R, path), max(secs, 1.0), seg)] if path else []
             for f in (E.ours, lambda n, dd: E.theirs(GU, n, dd)):
                 x, _ = f(key, d)

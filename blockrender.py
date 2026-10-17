@@ -2414,6 +2414,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     expanded = []
     inner_ridge = set()          # ridges after the first, which must not choke each other
     stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
+    stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
     for ev in notes:
         ch, note, on, off, vel, rest, pg = ev
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
@@ -2426,6 +2427,8 @@ def prepare(path, tuner='hybrid440', sink=None):
             # inner_ridge is, so the event tuple keeps its shape.
             if len(st) > 3 and st[3] != 1.0:
                 stroke_pitch[(note, t0)] = st[3]
+            if len(st) > 4:
+                stroke_tilt[(note, t0)] = st[4]
             expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
             if k: inner_ridge.add((note, t0))
     notes = expanded
@@ -3235,6 +3238,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
             _, pc, f0, dpan = drum
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
+            _tilt = stroke_tilt.get((note, on))       # a voice's pulse: its tilt, below
             # ...and a key's written pitch that picks a RATE, as the program's
             # note does (sounding_octaves, below): the SFX set's helicopter had
             # run its rotor at 261.6 Hz, four octaves fast -- a buzz
@@ -3420,6 +3424,10 @@ def prepare(path, tuner='hybrid440', sink=None):
         # level against GeneralUser GS's, on the channel volume
         chan_vol *= program_trim(prog, drum is not None)
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
+        if drum is not None and _tilt is not None:
+            # a voice's pulse, darker or brighter as its syllable goes on
+            # (percussion_map._voiced; tonelib.SfxThroatProperties)
+            props.stroke_tilt_db = _tilt
         if _press:
             # ...and the LEVEL half of it. `gain` is read lazily inside
             # harmonic_volume, long after construction, so this needs no change
@@ -4371,6 +4379,34 @@ def prepare(path, tuner='hybrid440', sink=None):
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
             stops = ()
+        if getattr(props, 'noise_events', ()):
+            # TIMED NOISE BANDS (tonelib.SfxHeartbeatProperties' blood flow):
+            # each (Hz, dB, start s, end s) a noise band sounding over its own
+            # span of the note, ramped in and out over noise_event_ramp_s --
+            # a spectrum whose top follows a curve, built from the bands it
+            # reaches. Beside the class's partials, not in place of them. As
+            # the shake's rows: several a band, no room images.
+            _cbw = (_CBW[0], _CBW[1])
+            _CBW[0], _CBW[1] = -props.noise_rel, 0.0
+            _NOREFL[0] = True
+            _PL[0] = 0
+            _vbk = (_VB[0], _VB[1], _VB[2])
+            _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
+            _k = int(props.noise_rows)
+            _rmp = props.noise_event_ramp_s * SR
+            for _bf, _db, _t0, _t1 in props.noise_events:
+                for _j in range(_k):
+                    _hf = _bf * 2.0 ** ((_j - 0.5 * (_k - 1)) / (3.0 * _k))
+                    if _hf >= 0.45 * SR:
+                        continue
+                    _gM = props.gain * 10.0 ** ((_db - 10.0 * math.log10(_k)) / 20.0) * props.radiation_gain(_hf)
+                    _gl, _gr = props.hrtf_gain(_hf, li), props.hrtf_gain(_hf, ri)
+                    emit_partial(2 * math.pi * _hf / SR, _gM * _gl, _gM * _gr, _gM, _hf, non + _t0 * SR,
+                                 non + _t1 * SR, _rmp, _rmp, chiff, 0.0, 0.0, 0.0, 1.0, 0.0, cc, crl, 0.0,
+                                 csc, -1, 0)
+            _CBW[0], _CBW[1] = _cbw
+            _VB[0], _VB[1], _VB[2] = _vbk
+            _NOREFL[0] = False
         if getattr(props, 'pulse', False):
             # A PRESSURE PULSE (the gunshot's N-wave, tonelib.pulse_series): a
             # waveform written as one period of a Fourier series, every

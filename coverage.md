@@ -259,6 +259,12 @@ plays Standard, as does any program that is not a set.
 | 49 | Guitar cutting noise (up) | `SfxGuitarCutUp` | **4** | GUITAR CUTTING NOISE (UP): a hollowbody's bright muted strum (Freesound, CC0): 8.0 dB |
 | 50 | String slap of double bass | `SfxBassSlap` | **3** | STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
 | 51 | Key Click | `SfxKeyClick` | **4** | KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
+| 52 | Laughing | `SfxLaugh` | **4** | LAUGHING: a "ho ho ho" (Ben's call; a woman's laugh never read as one) -- a throat pulsed as a Freesound Santa says it (CC0): four arcing "ho"s and a long falling "hooo", each glottal pulse ringing his /o/'s formants (LPC: 500, 850 Hz, 2.5, 2.9, 5.7 kHz; examples/throat_fit.py), so the pitch slides through a fixed vowel. 2.1 s where GeneralUser GS's laugh is 0.9 |
+| 53 | Screaming | `SfxScream` | **4** | SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
+| 54 | Punch | `SfxPunch` | **4** | PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
+| 55 | Heart Beat | `SfxHeartbeat` | **4** | HEART BEAT: the heart's own waveform -- a standard ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
+| 56 | Footsteps1 | `SfxFootstep` | **4** | FOOTSTEPS1: a hard shoe on stone (Freesound, CC0): the heel as shaped noise (colour 1.0 dB) and, 70 ms on, the sole 8 dB under, as the recorded steps pair |
+| 57 | Footsteps2 | `SfxFootstep` | **4** | FOOTSTEPS2: as 56, a semitone up, as GeneralUser GS has its pair |
 | 58 | Applause | `OrchestraApplause` | **4** | the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
 | 59 | Door Creaking | `SfxDoorCreak` | **4** | DOOR CREAKING: a hinge's stick-slip as a pulse train slowing 285 to 130 Hz (GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0): 1.6 dB |
 | 60 | Door | `SfxDoor` | **4** | DOOR: a wooden door slammed (Freesound, CC0): the slab, the latch, the frame (perc_fit): 6.5 dB |
@@ -277,6 +283,8 @@ plays Standard, as does any program that is not a set.
 | 73 | Machinegun | `SfxMachinegun` | **4** | MACHINEGUN: the set's gun shot (72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0) -- an impact train in the set's own stroke table (percussion_map.KIT_STROKES) |
 | 74 | Lasergun | `SfxLaser` | **3** | LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
 | 75 | Explosion | `SfxExplosion` | **4** | EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
+| 76 | Dog | `SfxDog` | **4** | DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
+| 77 | Horse-Gallop | `SfxHoof` | **4** | HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
 | 78 | Birds | `SfxBirds` | **4** | GM 123's bird (fitted), a one-shot gated 0.4 s |
 | 79 | Rain | `SfxRain` | **4** | RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
 | 80 | Thunder | `SfxThunder` | **4** | THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
@@ -600,7 +608,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-355 classes.
+363 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -707,11 +715,15 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxDoor` -- set 56 60 Door (4)
             - `SfxGuitarCutDown` -- set 56 48 Guitar cutting noise (down) (4)
             - `SfxGuitarCutUp` -- set 56 49 Guitar cutting noise (up) (4)
+            - `SfxHoof` -- set 56 77 Horse-Gallop (4)
             - `SfxKeyClick` -- set 56 51 Key Click (4)
             - `SfxMetronomeBell` -- 34 Metronome Bell (4), set 56 46 Metronome Bell (4)
             - `SfxMetronomeClick` -- 33 Metronome Click (4), set 56 45 Metronome Click (4)
             - `SfxSlap` -- 28 Slap (4), set 56 40 Slap (4)
             - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)
+            - `SfxThroat`
+              - `SfxDog` -- set 56 76 Dog (4)
+              - `SfxLaugh` -- set 56 52 Laughing (4)
             - `SfxWindchime` -- set 56 62 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4)
               - `SurdoMute` -- 86 Mute Surdo (4)
@@ -770,6 +782,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `ShakenNoise` [NoisyPercussionMixin]
         - `Cabasa` -- 69 Cabasa (4)
         - `Maracas` -- 70 Maracas (4)
+        - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4)
+        - `SfxPunch` -- set 56 54 Punch (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (4)
         - `GatedSnare` -- set 16 38 Gated SD (4), set 24 40 Gated SD (4)
@@ -884,11 +898,13 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxDoorCreak` -- set 56 59 Door Creaking (4)
           - `SfxEngine` -- set 56 63 Car-Engine (4)
           - `SfxExplosion` -- set 56 75 Explosion (4)
+          - `SfxHeartbeat` -- set 56 55 Heart Beat (4)
           - `SfxJet` -- set 56 69 Jetplane (4)
           - `SfxLaser` -- set 56 74 Lasergun (3)
           - `SfxRain` -- set 56 79 Rain (4)
           - `SfxScratchPush` -- 29 Scratch Push (4), set 56 41 Scratch Push (4)
             - `SfxScratchPull` -- 30 Scratch Pull (4), set 56 42 Scratch Pull (4), set 56 61 Scratch (4)
+          - `SfxScream` -- set 56 53 Screaming (4)
           - `SfxSiren` -- set 56 67 Siren (4)
           - `SfxSkid` -- set 56 64 Car-Skid (4)
           - `SfxStarship` -- set 56 71 Starship (3)

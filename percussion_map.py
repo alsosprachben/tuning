@@ -113,6 +113,8 @@ from tonelib import (
     SfxKeyClickProperties,
     SfxDoorProperties,
     SfxWindchimeProperties,
+    SfxPunchProperties, SfxHeartbeatProperties, SfxFootstepProperties, SfxDogProperties, SfxHoofProperties,
+    SfxLaughProperties, SfxScreamProperties,
     GunshotProperties,
     RoomTomProperties,
     RoomFloorTomProperties,
@@ -507,6 +509,16 @@ KITS = {
         51: ("Key Click",           SfxKeyClickProperties, 988.0),
         60: ("Door",                SfxDoorProperties, 256.0),
         62: ("Windchime",           SfxWindchimeProperties, 485.0),
+        54: ("Punch",               SfxPunchProperties, 261.63),
+        # the heart's own waveform: an ECG beat's Fourier series, 1 Hz
+        # harmonics (examples/ecg_heart.py) -- one beat, 60 bpm
+        55: ("Heart Beat",          SfxHeartbeatProperties, 1.0),
+        56: ("Footsteps1",          SfxFootstepProperties, 621.0),
+        57: ("Footsteps2",          SfxFootstepProperties, 658.0),
+        76: ("Dog",                 SfxDogProperties, 1000.0),
+        77: ("Horse-Gallop",        SfxHoofProperties, 1900.0),
+        52: ("Laughing",            SfxLaughProperties, 1000.0),
+        53: ("Screaming",           SfxScreamProperties, 1243.0),
     },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
@@ -545,7 +557,9 @@ KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4},
                  79: 2.75, 80: 1.0, 81: 1.6, 83: 2.75, 84: 0.4,
                  63: 0.64, 66: 1.3, 68: 2.25, 69: 1.81,
                  64: 0.45, 65: 0.75, 67: 1.5, 71: 1.5,
-                 39: 0.056, 41: 0.18, 42: 0.23, 61: 0.23, 59: 0.6, 73: 0.7, 74: 0.33, 75: 0.6}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
+                 39: 0.056, 41: 0.18, 42: 0.23, 61: 0.23, 59: 0.6, 73: 0.7, 74: 0.33, 75: 0.6,
+                 # the scream held; the heartbeat one beat
+                 53: 0.78, 55: 1.0}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead: a slap does not replace a
 # hand clap nor a swirl an electric snare, whatever key they share. Its tap
 # sits 11.3 dB under Standard's snare, where GeneralUser GS keeps its brush
@@ -569,7 +583,7 @@ KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.9
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
              16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
-             56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.090, 46: 0.591, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
+             56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.090, 46: 0.591, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 52: 5.284, 53: 1.777, 54: 9.798, 55: 3.855, 56: 0.806, 57: 0.952, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 76: 1.389, 77: 1.426, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
              40: {38: 0.490, 39: 0.570, 40: 0.011}}
 
 
@@ -1078,7 +1092,8 @@ PERCUSSION_CASCADE = {
 
 
 # A SET'S OWN STROKE TABLES, for a set that stands alone (KIT_ONLY): {kit:
-# {"cascade"|"train"|"rattle"|"rasp": {note: as Standard's table}}}
+# {"cascade"|"train"|"rattle"|"rasp": {note: as Standard's table}, or
+# "pattern": {note: its strokes}, "voiced": {note: a pulse train}}}
 KIT_STROKES = {
     56: {
         # the bubble: the bell tree's cascade, which it had by accident when Ben
@@ -1088,8 +1103,102 @@ KIT_STROKES = {
         # burst, measured: 4.9 ms rms off the clock = 7%), 0.69 s of them, a
         # dB of fall and +-1.5 dB shot to shot -- each shot a gunshot
         "train": {73: (14.49, 0.69, 1.0, 0.07, 1.5)},
+        # PATTERNS, (seconds, dB, semitones) a stroke, as GeneralUser GS's
+        # samples play them: the gallop's five hooves over 0.45 s, their
+        # levels the SF2's sample's own (its zone's 5 s attack had made the
+        # first two read 15-20 dB light), each hoof its own pitch (a semitone
+        # either way); the laugh's
+        # syllables (GeneralUser's at 485 Hz, ours at the recording's 337)
+        "pattern": {77: ((0.0, -8.0, 0.4), (0.085, -6.0, -0.6), (0.30, -4.0, 0.0),
+                         (0.377, 0.0, 0.7), (0.454, -7.0, -0.3)),
+                    # a step: the heel, then the sole -- 60-81 ms on, 3-12 dB
+                    # under it (a Freesound walk on stone, six steps)
+                    56: ((0.0, 0.0, 0.0), (0.07, -8.0, 1.0)),
+                    57: ((0.0, 0.0, 0.0), (0.07, -8.0, 1.0)),
+                    },
+        # VOICED: a throat pulsed (tonelib.SfxThroatProperties) -- (syllables
+        # as a pattern's strokes, the pitch Hz, its shape (_voiced), each
+        # syllable's length s, its rise s and the dB it falls over the rest,
+        # the periods' jitter, the pulses' shimmer dB). THE BARK as six
+        # Freesound dogs' (CC0; examples/throat_fit.py --contours): its pitch
+        # nearly level -- up ~0.8 semitone by 40 ms, down ~1.5 by 150 ms (a
+        # 0.7-octave chirp, Ben's guess, the dogs do not make) -- and ROUGH,
+        # noise between its harmonics: 6% jitter, 2 dB shimmer, breath on each
+        # pulse -- and BRIGHT FIRST: its 2-8 kHz up ~6 dB over the first 30 ms
+        # (against 300 Hz-1 kHz), then down 8-13 by 120 ms in three of five
+        # barks (examples/throat_fit.py --tilt). THE LAUGH a "ho ho ho" (Ben:
+        # "Why not try to make it a ho ho ho?"), a Freesound Santa's (CC0): four
+        # "ho"s 0.4 s apart, each ~0.1 s arcing up ~3 semitones and back, each
+        # lower (365, 338, 255, 248 Hz), then the long "hooo", up to 213 Hz
+        # and down an octave over half a second; a clean voice (0.5% jitter)
+        "voiced": {76: (((0.0, 0.0, 0.0),), 540.0, ((0.0, -1.0), (0.04, 0.8), (0.15, -1.5)),
+                        0.15, 0.015, 14.0, 0.06, 2.0, ((0.0, -6.0), (0.03, 0.0), (0.12, -10.0))),
+                   52: (((0.0, 0.0, 6.3), (0.45, 0.0, 5.2), (0.84, 0.0, 0.1), (1.21, 0.0, -0.35),
+                         (1.53, -2.0, -2.8, ((0.0, -1.8), (0.06, 0.0), (0.2, -3.0), (0.42, -10.0), (0.5, -12.2)),
+                          0.5)),
+                        250.0, ((0.0, -2.0), (0.05, 1.2), (0.1, 0.0)), 0.11, 0.01, 10.0, 0.005, 0.5)},
     },
 }
+
+
+def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None):
+    """(start, end, level, pitch) for a KIT_STROKES voiced note: each
+    syllable a train of glottal pulses, one stroke each, spaced at the
+    pitch's period as it moves, jitter on each period (a voice is never a
+    clock; a bark's is rough) and shimmer_db on each pulse's level; the
+    level rising over rise s, then falling fall_db to the syllable's end --
+    on the square law, as _pattern's. The pitch: f0 and the syllable's
+    semitones, moved by SHAPE -- (bend octaves, time constant s), settling
+    exponentially from bend above, or ((s, semitones), ...), a contour read
+    off recordings, joined straight in semitones and held past its ends.
+    BRIGHT, ((s, dB), ...) the same way: each pulse's TILT, its throat's
+    formants over 1 kHz moved this much at 4 kHz (half a dB an octave per
+    dB) and its breath with them -- a fifth field on the stroke
+    (tonelib.SfxThroatProperties.stroke_tilt_db)."""
+    import math
+    import random
+    rng = random.Random(note * 7919 + int(round(on * 1e4)))
+
+    def along(pts, t):
+        if t <= pts[0][0]:
+            return pts[0][1]
+        for (ta, sa), (tb, sb) in zip(pts, pts[1:]):
+            if t <= tb:
+                return sa + (sb - sa) * (t - ta) / (tb - ta)
+        return pts[-1][1]
+
+    def moved(t, shape):
+        if isinstance(shape[0], tuple):
+            return along(shape, t) / 12.0
+        return shape[0] * math.exp(-t / shape[1])
+    out = []
+    for syl in syllables:
+        # a syllable may carry its own shape and length (a "ho ho ho"'s long
+        # last "hooo")
+        ts, db, semis = syl[:3]
+        sh, dn = (syl[3], syl[4]) if len(syl) > 3 else (shape, dur)
+        t = 0.0
+        while t < dn:
+            f = f0 * 2.0 ** (semis / 12.0 + moved(t, sh))
+            env = 20.0 * math.log10(max(t / rise, 0.03)) if t < rise else -fall_db * (t - rise) / max(dn - rise, 1e-6)
+            per = max(0.3, rng.gauss(1.0, jitter)) / f
+            lvl = db + env + (rng.gauss(0.0, shimmer_db) if shimmer_db else 0.0)
+            st = (on + ts + t, on + ts + t + per, 10.0 ** (lvl / 40.0), 1.0)
+            out.append(st + (along(bright, t),) if bright else st)
+            t += per
+    return out
+
+
+def _pattern(on, strokes):
+    """(start, end, level, pitch) for a KIT_STROKES pattern: each stroke at
+    its time, level and pitch, running to the next (the last 0.3 s). The
+    level scales the velocity, and a drum's velocity is its volume on the
+    square law (40 log10 v), so a stroke's dB are halved into it."""
+    out = []
+    for k, (t, db, semis) in enumerate(strokes):
+        end = strokes[k + 1][0] if k + 1 < len(strokes) else t + 0.3
+        out.append((on + t, on + end, 10.0 ** (db / 40.0), 2.0 ** (semis / 12.0)))
+    return out
 
 
 def rasp_strokes(note, on, off, rng=None, kit=0):
@@ -1147,6 +1256,13 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
     train = table("train", PERCUSSION_TRAIN)
     if train is not None:
         return _impact_train(note, on, *train)
+
+    voiced = tabs.get("voiced", {}).get(note) if tabs is not None else None
+    if voiced is not None:
+        return _voiced(note, on, *voiced)
+    pattern = tabs.get("pattern", {}).get(note) if tabs is not None else None
+    if pattern is not None:
+        return _pattern(on, pattern)
 
     rattle = table("rattle", PERCUSSION_RATTLE)
     if rattle is not None:

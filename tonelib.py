@@ -23982,6 +23982,62 @@ class SfxWindchimeProperties(MeasuredStrokeProperties):
     DRUM_MODES = ((0.9997, 0.0, 10), (2.6579, -8.2, 38), (4.9442, -13.7, 68), (7.5296, -25.4, 148), (7.7018, -17.5, 157), (9.3539, -25.8, 111), (11.2295, -23.3, 153))
 
 
+# THE HUMAN AND ANIMAL KEYS' STRUCK SOUNDS (54, 56-57, 77): short bursts
+# of noise, not bodies that ring. The gallop's hooves are one burst each,
+# patterned (percussion_map.KIT_STROKES) as GeneralUser GS's sample plays
+# them; the heartbeat is the kit's own kick.
+class SfxPunchProperties(ShakenNoiseProperties):
+    """SFX 54, "Punch": a fist on a body -- a thud and the skin's slap, over in
+    ~50 ms: shaped noise (as the cabasa), its spectrum and envelope fitted to
+    Freesound recordings (CC0; examples/perc_fit.py sfx_punch). As a body's
+    modes, its click series rang half a second where the takes are gone in
+    50 ms (Ben: "quite bad")."""
+    # A FIXED BURST: its length its own, whatever the note's (shake_frac 0)
+    shake_frac = 0.0
+    shake_min_s = 0.0158558
+    rise_s = 0.00143259
+    settle_s = 0.133538
+    settle_db = 27.1306
+    noise_bands = ((45, -12.6), (56, -13.8), (71, -5.0), (89, -9.5), (112, -9.8), (141, -16.3), (178, -16.0), (224, -11.2), (283, -18.9), (356, -17.3), (449, -22.2), (566, -17.7), (713, -17.7), (898, -17.8), (1131, -18.2), (1425, -16.5), (1796, -14.3), (2263, -15.5), (2851, -18.9), (3592, -22.6), (4525, -20.8), (5702, -13.4), (7184, -17.4), (9051, -16.3), (11404, -20.4), (14368, -84.1))
+
+
+class SfxFootstepProperties(ShakenNoiseProperties):
+    """SFX 56-57, "Footsteps": a hard shoe's HEEL on stone -- shaped noise (as
+    the cabasa), fitted to a Freesound recording's heels (CC0;
+    examples/perc_fit.py sfx_footstep); the sole follows 70 ms on, 8 dB under
+    (KIT_STROKES), as the walk's steps do. One burst for both had blurred
+    the pair (Ben: "not sure about"); its modes had rung half a second."""
+    # A FIXED BURST: its length its own, whatever the note's (shake_frac 0)
+    shake_frac = 0.0
+    shake_min_s = 0.0107848
+    rise_s = 0.000629045
+    settle_s = 0.161468
+    settle_db = 51.4573
+    noise_bands = ((112, -9.5), (141, -6.4), (178, -7.2), (224, 8.5), (283, -5.5), (356, 8.3), (449, 6.2), (566, -14.2), (713, 6.4), (898, -19.8), (1131, -6.4), (1425, -8.5), (1796, -8.4), (2263, -8.2), (2851, -11.3), (3592, -9.0), (4525, -10.8), (5702, -10.5), (7184, -10.9), (9051, -10.8), (11404, -10.7), (14368, -3.8))
+
+
+class SfxHoofProperties(MeasuredStrokeProperties):
+    """SFX 77, "Horse-Gallop": a HORSESHOE'S CLICK -- Ben: "horseshoe clicks
+    in the gallop pattern" -- the gallop's five falls patterned (KIT_STROKES)
+    as GeneralUser GS's sample has them. A shoe is a curved steel bar struck
+    on stone: a clink, its modes a free bar's (1, 2.76, 5.40, 8.93) from
+    1.9 kHz, gone in ~60 ms (the hoof damps it), over the strike's click,
+    bright and gone in ~25. Set, not fitted: no recording has a shoe's click alone (a
+    road's clops, fitted as noise, were a dull thud; as a body's modes, a
+    ring)."""
+    DRUM_MODES = ((1.0, 0.0, 500.0), (2.756, -4.0, 650.0), (5.404, -9.0, 800.0), (8.933, -15.0, 1000.0))
+    # the strike's click a steel edge on stone: bright, nothing of a thud --
+    # its bands under 800 Hz rolled away (the hoof's thud had dominated)
+    CLICK_DB = (-24, -21, -18, -15, -12, -9) + (0,) * 14
+    slow_share = 0.0
+    click_cal_db = -8.0
+    click_dbs = 1600.0
+    chiff_volume = 0.3
+    chiff_width = 0.01
+    sustain_jitter = 0.02
+    mode_jitter = 0.01
+
+
 class SfxMachinegunProperties(GunshotProperties):
     """SFX 73, "Machinegun": the set's gun shot (GM 127's, fitted) fired as a
     rifle on full auto does -- a shot every 69 ms, 0.69 s of them, as a
@@ -24078,15 +24134,173 @@ class SfxExplosionProperties(SfxWeatherProperties):
     breath_noise_fade_s = 0.01
     release_valve_time = 0.9
     release_fraction_max = None
+    # FITTED (examples/weather_fit.py): colour rms 0.4 dB to the recording
+    breath_noise_db = ((51, 19.2), (64, 45.0), (80, 47.1), (101, 48.3), (127, 49.7), (160, 48.6), (202, 54.1), (255, 48.8), (321, 52.4), (404, 53.3), (509, 51.2), (641, 51.8), (808, 49.9), (1018, 50.7), (1283, 50.0), (1616, 50.8), (2036, 46.1), (2566, 39.9), (3233, 32.8), (4073, 28.0), (5132, 25.9), (6465, 16.6), (8146, 11.8), (10263, 9.4), (12931, 5.9))
+    grains = ()
+
+
+class SfxHeartbeatProperties(SfxWeatherProperties):
+    """SFX 55, "Heart Beat": the heart's own waveform -- a standard ECG beat
+    (lead II, 60 bpm: P, QRS, T) as its Fourier series, one partial a 1 Hz
+    harmonic at the FFT's gain and phase (examples/ecg_heart.py), so their
+    sum IS the trace; one beat, the note gated to its period. Ben: "take a
+    standard ECG shape, and use an FFT to convert it. Let's just make it the
+    actual waveform." (A stethoscope's thump, fitted, sounded nothing like
+    one; two kicks were the next try.) Most of it is under 20 Hz: a speaker
+    gives back the QRS's knock and the T wave's swell."""
+    # THE BLOOD FLOW over the trace, as a Doppler hears it: noise bands
+    # filling up to a top that follows the artery's velocity
+    # (examples/ecg_heart.py; blockrender's timed noise bands), flow_db on
+    # each band: at 0 the flow was 13 dB over the trace (K-weighted), which
+    # it buried; 3 dB over it
+    FLOW_EVENTS = ((200.0, 0.0, 0.0, 0.1327), (200.0, 0.0, 0.3486, 0.593), (200.0, 0.0, 0.6481, 1.0), (252.0, 0.0, 0.0, 0.0518), (252.0, 0.0, 0.3522, 0.5858), (252.0, 0.0, 0.6501, 1.0), (317.5, 0.0, 0.3558, 0.5784), (317.5, 0.0, 0.6527, 0.9709), (400.0, 0.0, 0.3597, 0.5706), (400.0, 0.0, 0.656, 0.89), (504.0, 0.0, 0.3639, 0.5623), (504.0, 0.0, 0.6603, 0.8092), (635.0, 0.0, 0.3684, 0.5535), (635.0, 0.0, 0.6654, 0.7284), (800.0, 0.0, 0.3732, 0.5438), (1007.9, 0.0, 0.3784, 0.5334), (1269.9, 0.0, 0.3842, 0.5219), (1600.0, 0.0, 0.3909, 0.5085), (2015.9, 0.0, 0.3988, 0.4924), (2539.8, 0.0, 0.4099, 0.4705))
+    flow_db = -10.0
+    noise_rel = 0.25
+    noise_rows = 3
+    noise_event_ramp_s = 0.02
+
+    @property
+    def noise_events(self):
+        return tuple((f, db + self.flow_db, a, b) for f, db, a, b in self.FLOW_EVENTS)
+
+    ECG_GAINS = (0.79523, 0.66135, 0.84831, 1, 0.49014, 0.69942, 0.72673, 0.46402, 0.46891, 0.61311, 0.6554, 0.6171, 0.57081, 0.55315, 0.55743, 0.55425, 0.53266, 0.50143, 0.47048, 0.44121, 0.41052, 0.37702, 0.34185, 0.30661, 0.27213, 0.23874, 0.20678, 0.17666, 0.14876, 0.12334, 0.10054, 0.080431, 0.062993, 0.048149, 0.035763, 0.025651, 0.017599, 0.011385, 0.0068153, 0.0038405, 0.002746, 0.0031962, 0.0039729, 0.0046327, 0.0051442, 0.0055419, 0.0058513, 0.0060792, 0.0062204, 0.0062662, 0.0062109, 0.0060545, 0.0058035, 0.0054698, 0.0050693, 0.0046199, 0.0041403, 0.0036484, 0.0031604, 0.0026901, 0.0022486, 0.001844, 0.0014819, 0.0011651, 0.00089459, 0.00066956, 0.0004881, 0.00034777, 0.00024609, 0.00018043, 0.00014577, 0.00013185, 0.00012662, 0.00012228, 0.00011579, 0.00010671, 9.5641e-05, 8.347e-05, 7.1027e-05, 5.8989e-05)
+    ECG_PHASES = (-2.85065, -1.53973, 1.32495, -1.79445, 2.57215, 1.78764, -0.27653, -2.41571, 1.91396, 0.02954, -1.79156, 2.68157, 0.78704, -1.16418, -3.08868, 1.30812, -0.57261, -2.46861, 1.90610, -0.00255, -1.90634, 2.47489, 0.57111, -1.33505, 3.04080, 1.13305, -0.77529, -2.68462, 1.68804, -0.22366, -2.13643, 2.23301, 0.31860, -1.59577, 2.77463, 0.86668, -1.02922, -2.89605, 1.59431, 0.00000, -1.26489, -2.67693, 1.85893, -0.04058, -2.00335, 2.29091, 0.29426, -1.70025, 2.59544, 0.61682, -1.35284, 2.96889, 1.01448, -0.93411, -2.87808, 1.46463, -0.47341, -2.41003, 1.93693, 0.00000, -1.93891, 2.40185, 0.45384, -1.50260, 2.81151, 0.82331, -1.19431, 3.02568, 0.89467, -1.31998, 2.69336, 0.44891, -1.71619, 2.47762, 0.44132, -1.56096, 2.74137, 0.77383, -1.18584, -3.14159)
+    max_harmonic = 80
+    mode_ratios = tuple(float(k) for k in range(1, 81))
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    breath_noise_db = ()
+    initial_gain = 0.05             # no noise table to carry its level
+    attack_time = 0.002
+    release_valve_time = 0.01
+    release_fraction_max = None
+    # the oscillators' phase against the series' cosines
+    ecg_phase_offset = 0.0
+
+    @property
+    def mode_gains(self):
+        return self.ECG_GAINS
+
+    def mode_phase(self, harmonic):
+        if 1 <= harmonic <= len(self.ECG_PHASES):
+            return self.ECG_PHASES[harmonic - 1] + self.ecg_phase_offset
+        return 0.0
+
+
+# THE SFX SET'S VOICES (52, 53, 76): a voice is a pulse train through the throat.
+# The scream, steady, as its harmonics, each at the recording's own level
+# (read at its own pitch, where the throat's resonances put them), its breath
+# fitted under them (examples/weather_fit.py). The bark and the laugh, whose
+# pitch slides a long way, as the throat itself: each pulse ringing fixed
+# formants (SfxThroatProperties; examples/throat_fit.py). GeneralUser GS
+# gives the gesture: the scream's slide up into it, the laugh's syllables
+# (percussion_map.KIT_STROKES).
+class SfxThroatProperties(MeasuredStrokeProperties):
+    """A THROAT, MODALLY: one glottal pulse ringing the vocal tract's
+    resonances -- each formant a decaying sine at its own fixed frequency,
+    dying as its bandwidth says (27.3 dB/s a hertz), at the level its
+    envelope peak times its bandwidth gives an impulse (the FOF). A voice is
+    a train of them (percussion_map.KIT_STROKES "voiced"): the PITCH is only
+    the pulses' spacing, so a sliding pitch slides through fixed formants as
+    a throat's does -- where harmonics with set gains (the first dog and
+    laugh) slid the formants with them (Ben: "filter in a modal way, to sound
+    more like a throat"). DRUM_MODES are the formants re 1 kHz (the key's
+    pitch), from LPC of the recordings (examples/throat_fit.py). Each pulse
+    rings in phase -- no strike signs, no jitter, no click: the strike is the
+    glottis; breath_volume is the breath on each pulse."""
+    CLICK_DB = (-120,) * 20
+    breath_volume = 0.0
+    slow_share = 0.0
+    mode_jitter = 0.0
+    sustain_jitter = 0.0
+    strike_phase_spread = 0.0
+    stroke_scatter = False
+    # each pulse's rise ~one period (the FOF's raised attack): at 0.5 ms the
+    # strongest formant's onset splattered over every band above it, and the
+    # upper formants (and their tilt) drowned in it
+    attack_time = 0.002
+    # A PULSE'S TILT (percussion_map._voiced, set on the note by the
+    # renderers): its formants over 1 kHz moved this many dB at 4 kHz -- half
+    # of it an octave -- and its breath with them. A bark is brightest ~30 ms
+    # in and darkens after.
+    stroke_tilt_db = 0.0
+
+    @property
+    def chiff_volume(self):
+        return self.breath_volume * 10.0 ** (self.stroke_tilt_db / 20.0)
+
+    def harmonic_volume(self, harmonic):
+        v = super().harmonic_volume(harmonic)
+        if self.stroke_tilt_db and v and harmonic <= len(self.DRUM_MODES):
+            hz = 1000.0 * self.DRUM_MODES[harmonic - 1][0]
+            if hz > 1000.0:
+                v *= 10.0 ** (0.5 * self.stroke_tilt_db * _log(hz / 1000.0) / _log(2.0) / 20.0)
+        return v
+
+
+class SfxScreamProperties(SfxWeatherProperties):
+    """SFX 53, "Screaming": a shriek near 1.24 kHz -- a Freesound girl's
+    scream (CC0), h2 -5 dB, h3 -12, h4 -16, falling away past 7 kHz -- that
+    slides up a fourth into its pitch over ~0.15 s, as GeneralUser GS's does
+    (1.23 to 1.63 kHz), never quite steady."""
+    mode_ratios = tuple(float(k) for k in range(1, 11))
+    # on the noise table's scale (its rows +50 dB on the seashore's gain)
+    max_harmonic = 10
+    decay_db = 0.0
+    harmonic_decay_db = 0.0
+    attack_time = 0.04
+    release_valve_time = 0.1
+    release_fraction_max = None
+    tension_log = True
+    tension_bend = -0.415
+    tension_bend_max = 2.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_settle_time = 0.15
+    tension_settle_cutoff = 2.0
+    scream_vibrato_cents = 8.0
+    scream_vibrato_hz = 6.0
+
+    def voice_vibrato(self, frequency, index):
+        d = 2.0 ** (self.scream_vibrato_cents * 1.4142 / 1200.0) - 1.0
+        return (d, self.scream_vibrato_hz, 0.0)
+    # FITTED (examples/weather_fit.py): colour rms 0.0 dB to the recording
+    breath_noise_db = ((51, -36.4), (64, -37.5), (80, -27.1), (101, -29.8), (127, -39.6), (160, -35.4), (202, -32.8), (255, -35.4), (321, -34.3), (404, -36.5), (509, -34.0), (641, -30.5), (808, -21.7), (1018, 3.3), (1283, 24.0), (1616, 4.8), (2036, 9.1), (2566, 19.7), (3233, 9.4), (4073, 13.8), (5132, 11.0), (6465, 1.2), (8146, -0.7), (10263, -9.0), (12931, -4.6))
+    grains = ()
+    mode_gains = (4567.4, 1032.8, 951.47, 536.44, 268.4, 192.5, 8.5993, 67.58, 95.47, 212.64)
+
+
+class SfxDogProperties(SfxThroatProperties):
+    """SFX 76, "Dog": one bark -- a throat (SfxThroatProperties) pulsed as six
+    Freesound dogs bark (CC0; KIT_STROKES "voiced"): the pitch nearly level
+    near 540 Hz (up ~0.8 semitone, then down ~1.5 over 0.15 s) and ROUGH --
+    the period 6% jittered, each pulse 2 dB apart, a breath on each. Its
+    formants by LPC of a bark: ~560 Hz, 1.35, 2.4, 3.5 and 5.4 kHz. (A
+    chirp's harmonics, Ben: "close, but needs to filter in a modal way"; a
+    0.7-octave sweep, which no dog recorded made; shaped noise, a hiss; a
+    body's modes, a ring.)"""
+    # the breath on each pulse: the bark's roughness
+    breath_volume = 0.3
+    DRUM_MODES = ((0.5569, 0.0, 4094.0), (1.3469, 17.9, 9089.0), (2.3832, 6.9, 12490.0), (3.5195, 5.2, 17522.0), (5.4854, -9.8, 11214.0))
+
+
+class SfxLaughProperties(SfxThroatProperties):
+    """SFX 52, "Laughing": a "ho ho ho" -- Ben: "Why not try to make it a ho
+    ho ho?" -- a throat (SfxThroatProperties) pulsed as a Freesound Santa
+    says it (CC0; KIT_STROKES "voiced"): four short "ho"s and a long falling
+    "hooo". Its /o/ by LPC of his: ~500 Hz, 850, the pair at 2.5 and 2.9
+    kHz that rings in it, 5.7 kHz (examples/throat_fit.py), levelled
+    against his bands. (A woman's laugh, its "ha"s eight as GeneralUser's, never read as
+    one: with set harmonic gains, then as a throat.)"""
+    DRUM_MODES = ((0.4978, 0.0, 4094.0), (0.8383, -5.8, 6603.0), (2.5117, -15.9, 5136.0), (2.945, -16.3, 5200.0), (5.7268, -30.5, 4858.0))
+    # a trace of breath on each pulse: his voice is clean
+    breath_volume = 0.05
 
 
 # THE SFX SET'S ELECTRONIC CLICKS (39, 44): Roland's own synthesized sounds,
 # so the reference is GeneralUser GS's sample of each, and the instrument a
 # synth voice -- the TR-808 engine's resonator and click (tr808.py) fit them
 # as they fit the 808 (examples/sfx808_fit.py).
-    # FITTED (examples/weather_fit.py): colour rms 0.4 dB to the recording
-    breath_noise_db = ((51, 19.2), (64, 45.0), (80, 47.1), (101, 48.3), (127, 49.7), (160, 48.6), (202, 54.1), (255, 48.8), (321, 52.4), (404, 53.3), (509, 51.2), (641, 51.8), (808, 49.9), (1018, 50.7), (1283, 50.0), (1616, 50.8), (2036, 46.1), (2566, 39.9), (3233, 32.8), (4073, 28.0), (5132, 25.9), (6465, 16.6), (8146, 11.8), (10263, 9.4), (12931, 5.9))
-    grains = ()
 
 
 class SfxHighQProperties(TR808Properties):

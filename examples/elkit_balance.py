@@ -37,13 +37,18 @@ NOTES = {0: (27, 28, 29, 30, 31, 32, 33, 34),     # Standard's GS eight (PERCUSS
          8: (41, 43, 45, 47, 48, 50),
          16: (36, 41, 43, 45, 47, 48, 50),
          56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84, 63, 66, 68, 69, 64, 65, 67, 71,
-             39, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 59, 60, 61, 62, 73, 74, 75)}
+             39, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 59, 60, 61, 62, 73, 74, 75,
+             52, 53, 54, 55, 56, 57, 76, 77)}
 ANCHOR_STANDARD = {56}
 # A KEY GENERALUSER RENDERS SILENT (timidity plays the SFX set's train as
 # nothing, -94 dBFS; the starship as a 4409 Hz whine, its noise once and
 # under its own attack, -48.8 dB): levelled to a stand-in key of its kind
 # instead -- the train and the starship to the jet, each a vehicle's held roar
-STAND_IN = {56: {68: 69, 71: 69}}
+# ...and the gallop, which GeneralUser GS means as a loop swelling in over 5
+# s (its zone's attack 2786 timecents) 20 dB down -- a held note's design, its
+# first 2 s 34 dB under the snare: levelled to the footsteps, a step on hard
+# ground
+STAND_IN = {56: {68: 69, 71: 69, 77: 56}}
 
 
 def k150(x, sr):

@@ -14,7 +14,7 @@ All rights reserved.
 
 from patches import patches
 from patch_map import property_class_for_program, property_class_for_note
-from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL
+from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL, kit_for_program
 
 # Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
 # str. Accept both so the byte-level MIDI parsing below works unchanged.
@@ -208,6 +208,10 @@ def h(o):
 
 dictstr = lambda s: (s.__class__.__name__  + ": " if hasattr(s, "__class__") else "") + (p(s.__dict__) if hasattr(s, "__dict__") else "None")
 
+
+
+# a voice's pulse classes, each tilt one subclass (Note's drum branch)
+_TILTED = {}
 
 class ChannelEvent:
     class NoteOff:
@@ -902,6 +906,7 @@ class Channels:
         # else sees the stream -- the choke and the note durations must both work
         # on the real strokes, as they do in blockrender.
         self.stroke_pitch = {}
+        self.stroke_tilt = {}
         events = self.expandRaspStrokes(events)
         self.q = EventQueue(0, events)
         
@@ -924,6 +929,7 @@ class Channels:
         # the swept-stroke pitches, so a drum's tone can pick up its own bar
         for _ch in self.channels.values():
             _ch.stroke_pitch = self.stroke_pitch
+            _ch.stroke_tilt = self.stroke_tilt
 
         self.scanNoteDurations(events)
 
@@ -973,6 +979,10 @@ class Channels:
 
         # pair the percussion note-ons with their offs
         pending = {}; pairs = []
+        # THE SET the channel plays at each note: a set that stands alone (the
+        # SFX set) strokes by its own tables, not Standard's by note number --
+        # as blockrender's expansion does
+        kit = 0
         for tick, ev in ordered:
             inner = getattr(ev, "event", None)
             if not isinstance(ev, ChannelEvent) or inner is None:
@@ -980,17 +990,19 @@ class Channels:
             if getattr(inner, "midi_channel", None) != GM_PERCUSSION_CHANNEL:
                 continue
             cls = inner.__class__
-            if cls is ChannelEvent.NoteOn and inner.velocity > 0:
-                pending.setdefault(inner.note, []).append((tick, ev))
+            if cls is ChannelEvent.ProgramChange:
+                kit = kit_for_program(inner.program)
+            elif cls is ChannelEvent.NoteOn and inner.velocity > 0:
+                pending.setdefault(inner.note, []).append((tick, ev, kit))
             elif cls is ChannelEvent.NoteOff or (cls is ChannelEvent.NoteOn and inner.velocity == 0):
                 stack = pending.get(inner.note)
                 if stack:
-                    on_tick, on_ev = stack.pop(0)
-                    pairs.append((inner.note, on_tick, on_ev, tick, ev))
+                    on_tick, on_ev, on_kit = stack.pop(0)
+                    pairs.append((inner.note, on_tick, on_ev, tick, ev, on_kit))
 
         drop = set(); add = []
-        for note, on_tick, on_ev, off_tick, off_ev in pairs:
-            strokes = rasp_strokes(note, to_sec(on_tick), to_sec(off_tick))
+        for note, on_tick, on_ev, off_tick, off_ev, on_kit in pairs:
+            strokes = rasp_strokes(note, to_sec(on_tick), to_sec(off_tick), kit=on_kit)
             if not strokes:
                 continue
             drop.add(id(on_ev)); drop.add(id(off_ev))
@@ -999,6 +1011,8 @@ class Channels:
                 t0, t1, lvl = st[0], st[1], st[2]
                 if len(st) > 3 and st[3] != 1.0:
                     self.stroke_pitch[(note, to_tick(t0))] = st[3]
+                if len(st) > 4:
+                    self.stroke_tilt[(note, to_tick(t0))] = st[4]
                 a = copy.deepcopy(on_ev); b = copy.deepcopy(off_ev)
                 a.time = a.event.time = to_tick(t0)
                 b.time = b.event.time = max(a.time + 1, to_tick(t1))
@@ -1121,6 +1135,15 @@ class Note:
             # (note, tick); the channel hands it over here because the tone is
             # built before this Note's event is attached.
             base_frequency *= getattr(self.channel, "_stroke_pitch", 1.0)
+            # ...and a voice's pulse its TILT (percussion_map._voiced): the class
+            # with it set, as blockrender sets it on the note's props
+            _tilt = getattr(self.channel, "_stroke_tilt", None)
+            if _tilt is not None:
+                _key = (property_class, round(_tilt, 2))
+                if _key not in _TILTED:
+                    _TILTED[_key] = type(property_class.__name__, (property_class,),
+                                         {"stroke_tilt_db": _key[1]})
+                property_class = _TILTED[_key]
             self.f = base_frequency
             # Each drum has a default stereo position; the channel pan (CC10)
             # rotates the whole kit around it. Clamp to the legal pan range.
@@ -1223,8 +1246,10 @@ class Channel:
                             prev.tone.release()
 
         self._stroke_pitch = getattr(self, "stroke_pitch", {}).get((n.note, n.time), 1.0)
+        self._stroke_tilt = getattr(self, "stroke_tilt", {}).get((n.note, n.time))
         e = Note(self, None, n.note, self.getControl("pan"), s, n.velocity)
         self._stroke_pitch = 1.0
+        self._stroke_tilt = None
         e.event = n
         e.unrelease()   # strike this voice
         self.notes.setdefault(n.note, []).append(e)

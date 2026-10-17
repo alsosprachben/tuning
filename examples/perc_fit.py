@@ -91,6 +91,16 @@ ATTACK_REFIT = ("agogo_hi", "agogo_lo", "conga_open", "conga_low", "bongo_hi", "
 
 # note, files, how they group into soft/mid/loud (None: one group), the
 # modes' band and floor, the flatness band
+# the SFX keys whose low body rings free (ring_scale), judged from 31 Hz: the
+# guitar's cuts and the bass slap
+LOW_RING = (48, 49, 50)
+# ...and those that are a BURST OF NOISE, not a body (tonelib.ShakenNoiseProperties
+# with a fixed length): a punch, a footstep, a bark, a hoof. As modes their
+# click series rang half a second past takes gone in 30-150 ms -- unseen by the
+# grid, whose windows past a take's end are not scored (Ben: "quite bad").
+# Their envelope fitted here, their spectrum by --trim3
+BURST = (54, 56, 76, 77)
+BURST_PARAMS = ("rise_s", "settle_s", "settle_db", "shake_min_s")
 INSTS = {
     "cowbell":   dict(note=56, glob="Percussion/Cowbell1_Hit_v*_Sum.wav",
                       groups=lambda p: {1: "soft", 2: "mid", 3: "mid", 4: "loud"}[_vtag(p)],
@@ -244,11 +254,15 @@ INSTS = {
         # the guitar's cuts and the bass slap ring free (ring_scale): held at
         # the modes' own rates, their body's 65-100 Hz rang 0.6-0.8 s where the
         # takes are gone by 0.2-0.6 -- a tom (Ben: "seem like drums")
-        params=DRUM_PARAMS + (("ring_scale",) if note in (48, 49, 50) else ()),
+        params=(BURST_PARAMS if note in BURST else
+                DRUM_PARAMS + (("ring_scale",) if note in LOW_RING else ())),
+        # a burst's noise_bands fitted (--trim3) from its band's foot, a punch's
+        # and a hoof's thud under 250 Hz
+        trim_lo=band[0],
         # ...judged from 31 Hz, as the surdo is: from 125 the grid never saw
         # the body it was to damp (ring_scale stayed at 1)
         **({"edges": (31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)}
-           if note in (48, 49, 50) else {}))
+           if note in LOW_RING + BURST else {}))
        for name, note, folder, hit, band, flat in (
            ("sfx_slap", 40, "slap", "slap", (100, 8000), (500, 8000)),
            ("sfx_sticks", 43, "sticks", "sticks", (500, 16000), (1000, 16000)),
@@ -259,7 +273,12 @@ INSTS = {
            ("sfx_bassslap", 50, "bassslap", "bassslap", (40, 4000), (500, 8000)),
            ("sfx_keyclick", 51, "keyclick", "keyclick", (200, 8000), (500, 8000)),
            ("sfx_door", 60, "door", "door", (40, 4000), (500, 8000)),
-           ("sfx_chime", 62, "windchime", "chime", (300, 16000), (1000, 16000)))},
+           ("sfx_chime", 62, "windchime", "chime", (300, 16000), (1000, 16000)),
+           # the human and animal keys'
+           ("sfx_punch", 54, "punch", "punch", (40, 4000), (500, 8000)),
+           ("sfx_footstep", 56, "footsteps", "footstep", (100, 8000), (500, 8000)),
+           ("sfx_bark", 76, "dog", "bark", (200, 8000), (500, 8000)),
+           ("sfx_hoof", 77, "horse", "hoof", (100, 8000), (500, 8000)))},
 }
 
 C.EDGES = (125, 250, 500, 1000, 2000, 4000, 8000, 16000)
@@ -702,13 +721,14 @@ _E3 = 2 ** np.arange(np.log2(100), np.log2(20000), 1 / 3.0)
 _C3 = np.sqrt(_E3[:-1] * _E3[1:])
 
 
-def ltas3(chs, sr, dur=1.5):
+def ltas3(chs, sr, dur=1.5, edges=None):
+    edges = _E3 if edges is None else edges
     x = sum(chs)
     t0 = C.onset([x], sr)
     seg = x[t0:t0 + int(dur * sr)]
     X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), 1 << 17)) ** 2
     f = np.fft.rfftfreq(1 << 17, 1.0 / sr)
-    b = np.array([X[(f >= lo) & (f < hi)].sum() for lo, hi in zip(_E3[:-1], _E3[1:])])
+    b = np.array([X[(f >= lo) & (f < hi)].sum() for lo, hi in zip(edges[:-1], edges[1:])])
     return 10 * np.log10(b / b.sum() + 1e-30)
 
 
@@ -720,22 +740,28 @@ def trim3(inst, passes):
     note = INSTS[inst]["note"]
     cls = inst_class(INSTS[inst])
     path = os.path.join(HERE, "tonelib.py")
-    r = np.mean([ltas3(*load(p)) for p in files(inst)], 0)
-    keep = (_C3 >= 250) & (_C3 <= 14000)
+    # a band reaching under 100 Hz (a punch's, a hoof's thud): the grid carried
+    # down by whole thirds, so the bands over 100 Hz stay where they were
+    lo = INSTS[inst].get("trim_lo", 250)
+    k = max(0, int(np.ceil(3 * np.log2(100.0 / lo)))) if lo < 100 else 0
+    E3 = np.concatenate([_E3[0] * 2.0 ** (-np.arange(k, 0, -1) / 3.0), _E3])
+    C3 = np.sqrt(E3[:-1] * E3[1:])
+    r = np.mean([ltas3(*load(p), edges=E3) for p in files(inst)], 0)
+    keep = (C3 >= lo) & (C3 <= 14000)
     attr = "noise_bands" if getattr(cls, "shake_noise", False) else "band_trim_db"
     for it in range(passes + 1):
-        m = np.mean([ltas3(*C.render(note, v)) for v in (60, 90, 120)], 0)
+        m = np.mean([ltas3(*C.render(note, v), edges=E3) for v in (60, 90, 120)], 0)
         d = r - m
         k = int(np.argmax(np.abs(d * keep)))
         print("pass %d  rms(model-rec) 250-14k %.2f dB  worst %+.1f at %.0f Hz" % (
-            it, np.sqrt(np.mean(d[keep] ** 2)), -d[k], _C3[k]), flush=True)
+            it, np.sqrt(np.mean(d[keep] ** 2)), -d[k], C3[k]), flush=True)
         if it == passes:
             break
         old = getattr(cls, attr) or ((1000.0, 0.0),)
         of, od = np.array([p[0] for p in old], float), np.array([p[1] for p in old], float)
         pts = tuple((float(cf), float(np.interp(np.log(cf), np.log(of), od)
                                       + (np.clip(dd, -12, 12) if kk else min(0.0, dd))))
-                    for cf, dd, kk in zip(_C3, d, keep) if 160 <= cf <= 16000)
+                    for cf, dd, kk in zip(C3, d, keep) if min(160, lo) <= cf <= 16000)
         setattr(cls, attr, pts)
         PM._RING_CLASSES.clear()
         s = open(path).read()
@@ -748,7 +774,7 @@ def trim3(inst, passes):
         else:
             blk = blk + "\n" + txt
         open(path, "w").write(s[:a] + blk + s[b:])
-    print("model - rec  " + " ".join("%.0f:%+.1f" % (cf, -dd) for cf, dd in zip(_C3, d)))
+    print("model - rec  " + " ".join("%.0f:%+.1f" % (cf, -dd) for cf, dd in zip(C3, d)))
 
 
 def write_fit(inst, spec, vals, trim):

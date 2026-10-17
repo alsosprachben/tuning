@@ -370,12 +370,28 @@ SFX = {
     # 0.5-1 kHz): SpeedY's nylon pair was the body's thump (130 Hz) -- a tom
     "cutdown":   ("guitarcut", ("353605_*.wav",), 1, 0.6),
     "cutup":     ("guitarcut", ("81403_*.wav",), 1, 0.5),
+    # THE HUMAN AND ANIMAL KEYS' STRUCK SOUNDS (54-57, 76, 77): one hit each,
+    # the gallop patterned from its hoof (percussion_map.KIT_STROKES)
+    "punch":     ("punch", ("244513_*.wav", "383882_*.wav"), 8, 0.4),
+    # the HEEL alone: each step is the heel and, ~70 ms on, the sole 8 dB
+    # under it (KIT_STROKES plays the pair)
+    "footstep":  ("footsteps", ("637555_*.flac",), 8, 0.06),
+    # swiftoid's horse walking down a road, close (6.5-11 s): the gallop's
+    # recording (175356) buried its hooves in wind under 125 Hz
+    "hoof":      ("horse", ("182504_*.wav",), 8, 0.2),
+    "bark":      ("dog", ("277058_*.wav", "495658_*.wav"), 4, 0.4),
 }
-# one event a file however many onsets it holds: a slam's latch and rattle
-WHOLE = {"door"}
-# ...or the one event at this time (s) in a take of several: bsumusictech's
-# hollowbody, its bright strum (centroid 1.2 kHz) among body knocks
-PICK = {"cutup": 9.81}
+# one event a file however many onsets it holds: a slam's latch and rattle;
+# a punch layered from several (JewTwinz's), a single bark
+WHOLE = {"door", "punch", "bark"}
+# ...or the events at these times (s) in a take of several, by the file's
+# Freesound id: bsumusictech's hollowbody, its bright strum (centroid 1.2 kHz)
+# among body knocks; a horse's loudest clops as it passes closest
+PICK = {"cutup": {"81403": [9.81]},
+        "hoof": {"182504": [6.488, 7.281, 7.535, 7.787, 8.705, 9.873, 10.113, 10.941]},
+        "punch": {"383882": [1.47, 4.71]},
+        "bark": {"495658": [0.18, 1.04]},
+        "footstep": {"637555": [0.43, 0.95, 1.44, 1.97, 2.47, 2.99, 3.50]}}
 
 
 def sfx(names=None):
@@ -398,9 +414,16 @@ def sfx(names=None):
                 x = a.sum(1)
                 x = x / max(np.abs(x).max(), 1e-12)
                 on = onsets(x, sr, rise_db=15.0, top_db=-35.0, gap=0.08) if most > 1 and name not in WHOLE else []
-                if name in PICK:
-                    allon = onsets(x, sr, rise_db=15.0, top_db=-35.0, gap=0.08)
-                    on = [min(allon, key=lambda o: abs(o / sr - PICK[name]))]
+                want = PICK.get(name, {}).get(os.path.basename(src).split("_")[0])
+                if want:
+                    # each the onset nearest its time (the energy's peak is
+                    # given; its rise a few ms before)
+                    allon = onsets(x, sr, rise_db=15.0, top_db=-35.0, gap=0.04)
+                    # ...or 30 ms before the peak where none rises within 40 ms
+                    # (a low thump rises too slowly to find)
+                    near = [min(allon, key=lambda o: abs(o / sr - (t - 0.01))) for t in want]
+                    on = [o if abs(o / sr - (t - 0.01)) < 0.04 else int((t - 0.03) * sr)
+                          for o, t in zip(near, want)]
                 if not on:
                     on = [int(np.argmax(np.abs(x) > 0.05))]
                 for s, t in zip(on, on[1:] + [len(x)]):
