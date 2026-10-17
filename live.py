@@ -9326,8 +9326,10 @@ def selftest():
     check("...and the helicopter's note chooses a rotor, not a pitch",
           _hc.sounding_octaves <= -3.0
           and _T.SynthProperties.sounding_octaves == 0.0
+          # the classes that SET it: the SFX set's one-shot helicopter
+          # (SfxHelicopterProperties) inherits it, and is the same rotor
           and [_n for _n, _c in vars(_T).items()
-               if isinstance(_c, type) and getattr(_c, "sounding_octaves", 0.0)]
+               if isinstance(_c, type) and vars(_c).get("sounding_octaves", 0.0)]
           == ["HelicopterProperties"],
           "  (a written C4 sounds at 16.3 Hz, with partials every 16.3 to 1 kHz)")
     # A BIRD IS A CHIRP: tension_bend for the third time and in the third
@@ -15445,11 +15447,12 @@ def selftest():
           _PM is not None and __import__("patch_map").variation_class(5, 8)
           is __import__("patch_map").property_class_for_program(5))
     check("drum sets: the SC-55's numbers; only built ones sound as themselves",
-          [_PM.kit_for_program(k) for k in (0, 24, 25, 8, 16, 56, 1, 20, 29, 30, 35, 47, 49, 60)]
-          == [0, 24, 25, 8, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          [_PM.kit_for_program(k) for k in (0, 24, 25, 8, 16, 56, 127, 1, 20, 29, 30, 35, 47, 49, 60)]
+          == [0, 24, 25, 8, 16, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0]
           and _PM.drum_set_name(24) == "Electronic"
           and _PM.drum_set_name(25) == "TR-808"
-          and _PM.drum_set_name(56) == "SFX (plays Standard)"
+          and _PM.drum_set_name(127) == "CM-64/32L (plays Standard)"
+          and _PM.percussion_for_note(36, 56) is None      # the SFX set has no drums
           and _PM.drum_set_name(32) == "Jazz",
           "  (the manual does not say what a non-set number does, so the "
           "corpus's 1, 20, 29, 30, 35, 47, 49, 60 play Standard, as before)")

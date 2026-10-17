@@ -1133,7 +1133,12 @@ class SynthProperties:
     # -- rows of (lo Hz, hi Hz, per second, dB re the note's gain, dB scatter,
     # decay dB/s): each a damped sine at a log-uniform frequency in the band,
     # at Poisson instants, its level up to the scatter under the row's, on the
-    # breath noise's swell if the channel has one. () = none.
+    # breath noise's swell if the channel has one. Two more fields, where a row
+    # has them, are a GLIDE: (..., start, tau) -- each grain starts at start x
+    # its pitch and settles onto it in tau s (a bubble's ring rising as it
+    # nears the surface); a ninth, n, makes each event a CLUSTER of n sines
+    # across the band at one instant -- a broadband click, a drop's impact.
+    # () = none.
     grains = ()
     # ...and its PITCH: harder breath, sharper note -- this many cents rms, the
     # same kind of slow noise at its own corner, breath_pitch_share of it the
@@ -23548,6 +23553,105 @@ def set_room(name, stagger=True):
     if stagger:
         stagger_room(name)
     return name
+
+
+# THE SFX SET (program 56 on the drum channel, SC-55 p.71): 46 sound effects on
+# keys 39-84 and no drums. Where a GM sound-effect program is already fitted,
+# its key plays it -- held voices made one-shots, their length the set's gate
+# (percussion_map.KIT_GATE), as long as GeneralUser GS's sample on that key
+# rings -- at the key each program was fitted at (examples/sfx_levels.KEY_OF).
+class SfxFretSlideProperties(GuitarFretNoiseProperties):
+    """SFX 47, "Guitar sliding finger": GM 120's fret noise, a one-shot."""
+    one_shot = True
+
+
+class SfxHelicopterProperties(HelicopterProperties):
+    """SFX 70, "Helicopter": GM 125's rotor, a one-shot."""
+    one_shot = True
+
+
+class SfxBirdsProperties(BirdTweetProperties):
+    """SFX 78, "Birds": GM 123's tweet, a one-shot."""
+    one_shot = True
+
+
+class SfxSeashoreProperties(SeashoreProperties):
+    """SFX 82, "Sea Shore": GM 122's surf, a one-shot."""
+    one_shot = True
+
+
+
+# THE SFX SET'S WEATHER AND WATER (79-84, SC-55 p.71): the seashore's machinery
+# -- a held noise table (breath_noise_db) on a slow swell, sparse grains for
+# what is struck in it -- each fitted to a Freesound recording of the real
+# thing (CC0; examples/weather_fit.py, sources.md) and gated to the length
+# GeneralUser GS's sample on that key rings. One-shots: a drum key.
+class SfxWeatherProperties(SeashoreProperties):
+    """The weather's base: the seashore's noise table, no beads, and NO
+    SWELL. The breath's swell rows are a channel's, built from its melodic
+    program, and a drum channel has none -- nor could one row serve wind,
+    rain and thunder on one channel. A one-shot's gesture is its rise
+    (breath_noise_fade_s) and its gate (percussion_map.KIT_GATE)."""
+    one_shot = True
+    grains = ()
+    breath_noise_fade_s = 0.08
+    breath_noise_wobble_db = 0.0
+
+
+class SfxRainProperties(SfxWeatherProperties):
+    """SFX 79, "Rain": a broadband hiss (250 Hz - 2 kHz at its peak), steady,
+    and the drops struck in it. A DROP IS A CLICK, not a tone: measured (the
+    twelve loudest, averaged), it stands +19 dB over the hiss, rising in ~1 ms
+    and falling 7 dB in half of one, +6 to +11 dB in every octave from 500 Hz
+    to 16 kHz -- where single damped sines (the first fit) put it at 2-4 kHz
+    alone and plinked (Ben: "the dripping needs improvement ... the sharpness
+    of the attack or height of the spectrum"). So each drop is a CLUSTER of
+    sines across the band at one instant (grains' ninth field)."""
+    # FITTED (examples/weather_fit.py): colour rms 1.7 dB to the recording
+    breath_noise_db = ((51, -48.6), (64, -7.9), (80, 24.4), (101, 31.8), (127, 37.8), (160, 42.2), (202, 43.6), (255, 47.9), (321, 48.8), (404, 50.2), (509, 52.4), (641, 53.2), (808, 51.8), (1018, 51.2), (1283, 50.5), (1616, 51.0), (2036, 51.2), (2566, 50.7), (3233, 48.3), (4073, 47.2), (5132, 47.2), (6465, 48.2), (8146, 48.8), (10263, 40.9), (12931, 31.2))
+    grains = ((500.0, 16000.0, 40.0, 74.2, 8.0, 3000.0, 1.0, 0.001, 12),)
+
+
+class SfxThunderProperties(SfxWeatherProperties):
+    """SFX 80, "Thunder": nearly all of it under 250 Hz -- a rumble swelling 10
+    dB, the cracks in it low grains."""
+    breath_noise_fade_s = 0.02
+    # FITTED (examples/weather_fit.py): colour rms 7.4 dB to the recording
+    breath_noise_db = ((51, 52.2), (64, 52.7), (80, 50.9), (101, 45.1), (127, 51.6), (160, 54.1), (202, 51.2), (255, 45.0), (321, 42.5), (404, 32.7), (509, 37.8), (641, 33.3), (808, 33.7), (1018, 31.7), (1283, 27.9), (1616, 15.9), (2036, 9.8), (2566, -16.5), (3233, -44.8), (4073, -71.9), (5132, -92.1), (6465, -86.4), (8146, -99.3), (10263, -134.7), (12931, -179.6))
+    grains = ((40.0, 400.0, 8.0, 57.8, 10.0, 60.0),)
+
+
+class SfxWindProperties(SfxWeatherProperties):
+    """SFX 81, "Wind": a howl -- its energy at the 1 kHz octave over a low
+    rumble -- swelling slowly."""
+    breath_noise_fade_s = 0.3
+    # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
+    breath_noise_db = ((51, 38.8), (64, 42.4), (80, 36.9), (101, 39.2), (127, 42.3), (160, 32.2), (202, 39.3), (255, 41.3), (321, 42.1), (404, 41.5), (509, 43.9), (641, 46.3), (808, 44.4), (1018, 55.0), (1283, 50.5), (1616, 31.1), (2036, 24.7), (2566, 17.4), (3233, 13.7), (4073, 6.5), (5132, 6.2), (6465, 4.5), (8146, 4.7), (10263, 6.1), (12931, 10.9))
+    grains = ()
+
+
+class SfxStreamProperties(SfxWeatherProperties):
+    """SFX 83, "Stream": the brook's hiss, 2-8 kHz at its peak, very steady,
+    and its drops: measured, +18 dB over the hiss, a ring at the 2 kHz octave
+    (+16 dB) rising as a bubble's does, and a click from 2 to 16 kHz (+6 to +10; a click from 500 Hz put +16 dB
+    at 1 kHz, where the stream's drops barely rise) --
+    two grain rows, the ring and the click (as the rain's). The ring KEPT
+    SHORT: at the bubble's own 220 dB/s and a 12% rise it boinged (Ben: "a
+    bit too bouncy ball ... pull it back like the rain"), so it dies at 900
+    dB/s, rises 5%, and sits 6 dB further under the click."""
+    # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
+    breath_noise_db = ((51, 6.2), (64, 20.3), (80, 27.0), (101, 33.3), (127, 42.0), (160, 47.6), (202, 48.1), (255, 49.6), (321, 48.4), (404, 49.4), (509, 47.7), (641, 47.4), (808, 47.0), (1018, 46.7), (1283, 46.5), (1616, 37.7), (2036, 54.9), (2566, 53.8), (3233, 53.7), (4073, 53.7), (5132, 50.6), (6465, 52.0), (8146, 54.3), (10263, 56.1), (12931, 57.4))
+    grains = ((1400.0, 2800.0, 25.0, 59.8, 8.0, 900.0, 0.95, 0.004), (2000.0, 16000.0, 10.0, 77.8, 8.0, 3000.0, 1.0, 0.001, 12))
+
+
+class SfxBubbleProperties(SfxWeatherProperties):
+    """SFX 84, "Bubble": bubbles alone, measured off a recording of them
+    (examples/weather_fit.py --bubbles): 11 a second, each ringing at 300 Hz -
+    1.2 kHz (480 the median, the bubble's Minnaert resonance), dying at ~220
+    dB/s, starting at 0.88 of its pitch and rising onto it as it nears the
+    surface. No hiss."""
+    breath_noise_db = ()
+    grains = ((300.0, 1200.0, 11.0, 50.0, 6.0, 220.0, 0.88, 0.008),)
 
 
 import os as _os

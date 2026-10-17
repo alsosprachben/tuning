@@ -129,7 +129,7 @@ plays Standard, as does any program that is not a set.
 | 32 | Jazz | = Standard on the SC-55 |
 | 40 | Brush | yes |
 | 48 | Orchestra | yes |
-| 56 | SFX | no -- plays Standard |
+| 56 | SFX | yes |
 | 127 | CM-64/32L | no -- plays Standard |
 
 ### 8 Room
@@ -232,6 +232,22 @@ plays Standard, as does any program that is not a set.
 | 57 | Concert Cymbal 2 | `ConcertCymbal2` | **4** | CONCERT CYMBAL 2: a CLASHED pair, VCSL's "Clash Cymbals 2" (CC0, the pair both GM sets pick), on the kit crash fitted to its hits (examples/crash_fit.py --orch): 6.1 dB -- a clash's top dies far faster than a suspended crash's |
 | 59 | Concert Cymbal 1 | `ConcertCymbal1` | **4** | CONCERT CYMBAL 1: VCSL's "Clash Cymbals 1", as 57: 5.2 dB |
 | 88 | Applause | `OrchestraApplause` | **4** | GM 126's applause (fitted to three Freesound halls) as a drum note: a one-shot, gated at 1.4 s as GeneralUser GS's sample lasts |
+
+### 56 SFX
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 47 | Guitar sliding finger | `SfxFretSlide` | **4** | GM 120's fret noise (fitted), a one-shot gated as GeneralUser GS's sample lasts (0.3 s) |
+| 58 | Applause | `OrchestraApplause` | **4** | the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
+| 70 | Helicopter | `SfxHelicopter` | **4** | GM 125's helicopter (fitted), a one-shot gated 3.75 s |
+| 72 | Gun Shot | `Gunshot` | **4** | GM 127's gunshot (fitted) |
+| 78 | Birds | `SfxBirds` | **4** | GM 123's bird (fitted), a one-shot gated 0.4 s |
+| 79 | Rain | `SfxRain` | **4** | RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
+| 80 | Thunder | `SfxThunder` | **4** | THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
+| 81 | Wind | `SfxWind` | **4** | WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
+| 82 | Sea Shore | `SfxSeashore` | **4** | GM 122's seashore (fitted), a one-shot gated 2.3 s |
+| 83 | Stream | `SfxStream` | **4** | STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
+| 84 | Bubble | `SfxBubble` | **4** | BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s |
 
 ## 0-7 Piano
 
@@ -548,7 +564,7 @@ Controls are the rest of the console that are not stops.
 
 ## The class tree
 
-319 classes.
+329 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -581,6 +597,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Rhodes` -- GM 4 Electric Piano 1 (4)
       - `Wurlitzer` -- GM 5 Electric Piano 2 (4)
     - `GuitarFretNoise` [NoisyPercussionMixin, FormantBody] -- GM 120 Guitar Fret Noise (3)
+      - `SfxFretSlide` -- set 56 47 Guitar sliding finger (4)
     - `Harp` [FormantBody] -- GM 46 Orchestral Harp (4)
     - `HarpsiBase` [FormantBody]
       - `Harpsichord` -- GM 6 Harpsichord (4)
@@ -626,7 +643,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `RideBell` -- 53 Ride Bell (4)
         - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 48 30 Ride Cymbal (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
-      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4)
+      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4), set 56 72 Gun Shot (4)
       - `MembraneDrum`
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
@@ -692,6 +709,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
+          - `SfxBirds` -- set 56 78 Birds (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4)
@@ -736,6 +754,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `FifthsLead`
           - `MoogFifthsLead` -- GM 86 Lead 7 (fifths) (4)
         - `Helicopter` -- GM 125 Helicopter (4)
+          - `SfxHelicopter` -- set 56 70 Helicopter (4)
         - `MoogSawLead` -- GM 81 Lead 2 (sawtooth) (4)
         - `SquareSynth`
           - `MoogSquareLead` -- GM 80 Lead 1 (square) (4)
@@ -806,8 +825,15 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
-        - `OrchestraApplause` -- set 48 88 Applause (4)
+        - `OrchestraApplause` -- set 48 88 Applause (4), set 56 58 Applause (4)
       - `Seashore` -- GM 122 Seashore (4)
+        - `SfxSeashore` -- set 56 82 Sea Shore (4)
+        - `SfxWeather`
+          - `SfxBubble` -- set 56 84 Bubble (4)
+          - `SfxRain` -- set 56 79 Rain (4)
+          - `SfxStream` -- set 56 83 Stream (4)
+          - `SfxThunder` -- set 56 80 Thunder (4)
+          - `SfxWind` -- set 56 81 Wind (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)

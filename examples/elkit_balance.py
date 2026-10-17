@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A built set's balance WITHIN itself, as GeneralUser GS has it.
 
-    python3 -I examples/elkit_balance.py [--kit=8|16|24|25|40|48] [--write]
+    python3 -I examples/elkit_balance.py [--kit=8|16|24|25|40|48|56] [--write]
 
 The snare stays where examples/drumset_check.py put it (on the Standard
 snare); every other Electronic note takes the K-weighted level GeneralUser GS
@@ -34,7 +34,9 @@ NOTES = {24: (36, 40, 41, 43, 45, 47, 48, 50),
          48: (27, 28, 29, 30, 35, 36, 39, 40) + tuple(range(41, 54)) + (57, 59, 88),
          40: (39, 40),
          8: (41, 43, 45, 47, 48, 50),
-         16: (36, 41, 43, 45, 47, 48, 50)}
+         16: (36, 41, 43, 45, 47, 48, 50),
+         56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84)}
+ANCHOR_STANDARD = {56}
 
 
 def k150(x, sr):
@@ -50,7 +52,11 @@ def main(argv):
     E.KIT = kit
     miss = {}
     with tempfile.TemporaryDirectory() as d:
+        if kit in ANCHOR_STANDARD:
+            # a set with no snare of its own (SFX): its keys against Standard's
+            E.KIT = 0
         g38, o38 = k150(*E.theirs(GU, 38, d)), k150(*E.ours(38, d))
+        E.KIT = kit
         for n in NOTES[kit]:
             g, o = k150(*E.theirs(GU, n, d)) - g38, k150(*E.ours(n, d)) - o38
             miss[n] = g - o

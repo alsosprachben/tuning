@@ -4278,18 +4278,44 @@ def prepare(path, tuner='hybrid440', sink=None):
             if ch in bbrow_of and props.breath_noise_wobble_db > 0.0:
                 _BR[0] = bbrow_of[ch][1]
             _grng = random.Random(int(round(on * 1e6)) * 139 + note * 13 + ch)
-            for _lo, _hi, _rate, _db, _dsc, _dps in props.grains:
+            _glkeep = (_GL[0], _GL[1], _GL[2])
+            for _row in props.grains:
+                _lo, _hi, _rate, _db, _dsc, _dps = _row[:6]
+                # ...and a GLIDE where the row carries one (a bubble's ring
+                # rising as it nears the surface): it starts at _rise times its
+                # pitch and settles onto it in _gtau -- the note glide's own
+                # term, each grain its own. Six-field rows (the ocean drum's
+                # beads) emit exactly as before.
+                if len(_row) > 6:
+                    _rise, _gtau = _row[6], _row[7]
+                    _GL[0], _GL[1], _GL[2] = 1.0 / _rise - 1.0, _gtau, _gtau * T.PORTA_SETTLE_TAUS
                 _t = non + _grng.expovariate(_rate) * SR
                 _glr = math.log(10.0) / 20.0 * _dps
+                # ...and a CLUSTER where the row carries a ninth field: that many
+                # sines at one instant, each its own pitch across the band, at
+                # 1/sqrt(n) -- with random phases a broadband CLICK, as a drop's
+                # impact is (a rain drop reads +6 to +11 dB over its hiss in every
+                # octave from 500 Hz to 16 kHz). One a grain otherwise, as before.
+                _ncl = int(_row[8]) if len(_row) > 8 else 1
+                _gcl = 1.0 / math.sqrt(_ncl)
                 while _t < noff:
-                    _hf = _lo * (_hi / _lo) ** _grng.random()
-                    _gM = props.gain * 10.0 ** ((_db - _grng.uniform(0.0, _dsc)) / 20.0)
-                    if _hf < 0.45 * SR:
-                        emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
-                                     _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _t, _t + 0.1 * SR,
-                                     8.0, 0.005 * SR, chiff, _glr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc,
-                                     -1, 0, ph0=_grng.random() * 2.0 * math.pi)
+                    if _ncl == 1:
+                        # the draws in their old order: pitch, then level
+                        _hf = _lo * (_hi / _lo) ** _grng.random()
+                        _gM0 = props.gain * 10.0 ** ((_db - _grng.uniform(0.0, _dsc)) / 20.0)
+                    else:
+                        _gM0 = props.gain * 10.0 ** ((_db - _grng.uniform(0.0, _dsc)) / 20.0) * _gcl
+                    for _k in range(_ncl):
+                        if _ncl > 1:
+                            _hf = _lo * (_hi / _lo) ** _grng.random()
+                        _gM = _gM0
+                        if _hf < 0.45 * SR:
+                            emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
+                                         _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _t, _t + 0.1 * SR,
+                                         8.0, 0.005 * SR, chiff, _glr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc,
+                                         -1, 0, ph0=_grng.random() * 2.0 * math.pi)
                     _t += _grng.expovariate(_rate) * SR
+                _GL[0], _GL[1], _GL[2] = _glkeep
             _BR[0] = _bkeep
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False

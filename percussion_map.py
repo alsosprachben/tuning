@@ -78,6 +78,16 @@ from tonelib import (
     ReverseCymbalProperties,
     ElectronicKickProperties,
     ConcertBassDrumProperties,
+    SfxFretSlideProperties,
+    SfxHelicopterProperties,
+    SfxBirdsProperties,
+    SfxSeashoreProperties,
+    SfxRainProperties,
+    SfxThunderProperties,
+    SfxWindProperties,
+    SfxStreamProperties,
+    SfxBubbleProperties,
+    GunshotProperties,
     RoomTomProperties,
     RoomFloorTomProperties,
     RoomHighTomProperties,
@@ -419,6 +429,22 @@ KITS = {
         48: ("Room Hi Tom 2",    RoomHighTomProperties, 150.0),
         50: ("Room Hi Tom 1",    RoomHighTomProperties, 175.0),
     },
+    # SFX, p.71: 46 sound effects on keys 39-84 and NO drums (KIT_ONLY). Built
+    # in batches; the keys a GM sound-effect program already covers first,
+    # played at the key it was fitted at (C4; birds at E7, the gunshot at G3).
+    56: {
+        47: ("Guitar sliding finger", SfxFretSlideProperties, 261.63),
+        58: ("Applause",         OrchestraApplauseProperties, 440.0),
+        70: ("Helicopter",       SfxHelicopterProperties, 261.63),
+        72: ("Gun Shot",         GunshotProperties, 196.0),
+        78: ("Birds",            SfxBirdsProperties, 2637.02),
+        82: ("Sea Shore",        SfxSeashoreProperties, 261.63),
+        79: ("Rain",             SfxRainProperties, 261.63),
+        80: ("Thunder",          SfxThunderProperties, 261.63),
+        81: ("Wind",             SfxWindProperties, 261.63),
+        83: ("Stream",           SfxStreamProperties, 261.63),
+        84: ("Bubble",           SfxBubbleProperties, 261.63),
+    },
     # BRUSH, p.70: the SC-55's jazz set, since its Jazz (32) is Standard. Three
     # notes, all strokes of a brush on the snare, at the snare's own pitch.
     40: {
@@ -440,7 +466,7 @@ KITS = {
 # kit; each tuned so the pitch a render reads where it fades (the sweep
 # still settling there) is where GeneralUser's reads: ~0.9x its end -- (48 between its neighbours:
 # GeneralUser's 47 and 48 both end at 79 Hz).
-KIT_RING = {24: {}, 25: {}, 48: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
+KIT_RING = {24: {}, 25: {}, 48: {}, 56: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
 # ...AND THEIR GATES: the Electronic toms stop dead where the pad's amplifier
 # closes. GeneralUser GS's decay as ours do and then fall 30 dB in under 50 ms
 # from about -32 dB -- at 0.70, 0.55 and 0.35 s on 41, 45 and 50 (the rest
@@ -448,7 +474,10 @@ KIT_RING = {24: {}, 25: {}, 48: {}}     # the Simmons voices' DECAY is their pat
 # (examples/elkit_fit.py). The note's length, as GatedSnareProperties.gate_time
 # is, closing over the class's release_valve_time.
 # The Electronic snare too: GeneralUser's stops at 0.31 s, -32 dB.
-KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
+KIT_GATE = {24: {}, 25: {}, 48: {88: 1.4},
+            # the SFX set's held voices, as long as GeneralUser GS's samples ring
+            56: {47: 0.3, 58: 3.7, 70: 3.75, 78: 0.4, 82: 2.3,
+                 79: 2.75, 80: 1.0, 81: 1.6, 83: 2.75, 84: 0.4}}     # the Simmons voices are not gated: their bodies decay (elkit_fit.py --real)
 # BRUSH is balanced against its own tap instead: a slap does not replace a
 # hand clap nor a swirl an electric snare, whatever key they share. Its tap
 # sits 11.3 dB under Standard's snare, where GeneralUser GS keeps its brush
@@ -472,6 +501,7 @@ KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.9
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
              16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
+             56: {47: 59.315, 58: 0.137, 70: 0.575, 72: 3.108, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
              40: {38: 0.490, 39: 0.570, 40: 0.011}}
 
 
@@ -511,6 +541,12 @@ def drum_set_name(program):
     return name
 
 
+# SETS WITHOUT A KIT UNDER THEM: the SFX set (SC-55 p.71) is its effects and
+# nothing else, so a key it does not define (or not yet) is silent, not
+# Standard's drum on that key -- "Guitar cutting noise" must not be a tom.
+KIT_ONLY = {56}
+
+
 def percussion_for_note(note, kit=0):
     """Return (name, property_class, base_frequency, default_pan) for a GM
     drum note in drum set `kit`, or None if unmapped."""
@@ -518,6 +554,8 @@ def percussion_for_note(note, kit=0):
     if own is not None:
         name, cls, freq = own
         return name, _with_ring(cls, note, kit), freq, kit_pan(note)
+    if kit in KIT_ONLY:
+        return None
     entry = PERCUSSION.get(note)
     if entry is None:
         return None

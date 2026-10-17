@@ -354,7 +354,8 @@ def percussion_table():
 # Standard's fitted voices moved, and heard: 4. Brush too, fitted to Swirly
 # Drums (examples/snare_fit.py --brush, brush_fit.py), and heard: 4. Room and
 # Power: Standard's fitted drums in a live room of their own, its size fitted to
-# GeneralUser's (examples/roomset_fit.py), and heard: 4.
+# GeneralUser's (examples/roomset_fit.py), and heard: 4. SFX: built in
+# batches, its unbuilt keys silent (KIT_ONLY); what is built, heard: 4.
 _808 = ("THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- "
         "bridged-T resonators, and six square oscillators through band-passes -- every "
         "instrument a patch of knobs, read off the service notes' schematic where it fixes "
@@ -417,6 +418,19 @@ KIT_RATED = {
         36: (4, "MONDO KICK: Standard's kick in the Room set's live room (tonelib.LiveRoom). GeneralUser GS's Power kick is another drum besides -- tuned higher, undamped; ours keeps Standard's, which Ben heard"),
         38: (4, "GATED SD: the Electronic set's gated snare, as the manual names it, set against Standard's snare as GeneralUser's Power snare sits against its own"),
         **{n: (4, "the Room set's tom (as program 8)") for n in (41, 43, 45, 47, 48, 50)},
+    },
+    56: {
+        47: (4, "GM 120's fret noise (fitted), a one-shot gated as GeneralUser GS's sample lasts (0.3 s)"),
+        58: (4, "the Orchestra set's applause, gated 3.7 s as GeneralUser GS's"),
+        70: (4, "GM 125's helicopter (fitted), a one-shot gated 3.75 s"),
+        72: (4, "GM 127's gunshot (fitted)"),
+        78: (4, "GM 123's bird (fitted), a one-shot gated 0.4 s"),
+        79: (4, "RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: \"the rain is good enough drops\""),
+        80: (4, "THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's"),
+        81: (4, "WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows)"),
+        82: (4, "GM 122's seashore (fitted), a one-shot gated 2.3 s"),
+        83: (4, "STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: \"a bit too bouncy ball\")"),
+        84: (4, "BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s"),
     },
     48: {
         27: (4, "Standard's closed hi-hat, moved: the set's hats are EXC1 with 42/44/46 -- six keys, one pair of cymbals (percussion_map.KIT_CHOKE)"),
