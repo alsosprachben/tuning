@@ -6,6 +6,8 @@
     python3 -I examples/sfx_ab.py --rest [OUTDIR]     # the rest (39-62, 73-75)
     python3 -I examples/sfx_ab.py --human [OUTDIR]    # the human and animal keys (52-57, 76, 77)
     python3 -I examples/sfx_ab.py --ours --human      # ...ours alone, in order
+    python3 -I examples/sfx_ab.py --ours --kit=127    # the CM-64/32L set, ours alone, in order
+    python3 -I examples/sfx_ab.py --drums --kit=127   # its drums: ours, then GeneralUser's
     python3 -I examples/sfx_ab.py --ours [OUTDIR]     # ours alone, every key in order, as a file
                                                       # plays it (one render: the set's balance)
 
@@ -85,7 +87,7 @@ def excerpt(path, secs, seg=None):
     return x
 
 
-def ours_in_order(out, only=None, name="sfx_ours.mp3"):
+def ours_in_order(out, only=None, name="sfx_ours.mp3", kit=56):
     """Every key of the set, low to high, each after the last has rung out,
     in ONE render on the drum channel -- the levels the set plays at."""
     import mido
@@ -96,17 +98,17 @@ def ours_in_order(out, only=None, name="sfx_ours.mp3"):
     t = mido.MidiTrack()
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))      # 960 ticks a second
-    t.append(mido.Message("program_change", channel=9, program=56, time=0))
+    t.append(mido.Message("program_change", channel=9, program=kit, time=0))
     gap = 0
-    for key in sorted(k for k in P.KITS[56] if only is None or k in only):
-        ring = P.KIT_GATE[56].get(key, 1.0) + 0.6
-        pat = P.KIT_STROKES[56].get("pattern", {}).get(key)
+    for key in sorted(k for k in P.KITS[kit] if only is None or k in only):
+        ring = P.KIT_GATE[kit].get(key, 1.0) + 0.6
+        pat = P.KIT_STROKES[kit].get("pattern", {}).get(key)
         if pat:
             ring += pat[-1][0]                  # a patterned key to its last stroke
         t.append(mido.Message("note_on", channel=9, note=key, velocity=100, time=gap))
         t.append(mido.Message("note_off", channel=9, note=key, velocity=0, time=60))
         gap = int(ring * 960) - 60
-        print("  %d %s" % (key, P.KITS[56][key][0]))
+        print("  %d %s" % (key, P.KITS[kit][key][0]))
     t.append(mido.MetaMessage("end_of_track", time=gap + 960))
     L, R = B.render(m)[:2]
     w = np.stack([np.asarray(L, float), np.asarray(R, float)], 1)
@@ -126,9 +128,13 @@ def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     out = args[0] if args else os.path.expanduser("~/Downloads/sfx_ab")
     import weather_fit as W
+    kit = int(next((a.split("=")[1] for a in argv if a.startswith("--kit=")), 56))
     if "--ours" in argv:
-        # --ours --human: just the human and animal keys
-        if "--human" in argv:
+        # --ours --human: just the human and animal keys; --kit=127 the
+        # CM-64/32L set
+        if kit != 56:
+            ours_in_order(out, None, "kit%d_ours.mp3" % kit, kit)
+        elif "--human" in argv:
             ours_in_order(out, {k for k, _, _ in HUMAN}, "human_ours.mp3")
         else:
             ours_in_order(out)
@@ -144,6 +150,12 @@ def main(argv):
     elif "--human" in argv:
         keys = list(HUMAN)
         name = "human.mp3"
+    elif "--drums" in argv:
+        # --kit=127 --drums: a set's drums (35-75), ours then GeneralUser's,
+        # no recording
+        E.KIT = kit
+        keys = [(k, None, None) for k in sorted(P.KITS[kit]) if k <= 75]
+        name = "kit%d_drums.mp3" % kit
     elif "--vehicles" in argv:
         keys = [(k,) + (SIREN if v == "siren" else (W.VOICES[v][2], W.SEGMENT.get(v))) for k, v in VEHICLES]
         name = "vehicles.mp3"
@@ -156,11 +168,11 @@ def main(argv):
     chunks = []
     with tempfile.TemporaryDirectory() as d:
         for key, path, seg in keys:
-            secs = P.KIT_GATE[56].get(key, 2.0)
-            pat = P.KIT_STROKES[56].get("pattern", {}).get(key)
+            secs = P.KIT_GATE[kit].get(key, 2.0 if kit == 56 else 0.8)
+            pat = P.KIT_STROKES[kit].get("pattern", {}).get(key)
             if pat:
                 # a patterned key (the laugh, heart, gallop) to its last stroke's end
-                secs = pat[-1][0] + P.KIT_GATE[56].get(key, 0.5)
+                secs = pat[-1][0] + P.KIT_GATE[kit].get(key, 0.5)
             items = [excerpt(os.path.join(R, path), max(secs, 1.0), seg)] if path else []
             for f in (E.ours, lambda n, dd: E.theirs(GU, n, dd)):
                 x, _ = f(key, d)

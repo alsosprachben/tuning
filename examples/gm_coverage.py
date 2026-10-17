@@ -498,6 +498,26 @@ KIT_RATED = {
 }
 
 
+
+def _cm32l_rated():
+    """THE CM-64/32L SET (127), rated as it is built (percussion_map._cm32l):
+    each key its source's rating and note -- the MT-32's drums Standard's (40
+    the Electronic set's snare), its effects the SFX set's, 24 keys down."""
+    import percussion_map as PM
+    out = {}
+    for n, (src_kit, src) in PM.CM32L_DRUMS.items():
+        r, note = (KIT_RATED[src_kit][src] if src_kit else PERC_RATED[src])
+        where = ("the Electronic set's %d" % src) if src_kit else ("Standard's %d" % src)
+        out[n] = (r, "%s -- the MT-32's, as %s: %s" % (PM.KITS[127][n][0].upper(), where, note))
+    for n in PM.KITS[127]:
+        if n >= 76:
+            r, note = KIT_RATED[56][n - PM.CM32L_SFX]
+            out[n] = (r, "the CM-32L's, as the SFX set's %d: %s" % (n - PM.CM32L_SFX, note))
+    return out
+
+
+KIT_RATED[127] = _cm32l_rated()
+
 def drum_set_table():
     """The drum sets, by the program that selects them."""
     import percussion_map as PM

@@ -584,7 +584,9 @@ KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.9
              8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
              16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
              56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.090, 46: 0.591, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 52: 5.284, 53: 1.777, 54: 9.798, 55: 3.855, 56: 0.806, 57: 0.952, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 76: 1.389, 77: 1.426, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
-             40: {38: 0.490, 39: 0.570, 40: 0.011}}
+             40: {38: 0.490, 39: 0.570, 40: 0.011},
+             # the CM-64/32L set's, over its sources' (_cm32l)
+             127: {35: 0.767, 36: 0.737, 37: 0.708, 38: 1.000, 39: 1.446, 40: 0.798, 41: 0.900, 42: 0.748, 43: 0.868, 44: 0.235, 45: 1.182, 46: 0.510, 47: 1.154, 48: 1.467, 49: 0.466, 50: 1.495, 51: 0.251, 54: 0.582, 56: 0.347, 60: 0.567, 61: 0.829, 62: 0.287, 63: 0.799, 64: 0.748, 65: 0.753, 66: 0.799, 67: 0.659, 68: 0.546, 69: 0.538, 70: 0.536, 71: 22.115, 72: 32.874, 73: 1.044, 75: 1.337, 76: 5.121, 77: 1.473, 78: 9.771, 79: 3.452, 80: 0.594, 81: 0.580, 82: 0.800, 83: 1.396, 84: 0.235, 85: 1.172, 86: 1.129, 87: 0.077, 88: 3.577, 89: 1.543, 90: 1.003, 91: 0.177, 92: 0.757, 93: 0.302, 94: 0.592, 95: 1.119, 96: 2.467, 97: 1.342, 98: 3.593, 99: 1.247, 100: 0.985, 101: 0.926, 102: 0.411, 103: 0.025, 104: 1.106, 105: 0.486, 106: 0.033, 107: 0.026, 108: 4.316}}
 
 
 class DrumProgram(int):
@@ -626,6 +628,8 @@ def drum_set_name(program):
 # SETS WITHOUT A KIT UNDER THEM: the SFX set (SC-55 p.71) is its effects and
 # nothing else, so a key it does not define (or not yet) is silent, not
 # Standard's drum on that key -- "Guitar cutting noise" must not be a tom.
+# The CM-64/32L set (127) too, whose blanks are "no sound" (added with it,
+# below: _cm32l).
 KIT_ONLY = {56}
 
 
@@ -1139,6 +1143,81 @@ KIT_STROKES = {
                         250.0, ((0.0, -2.0), (0.05, 1.2), (0.1, 0.0)), 0.11, 0.01, 10.0, 0.005, 0.5)},
     },
 }
+
+
+# THE CM-64/32L SET (program 127; SC-55 p.71): "the MT-32 drum set with SFX
+# sounds added to it". It stands alone (KIT_ONLY): its blanks are "no sound",
+# not Standard's (34, 52, 53, 55, 57-59, 74). Built from what is here:
+#   35-75  the MT-32's drums, each Standard's instrument of that name -- its
+#          ring, level, gate and strokes with it. Where the MT-32's names
+#          differ: 37 a Rim Shot (Standard's 37), 40 the Electronic Snare
+#          Drum (the Electronic set's Elec SD), 44 Open High Hat 2 (an open
+#          hat outside the hi-hats' exclusive class, which is 42 and 46
+#          alone), 73 the Quijada (the jawbone the vibraslap imitates:
+#          Standard's 58, its train), 71/72 the whistles
+#   76-108 the CM-32L's sound effects: the SFX set's 52-84, every one, 24
+#          keys up (Laughing ... Bubble; its Pistol is the Gun Shot, Waves the
+#          Sea Shore, Creaking the Door Creaking)
+# Its levels are then GeneralUser GS's CM-64/32L kit's (examples/elkit_balance.py
+# --kit=127), over these.
+CM32L_DRUMS = {35: (0, 35), 36: (0, 36), 37: (0, 37), 38: (0, 38), 39: (0, 39), 40: (24, 38),
+               41: (0, 41), 42: (0, 42), 43: (0, 43), 44: (0, 46), 45: (0, 45), 46: (0, 46),
+               47: (0, 47), 48: (0, 48), 49: (0, 49), 50: (0, 50), 51: (0, 51), 54: (0, 54),
+               56: (0, 56), 60: (0, 60), 61: (0, 61), 62: (0, 62), 63: (0, 63), 64: (0, 64),
+               65: (0, 65), 66: (0, 66), 67: (0, 67), 68: (0, 68), 69: (0, 69), 70: (0, 70),
+               71: (0, 71), 72: (0, 72), 73: (0, 58), 75: (0, 75)}
+CM32L_NAMES = {35: "Acoustic Bass Drum", 36: "Acoustic Bass Drum", 37: "Rim Shot", 38: "Acoustic Snare Drum",
+               40: "Electronic Snare Drum", 41: "Acoustic Low Tom", 42: "Closed High Hat",
+               43: "Acoustic Low Tom", 44: "Open High Hat 2", 45: "Acoustic Middle Tom",
+               46: "Open High Hat 1", 47: "Acoustic Middle Tom", 48: "Acoustic High Tom",
+               49: "Crash Cymbal", 50: "Acoustic High Tom", 51: "Ride Cymbal", 63: "High Conga",
+               73: "Quijada", 79: "Heartbeat", 80: "Footsteps 1", 81: "Footsteps 2", 83: "Creaking",
+               87: "Engine", 88: "Car-stop", 89: "Car-pass", 90: "Crash", 93: "Jet", 96: "Pistol",
+               101: "Horse", 106: "Waves"}
+CM32L_SFX = 24          # its effects are the SFX set's, this many keys up
+
+
+def _cm32l():
+    kit, ring, level, gate, strokes = {}, {}, {}, {}, {}
+    std_tables = {"rasp": PERCUSSION_RASP, "train": PERCUSSION_TRAIN, "rattle": PERCUSSION_RATTLE,
+                  "cascade": PERCUSSION_CASCADE}
+    for note, (src_kit, src) in CM32L_DRUMS.items():
+        name, cls, f0 = KITS[src_kit][src] if src_kit else PERCUSSION[src]
+        kit[note] = (CM32L_NAMES.get(note, name), cls, f0)
+        if src_kit:
+            r, lv, g = KIT_RING.get(src_kit, {}).get(src), KIT_LEVEL.get(src_kit, {}).get(src), KIT_GATE.get(src_kit, {}).get(src)
+        else:
+            r, lv, g = PERCUSSION_RING.get(src), PERCUSSION_LEVEL.get(src), KIT_GATE.get(0, {}).get(src)
+            for tab, t in std_tables.items():
+                if src in t:
+                    strokes.setdefault(tab, {})[note] = t[src]
+        for d, v in ((ring, r), (level, lv), (gate, g)):
+            if v is not None:
+                d[note] = v
+    for src, (name, cls, f0) in KITS[56].items():
+        if src < 52:
+            continue                    # the GS set's own (39-51): not the CM-32L's
+        note = src + CM32L_SFX
+        kit[note] = (CM32L_NAMES.get(note, name), cls, f0)
+        for d, sd in ((ring, KIT_RING[56]), (level, KIT_LEVEL[56]), (gate, KIT_GATE[56])):
+            if src in sd:
+                d[note] = sd[src]
+        for tab, t in KIT_STROKES[56].items():
+            if src in t:
+                strokes.setdefault(tab, {})[note] = t[src]
+    return kit, ring, level, gate, strokes
+
+
+_k, _r, _l, _g, _s = _cm32l()
+KITS[127] = _k
+KIT_RING[127] = _r
+# the balanced levels (KIT_LEVEL's own entry, elkit_balance.py) over the sources'
+KIT_LEVEL[127] = {**_l, **KIT_LEVEL.get(127, {})}
+KIT_GATE[127] = _g
+KIT_STROKES[127] = _s
+KIT_ONLY.add(127)
+KIT_CHOKE[127] = [{42, 46}]
+del _k, _r, _l, _g, _s
 
 
 def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None):

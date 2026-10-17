@@ -15448,11 +15448,14 @@ def selftest():
           is __import__("patch_map").property_class_for_program(5))
     check("drum sets: the SC-55's numbers; only built ones sound as themselves",
           [_PM.kit_for_program(k) for k in (0, 24, 25, 8, 16, 56, 127, 1, 20, 29, 30, 35, 47, 49, 60)]
-          == [0, 24, 25, 8, 16, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          == [0, 24, 25, 8, 16, 56, 127, 0, 0, 0, 0, 0, 0, 0, 0]
           and _PM.drum_set_name(24) == "Electronic"
           and _PM.drum_set_name(25) == "TR-808"
-          and _PM.drum_set_name(127) == "CM-64/32L (plays Standard)"
+          and _PM.drum_set_name(127) == "CM-64/32L"
           and _PM.percussion_for_note(36, 56) is None      # the SFX set has no drums
+          # ...and the CM-64/32L's blanks are silent, its effects the SFX set's
+          and _PM.percussion_for_note(52, 127) is None
+          and _PM.percussion_for_note(100, 127)[0] == "Dog"
           and _PM.drum_set_name(32) == "Jazz",
           "  (the manual does not say what a non-set number does, so the "
           "corpus's 1, 20, 29, 30, 35, 47, 49, 60 play Standard, as before)")

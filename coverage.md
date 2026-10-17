@@ -139,7 +139,7 @@ plays Standard, as does any program that is not a set.
 | 40 | Brush | yes |
 | 48 | Orchestra | yes |
 | 56 | SFX | yes |
-| 127 | CM-64/32L | no -- plays Standard |
+| 127 | CM-64/32L | yes |
 
 ### 8 Room
 
@@ -292,6 +292,78 @@ plays Standard, as does any program that is not a set.
 | 82 | Sea Shore | `SfxSeashore` | **4** | GM 122's seashore (fitted), a one-shot gated 2.3 s |
 | 83 | Stream | `SfxStream` | **4** | STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 84 | Bubble | `SfxBubble` | **4** | BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
+
+### 127 CM-64/32L
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | Acoustic Bass Drum | `KickDrum` | **4** | ACOUSTIC BASS DRUM -- the MT-32's, as Standard's 35: DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper |
+| 36 | Acoustic Bass Drum | `KickDrum` | **4** | ACOUSTIC BASS DRUM -- the MT-32's, as Standard's 36: as 35, at the recorded kick's own 44.4 Hz |
+| 37 | Rim Shot | `SideStick` | **4** | RIM SHOT -- the MT-32's, as Standard's 37: DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick) |
+| 38 | Acoustic Snare Drum | `AcousticSnare` | **4** | ACOUSTIC SNARE DRUM -- the MT-32's, as Standard's 38: DRSKit's snare (29 strokes, top and bottom mics): the head at 196 Hz with a tom's modes, choked in 50 ms; the wires a buzz of jittered noise in third-octave bands, fitted on band, onset balance and flatness (a chord of sines at the right band levels was not a snare; neither was a comb in phase -- "pew pew"). Needed the renderer's onsets to start on their own sample. Ben, by ear: sounds so much better |
+| 39 | Hand Clap | `HandClap` | **4** | HAND CLAP -- the MT-32's, as Standard's 39: VCSL claps (CC0, examples/clap_fit.py): an ensemble -- seven hands flammed over 65 ms, each a fitted noise burst. Ben: sounds great |
+| 40 | Electronic Snare Drum | `SimmonsSnare` | **4** | ELECTRONIC SNARE DRUM -- the MT-32's, as the Electronic set's 38: the SDS-V's snare module on the same engine: one oscillator near 450 Hz under its noise, fitted to the real Simmons snare GeneralUser's is closest to (hit 36), score 7.6 -- its decay within a few ms of the hit's. The two-tone snare fitted to GeneralUser itself stays in the code (ElectronicSnareProperties) |
+| 41 | Acoustic Low Tom | `FloorTom` | **4** | ACOUSTIC LOW TOM -- the MT-32's, as Standard's 41: DRSKit's floor tom, 30 strokes on its close mic: modes 1 : 1.631 : 2.012 : 2.349 : 2.971, a long ring (the fundamental 13 dB/s, about 2.5 s), a two-stage decay, the stick's click, a glide that grows with the stroke. Ben, by ear |
+| 42 | Closed High Hat | `ClosedHiHat` | **4** | CLOSED HIGH HAT -- the MT-32's, as Standard's 42: Iowa hi-hat, five takes |
+| 43 | Acoustic Low Tom | `FloorTom` | **4** | ACOUSTIC LOW TOM -- the MT-32's, as Standard's 43: as 41, higher |
+| 44 | Open High Hat 2 | `OpenHiHat` | **4** | OPEN HIGH HAT 2 -- the MT-32's, as Standard's 46: Iowa hi-hat, open |
+| 45 | Acoustic Middle Tom | `TomTom` | **4** | ACOUSTIC MIDDLE TOM -- the MT-32's, as Standard's 45: DRSKit's rack tom, 27 strokes on its close mic: modes 1 : 1.477 : 1.755 : 2.259, the stick's click 30-60 dB under the fundamental to 6 kHz, a glide that grows with the stroke. Ben, by ear |
+| 46 | Open High Hat 1 | `OpenHiHat` | **4** | OPEN HIGH HAT 1 -- the MT-32's, as Standard's 46: Iowa hi-hat, open |
+| 47 | Acoustic Middle Tom | `TomTom` | **4** | ACOUSTIC MIDDLE TOM -- the MT-32's, as Standard's 47: as 45, higher |
+| 48 | Acoustic High Tom | `HighTom` | **4** | ACOUSTIC HIGH TOM -- the MT-32's, as Standard's 48: as 45, higher |
+| 49 | Crash Cymbal | `CrashCymbal1` | **4** | CRASH CYMBAL -- the MT-32's, as Standard's 49: Iowa 17" suspended crash for the modes, refitted to DRSKit's left crash hit HARD with the stick's shank (11 strokes over 37 dB): the cascade's swell of 2-8 kHz after the strike, scattered (in order it glided), growing with the stroke; a slow ring at its own 8.5 dB/s; the shank's thud. Ben, by ear: sounds great |
+| 50 | Acoustic High Tom | `HighTom` | **4** | ACOUSTIC HIGH TOM -- the MT-32's, as Standard's 50: as 45, higher |
+| 51 | Ride Cymbal | `RideCymbal` | **4** | RIDE CYMBAL -- the MT-32's, as Standard's 51: Iowa 21" ride, bow |
+| 54 | Tambourine | `Tambourine` | **4** | TAMBOURINE -- the MT-32's, as Standard's 54: Iowa's tambourines, fitted: 77 measured jingle modes in four clusters, the hand's slap on the head, and each stroke catching the jingles differently (alike, a run of strokes rang metallic) |
+| 56 | Cowbell | `CowbellStroke` | **4** | COWBELL -- the MT-32's, as Standard's 56: VSCO-2 CE (CC0) cowbell, fitted: 28 measured modes each at its own rate, clean; the strike dense and noisy from 400 Hz, its attack contrast matched. Ben: better than the first fit, which was jittery and modal |
+| 60 | Hi Bongo | `BongoHigh` | **4** | HI BONGO -- the MT-32's, as Standard's 60: VSCO-2 CE (CC0) high bongo (161 Hz), fitted: measured modes ringing clean, the slap a dense noisy strike, strokes varying as the takes do |
+| 61 | Low Bongo | `BongoLow` | **4** | LOW BONGO -- the MT-32's, as Standard's 61: as 60, the low bongo (142 Hz) |
+| 62 | Mute Hi Conga | `CongaMute` | **4** | MUTE HI CONGA -- the MT-32's, as Standard's 62: VSCO-2 CE (CC0) quinto tapped: the high conga muted |
+| 63 | High Conga | `CongaOpen` | **4** | HIGH CONGA -- the MT-32's, as Standard's 63: VSCO-2 CE (CC0) quinto open (216 Hz), 13 measured modes -- one left out, the glide smeared into a peak that beat at 16 Hz |
+| 64 | Low Conga | `CongaLow` | **4** | LOW CONGA -- the MT-32's, as Standard's 64: VSCO-2 CE (CC0) conga, the middle of its three (164 Hz), open at three dynamics |
+| 65 | High Timbale | `TimbaleHigh` | **4** | HIGH TIMBALE -- the MT-32's, as Standard's 65: hello_flowers' timbales (freesound 41196, CC0), the high drum's ten free strokes cut from 50 hits (examples/freesound_slice.py): 46 measured modes ringing to 3.8 kHz, 224 Hz; fitted to 5.1 dB. The strike dense, jittered and SCATTERED in its bands (click_scatter): on an even grid its partials beat in a sweep -- Ben: "a phaser in the initial attack" |
+| 66 | Low Timbale | `TimbaleLow` | **4** | LOW TIMBALE -- the MT-32's, as Standard's 66: as 65, the low drum's nine (186 Hz, 33 modes), fitted to 6.3 dB |
+| 67 | High Agogo | `AgogoHigh` | **4** | HIGH AGOGO -- the MT-32's, as Standard's 67: VSCO-2 CE (CC0) agogo bell 2 (1228 Hz), fitted: measured modes, per-stroke scatter from the takes |
+| 68 | Low Agogo | `AgogoLow` | **4** | LOW AGOGO -- the MT-32's, as Standard's 68: VSCO-2 CE (CC0) agogo bell 3 (696 Hz), as 67 |
+| 69 | Cabasa | `Cabasa` | **4** | CABASA -- the MT-32's, as Standard's 69: VSCO-2 CE (CC0) cabasa as SHAPED NOISE: measured, a twist is noise (its grain is its own spectrum with random phases), so the recording's third-octave spectrum as noise rows under the fitted swell, shake and 0.33 s settle -- colour within 0.3 dB, envelope 3.0. The impact burst before it clicked where the takes do not. Ben: sounds great |
+| 70 | Maracas | `Maracas` | **4** | MARACAS -- the MT-32's, as Standard's 70: VSCO-2 CE (CC0) maracas as SHAPED NOISE, fitted to the SINGLE strokes (two of the five files are two strokes, one three): the recording's spectrum as noise rows, a swell, the shake, a 0.29 s settle falling 40 dB -- colour within 0.8 dB but for the gourd's 2.3 kHz cliff, envelope 3.2. A little seed-click grain above 4 kHz is the recording's and not ours. Ben: sounds great |
+| 71 | Short Whistle | `ShortWhistle` | **4** | SHORT WHISTLE -- the MT-32's, as Standard's 71: VCSL ball whistle, short blast (CC0, examples/whistle_fit.py): one tone at 2.7 kHz, the pea swinging it 144 cents at 40 Hz and chopping it, a 0.19 s blast; the air above the tone only. Ben: sounds good |
+| 72 | Long Whistle | `LongWhistle` | **4** | LONG WHISTLE -- the MT-32's, as Standard's 72: as 71, the long blast (0.89 s, 80 cents at 30 Hz) |
+| 73 | Quijada | `Vibraslap` | **4** | QUIJADA -- the MT-32's, as Standard's 58: VSCO-2 CE (CC0) vibraslap: the beads in the box a periodic train at 55 Hz falling over 2.6 s, each impact soft-onset, the colour matched in third octaves. Ben: a lot better than expected |
+| 75 | Claves | `Claves` | **4** | CLAVES -- the MT-32's, as Standard's 75: Iowa claves, three pairs |
+| 76 | Laughing | `SfxLaugh` | **4** | the CM-32L's, as the SFX set's 52: LAUGHING: a "ho ho ho" (Ben's call; a woman's laugh never read as one) -- a throat pulsed as a Freesound Santa says it (CC0): four arcing "ho"s and a long falling "hooo", each glottal pulse ringing his /o/'s formants (LPC: 500, 850 Hz, 2.5, 2.9, 5.7 kHz; examples/throat_fit.py), so the pitch slides through a fixed vowel. 2.1 s where GeneralUser GS's laugh is 0.9 |
+| 77 | Screaming | `SfxScream` | **4** | the CM-32L's, as the SFX set's 53: SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
+| 78 | Punch | `SfxPunch` | **4** | the CM-32L's, as the SFX set's 54: PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
+| 79 | Heartbeat | `SfxHeartbeat` | **4** | the CM-32L's, as the SFX set's 55: HEART BEAT: the heart's own waveform -- a standard ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
+| 80 | Footsteps 1 | `SfxFootstep` | **4** | the CM-32L's, as the SFX set's 56: FOOTSTEPS1: a hard shoe on stone (Freesound, CC0): the heel as shaped noise (colour 1.0 dB) and, 70 ms on, the sole 8 dB under, as the recorded steps pair |
+| 81 | Footsteps 2 | `SfxFootstep` | **4** | the CM-32L's, as the SFX set's 57: FOOTSTEPS2: as 56, a semitone up, as GeneralUser GS has its pair |
+| 82 | Applause | `OrchestraApplause` | **4** | the CM-32L's, as the SFX set's 58: the Orchestra set's applause, gated 3.7 s as GeneralUser GS's |
+| 83 | Creaking | `SfxDoorCreak` | **4** | the CM-32L's, as the SFX set's 59: DOOR CREAKING: a hinge's stick-slip as a pulse train slowing 285 to 130 Hz (GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0): 1.6 dB |
+| 84 | Door | `SfxDoor` | **4** | the CM-32L's, as the SFX set's 60: DOOR: a wooden door slammed (Freesound, CC0): the slab, the latch, the frame (perc_fit): 6.5 dB |
+| 85 | Scratch | `SfxScratchPull` | **4** | the CM-32L's, as the SFX set's 61: SCRATCH: the Scratch Pull, as GeneralUser GS plays it |
+| 86 | Windchime | `SfxWindchime` | **3** | the CM-32L's, as the SFX set's 62: WINDCHIME: a metal chime tube struck, ringing out (Freesound, CC0): 13.0 dB -- one tube where GS's is a shaken set |
+| 87 | Engine | `SfxEngine` | **4** | the CM-32L's, as the SFX set's 63: CAR ENGINE fitted to a Freesound idle (CC0, examples/weather_fit.py): its firing at 47.4 Hz and harmonics as partials, each standing out of the engine's noise as the recording's (h1-h6 within 2 dB; those barely over the noise held at their measured heights), the noise's colour 1.6 dB rms |
+| 88 | Car-stop | `SfxSkid` | **4** | the CM-32L's, as the SFX set's 64: CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
+| 89 | Car-pass | `SfxCarPass` | **4** | the CM-32L's, as the SFX set's 65: CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
+| 90 | Crash | `SfxCrash` | **4** | the CM-32L's, as the SFX set's 66: CAR CRASH fitted to a Freesound crash with glass (CC0): its noise (0.2 dB rms) with glass clicks and metal rings as grains, holding 1.3 s and falling away over 0.6 s as the recording does |
+| 91 | Siren | `SfxSiren` | **4** | the CM-32L's, as the SFX set's 67: SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) winding up from half its pitch with the recording's 1.14 s time constant -- the wail's first 1.5 s, where GeneralUser GS's is a 0.3 s blip |
+| 92 | Train | `SfxTrain` | **4** | the CM-32L's, as the SFX set's 68: TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
+| 93 | Jet | `SfxJet` | **4** | the CM-32L's, as the SFX set's 69: JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
+| 94 | Helicopter | `SfxHelicopter` | **4** | the CM-32L's, as the SFX set's 70: GM 125's helicopter (fitted), a one-shot gated 3.75 s, its key's note a rotor as the program's is (a written C4 at 16.3 Hz; it had buzzed at 261.6) |
+| 95 | Starship | `SfxStarship` | **3** | the CM-32L's, as the SFX set's 71: STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet |
+| 96 | Pistol | `Gunshot` | **4** | the CM-32L's, as the SFX set's 72: GM 127's gunshot (fitted) |
+| 97 | Machinegun | `SfxMachinegun` | **4** | the CM-32L's, as the SFX set's 73: MACHINEGUN: the set's gun shot (72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0) -- an impact train in the set's own stroke table (percussion_map.KIT_STROKES) |
+| 98 | Lasergun | `SfxLaser` | **3** | the CM-32L's, as the SFX set's 74: LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
+| 99 | Explosion | `SfxExplosion` | **4** | the CM-32L's, as the SFX set's 75: EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
+| 100 | Dog | `SfxDog` | **4** | the CM-32L's, as the SFX set's 76: DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
+| 101 | Horse | `SfxHoof` | **4** | the CM-32L's, as the SFX set's 77: HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
+| 102 | Birds | `SfxBirds` | **4** | the CM-32L's, as the SFX set's 78: GM 123's bird (fitted), a one-shot gated 0.4 s |
+| 103 | Rain | `SfxRain` | **4** | the CM-32L's, as the SFX set's 79: RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
+| 104 | Thunder | `SfxThunder` | **4** | the CM-32L's, as the SFX set's 80: THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
+| 105 | Wind | `SfxWind` | **4** | the CM-32L's, as the SFX set's 81: WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
+| 106 | Waves | `SfxSeashore` | **4** | the CM-32L's, as the SFX set's 82: GM 122's seashore (fitted), a one-shot gated 2.3 s |
+| 107 | Stream | `SfxStream` | **4** | the CM-32L's, as the SFX set's 83: STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
+| 108 | Bubble | `SfxBubble` | **4** | the CM-32L's, as the SFX set's 84: BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
 
 ## 0-7 Piano
 
@@ -674,67 +746,67 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `Percussion`
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4)
-        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4)
+        - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
           - `ConcertCymbal2` -- set 48 57 Concert Cymbal 2 (4)
         - `CrashRide` -- 59 Ride Cymbal 2 (4)
         - `HiHat`
-          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4)
-          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4)
+          - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
+          - `OpenHiHat` -- 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
           - `PedalHiHat` -- 44 Pedal Hi-Hat (4), set 48 28 Pedal Hi-Hat (4)
         - `RideBell` -- 53 Ride Bell (4)
-        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 48 30 Ride Cymbal (4)
+        - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 48 30 Ride Cymbal (4), set 127 51 Ride Cymbal (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
-      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4), set 56 72 Gun Shot (4)
-        - `SfxMachinegun` -- set 56 73 Machinegun (4)
+      - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4), set 56 72 Gun Shot (4), set 127 96 Pistol (4)
+        - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
-          - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4)
-            - `SideStick` -- 37 Side Stick (4)
+          - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4), set 127 38 Acoustic Snare Drum (4)
+            - `SideStick` -- 37 Side Stick (4), set 127 37 Rim Shot (4)
             - `SnareDrum2` -- 40 Snare Drum 2 (4)
               - `BrushTap` -- set 40 38 Brush Tap (4)
                 - `BrushSlap` -- set 40 39 Brush Slap (4)
               - `ConcertSnare` -- set 48 38 Concert SD (4), set 48 40 Concert SD (4)
-          - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4)
+          - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4)
             - `MondoKick` [LiveRoom] -- set 16 36 MONDO Kick (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
-            - `AgogoHigh` -- 67 High Agogo (4)
+            - `AgogoHigh` -- 67 High Agogo (4), set 127 67 High Agogo (4)
               - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
-            - `AgogoLow` -- 68 Low Agogo (4)
+            - `AgogoLow` -- 68 Low Agogo (4), set 127 68 Low Agogo (4)
               - `MelodicAgogoLow` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
-            - `BongoHigh` -- 60 Hi Bongo (4)
-            - `BongoLow` -- 61 Low Bongo (4)
-            - `CongaLow` -- 64 Low Conga (4)
-            - `CongaMute` -- 62 Mute Hi Conga (4)
-            - `CongaOpen` -- 63 Open Hi Conga (4)
-            - `CowbellStroke` -- 56 Cowbell (4)
+            - `BongoHigh` -- 60 Hi Bongo (4), set 127 60 Hi Bongo (4)
+            - `BongoLow` -- 61 Low Bongo (4), set 127 61 Low Bongo (4)
+            - `CongaLow` -- 64 Low Conga (4), set 127 64 Low Conga (4)
+            - `CongaMute` -- 62 Mute Hi Conga (4), set 127 62 Mute Hi Conga (4)
+            - `CongaOpen` -- 63 Open Hi Conga (4), set 127 63 High Conga (4)
+            - `CowbellStroke` -- 56 Cowbell (4), set 127 56 Cowbell (4)
             - `SfxBassSlap` -- set 56 50 String slap of double bass (3)
-            - `SfxDoor` -- set 56 60 Door (4)
+            - `SfxDoor` -- set 56 60 Door (4), set 127 84 Door (4)
             - `SfxGuitarCutDown` -- set 56 48 Guitar cutting noise (down) (4)
             - `SfxGuitarCutUp` -- set 56 49 Guitar cutting noise (up) (4)
-            - `SfxHoof` -- set 56 77 Horse-Gallop (4)
+            - `SfxHoof` -- set 56 77 Horse-Gallop (4), set 127 101 Horse (4)
             - `SfxKeyClick` -- set 56 51 Key Click (4)
             - `SfxMetronomeBell` -- 34 Metronome Bell (4), set 56 46 Metronome Bell (4)
             - `SfxMetronomeClick` -- 33 Metronome Click (4), set 56 45 Metronome Click (4)
             - `SfxSlap` -- 28 Slap (4), set 56 40 Slap (4)
             - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)
             - `SfxThroat`
-              - `SfxDog` -- set 56 76 Dog (4)
-              - `SfxLaugh` -- set 56 52 Laughing (4)
-            - `SfxWindchime` -- set 56 62 Windchime (3)
+              - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
+              - `SfxLaugh` -- set 56 52 Laughing (4), set 127 76 Laughing (4)
+            - `SfxWindchime` -- set 56 62 Windchime (3), set 127 86 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4)
               - `SurdoMute` -- 86 Mute Surdo (4)
             - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4)
-            - `TimbaleHigh` -- 65 High Timbale (4)
-            - `TimbaleLow` -- 66 Low Timbale (4)
-          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4)
-          - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4)
-            - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4)
+            - `TimbaleHigh` -- 65 High Timbale (4), set 127 65 High Timbale (4)
+            - `TimbaleLow` -- 66 Low Timbale (4), set 127 66 Low Timbale (4)
+          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4), set 127 54 Tambourine (4)
+          - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4), set 127 45 Acoustic Middle Tom (4), set 127 47 Acoustic Middle Tom (4)
+            - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4), set 127 41 Acoustic Low Tom (4), set 127 43 Acoustic Low Tom (4)
               - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
-            - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4)
+            - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4), set 127 48 Acoustic High Tom (4), set 127 50 Acoustic High Tom (4)
               - `RoomHighTom` [LiveRoom] -- set 8 48 Room Hi Tom 2 (4), set 8 50 Room Hi Tom 1 (4), set 16 48 Room Hi Tom 2 (4), set 16 50 Room Hi Tom 1 (4)
             - `RoomTom` [LiveRoom] -- set 8 45 Room Mid Tom 2 (4), set 8 47 Room Mid Tom 1 (4), set 16 45 Room Mid Tom 2 (4), set 16 47 Room Mid Tom 1 (4)
         - `SynthDrum`
@@ -748,7 +820,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ElectronicTom47` -- set 24 47 Elec Mid Tom 1 (4)
               - `ElectronicTom48` -- set 24 48 Elec Hi Tom 2 (4)
               - `ElectronicTom50` -- set 24 50 Elec Hi Tom 1 (4)
-            - `SimmonsSnare` -- set 24 38 Elec SD (4)
+            - `SimmonsSnare` -- set 24 38 Elec SD (4), set 127 40 Electronic Snare Drum (4)
           - `TR808` [ModeDecays]
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
@@ -770,26 +842,26 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
-          - `SfxBirds` -- set 56 78 Birds (4)
+          - `SfxBirds` -- set 56 78 Birds (4), set 127 102 Birds (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4)
         - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4)
       - `NoiseDrum` [NoisyPercussionMixin]
-        - `HandClap` -- 39 Hand Clap (4)
+        - `HandClap` -- 39 Hand Clap (4), set 127 39 Hand Clap (4)
       - `OrchestraHit` -- GM 55 Orchestra Hit (4)
       - `Rattle` [NoisyPercussionMixin]
-        - `Vibraslap` -- 58 Vibraslap (4)
+        - `Vibraslap` -- 58 Vibraslap (4), set 127 73 Quijada (4)
       - `ShakenNoise` [NoisyPercussionMixin]
-        - `Cabasa` -- 69 Cabasa (4)
-        - `Maracas` -- 70 Maracas (4)
-        - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4)
-        - `SfxPunch` -- set 56 54 Punch (4)
+        - `Cabasa` -- 69 Cabasa (4), set 127 69 Cabasa (4)
+        - `Maracas` -- 70 Maracas (4), set 127 70 Maracas (4)
+        - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4), set 127 80 Footsteps 1 (4), set 127 81 Footsteps 2 (4)
+        - `SfxPunch` -- set 56 54 Punch (4), set 127 78 Punch (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (4)
         - `GatedSnare` -- set 16 38 Gated SD (4), set 24 40 Gated SD (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4)
-        - `Claves` -- 75 Claves (4)
+        - `Claves` -- 75 Claves (4), set 127 75 Claves (4)
         - `Guiro` -- 73 Short Guiro (4), 74 Long Guiro (4)
         - `WoodBlockHi` -- 76 Hi Wood Block (4)
           - `WoodBlockLo` -- 77 Low Wood Block (4)
@@ -817,7 +889,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `FifthsLead`
           - `MoogFifthsLead` -- GM 86 Lead 7 (fifths) (4)
         - `Helicopter` -- GM 125 Helicopter (4)
-          - `SfxHelicopter` -- set 56 70 Helicopter (4)
+          - `SfxHelicopter` -- set 56 70 Helicopter (4), set 127 94 Helicopter (4)
         - `MoogSawLead` -- GM 81 Lead 2 (sawtooth) (4)
         - `SquareSynth`
           - `MoogSquareLead` -- GM 80 Lead 1 (square) (4)
@@ -888,30 +960,30 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `VoiceOohs` [_VocalBody] -- GM 53 Voice Oohs (4)
     - `BreathNoise` [NoisyPercussionMixin] -- GM 121 Breath Noise (4)
       - `Applause` -- GM 126 Applause (4)
-        - `OrchestraApplause` -- set 48 88 Applause (4), set 56 58 Applause (4)
+        - `OrchestraApplause` -- set 48 88 Applause (4), set 56 58 Applause (4), set 127 82 Applause (4)
       - `Seashore` -- GM 122 Seashore (4)
-        - `SfxSeashore` -- set 56 82 Sea Shore (4)
+        - `SfxSeashore` -- set 56 82 Sea Shore (4), set 127 106 Waves (4)
         - `SfxWeather`
-          - `SfxBubble` -- set 56 84 Bubble (4)
-          - `SfxCarPass` -- set 56 65 Car-Pass (4)
-          - `SfxCrash` -- set 56 66 Car-Crash (4)
-          - `SfxDoorCreak` -- set 56 59 Door Creaking (4)
-          - `SfxEngine` -- set 56 63 Car-Engine (4)
-          - `SfxExplosion` -- set 56 75 Explosion (4)
-          - `SfxHeartbeat` -- set 56 55 Heart Beat (4)
-          - `SfxJet` -- set 56 69 Jetplane (4)
-          - `SfxLaser` -- set 56 74 Lasergun (3)
-          - `SfxRain` -- set 56 79 Rain (4)
+          - `SfxBubble` -- set 56 84 Bubble (4), set 127 108 Bubble (4)
+          - `SfxCarPass` -- set 56 65 Car-Pass (4), set 127 89 Car-pass (4)
+          - `SfxCrash` -- set 56 66 Car-Crash (4), set 127 90 Crash (4)
+          - `SfxDoorCreak` -- set 56 59 Door Creaking (4), set 127 83 Creaking (4)
+          - `SfxEngine` -- set 56 63 Car-Engine (4), set 127 87 Engine (4)
+          - `SfxExplosion` -- set 56 75 Explosion (4), set 127 99 Explosion (4)
+          - `SfxHeartbeat` -- set 56 55 Heart Beat (4), set 127 79 Heartbeat (4)
+          - `SfxJet` -- set 56 69 Jetplane (4), set 127 93 Jet (4)
+          - `SfxLaser` -- set 56 74 Lasergun (3), set 127 98 Lasergun (3)
+          - `SfxRain` -- set 56 79 Rain (4), set 127 103 Rain (4)
           - `SfxScratchPush` -- 29 Scratch Push (4), set 56 41 Scratch Push (4)
-            - `SfxScratchPull` -- 30 Scratch Pull (4), set 56 42 Scratch Pull (4), set 56 61 Scratch (4)
-          - `SfxScream` -- set 56 53 Screaming (4)
-          - `SfxSiren` -- set 56 67 Siren (4)
-          - `SfxSkid` -- set 56 64 Car-Skid (4)
-          - `SfxStarship` -- set 56 71 Starship (3)
-          - `SfxStream` -- set 56 83 Stream (4)
-          - `SfxThunder` -- set 56 80 Thunder (4)
-          - `SfxTrain` -- set 56 68 Train (4)
-          - `SfxWind` -- set 56 81 Wind (4)
+            - `SfxScratchPull` -- 30 Scratch Pull (4), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4)
+          - `SfxScream` -- set 56 53 Screaming (4), set 127 77 Screaming (4)
+          - `SfxSiren` -- set 56 67 Siren (4), set 127 91 Siren (4)
+          - `SfxSkid` -- set 56 64 Car-Skid (4), set 127 88 Car-stop (4)
+          - `SfxStarship` -- set 56 71 Starship (3), set 127 95 Starship (3)
+          - `SfxStream` -- set 56 83 Stream (4), set 127 107 Stream (4)
+          - `SfxThunder` -- set 56 80 Thunder (4), set 127 104 Thunder (4)
+          - `SfxTrain` -- set 56 68 Train (4), set 127 92 Train (4)
+          - `SfxWind` -- set 56 81 Wind (4), set 127 105 Wind (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
@@ -921,8 +993,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `BlownBottle` -- GM 76 Blown Bottle (4)
         - `Ocarina` -- GM 79 Ocarina (4)
           - `SambaWhistle`
-            - `LongWhistle` -- 72 Long Whistle (4)
-            - `ShortWhistle` -- 71 Short Whistle (4)
+            - `LongWhistle` -- 72 Long Whistle (4), set 127 72 Long Whistle (4)
+            - `ShortWhistle` -- 71 Short Whistle (4), set 127 71 Short Whistle (4)
         - `Whistle` -- GM 78 Whistle (4)
     - `Organ`
       - `Brass`
