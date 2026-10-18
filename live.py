@@ -2985,7 +2985,7 @@ class Live:
         # that reached the engine, from the keyboard (after routing) or the
         # panel. Culled by construction -- a later value replaces an earlier.
         self.chanstate = {}
-        self.stopword = {}           # channel -> [CC43, CC44], a harmonium's stop word
+        self.stopword = {}           # channel -> [CC43, CC44, CC45], a harmonium's stop word
         self.xnote = {}              # slot key -> the bellows (0..1) its Expression was stamped at
         self.note_touch = {}         # (part, channel, note) -> its velocity's level, if the part follows it
         # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
@@ -3859,20 +3859,22 @@ class Live:
                                                     / T.harmonium_expression_gain(h, e0)
                                                     ).astype(np.float32))
                         self.xnote[key] = e
-            elif msg.control in (43, 44):           # a harmonium's stop word
-                # CC43 low seven, CC44 high seven -- on a voice that says its
-                # stop word lives there (the harmonium, whose CC11 is the
-                # bellows). The pipe organ's registration is the panel's here.
-                w = self.stopword.setdefault(ch, [None, None])
-                w[0 if msg.control == 43 else 1] = msg.value
+            elif msg.control in (43, 44, 45):       # a harmonium's stop word
+                # CC43 low seven, CC44 the next, CC45 the Debain's three more --
+                # on a voice that says its stop word lives there (the
+                # harmonium, whose CC11 is the bellows). The pipe organ's
+                # registration is the panel's here.
+                w = self.stopword.setdefault(ch, [None, None, None])
+                w[msg.control - 43] = msg.value
                 for part in parts:
                     if not (self._listens(part, ch) and part.organ):
                         continue
-                    if part.patch.stop_word_ccs != (43, 44):
+                    if part.patch.stop_word_ccs[0] != 43:
                         continue
                     ds = part.patch.default_stops
-                    word = ((w[0] if w[0] is not None else ds & 0x7F)
-                            | ((w[1] if w[1] is not None else (ds >> 7) & 0x7F) << 7))
+                    word = 0
+                    for _i in range(len(part.patch.stop_word_ccs)):
+                        word |= (w[_i] if w[_i] is not None else (ds >> (7 * _i)) & 0x7F) << (7 * _i)
                     names = part.patch.rank_names
                     self.set_stops(part, {names[i] for i in range(len(names)) if (word >> i) & 1}, n0)
             elif msg.control == 91:                 # reverb send
@@ -7031,7 +7033,7 @@ class Live:
                                     hrel, 0, False):
             self.dropped += 1
             return
-        if part.patch.stop_word_ccs == (43, 44):
+        if part.patch.stop_word_ccs[0] == 43:
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
         if part.patch.wind_pc is not None:
             _wr = self._wind_row(part, rank)
@@ -7566,7 +7568,7 @@ def _m1_view(e):
     return mido.Message("sysex", data=e.data)
 
 
-CAPTURE_CC = (0, 32, 1, 5, 7, 10, 11, 43, 44, 65, 91, 93)
+CAPTURE_CC = (0, 32, 1, 5, 7, 10, 11, 43, 44, 45, 65, 91, 93)
 CAPTURE_RESET_CC = (1, 11, 65)       # the captured ones CC121 resets
 SCENE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scenes.json")
 SESSION_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "session.json")
@@ -14861,7 +14863,7 @@ def selftest():
     _hword(_hm, (1 << 0) | (1 << 7))            # bass Cor anglais, treble Hautbois
     _hm.on_midi(_cc_(0, 1, 127)); _hm.apply(_hm.n)
     check("the harmonium's stops are its own, on CC43/44, and the wheel leaves them",
-          _hp.patch.stop_word_ccs == (43, 44)
+          _hp.patch.stop_word_ccs[0] == 43
           and _hp.drawn == {"cor anglais 1", "hautbois 4"},
           "  (drawn %s; a crescendo pedal is a pipe organ's -- the harmonium has none)"
           % sorted(_hp.drawn))
@@ -14883,7 +14885,10 @@ def selftest():
             sorted(set(np.round(_hlive(w, 127, 48)["fa"]).astype(int))))
            for w in (_H1, _H1 | (1 << 10), _H1 | (1 << 3) | (1 << 10))]
     check("Percussion strikes register 1 only, live as in the file",
-          all(f == l for f, l in _pf) and len(_pf[0][0]) == 1 and len(_pf[2][0]) == 2
+          # (the Basson's harmonics each their own attack: its upper ones
+          # build last, as the Debain's do -- debain_registers.py)
+          all(f == l for f, l in _pf) and len(_pf[0][0]) == 1
+          and _pf[2][0][0] == _pf[1][0][0] and min(_pf[2][0][1:]) > _pf[1][0][0]
           and _pf[1][0][0] < _pf[0][0][0],
           "  (attack in samples, file/live: plain %s/%s, percussion %s/%s, with the "
           "Basson %s/%s)" % tuple(x for p in _pf for x in p))

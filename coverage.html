@@ -1307,7 +1307,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 
 <section>
 <h2>Stops: the registers within a program</h2>
-<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. 52 of the 68 are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
+<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. 61 of the 71 are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
 <div class="stopstack">
 <div class="fambox">
 <div class="famhead"><h3>6 Harpsichord</h3><span class="rng">the harpsichord&#x27;s registers (CC11 stop word)</span><span class="pips">
@@ -1417,33 +1417,39 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="num">&ndash;</td><td class="nm">the key&#x27;s groove</td><td class="rt"><span class="chip r2">2</span></td><td class="note">not modelled: the stops on a key share its channel, so a release drains faster with more drawn, and the pipes go flat as it drains (Pitea&#x27;s reeds 35-68 cents at C3-C4)</td></tr>
 </table></div></div>
 <div class="fambox">
-<div class="famhead"><h3>20 Reed Organ</h3><span class="rng">the harmonium&#x27;s registers (CC43/44 stop word: bass | treble at E4/F4)</span><span class="pips">
+<div class="famhead"><h3>20 Reed Organ</h3><span class="rng">the harmonium&#x27;s registers (CC43/44/45 stop word: bass | treble at E4/F4)</span><span class="pips">
 <span class="pip r4" title="cor anglais 1"></span>
-<span class="pip r2" title="bourdon 2"></span>
+<span class="pip r4" title="bourdon 2"></span>
 <span class="pip r4" title="clairon 3"></span>
-<span class="pip r2" title="basson 4"></span>
+<span class="pip r4" title="basson 4"></span>
 <span class="pip r4" title="flute 1"></span>
-<span class="pip r2" title="clarinette 2"></span>
+<span class="pip r4" title="clarinette 2"></span>
 <span class="pip r4" title="fifre 3"></span>
-<span class="pip r2" title="hautbois 4"></span>
-<span class="pip r2" title="celeste"></span>
+<span class="pip r4" title="hautbois 4"></span>
+<span class="pip r4" title="celeste"></span>
 <span class="pip r2" title="expression"></span>
 <span class="pip r2" title="percussion"></span>
-<span class="pip r2" title="tremolo"></span>
+<span class="pip r4" title="tremolo"></span>
+<span class="pip r4" title="violoncelle"></span>
+<span class="pip r4" title="sourdine"></span>
+<span class="pip r4" title="musette"></span>
 </span></div>
 <div class="tscroll"><table><tr><th>Bit</th><th>Stop</th><th></th><th>Notes</th></tr>
 <tr><td class="num">0</td><td class="nm">cor anglais 1</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the bass 8&#x27; foundation: donyaquick&#x27;s harmonium, 32 keys, the series within 2.5 dB rms</td></tr>
-<tr><td class="num">1</td><td class="nm">bourdon 2</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the bass 16&#x27;, darker (gate 0.90, corner 3 kHz): re-anchored on the fitted foundation, its voicing asserted</td></tr>
+<tr><td class="num">1</td><td class="nm">bourdon 2</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the bass 16&#x27;: the Debain&#x27;s Bourdon (Silvestre&#x27;s set), its difference from the Debain&#x27;s foundation key by key carried onto ours as tables at three anchors (the takes are low-passed and denoised: each read over its live band), its slow speech (36 cycles) and its level by the set&#x27;s balance (examples/debain_registers.py). Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
 <tr><td class="num">2</td><td class="nm">clairon 3</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the bass 4&#x27;: the take&#x27;s other reed, each key 0.4-12 cents sharp of its octave, voiced as the foundation at 1.2x its level</td></tr>
-<tr><td class="num">3</td><td class="nm">basson 4</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the bass 8&#x27; solo, reedy (gate 1.08, corner 8 kHz): re-anchored as bourdon 2</td></tr>
+<tr><td class="num">3</td><td class="nm">basson 4</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the bass 8&#x27; solo: the Debain&#x27;s Basson, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
 <tr><td class="num">4</td><td class="nm">flute 1</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the treble 8&#x27; foundation, as cor anglais 1</td></tr>
-<tr><td class="num">5</td><td class="nm">clarinette 2</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the treble 16&#x27;, covered (gate 0.85, corner 2.6 kHz): as bourdon 2</td></tr>
+<tr><td class="num">5</td><td class="nm">clarinette 2</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the treble 16&#x27;: the Debain&#x27;s Clarinette, HOLLOW at last (h3 over h2: the cavity the flow model could not make), as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
 <tr><td class="num">6</td><td class="nm">fifre 3</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the treble 4&#x27;, as clairon 3</td></tr>
-<tr><td class="num">7</td><td class="nm">hautbois 4</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the treble 8&#x27; solo, as basson 4</td></tr>
-<tr><td class="num">8</td><td class="nm">celeste</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a 16&#x27; reed tuned +12 cents: EB1911 says only &#x27;not quite in unison&#x27;, the amount a choice</td></tr>
+<tr><td class="num">7</td><td class="nm">hautbois 4</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the treble 8&#x27; solo: the Debain&#x27;s Hautbois, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
+<tr><td class="num">8</td><td class="nm">celeste</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the Debain&#x27;s Voix celeste 16: TWO ROWS beating on their own, 10.5-18.6 cents apart key by key (median 15.4; every harmonic&#x27;s swing at m times one rate), its series as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
 <tr><td class="num">9</td><td class="nm">expression</td><td class="rt"><span class="chip r2">2</span></td><td class="note">the reservoir shut, the feet the wind: brightness with pressure, asserted</td></tr>
 <tr><td class="num">10</td><td class="nm">percussion</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a hammer on the front 8&#x27; reeds at key-down, asserted</td></tr>
-<tr><td class="num">11</td><td class="nm">tremolo</td><td class="rt"><span class="chip r2">2</span></td><td class="note">a small bellows fluttering the trunk, asserted</td></tr>
+<tr><td class="num">11</td><td class="nm">tremolo</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the Debain&#x27;s Tremolo (its Musette with the flutter on): a level swing at 9.52 Hz, depth 0.25, ours on the Musette reading the same; it flutters every reed drawn, the Debain&#x27;s only its one row. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
+<tr><td class="num">12</td><td class="nm">violoncelle</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the Debain&#x27;s Violoncelle 8&#x27;, bass (bit 12): added from its takes, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
+<tr><td class="num">13</td><td class="nm">sourdine</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the Debain&#x27;s Sourdine 8&#x27;, bass (bit 13), the muted stop 10.3 dB under the foundation: added, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
+<tr><td class="num">14</td><td class="nm">musette</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the Debain&#x27;s Musette 16&#x27;, treble (bit 14): added, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great</td></tr>
 </table></div></div>
 <div class="fambox">
 <div class="famhead"><h3>21 Accordion &middot; 23 Tango Accordion</h3><span class="rng">the accordion&#x27;s reed banks (no stops: GM gives each box its own program)</span><span class="pips">

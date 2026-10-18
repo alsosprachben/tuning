@@ -641,22 +641,25 @@ Controls are the rest of the console that are not stops.
 | -- | shared wind (the chest) | **3** | every pipe on the chest hears the others' demand: a chord dips the pressure as it enters and surges it as it lifts, a reservoir ringing at 4 Hz and a regulator restoring it -- the form the physics' (Pykett, Carlsson 2002, the Rodgers wind patent), the size Ben's ear's (flexibility 1 of off/1/2.5/8: a five-note chord takes ~2 cents from a held note). No recording of one organ's coupling was fitted: it varies organ to organ. On by default |
 | -- | the key's groove | **2** | not modelled: the stops on a key share its channel, so a release drains faster with more drawn, and the pipes go flat as it drains (Pitea's reeds 35-68 cents at C3-C4) |
 
-### 20 Reed Organ -- the harmonium's registers (CC43/44 stop word: bass | treble at E4/F4)
+### 20 Reed Organ -- the harmonium's registers (CC43/44/45 stop word: bass | treble at E4/F4)
 
 | bit | stop | | notes |
 |---|---|---|---|
 | 0 | cor anglais 1 | **4** | the bass 8' foundation: donyaquick's harmonium, 32 keys, the series within 2.5 dB rms |
-| 1 | bourdon 2 | **2** | the bass 16', darker (gate 0.90, corner 3 kHz): re-anchored on the fitted foundation, its voicing asserted |
+| 1 | bourdon 2 | **4** | the bass 16': the Debain's Bourdon (Silvestre's set), its difference from the Debain's foundation key by key carried onto ours as tables at three anchors (the takes are low-passed and denoised: each read over its live band), its slow speech (36 cycles) and its level by the set's balance (examples/debain_registers.py). Ben, examples/harmonium_registers_demo.py: they sound great |
 | 2 | clairon 3 | **4** | the bass 4': the take's other reed, each key 0.4-12 cents sharp of its octave, voiced as the foundation at 1.2x its level |
-| 3 | basson 4 | **2** | the bass 8' solo, reedy (gate 1.08, corner 8 kHz): re-anchored as bourdon 2 |
+| 3 | basson 4 | **4** | the bass 8' solo: the Debain's Basson, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 | 4 | flute 1 | **4** | the treble 8' foundation, as cor anglais 1 |
-| 5 | clarinette 2 | **2** | the treble 16', covered (gate 0.85, corner 2.6 kHz): as bourdon 2 |
+| 5 | clarinette 2 | **4** | the treble 16': the Debain's Clarinette, HOLLOW at last (h3 over h2: the cavity the flow model could not make), as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 | 6 | fifre 3 | **4** | the treble 4', as clairon 3 |
-| 7 | hautbois 4 | **2** | the treble 8' solo, as basson 4 |
-| 8 | celeste | **2** | a 16' reed tuned +12 cents: EB1911 says only 'not quite in unison', the amount a choice |
+| 7 | hautbois 4 | **4** | the treble 8' solo: the Debain's Hautbois, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
+| 8 | celeste | **4** | the Debain's Voix celeste 16: TWO ROWS beating on their own, 10.5-18.6 cents apart key by key (median 15.4; every harmonic's swing at m times one rate), its series as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 | 9 | expression | **2** | the reservoir shut, the feet the wind: brightness with pressure, asserted |
 | 10 | percussion | **2** | a hammer on the front 8' reeds at key-down, asserted |
-| 11 | tremolo | **2** | a small bellows fluttering the trunk, asserted |
+| 11 | tremolo | **4** | the Debain's Tremolo (its Musette with the flutter on): a level swing at 9.52 Hz, depth 0.25, ours on the Musette reading the same; it flutters every reed drawn, the Debain's only its one row. Ben, examples/harmonium_registers_demo.py: they sound great |
+| 12 | violoncelle | **4** | the Debain's Violoncelle 8', bass (bit 12): added from its takes, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
+| 13 | sourdine | **4** | the Debain's Sourdine 8', bass (bit 13), the muted stop 10.3 dB under the foundation: added, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
+| 14 | musette | **4** | the Debain's Musette 16', treble (bit 14): added, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 
 ### 21 Accordion, 23 Tango Accordion -- the accordion's reed banks (no stops: GM gives each box its own program)
 

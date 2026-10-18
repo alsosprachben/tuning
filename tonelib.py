@@ -6635,6 +6635,12 @@ class FreeReedProperties(SynthProperties):
         return got
 
     def series_volume(self, harmonic):
+        # A REGISTER WITH MEASURED TABLES answers from them, as the organ's
+        # recorded ranks do (mode_gains_points: the harmonium's Debain
+        # registers, examples/debain_registers.py): the flow model is the
+        # stand-in for a reed nobody recorded
+        if self.mode_gains is not None:
+            return SynthProperties.series_volume(self, harmonic)
         if self.max_harmonic and harmonic > self.max_harmonic:
             return 0.0
         series = self._reed_series()
@@ -6681,8 +6687,8 @@ class ReedOrganFreeProperties(FreeReedProperties):
 
     THE STOPS HAVE THEIR OWN ADDRESS. On the pipe organ and the harpsichord CC11
     is half the stop word; on a free reed CC11 is the bellows -- the expression
-    -- so here the stop word is CC43 (low seven) and CC44 (high seven), which GM
-    files do not send. A GM file therefore keeps its expression and plays the
+    -- so here the stop word is CC43 (low seven), CC44 (the next seven) and
+    CC45 (the Debain's three more), which GM files do not send. A GM file therefore keeps its expression and plays the
     default registration, register 1 in both halves, which is exactly the single
     8-foot rank this voice was before it had stops.
     """
@@ -6730,7 +6736,7 @@ class ReedOrganFreeProperties(FreeReedProperties):
     # are the bellows and the player's, as they were before it had stops. The
     # blanket "registerable answers nothing" rule is the pipe organ's.
     answers_sound_controls = True
-    stop_word_ccs = (43, 44)
+    stop_word_ccs = (43, 44, 45)
     # Registers 1 in both halves: the plain 8-foot, what GM 20 has always been.
     default_stops = (1 << 0) | (1 << 4)
     # THE 4-FOOT IS TUNED REED BY REED, NOT TO THE OCTAVE: donyaquick's
@@ -6764,15 +6770,47 @@ class ReedOrganFreeProperties(FreeReedProperties):
 class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     """2 Bourdon, 16-foot: dark and weighty, the double diapason under the
     foundation."""
-    reed_gate = 0.90            # 0.17 under the foundation, as it was
-    bore_corner_hz = 3000.0
+    mode_gains_points = (
+        (41.2, (0.79087, 0.78627, 1.00000, 0.70042, 0.90987, 0.18211, 0.62993, 0.30076, 0.60859, 0.14455, 0.50256, 0.73787, 0.17727, 0.15111, 0.04326, 0.06509, 0.02700, 0.08807, 0.01769, 0.18450, 0.23182, 0.31678, 0.11026, 0.10729, 0.09048, 0.09183, 0.08908, 0.09111, 0.08042, 0.07478, 0.07110, 0.06660)),
+        (73.4, (0.29507, 0.37948, 0.45948, 0.18972, 0.29933, 0.20004, 0.49534, 0.35187, 1.00000, 0.24254, 0.26426, 0.58623, 0.14519, 0.22876, 0.30671, 0.17663, 0.12502, 0.14289, 0.17634, 0.10010, 0.09128, 0.08945, 0.12355, 0.12040, 0.11704, 0.11349, 0.10472, 0.09450, 0.09139, 0.08562, 0.07798, 0.07238)),
+        (130.8, (0.23038, 0.48421, 0.36515, 0.08104, 0.20091, 0.06326, 0.22368, 0.23329, 0.16764, 0.05971, 0.17588, 1.00000, 0.03183, 0.03039, 0.09221, 0.02044, 0.01805, 0.01636, 0.01524, 0.01429, 0.01395, 0.01366, 0.01307, 0.01241, 0.01169, 0.01110, 0.01035, 0.00961, 0.00871, 0.00801, 0.00743, 0.00687)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- +0.9 dB re its Cor anglais on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0623007
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 36.0
+    speech_harmonic_exp = -0.3
+    attack_time = 0.012
 
 
 class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     """2 Clarinette, treble 16-foot: dark and covered. Not hollow -- see above:
     that is the cavity this model lacks."""
-    reed_gate = 0.85            # 0.22 under the foundation, as it was
-    bore_corner_hz = 2600.0
+    mode_gains_points = (
+        (233.1, (0.33545, 0.83995, 1.00000, 0.69789, 0.56003, 0.72236, 0.56261, 0.24435, 0.29147, 0.18326, 0.21565, 0.18495, 0.15403, 0.13013, 0.10654, 0.08842, 0.07526, 0.06489, 0.05787, 0.05285, 0.04910, 0.04582, 0.04303, 0.03989, 0.03635, 0.03358, 0.02967, 0.02647, 0.02386, 0.02106, 0.01901, 0.01749)),
+        (440.0, (1.00000, 0.40501, 0.62785, 0.35200, 0.26451, 0.26892, 0.23524, 0.20288, 0.16464, 0.13688, 0.11131, 0.09077, 0.07258, 0.05662, 0.04491, 0.03672, 0.03023, 0.02566, 0.02262, 0.02006, 0.01834, 0.01691, 0.01566, 0.01408, 0.01259, 0.01142, 0.01405, 0.01263, 0.01111, 0.01036, 0.00921, 0.00820)),
+        (784.0, (1.00000, 0.02831, 0.44500, 0.23683, 0.16151, 0.13379, 0.10438, 0.08423, 0.06480, 0.05138, 0.03954, 0.03119, 0.02397, 0.01789, 0.01287, 0.01009, 0.00753, 0.00615, 0.00484, 0.00422, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- +0.0 dB re its Flute on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0558778
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 36.0
+    speech_harmonic_exp = -0.6
+    attack_time = 0.012
 
 
 class HarmoniumClaironProperties(ReedOrganFreeProperties):
@@ -6786,17 +6824,154 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
 
 
 class HarmoniumHautboisProperties(ReedOrganFreeProperties):
-    """4 Basson / Hautbois, 8-foot: reedy and nasal, the treble's solo stop and
-    the bass's bassoon -- the shortest pulse and the most open case."""
-    reed_gate = 1.08            # the ceiling: the foundation sits just under it,
-    bore_corner_hz = 8000.0     # so its brightness is the case's, opened further
+    """4 Hautbois, treble 8-foot: reedy and nasal, the treble's solo stop --
+    the shortest pulse and the most open case."""
+    mode_gains_points = (
+        (466.2, (0.42095, 0.64169, 1.00000, 0.40274, 0.63228, 0.07692, 0.20464, 0.13918, 0.10264, 0.08353, 0.07258, 0.06303, 0.05297, 0.04206, 0.03356, 0.02756, 0.02334, 0.02057, 0.01843, 0.01643, 0.01668, 0.01388, 0.01188, 0.00704, 0.00629, 0.00578, 0.00374, 0.00328, 0.00288, 0.00388, 0.00339, 0.00317)),
+        (880.0, (0.70710, 0.33959, 1.00000, 0.14803, 0.10502, 0.07503, 0.04778, 0.03109, 0.02235, 0.01765, 0.01487, 0.01257, 0.01012, 0.00854, 0.00608, 0.00483, 0.00414, 0.00368, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363)),
+        (1568.0, (0.98450, 1.00000, 0.38052, 0.07844, 0.18459, 0.08369, 0.04850, 0.02919, 0.01917, 0.01081, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- +0.9 dB re its Flute on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0738428
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 24.0
+    speech_harmonic_exp = -0.6
+    attack_time = 0.035
+
+
+class HarmoniumBassonProperties(ReedOrganFreeProperties):
+    """4 Basson, bass 8-foot: the hautbois's bass half, the bassoon."""
+    mode_gains_points = (
+        (82.4, (0.34711, 1.00000, 0.36131, 0.10559, 0.09914, 0.04717, 0.04179, 0.03494, 0.02159, 0.09672, 0.13572, 0.03450, 0.02596, 0.01973, 0.00951, 0.00984, 0.01374, 0.01311, 0.00886, 0.00784, 0.00810, 0.00718, 0.00632, 0.00564, 0.00534, 0.00515, 0.00493, 0.00478, 0.00426, 0.00378, 0.00339, 0.00332)),
+        (146.8, (1.00000, 0.41154, 0.13705, 0.19878, 0.06320, 0.29919, 0.21270, 0.12406, 0.08331, 0.02073, 0.01870, 0.00883, 0.03518, 0.07242, 0.02099, 0.01586, 0.02101, 0.02239, 0.02309, 0.02134, 0.02068, 0.01845, 0.01625, 0.01399, 0.01264, 0.01216, 0.01150, 0.01041, 0.00885, 0.00781, 0.00739, 0.00690)),
+        (261.6, (1.00000, 0.96339, 0.78457, 0.33180, 0.68111, 0.78898, 0.27080, 0.46194, 0.36172, 0.48768, 0.19658, 0.17862, 0.11294, 0.13152, 0.10766, 0.09149, 0.07843, 0.07249, 0.06720, 0.06052, 0.05405, 0.04552, 0.03907, 0.03407, 0.03005, 0.02805, 0.02538, 0.02286, 0.01991, 0.01686, 0.01493, 0.01388)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- +0.2 dB re its Cor anglais on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0618676
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 24.0
+    speech_harmonic_exp = -0.3
+    attack_time = 0.012
+
+
+class HarmoniumCelesteProperties(ReedOrganFreeProperties):
+    """C Voix celeste, treble 16-foot: TWO ROWS of reeds, one tuned a little
+    off the other, so the stop beats on its own (stop_ranks' two ratios)."""
+    mode_gains_points = (
+        (233.1, (0.43025, 0.38095, 1.00000, 0.31804, 0.70123, 0.22395, 0.20407, 0.12901, 0.18087, 0.10358, 0.10811, 0.07348, 0.08911, 0.06303, 0.05238, 0.04435, 0.03778, 0.03232, 0.02960, 0.02686, 0.02500, 0.02364, 0.02209, 0.02070, 0.01900, 0.01754, 0.01555, 0.01411, 0.01270, 0.01119, 0.01012, 0.00918)),
+        (440.0, (0.40974, 0.19143, 1.00000, 0.33983, 0.33405, 0.31657, 0.26598, 0.22415, 0.18297, 0.15983, 0.12594, 0.10601, 0.07939, 0.06328, 0.05022, 0.04059, 0.03382, 0.02873, 0.02532, 0.02250, 0.02055, 0.01893, 0.01755, 0.01564, 0.01414, 0.01290, 0.01386, 0.01238, 0.01078, 0.00945, 0.00839, 0.00752)),
+        (784.0, (1.00000, 0.07129, 0.51868, 0.53533, 0.23448, 0.30263, 0.23909, 0.19277, 0.14758, 0.11665, 0.08977, 0.07080, 0.05440, 0.04186, 0.03127, 0.02455, 0.01918, 0.01577, 0.01088, 0.00947, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- -1.0 dB re its Flute on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0487447
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 36.0
+    speech_harmonic_exp = -0.6
+    attack_time = 0.035
+
+
+# ---- the Debain's registers this voice did not have ---------------------------
+# Jean-Pierre Silvestre's Debain (sources.md "Organs and free reeds") has three
+# more reed stops than the eight registers and celeste above: each recorded
+# key by key, so each added as the organ's recorded ranks were.
+class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
+    """V Violoncelle, bass 8-foot: the bass's string-toned solo."""
+    mode_gains_points = (
+        (82.4, (0.38720, 1.00000, 0.32942, 0.13913, 0.17825, 0.09780, 0.06577, 0.04662, 0.03132, 0.07453, 0.17051, 0.06183, 0.03007, 0.05447, 0.01889, 0.02413, 0.01668, 0.02133, 0.00772, 0.02026, 0.01471, 0.01708, 0.01488, 0.01369, 0.01280, 0.01251, 0.01185, 0.01130, 0.01027, 0.00913, 0.00818, 0.00805)),
+        (146.8, (1.00000, 0.29024, 0.30195, 0.26679, 0.11271, 0.48671, 0.28394, 0.05941, 0.03314, 0.02807, 0.06683, 0.00674, 0.06649, 0.03403, 0.04452, 0.02868, 0.03297, 0.02880, 0.03077, 0.02573, 0.02418, 0.02147, 0.01893, 0.01682, 0.01565, 0.01446, 0.01438, 0.01209, 0.01096, 0.00951, 0.00828, 0.00787)),
+        (261.6, (1.00000, 0.64579, 0.46173, 0.29589, 0.34601, 0.18364, 0.18031, 0.10394, 0.23781, 0.19044, 0.23244, 0.16010, 0.14095, 0.11840, 0.09760, 0.08285, 0.07114, 0.06593, 0.06027, 0.05522, 0.04856, 0.04173, 0.03505, 0.03056, 0.02703, 0.02522, 0.02279, 0.02046, 0.01786, 0.01524, 0.01338, 0.01239)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- +0.3 dB re its Cor anglais on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0720741
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.02
+
+
+class HarmoniumSourdineProperties(ReedOrganFreeProperties):
+    """S Sourdine, bass 8-foot: the muted bass, an accompaniment under a treble
+    solo."""
+    mode_gains_points = (
+        (82.4, (1.00000, 0.95847, 0.83620, 0.75158, 0.62677, 0.45090, 0.33627, 0.26384, 0.22702, 0.21110, 0.90004, 0.19836, 0.17919, 0.19081, 0.15268, 0.13890, 0.32157, 0.16727, 0.12914, 0.11604, 0.02880, 0.09640, 0.05905, 0.11468, 0.07425, 0.07141, 0.06735, 0.06247, 0.05599, 0.05030, 0.04630, 0.04501)),
+        (146.8, (0.83888, 0.97845, 0.80991, 0.66172, 0.52541, 0.38363, 1.00000, 0.25286, 0.23727, 0.16353, 0.18588, 0.04353, 0.24772, 0.26475, 0.14293, 0.11802, 0.11309, 0.10742, 0.10302, 0.09678, 0.11158, 0.07780, 0.06816, 0.06050, 0.05575, 0.05248, 0.04927, 0.04544, 0.03993, 0.03519, 0.03162, 0.03016)),
+        (261.6, (0.92096, 1.00000, 0.92418, 0.91649, 0.86857, 0.84153, 0.74955, 0.85987, 0.65514, 0.57142, 0.46161, 0.12634, 0.15894, 0.13648, 0.11365, 0.09739, 0.08591, 0.08046, 0.07513, 0.06773, 0.06095, 0.05222, 0.04500, 0.03969, 0.03554, 0.03331, 0.03039, 0.02733, 0.02411, 0.02067, 0.01838, 0.01743)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- -10.3 dB re its Cor anglais on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.0117977
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 36.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.02
+
+
+class HarmoniumMusetteProperties(ReedOrganFreeProperties):
+    """M Musette, treble 16-foot: the treble's soft reed."""
+    mode_gains_points = (
+        (233.1, (1.00000, 0.84514, 0.93519, 0.31287, 0.33747, 0.04565, 0.27376, 0.18386, 0.37905, 0.42870, 0.49397, 0.17417, 0.30886, 0.20213, 0.16460, 0.13705, 0.11699, 0.10089, 0.09110, 0.08458, 0.07941, 0.07546, 0.07064, 0.06617, 0.06127, 0.05680, 0.05124, 0.04650, 0.04210, 0.03768, 0.03368, 0.03075)),
+        (440.0, (0.28863, 0.05505, 0.61235, 0.81667, 1.00000, 0.55361, 0.52120, 0.49960, 0.32227, 0.26773, 0.21423, 0.17501, 0.13921, 0.11004, 0.08666, 0.06957, 0.05800, 0.04924, 0.04335, 0.03840, 0.03497, 0.03213, 0.02966, 0.02262, 0.02042, 0.01859, 0.01533, 0.01362, 0.01184, 0.00993, 0.00886, 0.00790)),
+        (784.0, (0.57770, 0.10636, 1.00000, 0.02902, 0.02904, 0.11490, 0.02243, 0.01817, 0.01388, 0.01107, 0.00850, 0.00675, 0.00518, 0.00334, 0.00202, 0.00160, 0.00099, 0.00081, 0.00134, 0.00117, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: the Debain's own balance -- -0.6 dB re its Flute on the same
+    # keys (debain_registers.py) -- held against ours
+    initial_gain = 0.053788
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 36.0
+    speech_harmonic_exp = -0.3
+    attack_time = 0.035
 
 
 # THE VOIX CELESTE'S DETUNE, in cents. EB1911 says only "not quite in unison";
-# the amount is a choice. +12 cents beats against the foundation at about 1.8 Hz
-# at middle C and proportionally faster above -- the slow shimmer the stop is
-# for, not a chorus.
-HARMONIUM_CELESTE_CENTS = 12.0
+# +12 was asserted. MEASURED (debain_registers.py --celeste): the Debain's
+# celeste drawn alone beats -- every harmonic's level swings at m times one
+# rate, h1-h6 agreeing to 0.01 Hz -- so the stop is TWO ROWS, the second this
+# far above the first: 10.5-18.6 cents key by key, median 15.4, about a line
+# from 16.3 at A4 falling 1.3 an octave (2.1 cents rms about it). A tuner's
+# pairs, not a law: three neighbours share one 1.87 Hz beat, as beats counted
+# would set them. Each key its own (HARMONIUM_CELESTE_BY_KEY); this the
+# nominal, for the stop's ratio.
+HARMONIUM_CELESTE_CENTS = 15.4
 
 # The split: EB1911 puts it "in the middle of the keyboard scale", each half
 # about two octaves and a half of a five-octave compass (C2 to C7 here). That
@@ -6806,29 +6981,50 @@ HARMONIUM_SPLIT = 65
 _BASS = (0, HARMONIUM_SPLIT - 1)
 _TREBLE = (HARMONIUM_SPLIT, 127)
 
+# THE VOIX CELESTE'S TWO ROWS, key by key (debain_registers.py --celeste)
+# (keys 83, 85, 89, 92, 93, 94, 95, 96: no steady rate read -- the line's)
+HARMONIUM_CELESTE_BY_KEY = {
+    65: 17.8,    66: 17.4,    67: 16.4,    68: 15.5,    69: 13.1,    70: 14.6,    71: 15.7,    72: 14.7,
+    73: 13.0,    74: 17.4,    75: 18.5,    76: 18.6,    77: 15.2,    78: 14.4,    79: 12.5,    80: 17.6,
+    81: 17.4,    82: 17.5,    83: 14.7,    84: 16.4,    85: 14.5,    86: 14.9,    87: 13.0,    88: 10.5,
+    89: 14.0,    90: 15.4,    91: 11.3,    92: 13.7,    93: 13.6,    94: 13.5,    95: 13.4,    96: 13.3,
+}
+
 # (name, footage ratio, gain, voice, dyn, pipe, key range). A ratio of None is
 # a stop that is not a reed -- it has a knob and a gate, and no pipes.
 ReedOrganFreeProperties.stop_ranks = [
     ("cor anglais 1", 1.0, 1.00, None, False, None, _BASS),
     ("bourdon 2",     0.5, 0.80, HarmoniumBourdonProperties, False, None, _BASS),
     ("clairon 3",     2.0, 1.20, HarmoniumClaironProperties, False, None, _BASS),
-    ("basson 4",      1.0, 0.85, HarmoniumHautboisProperties, False, None, _BASS),
+    ("basson 4",      1.0, 0.85, HarmoniumBassonProperties, False, None, _BASS),
     ("flute 1",       1.0, 1.00, None, False, None, _TREBLE),
     ("clarinette 2",  0.5, 0.80, HarmoniumClarinetteProperties, False, None, _TREBLE),
     ("fifre 3",       2.0, 1.20, HarmoniumClaironProperties, False, None, _TREBLE),
     ("hautbois 4",    1.0, 0.85, HarmoniumHautboisProperties, False, None, _TREBLE),
-    ("celeste",       0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 1200.0), 0.70,
-                      HarmoniumBourdonProperties, False, None, _TREBLE),
+    ("celeste",       (0.5, 0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 1200.0)), 0.70,
+                      HarmoniumCelesteProperties, False, None, _TREBLE),
     ("expression",    None, 0.0),
     ("percussion",    None, 0.0),
     ("tremolo",       None, 0.0),
+    # bits 12-14, the Debain's other three (above): past the fourteen bits
+    # CC43/44 carry, so the word gains CC45 (stop_word_ccs), as the organ's did
+    ("violoncelle",   1.0, 0.85, HarmoniumVioloncelleProperties, False, None, _BASS),
+    ("sourdine",      1.0, 0.85, HarmoniumSourdineProperties, False, None, _BASS),
+    ("musette",       0.5, 0.80, HarmoniumMusetteProperties, False, None, _TREBLE),
 ]
-# The panel's two key rows: the reeds on the digits, the three stops that are
-# not reeds on shift+digit.
+# THE CELESTE'S TWO ROWS AT EACH KEY: the first at the key's 16-foot, the
+# second its own measured cents above (mixture_ratios reads a composition by
+# the key's pitch, so each key its pair)
+ReedOrganFreeProperties.mixture_compositions = {"celeste": [
+    (440.0 * 2.0 ** ((_k - 69.5) / 12.0), (0.5, 0.5 * 2.0 ** (_c / 1200.0)))
+    for _k, _c in sorted(HARMONIUM_CELESTE_BY_KEY.items())]}
+# The panel's key rows: the reeds on the digits, the three stops that are not
+# reeds on shift+digit, the Debain's other three on Alt+digit.
 ReedOrganFreeProperties.stop_rows = [
     ["cor anglais 1", "bourdon 2", "clairon 3", "basson 4", "|",
      "flute 1", "clarinette 2", "fifre 3", "hautbois 4", "celeste"],
     ["expression", "percussion", "tremolo"],
+    ["violoncelle", "sourdine", "|", "musette"],
 ]
 
 
@@ -6899,8 +7095,15 @@ ReedOrganFreeProperties.percussion_attack_s = 0.003
 # tremolo_hz/tremolo_depth, which would hand the harmonium's CC1 a tremolo
 # knob. EB1911 says the flutter quickens with the pressure; this one runs at a
 # fixed rate, and has no pitch wobble.
-ReedOrganFreeProperties.stop_tremolo_hz = 5.5
-ReedOrganFreeProperties.stop_tremolo_depth = 0.22
+# ...MEASURED (debain_registers.py --tremolo): the Debain's Tremolo is its
+# Musette row with the flutter on (its ladder within 3.8 dB of the Musette's),
+# recorded key by key -- every harmonic's level swinging together (h1-h4 one
+# rate: a level, not a pitch) at 9.52 Hz, the median of 9.3-10.9 (quicker up
+# the treble), depth 0.25; ours on the Musette reads the same at the depth
+# below. The Debain's flutters its one row; this one, every reed drawn. (5.5
+# Hz, 0.22 were asserted)
+ReedOrganFreeProperties.stop_tremolo_hz = 9.52
+ReedOrganFreeProperties.stop_tremolo_depth = 0.2530
 
 
 class AccordionProperties(FormantBody, FreeReedProperties):
