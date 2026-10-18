@@ -3598,10 +3598,30 @@ class HarpsiLuteProperties(HarpsiBase):
     # of a short string (decay_register_slope 0.87 against 0.42).
     # (Its tilt refitted against the 8' refitted over the whole band -- the
     # ladder fit is a difference, so it moves with the 8': 7.13 -> 4.74 dB.)
+    #
+    # REFITTED, 2026-10-18, to the Harpsimachord (Pianobook; a Brown copy of a
+    # 1750 Kirckman), its Buff takes against its Lower -- English too, and a
+    # gentler buff: harmonics 3-12 down 6-10 dB in the treble where VCSL's
+    # are down 15-21, 2-8 in the tenor, the bass untouched as on VCSL.
+    #
+    #     lute minus 8', dB    m=2    4     6     8    10    12
+    #     bass, recorded       0.1  -0.4  -0.7   2.0  -1.1  -3.7
+    #     tenor                0.6  -1.4  -1.7  -3.6  -5.6  -6.4
+    #     treble              -1.0  -9.5  -6.3  -7.2 -10.6  -8.7
+    #
+    # The VCSL tilt (1.095, 0.370) is 7.18 dB rms from that; this one 2.20.
+    # Its tail is another string as VCSL's is -- 5.7 cents from the attack
+    # (|median| of 41 keys; the Lower's own, 1.9), sharp on some keys and
+    # flat on others, where VCSL's were nearly all sharp. And it dies 1.62x
+    # as fast as the 8' (median of 15 keys' early partials), not 2.1: decay_db
+    # set where the model's ratio is that (7 -> 1.21, 9 -> 1.48, 11 -> 1.74).
+    # The whole-envelope fit (envfit) wanted 4.3, a buffed string no faster
+    # than a plain one -- the tail again taken for the buffed string's own,
+    # with register_gain held at VCSL's (it is every stop's coupling).
     strike_point = 0.115
-    tonal_dampening = 1.095
-    octave_dampening = 0.370
-    decay_db = 14.46
+    tonal_dampening = 0.634
+    octave_dampening = 0.178
+    decay_db = 10.1
     harmonic_decay_db = 2.89
     harmonic_decay_dampening = 0.016   # its own: the buff takes the top fast, the 8''s m^0.6 law does not
     decay_register_slope = 0.823
@@ -3724,6 +3744,14 @@ class HarpsichordProperties(HarpsiBase):
     # irregular. (The Bezemer harpsichord on Hauptwerk.nl documents ~20 ms
     # between its two 8's -- the far end; tonelib.contact_offset_s.) The lute
     # is the lower 8''s jack on its buffed string.
+    # TRIED, 2026-10-18, on the Harpsimachord's coupled take (Lower+Upper+4,
+    # and Lower+4, against the single-jack takes): NOT RESOLVABLE THERE. Its
+    # attacks build over 20-30 ms (the pack's reverb and noise reduction), one
+    # quill's own harmonics reach half level 3-10 ms apart, its high band
+    # pulses once a period (the kink passing the bridge), and its releases
+    # ring 30-60 ms whatever is drawn. The 4' alone is on the even harmonics,
+    # but an even-over-odd onset estimator could not see a 6 ms shift of the
+    # 4' even on this model's own renders. Still asserted.
     jack_offset_ms = {"8": 0.0, "lute": 0.0, "8-upper": 3.0, "4": 6.0}
     jack_scatter_ms = 1.0
     # ...AND EACH JACK FALLS BACK ON ITS OWN: one release click a jack drawn at

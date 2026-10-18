@@ -6,6 +6,7 @@
     harpsi_4ft.py fit SAMPLES_DIR [--params=a,b] [--maxfev=N]
     harpsi_4ft.py ab MID OUTDIR [--secs=40]   before / fitted / level-matched, 8'+4'
     harpsi_4ft.py upper-ab MID OUTDIR [--secs=40]   the upper 8', Flemish-carried / English-fitted
+    harpsi_4ft.py lute-ab MID OUTDIR [--secs=40]    the lute, VCSL-fitted / Harpsimachord-fitted
 
 SAMPLES_DIR is Douglas Knisely's Harpsimachord (Pianobook) SamplesNR: a Brown
 copy of a 1750 Kirckman, every key F1-F6 in seven registrations, at A=415 and
@@ -184,19 +185,31 @@ def ab(mid, outdir, secs):
     rows[i4], P.string_choirs = fitted, choirs
 
 
-def upper_ab(mid, outdir, secs):
-    """The upper 8' (alone, then both 8's) before -- VCSL's Flemish pair
-    carried as a ratio -- and after, fitted to the Harpsimachord's Upper."""
+# BEFORE, per stop: the values each stood at before this pack refitted it
+BEFORE = {
+    # the upper 8', carried from VCSL's Flemish pair as a ratio
+    "upper": ("HarpsiUpperProperties", {"strike_point": 0.083, "decay_db": 4.62 * 1.31,
+                                        "harmonic_decay_db": 2.29 * 1.31},
+              (("8-upper", "upper"), ("8+8-upper", "both8"))),
+    # the lute, fitted to VCSL's English Lute set
+    "lute": ("HarpsiLuteProperties", {"tonal_dampening": 1.095, "octave_dampening": 0.370,
+                                      "decay_db": 14.46},
+             (("lute", "lute"),)),
+}
+
+
+def stop_ab(which, mid, outdir, secs):
+    """A stop on MID before (BEFORE[which]) and after (tonelib as it stands)."""
     import tonelib as T
     import harpsi_ab as AB
     os.makedirs(outdir, exist_ok=True)
-    U = T.HarpsiUpperProperties
-    after = {n: getattr(U, n) for n in ("strike_point", "decay_db", "harmonic_decay_db")}
-    before = {"strike_point": 0.083, "decay_db": 4.62 * 1.31, "harmonic_decay_db": 2.29 * 1.31}
+    cname, before, stops = BEFORE[which]
+    U = getattr(T, cname)
+    after = {n: getattr(U, n) for n in before}
     for name, vals in (("before", before), ("after", after)):
         for n, v in vals.items():
             setattr(U, n, v)
-        for stop, tag in (("8-upper", "upper"), ("8+8-upper", "both8")):
+        for stop, tag in stops:
             out = os.path.join(outdir, "harpsichord_%s_%s.wav" % (tag, name))
             AB.main(["harpsi_ab.py", "piece", mid, out, "--stop=" + stop, "--secs=%g" % secs])
             print(name, out, flush=True)
@@ -209,8 +222,8 @@ def main():
     opts = dict(a[2:].split("=", 1) for a in sys.argv[1:] if a.startswith("--") and "=" in a)
     if args[0] == "ab":
         return ab(args[1], args[2], float(opts.get("secs", 40)))
-    if args[0] == "upper-ab":
-        return upper_ab(args[1], args[2], float(opts.get("secs", 40)))
+    if args[0] in ("upper-ab", "lute-ab"):
+        return stop_ab(args[0][:-3], args[1], args[2], float(opts.get("secs", 40)))
     cmd, d = args[0], args[1]
     rec = measured(d)
     show("recorded: 8'+4' over 8', even over odd, dB (median +- iq/2)", rec)

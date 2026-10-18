@@ -42,6 +42,14 @@ CLASS = {"lute": "HarpsiLuteProperties", "8-upper": "HarpsiUpperProperties"}
 HOLD = 2.0
 
 
+def key_of(path):
+    """The key a file is named for: a note name (VCSL), or a bare MIDI number
+    (Pianobook's Harpsimachord, named by the A=440 number), or None."""
+    n = V.note_of(path)
+    stem = os.path.splitext(os.path.basename(path))[0]
+    return int(stem) if n is None and stem.isdigit() else n
+
+
 def pairs(ref_dir, stop_dir):
     """[(key, ref_path, stop_path)] keyed by the REF recording's measured pitch
     (VCSL's Flemish labels sit an octave under what sounds)."""
@@ -49,10 +57,7 @@ def pairs(ref_dir, stop_dir):
     byn = {}
     for d, k in ((ref_dir, 0), (stop_dir, 1)):
         for p in glob.glob(os.path.join(d, '*.wav')):
-            n = V.note_of(p)
-            stem = os.path.splitext(os.path.basename(p))[0]
-            if n is None and stem.isdigit():
-                n = int(stem)      # named by MIDI number (Pianobook's Harpsimachord)
+            n = key_of(p)
             if n is not None:
                 byn.setdefault(n, [None, None])[k] = p
     # THE SET'S OCTAVE, from its labels against what sounds: the median over
@@ -271,10 +276,10 @@ def fit_envelope(stop_dir, stop, opts):
     import tonelib as T
     cls = getattr(T, CLASS[stop])
     d0, h0 = cls.decay_db, cls.harmonic_decay_db
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(stop_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(stop_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(stop_dir, stop_dir)
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     rec = {}
     for n, p in sorted(files.items()):
         e = env_db(p, key_hz(n + shift))
@@ -318,10 +323,10 @@ def fit_envelope_nm(stop_dir, stop, opts):
     cls = getattr(T, CLASS[stop])
     names = opts.get("--params", "decay_db,decay_register_slope,register_gain").split(",")
     own = lambda n: T.HarpsichordProperties if n == "register_gain" else cls   # noqa: E731
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(stop_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(stop_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(stop_dir, stop_dir)
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     rec, rtail = {}, {}
     for n, p in sorted(files.items()):
         e = env_db(p, key_hz(n + shift))
@@ -396,10 +401,10 @@ def fit_spectrum(ref_dir, opts):
     from scipy.optimize import minimize
     cls = T.HarpsiBase
     names = opts.get("--params", "tonal_dampening,octave_dampening").split(",")
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(ref_dir, ref_dir)
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     rec = {}
     for n, p in sorted(files.items()):
         if single_note(p):
@@ -492,10 +497,10 @@ def fit_decay(ref_dir, opts):
     stop = opts.get("--stop", "8")
     cls = T.HarpsiBase if stop == "8" else getattr(T, CLASS[stop])
     names = opts.get("--params", "decay_db,harmonic_decay_db,harmonic_decay_dampening,decay_register_slope").split(",")
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(ref_dir, ref_dir)
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     rec = {}
     for n, p in sorted(files.items()):
         if single_note(p):
@@ -567,10 +572,10 @@ def fit_body(ref_dir, opts):
     import upright_fit as U
     cls = T.HarpsiBase
     C = np.sqrt(U.E3[:-1] * U.E3[1:])
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(ref_dir, ref_dir)
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     rec = {}
     for n, p in sorted(files.items()):
         if single_note(p):
@@ -655,10 +660,10 @@ def fit_pluck(ref_dir, opts):
     import tonelib as T
     import upright_fit as U
     cls = T.HarpsichordProperties
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(ref_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(ref_dir, ref_dir)
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     lo_key = int(opts.get("--from", 48))          # below, the partials fill the gaps
     rec, falls = {}, []
     for n, p in sorted(files.items()):
@@ -716,10 +721,10 @@ def fit_tail(stop_dir, stop, opts):
     """register_gain against the stop's tail, key by key (`tail`)."""
     import glob
     import tonelib as T
-    files = {V.note_of(p): p for p in glob.glob(os.path.join(stop_dir, "*.wav"))
-             if V.note_of(p) is not None}
+    files = {key_of(p): p for p in glob.glob(os.path.join(stop_dir, "*.wav"))
+             if key_of(p) is not None}
     P = pairs(stop_dir, stop_dir)                 # the set's octave, by its labels
-    shift = (P[0][0] - V.note_of(P[0][1])) if P else 0
+    shift = (P[0][0] - key_of(P[0][1])) if P else 0
     rec = {}
     for n, p in sorted(files.items()):
         k = n + shift
