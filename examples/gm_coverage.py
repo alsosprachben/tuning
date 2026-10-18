@@ -615,8 +615,8 @@ STOP_RATED = [
  ((20,), "the harmonium's registers (CC43/44/45 stop word: bass | treble at E4/F4)", {
     "cor anglais 1": (4, "the bass 8' foundation: donyaquick's harmonium, 32 keys, the series within 2.5 dB rms"),
     "flute 1":       (4, "the treble 8' foundation, as cor anglais 1"),
-    "clairon 3":     (4, "the bass 4': the take's other reed, each key 0.4-12 cents sharp of its octave, voiced as the foundation at 1.2x its level"),
-    "fifre 3":       (4, "the treble 4', as clairon 3"),
+    "clairon 3":     (4, "the bass 4': its series and speech the Debain's Clairon recorded alone (as bourdon 2), its level and its cents (each key 0.4-12 sharp of its octave) donyaquick's 8'+4' take's -- where the 8'+4' had fitted its brightness only as a sum: against that take the evens h2-h8 now within 2.1 dB (were 5.0), h10-h12 5-9 dB dark (the Debain's cut)"),
+    "fifre 3":       (4, "the treble 4', as clairon 3 (the Debain's Fifre, its top thirteen keys broken: those carry the keys below)"),
     "bourdon 2":     (4, "the bass 16': the Debain's Bourdon (Silvestre's set), its difference from the Debain's foundation key by key carried onto ours as tables at three anchors (the takes are low-passed and denoised: each read over its live band), its slow speech (36 cycles) and its level by the set's balance (examples/debain_registers.py). Ben, examples/harmonium_registers_demo.py: they sound great"),
     "clarinette 2":  (4, "the treble 16': the Debain's Clarinette, HOLLOW at last (h3 over h2: the cavity the flow model could not make), as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great"),
     "basson 4":      (4, "the bass 8' solo: the Debain's Basson, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great"),

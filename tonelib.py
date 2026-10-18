@@ -6821,6 +6821,45 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
     take's 4' fundamental (its h2) stands 3 dB over the 8''s. With both, the
     series to h12 within 2.7 dB rms. Sharp of the octave key by key
     (rank_detune)."""
+    mode_gains_points = (
+        (164.8, (1.00000, 0.43185, 0.09205, 0.01560, 0.04418, 0.06480, 0.10990, 0.03304, 0.01831, 0.10867, 0.04915, 0.02438, 0.01227, 0.03911, 0.01615, 0.01419, 0.01409, 0.01434, 0.01432, 0.01414, 0.01455, 0.01445, 0.01464, 0.01450, 0.01459, 0.01449, 0.01470, 0.01479, 0.01474, 0.01489, 0.01479, 0.01506)),
+        (293.7, (0.44848, 0.46155, 1.00000, 0.22319, 0.37524, 0.02025, 0.29218, 0.03563, 0.04332, 0.03169, 0.02518, 0.02054, 0.01932, 0.01509, 0.01196, 0.01074, 0.01073, 0.01044, 0.01060, 0.00952, 0.00953, 0.00971, 0.01029, 0.01038, 0.00946, 0.00940, 0.00950, 0.00932, 0.00935, 0.00938, 0.00935, 0.01259)),
+        (523.3, (0.19400, 0.03367, 1.00000, 0.15682, 0.15469, 0.02679, 0.04752, 0.03306, 0.03536, 0.02289, 0.01762, 0.01291, 0.01071, 0.00897, 0.00667, 0.00549, 0.00558, 0.00560, 0.00563, 0.00691, 0.00693, 0.00693, 0.00647, 0.00654, 0.00859, 0.00870, 0.00872, 0.03295, 0.03338, 0.03386, 0.03467, 0.00489)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: HELD where donyaquick's 8'+4' take set it (debain_registers.py
+    # --hold-level): the Debain fitted its series and speech only
+    initial_gain = 0.0704306
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 24.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.012
+
+
+class HarmoniumFifreProperties(HarmoniumClaironProperties):
+    """3 Fifre, treble 4-foot: the clairon's treble half."""
+    mode_gains_points = (
+        (932.3, (1.00000, 0.17168, 0.22348, 0.08204, 0.07793, 0.03866, 0.03437, 0.01771, 0.01706, 0.01397, 0.01092, 0.00958, 0.00784, 0.00770, 0.00642, 0.00527, 0.00607, 0.00611, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459)),
+        (1661.2, (1.00000, 0.01343, 0.07121, 0.01205, 0.00498, 0.00419, 0.00338, 0.00047, 0.00144, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071)),
+    )
+    mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
+    mode_gains_low = None
+    max_harmonic = 32
+    bore_corner_hz = 0.0
+    # its own speech and decay, not the host's (blockrender's rank_is_pipe)
+    rank_is_pipe = True
+    # LEVEL: HELD where donyaquick's 8'+4' take set it (debain_registers.py
+    # --hold-level): the Debain fitted its series and speech only
+    initial_gain = 0.0634428
+    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
+    speech_cycles = 36.0
+    speech_harmonic_exp = 0.0
+    attack_time = 0.012
 
 
 class HarmoniumHautboisProperties(ReedOrganFreeProperties):
@@ -6999,7 +7038,7 @@ ReedOrganFreeProperties.stop_ranks = [
     ("basson 4",      1.0, 0.85, HarmoniumBassonProperties, False, None, _BASS),
     ("flute 1",       1.0, 1.00, None, False, None, _TREBLE),
     ("clarinette 2",  0.5, 0.80, HarmoniumClarinetteProperties, False, None, _TREBLE),
-    ("fifre 3",       2.0, 1.20, HarmoniumClaironProperties, False, None, _TREBLE),
+    ("fifre 3",       2.0, 1.20, HarmoniumFifreProperties, False, None, _TREBLE),
     ("hautbois 4",    1.0, 0.85, HarmoniumHautboisProperties, False, None, _TREBLE),
     ("celeste",       (0.5, 0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 1200.0)), 0.70,
                       HarmoniumCelesteProperties, False, None, _TREBLE),

@@ -2,7 +2,7 @@
 """The harmonium's registers (GM 20) fitted to the Debain's, and written into
 their classes in tonelib.py.
 
-    python3 -I examples/debain_registers.py [--stop=NAME ...] [--dry]
+    python3 -I examples/debain_registers.py [--stop=NAME ...] [--dry] [--hold-level]
     python3 -I examples/debain_registers.py --celeste [--dry]
     python3 -I examples/debain_registers.py --tremolo [--dry]
     python3 -I examples/debain_registers.py --survey
@@ -418,12 +418,21 @@ def ours_level(stop, side):
                                   for k in LEVEL_KEYS[side]]))
 
 
-def fit_level(stop):
+def fit_level(stop, hold=None):
+    """The Debain's balance -- or, with HOLD (dB re our foundation, measured
+    before the fit), ours kept where it was: the 4''s level is donyaquick's
+    take's, measured with its 8' (--hold-level)."""
     side = half(stop)
     ref = FOUNDATION[side]
     rec_d = rec_level(stop, side) - rec_level(ref, side)
     ref_ours = ours_level(ref, side)
     cls = rank_class(stop)
+    if hold is not None:
+        for _ in range(2):
+            cls.initial_gain *= 10 ** (((ref_ours + hold) - ours_level(stop, side)) / 20.0)
+        print("  level: HELD at %+.1f dB re our %s (the Debain's %+.1f)" % (
+            ours_level(stop, side) - ref_ours, ref, rec_d), flush=True)
+        return None
     for _ in range(2):
         d = (ref_ours + rec_d) - ours_level(stop, side)
         cls.initial_gain *= 10 ** (d / 20.0)
@@ -446,9 +455,12 @@ def body(stop, rec_d):
               "    bore_corner_hz = 0.0",
               "    # its own speech and decay, not the host's (blockrender's rank_is_pipe)",
               "    rank_is_pipe = True",
-              "    # LEVEL: the Debain's own balance -- %+.1f dB re its %s on the same" % (
-                  rec_d, FOUNDATION[half(stop)].split()[0].replace("cor", "Cor anglais").replace("flute", "Flute")),
-              "    # keys (debain_registers.py) -- held against ours",
+              ("    # LEVEL: the Debain's own balance -- %+.1f dB re its %s on the same" % (
+                  rec_d, FOUNDATION[half(stop)].split()[0].replace("cor", "Cor anglais").replace("flute", "Flute"))
+               if rec_d is not None else
+               "    # LEVEL: HELD where donyaquick's 8'+4' take set it (debain_registers.py"),
+              ("    # keys (debain_registers.py) -- held against ours" if rec_d is not None else
+               "    # --hold-level): the Debain fitted its series and speech only"),
               "    initial_gain = %.6g" % cls.initial_gain,
               "    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)",
               "    speech_cycles = %r" % cls.speech_cycles,
@@ -713,9 +725,11 @@ def main(argv):
     for stop in stops or FIT:
         cls = rank_class(stop)
         print("\n== %s (%s, %s)" % (stop, cls.__name__, FOLDER[stop]), flush=True)
+        hold = (ours_level(stop, half(stop)) - ours_level(FOUNDATION[half(stop)], half(stop))
+                if "--hold-level" in argv else None)
         fit_tables(stop)
         fit_speech(stop)
-        rec_d = fit_level(stop)
+        rec_d = fit_level(stop, hold)
         text = body(stop, rec_d)
         if dry:
             print(text)

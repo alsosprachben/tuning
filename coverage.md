@@ -647,11 +647,11 @@ Controls are the rest of the console that are not stops.
 |---|---|---|---|
 | 0 | cor anglais 1 | **4** | the bass 8' foundation: donyaquick's harmonium, 32 keys, the series within 2.5 dB rms |
 | 1 | bourdon 2 | **4** | the bass 16': the Debain's Bourdon (Silvestre's set), its difference from the Debain's foundation key by key carried onto ours as tables at three anchors (the takes are low-passed and denoised: each read over its live band), its slow speech (36 cycles) and its level by the set's balance (examples/debain_registers.py). Ben, examples/harmonium_registers_demo.py: they sound great |
-| 2 | clairon 3 | **4** | the bass 4': the take's other reed, each key 0.4-12 cents sharp of its octave, voiced as the foundation at 1.2x its level |
+| 2 | clairon 3 | **4** | the bass 4': its series and speech the Debain's Clairon recorded alone (as bourdon 2), its level and its cents (each key 0.4-12 sharp of its octave) donyaquick's 8'+4' take's -- where the 8'+4' had fitted its brightness only as a sum: against that take the evens h2-h8 now within 2.1 dB (were 5.0), h10-h12 5-9 dB dark (the Debain's cut) |
 | 3 | basson 4 | **4** | the bass 8' solo: the Debain's Basson, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 | 4 | flute 1 | **4** | the treble 8' foundation, as cor anglais 1 |
 | 5 | clarinette 2 | **4** | the treble 16': the Debain's Clarinette, HOLLOW at last (h3 over h2: the cavity the flow model could not make), as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
-| 6 | fifre 3 | **4** | the treble 4', as clairon 3 |
+| 6 | fifre 3 | **4** | the treble 4', as clairon 3 (the Debain's Fifre, its top thirteen keys broken: those carry the keys below) |
 | 7 | hautbois 4 | **4** | the treble 8' solo: the Debain's Hautbois, as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 | 8 | celeste | **4** | the Debain's Voix celeste 16: TWO ROWS beating on their own, 10.5-18.6 cents apart key by key (median 15.4; every harmonic's swing at m times one rate), its series as bourdon 2. Ben, examples/harmonium_registers_demo.py: they sound great |
 | 9 | expression | **2** | the reservoir shut, the feet the wind: brightness with pressure, asserted |
