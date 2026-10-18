@@ -50,6 +50,9 @@ def pairs(ref_dir, stop_dir):
     for d, k in ((ref_dir, 0), (stop_dir, 1)):
         for p in glob.glob(os.path.join(d, '*.wav')):
             n = V.note_of(p)
+            stem = os.path.splitext(os.path.basename(p))[0]
+            if n is None and stem.isdigit():
+                n = int(stem)      # named by MIDI number (Pianobook's Harpsimachord)
             if n is not None:
                 byn.setdefault(n, [None, None])[k] = p
     # THE SET'S OCTAVE, from its labels against what sounds: the median over
@@ -783,6 +786,17 @@ def main(argv):
     mb, mr = model(keys, stop, tmp, cache)
     show("MODEL as it stands (%s)" % ", ".join("%s %.3f" % (n, v) for n, v in zip(names, x0)), mb, mr)
     print("  ladder rms %.2f dB" % err(mb, rb))
+    if "--grid" in opts:
+        # --grid=name:v1,v2,... -- a bounded scan, for a landscape the simplex
+        # cannot walk: two plucking points' combs put their nulls at different
+        # harmonics, and the difference jumps 30 dB as one crosses a harmonic
+        name, vals = opts["--grid"].split(":")
+        for v in [float(u) for u in vals.split(",")]:
+            setattr(cls, name, v)
+            mb, mr = model(keys, stop, tmp, cache)
+            show("MODEL %s %.4f" % (name, v), mb, mr)
+            print("  ladder rms %.2f dB" % err(mb, rb), flush=True)
+        return 0
     seen = {}
 
     def f(x):

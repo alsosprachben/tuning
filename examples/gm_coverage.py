@@ -560,8 +560,8 @@ def drum_set_table():
 STOP_RATED = [
  ((6,), "the harpsichord's registers (CC11 stop word)", {
     "8":       (4, "the lower 8': VCSL's English harpsichord over the whole band -- ladder, body, decay as m^0.6, partials to 16 kHz, the quill's catch before it slips -- and a string among three: the key's other choirs answer through the bridge (register.py), each its own cents and wire"),
-    "8-upper": (4, "VCSL's Flemish harpsichord, each 8' recorded alone: plucked nearer the nut (comb 0.087 against 0.120, carried as the ratio, 0.083) and dying 1.31x as fast; its ladder could not be resolved from the pair and is the 8''s. Plucks ~3 ms after the lower 8' (asserted: no coupled recording)"),
-    "4":       (2, "its own string at twice the pitch -- its decay and ladder at that pitch -- on its own bridge (half the coupling, asserted). No recording of it"),
+    "8-upper": (4, "the Harpsimachord (Pianobook, a Kirckman copy), its Upper against its Lower: within +-3 dB at every harmonic, so plucked where the lower 8' is (0.115; the Flemish pair's ratio, 0.083, was 13.1 dB rms off, now 3.1) and dying 1.12x as fast (11 keys). Plucks ~3 ms after the lower 8' (asserted: no coupled recording)"),
+    "4":       (4, "the Harpsimachord's Lower+4 against its Lower, the 4' read on the 8''s even harmonics against the odd ones beside them: plucked at 0.21 (twice the 8''s fraction), darker, dying faster (2.89 -> 1.62 dB rms); level 0.57 from the takes' totals (+0.9 dB), not the ladder's 1.05 -- Ben, A/B: \"Levelled sounds more natural\". Its own bridge (half the coupling, asserted)"),
     "lute":    (4, "VCSL's English Lute set against its Normal: the buff dulls the treble and spares the bass (4.7 dB), the buffed string dies fast (0.72 log rate), and its tail is the other 8' answering, which fitted the register's coupling; the pad damps choir A's string whichever jack plucks it"),
   }, []),
  ((16, 17, 18), "the tonewheel's nine drawbars", {

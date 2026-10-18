@@ -3280,7 +3280,7 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     # Found by building a registration demo, which is what demos are for.
     #
     # The relative balance between ranks is stop_ranks' own gains (1.00, 0.82,
-    # 0.58, 0.50) and belongs there, not in an accident of which class happened
+    # 0.57, 0.50) and belongs there, not in an accident of which class happened
     # to be normalised.
     initial_gain = 0.3142260371
 
@@ -3534,18 +3534,26 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
 class HarpsiUpperProperties(HarpsiBase):
     """Upper-manual 8': the jack plucks very close to the nut, so the comb nulls
     start high and the low harmonics are weak -- the classic nasal, reedy colour."""
-    # MEASURED, on VCSL's Flemish harpsichord, recorded one 8' at a time (its
-    # High and Low sets: the same pitch, labelled an octave under it). The
-    # High is plucked nearer the nut -- comb 0.087 (1/11.5) against the Low's
-    # 0.120 (1/8.3) -- so it is the upper 8'. Carried to this instrument's
-    # 8' (0.115) as that ratio: 0.083. The 1/22 that stood here was asserted,
-    # twice as near the nut as the Flemish plucks.
-    strike_point = 0.083
+    # FITTED to an ENGLISH double, as this voice's 8' is: Knisely's
+    # Harpsimachord (Pianobook; a Brown copy of a 1750 Kirckman), its Upper
+    # takes against its Lower -- one instrument, one room, one EQ chain
+    # (examples/harpsi_fit.py fit --stop=8-upper --grid=strike_point:...).
+    # The two are within +-3 dB at every harmonic to the 12th, no tilt and no
+    # comb between them: the two 8' rows stand side by side and pluck at
+    # nearly one point -- "slightly more nasal", its maker says, and no more.
+    # Scanned (the combs' nulls cross harmonics, so the simplex cannot walk
+    # it): 0.095 7.4 dB rms, 0.105 4.3, 0.110 5.2, 0.115 3.1 -- the lower's own.
+    #
+    # This stood at 0.083, carried from VCSL's FLEMISH pair, recorded one 8'
+    # at a time, whose High is plucked well nearer the nut (comb 0.087 against
+    # the Low's 0.120): 13.1 dB rms here, its nulls 30-50 dB off at m=8-12.
+    # The English instrument's 8's differ in their strings, not their pluck.
+    strike_point = 0.115
     tonal_dampening = 0.756
-    # ...and it dies 1.31x as fast as the Low (median of 14 keys, room-free:
-    # one instrument, one room), on the 8''s decay law
-    decay_db = 4.62 * 1.31
-    harmonic_decay_db = 2.29 * 1.31
+    # ...and it dies 1.12x as fast as the Lower (median of the 11 keys whose
+    # decay reads on both takes; the Flemish pair's was 1.31), on the 8''s law
+    decay_db = 4.62 * 1.12
+    harmonic_decay_db = 2.29 * 1.12
     # A REGISTER IS ITS OWN ROW OF JACKS, so its decay and its quill's tick are
     # its own and not the 8''s -- borrowing the spectrum only, as an organ's
     # cross-family stop does, left every register ringing exactly as long as
@@ -3604,6 +3612,40 @@ class HarpsiLuteProperties(HarpsiBase):
     chiff_volume = 0.30
 
 
+class HarpsiFourProperties(HarpsiBase):
+    """The 4' choir: its own row of strings an octave up, half as long, on its
+    own bridge -- its pluck, its ladder and its decay its own."""
+    rank_is_pipe = True               # its decay is its own (see HarpsiUpperProperties)
+    # FITTED to Knisely's Harpsimachord (Pianobook: a Brown copy of a 1750
+    # Kirckman), its Lower 8' takes against its Lower 8' + 4' -- one
+    # instrument, one room, one EQ chain, so the take over the take is free of
+    # all three. The 4' lands only on the 8''s even harmonics; the odd ones
+    # either side are the same string plucked twice and take out the take's
+    # own difference (examples/harpsi_4ft.py):
+    #
+    #     even over odd, dB    n=1    2   3-4  5-8 | late - early (0.8-1.6 s)
+    #     bass, recorded       3.6  4.5  8.4  4.9 | -2.3 -4.3 -3.0 -1.4
+    #     tenor                5.1  9.3  5.3  5.2 | -0.7 -6.5 -1.9 -5.4
+    #     treble               0.3  1.1  2.1  1.4 |  3.8 -3.8  1.8 -1.4
+    #
+    # PLUCKED AT TWICE THE 8''s FRACTION -- 0.21 against 0.115: the jacks
+    # stand in one row across strings half as long. Darker per harmonic than
+    # the 8' (tonal_dampening 0.52), and dying faster: decay_db 12.4 at its
+    # own pitch. The 8''s values gave 2.89 dB rms; these, 1.62.
+    #
+    # ITS LEVEL IS THE TOTAL'S, NOT THE LADDER'S. Even over odd, the fit puts
+    # the 4' as loud as the 8' (1.05) -- against THIS instrument's 8' evens,
+    # which are weaker against its fundamental than ours (VCSL's English). The
+    # recording's 8'+4' is 0.9 dB over its 8' (61 keys, unnormalised takes);
+    # 0.57 matches that, 1.05 was 2.5 dB over. Ben, A/B on BWV 847: "Levelled
+    # sounds more natural." (stop_ranks 0.57; it stood at an asserted 0.58.)
+    strike_point = 0.2099
+    tonal_dampening = 0.5213
+    decay_db = 12.43
+    max_partial_hz = 16000.0
+    partial_phase_spread = 1.0
+
+
 class HarpsichordProperties(HarpsiBase):
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
@@ -3621,7 +3663,7 @@ class HarpsichordProperties(HarpsiBase):
     stop_ranks = [
         ("8",       1.0, 1.00),
         ("8-upper", 1.0, 0.82, HarpsiUpperProperties),
-        ("4",       2.0, 0.58),
+        ("4",       2.0, 0.57, HarpsiFourProperties),
         ("lute",    1.0, 0.50, HarpsiLuteProperties),
     ]
     crescendo_order = ["8", "8-upper", "4", "lute"]
@@ -3640,7 +3682,7 @@ class HarpsichordProperties(HarpsiBase):
     # within a cent: there the plucked string drowns it).
     #
     # (name, footage ratio, the class whose string it is -- None, this one)
-    string_choirs = (("A", 1.0, None), ("B", 1.0, HarpsiUpperProperties), ("C", 2.0, None),
+    string_choirs = (("A", 1.0, None), ("B", 1.0, HarpsiUpperProperties), ("C", 2.0, HarpsiFourProperties),
                      ("A~", 1.0, HarpsiLuteProperties))
     rank_choirs = {"8": "A", "8-upper": "B", "4": "C", "lute": "A~"}
     # THE BUFF IS ON A STRING, NOT A JACK. The lute stop presses a pad on
