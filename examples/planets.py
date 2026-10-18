@@ -2,6 +2,14 @@
 """Holst, The Planets, the whole suite -- one clean pass a movement.
 
     python3 examples/planets.py [OUTDIR] [--only=mars,venus,...]   # default ~/Downloads/planets
+    python3 examples/planets.py [OUTDIR] --714 [--only=...]          # 7.1.4 MPEG-H beds
+
+--714 makes each movement a 7.1.4 bed for Seth's room (examples/brother_714.yaml)
+instead of an mp3: the same MIDI and settings, rendered as objects dry of
+reflections and as stereo, then through examples/immersive.py, which gives the
+direct sound, the hall's first reflections placed in direction, and the tail.
+Neptune goes through examples/neptune_714.py. 576 kbit/s; Neptune's nine
+minutes need 448 to fit the 30 MiB upload.
 
 Every movement from classicalmidi.co.uk (sources below), read part by part
 by mt32mux -- which maps an MT-32's velocities to GM by default (3/4 v + 32,
@@ -75,6 +83,28 @@ def movement(out, num, name, title, url):
     return mp3
 
 
+def movement_714(out, num, name, title, url):
+    d = os.path.join(out, name)
+    os.makedirs(d, exist_ok=True)
+    P = lambda f: os.path.join(d, f)       # noqa: E731
+    if name == "neptune":
+        run([sys.executable, os.path.join(HERE, "examples", "neptune_714.py"), d])
+        return P("neptune.mpegh.mp4")
+    src = P(name + ".mid")
+    if not os.path.exists(src):
+        run(["curl", "-sfL", "--max-time", "60", "-A", "Mozilla/5.0", "-o", src, SITE + url])
+    run([sys.executable, os.path.join(HERE, "mt32mux.py"), src, P(name + "_mux.mid")])
+    env = {"TUNING_ROOM": ROOM, "TUNING_WET": WET, "TUNING_MASTER_DB": MASTER_DB}
+    br = os.path.join(HERE, "blockrender.py")
+    run([sys.executable, br, P(name + "_mux.mid"), P(name + ".dry.wav"), TUNER], env)
+    run([sys.executable, br, P(name + "_mux.mid"), P(name + ".unused.wav"), TUNER,
+         "--objects", P("objects"), "--by-source", "--no-reflect"], env)
+    run([sys.executable, os.path.join(HERE, "examples", "immersive.py"), P("objects"),
+         P(name + ".dry.wav"), d, os.path.join(HERE, "examples", "brother_714.yaml"),
+         "--room", ROOM, "--br", "576000", "--clean"], env)
+    return P(name + ".mpegh.mp4")
+
+
 def main(argv):
     args = [a for a in argv[1:] if not a.startswith("--")]
     out = args[0] if args else os.path.expanduser("~/Downloads/planets")
@@ -84,7 +114,8 @@ def main(argv):
         if only and name not in only:
             continue
         print("== %s %s" % (num, title), flush=True)
-        print("  -> %s" % movement(out, num, name, title, url), flush=True)
+        go = movement_714 if "--714" in argv else movement
+        print("  -> %s" % go(out, num, name, title, url), flush=True)
     return 0
 
 
