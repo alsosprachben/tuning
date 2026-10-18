@@ -19,7 +19,7 @@ EAR to a 7.1.4 bed and on to MPEG-H.
 Coordinates. The model puts the listener at the origin with +x right, +y
 forward and +z up, in metres. ADM's polar convention has azimuth 0 ahead and
 **positive to the LEFT**, so the sign flips; elevation is above the horizontal;
-distance is normalised against a reference rather than given in metres.
+distance is 1, on the speaker sphere (see polar).
 
 Usage:
     python3 admbwf.py OBJECTS_DIR OUT.wav [--bits 24] [--name "..."]
@@ -52,11 +52,19 @@ def polar(x, y, z, reference):
     Azimuth is positive anti-clockwise -- to the left -- where the model counts
     x positive to the right, so it is negated. Getting that backwards mirrors
     the whole stage and is not obvious from a spectrum.
+
+    DISTANCE IS 1, THE SPEAKER SPHERE, not the range over `reference`. A
+    renderer reads distance below 1 as a source INSIDE the array and widens it
+    (EAR's extent_mod: 360 degrees at 0). The range here, the 2 m stage over
+    the 12 m radiation distance, is about 0.19, which spread every point object
+    about 160 degrees -- each instrument's direct sound over half the room
+    (an impulse at x = -1 m lit every speaker). How far away a source is lives
+    in its level and its room, not in this number.
     """
     r = math.sqrt(x * x + y * y + z * z) or 1e-9
     az = math.degrees(math.atan2(-x, y))
     el = math.degrees(math.asin(max(-1.0, min(1.0, z / r))))
-    return az, el, max(0.0, min(1.0, r / reference if reference else 1.0))
+    return az, el, 1.0
 
 
 def build_axml(objects, duration, sample_rate, bits, programme):
@@ -305,7 +313,7 @@ def main(argv):
     print("== %s" % outp)
     print("   %d objects, %.1f s, %d Hz, %d-bit  (%.2f GB)"
           % (ch, dur, sr, bits, os.path.getsize(outp) / 1e9))
-    print("   azimuth is positive to the LEFT, distance normalised to %.1f m" % ref)
+    print("   azimuth is positive to the LEFT, distance on the speaker sphere")
     for ob in meta[:6]:
         az, el, d = ob['polar']
         print("     %-34s az %+7.2f  el %+6.2f  dist %.3f"
