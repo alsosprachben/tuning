@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Buxtehude, Passacaglia in D minor BuxWV 161 -- as one long crescendo.
 
-    python3 examples/buxwv161.py SCORE.mid [outdir] [--colours]
+    python3 examples/buxwv161.py SCORE.mid [outdir] [--colours] [--full]
 
 SCORE is the four-channel score (buxtehude_passacaglia_registered.mid): 0 the
 manual, 1 the pedal, 2 the pedal reed, 3 the manual reed. The reed channels
@@ -71,6 +71,7 @@ KEY = {'D1': 1.8, 'F': 86.4, 'A': 170.9, 'D2': 255.5}
 # rather than of runs, and it is the approach to the final section, so the
 # blaze starts there and arrives rather than switching on at the double bar:
 # the whole return registration is drawn on its first chord (ENCORE, below).
+STATEMENT = 10.9      # one round of the ground, in the score's seconds
 LAST = 320.9          # the 28th and final statement
 BEAT = 0.454545       # a quarter at the file's 132
 ENCORE = 549 * BEAT   # the encore's first chord, beat 4, in the score
@@ -141,6 +142,36 @@ RAW_COLOURS[0] = [
     (KEY['F'],  ['flute 8', 'koppelflute 4', 'waldflute 2']),
     (KEY['A'],  ['flute 8', 'nazard 2-2/3', 'tierce 1-3/5']),
     (ENCORE,    ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3', 'principal 16', 'quint 5-1/3', 'mixture III'])]
+
+
+def with_full_organ(raw):
+    """--full: the return builds statement by statement to FULL ORGAN on the
+    last round of the ground, designed BACKWARDS from it (Ben). Full organ is a
+    plenum with the chorus reeds, not every stop: drawing everything (the
+    celeste beating, the vox humana, the tierce over the chorus) sounded gross.
+    So statement 28 is full organ, and each earlier statement removes the one
+    addition after it, which lands exactly on the return's own registration at
+    statement 22 -- read forward: the foundation fills, then each chorus reed,
+    and the 16' reeds last. Every change on a statement's first note. The
+    manual reeds go on the manual's own channel (the reed channel 3 stays
+    silent, so nothing doubles); the pedal's reeds stay on channel 2."""
+    plenum = ['principal 8', 'octave 4', 'super octave 2', 'quint 2-2/3',
+              'principal 16', 'quint 5-1/3', 'mixture III']
+    adds = [['flute 8', 'bourdon 16'],      # 23
+            ['reed 8'],                     # 24
+            ['trumpet 8'],                  # 25
+            ['reed 4'],                     # 26
+            ['trompette 8'],                # 27
+            ['reed 16']]                    # 28: full organ
+    out = {ch: [(t, ns) for t, ns in spec if t < KEY['D2'] + STATEMENT / 2]
+           for ch, spec in raw.items()}
+    ns = list(plenum)
+    for k, more in enumerate(adds, 1):
+        ns = ns + more
+        out[0].append((KEY['D2'] + k * STATEMENT, ns))
+    out[2].append((LAST, ['reed 16', 'reed 8', 'contrabassoon 32', 'reed 4']))
+    out[3] = [(0.0, [])]
+    return out
 
 
 # THE ENCORE. The chords before the return are played as an encore: the
@@ -311,6 +342,8 @@ def main(argv):
             return ahead
         return at_raw(warp_time(t))
     raw = RAW_COLOURS if '--colours' in argv else RAW
+    if '--full' in argv:
+        raw = with_full_organ(raw)
     PLAN = {ch: [(when(ch, t), ns) for t, ns in spec] for ch, spec in raw.items()}
     graded = os.path.join(outdir, 'buxwv161_graded.mid')
     lib.set_stops(score, graded, PLAN)
