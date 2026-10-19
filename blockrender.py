@@ -4456,6 +4456,13 @@ def prepare(path, tuner='hybrid440', sink=None):
                 continue
             if len(rest) > 3 and rest[3] is not None and not (rest[3][0] <= note <= rest[3][1]):
                 continue
+            # A RANK THAT IS NOTHING UNTIL DRAWN (rank_only_when_drawn: the
+            # tonewheel's percussion taps): on a channel that never draws it,
+            # not emitted at all -- gated shut, its rows still moved the voice
+            # around them (GM 18 by -28 dB through its driven amplifier)
+            if (rest and rest[0] is not None and getattr(rest[0], 'rank_only_when_drawn', False)
+                    and not any(v >= 0.5 for _t, v in rankev_of[ch].get(key, ()))):
+                continue
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
             # the chest's wind (wind.py): this rank's family's row on its channel
             if organ and (ch, key) in wrow_of:
@@ -4636,14 +4643,19 @@ def prepare(path, tuner='hybrid440', sink=None):
             # under this one's fundamental, on its own gate and envelope (so a
             # stop pushed in takes its leak with it, and live stamps it with
             # the rank)
+            # ...THE DRAWBARS' CONTACTS ONLY: a rank with a class of its own
+            # (the percussion taps, tonelib.TonewheelPercussionProperties) is
+            # not on a drawbar's busbar -- it neither leaks nor is leaked
             _lk = getattr(props, 'drawbar_leak_db', None)
-            if organ and _lk is not None and not isinstance(ratio, (list, tuple)):
+            if organ and _lk is not None and not isinstance(ratio, (list, tuple)) and spv is None:
                 _lrng = random.Random(int(round(on * 1e6)) * 157 + note * 23 + ch + 7 * len(key))
                 _lref = hv_fn(1) * gain * 10.0 ** (_lk / 20.0)
                 _pl_keep = _PL[0]
                 _PL[0] = 0
                 for _ok, _orat, *_or in stops:
                     if _orat is None or isinstance(_orat, (list, tuple)) or _ok == key:
+                        continue
+                    if len(_or) > 1 and _or[1] is not None:
                         continue
                     _lf = f0 * _orat
                     if _lf >= 0.45 * SR:

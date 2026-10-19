@@ -39,8 +39,8 @@ so it plays on the Messenger itself.
 | 0 nothing | 0 | 0% |
 | 1 general class | 0 | 0% |
 | 2 specific, theory | 0 | 0% |
-| 3 specific, theory + ear | 10 | 8% |
-| 4 specific, reference audio | 118 | 92% |
+| 3 specific, theory + ear | 9 | 7% |
+| 4 specific, reference audio | 119 | 93% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -396,7 +396,7 @@ plays Standard, as does any program that is not a set.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 16 | Drawbar Organ | `DrawbarOrgan` | **4** | hammondman's tonewheel organ through a Leslie, two packs (freesound 18844, 15120, CC0): the recordings' drawbar settings DERIVED from their spectra (examples/drawbar_fit.py) and the model's drawbars, gains and foldback validated on them to 3.5 dB rms -- 23 notes slow, 17 fast; the Leslie measured: the bass rotor directional from 160 Hz (it barely swung), the cabinet's response (a dip at 400-640 Hz, the horn's 1.5 kHz peak), a two-rotor crossover (partials near 800 Hz from both: the shimmer), the horn's throw and lobe refitted (6.9 -> 4.7 dB); and the wheels -- the KEY CLICK as the contacts make it (each drawbar's at its own instant over 15 ms, at the wheel's running phase, a bounce of noise; within ~1 dB of the takes' burst), their own harmonics 8-17 dB purer, the takes' leakage at the unpulled drawbars (-48 dB). Ben: drawbar and Leslie sound great; the click sounds good |
-| 17 | Percussive Organ | `PercussiveOrgan` | **3** | tonewheel, percussive tap. The drawbars, Leslie and cabinet are GM 16's, measured; the percussion tap is asserted -- no recording has it |
+| 17 | Percussive Organ | `PercussiveOrgan` | **4** | tonewheel, percussive tap. The drawbars, Leslie and cabinet are GM 16's, measured; the tap a rank of its own, the B3's third harmonic (Real Rotor Organ: its decay ~100 dB/s, its level its maker's mix), the drawbars sustaining under it. Ben: B3 as the default, level is good |
 | 18 | Rock Organ | `RockOrgan` | **4** | as 16, the rok pack's fast rotor and its drawbars (00 8876 034) measured; and its overdrive, from the energy off the drawbars' harmonics: only to the edge of breakup (drive 1.53 -> 0.92, the recording's 41 dB under the drawbars). Ben: sounds great |
 | 19 | Church Organ | `FlueOrgan` | **4** | FITTED TO PITEA'S PIPES (Lars Palo's set of the Gronlund organ, CC BY-SA 2.5; examples/pitea_fit.py): the Principal 8, Octave 4 and Super Octave 2 each their own measured series, h1-h32 at three anchor pitches, within 0.9 dB rms; the pipe's SPEECH fitted register by register -- 24 of its own periods, the upper harmonics first, h2-h4 overshooting ~+6 dB mid-keyboard, the release as long as the speech, and each pipe's release its own, an upper band ringing on past the fundamental on some (the release's squeak, fitted to the spread across 33 pipes) -- and the wind before it (the jet's turbulence, the reeds' attack rush). Pitea's fundamentals swing 15 dB key to key with its hall's modes; the tables keep the median and leave the room out. A shared wind per division, on by default -- a chord breathes as it enters and lifts, every pipe on the chest hearing it -- and a Tremulant. Every other stop is rated in the stops map. Ben: sounds great |
 | 20 | Reed Organ | `ReedOrganFree` | **4** | donyaquick's harmonium (freesound 330410, CC0), all 32 keys G2-D5 held 7-12 s (examples/wind_fit.py --voice=reedorgan): it plays an 8' and a 4' -- its evens beat, each key's 4' 0.4-12 cents sharp (rank_detune) -- so ours is measured at 8'+4'; the foundation reed fitted far brighter (gate 0.52 -> 1.07), the 4' voiced as it and at twice the level, the series within 2.5 dB rms, the partials' odd/even cents the take's; the reed's hiss between the harmonics. The French registers re-anchored on it. Ben: sounds great |
@@ -602,10 +602,14 @@ Controls are the rest of the console that are not stops.
 | 6 | 1-3/5 | **4** | the L102, as 16: level with the 2' and 1.3 dB over the 1-1/3' on their wheels (0.52 -> 0.59); its wheel the tempered seventeenth, read 11.4 cents sharp |
 | 7 | 1-1/3 | **4** | the rok pack, 4.0 dB |
 | 8 | 1 | **4** | the rok pack, 3.1 dB, with the foldback above the 91st wheel |
+| 9 | perc 3rd L102 | **4** | the L102's third-harmonic tap, recorded alone on the fast decay: 90 dB/s, -6.6 dB against the 8' on the same wheel (its rise with pitch, +4.5 dB/octave, is the spinet's circuit: left flat) |
+| 10 | perc 2nd L102 | **4** | the L102's second, as its third: 90 dB/s, -14.4 dB |
+| 11 | perc 3rd B3 | **4** | Real Rotor Organ's (a 1957 B3 through its Leslie): ~100 dB/s, +1.4 dB over its 5-1/3' by its maker's own mix (the files read hot, normalised) -- GM 17's |
+| 12 | perc 2nd B3 | **4** | Real Rotor Organ's second, as its third: +6.3 dB over its 8' |
 | -- | Leslie slow (chorale) | **4** | the tonewheel pack: the bass rotor's lobe from 160 Hz, the cabinet's response, the crossover's shimmer |
 | -- | Leslie fast (tremolo) | **4** | the rok pack: the horn's throw and lobe refitted, 6.9 -> 4.7 dB |
 | -- | key click and leakage | **4** | every drawbar's contact at its own instant over 15 ms, the bounce's noise, the unpulled wheels at -48 dB: within ~1 dB of the takes |
-| -- | percussion (GM 17) | **2** | the second- or third-harmonic tap and its decay: asserted, no take has it |
+| -- | percussion (GM 17) | **3** | the four tap stops (perc 3rd/2nd, L102/B3), each a rank decaying on its own, fitted; NOT modelled, the B3's own behaviour: its single trigger (keyed only from every key up), its 1' cancel while on, its normal-volume duck of the drawbars |
 | -- | overdrive (GM 18) | **4** | the rok pack's energy off the drawbars' harmonics: to the edge of breakup, drive 0.92 |
 
 ### 19 Church Organ -- the church organ's console (28-bit stop word, CC11 | CC43<<7 | CC44<<14 | CC45<<21)
@@ -1051,6 +1055,6 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
     - `PanFlute` -- GM 75 Pan Flute (4)
   - `Tonewheel`
     - `DrawbarOrgan` -- GM 16 Drawbar Organ (4)
-    - `PercussiveOrgan` -- GM 17 Percussive Organ (3)
+    - `PercussiveOrgan` -- GM 17 Percussive Organ (4)
     - `RockOrgan` -- GM 18 Rock Organ (4)
 

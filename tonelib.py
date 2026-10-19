@@ -5990,22 +5990,69 @@ class DrawbarOrganProperties(TonewheelProperties):
     initial_gain = TonewheelProperties.initial_gain * 10 ** (0.937 / 20.0)
 
 
-class PercussiveOrganProperties(TonewheelProperties):
-    """GM 17. The same console with the percussion tab down.
+class TonewheelPercussionProperties(TonewheelProperties):
+    """The percussion tap: a wheel keyed through a decaying gate, its own rank
+    (rank_is_pipe: its attack and decay its own, the drawbars' sustain not)."""
+    # FITTED to the L102 (Pianobook; examples/l102_fit.py), its percussion
+    # recorded alone on the fast decay, both harmonics: 2.00 and 3.00 x the 8'
+    # (the drawbars' own wheels), falling ~90 dB/s through the compass (T60
+    # 0.65 s; the takes are cut at 0.17-0.25 s, so +-20%). decay_db 45 renders
+    # 89-91. Its peak against the 8' ON THE SAME WHEEL (speaker and mic
+    # divided out): the third -11 dB at F2's tap to -2 two octaves up, its
+    # mean held here (stop_ranks 0.60, the residual -3.8 .. +3.7 dB). The rise
+    # is the spinet's percussion circuit against its drawbar path -- a B3's is
+    # another -- and register_tilt_db does not reach a rank: left flat.
+    rank_is_pipe = True
+    rank_only_when_drawn = True       # a channel that never draws it renders as if it were not there
+    attack_time = 0.0015
+    decay_db = 45.0
+    harmonic_decay_db = 0.0
+    harmonic_decay_dampening = 0.0
+    sustain_level = 0.0
 
-    Percussion is a separate decaying tap at the second or third harmonic,
-    keyed once per phrase rather than once per note -- a hardware detail this
-    does not model. What it does model is the SHAPE: an attack with a bright,
-    fast-decaying top over a flat sustain, which is the part that reads.
+
+class TonewheelPercussionB3Properties(TonewheelPercussionProperties):
+    """The B3's tap: Indiginus's Real Rotor Organ (a 1957 B3 through a Leslie on
+    chorale, ~/Documents/refs/b3_real_rotor_organ), its 2nd and 3rd recorded
+    alone, 61 keys. Through the rotor every reading swings: the decay's
+    median ~100 dB/s over 20-250 ms, both harmonics (iq 50-95) -- decay_db 50.
+    ITS LEVEL IS ITS SAMPLER'S, NOT ITS FILES': the files stand +9 dB over the
+    drawbar on the same wheel (the 3rd against the 5 1/3', the 2nd against the
+    8', both drawn at 8 in its 688 600 000), but a tap alone normalised as a
+    four-drawbar chord is comes out hot by just that much -- and its maker turned
+    them down in his own preset (3rd 0.3, 2nd 0.5 against the drawbars' 0.7). By
+    his mix, an owner's ear on his own organ: the 3rd +1.4 dB over its drawbar,
+    the 2nd +6.3 -- bolder than the spinet's -6.6 and -14.4, as a B3's is."""
+    decay_db = 50.0
+
+
+# THE PERCUSSION as ranks of their own, each a stop, as a console selects its
+# percussion with tabs: the third harmonic's wheel (the tempered twelfth the
+# 2 2/3' drawbar plays) or the second's (the 4''s), the L102's (bits 9, 10;
+# its second -14.4 dB against the 8' on its wheel, mean of six keys, the third
+# -6.6) or the B3's (bits 11, 12). GM 17 draws the B3's third (Ben: "B3 as
+# the default, level is good").
+TonewheelProperties.stop_ranks = TonewheelProperties.stop_ranks + [
+    ("perc 3rd L102", 2.9966, 0.60, TonewheelPercussionProperties),
+    ("perc 2nd L102", 2.0, 0.28, TonewheelPercussionProperties),
+    # the B3's, rendered and read as the recordings were: 1.32 puts the 3rd
+    # +1.4 dB over its 5 1/3', 2.76 the 2nd +6.3 over its 8' 
+    ("perc 3rd B3", 2.9966, 1.32, TonewheelPercussionB3Properties),
+    ("perc 2nd B3", 2.0, 2.76, TonewheelPercussionB3Properties)]
+
+
+class PercussiveOrganProperties(TonewheelProperties):
+    """GM 17. The same console with the percussion tab down: 888 8 and the
+    B3's third-harmonic tap (TonewheelPercussionB3Properties, bit 11).
+
+    The drawbars sustain as GM 16's do -- a Hammond's do not decay -- and the
+    percussion is the tap rank of its own, keyed with every note. (A B3 keys it
+    once per phrase, only when every key is up: not modelled.) It stood here
+    as an envelope -- a 1.5 ms attack, the upper wheels falling faster, a 0.80
+    sustain -- the SHAPE of a tap with no tap in it.
     """
     wheel_swell = True          # the expression pedal on the wheel (Synth.wheel_swell)
-    default_stops = 0b000001111      # 888 8
-    # the percussion tap is a fast attack: its 1.5 ms kept, under the contacts
-    attack_time = 0.0015
-    decay_db = 3.0
-    harmonic_decay_db = 9.0          # the tap, and it is all in the upper wheels
-    harmonic_decay_dampening = 0.0
-    sustain_level = 0.80
+    default_stops = 0b100000001111   # 888 8, and the B3's third-harmonic percussion (bit 11)
     leslie = True
     leslie_fast = False
     # HELD at its level (the mean of C4-G5's first second at velocity 100)
