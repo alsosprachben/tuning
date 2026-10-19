@@ -266,8 +266,10 @@ INSTS = {
        for name, note, folder, hit, band, flat in (
            ("sfx_slap", 40, "slap", "slap", (100, 8000), (500, 8000)),
            ("sfx_sticks", 43, "sticks", "sticks", (500, 16000), (1000, 16000)),
-           ("sfx_metronome", 45, "metronome", "metronome", (500, 16000), (1000, 16000)),
-           ("sfx_bell", 46, "telephone_wav", "bell", (500, 16000), (1000, 16000)),
+           ("sfx_metronome", 45, "../metronome_ben", "metronome", (500, 16000), (1000, 16000)),
+           # Ben's bell from 600 Hz: under it the take holds a video game in the
+           # next room (220-480 Hz), which the trim fitted as bell (+43 dB at 566)
+           ("sfx_bell", 46, "../metronome_ben", "bell", (600, 16000), (1000, 16000)),
            ("sfx_cutdown", 48, "guitarcut", "cutdown", (100, 8000), (500, 8000)),
            ("sfx_cutup", 49, "guitarcut", "cutup", (100, 8000), (500, 8000)),
            ("sfx_bassslap", 50, "bassslap", "bassslap", (40, 4000), (500, 8000)),

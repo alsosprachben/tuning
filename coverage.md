@@ -56,8 +56,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 | rating | notes | share |
 |---|---|---|
-| 3 specific, theory + ear | 3 | 5% |
-| 4 specific, reference audio | 56 | 95% |
+| 3 specific, theory + ear | 2 | 3% |
+| 4 specific, reference audio | 57 | 97% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -67,8 +67,8 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 30 | Scratch Pull | `SfxScratchPull` | **4** | GS's Scratch Pull, the SFX set's 42: the groove bending down from a fifth |
 | 31 | Sticks | `SfxSticks` | **4** | GS's Sticks, the SFX set's 43: two drumsticks clicked (Freesound, CC0; perc_fit sfx_sticks) |
 | 32 | Square Click | `SfxSquareClick` | **3** | GS's Square Click, the SFX set's 44: the 808 engine's click alone, fitted to GeneralUser GS's sample (examples/sfx808_fit.py) -- a synth sound, its sample the reference |
-| 33 | Metronome Click | `SfxMetronomeClick` | **4** | GS's Metronome Click, the SFX set's 45: a Wittner's tick (Freesound, CC0; perc_fit sfx_metronome) |
-| 34 | Metronome Bell | `SfxMetronomeBell` | **3** | GS's Metronome Bell, the SFX set's 46: BY PROXY, a small steel gong struck once -- a rotary phone's (TRP, CC0), no metronome's; the one CC0 metronome bell, a plastic one's, rings at 9.45 kHz, a beep (Ben) |
+| 33 | Metronome Click | `SfxMetronomeClick` | **4** | GS's Metronome Click, the SFX set's 45: Ben's own Wittner, recorded through his A6 (perc_fit sfx_metronome), as the SFX set's 45 |
+| 34 | Metronome Bell | `SfxMetronomeBell` | **4** | GS's Metronome Bell, the SFX set's 46: Ben's own Wittner's bell, with 33's tick struck under it (percussion_map.KIT_LAYER), as the SFX set's 46 |
 | 35 | Acoustic Bass Drum | `KickDrum` | **4** | DRSKit's kick (DrumGizmo, CC-BY 4.0), 29 strokes on its two close mics: eleven measured modes, damped like a pillowed kick (head modes 40-130 dB/s, fitted by BAND so two modes 7% apart are not each read twice), a stroke-scaled glide of 150-350 cents, the beater's click. Two semitones under 36, at 39.4 Hz. Ben, by ear: sounds deeper |
 | 36 | Bass Drum 1 | `KickDrum` | **4** | as 35, at the recorded kick's own 44.4 Hz |
 | 37 | Side Stick | `SideStick` | **4** | DRSKit's cross-stick, fitted as the measured snare struck on the rim: its head under the stick, the rim's click at 1.05 and 1.93 kHz, wires that die faster. Level by ear, 3 dB under the snare (the recorded 20.6 left it buried under the kick) |
@@ -252,8 +252,8 @@ plays Standard, as does any program that is not a set.
 | 42 | Scratch Pull | `SfxScratchPull` | **4** | SCRATCH PULL: the groove dragged back, its colour falling from a fifth |
 | 43 | Sticks | `SfxSticks` | **4** | STICKS: hickory sticks clicked (Freesound, CC0): their modes near 4 kHz, the strike fitted (perc_fit): 5.0 dB |
 | 44 | Square Click | `SfxSquareClick` | **3** | SQUARE CLICK: as Standard's 32 |
-| 45 | Metronome Click | `SfxMetronomeClick` | **4** | METRONOME CLICK: a Wittner Taktell Piccolo's tick (Freesound, CC0), eight ticks: 7.4 dB |
-| 46 | Metronome Bell | `SfxMetronomeBell` | **3** | METRONOME BELL: BY PROXY, a rotary phone's 1615 Hz gong struck once (TRP, CC0): 5.7 dB -- the one CC0 metronome bell rings at 9.45 kHz, a beep (Ben) |
+| 45 | Metronome Click | `SfxMetronomeClick` | **4** | METRONOME CLICK: Ben's own Wittner at its slowest, the bell off, 35 ticks recorded close through his A6 (perc_fit sfx_metronome): a wooden knock at 0.7-1 kHz, its octaves within 2.7 dB of the ticks; its ring held to theirs with his room measured and put on ours (metronome_room.py), the knock's lines read slow under the room. Its tick no longer swings with where in the block it falls (the kernel's short chiff and cross-edge knee). Ben: sounds great |
+| 46 | Metronome Bell | `SfxMetronomeBell` | **4** | METRONOME BELL: Ben's own Wittner's bell, 8 strikes, two left to ring (perc_fit sfx_bell): 8.97 kHz under 13.5 and 18.7 kHz gone in a second, over its own low modes 2.05 and 5.1 kHz ringing 2.5-5 dB/s; each upper mode a DOUBLET, beating 2.3-11 Hz as his rings do (Ben: the wobble). The bell alone -- its tick is the click key's, struck with it (KIT_LAYER: GeneralUser's bell is its click under 4 kHz too) -- and levelled over that tick as his take has it, +11.3 dB at 4-16 kHz (elkit_balance.TIED). Ben: sounds great |
 | 47 | Guitar sliding finger | `SfxFretSlide` | **3** | GM 120's fret noise (not fitted: its slide, squeak and shift reworked by Ben's ear), a one-shot gated as GeneralUser GS's sample lasts (0.3 s) |
 | 48 | Guitar cutting noise (down) | `SfxGuitarCutDown` | **4** | GUITAR CUTTING NOISE (DOWN): a muted strum on steel strings (Freesound, CC0), the strings' scrape at 0.14-3 kHz: 5.9 dB. A nylon guitar's take had been its body's thump -- a tom (Ben) |
 | 49 | Guitar cutting noise (up) | `SfxGuitarCutUp` | **4** | GUITAR CUTTING NOISE (UP): a hollowbody's bright muted strum (Freesound, CC0): 8.0 dB |
@@ -792,7 +792,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxGuitarCutUp` -- set 56 49 Guitar cutting noise (up) (4)
             - `SfxHoof` -- set 56 77 Horse-Gallop (3), set 127 101 Horse (3)
             - `SfxKeyClick` -- set 56 51 Key Click (4)
-            - `SfxMetronomeBell` -- 34 Metronome Bell (3), set 56 46 Metronome Bell (3)
+            - `SfxMetronomeBell` -- 34 Metronome Bell (4), set 56 46 Metronome Bell (4)
             - `SfxMetronomeClick` -- 33 Metronome Click (4), set 56 45 Metronome Click (4)
             - `SfxSlap` -- 28 Slap (4), set 56 40 Slap (4)
             - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)

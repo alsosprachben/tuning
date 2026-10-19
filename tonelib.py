@@ -24170,37 +24170,82 @@ class SfxSticksProperties(MeasuredStrokeProperties):
 
 
 class SfxMetronomeClickProperties(MeasuredStrokeProperties):
-    """SFX 45, "Metronome Click": a Wittner's tick -- its escapement's knock, 1.4 kHz and up. Fitted to Freesound recordings (CC0; examples/perc_fit.py
-    sfx_metronome): the modes read off the hits, the strike and noise fitted."""
-    DRUM_MODES = ((0.3733, -20.3, 272), (0.3923, -14.8, 313), (0.4166, -12.6, 333), (0.4366, -11.2, 291), (0.4580, -2.9, 219), (0.4879, -9.9, 189), (0.5245, -13.8, 254), (0.5469, -24.4, 202), (0.5745, -14.5, 457), (0.5921, -10.2, 193), (0.6040, -12.4, 118), (0.6187, -8.7, 253), (0.6406, -2.7, 181), (0.6677, -9.1, 241), (0.7219, -14.7, 327), (0.7533, -23.2, 332), (0.7728, -20.4, 172), (0.8013, -11.2, 206), (0.8579, -7.8, 313), (0.8979, -4.6, 213), (0.9326, -9.9, 769), (0.9977, 0.0, 323), (1.0500, -6.4, 197), (1.0776, -8.7, 1421), (1.0990, -9.8, 183), (1.1266, -12.2, 329), (1.1656, -17.9, 261), (1.2255, -12.0, 177), (1.2750, -4.5, 179), (1.3867, -12.3, 149), (1.4100, -12.4, 265), (1.5127, -9.2, 164), (1.5475, -13.3, 155), (1.5841, -15.6, 169), (1.6507, -20.1, 146), (1.7244, -18.4, 240), (1.8452, -7.5, 205), (1.9098, -13.8, 154), (1.9869, -15.9, 156), (2.0577, -10.1, 135), (2.1077, -12.3, 214), (2.2337, -4.2, 205), (2.2822, -4.8, 180), (2.3217, -4.7, 177), (2.3735, -6.1, 181), (2.5048, -6.0, 273), (2.5999, -10.6, 173), (2.7035, -11.2, 208), (2.7753, -10.9, 187), (2.9095, -12.5, 265), (3.0873, -10.6, 231), (3.1496, -11.8, 180), (3.2461, -17.8, 157), (3.3189, -14.2, 245), (3.3765, -17.5, 181), (3.4863, -21.3, 230), (3.5572, -19.9, 216), (3.6689, -16.2, 171), (3.7954, -17.3, 135), (3.8582, -15.6, 152), (3.9585, -13.7, 234), (4.0294, -17.0, 180), (4.1255, -18.8, 159), (4.2719, -19.3, 181), (4.4265, -16.0, 164), (4.6662, -12.5, 167), (4.7518, -12.8, 155), (4.8726, -16.3, 171), (5.1046, -21.4, 187), (5.2045, -20.3, 171), (5.3510, -19.4, 220), (5.4423, -19.7, 186), (5.5735, -19.7, 194), (5.7053, -21.2, 187), (5.8284, -22.0, 206), (5.9863, -21.9, 194), (6.1014, -21.8, 206), (6.2892, -21.4, 194), (6.4119, -21.8, 201), (6.5365, -21.8, 210), (6.6735, -21.1, 203), (6.8951, -25.2, 196), (7.0592, -29.3, 193), (7.6940, -27.6, 206), (8.0730, -29.1, 230), (8.4678, -29.4, 187))
-    slow_share = 0.0516598
-    slow_dbs = 17.0115
-    click_cal_db = 2.40981
-    click_dbs = 724.226
-    click_stroke_slope = 0.566064
-    chiff_volume = 11.1579
-    chiff_width = 0.0147935
-    chiff_bandwidth = 0.0517869
-    sustain_jitter = 0.0670335
-    band_trim_db = ((177, -2.3), (354, 1.1), (707, -1.2), (1414, 2.2), (2828, 1.7), (5657, 0.1), (11314, -1.7))
+    """SFX 45, "Metronome Click": a mechanical metronome's tick -- Ben's own Wittner,
+    recorded close at its slowest setting (2026-10-18; ~/Documents/refs/
+    metronome_ben/ben_take2, the bell off, 35 ticks): a wooden knock, 690 Hz-
+    1 kHz (strongest 715) with a line near 2.0 kHz (examples/perc_fit.py
+    sfx_metronome): the modes read off the hits, the strike and noise fitted.
+    NOT the 2.05 and 5.1 kHz the first take's ticks all carried: those are the
+    bell's low modes ringing on (SfxMetronomeBellProperties), which a tick
+    does not raise. It stood on a Wittner Taktell Piccolo's (Freesound, CC0)."""
+    DRUM_MODES = ((0.3618, -15.4, 344), (0.3799, -23.8, 361), (0.3996, -29.2, 308), (0.4270, -24.1, 245), (0.4477, -23.1, 406), (0.4571, -22.8, 300), (0.4876, -8.8, 236), (0.5052, 0.0, 378), (0.5347, -10.4, 208), (0.5554, -11.8, 302), (0.5673, -11.9, 482), (0.6072, -10.8, 622), (0.6253, -14.0, 771), (0.6620, -18.5, 608), (0.6843, -8.1, 411), (0.7557, -11.9, 414), (0.7821, -13.6, 223), (0.7987, -12.6, 328), (0.8334, -13.3, 229), (0.8535, -13.2, 450), (0.8965, -14.1, 282), (0.9436, -18.5, 589), (0.9726, -22.8, 642), (0.9928, -23.6, 372), (1.0207, -24.4, 448), (1.0860, -18.2, 362), (1.1439, -24.7, 309), (1.1755, -20.0, 325), (1.1972, -20.6, 341), (1.2635, -13.1, 177), (1.3484, -13.0, 325), (1.4095, -9.8, 244), (1.4767, -15.6, 299), (1.5031, -16.6, 333), (1.5559, -16.7, 280), (1.6274, -18.7, 273), (1.6595, -18.5, 330), (1.7366, -21.2, 334), (1.8142, -22.5, 342), (1.8836, -20.3, 342), (1.9224, -23.3, 313), (1.9845, -19.8, 251), (2.0332, -23.7, 272), (2.0849, -22.6, 264), (2.1662, -16.8, 290), (2.2946, -18.5, 232), (2.3831, -19.3, 230), (2.4820, -13.9, 244), (2.5234, -12.8, 239), (2.5819, -14.9, 225), (2.7309, -12.3, 210), (2.8541, -14.7, 231), (2.9157, -17.1, 193), (3.0612, -20.9, 246), (3.2139, -24.1, 244), (3.3200, -23.8, 243), (3.4240, -24.4, 231), (3.5286, -22.5, 299), (3.6745, -25.8, 264), (3.7335, -26.0, 302), (3.8883, -23.2, 228), (4.1197, -22.2, 242), (4.2543, -22.7, 234), (4.5125, -25.5, 232), (4.6813, -18.0, 256), (4.8625, -22.1, 243), (5.0276, -24.8, 236), (5.1062, -25.5, 247), (5.2921, -29.5, 229), (5.5017, -24.5, 250), (5.7564, -29.2, 214), (6.1182, -28.1, 235), (6.2957, -26.4, 253), (6.5209, -28.1, 251), (6.6741, -26.8, 241), (6.9308, -25.2, 290))
+    # ITS RING, against Ben's ticks with his room put on ours (metronome_room):
+    # as fitted it rang 8-13 dB long over 50-300 ms at 0.5-1.5 kHz (Ben: "The
+    # click alone seems to reverb longer") -- a slow share (0.138 at 10.8 dB/s)
+    # and the knock's eight lines at 0.7-1 kHz read slow, the room's tail
+    # under them in the takes. No slow share, those eight 1.5x as fast: within
+    # 2.2 dB of the ticks' ring, octave by octave, from 3.1 and 8+.
+    slow_share = 0.0
+    slow_dbs = 10.7814  
+    click_cal_db = 1.76221  
+    click_dbs = 614.761  
+    click_stroke_slope = 0.426442  
+    chiff_volume = 28.4222  
+    chiff_width = 0.00827775  
+    chiff_bandwidth = 0.0552945  
+    sustain_jitter = 0.0444077  
+    # NO TRIM: perc_fit --trim3 drove this click 19.4 dB from Ben's 35 ticks
+    # (-25.6 dB at its own 715 Hz line, +32 at 11.4 kHz), fitting the takes'
+    # background -- a game next door, the A6's USB whine at 1-5 kHz. Untrimmed,
+    # its octaves 0.5-16 kHz are within 2.5 dB rms of the ticks' median.
+    band_trim_db = ()
 
 
 class SfxMetronomeBellProperties(MeasuredStrokeProperties):
-    """SFX 46, "Metronome Bell": a metronome's bell on beat one -- a small steel gong
-    struck by a hammer, as a rotary phone's is (TRP's, its 1615 Hz gong struck
-    once; the one CC0 metronome bell, a plastic one's, rings at 9.45 kHz: a beep). Fitted to Freesound recordings (CC0; examples/perc_fit.py
-    sfx_bell): the modes read off the hits, the strike and noise fitted."""
-    DRUM_MODES = ((0.9995, -5.7, 12), (2.5805, -9.2, 10), (4.6421, 0.0, 41), (7.1269, -3.7, 97))
-    slow_share = 0.0536589  
-    slow_dbs = 78.8925  
-    click_cal_db = 0.474302  
-    click_dbs = 5773.21  
-    click_stroke_slope = 0.111779  
-    chiff_volume = 0.0543207  
-    chiff_width = 0.0608042  
-    chiff_bandwidth = 0.0401244  
-    sustain_jitter = 0.0645266  
-    band_trim_db = ((177, 3.7), (354, -10.1), (707, -5.0), (1414, 0.4), (2828, 5.7), (5657, 0.0), (11314, 5.2))
+    """SFX 46, "Metronome Bell": a mechanical metronome's bell on beat one --
+    Ben's own Wittner (2026-10-18; ~/Documents/refs/metronome_ben, 8 strikes, two
+    stopped and left to ring 4 s): a small bell at 8.97 kHz (22 dB/s) under
+    13.5 kHz (61 dB/s) and 18.7 kHz, gone in a second, over its own two low
+    modes, 2.05 and 5.1 kHz, ringing 2.5 and 5 dB/s -- still sounding under
+    the next ticks (examples/perc_fit.py sfx_bell): the modes read off the
+    hits, the strike and noise fitted. Its tick is the click key's
+    (percussion_map.KIT_LAYER). It stood on a rotary phone's 1615 Hz
+    gong (TRP, CC0) -- the one CC0 metronome bell rang at 9.45 kHz, near
+    this one's, and Ben heard it as a beep: its partial alone, no case."""
+    DRUM_MODES = ((1.2694, -9.8, 2.5), (2.4884, -29.6, 228), (3.15759, -9.0, 5.0), (3.15994, -5.9, 5.0), (5.55214, -17.0, 22), (5.55356, -6.7, 22), (5.55498, -7.1, 22), (8.36991, -5.5, 61), (8.37672, -1.5, 61), (11.5932, -11.0, 68))
+    # the two low modes' decays MEASURED on the two strikes left to ring
+    # (2.5 and 5.0 dB/s over 2-4.5 s): --modes floors a decay at 10
+    # ...and the 18.7 kHz partial, above --modes' 16 kHz band, read on them
+    # too: 11 dB under 13.5 kHz's in the first 0.3 s, 66-71 dB/s
+    # THE WOBBLE: each of the bell's upper modes is a DOUBLET -- no bell is
+    # round, so a mode splits in two a few Hz apart and the pair beats (Ben:
+    # "the subtle wobble of the higher harmonics of the ring"). Read on the
+    # two strikes left to ring (1-6 s of tail, 0.1 Hz resolution), alike on
+    # both: 5.1 kHz = 5099.5 + 5103.3 (3.8 Hz; the envelope wobbles 4 dB at
+    # 3.8-4.0 Hz), 8.97 kHz = 8969.0 + 8971.3 and a weak 8966.7 (2.2-2.5 Hz,
+    # 4.5 dB), 13.5 kHz = 13517.4 + 13528.4 (11 Hz, 2-4 dB; which of the two
+    # is louder swaps between the strikes -- where the hammer meets the
+    # modes' nodes). 2.05 and 18.7 kHz are single (partners 25-41 dB down,
+    # wobble under 1 dB). Each pair carries its partial's decay and level.
+    slow_share = 0.0600484  
+    slow_dbs = 39.1831  
+    click_cal_db = 0.717911  
+    click_dbs = 8553.04  
+    click_stroke_slope = 0.105426  
+    chiff_volume = 0.23789  
+    chiff_width = 0.150798  
+    chiff_bandwidth = 0.0710023  
+    sustain_jitter = 0.0795793  
+    # THE BELL ALONE: its tick is the click key's, struck with it
+    # (percussion_map.KIT_LAYER). Its takes always hold the tick (Ben: "It
+    # only plays at the same time"); the knock this class carried -- three of
+    # the click's lines, raised to the takes' level -- rang higher and shorter
+    # than the click's 76 (Ben: "The click seems higher with the bell"), so it
+    # is cut out (Ben: "cut out the click entirely from the bell").
+    # NO TRIM, as the tick: --trim3 cut the band of the bell's long 5.1 kHz
+    # ring by 36 dB, fitting the background under it, and the bell went short
+    # and quiet (Ben: "much lower in volume in ours than in the recording").
+    band_trim_db = ()
 
 
 class SfxGuitarCutDownProperties(MeasuredStrokeProperties):

@@ -53,6 +53,23 @@ ANCHOR_STANDARD = {56}
 # ground
 # ...as in its CM-64/32L kit, the same three (92, 95, 101)
 STAND_IN = {56: {68: 69, 71: 69, 77: 56}, 127: {92: 93, 95: 93, 101: 80}}
+# A KEY TIED TO ANOTHER, not levelled to GeneralUser on its own: the
+# metronome's bell key, which strikes the click key with it (percussion_map.
+# KIT_LAYER), is set for the BELL OVER ITS TICK as Ben's own take has it:
+# 4-16 kHz over the first 0.3 s -- the bell's partials; under 4 kHz the beat
+# is the tick's -- +11.3 dB over a plain tick (8 bell beats, 15 ticks).
+# (GeneralUser GS's own bell sample stands +11.1 over its click there.)
+# {kit: {key: (the key it follows, dB)}}
+TIED = {56: {46: (45, 11.3)}, 0: {34: (33, 11.3)}}
+
+
+def tie_band(x, sr):
+    from scipy.signal import butter, sosfiltfilt
+    x = np.asarray(x, float)
+    a = int(np.argmax(np.abs(x) > 0.05 * np.abs(x).max()))
+    y = sosfiltfilt(butter(4, [4000, 16000], "bandpass", fs=sr, output="sos"), x)
+    s = y[max(0, a - int(0.003 * sr)):a + int(0.3 * sr)]
+    return 10 * np.log10(np.sum(s ** 2) + 1e-20)
 
 
 def k150(x, sr):
@@ -73,11 +90,20 @@ def main(argv):
             E.KIT = 0
         g38, o38 = k150(*E.theirs(GU, 38, d)), k150(*E.ours(38, d))
         E.KIT = kit
-        for n in NOTES[kit]:
+        # --only=45,46: just those keys (the rest of the set's levels untouched)
+        only = next((a.split("=")[1] for a in argv if a.startswith("--only=")), None)
+        notes = [n for n in NOTES[kit] if only is None or str(n) in only.split(",")]
+        for n in notes:
             g, o = k150(*E.theirs(GU, STAND_IN.get(kit, {}).get(n, n), d)) - g38, k150(*E.ours(n, d)) - o38
             miss[n] = g - o
             print("  %d %-16s GeneralUser %+5.1f  ours %+5.1f  (re the snare, K)  -> %+.1f dB"
                   % (n, (P.KITS[kit] if kit else P.PERCUSSION)[n][0], g, o, miss[n]))
+        for n, (ref, db) in TIED.get(kit, {}).items():
+            if n in miss and ref in miss:
+                kn, kr = tie_band(*E.ours(n, d)), tie_band(*E.ours(ref, d))
+                miss[n] = miss[ref] + db - (kn - kr)
+                print("  %d tied to %d: 4-16 kHz %+.1f dB re %d's (want %+.1f) -> %+.1f dB"
+                      % (n, ref, kn - kr, ref, db, miss[n]))
     if "--write" in argv and kit == 0:
         # STANDARD's levels are PERCUSSION_LEVEL's: each note's trim set (or
         # added after the table's opening comment), its old value carried

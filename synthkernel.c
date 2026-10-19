@@ -211,6 +211,58 @@ void synth_organ(
 // Amplitude is interpolated between block endpoints so fast decays don't step.
 static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; return x*x*(3.f-2.f*x); }
 
+/* A CHIFF SHORTER THAN A BLOCK. voice_block.inc reads the attack hump once a
+   block, at its MIDDLE, and holds it: right for a burst spanning blocks, but a
+   burst shorter than one (the metronome click's, 8.3 ms against 11.6) lands
+   between two middles or on one depending on where in the block the note
+   starts -- the click swung 13 dB in a cycle, beat by beat (Ben: "the click is
+   varying in a period pattern, maybe related to where in the block it is
+   being struck").
+
+   So such a block takes the ONE level that puts the energy the burst puts in
+   it, sample by sample. The chiff is the partial's own copy, phase-jittered
+   uniformly over 2*pi*cc and scaled by jfa = jf*A (A = cv*csc), so a sample
+   carries m^2 * (1 + 2 cos(j) jfa + jfa^2), j its draw -- at cv 28 (the
+   click) far from the jfa^2 an RMS would match. Over the samples the block
+   renders, weighted by the amplitude the loop gives it (the attack's knee,
+   then the block's line), with each sample's own draw, the one level x whose
+   energy is the samples' sum. Shared by both render paths through
+   voice_block.inc, so file, live and GPU take it alike. Out of line, after
+   the midpoint lines, which stay as they were: voices whose bursts span
+   blocks never reach it (kernel-edits rule; bitident). */
+__attribute__((noinline))
+static float jf_short_chiff(long bs0, long a, float chw, float sj, long blk,
+                            float A, float cc, float m0, float m1, float nf, float bw,
+                            long kA, long kN, float kg, long ns){
+    // from the block's first sample the loop draws (ns: the arrival, past the
+    // onset's travel delay), not its start -- what is not drawn carries nothing
+    long n0 = ns > a ? ns : a, n1 = bs0 + blk;
+    if(n1 <= n0 || A <= 0.f) return 0.f;
+    // the very draws the block's loop will take (chiff_step, chiff_index):
+    // a draw is held 1/(nf*bw) s -- longer than the whole burst at the click's
+    // bw 0.055 -- so a burst's copy is coherent by cos(its draw), not by the
+    // uniform draw's mean
+    uint64_t khi = 0, klo = 0;
+    if(bw > 0.f) chiff_step((double)nf * (double)bw / SRATE_D, &khi, &klo);
+    double W = 0.0, C = 0.0, Q = 0.0; float invch = 1.f / chw; double Ad = (double)A;
+    for(long n = n0; n < n1; n++){
+        float v;
+        if(n < a + (long)chw){ float s = sstep((float)(n - a) * invch); float r = sqrtf(s); v = fmaxf(r * (1.f - r), sj * s); }
+        else v = sj;
+        // the amplitude the loop gives this sample: the knee's ramp to kN (the
+        // attack, which a short burst sits inside), then the block's line
+        double m = (n < kN && kN > kA) ? (double)kg * (double)(n - kA) / (double)(kN - kA)
+                 : (double)m0 + ((double)m1 - (double)m0) * (double)(n - bs0) / (double)blk;
+        double w = m * m;
+        double cj = cos(6.283185307179586 * hash01(chiff_index(n, khi, klo)) * (double)cc);
+        W += w; C += w * cj; Q += w * (2.0 * Ad * cj * v + Ad * Ad * (double)v * v);
+    }
+    if(W <= 0.0) return 0.f;
+    // A^2 x^2 W + 2 A x C = Q, the positive root
+    double x = (-C + sqrt(C * C + W * Q)) / (Ad * W);
+    return x > 0.0 ? (float)x : 0.f;
+}
+
 // THE MOOG: a ladder filter and two contours, evaluated per partial -- the C
 // mirror of moog.py, which is the reference and says why each law is what it
 // is. A Moog partial has fx >= 0: its row FT[fx] holds what is fixed at the

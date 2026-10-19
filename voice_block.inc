@@ -125,6 +125,12 @@
                     else if(mid >= off){ float s=sstep((float)(mid-off)*invr); float r=sqrtf(s); jf=fmaxf(r*(1.f-r)*crl, sj*(1.f-s)); }
                     else jf=sj;
                 }
+                // A CHIFF SHORTER THAN A BLOCK takes the level that carries
+                // the burst's own energy into the block, not its middle's
+                // value (jf_short_chiff)
+                if(cv>0.f && chiffS[p]<(float)BLK && bs0<a+(long)chiffS[p] && mid<off)
+                    jf=jf_short_chiff(bs0, a, chiffS[p], sj, (long)BLK, cv*csc, cc, mL0, mL1, (float)nf, chBW[p],
+                                     kA, kN, kgL, ns);
                 // Tension bend (piano strike): frequency starts sharp by
                 // tbav*e^{-t/tau} and settles, cut off at tcut. Phase is the exact
                 // integral to the block start; the recurrence uses the block-start

@@ -86,7 +86,7 @@ import moog as _MG
 import tonelib as T
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
-                            kit_for_program, drum_set_name)
+                            kit_for_program, drum_set_name, key_layers)
 
 # Columns of the partial table, in the order blockrender builds them.
 # p0 is the LEFT ear's carrier phase and p0R the RIGHT one: the interaural
@@ -4148,6 +4148,12 @@ class Live:
             for part in parts:
                 if part.matches(self._pc(ch), msg.note):
                     self._note_on(part, ch, msg.note, msg.velocity, n0)
+                    # a key that also strikes another's sound (percussion_map.
+                    # KIT_LAYER): the metronome bell's tick is the click key's.
+                    # One-shots, so no key need stay down for them
+                    if part.patch.drums:
+                        for _ln in key_layers(msg.note, kit_for_program(part.patch.program)):
+                            self._note_on(part, ch, _ln, msg.velocity, n0)
             self._glide_from = None
             self._slur = False
         else:

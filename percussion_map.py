@@ -583,7 +583,7 @@ KIT_LEVEL = {24: {36: 1.697, 38: 0.823, 40: 0.790, 41: 0.945, 43: 0.990, 45: 0.9
              48: {27: 2.703, 28: 2.143, 29: 0.757, 30: 0.290, 35: 0.092, 36: 0.151, 38: 1.778, 39: 0.514, 40: 1.778, 41: 0.627, 42: 0.631, 43: 0.639, 44: 0.623, 45: 0.621, 46: 0.620, 47: 0.610, 48: 0.612, 49: 0.629, 50: 0.614, 51: 0.625, 52: 0.644, 53: 0.633, 57: 0.551, 59: 0.558, 88: 1.683},
              8: {41: 1.026, 43: 1.013, 45: 1.019, 47: 0.936, 48: 1.453, 50: 1.110},
              16: {36: 0.906, 38: 1.175, 41: 1.043, 43: 1.032, 45: 1.040, 47: 0.944, 48: 1.470, 50: 1.129},
-             56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.090, 46: 0.591, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 52: 5.284, 53: 1.777, 54: 9.798, 55: 3.855, 56: 0.806, 57: 0.952, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 76: 1.389, 77: 1.426, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
+             56: {39: 0.864, 40: 0.091, 41: 1.169, 42: 1.279, 43: 0.206, 44: 0.491, 45: 0.072, 46: 0.742, 47: 59.315, 48: 0.099, 49: 0.298, 50: 0.484, 51: 0.408, 52: 5.284, 53: 1.777, 54: 9.798, 55: 3.855, 56: 0.806, 57: 0.952, 58: 0.705, 59: 1.478, 60: 0.320, 61: 2.240, 62: 1.305, 63: 0.063, 64: 8.793, 65: 1.407, 66: 1.285, 67: 0.474, 68: 0.785, 69: 0.381, 70: 0.632, 71: 1.119, 72: 3.108, 73: 1.495, 74: 2.103, 75: 1.460, 76: 1.389, 77: 1.426, 78: 0.326, 79: 0.025, 80: 1.587, 81: 0.569, 82: 0.111, 83: 0.034, 84: 5.146},
              40: {38: 0.490, 39: 0.570, 40: 0.011},
              # the CM-64/32L set's, over its sources' (_cm32l)
              127: {35: 0.767, 36: 0.737, 37: 0.708, 38: 1.000, 39: 1.446, 40: 0.798, 41: 0.900, 42: 0.748, 43: 0.868, 44: 0.235, 45: 1.182, 46: 0.510, 47: 1.154, 48: 1.467, 49: 0.466, 50: 1.495, 51: 0.251, 54: 0.582, 56: 0.347, 60: 0.567, 61: 0.829, 62: 0.287, 63: 0.799, 64: 0.748, 65: 0.753, 66: 0.799, 67: 0.659, 68: 0.546, 69: 0.538, 70: 0.536, 71: 22.115, 72: 32.874, 73: 1.044, 75: 1.337, 76: 5.121, 77: 1.473, 78: 9.771, 79: 3.452, 80: 0.594, 81: 0.580, 82: 0.800, 83: 1.396, 84: 0.235, 85: 1.172, 86: 1.129, 87: 0.077, 88: 3.577, 89: 1.543, 90: 1.003, 91: 0.177, 92: 0.757, 93: 0.302, 94: 0.592, 95: 1.119, 96: 2.467, 97: 1.342, 98: 3.593, 99: 1.247, 100: 0.985, 101: 0.926, 102: 0.411, 103: 0.025, 104: 1.106, 105: 0.486, 106: 0.033, 107: 0.026, 108: 4.316}}
@@ -766,8 +766,8 @@ PERCUSSION_LEVEL = {
     30: 0.9711,  # GS's 30, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
     31: 0.2770,  # GS's 31, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
     32: 0.4226,  # GS's 32, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
-    33: 0.1069,  # GS's 33, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
-    34: 0.8692,  # GS's 34, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    33: 0.0933,  # GS's 33, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
+    34: 0.9301,  # GS's 34, TIED to 33 (elkit_balance.TIED: the bell over its tick as Ben's take has it)
     73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
     # ...and the rattles for the same reason: a shake is now a burst of impacts,
     # each ringing 10-12 ms instead of one 250 ms hit, so the energy is spread
@@ -896,6 +896,29 @@ for _grp in PERCUSSION_CHOKE:
 # the Orchestra set's hi-hats at 27-29 are EXC1 (SC-55 p.70) -- the same class
 # as 42/44/46, one pair of cymbals on six keys.
 KIT_CHOKE = {48: [{27, 28, 29, 42, 44, 46}]}
+
+
+# A KEY THAT ALSO STRIKES ANOTHER KEY'S SOUND, at its time and velocity:
+# the metronome's bell beat is the escapement's tick with the bell over it.
+# GeneralUser GS's Metronome Bell is its Metronome Click under 4 kHz to 0.4
+# dB, and Ben's Wittner cannot ring its bell without ticking. So the bell key
+# plays the CLICK KEY ITSELF -- its sound, its level -- and the bell class is
+# the bell alone (Ben: "cut out the click entirely from the bell"): the tick
+# in a bell beat cannot then sound unlike the plain ticks, as it did when the
+# bell carried a knock of its own (three of the click's 76 modes, higher and
+# shorter than the click). {kit: {key: (the keys it also strikes)}}
+KIT_LAYER = {56: {46: (45,)}, 0: {34: (33,)}}
+
+
+def key_layers(note, kit=0):
+    """The other keys a strike on this one also sounds, in this drum set --
+    a set playing Standard's key (not its own) takes Standard's layer."""
+    own = KIT_LAYER.get(kit, {}).get(note)
+    if own is not None:
+        return own
+    if kit in KIT_ONLY or note in KITS.get(kit, {}):
+        return ()
+    return KIT_LAYER[0].get(note, ())
 
 
 def choke_group(note, kit=0):

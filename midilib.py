@@ -14,7 +14,7 @@ All rights reserved.
 
 from patches import patches
 from patch_map import property_class_for_program, property_class_for_note
-from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL, kit_for_program
+from percussion_map import percussion_for_note, choke_group, rasp_strokes, GM_PERCUSSION_CHANNEL, kit_for_program, key_layers
 
 # Python 3 compatibility: indexing bytes yields int, where Python 2 yielded
 # str. Accept both so the byte-level MIDI parsing below works unchanged.
@@ -1002,6 +1002,12 @@ class Channels:
 
         drop = set(); add = []
         for note, on_tick, on_ev, off_tick, off_ev, on_kit in pairs:
+            # a key that also strikes another's sound (percussion_map.KIT_LAYER),
+            # as blockrender's expansion does
+            for ln in key_layers(note, on_kit):
+                a = copy.deepcopy(on_ev); b = copy.deepcopy(off_ev)
+                a.event.note = ln; b.event.note = ln
+                add.append((a.time, a)); add.append((b.time, b))
             strokes = rasp_strokes(note, to_sec(on_tick), to_sec(off_tick), kit=on_kit)
             if not strokes:
                 continue

@@ -139,7 +139,8 @@ RAND_GRAN = 100000.0
 from patch_map import property_class_for_program, property_class_for_note, program_trim
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
-                            GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program)
+                            GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program,
+                            key_layers)
 
 # SR is the engine's sample rate. It used to be hardcoded here AND as six literal
 # 44100s inside the kernel, so it could not actually be changed; the kernel now
@@ -2417,6 +2418,11 @@ def prepare(path, tuner='hybrid440', sink=None):
     stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
     for ev in notes:
         ch, note, on, off, vel, rest, pg = ev
+        # A KEY THAT ALSO STRIKES ANOTHER'S SOUND (percussion_map.KIT_LAYER):
+        # the metronome bell's tick is the click key's, at the bell's velocity
+        if is_drum(pg):
+            for _ln in key_layers(note, kit_for_program(int(pg))):
+                expanded.append((ch, _ln, on, off, vel, rest, pg))
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
         if strokes is None:
             expanded.append(ev); continue

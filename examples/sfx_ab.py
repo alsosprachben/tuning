@@ -4,6 +4,7 @@
     python3 -I examples/sfx_ab.py [OUTDIR]           # default ~/Downloads/sfx_ab
     python3 -I examples/sfx_ab.py --vehicles [OUTDIR] # the vehicles (63-71)
     python3 -I examples/sfx_ab.py --rest [OUTDIR]     # the rest (39-62, 73-75)
+    python3 -I examples/sfx_ab.py --rest --keys=45,46 --no-gu [OUTDIR]  # recording and ours only
     python3 -I examples/sfx_ab.py --human [OUTDIR]    # the human and animal keys (52-57, 76, 77)
     python3 -I examples/sfx_ab.py --ours --human      # ...ours alone, in order
     python3 -I examples/sfx_ab.py --ours --kit=127    # the CM-64/32L set, ours alone, in order
@@ -52,7 +53,7 @@ SIREN = ("siren/819369__sapperlapje__fire-truck-siren.wav", (0.3, 2.3))
 # cascade no longer play on them (percussion_map.rasp_strokes)
 REST = ((39, None, None), (40, "slap/hits/slap_01.wav", None), (41, "scratch/610676__liftpizzas__scratch-4x.wav", (0.12, 0.55)),
         (42, "scratch/610676__liftpizzas__scratch-4x.wav", (0.4, 0.8)), (43, "sticks/hits/sticks_01.wav", None),
-        (44, None, None), (45, "metronome/hits/metronome_01.wav", None), (46, "metronome/hits/bell_01.wav", None),
+        (44, None, None), (45, "../metronome_ben/hits/metronome_01.wav", None), (46, "../metronome_ben/hits/bell_06.wav", None),
         (48, "guitarcut/hits/cutdown_01.wav", None), (49, "guitarcut/hits/cutup_01.wav", None),
         (50, "bassslap/hits/bassslap_01.wav", None), (51, "keyclick/hits/keyclick_01.wav", None),
         (59, "doorcreak/316683__alex_hears_things__slow-door-hinges_nm.wav", (0.55, 3.4)),
@@ -174,7 +175,9 @@ def main(argv):
                 # a patterned key (the laugh, heart, gallop) to its last stroke's end
                 secs = pat[-1][0] + P.KIT_GATE[kit].get(key, 0.5)
             items = [excerpt(os.path.join(R, path), max(secs, 1.0), seg)] if path else []
-            for f in (E.ours, lambda n, dd: E.theirs(GU, n, dd)):
+            # --no-gu: the recording and ours only -- a pair that can be sent,
+            # where GeneralUser's sample is a local reference (Ben's metronome)
+            for f in ((E.ours,) if "--no-gu" in argv else (E.ours, lambda n, dd: E.theirs(GU, n, dd))):
                 x, _ = f(key, d)
                 x = np.asarray(x, float)
                 a = int(np.argmax(np.abs(x) > np.abs(x).max() * 0.01))

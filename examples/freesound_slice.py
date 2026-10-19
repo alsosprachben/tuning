@@ -357,11 +357,16 @@ def bagpipe():
 SFX = {
     "slap":      ("slap", ("539163_*.wav", "125406_*.aiff"), 12, 0.4),
     "sticks":    ("sticks", ("*.wav",), 4, 0.5),
-    "metronome": ("metronome", ("607216_*.wav",), 8, 0.5),
-    # the metronome's BELL from a rotary phone's gong struck once (TRP, its
-    # first strike, 1615 Hz): the plastic metronome's own rings at 9.45 kHz, a
-    # beep (Ben: "more of a click than the metronome click is")
-    "bell":      ("telephone_wav", ("616849_*.wav",), 1, 2.5),
+    # BEN'S OWN MECHANICAL METRONOME, A WITTNER (2026-10-18, a close condenser through
+    # his Teyun A6, 48 kHz 16-bit; ~/Documents/refs/metronome_ben, beside
+    # freesound/): its slowest setting (38.5 bpm), the bell every fourth beat,
+    # then stopped after a bell to let it ring. It replaces a Wittner's ticks
+    # (607216) and, for the bell, a rotary phone's gong (TRP, 616849) -- the
+    # one CC0 metronome bell, a plastic one's, rang at 9.45 kHz: a beep (Ben).
+    # Ben's rings at 8.97 kHz too, with 13.5 and 18.7 kHz partials gone in a
+    # second over the case's long 2.05 and 5.1 kHz.
+    "metronome": ("../metronome_ben", ("ben_take2.wav",), 35, 1.2),
+    "bell":      ("../metronome_ben", ("ben_take1.wav",), 8, 4.0),
     "bassslap":  ("bassslap", ("*.wav",), 1, 1.9),
     "keyclick":  ("keyclick", ("*.aiff",), 1, 0.2),
     "door":      ("door", ("*.wav",), 2, 1.0),        # each file one slam, whole (WHOLE)
@@ -387,7 +392,18 @@ WHOLE = {"door", "punch", "bark"}
 # ...or the events at these times (s) in a take of several, by the file's
 # Freesound id: bsumusictech's hollowbody, its bright strum (centroid 1.2 kHz)
 # among body knocks; a horse's loudest clops as it passes closest
-PICK = {"cutup": {"81403": [9.81]},
+# A pick may be (time, longest): the metronome's bells inside the run stop
+# before the next tick; the two it was stopped after ring 4 s
+# THE TICKS FROM BEN'S SECOND TAKE, THE BELL SWITCHED OFF (ben_take2): 35
+# ticks at 38.5 bpm, alternating 1.51 / 1.57 s (the escapement's two sides).
+# The first take's ticks all sat under the bell's two low modes, 2.05 and
+# 5.1 kHz, ringing on at 2.5 and 5 dB/s (2.05 kHz still +36 dB 13 s after a
+# bell) -- lines a tick does not raise (measured just before and after each)
+# and that read as the tick's own strongest modes.
+PICK = {"metronome": {"ben": [6.98, 8.52, 10.03, 11.60, 13.10, 14.68, 16.18, 17.75, 19.27, 20.87, 22.37, 23.98, 25.50, 27.10, 28.62, 30.20, 31.71, 33.28, 34.78, 36.33, 37.84, 39.40, 40.93, 42.47, 43.98, 45.55, 47.07, 48.62, 50.12, 51.67, 53.18, 54.75, 56.26, 57.84, 59.35]},
+        "bell": {"ben": [(3.32, 1.45), (9.55, 1.45), (15.84, 1.45), (22.14, 1.45), (29.80, 1.45),
+                         (38.64, 4.0), (53.65, 1.45), (62.03, 4.0)]},
+        "cutup": {"81403": [9.81]},
         "hoof": {"182504": [6.488, 7.281, 7.535, 7.787, 8.705, 9.873, 10.113, 10.941]},
         "punch": {"383882": [1.47, 4.71]},
         "bark": {"495658": [0.18, 1.04]},
@@ -415,6 +431,10 @@ def sfx(names=None):
                 x = x / max(np.abs(x).max(), 1e-12)
                 on = onsets(x, sr, rise_db=15.0, top_db=-35.0, gap=0.08) if most > 1 and name not in WHOLE else []
                 want = PICK.get(name, {}).get(os.path.basename(src).split("_")[0])
+                caps = None
+                if want and isinstance(want[0], tuple):
+                    caps = [c for _, c in want]
+                    want = [t for t, _ in want]
                 if want:
                     # each the onset nearest its time (the energy's peak is
                     # given; its rise a few ms before)
@@ -426,13 +446,14 @@ def sfx(names=None):
                           for o, t in zip(near, want)]
                 if not on:
                     on = [int(np.argmax(np.abs(x) > 0.05))]
-                for s, t in zip(on, on[1:] + [len(x)]):
+                for i, (s, t) in enumerate(zip(on, on[1:] + [len(x)])):
                     if n >= most:
                         break
                     if len(on) > 1 and t - s < int(0.08 * sr):
                         continue              # a hit cut short by the next
                     pre = min(s, int(0.005 * sr))
-                    seg = a[s - pre:s + min(t - s, int(longest * sr))].astype(np.float32)
+                    cap = caps[i] if caps else longest
+                    seg = a[s - pre:s + min(t - s, int(cap * sr))].astype(np.float32)
                     n += 1
                     wavfile.write(os.path.join(out, "%s_%02d.wav" % (name, n)), sr, seg)
                     print("%s_%02d  %s t=%6.2f s  %.2f s" % (name, n, os.path.basename(src)[:30],
