@@ -2162,6 +2162,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     _NOREFL = [False]        # emit no room images for this partial (noise: see below)
     _LATE = [False]     # rows of a late copy (bloom): dr 0.75 direct, 0.25 an image -- see sympathetic.expand
     _RING = []          # [(first, end)] of each note's ring rows: off the wheel (live reads them too)
+    _GRAIN_ROWS = []    # [(first, end)] of each note's grains: live keeps their own onsets
     _RINGF = [False]    # emitting ring rows: dr 0.9 direct, 0.1 an image -- see sympathetic.expand
     # A ROOM IMAGE'S EXTRA PATH, in samples: how much later than its direct
     # sound it starts and stops. Already in its `non`/`noff` here; recorded on
@@ -3471,8 +3472,9 @@ def prepare(path, tuner='hybrid440', sink=None):
             _gate = getattr(pc, 'gate_time', None)
             # A KIT keeps the flat hold: a ride's 1240 partials held to -80 dB
             # (32 s) a hit, on eighths, would fill live's slab
-            off = (on + _gate) if _gate else max(off, on + (ONE_SHOT_MIN_S if drum is not None
-                                                           else one_shot_ring(props, f0)))
+            off = ((max(off, on + _gate) if getattr(pc, 'held_texture', False) else on + _gate)
+                   if _gate else max(off, on + (ONE_SHOT_MIN_S if drum is not None
+                                                else one_shot_ring(props, f0))))
         # THE PEDAL, between the two of them on purpose. After the one-shot
         # extension, because a cymbal has no damper to lift and must not be
         # pedalled; before the choke override below, so a closed hi-hat still
@@ -4299,6 +4301,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _BR[0] = bbrow_of[ch][1]
             _grng = random.Random(int(round(on * 1e6)) * 139 + note * 13 + ch)
             _glkeep = (_GL[0], _GL[1], _GL[2])
+            _gr0 = len(A['om'])
             for _row in props.grains:
                 _lo, _hi, _rate, _db, _dsc, _dps = _row[:6]
                 # ...and a GLIDE where the row carries one (a bubble's ring
@@ -4341,6 +4344,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                     _t += (max(0.2 * _per, _grng.gauss(_per, 0.07 * _per)) if _per
                            else _grng.expovariate(_rate)) * SR
                 _GL[0], _GL[1], _GL[2] = _glkeep
+            _GRAIN_ROWS.append((_gr0, len(A['om'])))
             _BR[0] = _bkeep
             _CBW[0], _CBW[1] = _cbw
             _NOREFL[0] = False
@@ -5267,6 +5271,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 # which rows are sympathetic strings' (live's meend leaves them
                 # at their own pitch: Live._meend_retune)
                 sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP),
+                grain_rows=list(_GRAIN_ROWS),
                 rel_rows=list(_REL_ROWS), rel_jacks=list(_REL_JACKS))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)

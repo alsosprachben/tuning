@@ -1122,6 +1122,9 @@ class Slab:
         # a Hammond drawbar speaks when its contact closes (t["cof"])
         if tmpl.get("cof") is not None and len(tmpl["cof"]) == n:
             newnon = newnon + tmpl["cof"]
+        # ...and a grain lands where it falls in the note (t["gof"])
+        if tmpl.get("gof") is not None and len(tmpl["gof"]) == n:
+            newnon = newnon + tmpl["gof"]
         # p0 = -om*(non + ear delay) + ph0, so moving the onset moves the phase
         # anchor with it. Written against the template's OWN onsets, which makes
         # it correct whether or not they differ from each other.
@@ -2530,6 +2533,21 @@ class Patch:
         t["push"] = np.zeros(int(t["P"]), bool)
         for _a, _b in (p.get("push_rows") or ()):
             t["push"][_a:min(_b, int(t["P"]))] = True
+        # ...AND THE GRAINS (blockrender grain_rows: rain's drops, a stream's,
+        # the ocean drum's beads): each keeps ITS OWN onset in the note (gof),
+        # where every other row is placed at the press -- placed at the press,
+        # a rain key's 118 drops over 2.75 s all fell in its first instant
+        t["grain"] = None
+        t["gof"] = None
+        if t["P"] and p.get("grain_rows"):
+            _g = np.zeros(int(t["P"]), bool)
+            for _a, _b in p.get("grain_rows"):
+                _g[_a:min(_b, int(t["P"]))] = True
+            if _g.any():
+                _dir = (t["rdl"] == 0) & ~_g
+                _t0 = int(t["non"][_dir].min()) if _dir.any() else int(t["non"].min())
+                t["grain"] = _g
+                t["gof"] = np.where(_g, t["non"] - _t0, 0).astype(np.int64)
         # ...AND A HAMMOND'S CONTACTS (tonelib.contact_offset_s): each drawbar
         # speaks a little after the key, at its own instant -- the click. The
         # template's onsets carry it; the stamp keeps it (newnon), for this voice
@@ -2606,6 +2624,50 @@ class Patch:
                 _end = (np.asarray(t["fa"], np.float64) + _ts * B.SR + 0.01 * B.SR).astype(np.int64)
                 t["rof"] = np.where(_quiet, np.minimum(t["rof"], _end), t["rof"])
             t["dur"] = int(t["rof"].max())
+        # A HELD TEXTURE (tonelib held_texture: rain, the engine, the wind ...)
+        # IS A HELD NOTE: its noise and partials run until the key is up --
+        # generated, as long as it is held -- and only the rows that decay on
+        # their own (the drops, the clacks) keep their own ends. Its gate is
+        # the least it plays (min_hold, _note_off): a tap still sounds what
+        # GeneralUser's sample does.
+        _vh = self._voice_class(note)
+        if (t["P"] and t["oneshot"] and getattr(_vh, "held_texture", False)
+                and getattr(_vh, "gate_time", None)):
+            _lr = np.asarray(t["logr"], np.float64)
+            _decays = (_lr > 0) & (np.asarray(t["sus"]) <= 0) & (np.asarray(t["gr"]) < 0)
+            t["rof"] = np.where(_decays, t["rof"], -1).astype(np.int64)
+            t["oneshot"] = False
+            t["min_hold"] = int(round(float(_vh.gate_time) * B.SR))
+            # ...AND ITS GRAINS GO ON: past min_hold, while the key is down, the
+            # audio thread strikes single grains (Live._tex_tick) at Poisson
+            # instants at the class's own rate, each drawn from this POOL -- the
+            # template's own drops, one sub-template a drop (its rows share an
+            # onset) -- so the rain keeps falling, drawn fresh, not a loop
+            t["gpool"] = []
+            _rate = sum(r[2] for r in getattr(_vh, "grains", ()) if r[2] > 0)
+            if t["grain"] is not None and _rate > 0:
+                _gi = np.flatnonzero(t["grain"])
+                _P = int(t["P"])
+                for _on in np.unique(t["non"][_gi]):
+                    _ix = _gi[t["non"][_gi] == _on]
+                    sub = {k: (v[_ix] if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == _P else v)
+                           for k, v in t.items() if k not in ("gpool", "ranks", "rel_rank")}
+                    sub.update(P=len(_ix), oneshot=True, gof=None, cof=None, scatter_ms=0.0,
+                               dur=int(sub["rof"].max()), min_hold=None)
+                    t["gpool"].append(sub)
+                # ...AND THE HELD STAMP IS THE REST: every drop comes from the
+                # generator, from the press on, each its own one-shot freeing
+                # its own slots -- stamped with the note, a rain key's 1416 drop
+                # rows held their slots till key-up, sounded or not
+                _keep = np.flatnonzero(~t["grain"])
+                for k in list(t.keys()):
+                    v = t[k]
+                    if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == _P:
+                        t[k] = v[_keep]
+                t["P"] = len(_keep)
+                t["grain"] = None
+                t["gof"] = None
+            t["grate"] = float(_rate)
         t["send"] = getattr(self._voice_class(note), "reverb_distance", None)
         t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
         # WHICH PARTIALS' FADE IS THE ATTACK, for a slur to shorten (_slur_stamp):
@@ -3010,6 +3072,10 @@ class Live:
         self.metro_next = None           # the next beat's absolute sample
         self.metro_beat = 0
         self.metro_log = collections.deque(maxlen=64)   # (sample, key) struck, for the selftest
+        self.tex_on = {}                 # (pid, ch, note) -> the sample a held texture may stop
+        self.tex_gen = {}                # (pid, ch, note) -> [part, template, next grain's sample, scale]
+        self._tex_rng = _random.Random(0x7E47)
+        self._tex_n = 0
         self.events = collections.deque()
         self.routes = ()             # Route table, applied in on_midi
         self.seen = {}               # (channel, control key) -> last value
@@ -3618,6 +3684,12 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "register: %s: %s" % (type(e).__name__, e)
+        if self.tex_gen:
+            try:
+                self._tex_tick(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "texture: %s: %s" % (type(e).__name__, e)
         if self.metro_bpm > 0 and self.metro_part is not None:
             try:
                 self._metro_tick(n0)
@@ -3682,6 +3754,23 @@ class Live:
         if self.metro_bpm > 0 and not was:
             self.metro_next = None       # from the next block, on beat one
             self.metro_beat = 0
+
+    def _tex_tick(self, n0):
+        """A held texture's grains past its template: a drop from its pool at
+        each Poisson instant in this block, at its own sample (tmpl grate per
+        second), under a key of its own -- a one-shot that decays on its own
+        rows' ends, so key-up need not touch it."""
+        end = n0 + self.frames
+        rng = self._tex_rng
+        for k, g in list(self.tex_gen.items()):
+            part, tmpl, nxt, scale = g
+            while nxt < end:
+                sub = tmpl["gpool"][rng.randrange(len(tmpl["gpool"]))]
+                self._tex_n += 1
+                if not self.slab.stamp(sub, k + (("grain", self._tex_n),), max(int(nxt), n0), scale):
+                    self.dropped += 1
+                nxt += rng.expovariate(tmpl["grate"]) * B.SR
+            g[2] = nxt              # the first instant past this block, for the next
 
     def set_metro_level(self, db):
         """The metronome's volume, dB on its own part -- a part's level, read
@@ -4406,6 +4495,12 @@ class Live:
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
+        if tmpl.get("min_hold"):
+            self.tex_on[(part.pid, ch, note)] = n0 + tmpl["min_hold"]     # the least it plays
+            if tmpl.get("gpool") and tmpl.get("grate", 0.0) > 0:
+                # its grains, from the press, for as long as it is held (_tex_tick)
+                self.tex_gen[(part.pid, ch, note)] = [
+                    part, tmpl, n0 + self._tex_rng.expovariate(tmpl["grate"]) * B.SR, scale]
         if tmpl.get("rel"):
             self.held_tmpl[(part.pid, ch, note)] = (tmpl, scale)
         # A LAYERED MOOG (moog.layers_of): the same knob-neutral template again
@@ -5841,7 +5936,11 @@ class Live:
             if self.reg_enabled and self._reg_voice(part, note):
                 self._reg_damper(part, ch, n0, released=note)   # every choir's damper falls
         else:
-            self.slab.release((part.pid, ch, note, None), n0)
+            # a held texture lets go no sooner than its gate (min_hold), and
+            # strikes no more grains
+            _at = max(n0, self.tex_on.pop((part.pid, ch, note), n0))
+            self.tex_gen.pop((part.pid, ch, note), None)
+            self.slab.release((part.pid, ch, note, None), _at)
             self._key_up_event(part, ch, note, n0)
             if self.reg_enabled:
                 self.slab.release((part.pid, ch, note, self.REG_FORCED), n0)

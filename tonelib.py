@@ -11044,6 +11044,14 @@ class PercussionProperties(PluckedStringProperties):
     # A GATED one-shot stops here, in seconds from the strike, instead of
     # ringing out: see GatedSnareProperties. None is every other struck voice.
     gate_time = None
+    # A HELD TEXTURE (the SFX set's engine, train, jet, helicopter, siren,
+    # starship, rain, wind, stream): a one-shot whose gate is the LEAST it
+    # plays -- GeneralUser's sample's length, the sound a tap gives -- and that
+    # runs on while the key is down, generated, not looped: its noise and
+    # partials held, its grains drawn for as long as it lasts (Ben: "we just
+    # keep generating. It is an advantage"). GeneralUser itself sustains the
+    # engine and the helicopter while held, and plays the rest at a fixed length.
+    held_texture = False
 
     chiff_cycle = 0.0
     chiff_volume = 0.0
@@ -23940,6 +23948,7 @@ class SfxFretSlideProperties(GuitarFretNoiseProperties):
 
 class SfxHelicopterProperties(HelicopterProperties):
     """SFX 70, "Helicopter": GM 125's rotor, a one-shot."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     one_shot = True
 
 
@@ -23980,6 +23989,7 @@ class SfxRainProperties(SfxWeatherProperties):
     alone and plinked (Ben: "the dripping needs improvement ... the sharpness
     of the attack or height of the spectrum"). So each drop is a CLUSTER of
     sines across the band at one instant (grains' ninth field)."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     # FITTED (examples/weather_fit.py): colour rms 1.7 dB to the recording
     breath_noise_db = ((51, -48.6), (64, -7.9), (80, 24.4), (101, 31.8), (127, 37.8), (160, 42.2), (202, 43.6), (255, 47.9), (321, 48.8), (404, 50.2), (509, 52.4), (641, 53.2), (808, 51.8), (1018, 51.2), (1283, 50.5), (1616, 51.0), (2036, 51.2), (2566, 50.7), (3233, 48.3), (4073, 47.2), (5132, 47.2), (6465, 48.2), (8146, 48.8), (10263, 40.9), (12931, 31.2))
     grains = ((500.0, 16000.0, 40.0, 74.2, 8.0, 3000.0, 1.0, 0.001, 12),)
@@ -23997,6 +24007,7 @@ class SfxThunderProperties(SfxWeatherProperties):
 class SfxWindProperties(SfxWeatherProperties):
     """SFX 81, "Wind": a howl -- its energy at the 1 kHz octave over a low
     rumble -- swelling slowly."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     breath_noise_fade_s = 0.3
     # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
     breath_noise_db = ((51, 38.8), (64, 42.4), (80, 36.9), (101, 39.2), (127, 42.3), (160, 32.2), (202, 39.3), (255, 41.3), (321, 42.1), (404, 41.5), (509, 43.9), (641, 46.3), (808, 44.4), (1018, 55.0), (1283, 50.5), (1616, 31.1), (2036, 24.7), (2566, 17.4), (3233, 13.7), (4073, 6.5), (5132, 6.2), (6465, 4.5), (8146, 4.7), (10263, 6.1), (12931, 10.9))
@@ -24012,6 +24023,7 @@ class SfxStreamProperties(SfxWeatherProperties):
     SHORT: at the bubble's own 220 dB/s and a 12% rise it boinged (Ben: "a
     bit too bouncy ball ... pull it back like the rain"), so it dies at 900
     dB/s, rises 5%, and sits 6 dB further under the click."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
     breath_noise_db = ((51, 6.2), (64, 20.3), (80, 27.0), (101, 33.3), (127, 42.0), (160, 47.6), (202, 48.1), (255, 49.6), (321, 48.4), (404, 49.4), (509, 47.7), (641, 47.4), (808, 47.0), (1018, 46.7), (1283, 46.5), (1616, 37.7), (2036, 54.9), (2566, 53.8), (3233, 53.7), (4073, 53.7), (5132, 50.6), (6465, 52.0), (8146, 54.3), (10263, 56.1), (12931, 57.4))
     grains = ((1400.0, 2800.0, 25.0, 59.8, 8.0, 900.0, 0.95, 0.004), (2000.0, 16000.0, 10.0, 77.8, 8.0, 3000.0, 1.0, 0.001, 12))
@@ -24039,6 +24051,7 @@ class SfxEngineProperties(SfxWeatherProperties):
     falling 15, 24, ~30 dB and 40-60 by the sixteenth -- as partials (held,
     a touch unsteady: the firing is not a clock) over the engine's noise.
     Played at its firing (the key's base frequency)."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     mode_ratios = tuple(float(k) for k in range(1, 17))
     max_harmonic = 16
     # the seashore's gain is its noise table's (+50 dB rows); the firing's
@@ -24057,6 +24070,7 @@ class SfxEngineProperties(SfxWeatherProperties):
 class SfxTrainProperties(SfxWeatherProperties):
     """SFX 68, "Train": a freight train's rumble (63-125 Hz) and the wheels'
     clacks over the rail joints -- grains, each a cluster: a click."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     # FITTED (examples/weather_fit.py): colour rms 0.2 dB to the recording
     breath_noise_db = ((51, 46.0), (64, 54.7), (80, 51.6), (101, 51.4), (127, 47.5), (160, 42.2), (202, 43.9), (255, 37.3), (321, 36.2), (404, 35.3), (509, 36.1), (641, 18.9), (808, 22.1), (1018, 34.3), (1283, 38.0), (1616, 38.3), (2036, 34.6), (2566, 28.4), (3233, 20.2), (4073, 31.9), (5132, 32.9), (6465, 24.4), (8146, 29.1), (10263, 25.6), (12931, 25.1))
     grains = ((200.0, 4000.0, 4.0, 56.3, 6.0, 400.0, 1.0, 0.001, 8),)
@@ -24065,6 +24079,7 @@ class SfxTrainProperties(SfxWeatherProperties):
 class SfxJetProperties(SfxWeatherProperties):
     """SFX 69, "Jetplane": a jet overhead -- a broadband roar (125 Hz - 1 kHz
     at its strongest), swelling in."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     breath_noise_fade_s = 0.35
     # FITTED (examples/weather_fit.py): colour rms 0.0 dB to the recording
     breath_noise_db = ((51, 46.2), (64, 47.1), (80, 48.9), (101, 47.7), (127, 51.4), (160, 50.7), (202, 51.7), (255, 52.6), (321, 53.1), (404, 53.5), (509, 54.1), (641, 54.1), (808, 54.9), (1018, 58.7), (1283, 59.4), (1616, 54.1), (2036, 48.1), (2566, 49.5), (3233, 52.7), (4073, 48.6), (5132, 46.2), (6465, 47.2), (8146, 38.1), (10263, 33.4), (12931, 23.3))
@@ -24095,6 +24110,7 @@ class SfxSirenProperties(SfxWeatherProperties):
     from 0.52 of its pitch toward it with a 1.14 s time constant (382 Hz at
     0.5 s, 592 at 1.75, 738 at the top). GeneralUser's own is a 0.3 s blip;
     this is the wail's first second and a half. No noise of its own."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     mode_ratios = tuple(float(k) for k in range(1, 13))
     mode_gains = (1, 0.5012, 0.1413, 0.1259, 0.1995, 0.08913, 0.1413, 0.1778, 0.07943, 0.02239, 0.03162, 0.00631)
     max_harmonic = 12
@@ -24175,6 +24191,7 @@ class SfxStarshipProperties(SfxWeatherProperties):
     -- a hiss through a resonant low-pass (3.8 kHz, 12.8 dB), swelling in
     over 0.21 s, and a buzz near 2.3 kHz warbling 581 cents at 10.9 Hz, 24 dB
     under it, fading in over 0.84 s: the sci-fi warble."""
+    held_texture = True               # sustains while held, its GS length the least (blockrender, live)
     mode_ratios = (1.0, 2.0)
     # at the noise table's scale: the buzz 23.7 dB under the hiss, as the
     # reference has it
