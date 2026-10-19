@@ -593,13 +593,13 @@ Controls are the rest of the console that are not stops.
 
 | bit | stop | | notes |
 |---|---|---|---|
-| 0 | 16 | **2** | never pulled in a take: its wheels are built as the measured bars' are, its level asserted |
-| 1 | 5-1/3 | **2** | never pulled in a take, as 16 |
+| 0 | 16 | **4** | the L102 (Pianobook, a spinet sampled dry, every drawbar alone; l102_fit.py): +2.2 dB over the 8' on the same wheel -- one frequency, so speaker and mic divide out -- 1.00 -> 1.30. Ben, A/B: "the after sounds more natural" |
+| 1 | 5-1/3 | **4** | the L102, as 16: -1.1 dB under the 8' on its wheel, which the asserted 0.85 had (0.87) |
 | 2 | 8 | **4** | pulled in both of hammondman's packs; drawbar_fit.py derives the settings (tonewheel 00 7880 000, rok 00 8876 034) and the model explains every note to 3.0-3.9 dB rms |
 | 3 | 4 | **4** | as 8: both packs, 3.4-3.6 dB |
 | 4 | 2-2/3 | **4** | as 8: both packs, 2.9-4.1 dB -- the tempered twelfth |
 | 5 | 2 | **4** | the rok pack, 3.6 dB |
-| 6 | 1-3/5 | **2** | never pulled in a take: the tempered seventeenth, 13.7 cents sharp, asserted |
+| 6 | 1-3/5 | **4** | the L102, as 16: level with the 2' and 1.3 dB over the 1-1/3' on their wheels (0.52 -> 0.59); its wheel the tempered seventeenth, read 11.4 cents sharp |
 | 7 | 1-1/3 | **4** | the rok pack, 4.0 dB |
 | 8 | 1 | **4** | the rok pack, 3.1 dB, with the foldback above the 91st wheel |
 | -- | Leslie slow (chorale) | **4** | the tonewheel pack: the bass rotor's lobe from 160 Hz, the cabinet's response, the crossover's shimmer |

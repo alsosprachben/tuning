@@ -1307,7 +1307,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 
 <section>
 <h2>Stops: the registers within a program</h2>
-<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. 62 of the 71 are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
+<p>A program&rsquo;s rating is its default registration&rsquo;s. A registerable program has other stops, and each is its own claim &mdash; the harmonium take plays two of its reeds, Pite&aring;&rsquo;s pipes measured three of the church organ&rsquo;s fourteen stops &mdash; so each is rated on the same scale. The names are the code&rsquo;s own (<code>stop_ranks</code>, checked when the page is built), the bit is the stop word&rsquo;s, and the rows after the stops are the rest of the console: the Leslie&rsquo;s speeds, the accordion&rsquo;s banks. 65 of the 71 are fitted against a recording; where Pite&aring; has a stop still to measure, the note names it.</p>
 <div class="stopstack">
 <div class="fambox">
 <div class="famhead"><h3>6 Harpsichord</h3><span class="rng">the harpsichord&#x27;s registers (CC11 stop word)</span><span class="pips">
@@ -1324,13 +1324,13 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 </table></div></div>
 <div class="fambox">
 <div class="famhead"><h3>16 Drawbar Organ &middot; 17 Percussive Organ &middot; 18 Rock Organ</h3><span class="rng">the tonewheel&#x27;s nine drawbars</span><span class="pips">
-<span class="pip r2" title="16"></span>
-<span class="pip r2" title="5-1/3"></span>
+<span class="pip r4" title="16"></span>
+<span class="pip r4" title="5-1/3"></span>
 <span class="pip r4" title="8"></span>
 <span class="pip r4" title="4"></span>
 <span class="pip r4" title="2-2/3"></span>
 <span class="pip r4" title="2"></span>
-<span class="pip r2" title="1-3/5"></span>
+<span class="pip r4" title="1-3/5"></span>
 <span class="pip r4" title="1-1/3"></span>
 <span class="pip r4" title="1"></span>
 <span class="pip r4" title="Leslie slow (chorale)"></span>
@@ -1340,13 +1340,13 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <span class="pip r4" title="overdrive (GM 18)"></span>
 </span></div>
 <div class="tscroll"><table><tr><th>Bit</th><th>Stop</th><th></th><th>Notes</th></tr>
-<tr><td class="num">0</td><td class="nm">16</td><td class="rt"><span class="chip r2">2</span></td><td class="note">never pulled in a take: its wheels are built as the measured bars&#x27; are, its level asserted</td></tr>
-<tr><td class="num">1</td><td class="nm">5-1/3</td><td class="rt"><span class="chip r2">2</span></td><td class="note">never pulled in a take, as 16</td></tr>
+<tr><td class="num">0</td><td class="nm">16</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the L102 (Pianobook, a spinet sampled dry, every drawbar alone; l102_fit.py): +2.2 dB over the 8&#x27; on the same wheel -- one frequency, so speaker and mic divide out -- 1.00 -&gt; 1.30. Ben, A/B: &quot;the after sounds more natural&quot;</td></tr>
+<tr><td class="num">1</td><td class="nm">5-1/3</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the L102, as 16: -1.1 dB under the 8&#x27; on its wheel, which the asserted 0.85 had (0.87)</td></tr>
 <tr><td class="num">2</td><td class="nm">8</td><td class="rt"><span class="chip r4">4</span></td><td class="note">pulled in both of hammondman&#x27;s packs; drawbar_fit.py derives the settings (tonewheel 00 7880 000, rok 00 8876 034) and the model explains every note to 3.0-3.9 dB rms</td></tr>
 <tr><td class="num">3</td><td class="nm">4</td><td class="rt"><span class="chip r4">4</span></td><td class="note">as 8: both packs, 3.4-3.6 dB</td></tr>
 <tr><td class="num">4</td><td class="nm">2-2/3</td><td class="rt"><span class="chip r4">4</span></td><td class="note">as 8: both packs, 2.9-4.1 dB -- the tempered twelfth</td></tr>
 <tr><td class="num">5</td><td class="nm">2</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the rok pack, 3.6 dB</td></tr>
-<tr><td class="num">6</td><td class="nm">1-3/5</td><td class="rt"><span class="chip r2">2</span></td><td class="note">never pulled in a take: the tempered seventeenth, 13.7 cents sharp, asserted</td></tr>
+<tr><td class="num">6</td><td class="nm">1-3/5</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the L102, as 16: level with the 2&#x27; and 1.3 dB over the 1-1/3&#x27; on their wheels (0.52 -&gt; 0.59); its wheel the tempered seventeenth, read 11.4 cents sharp</td></tr>
 <tr><td class="num">7</td><td class="nm">1-1/3</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the rok pack, 4.0 dB</td></tr>
 <tr><td class="num">8</td><td class="nm">1</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the rok pack, 3.1 dB, with the foldback above the 91st wheel</td></tr>
 <tr><td class="num">&ndash;</td><td class="nm">Leslie slow (chorale)</td><td class="rt"><span class="chip r4">4</span></td><td class="note">the tonewheel pack: the bass rotor&#x27;s lobe from 160 Hz, the cabinet&#x27;s response, the crossover&#x27;s shimmer</td></tr>

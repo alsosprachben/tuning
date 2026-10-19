@@ -571,9 +571,9 @@ STOP_RATED = [
     "2":     (4, "the rok pack, 3.6 dB"),
     "1-1/3": (4, "the rok pack, 4.0 dB"),
     "1":     (4, "the rok pack, 3.1 dB, with the foldback above the 91st wheel"),
-    "16":    (2, "never pulled in a take: its wheels are built as the measured bars' are, its level asserted"),
-    "5-1/3": (2, "never pulled in a take, as 16"),
-    "1-3/5": (2, "never pulled in a take: the tempered seventeenth, 13.7 cents sharp, asserted"),
+    "16":    (4, "the L102 (Pianobook, a spinet sampled dry, every drawbar alone; l102_fit.py): +2.2 dB over the 8' on the same wheel -- one frequency, so speaker and mic divide out -- 1.00 -> 1.30. Ben, A/B: \"the after sounds more natural\""),
+    "5-1/3": (4, "the L102, as 16: -1.1 dB under the 8' on its wheel, which the asserted 0.85 had (0.87)"),
+    "1-3/5": (4, "the L102, as 16: level with the 2' and 1.3 dB over the 1-1/3' on their wheels (0.52 -> 0.59); its wheel the tempered seventeenth, read 11.4 cents sharp"),
   }, [
     ("Leslie slow (chorale)", 4, "the tonewheel pack: the bass rotor's lobe from 160 Hz, the cabinet's response, the crossover's shimmer"),
     ("Leslie fast (tremolo)", 4, "the rok pack: the horn's throw and lobe refitted, 6.9 -> 4.7 dB"),

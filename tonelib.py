@@ -5922,14 +5922,28 @@ class TonewheelProperties(SynthProperties):
 
     # The drawbars. Ratios are TEMPERED, not integer -- see above. Amplitudes
     # are the drawbar at 8, the stop mask choosing which are pulled.
+    #
+    # THE THREE NO B3 TAKE PULLED -- 16', 5 1/3', 1 3/5' -- FROM THE L102
+    # (Pianobook; a 1960s spinet sampled dry, every drawbar ALONE:
+    # examples/l102_fit.py), each against a drawbar the B3 packs did fit, on
+    # the SAME WHEEL (the 16' at key K with the 8' at K-12 ...: one frequency,
+    # so the speaker and the mic divide out): the 16' +2.2 dB over the 8'
+    # (1.00 -> 1.30), the 5 1/3' -1.1 under it (0.85 -> 0.87, as it was), the
+    # 1 3/5' level with the 2' and 1.3 dB over the 1 1/3' (0.52 -> 0.59, the
+    # mean of the two it gives). The L102 holds EVERY drawbar within +-2.3 dB
+    # of the 8' on its wheel, where ours falls with footage (1' -6.5); the B3
+    # packs cannot tell the two apart -- their settings, solved in 3 dB steps,
+    # absorb it (drawbar_fit: rok 5.70 dB against 6.07 with the L102's gains,
+    # tonewheel 3.80 against 3.76) -- so the fitted drawbars keep theirs, and
+    # only the three asserted ones take the spinet's word (Ben: "(b)").
     stop_ranks = [
-        ("16",    0.5,    1.00),     # sub-fundamental
-        ("5-1/3", 1.4983, 0.85),     # sub-third: tempered fifth, not 1.5
+        ("16",    0.5,    1.30),     # sub-fundamental (the L102, below)
+        ("5-1/3", 1.4983, 0.87),     # sub-third: tempered fifth, not 1.5 (the L102)
         ("8",     1.0,    1.00),     # fundamental
         ("4",     2.0,    0.90),
         ("2-2/3", 2.9966, 0.72),     # tempered twelfth, not 3.0
         ("2",     4.0,    0.66),
-        ("1-3/5", 5.0397, 0.52),     # tempered seventeenth: 13.7 cents sharp
+        ("1-3/5", 5.0397, 0.59),     # tempered seventeenth: 13.7 cents sharp (the L102)
         ("1-1/3", 5.9932, 0.45),
         ("1",     8.0,    0.40),
     ]
