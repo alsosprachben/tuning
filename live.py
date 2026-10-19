@@ -2588,6 +2588,24 @@ class Patch:
         # ...and every row of a one-shot keeps the length it has offline (rof)
         if t["P"] and t["oneshot"]:
             t["rof"] = (t["noff"] - t["non"]).astype(np.int64)
+            # ...BUT NOT PAST WHERE IT FALLS SILENT. Offline a one-shot's note
+            # runs 8 s and every row with it, so live each row held its slot 8
+            # s: a metronome click's 392 rows, its modes gone in tenths of a
+            # second, 8 s apiece -- sixteen clicks deep at 120 bpm (Ben: "The
+            # click won't retire partials for a very long time"). A row that
+            # only decays (no sustain, no gate) ends at its attack plus the
+            # time its own rate takes it from its own level to ONESHOT_FLOOR_DB
+            # under the template's loudest row: the bell's long low modes keep
+            # their seconds, its fast ones and the click's do not.
+            _a = np.maximum(np.abs(t["aL"]), np.abs(t["aR"])).astype(np.float64)
+            _lr = np.asarray(t["logr"], np.float64)
+            _quiet = (_lr > 0) & (np.asarray(t["sus"]) <= 0) & (np.asarray(t["gr"]) < 0)
+            if _quiet.any() and _a.max() > 0:
+                _fl = _a.max() * 10.0 ** (-ONESHOT_FLOOR_DB / 20.0)
+                _ts = np.log(np.maximum(_a, _fl) / _fl) / np.where(_lr > 0, _lr, 1.0)
+                _end = (np.asarray(t["fa"], np.float64) + _ts * B.SR + 0.01 * B.SR).astype(np.int64)
+                t["rof"] = np.where(_quiet, np.minimum(t["rof"], _end), t["rof"])
+            t["dur"] = int(t["rof"].max())
         t["send"] = getattr(self._voice_class(note), "reverb_distance", None)
         t["scatter_ms"] = getattr(self._voice_class(note), "section_onset_ms", 0.0) or 0.0
         # WHICH PARTIALS' FADE IS THE ATTACK, for a slur to shorten (_slur_stamp):
@@ -2769,6 +2787,11 @@ def tuner_for(program, drums, tuner, eastern):
         return eastern
     _f = B.tuning_table(tuner).get(ragas.sa_note(_key))
     return "%s:%.6f" % (eastern, _f) if _f else eastern
+
+
+# How far under a one-shot template's loudest row a decaying row is let go
+# (Patch: its rof): a hundred dB is under the float kernel's own noise.
+ONESHOT_FLOOR_DB = 100.0
 
 
 class Part:
@@ -2978,6 +3001,15 @@ class Live:
         self.pedal = {}         # channel -> sustain pedal down
         self.pedalled = set()   # keys whose damper the pedal is holding off
         self.n = 0                       # absolute sample clock
+        # THE METRONOME (set_metronome): its own drum part on Standard's kit,
+        # struck from the audio thread at each beat's own sample
+        self.metro_bpm = 0.0             # 0: off
+        self.metro_ring = 0              # the bell every N beats; 0: none
+        self.metro_level_db = 0.0        # its part's level (set_metro_level)
+        self.metro_part = None
+        self.metro_next = None           # the next beat's absolute sample
+        self.metro_beat = 0
+        self.metro_log = collections.deque(maxlen=64)   # (sample, key) struck, for the selftest
         self.events = collections.deque()
         self.routes = ()             # Route table, applied in on_midi
         self.seen = {}               # (channel, control key) -> last value
@@ -3586,6 +3618,12 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "register: %s: %s" % (type(e).__name__, e)
+        if self.metro_bpm > 0 and self.metro_part is not None:
+            try:
+                self._metro_tick(n0)
+            except Exception as e:
+                self.errors += 1
+                self.last_error = "metronome: %s: %s" % (type(e).__name__, e)
         if self.moog_glide:
             try:
                 self._moog_tick(n0)
@@ -3598,6 +3636,74 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "amp: %s: %s" % (type(e).__name__, e)
+
+    # ---- the metronome --------------------------------------------------------
+    # A click on every beat and the bell every `ring` beats, from Standard's
+    # kit: 33, the click, and 34, the bell -- which strikes 33's tick with it
+    # (percussion_map.KIT_LAYER), as Ben's Wittner rings its bell over the tick
+    # it always makes. Struck HERE, on the audio thread, at each beat's own
+    # sample -- not as MIDI from the panel, whose events land on the block
+    # (apply's n0) after however long the panel took to send them. Its part is
+    # its own and in no part list, so the keyboard never plays it and a
+    # program change never takes it away.
+    METRO_KIT = 0
+    METRO_CLICK, METRO_BELL = 33, 34
+    METRO_VEL = 100
+
+    @classmethod
+    def build_metro_part(cls, tuner="hybrid440", progress=None):
+        """The metronome's own drum part, its click and bell BUILT -- off the
+        audio thread. Standard's 33 and 34 are GS's, under the GM drum range a
+        drum patch warms (Patch.range), so they are built here: a first beat
+        otherwise missed its template and fell silent while the builder made
+        it."""
+        patch = patch_for(cls.METRO_KIT, True, tuner, progress)
+        b = patch.bucket(cls.METRO_VEL)
+        for note in (cls.METRO_BELL, cls.METRO_CLICK):
+            for sp in patch.speeds:
+                if (note, b, sp) not in patch.templates:
+                    t = patch._raw_template(note, patch.bucket_vel(b), sp)
+                    if t is not None:
+                        patch.templates[(note, b, sp)] = t
+                        patch.partials += t["P"]
+        return Part(patch, channel=GM_PERCUSSION_CHANNEL)
+
+    def set_metronome(self, bpm, ring, part=None):
+        """From the panel: the tempo (0 stops it) and the ring (0: no bell).
+        `part` is the drum part to strike, built off the audio thread (patch_for)
+        the first time it is switched on. Starting again begins on beat one;
+        a new tempo keeps the next beat where it was and spaces the rest."""
+        if part is not None:
+            part.level_db = self.metro_level_db
+            self.metro_part = part
+        was = self.metro_bpm > 0
+        self.metro_ring = max(0, int(ring))
+        self.metro_bpm = max(0.0, float(bpm))
+        if self.metro_bpm > 0 and not was:
+            self.metro_next = None       # from the next block, on beat one
+            self.metro_beat = 0
+
+    def set_metro_level(self, db):
+        """The metronome's volume, dB on its own part -- a part's level, read
+        at each strike as any part's is (Part.gain)."""
+        self.metro_level_db = float(db)
+        if self.metro_part is not None:
+            self.metro_part.level_db = self.metro_level_db
+
+    def _metro_tick(self, n0):
+        period = B.SR * 60.0 / self.metro_bpm
+        if self.metro_next is None or self.metro_next < n0 - period:
+            self.metro_next, self.metro_beat = float(n0), 0
+        end = n0 + self.frames
+        while self.metro_next < end:
+            at = int(round(self.metro_next))
+            bell = self.metro_ring > 0 and self.metro_beat % self.metro_ring == 0
+            note = self.METRO_BELL if bell else self.METRO_CLICK
+            for k in (note,) + tuple(key_layers(note, self.METRO_KIT)):
+                self._note_on(self.metro_part, GM_PERCUSSION_CHANNEL, k, self.METRO_VEL, at)
+            self.metro_log.append((at, note))
+            self.metro_next += period
+            self.metro_beat += 1
 
     def _one(self, n0, msg):
         if self.mpe and msg.type not in _M2_ONLY and msg.type != "sysex" \
@@ -14970,8 +15076,8 @@ def selftest():
           # the Tremulant is no reed: on the shifted row, past a break, alone
           and any(l.strip().startswith(_tuiH.STOP_LABELS[(1, 4)] + " tremulant") for l in _olines)
           # ...and the recorded ranks (bits 14-24) on Alt and Alt+shift, after it
-          and any(l.strip().startswith("\u2325" + _tuiH.STOP_LABELS[(0, 0)] + " koppelflute 4") for l in _olines)
-          and any(l.strip().startswith("\u2325" + _tuiH.STOP_LABELS[(1, 0)] + " gamba 8") for l in _olines)
+          and any(l.strip().startswith(_tuiH.STOP_PREFIX + _tuiH.STOP_LABELS[(0, 0)] + " koppelflute 4") for l in _olines)
+          and any(l.strip().startswith(_tuiH.STOP_PREFIX + _tuiH.STOP_LABELS[(1, 0)] + " gamba 8") for l in _olines)
           and _ostr.index("tremulant") < _ostr.index("koppelflute 4") < _ostr.index("trompette 8"),
           "  (%s; shift+3 is %r here, from %s)"
           % (" / ".join(_olines), _sh3, _tuiH.STOP_KEYS_FROM))
@@ -15852,6 +15958,39 @@ def wind_selftest(check=None):
     finally:
         B.WIND, B.WIND_SCALE = was
         _WND.Wind = _Wind0
+    # THE METRONOME, struck on the audio thread at each beat's own sample: at
+    # 120 bpm the plain clicks fall a whole number of samples apart -- the
+    # period -- whatever the block, and the ring's beats carry the bell
+    lm = Live(program=12, rate=rate, frames=fr, verbose=False)
+    lm.set_metronome(120, 4, Live.build_metro_part())
+    _mb = np.concatenate([np.frombuffer(lm.callback(None, fr, None, 0)[0], np.float32)
+                          for _ in range(int(2.4 * rate / fr))]).reshape(-1, 2).mean(1)
+    _per = rate * 60.0 / 120
+    _thr = 0.2 * np.abs(_mb).max()
+    _ons, _i = [], 0
+    while True:
+        _hit = np.flatnonzero(np.abs(_mb[_i:]) > _thr)
+        if not len(_hit):
+            break
+        _ons.append(_i + int(_hit[0]))
+        _i = _ons[-1] + int(0.25 * rate)
+    from scipy.signal import butter as _bt, sosfiltfilt as _sf
+    _hi = _sf(_bt(4, [4000, 16000], "bandpass", fs=rate, output="sos"), _mb)
+    _hb = [10 * np.log10(np.sum(_hi[o:o + int(0.3 * rate)] ** 2) + 1e-20) for o in _ons]
+    _clk = [k for k in range(len(_ons)) if k % 4]
+    _gaps = [_ons[k + 1] - _ons[k] for k in _clk if k + 1 in _clk]
+    _bell = [_hb[k] for k in range(len(_ons)) if k % 4 == 0]
+    _plain = [_hb[k] for k in _clk]
+    _log = list(lm.metro_log)
+    _sgap = sorted(set(q[0] - p_[0] for p_, q in zip(_log, _log[1:])))
+    check("the metronome strikes each beat on its own sample, the bell every ring",
+          lm.misses == 0 and _sgap == [int(_per)] and len(_ons) == len(_log)
+          and [n for _, n in _log][:5] == [34, 33, 33, 33, 34]
+          and min(_bell) - max(_plain) > 10.0,
+          "  (%d beats sounded of %d struck, %d misses; struck %s samples apart against %.0f;"
+          " 4-16 kHz bell %s against clicks %s dB)"
+          % (len(_ons), len(_log), lm.misses, _sgap, _per, " ".join("%.0f" % v for v in _bell),
+             " ".join("%.0f" % v for v in _plain)))
     return 1 if fails else 0
 
 

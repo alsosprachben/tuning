@@ -254,6 +254,13 @@ GLOBALS = (
     # THE GPU: the samples rendered on it (gpurender.py), the CPU taking the
     # light blocks. Swapped like the threads, while notes sound.
     ("gpu",        "onoff",  0.0,  1.0, 1.0),
+    # THE METRONOME (Live.set_metronome): Standard's click on every beat, its
+    # bell every `ring` beats (0: none) -- struck on the audio thread at each
+    # beat's own sample, from a drum part of its own the keyboard never plays.
+    # 0 bpm is off; it steps from off straight to 20.
+    ("metronome",  "bpm",    0.0, 300.0, 1.0),
+    ("ring",       "ring",   0.0, 16.0, 1.0),
+    ("metro level", "dB",  -40.0, 12.0, 0.5),
 )
 
 # THE KEYS A PANEL CONTROL MAY BE BOUND TO: everything the panel does not
@@ -336,6 +343,10 @@ def stop_keymap(dump=None):
 
 
 STOP_KEYS, STOP_LABELS, STOP_KEYS_FROM = stop_keymap()
+# THE KEY BEFORE A STOP KEY FOR THE THIRD AND FOURTH ROWS, as Alt is -- for a
+# desktop whose window manager keeps Alt. Backtick: on no layout a digit-row
+# level, so never a stop key itself.
+STOP_PREFIX = "`"
 # A panel control cannot be bound to a stop key.
 HOTKEYS_FREE = HOTKEYS_FREE - set(STOP_KEYS)
 
@@ -383,7 +394,8 @@ class TUI:
                 L.mod_cents, L.mod_rate, L.press_db,
                 float(L.renderer.K),
                 float(LV.ROOM_NAMES.index(L.room_name or "dry")),
-                1.0 if isinstance(L.renderer, LV.GpuRenderer) else 0.0)[i]
+                1.0 if isinstance(L.renderer, LV.GpuRenderer) else 0.0,
+                float(L.metro_bpm), float(L.metro_ring), float(L.metro_level_db))[i]
 
     def set_global(self, i, v):
         L = self.live
@@ -413,6 +425,16 @@ class TUI:
             if name != L.room_name:
                 L.set_room(name)
                 self.say("room: %s -- re-building the patches in it" % name)
+        elif i == 10:
+            # off and 20 bpm are neighbours: nothing slower is a metronome
+            prev = L.metro_bpm
+            if 0 < v < 20:
+                v = 20.0 if prev < 20 else 0.0
+            self.metronome(round(v), L.metro_ring)
+        elif i == 11:
+            self.metronome(L.metro_bpm, round(v))
+        elif i == 12:
+            L.set_metro_level(v)
         elif i == 9:
             on = v >= 0.5
             if on != isinstance(L.renderer, LV.GpuRenderer):
@@ -432,6 +454,33 @@ class TUI:
                                               isinstance(old, LV.GpuRenderer))
                 L.slab.dirty = True
                 old.close()
+
+    def metronome(self, bpm, ring):
+        """Set the metronome. Its drum part is built the first time it is
+        switched on -- off this thread and off the audio thread, by the builder
+        that builds every patch -- and it starts once the part is ready."""
+        L = self.live
+        if bpm > 0 and L.metro_part is None:
+            # one build, whatever is pressed while it runs: it starts on the
+            # LATEST tempo and ring asked for
+            self._metro_want = (bpm, ring)
+            L.metro_ring = int(ring)
+            if getattr(self, "_metro_building", False):
+                return
+            self._metro_building = True
+            tuner = self.parts()[0].patch.tuner if self.parts() else "hybrid440"
+
+            def job(progress):
+                try:
+                    part = L.build_metro_part(tuner, progress)
+                    b, r = self._metro_want
+                    L.set_metronome(b, r, part)
+                finally:
+                    self._metro_building = False
+            self.builder.submit("metronome", job)
+            self.say("metronome: building its click and bell")
+        else:
+            L.set_metronome(bpm, ring)
 
     # ---- edits that need a patch --------------------------------------------
     def rebuild(self, label, specs):
@@ -1715,8 +1764,9 @@ class TUI:
                         lines.append(cur.rstrip()); cur = "       "
                     continue
                 i += 1
-                # rows 2 and 3 are Alt and Alt+shift on the same keys
-                k = (("\u2325" if row >= 2 else "") + STOP_LABELS.get((row % 2, i), "")) if row < 4 else ""
+                # rows 2 and 3 are the same keys after the STOP_PREFIX key (or
+                # Alt, where the window manager leaves Alt to the terminal)
+                k = ((STOP_PREFIX if row >= 2 else "") + STOP_LABELS.get((row % 2, i), "")) if row < 4 else ""
                 item = ("%s[%s]" % (k, r)) if r in p.drawn else ("%s %s " % (k, r))
                 if len(cur) + len(item) + 1 > width and cur.strip():
                     lines.append(cur.rstrip()); cur = "       "
@@ -1786,7 +1836,9 @@ class TUI:
             "  every rank -- the organ's flute 8, bourdon 16, mixture and reeds",
             "  are hand-drawn only. enter on the stops column, or the",
             "  key next to the name under the selected row: the digits for the",
-            "  first row, shift and the digit for the second (the reeds).",
+            "  first row, shift and the digit for the second (the reeds); ` and",
+            "  then the key for the third and fourth (Alt+digit does it too,",
+            "  where the window manager lets Alt through).",
             "",
             "globals",
             "  master            capped at 0 dB: above unity the kernel hard-clips",
@@ -1978,8 +2030,18 @@ class TUI:
             # panic, the one thing you want when something drones
             self.live.panic()
             self.say("all notes off")
+        elif c == ord(STOP_PREFIX):
+            # THE THIRD AND FOURTH STOP ROWS WITHOUT ALT: Alt+digit reaches
+            # them, but a window manager that keeps Alt for itself never lets it
+            # through (Ben: "the alt key is taken by the window manager, so I
+            # can't select half the stops"). The prefix, then the stop key.
+            self.stop_bank = not getattr(self, "stop_bank", False)
+            self.say("stops: rows 3 and 4 -- press a stop key" if self.stop_bank else "stops: rows 1 and 2")
         elif 0 < c < 0x110000 and chr(c) in STOP_KEYS:
             row, i = STOP_KEYS[chr(c)]
+            if getattr(self, "stop_bank", False):
+                self.stop_bank = False
+                row += 2
             self.toggle_stop(i, row)
         return True
 
@@ -2182,6 +2244,10 @@ def fmt(v, unit):
         return "+%.0f%%" % (v * 100.0)
     if unit == "st":
         return "%.1f st" % v
+    if unit == "bpm":
+        return "off" if v <= 0 else "%d bpm" % int(round(v))
+    if unit == "ring":
+        return "no bell" if v <= 0 else "bell /%d" % int(round(v))
     return "%.2f" % v
 
 
