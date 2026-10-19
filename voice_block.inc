@@ -65,6 +65,35 @@
                         if(ns>=ne) continue;
                     }
                 }
+                // ...AND AN ATTACK THAT CROSSES A BLOCK EDGE keeps its knee in the
+                // block it ends in. The rule above gives a knee only to an
+                // attack that ends in the block it starts in; one that starts
+                // late in a block ended in the next as a single line from mid-
+                // ramp to past the peak, so its peak was cut by however far into
+                // the block the onset fell -- at a steady tempo, a pattern (the
+                // metronome click's 7 ms rise swung it 11 dB, beat by beat: Ben,
+                // "the click is varying in a period pattern"; the claves' 4 ms
+                // 2.4 dB). Here the ramp runs on from the block's start to the
+                // attack's end (kA, kN, kgL/kgR as the rule sets them) and the
+                // line is re-aimed through the peak. ONLY AN ATTACK SHORTER THAN
+                // A BLOCK, as the rule's own knee: a longer one (a pipe's, a
+                // bow's) is drawn by the blocks' lines along its own curve, and
+                // a straight ramp from its start would step off that curve at
+                // the block's edge. After the rule, not in it: a block the rule
+                // saw is left exactly as it was.
+                if(kN==0 && !ftr && chBW[p]>=0.f && fadeS[p]>KNEE_MIN && fadeS[p]<(float)BLK){
+                    float xdmin=fminf(dL,dR);
+                    long xA=a+(long)ceilf(xdmin), xF=xA+(long)fadeS[p];
+                    if(xA<bs0 && xF>bs0 && xF<bs1){
+                        float x0L=AMP(xF,b,dL), x0R=AMP(xF,b,dR);
+                        if(BLrow){ long bb=b<nblk?b:nblk-1;
+                            float wq=BLrow[bb]+(BLrow[bb+1]-BLrow[bb])*(float)(xF-bs0)/(float)BLK;
+                            x0L*=wq; x0R*=wq; }
+                        float xq=(float)BLK/(float)(bs1-xF);
+                        mL0=mL1-(mL1-x0L)*xq; mR0=mR1-(mR1-x0R)*xq;
+                        kN=xF; kA=xA; kgL=x0L; kgR=x0R;
+                    }
+                }
                 // ...AND A GROWTH'S BLOCK ENDS AT ITS CUT, the onset's rule
                 // mirrored. Only a partial that GROWS (a negative decay rate: a
                 // note played backwards, blockrender._reverse_partial) peaks at
