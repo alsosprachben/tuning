@@ -109,6 +109,10 @@ COLS_I4 = ("gr", "cr", "br", "pl", "fx", "mk")
 # THE ORGAN'S WIND, live: how many bend rows the slab keeps for it, one per
 # (part, family of pipe) -- a flue and a reed answer the chest differently.
 WIND_ROWS = 32
+# THE SIRENS' ROWS (siren.py): after the wind's, a pool -- one row a sounding
+# siren note, two for the double siren's discs -- each rewritten every
+# callback by Live._siren_block from the note's own rotor
+SIREN_ROWS = 32
 
 # ---- CC10, and what pan actually IS in this renderer ------------------------
 # NOT A PAN LAW. The file path puts CC10 into channel_pan, which becomes a
@@ -824,9 +828,10 @@ class Slab:
         # one per (part, family), rewritten every callback by Live._wind_block:
         # this block's pitch ratio, the phase it has accrued to the block's
         # start, and its level at the block's two edges. The arrays never move.
-        self.BR = np.ones((WIND_ROWS + 1, 1), np.float32)
-        self.BC = np.zeros((WIND_ROWS + 1, 1), np.float64)
-        self.BL = np.ones((WIND_ROWS + 1, 2), np.float32)
+        self.BR = np.ones((WIND_ROWS + 1 + SIREN_ROWS, 1), np.float32)
+        self.BC = np.zeros((WIND_ROWS + 1 + SIREN_ROWS, 1), np.float64)
+        self.BL = np.ones((WIND_ROWS + 1 + SIREN_ROWS, 2), np.float32)
+        self.siren_free = collections.deque(range(WIND_ROWS + 1, WIND_ROWS + 1 + SIREN_ROWS))
         self.sh = (0.06, 1.6, 3.5, 1500.0)
         self._prep_cache = None
         self.rate = 48000.0   # set by Live; needed by retune()
@@ -1125,6 +1130,9 @@ class Slab:
         # ...and a grain lands where it falls in the note (t["gof"])
         if tmpl.get("gof") is not None and len(tmpl["gof"]) == n:
             newnon = newnon + tmpl["gof"]
+        # ...and so does each stroke of a stroked note (t["sof"])
+        if tmpl.get("sof") is not None and len(tmpl["sof"]) == n:
+            newnon = newnon + tmpl["sof"]
         # p0 = -om*(non + ear delay) + ph0, so moving the onset moves the phase
         # anchor with it. Written against the template's OWN onsets, which makes
         # it correct whether or not they differ from each other.
@@ -2169,24 +2177,35 @@ def make_renderer(slab, frames, threads=1, gpu=False):
 # 64 is the voice's own range, and the value a patch defaults to.
 DETUNE_STEPS = (0, 64, 127)
 
-_PATCHES = collections.OrderedDict()   # (program, drums, tuner) -> Patch
+_PATCHES = collections.OrderedDict()   # (program, drums, tuner, variation) -> Patch
 _PATCH_PARTIAL_CAP = 400000           # ~50 MB of templates; piano alone is 125k
 _PATCH_LOCK = threading.RLock()
-_PATCH_PINNED = set()        # (program, drums, tuner) a Part is holding now
+_PATCH_PINNED = set()        # (program, drums, tuner, variation) a Part is holding now
 
 
 class Patch:
-    """Every template for one patch: (program, drums, tuner).
+    """Every template for one patch: (program, drums, tuner, variation).
 
     Shared by every Part that wants that patch, so layering two trumpets builds
     one patch. Effectively immutable once warmed, which is what makes it safe to
     hand to the audio thread by a single attribute assignment.
     """
 
-    def __init__(self, program, drums, tuner):
+    key = property(lambda self: (self.program, self.drums, self.tuner, self.variation))
+
+    def __init__(self, program, drums, tuner, variation=0):
         self.program, self.drums, self.tuner = program, drums, tuner
+        # THE GS BANK (CC0), the variation tone under the program. Only one
+        # that exists is kept: any other bank plays the capital tone, as a
+        # Sound Canvas does, and is the same patch as bank 0.
+        _PM = __import__("patch_map")
+        self.variation = (int(variation) if not drums and variation
+                          and ((int(program) & 0x7F), int(variation)) in _PM.VARIATIONS else 0)
+        # the program the class lookups are given: carries the variation
+        self.vprogram = (_PM.VariationProgram(program, self.variation) if self.variation
+                         else program)
         self._freqs = None
-        pc = None if drums else __import__("patch_map").property_class_for_program(program)
+        pc = None if drums else _PM.property_class_for_program(self.vprogram)
         self.cls_name = "GM percussion" if drums else pc.__name__
         self.organ = (not drums) and getattr(pc, "registerable", False)
         # A ROTOR IS PART OF THE TEMPLATE, not a control over it. The level
@@ -2194,6 +2213,11 @@ class Patch:
         # a change of speed is a change of PARTIALS and cannot be retuned --
         # it needs a different template. Hence a speed axis on the cache.
         self.leslie = (not drums) and getattr(pc, "leslie", False)
+        # A SIREN'S DISCS (tonelib siren_rotor / siren_upper): which ranks turn
+        # with the upper disc, and per key whether its voice is a rotor at all
+        # (a drum set's key 67 is; the set's other keys are not)
+        self.siren_upper = tuple(getattr(pc, "siren_upper", ())) if not drums else ()
+        self._siren_kind = {}
         # The drive the VOICE was voiced at. Live the mod wheel scales it,
         # so this is the reference and not the setting -- a voice with no
         # amplifier (amp_drive 0) stays clean however far the wheel goes.
@@ -2208,7 +2232,7 @@ class Patch:
         # the trim rides on) -- not a drive. Left alone, a guitar trimmed up
         # distorted more live, a Hammond trimmed down less.
         if self.amp_reference:
-            self.amp_reference *= __import__("patch_map").program_trim(program)
+            self.amp_reference *= __import__("patch_map").program_trim(self.vprogram)
         # AND THE IMBALANCE, which live never carried. Offline passes each voice
         # its own (blockrender's _AMP_IMB); live passed none, so tubeamp's
         # default of 0.06 applied -- a balanced push-pull pair with its even
@@ -2406,7 +2430,14 @@ class Patch:
             # The program IS the drum set, on a drum part (SC-55 p.21).
             got = percussion_for_note(note, kit_for_program(self.program))
             return got[1] if got else None
-        return __import__("patch_map").property_class_for_note(self.program, note)
+        return __import__("patch_map").property_class_for_note(self.vprogram, note)
+
+    def siren_kind(self, note):
+        """'fire', 'helmholtz' or None: whether this key's voice is a rotor."""
+        k = self._siren_kind.get(note, 0)
+        if k == 0:
+            k = self._siren_kind[note] = getattr(self._voice_class(note), "siren_rotor", None)
+        return k
 
     def _raw_template(self, note, vel, fast=None):
         """Build one note at one velocity. Costs 1.4-10 ms: off-thread only."""
@@ -2416,6 +2447,11 @@ class Patch:
         tr.append(mido.MetaMessage("set_tempo", tempo=1000000, time=0))
         # A drum part sends its program too: it is the drum SET, and blockrender
         # reads it off channel 10 exactly as it does in a file.
+        if self.variation:
+            # THE BANK FIRST, as a file selects a variation: blockrender
+            # resolves the program change under the latched CC0
+            tr.append(mido.Message("control_change", channel=ch, control=0,
+                                   value=self.variation, time=0))
         tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
         if self.organ:
             # Draw everything so every rank emits partials AND speaks at the
@@ -2548,6 +2584,18 @@ class Patch:
                 _t0 = int(t["non"][_dir].min()) if _dir.any() else int(t["non"].min())
                 t["grain"] = _g
                 t["gof"] = np.where(_g, t["non"] - _t0, 0).astype(np.int64)
+        # ...AND A STROKED NOTE'S STROKES (blockrender stroke_rows: the machine
+        # gun's shots, a bark's pulses, the gallop's hooves, the guiro's
+        # ridges): each where it falls in the note (sof). Placed at the press,
+        # a 0.69 s train of fourteen shots sounded as one smeared burst
+        t["sof"] = None
+        if t["P"] and p.get("stroke_rows"):
+            _s = np.zeros(int(t["P"]), bool)
+            for _a, _b in p.get("stroke_rows"):
+                _s[_a:min(_b, int(t["P"]))] = True
+            if _s.any():
+                _base = (t["non"] - t["rdl"])[_s]
+                t["sof"] = np.where(_s, t["non"] - t["rdl"] - _base.min(), 0).astype(np.int64)
         # ...AND A HAMMOND'S CONTACTS (tonelib.contact_offset_s): each drawbar
         # speaks a little after the key, at its own instant -- the click. The
         # template's onsets carry it; the stamp keeps it (newnon), for this voice
@@ -2624,6 +2672,10 @@ class Patch:
                 _end = (np.asarray(t["fa"], np.float64) + _ts * B.SR + 0.01 * B.SR).astype(np.int64)
                 t["rof"] = np.where(_quiet, np.minimum(t["rof"], _end), t["rof"])
             t["dur"] = int(t["rof"].max())
+            # ...COUNTED FROM THE PRESS, so a stroked note's last stroke (sof)
+            # is in it: the slots retire at n0 + dur
+            if t.get("sof") is not None:
+                t["dur"] = int((t["sof"] + t["rof"]).max())
         # A HELD TEXTURE (tonelib held_texture: rain, the engine, the wind ...)
         # IS A HELD NOTE: its noise and partials run until the key is up --
         # generated, as long as it is held -- and only the rows that decay on
@@ -2689,6 +2741,8 @@ class Patch:
                 cols["lflip"] = t["lflip"][msk]     # the Leslie crossover's copies, per stop
                 if t["cof"] is not None:
                     cols["cof"] = t["cof"][msk]     # ...and when each drawbar's contact closes
+                if t.get("sof") is not None:
+                    cols["sof"] = t["sof"][msk]     # ...and where each stroke falls
                 if t["rof"] is not None:
                     cols["rof"] = t["rof"][msk]     # ...and the catch's own end
                 t["ranks"][nm] = (cols, int(msk.sum()), t["hrel"][msk])
@@ -2775,18 +2829,18 @@ class Patch:
         return self.templates.get((note, self.bucket(vel), fast))
 
 
-def patch_for(program, drums, tuner, progress=None):
+def patch_for(program, drums, tuner, progress=None, variation=0):
     """The warmed Patch for one patch, built if it is not already cached.
 
     BLOCKS while it builds -- callers must not be the audio thread. Serialised,
     because blockrender.prepare() reseeds the global RNG and two concurrent
     builds would race on it.
     """
-    key = (int(program), bool(drums), str(tuner))
+    key = (int(program), bool(drums), str(tuner), patch_variation(program, drums, variation))
     with _PATCH_LOCK:
         got = _PATCHES.get(key)
         if got is None:
-            got = Patch(key[0], key[1], key[2])
+            got = Patch(*key)
             _PATCHES[key] = got
         got.warm(progress)
         _PATCHES.move_to_end(key)
@@ -2818,6 +2872,15 @@ def patch_for(program, drums, tuner, progress=None):
                 break           # every patch left is on stage
             del _PATCHES[drop]
         return got
+
+
+def patch_variation(program, drums, variation):
+    """The variation a patch key holds: the bank when that variation exists,
+    else 0 -- an unbuilt bank is the capital tone and must share its patch."""
+    if drums or not variation:
+        return 0
+    v = int(variation)
+    return v if ((int(program) & 0x7F), v) in __import__("patch_map").VARIATIONS else 0
 
 
 def pin_patches(keys):
@@ -2906,7 +2969,8 @@ class Part:
         """
         # A NEW PROGRAM IS A NEW PATCH: its knobs are its own, not the last
         # one's -- on a Messenger, recalling a patch sets every knob.
-        if getattr(self, "patch", None) is not None and patch.program != self.patch.program:
+        if getattr(self, "patch", None) is not None and (
+                (patch.program, patch.variation) != (self.patch.program, self.patch.variation)):
             self.synth = {}
             self.synth_b = {}
         self.patch = patch
@@ -2917,6 +2981,7 @@ class Part:
 
     # a Part delegates its patch identity to its patch
     program = property(lambda self: self.patch.program)
+    variation = property(lambda self: self.patch.variation)
     drums = property(lambda self: self.patch.drums)
     organ = property(lambda self: self.patch.organ)
     tuner = property(lambda self: self.patch.tuner)
@@ -2931,6 +2996,8 @@ class Part:
     def label(self):
         if self.drums:
             return "-- %s kit" % drum_set_name(self.program)
+        if self.variation:
+            return "%d.%d %s" % (self.program, self.variation, self.patch.cls_name)
         return "%d %s" % (self.program, self.patch.cls_name)
 
     def moog(self):
@@ -2952,6 +3019,8 @@ class Part:
                  channel=self.channel, lo=self.lo, hi=self.hi,
                  transpose=self.transpose, level_db=self.level_db,
                  muted=self.muted, drawn=sorted(self.drawn))
+        if self.variation:
+            d["bank"] = int(self.variation)       # the GS variation; absent = the capital tone
         if self.synth:
             d["synth"] = dict(self.synth)
         if self.synth_b:
@@ -2971,7 +3040,7 @@ class Part:
         _base = d.get("tuner", "hybrid")
         patch = patch_for(d.get("program", 56), d.get("drums", False),
                           tuner_for(d.get("program", 56), d.get("drums", False), _base, eastern),
-                          progress)
+                          progress, d.get("bank", 0))
         p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.base_tuner = _base
@@ -3073,6 +3142,15 @@ class Live:
         self.metro_beat = 0
         self.metro_log = collections.deque(maxlen=64)   # (sample, key) struck, for the selftest
         self.tex_on = {}                 # (pid, ch, note) -> the sample a held texture may stop
+        # THE SIRENS (siren.py, _siren_block): (pid, ch, note) -> the sounding
+        # note's rotor and rows; a rotor let go stays in siren_mem with the
+        # sample it was let go at, so a key struck again finds its disc still
+        # turning; rows of a note just ended wait in siren_retire for its fade
+        self.siren_st = {}
+        self.siren_mem = {}
+        self.siren_retire = []
+        self.ppress = {}                 # (ch, note) -> poly pressure, 0..1
+        self.cc2 = {}                    # ch -> breath controller, 0..1
         self.tex_gen = {}                # (pid, ch, note) -> [part, template, next grain's sample, scale]
         self._tex_rng = _random.Random(0x7E47)
         self._tex_n = 0
@@ -3506,8 +3584,7 @@ class Live:
 
     def _pin_patches(self):
         """Tell the cache which voices are on stage, so it evicts none of them."""
-        pin_patches({(p.patch.program, p.patch.drums, p.patch.tuner)
-                   for p in self.parts})
+        pin_patches({p.patch.key for p in self.parts})
 
     def shutdown(self):
         """Stop the worker threads and the renderer.
@@ -3920,11 +3997,14 @@ class Live:
             for slots, tilt in self._press_groups(ch):
                 self.slab.press(slots, self.pressure[ch], self.press_db, tilt)
         elif msg.type == "polytouch":
+            self.ppress[(ch, msg.note)] = msg.value / 127.0      # a siren's air (_siren_block)
             for slots, tilt in self._press_groups(ch, note=msg.note):
                 self.slab.press(slots, msg.value / 127.0, self.press_db, tilt)
         elif msg.type == "control_change" and self._messenger_cc(ch, msg.control, msg.value, n0):
             pass            # a Messenger's panel, on a part that reads its chart
         elif msg.type == "control_change":
+            if msg.control == 2:
+                self.cc2[ch] = msg.value / 127.0                 # breath: a siren's air (_siren_block)
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
                 # THE MOD WHEEL IS A CRESCENDO PEDAL on an organ part and
@@ -4288,8 +4368,9 @@ class Live:
                 if not self._listens(part, ch):
                     continue
                 _pd = _dr if (_said and part.channel == ch) else part.drums
-                want = (_prog, _pd, self._tuner_for(_prog, _pd, part.base_tuner))
-                if (part.patch.program, part.patch.drums, part.patch.tuner) == want:
+                want = (_prog, _pd, self._tuner_for(_prog, _pd, part.base_tuner),
+                        patch_variation(_prog, _pd, _var))
+                if part.patch.key == want:
                     continue
                 self.patch_reqs.append((part.pid, want))
             if self.patch_reqs:
@@ -4436,6 +4517,9 @@ class Live:
         # the player's effort. On a Moog, whose tone barely follows velocity
         # (0.2 dB of RMS from v30 to v120), it is nearly all of it -- a
         # Jupiter-8's keyboard.
+        _skind = part.patch.siren_kind(snote)
+        if _skind:
+            self._siren_on(part, ch, note, vel, n0, _skind)
         scale = part.gain() * self._chan_gain(ch)
         _fixed = part.touch_fixed()
         if part.patch.touch_sensitive:
@@ -4495,6 +4579,9 @@ class Live:
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
+        _sst = self.siren_st.get((part.pid, ch, note))
+        if _sst is not None and _sst["rows"]:
+            self.slab.a["br"][np.asarray(self.slab.last_slots, np.int64)] = _sst["rows"][0]
         if tmpl.get("min_hold"):
             self.tex_on[(part.pid, ch, note)] = n0 + tmpl["min_hold"]     # the least it plays
             if tmpl.get("gpool") and tmpl.get("grate", 0.0) > 0:
@@ -5165,8 +5252,8 @@ class Live:
         self.eastern = spec or None
         for part in self.parts:
             want = (part.program, part.drums,
-                    self._tuner_for(part.program, part.drums, part.base_tuner))
-            if (part.patch.program, part.patch.drums, part.patch.tuner) != want:
+                    self._tuner_for(part.program, part.drums, part.base_tuner), part.variation)
+            if part.patch.key != want:
                 self.patch_reqs.append((part.pid, want))
         if self.patch_reqs:
             self.patch_go.set()
@@ -5419,7 +5506,8 @@ class Live:
     WHEEL_MEANING = {'drive': 'amp drive', 'crescendo': 'crescendo pedal',
                      'tremolo': 'tremolo depth', 'tone': 'tone rockers',
                      'detune': 'detuning', 'drones': 'drones (0: the chanter alone)',
-                     'vibrato': 'vibrato', 'swell': 'swell pedal'}
+                     'vibrato': 'vibrato', 'swell': 'swell pedal',
+                     'crank': 'crank: the upper disc turned (at the top the 12-row fundamental cancels)'}
 
     def wheel_roles(self, part):
         """What the mod wheel is on this part -- the CC1 branch asks this, and
@@ -5446,6 +5534,10 @@ class Live:
         has no vibrato at all, since a bag under constant pressure is what a
         piper is FOR."""
         pt = part.patch
+        # ON THE DOUBLE SIREN IT IS THE CRANK, and nothing else: the upper
+        # chest turned against the lower (_siren_block reads wheel_at)
+        if pt.siren_upper:
+            return ['crank']
         r = []
         if pt.amp_drive > 0.0:
             r.append('drive')
@@ -5918,6 +6010,15 @@ class Live:
 
     def _note_off(self, part, ch, note, n0):
         self._amp_touch(part)
+        _sst = self.siren_st.get((part.pid, ch, note))
+        if _sst is not None and _sst["down"]:
+            # A SIREN'S KEY-UP ENDS ITS DRIVE, not its sound: the fire siren
+            # coasts (no sooner than its GS length), the double siren's air
+            # runs out -- and _siren_block lets the note go when it has
+            _sst["down"] = False
+            _sst["drive_end"] = max(n0, self.tex_on.pop((part.pid, ch, note), n0))
+            self.tex_gen.pop((part.pid, ch, note), None)
+            return
         if part.patch.drone_wheel:
             # Arm the hold rather than release: this key may be the middle of a
             # phrase. _drone_reap decides, part_break_s later.
@@ -6786,8 +6887,8 @@ class Live:
             self._resota(ch, n0)
         self.cgain.clear()
         for part in self.parts:
-            want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner))
-            if (part.patch.program, part.patch.drums, part.patch.tuner) != want:
+            want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner), 0)
+            if part.patch.key != want:
                 self.patch_reqs.append((part.pid, want))
         if self.patch_reqs:
             self.patch_go.set()
@@ -6859,8 +6960,7 @@ class Live:
         # Every part re-built in the new room. Notes sounding keep the old
         # reflections, as a program change keeps its old voice.
         for part in self.parts:
-            self.patch_reqs.append((part.pid, (part.patch.program, part.patch.drums,
-                                               part.patch.tuner)))
+            self.patch_reqs.append((part.pid, part.patch.key))
         self._room_install(None if name == "dry"
                            else build_room_tail(self.rate, self.frames, self._room_band_q()))
 
@@ -6942,15 +7042,14 @@ class Live:
                     with _PATCH_LOCK:
                         patch = _PATCHES.get(want)
                         if patch is None:
-                            patch = Patch(want[0], want[1], want[2])
+                            patch = Patch(*want)
                             _PATCHES[want] = patch
                         _PATCHES.move_to_end(want)
                     self.post(lambda n0, _p=part, _b=patch: self._swap_patch(_p, _b, n0))
                     # Published BEFORE the warm, which is the call that can
                     # evict: the new patch is on stage the moment it is swapped
                     # in, and the old one still is until then.
-                    pin_patches({(q.patch.program, q.patch.drums, q.patch.tuner)
-                               for q in self.parts} | {want})
+                    pin_patches({q.patch.key for q in self.parts} | {want})
                     self.patch_label = "%d" % want[0]
                     patch.warm(stop=lambda: bool(self.patch_reqs) or bool(self.room_reqs)
                                or self.patch_stop)
@@ -7250,6 +7349,11 @@ class Live:
             _wr = self._wind_row(part, rank)
             if _wr > 0:
                 self.slab.a["br"][np.asarray(self.slab.last_slots, np.int64)] = _wr
+        _sst = self.siren_st.get((part.pid, ch, note))
+        if _sst is not None and _sst["rows"]:
+            # each row of holes turns with its own disc
+            _rw = _sst["rows"][-1] if rank in part.patch.siren_upper else _sst["rows"][0]
+            self.slab.a["br"][np.asarray(self.slab.last_slots, np.int64)] = _rw
         # A REGISTERABLE VOICE STILL TAKES A TUNING, even though it takes no
         # bend. `_note_on` returns here before every per-channel pitch
         # adjustment, which is right for the wheel -- an organ has no pitch
@@ -7308,6 +7412,107 @@ class Live:
                 st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
             self.wind_st[part.pid] = st
         return st["rank_row"].get(rank, 0)
+
+    # ---- the sirens (siren.py) ---------------------------------------------
+    def _siren_on(self, part, ch, note, vel, n0, kind):
+        """A siren key goes down: its rotor -- the one still turning under this
+        key if it was let go and is coasting, else at rest -- and its rows.
+        A note still sounding on the key (coasting, its air running out) is let
+        go here: the disc is one disc."""
+        import siren as _SIR
+        k = (part.pid, ch, note)
+        rot = None
+        old = self.siren_st.pop(k, None)
+        if old is not None:
+            rot = old["rot"]
+            self._siren_end(k, old, n0)
+        else:
+            mem = self.siren_mem.pop(k, None)
+            if mem is not None:
+                rot = mem[0]
+                rot.coast(max(0, n0 - mem[1]) / float(self.rate))
+        if rot is None:
+            rot = _SIR.Rotor(kind)
+        nrow = 2 if part.patch.siren_upper else 1
+        sl = self.slab
+        rows = ()
+        if len(sl.siren_free) >= nrow:
+            rows = tuple(sl.siren_free.popleft() for _ in range(nrow))
+        f = 440.0 * 2.0 ** ((note + part.transpose - 69) / 12.0)
+        st = dict(rot=rot, kind=kind, rows=rows, down=True, drive_end=None,
+                  pv=max(vel / 127.0, 1e-3), acc=[0.0] * nrow, frev=f / 12.0, dl=0.0,
+                  n_on=n0)
+        if nrow == 2:
+            st["dl"] = _SIR.crank_samples(_SIR.crank_angle(self.wheel_at.get(ch, 0)),
+                                          st["frev"], self.rate)
+            st["acc"][1] = st["dl"]
+        for r in rows:
+            sl.BR[r, 0] = 1.0
+            sl.BC[r, 0] = 0.0
+            sl.BL[r, 0] = sl.BL[r, 1] = 0.0
+        self.siren_st[k] = st
+
+    def _siren_end(self, k, st, n0):
+        """Let a siren note go: its slots fade on their own release, its rows
+        are freed once they have (siren_retire), its rotor is remembered."""
+        for key in [q for q in list(self.slab.live) if (q[0], q[1], q[2]) == k]:
+            self.slab.release(key, n0)
+        if st["rows"]:
+            self.siren_retire.append((n0 + int(0.5 * self.rate), st["rows"]))
+        self.siren_mem[k] = (st["rot"], n0)
+
+    def _siren_block(self, n0, frames):
+        """Every sounding siren's rotor one callback on: its rows for this block
+        (the same model, the same steps, as blockrender's _SIREN_AT)."""
+        import siren as _SIR
+        sl = self.slab
+        dt = frames / float(self.rate)
+        while self.siren_retire and self.siren_retire[0][0] <= n0:
+            sl.siren_free.extend(self.siren_retire.pop(0)[1])
+        for k, st in list(self.siren_st.items()):
+            pid, ch, note = k
+            if not any((q[0], q[1], q[2]) == k for q in sl.live):
+                # its slots were taken from it (a reset, a panic): let it go
+                del self.siren_st[k]
+                self._siren_end(k, st, n0)
+                continue
+            drive = st["down"] or (st["drive_end"] is not None and n0 < st["drive_end"])
+            if not drive:
+                p = 0.0
+            elif st["kind"] == "fire":
+                p = 1.0
+            else:
+                p = max(st["pv"], self.pressure.get(ch, 0.0), self.ppress.get((ch, note), 0.0),
+                        self.cc2.get(ch, 0.0))
+            rot = st["rot"]
+            r, l0, l1 = rot.block(p, dt)
+            if st["kind"] != "fire":
+                g = 1.0 / math.sqrt(st["pv"])     # the velocity's gain is the onset's level
+                l0, l1 = l0 * g, l1 * g
+            rows = st["rows"]
+            if rows:
+                lo = rows[0]
+                sl.BR[lo, 0] = r
+                sl.BC[lo, 0] = st["acc"][0]
+                sl.BL[lo, 0] = l0
+                sl.BL[lo, 1] = l1
+                st["acc"][0] += (float(sl.BR[lo, 0]) - 1.0) * frames
+                if len(rows) > 1:
+                    up = rows[1]
+                    dl = _SIR.crank_samples(_SIR.crank_angle(self.wheel_at.get(ch, 0)),
+                                            st["frev"], self.rate)
+                    sl.BR[up, 0] = r + (dl - st["dl"]) / frames
+                    sl.BC[up, 0] = st["acc"][1]
+                    sl.BL[up, 0] = l0
+                    sl.BL[up, 1] = l1
+                    st["acc"][1] += (float(sl.BR[up, 0]) - 1.0) * frames
+                    st["dl"] = dl
+            if not drive:
+                done = (rot.level() <= 10.0 ** (-_SIR.FLOOR_DB / 20.0) if st["kind"] == "fire"
+                        else rot.air <= 1e-3 * st["pv"])
+                if done:
+                    del self.siren_st[k]
+                    self._siren_end(k, st, n0 + frames)
 
     def _wind_block(self, n0, frames):
         """Every organ part's chest, one block on: its rows for this block."""
@@ -7376,6 +7581,7 @@ class Live:
                   and (k[1], k[2]) not in self.sost.get(k[1], ())
                   and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
+                  and (k[0], k[1], k[2]) not in self.siren_st
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1
@@ -7394,6 +7600,8 @@ class Live:
                 continue
             if note is not None and k[2] != note:
                 continue
+            if (k[0], k[1], k[2]) in self.siren_st:
+                continue        # a siren's pressure is its air, not a brightness
             groups.setdefault(self._press_tilt(k[0], k[2]), []).extend(slots)
         return [(v, t) for t, v in groups.items()]
 
@@ -7505,6 +7713,12 @@ class Live:
             self.sweep(n0)
             self._drone_reap(n0)
             self._mf104_reap(n0)
+            if self.siren_st or self.siren_retire:
+                try:
+                    self._siren_block(n0, frame_count)
+                except Exception as e:
+                    self.errors += 1
+                    self.last_error = "siren: %s: %s" % (type(e).__name__, e)
             self.slab.reap(n0)
             if self.slab.tr_on.any():
                 # ONE RATE, from an absolute clock, so a held chord and a note
@@ -10923,7 +11137,7 @@ def selftest():
           and _pre.get("eastern") == "raga:bel_todi/todi@c#"
           and [d["tuner"] for d in _pre["parts"]] == ["hybrid440", "hybrid440"]
           and lve2.parts[0].tuner == _east[0] and lve2.parts[1].tuner == "hybrid440"
-          and _back == [(0, False, "hybrid440")],
+          and _back == [(0, False, "hybrid440", 0)],
           "  (the sitar's part on %s, the piano's on its own; kept by the session; "
           "a program change to a piano goes back to the part's own)" % _east[0])
 
@@ -11307,8 +11521,7 @@ def selftest():
     _held = []
     for _i, _p in enumerate(_PROGS):
         _held.append(Part(patch_for(_p, _p == 118, "hybrid"), channel=_i))
-        pin_patches({(_q.patch.program, _q.patch.drums, _q.patch.tuner)
-                   for _q in _held})
+        pin_patches({_q.patch.key for _q in _held})
     _res = len(_PATCHES)
     _tot = sum(_b.partials for _b in _PATCHES.values())
     check("the cache keeps every voice a rig is actually playing",
@@ -11325,7 +11538,7 @@ def selftest():
     _after = sum(_b.partials for _b in _PATCHES.values())
     check("...and still evicts freely once nothing is holding them",
           _after <= _PATCH_PARTIAL_CAP
-          and (2, False, "hybrid") in _PATCHES,
+          and (2, False, "hybrid", 0) in _PATCHES,
           "  (%d partials, %.2fx the cap, and the newest survived)"
           % (_after, float(_after) / _PATCH_PARTIAL_CAP))
     del _held
@@ -15770,6 +15983,200 @@ def selftest():
           "  (before %s, after %s; the omni part is the player's and stays)"
           % (_still, [p.drums for p in _lb.parts]))
     _lb.shutdown()
+
+    # ---- GS VARIATIONS: THE BANK PICKS A TONE UNDER THE PROGRAM -------------
+    # CC0 = bank, then the program (SC-55 p.68). Parsed and thrown away until
+    # patch_map.VARIATIONS existed; a variation not built plays its capital
+    # tone. Checked with a stand-in variation (125.5 as the woodblock), so the
+    # plumbing is proved whatever the table holds.
+    import patch_map as _PMV
+    _vsave = dict(_PMV.VARIATIONS)
+    _vcls = _PMV.PROGRAM_CLASS[115]
+    _PMV.VARIATIONS[(125, 5)] = _vcls
+    try:
+        _vp = lambda bank, prog: [n[6] for n in B.parse(_bfile(
+            [_M("control_change", channel=0, control=0, value=bank),
+             _M("program_change", channel=0, program=prog)] + _on(0, 60)))[2]][0]
+        _v5, _v3 = _vp(5, 125), _vp(9, 125)       # 125.9 Burst Noise: not built
+        check("file: CC0 = 5 and program 125 is the variation; an unbuilt bank the capital tone",
+              getattr(_v5, "variation", 0) == 5 and int(_v5) == 125
+              and _PMV.property_class_for_program(_v5) is _vcls
+              and _PMV.property_class_for_note(_v5, 60) is _vcls
+              and getattr(_v3, "variation", 0) == 0
+              and _PMV.property_class_for_program(_v3) is _PMV.property_class_for_program(125),
+              "  (%r -> %s, %r -> %s)" % (_v5, _PMV.property_class_for_program(_v5).__name__,
+                                         _v3, _PMV.property_class_for_program(_v3).__name__))
+        _vr = [n[6] for n in B.parse(_bfile(
+            [_M("control_change", channel=0, control=0, value=5),
+             _M("program_change", channel=0, program=125)] + _on(0, 60)
+            + [_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41),
+               _M("program_change", channel=0, program=125)] + _on(0, 60)))[2]]
+        check("file: GS Reset clears the bank",
+              [getattr(x, "variation", 0) for x in _vr] == [5, 0], "  (%r)" % _vr)
+        _lv = Live(program=0, rate=48000, frames=128, verbose=False)
+        _lv.on_midi(_M("control_change", channel=0, control=0, value=5))
+        _lv.on_midi(_M("program_change", channel=0, program=125)); _lv.apply(0)
+        _okv = _lv.wait_patch(90)
+        _pv = _lv.parts[0]
+        check("live: CC0 = 5 then program 125 selects the variation",
+              _okv and _pv.program == 125 and _pv.variation == 5
+              and _pv.patch._voice_class(60) is _vcls
+              and _pv.patch.key == (125, False, _pv.patch.tuner, 5)
+              and _pv.label().startswith("125.5 "),
+              "  (%s, %s)" % (_pv.patch.key, _pv.label()))
+        _d = _pv.to_dict()
+        _rt = Part.from_dict(_d)
+        _d0 = Part(patch_for(125, False, "hybrid")).to_dict()
+        check("...a preset carries the bank, and one without it loads the capital tone",
+              _d.get("bank") == 5 and _rt.variation == 5 and _rt.patch.key[3] == 5
+              and "bank" not in _d0
+              and Part.from_dict(_d0).variation == 0
+              and patch_for(125, False, "hybrid", variation=9).key[3] == 0,
+              "  (%s; an unbuilt bank keys as 0)" % _d)
+        _lv.on_midi(_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41)); _lv.apply(0)
+        _lv.wait_patch(90)
+        check("...and GS Reset puts the part back on the capital tone",
+              _lv.parts[0].variation == 0 and _lv.parts[0].program == 0,
+              "  (%s)" % (_lv.parts[0].patch.key,))
+        _lv.shutdown()
+    finally:
+        _PMV.VARIATIONS.clear()
+        _PMV.VARIATIONS.update(_vsave)
+        with _PATCH_LOCK:
+            for _k in [k for k in _PATCHES if k[3]]:
+                del _PATCHES[_k]
+
+    # THE SFX VARIATIONS ARE THE SFX SET PLAYED FROM THE KEYBOARD
+    # (patch_map.SFX_VARIATIONS): at C4, 125.1 Car-Engine is the kit's key 63
+    # -- the same spectrum (1/3-octave, both channels' power) and, centred
+    # against the kit's pan, the same level within the pan law -- and live, a
+    # texture variation is a held note as its kit key is.
+    def _pow_bands(x):
+        _X = sum(np.abs(np.fft.rfft(np.asarray(_c, np.float64), 1 << 19)) ** 2 for _c in x[:2])
+        _fr = np.fft.rfftfreq(1 << 19, 1.0 / B.SR)
+        _ed = 40.0 * 2 ** (np.arange(0, 28) / 3.0)
+        return np.array([_X[(_fr >= _a) & (_fr < _b)].sum() for _a, _b in zip(_ed[:-1], _ed[1:])]) + 1e-30
+    _vk = B.render(_bfile([_M("program_change", channel=9, program=56)] + _on(9, 63)))
+    _vv = B.render(_bfile([_M("control_change", channel=0, control=0, value=1),
+                           _M("program_change", channel=0, program=125)] + _on(0, 60)))
+    _ek, _ev = _pow_bands(_vk), _pow_bands(_vv)
+    _w = (_ek + _ev) / (_ek + _ev).sum()
+    _sd = float(np.sqrt((_w * (10 * np.log10(_ek / _ek.sum()) - 10 * np.log10(_ev / _ev.sum())) ** 2).sum()))
+    _ld = 10 * np.log10(_ev.sum() / _ek.sum())
+    check("GS 125.1 Car-Engine at C4 is the SFX set's key 63",
+          _sd < 1.5 and abs(_ld) < 3.0,
+          "  (spectrum %.2f dB rms apart, level %+.1f dB)" % (_sd, _ld))
+    # ...and TRANSPOSED WHOLE with the key, noise and all (blockrender _XP):
+    # 122.3 Wind's howl is a noise table in Hz, and an octave up puts its
+    # loudest 1/3-octave band three bands higher, as a sample's would
+    _wv = [_pow_bands(B.render(_bfile([_M("control_change", channel=0, control=0, value=3),
+                                       _M("program_change", channel=0, program=122)]
+                                      + _on(0, _n)))) for _n in (60, 72)]
+    check("...and a noise texture moves with the key: Wind an octave up is its howl an octave up",
+          int(np.argmax(_wv[1])) - int(np.argmax(_wv[0])) == 3,
+          "  (loudest band %d -> %d, of 1/3 octaves)" % (int(np.argmax(_wv[0])), int(np.argmax(_wv[1]))))
+    # THE SIRENS' ROTOR (siren.py): the fire siren's pitch is its disc's
+    # speed, wound up while held and coasting after -- in the file as the
+    # model steps it, and live as the file (the same model, a block at a time)
+    import siren as _SIRN
+
+    def _sir_file(msgs, secs):
+        _m = _bfile(msgs)
+        _m.tracks[0].append(mido.MetaMessage("end_of_track", time=int(secs * 960)))
+        return np.asarray(B.render(_m)[0], np.float64)
+
+    def _pk(x, t0, t1, lo, hi, sr=None):
+        sr = sr or B.SR
+        _s = x[int(t0 * sr):int(t1 * sr)]
+        _X = np.abs(np.fft.rfft(_s * np.hanning(len(_s)), 1 << 18))
+        _f = np.fft.rfftfreq(1 << 18, 1.0 / sr)
+        _m = (_f > lo) & (_f < hi)
+        return float(_f[_m][np.argmax(_X[_m])]), _X, _f
+    _fs = _sir_file([_M("program_change", channel=9, program=56),
+                     _M("note_on", channel=9, note=67, velocity=110, time=0),
+                     _M("note_off", channel=9, note=67, velocity=0, time=1920)], 5.0)
+    _rt = _SIRN.Rotor("fire")
+    _us = {}
+    for _k in range(int(4.0 / 0.01)):
+        _rt.block(1.0 if _k * 0.01 < 2.0 else 0.0, 0.01)
+        _us[round((_k + 1) * 0.01, 2)] = _rt.u
+    _f19 = _pk(_fs, 1.85, 1.95, 300, 900)[0]
+    _f39 = _pk(_fs, 3.85, 3.95, 300, 900)[0]
+    check("the fire siren winds up while held and coasts after, as its rotor does",
+          abs(_f19 / (738.0 * _us[1.9]) - 1) < 0.02 and abs(_f39 / (738.0 * _us[3.9]) - 1) < 0.02
+          and _f39 < _f19,
+          "  (%.0f Hz at 1.9 s against the model's %.0f, %.0f at 3.9 s against %.0f)"
+          % (_f19, 738.0 * _us[1.9], _f39, 738.0 * _us[3.9]))
+    _ls = Live(program=56, rate=48000, frames=128, drums=True, verbose=False)
+    _sp = _ls.parts[0].patch
+    _sb = _sp.bucket(110)
+    for _sv in _sp.speeds:
+        if (67, _sb, _sv) not in _sp.templates:
+            _tt = _sp._raw_template(67, _sp.bucket_vel(_sb), _sv)
+            if _tt is not None:
+                _sp.templates[(67, _sb, _sv)] = _tt
+    _ls.on_midi(mido.Message("note_on", channel=9, note=67, velocity=110))
+    _lb = []
+    for _i in range(int(4.0 * 48000) // 128):
+        if _i == int(2.0 * 48000) // 128:
+            _ls.on_midi(mido.Message("note_off", channel=9, note=67, velocity=0))
+        _bb, _ff = _ls.callback(None, 128, None, 0)
+        _lb.append(np.frombuffer(_bb, np.float32))
+    _sounding = bool(_ls.siren_st)
+    _ls.shutdown()
+    _ly = np.concatenate(_lb).reshape(-1, 2)[:, 0].astype(np.float64)
+    _l19 = _pk(_ly, 1.85, 1.95, 300, 900, 48000)[0]
+    _l39 = _pk(_ly, 3.85, 3.95, 300, 900, 48000)[0]
+    check("...and live winds it and coasts it as the file does, sounding past its key-up",
+          abs(_l19 / _f19 - 1) < 0.01 and abs(_l39 / _f39 - 1) < 0.01 and _sounding,
+          "  (%.1f / %.1f Hz at 1.9 s, %.1f / %.1f at 3.9 s; still coasting: %s)"
+          % (_l19, _f19, _l39, _f39, _sounding))
+    # THE DOUBLE SIREN'S CRANK: both 12-rows, the upper chest turned half a
+    # hole -- the fundamental (and every odd harmonic) cancels, the octave stays
+    _hv = [_M("control_change", channel=0, control=0, value=5),
+           _M("program_change", channel=0, program=125)]
+    _cr = []
+    for _w in (0, 127):
+        _x = _sir_file(_hv + [_M("control_change", channel=0, control=1, value=_w),
+                              _M("note_on", channel=0, note=60, velocity=127, time=0),
+                              _M("note_off", channel=0, note=60, velocity=0, time=2880)], 3.5)
+        _f1, _X, _f = _pk(_x, 2.0, 2.9, 150, 600)
+        _cr.append(_X)
+    _f1, _X0, _f = _pk(_sir_file(_hv + [_M("note_on", channel=0, note=60, velocity=127, time=0),
+                                        _M("note_off", channel=0, note=60, velocity=0, time=2880)],
+                                 3.5), 2.0, 2.9, 150, 600)
+    _db = lambda X, f: 20 * np.log10(X[np.abs(_f - f) < 3].max() + 1e-12)
+    _d1 = _db(_cr[0], _f1) - _db(_cr[1], _f1)
+    _d2 = _db(_cr[0], 2 * _f1) - _db(_cr[1], 2 * _f1)
+    check("the double siren's crank at the top cancels its fundamental and keeps the octave",
+          _d1 > 40.0 and abs(_d2) < 1.0,
+          "  (h1 down %.0f dB, h2 %+.2f dB)" % (_d1, -_d2))
+    _lh = Live(program=0, rate=48000, frames=128, verbose=False)
+    _lh.set_parts([Part(patch_for(125, False, "hybrid", variation=5))])
+    _hp = _lh.parts[0].patch
+    _hb = _hp.bucket(127)
+    for _sv in _hp.speeds:
+        if (60, _hb, _sv) not in _hp.templates:
+            _hp.templates[(60, _hb, _sv)] = _hp._raw_template(60, _hp.bucket_vel(_hb), _sv)
+    _free0 = len(_lh.slab.siren_free)
+    _lh.on_midi(mido.Message("note_on", channel=0, note=60, velocity=127))
+    for _i in range(int(0.5 * 48000) // 128):
+        _lh.callback(None, 128, None, 0)
+    _held = len(_lh.slab.siren_free)
+    _lh.on_midi(mido.Message("note_off", channel=0, note=60, velocity=0))
+    for _i in range(int(1.5 * 48000) // 128):
+        _lh.callback(None, 128, None, 0)
+    check("...and live, its two discs take two rows while it sings and give them back when the air is out",
+          _held == _free0 - 2 and len(_lh.slab.siren_free) == _free0 and not _lh.siren_st
+          and (0, 60) not in [(k[1], k[2]) for k in _lh.slab.live],
+          "  (%d rows free, %d while held, %d after)" % (_free0, _held, len(_lh.slab.siren_free)))
+    _lh.shutdown()
+    _ptx = Patch(122, False, "hybrid", 1)
+    _ttx = _ptx._raw_template(60, 100)
+    check("...and live, 122.1 Rain is held while the key is, its GS length the least it plays",
+          _ptx.variation == 1 and _ttx is not None and not _ttx["oneshot"]
+          and _ttx.get("min_hold", 0) == int(round(_ptx._voice_class(60).gate_time * B.SR)),
+          "  (%s, min_hold %s)" % (_ptx.cls_name, None if _ttx is None else _ttx.get("min_hold")))
 
     # ---- THE LEGATO ATTACK, LIVE --------------------------------------------
     # A slur is one number -- the attack time -- and live applies it after the

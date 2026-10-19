@@ -274,7 +274,7 @@ plays Standard, as does any program that is not a set.
 | 64 | Car-Skid | `SfxSkid` | **4** | CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
 | 65 | Car-Pass | `SfxCarPass` | **4** | CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
 | 66 | Car-Crash | `SfxCrash` | **4** | CAR CRASH fitted to a Freesound crash with glass (CC0): its noise (0.2 dB rms) with glass clicks and metal rings as grains, holding 1.3 s and falling away over 0.6 s as the recording does |
-| 67 | Siren | `SfxSiren` | **4** | SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) winding up from half its pitch with the recording's 1.14 s time constant -- the wail's first 1.5 s, where GeneralUser GS's is a 0.3 s blip |
+| 67 | Siren | `SfxSiren` | **4** | SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) on a ROTOR (siren.py) fitted to the whole recorded gesture, 33 cents rms -- wound up while held (1.23 s), coasting after (11 s a factor e) and fading as it slows (its own fan: 1.1 dB rms); pressed again while it coasts it starts from the speed it has. Live steps the same model a callback at a time |
 | 68 | Train | `SfxTrain` | **4** | TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
 | 69 | Jetplane | `SfxJet` | **4** | JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
 | 70 | Helicopter | `SfxHelicopter` | **4** | GM 125's helicopter (fitted), a one-shot gated 3.75 s, its key's note a rotor as the program's is (a written C4 at 16.3 Hz; it had buzzed at 261.6) |
@@ -346,7 +346,7 @@ plays Standard, as does any program that is not a set.
 | 88 | Car-stop | `SfxSkid` | **4** | the CM-32L's, as the SFX set's 64: CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
 | 89 | Car-pass | `SfxCarPass` | **4** | the CM-32L's, as the SFX set's 65: CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
 | 90 | Crash | `SfxCrash` | **4** | the CM-32L's, as the SFX set's 66: CAR CRASH fitted to a Freesound crash with glass (CC0): its noise (0.2 dB rms) with glass clicks and metal rings as grains, holding 1.3 s and falling away over 0.6 s as the recording does |
-| 91 | Siren | `SfxSiren` | **4** | the CM-32L's, as the SFX set's 67: SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) winding up from half its pitch with the recording's 1.14 s time constant -- the wail's first 1.5 s, where GeneralUser GS's is a 0.3 s blip |
+| 91 | Siren | `SfxSiren` | **4** | the CM-32L's, as the SFX set's 67: SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) on a ROTOR (siren.py) fitted to the whole recorded gesture, 33 cents rms -- wound up while held (1.23 s), coasting after (11 s a factor e) and fading as it slows (its own fan: 1.1 dB rms); pressed again while it coasts it starts from the speed it has. Live steps the same model a callback at a time |
 | 92 | Train | `SfxTrain` | **4** | the CM-32L's, as the SFX set's 68: TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
 | 93 | Jet | `SfxJet` | **4** | the CM-32L's, as the SFX set's 69: JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
 | 94 | Helicopter | `SfxHelicopter` | **4** | the CM-32L's, as the SFX set's 70: GM 125's helicopter (fitted), a one-shot gated 3.75 s, its key's note a rotor as the program's is (a written C4 at 16.3 Hz; it had buzzed at 261.6) |
@@ -684,6 +684,75 @@ Controls are the rest of the console that are not stops.
 | 4 | tpt | **4** | the trumpet an octave up, as bass |
 | 5 | wind | **4** | flutes and oboes as a stopped pipe on the TWELFTH (x3), re-voiced with the horns; as bass |
 | 6 | picc | **4** | the piccolo two octaves up, as bass |
+
+## Variations: the GS banks (CC0)
+
+A GS bank select (CC0 = bank, then the program) picks a variation tone
+under a program (SC-55 owner's manual p.68). 24 of GS's 60 are built;
+one not built plays its capital tone, as a Sound Canvas does.
+
+| program.bank | GS name | class | | notes |
+|---|---|---|---|---|
+| 4.8 | Detuned EP 1 | -- |  | not built: plays 4 Electric Piano 1 |
+| 5.8 | Detuned EP 2 | -- |  | not built: plays 5 Electric Piano 2 |
+| 6.8 | Coupled Hps. | -- |  | not built: plays 6 Harpsichord |
+| 14.8 | Church Bell | -- |  | not built: plays 14 Tubular Bells |
+| 16.8 | Detuned Or. 1 | -- |  | not built: plays 16 Drawbar Organ |
+| 17.8 | Detuned Or. 2 | -- |  | not built: plays 17 Percussive Organ |
+| 19.8 | Church Org. 2 | -- |  | not built: plays 19 Church Organ |
+| 21.8 | Accordion It | -- |  | not built: plays 21 Accordion |
+| 24.8 | Ukulele | -- |  | not built: plays 24 Acoustic Guitar (nylon) |
+| 25.8 | 12-str. Gt | -- |  | not built: plays 25 Acoustic Guitar (steel) |
+| 25.16 | Mandolin | -- |  | not built: plays 25 Acoustic Guitar (steel) |
+| 26.8 | Hawaiian Gt. | -- |  | not built: plays 26 Electric Guitar (jazz) |
+| 27.8 | Chorus Gt. | -- |  | not built: plays 27 Electric Guitar (clean) |
+| 28.8 | Funk Gt. | -- |  | not built: plays 28 Electric Guitar (muted) |
+| 30.8 | Feedback Gt. | -- |  | not built: plays 30 Distortion Guitar |
+| 31.8 | Gt. Feedback | -- |  | not built: plays 31 Guitar Harmonics |
+| 38.8 | Synth Bass 3 | -- |  | not built: plays 38 Synth Bass 1 |
+| 39.8 | Synth Bass 4 | -- |  | not built: plays 39 Synth Bass 2 |
+| 48.8 | Orchestra | -- |  | not built: plays 48 String Ensemble 1 |
+| 50.8 | Syn. Strings3 | -- |  | not built: plays 50 Synth Strings 1 |
+| 61.8 | Brass 2 | -- |  | not built: plays 61 Brass Section |
+| 62.8 | Synth Brass3 | -- |  | not built: plays 62 Synth Brass 1 |
+| 63.8 | Synth Brass4 | -- |  | not built: plays 63 Synth Brass 2 |
+| 107.8 | Taisho Koto | -- |  | not built: plays 107 Koto |
+| 115.8 | Castanets | -- |  | not built: plays 115 Woodblock |
+| 116.8 | Concert BD | -- |  | not built: plays 116 Taiko Drum |
+| 117.8 | Melo. Tom 2 | -- |  | not built: plays 117 Melodic Tom |
+| 118.8 | 808 Tom | -- |  | not built: plays 118 Synth Drum |
+| 120.1 | Gt. Cut Noise | `SfxGuitarCutDown_sfx48` | **4** | the SFX set's key 48 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): GUITAR CUTTING NOISE (DOWN): a muted strum on steel strings (Freesound, CC0), the strings' scrape at 0.14-3 kHz: 5.9 dB. A nylon guitar's take had been its body's thump -- a tom (Ben) |
+| 120.2 | String Slap | `SfxBassSlap_sfx50` | **3** | the SFX set's key 50 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
+| 121.1 | Fl. Key Click | `SfxKeyClick_sfx51` | **4** | the SFX set's key 51 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
+| 122.1 | Rain | `SfxRain_sfx79` | **4** | the SFX set's key 79 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
+| 122.2 | Thunder | `SfxThunder_sfx80` | **4** | the SFX set's key 80 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
+| 122.3 | Wind | `SfxWind_sfx81` | **4** | the SFX set's key 81 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
+| 122.4 | Stream | `SfxStream_sfx83` | **4** | the SFX set's key 83 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
+| 122.5 | Bubble | -- |  | not built: plays 122 Seashore |
+| 123.1 | Dog | -- |  | not built: plays 123 Bird Tweet |
+| 123.2 | Horse | -- |  | not built: plays 123 Bird Tweet |
+| 124.1 | Telephone 2 | -- |  | not built: plays 124 Telephone Ring |
+| 124.2 | Door Creaking | `SfxDoorCreak_sfx59` | **4** | the SFX set's key 59 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOOR CREAKING: a hinge's stick-slip as a pulse train slowing 285 to 130 Hz (GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0): 1.6 dB |
+| 124.3 | Door | `SfxDoor_sfx60` | **4** | the SFX set's key 60 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOOR: a wooden door slammed (Freesound, CC0): the slab, the latch, the frame (perc_fit): 6.5 dB |
+| 124.4 | Scratch | `SfxScratchPull_sfx61` | **4** | the SFX set's key 61 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCRATCH: the Scratch Pull, as GeneralUser GS plays it |
+| 124.5 | Windchime | `SfxWindchime_sfx62` | **3** | the SFX set's key 62 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WINDCHIME: a metal chime tube struck, ringing out (Freesound, CC0): 13.0 dB -- one tube where GS's is a shaken set |
+| 125.1 | Car-Engine | `SfxEngine_sfx63` | **4** | the SFX set's key 63 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR ENGINE fitted to a Freesound idle (CC0, examples/weather_fit.py): its firing at 47.4 Hz and harmonics as partials, each standing out of the engine's noise as the recording's (h1-h6 within 2 dB; those barely over the noise held at their measured heights), the noise's colour 1.6 dB rms |
+| 125.2 | Car-Stop | `SfxSkid_sfx64` | **4** | the SFX set's key 64 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
+| 125.3 | Car-Pass | `SfxCarPass_sfx65` | **4** | the SFX set's key 65 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
+| 125.4 | Car-Crash | `SfxCrash_sfx66` | **4** | the SFX set's key 66 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR CRASH fitted to a Freesound crash with glass (CC0): its noise (0.2 dB rms) with glass clicks and metal rings as grains, holding 1.3 s and falling away over 0.6 s as the recording does |
+| 125.5 | Siren | `HelmholtzSiren` | **3** | HELMHOLTZ'S DOUBLE SIREN (siren.py): two discs on one axle -- lower rows 8/10/12/18, upper 9/12/15/16, each row a stop (CC43/44) -- driven by AIR (velocity, aftertouch, CC2): its rotor's inertia measured on the fire siren and the VCSL siren whistle, singing only while blown and coasting silent after (the wail on a re-press); the mod wheel is the crank, the upper chest's angle, cancelling the 12-rows' fundamental at the top. Its tone is the fire siren's measured series: no recording of the instrument itself |
+| 125.6 | Train | `SfxTrain_sfx68` | **4** | the SFX set's key 68 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
+| 125.7 | Jetplane | `SfxJet_sfx69` | **4** | the SFX set's key 69 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
+| 125.8 | Starship | `SfxStarship_sfx71` | **3** | the SFX set's key 71 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet |
+| 125.9 | Burst Noise | -- |  | not built: plays 125 Helicopter |
+| 126.1 | Laughing | -- |  | not built: plays 126 Applause |
+| 126.2 | Screaming | `SfxScream_sfx53` | **4** | the SFX set's key 53 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
+| 126.3 | Punch | `SfxPunch_sfx54` | **4** | the SFX set's key 54 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
+| 126.4 | Heart Beat | `SfxHeartbeat_sfx55` | **3** | the SFX set's key 55 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): HEART BEAT: not a recording -- the heart's own waveform, a textbook ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
+| 126.5 | Footstep | -- |  | not built: plays 126 Applause |
+| 127.1 | Machinegun | -- |  | not built: plays 127 Gunshot |
+| 127.2 | Lasergun | `SfxLaser_sfx74` | **3** | the SFX set's key 74 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
+| 127.3 | Explosion | `SfxExplosion_sfx75` | **4** | the SFX set's key 75 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
 
 ## The class tree
 

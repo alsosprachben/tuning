@@ -137,6 +137,7 @@ import mf104 as _MFD
 # a white wash. See chiff_bandwidth.
 RAND_GRAN = 100000.0
 from patch_map import property_class_for_program, property_class_for_note, program_trim
+from patch_map import VariationProgram, VARIATIONS
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
                             GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program,
@@ -531,6 +532,7 @@ def parse(path):
     # change resolved to -- channel 10 from power-on -- and the program itself
     # carries the answer (DrumProgram), snapshotted at note-on like the rest.
     _bmsb = {}; _blsb = {}; _drums = {}
+    _var = {}                # the channel's variation (GS bank), from its last program change
     _rxbank = [True]         # Rx.BANK SELECT: GM1 On turns it off
     # MPE (M1-100-UM), as live.py plays it: the zones in force, and their
     # history for prepare. A member channel takes its manager's program and is
@@ -544,7 +546,12 @@ def parse(path):
         if _mpe and _mpe.is_member(ch):
             ch = _mpe.manager_of(ch)
         p = ch_prog.get(ch, 0)
-        return DrumProgram(p) if _is_drums(ch) else p
+        if _is_drums(ch):
+            return DrumProgram(p)
+        # A VARIATION THAT EXISTS rides the program (patch_map.VariationProgram);
+        # any other bank plays the capital tone, as a Sound Canvas does
+        v = _var.get(ch, 0)
+        return VariationProgram(p, v) if v and ((p & 0x7F), v) in VARIATIONS else p
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
         # tonelib.GM_DEFAULT_VOLUME for why volume starts at 100.
@@ -588,16 +595,17 @@ def parse(path):
                 if msg.control not in _MPE_NOT_FANNED:
                     _inj.extend(msg.copy(channel=_m2, time=0) for _m2 in _mpe.members(_mc))
         if msg.type == 'program_change':
-            _dr, _pr, _var = T.resolve_patch(_bmsb.get(msg.channel, 0),
+            _dr, _pr, _var_ = T.resolve_patch(_bmsb.get(msg.channel, 0),
                                              _blsb.get(msg.channel, 0), msg.program,
                                              _is_drums(msg.channel), _rxbank[0])
             _drums[msg.channel] = _dr
             ch_prog[msg.channel] = _pr
+            _var[msg.channel] = 0 if _dr else _var_
             # A drum set is not a melodic program: the organ registration pass
             # reads this list, and a Power kit (16) would have registered the
             # drum channel as a Drawbar Organ.
             if not _dr:
-                ch_progs.setdefault(msg.channel, []).append(_pr)
+                ch_progs.setdefault(msg.channel, []).append(_cur_prog(msg.channel))
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
             if msg.control == 0:
@@ -736,7 +744,7 @@ def parse(path):
                 # its whole sound set is addressed through it. Every program
                 # goes to 0, as live's does; this renderer kept them.
                 _rxbank[0] = _lvl != 1
-                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear()
+                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear()
                 # BACK TO POWER-ON, which this renderer did not do at all while
                 # its own docstring said it did. The controllers go (so a note
                 # after it snapshots CC7 at 100 again), and every tuning the
@@ -2012,6 +2020,127 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _r, _cc = bend_blocks(ev, nblk)
                 row = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
             _PN_AT[(ch, note, on)] = (p0, b0, row)
+    # THE SIREN'S ROTOR (siren.py; tonelib siren_rotor): a siren's pitch is its
+    # disc's speed, and its speed has inertia -- wound up by its drive, coasting
+    # without it. Each siren note gets its rotor integrated a block at a time
+    # into a ROW of its own (the mean speed a block, the phase summed from it
+    # as bend_blocks sums it, the level at each block edge), carried key to
+    # key: a press while the disc still coasts starts from the speed it has.
+    # The fire siren's drive is its motor, full while held (its GS length the
+    # least); the Helmholtz siren's is its AIR -- velocity, channel and poly
+    # aftertouch, CC2, the most of them -- and its level the air's, against
+    # the velocity's own gain. Its upper disc rides a second row, the first's
+    # turned by the crank (CC1): the same ratio, its phase ahead by the
+    # chest's angle, and its ratio moved while the wheel moves, as the crank
+    # moved it. (ch, note, on) -> (rows, end).
+    _SIREN_AT = {}
+    _sir_keys = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if (_c, _nt, _on) in _mpe_member:
+            continue
+        if is_drum(_pg):
+            _dd = percussion_for_note(_nt, kit_for_program(int(_pg)))
+            _spc = _dd[1] if _dd else None
+        else:
+            _spc = property_class_for_note(_pg, _nt)
+        _kind = getattr(_spc, 'siren_rotor', None)
+        if _kind:
+            _sir_keys.setdefault((_c, _nt, _kind), []).append((_on, _of, _v, _spc))
+    if _sir_keys:
+        import siren as _SIR
+        _bdt = BLK / float(SR)
+
+        def _stepv(_ev, _tt, _d=0):
+            _x = _d
+            for _t0, _val in _ev:
+                if _t0 <= _tt + 1e-9:
+                    _x = _val
+                else:
+                    break
+            return _x
+        for (_c, _nt, _kind), _ns in _sir_keys.items():
+            _ns.sort()
+            _rot = _SIR.Rotor(_kind)
+            _tprev = None
+            _at = sorted(ats.get(_c, []))
+            _pt = sorted(pts.get((_c, _nt), []))
+            _c2 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 2)
+            _c1 = sorted((_t, _val) for _t, _cc, _val in ccs.get(_c, []) if _cc == 1)
+            for _i, (_on, _of, _v, _spc) in enumerate(_ns):
+                if _tprev is not None and _on > _tprev:
+                    _rot.coast(_on - _tprev)
+                _drive_end = _of
+                if getattr(_spc, 'held_texture', False) and getattr(_spc, 'gate_time', None):
+                    _drive_end = max(_of, _on + _spc.gate_time)
+                _cap = _ns[_i + 1][0] if _i + 1 < len(_ns) else float('inf')
+                _pv = _v / 127.0
+                _b0 = int(_on * SR // BLK)
+                _r = []; _lv = []
+                _k = _b0
+                _end = None
+                while True:
+                    _tb = _k * _bdt
+                    if _tb >= _cap or _k >= nblk:
+                        _end = min(_cap, nblk * _bdt)
+                        break
+                    _tm = _tb + 0.5 * _bdt
+                    if _tm < _drive_end:
+                        if _kind == 'fire':
+                            _p = 1.0
+                        else:
+                            _p = max(_pv, _stepv(_at, _tm) / 127.0, _stepv(_pt, _tm) / 127.0,
+                                     _stepv(_c2, _tm) / 127.0)
+                    else:
+                        _p = 0.0
+                    _rr, _l0, _l1 = _rot.block(_p, _bdt)
+                    _r.append(_rr); _lv.append(_l0)
+                    _k += 1
+                    if _tb >= _drive_end:
+                        if _kind == 'fire':
+                            if _l1 <= 10.0 ** (-_SIR.FLOOR_DB / 20.0):
+                                _end = _k * _bdt
+                                break
+                        elif _rot.air <= 1e-3 * max(_pv, 1e-3):
+                            _end = _k * _bdt
+                            break
+                _lv.append(_rot.level())
+                _tprev = min(_end, _cap)
+                # ...AND HELD AT ITS LAST past its end, for its release: a row
+                # back at 1 there sounded the tail at full level and the key's
+                # nominal pitch
+                _ra = np.ones(nblk, np.float32)
+                _n = min(len(_r), nblk - _b0)
+                _ra[_b0:_b0 + _n] = _r[:_n]
+                if _n:
+                    _ra[_b0 + _n:] = _r[_n - 1]
+                _la = np.ones(nblk + 1, np.float32)
+                _lvn = np.asarray(_lv[:_n + 1], np.float64)
+                if _kind != 'fire':
+                    _lvn = _lvn / math.sqrt(max(_pv, 1e-3))   # the velocity's gain is the onset's level
+                _la[_b0:_b0 + len(_lvn)] = _lvn
+                _la[_b0 + len(_lvn):] = _lvn[-1]
+                _cc = np.concatenate(([0.0], np.cumsum((_ra.astype(np.float64) - 1.0) * BLK)))[:nblk]
+                _lo = len(BRrows); BRrows.append(_ra); BCrows.append(_cc)
+                _BLrows[_lo] = _la
+                _rows = (_lo,)
+                if getattr(_spc, 'siren_upper', None):
+                    # the crank: the upper chest's angle as samples of phase at
+                    # each block's start, from the wheel; 0 outside the note
+                    _frev = _F(_c, _on)[_nt] / 12.0
+                    _dl = np.zeros(nblk + 1, np.float64)
+                    for _j in range(_b0, min(_b0 + _n + 1, nblk + 1)):
+                        _dl[_j] = _SIR.crank_samples(_SIR.crank_angle(_stepv(_c1, _j * _bdt)),
+                                                     _frev, SR)
+                    _ru = (_ra.astype(np.float64) + np.diff(_dl) / BLK).astype(np.float32)
+                    # the lower disc's phase plus the chest's angle, exactly --
+                    # summed from _ru instead, a note in the render's first
+                    # block lost its starting angle (no block before it to
+                    # carry the step)
+                    _cu = _cc + _dl[:nblk]
+                    _up = len(BRrows); BRrows.append(_ru); BCrows.append(_cu)
+                    _BLrows[_up] = _la.copy()
+                    _rows = (_lo, _up)
+                _SIREN_AT[(_c, _nt, _on)] = (_rows, _tprev)
     # THE CHANNEL FADER, MID-NOTE. A note took CC7 x CC11 (squared) once, at
     # its onset, so a swell or a fade written over a held note did nothing
     # here -- while live, a fader in someone's hand, moved the notes already
@@ -2084,6 +2213,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         _own = [brow_of.get(_c)] + list(bbrow_of.get(_c, ()))
         _own += [_r for (_ch, _nt, _on), (_r0, _r) in _MPE_AT.items() if _mpe_member.get((_ch, _nt, _on)) == _c]
         _own += [_x[2] for (_ch, _nt, _on), _x in _PN_AT.items() if _mpe_member.get((_ch, _nt, _on), _ch) == _c]
+        _own += [_rw for (_ch, _nt, _on), (_rws, _e) in _SIREN_AT.items() if _ch == _c for _rw in _rws]
         for _r in set(_own):
             if _r is not None and _r >= 0:
                 _BLrows[_r] = (_BLrows[_r] * _L) if _r in _BLrows else _L.copy()
@@ -2154,7 +2284,10 @@ def prepare(path, tuner='hybrid440', sink=None):
     _GL = [0.0, 0.05, 0.0]   # per-note portamento [g = ftgt/fsrc - 1, tau, cutoff]
     _VB = [0.0, 5.5, 0.0]    # per-VOICE vibrato [depth fraction, rate Hz, phase rad]
     _VDL = [0.0]             # per-note vibrato delay, seconds (CC78); 0 = none
-    _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter)
+    _PJ = [1.0]              # per-note pitch-jitter frequency scale (1 + pitch_jitter), times a whole transposition
+    _NYQ_OM = 0.98 * math.pi  # 0.49 SR: a transposed note's rows were placed under 0.45 SR before its scale
+    _XPON = [False]           # this note is transposed whole: only then is the guard on (other
+                              # voices emit rows above it, as they always have)
     _DL = [0.0, 0.0]         # per-note per-ear HRTF envelope delay in samples (ITD)
     _PL = [0]                # which player of a section this partial belongs to
     _FX = [-1]               # the Moog filter row of this note (moog.py), -1 = none
@@ -2163,6 +2296,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     _LATE = [False]     # rows of a late copy (bloom): dr 0.75 direct, 0.25 an image -- see sympathetic.expand
     _RING = []          # [(first, end)] of each note's ring rows: off the wheel (live reads them too)
     _GRAIN_ROWS = []    # [(first, end)] of each note's grains: live keeps their own onsets
+    _NOTE_ROW0 = []     # (first row, a stroke?) of each note in turn: stroke_rows, below
     _RINGF = [False]    # emitting ring rows: dr 0.9 direct, 0.1 an image -- see sympathetic.expand
     # A ROOM IMAGE'S EXTRA PATH, in samples: how much later than its direct
     # sound it starts and stops. Already in its `non`/`noff` here; recorded on
@@ -2287,6 +2421,8 @@ def prepare(path, tuner='hybrid440', sink=None):
                              crl, sj, csc, gr, cr, ph0)
             return
         om = om * _PJ[0]
+        if _XPON[0] and om >= _NYQ_OM:
+            return          # a transposition (_XP) carried it past Nyquist
         dl, dr, px, pz = _place if _place else (_DL[0], _DL[1], _PX[0], _PZ[0])
         if _place is None:
             _AZ[0] = math.atan2(px, max(props.radiation_distance, 1e-6))
@@ -2417,6 +2553,8 @@ def prepare(path, tuner='hybrid440', sink=None):
     inner_ridge = set()          # ridges after the first, which must not choke each other
     stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
     stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
+    _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
+    _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
     for ev in notes:
         ch, note, on, off, vel, rest, pg = ev
         # A KEY THAT ALSO STRIKES ANOTHER'S SOUND (percussion_map.KIT_LAYER):
@@ -2425,6 +2563,17 @@ def prepare(path, tuner='hybrid440', sink=None):
             for _ln in key_layers(note, kit_for_program(int(pg))):
                 expanded.append((ch, _ln, on, off, vel, rest, pg))
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
+        # ...AND A KIT KEY PLAYED FROM THE KEYBOARD (patch_map.melodic_sfx: a GS
+        # SFX variation) keeps its strokes: the dog's bark, the gallop's hooves,
+        # the machine gun's train, the laugh's syllables, the bubbles' run --
+        # its class names the key whose table they are
+        if strokes is None and not is_drum(pg):
+            _sk = _sfx_strokes_of.get((pg, note), 0)
+            if _sk == 0:
+                _sk = _sfx_strokes_of[(pg, note)] = getattr(
+                    property_class_for_note(pg, note), 'sfx_strokes_of', None)
+            if _sk:
+                strokes = rasp_strokes(_sk[1], on, off, kit=_sk[0])
         if strokes is None:
             expanded.append(ev); continue
         for k, st in enumerate(strokes):
@@ -2437,6 +2586,7 @@ def prepare(path, tuner='hybrid440', sink=None):
             if len(st) > 4:
                 stroke_tilt[(note, t0)] = st[4]
             expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
+            _stroked.add((ch, note, t0))
             if k: inner_ridge.add((note, t0))
     notes = expanded
 
@@ -3213,6 +3363,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         _push_finish(_PUSH_PEND[0]); _PUSH_PEND[0] = None; del _PUSH_SEG[:]
         # the previous strike's rows end where this note's begin
         _row0 = len(A['om'])
+        _NOTE_ROW0.append((_row0, (ch, note, on) in _stroked))
         if _REG_OPEN[0] is not None:
             _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], _row0); _REG_OPEN[0] = None
         _raw_off = off           # when the KEY came up, before any pedal held it
@@ -3430,8 +3581,20 @@ def prepare(path, tuner='hybrid440', sink=None):
         # THE BANK'S BALANCE (patch_map.PROGRAM_TRIM_DB): the program's own
         # level against GeneralUser GS's, on the channel volume
         chan_vol *= program_trim(prog, drum is not None)
+        # A SOUND TRANSPOSED WHOLE (tonelib transposed_from_hz: the SFX set
+        # played from the keyboard, patch_map.melodic_sfx): built at the pitch
+        # it was fitted at, and every frequency it emits -- harmonics, the
+        # noise table's bands, the grains, all in Hz -- moved by the key's
+        # interval, as a sample transposes. Its times stay its own.
+        _XP = 1.0
+        _xf = getattr(pc, 'transposed_from_hz', None)
+        if drum is None and _xf:
+            _XP, f0 = f0 / _xf, _xf
+            # ...each stroke of it its own pitch and tilt, as on the kit
+            f0 *= stroke_pitch.get((note, on), 1.0)
+            _tilt = stroke_tilt.get((note, on))
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
-        if drum is not None and _tilt is not None:
+        if (drum is not None or _xf) and _tilt is not None:
             # a voice's pulse, darker or brighter as its syllable goes on
             # (percussion_map._voiced; tonelib.SfxThroatProperties)
             props.stroke_tilt_db = _tilt
@@ -3475,6 +3638,11 @@ def prepare(path, tuner='hybrid440', sink=None):
             off = ((max(off, on + _gate) if getattr(pc, 'held_texture', False) else on + _gate)
                    if _gate else max(off, on + (ONE_SHOT_MIN_S if drum is not None
                                                 else one_shot_ring(props, f0))))
+        # A SIREN sounds while its rotor does (_SIREN_AT): the fire siren's
+        # coast, the Helmholtz siren's air running out
+        _sir = _SIREN_AT.get((ch, note, on))
+        if _sir is not None:
+            off = max(on + 1e-3, _sir[1])
         # THE PEDAL, between the two of them on purpose. After the one-shot
         # extension, because a cymbal has no damper to lift and must not be
         # pedalled; before the choke override below, so a closed hi-hat still
@@ -3637,7 +3805,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         non = (on + getattr(props,'attack_jitter',0.0))*SR; noff = off*SR
         # a reversed note's partials are emitted backwards, ending at its note-off (_reverse_partial)
         _REV[0] = (non, noff) if getattr(props, 'played_backwards', False) else None
-        _PJ[0] = 1.0 + getattr(props,'pitch_jitter',0.0)
+        _PJ[0] = (1.0 + getattr(props,'pitch_jitter',0.0)) * _XP
+        _XPON[0] = _XP != 1.0
         # ...AND WHETHER THIS NOTE CAN BE BENT AT ALL. Per NOTE and not per
         # channel, because a channel can change program mid-piece (passac.mid
         # cycles six of them), so each note is judged by its own class.
@@ -3653,6 +3822,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         _mea = _MEEND_AT.get((ch, note, on))
         if _mea is not None:
             _BR[0] = _mea[1]            # the meend: the note's own row, or none
+        if _sir is not None:
+            _BR[0] = _sir[0][0]         # the siren's rotor (its lower disc's, a rank's below)
         _DL[0] = getattr(props,'left_hrtf_delay',0.0)*SR; _DL[1] = getattr(props,'right_hrtf_delay',0.0)*SR
         li, ri = props.left_incidence, props.right_incidence
         # A SECTION IS PEOPLE IN CHAIRS, not a point. Each player is a separate
@@ -4472,6 +4643,9 @@ def prepare(path, tuner='hybrid440', sink=None):
             if organ and (ch, key) in wrow_of:
                 _w = wrow_of[(ch, key)]
                 _BR[0] = wcombo.get((_bnote, _w), _w) if _bnote >= 0 else _w
+            # a siren's row of holes turns with its own disc (_SIREN_AT)
+            if _sir is not None and len(_sir[0]) > 1:
+                _BR[0] = _sir[0][1] if key in getattr(props, 'siren_upper', ()) else _sir[0][0]
             dyn = rest[1] if len(rest) > 1 else False   # force flue-dynamic inharmonicity (hybrid-lock)
             # "BORROW THIS VOICE'S SPECTRUM ONLY" -- and the line under that
             # comment handed the borrowed class a velocity as well, so it also
@@ -5026,6 +5200,7 @@ def prepare(path, tuner='hybrid440', sink=None):
         if len(A['om']) > _rel0:
             _REL_ROWS.append((_rel0, len(A['om'])))
     _REV[0] = None
+    _NOTE_END = [len(A['om'])]   # the last note's rows end here (stroke_rows)
     _snd_finish(_SND_PEND[0])      # the last note's CC71/74/75, as the loop gives the others
     _push_finish(_PUSH_PEND[0])
     if _HT_PEND[0] is not None:
@@ -5272,6 +5447,11 @@ def prepare(path, tuner='hybrid440', sink=None):
                 # at their own pitch: Live._meend_retune)
                 sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP),
                 grain_rows=list(_GRAIN_ROWS),
+                # ...AND A STROKED NOTE'S STROKES (rasp_strokes: a machine gun's
+                # train, a bark's pulses, the guiro's ridges): each keeps its
+                # place in the note, where live had put them all at the press
+                stroke_rows=[(_a, _b) for (_a, _s), (_b, _) in
+                             zip(_NOTE_ROW0, _NOTE_ROW0[1:] + [(_NOTE_END[0], False)]) if _s and _b > _a],
                 rel_rows=list(_REL_ROWS), rel_jacks=list(_REL_JACKS))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)

@@ -538,13 +538,41 @@ KIT_TRIM_DB = -1.7
 
 
 def program_trim(program, drum=False):
-    """The linear factor on a note's channel volume for its program."""
-    db = KIT_TRIM_DB if drum else PROGRAM_TRIM_DB.get(int(program), 0.0)
+    """The linear factor on a note's channel volume for its program -- or for
+    its variation (VARIATION_TRIM_DB), where it has one."""
+    v = getattr(program, "variation", 0)
+    if not drum and v and ((int(program) & 0x7F), v) in VARIATION_TRIM_DB:
+        db = VARIATION_TRIM_DB[(int(program) & 0x7F, v)]
+    else:
+        db = KIT_TRIM_DB if drum else PROGRAM_TRIM_DB.get(int(program) & 0x7F, 0.0)
     return 10.0 ** (db / 20.0) if db else 1.0
 
 
+class VariationProgram(int):
+    """A program number in a BANK: GS's variation tones (CC0 = the variation,
+    the SC-55's "Variation" table), carried as DrumProgram carries a drum set.
+    An int, so everything that reads a note's program keeps working; the class
+    lookups read `.variation` and take the variation's class where VARIATIONS
+    has one. Made only for a variation that exists -- any other bank plays the
+    capital tone, as a Sound Canvas does."""
+
+    def __new__(cls, program, variation):
+        o = int.__new__(cls, int(program))
+        o.variation = int(variation)
+        return o
+
+    def __repr__(self):
+        return "VariationProgram(%d, %d)" % (int(self), self.variation)
+
+
 def property_class_for_program(program):
-    """Return the property class for a 0-based GM program number."""
+    """Return the property class for a 0-based GM program number -- its
+    variation's, where it carries one (VariationProgram)."""
+    v = getattr(program, "variation", 0)
+    if v:
+        got = VARIATIONS.get((int(program) & 0x7F, v))
+        if got is not None:
+            return got
     return PROGRAM_CLASS.get(program & 0x7F, PluckedStringProperties)
 
 
@@ -556,6 +584,35 @@ def property_class_for_program(program):
 # variation falls back to the capital tone, which is what a Sound Canvas does
 # with one it lacks.
 VARIATIONS = {}
+# ...each one's level against GeneralUser GS's own tone (dB, as
+# PROGRAM_TRIM_DB); without one, its capital's trim
+VARIATION_TRIM_DB = {}
+# GS's names (SC-55 owner's manual p.68, the Variation table), 0-based
+# programs: what the panel and the coverage table call a variation, built or
+# not. Bank 127 is the CM-64/MT-32 map (p.69), not listed here.
+VARIATION_NAMES = {
+    (4, 8): "Detuned EP 1", (5, 8): "Detuned EP 2", (6, 8): "Coupled Hps.",
+    (14, 8): "Church Bell", (16, 8): "Detuned Or. 1", (17, 8): "Detuned Or. 2",
+    (19, 8): "Church Org. 2", (21, 8): "Accordion It", (24, 8): "Ukulele",
+    (25, 8): "12-str. Gt", (25, 16): "Mandolin", (26, 8): "Hawaiian Gt.",
+    (27, 8): "Chorus Gt.", (28, 8): "Funk Gt.", (30, 8): "Feedback Gt.",
+    (31, 8): "Gt. Feedback", (38, 8): "Synth Bass 3", (39, 8): "Synth Bass 4",
+    (48, 8): "Orchestra", (50, 8): "Syn. Strings3", (61, 8): "Brass 2",
+    (62, 8): "Synth Brass3", (63, 8): "Synth Brass4", (107, 8): "Taisho Koto",
+    (115, 8): "Castanets", (116, 8): "Concert BD", (117, 8): "Melo. Tom 2",
+    (118, 8): "808 Tom",
+    (120, 1): "Gt. Cut Noise", (120, 2): "String Slap", (121, 1): "Fl. Key Click",
+    (122, 1): "Rain", (122, 2): "Thunder", (122, 3): "Wind", (122, 4): "Stream",
+    (122, 5): "Bubble", (123, 1): "Dog", (123, 2): "Horse",
+    (124, 1): "Telephone 2", (124, 2): "Door Creaking", (124, 3): "Door",
+    (124, 4): "Scratch", (124, 5): "Windchime",
+    (125, 1): "Car-Engine", (125, 2): "Car-Stop", (125, 3): "Car-Pass",
+    (125, 4): "Car-Crash", (125, 5): "Siren", (125, 6): "Train", (125, 7): "Jetplane",
+    (125, 8): "Starship", (125, 9): "Burst Noise",
+    (126, 1): "Laughing", (126, 2): "Screaming", (126, 3): "Punch",
+    (126, 4): "Heart Beat", (126, 5): "Footstep",
+    (127, 1): "Machinegun", (127, 2): "Lasergun", (127, 3): "Explosion",
+}
 
 
 def variation_class(program, variation):
@@ -737,7 +794,11 @@ def property_class_for_note(program, note):
     FAMILY: the bowed and brass ensembles, which pick the instrument whose
     register the note is in, and the solo winds and brass whose bottom octave
     belongs to a bigger instrument entirely (SOLO_SPLIT).
+    A VARIATION (VariationProgram) is its own class, ahead of every router.
     """
+    v = getattr(program, "variation", 0)
+    if v and (int(program) & 0x7F, v) in VARIATIONS:
+        return VARIATIONS[(int(program) & 0x7F, v)]
     prog = program & 0x7F
     if prog in BRASS_ENSEMBLE:
         return brass_section(_brass_body(note))
@@ -835,3 +896,71 @@ if _want:
     if _cls is None:
         raise SystemExit("TUNING_HARPSI=%r; have %s" % (_want, ", ".join(sorted(_HARPSI))))
     PROGRAM_CLASS[6] = PROGRAM_CLASS[7] = _cls
+
+
+# THE SFX SET, PLAYED FROM THE KEYBOARD. GS's sound-effect variations (bank
+# 1-8 under programs 120-127) are the SFX set's own sounds on a melodic part:
+# the same tone, its key choosing the pitch, with C4 (key 60) at the pitch the
+# kit plays it (SC-55 p.71's convention for the set's sounds). So each one is
+# the kit key's fitted class with everything the kit gives it -- its ring, its
+# level and its GS gate (percussion_map._with_ring) -- and its written note
+# moved onto the kit's pitch by sounding_octaves, which both renderers apply
+# to f0 before anything is built from it -- and then the whole sound moved
+# with the key (transposed_from_hz). A held texture keeps sounding while held,
+# as on the kit.
+_MELODIC_SFX = {}
+
+
+def melodic_sfx(key, kit=56):
+    """The SFX set's key `key` as a melodic voice, C4 at its kit pitch."""
+    import percussion_map as _PM
+    from math import log2
+    if (key, kit) not in _MELODIC_SFX:
+        name, cls, freq = _PM.KITS[kit][key]
+        rc = _PM._with_ring(cls, key, kit)
+        so = float(getattr(rc, "sounding_octaves", 0.0))
+        # ...AND TRANSPOSED WHOLE: built at the kit's pitch, every frequency it
+        # emits -- its noise bands and grains, which are in Hz, with its
+        # harmonics -- moved by the key's interval (blockrender's _XP), as GS
+        # transposes the sample. Its gate and decays stay in seconds.
+        # ...and its STROKES (percussion_map.rasp_strokes): the key whose
+        # table they are, which blockrender expands a melodic note by
+        attrs = {"sounding_octaves": so + log2(freq / SFX_C4_HZ),
+                 "transposed_from_hz": freq * 2.0 ** so,
+                 "sfx_strokes_of": (kit, key)}
+        _MELODIC_SFX[(key, kit)] = type("%s_sfx%d" % (cls.__name__, key), (rc,), attrs)
+    return _MELODIC_SFX[(key, kit)]
+
+
+SFX_C4_HZ = 440.0 * 2.0 ** (-9 / 12.0)      # key 60 at A440 equal temperament
+
+# GS bank on program -> the SFX set's key (SC-55 p.68 against p.71)
+SFX_VARIATIONS = {
+    (120, 1): 48, (120, 2): 50,                                  # Gt Cut Noise, String Slap
+    (121, 1): 51,                                                # Fl.KeyClick
+    (122, 1): 79, (122, 2): 80, (122, 3): 81, (122, 4): 83,      # Rain, Thunder, Wind, Stream
+    (124, 2): 59, (124, 3): 60, (124, 4): 61, (124, 5): 62,      # DoorCreaking, Door, Scratch, Windchime
+    (125, 1): 63, (125, 2): 64, (125, 3): 65, (125, 4): 66,      # Car-Engine, Car-Stop, Car-Pass, Car-Crash
+    (125, 6): 68, (125, 7): 69, (125, 8): 71,                    # Train, Jetplane, Starship
+    (126, 2): 53, (126, 3): 54, (126, 4): 55,                    # Screaming, Punch, Heart Beat
+    (127, 2): 74, (127, 3): 75,                                  # Lasergun, Explosion
+    # ...and those played as STROKES (percussion_map.KIT_STROKES): a pattern,
+    # a voice's pulses, a train, a cascade -- expanded for a melodic note too
+    (122, 5): 84,                                                # Bubble
+    (123, 1): 76, (123, 2): 77,                                  # Dog, Horse-Gallop
+    (126, 1): 52, (126, 5): 56,                                  # Laughing, Footstep
+    (127, 1): 73,                                                # Machinegun
+}
+for _pv, _k in SFX_VARIATIONS.items():
+    VARIATIONS[_pv] = melodic_sfx(_k)
+    # ...AT THE KIT'S LEVEL: the class is levelled as the SFX set's key, and
+    # its program's trim was set for that program's own voice (120's fret
+    # noise +34 dB over the kit's, 124's telephone -25)
+    VARIATION_TRIM_DB.setdefault(_pv, KIT_TRIM_DB)
+
+# GS 125.5 "Siren": Helmholtz's double siren (tonelib.HelmholtzSirenProperties,
+# siren.py) -- the key's pitch the 12-rows' at full air, the rows its stops.
+# At the SFX set's level until levelled against GeneralUser's own.
+from tonelib import HelmholtzSirenProperties as _HSP
+VARIATIONS[(125, 5)] = _HSP
+VARIATION_TRIM_DB.setdefault((125, 5), KIT_TRIM_DB)

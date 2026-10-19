@@ -24118,16 +24118,70 @@ class SfxSirenProperties(SfxWeatherProperties):
     harmonic_decay_db = 0.0
     breath_noise_db = ()
     initial_gain = 0.05             # no noise table to carry its level
-    attack_time = 0.15
-    release_valve_time = 0.3
+    # THE ROTOR (siren.py, measured off the same recording): held, its motor
+    # winds it onto the key's pitch (1.23 s); let go, it COASTS -- the wail's
+    # fall, eleven seconds a factor e -- and fades as it slows, pumping its own
+    # air (flat to half speed, then a knee). Its pitch and level are rows the
+    # renderers write from the model (blockrender _SIREN_AT, Live._siren_block),
+    # so the tone itself is steady and the rotor does the rest. Its drive is a
+    # switch: full while held, velocity its loudness, as every key of the set.
+    siren_rotor = "fire"
+    attack_time = 0.01
+    release_valve_time = 0.05
     release_fraction_max = None
-    tension_log = True
-    tension_bend = -0.48
-    tension_bend_max = 1.0
-    tension_bend_slope = 0.0
-    tension_bend_power = 0.0
-    tension_settle_time = 1.14
-    tension_settle_cutoff = 3.0
+
+
+class SirenRowProperties(SfxSirenProperties):
+    """One row of holes on a siren's disc: the fire siren's measured series
+    (its pulses through one row) as a rank's spectrum."""
+    siren_rotor = None
+    held_texture = False
+    one_shot = False
+
+
+class HelmholtzSirenProperties(SfxSirenProperties):
+    """GS 125.5, "Siren": HELMHOLTZ'S DOUBLE SIREN (1862) -- two Dove sirens
+    on one axle, one wind: the lower disc with rows of 8, 10, 12 and 18 holes,
+    the upper with 9, 12, 15 and 16, each row opened by its own stop, and a
+    crank that turns the upper chest against the lower (Smithsonian; Sound &
+    Science). "Full, strong and soft, like a fine tone on the French horn."
+
+    PLAYED AS ONE: the air is the key -- velocity, aftertouch (channel or
+    poly) and CC2, whichever is the most -- and the rotor (siren.py) follows
+    it: up in ~0.6 s at full (as the VCSL siren whistle winds up under
+    breath), its speed the jet's, so a softer key sings under pitch, as the
+    instrument does. Let go, the air stops and so does the tone while the disc
+    coasts on, silent; struck again before it stops, it starts from the speed
+    it still has -- the wail.
+
+    THE CRANK is the mod wheel: 0 to half a hole's spacing on the 12-rows,
+    0-180 degrees on their fundamental. Both 12-rows drawn (the default) and
+    the wheel at the top, their fundamentals cancel and the octave remains;
+    a moving wheel bends the upper disc's pitch while it turns, as the crank
+    did. The stops are the rows: 8 + 12 a fifth, 12 + 15 a major third, as
+    Helmholtz used it to sound his intervals."""
+    siren_rotor = "helmholtz"
+    held_texture = False
+    one_shot = False
+    touch_sensitive = False          # the air is the level (siren.blown_level), not a gain on it
+    registerable = True
+    stop_word_ccs = (43, 44)          # CC11 stays expression; the rows on CC43 (and 44 for the eighth)
+    # (name, ratio to the 12-row, gain, spectrum): the LOWER disc first
+    stop_ranks = [
+        ("lower 8",  8 / 12.0,  1.0, SirenRowProperties),
+        ("lower 10", 10 / 12.0, 1.0, SirenRowProperties),
+        ("lower 12", 1.0,       1.0, SirenRowProperties),
+        ("lower 18", 18 / 12.0, 1.0, SirenRowProperties),
+        ("upper 9",  9 / 12.0,  1.0, SirenRowProperties),
+        ("upper 12", 1.0,       1.0, SirenRowProperties),
+        ("upper 15", 15 / 12.0, 1.0, SirenRowProperties),
+        ("upper 16", 16 / 12.0, 1.0, SirenRowProperties),
+    ]
+    default_stops = 0b00100100        # the two 12-rows: one pitch, the crank's to play with
+    crescendo_order = ["lower 12", "upper 12", "lower 8", "upper 15", "lower 18", "upper 9",
+                       "lower 10", "upper 16"]
+    siren_upper = ("upper 9", "upper 12", "upper 15", "upper 16")
+    wind_pitch_exp = 0.0              # no organ chest's wind (live's wind_pc): its rotor is its pitch
 
 
 class SfxCarPassProperties(SfxWeatherProperties):

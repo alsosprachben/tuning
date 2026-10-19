@@ -443,7 +443,7 @@ KIT_RATED = {
         64: (4, "CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms"),
         65: (4, "CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it"),
         66: (4, "CAR CRASH fitted to a Freesound crash with glass (CC0): its noise (0.2 dB rms) with glass clicks and metal rings as grains, holding 1.3 s and falling away over 0.6 s as the recording does"),
-        67: (4, "SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) winding up from half its pitch with the recording's 1.14 s time constant -- the wail's first 1.5 s, where GeneralUser GS's is a 0.3 s blip"),
+        67: (4, "SIREN from a Freesound fire engine (CC0): its measured series (a rotor's pulses) on a ROTOR (siren.py) fitted to the whole recorded gesture, 33 cents rms -- wound up while held (1.23 s), coasting after (11 s a factor e) and fading as it slows (its own fan: 1.1 dB rms); pressed again while it coasts it starts from the speed it has. Live steps the same model a callback at a time"),
         68: (4, "TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence"),
         69: (4, "JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in"),
         39: (3, "HIGH Q: as Standard's 27"),
@@ -667,6 +667,62 @@ def stops():
     return out
 
 
+# THE GS VARIATIONS (CC0 = bank, SC-55 p.68): each one built is its own claim,
+# rated here as a program is. Every key of patch_map.VARIATIONS must be rated
+# and nothing else may be -- checked when the page is built, as STOP_RATED is.
+VAR_RATED = {
+    (125, 5): (3, "HELMHOLTZ'S DOUBLE SIREN (siren.py): two discs on one axle -- lower rows 8/10/12/18, upper 9/12/15/16, each row a stop (CC43/44) -- driven by AIR (velocity, aftertouch, CC2): its rotor's inertia measured on the fire siren and the VCSL siren whistle, singing only while blown and coasting silent after (the wail on a re-press); the mod wheel is the crank, the upper chest's angle, cancelling the 12-rows' fundamental at the top. Its tone is the fire siren's measured series: no recording of the instrument itself"),
+}
+# THE SFX VARIATIONS are the SFX set's keys played from the keyboard
+# (patch_map.SFX_VARIATIONS, checked by examples/sfx_variations.py: at C4 each
+# is its key's spectrum within the noise floor), so each carries its key's
+# rating and note -- read from KIT_RATED, so the two cannot drift
+def _sfx_var_rated():
+    for (p, v), key in patch_map.SFX_VARIATIONS.items():
+        r, note = KIT_RATED[56][key]
+        VAR_RATED[(p, v)] = (r, "the SFX set's key %d played from the keyboard, C4 at its "
+                                "kit pitch (its gate, ring and level the kit's): %s" % (key, note))
+
+
+def variations():
+    if not any(k in VAR_RATED for k in patch_map.SFX_VARIATIONS):
+        _sfx_var_rated()
+    """[(program, bank, GS name, class or None, rating or None, note)], every
+    variation GS names; one not built plays its capital tone."""
+    built = set(patch_map.VARIATIONS)
+    unrated = sorted(built - set(VAR_RATED))
+    unknown = sorted(set(VAR_RATED) - built)
+    if unrated or unknown:
+        raise SystemExit("VAR_RATED does not match patch_map.VARIATIONS: unrated %s, unknown %s"
+                         % (unrated, unknown))
+    out = []
+    for (p, v), name in sorted(patch_map.VARIATION_NAMES.items()):
+        if (p, v) in built:
+            cls = patch_map.property_class_for_program(patch_map.VariationProgram(p, v))
+            r, note = VAR_RATED[(p, v)]
+            out.append((p, v, name, cls.__name__, r, note))
+        else:
+            out.append((p, v, name, None, None, "not built: plays %d %s" % (p, GM[p])))
+    return out
+
+
+def variations_md():
+    rows = variations()
+    nb = sum(1 for r in rows if r[3])
+    L = ["## Variations: the GS banks (CC0)\n",
+         "A GS bank select (CC0 = bank, then the program) picks a variation tone",
+         "under a program (SC-55 owner's manual p.68). %d of GS's %d are built;" % (nb, len(rows)),
+         "one not built plays its capital tone, as a Sound Canvas does.\n",
+         "| program.bank | GS name | class | | notes |",
+         "|---|---|---|---|---|"]
+    for p, v, name, cls, r, note in rows:
+        L.append("| %d.%d | %s | %s | %s | %s |"
+                 % (p, v, name, "`%s`" % cls.replace("Properties", "") if cls else "--",
+                    "**%d**" % r if r is not None else "", note))
+    L.append("")
+    return "\n".join(L)
+
+
 def stops_md():
     L = ["## Stops: the registers within a program\n",
          "A program's rating is its default registration's. Each stop of a",
@@ -841,6 +897,7 @@ def main(argv):
                      % (p, GM[p], cls.replace("Properties", ""), r, note))
         L.append("")
     L.append(stops_md())
+    L.append(variations_md())
     L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)

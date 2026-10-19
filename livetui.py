@@ -29,6 +29,7 @@ import live as LV
 import moog as MG
 import mf104 as MFD
 import percussion_map as PM
+import patch_map as PMAP
 
 locale.setlocale(locale.LC_ALL, "")
 
@@ -74,18 +75,26 @@ MODELLED = {0: "Steinway", 2: "CP-70", 4: "Rhodes", 5: "Wurlitzer", 7: "Clavinet
             80: "Moog", 81: "Moog", 107: "\u0110\u00e0n Tranh"}
 
 
-def gm_label(p):
+def gm_label(p, v=0):
     if p >= len(GM):
         return "?"
+    if v and (p, v) in PMAP.VARIATION_NAMES:
+        return PMAP.VARIATION_NAMES[(p, v)]     # GS's own name for the variation
     return GM[p] + (" (%s)" % MODELLED[p] if p in MODELLED else "")
 
 
-def gm_label_short(p, width):
+def built_variations(p):
+    """The GS variations under program p that are built (patch_map.VARIATIONS),
+    in bank order: the ones a picker offers."""
+    return sorted(v for (q, v) in PMAP.VARIATIONS if q == p)
+
+
+def gm_label_short(p, width, v=0):
     """gm_label within a column: past it, the GM name's own qualifier goes
     and Electric/Acoustic shorten -- "E. Guitar (Stratocaster)" -- so the
     model still shows; the picker has the whole name."""
-    s = gm_label(p)
-    if len(s) <= width or p not in MODELLED:
+    s = gm_label(p, v)
+    if len(s) <= width or v or p not in MODELLED:
         return s
     base = GM[p].split(" (")[0].replace("Electric ", "E. ").replace("Acoustic ", "A. ")
     return "%s (%s)" % (base, MODELLED[p])
@@ -493,12 +502,17 @@ class TUI:
     def specs(self):
         return [p.to_dict() for p in self.parts()]
 
-    def change_patch(self, delta=None, program=None, drums=None):
+    def change_patch(self, delta=None, program=None, drums=None, bank=0):
         p = self.sel()
         if p is None:
             return
         specs = self.specs()
         s = specs[self.row]
+        # A NEW PATCH IS ON ITS CAPITAL TONE unless a bank is asked for: stepping
+        # programs leaves a variation, as a Sound Canvas's program buttons do
+        s.pop("bank", None)
+        if bank and drums is None and program is not None:
+            s["bank"] = int(bank)
         if drums is not None:
             s["drums"] = drums
             if program is not None:
@@ -948,18 +962,28 @@ class TUI:
             return
         # The drum SETS first, by the SC-55's names: on a drum part the program
         # is the set. One not built says so, and plays Standard.
+        # Each program's built GS variations (patch_map.VARIATIONS) sit under
+        # it, indented, by bank: "125.5 Siren".
         sets = sorted(PM.DRUM_SETS)
-        items = ["-- %s kit" % PM.drum_set_name(k) for k in sets] + \
-                ["%3d  %s" % (i, gm_label(i)) for i in range(len(GM))]
-        start = (sets.index(p.program) if p.drums and p.program in sets
-                 else 0 if p.drums else len(sets) + p.program)
+        items = ["-- %s kit" % PM.drum_set_name(k) for k in sets]
+        picks = [(True, k, 0) for k in sets]
+        for i in range(len(GM)):
+            items.append("%3d  %s" % (i, gm_label(i)))
+            picks.append((False, i, 0))
+            for v in built_variations(i):
+                items.append("   %3d.%d  %s" % (i, v, gm_label(i, v)))
+                picks.append((False, i, v))
+        here = (True, p.program, 0) if p.drums else (False, p.program, p.variation)
+        start = (picks.index(here) if here in picks
+                 else 0 if p.drums else picks.index((False, p.program, 0)))
         pick = self.menu(scr, "patch for part %d" % (self.row + 1), items, start)
         if pick is None:
             return
-        if pick < len(sets):
-            self.change_patch(drums=True, program=sets[pick])
+        dr, prog, v = picks[pick]
+        if dr:
+            self.change_patch(drums=True, program=prog)
         else:
-            self.change_patch(program=pick - len(sets))
+            self.change_patch(program=prog, bank=v)
 
     # ---- the controls pane -------------------------------------------------
     # A keyboard may send nothing but notes. This pane supplies what it lacks
@@ -1727,6 +1751,8 @@ class TUI:
     def cell(self, p, c):
         if c == "patch":
             return ("-- %s kit" % PM.drum_set_name(p.program) if p.drums
+                    else "%3d.%d %s" % (p.program, p.variation, gm_label_short(
+                        p.program, COL_W["patch"] - 7, p.variation)) if p.variation
                     else "%3d %s" % (p.program, gm_label_short(p.program, COL_W["patch"] - 5)))
         if c == "ch":
             return "all" if p.channel is None else str(p.channel + 1)
@@ -2101,7 +2127,7 @@ def patch_label(spec):
     if spec.get("drums"):
         return "%s kit" % PM.drum_set_name(spec.get("program", 0))
     p = spec.get("program", 0)
-    return gm_label(p) if p < len(GM) else str(p)
+    return gm_label(p, spec.get("bank", 0)) if p < len(GM) else str(p)
 
 
 # THE MESSENGER'S KNOBS, laid out as its panel is: (section, moog.PANEL name,

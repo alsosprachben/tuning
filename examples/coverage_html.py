@@ -343,6 +343,19 @@ def stops():
     return "\n".join(out)
 
 
+def variations():
+    """The GS variations (gm_coverage.variations): built ones rated, the rest
+    playing their capital tone."""
+    trs = []
+    for p, v, name, cls, r, note in C.variations():
+        trs.append('<tr><td class="num">%d.%d</td><td class="nm">%s</td><td class="note">%s</td>'
+                   '<td class="rt">%s</td><td class="note">%s</td></tr>'
+                   % (p, v, e(name), e(cls.replace("Properties", "")) if cls else "&ndash;",
+                      '<span class="chip r%d">%d</span>' % (r, r) if r is not None else "", e(note)))
+    return ('<div class="tscroll"><table><tr><th>Program.bank</th><th>GS name</th><th>Class</th>'
+            '<th></th><th>Notes</th></tr>\n%s\n</table></div>' % "\n".join(trs))
+
+
 def tree():
     """The class tree (gm_coverage.class_tree), collapsible below two levels."""
     n = [0]
@@ -403,6 +416,9 @@ def build():
         "percnotes": percussion_notes(),
         "drumsets": drum_sets(),
         "stops": stops(),
+        "variations": variations(),
+        "nvar": len(C.variations()),
+        "nvarb": sum(1 for x in C.variations() if x[3]),
         "nstop": sum(len(r) + len(c) for _, _, r, c in C.stops()),
         "nstop4": sum(1 for _, _, r, c in C.stops() for x in list(r) + list(c) if x[-2] == 4),
         "catline": ("The %d patches on a voice of the wrong physical kind are %s."
@@ -486,6 +502,12 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <div class="stopstack">
 %(stops)s
 </div>
+</section>
+
+<section>
+<h2>Variations: the GS banks</h2>
+<p>A GS bank select (CC0 = bank, then the program) picks a <em>variation</em> tone under a program (SC-55 owner&rsquo;s manual p.68). %(nvarb)d of GS&rsquo;s %(nvar)d are built; one not built plays its capital tone, as a Sound Canvas does.</p>
+%(variations)s
 </section>
 
 <section>
