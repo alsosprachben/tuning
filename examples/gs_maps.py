@@ -11,6 +11,7 @@ tones than the original SC-55 (whose owner's manual p.68 patch_map's
 VARIATION_NAMES follows): so "missing from the SC-55 map" here can be a tone
 the original never had.
 """
+import csv
 import os
 import re
 import subprocess
@@ -70,11 +71,19 @@ def parse():
         # each table spans to the next one's PC column
         bounds = [(t[1], (tables[k + 1][1][0] - 8) if k + 1 < len(tables) else 1e9) for k, t in enumerate(tables)]
         ys = sorted({round(y, 0) for x, y, w in W})
-        # rows at a page's top continue the last program of the page before
-        pcs = {0: last} if last is not None else {}
-        for y in ys:
-            line = sorted((x, w) for x, yy, w in W if abs(yy - y) < 1.5)
-            for k, (cols, xend) in enumerate(bounds):
+        # IN READING ORDER: the left table top to bottom, then the right. Rows
+        # at the top of a table continue the program before it -- the left
+        # table's, the last of the page before; the right table's, the LEFT
+        # table's last on this page. Walking both at once by line seeded only
+        # the left: the right's first rows had no program and were dropped
+        # (SC-88Pro 30.9-30.25, Rock Rhythm among them, which Tokei plays)
+        pcs = {}
+        for k, (cols, xend) in enumerate(bounds):
+            prev = last if k == 0 else pcs.get(k - 1, last)
+            if prev is not None:
+                pcs[k] = prev
+            for y in ys:
+                line = sorted((x, w) for x, yy, w in W if abs(yy - y) < 1.5)
                 # (a PC can sit a little left of its header)
                 ws = [(x, w) for x, w in line if cols[0] - 14 <= x < xend]
                 if not ws:
@@ -113,6 +122,72 @@ def parse():
     return rows
 
 
+PDF8850 = os.path.expanduser("~/Documents/refs/roland/SC-8850_OM.pdf")
+TSV8850 = os.path.expanduser("~/Documents/refs/roland/sc8850_instruments.tsv")
+PAGES8850 = range(167, 186)      # the instrument list (each even page heads its key first)
+
+
+def parse8850():
+    """THE SC-8850's LIST, which sets ALL FOUR maps side by side -- SC-8850,
+    SC-88Pro, SC-88, SC-55 -- one table per group, two to a page stacked, the
+    same columns. So it is the SC-8850 map (bank select LSB 4) and a second,
+    independent reading of the other three to check the SC-88Pro's against.
+    Columns from each page's header words; the remarks between ("[Pro]",
+    "[88]": the same sound as that map) and the legato mark ":" dropped."""
+    rows = []
+    pc = None
+    for p in PAGES8850:
+        html = subprocess.run(["pdftotext", "-f", str(p), "-l", str(p), "-bbox", PDF8850, "-"],
+                              capture_output=True, text=True).stdout
+        import html as _h
+        W = [(float(a), float(b), _h.unescape(w)) for a, b, w in
+             re.findall(r'<word xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>([^<]*)</word>', html)]
+        # the HEADER is the CC00 line that names the maps (the key above the
+        # table on an even page says "CC00" too)
+        sc = {round(y) for x, y, w in W if w == "SC-8850"}
+        heads = sorted(y for x, y, w in W if w == "CC00" and any(abs(y - z) < 2 for z in sc))
+        if not heads:
+            continue
+        hy = heads[0]
+        hx = {}
+        vo = []
+        for x, y, w in sorted(W):
+            if abs(y - hy) < 2:
+                if w in ("CC00", "PC", "SC-8850", "SC-88Pro", "SC-88", "SC-55"):
+                    hx[w] = x
+                elif w == "Voices":
+                    vo.append(x)
+        # name spans: from a map's header to its Voices column
+        spans = [(hx["SC-8850"], vo[0] - 4), (hx["SC-88Pro"], vo[1] - 4),
+                 (hx["SC-88"], vo[2] - 4), (hx["SC-55"], vo[3] - 4)]
+        for y in sorted({round(y, 0) for x, y, w in W if y > hy + 4}):
+            line = sorted((x, w) for x, yy, w in W if abs(yy - y) < 1.5)
+            cc = [w for x, w in line if abs(x - hx["CC00"]) < 6 and re.match(r"^\d{3}$", w)]
+            if not cc:
+                continue
+            pcs = [w for x, w in line if abs(x - hx["PC"]) < 6 and re.match(r"^\d{3}$", w)]
+            if pcs:
+                pc = int(pcs[0])
+            if pc is None:
+                continue
+            names = []
+            for a, b in spans:
+                ws = [w for x, w in line if a - 2 <= x < b and w != ":"]
+                names.append(" ".join(ws) or "-----")
+            rows.append((pc - 1, int(cc[0])) + tuple(names))
+    rows = sorted(set(rows))
+    with open(TSV8850, "w") as f:
+        f.write("program\tbank\tsc8850\tsc88pro\tsc88\tsc55\n")
+        for r in rows:
+            f.write("\t".join(str(v) for v in r) + "\n")
+    print("  %d rows -> %s" % (len(rows), TSV8850))
+    return rows
+
+
+if __name__ == "__main__" and sys.argv[1] == "parse8850":
+    parse8850()
+
+
 def load():
     out = []
     for line in open(TSV).read().splitlines()[1:]:
@@ -143,7 +218,7 @@ for _k, _keys in {
     "derived": "0.8 0.16 1.8 2.1 2.2 2.8 4.16 5.16 6.16 6.24 11.8 12.8 24.16 24.24 25.9 31.16 "
                "48.9 48.11 48.16 48.24 49.10 52.8 55.10 60.16 62.16 63.16 63.17 98.5 98.18 98.19 "
                "99.2 99.3 99.5 102.3 102.4 102.5 104.2 119.1 119.8 119.9 119.16 119.17 119.24 119.25 "
-               "120.3 120.4 120.6 123.3 124.7 126.6 14.9 104.1 15.1",
+               "120.3 120.4 120.6 123.3 124.7 126.6 14.9 104.1 15.1 30.18",
     "organ": "16.1 16.9 16.16 16.17 16.18 16.32 16.33 16.40 17.1 17.32 18.8 18.16 18.24 19.16 19.24 19.32",
     "synth": "35.4 38.1 38.9 38.10 38.16 39.1 39.2 39.3 39.9 39.16 39.17 39.18 39.19 50.1 54.8 55.16 "
              "62.1 62.9 63.1 80.1 80.2 80.3 80.4 80.5 80.6 80.8 81.1 81.2 81.3 81.4 81.5 81.6 81.7 81.8 "
@@ -152,9 +227,10 @@ for _k, _keys in {
              "99.1 99.4 99.6 101.1 101.2 102.1 102.2 102.6 103.1",
     "refit": "4.25 4.26 5.24 11.1 15.8 22.1 24.32 24.40 25.32 26.1 28.1 28.16 30.1 30.2 33.1 33.2 34.8 "
              "35.1 35.2 35.3 35.5 36.8 40.8 44.8 44.9 48.1 48.10 49.1 49.8 49.9 52.9 52.32 55.8 55.9 "
-             "56.1 56.24 56.25 57.1 58.1 60.1 60.8 61.16 63.1 65.8 66.8 105.1 106.1 111.1 120.5",
+             "56.1 56.24 56.25 57.1 58.1 60.1 60.8 61.16 63.1 65.8 66.8 105.1 106.1 111.1 120.5 "
+             "30.9 30.16 30.17 30.24 30.25",
     "new": "16.24 56.8 71.8 75.8 104.8 104.16 105.8 105.16 105.24 107.16 111.8 111.16 112.8 112.9 "
-           "112.10 112.11 112.16 113.8 123.4 123.5",
+           "112.10 112.11 112.16 113.8 123.4 123.5 12.16 12.17 12.24",
 }.items():
     for _t in _keys.split():
         _p, _b = _t.split(".")
@@ -223,21 +299,23 @@ if __name__ == "__main__" and sys.argv[1] == "inventory":
 
 
 def write_names(path=os.path.join(HERE, "gs_map_names.py")):
-    """gs_map_names.py: each later map's variation tones by name, for
-    patch_map's map switch (bank select LSB). Names only -- Roland's list,
-    a fact about the modules -- so the renderers need no copy of the manual."""
-    R = load()
+    """gs_map_names.py: each map's variation tones by name, for patch_map's
+    map switch (bank select LSB). Names only -- Roland's list, a fact about
+    the modules -- so the renderers need no copy of the manual. From the
+    SC-8850's list, which sets all four maps side by side and agrees with the
+    SC-88Pro manual's tone for tone (parse8850)."""
+    R = list(csv.reader(open(TSV8850), delimiter="\t"))[1:]
     L = ['"""THE SOUND CANVAS MAPS\' VARIATION TONES, by name: {map: {(program, bank):',
          'name}} -- bank select LSB 1 the SC-55 map (the SC-55mkII\'s, as a later',
-         'module has it), 2 the SC-88 map, 3 the SC-88Pro\'s own. Generated from the',
-         'SC-88Pro owner\'s manual\'s instrument list by examples/gs_maps.py names;',
-         'do not edit. Capitals (bank 0) are every map\'s, and are not listed."""', "",
+         'module has it), 2 the SC-88 map, 3 the SC-88Pro\'s, 4 the SC-8850\'s. From',
+         'the SC-8850 owner\'s manual\'s instrument list (all four maps side by side) by',
+         'examples/gs_maps.py names; do not edit. Capitals (bank 0) are not listed."""', "",
          "MAP_NAMES = {"]
-    for m, col in ((1, "sc55"), (2, "sc88"), (3, "native")):
+    for m, col in ((1, 5), (2, 4), (3, 3), (4, 2)):
         L.append("    %d: {" % m)
         for r in R:
-            if r["bank"] and r[col] not in ("-----", "", "+ -----"):
-                L.append("        (%d, %d): %r," % (r["program"], r["bank"], r[col].lstrip("+ ").strip()))
+            if int(r[1]) and r[col] not in ("-----", "", "+ -----"):
+                L.append("        (%d, %d): %r," % (int(r[0]), int(r[1]), r[col].lstrip("+ ").strip()))
         L.append("    },")
     L.append("}")
     open(path, "w").write("\n".join(L) + "\n")

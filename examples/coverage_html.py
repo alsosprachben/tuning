@@ -392,6 +392,22 @@ def sound_canvas():
             % ("\n".join(rows), head, trs, len(miss), "\n".join(kinds)))
 
 
+def effects():
+    """The Sound Canvas's effects (gm_coverage.EFFECTS_RATED), rated."""
+    trs = "\n".join('<tr><td class="nm">%s</td><td class="rt"><span class="chip r%d">%d</span></td>'
+                     '<td class="note">%s</td></tr>' % (e(n), r, r, e(note)) for n, r, note in C.EFFECTS_RATED)
+    built = "\n".join('<tr><td class="nm">%s</td><td class="rt"><span class="chip r%d">%d</span></td>'
+                      '<td class="note">%s</td></tr>' % (e(n), C.EFX_RATED[n][0], C.EFX_RATED[n][0],
+                                                         e(C.EFX_RATED[n][1]))
+                      for n in C.EFX_TYPES if n in C.EFX_RATED)
+    rest = ", ".join(e(n) for n in C.EFX_TYPES if n not in C.EFX_RATED)
+    return ('<div class="tscroll"><table><tr><th>Effect</th><th></th><th>Notes</th></tr>\n%s\n'
+            '</table></div>\n<h3>Insertion effects (EFX, the SC-88Pro&rsquo;s 64 types)</h3>\n'
+            '<p>Read per note at its onset (the files automate the level, the mix, the sends); a part '
+            'assigned to a type not built plays dry.</p>\n<div class="tscroll"><table><tr><th>Type</th>'
+            '<th></th><th>Notes</th></tr>\n%s\n</table></div>\n<p>Not built yet: %s.</p>' % (trs, built, rest))
+
+
 def tree():
     """The class tree (gm_coverage.class_tree), collapsible below two levels."""
     n = [0]
@@ -454,6 +470,7 @@ def build():
         "stops": stops(),
         "variations": variations(),
         "soundcanvas": sound_canvas(),
+        "effects": effects(),
         "nvar": len(C.variations()),
         "nvarb": sum(1 for x in C.variations() if x[3]),
         "nstop": sum(len(r) + len(c) for _, _, r, c in C.stops()),
@@ -551,6 +568,12 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <h2>Sound Canvas: the GS maps</h2>
 <p>Each Sound Canvas&rsquo;s map of tones &mdash; the SC-55&rsquo;s own (owner&rsquo;s manual p.68), and the SC-55mkII, SC-88 and SC-88Pro maps from the SC-88Pro manual&rsquo;s instrument list &mdash; against ours: a tone is built when we play it, as a program or a variation, and rated as the tables above rate it. A later map can put another tone under a number we built (the SC-88&rsquo;s 4.8 is &ldquo;St.Soft EP&rdquo;, not our detuned pair); that one is not counted.</p>
 %(soundcanvas)s
+</section>
+
+<section>
+<h2>Effects: the Sound Canvas&rsquo;s</h2>
+<p>Rated on what each is built to: 4 fitted against recordings of the device, 3 built to Roland&rsquo;s own definition (the manuals&rsquo; parameter tables), 2 mapped onto a related model of ours, 1 a stand-in, 0 not built. Each insertion type is to be mapped onto the physical model we have where one exists &mdash; Rotary the Leslie, Overdrive and Distortion the valve amp and cabinet, the choruses <code>chorus.py</code>, the 3D types our room and head.</p>
+%(effects)s
 </section>
 
 <section>

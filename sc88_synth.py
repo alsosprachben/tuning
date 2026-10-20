@@ -170,7 +170,11 @@ SC88_SYNTH = {
               dict(osc1_wave=SAW, osc2_wave=SAW, osc2_freq=c(25), a_attack=0.0, f_attack=0.0,
                    a_decay=0.35, a_sustain=0.3, cutoff=0.65)),
     (98, 1): ("Syn Mallet", "MoogCrystalFX", dict(a_decay=0.4, mod_amount=0.58)),
-    (98, 2): ("SoftCrystal", "MoogCrystalFX", dict(mod_amount=0.6, cutoff=0.58)),
+    # "soft" is the strike, not the level: the filter opened half as far
+    # (eg_amount), a little lower, a 0.04 attack -- centroid 5.3 -> 3.0 kHz on
+    # Tokei's part; Ben chose it by ear (C) over a plain -4 dB
+    (98, 2): ("SoftCrystal", "MoogCrystalFX", dict(mod_amount=0.6, cutoff=0.55, eg_amount=0.55,
+                                                   a_attack=0.04)),
     (98, 4): ("Loud Glock", "MoogCrystalFX", dict(mod_amount=0.66, cutoff=0.75)),
     (98, 6): ("Clear Bells", "MoogCrystalFX", dict(mod_amount=0.62, a_decay=0.65)),
     (98, 7): ("X'mas Bell", "MoogCrystalFX", dict(mod_amount=0.68, osc2_freq=0.85)),

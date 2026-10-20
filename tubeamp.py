@@ -76,6 +76,7 @@ either, for the reason the growl has pitch: noise is uncorrelated with the
 source and a cluster is not. So the spectrum is right (1/12-octave bands to
 10-15%, total energy to 1%) and the slow beat inside a cluster is not there.
 """
+import bisect
 import math
 
 # Child-Langmuir: a triode's plate current follows the 3/2 power of its grid
@@ -648,9 +649,18 @@ def segment(A, arrs, rows, ch, drive, a, b, sr, cols, extra, keep=KEEP_PARTIALS,
     imb = (imbalances or {}).get(ch)
     valve = {} if imb is None else {'imbalance': float(imb)}
     made = 0
+    ref = (references or {}).get(ch)
+    if isinstance(ref, tuple):
+        # A REFERENCE THAT FOLLOWS A LEVEL AFTER THE VALVE: ('steps', base,
+        # starts, levels) -- a GS insertion effect's output level, automated by
+        # the file, is in each note's gain (that is how it reaches the output)
+        # and so must be in the reference too, segment by segment, or a fade
+        # would reach the valve as less drive rather than as less level
+        _, base, starts, levels = ref
+        i = bisect.bisect_right(starts, a) - 1
+        ref = base * levels[max(0, i)]
     for j, (f, g, ph) in enumerate(emit(fs.tolist(), as_.tolist(), ps.tolist(),
-                                        sr, drive, floor=floor,
-                                        reference=(references or {}).get(ch),
+                                        sr, drive, floor=floor, reference=ref,
                                         **valve)):
         if meta is not None:
             meta.append((ch, a, j))

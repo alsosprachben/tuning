@@ -400,8 +400,9 @@ class Stream:
         if fx['leslie'] and self.loudest is None and not self.scan:
             raise NeedLoudest()
         mf = [(a - i0, b - i0, st) for a, b, st in fx['mf104'] if i0 <= a < i1]
+        gsd = [(a - i0, b - i0, dv, sd) for a, b, dv, sd in fx.get('gsdelay', ()) if i0 <= a < i1]
         ht = [(a - i0, b - i0) for a, b in self.ctx['ht_rows'] if i0 <= a < i1]
-        note = dict(r=r, mf=mf, ht=ht, wait=0)
+        note = dict(r=r, mf=mf, gsd=gsd, ht=ht, wait=0)
         sym = fx['sympathetic']
         if sym:
             for ch in sym:
@@ -582,19 +583,27 @@ class Stream:
     # -- 2. MF-104 ----------------------------------------------------------
     def _mf104(self, note):
         r = note['r']
-        if note['mf']:
+        if note['mf'] or note['gsd']:
             import mf104 as MF
+            import gsdelay as GSD
             mini = _mini(r, self.cols)
             n0 = len(r['om'])
-            meta = []
-            _, last = MF.expand(mini, note['mf'], self.B.SR, self.cols, dup_fx=self._mf_dup, meta=meta)
-            self.mf_last = max(self.mf_last, last)
+            meta, gmeta = [], []
+            if note['mf']:
+                _, last = MF.expand(mini, note['mf'], self.B.SR, self.cols, dup_fx=self._mf_dup, meta=meta)
+                self.mf_last = max(self.mf_last, last)
+            if note['gsd']:
+                # the GS delay's repeats, after the MF-104M's, of the dry rows
+                _, last = GSD.expand(mini, note['gsd'], self.B.SR, self.cols, self.B.gsd_place, meta=gmeta)
+                self.mf_last = max(self.mf_last, last)
             for k in ('aL', 'aR', 'aM'):                    # the dry share, in place
                 r[k] = np.array(mini[k][:n0], dtype=r[k].dtype)
+            meta = meta + gmeta
             if meta:
                 out = _appended(mini, r, self.cols, n0)
                 src = np.array([x[0] for x in meta], np.int64)
                 lvl = np.zeros((len(meta), 4), np.int64); lvl[:, 0] = 2
+                lvl[len(meta) - len(gmeta):, 0] = 3        # the GS delay's: their own level
                 out['key'], out['klen'] = _key(lvl, r['key'][src], r['klen'][src],
                                                np.array([[x[1]] for x in meta], np.int64))
                 out['ht'] = np.zeros(len(src), bool)
@@ -754,6 +763,15 @@ class Stream:
             parts = [p for p in parts if p is not None]
             parts.append(self._chorus(parts, fx['chorus']))
         out = _cat(parts)
+        # THE INSERTION EFFECT's EQ, after its valve, in place (gsefx.eq_gain)
+        if fx.get('efxeq'):
+            import gsefx as GSX
+            for ch, eq in fx['efxeq'].items():
+                sel = out['mch'] == ch
+                if sel.any():
+                    g = GSX.eq_gain(out['nf'][sel].astype(np.float64), eq)
+                    for col in ('aL', 'aR', 'aM'):
+                        v = out[col]; v[sel] *= g
         # CABINET, in place
         import cabinet as CAB
         for ch, name in fx['cabinet'].items():
@@ -824,7 +842,7 @@ class Stream:
         outs = []
         for ch, spec in channels.items():
             send, cents = spec[0], spec[1]
-            if send <= CH.FLOOR or not cents:
+            if (send <= CH.FLOOR and not len(spec) > 3) or not cents:
                 continue
             if len(spec) > 2 and spec[2] == 'pair':
                 # a DETUNED PAIR (chorus._pair): the rows down and left, a
@@ -862,6 +880,36 @@ class Stream:
                     p['aR'][rows] = p['aR'][rows] * gr0
                     p['aM'][rows] = p['aM'][rows] * 0.5 ** 0.5
                 self.made[ch] = self.made.get(ch, 0) + made
+                continue
+            if len(spec) > 2 and spec[2] == 'gs':
+                # A SOUND CANVAS FILE'S CHORUS (chorus.gs_copies), as the
+                # whole table makes it
+                made = 0
+                dry = 1.0
+                sels = [np.flatnonzero(p['mch'] == ch) for p in parts]
+                drys = []
+                for p, rows in zip(parts, sels):
+                    if not len(rows):
+                        drys.append(None)
+                        continue
+                    # (an insertion effect's mix follows the file: a share per row)
+                    sh = spec[3](p['non'][rows]) if len(spec) > 3 else send
+                    cps, dry = CH.gs_copies(p, rows, cents, sh, self.B.SR, self.B.gsd_place)
+                    drys.append(dry if cps else None)
+                    for ci, o, sel in cps:
+                        rk = rows[sel]
+                        lvl = np.zeros((len(rk), 4), np.int64)
+                        lvl[:, 0] = 6; lvl[:, 1] = order.index(ch); lvl[:, 2] = 1000 + ci
+                        o['key'], o['klen'] = _key(lvl, p['key'][rk], p['klen'][rk])
+                        o['ht'] = np.zeros(len(rk), bool)
+                        outs.append(o)
+                        made += len(rk)
+                self.made[ch] = self.made.get(ch, 0) + made
+                for p, rows, dry in zip(parts, sels, drys):
+                    if dry is not None and len(rows) and np.any(np.asarray(dry) != 1.0):
+                        self.dried.add(ch)
+                        for col in ('aL', 'aR', 'aM'):
+                            p[col][rows] = (p[col][rows] * dry).astype(p[col].dtype)
                 continue
             wet = (send / float(len(cents))) ** 0.5
             dry = (1.0 - send) ** 0.5

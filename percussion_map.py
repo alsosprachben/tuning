@@ -329,7 +329,19 @@ DEFAULT_PAN = {
 
 
 
-def kit_pan(note):
+# A SET'S OWN PLACES, where it puts an instrument somewhere Standard's table
+# does not (a GS set pans each instrument; a file's CC10 moves them together).
+# {program: {note: pan -1..1}}
+KIT_PAN = {
+    # ASIA (set 53): the gongs Tokei rolls on, placed by ear against the
+    # SC-88Pro recording (Ben: "a regular orchestral gong on the left ... some
+    # higher pitch crashing on the right") -- the Big Gong left, the Small
+    # Gong right, the Asian Gong just off centre
+    52: {73: 0.15, 74: -0.5, 75: 0.5},
+}
+
+
+def kit_pan(note, kit=0):
     """This drum's place in the stereo image, before the channel's CC10.
 
     FROM WHICH SIDE OF THE KIT. DEFAULT_PAN is the drummer's view (hi-hat
@@ -346,7 +358,8 @@ def kit_pan(note):
     left to clearly right, which is what he wrote for. That is an audience-side
     kit, and TUNING_KIT_VIEW=audience mirrors the whole kit for such a file.
     """
-    p = DEFAULT_PAN.get(note, 0.0)
+    own = KIT_PAN.get(kit, {})
+    p = own[note] if note in own else DEFAULT_PAN.get(note, 0.0)
     return -p if _os.environ.get('TUNING_KIT_VIEW', 'drummer') == 'audience' else p
 
 # ---- DRUM SETS ---------------------------------------------------------------
@@ -361,7 +374,7 @@ def kit_pan(note):
 # Jazz (32) shares Standard's column on the SC-55, so it IS Standard there.
 DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
              25: "TR-808", 32: "Jazz", 40: "Brush", 48: "Orchestra",
-             56: "SFX", 127: "CM-64/32L"}
+             52: "Asia", 56: "SFX", 127: "CM-64/32L"}
 
 # THE SETS THAT ARE BUILT: {program: {note: (name, class, base Hz)}}, holding
 # only the notes that differ. A set named above but not here plays Standard,
@@ -541,6 +554,24 @@ KITS = {
 # kit; each tuned so the pitch a render reads where it fades (the sweep
 # still settling there) is where GeneralUser's reads: ~0.9x its end -- (48 between its neighbours:
 # GeneralUser's 47 and 48 both end at 79 Hz).
+# ASIA (SC-88Pro set 53, its owner's manual's drum set list): Chinese, Korean,
+# Japanese and Javanese percussion. Built so far: its three gongs, Iowa's
+# tam-tams (tonelib.TamTam*, examples/gong_fit.py), at their lowest modes --
+# what Tokei's port-B gong roll plays (0:21-0:24), which fell back to
+# Standard's guiros and claves -- and its key 49 (below). The rest of the set
+# is silent (KIT_ONLY).
+KITS[52] = {
+    # KEY 49 IS THE CRASH, as Konami wrote it. Roland's table, as read here
+    # (its columns run together), puts a Jaws Harp on 49; but Tokei's roll on
+    # it under this set (0:22) is the crash roll it plays on Standard at 0:11,
+    # note for note, and the SC-88Pro recording has cymbals and gongs there
+    # and no twang (Ben). Matched by intent, not by the table's word.
+    49: PERCUSSION[49],
+    73: ("Asian Gong", _T.TamTam28Properties, 83.93),
+    74: ("Big Gong",   _T.TamTam40Properties, 66.18),
+    75: ("Small Gong", _T.TamTam22Properties, 135.63),
+}
+
 KIT_RING = {24: {}, 25: {}, 48: {}, 56: {}}     # the Simmons voices' DECAY is their patch's (simmons.py)
 # ...AND THEIR GATES: the Electronic toms stop dead where the pad's amplifier
 # closes. GeneralUser GS's decay as ours do and then fall 30 dB in under 50 ms
@@ -630,7 +661,8 @@ def drum_set_name(program):
 # Standard's drum on that key -- "Guitar cutting noise" must not be a tom.
 # The CM-64/32L set (127) too, whose blanks are "no sound" (added with it,
 # below: _cm32l).
-KIT_ONLY = {56}
+KIT_ONLY = {56, 52}     # ...and ASIA (set 53), whose every key is its own: an
+                        # unbuilt one is silent, not Standard's guiro on it
 
 
 def percussion_for_note(note, kit=0):
@@ -639,7 +671,7 @@ def percussion_for_note(note, kit=0):
     own = KITS.get(kit, {}).get(note)
     if own is not None:
         name, cls, freq = own
-        return name, _with_ring(cls, note, kit), freq, kit_pan(note)
+        return name, _with_ring(cls, note, kit), freq, kit_pan(note, kit)
     if kit in KIT_ONLY:
         return None
     entry = PERCUSSION.get(note)

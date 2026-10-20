@@ -86,6 +86,12 @@ def room_of(props):
     return w * d * h, areas
 
 
+# A FILE'S REVERB TIME (GS 40 01 34, via the sidecar): x/ 2 at the ends.
+# Roland gives the range, not the law; the room's own T60s are scaled, so the
+# hall stays bass-rich and HF-damped at any length.
+T60_SCALE = 1.0
+
+
 def decay_and_level(props, q=2.0, band_q=None):
     """[(centre Hz, T60 s, reverberant/direct energy ratio)] per octave.
 
@@ -110,7 +116,7 @@ def decay_and_level(props, q=2.0, band_q=None):
         # Air absorption enters as nepers per metre, not decibels.
         m = props.air_absorption_db_per_m(f) / 8.685889638
         denom = -surface * math.log(max(1e-6, 1.0 - mean)) + 4.0 * m * volume
-        t60 = 0.161 * volume / denom
+        t60 = 0.161 * volume / denom * T60_SCALE
         # Reverberant field against direct at r: (4/R) / (Q/(4*pi*r^2)).
         R = surface * mean / max(1e-6, 1.0 - mean)
         ratio = 16.0 * math.pi * r * r / (max(qf, 1e-3) * R)
@@ -444,6 +450,20 @@ def main(argv):
     seed = int(argv[argv.index('--seed') + 1]) if '--seed' in argv else 0
 
     x, sr = read_wav(inp)
+    # THE ROOM THE RENDER WAS IN, where the sidecar says (a GS file's reverb
+    # macro chose it -- blockrender.prepare), so the tail is that room's
+    side = os.path.splitext(inp)[0] + '.room.json'
+    tail_gain = tail_time = 1.0
+    if os.path.exists(side):
+        import json
+        _d0 = json.load(open(side))
+        if _d0.get('room_name') and _d0['room_name'] != T.ROOM_NAME[0]:
+            T.set_room(_d0['room_name'])
+            print("   room %s (the render's)" % _d0['room_name'])
+        tail_gain = float(_d0.get('tail_gain', 1.0))
+        tail_time = float(_d0.get('tail_time', 1.0))
+        global T60_SCALE
+        T60_SCALE = tail_time
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
     # Prefer what the render measured over the scalar.
     band_q = None
@@ -459,6 +479,11 @@ def main(argv):
             side_send = float(next(iter(_sd.values())))
     ir, bands, onset = build_ir(props, sr, q=q, seed=seed,
                                 channels=x.shape[1], band_q=band_q)
+    if tail_gain != 1.0 or tail_time != 1.0:
+        # A FILE'S REVERB LEVEL (GS 40 01 33, 64 the module's default): the
+        # tail's amplitude, the direct sound untouched
+        ir = ir * tail_gain
+        print("   GS reverb: level x%.2f, time x%.2f" % (tail_gain, tail_time))
 
     volume, areas = room_of(props)
     print("== %s -> %s" % (inp, outp))

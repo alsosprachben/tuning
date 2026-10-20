@@ -1240,6 +1240,24 @@ VARIATIONS[(25, 16)] = _MDP
 #   ("set", program, {attrs})     the program's voice with these settings
 #   ("layer", ((program, semitones, dB[, vel lo, vel hi]), ...))
 WIDE = 0.5                       # key_pan_spread: +-0.5 of the field 30 keys from middle C
+
+
+def palm_mute(s):
+    """GM 30's strings under a palm mute of strength s: 0 its own, 1 GM 28's
+    fitted mute (IDMT-SMT-Guitar, a clean DI guitar) -- decay rates taken
+    geometrically between the two, the pick and the palm's low-pass linearly.
+    A driven chug's length also depends on how hard the palm rests, which is
+    the player's: examples/rock_rhythm_ab.py renders a part at any s."""
+    from tonelib import DistortionGuitarProperties as _D, MutedGuitarProperties as _M
+    out = {}
+    for k in ('decay_db', 'harmonic_decay_db', 'decay_register_slope', 'strike_depth',
+              'tonal_dampening'):
+        a, b = float(getattr(_D, k)), float(getattr(_M, k))
+        v = a * (b / a) ** s if k in ('decay_db', 'harmonic_decay_db') else a + s * (b - a)
+        out[k] = float('%.4g' % v)
+    return out
+
+
 SC88_CHEAP = {
     (0, 8): ("Piano 1w", ("set", 0, dict(key_pan_spread=WIDE))),
     # "d": A SOFTER, WORN HAMMER (Ben: "the hammer is beaten up... the attack
@@ -1271,7 +1289,9 @@ SC88_CHEAP = {
     (16, 40): ("Organ Bass", ("set", 16, dict(default_stops=0b101))),           # 16' 8'
     (17, 1): ("Organ 201", ("set", 17, dict(default_stops=0b1000000000111))),   # 888, the B3's 2nd percussion
     (17, 32): ("Organ 5", ("set", 17, dict(default_stops=0b100100000111))),     # 888 and 1', 3rd percussion
-    (18, 8): ("Rotary Org.", ("set", 18, dict(default_stops=0b111111111, leslie_fast=True))),
+    # Rotary Org. is the switchable one -- Roland has RotaryOrg.S and .F for
+    # the fixed speeds -- so it starts slow and the wheel (CC1) takes it fast
+    (18, 8): ("Rotary Org.", ("set", 18, dict(default_stops=0b111111111, leslie_fast=False))),
     (18, 16): ("RotaryOrg.S", ("set", 18, dict(leslie_fast=False))),
     (18, 24): ("RotaryOrg.F", ("set", 18, dict(leslie_fast=True, default_stops=0b111111111))),
     (19, 16): ("ChurchOrg.3", ("set", 19, dict(default_stops=0b10010011))),     # 8' 4' 16' mixture
@@ -1281,6 +1301,47 @@ SC88_CHEAP = {
     (24, 24): ("VeloHarmnix", ("layer", ((24, 0, 0.0, 0, 95), (31, 0, 0.0, 96, 127)))),
     (25, 9): ("Nylon+Steel", ("layer", ((24, 0, -2.0), (25, 0, -2.0)))),
     (31, 16): ("Ac.Gt.Harm.", ("alias", 31)),
+    # THE SC-88Pro's ":" TONES ARE LEGATO-ENABLED (owner's manual, "Concerning
+    # legato-enabled sounds"): a note played over a held one sounds without
+    # its attack. Ours slur what overlaps on every voice that declares a
+    # legato attack (blockrender's legato pass, tonelib.slur_attack), so where
+    # the colon is the only difference the tone is the voice as it is
+    (72, 1): ("Piccolo :", ("alias", 72)),
+    # ...and the strings' two, legato as ours are: Bright Str: the body's
+    # roll-off opened (bore_corner_hz 3 -> 4.5 kHz: a colour, power-
+    # preserving); ChamberStr: a chamber orchestra's section, fewer players
+    # (2 voices against 7, a narrower desk) -- each chosen by Ben on Tokei's
+    # strings (examples/tone_ab.py; 3, 4.5, 6 kHz; 7, 3, 2 players)
+    (48, 1): ("Bright Str:", ("set", 48, dict(bore_corner_hz=4500.0))),
+    (48, 2): ("ChamberStr:", ("set", 48, dict(section_players=2, section_width_m=0.8))),
+    # SOLO SPIC.: one violin, its bow thrown onto the string and off it -- a
+    # quick bite (12 ms, no bowed speech), 40 ms on the string whatever the
+    # key holds (one_shot, gate_time), then the string's brief ring (0.12 s:
+    # a stopped high note, damped by the finger) -- chosen by Ben on Tokei's
+    # clock tick (F#6 every half second) in its hall, over 50 ms / 0.18 s
+    (45, 16): ("Solo Spic.", ("set", 40, dict(section_players=1, one_shot=True, gate_time=0.04,
+                                              release_valve_time=0.12, attack_time=0.012,
+                                              speech_cycles=0.0))),
+    # PICKED BASS 2: the picked bass with its amp pushed into a mild growl --
+    # Roland gives only its 2 voices; read by Ben as the driven one, the Ozzy
+    # rhythm section's (Bob Daisley's picked bass under Crazy Train's guitars),
+    # drive 1.0 chosen on Tokei's bass (0.28 its own, 1.0, 2.0)
+    (34, 1): ("Picked Bass2", ("set", 34, dict(amp_drive=1.0))),
+    # DIST. GT2 : the distortion guitar, legato-enabled -- a guitar's legato
+    # is the fretting hand: a note over a held one is hammered or pulled off,
+    # its string ringing on from the last pick (blockrender hammer_legato),
+    # and the note it leaves stops (one string, one pitch)
+    (30, 1): ("Dist. Gt2 :", ("set", 30, dict(hammer_legato=True, slur_cuts_release=True))),
+    # MORE DRIVE: GM 29's own voice. Tokei plays it through GTR Multi 2's
+    # overdrive at 30 (x1.72 on the valve, gsefx.od_gain), and that product
+    # Ben heard as right -- Crazy Train's crunch, a little less smashed; a
+    # hotter voice under the same EFX would be more smashed than that
+    (29, 3): ("More Drive", ("alias", 29)),
+    # ROCK RHYTHM: the distortion guitar palm-muted, at 0.3 of GM 28's mute --
+    # a distorted palm-muted open G (Freesound 12042, CC0) swells 150 ms and
+    # sags ~11 dB/s, a light palm (0.2-0.35); Ben chose 0.3 by ear on Tokei's
+    # rhythm part (0, 0.3, 1 rendered by examples/rock_rhythm_ab.py)
+    (30, 24): ("Rock Rhythm", ("set", 30, palm_mute(0.3))),
     (48, 9): ("Orchestra 2", ("layer", ((48, 0, 0.0), (60, 0, -8.0)))),
     (48, 11): ("Choir Str.", ("layer", ((48, 0, 0.0), (52, 0, -4.0)))),
     (48, 16): ("St.Strings", ("set", 48, dict(key_pan_spread=WIDE))),
@@ -1354,7 +1415,7 @@ for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
 
 # THE MAP SWITCH: BANK SELECT LSB (CC32) picks a Sound Canvas's map, as an
 # SC-88 does -- 1 the SC-55 map (the SC-55mkII's, as a later module has it),
-# 2 the SC-88's, 3 the SC-88Pro's -- latched with CC0 until the next program
+# 2 the SC-88's, 3 the SC-88Pro's, 4 the SC-8850's -- latched with CC0 until the next program
 # change. 0, or none, is OURS: the SC-55's own tones, and the later maps'
 # where the SC-55 had none. A map names its tones (gs_map_names.MAP_NAMES,
 # from the SC-88Pro manual); under a map:
@@ -1365,12 +1426,16 @@ for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
 #   - anywhere else it plays ours: the same tone, perhaps renamed ("Syn.Bass
 #     3", "Acid Bass")
 from gs_map_names import MAP_NAMES
-MAP_LABELS = {1: "SC-55", 2: "SC-88", 3: "SC-88Pro"}
+MAP_LABELS = {1: "SC-55", 2: "SC-88", 3: "SC-88Pro", 4: "SC-8850"}
 MAP_OTHER = {
     1: {(3, 8), (4, 16), (5, 16), (62, 16), (63, 16)},
     2: {(4, 8), (39, 8)},
     3: {(0, 16), (3, 8), (4, 8), (39, 8), (16, 8), (16, 9), (16, 32), (17, 1), (17, 32),
         (60, 16), (62, 8), (63, 8), (63, 17)},
+    # the SC-8850 keeps the SC-88Pro's, and makes its two "w" pianos uprights
+    # and pop pianos
+    4: {(0, 8), (0, 16), (1, 8), (3, 8), (4, 8), (39, 8), (16, 8), (16, 9), (16, 32), (17, 1),
+        (17, 32), (60, 16), (62, 8), (63, 8), (63, 17)},
 }
 
 
@@ -1429,5 +1494,19 @@ for (_m, _p, _b), (_nm, _how) in MAP_TONES.items():
 # preset for, levelled to it as the programs are (examples/sfx_levels.py
 # --var-trim: velocities 64 and 100, K level re a piano C4) -- over the
 # defaults set above (a variation's capital's trim, or the SFX set's)
-VARIATION_TRIM_FIT = {(0, 8): 0.0, (0, 16): 0.2, (1, 8): 8.2, (2, 1): -1.3, (2, 2): -2.8, (2, 8): 1.9, (3, 8): 7.3, (3, 136): 9.6, (4, 8): 0.6, (4, 16): -7.4, (4, 24): -4.5, (4, 144): -2.1, (4, 264): -2.0, (5, 8): -2.4, (5, 16): -5.3, (5, 144): -5.6, (6, 8): -11.9, (6, 16): -10.9, (6, 24): -12.5, (11, 8): 2.3, (12, 8): 2.9, (14, 8): -2.6, (14, 9): -1.9, (15, 1): 4.2, (16, 1): -7.4, (16, 8): -4.4, (16, 9): -6.0, (16, 16): -5.5, (16, 17): -5.7, (16, 18): -9.6, (16, 32): -10.1, (16, 33): -7.7, (16, 40): -6.9, (17, 1): -2.4, (17, 8): -2.0, (17, 32): -2.7, (18, 8): -10.1, (18, 16): -7.9, (18, 24): -10.1, (19, 8): -2.6, (19, 16): -3.8, (19, 24): 5.4, (19, 32): 5.2, (21, 8): -12.2, (24, 8): 7.9, (24, 16): 8.3, (24, 24): 9.6, (25, 8): -0.9, (25, 9): -0.4, (25, 16): 3.5, (26, 8): 12.8, (27, 8): 3.7, (28, 8): 5.1, (30, 8): 6.6, (31, 8): -12.7, (31, 16): 13.2, (35, 4): 9.2, (38, 1): -4.9, (38, 8): -4.6, (38, 9): -2.9, (38, 10): 5.4, (38, 16): 4.0, (39, 1): -4.2, (39, 2): -2.6, (39, 3): 3.0, (39, 8): -2.3, (39, 9): -1.3, (39, 16): -0.9, (39, 17): -5.5, (39, 18): -2.7, (39, 19): -3.3, (39, 264): -3.9, (48, 8): 2.2, (48, 9): 0.9, (48, 11): -0.4, (48, 16): 2.1, (48, 24): 4.2, (49, 10): 2.6, (50, 1): 10.0, (50, 8): 5.0, (52, 8): 3.5, (54, 8): 2.1, (55, 10): -15.9, (55, 16): 16.3, (60, 16): 6.4, (61, 8): 3.1, (62, 1): 8.4, (62, 8): 3.2, (62, 9): 11.0, (62, 16): 7.4, (62, 144): 9.0, (63, 8): 5.2, (63, 16): 8.5, (63, 17): 7.6, (63, 144): 8.5, (80, 1): -2.3, (80, 2): 9.0, (80, 3): 11.9, (80, 4): 0.3, (80, 5): 8.5, (80, 6): 5.5, (80, 8): 8.0, (81, 1): -5.4, (81, 2): -2.0, (81, 3): 3.1, (81, 4): -1.0, (81, 5): 1.1, (81, 6): -2.8, (81, 7): -0.5, (81, 8): 4.0, (81, 16): 4.1, (82, 1): 8.8, (82, 2): 9.9, (84, 8): 0.1, (86, 1): 1.2, (87, 1): 6.5, (87, 2): 3.5, (88, 1): 14.7, (89, 1): 2.2, (89, 2): 2.6, (89, 3): 2.9, (89, 4): 4.5, (90, 1): 7.8, (91, 1): 8.0, (93, 1): 5.8, (93, 2): 5.4, (95, 1): 5.1, (95, 8): 5.9, (95, 9): 4.2, (95, 10): 12.8, (96, 1): 1.3, (96, 2): 15.9, (96, 8): -0.9, (97, 1): 5.5, (97, 2): 7.7, (97, 8): 10.9, (98, 1): 8.1, (98, 2): 4.0, (98, 3): -0.9, (98, 4): 3.8, (98, 5): -6.0, (98, 6): 3.5, (98, 7): 3.9, (98, 8): 3.9, (98, 9): 4.6, (98, 16): 3.0, (98, 17): 3.6, (98, 18): 0.1, (98, 19): 9.3, (99, 1): 6.2, (99, 2): 5.6, (99, 3): 4.6, (99, 4): 2.8, (99, 5): 8.3, (99, 6): 5.2, (101, 1): 3.8, (101, 2): 8.1, (102, 1): -3.3, (102, 2): 6.7, (102, 3): -1.2, (102, 4): -1.2, (102, 5): 1.8, (102, 6): -2.5, (103, 1): 5.6, (104, 1): 12.6, (104, 2): 17.0, (107, 8): 0.7, (115, 8): -13.2, (116, 8): 0.5, (117, 1): 5.8, (117, 8): -1.8, (117, 9): 5.5, (118, 8): 1.2, (118, 9): 0.0, (119, 1): -1.7, (119, 8): -0.2, (119, 9): 2.5, (119, 16): -2.8, (119, 17): -2.1, (119, 24): 1.2, (119, 25): 2.1, (120, 1): -5.4, (120, 2): -5.3, (120, 3): 1.0, (120, 4): 1.0, (120, 6): 32.8, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (124, 7): -6.4, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (126, 6): 14.3, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
+VARIATION_TRIM_FIT = {(0, 8): 0.0, (0, 16): 0.2, (1, 8): 8.2, (2, 1): -1.3, (2, 2): -2.8, (2, 8): 1.9, (3, 8): 7.3, (3, 136): 9.6, (4, 8): 0.6, (4, 16): -7.4, (4, 24): -4.5, (4, 144): -2.1, (4, 264): -2.0, (5, 8): -2.4, (5, 16): -5.3, (5, 144): -5.6, (6, 8): -11.9, (6, 16): -10.9, (6, 24): -12.5, (11, 8): 2.3, (12, 8): 2.9, (14, 8): -2.6, (14, 9): -1.9, (15, 1): 4.2, (16, 1): -7.4, (16, 8): -4.4, (16, 9): -6.0, (16, 16): -5.5, (16, 17): -5.7, (16, 18): -9.6, (16, 32): -10.1, (16, 33): -7.7, (16, 40): -6.9, (17, 1): -2.4, (17, 8): -2.0, (17, 32): -2.7, (18, 8): -10.1, (18, 16): -7.9, (18, 24): -10.1, (19, 8): -2.6, (19, 16): -3.8, (19, 24): 5.4, (19, 32): 5.2, (21, 8): -12.2, (24, 8): 7.9, (24, 16): 8.3, (24, 24): 9.6, (25, 8): -0.9, (25, 9): -0.4, (25, 16): 3.5, (26, 8): 12.8, (27, 8): 3.7, (28, 8): 5.1, (30, 8): 6.6, (31, 8): -12.7, (31, 16): 13.2, (34, 1): 3.7, (35, 4): 9.2, (38, 1): -4.9, (38, 8): -4.6, (38, 9): -2.9, (38, 10): 5.4, (38, 16): 4.0, (39, 1): -4.2, (39, 2): -2.6, (39, 3): 3.0, (39, 8): -2.3, (39, 9): -1.3, (39, 16): -0.9, (39, 17): -5.5, (39, 18): -2.7, (39, 19): -3.3, (39, 264): -3.9, (45, 16): 16.1, (48, 1): 2.5, (48, 2): 7.4, (48, 8): 2.2, (48, 9): 0.9, (48, 11): -0.4, (48, 16): 2.1, (48, 24): 4.2, (49, 10): 2.6, (50, 1): 10.0, (50, 8): 5.0, (52, 8): 3.5, (54, 8): 2.1, (55, 10): -15.9, (55, 16): 16.3, (60, 16): 6.4, (61, 8): 3.1, (62, 1): 8.4, (62, 8): 3.2, (62, 9): 11.0, (62, 16): 7.4, (62, 144): 9.0, (63, 8): 5.2, (63, 16): 8.5, (63, 17): 7.6, (63, 144): 8.5, (80, 1): -2.3, (80, 2): 9.0, (80, 3): 11.9, (80, 4): 0.3, (80, 5): 8.5, (80, 6): 5.5, (80, 8): 8.0, (81, 1): -5.4, (81, 2): -2.0, (81, 3): 3.1, (81, 4): -1.0, (81, 5): 1.1, (81, 6): -2.8, (81, 7): -0.5, (81, 8): 4.0, (81, 16): 4.1, (82, 1): 8.8, (82, 2): 9.9, (84, 8): 0.1, (86, 1): 1.2, (87, 1): 6.5, (87, 2): 3.5, (88, 1): 14.7, (89, 1): 2.2, (89, 2): 2.6, (89, 3): 2.9, (89, 4): 4.5, (90, 1): 7.8, (91, 1): 8.0, (93, 1): 5.8, (93, 2): 5.4, (95, 1): 5.1, (95, 8): 5.9, (95, 9): 4.2, (95, 10): 12.8, (96, 1): 1.3, (96, 2): 15.9, (96, 8): -0.9, (97, 1): 5.5, (97, 2): 7.7, (97, 8): 10.9, (98, 1): 8.1, (98, 2): 12.8, (98, 3): -0.9, (98, 4): 3.8, (98, 5): -6.0, (98, 6): 3.5, (98, 7): 3.9, (98, 8): 3.9, (98, 9): 4.6, (98, 16): 3.0, (98, 17): 3.6, (98, 18): 0.1, (98, 19): 9.3, (99, 1): 6.2, (99, 2): 5.6, (99, 3): 4.6, (99, 4): 2.8, (99, 5): 8.3, (99, 6): 5.2, (101, 1): 3.8, (101, 2): 8.1, (102, 1): -3.3, (102, 2): 6.7, (102, 3): -1.2, (102, 4): -1.2, (102, 5): 1.8, (102, 6): -2.5, (103, 1): 5.6, (104, 1): 12.6, (104, 2): 17.0, (107, 8): 0.7, (115, 8): -13.2, (116, 8): 0.5, (117, 1): 5.8, (117, 8): -1.8, (117, 9): 5.5, (118, 8): 1.2, (118, 9): 0.0, (119, 1): -1.7, (119, 8): -0.2, (119, 9): 2.5, (119, 16): -2.8, (119, 17): -2.1, (119, 24): 1.2, (119, 25): 2.1, (120, 1): -5.4, (120, 2): -5.3, (120, 3): 1.0, (120, 4): 1.0, (120, 6): 32.8, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (124, 7): -6.4, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (126, 6): 14.3, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
 VARIATION_TRIM_DB.update(VARIATION_TRIM_FIT)
+
+# ...AND BY EAR, where there is no witness: dB added over the above (so a
+# re-run of --var-trim keeps them). GeneralUser has no preset for these, and
+# each was put where its capital sits -- which the SC-88Pro does not.
+#   98.2 Soft Crystal: at Crystal's level it stood out of Tokei against the
+#        SC-88Pro recording, where it all but disappears -- too far, Ben
+#        judged, for the arrangement. Its panel made soft (sc88_synth) and
+#        set 5.3 dB under Crystal by ear (Ben, 2026-10-20)
+#   48.1 Bright Str, 48.2 ChamberStr: at the level Ben chose them at on
+#        Tokei's strings -- the chamber section 5.3 dB under the full one,
+#        which is the power of 2 players against 7
+VARIATION_TRIM_EAR = {(98, 2): -5.3, (48, 1): -0.4, (48, 2): -5.3}
+for _k, _db in VARIATION_TRIM_EAR.items():
+    VARIATION_TRIM_DB[_k] = VARIATION_TRIM_DB.get(_k, PROGRAM_TRIM_DB.get(_k[0], 0.0)) + _db

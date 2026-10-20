@@ -853,9 +853,10 @@ def mt32_md():
 # "St.Soft EP", not our detuned pair): those are not counted as built. A name
 # that differs only in its spelling ("Syn.Bass 3", "Acid Bass") is the same
 # tone, renamed.
-SC_COL_MAP = {"sc55": 1, "sc88": 2, "native": 3}
+SC_COL_MAP = {"sc55": 1, "sc88": 2, "native": 3, "sc8850": 4}
 SC_OTHER = {col: patch_map.MAP_OTHER[m] for col, m in SC_COL_MAP.items()}
-SC_MAPS = (("sc55o", "SC-55"), ("sc55", "SC-55mkII"), ("sc88", "SC-88"), ("native", "SC-88Pro"))
+SC_MAPS = (("sc55o", "SC-55"), ("sc55", "SC-55mkII"), ("sc88", "SC-88"), ("native", "SC-88Pro"),
+           ("sc8850", "SC-8850"))
 
 
 def sound_canvas():
@@ -879,6 +880,14 @@ def sound_canvas():
     for col in ("sc55", "sc88", "native"):
         tones[col] = [(r["program"], r["bank"]) for r in R
                       if r[col] not in ("-----", "", "+ -----")]
+    # the SC-8850's, from its own list (which sets the other three beside it)
+    if os.path.exists(gs_maps.TSV8850):
+        import csv
+        tones["sc8850"] = [(int(r[0]), int(r[1])) for r in
+                           list(csv.reader(open(gs_maps.TSV8850), delimiter="\t"))[1:]
+                           if r[2] not in ("-----", "", "+ -----")]
+    else:
+        tones["sc8850"] = []
 
     def rating(col, k):
         # WHAT THAT MAP PLAYS for the number (patch_map.map_bank, as a file's
@@ -931,7 +940,7 @@ def sound_canvas_md():
     own = sorted((v >> 7, p, v & 0x7F, nm) for (p, v), nm in patch_map.VARIATION_NAMES.items()
                  if v >> 7 in patch_map.MAP_LABELS and (p, v) in patch_map.VARIATIONS)
     if own:
-        L += ["", "A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro; "
+        L += ["", "A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; "
               "none, ours). Where a map holds another tone under a number, it is built as its own: "
               + ", ".join("%s %d.%d %s (%s)" % (patch_map.MAP_LABELS[m], p, b, nm,
                                                   VAR_RATED[(p, 128 * m + b)][0])
@@ -947,6 +956,70 @@ def sound_canvas_md():
         if rs:
             L.append("**%s** (%d: %s): %s\n" % (k, len(rs), what,
                                                ", ".join("%d.%d %s" % (p, b, nm) for p, b, nm, _ in rs)))
+    return "\n".join(L) + "\n"
+
+
+# THE SOUND CANVAS'S EFFECTS, rated as the voices are, on what each is built
+# to: 4 fitted against recordings of the device, 3 built to Roland's own
+# definition (the manuals' parameter tables), 2 mapped onto a related model
+# of ours, 1 a stand-in, 0 not built (the sound passes dry).
+EFFECTS_RATED = [
+    ("Reverb (system)", 2, "the macro picks one of our physical rooms (Room 1-3 studio, chamber, "
+     "chapel; Hall 1 hall; Hall 2 church), its level and time scale the tail from the macro's "
+     "own preset; CC91 a distance. Not Roland's algorithm, and a per-drum reverb send not yet"),
+    ("Chorus (system)", 3, "chorus.gs_copies: Roland's eight macros, a line swept by one LFO, "
+     "read at two outputs in opposite phase, fed back; laws GM 2's (rate, depth, feedback), the "
+     "delay's chosen (0.2 ms a step); the wet share held as CC93's. To reverb / to delay, "
+     "per-drum chorus sends, not yet"),
+    ("Delay (system)", 3, "gsdelay.py: Roland's three taps, time table, ten macros, feedback "
+     "through the center; CC94 (in a GS file) and the drum keys' sends; level laws chosen "
+     "(linear over 127). Delay to reverb not yet a send of its own"),
+    ("EQ (system)", 3, "the SC-88's two shelves at 200/400 Hz and 3/6 kHz, per part on/off, "
+     "first-order (the order chosen)"),
+]
+EFX_TYPES = ("Stereo-EQ", "Spectrum", "Enhancer", "Humanizer", "Overdrive", "Distortion",
+             "Phaser", "Auto Wah", "Rotary", "Stereo Flanger", "Step Flanger", "Tremolo",
+             "Auto Pan", "Compressor", "Limiter", "Hexa Chorus", "Tremolo Chorus",
+             "Stereo Chorus", "Space D", "3D Chorus", "Stereo Delay", "Mod Delay",
+             "3 Tap Delay", "4 Tap Delay", "Tm Ctrl Delay", "Reverb", "Gate Reverb",
+             "3D Delay", "2 Pitch Shifter", "Fb P.Shifter", "3D Auto", "3D Manual",
+             "Lo-Fi 1", "Lo-Fi 2", "OD -> Chorus", "OD -> Flanger", "OD -> Delay",
+             "DS -> Chorus", "DS -> Flanger", "DS -> Delay", "EH -> Chorus", "EH -> Flanger",
+             "EH -> Delay", "Cho -> Delay", "FL -> Delay", "Cho -> Flanger", "Rotary Multi",
+             "GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Clean Gt Multi 1",
+             "Clean Gt Multi 2", "Bass Multi", "Rhodes Multi", "Keyboard Multi",
+             "Cho / Delay", "FL / Delay", "Cho / Flanger", "OD1 / OD2", "OD / Rotary",
+             "OD / Phaser", "OD / AutoWah", "PH / Rotary", "PH / AutoWah")
+
+
+# THE INSERTION TYPES BUILT (gsefx.BUILT), each on our models: 2, mapped
+EFX_RATED = {
+    "Overdrive": (2, "tubeamp on the part's sum, the 1x12 cabinet; Roland's drive onto the valve's (law chosen), low/high gains"),
+    "Distortion": (2, "as Overdrive, with more gain"),
+    "GTR Multi 1": (2, "compressor (decay slowed, law chosen), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay)"),
+    "GTR Multi 2": (2, "compressor, OD and amp, 3-band EQ (exact per partial), chorus/flanger -- Tokei's guitars"),
+    "GTR Multi 3": (1, "as GTR Multi 1 without its wah (not built)"),
+}
+
+
+def effects_md():
+    L = ["## Effects: the Sound Canvas's\n",
+         "Rated on what each is built to: 4 fitted against recordings of the device, 3 built to "
+         "Roland's own definition, 2 mapped onto a related model of ours, 1 a stand-in, 0 not "
+         "built (the sound passes dry). The plan maps each insertion type onto the physical "
+         "model we have where one exists (Rotary the Leslie, Overdrive/Distortion the valve "
+         "amp and cabinet, the choruses chorus.py, the 3D types our room and head).\n",
+         "| effect | | notes |", "|---|---|---|"]
+    for nm, r, note in EFFECTS_RATED:
+        L.append("| %s | **%d** | %s |" % (nm, r, note))
+    L += ["", "### Insertion effects (EFX, the SC-88Pro's 64 types)\n",
+          "Read per note at its onset (the files automate the level, the mix, the sends); "
+          "a part assigned to a type not built plays dry.\n",
+          "| type | | notes |", "|---|---|---|"]
+    for n in EFX_TYPES:
+        if n in EFX_RATED:
+            L.append("| %s | **%d** | %s |" % (n, EFX_RATED[n][0], EFX_RATED[n][1]))
+    L += ["", "Not built yet: %s." % ", ".join(n for n in EFX_TYPES if n not in EFX_RATED), ""]
     return "\n".join(L) + "\n"
 
 
@@ -1127,6 +1200,7 @@ def main(argv):
     L.append(variations_md())
     L.append(mt32_md())
     L.append(sound_canvas_md())
+    L.append(effects_md())
     L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)

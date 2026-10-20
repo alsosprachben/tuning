@@ -131,6 +131,8 @@ _CONS = os.environ.get('TUNING_CONSONANTS', '1') != '0'
 import tonelib as T, midilib, vowels as _VOW
 import chorus as _CHR
 import mf104 as _MFD
+import gsdelay as _GSD
+import gsefx as _GSX
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
 # times the partial's frequency per second, which at 100000 is every sample --
@@ -537,6 +539,20 @@ def parse(path):
     # carries the answer (DrumProgram), snapshotted at note-on like the rest.
     _bmsb = {}; _blsb = {}; _drums = {}
     _var = {}                # the channel's variation (GS bank), from its last program change
+    # THE DRUM INSTRUMENTS' OWN SETTINGS (GS): per channel, [(t, seq, key,
+    # param, value)] from the drum NRPNs (18-1F rr) and the drum setup SysEx
+    # (41 m p rr), key None with 'reset' where a drum set change or a reset
+    # puts them back -- read at each drum note's onset in prepare. _rmap is
+    # the drum MAP a rhythm part plays (0 MAP1, 1 MAP2), which the SysEx
+    # addresses: channel 10 is MAP1 until "use for rhythm part" says otherwise.
+    dedit = {}
+    _rmap = {}
+    # THE USER DRUM SETS (GS 21 dp rr: sets 65 and 66): {(set 0/1, key):
+    # {param: value}} -- each key's source set and note, and its own settings
+    uset = {}
+    # THE INSERTION EFFECT's timeline (gsefx.parse): [(t, event)], a reset an
+    # event too -- read at each note's onset in prepare
+    efxev = []
     _rxbank = [True]         # Rx.BANK SELECT: GM1 On turns it off
     # MPE (M1-100-UM), as live.py plays it: the zones in force, and their
     # history for prepare. A member channel takes its manager's program and is
@@ -605,6 +621,10 @@ def parse(path):
             _drums[msg.channel] = _dr
             ch_prog[msg.channel] = _pr
             _var[msg.channel] = 0 if _dr else _var_
+            if _dr and msg.channel in dedit:
+                # "When the Drum Set is changed, DRUM SETUP PARAMETER values
+                # will all be initialized" (VE-GS Pro MIDI Implementation)
+                dedit[msg.channel].append((t, _seq, None, 'reset', 0))
             # A drum set is not a melodic program: the organ registration pass
             # reads this list, and a Power kit (16) would have registered the
             # drum channel as a Drawbar Organ.
@@ -663,6 +683,12 @@ def parse(path):
                 _gs = T.GS_SOUND_NRPN.get(_nsel.get(_c)) if _sel is None else None
                 if _gs is not None and _cc == 6:
                     sndev.setdefault(_c, []).append((t, _seq, _gs, _v))
+                _dn = _nsel.get(_c) if _sel is None else None
+                if _dn is not None and _cc == 6 and _dn[0] in GS_DRUM_NRPN:
+                    # a DRUM INSTRUMENT's own: its key is the NRPN's LSB
+                    _par = GS_DRUM_NRPN[_dn[0]]
+                    dedit.setdefault(_c, []).append(
+                        (t, _seq, _dn[1], _par, (_v - 64) if _par == 'pitch' else _v))
                 if _sel == (0, 6) and _cc == 6:
                     # THE MPE CONFIGURATION MESSAGE (2.2.1): the zones, a
                     # reset on every channel whose zone changed (2.2.3), and the
@@ -749,6 +775,10 @@ def parse(path):
                 # goes to 0, as live's does; this renderer kept them.
                 _rxbank[0] = _lvl != 1
                 _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear()
+                _rmap.clear()
+                efxev.append((t, ('reset',)))
+                for _dc in dedit:
+                    dedit[_dc].append((t, _seq, None, 'reset', 0))
                 # BACK TO POWER-ON, which this renderer did not do at all while
                 # its own docstring said it did. The controllers go (so a note
                 # after it snapshots CC7 at 100 again), and every tuning the
@@ -776,6 +806,28 @@ def parse(path):
                 _drums[_rc] = bool(_rm)
                 if _rm:
                     _var[_rc] = 0
+                    _rmap[_rc] = _rm - 1
+                continue
+            _gx = _GSX.parse(msg.data)
+            if _gx is not None:
+                efxev.append((t, _gx))
+                continue
+            _ud = parse_gs_user_drum(msg.data)
+            if _ud is not None:
+                uset.setdefault((_ud[0], _ud[1]), {})[_ud[2]] = _ud[3]
+                continue
+            _gp = parse_gs_part(msg.data)
+            if _gp is not None:
+                # A PART PARAMETER: read as the MIDI message it is, next, in order
+                _inj.extend(_gp[1])
+                continue
+            _ds = parse_gs_drum_setup(msg.data)
+            if _ds is not None:
+                # A DRUM MAP'S SETTING: every channel of that port playing the map
+                _dport, _dm_, _dk, _dpar, _dv = _ds
+                for _dc in range(16 * _dport, 16 * _dport + 16):
+                    if _is_drums(_dc) and _rmap.get(_dc, 0) == _dm_:
+                        dedit.setdefault(_dc, []).append((t, _seq, _dk, _dpar, _dv))
                 continue
             _mt = _MTS.parse_mts(msg.data)
             if _mt is not None:
@@ -836,7 +888,7 @@ def parse(path):
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
                                    pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn,
-                                   mpe=mpe_ev)))
+                                   mpe=mpe_ev, dedit=dedit, uset=uset, efx=efxev)))
 
 
 # What an MPE manager's control change does NOT copy to its members: the RPN
@@ -849,8 +901,12 @@ _MPE_NOT_FANNED = frozenset((0, 6, 32, 38, 74, 96, 97, 98, 99, 100, 101, 126, 12
 def _open_midi(path):
     """A path, a mido.MidiFile, or a MIDI 2.0 file (Clip File or raw UMP),
     which ump.UmpMidi presents in mido's shape -- see ump.py."""
-    if isinstance(path, mido.MidiFile) or hasattr(path, 'slots'):
+    if hasattr(path, 'slots') or isinstance(path, PortedMidi):
         return path
+    if isinstance(path, mido.MidiFile):
+        # an in-memory file names its ports as a saved one does: an excerpt
+        # or a test's file must not collapse port B onto port A
+        return PortedMidi(path) if PortedMidi.uses_ports(path) else path
     import ump as _U
     with open(path, 'rb') as f:
         head = f.read(8)
@@ -1015,6 +1071,132 @@ def parse_gs_reset(data):
     # (mm 0 one module, 1 two): "the SC-88 will be reset", and the file sends
     # it in GS Reset's place -- six of the seven Sound Canvas files scanned do
     return d[4:7] == (0x40, 0x00, 0x7F) and d[7] == 0x00 or d[4:7] == (0x00, 0x00, 0x7F)
+
+
+# THE HAMMER-ON (hammer_legato). Chosen, by the physics' sign and not fitted:
+# the finger costs the string a little (3 dB), and its onset is a fingertip's,
+# not a pick's -- 6 ms at first, 12 by Ben's ear on Tokei's side guitar ("it
+# works... could be even softer"), against the pick's 2.
+HAMMER_LOSS_DB = 3.0
+HAMMER_GAIN = 10.0 ** (-HAMMER_LOSS_DB / 20.0)
+HAMMER_ATTACK_S = 0.012
+
+
+# GS's DRUM INSTRUMENT NRPNs (VE-GS Pro MIDI Implementation): MSB -> what it
+# sets of the instrument on key LSB. Pitch is relative (40H = 0, semitones);
+# the rest absolute, replacing the instrument's preset.
+GS_DRUM_NRPN = {0x18: 'pitch', 0x1A: 'level', 0x1C: 'pan', 0x1D: 'reverb',
+                0x1E: 'chorus', 0x1F: 'delay'}
+_GS_DRUM_SETUP = {1: 'note', 2: 'level', 3: 'group', 4: 'pan', 5: 'reverb',
+                  6: 'chorus', 7: 'rxoff', 8: 'rxon', 9: 'delay'}
+
+
+def parse_gs_drum_setup(data):
+    """(port, map, key, param, value) for a GS DRUM SETUP parameter, or None.
+
+    F0 41 dd 42 12 4b mp rr vv cs F7 (b 1 port A, 5 port B; m the drum map,
+    0 MAP1 or 1 MAP2; p the parameter): the per-key settings the drum NRPNs
+    also reach, addressed by map rather than channel. PLAY NOTE NUMBER is the
+    pitch as a note number -- returned here as semitones from the key, as the
+    NRPN's relative pitch is."""
+    d = tuple(data)
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4] in (0x41, 0x51) and (d[5] >> 4) in (0, 1)):
+        return None
+    par = _GS_DRUM_SETUP.get(d[5] & 0x0F)
+    if par is None:
+        return None
+    key, v = int(d[6]), int(d[7])
+    if par == 'note':
+        return (1 if d[4] == 0x51 else 0), d[5] >> 4, key, 'pitch', v - key
+    return (1 if d[4] == 0x51 else 0), d[5] >> 4, key, par, v
+
+
+_GS_USER_DRUM = {1: 'note', 2: 'level', 3: 'group', 4: 'pan', 5: 'reverb', 6: 'chorus',
+                 7: 'rxoff', 8: 'rxon', 9: 'delay', 0xA: 'src_map', 0xB: 'src_set', 0xC: 'src_note'}
+USER_DRUM_SETS = (64, 65)        # GS's user sets 65 and 66, as programs
+
+
+def parse_gs_user_drum(data):
+    """(set 0/1, key, param, value) for a GS USER DRUM SET parameter
+    (F0 41 dd 42 12 21 dp rr vv cs F7), or None."""
+    d = tuple(data)
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and d[4] == 0x21
+            and (d[5] >> 4) in (0, 1)):
+        return None
+    par = _GS_USER_DRUM.get(d[5] & 0x0F)
+    return None if par is None else (d[5] >> 4, int(d[6]), par, int(d[7]))
+
+
+def user_drum(uset, prog, key):
+    """For a key of user drum set `prog` (64/65): (source set, source note,
+    {its own settings, as drum_edit_at's}) or None if the set leaves it unset.
+    PLAY NOTE is the key's pitch as a note number, so its pitch is play - source."""
+    u = uset.get((int(prog) - USER_DRUM_SETS[0], key))
+    if not u or 'src_note' not in u:
+        return None
+    sn = u['src_note']
+    own = {k: u[k] for k in ('level', 'pan', 'rxon') if k in u}
+    if 'note' in u:
+        own['pitch'] = u['note'] - sn
+    return u.get('src_set', 0), sn, own
+
+
+def drum_edit_at(edits, key, t):
+    """{param: value} in force for drum key `key` at time t, from a channel's
+    edit timeline (parse's dedit): the last of each since the last reset."""
+    st = {}
+    for et, _sq, k, par, v in edits:
+        if et > t + 1e-9:
+            break
+        if par == 'reset':
+            st = {}
+        elif k == key:
+            st[par] = v
+    return st
+
+
+def parse_gs_part(data):
+    """(channel, [mido messages]) for a GS PART parameter that has a MIDI
+    message of its own, or None: the part's level, pan, reverb and chorus
+    sends, tone, mono/poly and key shift are what CC7, CC10, CC91, CC93, CC0 +
+    program change, CC126/127 and RPN 0/2 set -- so they are read as those,
+    through the same code, and nothing new decides what they mean.
+
+    F0 41 dd 42 12 4b 1p aa vv [ww] cs F7, b 0 port A / 1 port B (address 40 /
+    50), p the GS part (0 is part 10). Port B's channels are 16-31, carried
+    as PortedMidi carries them."""
+    d = tuple(data)
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4] in (0x40, 0x50) and d[5] >> 4 == 1):
+        return None
+    blk = d[5] & 0x0F
+    ch = (9 if blk == 0 else (blk - 1 if blk <= 9 else blk)) + (16 if d[4] == 0x50 else 0)
+    a, v = d[6], d[7]
+    C = lambda cc, val: ('control_change', dict(control=cc, value=max(0, min(127, val))))
+    if a == 0x00 and len(d) >= 9:                       # TONE NUMBER: CC00, then the program
+        msgs = [C(0, v), ('program_change', dict(program=d[8]))]
+    elif a == 0x13:                                     # MONO/POLY
+        msgs = [C(126, 1) if v == 0 else C(127, 0)]
+    elif a == 0x16:                                     # PITCH KEY SHIFT, 28-58 about 40
+        msgs = [C(101, 0), C(100, 2), C(6, 64 + max(-24, min(24, v - 0x40))), C(101, 127), C(100, 127)]
+    elif a == 0x19:                                     # PART LEVEL
+        msgs = [C(7, v)]
+    elif a == 0x1C:                                     # PART PANPOT (0 random: centre)
+        msgs = [C(10, v or 64)]
+    elif a == 0x21:                                     # CHORUS SEND LEVEL
+        msgs = [C(93, v)]
+    elif a == 0x22:                                     # REVERB SEND LEVEL
+        msgs = [C(91, v)]
+    elif a == 0x2C:                                     # DELAY SEND LEVEL (the SC-88's CC94)
+        msgs = [C(94, v)]
+    else:
+        return None
+    out = []
+    for typ, kw in msgs:
+        m = mido.Message(typ, channel=ch & 15, time=0, **kw)
+        out.append(_PortMsg(m, ch, 0) if ch >= 16 else m)
+    return ch, out
 
 
 def parse_gs_rhythm_part(data):
@@ -1420,7 +1602,176 @@ def _strike_rows(A, r0, r1, cols, grs=None):
     return rows
 
 
+# THE GS REVERB, as a Sound Canvas file sets it (40 01 3x): its MACRO picks
+# one of our physical rooms -- the module has one reverb, as a render has one
+# room -- and its LEVEL and TIME scale the tail roomtail draws from that room.
+# Room 1-3 run small to large, Hall 2 is the longer hall; we have no plate, and
+# the delays' echo is the GS delay's, so those keep the hall.
+# MATCHED BY WHAT IT IS FOR, NOT BY ITS NAME: Hall 1 is the chamber. Roland's
+# Hall 1 is an algorithmic reverb with a flat low end, and a GS arranger
+# reaching for it (Konami's Tokei, at level 90) wants space round an
+# orchestra -- in our hall, whose bass rings 1.6x its top as a real hall's
+# does, that came out boomy (Ben). "More semantically matching than
+# literally matching."
+GS_REVERB_ROOM = {0: 'studio', 1: 'chamber', 2: 'chapel', 3: 'chamber', 4: 'church',
+                  5: 'hall', 6: 'hall', 7: 'hall'}
+_GS_REVERB_PARAM = {0x30: 'reverb_macro', 0x33: 'reverb_level', 0x34: 'reverb_time'}
+# ...each macro's own REV TIME (SC-8850 owner's manual, "About Reverb Type"): a
+# file's time is measured from it -- Hall 2's where it set none, as a reset leaves
+GS_REVERB_TIME = {0: 80, 1: 56, 2: 64, 3: 72, 4: 64, 5: 88, 6: 32, 7: 64}
+
+
+def parse_gs_reverb(data):
+    """(param, value) for a GS reverb macro / level / time message, or None."""
+    d = tuple(data)
+    if (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4:6] == (0x40, 0x01) and d[6] in _GS_REVERB_PARAM):
+        return _GS_REVERB_PARAM[d[6]], int(d[7])
+    return None
+
+
+def gs_reverb(path):
+    """{param: value} the file's GS reverb is set to by its first note: the
+    song's setup. A reset puts it back to the module's (none)."""
+    return gs_setup(path)[0]
+
+
+_GSD_PLACE = {}
+
+
+def gsd_place(side, f):
+    """Where the GS delay's output `side` ('c', 'l', 'r') reaches the ears at
+    frequency f: (gL, gR, dL, dR samples) -- the head model's, for a source
+    at the field's middle or side, as a pan of 0 or +-1 places one."""
+    k = (side, int(f))
+    v = _GSD_PLACE.get(k)
+    if v is None:
+        if len(_GSD_PLACE) > 200000:
+            _GSD_PLACE.clear()
+        if not _GSD_PLACE:
+            _GSD_PLACE['_p'] = T.StoppedPipeProperties(261.6, 0, 1, 1)
+        q = _GSD_PLACE['_p']
+        li, ri, ld, rd = q.hrtf_at(_GSD.OUTPUT_X[side], 0.0, q.listener_distance)
+        v = _GSD_PLACE[k] = (q.hrtf_gain(f, li), q.hrtf_gain(f, ri), ld * SR, rd * SR)
+    return v
+
+
+def parse_gs_eq(data):
+    """('eq', param, value) for the GS EQ (40 02 0p), ('eq_part', channel, on)
+    for a part's EQ switch (4b 4p 20), or None."""
+    d = tuple(data)
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12):
+        return None
+    if d[4:6] == (0x40, 0x02) and d[6] <= 3:
+        return 'eq', int(d[6]), int(d[7])
+    if d[4] in (0x40, 0x50) and d[5] >> 4 == 4 and d[6] == 0x20:
+        blk = d[5] & 0x0F
+        ch = (9 if blk == 0 else (blk - 1 if blk <= 9 else blk)) + (16 if d[4] == 0x50 else 0)
+        return 'eq_part', ch, bool(d[7])
+    return None
+
+
+def gs_setup(path):
+    """The file's GS setup by its first note -- (reverb {param: value}, EQ
+    {0-3: value}, {channel: EQ on/off}, delay {param: value}, GS?, chorus
+    {param: value}) -- a reset
+    putting all back. GS? is whether the file speaks GS at all (a GS reset,
+    the SC-88's mode set, or a GS parameter): CC94 is the GS delay's send
+    only there -- General MIDI 1 calls it celeste depth."""
+    rv, eq, sw, dl, gs, ch = {}, {}, {}, {}, False, {}
+    for m in _open_midi(path):
+        if m.type == 'note_on' and getattr(m, 'velocity', 0):
+            break
+        if m.type == 'sysex':
+            _d = tuple(m.data)
+            if len(_d) >= 4 and _d[0] == 0x41 and _d[2] == 0x42 and _d[3] == 0x12:
+                gs = True
+            if parse_gs_reset(m.data):
+                rv, eq, sw, dl, ch = {}, {}, {}, {}, {}
+                continue
+            if len(_d) >= 8 and _d[4:6] == (0x40, 0x01) and _d[6] in _CHR.GS_PARAM:
+                ch[_CHR.GS_PARAM[_d[6]]] = int(_d[7])
+                if _d[6] == 0x38:             # a macro sets them all
+                    ch = {'macro': int(_d[7])}
+                continue
+            if len(_d) >= 8 and _d[4:6] == (0x40, 0x01) and _d[6] in _GSD.PARAM:
+                dl[_GSD.PARAM[_d[6]]] = int(_d[7])
+                if _d[6] == 0x50:             # a macro sets all ten: what came before is gone
+                    dl = {'macro': int(_d[7])}
+                continue
+            r = parse_gs_reverb(m.data)
+            if r is not None:
+                if r[0] == 'reverb_macro':      # a macro sets all: what came before is gone
+                    rv = {}
+                rv[r[0]] = r[1]
+                continue
+            e = parse_gs_eq(m.data)
+            if e is not None:
+                if e[0] == 'eq':
+                    eq[e[1]] = e[2]
+                else:
+                    sw[e[1]] = e[2]
+    return rv, eq, sw, dl, gs, ch
+
+
+def gs_eq_gain(f, eq):
+    """THE SC-88's EQ at frequency f: a low and a high shelf, first order --
+    the low at 200 or 400 Hz, the high at 3 or 6 kHz, each -12..+12 dB about
+    40H (VE-GS Pro MIDI Implementation 40 02 0x). Linear amplitude."""
+    lo_f = 400.0 if eq.get(0, 0) else 200.0
+    hi_f = 6000.0 if eq.get(2, 0) else 3000.0
+    lo_g = max(-12, min(12, eq.get(1, 0x40) - 0x40))
+    hi_g = max(-12, min(12, eq.get(3, 0x40) - 0x40))
+    x = (f / lo_f) ** 2
+    y = (f / hi_f) ** 2
+    return 10.0 ** ((lo_g / (1.0 + x) + hi_g * y / (1.0 + y)) / 20.0)
+
+
+_GS_ROOM = {}            # the last prepare's room and GS reverb level/time, for the sidecar
+_GS_EQ = {}              # the file's GS EQ while it prepares: {'eq': {0-3: v}, 'off': {channels}}
+_GS_DLY = {}             # ...and its GS delay: {'dev': gsdelay.device} for a GS file
+_GS_CHO = {}             # ...and its GS chorus: {'dev': chorus.gs_device} for a GS file
+
+
 def prepare(path, tuner='hybrid440', sink=None):
+    """_prepare, in the room the file's GS reverb macro chose -- where nobody
+    chose one (TUNING_ROOM) -- and the room put back after; the file's reverb
+    level and time ride _LAST_PREP to the room sidecar, for roomtail."""
+    fx, eq, eqsw, dly, gs, cho = gs_setup(path)
+    # ...and its GS chorus, the device (chorus.gs_device): Chorus 3 as a reset
+    # leaves it, then the file's
+    _GS_CHO.clear()
+    if gs and os.environ.get('TUNING_GS_CHORUS', '1') not in ('0', 'off', ''):
+        _GS_CHO['dev'] = _CHR.gs_device(cho)
+    # THE GS DELAY, for a GS file: Delay 1 as a reset leaves it, then the file's
+    _GS_DLY.clear()
+    if gs and os.environ.get('TUNING_GS_DELAY', '1') not in ('0', 'off', ''):
+        _GS_DLY['dev'] = _GSD.device(dly)
+    if os.environ.get('TUNING_ROOM'):
+        fx = {}
+    room = GS_REVERB_ROOM.get(fx.get('reverb_macro'))
+    # the EQ, for _prepare's partials: off where flat, so nothing moves
+    _GS_EQ.clear()
+    if any(eq.get(k, 0x40) != 0x40 for k in (1, 3)):
+        _GS_EQ.update(eq=eq, off={c for c, on in eqsw.items() if not on})
+    prev = T.ROOM_NAME[0]
+    if room is not None and room != prev:
+        T.set_room(room)
+    try:
+        out = _prepare(path, tuner, sink)
+    finally:
+        if T.ROOM_NAME[0] != prev:
+            T.set_room(prev)
+    # (its own record: render() rebuilds _LAST_PREP from what prepare returns,
+    # and a streamed render from the stream)
+    _GS_ROOM.clear()
+    _GS_ROOM.update(room_name=room or prev, tail_gain=fx.get('reverb_level', 64) / 64.0,
+                    tail_time=2.0 ** ((fx['reverb_time'] - GS_REVERB_TIME.get(fx.get('reverb_macro', 4), 64))
+                                      / 64.0) if 'reverb_time' in fx else 1.0)
+    return out
+
+
+def _prepare(path, tuner='hybrid440', sink=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
     full window) and play.py (streamed windows)."""
@@ -1448,6 +1799,11 @@ def prepare(path, tuner='hybrid440', sink=None):
         T.raga_sa_note = None
         T.raga_spec = None
     ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
+    _DEDIT = _sys.get('dedit') or {}
+    _EFXEV = (_sys.get('efx') or []) if os.environ.get('TUNING_GS_EFX', '1') not in ('0', 'off', '') else []
+    _EFXN = [None]          # this note's insertion-effect chain (gsefx.chain), or None
+    _EFX_CH = {}            # channel -> its first EFX chain: what is set once (amp, cabinet, flanger)
+    _USET = _sys.get('uset') or {}
     rpns, master, gmon = _sys['rpns'], _sys['master'], _sys['gmon']
     _pwseq = _sys['pwseq']
 
@@ -2454,6 +2810,20 @@ def prepare(path, tuner='hybrid440', sink=None):
     _MOOG_MPI, _MOOG_MPC, _MOOG_MPR = [], [], []   # per-note pitch rows (moog.pitch_rows)
     _MOOG_MKI, _MOOG_MPK, _MOOG_MPKN = [], [], [0]  # per-note shape rows (moog.shape_rows)
     _MF104 = []         # (first row, end row, settings): notes through the MF-104M (mf104.py)
+    _GSDN = []          # (first row, end row, device, send): notes into the GS delay (gsdelay.py)
+    _GSD_OPEN = [None]  # this note's (first row, send), closed where the next begins
+    _CC94 = {}          # channel -> [(t, value)] of CC94, the GS delay send, in order
+
+    def _gsd_send(c, t):
+        """The channel's DELAY SEND (CC94) in force at t, 0-1."""
+        if c not in _CC94:
+            _CC94[c] = [(et, v) for et, cc, v in in_order(ccs.get(c, [])) if cc == 94]
+        v = 0
+        for et, cv in _CC94[c]:
+            if et > t + 1e-9:
+                break
+            v = cv
+        return v / 127.0
     _CBW = [RAND_GRAN, 0.0]  # wash bandwidth: [fraction of partial f, absolute Hz]
     # Reflections cost about 7x the partials, since every one of them is
     # audible and nothing prunes. Worth it for a render you will listen to,
@@ -2565,8 +2935,53 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _XPON[0] and om >= _NYQ_OM:
             return          # a transposition (_XP) carried it past Nyquist
         dl, dr, px, pz = _place if _place else (_DL[0], _DL[1], _PX[0], _PZ[0])
+        _am0 = ampM
         if _place is None:
             _AZ[0] = math.atan2(px, max(props.radiation_distance, 1e-6))
+            # FURTHER AWAY, THE SAME BALANCE: a channel's distance multiple
+            # (_src_dist -- CC91, or the voice's own) moves the source out
+            # along its own ray, so the reflections below follow it and the
+            # direct path crosses the extra air -- its top end, a few dB at 8-16
+            # kHz over ten metres. Its LEVEL stays as the mix wrote it: that is
+            # the normalisation that makes the send a distance, not a fader
+            # (roomtail sets the tail by the same multiple).
+            _dm = _src_dist(_MCH[0], props)
+            if _dm != 1.0:
+                _r0 = math.sqrt(px * px + props.radiation_distance ** 2 + pz * pz)
+                _ga = 10.0 ** (-props.air_absorption_db_per_m(nomf) * (_dm - 1.0) * _r0 / 20.0)
+                # ...AND THE PART AS LOUD AS IT WAS. Further out the direct
+                # weakens against its own images, so holding the direct alone
+                # left a part sent to 127 1.5-3 dB louder (measured over an
+                # octave: flute, piano, strings). The direct and its early
+                # images are held to the energy they had at the voice's own
+                # distance: the ratio between them moves, which is the cue
+                if REFLECT and not _NOREFL[0]:
+                    _ga *= _refl_norm(nomf, px, pz, _dm)
+                ampL *= _ga; ampR *= _ga; ampM *= _ga
+            # THE FILE'S GS EQ, on the parts that have it on (gs_eq_gain):
+            # the partial at its frequency, its reflections with it
+            if _GS_EQ and _MCH[0] not in _GS_EQ['off']:
+                _ge = gs_eq_gain(nomf, _GS_EQ['eq'])
+                ampL *= _ge; ampR *= _ge; ampM *= _ge
+            # THE INSERTION EFFECT's compressor (gsefx), before its OD: its
+            # sustain the decay slowed (logr, logrA), its makeup a gain. Its
+            # EQ is after the OD and the amp: the speaker pass (_EFXEQ_CH)
+            _ex = _EFXN[0]
+            if _ex is not None:
+                if _ex['comp'] is not None:
+                    logr = logr * _ex['comp'][0]
+                    logrA = logrA * _ex['comp'][0]
+                    ampL *= _ex['comp'][1]; ampR *= _ex['comp'][1]; ampM *= _ex['comp'][1]
+            # A HAMMER-ON / PULL-OFF (hammer_legato): no pick -- the string
+            # rings on from the note that was picked, so each partial starts
+            # where its own decay (the compressor's, if any) has got to since
+            # that pick (the kernel's two-stage law: logr, then the
+            # aftersound's logrA), less what the fretting finger costs
+            # (HAMMER_LOSS_DB)
+            if _HAM[0] > 0.0:
+                _hg = (((1.0 - aft) * math.exp(-logr * _HAM[0]) + aft * math.exp(-logrA * _HAM[0]))
+                       * HAMMER_GAIN)
+                ampL *= _hg; ampR *= _hg; ampM *= _hg
         # THE EAR DELAY MOVES THE CARRIER, NOT JUST THE ENVELOPE. A path length
         # delays the whole signal; delaying only the envelope leaves both ears
         # with identical carrier phase, so a held note has no interaural time
@@ -2640,7 +3055,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                 q = props.directivity_factor(ROOM_BANDS[bi], px, pz, _radius[0])
             except Exception:
                 q = 1.0
-            e = ampM * ampM
+            e = _am0 * _am0             # the power it feeds the room, before the air
             _QACC[bi][0] += e
             _QACC[bi][1] += e / max(q, 1e-6)
         if _place is not None or not REFLECT or _NOREFL[0]:
@@ -2658,7 +3073,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         # the 2 m listener_distance -- that one is a stage image chosen to give
         # the head model sensible interaural cues, not a claim about where the
         # players are (see the radiation comment in tonelib).
-        _rk = (nomf, px, pz, _radius[0]) + _refl_state(props)
+        _dm = _src_dist(_MCH[0], props)
+        _rk = (nomf, px, pz, _radius[0], _dm) + _refl_state(props)
         _terms = _REFL.get(_rk) if PREP_MEMO else None
         PREP_MEMO_STATS[0] += 1
         if _terms is None:
@@ -2669,9 +3085,24 @@ def prepare(path, tuner='hybrid440', sink=None):
             if len(_REFL) >= PREP_MEMO_MAX:
                 _REFL.clear()
                 PREP_MEMO_STATS[2] += 1
-            _terms = [(rg, rdelay, image, props.hrtf_at(image[0], image[2], image[1]))
-                      for rg, rdelay, image in props.reflection_terms(
-                          nomf, px, props.radiation_distance, pz, _radius[0])]
+            # THE SOURCE MOVED OUT ALONG ITS RAY by the distance multiple: the
+            # same direction (so the same width and pan), the images from where
+            # it now stands -- gains and delays still relative to its direct sound
+            #
+            # AND EACH IMAGE'S EAR DELAYS ON THE DIRECT SOUND'S BASELINE. The
+            # direct sound's come from the head model's stage image at
+            # listener_distance; an image's hrtf_at counts its whole path from
+            # the origin, and rdelay already carries the path it adds -- so the
+            # image arrived (path - stage)/c late: 9.1 ms after the direct on a
+            # piano's floor bounce whose geometry says 2.1. Each image keeps its
+            # interaural difference and loses the path counted twice.
+            _sx, _sy, _sz = px * _dm, props.radiation_distance * _dm, pz * _dm
+            _stage = math.sqrt(px * px + props.listener_distance ** 2 + pz * pz)
+            _terms = []
+            for rg, rdelay, image in props.reflection_terms(nomf, _sx, _sy, _sz, _radius[0]):
+                _rli, _rri, _rld, _rrd = props.hrtf_at(image[0], image[2], image[1])
+                _sh = (math.sqrt(image[0] ** 2 + image[1] ** 2 + image[2] ** 2) - _stage) / props.sound_speed
+                _terms.append((rg, rdelay, image, (_rli, _rri, _rld - _sh, _rrd - _sh)))
             if PREP_MEMO:
                 _REFL[_rk] = _terms
         for rg, rdelay, image, (rli, rri, rld, rrd) in _terms:
@@ -3130,8 +3561,10 @@ def prepare(path, tuner='hybrid440', sink=None):
     _REG_OPEN = [None]
     _AMP_CH = {}
     _AMP_REF = {}
+    _AMP_LV0 = {}       # the EFX level in a part's reference when it was taken (1 if none)
     _AMP_IMB = {}
     _CAB_CH = {}
+    _EFXEQ_CH = {}      # a part's insertion-effect EQ, after its valve: {ch: eq}
     _TREM_CH = {}
     # The harmonium's Tremolo stop: channel -> (rate, depth, stereo), and the
     # row spans of the notes that sounded with it drawn. Per NOTE, because it
@@ -3139,6 +3572,36 @@ def prepare(path, tuner='hybrid440', sink=None):
     _HTREM_CH = {}; _HT_ROWS = []; _HT_PEND = [None]
     _CHORUS_CH = {}     # channel -> (CC93 send 0..1, cents tuple)
     _REVERB_CH = {}     # channel -> CC91 send as a DISTANCE MULTIPLE
+    _C91D = {}          # channel -> its first CC91 as that multiple, or None
+
+    _RNORM = {}
+
+    def _refl_norm(f, px, pz, d):
+        """sqrt(E(1) / E(d)), E = 1 + the images' energy against the direct,
+        for the current voice at frequency f moved out by d (_src_dist)."""
+        k = (round(f, 1), px, pz, _radius[0], d) + _refl_state(props)
+        g = _RNORM.get(k)
+        if g is None:
+            r = props.radiation_distance
+            e = [1.0 + sum(rg * rg for rg, _, _ in props.reflection_terms(f, px * m, r * m, pz * m, _radius[0]))
+                 for m in (1.0, d)]
+            if len(_RNORM) >= PREP_MEMO_MAX:
+                _RNORM.clear()
+            g = _RNORM[k] = math.sqrt(e[0] / e[1])
+        return g
+
+    def _src_dist(ch, pr):
+        """The source's distance as a multiple of its voice's own: the channel's
+        first CC91 against GM's default 40, else the voice's reverb_distance,
+        else 1 -- the number the send bus weights the room by (_REVERB_CH),
+        so the reflections and the tail stand at one distance."""
+        if ch not in _C91D:
+            _c = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 91]
+            _C91D[ch] = (_c[0] / float(GM_DEFAULT_REVERB)) if _c else None
+        d = _C91D[ch]
+        if d is None:
+            d = getattr(pr, 'reverb_distance', None)
+        return 1.0 if d is None else max(0.1, float(d))
     _CLAV_CH = {}
     _DETUNE_CH = {}
     _DRONE_CH = {}          # how many drones, per channel: see below
@@ -3436,6 +3899,8 @@ def prepare(path, tuner='hybrid440', sink=None):
     _REL_ROWS = []
     _REL_JACKS = []         # (first, end, rank, jack offset s): the click rows of each jack
     _PUSH_T0 = {}           # channel -> when its bellows' push began (a note from silence)
+    _HAM_T0 = {}            # channel -> when its string was last PICKED (hammer_legato)
+    _HAM = [0.0]            # this note's seconds since that pick, if a hammer-on; else 0
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
     def _mvol():
@@ -3509,8 +3974,9 @@ def prepare(path, tuner='hybrid440', sink=None):
         if REFLECT and _src is not None:
             _pr, _px, _pz, _rad = _src
             try:
-                _terms = _pr.reflection_terms(_fc, _px, _pr.radiation_distance,
-                                              _pz, _rad)
+                _dmb = _src_dist(_MCH[0], _pr)
+                _terms = _pr.reflection_terms(_fc, _px * _dmb, _pr.radiation_distance * _dmb,
+                                              _pz * _dmb, _rad)
             except Exception:
                 _terms = []
             for _ti, (_rg, _rdelay, _image) in enumerate(_terms):
@@ -3541,9 +4007,10 @@ def prepare(path, tuner='hybrid440', sink=None):
                         reverb=_REVERB_CH, qacc=_QACC, F=_F_SYM, ht_rows=_HT_ROWS,
                         amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
                         moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
-                        effects=dict(sympathetic=_SYM_CH, mf104=_MF104, tubeamp=_AMP_CH,
+                        effects=dict(sympathetic=_SYM_CH, mf104=_MF104, gsdelay=_GSDN, tubeamp=_AMP_CH,
                                      clavinet=_CLAV_CH, htremolo=_HTREM_CH, tremolo=_TREM_CH,
-                                     chorus=_CHORUS_CH, cabinet=_CAB_CH, leslie=_LESLIE_CH,
+                                     chorus=_CHORUS_CH, cabinet=_CAB_CH, efxeq=_EFXEQ_CH,
+                                     leslie=_LESLIE_CH,
                                      scanner=_SCAN_CH,
                                      register=_REG_CH, register_scale=REGISTER_SCALE,
                                      register_strings=(string_partial, partial_decay,
@@ -3561,6 +4028,10 @@ def prepare(path, tuner='hybrid440', sink=None):
         _raw_off = off           # when the KEY came up, before any pedal held it
         if _HT_PEND[0] is not None:
             _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
+        if _GSD_OPEN[0] is not None:
+            if len(A['om']) > _GSD_OPEN[0][0]:
+                _GSDN.append((_GSD_OPEN[0][0], len(A['om']), _GSD_OPEN[0][2], _GSD_OPEN[0][1]))
+            _GSD_OPEN[0] = None
         if sink is not None:            # the last note's rows are final
             if _S0[0] is not None:
                 # ...and every note to come starts at or after this one
@@ -3580,13 +4051,66 @@ def prepare(path, tuner='hybrid440', sink=None):
         # The reference (midilib) has always done this; only the block engine
         # did not, so the two disagreed on any file with a drum track.
         # THE DRUM SET is the program, when the note began on a drum channel.
-        drum = (percussion_for_note(note, kit_for_program(int(prog)))
-                if is_drum(prog) else None)
+        # A USER DRUM SET's key is another set's key (user_drum): its sound
+        # from there, its own settings as the key's preset, the file's drum
+        # NRPN / setup edits over them (pitch adding, the rest replacing)
+        _ud = (user_drum(_USET, prog, note)
+               if (is_drum(prog) and int(prog) in USER_DRUM_SETS and _USET) else None)
+        if _ud is not None:
+            drum = percussion_for_note(_ud[1], kit_for_program(int(_ud[0])))
+        else:
+            drum = (percussion_for_note(note, kit_for_program(int(prog)))
+                    if is_drum(prog) else None)
         if is_drum(prog) and drum is None:
             continue                      # unmapped drum: the reference drops it
+        _dst = drum_edit_at(_DEDIT[ch], note, on) if (drum is not None and ch in _DEDIT) else {}
+        if _ud is not None:
+            _own = dict(_ud[2])
+            for _k, _v in _dst.items():
+                _own[_k] = _own.get('pitch', 0) + _v if _k == 'pitch' else _v
+            _dst = _own
+        if _dst.get('rxon', 1) == 0:
+            continue                      # the kit told not to receive this key
+        # INTO THE GS DELAY: the part's send at the onset, a drum key's own
+        # multiplying it (its 0-127 a share of the part's, preset taken as all)
+        # THE INSERTION EFFECT, where this part is assigned to it and its type
+        # is built (gsefx.chain): what it is at this note's onset
+        _EFXN[0] = None
+        if _EFXEV and not MOOG_NEUTRAL and _GSX.assigned(_EFXEV, ch, on):
+            _EFXN[0] = _GSX.chain(_GSX.state_at(_EFXEV, on))
+            if _EFXN[0] is not None and ch not in _EFX_CH:
+                _EFX_CH[ch] = _EFXN[0]
+                # ITS SENDS ARE THE PART'S NOW: the reverb's distance, here
+                # before the channel's is read from CC91
+                _rv = _EFXN[0]['sends'].get(_GSX.SEND_REV, 40)
+                _C91D[ch] = max(0.0, _rv) / float(GM_DEFAULT_REVERB)
+                _REVERB_CH.setdefault(ch, _C91D[ch])
+        if _GS_DLY and not MOOG_NEUTRAL:
+            if _EFXN[0] is not None:
+                _gs_s = _EFXN[0]['sends'].get(_GSX.SEND_DLY, 0) / 127.0
+            else:
+                _gs_s = _gsd_send(ch, on) * (_dst.get('delay', 127) / 127.0 if drum is not None else 1.0)
+            if _gs_s > 0.0:
+                _GSD_OPEN[0] = (_row0, _gs_s, _GS_DLY['dev'])
+        if _EFXN[0] is not None and _EFXN[0].get('dly'):
+            # a guitar multi's own delay (its Dly stage), in the GS delay's place
+            _GSD_OPEN[0] = (_row0, 1.0, _EFXN[0]['dly'])
         if drum is not None:
             FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
             _, pc, f0, dpan = drum
+            # THE FILE'S OWN SETTING OF THIS DRUM (GS drum NRPN / drum setup):
+            # its pitch in semitones, its pan in place of the kit's (0 random,
+            # the same at every render), its level against the preset -- ours
+            # taken as Roland's typical 100, the value no preset table gives
+            if 'pitch' in _dst:
+                f0 *= 2.0 ** (_dst['pitch'] / 12.0)
+            if 'pan' in _dst:
+                if _dst['pan'] == 0:
+                    _hv = (ch * 0x9E3779B1) ^ (note * 0x85EBCA6B) ^ (int(on * 1000) * 0xC2B2AE35)
+                    _hv = ((_hv ^ (_hv >> 15)) * 0x2545F491) & 0xFFFFFFFF
+                    dpan = 2.0 * (_hv / 4294967295.0) - 1.0 - pan
+                else:
+                    dpan = (_dst['pan'] - 64) / 63.0
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
             _tilt = stroke_tilt.get((note, on))       # a voice's pulse: its tilt, below
             # ...and a key's written pitch that picks a RATE, as the program's
@@ -3596,6 +4120,8 @@ def prepare(path, tuner='hybrid440', sink=None):
             if _so:
                 f0 *= 2.0 ** _so
             organ = False; chan_vol = (v7*v11)**2
+            if 'level' in _dst:
+                chan_vol *= (_dst['level'] / 100.0) ** 2
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
             pc = _DRONE_PC.get((ch, note, on)) or property_class_for_note(prog, note)
@@ -3791,6 +4317,15 @@ def prepare(path, tuner='hybrid440', sink=None):
             # ...each stroke of it its own pitch and tilt, as on the kit
             f0 *= stroke_pitch.get((note, on), 1.0)
             _tilt = stroke_tilt.get((note, on))
+        _EFG = 1.0
+        if _EFXN[0] is not None:
+            chan_vol *= _EFXN[0]['level']      # the insertion effect's output level, this note's
+            # ITS OD STAGE'S GAIN, in front of the valve: into the note's
+            # level, and NOT into the valve's reference below (which takes a
+            # fader back out) -- so it drives the valve harder and comes out
+            # louder, saturating at the valve's ceiling, as a pedal does
+            _EFG = _EFXN[0].get('od_gain') or 1.0
+            chan_vol *= _EFG
         props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
         if (drum is not None or _xf) and _tilt is not None:
             # a voice's pulse, darker or brighter as its syllable goes on
@@ -3912,6 +4447,17 @@ def prepare(path, tuner='hybrid440', sink=None):
         # applies the same slur after stamping a template.
         if (ch, note, _occ.get((ch, note), 0)) in legato:
             at = T.slur_attack(at, props)
+        # A GUITAR'S LEGATO IS THE FRETTING HAND (hammer_legato: Roland's ":"
+        # guitars). A note over the one before is hammered or pulled, not
+        # picked: a softer onset, and the string's energy carried on from the
+        # last pick (emit_partial); a picked note starts the chain again
+        _HAM[0] = 0.0
+        if getattr(props, 'hammer_legato', False):
+            if (ch, note, _occ.get((ch, note), 0)) in legato and ch in _HAM_T0:
+                _HAM[0] = max(0.0, on - _HAM_T0[ch])
+                at = max(at, HAMMER_ATTACK_S)
+            else:
+                _HAM_T0[ch] = on
         # A GLISS STEP IS NOT RETONGUED. The lips keep buzzing through the whole
         # run -- that is what "blow through the harmonics" means -- so every
         # step takes the legato attack whether or not _legato_ticks saw it.
@@ -4094,8 +4640,38 @@ def prepare(path, tuner='hybrid440', sink=None):
             # struck IS how hard the valve is driven. That is the whole point
             # of amp_reference. A fader is a different kind of number.
             _ref = getattr(props, 'amp_reference', None)
-            _AMP_REF[_MCH[0]] = (_ref * chan_vol) if _ref else None
+            _AMP_REF[_MCH[0]] = (_ref * chan_vol / _EFG) if _ref else None
+            _AMP_LV0[_MCH[0]] = _EFXN[0]['level'] if _EFXN[0] is not None else 1.0
             _AMP_IMB[_MCH[0]] = getattr(props, 'amp_imbalance', None)
+        # THE INSERTION EFFECT's AMP, SPEAKER AND FLANGER, set once for the
+        # part at its first note through it: its OD stage a gain in front of
+        # the voice's own valve (two stages in series: their gains multiply,
+        # through the note's level above) -- a voice with no valve given one
+        # at its edge, its reference the Strat's; its cabinet; its chorus or
+        # flanger in the CC93 chorus's place, its mix followed note by note
+        if _EFXN[0] is not None and _EFX_CH.get(_MCH[0]) is _EFXN[0] and not _EFX_CH.get(('done', _MCH[0])):
+            _EFX_CH[('done', _MCH[0])] = True
+            _ex = _EFXN[0]
+            if _ex['od_gain'] is not None and _MCH[0] not in _AMP_CH:
+                _AMP_CH[_MCH[0]] = _GSX.PEDAL_AMP_DRIVE
+                _ref = getattr(props, 'amp_reference', None) or 0.2289
+                _AMP_REF[_MCH[0]] = _ref * chan_vol / _EFG
+                _AMP_LV0[_MCH[0]] = _ex['level']
+            if _AMP_REF.get(_MCH[0]) and not isinstance(_AMP_REF[_MCH[0]], tuple):
+                # ITS LEVEL IS AFTER THE VALVE: the reference follows the
+                # file's level timeline (tubeamp.segment), so the level's
+                # automation is a level and the OD's gain alone is drive
+                _st = sorted({0.0} | {float(t) for t, e in _EFXEV})
+                _AMP_REF[_MCH[0]] = ('steps', _AMP_REF[_MCH[0]] / max(_AMP_LV0.get(_MCH[0], 1.0), 1e-12),
+                                     [t * SR for t in _st],
+                                     [((_GSX.chain(_GSX.state_at(_EFXEV, t)) or _ex)['level'])
+                                      for t in _st])
+            if _ex['eq'] is not None:
+                _EFXEQ_CH[_MCH[0]] = _ex['eq']
+            if _ex['cabinet'] and _MCH[0] not in _CAB_CH and os.environ.get('TUNING_CABINET', '1') != '0':
+                _CAB_CH[_MCH[0]] = _ex['cabinet']
+            if _ex['cf'] is not None:
+                _CHORUS_CH[_MCH[0]] = (0.0, _ex['cf'][0], 'gs', _GSX.mix_share(_EFXEV, _MCH[0], SR))
         if getattr(props, 'sympathetic_gain', 0.0) and _MCH[0] not in _SYM_CH:
             _SYM_CH[_MCH[0]] = props
         if REGISTER and (getattr(props, 'register_gain', 0.0)
@@ -4222,7 +4798,14 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _MCH[0] not in _CHORUS_CH:
             _c93 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
             if _c93:
-                if _c93[0] > 0:
+                if _c93[0] > 0 and _GS_CHO and not MOOG_NEUTRAL:
+                    # A SOUND CANVAS FILE'S CHORUS is its device (chorus.gs_copies).
+                    # The device ADDS its output, at send x level, to the dry;
+                    # here the share is that same power taken out of the dry
+                    # (a^2 / (1 + a^2)), the level held as CC93's is
+                    _ca = _c93[0] / 127.0 * _GS_CHO['dev']['level']
+                    _CHORUS_CH[_MCH[0]] = (_ca * _ca / (1.0 + _ca * _ca), _GS_CHO['dev'], 'gs')
+                elif _c93[0] > 0:
                     _CHORUS_CH[_MCH[0]] = (_c93[0] / 127.0, _CHR.offsets_for(props))
             elif getattr(props, 'chorus_send', None):
                 # A VOICE THAT IS ITS INSTRUMENT THROUGH A CHORUS PEDAL (GS's
@@ -5441,6 +6024,10 @@ def prepare(path, tuner='hybrid440', sink=None):
     # the last strike's rows end here -- before the stream hears them
     if _REG_OPEN[0] is not None:
         _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], len(A['om'])); _REG_OPEN[0] = None
+    if _GSD_OPEN[0] is not None:
+        if len(A['om']) > _GSD_OPEN[0][0]:
+            _GSDN.append((_GSD_OPEN[0][0], len(A['om']), _GSD_OPEN[0][2], _GSD_OPEN[0][1]))
+        _GSD_OPEN[0] = None
     if sink is not None:
         if _S0[0] is not None:
             sink(A, _S0[0], len(A['om']), None)
@@ -5552,6 +6139,13 @@ def prepare(path, tuner='hybrid440', sink=None):
         if _mlast + SR // 2 > N:
             N = _mlast + SR // 2         # nblk stays: the kernel clamps every per-block row
         print("  MF-104M: %d note(s), %d repeats" % (len(_MF104), _nm))
+    if _GSDN:
+        # THE GS DELAY's repeats (gsdelay.py), after the MF-104M's: of each
+        # sending note's own rows, as the stream makes them
+        _ng, _glast = _GSD.expand(A, _GSDN, SR, PARTIAL_COLS + ('az', 'dr'), gsd_place)
+        if _glast + SR // 2 > N:
+            N = _glast + SR // 2
+        print("  GS delay: %d note(s), %d repeats" % (len(_GSDN), _ng))
 
     # ...and on to where the last partial dies (RING_FLOOR), in chunks so a
     # long piece's table is never copied whole
@@ -5629,13 +6223,27 @@ def prepare(path, tuner='hybrid440', sink=None):
     # THE CHORUS SITS BEFORE THE SPEAKER, which is where a chorus pedal sits:
     # the cabinet colours whatever reaches it, copies included.
     if _CHORUS_CH:
-        _nc = _CHR.expand(A, _CHORUS_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        _nc = _CHR.expand(A, _CHORUS_CH, SR, PARTIAL_COLS + ('az', 'dr'), place=gsd_place)
         if _nc:
-            print("  chorus: %d channel(s), %d copies at %s cents"
-                  % (len(_CHORUS_CH), _nc,
-                     "/".join("%+.0f" % c
-                              for c in list(_CHORUS_CH.values())[0][1])))
+            _c0 = list(_CHORUS_CH.values())[0]
+            print("  chorus: %d channel(s), %d copies %s"
+                  % (len(_CHORUS_CH), _nc, "through the GS chorus" if len(_c0) > 2 and _c0[2] == 'gs'
+                     else "at %s cents" % "/".join("%+.0f" % c for c in _c0[1])))
 
+    # THE INSERTION EFFECT's EQ, after its OD and amp (gsefx.eq_gain): every
+    # partial of the part, the valve's products and the copies included
+    if _EFXEQ_CH:
+        _mq = np.asarray(A['mch']); _fq = np.asarray(A['nf'], float)
+        for _qc, _qe in _EFXEQ_CH.items():
+            _qs = np.flatnonzero(_mq == _qc)
+            if len(_qs):
+                _qg = _GSX.eq_gain(_fq[_qs], _qe)
+                for _col in ('aL', 'aR', 'aM'):
+                    if isinstance(A[_col], list):
+                        for _i, _g in zip(_qs.tolist(), _qg.tolist()):
+                            A[_col][_i] *= _g
+                    else:
+                        np.asarray(A[_col])[_qs] *= _qg
     if _CAB_CH:
         import cabinet as _CAB
         _nc = _CAB.expand(A, _CAB_CH, SR, PARTIAL_COLS + ('az', 'dr'))
@@ -6196,8 +6804,9 @@ if __name__=="__main__":
                     # One number for every channel that sounds: roomtail scales
                     # the mix it already has and nothing extra is rendered.
                     _sd = {str(_c): next(iter(_vv)) for _c in _hh}
-            json.dump({'bands': [{'hz': f, 'q': q, 'energy': e} for f, q, e in _rq],
-                       'send': _sd}, fh, indent=1)
+            _rx = dict(_GS_ROOM)
+            json.dump(dict({'bands': [{'hz': f, 'q': q, 'energy': e} for f, q, e in _rq],
+                            'send': _sd}, **_rx), fh, indent=1)
     # THE REVERB SEND BUS. Each channel feeds the room in proportion to how far
     # away it stands, and the room's IR is the same shape for all of them --
     # so the whole send is one weighted sum, convolved once.

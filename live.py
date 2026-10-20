@@ -6956,6 +6956,15 @@ class Live:
         # channel becomes a kit, or channel 10 melodic, and a part on THAT
         # channel follows, as it does GM 2's bank 120 -- an omni part is the
         # player's own. Port B's parts (block 50) have no port here.
+        # A GS PART PARAMETER (blockrender.parse_gs_part): the MIDI message it
+        # is -- part level CC7, pan CC10, the sends, the tone, mono/poly, key
+        # shift -- through the same path, now. Port B has no port here.
+        _gp = _BRs.parse_gs_part(d)
+        if _gp is not None:
+            if _gp[0] < 16 and not _g:
+                for _pm in _gp[1]:
+                    self._one(n0, _pm)
+            return
         _rp = _BRs.parse_gs_rhythm_part(d)
         if _rp is not None:
             ch, mode = _rp
@@ -16375,6 +16384,252 @@ def selftest():
               type(_rk.get(10)).__name__ == "DrumProgram" and int(_rk[10]) == 56
               and type(_rk.get(9)).__name__ != "DrumProgram" and int(_rk[9]) == 24,
               "  (%r)" % _rk)
+        # THE DRUM INSTRUMENTS' OWN SETTINGS (GS drum NRPN 18-1F, drum setup
+        # 41 m p rr): a tom's pitch in semitones, its level against the
+        # preset, Rx note on off silences the key, and a drum set change puts
+        # them back; a PART parameter by SysEx is its MIDI message
+        def _dr1(pre, note=45, ch=9):
+            _x = B.render(_bfile(pre + [_M("note_on", channel=ch, note=note, velocity=100),
+                                        _M("note_off", channel=ch, note=note, velocity=0, time=480)]))
+            return np.asarray(_x[0]) + np.asarray(_x[1])
+        _nr = lambda msb, lsb, v: [_M("control_change", channel=9, control=99, value=msb),
+                                   _M("control_change", channel=9, control=98, value=lsb),
+                                   _M("control_change", channel=9, control=6, value=v)]
+        def _pk(x):
+            _w = int(0.5 * B.SR)
+            _X = np.abs(np.fft.rfft(x[:_w] * np.hanning(_w)))
+            _f = np.fft.rfftfreq(_w, 1.0 / B.SR)
+            _m = (_f > 40) & (_f < 2000)
+            return float(_f[_m][np.argmax(_X[_m])])
+        _e = lambda x: 10 * np.log10(float((x * x).sum()) + 1e-30)
+        _t0 = _dr1([])
+        _tup = _pk(_dr1(_nr(0x18, 45, 64 + 12))) / _pk(_t0)
+        _treset = _pk(_dr1(_nr(0x18, 45, 64 + 12) + [_M("program_change", channel=9, program=0)])) / _pk(_t0)
+        _tlev = _e(_dr1(_nr(0x1A, 45, 50))) - _e(_t0)
+        _toff = _e(_dr1([_SX(0x41, 0x10, 0x42, 0x12, 0x41, 0x08, 45, 0x00, 0x00)]))
+        _pl = _e(_dr1([_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x11, 0x19, 64, 0x00)], note=60, ch=0)) \
+            - _e(_dr1([_M("control_change", channel=0, control=7, value=64)], note=60, ch=0))
+        check("file: a drum's own pitch, level and Rx (GS drum NRPN / drum setup), reset with the set; "
+              "part level by SysEx is CC7",
+              abs(_tup - 2.0) < 0.05 and abs(_treset - 1.0) < 0.02 and abs(_tlev + 12.0) < 0.5
+              and _toff < -200 and abs(_pl) < 0.05,
+              "  (tom x%.3f at +12, x%.3f after a set change; level 50 %+.1f dB; Rx off %.0f dB; "
+              "part level vs CC7 %+.2f dB)" % (_tup, _treset, _tlev, _toff, _pl))
+        # THE FILE'S GS REVERB AND EQ (blockrender.gs_setup): Room 1 renders in
+        # our studio and the room is put back after; the reverb level and time
+        # go to the sidecar; the EQ's +12 dB high shelf lifts a piano's 4-8 kHz
+        # (its partials, not a breath's noise) where its part has the EQ on,
+        # and nowhere its switch is off
+        _gsx = lambda *b: _SX(0x41, 0x10, 0x42, 0x12, *b)
+        _room0 = _T.ROOM_NAME[0]
+        _rooms = []
+        _srm = _T.set_room
+        try:
+            _T.set_room = lambda n, stagger=True: (_rooms.append(n), _srm(n, stagger))[1]
+            if not os.environ.get("TUNING_ROOM"):
+                B.render(_bfile([_gsx(0x40, 0x01, 0x30, 0x00, 0), _gsx(0x40, 0x01, 0x33, 96, 0)]
+                                + _on(0, 60)))
+        finally:
+            _T.set_room = _srm
+        _tg = B._GS_ROOM.get("tail_gain", 0)     # before the renders below set it again
+        _flt = lambda pre: B.render(_bfile([_M("program_change", channel=0, program=0)] + pre
+                                           + _on(0, 72)))
+        def _hb(x):
+            _a = np.asarray(x[0]) + np.asarray(x[1])
+            _X = np.abs(np.fft.rfft(_a)) ** 2
+            _f = np.fft.rfftfreq(len(_a), 1.0 / B.SR)
+            return 10 * np.log10(_X[(_f > 4000) & (_f < 8000)].sum() + 1e-30)
+        _h0 = _hb(_flt([]))
+        _hup = _hb(_flt([_gsx(0x40, 0x02, 0x03, 0x4C, 0)])) - _h0
+        _hoff = _hb(_flt([_gsx(0x40, 0x02, 0x03, 0x4C, 0), _gsx(0x40, 0x41, 0x20, 0x00, 0)])) - _h0
+        check("file: GS reverb Room 1 renders in our studio and the room comes back; "
+              "the EQ's high shelf where a part has it on",
+              (os.environ.get("TUNING_ROOM") or (_rooms[:1] == ["studio"] and _T.ROOM_NAME[0] == _room0
+                                                and abs(_tg - 1.5) < 1e-9))
+              and _hup > 7.0 and abs(_hoff) < 0.05,
+              "  (rooms set %s, back to %s; 4-8 kHz %+.1f dB with the shelf, %+.2f with the part's EQ off)"
+              % (_rooms, _T.ROOM_NAME[0], _hup, _hoff))
+        # A USER DRUM SET (GS 21 dp rr, sets 65/66): a key takes another set's
+        # key -- here set 65's key 60 the Standard snare (38), which it then is
+        def _cen(x):
+            _X = np.abs(np.fft.rfft(x))
+            return float((_X * np.fft.rfftfreq(len(x), 1.0 / B.SR)).sum() / _X.sum())
+        _usn = _dr1([], note=38)
+        _uk = _dr1([_gsx(0x21, 0x0B, 60, 0, 0), _gsx(0x21, 0x0C, 60, 38, 0),
+                    _M("program_change", channel=9, program=64)], note=60)
+        check("file: a user drum set's key plays the set and note it names",
+              abs(_e(_uk) - _e(_usn)) < 0.1 and abs(_cen(_uk) / _cen(_usn) - 1.0) < 0.01,
+              "  (key 60 <- Standard 38: %+.2f dB, centroid %.0f against %.0f)"
+              % (_e(_uk) - _e(_usn), _cen(_uk), _cen(_usn)))
+        # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
+        # Delay 1's repeats every 340 ms, the first at its level (64/127) and
+        # each a quarter the last (feedback +16), streamed exactly as whole;
+        # in a file that is not GS, CC94 is General MIDI's celeste and nothing
+        # repeats
+        def _wb(gs, stream=True):
+            _msgs = ([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41)] if gs else []) + [
+                _M("program_change", channel=0, program=115),
+                _M("control_change", channel=0, control=94, value=127),
+                _M("note_on", channel=0, note=76, velocity=110),
+                _M("note_off", channel=0, note=76, velocity=0, time=120),
+                _M("note_on", channel=0, note=76, velocity=0, time=2400)]
+            _rs0 = B.RENDER_STREAM
+            try:
+                B.RENDER_STREAM = stream
+                _x = B.render(_bfile(_msgs))
+            finally:
+                B.RENDER_STREAM = _rs0
+            return np.asarray(_x[0]), np.asarray(_x[1])
+        def _echoes(L, R):
+            _x = np.abs(L) + np.abs(R)
+            _env = np.convolve(_x, np.ones(220) / 220.0, "same")
+            _on = int(np.argmax(_env > _env.max() * 0.5))
+            _st = int(0.340 * B.SR)
+            return [float(_env[max(0, _on + k * _st - 500):_on + k * _st + 3000].max()) for k in range(3)]
+        _dg = _wb(True)
+        _ev = _echoes(*_dg)
+        _dw = _wb(True, stream=False)
+        _ng = _echoes(*_wb(False))
+        _db = lambda a, b: 20 * np.log10(max(a, 1e-30) / max(b, 1e-30))
+        check("file: the GS delay repeats a CC94 send every 340 ms (Delay 1), streamed as whole; "
+              "not in a file that is not GS",
+              abs(_db(_ev[1], _ev[0]) + 5.95) < 0.5 and abs(_db(_ev[2], _ev[1]) + 12.04) < 0.5
+              and len(_dw[0]) == len(_dg[0]) and float(np.abs(_dw[0] - _dg[0]).max()) == 0.0
+              and _db(_ng[1], _ng[0]) < -50.0,
+              "  (repeats %+.1f, %+.1f dB; stream - whole %.1e; not GS: %+.0f dB)"
+              % (_db(_ev[1], _ev[0]), _db(_ev[2], _ev[1]),
+                 float(np.abs(_dw[0] - _dg[0]).max()) if len(_dw[0]) == len(_dg[0]) else -1.0,
+                 _db(_ng[1], _ng[0])))
+        # THE GS CHORUS (chorus.gs_copies): a GS file's CC93 sends a lead into
+        # its device -- two outputs swept in opposite phase, so the sides part
+        # (left against right decorrelates), the level held as CC93's is, the
+        # Flanger's feedback passes included; streamed exactly as whole
+        def _cb(macro, c93=127, stream=True):
+            _msgs = [_gsx(0x40, 0x00, 0x7F, 0x00, 0x41)] + (
+                [_gsx(0x40, 0x01, 0x38, macro, 0)] if macro is not None else []) + [
+                _M("program_change", channel=0, program=80),
+                _M("control_change", channel=0, control=93, value=c93),
+                _M("note_on", channel=0, note=69, velocity=100),
+                _M("note_off", channel=0, note=69, velocity=0, time=1920),
+                _M("note_on", channel=0, note=69, velocity=0, time=480)]
+            _rs0 = B.RENDER_STREAM
+            try:
+                B.RENDER_STREAM = stream
+                _x = B.render(_bfile(_msgs))
+            finally:
+                B.RENDER_STREAM = _rs0
+            return np.asarray(_x[0]), np.asarray(_x[1])
+        _c0 = _cb(None, c93=0)
+        _c1 = _cb(0)
+        _c5 = _cb(5)
+        _c1w = _cb(0, stream=False)
+        _cl = lambda x: _e(x[0] + x[1])
+        _cr = lambda x: float(np.corrcoef(x[0], x[1])[0, 1])
+        check("file: the GS chorus parts the sides and holds the level (Chorus 1, Flanger), "
+              "streamed as whole",
+              _cr(_c1) < 0.9 and _cr(_c5) < 0.9 and abs(_cl(_c1) - _cl(_c0)) < 0.5
+              and abs(_cl(_c5) - _cl(_c0)) < 0.5 and len(_c1w[0]) == len(_c1[0])
+              and float(np.abs(_c1w[0] - _c1[0]).max()) == 0.0,
+              "  (L/R correlation %.2f, %.2f against 1.00 dry; level %+.2f, %+.2f dB)"
+              % (_cr(_c1), _cr(_c5), _cl(_c1) - _cl(_c0), _cl(_c5) - _cl(_c0)))
+        # THE INSERTION EFFECT (gsefx): Tokei's GTR Multi 2 on a distortion
+        # guitar part -- its level (40) and its 2 kHz EQ (+6) at the
+        # notes before the file raises the level and the flanger's mix; after,
+        # the level back and the sides parted by the flanger; streamed as whole
+        _tk = {1: 100, 2: 127, 3: 70, 4: 1, 5: 0, 6: 30, 7: 1, 8: 1, 9: 1, 10: 62, 11: 86, 12: 2,
+               13: 70, 14: 69, 15: 1, 16: 8, 17: 42, 18: 102, 19: 0, 20: 40}
+        def _ef(assign, stream=True, flat=False):
+            _tq = dict(_tk)
+            if flat:
+                _tq.update({10: 64, 13: 64, 14: 64})
+            _ms = [_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _gsx(0x40, 0x03, 0x00, 0x04, 0x01, 0)] + [
+                _gsx(0x40, 0x03, 0x02 + n, v, 0) for n, v in _tq.items()]
+            if assign:
+                _ms.append(_gsx(0x40, 0x41, 0x22, 0x01, 0))
+            _ms.append(_M("program_change", channel=0, program=30))
+            for _i, _n in enumerate([40, 47, 52, 40, 47, 52, 45, 52, 57, 45, 52, 57]):
+                if _i == 6:
+                    _ms += [_gsx(0x40, 0x03, 0x15, 100, 0), _gsx(0x40, 0x03, 0x16, 127, 0)]
+                _ms += [_M("note_on", channel=0, note=_n, velocity=100),
+                        _M("note_off", channel=0, note=_n, velocity=0, time=240)]
+            _ms.append(_M("note_on", channel=0, note=40, velocity=0, time=960))
+            _rs0 = B.RENDER_STREAM
+            try:
+                B.RENDER_STREAM = stream
+                _x = B.render(_bfile(_ms))
+            finally:
+                B.RENDER_STREAM = _rs0
+            return np.asarray(_x[0]), np.asarray(_x[1])
+        _ed, _ew, _eww = _ef(False), _ef(True), _ef(True, stream=False)
+        _efl = _ef(True, flat=True)
+        _h1 = lambda x: (x[0][:int(1.4 * B.SR)], x[1][:int(1.4 * B.SR)])
+        _h2 = lambda x: (x[0][int(1.5 * B.SR):int(3.0 * B.SR)], x[1][int(1.5 * B.SR):int(3.0 * B.SR)])
+        def _band(x, lo, hi):
+            _X = np.abs(np.fft.rfft(x[0] + x[1])) ** 2
+            _f = np.fft.rfftfreq(len(x[0]), 1.0 / B.SR)
+            return 10 * np.log10(_X[(_f > lo) & (_f < hi)].sum() + 1e-30)
+        _lv1 = _e(sum(_h1(_ew))) - _e(sum(_h1(_ed)))
+        # the EQ against the same chain with it flat: after the valve, so its
+        # products are lifted too (the OD's own brightening cancels)
+        _eq1 = _band(_h1(_ew), 1700, 2400) - _band(_h1(_efl), 1700, 2400)
+        _lv2 = _e(sum(_h2(_ew))) - _e(sum(_h2(_ed)))
+        _co2 = float(np.corrcoef(*_h2(_ew))[0, 1])
+        # the OD a gain in front of the valve (+4.7 dB at 30) with its makeup
+        # (gsefx.OD_MAKEUP_DB), so level 40 sits a little under the dry part,
+        # not 10 dB under it; the level after the valve (tubeamp's stepped reference),
+        # so 40 -> 127 is its own 10 dB and not more drive
+        check("file: Tokei's GTR Multi 2 -- its OD's gain and makeup at level 40 and +6 dB at "
+              "2 kHz, then the level up its own 10 dB and the flanger parting the sides; streamed as whole",
+              -5.0 < _lv1 < 0.0 and 4.5 < _eq1 < 7.5 and abs(_lv2 - _lv1 - 10.0) < 1.0 and _co2 < 0.85
+              and len(_eww[0]) == len(_ew[0]) and float(np.abs(_eww[0] - _ew[0]).max()) == 0.0,
+              "  (level %+.1f dB, 2 kHz %+.1f over the EQ flat; then %+.1f dB, L/R %.2f)" % (_lv1, _eq1, _lv2, _co2))
+        # THE HAMMER-ON (Dist. Gt2 :, 30.1): a note over the one before is not
+        # picked -- it starts under the picked note's level (the string's
+        # decay since the pick, less the finger) and without the pick's click
+        # (2-8 kHz in its first 10 ms); the same line on the plain distortion
+        # guitar re-picks every note
+        def _hm(bank):
+            _ms = [_M("control_change", channel=0, control=0, value=bank),
+                   _M("program_change", channel=0, program=30)]
+            _ns = [52, 54, 55, 57]
+            _ms.append(_M("note_on", channel=0, note=_ns[0], velocity=100, time=240))
+            for _a, _b in zip(_ns, _ns[1:]):
+                _ms += [_M("note_on", channel=0, note=_b, velocity=100, time=240),
+                        _M("note_off", channel=0, note=_a, velocity=0, time=10)]
+            _ms += [_M("note_off", channel=0, note=_ns[-1], velocity=0, time=470),
+                    _M("note_on", channel=0, note=40, velocity=0, time=960)]
+            _x = B.render(_bfile(_ms))
+            return np.asarray(_x[0]) + np.asarray(_x[1])
+        def _hon(a, i):
+            _t = int((0.25 + 0.25 * i) * B.SR)
+            _sg = a[_t:_t + int(0.04 * B.SR)]
+            return 10 * np.log10(float((_sg * _sg).mean()) + 1e-30)
+        def _hck(a, i):
+            _t = int((0.25 + 0.25 * i) * B.SR)
+            _sg = a[_t:_t + int(0.01 * B.SR)]
+            _X = np.abs(np.fft.rfft(_sg * np.hanning(len(_sg)))) ** 2
+            _f = np.fft.rfftfreq(len(_sg), 1.0 / B.SR)
+            return 10 * np.log10(_X[(_f > 2000) & (_f < 8000)].sum() + 1e-30)
+        _hp, _hh = _hm(0), _hm(1)
+        _hdrop = [_hon(_hh, i) - _hon(_hp, i) for i in (1, 2, 3)]
+        _hclk = _hck(_hh, 3) - _hck(_hp, 3)
+        check("file: Dist. Gt2's legato -- an overlapping note is hammered: under the picked one, "
+              "falling down the run, and without the pick's click",
+              abs(_hon(_hh, 0) - _hon(_hp, 0)) < 0.5 and _hdrop[0] < -1.0 and _hdrop[2] < _hdrop[0]
+              and _hclk < -6.0,
+              "  (onsets vs re-picked %s dB; click %+.1f dB)" % (" ".join("%+.1f" % v for v in _hdrop), _hclk))
+        # THE ASIA SET (53): its gongs are Iowa's tam-tams at their own places,
+        # its 49 Standard's crash (Tokei's cymbal roll, by intent), and a key
+        # it does not build is silent -- not Standard's guiro on it
+        _ag = [_PM.percussion_for_note(_k, 52) for _k in (73, 74, 75, 49, 36)]
+        check("file: ASIA's gongs -- the Asian, Big and Small Gong are the 28, 40 and 22 inch "
+              "tam-tams, Big left and Small right; 49 the crash; its unbuilt keys silent",
+              [(_g[0], _g[1].__mro__[1].__name__ if _g[1].__name__.startswith('_') else _g[1].__name__)
+               for _g in _ag[:3]] == [("Asian Gong", "TamTam28Properties"), ("Big Gong", "TamTam40Properties"),
+                                      ("Small Gong", "TamTam22Properties")]
+              and _ag[1][3] < 0 < _ag[2][3] and _ag[3] is not None
+              and _ag[3][0] == _PM.PERCUSSION[49][0] and _ag[4] is None,
+              "  (%s)" % ", ".join("%s %+.2f" % (_g[0], _g[3]) if _g else "silent" for _g in _ag))
         import tempfile as _tfp
         _pmf = mido.MidiFile(ticks_per_beat=480)
         for _port in (0, 1):
@@ -16421,12 +16676,15 @@ def selftest():
         _mp = [getattr(_vpm(8, m, 3), "variation", 0) for m in (0, 1, 2, 3)]
         _mb = getattr(_vpm(8, 3, 39), "variation", 0)
         _mc = getattr(_vpm(16, 3, 0), "variation", 0)
+        # ...and the SC-8850's (LSB 4): its 39.8 the SC-88's Beef FM Bass, its
+        # 0.8 upright (not built) the capital
+        _m4 = (getattr(_vpm(8, 4, 39), "variation", 0), getattr(_vpm(8, 4, 0), "variation", 0))
         check("file: CC32 picks the map -- 3.8 ours, the SC-55's own, ours, the capital; "
               "88Pro 39.8 the SC-88's; 88Pro 0.16 the capital",
-              _mp == [8, 136, 8, 0] and _mb == 264 and _mc == 0
+              _mp == [8, 136, 8, 0] and _mb == 264 and _mc == 0 and _m4 == (264, 0)
               and _PMV.property_class_for_note(_vpm(8, 1, 3), 60) is _PMV.VARIATIONS[(3, 136)](60)
               and _PMV.bank_select(136) == (8, 1),
-              "  (3.8 under LSB 0-3: %s; 39.8/3 %d; 0.16/3 %d)" % (_mp, _mb, _mc))
+              "  (3.8 under LSB 0-3: %s; 39.8/3 %d; 0.16/3 %d; LSB 4 39.8/0.8 %s)" % (_mp, _mb, _mc, _m4))
         _lv = Live(program=0, rate=48000, frames=128, verbose=False)
         _lv.on_midi(_M("control_change", channel=0, control=0, value=16))
         _lv.on_midi(_M("control_change", channel=0, control=32, value=1))
