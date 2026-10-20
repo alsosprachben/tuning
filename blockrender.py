@@ -545,7 +545,7 @@ def parse(path):
     def _is_drums(ch):
         if _mpe and _mpe.is_member(ch):
             return False
-        return _drums.get(ch, ch == GM_PERCUSSION_CHANNEL)
+        return _drums.get(ch, ch % 16 == GM_PERCUSSION_CHANNEL)
     def _cur_prog(ch):
         if _mpe and _mpe.is_member(ch):
             ch = _mpe.manager_of(ch)
@@ -766,6 +766,17 @@ def parse(path):
             if _mst is not None:
                 master.append((t, _mst[0], _mst[1], _seq))
                 continue
+            _rp = parse_gs_rhythm_part(msg.data)
+            if _rp is not None:
+                # A DRUM PART ON ANOTHER CHANNEL (or channel 10 melodic): the
+                # channel's drums state, as GM 2's bank 120 sets it. Its
+                # program STAYS -- SuwaFF moves channel 12 from drum map 1 to 2
+                # after its program change chose the set, and means that set
+                _rc, _rm = _rp
+                _drums[_rc] = bool(_rm)
+                if _rm:
+                    _var[_rc] = 0
+                continue
             _mt = _MTS.parse_mts(msg.data)
             if _mt is not None:
                 mtsev.append((t, _seq, _mt))
@@ -845,7 +856,71 @@ def _open_midi(path):
         head = f.read(8)
     if _U.is_ump_file(head):
         return _U.UmpMidi.open(path)
-    return mido.MidiFile(path)
+    mid = mido.MidiFile(path)
+    return PortedMidi(mid) if PortedMidi.uses_ports(mid) else mid
+
+
+class _PortMsg(object):
+    """A message on port B (or later): itself, its channel + 16 x port."""
+    __slots__ = ("_m", "channel", "time")
+
+    def __init__(self, m, channel, time):
+        self._m, self.channel, self.time = m, channel, time
+
+    def __getattr__(self, k):
+        return getattr(self._m, k)
+
+    def copy(self, **kw):
+        ch = kw.pop("channel", self.channel)
+        tm = kw.pop("time", self.time)
+        return _PortMsg(self._m.copy(**kw) if kw else self._m, ch, tm)
+
+
+class PortedMidi(object):
+    """A MIDI 1.0 file whose tracks name a MIDI PORT (the FF 21 meta event),
+    as a two-port Sound Canvas file does: Konami's SC-88Pro data plays 32
+    parts, sixteen on each port, and read as one port they collapse onto each
+    other. Each channel message is presented on channel + 16 x its track's
+    port -- the flat channel MIDI 2.0's groups use already (ump.py) -- so the
+    renderer reads 32 channels. Shaped as UmpMidi is: iterating gives seconds,
+    .tracks one merged track in ticks for the legato pass."""
+
+    def __init__(self, mid):
+        self.ticks_per_beat = mid.ticks_per_beat
+        ev = []
+        for k, tr in enumerate(mid.tracks):
+            at, port = 0, 0
+            for m in tr:
+                at += m.time
+                if m.type == "midi_port":
+                    port = m.port
+                ev.append((at, k, m, port))
+        ev.sort(key=lambda e: (e[0], e[1]))     # mido.merge_tracks' order
+        self._ev = ev
+
+    @staticmethod
+    def uses_ports(mid):
+        return any(m.type == "midi_port" and m.port for tr in mid.tracks for m in tr)
+
+    def _msgs(self, seconds):
+        tempo, last = 500000, 0
+        for at, _k, m, port in self._ev:
+            dt = at - last
+            last = at
+            d = mido.tick2second(dt, self.ticks_per_beat, tempo) if seconds else dt
+            if m.type == "set_tempo":
+                tempo = m.tempo
+            if hasattr(m, "channel") and not m.is_meta:
+                yield _PortMsg(m, m.channel + 16 * port, d)
+            else:
+                yield m.copy(time=d)
+
+    def __iter__(self):
+        return self._msgs(True)
+
+    @property
+    def tracks(self):
+        return [list(self._msgs(False))]
 
 # ---- GM2 Scale/Octave Tuning Adjust -----------------------------------------
 # Twelve cent offsets, one per pitch class, applied to a set of channels. It is
@@ -934,8 +1009,31 @@ def parse_gs_reset(data):
     a reset somebody meant.
     """
     d = tuple(data)
-    return (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
-            and d[4:8] == (0x40, 0x00, 0x7F, 0x00))
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12):
+        return False
+    # ...and the SC-88's SYSTEM MODE SET, F0 41 dd 42 12 00 00 7F mm cs F7
+    # (mm 0 one module, 1 two): "the SC-88 will be reset", and the file sends
+    # it in GS Reset's place -- six of the seven Sound Canvas files scanned do
+    return d[4:7] == (0x40, 0x00, 0x7F) and d[7] == 0x00 or d[4:7] == (0x00, 0x00, 0x7F)
+
+
+def parse_gs_rhythm_part(data):
+    """(channel, mode) for GS's USE FOR RHYTHM PART, or None.
+
+    F0 41 dd 42 12 4b 1p 15 mm cs F7: part p of block b (40 port A, 50 port B
+    -- channel + 16) a drum part (mm 1 or 2, the SC-88's two drum maps) or a
+    melodic one (0). The GS part numbering: p 0 is part 10, 1-9 parts 1-9,
+    A-F parts 11-16 -- each on its own channel by default. Files put a kit on
+    channel 11, 12, or 9 this way (Falcom, Konami); channel 10 can be made
+    melodic.
+    """
+    d = tuple(data)
+    if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4] in (0x40, 0x50) and d[5] >> 4 == 1 and d[6] == 0x15):
+        return None
+    blk = d[5] & 0x0F
+    ch = 9 if blk == 0 else (blk - 1 if blk <= 9 else blk)
+    return ch + (16 if d[4] == 0x50 else 0), int(d[7])
 
 
 def parse_master(data):
@@ -952,6 +1050,21 @@ def parse_master(data):
     message for a machine this is not.
     """
     d = tuple(data)
+    # ROLAND'S OWN, the GS system parameters (F0 41 dd 42 12 40 00 aa .. F7):
+    #   40 00 00  MASTER TUNE   four nibbles, 0018-07E8 about 0400: -100.0 ..
+    #                           +100.0 cents in tenths
+    #   40 00 04  MASTER VOLUME 0-127 (127 at power-on), the universal law
+    #   40 00 05  MASTER KEY-SHIFT  28-58 about 40: semitones
+    # Sensation (Konami's SC-88Pro data) fades out on 111 of the volume
+    if len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12 and d[4:6] == (0x40, 0x00):
+        if d[6] == 0x04:
+            return ('vol', T.master_volume_gain(d[7] << 7 | d[7]))
+        if d[6] == 0x05:
+            return ('coarse', float(max(0x28, min(0x58, d[7])) - 0x40))
+        if d[6] == 0x00 and len(d) >= 11:
+            nib = (d[7] & 15) << 12 | (d[8] & 15) << 8 | (d[9] & 15) << 4 | (d[10] & 15)
+            return ('fine', (max(0x18, min(0x7E8, nib)) - 0x400) / 10.0)
+        return None
     if len(d) < 6 or d[0] != 0x7F or d[2] != 0x04:
         return None
     ll, mm = d[4], d[5]

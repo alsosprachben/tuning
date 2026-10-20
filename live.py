@@ -6952,6 +6952,28 @@ class Live:
                     if self.mts.selection(ch) == (bank, prog):
                         self._remts(ch, list(_mt[3]), n0)
             return
+        # GS'S USE FOR RHYTHM PART (blockrender.parse_gs_rhythm_part): the
+        # channel becomes a kit, or channel 10 melodic, and a part on THAT
+        # channel follows, as it does GM 2's bank 120 -- an omni part is the
+        # player's own. Port B's parts (block 50) have no port here.
+        _rp = _BRs.parse_gs_rhythm_part(d)
+        if _rp is not None:
+            ch, mode = _rp
+            if ch >= 16:
+                return
+            ch += 16 * _g
+            self.ch_drums[ch] = bool(mode)
+            for part in self.parts:
+                if part.channel != ch:
+                    continue
+                want = (part.program, bool(mode),
+                        self._tuner_for(part.program, bool(mode), part.base_tuner),
+                        patch_variation(part.program, bool(mode), part.variation))
+                if part.patch.key != want:
+                    self.patch_reqs.append((part.pid, want))
+            if self.patch_reqs:
+                self.patch_go.set()
+            return
         _m = _BRs.parse_master(d)
         if _m is not None:
             kind, val = _m
@@ -16326,6 +16348,52 @@ def selftest():
                _M("program_change", channel=0, program=125)] + _on(0, 60)))[2]]
         check("file: GS Reset clears the bank",
               [getattr(x, "variation", 0) for x in _vr] == [5, 0], "  (%r)" % _vr)
+        # THE SOUND CANVAS FILES' OWN SYSEX (blockrender): the SC-88's System
+        # Mode Set is a reset; GS master volume / key shift / tune are the
+        # master's; USE FOR RHYTHM PART makes channel 11 a kit and channel 10
+        # melodic; and a two-port file's port B is channels 16-31, its
+        # channel 10 a kit
+        _vs = [n[6] for n in B.parse(_bfile(
+            [_M("control_change", channel=0, control=0, value=5),
+             _M("program_change", channel=0, program=125)] + _on(0, 60)
+            + [_SX(0x41, 0x10, 0x42, 0x12, 0x00, 0x00, 0x7F, 0x00, 0x01),
+               _M("program_change", channel=0, program=125)] + _on(0, 60)))[2]]
+        _gm = lambda a, *v: B.parse_master((0x41, 0x10, 0x42, 0x12, 0x40, 0x00, a) + v + (0,))
+        check("file: System Mode Set resets as GS Reset does; GS master volume, key shift and tune",
+              [getattr(x, "variation", 0) for x in _vs] == [5, 0]
+              and _gm(0x04, 127) == ('vol', _T.master_volume_gain(16383))
+              and _gm(0x04, 64)[1] < 0.5 and _gm(0x05, 0x42) == ('coarse', 2.0)
+              and _gm(0x00, 0, 4, 0, 0) == ('fine', 0.0) and _gm(0x00, 0, 7, 0xE, 8) == ('fine', 100.0),
+              "  (%r; vol 64 -> %.3f)" % (_vs, _gm(0x04, 64)[1]))
+        _rr = B.parse(_bfile(
+            [_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x1A, 0x15, 0x02, 0x00),
+             _SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x10, 0x15, 0x00, 0x00),
+             _M("program_change", channel=10, program=56),
+             _M("program_change", channel=9, program=24)] + _on(10, 60) + _on(9, 60)))[2]
+        _rk = {n[0]: n[6] for n in _rr}
+        check("file: USE FOR RHYTHM PART -- channel 11 a kit (SFX), channel 10 melodic (nylon)",
+              type(_rk.get(10)).__name__ == "DrumProgram" and int(_rk[10]) == 56
+              and type(_rk.get(9)).__name__ != "DrumProgram" and int(_rk[9]) == 24,
+              "  (%r)" % _rk)
+        import tempfile as _tfp
+        _pmf = mido.MidiFile(ticks_per_beat=480)
+        for _port in (0, 1):
+            _ptr = mido.MidiTrack()
+            _ptr.append(mido.MetaMessage("midi_port", port=_port))
+            _ptr += [_M("program_change", channel=0, program=40 + _port),
+                     _M("note_on", channel=0, note=60, velocity=90),
+                     _M("note_off", channel=0, note=60, velocity=0, time=480),
+                     _M("note_on", channel=9, note=38, velocity=90),
+                     _M("note_off", channel=9, note=38, velocity=0, time=480)]
+            _pmf.tracks.append(_ptr)
+        with _tfp.TemporaryDirectory() as _pd:
+            _pp = os.path.join(_pd, "ports.mid")
+            _pmf.save(_pp)
+            _pn = B.parse(_pp)[2]
+        _pk = sorted((n[0], type(n[6]).__name__ == "DrumProgram", int(n[6])) for n in _pn)
+        check("file: two MIDI ports are 32 channels -- port B's channel 1 on 16, its channel 10 a kit",
+              _pk == [(0, False, 40), (9, True, 0), (16, False, 41), (25, True, 0)],
+              "  (%r)" % _pk)
         # BANK 127, THE MT-32 SET (patch_map.MT32_SET, SC-55 p.69): a melodic
         # channel's CC0 = 127 plays the MT-32's tone on the program -- PC 33
         # "Fantasy" GM 88's voice at GM 88's level, PC 120 "Cymbal" the crash
