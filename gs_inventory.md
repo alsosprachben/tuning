@@ -6,24 +6,20 @@ module is the SC-55mkII's, a few dozen tones more than the original SC-55's we b
 
 | map | tones | built | to do |
 |---|---|---|---|
-| SC-55 map (mkII) | 226 | 211 | 15 |
-| SC-88 map | 409 | 263 | 146 |
-| SC-88Pro map | 765 | 263 | 502 |
+| SC-55 map (mkII) | 226 | 220 | 6 |
+| SC-88 map | 409 | 340 | 69 |
+| SC-88Pro map | 765 | 340 | 425 |
 
-## The SC-88 map's 146 missing tones, by what they take
+## The SC-88 map's 69 missing tones, by what they take
 
 | kind | count | what it takes |
 |---|---|---|
 | alias | 0 | one of our voices, under another number |
 | derived | 0 | a setting of one of ours (wide, dark, octave, layered, velocity, reversed) |
 | organ | 0 | a registration of our organs (drawbars, stops, the Leslie) |
-| synth | 77 | a Moog panel, voiced by ear |
+| synth | 0 | a Moog panel, voiced by ear |
 | refit | 49 | an articulation of one we have, wanting a fit to a reference |
 | new | 20 | an instrument we have not modelled, wanting references |
-
-### synth
-
-35.4 SynFretless, 38.1 Syn.Bass101 (mkII), 38.9 TB303 Bass, 38.10 Tekno Bass, 38.16 Reso SHBass, 39.1 Syn.Bass201, 39.2 ModularBass, 39.3 Seq Bass, 39.9 X Wire Bass, 39.16 Rubber Bass (mkII), 39.17 SH101Bass 1, 39.18 SH101Bass 2, 39.19 Smooth Bass, 50.1 OB Strings, 54.8 Syn.Voice, 55.16 Lo Fi Rave, 62.1 Poly Brass, 62.9 Quack Brass, 80.1 Square (mkII), 80.2 Hollow Mini, 80.3 Mellow FM, 80.4 CC Solo, 80.5 Shmoog, 80.6 LM Square, 80.8 Sine Wave (mkII), 81.1 Saw (mkII), 81.2 Pulse Saw, 81.3 Feline GR, 81.4 Big Lead, 81.5 Velo Lead, 81.6 GR-300, 81.7 LA Saw, 81.8 Doctor Solo (mkII), 81.16 Waspy Synth, 82.1 Vent Synth, 82.2 PurePanLead, 84.8 Dist.Lead, 86.1 Big Fives, 87.1 Big & Raw, 87.2 Fat & Perky, 88.1 Fantasia 2, 89.1 Thick Pad, 89.2 Horn Pad, 89.3 RotaryStrng, 89.4 Soft Pad, 90.1 80'sPolySyn, 91.1 Heaven II, 93.1 Tine Pad, 93.2 Panner Pad, 95.1 Polar Pad, 95.8 Converge, 95.9 Shwimmer, 95.10 CelestialPd, 96.1 Harmo Rain, 96.2 AfricanWood, 96.8 Clavi Pad, 97.1 Ancestral, 97.2 Prologue, 97.8 Rave, 98.1 Syn Mallet (mkII), 98.2 SoftCrystal, 98.4 Loud Glock, 98.6 Clear Bells, 98.7 X'mas Bell, 98.8 Vibra Bells, 98.9 Digi Bells, 98.16 ChoralBells, 98.17 Air Bells, 99.1 Warm Atmos, 99.4 HollowRels., 99.6 Ambient Pad, 101.1 Goblinson, 101.2 50's Sci-Fi, 102.1 Echo Bell (mkII), 102.2 Echo Pan (mkII), 102.6 Water Piano, 103.1 StarTheme 2
 
 ### refit
 

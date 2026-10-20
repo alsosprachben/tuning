@@ -764,6 +764,18 @@ def _sc88_var_rated():
                                                           (" vel %d-%d" % (l[3], l[4])) if len(l) > 3 else "")
                                             for l in how[1])
         VAR_RATED[(p, b)] = (r, "SC-88 map: " + note)
+    # ...AND ITS SYNTH TONES (sc88_synth.SC88_SYNTH): Moog panels, a 3 as the
+    # bank-8 synths are -- the engine is fitted to Ben's Messenger, the panel
+    # is voiced from what the tone is, not fitted to a recording of it
+    try:
+        from sc88_synth import SC88_SYNTH
+    except ImportError:
+        SC88_SYNTH = {}
+    for (p, b), (nm, base, pan) in SC88_SYNTH.items():
+        if (p, b) in patch_map.VARIATIONS:
+            VAR_RATED[(p, b)] = (3, "SC-88 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
+                                    "voiced from what the tone is, the engine fitted to Ben's Messenger"
+                                 % (base.replace("Moog", "the "), ", ".join(sorted(pan))))
 
 
 def variations():

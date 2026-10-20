@@ -30,7 +30,7 @@ import moog as MG
 import mf104 as MFD
 import percussion_map as PM
 import patch_map as PMAP
-from variation_desc import VARIATION_DESC
+from variation_desc import VARIATION_DESC, CAPITAL_DESC
 
 locale.setlocale(locale.LC_ALL, "")
 
@@ -1027,7 +1027,10 @@ class TUI:
         # ...EACH VARIATION SAYING WHAT IT CHANGES (variation_desc: "Piano 1d
         # -- dark: worn hammers"), so the list reads, and searches, by sound
         for i in range(len(GM)):
-            items.append(row(i, 0, gm_label(i)))
+            # ...and each capital what it IS here (the model, the registration),
+            # which replaces the bracketed model the GM name carried
+            items.append(row(i, 0, ("%-23s %s" % (GM[i], CAPITAL_DESC[i])) if i in CAPITAL_DESC
+                             else gm_label(i)))
             picks.append((False, i, 0))
             for v in built_variations(i):
                 d = VARIATION_DESC.get((i, v))
