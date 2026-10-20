@@ -220,3 +220,29 @@ def inventory(out=None):
 
 if __name__ == "__main__" and sys.argv[1] == "inventory":
     inventory(sys.argv[2] if len(sys.argv) > 2 else None)
+
+
+def write_names(path=os.path.join(HERE, "gs_map_names.py")):
+    """gs_map_names.py: each later map's variation tones by name, for
+    patch_map's map switch (bank select LSB). Names only -- Roland's list,
+    a fact about the modules -- so the renderers need no copy of the manual."""
+    R = load()
+    L = ['"""THE SOUND CANVAS MAPS\' VARIATION TONES, by name: {map: {(program, bank):',
+         'name}} -- bank select LSB 1 the SC-55 map (the SC-55mkII\'s, as a later',
+         'module has it), 2 the SC-88 map, 3 the SC-88Pro\'s own. Generated from the',
+         'SC-88Pro owner\'s manual\'s instrument list by examples/gs_maps.py names;',
+         'do not edit. Capitals (bank 0) are every map\'s, and are not listed."""', "",
+         "MAP_NAMES = {"]
+    for m, col in ((1, "sc55"), (2, "sc88"), (3, "native")):
+        L.append("    %d: {" % m)
+        for r in R:
+            if r["bank"] and r[col] not in ("-----", "", "+ -----"):
+                L.append("        (%d, %d): %r," % (r["program"], r["bank"], r[col].lstrip("+ ").strip()))
+        L.append("    },")
+    L.append("}")
+    open(path, "w").write("\n".join(L) + "\n")
+    print("  wrote %s" % path)
+
+
+if __name__ == "__main__" and sys.argv[1] == "names":
+    write_names()

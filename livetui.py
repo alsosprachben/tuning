@@ -80,7 +80,9 @@ def gm_label(p, v=0):
     if p >= len(GM):
         return "?"
     if v and (p, v) in PMAP.VARIATION_NAMES:
-        return PMAP.VARIATION_NAMES[(p, v)]     # GS's own name for the variation
+        # GS's own name for the variation -- and a map's own tone says whose
+        nm = PMAP.VARIATION_NAMES[(p, v)]
+        return nm + (" (%s)" % PMAP.MAP_LABELS[v >> 7] if v >> 7 in PMAP.MAP_LABELS else "")
     return GM[p] + (" (%s)" % MODELLED[p] if p in MODELLED else "")
 
 
@@ -91,7 +93,18 @@ def built_variations(p):
     not bank 127, the MT-32 set: another instrument's tones on the same
     numbers, which the picker lists as a section of its own (mt32_tones)."""
     return sorted(v for (q, v) in PMAP.VARIATIONS
-                  if q == p and v != 127 and (q, v) in PMAP.VARIATION_NAMES)
+                  if q == p and v < 127 and (q, v) in PMAP.VARIATION_NAMES)
+
+
+def map_tones():
+    """{map: [(program, variation key)]}: each Sound Canvas map's OWN tones
+    (patch_map.map_bank's 128 x map + bank), where it holds another tone
+    than ours under a number. The picker lists them by map."""
+    out = {}
+    for (q, v) in sorted(PMAP.VARIATIONS):
+        if v >> 7 in PMAP.MAP_LABELS and (q, v) in PMAP.VARIATION_NAMES:
+            out.setdefault(v >> 7, []).append((q, v))
+    return out
 
 
 def mt32_tones():
@@ -1023,7 +1036,7 @@ class TUI:
         # ...ALIGNED ON THE PROGRAM, the bank in a column of its own (Ben: an
         # indent was more distracting than lining them up by number)
         def row(i, v, label):
-            return "%3d%-5s %s" % (i, (".%d" % v) if v else "", label)
+            return "%3d%-5s %s" % (i, (".%d" % (v & 0x7F)) if v else "", label)
         # ...EACH VARIATION SAYING WHAT IT CHANGES (variation_desc: "Piano 1d
         # -- dark: worn hammers"), so the list reads, and searches, by sound
         for i in range(len(GM)):
@@ -1045,6 +1058,16 @@ class TUI:
             for i, nm, plays in tones:
                 items.append(row(i, 127, "%-13s (plays %s)" % (nm, plays)))
                 picks.append((False, i, 127))
+        # ...AND EACH SOUND CANVAS MAP'S OWN TONES (bank select LSB): where an
+        # SC-55mkII or SC-88 holds another tone under a number than ours
+        for m, keys in sorted(map_tones().items()):
+            items.append("-- %s map (bank LSB %d): its own tones --" % (PMAP.MAP_LABELS[m], m))
+            picks.append(None)
+            for i, v in keys:
+                d = VARIATION_DESC.get((i, v))
+                nm = PMAP.VARIATION_NAMES[(i, v)]
+                items.append(row(i, v, ("%-13s %s" % (nm, d)) if d else nm))
+                picks.append((False, i, v))
         here = (True, p.program, 0) if p.drums else (False, p.program, p.variation)
         start = (picks.index(here) if here in picks
                  else 0 if p.drums else picks.index((False, p.program, 0)))

@@ -743,7 +743,10 @@ def _sc88_var_rated():
     voice's rating -- the program it aliases or sets, its layers' lowest, the
     kit key it plays -- and what was done to it."""
     names = GM
-    for (p, b), (nm, how) in patch_map.SC88_CHEAP.items():
+    tones = [((p, b), how, "SC-88 map: ") for (p, b), (nm, how) in patch_map.SC88_CHEAP.items()]
+    tones += [((p, 128 * m + b), how, "%s map's own: " % patch_map.MAP_LABELS[m])
+              for (m, p, b), (nm, how) in getattr(patch_map, "MAP_TONES", {}).items()]
+    for (p, b), how, whose in tones:
         kind = how[0]
         if kind == "alias":
             r, note = RATED[how[1]][0], "GM %d %s's voice" % (how[1], names[how[1]])
@@ -763,14 +766,15 @@ def _sc88_var_rated():
                                                           (" %+.0f dB" % l[2]) if l[2] else "",
                                                           (" vel %d-%d" % (l[3], l[4])) if len(l) > 3 else "")
                                             for l in how[1])
-        VAR_RATED[(p, b)] = (r, "SC-88 map: " + note)
+        VAR_RATED[(p, b)] = (r, whose + note)
     # ...AND ITS SYNTH TONES (sc88_synth.SC88_SYNTH): Moog panels, a 3 as the
     # bank-8 synths are -- the engine is fitted to Ben's Messenger, the panel
     # is voiced from what the tone is, not fitted to a recording of it
     try:
-        from sc88_synth import SC88_SYNTH
+        from sc88_synth import SC88_SYNTH, MAP_SYNTH
     except ImportError:
-        SC88_SYNTH = {}
+        SC88_SYNTH, MAP_SYNTH = {}, {}
+    SC88_SYNTH = {**SC88_SYNTH, **{(p, 128 * m + b): t for (m, p, b), t in MAP_SYNTH.items()}}
     for (p, b), (nm, base, pan) in SC88_SYNTH.items():
         if (p, b) in patch_map.VARIATIONS:
             VAR_RATED[(p, b)] = (3, "SC-88 map: a Moog panel, %s's with %s changed (sc88_synth.py); "
@@ -794,8 +798,8 @@ def variations():
                          % (unrated, unknown))
     out = []
     for (p, v), name in sorted(patch_map.VARIATION_NAMES.items()):
-        if v == 127:
-            continue                       # the MT-32 set: its own table (mt32_md)
+        if v >= 127:
+            continue                       # the MT-32 set (mt32_md); the maps' own (sound_canvas_md)
         if (p, v) in built:
             cls = patch_map.property_class_for_program(patch_map.VariationProgram(p, v))
             r, note = VAR_RATED[(p, v)]
@@ -849,12 +853,8 @@ def mt32_md():
 # "St.Soft EP", not our detuned pair): those are not counted as built. A name
 # that differs only in its spelling ("Syn.Bass 3", "Acid Bass") is the same
 # tone, renamed.
-SC_OTHER = {
-    "sc55": {(3, 8), (4, 16), (5, 16), (62, 16), (63, 16)},
-    "sc88": {(4, 8), (39, 8)},
-    "native": {(0, 16), (3, 8), (4, 8), (39, 8), (16, 8), (16, 9), (16, 32), (17, 1), (17, 32),
-               (60, 16), (62, 8), (63, 8), (63, 17)},
-}
+SC_COL_MAP = {"sc55": 1, "sc88": 2, "native": 3}
+SC_OTHER = {col: patch_map.MAP_OTHER[m] for col, m in SC_COL_MAP.items()}
 SC_MAPS = (("sc55o", "SC-55"), ("sc55", "SC-55mkII"), ("sc88", "SC-88"), ("native", "SC-88Pro"))
 
 
@@ -875,22 +875,25 @@ def sound_canvas():
     except ImportError:
         pass
     tones = {"sc55o": [(p, 0) for p in range(128)] +
-             [k for k in patch_map.VARIATION_NAMES if k[1] != 127 and k not in later]}
+             [k for k in patch_map.VARIATION_NAMES if k[1] < 127 and k not in later]}
     for col in ("sc55", "sc88", "native"):
         tones[col] = [(r["program"], r["bank"]) for r in R
                       if r[col] not in ("-----", "", "+ -----")]
 
     def rating(col, k):
+        # WHAT THAT MAP PLAYS for the number (patch_map.map_bank, as a file's
+        # CC32 selects it): its own tone, ours, or -- not built -- the capital
         if k[1] == 0:
             return RATED[k[0]][0]
-        if k in SC_OTHER.get(col, ()) or k not in patch_map.VARIATIONS or k not in VAR_RATED:
+        v = patch_map.map_bank(k[0], k[1], SC_COL_MAP.get(col, 0))
+        if not v or (k[0], v) not in patch_map.VARIATIONS or (k[0], v) not in VAR_RATED:
             return None
-        return VAR_RATED[k][0]
+        return VAR_RATED[(k[0], v)][0]
     maps, fams = [], []
     for col, name in SC_MAPS:
         rs = [rating(col, k) for k in tones[col]]
         hist = {r: rs.count(r) for r in range(5)}
-        other = sum(1 for k in tones[col] if k in SC_OTHER.get(col, ()))
+        other = sum(1 for k in tones[col] if k in SC_OTHER.get(col, ()) and rating(col, k) is None)
         maps.append((name, len(rs), sum(r is not None for r in rs), other, hist))
     for start, fam in FAMILY:
         row = []
@@ -925,6 +928,14 @@ def sound_canvas_md():
         L.append("| %s | %d | %d | %d%% | %s | %d%s |"
                  % (name, n, nb, round(100 * nb / n), " | ".join(str(h[r]) for r in (4, 3, 2, 1, 0)),
                     n - nb, (" (%d another tone)" % other) if other else ""))
+    own = sorted((v >> 7, p, v & 0x7F, nm) for (p, v), nm in patch_map.VARIATION_NAMES.items()
+                 if v >> 7 in patch_map.MAP_LABELS and (p, v) in patch_map.VARIATIONS)
+    if own:
+        L += ["", "A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro; "
+              "none, ours). Where a map holds another tone under a number, it is built as its own: "
+              + ", ".join("%s %d.%d %s (%s)" % (patch_map.MAP_LABELS[m], p, b, nm,
+                                                  VAR_RATED[(p, 128 * m + b)][0])
+                          for m, p, b, nm in own) + "."]
     L += ["", "### By family: built of each map's tones\n",
           "| family | " + " | ".join(nm for _, nm in SC_MAPS) + " |",
           "|---|" + "---|" * len(SC_MAPS)]

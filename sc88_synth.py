@@ -195,3 +195,19 @@ SC88_SYNTH = {
                dict(mod_dest=0, mod_amount=0.58, a_decay=0.5, a_sustain=0.2)),
     (103, 1): ("StarTheme 2", "MoogSciFiFX", dict(lfo1_rate=0.55, resonance=0.5)),
 }
+
+
+# THE OTHER MAPS' OWN SYNTH TONES (patch_map's map switch, bank select LSB):
+# where a map holds a different tone under a number than ours does. Keyed
+# (map, program, bank); map 1 the SC-55mkII's map, 2 the SC-88's.
+MAP_SYNTH = {
+    (1, 62, 16): ("Analog Brs1", "MoogSynthBrass1",
+                  dict(osc2_freq=c(14), f_attack=0.2, eg_amount=0.7, cutoff=0.5, a_attack=0.12)),
+    (1, 63, 16): ("Analog Brs2", "MoogSynthBrass2",
+                  dict(osc2_freq=c(18), f_attack=0.3, a_attack=0.2, cutoff=0.47,
+                       lfo1_dest=1, lfo1_depth=0.57, lfo1_rate=0.6)),
+    (2, 39, 8): ("Beef FMBass", "MoogSynthBass2",
+                 dict(osc1_wave=TRI, osc2_wave=TRI, osc2_level=1.0, osc2_octave=8, osc2_freq=0.5,
+                      osc1_level=0.0, mod_dest=0, mod_amount=0.66, sub_level=0.6, cutoff=0.58,
+                      resonance=0.1, f_decay=0.25, f_sustain=0.35)),
+}

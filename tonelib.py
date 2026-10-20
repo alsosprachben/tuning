@@ -20180,7 +20180,8 @@ def resolve_patch(msb, lsb, program, was_drums, rx_bank=True):
     """(drums, program, variation) for a program change under a latched bank.
 
     `was_drums` is what the channel was before -- channel 10 starts as drums.
-    Variation 0 is the capital tone; patch_map.variation_class falls back to it
+    The variation is a key of patch_map.VARIATIONS: the bank, read in the
+    map CC32 selects (patch_map.map_bank). Variation 0 is the capital tone; patch_map.variation_class falls back to it
     for any variation not built, as a Sound Canvas does.
     """
     if not rx_bank:
@@ -20191,7 +20192,9 @@ def resolve_patch(msb, lsb, program, was_drums, rx_bank=True):
         return False, int(program), int(lsb)
     if was_drums:
         return True, int(program), 0
-    return False, int(program), int(msb)
+    # GS: CC32 picks the Sound Canvas MAP the bank is read in (patch_map.map_bank:
+    # 1 SC-55, 2 SC-88, 3 SC-88Pro; 0 ours)
+    return False, int(program), __import__("patch_map").map_bank(program, int(msb), int(lsb))
 
 
 # ---------------------------------------------- CC71-78, the sound controllers

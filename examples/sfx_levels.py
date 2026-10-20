@@ -201,7 +201,9 @@ def var_mid(prog, bank, key, vel, path, secs=1.5):
     t = mido.MidiTrack()
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
-    t.append(mido.Message("control_change", channel=0, control=0, value=bank, time=0))
+    t.append(mido.Message("control_change", channel=0, control=0, value=bank & 0x7F, time=0))
+    if bank >> 7:               # a map's own tone (patch_map.map_bank): CC32 = the map
+        t.append(mido.Message("control_change", channel=0, control=32, value=bank >> 7, time=0))
     t.append(mido.Message("program_change", channel=0, program=prog, time=0))
     t.append(mido.Message("note_on", channel=0, note=key, velocity=vel, time=240))
     t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))

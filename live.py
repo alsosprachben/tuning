@@ -2487,8 +2487,14 @@ class Patch:
         if self.variation:
             # THE BANK FIRST, as a file selects a variation: blockrender
             # resolves the program change under the latched CC0
+            # ...AND THE MAP: a map's own tone (patch_map.map_bank's key 128 x
+            # map + bank) is CC0 = bank under CC32 = map
+            _b0, _b32 = __import__("patch_map").bank_select(self.variation)
             tr.append(mido.Message("control_change", channel=ch, control=0,
-                                   value=self.variation, time=0))
+                                   value=_b0, time=0))
+            if _b32:
+                tr.append(mido.Message("control_change", channel=ch, control=32,
+                                       value=_b32, time=0))
         tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
         if self.organ:
             # Draw everything so every rank emits partials AND speaks at the
@@ -3041,7 +3047,11 @@ class Part:
         if self.drums:
             return "-- %s kit" % drum_set_name(self.program)
         if self.variation:
-            return "%d.%d %s" % (self.program, self.variation, self.patch.cls_name)
+            # the bank as a file sends it, and a map's own tone (patch_map.map_bank's
+            # 128 x map + bank) says whose
+            _m = __import__("patch_map").MAP_LABELS.get(self.variation >> 7)
+            return "%d.%d %s%s" % (self.program, self.variation & 0x7F, self.patch.cls_name,
+                                   " (%s)" % _m if _m else "")
         return "%d %s" % (self.program, self.patch.cls_name)
 
     def moog(self):
@@ -16331,6 +16341,39 @@ def selftest():
               "  (32.127 %s -> %s; 119.127 -> %s)" % (_PMV.VARIATION_NAMES[(32, 127)],
                                                      _PMV.property_class_for_note(_m32, 60).__name__,
                                                      _PMV.property_class_for_note(_m32c, 60).__name__))
+        # THE MAP SWITCH (patch_map.map_bank): CC32 reads the bank in a Sound
+        # Canvas's map. 3.8 is the SC-55mkII's HonkyTonk w under LSB 1, ours
+        # (Old Upright, the SC-88's) under 2, and under 3 the capital (the
+        # SC-88Pro's Honky-tonk 2 is not built); the SC-88Pro's 39.8 is the
+        # SC-88's own Beef FM Bass; a bank a map lacks is its capital
+        _vpm = lambda bank, lsb, prog: [n[6] for n in B.parse(_bfile(
+            [_M("control_change", channel=0, control=0, value=bank),
+             _M("control_change", channel=0, control=32, value=lsb),
+             _M("program_change", channel=0, program=prog)] + _on(0, 60)))[2]][0]
+        _mp = [getattr(_vpm(8, m, 3), "variation", 0) for m in (0, 1, 2, 3)]
+        _mb = getattr(_vpm(8, 3, 39), "variation", 0)
+        _mc = getattr(_vpm(16, 3, 0), "variation", 0)
+        check("file: CC32 picks the map -- 3.8 ours, the SC-55's own, ours, the capital; "
+              "88Pro 39.8 the SC-88's; 88Pro 0.16 the capital",
+              _mp == [8, 136, 8, 0] and _mb == 264 and _mc == 0
+              and _PMV.property_class_for_note(_vpm(8, 1, 3), 60) is _PMV.VARIATIONS[(3, 136)](60)
+              and _PMV.bank_select(136) == (8, 1),
+              "  (3.8 under LSB 0-3: %s; 39.8/3 %d; 0.16/3 %d)" % (_mp, _mb, _mc))
+        _lv = Live(program=0, rate=48000, frames=128, verbose=False)
+        _lv.on_midi(_M("control_change", channel=0, control=0, value=16))
+        _lv.on_midi(_M("control_change", channel=0, control=32, value=1))
+        _lv.on_midi(_M("program_change", channel=0, program=62)); _lv.apply(0)
+        _okm = _lv.wait_patch(90)
+        _pm = _lv.parts[0]
+        _dm = _pm.to_dict()
+        check("live: CC0 16, CC32 1, program 62 is the SC-55's own Analog Brs1, "
+              "its template built under the same map, and a preset keeps it",
+              _okm and _pm.variation == 144 and _pm.patch.key[3] == 144
+              and _pm.patch._voice_class(60) is _PMV.VARIATIONS[(62, 144)]
+              and _pm.label().startswith("62.16 ") and _pm.label().endswith("(SC-55)")
+              and Part.from_dict(_dm).patch.key[3] == 144,
+              "  (%s, %s)" % (_pm.patch.key, _pm.label()))
+        _lv.shutdown()
         _lv = Live(program=0, rate=48000, frames=128, verbose=False)
         _lv.on_midi(_M("control_change", channel=0, control=0, value=5))
         _lv.on_midi(_M("program_change", channel=0, program=125)); _lv.apply(0)

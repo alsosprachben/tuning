@@ -367,3 +367,15 @@ CAPITAL_DESC.update({
     126: "applause",
     127: "gunshot",
 })
+
+
+# THE MAPS' OWN TONES (patch_map.map_bank: key 128 x map + bank)
+VARIATION_DESC.update({
+    (3, 128 + 8): "wide: keys spread in stereo",
+    (4, 128 + 16): "bell an octave up on hard hits",
+    (5, 128 + 16): "bell an octave up on hard hits",
+    (62, 128 + 16): "Moog: slow filter swell, wide",
+    (63, 128 + 16): "Moog: slower, darker, vibrato",
+    (4, 256 + 8): "wide and softer Rhodes",
+    (39, 256 + 8): "Moog: FM triangles + sub",
+})

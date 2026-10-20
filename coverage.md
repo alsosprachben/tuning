@@ -1055,22 +1055,24 @@ A later map can put another tone under a number we built; that one is not counte
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
 | SC-55 | 188 | 188 | 100% | 153 | 35 | 0 | 0 | 0 | 0 |
-| SC-55mkII | 226 | 215 | 95% | 171 | 44 | 0 | 0 | 0 | 11 (5 another tone) |
-| SC-88 | 409 | 338 | 83% | 223 | 115 | 0 | 0 | 0 | 71 (2 another tone) |
-| SC-88Pro | 765 | 327 | 43% | 216 | 111 | 0 | 0 | 0 | 438 (13 another tone) |
+| SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
+| SC-88 | 409 | 340 | 83% | 224 | 116 | 0 | 0 | 0 | 69 |
+| SC-88Pro | 765 | 329 | 43% | 217 | 112 | 0 | 0 | 0 | 436 (11 another tone) |
+
+A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
 ### By family: built of each map's tones
 
 | family | SC-55 | SC-55mkII | SC-88 | SC-88Pro |
 |---|---|---|---|---|
-| Piano | 11/11 | 18/21 | 22/26 | 20/39 |
+| Piano | 11/11 | 21/21 | 23/26 | 21/39 |
 | Chromatic Percussion | 9/9 | 12/12 | 13/15 | 13/20 |
 | Organ | 12/12 | 16/16 | 28/30 | 23/49 |
 | Guitar | 16/16 | 17/19 | 20/28 | 20/49 |
-| Bass | 10/10 | 12/12 | 22/31 | 22/76 |
+| Bass | 10/10 | 12/12 | 23/31 | 23/76 |
 | Strings | 8/8 | 8/9 | 8/11 | 8/20 |
 | Ensemble | 10/10 | 10/11 | 20/29 | 20/63 |
-| Brass | 11/11 | 11/15 | 17/27 | 13/51 |
+| Brass | 11/11 | 13/15 | 17/27 | 13/51 |
 | Reed | 8/8 | 8/8 | 8/11 | 8/20 |
 | Pipe | 8/8 | 8/8 | 8/9 | 8/22 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 30/80 |
@@ -1080,13 +1082,11 @@ A later map can put another tone under a number we built; that one is not counte
 | Percussive | 12/12 | 13/13 | 22/28 | 22/47 |
 | Sound Effects | 40/40 | 41/41 | 46/49 | 46/73 |
 
-### The SC-88 map's 71 still to build, by what they take
+### The SC-88 map's 69 still to build, by what they take
 
 **refit** (49: an articulation of one we have, wanting a fit to a reference): 4.25 Hard Rhodes, 4.26 MellwRhodes, 5.24 Hard FM EP, 11.1 Hard Vibe, 15.8 Cimbalom, 22.1 Harmonica 2, 24.32 Nylon Gt.2, 24.40 Lequint Gt., 25.32 Steel Gt.2, 26.1 Mellow Gt., 28.1 MutedDis.Gt, 28.16 Funk Gt.2, 30.1 Dist. Gt2, 30.2 DazedGuitar, 33.1 FingeredBs2, 33.2 Jazz Bass, 34.8 MutePickBs., 35.1 FretlessBs2, 35.2 FretlessBs3, 35.3 FretlessBs4, 35.5 Mr.Smooth, 36.8 Reso Slap, 40.8 Slow Violin, 44.8 SlowTremolo, 44.9 SuspenseStr, 48.1 Strings 2, 48.10 TremoloOrch, 49.1 Slow Str. 2, 49.8 Legato Str., 49.9 WarmStrings, 52.9 Mello Choir, 52.32 ChoirAahs 2, 55.8 Impact Hit, 55.9 Philly Hit, 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 57.1 Trombone 2, 58.1 Tuba 2, 60.1 Fr.Horn 2, 60.8 Fr.HornSolo, 61.16 Brass Fall, 63.1 Soft Brass, 65.8 Hyper Alto, 66.8 BreathyTnr., 105.1 Muted Banjo, 106.1 Tsugaru, 111.1 Shanai 2, 120.5 Bass Slide
 
 **new** (20: an instrument we have not modelled, wanting references): 16.24 CheeseOrgan, 56.8 Flugel Horn, 71.8 Bs Clarinet, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 107.16 Kanoon, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 112.16 RAMA Cymbal, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
-
-**other** (2: a different tone under a number we built): 4.8 St.Soft EP, 39.8 Beef FMBass
 
 
 ## The class tree
