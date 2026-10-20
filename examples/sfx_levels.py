@@ -4,6 +4,7 @@ program's note played alone, its level re a piano C4 at the same velocity.
 
     python3 examples/sfx_levels.py [--vel=110] [--progs=127:55,126:60,... | --all] [SF2 ...]
     python3 examples/sfx_levels.py --trim     the bank to GeneralUser GS (writes patch_map.py)
+    python3 examples/sfx_levels.py --var-trim the GS variations to GU's own presets for them
 
 Each SoundFont (examples/gm_release.py's four: FluidR3, GeneralUser GS,
 MuseScore General, TimGM6mb) through timidity, reverb and chorus off; ours
@@ -194,9 +195,113 @@ def trim(progs, vels=(64, 100), passes=2):
     print("  written: %d program trims, kit %+.1f dB" % (len(PM.PROGRAM_TRIM_DB), PM.KIT_TRIM_DB))
 
 
+def var_mid(prog, bank, key, vel, path, secs=1.5):
+    """note_mid on a GS bank: CC0 before the program change."""
+    m = mido.MidiFile(ticks_per_beat=480)
+    t = mido.MidiTrack()
+    m.tracks.append(t)
+    t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    t.append(mido.Message("control_change", channel=0, control=0, value=bank, time=0))
+    t.append(mido.Message("program_change", channel=0, program=prog, time=0))
+    t.append(mido.Message("note_on", channel=0, note=key, velocity=vel, time=240))
+    t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=int(secs * 960)))
+    t.append(mido.MetaMessage("end_of_track", time=1920))
+    m.save(path)
+
+
+def gu_variations():
+    """The GS variations GeneralUser GS has a preset for: [(program, bank)]."""
+    import struct
+    import patch_map as PM
+    d = open(gu_path(), "rb").read()
+    i = d.find(b"phdr")
+    n = struct.unpack("<I", d[i + 4:i + 8])[0] // 38
+    have = {struct.unpack("<HH", d[i + 8 + 38 * k + 20:i + 8 + 38 * k + 24])[::-1] for k in range(n)}
+    return sorted((p, v) for (p, v) in PM.VARIATIONS if v != 127 and (v, p) in have
+                  and (p, v) in PM.VARIATION_NAMES)
+
+
+def var_trim(vels=(64, 100), passes=1):
+    """VARIATION_TRIM_FIT: each GS variation's level to GeneralUser GS's own
+    preset for it, as trim() does the programs (velocities 64 and 100, K
+    level re a piano C4, GU's less ours, averaged) -- from the variation's
+    default trim (its capital's, or the SFX set's). Written into patch_map.py
+    as the table the defaults are overridden by. Bank 127 is not here: the
+    MT-32 set plays each tone at its target's level."""
+    import re
+    import patch_map as PM
+    pairs = gu_variations()
+    sf = gu_path()
+    with tempfile.TemporaryDirectory() as d:
+        cfg = os.path.join(d, "v.cfg")
+        with open(cfg, "w") as f:
+            for b in sorted({0} | {v for _, v in pairs}):
+                f.write("bank %d\n" % b)
+                for p in sorted({p for p, v in pairs if v == b} | ({REF[0]} if b == 0 else set())):
+                    f.write('%d %%font "%s" %d %d\n' % (p, sf, b, p))
+
+        def gu(v_):
+            out = {}
+            for key in pairs + [REF]:
+                p, b = (key if key != REF else (REF[0], 0))
+                mid, wav = os.path.join(d, "g.mid"), os.path.join(d, "g.wav")
+                var_mid(p, b, KEY_OF.get(p, 60) if key != REF else REF[1], v_, mid)
+                subprocess.run(["timidity", "-c", cfg, "-Ow", "-o", wav, "-s", "44100",
+                                "-EFreverb=d", "-EFchorus=d", "--quiet=2", mid],
+                               check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                a, sr = read(wav)
+                a = a.astype(np.float64)
+                out[key] = (levels([a[:, 0], a[:, 1]] if a.ndim > 1 else [a], sr)[1]
+                            if np.abs(a).max() > 0 else None)
+            return out
+
+        def ours_(v_):
+            os.environ.setdefault("TUNING_REFLECT", "0")
+            os.environ.setdefault("TUNING_MASTER_DB", "-14")
+            import blockrender as B
+            out = {}
+            for key in pairs + [REF]:
+                p, b = (key if key != REF else (REF[0], 0))
+                mid = os.path.join(d, "o.mid")
+                var_mid(p, b, KEY_OF.get(p, 60) if key != REF else REF[1], v_, mid)
+                L, R = B.render(mido.MidiFile(mid))[:2]
+                out[key] = levels([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)[1]
+            return out
+        g = {v: gu(v) for v in vels}
+        for it in range(passes + 1):
+            o = {v: ours_(v) for v in vels}
+            diff = {}
+            for key in pairs:
+                ds = [(g[v][key] - g[v][REF]) - (o[v][key] - o[v][REF]) for v in vels
+                      if g[v].get(key) is not None and o[v].get(key) is not None
+                      and np.isfinite(g[v][key]) and np.isfinite(o[v][key]) and o[v][key] > -200]
+                if ds:
+                    diff[key] = float(np.mean(ds))
+            rms = float(np.sqrt(np.mean(np.square(list(diff.values()))))) if diff else 0.0
+            print("  pass %d: %d variations off GU by %.1f dB rms (worst %s)" % (
+                it, len(diff), rms, ", ".join("%d.%d %+.1f" % (k[0], k[1], dv) for k, dv in
+                                              sorted(diff.items(), key=lambda kv: -abs(kv[1]))[:6])), flush=True)
+            if it == passes:
+                break
+            for (p, v), dv in diff.items():
+                base = PM.VARIATION_TRIM_DB.get((p, v), PM.PROGRAM_TRIM_DB.get(p, 0.0))
+                PM.VARIATION_TRIM_DB[(p, v)] = round(base + dv, 1)
+                PM.VARIATION_TRIM_FIT[(p, v)] = PM.VARIATION_TRIM_DB[(p, v)]
+    path = os.path.join(HERE, "patch_map.py")
+    src = open(path).read()
+    tab = "{" + ", ".join("(%d, %d): %.1f" % (p, v, PM.VARIATION_TRIM_FIT[(p, v)])
+                          for p, v in sorted(PM.VARIATION_TRIM_FIT)) + "}"
+    src = re.sub(r"^VARIATION_TRIM_FIT = .*$", lambda _: "VARIATION_TRIM_FIT = " + tab, src, count=1, flags=re.M)
+    open(path, "w").write(src)
+    print("  written: %d variation trims" % len(PM.VARIATION_TRIM_FIT))
+
+
 def main(argv):
     if "--trim" in argv:
         trim(ALL)
+        return 0
+    if "--var-trim" in argv:
+        var_trim()
         return 0
     vel = int(next((a.split("=")[1] for a in argv if a.startswith("--vel=")), 110))
     progs = next((tuple(tuple(int(v) for v in x.split(":")) for x in a.split("=")[1].split(","))

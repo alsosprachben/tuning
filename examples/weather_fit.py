@@ -45,6 +45,10 @@ VOICES = {
                 (40, 400)),
     "wind":    ("SfxWindProperties", 81, "wind/117611__swiftoid__wind_howl2_stereo.wav", None),
     "stream":  ("SfxStreamProperties", 83, "stream/382322__sterferny__stream.wav", (1000, 16000)),
+    # A MELODIC VARIATION (its key a (program, bank, note)), against
+    # GeneralUser GS's own tone on it held HOLD seconds (gu_take): no
+    # recording of the SC-55's exists
+    "burst":   ("SfxBurstNoiseProperties", (125, 9, 60), "GU:125:9:60", (100, 400)),
     # THE VEHICLES (63-69): read from a stretch of the recording (SEGMENT), the
     # crash whole (SHORT); the train's FLAC decoded by sox into SCRATCH
     "engine":  ("SfxEngineProperties", 63, "engine/433584__jackthemurray__car-starting-and-accelerating.wav", None),
@@ -97,9 +101,40 @@ TABLE = {}
 HARMCOL = {"scream": 1243.0, "laugh": 337.0}
 
 
+def gu_take(prog, bank, note, secs=HOLD):
+    """GeneralUser GS's tone on (prog, bank), `note` held `secs`, through
+    timidity (reverb and chorus off): kept beside the font, measured only."""
+    import subprocess
+    import tempfile
+    import mido
+    out = os.path.expanduser("~/Documents/refs/soundfonts/gu_renders/gu_%d_%d_%d.wav" % (prog, bank, note))
+    if os.path.exists(out):
+        return out
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    sf = os.path.expanduser("~/Documents/refs/soundfonts/GeneralUser-GS.sf2")
+    with tempfile.TemporaryDirectory() as d:
+        cfg, mid = os.path.join(d, "t.cfg"), os.path.join(d, "t.mid")
+        open(cfg, "w").write('bank %d\n%d %%font "%s" %d %d\n' % (bank, prog, sf, bank, prog))
+        m = mido.MidiFile(ticks_per_beat=480)
+        t = mido.MidiTrack(); m.tracks.append(t)
+        t.append(mido.Message("control_change", control=0, value=bank))
+        t.append(mido.Message("program_change", program=prog))
+        t.append(mido.Message("note_on", note=note, velocity=100, time=240))
+        t.append(mido.Message("note_off", note=note, velocity=0, time=int(secs * 960)))
+        t.append(mido.MetaMessage("end_of_track", time=960))
+        m.save(mid)
+        subprocess.run(["timidity", "-c", cfg, "-Ow", "-o", out, "-s", "44100", "-EFreverb=d",
+                        "-EFchorus=d", "--quiet=2", mid], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return out
+
+
 def load(path, seg=None):
     from scipy.io import wavfile
     from scipy.signal import resample_poly
+    if "GU:" in path:
+        prog, bank, note = (int(v) for v in path.split("GU:")[1].split(":"))
+        path = gu_take(prog, bank, note)
     if path.endswith("STARSHIP"):
         import subprocess
         import tempfile
@@ -137,6 +172,8 @@ def kurt(x, sr, band):
 
 
 def render(key):
+    if isinstance(key, tuple):
+        return render_melodic(*key)
     import elkit_fit as E
     import percussion_map as P
     E.KIT = 56
@@ -159,6 +196,25 @@ def render(key):
     P.KIT_GATE[56][key] = gate
     P._RING_CLASSES.clear()
     return 0.5 * (np.asarray(L, np.float64) + np.asarray(Rr, np.float64)), 44100
+
+
+def render_melodic(prog, bank, note):
+    """A melodic variation's note held HOLD seconds, as gu_take holds GU's."""
+    import tempfile
+    import mido
+    import blockrender as B
+    with tempfile.TemporaryDirectory() as d:
+        mid = os.path.join(d, "w.mid")
+        m = mido.MidiFile(type=1, ticks_per_beat=480)
+        t = mido.MidiTrack(); m.tracks.append(t)
+        t.append(mido.Message("control_change", channel=0, control=0, value=bank, time=0))
+        t.append(mido.Message("program_change", channel=0, program=prog, time=0))
+        t.append(mido.Message("note_on", channel=0, note=note, velocity=100, time=240))
+        t.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=int(HOLD * 960)))
+        t.append(mido.MetaMessage("end_of_track", time=960))
+        m.save(mid)
+        L, Rr = B.render(mid)[:2]
+    return 0.5 * (np.asarray(L, np.float64) + np.asarray(Rr, np.float64)), B.SR
 
 
 def measure(x, sr, band, short=False, f0=None):

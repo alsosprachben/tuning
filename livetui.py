@@ -1255,6 +1255,15 @@ class TUI:
             if (delta > 0) != self.switch_on(c["key"], c.get("channel")):
                 self.fire(c)
             return
+        if kind == "selector":
+            # a switch of several positions: its next one that way
+            import scanner as SCN
+            starts = [v for _n, v in SCN.POSITIONS]
+            i = max(k for k, v in enumerate(starts) if c.get("value", 0) >= v)
+            i = max(0, min(len(starts) - 1, i + (1 if delta > 0 else -1)))
+            self.send_control(c, starts[i])
+            self.say("%s %s" % (LV.CONTROL_BY_KEY[c["key"]][1], SCN.POSITIONS[i][0]))
+            return
         step = (128 if kind == "bend" else 1) * (8 if big else 1)
         self.send_control(c, c.get("value", 0) + delta * step)
 
@@ -1319,6 +1328,12 @@ class TUI:
                 self.addstr(scr, y, 27, " ON " if on else " off",
                             (C("green") | curses.A_BOLD | curses.A_REVERSE) if on
                             else C("dim"))
+            elif kind == "selector":
+                import scanner as SCN
+                pos = SCN.setting_from_cc(c.get("value", default))
+                self.addstr(scr, y, 27, " ".join(("[%s]" % n if n == pos else " %s " % n)
+                                                 for n, _v in SCN.POSITIONS),
+                            C("green") if here else 0)
             else:
                 v = c.get("value", default)
                 lo, hi = (-8192, 8191) if kind == "bend" else (0, 127)

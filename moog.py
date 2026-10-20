@@ -489,7 +489,16 @@ def v1_knob_attack(v):
 # straight line to 0.05 octave; past 0.55 the corner is above the band. Its
 # BOTTOM IS ~190 Hz, not 20: a first fit, misled by the floor, guessed the
 # low end and put every converted patch's corner far too low on the knob.
-CUT_LO_HZ, CUT_OCT = 189.0, 11.14
+V5_CUT_LO_HZ, V5_CUT_OCT = 189.0, 11.14
+# ...AND ON THE FIRMWARE AFTER IT (re-measured 2026-10-19, the same test from
+# the INIT preset: examples/messenger_fit.py cutoff; ~/Documents/refs/
+# messenger_ben/calib_2026-10-19.txt) THE SAME KNOB IS 4.3-4.5 OCTAVES LOWER:
+# 36 Hz at 0.2, 409 at 0.5, 884 at 0.6 -- 7.9 Hz * 2^(11.38 v), a straight
+# line to 0.02 octave, 21 kHz at full: a ladder's whole range, where the
+# 190 Hz bottom above was a firmware's. LFO 1 on the cutoff read the same
+# -4.33 octaves at every depth; every other law measured as before. A patch
+# written on the old law (synth_units 5) keeps its corners: convert_v5.
+CUT_LO_HZ, CUT_OCT = 7.9, 11.38
 
 
 def knob_cutoff(v):
@@ -1001,11 +1010,12 @@ MESSENGER_LSB = {cc + 32: cc for cc, v in MESSENGER_CC.items() if v and v[1] in 
 # BEN'S MESSENGER'S A440 is not at its TUNE knob's centre: it plays 40.5 cents
 # sharp there (examples/messenger_fit.py tune; still so after its own tuning
 # procedure, and creeping -- 36.7, 38.5, 40.5 over one warm session -- so a
-# property of this unit: re-measure, and set this). TUNE is its master tune,
+# property of this unit: re-measure, and set this). 28.3 on the firmware after
+# (2026-10-19, an hour on, the room cool). TUNE is its master tune,
 # 1401 cents a unit, so the chart moves it by that much each way: the panel's
 # 0.5, A440 here, is sent as the hardware's own A440 and read back as 0.5.
 # (The panel's bottom 40 cents are then past the hardware knob's end.)
-MESSENGER_TUNE_CENTS = 40.5
+MESSENGER_TUNE_CENTS = 28.3
 _TUNE_TRIM = MESSENGER_TUNE_CENTS / (2.0 * SEMIS * 100.0)
 
 
@@ -1272,6 +1282,16 @@ def convert_v4(knobs, context=None):
     if 'lfo1_shape' in out and int(out['lfo1_shape']) in (1, 2):
         out['lfo1_shape'] = 3 - int(out['lfo1_shape'])
     return out
+
+def convert_v5(knobs, context=None):
+    """A panel written on the firmware before (synth_units 5 and before: the
+    cutoff 189 Hz * 2^(11.14 v)) as this: each CUTOFF the same corner. Past
+    this law's top (21 kHz: the old 0.61 and up) it is fully open."""
+    out = dict(knobs)
+    if 'cutoff' in out:
+        out['cutoff'] = cutoff_knob(V5_CUT_LO_HZ * 2.0 ** (V5_CUT_OCT * _clip01(out['cutoff'])))
+    return out
+
 
 PANEL = convert_v1(PANEL_V1)
 MG = 128                 # the grid the kernel reads rows on (synthkernel MOOG_GRID)

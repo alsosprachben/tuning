@@ -2,7 +2,7 @@
 """A/B for a GM program between two trees: a phrase of staccato chords and a
 line, the program as it plays (its own default registration and rotor).
 
-    python3 examples/program_ab.py render TREE PROGRAM OUT.npz
+    python3 examples/program_ab.py render TREE PROGRAM[.BANK] OUT.npz
     python3 examples/program_ab.py ab BEFORE.npz AFTER.npz OUT.mp3
 
 Run `render` once with each tree (it renders through the TREE it is given),
@@ -15,12 +15,14 @@ import sys
 import numpy as np
 
 
-def phrase(B, program):
+def phrase(B, program, bank=0):
     import mido
     m = mido.MidiFile(type=1, ticks_per_beat=480)
     t = mido.MidiTrack()
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    if bank:
+        t.append(mido.Message("control_change", channel=0, control=0, value=bank, time=0))
     t.append(mido.Message("program_change", channel=0, program=program, time=0))
     ev = []
     # staccato chords on the beat: C, F, G, C
@@ -47,7 +49,8 @@ def phrase(B, program):
 def render(tree, program, out):
     sys.path[:0] = [tree, os.path.join(tree, "examples")]
     import blockrender as B
-    x, sr = phrase(B, int(program))
+    p, _, b = str(program).partition(".")
+    x, sr = phrase(B, int(p), int(b or 0))
     np.savez(out, x=x, sr=sr)
     print("%s: program %s rendered" % (tree, program))
 

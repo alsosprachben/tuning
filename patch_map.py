@@ -572,7 +572,8 @@ def property_class_for_program(program):
     if v:
         got = VARIATIONS.get((int(program) & 0x7F, v))
         if got is not None:
-            return got
+            # a ROUTED variation (a function of the note): its middle register
+            return got if isinstance(got, type) else got(60)
     return PROGRAM_CLASS.get(program & 0x7F, PluckedStringProperties)
 
 
@@ -796,9 +797,14 @@ def property_class_for_note(program, note):
     belongs to a bigger instrument entirely (SOLO_SPLIT).
     A VARIATION (VariationProgram) is its own class, ahead of every router.
     """
+    if getattr(program, "layer", None) is not None:
+        return layer_class(program, note)
     v = getattr(program, "variation", 0)
     if v and (int(program) & 0x7F, v) in VARIATIONS:
-        return VARIATIONS[(int(program) & 0x7F, v)]
+        got = VARIATIONS[(int(program) & 0x7F, v)]
+        # a ROUTED variation is a function of the note (an ensemble's, whose
+        # register picks the instrument): the variation wraps the router
+        return got if isinstance(got, type) else got(note)
     prog = program & 0x7F
     if prog in BRASS_ENSEMBLE:
         return brass_section(_brass_body(note))
@@ -859,6 +865,18 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
     PROGRAM_CLASS[63] = MoogSynthBrass2          # slower, darker, wider apart
     PROGRAM_CLASS[50] = MoogSynthStrings1        # two saws 7 c apart: no chorus
     PROGRAM_CLASS[51] = MoogSynthStrings2        # slower, darker, 11 c
+    # GS's bank-8 variations of them (tonelib: starting panels, voiced on
+    # Ben's Messenger)
+    from tonelib import MoogSynthBass3, MoogSynthBass4, MoogSynthStrings3, \
+        MoogSynthBrass3, MoogSynthBrass4
+    VARIATIONS[(38, 8)] = MoogSynthBass3
+    VARIATIONS[(39, 8)] = MoogSynthBass4
+    VARIATIONS[(50, 8)] = MoogSynthStrings3
+    VARIATIONS[(62, 8)] = MoogSynthBrass3
+    VARIATIONS[(63, 8)] = MoogSynthBrass4
+    # GS 124.1 "Telephone 2": the electronic tone ringer, a small synth
+    from tonelib import MoogTelephone2
+    VARIATIONS[(124, 1)] = MoogTelephone2
     PROGRAM_CLASS[89] = MoogWarmPad              # a low ladder, a slow swell
     PROGRAM_CLASS[90] = MoogPolysynthPad         # open, and a front to play on
     PROGRAM_CLASS[94] = MoogHaloPad              # squares, and NOISE for the air
@@ -916,8 +934,13 @@ def melodic_sfx(key, kit=56):
     import percussion_map as _PM
     from math import log2
     if (key, kit) not in _MELODIC_SFX:
-        name, cls, freq = _PM.KITS[kit][key]
-        rc = _PM._with_ring(cls, key, kit)
+        if key in _PM.KITS.get(kit, {}):
+            name, cls, freq = _PM.KITS[kit][key]
+            rc = _PM._with_ring(cls, key, kit)
+        else:
+            # Standard's own (and any set's note it takes from Standard)
+            name, cls, freq = _PM.PERCUSSION[key]
+            rc = _PM._with_ring(cls, key)
         so = float(getattr(rc, "sounding_octaves", 0.0))
         # ...AND TRANSPOSED WHOLE: built at the kit's pitch, every frequency it
         # emits -- its noise bands and grains, which are in Hz, with its
@@ -958,9 +981,233 @@ for _pv, _k in SFX_VARIATIONS.items():
     # noise +34 dB over the kit's, 124's telephone -25)
     VARIATION_TRIM_DB.setdefault(_pv, KIT_TRIM_DB)
 
+# GS BANK 127: THE MT-32 SET (SC-55 p.69) -- the MT-32's 128 tones on the
+# GS programs, for files written for one (a Sound Canvas in its MT-32 map).
+# Each its nearest voice here: a GM program (its router and all, at that
+# program's own level), or for a drum the MT-32 played from the keyboard,
+# the fitted kit key (melodic_sfx, set 0). Synth tones the MT-32 made its own
+# (Fantasy, Doctor Solo, Bellsinger) take the GM synth program nearest in
+# kind. (mt32mux still maps an MT-32 FILE by its track names: this is for a
+# file that selects bank 127 itself.)
+MT32_SET = (
+    ("Acou Piano 1", 0), ("Acou Piano 2", 1), ("Acou Piano 3", 1), ("Elec Piano 1", 4),
+    ("Elec Piano 2", 5), ("Elec Piano 3", 4), ("Elec Piano 4", 5), ("Honkytonk", 3),
+    ("Elec Org 1", 16), ("Elec Org 2", 17), ("Elec Org 3", 18), ("Elec Org 4", 16),
+    ("Pipe Org 1", 19), ("Pipe Org 2", 19), ("Pipe Org 3", 20), ("Accordion", 21),
+    ("Harpsi 1", 6), ("Harpsi 2", 6), ("Harpsi 3", 6), ("Clavi 1", 7),
+    ("Clavi 2", 7), ("Clavi 3", 7), ("Celesta 1", 8), ("Celesta 2", 8),
+    ("Syn Brass 1", 62), ("Syn Brass 2", 63), ("Syn Brass 3", 62), ("Syn Brass 4", 63),
+    ("Syn Bass 1", 38), ("Syn Bass 2", 39), ("Syn Bass 3", 38), ("Syn Bass 4", 39),
+    ("Fantasy", 88), ("Harmo Pan", 89), ("Chorale", 52), ("Glasses", 98),
+    ("Soundtrack", 97), ("Atmosphere", 99), ("Warm Bell", 14), ("Funny Vox", 54),
+    ("Echo Bell", 102), ("Ice Rain", 96), ("Oboe 2001", 68), ("Echo Pan", 75),
+    ("Doctor Solo", 81), ("School Daze", 14), ("Bellsinger", 85), ("Square Wave", 80),
+    ("Str Sect 1", 48), ("Str Sect 2", 48), ("Str Sect 3", 49), ("Pizzicato", 45),
+    ("Violin 1", 40), ("Violin 2", 40), ("Cello 1", 42), ("Cello 2", 42),
+    ("Contrabass", 43), ("Harp 1", 46), ("Harp 2", 46), ("Guitar 1", 24),
+    ("Guitar 2", 25), ("Elec Gtr 1", 26), ("Elec Gtr 2", 27), ("Sitar", 104),
+    ("Acou Bass 1", 32), ("Acou Bass 2", 32), ("Elec Bass 1", 33), ("Elec Bass 2", 34),
+    ("Slap Bass 1", 36), ("Slap Bass 2", 37), ("Fretless 1", 35), ("Fretless 2", 35),
+    ("Flute 1", 73), ("Flute 2", 73), ("Piccolo 1", 72), ("Piccolo 2", 72),
+    ("Recorder", 74), ("Pan Pipes", 75), ("Sax 1", 64), ("Sax 2", 65),
+    ("Sax 3", 66), ("Sax 4", 67), ("Clarinet 1", 71), ("Clarinet 2", 71),
+    ("Oboe", 68), ("Engl Horn", 69), ("Bassoon", 70), ("Harmonica", 22),
+    ("Trumpet 1", 56), ("Trumpet 2", 56), ("Trombone 1", 57), ("Trombone 2", 57),
+    ("Fr Horn 1", 60), ("Fr Horn 2", 60), ("Tuba", 58), ("Brs Sect 1", 61),
+    ("Brs Sect 2", 61), ("Vibe 1", 11), ("Vibe 2", 11), ("Syn Mallet", 12),
+    ("Windbell", 112), ("Glock", 9), ("Tube Bell", 14), ("Xylophone", 13),
+    ("Marimba", 12), ("Koto", 107), ("Sho", 20), ("Shakuhachi", 77),
+    ("Whistle 1", 78), ("Whistle 2", 78), ("Bottleblow", 76), ("Breathpipe", 76),
+    ("Timpani", 47), ("Melodic Tom", 117), ("Deep Snare", ("kit", 38)), ("Elec Perc 1", 118),
+    ("Elec Perc 2", 118), ("Taiko", 116), ("Taiko Rim", 116), ("Cymbal", ("kit", 49)),
+    ("Castanets", ("kit", 85)), ("Triangle", ("kit", 81)), ("Orche Hit", 55), ("Telephone", 124),
+    ("Bird Tweet", 123), ("One Note Jam", 28), ("Water Bell", 98), ("Jungle Tune", 108),
+)
+assert len(MT32_SET) == 128
+
+
+def aliased_variation(program):
+    """VARIATIONS entry: another program's voice, note by note (its router)."""
+    def pick(note, _p=program):
+        return property_class_for_note(_p, note)
+    return pick
+
+
+for _i, (_nm, _to) in enumerate(MT32_SET):
+    VARIATION_NAMES[(_i, 127)] = _nm
+    if isinstance(_to, tuple):
+        VARIATIONS[(_i, 127)] = melodic_sfx(_to[1], kit=0)
+        VARIATION_TRIM_DB[(_i, 127)] = KIT_TRIM_DB
+    else:
+        VARIATIONS[(_i, 127)] = aliased_variation(_to)
+        VARIATION_TRIM_DB[(_i, 127)] = PROGRAM_TRIM_DB.get(_to, 0.0)
+
+# GS 125.9 "Burst Noise": a hiss and low bursts, fitted to GeneralUser's own
+# (tonelib.SfxBurstNoiseProperties); at the SFX set's level until levelled
+from tonelib import SfxBurstNoiseProperties as _SBN
+VARIATIONS[(125, 9)] = _SBN
+VARIATION_TRIM_DB.setdefault((125, 9), KIT_TRIM_DB)
+
 # GS 125.5 "Siren": Helmholtz's double siren (tonelib.HelmholtzSirenProperties,
 # siren.py) -- the key's pitch the 12-rows' at full air, the rows its stops.
 # At the SFX set's level until levelled against GeneralUser's own.
 from tonelib import HelmholtzSirenProperties as _HSP
 VARIATIONS[(125, 5)] = _HSP
 VARIATION_TRIM_DB.setdefault((125, 5), KIT_TRIM_DB)
+
+# GS 19.8 "Church Org. 2": the church organ's principal chorus to the fourth
+# harmonic, 8' 4' 2 2/3' 2' (tonelib.ChurchOrgan2Properties); its level the
+# capital's trim, the extra ranks' own loudness on top, as on the instrument
+from tonelib import ChurchOrgan2Properties as _CO2
+VARIATIONS[(19, 8)] = _CO2
+
+# GS 6.8 "Coupled Hps.": the harpsichord's 8' and 4' (tonelib.CoupledHarpsichordProperties)
+from tonelib import CoupledHarpsichordProperties as _CHP
+VARIATIONS[(6, 8)] = _CHP
+
+# GS 21.8 "Accordion It": the musette, M- M M+ (tonelib.AccordionItalianProperties)
+from tonelib import AccordionItalianProperties as _AIP
+VARIATIONS[(21, 8)] = _AIP
+
+# GS 4.8 / 5.8 / 16.8 / 17.8: the program's own voice as a detuned pair
+# (tonelib.Detuned*Properties, chorus._pair)
+from tonelib import (DetunedEP1Properties as _DE1, DetunedEP2Properties as _DE2,
+                     DetunedOrgan1Properties as _DO1, DetunedOrgan2Properties as _DO2)
+VARIATIONS[(4, 8)] = _DE1
+VARIATIONS[(5, 8)] = _DE2
+VARIATIONS[(16, 8)] = _DO1
+VARIATIONS[(17, 8)] = _DO2
+
+# GS 27.8 / 28.8: the Strat through a chorus pedal; the Strat on position 4,
+# clean (tonelib.ChorusGuitarProperties, FunkGuitarProperties)
+from tonelib import ChorusGuitarProperties as _CGP, FunkGuitarProperties as _FGP
+VARIATIONS[(27, 8)] = _CGP
+VARIATIONS[(28, 8)] = _FGP
+
+# GS 115.8 / 116.8 / 117.8 / 118.8: kit voices played from the keyboard, as the
+# SFX variations are (melodic_sfx: the kit's ring, gate, level and strokes,
+# C4 at its kit pitch, transposed whole) -- a tom set's MIDDLE tom, as a
+# sampler maps one tom across the keys
+for _pv, (_k, _kit) in {(115, 8): (85, 0),       # Castanets (Standard)
+                        (116, 8): (36, 48),      # Concert BD 1 (Orchestra set)
+                        (117, 8): (47, 24),      # Elec Mid Tom 1: the Simmons (Electronic set)
+                        (118, 8): (47, 25),      # 808 Mid Tom 1 (808 set)
+                        }.items():
+    VARIATIONS[_pv] = melodic_sfx(_k, _kit)
+    VARIATION_TRIM_DB.setdefault(_pv, KIT_TRIM_DB)
+
+# A VARIATION OF A ROUTED PROGRAM keeps the routing: the entry is a function of
+# the note, each register's class with the variation's attributes on it
+_ROUTED_CLASSES = {}
+
+
+def routed_variation(program, name, **attrs):
+    """VARIATIONS entry: program's own router, each class it picks given attrs."""
+    def pick(note, _p=program, _n=name, _a=attrs):
+        base = property_class_for_note(_p, note)
+        k = (base, _n)
+        if k not in _ROUTED_CLASSES:
+            _ROUTED_CLASSES[k] = type("%s_%s" % (base.__name__, _n), (base,), dict(_a))
+        return _ROUTED_CLASSES[k]
+    return pick
+
+
+# GS 61.8 "Brass 2": the brass section's own router, every register a detuned
+# pair (chorus._pair), +-4 cents half left and right -- MuseScore's 61.8, its
+# section twice, +-4, panned apart: the brass made wider
+VARIATIONS[(61, 8)] = routed_variation(61, "brass2", detuned_pair=(-4.0, 4.0))
+
+# A LAYERED VARIATION: one key, two (or more) voices -- each routed by its
+# own program at its own transposition and level. blockrender expands such a
+# note into one event per layer before anything else sees it (so live's
+# templates, built through it, carry every layer), each event's program a
+# LayerProgram naming its layer. {(program, variation): ((routing program,
+# semitones, dB), ...)}
+LAYERED = {}
+
+
+class LayerProgram(int):
+    """The program (its int value, for every channel-level lookup) of one
+    LAYER of a layered variation."""
+    def __new__(cls, program, variation, layer):
+        o = int.__new__(cls, int(program)); o.variation = int(variation); o.layer = int(layer)
+        return o
+
+    def __repr__(self):
+        return "LayerProgram(%d, %d, %d)" % (int(self), self.variation, self.layer)
+
+
+_LAYER_CLASSES = {}
+
+
+def layer_class(program, note):
+    """The class of one layer of a layered variation at (its own) note."""
+    spec = LAYERED[(int(program) & 0x7F, program.variation)][program.layer]
+    base = property_class_for_note(spec[0], note)
+    db = float(spec[2])
+    if not db:
+        return base
+    k = (base, db)
+    if k not in _LAYER_CLASSES:
+        _LAYER_CLASSES[k] = type("%s_layer%+g" % (base.__name__, db), (base,),
+                                 {"initial_gain": base.initial_gain * 10.0 ** (db / 20.0)})
+    return _LAYER_CLASSES[k]
+
+
+def layers_of(program):
+    """((LayerProgram, semitones), ...) for a layered variation, else None."""
+    v = getattr(program, "variation", 0)
+    spec = LAYERED.get((int(program) & 0x7F, v)) if v and getattr(program, "layer", None) is None else None
+    if not spec:
+        return None
+    return tuple((LayerProgram(program, v, i), int(s[1])) for i, s in enumerate(spec))
+
+
+# GS 48.8 "Orchestra": the strings, and a brass section an octave above them,
+# softer -- what both GM sets build (GeneralUser's and MuseScore's 48.8 are
+# their strings with their brass section 8va layered over them). Each layer
+# its own router: the bowed section by register, the brass by its.
+LAYERED[(48, 8)] = ((48, 0, 0.0), (61, 12, -10.0))
+VARIATIONS[(48, 8)] = routed_variation(48, "orchestra")
+
+# GS 14.8 "Church Bell": a church bell, measured (tonelib.ChurchBellProperties)
+from tonelib import ChurchBellProperties as _CBP
+VARIATIONS[(14, 8)] = _CBP
+
+# GS 26.8 "Hawaiian Gt.": the lap steel (tonelib.HawaiianGuitarProperties)
+from tonelib import HawaiianGuitarProperties as _HGP
+VARIATIONS[(26, 8)] = _HGP
+
+# GS 25.8 "12-str. Gt": the steel-string's courses doubled (tonelib.TwelveStringProperties)
+from tonelib import TwelveStringProperties as _TSP
+VARIATIONS[(25, 8)] = _TSP
+
+# GS 30.8 "Feedback Gt.", 31.8 "Gt. Feedback": a guitar held into feedback
+# (tonelib.Feedback): the distortion guitar blooming, the clean loop itself
+from tonelib import FeedbackGuitarProperties as _FGP, GuitarFeedbackProperties as _GFP
+VARIATIONS[(30, 8)] = _FGP
+VARIATIONS[(31, 8)] = _GFP
+
+# GS 24.8 "Ukulele": Ben's own, recorded for it (tonelib.UkuleleProperties)
+from tonelib import UkuleleProperties as _UKP
+VARIATIONS[(24, 8)] = _UKP
+
+# GS 107.8 "Taisho Koto": a course of a string and three an octave over it
+from tonelib import TaishoKotoProperties as _TKP
+VARIATIONS[(107, 8)] = _TKP
+# ...and its drone string, alone on a bank of its own (the fit renders it there;
+# blockrender's struck drone plays it through the class)
+from tonelib import TaishoDroneProperties as _TDP
+VARIATIONS[(107, 9)] = _TDP
+
+# GS 25.16 "Mandolin": unison courses of steel strings (tonelib.MandolinProperties)
+from tonelib import MandolinProperties as _MDP
+VARIATIONS[(25, 16)] = _MDP
+
+
+# THE VARIATIONS' LEVELS, MEASURED: each GS variation GeneralUser GS has a
+# preset for, levelled to it as the programs are (examples/sfx_levels.py
+# --var-trim: velocities 64 and 100, K level re a piano C4) -- over the
+# defaults set above (a variation's capital's trim, or the SFX set's)
+VARIATION_TRIM_FIT = {(4, 8): 0.6, (5, 8): -2.4, (6, 8): -11.9, (14, 8): -2.6, (16, 8): -4.4, (17, 8): -2.0, (19, 8): -2.6, (21, 8): -12.2, (24, 8): 7.9, (25, 8): -0.9, (25, 16): 3.5, (26, 8): 12.8, (27, 8): 3.7, (28, 8): 5.1, (30, 8): 6.6, (31, 8): -12.7, (38, 8): -4.6, (39, 8): -2.3, (48, 8): 2.2, (50, 8): 5.0, (61, 8): 3.1, (62, 8): 3.2, (63, 8): 5.2, (107, 8): 0.7, (115, 8): -13.2, (116, 8): 0.5, (117, 8): -1.8, (118, 8): 1.2, (120, 1): -5.4, (120, 2): -5.3, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
+VARIATION_TRIM_DB.update(VARIATION_TRIM_FIT)

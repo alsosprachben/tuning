@@ -584,6 +584,7 @@ STOP_RATED = [
     ("key click and leakage", 4, "every drawbar's contact at its own instant over 15 ms, the bounce's noise, the unpulled wheels at -48 dB: within ~1 dB of the takes"),
     ("percussion (GM 17)", 3, "the four tap stops (perc 3rd/2nd, L102/B3), each a rank decaying on its own, fitted; NOT modelled, the B3's own behaviour: its single trigger (keyed only from every key up), its 1' cancel while on, its normal-volume duck of the drawbars"),
     ("overdrive (GM 18)", 4, "the rok pack's energy off the drawbars' harmonics: to the edge of breakup, drive 0.92"),
+    ("scanner vibrato/chorus (CC94: off, V1-V3, C1-C3)", 3, "the late B-3's circuit SOLVED (scanner.py; Werner, Dunkel & Germain, DAFx-16, its Table 1): the LC ladder's 19 taps by AC nodal analysis -- lowpass, dispersion, standing-wave ripple, the tapered early taps -- and on chorus the bottom rail's 0.71 of the signal undelayed under the scanned ~0.3 (Rc 22 k; the service manual's 'part of the signal across the line, the rest across a resistor in series'); the scanner's crossfade over its 16 plates at 6.87 Hz, one motor for every key: a delay row per band, each partial's mean gain, and the crossfade's own motion as sidebands within 40 dB of their partial and 60 of its note (Ben, A/B: 'Tier B sounds better'). Live = file to 0.15 dB. No recording of a B-3's scanner to fit against"),
   ]),
  ((19,), "the church organ's console (28-bit stop word, CC11 | CC43<<7 | CC44<<14 | CC45<<21)", {
     "principal 8":    (4, "Pitea's HV Principal 8: its own series at three anchor pitches, its speech and overshoot fitted register by register, its wind. Ben: sounds great"),
@@ -671,12 +672,52 @@ def stops():
 # rated here as a program is. Every key of patch_map.VARIATIONS must be rated
 # and nothing else may be -- checked when the page is built, as STOP_RATED is.
 VAR_RATED = {
+    (25, 8): (3, "the steel-string with its courses DOUBLED, read off John Magner's Fender 12-string (Pianobook), its harmonics resolved into doublets: below B3 an octave string on the even harmonics, as loud as the main at its own pitch (the open low strings' 2nd ~10 dB over a single string's), 8 cents off (6-14 measured); B3 up a unison partner at 0.9, 5.5 cents off (2.6-9). Levels the robust numbers only: the Fender is a different guitar from the steel-string's fit. STRUCK BY A PICK (tonelib.Plectrum; examples/plectrum_fit.py): the scrape as noise of its own -- the take's attack as bright on E2 as on A4, which brighter partials cannot be -- at the note's level to 7 kHz, gone at 400 dB/s (fitted on the 4-16 kHz envelope over 70 ms, after a fit on 15 ms shares took a long quiet scrape Ben heard as harsh), the course crossed 28 ms apart. Ben: 'Sounds good'"),
+    (25, 16): (3, "unison COURSES of steel strings (0.9, 5.5 cents off, as the 12-string's top), its decay fitted to the Eclectic Mandolin's takes (examples/pluck_fit.py --voice=mandolin: 14.35 dB/s, steeply by register), and PICKED (tonelib.Plectrum): the scrape at the note's level to 5.5 kHz gone at 700 dB/s, the top partials struck 12 dB an octave over 1.5 kHz and gone at 400 dB/s (the take's top falls 24-42 dB by 0.1 s), the course crossed 14 ms apart. The take is re-amped dark, so its colour is not a target: fitted on flatness and how fast the top falls. Ben: 'Sounds good'"),
+    (26, 8): (4, "a LAP STEEL fitted to David Long's (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel): its six open strings -- the sustain (decay fit 17.4 -> 10.2 dB/s rms, the low harmonics 2-6 dB/s), the tone rolled back on its pickup (resonance 500 Hz, Q 0.5; lapsteel_tone.py), and its OTHER OPEN STRINGS answering through the bridge, each as tuned on that instrument, harmonic by harmonic where it lies near the note's (the E2 string's 2nd under an E3 at -14 dB, the take's -13, beating 1.7 Hz off) -- what Ben heard as 'more inharmonicity, especially lower'. Ben: 'Sounds great'"),
+    (14, 8): (4, "St. Kathrin's church bell, Gelting (Pianobook, Zoom H5): its 19 modes fitted window by window to their level at the strike and decay -- the strike note an octave under the nominal (649.6 Hz), the flat hum (0.438) and the 1.125 ringing seconds, the superquint a doublet 3 Hz apart, the clang 4.2-13.7 gone in a second; within ~6 dB of the recording, mode by mode against the nominal, to 2.5 s (its noise beyond). Ben: \"Sounds amazing\""),
+    (48, 8): (3, "a LAYERED variation (patch_map.LAYERED): the strings by register (cello, viola, violin) and the brass section's own router an octave above at -10 dB -- both GM sets' 48.8 is their strings with their brass 8va; the layer's level by Ben's ear of -4/-10/-16"),
+    (61, 8): (3, "the brass section's router (tuba, trombones, trumpets by register), every register a detuned pair, +-4 cents half left and right -- MuseScore's 61.8, its section twice, panned apart; the spread asserted"),
+    (27, 8): (3, "the Stratocaster into a chorus pedal (the swept bucket-brigade chorus CC93 makes), on at half by default -- GeneralUser's 27.8 is its clean guitar with a copy 7 cents up; the pedal's settings asserted"),
+    (28, 8): (3, "the Stratocaster on position 4: neck (0.247) and middle (0.157) pickups in parallel -- their combs summed, the mean of two coils, the resonance up by sqrt 2 with the halved inductance -- through a cleaner amp (drive 0.3). The physics of the wiring; not fitted to a recording of one"),
+    (4, 8): (3, "the Rhodes as a detuned pair (chorus._pair): the note 4 cents down and half left, a copy 4 up and half right, by level, the copy 7 ms behind -- MuseScore's 4.8 (its sample twice, +-4); the spread the GM sets', asserted"),
+    (5, 8): (3, "the Wurlitzer as a detuned pair, as 4.8"),
+    (16, 8): (3, "the drawbar organ on its SCANNER CHORUS, C3 (the stops table's scanner row): what GS's two detuned copies stand in for on an organ that cannot be detuned"),
+    (17, 8): (3, "the percussive organ on its scanner chorus, C3, as 16.8"),
+    (21, 8): (3, "the musette: GM 21's accordion with a third middle reed, M-16 / M / M+16 -- the wet reed's tuning measured on the Hohner, mirrored flat (asserted). Both GM sets' 21.8 is their accordion made wetter; no recording of a three-reed musette here (juskiddink's Paolo Soprani take is a dry register). Ben's pick of three"),
+    (6, 8): (4, "the harpsichord's 8' and 4' together, both fitted stops (the stops table): what both GM sets' 6.8 plays, their harpsichord with a layer an octave up; Ben's pick of four (8'+8', 8'+4', 8'+8'+4'), the upper 8' left to draw for the full coupler"),
+    (19, 8): (4, "the church organ's principal chorus to the fourth harmonic -- 8', 4', the principal quint 2 2/3', 2' -- every rank Pitea's recorded pipe (the stops table); clear and bright, short of the mixture (Ben's registration). GeneralUser's 19.8 is its organ an octave up, MuseScore's its organ coupled at 16': neither a plenum"),
+    (38, 8): (3, "the ACID bass on the Moog (tonelib.MoogSynthBass3): one saw into a resonant ladder nearly shut, the contour snapping open to a low sustain, RES BASS on -- GeneralUser names it Acid Bass; a starting panel, the model checked against Ben's Messenger (re-measured on its new firmware: the cutoff law moved 4.5 octaves, convert_v5), at its capital's level. Ben: 'The synths sound great'"),
+    (39, 8): (3, "the talking bass on the Moog (MoogSynthBass4): both GS sets' takes hold a peak h17-23 10-16 dB over its neighbours -- a square and the SUB through a resonant ladder left open, the cutoff tracking the key. Ben: 'great'"),
+    (50, 8): (3, "the brighter, quicker string machine on the Moog (MoogSynthStrings3): two saws nine cents apart, the ladder further open with a touch of resonance, the swell a third of 50's. Ben: 'great'"),
+    (62, 8): (3, "62's blat punchier on the Moog (MoogSynthBrass3): the pair six cents apart, the contour opening faster and further, a little resonance on its edge. Ben: 'great'"),
+    (63, 8): (3, "63's soft brass on squares (MoogSynthBrass4): hollower, fourteen cents apart, slower to open. Ben: 'great'"),
+    (124, 1): (3, "an ELECTRONIC TONE RINGER on the Moog (MoogTelephone2), fitted to GeneralUser GS's own (examples/telephone2_fit.py): OSC 2 a saw through a band pass for the piezo, LFO 1 a square switching it up a fifth at 14.6 Hz -- 1824/2736 Hz at C4, the upper 6.4 dB under (GU's 9.8), 8.6 dB rms over each tone's harmonics; sounds 2.8 octaves over where written. Ben: 'sound great'"),
+    (125, 9): (3, "a hiss and LOW BURSTS (SfxBurstNoiseProperties), the weather's machinery fitted to GeneralUser GS's own (examples/weather_fit.py burst): the colour within ~1 dB from 320 Hz to 8 kHz, 100-400 Hz bursts ~1.6 a second at C4, transposed whole by the key. Ben: 'sound great'"),
+    (107, 8): (4, "the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great'"),
+    (107, 9): (3, "(internal: the taishogoto's drone string alone, the bank its struck stop renders from -- 98 Hz, its own fundamental all but silent, decay 3.4 dB/s rms over 24 strokes, colour within ~10 dB 300 Hz-10 kHz)"),
+    (30, 8): (3, "the distortion guitar HELD INTO FEEDBACK (tonelib.Feedback, examples/feedback_fit.py): a second after the pluck the partial nearest the loop's band (~800 Hz; 600-1100 on the Feedbacker's '69 Strat into a Super Reverb) swells in and holds while the rest dies, the amp distorting it with the note -- GeneralUser's 30.8 has no bloom; ours follows the real thing. Ben: 'They sound great'"),
+    (31, 8): (4, "FEEDBACK ITSELF on a clean amp (GuitarFeedbackProperties), fitted to the Gretsch's clean G4 (Pianobook, OMS-1): the fundamental 21 dB over the pluck a second in (the take's 23), its odd harmonics -20/-18/-23 dB as the amp saturates (-25/-16/-21), sinking slowly while held -- as GeneralUser's 31.8 swells. Ben: 'They sound great'"),
+    (24, 8): (4, "BEN'S OWN UKULELE, a Luna, concert size (G C E A, re-entrant, A440), recorded by him through his A6 for it (ukulele_ben/; examples/pluck_fit.py --voice=ukulele): its 52 chromatic notes staged; its strings' stiffness measured (B 2.7e-4, the nylon guitar's was 5x); its fast dark decay (the fundamental 15-45 dB/s); its box (a resonance at 800 Hz, a hollow at 1 kHz; 2.9 dB rms to 5 kHz); the finger's flesh a soft noise burst (the attacks' flatness matched); and ITS PITCH WANDERING 9 cents over a second after the strike's glide, a soft string under a fretting finger (Ben: 'more than the guitar model'). Its first 15 ms ~5-8 dB brighter over 2 kHz than his (a fingertip rounding the pluck, not modelled). Ben: 'Perfect. Sounds great'"),
     (125, 5): (3, "HELMHOLTZ'S DOUBLE SIREN (siren.py): two discs on one axle -- lower rows 8/10/12/18, upper 9/12/15/16, each row a stop (CC43/44) -- driven by AIR (velocity, aftertouch, CC2): its rotor's inertia measured on the fire siren and the VCSL siren whistle, singing only while blown and coasting silent after (the wail on a re-press); the mod wheel is the crank, the upper chest's angle, cancelling the 12-rows' fundamental at the top. Its tone is the fire siren's measured series: no recording of the instrument itself"),
 }
 # THE SFX VARIATIONS are the SFX set's keys played from the keyboard
 # (patch_map.SFX_VARIATIONS, checked by examples/sfx_variations.py: at C4 each
 # is its key's spectrum within the noise floor), so each carries its key's
 # rating and note -- read from KIT_RATED, so the two cannot drift
+# ...and the kit voices played from the keyboard the same way (115.8-118.8),
+# each its key's rating, Standard's from PERC_RATED
+KIT_VARIATIONS = {(115, 8): (0, 85), (116, 8): (48, 36), (117, 8): (24, 47), (118, 8): (25, 47)}
+
+
+def _kit_var_rated():
+    for (p, v), (kit, key) in KIT_VARIATIONS.items():
+        r, note = PERC_RATED[key] if kit == 0 else KIT_RATED[kit][key]
+        VAR_RATED[(p, v)] = (r, "set %d's key %d played from the keyboard (patch_map.melodic_sfx), "
+                                "C4 at its kit pitch, transposed whole -- at C4 its key's spectrum "
+                                "within 0.05-0.33 dB: %s" % (kit, key, note))
+
+
 def _sfx_var_rated():
     for (p, v), key in patch_map.SFX_VARIATIONS.items():
         r, note = KIT_RATED[56][key]
@@ -684,9 +725,24 @@ def _sfx_var_rated():
                                 "kit pitch (its gate, ring and level the kit's): %s" % (key, note))
 
 
+def _mt32_var_rated():
+    """BANK 127, the MT-32 set: each tone its target's rating, read from
+    RATED / PERC_RATED, so they cannot drift."""
+    names = GM
+    for i, (nm, to) in enumerate(patch_map.MT32_SET):
+        if isinstance(to, tuple):
+            r, note = PERC_RATED[to[1]]
+            VAR_RATED[(i, 127)] = (r, "Standard's key %d played from the keyboard" % to[1])
+        else:
+            r = RATED[to][0]
+            VAR_RATED[(i, 127)] = (r, "GM %d %s" % (to, names[to]))
+
+
 def variations():
     if not any(k in VAR_RATED for k in patch_map.SFX_VARIATIONS):
         _sfx_var_rated()
+        _kit_var_rated()
+        _mt32_var_rated()
     """[(program, bank, GS name, class or None, rating or None, note)], every
     variation GS names; one not built plays its capital tone."""
     built = set(patch_map.VARIATIONS)
@@ -697,6 +753,8 @@ def variations():
                          % (unrated, unknown))
     out = []
     for (p, v), name in sorted(patch_map.VARIATION_NAMES.items()):
+        if v == 127:
+            continue                       # the MT-32 set: its own table (mt32_md)
         if (p, v) in built:
             cls = patch_map.property_class_for_program(patch_map.VariationProgram(p, v))
             r, note = VAR_RATED[(p, v)]
@@ -719,6 +777,21 @@ def variations_md():
         L.append("| %d.%d | %s | %s | %s | %s |"
                  % (p, v, name, "`%s`" % cls.replace("Properties", "") if cls else "--",
                     "**%d**" % r if r is not None else "", note))
+    L.append("")
+    return "\n".join(L)
+
+
+def mt32_md():
+    variations()
+    L = ["## Bank 127: the MT-32 set\n",
+         "GS's bank 127 is the MT-32's 128 tones on the GS programs (SC-55 owner's",
+         "manual p.69), for a file that selects it. Each plays its nearest voice",
+         "here (patch_map.MT32_SET) at that voice's level, rated as that voice.\n",
+         "| program.127 | MT-32 tone | plays | |",
+         "|---|---|---|---|"]
+    for i, (nm, to) in enumerate(patch_map.MT32_SET):
+        r, note = VAR_RATED[(i, 127)]
+        L.append("| %d.127 | %s | %s | **%d** |" % (i, nm, note, r))
     L.append("")
     return "\n".join(L)
 
@@ -898,6 +971,7 @@ def main(argv):
         L.append("")
     L.append(stops_md())
     L.append(variations_md())
+    L.append(mt32_md())
     L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)

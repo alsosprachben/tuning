@@ -725,6 +725,30 @@ class Stream:
         if fx['tremolo']:
             src = _cat(parts)
             parts.append(self._tremolo(src, fx['tremolo'], 5))
+        # THE SCANNER (scanner.apply): vibrato puts a channel's rows on its
+        # band rows through the circuit's gains; chorus makes them the dry
+        # share and adds the scanned copies
+        if fx.get('scanner'):
+            import scanner as SCN
+            parts = [p for p in parts if p is not None]
+            outs = []
+            order = list(fx['scanner'])
+            for ch, (rws, depth, chorus) in fx['scanner'].items():
+                for p in parts:
+                    sel = np.flatnonzero((p['mch'] == ch) & (p['br'] < 0))
+                    if not len(sel):
+                        continue
+                    o = SCN.apply(p, sel, rws, depth, chorus, self.B.SR)
+                    if o is None:
+                        continue
+                    src = o.pop('_src')
+                    lvl = np.zeros((len(src), 4), np.int64)
+                    lvl[:, 0] = 7; lvl[:, 1] = order.index(ch); lvl[:, 2] = np.arange(len(src))
+                    o['key'], o['klen'] = _key(lvl, p['key'][src], p['klen'][src])
+                    o['ht'] = np.zeros(len(src), bool)
+                    outs.append(o)
+            if outs:
+                parts.append(_cat(outs))
         # CHORUS (copies, and the dry share in place)
         if fx['chorus']:
             parts = [p for p in parts if p is not None]
@@ -798,8 +822,46 @@ class Stream:
         import chorus as CH
         order = list(channels)
         outs = []
-        for ch, (send, cents) in channels.items():
+        for ch, spec in channels.items():
+            send, cents = spec[0], spec[1]
             if send <= CH.FLOOR or not cents:
+                continue
+            if len(spec) > 2 and spec[2] == 'pair':
+                # a DETUNED PAIR (chorus._pair): the rows down and left, a
+                # copy up and right, each at half power, the copy delayed
+                lo, hi = 2.0 ** (cents[0] / 1200.0), 2.0 ** (cents[1] / 1200.0)
+                (gl0, gr0), (gl1, gr1) = CH.pair_side(-1), CH.pair_side(+1)
+                made = 0
+                for p in parts:
+                    rows = np.flatnonzero(p['mch'] == ch)
+                    if not len(rows):
+                        continue
+                    keep = rows[p['nf'][rows].astype(np.float64) * hi < self.B.SR * 0.5]
+                    if len(keep):
+                        o = {k: v[keep].copy() for k, v in p.items()}
+                        om, p0, p0R = p['om'][keep], p['p0'][keep], p['p0R'][keep]
+                        dl = CH.DELAY_S[0]
+                        o['om'] = om * hi
+                        o['nf'] = p['nf'][keep].astype(np.float64) * hi
+                        o['p0'] = p0 * hi - om * hi * dl * self.B.SR
+                        o['p0R'] = p0R * hi - om * hi * dl * self.B.SR
+                        o['aL'] = p['aL'][keep] * gl1
+                        o['aR'] = p['aR'][keep] * gr1
+                        o['aM'] = p['aM'][keep] * 0.5 ** 0.5
+                        lvl = np.zeros((len(keep), 4), np.int64)
+                        lvl[:, 0] = 6; lvl[:, 1] = order.index(ch); lvl[:, 2] = 0
+                        o['key'], o['klen'] = _key(lvl, p['key'][keep], p['klen'][keep])
+                        o['ht'] = np.zeros(len(keep), bool)
+                        outs.append(o)
+                        made += len(keep)
+                    p['om'][rows] = p['om'][rows] * lo
+                    p['nf'][rows] = p['nf'][rows] * lo
+                    p['p0'][rows] = p['p0'][rows] * lo
+                    p['p0R'][rows] = p['p0R'][rows] * lo
+                    p['aL'][rows] = p['aL'][rows] * gl0
+                    p['aR'][rows] = p['aR'][rows] * gr0
+                    p['aM'][rows] = p['aM'][rows] * 0.5 ** 0.5
+                self.made[ch] = self.made.get(ch, 0) + made
                 continue
             wet = (send / float(len(cents))) ** 0.5
             dry = (1.0 - send) ** 0.5

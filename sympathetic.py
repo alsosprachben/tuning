@@ -93,7 +93,11 @@ def responders(props, freq=None, f0=None):
         # EACH STRING ITS OWN LEVEL, when the class gives them (dB, by string):
         # a shamisen's sawari string answers louder than the other two
         sdb = tuple(getattr(props, 'sympathetic_string_db', ())) or (0.0,) * len(strings)
-        for off, odb in zip(strings, sdb):
+        # ...AND ITS OWN TUNING, cents off the table (the player's: a lap
+        # steel's low E 11 cents flat of its other open strings, so its 2nd
+        # harmonic beats 1.7 Hz under an E3 played on the next string)
+        scents = tuple(getattr(props, 'sympathetic_string_cents', ())) or (0.0,) * len(strings)
+        for off, odb, oct_ in zip(strings, sdb, scents):
             pitch = tonic + int(off)
             s = pitch - drv
             if s == 0:
@@ -104,13 +108,14 @@ def responders(props, freq=None, f0=None):
             # -- so only the octave coincided and the fifths, which are the
             # reason to use a just tuner at all, never rang.
             rf = freq[pitch] if (freq and pitch in freq) else f0 * 2.0 ** (s / 12.0)
+            rf *= 2.0 ** (oct_ / 1200.0)
             # ...OR KICKED, WHICH A SKIN DOES: a shamisen's open strings ring
             # at their own harmonics, the ones that do NOT coincide with the
             # note's (the second string's 3rd, 5th and 7th under a bass-string
             # pluck), so the coupling is the body's and every string takes it
             d = (g if mode == 'contact' else _coupling(props, _at(props, rf), g)) * 10.0 ** (odb / 20.0)
             if d >= floor:
-                out.append((s, d))
+                out.append((s, d, oct_) if oct_ else (s, d))
         out.sort(key=lambda sd: -sd[1])
         return out[:top]
     if mode == 'contact':
@@ -247,7 +252,10 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
             key = (id(tab), drv)
             if key not in cache:
                 cache[key] = responders(props, tab, f0=f0)
-            for ri, (semis, drive) in enumerate(cache[key]):
+            for ri, item in enumerate(cache[key]):
+                semis, drive = item[0], item[1]
+                # a string's own tuning off the table (sympathetic_string_cents)
+                tune = 2.0 ** (item[2] / 1200.0) if len(item) > 2 else 1.0
                 # AND THE PITCH IS THE TABLE'S. This was 2**(semis/12) -- an
                 # equal-tempered interval from the partial -- under every tuner,
                 # so a sitar tuned `just` had its sympathetic strings ring
@@ -261,12 +269,27 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
                     ratio = float(tab[drv + semis]) / float(tab[drv])
                 else:
                     ratio = 2.0 ** (semis / 12.0)
+                ratio *= tune
                 if (nf[ix] * ratio > sr * 0.5).all():
                     continue
                 keep = ix[nf[ix] * ratio < sr * 0.5]
                 if not len(keep):
                     continue
-                for i in keep:
+                # PER MODE, where the voice asks (sympathetic_per_mode): each
+                # of the string's copied modes as loud as it COINCIDES with the
+                # note's partials -- a Lorentzian no narrower than the voice's
+                # sympathetic_width_hz -- the best of them at the string's drive.
+                # A lap steel's low E answers an E3 with its 2nd harmonic and
+                # not its fundamental, which one scalar a string cannot say
+                wk = None
+                if getattr(props, 'sympathetic_per_mode', False):
+                    bw = float(getattr(props, 'sympathetic_width_hz', 0.0) or 1.0)
+                    fd, ad = nf[ix], np.abs(aM[ix])
+                    fk = nf[keep] * ratio
+                    wk = ((ad[None, :] / (ad.max() or 1.0))
+                          / (1.0 + ((fd[None, :] - fk[:, None]) / bw) ** 2)).sum(1)
+                    wk = wk / (wk.max() or 1.0)
+                for n_i, i in enumerate(keep):
                     if meta is not None:
                         meta.append((ch, g0, ri, int(i)))
                     for k in keys:
@@ -285,9 +308,10 @@ def expand(A, channels, sr, cols=None, freq=None, table=None, meta=None):
                     if ring_law and 'aft' in extra and extra['aft'][-1] > 0.0:
                         extra['logr'][-1] = extra['logrA'][-1]
                         extra['aft'][-1] = 0.0
-                    extra['aL'][-1] = aL[i] * drive
-                    extra['aR'][-1] = aR[i] * drive
-                    extra['aM'][-1] = aM[i] * drive
+                    dk = drive * (wk[n_i] if wk is not None else 1.0)
+                    extra['aL'][-1] = aL[i] * dk
+                    extra['aR'][-1] = aR[i] * dk
+                    extra['aM'][-1] = aM[i] * dk
                     made += 1
     for k in keys:
         A[k].extend(extra[k])

@@ -611,6 +611,7 @@ Controls are the rest of the console that are not stops.
 | -- | key click and leakage | **4** | every drawbar's contact at its own instant over 15 ms, the bounce's noise, the unpulled wheels at -48 dB: within ~1 dB of the takes |
 | -- | percussion (GM 17) | **3** | the four tap stops (perc 3rd/2nd, L102/B3), each a rank decaying on its own, fitted; NOT modelled, the B3's own behaviour: its single trigger (keyed only from every key up), its 1' cancel while on, its normal-volume duck of the drawbars |
 | -- | overdrive (GM 18) | **4** | the rok pack's energy off the drawbars' harmonics: to the edge of breakup, drive 0.92 |
+| -- | scanner vibrato/chorus (CC94: off, V1-V3, C1-C3) | **3** | the late B-3's circuit SOLVED (scanner.py; Werner, Dunkel & Germain, DAFx-16, its Table 1): the LC ladder's 19 taps by AC nodal analysis -- lowpass, dispersion, standing-wave ripple, the tapered early taps -- and on chorus the bottom rail's 0.71 of the signal undelayed under the scanned ~0.3 (Rc 22 k; the service manual's 'part of the signal across the line, the rest across a resistor in series'); the scanner's crossfade over its 16 plates at 6.87 Hz, one motor for every key: a delay row per band, each partial's mean gain, and the crossfade's own motion as sidebands within 40 dB of their partial and 60 of its note (Ben, A/B: 'Tier B sounds better'). Live = file to 0.15 dB. No recording of a B-3's scanner to fit against |
 
 ### 19 Church Organ -- the church organ's console (28-bit stop word, CC11 | CC43<<7 | CC44<<14 | CC45<<21)
 
@@ -688,39 +689,39 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 24 of GS's 60 are built;
+under a program (SC-55 owner's manual p.68). 60 of GS's 60 are built;
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | GS name | class | | notes |
 |---|---|---|---|---|
-| 4.8 | Detuned EP 1 | -- |  | not built: plays 4 Electric Piano 1 |
-| 5.8 | Detuned EP 2 | -- |  | not built: plays 5 Electric Piano 2 |
-| 6.8 | Coupled Hps. | -- |  | not built: plays 6 Harpsichord |
-| 14.8 | Church Bell | -- |  | not built: plays 14 Tubular Bells |
-| 16.8 | Detuned Or. 1 | -- |  | not built: plays 16 Drawbar Organ |
-| 17.8 | Detuned Or. 2 | -- |  | not built: plays 17 Percussive Organ |
-| 19.8 | Church Org. 2 | -- |  | not built: plays 19 Church Organ |
-| 21.8 | Accordion It | -- |  | not built: plays 21 Accordion |
-| 24.8 | Ukulele | -- |  | not built: plays 24 Acoustic Guitar (nylon) |
-| 25.8 | 12-str. Gt | -- |  | not built: plays 25 Acoustic Guitar (steel) |
-| 25.16 | Mandolin | -- |  | not built: plays 25 Acoustic Guitar (steel) |
-| 26.8 | Hawaiian Gt. | -- |  | not built: plays 26 Electric Guitar (jazz) |
-| 27.8 | Chorus Gt. | -- |  | not built: plays 27 Electric Guitar (clean) |
-| 28.8 | Funk Gt. | -- |  | not built: plays 28 Electric Guitar (muted) |
-| 30.8 | Feedback Gt. | -- |  | not built: plays 30 Distortion Guitar |
-| 31.8 | Gt. Feedback | -- |  | not built: plays 31 Guitar Harmonics |
-| 38.8 | Synth Bass 3 | -- |  | not built: plays 38 Synth Bass 1 |
-| 39.8 | Synth Bass 4 | -- |  | not built: plays 39 Synth Bass 2 |
-| 48.8 | Orchestra | -- |  | not built: plays 48 String Ensemble 1 |
-| 50.8 | Syn. Strings3 | -- |  | not built: plays 50 Synth Strings 1 |
-| 61.8 | Brass 2 | -- |  | not built: plays 61 Brass Section |
-| 62.8 | Synth Brass3 | -- |  | not built: plays 62 Synth Brass 1 |
-| 63.8 | Synth Brass4 | -- |  | not built: plays 63 Synth Brass 2 |
-| 107.8 | Taisho Koto | -- |  | not built: plays 107 Koto |
-| 115.8 | Castanets | -- |  | not built: plays 115 Woodblock |
-| 116.8 | Concert BD | -- |  | not built: plays 116 Taiko Drum |
-| 117.8 | Melo. Tom 2 | -- |  | not built: plays 117 Melodic Tom |
-| 118.8 | 808 Tom | -- |  | not built: plays 118 Synth Drum |
+| 4.8 | Detuned EP 1 | `DetunedEP1` | **3** | the Rhodes as a detuned pair (chorus._pair): the note 4 cents down and half left, a copy 4 up and half right, by level, the copy 7 ms behind -- MuseScore's 4.8 (its sample twice, +-4); the spread the GM sets', asserted |
+| 5.8 | Detuned EP 2 | `DetunedEP2` | **3** | the Wurlitzer as a detuned pair, as 4.8 |
+| 6.8 | Coupled Hps. | `CoupledHarpsichord` | **4** | the harpsichord's 8' and 4' together, both fitted stops (the stops table): what both GM sets' 6.8 plays, their harpsichord with a layer an octave up; Ben's pick of four (8'+8', 8'+4', 8'+8'+4'), the upper 8' left to draw for the full coupler |
+| 14.8 | Church Bell | `ChurchBell` | **4** | St. Kathrin's church bell, Gelting (Pianobook, Zoom H5): its 19 modes fitted window by window to their level at the strike and decay -- the strike note an octave under the nominal (649.6 Hz), the flat hum (0.438) and the 1.125 ringing seconds, the superquint a doublet 3 Hz apart, the clang 4.2-13.7 gone in a second; within ~6 dB of the recording, mode by mode against the nominal, to 2.5 s (its noise beyond). Ben: "Sounds amazing" |
+| 16.8 | Detuned Or. 1 | `DetunedOrgan1` | **3** | the drawbar organ on its SCANNER CHORUS, C3 (the stops table's scanner row): what GS's two detuned copies stand in for on an organ that cannot be detuned |
+| 17.8 | Detuned Or. 2 | `DetunedOrgan2` | **3** | the percussive organ on its scanner chorus, C3, as 16.8 |
+| 19.8 | Church Org. 2 | `ChurchOrgan2` | **4** | the church organ's principal chorus to the fourth harmonic -- 8', 4', the principal quint 2 2/3', 2' -- every rank Pitea's recorded pipe (the stops table); clear and bright, short of the mixture (Ben's registration). GeneralUser's 19.8 is its organ an octave up, MuseScore's its organ coupled at 16': neither a plenum |
+| 21.8 | Accordion It | `AccordionItalian` | **3** | the musette: GM 21's accordion with a third middle reed, M-16 / M / M+16 -- the wet reed's tuning measured on the Hohner, mirrored flat (asserted). Both GM sets' 21.8 is their accordion made wetter; no recording of a three-reed musette here (juskiddink's Paolo Soprani take is a dry register). Ben's pick of three |
+| 24.8 | Ukulele | `Ukulele` | **4** | BEN'S OWN UKULELE, a Luna, concert size (G C E A, re-entrant, A440), recorded by him through his A6 for it (ukulele_ben/; examples/pluck_fit.py --voice=ukulele): its 52 chromatic notes staged; its strings' stiffness measured (B 2.7e-4, the nylon guitar's was 5x); its fast dark decay (the fundamental 15-45 dB/s); its box (a resonance at 800 Hz, a hollow at 1 kHz; 2.9 dB rms to 5 kHz); the finger's flesh a soft noise burst (the attacks' flatness matched); and ITS PITCH WANDERING 9 cents over a second after the strike's glide, a soft string under a fretting finger (Ben: 'more than the guitar model'). Its first 15 ms ~5-8 dB brighter over 2 kHz than his (a fingertip rounding the pluck, not modelled). Ben: 'Perfect. Sounds great' |
+| 25.8 | 12-str. Gt | `TwelveString` | **3** | the steel-string with its courses DOUBLED, read off John Magner's Fender 12-string (Pianobook), its harmonics resolved into doublets: below B3 an octave string on the even harmonics, as loud as the main at its own pitch (the open low strings' 2nd ~10 dB over a single string's), 8 cents off (6-14 measured); B3 up a unison partner at 0.9, 5.5 cents off (2.6-9). Levels the robust numbers only: the Fender is a different guitar from the steel-string's fit. STRUCK BY A PICK (tonelib.Plectrum; examples/plectrum_fit.py): the scrape as noise of its own -- the take's attack as bright on E2 as on A4, which brighter partials cannot be -- at the note's level to 7 kHz, gone at 400 dB/s (fitted on the 4-16 kHz envelope over 70 ms, after a fit on 15 ms shares took a long quiet scrape Ben heard as harsh), the course crossed 28 ms apart. Ben: 'Sounds good' |
+| 25.16 | Mandolin | `Mandolin` | **3** | unison COURSES of steel strings (0.9, 5.5 cents off, as the 12-string's top), its decay fitted to the Eclectic Mandolin's takes (examples/pluck_fit.py --voice=mandolin: 14.35 dB/s, steeply by register), and PICKED (tonelib.Plectrum): the scrape at the note's level to 5.5 kHz gone at 700 dB/s, the top partials struck 12 dB an octave over 1.5 kHz and gone at 400 dB/s (the take's top falls 24-42 dB by 0.1 s), the course crossed 14 ms apart. The take is re-amped dark, so its colour is not a target: fitted on flatness and how fast the top falls. Ben: 'Sounds good' |
+| 26.8 | Hawaiian Gt. | `HawaiianGuitar` | **4** | a LAP STEEL fitted to David Long's (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel): its six open strings -- the sustain (decay fit 17.4 -> 10.2 dB/s rms, the low harmonics 2-6 dB/s), the tone rolled back on its pickup (resonance 500 Hz, Q 0.5; lapsteel_tone.py), and its OTHER OPEN STRINGS answering through the bridge, each as tuned on that instrument, harmonic by harmonic where it lies near the note's (the E2 string's 2nd under an E3 at -14 dB, the take's -13, beating 1.7 Hz off) -- what Ben heard as 'more inharmonicity, especially lower'. Ben: 'Sounds great' |
+| 27.8 | Chorus Gt. | `ChorusGuitar` | **3** | the Stratocaster into a chorus pedal (the swept bucket-brigade chorus CC93 makes), on at half by default -- GeneralUser's 27.8 is its clean guitar with a copy 7 cents up; the pedal's settings asserted |
+| 28.8 | Funk Gt. | `FunkGuitar` | **3** | the Stratocaster on position 4: neck (0.247) and middle (0.157) pickups in parallel -- their combs summed, the mean of two coils, the resonance up by sqrt 2 with the halved inductance -- through a cleaner amp (drive 0.3). The physics of the wiring; not fitted to a recording of one |
+| 30.8 | Feedback Gt. | `FeedbackGuitar` | **3** | the distortion guitar HELD INTO FEEDBACK (tonelib.Feedback, examples/feedback_fit.py): a second after the pluck the partial nearest the loop's band (~800 Hz; 600-1100 on the Feedbacker's '69 Strat into a Super Reverb) swells in and holds while the rest dies, the amp distorting it with the note -- GeneralUser's 30.8 has no bloom; ours follows the real thing. Ben: 'They sound great' |
+| 31.8 | Gt. Feedback | `GuitarFeedback` | **4** | FEEDBACK ITSELF on a clean amp (GuitarFeedbackProperties), fitted to the Gretsch's clean G4 (Pianobook, OMS-1): the fundamental 21 dB over the pluck a second in (the take's 23), its odd harmonics -20/-18/-23 dB as the amp saturates (-25/-16/-21), sinking slowly while held -- as GeneralUser's 31.8 swells. Ben: 'They sound great' |
+| 38.8 | Synth Bass 3 | `MoogSynthBass3` | **3** | the ACID bass on the Moog (tonelib.MoogSynthBass3): one saw into a resonant ladder nearly shut, the contour snapping open to a low sustain, RES BASS on -- GeneralUser names it Acid Bass; a starting panel, the model checked against Ben's Messenger (re-measured on its new firmware: the cutoff law moved 4.5 octaves, convert_v5), at its capital's level. Ben: 'The synths sound great' |
+| 39.8 | Synth Bass 4 | `MoogSynthBass4` | **3** | the talking bass on the Moog (MoogSynthBass4): both GS sets' takes hold a peak h17-23 10-16 dB over its neighbours -- a square and the SUB through a resonant ladder left open, the cutoff tracking the key. Ben: 'great' |
+| 48.8 | Orchestra | `Violin_orchestra` | **3** | a LAYERED variation (patch_map.LAYERED): the strings by register (cello, viola, violin) and the brass section's own router an octave above at -10 dB -- both GM sets' 48.8 is their strings with their brass 8va; the layer's level by Ben's ear of -4/-10/-16 |
+| 50.8 | Syn. Strings3 | `MoogSynthStrings3` | **3** | the brighter, quicker string machine on the Moog (MoogSynthStrings3): two saws nine cents apart, the ladder further open with a touch of resonance, the swell a third of 50's. Ben: 'great' |
+| 61.8 | Brass 2 | `TromboneToTrumpet50Section_brass2` | **3** | the brass section's router (tuba, trombones, trumpets by register), every register a detuned pair, +-4 cents half left and right -- MuseScore's 61.8, its section twice, panned apart; the spread asserted |
+| 62.8 | Synth Brass3 | `MoogSynthBrass3` | **3** | 62's blat punchier on the Moog (MoogSynthBrass3): the pair six cents apart, the contour opening faster and further, a little resonance on its edge. Ben: 'great' |
+| 63.8 | Synth Brass4 | `MoogSynthBrass4` | **3** | 63's soft brass on squares (MoogSynthBrass4): hollower, fourteen cents apart, slower to open. Ben: 'great' |
+| 107.8 | Taisho Koto | `TaishoKoto` | **4** | the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great' |
+| 115.8 | Castanets | `Castanets_sfx85` | **4** | set 0's key 85 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: Iowa castanets |
+| 116.8 | Concert BD | `ConcertBassDrum_sfx36` | **4** | set 48's key 36 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: CONCERT BD 1, FITTED BY TWO LEVELS (examples/orch_fit.py): GeneralUser GS's Orchestra bass drum picks VCSL's "Bass Drum 1" (CC0), and the drum is fitted to its hit -- 73 modes read settled to -45 dB AND early to 3 kHz (a big head's upper modes are gone before a kick's are read), per-octave trims and rates: 10.7 dB. Balanced as GeneralUser's set (examples/elkit_balance.py --kit=48). Ben: sounds good |
+| 117.8 | Melo. Tom 2 | `ElectronicTom47_sfx47` | **4** | set 24's key 47 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: as 41 |
+| 118.8 | 808 Tom | `TR808MidTom_sfx47` | **4** | set 25's key 47 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: as 45, 2 semitones higher (as 43) |
 | 120.1 | Gt. Cut Noise | `SfxGuitarCutDown_sfx48` | **4** | the SFX set's key 48 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): GUITAR CUTTING NOISE (DOWN): a muted strum on steel strings (Freesound, CC0), the strings' scrape at 0.14-3 kHz: 5.9 dB. A nylon guitar's take had been its body's thump -- a tom (Ben) |
 | 120.2 | String Slap | `SfxBassSlap_sfx50` | **3** | the SFX set's key 50 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
 | 121.1 | Fl. Key Click | `SfxKeyClick_sfx51` | **4** | the SFX set's key 51 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
@@ -728,10 +729,10 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 122.2 | Thunder | `SfxThunder_sfx80` | **4** | the SFX set's key 80 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
 | 122.3 | Wind | `SfxWind_sfx81` | **4** | the SFX set's key 81 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
 | 122.4 | Stream | `SfxStream_sfx83` | **4** | the SFX set's key 83 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
-| 122.5 | Bubble | -- |  | not built: plays 122 Seashore |
-| 123.1 | Dog | -- |  | not built: plays 123 Bird Tweet |
-| 123.2 | Horse | -- |  | not built: plays 123 Bird Tweet |
-| 124.1 | Telephone 2 | -- |  | not built: plays 124 Telephone Ring |
+| 122.5 | Bubble | `SfxBubble_sfx84` | **4** | the SFX set's key 84 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
+| 123.1 | Dog | `SfxDog_sfx76` | **4** | the SFX set's key 76 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
+| 123.2 | Horse | `SfxHoof_sfx77` | **3** | the SFX set's key 77 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
+| 124.1 | Telephone 2 | `MoogTelephone2` | **3** | an ELECTRONIC TONE RINGER on the Moog (MoogTelephone2), fitted to GeneralUser GS's own (examples/telephone2_fit.py): OSC 2 a saw through a band pass for the piezo, LFO 1 a square switching it up a fifth at 14.6 Hz -- 1824/2736 Hz at C4, the upper 6.4 dB under (GU's 9.8), 8.6 dB rms over each tone's harmonics; sounds 2.8 octaves over where written. Ben: 'sound great' |
 | 124.2 | Door Creaking | `SfxDoorCreak_sfx59` | **4** | the SFX set's key 59 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOOR CREAKING: a hinge's stick-slip as a pulse train slowing 285 to 130 Hz (GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0): 1.6 dB |
 | 124.3 | Door | `SfxDoor_sfx60` | **4** | the SFX set's key 60 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOOR: a wooden door slammed (Freesound, CC0): the slab, the latch, the frame (perc_fit): 6.5 dB |
 | 124.4 | Scratch | `SfxScratchPull_sfx61` | **4** | the SFX set's key 61 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCRATCH: the Scratch Pull, as GeneralUser GS plays it |
@@ -744,15 +745,152 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 125.6 | Train | `SfxTrain_sfx68` | **4** | the SFX set's key 68 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): TRAIN fitted to a Freesound freight train (CC0): rumble and the wheels' clacks (clusters), 0.2 dB rms; levelled to the jet, timidity playing GeneralUser GS's train as silence |
 | 125.7 | Jetplane | `SfxJet_sfx69` | **4** | the SFX set's key 69 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): JETPLANE fitted to a Freesound jet (CC0): its roar (0.0 dB rms), swelling in |
 | 125.8 | Starship | `SfxStarship_sfx71` | **3** | the SFX set's key 71 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet |
-| 125.9 | Burst Noise | -- |  | not built: plays 125 Helicopter |
-| 126.1 | Laughing | -- |  | not built: plays 126 Applause |
+| 125.9 | Burst Noise | `SfxBurstNoise` | **3** | a hiss and LOW BURSTS (SfxBurstNoiseProperties), the weather's machinery fitted to GeneralUser GS's own (examples/weather_fit.py burst): the colour within ~1 dB from 320 Hz to 8 kHz, 100-400 Hz bursts ~1.6 a second at C4, transposed whole by the key. Ben: 'sound great' |
+| 126.1 | Laughing | `SfxLaugh_sfx52` | **4** | the SFX set's key 52 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): LAUGHING: a "ho ho ho" (Ben's call; a woman's laugh never read as one) -- a throat pulsed as a Freesound Santa says it (CC0): four arcing "ho"s and a long falling "hooo", each glottal pulse ringing his /o/'s formants (LPC: 500, 850 Hz, 2.5, 2.9, 5.7 kHz; examples/throat_fit.py), so the pitch slides through a fixed vowel. 2.1 s where GeneralUser GS's laugh is 0.9 |
 | 126.2 | Screaming | `SfxScream_sfx53` | **4** | the SFX set's key 53 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCREAMING: a girl's scream (Freesound, CC0), its harmonics at her own levels (h2 -5 dB, h3 -12) over a breath 60 dB under, sliding up a fourth into 1.24 kHz as GeneralUser GS's does (weather_fit HARMCOL: colour 0.0 dB at the harmonics) |
 | 126.3 | Punch | `SfxPunch_sfx54` | **4** | the SFX set's key 54 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): PUNCH: a fist on a body (Freesound, CC0) as a 16 ms burst of shaped noise, its colour fitted (2.6 dB) -- as a body's modes it rang half a second |
 | 126.4 | Heart Beat | `SfxHeartbeat_sfx55` | **3** | the SFX set's key 55 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): HEART BEAT: not a recording -- the heart's own waveform, a textbook ECG beat's Fourier series, 1 Hz harmonics at the FFT's gains and phases (examples/ecg_heart.py: rendered, correlation 1.000) -- and over it the BLOOD FLOW as a Doppler hears it, noise filling to a top that follows an artery's velocity (3 kHz at peak; systole, the dicrotic notch, diastole's run-off). Ben: "sounds great" |
-| 126.5 | Footstep | -- |  | not built: plays 126 Applause |
-| 127.1 | Machinegun | -- |  | not built: plays 127 Gunshot |
+| 126.5 | Footstep | `SfxFootstep_sfx56` | **4** | the SFX set's key 56 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): FOOTSTEPS1: a hard shoe on stone (Freesound, CC0): the heel as shaped noise (colour 1.0 dB) and, 70 ms on, the sole 8 dB under, as the recorded steps pair |
+| 127.1 | Machinegun | `SfxMachinegun_sfx73` | **4** | the SFX set's key 73 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): MACHINEGUN: the set's gun shot (72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0) -- an impact train in the set's own stroke table (percussion_map.KIT_STROKES) |
 | 127.2 | Lasergun | `SfxLaser_sfx74` | **3** | the SFX set's key 74 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): LASERGUN: a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0) measures. GeneralUser GS's is no reference (its envelope dies in 1 ms by the SF2; timidity plays a whine) |
 | 127.3 | Explosion | `SfxExplosion_sfx75` | **4** | the SFX set's key 75 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): EXPLOSION: a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB), at once, held 0.6 s, dying over the next second as GeneralUser GS's does |
+
+## Bank 127: the MT-32 set
+
+GS's bank 127 is the MT-32's 128 tones on the GS programs (SC-55 owner's
+manual p.69), for a file that selects it. Each plays its nearest voice
+here (patch_map.MT32_SET) at that voice's level, rated as that voice.
+
+| program.127 | MT-32 tone | plays | |
+|---|---|---|---|
+| 0.127 | Acou Piano 1 | GM 0 Acoustic Grand Piano | **4** |
+| 1.127 | Acou Piano 2 | GM 1 Bright Acoustic Piano | **4** |
+| 2.127 | Acou Piano 3 | GM 1 Bright Acoustic Piano | **4** |
+| 3.127 | Elec Piano 1 | GM 4 Electric Piano 1 | **4** |
+| 4.127 | Elec Piano 2 | GM 5 Electric Piano 2 | **4** |
+| 5.127 | Elec Piano 3 | GM 4 Electric Piano 1 | **4** |
+| 6.127 | Elec Piano 4 | GM 5 Electric Piano 2 | **4** |
+| 7.127 | Honkytonk | GM 3 Honky-tonk Piano | **3** |
+| 8.127 | Elec Org 1 | GM 16 Drawbar Organ | **4** |
+| 9.127 | Elec Org 2 | GM 17 Percussive Organ | **4** |
+| 10.127 | Elec Org 3 | GM 18 Rock Organ | **4** |
+| 11.127 | Elec Org 4 | GM 16 Drawbar Organ | **4** |
+| 12.127 | Pipe Org 1 | GM 19 Church Organ | **4** |
+| 13.127 | Pipe Org 2 | GM 19 Church Organ | **4** |
+| 14.127 | Pipe Org 3 | GM 20 Reed Organ | **4** |
+| 15.127 | Accordion | GM 21 Accordion | **4** |
+| 16.127 | Harpsi 1 | GM 6 Harpsichord | **4** |
+| 17.127 | Harpsi 2 | GM 6 Harpsichord | **4** |
+| 18.127 | Harpsi 3 | GM 6 Harpsichord | **4** |
+| 19.127 | Clavi 1 | GM 7 Clavinet | **4** |
+| 20.127 | Clavi 2 | GM 7 Clavinet | **4** |
+| 21.127 | Clavi 3 | GM 7 Clavinet | **4** |
+| 22.127 | Celesta 1 | GM 8 Celesta | **4** |
+| 23.127 | Celesta 2 | GM 8 Celesta | **4** |
+| 24.127 | Syn Brass 1 | GM 62 Synth Brass 1 | **4** |
+| 25.127 | Syn Brass 2 | GM 63 Synth Brass 2 | **4** |
+| 26.127 | Syn Brass 3 | GM 62 Synth Brass 1 | **4** |
+| 27.127 | Syn Brass 4 | GM 63 Synth Brass 2 | **4** |
+| 28.127 | Syn Bass 1 | GM 38 Synth Bass 1 | **4** |
+| 29.127 | Syn Bass 2 | GM 39 Synth Bass 2 | **4** |
+| 30.127 | Syn Bass 3 | GM 38 Synth Bass 1 | **4** |
+| 31.127 | Syn Bass 4 | GM 39 Synth Bass 2 | **4** |
+| 32.127 | Fantasy | GM 88 Pad 1 (new age) | **4** |
+| 33.127 | Harmo Pan | GM 89 Pad 2 (warm) | **4** |
+| 34.127 | Chorale | GM 52 Choir Aahs | **4** |
+| 35.127 | Glasses | GM 98 FX 3 (crystal) | **4** |
+| 36.127 | Soundtrack | GM 97 FX 2 (soundtrack) | **4** |
+| 37.127 | Atmosphere | GM 99 FX 4 (atmosphere) | **4** |
+| 38.127 | Warm Bell | GM 14 Tubular Bells | **4** |
+| 39.127 | Funny Vox | GM 54 Synth Choir | **4** |
+| 40.127 | Echo Bell | GM 102 FX 7 (echoes) | **3** |
+| 41.127 | Ice Rain | GM 96 FX 1 (rain) | **3** |
+| 42.127 | Oboe 2001 | GM 68 Oboe | **4** |
+| 43.127 | Echo Pan | GM 75 Pan Flute | **4** |
+| 44.127 | Doctor Solo | GM 81 Lead 2 (sawtooth) | **4** |
+| 45.127 | School Daze | GM 14 Tubular Bells | **4** |
+| 46.127 | Bellsinger | GM 85 Lead 6 (voice) | **4** |
+| 47.127 | Square Wave | GM 80 Lead 1 (square) | **4** |
+| 48.127 | Str Sect 1 | GM 48 String Ensemble 1 | **4** |
+| 49.127 | Str Sect 2 | GM 48 String Ensemble 1 | **4** |
+| 50.127 | Str Sect 3 | GM 49 String Ensemble 2 | **4** |
+| 51.127 | Pizzicato | GM 45 Pizzicato Strings | **4** |
+| 52.127 | Violin 1 | GM 40 Violin | **4** |
+| 53.127 | Violin 2 | GM 40 Violin | **4** |
+| 54.127 | Cello 1 | GM 42 Cello | **4** |
+| 55.127 | Cello 2 | GM 42 Cello | **4** |
+| 56.127 | Contrabass | GM 43 Contrabass | **4** |
+| 57.127 | Harp 1 | GM 46 Orchestral Harp | **4** |
+| 58.127 | Harp 2 | GM 46 Orchestral Harp | **4** |
+| 59.127 | Guitar 1 | GM 24 Acoustic Guitar (nylon) | **4** |
+| 60.127 | Guitar 2 | GM 25 Acoustic Guitar (steel) | **4** |
+| 61.127 | Elec Gtr 1 | GM 26 Electric Guitar (jazz) | **4** |
+| 62.127 | Elec Gtr 2 | GM 27 Electric Guitar (clean) | **4** |
+| 63.127 | Sitar | GM 104 Sitar | **4** |
+| 64.127 | Acou Bass 1 | GM 32 Acoustic Bass | **4** |
+| 65.127 | Acou Bass 2 | GM 32 Acoustic Bass | **4** |
+| 66.127 | Elec Bass 1 | GM 33 Electric Bass (finger) | **4** |
+| 67.127 | Elec Bass 2 | GM 34 Electric Bass (pick) | **4** |
+| 68.127 | Slap Bass 1 | GM 36 Slap Bass 1 | **4** |
+| 69.127 | Slap Bass 2 | GM 37 Slap Bass 2 | **4** |
+| 70.127 | Fretless 1 | GM 35 Fretless Bass | **4** |
+| 71.127 | Fretless 2 | GM 35 Fretless Bass | **4** |
+| 72.127 | Flute 1 | GM 73 Flute | **4** |
+| 73.127 | Flute 2 | GM 73 Flute | **4** |
+| 74.127 | Piccolo 1 | GM 72 Piccolo | **4** |
+| 75.127 | Piccolo 2 | GM 72 Piccolo | **4** |
+| 76.127 | Recorder | GM 74 Recorder | **4** |
+| 77.127 | Pan Pipes | GM 75 Pan Flute | **4** |
+| 78.127 | Sax 1 | GM 64 Soprano Sax | **4** |
+| 79.127 | Sax 2 | GM 65 Alto Sax | **4** |
+| 80.127 | Sax 3 | GM 66 Tenor Sax | **4** |
+| 81.127 | Sax 4 | GM 67 Baritone Sax | **4** |
+| 82.127 | Clarinet 1 | GM 71 Clarinet | **4** |
+| 83.127 | Clarinet 2 | GM 71 Clarinet | **4** |
+| 84.127 | Oboe | GM 68 Oboe | **4** |
+| 85.127 | Engl Horn | GM 69 English Horn | **4** |
+| 86.127 | Bassoon | GM 70 Bassoon | **4** |
+| 87.127 | Harmonica | GM 22 Harmonica | **4** |
+| 88.127 | Trumpet 1 | GM 56 Trumpet | **4** |
+| 89.127 | Trumpet 2 | GM 56 Trumpet | **4** |
+| 90.127 | Trombone 1 | GM 57 Trombone | **4** |
+| 91.127 | Trombone 2 | GM 57 Trombone | **4** |
+| 92.127 | Fr Horn 1 | GM 60 French Horn | **4** |
+| 93.127 | Fr Horn 2 | GM 60 French Horn | **4** |
+| 94.127 | Tuba | GM 58 Tuba | **4** |
+| 95.127 | Brs Sect 1 | GM 61 Brass Section | **3** |
+| 96.127 | Brs Sect 2 | GM 61 Brass Section | **3** |
+| 97.127 | Vibe 1 | GM 11 Vibraphone | **4** |
+| 98.127 | Vibe 2 | GM 11 Vibraphone | **4** |
+| 99.127 | Syn Mallet | GM 12 Marimba | **4** |
+| 100.127 | Windbell | GM 112 Tinkle Bell | **4** |
+| 101.127 | Glock | GM 9 Glockenspiel | **4** |
+| 102.127 | Tube Bell | GM 14 Tubular Bells | **4** |
+| 103.127 | Xylophone | GM 13 Xylophone | **4** |
+| 104.127 | Marimba | GM 12 Marimba | **4** |
+| 105.127 | Koto | GM 107 Koto | **4** |
+| 106.127 | Sho | GM 20 Reed Organ | **4** |
+| 107.127 | Shakuhachi | GM 77 Shakuhachi | **4** |
+| 108.127 | Whistle 1 | GM 78 Whistle | **4** |
+| 109.127 | Whistle 2 | GM 78 Whistle | **4** |
+| 110.127 | Bottleblow | GM 76 Blown Bottle | **4** |
+| 111.127 | Breathpipe | GM 76 Blown Bottle | **4** |
+| 112.127 | Timpani | GM 47 Timpani | **4** |
+| 113.127 | Melodic Tom | GM 117 Melodic Tom | **4** |
+| 114.127 | Deep Snare | Standard's key 38 played from the keyboard | **4** |
+| 115.127 | Elec Perc 1 | GM 118 Synth Drum | **4** |
+| 116.127 | Elec Perc 2 | GM 118 Synth Drum | **4** |
+| 117.127 | Taiko | GM 116 Taiko Drum | **4** |
+| 118.127 | Taiko Rim | GM 116 Taiko Drum | **4** |
+| 119.127 | Cymbal | Standard's key 49 played from the keyboard | **4** |
+| 120.127 | Castanets | Standard's key 85 played from the keyboard | **4** |
+| 121.127 | Triangle | Standard's key 81 played from the keyboard | **4** |
+| 122.127 | Orche Hit | GM 55 Orchestra Hit | **4** |
+| 123.127 | Telephone | GM 124 Telephone Ring | **4** |
+| 124.127 | Bird Tweet | GM 123 Bird Tweet | **4** |
+| 125.127 | One Note Jam | GM 28 Electric Guitar (muted) | **4** |
+| 126.127 | Water Bell | GM 98 FX 3 (crystal) | **4** |
+| 127.127 | Jungle Tune | GM 108 Kalimba | **4** |
 
 ## The class tree
 

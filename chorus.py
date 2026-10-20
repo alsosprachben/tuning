@@ -56,6 +56,22 @@ DELAY_S = (0.007, 0.011, 0.013, 0.017)
 FLOOR = 0.02
 
 
+# A DETUNED PAIR (tonelib detuned_pair: GS's Detuned EP / Detuned Organ) is not
+# a chorus: the GM sets build it as their sample TWICE, a few cents either way,
+# each half-way to its own side -- no sweep, no dry. So the note itself is the
+# lower copy, placed left, and one copy is made above it, placed right, by
+# LEVEL as a sample player pans (power held); the copy delayed as a chorus's,
+# so the two do not open in phase.
+PAIR_PAN = 0.5
+
+
+def pair_side(side):
+    """(left gain, right gain) for a copy `side` (-1 left, +1 right) of a pair,
+    each at half power."""
+    s = PAIR_PAN * side
+    return (0.5 * (1.0 - s)) ** 0.5, (0.5 * (1.0 + s)) ** 0.5
+
+
 def offsets_for(props):
     """The comb this voice wants, in cents."""
     cents = tuple(getattr(props, 'chorus_cents', ()) or ())
@@ -80,11 +96,15 @@ def expand(A, channels, sr, cols=None):
     keys = list(cols or A.keys())
     extra = {k: [] for k in keys}
     made = 0
-    for ch, (send, cents) in channels.items():
+    for ch, spec in channels.items():
+        send, cents = spec[0], spec[1]
         if send <= FLOOR or not cents:
             continue
         rows = np.flatnonzero(mch == ch)
         if not len(rows):
+            continue
+        if len(spec) > 2 and spec[2] == 'pair':
+            made += _pair(A, extra, keys, rows, cents, om, nf, p0, p0R, aL, aR, aM, sr)
             continue
         # A SEND IS A MIX, NOT AN ADDITION. Copies are incoherent with their
         # parent, so their powers add: two at full send made the channel 3.5 dB
@@ -137,4 +157,35 @@ def expand(A, channels, sr, cols=None):
                     col[int(i)] = col[int(i)] * dry
     for k in keys:
         A[k].extend(extra[k])
+    return made
+
+
+def _pair(A, extra, keys, rows, cents, om, nf, p0, p0R, aL, aR, aM, sr):
+    """A detuned pair over these rows: themselves moved down and left, a copy
+    up and right. Returns the copies made."""
+    lo, hi = 2.0 ** (cents[0] / 1200.0), 2.0 ** (cents[1] / 1200.0)
+    gl0, gr0 = pair_side(-1)
+    gl1, gr1 = pair_side(+1)
+    made = 0
+    delay = DELAY_S[0]
+    for i in rows:
+        i = int(i)
+        if nf[i] * hi < sr * 0.5:
+            for k in keys:
+                extra[k].append(A[k][i])
+            extra['om'][-1] = om[i] * hi
+            extra['nf'][-1] = nf[i] * hi
+            extra['p0'][-1] = p0[i] * hi - om[i] * hi * delay * sr
+            extra['p0R'][-1] = p0R[i] * hi - om[i] * hi * delay * sr
+            extra['aL'][-1] = aL[i] * gl1
+            extra['aR'][-1] = aR[i] * gr1
+            extra['aM'][-1] = aM[i] * 0.5 ** 0.5
+            made += 1
+        A['om'][i] = om[i] * lo
+        A['nf'][i] = nf[i] * lo
+        A['p0'][i] = p0[i] * lo
+        A['p0R'][i] = p0R[i] * lo
+        A['aL'][i] = aL[i] * gl0
+        A['aR'][i] = aR[i] * gr0
+        A['aM'][i] = aM[i] * 0.5 ** 0.5
     return made

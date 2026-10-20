@@ -136,8 +136,12 @@ import mf104 as _MFD
 # times the partial's frequency per second, which at 100000 is every sample --
 # a white wash. See chiff_bandwidth.
 RAND_GRAN = 100000.0
+# live builds its templates PLAIN of the Hammond scanner and applies the
+# selector per note at the stamp (scanner.apply), so a switch moved mid-
+# performance takes the next keys without a template per position
+SCANNER_OFF = False
 from patch_map import property_class_for_program, property_class_for_note, program_trim
-from patch_map import VariationProgram, VARIATIONS
+from patch_map import VariationProgram, VARIATIONS, layers_of
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
                             GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program,
@@ -2141,6 +2145,28 @@ def prepare(path, tuner='hybrid440', sink=None):
                     _BLrows[_up] = _la.copy()
                     _rows = (_lo, _up)
                 _SIREN_AT[(_c, _nt, _on)] = (_rows, _tprev)
+    # THE HAMMOND SCANNER (scanner.py; tonelib `scanner`, 'V1'..'C3'): its
+    # vibrato is a moving delay -- one row per channel, BC the delay as phase,
+    # on the synchronous motor's clock from the render's start, so every note
+    # rides the same sweep. Its partials go onto it after the notes are built
+    # (scanner.expand, below: vibrato moves them, chorus adds a copy).
+    _SCAN_CH = {}
+    for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
+        if SCANNER_OFF or _c in _SCAN_CH or is_drum(_pg):
+            continue
+        _spc = property_class_for_note(_pg, _nt)
+        if not (getattr(_spc, 'scanner_switch', False) or getattr(_spc, 'scanner', None)):
+            continue
+        import scanner as _SCN
+        # the selector's position: the channel's first CC94, else the voice's own
+        _c94 = [_val for _t, _cc, _val in in_order(ccs.get(_c, [])) if _cc == _SCN.SWITCH_CC]
+        _sset = _SCN.setting_of(_spc, _c94[0] if _c94 else None)
+        if _sset:
+            _dep, _cho = _sset
+            _rws = []
+            for _r, _cc in _SCN.rows(nblk, BLK, SR, _dep, _cho):      # a row per band
+                _rws.append(len(BRrows)); BRrows.append(_r); BCrows.append(_cc)
+            _SCAN_CH[_c] = (tuple(_rws), _dep, _cho)
     # THE CHANNEL FADER, MID-NOTE. A note took CC7 x CC11 (squared) once, at
     # its onset, so a swell or a fade written over a held note did nothing
     # here -- while live, a fader in someone's hand, moved the notes already
@@ -2161,7 +2187,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     def _plain(_pg, _nt):
         if isinstance(_pg, DrumProgram):
             return True
-        _k = (_pg, _nt)
+        _k = (_pg, getattr(_pg, 'variation', 0), getattr(_pg, 'layer', None), _nt)
         if _k not in _org:
             _pc = property_class_for_note(_pg, _nt)
             _org[_k] = not (getattr(_pc, 'registerable', False)
@@ -2214,6 +2240,8 @@ def prepare(path, tuner='hybrid440', sink=None):
         _own += [_r for (_ch, _nt, _on), (_r0, _r) in _MPE_AT.items() if _mpe_member.get((_ch, _nt, _on)) == _c]
         _own += [_x[2] for (_ch, _nt, _on), _x in _PN_AT.items() if _mpe_member.get((_ch, _nt, _on), _ch) == _c]
         _own += [_rw for (_ch, _nt, _on), (_rws, _e) in _SIREN_AT.items() if _ch == _c for _rw in _rws]
+        if _c in _SCAN_CH:
+            _own.extend(_SCAN_CH[_c][0])
         for _r in set(_own):
             if _r is not None and _r >= 0:
                 _BLrows[_r] = (_BLrows[_r] * _L) if _r in _BLrows else _L.copy()
@@ -2562,15 +2590,28 @@ def prepare(path, tuner='hybrid440', sink=None):
         if is_drum(pg):
             for _ln in key_layers(note, kit_for_program(int(pg))):
                 expanded.append((ch, _ln, on, off, vel, rest, pg))
+        # A LAYERED VARIATION (patch_map.LAYERED: GS's Orchestra): one event a
+        # layer, each its own program and transposition, before anything else
+        # sees the note
+        _lys = None if is_drum(pg) else layers_of(pg)
+        if _lys:
+            for _lp, _st in _lys:
+                if 0 <= note + _st <= 127:
+                    expanded.append((ch, note + _st, on, off, vel, rest, _lp))
+            continue
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
         # ...AND A KIT KEY PLAYED FROM THE KEYBOARD (patch_map.melodic_sfx: a GS
         # SFX variation) keeps its strokes: the dog's bark, the gallop's hooves,
         # the machine gun's train, the laugh's syllables, the bubbles' run --
         # its class names the key whose table they are
         if strokes is None and not is_drum(pg):
-            _sk = _sfx_strokes_of.get((pg, note), 0)
+            # keyed by the variation and layer as well: a VariationProgram is
+            # equal to its plain program, so 126.1's laugh and 126.0's applause
+            # shared one entry, whichever came first
+            _skk = (pg, getattr(pg, 'variation', 0), getattr(pg, 'layer', None), note)
+            _sk = _sfx_strokes_of.get(_skk, 0)
             if _sk == 0:
-                _sk = _sfx_strokes_of[(pg, note)] = getattr(
+                _sk = _sfx_strokes_of[_skk] = getattr(
                     property_class_for_note(pg, note), 'sfx_strokes_of', None)
             if _sk:
                 strokes = rasp_strokes(_sk[1], on, off, kit=_sk[0])
@@ -3039,6 +3080,41 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _don = _a + 1e-6 * _i
                 _dnew.append((_c, _dn, _don, _b, _first[4], _first[5], _first[6]))
                 _DRONE_PC[(_c, _dn, _don)] = _dcls
+    # THE TAISHOGOTO'S STRUCK DRONE (its last stop, tonelib.TaishoKotoProperties:
+    # the channel's first CC1 in even shares of the wheel, read once):
+    # the open G2 under every stroke of the channel, re-struck by the next --
+    # one string, so each ends where the next begins, the last left to ring --
+    # drone_strike_db under the stroke (velocity on the square law)
+    _TD_CH = {}
+
+    def _drone_stop(_c, _pc):
+        if _c not in _TD_CH:
+            _c1t = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == 1]
+            _TD_CH[_c] = (min(len(_pc.drone_stops) - 1, int(_c1t[0] * len(_pc.drone_stops) / 128))
+                          if _c1t else int(_pc.drone_stop_default))
+        return _TD_CH[_c]
+    for _c in _by_ch:
+        _cn = sorted((_e for _e in notes if _e[0] == _c and not is_drum(_e[6])
+                      and getattr(property_class_for_note(_e[6], _e[1]), 'drone_stops', None)),
+                     key=lambda _e: _e[2])
+        if not _cn:
+            continue
+        _tpc = property_class_for_note(_cn[0][6], _cn[0][1])
+        if _drone_stop(_c, _tpc) < len(_tpc.drone_stops) - 1:
+            continue
+        _dcls = getattr(T, _tpc.drone_strike_class)
+        _dv = 10 ** (_tpc.drone_strike_db / 40.0)
+        _starts = sorted({_e[2] for _e in _cn})
+        for _e in _cn:
+            _nx = [t for t in _starts if t > _e[2]]
+            if _e[2] in [_d[2] - 1e-6 for _d in _dnew if _d[0] == _c]:
+                continue                  # a chord: one drone stroke
+            _doff = min(_nx[0] if _nx else _e[2] + _tpc.drone_strike_ring_s,
+                        _e[2] + _tpc.drone_strike_ring_s)
+            _don = _e[2] + 1e-6
+            _dnew.append((_c, _tpc.drone_strike_note, _don, _doff,
+                          max(1, int(round(_e[4] * _dv))), _e[5], _e[6]))
+            _DRONE_PC[(_c, _tpc.drone_strike_note, _don)] = _dcls
     notes = notes + _dnew
     # what the last prepare() sounded as drones: (channel, note, on, off, class
     # name), for the selftests to read
@@ -3353,6 +3429,7 @@ def prepare(path, tuner='hybrid440', sink=None):
                         effects=dict(sympathetic=_SYM_CH, mf104=_MF104, tubeamp=_AMP_CH,
                                      clavinet=_CLAV_CH, htremolo=_HTREM_CH, tremolo=_TREM_CH,
                                      chorus=_CHORUS_CH, cabinet=_CAB_CH, leslie=_LESLIE_CH,
+                                     scanner=_SCAN_CH,
                                      register=_REG_CH, register_scale=REGISTER_SCALE,
                                      register_strings=(string_partial, partial_decay,
                                                        unison_partial))))
@@ -4016,8 +4093,18 @@ def prepare(path, tuner='hybrid440', sink=None):
                 _REVERB_CH[_MCH[0]] = float(props.reverb_distance)
         if _MCH[0] not in _CHORUS_CH:
             _c93 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
-            if _c93 and _c93[0] > 0:
-                _CHORUS_CH[_MCH[0]] = (_c93[0] / 127.0, _CHR.offsets_for(props))
+            if _c93:
+                if _c93[0] > 0:
+                    _CHORUS_CH[_MCH[0]] = (_c93[0] / 127.0, _CHR.offsets_for(props))
+            elif getattr(props, 'chorus_send', None):
+                # A VOICE THAT IS ITS INSTRUMENT THROUGH A CHORUS PEDAL (GS's
+                # Chorus Gt): the pedal on by default, as the file's CC93 would
+                # set it -- and a CC93 the file does send overrides it, 0 for off
+                _CHORUS_CH[_MCH[0]] = (float(props.chorus_send), _CHR.offsets_for(props))
+            elif getattr(props, 'detuned_pair', None):
+                # a DETUNED voice's own pair (chorus._pair): GS's Detuned EP
+                # and Organ; a CC93 on the channel is a chorus instead
+                _CHORUS_CH[_MCH[0]] = (1.0, tuple(props.detuned_pair), 'pair')
         if getattr(props, 'leslie', False) and _MCH[0] not in _LESLIE_CH:
             # CC1 IS THE HALF-MOON SWITCH: >=64 tremolo, below chorale. A
             # rotor has momentum, so this is a history of requests and not a
@@ -5061,6 +5148,24 @@ def prepare(path, tuner='hybrid440', sink=None):
                                      bfade, rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level,
                                      cvp, cc_r, crl, sjit, csc, gr, cr)
                         _LATE[0] = False
+                    # FEEDBACK (tonelib.Feedback: GS 30.8, 31.8): the loop's
+                    # partial and its own series, a late copy swelling in at the
+                    # loop's onset and held, sinking at its own rate, until the
+                    # note is let go -- at the fundamental's pluck level, so it
+                    # does not inherit this partial's own
+                    _fbk = props.feedback_harmonic(f0) if hasattr(props, 'feedback_harmonic') else 0
+                    if _fbk and m % _fbk == 0:
+                        _fbs = dict(props.feedback_series).get(m // _fbk, 0.0)
+                        _fon = non_m + props.feedback_delay_s * SR
+                        if _fbs > 0.0 and _fon < noff and hv > 0.0:
+                            _fs = props.feedback_gain * _fbs * hv_sub(1) / hv
+                            _fdb = props.feedback_dbs
+                            _flr = math.log(T.db_ratio(_fdb)) if _fdb > 0 else 0.0
+                            _LATE[0] = True
+                            emit_partial(2*math.pi*hf/SR, gL*_fs, gR*_fs, gM*_fs, hf, _fon, noff,
+                                         max(1e-4, props.feedback_swell_s)*SR, rel_r, chiff_r,
+                                         _flr, _flr, 0.0, 0.0, cvp, cc_r, crl, sjit, csc, gr, cr)
+                            _LATE[0] = False
                     transverse.append((hf, hv, dbps))
                     # A DRONE IS THE PART, NOT THE NOTE: emit it once for the
                     # channel, spanning its whole range, and skip it on every
@@ -5385,6 +5490,14 @@ def prepare(path, tuner='hybrid440', sink=None):
             print("  tremolo: %.1f Hz, depth %.2f%s, %d sidebands"
                   % (_r0[0], _r0[1], " (stereo pan)" if _r0[2] else "", _nt))
 
+    # THE SCANNER IS INSIDE THE ORGAN, ahead of any chorus pedal, the cabinet
+    # and the Leslie, whose copies inherit its row
+    if _SCAN_CH:
+        import scanner as _SCN
+        _ns = _SCN.expand(A, _SCAN_CH, SR, PARTIAL_COLS + ('az', 'dr'))
+        print("  scanner: %s, %d chorus copies (the circuit's dry share under them)"
+              % (", ".join("ch%d %s%d" % (c, "C" if v[2] else "V", v[1]) for c, v in _SCAN_CH.items()), _ns))
+
     # THE CHORUS SITS BEFORE THE SPEAKER, which is where a chorus pedal sits:
     # the cabinet colours whatever reaches it, copies included.
     if _CHORUS_CH:
@@ -5447,6 +5560,9 @@ def prepare(path, tuner='hybrid440', sink=None):
                 # at their own pitch: Live._meend_retune)
                 sym_rows=(_sym0, _sym1), ring_rows=list(_RING), push_rows=list(_PUSH_ROWS), leslie_flip=list(_LFLIP),
                 grain_rows=list(_GRAIN_ROWS),
+                # the scanner's rows by channel (live: its slots onto a part's
+                # own scanner row -- a template's row index means nothing there)
+                scan_rows={c: v[0] for c, v in _SCAN_CH.items()},
                 # ...AND A STROKED NOTE'S STROKES (rasp_strokes: a machine gun's
                 # train, a bark's pulses, the guiro's ridges): each keeps its
                 # place in the note, where live had put them all at the press

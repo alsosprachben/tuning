@@ -5805,6 +5805,10 @@ class TonewheelProperties(SynthProperties):
 
     Only nine ratios exist, and the seventh harmonic is not among them.
     """
+    # THE SCANNER VIBRATO / CHORUS (scanner.py): the B-3's selector, on CC94
+    # (off, V1-V3, C1-C3); off unless the voice says otherwise (16.8, 17.8: C3)
+    scanner_switch = True
+    scanner = None
     # A synchronous motor decides the pitch, not the player.
     pitch_bendable = False
     # A tonewheel runs off a synchronous motor; the key is a switch and the
@@ -12143,6 +12147,64 @@ class TubularBellProperties(TunedBarProperties):
         return super().harmonic_decay(harmonic)
 
 
+class ChurchBellProperties(TubularBellProperties):
+    """GS 14.8, "Church Bell": a CHURCH BELL, measured -- St. Kathrin's in
+    Gelting (Pianobook, Zoom H5; sources.md), one strike, its modes read
+    window by window (0.25 s) and each fitted to a line in dB: its level at
+    the strike and its decay.
+
+    The written note is the STRIKE NOTE, which a bell is heard at an octave
+    under its NOMINAL (here 649.6 Hz, E5 a little flat: the strike E4). Under
+    it the HUM, flat as a village bell's often is (0.438, not 0.5), and a mode
+    at 1.125 -- the prime/tierce region -- both ringing on for seconds (2-4
+    dB/s): the bell's tail. The nominal at 2.0 (7.6 dB/s), the superquint at
+    3.0 a DOUBLET 3 Hz apart, beating; above it the clang -- 4.2 to 13.7, as
+    loud as the nominal at the strike and gone in a second (27-57 dB/s), a
+    triplet at 7.0. Tubular bells' register law for the rest: a bigger bell,
+    lower, rings longer."""
+    # (ratio to the strike note, per octave, dB at the strike, per octave, dB/s)
+    # The fast ones (> 25 dB/s) and the 1.125 4 dB over their lines' intercepts:
+    # a mode that dies within the fit's first window reads low across it (as
+    # the tubular bell's fit found), measured here against the render
+    TUBE_MODES = (
+        (0.438, 0.0, -26.6, 0.0, 2.3),
+        (0.589, 0.0, -49.8, 0.0, 1.0),
+        (1.125, 0.0, -9.8, 0.0, 3.7),
+        (2.000, 0.0, -2.8, 0.0, 7.6),
+        (3.021, 0.0, -14.6, 0.0, 8.7),
+        (3.030, 0.0, -11.6, 0.0, 9.4),
+        (4.207, 0.0, 4.0, 0.0, 33.6),
+        (4.825, 0.0, -24.3, 0.0, 12.9),
+        (5.527, 0.0, -13.8, 0.0, 27.2),
+        (6.073, 0.0, -0.8, 0.0, 33.7),
+        (6.980, 0.0, -6.0, 0.0, 34.7),
+        (6.992, 0.0, -5.8, 0.0, 34.0),
+        (7.003, 0.0, -8.9, 0.0, 33.0),
+        (7.986, 0.0, -5.9, 0.0, 43.6),
+        (8.581, 0.0, 0.5, 0.0, 51.6),
+        (9.128, 0.0, -6.7, 0.0, 47.3),
+        (10.317, 0.0, -11.8, 0.0, 37.1),
+        (12.163, 0.0, -9.6, 0.0, 44.5),
+        (13.693, 0.0, -8.1, 0.0, 57.2),
+    )
+    TUBE_REF_HZ = 324.8
+    mode_ratios = tuple(m[0] for m in TUBE_MODES)
+    max_harmonic = len(TUBE_MODES)
+    # level with GM 14's tubular bell at the strike (its first 0.5 s): +6.1 dB
+    initial_gain = TubularBellProperties.initial_gain * 10.0 ** (6.1 / 20.0)
+
+    def harmonic_decay(self, harmonic):
+        # THE TABLE IS THE RECORDING'S dB/s, at the bell's own strike note: the
+        # engine reads a decay at twice its value (measured: every mode 1.49x
+        # its table through the tubular bell's law, which is 2x at 415 Hz's
+        # register factor), and a lower bell rings longer from there
+        if 1 <= harmonic <= len(self.TUBE_MODES):
+            f = self.frequency_x * 2.0 ** self.octave_position
+            return (self.TUBE_MODES[harmonic - 1][4] / 2.0
+                    * 2.0 ** (self.decay_register_slope * _log(f / self.TUBE_REF_HZ) / _log(2.0)))
+        return super().harmonic_decay(harmonic)
+
+
 class TimpaniProperties(MembraneDrumProperties):
     """A kettledrum: a large tuned membrane over a closed bowl.
 
@@ -14583,7 +14645,7 @@ class MoogSawLead(SawtoothSynthProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,   # +6 cents
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.201155, resonance=0.171053, eg_amount=0.778887, kb_track=1.0,
+        cutoff=0.599407, resonance=0.171053, eg_amount=0.778887, kb_track=1.0,
         f_attack=0.0, f_decay=0.185522, f_sustain=0.594757, f_release=0.134897,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.175397,
     )
@@ -14600,7 +14662,7 @@ class MoogCalliopeLead(TriangleSynthProperties):
     initial_gain = TriangleSynthProperties.initial_gain * 10 ** (2.0 / 20.0)
     messenger = dict(
         osc1_wave=0.335, osc2_wave=0.335, osc2_octave=4, osc1_level=1.0, osc2_level=0.25,
-        cutoff=0.424804, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
+        cutoff=0.81834, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.028487, f_decay=0.134897, f_sustain=0.781424, f_release=0.134897,
         a_attack=0.060231, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
     )
@@ -14621,7 +14683,7 @@ class MoogChiffLead(ChiffLeadProperties):
     chiff_volume = 0.0
     messenger = dict(
         osc1_wave=0.5, osc2_level=0.0, osc1_level=1.0, noise_level=0.117769,
-        cutoff=0.201155, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
+        cutoff=0.599407, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
         f_attack=0.0, f_decay=0.277265, f_sustain=0.515793, f_release=0.095069,
         a_attack=0.012614, a_decay=0.134897, a_sustain=0.974811, a_release=0.134897,
     )
@@ -14643,7 +14705,7 @@ class MoogCharangLead(CharangLeadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 10.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.263777, resonance=0.239474, eg_amount=0.676383, kb_track=1.0,
+        cutoff=0.660709, resonance=0.239474, eg_amount=0.676383, kb_track=1.0,
         f_attack=0.0, f_decay=0.134897, f_sustain=0.713203, f_release=0.079197,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.095069,
     )
@@ -14660,7 +14722,7 @@ class MoogVoiceLead(VoiceLeadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
-        cutoff=0.335344, resonance=0.068421, eg_amount=0.676383, kb_track=1.0,
+        cutoff=0.730766, resonance=0.068421, eg_amount=0.676383, kb_track=1.0,
         f_attack=0.076103, f_decay=0.185522, f_sustain=0.781424, f_release=0.134897,
         a_attack=0.125028, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
     )
@@ -14679,7 +14741,7 @@ class MoogFifthsLead(FifthsLeadProperties):
     initial_gain = FifthsLeadProperties.initial_gain * 10 ** (11.3 / 20.0)
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=1.0, osc1_level=0.8, osc2_level=0.5,
-        cutoff=0.201155, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
+        cutoff=0.599407, resonance=0.136842, eg_amount=0.749444, kb_track=1.0,
         f_attack=0.0, f_decay=0.185522, f_sustain=0.594757, f_release=0.134897,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.175397,
     )
@@ -14695,7 +14757,7 @@ class MoogBassLead(BassLeadProperties):
     initial_gain = BassLeadProperties.initial_gain * 10 ** (12.4 / 20.0)
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_octave=16, osc1_level=0.8, osc2_level=0.7,
-        cutoff=0.156425, resonance=0.205263, eg_amount=0.761619, kb_track=1.0,
+        cutoff=0.555621, resonance=0.205263, eg_amount=0.761619, kb_track=1.0,
         f_attack=0.0, f_decay=0.134897, f_sustain=0.555275, f_release=0.095069,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.134897,
     )
@@ -14713,7 +14775,7 @@ class MoogSquareLead(SquareSynthProperties):
     messenger = dict(
         osc1_wave=0.68, osc2_level=0.0, sub_wave=0.3, sub_level=0.5,
         osc1_level=1.0,
-        cutoff=0.245885, resonance=0.102632, eg_amount=0.749444, kb_track=1.0,
+        cutoff=0.643194, resonance=0.102632, eg_amount=0.749444, kb_track=1.0,
         f_attack=0.0, f_decay=0.134897, f_sustain=0.634239, f_release=0.134897,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.134897,
     )
@@ -14743,7 +14805,7 @@ class MoogSynthBass1(SynthBass1Properties):
     initial_gain = SynthBass1Properties.initial_gain * 10 ** (7.7 / 20.0)
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_octave=16, osc1_level=0.85, osc2_level=0.5,
-        cutoff=0.156425, resonance=0.136842, eg_amount=0.761619, kb_track=1.0,
+        cutoff=0.555621, resonance=0.136842, eg_amount=0.761619, kb_track=1.0,
         f_attack=0.0, f_decay=0.291137, f_sustain=0.466518, f_release=0.185522,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.104523,
     )
@@ -14758,7 +14820,7 @@ class MoogSynthBass2(SynthBass2Properties):
     initial_gain = SynthBass2Properties.initial_gain * 10 ** (5.4 / 20.0)
     messenger = dict(
         osc1_wave=0.68, osc2_level=0.0, sub_wave=0.3, sub_level=0.5, osc1_level=1.0,
-        cutoff=0.210101, resonance=0.307895, eg_amount=0.749444, kb_track=1.0,
+        cutoff=0.608165, resonance=0.307895, eg_amount=0.749444, kb_track=1.0,
         f_attack=0.0, f_decay=0.22178, f_sustain=0.515793, f_release=0.134897,
         a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.104523,
     )
@@ -14776,7 +14838,7 @@ class MoogSynthBrass1(SynthBrass1Properties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.084858, resonance=0.102632, eg_amount=0.795146, kb_track=1.0,
+        cutoff=0.485563, resonance=0.102632, eg_amount=0.795146, kb_track=1.0,
         f_attack=0.119966, f_decay=0.321666, f_sustain=0.673721, f_release=0.185522,
         a_attack=0.082452, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
     )
@@ -14792,7 +14854,7 @@ class MoogSynthBrass2(SynthBrass2Properties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 11.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.049074, resonance=0.068421, eg_amount=0.736643, kb_track=1.0,
+        cutoff=0.450534, resonance=0.068421, eg_amount=0.736643, kb_track=1.0,
         f_attack=0.22213, f_decay=0.369419, f_sustain=0.752001, f_release=0.249524,
         a_attack=0.155403, a_decay=0.134897, a_sustain=1.0, a_release=0.249524,
     )
@@ -14815,7 +14877,7 @@ class MoogSynthStrings1(SynthStrings1Properties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 7.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.263777, resonance=0.0, eg_amount=0.657762, kb_track=1.0,
+        cutoff=0.660709, resonance=0.0, eg_amount=0.657762, kb_track=1.0,
         f_attack=0.195902, f_decay=0.401385, f_sustain=0.840271, f_release=0.401385,
         a_attack=0.195902, a_decay=0.249524, a_sustain=1.0, a_release=0.401385,
     )
@@ -14830,10 +14892,115 @@ class MoogSynthStrings2(SynthStrings2Properties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 11.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.201155, resonance=0.0, eg_amount=0.657762, kb_track=1.0,
+        cutoff=0.599407, resonance=0.0, eg_amount=0.657762, kb_track=1.0,
         f_attack=0.337985, f_decay=0.401385, f_sustain=0.869694, f_release=0.436552,
         a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
     )
+
+
+# GS'S SYNTH VARIATIONS ON THE MOOG (bank 8): STARTING PANELS, to be voiced
+# by Ben on his Messenger (live.py --messenger: its knobs turn the part's
+# panel; examples/messenger_variations.py read the GS sets' tones for what
+# each is). Each is its capital tone's class with its own panel.
+
+class MoogSynthBass3(MoogSynthBass1):
+    """GS 38.8 "Synth Bass 3": the ACID bass (GeneralUser GS calls it so) --
+    one saw into a resonant ladder nearly shut, the filter contour snapping
+    open and falling to a low sustain: the squelch is the resonance riding
+    the sweep. RES BASS on, so the ladder's feedback does not thin the bass."""
+    # at its capital tone's level (examples/messenger_variations.py ab, rms)
+    initial_gain = MoogSynthBass1.initial_gain * 10 ** (-10.2 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc1_level=1.0, osc2_level=0.0, sub_level=0.0,
+        cutoff=0.529753, resonance=0.62, res_bass=True, eg_amount=0.80, kb_track=1.0,
+        f_attack=0.0, f_decay=0.22, f_sustain=0.30, f_release=0.12,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.09,
+    )
+
+
+class MoogSynthBass4(MoogSynthBass2):
+    """GS 39.8 "Synth Bass 4": both GS sets' takes hold a PEAK high in the
+    settled tone (h17-23, 10-16 dB over its neighbours) -- a resonant ladder
+    left open, so the bass talks. A square with the SUB under it, the
+    resonance high and the cutoff tracking the key, a short contour on top."""
+    # at its capital tone's level (examples/messenger_variations.py ab, rms)
+    initial_gain = MoogSynthBass2.initial_gain * 10 ** (-14.0 / 20.0)
+    messenger = dict(
+        osc1_wave=0.68, osc1_level=1.0, osc2_level=0.0, sub_wave=0.3, sub_level=0.6,
+        cutoff=0.696168, resonance=0.70, res_bass=True, eg_amount=0.66, kb_track=1.0,
+        f_attack=0.0, f_decay=0.20, f_sustain=0.40, f_release=0.12,
+        a_attack=0.0, a_decay=0.134897, a_sustain=1.0, a_release=0.09,
+    )
+
+
+class MoogSynthStrings3(MoogSynthStrings1):
+    """GS 50.8 "Syn.Strings 3": the brighter, quicker string machine -- two
+    saws nine cents apart, the ladder further open with a touch of
+    resonance, the swell a third as long as 50's."""
+    # at its capital tone's level (examples/messenger_variations.py ab, rms)
+    initial_gain = MoogSynthStrings1.initial_gain * 10 ** (3.1 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 9.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.735324, resonance=0.10, eg_amount=0.62, kb_track=1.0,
+        f_attack=0.12, f_decay=0.40, f_sustain=0.85, f_release=0.40,
+        a_attack=0.12, a_decay=0.249524, a_sustain=1.0, a_release=0.40,
+    )
+
+
+class MoogSynthBrass3(MoogSynthBrass1):
+    """GS 62.8 "Synth Brass 3": 62's blat, punchier -- the pair closer (six
+    cents), the contour opening faster and further, a little resonance on
+    its edge."""
+    # at its capital tone's level (examples/messenger_variations.py ab, rms)
+    initial_gain = MoogSynthBrass1.initial_gain * 10 ** (1.2 / 20.0)
+    messenger = dict(
+        osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.510175, resonance=0.18, eg_amount=0.82, kb_track=1.0,
+        f_attack=0.09, f_decay=0.30, f_sustain=0.70, f_release=0.185522,
+        a_attack=0.06, a_decay=0.134897, a_sustain=1.0, a_release=0.185522,
+    )
+
+
+class MoogSynthBrass4(MoogSynthBrass2):
+    """GS 63.8 "Synth Brass 4": 63's soft brass on SQUARES -- hollower,
+    fourteen cents apart, slower still to open."""
+    # at its capital tone's level (examples/messenger_variations.py ab, rms)
+    initial_gain = MoogSynthBrass2.initial_gain * 10 ** (-4.5 / 20.0)
+    messenger = dict(
+        osc1_wave=0.68, osc2_wave=0.68, osc2_freq=0.5 + 14.0 / 1400.0,
+        osc1_level=0.8, osc2_level=0.8,
+        cutoff=0.461229, resonance=0.06, eg_amount=0.72, kb_track=1.0,
+        f_attack=0.26, f_decay=0.40, f_sustain=0.78, f_release=0.30,
+        a_attack=0.20, a_decay=0.134897, a_sustain=1.0, a_release=0.30,
+    )
+
+
+class MoogTelephone2(SawtoothSynthProperties):
+    """GS 124.1 "Telephone 2": the ELECTRONIC TONE RINGER that replaced the
+    gongs (examples/telephone2_fit.py, fitted to GeneralUser GS's own tone).
+    A ringer chip is a small synth -- an oscillator, a square LFO switching
+    its pitch up a fifth fourteen times a second, a piezo disc whose
+    resonance favours the lower tone -- so the Moog plays it: OSC 1 at the
+    key, LFO 1 a square on its pitch, the ladder a band pass for the disc.
+    C4 rings at GU's own pitch (1824 Hz), so it sounds 2.8 octaves over where
+    it is written, as the helicopter sounds under. It rings while held and
+    stops when let go, as GU's does: the cadence is the score's (GM 124)."""
+    moog = True
+    sounding_octaves = 2.8013
+    # OSC 2, as LFO 1's pitch destination is on the Messenger: a saw through a
+    # band pass a fifth of an octave under the lower tone (examples/
+    # telephone2_fit.py: each tone's harmonics and their balance, 8.6 dB rms
+    # over GU's -- the upper 6.4 dB under the lower, GU's 9.8; GU's lower
+    # tone keeps more of its 2nd than one band pass can), LFO 1 a square up
+    # a fifth at 14.6 Hz, reset at each key, gone 50 ms after the key
+    messenger = dict(osc2_wave=0.5, osc1_level=0.0, osc2_level=1.0, osc2_freq=0.5, sub_level=0.0,
+                     noise_level=0.0, mode=2, kb_track=1.0, resonance=0.42, eg_amount=0.5,
+                     cutoff=0.42177, f_attack=0.0, f_decay=0.4, f_sustain=1.0, f_release=0.05,
+                     a_attack=0.0, a_decay=0.4, a_sustain=1.0, a_release=0.08,
+                     lfo1_shape=3, lfo1_dest=1, lfo1_rate=0.838703, lfo1_depth=0.750229,
+                     lfo1_reset=True, mod_amount=0.5)
 
 
 class MoogWarmPad(WarmPadProperties):
@@ -14846,7 +15013,7 @@ class MoogWarmPad(WarmPadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 10.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.138533, resonance=0.034211, eg_amount=0.636626, kb_track=1.0,
+        cutoff=0.538106, resonance=0.034211, eg_amount=0.636626, kb_track=1.0,
         f_attack=0.353903, f_decay=0.401385, f_sustain=0.899117, f_release=0.489307,
         a_attack=0.353903, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
     )
@@ -14862,7 +15029,7 @@ class MoogPolysynthPad(PolysynthPadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 7.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.263777, resonance=0.102632, eg_amount=0.736643, kb_track=1.0,
+        cutoff=0.660709, resonance=0.102632, eg_amount=0.736643, kb_track=1.0,
         f_attack=0.028487, f_decay=0.277265, f_sustain=0.713203, f_release=0.337583,
         a_attack=0.095149, a_decay=0.321666, a_sustain=0.924433, a_release=0.337583,
     )
@@ -14878,7 +15045,7 @@ class MoogHaloPad(HaloPadProperties):
     messenger = dict(
         osc1_wave=0.68, osc2_wave=0.68, osc2_freq=0.5 + 6.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.7, noise_level=0.047107,
-        cutoff=0.29956, resonance=0.068421, eg_amount=0.624722, kb_track=1.0,
+        cutoff=0.695737, resonance=0.068421, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.337985, f_decay=0.401385, f_sustain=0.869694, f_release=0.489307,
         a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
     )
@@ -14895,7 +15062,7 @@ class MoogSweepPad(SweepPadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.111696, resonance=0.307895, eg_amount=0.5, kb_track=1.0,
+        cutoff=0.511835, resonance=0.307895, eg_amount=0.5, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=1.0, f_release=0.471722,
         a_attack=0.30615, a_decay=0.249524, a_sustain=1.0, a_release=0.471722,
         lfo1_rate=0.161946, lfo1_shape=0, lfo1_depth=0.774527, lfo1_dest=0,
@@ -14912,7 +15079,7 @@ class MoogSoundtrackPad(SoundtrackFXProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 14.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.174317, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
+        cutoff=0.573135, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
         f_attack=0.50775, f_decay=0.489307, f_sustain=0.899117, f_release=0.544434,
         a_attack=0.44579, a_decay=0.249524, a_sustain=1.0, a_release=0.544434,
         lfo1_rate=0.102026, lfo1_shape=0, lfo1_depth=0.731545, lfo1_dest=0,
@@ -14936,7 +15103,7 @@ class MoogAtmosphereFX(AtmosphereFXProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.335, osc2_freq=0.5 + 5.0 / 1400.0,
         osc1_level=0.7, osc2_level=0.5, noise_level=0.147211,
-        cutoff=0.201155, resonance=0.102632, eg_amount=0.657762, kb_track=1.0,
+        cutoff=0.599407, resonance=0.102632, eg_amount=0.657762, kb_track=1.0,
         f_attack=0.353903, f_decay=0.401385, f_sustain=0.869694, f_release=0.489307,
         a_attack=0.358678, a_decay=0.249524, a_sustain=1.0, a_release=0.489307,
     )
@@ -14953,7 +15120,7 @@ class MoogGoblinsFX(GoblinsFXProperties):
     initial_gain = GoblinsFXProperties.initial_gain * 10 ** (11.4 / 20.0)
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.066966, resonance=0.205263, eg_amount=0.624722, kb_track=1.0,
+        cutoff=0.468048, resonance=0.205263, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=0.899117, f_release=0.436552,
         a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
         lfo1_rate=0.388669, lfo1_shape=0, lfo1_depth=0.587592, lfo1_dest=1,
@@ -14972,7 +15139,7 @@ class MoogSciFiFX(SciFiFXProperties):
     messenger = dict(
         osc1_wave=0.68, osc2_wave=0.68, osc2_freq=0.5 + 9.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
-        cutoff=0.066966, resonance=0.410526, eg_amount=0.815524, kb_track=1.0,
+        cutoff=0.468048, resonance=0.410526, eg_amount=0.815524, kb_track=1.0,
         f_attack=0.30615, f_decay=0.619504, f_sustain=0.555275, f_release=0.436552,
         a_attack=0.125028, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
         lfo1_rate=0.44535, lfo1_shape=0, lfo1_depth=0.772117, lfo1_dest=2,
@@ -14989,7 +15156,7 @@ class MoogBrightnessFX(BrightnessFXProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.8,
-        cutoff=0.406912, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
+        cutoff=0.800825, resonance=0.136842, eg_amount=0.676383, kb_track=1.0,
         f_attack=0.0, f_decay=0.249524, f_sustain=0.781424, f_release=0.369419,
         a_attack=0.050707, a_decay=0.489307, a_sustain=0.899117, a_release=0.369419,
     )
@@ -15006,7 +15173,7 @@ class MoogChoirPad(ChoirPadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 6.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.7,
-        cutoff=0.335344, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
+        cutoff=0.730766, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=0.869694, f_release=0.436552,
         a_attack=0.30615, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
     )
@@ -15026,7 +15193,7 @@ class MoogBowedPad(BowedPadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
-        mode=2, cutoff=0.243144, resonance=0.478947, eg_amount=0.5, kb_track=1.0,
+        mode=2, cutoff=0.640511, resonance=0.478947, eg_amount=0.5, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=1.0, f_release=0.507281,
         a_attack=0.395288, a_decay=0.249524, a_sustain=1.0, a_release=0.507281,
     )
@@ -15058,7 +15225,7 @@ class MoogMetallicPad(MetallicPadProperties):
     messenger = dict(
         osc1_wave=0.335, osc2_wave=0.335, osc2_octave=4, osc2_freq=0.5 + 50.0 / 1400.0,
         osc1_level=0.0, osc2_level=0.9,
-        cutoff=0.263777, resonance=0.0, eg_amount=0.749444, kb_track=1.0,
+        cutoff=0.660709, resonance=0.0, eg_amount=0.749444, kb_track=1.0,
         f_attack=0.125028, f_decay=0.581586, f_sustain=0.594757, f_release=0.436552,
         a_attack=0.255422, a_decay=0.249524, a_sustain=1.0, a_release=0.436552,
         mod_dest=0, mod_amount=0.634694,
@@ -15084,7 +15251,7 @@ class MoogCrystalFX(CrystalFXProperties):
     messenger = dict(
         osc1_wave=0.335, osc2_wave=0.335, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
         osc1_level=0.4, osc2_level=0.9,
-        cutoff=0.245885, resonance=0.0, eg_amount=0.815524, kb_track=1.0,
+        cutoff=0.643194, resonance=0.0, eg_amount=0.815524, kb_track=1.0,
         f_attack=0.0, f_decay=0.544434, f_sustain=0.0, f_release=0.489307,
         a_attack=0.0, a_decay=0.581586, a_sustain=0.0, a_release=0.489307,
         mod_dest=0, mod_amount=0.634694,
@@ -15112,7 +15279,7 @@ class MoogRainFX(RainFXProperties):
     messenger = dict(
         osc1_wave=0.335, osc2_wave=0.335, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
         osc1_level=0.4, osc2_level=0.9,
-        cutoff=0.353236, resonance=0.0, eg_amount=0.778887, kb_track=1.0,
+        cutoff=0.748281, resonance=0.0, eg_amount=0.778887, kb_track=1.0,
         f_attack=0.0, f_decay=0.249524, f_sustain=0.0, f_release=0.249524,
         a_attack=0.0, a_decay=0.321666, a_sustain=0.0, a_release=0.249524,
         mod_dest=0, mod_amount=0.634694,
@@ -15134,7 +15301,7 @@ class MoogEchoesFX(EchoesFXProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 5.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
-        cutoff=0.111696, resonance=0.171053, eg_amount=0.795146, kb_track=1.0,
+        cutoff=0.511835, resonance=0.171053, eg_amount=0.795146, kb_track=1.0,
         f_attack=0.0, f_decay=0.185522, f_sustain=0.354911, f_release=0.249524,
         a_attack=0.0, a_decay=0.337583, a_sustain=0.354911, a_release=0.249524,
         mf104_on=True, mf104_range=0, mf104_time=0.602, mf104_feedback=0.49,
@@ -15158,14 +15325,14 @@ class MoogNewAgePad(NewAgePadProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 8.0 / 1400.0,
         osc1_level=0.75, osc2_level=0.75,
-        cutoff=0.201155, resonance=0.068421, eg_amount=0.676383, kb_track=1.0,
+        cutoff=0.599407, resonance=0.068421, eg_amount=0.676383, kb_track=1.0,
         f_attack=0.30615, f_decay=0.401385, f_sustain=0.840271, f_release=0.489307,
         a_attack=0.337985, a_decay=0.249524, a_sustain=1.0, a_release=0.507281,
     )
     messenger_b = dict(
         osc1_wave=0.335, osc2_wave=0.335, osc2_octave=4, osc2_freq=0.5 + 600.0 / 1400.0,
         osc1_level=0.25, osc2_level=0.55,
-        cutoff=0.263777, resonance=0.0, eg_amount=0.805505, kb_track=1.0,
+        cutoff=0.660709, resonance=0.0, eg_amount=0.805505, kb_track=1.0,
         f_attack=0.0, f_decay=0.489307, f_sustain=0.0, f_release=0.401385,
         a_attack=0.0, a_decay=0.544434, a_sustain=0.0, a_release=0.401385,
         mod_dest=0, mod_amount=0.634694,
@@ -17387,7 +17554,7 @@ class MoogSynthDrum(SynthDrumProperties):
     initial_gain = SynthDrumProperties.initial_gain * 10 ** (6.5 / 20.0)
     messenger = dict(
         osc1_level=0.0, osc2_wave=0.335, osc2_level=1.0, noise_level=0.070661,
-        cutoff=0.201155, resonance=0.136842, eg_amount=0.778887, kb_track=1.0,
+        cutoff=0.599407, resonance=0.136842, eg_amount=0.778887, kb_track=1.0,
         f_attack=0.0, f_decay=0.185522, f_sustain=0.0, f_release=0.185522,
         a_attack=0.0, a_decay=0.525858, a_sustain=0.0, a_release=0.525858,
         mod_dest=1, mod_amount=0.6,     # +1 octave at the peak (MOD_PITCH_OCTAVES 5)
@@ -22435,7 +22602,7 @@ class MoogSynthVoice(SynthVoiceProperties):
     messenger = dict(
         osc1_wave=0.5, osc2_wave=0.5, osc2_freq=0.5 + 4.0 / 1400.0,
         osc1_level=0.8, osc2_level=0.6,
-        cutoff=0.317452, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
+        cutoff=0.713252, resonance=0.0, eg_amount=0.624722, kb_track=1.0,
         f_attack=0.22213, f_decay=0.401385, f_sustain=0.869694, f_release=0.321666,
         a_attack=0.22213, a_decay=0.249524, a_sustain=1.0, a_release=0.321666,
     )
@@ -23469,8 +23636,13 @@ def sympathetic_partials(driver, responder, gain=None):
     # the driver's loudest partial, and the responder then rings at its own
     # natural amplitude times the gain.
     ref = max(a for _, a in dpar) or 1.0
+    # ...NO NARROWER THAN THE PLUCK SPREADS IT, where the voice says how far
+    # (sympathetic_width_hz): a struck string's first moments are a transient,
+    # not a tone, and a lap steel's low E answers an E3 on the next string at
+    # -13 dB from 1.7 Hz away, where its own mode (0.1 Hz wide) would not hear it
+    wmin = float(getattr(responder, 'sympathetic_width_hz', 0.0) or 0.0)
     for j, (fj, aj) in enumerate(rpar, start=1):
-        bw = _mode_bandwidth(responder, j)
+        bw = max(_mode_bandwidth(responder, j), wmin)
         d = 0.0
         for fi, ai in dpar:
             x = (fi - fj) / max(bw, 1e-9)
@@ -23995,6 +24167,25 @@ class SfxRainProperties(SfxWeatherProperties):
     grains = ((500.0, 16000.0, 40.0, 74.2, 8.0, 3000.0, 1.0, 0.001, 12),)
 
 
+class SfxBurstNoiseProperties(SfxWeatherProperties):
+    """GS 125.9 "Burst Noise", fitted to GeneralUser GS's own tone (no
+    recording of the SC-55's; examples/weather_fit.py burst): a steady hiss,
+    flat from 1.6 to 6.4 kHz, and low bursts in it -- 100-400 Hz, ~1.6 a
+    second at C4 -- the weather's machinery (a noise table and grains).
+    Played from the keyboard as GS plays it, transposed whole by the key (as
+    the melodic SFX are, patch_map.melodic_sfx); held while the key is."""
+    one_shot = False
+    transposed_from_hz = 261.6256
+    breath_noise_fade_s = 0.01
+    breath_noise_db = ((51, 20.0), (101, 35.0), (202, 45.0), (404, 50.0), (808, 50.0), (1616, 48.0),
+                       (3233, 48.0), (6465, 48.0), (12931, 40.0))
+    # FITTED (examples/weather_fit.py burst): the colour within ~1 dB of GU's
+    # from 320 Hz to 8 kHz, the bursts 12 dB under where the fit's kurtosis
+    # step took them (the 127 Hz band their check: -23.6 dB against GU's -24.5)
+    breath_noise_db = ((51, 25.0), (64, 23.1), (80, 26.2), (101, 5.7), (127, -35.9), (160, 2.0), (202, 9.2), (255, 28.1), (321, 49.8), (404, 52.5), (509, 52.4), (641, 54.1), (808, 51.3), (1018, 39.4), (1283, 40.5), (1616, 40.9), (2036, 50.5), (2566, 40.7), (3233, 45.3), (4073, 46.4), (5132, 47.9), (6465, 49.2), (8146, 48.4), (10263, 41.9), (12931, -9.0))
+    grains = ((100.0, 400.0, 1.6, 46.4, 6.0, 60.0),)
+
+
 class SfxThunderProperties(SfxWeatherProperties):
     """SFX 80, "Thunder": nearly all of it under 250 Hz -- a rumble swelling 10
     dB, the cracks in it low grains."""
@@ -24129,6 +24320,553 @@ class SfxSirenProperties(SfxWeatherProperties):
     attack_time = 0.01
     release_valve_time = 0.05
     release_fraction_max = None
+
+
+class CoupledHarpsichordProperties(HarpsichordProperties):
+    """GS 6.8, "Coupled Hps.": the 8' and the 4' together -- what both GM sets
+    play (GeneralUser's and MuseScore's 6.8 are their harpsichord with a layer
+    an octave up), Ben's pick of four (8'+8', 8'+4', 8'+8'+4'). The upper 8'
+    stays a stop to draw: the full coupler's tutti is one more stop away."""
+    default_stops = 0b0101
+
+
+class AccordionItalianProperties(AccordionProperties):
+    """GS 21.8, "Accordion It": the musette -- THREE middle reeds, the wet one
+    16 cents sharp as GM 21's (the Hohner, measured) and its mirror 16 flat,
+    each narrowing up the keyboard by the Hohner's own -3.3 cents an octave:
+    M-, M, M+. Both GM sets make their Italian accordion the plain one made
+    wetter (their sample again, detuned against itself); juskiddink's Paolo
+    Soprani take is a dry register and says nothing of the tuning
+    (examples/musette_fit.py). Ben's pick of dry, GM 21 and this."""
+    reed_bank_gain = (AccordionProperties.reed_bank_gain[0], AccordionProperties.reed_bank_gain[0])
+    reed_bank_ratio = (1.0, 1.0)
+    reed_detune_cents = (16.0, -16.0)
+    reed_detune_per_octave = (-3.32, 3.32)
+
+
+# THE DETUNED EPs (GS 4.8, 5.8): the program's own voice as a DETUNED PAIR
+# (chorus._pair) -- the note a few cents down and half left, a copy as far up
+# and half right, by level, no sweep: what both GM sets build (their sample
+# twice, MuseScore's EP +-4 cents) -- a chorus pedal in front of an EP.
+# THE "DETUNED" ORGANS (16.8, 17.8) are what that detuning stands in for on a
+# tonewheel organ, which cannot be detuned (one shaft, one synchronous
+# motor): its SCANNER CHORUS (scanner.py), C3.
+class DetunedEP1Properties(RhodesProperties):
+    """GS 4.8, "Detuned EP 1": the Rhodes as a detuned pair, +-4 cents."""
+    detuned_pair = (-4.0, 4.0)
+
+
+class DetunedEP2Properties(WurlitzerProperties):
+    """GS 5.8, "Detuned EP 2": the Wurlitzer as a detuned pair, +-4 cents."""
+    detuned_pair = (-4.0, 4.0)
+
+
+# third octaves, as the pianos' strike tables
+PICK_NOISE_BANDS = (453, 570, 718, 905, 1140, 1437, 1810, 2281, 2874, 3620, 4561, 5747,
+                    7241, 9123, 11494, 14482, 18245)
+
+
+class Plectrum:
+    """A STRING STRUCK BY A PICK (examples/plectrum_fit.py), against a finger's
+    pluck: measured on the 12-string's, the mandolin's and the lap steel's
+    takes, three things ours lacked --
+
+      A BRIGHT TRANSIENT. The pick's sharp corner launches the upper partials
+      far louder than they ring: the takes' energy over 4 kHz in their first
+      15 ms stands 4-19 dB higher than ours, and falls 7-38 dB by 0.1-0.2 s.
+      So every partial above pick_hz starts pick_slope_db an octave louder
+      (to pick_boost_max_db) and the extra falls at pick_dbs; what remains
+      rings on at the string's own law (the renderer's aftersound: the share
+      that rings on is the partial's level before the boost).
+      THE PICK'S NOISE. A plectrum scraping off the string: the takes' first
+      20 ms are near-noise between 1 and 8 kHz (flatness -4 dB, ours -15 to
+      -23), and as bright on E2 as on A4 -- so it is noise of its own, the
+      scrape (pick_noise_db, below), not the partials made brighter: a boost
+      over pick_hz alone left the low notes dull and the high ones shrill.
+      What the boost still does is a top that dies fast (the mandolin's).
+      A COURSE CROSSED, NOT STRUCK AT ONCE (course_stagger_s, on a doubled
+      course): the pick reaches the second string a few ms after the first,
+      and the attack builds in two steps (the takes' rise 17-28 ms to peak).
+    """
+    pick_hz = 1500.0
+    pick_slope_db = 6.0
+    pick_boost_max_db = 18.0
+    pick_dbs = 60.0
+    course_stagger_s = 0.0
+    chiff_volume = 0.0
+    chiff_width = 0.015
+    chiff_cycle = 0.0
+    # THE SCRAPE ITSELF, as noise rather than partials (the renderer's strike,
+    # strike_noise_db): the takes' attack is as bright on a high note as a low
+    # one (energy over 4 kHz in the first 15 ms within ~3 dB from E2 to A4),
+    # which a boost on the partials over pick_hz cannot be -- it leaves a low
+    # note dull and a high one shrill. A third-octave table from
+    # pick_noise_lo_hz up, pick_noise_db re the note's gain at 2 kHz and
+    # pick_noise_tilt_db an octave, falling pick_noise_dbs. None = no scrape.
+    pick_noise_db = None
+    pick_noise_tilt_db = 0.0
+    pick_noise_lo_hz = 700.0
+    pick_noise_hi_hz = None             # ...and over it falling 12 dB an octave
+    pick_noise_dbs = 300.0
+    strike_noise_fade_s = 0.0005
+    strike_noise_len_s = 0.12
+
+    @property
+    def strike_noise_db(self):
+        from math import log2
+        if self.pick_noise_db is None:
+            return ()
+        hi = self.pick_noise_hi_hz
+        return tuple((hz, self.pick_noise_db + self.pick_noise_tilt_db * log2(hz / 2000.0)
+                      - (12.0 * log2(hz / hi) if hi and hz > hi else 0.0))
+                     for hz in PICK_NOISE_BANDS if hz >= self.pick_noise_lo_hz)
+
+    @property
+    def strike_noise_dbs(self):
+        return self.pick_noise_dbs
+
+    def _pick_db(self, m):
+        from math import log2
+        f = self.frequency_x * (2.0 ** self.octave_position) * m
+        if f <= self.pick_hz:
+            return 0.0
+        return min(self.pick_boost_max_db, self.pick_slope_db * log2(f / self.pick_hz))
+
+    def harmonic_volume(self, m):
+        v = super().harmonic_volume(m)
+        b = self._pick_db(m)
+        return v * 10.0 ** (b / 20.0) if b > 0.0 else v
+
+    def harmonic_decay(self, m):
+        base = super().harmonic_decay(m)
+        return max(base, self.pick_dbs) if self._pick_db(m) > 0.0 else base
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        b = self._pick_db(m)
+        if b > 0.0:
+            return (10.0 ** (-b / 20.0), super().harmonic_decay(m))
+        return (0.0, decay_rate)
+
+    def section_onsets_at(self, frequency):
+        if self.course_stagger_s > 0.0:
+            return [0.0, self.course_stagger_s]
+        return super().section_onsets_at(frequency)
+
+
+class TwelveStringProperties(Plectrum, SteelGuitarProperties):
+    """GS 25.8, "12-str. Gt": the steel-string with every COURSE DOUBLED, as a
+    12-string's are -- read off John Magner's Fender 12-string (Pianobook;
+    sources.md), its notes' harmonics resolved into doublets.
+
+      THE LOW FOUR COURSES (E A D G) pair each string with a thin one an
+      OCTAVE up: its harmonics land on the main string's EVEN ones, so it is
+      a voice on each even harmonic (unison_voices) -- as loud as the main
+      string at its own pitch (the open low strings' 2nd harmonic ~10 dB over
+      a single string's), 8 cents off (the doublets 6-14).
+      THE TOP TWO (B E) are UNISON pairs: a voice on every harmonic, 0.9 of
+      the main, 5.5 cents off (the doublets 1-2 Hz, 2.6-9 cents, median 5.5).
+    A note's course by its pitch: below B3 the octave courses, B3 and up the
+    unison ones (where the frets put them on the low E-A-D-G and B-E)."""
+    course_split = 59
+    octave_partner_gain = 1.0
+    octave_partner_cents = 8.0
+    unison_partner_gain = 0.9
+    unison_partner_cents = 5.5
+    # THE PICK (examples/plectrum_fit.py): a scrape at the note's own level to
+    # 7 kHz, gone at 400 dB/s (the takes' top falls 10-20 dB by 25 ms: a first
+    # fit on 15 ms shares alone took a long quiet scrape to 10 kHz, which Ben
+    # heard as harsh), the courses crossed 28 ms apart; the partials need no
+    # boost of their own once the scrape is there
+    pick_noise_db = 0.0
+    pick_noise_tilt_db = 0.0
+    pick_noise_hi_hz = 7000.0
+    pick_noise_dbs = 400.0
+    pick_slope_db = 0.0
+    course_stagger_s = 0.028
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        from math import log2
+        out = list(super().unison_voices(frequency, harmonic, harmonic_decay))
+        midi = 69 + 12 * log2(max(float(frequency), 1e-6) / 440.0)
+        if midi >= self.course_split - 0.5:
+            r = 2.0 ** (self.unison_partner_cents / 1200.0) - 1.0
+            out.append((self.unison_partner_gain, 0.0, r, harmonic_decay, 0.0))
+        elif harmonic % 2 == 0:
+            # the octave string's k-th harmonic, on the main's 2k-th: its level
+            # the main string's k-th (the same string an octave shorter)
+            k = harmonic // 2
+            hm = self.harmonic_volume(harmonic)
+            if hm > 0.0:
+                g = self.octave_partner_gain * self.harmonic_volume(k) / hm
+                r = 2.0 ** (self.octave_partner_cents / 1200.0) - 1.0
+                out.append((min(g, 30.0), 0.0, r, harmonic_decay, 0.0))
+        return out
+
+
+class Feedback:
+    """A GUITAR HELD INTO FEEDBACK (GS 30.8, 31.8): the string, the pickup,
+    the amp and the speaker a loop -- the speaker's sound driving the string
+    at a frequency the loop favours, the string's own decay overcome, so one
+    partial SWELLS after the pluck and holds while the note is held.
+    Measured on two Pianobook packs (sources.md; examples/feedback_fit.py):
+      CLEAN (the Gretsch, OMS-1): the fundamental itself, rising ~24 dB over
+      the pluck in a second or two, holding (falling ~0.7 dB/s), its odd
+      harmonics coming up as the amp saturates (h3 -25, h5 -16 dB);
+      CRANKED (a '69 Strat into a Super Reverb, the Feedbacker): the partial
+      nearest the loop's band -- 600-1100 Hz on its takes -- blooming over the
+      fading pluck a second or more in.
+    Rendered as a late copy of that partial (blockrender: beside the bloom's),
+    at its own onset, swell and decay, and its own harmonics over it."""
+    feedback_band_hz = 800.0
+    feedback_fixed_harmonic = None      # 1: the fundamental, whatever the note
+    feedback_delay_s = 1.0              # when the loop takes hold
+    feedback_swell_s = 1.5              # how long it takes to rise
+    feedback_gain = 1.0                 # its level re the fundamental's pluck
+    feedback_dbs = 0.7                  # how fast it sinks while held
+    # its own series, (multiple, gain): the tone the loop sustains
+    feedback_series = ((1, 1.0),)
+
+    def feedback_harmonic(self, frequency):
+        from math import log2
+        if self.feedback_fixed_harmonic:
+            return int(self.feedback_fixed_harmonic)
+        return max(1, min(range(1, 33), key=lambda k: abs(log2(k * frequency / self.feedback_band_hz))))
+
+
+class FeedbackGuitarProperties(Feedback, DistortionGuitarProperties):
+    """GS 30.8 "Feedback Gt.": the distortion guitar held into FEEDBACK -- the
+    pluck, and a second or more later the partial nearest the loop's band
+    (~800 Hz) swelling over it, distorted with it by the amp."""
+    feedback_delay_s = 1.2
+    feedback_swell_s = 2.0
+    feedback_gain = 1.0
+
+
+class GuitarFeedbackProperties(Feedback, ElectricGuitarProperties):
+    """GS 31.8 "Gt. Feedback": the feedback ITSELF, on a clean amp (the
+    Gretsch's): the note's fundamental sustained by the loop, swelling in
+    over the pluck, its odd harmonics rising as the amp saturates."""
+    # against the Gretsch's clean G4 (examples/feedback_fit.py): the
+    # fundamental ~23 dB over the pluck a second in, its odd harmonics at
+    # -25/-16/-21 dB by 3 s, sinking ~0.7 dB/s while held
+    feedback_fixed_harmonic = 1
+    feedback_delay_s = 0.2
+    feedback_swell_s = 1.2
+    feedback_gain = 16.0
+    feedback_dbs = 0.4
+    feedback_series = ((1, 1.0), (3, 0.056), (5, 0.09), (7, 0.056))
+
+
+class TaishoKotoProperties(TwelveStringProperties):
+    """GS 107.8 "Taisho Koto": the taishogoto, the keyed zither of 1912 -- a
+    typewriter's row of keys stopping its strings on frets, the right hand
+    picking -- fitted to Arthur Chanson's soprano (Pianobook, Taishogoto;
+    sources.md; examples/pluck_fit.py --voice=taisho).
+
+    EVERY KEY STOPS A COURSE: one string at the note and THREE an octave over
+    it, as the 12-string's low courses pair a string with its octave (E5 in
+    the pack sounds 330 and 661 Hz at one level; its upper lines a few cents
+    apart). Written at the low string, as the 12-string is. Picked: its
+    plectrum (tonelib.Plectrum) the 12-string's until fitted."""
+    course_split = 200                  # every note an octave course
+    octave_partner_gain = 1.0           # the trio's sum re the low string
+    # ITS DECAY (pluck_fit --fit=decay --nh=6: on h1-h6, the takes' upper
+    # harmonics in their floor within a second), 10.7 dB/s rms
+    decay_db = 4.937
+    harmonic_decay_db = 0.7595
+    decay_register_slope = 0.1527
+    # ITS TOP (pluck_fit --fit=bright --top): 13.2 dB rms over the 0.15 s
+    # ladders, the rest each single pluck's own point (one take a note)
+    tonal_dampening = 0.85
+    bore_corner_hz = 2500.0
+    bore_order = 2.5
+    # A SMALL BOX: the low string's fundamental radiated weakly (pluck_fit
+    # --fit=bright: E5's 3rd 11 dB over its 1st, the trio 14)
+    bell_cutoff_hz = 600.0
+    bell_order = 2.5
+    # the trio's three strings, cents off the octave (lines -3, 0, +2.5)
+    octave_trio_cents = (-3.0, 0.0, 2.5)
+
+    # THE DRONE, A STOP ON THE WHEEL (Ben: "like we do for bagpipe. As a stop,
+    # that can be selected by moving up modulation"): the open G2 string the
+    # keys never stop (TaishoDroneProperties). CC1 selects, in halves of the
+    # wheel (read once from a file, live under the wheel, as the bagpipe's):
+    #   0  SYMPATHY   the open string ringing where the melody's partials
+    #                 land on its own (G, D, B notes), as the lap steel's do --
+    #                 an undamped open string always does; the default
+    #   1  STRUCK     the pick catching it with every stroke too, re-struck
+    #                 each time, drone_strike_db under the stroke
+    # (No damped stop: the sympathy is in a patch's templates, so live would
+    # need a second set of them to take it away.)
+    drone_stops = ("sympathy", "struck")
+    drone_stop_default = 0
+    drone_strike_class = "TaishoDroneProperties"
+    drone_strike_variation = 9          # its bank on 107 (patch_map), for live's templates
+    drone_strike_note = 43              # G2
+    drone_strike_db = -6.0
+    drone_strike_ring_s = 12.0          # the last stroke's, left to ring
+    sympathetic_mode = 'coincidence'
+    sympathetic_strings = (0,)
+    sympathetic_tonic = 43
+    sympathetic_width_hz = 2.0
+    sympathetic_per_mode = True
+    sympathetic_max = 4
+    sympathetic_floor = 0.0
+    sympathetic_gain = 0.7
+
+    # THE PICK SWEEPS THE COURSE (Ben: "some of the plucks are sweeps of
+    # octaves"): timed on all 81 takes, the trio starts with the low string in
+    # about half (0-7 ms) and 15-60 ms after it in the rest -- the octave heard
+    # arriving -- the high notes most often. Each key its own draw from that
+    # (fixed by the pitch, as the telephone's strokes are), the three upper
+    # strings crossed sweep_step_s apart. (A few takes go the other way, the
+    # trio ~10 ms first; not modelled.)
+    course_stagger_s = 0.0
+    sweep_together_s = (0.0, 0.007)
+    sweep_swept_s = (0.015, 0.05)
+    sweep_share = 0.5
+    sweep_step_s = 0.002
+
+    def section_onsets_at(self, frequency):
+        r = _random.Random(int(round(frequency * 16.0)) * 6151 + 1078)
+        lo, hi = self.sweep_swept_s if r.random() < self.sweep_share else self.sweep_together_s
+        d = r.uniform(lo, hi)
+        return [0.0] + [d + i * self.sweep_step_s for i in range(len(self.octave_trio_cents))]
+
+    # THE LOW STRING DARKER THAN THE TRIO: its own harmonics fall
+    # low_string_tilt_db an octave more than the trio's (the takes' odd
+    # harmonics -- the low string's alone -- 8-42 dB down where the trio's
+    # own 2nd and 3rd are 1-24)
+    low_string_tilt_db = 0.0
+
+    def harmonic_volume(self, m):
+        from math import log2
+        v = super().harmonic_volume(m)
+        return v * 10.0 ** (-self.low_string_tilt_db * log2(m) / 20.0) if m > 1 else v
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        out = list(SteelGuitarProperties.unison_voices(self, frequency, harmonic, harmonic_decay))
+        if harmonic % 2 == 0:
+            hm = self.harmonic_volume(harmonic)
+            if hm > 0.0:
+                # the trio's k-th harmonics on the low string's 2k-th, each a
+                # third of the sum's power -- at the string's own spectrum,
+                # without the low string's extra tilt
+                g = self.octave_partner_gain * super().harmonic_volume(harmonic // 2) / hm
+                g = min(g, 30.0) / len(self.octave_trio_cents) ** 0.5
+                for c in self.octave_trio_cents:
+                    out.append((g, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, 0.0))
+        return out
+
+
+class TaishoDroneProperties(Plectrum, SteelGuitarProperties):
+    """The taishogoto's DRONE: an open G2 string (98 Hz) the keys never stop,
+    on the same small box -- its takes (Drone_Mic_*, 24 strokes, ringing 7-12
+    s) all G2's harmonics, its own fundamental all but silent, the 4th the
+    strongest. Struck with the melody or ringing in sympathy with it as the
+    wheel selects (TaishoKotoProperties.drone_stops). Fitted by
+    examples/pluck_fit.py --voice=taishodrone."""
+    # ITS DECAY (--fit=decay --nh=8): 3.4 dB/s rms over the 24 strokes
+    decay_db = 3.929
+    harmonic_decay_db = 1.001
+    decay_register_slope = 0.9166
+    # THE MIC HEARS LITTLE UNDER 400 Hz of it (its 2nd, 196 Hz, near silent
+    # there, the strongest on the pickup): the box's corner higher for this
+    # string, the steel guitar's trim cleared -- the colour within ~10 dB of
+    # the takes' from 300 Hz to 10 kHz (806 and 2031 Hz the outliers)
+    bell_cutoff_hz = 900.0
+    bell_order = 4.0
+    body_trim_db = ()
+    tonal_dampening = 0.97
+    bore_corner_hz = 9000.0
+    bore_order = 2.5
+    pick_noise_db = 0.0
+    pick_noise_hi_hz = 7000.0
+    pick_noise_dbs = 400.0
+    pick_slope_db = 0.0
+
+
+class UkuleleProperties(Plectrum, NylonGuitarProperties):
+    """GS 24.8 "Ukulele": Ben's own, a professional Luna (concert size, he
+    thinks) tuned G C E A
+    (re-entrant, G4 C4 E4 A4) at A440, played and recorded by Ben
+    (sources.md, ukulele_ben/; examples/pluck_fit.py --voice=ukulele): four
+    nylon-family strings on a small box, plucked with the flesh of the
+    finger.
+
+    IT DIES FAST AND DARK: its fundamental at 15-45 dB/s (a guitar's ~5),
+    everything from the 5th harmonic 25-40 dB down and in the room's floor
+    within a second -- the decay fitted on h1-h6 (--fit=decay --nh=6; 13.2
+    dB/s rms, the takes' harmonics erratic note to note: the body takes some
+    and not others)."""
+    # THE FINGER'S FLESH (tonelib.Plectrum's scrape, no pick): a soft noise
+    # burst at the pluck -- the takes' first 20 ms flatness -8 to -18 dB,
+    # ours without it -21 to -33. No boost on the partials, no course
+    # (fitted on the takes' first-20 ms flatness, -14.6 dB median, matched;
+    # their top over 2 kHz still ~5-8 dB under ours in those 15 ms -- a
+    # fingertip rounding the pluck's start, not modelled)
+    pick_slope_db = 0.0
+    pick_noise_db = -12.0
+    pick_noise_tilt_db = 0.0
+    pick_noise_hi_hz = 5000.0
+    pick_noise_dbs = 400.0
+    # ITS PITCH WANDERS (Ben: "the recording seems like it might drift in
+    # pitch more than the guitar model"): after the strike's glide (+12 cents
+    # settling in 0.2 s, as ours) each of its notes wanders 9 cents over the
+    # next second (median range 0.2-1.4 s; quartiles 5-13), some sagging flat
+    # and coming back, some drifting sharp -- a soft, low-tension string under
+    # a fretting finger's changing pressure. Each note its own slow swing:
+    # depth up to string_wander_cents, its rate and phase drawn by the key.
+    string_wander_cents = 7.0
+    string_wander_hz = (0.4, 0.9)
+
+    def voice_vibrato(self, frequency, index):
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        rng = _random.Random(0x0CE + midi * 64 + index)
+        return ((2.0 ** (self.string_wander_cents / 1200.0) - 1.0) * rng.uniform(0.3, 1.0),
+                rng.uniform(*self.string_wander_hz), rng.uniform(0.0, 6.283185307179586))
+
+    # ITS STRINGS' STIFFNESS, MEASURED: B 2.7e-4, the median of the 52 notes'
+    # partial positions (1e-4 to 6e-4, no register trend) -- the nylon
+    # guitar's 1.3e-3 put its 6th harmonic 38 cents sharp
+    inharmonicity_coefficient = 2.7e-4
+    # ITS TOP (--fit=bright --wide): brighter than the nylon guitar, the low
+    # pass all but open -- its harmonics held to the 12th
+    tonal_dampening = 0.35
+    bore_corner_hz = 10000.0
+    bore_order = 0.7
+    # ITS BOX (--fit=body: 2.9 dB rms over the third octaves to 5 kHz): a
+    # resonance at the 800 Hz third (+9) and a hollow at 1 kHz (-11) where
+    # the guitar's box has neither. Above 5 kHz the takes at 0.1-0.3 s are
+    # the room's hiss (40 dB under the notes), not the uke: not fitted
+    body_trim_db = ((254, -4.2), (320, 0.3), (403, -5.3), (508, -0.7), (640, -3.1), (806, 9.1),
+                    (1016, -11.1), (1280, -2.2), (1613, 1.6), (2032, -4.4), (2560, -3.2), (3225, 6.2),
+                    (4064, 2.2), (5120, -0.4))
+    decay_db = 4.182
+    harmonic_decay_db = 9.528
+    decay_register_slope = 0.02292
+
+
+class MandolinProperties(Plectrum, SteelGuitarProperties):
+    """GS 25.16, "Mandolin": four UNISON COURSES of steel strings on a small
+    body -- fitted to Joshua Meltzer's late-1800s mandolin (Pianobook, Eclectic
+    Mandolin, carved from its monolith; examples/pluck_fit.py --voice=mandolin),
+    which sounds from D3: an old instrument tuned low. Each note's course is a
+    pair, a voice on every harmonic 5.5 cents off at 0.9 (its doublets 2-13
+    cents, median ~5.5, the partner within a few dB)."""
+    unison_partner_gain = 0.9
+    unison_partner_cents = 5.5
+    # THE PICK (examples/plectrum_fit.py, on flatness and how fast the top
+    # falls -- not its level: the take is re-amped dark): a scrape at the
+    # note's level to 5.5 kHz gone at 700 dB/s, and the top partials struck
+    # 12 dB an octave over pick_hz, gone at 400 dB/s -- the take's top falls
+    # 24-42 dB by 0.1 s; the courses crossed 14 ms apart. (+6 dB scored a
+    # little better; the gentler level, after Ben's "too harsh")
+    pick_noise_db = 0.0
+    pick_noise_tilt_db = 0.0
+    pick_noise_hi_hz = 5500.0
+    pick_noise_dbs = 700.0
+    pick_slope_db = 12.0
+    pick_boost_max_db = 24.0
+    pick_dbs = 400.0
+    course_stagger_s = 0.014
+    # FITTED (pluck_fit.py --voice=mandolin --fit=decay): a short ring, the
+    # treble shorter (register slope 1.35), every harmonic near one rate
+    decay_db = 14.35
+    harmonic_decay_db = 0.01024
+    decay_register_slope = 1.35
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        out = list(super().unison_voices(frequency, harmonic, harmonic_decay))
+        r = 2.0 ** (self.unison_partner_cents / 1200.0) - 1.0
+        out.append((self.unison_partner_gain, 0.0, r, harmonic_decay, 0.0))
+        return out
+
+
+class HawaiianGuitarProperties(Plectrum, JazzGuitarProperties):
+    """GS 26.8, "Hawaiian Gt.": a LAP STEEL -- a hollow-body guitar played flat,
+    its strings stopped by a steel bar instead of frets. Fitted to David Long's
+    (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel):
+    its six open strings (open E, E2-E4; the pack labels each an octave high,
+    and its "A3" is a note slid into with the bar, left out).
+
+    IT SUSTAINS: the decay fitted to them, the low harmonics ringing at 2-6
+    dB/s where the archtop's die at 6-8 -- a solid neck, high strings, no
+    frets to damp."""
+    # FINGERPICKS, NOT A FLATPICK: the takes' top does not fall after the
+    # strike (examples/plectrum_fit.py, FALL ~0 dB) -- no transient boost
+    pick_slope_db = 0.0
+    # FITTED (pluck_fit.py --voice=lapsteel --fit=decay): 17.4 -> 10.2 dB/s rms
+    decay_db = 6.629
+    harmonic_decay_db = 0.3713
+    decay_register_slope = 0.6132
+    # ...AND DARK: the tone control rolled back on its pickup, loading the
+    # coil's resonance down and damping it (examples/lapsteel_tone.py, the
+    # open strings' third-octave colour 160 Hz-2.5 kHz: 13 -> 9.5 dB rms; the
+    # rest is each string's own comb, not a colour)
+    pickup_resonance_hz = 500.0
+    pickup_q = 0.5
+    # ITS OTHER OPEN STRINGS ANSWER through the bridge, where their harmonics
+    # lie near the note's -- coincidence over a fixed set (sympathetic.py), no
+    # narrower than the pluck's spread (sympathetic_width_hz): open E,
+    # E2 B2 E3 G#3 B3 E4. Measured, under an E3 the E2 string's 2nd harmonic
+    # rings 13 dB under the note -- 1.7 Hz below it, beating, the low E tuned
+    # 15 cents flat of the E3 (each string's tuning on this instrument, cents
+    # against the table that puts its E3 where it was); the others 35-49 under. What Ben heard as
+    # "more inharmonicity on the recording, especially lower": the string's
+    # own stretch is LESS than the archtop's (E2's 10th 19 cents, ours 35).
+    sympathetic_mode = 'coincidence'
+    sympathetic_strings = (0, 7, 12, 16, 19, 24)
+    sympathetic_tonic = 40
+    sympathetic_string_cents = (-15.0, -3.1, 0.0, -8.8, -3.0, -3.6)   # re E3, as tuned
+    sympathetic_width_hz = 2.0
+    sympathetic_per_mode = True
+    # the E2 string's 2nd harmonic under an E3: -14 dB, the take's -13 (its
+    # 4th -52, G#3 -60: the take's -40 and -46); every string coupled alike
+    sympathetic_gain = 0.7
+    sympathetic_max = 5
+    sympathetic_floor = 0.0
+
+
+class ChorusGuitarProperties(ElectricGuitarProperties):
+    """GS 27.8, "Chorus Gt.": the Stratocaster into a CHORUS PEDAL -- a swept
+    bucket-brigade delay mixed with the dry (chorus.py, as CC93 makes it), on by
+    default at half; a CC93 the file sends sets it instead. GeneralUser's 27.8
+    is its clean guitar with a copy 7 cents up, half right."""
+    chorus_send = 0.5
+
+
+class FunkGuitarProperties(ElectricGuitarProperties):
+    """GS 28.8, "Funk Gt.": the Stratocaster on POSITION 4 -- the neck and middle
+    pickups in parallel (0.247 and 0.157 of the scale from the bridge), their
+    two combs summed into the "quack", the pair's halved inductance putting
+    the coil's resonance up by sqrt 2 -- through the amp cleaner. Both GM sets'
+    28.8 is a bright clean guitar layered for snap (with slap-bass attacks)."""
+    pickup_points = (0.247, 0.157)
+    pickup_turns = 0.5                          # in parallel: the two coils' mean
+    pickup_resonance_hz = ElectricGuitarProperties.pickup_resonance_hz * 2.0 ** 0.5
+    amp_drive = 0.3
+
+
+class DetunedOrgan1Properties(DrawbarOrganProperties):
+    """GS 16.8, "Detuned Or. 1": the drawbar organ on its scanner chorus, C3
+    -- the B-3's own shimmer, which GS's two detuned copies imitate."""
+    scanner = "C3"
+
+
+class DetunedOrgan2Properties(PercussiveOrganProperties):
+    """GS 17.8, "Detuned Or. 2": the percussive organ on its scanner chorus, C3."""
+    scanner = "C3"
+
+
+class ChurchOrgan2Properties(FlueOrganProperties):
+    """GS 19.8, "Church Org. 2": the same organ, its principal chorus drawn to
+    the fourth harmonic -- 8', 4', the principal quint 2 2/3', 2' -- and no
+    further: the harmonic series on principals, clear and bright and short of
+    the mixture's edge (Ben's registration). Neither GM set's reading is a
+    plenum either: GeneralUser's 19.8 is its organ an octave up, MuseScore's
+    its organ coupled at 16'; this is the organ's own next step up."""
+    default_stops = 0b1111
 
 
 class SirenRowProperties(SfxSirenProperties):

@@ -422,6 +422,9 @@ CONTROLS = (
     (10, "pan", "continuous", 64),
     (5, "portamento time", "continuous", 0),
     (93, "chorus", "continuous", 0),
+    # THE HAMMOND'S VIBRATO/CHORUS SELECTOR (scanner.py, CC94): seven
+    # positions, stepped -- off, V1-V3, C1-C3 -- on a tonewheel voice
+    (94, "scanner (V/C)", "selector", 0),
     (74, "brightness", "continuous", 64),
     (71, "resonance", "continuous", 64),
     (73, "attack", "continuous", 64),
@@ -2217,6 +2220,10 @@ class Patch:
         # with the upper disc, and per key whether its voice is a rotor at all
         # (a drum set's key 67 is; the set's other keys are not)
         self.siren_upper = tuple(getattr(pc, "siren_upper", ())) if not drums else ()
+        # A HAMMOND'S SCANNER (scanner.py): this voice has the selector, or a
+        # setting of its own (Live._scan_stamp)
+        self.scanner_voice = (not drums) and bool(getattr(pc, "scanner_switch", False)
+                                                  or getattr(pc, "scanner", None))
         self._siren_kind = {}
         # The drive the VOICE was voiced at. Live the mod wheel scales it,
         # so this is the reference and not the setting -- a voice with no
@@ -2325,6 +2332,14 @@ class Patch:
         # BagpipeDroneProperties, patch_map's drone notes), not the key nearest
         # its frequency -- under a low tuner that key is a chanter note
         self.drone_notes = tuple(n for n, _ in getattr(pc, "drone_classes", ())) if pc else ()
+        # THE TAISHOGOTO'S DRONE STOPS (tonelib.TaishoKotoProperties): the
+        # wheel in even shares, its last stop the open string STRUCK with every
+        # stroke -- its own voice's templates (the drone's bank), built beside
+        # this patch's for its one note (warm)
+        self.drone_stops = tuple(getattr(pc, "drone_stops", ())) if (pc and not drums) else ()
+        self.drone_strike = ((int(pc.drone_strike_note), float(pc.drone_strike_db),
+                              int(pc.drone_strike_variation)) if self.drone_stops else None)
+        self.drone_patch = None
         self.scale_tonic_note = getattr(pc, "scale_tonic_note", None) if pc else None
         self.part_break_s = float(getattr(pc, "part_break_s", 2.0)) if pc else 2.0
         self.detune_wheel = (not drums) and bool(getattr(pc, "detune_wheel", False))
@@ -2533,6 +2548,7 @@ class Patch:
             _wasr = B.REGISTER
             with quiet():
                 B.MOOG_NEUTRAL = True        # the slab applies the panel
+                B.SCANNER_OFF = True         # ...and the scanner's selector (_scan_stamp)
                 # a fixed-touch voice's template at the jack's own level; the
                 # stamp applies velocity when the part's switch is off
                 T.FIXED_TOUCH = True
@@ -2543,6 +2559,7 @@ class Patch:
                 p = B.prepare(m, self.tuner)
         finally:
             B.MOOG_NEUTRAL = False
+            B.SCANNER_OFF = False
             T.FIXED_TOUCH = False
             B.REGISTER = _wasr
             _L.SIDEBANDS = _was
@@ -2798,6 +2815,11 @@ class Patch:
         """
         if self.warmed:
             return self
+        if self.drone_strike and self.drone_patch is None:
+            _dn, _ddb, _dv = self.drone_strike
+            _dp = Patch(self.program, False, self.tuner, _dv)
+            _dp.range = (_dn, _dn)
+            self.drone_patch = _dp.warm()
         lo, hi = self.range
         done = 0
         total = (hi - lo + 1) * self.nbuckets * len(self.speeds)
@@ -3026,7 +3048,7 @@ class Part:
         if self.synth_b:
             d["synth_b"] = dict(self.synth_b)
         if self.synth or self.synth_b:
-            d["synth_units"] = 5            # the Messenger's measured knobs (moog.py)
+            d["synth_units"] = 6            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
         if self.fixed_touch is not None:
@@ -3049,10 +3071,11 @@ class Part:
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
         # KNOBS SAVED BEFORE THE MESSENGER WAS MEASURED are in the first model's
         # units; those saved before its contours were (synth_units 2) or its
-        # waveshape (3) or LFO 1 (4), in the later ones': converted once, as
-        # the patches were, so they sound as saved
+        # waveshape (3) or LFO 1 (4), or on the firmware before (5: its
+        # cutoff law), in the later ones': converted once, as the patches
+        # were, so they sound as saved
         units = int(d.get("synth_units", 1))
-        if (p.synth or p.synth_b) and units < 5:
+        if (p.synth or p.synth_b) and units < 6:
             vc = p.moog()
             for lay, own in (('a', p.synth), ('b', p.synth_b)):
                 if own:
@@ -3064,7 +3087,9 @@ class Part:
                         own.update(_MG.convert_v2(own))
                     if units < 4:
                         own.update(_MG.convert_v3(own, context=ctx))
-                    own.update(_MG.convert_v4(own, context=ctx))
+                    if units < 5:
+                        own.update(_MG.convert_v4(own, context=ctx))
+                    own.update(_MG.convert_v5(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
         p.fixed_touch = None if d.get("fixed_touch") is None else bool(d["fixed_touch"])
         p.pan = None if d.get("pan") is None else max(0, min(127, int(d["pan"])))
@@ -3132,6 +3157,25 @@ class Live:
         self.pedal = {}         # channel -> sustain pedal down
         self.pedalled = set()   # keys whose damper the pedal is holding off
         self.n = 0                       # absolute sample clock
+        # TUNING_TAP=path: every block the callback hands the sound card, as
+        # raw interleaved float32 at the engine's rate (path), with the
+        # underrun count at each block (path + ".xruns") -- written by a thread
+        # of its own, the audio thread only queueing it
+        self._tap = None
+        _tp = os.environ.get("TUNING_TAP")
+        if _tp:
+            self._tap = collections.deque()
+
+            def _tap_writer(path=_tp, q=self._tap):
+                with open(path, "wb") as f, open(path + ".xruns", "w") as fx:
+                    while True:
+                        while q:
+                            xr, blk = q.popleft()
+                            f.write(blk)
+                            fx.write("%d\n" % xr)
+                        f.flush(); fx.flush()
+                        time.sleep(0.05)
+            threading.Thread(target=_tap_writer, daemon=True).start()
         # THE METRONOME (set_metronome): its own drum part on Standard's kit,
         # struck from the audio thread at each beat's own sample
         self.metro_bpm = 0.0             # 0: off
@@ -3150,6 +3194,13 @@ class Live:
         self.siren_mem = {}
         self.siren_retire = []
         self.ppress = {}                 # (ch, note) -> poly pressure, 0..1
+        # THE HAMMOND SCANNER (scanner.py): a part's row, from the slab's pool,
+        # written every callback off the absolute clock -- one sweep for every
+        # note, as one motor turns it. (pid, depth, chorus?) -> rows per band;
+        # the selector's position per channel (CC94); each rank's gains cached
+        self.scan_row = {}
+        self.cc94 = {}
+        self._scan_g = {}
         self.cc2 = {}                    # ch -> breath controller, 0..1
         self.tex_gen = {}                # (pid, ch, note) -> [part, template, next grain's sample, scale]
         self._tex_rng = _random.Random(0x7E47)
@@ -3292,6 +3343,8 @@ class Live:
         self.rx_bank = True
         self._rpn_fine_msb = {}
         self.drone_count = {}   # pid -> how many drones are uncorked (0-3)
+        self.drone_stop = {}    # pid -> the taishogoto's drone stop (Patch.drone_stops)
+        self.drone_turn = {}    # pid -> which of two keys its last drone stroke is on
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
         self.held_tmpl = {}     # (pid, ch, note) -> (template, scale): its key-up event
         # TUNING_CLIPLOG: a loud block's rows, named (_clip_snap, _clip_write)
@@ -4005,6 +4058,8 @@ class Live:
         elif msg.type == "control_change":
             if msg.control == 2:
                 self.cc2[ch] = msg.value / 127.0                 # breath: a siren's air (_siren_block)
+            if msg.control == 94:
+                self.cc94[ch] = msg.value                        # the scanner's selector (_scan_stamp)
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
                 # THE MOD WHEEL IS A CRESCENDO PEDAL on an organ part and
@@ -4022,6 +4077,11 @@ class Live:
                 clavs = [p for p in here if 'tone' in roles[p.pid]]
                 detuners = [p for p in here if 'detune' in roles[p.pid]]
                 dronists = [p for p in here if 'drones' in roles[p.pid]]
+                for p in [p for p in here if 'drone stop' in roles[p.pid]]:
+                    # even shares of the wheel, as blockrender reads a file's
+                    # first CC1 -- live under the wheel, as the bagpipe's corks
+                    _ns = len(p.patch.drone_stops)
+                    self.drone_stop[p.pid] = min(_ns - 1, msg.value * _ns // 128)
                 others = [p for p in here if 'vibrato' in roles[p.pid]]
                 for p in [p for p in here if 'swell' in roles[p.pid]]:
                     # THE EXPRESSION PEDAL: CC11's squared law on the part, the
@@ -4579,6 +4639,9 @@ class Live:
         if not self.slab.stamp(tmpl, key, n0, scale):
             self.dropped += 1
             return                  # slab full: this note does not sound
+        if part.patch.drone_strike and (self.drone_stop.get(part.pid, 0)
+                                        >= len(part.patch.drone_stops) - 1):
+            self._drone_strike(part, ch, vel, n0)
         _sst = self.siren_st.get((part.pid, ch, note))
         if _sst is not None and _sst["rows"]:
             self.slab.a["br"][np.asarray(self.slab.last_slots, np.int64)] = _sst["rows"][0]
@@ -5506,6 +5569,7 @@ class Live:
     WHEEL_MEANING = {'drive': 'amp drive', 'crescendo': 'crescendo pedal',
                      'tremolo': 'tremolo depth', 'tone': 'tone rockers',
                      'detune': 'detuning', 'drones': 'drones (0: the chanter alone)',
+                     'drone stop': 'the drone (up: struck)',
                      'vibrato': 'vibrato', 'swell': 'swell pedal',
                      'crank': 'crank: the upper disc turned (at the top the 12-row fundamental cancels)'}
 
@@ -5551,6 +5615,8 @@ class Live:
             r.append('detune')
         if pt.drone_wheel:
             r.append('drones')
+        if pt.drone_stops:
+            r.append('drone stop')
         # AND WHERE THE INSTRUMENT CANNOT BEND AFTER ITS ATTACK -- a hammer,
         # a mallet, a stick, a noise (tonelib Synth.wheel_vibrato) -- NOTHING:
         # the vibrato default had given a piano, a glockenspiel and a gunshot
@@ -5988,6 +6054,34 @@ class Live:
                     self.slab.retune(slots, n0, om_scale=hz / f0)
             elif i >= want and on:
                 self.slab.release(key, n0)
+
+    def _drone_strike(self, part, ch, vel, n0):
+        """The taishogoto's open drone string struck with this stroke (its
+        last stop): one string, so the last stroke on it is let go as this one
+        starts, over the steal-fade; the two keys it alternates on keep the
+        old ring's release from cutting the new one."""
+        dp = part.patch.drone_patch
+        if dp is None:
+            return
+        dn, ddb, _dv = part.patch.drone_strike
+        v = max(1, int(round(vel * 10 ** (ddb / 40.0))))
+        tmpl = dp.get(dn, v, dp.leslie_default)
+        if tmpl is None:
+            self.misses += 1
+            return
+        turn = self.drone_turn.get(part.pid, 0)
+        old = (part.pid, ch, -100 - turn, self.DRONE_SLOT)
+        _sl = self.slab.live.get(old)
+        if _sl:
+            _ix = np.fromiter(_sl, np.int64, len(_sl))
+            self.slab.a["re"][_ix] = np.minimum(self.slab.a["re"][_ix],
+                                                np.float32(B.RETRIGGER_FADE * self.rate))
+            self.slab.release(old, n0)
+        turn = 1 - turn
+        self.drone_turn[part.pid] = turn
+        scale = part.gain() * self._chan_gain(ch) * (v / 127.0) ** 2 / max((tmpl.get("vel", 127) / 127.0) ** 2, 1e-9)
+        if not self.slab.stamp(tmpl, (part.pid, ch, -100 - turn, self.DRONE_SLOT), n0, scale):
+            self.dropped += 1
 
     def _drone_reap(self, n0):
         """Let the bag down once the chanter has been quiet long enough.
@@ -7376,6 +7470,13 @@ class Live:
             self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
                                  n0, self.rotor_horn.rate, self.rotor_drum.rate,
                                  flip=cols.get("lflip"))
+        # THE SCANNER'S SELECTOR (scanner.py), last: its copy is stamped,
+        # tuned and put on the rotor as the rank was
+        if part.patch.scanner_voice:
+            self._scan_stamp(part, ch, note, rank, cols, n, hrel, n0,
+                             part.gain() * self._chan_gain(ch)
+                             * self.note_touch.get((part.pid, ch, note), 1.0),
+                             list(self.slab.last_slots), _sr)
 
     # ---- the organ's wind (wind.py) ------------------------------------------
     # One chest per pipe-organ part: its pressure moved by the wander and the
@@ -7412,6 +7513,119 @@ class Live:
                 st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
             self.wind_st[part.pid] = st
         return st["rank_row"].get(rank, 0)
+
+    # ---- the Hammond scanner (scanner.py) ------------------------------------
+    def _scan_setting(self, part, ch, note):
+        """(depth, chorus?) of this part's scanner on this channel, or None."""
+        import scanner as _SCN
+        vc = part.patch._voice_class(note + part.transpose)
+        if not (getattr(vc, "scanner_switch", False) or getattr(vc, "scanner", None)):
+            return None
+        return _SCN.setting_of(vc, self.cc94.get(ch))
+
+    def _scan_rows(self, part, dep, cho):
+        """The part's band rows for this position, from the slab's pool."""
+        import scanner as _SCN
+        k = (part.pid, dep, cho)
+        if k not in self.scan_row:
+            if len(self.slab.siren_free) < len(_SCN.BAND_HZ):
+                return None
+            self.scan_row[k] = tuple(self.slab.siren_free.popleft() for _ in _SCN.BAND_HZ)
+            self._scanner_block(self.n, self.frames)
+        return self.scan_row[k]
+
+    def _scan_stamp(self, part, ch, note, rank, cols, n, hrel, n0, scale, dry_slots, sr_ratio):
+        """The selector on one rank just stamped (scanner.apply's law): on
+        vibrato its slots take the scanned path's gains and their band rows; on
+        chorus they are the dry share, and a copy -- stamped as they were,
+        tuned and on the rotor as they are -- the scanned."""
+        import scanner as _SCN
+        st = self._scan_setting(part, ch, note)
+        if st is None or not len(dry_slots):
+            return
+        dep, cho = st
+        rows = self._scan_rows(part, dep, cho)
+        if rows is None:
+            return
+        gk = (id(cols), dep, cho)
+        g = self._scan_g.get(gk)
+        if g is None:
+            if len(self._scan_g) > 4096:
+                self._scan_g.clear()
+            g = _SCN.gains(np.asarray(cols["nf"], float), dep, cho)
+            # ...and tier B's sideband copies of this rank (scanner._side_copies,
+            # the template's loudest partial its note's), built once
+            side = None
+            if _SCN.SIDEBANDS and n:
+                cnp = {k: np.asarray(v) for k, v in cols.items()
+                       if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == n}
+                # the floor's reference measured off the rank's own rows, as the
+                # file groups a note's rows by onset (a drawbar's contact its own)
+                side = _SCN._side_copies(cnp, np.arange(n), np.asarray(rows)[g[0]], dep, cho,
+                                         float(self.rate))
+                if side is not None:
+                    side["_dw"] = side["om"] - cnp["om"][side["_src"]]
+                    side["_hrel"] = np.asarray(hrel)[side["_src"]]
+            g = self._scan_g[gk] = g + (side,)
+        band, dry, sc, side = g
+        sl = self.slab
+
+        def put(slots, gain, br):
+            idx = np.asarray(slots, np.int64)
+            sl.channel_gain(idx, np.abs(gain).astype(np.float32))
+            sl.a["p0"][idx] += np.angle(gain)
+            sl.a["p0R"][idx] += np.angle(gain)
+            if br is not None:
+                sl.a["br"][idx] = np.asarray(rows)[band]
+        def sidestamp():
+            # the crossfade's own motion (tier B): each copy stamped, its share
+            # of the scanner's angle turned to the motor's at this press
+            if side is None or not len(side["_src"]):
+                return
+            sk = (part.pid, ch, note, ("scanside", rank))
+            if not sl.stamp_cols(side, len(side["_src"]), sk, n0, scale, side["_hrel"], 0, False):
+                self.dropped += 1
+                return
+            ss = np.asarray(sl.last_slots, np.int64)
+            sl.a["br"][ss] = side["br"]
+            turn = side["_dw"] * (sl.a["non"][ss] - side["non"])
+            sl.a["p0"][ss] += turn
+            sl.a["p0R"][ss] += turn
+            if sr_ratio != 1.0:
+                sl.retune(list(ss), n0, om_scale=sr_ratio)
+            if part.patch.leslie:
+                sl.leslie_arm(list(ss), side["az"], side["nf"], n0, self.rotor_horn.rate,
+                              self.rotor_drum.rate, flip=side.get("lflip"))
+        if not cho:
+            put(dry_slots, sc, True)
+            sidestamp()
+            return
+        put(dry_slots, dry, None)
+        ck = (part.pid, ch, note, ("scan", rank))
+        if not sl.stamp_cols(cols, n, ck, n0, scale, hrel, 0, False):
+            self.dropped += 1
+            return
+        cs = list(sl.last_slots)
+        if sr_ratio != 1.0:
+            sl.retune(cs, n0, om_scale=sr_ratio)
+        if part.patch.leslie:
+            sl.leslie_arm(cs, cols["az"], cols["nf"], n0, self.rotor_horn.rate,
+                          self.rotor_drum.rate, flip=cols.get("lflip"))
+        put(cs, sc, True)
+        sidestamp()
+
+    def _scanner_block(self, n0, frames):
+        """Every scanner's band rows, this block: each band's delay slope and
+        its phase at the block's start (scanner.rows, live)."""
+        import scanner as _SCN
+        sl = self.slab
+        t = np.array([n0, n0 + frames], float) / self.rate
+        for (pid, dep, cho), rws in self.scan_row.items():
+            for b, row in enumerate(rws):
+                c0, c1 = _SCN.band_bc(t, dep, b, cho, self.rate)
+                sl.BR[row, 0] = 1.0 + (c1 - c0) / frames
+                sl.BC[row, 0] = c0
+                sl.BL[row, 0] = sl.BL[row, 1] = 1.0
 
     # ---- the sirens (siren.py) ---------------------------------------------
     def _siren_on(self, part, ch, note, vel, n0, kind):
@@ -7713,6 +7927,8 @@ class Live:
             self.sweep(n0)
             self._drone_reap(n0)
             self._mf104_reap(n0)
+            if self.scan_row:
+                self._scanner_block(n0, frame_count)
             if self.siren_st or self.siren_retire:
                 try:
                     self._siren_block(n0, frame_count)
@@ -7796,7 +8012,13 @@ class Live:
             self.peak = p
         st = np.empty(frame_count * 2, np.float32)
         st[0::2] = L; st[1::2] = R
-        return (st.tobytes(), pyaudio.paContinue)
+        b = st.tobytes()
+        if self._tap is not None:
+            # TUNING_TAP: what went out, block by block, for the writer
+            # thread -- the audio thread only appends (with the underrun
+            # count, so a gap in the file can be told from a gap in the sound)
+            self._tap.append((self.underruns, b))
+        return (b, pyaudio.paContinue)
 
     # ---- telemetry ----------------------------------------------------------
     def wheel_state(self):
@@ -9754,10 +9976,11 @@ def selftest():
           _hc.sounding_octaves <= -3.0
           and _T.SynthProperties.sounding_octaves == 0.0
           # the classes that SET it: the SFX set's one-shot helicopter
-          # (SfxHelicopterProperties) inherits it, and is the same rotor
-          and [_n for _n, _c in vars(_T).items()
-               if isinstance(_c, type) and vars(_c).get("sounding_octaves", 0.0)]
-          == ["HelicopterProperties"],
+          # (SfxHelicopterProperties) inherits it, and is the same rotor --
+          # and GS 124.1's tone ringer, which sounds OVER where it is written
+          and sorted(_n for _n, _c in vars(_T).items()
+                     if isinstance(_c, type) and vars(_c).get("sounding_octaves", 0.0))
+          == ["HelicopterProperties", "MoogTelephone2"],
           "  (a written C4 sounds at 16.3 Hz, with partials every 16.3 to 1 kHz)")
     # A BIRD IS A CHIRP: tension_bend for the third time and in the third
     # direction -- the piano's sag, the synth drum's 808 fall, and a bird's
@@ -12905,10 +13128,14 @@ def selftest():
             _v = [10 * np.log10(_P[(_f >= _a) & (_f < _b)].mean()) for _a, _b in _moct]
             return np.array(_v) - _v[0]
         _mopen = _mnoise(cutoff=1.0)
-        _mclosed = _mnoise(cutoff=0.5, kb_track=0.0)
-        _mlad = np.array([20 * np.log10(_MG.ladder_gain(np.sqrt(_a * _b), _MG.knob_cutoff(0.5), 0.0)
+        # AT A STATED CORNER, not a knob position: the knob's law is the
+        # hardware's and moves with its firmware (moog.convert_v5 -- 0.5 was
+        # 9 kHz, now 409 Hz, its bands 80 dB down where the read floors)
+        _mfc = 1000.0
+        _mclosed = _mnoise(cutoff=_MG.cutoff_knob(_mfc), kb_track=0.0)
+        _mlad = np.array([20 * np.log10(_MG.ladder_gain(np.sqrt(_a * _b), _mfc, 0.0)
                                         * _MG.output_gain(np.sqrt(_a * _b))
-                                        / _MG.ladder_gain(np.sqrt(100 * 200), _MG.knob_cutoff(0.5), 0.0)
+                                        / _MG.ladder_gain(np.sqrt(100 * 200), _mfc, 0.0)
                                         / _MG.output_gain(np.sqrt(100 * 200)))
                           for _a, _b in _moct])
     finally:
@@ -12919,7 +13146,7 @@ def selftest():
             os.environ["TUNING_REFLECT"] = _menv
     check("the Moog's noise is white, and its ladder filters it",
           np.all(np.abs(_mopen[:5]) < 2.5) and np.all(np.abs(_mclosed - _mlad) < 3.5),
-          "  (open: %s dB per octave band; through LP4 at 632 Hz: %s against the "
+          "  (open: %s dB per octave band; through LP4 at 1 kHz: %s against the "
           "ladder's %s)" % (" ".join("%+.1f" % _v for _v in _mopen),
                             " ".join("%+.0f" % _v for _v in _mclosed),
                             " ".join("%+.0f" % _v for _v in _mlad)))
@@ -15873,8 +16100,12 @@ def selftest():
           and _rp(8, 0, 5, False) == (False, 5, 8)
           and _rp(120, 0, 5, False, rx_bank=False) == (False, 5, 0))
     check("...and every variation falls back to the capital tone",
-          _PM is not None and __import__("patch_map").variation_class(5, 8)
-          is __import__("patch_map").property_class_for_program(5))
+          # (one GS names that is not built: 5.8 was, until Detuned EP 2 was)
+          _PM is not None and all(
+              __import__("patch_map").variation_class(p, v)
+              is __import__("patch_map").property_class_for_program(p)
+              for p, v in [k for k in __import__("patch_map").VARIATION_NAMES
+                           if k not in __import__("patch_map").VARIATIONS][:3]))
     check("drum sets: the SC-55's numbers; only built ones sound as themselves",
           [_PM.kit_for_program(k) for k in (0, 24, 25, 8, 16, 56, 127, 1, 20, 29, 30, 35, 47, 49, 60)]
           == [0, 24, 25, 8, 16, 56, 127, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -15997,7 +16228,7 @@ def selftest():
         _vp = lambda bank, prog: [n[6] for n in B.parse(_bfile(
             [_M("control_change", channel=0, control=0, value=bank),
              _M("program_change", channel=0, program=prog)] + _on(0, 60)))[2]][0]
-        _v5, _v3 = _vp(5, 125), _vp(9, 125)       # 125.9 Burst Noise: not built
+        _v5, _v3 = _vp(5, 125), _vp(10, 125)      # 125.10: no GS tone, so never built
         check("file: CC0 = 5 and program 125 is the variation; an unbuilt bank the capital tone",
               getattr(_v5, "variation", 0) == 5 and int(_v5) == 125
               and _PMV.property_class_for_program(_v5) is _vcls
@@ -16013,6 +16244,21 @@ def selftest():
                _M("program_change", channel=0, program=125)] + _on(0, 60)))[2]]
         check("file: GS Reset clears the bank",
               [getattr(x, "variation", 0) for x in _vr] == [5, 0], "  (%r)" % _vr)
+        # BANK 127, THE MT-32 SET (patch_map.MT32_SET, SC-55 p.69): a melodic
+        # channel's CC0 = 127 plays the MT-32's tone on the program -- PC 33
+        # "Fantasy" GM 88's voice at GM 88's level, PC 120 "Cymbal" the crash
+        # from the keyboard -- and on the drum channel it is still a kit
+        _m32 = _vp(127, 32)
+        _m32c = _vp(127, 119)
+        check("file: bank 127 is the MT-32 set: each tone its nearest voice, at that voice's level",
+              getattr(_m32, "variation", 0) == 127
+              and _PMV.property_class_for_note(_m32, 60) is _PMV.property_class_for_note(88, 60)
+              and abs(_PMV.program_trim(_m32) - _PMV.program_trim(88)) < 1e-12
+              and "sfx49" in _PMV.property_class_for_note(_m32c, 60).__name__
+              and _T.resolve_patch(127, 0, 24, True) == (True, 24, 0),
+              "  (32.127 %s -> %s; 119.127 -> %s)" % (_PMV.VARIATION_NAMES[(32, 127)],
+                                                     _PMV.property_class_for_note(_m32, 60).__name__,
+                                                     _PMV.property_class_for_note(_m32c, 60).__name__))
         _lv = Live(program=0, rate=48000, frames=128, verbose=False)
         _lv.on_midi(_M("control_change", channel=0, control=0, value=5))
         _lv.on_midi(_M("program_change", channel=0, program=125)); _lv.apply(0)
@@ -16031,7 +16277,7 @@ def selftest():
               _d.get("bank") == 5 and _rt.variation == 5 and _rt.patch.key[3] == 5
               and "bank" not in _d0
               and Part.from_dict(_d0).variation == 0
-              and patch_for(125, False, "hybrid", variation=9).key[3] == 0,
+              and patch_for(125, False, "hybrid", variation=10).key[3] == 0,
               "  (%s; an unbuilt bank keys as 0)" % _d)
         _lv.on_midi(_SX(0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41)); _lv.apply(0)
         _lv.wait_patch(90)
@@ -16039,6 +16285,36 @@ def selftest():
               _lv.parts[0].variation == 0 and _lv.parts[0].program == 0,
               "  (%s)" % (_lv.parts[0].patch.key,))
         _lv.shutdown()
+        # THE TAISHOGOTO'S DRONE STOP (tonelib.TaishoKotoProperties): the
+        # wheel's upper half strikes the open G2 with every stroke, in a file
+        # (its first CC1) and live (under the wheel) alike
+        _PMV.VARIATIONS.clear(); _PMV.VARIATIONS.update(_vsave)
+        _tdr = []
+        for _c1 in (0, 127):
+            B.render(_bfile([_M("control_change", channel=0, control=0, value=8),
+                             _M("program_change", channel=0, program=107),
+                             _M("control_change", channel=0, control=1, value=_c1)]
+                            + _on(0, 67) + _on(0, 69)))
+            _tdr.append([(d[1], d[4]) for d in B.LAST_DRONES])
+        check("file: the taishogoto's wheel up strikes its drone with each stroke, down not",
+              _tdr[0] == [] and _tdr[1] == [(43, "TaishoDroneProperties")] * 2, "  (%s)" % _tdr)
+        _lt = Live(program=0, rate=48000, frames=128, verbose=False)
+        _lt.on_midi(_M("control_change", channel=0, control=0, value=8))
+        _lt.on_midi(_M("program_change", channel=0, program=107)); _lt.apply(0)
+        _okt = _lt.wait_patch(180)
+        _dk = lambda: sorted(k[2] for k in _lt.slab.live if k[3] == _lt.DRONE_SLOT)
+        _lt.on_midi(_M("note_on", channel=0, note=67, velocity=100)); _lt.apply(0)
+        _down = _dk()
+        _lt.on_midi(_M("control_change", channel=0, control=1, value=127)); _lt.apply(0)
+        _lt.on_midi(_M("note_on", channel=0, note=69, velocity=100)); _lt.apply(0)
+        _up1 = _dk()
+        _lt.on_midi(_M("note_on", channel=0, note=71, velocity=100)); _lt.apply(0)
+        _up2 = _dk()
+        check("live: ...and live, under the wheel; a new stroke re-strikes the one string",
+              _okt and _lt.parts[0].patch.drone_patch is not None and _down == []
+              and _up1 == [-101] and -100 in _up2,
+              "  (wheel down %s, up %s, again %s: the string's last stroke let go)" % (_down, _up1, _up2))
+        _lt.shutdown()
     finally:
         _PMV.VARIATIONS.clear()
         _PMV.VARIATIONS.update(_vsave)
@@ -16063,9 +16339,14 @@ def selftest():
     _w = (_ek + _ev) / (_ek + _ev).sum()
     _sd = float(np.sqrt((_w * (10 * np.log10(_ek / _ek.sum()) - 10 * np.log10(_ev / _ev.sum())) ** 2).sum()))
     _ld = 10 * np.log10(_ev.sum() / _ek.sum())
+    # ...ITS LEVEL GeneralUser's own 125.1's (patch_map.VARIATION_TRIM_FIT,
+    # examples/sfx_levels.py --var-trim), not the kit key's: that difference
+    # expected, the pan law's 3 dB either side of it
+    import patch_map as _PMC
+    _lx = _PMC.VARIATION_TRIM_DB[(125, 1)] - _PMC.KIT_TRIM_DB
     check("GS 125.1 Car-Engine at C4 is the SFX set's key 63",
-          _sd < 1.5 and abs(_ld) < 3.0,
-          "  (spectrum %.2f dB rms apart, level %+.1f dB)" % (_sd, _ld))
+          _sd < 1.5 and abs(_ld - _lx) < 3.0,
+          "  (spectrum %.2f dB rms apart, level %+.1f dB against the levels' %+.1f)" % (_sd, _ld, _lx))
     # ...and TRANSPOSED WHOLE with the key, noise and all (blockrender _XP):
     # 122.3 Wind's howl is a noise table in Hz, and an octave up puts its
     # loudest 1/3-octave band three bands higher, as a sample's would
@@ -16171,6 +16452,92 @@ def selftest():
           and (0, 60) not in [(k[1], k[2]) for k in _lh.slab.live],
           "  (%d rows free, %d while held, %d after)" % (_free0, _held, len(_lh.slab.siren_free)))
     _lh.shutdown()
+    # THE HAMMOND SCANNER (scanner.py): CC94 is its selector on a tonewheel
+    # voice -- V3 swings the pitch at the motor's 6.87 Hz, off leaves only the
+    # Leslie -- and live plays 16.8's C3 (tier B's sidebands too) as the file
+    from scipy.signal import hilbert as _hilb_s, butter as _butter_s, sosfiltfilt as _sff_s
+
+    def _swing(x, sr, f0=440.0):
+        _y = np.asarray(x, np.float64)[int(0.5 * sr):int(2.8 * sr)]
+        _z = _hilb_s(_sff_s(_butter_s(4, [f0 - 12, f0 + 12], "band", fs=sr, output="sos"), _y))
+        _i = np.diff(np.unwrap(np.angle(_z))) * sr / (2 * np.pi)
+        _i = _i[2000:-2000]
+        _X = np.abs(np.fft.rfft((_i - _i.mean()) * np.hanning(len(_i)), 1 << 19))
+        _fr = np.fft.rfftfreq(1 << 19, 1.0 / sr)
+        _m = (_fr > 2) & (_fr < 30)
+        return (1200 * np.log2(np.percentile(_i, 99) / np.percentile(_i, 1)), float(_fr[_m][np.argmax(_X[_m])]))
+
+    def _org(extra, secs=3.0):
+        return _sir_file([_M("program_change", channel=0, program=16)] + extra
+                         + [_M("note_on", channel=0, note=69, velocity=100, time=0),
+                            _M("note_off", channel=0, note=69, velocity=0, time=int(secs * 960))], secs + 0.5)
+    _sv3 = _swing(_org([_M("control_change", channel=0, control=94, value=60)]), B.SR)
+    _sof = _swing(_org([_M("control_change", channel=0, control=94, value=0)]), B.SR)
+    check("the scanner's selector (CC94): V3 swings a tonewheel note at the motor's rate, off does not",
+          _sv3[0] > 50.0 and abs(_sv3[1] - 6.87) < 0.1 and _sof[0] < 10.0,
+          "  (V3 %.0f cents p-p at %.2f Hz; off %.0f cents)" % (_sv3[0], _sv3[1], _sof[0]))
+    _f168 = _sir_file([_M("control_change", channel=0, control=0, value=8)]
+                      + [_M("program_change", channel=0, program=16),
+                         _M("note_on", channel=0, note=69, velocity=100, time=0),
+                         _M("note_off", channel=0, note=69, velocity=0, time=2880)], 3.5)
+    _ls8 = Live(program=0, rate=48000, frames=128, verbose=False, tuner="hybrid440")
+    _ls8.set_parts([Part(patch_for(16, False, "hybrid440", variation=8))])
+    _p8 = _ls8.parts[0].patch
+    _b8 = _p8.bucket(100)
+    for _sv in _p8.speeds:
+        if (69, _b8, _sv) not in _p8.templates:
+            _p8.templates[(69, _b8, _sv)] = _p8._raw_template(69, _p8.bucket_vel(_b8), _sv)
+    _ls8.on_midi(mido.Message("note_on", channel=0, note=69, velocity=100))
+    _l8 = []
+    for _i in range(int(3.0 * 48000) // 128):
+        _bb, _ff = _ls8.callback(None, 128, None, 0)
+        _l8.append(np.frombuffer(_bb, np.float32))
+    _ls8.shutdown()
+    _l8 = np.concatenate(_l8).reshape(-1, 2)[:, 0].astype(np.float64)
+    _a8, _b8s = _swing(_l8, 48000), _swing(_f168, B.SR)
+    _el, _ef = _pow_bands([_l8[int(0.5 * 48000):int(2.8 * 48000)]]), _pow_bands([_f168[int(0.5 * B.SR):int(2.8 * B.SR)]])
+    _w8 = (_el / _el.sum() + _ef / _ef.sum()) / 2
+    _d8 = float(np.sqrt((_w8 * (10 * np.log10(_el / _el.sum()) - 10 * np.log10(_ef / _ef.sum())) ** 2).sum()))
+    check("...and live plays 16.8's scanner chorus (tier B too) as the file does",
+          abs(_a8[0] - _b8s[0]) < 3.0 and _d8 < 1.0,
+          "  (swing %.1f / %.1f cents; spectrum %.2f dB rms apart)" % (_a8[0], _b8s[0], _d8))
+    # A LAYERED VARIATION, LIVE (patch_map.LAYERED: GS 48.8 Orchestra, the
+    # strings with the brass an octave up 10 dB under): live's templates are
+    # built through blockrender, which expands the layers, so live plays both
+    # as the file does -- this keeps it so (a reading of live.py alone had it
+    # playing the strings only)
+    def _lvf(bank):
+        """(live-vs-file spectral distance, the live template's partials) for
+        48.<bank>'s C4: the file and live each, weighted 1/3-octave bands."""
+        _f = _sir_file(([_M("control_change", channel=0, control=0, value=bank)] if bank else [])
+                       + [_M("program_change", channel=0, program=48),
+                          _M("note_on", channel=0, note=60, velocity=100, time=0),
+                          _M("note_off", channel=0, note=60, velocity=0, time=2880)], 3.5)
+        _lv = Live(program=0, rate=48000, frames=128, verbose=False, tuner="hybrid440")
+        _lv.set_parts([Part(patch_for(48, False, "hybrid440", variation=bank))])
+        _pp = _lv.parts[0].patch
+        _bk = _pp.bucket(100)
+        for _sv in _pp.speeds:
+            if (60, _bk, _sv) not in _pp.templates:
+                _pp.templates[(60, _bk, _sv)] = _pp._raw_template(60, _pp.bucket_vel(_bk), _sv)
+        _lv.on_midi(mido.Message("note_on", channel=0, note=60, velocity=100))
+        _o = []
+        for _i in range(int(3.0 * 48000) // 128):
+            _bb, _ff = _lv.callback(None, 128, None, 0)
+            _o.append(np.frombuffer(_bb, np.float32))
+        _lv.shutdown()
+        _o = np.concatenate(_o).reshape(-1, 2)[:, 0].astype(np.float64)
+        _eo, _ef = _pow_bands([_o[int(0.5 * 48000):int(2.8 * 48000)]]), _pow_bands([_f[int(0.5 * B.SR):int(2.8 * B.SR)]])
+        _w = (_eo / _eo.sum() + _ef / _ef.sum()) / 2
+        return (float(np.sqrt((_w * (10 * np.log10(_eo / _eo.sum()) - 10 * np.log10(_ef / _ef.sum())) ** 2).sum())),
+                _pp.templates[(60, _bk, _pp.speeds[0])]["P"])
+    # ...THE LAYERS ADDING NOTHING to the strings' own live-file gap (their
+    # seating and reflections differ a little, the capital's 48 as much)
+    (_do8, _n488), (_do0, _n48) = _lvf(8), _lvf(0)
+    check("...and live plays 48.8 Orchestra's two layers as the file does",
+          _do8 < _do0 + 1.0 and _n488 > _n48,
+          "  (spectrum %.2f dB rms apart, the capital's own %.2f; %d partials against its %d)"
+          % (_do8, _do0, _n488, _n48))
     _ptx = Patch(122, False, "hybrid", 1)
     _ttx = _ptx._raw_template(60, 100)
     check("...and live, 122.1 Rain is held while the key is, its GS length the least it plays",

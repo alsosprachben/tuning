@@ -50,7 +50,24 @@ PROG = 104
 CLS = "SitarProperties"
 # voice: (program, class, staged folder)
 VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoProperties", "banjo"),
-          "shamisen": (106, "ShamisenProperties", "shamisen")}
+          "shamisen": (106, "ShamisenProperties", "shamisen"),
+          # GS 26.8 Hawaiian Gt. on David Long's hollow-body lap steel (Pianobook,
+          # Lapsteel Articulations; sources.md): its open strings, one pluck a file
+          "lapsteel": (26, "HawaiianGuitarProperties", "lapsteel"),
+          # GS 25.16 Mandolin on Joshua Meltzer's (Pianobook, Eclectic Mandolin),
+          # carved from its monolith: its medium layer's long takes
+          "mandolin": (25, "MandolinProperties", "mandolin"),
+          # GS 107.8 Taisho Koto on Arthur Chanson's soprano taishogoto
+          # (Pianobook, Taishogoto): its condenser takes, the middle velocity
+          "taisho": (107, "TaishoKotoProperties", "taisho"),
+          # ...and its open G2 drone string, its own takes (Drone_Mic_*); rendered
+          # on its class through the drone's own program slot (DRONE_PROG)
+          "taishodrone": (107, "TaishoDroneProperties", "taishodrone"),
+          # GS 24.8 Ukulele on Ben's own (ukulele_ben/, recorded 2026-10-19)
+          "ukulele": (24, "UkuleleProperties", "ukulele")}
+# the GS bank a voice is (a variation): CC0 before its program change
+BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8}
+BANK = 0
 NH = 24
 HOP, WIN = 0.1, 0.2
 # THE DECAY'S WINDOW: from T_DECAY to T_END s after the pluck. A live take's
@@ -66,7 +83,19 @@ PROMPT_X0 = (15.0, 0.3, 1200.0)
 # instrument was tuned -- its strings follow the table, so a pluck bent to the
 # take's pitch off an A440 table would sit up to 45 cents off its own strings
 TUNER = None
-VOICE_OPTS = {"shamisen": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3,
+VOICE_OPTS = {"mandolin": dict(T_END=3.0),
+              # (16 harmonics: its high notes, 929 Hz, have no 24th under Nyquist)
+              "taisho": dict(T_END=4.0, NH=16),
+              "taishodrone": dict(T_END=6.0),
+              # its notes damped ~3 s in: read to 2.4 s
+              "ukulele": dict(T_END=2.4, NH=16),
+              "lapsteel": dict(T_END=8.0,
+                               # the take's own tuning: E3, its open string, at
+                               # 164.54 Hz, so a pluck and the strings answering
+                               # it share one table (bent to the take's pitch,
+                               # the played note left the open strings behind)
+                               TUNER="hybrid440:443.92"),
+              "shamisen": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3,
                                P_SECS=0.3, PROMPT_X0=(30.0, 0.15, 6000.0),
                                # C#3, its sympathetic_tonic, at the bass string's 142.2 Hz
                                TUNER="hybrid:454.81")}
@@ -109,6 +138,110 @@ def f0_of(seg, sr, lo, hi):
 # label: (file under REFS, f0 search Hz, min seconds to the next pluck)
 TAKES = {"ma": ("sitar/42192__*.flac", (150, 190), 5.0),
          "chinpen": ("sitar/42268__*.wav", (270, 310), 2.5)}
+
+
+def stage_files(label, pat, lo=60.0, hi=1500.0, skip=(), div=1):
+    """A pack's single notes, one pluck a file (the lap steel's open strings):
+    each staged as it is, its f0 measured over its first second's harmonics."""
+    import shutil
+    os.makedirs(STAGED, exist_ok=True)
+    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+        os.remove(f)
+    names = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8,
+             "A": 9, "A#": 10, "B": 11}
+    for n, p in enumerate(p for p in sorted(glob.glob(pat)) if not any(s in p for s in skip)):
+        x, sr = read(p)
+        a = int(np.flatnonzero(np.abs(x) > 0.1 * np.abs(x).max())[0])
+        # THE NAME AN OCTAVE HIGH (as the pack labels it: E5.wav sounds E4,
+        # its h2 the strongest line): the pitch refined near the name's, less
+        # an octave -- the strongest peak alone read h2 on four of seven
+        # (searched, not matched at the start: the taishogoto's are Mic_E5_2_1)
+        m = re.search(r"([A-G]#?)(-?\d)", os.path.basename(p))
+        if m:
+            nom = 440.0 * 2 ** ((names[m.group(1)] + 12 * (int(m.group(2)) + 1) - 69 - 12) / 12.0)
+            f0 = f0_of(x[a + int(0.1 * sr):a + int(1.1 * sr)], sr, nom * 0.97, nom * 1.03)
+        else:
+            # (div: read on the harmonic that number up -- the drone's own
+            # fundamental is all but silent, its 4th the strongest)
+            f0 = f0_of(x[a + int(0.1 * sr):a + int(1.1 * sr)], sr, lo * div, hi * div) / div
+        name = "%s_%d_f0_%.2f.wav" % (label, n, f0)
+        shutil.copy(p, os.path.join(STAGED, name))
+        print("  %s -> %s" % (os.path.basename(p), name))
+
+
+# the carved mandolin takes (wav/NN.wav, names.txt) with their pitch read by
+# a harmonic sum (their file numbers are not note order): the medium layer's,
+# 2.4 s and longer, across the range
+MANDOLIN = ((57, 149.2), (55, 166.7), (53, 186.4), (52, 197.8), (50, 219.2), (48, 247.8),
+            (58, 260.6), (47, 278.2), (45, 312.4), (44, 331.1), (42, 372.8), (40, 423.4),
+            (37, 496.4))
+
+
+def stage_mandolin():
+    import shutil
+    os.makedirs(STAGED, exist_ok=True)
+    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+        os.remove(f)
+    d = os.path.expanduser("~/Documents/refs/mandolin_eclectic/wav")
+    for n, (i, f0) in enumerate(MANDOLIN):
+        x, sr = read(os.path.join(d, "%02d.wav" % i))
+        a = int(np.flatnonzero(np.abs(x) > 0.1 * np.abs(x).max())[0])
+        f0 = f0_of(x[a + int(0.1 * sr):a + int(1.1 * sr)], sr, f0 * 0.98, f0 * 1.02)
+        name = "medium_%d_f0_%.2f.wav" % (n, f0)
+        shutil.copy(os.path.join(d, "%02d.wav" % i), os.path.join(STAGED, name))
+        print("  %02d.wav -> %s" % (i, name))
+
+
+# BEN'S UKULELE (sources.md, ukulele_ben/): its chromatic take, each string
+# open to the 12th fret at mf, G (re-entrant, G4) then C, E, A
+UKE_TAKE = os.path.expanduser("~/Documents/refs/ukulele_ben/03_chromatic_mf.wav")
+UKE_NOTES = [s + k for s in (67, 60, 64, 69) for k in range(13)]
+
+
+def stage_ukulele():
+    """THE CHROMATIC TAKE, CUT: every onset (a 10 dB rise, over -50 dB) that
+    rings 0.8 s or more, its pitch YIN's median over 0.05-0.9 s where periodic,
+    kept within 0.4 semitone of a note in the uke's range -- a repeat of the
+    note just kept REPLACING it (Ben flubbed one on the G string and played
+    it again), one an octave over the next fret halved (YIN's octave slip), a
+    segment with no stable pitch (a damp, a knock) skipped. Each cut from
+    20 ms before its onset to its end."""
+    from scipy.io import wavfile
+    sys.path.insert(0, os.path.join(HERE, "examples"))
+    from freesound_slice import onsets as fs_onsets, track
+    os.makedirs(STAGED, exist_ok=True)
+    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+        os.remove(f)
+    sr, x = wavfile.read(UKE_TAKE)
+    y = x[:, 0].astype(np.float64) / 32768.0
+    on = fs_onsets(y, sr, rise_db=10.0, top_db=-50.0, gap=0.3) + [len(y)]
+    got = []
+    for a, b in zip(on[:-1], on[1:]):
+        if b - a < 0.8 * sr:
+            continue
+        T = [t for t in track(y[a + int(0.05 * sr):a + int(0.9 * sr)], sr, 200, 1200) if t[1] < 0.2]
+        if len(T) < 10:
+            continue
+        f0 = float(np.median([t[0] for t in T]))
+        m = 69 + 12 * np.log2(f0 / 440.0)
+        prev = got[-1][3] if got else None
+        # ...AN OCTAVE HIGH where the next fret is an octave under it (YIN
+        # read F#4's 2nd as its pitch, twice): halved
+        if prev is not None and abs(m - 12 - (prev + 1)) < 0.5 and abs(m - (prev + 1)) >= 0.5:
+            f0, m = f0 / 2.0, m - 12
+        n = int(round(m))
+        if abs(m - n) > 0.4 or not 59 <= n <= 82:
+            continue
+        if prev is not None and n == prev:
+            got[-1] = (a, b, f0, n)                 # the note again: the second try
+        else:
+            got.append((a, b, f0, n))
+    for n, (a, b, f0, note) in enumerate(got):
+        seg = y[max(0, a - int(0.02 * sr)):b]
+        name = "uke_%d_f0_%.2f.wav" % (n, f0)
+        wavfile.write(os.path.join(STAGED, name), sr, (seg * 32767).astype(np.int16))
+    have = sorted(n for _, _, _, n in got)
+    print("  %d notes staged (of %d played): %s" % (len(got), len(UKE_NOTES), have))
 
 
 def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3):
@@ -189,19 +322,22 @@ def render(f0, secs):
     import tonelib as T
     indian = getattr(getattr(T, CLS), "tuning_family", None) == "indian"
     names = ("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b")
-    tab = B.tuning_table(TUNER) if TUNER else None
-    if tab:
-        near = min(tab, key=lambda n: abs(np.log2(tab[n] / f0)))
-    else:
-        near = int(round(69 + 12 * np.log2(f0 / 440.0)))
+    # THE TABLE THE RENDER USES, the renderer's own default where no TUNER:
+    # bending from A440's equal steps put every note under hybrid440 ~1% flat
+    # of its target (E3 162.8 Hz asked 164.5) -- harmless to decays and
+    # levels, wrong for anything placed by frequency (a lap steel's strings)
+    tab = B.tuning_table(TUNER or "hybrid440")
+    near = min(tab, key=lambda n: abs(np.log2(tab[n] / f0)))
     note = 60 + near % 12 if indian else near
     m = mido.MidiFile(type=1, ticks_per_beat=480)
     t = mido.MidiTrack()
     m.tracks.append(t)
     t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
+    if BANK:
+        t.append(mido.Message("control_change", channel=0, control=0, value=BANK, time=0))
     t.append(mido.Message("program_change", channel=0, program=PROG, time=0))
     if not indian:
-        cents = 1200 * np.log2(f0 / (tab[near] if tab else 440.0 * 2 ** ((near - 69) / 12.0)))
+        cents = 1200 * np.log2(f0 / tab[near])
         t.append(mido.Message("pitchwheel", channel=0, pitch=int(round(cents / 200.0 * 8191)), time=0))
     t.append(mido.Message("note_on", channel=0, note=note, velocity=100, time=0))
     t.append(mido.Message("note_off", channel=0, note=note, velocity=0, time=int(secs * 960)))
@@ -269,6 +405,74 @@ def both(step=1):
         y, s2 = render(f0, 6.0)
         ours.append((lab, f0, measure(y, s2, f0)))
     return rec, ours
+
+
+def fit_bright():
+    """--fit=bright: tonal_dampening and the low-pass corner (bore_corner_hz,
+    bore_order) on the 0.15 s ladder, h2-h12 where the take holds the
+    harmonic 20 dB or more over its 2 s floor (the taishogoto's top is in its
+    floor within a second), by grid."""
+    import tonelib as T
+    C = getattr(T, CLS)
+    recs = []
+    for f0, p, lab in plucks():
+        x, sr = read(p)
+        recs.append((f0, measure(x, sr, f0)))
+
+    def err():
+        e = []
+        for f0, m in recs:
+            y, s2 = render(f0, 1.0)
+            o = measure(y, s2, f0)
+            floor = np.nanmin(m[2])
+            for k in range(1, min(12, NH)):
+                if m[1][k] > floor + 20.0:
+                    e.append((m[1][k] - o[1][k]) ** 2)
+        return float(np.sqrt(np.mean(e)))
+    best = None
+    if hasattr(C, "low_string_tilt_db"):
+        # A COURSE (the taishogoto's): the trio's level and the low string's
+        # own tilt, the overall top as it stands
+        # ...and the BODY'S LOW CORNER (bell_cutoff_hz, bell_order): a small
+        # box radiates the low string's fundamental weakly -- E5's 3rd stands
+        # 11 dB over its 1st
+        C.low_string_tilt_db = 0.0
+        if "--top" in sys.argv:
+            # the top again, with the body's corner in place (bell_cutoff_hz)
+            for td in (0.97, 0.85, 0.7):
+                for bc in (2500.0, 5000.0, 9000.0):
+                    C.tonal_dampening, C.bore_corner_hz = td, bc
+                    e = err()
+                    print("  tonal_dampening %.2f corner %5.0f Hz -> %.2f dB" % (td, bc, e), flush=True)
+                    if best is None or e < best[0]:
+                        best = (e, td, bc)
+            print("    tonal_dampening = %s\n    bore_corner_hz = %s   (%.2f dB)" % (best[1], best[2], best[0]))
+            return
+        for og in (1.0, 2.0):
+            for bc in (300.0, 600.0, 900.0, 1300.0):
+                for bo in (1.0, 2.5):
+                    C.octave_partner_gain, C.bell_cutoff_hz, C.bell_order = og, bc, bo
+                    e = err()
+                    print("  trio %.1f body corner %5.0f Hz order %.1f -> %.2f dB" % (og, bc, bo, e), flush=True)
+                    if best is None or e < best[0]:
+                        best = (e, og, bc, bo)
+        print("    octave_partner_gain = %s\n    bell_cutoff_hz = %s\n    bell_order = %s   (%.2f dB)"
+              % (best[1], best[2], best[3], best[0]))
+        return
+    tds, bcs, bos = ((0.97, 0.9, 0.8, 0.7), (1500.0, 2500.0, 3500.0), (1.4, 2.5))
+    if "--wide" in sys.argv:
+        # brighter and gentler (the ukulele's top held to its 12th harmonic)
+        tds, bcs, bos = ((0.7, 0.5, 0.35), (3500.0, 6000.0, 10000.0), (0.7, 1.4))
+    for td in tds:
+        for bc in bcs:
+            for bo in bos:
+                C.tonal_dampening, C.bore_corner_hz, C.bore_order = td, bc, bo
+                e = err()
+                print("  tonal_dampening %.2f corner %5.0f Hz order %.1f -> %.2f dB" % (td, bc, bo, e), flush=True)
+                if best is None or e < best[0]:
+                    best = (e, td, bc, bo)
+    print("    tonal_dampening = %s\n    bore_corner_hz = %s\n    bore_order = %s   (%.2f dB)"
+          % (best[1], best[2], best[3], best[0]))
 
 
 def report():
@@ -575,16 +779,37 @@ TOP_HZ = 11500.0   # the body fit's last band: above it one pluck's noise, not h
 
 
 def main(argv):
-    global TAKE, PROG, CLS, STAGED
+    global TAKE, PROG, CLS, STAGED, BANK
     TAKE = next((a.split("=", 1)[1] for a in argv if a.startswith("--take=")), None)
     voice = next((a.split("=", 1)[1] for a in argv if a.startswith("--voice=")), "sitar")
     PROG, CLS, folder = VOICES[voice]
     STAGED = os.path.join(REFS, "staged", folder)
     globals().update(VOICE_OPTS.get(voice, {}))
+    BANK = BANKS.get(voice, 0)
     if "--stage" in argv:
-        stage_live() if voice == "shamisen" else stage()
+        if voice == "lapsteel":
+            stage_files("open", os.path.expanduser("~/Documents/refs/lapsteel/x/samples/open/*.wav"))
+        elif voice == "mandolin":
+            stage_mandolin()
+        elif voice == "ukulele":
+            stage_ukulele()
+        elif voice == "taishodrone":
+            stage_files("drone", os.path.expanduser(
+                "~/Documents/refs/taishogoto/x/Taishogoto/Taishogoto Samples/Drone_Mic_*.wav"), 94.0, 102.0, div=4)
+        elif voice == "taisho":
+            # named by the trio, an octave over the low string (stage_files)
+            stage_files("mic", os.path.expanduser(
+                "~/Documents/refs/taishogoto/x/Taishogoto/Taishogoto Samples/Mic_*_2_1.wav"),
+                # G4 left out: its low string is 29 dB under the trio (the open
+                # string, no key down?), so its fundamental is not the note's
+                skip=("Mic_G4_",))
+        else:
+            stage_live() if voice == "shamisen" else stage()
         return 0
     if "--fit=decay" in argv:
+        # --nh=N: the decay read on h1-hN only (a take whose upper harmonics
+        # sink into its floor in a second reads them as 0 dB/s)
+        globals()["NH"] = int(next((a.split("=")[1] for a in argv if a.startswith("--nh=")), NH))
         fit_decay()
         return 0
     out = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab=")), None)
@@ -602,6 +827,9 @@ def main(argv):
         return 0
     if "--fit=body" in argv:
         fit_body()
+        return 0
+    if "--fit=bright" in argv:
+        fit_bright()
         return 0
     report()
     return 0
