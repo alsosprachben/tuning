@@ -1160,7 +1160,10 @@ def layers_of(program):
     spec = LAYERED.get((int(program) & 0x7F, v)) if v and getattr(program, "layer", None) is None else None
     if not spec:
         return None
-    return tuple((LayerProgram(program, v, i), int(s[1])) for i, s in enumerate(spec))
+    # (a spec's optional 4th and 5th fields: the velocities it sounds at)
+    return tuple((LayerProgram(program, v, i), int(s[1]),
+                  int(s[3]) if len(s) > 3 else 0, int(s[4]) if len(s) > 4 else 127)
+                 for i, s in enumerate(spec))
 
 
 # GS 48.8 "Orchestra": the strings, and a brass section an octave above them,
@@ -1205,9 +1208,134 @@ from tonelib import MandolinProperties as _MDP
 VARIATIONS[(25, 16)] = _MDP
 
 
+# THE SC-88 MAP'S CHEAP TONES (Roland's SC-88Pro owner's manual, its
+# instrument list; examples/gs_maps.py, gs_inventory.md): the ones that are
+# one of our voices under another number, or a setting of one -- wide (the
+# keys across the stereo field), dark, an octave or a second voice layered, a
+# velocity switch, a drum reversed, an organ's registration. Each at its
+# capital's level (or its own voice's), until levelled against GeneralUser's.
+#   ("alias", program)            that program's voice, note by note
+#   ("var", (program, bank))      that variation's voice
+#   ("kit", key, set)             the set's key played from the keyboard
+#   ("rev", key, set)             ...and played backwards (the reverse cymbal's)
+#   ("set", program, {attrs})     the program's voice with these settings
+#   ("layer", ((program, semitones, dB[, vel lo, vel hi]), ...))
+WIDE = 0.5                       # key_pan_spread: +-0.5 of the field 30 keys from middle C
+SC88_CHEAP = {
+    (0, 8): ("Piano 1w", ("set", 0, dict(key_pan_spread=WIDE))),
+    # "d": A SOFTER, WORN HAMMER (Ben: "the hammer is beaten up... the attack
+    # starts darker due to the hammer difference"), not a duller piano: the
+    # felt's contact low-pass at 0.6x -- fewer upper partials excited at the
+    # strike, every string then ringing by its own law
+    (0, 16): ("Piano 1d", ("set", 0, dict(hammer_corner_hz=0.6 * 3542.03))),
+    (1, 8): ("Piano 2w", ("set", 1, dict(key_pan_spread=WIDE))),
+    (2, 1): ("EG+Rhodes 1", ("layer", ((2, 0, 0.0), (4, 0, -6.0)))),
+    (2, 2): ("EG+Rhodes 2", ("layer", ((2, 0, -3.0), (4, 0, 0.0)))),
+    (2, 8): ("Piano 3w", ("set", 2, dict(key_pan_spread=WIDE))),
+    (3, 8): ("Old Upright", ("alias", 1)),
+    (4, 16): ("FM+SA EP", ("layer", ((4, 0, 0.0), (5, 0, -4.0)))),
+    (4, 24): ("60'sE.Piano", ("alias", 5)),
+    (5, 16): ("St.FM EP", ("set", 5, dict(key_pan_spread=WIDE))),
+    (6, 16): ("Harpsi.w", ("set", 6, dict(key_pan_spread=WIDE))),
+    (6, 24): ("Harpsi.o", ("layer", ((6, 0, 0.0), (6, 12, -6.0)))),
+    (11, 8): ("Vib.w", ("set", 11, dict(key_pan_spread=WIDE))),
+    (12, 8): ("Marimba w", ("set", 12, dict(key_pan_spread=WIDE))),
+    (14, 9): ("Carillon", ("var", (14, 8))),
+    (15, 1): ("Santur 2", ("set", 15, dict(detuned_pair=(-6.0, 6.0)))),
+    (16, 1): ("Organ 101", ("set", 16, dict(default_stops=0b101101))),          # 16' 8' 4' 2'
+    (16, 9): ("Organ 109", ("set", 16, dict(default_stops=0b111100))),          # 8' 4' 2 2/3' 2'
+    (16, 16): ("60'sOrgan 1", ("set", 16, dict(default_stops=0b100001100))),    # 8' 4' 1'
+    (16, 17): ("60'sOrgan 2", ("set", 16, dict(default_stops=0b100101100))),    # 8' 4' 2' 1'
+    (16, 18): ("60'sOrgan 3", ("set", 16, dict(default_stops=0b111111100))),    # 8' and every one over it
+    (16, 32): ("Organ 4", ("set", 16, dict(default_stops=0b111111111))),        # all nine
+    (16, 33): ("Even Bar", ("set", 16, dict(default_stops=0b100101101))),       # the even ones: 16' 8' 4' 2' 1'
+    (16, 40): ("Organ Bass", ("set", 16, dict(default_stops=0b101))),           # 16' 8'
+    (17, 1): ("Organ 201", ("set", 17, dict(default_stops=0b1000000000111))),   # 888, the B3's 2nd percussion
+    (17, 32): ("Organ 5", ("set", 17, dict(default_stops=0b100100000111))),     # 888 and 1', 3rd percussion
+    (18, 8): ("Rotary Org.", ("set", 18, dict(default_stops=0b111111111, leslie_fast=True))),
+    (18, 16): ("RotaryOrg.S", ("set", 18, dict(leslie_fast=False))),
+    (18, 24): ("RotaryOrg.F", ("set", 18, dict(leslie_fast=True, default_stops=0b111111111))),
+    (19, 16): ("ChurchOrg.3", ("set", 19, dict(default_stops=0b10010011))),     # 8' 4' 16' mixture
+    (19, 24): ("Organ Flute", ("set", 19, dict(default_stops=(1 << 6) | (1 << 14)))),                # flute 8' 4'
+    (19, 32): ("Trem.Flute", ("set", 19, dict(default_stops=(1 << 6) | (1 << 14) | (1 << 13)))),    # ...tremulant
+    (24, 16): ("Nylon Gt.o", ("layer", ((24, 0, 0.0), (24, 12, -6.0)))),
+    (24, 24): ("VeloHarmnix", ("layer", ((24, 0, 0.0, 0, 95), (31, 0, 0.0, 96, 127)))),
+    (25, 9): ("Nylon+Steel", ("layer", ((24, 0, -2.0), (25, 0, -2.0)))),
+    (31, 16): ("Ac.Gt.Harm.", ("alias", 31)),
+    (48, 9): ("Orchestra 2", ("layer", ((48, 0, 0.0), (60, 0, -8.0)))),
+    (48, 11): ("Choir Str.", ("layer", ((48, 0, 0.0), (52, 0, -4.0)))),
+    (48, 16): ("St.Strings", ("set", 48, dict(key_pan_spread=WIDE))),
+    (48, 24): ("VeloStrings", ("layer", ((49, 0, 0.0, 0, 90), (48, 0, 0.0, 91, 127)))),
+    (49, 10): ("St.SlowStr.", ("set", 49, dict(key_pan_spread=WIDE))),
+    (52, 8): ("St.Choir", ("set", 52, dict(key_pan_spread=WIDE))),
+    (55, 10): ("Double Hit", ("layer", ((55, 0, 0.0), (55, 12, -6.0)))),
+    (60, 16): ("Horn Orch", ("set", 60, dict(detuned_pair=(-5.0, 5.0)))),
+    (62, 16): ("OctaveBrass", ("layer", ((62, 0, 0.0), (62, 12, -6.0)))),
+    (63, 16): ("VeloBrass 1", ("layer", ((63, 0, 0.0, 0, 90), (62, 0, 0.0, 91, 127)))),
+    (63, 17): ("VeloBrass 2", ("layer", ((63, 0, 0.0, 0, 90), (61, 0, 0.0, 91, 127)))),
+    (98, 3): ("Round Glock", ("alias", 9)),
+    (98, 5): ("GlocknChime", ("layer", ((9, 0, 0.0), (14, 0, -6.0)))),
+    (98, 18): ("Bell Harp", ("layer", ((46, 0, 0.0), (9, 12, -8.0)))),
+    (98, 19): ("Gamelimba", ("layer", ((108, 0, 0.0), (98, 0, -6.0)))),
+    (99, 2): ("Nylon Harp", ("layer", ((24, 0, -2.0), (46, 0, -3.0)))),
+    (99, 3): ("Harpvox", ("layer", ((46, 0, 0.0), (54, 0, -6.0)))),
+    (99, 5): ("NylonRhodes", ("layer", ((24, 0, -2.0), (4, 0, -3.0)))),
+    (102, 3): ("Echo Pan 2", ("set", 102, dict(key_pan_spread=WIDE))),
+    (102, 4): ("Big Panner", ("set", 102, dict(key_pan_spread=0.8))),
+    (102, 5): ("Reso Panner", ("set", 102, dict(key_pan_spread=0.8, sound_bias={"resonance": 0.5}))),
+    (104, 1): ("Sitar 2", ("set", 104, dict(tonal_dampening=0.4125))),                     # brighter: less rolloff
+    (104, 2): ("DetuneSitar", ("set", 104, dict(detuned_pair=(-8.0, 8.0)))),
+    (117, 1): ("Real Tom", ("kit", 45, 0)),
+    (117, 9): ("Rock Tom", ("kit", 45, 16)),
+    (118, 9): ("Elec Perc", ("kit", 45, 24)),
+    (119, 1): ("ReverseCym2", ("rev", 57, 0)),
+    (119, 8): ("Rev.Snare 1", ("rev", 38, 0)),
+    (119, 9): ("Rev.Snare 2", ("rev", 40, 0)),
+    (119, 16): ("Rev.Kick 1", ("rev", 36, 0)),
+    (119, 17): ("Rev.ConBD", ("rev", 36, 48)),
+    (119, 24): ("Rev.Tom 1", ("rev", 45, 0)),
+    (119, 25): ("Rev.Tom 2", ("rev", 48, 0)),
+    (120, 3): ("Gt.CutNz. 2", ("var", (120, 1))),
+    (120, 4): ("Dist.CutNz.", ("var", (120, 1))),
+    (120, 6): ("Pick Scrape", ("alias", 120)),
+    (123, 3): ("Bird 2", ("kit", 78, 56)),
+    (124, 7): ("Scratch 2", ("var", (124, 4))),
+    (126, 6): ("Applause 2", ("kit", 58, 56)),
+}
+_SC88_DONE = {}
+
+
+def _sc88_class(how, tag):
+    kind = how[0]
+    if kind == "alias":
+        return aliased_variation(how[1]), PROGRAM_TRIM_DB.get(how[1], 0.0)
+    if kind == "var":
+        return VARIATIONS[how[1]], VARIATION_TRIM_DB.get(how[1], PROGRAM_TRIM_DB.get(how[1][0], 0.0))
+    if kind in ("kit", "rev"):
+        c = melodic_sfx(how[1], kit=how[2])
+        if kind == "rev":
+            # PLAYED BACKWARDS as the reverse cymbal is (blockrender: each
+            # partial's decay a growth, arriving on the note-off)
+            c = type("%s_rev" % c.__name__, (c,), dict(played_backwards=True, one_shot=False,
+                                                     held_texture=False))
+        return c, KIT_TRIM_DB
+    if kind == "set":
+        return routed_variation(how[1], tag, **how[2]), PROGRAM_TRIM_DB.get(how[1], 0.0)
+    raise ValueError(kind)
+
+
+for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
+    VARIATION_NAMES[(_p, _b)] = _nm
+    if _how[0] == "layer":
+        LAYERED[(_p, _b)] = _how[1]
+        VARIATIONS[(_p, _b)] = routed_variation(_how[1][0][0], "sc88_%d_%d" % (_p, _b))
+    else:
+        VARIATIONS[(_p, _b)], _tr = _sc88_class(_how, "sc88_%d_%d" % (_p, _b))
+        VARIATION_TRIM_DB.setdefault((_p, _b), _tr)
+
 # THE VARIATIONS' LEVELS, MEASURED: each GS variation GeneralUser GS has a
 # preset for, levelled to it as the programs are (examples/sfx_levels.py
 # --var-trim: velocities 64 and 100, K level re a piano C4) -- over the
 # defaults set above (a variation's capital's trim, or the SFX set's)
-VARIATION_TRIM_FIT = {(4, 8): 0.6, (5, 8): -2.4, (6, 8): -11.9, (14, 8): -2.6, (16, 8): -4.4, (17, 8): -2.0, (19, 8): -2.6, (21, 8): -12.2, (24, 8): 7.9, (25, 8): -0.9, (25, 16): 3.5, (26, 8): 12.8, (27, 8): 3.7, (28, 8): 5.1, (30, 8): 6.6, (31, 8): -12.7, (38, 8): -4.6, (39, 8): -2.3, (48, 8): 2.2, (50, 8): 5.0, (61, 8): 3.1, (62, 8): 3.2, (63, 8): 5.2, (107, 8): 0.7, (115, 8): -13.2, (116, 8): 0.5, (117, 8): -1.8, (118, 8): 1.2, (120, 1): -5.4, (120, 2): -5.3, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
+VARIATION_TRIM_FIT = {(0, 8): 0.0, (0, 16): -0.0, (1, 8): 8.2, (2, 1): -1.3, (2, 2): -2.8, (2, 8): 1.9, (3, 8): 7.3, (4, 8): 0.6, (4, 16): -7.4, (4, 24): -4.5, (5, 8): -2.4, (5, 16): -5.3, (6, 8): -11.9, (6, 16): -10.9, (6, 24): -12.5, (11, 8): 2.3, (12, 8): 2.9, (14, 8): -2.6, (14, 9): -1.9, (15, 1): 4.2, (16, 1): -7.4, (16, 8): -4.4, (16, 9): -6.0, (16, 16): -5.5, (16, 17): -5.7, (16, 18): -9.6, (16, 32): -10.1, (16, 33): -7.7, (16, 40): -6.9, (17, 1): -2.4, (17, 8): -2.0, (17, 32): -2.7, (18, 8): -10.1, (18, 16): -7.9, (18, 24): -10.1, (19, 8): -2.6, (19, 16): -3.8, (19, 24): 5.4, (19, 32): 5.2, (21, 8): -12.2, (24, 8): 7.9, (24, 16): 8.3, (24, 24): 9.6, (25, 8): -0.9, (25, 9): -0.4, (25, 16): 3.5, (26, 8): 12.8, (27, 8): 3.7, (28, 8): 5.1, (30, 8): 6.6, (31, 8): -12.7, (31, 16): 13.2, (38, 8): -4.6, (39, 8): -2.3, (48, 8): 2.2, (48, 9): 0.9, (48, 11): -0.4, (48, 16): 2.1, (48, 24): 4.2, (49, 10): 2.6, (50, 8): 5.0, (52, 8): 3.5, (55, 10): -15.9, (60, 16): 6.4, (61, 8): 3.1, (62, 8): 3.2, (62, 16): 7.4, (63, 8): 5.2, (63, 16): 8.5, (63, 17): 7.6, (98, 3): -0.9, (98, 5): -6.0, (98, 18): 0.1, (98, 19): 9.3, (99, 2): 5.6, (99, 3): 4.6, (99, 5): 8.3, (102, 3): -1.2, (102, 4): -1.2, (102, 5): 1.8, (104, 1): 12.6, (104, 2): 17.0, (107, 8): 0.7, (115, 8): -13.2, (116, 8): 0.5, (117, 1): 5.8, (117, 8): -1.8, (117, 9): 5.5, (118, 8): 1.2, (118, 9): 0.0, (119, 1): -1.7, (119, 8): -0.2, (119, 9): 2.5, (119, 16): -2.8, (119, 17): -2.1, (119, 24): 1.2, (119, 25): 2.1, (120, 1): -5.4, (120, 2): -5.3, (120, 3): 1.0, (120, 4): 1.0, (120, 6): 32.8, (121, 1): -9.6, (122, 1): 16.4, (122, 2): -0.7, (122, 3): 11.8, (122, 4): 19.8, (122, 5): 3.4, (123, 1): -10.8, (123, 2): -6.9, (124, 1): 13.3, (124, 2): -7.4, (124, 3): -10.3, (124, 4): -8.0, (124, 5): -2.0, (124, 7): -6.4, (125, 1): 3.1, (125, 2): -8.3, (125, 3): -1.4, (125, 4): -4.3, (125, 5): 1.1, (125, 6): -6.7, (125, 7): 2.0, (125, 8): -2.4, (125, 9): 0.8, (126, 1): -2.4, (126, 2): -8.0, (126, 3): -1.1, (126, 4): -3.4, (126, 5): -0.9, (126, 6): 14.3, (127, 1): 4.7, (127, 2): 8.3, (127, 3): 4.2}
 VARIATION_TRIM_DB.update(VARIATION_TRIM_FIT)

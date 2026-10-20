@@ -738,11 +738,40 @@ def _mt32_var_rated():
             VAR_RATED[(i, 127)] = (r, "GM %d %s" % (to, names[to]))
 
 
+def _sc88_var_rated():
+    """THE SC-88 MAP'S CHEAP TONES (patch_map.SC88_CHEAP): each its source
+    voice's rating -- the program it aliases or sets, its layers' lowest, the
+    kit key it plays -- and what was done to it."""
+    names = GM
+    for (p, b), (nm, how) in patch_map.SC88_CHEAP.items():
+        kind = how[0]
+        if kind == "alias":
+            r, note = RATED[how[1]][0], "GM %d %s's voice" % (how[1], names[how[1]])
+        elif kind == "var":
+            r, note = VAR_RATED[how[1]][0], "%d.%d's voice" % how[1]
+        elif kind in ("kit", "rev"):
+            kr = PERC_RATED[how[1]] if how[2] == 0 else KIT_RATED[how[2]].get(how[1], PERC_RATED.get(how[1]))
+            r = kr[0]
+            note = "set %d's key %d from the keyboard%s" % (how[2], how[1], ", played backwards" if kind == "rev" else "")
+        elif kind == "set":
+            r = RATED[how[1]][0]
+            note = "GM %d %s with %s" % (how[1], names[how[1]], ", ".join(
+                "%s=%s" % (k, ("%#x" % v) if k == "default_stops" else v) for k, v in how[2].items()))
+        else:
+            r = min(RATED[l[0]][0] for l in how[1])
+            note = "layered: " + " + ".join("GM %d%s%s%s" % (l[0], (" %+d st" % l[1]) if l[1] else "",
+                                                          (" %+.0f dB" % l[2]) if l[2] else "",
+                                                          (" vel %d-%d" % (l[3], l[4])) if len(l) > 3 else "")
+                                            for l in how[1])
+        VAR_RATED[(p, b)] = (r, "SC-88 map: " + note)
+
+
 def variations():
     if not any(k in VAR_RATED for k in patch_map.SFX_VARIATIONS):
         _sfx_var_rated()
         _kit_var_rated()
         _mt32_var_rated()
+        _sc88_var_rated()
     """[(program, bank, GS name, class or None, rating or None, note)], every
     variation GS names; one not built plays its capital tone."""
     built = set(patch_map.VARIATIONS)
@@ -766,16 +795,20 @@ def variations():
 
 def variations_md():
     rows = variations()
-    nb = sum(1 for r in rows if r[3])
+    sc88 = set(getattr(patch_map, "SC88_CHEAP", {}))
+    r55 = [r for r in rows if (r[0], r[1]) not in sc88]
+    nb = sum(1 for r in r55 if r[3])
     L = ["## Variations: the GS banks (CC0)\n",
          "A GS bank select (CC0 = bank, then the program) picks a variation tone",
-         "under a program (SC-55 owner's manual p.68). %d of GS's %d are built;" % (nb, len(rows)),
+         "under a program (SC-55 owner's manual p.68). %d of the SC-55's %d are built," % (nb, len(r55)),
+         "and %d of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);" % len(sc88),
          "one not built plays its capital tone, as a Sound Canvas does.\n",
-         "| program.bank | GS name | class | | notes |",
-         "|---|---|---|---|---|"]
+         "| program.bank | map | GS name | class | | notes |",
+         "|---|---|---|---|---|---|"]
     for p, v, name, cls, r, note in rows:
-        L.append("| %d.%d | %s | %s | %s | %s |"
-                 % (p, v, name, "`%s`" % cls.replace("Properties", "") if cls else "--",
+        L.append("| %d.%d | %s | %s | %s | %s | %s |"
+                 % (p, v, "SC-88" if (p, v) in sc88 else "SC-55", name,
+                    "`%s`" % cls.replace("Properties", "") if cls else "--",
                     "**%d**" % r if r is not None else "", note))
     L.append("")
     return "\n".join(L)
@@ -794,6 +827,104 @@ def mt32_md():
         L.append("| %d.127 | %s | %s | **%d** |" % (i, nm, note, r))
     L.append("")
     return "\n".join(L)
+
+
+# THE SOUND CANVAS MAPS (examples/gs_maps.py: the SC-88Pro owner's manual's
+# instrument list, its Native, SC-88 and SC-55mkII maps side by side, and the
+# original SC-55's p.68 list, which VARIATION_NAMES follows): each map's tones
+# against what we have built, rated as the GM table and the variations are.
+# A later map can put ANOTHER TONE under a number we built (the SC-88's 4.8 is
+# "St.Soft EP", not our detuned pair): those are not counted as built. A name
+# that differs only in its spelling ("Syn.Bass 3", "Acid Bass") is the same
+# tone, renamed.
+SC_OTHER = {
+    "sc55": {(3, 8), (4, 16), (5, 16), (62, 16), (63, 16)},
+    "sc88": {(4, 8), (39, 8)},
+    "native": {(0, 16), (3, 8), (4, 8), (39, 8), (16, 8), (16, 9), (16, 32), (17, 1), (17, 32),
+               (60, 16), (62, 8), (63, 8), (63, 17)},
+}
+SC_MAPS = (("sc55o", "SC-55"), ("sc55", "SC-55mkII"), ("sc88", "SC-88"), ("native", "SC-88Pro"))
+
+
+def sound_canvas():
+    """([(map name, tones, built, other tone, {rating: n})],
+    [(family, [(built, tones) per map])], the SC-88 map's missing [(p, b, name, kind)])
+    -- None if the manual's list has not been parsed (gs_maps.py parse)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gs_maps
+    if not os.path.exists(gs_maps.TSV):
+        return None
+    variations()                                     # fills VAR_RATED
+    R = gs_maps.load()
+    later = set(getattr(patch_map, "SC88_CHEAP", {}))
+    try:
+        from sc88_synth import SC88_SYNTH
+        later |= set(SC88_SYNTH)
+    except ImportError:
+        pass
+    tones = {"sc55o": [(p, 0) for p in range(128)] +
+             [k for k in patch_map.VARIATION_NAMES if k[1] != 127 and k not in later]}
+    for col in ("sc55", "sc88", "native"):
+        tones[col] = [(r["program"], r["bank"]) for r in R
+                      if r[col] not in ("-----", "", "+ -----")]
+
+    def rating(col, k):
+        if k[1] == 0:
+            return RATED[k[0]][0]
+        if k in SC_OTHER.get(col, ()) or k not in patch_map.VARIATIONS or k not in VAR_RATED:
+            return None
+        return VAR_RATED[k][0]
+    maps, fams = [], []
+    for col, name in SC_MAPS:
+        rs = [rating(col, k) for k in tones[col]]
+        hist = {r: rs.count(r) for r in range(5)}
+        other = sum(1 for k in tones[col] if k in SC_OTHER.get(col, ()))
+        maps.append((name, len(rs), sum(r is not None for r in rs), other, hist))
+    for start, fam in FAMILY:
+        row = []
+        for col, _ in SC_MAPS:
+            ks = [k for k in tones[col] if start <= k[0] < start + 8]
+            row.append((sum(rating(col, k) is not None for k in ks), len(ks)))
+        fams.append((fam, row))
+    miss = sorted((r["program"], r["bank"], r["sc88"], gs_maps.KIND.get((r["program"], r["bank"]), "?"))
+                  for r in R if r["sc88"] not in ("-----", "", "+ -----")
+                  and rating("sc88", (r["program"], r["bank"])) is None)
+    return maps, fams, miss
+
+
+SC_KINDS = (("synth", "a Moog panel, voiced by ear"),
+            ("refit", "an articulation of one we have, wanting a fit to a reference"),
+            ("new", "an instrument we have not modelled, wanting references"),
+            ("other", "a different tone under a number we built"))
+
+
+def sound_canvas_md():
+    sc = sound_canvas()
+    if sc is None:
+        return ""
+    maps, fams, miss = sc
+    L = ["## Sound Canvas: the GS maps\n",
+         "Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55mkII,",
+         "SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built",
+         "when we play it, as a program or a variation, and rated as the tables above rate it.",
+         "A later map can put another tone under a number we built; that one is not counted.\n",
+         "| map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |", "|---|---|---|---|---|---|---|---|---|---|"]
+    for name, n, nb, other, h in maps:
+        L.append("| %s | %d | %d | %d%% | %s | %d%s |"
+                 % (name, n, nb, round(100 * nb / n), " | ".join(str(h[r]) for r in (4, 3, 2, 1, 0)),
+                    n - nb, (" (%d another tone)" % other) if other else ""))
+    L += ["", "### By family: built of each map's tones\n",
+          "| family | " + " | ".join(nm for _, nm in SC_MAPS) + " |",
+          "|---|" + "---|" * len(SC_MAPS)]
+    for fam, row in fams:
+        L.append("| %s | %s |" % (fam, " | ".join("%d/%d" % x for x in row)))
+    L += ["", "### The SC-88 map's %d still to build, by what they take\n" % len(miss)]
+    for k, what in SC_KINDS:
+        rs = [m for m in miss if (m[3] if (m[0], m[1]) not in SC_OTHER["sc88"] else "other") == k]
+        if rs:
+            L.append("**%s** (%d: %s): %s\n" % (k, len(rs), what,
+                                               ", ".join("%d.%d %s" % (p, b, nm) for p, b, nm, _ in rs)))
+    return "\n".join(L) + "\n"
 
 
 def stops_md():
@@ -972,6 +1103,7 @@ def main(argv):
     L.append(stops_md())
     L.append(variations_md())
     L.append(mt32_md())
+    L.append(sound_canvas_md())
     L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)

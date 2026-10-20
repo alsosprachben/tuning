@@ -6,32 +6,20 @@ module is the SC-55mkII's, a few dozen tones more than the original SC-55's we b
 
 | map | tones | built | to do |
 |---|---|---|---|
-| SC-55 map (mkII) | 226 | 188 | 38 |
-| SC-88 map | 409 | 188 | 221 |
-| SC-88Pro map | 765 | 188 | 577 |
+| SC-55 map (mkII) | 226 | 211 | 15 |
+| SC-88 map | 409 | 263 | 146 |
+| SC-88Pro map | 765 | 263 | 502 |
 
-## The SC-88 map's 221 missing tones, by what they take
+## The SC-88 map's 146 missing tones, by what they take
 
 | kind | count | what it takes |
 |---|---|---|
-| alias | 6 | one of our voices, under another number |
-| derived | 53 | a setting of one of ours (wide, dark, octave, layered, velocity, reversed) |
-| organ | 16 | a registration of our organs (drawbars, stops, the Leslie) |
+| alias | 0 | one of our voices, under another number |
+| derived | 0 | a setting of one of ours (wide, dark, octave, layered, velocity, reversed) |
+| organ | 0 | a registration of our organs (drawbars, stops, the Leslie) |
 | synth | 77 | a Moog panel, voiced by ear |
 | refit | 49 | an articulation of one we have, wanting a fit to a reference |
 | new | 20 | an instrument we have not modelled, wanting references |
-
-### alias
-
-3.8 Old Upright (mkII), 4.24 60'sE.Piano (mkII), 98.3 Round Glock, 117.1 Real Tom, 117.9 Rock Tom, 118.9 Elec Perc (mkII)
-
-### derived
-
-0.8 Piano 1w (mkII), 0.16 Piano 1d (mkII), 1.8 Piano 2w (mkII), 2.1 EG+Rhodes 1, 2.2 EG+Rhodes 2, 2.8 Piano 3w (mkII), 4.16 FM+SA EP (mkII), 5.16 St.FM EP (mkII), 6.16 Harpsi.w (mkII), 6.24 Harpsi.o (mkII), 11.8 Vib.w (mkII), 12.8 Marimba w (mkII), 14.9 Carillon (mkII), 15.1 Santur 2, 24.16 Nylon Gt.o (mkII), 24.24 VeloHarmnix, 25.9 Nylon+Steel, 31.16 Ac.Gt.Harm., 48.9 Orchestra 2, 48.11 Choir Str., 48.16 St.Strings, 48.24 VeloStrings, 49.10 St.SlowStr., 52.8 St.Choir, 55.10 Double Hit, 60.16 Horn Orch, 62.16 OctaveBrass (mkII), 63.16 VeloBrass 1 (mkII), 63.17 VeloBrass 2, 98.5 GlocknChime, 98.18 Bell Harp, 98.19 Gamelimba, 99.2 Nylon Harp, 99.3 Harpvox, 99.5 NylonRhodes, 102.3 Echo Pan 2, 102.4 Big Panner, 102.5 Reso Panner, 104.1 Sitar 2 (mkII), 104.2 DetuneSitar, 119.1 ReverseCym2, 119.8 Rev.Snare 1, 119.9 Rev.Snare 2, 119.16 Rev.Kick 1, 119.17 Rev.ConBD, 119.24 Rev.Tom 1, 119.25 Rev.Tom 2, 120.3 Gt.CutNz. 2, 120.4 Dist.CutNz., 120.6 Pick Scrape, 123.3 Bird 2 (mkII), 124.7 Scratch 2, 126.6 Applause 2
-
-### organ
-
-16.1 Organ 101, 16.9 Organ 109, 16.16 60'sOrgan 1 (mkII), 16.17 60'sOrgan 2, 16.18 60'sOrgan 3, 16.32 Organ 4 (mkII), 16.33 Even Bar, 16.40 Organ Bass, 17.1 Organ 201, 17.32 Organ 5 (mkII), 18.8 Rotary Org., 18.16 RotaryOrg.S, 18.24 RotaryOrg.F, 19.16 ChurchOrg.3 (mkII), 19.24 Organ Flute, 19.32 Trem.Flute
 
 ### synth
 

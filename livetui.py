@@ -30,6 +30,7 @@ import moog as MG
 import mf104 as MFD
 import percussion_map as PM
 import patch_map as PMAP
+from variation_desc import VARIATION_DESC
 
 locale.setlocale(locale.LC_ALL, "")
 
@@ -736,13 +737,32 @@ class TUI:
             curses.curs_set(0)
 
     def menu(self, scr, title, items, start=0):
-        """A centred picker. Returns an index, or None if cancelled."""
+        """A centred picker. Returns an index, or None if cancelled.
+
+        AND A SEARCH (Ben: "control over tone means search and edit"): "/"
+        starts one, typing narrows the list to the rows holding every word
+        typed (any case: "slow str", "rhodes", "127 bell"), the arrows move
+        within them, Enter picks, Backspace edits, Esc clears it (a second
+        closes the menu). A heading row (a section of the patch list) stays
+        out of a search's matches."""
         scr.keypad(True)
         i = start
+        query, searching = "", False
+
+        def view():
+            if not query:
+                return list(range(len(items)))
+            ws = query.lower().split()
+            return [j for j, x in enumerate(items)
+                    if not x.startswith("--") and all(w in x.lower() for w in ws)]
         while True:
+            vis = view()
             h, w = scr.getmaxyx()
-            n = min(len(items), max(3, h - 8))
-            top = max(0, min(i - n // 2, len(items) - n))
+            if vis and i not in vis:
+                i = vis[0]
+            pos = vis.index(i) if i in vis else 0
+            n = min(max(len(vis), 1), max(3, h - 8))
+            top = max(0, min(pos - n // 2, len(vis) - n))
             bw = min(w - 4, max(len(title) + 4, max((len(x) for x in items), default=10) + 8))
             y0 = max(0, (h - n) // 2 - 1)
             x0 = max(0, (w - bw) // 2)
@@ -750,28 +770,48 @@ class TUI:
                 self.addstr(scr, y, x0, " " * bw, curses.A_REVERSE)
             self.addstr(scr, y0 - 1, x0 + 2, title[:bw - 4], curses.A_REVERSE | curses.A_BOLD)
             for k in range(n):
-                j = top + k
+                if top + k >= len(vis):
+                    if not vis and k == 0:
+                        self.addstr(scr, y0, x0, ("   (nothing matches)")[:bw], curses.A_REVERSE)
+                    continue
+                j = vis[top + k]
                 mark = ">" if j == i else " "
                 txt = " %s %-*s" % (mark, bw - 5, items[j][:bw - 5])
                 self.addstr(scr, y0 + k, x0, txt[:bw],
                             curses.A_REVERSE | (curses.A_BOLD if j == i else 0))
-            self.addstr(scr, y0 + n + 1, x0 + 2,
-                        "enter select   esc cancel"[:bw - 4], curses.A_REVERSE)
+            foot = (("/" + query + ("_" if searching else "") + "   %d found" % len(vis)) if (searching or query)
+                    else "enter select   / search   esc cancel")
+            self.addstr(scr, y0 + n + 1, x0 + 2, foot[:bw - 4], curses.A_REVERSE)
             scr.refresh()
             c = scr.getch()
             if c == -1:
                 continue
+            if searching and 32 <= c < 127 and c != ord("/"):
+                query += chr(c)
+                continue
+            if searching and c in (curses.KEY_BACKSPACE, 127, 8):
+                query = query[:-1]
+                continue
+            if c == ord("/"):
+                searching = True
+                continue
             if c in (curses.KEY_UP, ord("k")):
-                i = max(0, i - 1)
+                i = vis[max(0, pos - 1)] if vis else i
             elif c in (curses.KEY_DOWN, ord("j")):
-                i = min(len(items) - 1, i + 1)
+                i = vis[min(len(vis) - 1, pos + 1)] if vis else i
             elif c == curses.KEY_PPAGE:
-                i = max(0, i - n)
+                i = vis[max(0, pos - n)] if vis else i
             elif c == curses.KEY_NPAGE:
-                i = min(len(items) - 1, i + n)
+                i = vis[min(len(vis) - 1, pos + n)] if vis else i
             elif c in (10, 13):
-                return i
-            elif c == 27 or c == ord("q"):
+                if vis:
+                    return i
+            elif c == 27:
+                if searching or query:
+                    query, searching = "", False      # first Esc: the search
+                else:
+                    return None
+            elif c == ord("q") and not searching:
                 return None
 
     def enter(self, scr):
@@ -984,11 +1024,14 @@ class TUI:
         # indent was more distracting than lining them up by number)
         def row(i, v, label):
             return "%3d%-5s %s" % (i, (".%d" % v) if v else "", label)
+        # ...EACH VARIATION SAYING WHAT IT CHANGES (variation_desc: "Piano 1d
+        # -- dark: worn hammers"), so the list reads, and searches, by sound
         for i in range(len(GM)):
             items.append(row(i, 0, gm_label(i)))
             picks.append((False, i, 0))
             for v in built_variations(i):
-                items.append(row(i, v, gm_label(i, v)))
+                d = VARIATION_DESC.get((i, v))
+                items.append(row(i, v, ("%-13s %s" % (gm_label(i, v), d)) if d else gm_label(i, v)))
                 picks.append((False, i, v))
         # ...AND THE MT-32 SET, bank 127, on its own after them: the MT-32's
         # tones by their own names, each with the voice it plays here

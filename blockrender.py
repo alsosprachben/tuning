@@ -2595,8 +2595,10 @@ def prepare(path, tuner='hybrid440', sink=None):
         # sees the note
         _lys = None if is_drum(pg) else layers_of(pg)
         if _lys:
-            for _lp, _st in _lys:
-                if 0 <= note + _st <= 127:
+            # ...each within its velocity range (a "Velo" variation switches
+            # voice with how hard the key is struck)
+            for _lp, _st, _vlo, _vhi in _lys:
+                if 0 <= note + _st <= 127 and _vlo <= vel <= _vhi:
                     expanded.append((ch, note + _st, on, off, vel, rest, _lp))
             continue
         strokes = rasp_strokes(note, on, off, kit=kit_for_program(int(pg))) if is_drum(pg) else None
@@ -3484,6 +3486,12 @@ def prepare(path, tuner='hybrid440', sink=None):
             pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
         else:
             pc = _DRONE_PC.get((ch, note, on)) or property_class_for_note(prog, note)
+            # A WIDE VOICE (key_pan_spread: GS's "w" tones) spreads its keys
+            # across the stereo field, low left and high right, about the
+            # channel's pan: the spread at 30 semitones from middle C
+            _kps = getattr(pc, 'key_pan_spread', 0.0)
+            if _kps:
+                pan = max(-1.0, min(1.0, pan + _kps * (note - 60) / 30.0))
             organ = getattr(pc,'registerable',False)
             # An organ's CC7 is its swell shutter and its CC11 half the stop
             # word, so its channel gain is 1 and the swell row does the rest; a
@@ -3821,6 +3829,13 @@ def prepare(path, tuner='hybrid440', sink=None):
         # here, silently, as a bend is on a piano.
         _sctl = T.sound_controls_of(pc)
         _sdd = _snd_d(ch, on)
+        # ...AND THE VOICE'S OWN STARTING POINT (sound_bias: a GS "d"ark or
+        # bright variation), the channel's offsets on top of it
+        _sbias = getattr(pc, 'sound_bias', None)
+        if _sbias:
+            _sdd = dict(_sdd)
+            for _bk, _bv in _sbias.items():
+                _sdd[_bk] = _sdd.get(_bk, 0.0) + _bv
         if _mmgr is not None:
             # MPE: CC74 per note, the manager's a bias on it (Appendix D)
             _mb = _snd_d(_mmgr, on).get('brightness', 0.0)

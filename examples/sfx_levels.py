@@ -287,6 +287,7 @@ def var_trim(vels=(64, 100), passes=1):
                 base = PM.VARIATION_TRIM_DB.get((p, v), PM.PROGRAM_TRIM_DB.get(p, 0.0))
                 PM.VARIATION_TRIM_DB[(p, v)] = round(base + dv, 1)
                 PM.VARIATION_TRIM_FIT[(p, v)] = PM.VARIATION_TRIM_DB[(p, v)]
+    cap_trim(vels)
     path = os.path.join(HERE, "patch_map.py")
     src = open(path).read()
     tab = "{" + ", ".join("(%d, %d): %.1f" % (p, v, PM.VARIATION_TRIM_FIT[(p, v)])
@@ -294,6 +295,44 @@ def var_trim(vels=(64, 100), passes=1):
     src = re.sub(r"^VARIATION_TRIM_FIT = .*$", lambda _: "VARIATION_TRIM_FIT = " + tab, src, count=1, flags=re.M)
     open(path, "w").write(src)
     print("  written: %d variation trims" % len(PM.VARIATION_TRIM_FIT))
+
+
+def cap_trim(vels=(64, 100)):
+    """THE VARIATIONS GeneralUser HAS NO PRESET FOR (the SC-88 map's cheap
+    tones, mostly) at their CAPITAL tone's loudness: each its K level less its
+    capital's at the program's key, both velocities, the trim moved by the
+    mean -- a variation of a program sits where the program does. Into
+    VARIATION_TRIM_FIT with the rest (bank 127 excepted, at its targets')."""
+    import patch_map as PM
+    have = set(gu_variations())
+    pairs = sorted(k for k in PM.VARIATIONS if k[1] != 127 and k in PM.VARIATION_NAMES and k not in have)
+    if not pairs:
+        return
+    os.environ.setdefault("TUNING_REFLECT", "0")
+    os.environ.setdefault("TUNING_MASTER_DB", "-14")
+    import blockrender as B
+    with tempfile.TemporaryDirectory() as d:
+        def k_level(p, b, v_):
+            mid = os.path.join(d, "c.mid")
+            var_mid(p, b, KEY_OF.get(p, 60), v_, mid)
+            L, R = B.render(mido.MidiFile(mid))[:2]
+            return levels([np.asarray(L, np.float64), np.asarray(R, np.float64)], B.SR)[1]
+        diffs = {}
+        for p, b in pairs:
+            ds = []
+            for v_ in vels:
+                a, c = k_level(p, b, v_), k_level(p, 0, v_)
+                if np.isfinite(a) and np.isfinite(c) and a > -200 and c > -200:
+                    ds.append(c - a)
+            if ds:
+                dv = float(np.mean(ds))
+                base = PM.VARIATION_TRIM_DB.get((p, b), PM.PROGRAM_TRIM_DB.get(p, 0.0))
+                PM.VARIATION_TRIM_DB[(p, b)] = PM.VARIATION_TRIM_FIT[(p, b)] = round(base + dv, 1)
+                diffs[(p, b)] = dv
+    rms = float(np.sqrt(np.mean(np.square(list(diffs.values()))))) if diffs else 0.0
+    print("  %d variations without a GU preset, to their capitals: %.1f dB rms moved (worst %s)" % (
+        len(diffs), rms, ", ".join("%d.%d %+.1f" % (k[0], k[1], dv) for k, dv in
+                                   sorted(diffs.items(), key=lambda kv: -abs(kv[1]))[:6])), flush=True)
 
 
 def main(argv):

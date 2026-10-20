@@ -127,6 +127,10 @@ p{margin:0; max-width:66ch; color:var(--ink-2)}
   font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:500;
 }
 .bar span.r1{color:var(--ink)}
+.bar span.todo{background:var(--rule-2); color:var(--muted)}
+.scmap{display:grid; grid-template-columns:minmax(80px,auto) 1fr; gap:10px 14px; align-items:center}
+.scmap .bar{height:26px}
+.scmap .nm{font-family:"IBM Plex Mono",monospace; font-size:12.5px}
 .scalelist{list-style:none; padding:0; margin:0; display:grid; gap:1px;
   border:1px solid var(--rule); border-radius:4px; overflow:hidden; background:var(--rule)}
 .scalelist li{
@@ -356,6 +360,38 @@ def variations():
             '<th></th><th>Notes</th></tr>\n%s\n</table></div>' % "\n".join(trs))
 
 
+def sound_canvas():
+    """The Sound Canvas maps (gm_coverage.sound_canvas): a bar per map by
+    rating and what is still to do, then built of each map's tones by family,
+    then the SC-88 map's remaining tones by what they take."""
+    sc = C.sound_canvas()
+    if sc is None:
+        return "<p>(The SC-88Pro manual's list is not parsed here: examples/gs_maps.py parse.)</p>"
+    maps, fams, miss = sc
+    rows = []
+    for name, n, nb, other, h in maps:
+        spans = "".join('<span class="r%d" style="flex:%d" title="rated %d: %d">%d</span>' % (r, h[r], r, h[r], h[r])
+                        for r in (4, 3, 2, 1, 0) if h[r])
+        if n > nb:
+            spans += ('<span class="todo" style="flex:%d" title="to do%s">%d to do</span>'
+                      % (n - nb, (", %d another tone under a number we built" % other) if other else "", n - nb))
+        rows.append('<div class="nm">%s<br><span class="rng">%d of %d</span></div><div class="bar">%s</div>'
+                    % (e(name), nb, n, spans))
+    head = "".join("<th>%s</th>" % e(nm) for _, nm in C.SC_MAPS)
+    trs = "\n".join('<tr><td class="nm">%s</td>%s</tr>' % (e(f), "".join(
+        '<td class="num">%d/%d</td>' % x for x in row)) for f, row in fams)
+    kinds = []
+    for k, what in C.SC_KINDS:
+        rs = [m for m in miss if (m[3] if (m[0], m[1]) not in C.SC_OTHER["sc88"] else "other") == k]
+        if rs:
+            kinds.append("<p><strong>%s</strong> (%d, %s): %s</p>" % (e(k), len(rs), e(what), e(
+                ", ".join("%d.%d %s" % (p, b, nm) for p, b, nm, _ in rs))))
+    return ('<div class="scmap">%s</div>\n<h3>By family: built of each map&rsquo;s tones</h3>\n'
+            '<div class="tscroll"><table><tr><th>Family</th>%s</tr>\n%s\n</table></div>\n'
+            '<h3>The SC-88 map&rsquo;s %d still to build, by what they take</h3>\n%s'
+            % ("\n".join(rows), head, trs, len(miss), "\n".join(kinds)))
+
+
 def tree():
     """The class tree (gm_coverage.class_tree), collapsible below two levels."""
     n = [0]
@@ -417,6 +453,7 @@ def build():
         "drumsets": drum_sets(),
         "stops": stops(),
         "variations": variations(),
+        "soundcanvas": sound_canvas(),
         "nvar": len(C.variations()),
         "nvarb": sum(1 for x in C.variations() if x[3]),
         "nstop": sum(len(r) + len(c) for _, _, r, c in C.stops()),
@@ -508,6 +545,12 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <h2>Variations: the GS banks</h2>
 <p>A GS bank select (CC0 = bank, then the program) picks a <em>variation</em> tone under a program (SC-55 owner&rsquo;s manual p.68). %(nvarb)d of GS&rsquo;s %(nvar)d are built; one not built plays its capital tone, as a Sound Canvas does.</p>
 %(variations)s
+</section>
+
+<section>
+<h2>Sound Canvas: the GS maps</h2>
+<p>Each Sound Canvas&rsquo;s map of tones &mdash; the SC-55&rsquo;s own (owner&rsquo;s manual p.68), and the SC-55mkII, SC-88 and SC-88Pro maps from the SC-88Pro manual&rsquo;s instrument list &mdash; against ours: a tone is built when we play it, as a program or a variation, and rated as the tables above rate it. A later map can put another tone under a number we built (the SC-88&rsquo;s 4.8 is &ldquo;St.Soft EP&rdquo;, not our detuned pair); that one is not counted.</p>
+%(soundcanvas)s
 </section>
 
 <section>
