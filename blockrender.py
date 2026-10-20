@@ -2991,6 +2991,39 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # the players seated but the carrier shared, 0.8382 with both. The seats
         # supply the positions; this is what turns a position into an arrival.
         # p0 = -om*(non + d) + ph0, i.e. exactly "this partial, delayed by d".
+        #
+        # THE SAME PLATE STRUCK AGAIN (fold_restrike: a gong). The new strike
+        # does not erase the old ring, it adds to it -- and both are the same
+        # modes, at the same frequencies, each decaying at its own one rate
+        # (no aftersound: a single exponential). So from the re-strike on the
+        # old mode IS its value then, decaying on the new note's clock, and the
+        # two sum as phasors into one row: exact, and a roll costs one strike's
+        # rows however long it runs. The old strike's direct rows (and its
+        # bloom's, once risen) end at the re-strike, fading over the new
+        # attack; the new strike's direct rows take them in. Reflections are
+        # made from the direct row below, so they fold with it.
+        if _place is None and _FOLDIN[0] and not _LATE[0] and aft == 0.0 and sus == 0.0:
+            _old = _FOLDIN[0].pop(round(nomf, 3), None)
+            if _old:
+                _pl, _pr = -om * (non + dl) + ph0, -om * (non + dr) + ph0
+                _zl, _zr, _zm = (ampL * cmath.exp(1j * _pl), ampR * cmath.exp(1j * _pr),
+                                 ampM * cmath.exp(1j * _pl))
+                for _oL, _oR, _oM, _q0, _q0R, _n1, _lr in _old:
+                    _g = math.exp(-_lr * (non - _n1) / SR)
+                    _zl += _oL * _g * cmath.exp(1j * _q0)
+                    _zr += _oR * _g * cmath.exp(1j * _q0R)
+                    _zm += _oM * _g * cmath.exp(1j * _q0)
+                ampL, ampR, ampM = abs(_zl), abs(_zr), abs(_zm)
+                ph0 = cmath.phase(_zl) + om * (non + dl)
+        # (taking in the strike before FIRST, then leaving the sum to the next:
+        # in a roll each strike carries all the ones before it)
+        if _place is None and _FOLD[0] is not None:
+            _n2, _xf, _st = _FOLD[0]
+            if aft == 0.0 and sus == 0.0 and non + fa <= _n2 < noff:
+                _st.setdefault(round(nomf, 3), []).append(
+                    (ampL, ampR, ampM, -om * (non + dl) + ph0, -om * (non + dr) + ph0, non, logr))
+                noff = _n2
+                re = _xf
         A["om"].append(om)
         A["p0"].append(-om*(non + dl) + ph0)
         A["p0R"].append(-om*(non + dr) + ph0)
@@ -3900,6 +3933,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _REL_JACKS = []         # (first, end, rank, jack offset s): the click rows of each jack
     _PUSH_T0 = {}           # channel -> when its bellows' push began (a note from silence)
     _HAM_T0 = {}            # channel -> when its string was last PICKED (hammer_legato)
+    _FOLD = [None]          # (re-strike sample, crossfade, store) if this note's plate is struck again
+    _FOLDIN = [None]        # {mode Hz: [old rows]} the strike before left this one to take in
+    _FOLD_STORE = {}        # (ch, note) -> (re-strike time s, store)
+    _FOLD_ON = os.environ.get('TUNING_FOLD', '1') not in ('0', 'off', '')
     _HAM = [0.0]            # this note's seconds since that pick, if a hammer-on; else 0
     _LFLIP = []             # rows on the Leslie rotor their pitch would not pick (the crossover's copies)
 
@@ -4451,6 +4488,19 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # guitars). A note over the one before is hammered or pulled, not
         # picked: a softer onset, and the string's energy carried on from the
         # last pick (emit_partial); a picked note starts the chain again
+        # THE SAME PLATE STRUCK AGAIN (fold_restrike; emit_partial): this
+        # strike takes in what the one before left it, and leaves its own to
+        # the next strike of the key, if there is one
+        _FOLD[0] = _FOLDIN[0] = None
+        if _FOLD_ON and getattr(props, 'fold_restrike', False):
+            _fs = _FOLD_STORE.pop((ch, note), None)
+            if _fs is not None and abs(_fs[0] - on) < 1e-6:
+                _FOLDIN[0] = _fs[1]
+            _nx2 = _next_same.get(((ch, note), on))
+            if _nx2 is not None:
+                _st2 = {}
+                _FOLD[0] = (int(_nx2 * SR), max(32.0, (props.attack_time or 0.004) * SR), _st2)
+                _FOLD_STORE[(ch, note)] = (_nx2, _st2)
         _HAM[0] = 0.0
         if getattr(props, 'hammer_legato', False):
             if (ch, note, _occ.get((ch, note), 0)) in legato and ch in _HAM_T0:

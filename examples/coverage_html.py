@@ -28,8 +28,8 @@ SCALE = [
     ("nothing", "no voice at all"),
     ("general class", "a shared base, or another instrument standing in"),
     ("specific, theory", "its own voice, derived from how the instrument works"),
-    ("specific, theory + ear", "...and the numbers moved after listening"),
-    ("specific, reference audio", "...and fitted against a recording of the instrument"),
+    ("specific, theory + ear", "...and validated semantically by ear, by whatever mechanism"),
+    ("specific, validated against a target", "...a recording of the instrument, or the hardware's own output"),
 ]
 
 CSS = """
@@ -510,7 +510,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <div class="lg"><span class="sw r1"></span>1 &nbsp;general class</div>
 <div class="lg"><span class="sw r2"></span>2 &nbsp;specific, theory</div>
 <div class="lg"><span class="sw r3"></span>3 &nbsp;specific, theory + ear</div>
-<div class="lg"><span class="sw r4"></span>4 &nbsp;specific, reference audio</div>
+<div class="lg"><span class="sw r4"></span>4 &nbsp;specific, validated against a target</div>
 <div class="lg"><span class="sw err"></span>wrong physical kind</div>
 </div></div>
 </section>
@@ -572,7 +572,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 
 <section>
 <h2>Effects: the Sound Canvas&rsquo;s</h2>
-<p>Rated on what each is built to: 4 fitted against recordings of the device, 3 built to Roland&rsquo;s own definition (the manuals&rsquo; parameter tables), 2 mapped onto a related model of ours, 1 a stand-in, 0 not built. Each insertion type is to be mapped onto the physical model we have where one exists &mdash; Rotary the Leslie, Overdrive and Distortion the valve amp and cabinet, the choruses <code>chorus.py</code>, the 3D types our room and head.</p>
+<p>Rated on the voices&rsquo; scale: 4 validated against a target (a recording of the device, or the hardware&rsquo;s output of a file judged against ours by ear), 3 validated semantically by ear, 2 from theory (Roland&rsquo;s tables, our models), 1 a stand-in, 0 not built. The reverb is the module&rsquo;s way of giving the music a space, and our physical rooms are how we do that job. Each insertion type is to be mapped onto the physical model we have where one exists &mdash; Rotary the Leslie, Overdrive and Distortion the valve amp and cabinet, the choruses <code>chorus.py</code>, the 3D types our room and head.</p>
 %(effects)s
 </section>
 

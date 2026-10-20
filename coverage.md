@@ -10,10 +10,13 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | **1** | general class |
 | **2** | specific, theory |
 | **3** | specific, theory + ear |
-| **4** | specific, reference audio |
+| **4** | specific, validated against a target |
 
-4 means the voice was fitted against a RECORDING of the instrument, or
-against a family law measured on its close relatives. Published measurements
+3 means validated SEMANTICALLY BY EAR: it does what the instrument does, judged
+by listening, whether or not by the same mechanism. 4 means validated against a
+TARGET -- a recording of the instrument is one (fitted against it, or against a
+family law measured on its close relatives); the hardware's own output of a
+file is another (a Sound Canvas playing it, judged against ours by ear). Published measurements
 that are not audio -- the Rhodes' high-speed-camera papers -- are better than
 theory but cannot contradict the model the way a recording can, so those
 voices sit at 2 and say so.
@@ -40,7 +43,7 @@ so it plays on the Messenger itself.
 | 1 general class | 0 | 0% |
 | 2 specific, theory | 0 | 0% |
 | 3 specific, theory + ear | 9 | 7% |
-| 4 specific, reference audio | 119 | 93% |
+| 4 specific, validated against a target | 119 | 93% |
 
 **No patch is played by a voice of the wrong physical kind.** The last three to be were 123 Bird Tweet, 124 Telephone Ring and 125 Helicopter, which are not recordings of the world but a chirp, a struck bell and a blade passing frequency.
 
@@ -57,7 +60,7 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | rating | notes | share |
 |---|---|---|
 | 3 specific, theory + ear | 2 | 3% |
-| 4 specific, reference audio | 57 | 97% |
+| 4 specific, validated against a target | 57 | 97% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
@@ -1101,14 +1104,14 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 
 ## Effects: the Sound Canvas's
 
-Rated on what each is built to: 4 fitted against recordings of the device, 3 built to Roland's own definition, 2 mapped onto a related model of ours, 1 a stand-in, 0 not built (the sound passes dry). The plan maps each insertion type onto the physical model we have where one exists (Rotary the Leslie, Overdrive/Distortion the valve amp and cabinet, the choruses chorus.py, the 3D types our room and head).
+Rated on the voices' scale: 4 validated against a target (a recording of the device, or the hardware's output of a file judged against ours by ear), 3 validated semantically by ear, 2 from theory (Roland's tables, our models), 1 a stand-in, 0 not built (the sound passes dry). The reverb is the module's way of giving the music a space, and our physical rooms are how we do that job: it is rated on whether the space is the one the arranger asked for. The plan maps each insertion type onto the physical model we have where one exists (Rotary the Leslie, Overdrive/Distortion the valve amp and cabinet, the choruses chorus.py, the 3D types our room and head).
 
 | effect | | notes |
 |---|---|---|
-| Reverb (system) | **2** | the macro picks one of our physical rooms (Room 1-3 studio, chamber, chapel; Hall 1 hall; Hall 2 church), its level and time scale the tail from the macro's own preset; CC91 a distance. Not Roland's algorithm, and a per-drum reverb send not yet |
+| Reverb (system) | **3** | the macro picks one of our physical rooms by what it is for (Room 1-3 studio, chamber, chapel; Hall 1 CHAMBER -- validated against Tokei on the SC-88Pro, a 4 for Hall 1: boomy in our hall, right in the chamber (Ben); Hall 2 church), its level and time scale the tail from the macro's own preset; CC91 a distance. Character, Pre-LPF, pre-delay, the delay macros' echo and a per-drum reverb send not yet |
 | Chorus (system) | **3** | chorus.gs_copies: Roland's eight macros, a line swept by one LFO, read at two outputs in opposite phase, fed back; laws GM 2's (rate, depth, feedback), the delay's chosen (0.2 ms a step); the wet share held as CC93's. To reverb / to delay, per-drum chorus sends, not yet |
 | Delay (system) | **3** | gsdelay.py: Roland's three taps, time table, ten macros, feedback through the center; CC94 (in a GS file) and the drum keys' sends; level laws chosen (linear over 127). Delay to reverb not yet a send of its own |
-| EQ (system) | **3** | the SC-88's two shelves at 200/400 Hz and 3/6 kHz, per part on/off, first-order (the order chosen) |
+| EQ (system) | **2** | the SC-88's two shelves at 200/400 Hz and 3/6 kHz, per part on/off, first-order (the order chosen) |
 
 ### Insertion effects (EFX, the SC-88Pro's 64 types)
 
@@ -1116,10 +1119,10 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 
 | type | | notes |
 |---|---|---|
-| Overdrive | **2** | tubeamp on the part's sum, the 1x12 cabinet; Roland's drive onto the valve's (law chosen), low/high gains |
+| Overdrive | **2** | the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; not yet heard in a file |
 | Distortion | **2** | as Overdrive, with more gain |
-| GTR Multi 1 | **2** | compressor (decay slowed, law chosen), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay) |
-| GTR Multi 2 | **2** | compressor, OD and amp, 3-band EQ (exact per partial), chorus/flanger -- Tokei's guitars |
+| GTR Multi 1 | **2** | compressor (decay slowed; its Attack not yet), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); not yet heard in a file |
+| GTR Multi 2 | **4** | compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built |
 | GTR Multi 3 | **1** | as GTR Multi 1 without its wah (not built) |
 
 Not built yet: Stereo-EQ, Spectrum, Enhancer, Humanizer, Phaser, Auto Wah, Rotary, Stereo Flanger, Step Flanger, Tremolo, Auto Pan, Compressor, Limiter, Hexa Chorus, Tremolo Chorus, Stereo Chorus, Space D, 3D Chorus, Stereo Delay, Mod Delay, 3 Tap Delay, 4 Tap Delay, Tm Ctrl Delay, Reverb, Gate Reverb, 3D Delay, 2 Pitch Shifter, Fb P.Shifter, 3D Auto, 3D Manual, Lo-Fi 1, Lo-Fi 2, OD -> Chorus, OD -> Flanger, OD -> Delay, DS -> Chorus, DS -> Flanger, DS -> Delay, EH -> Chorus, EH -> Flanger, EH -> Delay, Cho -> Delay, FL -> Delay, Cho -> Flanger, Rotary Multi, Clean Gt Multi 1, Clean Gt Multi 2, Bass Multi, Rhodes Multi, Keyboard Multi, Cho / Delay, FL / Delay, Cho / Flanger, OD1 / OD2, OD / Rotary, OD / Phaser, OD / AutoWah, PH / Rotary, PH / AutoWah.

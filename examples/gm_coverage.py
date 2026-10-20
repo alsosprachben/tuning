@@ -273,7 +273,7 @@ FAMILY = [(0,"Piano"),(8,"Chromatic Percussion"),(16,"Organ"),(24,"Guitar"),(32,
           (80,"Synth Lead"),(88,"Synth Pad"),(96,"Synth Effects"),(104,"Ethnic"),
           (112,"Percussive"),(120,"Sound Effects")]
 LEVEL = {0:"nothing", 1:"general class", 2:"specific, theory",
-         3:"specific, theory + ear", 4:"specific, reference audio"}
+         3:"specific, theory + ear", 4:"specific, validated against a target"}
 
 
 def _class_name(p):
@@ -959,14 +959,21 @@ def sound_canvas_md():
     return "\n".join(L) + "\n"
 
 
-# THE SOUND CANVAS'S EFFECTS, rated as the voices are, on what each is built
-# to: 4 fitted against recordings of the device, 3 built to Roland's own
-# definition (the manuals' parameter tables), 2 mapped onto a related model
-# of ours, 1 a stand-in, 0 not built (the sound passes dry).
+# THE SOUND CANVAS'S EFFECTS, rated on the voices' own scale (Ben): 4
+# validated against a target -- a recording of the device, or the hardware's
+# output of a file judged against ours by ear; 3 validated semantically by ear
+# (not necessarily Roland's mechanism); 2 specific, from theory (Roland's
+# tables, our models); 1 a stand-in; 0 not built (the sound passes dry).
+# THE REVERB IS NOT A DEVICE TO EMULATE: on a Sound Canvas it is the module's
+# way of giving the music a space, as a SoundFont player's is, and our
+# physical rooms are how we do that job -- the question is whether the space
+# the arranger asked for is the space we give.
 EFFECTS_RATED = [
-    ("Reverb (system)", 2, "the macro picks one of our physical rooms (Room 1-3 studio, chamber, "
-     "chapel; Hall 1 hall; Hall 2 church), its level and time scale the tail from the macro's "
-     "own preset; CC91 a distance. Not Roland's algorithm, and a per-drum reverb send not yet"),
+    ("Reverb (system)", 3, "the macro picks one of our physical rooms by what it is for (Room 1-3 "
+     "studio, chamber, chapel; Hall 1 CHAMBER -- validated against Tokei on the SC-88Pro, a 4 "
+     "for Hall 1: boomy in our hall, right in the chamber (Ben); Hall 2 church), its level and "
+     "time scale the tail from the macro's own preset; CC91 a distance. Character, Pre-LPF, "
+     "pre-delay, the delay macros' echo and a per-drum reverb send not yet"),
     ("Chorus (system)", 3, "chorus.gs_copies: Roland's eight macros, a line swept by one LFO, "
      "read at two outputs in opposite phase, fed back; laws GM 2's (rate, depth, feedback), the "
      "delay's chosen (0.2 ms a step); the wet share held as CC93's. To reverb / to delay, "
@@ -974,7 +981,7 @@ EFFECTS_RATED = [
     ("Delay (system)", 3, "gsdelay.py: Roland's three taps, time table, ten macros, feedback "
      "through the center; CC94 (in a GS file) and the drum keys' sends; level laws chosen "
      "(linear over 127). Delay to reverb not yet a send of its own"),
-    ("EQ (system)", 3, "the SC-88's two shelves at 200/400 Hz and 3/6 kHz, per part on/off, "
+    ("EQ (system)", 2, "the SC-88's two shelves at 200/400 Hz and 3/6 kHz, per part on/off, "
      "first-order (the order chosen)"),
 ]
 EFX_TYPES = ("Stereo-EQ", "Spectrum", "Enhancer", "Humanizer", "Overdrive", "Distortion",
@@ -992,21 +999,26 @@ EFX_TYPES = ("Stereo-EQ", "Spectrum", "Enhancer", "Humanizer", "Overdrive", "Dis
              "OD / Phaser", "OD / AutoWah", "PH / Rotary", "PH / AutoWah")
 
 
-# THE INSERTION TYPES BUILT (gsefx.BUILT), each on our models: 2, mapped
+# THE INSERTION TYPES BUILT (gsefx.BUILT), each on our models: the OD a gain
+# stage in front of the voice's valve (gsefx.od_gain), its makeup and the
+# Level after it, the EQ after the valve on its products too
 EFX_RATED = {
-    "Overdrive": (2, "tubeamp on the part's sum, the 1x12 cabinet; Roland's drive onto the valve's (law chosen), low/high gains"),
+    "Overdrive": (2, "the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; not yet heard in a file"),
     "Distortion": (2, "as Overdrive, with more gain"),
-    "GTR Multi 1": (2, "compressor (decay slowed, law chosen), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay)"),
-    "GTR Multi 2": (2, "compressor, OD and amp, 3-band EQ (exact per partial), chorus/flanger -- Tokei's guitars"),
+    "GTR Multi 1": (2, "compressor (decay slowed; its Attack not yet), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); not yet heard in a file"),
+    "GTR Multi 2": (4, "compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built"),
     "GTR Multi 3": (1, "as GTR Multi 1 without its wah (not built)"),
 }
 
 
 def effects_md():
     L = ["## Effects: the Sound Canvas's\n",
-         "Rated on what each is built to: 4 fitted against recordings of the device, 3 built to "
-         "Roland's own definition, 2 mapped onto a related model of ours, 1 a stand-in, 0 not "
-         "built (the sound passes dry). The plan maps each insertion type onto the physical "
+         "Rated on the voices' scale: 4 validated against a target (a recording of the device, or "
+         "the hardware's output of a file judged against ours by ear), 3 validated semantically "
+         "by ear, 2 from theory (Roland's tables, our models), 1 a stand-in, 0 not built (the "
+         "sound passes dry). The reverb is the module's way of giving the music a space, and our "
+         "physical rooms are how we do that job: it is rated on whether the space is the one the "
+         "arranger asked for. The plan maps each insertion type onto the physical "
          "model we have where one exists (Rotary the Leslie, Overdrive/Distortion the valve "
          "amp and cabinet, the choruses chorus.py, the 3D types our room and head).\n",
          "| effect | | notes |", "|---|---|---|"]
@@ -1145,8 +1157,11 @@ def main(argv):
     for k in range(5):
         L.append("| **%d** | %s |" % (k, LEVEL[k]))
     L.append("")
-    L.append("4 means the voice was fitted against a RECORDING of the instrument, or")
-    L.append("against a family law measured on its close relatives. Published measurements")
+    L.append("3 means validated SEMANTICALLY BY EAR: it does what the instrument does, judged")
+    L.append("by listening, whether or not by the same mechanism. 4 means validated against a")
+    L.append("TARGET -- a recording of the instrument is one (fitted against it, or against a")
+    L.append("family law measured on its close relatives); the hardware's own output of a")
+    L.append("file is another (a Sound Canvas playing it, judged against ours by ear). Published measurements")
     L.append("that are not audio -- the Rhodes' high-speed-camera papers -- are better than")
     L.append("theory but cannot contradict the model the way a recording can, so those")
     L.append("voices sit at 2 and say so.\n")

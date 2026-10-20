@@ -18697,6 +18697,9 @@ class TamTamProperties(ModeDecays, CymbalProperties):
     mf-ff tilt carried down -- a gong roll lives in mf-ff (Tokei's 44-127)."""
     one_shot = True
     release_floor_db = -50.0
+    # ONE PLATE: a strike on a ringing gong adds to its ring, and the two are
+    # the same modes -- folded into one strike's rows (blockrender fold_restrike)
+    fold_restrike = True
     attack_time = 0.004            # a felt mallet, not a stick
     chiff_volume = 0.2             # ...so little strike noise
     sustain_jitter = 0.02
