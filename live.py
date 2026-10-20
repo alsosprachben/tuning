@@ -782,6 +782,7 @@ class Slab:
         # it left by, which rotor carries it, and the amplitude it would have
         # had standing still.
         self.ls_on = np.zeros(capacity, bool)
+        self._ls_memo = {}          # leslie_params, by the partials' array
         # The tremolo, and the Rhodes' stereo pan, which is the same thing with
         # one sign flipped (see tremolo.py). Live it is a per-block GAIN rather
         # than sidebands -- cheaper, and exact, which is the same trade
@@ -898,31 +899,13 @@ class Slab:
         if not slots:
             return
         idx = np.fromiter(slots, np.int64, len(slots))
-        nf = np.asarray(nf, np.float64)
-        horn = nf >= _L.CROSSOVER_HZ
-        # a crossover copy is on the OTHER rotor (leslie.crossover_weights)
-        if flip is not None and len(flip) == len(horn):
-            horn = horn ^ np.asarray(flip, bool)
-        # THE LOBE ITSELF, not its first Fourier term. Live this is a gain, so
-        # the exact pattern costs no more than a cosine did -- and a cosine is
-        # what makes a rotating speaker sound like a tremolo pedal. The drum
-        # fires into a rotating scoop rather than sweeping a horn, so its lobe
-        # is blunter: half the sharpness and half the depth.
-        fl = np.empty(len(nf), np.float32)
-        sh = np.empty(len(nf), np.float32)
-        for j, f in enumerate(nf):
-            a, b = _L.beam(float(f)) if horn[j] else _L.drum_beam(float(f))
-            fl[j], sh[j] = a, b
+        horn, fl, sh, nrm = self.leslie_params(nf, flip)
         self.ls_on[idx] = True
         self.ls_ph[idx] = np.asarray(az, np.float32)
         self.ls_horn[idx] = horn
         self.ls_am[idx] = fl
         self.ls_sharp[idx] = sh
-        # mean of the lobe, so the swing is a colour and not a level change
-        th = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
-        cc = 0.5 * (1.0 + np.cos(th))
-        self.ls_norm[idx] = (fl[:, None] + (1.0 - fl[:, None])
-                             * cc[None, :] ** (0.5 * sh[:, None])).mean(axis=1)
+        self.ls_norm[idx] = nrm
         self.ls_aL[idx] = self.a["aL"][idx]
         self.ls_aR[idx] = self.a["aR"][idx]
         # THE DOPPLER IS NORMALISED TO A REFERENCE ROTOR, whatever speed the
@@ -938,6 +921,45 @@ class Slab:
         self.vsc[idx] = self.vbase[idx]
         if horn_rate is not None:
             self._doppler_to(idx, horn, n, horn_rate, drum_rate)
+
+    def leslie_params(self, nf, flip=None):
+        """(horn?, lobe floor, sharpness, the lobe's mean) for partials at nf.
+
+        CACHED BY THE ARRAY: a template rank's partials (and the scanner's
+        copies of them) are fixed arrays, and working these out partial by
+        partial in Python on every press was most of a drawbar chord's attack
+        -- 9 ms of 15 on the detuned organ, every rank armed three times. The
+        entry keeps the arrays themselves, so a reused id cannot alias."""
+        import leslie as _L
+        key = (id(nf), id(flip))
+        got = self._ls_memo.get(key)
+        if got is not None and got[0] is nf and got[1] is flip:
+            return got[2]
+        a = np.asarray(nf, np.float64)
+        horn = a >= _L.CROSSOVER_HZ
+        # a crossover copy is on the OTHER rotor (leslie.crossover_weights)
+        if flip is not None and len(flip) == len(horn):
+            horn = horn ^ np.asarray(flip, bool)
+        # THE LOBE ITSELF, not its first Fourier term. Live this is a gain, so
+        # the exact pattern costs no more than a cosine did -- and a cosine is
+        # what makes a rotating speaker sound like a tremolo pedal. The drum
+        # fires into a rotating scoop rather than sweeping a horn, so its lobe
+        # is blunter: half the sharpness and half the depth.
+        fl = np.empty(len(a), np.float32)
+        sh = np.empty(len(a), np.float32)
+        for j, f in enumerate(a):
+            p, q = _L.beam(float(f)) if horn[j] else _L.drum_beam(float(f))
+            fl[j], sh[j] = p, q
+        # mean of the lobe, so the swing is a colour and not a level change
+        th = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
+        cc = 0.5 * (1.0 + np.cos(th))
+        nrm = (fl[:, None] + (1.0 - fl[:, None]) * cc[None, :] ** (0.5 * sh[:, None])).mean(axis=1)
+        out = (horn, fl, sh, nrm)
+        if isinstance(nf, np.ndarray):
+            if len(self._ls_memo) > 65536:
+                self._ls_memo.clear()
+            self._ls_memo[key] = (nf, flip, out)
+        return out
 
     def _doppler_to(self, idx, horn, n, horn_rate, drum_rate):
         """Scale these partials' REFERENCE Doppler to the rate the rotors are
@@ -3201,6 +3223,7 @@ class Live:
         self.scan_row = {}
         self.cc94 = {}
         self._scan_g = {}
+        self.scan_reqs = collections.deque()    # (cols, n, hrel, depth, chorus?): the builder's to prepare
         self.cc2 = {}                    # ch -> breath controller, 0..1
         self.tex_gen = {}                # (pid, ch, note) -> [part, template, next grain's sample, scale]
         self._tex_rng = _random.Random(0x7E47)
@@ -3466,6 +3489,9 @@ class Live:
                 while p.pid not in self.reg_info and time.time() - _t < 60.0 \
                         and self.reg_err is None:
                     time.sleep(0.02)
+        # ...and its organs' scanner data and Leslie lobes, so no press works
+        # them out on the audio thread
+        self._scan_prefetch()
         _gc_freeze()
         if self.verbose:
             tot = sum(p.patch.partials for p in self.parts)
@@ -4060,6 +4086,7 @@ class Live:
                 self.cc2[ch] = msg.value / 127.0                 # breath: a siren's air (_siren_block)
             if msg.control == 94:
                 self.cc94[ch] = msg.value                        # the scanner's selector (_scan_stamp)
+                self.patch_go.set()                              # ...its new position prepared (_scan_prefetch)
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
                 # THE MOD WHEEL IS A CRESCENDO PEDAL on an organ part and
@@ -7152,6 +7179,7 @@ class Live:
                     self.patch_err = "%s: %s" % (type(e).__name__, e)
                     self.patch_label = None
             self._fill_misses()
+            self._scan_prefetch()
             _gc_freeze()        # what this pass built, out of the collector's sweep
             self.patch_busy = False
           except BaseException as e:
@@ -7547,26 +7575,15 @@ class Live:
         rows = self._scan_rows(part, dep, cho)
         if rows is None:
             return
-        gk = (id(cols), dep, cho)
-        g = self._scan_g.get(gk)
+        # PREPARED OFF THE AUDIO THREAD (_scan_prep, by the builder): working
+        # out a rank's gains and tier B's sidebands here cost ~130 ms on a
+        # chord's first press -- the detuned organs' attack spike Ben heard.
+        # Not ready: this press plays dry, and the work is queued
+        g = self._scan_g.get((id(cols), dep, cho))
         if g is None:
-            if len(self._scan_g) > 4096:
-                self._scan_g.clear()
-            g = _SCN.gains(np.asarray(cols["nf"], float), dep, cho)
-            # ...and tier B's sideband copies of this rank (scanner._side_copies,
-            # the template's loudest partial its note's), built once
-            side = None
-            if _SCN.SIDEBANDS and n:
-                cnp = {k: np.asarray(v) for k, v in cols.items()
-                       if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == n}
-                # the floor's reference measured off the rank's own rows, as the
-                # file groups a note's rows by onset (a drawbar's contact its own)
-                side = _SCN._side_copies(cnp, np.arange(n), np.asarray(rows)[g[0]], dep, cho,
-                                         float(self.rate))
-                if side is not None:
-                    side["_dw"] = side["om"] - cnp["om"][side["_src"]]
-                    side["_hrel"] = np.asarray(hrel)[side["_src"]]
-            g = self._scan_g[gk] = g + (side,)
+            self.scan_reqs.append((cols, n, hrel, dep, cho))
+            self.patch_go.set()
+            return
         band, dry, sc, side = g
         sl = self.slab
 
@@ -7587,7 +7604,7 @@ class Live:
                 self.dropped += 1
                 return
             ss = np.asarray(sl.last_slots, np.int64)
-            sl.a["br"][ss] = side["br"]
+            sl.a["br"][ss] = np.asarray(rows)[side["_band"]]
             turn = side["_dw"] * (sl.a["non"][ss] - side["non"])
             sl.a["p0"][ss] += turn
             sl.a["p0R"][ss] += turn
@@ -7613,6 +7630,61 @@ class Live:
                           self.rotor_drum.rate, flip=cols.get("lflip"))
         put(cs, sc, True)
         sidestamp()
+
+    def _scan_prep(self, cols, n, hrel, dep, cho):
+        """One rank's scanner data for one position (the builder thread's):
+        each partial's band and its dry and scanned gains (scanner.gains), and
+        tier B's sideband copies (scanner._side_copies, the template's loudest
+        partial its note's) -- by BAND, not by row: a part's band rows are its
+        own and are mapped in at the stamp, so one rank's data serves any part."""
+        import scanner as _SCN
+        g = _SCN.gains(np.asarray(cols["nf"], float), dep, cho)
+        side = None
+        if _SCN.SIDEBANDS and n:
+            cnp = {k: np.asarray(v) for k, v in cols.items()
+                   if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == n}
+            # the floor's reference measured off the rank's own rows, as the
+            # file groups a note's rows by onset (a drawbar's contact its own)
+            side = _SCN._side_copies(cnp, np.arange(n), np.asarray(g[0], np.int64), dep, cho,
+                                     float(self.rate))
+            if side is not None:
+                side["_band"] = np.asarray(side["br"], np.int64)
+                side["_dw"] = side["om"] - cnp["om"][side["_src"]]
+                side["_hrel"] = np.asarray(hrel)[side["_src"]]
+        self._scan_g[(id(cols), dep, cho)] = g + (side,)
+
+    def _scan_prefetch(self):
+        """Every template rank of every part with a scanner, prepared for the
+        positions in play -- its voice's default and each channel's CC94 --
+        and of every part on a Leslie, its lobes (Slab.leslie_params), so a
+        press only looks them up. Run by the builder after each pass."""
+        import scanner as _SCN
+        while self.scan_reqs:
+            cols, n, hrel, dep, cho = self.scan_reqs.popleft()
+            if (id(cols), dep, cho) not in self._scan_g:
+                self._scan_prep(cols, n, hrel, dep, cho)
+        for part in list(self.parts):
+            if not (part.patch.scanner_voice or part.patch.leslie):
+                continue
+            for tk, tmpl in list(part.patch.templates.items()):
+                if self.patch_stop or self.patch_reqs:
+                    return
+                vc = part.patch._voice_class(tk[0])
+                wants = ({_SCN.setting_of(vc, v) for v in [None] + list(self.cc94.values())}
+                         if part.patch.scanner_voice and (getattr(vc, "scanner_switch", False)
+                                                          or getattr(vc, "scanner", None)) else {None})
+                for rank, got in list((tmpl.get("ranks") or {}).items()):
+                    cols, n, hrel = got
+                    for st in wants:
+                        if st is not None and (id(cols),) + tuple(st) not in self._scan_g:
+                            self._scan_prep(cols, n, hrel, st[0], st[1])
+                        # ...and the Leslie's lobes of the rank and its copies
+                        # (Slab.leslie_params), so no press works them out
+                        if part.patch.leslie:
+                            self.slab.leslie_params(cols["nf"], cols.get("lflip"))
+                            g = self._scan_g.get((id(cols),) + tuple(st)) if st else None
+                            if g is not None and g[3] is not None:
+                                self.slab.leslie_params(g[3]["nf"], g[3].get("lflip"))
 
     def _scanner_block(self, n0, frames):
         """Every scanner's band rows, this block: each band's delay slope and
@@ -16487,6 +16559,7 @@ def selftest():
     for _sv in _p8.speeds:
         if (69, _b8, _sv) not in _p8.templates:
             _p8.templates[(69, _b8, _sv)] = _p8._raw_template(69, _p8.bucket_vel(_b8), _sv)
+    _ls8._scan_prefetch()        # as the builder does after a warm: the press only looks it up
     _ls8.on_midi(mido.Message("note_on", channel=0, note=69, velocity=100))
     _l8 = []
     for _i in range(int(3.0 * 48000) // 128):

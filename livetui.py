@@ -85,8 +85,21 @@ def gm_label(p, v=0):
 
 def built_variations(p):
     """The GS variations under program p that are built (patch_map.VARIATIONS),
-    in bank order: the ones a picker offers."""
-    return sorted(v for (q, v) in PMAP.VARIATIONS if q == p)
+    in bank order: the ones a picker offers. Only GS's own (VARIATION_NAMES) --
+    not a voice's internal bank (107.9, the taishogoto's drone string) -- and
+    not bank 127, the MT-32 set: another instrument's tones on the same
+    numbers, which the picker lists as a section of its own (mt32_tones)."""
+    return sorted(v for (q, v) in PMAP.VARIATIONS
+                  if q == p and v != 127 and (q, v) in PMAP.VARIATION_NAMES)
+
+
+def mt32_tones():
+    """[(program, MT-32 tone, what it plays)] of bank 127 (patch_map.MT32_SET)."""
+    out = []
+    for i, (nm, to) in enumerate(getattr(PMAP, "MT32_SET", ())):
+        plays = ("kit key %d" % to[1]) if isinstance(to, tuple) else gm_label(to)
+        out.append((i, nm, plays))
+    return out
 
 
 def gm_label_short(p, width, v=0):
@@ -967,18 +980,31 @@ class TUI:
         sets = sorted(PM.DRUM_SETS)
         items = ["-- %s kit" % PM.drum_set_name(k) for k in sets]
         picks = [(True, k, 0) for k in sets]
+        # ...ALIGNED ON THE PROGRAM, the bank in a column of its own (Ben: an
+        # indent was more distracting than lining them up by number)
+        def row(i, v, label):
+            return "%3d%-5s %s" % (i, (".%d" % v) if v else "", label)
         for i in range(len(GM)):
-            items.append("%3d  %s" % (i, gm_label(i)))
+            items.append(row(i, 0, gm_label(i)))
             picks.append((False, i, 0))
             for v in built_variations(i):
-                items.append("   %3d.%d  %s" % (i, v, gm_label(i, v)))
+                items.append(row(i, v, gm_label(i, v)))
                 picks.append((False, i, v))
+        # ...AND THE MT-32 SET, bank 127, on its own after them: the MT-32's
+        # tones by their own names, each with the voice it plays here
+        tones = mt32_tones()
+        if tones:
+            items.append("-- MT-32 set (bank 127) --")
+            picks.append(None)
+            for i, nm, plays in tones:
+                items.append(row(i, 127, "%-13s (plays %s)" % (nm, plays)))
+                picks.append((False, i, 127))
         here = (True, p.program, 0) if p.drums else (False, p.program, p.variation)
         start = (picks.index(here) if here in picks
                  else 0 if p.drums else picks.index((False, p.program, 0)))
         pick = self.menu(scr, "patch for part %d" % (self.row + 1), items, start)
-        if pick is None:
-            return
+        if pick is None or picks[pick] is None:
+            return                          # (a section's heading picks nothing)
         dr, prog, v = picks[pick]
         if dr:
             self.change_patch(drums=True, program=prog)
