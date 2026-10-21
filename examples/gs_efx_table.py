@@ -91,7 +91,7 @@ def raw_default(rng, enc, default, tables):
         return 0x40 + (int(d[1:]) if d[0] == "R" else -int(d[1:]))
     if d == "0" and rng.strip().startswith("L"):                    # ...its centre
         return 0x40
-    if d == "D=E":                                                  # a balance's middle
+    if d in ("D=E", "A=B"):                                         # a balance's middle
         return 0x40
     m = re.fullmatch(r"D>(\d+)E", d)                                 # dry over the effect at x
     if m:
@@ -104,8 +104,10 @@ def raw_default(rng, enc, default, tables):
     x = _num(d)
     if x is None:
         return None
-    if (lo, hi) == (0x34, 0x4C) or (lo, hi) == (0x28, 0x58):        # signed about 40H
+    if (lo, hi) in ((0x34, 0x4C), (0x28, 0x58), (0x28, 0x4C)):      # signed about 40H
         return 0x40 + int(round(x))
+    if (lo, hi) == (0x0E, 0x72):                                    # cents, 2 a step about 40H
+        return 0x40 + int(round(x / 2.0))
     if (lo, hi) == (0, 0x7F) and rng.strip().startswith("0 "):      # 0 - 127 (or a part of it)
         return int(round(x))
     return None

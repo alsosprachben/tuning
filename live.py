@@ -8789,6 +8789,27 @@ def selftest_gs(check):
               and _rc < 0.95 and _rsame,
               "  (tremolo %.2f Hz; pan L/R %.2f; horn %.2f Hz; rotary L/R %.2f, streamed as whole %s)"
               % (_trate, _pc, _hz, _rc, _rsame))
+        # 3D MANUAL, THE PITCH SHIFTER, THE STEREO FLANGER (gsefx), on the held
+        # square lead against Thru: 3D Manual at L96 puts 2-8 kHz well left;
+        # the 2 Pitch Shifter's +7 voice (-4 cents) sounds at 440 x 1.4948 (its
+        # balance the effect at 0.58 under the dry, so a few dB, not many);
+        # the flanger parts the ears
+        def _hb2(x, lo, hi, ch):
+            _X = np.abs(np.fft.rfft(np.asarray(x[ch], float))) ** 2
+            _f = np.fft.rfftfreq(len(x[ch]), 1.0 / B.SR)
+            return 10 * np.log10(_X[(_f > lo) & (_f < hi)].sum() + 1e-30)
+        _x0 = B.render(_tre((0, 0)))
+        _xm = B.render(_tre((0x01, 0x71), [_gsx(0x40, 0x03, 0x03, 30, 0)]))
+        _xs = B.render(_tre((0x01, 0x60)))
+        _xf = B.render(_tre((0x01, 0x23)))
+        _ild = _hb2(_xm, 2000, 8000, 0) - _hb2(_xm, 2000, 8000, 1)
+        _sh = (_hb2(_xs, 650, 665, 0) - _hb2(_x0, 650, 665, 0))
+        _cf0 = float(np.corrcoef(np.asarray(_x0[0], float), np.asarray(_x0[1], float))[0, 1])
+        _cff = float(np.corrcoef(np.asarray(_xf[0], float), np.asarray(_xf[1], float))[0, 1])
+        check("file: 3D Manual places, the Pitch Shifter shifts, the Stereo Flanger parts the ears",
+              _ild > 6.0 and _sh > 6.0 and _cff < _cf0 - 0.03,
+              "  (L96: 2-8 kHz L %+.1f dB over R; 650-665 Hz %+.1f dB; L/R %.2f against %.2f)"
+              % (_ild, _sh, _cff, _cf0))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

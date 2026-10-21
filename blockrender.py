@@ -4525,6 +4525,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # a seat inside the instrument, at the angle its pan names
             props.seat_x = props.listener_distance * math.tan(T.stage_angle(_seat))
             props.place()
+        if _EFXN[0] is not None and _EFXN[0].get('pos3d'):
+            # THE PART PLACED IN 3D (gsefx: 3D Manual, 3D Auto): its angle the
+            # type's, past the speakers and behind, turning at 3D Auto's speed --
+            # each note where its onset finds it
+            _az, _turn = _EFXN[0]['pos3d']
+            props.pan_angle = math.radians(((_az + 360.0 * _turn * on + 180.0) % 360.0) - 180.0)
+            props.place()
         if (drum is not None or _xf) and _tilt is not None:
             # a voice's pulse, darker or brighter as its syllable goes on
             # (percussion_map._voiced; tonelib.SfxThroatProperties)

@@ -31,6 +31,7 @@ law, the EQ's shelf corners (400 Hz / 4 kHz), and the flanger's base delay.
 Each says so where it is set.
 """
 import math
+import re
 
 # THE TYPES (SC-88Pro owner's manual, chapter 4): (MSB, LSB) -> name
 TYPES = {
@@ -63,10 +64,11 @@ TYPES[(0x02, 0x0C)] = "Rotary Multi"
 _TABLE_NAME = {TYPES[_k]: _nm for _k, (_n, _nm) in _P.TYPES.items()}   # ours -> the table's
 BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion",
          "Stereo-EQ", "Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus"}
-CHORUS_TYPES = ("Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus")
+CHORUS_TYPES = ("Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus", "Stereo Flanger")
 DELAY_TYPES = ("Stereo Delay", "Mod Delay", "3 Tap Delay", "4 Tap Delay", "Tm Ctrl Delay", "3D Delay")
 BUILT |= set(DELAY_TYPES)
 BUILT |= {"Rotary", "Rotary Multi", "Tremolo", "Auto Pan"}
+BUILT |= {"Stereo Flanger", "3D Manual", "3D Auto", "2 Pitch Shifter", "Fb P.Shifter"}
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -265,6 +267,12 @@ def _chorus(name, g, pn):
     rate = table_value(6, g("Rate" if "Rate" in pn else "Cho Rate", 8))
     depth = g("Depth" if "Depth" in pn else "Cho Depth", 64)
     swing = (int(depth) + 1) / 3.2 / 1000.0 / 2.0
+    fb = 0.0
+    if name == "Stereo Flanger":
+        # a flanger's swing an eighth of a chorus's, as cf_device's, so its
+        # comb stays in the flanging range; its feedback the comb's depth
+        swing /= 8.0
+        fb = feedback(g("Feedback", 104))
     pre = (table_value(1, g("Pre Dly", 10)) or 0.0) / 1000.0
     ph = math.radians(2.0 * g("Phase", int(CHORUS_PHASE_DEG / 2.0))) if "Phase" in pn \
         else math.radians(CHORUS_PHASE_DEG)
@@ -282,7 +290,7 @@ def _chorus(name, g, pn):
     lpf = None
     if "Pre Filter" in pn and g("Pre Filter", 0) == 1:      # the LPF; its HPF is not built
         lpf = table_value(9, g("Cutoff", 127))
-    return dict(tau=pre + swing, rate=rate, vd=2.0 * math.pi * rate * swing, fb=0.0, level=1.0,
+    return dict(tau=pre + swing, rate=rate, vd=2.0 * math.pi * rate * swing, fb=fb, level=1.0,
                 lpf=lpf, taps=taps)
 
 
@@ -394,6 +402,24 @@ _SAW = [(k, 2.0 / (math.pi * k), (-1) ** (k + 1) * -math.pi / 2.0) for k in rang
 WAVES = (_TRI, _SQR, [(1, 1.0, 0.0)], _SAW, [(k, c, p + math.pi) for k, c, p in _SAW])
 
 
+def azimuth(v):
+    """The 3D types' Azimuth (value table *13: "L168", "0", "R12",
+    "L180(=R180)"), degrees, + to the right."""
+    x = str(_P.VALUE_TABLES[13][max(0, min(127, int(v)))])
+    m = re.match(r"([LR])(\d+)", x)
+    return 0.0 if not m else float(m.group(2)) * (1.0 if m.group(1) == "R" else -1.0)
+
+
+# 3D AUTO's turning where Roland prints no default: on, clockwise (+). Chosen.
+AUTO_TURN, AUTO_CLOCKWISE = 1, 1
+
+
+def semitones(coarse, fine):
+    """A pitch shifter's ratio: Coarse -24..+12 semitones about 40H, Fine
+    -100..+100 cents, 2 a step about 40H."""
+    return 2.0 ** ((coarse - 0x40) / 12.0 + (fine - 0x40) * 2.0 / 1200.0)
+
+
 def param_numbers(name):
     """{parameter name: its number 1-20} for a type, from Roland's table."""
     for _k, (_n, nm) in _P.TYPES.items():
@@ -448,6 +474,38 @@ def chain(st):
         if name == "Tremolo Chorus":
             out['trem'] = (table_value(6, g("Trem Rate", 60)), TREMOLO_CHORUS_DEPTH,
                            g("Trem Sep", 96) > 0)
+        return out
+    if name in ("3D Manual", "3D Auto"):
+        # THE PART PLACED IN 3D: its angle the type's Azimuth (past the
+        # speakers, behind) -- and 3D Auto's turning on at its Speed, each
+        # note at the angle its onset finds (pos3d: degrees, turns a second)
+        turn = 0.0
+        if name == "3D Auto" and g("Turn", AUTO_TURN):
+            turn = table_value(6, g("Speed", 25)) * (1.0 if g("Clockwise", AUTO_CLOCKWISE) else -1.0)
+        out['pos3d'] = (azimuth(g("Azimuth", 62)), turn)
+        return out
+    if name in ("2 Pitch Shifter", "Fb P.Shifter"):
+        # gsdelay taps that move each repeat's pitch (repeats_full): the
+        # two voices at their own pitch, delay and pan, the L.Bal between
+        # them; the feedback one's repeats spiralling by its ratio again
+        pre = lambda key, d: (table_value(1, g(key, d)) or 0.0) / 1000.0
+        side = lambda key: (g(key, 64) - 64) / 63.0 if g(key, 64) != 64 else 'c'
+        if name == "2 Pitch Shifter":
+            la, lb = balance(g("L.Bal", 64))
+            taps = [(pre("Pre Dly 1", 0), la, side("EFX Pan 1"), 1.0,
+                     semitones(g("Coarse 1", 71), g("Fine 1", 62))),
+                    (pre("Pre Dly 2", 0), lb, side("EFX Pan 2"), 1.0,
+                     semitones(g("Coarse 2", 59), g("Fine 2", 66)))]
+            fb = 0.0
+        else:
+            t = pre("Pre Dly", 95)
+            taps = [(t, 1.0, side("EFX Pan"), t, semitones(g("P.Coarse", 71), g("P.Fine", 64)))]
+            fb = feedback(g("Feedback", 84))
+        dry, wet = balance(g("Balance", 64))
+        out['dly'] = dict(tc=max(taps[0][0], 1e-3), taps=taps, level=wet / max(dry, DRY_FLOOR), fb=fb,
+                          lpf=None, to_reverb=0.0)
+        out['level'] *= max(dry, DRY_FLOOR)
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
         return out
     if name in ("Rotary", "Rotary Multi"):
         out['rotary'] = _rotary(name, g, pn)

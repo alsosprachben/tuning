@@ -112,6 +112,11 @@ def lpf_gain(f_hz, fc):
 
 
 def repeats(dev, send, f_hz, sr, rel=1.0):
+    """[(tap side, k, delay samples, gain)] -- repeats_full without the shift."""
+    return [x[:4] for x in repeats_full(dev, send, f_hz, sr, rel)]
+
+
+def repeats_full(dev, send, f_hz, sr, rel=1.0):
     """[(tap side, k, delay samples, gain)] for a partial at f_hz sent at
     `send` (0-1), until a repeat falls under REPEAT_FLOOR of the note's
     loudest partial (`rel`: this partial's level against that one)."""
@@ -132,7 +137,10 @@ def repeats(dev, send, f_hz, sr, rel=1.0):
             if abs(g) * rel < REPEAT_FLOOR or (k and fb == 0.0):
                 break
             sd = side if not (cross and k % 2) else {'l': 'r', 'r': 'l'}.get(side, side)
-            out.append((sd, k, int(round((tau + k * period) * sr)), g))
+            # a PITCH SHIFTER's tap (gsefx: 2 Pitch Shifter, Fb P.Shifter) moves
+            # each repeat by its ratio once more: k + 1 times round the loop
+            sh = tap[4] ** (k + 1) if len(tap) > 4 else 1.0
+            out.append((sd, k, int(round((tau + k * period) * sr)), g, sh))
     return out
 
 
@@ -164,8 +172,8 @@ def expand(A, notes, sr, cols, place, meta=None):
             om = float(row['om'])
             f = om * sr / tpi
             rel = lv[i - i0] / top if top > 0.0 else 0.0
-            for side, k, d, g in repeats(dev, send, f, sr, rel):
-                gl, gr, dl, dr = place(side, f)
+            for side, k, d, g, sh in repeats_full(dev, send, f, sr, rel):
+                gl, gr, dl, dr = place(side, f * sh)
                 c = dict(row)
                 c['non'] = row['non'] + d
                 c['noff'] = row['noff'] + d
@@ -173,8 +181,12 @@ def expand(A, notes, sr, cols, place, meta=None):
                 # the copy leaves at the output, not at the source: its ears'
                 # delays are the output's, its phase the line's
                 c['delL'], c['delR'] = dl, dr
-                c['p0'] = -om * (float(c['non']) + dl) + (float(row['p0']) + om * (float(row['non']) + float(row['delL'])))
-                c['p0R'] = -om * (float(c['non']) + dr) + (float(row['p0R']) + om * (float(row['non']) + float(row['delR'])))
+                om2 = om * sh                    # a shifter's repeat at its own pitch
+                if sh != 1.0:
+                    c['om'] = om2
+                    c['nf'] = float(row['nf']) * sh
+                c['p0'] = -om2 * (float(c['non']) + dl) + (float(row['p0']) + om * (float(row['non']) + float(row['delL'])))
+                c['p0R'] = -om2 * (float(c['non']) + dr) + (float(row['p0R']) + om * (float(row['non']) + float(row['delR'])))
                 if float(row.get('fmw', 0.0)) != 0.0:
                     c['fmp'] = row['fmp'] - float(row['fmw']) * d
                     c['fmpR'] = row['fmpR'] - float(row['fmw']) * d
