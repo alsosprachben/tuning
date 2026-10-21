@@ -73,8 +73,18 @@ BUILT |= set(DELAY_TYPES)
 BUILT |= {"Rotary", "Rotary Multi", "Tremolo", "Auto Pan"}
 BUILT |= {"Stereo Flanger", "3D Manual", "3D Auto", "2 Pitch Shifter", "Fb P.Shifter"}
 SERIES_TYPES = ("OD -> Chorus", "OD -> Flanger", "OD -> Delay", "DS -> Chorus", "DS -> Flanger",
-                "DS -> Delay", "Cho -> Delay", "FL -> Delay")
+                "DS -> Delay", "Cho -> Delay", "FL -> Delay", "EH -> Chorus", "EH -> Flanger",
+                "EH -> Delay", "Cho -> Flanger")
 BUILT |= set(SERIES_TYPES) | {"Clean Gt Multi 1", "Bass Multi"}
+BUILT |= {"Clean Gt Multi 2", "Rhodes Multi", "Keyboard Multi"}
+# THE KEYBOARD MULTI's RING MODULATOR: its Mod Freq 0-127 onto 10 Hz-5 kHz,
+# logarithmically (116 Hz at its default 50); Roland prints none. Chosen.
+RM_HZ = (10.0, 5000.0)
+
+
+def rm_hz(v):
+    lo, hi = RM_HZ
+    return lo * (hi / lo) ** (max(0, min(127, int(v))) / 127.0)
 BUILT |= {"Phaser", "Auto Wah", "Step Flanger", "Humanizer"}
 BUS_TYPES = ("Lo-Fi 1", "Lo-Fi 2", "Compressor", "Limiter", "Enhancer", "Gate Reverb", "Reverb")
 BUILT |= {"Spectrum"}
@@ -492,6 +502,16 @@ def _filter(name, g, pn):
             return None
         return dict(ty=2 if g("Wah Fil", 1) == 0 else 3, pa=EF.wah_q(g("Wah Peak", 10)), pb=1.0, pc=0.0,
                     ctrl=('wah', EF.wah_hz(g("Wah Man", 60))))
+    if name == "Clean Gt Multi 2":
+        if not g("AW Sw", 1):              # unprinted: on
+            return None
+        return dict(ty=2 if g("AW Filter", 1) == 0 else 3, pa=EF.wah_q(g("AW Peak", 40)), pb=1.0, pc=0.0,
+                    ctrl=('sweep', EF.wah_hz(g("AW Man", 55)), AUTOWAH_OCT * g("AW Depth", 80) / 127.0,
+                          rate2(g("AW Rate", 29)), True, 0.0))
+    if name in ("Rhodes Multi", "Keyboard Multi"):
+        return dict(ty=1, pa=g("PH Mix", 64) / 127.0, pb=0.9 * g("PH Reso", 16) / 127.0, pc=EF.PHASER_STAGES,
+                    ctrl=('sweep', table_value(12, g("PH Man", 36)), PHASER_OCT * g("PH Depth", 32) / 127.0,
+                          rate2(g("PH Rate", 16)), None, 0.0))
     if name == "Step Flanger":
         swing = (int(g("Depth", 95)) + 1) / 3.2 / 1000.0 / 2.0 / 8.0
         pre = (table_value(1, g("Pre Dly", 10)) or 0.0) / 1000.0
@@ -571,8 +591,8 @@ def filter_setup(events, ch, notes=()):
                     out[m] = c[1] * 2.0 ** ((1.0 if c[4] else -1.0) * oc)
             elif c[0] == 'wah':
                 out[m] = c[1]
-            else:                                     # a stepped flanger's line
-                held = np.floor(tt * c[4]) / c[4]
+            else:                                     # a flanger's line, stepped or not
+                held = tt if c[4] is None else np.floor(tt * c[4]) / c[4]
                 out[m] = c[1] + c[2] * 0.5 * (1.0 + np.sin(2.0 * math.pi * c[3] * held))
         return out
     return EF.Channel(f0['ty'], f0['pa'], f0['pb'], f0['pc'], control)
@@ -768,7 +788,14 @@ def chain(st):
         # stage and its cabinet, the chorus or flanger a gs_copies device
         # (Bal its share), the delay a gsdelay tap (Bal its dry and effect).
         # Our passes run the delay before the chorus, so "Cho -> Delay" runs
-        # the other way about; a slow sweep sounds alike either way
+        # the other way about; a slow sweep sounds alike either way. The
+        # Enhancer (EH -> ...) is the part's bus (efxbus), so it runs AFTER the
+        # chorus, flanger or delay, the other way about too: it brightens the
+        # copies as it would the source. Cho -> Flanger: the chorus the copies,
+        # the flanger after them a moving comb (efxfilter, Step Flanger's
+        # without the steps) on every row, the copies' too -- in its order.
+        if "EH Sens" in pn:              # its Mix unprinted: the Enhancer's 64
+            out['bus'] = ('enh', dict(sens=g("EH Sens", 64), mix=g("EH Mix", 64)))
         for od in ("OD", "DS"):
             if od + " Drive" in pn:
                 out['od_gain'] = od_gain(g(od + " Drive", 48), od == "DS")
@@ -776,6 +803,12 @@ def chain(st):
                 if g(od + " Amp Sw", 1):
                     out['cabinet'] = 'guitar12'
         for mod in ("Cho", "FL"):
+            if mod == "FL" and "Cho Rate" in pn and "FL Rate" in pn:
+                swing = (int(g("FL Depth", 24)) + 1) / 3.2 / 1000.0 / 2.0 / 8.0
+                pre = (table_value(1, g("FL Dly", 16)) or 0.0) / 1000.0
+                out['filter'] = dict(ty=4, pa=g("FL Bal", 64) / 127.0, pb=feedback(g("FL Fb", 104)), pc=0.0,
+                                     ctrl=('comb', pre, swing, table_value(6, g("FL Rate", 11)), None))
+                continue
             if mod + " Rate" in pn:
                 rate = table_value(6, g(mod + " Rate", 8))
                 swing = (int(g(mod + " Depth", 64)) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if mod == "FL" else 1.0)
@@ -812,6 +845,19 @@ def chain(st):
                      g("CF Mix", 0) / 127.0)
     if name == "GTR Multi 3":
         out['filter'] = _filter(name, g, pn)     # its wah (efxfilter), before the OD
+    if name in ("Clean Gt Multi 2", "Rhodes Multi", "Keyboard Multi"):
+        out['filter'] = _filter(name, g, pn)     # an auto wah, or a phaser (efxfilter)
+    if "EH Sens" in pn:
+        # the Rhodes Multi's Enhancer: the part's bus, so AFTER its phaser and
+        # chorus where Roland has it first -- it brightens their output alike
+        out['bus'] = ('enh', dict(sens=g("EH Sens", 64), mix=g("EH Mix", 64)))
+    if "TP Sw" in pn and g("TP Sw", 1):
+        # its Tremolo/Pan (unprinted: on, Trem, the sine), as the Tremolo type's
+        d = g("TP Mod Dep", 64) / 127.0
+        mid = 1.0 - 0.5 * d
+        out['level'] *= mid
+        out['trem'] = (rate2(g("TP Mod RT", 60)), 0.5 * d / mid, bool(g("TP Sel", 0)), 0.0,
+                       WAVES[min(4, g("TP Mod WV", 2))])
     if "Dly Time" in pn:
         # the chain's own delay, as the GS delay's repeats (gsdelay): one tap,
         # 0-635 ms (5 ms a step), its feedback 0-127, its mix
@@ -819,7 +865,45 @@ def chain(st):
         if x:
             out['dly'] = dict(tc=t * 0.005, taps=[(t * 0.005, 1.0, 'c')], level=x / 127.0,
                               fb=f / 128.0, lpf=None, to_reverb=0.0)
+    if name == "Keyboard Multi":
+        out['dly'] = _keyboard_multi(g, out['dly'], out)
     return out
+
+
+def _keyboard_multi(g, dly, out):
+    """The Keyboard Multi's ring modulator, pitch shifter and delay in series
+    (RM -> EQ -> PS -> PH -> Dly), unrolled into gsdelay taps: every path
+    through them -- dry or either sideband, dry or shifted, direct or each
+    repeat -- one tap of (delay, level, side, period, ratio, Hz), feedback
+    none (the repeats are taps). The part itself is the all-dry path, at its
+    level; each tap against it. The sidebands at half each (a product of
+    sines); the PS Mode (its quality) is not modelled."""
+    fm = rm_hz(g("RM Mod Freq 0 - 50 - 127", 50))
+    rd, rw = balance(g("RM Bal", 15))
+    pd, pw = balance(g("PS Bal", 30))
+    r = semitones(g("PS Coarse", 71), g("PS Fine", 64))
+    rm = [(rd, 1.0, 0.0), (0.5 * rw, 1.0, fm), (0.5 * rw, 1.0, -fm)]
+    ps = [(pd, 1.0), (pw, r)]
+    reps = [(0.0, 1.0)]
+    if dly is not None:
+        t, fb = dly['tc'], dly['fb']
+        for k in range(64):
+            lv = dly['level'] * fb ** k
+            if lv < 1e-3:
+                break
+            reps.append(((k + 1) * t, lv))
+    base = max(rd * pd, DRY_FLOOR)
+    taps = []
+    for a, _, hz in rm:
+        for b, ratio in ps:
+            for tau, c in reps:
+                if hz == 0.0 and ratio == 1.0 and tau == 0.0:
+                    continue                      # the part itself
+                lv = a * b * c / base
+                if lv > 1e-4:
+                    taps.append((tau, lv, 'c', tau, ratio, hz * ratio))
+    out['level'] *= base
+    return dict(tc=max(1e-3, reps[-1][0]), taps=taps, level=1.0, fb=0.0, lpf=None, to_reverb=0.0)
 
 
 def mix_share(events, ch, sr):

@@ -8910,6 +8910,40 @@ def selftest_gs(check):
         check("file: Spectrum lifts 1250 Hz and cuts 8 kHz; the Reverb type rings after the note",
               _b3 > 4.0 and _b8 < -2.0 and _rv > -40.0 and _rms(_x0, 3.3, 3.8) < 1e-6 * _rms(_x0, 1.0, 2.0),
               "  (1300-1340 Hz %+.1f dB, 8 kHz %+.1f dB; the tail at %+.0f dB of the note)" % (_b3, _b8, _rv))
+        # THE ENHANCER'S CHAINS (its bus after the partials' stages): EH -> Delay
+        # brightens 2-8 kHz and repeats, streamed as whole (to -120 dB: a
+        # delay's repeats sum in another order); Cho -> Flanger's comb, after
+        # the chorus's copies, moves the spectrum as the chorus alone does not
+        _ed = _tre((0x02, 0x08))
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xe1 = B.render(_ed)
+            B.RENDER_STREAM = False; _xe2 = B.render(_ed)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _xcf = B.render(_tre((0x02, 0x0B)))
+        _xco = B.render(_tre((0x02, 0x0B), [_gsx(0x40, 0x03, 0x0C, 0, 0)]))   # FL Bal: the dry alone
+        _ebr = _hb2(_xe2, 2000, 8000, 0) - _hb2(_x0, 2000, 8000, 0)
+        _etl = _rms(_xe2, 3.05, 3.25) / _rms(_x0, 3.05, 3.25)
+        _sw1, _sw0 = _cen2(_xcf)[1], _cen2(_xco)[1]
+        check("file: EH -> Delay brightens and repeats (streamed as whole); Cho -> Flanger's comb sweeps",
+              _ebr > 1.0 and _etl > 2.0 and _near(_xe1, _xe2) and _sw1 > 1.5 * _sw0,
+              "  (2-8 kHz %+.1f dB; after the note x%.2g; streamed as whole %s; centroid swing %.0f against %.0f Hz)"
+              % (_ebr, _etl, _near(_xe1, _xe2), _sw1, _sw0))
+        # THE KEYBOARD MULTI's RING MODULATOR (gsdelay taps at f +- Hz): A4's
+        # sidebands at 440 +- 116 Hz rise where Thru has nothing, and its
+        # series of taps renders streamed as whole (to -120 dB)
+        _km = _tre((0x05, 0x00))
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xk1 = B.render(_km)
+            B.RENDER_STREAM = False; _xk2 = B.render(_km)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _sb = min(_hb2(_xk2, 318, 330, 0) - _hb2(_x0, 318, 330, 0), _hb2(_xk2, 550, 562, 0) - _hb2(_x0, 550, 562, 0))
+        check("file: the Keyboard Multi's ring modulator makes A4's sidebands (streamed as whole)",
+              _sb > 15.0 and _near(_xk1, _xk2),
+              "  (324 and 556 Hz at least %+.0f dB; streamed as whole %s)" % (_sb, _near(_xk1, _xk2)))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

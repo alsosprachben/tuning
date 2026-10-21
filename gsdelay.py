@@ -129,7 +129,7 @@ def repeats_full(dev, send, f_hz, sr, rel=1.0):
     # period (a Stereo Delay's left and right), and a cross-feedback one
     # (ping-pong) answers each repeat from the other side
     cross = dev.get('cross')
-    for tap in dev['taps']:
+    for j, tap in enumerate(dev['taps']):
         tau, lv, side = tap[0], tap[1], tap[2]
         period = tap[3] if len(tap) > 3 else dev['tc']
         for k in range(MAX_REPEATS):
@@ -140,6 +140,12 @@ def repeats_full(dev, send, f_hz, sr, rel=1.0):
             # a PITCH SHIFTER's tap (gsefx: 2 Pitch Shifter, Fb P.Shifter) moves
             # each repeat by its ratio once more: k + 1 times round the loop
             sh = tap[4] ** (k + 1) if len(tap) > 4 else 1.0
+            if len(tap) > 5:
+                # ...and a RING MODULATOR's (gsefx: Keyboard Multi) moves it by
+                # Hz besides: (ratio, Hz), the copy at f * ratio + Hz -- and
+                # the tap is named by its index, not its side (several share one)
+                out.append((sd, k, int(round((tau + k * period) * sr)), g, (sh, tap[5], j)))
+                continue
             out.append((sd, k, int(round((tau + k * period) * sr)), g, sh))
     return out
 
@@ -173,6 +179,16 @@ def expand(A, notes, sr, cols, place, meta=None):
             f = om * sr / tpi
             rel = lv[i - i0] / top if top > 0.0 else 0.0
             for side, k, d, g, sh in repeats_full(dev, send, f, sr, rel):
+                add, tj = 0.0, None
+                if isinstance(sh, tuple):
+                    sh, add, tj = sh
+                    if f * sh + add == 0.0:
+                        continue
+                    # f * ratio + Hz as a ratio of f: a lower sideband below
+                    # 0 Hz folds back up, its phase turned (sin(-x + p) =
+                    # sin(x - p + pi)): `flip`
+                    flip = f * sh + add < 0.0
+                    sh = abs(f * sh + add) / f
                 gl, gr, dl, dr = place(side, f * sh)
                 c = dict(row)
                 c['non'] = row['non'] + d
@@ -187,6 +203,15 @@ def expand(A, notes, sr, cols, place, meta=None):
                     c['nf'] = float(row['nf']) * sh
                 c['p0'] = -om2 * (float(c['non']) + dl) + (float(row['p0']) + om * (float(row['non']) + float(row['delL'])))
                 c['p0R'] = -om2 * (float(c['non']) + dr) + (float(row['p0R']) + om * (float(row['non']) + float(row['delR'])))
+                if tj is not None:
+                    # the modulator's own phase where the copy starts (it runs
+                    # on the file's clock), and a folded sideband's turn
+                    mp = tpi * add * float(c['non']) / sr
+                    for pk, dd in (('p0', dl), ('p0R', dr)):
+                        ph0 = float(c[pk]) + om2 * (float(c['non']) + dd) + mp
+                        if flip:
+                            ph0 = math.pi - ph0
+                        c[pk] = -om2 * (float(c['non']) + dd) + ph0
                 if float(row.get('fmw', 0.0)) != 0.0:
                     c['fmp'] = row['fmp'] - float(row['fmw']) * d
                     c['fmpR'] = row['fmpR'] - float(row['fmw']) * d
@@ -206,7 +231,8 @@ def expand(A, notes, sr, cols, place, meta=None):
                     c['vr'] = mr
                     c['vp'] = (tpi * mr * float(c['non']) / sr + (mph if side == 'r' else 0.0)) % tpi
                 if meta is not None:
-                    meta.append((i, (SIDES.index(side) if side in SIDES else
+                    meta.append((i, ((len(SIDES) + 32 + tj) if tj is not None else
+                                     SIDES.index(side) if side in SIDES else
                                      len(SIDES) + _tap_of(dev, side)) * MAX_REPEATS + k))
                 made += 1
                 last = max(last, int(c['noff']) + int(math.ceil(float(row.get('re', 0.0)))))
