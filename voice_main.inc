@@ -29,9 +29,14 @@
 #ifdef SV_LOBE
                 // A ROTOR ROW (leslie_grid): its own loop, its level swung by
                 // the lobe; every other row goes on as it always went
-                if(lsr && lsr[p]>=0 && !ftr && chBW[p]>=0.f){
+                if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0)) && !ftr && chBW[p]>=0.f){
                     float lg[65];
-                    leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bs0, mg, BLK/mg+1, lg);
+                    if(lsr[p]>=0)
+                        leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bs0, mg, BLK/mg+1, lg);
+                    else
+                        for(int j=0;j<BLK/mg+1;j++) lg[j]=1.f;
+                    if(fsr && fsr[p]>=0)       /* ...and a moving filter (filter_grid, efxfilter.py) */
+                        filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bs0, mg, BLK/mg+1, lg);
                     leslie_samples(ns, ne, n0, bs0, invb, mg, lg, kAl, kNl, kgL, kAr, kNr, kgR,
                                    mL0, mL1, mR0, mR1, aL, aR, zrL, ziL, zrR, ziR, rr, ri,
                                    jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
@@ -91,6 +96,21 @@
                 }
                 } else {
                 #include "voice_moog.inc"
+#ifdef SV_LOBE
+                // A MOOG ROW ON A ROTOR OR A MOVING FILTER: its grid gains
+                // (gLm/gRm, the same 128-sample grid) times the lobe and the
+                // filter, before its cells read them
+                if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0))){
+                    float lgm[65]; int njm=BLK/mg+1;
+                    if(lsr[p]>=0)
+                        leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bs0, mg, njm, lgm);
+                    else
+                        for(int j=0;j<njm;j++) lgm[j]=1.f;
+                    if(fsr && fsr[p]>=0)
+                        filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bs0, mg, njm, lgm);
+                    for(int j=0;j<njm;j++){ gLm[j]*=lgm[j]; gRm[j]*=lgm[j]; }
+                }
+#endif
                 for(int cl=0; cl<BLK/mg; cl++){
                 #include "voice_cell.inc"
                 for(long n=s0;n<s1;n++){

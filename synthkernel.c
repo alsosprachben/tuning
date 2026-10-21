@@ -325,6 +325,47 @@ static void leslie_samples(long ns, long ne, long n0, long bs0, float invb, int 
         tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
     }
 }
+
+/* A FILTER THAT MOVES (efxfilter.py: a Phaser, a wah, a Step Flanger, a
+   Humanizer): each grid point's lg multiplied by the filter's |H| at the
+   row's own frequency, the filter where its control (FCT: per channel, on
+   the grid, as LANG is per rotor) has it. The row's type and parameters
+   (fty, fpa, fpb, fpc) as efxfilter.response reads them. Out of line, and
+   only in the builds that carry the lobe (kernel-edits rule). */
+__attribute__((noinline))
+static void filter_grid(const float* FCT, long fgn, int row, int ty, float pa, float pb, float pc,
+                        float nf, long bs0, int mg, int nj, float* lg){
+    long g0=bs0/mg;
+    for(int j=0;j<nj;j++){
+        long gi=g0+j; if(gi>fgn-1) gi=fgn-1;
+        float c=FCT[(long)row*fgn+gi], h=1.f;
+        if(ty==1 || ty==4){
+            /* the phaser's all-passes, or the comb's line: z, then
+               (1 - mix) + mix z / (1 - r z) */
+            float ph = ty==1 ? -2.f*pc*atanf(nf/fmaxf(c,1.f)) : -6.2831853f*nf*c;
+            float zr=cosf(ph), zi=sinf(ph), r = pb, mx = pa;
+            float dr=1.f-r*zr, di=-r*zi, dd=dr*dr+di*di;
+            float ar=(zr*dr+zi*di)/dd, ai=(zi*dr-zr*di)/dd;
+            float yr=(1.f-mx)+mx*ar, yi=mx*ai;
+            h=sqrtf(yr*yr+yi*yi);
+        } else if(ty==2 || ty==3){
+            float x=nf/fmaxf(c,1.f), q=fmaxf(pa,0.1f);
+            float den=sqrtf((1.f-x*x)*(1.f-x*x)+(x/q)*(x/q));
+            float w = ty==2 ? 1.f/den : (x/q)/den;
+            h=(1.f-pb)+pb*w;
+        } else if(ty==5){
+            h=pa;
+            for(int k=0;k<3;k++){
+                float F=FCT[(long)(row+k)*fgn+gi];
+                float B = k==0 ? 80.f : k==1 ? 110.f : 160.f, A = k==0 ? 1.f : k==1 ? 0.7f : 0.5f;
+                float u=(nf-F)/(0.5f*B);
+                h+=A/(1.f+u*u);
+            }
+            h*=pb;
+        }
+        lg[j]*=h;
+    }
+}
 #endif
 
 __attribute__((noinline))
@@ -872,7 +913,9 @@ void synth_voice_lobe(
     const double* fmw, const double* fmp, const double* fmpR,
     float sfloor, float spow, float shmax, float shref,
     const int* lsr, const float* lph, const float* lfl, const float* lsh, const float* lnm,
-    const float* LANG, long lgn, long CHUNK,
+    const float* LANG, long lgn,
+    const int* fsr, const int* fty, const float* fpa, const float* fpb, const float* fpc,
+    const float* FCT, long fgn, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
 #define SV_LOBE
@@ -921,6 +964,8 @@ int voice_block(long n0, int BLK, int nblk, int P,
     float sfloor, float spow, float shmax, float shref,
     const int* lsr, const float* lph, const float* lfl, const float* lsh, const float* lnm,
     const float* LANG, long lgn,
+    const int* fsr, const int* fty, const float* fpa, const float* fpb, const float* fpc,
+    const float* FCT, long fgn,
     const float* sendW, int send,
     const long* idx, int nact, vdesc* D, vcell* C, int ccap, vsb* SB, int sbcap,
     int nthr, int* counts, int nb)
@@ -978,14 +1023,30 @@ int voice_block(long n0, int BLK, int nblk, int P,
                 d->nseed=(uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
             }
             // a rotor row: its lobe at the block's grid points (leslie_grid)
-            if(lsr && lsr[p]>=0 && chBW[p]>=0.f && BLK/mg+1<=VD_LG){
+            if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0)) && chBW[p]>=0.f && BLK/mg+1<=VD_LG){
                 d->flags|=VD_LESLIE;
-                leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bn0, mg, BLK/mg+1, d->lg);
+                if(lsr[p]>=0)
+                    leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bn0, mg, BLK/mg+1, d->lg);
+                else
+                    for(int j=0;j<BLK/mg+1;j++) d->lg[j]=1.f;
+                if(fsr && fsr[p]>=0)       /* ...and a moving filter (filter_grid) */
+                    filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bn0, mg, BLK/mg+1, d->lg);
             }
             d->kind=1; continue;
         }
         #include "voice_moog.inc"
         (void)nui; (void)nh0; (void)ndh;
+        // a Moog row on a rotor or a moving filter: its grid gains times them
+        if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0))){
+            float lgm[65]; int njm=BLK/mg+1;
+            if(lsr[p]>=0)
+                leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bn0, mg, njm, lgm);
+            else
+                for(int j=0;j<njm;j++) lgm[j]=1.f;
+            if(fsr && fsr[p]>=0)
+                filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bn0, mg, njm, lgm);
+            for(int j=0;j<njm;j++){ gLm[j]*=lgm[j]; gRm[j]*=lgm[j]; }
+        }
         // (cbase, not c0: the cell fragment's c0 is the cell's first sample)
         int ncl=BLK/mg;
         int cbase=__atomic_fetch_add(&nc, ncl, __ATOMIC_RELAXED);

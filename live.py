@@ -8832,6 +8832,31 @@ def selftest_gs(check):
               _br > 3.0 and _tail > 2.0 * _tail0 and _qsame,
               "  (2-8 kHz %+.1f dB; after the note %.2g against %.2g; streamed as whole %s)"
               % (_br, _tail, _tail0, _qsame))
+        # THE MOVING FILTERS (efxfilter; the lobe kernel's filter_grid), on the
+        # held square lead -- a Moog voice, so its cells take them: the Auto
+        # Wah sweeps the spectrum (its centroid moves as Thru's does not) and
+        # renders streamed as whole; the Humanizer's vowel lifts its centroid
+        def _cen2(x):
+            _x = np.asarray(x[0], float)[int(0.3 * B.SR):int(2.8 * B.SR)]
+            _w = int(0.1 * B.SR); _c = []
+            for _a in range(0, len(_x) - _w, _w):
+                _X = np.abs(np.fft.rfft(_x[_a:_a + _w])) ** 2; _f = np.fft.rfftfreq(_w, 1.0 / B.SR)
+                _c.append(float((_X * _f).sum() / max(_X.sum(), 1e-30)))
+            return float(np.mean(_c)), float(np.std(_c))
+        _wf = _tre((0x01, 0x21))
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xw1 = B.render(_wf)
+            B.RENDER_STREAM = False; _xw2 = B.render(_wf)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _xh = B.render(_tre((0x01, 0x03)))
+        _c0, _w0 = _cen2(_x0); _c1, _w1 = _cen2(_xw1); _ch, _wh = _cen2(_xh)
+        _wsame = len(_xw1[0]) == len(_xw2[0]) and float(np.abs(np.asarray(_xw1[0]) - np.asarray(_xw2[0])).max()) == 0.0
+        check("file: the Auto Wah sweeps a Moog lead (streamed as whole); the Humanizer's vowel",
+              _w1 > 2.0 * _w0 and _wsame and _ch > _c0 + 50.0,
+              "  (centroid swing %.0f Hz against Thru's %.0f; streamed as whole %s; Humanizer %.0f against %.0f Hz)"
+              % (_w1, _w0, _wsame, _ch, _c0))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

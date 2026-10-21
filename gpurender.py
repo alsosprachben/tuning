@@ -358,6 +358,9 @@ class FileRenderer:
                 sm = np.maximum.accumulate(np.asarray(BL)[:, ::-1], axis=1)[:, ::-1]
                 bb = np.minimum(np.asarray(non)[on] // B.BLK, sm.shape[1] - 1)
                 lift[on] = np.maximum(sm[br[on], bb], 0.0)
+        # a moving filter can lift a row too, at most fmx (efxfilter.peak)
+        if prep.get('FCT') is not None and 'fmx' in prep:
+            lift = lift * np.where(np.asarray(prep['fsr'])[:P] >= 0, np.asarray(prep['fmx'], np.float64)[:P], 1.0)
         # a rotor row's lobe peaks at lnm times its level (leslie.lobe_columns)
         if prep.get('LANG') is not None:
             lift = lift * np.where(np.asarray(prep['lsr'])[:P] >= 0, np.asarray(prep['lnm'], np.float64)[:P], 1.0)

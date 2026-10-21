@@ -3733,6 +3733,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     cons_bursts = []
     _CONS_SRC = {}
     _LESLIE_CH = {}
+    _FILTER_CH = {}     # channel -> its moving filter (efxfilter.Channel)
     _SYM_CH = {}
     # THE FREE-STRING REGISTER: channel -> its class's strike list and setup,
     # and the strike whose rows are being emitted (closed at the next note)
@@ -4199,6 +4200,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      clavinet=_CLAV_CH, htremolo=_HTREM_CH, tremolo=_TREM_CH,
                                      chorus=_CHORUS_CH, cabinet=_CAB_CH, efxeq=_EFXEQ_CH,
                                      leslie=_LESLIE_CH,
+                                     filter=_FILTER_CH,
                                      scanner=_SCAN_CH,
                                      register=_REG_CH, register_scale=REGISTER_SCALE,
                                      register_strings=(string_partial, partial_decay,
@@ -4896,6 +4898,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _rs_ = _GSX.rotary_setup(_EFXEV, _MCH[0])
                 if _rs_ is not None:
                     _LESLIE_CH[_MCH[0]] = _rs_
+            if _ex.get('filter') and _MCH[0] not in _FILTER_CH:
+                # a moving filter (a Phaser, a wah, a Step Flanger, a Humanizer):
+                # its control over the file, from the effect's timeline
+                _fc_ = _GSX.filter_setup(_EFXEV, _MCH[0])
+                if _fc_ is not None:
+                    _FILTER_CH[_MCH[0]] = _fc_
             if _ex.get('trem') and _MCH[0] not in _TREM_CH:
                 # a Tremolo Chorus's tremolo: the tremolo pass's (rate, depth, stereo)
                 _TREM_CH[_MCH[0]] = tuple(_ex['trem'])
@@ -6277,7 +6285,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     effects={k: sorted(v) for k, v in (
                         ('sympathetic', _SYM_CH), ('mf104', {i for i, _, _ in _MF104}), ('tubeamp', _AMP_CH),
                         ('clavinet', _CLAV_CH), ('harmonium tremolo', _HTREM_CH), ('tremolo', _TREM_CH),
-                        ('chorus', _CHORUS_CH), ('cabinet', _CAB_CH), ('leslie', _LESLIE_CH)) if v})
+                        ('chorus', _CHORUS_CH), ('cabinet', _CAB_CH), ('leslie', _LESLIE_CH),
+                        ('filter', _FILTER_CH)) if v})
 
     # A CONSONANT IS SUNG BY THE SECTION, NOT BY A POINT.
     #
@@ -6556,7 +6565,26 @@ def _prepare(path, tuner='hybrid440', sink=None):
         for k, dt, _ in _LES.LOBE_COLS:
             prep[k] = arr(k, dt)
         prep['LANG'] = _LES.angle_table(_LESLIE_CH, _LES.make_rotors(_LESLIE_CH), N, SR, BLK)
+    if _FILTER_CH:
+        filter_prep(prep, _FILTER_CH, N)
     return prep
+
+
+def filter_prep(prep, channels, n):
+    """A MOVING FILTER's columns and control table (efxfilter) on a kernel
+    table: the filter columns from its rows' channels, FCT for the file's
+    length -- and, where the table has no rotor, the Leslie's columns on no
+    rotor, so the lobe kernel (which carries the filter) can take it."""
+    import efxfilter as _EF
+    import leslie as _LES
+    P = len(prep['mch'])
+    for k, v in _EF.columns(prep['mch'], channels).items():
+        prep[k] = np.ascontiguousarray(v)
+    prep['FCT'] = _EF.table(channels, n, SR, _LES.rotor_grid(BLK))[0]
+    if prep.get('LANG') is None:
+        for k, dt, v in _LES.LOBE_COLS:
+            prep[k] = np.full(P, v, dt)
+        prep['LANG'] = np.zeros((1, 1), np.float32)
 
 # The table's columns as the kernel takes them (prepare's last step; a
 # streamed window's table is converted the same way, streamrender)
@@ -6685,8 +6713,8 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
 def _voice_args(a, sl, P, lobe=True):
     """synth_voice's arguments from BLK to the shutter's four scalars -- the
     run voice_block (the GPU's block setup) takes too, in the same order --
-    and with lobe, the Leslie's seven after them (synth_voice_lobe and
-    voice_block take them; synth_voice does not)."""
+    and with lobe, the Leslie's seven after them and a moving filter's seven
+    (synth_voice_lobe and voice_block take them; synth_voice does not)."""
     dp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     lp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
     return (BLK,a['nblk'],P,
@@ -6726,7 +6754,12 @@ def _voice_args(a, sl, P, lobe=True):
                     *(() if not lobe else
                       (ip(sl('lsr')), fp(sl('lph')), fp(sl('lfl')), fp(sl('lsh')), fp(sl('lnm')),
                        fp(a['LANG']), ctypes.c_long(a['LANG'].shape[1]))
-                      if a.get('LANG') is not None else (None,) * 6 + (ctypes.c_long(0),)))
+                      if a.get('LANG') is not None else (None,) * 6 + (ctypes.c_long(0),)),
+                    # ...and a moving filter's (efxfilter: FILTER_COLS, FCT); NULL: none
+                    *(() if not lobe else
+                      (ip(sl('fsr')), ip(sl('fty')), fp(sl('fpa')), fp(sl('fpb')), fp(sl('fpc')),
+                       fp(a['FCT']), ctypes.c_long(a['FCT'].shape[1]))
+                      if a.get('FCT') is not None else (None,) * 6 + (ctypes.c_long(0),)))
 
 _NO_ROWS = np.zeros(16, np.float32)
 

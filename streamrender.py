@@ -1081,6 +1081,7 @@ class Stream:
         for k, dt in B.FINAL_DTYPES:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
         self._lobe_prep(prep, rows, order)
+        self._filter_prep(prep)
         if self.gpu is not None:
             import gpurender as GR
             g = self.B.send_weights(self.ctx['reverb'], self.ctx.get('reverb_steps'),
@@ -1109,6 +1110,28 @@ class Stream:
             prep['aR'] = prep['aR'] * g
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
         self._emit(w0, w1, L, R, SL, SR_)
+
+    def _filter_prep(self, prep):
+        """A moving filter's columns and control table (blockrender.filter_prep),
+        the table built again only when a channel joins or the length grows."""
+        chans = self.ctx['effects'].get('filter')
+        if not chans:
+            return
+        key = (tuple(chans), self.N)
+        if getattr(self, '_fct_key', None) != key:
+            import efxfilter as EF
+            import leslie as LE
+            self._fct = EF.table(chans, self.N, self.B.SR, LE.rotor_grid(self.B.BLK))[0]
+            self._fct_key = key
+        import efxfilter as EF
+        import leslie as LE
+        for k, v in EF.columns(prep['mch'], chans).items():
+            prep[k] = np.ascontiguousarray(v)
+        prep['FCT'] = self._fct
+        if prep.get('LANG') is None:
+            for k, dt, v in LE.LOBE_COLS:
+                prep[k] = np.full(len(prep['mch']), v, dt)
+            prep['LANG'] = np.zeros((1, 1), np.float32)
 
     def _lobe_prep(self, prep, rows, ix):
         """The Leslie's lobe for the kernel: its columns, and the rotors'
@@ -1176,6 +1199,7 @@ class Stream:
                 for c, dt in B.FINAL_DTYPES:
                     prep[c] = np.ascontiguousarray(rows[c][ix].astype(dt))
                 self._lobe_prep(prep, rows, ix)
+                self._filter_prep(prep)
                 if self.stems['objects']:          # subset(objectify=True)'s rules
                     prep['aL'] = prep['aR'] = np.ascontiguousarray(prep['aM'])
                     prep['p0R'] = np.ascontiguousarray(prep['p0'])

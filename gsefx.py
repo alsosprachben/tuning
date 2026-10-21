@@ -31,6 +31,8 @@ law, the EQ's shelf corners (400 Hz / 4 kHz), and the flanger's base delay.
 Each says so where it is set.
 """
 import math
+
+import numpy as np
 import re
 
 # THE TYPES (SC-88Pro owner's manual, chapter 4): (MSB, LSB) -> name
@@ -73,6 +75,7 @@ BUILT |= {"Stereo Flanger", "3D Manual", "3D Auto", "2 Pitch Shifter", "Fb P.Shi
 SERIES_TYPES = ("OD -> Chorus", "OD -> Flanger", "OD -> Delay", "DS -> Chorus", "DS -> Flanger",
                 "DS -> Delay", "Cho -> Delay", "FL -> Delay")
 BUILT |= set(SERIES_TYPES) | {"Clean Gt Multi 1", "Bass Multi"}
+BUILT |= {"Phaser", "Auto Wah", "Step Flanger", "Humanizer"}
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -424,6 +427,91 @@ def semitones(coarse, fine):
     return 2.0 ** ((coarse - 0x40) / 12.0 + (fine - 0x40) * 2.0 / 1200.0)
 
 
+# THE MOVING FILTERS' LAWS where Roland gives no numbers (efxfilter's own:
+# WAH_HZ, WAH_Q, PHASER_STAGES): the Phaser's Depth 0-127 onto +-2 octaves of
+# sweep, its Mix (unprinted) at the middle, its Reso onto 0-0.9; the Auto
+# Wah's Depth onto 3 octaves up from its Manual, BPF and Up where unset; the
+# Humanizer's Accel 0-15 onto a glide of 0.5 s down to 15 ms. Chosen.
+PHASER_OCT, AUTOWAH_OCT = 2.0, 3.0
+
+
+def _filter(name, g, pn):
+    """A moving filter's spec (efxfilter): type, parameters, and its control
+    while this setting stands -- ('sweep', base Hz, octaves, rate, up?),
+    ('wah', Hz), ('comb', base s, swing s, rate, step rate), ('vowel', i, glide)."""
+    import efxfilter as EF
+    if name == "Phaser":
+        return dict(ty=1, pa=g("Mix", 64) / 127.0, pb=0.9 * g("Reso", 16) / 127.0, pc=EF.PHASER_STAGES,
+                    ctrl=('sweep', table_value(12, g("Manual", 36)), PHASER_OCT * g("Depth", 64) / 127.0,
+                          table_value(6, g("Rate", 16)), None))
+    if name == "Auto Wah":
+        return dict(ty=2 if g("Fil Type", 1) == 0 else 3, pa=EF.wah_q(g("Peak", 62)), pb=1.0, pc=0.0,
+                    ctrl=('sweep', EF.wah_hz(g("Manual", 68)), AUTOWAH_OCT * g("Depth", 72) / 127.0,
+                          table_value(6, g("Rate", 40)), bool(g("Polarity", 1))))
+    if name == "GTR Multi 3":
+        if not g("Wah Sw", 1):
+            return None
+        return dict(ty=2 if g("Wah Fil", 1) == 0 else 3, pa=EF.wah_q(g("Wah Peak", 10)), pb=1.0, pc=0.0,
+                    ctrl=('wah', EF.wah_hz(g("Wah Man", 60))))
+    if name == "Step Flanger":
+        swing = (int(g("Depth", 95)) + 1) / 3.2 / 1000.0 / 2.0 / 8.0
+        pre = (table_value(1, g("Pre Dly", 10)) or 0.0) / 1000.0
+        return dict(ty=4, pa=g("Balance", 64) / 127.0, pb=feedback(g("Feedback", 79)), pc=0.0,
+                    ctrl=('comb', pre, swing, table_value(6, g("Rate", 5)), table_value(6, g("Step Rate", 54))))
+    if name == "Humanizer":
+        acc = table_value(14, g("Accel", 64)) or 8.0
+        return dict(ty=5, pa=EF.VOWEL_FLOOR, pb=1.5, pc=0.0,
+                    ctrl=('vowel', min(4, g("Vowel", 0)), 0.5 * (0.03 ** (acc / 15.0))))
+    return None
+
+
+def filter_setup(events, ch):
+    """A part's moving filter over the file (efxfilter.Channel): its type and
+    parameters as first set, its control from each setting of the timeline,
+    held until the next -- a sweep's LFO on the absolute clock, a wah's pedal
+    where the file moved it, the Humanizer's vowels gliding at its Accel."""
+    import efxfilter as EF
+    segs = []
+    for t in sorted({0.0} | {t for t, _ in events}):
+        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        f = c.get('filter') if c is not None else None
+        if f is not None:
+            segs.append((t, f))
+    if not segs:
+        return None
+    f0 = segs[0][1]
+    ts = np.array([t for t, _ in segs])
+    kind = f0['ctrl'][0]
+    if kind == 'vowel':
+        vt = [t for t, _ in segs]
+        fs = [EF.VOWEL_F[f['ctrl'][1]] for _, f in segs]
+        rows = [EF.steps(vt, [x[k] for x in fs], glide=f0['ctrl'][2]) for k in range(3)]
+        return EF.Channel(5, f0['pa'], f0['pb'], f0['pc'], lambda t: [r(t) for r in rows], rows=3)
+
+    def control(t):
+        t = np.asarray(t, float)
+        i = np.clip(np.searchsorted(ts, t, side='right') - 1, 0, len(segs) - 1)
+        out = np.empty(len(t))
+        for k, (_, f) in enumerate(segs):
+            m = i == k
+            if not m.any():
+                continue
+            c, tt = f['ctrl'], t[m]
+            if c[0] == 'sweep':
+                lf = np.sin(2.0 * math.pi * c[3] * tt)
+                if c[4] is None:                      # a phaser: about its Manual
+                    out[m] = c[1] * 2.0 ** (c[2] * lf)
+                else:                                 # an auto wah: up (or down) from it
+                    out[m] = c[1] * 2.0 ** ((1.0 if c[4] else -1.0) * c[2] * 0.5 * (1.0 + lf))
+            elif c[0] == 'wah':
+                out[m] = c[1]
+            else:                                     # a stepped flanger's line
+                held = np.floor(tt * c[4]) / c[4]
+                out[m] = c[1] + c[2] * 0.5 * (1.0 + np.sin(2.0 * math.pi * c[3] * held))
+        return out
+    return EF.Channel(f0['ty'], f0['pa'], f0['pb'], f0['pc'], control)
+
+
 def param_numbers(name):
     """{parameter name: its number 1-20} for a type, from Roland's table."""
     for _k, (_n, nm) in _P.TYPES.items():
@@ -478,6 +566,13 @@ def chain(st):
         if name == "Tremolo Chorus":
             out['trem'] = (table_value(6, g("Trem Rate", 60)), TREMOLO_CHORUS_DEPTH,
                            g("Trem Sep", 96) > 0)
+        return out
+    if name in ("Phaser", "Auto Wah", "Step Flanger", "Humanizer"):
+        out['filter'] = _filter(name, g, pn)
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
+        if name == "Humanizer" and g("Drive Sw", 0):      # its drive before the vowel
+            out['od_gain'] = od_gain(g("Drive", 48), False)
+            out['level'] *= mk
         return out
     if name in ("3D Manual", "3D Auto"):
         # THE PART PLACED IN 3D: its angle the type's Azimuth (past the
@@ -601,6 +696,8 @@ def chain(st):
     if "CF Rate" in pn:
         out['cf'] = (cf_device(bool(g("CF Sel", 0)), g("CF Rate", 8), g("CF Depth", 40), g("CF Fb", 64)),
                      g("CF Mix", 0) / 127.0)
+    if name == "GTR Multi 3":
+        out['filter'] = _filter(name, g, pn)     # its wah (efxfilter), before the OD
     if "Dly Time" in pn:
         # the chain's own delay, as the GS delay's repeats (gsdelay): one tap,
         # 0-635 ms (5 ms a step), its feedback 0-127, its mix
