@@ -76,7 +76,11 @@ SERIES_TYPES = ("OD -> Chorus", "OD -> Flanger", "OD -> Delay", "DS -> Chorus", 
                 "DS -> Delay", "Cho -> Delay", "FL -> Delay")
 BUILT |= set(SERIES_TYPES) | {"Clean Gt Multi 1", "Bass Multi"}
 BUILT |= {"Phaser", "Auto Wah", "Step Flanger", "Humanizer"}
-BUS_TYPES = ("Lo-Fi 1", "Compressor", "Limiter", "Enhancer")
+BUS_TYPES = ("Lo-Fi 1", "Lo-Fi 2", "Compressor", "Limiter", "Enhancer", "Gate Reverb", "Reverb")
+BUILT |= {"Spectrum"}
+# SPECTRUM's eight fixed bands (the SC-8850 manual's frequencies); its Width
+# (Q, the same for all) where unprinted 2.0, the middle. Chosen.
+SPECTRUM_HZ = (250.0, 500.0, 1000.0, 1250.0, 2000.0, 3150.0, 4000.0, 8000.0)
 BUILT |= set(BUS_TYPES)
 
 # ---------------------------------------------------------------- encodings
@@ -435,6 +439,38 @@ def semitones(coarse, fine):
 # Wah's Depth onto 3 octaves up from its Manual, BPF and Up where unset; the
 # Humanizer's Accel 0-15 onto a glide of 0.5 s down to 15 ms. Chosen.
 PHASER_OCT, AUTOWAH_OCT = 2.0, 3.0
+# THE AUTO WAH'S SENS: the filter opened by the part's own loudness as well as
+# its LFO -- Sens 0-127 onto up to AUTOWAH_SENS_OCT octaves at a full
+# envelope. The envelope is the part's NOTES' (velocity / 127, rising in
+# 5 ms, falling as a struck note does while held, and quickly after its
+# release; the loudest note at each moment), not its audio's: the filter is
+# set before the part renders, and a note's envelope is the same in the
+# stream as in the whole table. Chosen.
+AUTOWAH_SENS_OCT = 3.0
+WAH_ENV_ATTACK, WAH_ENV_HOLD, WAH_ENV_RELEASE = 0.005, 0.4, 0.06
+
+
+def note_envelope(notes):
+    """t (s, array) -> the part's envelope 0..1 from its notes (start, end,
+    velocity): each note's level, the loudest at each moment."""
+    nts = [(float(s), float(e), v / 127.0) for s, e, v in notes]
+
+    def env(t):
+        t = np.asarray(t, float)
+        out = np.zeros(len(t))
+        for s, e, a in nts:
+            i0 = np.searchsorted(t, s)
+            i1 = np.searchsorted(t, e + 8.0 * WAH_ENV_RELEASE)
+            if i1 <= i0:
+                continue
+            tt = t[i0:i1]
+            u = tt - s
+            held = a * np.minimum(1.0, u / WAH_ENV_ATTACK) * np.exp(-u / WAH_ENV_HOLD)
+            at_end = a * np.exp(-(e - s) / WAH_ENV_HOLD)
+            lv = np.where(tt <= e, held, at_end * np.exp(-(tt - e) / WAH_ENV_RELEASE))
+            out[i0:i1] = np.maximum(out[i0:i1], lv)
+        return out
+    return env
 
 
 def _filter(name, g, pn):
@@ -445,11 +481,12 @@ def _filter(name, g, pn):
     if name == "Phaser":
         return dict(ty=1, pa=g("Mix", 64) / 127.0, pb=0.9 * g("Reso", 16) / 127.0, pc=EF.PHASER_STAGES,
                     ctrl=('sweep', table_value(12, g("Manual", 36)), PHASER_OCT * g("Depth", 64) / 127.0,
-                          table_value(6, g("Rate", 16)), None))
+                          table_value(6, g("Rate", 16)), None, 0.0))
     if name == "Auto Wah":
         return dict(ty=2 if g("Fil Type", 1) == 0 else 3, pa=EF.wah_q(g("Peak", 62)), pb=1.0, pc=0.0,
                     ctrl=('sweep', EF.wah_hz(g("Manual", 68)), AUTOWAH_OCT * g("Depth", 72) / 127.0,
-                          table_value(6, g("Rate", 40)), bool(g("Polarity", 1))))
+                          table_value(6, g("Rate", 40)), bool(g("Polarity", 1)),
+                          AUTOWAH_SENS_OCT * g("Sens", 0) / 127.0))
     if name == "GTR Multi 3":
         if not g("Wah Sw", 1):
             return None
@@ -486,14 +523,15 @@ def bus_setup(events, ch, sr):
     if first is None:
         return None
     return dict(kind=first['bus'][0], kw=first['bus'][1], spans=spans,
-                mix=first.get('bus_mix', (0.0, 1.0)) if first['bus'][0] == 'lofi' else (0.0, 1.0))
+                mix=first.get('bus_mix', (0.0, 1.0)))
 
 
-def filter_setup(events, ch):
+def filter_setup(events, ch, notes=()):
     """A part's moving filter over the file (efxfilter.Channel): its type and
     parameters as first set, its control from each setting of the timeline,
     held until the next -- a sweep's LFO on the absolute clock, a wah's pedal
-    where the file moved it, the Humanizer's vowels gliding at its Accel."""
+    where the file moved it, the Humanizer's vowels gliding at its Accel; an
+    Auto Wah's Sens from the part's notes ((start, end, velocity))."""
     import efxfilter as EF
     segs = []
     for t in sorted({0.0} | {t for t, _ in events}):
@@ -506,6 +544,7 @@ def filter_setup(events, ch):
     f0 = segs[0][1]
     ts = np.array([t for t, _ in segs])
     kind = f0['ctrl'][0]
+    env = note_envelope(notes) if any(f['ctrl'][0] == 'sweep' and f['ctrl'][5] for _, f in segs) else None
     if kind == 'vowel':
         vt = [t for t, _ in segs]
         fs = [EF.VOWEL_F[f['ctrl'][1]] for _, f in segs]
@@ -526,7 +565,10 @@ def filter_setup(events, ch):
                 if c[4] is None:                      # a phaser: about its Manual
                     out[m] = c[1] * 2.0 ** (c[2] * lf)
                 else:                                 # an auto wah: up (or down) from it
-                    out[m] = c[1] * 2.0 ** ((1.0 if c[4] else -1.0) * c[2] * 0.5 * (1.0 + lf))
+                    oc = c[2] * 0.5 * (1.0 + lf)
+                    if c[5] and env is not None:      # ...and by the part's loudness
+                        oc = oc + c[5] * env(tt)
+                    out[m] = c[1] * 2.0 ** ((1.0 if c[4] else -1.0) * oc)
             elif c[0] == 'wah':
                 out[m] = c[1]
             else:                                     # a stepped flanger's line
@@ -599,6 +641,29 @@ def chain(st):
             out['bus'] = ('lofi', dict(lofi_type=g("Lo-Fi Type", 5) + 1, pre=g("Pre Filter", 1) + 1,
                                        post=g("Post Filter", 1) + 1))
             out['bus_mix'] = balance(g("Balance", 127))
+        elif name == "Lo-Fi 2":
+            # its unprinted defaults: no detune, white, the noises silent
+            # and unfiltered, LP, 50 Hz, stereo, the effect alone. Chosen.
+            lpf = lambda v: table_value(11, v)          # noqa: E731 (None: Bypass)
+            out['bus'] = ('lofi2', dict(lofi_type=g("Lo-Fi Type", 1) + 1, fil_type=g("Fil Type", 0),
+                                        cutoff=table_value(9, g("Cutoff", 32)) or 630.0,
+                                        detune=g("R.Detune", 0), radio_nz=g("R.Nz Lev", 64),
+                                        pink=g("W/P Sel", 0), wp_lpf=lpf(g("W/P LPF", 127)),
+                                        wp_level=g("W/P Level", 0), disc_type=g("Disc Type", 0),
+                                        disc_lpf=lpf(g("Disc LPF", 127)), disc_level=g("Disc Nz Lev", 0),
+                                        hum_type=g("Hum Type", 0), hum_lpf=lpf(g("Hum LPF", 127)),
+                                        hum_level=g("Hum Level", 0), stereo=g("M/S", 1),
+                                        pan=g("Pan(Mono)", 64)))
+            out['bus_mix'] = balance(g("Balance", 127))
+        elif name == "Gate Reverb":
+            # Gate Time 0-99 onto 5-500 ms (the SC-8850's range; 12 its 65 ms)
+            out['bus'] = ('gate', dict(gtype=g("Type", 0), pre_ms=table_value(1, g("Pre Dly", 5)) or 0.0,
+                                       gate_ms=5.0 * (min(99, g("Gate Time", 12)) + 1)))
+            out['bus_mix'] = balance(g("Balance", 32))
+        elif name == "Reverb":
+            out['bus'] = ('reverb', dict(rtype=g("Type", 0), pre_ms=table_value(1, g("Pre Dly", 112)) or 0.0,
+                                         time=g("Time", 120), damp_hz=table_value(8, g("HF Damp", 104))))
+            out['bus_mix'] = balance(g("Balance", 64))
         elif name == "Compressor":
             out['bus'] = ('comp', dict(attack=g("Attack", 72), sustain=g("Sustain", 100),
                                        post_gain=g("Post Gain", 0)))
@@ -683,6 +748,13 @@ def chain(st):
         out['dly'] = dev
         out['level'] *= max(dry, DRY_FLOOR)
         out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
+        return out
+    if name == "Spectrum":
+        # a static filter: each partial's gain at its frequency (eq_gain's
+        # mids, no shelves), as exact in the partials as the Stereo-EQ
+        q = EQ_Q[min(4, g("Width", 2))]
+        out['eq'] = (0.0, None, None, 0.0, 0.0, LOW_SHELF_HZ, HIGH_SHELF_HZ) + tuple(
+            (hz, q, gain_db(g("Band %d" % (i + 1), 64))) for i, hz in enumerate(SPECTRUM_HZ))
         return out
     if name == "Stereo-EQ":
         out['eq'] = (gain_db(g("Low Gain", 64)), eq_freq(g("M1 Freq", 72)), EQ_Q[min(4, g("M1 Q", 1))],
@@ -790,12 +862,12 @@ def eq_gain(f, eq):
     (GTR Multi 2: Cmp, OD, EQ, CF) -- applied with the cabinet, to the valve's
     products too (blockrender's and streamrender's speaker pass)."""
     lo, mf, q, mg, hi = eq[:5]
-    # ...and, where a type sets them (Stereo-EQ), its shelves' corners and a
-    # second mid: (lo, mid Hz, Q, mid dB, hi, lo Hz, hi Hz, (mid 2 Hz, Q, dB))
+    # ...and, where a type sets them (Stereo-EQ), its shelves' corners and
+    # more mids: (lo, mid Hz, Q, mid dB, hi, lo Hz, hi Hz, (mid Hz, Q, dB)...)
     x = (f / (eq[5] if len(eq) > 5 else LOW_SHELF_HZ)) ** 2
     y = (f / (eq[6] if len(eq) > 6 else HIGH_SHELF_HZ)) ** 2
     db = lo / (1.0 + x) + hi * y / (1.0 + y)
-    for mf, q, mg in ((mf, q, mg),) + (tuple(eq[7:8]) if len(eq) > 7 else ()):
+    for mf, q, mg in ((mf, q, mg),) + (tuple(eq[7:]) if len(eq) > 7 else ()):
         if mf and mg:
             u = q * (f / mf - mf / (f + 1e-6 * (f <= 0)))
             db += mg / (1.0 + u * u)
@@ -842,6 +914,15 @@ def selftest():
     _ub = next(k for k, v in sorted(TYPES.items()) if v not in BUILT and v != "Thru")
     check("an unbuilt type has no chain (its parts play dry)",
           chain(dict(type=_ub, p={}, send={})) is None, "(%s)" % TYPES[_ub])
+    # the Auto Wah's Sens: its filter opened by the part's notes -- higher
+    # just after a loud note's onset than before it and than long after
+    _ev = [(0.0, ('type', (0x01, 0x21))), (0.0, ('param', 2, 127)), (0.0, ('param', 6, 0)),
+           (0.0, ('part', 0, True))]
+    _fc = filter_setup(_ev, 0, [(1.0, 1.5, 120)])
+    _v = _fc.control(np.array([0.5, 1.02, 3.0])) if _fc is not None else [0, 0, 0]
+    check("the Auto Wah's Sens opens its filter with the part's notes",
+          _v[1] > 4.0 * _v[0] and abs(_v[2] - _v[0]) < 1.0,
+          "(%.0f Hz before, %.0f at the onset, %.0f after)" % tuple(_v))
     e = (0.0, 2000.0, 2.0, 6.0, 0.0)
     check("the mid EQ peaks at its frequency, at its gain",
           abs(20 * math.log10(eq_gain(2000.0, e)) - 6.0) < 0.3

@@ -4911,7 +4911,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _ex.get('filter') and _MCH[0] not in _FILTER_CH:
                 # a moving filter (a Phaser, a wah, a Step Flanger, a Humanizer):
                 # its control over the file, from the effect's timeline
-                _fc_ = _GSX.filter_setup(_EFXEV, _MCH[0])
+                _fc_ = _GSX.filter_setup(_EFXEV, _MCH[0],
+                                         [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _MCH[0]])
                 if _fc_ is not None:
                     _FILTER_CH[_MCH[0]] = _fc_
             if _ex.get('trem') and _MCH[0] not in _TREM_CH:

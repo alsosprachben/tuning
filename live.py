@@ -8877,6 +8877,39 @@ def selftest_gs(check):
               _nlv <= 80 and _nl0 > 1000 and _same(_xl1, _xl2) and _same(_xc1, _xc2),
               "  (%d levels against Thru's %d; streamed as whole %s, %s)"
               % (_nlv, _nl0, _same(_xl1, _xl2), _same(_xc1, _xc2)))
+        # ...LO-FI 2's HUM is heard when the part is silent (50 Hz after the
+        # note, where Thru has nothing), and a GATE REVERB holds the note's
+        # end for its Gate Time (500 ms, the effect alone) and then shuts --
+        # both streamed as whole (the reverb's convolution to -120 dB)
+        _l2 = _tre((0x01, 0x73), [_gsx(0x40, 0x03, 0x10, 127, 0)])
+        _gr = _tre((0x01, 0x56), [_gsx(0x40, 0x03, 0x05, 99, 0), _gsx(0x40, 0x03, 0x12, 127, 0)])
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xh1 = B.render(_l2); _xg1 = B.render(_gr)
+            B.RENDER_STREAM = False; _xh2 = B.render(_l2); _xg2 = B.render(_gr)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _near = lambda a, b: len(a[0]) == len(b[0]) and float(np.abs(np.asarray(a[0]) - np.asarray(b[0])).max()) \
+            < 1e-6 * float(np.abs(np.asarray(b[0])).max())
+        _rms = lambda x, t0, t1: float(np.sqrt(np.mean(np.asarray(x[0][int(t0 * B.SR):int(t1 * B.SR)], float) ** 2))) + 1e-30
+        _hum = _hb2(_xh1, 45, 55, 0) - _hb2(_x0, 45, 55, 0)
+        _gin = 20 * np.log10(_rms(_xg2, 3.15, 3.35) / _rms(_x0, 3.15, 3.35))
+        _gout = 20 * np.log10(_rms(_xg2, 3.7, 3.9) / _rms(_xg2, 3.15, 3.35))
+        check("file: Lo-Fi 2's hum sounds through silence; the Gate Reverb holds, then shuts (streamed as whole)",
+              _hum > 20.0 and _gin > 10.0 and _gout < -30.0 and _same(_xh1, _xh2) and _near(_xg1, _xg2),
+              "  (45-55 Hz %+.0f dB; the gate's tail %+.0f dB over Thru's, then %+.0f dB; streamed as whole %s, %s)"
+              % (_hum, _gin, _gout, _same(_xh1, _xh2), _near(_xg1, _xg2)))
+        # SPECTRUM lifts its 1250 Hz band (+6 dB at its defaults: the lead's
+        # third harmonic, 1320 Hz, rises) and cuts at 8 kHz; the REVERB type
+        # rings on after the note, where Thru is silent
+        _xsp = B.render(_tre((0x01, 0x01)))
+        _xrv = B.render(_tre((0x01, 0x55)))
+        _b3 = _hb2(_xsp, 1300, 1340, 0) - _hb2(_x0, 1300, 1340, 0)
+        _b8 = _hb2(_xsp, 7700, 8300, 0) - _hb2(_x0, 7700, 8300, 0)
+        _rv = 20 * np.log10(_rms(_xrv, 3.3, 3.8) / _rms(_xrv, 1.0, 2.0))
+        check("file: Spectrum lifts 1250 Hz and cuts 8 kHz; the Reverb type rings after the note",
+              _b3 > 4.0 and _b8 < -2.0 and _rv > -40.0 and _rms(_x0, 3.3, 3.8) < 1e-6 * _rms(_x0, 1.0, 2.0),
+              "  (1300-1340 Hz %+.1f dB, 8 kHz %+.1f dB; the tail at %+.0f dB of the note)" % (_b3, _b8, _rv))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;
