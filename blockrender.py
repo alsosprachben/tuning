@@ -529,6 +529,7 @@ def parse(path):
     pn = dict(attr={}, p725={}, bend={}, range={})
     ats = {}; pts = {}       # channel pressure, and per-key pressure
     sotas = {}               # channel -> [(t, 12 cents)] from GM2 sysex
+    _gsstate = {}            # channel -> a GS part's velocity sense, key range, scale (parse_gs_part_state)
     # THE RPNs, which this renderer read none of. A file that set its bend
     # range to 12 was bent over 2, and fine and coarse tuning were ignored --
     # GM Level 1 requires all three, and live.py had them the whole time. The
@@ -801,6 +802,7 @@ def parse(path):
                 _rtp.clear(); _rtb.clear()
                 for _c in list(sotas):
                     sotas[_c].append((t, (0.0,) * 12))
+                _gsstate.clear()            # velocity sense, key range, scale: power-on
                 continue
             _mst = parse_master(msg.data)
             if _mst is not None:
@@ -825,6 +827,18 @@ def parse(path):
             _ud = parse_gs_user_drum(msg.data)
             if _ud is not None:
                 uset.setdefault((_ud[0], _ud[1]), {})[_ud[2]] = _ud[3]
+                continue
+            _gps = parse_gs_part_state(msg.data)
+            if _gps is not None:
+                _gc, _gk, _gv = _gps
+                _gst = _gsstate.setdefault(_gc, {})
+                if _gk == 'scale':
+                    # one scale per part, its notes set one at a time or together
+                    _sc = _gst.setdefault('scale', [0.0] * 12)
+                    _sc[_gv[0]:_gv[0] + len(_gv[1])] = _gv[1]
+                    sotas.setdefault(_gc, []).append((t, tuple(_sc)))
+                else:
+                    _gst[_gk] = _gv
                 continue
             _gp = parse_gs_part(msg.data)
             if _gp is not None:
@@ -877,8 +891,20 @@ def parse(path):
             # clarinet, trumpet, organ and music box, and all 2161 notes came
             # out as strings.
             _np = _cur_prog(msg.channel)
+            _vel = msg.velocity
+            _gst = _gsstate.get(msg.channel)
+            if _gst:
+                # A GS PART'S KEY RANGE (outside it the part does not sound) and
+                # its VELOCITY SENSE: depth scales the velocity (64 as is),
+                # offset moves it (64 none) -- Roland's "how much velocity
+                # affects the volume" and "how much it is boosted"
+                if not _gst.get('klo', 0) <= msg.note <= _gst.get('khi', 127):
+                    continue
+                if _gst.get('vsd', 64) != 64 or _gst.get('vso', 64) != 64:
+                    _vel = max(1, min(127, int(round(_vel * _gst.get('vsd', 64) / 64.0
+                                                     + _gst.get('vso', 64) - 64))))
             on.setdefault((msg.channel, msg.note), []).append(
-                (t, msg.velocity, cv(msg.channel), _np))
+                (t, _vel, cv(msg.channel), _np))
             if _mpe and _mpe.is_member(msg.channel) and not isinstance(_np, DrumProgram) \
                     and _np not in ch_progs.get(msg.channel, ()):
                 ch_progs.setdefault(msg.channel, []).append(_np)
@@ -1214,6 +1240,34 @@ def drum_edit_at(edits, key, t):
     return st
 
 
+# GS TONE MODIFY 1-8 (40 1x 30-37) as the CCs their NRPNs are (VE-GS Pro MIDI
+# Implementation: vibrato rate, depth, TVF cutoff, resonance, attack, decay,
+# release, vibrato delay)
+GS_TONE_MODIFY_CC = (76, 77, 74, 71, 73, 75, 72, 78)
+
+
+def parse_gs_part_state(data):
+    """(channel, what, value) for a GS PART parameter that no MIDI message
+    carries, or None: VELOCITY SENSE DEPTH / OFFSET (1A/1B, 'vsd'/'vso'),
+    KEYBOARD RANGE LOW / HIGH (1D/1E, 'klo'/'khi') -- each a number -- and
+    SCALE TUNING C..B (40-4B, 'scale': (first note, cents...), one DT1 or
+    several at once). The parse loop holds them per channel and applies them
+    at note-on; the scale goes to the scale/octave tuning (sotas)."""
+    d = tuple(data)
+    if not (len(d) >= 9 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4] in (0x40, 0x50) and d[5] >> 4 == 1):
+        return None
+    blk = d[5] & 0x0F
+    ch = (9 if blk == 0 else (blk - 1 if blk <= 9 else blk)) + (16 if d[4] == 0x50 else 0)
+    a, body = d[6], d[7:-1]                 # the values, without the checksum
+    kind = {0x1A: 'vsd', 0x1B: 'vso', 0x1D: 'klo', 0x1E: 'khi'}.get(a)
+    if kind is not None and body:
+        return ch, kind, int(body[0])
+    if 0x40 <= a <= 0x4B and body:
+        return ch, 'scale', (a - 0x40, tuple(float(x) - 64.0 for x in body[:0x4C - a]))
+    return None
+
+
 def parse_gs_part(data):
     """(channel, [mido messages]) for a GS PART parameter that has a MIDI
     message of its own, or None: the part's level, pan, reverb and chorus
@@ -1226,13 +1280,28 @@ def parse_gs_part(data):
     as PortedMidi carries them."""
     d = tuple(data)
     if not (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
-            and d[4] in (0x40, 0x50) and d[5] >> 4 == 1):
+            and d[4] in (0x40, 0x50) and d[5] >> 4 in (1, 2)):
         return None
     blk = d[5] & 0x0F
     ch = (9 if blk == 0 else (blk - 1 if blk <= 9 else blk)) + (16 if d[4] == 0x50 else 0)
     a, v = d[6], d[7]
     C = lambda cc, val: ('control_change', dict(control=cc, value=max(0, min(127, val))))
-    if a == 0x00 and len(d) >= 9:                       # TONE NUMBER: CC00, then the program
+    if d[5] >> 4 == 2:
+        # THE CONTROLLERS' DESTINATIONS (40 2x): the two our voices have as
+        # messages. BEND PITCH CONTROL is the bend range (RPN 0/0); MOD LFO1
+        # PITCH DEPTH, 0-600 cents, the mod wheel's vibrato (RPN 0/5, GM 2's
+        # modulation depth range). The rest move a Sound Canvas's own TVF,
+        # TVA and LFOs, which these voices are not built from.
+        if a == 0x10:
+            msgs = [C(101, 0), C(100, 0), C(6, max(0, min(24, v - 0x40))), C(38, 0),
+                    C(101, 127), C(100, 127)]
+        elif a == 0x04:
+            _ct = v * 600.0 / 127.0
+            msgs = [C(101, 0), C(100, 5), C(6, int(_ct // 100)),
+                    C(38, int(round((_ct % 100.0) * 128.0 / 100.0))), C(101, 127), C(100, 127)]
+        else:
+            return None
+    elif a == 0x00 and len(d) >= 9:                     # TONE NUMBER: CC00, then the program
         msgs = [C(0, v), ('program_change', dict(program=d[8]))]
     elif a == 0x13:                                     # MONO/POLY
         msgs = [C(126, 1) if v == 0 else C(127, 0)]
@@ -1248,6 +1317,12 @@ def parse_gs_part(data):
         msgs = [C(91, v)]
     elif a == 0x2C:                                     # DELAY SEND LEVEL (the SC-88's CC94)
         msgs = [C(94, v)]
+    elif a == 0x2A and len(d) >= 10:                    # PITCH FINE TUNE (= RPN 1), MSB LSB
+        msgs = [C(101, 0), C(100, 1), C(6, v), C(38, d[8]), C(101, 127), C(100, 127)]
+    elif 0x30 <= a <= 0x37:
+        # TONE MODIFY 1-8 (=NRPN 8, 9, 20H, 21H, 63H, 64H, 66H, 0AH): the
+        # sound controllers the NRPNs are read as (tonelib.GS_SOUND_NRPN)
+        msgs = [C(GS_TONE_MODIFY_CC[a - 0x30], v)]
     else:
         return None
     out = []

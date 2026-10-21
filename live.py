@@ -8671,6 +8671,30 @@ def selftest_gs(check):
               "  (steps %s; sends %s then %s; one CC91: %s; chorus first note %.1e, second %.1e)"
               % (None if _st is None else np.round(_st[1], 3).tolist(), sorted(_g1), sorted(_g2),
                  _p1.get("reverb_steps"), _d1, _d2))
+        # THE PART PARAMETERS NO CC CARRIED (blockrender.parse_gs_part_state;
+        # parse_gs_part): part 1 (channel 0) given Tone Modify 3 (the cutoff,
+        # CC74), Fine Tune (RPN 1), velocity sense depth 32 (half), a key range
+        # from C4, and a scale with E 14 cents flat
+        _pr = B.parse(_bfile([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41),
+                              _gsx(0x40, 0x11, 0x32, 0x60, 0), _gsx(0x40, 0x11, 0x2A, 0x50, 0x00, 0),
+                              _gsx(0x40, 0x11, 0x1A, 32, 0), _gsx(0x40, 0x11, 0x1D, 60, 0),
+                              _gsx(0x40, 0x11, 0x40, *([64] * 4 + [50] + [64] * 7), 0)]
+                             + _on(0, 59) + _on(0, 64)))
+        _pn = [(n[1], n[4]) for n in _pr[2] if n[0] == 0]
+        _pc = [(cc, v) for _, cc, v in _pr[3].get(0, []) if cc in (74, 6, 38)]
+        _psc = _pr[7][2].get(0, [])
+        check("file: GS Tone Modify, Fine Tune, velocity sense, key range and scale tuning",
+              _pn == [(64, 50)] and (74, 0x60) in _pc and (6, 0x50) in _pc
+              and _psc and _psc[-1][1][4] == -14.0 and _psc[-1][1][0] == 0.0,
+              "  (notes %s; CCs %s; scale %s)" % (_pn, _pc, _psc[-1][1] if _psc else None))
+        # ...AND TWO CONTROLLER DESTINATIONS (40 2x): the bend range (12) and
+        # the mod wheel's vibrato depth (64 of 0-600 cents: 302), as RPN 0/0, 0/5
+        _rq = B.parse(_bfile([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _gsx(0x40, 0x21, 0x10, 0x4C, 0),
+                              _gsx(0x40, 0x21, 0x04, 0x40, 0)] + _on(0, 64)))[7][3]["rpns"].get(0, [])
+        _rr = {k: v for _, k, v, _ in _rq}
+        check("file: GS bend range and mod depth (40 2x 10, 04) as RPN 0/0 and 0/5",
+              _rr.get("range") == 12.0 and abs(_rr.get("mod", 0) - 64 * 600 / 127.0) < 1.0,
+              "  (%s)" % _rr)
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

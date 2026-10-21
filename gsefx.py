@@ -67,6 +67,31 @@ def rate1(v):
     return min(10.0, 7.0 + 0.5 * (v - 0x77))
 
 
+def rate2(v):
+    """Rate2, Hz: 0.05 a step, 0.05 to 6.40 -- the guitar multis' CF Rate
+    (the data table's *7). Rate1 (rate1) goes on to 10 Hz past 63H; read
+    with it, a chain's chorus at 7FH turned at 10 Hz, not 6.40."""
+    return 0.05 * (max(0, min(127, int(v))) + 1)
+
+
+# EACH TYPE'S OWN DEFAULTS (SC-88Pro owner's manual, the Chapter 8 data table;
+# the SC-8850's prints the same): what a type change sets, before the file
+# sends a parameter of its own -- the value between a row's range ("0 - 80 -
+# 127"). A row that prints only its range has its default at one end and
+# does not say which, and a switch prints none: those keep chain()'s own.
+# By parameter number (1-20 = address 03H-16H).
+DEFAULTS = {
+    "Overdrive": {1: 48, 20: 96},
+    "Distortion": {1: 76, 18: 0x40 - 8, 20: 84},
+    "GTR Multi 1": {1: 100, 2: 80, 3: 100, 6: 80, 9: 0x40 + 5, 10: 0x40 + 10, 13: 8, 14: 30,
+                    15: 0x40 + 38, 16: 40, 17: 60, 18: 34, 19: 15, 20: 110},
+    "GTR Multi 2": {1: 70, 3: 90, 6: 80, 11: 56, 13: 0x40 + 5, 14: 0x40 - 10, 16: 8, 17: 96,
+                    18: 0x40 + 38, 20: 80},
+    "GTR Multi 3": {2: 60, 3: 10, 6: 80, 13: 8, 15: 0x40 + 25, 16: 50, 17: 32, 18: 64, 19: 30,
+                    20: 88},
+}
+
+
 EQ_FREQS = (200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000,
             5000, 6300)
 
@@ -203,7 +228,8 @@ def chain(st):
     if name not in BUILT:
         return None
     p = st['p']
-    g = lambda n, d: p.get(n, d)
+    dflt = DEFAULTS.get(name, {})
+    g = lambda n, d: p.get(n, dflt.get(n, d))      # the file's, the type's, ours
     out = dict(name=name, od_gain=None, cabinet=None, comp=None, eq=None, cf=None, dly=None,
                level=g(20, 127) / 127.0, sends=dict(st['send']))
     mk = 10.0 ** (OD_MAKEUP_DB / 20.0)
@@ -275,7 +301,7 @@ def cf_device(flanger, rate, depth, fb):
     the table, depth as the system chorus's swing, feedback +-98 %. The base
     delay is chosen -- a chorus 10 ms, a flanger 1 ms -- and a flanger's swing
     an eighth of a chorus's, so its comb stays in the flanging range."""
-    r = rate1(rate)
+    r = rate2(rate)
     swing = (int(depth) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if flanger else 1.0)
     return dict(tau=(0.001 if flanger else 0.010) + swing, rate=r,
                 vd=2.0 * math.pi * r * swing, fb=feedback(fb), level=1.0, lpf=None)
@@ -308,6 +334,15 @@ def selftest():
     check("Rate1: 0.05 Hz at 00, 0.45 at 08, 5.00 at 63, 10 at 7F",
           abs(rate1(0) - 0.05) < 1e-9 and abs(rate1(8) - 0.45) < 1e-9
           and abs(rate1(0x63) - 5.0) < 1e-9 and rate1(0x7F) == 10.0)
+    check("Rate2, the guitar multis' CF Rate: 0.45 Hz at 08, 6.40 at 7F (not Rate1's 10)",
+          abs(rate2(8) - 0.45) < 1e-9 and abs(rate2(0x7F) - 6.40) < 1e-9
+          and abs(cf_device(False, 0x7F, 40, 64)['rate'] - 6.40) < 1e-9)
+    _d = chain(dict(type=(4, 0), p={}, send={}))
+    _e = chain(dict(type=(4, 0), p={20: 127}, send={}))
+    check("a type comes up at Roland's own defaults: GTR Multi 1's level 110 of 127",
+          abs(_d['level'] / _e['level'] - 110 / 127.0) < 1e-9
+          and abs(_d['comp'][2] - CMP_ATTACK_MS * 100 / 127000.0) < 1e-12,
+          "(level %.3f against %.3f at 127)" % (_d['level'], _e['level']))
     check("EQ Freq: 200 Hz at 00, 2 kHz at 56H, 6.3 kHz at 7F",
           eq_freq(0) == 200 and eq_freq(0x56) == 2000 and eq_freq(0x7F) == 6300)
     ev = [(0.0, ('type', (4, 1))), (0.0, ('param', 20, 40)), (5.0, ('param', 20, 100))]
