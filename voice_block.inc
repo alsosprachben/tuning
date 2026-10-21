@@ -94,6 +94,56 @@
                         kN=xF; kA=xA; kgL=x0L; kgR=x0R;
                     }
                 }
+                // ...AND EACH EAR ITS OWN ONSET. The rules above place one
+                // attack for both ears, at the EARLIER ear's arrival (dmin), so
+                // the later ear's attack began with it -- up to ~30 samples
+                // early, the interaural onset of every panned attack lost, and
+                // a transient is placed by its onset. Here the LATER ear takes
+                // its own: silent until it arrives, its own ramp and knee (or,
+                // for a strike, its own step) and its line on from there; the
+                // earlier ear's left exactly as the rules made it. kAl/kNl and
+                // kAr/kNr are each ear's ramp, from its origin to its knee (equal:
+                // silent until then). Equal delays: nothing below runs.
+                long kAl=kA, kNl=kN, kAr=kA, kNr=kN;
+                // (only where the two ears' onsets fall on different samples:
+                // the rules place onsets on whole samples, so a sub-sample
+                // difference changes nothing, and is left exactly as it was)
+                if((long)ceilf(dL)!=(long)ceilf(dR) && !ftr && chBW[p]>=0.f){
+                    int rlate = dR>dL;
+                    float dx = rlate ? dR : dL, mx1 = rlate ? mR1 : mL1;
+                    long sAx=a+(long)ceilf(dx), sFx=sAx+(long)fadeS[p];
+                    float m0x = rlate ? mR0 : mL0;
+                    long zA=0, zN=0; float zg=0.f;
+                    if(sAx>=bs1){
+                        zA=zN=bs1;                      // not arrived in this block: silent
+                    } else if(sAx>bs0){
+                        int knee = sFx<bs1 && fadeS[p]>KNEE_MIN;
+                        long s0 = sFx<bs1 ? (knee ? sFx : sAx+(long)(0.5f*fadeS[p])) : sAx;
+                        if(s0>=bs1) s0=bs1-1;
+                        float g0=0.f;
+                        if(sFx<bs1){
+                            g0=AMP(sFx,b,dx);
+                            if(BLrow){ long bb=b<nblk?b:nblk-1;
+                                g0*=BLrow[bb]+(BLrow[bb+1]-BLrow[bb])*(float)(sFx-bs0)/(float)BLK; }
+                        }
+                        m0x = mx1-(mx1-g0)*((float)BLK/(float)(bs1-s0));
+                        if(knee){ zA=sAx; zN=sFx; zg=g0; } else { zA=zN=s0; }
+                    } else if(fadeS[p]>KNEE_MIN && fadeS[p]<(float)BLK && sFx>bs0 && sFx<bs1){
+                        float g0=AMP(sFx,b,dx);
+                        if(BLrow){ long bb=b<nblk?b:nblk-1;
+                            g0*=BLrow[bb]+(BLrow[bb+1]-BLrow[bb])*(float)(sFx-bs0)/(float)BLK; }
+                        m0x = mx1-(mx1-g0)*((float)BLK/(float)(bs1-sFx));
+                        zA=sAx; zN=sFx; zg=g0;
+                    } else if(kN>0){
+                        // the rules placed the EARLIER ear's knee here and drew this
+                        // ear's line from it; this ear's own attack runs on past the
+                        // block, so its line is the plain one from the block's edges
+                        m0x = AMP(bs0,b,dx);
+                        if(BLrow){ long bb=b<nblk?b:nblk-1; m0x*=BLrow[bb]; }
+                    }
+                    if(rlate){ mR0=m0x; kAr=zA; kNr=zN; if(zN>zA) kgR=zg; }
+                    else     { mL0=m0x; kAl=zA; kNl=zN; if(zN>zA) kgL=zg; }
+                }
                 // ...AND A GROWTH'S BLOCK ENDS AT ITS CUT, the onset's rule
                 // mirrored. Only a partial that GROWS (a negative decay rate: a
                 // note played backwards, blockrender._reverse_partial) peaks at

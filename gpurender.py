@@ -26,7 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # compiler's sizeof when the library and the program load)
 VDESC = np.dtype([("chk_hi", "u8"), ("chk_lo", "u8"), ("nk_hi", "u8"), ("nk_lo", "u8"), ("nseed", "u8"),
                   ("ns", "i4"), ("ne", "i4"), ("kind", "i4"), ("flags", "i4"), ("cell", "i4"), ("kn", "i4"),
-                  ("ka", "i4"), ("kpad", "i4"),
+                  ("ka", "i4"), ("knR", "i4"), ("kaR", "i4"), ("kpad", "i4"),
                   ("zLr", "f4"), ("zLi", "f4"), ("zRr", "f4"), ("zRi", "f4"), ("winst", "f4"),
                   ("mL0", "f4"), ("mL1", "f4"), ("mR0", "f4"), ("mR1", "f4"),
                   ("aL", "f4"), ("aR", "f4"), ("aLp", "f4"), ("aRp", "f4"),

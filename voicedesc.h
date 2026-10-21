@@ -60,7 +60,8 @@ typedef struct {
     // dipped and re-rose where the CPU file renderer (which ramps from kA)
     // did not -- found on the GS flanger's copies, whose ears' delays differ
     // and put the earlier ear's onset in the block before. kpad: alignment.
-    i32 ka, kpad;
+    i32 ka, knR, kaR, kpad;      // ...and the right ear's (knR, kaR): kn/ka the left's
+                                 // -- each ear its own onset (voice_block.inc)
     float zLr, zLi, zRr, zRi;    // the carrier at ns, each ear
     float winst;                 // its step, radians a sample
     float mL0, mL1, mR0, mR1;    // kind 1: the amplitude at the block's edges
@@ -149,10 +150,19 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
     float tb=(float)k*invb, mL, mR, sL, sR;
     if(d->kind==1){
         mL=(d->mL0+(d->mL1-d->mL0)*tb)*d->aL; mR=(d->mR0+(d->mR1-d->mR0)*tb)*d->aR;
-        if(k<d->kn){
-            // the attack's ramp, up to its knee (voice_block.inc)
-            float r=(float)(k-d->ka)/(float)(d->kn-d->ka);
-            mL=d->kgL*r*d->aL; mR=d->kgR*r*d->aR;
+        if(d->kn==d->knR && d->ka==d->kaR){
+            if(k<d->kn){
+                // the attack's ramp, up to its knee (voice_block.inc)
+                float r=(float)(k-d->ka)/(float)(d->kn-d->ka);
+                mL=d->kgL*r*d->aL; mR=d->kgR*r*d->aR;
+            }
+        } else {
+            // EACH EAR ITS OWN ONSET: silent until its ramp, its ramp to its
+            // knee, then the line
+            if(k<d->kn)
+                mL = (d->kn>d->ka && k>=d->ka) ? d->kgL*((float)(k-d->ka)/(float)(d->kn-d->ka))*d->aL : 0.f;
+            if(k<d->knR)
+                mR = (d->knR>d->kaR && k>=d->kaR) ? d->kgR*((float)(k-d->kaR)/(float)(d->knR-d->kaR))*d->aR : 0.f;
         }
         sL=zrL; sR=zrR;
         if(d->flags & VD_NOISE){

@@ -230,6 +230,45 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
    voice_block.inc, so file, live and GPU take it alike. Out of line, after
    the midpoint lines, which stay as they were: voices whose bursts span
    blocks never reach it (kernel-edits rule; bitident). */
+/* EACH EAR ITS OWN ONSET, the CPU's attack: from ns to the later of the two
+   knees, each ear its own ramp (from its origin kA to its knee kN; equal:
+   silent before it) or, past its knee, the block's line -- as the loop after
+   would draw it -- with the phasor, the chiff and the send exactly as there.
+   Out of line, and only where the ears' ramps differ (voice_block.inc): the
+   loop every other block takes is spelled as it was (kernel-edits rule).
+   Returns where the loop after resumes. */
+__attribute__((noinline))
+static long ear_knees(long ns, long ne, long n0, long bs0, float invb,
+                      long kAl, long kNl, float kgL, long kAr, long kNr, float kgR,
+                      float mL0, float mL1, float mR0, float mR1, float aL, float aR,
+                      float* zrL_, float* ziL_, float* zrR_, float* ziR_, float rr, float ri,
+                      float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
+                      float* outL, float* outR, float* outSL, float* outSR, float swp){
+    long kmax = kNl>kNr ? kNl : kNr;
+    long ke = kmax<ne ? kmax : ne;
+    float zrL=*zrL_, ziL=*ziL_, zrR=*zrR_, ziR=*ziR_;
+    for(long n=ns;n<ke;n++){
+        float t=(float)(n-bs0)*invb, mL, mR;
+        if(n<kNl) mL = (kNl>kAl && n>=kAl) ? kgL*((float)(n-kAl)/(float)(kNl-kAl))*aL : 0.f;
+        else      mL = (mL0+(mL1-mL0)*t)*aL;
+        if(n<kNr) mR = (kNr>kAr && n>=kAr) ? kgR*((float)(n-kAr)/(float)(kNr-kAr))*aR : 0.f;
+        else      mR = (mR0+(mR1-mR0)*t)*aR;
+        float sL=zrL, sR=zrR;
+        if(jfa>0.f){
+            float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
+            float cj=cosf(jit),sj2=sinf(jit);
+            sL += (zrL*cj - ziL*sj2)*jfa;
+            sR += (zrR*cj - ziR*sj2)*jfa;
+        }
+        outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+        if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
+        float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
+        tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+    }
+    *zrL_=zrL; *ziL_=ziL; *zrR_=zrR; *ziR_=ziR;
+    return ke>ns ? ke : ns;
+}
+
 __attribute__((noinline))
 static float jf_short_chiff(long bs0, long a, float chw, float sj, long blk,
                             float A, float cc, float m0, float m1, float nf, float bw,
@@ -768,6 +807,12 @@ void synth_voice(
                 // THE KNEE (voice_block.inc): the attack's own ramp, from its
                 // onset to its end, before the block's line takes over -- a loop
                 // of its own, so the one below is spelled as it always was
+                if(kAl!=kAr || kNl!=kNr){
+                    // EACH EAR ITS OWN ONSET (voice_block.inc): out of line
+                    ns=ear_knees(ns, ne, n0, bs0, invb, kAl, kNl, kgL, kAr, kNr, kgR,
+                                 mL0, mL1, mR0, mR1, aL, aR, &zrL, &ziL, &zrR, &ziR, rr, ri,
+                                 jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
+                } else
                 if(kN>ns){
                     long ke=kN<ne?kN:ne; float ik=1.f/(float)(kN-kA);
                     for(long n=ns;n<ke;n++){
@@ -974,8 +1019,10 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
         d->jfa=jfa; d->cc=cc; d->swp=swp;
         // the knee: its sample from the block's start (0, none), its gains
-        d->kn=kN>ns ? (int)(kN-bn0) : 0; d->kgL=kgL; d->kgR=kgR;
-        d->ka=kN>ns ? (int)(kA-bn0) : 0; d->kpad=0;
+        d->kn=kNl>ns ? (int)(kNl-bn0) : 0; d->kgL=kgL; d->kgR=kgR;
+        d->ka=kNl>ns ? (int)(kAl-bn0) : 0;
+        d->knR=kNr>ns ? (int)(kNr-bn0) : 0;
+        d->kaR=kNr>ns ? (int)(kAr-bn0) : 0; d->kpad=0;
         // the carrier at each V_SUB samples into the block, in double, as the
         // phasor's own steps of winst place it (voicedesc.h)
         for(int j=1;j<4;j++){
