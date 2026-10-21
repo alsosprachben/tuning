@@ -1123,6 +1123,7 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | Overdrive | **2** | the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; not yet heard in a file |
 | Distortion | **2** | as Overdrive, with more gain |
 | Rotary | **3** | our Leslie at the type's rotor speeds, switched by Speed, Accl through our measured spin-ups, the rotors' levels -- RECORDED as Roland's is: two mics round the cabinet (Separate, 0-180 degrees), each to its speaker with its own swing and Doppler; heard on our Rhodes riff, mono and then with its two mics (Ben: "Those sound awesome", "Sounds great") |
+| Stereo Flanger | **2** | the chorus device with a flanger's swing, Roland's pre-delay and feedback, its outputs apart by its Phase |
 | Tremolo | **3** | the tremolo pass, Roland's five waves as Fourier series, the depth dipping the level; heard on our riff |
 | Auto Pan | **3** | the same across the ears; heard on our riff |
 | Hexa Chorus | **2** | six voices spread in delay, depth and pan by its Dev parameters (0.5 ms a Pre Dly Dev step, chosen) |
@@ -1136,12 +1137,26 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | 4 Tap Delay | **3** | four taps spread left to right (chosen); heard on our riff |
 | Tm Ctrl Delay | **3** | one tap at its time, placed by its pan (its time's glide under control not built); heard on our riff |
 | 3D Delay | **3** | centre tap and two at 60 degrees; heard on our riff |
+| 2 Pitch Shifter | **2** | two shifted voices as gsdelay taps (Coarse, Fine, delay, pan, L.Bal) |
+| Fb P.Shifter | **2** | a shifted tap whose repeats shift again round the loop |
+| 3D Auto | **2** | the same, turning at its Speed; each note where its onset finds it |
+| 3D Manual | **2** | the part at the type's Azimuth, past the speakers and behind (tonelib pan_angle) |
+| OD -> Chorus | **2** | the valve's gain stage and guitar cabinet, then the chorus (gs_copies) |
+| OD -> Flanger | **2** | the same with the flanger |
+| OD -> Delay | **2** | the same with a gsdelay tap; its dry and effect by Bal |
+| DS -> Chorus | **2** | as OD -> Chorus with the distortion's gain |
+| DS -> Flanger | **2** | as OD -> Flanger with the distortion's gain |
+| DS -> Delay | **2** | as OD -> Delay with the distortion's gain |
+| Cho -> Delay | **2** | the chorus and a delay tap (our passes run the delay first) |
+| FL -> Delay | **2** | the flanger and a delay tap |
 | Rotary Multi | **2** | the Rotary with its OD (the valve) and EQ before the rotors |
 | GTR Multi 1 | **2** | compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); not yet heard in a file |
 | GTR Multi 2 | **4** | compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built |
 | GTR Multi 3 | **1** | as GTR Multi 1 without its wah (not built) |
+| Clean Gt Multi 1 | **2** | compressor, EQ, chorus/flanger and delay, as the guitar multis' |
+| Bass Multi | **2** | compressor, OD, EQ, chorus/flanger, the 4x10 bass cabinet |
 
-Not built yet: Spectrum, Enhancer, Humanizer, Phaser, Auto Wah, Stereo Flanger, Step Flanger, Compressor, Limiter, Reverb, Gate Reverb, 2 Pitch Shifter, Fb P.Shifter, 3D Auto, 3D Manual, Lo-Fi 1, Lo-Fi 2, OD -> Chorus, OD -> Flanger, OD -> Delay, DS -> Chorus, DS -> Flanger, DS -> Delay, EH -> Chorus, EH -> Flanger, EH -> Delay, Cho -> Delay, FL -> Delay, Cho -> Flanger, Clean Gt Multi 1, Clean Gt Multi 2, Bass Multi, Rhodes Multi, Keyboard Multi, Cho / Delay, FL / Delay, Cho / Flanger, OD1 / OD2, OD / Rotary, OD / Phaser, OD / AutoWah, PH / Rotary, PH / AutoWah.
+Not built yet: Spectrum, Enhancer, Humanizer, Phaser, Auto Wah, Step Flanger, Compressor, Limiter, Reverb, Gate Reverb, Lo-Fi 1, Lo-Fi 2, EH -> Chorus, EH -> Flanger, EH -> Delay, Cho -> Flanger, Clean Gt Multi 2, Rhodes Multi, Keyboard Multi, Cho / Delay, FL / Delay, Cho / Flanger, OD1 / OD2, OD / Rotary, OD / Phaser, OD / AutoWah, PH / Rotary, PH / AutoWah.
 
 
 ## Roland GS SysEx: the address map
@@ -1175,7 +1190,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 | address | parameter | | notes |
 |---|---|---|---|
-| `40 03 00-01` | Type | **Partial** | 21 of 64 built (the guitar multis, Overdrive, Distortion, the choruses, the delays, Rotary, Tremolo, Auto Pan, Stereo-EQ); the rest play dry |
+| `40 03 00-01` | Type | **Partial** | 36 of 64 built (the guitar, bass and clean multis, Overdrive, Distortion, the choruses and flanger, the delays, Rotary, Tremolo, Auto Pan, the 3D types, the pitch shifters, the series pairs, Stereo-EQ); the rest play dry |
 | `40 03 03-16` | Parameters 1-20 | **Partial** | each type at Roland's own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part's first note's; Amp Type not read |
 | `40 03 17, 19` | Send to reverb, delay | **Yes** | per note |
 | `40 03 18` | Send to chorus | **No** | parsed, not used |

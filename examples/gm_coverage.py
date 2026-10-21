@@ -1024,6 +1024,21 @@ EFX_RATED = {
     "Rotary Multi": (2, "the Rotary with its OD (the valve) and EQ before the rotors"),
     "Tremolo": (3, "the tremolo pass, Roland's five waves as Fourier series, the depth dipping the level; heard on our riff"),
     "Auto Pan": (3, "the same across the ears; heard on our riff"),
+    "Stereo Flanger": (2, "the chorus device with a flanger's swing, Roland's pre-delay and feedback, its outputs apart by its Phase"),
+    "3D Manual": (2, "the part at the type's Azimuth, past the speakers and behind (tonelib pan_angle)"),
+    "3D Auto": (2, "the same, turning at its Speed; each note where its onset finds it"),
+    "2 Pitch Shifter": (2, "two shifted voices as gsdelay taps (Coarse, Fine, delay, pan, L.Bal)"),
+    "Fb P.Shifter": (2, "a shifted tap whose repeats shift again round the loop"),
+    "OD -> Chorus": (2, "the valve's gain stage and guitar cabinet, then the chorus (gs_copies)"),
+    "OD -> Flanger": (2, "the same with the flanger"),
+    "OD -> Delay": (2, "the same with a gsdelay tap; its dry and effect by Bal"),
+    "DS -> Chorus": (2, "as OD -> Chorus with the distortion's gain"),
+    "DS -> Flanger": (2, "as OD -> Flanger with the distortion's gain"),
+    "DS -> Delay": (2, "as OD -> Delay with the distortion's gain"),
+    "Cho -> Delay": (2, "the chorus and a delay tap (our passes run the delay first)"),
+    "FL -> Delay": (2, "the flanger and a delay tap"),
+    "Clean Gt Multi 1": (2, "compressor, EQ, chorus/flanger and delay, as the guitar multis'"),
+    "Bass Multi": (2, "compressor, OD, EQ, chorus/flanger, the 4x10 bass cabinet"),
 }
 
 
@@ -1076,7 +1091,7 @@ SYSEX_ROWS = [
         ("40 02 00-03", "Master EQ, low and high", "Partial", "each partial at its frequency; before the first note"),
     ]),
     ("Insertion effect (40 03)", [
-        ("40 03 00-01", "Type", "Partial", "%d of 64 built (the guitar multis, Overdrive, Distortion, the choruses, the delays, Rotary, Tremolo, Auto Pan, Stereo-EQ); the rest play dry" % len(_BUILT_EFX)),
+        ("40 03 00-01", "Type", "Partial", "%d of 64 built (the guitar, bass and clean multis, Overdrive, Distortion, the choruses and flanger, the delays, Rotary, Tremolo, Auto Pan, the 3D types, the pitch shifters, the series pairs, Stereo-EQ); the rest play dry" % len(_BUILT_EFX)),
         ("40 03 03-16", "Parameters 1-20", "Partial", "each type at Roland's own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part's first note's; Amp Type not read"),
         ("40 03 17, 19", "Send to reverb, delay", "Yes", "per note"),
         ("40 03 18", "Send to chorus", "No", "parsed, not used"),
