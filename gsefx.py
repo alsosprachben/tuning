@@ -609,8 +609,9 @@ def selftest():
           abs(20 * math.log10(c['od_gain']) - 20.0 * 30 / 127) < 1e-9
           and od_gain(30, True) > od_gain(30, False)
           and abs(20 * math.log10(c['level']) - OD_MAKEUP_DB) < 1e-9)
+    _ub = next(k for k, v in sorted(TYPES.items()) if v not in BUILT and v != "Thru")
     check("an unbuilt type has no chain (its parts play dry)",
-          chain(dict(type=(0x01, 0x22), p={}, send={})) is None)
+          chain(dict(type=_ub, p={}, send={})) is None, "(%s)" % TYPES[_ub])
     e = (0.0, 2000.0, 2.0, 6.0, 0.0)
     check("the mid EQ peaks at its frequency, at its gain",
           abs(20 * math.log10(eq_gain(2000.0, e)) - 6.0) < 0.3

@@ -1005,9 +1005,25 @@ EFX_TYPES = ("Stereo-EQ", "Spectrum", "Enhancer", "Humanizer", "Overdrive", "Dis
 EFX_RATED = {
     "Overdrive": (2, "the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; not yet heard in a file"),
     "Distortion": (2, "as Overdrive, with more gain"),
-    "GTR Multi 1": (2, "compressor (decay slowed; its Attack not yet), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); not yet heard in a file"),
+    "GTR Multi 1": (2, "compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); not yet heard in a file"),
     "GTR Multi 2": (4, "compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built"),
     "GTR Multi 3": (1, "as GTR Multi 1 without its wah (not built)"),
+    "Stereo-EQ": (3, "two shelves at their own corners and two peaking mids (gsefx.eq_gain), every partial; heard on sysex_01 (Ben: \"These all sound great\")"),
+    "Space D": (3, "chorus.gs_copies, two outputs half a turn apart, pre-delay and rate from Roland's tables, Balance the share; heard on SENSATIO"),
+    "Stereo Chorus": (2, "as Space D, its Phase and pre-filter (the LPF; its HPF not built)"),
+    "Hexa Chorus": (2, "six voices spread in delay, depth and pan by its Dev parameters (0.5 ms a Pre Dly Dev step, chosen)"),
+    "Tremolo Chorus": (2, "the chorus and the tremolo pass (half depth, chosen)"),
+    "3D Chorus": (2, "the chorus's outputs at 60 degrees, past the speakers"),
+    "Stereo Delay": (3, "gsdelay: left and right taps each looping at its own period, feedback (cross for ping-pong), phase inversion, HF damping; heard on our riff (Ben: \"They sound great\")"),
+    "Mod Delay": (3, "the Stereo Delay with its modulation as the repeats' vibrato; heard on our riff"),
+    "3 Tap Delay": (3, "centre, left and right taps, the centre's loop; heard on our riff"),
+    "4 Tap Delay": (3, "four taps spread left to right (chosen); heard on our riff"),
+    "Tm Ctrl Delay": (3, "one tap at its time, placed by its pan (its time's glide under control not built); heard on our riff"),
+    "3D Delay": (3, "centre tap and two at 60 degrees; heard on our riff"),
+    "Rotary": (3, "our Leslie at the type's rotor speeds, switched by Speed, Accl through our measured spin-ups, the rotors' levels -- RECORDED as Roland's is: two mics round the cabinet (Separate, 0-180 degrees), each to its speaker with its own swing and Doppler; heard on our Rhodes riff, mono and then with its two mics (Ben: \"Those sound awesome\", \"Sounds great\")"),
+    "Rotary Multi": (2, "the Rotary with its OD (the valve) and EQ before the rotors"),
+    "Tremolo": (3, "the tremolo pass, Roland's five waves as Fourier series, the depth dipping the level; heard on our riff"),
+    "Auto Pan": (3, "the same across the ears; heard on our riff"),
 }
 
 
@@ -1039,6 +1055,9 @@ def effects_md():
 # SC-88Pro owner's manual for the insertion effects) against what the file
 # renderer reads. Yes: read and applied; Partial: read, with the limit said;
 # No: not read. Kept by hand from the map, as the ratings above are.
+import gsefx as _GSX_C
+_BUILT_EFX = _GSX_C.BUILT    # the insertion types built, counted where they are
+
 SYSEX_ROWS = [
     ("System", [
         ("40 00 7F, 00 00 7F", "GS Reset, System Mode Set", "Yes",
@@ -1057,7 +1076,7 @@ SYSEX_ROWS = [
         ("40 02 00-03", "Master EQ, low and high", "Partial", "each partial at its frequency; before the first note"),
     ]),
     ("Insertion effect (40 03)", [
-        ("40 03 00-01", "Type", "Partial", "5 of 64 built (GTR Multi 1-3, Overdrive, Distortion); the rest play dry"),
+        ("40 03 00-01", "Type", "Partial", "%d of 64 built (the guitar multis, Overdrive, Distortion, the choruses, the delays, Rotary, Tremolo, Auto Pan, Stereo-EQ); the rest play dry" % len(_BUILT_EFX)),
         ("40 03 03-16", "Parameters 1-20", "Partial", "each type at Roland's own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part's first note's; Amp Type not read"),
         ("40 03 17, 19", "Send to reverb, delay", "Yes", "per note"),
         ("40 03 18", "Send to chorus", "No", "parsed, not used"),
