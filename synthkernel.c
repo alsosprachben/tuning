@@ -974,7 +974,8 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
         d->jfa=jfa; d->cc=cc; d->swp=swp;
         // the knee: its sample from the block's start (0, none), its gains
-        d->kn=kN>ns ? (int)(kN-bn0) : 0; d->kgL=kgL; d->kgR=kgR; (void)kA;
+        d->kn=kN>ns ? (int)(kN-bn0) : 0; d->kgL=kgL; d->kgR=kgR;
+        d->ka=kN>ns ? (int)(kA-bn0) : 0; d->kpad=0;
         // the carrier at each V_SUB samples into the block, in double, as the
         // phasor's own steps of winst place it (voicedesc.h)
         for(int j=1;j<4;j++){

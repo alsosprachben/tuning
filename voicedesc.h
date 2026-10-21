@@ -53,6 +53,14 @@ typedef struct {
     u64 nk_hi, nk_lo, nseed;     // the noise band's draw step and seed
     i32 ns, ne;                  // samples [ns, ne) of the block, from its start
     i32 kind, flags, cell, kn;   // kn: the attack's knee, samples from the block's start (0: none)
+    // ka: where the attack's ramp starts, samples from the block's start --
+    // NEGATIVE for an attack begun in the block before (voice_block.inc's
+    // second rule). The ramp ran from ns, the block's own first sample, so
+    // such an attack restarted from zero at the block edge: the GPU and live
+    // dipped and re-rose where the CPU file renderer (which ramps from kA)
+    // did not -- found on the GS flanger's copies, whose ears' delays differ
+    // and put the earlier ear's onset in the block before. kpad: alignment.
+    i32 ka, kpad;
     float zLr, zLi, zRr, zRi;    // the carrier at ns, each ear
     float winst;                 // its step, radians a sample
     float mL0, mL1, mR0, mR1;    // kind 1: the amplitude at the block's edges
@@ -143,7 +151,7 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
         mL=(d->mL0+(d->mL1-d->mL0)*tb)*d->aL; mR=(d->mR0+(d->mR1-d->mR0)*tb)*d->aR;
         if(k<d->kn){
             // the attack's ramp, up to its knee (voice_block.inc)
-            float r=(float)(k-d->ns)/(float)(d->kn-d->ns);
+            float r=(float)(k-d->ka)/(float)(d->kn-d->ka);
             mL=d->kgL*r*d->aL; mR=d->kgR*r*d->aR;
         }
         sL=zrL; sR=zrR;
