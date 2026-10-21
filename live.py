@@ -8810,6 +8810,28 @@ def selftest_gs(check):
               _ild > 6.0 and _sh > 6.0 and _cff < _cf0 - 0.03,
               "  (L96: 2-8 kHz L %+.1f dB over R; 650-665 Hz %+.1f dB; L/R %.2f against %.2f)"
               % (_ild, _sh, _cff, _cf0))
+        # A SERIES PAIR (gsefx.SERIES_TYPES): DS -> Delay on the held lead --
+        # its drive brightens 2-8 kHz against Thru, its delay repeats, and the
+        # stream renders it as the whole table does -- TO -120 dB, NOT BIT FOR
+        # BIT: a part with both the valve and a delay (GTR Multi 1 as well, from
+        # before) sums its products and repeats in another order in the stream,
+        # a few ulps (-128 dB); each alone is exact. An open item, not a sound
+        _sq = _tre((0x02, 0x05))
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xq = B.render(_sq)
+            B.RENDER_STREAM = False; _xqw = B.render(_sq)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _br = _hb2(_xq, 2000, 8000, 0) - _hb2(_x0, 2000, 8000, 0)
+        _qsame = len(_xq[0]) == len(_xqw[0]) and float(np.abs(np.asarray(_xq[0]) - np.asarray(_xqw[0])).max()) \
+            < 1e-6 * float(np.abs(np.asarray(_xqw[0])).max())
+        _tail = float(np.sqrt(np.mean(np.asarray(_xq[0][int(3.05 * B.SR):int(3.25 * B.SR)], float) ** 2)))
+        _tail0 = float(np.sqrt(np.mean(np.asarray(_x0[0][int(3.05 * B.SR):int(3.25 * B.SR)], float) ** 2)))
+        check("file: DS -> Delay drives and repeats, streamed as whole (to -120 dB)",
+              _br > 3.0 and _tail > 2.0 * _tail0 and _qsame,
+              "  (2-8 kHz %+.1f dB; after the note %.2g against %.2g; streamed as whole %s)"
+              % (_br, _tail, _tail0, _qsame))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

@@ -59,7 +59,8 @@ TYPES = {
 # have followed it
 import gs_efx_params as _P
 for _k, (_n, _nm) in _P.TYPES.items():
-    TYPES.setdefault(_k, _nm)
+    # (the series pairs as the coverage table writes them: "OD -> Chorus")
+    TYPES.setdefault(_k, _nm.replace(" \u2192 ", " -> ").replace("\u2192 ", " -> "))
 TYPES[(0x02, 0x0C)] = "Rotary Multi"
 _TABLE_NAME = {TYPES[_k]: _nm for _k, (_n, _nm) in _P.TYPES.items()}   # ours -> the table's
 BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion",
@@ -69,6 +70,9 @@ DELAY_TYPES = ("Stereo Delay", "Mod Delay", "3 Tap Delay", "4 Tap Delay", "Tm Ct
 BUILT |= set(DELAY_TYPES)
 BUILT |= {"Rotary", "Rotary Multi", "Tremolo", "Auto Pan"}
 BUILT |= {"Stereo Flanger", "3D Manual", "3D Auto", "2 Pitch Shifter", "Fb P.Shifter"}
+SERIES_TYPES = ("OD -> Chorus", "OD -> Flanger", "OD -> Delay", "DS -> Chorus", "DS -> Flanger",
+                "DS -> Delay", "Cho -> Delay", "FL -> Delay")
+BUILT |= set(SERIES_TYPES) | {"Clean Gt Multi 1", "Bass Multi"}
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -549,6 +553,35 @@ def chain(st):
                      (200.0, 400.0)[min(1, g("Low Freq", 0))], (4000.0, 8000.0)[min(1, g("Hi Freq", 0))],
                      (eq_freq(g("M2 Freq", 56)), EQ_Q[min(4, g("M2 Q", 1))], gain_db(g("M2 Gain", 64))))
         return out
+    if name in SERIES_TYPES:
+        # THE SERIES PAIRS (OD/DS -> Chorus/Flanger/Delay, Cho/FL -> Delay):
+        # each stage by its names, as the multis' -- the drive the valve's gain
+        # stage and its cabinet, the chorus or flanger a gs_copies device
+        # (Bal its share), the delay a gsdelay tap (Bal its dry and effect).
+        # Our passes run the delay before the chorus, so "Cho -> Delay" runs
+        # the other way about; a slow sweep sounds alike either way
+        for od in ("OD", "DS"):
+            if od + " Drive" in pn:
+                out['od_gain'] = od_gain(g(od + " Drive", 48), od == "DS")
+                out['level'] *= mk
+                if g(od + " Amp Sw", 1):
+                    out['cabinet'] = 'guitar12'
+        for mod in ("Cho", "FL"):
+            if mod + " Rate" in pn:
+                rate = table_value(6, g(mod + " Rate", 8))
+                swing = (int(g(mod + " Depth", 64)) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if mod == "FL" else 1.0)
+                pre = (table_value(1, g(mod + " Dly", 10)) or 0.0) / 1000.0
+                out['cf'] = (dict(tau=pre + swing, rate=rate, vd=2.0 * math.pi * rate * swing,
+                                  fb=feedback(g("FL Fb", 104)) if mod == "FL" else 0.0, level=1.0, lpf=None), 0.0)
+                out['cf_share'] = g(mod + " Bal", 64) / 127.0
+        if "Dly Time" in pn:
+            t = (table_value(4, g("Dly Time", 106)) or 0.0) / 1000.0
+            dry, wet = balance(g("Dly Bal", 37))
+            out['dly'] = dict(tc=t, taps=[(t, 1.0, 'c', t)], level=wet / max(dry, DRY_FLOOR),
+                              fb=feedback(g("Dly Fb", 80)), lpf=table_value(8, g("Dly HF", 127)), to_reverb=0.0)
+            out['level'] *= max(dry, DRY_FLOOR)
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
+        return out
     if "Cmp Sw" in pn and g("Cmp Sw", 1):
         sus = g("Cmp Sus", 64) / 127.0
         # chosen: sustain 0-127 slows the decay up to fourfold, the level its
@@ -559,7 +592,7 @@ def chain(st):
         out['od_gain'] = od_gain(g("OD Drive", 48), bool(g("OD Sel", 0)))
         out['level'] *= mk
         if g("OD Amp Sw", 1):
-            out['cabinet'] = 'guitar12'
+            out['cabinet'] = 'bass410' if name == "Bass Multi" else 'guitar12'
     if "EQ L Gain" in pn:
         out['eq'] = (gain_db(g("EQ L Gain", 64)), eq_freq(g("EQ M Fq", 64)), EQ_Q[min(4, g("EQ M Q", 1))],
                      gain_db(g("EQ M Gain", 64)), gain_db(g("EQ H Gain", 64)))
