@@ -276,11 +276,20 @@ def path(freq_hz, x, z, fast=True):
 
 
 def make_rotors(channels):
-    """Each Leslie channel's horn and drum rotors, from its speed history."""
-    return {ch: (Rotor(True, req), Rotor(False, req)) for ch, req in channels.items()}
+    """Each Leslie channel's horn and drum rotors, from its speed history --
+    or, for an insertion effect's Rotary (gsefx.rotary_setup), a dict giving
+    each rotor its own speeds, spin times and levels."""
+    out = {}
+    for ch, req in channels.items():
+        if isinstance(req, dict):
+            out[ch] = (Rotor(True, req['horn'], taus=req['horn_tau']),
+                       Rotor(False, req['drum'], taus=req['drum_tau'], ratio=-1.0))
+        else:
+            out[ch] = (Rotor(True, req), Rotor(False, req))
+    return out
 
 
-def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=None):
+def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=None, place=None):
     """Give every partial of a Leslie voice its rotor, in place on the table.
 
     `channels` is {midi_channel: [(seconds, fast), ...]} -- the half-moon
@@ -337,8 +346,8 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
         t_on = r['non'] / float(sr)
         rate, angle = rotor.at(t_on)
         if not horn:
-            rate *= abs(DRUM_RATIO)
-            angle *= DRUM_RATIO          # and it turns the other way
+            rate *= abs(rotor.ratio)
+            angle *= rotor.ratio         # and it turns the other way
         radius = HORN_RADIUS if horn else DRUM_RADIUS
         fm = doppler_depth(radius, rate)
         # The kernel's modulator is sin(2*pi*rate*t + vp) on an absolute clock,
@@ -416,6 +425,10 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
         # the row; the other's share, when within XOVER_FLOOR, is a copy on the
         # other rotor (recorded in flips for live, in meta as k + XOVER_K)
         wh, wd = crossover_weights(f)
+        # an insertion Rotary's own balance of the rotors (its Hi/Low Level)
+        lv = channels[ch].get('levels') if isinstance(channels[ch], dict) else None
+        if lv is not None:
+            wh, wd = wh * lv[1], wd * lv[0]
         wp, ws = (wh, wd) if horn else (wd, wh)
         if ws < XOVER_FLOOR:
             wp, ws = 1.0, 0.0
@@ -428,6 +441,23 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
         for col in ('aL', 'aR', 'aM'):
             r[col] = r[col] * _cg * wp
             A[col][i] = r[col]
+        # A RECORDED ROTARY (an insertion Rotary's Separate, gsefx): the direct
+        # sound as two microphones round the cabinet hear it, each sent to its
+        # speaker -- mic A to the left, mic B to the right, Separate apart --
+        # so each has its own angle to the rotors: its own swing and its own
+        # Doppler. The room's images still hear the cabinet itself.
+        sep = channels[ch].get('separate') if isinstance(channels[ch], dict) else None
+        mic = sep is not None and place is not None and float(A['dr'][i]) > 0.5
+        rB = twinB = None
+        if mic:
+            az0 = float(r['az'])
+            rB = _to_mic(dict(r), 'r', az0 + 0.5 * sep, place, f)
+            _to_mic(r, 'l', az0 - 0.5 * sep, place, f)
+            for col in ('aL', 'aR', 'aM', 'p0', 'p0R', 'delL', 'delR', 'az'):
+                A[col][i] = r[col]
+            if twin is not None:
+                twinB = _to_mic(dict(twin), 'r', az0 + 0.5 * sep, place, f)
+                _to_mic(twin, 'l', az0 - 0.5 * sep, place, f)
         made += rotate(r, horn, i, 0)
         if lobe is not None:
             lobe.append((i, 2 * rank[ch] + (0 if horn else 1), r['az'], f, horn))
@@ -447,11 +477,48 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
             for col in ('vd', 'vr', 'vp'):
                 extra[col][pos] = twin[col]
             made += 1
+        # ...and mic B's: the row's, then its twin's, after them
+        for vb, hb, code, rot in ((rB, horn, MIC_K, 0 if horn else 1),
+                                  (twinB, not horn, MIC_K + XOVER_K, 1 if horn else 0)):
+            if vb is None:
+                continue
+            if meta is not None:
+                meta.append((i, code, 3))
+            pos = len(extra['om'])
+            for col in cols:
+                extra[col].append(vb[col])
+            made += rotate(vb, hb, i, code)
+            if lobe is not None:
+                lobe.append((n + pos, 2 * rank[ch] + rot, vb['az'], f, hb))
+            for col in ('vd', 'vr', 'vp'):
+                extra[col][pos] = vb[col]
+            made += 1
     for k in cols:
         A[k].extend(extra[k])
     if lobe is not None:
         A.update(lobe_columns(lobe, n + len(extra['om'])))
     return made
+
+
+MIC_K = 20                   # meta's code for mic B's copy (and + XOVER_K for its twin's)
+MIC_SHARE = 0.5 ** 0.5       # each mic's share: the pair's power the direct sound's
+
+
+def _to_mic(v, side, az, place, f):
+    """Row v (a dict) as one microphone of a recorded Rotary hears it: at
+    azimuth az to the rotors, and arriving from its speaker (place: the GS
+    effects' outputs) -- its ear gains and delays the speaker's, its phase the
+    line's, as gsdelay's copies are. Returns v, changed in place."""
+    gl, gr, dl, dr = place(side, f)
+    om, non = float(v['om']), float(v['non'])
+    m = abs(float(v['aM'])) * MIC_SHARE
+    v['p0'] = -om * (non + dl) + (float(v['p0']) + om * (non + float(v['delL'])))
+    v['p0R'] = -om * (non + dr) + (float(v['p0R']) + om * (non + float(v['delR'])))
+    v['delL'], v['delR'] = dl, dr
+    v['aL'], v['aR'] = m * gl, m * gr
+    v['aM'] = float(v['aM']) * MIC_SHARE
+    v['az'] = az
+    return v
 
 
 # A row on no rotor: rotor -1, and a lobe that is 1 everywhere
@@ -513,7 +580,7 @@ def angle_table(channels, rotors, n_samples, sr, blk):
     for k, ch in enumerate(channels):
         horn, drum = rotors[ch]
         out[2 * k] = np.mod(horn.angles(t), 2.0 * math.pi)
-        out[2 * k + 1] = np.mod(DRUM_RATIO * drum.angles(t), 2.0 * math.pi)
+        out[2 * k + 1] = np.mod(drum.ratio * drum.angles(t), 2.0 * math.pi)
     return out
 
 
@@ -563,9 +630,14 @@ class Rotor:
     only "how fast is it now" loses where it has got to.
     """
 
-    def __init__(self, horn, requests, step=0.01, length=0.0):
+    def __init__(self, horn, requests, step=0.01, length=0.0, taus=None, ratio=None):
         self.up = HORN_SPIN_UP if horn else DRUM_SPIN_UP
         self.down = HORN_SPIN_DOWN if horn else DRUM_SPIN_DOWN
+        if taus is not None:                 # an insertion Rotary's own (gsefx)
+            self.up, self.down = taus
+        # the drum's speed against the requests' (DRUM_RATIO, and the other
+        # way round); a Rotary's drum is asked its own speed, so only turns
+        self.ratio = 1.0 if horn else (DRUM_RATIO if ratio is None else ratio)
         self.step = step
         self.t, self.rate, self.angle = [0.0], [], [0.0]
         req = sorted(requests) or [(0.0, TREMOLO)]

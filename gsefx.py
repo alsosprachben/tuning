@@ -66,6 +66,7 @@ BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion",
 CHORUS_TYPES = ("Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus")
 DELAY_TYPES = ("Stereo Delay", "Mod Delay", "3 Tap Delay", "4 Tap Delay", "Tm Ctrl Delay", "3D Delay")
 BUILT |= set(DELAY_TYPES)
+BUILT |= {"Rotary", "Rotary Multi", "Tremolo", "Auto Pan"}
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -335,6 +336,64 @@ def _delay(name, g, pn, sec):
     return dev
 
 
+# THE ROTARY'S ACCELERATION (Accl 0-15): Roland gives no times. Taken
+# through our Leslie's measured spin-ups at the type's own defaults -- the
+# horn's Accl 11 its 1.0 s, the drum's Accl 3 its 3.5 s -- on a log line
+# (5.6 s at 0, 0.5 s at 15); coasting down 1.4 times slower, as ours do.
+def accl_tau(a):
+    up = math.exp(1.7226 - 0.1566 * float(a))
+    return up, 1.4 * up
+
+
+def _rotary(name, g, pn):
+    """A Rotary's rotors: (slow, fast) Hz for the drum (Low) and the horn (Hi),
+    their spin times, their levels, and the speed the file asks for."""
+    pre = "RT " if name == "Rotary Multi" else ""
+    k = {"Low Slow": "L Slow", "Low Fast": "L Fast", "Low Accl": "Lo Accl", "Low Level": "Lo Lev",
+         "Hi Slow": "H Slow", "Hi Fast": "H Fast", "Hi Accl": "Hi Accl", "Hi Level": "Hi Lev",
+         "Speed": "Speed"} if pre else None
+    n = (lambda key: pre + k[key]) if pre else (lambda key: key)
+    lo = (table_value(6, g(n("Low Slow"), 6)), table_value(6, g(n("Low Fast"), 113)))
+    hi = (table_value(6, g(n("Hi Slow"), 17)), table_value(6, g(n("Hi Fast"), 120)))
+    acc = lambda key, d: table_value(14, g(n(key), d))
+    llv, hlv = g(n("Low Level"), 127), g(n("Hi Level"), 64)
+    top = float(max(llv, hlv, 1))
+    # SEPARATE, the two microphones' spacing round the cabinet (leslie's
+    # recorded rotary): Roland gives no units; 0-127 onto 0-180 degrees apart
+    # (the default 96 at 136), chosen
+    sepk = "RT Sept" if pre else "Separate"
+    return dict(drum=lo, horn=hi, drum_tau=accl_tau(acc("Low Accl", 24)),
+                horn_tau=accl_tau(acc("Hi Accl", 88)), levels=(llv / top, hlv / top),
+                fast=bool(g(n("Speed"), 0)), separate=math.pi * g(sepk, 96) / 127.0)
+
+
+def rotary_setup(events, ch):
+    """A part's Rotary over the file (leslie's channel dict): each rotor's
+    speed requests -- slow or fast as the type's Speed stands at each change
+    of the timeline -- and the first setting's spin times and levels."""
+    first, horn, drum = None, [], []
+    for t in sorted({0.0} | {t for t, _ in events}):
+        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        rt = c.get('rotary') if c is not None else None
+        if rt is None:
+            continue
+        first = first or rt
+        horn.append((t, rt['horn'][1] if rt['fast'] else rt['horn'][0]))
+        drum.append((t, rt['drum'][1] if rt['fast'] else rt['drum'][0]))
+    if first is None:
+        return None
+    return dict(horn=horn, drum=drum, horn_tau=first['horn_tau'], drum_tau=first['drum_tau'],
+                levels=first['levels'], separate=first['separate'])
+
+
+# THE TREMOLO'S WAVES as their Fourier series about their own mean, peak 1:
+# (harmonic, coefficient, phase) -- Tri, Sqr, Sin, Saw1, Saw2 (Mod Wave 0-4)
+_TRI = [(k, 8.0 / (math.pi * k) ** 2, 0.0) for k in (1, 3, 5, 7)]
+_SQR = [(k, 4.0 / (math.pi * k) * (1 if (k // 2) % 2 == 0 else -1), 0.0) for k in (1, 3, 5, 7, 9)]
+_SAW = [(k, 2.0 / (math.pi * k), (-1) ** (k + 1) * -math.pi / 2.0) for k in range(1, 7)]
+WAVES = (_TRI, _SQR, [(1, 1.0, 0.0)], _SAW, [(k, c, p + math.pi) for k, c, p in _SAW])
+
+
 def param_numbers(name):
     """{parameter name: its number 1-20} for a type, from Roland's table."""
     for _k, (_n, nm) in _P.TYPES.items():
@@ -389,6 +448,30 @@ def chain(st):
         if name == "Tremolo Chorus":
             out['trem'] = (table_value(6, g("Trem Rate", 60)), TREMOLO_CHORUS_DEPTH,
                            g("Trem Sep", 96) > 0)
+        return out
+    if name in ("Rotary", "Rotary Multi"):
+        out['rotary'] = _rotary(name, g, pn)
+        if name == "Rotary Multi":
+            # its OD and EQ before the rotors: the OD the valve's gain stage
+            # (no guitar cabinet -- the Leslie is the speaker), the EQ after
+            if g("OD Sw", 1):
+                out['od_gain'] = od_gain(g("OD Drive", 13), False)
+                out['level'] *= mk
+            out['eq'] = (gain_db(g("EQ L Gain", 64)), eq_freq(g("EQ M Fq", 72)), EQ_Q[min(4, g("EQ M Q", 1))],
+                         gain_db(g("EQ M Gain", 64)), gain_db(g("EQ H Gain", 64)))
+        else:
+            out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
+        return out
+    if name in ("Tremolo", "Auto Pan"):
+        # ROLAND'S DEPTH DIPS THE LEVEL (1 - d .. 1); the tremolo pass swings
+        # about its carrier, so the part is taken down to the swing's middle
+        # and the swing measured from there
+        d = g("Mod Depth", 96) / 127.0
+        mid = 1.0 - 0.5 * d
+        out['level'] *= mid
+        out['trem'] = (table_value(6, g("Mod Rate", 60)), 0.5 * d / mid, name == "Auto Pan", 0.0,
+                       WAVES[min(4, g("Mod Wave", 2))])
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
         return out
     if name in DELAY_TYPES:
         def sec(key):                    # a time through its own value table, seconds

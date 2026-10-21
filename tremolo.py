@@ -90,8 +90,11 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
         cfg = channels.get(ch)
         if cfg is None:
             continue
-        if len(cfg) == 4:
-            rate, depth, stereo, scatter = cfg
+        # ...and an insertion effect's (gsefx: Tremolo, Auto Pan) a waveform:
+        # (rate, depth, stereo, scatter, [(harmonic, coefficient, phase)])
+        harm = cfg[4] if len(cfg) > 4 else None
+        if len(cfg) >= 4:
+            rate, depth, stereo, scatter = cfg[:4]
         else:
             rate, depth, stereo = cfg
             scatter = 0.0
@@ -108,6 +111,26 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
             rate = rate * (1.0 + scatter * rng.uniform(-1.0, 1.0))
             ph = rng.uniform(0.0, 2.0 * math.pi)
         dw = 2.0 * math.pi * rate / sr
+        if harm is not None:
+            # A WAVEFORM'S HARMONICS, each its own sideband pair: k times the
+            # rate, its coefficient's share of the depth, its phase (+ for the
+            # upper, - for the lower, as the scatter's)
+            for hk, (k, ck, pk) in enumerate(harm):
+                hh = 0.5 * depth * ck
+                for si, sign in enumerate((1.0, -1.0)):
+                    if meta is not None:
+                        meta.append((i, 2 * hk + si))
+                    for col in cols:
+                        extra[col].append(A[col][i])
+                    extra['om'][-1] = A['om'][i] + sign * k * dw
+                    extra['p0'][-1] = A['p0'][i] + sign * (k * ph + pk)
+                    if 'p0R' in extra:
+                        extra['p0R'][-1] = A['p0R'][i] + sign * (k * ph + pk)
+                    extra['aL'][-1] = A['aL'][i] * hh
+                    extra['aR'][-1] = A['aR'][i] * (-hh if stereo else hh)
+                    extra['aM'][-1] = 0.0 if stereo else A['aM'][i] * hh
+                    made += 1
+            continue
         half = 0.5 * depth
         for si, sign in enumerate((1.0, -1.0)):
             if meta is not None:

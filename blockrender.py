@@ -4883,6 +4883,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _CAB_CH[_MCH[0]] = _ex['cabinet']
             if _ex['cf'] is not None:
                 _CHORUS_CH[_MCH[0]] = (0.0, _ex['cf'][0], 'gs', _GSX.mix_share(_EFXEV, _MCH[0], SR))
+            if _ex.get('rotary') and _MCH[0] not in _LESLIE_CH:
+                # a Rotary: the part through our Leslie, its rotors as the type
+                # sets them and its speed as the file switches it
+                _rs_ = _GSX.rotary_setup(_EFXEV, _MCH[0])
+                if _rs_ is not None:
+                    _LESLIE_CH[_MCH[0]] = _rs_
             if _ex.get('trem') and _MCH[0] not in _TREM_CH:
                 # a Tremolo Chorus's tremolo: the tremolo pass's (rate, depth, stereo)
                 _TREM_CH[_MCH[0]] = tuple(_ex['trem'])
@@ -6470,6 +6476,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                             A[_col][_i] *= _g
                     else:
                         np.asarray(A[_col])[_qs] *= _qg
+        # ...and its views of the table let go: a pass after it (the Leslie,
+        # a Rotary's) extends the columns, which a live view forbids
+        del _mq, _fq
     if _CAB_CH:
         import cabinet as _CAB
         _nc = _CAB.expand(A, _CAB_CH, SR, PARTIAL_COLS + ('az', 'dr'))
@@ -6484,11 +6493,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # That difference is the effect; see leslie.py.
     if _LESLIE_CH:
         import leslie as _LES
-        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az', 'dr'), flips=_LFLIP)
+        _n = _LES.expand(A, _LESLIE_CH, SR, PARTIAL_COLS + ('az', 'dr'), flips=_LFLIP, place=gsd_place)
         if _n:
             print("  leslie: %d channel(s), %d sideband partials, %d speed change(s)"
                   % (len(_LESLIE_CH), _n,
-                     sum(len(v) - 1 for v in _LESLIE_CH.values())))
+                     sum(len(v['horn'] if isinstance(v, dict) else v) - 1 for v in _LESLIE_CH.values())))
 
     P = len(A["om"])
     def arr(k,dt):

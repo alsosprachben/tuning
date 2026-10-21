@@ -8749,6 +8749,46 @@ def selftest_gs(check):
         check("file: the Stereo Delay repeats on the left at its left time and the right at its right",
               _w100[0] > 1.3 * _w100[1] and _w250[1] > 1.3 * _w250[0] and _w100[0] > 0 and _w250[1] > 0,
               "  (100 ms: L %.3g R %.3g; 250 ms: L %.3g R %.3g)" % (_w100[0], _w100[1], _w250[0], _w250[1]))
+        # TREMOLO, AUTO PAN AND ROTARY (gsefx): a steady square lead on part 1
+        # held 3 s. The Tremolo's envelope swings at its 3.05 Hz; the Auto
+        # Pan's two ears swing against each other; the Rotary, Speed fast, puts
+        # the part's rows on its rotors, the horn spun up to its 7.5 Hz
+        def _tre(ty, extra=()):
+            return _bfile([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _gsx(0x40, 0x03, 0x00, ty[0], ty[1], 0)]
+                          + list(extra) + [_gsx(0x40, 0x41, 0x22, 0x01, 0),
+                          _M("program_change", channel=0, program=80),
+                          _M("note_on", channel=0, note=69, velocity=100),
+                          _M("note_off", channel=0, note=69, velocity=0, time=2880)])
+        def _env(x, w=int(0.01 * 44100)):
+            x = np.asarray(x, float) ** 2
+            return np.sqrt(np.convolve(x, np.ones(w) / w, "same"))[::w // 4]
+        _xt = B.render(_tre((1, 0x25)))
+        _et = _env(_xt[0])[int(0.5 * 400):int(2.8 * 400)]
+        _ft = np.fft.rfftfreq(len(_et), 1.0 / 400.0); _St = np.abs(np.fft.rfft(_et - _et.mean()))
+        _trate = float(_ft[1:][np.argmax(_St[1:])])
+        _xp = B.render(_tre((1, 0x26)))
+        _el, _er = _env(_xp[0])[200:1100], _env(_xp[1])[200:1100]
+        _pc = float(np.corrcoef(_el - _el.mean(), _er - _er.mean())[0, 1])
+        _pr = B.prepare(_tre((1, 0x22), [_gsx(0x40, 0x03, 0x0D, 0x7F, 0)]), "even")
+        _lang = _pr.get("LANG")
+        _hz = (float(np.diff(np.unwrap(_lang[0].astype(float)))[-200:].mean()) * B.SR / 128.0 / (2 * np.pi)
+               if _lang is not None else 0.0)
+        # ...and its two microphones (Separate) part the ears, the stream as whole
+        _rf = _tre((1, 0x22), [_gsx(0x40, 0x03, 0x0D, 0x7F, 0)])
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xr = B.render(_rf)
+            B.RENDER_STREAM = False; _xw = B.render(_rf)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _rc = float(np.corrcoef(np.asarray(_xr[0], float), np.asarray(_xr[1], float))[0, 1])
+        _rsame = len(_xr[0]) == len(_xw[0]) and float(np.abs(np.asarray(_xr[0]) - np.asarray(_xw[0])).max()) == 0.0
+        check("file: Tremolo at its rate, Auto Pan across the ears, Rotary on its rotors and two mics",
+              abs(_trate - 3.05) < 0.2 and _pc < -0.3 and _lang is not None
+              and int((np.asarray(_pr["lsr"]) >= 0).sum()) > 0 and abs(_hz - 7.5) < 0.1
+              and _rc < 0.95 and _rsame,
+              "  (tremolo %.2f Hz; pan L/R %.2f; horn %.2f Hz; rotary L/R %.2f, streamed as whole %s)"
+              % (_trate, _pc, _hz, _rc, _rsame))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

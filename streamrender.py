@@ -843,12 +843,17 @@ class Stream:
         n0 = len(r['om'])
         meta = []
         LE.expand(mini, channels, self.B.SR, self.cols, meta=meta,
-                  loudest=self.loudest, rotors=self.rotors)
+                  loudest=self.loudest, rotors=self.rotors, place=self.B.gsd_place)
         # in place: the rotor's vibrato, and the cabinet's colour on each row
         # (leslie.cabinet_gain) -- which the old copy-back dropped, so a stream
         # render had the cabinet on the sidebands alone and prepare() on all
         for k in ('vd', 'vr', 'vp', 'aL', 'aR', 'aM'):
             r[k] = np.array(mini[k][:n0], dtype=r[k].dtype)
+        # ...and a recorded Rotary's mic A, in place (leslie._to_mic): its
+        # phase, its ears' delays from its speaker, its angle to the rotors
+        if any(isinstance(v, dict) and v.get('separate') is not None for v in channels.values()):
+            for k in ('p0', 'p0R', 'delL', 'delR', 'az'):
+                r[k] = np.array(mini[k][:n0], dtype=r[k].dtype)
         # the kernel's lobe (leslie.lobe_columns), on every row of the chunk
         lobe = 'lsr' in mini
         if lobe:
