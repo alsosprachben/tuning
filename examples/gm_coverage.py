@@ -1058,6 +1058,15 @@ EFX_RATED = {
     "Clean Gt Multi 2": (3, "an auto wah (efxfilter), the EQ, chorus/flanger and its delay; heard on a guitar"),
     "Rhodes Multi": (3, "Enhancer (the bus), phaser (efxfilter), chorus/flanger, tremolo/pan; heard on an EP"),
     "Keyboard Multi": (3, "ring modulator (each partial's f +- Hz sidebands as gsdelay taps), EQ, pitch shifter, phaser, delay -- the series unrolled into a tap per path; heard on an EP"),
+    "Cho / Delay": (3, "TWO BRANCHES: the part's rows the chorus's, a copy on its virtual channel the delay's, each at its own Level and Pan (a gain across the ears; the chorus's copies keep its +-30 degree outputs); heard (Ben: \"They all sound great\")"),
+    "FL / Delay": (3, "the flanger's branch and the delay's, in parallel; heard (Ben: \"They all sound great\")"),
+    "Cho / Flanger": (3, "the chorus's branch and the flanger's, in parallel; heard (Ben: \"They all sound great\")"),
+    "OD1 / OD2": (3, "two OD branches, each the valve's gain stage and cabinet at its own drive, level and pan; heard (Ben: \"They all sound great\")"),
+    "OD / Rotary": (3, "an OD branch beside a Leslie branch (the voice's own valve in both); heard (Ben: \"They all sound great\")"),
+    "OD / Phaser": (3, "an OD branch beside a phaser branch (efxfilter); heard (Ben: \"They all sound great\")"),
+    "OD / AutoWah": (3, "an OD branch beside an auto wah branch, its Sens the part's notes; heard (Ben: \"They all sound great\")"),
+    "PH / Rotary": (3, "a phaser branch beside a Leslie branch; heard (Ben: \"They all sound great\")"),
+    "PH / AutoWah": (3, "a phaser branch beside an auto wah branch; heard (Ben: \"They all sound great\")"),
 }
 
 
@@ -1110,7 +1119,7 @@ SYSEX_ROWS = [
         ("40 02 00-03", "Master EQ, low and high", "Partial", "each partial at its frequency; before the first note"),
     ]),
     ("Insertion effect (40 03)", [
-        ("40 03 00-01", "Type", "Partial", "%d of 64 built (the guitar, bass and clean multis, Overdrive, Distortion, the choruses and flanger, the delays, Rotary, Tremolo, Auto Pan, the 3D types, the pitch shifters, the series pairs, Stereo-EQ, the Phaser, Auto Wah, Step Flanger, Humanizer); the rest play dry" % len(_BUILT_EFX)),
+        ("40 03 00-01", "Type", "Yes" if len(_BUILT_EFX) >= 64 else "Partial", "%d of 64 built: the filters and EQs, the drives and guitar/bass/keyboard multis, the choruses and flangers, the delays, Rotary, Tremolo, Auto Pan, the 3D types, the pitch shifters, the moving filters (efxfilter), a part's own bus (Lo-Fi, the dynamics, Enhancer, the reverbs: efxbus), the series pairs and the parallel ones (branch B on a virtual channel); Thru plays dry" % len(_BUILT_EFX)),
         ("40 03 03-16", "Parameters 1-20", "Partial", "each type at Roland's own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part's first note's; Amp Type not read"),
         ("40 03 17, 19", "Send to reverb, delay", "Yes", "per note"),
         ("40 03 18", "Send to chorus", "No", "parsed, not used"),

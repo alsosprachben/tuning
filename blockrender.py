@@ -2964,6 +2964,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _MF104 = []         # (first row, end row, settings): notes through the MF-104M (mf104.py)
     _GSDN = []          # (first row, end row, device, send): notes into the GS delay (gsdelay.py)
     _GSD_OPEN = [None]  # this note's (first row, send), closed where the next begins
+    _PAR_OPEN = [None]  # a parallel type's note: (first row, part, its chain) -- copied to branch B where it closes
     _CC94 = {}          # channel -> [(t, value)] of CC94, the GS delay send, in order
 
     def _gsd_send(c, t):
@@ -4215,24 +4216,70 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      register=_REG_CH, register_scale=REGISTER_SCALE,
                                      register_strings=(string_partial, partial_decay,
                                                        unison_partial))))
+    def _par_close(gsw):
+        """A PARALLEL TYPE's note closes (gsefx.PARALLEL_TYPES): its rows are
+        branch A's, at A's pan; a copy of them, at branch B's level and pan,
+        goes on the part's virtual channel (+ gsefx.VIRT), whose own stages
+        were set at the part's first note -- B's delay over the copy, or the
+        GS delay the note was sent to, as the note's own rows are."""
+        po = _PAR_OPEN[0]; _PAR_OPEN[0] = None
+        if po is None:
+            return
+        r0, pch, ca = po
+        r1 = len(A['om'])
+        if r1 <= r0:
+            return
+        cb, vch = ca['par']['B'], pch + _GSX.VIRT
+        fb = (cb['level'] * (cb.get('od_gain') or 1.0)) / max(ca['level'] * (ca.get('od_gain') or 1.0), 1e-12)
+        la, ra = _GSX.pan_gains(ca['par']['pan'])
+        lb, rb = _GSX.pan_gains(ca['par']['panB'])
+        from array import array as _arr
+        for k, col in A.items():
+            if len(col) != r1:
+                continue
+            tc = col.typecode if hasattr(col, 'typecode') else col.a.typecode
+            seg = np.frombuffer(_arr(tc, col[r0:r1]).tobytes(), dtype=np.dtype(tc)).copy()
+            if k == 'mch':
+                seg[:] = vch
+            elif k in ('aL', 'aR', 'aM'):
+                seg = (seg * (fb * {'aL': lb, 'aR': rb}.get(k, 1.0))).astype(seg.dtype)
+            col.extend(_arr(tc, seg.tobytes()))
+        if la != 1.0 or ra != 1.0:              # A's own pan, on its rows
+            for k, gg in (('aL', la), ('aR', ra)):
+                col = A[k]
+                for i in range(r0, r1):
+                    col[i] = col[i] * gg
+        if cb.get('dly'):
+            _GSDN.append((r1, len(A['om']), cb['dly'], 1.0))
+        elif gsw is not None and not ca.get('dly'):
+            _GSDN.append((r1, len(A['om']), gsw[2], gsw[1]))
+        # ...and what the voice itself does per part, B's as A's
+        for _d in (_CLAV_CH, _HTREM_CH, _TREM_CH):
+            if pch in _d and vch not in _d:
+                _d[vch] = _d[pch]
+
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
         _ON_NOW[0] = on
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
         _push_finish(_PUSH_PEND[0]); _PUSH_PEND[0] = None; del _PUSH_SEG[:]
-        # the previous strike's rows end where this note's begin
+        # the previous strike's rows end where this note's begin -- its own
+        # rows (_pre), and after them any parallel type's branch B copy of them
+        _pre = len(A['om'])
+        _gsw = _GSD_OPEN[0]
+        if _GSD_OPEN[0] is not None:
+            if _pre > _GSD_OPEN[0][0]:
+                _GSDN.append((_GSD_OPEN[0][0], _pre, _GSD_OPEN[0][2], _GSD_OPEN[0][1]))
+            _GSD_OPEN[0] = None
+        _par_close(_gsw)
         _row0 = len(A['om'])
         _NOTE_ROW0.append((_row0, (ch, note, on) in _stroked))
         if _REG_OPEN[0] is not None:
-            _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], _row0); _REG_OPEN[0] = None
+            _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], _pre); _REG_OPEN[0] = None
         _raw_off = off           # when the KEY came up, before any pedal held it
         if _HT_PEND[0] is not None:
-            _HT_ROWS.append((_HT_PEND[0], len(A['om']))); _HT_PEND[0] = None
-        if _GSD_OPEN[0] is not None:
-            if len(A['om']) > _GSD_OPEN[0][0]:
-                _GSDN.append((_GSD_OPEN[0][0], len(A['om']), _GSD_OPEN[0][2], _GSD_OPEN[0][1]))
-            _GSD_OPEN[0] = None
+            _HT_ROWS.append((_HT_PEND[0], _pre)); _HT_PEND[0] = None
         if sink is not None:            # the last note's rows are final
             if _S0[0] is not None:
                 # ...and every note to come starts at or after this one
@@ -4297,6 +4344,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _EFXN[0] is not None and _EFXN[0].get('dly'):
             # a guitar multi's own delay (its Dly stage), in the GS delay's place
             _GSD_OPEN[0] = (_row0, 1.0, _EFXN[0]['dly'])
+        if _EFXN[0] is not None and _EFXN[0].get('par'):
+            _PAR_OPEN[0] = (_row0, ch, _EFXN[0])     # its branch B made where the note closes
         _seat = 0.0                # a seat inside the instrument (below); none
         if drum is not None:
             FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
@@ -4918,6 +4967,41 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _ex.get('trem') and _MCH[0] not in _TREM_CH:
                 # a Tremolo Chorus's tremolo: the tremolo pass's (rate, depth, stereo)
                 _TREM_CH[_MCH[0]] = tuple(_ex['trem'])
+            if _ex.get('par'):
+                # BRANCH B's part (gsefx.PARALLEL_TYPES), on the virtual channel:
+                # the voice's own valve and speaker as A's, B's OD, chorus or
+                # flanger, Leslie, moving filter -- and A's reverb send
+                _vc, _eb = _MCH[0] + _GSX.VIRT, _ex['par']['B']
+                _cv0 = chan_vol / max(_ex['level'] * _EFG, 1e-12)      # the part's level before the effect
+                _ref = getattr(props, 'amp_reference', None)
+                if getattr(props, 'amp_drive', 0.0) and _MCH[0] in _AMP_CH:
+                    _AMP_CH[_vc] = _AMP_CH[_MCH[0]]                    # the voice's own valve, as A's
+                    _AMP_IMB[_vc] = getattr(props, 'amp_imbalance', None)
+                elif _eb['od_gain'] is not None:
+                    _AMP_CH[_vc] = _GSX.PEDAL_AMP_DRIVE
+                    _ref = _ref or 0.2289
+                if _vc in _AMP_CH and _ref:
+                    _st = sorted({0.0} | {float(t) for t, e in _EFXEV})
+                    _AMP_REF[_vc] = ('steps', _ref * _cv0, [t * SR for t in _st],
+                                     [((_GSX.at(_EFXEV, _vc, t) or _eb)['level']) for t in _st])
+                    _AMP_LV0[_vc] = _eb['level']
+                if _eb['cabinet'] and os.environ.get('TUNING_CABINET', '1') != '0':
+                    _CAB_CH[_vc] = _eb['cabinet']
+                elif getattr(props, 'cabinet', None) and os.environ.get('TUNING_CABINET', '1') != '0':
+                    _CAB_CH[_vc] = props.cabinet
+                if _eb['cf'] is not None:
+                    _CHORUS_CH[_vc] = (0.0, _eb['cf'][0], 'gs', _GSX.mix_share(_EFXEV, _vc, SR))
+                if _eb.get('rotary'):
+                    _rs_ = _GSX.rotary_setup(_EFXEV, _vc)
+                    if _rs_ is not None:
+                        _LESLIE_CH[_vc] = _rs_
+                if _eb.get('filter'):
+                    _fc_ = _GSX.filter_setup(_EFXEV, _vc,
+                                             [(_n[2], _n[3], _n[4]) for _n in notes if _n[0] == _MCH[0]])
+                    if _fc_ is not None:
+                        _FILTER_CH[_vc] = _fc_
+                if _MCH[0] in _REVERB_CH:
+                    _REVERB_CH[_vc] = _REVERB_CH[_MCH[0]]
         if getattr(props, 'sympathetic_gain', 0.0) and _MCH[0] not in _SYM_CH:
             _SYM_CH[_MCH[0]] = props
         if REGISTER and (getattr(props, 'register_gain', 0.0)
@@ -6282,10 +6366,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # the last strike's rows end here -- before the stream hears them
     if _REG_OPEN[0] is not None:
         _REG_OPEN[0]['rows'] = (_REG_OPEN[0]['rows'][0], len(A['om'])); _REG_OPEN[0] = None
+    _gsw = _GSD_OPEN[0]
     if _GSD_OPEN[0] is not None:
         if len(A['om']) > _GSD_OPEN[0][0]:
             _GSDN.append((_GSD_OPEN[0][0], len(A['om']), _GSD_OPEN[0][2], _GSD_OPEN[0][1]))
         _GSD_OPEN[0] = None
+    _par_close(_gsw)
     if sink is not None:
         if _S0[0] is not None:
             sink(A, _S0[0], len(A['om']), None)
@@ -6911,8 +6997,9 @@ def render(path, tuner='hybrid440'):
 #            an object would put two head models in series.
 
 def channel_rows(prep):
-    """{MIDI channel: row mask} over the partial table."""
-    mch = prep['mch']
+    """{MIDI channel: row mask} over the partial table -- a parallel type's
+    branch B (its virtual channel, gsefx.VIRT) in its part's."""
+    mch = prep['mch'] % _GSX.VIRT
     return {int(c): (mch == c) for c in np.unique(mch)}
 
 
@@ -6932,7 +7019,7 @@ def source_rows(prep):
     An object is a thing that persists and moves; the movement belongs in its
     position over time, not in its identity.
     """
-    mch = prep['mch'].astype(np.int64)
+    mch = prep['mch'].astype(np.int64) % _GSX.VIRT          # branch B in its part
     pl = prep['pl'].astype(np.int64)
     gr = prep['gr'].astype(np.int64)
     key = (mch << 40) ^ (pl << 20) ^ (gr + 1)

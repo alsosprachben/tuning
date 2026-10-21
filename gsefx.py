@@ -77,6 +77,19 @@ SERIES_TYPES = ("OD -> Chorus", "OD -> Flanger", "OD -> Delay", "DS -> Chorus", 
                 "EH -> Delay", "Cho -> Flanger")
 BUILT |= set(SERIES_TYPES) | {"Clean Gt Multi 1", "Bass Multi"}
 BUILT |= {"Clean Gt Multi 2", "Rhodes Multi", "Keyboard Multi"}
+# THE PARALLEL TYPES ("Cho / Delay" ...): the part into two branches, each its
+# stage, its pan and its level, summed. Branch A is the part's own rows;
+# branch B a copy of them on a VIRTUAL CHANNEL (the part's + VIRT), so every
+# per-channel pass -- the valve, the chorus, the delay, the Leslie, the moving
+# filter -- takes each branch as a part of its own. A branch's Level where
+# Roland prints none: 96, as OD1's. Chosen.
+PARALLEL_TYPES = ("Cho / Delay", "FL / Delay", "Cho / Flanger", "OD1 / OD2", "OD / Rotary", "OD / Phaser",
+                  "OD / AutoWah", "PH / Rotary", "PH / AutoWah")
+BUILT |= set(PARALLEL_TYPES)
+VIRT = 1 << 16
+BRANCH_LEVEL = 96
+_BRANCH_PREFIX = {"Cho": "Cho", "Delay": "Dly", "FL": "FL", "Flanger": "FL", "OD1": "OD1", "OD2": "OD2",
+                  "OD": "OD", "Rotary": "RT", "Phaser": "PH", "PH": "PH", "AutoWah": "AW"}
 # THE KEYBOARD MULTI's RING MODULATOR: its Mod Freq 0-127 onto 10 Hz-5 kHz,
 # logarithmically (116 Hz at its default 50); Roland prints none. Chosen.
 RM_HZ = (10.0, 5000.0)
@@ -192,6 +205,18 @@ def state_at(events, t):
         elif ev[0] == 'send':
             st['send'][ev[1]] = ev[2]
     return st
+
+
+def at(events, ch, t):
+    """The chain part `ch` hears at t, or None: a virtual channel (ch >=
+    VIRT) the parallel type's branch B of its part's."""
+    base = ch % VIRT
+    if not assigned(events, base, t):
+        return None
+    c = chain(state_at(events, t))
+    if c is None or ch < VIRT:
+        return c
+    return (c.get('par') or {}).get('B')
 
 
 def assigned(events, ch, t):
@@ -404,7 +429,7 @@ def rotary_setup(events, ch):
     of the timeline -- and the first setting's spin times and levels."""
     first, horn, drum = None, [], []
     for t in sorted({0.0} | {t for t, _ in events}):
-        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        c = at(events, ch, t)
         rt = c.get('rotary') if c is not None else None
         if rt is None:
             continue
@@ -530,7 +555,7 @@ def bus_setup(events, ch, sr):
     spans, first, start = [], None, None
     ts = sorted({0.0} | {t for t, _ in events})
     for i, t in enumerate(ts):
-        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        c = at(events, ch, t)
         on = c is not None and c.get('bus') is not None
         if on and first is None:
             first = c
@@ -555,7 +580,7 @@ def filter_setup(events, ch, notes=()):
     import efxfilter as EF
     segs = []
     for t in sorted({0.0} | {t for t, _ in events}):
-        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        c = at(events, ch, t)
         f = c.get('filter') if c is not None else None
         if f is not None:
             segs.append((t, f))
@@ -782,6 +807,14 @@ def chain(st):
                      (200.0, 400.0)[min(1, g("Low Freq", 0))], (4000.0, 8000.0)[min(1, g("Hi Freq", 0))],
                      (eq_freq(g("M2 Freq", 56)), EQ_Q[min(4, g("M2 Q", 1))], gain_db(g("M2 Gain", 64))))
         return out
+    if name in PARALLEL_TYPES:
+        a, b = (_BRANCH_PREFIX[x.strip()] for x in name.split(" / "))
+        ob = dict(out, sends=dict(out['sends']))
+        for o, pre in ((out, a), (ob, b)):
+            _stage(o, pre, g, pn, mk)
+            o['level'] *= max(g(pre + " Level", BRANCH_LEVEL), 1) / 127.0
+        out['par'] = dict(B=ob, pan=g(a + " Pan", 64), panB=g(b + " Pan", 64))
+        return out
     if name in SERIES_TYPES:
         # THE SERIES PAIRS (OD/DS -> Chorus/Flanger/Delay, Cho/FL -> Delay):
         # each stage by its names, as the multis' -- the drive the valve's gain
@@ -870,6 +903,52 @@ def chain(st):
     return out
 
 
+def _stage(o, pre, g, pn, mk):
+    """One branch's stage into chain dict o, by its parameters' prefix: a
+    chorus or flanger (gs_copies), a delay (gsdelay), an OD (the valve and
+    cabinet), a rotary (the Leslie), a phaser or auto wah (efxfilter)."""
+    import efxfilter as EF
+    if pre in ("Cho", "FL"):
+        rate = table_value(6, g(pre + " Rate", 8))
+        swing = (int(g(pre + " Depth", 64)) + 1) / 3.2 / 1000.0 / 2.0 / (8.0 if pre == "FL" else 1.0)
+        dl = (table_value(1, g(pre + " Dly", 10)) or 0.0) / 1000.0
+        o['cf'] = (dict(tau=dl + swing, rate=rate, vd=2.0 * math.pi * rate * swing,
+                        fb=feedback(g("FL Fb", 104)) if pre == "FL" else 0.0, level=1.0, lpf=None), 0.0)
+        o['cf_share'] = g(pre + " Bal", 64) / 127.0
+    elif pre == "Dly":
+        t = (table_value(4, g("Dly Time", 111)) or 0.0) / 1000.0
+        dry, wet = balance(g("Dly Bal", 37))
+        o['dly'] = dict(tc=t, taps=[(t, 1.0, 'c', t)], level=wet / max(dry, DRY_FLOOR),
+                        fb=feedback(g("Dly Fb", 80)), lpf=table_value(8, g("Dly HF", 127)), to_reverb=0.0)
+        o['level'] *= max(dry, DRY_FLOOR)
+    elif pre in ("OD", "OD1", "OD2"):
+        o['od_gain'] = od_gain(g(pre + " Drive", 48), bool(g(pre + " Sel", 0)))
+        o['level'] *= mk
+        sw = pre + " Amp Sw" if pre + " Amp Sw" in pn else pre + " Amp Sw Off/On"
+        if g(sw, 1):
+            o['cabinet'] = 'guitar12'
+    elif pre == "RT":
+        o['rotary'] = _rotary("Rotary Multi", g, pn)
+    elif pre == "PH":
+        o['filter'] = dict(ty=1, pa=g("PH Mix", 64) / 127.0, pb=0.9 * g("PH Reso", 16) / 127.0,
+                           pc=EF.PHASER_STAGES,
+                           ctrl=('sweep', table_value(12, g("PH Man", 36)), PHASER_OCT * g("PH Depth", 64) / 127.0,
+                                 table_value(6, g("PH Rate", 16)), None, 0.0))
+    elif pre == "AW":
+        o['filter'] = dict(ty=2 if g("AW Filter", 1) == 0 else 3, pa=EF.wah_q(g("AW Peak", 62)), pb=1.0, pc=0.0,
+                           ctrl=('sweep', EF.wah_hz(g("AW Man", 68)), AUTOWAH_OCT * g("AW Depth", 72) / 127.0,
+                                 table_value(6, g("AW Rate", 40)), bool(g("AW Pol", 1)),
+                                 AUTOWAH_SENS_OCT * g("AW Sens", 0) / 127.0))
+
+
+def pan_gains(v):
+    """A branch's Pan 0-127 (64 the middle) as gains on the two ears,
+    constant power, whole at the middle -- a level across the ears, not a
+    new place (the copy keeps its interaural delays). Chosen."""
+    th = (max(0, min(127, int(v))) - 64) / 63.0 * 0.25 * math.pi + 0.25 * math.pi
+    return math.sqrt(2.0) * math.cos(th), math.sqrt(2.0) * math.sin(th)
+
+
 def _keyboard_multi(g, dly, out):
     """The Keyboard Multi's ring modulator, pitch shifter and delay in series
     (RM -> EQ -> PS -> PH -> Dly), unrolled into gsdelay taps: every path
@@ -914,7 +993,7 @@ def mix_share(events, ch, sr):
     ts = sorted({0.0} | {t for t, _ in events})
     vals = []
     for t in ts:
-        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        c = at(events, ch, t)
         if c is not None and c.get('cf_share') is not None:
             vals.append(c['cf_share'])        # a chorus type's Balance: dry against effect
             continue
@@ -995,9 +1074,9 @@ def selftest():
           abs(20 * math.log10(c['od_gain']) - 20.0 * 30 / 127) < 1e-9
           and od_gain(30, True) > od_gain(30, False)
           and abs(20 * math.log10(c['level']) - OD_MAKEUP_DB) < 1e-9)
-    _ub = next(k for k, v in sorted(TYPES.items()) if v not in BUILT and v != "Thru")
-    check("an unbuilt type has no chain (its parts play dry)",
-          chain(dict(type=_ub, p={}, send={})) is None, "(%s)" % TYPES[_ub])
+    _nc = [v for k, v in sorted(TYPES.items()) if v != "Thru" and chain(dict(type=k, p={}, send={})) is None]
+    check("every type builds a chain at its defaults (Thru none: its parts play dry)",
+          not _nc and chain(dict(type=(0, 0), p={}, send={})) is None, "(%s)" % ", ".join(_nc))
     # the Auto Wah's Sens: its filter opened by the part's notes -- higher
     # just after a loud note's onset than before it and than long after
     _ev = [(0.0, ('type', (0x01, 0x21))), (0.0, ('param', 2, 127)), (0.0, ('param', 6, 0)),

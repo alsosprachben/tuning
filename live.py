@@ -8944,6 +8944,29 @@ def selftest_gs(check):
         check("file: the Keyboard Multi's ring modulator makes A4's sidebands (streamed as whole)",
               _sb > 15.0 and _near(_xk1, _xk2),
               "  (324 and 556 Hz at least %+.0f dB; streamed as whole %s)" % (_sb, _near(_xk1, _xk2)))
+        # THE PARALLEL TYPES (branch B on the part's virtual channel): OD1 / OD2
+        # with OD1 hard left and OD2 hard right -- OD2's level at 0, the right
+        # ear falls silent; OD1's at 0, the left -- each branch its own part,
+        # streamed as whole; and Cho / Delay's delay branch rings on after the note
+        _od = lambda *x: _tre((0x11, 0x03), [_gsx(0x40, 0x03, 0x12, 0, 0), _gsx(0x40, 0x03, 0x14, 127, 0)]
+                              + list(x))
+        _pd = _od()
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xp1 = B.render(_pd)
+            B.RENDER_STREAM = False; _xp2 = B.render(_pd)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _ebr2 = lambda x, k: float(np.sqrt(np.mean(np.asarray(x[k], float) ** 2))) + 1e-30
+        _xa = B.render(_od(_gsx(0x40, 0x03, 0x15, 0, 0)))       # OD2 Level 0
+        _xb = B.render(_od(_gsx(0x40, 0x03, 0x13, 0, 0)))       # OD1 Level 0
+        _sa = 20 * np.log10(_ebr2(_xa, 1) / _ebr2(_xa, 0)); _sb2 = 20 * np.log10(_ebr2(_xb, 0) / _ebr2(_xb, 1))
+        _xcd = B.render(_tre((0x11, 0x00)))
+        _cdt = _rms(_xcd, 3.05, 3.25) / _rms(_x0, 3.05, 3.25)
+        check("file: OD1 / OD2 in two branches, each at its own pan (streamed as whole); Cho / Delay's delay",
+              _sa < -40.0 and _sb2 < -40.0 and _same(_xp1, _xp2) and _cdt > 2.0,
+              "  (OD1 alone: right %+.0f dB of left; OD2 alone: left %+.0f dB of right; streamed as whole %s; "
+              "after the note x%.2g)" % (_sa, _sb2, _same(_xp1, _xp2), _cdt))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;
