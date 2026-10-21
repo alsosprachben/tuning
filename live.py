@@ -2995,6 +2995,10 @@ class Part:
         self.synth = {}         # a Moog's knobs, over its patch's (moog.PANEL names)
         self.synth_b = {}       # ...and a layered Moog's second Messenger's
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
+        # THE STANDARD ITS PATCH WAS PICKED IN (livetui.patch_tree): "gm", "sc1"-
+        # "sc4" (a Sound Canvas level, its map), "mt32". Where the picker opens
+        # and what the program keys step through; the sound is the patch's
+        self.std = "gm"
         # THE PART'S OWN PAN POT, a CC10 value, or None to follow its channel's
         # CC10 as every part did before. Pan is per channel and a layer's parts
         # share the keyboard's, so a double-tracked sound -- two passes of a
@@ -3083,6 +3087,8 @@ class Part:
             d["synth_units"] = 6            # the Messenger's measured knobs (moog.py)
         if self.cc_map != "gm":
             d["cc_map"] = self.cc_map
+        if self.std != "gm":
+            d["std"] = self.std
         if self.fixed_touch is not None:
             d["fixed_touch"] = bool(self.fixed_touch)
         if self.pan is not None:
@@ -3123,6 +3129,7 @@ class Part:
                         own.update(_MG.convert_v4(own, context=ctx))
                     own.update(_MG.convert_v5(own, context=ctx))
         p.cc_map = d.get("cc_map", "gm")
+        p.std = d.get("std", "gm")
         p.fixed_touch = None if d.get("fixed_touch") is None else bool(d["fixed_touch"])
         p.pan = None if d.get("pan") is None else max(0, min(127, int(d["pan"])))
         if d.get("drawn"):
@@ -15877,6 +15884,58 @@ def selftest(only=""):
     _ui.key(_scr, ord("d"))
     check("panel: d deletes a route and a control",
           _lr.routes == () and [c["key"] for c in _lr.screen_controls] == [1])
+
+    # THE PATCH PICKER IS A TREE (livetui.patch_tree): a standard, a Sound
+    # Canvas's level, the families, the programs, the tones. Driven through a
+    # stub menu; what it picks is read off change_patch.
+    import patch_map as _PM
+    _tree = _tui.patch_tree()
+    _lv = _tui.tree_leaves(_tree)
+    _by = collections.Counter(lf["pick"][3] for _, _, lf in _lv)
+    check("picker: each Sound Canvas level lists exactly its model's tones",
+          [_by["sc%d" % m] for m in (1, 2, 3, 4)]
+          == [128 + len(_PM.MAP_NAMES[m]) for m in (1, 2, 3, 4)]
+          and _by["gm"] == 128 and _by["mt32"] == 128,
+          "  (%s)" % dict(_by))
+    _ok = all(lf["pick"][2] == 0 or (lf["pick"][1], lf["pick"][2]) in _PM.VARIATIONS
+              for _, _, lf in _lv if (lf["pick"][3] or "").startswith("sc"))
+    check("picker: a Sound Canvas tone picks a built tone or its capital (map_bank)", _ok)
+    _got = []
+    _ui.change_patch = lambda **kw: _got.append(kw)
+    _sfx = _tui.FAMILIES.index("Sound Effects")
+    _lvl3 = _tree["kids"][1]["kids"][2]
+    _p125 = _lvl3["kids"][_sfx]["kids"][5]
+    _sir = next(j for j, k in enumerate(_p125["kids"]) if "Siren" in k["label"])
+    _menu_args = []
+    def _stubmenu(scr, title, items, start=0, **kw):
+        _menu_args.append((title, len(items), kw))
+        return _answers.pop(0)
+    _ui.menu = _stubmenu
+    _ui.row = 0
+    _answers[:] = [1, 2, _sfx, 5, _sir]
+    _ui.pick_patch(_scr)
+    check("picker: Sound Canvas > Level 3 > Sound Effects > 125 > Siren picks 125.5 there",
+          _got == [dict(program=125, bank=_tui.sc_tone(125, 5, 3)[0], std="sc3")]
+          and "SC-88Pro" in _menu_args[-1][0],
+          "  (%s; last title %r)" % (_got, _menu_args[-1][0] if _menu_args else None))
+    _got[:] = []
+    _answers[:] = [1, "back", 2, 0, 3]                 # into SC, back out, MT-32, 0-7, 3
+    _ui.pick_patch(_scr)
+    check("picker: Left comes back out; the MT-32's tones are bank 127",
+          _got == [dict(program=3, bank=127, std="mt32")], "  (%s)" % _got)
+    _found = [_tui.leaf_crumb(up, lf) for _, up, lf in _lv]
+    _j = next(j for j, c in enumerate(_found) if "Level 4" in c and "Siren" in c)
+    _got[:] = []
+    _answers[:] = [("found", _j)]
+    _ui.pick_patch(_scr)
+    check("picker: a search lists the whole tree and picks from it",
+          _got == [dict(program=125, bank=_tui.sc_tone(125, 5, 4)[0], std="sc4")]
+          and _menu_args[-1][2].get("everywhere") is not None, "  (%s)" % _got)
+    del _ui.change_patch, _ui.menu
+    _ps = Part.from_dict(dict(program=0, drums=False, std="sc3"))
+    check("picker: a part keeps its standard through a preset; none is GM",
+          _ps.to_dict().get("std") == "sc3" and Part.from_dict(dict(program=0)).std == "gm"
+          and "std" not in Part.from_dict(dict(program=0)).to_dict())
     _lr.renderer.close()
 
     # MONO FROM THE PANEL: a keyboard with no mode buttons still gets one.

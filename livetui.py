@@ -116,6 +116,91 @@ def mt32_tones():
     return out
 
 
+# THE PATCH PICKER AS A TREE (Ben: "a GM mode, an MT-32 mode, a Sound Canvas
+# mode -- which version by level number and model"): a standard, then (for
+# a Sound Canvas) its level, then the sixteen GM families, the programs, and
+# the tones under each. A part keeps its standard (Part.std), so the picker
+# opens where it is and the program keys step within it.
+FAMILIES = ("Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings",
+            "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad",
+            "Synth Effects", "Ethnic", "Percussive", "Sound Effects")
+# a Sound Canvas level is its map (bank select LSB, patch_map.MAP_LABELS)
+SC_LEVELS = {1: "SC-55 / SC-55mkII", 2: "SC-88", 3: "SC-88Pro", 4: "SC-8850"}
+
+
+def sc_tone(p, b, m):
+    """(variation key, what it plays) for tone p.b on the level-m Sound Canvas:
+    the key a file's CC0 b / CC32 m selects (patch_map.map_bank), and None
+    where we play that very tone -- else the voice it falls back to (the
+    capital, as a Sound Canvas plays a number it has no tone at)."""
+    k = PMAP.map_bank(p, b, m) if b else 0
+    if b and (k == 0 or (p, k) not in PMAP.VARIATIONS):
+        return 0, "plays %s" % gm_label(p)
+    return k, None
+
+
+def patch_tree():
+    """The picker's tree: nodes dict(label, kids), leaves dict(label, pick),
+    pick = (drums, program, variation key, standard)."""
+    def row(i, b, name, note):
+        return "%3d%-5s %-16s %s" % (i, (".%d" % b) if b else "", name, note or "")
+
+    def families(std, leaves_of):
+        return [dict(label="%-20s %3d-%d" % (f, 8 * k, 8 * k + 7),
+                     kids=[dict(label=row(i, 0, GM[i], None), kids=leaves_of(i))
+                           if len(leaves_of(i)) > 1 else leaves_of(i)[0]
+                           for i in range(8 * k, 8 * k + 8)])
+                for k, f in enumerate(FAMILIES)]
+
+    def gm(i):
+        return [dict(label=row(i, 0, GM[i], CAPITAL_DESC.get(i) or
+                               (MODELLED[i] if i in MODELLED else None)),
+                     pick=(False, i, 0, "gm"))]
+
+    def sc(m):
+        def leaves(i):
+            out = [dict(label=row(i, 0, GM[i], CAPITAL_DESC.get(i)), pick=(False, i, 0, "sc%d" % m))]
+            for b in sorted(b for (q, b) in PMAP.MAP_NAMES[m] if q == i):
+                k, falls = sc_tone(i, b, m)
+                d = VARIATION_DESC.get((i, k)) if k else None
+                out.append(dict(label=row(i, b, PMAP.MAP_NAMES[m][(i, b)], falls or d),
+                                pick=(False, i, k, "sc%d" % m)))
+            return out
+        return leaves
+
+    tones = mt32_tones()
+    mt = [dict(label="%3d-%-3d %s ..." % (8 * k, 8 * k + 7, tones[8 * k][1]),
+               kids=[dict(label=row(i, 127, nm, "(plays %s)" % plays), pick=(False, i, 127, "mt32"))
+                     for i, nm, plays in tones[8 * k:8 * k + 8]])
+          for k in range(len(tones) // 8)]
+    kits = [dict(label="%3d %s" % (k, PM.drum_set_name(k)), pick=(True, k, 0, None))
+            for k in sorted(PM.DRUM_SETS)]
+    return dict(label="patch", kids=[
+        dict(label="General MIDI          128 programs", crumb="GM", kids=families("gm", gm)),
+        dict(label="Sound Canvas          by level and model", crumb="Sound Canvas",
+             kids=[dict(label="Level %d  %-18s (map %d)" % (m, SC_LEVELS[m], m),
+                        crumb="Level %d %s" % (m, SC_LEVELS[m]),
+                        kids=families("sc%d" % m, sc(m))) for m in sorted(SC_LEVELS)]),
+        dict(label="MT-32 / CM-32L        its 128 tones (bank 127)", crumb="MT-32", kids=mt),
+        dict(label="Drum kits             %d sets" % len(kits), crumb="Drum kits", kids=kits)])
+
+
+def tree_leaves(node, path=(), up=()):
+    """[(path of kid indices, the nodes above, leaf)] under node, in order."""
+    out = []
+    for j, k in enumerate(node.get("kids", ())):
+        if "kids" in k:
+            out += tree_leaves(k, path + (j,), up + (k,))
+        else:
+            out.append((path + (j,), up, k))
+    return out
+
+
+def leaf_crumb(up, leaf):
+    """A leaf as a search lists it: its standard and level, then its row."""
+    return " \u203a ".join([n["crumb"] for n in up if n.get("crumb")] + [leaf["label"].strip()])
+
+
 def gm_label_short(p, width, v=0):
     """gm_label within a column: past it, the GM name's own qualifier goes
     and Electric/Acoustic shorten -- "E. Guitar (Stratocaster)" -- so the
@@ -529,7 +614,7 @@ class TUI:
     def specs(self):
         return [p.to_dict() for p in self.parts()]
 
-    def change_patch(self, delta=None, program=None, drums=None, bank=0):
+    def change_patch(self, delta=None, program=None, drums=None, bank=0, std=None):
         p = self.sel()
         if p is None:
             return
@@ -540,6 +625,14 @@ class TUI:
         s.pop("bank", None)
         if bank and drums is None and program is not None:
             s["bank"] = int(bank)
+        # ...IN THE PART'S STANDARD (patch_tree): the picker sets it, and the
+        # program keys step within it -- the MT-32's tones stay the MT-32's
+        if std is not None:
+            s.pop("std", None)
+            if std != "gm":
+                s["std"] = std
+        if delta is not None and s.get("std") == "mt32" and not s.get("drums"):
+            s["bank"] = 127
         if drums is not None:
             s["drums"] = drums
             if program is not None:
@@ -749,8 +842,13 @@ class TUI:
         finally:
             curses.curs_set(0)
 
-    def menu(self, scr, title, items, start=0):
+    def menu(self, scr, title, items, start=0, nav=False, everywhere=None):
         """A centred picker. Returns an index, or None if cancelled.
+
+        A TREE'S LEVEL (pick_patch): with nav, Left -- or Backspace outside a
+        search -- returns "back" and Right is Enter; with everywhere (rows
+        from the whole tree), a search lists those instead, and its pick
+        comes back as ("found", row).
 
         AND A SEARCH (Ben: "control over tone means search and edit"): "/"
         starts one, typing narrows the list to the rows holding every word
@@ -762,13 +860,18 @@ class TUI:
         i = start
         query, searching = "", False
 
+        here = items
+
         def view():
             if not query:
-                return list(range(len(items)))
+                return list(range(len(here)))
             ws = query.lower().split()
-            return [j for j, x in enumerate(items)
+            return [j for j, x in enumerate(here)
                     if not x.startswith("--") and all(w in x.lower() for w in ws)]
         while True:
+            wide = bool(query) and everywhere is not None
+            if (here is everywhere) != wide:
+                here, i = (everywhere if wide else items), (0 if wide else start)
             vis = view()
             h, w = scr.getmaxyx()
             if vis and i not in vis:
@@ -776,7 +879,7 @@ class TUI:
             pos = vis.index(i) if i in vis else 0
             n = min(max(len(vis), 1), max(3, h - 8))
             top = max(0, min(pos - n // 2, len(vis) - n))
-            bw = min(w - 4, max(len(title) + 4, max((len(x) for x in items), default=10) + 8))
+            bw = min(w - 4, max(len(title) + 4, max((len(x) for x in here), default=10) + 8))
             y0 = max(0, (h - n) // 2 - 1)
             x0 = max(0, (w - bw) // 2)
             for y in range(y0 - 1, y0 + n + 2):
@@ -789,7 +892,7 @@ class TUI:
                     continue
                 j = vis[top + k]
                 mark = ">" if j == i else " "
-                txt = " %s %-*s" % (mark, bw - 5, items[j][:bw - 5])
+                txt = " %s %-*s" % (mark, bw - 5, here[j][:bw - 5])
                 self.addstr(scr, y0 + k, x0, txt[:bw],
                             curses.A_REVERSE | (curses.A_BOLD if j == i else 0))
             foot = (("/" + query + ("_" if searching else "") + "   %d found" % len(vis)) if (searching or query)
@@ -816,9 +919,11 @@ class TUI:
                 i = vis[max(0, pos - n)] if vis else i
             elif c == curses.KEY_NPAGE:
                 i = vis[min(len(vis) - 1, pos + n)] if vis else i
-            elif c in (10, 13):
+            elif c in (10, 13) or (nav and c == curses.KEY_RIGHT):
                 if vis:
-                    return i
+                    return ("found", i) if here is not items else i
+            elif nav and (c == curses.KEY_LEFT or (c in (curses.KEY_BACKSPACE, 127, 8) and not searching)):
+                return "back"
             elif c == 27:
                 if searching or query:
                     query, searching = "", False      # first Esc: the search
@@ -1023,62 +1128,56 @@ class TUI:
                 return None
 
     def pick_patch(self, scr):
+        """THE PATCH, BY STANDARD (patch_tree): General MIDI, a Sound Canvas by
+        level, the MT-32's tones, the drum kits -- Enter or Right goes in,
+        Left or Backspace comes out, and "/" searches the whole tree from any
+        level. It opens on the part's own patch, in the part's standard."""
         p = self.sel()
         if p is None:
             return
-        # The drum SETS first, by the SC-55's names: on a drum part the program
-        # is the set. One not built says so, and plays Standard.
-        # Each program's built GS variations (patch_map.VARIATIONS) sit under
-        # it, indented, by bank: "125.5 Siren".
-        sets = sorted(PM.DRUM_SETS)
-        items = ["-- %s kit" % PM.drum_set_name(k) for k in sets]
-        picks = [(True, k, 0) for k in sets]
-        # ...ALIGNED ON THE PROGRAM, the bank in a column of its own (Ben: an
-        # indent was more distracting than lining them up by number)
-        def row(i, v, label):
-            return "%3d%-5s %s" % (i, (".%d" % (v & 0x7F)) if v else "", label)
-        # ...EACH VARIATION SAYING WHAT IT CHANGES (variation_desc: "Piano 1d
-        # -- dark: worn hammers"), so the list reads, and searches, by sound
-        for i in range(len(GM)):
-            # ...and each capital what it IS here (the model, the registration),
-            # which replaces the bracketed model the GM name carried
-            items.append(row(i, 0, ("%-23s %s" % (GM[i], CAPITAL_DESC[i])) if i in CAPITAL_DESC
-                             else gm_label(i)))
-            picks.append((False, i, 0))
-            for v in built_variations(i):
-                d = VARIATION_DESC.get((i, v))
-                items.append(row(i, v, ("%-13s %s" % (gm_label(i, v), d)) if d else gm_label(i, v)))
-                picks.append((False, i, v))
-        # ...AND THE MT-32 SET, bank 127, on its own after them: the MT-32's
-        # tones by their own names, each with the voice it plays here
-        tones = mt32_tones()
-        if tones:
-            items.append("-- MT-32 set (bank 127) --")
-            picks.append(None)
-            for i, nm, plays in tones:
-                items.append(row(i, 127, "%-13s (plays %s)" % (nm, plays)))
-                picks.append((False, i, 127))
-        # ...AND EACH SOUND CANVAS MAP'S OWN TONES (bank select LSB): where an
-        # SC-55mkII or SC-88 holds another tone under a number than ours
-        for m, keys in sorted(map_tones().items()):
-            items.append("-- %s map (bank LSB %d): its own tones --" % (PMAP.MAP_LABELS[m], m))
-            picks.append(None)
-            for i, v in keys:
-                d = VARIATION_DESC.get((i, v))
-                nm = PMAP.VARIATION_NAMES[(i, v)]
-                items.append(row(i, v, ("%-13s %s" % (nm, d)) if d else nm))
-                picks.append((False, i, v))
-        here = (True, p.program, 0) if p.drums else (False, p.program, p.variation)
-        start = (picks.index(here) if here in picks
-                 else 0 if p.drums else picks.index((False, p.program, 0)))
-        pick = self.menu(scr, "patch for part %d" % (self.row + 1), items, start)
-        if pick is None or picks[pick] is None:
-            return                          # (a section's heading picks nothing)
-        dr, prog, v = picks[pick]
+        tree = patch_tree()
+        leaves = tree_leaves(tree)
+        found = [leaf_crumb(up, lf) for _, up, lf in leaves]
+        here = ((True, p.program, 0, None) if p.drums else
+                (False, p.program, p.variation, getattr(p, "std", "gm")))
+        path = (next((pa for pa, _, lf in leaves if lf["pick"] == here), None)
+                # a patch picked by number, or saved before standards: its GM place
+                or next((pa for pa, _, lf in leaves if lf["pick"][:3] == here[:3]), None)
+                or (0,))
+        node, stack = tree, []           # stack: (node above, the row we came in by)
+        while True:
+            d = len(stack)
+            start = path[d] if d < len(path) else 0
+            title = " \u203a ".join(["patch for part %d" % (self.row + 1)] +
+                                    [n["crumb"] for n, _ in stack if n.get("crumb")] +
+                                    ([node["crumb"]] if node.get("crumb") else []))
+            got = self.menu(scr, title, [k["label"] for k in node["kids"]], start,
+                            nav=True, everywhere=found)
+            if got is None:
+                return
+            if got == "back":
+                if not stack:
+                    return
+                node, j = stack.pop()
+                path = path[:len(stack)] + (j,)
+                continue
+            if isinstance(got, tuple):        # a search's pick, from anywhere
+                leaf = leaves[got[1]][2]
+                break
+            k = node["kids"][got]
+            if "kids" not in k:
+                leaf = k
+                break
+            # in: onto the patch's own row if this is its way, else the top
+            if not (d < len(path) and path[d] == got):
+                path = path[:d] + (got,)
+            stack.append((node, got))
+            node = k
+        dr, prog, v, std = leaf["pick"]
         if dr:
             self.change_patch(drums=True, program=prog)
         else:
-            self.change_patch(program=prog, bank=v)
+            self.change_patch(program=prog, bank=v, std=std)
 
     # ---- the controls pane -------------------------------------------------
     # A keyboard may send nothing but notes. This pane supplies what it lacks
