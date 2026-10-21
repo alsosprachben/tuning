@@ -280,7 +280,42 @@ def small_signal(**kw):
     return float((curve(h, **kw) - curve(-h, **kw)) / (2.0 * h))
 
 
+_POOL = []
+SYNTH_CHUNK = 8192
+
+
+def _synth(a, f, p, t):
+    """sum A cos(2 pi F t + P) over the partials, in chunks of the sample axis
+    on every core. Each sample is still built by the same operations in the
+    same partial order, so the result is bit-identical to the plain loop
+    (checked at chunks of 2048-16384); the chunk also keeps the loop's
+    temporaries in cache, where the whole axis (1 MB a pass) did not fit.
+    This sum was 90% of emit()'s time."""
+    import numpy as np
+    x = np.zeros(len(t))
+    if not _POOL:
+        import os
+        from concurrent.futures import ThreadPoolExecutor
+        _POOL.append(ThreadPoolExecutor(os.cpu_count() or 1))
+
+    def job(s):
+        tt, xx = t[s:s + SYNTH_CHUNK], x[s:s + SYNTH_CHUNK]
+        for A, F, P in zip(a, f, p):
+            xx += A * np.cos(2.0 * np.pi * F * tt + P)
+    list(_POOL[0].map(job, range(0, len(t), SYNTH_CHUNK)))
+    return x
+
+
+_WINDOWS = {}
+
+
 def _window(n):
+    if n not in _WINDOWS:
+        _WINDOWS[n] = _window_of(n)
+    return _WINDOWS[n]
+
+
+def _window_of(n):
     """Blackman-Harris, 4-term: -92 dB sidelobes.
 
     The sidelobe level is the whole reason for the choice. A strong input
@@ -364,9 +399,7 @@ def emit(freqs, amps, phases, sr, drive, window_s=WINDOW_S,
     # longer any physical need to throw away quiet partials. Accumulated in a
     # loop rather than broadcast, because the (partials x samples) matrix is
     # tens of megabytes and is read exactly once.
-    x = np.zeros(n)
-    for A, F, P in zip(a, f, p):
-        x += A * np.cos(2.0 * np.pi * F * t + P)
+    x = _synth(a, f, p, t)
     pk = float(np.abs(x).max())
     if pk <= 0.0:
         return []
