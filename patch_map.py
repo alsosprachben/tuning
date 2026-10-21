@@ -537,14 +537,29 @@ PROGRAM_TRIM_DB = {1: 8.2, 2: 1.9, 3: 9.6, 4: -2.0, 5: -5.3, 6: -10.9, 7: -2.8, 
 KIT_TRIM_DB = -1.7
 
 
-def program_trim(program, drum=False):
+# A SOUND CANVAS FILE'S BALANCE, on top of the bank's: the trims above match
+# GeneralUser GS, but a GS file was balanced by ear against a Roland module,
+# whose programs sit differently against each other. Only where that has
+# been heard: Tokei (Konami, SC-88Pro) had every electric guitar 3-6 dB
+# quiet -- the side and lead parts on their own valves as well as the EFX
+# ones, so the program's level and not the effect -- and Ben chose +3 from
+# +0/+3/+4.5/+6 on the whole mix (4.5 too much). Its electric bass under
+# them the same +3 (Ben, by ear on the same mix), finger and pick. Every
+# variation of the program with it. A GM file keeps GeneralUser's balance.
+GS_TRIM_DB = {29: 3.0, 30: 3.0, 33: 3.0, 34: 3.0}
+
+
+def program_trim(program, drum=False, gs=False):
     """The linear factor on a note's channel volume for its program -- or for
-    its variation (VARIATION_TRIM_DB), where it has one."""
+    its variation (VARIATION_TRIM_DB), where it has one -- and, in a file
+    that speaks GS, GS_TRIM_DB's on top."""
     v = getattr(program, "variation", 0)
     if not drum and v and ((int(program) & 0x7F), v) in VARIATION_TRIM_DB:
         db = VARIATION_TRIM_DB[(int(program) & 0x7F, v)]
     else:
         db = KIT_TRIM_DB if drum else PROGRAM_TRIM_DB.get(int(program) & 0x7F, 0.0)
+    if gs and not drum:
+        db += GS_TRIM_DB.get(int(program) & 0x7F, 0.0)
     return 10.0 ** (db / 20.0) if db else 1.0
 
 

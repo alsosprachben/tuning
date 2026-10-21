@@ -1731,6 +1731,7 @@ _GS_ROOM = {}            # the last prepare's room and GS reverb level/time, for
 _GS_EQ = {}              # the file's GS EQ while it prepares: {'eq': {0-3: v}, 'off': {channels}}
 _GS_DLY = {}             # ...and its GS delay: {'dev': gsdelay.device} for a GS file
 _GS_CHO = {}             # ...and its GS chorus: {'dev': chorus.gs_device} for a GS file
+_GS_FILE = [False]       # ...and whether it speaks GS at all (patch_map.GS_TRIM_DB)
 
 
 def prepare(path, tuner='hybrid440', sink=None):
@@ -1738,6 +1739,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     chose one (TUNING_ROOM) -- and the room put back after; the file's reverb
     level and time ride _LAST_PREP to the room sidecar, for roomtail."""
     fx, eq, eqsw, dly, gs, cho = gs_setup(path)
+    _GS_FILE[0] = bool(gs)
     # ...and its GS chorus, the device (chorus.gs_device): Chorus 3 as a reset
     # leaves it, then the file's
     _GS_CHO.clear()
@@ -4341,7 +4343,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _LV[0] = _LROW[_lk]
         # THE BANK'S BALANCE (patch_map.PROGRAM_TRIM_DB): the program's own
         # level against GeneralUser GS's, on the channel volume
-        chan_vol *= program_trim(prog, drum is not None)
+        chan_vol *= program_trim(prog, drum is not None, gs=_GS_FILE[0])
         # A SOUND TRANSPOSED WHOLE (tonelib transposed_from_hz: the SFX set
         # played from the keyboard, patch_map.melodic_sfx): built at the pitch
         # it was fitted at, and every frequency it emits -- harmonics, the
