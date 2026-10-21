@@ -1123,7 +1123,7 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | Overdrive | **2** | the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; not yet heard in a file |
 | Distortion | **2** | as Overdrive, with more gain |
 | Rotary | **3** | our Leslie at the type's rotor speeds, switched by Speed, Accl through our measured spin-ups, the rotors' levels -- RECORDED as Roland's is: two mics round the cabinet (Separate, 0-180 degrees), each to its speaker with its own swing and Doppler; heard on our Rhodes riff, mono and then with its two mics (Ben: "Those sound awesome", "Sounds great") |
-| Stereo Flanger | **2** | the chorus device with a flanger's swing, Roland's pre-delay and feedback, its outputs apart by its Phase |
+| Stereo Flanger | **3** | the chorus device with a flanger's swing, Roland's pre-delay and feedback, its outputs apart by its Phase; heard on our riff (Ben: "sound great") |
 | Tremolo | **3** | the tremolo pass, Roland's five waves as Fourier series, the depth dipping the level; heard on our riff |
 | Auto Pan | **3** | the same across the ears; heard on our riff |
 | Hexa Chorus | **2** | six voices spread in delay, depth and pan by its Dev parameters (0.5 ms a Pre Dly Dev step, chosen) |
@@ -1137,24 +1137,24 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | 4 Tap Delay | **3** | four taps spread left to right (chosen); heard on our riff |
 | Tm Ctrl Delay | **3** | one tap at its time, placed by its pan (its time's glide under control not built); heard on our riff |
 | 3D Delay | **3** | centre tap and two at 60 degrees; heard on our riff |
-| 2 Pitch Shifter | **2** | two shifted voices as gsdelay taps (Coarse, Fine, delay, pan, L.Bal) |
-| Fb P.Shifter | **2** | a shifted tap whose repeats shift again round the loop |
-| 3D Auto | **2** | the same, turning at its Speed; each note where its onset finds it |
-| 3D Manual | **2** | the part at the type's Azimuth, past the speakers and behind (tonelib pan_angle) |
-| OD -> Chorus | **2** | the valve's gain stage and guitar cabinet, then the chorus (gs_copies) |
-| OD -> Flanger | **2** | the same with the flanger |
-| OD -> Delay | **2** | the same with a gsdelay tap; its dry and effect by Bal |
-| DS -> Chorus | **2** | as OD -> Chorus with the distortion's gain |
-| DS -> Flanger | **2** | as OD -> Flanger with the distortion's gain |
-| DS -> Delay | **2** | as OD -> Delay with the distortion's gain |
-| Cho -> Delay | **2** | the chorus and a delay tap (our passes run the delay first) |
-| FL -> Delay | **2** | the flanger and a delay tap |
+| 2 Pitch Shifter | **3** | two shifted voices as gsdelay taps (Coarse, Fine, delay, pan, L.Bal); heard on our riff (Ben: "sound great") |
+| Fb P.Shifter | **3** | a shifted tap whose repeats shift again round the loop; heard on our riff (Ben: "sound great") |
+| 3D Auto | **3** | the same, turning at its Speed; each note where its onset finds it; heard on our riff (Ben: "sound great") |
+| 3D Manual | **3** | the part at the type's Azimuth, past the speakers and behind (tonelib pan_angle); heard on our riff (Ben: "sound great") |
+| OD -> Chorus | **3** | the valve's gain stage and guitar cabinet, then the chorus (gs_copies); heard on our riff (Ben: "sound great") |
+| OD -> Flanger | **3** | the same with the flanger; heard on our riff (Ben: "sound great") |
+| OD -> Delay | **3** | the same with a gsdelay tap; its dry and effect by Bal; heard on our riff (Ben: "sound great") |
+| DS -> Chorus | **3** | as OD -> Chorus with the distortion's gain; heard on our riff (Ben: "sound great") |
+| DS -> Flanger | **3** | as OD -> Flanger with the distortion's gain; heard on our riff (Ben: "sound great") |
+| DS -> Delay | **3** | as OD -> Delay with the distortion's gain; heard on our riff (Ben: "sound great") |
+| Cho -> Delay | **3** | the chorus and a delay tap (our passes run the delay first); heard on our riff (Ben: "sound great") |
+| FL -> Delay | **3** | the flanger and a delay tap; heard on our riff (Ben: "sound great") |
 | Rotary Multi | **2** | the Rotary with its OD (the valve) and EQ before the rotors |
 | GTR Multi 1 | **2** | compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); not yet heard in a file |
 | GTR Multi 2 | **4** | compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built |
 | GTR Multi 3 | **1** | as GTR Multi 1 without its wah (not built) |
-| Clean Gt Multi 1 | **2** | compressor, EQ, chorus/flanger and delay, as the guitar multis' |
-| Bass Multi | **2** | compressor, OD, EQ, chorus/flanger, the 4x10 bass cabinet |
+| Clean Gt Multi 1 | **3** | compressor, EQ, chorus/flanger and delay, as the guitar multis'; heard on our riff (Ben: "sound great") |
+| Bass Multi | **3** | compressor, OD, EQ, chorus/flanger, the 4x10 bass cabinet; heard on our riff (Ben: "sound great") |
 
 Not built yet: Spectrum, Enhancer, Humanizer, Phaser, Auto Wah, Step Flanger, Compressor, Limiter, Reverb, Gate Reverb, Lo-Fi 1, Lo-Fi 2, EH -> Chorus, EH -> Flanger, EH -> Delay, Cho -> Flanger, Clean Gt Multi 2, Rhodes Multi, Keyboard Multi, Cho / Delay, FL / Delay, Cho / Flanger, OD1 / OD2, OD / Rotary, OD / Phaser, OD / AutoWah, PH / Rotary, PH / AutoWah.
 
