@@ -1946,6 +1946,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _EFXEV = (_sys.get('efx') or []) if os.environ.get('TUNING_GS_EFX', '1') not in ('0', 'off', '') else []
     _EFXN = [None]          # this note's insertion-effect chain (gsefx.chain), or None
     _EFX_CH = {}            # channel -> its first EFX chain: what is set once (amp, cabinet, flanger)
+    # ...and the parts on a type with a bus of its own (efxbus), each over the
+    # whole file -- found from the timeline up front, not at a part's first
+    # effect note, for a part may come to it later in the song
+    _BUS_CH = {}
+    if _EFXEV and not MOOG_NEUTRAL:
+        for _bc in sorted({ev[1] for _, ev in _EFXEV if ev[0] == 'part'}):
+            _bs = _GSX.bus_setup(_EFXEV, _bc, SR)
+            if _bs is not None:
+                _BUS_CH[_bc] = _bs
     _USET = _sys.get('uset') or {}
     rpns, master, gmon = _sys['rpns'], _sys['master'], _sys['gmon']
     _pwseq = _sys['pwseq']
@@ -4201,6 +4210,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      chorus=_CHORUS_CH, cabinet=_CAB_CH, efxeq=_EFXEQ_CH,
                                      leslie=_LESLIE_CH,
                                      filter=_FILTER_CH,
+                                     bus=_BUS_CH,
                                      scanner=_SCAN_CH,
                                      register=_REG_CH, register_scale=REGISTER_SCALE,
                                      register_strings=(string_partial, partial_decay,
@@ -6567,6 +6577,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         prep['LANG'] = _LES.angle_table(_LESLIE_CH, _LES.make_rotors(_LESLIE_CH), N, SR, BLK)
     if _FILTER_CH:
         filter_prep(prep, _FILTER_CH, N)
+    if _BUS_CH:
+        prep['bus'] = dict(_BUS_CH)
     return prep
 
 
@@ -6648,9 +6660,54 @@ def _gpu():
     return _GPU[0] or None
 
 
+# THE PER-ROW COLUMNS a subset of a kernel table takes (prep_rows): the final
+# columns, the rotor's and a moving filter's -- by name, for a table such as
+# the Moog's FT is a flat array whose length may happen to equal P
+def _row_keys():
+    import leslie as _LES, efxfilter as _EF
+    return ([k for k, _ in FINAL_DTYPES] + [k for k, _, _ in _LES.LOBE_COLS]
+            + [k for k, _, _ in _EF.FILTER_COLS] + ['sw'])
+
+
+def prep_rows(prep, mask):
+    """prep with only the rows `mask` selects (a part's own bus)."""
+    out = dict(prep)
+    P = prep['P']
+    for k in _row_keys():
+        v = prep.get(k)
+        if isinstance(v, np.ndarray) and v.ndim == 1 and len(v) == P:
+            out[k] = np.ascontiguousarray(v[mask])
+    out['P'] = int(np.count_nonzero(mask))
+    return out
+
+
 def render_partials(prep, n0, winlen, L, R):
     """Every partial of prep into L/R over [n0, n0+winlen): on the GPU when
-    asked for and the window is the whole file from 0, else synth_partials."""
+    asked for and the window is the whole file from 0, else synth_partials.
+    A PART WITH A BUS OF ITS OWN (prep['bus'], efxbus) renders apart and is
+    processed before it joins the rest -- the whole window in one call here,
+    so each bus is made fresh (the stream keeps its own across windows)."""
+    bus = prep.get('bus')
+    if bus:
+        import efxbus as _EB
+        mch = np.asarray(prep['mch'])
+        on = np.isin(mch, list(bus))
+        _render_partials(prep_rows(prep, ~on), n0, winlen, L, R)
+        for ch, spec in bus.items():
+            m = mch == ch
+            if not m.any():
+                continue
+            bL = np.zeros(winlen, np.float32); bR = np.zeros(winlen, np.float32)
+            _render_partials(prep_rows(prep, m), n0, winlen, bL, bR)
+            oL, oR = _EB.Bus(spec, SR, T.master_gain).process(bL, bR, n0)
+            L += oL; R += oR
+        return
+    _render_partials(prep, n0, winlen, L, R)
+
+
+def _render_partials(prep, n0, winlen, L, R):
+    if prep['P'] == 0:
+        return
     if RENDER_GPU and n0 == 0 and _gpu() is not None:
         import gpurender
         gL, gR, _, _ = gpurender.FileRenderer(prep, _gpu()).render(winlen)

@@ -82,6 +82,9 @@ def raw_default(rng, enc, default, tables):
                 if x is not None and (x == want or (_num(x) is not None and _num(x) == _num(want))):
                     return i
         return None
+    cm = re.fullmatch(r"(\d+)-(\d+)-(\d+)", rng.strip())
+    if cm:                                                          # a numbered choice, from 0
+        return int(cm.group(2)) - int(cm.group(1))
     lohi = re.fullmatch(r"([0-9A-F]{2})\s*-\s*([0-9A-F]{2})", enc.strip())
     if not lohi:
         return None
@@ -134,6 +137,11 @@ def parse(pdf):
                     continue
                 parts = [p.strip() for p in re.split(r"\s+-\s+", rng)]
                 default = parts[1] if len(parts) == 3 else None
+                # ...or a numbered choice printed without the spaces ("1-2-6":
+                # 1 to 6, 2 the default, sent from 0)
+                cm = re.fullmatch(r"(\d+)-(\d+)-(\d+)", rng.strip())
+                if cm:
+                    default = cm.group(2)
                 params[cur][n] = (name.strip(), rng.strip(), default,
                                   raw_default(rng, enc, default, tables), enc.strip(), mark or "")
     # ROTARY MULTI is 03H 00H: the SC-88Pro's text and the SC-8850's text and

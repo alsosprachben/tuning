@@ -8857,6 +8857,26 @@ def selftest_gs(check):
               _w1 > 2.0 * _w0 and _wsame and _ch > _c0 + 50.0,
               "  (centroid swing %.0f Hz against Thru's %.0f; streamed as whole %s; Humanizer %.0f against %.0f Hz)"
               % (_w1, _w0, _wsame, _ch, _c0))
+        # A PART'S OWN BUS (efxbus): Lo-Fi 1 at Type 9 with no filters leaves the
+        # held lead at a handful of levels (5 bits) where Thru has thousands;
+        # Lo-Fi and the Compressor render streamed as whole
+        _lf = _tre((0x01, 0x72), [_gsx(0x40, 0x03, 0x03, 0, 0), _gsx(0x40, 0x03, 0x04, 8, 0),
+                                  _gsx(0x40, 0x03, 0x05, 0, 0)])
+        _cp = _tre((0x01, 0x30))
+        _rs0 = B.RENDER_STREAM
+        try:
+            B.RENDER_STREAM = True; _xl1 = B.render(_lf); _xc1 = B.render(_cp)
+            B.RENDER_STREAM = False; _xl2 = B.render(_lf); _xc2 = B.render(_cp)
+        finally:
+            B.RENDER_STREAM = _rs0
+        _seg = slice(int(0.5 * B.SR), int(1.0 * B.SR))
+        _nlv = len(np.unique(np.round(np.asarray(_xl1[0], float)[_seg], 9)))
+        _nl0 = len(np.unique(np.round(np.asarray(_x0[0], float)[_seg], 9)))
+        _same = lambda a, b: len(a[0]) == len(b[0]) and float(np.abs(np.asarray(a[0]) - np.asarray(b[0])).max()) == 0.0
+        check("file: Lo-Fi 1 holds and quantises its part on its own bus; it and the Compressor streamed as whole",
+              _nlv <= 80 and _nl0 > 1000 and _same(_xl1, _xl2) and _same(_xc1, _xc2),
+              "  (%d levels against Thru's %d; streamed as whole %s, %s)"
+              % (_nlv, _nl0, _same(_xl1, _xl2), _same(_xc1, _xc2)))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

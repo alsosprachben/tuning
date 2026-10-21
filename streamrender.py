@@ -1082,17 +1082,49 @@ class Stream:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
         self._lobe_prep(prep, rows, order)
         self._filter_prep(prep)
-        if self.gpu is not None:
+        bus = self.ctx['effects'].get('bus')
+        if not bus:
+            L, R, SL, SR_ = self._synth(prep, wi, w0, w1)
+            self._emit(w0, w1, L, R, SL, SR_)
+            return
+        # A PART WITH A BUS OF ITS OWN (efxbus) renders apart, through its
+        # processors -- kept across windows, fed silence where it has no rows,
+        # so the stream is the whole table's one continuous pass
+        import efxbus as EB
+        mch = np.asarray(prep['mch'])
+        on = np.isin(mch, list(bus))
+        L, R, SL, SR_ = self._synth(B.prep_rows(prep, ~on), wi, w0, w1)
+        procs = self.__dict__.setdefault('_busp', {})
+        for ch, spec in bus.items():
+            if ch not in procs:
+                procs[ch] = (EB.Bus(spec, B.SR, T_master_gain()), EB.Bus(spec, B.SR, T_master_gain()))
+            m = mch == ch
+            if m.any():
+                bL, bR, bSL, bSR = self._synth(B.prep_rows(prep, m), wi, w0, w1)
+            else:
+                bL = bR = bSL = bSR = np.zeros(n, np.float32)
+            oL, oR = procs[ch][0].process(bL, bR, w0)
+            sL, sR = procs[ch][1].process(bSL, bSR, w0)
+            L = L + oL; R = R + oR; SL = SL + sL; SR_ = SR_ + sR
+        self._emit(w0, w1, L, R, SL, SR_)
+
+    def _synth(self, prep, wi, w0, w1):
+        """A window's samples of these rows: (L, R, SL, SR), the send rendered
+        where the channels heard send differently -- on the GPU or the CPU."""
+        B = self.B
+        n = w1 - w0
+        P = prep['P']
+        if self.gpu is not None and P:
             import gpurender as GR
             g = self.B.send_weights(self.ctx['reverb'], self.ctx.get('reverb_steps'),
                                     prep['mch'], prep['non'])
             if self.send == 'auto' and self._split():
                 self.send = True
-            L, R, SL, SR_ = GR.FileRenderer(prep, self.gpu).render(w1, send_w=g, n0=w0)
-            self._emit(w0, w1, L, R, SL, SR_)
-            return
+            return GR.FileRenderer(prep, self.gpu).render(w1, send_w=g, n0=w0)
         L = np.zeros(n, np.float32); R = np.zeros(n, np.float32)
         SL = np.zeros(n, np.float32); SR_ = np.zeros(n, np.float32)
+        if not P:
+            return L, R, SL, SR_
         B.synth_partials(prep, w0, n, 0, P, L, R)
         # THE SEND, A SECOND RENDER of the same rows at each channel's send, as
         # blockrender's own send pass makes it. NOT the kernel's send bus in
@@ -1109,7 +1141,7 @@ class Stream:
             prep['aL'] = prep['aL'] * g
             prep['aR'] = prep['aR'] * g
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
-        self._emit(w0, w1, L, R, SL, SR_)
+        return L, R, SL, SR_
 
     def _filter_prep(self, prep):
         """A moving filter's columns and control table (blockrender.filter_prep),

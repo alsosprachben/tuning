@@ -76,6 +76,8 @@ SERIES_TYPES = ("OD -> Chorus", "OD -> Flanger", "OD -> Delay", "DS -> Chorus", 
                 "DS -> Delay", "Cho -> Delay", "FL -> Delay")
 BUILT |= set(SERIES_TYPES) | {"Clean Gt Multi 1", "Bass Multi"}
 BUILT |= {"Phaser", "Auto Wah", "Step Flanger", "Humanizer"}
+BUS_TYPES = ("Lo-Fi 1", "Compressor", "Limiter", "Enhancer")
+BUILT |= set(BUS_TYPES)
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -465,6 +467,28 @@ def _filter(name, g, pn):
     return None
 
 
+def bus_setup(events, ch, sr):
+    """A part's bus over the file (efxbus.Bus's spec): the first setting's
+    processor and mix, and the spans (samples) when the part is on it."""
+    spans, first, start = [], None, None
+    ts = sorted({0.0} | {t for t, _ in events})
+    for i, t in enumerate(ts):
+        c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        on = c is not None and c.get('bus') is not None
+        if on and first is None:
+            first = c
+        if on and start is None:
+            start = int(round(t * sr))
+        if not on and start is not None:
+            spans.append((start, int(round(t * sr)))); start = None
+    if start is not None:
+        spans.append((start, 1 << 62))
+    if first is None:
+        return None
+    return dict(kind=first['bus'][0], kw=first['bus'][1], spans=spans,
+                mix=first.get('bus_mix', (0.0, 1.0)) if first['bus'][0] == 'lofi' else (0.0, 1.0))
+
+
 def filter_setup(events, ch):
     """A part's moving filter over the file (efxfilter.Channel): its type and
     parameters as first set, its control from each setting of the timeline,
@@ -566,6 +590,24 @@ def chain(st):
         if name == "Tremolo Chorus":
             out['trem'] = (table_value(6, g("Trem Rate", 60)), TREMOLO_CHORUS_DEPTH,
                            g("Trem Sep", 96) > 0)
+        return out
+    if name in BUS_TYPES:
+        # A PART'S OWN BUS (efxbus): rendered to its own buffer, processed,
+        # added back -- its dry against its effect by Balance where it has one
+        # (Lo-Fi's unprinted: the effect alone, chosen)
+        if name == "Lo-Fi 1":
+            out['bus'] = ('lofi', dict(lofi_type=g("Lo-Fi Type", 5) + 1, pre=g("Pre Filter", 1) + 1,
+                                       post=g("Post Filter", 1) + 1))
+            out['bus_mix'] = balance(g("Balance", 127))
+        elif name == "Compressor":
+            out['bus'] = ('comp', dict(attack=g("Attack", 72), sustain=g("Sustain", 100),
+                                       post_gain=g("Post Gain", 0)))
+        elif name == "Limiter":
+            out['bus'] = ('limit', dict(threshold=g("Threshold", 85), ratio=g("Ratio", 2),
+                                        release=g("Release", 16), post_gain=g("Post Gain", 0)))
+        else:
+            out['bus'] = ('enh', dict(sens=g("Sens", 64), mix=g("Mix", 64)))
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
         return out
     if name in ("Phaser", "Auto Wah", "Step Flanger", "Humanizer"):
         out['filter'] = _filter(name, g, pn)
