@@ -1078,10 +1078,8 @@ class Stream:
         self._lobe_prep(prep, rows, order)
         if self.gpu is not None:
             import gpurender as GR
-            rs = self.ctx['reverb']
-            g = np.ones(P, np.float32)
-            for c, v in rs.items():
-                g[prep['mch'] == c] = v
+            g = self.B.send_weights(self.ctx['reverb'], self.ctx.get('reverb_steps'),
+                                    prep['mch'], prep['non'])
             if self.send == 'auto' and self._split():
                 self.send = True
             L, R, SL, SR_ = GR.FileRenderer(prep, self.gpu).render(w1, send_w=g, n0=w0)
@@ -1100,10 +1098,8 @@ class Stream:
             self.send = True
             self.incomplete = wi > 0
         if self.send is True:
-            rs = self.ctx['reverb']
-            g = np.ones(P, np.float32)
-            for c, v in rs.items():
-                g[prep['mch'] == c] = v
+            g = B.send_weights(self.ctx['reverb'], self.ctx.get('reverb_steps'),
+                               prep['mch'], prep['non'])
             prep['aL'] = prep['aL'] * g
             prep['aR'] = prep['aR'] * g
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
@@ -1243,8 +1239,8 @@ class Stream:
             self.SL[w0:w1] = SL; self.SR[w0:w1] = SR_
 
     def _split(self):
-        rs = self.ctx['reverb']
-        return len({rs.get(c, 1.0) for c in self.heard}) > 1 if rs else False
+        rs, st = self.ctx['reverb'], self.ctx.get('reverb_steps')
+        return len(self.B.send_values(rs, st, self.heard)) > 1 if (rs or st) else False
 
 
 def T_master_gain():
@@ -1325,7 +1321,7 @@ def result(s):
     """What blockrender's main reads after a render (its _LAST_PREP): the room
     sidecar's bands, the sends, the channels heard, and the send bus."""
     room_q = [(f, (d / r) if r > 0.0 else 1.0, d) for f, (d, r) in zip(s.ctx['room_bands'], s.ctx['qacc'])]
-    return dict(room_q=room_q, reverb_send=dict(s.ctx['reverb']),
+    return dict(room_q=room_q, reverb_send=dict(s.ctx['reverb']), reverb_steps=dict(s.ctx.get('reverb_steps') or {}),
                 mch=np.array(sorted(s.heard), np.int32), N=s.N, total=s.ctx['total'],
                 mvol=s.ctx['mvol'](),
                 stream_send=None if s.send is not True else ((s.SL, s.SR) if s.SL is not None else s.send_path))

@@ -1036,6 +1036,54 @@ def in_order(evs):
     return sorted(evs, key=lambda e: e[0])
 
 
+# CC91 FOLLOWS THE SONG. A send was each channel's FIRST CC91, held for the
+# whole piece; six of seven Sound Canvas files here move it as they go (Tokei,
+# River, SENSATIO, 421 changes), the arranger setting a section's depth. A
+# channel whose CC91 changes has steps: (onset samples, distance multiples),
+# the value before its first change being its first, as before -- so a file
+# that sends one CC91 renders as it did. Each note stands at the distance its
+# onset finds (_src_dist), and the send bus weights each row by its onset.
+def send_steps(ccs, sr, nominal):
+    """{channel: (onsets in samples, multiples)} for the channels whose CC91
+    changes; the others keep one send (the _REVERB_CH dict)."""
+    out = {}
+    for ch, evs in ccs.items():
+        v = [(t, x) for t, cc, x in in_order(evs) if cc == 91]
+        if len({x for _, x in v}) > 1:
+            out[ch] = (np.array([int(round(t * sr)) for t, _ in v], np.int64),
+                       np.array([x / float(nominal) for _, x in v], np.float64))
+    return out
+
+
+def step_at(st, n):
+    """A step table's value at sample(s) n: the last change at or before it,
+    and before the first, the first."""
+    i = np.searchsorted(st[0], np.asarray(n), side='right') - 1
+    return st[1][np.maximum(i, 0)]
+
+
+def send_weights(rs, steps, mch, non):
+    """Each row's reverb send: its channel's, at the row's onset where the
+    channel's CC91 changes (send_steps), else the channel's one value."""
+    mch = np.asarray(mch)
+    g = np.ones(len(mch), np.float32)
+    for c in np.unique(mch):
+        m = mch == c
+        st = steps.get(int(c)) if steps else None
+        g[m] = step_at(st, np.asarray(non)[m]) if st is not None else (rs or {}).get(int(c), 1.0)
+    return g
+
+
+def send_values(rs, steps, heard):
+    """Every send the channels heard stand at -- more than one, and the room
+    needs a send bus of its own."""
+    out = set()
+    for c in heard:
+        st = steps.get(int(c)) if steps else None
+        out |= set(st[1].tolist()) if st is not None else {(rs or {}).get(int(c), 1.0)}
+    return out
+
+
 # A pending CC84 cancelled by CC121. Not a note number -- a controller value
 # never exceeds 127 -- so it can ride in `ccs` in message order and be told
 # apart from a real source note by the one reader that cares.
@@ -3622,6 +3670,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _CHORUS_CH = {}     # channel -> (CC93 send 0..1, cents tuple)
     _REVERB_CH = {}     # channel -> CC91 send as a DISTANCE MULTIPLE
     _C91D = {}          # channel -> its first CC91 as that multiple, or None
+    # ...and the channels whose CC91 moves, by onset (send_steps)
+    _REVERB_STEPS = send_steps(ccs, SR, GM_DEFAULT_REVERB)
+    _ON_NOW = [0.0]     # the onset, seconds, of the note being emitted
 
     _RNORM = {}
 
@@ -3648,6 +3699,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _c = [v for t, cc, v in in_order(ccs.get(ch, [])) if cc == 91]
             _C91D[ch] = (_c[0] / float(GM_DEFAULT_REVERB)) if _c else None
         d = _C91D[ch]
+        if ch in _REVERB_STEPS:          # its CC91 at this note's onset (send_steps)
+            d = float(step_at(_REVERB_STEPS[ch], int(round(_ON_NOW[0] * SR))))
         if d is None:
             d = getattr(pr, 'reverb_distance', None)
         return 1.0 if d is None else max(0.1, float(d))
@@ -4057,7 +4110,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         lib=lib, N=N, nblk=nblk, total=total, sh=sh, G=G, S=S, BR=BR, BC=BC, BL=BL,
                         cons_bursts=cons_bursts, cons_expand=_cons_expand, cons_src=_CONS_SRC,
                         mvol=_mvol, moog_tables=_moog_tables,
-                        reverb=_REVERB_CH, qacc=_QACC, F=_F_SYM, ht_rows=_HT_ROWS,
+                        reverb=_REVERB_CH, reverb_steps=_REVERB_STEPS, qacc=_QACC, F=_F_SYM, ht_rows=_HT_ROWS,
                         amp_ref=_AMP_REF, amp_imb=_AMP_IMB,
                         moog_ft=_MOOG_FT, moog_mpi=_MOOG_MPI, moog_mki=_MOOG_MKI,
                         effects=dict(sympathetic=_SYM_CH, mf104=_MF104, gsdelay=_GSDN, tubeamp=_AMP_CH,
@@ -4069,6 +4122,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                      register_strings=(string_partial, partial_decay,
                                                        unison_partial))))
     for ch, note, on, off, vel, (v7, v11, pan), prog in notes:
+        _ON_NOW[0] = on
         _pna = None              # MIDI 2.0 per-note pitch: set where f0 is decided
         _mmgr = None             # MPE: this note's manager channel, if it is on a member
         _snd_finish(_SND_PEND[0]); _SND_PEND[0] = None
@@ -4138,6 +4192,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _rv = _EFXN[0]['sends'].get(_GSX.SEND_REV, 40)
                 _C91D[ch] = max(0.0, _rv) / float(GM_DEFAULT_REVERB)
                 _REVERB_CH.setdefault(ch, _C91D[ch])
+                _REVERB_STEPS.pop(ch, None)    # the effect's send, not CC91's
         if _GS_DLY and not MOOG_NEUTRAL:
             if _EFXN[0] is not None:
                 _gs_s = _EFXN[0]['sends'].get(_GSX.SEND_DLY, 0) / 127.0
@@ -4870,8 +4925,20 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # the channel overrides it, as a desk's send would.
                 _REVERB_CH[_MCH[0]] = float(props.reverb_distance)
         if _MCH[0] not in _CHORUS_CH:
-            _c93 = [v for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
-            if _c93:
+            _c93t = [(t, v) for t, cc, v in in_order(ccs.get(_MCH[0], [])) if cc == 93]
+            _c93 = [v for _, v in _c93t]
+            if _c93 and len(set(_c93)) > 1 and max(_c93) > 0 and _GS_CHO and not MOOG_NEUTRAL:
+                # ...AND ITS CC93 FOLLOWS THE SONG, as CC91 does (send_steps):
+                # the share each row's onset finds, through the chorus pass's
+                # own per-row share (chorus.expand's fourth)
+                def _cshare(v, _l=_GS_CHO['dev']['level']):
+                    _ca = v / 127.0 * _l
+                    return _ca * _ca / (1.0 + _ca * _ca)
+                _st = (np.array([int(round(t * SR)) for t, _ in _c93t], np.int64),
+                       np.array([_cshare(v) for v in _c93], np.float64))
+                _CHORUS_CH[_MCH[0]] = (float(_st[1][0]), _GS_CHO['dev'], 'gs',
+                                       lambda non, _st=_st: step_at(_st, non))
+            elif _c93:
                 if _c93[0] > 0 and _GS_CHO and not MOOG_NEUTRAL:
                     # A SOUND CANVAS FILE'S CHORUS is its device (chorus.gs_copies).
                     # The device ADDS its output, at send x level, to the dry;
@@ -6364,7 +6431,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 FT=FT, KN=KN, knk=1, kb0=0, MPI=MPI, MPC=MPC, MPR=MPR, MKI=MKI, MPK=MPK,
                 mvol=mvol,
                 cons_bursts=cons_bursts,
-                room_q=room_q, reverb_send=dict(_REVERB_CH),
+                room_q=room_q, reverb_send=dict(_REVERB_CH), reverb_steps=dict(_REVERB_STEPS),
                 fader_rows=dict(_LROW),      # THE CHANNEL FADER: {channel: row}
                 # which rows are sympathetic strings' (live's meend leaves them
                 # at their own pitch: Live._meend_retune)
@@ -6895,7 +6962,7 @@ if __name__=="__main__":
             _sd = {str(k): v for k, v in _rs.items()}
             if _rs:
                 _hh = sorted(set(int(_c) for _c in np.unique(_LAST_PREP['mch'])))
-                _vv = {_rs.get(_c, 1.0) for _c in _hh}
+                _vv = send_values(_rs, _LAST_PREP.get('reverb_steps'), _hh)
                 if len(_vv) == 1:
                     # One number for every channel that sounds: roomtail scales
                     # the mix it already has and nothing extra is rendered.
@@ -6918,7 +6985,7 @@ if __name__=="__main__":
         # only that channel has notes -- and comparing the send table alone
         # would call it split and pay for a second render.
         _heard = sorted(set(int(_c) for _c in np.unique(_mch)))
-        _vals = {_rs.get(_c, 1.0) for _c in _heard}
+        _vals = send_values(_rs, _LAST_PREP.get('reverb_steps'), _heard)
     _ss = _LAST_PREP.get('stream_send')
     if _rs and len(_vals) > 1 and _ss is not None:
         # streamed: the bus was rendered beside the mix, in the same kernel call
@@ -6929,9 +6996,7 @@ if __name__=="__main__":
         print("  reverb send: %d channel(s) at their own distance, bus written"
               % len(_rs))
     elif _rs and len(_vals) > 1:
-        _g = np.ones(len(_mch), np.float32)
-        for _c in _heard:
-            _g[_mch == _c] = _rs.get(_c, 1.0)
+        _g = send_weights(_rs, _LAST_PREP.get('reverb_steps'), _mch, _LAST_PREP['non'])
         _sav = (_LAST_PREP['aL'].copy(), _LAST_PREP['aR'].copy())
         _LAST_PREP['aL'] *= _g
         _LAST_PREP['aR'] *= _g

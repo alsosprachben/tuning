@@ -8647,6 +8647,30 @@ def selftest_gs(check):
               abs(_e(_uk) - _e(_usn)) < 0.1 and abs(_cen(_uk) / _cen(_usn) - 1.0) < 0.01,
               "  (key 60 <- Standard 38: %+.2f dB, centroid %.0f against %.0f)"
               % (_e(_uk) - _e(_usn), _cen(_uk), _cen(_usn)))
+        # CC91 AND CC93 FOLLOW THE SONG (blockrender.send_steps): a channel's
+        # sends as each note's onset finds them, not its first all piece long.
+        # Two notes, the reverb send 40 then 127; the chorus send 0 then 127
+        _cc = lambda c, v, t=0: _M("control_change", channel=0, control=c, value=v, time=t)
+        _ss = lambda c, v2: _bfile([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _cc(c, c == 91 and 40 or 0)]
+                                   + _on(0, 60) + [_cc(c, v2, 480)] + _on(0, 64)
+                                   + [_M("note_on", channel=0, note=60, velocity=0, time=960)])
+        _pp = B.prepare(_ss(91, 127), "even")
+        _st = _pp.get("reverb_steps", {}).get(0)
+        _g = B.send_weights(_pp["reverb_send"], _pp["reverb_steps"], _pp["mch"], _pp["non"])
+        _cut = int(0.75 * B.SR)                   # between the two notes
+        _g1, _g2 = set(_g[_pp["non"] < _cut].tolist()), set(_g[_pp["non"] >= _cut].tolist())
+        _p1 = B.prepare(_ss(91, 40), "even")
+        _x0 = B.render(_ss(93, 0)); _x1 = B.render(_ss(93, 127))
+        _n1 = int(0.5 * B.SR)                     # the first note, before the change
+        _d1 = float(np.abs(np.asarray(_x1[0])[:_n1] - np.asarray(_x0[0])[:_n1]).max())
+        _d2 = float(np.abs(np.asarray(_x1[0])[_n1:] - np.asarray(_x0[0])[_n1:]).max())
+        check("file: CC91 and CC93 follow the song -- each note sends as its onset finds them",
+              _st is not None and list(np.round(_st[1], 3)) == [1.0, round(127 / 40.0, 3)]
+              and _g1 == {1.0} and _g2 == {np.float32(127 / 40.0)}
+              and not _p1.get("reverb_steps") and _d1 == 0.0 and _d2 > 1e-4,
+              "  (steps %s; sends %s then %s; one CC91: %s; chorus first note %.1e, second %.1e)"
+              % (None if _st is None else np.round(_st[1], 3).tolist(), sorted(_g1), sorted(_g2),
+                 _p1.get("reverb_steps"), _d1, _d2))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;
