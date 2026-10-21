@@ -289,6 +289,7 @@ class FileRenderer:
     # tens of thousands retired together still sum far under hearing -- a row
     # is done. The CPU path keeps every row (its hashes are the corpus's).
     RETIRE_FLOOR = 1e-6
+    BEND_RETIRE_FLOOR = 3e-7         # rows on a bend row: see _audible_end
     # A WINDOW'S DESCRIPTORS HAVE A BUDGET: active rows x blocks, 184 bytes
     # each. Tokei at 3:44 had ~590 000 rows sounding, and 32 blocks of them
     # asked for a table past the 3.25 GB the Iris allocates in one buffer --
@@ -324,14 +325,42 @@ class FileRenderer:
         self.wins = [_Window(self.gpu.ctx), _Window(self.gpu.ctx)]
 
     def _audible_end(self, prep, non, dl):
-        """Each row's last sample above RETIRE_FLOOR, from its level and its
+        """Each row's last sample above RETIRE_FLOOR (BEND_RETIRE_FLOOR for a
+        row on a bend row), from its level and its
         two decay rates (the kernel's law, as blockrender.ring_last reads
         it); a row that never falls (a sustain, no decay) keeps its end."""
         P = len(non)
         g = lambda k: np.asarray(prep[k], np.float64)[:P]     # noqa: E731
         a = np.maximum(np.abs(g('aL')), np.abs(g('aR')))
+        # A BEND ROW CHANGES A ROW'S LEVEL ONLY THROUGH BL (voice_partial.inc:
+        # BLrow, a wind's level or a tremulant, multiplying the law) -- the
+        # pitch itself leaves it alone. So such a row retires by its own law
+        # times the most BL it will meet from its onset on: an upper bound,
+        # and 1 where there is no BL at all. Kept to the nominal end instead,
+        # half of Tokei's setup (51% of its block descriptors) was rows on a
+        # pitch-bend row ringing on below -120 dB.
+        #
+        # ...AT THEIR OWN FLOOR, BEND_RETIRE_FLOOR. 89% of Tokei's rows ride a
+        # bend row, so their retirement sets the GPU's agreement with the CPU,
+        # and it follows the floor (the residue is the retired rows' sum,
+        # ~25 000 at once): measured on its first 20 s against the CPU,
+        # never retired 25.1 s and -102 dB; 3e-8 24.2 s, -99; 1e-7 21.7 s,
+        # -90; 3e-7 15.6 s, -79; 1e-6 14.7 s, -68. 3e-7 is the curve's knee:
+        # nearly all the speed, inside the paths' usual -66..-80 dB.
+        lift = np.ones(P)
+        Fr = np.full(P, float(self.RETIRE_FLOOR))
+        if 'br' in prep:
+            br = np.asarray(prep['br'])[:P]
+            on = br >= 0
+            Fr[on] = self.BEND_RETIRE_FLOOR
+            BL = prep.get('BL')
+            if BL is not None and on.any():
+                sm = np.maximum.accumulate(np.asarray(BL)[:, ::-1], axis=1)[:, ::-1]
+                bb = np.minimum(np.asarray(non)[on] // B.BLK, sm.shape[1] - 1)
+                lift[on] = np.maximum(sm[br[on], bb], 0.0)
+        a = a * lift
         sl, af, lr, lrA = g('sus'), g('aft'), g('logr'), g('logrA')
-        F = self.RETIRE_FLOOR
+        F = Fr
 
         def t_to(c, rate):
             with np.errstate(divide='ignore', invalid='ignore'):
@@ -340,9 +369,9 @@ class FileRenderer:
         t = np.maximum(t_to((1.0 - sl) * (1.0 - af) * a, lr), t_to((1.0 - sl) * af * a, lrA))
         t = np.where(sl * a > F, np.inf, t)
         # ...but only where the row's level IS that law: a Moog row's comes
-        # from its filter (fx), a wind's or a bend's row may lift it (br), an
-        # organ's gate and swell (gr) -- those keep their nominal end
-        for k in ('fx', 'br', 'gr'):
+        # from its filter (fx), an organ's gate and swell (gr) -- those keep
+        # their nominal end (a bend row's BL is bounded above, in `lift`)
+        for k in ('fx', 'gr'):
             if k in prep:
                 t = np.where(np.asarray(prep[k])[:P] >= 0, np.inf, t)
         big = np.iinfo(np.int64).max // 4
