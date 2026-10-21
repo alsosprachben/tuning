@@ -1775,7 +1775,9 @@ _GSD_PLACE = {}
 def gsd_place(side, f):
     """Where the GS delay's output `side` ('c', 'l', 'r') reaches the ears at
     frequency f: (gL, gR, dL, dR samples) -- the head model's, for a source
-    at the field's middle or side, as a pan of 0 or +-1 places one."""
+    at the field's middle or side, as a pan of 0 or +-1 places one. A side
+    may be a pan (-1..1) itself: a voice between the outputs (a Hexa
+    Chorus's), at the angle the pan law puts it (tonelib.stage_angle)."""
     k = (side, int(f))
     v = _GSD_PLACE.get(k)
     if v is None:
@@ -1784,7 +1786,12 @@ def gsd_place(side, f):
         if not _GSD_PLACE:
             _GSD_PLACE['_p'] = T.StoppedPipeProperties(261.6, 0, 1, 1)
         q = _GSD_PLACE['_p']
-        li, ri, ld, rd = q.hrtf_at(_GSD.OUTPUT_X[side], 0.0, q.listener_distance)
+        _x = (_GSD.OUTPUT_X[side] if isinstance(side, str)
+              # ...or an angle itself, degrees (the 3D types: past the speakers)
+              else q.listener_distance * math.tan(math.radians(max(-80.0, min(80.0, side[1]))))
+              if isinstance(side, tuple)
+              else q.listener_distance * math.tan(T.stage_angle(float(side))))
+        li, ri, ld, rd = q.hrtf_at(_x, 0.0, q.listener_distance)
         v = _GSD_PLACE[k] = (q.hrtf_gain(f, li), q.hrtf_gain(f, ri), ld * SR, rd * SR)
     return v
 
@@ -4876,6 +4883,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _CAB_CH[_MCH[0]] = _ex['cabinet']
             if _ex['cf'] is not None:
                 _CHORUS_CH[_MCH[0]] = (0.0, _ex['cf'][0], 'gs', _GSX.mix_share(_EFXEV, _MCH[0], SR))
+            if _ex.get('trem') and _MCH[0] not in _TREM_CH:
+                # a Tremolo Chorus's tremolo: the tremolo pass's (rate, depth, stereo)
+                _TREM_CH[_MCH[0]] = tuple(_ex['trem'])
         if getattr(props, 'sympathetic_gain', 0.0) and _MCH[0] not in _SYM_CH:
             _SYM_CH[_MCH[0]] = props
         if REGISTER and (getattr(props, 'register_gain', 0.0)

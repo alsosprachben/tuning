@@ -26,10 +26,31 @@ import blockrender as B      # noqa: E402
 import tone_ab as TA         # noqa: E402
 
 
+def _top_split(s):
+    """s split at the commas outside brackets and quotes (a value may be a
+    dict or a tuple)."""
+    out, depth, cur, q = [], 0, "", None
+    for ch in s:
+        if q:
+            q = None if ch == q else q
+        elif ch in "'\"":
+            q = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            out.append(cur); cur = ""
+            continue
+        cur += ch
+    out.append(cur)
+    return out
+
+
 def parse_take(t):
     name, _, sets = t.partition(":")
     out = []
-    for kv in filter(None, sets.split(",")):
+    for kv in filter(None, _top_split(sets)):
         k, v = kv.split("=", 1)
         mod, attr = k.rsplit(".", 1)
         out.append((importlib.import_module(mod), attr, ast.literal_eval(v)))

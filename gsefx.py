@@ -60,7 +60,9 @@ import gs_efx_params as _P
 for _k, (_n, _nm) in _P.TYPES.items():
     TYPES.setdefault(_k, _nm)
 TYPES[(0x02, 0x0C)] = "Rotary Multi"
-BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion"}
+BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion",
+         "Stereo-EQ", "Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus"}
+CHORUS_TYPES = ("Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus")
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -218,6 +220,68 @@ def od_gain(v, dist):
 CMP_ATTACK_MS = 40.0
 
 
+def table_value(k, v):
+    """The value table *k's entry at v (Roland's data table), as a number."""
+    x = _P.VALUE_TABLES[k][max(0, min(127, int(v)))]
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def printed(name, key):
+    """A parameter's default as the table prints it ("+2"), as a number, or None."""
+    for _k, (_n, nm) in _P.TYPES.items():
+        if TYPES.get(_k) == name:
+            for x in _P.PARAMS[nm].values():
+                if x[0] == key and x[2] is not None:
+                    try:
+                        return float(x[2].replace("m", ""))
+                    except ValueError:
+                        return None
+    return None
+
+
+# THE CHORUS TYPES' VOICES, where Roland gives no number: Space D's and the
+# Stereo Chorus's two outputs' LFOs half a turn apart when the file sends no
+# Phase (its default prints only its range); a Hexa Chorus's Pre Dly Dev in
+# steps of 0.5 ms; the Tremolo Chorus's tremolo at half depth. Chosen.
+CHORUS_PHASE_DEG = 180.0
+HEXA_DLY_STEP_MS = 0.5
+TREMOLO_CHORUS_DEPTH = 0.5
+
+
+def _chorus(name, g, pn):
+    """A chorus type's device for chorus.gs_copies, with its voices (taps:
+    (side, LFO phase, extra delay s, depth factor)): the pre-delay and the
+    rate from Roland's tables (*1, *6), the depth as the system chorus's
+    swing; Space D and the Stereo Chorus two outputs apart by their Phase,
+    the Hexa Chorus six voices spread in delay, depth and pan by its Dev
+    parameters, the 3D Chorus's two placed wider than the speakers."""
+    rate = table_value(6, g("Rate" if "Rate" in pn else "Cho Rate", 8))
+    depth = g("Depth" if "Depth" in pn else "Cho Depth", 64)
+    swing = (int(depth) + 1) / 3.2 / 1000.0 / 2.0
+    pre = (table_value(1, g("Pre Dly", 10)) or 0.0) / 1000.0
+    ph = math.radians(2.0 * g("Phase", int(CHORUS_PHASE_DEG / 2.0))) if "Phase" in pn \
+        else math.radians(CHORUS_PHASE_DEG)
+    if name == "Hexa Chorus":
+        dd = g("Pre Dly Dev", printed(name, "Pre Dly Dev") or 0)
+        dv = (g("Depth Dev", 0x40 + int(printed(name, "Depth Dev") or 0)) - 0x40) / 20.0
+        pd = g("Pan Dev", printed(name, "Pan Dev") or 0) / 20.0
+        taps = [(pd * (2.0 * k / 5.0 - 1.0), 2.0 * math.pi * k / 6.0,
+                 HEXA_DLY_STEP_MS * dd * (k / 5.0 - 0.5) / 1000.0, max(0.0, 1.0 + dv * (k / 5.0 - 0.5)))
+                for k in range(6)]
+    elif name == "3D Chorus":
+        taps = [(('deg', -60.0), 0.0, 0.0, 1.0), (('deg', 60.0), math.pi, 0.0, 1.0)]
+    else:
+        taps = [('l', 0.0, 0.0, 1.0), ('r', ph, 0.0, 1.0)]
+    lpf = None
+    if "Pre Filter" in pn and g("Pre Filter", 0) == 1:      # the LPF; its HPF is not built
+        lpf = table_value(9, g("Cutoff", 127))
+    return dict(tau=pre + swing, rate=rate, vd=2.0 * math.pi * rate * swing, fb=0.0, level=1.0,
+                lpf=lpf, taps=taps)
+
+
 def param_numbers(name):
     """{parameter name: its number 1-20} for a type, from Roland's table."""
     for _k, (_n, nm) in _P.TYPES.items():
@@ -265,6 +329,20 @@ def chain(st):
             out['cabinet'] = 'guitar12'
         out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
         return out
+    if name in CHORUS_TYPES:
+        out['cf'] = (_chorus(name, g, pn), 0.0)
+        out['cf_share'] = g("Balance", 64) / 127.0
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
+        if name == "Tremolo Chorus":
+            out['trem'] = (table_value(6, g("Trem Rate", 60)), TREMOLO_CHORUS_DEPTH,
+                           g("Trem Sep", 96) > 0)
+        return out
+    if name == "Stereo-EQ":
+        out['eq'] = (gain_db(g("Low Gain", 64)), eq_freq(g("M1 Freq", 72)), EQ_Q[min(4, g("M1 Q", 1))],
+                     gain_db(g("M1 Gain", 64)), gain_db(g("Hi Gain", 64)),
+                     (200.0, 400.0)[min(1, g("Low Freq", 0))], (4000.0, 8000.0)[min(1, g("Hi Freq", 0))],
+                     (eq_freq(g("M2 Freq", 56)), EQ_Q[min(4, g("M2 Q", 1))], gain_db(g("M2 Gain", 64))))
+        return out
     if "Cmp Sw" in pn and g("Cmp Sw", 1):
         sus = g("Cmp Sus", 64) / 127.0
         # chosen: sustain 0-127 slows the decay up to fourfold, the level its
@@ -303,6 +381,9 @@ def mix_share(events, ch, sr):
     vals = []
     for t in ts:
         c = chain(state_at(events, t)) if assigned(events, ch, t) else None
+        if c is not None and c.get('cf_share') is not None:
+            vals.append(c['cf_share'])        # a chorus type's Balance: dry against effect
+            continue
         a = c['cf'][1] if (c is not None and c['cf'] is not None) else 0.0
         vals.append(a * a / (1.0 + a * a))
     ts, vals = np.array(ts), np.array(vals)
@@ -330,13 +411,16 @@ def eq_gain(f, eq):
     its Q and gain). It is AFTER the OD and its amp, as the chains have it
     (GTR Multi 2: Cmp, OD, EQ, CF) -- applied with the cabinet, to the valve's
     products too (blockrender's and streamrender's speaker pass)."""
-    lo, mf, q, mg, hi = eq
-    x = (f / LOW_SHELF_HZ) ** 2
-    y = (f / HIGH_SHELF_HZ) ** 2
+    lo, mf, q, mg, hi = eq[:5]
+    # ...and, where a type sets them (Stereo-EQ), its shelves' corners and a
+    # second mid: (lo, mid Hz, Q, mid dB, hi, lo Hz, hi Hz, (mid 2 Hz, Q, dB))
+    x = (f / (eq[5] if len(eq) > 5 else LOW_SHELF_HZ)) ** 2
+    y = (f / (eq[6] if len(eq) > 6 else HIGH_SHELF_HZ)) ** 2
     db = lo / (1.0 + x) + hi * y / (1.0 + y)
-    if mf and mg:
-        u = q * (f / mf - mf / (f + 1e-6 * (f <= 0)))
-        db += mg / (1.0 + u * u)
+    for mf, q, mg in ((mf, q, mg),) + (tuple(eq[7:8]) if len(eq) > 7 else ()):
+        if mf and mg:
+            u = q * (f / mf - mf / (f + 1e-6 * (f <= 0)))
+            db += mg / (1.0 + u * u)
     return 10.0 ** (db / 20.0)
 
 

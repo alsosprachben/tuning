@@ -282,9 +282,15 @@ def gs_copies(p, rows, dev, share, sr, place):
     share = np.asarray(share, np.float64)
     if not np.any(share > 0.0):
         return [], np.ones(len(rows)) if share.ndim else 1.0
-    wet = (share / float(len(GS_TAPS)) / passes) ** 0.5
+    # THE DEVICE'S VOICES (a chorus type's: gsefx._chorus), else the system
+    # chorus's two: (side, LFO phase[, extra delay s, depth factor])
+    taps = dev.get('taps') or GS_TAPS
+    wet = (share / float(len(taps)) / passes) ** 0.5
     out = []
-    for ti, (side, phase) in enumerate(GS_TAPS):
+    for ti, tap in enumerate(taps):
+        side, phase = tap[0], tap[1]
+        extra = tap[2] if len(tap) > 2 else 0.0
+        dfac = tap[3] if len(tap) > 3 else 1.0
         pl = [place(side, x) for x in f]
         gl = np.array([q[0] for q in pl]); gr = np.array([q[1] for q in pl])
         dl = np.array([q[2] for q in pl]); dr = np.array([q[3] for q in pl])
@@ -292,7 +298,7 @@ def gs_copies(p, rows, dev, share, sr, place):
             g = wet * dev['fb'] ** (k - 1)
             if np.all(np.abs(g) < FLOOR * 0.5) or (k > 1 and dev['fb'] == 0.0):
                 break
-            d = k * dev['tau'] * sr
+            d = (k * dev['tau'] + extra) * sr
             o = {c: v[rows].copy() for c, v in p.items()}
             o['non'] = (non + d).astype(o['non'].dtype)
             o['noff'] = (p['noff'][rows].astype(np.float64) + d).astype(o['noff'].dtype)
@@ -310,7 +316,7 @@ def gs_copies(p, rows, dev, share, sr, place):
             o['aR'] = (m * gr).astype(o['aR'].dtype)
             o['aM'] = (aM * g * lp).astype(o['aM'].dtype)
             # the LFO runs free, as the device's does: its phase at the copy's onset
-            o['vd'] = np.full(len(rows), min(0.5, k * dev['vd']), o['vd'].dtype)
+            o['vd'] = np.full(len(rows), min(0.5, k * dev['vd'] * dfac), o['vd'].dtype)
             o['vr'] = np.full(len(rows), dev['rate'], o['vr'].dtype)
             o['vp'] = ((2.0 * np.pi * dev['rate'] * nn / sr + phase) % (2.0 * np.pi)).astype(o['vp'].dtype)
             if 'vdl' in o:

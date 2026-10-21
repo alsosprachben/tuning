@@ -8695,6 +8695,37 @@ def selftest_gs(check):
         check("file: GS bend range and mod depth (40 2x 10, 04) as RPN 0/0 and 0/5",
               _rr.get("range") == 12.0 and abs(_rr.get("mod", 0) - 64 * 600 / 127.0) < 1.0,
               "  (%s)" % _rr)
+        # THE CHORUS TYPES AND THE STEREO EQ (gsefx.CHORUS_TYPES, Stereo-EQ): a
+        # string chord on part 1 through Space D parts the ears as the same
+        # chord through Thru does not, streamed as whole; the Stereo-EQ at its
+        # defaults lifts 1.5-1.7 kHz as its own curve says (M1's +8 dB less M2's)
+        def _efxr(ty, stream=True):
+            _ms = [_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _gsx(0x40, 0x03, 0x00, ty[0], ty[1], 0),
+                   _gsx(0x40, 0x41, 0x22, 0x01, 0), _M("program_change", channel=0, program=48)]
+            _ms += [_M("note_on", channel=0, note=n, velocity=100) for n in (55, 60, 64, 67)]
+            _ms += [_M("note_off", channel=0, note=55, velocity=0, time=1440)]
+            _ms += [_M("note_off", channel=0, note=n, velocity=0) for n in (60, 64, 67)]
+            _rs0 = B.RENDER_STREAM
+            try:
+                B.RENDER_STREAM = stream
+                _x = B.render(_bfile(_ms))
+            finally:
+                B.RENDER_STREAM = _rs0
+            return np.asarray(_x[0], float), np.asarray(_x[1], float)
+        _fd, _fs, _fsw, _fe = _efxr((0, 0)), _efxr((1, 0x43)), _efxr((1, 0x43), stream=False), _efxr((1, 0))
+        _cdry, _csd = float(np.corrcoef(*_fd)[0, 1]), float(np.corrcoef(*_fs)[0, 1])
+        def _bd(x, lo, hi):
+            _X = np.abs(np.fft.rfft(x[0] + x[1])) ** 2
+            _f = np.fft.rfftfreq(len(x[0]), 1.0 / B.SR)
+            return 10 * np.log10(_X[(_f > lo) & (_f < hi)].sum() + 1e-30)
+        _eqm = _bd(_fe, 1500, 1700) - _bd(_fd, 1500, 1700)
+        import gsefx as _GSX
+        _eqw = 20 * np.log10(_GSX.eq_gain(1600.0, _GSX.chain(dict(type=(1, 0), p={}, send={}))['eq']))
+        check("file: Space D parts the ears (streamed as whole); the Stereo-EQ's curve at 1.6 kHz",
+              _csd < _cdry - 0.05 and abs(_eqm - _eqw) < 1.0
+              and len(_fsw[0]) == len(_fs[0]) and float(np.abs(_fsw[0] - _fs[0]).max()) == 0.0,
+              "  (L/R correlation %.3f dry, %.3f Space D; 1.5-1.7 kHz %+.1f dB, its curve %+.1f)"
+              % (_cdry, _csd, _eqm, _eqw))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;
@@ -8759,10 +8790,13 @@ def selftest_gs(check):
         _c1w = _cb(0, stream=False)
         _cl = lambda x: _e(x[0] + x[1])
         _cr = lambda x: float(np.corrcoef(x[0], x[1])[0, 1])
+        # (its outputs at the speakers, +-30 degrees (gsdelay.OUTPUT_X): each ear
+        # hears both, so the sides part less than they did at +-63 -- 0.92-0.94
+        # -- and the copies, more alike at each ear, add up to +0.6 dB)
         check("file: the GS chorus parts the sides and holds the level (Chorus 1, Flanger), "
               "streamed as whole",
-              _cr(_c1) < 0.9 and _cr(_c5) < 0.9 and abs(_cl(_c1) - _cl(_c0)) < 0.5
-              and abs(_cl(_c5) - _cl(_c0)) < 0.5 and len(_c1w[0]) == len(_c1[0])
+              _cr(_c1) < 0.97 and _cr(_c5) < 0.97 and abs(_cl(_c1) - _cl(_c0)) < 0.8
+              and abs(_cl(_c5) - _cl(_c0)) < 0.8 and len(_c1w[0]) == len(_c1[0])
               and float(np.abs(_c1w[0] - _c1[0]).max()) == 0.0,
               "  (L/R correlation %.2f, %.2f against 1.00 dry; level %+.2f, %+.2f dB)"
               % (_cr(_c1), _cr(_c5), _cl(_c1) - _cl(_c0), _cl(_c5) - _cl(_c0)))

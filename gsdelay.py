@@ -52,8 +52,12 @@ NAMES = ("Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2
 PARAM = {0x50: 'macro', 0x51: 'pre_lpf', 0x52: 'time', 0x53: 'ratio_l', 0x54: 'ratio_r',
          0x55: 'level_c', 0x56: 'level_l', 0x57: 'level_r', 0x58: 'level', 0x59: 'feedback',
          0x5A: 'to_reverb'}
-OUTPUT_X = {'c': 0.0, 'l': -4.0, 'r': 4.0}
-SIDES = ('c', 'l', 'r')     # metres: the field's middle and sides (a pan of 0, -1, +1)
+# THE OUTPUTS ARE THE SPEAKERS: the module's left and right outputs, heard
+# where a hard pan is (tonelib.stage_angle: +-30 degrees, ITU-R BS.775) --
+# 2 m x tan 30 either side of a listener 2 m away. They were +-4 m (63
+# degrees), the stage pan had before it was a turn.
+OUTPUT_X = {'c': 0.0, 'l': -2.0 * math.tan(math.pi / 6.0), 'r': 2.0 * math.tan(math.pi / 6.0)}
+SIDES = ('c', 'l', 'r')     # the field's middle and sides (a pan of 0, -1, +1)
 
 
 def time_ms(v):

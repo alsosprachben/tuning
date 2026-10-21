@@ -30,6 +30,10 @@ HALF = 298          # the A4 page's half width, points
 
 _HEAD = re.compile(r"^\s*(\d+)\s*:\s*(.+?)\s{2,}([0-9A-F]{2})\s+([0-9A-F]{2})\s*$")
 _ROW = re.compile(r"^\s*([+#])?\s*(\S.*?)\s{2,}(\S.*?)\s{2,}(\S.*?)\s{2,}([0-9A-F]{2})\s*$")
+# ...and a row whose value runs into its encoding ("990m/1sec*3", "D 0<E 00 - 7F"):
+# the encoding and the address found from the line's end
+_ROW2 = re.compile(r"^\s*([+#])?\s*(\S.*?)\s{2,}(.*?)\s*(\*\d+|[0-9A-F]{2}\s*-\s*[0-9A-F]{2}"
+                   r"|[0-9A-F]{2}(?:/[0-9A-F]{2})+)\s+([0-9A-F]{2})\s*$")
 
 
 def _text(pdf, page, x, w):
@@ -87,6 +91,14 @@ def raw_default(rng, enc, default, tables):
         return 0x40 + (int(d[1:]) if d[0] == "R" else -int(d[1:]))
     if d == "0" and rng.strip().startswith("L"):                    # ...its centre
         return 0x40
+    if d == "D=E":                                                  # a balance's middle
+        return 0x40
+    m = re.fullmatch(r"D>(\d+)E", d)                                 # dry over the effect at x
+    if m:
+        return int(m.group(1)) // 2
+    m = re.fullmatch(r"D(\d+)<E", d)                                 # the effect over the dry
+    if m:
+        return 127 - int(m.group(1)) // 2
     if "%" in d:                                                    # 2 % a step about 40H
         return 0x40 + int(round(_num(d) / 2.0))
     x = _num(d)
@@ -111,7 +123,7 @@ def parse(pdf):
                     types[(int(h.group(3), 16), int(h.group(4), 16))] = (int(h.group(1)), cur)
                     params[cur] = {}
                     continue
-                r = _ROW.match(line)
+                r = _ROW.match(line) or _ROW2.match(line)
                 if not (r and cur):
                     continue
                 mark, name, rng, enc, addr = r.groups()
