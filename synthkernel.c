@@ -269,6 +269,64 @@ static long ear_knees(long ns, long ne, long n0, long bs0, float invb,
     return ke>ns ? ke : ns;
 }
 
+#if defined(LESLIE_KERNEL) || defined(VOICE_BLOCK)
+/* THE LESLIE'S LOBE, AS A GAIN (leslie.py). A rotor row's level is its
+   lobe at where its rotor has got to: fl + (1-fl)*((1+cos(angle-ph))/2)^sh,
+   times nm (one over the lobe's mean, so it colours and does not level).
+   LANG holds each rotor's angle at every grid point (MOOG_GRID samples, the
+   live callback's block, so the file and the player swing on the same
+   points); the lobe is worked out at the block's grid points here and drawn
+   as a line between them, as a Moog's level is. It replaced sidebands, which
+   froze each note at the rotor speed it started under and, to keep their
+   number down, needed the whole file's loudest row before the first Leslie
+   note could render. Out of line, both of these (kernel-edits rule): every
+   other row takes the loops it always took. */
+__attribute__((noinline))
+static void leslie_grid(const float* LANG, long lgn, int rot, float ph, float fl, float sh, float nm,
+                        long bs0, int mg, int nj, float* lg){
+    const float* A=LANG+(long)rot*lgn;
+    long g0=bs0/mg;
+    for(int j=0;j<nj;j++){
+        long gi=g0+j; if(gi>lgn-1) gi=lgn-1;
+        float c=0.5f*(1.f+cosf(A[gi]-ph));
+        lg[j]=(fl+(1.f-fl)*powf(c,sh))*nm;
+    }
+}
+/* ...and the CPU's sample loop for such a row, the whole block: each ear's
+   attack and the block's line exactly as ear_knees draws them (one knee, or
+   none, is the case where the two ears' are equal), times the lobe. */
+__attribute__((noinline))
+static void leslie_samples(long ns, long ne, long n0, long bs0, float invb, int mg, const float* lg,
+                           long kAl, long kNl, float kgL, long kAr, long kNr, float kgR,
+                           float mL0, float mL1, float mR0, float mR1, float aL, float aR,
+                           float zrL, float ziL, float zrR, float ziR, float rr, float ri,
+                           float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
+                           float* outL, float* outR, float* outSL, float* outSR, float swp){
+    float invg=1.f/(float)mg;
+    for(long n=ns;n<ne;n++){
+        float t=(float)(n-bs0)*invb, mL, mR;
+        if(n<kNl) mL = (kNl>kAl && n>=kAl) ? kgL*((float)(n-kAl)/(float)(kNl-kAl))*aL : 0.f;
+        else      mL = (mL0+(mL1-mL0)*t)*aL;
+        if(n<kNr) mR = (kNr>kAr && n>=kAr) ? kgR*((float)(n-kAr)/(float)(kNr-kAr))*aR : 0.f;
+        else      mR = (mR0+(mR1-mR0)*t)*aR;
+        long k=n-bs0; long j=k/mg;
+        float g=lg[j]+(lg[j+1]-lg[j])*((float)(k-j*mg)*invg);
+        mL*=g; mR*=g;
+        float sL=zrL, sR=zrR;
+        if(jfa>0.f){
+            float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
+            float cj=cosf(jit),sj2=sinf(jit);
+            sL += (zrL*cj - ziL*sj2)*jfa;
+            sR += (zrR*cj - ziR*sj2)*jfa;
+        }
+        outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+        if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
+        float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
+        tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+    }
+}
+#endif
+
 __attribute__((noinline))
 static float jf_short_chiff(long bs0, long a, float chw, float sj, long blk,
                             float A, float cc, float m0, float m1, float nf, float bw,
@@ -784,171 +842,44 @@ void synth_voice(
     float sfloor, float spow, float shmax, float shref, long CHUNK,
     const float* sendW, float* outSL, float* outSR)
 {
-    // THE SEND BUS, for the live room. When outSL is non-NULL every partial is
-    // ALSO accumulated into outSL/outSR scaled by sendW[p] -- its channel's
-    // CC91 distance multiple -- and that pair feeds the room's tail. The
-    // oscillator is computed once; only the accumulation doubles. NULL (the
-    // file renderer, which makes its send by a second render) touches nothing,
-    // so outL/outR are bit-identical to before.
-    long nchunks=(winlen+CHUNK-1)/CHUNK;
-    #pragma omp parallel for schedule(dynamic)
-    for(long c=0;c<nchunks;c++){
-        long cs=n0+c*CHUNK, ce=cs+CHUNK; if(ce>n0+winlen)ce=n0+winlen;
-        for(int p=0;p<P;p++){
-            #include "voice_partial.inc"
-            long bstart=(cs>a?cs:a)/BLK, bend=(ce<zend?ce:zend+1)/BLK+1;
-            for(long b=bstart;b<bend;b++){
-                #include "voice_block.inc"
-                // EVERY OTHER VOICE takes the loop it always took, spelled as it
-                // always was: -ffast-math contracts a restructured expression
-                // differently, and a render moves by an ULP. A MOOG runs the
-                // same body over grid cells, each interpolated between its own
-                // two grid gains; the phasor runs on across them untouched.
-                // THE KNEE (voice_block.inc): the attack's own ramp, from its
-                // onset to its end, before the block's line takes over -- a loop
-                // of its own, so the one below is spelled as it always was
-                if(kAl!=kAr || kNl!=kNr){
-                    // EACH EAR ITS OWN ONSET (voice_block.inc): out of line
-                    ns=ear_knees(ns, ne, n0, bs0, invb, kAl, kNl, kgL, kAr, kNr, kgR,
-                                 mL0, mL1, mR0, mR1, aL, aR, &zrL, &ziL, &zrR, &ziR, rr, ri,
-                                 jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
-                } else
-                if(kN>ns){
-                    long ke=kN<ne?kN:ne; float ik=1.f/(float)(kN-kA);
-                    for(long n=ns;n<ke;n++){
-                        float r=(float)(n-kA)*ik; float mL=kgL*r*aL, mR=kgR*r*aR;
-                        float sL=zrL, sR=zrR;
-                        if(jfa>0.f){
-                            float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
-                            float cj=cosf(jit),sj2=sinf(jit);
-                            sL += (zrL*cj - ziL*sj2)*jfa;
-                            sR += (zrR*cj - ziR*sj2)*jfa;
-                        }
-                        outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
-                        if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
-                        float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
-                        tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
-                    }
-                    ns=ke;
-                }
-                if(!ftr && chBW[p]<0.f){
-                #include "voice_noise.inc"
-                } else if(!ftr){
-                for(long n=ns;n<ne;n++){
-                    float t=(float)(n-bs0)*invb; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
-                    float sL=zrL, sR=zrR;
-                    if(jfa>0.f){
-                        // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per
-                        // second, so gran IS the noise's bandwidth as a fraction of
-                        // the partial's own frequency: at RAND_GRAN it is redrawn
-                        // every sample and the noise is white, spread flat over the
-                        // whole spectrum no matter which partial it came from. That
-                        // is why turning the wash up far enough to fill between a
-                        // cymbal's modes also fills the notches BETWEEN its bands.
-                        // A smaller gran keeps each partial's noise around the
-                        // partial, so the wash inherits the plate's own shape.
-                        // the index floor(n * nf * gran / SRATE), exactly (chiff_index)
-                        float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
-                        float cj=cosf(jit),sj2=sinf(jit);
-                        sL += (zrL*cj - ziL*sj2)*jfa;
-                        sR += (zrR*cj - ziR*sj2)*jfa;
-                    }
-                    outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
-                    if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
-                    float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
-                    tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
-                }
-                } else {
-                #include "voice_moog.inc"
-                for(int cl=0; cl<BLK/mg; cl++){
-                #include "voice_cell.inc"
-                for(long n=s0;n<s1;n++){
-                    float t=(float)(n-c0)*invg, tb=(float)(n-bs0)*invb;
-                    float mL=(a0L+(a1L-a0L)*t)*(aLp+(aL-aLp)*tb), mR=(a0R+(a1R-a0R)*t)*(aRp+(aR-aRp)*tb);
-                    float sL=zrL, sR=zrR;
-                    if(noiz){
-                        // A NOISE BAND: the carrier's phase moved to a new
-                        // random value nrate times a second, which spreads it
-                        // over a band that wide around its centre -- and no
-                        // carrier left. MOVED, not jumped: each draw is joined
-                        // to the next the short way round the circle. A phase
-                        // that jumps is a click at every draw, and a thousand
-                        // of them leaked the low bands up the spectrum to a
-                        // floor 45 dB down, which a closed ladder cannot take out.
-                        uint64_t ui=chiff_index(n, nk_hi, nk_lo);
-                        double uf=(double)((uint64_t)n*nk_lo)*(1.0/18446744073709551616.0);
-                        if((long long)ui!=nui){   // a new draw: hash only then
-                            nui=(long long)ui; nh0=hash01(nseed+ui);
-                            double h1=hash01(nseed+ui+1);
-                            ndh=h1-nh0; ndh-=floor(ndh+0.5);
-                        }
-                        float jn=6.2831853f*(float)(nh0+ndh*uf);
-                        float cn=cosf(jn), sn=sinf(jn);
-                        sL = zrL*cn - ziL*sn; sR = zrR*cn - ziR*sn;
-                    }
-                    float czL=zrL, czR=zrR, sgL=ziL, sgR=ziR;
-                    if(fms){
-                        // F = sum_m G_m(t) e^{i m th1}; the harmonic is
-                        // Re(e^{i k th2} F)
-                        const float *G0r=g0r+slo, *G0i=g0i+slo, *DGr=dgr+slo, *DGi=dgi+slo;
-                        float Fr=0.f, Fi=0.f;
-                        for(int i=0;i<nsb;i++){
-                            float gr=G0r[i]+DGr[i]*t, gi=G0i[i]+DGi[i]*t;
-                            Fr+=gr*pzr[i]-gi*pzi[i]; Fi+=gr*pzi[i]+gi*pzr[i];
-                            float tr=pzr[i]*prr[i]-pzi[i]*pri[i]; pzi[i]=pzr[i]*pri[i]+pzi[i]*prr[i]; pzr[i]=tr;
-                        }
-                        czL=zrL*Fr-ziL*Fi; sgL=zrL*Fi+ziL*Fr;
-                        czR=zrR*Fr-ziR*Fi; sgR=zrR*Fi+ziR*Fr;
-                        sL=czL; sR=czR;
-                    } else if(fmo){
-                        // A = sum_j Re(B_j) sin(j th1) + Im(B_j) cos(j th1): the
-                        // integral of OSC 1's wave; OSC 2's harmonic k moves by k I A
-                        float pr=z1r, pi=z1i, A=0.f;
-                        const float* B=ftr+14;
-                        for(int jj=0;jj<FM_J;jj++){
-                            A += B[2*jj]*pi + B[2*jj+1]*pr;
-                            float tr=pr*z1r-pi*z1i; pi=pr*z1i+pi*z1r; pr=tr;
-                        }
-                        float dl=(float)fmk*fmI*A, cd=cosf(dl), sd=sinf(dl);
-                        czL=zrL*cd-ziL*sd; sgL=zrL*sd+ziL*cd;
-                        czR=zrR*cd-ziR*sd; sgR=zrR*sd+ziR*cd;
-                        sL=czL; sR=czR;
-                        float t1=z1r*r1r-z1i*r1i; z1i=z1r*r1i+z1i*r1r; z1r=t1;
-                    }
-                    if(shm){
-                        // Re(c e^{i theta}) with c moving across the cell
-                        float gr=cRe[cl]+(cRe[cl+1]-cRe[cl])*t, gi=cIm[cl]+(cIm[cl+1]-cIm[cl])*t;
-                        sL = gr*czL - gi*sgL; sR = gr*czR - gi*sgR;
-                    }
-                    if(jfa>0.f){
-                        // THE WASH'S BANDWIDTH. The phase is redrawn at nf*gran per
-                        // second, so gran IS the noise's bandwidth as a fraction of
-                        // the partial's own frequency: at RAND_GRAN it is redrawn
-                        // every sample and the noise is white, spread flat over the
-                        // whole spectrum no matter which partial it came from. That
-                        // is why turning the wash up far enough to fill between a
-                        // cymbal's modes also fills the notches BETWEEN its bands.
-                        // A smaller gran keeps each partial's noise around the
-                        // partial, so the wash inherits the plate's own shape.
-                        // the index floor(n * nf * gran / SRATE), exactly (chiff_index)
-                        float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
-                        float cj=cosf(jit),sj2=sinf(jit);
-                        sL += (zrL*cj - ziL*sj2)*jfa;
-                        sR += (zrR*cj - ziR*sj2)*jfa;
-                    }
-                    outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
-                    if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
-                    float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
-                    tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
-                }
-                }
-                }
-            }
-            #undef AMP
-        }
-    }
+#include "voice_main.inc"
 }
 
+
+#ifdef LESLIE_KERNEL
+// ---------------------------------------------------------------------------
+// ONLY IN THE LESLIE'S BUILD (-DLESLIE_KERNEL, libsynthlobe_<rate>.so):
+// synth_voice with the rotor rows' lobe (leslie_grid), for a table that
+// has a Leslie. Every other table renders through synth_voice itself.
+void synth_voice_lobe(
+    float* outL, float* outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double* omega, const double* ph0L, const double* ph0R,
+    const float* ampL, const float* ampR, const float* nomfreq,
+    const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
+    const float* logr, const float* logrA, const float* aftL, const float* susL,
+    const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
+    const float* chBW,
+    const float* tbav, const float* tau, const float* tcut,
+    const float* gbav, const float* gtau, const float* gcut,
+    const float* vdep, const float* vrate, const float* vph, const float* vdl,
+    const float* delL, const float* delR,
+    const int* grow, const int* crow, const float* G, const float* S,
+    const int* brow, const float* BR, const double* BC, const float* BL,
+    const int* fxr, const float* FT, const float* KN, long knk, long kb0,
+    const float* ampLp, const float* ampRp, const int* mkr,
+    const int* MPI, const double* MPC, const float* MPR,
+    const int* MKI, const float* MPK,
+    const double* fmw, const double* fmp, const double* fmpR,
+    float sfloor, float spow, float shmax, float shref,
+    const int* lsr, const float* lph, const float* lfl, const float* lsh, const float* lnm,
+    const float* LANG, long lgn, long CHUNK,
+    const float* sendW, float* outSL, float* outSR)
+{
+#define SV_LOBE
+#include "voice_main.inc"
+#undef SV_LOBE
+}
+#endif
 
 // ---------------------------------------------------------------------------
 // ONLY IN THE GPU'S BUILD (-DVOICE_BLOCK, libsynthgpu_<rate>.so): a second
@@ -988,6 +919,8 @@ int voice_block(long n0, int BLK, int nblk, int P,
     const int* MKI, const float* MPK,
     const double* fmw, const double* fmp, const double* fmpR,
     float sfloor, float spow, float shmax, float shref,
+    const int* lsr, const float* lph, const float* lfl, const float* lsh, const float* lnm,
+    const float* LANG, long lgn,
     const float* sendW, int send,
     const long* idx, int nact, vdesc* D, vcell* C, int ccap, vsb* SB, int sbcap,
     int nthr, int* counts, int nb)
@@ -1043,6 +976,11 @@ int voice_block(long n0, int BLK, int nblk, int P,
                 d->flags=VD_NOISE; d->nk_hi=gh; d->nk_lo=gl;
                 d->jfa=0.f;      // a noise band has no chiff of its own (voice_noise.inc)
                 d->nseed=(uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
+            }
+            // a rotor row: its lobe at the block's grid points (leslie_grid)
+            if(lsr && lsr[p]>=0 && chBW[p]>=0.f && BLK/mg+1<=VD_LG){
+                d->flags|=VD_LESLIE;
+                leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bn0, mg, BLK/mg+1, d->lg);
             }
             d->kind=1; continue;
         }

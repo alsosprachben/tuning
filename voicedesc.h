@@ -45,6 +45,8 @@ static inline u64 v_mulhi(u64 a, u64 b){ return (u64)(((unsigned __int128)a * b)
 #define VD_FMO   4      // 1 -> 2 FM, unfiltered
 #define VD_FMS   8      // 1 -> 2 FM as sidebands, each through the ladder
 #define VD_PM    16     // OSC 2 on its pitch rows: the carrier re-anchored per cell
+#define VD_LESLIE 32    // a rotor row: its level times the lobe, lg (leslie_grid)
+#define VD_LG    5      // the lobe's grid points a block: a file's 512 over MOOG_GRID, and its end
 
 // ONE PARTIAL'S BLOCK. kind 0: silent this block (skipped); 1: every voice but
 // the Moog; 2: a Moog partial, whose cells follow in the cell table.
@@ -69,6 +71,7 @@ typedef struct {
     float jfa, cc, swp;          // the chiff's level, its cycle, the send weight
     float kgL, kgR;              // kind 1: the amplitude at the knee (voice_block.inc), each ear
     float za[12];                // the carrier again at ns+128, +256, +384 (zLr zLi zRr zRi each)
+    float lg[VD_LG], lpad;       // VD_LESLIE: the lobe at the block's grid points
 } vdesc;
 
 // THE CARRIER IS RE-ANCHORED EVERY V_SUB SAMPLES. A file renders in 512-sample
@@ -224,6 +227,11 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
         float jit=6.2831853f*v_hash01(idx)*d->cc, cj=VCOS(jit), sj=VSIN(jit);
         sL+=(zrL*cj-ziL*sj)*d->jfa;
         sR+=(zrR*cj-ziR*sj)*d->jfa;
+    }
+    if(d->flags & VD_LESLIE){
+        // the rotor's lobe, a line between its grid points (leslie_grid)
+        int j=k/mg; float g=d->lg[j]+(d->lg[j+1]-d->lg[j])*((float)(k-j*mg)*invg);
+        mL*=g; mR*=g;
     }
     o[0]+=mL*sL; o[1]+=mR*sR;
     if(send){ o[2]+=mL*sL*d->swp; o[3]+=mR*sR*d->swp; }

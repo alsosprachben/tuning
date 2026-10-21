@@ -234,6 +234,16 @@ def _cat(parts):
     return out
 
 
+def _lobe_fill(c):
+    """A chunk with the Leslie's lobe columns: as it is, or on no rotor (one
+    finished before the first Leslie row)."""
+    if 'lsr' in c:
+        return c
+    import leslie as LE
+    n = len(c['om'])
+    return dict(c, **{k: np.full(n, v, dt) for k, dt, v in LE.LOBE_COLS})
+
+
 def _mini(r, cols):
     """Rows as the lists a pass's expand() works on, in the whole table's order."""
     return {k: r[k].tolist() for k in cols}
@@ -402,7 +412,9 @@ class Stream:
     def _note(self, r, i0, i1):
         fx = self.ctx['effects']
         if fx['leslie'] and self.loudest is None and not self.scan:
-            raise NeedLoudest()
+            import leslie as LE
+            if not LE.KERNEL_LOBE:     # the sidebands' budget is the file's loudest row
+                raise NeedLoudest()
         mf = [(a - i0, b - i0, st) for a, b, st in fx['mf104'] if i0 <= a < i1]
         gsd = [(a - i0, b - i0, dv, sd) for a, b, dv, sd in fx.get('gsdelay', ()) if i0 <= a < i1]
         ht = [(a - i0, b - i0) for a, b in self.ctx['ht_rows'] if i0 <= a < i1]
@@ -837,9 +849,17 @@ class Stream:
         # render had the cabinet on the sidebands alone and prepare() on all
         for k in ('vd', 'vr', 'vp', 'aL', 'aR', 'aM'):
             r[k] = np.array(mini[k][:n0], dtype=r[k].dtype)
+        # the kernel's lobe (leslie.lobe_columns), on every row of the chunk
+        lobe = 'lsr' in mini
+        if lobe:
+            for k, dt, _ in LE.LOBE_COLS:
+                r[k] = np.asarray(mini[k][:n0], dt)
         if not meta:
             return None
         out = _appended(mini, r, self.cols, n0)
+        if lobe:
+            for k, dt, _ in LE.LOBE_COLS:
+                out[k] = np.asarray(mini[k][n0:], dt)
         src = np.array([x[0] for x in meta], np.int64)
         lvl = np.zeros((len(meta), 4), np.int64); lvl[:, 0] = 7
         out['key'], out['klen'] = _key(lvl, r['key'][src], r['klen'][src],
@@ -1044,6 +1064,8 @@ class Stream:
             self._emit(w0, w1, np.zeros(n, np.float32), np.zeros(n, np.float32),
                        np.zeros(n, np.float32), np.zeros(n, np.float32))
             return
+        if any('lsr' in c for c in sel):
+            sel = [_lobe_fill(c) for c in sel]
         rows = _cat(sel)
         order = np.lexsort(rows['key'].T[::-1])
         P = len(order)
@@ -1053,6 +1075,7 @@ class Stream:
                     knk=1, kb0=0, **self.ctx['moog_tables']())
         for k, dt in B.FINAL_DTYPES:
             prep[k] = np.ascontiguousarray(rows[k][order].astype(dt))
+        self._lobe_prep(prep, rows, order)
         if self.gpu is not None:
             import gpurender as GR
             rs = self.ctx['reverb']
@@ -1086,6 +1109,23 @@ class Stream:
             B.synth_partials(prep, w0, n, 0, P, SL, SR_)
         self._emit(w0, w1, L, R, SL, SR_)
 
+    def _lobe_prep(self, prep, rows, ix):
+        """The Leslie's lobe for the kernel: its columns, and the rotors'
+        angles (leslie.angle_table) -- built for the file's length, again only
+        when a channel joins or the length grows, so every window reads one
+        table, the whole table's."""
+        if 'lsr' not in rows:
+            return
+        import leslie as LE
+        for k, dt, _ in LE.LOBE_COLS:
+            prep[k] = np.ascontiguousarray(rows[k][ix].astype(dt))
+        chans = self.ctx['effects']['leslie']
+        key = (tuple(chans), self.N)
+        if getattr(self, '_lang_key', None) != key:
+            self._lang = LE.angle_table(chans, self.rotors, self.N, self.B.SR, self.B.BLK)
+            self._lang_key = key
+        prep['LANG'] = self._lang
+
     # -- stems and objects -------------------------------------------------------
     def _group_keys(self, rows):
         if self.stems['by'] == 'source':
@@ -1116,6 +1156,8 @@ class Stream:
         n = w1 - w0
         done = set()
         if sel:
+            if any('lsr' in c for c in sel):
+                sel = [_lobe_fill(c) for c in sel]
             rows = _cat(sel)
             order = np.lexsort(rows['key'].T[::-1])
             rows = _take(rows, order)
@@ -1132,6 +1174,7 @@ class Stream:
                 prep = dict(base, P=len(ix))
                 for c, dt in B.FINAL_DTYPES:
                     prep[c] = np.ascontiguousarray(rows[c][ix].astype(dt))
+                self._lobe_prep(prep, rows, ix)
                 if self.stems['objects']:          # subset(objectify=True)'s rules
                     prep['aL'] = prep['aR'] = np.ascontiguousarray(prep['aM'])
                     prep['p0R'] = np.ascontiguousarray(prep['p0'])

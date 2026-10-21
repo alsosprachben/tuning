@@ -75,6 +75,17 @@ C_SOUND = 343.0
 # than something baked into a note, and it can change under a held chord.
 SIDEBANDS = True
 
+# ...AND NOW OFFLINE IS A GAIN TOO. The kernel takes each rotor's angle on the
+# Moog's grid (128 samples, live's callback) and each rotor row's lobe, and
+# swings the row's level as live does (synthkernel.c leslie_grid). The
+# sidebands below had two faults: each note kept the rotor speed it started
+# under, so a chord held through the half-moon switch did not follow it; and
+# to keep their number down they were spent by level against the whole file's
+# loudest row -- which a streamed render cannot know, so every file with a
+# Leslie was emitted twice (Tokei: six minutes of scan). False keeps the
+# sidebands, for an A/B.
+KERNEL_LOBE = True
+
 # How many harmonics of the lobe the offline path buys. Three carries the chop
 # -- the second and third are what separate a beam from a cosine -- and each
 # costs a sideband pair on every partial.
@@ -284,11 +295,14 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
     A reflection is not given the listener's modulation; it is given its own.
 
     The Doppler goes into the existing per-partial vibrato columns, which the
-    kernel integrates analytically on an absolute clock. The level swing
-    becomes two sidebands, since AM of a sinusoid is three partials and this
-    renderer's only primitive is a partial.
+    kernel integrates analytically on an absolute clock. The level swing is
+    the kernel's (KERNEL_LOBE): each rotor row gets its rotor and lobe
+    (lobe_columns), and synth_voice_lobe swings it by the rotor's angle
+    (angle_table) -- or, with KERNEL_LOBE off, sidebands, since AM of a
+    sinusoid is three partials.
 
-    THE RATE IS FROZEN AT EACH NOTE'S ONSET, and that is the one place this is
+    THE DOPPLER'S RATE IS FROZEN AT EACH NOTE'S ONSET (the level's is not: it
+    reads the rotor's angle as it turns), and that is the one place this is
     an approximation rather than a model. The kernel's modulator is a fixed
     sinusoid, so a partial cannot itself chirp; what it can do is start at the
     rotor's true angle and true rate at the moment it speaks. Over a note short
@@ -306,8 +320,12 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
         rotors = make_rotors(channels)
     extra = {k: [] for k in cols}
     made = 0
-    if loudest is None:
+    if loudest is None and not KERNEL_LOBE:
         loudest = max(float(np.max(np.abs(A['aM']))), 1e-12) if n else 1.0
+    # the kernel's lobe: (row, rotor, azimuth, frequency, on the horn?) for
+    # every row put on a rotor -- its position in the table as it ends
+    lobe = [] if (SIDEBANDS and KERNEL_LOBE) else None
+    rank = {c: k for k, c in enumerate(channels)}
 
     def rotate(r, horn, i, kbase):
         """Put row r (a dict of its columns) on a rotor: its Doppler in the
@@ -332,6 +350,10 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
         # A STOPPED ROTOR HAS NO SIDEBANDS. At rate 0 they would land exactly
         # on the carrier and simply add level -- a brake that makes the organ
         # louder, which is not what a brake does.
+        if SIDEBANDS and KERNEL_LOBE:       # the level is the kernel's (lobe_columns)
+            if rate < 0.05:
+                r['vd'] = 0.0
+            return 0
         if not SIDEBANDS or rate < 0.05:
             if rate < 0.05:
                 r['vd'] = 0.0
@@ -407,6 +429,8 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
             r[col] = r[col] * _cg * wp
             A[col][i] = r[col]
         made += rotate(r, horn, i, 0)
+        if lobe is not None:
+            lobe.append((i, 2 * rank[ch] + (0 if horn else 1), r['az'], f, horn))
         A['vd'][i], A['vr'][i], A['vp'][i] = r['vd'], r['vr'], r['vp']
         if twin is not None:
             # the copy on the other rotor: first its carrier, then its sidebands
@@ -418,12 +442,79 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
             for col in cols:
                 extra[col].append(twin[col])
             made += rotate(twin, not horn, i, XOVER_K)
+            if lobe is not None:
+                lobe.append((n + pos, 2 * rank[ch] + (1 if horn else 0), twin['az'], f, not horn))
             for col in ('vd', 'vr', 'vp'):
                 extra[col][pos] = twin[col]
             made += 1
     for k in cols:
         A[k].extend(extra[k])
+    if lobe is not None:
+        A.update(lobe_columns(lobe, n + len(extra['om'])))
     return made
+
+
+# A row on no rotor: rotor -1, and a lobe that is 1 everywhere
+LOBE_COLS = (('lsr', 'i4', -1), ('lph', 'f4', 0.0), ('lfl', 'f4', 1.0), ('lsh', 'f4', 0.0),
+             ('lnm', 'f4', 1.0))
+
+
+def lobe_params(nf, horn):
+    """(floor, half the sharpness, one over the mean) of the lobe for partials
+    at nf, each on the horn or the drum -- the kernel's form of beam_gain
+    (synthkernel.c leslie_grid), the mean as live takes it (Live.leslie_params:
+    256 points), so the two renderers swing alike."""
+    a = np.asarray(nf, np.float64)
+    fl = np.empty(len(a), np.float32)
+    sh = np.empty(len(a), np.float32)
+    memo = {}
+    for j, (f, h) in enumerate(zip(a.tolist(), np.asarray(horn, bool).tolist())):
+        k = (f, h)
+        if k not in memo:
+            memo[k] = beam(f) if h else drum_beam(f)
+        fl[j], sh[j] = memo[k]
+    th = np.linspace(0.0, 2.0 * np.pi, 256, endpoint=False)
+    cc = 0.5 * (1.0 + np.cos(th))
+    nrm = np.empty(len(a), np.float32)
+    for i0 in range(0, len(a), 4096):
+        f_, s_ = fl[i0:i0 + 4096, None], sh[i0:i0 + 4096, None]
+        nrm[i0:i0 + 4096] = (f_ + (1.0 - f_) * cc[None, :] ** (0.5 * s_)).mean(axis=1)
+    return fl, (0.5 * sh).astype(np.float32), (1.0 / nrm).astype(np.float32)
+
+
+def lobe_columns(lobe, n):
+    """The table's LOBE_COLS for n rows, from expand's (row, rotor, azimuth,
+    frequency, horn?) records; every other row on no rotor."""
+    out = {k: np.full(n, v, dt) for k, dt, v in LOBE_COLS}
+    if lobe:
+        pos = np.array([x[0] for x in lobe], np.int64)
+        fl, sh, nm = lobe_params([x[3] for x in lobe], [x[4] for x in lobe])
+        out['lsr'][pos] = [x[1] for x in lobe]
+        out['lph'][pos] = [x[2] for x in lobe]
+        out['lfl'][pos], out['lsh'][pos], out['lnm'][pos] = fl, sh, nm
+    return out
+
+
+def rotor_grid(blk):
+    """The samples between the lobe's grid points: the kernel's (synthkernel.c,
+    MOOG_GRID where the block is a multiple of it)."""
+    return 128 if (blk % 128 == 0 and blk // 128 <= 64) else blk
+
+
+def angle_table(channels, rotors, n_samples, sr, blk):
+    """Each rotor's angle at every grid point, [2 per channel (the horn, then
+    the drum -- which turns the other way, as rotate has it), points], float32,
+    each wrapped to a turn: the kernel's LANG. The rows are channels' order,
+    which is expand's rotor index."""
+    g = rotor_grid(blk)
+    lgn = n_samples // g + 2
+    t = np.arange(lgn, dtype=np.float64) * (g / float(sr))
+    out = np.empty((2 * len(channels), lgn), np.float32)
+    for k, ch in enumerate(channels):
+        horn, drum = rotors[ch]
+        out[2 * k] = np.mod(horn.angles(t), 2.0 * math.pi)
+        out[2 * k + 1] = np.mod(DRUM_RATIO * drum.angles(t), 2.0 * math.pi)
+    return out
 
 
 
@@ -496,6 +587,17 @@ class Rotor:
             self.t.append(t)
             self.rate.append(r)
             self.angle.append(a)
+
+    def angles(self, t):
+        """The angle at each of the times t (an array): at's, and past the
+        schedule's end turning on at its last rate (at holds the last angle
+        there; a note's Doppler, from at, keeps the last rate)."""
+        t = np.asarray(t, np.float64)
+        k = np.arange(len(self.angle), dtype=np.float64) * self.step
+        a = np.interp(t, k, np.asarray(self.angle))
+        past = t > k[-1]
+        a[past] = self.angle[-1] + 2.0 * math.pi * self.rate[-1] * (t[past] - k[-1])
+        return a
 
     def at(self, t):
         """(rate_hz, angle_rad) -- linear between the integration steps."""

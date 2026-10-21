@@ -31,7 +31,7 @@ VDESC = np.dtype([("chk_hi", "u8"), ("chk_lo", "u8"), ("nk_hi", "u8"), ("nk_lo",
                   ("mL0", "f4"), ("mL1", "f4"), ("mR0", "f4"), ("mR1", "f4"),
                   ("aL", "f4"), ("aR", "f4"), ("aLp", "f4"), ("aRp", "f4"),
                   ("jfa", "f4"), ("cc", "f4"), ("swp", "f4"), ("kgL", "f4"), ("kgR", "f4"),
-                  ("za", "f4", 12)])
+                  ("za", "f4", 12), ("lg", "f4", 5), ("lpad", "f4")])
 VCELL = np.dtype([("s0", "i4"), ("s1", "i4"), ("sb", "i4"), ("nsb", "i4"),
                   ("g", "f4", 4), ("c", "f4", 4), ("z", "f4", 4), ("wc", "f4"),
                   ("z1r", "f4"), ("z1i", "f4"), ("th1", "f4"), ("fmkI", "f4"),
@@ -358,6 +358,9 @@ class FileRenderer:
                 sm = np.maximum.accumulate(np.asarray(BL)[:, ::-1], axis=1)[:, ::-1]
                 bb = np.minimum(np.asarray(non)[on] // B.BLK, sm.shape[1] - 1)
                 lift[on] = np.maximum(sm[br[on], bb], 0.0)
+        # a rotor row's lobe peaks at lnm times its level (leslie.lobe_columns)
+        if prep.get('LANG') is not None:
+            lift = lift * np.where(np.asarray(prep['lsr'])[:P] >= 0, np.asarray(prep['lnm'], np.float64)[:P], 1.0)
         a = a * lift
         sl, af, lr, lrA = g('sus'), g('aft'), g('logr'), g('logrA')
         F = Fr

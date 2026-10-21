@@ -225,7 +225,7 @@ def ensure_lib():
 
 
 # synth_voice's source is synthkernel.c AND the fragments it includes
-KERNEL_PARTS = ("synthkernel.c", "voice_partial.inc", "voice_block.inc", "voice_moog.inc",
+KERNEL_PARTS = ("synthkernel.c", "voice_main.inc", "voice_partial.inc", "voice_block.inc", "voice_moog.inc",
                 "voice_cell.inc", "voice_noise.inc", "voicedesc.h")
 
 
@@ -252,6 +252,16 @@ def ensure_gpu_lib():
     src = os.path.join(HERE, "synthkernel.c")
     return _build(src, "libsynthgpu_%d.so" % SR, ["-DVOICE_BLOCK"],
                   ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack"])
+
+
+
+def ensure_lobe_lib():
+    """The kernel built with synth_voice_lobe (-DLESLIE_KERNEL): synth_voice
+    with the Leslie's lobe on its rotor rows (leslie.KERNEL_LOBE), for a table
+    that has one. A library of its own for the reason the GPU's is: a rotor
+    test inside synth_voice moved 110 of 167 corpus files by an ULP."""
+    src = os.path.join(HERE, "synthkernel.c")
+    return _build(src, "libsynthlobe_%d.so" % SR, ["-DLESLIE_KERNEL"], ["synth_voice_lobe"])
 
 
 # The C argument types, READ OFF THE C. Without argtypes a ctypes call does no
@@ -6359,6 +6369,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 rel_rows=list(_REL_ROWS), rel_jacks=list(_REL_JACKS))
     for k,dt in FINAL_DTYPES:
         prep[k] = arr(k, dt)
+    # THE LESLIE'S LOBE (leslie.lobe_columns): each row's rotor and lobe, and
+    # the rotors' angles on the grid -- the kernel swings the level
+    if A.get('lsr') is not None:
+        import leslie as _LES
+        for k, dt, _ in _LES.LOBE_COLS:
+            prep[k] = arr(k, dt)
+        prep['LANG'] = _LES.angle_table(_LESLIE_CH, _LES.make_rotors(_LESLIE_CH), N, SR, BLK)
     return prep
 
 # The table's columns as the kernel takes them (prepare's last step; a
@@ -6473,8 +6490,11 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
         sl = lambda k: a[k][i0:i1]
     else:
         sl = lambda k: a[k]
-    lib.synth_voice(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
-                    *_voice_args(a, sl, i1-i0),
+    # a table with a Leslie: synth_voice_lobe, the rotor rows swung by their lobe
+    lobe = a.get('LANG') is not None
+    fn = ensure_lobe_lib().synth_voice_lobe if lobe else lib.synth_voice
+    fn(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
+                    *_voice_args(a, sl, i1-i0, lobe),
                     ctypes.c_long(CHUNK),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)
                     fp(sl('sw')) if SndL is not None else None,
@@ -6482,9 +6502,11 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     fp(SndR) if SndL is not None else None)
 
 
-def _voice_args(a, sl, P):
+def _voice_args(a, sl, P, lobe=True):
     """synth_voice's arguments from BLK to the shutter's four scalars -- the
-    run voice_block (the GPU's block setup) takes too, in the same order."""
+    run voice_block (the GPU's block setup) takes too, in the same order --
+    and with lobe, the Leslie's seven after them (synth_voice_lobe and
+    voice_block take them; synth_voice does not)."""
     dp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_double)); fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     lp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_long)); ip=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_int))
     return (BLK,a['nblk'],P,
@@ -6517,7 +6539,14 @@ def _voice_args(a, sl, P):
                     dp(sl('fmw')) if (a.get('FT') is not None and 'fmw' in a) else None,
                     dp(sl('fmp')) if (a.get('FT') is not None and 'fmw' in a) else None,
                     dp(sl('fmpR')) if (a.get('FT') is not None and 'fmw' in a) else None,
-                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]))
+                    ctypes.c_float(a['sh'][0]),ctypes.c_float(a['sh'][1]),ctypes.c_float(a['sh'][2]),ctypes.c_float(a['sh'][3]),
+                    # the Leslie's lobe (leslie.lobe_columns): each row's rotor
+                    # and lobe, the rotors' angles; NULL: no rotor in this table
+                    # synth_voice_lobe and voice_block's (lobe; synth_voice has none)
+                    *(() if not lobe else
+                      (ip(sl('lsr')), fp(sl('lph')), fp(sl('lfl')), fp(sl('lsh')), fp(sl('lnm')),
+                       fp(a['LANG']), ctypes.c_long(a['LANG'].shape[1]))
+                      if a.get('LANG') is not None else (None,) * 6 + (ctypes.c_long(0),)))
 
 _NO_ROWS = np.zeros(16, np.float32)
 
@@ -6681,6 +6710,9 @@ def subset(prep, mask, objectify=False):
     # whose partial count happened to equal its rank count.
     for k in PARTIAL_COLS:
         out[k] = np.ascontiguousarray(prep[k][mask])
+    if prep.get('LANG') is not None:       # the Leslie's lobe, per row
+        for k in ('lsr', 'lph', 'lfl', 'lsh', 'lnm'):
+            out[k] = np.ascontiguousarray(prep[k][mask])
     out['P'] = int(mask.sum())
     if objectify:
         out['aL'] = out['aR'] = np.ascontiguousarray(out['aM'])
