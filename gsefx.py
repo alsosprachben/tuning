@@ -218,60 +218,76 @@ def od_gain(v, dist):
 CMP_ATTACK_MS = 40.0
 
 
+def param_numbers(name):
+    """{parameter name: its number 1-20} for a type, from Roland's table."""
+    for _k, (_n, nm) in _P.TYPES.items():
+        if TYPES.get(_k) == name:
+            return {x[0]: n for n, x in _P.PARAMS[nm].items()}
+    return {}
+
+
+_PN = {}
+
+
 def chain(st):
     """The stages a state's type makes, or None where the type is not built:
     {'name', 'drive' (or None), 'cabinet' (or None), 'comp': decay factor,
     gain and attack seconds (or None), 'eq': (low dB, mid Hz, Q, mid dB, high dB) (or None), 'cf':
     chorus device and mix (or None), 'level', 'sends'} -- 'od_gain' the OD
     stage's gain in front of the valve (or None), 'level' its output level
-    with the OD's makeup in it."""
+    with the OD's makeup in it.
+
+    EACH STAGE BY ITS PARAMETERS' NAMES (Roland's table, gs_efx_params): a
+    type with an "OD Drive" has an overdrive, one with "CF Rate" a chorus or
+    flanger, one with "Dly Time" a delay -- whatever number the type gives
+    them -- so the multis and the series and parallel pairs are built from
+    the same stages. A parameter the file has not sent is the type's default
+    (DEFAULTS), else the stage's own."""
     name = TYPES.get(tuple(st['type']))
     if name not in BUILT:
         return None
     p = st['p']
     dflt = DEFAULTS.get(name, {})
-    g = lambda n, d: p.get(n, dflt.get(n, d))      # the file's, the type's, ours
+    pn = _PN.get(name)
+    if pn is None:
+        pn = _PN[name] = param_numbers(name)
+
+    def g(key, d):                     # the file's, the type's, ours
+        n = pn.get(key)
+        return d if n is None else p.get(n, dflt.get(n, d))
     out = dict(name=name, od_gain=None, cabinet=None, comp=None, eq=None, cf=None, dly=None,
-               level=g(20, 127) / 127.0, sends=dict(st['send']))
+               level=g("Level", 127) / 127.0, sends=dict(st['send']))
     mk = 10.0 ** (OD_MAKEUP_DB / 20.0)
     if name in ("Overdrive", "Distortion"):
-        out['od_gain'] = od_gain(g(1, 48), name == "Distortion")
+        out['od_gain'] = od_gain(g("Drive", 48), name == "Distortion")
         out['level'] *= mk
-        if g(3, 1):
+        if g("Amp Sw", 1):
             out['cabinet'] = 'guitar12'
-        out['eq'] = (gain_db(g(17, 64)), None, None, 0.0, gain_db(g(18, 64)))
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
         return out
-    # THE GUITAR MULTIS, each by its own parameter numbers (SC-88Pro owner's
-    # manual, types 48-50):
-    #   1  Cmp 1-4, OD 5-11 (its low/high gains 9/10, switch 11), CF 12-16, Dly 17-19
-    #   2  Cmp 1-4, OD 5-9, EQ 10-14, CF 15-19
-    #   3  Wah 1-4 (not built: it plays without), OD 5-11 as 1's, CF 12-16, Dly 17-19
-    m = dict(od=(5, 6, 8, 9) if name == "GTR Multi 2" else (5, 6, 8, 11),
-             cf=(15, 16, 17, 18, 19) if name == "GTR Multi 2" else (12, 13, 14, 15, 16),
-             dly=None if name == "GTR Multi 2" else (17, 18, 19))
-    if name != "GTR Multi 3" and g(4, 1):        # Cmp Sw
-        sus = g(2, 64) / 127.0
+    if "Cmp Sw" in pn and g("Cmp Sw", 1):
+        sus = g("Cmp Sus", 64) / 127.0
         # chosen: sustain 0-127 slows the decay up to fourfold, the level its
         # makeup (64 none)
-        out['comp'] = (1.0 / (1.0 + 3.0 * sus), g(3, 64) / 64.0,
-                       CMP_ATTACK_MS * g(1, 70) / 127000.0)
-    sel_, drv, amp_sw, od_sw = m['od']
-    if g(od_sw, 1):
-        out['od_gain'] = od_gain(g(drv, 48), bool(g(sel_, 0)))
+        out['comp'] = (1.0 / (1.0 + 3.0 * sus), g("Cmp Level", 64) / 64.0,
+                       CMP_ATTACK_MS * g("Cmp Atck", 70) / 127000.0)
+    if "OD Drive" in pn and g("OD Sw", 1):
+        out['od_gain'] = od_gain(g("OD Drive", 48), bool(g("OD Sel", 0)))
         out['level'] *= mk
-        if g(amp_sw, 1):
+        if g("OD Amp Sw", 1):
             out['cabinet'] = 'guitar12'
-    if name == "GTR Multi 2":
-        out['eq'] = (gain_db(g(10, 64)), eq_freq(g(11, 64)), EQ_Q[min(4, g(12, 1))],
-                     gain_db(g(13, 64)), gain_db(g(14, 64)))
-    else:                             # the OD's own low and high gains
-        out['eq'] = (gain_db(g(9, 64)), None, None, 0.0, gain_db(g(10, 64)))
-    sel, rate, depth, fb, mix = (g(n, d) for n, d in zip(m['cf'], (0, 8, 40, 64, 0)))
-    out['cf'] = (cf_device(bool(sel), rate, depth, fb), mix / 127.0)
-    if m['dly']:
+    if "EQ L Gain" in pn:
+        out['eq'] = (gain_db(g("EQ L Gain", 64)), eq_freq(g("EQ M Fq", 64)), EQ_Q[min(4, g("EQ M Q", 1))],
+                     gain_db(g("EQ M Gain", 64)), gain_db(g("EQ H Gain", 64)))
+    elif "OD L Gain" in pn:           # the OD's own low and high gains
+        out['eq'] = (gain_db(g("OD L Gain", 64)), None, None, 0.0, gain_db(g("OD H Gain", 64)))
+    if "CF Rate" in pn:
+        out['cf'] = (cf_device(bool(g("CF Sel", 0)), g("CF Rate", 8), g("CF Depth", 40), g("CF Fb", 64)),
+                     g("CF Mix", 0) / 127.0)
+    if "Dly Time" in pn:
         # the chain's own delay, as the GS delay's repeats (gsdelay): one tap,
         # 0-635 ms (5 ms a step), its feedback 0-127, its mix
-        t, f, x = (g(n, d) for n, d in zip(m['dly'], (60, 32, 0)))
+        t, f, x = g("Dly Time", 60), g("Dly Fb", 32), g("Dly Mix", 0)
         if x:
             out['dly'] = dict(tc=t * 0.005, taps=[(t * 0.005, 1.0, 'c')], level=x / 127.0,
                               fb=f / 128.0, lpf=None, to_reverb=0.0)
