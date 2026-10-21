@@ -120,13 +120,28 @@ def repeats(dev, send, f_hz, sr, rel=1.0):
     if g0 <= 0.0:
         return out
     fb = dev['fb']
-    for tau, lv, side in dev['taps']:
+    # AN INSERTION DELAY'S TAPS (gsefx._delay) may each loop at their own
+    # period (a Stereo Delay's left and right), and a cross-feedback one
+    # (ping-pong) answers each repeat from the other side
+    cross = dev.get('cross')
+    for tap in dev['taps']:
+        tau, lv, side = tap[0], tap[1], tap[2]
+        period = tap[3] if len(tap) > 3 else dev['tc']
         for k in range(MAX_REPEATS):
             g = g0 * lv * (fb ** k if k else 1.0)
             if abs(g) * rel < REPEAT_FLOOR or (k and fb == 0.0):
                 break
-            out.append((side, k, int(round((tau + k * dev['tc']) * sr)), g))
+            sd = side if not (cross and k % 2) else {'l': 'r', 'r': 'l'}.get(side, side)
+            out.append((sd, k, int(round((tau + k * period) * sr)), g))
     return out
+
+
+def _tap_of(dev, side):
+    """The index of the tap at `side` (a pan or an angle, not c/l/r)."""
+    for j, t in enumerate(dev['taps']):
+        if t[2] == side:
+            return j
+    return 0
 
 
 def expand(A, notes, sr, cols, place, meta=None):
@@ -171,8 +186,16 @@ def expand(A, notes, sr, cols, place, meta=None):
                 c['aM'] = row['aM'] * g
                 for kk in keys:
                     extra[kk].append(c[kk])
+                # (an insertion delay's tap between or past the outputs, or its
+                # modulation: the line's LFO on the copy, free-running)
+                if dev.get('mod'):
+                    mr, mswing, mph = dev['mod']
+                    c['vd'] = min(0.5, 2.0 * math.pi * mr * mswing)
+                    c['vr'] = mr
+                    c['vp'] = (tpi * mr * float(c['non']) / sr + (mph if side == 'r' else 0.0)) % tpi
                 if meta is not None:
-                    meta.append((i, SIDES.index(side) * MAX_REPEATS + k))
+                    meta.append((i, (SIDES.index(side) if side in SIDES else
+                                     len(SIDES) + _tap_of(dev, side)) * MAX_REPEATS + k))
                 made += 1
                 last = max(last, int(c['noff']) + int(math.ceil(float(row.get('re', 0.0)))))
     for kk in keys:

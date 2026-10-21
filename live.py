@@ -8726,6 +8726,29 @@ def selftest_gs(check):
               and len(_fsw[0]) == len(_fs[0]) and float(np.abs(_fsw[0] - _fs[0]).max()) == 0.0,
               "  (L/R correlation %.3f dry, %.3f Space D; 1.5-1.7 kHz %+.1f dB, its curve %+.1f)"
               % (_cdry, _csd, _eqm, _eqw))
+        # THE DELAY TYPES (gsefx.DELAY_TYPES): a short note on part 1 through the
+        # Stereo Delay, left 100 ms and right 250 (times its repeats never
+        # share), against the same note through Thru (its room the same): each
+        # side louder where its own repeat lands. A woodblock, over before its
+        # first repeat -- a ringing note's copy beats against it, either way
+        def _dlr(ty):
+            _x = B.render(_bfile([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _gsx(0x40, 0x03, 0x00, ty[0], ty[1], 0),
+                                  _gsx(0x40, 0x03, 0x03, 96, 0), _gsx(0x40, 0x03, 0x04, 111, 0),
+                                  _gsx(0x40, 0x41, 0x22, 0x01, 0), _M("program_change", channel=0, program=115),
+                                  _M("note_on", channel=0, note=84, velocity=100),
+                                  _M("note_off", channel=0, note=84, velocity=0, time=48),
+                                  _M("note_on", channel=0, note=84, velocity=0, time=1920)]))
+            return np.asarray(_x[0], float), np.asarray(_x[1], float)
+        _dt0, _dt1 = _dlr((0, 0)), _dlr((1, 0x50))
+        _on0 = int(np.argmax(np.abs(_dt0[0]) > 1e-4 * np.abs(_dt0[0]).max()))
+        def _win(x, dt):
+            a = _on0 + int(dt * B.SR)
+            return float(np.sum((x[0][a:a + int(0.03 * B.SR)]) ** 2)), float(np.sum((x[1][a:a + int(0.03 * B.SR)]) ** 2))
+        _w100 = [d - c for d, c in zip(_win(_dt1, 0.100), _win(_dt0, 0.100))]
+        _w250 = [d - c for d, c in zip(_win(_dt1, 0.250), _win(_dt0, 0.250))]
+        check("file: the Stereo Delay repeats on the left at its left time and the right at its right",
+              _w100[0] > 1.3 * _w100[1] and _w250[1] > 1.3 * _w250[0] and _w100[0] > 0 and _w250[1] > 0,
+              "  (100 ms: L %.3g R %.3g; 250 ms: L %.3g R %.3g)" % (_w100[0], _w100[1], _w250[0], _w250[1]))
         # THE GS DELAY (gsdelay.py): in a GS file, CC94 sends a note into it --
         # Delay 1's repeats every 340 ms, the first at its level (64/127) and
         # each a quarter the last (feedback +16), streamed exactly as whole;

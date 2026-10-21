@@ -60,9 +60,12 @@ import gs_efx_params as _P
 for _k, (_n, _nm) in _P.TYPES.items():
     TYPES.setdefault(_k, _nm)
 TYPES[(0x02, 0x0C)] = "Rotary Multi"
+_TABLE_NAME = {TYPES[_k]: _nm for _k, (_n, _nm) in _P.TYPES.items()}   # ours -> the table's
 BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion",
          "Stereo-EQ", "Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus"}
 CHORUS_TYPES = ("Space D", "Stereo Chorus", "Hexa Chorus", "Tremolo Chorus", "3D Chorus")
+DELAY_TYPES = ("Stereo Delay", "Mod Delay", "3 Tap Delay", "4 Tap Delay", "Tm Ctrl Delay", "3D Delay")
+BUILT |= set(DELAY_TYPES)
 
 # ---------------------------------------------------------------- encodings
 # (SC-88Pro owner's manual, "Effect data table", p.183)
@@ -282,6 +285,56 @@ def _chorus(name, g, pn):
                 lpf=lpf, taps=taps)
 
 
+def balance(v):
+    """(dry, effect) levels of an insertion type's Balance, 0-127, as the
+    table labels its scale: "D>xE" the dry whole and the effect at x/127
+    (x = 2v) up to D=E (40H), both whole; past it "D x<E", the effect whole
+    and the dry at x/127."""
+    v = max(0, min(127, int(v)))
+    if v <= 0x40:
+        return 1.0, min(1.0, 2.0 * v / 127.0)
+    return min(1.0, 2.0 * (127 - v) / 127.0), 1.0
+
+
+# THE DELAY TYPES' TAPS where Roland prints no default: the 3 and 4 Tap's
+# levels whole, the 4 Tap's taps spread across the field (left to right,
+# 1 to 4), the 3D Delay's sides at 60 degrees. Chosen.
+TAP_LEVEL = 127
+FOUR_TAP_SIDES = (-1.0, -1.0 / 3.0, 1.0 / 3.0, 1.0)
+DRY_FLOOR = 1e-3          # an effect-only balance keeps its rows, just under hearing
+
+
+def _delay(name, g, pn, sec):
+    """A delay type's device for gsdelay (taps (seconds, level, side,
+    period), feedback, its HF damping as a low-pass, the Mod Delay's
+    modulation, a cross-feedback's ping-pong), and its Balance."""
+    fb = feedback(g("Feedback", 64))
+    hf = table_value(8, g("HF Damp", 127))           # Bypass: none
+    if name in ("Stereo Delay", "Mod Delay"):
+        tl, tr = sec("Dly Tm L"), sec("Dly Tm R")
+        sl = -1.0 if g("Phase L", 0) else 1.0
+        sr_ = -1.0 if g("Phase R", 0) else 1.0
+        taps = [(tl, sl, 'l', tl), (tr, sr_, 'r', tr)]
+    elif name in ("3 Tap Delay", "3D Delay"):
+        sides = ('c', 'l', 'r') if name == "3 Tap Delay" else ('c', ('deg', -60.0), ('deg', 60.0))
+        taps = [(sec("Dly Tm " + k), g("Dly Lev " + k, TAP_LEVEL) / 127.0, sd, sec("Dly Tm C"))
+                for k, sd in zip("CLR", sides)]
+    elif name == "4 Tap Delay":
+        taps = [(sec("Dly Tm %d" % j), g("Dly Lev %d" % j, TAP_LEVEL) / 127.0, FOUR_TAP_SIDES[j - 1],
+                 sec("Dly Tm 1")) for j in range(1, 5)]
+    else:                                             # Tm Ctrl Delay: one tap, placed
+        t = sec("Dly Time")
+        taps = [(t, 1.0, (g("EFX Pan", 64) - 64) / 63.0 if g("EFX Pan", 64) != 64 else 'c', t)]
+    dev = dict(tc=taps[0][3], taps=[x for x in taps if x[1] != 0.0], level=1.0, fb=fb,
+               lpf=hf, to_reverb=0.0)
+    if name == "Stereo Delay" or name == "Mod Delay":
+        dev['cross'] = bool(g("Fb Mode", 0))
+    if name == "Mod Delay":
+        dev['mod'] = (table_value(6, g("Mod Rate", 12)), (g("Mod Depth", 21) + 1) / 3.2 / 1000.0 / 2.0,
+                      math.radians(2.0 * g("Mod Phase", 45)))
+    return dev
+
+
 def param_numbers(name):
     """{parameter name: its number 1-20} for a type, from Roland's table."""
     for _k, (_n, nm) in _P.TYPES.items():
@@ -336,6 +389,18 @@ def chain(st):
         if name == "Tremolo Chorus":
             out['trem'] = (table_value(6, g("Trem Rate", 60)), TREMOLO_CHORUS_DEPTH,
                            g("Trem Sep", 96) > 0)
+        return out
+    if name in DELAY_TYPES:
+        def sec(key):                    # a time through its own value table, seconds
+            n = pn[key]
+            enc = next(x[4] for x in _P.PARAMS[_TABLE_NAME[name]].values() if x[0] == key)
+            return (table_value(int(enc[1:]), g(key, dflt.get(n, 0))) or 0.0) / 1000.0
+        dry, wet = balance(g("Balance", 37))
+        dev = _delay(name, g, pn, sec)
+        dev['level'] = wet / max(dry, DRY_FLOOR)
+        out['dly'] = dev
+        out['level'] *= max(dry, DRY_FLOOR)
+        out['eq'] = (gain_db(g("Low Gain", 64)), None, None, 0.0, gain_db(g("Hi Gain", 64)))
         return out
     if name == "Stereo-EQ":
         out['eq'] = (gain_db(g("Low Gain", 64)), eq_freq(g("M1 Freq", 72)), EQ_Q[min(4, g("M1 Q", 1))],
