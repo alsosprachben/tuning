@@ -51,6 +51,15 @@ TYPES = {
     (0x04, 0x04): "Clean Gt Multi 2", (0x04, 0x05): "Bass Multi", (0x04, 0x06): "Rhodes Multi",
     (0x05, 0x00): "Keyboard Multi",
 }
+# ...ALL 64 (gs_efx_params, generated from Roland's own table by
+# examples/gs_efx_table.py): the 20 above did not name -- the series pairs
+# (02H xx) and the parallel ones (11H xx) -- under the table's names; and
+# Rotary Multi also at 02H 0CH, the SC-88Pro table's misprint, should a file
+# have followed it
+import gs_efx_params as _P
+for _k, (_n, _nm) in _P.TYPES.items():
+    TYPES.setdefault(_k, _nm)
+TYPES[(0x02, 0x0C)] = "Rotary Multi"
 BUILT = {"GTR Multi 1", "GTR Multi 2", "GTR Multi 3", "Overdrive", "Distortion"}
 
 # ---------------------------------------------------------------- encodings
@@ -80,16 +89,8 @@ def rate2(v):
 # 127"). A row that prints only its range has its default at one end and
 # does not say which, and a switch prints none: those keep chain()'s own.
 # By parameter number (1-20 = address 03H-16H).
-DEFAULTS = {
-    "Overdrive": {1: 48, 20: 96},
-    "Distortion": {1: 76, 18: 0x40 - 8, 20: 84},
-    "GTR Multi 1": {1: 100, 2: 80, 3: 100, 6: 80, 9: 0x40 + 5, 10: 0x40 + 10, 13: 8, 14: 30,
-                    15: 0x40 + 38, 16: 40, 17: 60, 18: 34, 19: 15, 20: 110},
-    "GTR Multi 2": {1: 70, 3: 90, 6: 80, 11: 56, 13: 0x40 + 5, 14: 0x40 - 10, 16: 8, 17: 96,
-                    18: 0x40 + 38, 20: 80},
-    "GTR Multi 3": {2: 60, 3: 10, 6: 80, 13: 8, 15: 0x40 + 25, 16: 50, 17: 32, 18: 64, 19: 30,
-                    20: 88},
-}
+DEFAULTS = {TYPES[_k]: {n: x[3] for n, x in _P.PARAMS[_nm].items() if x[3] is not None}
+            for _k, (_n, _nm) in _P.TYPES.items()}
 
 
 EQ_FREQS = (200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000,
@@ -334,6 +335,11 @@ def selftest():
     check("Rate1: 0.05 Hz at 00, 0.45 at 08, 5.00 at 63, 10 at 7F",
           abs(rate1(0) - 0.05) < 1e-9 and abs(rate1(8) - 0.45) < 1e-9
           and abs(rate1(0x63) - 5.0) < 1e-9 and rate1(0x7F) == 10.0)
+    check("the table (gs_efx_params): all 64 types; GTR Multi 1's defaults as checked by hand",
+          len({n for n, _ in _P.TYPES.values()} - {0}) == 64
+          and DEFAULTS["GTR Multi 1"] == {1: 100, 2: 80, 3: 100, 6: 80, 9: 69, 10: 74, 13: 8, 14: 30,
+                                         15: 102, 16: 40, 17: 60, 18: 34, 19: 15, 20: 110}
+          and TYPES[(0x03, 0x00)] == TYPES[(0x02, 0x0C)] == "Rotary Multi")
     check("Rate2, the guitar multis' CF Rate: 0.45 Hz at 08, 6.40 at 7F (not Rate1's 10)",
           abs(rate2(8) - 0.45) < 1e-9 and abs(rate2(0x7F) - 6.40) < 1e-9
           and abs(cf_device(False, 0x7F, 40, 64)['rate'] - 6.40) < 1e-9)
