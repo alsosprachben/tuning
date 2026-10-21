@@ -244,11 +244,13 @@ class _Window:
             self.bufs[name] = held
         return held[1]
 
-    def room(self, name, n):
-        """The table `name`, grown (contents kept) to hold n records."""
+    def room(self, name, n, cap=None):
+        """The table `name`, grown (contents kept) to hold n records -- by
+        doubling, but past `cap` records only as far as asked."""
         arr = getattr(self, name)
         if n > len(arr):
-            new = aligned_zeros(max(n, 2 * len(arr)), arr.dtype)
+            grow = 2 * len(arr) if cap is None else min(2 * len(arr), cap)
+            new = aligned_zeros(max(n, grow), arr.dtype)
             new[:len(arr)] = arr
             setattr(self, name, new)
         return getattr(self, name)
@@ -276,7 +278,25 @@ class FileRenderer:
 
     LK, LG = 16, 8
 
-    def __init__(self, prep, gpu=None, window_blocks=32, setup_threads=4):
+    # A ROW LEAVES THE ACTIVE SET WHEN IT FALLS SILENT, not at its note's end:
+    # a one-shot's rows (a gong, a crash, every reflection and bloom copy of
+    # them) run to a long nominal noff, and every window set up a descriptor
+    # for each of them, every block -- on Tokei's gong roll a row's nominal
+    # span was 7.9 s (median) and its audible one 1.5 s, the active set 2.3x
+    # what sounds, and the descriptor table (rows x blocks) with it. Under
+    # RETIRE_FLOOR -- -120 dB, 20 dB under the renderer's RING_FLOOR, so that
+    # tens of thousands retired together still sum far under hearing -- a row
+    # is done. The CPU path keeps every row (its hashes are the corpus's).
+    RETIRE_FLOOR = 1e-6
+    # A WINDOW'S DESCRIPTORS HAVE A BUDGET: active rows x blocks, 184 bytes
+    # each. Tokei at 3:44 had ~590 000 rows sounding, and 32 blocks of them
+    # asked for a table past the 3.25 GB the Iris allocates in one buffer --
+    # the render died there after 55 minutes (and two such tables, one a
+    # window, are what a 7.5 GB laptop cannot hold). Past the budget a window
+    # takes fewer blocks, down to one: memory bounded however dense the file.
+    DESC_BUDGET = 768 << 20
+
+    def __init__(self, prep, gpu=None, window_blocks=32, setup_threads=None):
         cl = __import__("pyopencl")
         self.cl = cl
         if B.BLK % 128 or B.BLK > 4 * 128:
@@ -286,7 +306,9 @@ class FileRenderer:
         self.k = cl.Kernel(self.gpu.prg, "voices_win")
         self.k.set_arg(9, cl.LocalMemory(4 * self.LG * self.LK * 4))
         self.W = int(window_blocks)
-        self.tab = BlockTables(setup_threads)
+        # every core for the descriptors (voice_block is OpenMP); 4 was
+        # half this laptop's
+        self.tab = BlockTables(setup_threads or os.cpu_count() or 4)
         non = np.asarray(prep['non'], np.int64)
         self.order = np.argsort(non, kind='stable')
         self.onset = non[self.order]
@@ -297,7 +319,34 @@ class FileRenderer:
         self.end = (np.asarray(prep['noff'], np.int64)
                     + np.asarray(prep['re'], np.float32).astype(np.int64)
                     + np.ceil(dl).astype(np.int64) + B.BLK)
+        self.end = np.minimum(self.end, self._audible_end(prep, non, dl))
         self.wins = [_Window(self.gpu.ctx), _Window(self.gpu.ctx)]
+
+    def _audible_end(self, prep, non, dl):
+        """Each row's last sample above RETIRE_FLOOR, from its level and its
+        two decay rates (the kernel's law, as blockrender.ring_last reads
+        it); a row that never falls (a sustain, no decay) keeps its end."""
+        P = len(non)
+        g = lambda k: np.asarray(prep[k], np.float64)[:P]     # noqa: E731
+        a = np.maximum(np.abs(g('aL')), np.abs(g('aR')))
+        sl, af, lr, lrA = g('sus'), g('aft'), g('logr'), g('logrA')
+        F = self.RETIRE_FLOOR
+
+        def t_to(c, rate):
+            with np.errstate(divide='ignore', invalid='ignore'):
+                return np.where(c <= F, 0.0, np.where(rate > 0.0, np.log(np.maximum(c, F) / F)
+                                                      / np.where(rate > 0.0, rate, 1.0), np.inf))
+        t = np.maximum(t_to((1.0 - sl) * (1.0 - af) * a, lr), t_to((1.0 - sl) * af * a, lrA))
+        t = np.where(sl * a > F, np.inf, t)
+        # ...but only where the row's level IS that law: a Moog row's comes
+        # from its filter (fx), a wind's or a bend's row may lift it (br), an
+        # organ's gate and swell (gr) -- those keep their nominal end
+        for k in ('fx', 'br', 'gr'):
+            if k in prep:
+                t = np.where(np.asarray(prep[k])[:P] >= 0, np.inf, t)
+        big = np.iinfo(np.int64).max // 4
+        return np.where(np.isfinite(t), non + (np.minimum(t, 1e6) * B.SR).astype(np.int64)
+                        + np.ceil(dl).astype(np.int64) + 2 * B.BLK, big)
 
     def render(self, N, send_w=None, n0=0):
         """Samples [n0, N): (L, R, SL, SR), unscaled -- synth_partials' output.
@@ -316,14 +365,17 @@ class FileRenderer:
         nb = -(-N // BLK)
         self.ptr, self.active = 0, np.zeros(0, np.int64)
         turn = 0
-        for wb in range(n0 // BLK, nb, W):
+        wb = n0 // BLK
+        while wb < nb:
             w = self.wins[turn]
             if w.pending:                   # this window's last launch, done first
                 self._collect(w, out, N)
-            ng, blk_wg = self._fill(w, wb, min(nb, wb + W), send)
+            # the window may come back shorter than asked (DESC_BUDGET)
+            ng, blk_wg, wb1 = self._fill(w, wb, min(nb, wb + W), send)
             if ng:
                 self._launch(w, wb, ng, blk_wg, mg, send)
             turn ^= 1
+            wb = wb1
         for w in self.wins:
             if w.pending:
                 self._collect(w, out, N)
@@ -348,8 +400,15 @@ class FileRenderer:
             self.active = self.active[self.end[self.active] > w0]
         nact = len(self.active)
         if not nact:
-            return 0, [0] * nb
-        D = w.room('D', nact * nb)
+            return 0, [0] * nb, b1
+        cap = max(nact, self.DESC_BUDGET // VDESC.itemsize)
+        if nact * nb > cap:
+            # fewer blocks, so the table stays inside its budget (rows that
+            # begin after the shortened window are already in the active set,
+            # silent in these blocks -- kind 0, packed away)
+            nb = max(1, cap // nact)
+            b1 = b0 + nb
+        D = w.room('D', nact * nb, cap=cap)
         t.C, t.SB = w.C, w.S                # the window's own, so the GPU may
         t.setup(prep, self.active, w0, send, self.args, nb=nb, D=D)   # read the last
         w.C, w.S = t.C, t.SB                # (grown, if the window needed more)
@@ -364,7 +423,7 @@ class FileRenderer:
         gn = -(-gn // self.LG) * self.LG
         ng = int(gn.sum())
         if not ng:
-            return 0, [0] * nb
+            return 0, [0] * nb, b1
         G = w.room('G', ng)
         blk = np.repeat(np.arange(nb), gn)
         j = np.arange(ng) - np.repeat(np.cumsum(gn) - gn, gn)
@@ -373,7 +432,7 @@ class FileRenderer:
         g['d0'] = blk * nact + np.minimum(mb, j * pb)
         g['d1'] = blk * nact + np.minimum(mb, (j + 1) * pb)
         g['off'] = blk * BLK
-        return ng, list(gn // self.LG)
+        return ng, list(gn // self.LG), b1
 
     def _launch(self, w, wb, ng, blk_wg, mg, send):
         cl, BLK = self.cl, B.BLK

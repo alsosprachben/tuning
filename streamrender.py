@@ -18,6 +18,9 @@ from array import array
 
 import numpy as np
 
+# TUNING_STREAM_STATS=1: the store's rows held against still to sound, each window
+_STATS = os.environ.get("TUNING_STREAM_STATS", "") not in ("", "0")
+
 
 class PrefixCol:
     """A table column that can let go of its first rows.
@@ -304,6 +307,7 @@ class Stream:
         self.amp = {}               # channel -> dict(rows=..., edge=...)
         self.ready = []             # rows final for the per-row passes
         self.store = []             # rows through every pass, still to sound
+        self._shadow = []           # (rows, last end, bytes) a chunk the old rule would hold
         self.ht_seen = {}
         self.rotors = {}
         self.wi = 0
@@ -452,6 +456,9 @@ class Stream:
                     if self.stems is not None:
                         self._count_group_rows(out)
                     self.store.append(out)
+                    if _STATS:      # the old rule's chunk, whole, until its last row ends
+                        self._shadow.append((len(out['om']), int(out['zend'].max()),
+                                             sum(v.nbytes for v in out.values())))
 
     def _pending_min(self):
         """The earliest onset any row not yet past passes 1-2 may have."""
@@ -992,7 +999,38 @@ class Stream:
             m = (c['nonL'] < w1) & (c['zend'] > w0)
             if m.any():
                 sel.append({k: v[m] for k, v in c.items()})
-        self.store = [c for c in self.store if c['zend'].max() > w1]
+        # A CHUNK KEEPS ONLY ITS ROWS STILL TO SOUND. It was kept whole until
+        # its LAST row ended -- and a chunk is 20 000 rows of everything
+        # finished together, so nearly every one held some long row (a held
+        # string, the bass, a cymbal's ring, its reflections) and waited on it
+        # with every column of every row long done: memory grew with the
+        # piece, and Tokei's full render was reaped for it. A row whose end is
+        # past can sound in no later window, and the rows are sorted by key
+        # before every render, so dropping them changes no sample. Compacted
+        # once half a chunk is done, so each row is copied a few times at most.
+        if _STATS:
+            # what the store holds against what is still to sound: the rows
+            # whole chunks would keep (the old rule: until a chunk's last row
+            # ends), the rows kept now, and the rows actually still sounding
+            self._shadow = [x for x in self._shadow if x[1] > w1]
+            _old = sum(x[0] for x in self._shadow)
+            _oldb = sum(x[2] for x in self._shadow)
+            _held = sum(len(c['zend']) for c in self.store)
+            _alive = sum(int((c['zend'] > w1).sum()) for c in self.store)
+            _by = sum(sum(v.nbytes for v in c.values()) for c in self.store)
+            print("  stream at %6.1f s: rows held %8d (%5.0f MB), still to sound %8d; "
+                  "whole chunks would hold %8d (%5.0f MB)" % (w1 / self.B.SR, _held, _by / 2 ** 20, _alive,
+                                                              _old, _oldb / 2 ** 20),
+                  flush=True)
+        keep = []
+        for c in self.store:
+            alive = c['zend'] > w1
+            if not alive.any():
+                continue
+            if 2 * int(alive.sum()) < len(alive):
+                c = {k: v[alive] for k, v in c.items()}
+            keep.append(c)
+        self.store = keep
         n = w1 - w0
         if self.stems is not None:
             return self._render_stems(w0, w1, sel)
