@@ -183,10 +183,19 @@ def od_gain(v, dist):
     return 10.0 ** ((lo + (hi - lo) * x) / 20.0)
 
 
+# THE COMPRESSOR'S ATTACK (Cmp Atck, the guitar multis' p1, 70 by default):
+# "the time over which the sound will rise after it is input" (SC-88Pro
+# manual) -- each note's onset, risen over it. Roland gives no times: 0-127
+# onto 0-CMP_ATTACK_MS is chosen. The one documented thing in Tokei's chain
+# that would hide a MIDI guitar's tracking glitches (2-23 ms notes): a note
+# that ends before it has risen. 0 leaves every onset as it was.
+CMP_ATTACK_MS = 40.0
+
+
 def chain(st):
     """The stages a state's type makes, or None where the type is not built:
-    {'name', 'drive' (or None), 'cabinet' (or None), 'comp': decay factor and
-    gain (or None), 'eq': (low dB, mid Hz, Q, mid dB, high dB) (or None), 'cf':
+    {'name', 'drive' (or None), 'cabinet' (or None), 'comp': decay factor,
+    gain and attack seconds (or None), 'eq': (low dB, mid Hz, Q, mid dB, high dB) (or None), 'cf':
     chorus device and mix (or None), 'level', 'sends'} -- 'od_gain' the OD
     stage's gain in front of the valve (or None), 'level' its output level
     with the OD's makeup in it."""
@@ -217,7 +226,8 @@ def chain(st):
         sus = g(2, 64) / 127.0
         # chosen: sustain 0-127 slows the decay up to fourfold, the level its
         # makeup (64 none)
-        out['comp'] = (1.0 / (1.0 + 3.0 * sus), g(3, 64) / 64.0)
+        out['comp'] = (1.0 / (1.0 + 3.0 * sus), g(3, 64) / 64.0,
+                       CMP_ATTACK_MS * g(1, 70) / 127000.0)
     sel_, drv, amp_sw, od_sw = m['od']
     if g(od_sw, 1):
         out['od_gain'] = od_gain(g(drv, 48), bool(g(sel_, 0)))

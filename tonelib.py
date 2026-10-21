@@ -19,6 +19,19 @@ verbose = os.environ.get("TUNING_VERBOSE", "") not in ("", "0")
 hrtf = os.environ.get("TUNING_HRTF", "1") not in ("", "0")
 
 
+def stage_angle(p):
+    """THE PAN LAW, AS HEARD: the angle (radians, + right) a pan p (-1..1, CC10
+    (v - 64)/63) puts a source at. A MIDI file's pan is a level pan between
+    two speakers -- GM's default curve (MMA RP-036) and Roland's alike, cos/sin
+    of (p + 1) pi/4 -- and from speakers at +-30 degrees (ITU-R BS.775) the ear
+    hears it where the law of sines puts it: sin(phi) = sin 30 * (L - R)/(L + R)
+    = tan(p pi/4) / 2. Hard over is the speaker, 30 degrees; 34 is 11. It
+    was pan x 4 m across a listener 2 m away: 63 degrees hard over (Ben:
+    "all of the positioning seems to be wider than it probably should be")."""
+    import math
+    return math.asin(0.5 * math.tan(max(-1.0, min(1.0, p)) * math.pi / 4.0))
+
+
 def errlog(s):
     import sys
     if verbose:
@@ -2629,7 +2642,35 @@ class SynthProperties:
             _vs, _ds = zip(*sorted(self.strike_volume_trim_db))
             self.gain *= 10.0 ** (float(_np_interp(_v, _vs, _ds)) / 20.0)
 
-        self.position_x = self.octave_position * self.octave_width + self.channel_pan * 4  # meters
+        # WHERE IT IS, AND WHERE THE MIX TURNS IT (place, stage_angle): the
+        # instrument at its own position, CC10 a turn of it about the listener
+        self.pan_angle = stage_angle(self.channel_pan)
+        self.place()
+
+        # self.left_pan  = self.left_pan * self.left_intensity  / 20
+        # self.right_pan = self.right_pan * self.right_intensity / 20
+
+        if self.plucked_harmonic:
+            # pluck dampening
+            self.plucked_volumes = [
+                (harmonic, ((self.plucked_harmonic - harmonic) / self.plucked_harmonic) ** self.pluck_dampening)
+                for harmonic
+                in range(1, int(self.plucked_harmonic))
+            ]
+        else:
+            self.plucked_volumes = [(1000000, 1.0)]
+
+    # A SEAT within the instrument, metres right of its centre: a drum kit's
+    # pieces, a GS key's own pan (blockrender, after the props are made; then
+    # place() again). The part's pan turns the instrument, seat and all.
+    seat_x = 0.0
+
+    def place(self):
+        """Everything that follows from position_x: the instrument at its own
+        position (its soundboard's octave spread, its seat), the ears' cues
+        through hrtf_at -- which turns it by pan_angle."""
+        from math import atan, pi
+        self.position_x = self.octave_position * self.octave_width + self.seat_x  # meters
         self.position_y = 0.2  # meters
 
         self.ear_distance = 0.02  # meters
@@ -2645,7 +2686,6 @@ class SynthProperties:
         self.left_intensity = 1.0 / self.left_distance ** 2
         self.right_intensity = 1.0 / self.right_distance ** 2
 
-        from math import atan, pi
         # Amplitude placement: pitch-based soundboard position plus the
         # channel pan (CC10), which also contributes interaural delay above.
         self.pan_position = atan(self.octave_position / 20) / pi * 2 + self.channel_pan
@@ -2659,20 +2699,8 @@ class SynthProperties:
             (self.left_incidence, self.right_incidence,
              self.left_hrtf_delay, self.right_hrtf_delay) = self.hrtf_at(self.position_x)
 
-        # self.left_pan  = self.left_pan * self.left_intensity  / 20
-        # self.right_pan = self.right_pan * self.right_intensity / 20
 
-        if self.plucked_harmonic:
-            # pluck dampening
-            self.plucked_volumes = [
-                (harmonic, ((self.plucked_harmonic - harmonic) / self.plucked_harmonic) ** self.pluck_dampening)
-                for harmonic
-                in range(1, int(self.plucked_harmonic))
-            ]
-        else:
-            self.plucked_volumes = [(1000000, 1.0)]
-
-    def hrtf_at(self, position_x, position_z=None, position_y=None):
+    def hrtf_at(self, position_x, position_z=None, position_y=None, angle=None):
         """Per-ear (left_inc, right_inc, left_delay, right_delay) for a source at
         position_x metres (+ = right) and position_z metres (+ = up), via the
         Woodworth ITD on a spherical head. Factored out of __init__ so a
@@ -2686,9 +2714,16 @@ class SynthProperties:
         two-dimensional result when position_z is 0: there
         sin(atan2(x, y)) == x / sqrt(x**2 + y**2).
         """
-        from math import sqrt, acos, cos, pi
+        from math import sqrt, acos, cos, sin, pi
         z = self.position_z if position_z is None else position_z
         y = self.listener_distance if position_y is None else position_y
+        # THE MIX'S PAN IS A TURN (stage_angle): the source, wherever the
+        # instrument puts it -- a rank in its case, a desk, a room image --
+        # turned about the listener by the part's angle (or `angle`)
+        th = getattr(self, "pan_angle", 0.0) if angle is None else angle
+        if th:
+            position_x, y = (position_x * cos(th) + y * sin(th),
+                             -position_x * sin(th) + y * cos(th))
         distance = max(sqrt(position_x ** 2 + y * y + z * z), self.head_radius)
         base_delay = distance / self.sound_speed
         cos_to_right = position_x / distance
@@ -6191,7 +6226,8 @@ class OrganProperties(StoppedPipeProperties):
     #     + drift_m  * octave_position                             #   once per octave,
     #     + offset[rank]                                           #   drifts low->high
     #     + split[rank] * (+1 even key / -1 odd key)               # C/C# antiphonal
-    #     + channel_pan * 4                                        # CC10 division pan
+    #
+    # ...and CC10 turns the whole case about the listener (hrtf_at, stage_angle)
     #
     # sin(2pi*octave_position) IS the chroma circle (octave_position is log2 pitch,
     # so 2pi*octave_position advances one turn per octave); octave-related notes
@@ -6240,8 +6276,7 @@ class OrganProperties(StoppedPipeProperties):
         parity = 1.0 if (round(12.0 * op) % 2 == 0) else -1.0
         return (self.spiral_m * sin(2.0 * pi * op + self.spiral_phase)
                 + self.drift_m * op
-                + offset + split * parity
-                + self.channel_pan * 4.0)
+                + offset + split * parity)
 
 
 class FlueOrganProperties(OrganProperties):

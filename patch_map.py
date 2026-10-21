@@ -547,6 +547,9 @@ KIT_TRIM_DB = -1.7
 # them the same +3 (Ben, by ear on the same mix), finger and pick. Every
 # variation of the program with it. A GM file keeps GeneralUser's balance.
 GS_TRIM_DB = {29: 3.0, 30: 3.0, 33: 3.0, 34: 3.0}
+# ...and its drum kit: Tokei's kick, hats and snare quiet against the band
+# (Ben: "the whole kit could be 3dB higher"), every kit, every key
+GS_DRUM_TRIM_DB = 3.0
 
 
 def program_trim(program, drum=False, gs=False):
@@ -558,8 +561,8 @@ def program_trim(program, drum=False, gs=False):
         db = VARIATION_TRIM_DB[(int(program) & 0x7F, v)]
     else:
         db = KIT_TRIM_DB if drum else PROGRAM_TRIM_DB.get(int(program) & 0x7F, 0.0)
-    if gs and not drum:
-        db += GS_TRIM_DB.get(int(program) & 0x7F, 0.0)
+    if gs:
+        db += GS_DRUM_TRIM_DB if drum else GS_TRIM_DB.get(int(program) & 0x7F, 0.0)
     return 10.0 ** (db / 20.0) if db else 1.0
 
 

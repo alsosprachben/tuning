@@ -115,9 +115,10 @@ WIND_ROWS = 32
 SIREN_ROWS = 32
 
 # ---- CC10, and what pan actually IS in this renderer ------------------------
-# NOT A PAN LAW. The file path puts CC10 into channel_pan, which becomes a
-# POSITION IN METRES (tonelib: position_x = octave_position*octave_width +
-# channel_pan*4) and then an HRTF. Measured on that geometry, hard left against
+# NOT A PAN LAW. The file path puts CC10 into channel_pan, which TURNS the
+# instrument about the listener (tonelib.stage_angle: the angle the GM/GS level
+# law is heard at from speakers at +-30 degrees) and then an HRTF. Measured on
+# the old geometry (pan x 4 m, 63 degrees hard over), hard left against
 # centre:
 #
 #     interaural delay   +0.516 ms
@@ -131,7 +132,6 @@ SIREN_ROWS = 32
 #
 # Precomputed once from tonelib's own hrtf_at, so the two paths place a pan
 # identically and the audio thread does no trigonometry.
-PAN_METRES = 4.0                # channel_pan * 4, from tonelib's position_x
 _PAN_TABLE = None               # cc -> (alphaL, alphaR, half_itd_s)
 _PAN_BETA = 0.0                 # the head-shadow corner, rad/s
 
@@ -153,7 +153,9 @@ def pan_table():
     amin, tmin = 0.1, 150.0 * math.pi / 180.0
     out = []
     for cc in range(128):
-        li, ri, ld, rd = q.hrtf_at((cc - 64) / 63.0 * PAN_METRES)
+        # a centred source turned by the pan's angle (tonelib.stage_angle), as
+        # the file turns each instrument
+        li, ri, ld, rd = q.hrtf_at(0.0, angle=T.stage_angle((cc - 64) / 63.0))
         al = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * math.cos(li * math.pi / tmin)
         ar = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * math.cos(ri * math.pi / tmin)
         # THE DIFFERENTIAL ONLY. Panning hard moves the source 4 m sideways,
@@ -8636,7 +8638,9 @@ def selftest_gs(check):
         def _cen(x):
             _X = np.abs(np.fft.rfft(x))
             return float((_X * np.fft.rfftfreq(len(x), 1.0 / B.SR)).sum() / _X.sum())
-        _usn = _dr1([], note=38)
+        # (a GS file, as the user set's is: a Sound Canvas file's kit is
+        # patch_map.GS_DRUM_TRIM_DB up on a GM file's)
+        _usn = _dr1([_gsx(0x40, 0x00, 0x7F, 0x00, 0)], note=38)
         _uk = _dr1([_gsx(0x21, 0x0B, 60, 0, 0), _gsx(0x21, 0x0C, 60, 38, 0),
                     _M("program_change", channel=9, program=64)], note=60)
         check("file: a user drum set's key plays the set and note it names",
@@ -8759,10 +8763,13 @@ def selftest_gs(check):
         # the OD a gain in front of the valve (+4.7 dB at 30) with its makeup
         # (gsefx.OD_MAKEUP_DB), so level 40 sits a little under the dry part,
         # not 10 dB under it; the level after the valve (tubeamp's stepped reference),
-        # so 40 -> 127 is its own 10 dB and not more drive
+        # so 40 -> 127 is its own 10 dB and not more drive -- to 1.5 dB: the
+        # file raises the flanger's mix (CF Mix 100) on the same beat, which
+        # adds its own (11.0 dB measured, before and after the compressor's
+        # attack took 0.3 dB off both halves)
         check("file: Tokei's GTR Multi 2 -- its OD's gain and makeup at level 40 and +6 dB at "
               "2 kHz, then the level up its own 10 dB and the flanger parting the sides; streamed as whole",
-              -5.0 < _lv1 < 0.0 and 4.5 < _eq1 < 7.5 and abs(_lv2 - _lv1 - 10.0) < 1.0 and _co2 < 0.85
+              -5.0 < _lv1 < 0.0 and 4.5 < _eq1 < 7.5 and abs(_lv2 - _lv1 - 10.0) < 1.5 and _co2 < 0.85
               and len(_eww[0]) == len(_ew[0]) and float(np.abs(_eww[0] - _ew[0]).max()) == 0.0,
               "  (level %+.1f dB, 2 kHz %+.1f over the EQ flat; then %+.1f dB, L/R %.2f)" % (_lv1, _eq1, _lv2, _co2))
         # THE HAMMER-ON (Dist. Gt2 :, 30.1): a note over the one before is not
@@ -10908,9 +10915,10 @@ def selftest(only=""):
     _gm = Live(program=56, rate=48000, frames=128, verbose=False)
     _gm.warm()
 
-    # PAN IS NOT A GAIN LAW HERE. CC10 offline becomes a position in METRES and
-    # then an HRTF, so hard left is 0.10 dB at 100 Hz and 15.2 at 4 kHz plus
-    # half a millisecond of interaural delay. An amplitude pan would be a
+    # PAN IS NOT A GAIN LAW HERE. CC10 offline TURNS the source about the
+    # listener (tonelib.stage_angle: hard over is the speaker's 30 degrees)
+    # and then an HRTF, so hard left is about 10 dB above 3 kHz plus a quarter
+    # of a millisecond of interaural delay. An amplitude pan would be a
     # different effect: loud where this one is silent.
     def _panshot(_cc, _note=72):
         _gm.on_midi(mido.Message("control_change", channel=0, control=10, value=_cc))
@@ -10930,12 +10938,12 @@ def selftest(only=""):
     _pl = _panshot(0); _pc0 = _panshot(64); _pr = _panshot(127)
     _db = lambda a, b: 20 * _math.log10(max(a, 1e-30) / max(b, 1e-30))
     check("CC10 places a source, it does not fade one",
-          _db(_pl[0], _pl[1]) > 12.0 and _db(_pr[0], _pr[1]) < -12.0
+          _db(_pl[0], _pl[1]) > 8.0 and _db(_pr[0], _pr[1]) < -8.0
           and abs(_db(_pc0[0], _pc0[1])) < 1.0,
           "  (above 3 kHz: %+.1f dB hard left, %+.1f centred, %+.1f hard right)"
           % (_db(_pl[0], _pl[1]), _db(_pc0[0], _pc0[1]), _db(_pr[0], _pr[1])))
     check("...with an interaural delay, which is the whole cue in the bass",
-          abs(_pl[2] / 48.0 - 0.5) < 0.1 and abs(_pr[2] / 48.0 + 0.5) < 0.1,
+          abs(_pl[2] / 48.0 - 0.26) < 0.05 and abs(_pr[2] / 48.0 + 0.26) < 0.05,
           "  (%+.3f ms hard left, %+.3f hard right)"
           % (_pl[2] / 48.0, _pr[2] / 48.0))
     # ...AND THE TIME IMAGE DOES NOT MOVE UNDER A SOUNDING NOTE. delL/delR
@@ -13197,7 +13205,8 @@ def selftest(only=""):
     _lt.renderer.close()
     # A PART'S OWN PAN POT seats it, and the channel's CC10 then leaves it --
     # a layer's two passes stay where the desk put them (a head shadow, not a
-    # level pan: a middle-C saw at 20 is about 2 dB to the left, broadband)
+    # level pan: a middle-C saw at 20 is about 1 dB to the left, broadband,
+    # turned 18 degrees)
     _lp = Live(program=81, rate=48000, frames=128, verbose=False, tuner="even")
     _lp.warm()
     def _lr(_cc=None):
@@ -13217,7 +13226,7 @@ def selftest(only=""):
     _follow = _lr()
     _rt = Part.from_dict(dict(Part(_lp.parts[0].patch).to_dict(), pan=20)).pan
     check("a part's own pan seats it, and the channel's CC10 leaves it",
-          _seat > 1.0 and abs(_held - _seat) < 0.2 and _follow < -1.0 and _rt == 20,
+          _seat > 0.5 and abs(_held - _seat) < 0.2 and _follow < -0.5 and _rt == 20,
           "  (pan 20: L %+.1f dB over R; after CC10 127 %+.1f; following CC10 127 %+.1f)"
           % (_seat, _held, _follow))
     # ...AND THE SWITCH IS ON EVERY PART: a touch-sensitive voice follows

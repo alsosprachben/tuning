@@ -1744,6 +1744,7 @@ _GS_CHO = {}             # ...and its GS chorus: {'dev': chorus.gs_device} for a
 _GS_FILE = [False]       # ...and whether it speaks GS at all (patch_map.GS_TRIM_DB)
 
 
+
 def prepare(path, tuner='hybrid440', sink=None):
     """_prepare, in the room the file's GS reverb macro chose -- where nobody
     chose one (TUNING_ROOM) -- and the room put back after; the file's reverb
@@ -2984,6 +2985,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     logr = logr * _ex['comp'][0]
                     logrA = logrA * _ex['comp'][0]
                     ampL *= _ex['comp'][1]; ampR *= _ex['comp'][1]; ampM *= _ex['comp'][1]
+                    # ...and its attack: the onset risen over it (gsefx.CMP_ATTACK_MS)
+                    if _ex['comp'][2] > 0.0:
+                        fa = max(fa, _ex['comp'][2] * SR)
             # A HAMMER-ON / PULL-OFF (hammer_legato): no pick -- the string
             # rings on from the note that was picked, so each partial starts
             # where its own decay (the compressor's, if any) has got to since
@@ -4144,6 +4148,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if _EFXN[0] is not None and _EFXN[0].get('dly'):
             # a guitar multi's own delay (its Dly stage), in the GS delay's place
             _GSD_OPEN[0] = (_row0, 1.0, _EFXN[0]['dly'])
+        _seat = 0.0                # a seat inside the instrument (below); none
         if drum is not None:
             FREQ_N = FREQ          # a drum's pitch is its own, not a tuning's
             _, pc, f0, dpan = drum
@@ -4157,7 +4162,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 if _dst['pan'] == 0:
                     _hv = (ch * 0x9E3779B1) ^ (note * 0x85EBCA6B) ^ (int(on * 1000) * 0xC2B2AE35)
                     _hv = ((_hv ^ (_hv >> 15)) * 0x2545F491) & 0xFFFFFFFF
-                    dpan = 2.0 * (_hv / 4294967295.0) - 1.0 - pan
+                    dpan = 2.0 * (_hv / 4294967295.0) - 1.0
                 else:
                     dpan = (_dst['pan'] - 64) / 63.0
             f0 *= stroke_pitch.get((note, on), 1.0)   # bell tree: this bar, not the lowest
@@ -4171,7 +4176,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
             organ = False; chan_vol = (v7*v11)**2
             if 'level' in _dst:
                 chan_vol *= (_dst['level'] / 100.0) ** 2
-            pan = max(-1.0, min(1.0, pan + dpan))   # kit position + channel pan
+            # THE KIT'S SEAT (or the key's own pan) is where the piece sits in
+            # the kit; the part's pan turns the kit (tonelib.stage_angle) --
+            # GS's relative part pan on an absolute key pan, as Roland has it
+            _seat = dpan
         else:
             pc = _DRONE_PC.get((ch, note, on)) or property_class_for_note(prog, note)
             # A WIDE VOICE (key_pan_spread: GS's "w" tones) spreads its keys
@@ -4179,7 +4187,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # channel's pan: the spread at 30 semitones from middle C
             _kps = getattr(pc, 'key_pan_spread', 0.0)
             if _kps:
-                pan = max(-1.0, min(1.0, pan + _kps * (note - 60) / 30.0))
+                _seat = _kps * (note - 60) / 30.0   # within the instrument: a seat
             organ = getattr(pc,'registerable',False)
             # An organ's CC7 is its swell shutter and its CC11 half the stop
             # word, so its channel gain is 1 and the swell row does the rest; a
@@ -4375,7 +4383,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # louder, saturating at the valve's ceiling, as a pedal does
             _EFG = _EFXN[0].get('od_gain') or 1.0
             chan_vol *= _EFG
-        props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10 -> HRTF placement
+        props = pc(f0, pan, (vel/127.0)**2, chan_vol, _eff)   # pan = CC10: a turn (tonelib.stage_angle)
+        if _seat:
+            # a seat inside the instrument, at the angle its pan names
+            props.seat_x = props.listener_distance * math.tan(T.stage_angle(_seat))
+            props.place()
         if (drum is not None or _xf) and _tilt is not None:
             # a voice's pulse, darker or brighter as its syllable goes on
             # (percussion_map._voiced; tonelib.SfxThroatProperties)
