@@ -707,7 +707,13 @@ class Stream:
                 last = b
             st['edge'] = last
             if last is not None:
-                keep = arrs['noff'] >= last - 1e-6
+                # A ROW ENDING AT THE EDGE IS DONE. A segment [a, b] hears the
+                # rows with noff >= b (tubeamp.segment), and every segment to
+                # come ends past this edge, so such a row is in none of them.
+                # Kept, it held `next` at its own end until the channel played
+                # again: a guitar part falling silent froze the whole render
+                # there, and every row after piled up (Tokei, reaped at 2:08).
+                keep = arrs['noff'] > last + 1e-6
                 st['rows'] = _take(r, np.flatnonzero(keep)) if keep.any() else None
             # where the next products can start: the segment after the last
             # one made begins AT its end (or at the first edge, if none yet)
