@@ -408,6 +408,24 @@ def effects():
             '<th></th><th>Notes</th></tr>\n%s\n</table></div>\n<p>Not built yet: %s.</p>' % (trs, built, rest))
 
 
+def sysex():
+    """Roland's GS address map against what the renderer reads (gm_coverage.SYSEX_ROWS)."""
+    chip = {"Yes": 4, "Partial": 2, "No": 0}
+    n = {k: 0 for k in chip}
+    out = []
+    for blk, rows in C.SYSEX_ROWS:
+        trs = []
+        for a, prm, st, note in rows:
+            n[st] += 1
+            trs.append('<tr><td class="nm"><code>%s</code></td><td>%s</td><td class="rt">'
+                       '<span class="chip r%d">%s</span></td><td class="note">%s</td></tr>'
+                       % (e(a), e(prm), chip[st], st, e(note)))
+        out.append('<h3>%s</h3>\n<div class="tscroll"><table><tr><th>Address</th><th>Parameter</th>'
+                   '<th></th><th>Notes</th></tr>\n%s\n</table></div>' % (e(blk), "\n".join(trs)))
+    return ('<p>%d rows: %d read, %d partly, %d not.</p>\n' % (sum(n.values()), n["Yes"], n["Partial"], n["No"])
+            + "\n".join(out))
+
+
 def tree():
     """The class tree (gm_coverage.class_tree), collapsible below two levels."""
     n = [0]
@@ -471,6 +489,7 @@ def build():
         "variations": variations(),
         "soundcanvas": sound_canvas(),
         "effects": effects(),
+        "sysex": sysex(),
         "nvar": len(C.variations()),
         "nvarb": sum(1 for x in C.variations() if x[3]),
         "nstop": sum(len(r) + len(c) for _, _, r, c in C.stops()),
@@ -574,6 +593,12 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 <h2>Effects: the Sound Canvas&rsquo;s</h2>
 <p>Rated on the voices&rsquo; scale: 4 validated against a target (a recording of the device, or the hardware&rsquo;s output of a file judged against ours by ear), 3 validated semantically by ear, 2 from theory (Roland&rsquo;s tables, our models), 1 a stand-in, 0 not built. The reverb is the module&rsquo;s way of giving the music a space, and our physical rooms are how we do that job. Each insertion type is to be mapped onto the physical model we have where one exists &mdash; Rotary the Leslie, Overdrive and Distortion the valve amp and cabinet, the choruses <code>chorus.py</code>, the 3D types our room and head.</p>
 %(effects)s
+</section>
+
+<section>
+<h2>Roland GS SysEx: the address map</h2>
+<p>What the file renderer reads of Roland&rsquo;s GS map (the VE-GS Pro MIDI Implementation; the SC-88Pro manual for the insertion effects). <strong>Yes</strong> read and applied; <strong>Partial</strong> read, with its limit; <strong>No</strong> not read. Live reads the part parameters, the rhythm part, the master settings and the reset, on port A.</p>
+%(sysex)s
 </section>
 
 <section>

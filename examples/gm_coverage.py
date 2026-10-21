@@ -1035,6 +1035,95 @@ def effects_md():
     return "\n".join(L) + "\n"
 
 
+# THE GS SYSEX MAP: Roland's addresses (VE-GS Pro MIDI Implementation; the
+# SC-88Pro owner's manual for the insertion effects) against what the file
+# renderer reads. Yes: read and applied; Partial: read, with the limit said;
+# No: not read. Kept by hand from the map, as the ratings above are.
+SYSEX_ROWS = [
+    ("System", [
+        ("40 00 7F, 00 00 7F", "GS Reset, System Mode Set", "Yes",
+         "back to power-on: banks, programs, controllers, tunings, effects, drum edits, the part settings below"),
+        ("40 00 00-05", "Master tune, volume, key shift", "Yes", "the file's timeline; live too"),
+        ("40 00 06", "Master pan", "No", ""),
+    ]),
+    ("Reverb, chorus, delay, EQ (40 01, 40 02)", [
+        ("40 01 30", "Reverb macro", "Partial", "the arranger's space onto one of our rooms (Room 1 the studio, Hall 2 the church); read before the first note"),
+        ("40 01 33-34", "Reverb level, time", "Partial", "onto the room's tail; before the first note"),
+        ("40 01 31-32, 35, 37", "Reverb character, pre-LPF, feedback, pre-delay", "No", ""),
+        ("40 01 38-3E", "Chorus macro and parameters", "Partial", "the GS chorus device; before the first note"),
+        ("40 01 3F-40", "Chorus send to reverb, delay", "No", "parsed, not used"),
+        ("40 01 50-59", "Delay macro and parameters", "Partial", "the GS delay; before the first note"),
+        ("40 01 5A", "Delay send to reverb", "No", "parsed, not used"),
+        ("40 02 00-03", "Master EQ, low and high", "Partial", "each partial at its frequency; before the first note"),
+    ]),
+    ("Insertion effect (40 03)", [
+        ("40 03 00-01", "Type", "Partial", "5 of 64 built (GTR Multi 1-3, Overdrive, Distortion); the rest play dry"),
+        ("40 03 03-16", "Parameters 1-20", "Partial", "each type at Roland's own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part's first note's; Amp Type not read"),
+        ("40 03 17, 19", "Send to reverb, delay", "Yes", "per note"),
+        ("40 03 18", "Send to chorus", "No", "parsed, not used"),
+        ("40 03 1B-1E", "Control sources and depths", "No", ""),
+        ("40 4x 22", "Part assign", "Yes", "ports A and B"),
+    ]),
+    ("Part (40 1x)", [
+        ("40 1x 00", "Tone number", "Yes", "as CC0 and program change"),
+        ("40 1x 02-12", "Rx channel and switches", "No", ""),
+        ("40 1x 13", "Mono/poly", "Yes", "as CC126/127"),
+        ("40 1x 14", "Assign mode", "No", ""),
+        ("40 1x 15", "Use for rhythm part", "Yes", ""),
+        ("40 1x 16", "Pitch key shift", "Partial", "as RPN 2: replaces the file's own rather than adding to it"),
+        ("40 1x 17-18", "Pitch offset fine (Hz)", "No", ""),
+        ("40 1x 19, 1C, 2C", "Part level, pan, delay send", "Yes", "as CC7, CC10 (random as centre), CC94"),
+        ("40 1x 1A-1B", "Velocity sense depth, offset", "Yes", "at each note-on"),
+        ("40 1x 1D-1E", "Keyboard range", "Yes", "notes outside it do not sound"),
+        ("40 1x 1F-20", "CC1/CC2 controller numbers", "No", ""),
+        ("40 1x 21-22", "Chorus, reverb send", "Yes", "as CC93, CC91 -- each note's onset finds its own (the sends follow the song)"),
+        ("40 1x 23-24", "Rx bank select", "No", ""),
+        ("40 1x 2A", "Pitch fine tune", "Yes", "as RPN 1"),
+        ("40 1x 30-37", "Tone Modify 1-8", "Yes", "as the sound controllers CC71-78 (= the NRPNs)"),
+        ("40 1x 40-4B", "Scale tuning", "Yes", "through the scale/octave tuning"),
+        ("40 2x 04", "Mod LFO1 pitch depth", "Yes", "as RPN 5, the mod wheel's vibrato depth"),
+        ("40 2x 10", "Bend pitch control", "Yes", "as RPN 0, the bend range"),
+        ("40 2x (the rest)", "Mod, bend, aftertouch, CC1/CC2 onto TVF, TVA, LFOs", "No", "a Sound Canvas's own circuits, which our voices are not built from"),
+        ("40 4x 00-01", "Tone map number", "No", "the map comes from CC32"),
+        ("40 4x 20", "EQ switch", "Partial", "before the first note"),
+    ]),
+    ("Drum setup (41) and drum NRPNs", [
+        ("41 m1 / NRPN 18", "Play note, pitch", "Yes", ""),
+        ("41 m2 / NRPN 1A", "Level", "Yes", ""),
+        ("41 m4 / NRPN 1C", "Pan", "Yes", "a seat inside the kit, turned by the part's pan"),
+        ("41 m8", "Rx note on", "Yes", ""),
+        ("41 m9 / NRPN 1F", "Delay send", "Yes", ""),
+        ("41 m3", "Assign group", "No", "parsed, not used; the kits' own choke groups apply"),
+        ("41 m5-m6 / NRPN 1D-1E", "Reverb, chorus send", "No", "parsed, not used"),
+        ("41 m7", "Rx note off", "No", "parsed, not used"),
+    ]),
+    ("User sets, display, dumps", [
+        ("21 d1, d2, d4, d8, dB, dC", "User drum set: note, level, pan, Rx note on, source set and note", "Yes", ""),
+        ("21 (the rest)", "User drum set: group, sends, Rx note off, source map", "No", ""),
+        ("20, 22-27", "User tones, user EFX, user patches", "No", ""),
+        ("45 ...", "Display text and pages", "No", "not sound"),
+        ("bulk dumps", "48, 49, ...", "No", ""),
+    ]),
+]
+
+
+def sysex_md():
+    n = {k: 0 for k in ("Yes", "Partial", "No")}
+    L = ["## Roland GS SysEx: the address map\n",
+         "What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; "
+         "the SC-88Pro manual for the insertion effects). **Yes** read and applied; "
+         "**Partial** read, with its limit; **No** not read. Live reads the part parameters, "
+         "the rhythm part, the master settings and the reset, on port A.\n"]
+    for blk, rows in SYSEX_ROWS:
+        L += ["### %s\n" % blk, "| address | parameter | | notes |", "|---|---|---|---|"]
+        for a, p, st, note in rows:
+            n[st] += 1
+            L.append("| `%s` | %s | **%s** | %s |" % (a, p, st, note))
+        L.append("")
+    L.insert(2, "%d rows: %d read, %d partly, %d not.\n" % (sum(n.values()), n["Yes"], n["Partial"], n["No"]))
+    return "\n".join(L) + "\n"
+
+
 def stops_md():
     L = ["## Stops: the registers within a program\n",
          "A program's rating is its default registration's. Each stop of a",
@@ -1216,6 +1305,7 @@ def main(argv):
     L.append(mt32_md())
     L.append(sound_canvas_md())
     L.append(effects_md())
+    L.append(sysex_md())
     L.append(class_tree_md())
     open(out, 'w').write("\n".join(L) + "\n")
     print("  wrote %s" % out)
