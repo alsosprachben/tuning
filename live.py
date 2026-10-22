@@ -788,6 +788,7 @@ class Slab:
         self.tap_m = 0                               # scratch rows written for this block
         self.tap_cap = self.tcap                     # ...at most (the budget governor's: Live.callback)
         self.bus_m, self.bus_hide = 0, None          # the bus's scratch rows (bus_fill), its originals
+        self.bus_chans = set()                       # the channels on it this block (Live._bus_chans_now)
         self.tap_lib = None
         self.tap_tab = None                          # the tap sets, flattened (Live._tap_tables)
         self.a = {}
@@ -2161,6 +2162,10 @@ class Slab:
         m = 0
         if tab is not None:
             src = np.flatnonzero(self.tp >= 0).astype(np.int64)
+            if len(src) and self.bus_chans:
+                # a bus channel's copies are the bus's: written after its own
+                # partials (bus_fill), and through its effect with them
+                src = src[~np.isin(self.slot_ch[src], list(self.bus_chans))]
             if len(src):
                 m = self._expand(src, self.tp[src].astype(np.int32), tab, self.cap,
                                  min(self.tcap, self.tap_cap), _GSD.REPEAT_FLOOR, n0, frames)
@@ -2175,7 +2180,7 @@ class Slab:
     # in the scratch rows, contiguous, for a render of their own (bus_fill)
     _BUS_TAB = None
 
-    def bus_fill(self, chans, n0, frames):
+    def bus_fill(self, chans, n0, frames, extra=None):
         """A PART'S OWN BUS, live (Live._bus): the partials of these channels
         copied into the scratch rows after the taps', for the renderers to
         render apart (bus_rows) -- and the originals, hidden from the main
@@ -2187,6 +2192,10 @@ class Slab:
         if chans:
             a = self.a
             m = self.busy & np.isin(self.slot_ch, list(chans))
+            if extra is not None and len(extra):
+                # ...and what has no channel of its own: the bus parts' valve products
+                m[np.asarray(extra, np.int64)] = True
+                m &= self.busy
             src = np.flatnonzero(m).astype(np.int64)
             if len(src):
                 if Slab._BUS_TAB is None:
@@ -2199,6 +2208,16 @@ class Slab:
                 self.bus_m = self._expand(src, np.zeros(len(src), np.int32), Slab._BUS_TAB, d0,
                                           self.tcap - self.tap_m, 0.0, n0, frames, identity=True)
                 self.bus_hide = src
+                # THE BUS PARTS' COPIES (the effect's delays, chorus, shifters --
+                # EH -> Chorus, -> Delay, -> Flanger), after them: through the
+                # bus as the file has them, the Enhancer brightening its echoes
+                tab = self.tap_tab
+                if tab is not None:
+                    ts = np.flatnonzero((self.tp >= 0) & np.isin(self.slot_ch, list(chans))).astype(np.int64)
+                    if len(ts):
+                        self.bus_m += self._expand(ts, self.tp[ts].astype(np.int32), tab, d0 + self.bus_m,
+                                                   min(self.tcap - self.tap_m - self.bus_m, self.tap_cap),
+                                                   _GSD.REPEAT_FLOOR, n0, frames)
         if self.bus_m < prev:
             d0 = self.cap + self.tap_m
             self.full["non"][d0 + self.bus_m:d0 + prev] = IDLE
@@ -5988,6 +6007,14 @@ class Live:
             if lst and lst[0][1] < t - 4.0:
                 lst[:] = [x for x in lst if x[1] >= t - 4.0]
 
+    def _bus_chans_now(self):
+        """The EFX's channels when its type has a bus of its own, else none."""
+        for c in self.efx_parts:
+            ex = self._efx_for(c)
+            if ex is not None and ex.get('bus'):
+                return set(self.efx_parts)
+        return set()
+
     def _bus_block(self, n0, frames):
         """A PART'S OWN BUS, live (LiveBus): the EFX's parts on a bus type --
         Lo-Fi 1 and 2, Compressor, Limiter, Enhancer, Gate Reverb, Reverb --
@@ -6010,7 +6037,12 @@ class Live:
             self.slab.bus_fill((), n0, frames)
             self.renderer.bus_proc = None
             return
-        self.slab.bus_fill(set(self.efx_parts), n0, frames)
+        chans = set(self.efx_parts)
+        extra = []
+        for p in self.parts:
+            if p.channel is None or p.channel in chans:
+                extra.extend(self.slab.live.get(self._amp_key(p.pid), ()))
+        self.slab.bus_fill(chans, n0, frames, extra)
         self.renderer.bus_proc = self._busp
 
     def _efx_branch(self, ex, part, ch, note, tmpl, key, slots, scale, n0, b, cpan):
@@ -9273,6 +9305,7 @@ class Live:
                 self._filter_block(n0, frame_count)
                 self.slab.moog_filter_apply()
                 self._tap_tables()
+                self.slab.bus_chans = self._bus_chans_now()
                 self.slab.tap_fill(n0, frame_count)
             self._bus_block(n0, frame_count)
             # THE SEND BUS ONLY WHEN IT IS NEEDED. The kernel's second output
@@ -10830,6 +10863,37 @@ def selftest_gs(check):
           and not (_me0 or _me1 or _me2 or _me3),
           "  (centroid swing %.0f against Thru's %.0f Hz; Lo-Fi 1's 8-16 kHz %+.0f dB; %d shed, %d out)"
           % (_fswing(_mp), _fswing(_m0), _mtop(_ml) - _mtop(_m0), _mk, _mo))
+    # ...AND WHAT A BUS PART MAKES BESIDES ITS NOTES (Slab.bus_fill): EH ->
+    # Delay's echoes are bus rows -- through the Enhancer, none left among the
+    # main copies -- and an overdriven guitar on Lo-Fi 1 sends its valve's
+    # products through it with its notes
+    def _xhear(ty, prog, notes):
+        _lv = Live(program=prog, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            for _ev in [('type', ty), ('part', 0, True)]:
+                _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            for _nn in notes:
+                _lv.on_midi(_M("note_on", channel=0, note=_nn, velocity=110))
+            _lv.apply(0)
+            _bm, _tm, _amp = 0, 0, 0
+            for _i in range(int(0.8 * 48000 / 128)):
+                _lv.callback(None, 128, None, 0)
+                _h = _lv.slab.bus_hide
+                _ak = _lv.slab.live.get(_lv._amp_key(_lv.parts[0].pid), [])
+                _bm = max(_bm, _lv.slab.bus_m - (0 if _h is None else len(_h)))
+                _tm = max(_tm, _lv.slab.tap_m)
+                if _h is not None and len(_ak):
+                    _amp = max(_amp, int(np.isin(np.asarray(_ak), _h).sum()))
+            return _bm, _tm, _amp, _lv.errors
+        finally:
+            _lv.shutdown()
+    _xc, _xt, _, _xe1 = _xhear((0x02, 0x08), 4, (64,))
+    _, _, _xa, _xe2 = _xhear((0x01, 0x72), 29, (52, 59, 64))
+    check("live: a bus part's copies and valve products go through the bus with its notes",
+          _xc > 0 and _xt == 0 and _xa > 50 and not (_xe1 or _xe2),
+          "  (EH -> Delay: %d echo rows on the bus, %d left outside it; the guitar's products on it: %d)"
+          % (_xc, _xt, _xa))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
