@@ -679,6 +679,57 @@ class Route(object):
 # rotor to three zones upstream.
 LIVE_DRIVE_STEPS = 8
 LIVE_DRIVE_RANGE = 4.0  # wheel fully up = this many times the voice's amp_drive
+# THE VALVE IN TWO PASSES: the fast one (tubeamp.LIVE_*: 0.25 s, 150 products)
+# gives a chord its distortion within a few ms; the fine one (the file's: 1 s,
+# 400 products, 2x oversampled) replaces it ~50 ms later. Only the fine one
+# resolves the intermodulation products a few Hz apart whose beating is the
+# distortion's shimmer -- the fast one alone sounded phase-locked; the fine
+# one alone left the attack unclipped until it landed (Ben, against the file)
+LIVE_FINE_VALVE = True
+LIVE_FINE_WORKERS = 2   # processes (valvefine), so a chord never waits behind the last one's
+
+_FINE_POOL = []                 # [(pipe, its lock)]: the fine pass's processes, one set per process
+_FINE_POOL_LOCK = threading.Lock()
+
+
+def _fine_pool(rate):
+    """The valve's fine-pass workers (valvefine.serve), started and warmed
+    once and shared by every Live in the process: two per Live left the
+    selftest's thirty-odd lives holding seventy numpy processes, and the
+    kernel killed it for memory. A live's threads take a worker's lock for
+    each job; the workers are daemons and end with the process."""
+    with _FINE_POOL_LOCK:
+        if not _FINE_POOL:
+            import atexit
+            import multiprocessing as _mp
+            ctx = _mp.get_context("spawn")
+            for _w in range(LIVE_FINE_WORKERS):
+                mine, theirs = ctx.Pipe()
+                ctx.Process(target=__import__("valvefine").serve, args=(theirs,), daemon=True).start()
+                mine.send(([110.0, 220.0], [0.1, 0.05], [0.0, 0.0], float(rate), 1.0, None, None))
+                mine.recv()                               # warm: numpy loaded, the curve built
+                _FINE_POOL.append((mine, threading.Lock()))
+            atexit.register(_fine_pool_stop)
+        return _FINE_POOL
+
+
+def _fine_pool_stop():
+    for mine, lk in _FINE_POOL:
+        if lk.acquire(timeout=1.0):                       # never hold the exit behind a job
+            try:
+                mine.send(None)
+            except Exception:
+                pass
+            finally:
+                lk.release()
+# ...AND A LOOKAHEAD FOR IT. The valve's products (its squash of the chord as
+# much as its new partials) come from a worker a few blocks after a note
+# begins, and the file has them from the note's first sample: live, a valve
+# part's attack played unprocessed and loud until they landed (Ben: "like
+# there is a delay in processing"). So a part with a valve plays its notes
+# this many blocks late, and its products are there when they start -- a
+# real-time effect's latency, on those parts only. 0: none.
+LIVE_AMP_LOOKAHEAD = 6
 
 MELODIC_RANGE = (21, 96)        # a keyboard
 DRUM_RANGE = (35, 87)           # every note percussion_map has a voice for
@@ -1813,7 +1864,7 @@ class Slab:
             row[:] = _MG.ft_row(panel, float(row[10]), int(row[9]), row[11] > 0.5, int(row[12]))
         a["re"][idx] = np.float32(max(1.0, _MG.release_span(panel) * self.rate))
 
-    def stamp_amp(self, key, src, freqs, amps, phases, n0, rate):
+    def stamp_amp(self, key, src, freqs, amps, phases, n0, rate, at=None):
         """Place the amplifier's distortion partials, copying `src` for the rest.
 
         A distortion product is a partial like any other and belongs wherever
@@ -1854,8 +1905,9 @@ class Slab:
         om = 2.0 * np.pi * f / float(rate)
         a["om"][idx] = om
         a["nf"][idx] = f.astype(np.float32)
-        # `phases` is the phase wanted AT n0, and p0 anchors at sample 0.
-        a["p0"][idx] = np.asarray(phases, np.float64) - om * n0
+        # `phases` is the phase wanted AT `at` (the snapshot's sample; n0 when
+        # not given), and p0 anchors at sample 0.
+        a["p0"][idx] = np.asarray(phases, np.float64) - om * (n0 if at is None else at)
         # `phases` came from p0, the LEFT ear's; the right ear hears the amp
         # delR - delL samples later (tubeamp.expand says why this matters).
         a["p0R"][idx] = a["p0"][idx] - om * (float(a["delR"][src]) - float(a["delL"][src]))
@@ -2927,6 +2979,13 @@ class Patch:
                 tr.append(mido.Message("control_change", channel=ch, control=32,
                                        value=_b32, time=0))
         tr.append(mido.Message("program_change", channel=ch, program=self.program, time=0))
+        # THE CHANNEL'S VOLUME AT FULL. The stamp applies it (Live._chan_gain:
+        # (CC7 x CC11)^2, the file's own law), so a template built at GM's
+        # power-on 100 carried 0.62 of it already: every live note sat 4.1 dB
+        # under the file's, and a valve -- whose reference takes the volume
+        # once -- was driven that much softer, cleaner than the file (Ben).
+        for _cc in (7, 11):
+            tr.append(mido.Message("control_change", channel=ch, control=_cc, value=127, time=0))
         if self.organ:
             # Draw everything so every rank emits partials AND speaks at the
             # note's own onset. The live registration is then decided by which
@@ -3886,6 +3945,25 @@ class Live:
         self.amp_calls = 0      # how many times the worker has run
         self.amp_thread = threading.Thread(target=self._amp_worker, daemon=True)
         self.amp_thread.start()
+        # THE VALVE'S FINE PASS (_amp_fine_worker): the same chord at the file
+        # renderer's analysis, on a thread of its own, replacing the fast
+        # pass's products when it is done -- each part's chord numbered, so a
+        # result for a chord already gone is dropped
+        self.amp_jid = {}               # pid -> its chord's number
+        self.amp_start = {}             # pid -> its chord's first onset (_amp_snapshot)
+        self.amp_out_jid = None
+        self.amp_fine_pending = {}      # pid -> (its newest chord's job, its number): waiting for a worker
+        self.amp_fine_results = collections.deque()   # (number, placement) back from the workers
+        self.amp_fine_lock = threading.Lock()
+        self.amp_fine_placed = {}       # pid -> the chord whose fine products stand
+        self.amp_fine_go = threading.Event()
+        self._fine_conns = []           # the shared workers' pipes this live has (_fine_pool)
+        self.amp_fine_threads = []
+        if LIVE_FINE_VALVE:
+            for _w in range(LIVE_FINE_WORKERS):
+                th = threading.Thread(target=self._amp_fine_worker, args=(_w,), daemon=True)
+                th.start()
+                self.amp_fine_threads.append(th)
         # ...and the same division for program changes: the audio thread may
         # queue a voice change, never build one. See _patch_worker.
         self.patch_reqs = collections.deque()      # (pid, (program, drums, tuner))
@@ -4184,6 +4262,7 @@ class Live:
         self.patch_go.set()
         self.amp_stop = True
         self.amp_go.set()
+        self.amp_fine_go.set()          # the workers themselves are shared (_fine_pool): they stay
         if self.messenger_q is not None:
             self.messenger_q.put(None)
         self.renderer.close()
@@ -4365,7 +4444,9 @@ class Live:
             except Exception as e:
                 self.errors += 1
                 self.last_error = "moog: %s: %s" % (type(e).__name__, e)
-        if self.amp_dirty or self.amp_out is not None:
+        # (and a fine pass's result, which otherwise waited for the next chord
+        # to wake the pump: it landed as its own note ended, never heard)
+        if self.amp_dirty or self.amp_out is not None or self.amp_fine_results:
             try:
                 self._amp_pump(n0)
             except Exception as e:
@@ -5083,6 +5164,7 @@ class Live:
         snote = note + part.transpose
         if not 0 <= snote <= 127:
             return
+        n0 = n0 + self._amp_ahead(part)
         # No speed in the key any more: the rotor is driven from the callback,
         # so one template plays at every speed and a note started during a ramp
         # simply joins the rotor where it is.
@@ -7299,7 +7381,13 @@ class Live:
                 self.slab.release(k, n0)
 
     def _note_off(self, part, ch, note, n0):
+        n0 = n0 + self._amp_ahead(part)
         self._amp_touch(part)
+        if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
+            # THE PRODUCTS END WITH THEIR CHORD, over the note's own release, as
+            # the file's end at their segment's -- the new snapshot (_amp_touch)
+            # gives what is still held its own
+            self.slab.release(self._amp_key(part.pid), n0)
         for _en in self.efx_notes.get(ch, ()):
             if _en[3] == note and _en[1] == math.inf:
                 _en[1] = n0 / float(self.rate)          # the auto wah's envelope lets go
@@ -7487,6 +7575,14 @@ class Live:
             if ex is not None and ex.get('od_gain'):
                 return ex
         return None
+
+    def _amp_ahead(self, part):
+        """The lookahead a part with a valve plays at (LIVE_AMP_LOOKAHEAD)."""
+        if not LIVE_AMP_LOOKAHEAD or part.drums:
+            return 0
+        if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
+            return LIVE_AMP_LOOKAHEAD * self.frames
+        return 0
 
     def _amp_key(self, pid):
         # A uniform 4-tuple like every other key, with no channel and no note:
@@ -8489,7 +8585,8 @@ class Live:
             job = self.amp_job
             if self.amp_stop or job is None:
                 continue
-            pid, key, src, f, am, ph, drive, when, ref, imb = job
+            pid, key, src, f, am, ph, drive, when, ref, imb = job[:10]
+            jid = job[10] if len(job) > 10 else None
             try:
                 fc, ac, pc = _TA.combine(f, am, ph)
                 _kw = {} if imb is None else {"imbalance": float(imb)}
@@ -8502,7 +8599,52 @@ class Live:
             except Exception as e:
                 self.amp_err = "%s: %s" % (type(e).__name__, e)
                 out = []
-            self.amp_out = (pid, key, src, out)
+            self.amp_out = (pid, key, src, out, when)
+            self.amp_out_jid = jid
+
+    def _amp_fine_worker(self, w):
+        """One of the valve's fine-pass threads (LIVE_FINE_VALVE): it drives
+        the process-wide worker w (_fine_pool), started and warmed with the
+        first live -- a first chord waited three-quarters of a second for it
+        -- then, each time it is free, the newest chord any part is waiting
+        on; an older one of the same part is passed over."""
+        import tubeamp as _TA
+        try:
+            mine, mine_lock = _fine_pool(self.rate)[w]
+            with self.amp_fine_lock:
+                self._fine_conns.append(mine)
+        except Exception as e:
+            self.amp_err = "fine pass: %s: %s" % (type(e).__name__, e)
+            return
+        while not self.amp_stop:
+            if not self.amp_fine_go.wait(0.2):
+                continue
+            with self.amp_fine_lock:
+                if not self.amp_fine_pending:
+                    self.amp_fine_go.clear()
+                    continue
+                pid = max(self.amp_fine_pending, key=lambda q: self.amp_fine_pending[q][1])
+                job, jid = self.amp_fine_pending.pop(pid)
+                if not self.amp_fine_pending:
+                    self.amp_fine_go.clear()
+            if self.amp_stop:
+                return
+            if self.amp_jid.get(pid) != jid:
+                continue
+            _, key, src, f, am, ph, drive, when, ref, imb = job[:10]
+            try:
+                fc, ac, pc = _TA.combine(f, am, ph)
+                with mine_lock:
+                    mine.send((fc.tolist(), ac.tolist(), pc.tolist(), float(self.rate), drive,
+                               None if ref is None else float(ref), imb))
+                    st, out = mine.recv()
+            except Exception as e:
+                self.amp_err = "%s: %s" % (type(e).__name__, e)
+                continue
+            if st != "ok":
+                self.amp_err = out
+                continue
+            self.amp_fine_results.append((jid, (pid, key, src, out, when)))
 
     def _amp_snapshot(self, pid, n0):
         """What the worker needs, read on the audio thread so it cannot race."""
@@ -8593,19 +8735,55 @@ class Live:
             self.slab.release(key, n0)
             return None
         src = int(idx[ok[int(np.argmax(aM[ok]))]])
-        return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0,
-                ref_e if efx is not None else getattr(part.patch, 'amp_reference', None),
+        # its chord's first onset: the products start no sooner (a lookahead
+        # puts the notes ahead of the snapshot)
+        self.amp_start[pid] = int(sa["non"][idx[ok]].min())
+        ref = ref_e if efx is not None else getattr(part.patch, 'amp_reference', None)
+        if ref:
+            # THE FADERS SET THE LEVEL, NOT THE DRIVE, as the file has it (its
+            # reference is taken by the channel's CC7 x CC11): every gain the
+            # partials carry before the valve that is not how hard they were
+            # played -- the channel's, the part's level, the output headroom --
+            # in the reference too. Without them live drove the valve ~8 dB
+            # softer than the file at the same settings (0.62 x 0.63 at CC7
+            # 100): cleaner, more so on short notes (Ben, against the file)
+            _ch = part.channel if part.channel is not None else next(
+                (k[1] for k in self.slab.live if k[0] == pid and 0 <= k[1] < 256), 0)
+            ref = ref * self._chan_gain(_ch) * part.gain() * self.slab.headroom
+        return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0, ref,
                 getattr(part.patch, 'amp_imbalance', None))
 
-    def _amp_place(self, n0, pid, key, src, out):
+    AMP_XFADE = 0.020               # s: products replacing products cross over this long
+
+    def _amp_place(self, n0, pid, key, src, out, when=None):
         """Stamp what the worker returned. Cheap: no transform, just writes."""
+        # PRODUCTS REPLACING PRODUCTS (the fine pass's the fast pass's; a new
+        # snapshot's the last) CROSS OVER: the old out and the new in over the
+        # same AMP_XFADE from the same sample -- the kernel's release and attack
+        # are one smoothstep each way, so the two sum to one throughout. Out
+        # over the guitar's own release and in over its pick, both sounded for a
+        # while and the squash doubled, then shifted: the attack stood out (Ben)
+        old = self.slab.live.get(key)
+        xf = int(self.AMP_XFADE * self.rate)
+        if old:
+            _io = np.fromiter(old, np.int64, len(old))
+            self.slab.a["re"][_io] = np.float32(xf)
         self.slab.release(key, n0)
         if not out or not self.slab.busy[src]:
+            return
+        # NEVER AFTER THEIR NOTES. Its residual at the chord's own frequencies
+        # partly cancels the chord -- the valve's squash -- and alone, its
+        # notes let go, it is the chord inverted: a second attack in the tail
+        # (Ben). A result landing once the part holds no note is dropped. A
+        # NOTE's key ends in None, or in its rank where the voice has ranks (a
+        # Hammond's drawbars): reading None alone held every organ silent.
+        part = next((q for q in self.parts if q.pid == pid), None)
+        ranks = set(getattr(part.patch, "rank_names", ()) or ()) if part is not None else set()
+        if not any(k[0] == pid and (k[3] is None or k[3] in ranks) for k in self.slab.live):
             return
         f = [p[0] for p in out]
         a = [p[1] for p in out]
         p = [p[2] for p in out]
-        part = next((q for q in self.parts if q.pid == pid), None)
         cab = getattr(part.patch, "cabinet", None) if part else None
         efx = self._efx_od(part) if part is not None else None
         if efx is not None:
@@ -8621,7 +8799,17 @@ class Live:
             import cabinet as _CB
             g = _CB.get(cab).gain(np.asarray(f, float))
             a = (np.asarray(a, float) * g).tolist()
-        slots = self.slab.stamp_amp(key, src, f, a, p, n0, self.rate)
+        # THE PHASES ARE THE SNAPSHOT'S (_amp_snapshot: p0 + om * its n0), and
+        # the worker answers a block or two later: anchored at THIS block they
+        # were each om x that delay off -- and the valve's squash, the part of
+        # its residual at the chord's own frequencies, which partly cancels the
+        # chord, landed at any phase and added to it instead: more drive sounded
+        # cleaner (Ben, against the file). Anchored where they were taken.
+        start = max(n0, self.amp_start.get(pid, n0))
+        slots = self.slab.stamp_amp(key, src, f, a, p, start, self.rate, at=when)
+        if slots and old and start <= n0:
+            # (the note's first products keep its own attack: they start with it)
+            self.slab.a["fa"][np.fromiter(slots, np.int64, len(slots))] = np.float32(xf)
         if slots and self.slab.ls_on[src]:
             # The amplifier is UPSTREAM of the rotor, so its products swing and
             # Doppler like anything else that came out of the cabinet.
@@ -8633,13 +8821,34 @@ class Live:
         if out is not None:
             self.amp_out = None
             self.amp_busy = False
-            self._amp_place(n0, *out)
+            # ONLY THE CURRENT CHORD's: a result for one that has changed since --
+            # a note let go while it was being worked out -- would stamp its
+            # products again after their note had released them, a second
+            # attack in the tail (Ben); and a fast result whose chord's fine one
+            # already stands is late
+            jid = self.amp_out_jid
+            if (jid is None or self.amp_jid.get(out[0]) == jid) and not (
+                    jid is not None and self.amp_fine_placed.get(out[0]) == jid):
+                self._amp_place(n0, *out)
+        while self.amp_fine_results:
+            jid, payload = self.amp_fine_results.popleft()
+            if self.amp_jid.get(payload[0]) == jid:          # still this part's chord
+                self.amp_fine_placed[payload[0]] = jid
+                self._amp_place(n0, *payload)
         if self.amp_dirty and not self.amp_busy:
-            job = self._amp_snapshot(self.amp_dirty.pop(), n0)
+            pid = self.amp_dirty.pop()
+            job = self._amp_snapshot(pid, n0)
             if job is not None:
-                self.amp_job = job
+                jid = self.amp_jid[pid] = self.amp_jid.get(pid, 0) + 1
+                self.amp_job = job + (jid,)
                 self.amp_busy = True
                 self.amp_go.set()
+                if LIVE_FINE_VALVE:
+                    with self.amp_fine_lock:
+                        self.amp_fine_pending[pid] = (job, jid)
+                    self.amp_fine_go.set()
+            else:
+                self.amp_jid[pid] = self.amp_jid.get(pid, 0) + 1   # nothing to distort now
 
     def _crescendo(self, part, ch, value, n0):
         """Rolling the wheel up adds stops in the organ's own crescendo order;
@@ -10894,6 +11103,105 @@ def selftest_gs(check):
           _xc > 0 and _xt == 0 and _xa > 50 and not (_xe1 or _xe2),
           "  (EH -> Delay: %d echo rows on the bus, %d left outside it; the guitar's products on it: %d)"
           % (_xc, _xt, _xa))
+    # THE VALVE, LIVE, AGAINST THE FILE (Ben's guitar comparison):
+    # (1) the channel's volume applied once -- a live note's partials at the
+    #     file's own levels (headroom aside), the valve off in both;
+    # (2) its products' phases anchored where the snapshot took them;
+    # (3) a result that lands when its part holds no note is dropped;
+    # (4) its reference carries the faders -- the channel's, the part's, the
+    #     headroom -- so they are a level and not the drive;
+    # (5) a part with a valve plays its notes LIVE_AMP_LOOKAHEAD blocks late,
+    #     one without plays them at once;
+    # (6) its fine pass lands while the note sounds, its products crossing over
+    #     the fast pass's over AMP_XFADE
+    import tubeamp as _TAv
+    _vf = _bfile([_M("program_change", channel=0, program=29), _M("note_on", channel=0, note=52, velocity=96),
+                  _M("note_off", channel=0, note=52, velocity=0, time=960)])
+    _wasv, _TAv.ENABLED = _TAv.ENABLED, False
+    try:
+        _vp = B.prepare(_vf, "hybrid")
+    finally:
+        _TAv.ENABLED = _wasv
+    _vam = np.abs(np.asarray(_vp["aM"], float))[np.asarray(_vp["rdl"], float) == 0]
+    _lvv = Live(program=29, rate=48000, frames=128, verbose=False)
+    try:
+        _lvv.warm()
+        _lvv.on_midi(_M("note_on", channel=0, note=52, velocity=96)); _lvv.apply(0)
+        _vs = np.array([x for _k, _v in _lvv.slab.live.items() if _k[3] is None for x in _v])
+        _va = _lvv.slab.a
+        _vd = _vs[_va["rdl"][_vs] == 0]
+        _vear = 0.5 * (np.abs(_va["aL"][_vd]) + np.abs(_va["aR"][_vd])) / _lvv.slab.headroom
+        _vlvl = 20 * np.log10(_vam.max() / _vear.max())
+        _von = int(_va["non"][_vd].min())
+        _vahead = (_von - 0) // 128
+        # (2) phases: a product stamped with the snapshot's sample keeps its phase there
+        _src = int(_vd[0]); _key = (_lvv.parts[0].pid, -1, -1, "amp")
+        _sl = _lvv.slab.stamp_amp(_key, _src, [440.0], [0.01], [1.234], 5000, 48000, at=3000)
+        _ph = float((_va["p0"][_sl[0]] + _va["om"][_sl[0]] * 3000) % (2 * np.pi))
+        _lvv.slab.release(_key, 5000)
+        # (3) the guard: no note held -> nothing placed
+        _lvv.on_midi(_M("note_off", channel=0, note=52, velocity=0)); _lvv.apply(128)
+        for _i in range(3):
+            _lvv.callback(None, 128, None, 0)
+        _before = len(_lvv.slab.live.get(_key, []))
+        _lvv._amp_place(_lvv.n, _lvv.parts[0].pid, _key, _src, [(330.0, 0.01, 0.0), (660.0, 0.01, 0.0)], _lvv.n)
+        _guard = len(_lvv.slab.live.get(_key, [])) == _before == 0
+    finally:
+        _lvv.shutdown()
+    # (4) the reference, and (6) the fine pass, on an EP through the Overdrive
+    _lvr = Live(program=4, rate=48000, frames=128, verbose=False)
+    try:
+        _lvr.warm()
+        for _ev in [('type', (0x01, 0x10)), ('part', 0, True)]:
+            _lvr.on_midi(_M("sysex", data=_GSX.message(_ev)))
+        import time as _tm
+        _t0 = _tm.time()
+        while len(_lvr._fine_conns) < LIVE_FINE_WORKERS and _tm.time() - _t0 < 30.0:
+            _tm.sleep(0.1)                                  # the workers up and warm
+        _jobs = []
+        _snap0 = _lvr._amp_snapshot
+        def _snap1(pid, n0):
+            _j = _snap0(pid, n0)
+            if _j is not None:
+                _jobs.append(_j)
+            return _j
+        _lvr._amp_snapshot = _snap1
+        for _nn in (52, 59, 64):
+            _lvr.on_midi(_M("note_on", channel=0, note=_nn, velocity=100))
+        _lvr.apply(0)
+        for _i in range(4):
+            _lvr.callback(None, 128, None, 0)
+        _job = _jobs[0] if _jobs else None
+        _pr = _lvr.parts[0]
+        _want = (_GSX.PEDAL_AMP_DRIVE and 0.2289 * __import__("patch_map").program_trim(_pr.patch.vprogram)
+                 * _GSX.chain(_lvr.efx)['level'] * _lvr._chan_gain(0) * _pr.gain() * _lvr.slab.headroom)
+        _refok = _job is not None and abs(_job[8] / _want - 1.0) < 1e-6
+        _fland, _xfok = None, False
+        for _i in range(200):
+            _lvr.callback(None, 128, None, 0)
+            _tm.sleep(0.003)
+            if _lvr.amp_fine_placed.get(_pr.pid) is not None and _fland is None:
+                _fland = _i
+                _ps = _lvr.slab.live.get(_lvr._amp_key(_pr.pid), [])
+                _xfok = bool(len(_ps)) and bool(np.all(_lvr.slab.a["fa"][np.asarray(_ps)] == np.float32(int(_lvr.AMP_XFADE * 48000))))
+                break
+        _ahead0 = (int(_lvr.slab.a["non"][[x for _k, _v in _lvr.slab.live.items() if _k[3] is None for x in _v]].min()) - 0) // 128
+    finally:
+        _lvr.shutdown()
+    _lvn = Live(program=0, rate=48000, frames=128, verbose=False)
+    try:
+        _lvn.warm()
+        _lvn.on_midi(_M("note_on", channel=0, note=60, velocity=100)); _lvn.apply(0)
+        _nn0 = int(_lvn.slab.a["non"][[x for _k, _v in _lvn.slab.live.items() if _k[3] is None for x in _v]].min()) // 128
+    finally:
+        _lvn.shutdown()
+    check("live's valve against the file: the volume once, the phase anchored, a late result dropped, "
+          "the faders in the reference, the lookahead, the fine pass in time and crossed over",
+          abs(_vlvl) < 0.5 and abs(_ph - 1.234) < 1e-6 and _guard and _refok
+          and _vahead == LIVE_AMP_LOOKAHEAD and _nn0 == 0 and _fland is not None and _fland < 60 and _xfok,
+          "  (file/live level %+.2f dB; phase %.4f; guard %s; reference %s; lookahead %d / none %d blocks; "
+          "fine pass at %s blocks, crossed over %s)"
+          % (_vlvl, _ph, _guard, _refok, _vahead, _nn0, _fland, _xfok))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
