@@ -1897,6 +1897,17 @@ class Slab:
         self.mo_uL[idx] *= r
         self.mo_uR[idx] *= r
 
+    def ear_gain(self, slots, gl, gr):
+        """A gain on each ear of these slots, every baseline with it (as
+        channel_gain's): a parallel type's branch at its pan."""
+        if not slots or (gl == 1.0 and gr == 1.0):
+            return
+        idx = np.fromiter(slots, np.int64, len(slots))
+        for arrs, g in (((self.aL0, self.a["aL"], self.tr_aL, self.ls_aL, self.cv_aL, self.fl_aL, self.mo_uL), gl),
+                        ((self.aR0, self.a["aR"], self.tr_aR, self.ls_aR, self.cv_aR, self.fl_aR, self.mo_uR), gr)):
+            for x in arrs:
+                x[idx] *= np.float32(g)
+
     def repan(self, slots, cc, was, rate, itd=True):
         """Move a note's source position, CC10 `was` -> CC10 `cc`.
 
@@ -5238,13 +5249,11 @@ class Live:
         if _efx is not None:
             if self.EFX_TAPS:
                 self._tap_tables()
-                st = self.slab.tap_tab
-                if st is not None and ch < 256 and st["ts"][ch + 1] > st["ts"][ch]:
-                    _ix = np.fromiter(slots, np.int64, len(slots))
-                    self.slab.tp[_ix] = ch
-                    self.slab.tpx[_ix] = st["dmax"][ch]
+                self._tap_arm(ch, slots)
             else:
                 self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
+            if _efx.get('par'):
+                self._efx_branch(_efx, part, ch, note, tmpl, key, slots, scale, n0, b, _cp)
 
     # THE FREE-STRING REGISTER, LIVE (register.LiveChannel). A piano part's
     # undamped strings answering its strikes, the file renderer's physics on a
@@ -5684,12 +5693,26 @@ class Live:
     EFX_ROWS = 3000
 
     def _efx_for(self, ch):
-        """The chain channel ch hears now, cached by the EFX's revision."""
-        if ch not in self.efx_parts:
+        """The chain channel ch hears now, cached by the EFX's revision -- a
+        virtual channel (ch + gsefx.VIRT) a parallel type's branch B."""
+        base = ch % _GSX.VIRT
+        if base not in self.efx_parts:
             return None
         if getattr(self, "_efx_cache", (None,))[0] != self.efx_rev:
             self._efx_cache = (self.efx_rev, _GSX.chain(self.efx))
-        return self._efx_cache[1]
+        c = self._efx_cache[1]
+        if ch >= _GSX.VIRT:
+            return (c or {}).get('par', {}).get('B') if c else None
+        return c
+
+    def _efx_chans(self):
+        """The EFX's channels, and a parallel type's branch B of each."""
+        out = set(self.efx_parts)
+        for c in self.efx_parts:
+            ex = self._efx_for(c)
+            if ex is not None and ex.get('par'):
+                out.add(c + _GSX.VIRT)
+        return out
 
     @staticmethod
     def _efx_share(ex):
@@ -5845,13 +5868,13 @@ class Live:
             self._flt_key = key
             self._flt = {}
             import efxfilter as _EF
-            for c in self.efx_parts:
+            for c in self._efx_chans():
                 ex = self._efx_for(c)
                 if ex is None:
                     continue
                 comp = []
                 if ex.get('filter') is not None:
-                    nts = [(s0, s1, v) for s0, s1, v, _n in self.efx_notes.get(c, ())]
+                    nts = [(s0, s1, v) for s0, s1, v, _n in self.efx_notes.get(c % _GSX.VIRT, ())]
                     chn = _GSX.filter_setup(self.efx_events, c, nts)
                     if chn is not None:
                         comp.append(('chan', chn))
@@ -5876,7 +5899,7 @@ class Live:
             return
         import efxfilter as _EF
         t = (n0 + 0.5 * frames) / float(self.rate)
-        for c in list(self.efx_parts):
+        for c in list(self._efx_chans()):
             comps = self._filter_for(c)
             if not comps:
                 continue
@@ -5932,6 +5955,41 @@ class Live:
         self.slab.bus_fill(set(self.efx_parts), n0, frames)
         self.renderer.bus_proc = self._busp
 
+    def _efx_branch(self, ex, part, ch, note, tmpl, key, slots, scale, n0, b, cpan):
+        """A PARALLEL TYPE's BRANCH B (gsefx.PARALLEL_TYPES), live as the file
+        has it: the note again, struck with it, on the part's virtual channel
+        (ch + gsefx.VIRT) -- so the filter, the rotor, the taps take it as a
+        part of its own, its chain branch B's (_efx_for) -- at B's level, OD
+        and speaker; each branch at its own pan; let go with the note."""
+        exB = ex['par']['B']
+        vch = ch + _GSX.VIRT
+        a = self.slab.a
+        idx0 = np.fromiter(slots, np.int64, len(slots))
+        on = int((a["non"][idx0] - a["rdl"][idx0]).min())
+        keyB = (part.pid, ch, note, "%sB_%d" % (self.EFX_SLOT, n0))
+        if not self.slab.stamp_cols(dict(tmpl, scatter_ms=0.0), int(tmpl["P"]), keyB, on, scale,
+                                    tmpl["hrel"], tmpl.get("dur", 0), tmpl.get("oneshot")):
+            self.dropped += 1
+            return
+        sB = list(self.slab.last_slots)
+        ib = np.asarray(sB, np.int64)
+        self.slab.slot_ch[ib] = vch
+        if cpan != T.GM_DEFAULT_PAN:
+            self.slab.repan(sB, cpan, T.GM_DEFAULT_PAN, self.rate, itd=True)
+        self._efx_direct(exB, sB, part)
+        self.slab.ear_gain(slots, *_GSX.pan_gains(ex['par']['pan']))
+        self.slab.ear_gain(sB, *_GSX.pan_gains(ex['par']['panB']))
+        if b and b != 1.0:
+            self.slab.retune(sB, n0, om_scale=b)
+        if exB.get('rotary'):
+            self._efx_rotary_arm(exB, sB, note, n0)
+        if self._filter_for(vch):
+            self.slab.filter_arm(sB, vch)
+        self._tap_tables()
+        self._tap_arm(vch, sB)
+        direct = int(idx0[np.flatnonzero(a["rdl"][idx0] == 0)[0]]) if (a["rdl"][idx0] == 0).any() else int(idx0[0])
+        self.mf104_groups.append((key, direct, [(keyB, 0)]))
+
     def _efx_place3d(self, ex, slots, cpan, n0):
         """THE 3D TYPES (3D Manual, 3D Auto): the part at the type's azimuth,
         past the speakers and behind -- 3D Auto's turning at its speed, each
@@ -5964,7 +6022,7 @@ class Live:
         """The rotors at the Rotary type's speeds -- slow or fast as its Speed
         stands -- and its spin times; back to the organ's when it goes."""
         rt = None
-        for c in self.efx_parts:
+        for c in self._efx_chans():
             ex = self._efx_for(c)
             if ex is not None and ex.get('rotary'):
                 rt = ex['rotary']
@@ -5985,6 +6043,14 @@ class Live:
         self.rotor_drum.target = dz / max(abs(self.rotor_drum.ratio), 1e-9)
         for r, tau in ((self.rotor_horn, rt['horn_tau']), (self.rotor_drum, rt['drum_tau'])):
             r.up, r.down = (tau if isinstance(tau, tuple) else (tau, tau))   # (spin up, spin down)
+
+    def _tap_arm(self, ch, slots):
+        """Put these slots on channel ch's tap set, if it has taps."""
+        st, sid = self.slab.tap_tab, getattr(self, "_tap_sid", {}).get(ch)
+        if st is not None and sid is not None and st["ts"][sid + 1] > st["ts"][sid]:
+            _ix = np.fromiter(slots, np.int64, len(slots))
+            self.slab.tp[_ix] = sid
+            self.slab.tpx[_ix] = st["dmax"][sid]
 
     def _tap_list(self, ex):
         """The chain's copies as taps, partial-independent: (D samples, g,
@@ -6043,26 +6109,29 @@ class Live:
         if sl.tap_lib is None:
             sl.tap_lib = ensure_tap_lib()
         tab = pan_table()
-        NS = 256
+        chans = sorted(self._efx_chans())
+        NS = max(1, len(chans))
+        self._tap_sid = {c: i for i, c in enumerate(chans)}     # a channel's tap set
         ts = np.zeros(NS + 1, np.int32)
         cols = {k: [] for k in ("D", "g", "fc", "r", "hz", "al1", "ar1", "dl", "vd", "vr", "ph")}
         eq, eqo, nmid = [], np.full(NS, -1, np.int32), np.zeros(NS, np.int32)
         dry, al0, ar0, dmax = np.ones(NS), np.zeros(NS), np.zeros(NS), np.zeros(NS, np.int64)
         n = 0
-        for c in range(NS):
-            ts[c] = n
-            ex = self._efx_for(c) if c in self.efx_parts else None
+        for i in range(NS):
+            ts[i] = n
+            c = chans[i] if i < len(chans) else None
+            ex = self._efx_for(c) if c is not None else None
             if ex is None:
                 continue
-            a0, r0, d0 = tab[max(0, min(127, int(self.cpan.get(c, T.GM_DEFAULT_PAN))))]
-            al0[c], ar0[c] = a0, r0
-            if ex.get('cf') is not None:
-                dry[c] = (1.0 - self._efx_share(ex)) ** 0.5
+            a0, r0, d0 = tab[max(0, min(127, int(self.cpan.get(c % _GSX.VIRT, T.GM_DEFAULT_PAN))))]
+            al0[i], ar0[i] = a0, r0
+            if ex.get('cf') is not None and not self._cf_comb(ex):
+                dry[i] = (1.0 - self._efx_share(ex)) ** 0.5
             e = ex.get('eq')
             if e is not None:
                 mids = [(e[1] or 0.0, e[2] or 1.0, e[3] or 0.0)] + list(e[7:])
-                eqo[c] = len(eq)
-                nmid[c] = len(mids)
+                eqo[i] = len(eq)
+                nmid[i] = len(mids)
                 eq.extend([e[0], e[4], e[5] if len(e) > 5 else _GSX.LOW_SHELF_HZ,
                            e[6] if len(e) > 6 else _GSX.HIGH_SHELF_HZ])
                 for mf, q, mg in mids:
@@ -6075,7 +6144,7 @@ class Live:
                              ("vd", vib[0] if vib else -1.0), ("vr", vib[1] if vib else 0.0),
                              ("ph", vib[2] if vib else 0.0)):
                     cols[k].append(v)
-                dmax[c] = max(dmax[c], D)
+                dmax[i] = max(dmax[i], D)
                 n += 1
         ts[NS] = n
         if not n:
@@ -6236,6 +6305,9 @@ class Live:
             for ckey, d in group:
                 if ckey in self.slab.live and not self.slab.oneshot.get(ckey):
                     self.slab.release(ckey, off + d)
+                    if isinstance(ckey[3], str) and ckey[3].startswith(self.EFX_SLOT + "B"):
+                        # a parallel type's branch B going: the valve's chord changed
+                        self.amp_dirty.add(ckey[0])
         self.mf104_groups = keep
 
     def _chan_gain(self, ch):
@@ -8373,8 +8445,12 @@ class Live:
                 ref_e = getattr(part.patch, 'amp_reference', None)
             if ref_e:
                 ref_e *= float(efx['level'])
+        _effx = self._efx_od(part)
+        _b_od = bool(_effx is not None and (_effx.get('par') or {}).get('B', {}).get('od_gain'))
         slots = [sl for k, ss in self.slab.live.items()
-                 if k[0] == pid and k[3] != "amp" for sl in ss]
+                 if k[0] == pid and k[3] != "amp"
+                 and (_b_od or not (isinstance(k[3], str) and k[3].startswith(self.EFX_SLOT + "B")))
+                 for sl in ss]
         if drive <= 0.0 or len(slots) < 2:
             # Wheel down, or nothing left to intermodulate: the stage is clean.
             self.slab.release(key, n0)
@@ -10627,6 +10703,37 @@ def selftest_gs(check):
     _s0, _s1 = _shear(None), _shear((0x01, 0x73))
     check("live: a bus part's reverb send goes through its type (Lo-Fi 2's hum in the send after the note)",
           _s0 == 0.0 and _s1 > 1e-4, "  (send after the note: Thru %.1e, Lo-Fi 2 %.1e)" % (_s0, _s1))
+    # THE PARALLEL TYPES, LIVE (Live._efx_branch): OD1 hard left, OD2 hard
+    # right and silent -- the left ear OD1's alone; Cho / Delay's delay branch
+    # rings on after the key; and nothing of either is held after release
+    def _phear(ty, ex=()):
+        _lv = Live(program=4, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            for _ev in [('type', ty), ('part', 0, True)] + list(ex):
+                _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            for _nn in (52, 59, 64):
+                _lv.on_midi(_M("note_on", channel=0, note=_nn, velocity=110))
+            _lv.apply(0)
+            _b = []
+            for _i in range(int(1.6 * 48000 / 128)):
+                if _i == int(0.6 * 48000 / 128):
+                    for _nn in (52, 59, 64):
+                        _lv.on_midi(_M("note_off", channel=0, note=_nn, velocity=0))
+                _b.append(np.frombuffer(_lv.callback(None, 128, None, 0)[0], np.float32))
+            for _i in range(int(8 * 48000 / 128)):
+                _lv.callback(None, 128, None, 0)
+            return np.concatenate(_b).reshape(-1, 2).astype(float), int(_lv.slab.busy.sum()), _lv.errors
+        finally:
+            _lv.shutdown()
+    _pr = lambda x, a, b, c: float(np.sqrt(np.mean(x[int(a * 48000):int(b * 48000), c] ** 2))) + 1e-30
+    _po, _ph1, _pe1 = _phear((0x11, 0x03), [('param', 16, 0), ('param', 18, 127), ('param', 19, 0)])
+    _pd, _ph2, _pe2 = _phear((0x11, 0x00))
+    _pild = 20 * np.log10(_pr(_po, 0.1, 0.6, 0) / _pr(_po, 0.1, 0.6, 1))
+    check("live: the parallel types -- OD1 / OD2's branches to their ears, Cho / Delay's delay rings, none held",
+          _pild > 30.0 and _pr(_pd, 0.9, 1.5, 0) > 1e-5 and _ph1 == 0 and _ph2 == 0 and not (_pe1 or _pe2),
+          "  (OD1 alone: left %+.0f dB over right; Cho / Delay after the key %.1e; slots held %d, %d)"
+          % (_pild, _pr(_pd, 0.9, 1.5, 0), _ph1, _ph2))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
