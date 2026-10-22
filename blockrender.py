@@ -4655,6 +4655,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
             off = ((max(off, on + _gate) if getattr(pc, 'held_texture', False) else on + _gate)
                    if _gate else max(off, on + (ONE_SHOT_MIN_S if drum is not None
                                                 else one_shot_ring(props, f0))))
+        # A MELLOTRON'S TAPE RUNS OUT (tonelib.MellotronMixin, tape_length_s):
+        # a key held past its strip's length falls silent there
+        _tape = getattr(pc, 'tape_length_s', None)
+        if _tape and not getattr(pc, 'one_shot', False):
+            off = min(off, on + _tape)
         # A SIREN sounds while its rotor does (_SIREN_AT): the fire siren's
         # coast, the Helmholtz siren's air running out
         _sir = _SIREN_AT.get((ch, note, on))

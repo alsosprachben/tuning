@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 148 of the SC-55's 148 are built,
+under a program (SC-55 owner's manual p.68). 150 of the SC-55's 150 are built,
 and 96 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -788,6 +788,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 49.10 | SC-88 | St.SlowStr. | `ViolinSlow_sc88_49_10` | **4** | SC-88 map: GM 49 String Ensemble 2 with key_pan_spread=0.5 |
 | 50.1 | SC-55 | OB Strings | `Sc88_50_1` | **3** | SC-88 map: a Moog panel, the SynthStrings1's with a_attack, cutoff, f_attack, osc2_freq, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 50.8 | SC-55 | Syn. Strings3 | `MoogSynthStrings3` | **3** | the brighter, quicker string machine on the Moog (MoogSynthStrings3): two saws nine cents apart, the ladder further open with a touch of resonance, the swell a third of 50's. Ben: 'great' |
+| 50.24 | SC-55 | Tron Strings | `Violin_tron` | **4** | the MELLOTRON's '3 Violins' tape (tonelib.MellotronMixin): the string section, three players, its colour FITTED to menegass' Mellotron violin notes (Freesound 6815, CC0; examples/mellotron_fit.py, 12 notes C4-B4: miss 4.98 -> 2.08 dB) -- brighter to ~5 kHz, then cut steeply; the transport from the M400's mechanism (8 s run-out, no touch, each key its own tuning, one capstan's wow); at its capital's level. Ben: 'Sounds incredible' |
 | 52.8 | SC-88 | St.Choir | `ChoirAahs_sc88_52_8` | **4** | SC-88 map: GM 52 Choir Aahs with key_pan_spread=0.5 |
 | 52.9 | SC-88 | Melted Choir | `ChoirAahs_sc88_52_9` | **4** | SC-88 map: GM 52 Choir Aahs with tonal_dampening=1.9 |
 | 52.24 | SC-88 | Chorus Lahs | `ChoirAahs_sc88_52_24` | **4** | SC-88 map: GM 52 Choir Aahs with section_players=4, chiff_min_valve_time=0.025, chiff_max_valve_time=0.05 |
@@ -810,6 +811,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 72.1 | SC-88 | Piccolo : | `OpenPipe` | **4** | SC-88 map: GM 72 Piccolo's voice |
 | 73.1 | SC-88 | Flute 2 : | `OpenPipe` | **4** | SC-88 map: GM 73 Flute's voice |
 | 73.3 | SC-88 | Flt Travelso | `OpenPipe_sc88_73_3` | **4** | SC-88 map: GM 73 Flute with tonal_dampening=1.513, bore_corner_hz=104.3, even_harmonic_db=-8.253 |
+| 73.16 | SC-55 | Tron Flute | `OpenPipe_tron` | **3** | the MELLOTRON's flute tape (tonelib.MellotronMixin): our flute under the tape's cut fitted on its violins (the flute notes found were 0.135 s, too short to fit), the capstan's wow in place of a vibrato of its own. Ben: 'Sounds incredible' |
 | 80.1 | SC-55 | Square | `Sc88_80_1` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, eg_amount, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.2 | SC-55 | Hollow Mini | `Sc88_80_2` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, osc1_wave, osc2_level, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.3 | SC-55 | Mellow FM | `Sc88_80_3` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, mod_amount, mod_dest, osc1_level, osc1_wave, osc2_level, osc2_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -1090,11 +1092,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 189 | 189 | 100% | 154 | 35 | 0 | 0 | 0 | 0 |
+| SC-55 | 191 | 191 | 100% | 155 | 36 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
 | SC-88 | 418 | 350 | 84% | 233 | 117 | 0 | 0 | 0 | 68 |
-| SC-88Pro | 774 | 361 | 47% | 238 | 123 | 0 | 0 | 0 | 413 (11 another tone) |
-| SC-8850 | 1262 | 359 | 28% | 236 | 123 | 0 | 0 | 0 | 903 (13 another tone) |
+| SC-88Pro | 774 | 363 | 47% | 239 | 124 | 0 | 0 | 0 | 411 (11 another tone) |
+| SC-8850 | 1262 | 361 | 29% | 237 | 124 | 0 | 0 | 0 | 901 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1108,10 +1110,10 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Guitar | 16/16 | 17/19 | 23/34 | 25/55 | 25/72 |
 | Bass | 10/10 | 12/12 | 24/31 | 26/76 | 26/113 |
 | Strings | 8/8 | 8/9 | 8/11 | 9/20 | 9/29 |
-| Ensemble | 10/10 | 10/11 | 25/29 | 28/63 | 28/134 |
+| Ensemble | 11/11 | 10/11 | 25/29 | 29/63 | 29/134 |
 | Brass | 11/11 | 13/15 | 17/27 | 14/51 | 14/84 |
 | Reed | 9/9 | 8/8 | 9/11 | 9/20 | 9/23 |
-| Pipe | 8/8 | 8/8 | 8/9 | 11/22 | 11/27 |
+| Pipe | 9/9 | 8/8 | 8/9 | 12/22 | 12/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 43/76 | 43/122 |

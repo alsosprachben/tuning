@@ -22372,6 +22372,46 @@ class SaxophoneProperties(ConicalReedProperties):
     initial_gain = 1.24224e-04 * 1.2891
 
 
+class MellotronMixin:
+    """A MELLOTRON'S TAPE under a voice (GS 50.24 "Tron Strings", 73.16 "Tron
+    Flute"): each key a strip of tape recorded from a real instrument, pulled
+    past its head while the key is down. What the tape and the transport add
+    to the instrument on it, from the M400's mechanism:
+
+      the run-out     a strip lasts ~8 s; a key held longer falls silent
+                      (tape_length_s; blockrender cuts the note there)
+      no touch        a key only presses the tape to the head: velocity sets
+                      no level (touch_sensitive False: obeyed as the mix in a
+                      file, as an organ's is, and ignored played live)
+      each key's own  every strip and its pinch roller sit a little off,
+      tuning          fixed per key, not per note (tape_key_cents, seeded by
+                      the key)
+      one motor       the capstan's wow is the SAME on every key at once
+                      (one phase), not a section's independent players
+
+    A voice has one vibrato oscillator: where the instrument on the tape has
+    its own (the three violins'), that is what was recorded, and it keeps
+    it; where it has none, the capstan's wow takes it (tape_wow_*). The
+    tape's colour is the voice's -- see examples/mellotron_fit.py."""
+    touch_sensitive = False
+    tape_length_s = 8.0
+    tape_key_cents = 3.0
+    tape_wow_cents = 3.0
+    tape_wow_hz = 0.7
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        c = _random.Random(0x7A9E0 + midi).uniform(-self.tape_key_cents, self.tape_key_cents)
+        self.pitch_jitter = 2.0 ** (c / 1200.0) - 1.0
+
+    def voice_vibrato(self, frequency, index):
+        got = super().voice_vibrato(frequency, index)
+        if got and got[0]:
+            return got
+        return (2.0 ** (self.tape_wow_cents / 1200.0) - 1.0, self.tape_wow_hz, 0.0)
+
+
 class AltoSaxExpProperties(SaxophoneProperties):
     """GS 65.8 "AltoSax Exp." (the SC-88's "Hyper Alto"): the alto played out.
     FITTED AS A DIFFERENCE from GM 65's foundation (examples/sax_exp_fit.py):

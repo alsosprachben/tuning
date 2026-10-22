@@ -1507,6 +1507,41 @@ for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
         VARIATIONS[(_p, _b)], _tr = _sc88_class(_how, "sc88_%d_%d" % (_p, _b))
         VARIATION_TRIM_DB.setdefault((_p, _b), _tr)
 
+# THE MELLOTRON (tonelib.MellotronMixin): a program's own router, each class
+# it picks on tape -- the run-out, no touch, each key's own tuning, one
+# capstan's wow -- with the tape's colour as settings
+def mellotron_variation(program, name, **attrs):
+    import tonelib as _T
+
+    def pick(note, _p=program, _n=name, _a=attrs):
+        base = property_class_for_note(_p, note)
+        k = (base, _n)
+        if k not in _ROUTED_CLASSES:
+            _ROUTED_CLASSES[k] = type("%s_%s" % (base.__name__, _n), (_T.MellotronMixin, base), dict(_a))
+        return _ROUTED_CLASSES[k]
+    return pick
+
+
+# THE TAPE'S COLOUR, fitted on menegass' Mellotron violins (Freesound 6815,
+# CC0; examples/mellotron_fit.py, 12 notes C4-B4: miss 4.98 -> 2.08 dB):
+# brighter than our violins to ~5 kHz -- their body's resonance 2.3 -> 3.5
+# kHz, its floor gone -- then cut steeply, a low-pass at 2.6 kHz, order 6.4,
+# the copies of copies the tapes were
+TAPE_CUT = dict(lowpass_hz=2635.0, lowpass_order=6.392)
+# TRON STRINGS: the "3 Violins" tape -- the string section, three players, the
+# violins' body and the tape's cut (sysex_01, 4352)
+VARIATIONS[(50, 24)] = mellotron_variation(48, "tron", section_players=3, formant_floor=0.005,
+                                          formants=((3475.0, 1671.0, 0.55),), **TAPE_CUT)
+VARIATION_NAMES[(50, 24)] = "Tron Strings"
+# ...at its capital's level (the synth strings, GM 50): three players and the
+# tape's cut came out 6.5 dB under it (examples/variation_demo.py)
+VARIATION_TRIM_DB[(50, 24)] = PROGRAM_TRIM_DB.get(48, 0.0) + 6.5
+# TRON FLUTE: the flute tape -- our flute under the tape's cut (its own notes in
+# that pack too short to fit: 0.135 s) (sysex_01, 274)
+VARIATIONS[(73, 16)] = mellotron_variation(73, "tron", **TAPE_CUT)
+VARIATION_NAMES[(73, 16)] = "Tron Flute"
+VARIATION_TRIM_DB[(73, 16)] = PROGRAM_TRIM_DB.get(73, 0.0)
+
 # ALTOSAX EXP. (the SC-88's "Hyper Alto"): the alto played out, fitted as a
 # difference from GM 65 to Iowa's vibrato ff takes (tonelib.AltoSaxExpProperties,
 # examples/sax_exp_fit.py) -- its own vibrato, the ladder a little brighter
