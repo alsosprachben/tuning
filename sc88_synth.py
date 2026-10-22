@@ -231,6 +231,12 @@ SC88_SYNTH = {
     (118, 10): ("Sine Perc.", "MoogSynthDrum",
                 dict(noise_level=0.0, cutoff=0.5, resonance=0.0, a_decay=0.4)),
     # a resonant spike on a fast contour (River, 180)
+    # white noise: the noise oscillator alone, the ladder open, no contour
+    # (sysex_01 192, River 72, SuwaFF 3); Seashore's capital is the ocean drum,
+    # so it starts from the Atmosphere FX's panel, which has the noise
+    (122, 17): ("White Noise", "MoogAtmosphereFX",
+                dict(osc1_level=0.0, osc2_level=0.0, sub_level=0.0, noise_level=1.0, cutoff=1.0,
+                     resonance=0.0, eg_amount=0.5, a_attack=0.0, a_sustain=1.0, a_release=0.1)),
     (39, 21): ("Spike Bass", "MoogSynthBass2",
                dict(osc1_wave=SAW, sub_level=0.4, cutoff=0.45, resonance=0.55, eg_amount=0.85,
                     f_decay=0.1, f_sustain=0.1)),

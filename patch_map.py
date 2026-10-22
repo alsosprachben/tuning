@@ -1399,6 +1399,34 @@ SC88_CHEAP = {
     (123, 3): ("Bird 2", ("kit", 78, 56)),
     (124, 7): ("Scratch 2", ("var", (124, 4))),
     (126, 6): ("Applause 2", ("kit", 58, 56)),
+    # --- THE SC-88Pro MAP'S SETTINGS OF OUR VOICES THAT OUR GS FILES PLAY
+    # (examples/gs_maps.py; the notes each file gives the tone in brackets) --
+    # DANCE PIANO: the bright piano with a harder hammer, across the field
+    # (sysex_01, 912)
+    (1, 16): ("Dance Piano", ("set", 1, dict(hammer_corner_hz=1.6 * 189.3, key_pan_spread=WIDE))),
+    # SLOW STRINGS 2: the slow section's bow slower still, and darker for it
+    # -- its registers' attack 1.1 -> 1.8 s, their dampening 1.75-1.85 -> 2.1
+    # (SENSATIO, 454)
+    (49, 1): ("SlowStrings2", ("set", 49, dict(attack_time=1.8, tonal_dampening=2.1))),
+    # WARM STRINGS: the slow section with the body's roll-off lower, 3 -> 2.2
+    # kHz (River 9, SENSATIO 20)
+    (49, 9): ("Warm Strings", ("set", 49, dict(bore_corner_hz=2200.0))),
+    # MELTED / MELLO CHOIR: the choir darker, its upper partials damped faster
+    # (tonal_dampening 1.45 -> 1.9; its bore corner lowered read BRIGHTER, the
+    # colour being power-preserving) (River, 48)
+    (52, 9): ("Melted Choir", ("set", 52, dict(tonal_dampening=1.9))),
+    # CHORUS LAHS: a pop backing group's "lah" -- four singers, not seven, and
+    # the syllable's quicker onset (SENSATIO, 903)
+    (52, 24): ("Chorus Lahs", ("set", 52, dict(section_players=4, chiff_min_valve_time=0.025,
+                                               chiff_max_valve_time=0.05))),
+    # VOICE DAHS: the oohs' voices on /a/ (vowels.VOWELS), the plosive's quick
+    # onset (SuwaFF, 169)
+    (53, 8): ("Voice Dahs", ("set", 53, dict(formants=__import__("vowels").VOWELS["a"],
+                                             chiff_min_valve_time=0.015, chiff_max_valve_time=0.03))),
+    # WIDE FRENCH HORNS: the horns across the field (sysex_01, 140)
+    (60, 3): ("Wide FreHrns", ("set", 60, dict(key_pan_spread=WIDE))),
+    # FLUTE 2 : the flute, legato-enabled (the colon, as Piccolo :) (SENSATIO, 4)
+    (73, 1): ("Flute 2 :", ("alias", 73)),
 }
 _SC88_DONE = {}
 

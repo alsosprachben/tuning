@@ -693,8 +693,8 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 146 of the SC-55's 146 are built,
-and 83 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+under a program (SC-55 owner's manual p.68). 147 of the SC-55's 147 are built,
+and 91 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -702,6 +702,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 0.8 | SC-88 | Piano 1w | `GrandPiano_sc88_0_8` | **4** | SC-88 map: GM 0 Acoustic Grand Piano with key_pan_spread=0.5 |
 | 0.16 | SC-88 | Piano 1d | `GrandPiano_sc88_0_16` | **4** | SC-88 map: GM 0 Acoustic Grand Piano with hammer_corner_hz=2125.218 |
 | 1.8 | SC-88 | Piano 2w | `UprightPiano_sc88_1_8` | **4** | SC-88 map: GM 1 Bright Acoustic Piano with key_pan_spread=0.5 |
+| 1.16 | SC-88 | Dance Piano | `UprightPiano_sc88_1_16` | **4** | SC-88 map: GM 1 Bright Acoustic Piano with hammer_corner_hz=302.88000000000005, key_pan_spread=0.5 |
 | 2.1 | SC-88 | EG+Rhodes 1 | `ElectricGrand_sc88_2_1` | **4** | SC-88 map: layered: GM 2 + GM 4 -6 dB |
 | 2.2 | SC-88 | EG+Rhodes 2 | `ElectricGrand_sc88_2_2` | **4** | SC-88 map: layered: GM 2 -3 dB + GM 4 |
 | 2.8 | SC-88 | Piano 3w | `ElectricGrand_sc88_2_8` | **4** | SC-88 map: GM 2 Electric Grand Piano with key_pan_spread=0.5 |
@@ -779,13 +780,19 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 48.11 | SC-88 | Choir Str. | `Violin_sc88_48_11` | **4** | SC-88 map: layered: GM 48 + GM 52 -4 dB |
 | 48.16 | SC-88 | St.Strings | `Violin_sc88_48_16` | **4** | SC-88 map: GM 48 String Ensemble 1 with key_pan_spread=0.5 |
 | 48.24 | SC-88 | VeloStrings | `ViolinSlow_sc88_48_24` | **4** | SC-88 map: layered: GM 49 vel 0-90 + GM 48 vel 91-127 |
+| 49.1 | SC-88 | SlowStrings2 | `ViolinSlow_sc88_49_1` | **4** | SC-88 map: GM 49 String Ensemble 2 with attack_time=1.8, tonal_dampening=2.1 |
+| 49.9 | SC-88 | Warm Strings | `ViolinSlow_sc88_49_9` | **4** | SC-88 map: GM 49 String Ensemble 2 with bore_corner_hz=2200.0 |
 | 49.10 | SC-88 | St.SlowStr. | `ViolinSlow_sc88_49_10` | **4** | SC-88 map: GM 49 String Ensemble 2 with key_pan_spread=0.5 |
 | 50.1 | SC-55 | OB Strings | `Sc88_50_1` | **3** | SC-88 map: a Moog panel, the SynthStrings1's with a_attack, cutoff, f_attack, osc2_freq, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 50.8 | SC-55 | Syn. Strings3 | `MoogSynthStrings3` | **3** | the brighter, quicker string machine on the Moog (MoogSynthStrings3): two saws nine cents apart, the ladder further open with a touch of resonance, the swell a third of 50's. Ben: 'great' |
 | 52.8 | SC-88 | St.Choir | `ChoirAahs_sc88_52_8` | **4** | SC-88 map: GM 52 Choir Aahs with key_pan_spread=0.5 |
+| 52.9 | SC-88 | Melted Choir | `ChoirAahs_sc88_52_9` | **4** | SC-88 map: GM 52 Choir Aahs with tonal_dampening=1.9 |
+| 52.24 | SC-88 | Chorus Lahs | `ChoirAahs_sc88_52_24` | **4** | SC-88 map: GM 52 Choir Aahs with section_players=4, chiff_min_valve_time=0.025, chiff_max_valve_time=0.05 |
+| 53.8 | SC-88 | Voice Dahs | `VoiceOohs_sc88_53_8` | **4** | SC-88 map: GM 53 Voice Oohs with formants=((743.0, 285.0, 1.0), (1102.0, 121.0, 1.223), (2786.0, 241.0, 0.732), (3412.0, 697.0, 0.566)), chiff_min_valve_time=0.015, chiff_max_valve_time=0.03 |
 | 54.8 | SC-55 | Syn.Voice | `Sc88_54_8` | **3** | SC-88 map: a Moog panel, the SynthVoice's with lfo1_depth, lfo1_dest, lfo1_rate changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 55.10 | SC-88 | Double Hit | `OrchestraHit_sc88_55_10` | **4** | SC-88 map: layered: GM 55 + GM 55 +12 st -6 dB |
 | 55.16 | SC-55 | Lo Fi Rave | `Sc88_55_16` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with a_attack, a_decay, a_release, a_sustain, cutoff, f_attack, noise_level, osc1_wave, osc2_freq, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 60.3 | SC-88 | Wide FreHrns | `Horn_sc88_60_3` | **4** | SC-88 map: GM 60 French Horn with key_pan_spread=0.5 |
 | 60.16 | SC-88 | Horn Orch | `Horn_sc88_60_16` | **4** | SC-88 map: GM 60 French Horn with detuned_pair=(-5.0, 5.0) |
 | 61.8 | SC-55 | Brass 2 | `TromboneToTrumpet50Section_brass2` | **3** | the brass section's router (tuba, trombones, trumpets by register), every register a detuned pair, +-4 cents half left and right -- MuseScore's 61.8, its section twice, panned apart; the spread asserted |
 | 62.1 | SC-55 | Poly Brass | `Sc88_62_1` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with cutoff, eg_amount, f_attack, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -796,6 +803,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 63.16 | SC-88 | VeloBrass 1 | `MoogSynthBrass2_sc88_63_16` | **4** | SC-88 map: layered: GM 63 vel 0-90 + GM 62 vel 91-127 |
 | 63.17 | SC-88 | VeloBrass 2 | `MoogSynthBrass2_sc88_63_17` | **3** | SC-88 map: layered: GM 63 vel 0-90 + GM 61 vel 91-127 |
 | 72.1 | SC-88 | Piccolo : | `OpenPipe` | **4** | SC-88 map: GM 72 Piccolo's voice |
+| 73.1 | SC-88 | Flute 2 : | `OpenPipe` | **4** | SC-88 map: GM 73 Flute's voice |
 | 80.1 | SC-55 | Square | `Sc88_80_1` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, eg_amount, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.2 | SC-55 | Hollow Mini | `Sc88_80_2` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, osc1_wave, osc2_level, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.3 | SC-55 | Mellow FM | `Sc88_80_3` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, mod_amount, mod_dest, osc1_level, osc1_wave, osc2_level, osc2_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -901,6 +909,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 122.3 | SC-55 | Wind | `SfxWind_sfx81` | **4** | the SFX set's key 81 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WIND fitted to a Freesound howl (CC0): the 1 kHz howl over its rumble, 0.2 dB rms; one gust a key (a drum channel has no swell rows) |
 | 122.4 | SC-55 | Stream | `SfxStream_sfx83` | **4** | the SFX set's key 83 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 122.5 | SC-55 | Bubble | `SfxBubble_sfx84` | **4** | the SFX set's key 84 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
+| 122.17 | SC-55 | White Noise | `Sc88_122_17` | **3** | SC-88 map: a Moog panel, the AtmosphereFX's with a_attack, a_release, a_sustain, cutoff, eg_amount, noise_level, osc1_level, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 123.1 | SC-55 | Dog | `SfxDog_sfx76` | **4** | the SFX set's key 76 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): DOG: a bark as a throat (examples/throat_fit.py): pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5), rough (6% jitter, 2 dB shimmer, breath), bright first then darkening ~9 dB at 4-8 kHz as the barks do, ringing their formants (LPC: 560 Hz, 1.35, 2.4, 3.5, 5.4 kHz) levelled to their bands |
 | 123.2 | SC-55 | Horse | `SfxHoof_sfx77` | **3** | the SFX set's key 77 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down |
 | 123.3 | SC-88 | Bird 2 | `SfxBirds_sfx78` | **4** | SC-88 map: set 56's key 78 from the keyboard |
@@ -1077,9 +1086,9 @@ A later map can put another tone under a number we built; that one is not counte
 |---|---|---|---|---|---|---|---|---|---|
 | SC-55 | 188 | 188 | 100% | 153 | 35 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
-| SC-88 | 418 | 343 | 82% | 227 | 116 | 0 | 0 | 0 | 75 |
-| SC-88Pro | 774 | 346 | 45% | 225 | 121 | 0 | 0 | 0 | 428 (11 another tone) |
-| SC-8850 | 1262 | 344 | 27% | 223 | 121 | 0 | 0 | 0 | 918 (13 another tone) |
+| SC-88 | 418 | 346 | 83% | 230 | 116 | 0 | 0 | 0 | 72 |
+| SC-88Pro | 774 | 355 | 46% | 233 | 122 | 0 | 0 | 0 | 419 (11 another tone) |
+| SC-8850 | 1262 | 353 | 28% | 231 | 122 | 0 | 0 | 0 | 909 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1087,26 +1096,26 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 
 | family | SC-55 | SC-55mkII | SC-88 | SC-88Pro | SC-8850 |
 |---|---|---|---|---|---|
-| Piano | 11/11 | 21/21 | 23/26 | 21/39 | 19/61 |
+| Piano | 11/11 | 21/21 | 23/26 | 22/39 | 20/61 |
 | Chromatic Percussion | 9/9 | 12/12 | 13/18 | 13/23 | 13/29 |
 | Organ | 12/12 | 16/16 | 28/30 | 23/49 | 23/71 |
 | Guitar | 16/16 | 17/19 | 22/34 | 23/55 | 23/72 |
 | Bass | 10/10 | 12/12 | 23/31 | 25/76 | 25/113 |
 | Strings | 8/8 | 8/9 | 8/11 | 9/20 | 9/29 |
-| Ensemble | 10/10 | 10/11 | 21/29 | 22/63 | 22/134 |
-| Brass | 11/11 | 13/15 | 17/27 | 13/51 | 13/84 |
+| Ensemble | 10/10 | 10/11 | 24/29 | 27/63 | 27/134 |
+| Brass | 11/11 | 13/15 | 17/27 | 14/51 | 14/84 |
 | Reed | 8/8 | 8/8 | 8/11 | 8/20 | 8/23 |
-| Pipe | 8/8 | 8/8 | 8/9 | 9/22 | 9/27 |
+| Pipe | 8/8 | 8/8 | 8/9 | 10/22 | 10/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 43/76 | 43/122 |
 | Ethnic | 9/9 | 10/10 | 11/22 | 11/37 | 11/44 |
 | Percussive | 12/12 | 13/13 | 22/28 | 23/47 | 23/95 |
-| Sound Effects | 40/40 | 41/41 | 46/49 | 46/73 | 46/144 |
+| Sound Effects | 40/40 | 41/41 | 46/49 | 47/73 | 47/144 |
 
-### The SC-88 map's 75 still to build, by what they take
+### The SC-88 map's 72 still to build, by what they take
 
-**refit** (51: an articulation of one we have, wanting a fit to a reference): 4.25 Hard Rhodes, 4.26 MellwRhodes, 5.24 Hard FM EP, 11.1 Hard Vibe, 15.8 Cimbalom, 22.1 Harmonica 2, 24.32 Nylon Gt.2, 24.40 Lequint Gt., 25.32 Steel Gt.2, 26.1 Mellow Gt., 28.1 MutedDis.Gt, 28.16 Funk Gt.2, 30.2 DazedGuitar, 30.9 FeedbackGt2, 30.16 PowerGuitar, 30.17 Power Gt.2, 30.25 RockRhythm2, 33.1 FingeredBs2, 33.2 Jazz Bass, 34.8 MutePickBs., 35.1 FretlessBs2, 35.2 FretlessBs3, 35.3 FretlessBs4, 35.5 Mr.Smooth, 36.8 Reso Slap, 40.8 Slow Violin, 44.8 SlowTremolo, 44.9 SuspenseStr, 48.10 TremoloOrch, 49.1 Slow Str. 2, 49.8 Legato Str., 49.9 WarmStrings, 52.9 Mello Choir, 52.32 ChoirAahs 2, 55.8 Impact Hit, 55.9 Philly Hit, 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 57.1 Trombone 2, 58.1 Tuba 2, 60.1 Fr.Horn 2, 60.8 Fr.HornSolo, 61.16 Brass Fall, 63.1 Soft Brass, 65.8 Hyper Alto, 66.8 BreathyTnr., 105.1 Muted Banjo, 106.1 Tsugaru, 111.1 Shanai 2, 120.5 Bass Slide
+**refit** (48: an articulation of one we have, wanting a fit to a reference): 4.25 Hard Rhodes, 4.26 MellwRhodes, 5.24 Hard FM EP, 11.1 Hard Vibe, 15.8 Cimbalom, 22.1 Harmonica 2, 24.32 Nylon Gt.2, 24.40 Lequint Gt., 25.32 Steel Gt.2, 26.1 Mellow Gt., 28.1 MutedDis.Gt, 28.16 Funk Gt.2, 30.2 DazedGuitar, 30.9 FeedbackGt2, 30.16 PowerGuitar, 30.17 Power Gt.2, 30.25 RockRhythm2, 33.1 FingeredBs2, 33.2 Jazz Bass, 34.8 MutePickBs., 35.1 FretlessBs2, 35.2 FretlessBs3, 35.3 FretlessBs4, 35.5 Mr.Smooth, 36.8 Reso Slap, 40.8 Slow Violin, 44.8 SlowTremolo, 44.9 SuspenseStr, 48.10 TremoloOrch, 49.8 Legato Str., 52.32 ChoirAahs 2, 55.8 Impact Hit, 55.9 Philly Hit, 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 57.1 Trombone 2, 58.1 Tuba 2, 60.1 Fr.Horn 2, 60.8 Fr.HornSolo, 61.16 Brass Fall, 63.1 Soft Brass, 65.8 Hyper Alto, 66.8 BreathyTnr., 105.1 Muted Banjo, 106.1 Tsugaru, 111.1 Shanai 2, 120.5 Bass Slide
 
 **new** (23: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 16.24 CheeseOrgan, 56.8 Flugel Horn, 71.8 Bs Clarinet, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 107.16 Kanoon, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 112.16 RAMA Cymbal, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
