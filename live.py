@@ -174,6 +174,27 @@ ALL_COLS = COLS_F8 + COLS_F4 + COLS_F4_NOTE + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
 
+_TAP_LIB = None
+
+
+def ensure_tap_lib():
+    """tapkernel.c, built on its own (the referenced taps: Slab.tap_fill) --
+    the kernel's own libraries never see it."""
+    global _TAP_LIB
+    if _TAP_LIB is not None:
+        return _TAP_LIB
+    import ctypes, subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    src, lib = os.path.join(here, "tapkernel.c"), os.path.join(here, "libtapkernel.so")
+    if not os.path.exists(lib) or os.path.getmtime(src) > os.path.getmtime(lib):
+        tmp = "%s.%d.tmp" % (lib, os.getpid())
+        subprocess.check_call(["gcc", "-O3", "-march=native", "-shared", "-fPIC", src, "-o", tmp, "-lm"])
+        os.replace(tmp, lib)
+    dll = ctypes.CDLL(lib)
+    dll.tap_expand.restype = ctypes.c_int
+    _TAP_LIB = dll
+    return dll
+
 # TUNING_CLIPLOG=PATH: when a block peaks over CLIPLOG_PEAK (or is not finite),
 # append the loudest sounding rows and what owns each to PATH -- to catch an
 # intermittent burst in the act. Off by default; once a second at most.
@@ -693,8 +714,17 @@ class Slab:
     shape is not allowed to vary.
     """
 
-    def __init__(self, capacity=16384):
+    def __init__(self, capacity=16384, tap_capacity=None):
         self.cap = capacity
+        # THE TAPS' SCRATCH ROWS (tapkernel.c): past the slab's own slots,
+        # rewritten every block from the partials that carry a tap set, and
+        # rendered as rows -- never handed out, never busy, never reaped
+        self.tcap = 4 * capacity if tap_capacity is None else tap_capacity
+        self.tp = np.full(capacity, -1, np.int32)    # each slot's tap set (its channel's), -1 none
+        self.tpx = np.zeros(capacity, np.int64)      # ...and its longest tap: the slot is held that much longer
+        self.tap_m = 0                               # scratch rows written for this block
+        self.tap_lib = None
+        self.tap_tab = None                          # the tap sets, flattened (Live._tap_tables)
         self.a = {}
         for k in COLS_F8: self.a[k] = np.zeros(capacity, np.float64)
         for k in COLS_F4: self.a[k] = np.zeros(capacity, np.float32)
@@ -779,6 +809,17 @@ class Slab:
         # rather than to zero: at zero the chiff's hash index never advances, so
         # the "noise" becomes a fixed phase offset and the wash turns tonal.
         self.a["cbw"][:] = B.RAND_GRAN
+        # ...and every kernel column past the slots, for the taps' scratch rows:
+        # `full` the whole column (the kernel's and tap_expand's), `a` a view
+        # of the slots alone -- the same memory, so the slab reads as it did
+        self.full = {}
+        for _k, _v in list(self.a.items()):
+            if len(_v) == capacity:
+                _x = np.empty(capacity + self.tcap, _v.dtype)
+                _x[:capacity] = _v
+                _x[capacity:] = IDLE if _k in COLS_I8 else (_v[0] if capacity else 0)
+                self.full[_k] = _x
+                self.a[_k] = _x[:capacity]
         # THE ROTOR'S SIDE OF THE SLAB. None of this is a kernel column --
         # synth_partials never asks for it -- it is what the callback needs to
         # recompute each partial's level every block: how deeply this partial
@@ -1083,6 +1124,7 @@ class Slab:
         per callback was an allocation on the audio thread."""
         if self._prep_cache is None:
             d = dict(self.a)
+            d.update(self.full)             # the scratch rows past the slots too
             # BR/BC ARE INERT HERE, ON PURPOSE. The kernel is shared with the
             # file renderer, which uses these rows for pitch bend; live bends
             # through Slab.retune instead, which rewrites om and re-anchors the
@@ -1092,7 +1134,7 @@ class Slab:
             # tempting follow-up and deliberately not this change.) The one
             # exception is the organ's wind, rows 1.., which a whole division
             # rides at once and which moves every block (Live._wind_block).
-            d.update(lib=self.lib, P=self.cap, nblk=1, G=self.G, S=self.S,
+            d.update(lib=self.lib, P=self.cap + self.tcap, nblk=1, G=self.G, S=self.S,
                      BR=self.BR, BC=self.BC, BL=self.BL, sh=self.sh,
                      FT=self.FT, KN=self.KN, knk=2, kb0=0,
                      MPI=self.MPI, MPC=self.MPC, MPR=self.MPR, MKI=self.MKI, MPK=self.MPK)
@@ -1116,6 +1158,8 @@ class Slab:
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
+        self.tp[idx] = -1               # a fresh slot carries no taps
+        self.tpx[idx] = 0
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.cv_on[idx] = False
@@ -1579,6 +1623,8 @@ class Slab:
         slots = [self.free.popleft() for _ in range(n)]
         idx = np.fromiter(slots, np.int64, n)
         self.busy[idx] = True
+        self.tp[idx] = -1               # a fresh slot carries no taps
+        self.tpx[idx] = 0
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.cv_on[idx] = False
@@ -1861,6 +1907,48 @@ class Slab:
         idx = idx[self.busy[idx] & np.isin(self.slot_ch[idx], list(channels))]
         return list(np.unique(idx))
 
+    # the columns tap_expand writes by name; the rest are copied whole
+    _TAP_NAMED = ("om", "p0", "p0R", "non", "noff", "nf", "aL", "aR", "vd", "vr", "vp", "vdl",
+                  "delL", "delR", "fx", "gr", "br")
+
+    def tap_fill(self, n0, frames):
+        """THE REFERENCED TAPS, this block (tapkernel.c): every partial with a
+        tap set written once per tap into the scratch rows, from the partial
+        as it now stands. tap_m: how many rows the renderers add."""
+        tab = self.tap_tab
+        if tab is None:
+            self.tap_m = 0
+            return 0
+        import ctypes as C
+        src = np.flatnonzero(self.tp >= 0).astype(np.int64)
+        if not len(src):
+            self.tap_m = 0
+            return 0
+        a = self.full
+        if getattr(self, "_tap_cols", None) is None:
+            gen = [k for k in a if k not in self._TAP_NAMED and len(a[k]) == self.cap + self.tcap]
+            self._tap_cols = ((C.c_void_p * len(gen))(*[a[k].ctypes.data for k in gen]),
+                              (C.c_int * len(gen))(*[a[k].itemsize for k in gen]), len(gen))
+        cp, cz, nc = self._tap_cols
+        st = self.tp[src].astype(np.int32)
+        P = lambda x: x.ctypes.data_as(C.c_void_p)
+        m = self.tap_lib.tap_expand(
+            C.c_int(nc), cp, cz, C.c_int(len(src)), P(src), P(st),
+            P(a["om"]), P(a["p0"]), P(a["p0R"]), P(a["non"]), P(a["noff"]), P(a["nf"]),
+            P(a["aL"]), P(a["aR"]), P(a["vd"]), P(a["vr"]), P(a["vp"]), P(a["vdl"]),
+            P(a["delL"]), P(a["delR"]), P(a["fx"]), P(a["gr"]), P(a["br"]),
+            P(tab["ts"]), P(tab["eq"]), P(tab["eqo"]), P(tab["nmid"]), P(tab["dry"]),
+            P(tab["al0"]), P(tab["ar0"]), P(tab["D"]), P(tab["g"]), P(tab["fc"]), P(tab["r"]),
+            P(tab["hz"]), P(tab["al1"]), P(tab["ar1"]), P(tab["dl"]), P(tab["vd"]), P(tab["vr"]),
+            P(tab["ph"]), P(a["re"]), C.c_double(_GSD.REPEAT_FLOOR), C.c_int64(n0), C.c_int64(n0 + frames),
+            C.c_double(_PAN_BETA), C.c_double(float(B.SR)), C.c_int64(IDLE),
+            C.c_int64(self.cap), C.c_int(self.tcap))
+        # rows left over from a busier block go quiet
+        if m < self.tap_m:
+            a["non"][self.cap + m:self.cap + self.tap_m] = IDLE
+        self.tap_m = m
+        return m
+
     def release(self, key, n):
         """Note-off: one write per partial. The kernel picks it up next block."""
         slots = self.live.pop(key, None)
@@ -1892,8 +1980,11 @@ class Slab:
             # envelope runs delL/delR late (synthkernel.c voice_partial.inc)
             tail = off + float((self.a["re"][idx] + self.a["rdl"][idx]
                                 + np.maximum(self.a["delL"][idx], self.a["delR"][idx])).max()) + B.BLK + 1
+            if self.tap_tab is not None:
+                tail += float(self.tpx[idx].max())      # its taps' copies ring that much on
             if n > tail:
                 self.a["non"][idx] = IDLE
+                self.tp[idx] = -1
                 live = idx[self.busy[idx]]
                 if len(live):
                     self.busy[live] = False
@@ -2095,6 +2186,13 @@ class Renderer:
                 L += self.bufs[k][0]; R += self.bufs[k][1]
                 if snd:
                     SL += self.sbufs[k][0]; SR += self.sbufs[k][1]
+        m = self.slab.tap_m
+        if m:                               # the taps' scratch rows (Slab.tap_fill)
+            c0 = self.slab.cap
+            if snd:
+                B.synth_partials(self.slab.prep(), n0, frames, c0, c0 + m, L, R, SL, SR)
+            else:
+                B.synth_partials(self.slab.prep(), n0, frames, c0, c0 + m, L, R)
         self.slab.knobs_advance()
         L *= T.master_gain; R *= T.master_gain
         np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
@@ -2165,7 +2263,10 @@ class GpuRenderer(Renderer):
         sl.moog_fm_block()
         snd = self.send
         t0 = time.perf_counter()
-        self.tab.setup(sl.prep(), self.idx, n0, snd)
+        idx = self.idx
+        if sl.tap_m:                        # ...and the taps' scratch rows
+            idx = np.concatenate([idx, np.arange(sl.cap, sl.cap + sl.tap_m, dtype=np.int64)])
+        self.tab.setup(sl.prep(), idx, n0, snd)
         t1 = time.perf_counter()
         if self.gpu is not None:
             L, R, SL, SR = self.gpu.samples(self.tab, n0, frames, snd)
@@ -4848,7 +4949,15 @@ class Live:
             for _ly, _ls in _lslots.items():         # each Messenger its own pedal
                 self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
         if _efx is not None:
-            self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
+            if self.EFX_TAPS:
+                self._tap_tables()
+                st = self.slab.tap_tab
+                if st is not None and ch < 256 and st["ts"][ch + 1] > st["ts"][ch]:
+                    _ix = np.fromiter(slots, np.int64, len(slots))
+                    self.slab.tp[_ix] = ch
+                    self.slab.tpx[_ix] = st["dmax"][ch]
+            else:
+                self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
 
     # THE FREE-STRING REGISTER, LIVE (register.LiveChannel). A piano part's
     # undamped strings answering its strikes, the file renderer's physics on a
@@ -5387,6 +5496,111 @@ class Live:
                                     np.where(snd, g * lp, 0.0), np.ones(P), side,
                                     (min(0.5, k * cdev['vd'] * dfac), cdev['rate'], phase)))
         return out
+
+    # THE COPIES AS REFERENCED TAPS (tapkernel.c): a partial carries its
+    # channel's tap set and the copies are written each block from it, so the
+    # press stamps nothing and a knob reaches held notes. False: the stamped
+    # copies below (_efx_copies), kept as the reference the taps must match.
+    EFX_TAPS = True
+
+    def _tap_list(self, ex):
+        """The chain's copies as taps, partial-independent: (D samples, g,
+        lpf Hz or 0, ratio, Hz, side, (vd, vr, phase) or None)."""
+        out = []
+        dev = ex.get('dly')
+        if dev is not None:
+            fb, cross = dev['fb'], dev.get('cross')
+            for tap in dev['taps']:
+                tau, lv, side = tap[0], tap[1], tap[2]
+                period = tap[3] if len(tap) > 3 else dev['tc']
+                for k in range(_GSD.MAX_REPEATS):
+                    if k and fb == 0.0:
+                        break
+                    g = dev['level'] * lv * (fb ** k if k else 1.0)
+                    if abs(g) < _GSD.REPEAT_FLOOR:
+                        break
+                    sd = side if not (cross and k % 2) else {'l': 'r', 'r': 'l'}.get(side, side)
+                    vib = None
+                    if dev.get('mod'):
+                        mr, mswing, mph = dev['mod']
+                        vib = (min(0.5, 2.0 * math.pi * mr * mswing), mr, mph if sd == 'r' else 0.0)
+                    out.append((int(round((tau + k * period) * self.rate)), g, dev['lpf'] or 0.0,
+                                tap[4] ** (k + 1) if len(tap) > 4 else 1.0,
+                                tap[5] if len(tap) > 5 else 0.0, sd, vib))
+        if ex.get('cf') is not None:
+            cdev = ex['cf'][0]
+            sh = self._efx_share(ex)
+            if sh > 0.0:
+                fb2 = cdev['fb'] ** 2
+                passes = ((1.0 - fb2 ** _CHR.GS_MAX_PASSES) / (1.0 - fb2) if fb2 < 1.0
+                          else float(_CHR.GS_MAX_PASSES))
+                taps = cdev.get('taps') or _CHR.GS_TAPS
+                wet = (sh / float(len(taps)) / passes) ** 0.5
+                for tap in taps:
+                    side, phase = tap[0], tap[1]
+                    extra = tap[2] if len(tap) > 2 else 0.0
+                    dfac = tap[3] if len(tap) > 3 else 1.0
+                    for k in range(1, self.EFX_CF_PASSES + 1):
+                        g = wet * cdev['fb'] ** (k - 1)
+                        if abs(g) < _CHR.FLOOR * 0.5 or (k > 1 and cdev['fb'] == 0.0):
+                            break
+                        out.append((int(round((k * cdev['tau'] + extra) * self.rate)), g, cdev['lpf'] or 0.0,
+                                    1.0, 0.0, side, (min(0.5, k * cdev['vd'] * dfac), cdev['rate'], phase)))
+        return out
+
+    def _tap_tables(self):
+        """The tap sets, one a channel, flattened for tap_expand -- rebuilt
+        when the effect, its parts or a part's pan has moved."""
+        key = (self.efx_rev, tuple(sorted(self.efx_parts)),
+               tuple(self.cpan.get(c, T.GM_DEFAULT_PAN) for c in sorted(self.efx_parts)))
+        if getattr(self, "_tap_key", None) == key:
+            return
+        self._tap_key = key
+        sl = self.slab
+        if sl.tap_lib is None:
+            sl.tap_lib = ensure_tap_lib()
+        tab = pan_table()
+        NS = 256
+        ts = np.zeros(NS + 1, np.int32)
+        cols = {k: [] for k in ("D", "g", "fc", "r", "hz", "al1", "ar1", "dl", "vd", "vr", "ph")}
+        eq, eqo, nmid = [], np.full(NS, -1, np.int32), np.zeros(NS, np.int32)
+        dry, al0, ar0, dmax = np.ones(NS), np.zeros(NS), np.zeros(NS), np.zeros(NS, np.int64)
+        n = 0
+        for c in range(NS):
+            ts[c] = n
+            ex = self._efx_for(c) if c in self.efx_parts else None
+            if ex is None:
+                continue
+            a0, r0, d0 = tab[max(0, min(127, int(self.cpan.get(c, T.GM_DEFAULT_PAN))))]
+            al0[c], ar0[c] = a0, r0
+            if ex.get('cf') is not None:
+                dry[c] = (1.0 - self._efx_share(ex)) ** 0.5
+            e = ex.get('eq')
+            if e is not None:
+                mids = [(e[1] or 0.0, e[2] or 1.0, e[3] or 0.0)] + list(e[7:])
+                eqo[c] = len(eq)
+                nmid[c] = len(mids)
+                eq.extend([e[0], e[4], e[5] if len(e) > 5 else _GSX.LOW_SHELF_HZ,
+                           e[6] if len(e) > 6 else _GSX.HIGH_SHELF_HZ])
+                for mf, q, mg in mids:
+                    eq.extend([mf or 0.0, q or 1.0, mg or 0.0])
+            for D, g, fc, r, hz, side, vib in self._tap_list(ex):
+                a1, r1, d1 = tab[self._side_cc(side)]
+                for k, v in (("D", D), ("g", g), ("fc", fc), ("r", r), ("hz", hz), ("al1", a1),
+                             ("ar1", r1), ("dl", (d1 - d0) * self.rate),
+                             ("vd", vib[0] if vib else -1.0), ("vr", vib[1] if vib else 0.0),
+                             ("ph", vib[2] if vib else 0.0)):
+                    cols[k].append(v)
+                dmax[c] = max(dmax[c], D)
+                n += 1
+        ts[NS] = n
+        if not n:
+            sl.tap_tab = None
+            return
+        t = {k: np.asarray(v, np.int64 if k == "D" else np.float64) for k, v in cols.items()}
+        t.update(ts=ts, eq=np.asarray(eq or [0.0], np.float64), eqo=eqo, nmid=nmid, dry=dry,
+                 al0=al0, ar0=ar0, dmax=dmax)
+        sl.tap_tab = t
 
     def _efx_tmpl(self, ex, tmpl):
         """THE NOTE'S COPIES, READY TO STAMP -- built once per template and
@@ -8355,6 +8569,9 @@ class Live:
             self._mf104_reap(n0)
             if self._efx_q:
                 self._efx_drain(n0)
+            if self.efx_parts or self.slab.tap_m:
+                self._tap_tables()
+                self.slab.tap_fill(n0, frame_count)
             if self.scan_row:
                 self._scanner_block(n0, frame_count)
             if self.siren_st or self.siren_retire:
@@ -9065,12 +9282,16 @@ def selftest_gs(check):
                           _M("program_change", channel=0, program=80),
                           _M("note_on", channel=0, note=69, velocity=100),
                           _M("note_off", channel=0, note=69, velocity=0, time=2880)])
-        def _env(x, w=int(0.01 * 44100)):
+        # (at the renderer's own rate: a live section before this one leaves
+        # B.SR at its 48 kHz, and a frame rate taken as 44.1 kHz's misread it)
+        def _env(x, w=None):
+            w = w or int(0.01 * B.SR)
             x = np.asarray(x, float) ** 2
             return np.sqrt(np.convolve(x, np.ones(w) / w, "same"))[::w // 4]
+        _efr = B.SR / float(int(0.01 * B.SR) // 4)          # the envelope's frames a second
         _xt = B.render(_tre((1, 0x25)))
-        _et = _env(_xt[0])[int(0.5 * 400):int(2.8 * 400)]
-        _ft = np.fft.rfftfreq(len(_et), 1.0 / 400.0); _St = np.abs(np.fft.rfft(_et - _et.mean()))
+        _et = _env(_xt[0])[int(0.5 * _efr):int(2.8 * _efr)]
+        _ft = np.fft.rfftfreq(len(_et), 1.0 / _efr); _St = np.abs(np.fft.rfft(_et - _et.mean()))
         _trate = float(_ft[1:][np.argmax(_St[1:])])
         _xp = B.render(_tre((1, 0x26)))
         _el, _er = _env(_xp[0])[200:1100], _env(_xp[1])[200:1100]
