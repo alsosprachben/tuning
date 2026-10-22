@@ -1521,6 +1521,13 @@ VARIATIONS[(120, 12)] = BiwaProperties
 VARIATION_NAMES[(120, 12)] = "Biwa Stroke"
 VARIATION_TRIM_DB[(120, 12)] = PROGRAM_TRIM_DB.get(106, 0.0)
 
+# PHONO NOISE: a record's crackle and hiss as a voice (tonelib.PhonoNoiseProperties),
+# at the applause's trim, whose machinery it is
+from tonelib import PhonoNoiseProperties
+VARIATIONS[(124, 10)] = PhonoNoiseProperties
+VARIATION_NAMES[(124, 10)] = "Phono Noise"
+VARIATION_TRIM_DB[(124, 10)] = PROGRAM_TRIM_DB.get(126, 0.0)
+
 # THE MELLOTRON (tonelib.MellotronMixin): a program's own router, each class
 # it picks on tape -- the run-out, no touch, each key's own tuning, one
 # capstan's wow -- with the tape's colour as settings

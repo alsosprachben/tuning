@@ -5449,7 +5449,24 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _frate > 0.0:
                 _fspan = max(0.0, (noff - non) / SR)
                 _nfl = max(2, int(round(_frate * _fspan)))
-            if _nfl > 1:
+            _fbal = None
+            if _frate > 0.0 and getattr(props, 'strike_flam_record', False):
+                # A RECORD'S CLICKS (tonelib.PhonoNoiseProperties): ONE timeline,
+                # drawn second by second of the piece from a seed of that
+                # second, so every note of the voice sounding at once meets the
+                # same clicks at the same instants -- a speck in the groove is
+                # one event under the stylus -- and each click its own place in
+                # the BALANCE, the same for all of them: a note's left ear takes
+                # cos theta, its right sin theta (power kept). Its levels the
+                # draw's, not renormalised a note, so two parts agree.
+                _a0, _a1 = non / SR, noff / SR
+                _bursts, _fbal = [], []
+                for _ct, _cl, _cb in _record_clicks(props, _a1):
+                    if _a0 <= _ct < _a1:
+                        _bursts.append((_ct - _a0, _cl)); _fbal.append(_cb)
+                if not _bursts:
+                    _bursts, _fbal = [(0.0, -200.0)], [0.25 * math.pi]
+            elif _nfl > 1:
                 _frng = random.Random(int(round(on * 1e6)) * 131 + note * 7 + ch)
                 _bursts = [(_frng.uniform(0.0, _fspan), -_frng.uniform(0.0, props.strike_flam_db))
                            for _ in range(_nfl)]
@@ -5463,18 +5480,20 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # strike, its own dB/s): the table again, quieter and longer -- a
             # music box's pin snaps off the tooth and is gone in 5 ms, while
             # the comb's own buzz under it lasts tens
-            _bursts = [(b, d, _slr) for b, d in _bursts]
+            _bal = [(1.0, 1.0)] * len(_bursts) if _fbal is None else \
+                [(math.sqrt(2.0) * math.cos(_c), math.sqrt(2.0) * math.sin(_c)) for _c in _fbal]
+            _bursts = [(b, d, _slr, g) for (b, d), g in zip(_bursts, _bal)]
             _stail = getattr(props, 'strike_noise_tail', None)
             if _stail:
-                _bursts += [(b, d + _stail[0], math.log(10.0) / 20.0 * _stail[1]) for b, d, _ in _bursts]
-            for _boff, _bdb, _slr in _bursts:
+                _bursts += [(b, d + _stail[0], math.log(10.0) / 20.0 * _stail[1], g) for b, d, _, g in _bursts]
+            for _boff, _bdb, _slr, (_bgl, _bgr) in _bursts:
                 _bon = non + _sat + _boff * SR
                 for _hf, _db in props.strike_noise_db:
                     if _hf >= 0.45 * SR:
                         continue
                     _gM = props.gain * 10.0 ** ((_db + _reg + _bdb + _scal) / 20.0)
-                    emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
-                                 _gM * props.hrtf_gain(_hf, ri), _gM, _hf, _bon, _bon + _slen,
+                    emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li) * _bgl,
+                                 _gM * props.hrtf_gain(_hf, ri) * _bgr, _gM, _hf, _bon, _bon + _slen,
                                  _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
             # ...AND MORE STRUCK THINGS THAN ONE (strike_noise_layers: (table,
             # rise s, dB/s, length s) each): an orchestra hit's bass drum, which
@@ -6979,6 +6998,44 @@ def wind_scale_for(pc):
     if WIND_OFF or not getattr(pc, 'shared_wind', False):
         return 0.0
     return float(getattr(pc, 'wind_flex', 1.0))
+
+
+_RECORD = {}
+
+
+def _record_clicks(props, t_end):
+    """A RECORD'S CLICKS to t_end s: [(t, dB, balance)] on one timeline for the
+    whole render (tonelib.PhonoNoiseProperties), drawn a revolution at a time
+    from a seed of that revolution: strike_flam_rate a second at times
+    uniform within it, levels from strike_flam_levels' quantiles (percent,
+    dB) -- uniform under strike_flam_db where it has none -- and a balance
+    uniform over the quarter turn; each of the last revolution's clicks
+    clicking AGAIN a revolution on with strike_flam_recur's probability (a
+    speck met on the next turn), its balance kept. Cached and extended."""
+    import random
+    rate = float(props.strike_flam_rate)
+    per, pr = getattr(props, 'strike_flam_recur', None) or (1.8, 0.0)
+    q = tuple(getattr(props, 'strike_flam_levels', ()) or ())
+    key = (rate, per, pr, q, float(props.strike_flam_db))
+    st = _RECORD.setdefault(key, {'clicks': [], 'last': [], 'rev': 0})
+    while st['rev'] * per < t_end + per:
+        r = st['rev']
+        rr = random.Random(0xD15C0 + r)
+        new = []
+        for _t, _l, _b in st['last']:
+            if rr.random() < pr:
+                new.append((_t + per, _l + rr.uniform(-1.0, 1.0), _b))
+        for _ in range(int(round(rate * per))):
+            u = rr.random()
+            if q:
+                lv = float(np.interp(100.0 * u, [a for a, _ in q], [b for _, b in q]))
+            else:
+                lv = -props.strike_flam_db * u
+            new.append((r * per + rr.random() * per, lv, rr.uniform(0.0, 0.5 * math.pi)))
+        st['clicks'].extend(new)
+        st['last'] = [c for c in new if r * per <= c[0] < (r + 1) * per]
+        st['rev'] += 1
+    return st['clicks']
 
 
 def render(path, tuner='hybrid440'):

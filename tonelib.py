@@ -23337,6 +23337,56 @@ class ApplauseProperties(BreathNoiseProperties):
     strike_flam_rate = 274.2
     strike_flam_db = 13.0
 
+class PhonoNoiseProperties(ApplauseProperties):
+    """GS 124.10 "Phono Noise": a record's surface under the stylus, for as
+    long as the key is held -- its hiss and its clicks. FITTED to a real
+    record's blank groove (examples/phono_fit.py: nervousneal's 1961 MGM test
+    pressing, Freesound 586430, CC0, 20 minutes), on the applause's machinery
+    (bursts fired through a held note, each its own level):
+
+      hiss     the bed's shape as measured: flat within 2 dB from 300 Hz to
+               12 kHz -- NOT brown: the groove's noise rises with frequency
+               and RIAA's playback cut flattens it -- with the rumble rising
+               6-13 dB under 250 Hz, and falling past 16 kHz
+      clicks   on ONE timeline for the record, drawn a revolution (33 1/3,
+               1.8 s) at a time (blockrender._record_clicks): 37 a second
+               standing over the bed, their levels from the take's quantiles
+               (12.7-32.3 dB over the bed, 10th-99th percentile), each one
+               randomly placed in the balance (a speck in the groove is one
+               event under the stylus, reaching both channels at once -- Ben),
+               11.5 per cent of them clicking again a revolution on; each an
+               impulse (0.3 ms) whose spectrum is flat to 10 kHz as the take's
+
+    NOT DONE: the take's hiss is ANTI-correlated between the channels below
+    2 kHz (r -0.3 to -0.6, the groove's vertical motion), and 30 per cent of
+    its clicks reach the two sides in opposite polarity; a partial's two
+    ears share one sign here, so both are in phase."""
+    tonal_dampening = 0.25
+    hf_corner_hz = 16000.0
+    chiff_min_valve_time = 0.02
+    chiff_max_valve_time = 0.04
+    chiff_release = 0.3
+    breath_noise_db = ((63, -17.0), (80, -19.3), (101, -23.3), (127, -23.1), (160, -27.7), (202, -23.8), (250, -26.7), (315, -30.1), (397, -30.3), (500, -31.6), (630, -31.3), (794, -30.9), (1000, -30.0), (1260, -29.1), (1587, -28.9), (2000, -28.2), (2520, -28.0), (3175, -28.0), (4000, -28.4), (5040, -28.6), (6350, -29.0), (8000, -28.7), (10079, -28.1), (12699, -29.4), (16000, -34.8))
+    strike_noise_db = ((101, 12.2), (127, 12.2), (160, 12.2), (202, 12.2), (254, 12.2), (320, 12.2), (404, 12.9), (509, 12.7), (641, 11.3), (808, 11.3), (1018, 12.2), (1282, 12.0), (1616, 12.8), (2036, 13.5), (2565, 13.6), (3232, 13.3), (4072, 12.8), (5131, 11.9), (6465, 11.2), (8145, 11.1), (10263, 10.9), (12930, 9.0))
+    strike_noise_dbs = 29000.0
+    strike_noise_fade_s = 0.0001
+    strike_noise_octave_db = 0.0
+    strike_noise_len_s = 0.005
+    strike_flam_rate = 37.0
+    strike_flam_db = 26.0
+    strike_flam_levels = ((0, -26.0), (10, -25.3), (25, -24.0), (50, -21.2), (75, -17.1), (90, -12.8),
+                          (99, -5.7), (100, 0.0))
+    strike_flam_recur = (1.8, 0.115)
+    strike_flam_record = True
+    # THE CLICKS' LEVEL OVER THE BED fitted (phono_fit.py --ours, a held note
+    # measured as the take): 34 a second over 12 dB (the take's 36.7), 11.2
+    # over 20 (10.9), 0.5 over 30 (0.8); their quantiles 13.1-30.6 dB (the
+    # take's 12.7-32.3). AT A TONE'S LEVEL, as a Sound Canvas sample is: the
+    # applause's rms over a held note -- the file sets it under the music
+    # itself (River: velocity 52, CC7 110)
+    initial_gain = ApplauseProperties.initial_gain * 10 ** (15.5 / 20.0)
+
+
 class OrchestraApplauseProperties(ApplauseProperties):
     """The ORCHESTRA set's APPLAUSE (program 48, note 88, SC-55 manual p.70):
     GM 126's hall of hands as a drum note. A drum part's note-off comes at

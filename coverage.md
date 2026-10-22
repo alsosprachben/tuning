@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 152 of the SC-55's 152 are built,
+under a program (SC-55 owner's manual p.68). 153 of the SC-55's 153 are built,
 and 97 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -930,6 +930,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 124.4 | SC-55 | Scratch | `SfxScratchPull_sfx61` | **4** | the SFX set's key 61 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): SCRATCH: the Scratch Pull, as GeneralUser GS plays it |
 | 124.5 | SC-55 | Windchime | `SfxWindchime_sfx62` | **3** | the SFX set's key 62 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): WINDCHIME: a metal chime tube struck, ringing out (Freesound, CC0): 13.0 dB -- one tube where GS's is a shaken set |
 | 124.7 | SC-88 | Scratch 2 | `SfxScratchPull_sfx61` | **4** | SC-88 map: 124.4's voice |
+| 124.10 | SC-55 | Phono Noise | `PhonoNoise` | **4** | a RECORD'S SURFACE as a voice (tonelib.PhonoNoiseProperties), FITTED to nervousneal's blank groove (a 1961 MGM test pressing, Freesound 586430, CC0; examples/phono_fit.py): the hiss flat 300 Hz-12 kHz with its rumble (not brown: RIAA flattens it), clicks 34/s over 12 dB against the take's 36.7, their level spread and bright spectrum the take's, one timeline for the record with each click randomly placed in the balance (Ben) and 11.5% recurring a revolution on. Not modelled: the hiss's L/R anti-correlation, clicks of opposite polarity. Ben: 'Sounds great now' |
 | 125.1 | SC-55 | Car-Engine | `SfxEngine_sfx63` | **4** | the SFX set's key 63 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR ENGINE fitted to a Freesound idle (CC0, examples/weather_fit.py): its firing at 47.4 Hz and harmonics as partials, each standing out of the engine's noise as the recording's (h1-h6 within 2 dB; those barely over the noise held at their measured heights), the noise's colour 1.6 dB rms |
 | 125.2 | SC-55 | Car-Stop | `SfxSkid_sfx64` | **4** | the SFX set's key 64 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR SKID fitted to a Freesound handbrake turn (CC0): a squeal near 1.4 kHz over the tyre's roar (2.6 dB rms), never steady -- three near pitches beating under a slow swing, as the recording hops 53 cents rms |
 | 125.3 | SC-55 | Car-Pass | `SfxCarPass_sfx65` | **4** | the SFX set's key 65 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): CAR PASS fitted to a Freesound pass on a wet road (CC0): the tyres' noise (2.2 dB rms) swelling and falling, the engine one tone 18-21 dB over it (the recording's 16-20) falling 140 to 108 Hz through the pass -- GeneralUser GS's fast Doppler, an exponential in pitch, the noise riding it |
@@ -1095,11 +1096,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 192 | 192 | 100% | 156 | 36 | 0 | 0 | 0 | 0 |
+| SC-55 | 193 | 193 | 100% | 157 | 36 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
 | SC-88 | 418 | 350 | 84% | 233 | 117 | 0 | 0 | 0 | 68 |
-| SC-88Pro | 774 | 366 | 47% | 240 | 126 | 0 | 0 | 0 | 408 (11 another tone) |
-| SC-8850 | 1262 | 364 | 29% | 238 | 126 | 0 | 0 | 0 | 898 (13 another tone) |
+| SC-88Pro | 774 | 367 | 47% | 241 | 126 | 0 | 0 | 0 | 407 (11 another tone) |
+| SC-8850 | 1262 | 365 | 29% | 239 | 126 | 0 | 0 | 0 | 897 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1122,7 +1123,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
 | Ethnic | 9/9 | 10/10 | 11/22 | 11/37 | 11/44 |
 | Percussive | 12/12 | 13/13 | 22/28 | 23/47 | 23/95 |
-| Sound Effects | 41/41 | 41/41 | 46/49 | 48/73 | 48/144 |
+| Sound Effects | 42/42 | 41/41 | 46/49 | 49/73 | 49/144 |
 
 ### The SC-88 map's 68 still to build, by what they take
 
