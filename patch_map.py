@@ -1432,6 +1432,14 @@ SC88_CHEAP = {
     # (cabinet.JazzChorus212); the chorus is the Sound Canvas's own send
     # (storm_pro, 3557, through its Distortion)
     (27, 4): ("JC Clean Gt.", ("set", 27, dict(amp_drive=0.0, cabinet="jc120"))),
+    # FRETLESS BS2: ANOTHER FRETLESS -- GM 35's top refitted to mrforfs' (CC0,
+    # sources.md): a Harley Benton five-string, flatwounds, direct, both
+    # pickups (examples/egtr_fit.py's envelope on fretless_open_both, 5 open
+    # strings: miss 4.59 -> 1.94 dB): darker than FaireDesVagues' Jazz, the
+    # low-pass 645 -> 456 Hz. Ben, on SENSATIO's three parts: "like what is
+    # used in soul music" (SENSATIO, 1055)
+    (35, 1): ("Fretless Bs2", ("set", 35, dict(lowpass_hz=455.7, lowpass_order=3.605,
+                                               tonal_dampening=2.315))),
 }
 _SC88_DONE = {}
 
