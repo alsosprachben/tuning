@@ -152,12 +152,26 @@ def pan_table():
     # is the same on every voice.
     q = T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
     _PAN_BETA = q.hrtf_beta
-    amin, tmin = 0.1, 150.0 * math.pi / 180.0
     out = []
     for cc in range(128):
         # a centred source turned by the pan's angle (tonelib.stage_angle), as
         # the file turns each instrument
-        li, ri, ld, rd = q.hrtf_at(0.0, angle=T.stage_angle((cc - 64) / 63.0))
+        out.append(pan_at(T.stage_angle((cc - 64) / 63.0), q))
+    _PAN_TABLE = out
+    return out
+
+
+def pan_at(angle, q=None):
+    """(alpha_left, alpha_right, half_itd_seconds) for a source at `angle`
+    (radians, + to the right; the whole circle -- the 3D types put a part
+    behind), as pan_table has each CC10's."""
+    global _PAN_BETA
+    if q is None:
+        q = T.StoppedPipeProperties(261.63, 0.0, 1.0, 1.0)
+        _PAN_BETA = q.hrtf_beta
+    amin, tmin = 0.1, 150.0 * math.pi / 180.0
+    if True:
+        li, ri, ld, rd = q.hrtf_at(0.0, angle=angle)
         al = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * math.cos(li * math.pi / tmin)
         ar = 1.0 + amin / 2.0 + (1.0 - amin / 2.0) * math.cos(ri * math.pi / tmin)
         # THE DIFFERENTIAL ONLY. Panning hard moves the source 4 m sideways,
@@ -167,9 +181,7 @@ def pan_table():
         # would also break _amp_snapshot, which picks the direct sound out as
         # the partials within two samples of the minimum delay. A delay applied
         # equally to both ears of one source is not a cue anyway.
-        out.append((al, ar, (ld - rd) / 2.0))
-    _PAN_TABLE = out
-    return out
+        return (al, ar, (ld - rd) / 2.0)
 ALL_COLS = COLS_F8 + COLS_F4 + COLS_F4_NOTE + COLS_I8 + COLS_I4
 
 IDLE = 1 << 62          # a note-on so far in the future the partial never sounds
@@ -859,6 +871,7 @@ class Slab:
         self.ls_sharp = np.ones(capacity, np.float32)
         self.ls_norm = np.ones(capacity, np.float32)     # so the mean is 1
         self.ls_ph = np.zeros(capacity, np.float32)
+        self.ls_sep = np.zeros(capacity, np.float32)   # a Rotary type's two mics, their angle apart
         self.ls_horn = np.zeros(capacity, bool)
         self.ls_aL = np.zeros(capacity, np.float32)
         self.ls_aR = np.zeros(capacity, np.float32)
@@ -954,6 +967,7 @@ class Slab:
         idx = np.fromiter(slots, np.int64, len(slots))
         horn, fl, sh, nrm = self.leslie_params(nf, flip)
         self.ls_on[idx] = True
+        self.ls_sep[idx] = 0.0
         self.ls_ph[idx] = np.asarray(az, np.float32)
         self.ls_horn[idx] = horn
         self.ls_am[idx] = fl
@@ -1184,6 +1198,17 @@ class Slab:
         c = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx]))
         g = fl + (1.0 - fl) * c ** (0.5 * self.ls_sharp[idx])
         g /= self.ls_norm[idx]
+        sep = self.ls_sep[idx]
+        if sep.any():
+            # THE RECORDED ROTARY's two mics (gsefx Rotary's Separate): each ear
+            # its own mic, half the spacing either side -- its own swing
+            cl = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx] + 0.5 * sep))
+            cr = 0.5 * (1.0 + np.cos(ang - self.ls_ph[idx] - 0.5 * sep))
+            gl = (fl + (1.0 - fl) * cl ** (0.5 * self.ls_sharp[idx])) / self.ls_norm[idx]
+            gr = (fl + (1.0 - fl) * cr ** (0.5 * self.ls_sharp[idx])) / self.ls_norm[idx]
+            self.a["aL"][idx] = self.ls_aL[idx] * np.where(sep != 0, gl, g)
+            self.a["aR"][idx] = self.ls_aR[idx] * np.where(sep != 0, gr, g)
+            return
         self.a["aL"][idx] = self.ls_aL[idx] * g
         self.a["aR"][idx] = self.ls_aR[idx] * g
 
@@ -1843,8 +1868,9 @@ class Slab:
         if not slots or cc == was:
             return
         tab = pan_table()
-        al1, ar1, d1 = tab[max(0, min(127, int(cc)))]
-        al0, ar0, d0 = tab[max(0, min(127, int(was)))]
+        # ...or a place by its own (alpha_l, alpha_r, half itd): pan_at's, a 3D type's
+        al1, ar1, d1 = cc if isinstance(cc, tuple) else tab[max(0, min(127, int(cc)))]
+        al0, ar0, d0 = was if isinstance(was, tuple) else tab[max(0, min(127, int(was)))]
         idx = np.fromiter(slots, np.int64, len(slots))
         a = self.a
         om = 2.0 * math.pi * a["nf"][idx].astype(np.float64)
@@ -4936,7 +4962,11 @@ class Live:
             self._efx_direct(_efx, slots)
             self.efx_notes[ch].append([n0 / float(self.rate), math.inf, vel, note])
             self._efx_nrev += 1
-            if self._filter_for(ch) is not None:
+            if _efx.get('pos3d'):
+                self._efx_place3d(_efx, slots, _cp, n0)
+            if _efx.get('rotary'):
+                self._efx_rotary_arm(_efx, slots, note, n0)
+            if self._filter_for(ch):
                 self.slab.filter_arm(slots, ch)
         # UNA CORDA, before those same captures and for the same reason.
         if self.soft.get(ch) and slots:
@@ -5636,15 +5666,25 @@ class Live:
                 ex = self._efx_for(c)
                 if ex is None:
                     continue
+                comp = []
                 if ex.get('filter') is not None:
                     nts = [(s0, s1, v) for s0, s1, v, _n in self.efx_notes.get(c, ())]
                     chn = _GSX.filter_setup(self.efx_events, c, nts)
                     if chn is not None:
-                        self._flt[c] = ('chan', chn)
-                elif self._cf_comb(ex):
+                        comp.append(('chan', chn))
+                if self._cf_comb(ex):
                     d = ex['cf'][0]
                     swing = d['vd'] / (2.0 * math.pi * max(d['rate'], 1e-6))
-                    self._flt[c] = ('comb', (d['tau'], swing, d['rate'], self._efx_share(ex), d['fb']))
+                    comp.append(('comb', (d['tau'], swing, d['rate'], self._efx_share(ex), d['fb'])))
+                if ex.get('trem'):
+                    # THE TREMOLO / AUTO PAN (and a multi's Trem/Pan, the Tremolo
+                    # Chorus's): 1 + m w(t), w Roland's wave about its mean
+                    # (gsefx.WAVES), the right ear's 1 - m w(t) for a pan
+                    tr = tuple(ex['trem'])
+                    wave = tr[4] if len(tr) > 4 else [(1, 1.0, 0.0)]
+                    comp.append(('trem', (tr[0], tr[1], bool(tr[2]), wave)))
+                if comp:
+                    self._flt[c] = comp
         return self._flt.get(ch)
 
     def _filter_block(self, n0, frames):
@@ -5654,25 +5694,89 @@ class Live:
         import efxfilter as _EF
         t = (n0 + 0.5 * frames) / float(self.rate)
         for c in list(self.efx_parts):
-            fl = self._filter_for(c)
-            if fl is None:
+            comps = self._filter_for(c)
+            if not comps:
                 continue
-            if fl[0] == 'chan':
-                chn = fl[1]
-                v = chn.control(np.array([t]))
-                ctrl = np.array([float(np.asarray(x).ravel()[0]) for x in v]) if chn.rows > 1 \
-                    else float(np.asarray(v).ravel()[0])
-                self.slab.filter_swing(c, lambda f: _EF.response(chn.ty, f, ctrl, chn.pa, chn.pb, chn.pc))
-            else:
-                tau, swing, rate, mix, fb = fl[1]
-                tl = tau + swing * math.sin(2.0 * math.pi * rate * t)
-                tr = tau + swing * math.sin(2.0 * math.pi * rate * t + math.pi)
-                self.slab.filter_swing(c, lambda f: _EF.response(4, f, tl, mix, fb, 0.0),
-                                       lambda f: _EF.response(4, f, tr, mix, fb, 0.0))
+            HL, HR = [], []
+            for kind, x in comps:
+                if kind == 'chan':
+                    chn = x
+                    v = chn.control(np.array([t]))
+                    ctrl = np.array([float(np.asarray(y).ravel()[0]) for y in v]) if chn.rows > 1 \
+                        else float(np.asarray(v).ravel()[0])
+                    h = (lambda chn, ctrl: lambda f: _EF.response(chn.ty, f, ctrl, chn.pa, chn.pb, chn.pc))(chn, ctrl)
+                    HL.append(h); HR.append(h)
+                elif kind == 'comb':
+                    tau, swing, rate, mix, fb = x
+                    tl = tau + swing * math.sin(2.0 * math.pi * rate * t)
+                    tr = tau + swing * math.sin(2.0 * math.pi * rate * t + math.pi)
+                    HL.append((lambda tl: lambda f: _EF.response(4, f, tl, mix, fb, 0.0))(tl))
+                    HR.append((lambda tr: lambda f: _EF.response(4, f, tr, mix, fb, 0.0))(tr))
+                else:
+                    rate, m, pan, wave = x
+                    w = sum(cf * math.cos(k * 2.0 * math.pi * rate * t + ph) for k, cf, ph in wave)
+                    gl, gr = 1.0 + m * w, (1.0 - m * w) if pan else 1.0 + m * w
+                    HL.append((lambda g: lambda f: g)(gl)); HR.append((lambda g: lambda f: g)(gr))
+            self.slab.filter_swing(c, lambda f: np.prod([h(f) * np.ones_like(f) for h in HL], axis=0),
+                                   lambda f: np.prod([h(f) * np.ones_like(f) for h in HR], axis=0))
         # the notes an auto wah no longer hears
         for c, lst in self.efx_notes.items():
             if lst and lst[0][1] < t - 4.0:
                 lst[:] = [x for x in lst if x[1] >= t - 4.0]
+
+    def _efx_place3d(self, ex, slots, cpan, n0):
+        """THE 3D TYPES (3D Manual, 3D Auto): the part at the type's azimuth,
+        past the speakers and behind -- 3D Auto's turning at its speed, each
+        note where its onset finds it, as the file places them."""
+        az, turn = ex['pos3d']
+        t = n0 / float(self.rate)
+        ang = math.radians(((az + 360.0 * turn * t + 180.0) % 360.0) - 180.0)
+        self.slab.repan(slots, pan_at(ang), pan_table()[max(0, min(127, int(cpan)))], self.rate, itd=True)
+
+    def _efx_rotary_arm(self, ex, slots, note, n0):
+        """A ROTARY type's part on live's rotors (Slab.leslie_arm, the organ's
+        own): each partial leaving at its own angle -- scattered, as a
+        uniform start would lock them in phase -- the drum and horn at their
+        levels, the two mics at the type's Separate."""
+        rt = ex['rotary']
+        self._efx_rotary_sync()
+        idx = np.fromiter(slots, np.int64, len(slots))
+        idx = idx[self.slab.a["fx"][idx] < 0]
+        if not len(idx):
+            return
+        rng = np.random.default_rng(int(note) * 7919 + len(idx))
+        az = rng.uniform(0.0, 2.0 * math.pi, len(idx)).astype(np.float32)
+        sl = list(int(i) for i in idx)
+        self.slab.leslie_arm(sl, az, self.slab.a["nf"][idx], n0, self.rotor_horn.rate, self.rotor_drum.rate)
+        lv = np.where(self.slab.ls_horn[idx], rt['levels'][1], rt['levels'][0]).astype(np.float32)
+        self.slab.channel_gain(sl, lv)
+        self.slab.ls_sep[idx] = float(rt.get('separate', 0.0))
+
+    def _efx_rotary_sync(self):
+        """The rotors at the Rotary type's speeds -- slow or fast as its Speed
+        stands -- and its spin times; back to the organ's when it goes."""
+        rt = None
+        for c in self.efx_parts:
+            ex = self._efx_for(c)
+            if ex is not None and ex.get('rotary'):
+                rt = ex['rotary']
+                break
+        key = (self.efx_rev, rt is not None)
+        if getattr(self, "_rot_key", None) == key:
+            return
+        self._rot_key = key
+        if not hasattr(self, "_rot_dflt"):
+            self._rot_dflt = [(r.up, r.down) for r in (self.rotor_horn, self.rotor_drum)]
+        if rt is None:
+            for r, (u, d) in zip((self.rotor_horn, self.rotor_drum), self._rot_dflt):
+                r.up, r.down = u, d
+            return
+        hz = rt['horn'][1] if rt['fast'] else rt['horn'][0]
+        dz = rt['drum'][1] if rt['fast'] else rt['drum'][0]
+        self.rotor_horn.target = hz
+        self.rotor_drum.target = dz / max(abs(self.rotor_drum.ratio), 1e-9)
+        for r, tau in ((self.rotor_horn, rt['horn_tau']), (self.rotor_drum, rt['drum_tau'])):
+            r.up, r.down = (tau if isinstance(tau, tuple) else (tau, tau))   # (spin up, spin down)
 
     def _tap_list(self, ex):
         """The chain's copies as taps, partial-independent: (D samples, g,
@@ -8783,6 +8887,7 @@ class Live:
             # THE INSERTION EFFECT: its moving filter on the levels the swings
             # left, then its copies from the partials as they now stand
             if self.efx_parts or self.slab.tap_m:
+                self._efx_rotary_sync()
                 self._filter_block(n0, frame_count)
                 self._tap_tables()
                 self.slab.tap_fill(n0, frame_count)
@@ -10117,6 +10222,39 @@ def selftest_gs(check):
             _X = np.abs(np.fft.rfft(x[_a:_a + 4800])) ** 2
             _c.append(float((_X * np.fft.rfftfreq(4800, 1 / 48000.0)).sum() / max(_X.sum(), 1e-30)))
         return float(np.std(_c))
+    # TREMOLO, AUTO PAN, ROTARY, 3D (live: the filter pass's gain, the
+    # organ's rotors, pan_at): the Tremolo's swing at its 3.05 Hz, Auto Pan's
+    # ears in opposition, the Rotary's horn spun up from slow toward its fast
+    # 7.5 Hz (at the type's own acceleration: most of the way in 3 s) with
+    # its two mics parting the ears, 3D Manual at L96 to the left
+    def _menv(x, ear):
+        e = np.sqrt(np.convolve(x[:, ear] ** 2, np.ones(480) / 480, "same"))[::120][100:950]
+        tr = np.convolve(e, np.ones(80) / 80, "same")
+        return (e / np.maximum(tr, 1e-12) - 1.0)[60:-60]
+    def _mrate(m):
+        F = np.abs(np.fft.rfft(m)); fq = np.fft.rfftfreq(len(m), 1 / 400.0); sl = (fq > 1) & (fq < 20)
+        return float(fq[sl][np.argmax(F[sl])])
+    _xt = _fhear((0x01, 0x25), nn=60); _xa = _fhear((0x01, 0x26), nn=60)
+    _ap = float(np.corrcoef(_menv(_xa, 0), _menv(_xa, 1))[0, 1])
+    _lr = Live(program=4, rate=48000, frames=128, verbose=False)
+    try:
+        _lr.warm()
+        for _ev in [('type', (0x01, 0x22)), ('part', 0, True), ('param', 11, 127)]:
+            _lr.on_midi(_M("sysex", data=_GSX.message(_ev)))
+        _lr.on_midi(_M("note_on", channel=0, note=60, velocity=100)); _lr.apply(0)
+        _xr = np.concatenate([np.frombuffer(_lr.callback(None, 128, None, 0)[0], np.float32)
+                              for _i in range(int(3.0 * 48000 / 128))]).reshape(-1, 2).astype(float)
+        _hz = _lr.rotor_horn.rate
+    finally:
+        _lr.shutdown()
+    _rc = float(np.corrcoef(_xr[:, 0], _xr[:, 1])[0, 1])
+    _x3 = _fhear((0x01, 0x71), ex=[('param', 1, 30)], nn=60)
+    _ild = 20 * np.log10(float(np.sqrt(np.mean(_x3[:, 0] ** 2))) / float(np.sqrt(np.mean(_x3[:, 1] ** 2))))
+    check("live: Tremolo at its rate, Auto Pan across the ears, the Rotary's horn and two mics, 3D Manual left",
+          abs(_mrate(_menv(_xt, 0)) - 3.05) < 0.3 and _ap < -0.2 and 6.5 < _hz <= 7.5
+          and _rc < 0.8 and _ild > 1.0,
+          "  (tremolo %.2f Hz; pan L/R %.2f; horn %.2f Hz, mics L/R %.2f; 3D L %+.1f dB)"
+          % (_mrate(_menv(_xt, 0)), _ap, _hz, _rc, _ild))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
