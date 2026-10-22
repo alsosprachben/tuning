@@ -278,6 +278,14 @@ class Stream:
     Memory is what is sounding, plus what the amplifier holds."""
 
     BATCH = 8
+    # A BATCH HAS A ROW BUDGET (TUNING_STREAM_ROWS): a batch whose windows
+    # sound more rows than this renders in halves, down to a window at a time.
+    # Its rows are copied three times over (selected, joined, sorted) and set
+    # up for the kernel, about 2 KB each: SENSATIO's 8 s at 3:12 sounded 1.5M
+    # rows, the render reached 4.2 GB and was stopped. Batching only groups
+    # windows, so the samples are the same (TUNING_STREAM_BATCH=1 is the
+    # strictest case of it).
+    ROW_BUDGET = 300_000
 
     def __init__(self, send='auto', batch=None, loudest=None, scan=False, out=None, send_out=None,
                  stems=None, gpu=None):
@@ -303,6 +311,7 @@ class Stream:
         # TUNING_STREAM_BATCH=1: a window at a time, the strictest test of
         # when the stream decides a window can no longer change
         self.batch = batch or int(os.environ.get('TUNING_STREAM_BATCH', self.BATCH))
+        self.row_budget = int(os.environ.get('TUNING_STREAM_ROWS', self.ROW_BUDGET))
         self.loudest = loudest      # the Leslie's (a scanning run finds it)
         self.scan = scan            # scanning: no render, just the loudest row
         self.scan_max = 0.0
@@ -1024,6 +1033,12 @@ class Stream:
         w0 = wi * self.W
         w1 = min(self.N, w0 + nw * self.W)
         if w1 <= w0:
+            return
+        if nw > 1 and sum(int(((c['nonL'] < w1) & (c['zend'] > w0)).sum())
+                          for c in self.store) > self.row_budget:
+            h = nw // 2
+            self._render(wi, h)
+            self._render(wi + h, nw - h)
             return
         sel = []
         for c in self.store:
