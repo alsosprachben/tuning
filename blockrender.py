@@ -3709,6 +3709,37 @@ def _prepare(path, tuner='hybrid440', sink=None):
             (_e[0], _e[1], _e[2] + _T, _e[3], _e[4], _e[5], _e[6]))
         _GLIDE_SRC.pop(_k3, None)       # the lattice replaces the smooth glide
         _GLISS_DROP.add(_k3)
+    # A FALL IS A GLISS DOWN (tonelib fall_cents: GS 61.16 "Brass Fall"), so it
+    # walks the lattice as one does -- not a smooth sweep, which a valved
+    # instrument cannot make past the lip's tone (Ben). The note holds
+    # fall_at_s, then runs down a semitone a step over fall_s, each step a real
+    # note on its fingered pitch, the level fading fall_fade_db across the run,
+    # half-valved (smear fall_smear) as a fall usually is; the run ends it. A
+    # key let go before the fall begins releases as any note does.
+    for _e in list(notes):
+        _k3 = (_e[0], _e[1], _e[2])
+        if _k3 in _GLISS_DROP or is_drum(_e[6]):
+            continue
+        _pcf = property_class_for_note(_e[6], _e[1])
+        _fc = getattr(_pcf, 'fall_cents', 0.0) or 0.0
+        if not _fc:
+            continue
+        _tf = _e[2] + float(_pcf.fall_at_s)
+        if _e[3] <= _tf:
+            continue
+        _ns = max(2, int(round(_fc / 100.0)))
+        _dt = float(_pcf.fall_s) / _ns
+        _sm = float(getattr(_pcf, 'fall_smear', 0.6))
+        _GLISS_DROP.add(_k3)
+        _GLISS_STEPS.append((_e[0], _e[1], _e[2], _tf, _e[4], _e[5], _e[6]))
+        for _i in range(_ns):
+            _p = _e[1] - 1 - _i
+            if _p < 0:
+                break
+            _t0 = _tf + _i * _dt
+            _GLISS[(_e[0], _p, _t0)] = (10.0 ** (-float(_pcf.fall_fade_db) * (_i + 1) / _ns / 20.0), _sm,
+                                        _e[1] - _i, _dt)
+            _GLISS_STEPS.append((_e[0], _p, _t0, _t0 + _dt * 1.35, _e[4], _e[5], _e[6]))
     if _gliss_clean:
         print("  %d valved glissandi were too short to run and played clean "
               "(a step would have been under 12 ms)" % _gliss_clean)

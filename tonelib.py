@@ -1868,6 +1868,17 @@ class SynthProperties:
     one_shot = False
     release_floor_db = None
 
+    # A FALL (GS 61.16 "Brass Fall"; blockrender, beside the valved gliss):
+    # 0 cents is none. Held fall_at_s from the attack, then a run DOWN the
+    # lattice, a semitone a step over fall_s to fall_cents, fading
+    # fall_fade_db, half-valved at fall_smear (the gliss's smear); the run
+    # ends the note
+    fall_cents = 0.0
+    fall_at_s = 0.15
+    fall_s = 0.45
+    fall_fade_db = 30.0
+    fall_smear = 0.6
+
     # Metres of stereo spread per octave of pitch (times position_x). Positive =
     # higher notes toward one side; the piano flips the sign so its keyboard reads
     # low-left to high-right (a player's view). Class attribute so it can be set

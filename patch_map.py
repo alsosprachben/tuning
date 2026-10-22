@@ -1372,6 +1372,17 @@ SC88_CHEAP = {
     # -- Ben chose it from 0, 0.3, 0.6 and 1 on Tokei's three Rock Rhythm 2
     # parts (tracks 21, 30, 31 at 3:28; examples/tone_ab.py)
     (30, 25): ("Rock Rhythm2", ("set", 30, palm_mute(1.0))),
+    # MUTED DIS.GT: the distortion guitar under the whole palm mute -- Rock
+    # Rhythm2's tone, as Ben chose it (SENSATIO, 2)
+    (28, 1): ("Muted Dis.Gt", ("var", (30, 25))),
+    # BRASS FALL: the brass section, its notes falling off -- held 0.15 s,
+    # then a run down the valved lattice, 9 semitones over 0.45 s, half-valved,
+    # fading 30 dB (tonelib fall_cents; a gliss down, not a sweep -- Ben):
+    # within the 0.6 s Sorcerian holds its one chord (Sorcerian, 3)
+    (61, 16): ("Brass Fall", ("set", 61, dict(fall_cents=900.0))),
+    # BIG SHOT: the gunshot made bigger -- its noise held twice as long and its
+    # slower tail louder and longer (-6 dB at 60 dB/s -> -3 dB at 30) (storm_pro, 2)
+    (127, 5): ("Big Shot", ("set", 127, dict(strike_noise_len_s=2.0, strike_noise_tail=(-3.0, 30.0)))),
     (48, 9): ("Orchestra 2", ("layer", ((48, 0, 0.0), (60, 0, -8.0)))),
     # IMPACT HIT: the orchestra hit made heavier -- our timpani two octaves
     # under it and the Orchestra set's Concert BD 1, 18 semitones down (the hits
