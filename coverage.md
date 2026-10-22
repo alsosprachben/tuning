@@ -1123,8 +1123,8 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | Spectrum | **3** | eight fixed peaking bands at the manual's frequencies, each partial's gain at its own; heard on a piano |
 | Enhancer | **3** | efxbus: what lies above 2 kHz saturated, its harmonics mixed back by Mix; heard on an EP |
 | Humanizer | **3** | efxfilter: three formants of its vowel (a/i/u/e/o), gliding at its Accel; its drive the valve's gain stage; heard on a Moog lead |
-| Overdrive | **2** | the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; not yet heard in a file |
-| Distortion | **2** | as Overdrive, with more gain |
+| Overdrive | **3** | the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; heard in the OD -> Chorus/Flanger/Delay demos (Ben, 2026-10-21: those sound great) |
+| Distortion | **3** | as Overdrive, with more gain; heard on storm_pro (kathie, SC-88Pro), its part 8 clean electric guitar at Drive 70 (Ben: sounds good) |
 | Phaser | **3** | efxfilter: four all-passes at the swept corner, its resonance and mix, on every partial (the lobe kernel's filter_grid); heard on our riff |
 | Auto Wah | **3** | efxfilter: a resonant LPF/BPF swept up (or down) from its Manual by its LFO, and opened by its Sens (the part's notes' envelope); heard on our riff and a Clav (Ben: "sounds great") |
 | Rotary | **3** | our Leslie at the type's rotor speeds, switched by Speed, Accl through our measured spin-ups, the rotors' levels -- RECORDED as Roland's is: two mics round the cabinet (Separate, 0-180 degrees), each to its speaker with its own swing and Doppler; heard on our Rhodes riff, mono and then with its two mics (Ben: "Those sound awesome", "Sounds great") |
@@ -1134,11 +1134,11 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | Auto Pan | **3** | the same across the ears; heard on our riff |
 | Compressor | **3** | efxbus: a level-following gain at the output's scale, 10-40 dB down at 8:1, attack 1-50 ms (chosen); heard on our guitar riff |
 | Limiter | **3** | efxbus: the compressor at its Threshold and Ratio, Release 10 ms-1 s (chosen); heard on our guitar riff |
-| Hexa Chorus | **2** | six voices spread in delay, depth and pan by its Dev parameters (0.5 ms a Pre Dly Dev step, chosen) |
-| Tremolo Chorus | **2** | the chorus and the tremolo pass (half depth, chosen) |
-| Stereo Chorus | **2** | as Space D, its Phase and pre-filter (the LPF; its HPF not built) |
+| Hexa Chorus | **3** | six voices spread in delay, depth and pan by its Dev parameters (0.5 ms a Pre Dly Dev step, chosen); heard in its demo (Ben, 2026-10-21: these all sound great) |
+| Tremolo Chorus | **3** | the chorus and the tremolo pass (half depth, chosen); heard in its demo (Ben, 2026-10-21: these all sound great) |
+| Stereo Chorus | **3** | as Space D, its Phase and pre-filter (the LPF; its HPF not built); heard in its demo (Ben, 2026-10-21: these all sound great) |
 | Space D | **3** | chorus.gs_copies, two outputs half a turn apart, pre-delay and rate from Roland's tables, Balance the share; heard on SENSATIO |
-| 3D Chorus | **2** | the chorus's outputs at 60 degrees, past the speakers |
+| 3D Chorus | **3** | the chorus's outputs at 60 degrees, past the speakers; heard in its demo (Ben, 2026-10-21: these all sound great) |
 | Stereo Delay | **3** | gsdelay: left and right taps each looping at its own period, feedback (cross for ping-pong), phase inversion, HF damping; heard on our riff (Ben: "They sound great") |
 | Mod Delay | **3** | the Stereo Delay with its modulation as the repeats' vibrato; heard on our riff |
 | 3 Tap Delay | **3** | centre, left and right taps, the centre's loop; heard on our riff |
@@ -1165,7 +1165,7 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | Cho -> Delay | **3** | the chorus and a delay tap (our passes run the delay first); heard on our riff (Ben: "sound great") |
 | FL -> Delay | **3** | the flanger and a delay tap; heard on our riff (Ben: "sound great") |
 | Cho -> Flanger | **3** | the chorus's copies, then a moving comb (efxfilter) on every row, the copies' too: in its order; heard on strings |
-| Rotary Multi | **2** | the Rotary with its OD (the valve) and EQ before the rotors |
+| Rotary Multi | **3** | the Rotary with its OD (the valve) and EQ before the rotors; heard in its demo (Ben, 2026-10-21: those sound awesome) |
 | GTR Multi 1 | **2** | compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); not yet heard in a file |
 | GTR Multi 2 | **4** | compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built |
 | GTR Multi 3 | **3** | as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: "Those all sound great") |
