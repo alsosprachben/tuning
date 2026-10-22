@@ -85,6 +85,7 @@ import mf104 as _MFD
 import moog as _MG
 import tonelib as T
 import gsefx as _GSX
+import gsdelay as _GSD
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name, key_layers)
@@ -3323,6 +3324,8 @@ class Live:
         self.efx = _GSX.fresh_state()
         self.efx_parts = set()
         self.efx_rev = 0
+        self._efx_tc, self._efx_tc_rev = {}, 0     # the copies' templates (_efx_tmpl)
+        self._efx_q = collections.deque()            # copies to stamp ahead of their onsets
         self.soft = {}          # channel -> the una corda shift is in
         self.sost = {}          # channel -> keys the sostenuto pedal is holding
         self.sota = {}          # channel -> [12 cents]
@@ -4743,6 +4746,11 @@ class Live:
         _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
         if _cp != T.GM_DEFAULT_PAN and slots:
             self.slab.repan(slots, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
+        # THE INSERTION EFFECT's level and EQ on the note, before the same
+        # captures (its copies at the end, where the bend is known)
+        _efx = self._efx_for(ch) if slots and not part.drums else None
+        if _efx is not None:
+            self._efx_direct(_efx, slots)
         # UNA CORDA, before those same captures and for the same reason.
         if self.soft.get(ch) and slots:
             self.slab.soft_strings(slots, part.patch.soft_pedal_strings,
@@ -4839,6 +4847,8 @@ class Live:
         if part.moog() is not None and slots:
             for _ly, _ls in _lslots.items():         # each Messenger its own pedal
                 self._mf104(part, ch, note, tmpl, key, _ls, scale, n0, b, _cp, _ly)
+        if _efx is not None:
+            self._efx_copies(_efx, part, ch, note, tmpl, key, slots, scale, n0, b)
 
     # THE FREE-STRING REGISTER, LIVE (register.LiveChannel). A piano part's
     # undamped strings answering its strikes, the file renderer's physics on a
@@ -5255,6 +5265,267 @@ class Live:
             self.slab.channel_gain(slots, st["dry"])
             direct = next((i for i in slots if a["rdl"][i] == 0), slots[0])
             self.mf104_groups.append((key, int(direct), group))
+
+    # THE INSERTION EFFECT, LIVE (gsefx.chain; the file renderer's passes, at
+    # note-on). The partial-domain stages: its level and EQ (eq_gain at each
+    # partial's frequency), its delay's taps -- the delays, the pitch shifters,
+    # the ring modulator, a multi's delay (gsdelay's law, vectorised over the
+    # note's partials) -- and its chorus or flanger's voices (chorus.gs_copies's
+    # law), each a copy stamped at its delay and let go at the note's end
+    # that much later (_mf104_reap). Set at note-on, as _chorus: a setting moved
+    # under a held note is heard from the next.
+    EFX_SLOT = "efx"
+    # A FLANGER'S FEEDBACK is sixteen passes of copies offline -- 40,000-57,000
+    # rows for one six-note chord, 4-6 ms a block on the GPU against 2.7. In
+    # the partial domain that loop IS a moving comb on each partial (efxfilter
+    # type 4), which the live filter step gives it; until then, its first pass.
+    EFX_CF_PASSES = 1
+    # COPIES DUE LATER ARE PLACED LATER: those starting within EFX_NEAR blocks
+    # of the press are stamped with it; the rest queue and are stamped ahead
+    # of their onsets at EFX_ROWS rows a block, so a chord's echoes do not all
+    # land on the block that struck it
+    EFX_NEAR = 4
+    EFX_ROWS = 3000
+
+    def _efx_for(self, ch):
+        """The chain channel ch hears now, cached by the EFX's revision."""
+        if ch not in self.efx_parts:
+            return None
+        if getattr(self, "_efx_cache", (None,))[0] != self.efx_rev:
+            self._efx_cache = (self.efx_rev, _GSX.chain(self.efx))
+        return self._efx_cache[1]
+
+    @staticmethod
+    def _efx_share(ex):
+        """The chorus or flanger's wet share: a chorus type's Balance, else
+        its CF Mix as the system chorus's send is taken (gsefx.mix_share)."""
+        if ex.get('cf_share') is not None:
+            return float(ex['cf_share'])
+        a = float(ex['cf'][1])
+        return a * a / (1.0 + a * a)
+
+    def _efx_direct(self, ex, slots):
+        a = self.slab.a
+        idx = np.fromiter(slots, np.int64, len(slots))
+        f = a["om"][idx].astype(np.float64) * self.rate / (2.0 * math.pi)
+        g = np.full(len(idx), float(ex['level']))
+        if ex.get('eq') is not None:
+            g *= _GSX.eq_gain(f, ex['eq'])
+        if ex.get('cf') is not None:                 # the chorus's dry share
+            g *= (1.0 - self._efx_share(ex)) ** 0.5
+        self.slab.channel_gain(slots, g.astype(np.float32))
+
+    @staticmethod
+    def _side_cc(side):
+        """An output's side (gsdelay's 'c'/'l'/'r', a pan -1..1, ('deg', a))
+        as a CC10 on the +-30 degree stage."""
+        if side == 'l':
+            return 0
+        if side == 'r':
+            return 127
+        if isinstance(side, tuple):
+            x = max(-1.0, min(1.0, side[1] / 30.0))
+        elif isinstance(side, (int, float)):
+            x = max(-1.0, min(1.0, float(side)))
+        else:
+            return T.GM_DEFAULT_PAN
+        return int(round(64 + 63 * x))
+
+    def _efx_taps(self, ex, f, rel, snd):
+        """[(tag, delay samples, gain per partial, ratio per partial, side,
+        (vd, vr, phase) or None)]: every copy the note's EFX makes."""
+        P = len(f)
+        out = []
+        dev = ex.get('dly')
+        if dev is not None:
+            fb = dev['fb']
+            g0 = dev['level'] * (1.0 / np.sqrt(1.0 + (f / dev['lpf']) ** 2) if dev['lpf'] else np.ones(P))
+            cross = dev.get('cross')
+            for j, tap in enumerate(dev['taps']):
+                tau, lv, side = tap[0], tap[1], tap[2]
+                period = tap[3] if len(tap) > 3 else dev['tc']
+                for k in range(_GSD.MAX_REPEATS):
+                    if k and fb == 0.0:
+                        break
+                    g = g0 * lv * (fb ** k if k else 1.0)
+                    m = (np.abs(g) * rel >= _GSD.REPEAT_FLOOR) & snd
+                    if not m.any():
+                        break
+                    sd = side if not (cross and k % 2) else {'l': 'r', 'r': 'l'}.get(side, side)
+                    r = tap[4] ** (k + 1) if len(tap) > 4 else 1.0
+                    if len(tap) > 5:           # a ring modulator's: f * ratio + Hz
+                        fr = f * r + tap[5]
+                        m &= fr != 0.0
+                        ratio = np.abs(fr) / np.maximum(f, 1e-9)
+                    else:
+                        ratio = np.full(P, r)
+                    vib = None
+                    if dev.get('mod'):
+                        mr, mswing, mph = dev['mod']
+                        vib = (min(0.5, 2.0 * math.pi * mr * mswing), mr, mph if sd == 'r' else 0.0)
+                    out.append(("d%d_%d" % (j, k), int(round((tau + k * period) * self.rate)),
+                                np.where(m, g, 0.0), ratio, sd, vib))
+        if ex.get('cf') is not None:
+            cdev = ex['cf'][0]
+            sh = self._efx_share(ex)
+            if sh > 0.0:
+                fb2 = cdev['fb'] ** 2
+                passes = ((1.0 - fb2 ** _CHR.GS_MAX_PASSES) / (1.0 - fb2) if fb2 < 1.0
+                          else float(_CHR.GS_MAX_PASSES))
+                taps = cdev.get('taps') or _CHR.GS_TAPS
+                wet = (sh / float(len(taps)) / passes) ** 0.5
+                lp = (1.0 if not cdev['lpf'] else 1.0 / np.sqrt(1.0 + (f / cdev['lpf']) ** 2))
+                for ti, tap in enumerate(taps):
+                    side, phase = tap[0], tap[1]
+                    extra = tap[2] if len(tap) > 2 else 0.0
+                    dfac = tap[3] if len(tap) > 3 else 1.0
+                    for k in range(1, self.EFX_CF_PASSES + 1):
+                        g = wet * cdev['fb'] ** (k - 1)
+                        if abs(g) < _CHR.FLOOR * 0.5 or (k > 1 and cdev['fb'] == 0.0):
+                            break
+                        out.append(("c%d_%d" % (ti, k), int(round((k * cdev['tau'] + extra) * self.rate)),
+                                    np.where(snd, g * lp, 0.0), np.ones(P), side,
+                                    (min(0.5, k * cdev['vd'] * dfac), cdev['rate'], phase)))
+        return out
+
+    def _efx_tmpl(self, ex, tmpl):
+        """THE NOTE'S COPIES, READY TO STAMP -- built once per template and
+        EFX setting, and referenced by every press after: the template's rows
+        each copy takes, its tap delay in `rdl` (the column a room image's
+        extra path rides: the stamp starts the copy that much late and
+        Slab.release ends it that much late, as the file has them), its gain
+        and EQ in its amplitudes, its pitch ratio in om with the phase
+        anchored where the file anchors it, the note's own vibrato delayed
+        with it -- what is left for the press is one stamp, a pan per output,
+        the free LFOs' phases and the bend."""
+        ck = (id(tmpl), self.efx_rev)
+        c = self._efx_tc.get(ck)
+        if c is not None:
+            return c
+        if len(self._efx_tc) > 512 or self._efx_tc_rev != self.efx_rev:
+            self._efx_tc.clear()
+            self._efx_tc_rev = self.efx_rev
+        P = int(tmpl["P"])
+        om_t = np.asarray(tmpl["om"], np.float64)
+        f = om_t * self.rate / (2.0 * math.pi)
+        lvl = np.maximum(np.abs(tmpl["aL"]), np.abs(tmpl["aR"])).astype(np.float64)
+        rel = lvl / lvl.max() if lvl.max() > 0.0 else lvl
+        snd = lvl > 0.0
+        R, D, G, RT, SC, VB = [], [], [], [], [], []
+        for _tag, d, g, ratio, side, vib in self._efx_taps(ex, f, rel, snd):
+            r = np.flatnonzero(g != 0.0)
+            if not len(r):
+                continue
+            R.append(r); D.append(np.full(len(r), d, np.int64)); G.append(g[r]); RT.append(ratio[r])
+            SC.append(np.full(len(r), self._side_cc(side), np.int64))
+            VB.append(np.repeat(np.array([vib if vib is not None else (np.nan, 0.0, 0.0)]), len(r), 0))
+        if not R:
+            self._efx_tc[ck] = c = dict(n=0)
+            return c
+        R = np.concatenate(R); D = np.concatenate(D); G = np.concatenate(G)
+        RT = np.concatenate(RT); SC = np.concatenate(SC); VB = np.concatenate(VB)
+        n = len(R)
+        sub = {k: (v[R] if isinstance(v, np.ndarray) and v.shape[:1] == (P,) else v) for k, v in tmpl.items()}
+        sub["P"] = n
+        sub["scatter_ms"] = 0.0
+        rd0 = np.asarray(tmpl["rdl"])[R] if "rdl" in tmpl else np.zeros(n)
+        sub["rdl"] = (rd0 + D).astype(np.asarray(sub.get("rdl", rd0)).dtype)
+        gain = float(ex['level']) * G * (_GSX.eq_gain(f[R] * RT, ex['eq']) if ex.get('eq') is not None else 1.0)
+        for k in ("aL", "aR"):
+            sub[k] = (np.asarray(sub[k], np.float64) * gain).astype(np.asarray(tmpl[k]).dtype)
+        # the pitch ratio, the copy's phase at its onset the source's at its own
+        om1 = om_t[R] * RT
+        non_t = np.asarray(tmpl["non"], np.float64)[R]
+        for pk, dk in (("p0", "delL"), ("p0R", "delR")):
+            ph0 = np.asarray(tmpl[pk], np.float64)[R] + om_t[R] * (non_t + np.asarray(tmpl[dk], np.float64)[R])
+            sub[pk] = (-om1 * (non_t + np.asarray(tmpl[dk], np.float64)[R]) + ph0).astype(np.asarray(tmpl[pk]).dtype)
+        sub["om"] = om1.astype(np.asarray(tmpl["om"]).dtype)
+        tpi = 2.0 * math.pi
+        lfo = ~np.isnan(VB[:, 0])
+        vd = np.asarray(sub["vd"], np.float64).copy(); vr = np.asarray(sub["vr"], np.float64).copy()
+        vp = np.asarray(sub["vp"], np.float64).copy()
+        vd[lfo] = VB[lfo, 0]; vr[lfo] = VB[lfo, 1]
+        dv = ~lfo & (D > 0)
+        vp[dv] -= tpi * vr[dv] * D[dv] / self.rate        # the note's own vibrato, delayed
+        for k, v in (("vd", vd), ("vr", vr), ("vp", vp)):
+            sub[k] = v.astype(np.asarray(tmpl[k]).dtype)
+        def chunk(m):
+            """The rows m of the copies, as a template of their own."""
+            ix = np.flatnonzero(m)
+            if not len(ix):
+                return None
+            cs = {k: (v[ix] if isinstance(v, np.ndarray) and v.shape[:1] == (n,) else v) for k, v in sub.items()}
+            cs["P"] = len(ix)
+            sc, lf = SC[ix], lfo[ix]
+            return dict(n=len(ix), sub=cs, d0=int(D[ix].min()),
+                        sides=[(int(cc), np.flatnonzero(sc == cc)) for cc in np.unique(sc) if cc != T.GM_DEFAULT_PAN],
+                        lfo=np.flatnonzero(lf), lfo_r=VB[ix][lf, 1], lfo_ph=VB[ix][lf, 2])
+        near = D < self.EFX_NEAR * self.frames
+        c = dict(n=n, near=chunk(near), far=chunk(~near))
+        self._efx_tc[ck] = c
+        return c
+
+    def _efx_place(self, ch_, ckey, on, scale, n0, b):
+        """Stamp one chunk of a note's copies (_efx_tmpl) at the note's onset
+        `on`: its pans, its LFOs' phases on the file's clock, the note's bend.
+        False if the slab is full."""
+        sub = ch_["sub"]
+        if not self.slab.stamp_cols(sub, ch_["n"], ckey, on, scale, sub["hrel"], sub.get("dur", 0),
+                                    sub.get("oneshot")):
+            self.dropped += 1
+            return False
+        a = self.slab.a
+        cs = list(self.slab.last_slots)
+        ci = np.asarray(cs, np.int64)
+        for cc, pos in ch_["sides"]:                    # each output's side
+            self.slab.repan([cs[k] for k in pos], cc, T.GM_DEFAULT_PAN, self.rate, itd=True)
+        if len(ch_["lfo"]):                             # the line's LFO, free-running
+            li = ci[ch_["lfo"]]
+            a["vp"][li] = ((2.0 * math.pi * ch_["lfo_r"] * a["non"][li].astype(np.float64) / self.rate
+                            + ch_["lfo_ph"]) % (2.0 * math.pi))
+        if b and b != 1.0:
+            self.slab.retune(cs, n0, om_scale=b)
+        return True
+
+    def _efx_copies(self, ex, part, ch, note, tmpl, key, slots, scale, n0, b):
+        c = self._efx_tmpl(ex, tmpl)
+        if not c["n"]:
+            return
+        a = self.slab.a
+        idx0 = np.fromiter(slots, np.int64, len(slots))
+        on = int((a["non"][idx0] - a["rdl"][idx0]).min())
+        dr = np.flatnonzero(a["rdl"][idx0] == 0)
+        direct = int(idx0[dr[0]]) if len(dr) else int(idx0[0])
+        group = []
+        if c["near"] is not None:
+            ckey = (part.pid, ch, note, "%s_%d" % (self.EFX_SLOT, n0))
+            if self._efx_place(c["near"], ckey, on, scale, n0, b):
+                group.append((ckey, 0))
+        if c["far"] is not None:
+            fkey = (part.pid, ch, note, "%sf_%d" % (self.EFX_SLOT, n0))
+            self._efx_q.append((key, fkey, c["far"], on, scale, b, direct))
+        if group:
+            self.mf104_groups.append((key, direct, group))
+
+    def _efx_drain(self, n0):
+        """The queued copies (EFX_NEAR), stamped ahead of their onsets --
+        EFX_ROWS rows a block -- each let go at once if its note already
+        was (the note's noff, plus each copy's own delay through rdl)."""
+        budget = self.EFX_ROWS
+        while self._efx_q and budget > 0:
+            key, fkey, ch_, on, scale, b, direct = self._efx_q[0]
+            if ch_["n"] > budget and budget < self.EFX_ROWS:
+                break                                   # the next block's
+            self._efx_q.popleft()
+            budget -= ch_["n"]
+            if not self._efx_place(ch_, fkey, on, scale, n0, b):
+                continue
+            if key in self.slab.live:
+                self.mf104_groups.append((key, direct, [(fkey, 0)]))
+            else:
+                off = int(self.slab.a["noff"][direct])
+                if off != IDLE:
+                    self.slab.release(fkey, off)
 
     def _mf104_reap(self, n0):
         """Each repeat ends where its note ended, its own delay later."""
@@ -7946,7 +8217,7 @@ class Live:
         """
         for k in [k for k in list(self.slab.live)
                   if k[3] not in ("amp", self.DRONE_SLOT)
-                  and not (isinstance(k[3], str) and k[3].startswith(self.MF104_SLOT))
+                  and not (isinstance(k[3], str) and k[3].startswith((self.MF104_SLOT, self.EFX_SLOT)))
                   and (k[1], k[2]) not in self.sost.get(k[1], ())
                   and (k[1], k[2]) not in self.down
                   and (k[1], k[2]) not in self.pedalled
@@ -8082,6 +8353,8 @@ class Live:
             self.sweep(n0)
             self._drone_reap(n0)
             self._mf104_reap(n0)
+            if self._efx_q:
+                self._efx_drain(n0)
             if self.scan_row:
                 self._scanner_block(n0, frame_count)
             if self.siren_st or self.siren_retire:
@@ -9334,6 +9607,42 @@ def selftest_gs(check):
               "  (%s; after the panel %s; after GS Reset %s)" % (_st1, _st2, _st3))
     finally:
         _le.shutdown()
+
+    # ...AND HEARD (Live._efx_copies): an EP note through the Stereo Delay --
+    # its repeats (copies stamped ahead of their onsets, each ending its own
+    # delay after the key) ring on where Thru has stopped, and every copy is
+    # let go; the Stereo-EQ's level on the note itself
+    def _ehear(ty, ex=(), nn=69):
+        _lv = Live(program=4, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            if ty:
+                for _ev in [('type', ty), ('part', 0, True)] + list(ex):
+                    _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            _lv.on_midi(_M("note_on", channel=0, note=nn, velocity=100)); _lv.apply(0)
+            _b = []
+            for _i in range(int(1.5 * 48000 / 128)):
+                if _i == int(0.15 * 48000 / 128):
+                    _lv.on_midi(_M("note_off", channel=0, note=nn, velocity=0))
+                _bb, _ = _lv.callback(None, 128, None, 0)
+                _b.append(np.frombuffer(_bb, np.float32))
+            for _i in range(int(6.0 * 48000 / 128)):
+                _lv.callback(None, 128, None, 0)
+            _left = _lv.slab.cap - len(_lv.slab.free)
+            return np.concatenate(_b).reshape(-1, 2).astype(float), _left
+        finally:
+            _lv.shutdown()
+    _er = lambda x, a, b: float(np.sqrt(np.mean(x[int(a * 48000):int(b * 48000)] ** 2))) + 1e-30
+    _h0, _ = _ehear(None)
+    _hd, _hl = _ehear((0x01, 0x50))
+    _h2, _ = _ehear(None, nn=45)
+    _hq, _ = _ehear((0x01, 0x00), [('param', 2, 0x40 - 12)], nn=45)   # Stereo-EQ's low -12 dB, on A2
+    _rep = 20 * np.log10(_er(_hd, 0.35, 0.8) / max(_er(_hd, 0.0, 0.14), 1e-30))
+    _q = 20 * np.log10(_er(_hq, 0.0, 0.14) / _er(_h2, 0.0, 0.14))
+    check("live: the Stereo Delay's repeats ring on after the key (stamped ahead, let go), the EQ on the note",
+          _er(_h0, 0.35, 0.8) < 1e-9 and _rep > -20.0 and _hl == 0 and _q < -3.0,
+          "  (repeats %+.1f dB of the note, Thru silent; %d slots held after 6 s; the EQ %+.1f dB)"
+          % (_rep, _hl, _q))
 
 
 def selftest(only=""):
