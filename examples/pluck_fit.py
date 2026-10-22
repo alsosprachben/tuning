@@ -67,9 +67,12 @@ VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoPrope
           "ukulele": (24, "UkuleleProperties", "ukulele"),
           # GS 120.12 Biwa Stroke on Hugh de Ferranti's satsuma biwa (PARADISEC
           # HDF1-SB33, CC BY-NC-SA 4.0 data, never committed; sources.md)
-          "biwa": (120, "BiwaProperties", "biwa")}
+          "biwa": (120, "BiwaProperties", "biwa"),
+          # GS 107.16 Kanoon on Baris Bozkurt's kanun (Freesound 211133, CC0):
+          # isolated notes across its chromatic range, one take
+          "kanun": (107, "KanunProperties", "kanun")}
 # the GS bank a voice is (a variation): CC0 before its program change
-BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8, "biwa": 12}
+BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8, "biwa": 12, "kanun": 16}
 BANK = 0
 NH = 24
 HOP, WIN = 0.1, 0.2
@@ -98,6 +101,8 @@ VOICE_OPTS = {"mandolin": dict(T_END=3.0),
                                # it share one table (bent to the take's pitch,
                                # the played note left the open strings behind)
                                TUNER="hybrid440:443.92"),
+              # its notes ~2.4 s apart: read to 2 s
+              "kanun": dict(T_END=2.0, NH=16),
               # its strokes ring 0.3 s and more before the next, as the shamisen's
               "biwa": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3, P_SECS=0.3,
                            PROMPT_X0=(30.0, 0.15, 6000.0),
@@ -824,7 +829,11 @@ def main(argv):
                 # string, no key down?), so its fundamental is not the note's
                 skip=("Mic_G4_",))
         else:
-            if voice == "biwa":
+            if voice == "kanun":
+                stage_live("bz", os.path.expanduser(
+                    "~/Documents/refs/freesound/kanun/211133__barisbozkurt__kanun_moderate_chromatic_moreisolated.mp3"),
+                    min_next=0.8, lo=80, hi=2600)
+            elif voice == "biwa":
                 # side A's first 8:50 (the rest is blank tape); its lowest
                 # string is A2, 110 Hz
                 stage_live("sb", os.path.expanduser(

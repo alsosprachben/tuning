@@ -1539,6 +1539,21 @@ VARIATIONS[(124, 10)] = PhonoNoiseProperties
 VARIATION_NAMES[(124, 10)] = "Phono Noise"
 VARIATION_TRIM_DB[(124, 10)] = PROGRAM_TRIM_DB.get(126, 0.0)
 
+# KANOON: the kanun (tonelib.KanunProperties), fitted to Baris Bozkurt's
+# isolated notes (Freesound 211133, CC0) -- at the koto's trim, the zither it
+# starts from
+from tonelib import KanunProperties
+VARIATIONS[(107, 16)] = KanunProperties
+VARIATION_NAMES[(107, 16)] = "Kanoon"
+VARIATION_TRIM_DB[(107, 16)] = PROGRAM_TRIM_DB.get(107, 0.0)
+
+# RAMA CYMBAL: the Balinese ceng-ceng (tonelib.CengCengProperties), fitted to
+# the UNT gamelan's open strikes (Freesound pack 12954, CC0), at the kit's trim
+from tonelib import CengCengProperties
+VARIATIONS[(112, 16)] = CengCengProperties
+VARIATION_NAMES[(112, 16)] = "RAMA Cymbal"
+VARIATION_TRIM_DB[(112, 16)] = KIT_TRIM_DB
+
 # THE MELLOTRON (tonelib.MellotronMixin): a program's own router, each class
 # it picks on tape -- the run-out, no touch, each key's own tuning, one
 # capstan's wow -- with the tape's colour as settings

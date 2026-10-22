@@ -17510,6 +17510,62 @@ class BirdTweetProperties(MetalPercussionProperties):
         # the trill's notes level: each chirp at the written pitch
         return [(self.chirp_gain, 0.0, 0.0, harmonic_decay, 0.0) for _ in self.chirp_taps]
 
+class CengCengProperties(CrashCymbal1Properties):
+    """GS 112.16 "RAMA Cymbal": small cup cymbals of the Balinese gamelan, the
+    ceng-ceng -- struck open and left to ring, as a gamelan's accents are.
+    From the crash's plate (a cymbal is a cymbal; these are small, thick and
+    bright), its ring, bloom and colour FITTED to the University of North
+    Texas gamelan Bwana Kumala's open strikes (cpolcyn, Freesound pack
+    12954, CC0; examples/rama_fit.py), on crash_fit's grid of octave bands by
+    time. (Their damped strokes, the gamelan's closed "cak", are not this
+    tone: Sound Canvas files hold it 0.29 s and let it ring.)
+
+    FITTED on the SINGLE ringing strikes only (rama_fit.py --fit: 04, 05,
+    10): three of the pack's files are patterns of strikes, and fitted as
+    one stroke they held the ring 15-20 s (Ben: "decaying way too long").
+    4.8 dB rms on the grid: a ring peaking near 3.6 kHz, its aftersound 18
+    per cent falling 41 dB/s -- gone in about a second -- the plate's bloom
+    over 7.8 kHz."""
+    ring_peak_hz = 3565.0
+    ring_decay_floor = 23.72
+    ring_decay_below = 11.68
+    ring_decay_above = 6.988
+    aftersound_fraction = 0.178
+    aftersound_dbs = 40.67
+    bloom_gain = 5.322
+    bloom_seconds = 0.04524
+    bloom_center_hz = 7795.0
+    bloom_octaves = 1.504
+    bloom_swell = 1.125
+    bloom_gain_slope = 0.7677
+    chiff_volume = 3.55
+    chiff_width = 0.3151
+    band_trim_db = ((354, 9.5), (707, -4.1), (1414, -5.7), (2828, -0.2), (5657, -2.5), (11314, 2.9))
+    # THE CHATTER (Ben: "a multiple clash at the beginning, almost like
+    # sleigh bells"): a ceng-ceng is SEVERAL small cymbals on a stand, struck
+    # with a pair in the hands, so one stroke is a cluster -- 14-17 sub-hits in
+    # its first 120 ms, one every 5-8 ms, falling 0 to -15 dB (rama_fit's
+    # strokes, the 5-16 kHz envelope at 1 ms). Over the one plate fitted
+    # above: strike_flam bursts of noise in the chatter's own spectrum (the
+    # strokes' first 100 ms), each dying in ~5 ms, at levels within 15 dB,
+    # their level re the ring strike_noise_cal_db -- set on the texture, the
+    # grid's 10 ms windows being blind to it: the 5-16 kHz envelope's flicker
+    # (1 ms, about a 15 ms trend) over 10-110 ms, the strokes' 1.5-1.9 dB, ours
+    # 1.3 without the chatter, 1.65 at +3 dB -- and taken to +10 by Ben's
+    # ear, between the measured take and one exaggerated to show it
+    strike_noise_db = ((400, -23.5), (504, -27.8), (635, -27.2), (800, -24.7), (1008, -24.6), (1270, -16.9),
+                       (1600, -10.2), (2016, -11.9), (2540, -5.3), (3200, -4.4), (4032, -2.3), (5080, -6.5),
+                       (6400, -7.5), (8063, -0.7), (10159, 0.0), (12800, -5.3), (16127, -9.1))
+    strike_noise_dbs = 3000.0
+    strike_noise_fade_s = 0.0003
+    strike_noise_len_s = 0.01
+    strike_noise_octave_db = 0.0
+    strike_flam = 15
+    strike_flam_s = 0.11
+    strike_flam_db = 15.0
+    strike_noise_cal_db = 10.0
+
+
 class ReverseCymbalProperties(CrashCymbal1Properties):
     """GM 119. The fitted crash (CrashCymbal1Properties: 300 modes from Iowa,
     refitted to DRSKit) PLAYED BACKWARDS -- which is what GM's reverse cymbal
@@ -19928,6 +19984,82 @@ class BiwaProperties(PromptDecay, FormantBody, PluckedStringProperties):
     decay_register_slope = 0.6748
     max_harmonic = 96
     initial_gain = 0.032913 * 10 ** (6.989 / 20.0)
+
+
+class KanunProperties(FormantBody, PluckedStringProperties):
+    """GS 107.16 "Kanoon": the kanun (qanun), the Turkish and Arabic
+    trapezoidal zither -- COURSES OF THREE STRINGS over a wooden box, the
+    bridge standing on a skin, plucked with picks (mizrap) on both index
+    fingers. Built from the koto, a plucked zither over a wooden box, without
+    the koto's own tuned strings; its body, decay and top FITTED to Baris
+    Bozkurt's isolated notes (Freesound 211133, CC0; examples/pluck_fit.py
+    --voice=kanun).
+
+    THREE STRINGS A COURSE, a little apart: the two others each a ratio off
+    the note (a mistuned string is off by a ratio, so its partials beat
+    faster up the series), within KANUN_COURSE_CENTS, drawn per note from its
+    pitch so a course is the same course every time it is played."""
+    release_valve_time = 1.046
+    release_fraction_max = None
+    # THE BODY IS ITS FITTED TRIM (body_trim_db, --fit=body), over a floor of
+    # 1 under an open top: the koto's box (formants at 280 and 900 Hz, its top
+    # at 3.2 kHz) left the take's 5-13 kHz 30-57 dB short -- the picks' brightness
+    formant_floor = 1.0
+    bore_corner_hz = 12000.0
+    bore_order = 2.0
+    body_trim_db = ((202, -24.0), (254, -19.3), (320, -22.5), (403, -23.4), (508, -13.8), (640, -11.2),
+                    (806, 3.1), (1016, -6.9), (1280, -5.4), (1613, 4.2), (2032, -0.0), (2560, 0.0),
+                    (3225, -5.0), (4064, -5.2), (5120, -9.1), (6451, -18.6), (8127, -24.0), (10240, -22.1))
+    # (refitted on the measured inharmonicity and the whole-curve decay below:
+    # 250 Hz-13 kHz within about 3 dB of the take, miss 4.9 dB; under 250 Hz at
+    # the fit's -24 dB stop, the take's lowest notes thin -- its instrument's or
+    # its microphone's)
+    # the mizrap plucks near the bridge: bright
+    strike_point = 0.1
+    # ...and its PICK'S NOISE: the koto's strike table moved up an octave and
+    # raised 4-6 kHz -- with 40 harmonics the take's 10-13 kHz stood 30-55 dB
+    # over ours; with 96 most of it was harmonics, and the pick's top was set
+    # back 15 dB over 6 kHz where it overshot
+    strike_noise_db = ((314, -58.2), (396, -41.0), (499, -22.0), (629, -20.1), (792, -29.7), (998, -22.1),
+                       (1257, -27.8), (1584, -14.3), (1996, -18.1), (2514, -15.3), (3168, -19.1),
+                       (3991, -18.8), (5029, -16.1), (6336, -14.8), (7982, -24.0), (10057, -24.6),
+                       (12671, -26.2), (15963, -31.0))
+    strike_noise_dbs = 250.0
+    strike_noise_fade_s = 0.002
+    strike_depth = 0.0
+    strike_fills_with_force = False
+    # LOOSER THAN A KOTO (Ben: "more inharmonicity, like a guitar"), and
+    # measured so: the take's partials, h1-h16 of 28 notes, fitted to
+    # f_n = n f1 sqrt(1 + B n^2) -- B 7.1e-5 under 400 Hz, 1.2e-4 over (its
+    # strings shorter), median 7.9e-5, where the koto's is 6e-6; the 16th
+    # partial 8-17 cents sharp
+    inharmonicity_coefficient = 7.9e-05
+    inharmonicity_dynamic = False
+    # THE DECAY, BY THE NOTE'S WHOLE CURVE: --fit=decay (each harmonic's
+    # slope, 0.3-2 s) gave decay_db 1.96 and harmonic_decay_db 12.7, and the
+    # note then fell 15-28 dB further than the take's in its first second --
+    # "the decay seems too quick" (Ben). Set on the broadband level, re the
+    # peak, of the notes held 2.3 s and more, re-set on the refitted body:
+    # -14.6/-20.1/-28.7 dB at 0.25/0.5/1 s against the take's -12.6/-20.1/
+    # -28.9, ringing on longer after 1.5 s (-35 at 1.5 s, the take's -45)
+    decay_db = 5.0
+    harmonic_decay_db = 4.0
+    harmonic_decay_dampening = 0.0
+    decay_register_slope = 2.314
+    tonal_dampening = 0.40
+    octave_dampening = -0.70
+    max_harmonic = 96
+    # three strings, not one: the koto's level less the course's 4.8 dB
+    initial_gain = 0.0411004 / 3 ** 0.5
+    attack_time = 0.002
+    course_cents = (1.0, 4.0)
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        rng = _random.Random(0x6A2B0 + midi)
+        lo, hi = self.course_cents
+        cs = (rng.uniform(lo, hi), -rng.uniform(lo, hi))
+        return [(1.0, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, 0.0) for c in cs]
 
 
 class KotoProperties(FormantBody, PluckedStringProperties):
