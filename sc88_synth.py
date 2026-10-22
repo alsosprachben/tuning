@@ -198,6 +198,42 @@ SC88_SYNTH = {
     (102, 6): ("Water Piano", "MoogEchoesFX",
                dict(mod_dest=0, mod_amount=0.58, a_decay=0.5, a_sustain=0.2)),
     (103, 1): ("StarTheme 2", "MoogSciFiFX", dict(lfo1_rate=0.55, resonance=0.5)),
+    # --- THE SC-88Pro MAP'S, that our GS files play (gs_maps.py; the notes
+    # each file gives the tone in brackets) -------------------------------
+    # a square lead with a resonant edge and a little glide (storm_pro, 429)
+    (80, 10): ("KG Lead", "MoogSquareLead",
+               dict(osc2_level=0.7, osc2_wave=SQ, osc2_freq=c(7), sub_level=0.0, cutoff=0.65,
+                    resonance=0.35, glide=0.08)),
+    # a Prophet-5's two squares, a touch apart, its contour closing to half (River, 15)
+    (80, 16): ("P5 Square", "MoogSquareLead",
+               dict(osc2_level=0.8, osc2_wave=SQ, osc2_freq=c(6), sub_level=0.0, cutoff=0.66,
+                    resonance=0.15, f_decay=0.3, f_sustain=0.5)),
+    # an SH-101: one saw and its square sub, a snappy resonant contour (SuwaFF, 1216)
+    (81, 29): ("SH-101 Saw", "MoogSawLead",
+               dict(osc2_level=0.0, sub_level=0.4, cutoff=0.62, resonance=0.3, eg_amount=0.75,
+                    f_decay=0.25, f_sustain=0.35)),
+    # a Juno's saw and pulse, the pulse's width swept by the LFO, detuned (SuwaFF, storm_pro: 2177)
+    (87, 3): ("JUNO Rave", "MoogBassLead",
+              dict(osc1_wave=SAW, osc2_wave=SQ, osc2_octave=8, osc2_freq=c(18), sub_level=0.3,
+                   lfo1_dest=2, lfo1_depth=0.75, lfo1_rate=0.55, cutoff=0.66, resonance=0.2)),
+    # the new-age pad's swell with an FM bell on its front (River, 40)
+    (88, 3): ("Bell Heaven", "MoogNewAgePad",
+              dict(mod_dest=0, mod_amount=0.6, a_decay=0.6, a_sustain=0.4)),
+    # stacked saws, an octave over them, a sub under (SuwaFF, 1056)
+    (90, 8): ("Power Stack", "MoogPolysynthPad",
+              dict(osc1_wave=SAW, osc2_wave=SAW, osc2_octave=4, osc2_freq=c(8), sub_level=0.5,
+                   cutoff=0.66, resonance=0.15)),
+    # an Oberheim's two saws as a stab: a punch of filter, a short body (storm_pro, 1066)
+    (100, 2): ("OB Stab", "MoogBrightnessFX",
+               dict(osc2_freq=c(12), cutoff=0.55, eg_amount=0.8, f_decay=0.2, f_sustain=0.3,
+                    a_attack=0.0, a_decay=0.3, a_sustain=0.2, a_release=0.15)),
+    # the synth drum's falling tone without its noise, closed down nearer a sine (storm_pro, 216)
+    (118, 10): ("Sine Perc.", "MoogSynthDrum",
+                dict(noise_level=0.0, cutoff=0.5, resonance=0.0, a_decay=0.4)),
+    # a resonant spike on a fast contour (River, 180)
+    (39, 21): ("Spike Bass", "MoogSynthBass2",
+               dict(osc1_wave=SAW, sub_level=0.4, cutoff=0.45, resonance=0.55, eg_amount=0.85,
+                    f_decay=0.1, f_sustain=0.1)),
 }
 
 

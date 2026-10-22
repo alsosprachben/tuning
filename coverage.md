@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 137 of the SC-55's 137 are built,
+under a program (SC-55 owner's manual p.68). 146 of the SC-55's 146 are built,
 and 83 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -770,6 +770,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 39.17 | SC-55 | SH101Bass 1 | `Sc88_39_17` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, f_decay, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 39.18 | SC-55 | SH101Bass 2 | `Sc88_39_18` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, f_decay, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 39.19 | SC-55 | Smooth Bass | `Sc88_39_19` | **3** | SC-88 map: a Moog panel, the SynthBass2's with a_attack, cutoff, eg_amount, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 39.21 | SC-55 | Spike Bass | `Sc88_39_21` | **3** | SC-88 map: a Moog panel, the SynthBass2's with cutoff, eg_amount, f_decay, f_sustain, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 45.16 | SC-88 | Solo Spic. | `Violin_sc88_45_16` | **4** | SC-88 map: GM 40 Violin with section_players=1, one_shot=True, gate_time=0.04, release_valve_time=0.12, attack_time=0.012, speech_cycles=0.0 |
 | 48.1 | SC-88 | Bright Str: | `Violin_sc88_48_1` | **4** | SC-88 map: GM 48 String Ensemble 1 with bore_corner_hz=4500.0 |
 | 48.2 | SC-88 | ChamberStr: | `Violin_sc88_48_2` | **4** | SC-88 map: GM 48 String Ensemble 1 with section_players=2, section_width_m=0.8 |
@@ -802,6 +803,8 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 80.5 | SC-55 | Shmoog | `Sc88_80_5` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, glide, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.6 | SC-55 | LM Square | `Sc88_80_6` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, osc1_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.8 | SC-55 | Sine Wave | `Sc88_80_8` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, eg_amount, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 80.10 | SC-55 | KG Lead | `Sc88_80_10` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, glide, osc2_freq, osc2_level, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 80.16 | SC-55 | P5 Square | `Sc88_80_16` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, f_decay, f_sustain, osc2_freq, osc2_level, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.1 | SC-55 | Saw | `Sc88_81_1` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, eg_amount, osc2_level, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.2 | SC-55 | Pulse Saw | `Sc88_81_2` | **3** | SC-88 map: a Moog panel, the SawLead's with osc2_freq, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.3 | SC-55 | Feline GR | `Sc88_81_3` | **3** | SC-88 map: a Moog panel, the SawLead's with eg_amount, f_decay, f_sustain, glide, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -811,18 +814,22 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 81.7 | SC-55 | LA Saw | `Sc88_81_7` | **3** | SC-88 map: a Moog panel, the SawLead's with eg_amount, f_decay, noise_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.8 | SC-55 | Doctor Solo | `Sc88_81_8` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, lfo1_depth, lfo1_dest, lfo1_rate changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 81.16 | SC-55 | Waspy Synth | `Sc88_81_16` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, osc2_freq, resonance, sync changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 81.29 | SC-55 | SH-101 Saw | `Sc88_81_29` | **3** | SC-88 map: a Moog panel, the SawLead's with cutoff, eg_amount, f_decay, f_sustain, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 82.1 | SC-55 | Vent Synth | `Sc88_82_1` | **3** | SC-88 map: a Moog panel, the CalliopeLead's with cutoff, noise_level, osc1_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 82.2 | SC-55 | PurePanLead | `Sc88_82_2` | **3** | SC-88 map: a Moog panel, the CalliopeLead's with a_attack, cutoff, noise_level, osc1_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 84.8 | SC-55 | Dist.Lead | `Sc88_84_8` | **3** | SC-88 map: a Moog panel, the CharangLead's with cutoff, osc1_wave, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 86.1 | SC-55 | Big Fives | `Sc88_86_1` | **3** | SC-88 map: a Moog panel, the FifthsLead's with cutoff, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 87.1 | SC-55 | Big & Raw | `Sc88_87_1` | **3** | SC-88 map: a Moog panel, the BassLead's with cutoff, osc1_wave, osc2_octave, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 87.2 | SC-55 | Fat & Perky | `Sc88_87_2` | **3** | SC-88 map: a Moog panel, the BassLead's with eg_amount, f_decay, osc1_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 87.3 | SC-55 | JUNO Rave | `Sc88_87_3` | **3** | SC-88 map: a Moog panel, the BassLead's with cutoff, lfo1_depth, lfo1_dest, lfo1_rate, osc1_wave, osc2_freq, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 88.1 | SC-55 | Fantasia 2 | `Sc88_88_1` | **3** | SC-88 map: a Moog panel, the NewAgePad's with mf104_feedback, mf104_mix, mf104_on, mf104_time changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 88.3 | SC-55 | Bell Heaven | `Sc88_88_3` | **3** | SC-88 map: a Moog panel, the NewAgePad's with a_decay, a_sustain, mod_amount, mod_dest changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 89.1 | SC-55 | Thick Pad | `Sc88_89_1` | **3** | SC-88 map: a Moog panel, the WarmPad's with osc2_freq, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 89.2 | SC-55 | Horn Pad | `Sc88_89_2` | **3** | SC-88 map: a Moog panel, the WarmPad's with a_attack, cutoff, eg_amount, f_attack changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 89.3 | SC-55 | RotaryStrng | `Sc88_89_3` | **3** | SC-88 map: a Moog panel, the WarmPad's with cutoff, lfo1_depth, lfo1_dest, lfo1_rate changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 89.4 | SC-55 | Soft Pad | `Sc88_89_4` | **3** | SC-88 map: a Moog panel, the WarmPad's with a_attack, cutoff, f_attack changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 90.1 | SC-55 | 80'sPolySyn | `Sc88_90_1` | **3** | SC-88 map: a Moog panel, the PolysynthPad's with cutoff, eg_amount, f_decay, f_sustain, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 90.8 | SC-55 | Power Stack | `Sc88_90_8` | **3** | SC-88 map: a Moog panel, the PolysynthPad's with cutoff, osc1_wave, osc2_freq, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 91.1 | SC-55 | Heaven II | `Sc88_91_1` | **3** | SC-88 map: a Moog panel, the ChoirPad's with mf104_feedback, mf104_mix, mf104_on, mf104_time changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 93.1 | SC-55 | Tine Pad | `Sc88_93_1` | **3** | SC-88 map: a Moog panel, the MetallicPad's with a_decay, a_sustain changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 93.2 | SC-55 | Panner Pad | `Sc88_93_2` | **3** | SC-88 map: a Moog panel, the MetallicPad's with key_pan_spread, lfo1_depth, lfo1_dest, lfo1_rate changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -855,6 +862,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 99.4 | SC-55 | HollowRels. | `Sc88_99_4` | **3** | SC-88 map: a Moog panel, the AtmosphereFX's with a_release, osc1_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 99.5 | SC-88 | NylonRhodes | `NylonGuitar_sc88_99_5` | **4** | SC-88 map: layered: GM 24 -2 dB + GM 4 -3 dB |
 | 99.6 | SC-55 | Ambient Pad | `Sc88_99_6` | **3** | SC-88 map: a Moog panel, the AtmosphereFX's with a_attack, f_attack, mf104_mix, mf104_on, mf104_time changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
+| 100.2 | SC-55 | OB Stab | `Sc88_100_2` | **3** | SC-88 map: a Moog panel, the BrightnessFX's with a_attack, a_decay, a_release, a_sustain, cutoff, eg_amount, f_decay, f_sustain, osc2_freq changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 101.1 | SC-55 | Goblinson | `Sc88_101_1` | **3** | SC-88 map: a Moog panel, the GoblinsFX's with lfo1_rate changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 101.2 | SC-55 | 50's Sci-Fi | `Sc88_101_2` | **3** | SC-88 map: a Moog panel, the GoblinsFX's with cutoff, glide, lfo1_depth, lfo1_dest, lfo1_rate, osc1_level, osc2_level, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 102.1 | SC-55 | Echo Bell | `Sc88_102_1` | **3** | SC-88 map: a Moog panel, the EchoesFX's with a_decay, a_sustain, mod_amount, mod_dest, osc1_wave, osc2_wave changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -874,6 +882,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 117.9 | SC-88 | Rock Tom | `RoomTom_sfx45` | **4** | SC-88 map: set 16's key 45 from the keyboard |
 | 118.8 | SC-55 | 808 Tom | `TR808MidTom_sfx47` | **4** | set 25's key 47 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: as 45, 2 semitones higher (as 43) |
 | 118.9 | SC-88 | Elec Perc | `ElectronicTom45_sfx45` | **4** | SC-88 map: set 24's key 45 from the keyboard |
+| 118.10 | SC-55 | Sine Perc. | `Sc88_118_10` | **3** | SC-88 map: a Moog panel, the SynthDrum's with a_decay, cutoff, noise_level, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 119.1 | SC-88 | ReverseCym2 | `CrashCymbal2_sfx57_rev` | **4** | SC-88 map: set 0's key 57 from the keyboard, played backwards |
 | 119.8 | SC-88 | Rev.Snare 1 | `AcousticSnare_sfx38_rev` | **4** | SC-88 map: set 0's key 38 from the keyboard, played backwards |
 | 119.9 | SC-88 | Rev.Snare 2 | `SnareDrum2_sfx40_rev` | **4** | SC-88 map: set 0's key 40 from the keyboard, played backwards |
@@ -1069,8 +1078,8 @@ A later map can put another tone under a number we built; that one is not counte
 | SC-55 | 188 | 188 | 100% | 153 | 35 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
 | SC-88 | 418 | 343 | 82% | 227 | 116 | 0 | 0 | 0 | 75 |
-| SC-88Pro | 774 | 337 | 44% | 225 | 112 | 0 | 0 | 0 | 437 (11 another tone) |
-| SC-8850 | 1262 | 335 | 27% | 223 | 112 | 0 | 0 | 0 | 927 (13 another tone) |
+| SC-88Pro | 774 | 346 | 45% | 225 | 121 | 0 | 0 | 0 | 428 (11 another tone) |
+| SC-8850 | 1262 | 344 | 27% | 223 | 121 | 0 | 0 | 0 | 918 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1082,17 +1091,17 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Chromatic Percussion | 9/9 | 12/12 | 13/18 | 13/23 | 13/29 |
 | Organ | 12/12 | 16/16 | 28/30 | 23/49 | 23/71 |
 | Guitar | 16/16 | 17/19 | 22/34 | 23/55 | 23/72 |
-| Bass | 10/10 | 12/12 | 23/31 | 24/76 | 24/113 |
+| Bass | 10/10 | 12/12 | 23/31 | 25/76 | 25/113 |
 | Strings | 8/8 | 8/9 | 8/11 | 9/20 | 9/29 |
 | Ensemble | 10/10 | 10/11 | 21/29 | 22/63 | 22/134 |
 | Brass | 11/11 | 13/15 | 17/27 | 13/51 | 13/84 |
 | Reed | 8/8 | 8/8 | 8/11 | 8/20 | 8/23 |
 | Pipe | 8/8 | 8/8 | 8/9 | 9/22 | 9/27 |
-| Synth Lead | 8/8 | 12/12 | 30/30 | 30/80 | 30/131 |
-| Synth Pad | 8/8 | 8/8 | 21/21 | 21/43 | 21/83 |
-| Synth Effects | 8/8 | 11/11 | 42/42 | 42/76 | 42/122 |
+| Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
+| Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
+| Synth Effects | 8/8 | 11/11 | 42/42 | 43/76 | 43/122 |
 | Ethnic | 9/9 | 10/10 | 11/22 | 11/37 | 11/44 |
-| Percussive | 12/12 | 13/13 | 22/28 | 22/47 | 22/95 |
+| Percussive | 12/12 | 13/13 | 22/28 | 23/47 | 23/95 |
 | Sound Effects | 40/40 | 41/41 | 46/49 | 46/73 | 46/144 |
 
 ### The SC-88 map's 75 still to build, by what they take
