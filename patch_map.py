@@ -1159,7 +1159,8 @@ VARIATIONS[(61, 8)] = routed_variation(61, "brass2", detuned_pair=(-4.0, 4.0))
 # note into one event per layer before anything else sees it (so live's
 # templates, built through it, carry every layer), each event's program a
 # LayerProgram naming its layer. {(program, variation): ((routing program,
-# semitones, dB), ...)}
+# semitones, dB), ...)}; a routing program may be ("kit", key, set), a kit's
+# key, or ("set", program, {attrs}), a program's voice with settings (layer_class)
 LAYERED = {}
 
 
@@ -1180,14 +1181,21 @@ _LAYER_CLASSES = {}
 def layer_class(program, note):
     """The class of one layer of a layered variation at (its own) note."""
     spec = LAYERED[(int(program) & 0x7F, program.variation)][program.layer]
-    base = property_class_for_note(spec[0], note)
+    # a layer is a program's voice, ("kit", key, set): a kit's key played from
+    # the keyboard (melodic_sfx), C4 at its kit pitch, or ("set", program,
+    # {attrs}): the program's voice with those settings, as a "set" tone
+    src, attrs = spec[0], {}
+    if isinstance(src, tuple) and src[0] == "set":
+        src, attrs = src[1], dict(src[2])
+    base = (melodic_sfx(src[1], kit=src[2]) if isinstance(src, tuple)
+            else property_class_for_note(src, note))
     db = float(spec[2])
-    if not db:
+    if not db and not attrs:
         return base
-    k = (base, db)
+    k = (base, db, tuple(sorted(attrs.items())))
     if k not in _LAYER_CLASSES:
         _LAYER_CLASSES[k] = type("%s_layer%+g" % (base.__name__, db), (base,),
-                                 {"initial_gain": base.initial_gain * 10.0 ** (db / 20.0)})
+                                 dict(attrs, initial_gain=base.initial_gain * 10.0 ** (db / 20.0)))
     return _LAYER_CLASSES[k]
 
 
@@ -1365,6 +1373,20 @@ SC88_CHEAP = {
     # parts (tracks 21, 30, 31 at 3:28; examples/tone_ab.py)
     (30, 25): ("Rock Rhythm2", ("set", 30, palm_mute(1.0))),
     (48, 9): ("Orchestra 2", ("layer", ((48, 0, 0.0), (60, 0, -8.0)))),
+    # IMPACT HIT: the orchestra hit made heavier -- our timpani two octaves
+    # under it and the Orchestra set's Concert BD 1, 18 semitones down (the hits
+    # sit E4-B5, so the drum near its own pitch at C4) -- no Impact Hit in any GM
+    # set here to fit; voiced for Ben's ear: "needs bass drum, too", the
+    # timpani "could be louder" (-6 -> 0 dB); and on top a BRASS STAB -- the
+    # brass section struck sforzando and let go, one-shot, gated to 120 ms, at
+    # the hit's own pitch (D5-B5), -3 dB ("the piccolo is not a hit. It
+    # sustains"). EACH AT ITS OWN TRIM: a layered tone's notes all take the
+    # capital's (55's -12 dB), so each layer's dB carries its own trim less
+    # that -- the timpani's -2 (+10), the kit's -1.7 (+10.3), the brass
+    # section's +3.5 (+15.5); written as 0 dB they sat 10-16 dB under the
+    # hit, "didn't really hear much timpani" (Sorcerian, 87)
+    (55, 8): ("Impact Hit", ("layer", ((55, 0, 0.0), (47, -24, 10.0), (("kit", 36, 48), -18, 10.3),
+                                       (("set", 61, dict(one_shot=True, gate_time=0.12)), 0, 12.5)))),
     (48, 11): ("Choir Str.", ("layer", ((48, 0, 0.0), (52, 0, -4.0)))),
     (48, 16): ("St.Strings", ("set", 48, dict(key_pan_spread=WIDE))),
     (48, 24): ("VeloStrings", ("layer", ((49, 0, 0.0, 0, 90), (48, 0, 0.0, 91, 127)))),

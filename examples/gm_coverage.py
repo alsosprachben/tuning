@@ -762,10 +762,19 @@ def _sc88_var_rated():
             note = "GM %d %s with %s" % (how[1], names[how[1]], ", ".join(
                 "%s=%s" % (k, ("%#x" % v) if k == "default_stops" else v) for k, v in how[2].items()))
         else:
-            r = min(RATED[l[0]][0] for l in how[1])
-            note = "layered: " + " + ".join("GM %d%s%s%s" % (l[0], (" %+d st" % l[1]) if l[1] else "",
-                                                          (" %+.0f dB" % l[2]) if l[2] else "",
-                                                          (" vel %d-%d" % (l[3], l[4])) if len(l) > 3 else "")
+            # a layer is a GM program, ("kit", key, set) or ("set", program, {attrs})
+            def _lr(src):
+                if isinstance(src, tuple) and src[0] == "kit":
+                    kr = KIT_RATED.get(src[2], {}).get(src[1]) or PERC_RATED.get(src[1])
+                    return kr[0], "set %d's key %d" % (src[2], src[1])
+                if isinstance(src, tuple) and src[0] == "set":
+                    return RATED[src[1]][0], "GM %d with %s" % (src[1], ", ".join(
+                        "%s=%s" % kv for kv in src[2].items()))
+                return RATED[src][0], "GM %d" % src
+            r = min(_lr(l[0])[0] for l in how[1])
+            note = "layered: " + " + ".join("%s%s%s%s" % (_lr(l[0])[1], (" %+d st" % l[1]) if l[1] else "",
+                                                       (" %+.0f dB" % l[2]) if l[2] else "",
+                                                       (" vel %d-%d" % (l[3], l[4])) if len(l) > 3 else "")
                                             for l in how[1])
         VAR_RATED[(p, b)] = (r, whose + note)
     # ...AND ITS SYNTH TONES (sc88_synth.SC88_SYNTH): Moog panels, a 3 as the
