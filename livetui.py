@@ -2086,8 +2086,10 @@ class TUI:
                            ws["rate_lo"], ws["rate_hi"], ws["cc1"], ws["cc1_last"]),
                         C("cyan") if ws["wheel"] > 0 else C("dim"))
         bad = s["under"] + s["drop"] + s["err"] + s["miss"]
-        self.addstr(scr, y, 52, "under %d  drop %d  err %d  stuck %d  miss %d"
-                    % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"]),
+        self.addstr(scr, y, 52, "under %d  drop %d  err %d  stuck %d  miss %d%s"
+                    % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"],
+                       ("  efx %d cut %d" % (s.get("taps", 0), s.get("shed", 0)))
+                       if s.get("taps") or s.get("shed") else ""),
                     C("red") if bad else C("dim"))
         y += 1
 

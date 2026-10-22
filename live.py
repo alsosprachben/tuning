@@ -723,6 +723,7 @@ class Slab:
         self.tp = np.full(capacity, -1, np.int32)    # each slot's tap set (its channel's), -1 none
         self.tpx = np.zeros(capacity, np.int64)      # ...and its longest tap: the slot is held that much longer
         self.tap_m = 0                               # scratch rows written for this block
+        self.tap_cap = self.tcap                     # ...at most (the budget governor's: Live.callback)
         self.tap_lib = None
         self.tap_tab = None                          # the tap sets, flattened (Live._tap_tables)
         self.a = {}
@@ -1988,7 +1989,7 @@ class Slab:
             P(tab["hz"]), P(tab["al1"]), P(tab["ar1"]), P(tab["dl"]), P(tab["vd"]), P(tab["vr"]),
             P(tab["ph"]), P(a["re"]), C.c_double(_GSD.REPEAT_FLOOR), C.c_int64(n0), C.c_int64(n0 + frames),
             C.c_double(_PAN_BETA), C.c_double(float(B.SR)), C.c_int64(IDLE),
-            C.c_int64(self.cap), C.c_int(self.tcap))
+            C.c_int64(self.cap), C.c_int(min(self.tcap, self.tap_cap)))
         # rows left over from a busier block go quiet
         if m < self.tap_m:
             a["non"][self.cap + m:self.cap + self.tap_m] = IDLE
@@ -3620,6 +3621,7 @@ class Live:
         self.press_db = T.PRESS_DB      # one constant, shared with the file path
         self.press_tilt = T.PRESS_TILT
         self.underruns = 0
+        self.tap_shed = 0       # blocks the governor cut the effect's copies on
         self.dropped = 0
         self.errors = 0
         self.last_error = None
@@ -5725,7 +5727,8 @@ class Live:
                            e[6] if len(e) > 6 else _GSX.HIGH_SHELF_HZ])
                 for mf, q, mg in mids:
                     eq.extend([mf or 0.0, q or 1.0, mg or 0.0])
-            for D, g, fc, r, hz, side, vib in self._tap_list(ex):
+            # loudest first: a capped block (the governor's) keeps the loudest
+            for D, g, fc, r, hz, side, vib in sorted(self._tap_list(ex), key=lambda x: -abs(x[1])):
                 a1, r1, d1 = tab[self._side_cc(side)]
                 for k, v in (("D", D), ("g", g), ("fc", fc), ("r", r), ("hz", hz), ("al1", a1),
                              ("ar1", r1), ("dl", (d1 - d0) * self.rate),
@@ -8791,6 +8794,21 @@ class Live:
         # Layering makes overload reachable, and the drop counter only reports it
         # AFTER notes are already lost. This reports it before.
         self.render_ms = (time.perf_counter() - t0) * 1000.0
+        # THE BUDGET GOVERNOR. A block that takes longer than its slot is
+        # called again at once and never catches up -- and while the audio
+        # thread runs Python back to back the panel starves: the session
+        # hangs. The insertion effect's copies are the load that can give:
+        # over 85% of the slot, the next block writes 30% fewer of them (the
+        # quietest go first, every note alike: tapkernel.c's ranks); under
+        # 70%, they come back an eighth at a time.
+        _sl = self.slab
+        if _sl.tap_m or _sl.tap_cap < _sl.tcap:
+            _bud = 1000.0 * frame_count / float(self.rate)
+            if self.render_ms > 0.85 * _bud and _sl.tap_m:     # (no copies: nothing of theirs to cut)
+                _sl.tap_cap = int(min(_sl.tap_cap, _sl.tap_m) * 0.7)
+                self.tap_shed += 1
+            elif self.render_ms < 0.7 * _bud and _sl.tap_cap < _sl.tcap:
+                _sl.tap_cap = min(_sl.tcap, _sl.tap_cap + max(256, _sl.tap_cap // 8))
         # The first blocks after the stream opens cost several times the steady
         # state -- library warm-up and page faults -- so a max that included them
         # would sit permanently over budget and tell you nothing.
@@ -8869,6 +8887,7 @@ class Live:
                     used=self.slab.cap - len(self.slab.free), cap=self.slab.cap,
                     free=len(self.slab.free),
                     under=self.underruns, drop=self.dropped, err=self.errors,
+                    shed=self.tap_shed, taps=self.slab.tap_m,
                     stuck=self.stuck, miss=self.misses,
                     render_ms=self.render_ms, render_max=self.render_max,
                     threads=self.renderer.K, active=self.renderer.act,

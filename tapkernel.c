@@ -84,10 +84,19 @@ int tap_expand(int ncol, void** colp, const int* colsz,
         if (y > top) top = y;
     }
     double fl = floor * top;
+    /* RANK BY RANK -- every note's loudest tap, then every note's next (the
+       sets come loudest first: Live._tap_tables) -- so a cap (the budget's:
+       Live's governor) drops the quietest echoes everywhere, not one note's
+       whole effect */
+    int R = 0;
+    for (int i = 0; i < nsrc; i++)
+        if (set[i] >= 0 && ts[set[i] + 1] - ts[set[i]] > R)
+            R = ts[set[i] + 1] - ts[set[i]];
+    for (int rk = 0; rk < R; rk++)
     for (int i = 0; i < nsrc; i++) {
         int64_t s = src[i];
         int st = set[i];
-        if (st < 0 || fx[s] >= 0 || gr[s] >= 0 || br[s] >= 0)
+        if (st < 0 || ts[st] + rk >= ts[st + 1] || fx[s] >= 0 || gr[s] >= 0 || br[s] >= 0)
             continue;
         if (aL[s] == 0.0f && aR[s] == 0.0f)
             continue;
@@ -101,7 +110,8 @@ int tap_expand(int ncol, void** colp, const int* colsz,
         double eq0 = eqo[st] >= 0 ? eq_db(f, eq + eqo[st], nmid[st]) : 0.0;
         double ph0L = p0[s] + oms * ((double)non[s] + (double)delL[s]);
         double ph0R = p0R[s] + oms * ((double)non[s] + (double)delR[s]);
-        for (int t = ts[st]; t < ts[st + 1]; t++) {
+        {
+            int t = ts[st] + rk;
             if (m >= cap)
                 return m;
             int64_t D = tD[t];
