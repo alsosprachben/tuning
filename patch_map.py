@@ -1360,6 +1360,10 @@ SC88_CHEAP = {
     # sags ~11 dB/s, a light palm (0.2-0.35); Ben chose 0.3 by ear on Tokei's
     # rhythm part (0, 0.3, 1 rendered by examples/rock_rhythm_ab.py)
     (30, 24): ("Rock Rhythm", ("set", 30, palm_mute(0.3))),
+    # ROCK RHYTHM 2: the same guitar under GM 28's whole fitted palm mute (1.0)
+    # -- Ben chose it from 0, 0.3, 0.6 and 1 on Tokei's three Rock Rhythm 2
+    # parts (tracks 21, 30, 31 at 3:28; examples/tone_ab.py)
+    (30, 25): ("Rock Rhythm2", ("set", 30, palm_mute(1.0))),
     (48, 9): ("Orchestra 2", ("layer", ((48, 0, 0.0), (60, 0, -8.0)))),
     (48, 11): ("Choir Str.", ("layer", ((48, 0, 0.0), (52, 0, -4.0)))),
     (48, 16): ("St.Strings", ("set", 48, dict(key_pan_spread=WIDE))),
