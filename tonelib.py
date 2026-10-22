@@ -2626,7 +2626,10 @@ class SynthProperties:
         # units of dB-per-doubling / 6.02, and both effort and effort_tilt are
         # in dB, so the conversion happens here.
         if self.effort_tilt and self.effort:
-            self.attack_dampening -= (self.effort_tilt * self.effort) / 6.0206
+            tilt = self.effort_tilt
+            if self.effort > 0 and self.effort_tilt_up is not None:
+                tilt = self.effort_tilt_up
+            self.attack_dampening -= (tilt * self.effort) / 6.0206
 
         # Per-note even-harmonic balance (see even_harmonic_db_per_octave).
         # Instance attribute, so series_volume picks it up without the class
@@ -3026,6 +3029,9 @@ class SynthProperties:
     # 0.0 is the old behaviour, and every voice fitted at mf keeps its fit:
     # effort 0 means "the dynamic this class was measured at".
     effort_tilt = 0.0
+    # Above the fitted dynamic, where a law is not one slope: a bass clarinet
+    # opens 0.97 dB per dB from pp to mf and 0.41 from mf to ff. None: the same.
+    effort_tilt_up = None
     effort = 0.0
 
     # A fixed radiation corner (bore/bell). Off by default: only voices whose
@@ -22729,6 +22735,15 @@ class BassClarinetProperties(ClarinetProperties):
     harmonics stop at 4.4 kHz (HF 10.66 dB) where 128 reaches 8.9 kHz (3.72),
     and 192 is no better.
     """
+    # EFFORT, measured on Iowa's pp/mf/ff runs note for note (examples/bsclar_fit.py):
+    # 0.97 dB of tilt per dB of level from pp to mf, 0.41 from mf to ff (0.80
+    # pooled, r 0.71) -- so one slope below this mf fit and another above it;
+    # one alone put G3 at ff twice as bright as Iowa's. Not the Bb clarinet's
+    # 0.13: that was a pooled fit across notes, and matched note for note its
+    # own upper register reads 0.15 and its chalumeau 0.51. A bass clarinet
+    # played softly is nearly a sine.
+    effort_tilt = 0.97
+    effort_tilt_up = 0.41
     even_harmonic_db = -6.261
     even_harmonic_db_per_octave = 7.331
     tonal_dampening = 0.975

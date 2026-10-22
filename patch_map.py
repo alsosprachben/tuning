@@ -1648,6 +1648,12 @@ from tonelib import AltoSaxExpProperties
 VARIATIONS[(65, 8)] = AltoSaxExpProperties
 VARIATION_NAMES[(65, 8)] = "AltoSax Exp."
 
+# BS CLARINET: the bass clarinet over its whole compass (tonelib.BassClarinetProperties,
+# Iowa's mf runs; its effort law from the pp and ff, examples/bsclar_fit.py) --
+# under GM 71 it plays only the notes below D3
+VARIATIONS[(71, 8)] = BassClarinetProperties
+VARIATION_NAMES[(71, 8)] = "Bs Clarinet"
+
 # THE MAP SWITCH: BANK SELECT LSB (CC32) picks a Sound Canvas's map, as an
 # SC-88 does -- 1 the SC-55 map (the SC-55mkII's, as a later module has it),
 # 2 the SC-88's, 3 the SC-88Pro's, 4 the SC-8850's -- latched with CC0 until the next program

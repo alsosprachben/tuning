@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 156 of the SC-55's 156 are built,
+under a program (SC-55 owner's manual p.68). 157 of the SC-55's 157 are built,
 and 132 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -841,6 +841,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 63.16 | SC-88 | VeloBrass 1 | `MoogSynthBrass2_sc88_63_16` | **4** | SC-88 map: layered: GM 63 vel 0-90 + GM 62 vel 91-127 |
 | 63.17 | SC-88 | VeloBrass 2 | `MoogSynthBrass2_sc88_63_17` | **3** | SC-88 map: layered: GM 63 vel 0-90 + GM 61 vel 91-127 |
 | 65.8 | SC-55 | AltoSax Exp. | `AltoSaxExp` | **4** | the alto PLAYED OUT, fitted as a difference from GM 65 to Iowa's AltoSax.Vib.ff (examples/sax_exp_fit.py; 32 notes matched by pitch against the NoVib.mf takes GM 65 is fitted to): its own vibrato, 4.85 Hz at +-8.1 cents where the mf takes play straight (rendered 4.98 Hz, 8.9 cents), the ladder 1-2 dB up above h3 (miss 1.34 -> 0.66 dB). Ben: 'Sounds good' |
+| 71.8 | SC-55 | Bs Clarinet | `BassClarinet` | **4** | the bass clarinet over its whole compass (tonelib.BassClarinetProperties, fitted to Iowa's mf runs; GM 71 plays it only below D3), its effort law fitted on Iowa's pp and ff matched note for note (examples/bsclar_fit.py): 0.97 dB of tilt per dB from pp to mf, 0.41 above (effort_tilt_up); G3's centroid pp 209 Hz against Iowa's 202. Ben: 'Sounds great' |
 | 72.1 | SC-88 | Piccolo : | `OpenPipe` | **4** | SC-88 map: GM 72 Piccolo's voice |
 | 73.1 | SC-88 | Flute 2 : | `OpenPipe` | **4** | SC-88 map: GM 73 Flute's voice |
 | 73.3 | SC-88 | Flt Travelso | `OpenPipe_sc88_73_3` | **4** | SC-88 map: GM 73 Flute with tonal_dampening=1.513, bore_corner_hz=104.3, even_harmonic_db=-8.253 |
@@ -1134,11 +1135,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 195 | 195 | 100% | 159 | 36 | 0 | 0 | 0 | 0 |
+| SC-55 | 196 | 196 | 100% | 160 | 36 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 224 | 99% | 176 | 48 | 0 | 0 | 0 | 2 |
-| SC-88 | 418 | 387 | 93% | 263 | 124 | 0 | 0 | 0 | 31 |
-| SC-88Pro | 774 | 405 | 52% | 272 | 133 | 0 | 0 | 0 | 369 (11 another tone) |
-| SC-8850 | 1262 | 403 | 32% | 270 | 133 | 0 | 0 | 0 | 859 (13 another tone) |
+| SC-88 | 418 | 388 | 93% | 264 | 124 | 0 | 0 | 0 | 30 |
+| SC-88Pro | 774 | 406 | 52% | 273 | 133 | 0 | 0 | 0 | 368 (11 another tone) |
+| SC-8850 | 1262 | 404 | 32% | 271 | 133 | 0 | 0 | 0 | 858 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1154,7 +1155,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 12/29 |
 | Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
 | Brass | 11/11 | 13/15 | 19/27 | 16/51 | 16/84 |
-| Reed | 9/9 | 8/8 | 9/11 | 9/20 | 9/23 |
+| Reed | 10/10 | 8/8 | 10/11 | 10/20 | 10/23 |
 | Pipe | 9/9 | 8/8 | 8/9 | 12/22 | 12/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
@@ -1163,11 +1164,11 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Percussive | 13/13 | 13/13 | 23/28 | 24/47 | 24/95 |
 | Sound Effects | 42/42 | 41/41 | 46/49 | 50/73 | 50/144 |
 
-### The SC-88 map's 31 still to build, by what they take
+### The SC-88 map's 30 still to build, by what they take
 
 **refit** (11: an articulation of one we have, wanting a fit to a reference): 35.2 FretlessBs3, 35.3 FretlessBs4, 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 57.1 Trombone 2, 58.1 Tuba 2, 60.1 Fr.Horn 2, 60.8 Fr.HornSolo, 66.8 BreathyTnr., 120.5 Bass Slide
 
-**new** (20: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 71.8 Bs Clarinet, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (19: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's
