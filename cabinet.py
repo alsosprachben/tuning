@@ -191,8 +191,34 @@ class WurlitzerInternal(Cabinet):
     bell_order = 2.0
 
 
+class JazzChorus212(Cabinet):
+    """Roland's JC-120: two 12" drivers in a CLOSED-back combo, behind a clean
+    solid-state amplifier (GS 27.4 "JC Clean Gt.").
+
+    Voiced from what the cabinet is, against the Guitar12 it differs from --
+    no recording of one was found to fit (sources.md); Ben's ear is the check:
+      75 Hz, 2nd    the low roll-off. A closed back loads the cones, so it
+                    reaches lower than an open-backed 12" (85 Hz) -- the
+                    tight, full bottom the JC is known for.
+      100 Hz peak   the sealed box's resonance, broader and milder.
+      1.2 kHz dip   the cone's hollow, shallower than the guitar 12"'s.
+      3 kHz         presence, MILD -- +3 where a guitar 12" has +6.6. The amp
+                    is clean, so there is no fizz for the peak to shape.
+      5.5 kHz, 4th  the top, higher than a guitar 12"'s 4.2: the JC's glassy,
+                    open treble, which a clean signal can afford.
+    """
+    formants = ((100.0, 110.0, 0.35), (3000.0, 2000.0, 0.45))
+    antiformants = ((1200.0, 800.0, 0.15),)
+    formant_floor = 0.75
+    bore_corner_hz = 5500.0
+    bore_order = 4.0
+    bell_cutoff_hz = 75.0
+    bell_order = 2.0
+
+
 CABINETS = {"guitar12": Guitar12(), "bass410": Bass410(),
-            "rhodes": RhodesSuitcase(), "wurlitzer": WurlitzerInternal()}
+            "rhodes": RhodesSuitcase(), "wurlitzer": WurlitzerInternal(),
+            "jc120": JazzChorus212()}
 
 
 def get(name):

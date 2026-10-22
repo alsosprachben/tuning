@@ -694,7 +694,7 @@ Controls are the rest of the console that are not stops.
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
 under a program (SC-55 owner's manual p.68). 147 of the SC-55's 147 are built,
-and 91 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+and 92 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -747,6 +747,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 25.9 | SC-88 | Nylon+Steel | `NylonGuitar_sc88_25_9` | **4** | SC-88 map: layered: GM 24 -2 dB + GM 25 -2 dB |
 | 25.16 | SC-55 | Mandolin | `Mandolin` | **3** | unison COURSES of steel strings (0.9, 5.5 cents off, as the 12-string's top), its decay fitted to the Eclectic Mandolin's takes (examples/pluck_fit.py --voice=mandolin: 14.35 dB/s, steeply by register), and PICKED (tonelib.Plectrum): the scrape at the note's level to 5.5 kHz gone at 700 dB/s, the top partials struck 12 dB an octave over 1.5 kHz and gone at 400 dB/s (the take's top falls 24-42 dB by 0.1 s), the course crossed 14 ms apart. The take is re-amped dark, so its colour is not a target: fitted on flatness and how fast the top falls. Ben: 'Sounds good' |
 | 26.8 | SC-55 | Hawaiian Gt. | `HawaiianGuitar` | **4** | a LAP STEEL fitted to David Long's (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel): its six open strings -- the sustain (decay fit 17.4 -> 10.2 dB/s rms, the low harmonics 2-6 dB/s), the tone rolled back on its pickup (resonance 500 Hz, Q 0.5; lapsteel_tone.py), and its OTHER OPEN STRINGS answering through the bridge, each as tuned on that instrument, harmonic by harmonic where it lies near the note's (the E2 string's 2nd under an E3 at -14 dB, the take's -13, beating 1.7 Hz off) -- what Ben heard as 'more inharmonicity, especially lower'. Ben: 'Sounds great' |
+| 27.4 | SC-88 | JC Clean Gt. | `ElectricGuitar_sc88_27_4` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with amp_drive=0.0, cabinet=jc120 |
 | 27.8 | SC-55 | Chorus Gt. | `ChorusGuitar` | **3** | the Stratocaster into a chorus pedal (the swept bucket-brigade chorus CC93 makes), on at half by default -- GeneralUser's 27.8 is its clean guitar with a copy 7 cents up; the pedal's settings asserted |
 | 28.8 | SC-55 | Funk Gt. | `FunkGuitar` | **3** | the Stratocaster on position 4: neck (0.247) and middle (0.157) pickups in parallel -- their combs summed, the mean of two coils, the resonance up by sqrt 2 with the halved inductance -- through a cleaner amp (drive 0.3). The physics of the wiring; not fitted to a recording of one |
 | 29.3 | SC-88 | More Drive | `OverdrivenGuitar` | **4** | SC-88 map: GM 29 Overdriven Guitar's voice |
@@ -1087,8 +1088,8 @@ A later map can put another tone under a number we built; that one is not counte
 | SC-55 | 188 | 188 | 100% | 153 | 35 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
 | SC-88 | 418 | 346 | 83% | 230 | 116 | 0 | 0 | 0 | 72 |
-| SC-88Pro | 774 | 355 | 46% | 233 | 122 | 0 | 0 | 0 | 419 (11 another tone) |
-| SC-8850 | 1262 | 353 | 28% | 231 | 122 | 0 | 0 | 0 | 909 (13 another tone) |
+| SC-88Pro | 774 | 356 | 46% | 234 | 122 | 0 | 0 | 0 | 418 (11 another tone) |
+| SC-8850 | 1262 | 354 | 28% | 232 | 122 | 0 | 0 | 0 | 908 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1099,7 +1100,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Piano | 11/11 | 21/21 | 23/26 | 22/39 | 20/61 |
 | Chromatic Percussion | 9/9 | 12/12 | 13/18 | 13/23 | 13/29 |
 | Organ | 12/12 | 16/16 | 28/30 | 23/49 | 23/71 |
-| Guitar | 16/16 | 17/19 | 22/34 | 23/55 | 23/72 |
+| Guitar | 16/16 | 17/19 | 22/34 | 24/55 | 24/72 |
 | Bass | 10/10 | 12/12 | 23/31 | 25/76 | 25/113 |
 | Strings | 8/8 | 8/9 | 8/11 | 9/20 | 9/29 |
 | Ensemble | 10/10 | 10/11 | 24/29 | 27/63 | 27/134 |

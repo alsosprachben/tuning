@@ -1427,6 +1427,11 @@ SC88_CHEAP = {
     (60, 3): ("Wide FreHrns", ("set", 60, dict(key_pan_spread=WIDE))),
     # FLUTE 2 : the flute, legato-enabled (the colon, as Piccolo :) (SENSATIO, 4)
     (73, 1): ("Flute 2 :", ("alias", 73)),
+    # JC CLEAN GT.: the clean guitar through Roland's JC-120 -- a clean
+    # solid-state amplifier (no valve: amp_drive 0) and its closed-back 2x12
+    # (cabinet.JazzChorus212); the chorus is the Sound Canvas's own send
+    # (storm_pro, 3557, through its Distortion)
+    (27, 4): ("JC Clean Gt.", ("set", 27, dict(amp_drive=0.0, cabinet="jc120"))),
 }
 _SC88_DONE = {}
 
