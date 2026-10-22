@@ -238,6 +238,9 @@ SC88_SYNTH = {
                dict(osc1_wave=SAW, osc2_wave=SAW, osc2_freq=c(10), cutoff=0.58, resonance=0.15,
                     a_attack=0.45, f_attack=0.4, a_release=0.55, lfo1_dest=0, lfo1_depth=0.64,
                     lfo1_rate=0.3, mf104_on=True, mf104_time=0.6, mf104_feedback=0.4, mf104_mix=0.3)),
+    # soft brass: the synth brass with its ladder lower and its swell slower
+    (63, 1): ("Soft Brass", "MoogSynthBrass2",
+              dict(cutoff=0.48, eg_amount=0.6, a_attack=0.2, f_attack=0.25)),
     # white noise: the noise oscillator alone, the ladder open, no contour
     # (sysex_01 192, River 72, SuwaFF 3); Seashore's capital is the ocean drum,
     # so it starts from the Atmosphere FX's panel, which has the noise

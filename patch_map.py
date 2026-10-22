@@ -1383,6 +1383,58 @@ SC88_CHEAP = {
     # BIG SHOT: the gunshot made bigger -- its noise held twice as long and its
     # slower tail louder and longer (-6 dB at 60 dB/s -> -3 dB at 30) (storm_pro, 2)
     (127, 5): ("Big Shot", ("set", 127, dict(strike_noise_len_s=2.0, strike_noise_tail=(-3.0, 30.0)))),
+    # --- THE SC-88 MAP'S SETTINGS, the rest of them (not in our GS files):
+    # each a reading of its name on the voice it is a setting of, through
+    # the voice's own physical controls -- tonal_dampening (how fast the top
+    # dies: down is harder, brighter), the valve's drive, the attack (x4 at
+    # +1), a mute's decay, layers -- for Ben's ear, as tier 2's were
+    # (the fitted electric pianos' brightness is the tine's swing past the
+    # pickup, pickup_deflection; a vibraphone's its bar's mode levels, which a
+    # harder mallet lifts: tonal_dampening moves neither)
+    (4, 25): ("Hard Rhodes", ("set", 4, dict(pickup_deflection=1.12))),
+    (4, 26): ("MellwRhodes", ("set", 4, dict(pickup_deflection=0.45))),
+    (5, 24): ("Hard FM EP", ("set", 5, dict(pickup_deflection=1.46))),
+    (11, 1): ("Hard Vibe", ("set", 11, dict(bar_modes=((1, 1.0), (4, 0.75), (10, 0.25))))),
+    # the concert cimbalom: a bigger dulcimer, longer ringing, harder hammers
+    (15, 8): ("Cimbalom", ("set", 15, dict(decay_db=4.5, tonal_dampening=0.65))),
+    (22, 1): ("Harmonica 2", ("set", 22, dict(reed_edge=0.0128))),
+    (24, 32): ("Nylon Gt.2", ("set", 24, dict(tonal_dampening=0.8))),
+    # the requinto: a small, higher guitar -- brighter, shorter ringing
+    (24, 40): ("Lequint Gt.", ("set", 24, dict(tonal_dampening=0.75, decay_db=7.0))),
+    (25, 32): ("Steel Gt.2", ("set", 25, dict(tonal_dampening=0.6))),
+    (26, 1): ("Mellow Gt.", ("set", 26, dict(tonal_dampening=2.6))),
+    (28, 16): ("Funk Gt.2", ("var", (28, 8))),
+    # dazed: the distortion guitar wobbling against itself, a detuned pair
+    (30, 2): ("DazedGuitar", ("set", 30, dict(detuned_pair=(-12.0, 12.0)))),
+    (30, 9): ("FeedbackGt2", ("var", (30, 8))),
+    (30, 16): ("PowerGuitar", ("set", 30, dict(amp_drive=28.9))),
+    (30, 17): ("Power Gt.2", ("layer", ((30, 0, 0.0), (30, -12, -6.0)))),
+    (30, 18): ("5th Dist.", ("layer", ((30, 0, 0.0), (30, 7, -2.0)))),
+    (33, 1): ("FingeredBs2", ("set", 33, dict(tonal_dampening=2.9))),
+    # a Jazz bass on its bridge pickup alone: brighter, its own comb
+    (33, 2): ("Jazz Bass", ("set", 33, dict(pickup_points=(0.098,), tonal_dampening=2.0))),
+    (34, 8): ("MutePickBs.", ("set", 34, dict(decay_db=20.0, tonal_dampening=2.4))),
+    # Mr. Smooth: the soul fretless Ben heard in Fretless Bs2
+    (35, 5): ("Mr.Smooth", ("set", 35, dict(lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315))),
+    (36, 8): ("Reso Slap", ("set", 36, dict(tonal_dampening=1.4))),
+    (40, 8): ("Slow Violin", ("set", 40, dict(sound_bias={"attack": 1.0}))),
+    (44, 8): ("SlowTremolo", ("set", 44, dict(sound_bias={"attack": 1.0}))),
+    # suspense: tremolo bowed near the bridge, sul ponticello -- glassy, bright
+    (44, 9): ("SuspenseStr", ("set", 44, dict(tonal_dampening=0.9))),
+    # tremolo orchestra: Orchestra's layering (48.8) on the tremolo strings
+    (48, 10): ("TremoloOrch", ("layer", ((44, 0, 0.0), (61, 12, -10.0)))),
+    (49, 8): ("Legato Str.", ("set", 48, dict(sound_bias={"attack": 0.5}))),
+    (52, 32): ("ChoirAahs 2", ("set", 52, dict(section_players=12))),
+    # Philly: a soul string stab with the hit -- strings one-shot, gated
+    # 150 ms, 3 dB under the hit at their own trim
+    (55, 9): ("Philly Hit", ("layer", ((55, 0, 0.0),
+                                        (("set", 48, dict(one_shot=True, gate_time=0.15)), 0, 11.1)))),
+    (105, 1): ("Muted Banjo", ("set", 105, dict(decay_db=30.0, tonal_dampening=1.2))),
+    # Tsugaru: the shamisen's heavier school, a thicker neck struck harder
+    (106, 1): ("Tsugaru", ("set", 106, dict(tonal_dampening=0.35, decay_db=3.0))),
+    (111, 1): ("Shanai 2", ("set", 111, dict(sound_bias={"vib_depth": 0.5}))),
+    # cheese organ: a thin combo organ, 8' 4' 2' 1 3/5' 1'
+    (16, 24): ("CheeseOrgan", ("set", 16, dict(default_stops=0b101101100))),
     (48, 9): ("Orchestra 2", ("layer", ((48, 0, 0.0), (60, 0, -8.0)))),
     # IMPACT HIT: the orchestra hit made heavier -- our timpani two octaves
     # under it and the Orchestra set's Concert BD 1, 18 semitones down (the hits
