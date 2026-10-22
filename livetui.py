@@ -29,6 +29,7 @@ import live as LV
 import moog as MG
 import mf104 as MFD
 import percussion_map as PM
+import gsefx as GSX
 import patch_map as PMAP
 from variation_desc import VARIATION_DESC, CAPITAL_DESC
 
@@ -333,9 +334,9 @@ class Builder(threading.Thread):
 # two keys (- and +) change every one of them, so there are no per-field modes to
 # remember. PATCH and TUNER are the only columns that cost a build.
 
-COLS = ("patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops")
+COLS = ("patch", "ch", "lo", "hi", "tr", "level", "tuner", "touch", "stops", "efx")
 COL_W = {"patch": 33, "ch": 4, "lo": 5, "hi": 5, "tr": 4, "level": 8,
-         "tuner": 11, "touch": 6, "stops": 11}
+         "tuner": 11, "touch": 6, "stops": 11, "efx": 5}
 
 # Which columns open a picker on enter, and which take a typed value. Every
 # column answers enter with something -- it used to always open the patch
@@ -388,7 +389,7 @@ GLOBALS = (
 # already use, in any pane, since a bound key fires from every pane. Space is
 # the controls pane's own toggle, so it is not offered.
 HOTKEYS_FREE = (set("cefginoptuvwxyz0[];',./")
-                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNRE")))  # N/R: scenes; E: Eastern tuning
+                | (set("ABCDEFGHIJKMNOQRTUVWXYZ") - set("SLPNREX")))  # N/R: scenes; E: Eastern tuning; X: the EFX
 
 
 # THE STOP KEYS: the digit row, and the same keys shifted. What shift+1 TYPES
@@ -943,6 +944,8 @@ class TUI:
             self.pick_stops(scr)
         elif col == "touch":
             self.toggle_touch(self.sel())
+        elif col == "efx":
+            self.pick_efx(scr)
         else:
             self.type_value(scr, col)
 
@@ -1126,6 +1129,152 @@ class TUI:
                 return chosen
             elif c == 27 or c == ord("q"):
                 return None
+
+    # ---- the insertion effect (gsefx; Live.efx, set through Live.efx_send) --
+    def efx_channels(self, p):
+        """The MIDI channels a part listens on: its own, or all for 'all'."""
+        return set(range(16)) if p.channel is None else {p.channel}
+
+    def _efx_wait(self, rev):
+        """Let the audio thread apply what was sent (the panel's message
+        queues as hardware's does) before the panel reads the state back."""
+        t0 = time.monotonic()
+        while self.live.efx_rev == rev and time.monotonic() - t0 < 0.1:
+            time.sleep(0.005)
+
+    def _efx_send(self, ev):
+        rev = self.live.efx_rev
+        self.live.efx_send(ev)
+        self._efx_wait(rev)
+
+    def pick_efx(self, scr):
+        """THE INSERTION EFFECT, the Sound Canvas's: the selected part on or
+        off it, its type, and each of its parameters at the value in effect
+        (the file's, Roland's default, or ours where he prints none) -- each
+        sent as the GS message a file would carry (Live.efx_send)."""
+        p = self.sel()
+        if p is None:
+            return
+        i = 0
+        while True:
+            st = self.live.efx
+            name = GSX.TYPES.get(st['type'], "Thru")
+            chans = self.efx_channels(p)
+            on = chans <= self.live.efx_parts
+            num = next((n for n, k, _ in GSX.numbered() if k == st['type']), 0)
+            rows = [("part", "part %d (%s) on the EFX:  %s" % (
+                        self.row + 1, "all channels" if p.channel is None else "channel %d" % (p.channel + 1),
+                        "yes" if on else "no")),
+                    ("type", "type:  %s" % ("%02d %s" % (num, name) if num else "Thru"))]
+            if name != "Thru":
+                eff = GSX.in_effect(st)
+                rows.append((None, "-- parameters"))
+                for n, nm, _rg, d in GSX.params(name):
+                    v = eff.get(n, d if d is not None else 0)
+                    rows.append((("param", n, nm, v), "%-16s %s" % (nm[:16], GSX.printed_value(name, n, v))))
+                rows.append((None, "-- sends from the EFX"))
+                for a, nm in ((GSX.SEND_REV, "to reverb"), (GSX.SEND_CHO, "to chorus"), (GSX.SEND_DLY, "to delay")):
+                    rows.append((("send", a, nm, st['send'].get(a, 0)), "%-16s %d" % (nm, st['send'].get(a, 0))))
+            got = self.menu(scr, "insertion effect", [r[1] for r in rows], i)
+            if got is None:
+                return
+            i = got
+            what = rows[got][0]
+            if what is None:
+                continue
+            if what == "part":
+                for ch in sorted(chans):
+                    self._efx_send(('part', ch, not on))
+            elif what == "type":
+                self.pick_efx_type(scr)
+            elif what[0] == "param":
+                self.edit_efx(scr, name, what)
+            elif what[0] == "send":
+                self.edit_efx(scr, name, what)
+
+    def pick_efx_type(self, scr):
+        """The type, in Roland's families (gsefx.CATEGORIES): Enter or Right
+        into a family, Left back, "/" searching every type by name."""
+        allt = GSX.numbered()
+        found = ["%02d %s   (%s)" % (n, nm, next(c for c, a, b in GSX.CATEGORIES if a <= n <= b))
+                 for n, _k, nm in allt]
+        cats = ["00 Thru"] + [c for c, _a, _b in GSX.CATEGORIES]
+        cur = self.live.efx['type']
+        cn = next((n for n, k, _ in allt if k == cur), 0)
+        ci = next((j + 1 for j, (_c, a, b) in enumerate(GSX.CATEGORIES) if a <= cn <= b), 0)
+        while True:
+            got = self.menu(scr, "insertion effect type", cats, ci, nav=True, everywhere=found)
+            if got in (None, "back"):
+                return
+            if isinstance(got, tuple):
+                key = allt[got[1]][1]
+                break
+            if got == 0:
+                key = (0, 0)
+                break
+            ci = got
+            _c, a, b = GSX.CATEGORIES[got - 1]
+            kids = [(n, k, nm) for n, k, nm in allt if a <= n <= b]
+            start = next((j for j, (n, _k, _nm) in enumerate(kids) if n == cn), 0)
+            sub = self.menu(scr, "insertion effect › " + _c, ["%02d %s" % (n, nm) for n, _k, nm in kids],
+                            start, nav=True, everywhere=found)
+            if sub is None:
+                return
+            if sub == "back":
+                continue
+            if isinstance(sub, tuple):
+                key = allt[sub[1]][1]
+            else:
+                key = kids[sub][1]
+            break
+        if key != cur:
+            self._efx_send(('type', key))
+            self.say("EFX: %s" % GSX.TYPES.get(key, "Thru"))
+
+    def edit_efx(self, scr, name, what):
+        """One parameter (or send), moved with Left/Right (PgUp/PgDn ten at a
+        time) or typed as a raw 0-127; each move sent, so it is heard as it
+        goes. Enter keeps it, Esc puts back what it was."""
+        kind, n, nm, v0 = what
+        rng = GSX.param_range(name, n) if kind == "param" else (0, 127)
+        vals = list(rng) if isinstance(rng, list) else list(range(rng[0], rng[1] + 1))
+        v = min(vals, key=lambda x: abs(x - v0))
+        j = vals.index(v)
+        show = (lambda x: GSX.printed_value(name, n, x)) if kind == "param" else str
+        ev = (lambda x: ('param', n, x)) if kind == "param" else (lambda x: ('send', n, x))
+        scr.keypad(True)
+        while True:
+            h, w = scr.getmaxyx()
+            line = " %s:  %s   (raw %d)   left/right, pgup/pgdn, digits, enter keep, esc back " % (
+                nm, show(vals[j]), vals[j])
+            self.addstr(scr, h // 2, max(0, (w - len(line)) // 2), line[:w - 1], curses.A_REVERSE | curses.A_BOLD)
+            scr.refresh()
+            c = scr.getch()
+            k = j
+            if c in (curses.KEY_RIGHT, ord("l"), ord("+"), ord("=")):
+                k = min(len(vals) - 1, j + 1)
+            elif c in (curses.KEY_LEFT, ord("h"), ord("-")):
+                k = max(0, j - 1)
+            elif c == curses.KEY_NPAGE:
+                k = max(0, j - 10)
+            elif c == curses.KEY_PPAGE:
+                k = min(len(vals) - 1, j + 10)
+            elif 48 <= c <= 57:
+                got = self.prompt(scr, "%s raw value = %s" % (nm, chr(c)))
+                try:
+                    x = int(chr(c) + (got or ""), 10)
+                    k = vals.index(min(vals, key=lambda y: abs(y - x)))
+                except ValueError:
+                    pass
+            elif c in (10, 13):
+                return
+            elif c == 27:
+                if vals[j] != v0:
+                    self._efx_send(ev(v0))
+                return
+            if k != j:
+                j = k
+                self._efx_send(ev(vals[j]))
 
     def pick_patch(self, scr):
         """THE PATCH, BY STANDARD (patch_tree): General MIDI, a Sound Canvas by
@@ -1621,6 +1770,13 @@ class TUI:
                         break
                     self.addstr(scr, y, 6, ln, C("yellow"))
                     y += 1
+        # THE INSERTION EFFECT: one for the module, the parts on it
+        _ef = L.efx
+        if _ef['type'] != (0, 0) or L.efx_parts:
+            _on = ", ".join(str(c + 1) for c in sorted(L.efx_parts)) or "none"
+            self.addstr(scr, y, 6, ("EFX  %s   channels %s   (X to edit)"
+                                    % (GSX.TYPES.get(_ef['type'], "?"), _on))[:w - 8], C("cyan"))
+            y += 1
         y += 1
 
         if self.pane == 2:
@@ -1984,6 +2140,9 @@ class TUI:
             if not p.organ:
                 return "-"
             return " ".join(r for r in p.patch.stop_display if r in p.drawn) or "none"
+        if c == "efx":
+            on = self.efx_channels(p) & self.live.efx_parts
+            return "-" if not on else ("on" if on == self.efx_channels(p) else "some")
         return ""
 
     def stops_lines(self, p, width=80):
@@ -2057,6 +2216,10 @@ class TUI:
             "  s                 SPLIT: halve this part's range into two parts",
             "  d                 remove this part        m   mute / unmute",
             "  1..9, shift+1..9  on an organ part, draw or retire that stop",
+            "  X (or enter on    THE INSERTION EFFECT (the Sound Canvas's EFX):",
+            "   the efx column)    this part on or off it, its type (Roland's",
+            "                      families, / searches), each parameter -- heard",
+            "                      as you move it; esc puts it back",
             "",
             "touch",
             "  fixed: a harpsichord, organ, harmonium or accordion ignores how",
@@ -2261,6 +2424,8 @@ class TUI:
             self.load_preset(scr)
         elif c == ord("E"):
             self.pick_eastern(scr)
+        elif c == ord("X"):
+            self.pick_efx(scr)
         elif c == ord("P"):
             # panic, the one thing you want when something drones
             self.live.panic()

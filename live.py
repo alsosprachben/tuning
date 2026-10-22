@@ -84,6 +84,7 @@ import chorus as _CHR
 import mf104 as _MFD
 import moog as _MG
 import tonelib as T
+import gsefx as _GSX
 import register as _RGM     # the free-string register's physics (live: _reg_*)
 from percussion_map import (percussion_for_note, choke_group, GM_PERCUSSION_CHANNEL,
                             kit_for_program, drum_set_name, key_layers)
@@ -3315,6 +3316,13 @@ class Live:
         # ratio last APPLIED to each pitch class so a repeat cannot compound.
         # It cannot fold into self.bend, which is one scalar for the channel.
         self.chorus = {}        # channel -> CC93 send, 0..1
+        # THE INSERTION EFFECT (gsefx): the module's one EFX -- its type,
+        # parameters and sends (40 03 xx) -- and the channels assigned to it
+        # (40 4x 22). GS Reset and GM System On put it back to Thru and take
+        # every part off. efx_rev counts its changes (the panel redraws on it).
+        self.efx = _GSX.fresh_state()
+        self.efx_parts = set()
+        self.efx_rev = 0
         self.soft = {}          # channel -> the una corda shift is in
         self.sost = {}          # channel -> keys the sostenuto pedal is holding
         self.sota = {}          # channel -> [12 cents]
@@ -3652,6 +3660,17 @@ class Live:
             self._see(msg)
             with self.lock:
                 self.events.append((time.monotonic(), msg))
+
+    def efx_send(self, ev):
+        """An EFX setting from the panel (gsefx.parse's events), sent as the
+        GS message a file would carry -- one path for both, so what the panel
+        sets is what a recording of the session would hold."""
+        self.inject(mido.Message("sysex", data=_GSX.message(ev)))
+
+    def efx_chain(self, ch):
+        """The insertion effect's stages for channel ch (gsefx.chain), or None
+        when ch is not on it or its type is Thru."""
+        return _GSX.chain(self.efx) if ch in self.efx_parts else None
 
     def set_routes(self, routes):
         """Swap the route table: one assignment, as set_parts does."""
@@ -6965,6 +6984,16 @@ class Live:
         # channel becomes a kit, or channel 10 melodic, and a part on THAT
         # channel follows, as it does GM 2's bank 120 -- an omni part is the
         # player's own. Port B's parts (block 50) have no port here.
+        # THE INSERTION EFFECT (gsefx.parse, the file renderer's own reader):
+        # its type, a parameter, a send, or a part's assign -- the state the
+        # effect stages read (efx_chain)
+        _gx = _GSX.parse(d)
+        if _gx is not None:
+            if _gx[0] == 'part':
+                _gx = ('part', _gx[1] % 16 + 16 * _g, _gx[2])
+            _GSX.apply(self.efx, _gx, self.efx_parts)
+            self.efx_rev += 1
+            return
         # A GS PART PARAMETER (blockrender.parse_gs_part): the MIDI message it
         # is -- part level CC7, pan CC10, the sends, the tone, mono/poly, key
         # shift -- through the same path, now. Port B has no port here.
@@ -7057,6 +7086,10 @@ class Live:
             self.sota.pop(ch, None)
             self._resota(ch, n0)
         self.cgain.clear()
+        # ...and the insertion effect: "When a GM System On or GS Reset is
+        # received, 00 Thru will be selected" (SC-8850 OM), every part off it
+        _GSX.apply(self.efx, ('reset',), self.efx_parts)
+        self.efx_rev += 1
         for part in self.parts:
             want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner), 0)
             if part.patch.key != want:
@@ -9274,6 +9307,33 @@ def selftest_gs(check):
         with _PATCH_LOCK:
             for _k in [k for k in _PATCHES if k[3]]:
                 del _PATCHES[_k]
+
+    # THE INSERTION EFFECT, LIVE (Live.efx, through _sysex): a file's EFX
+    # messages -- the type, a parameter, a send, part 1 assigned -- land in the
+    # engine's state as the file renderer reads them; the panel's own messages
+    # (gsefx.message, Live.efx_send) are those same bytes; and GS Reset puts it
+    # back to Thru with every part off
+    _le = Live(program=0, rate=48000, frames=128, verbose=False)
+    try:
+        _sx = lambda *b: _M("sysex", data=_GSX.message(b))
+        for _m in (_sx('type', (0x01, 0x21)), _sx('param', 2, 100), _sx('send', _GSX.SEND_DLY, 50),
+                   _sx('part', 0, True), _sx('part', 9, True)):
+            _le.on_midi(_m)
+        _le.apply(0)
+        _st1 = (_le.efx['type'], dict(_le.efx['p']), _le.efx['send'][_GSX.SEND_DLY], sorted(_le.efx_parts))
+        _ch1 = _le.efx_chain(0)
+        _le.efx_send(('part', 9, False)); _le.efx_send(('param', 2, 30)); _le.apply(128)
+        _st2 = (sorted(_le.efx_parts), _le.efx['p'].get(2))
+        _le.on_midi(_M("sysex", data=[0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41]))
+        _le.apply(256)
+        _st3 = (_le.efx['type'], sorted(_le.efx_parts))
+        check("live: the EFX's messages set the engine's state (type, parameter, send, parts); "
+              "the panel's are the same bytes; GS Reset clears it",
+              _st1 == ((0x01, 0x21), {2: 100}, 50, [0, 9]) and _ch1 is not None and _ch1.get('filter')
+              and _le.efx_chain(1) is None and _st2 == ([0], 30) and _st3 == ((0, 0), []),
+              "  (%s; after the panel %s; after GS Reset %s)" % (_st1, _st2, _st3))
+    finally:
+        _le.shutdown()
 
 
 def selftest(only=""):

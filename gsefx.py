@@ -186,25 +186,164 @@ def parse(data):
     return None
 
 
+def fresh_state():
+    """The EFX after a reset (GS Reset, GM System On): Thru, the sends at the
+    module's own (reverb 40)."""
+    return dict(type=(0, 0), p={}, send={SEND_REV: 40, SEND_CHO: 0, SEND_DLY: 0})
+
+
+def apply(st, ev, parts=None):
+    """One of parse()'s events onto a state, in place -- a type change puts
+    the parameters back to the type's, a reset all of it (and, given the
+    set of parts on the EFX, takes them off, as the module does)."""
+    if ev[0] == 'reset':
+        st.clear(); st.update(fresh_state())
+        if parts is not None:
+            parts.clear()
+    elif ev[0] == 'type':
+        st['type'] = ev[1]
+        st['p'] = {}
+    elif ev[0] == 'param':
+        st['p'][ev[1]] = ev[2]
+    elif ev[0] == 'send':
+        st['send'][ev[1]] = ev[2]
+    elif ev[0] == 'part' and parts is not None:
+        (parts.add if ev[2] else parts.discard)(ev[1])
+    return st
+
+
 def state_at(events, t):
     """The EFX at time t from parse()'s events [(t, ('type'|'param'|'send'|
     'reset', ...))]: {'type': (msb, lsb), 'p': {n: v}, 'send': {addr: v}}. A
     type change puts the parameters back to the type's (unknown here: the
     model's own), as the module does; a reset puts all back."""
-    st = dict(type=(0, 0), p={}, send={SEND_REV: 40, SEND_CHO: 0, SEND_DLY: 0})
+    st = fresh_state()
     for et, ev in events:
         if et > t + 1e-9:
             break
-        if ev[0] == 'reset':
-            st = dict(type=(0, 0), p={}, send={SEND_REV: 40, SEND_CHO: 0, SEND_DLY: 0})
-        elif ev[0] == 'type':
-            st['type'] = ev[1]
-            st['p'] = {}
-        elif ev[0] == 'param':
-            st['p'][ev[1]] = ev[2]
-        elif ev[0] == 'send':
-            st['send'][ev[1]] = ev[2]
+        apply(st, ev)
     return st
+
+
+def message(ev, dev=0x10):
+    """The GS DT1 SysEx data (without F0/F7) for an EFX event -- parse()'s
+    inverse: what the live panel sends, so a setting made there is the
+    message a file would carry."""
+    if ev[0] == 'type':
+        body = [0x40, 0x03, 0x00, ev[1][0], ev[1][1]]
+    elif ev[0] == 'param':
+        body = [0x40, 0x03, 0x02 + int(ev[1]), int(ev[2])]
+    elif ev[0] == 'send':
+        body = [0x40, 0x03, int(ev[1]), int(ev[2])]
+    elif ev[0] == 'part':
+        ch = int(ev[1]) % 16
+        blk = 0 if ch == 9 else (ch + 1 if ch < 9 else ch)
+        body = [0x50 if ev[1] >= 16 else 0x40, 0x40 | blk, 0x22, 1 if ev[2] else 0]
+    else:
+        raise ValueError(ev)
+    return [0x41, dev, 0x42, 0x12] + body + [(128 - sum(body) % 128) % 128]
+
+
+def printed_value(name, n, v):
+    """A parameter's value as Roland's panel shows it: through its value
+    table (*k) where it has one, a choice by its name, +-12 dB for a gain
+    (34-4C), else the number."""
+    for _k, (_n, nm) in _P.TYPES.items():
+        if TYPES.get(_k) == name:
+            x = _P.PARAMS[nm].get(n)
+            break
+    else:
+        return str(v)
+    if x is None:
+        return str(v)
+    enc = x[4]
+    if x[0] == "Gate Time":                         # 5-500 ms (the SC-8850's), as chain() reads it
+        return "%d ms" % (5 * (min(99, int(v)) + 1))
+    if enc.startswith("*"):
+        t = _P.VALUE_TABLES[int(enc[1:])][max(0, min(127, int(v)))]
+        ms = "m" in x[1] and t not in ("Bypass",)
+        return str(t) + (" ms" if ms else "")
+    if "/" in x[1] and " - " not in x[1]:
+        ch = [c.strip() for c in x[1].split("/")]
+        return ch[int(v)] if 0 <= int(v) < len(ch) else ch[-1] if int(v) == 127 else str(v)
+    if enc == "34 - 4C":
+        return "%+d dB" % (int(v) - 64)
+    import re
+    if "D>" in x[1] or "D=E" in x[1]:                 # a Balance: dry against effect
+        v = int(v)
+        return "D=E" if v == 64 else ("D>%dE" % (2 * v) if v < 64 else "D%d<E" % (2 * (127 - v)))
+    m = re.match(r"^\s*([0-9A-F]{2})\s*-\s*([0-9A-F]{2})\s*$", enc)
+    nums = re.findall(r"[-+]?\d+(?:\.\d+)?", x[1])
+    if m and x[1].strip().startswith("-") and len(nums) >= 2:
+        # a signed range on its own codes (Coarse 28-4C onto -24..+12): linear
+        e0, e1 = int(m.group(1), 16), int(m.group(2), 16)
+        lo, hi = float(nums[0]), float(nums[-1])
+        val = lo + (max(e0, min(e1, int(v))) - e0) * (hi - lo) / float(e1 - e0)
+        return "%+d%s" % (round(val), "%" if "%" in x[1] else "")
+    m = re.match(r"^\s*(\d+)\s*-\s*\d+(\s*-\s*\d+)?\s*$", x[1])
+    if m and not enc.startswith("00 - 7F"):          # numbered choices: "1-2-6", "1-5"
+        return str(int(v) + int(m.group(1)))
+    if "L63" in x[1]:
+        return "C" if v == 64 else ("L%d" % (64 - v) if v < 64 else "R%d" % (v - 64))
+    return str(v)
+
+
+# ROLAND'S FAMILIES OF TYPES, by their numbers (the SC-8850 OM, "Insertion
+# Effect Types"): the live panel's type tree
+CATEGORIES = (("Tone colour (filters)", 1, 4), ("Distortion", 5, 6), ("Modulation", 7, 13),
+              ("Compression", 14, 15), ("Chorus", 16, 20), ("Delay and reverb", 21, 28),
+              ("Pitch", 29, 30), ("3D and Lo-Fi", 31, 34), ("Two in series", 35, 46),
+              ("Three or more in series", 47, 55), ("Two in parallel", 56, 64))
+
+
+def numbered():
+    """[(Roland's number 1-64, (msb, lsb), our name)], in his order."""
+    return sorted((n, k, TYPES[k]) for k, (n, _nm) in _P.TYPES.items() if n and k in TYPES)
+
+
+def param_range(name, n):
+    """The raw values parameter n of a type takes: (lo, hi) or a list of
+    the codes a choice takes (Speed's 00/7F) -- from its data code."""
+    for _k, (_n, nm) in _P.TYPES.items():
+        if TYPES.get(_k) == name:
+            x = _P.PARAMS[nm].get(n)
+            break
+    else:
+        return (0, 127)
+    enc = (x[4] if x else "").replace(" ", "")
+    if "/" in enc:
+        try:
+            return [int(h, 16) for h in enc.split("/")]
+        except ValueError:
+            return (0, 127)
+    if "-" in enc and not enc.startswith("*"):
+        try:
+            lo, hi = (int(h, 16) for h in enc.split("-"))
+            return (lo, hi)
+        except ValueError:
+            pass
+    return (0, 127)
+
+
+_USED = {}       # the last chain()'s parameters as it read them: {n: value}
+
+
+def in_effect(st):
+    """{n: value} each parameter of the state's type stands at -- the file's,
+    else Roland's printed default, else the model's chosen one: what the
+    panel shows, as chain() reads them."""
+    chain(st)
+    return dict(_USED)
+
+
+def params(name):
+    """[(n, its name, its range as printed, its default raw value)] of a
+    type, from Roland's table -- the panel's rows."""
+    for _k, (_n, nm) in _P.TYPES.items():
+        if TYPES.get(_k) == name:
+            return [(n, x[0], x[1], x[3] if x[3] is not None else DEFAULTS.get(_k, {}).get(n))
+                    for n, x in sorted(_P.PARAMS[nm].items())]
+    return []
 
 
 def at(events, ch, t):
@@ -657,9 +796,14 @@ def chain(st):
     if pn is None:
         pn = _PN[name] = param_numbers(name)
 
+    _USED.clear()
+
     def g(key, d):                     # the file's, the type's, ours
         n = pn.get(key)
-        return d if n is None else p.get(n, dflt.get(n, d))
+        v = d if n is None else p.get(n, dflt.get(n, d))
+        if n is not None:
+            _USED[n] = v
+        return v
     out = dict(name=name, od_gain=None, cabinet=None, comp=None, eq=None, cf=None, dly=None,
                level=g("Level", 127) / 127.0, sends=dict(st['send']))
     mk = 10.0 ** (OD_MAKEUP_DB / 20.0)
