@@ -691,6 +691,57 @@ DRUM_RANGE = (35, 87)           # every note percussion_map has a voice for
 # build, so they cost nothing.
 
 
+class LiveBus(object):
+    """THE INSERTION EFFECT's OWN BUS, live: efxbus's processor -- the file
+    renderer's own, its state carried from block to block -- on the bus parts'
+    render (Slab.bus_fill), at the output's scale (the master gain, where
+    Roland's thresholds and bits are), dry against effect by the type's
+    Balance. The reverbs' responses (efxbus.GateReverb, Reverb) run through
+    live's own block convolver (convolver.c) rather than a whole-response
+    FFT every block."""
+
+    def __init__(self, kind, kw, mix, sr, frames):
+        self.dry, self.wet = mix
+        self.spec = (kind, kw, sr, frames)
+        self.p = self._make()       # the mix's
+        self.ps = None              # ...and the reverb send's: a second, with its own state (process_send)
+
+    def _make(self):
+        import efxbus as _EB
+        kind, kw, sr, frames = self.spec
+        if kind in ('gate', 'reverb'):
+            pr = _EB.make(kind, sr, **kw)
+            return ('conv', [Convolver(np.asarray(h, np.float32), frames) for h in pr.h])
+        return ('proc', _EB.make(kind, sr, **kw))
+
+    def _run(self, p, L, R, gain):
+        g = max(float(gain), 1e-12)
+        if p[0] == 'conv':
+            m = (0.5 * (np.asarray(L, np.float32) + np.asarray(R, np.float32)))
+            yL = p[1][0].process(m).copy(); yR = p[1][1].process(m).copy()
+        else:
+            yL, yR = p[1].process(np.asarray(L, np.float32) * g, np.asarray(R, np.float32) * g)
+            yL = np.asarray(yL, np.float32) / g; yR = np.asarray(yR, np.float32) / g
+        return (self.dry * L + self.wet * yL).astype(np.float32), (self.dry * R + self.wet * yR).astype(np.float32)
+
+    def process(self, L, R, gain):
+        return self._run(self.p, L, R, gain)
+
+    def process_send(self, L, R, gain):
+        """The bus parts' reverb send, through the type as the mix is -- the
+        reverb hears the effect's output, as on the module (the streamed file
+        renderer's second Bus)."""
+        if self.ps is None:
+            self.ps = self._make()
+        return self._run(self.ps, L, R, gain)
+
+    def close(self):
+        for p in (self.p, self.ps):
+            if p is not None and p[0] == 'conv':
+                for c in p[1]:
+                    c.close()
+
+
 class LiveRotor:
     """One rotor, advanced a block at a time.
 
@@ -736,6 +787,7 @@ class Slab:
         self.tpx = np.zeros(capacity, np.int64)      # ...and its longest tap: the slot is held that much longer
         self.tap_m = 0                               # scratch rows written for this block
         self.tap_cap = self.tcap                     # ...at most (the budget governor's: Live.callback)
+        self.bus_m, self.bus_hide = 0, None          # the bus's scratch rows (bus_fill), its originals
         self.tap_lib = None
         self.tap_tab = None                          # the tap sets, flattened (Live._tap_tables)
         self.a = {}
@@ -2010,28 +2062,18 @@ class Slab:
     _TAP_NAMED = ("om", "p0", "p0R", "non", "noff", "nf", "aL", "aR", "vd", "vr", "vp", "vdl",
                   "delL", "delR", "fx", "gr", "br")
 
-    def tap_fill(self, n0, frames):
-        """THE REFERENCED TAPS, this block (tapkernel.c): every partial with a
-        tap set written once per tap into the scratch rows, from the partial
-        as it now stands. tap_m: how many rows the renderers add."""
-        tab = self.tap_tab
-        if tab is None:
-            self.tap_m = 0
-            return 0
+    def _expand(self, src, st, tab, dst0, cap, floor, n0, frames):
+        """tapkernel.c's tap_expand over these source slots and tap sets, into
+        the scratch rows from dst0 (cap of them): how many it wrote."""
         import ctypes as C
-        src = np.flatnonzero(self.tp >= 0).astype(np.int64)
-        if not len(src):
-            self.tap_m = 0
-            return 0
         a = self.full
         if getattr(self, "_tap_cols", None) is None:
             gen = [k for k in a if k not in self._TAP_NAMED and len(a[k]) == self.cap + self.tcap]
             self._tap_cols = ((C.c_void_p * len(gen))(*[a[k].ctypes.data for k in gen]),
                               (C.c_int * len(gen))(*[a[k].itemsize for k in gen]), len(gen))
         cp, cz, nc = self._tap_cols
-        st = self.tp[src].astype(np.int32)
         P = lambda x: x.ctypes.data_as(C.c_void_p)
-        m = self.tap_lib.tap_expand(
+        return self.tap_lib.tap_expand(
             C.c_int(nc), cp, cz, C.c_int(len(src)), P(src), P(st),
             P(a["om"]), P(a["p0"]), P(a["p0R"]), P(a["non"]), P(a["noff"]), P(a["nf"]),
             P(a["aL"]), P(a["aR"]), P(a["vd"]), P(a["vr"]), P(a["vp"]), P(a["vdl"]),
@@ -2039,14 +2081,59 @@ class Slab:
             P(tab["ts"]), P(tab["eq"]), P(tab["eqo"]), P(tab["nmid"]), P(tab["dry"]),
             P(tab["al0"]), P(tab["ar0"]), P(tab["D"]), P(tab["g"]), P(tab["fc"]), P(tab["r"]),
             P(tab["hz"]), P(tab["al1"]), P(tab["ar1"]), P(tab["dl"]), P(tab["vd"]), P(tab["vr"]),
-            P(tab["ph"]), P(a["re"]), C.c_double(_GSD.REPEAT_FLOOR), C.c_int64(n0), C.c_int64(n0 + frames),
+            P(tab["ph"]), P(a["re"]), C.c_double(floor), C.c_int64(n0), C.c_int64(n0 + frames),
             C.c_double(_PAN_BETA), C.c_double(float(B.SR)), C.c_int64(IDLE),
-            C.c_int64(self.cap), C.c_int(min(self.tcap, self.tap_cap)))
+            C.c_int64(dst0), C.c_int(cap))
+
+    def tap_fill(self, n0, frames):
+        """THE REFERENCED TAPS, this block (tapkernel.c): every partial with a
+        tap set written once per tap into the scratch rows, from the partial
+        as it now stands. tap_m: how many rows the renderers add."""
+        tab = self.tap_tab
+        m = 0
+        if tab is not None:
+            src = np.flatnonzero(self.tp >= 0).astype(np.int64)
+            if len(src):
+                m = self._expand(src, self.tp[src].astype(np.int32), tab, self.cap,
+                                 min(self.tcap, self.tap_cap), _GSD.REPEAT_FLOOR, n0, frames)
         # rows left over from a busier block go quiet
         if m < self.tap_m:
-            a["non"][self.cap + m:self.cap + self.tap_m] = IDLE
+            self.full["non"][self.cap + m:self.cap + self.tap_m] = IDLE
         self.tap_m = m
         return m
+
+    # THE BUS's IDENTITY TAP: a copy of each partial as it stands -- no delay,
+    # unit gain, its own place -- so tap_expand can lay a part's partials out
+    # in the scratch rows, contiguous, for a render of their own (bus_fill)
+    _BUS_TAB = None
+
+    def bus_fill(self, chans, n0, frames):
+        """A PART'S OWN BUS, live (Live._bus): the partials of these channels
+        copied into the scratch rows after the taps', for the renderers to
+        render apart (bus_rows) -- and the originals, hidden from the main
+        render this block (bus_hide). Moog, organ-gated and bent rows read
+        tables by absolute block and stay where they are."""
+        prev = getattr(self, "bus_m", 0)
+        self.bus_m, self.bus_hide = 0, None
+        if chans:
+            a = self.a
+            m = self.busy & np.isin(self.slot_ch, list(chans)) & (a["fx"] < 0) & (a["gr"] < 0) & (a["br"] < 0)
+            src = np.flatnonzero(m).astype(np.int64)
+            if len(src):
+                if Slab._BUS_TAB is None:
+                    one = lambda v, dt=np.float64: np.asarray([v], dt)
+                    Slab._BUS_TAB = dict(ts=np.asarray([0, 1], np.int32), eq=one(0.0), eqo=np.asarray([-1], np.int32),
+                                         nmid=np.zeros(1, np.int32), dry=one(1.0), al0=one(1.0), ar0=one(1.0),
+                                         D=one(0, np.int64), g=one(1.0), fc=one(0.0), r=one(1.0), hz=one(0.0),
+                                         al1=one(1.0), ar1=one(1.0), dl=one(0.0), vd=one(-1.0), vr=one(0.0), ph=one(0.0))
+                d0 = self.cap + self.tap_m
+                self.bus_m = self._expand(src, np.zeros(len(src), np.int32), Slab._BUS_TAB, d0,
+                                          self.tcap - self.tap_m, 0.0, n0, frames)
+                self.bus_hide = src
+        if self.bus_m < prev:
+            d0 = self.cap + self.tap_m
+            self.full["non"][d0 + self.bus_m:d0 + prev] = IDLE
+        return self.bus_m
 
     def release(self, key, n):
         """Note-off: one write per partial. The kernel picks it up next block."""
@@ -2262,10 +2349,21 @@ class Renderer:
             SL[:] = 0.0; SR[:] = 0.0
         # A VIEW OF WHAT WAS ASKED FOR, not the whole buffer: once it has grown
         # it stays grown, and the caller wants exactly frame_count samples.
-        if b is None:                       # nothing occupied: silence, cheaply
+        bus = getattr(self, "bus_proc", None)
+        if b is None and bus is None:       # nothing occupied: silence, cheaply
             self.slab.knobs_advance()
             return L[:frames], R[:frames]
-        if self.K == 1 or self.act < PARALLEL_MIN or frames != self.frames:
+        # A PART'S OWN BUS (Slab.bus_fill): its partials are rendered apart
+        # from their copies in the scratch rows, so the originals sit this
+        # block out of the main render
+        hide = self.slab.bus_hide if bus is not None else None
+        if hide is not None:
+            _non = self.slab.a["non"]
+            _saved = _non[hide].copy()
+            _non[hide] = IDLE
+        if b is None:
+            pass
+        elif self.K == 1 or self.act < PARALLEL_MIN or frames != self.frames:
             # One call over [0, hi). Slots past the high-water mark are idle and
             # contribute exactly zero, so stopping there is bit-identical.
             if snd:
@@ -2292,6 +2390,22 @@ class Renderer:
                 B.synth_partials(self.slab.prep(), n0, frames, c0, c0 + m, L, R, SL, SR)
             else:
                 B.synth_partials(self.slab.prep(), n0, frames, c0, c0 + m, L, R)
+        if hide is not None:
+            _non[hide] = _saved
+        if bus is not None:
+            BL = np.zeros(frames, np.float32); BR = np.zeros(frames, np.float32)
+            BSL = np.zeros(frames, np.float32); BSR = np.zeros(frames, np.float32)
+            if self.slab.bus_m:
+                c1 = self.slab.cap + self.slab.tap_m
+                if snd:
+                    B.synth_partials(self.slab.prep(), n0, frames, c1, c1 + self.slab.bus_m, BL, BR, BSL, BSR)
+                else:
+                    B.synth_partials(self.slab.prep(), n0, frames, c1, c1 + self.slab.bus_m, BL, BR)
+            oL, oR = bus.process(BL, BR, T.master_gain)
+            L[:frames] += oL; R[:frames] += oR
+            if snd:
+                sL, sR = bus.process_send(BSL, BSR, T.master_gain)
+                SL[:frames] += sL; SR[:frames] += sR
         self.slab.knobs_advance()
         L *= T.master_gain; R *= T.master_gain
         np.clip(L, -1, 1, L); np.clip(R, -1, 1, R)
@@ -2363,6 +2477,10 @@ class GpuRenderer(Renderer):
         snd = self.send
         t0 = time.perf_counter()
         idx = self.idx
+        bus = getattr(self, "bus_proc", None)
+        if bus is not None and sl.bus_hide is not None:
+            # a part's own bus: its originals out of the main pass (Slab.bus_fill)
+            idx = idx[~np.isin(idx, sl.bus_hide)]
         if sl.tap_m:                        # ...and the taps' scratch rows
             idx = np.concatenate([idx, np.arange(sl.cap, sl.cap + sl.tap_m, dtype=np.int64)])
         self.tab.setup(sl.prep(), idx, n0, snd)
@@ -2371,6 +2489,27 @@ class GpuRenderer(Renderer):
             L, R, SL, SR = self.gpu.samples(self.tab, n0, frames, snd)
         else:
             L, R, SL, SR = self.tab.samples_c(n0, frames, snd)
+        if bus is not None:
+            L = np.array(L, np.float32); R = np.array(R, np.float32)
+            if snd:
+                SL = np.array(SL, np.float32); SR = np.array(SR, np.float32)
+            BL = np.zeros(frames, np.float32); BR = np.zeros(frames, np.float32)
+            BSL = np.zeros(frames, np.float32); BSR = np.zeros(frames, np.float32)
+            if sl.bus_m:
+                c1 = sl.cap + sl.tap_m
+                self.tab.setup(sl.prep(), np.arange(c1, c1 + sl.bus_m, dtype=np.int64), n0, snd)
+                if self.gpu is not None:
+                    bL, bR, bSL, bSR = self.gpu.samples(self.tab, n0, frames, snd)
+                else:
+                    bL, bR, bSL, bSR = self.tab.samples_c(n0, frames, snd)
+                BL[:] = bL[:frames]; BR[:] = bR[:frames]
+                if snd:
+                    BSL[:] = bSL[:frames]; BSR[:] = bSR[:frames]
+            oL, oR = bus.process(BL, BR, T.master_gain)
+            L[:frames] += oL; R[:frames] += oR
+            if snd:
+                sL, sR = bus.process_send(BSL, BSR, T.master_gain)
+                SL[:frames] += sL; SR[:frames] += sR
         # the block's two halves, ms: for the meter and the timing tables
         self.ms_setup, self.ms_samples = (t1 - t0) * 1e3, (time.perf_counter() - t1) * 1e3
         sl.knobs_advance()
@@ -3526,6 +3665,7 @@ class Live:
         self.efx_rev = 0
         self._efx_tc, self._efx_tc_rev = {}, 0     # the copies' templates (_efx_tmpl)
         self._efx_q = collections.deque()            # copies to stamp ahead of their onsets
+        self._busp, self._bus_key = None, None       # a part's own bus (_bus_block)
         # ...its TIMELINE, as a file's (gsefx.parse's events at their seconds),
         # and each part's notes (start, end, velocity) for an auto wah's Sens:
         # what gsefx.filter_setup reads, so a moving filter is the file's
@@ -5766,6 +5906,31 @@ class Live:
         for c, lst in self.efx_notes.items():
             if lst and lst[0][1] < t - 4.0:
                 lst[:] = [x for x in lst if x[1] >= t - 4.0]
+
+    def _bus_block(self, n0, frames):
+        """A PART'S OWN BUS, live (LiveBus): the EFX's parts on a bus type --
+        Lo-Fi 1 and 2, Compressor, Limiter, Enhancer, Gate Reverb, Reverb --
+        rendered apart and processed, the processor rebuilt only when the
+        effect's setting changes (a knob, a type), its state otherwise carried
+        -- and kept running on silence after the notes, for a reverb's tail."""
+        ex = None
+        for c in self.efx_parts:
+            ex = self._efx_for(c)
+            if ex is not None:
+                break
+        spec = (ex['bus'], ex.get('bus_mix', (0.0, 1.0))) if ex is not None and ex.get('bus') else None
+        key = None if spec is None else (spec[0][0], tuple(sorted(spec[0][1].items())), tuple(spec[1]), frames)
+        if key != getattr(self, "_bus_key", None):
+            if getattr(self, "_busp", None) is not None:
+                self._busp.close()
+            self._busp = None if spec is None else LiveBus(spec[0][0], spec[0][1], spec[1], B.SR, frames)
+            self._bus_key = key
+        if self._busp is None:
+            self.slab.bus_fill((), n0, frames)
+            self.renderer.bus_proc = None
+            return
+        self.slab.bus_fill(set(self.efx_parts), n0, frames)
+        self.renderer.bus_proc = self._busp
 
     def _efx_place3d(self, ex, slots, cpan, n0):
         """THE 3D TYPES (3D Manual, 3D Auto): the part at the type's azimuth,
@@ -8974,6 +9139,7 @@ class Live:
                 self._filter_block(n0, frame_count)
                 self._tap_tables()
                 self.slab.tap_fill(n0, frame_count)
+            self._bus_block(n0, frame_count)
             # THE SEND BUS ONLY WHEN IT IS NEEDED. The kernel's second output
             # costs about a sixth more per partial (measured 5.40 -> 6.29 ms on
             # an 8400-partial string chord). When every channel stands at one
@@ -10400,6 +10566,67 @@ def selftest_gs(check):
           _n0 == 0 and _n1 > 50 and _vshare(_v1) - _vshare(_v0) > 6.0 and _vl > 3.0,
           "  (%d products against Thru's %d; 2-8 kHz share %+.1f dB; level %+.1f dB)"
           % (_n1, _n0, _vshare(_v1) - _vshare(_v0), _vl))
+    # A PART'S OWN BUS, LIVE (LiveBus, Slab.bus_fill): an EP note through the
+    # Reverb type rings on after its key where Thru has stopped; through the
+    # Gate Reverb (500 ms, the effect alone) it rings, then shuts; Lo-Fi 2's
+    # hum runs on through the silence; Lo-Fi 1 roughens its top
+    def _bhear(ty, ex=()):
+        _lv = Live(program=4, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            if ty:
+                for _ev in [('type', ty), ('part', 0, True)] + list(ex):
+                    _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            _lv.on_midi(_M("note_on", channel=0, note=60, velocity=110)); _lv.apply(0)
+            _b = []
+            for _i in range(int(2.0 * 48000 / 128)):
+                if _i == int(0.4 * 48000 / 128):
+                    _lv.on_midi(_M("note_off", channel=0, note=60, velocity=0))
+                _b.append(np.frombuffer(_lv.callback(None, 128, None, 0)[0], np.float32))
+            return np.concatenate(_b).reshape(-1, 2).astype(float), _lv.errors
+        finally:
+            _lv.shutdown()
+    _brm = lambda x, a, b: float(np.sqrt(np.mean(x[int(a * 48000):int(b * 48000)] ** 2))) + 1e-30
+    def _btop(x):
+        _y = x[int(0.05 * 48000):int(0.4 * 48000), 0]; _X = np.abs(np.fft.rfft(_y)) ** 2
+        _q = np.fft.rfftfreq(len(_y), 1 / 48000.0)
+        return 10 * np.log10(_X[(_q > 8000) & (_q < 16000)].sum() / max(_X.sum(), 1e-30) + 1e-30)
+    _b0, _e0 = _bhear(None)
+    _brv, _e1 = _bhear((0x01, 0x55), [('param', 1, 4)])
+    _bgt, _e2 = _bhear((0x01, 0x56), [('param', 3, 99), ('param', 16, 127)])
+    _bl2, _e3 = _bhear((0x01, 0x73), [('param', 14, 127)])
+    _bl1, _e4 = _bhear((0x01, 0x72))
+    check("live: a part's own bus -- the Reverb rings after the key, the Gate shuts, Lo-Fi 2 hums, Lo-Fi 1 roughens",
+          _brm(_b0, 0.6, 0.9) < 1e-9 and _brm(_brv, 0.6, 0.9) > 1e-4 and _brm(_bgt, 0.6, 0.9) > 1e-4
+          and _brm(_bgt, 1.5, 2.0) < 1e-9 and _brm(_bl2, 1.5, 2.0) > 1e-4 and _btop(_bl1) > _btop(_b0) + 10.0
+          and not (_e0 or _e1 or _e2 or _e3 or _e4),
+          "  (after the key: Thru %.1e, Reverb %.1e, Gate %.1e then %.1e; Lo-Fi 2 %.1e; Lo-Fi 1's 8-16 kHz %+.1f dB)"
+          % (_brm(_b0, 0.6, 0.9), _brm(_brv, 0.6, 0.9), _brm(_bgt, 0.6, 0.9), _brm(_bgt, 1.5, 2.0),
+             _brm(_bl2, 1.5, 2.0), _btop(_bl1) - _btop(_b0)))
+    # ...AND ITS REVERB SEND through the type too (LiveBus.process_send): with
+    # the send bus forced on after the note, Lo-Fi 2's hum is what the room
+    # hears from the part, where Thru sends nothing
+    def _shear(ty):
+        _lv = Live(program=4, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            if ty:
+                for _ev in [('type', ty), ('part', 0, True), ('param', 14, 127)]:
+                    _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            _lv.on_midi(_M("note_on", channel=0, note=60, velocity=110)); _lv.apply(0)
+            for _i in range(100):
+                _lv.callback(None, 128, None, 0)
+            _lv.on_midi(_M("note_off", channel=0, note=60, velocity=0))
+            for _i in range(400):
+                _lv.callback(None, 128, None, 0)
+            _lv.renderer.send = True
+            _lv.renderer.render(_lv.n, 128)
+            return float(np.abs(_lv.renderer.SL[:128]).max())
+        finally:
+            _lv.shutdown()
+    _s0, _s1 = _shear(None), _shear((0x01, 0x73))
+    check("live: a bus part's reverb send goes through its type (Lo-Fi 2's hum in the send after the note)",
+          _s0 == 0.0 and _s1 > 1e-4, "  (send after the note: Thru %.1e, Lo-Fi 2 %.1e)" % (_s0, _s1))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
