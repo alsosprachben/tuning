@@ -846,6 +846,13 @@ class Slab:
         self.tr_dep = np.zeros(capacity, np.float32)
         self.tr_st = np.ones(capacity, np.float32)
         self.tr_aL = np.zeros(capacity, np.float32)
+        # THE INSERTION EFFECT's MOVING FILTER (Live._filter_block): its slots,
+        # their channel, and the level each would have unfiltered -- a fifth
+        # baseline, kept up by channel_gain and repan as the other four are
+        self.fl_on = np.zeros(capacity, bool)
+        self.fl_ch = np.zeros(capacity, np.int32)
+        self.fl_aL = np.zeros(capacity, np.float32)
+        self.fl_aR = np.zeros(capacity, np.float32)
         self.tr_aR = np.zeros(capacity, np.float32)
         self.ls_am = np.zeros(capacity, np.float32)     # the lobe's floor
         self.ls_sharp = np.ones(capacity, np.float32)
@@ -1087,6 +1094,41 @@ class Slab:
         self.tr_dep[idx] = depth
         self.tr_st[idx] = -1.0 if stereo else 1.0
 
+    def filter_arm(self, slots, ch):
+        """Put these partials under channel ch's moving filter: their levels
+        now are what it filters, every block from here on (filter_swing)."""
+        idx = np.asarray(slots, np.intp)
+        idx = idx[self.a["fx"][idx] < 0]          # a Moog row's level is its panel's
+        if not len(idx):
+            return
+        self.fl_aL[idx] = self.a["aL"][idx]
+        self.fl_aR[idx] = self.a["aR"][idx]
+        self.fl_ch[idx] = ch
+        self.fl_on[idx] = True
+
+    def filter_swing(self, ch, H, HR=None):
+        """Channel ch's filter this block: H(f) -> |H| at each of its partials'
+        frequency now (HR the right ear's, a stereo flanger's), on the level
+        the other swings left this block where they ran, else on its own."""
+        m = self.fl_on & self.busy & (self.fl_ch == ch)
+        if not m.any():
+            return
+        idx = np.flatnonzero(m)
+        f = self.a["om"][idx].astype(np.float64) * (B.SR / (2.0 * math.pi))
+        hl = np.asarray(H(f), np.float32)
+        hr = hl if HR is None else np.asarray(HR(f), np.float32)
+        sw = self.tr_on[idx] | self.ls_on[idx]     # rewritten from their own this block
+        own = ~sw
+        a = self.a
+        if own.any():
+            io = idx[own]
+            a["aL"][io] = self.fl_aL[io] * hl[own]
+            a["aR"][io] = self.fl_aR[io] * hr[own]
+        if sw.any():
+            iw = idx[sw]
+            a["aL"][iw] *= hl[sw]
+            a["aR"][iw] *= hr[sw]
+
     def tremolo_swing(self, phase):
         """Set every modulated partial's level from where the modulator has got
         to. Evaluated NOW, so a held chord follows the wheel instead of keeping
@@ -1160,6 +1202,7 @@ class Slab:
         self.busy[idx] = True
         self.tp[idx] = -1               # a fresh slot carries no taps
         self.tpx[idx] = 0
+        self.fl_on[idx] = False         # ...and no filter
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.cv_on[idx] = False
@@ -1625,6 +1668,7 @@ class Slab:
         self.busy[idx] = True
         self.tp[idx] = -1               # a fresh slot carries no taps
         self.tpx[idx] = 0
+        self.fl_on[idx] = False         # ...and no filter
         self.ls_on[idx] = False
         self.tr_on[idx] = False
         self.cv_on[idx] = False
@@ -1744,6 +1788,8 @@ class Slab:
         self.ls_aR[idx] *= r
         self.cv_aL[idx] *= r
         self.cv_aR[idx] *= r
+        self.fl_aL[idx] *= r
+        self.fl_aR[idx] *= r
         self.mo_uL[idx] *= r
         self.mo_uR[idx] *= r
 
@@ -1781,7 +1827,7 @@ class Slab:
         rr = (shelf(ar1) / shelf(ar0)).astype(np.float32)
         for L, R in ((self.aL0, self.aR0), (a["aL"], a["aR"]),
                      (self.tr_aL, self.tr_aR), (self.ls_aL, self.ls_aR),
-                     (self.cv_aL, self.cv_aR)):
+                     (self.cv_aL, self.cv_aR), (self.fl_aL, self.fl_aR)):
             L[idx] *= rl
             R[idx] *= rr
         if itd:
@@ -3427,6 +3473,12 @@ class Live:
         self.efx_rev = 0
         self._efx_tc, self._efx_tc_rev = {}, 0     # the copies' templates (_efx_tmpl)
         self._efx_q = collections.deque()            # copies to stamp ahead of their onsets
+        # ...its TIMELINE, as a file's (gsefx.parse's events at their seconds),
+        # and each part's notes (start, end, velocity) for an auto wah's Sens:
+        # what gsefx.filter_setup reads, so a moving filter is the file's
+        self.efx_events = []
+        self.efx_notes = collections.defaultdict(list)
+        self._flt, self._flt_key, self._efx_nrev = {}, None, 0
         self.soft = {}          # channel -> the una corda shift is in
         self.sost = {}          # channel -> keys the sostenuto pedal is holding
         self.sota = {}          # channel -> [12 cents]
@@ -4852,6 +4904,10 @@ class Live:
         _efx = self._efx_for(ch) if slots and not part.drums else None
         if _efx is not None:
             self._efx_direct(_efx, slots)
+            self.efx_notes[ch].append([n0 / float(self.rate), math.inf, vel, note])
+            self._efx_nrev += 1
+            if self._filter_for(ch) is not None:
+                self.slab.filter_arm(slots, ch)
         # UNA CORDA, before those same captures and for the same reason.
         if self.soft.get(ch) and slots:
             self.slab.soft_strings(slots, part.patch.soft_pedal_strings,
@@ -5420,7 +5476,7 @@ class Live:
         g = np.full(len(idx), float(ex['level']))
         if ex.get('eq') is not None:
             g *= _GSX.eq_gain(f, ex['eq'])
-        if ex.get('cf') is not None:                 # the chorus's dry share
+        if ex.get('cf') is not None and not self._cf_comb(ex):   # the chorus's dry share
             g *= (1.0 - self._efx_share(ex)) ** 0.5
         self.slab.channel_gain(slots, g.astype(np.float32))
 
@@ -5503,6 +5559,91 @@ class Live:
     # copies below (_efx_copies), kept as the reference the taps must match.
     EFX_TAPS = True
 
+    # THE MOVING FILTERS, LIVE (efxfilter: Phaser, the wahs, Step Flanger,
+    # Humanizer, the multis' phasers -- and a flanger with feedback, which in
+    # the partial domain IS a moving comb, |(1 - mix) + mix z / (1 - fb z)|,
+    # in place of sixteen passes of copies): |H| at each partial's frequency,
+    # each block, on its level (Slab.filter_swing). The control is the file
+    # renderer's own (gsefx.filter_setup over this session's timeline and the
+    # part's notes): the LFO on the absolute clock, the pedal where it was
+    # moved, the vowels' glide, the auto wah's Sens.
+    @staticmethod
+    def _cf_comb(ex):
+        """A chorus device with feedback (a flanger's): a comb, not copies."""
+        return ex.get('cf') is not None and ex['cf'][0]['fb'] != 0.0
+
+    def _efx_event(self, n0, ev):
+        """The EFX timeline, as a file's -- compacted to a snapshot of what
+        stood two seconds ago and what came after, so a knob swept on the
+        panel does not grow it without end."""
+        t = n0 / float(self.rate)
+        self.efx_events.append((t, ev))
+        if len(self.efx_events) > 64:
+            cut = t - 2.0
+            old = [e for e in self.efx_events if e[0] <= cut]
+            new = [e for e in self.efx_events if e[0] > cut]
+            st = _GSX.state_at(old, cut)
+            parts = set()
+            for _t, e in old:
+                if e[0] == 'reset':
+                    parts.clear()
+                elif e[0] == 'part':
+                    (parts.add if e[2] else parts.discard)(e[1])
+            snap = [(cut, ('type', st['type']))] + [(cut, ('param', k, v)) for k, v in st['p'].items()]
+            snap += [(cut, ('send', k, v)) for k, v in st['send'].items()]
+            snap += [(cut, ('part', c, True)) for c in sorted(parts)]
+            self.efx_events = snap + new
+
+    def _filter_for(self, ch):
+        """Channel ch's moving filter now: [(H(f) maker of t, right ear's or
+        None)] built from the timeline, or None."""
+        key = (self.efx_rev, self._efx_nrev)
+        if self._flt_key != key:
+            self._flt_key = key
+            self._flt = {}
+            import efxfilter as _EF
+            for c in self.efx_parts:
+                ex = self._efx_for(c)
+                if ex is None:
+                    continue
+                if ex.get('filter') is not None:
+                    nts = [(s0, s1, v) for s0, s1, v, _n in self.efx_notes.get(c, ())]
+                    chn = _GSX.filter_setup(self.efx_events, c, nts)
+                    if chn is not None:
+                        self._flt[c] = ('chan', chn)
+                elif self._cf_comb(ex):
+                    d = ex['cf'][0]
+                    swing = d['vd'] / (2.0 * math.pi * max(d['rate'], 1e-6))
+                    self._flt[c] = ('comb', (d['tau'], swing, d['rate'], self._efx_share(ex), d['fb']))
+        return self._flt.get(ch)
+
+    def _filter_block(self, n0, frames):
+        """Every filtered channel's |H| this block, at the block's middle."""
+        if not self.efx_parts or not self.slab.fl_on.any():
+            return
+        import efxfilter as _EF
+        t = (n0 + 0.5 * frames) / float(self.rate)
+        for c in list(self.efx_parts):
+            fl = self._filter_for(c)
+            if fl is None:
+                continue
+            if fl[0] == 'chan':
+                chn = fl[1]
+                v = chn.control(np.array([t]))
+                ctrl = np.array([float(np.asarray(x).ravel()[0]) for x in v]) if chn.rows > 1 \
+                    else float(np.asarray(v).ravel()[0])
+                self.slab.filter_swing(c, lambda f: _EF.response(chn.ty, f, ctrl, chn.pa, chn.pb, chn.pc))
+            else:
+                tau, swing, rate, mix, fb = fl[1]
+                tl = tau + swing * math.sin(2.0 * math.pi * rate * t)
+                tr = tau + swing * math.sin(2.0 * math.pi * rate * t + math.pi)
+                self.slab.filter_swing(c, lambda f: _EF.response(4, f, tl, mix, fb, 0.0),
+                                       lambda f: _EF.response(4, f, tr, mix, fb, 0.0))
+        # the notes an auto wah no longer hears
+        for c, lst in self.efx_notes.items():
+            if lst and lst[0][1] < t - 4.0:
+                lst[:] = [x for x in lst if x[1] >= t - 4.0]
+
     def _tap_list(self, ex):
         """The chain's copies as taps, partial-independent: (D samples, g,
         lpf Hz or 0, ratio, Hz, side, (vd, vr, phase) or None)."""
@@ -5527,7 +5668,7 @@ class Live:
                     out.append((int(round((tau + k * period) * self.rate)), g, dev['lpf'] or 0.0,
                                 tap[4] ** (k + 1) if len(tap) > 4 else 1.0,
                                 tap[5] if len(tap) > 5 else 0.0, sd, vib))
-        if ex.get('cf') is not None:
+        if ex.get('cf') is not None and not self._cf_comb(ex):
             cdev = ex['cf'][0]
             sh = self._efx_share(ex)
             if sh > 0.0:
@@ -6654,6 +6795,10 @@ class Live:
 
     def _note_off(self, part, ch, note, n0):
         self._amp_touch(part)
+        for _en in self.efx_notes.get(ch, ()):
+            if _en[3] == note and _en[1] == math.inf:
+                _en[1] = n0 / float(self.rate)          # the auto wah's envelope lets go
+                self._efx_nrev += 1
         _sst = self.siren_st.get((part.pid, ch, note))
         if _sst is not None and _sst["down"]:
             # A SIREN'S KEY-UP ENDS ITS DRIVE, not its sound: the fire siren
@@ -7477,6 +7622,7 @@ class Live:
             if _gx[0] == 'part':
                 _gx = ('part', _gx[1] % 16 + 16 * _g, _gx[2])
             _GSX.apply(self.efx, _gx, self.efx_parts)
+            self._efx_event(n0, _gx)
             self.efx_rev += 1
             return
         # A GS PART PARAMETER (blockrender.parse_gs_part): the MIDI message it
@@ -7574,6 +7720,7 @@ class Live:
         # ...and the insertion effect: "When a GM System On or GS Reset is
         # received, 00 Thru will be selected" (SC-8850 OM), every part off it
         _GSX.apply(self.efx, ('reset',), self.efx_parts)
+        self._efx_event(n0, ('reset',))
         self.efx_rev += 1
         for part in self.parts:
             want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner), 0)
@@ -8569,9 +8716,6 @@ class Live:
             self._mf104_reap(n0)
             if self._efx_q:
                 self._efx_drain(n0)
-            if self.efx_parts or self.slab.tap_m:
-                self._tap_tables()
-                self.slab.tap_fill(n0, frame_count)
             if self.scan_row:
                 self._scanner_block(n0, frame_count)
             if self.siren_st or self.siren_retire:
@@ -8605,6 +8749,12 @@ class Live:
                     self.slab.leslie_doppler(n0, self.rotor_horn.rate,
                                              self.rotor_drum.rate)
                     self._ls_rate = self.rotor_horn.rate
+            # THE INSERTION EFFECT: its moving filter on the levels the swings
+            # left, then its copies from the partials as they now stand
+            if self.efx_parts or self.slab.tap_m:
+                self._filter_block(n0, frame_count)
+                self._tap_tables()
+                self.slab.tap_fill(n0, frame_count)
             # THE SEND BUS ONLY WHEN IT IS NEEDED. The kernel's second output
             # costs about a sixth more per partial (measured 5.40 -> 6.29 ms on
             # an 8400-partial string chord). When every channel stands at one
@@ -9853,6 +10003,38 @@ def selftest_gs(check):
             return np.concatenate(_b).reshape(-1, 2).astype(float), _left
         finally:
             _lv.shutdown()
+    # THE MOVING FILTERS, LIVE (Live._filter_block): the Phaser sweeps an EP's
+    # spectrum where Thru holds still; the Stereo Flanger's two combs part
+    # the ears; an Auto Wah on Sens alone opens with the Clav's notes
+    def _fhear(ty, prog=4, ex=(), nn=57):
+        _lv = Live(program=prog, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            if ty:
+                for _ev in [('type', ty), ('part', 0, True)] + list(ex):
+                    _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            _lv.on_midi(_M("note_on", channel=0, note=nn, velocity=110)); _lv.apply(0)
+            _b = [np.frombuffer(_lv.callback(None, 128, None, 0)[0], np.float32)
+                  for _i in range(int(2.5 * 48000 / 128))]
+            return np.concatenate(_b).reshape(-1, 2).astype(float)
+        finally:
+            _lv.shutdown()
+
+    def _fswing(x, ear=0):
+        x = x[int(0.2 * 48000):int(2.4 * 48000), ear]
+        _c = []
+        for _a in range(0, len(x) - 4800, 4800):
+            _X = np.abs(np.fft.rfft(x[_a:_a + 4800])) ** 2
+            _c.append(float((_X * np.fft.rfftfreq(4800, 1 / 48000.0)).sum() / max(_X.sum(), 1e-30)))
+        return float(np.std(_c))
+    _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
+    _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
+    _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
+    check("live: the moving filters -- the Phaser sweeps, the Stereo Flanger's combs part the ears, "
+          "an Auto Wah on Sens follows the notes",
+          _fswing(_fp) > 2.5 * _fswing(_f0) and _fc < 0.8 and _fswing(_fw) > 5.0 * _fswing(_f0),
+          "  (centroid swing: Thru %.0f Hz, Phaser %.0f, Sens wah %.0f; flanger L/R %.2f)"
+          % (_fswing(_f0), _fswing(_fp), _fswing(_fw), _fc))
     _er = lambda x, a, b: float(np.sqrt(np.mean(x[int(a * 48000):int(b * 48000)] ** 2))) + 1e-30
     _h0, _ = _ehear(None)
     _hd, _hl = _ehear((0x01, 0x50))

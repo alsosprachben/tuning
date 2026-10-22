@@ -641,7 +641,7 @@ def note_envelope(notes):
             u = tt - s
             held = a * np.minimum(1.0, u / WAH_ENV_ATTACK) * np.exp(-u / WAH_ENV_HOLD)
             at_end = a * np.exp(-(e - s) / WAH_ENV_HOLD)
-            lv = np.where(tt <= e, held, at_end * np.exp(-(tt - e) / WAH_ENV_RELEASE))
+            lv = np.where(tt <= e, held, at_end * np.exp(-np.maximum(tt - e, 0.0) / WAH_ENV_RELEASE))
             out[i0:i1] = np.maximum(out[i0:i1], lv)
         return out
     return env
