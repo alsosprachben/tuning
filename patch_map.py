@@ -1440,6 +1440,15 @@ SC88_CHEAP = {
     # used in soul music" (SENSATIO, 1055)
     (35, 1): ("Fretless Bs2", ("set", 35, dict(lowpass_hz=455.7, lowpass_order=3.605,
                                                tonal_dampening=2.315))),
+    # FLT TRAVELSO: THE TRAVERSO, the baroque wooden flute -- GM 73 refitted as
+    # a difference, Alex Murray's late-1700s Goulding flute (Bach's Sarabande,
+    # BWV 1013; Commons, CC BY-SA 2.0; sources.md) against the Iowa takes GM 73
+    # is fitted to, frame by frame where the pitch holds (examples/
+    # traverso_fit.py: miss 17.3 -> 4.35 dB): far purer, h2 some 20 dB under
+    # the modern flute's at D4. The bore corner under the lowest note is a
+    # slope, not a roll-off. Ben, on its part: sounds great (sysex_01, 274)
+    (73, 3): ("Flt Travelso", ("set", 73, dict(tonal_dampening=1.513, bore_corner_hz=104.3,
+                                               even_harmonic_db=-8.253))),
 }
 _SC88_DONE = {}
 
