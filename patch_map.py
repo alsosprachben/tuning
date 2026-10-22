@@ -1472,6 +1472,13 @@ for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
         VARIATIONS[(_p, _b)], _tr = _sc88_class(_how, "sc88_%d_%d" % (_p, _b))
         VARIATION_TRIM_DB.setdefault((_p, _b), _tr)
 
+# ALTOSAX EXP. (the SC-88's "Hyper Alto"): the alto played out, fitted as a
+# difference from GM 65 to Iowa's vibrato ff takes (tonelib.AltoSaxExpProperties,
+# examples/sax_exp_fit.py) -- its own vibrato, the ladder a little brighter
+from tonelib import AltoSaxExpProperties
+VARIATIONS[(65, 8)] = AltoSaxExpProperties
+VARIATION_NAMES[(65, 8)] = "AltoSax Exp."
+
 # THE MAP SWITCH: BANK SELECT LSB (CC32) picks a Sound Canvas's map, as an
 # SC-88 does -- 1 the SC-55 map (the SC-55mkII's, as a later module has it),
 # 2 the SC-88's, 3 the SC-88Pro's, 4 the SC-8850's -- latched with CC0 until the next program

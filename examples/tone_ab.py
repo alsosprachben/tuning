@@ -11,7 +11,8 @@ TRACKS is comma-separated track indices. Each NAME installs, as PROG.BANK,
 GM PROG's voice with those class attributes (a "set" tone, patch_map's
 SC88_CHEAP form), plus an optional "trim_db" (the level, over the program's
 trim) and "_base" (the program whose voice it is a setting of, PROG's own
-by default); '{}' is the program's voice as it is. Writes OUT_DIR/<file>_<NAME>.wav
+by default) or "_class" (a tonelib class to play instead, for a tone
+with code of its own); '{}' is the program's voice as it is. Writes OUT_DIR/<file>_<NAME>.wav
 at one common gain (the loudest take's peak to -1 dB), so levels compare.
 --room adds the room's tail as a full render has it (roomtail.py, from the
 sidecar the render leaves: the bands it radiated, each part's send, the GS
@@ -139,7 +140,9 @@ def main(argv):
             # each take's random phases are the same draw and only the
             # settings differ -- the router's cache cleared between takes
             P._ROUTED_CLASSES.clear()
-            P.VARIATIONS[(prog, bank)] = P.routed_variation(base, "toneab", **attrs)
+            cls = attrs.pop('_class', None)          # a tonelib class of its own, not a setting
+            P.VARIATIONS[(prog, bank)] = (type("ToneAB", (getattr(__import__("tonelib"), cls),), attrs)
+                                          if cls else P.routed_variation(base, "toneab", **attrs))
             P.VARIATION_TRIM_DB[(prog, bank)] = P.PROGRAM_TRIM_DB.get(prog, 0.0) + trim
             L, R = B.render(m, "even")[:2]
             k0 = int(t0 * B.SR)

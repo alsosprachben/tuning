@@ -22371,6 +22371,30 @@ class SaxophoneProperties(ConicalReedProperties):
     # not LEVEL.
     initial_gain = 1.24224e-04 * 1.2891
 
+
+class AltoSaxExpProperties(SaxophoneProperties):
+    """GS 65.8 "AltoSax Exp." (the SC-88's "Hyper Alto"): the alto played out.
+    FITTED AS A DIFFERENCE from GM 65's foundation (examples/sax_exp_fit.py):
+    Iowa's AltoSax.Vib.ff against the NoVib.mf takes the saxophone is fitted
+    to, 32 notes matched by pitch, Db3-Ab5.
+
+    THE VIBRATO IS THE DIFFERENCE: 4.85 Hz at +-8.1 cents, where the mf takes
+    play straight (0.9 cents) -- so this voice vibrates without the wheel,
+    each note its own phase and a rate within 3.5% of the player's (keyed on
+    pitch, as the solo vibrato is). The ladder barely moves: h3-h12 1-2 dB
+    up, tonal_dampening 1.40 -> 1.32 and formant_floor 0.65 -> 0.68 (the
+    difference's miss 1.34 -> 0.66 dB)."""
+    tonal_dampening = 1.324
+    formant_floor = 0.676
+    exp_vibrato_cents = 8.1
+    solo_vibrato_hz = 4.85
+
+    def voice_vibrato(self, frequency, index):
+        got = super().voice_vibrato(frequency, index)
+        rate, phase = (got[1], got[2]) if got else (self.solo_vibrato_hz, 0.0)
+        return (2.0 ** (self.exp_vibrato_cents / 1200.0) - 1.0, rate, phase)
+
+
 class ClarinetProperties(CylindricalReedProperties):
     """A cylindrical bore stopped by the reed: the one orchestral wind whose
     odd harmonics really do dominate -- but only in the low register.
