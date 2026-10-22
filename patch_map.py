@@ -1387,6 +1387,12 @@ SC88_CHEAP = {
     # hit, "didn't really hear much timpani" (Sorcerian, 87)
     (55, 8): ("Impact Hit", ("layer", ((55, 0, 0.0), (47, -24, 10.0), (("kit", 36, 48), -18, 10.3),
                                        (("set", 61, dict(one_shot=True, gate_time=0.12)), 0, 12.5)))),
+    # BAM HIT: the hit made PUNCHY where Impact Hit is heavy -- the brass stab
+    # at the hit's own level and the Concert BD under it, no timpani boom; each
+    # at its own trim as Impact Hit's (the hits sit G5-A5: the drum 20 down to
+    # its pitch at C4) (SENSATIO, 32)
+    (55, 19): ("Bam Hit", ("layer", ((55, 0, 0.0), (("kit", 36, 48), -20, 10.3),
+                                     (("set", 61, dict(one_shot=True, gate_time=0.12)), 0, 15.5)))),
     (48, 11): ("Choir Str.", ("layer", ((48, 0, 0.0), (52, 0, -4.0)))),
     (48, 16): ("St.Strings", ("set", 48, dict(key_pan_spread=WIDE))),
     (48, 24): ("VeloStrings", ("layer", ((49, 0, 0.0, 0, 90), (48, 0, 0.0, 91, 127)))),

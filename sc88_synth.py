@@ -231,6 +231,13 @@ SC88_SYNTH = {
     (118, 10): ("Sine Perc.", "MoogSynthDrum",
                 dict(noise_level=0.0, cutoff=0.5, resonance=0.0, a_decay=0.4)),
     # a resonant spike on a fast contour (River, 180)
+    # a dreamy pad: two saws ten cents apart swelling in, the ladder breathing
+    # on a slow LFO, a long release, the MF-104M's echo behind it (SENSATIO,
+    # 28; its capital the Sci-Fi FX, so it starts from the warm pad)
+    (103, 8): ("Dream Pad", "MoogWarmPad",
+               dict(osc1_wave=SAW, osc2_wave=SAW, osc2_freq=c(10), cutoff=0.58, resonance=0.15,
+                    a_attack=0.45, f_attack=0.4, a_release=0.55, lfo1_dest=0, lfo1_depth=0.64,
+                    lfo1_rate=0.3, mf104_on=True, mf104_time=0.6, mf104_feedback=0.4, mf104_mix=0.3)),
     # white noise: the noise oscillator alone, the ladder open, no contour
     # (sysex_01 192, River 72, SuwaFF 3); Seashore's capital is the ocean drum,
     # so it starts from the Atmosphere FX's panel, which has the noise
