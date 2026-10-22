@@ -1191,7 +1191,7 @@ Not built yet: .
 
 What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; the SC-88Pro manual for the insertion effects). **Yes** read and applied; **Partial** read, with its limit; **No** not read. Live reads the part parameters, the rhythm part, the master settings and the reset, on port A.
 
-51 rows: 23 read, 8 partly, 20 not.
+51 rows: 24 read, 8 partly, 19 not.
 
 ### System
 
@@ -1222,7 +1222,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 | `40 03 03-16` | Parameters 1-20 | **Partial** | each type at Roland's own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part's first note's; Amp Type not read |
 | `40 03 17, 19` | Send to reverb, delay | **Yes** | per note |
 | `40 03 18` | Send to chorus | **No** | parsed, not used |
-| `40 03 1B-1E` | Control sources and depths | **No** |  |
+| `40 03 1B-1E` | Control sources and depths | **Yes** | CC1-95, aftertouch or bend onto each type's + and # parameter, Roland's law (setting + controller x depth of the range); a file's at each note's onset, live's at once; the live panel learns the knob |
 | `40 4x 22` | Part assign | **Yes** | ports A and B |
 
 ### Part (40 1x)

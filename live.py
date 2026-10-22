@@ -3530,6 +3530,7 @@ class Live:
         # and each part's notes (start, end, velocity) for an auto wah's Sens:
         # what gsefx.filter_setup reads, so a moving filter is the file's
         self.efx_events = []
+        self.last_ctl = None                         # (source code, when): the panel's learn
         self.efx_notes = collections.defaultdict(list)
         self._flt, self._flt_key, self._efx_nrev = {}, None, 0
         self.soft = {}          # channel -> the una corda shift is in
@@ -3753,6 +3754,13 @@ class Live:
             return
         if msg.type in ("note_on", "note_off") and self._learn_take(msg):
             return
+        # the last controller the hardware moved: the EFX panel's "learn"
+        if msg.type == "control_change" and 1 <= msg.control <= 95:
+            self.last_ctl = (msg.control, time.monotonic())
+        elif msg.type == "aftertouch":
+            self.last_ctl = (_GSX.SRC_CAF, time.monotonic())
+        elif msg.type == "pitchwheel" and abs(msg.pitch) > 1024:
+            self.last_ctl = (_GSX.SRC_BEND, time.monotonic())
         routes = self.routes
         msgs = [msg]
         if routes and msg.type in ("control_change", "pitchwheel", "aftertouch",
@@ -3872,6 +3880,27 @@ class Live:
             self._see(msg)
             with self.lock:
                 self.events.append((time.monotonic(), msg))
+
+    def _efx_control(self, n0, msg):
+        """A controller on a part on the EFX that is one of its effect
+        controllers' sources (gsefx: CC1-95, aftertouch, bend): its value,
+        as a file's would join the timeline -- the + or # parameter moves."""
+        t = msg.type
+        if t == "control_change" and 1 <= msg.control <= 95:
+            src, v = msg.control, msg.value
+        elif t == "aftertouch":
+            src, v = _GSX.SRC_CAF, msg.value
+        elif t == "pitchwheel":
+            src, v = _GSX.SRC_BEND, (msg.pitch + 8192) >> 7
+        else:
+            return
+        c = self.efx.get('ctl') or {}
+        if src not in (c.get(_GSX.CTL_SRC1), c.get(_GSX.CTL_SRC2)) or self.efx['cv'].get(src) == v:
+            return
+        ev = ('cv', src, int(v))
+        _GSX.apply(self.efx, ev, self.efx_parts)
+        self._efx_event(n0, ev)
+        self.efx_rev += 1
 
     def efx_send(self, ev):
         """An EFX setting from the panel (gsefx.parse's events), sent as the
@@ -4309,6 +4338,8 @@ class Live:
             return
         ch = msg.channel
         parts = self.parts
+        if self.efx_parts and ch in self.efx_parts:
+            self._efx_control(n0, msg)
         if msg.type == "pitchwheel":
             # MIDI pitch bend is +/- 8192 over the wheel's range, which is
             # +/- bend_range semitones by convention.
@@ -5651,6 +5682,8 @@ class Live:
                     (parts.add if e[2] else parts.discard)(e[1])
             snap = [(cut, ('type', st['type']))] + [(cut, ('param', k, v)) for k, v in st['p'].items()]
             snap += [(cut, ('send', k, v)) for k, v in st['send'].items()]
+            snap += [(cut, ('ctl', k, v)) for k, v in st.get('ctl', {}).items()]
+            snap += [(cut, ('cv', k, v)) for k, v in st.get('cv', {}).items()]
             snap += [(cut, ('part', c, True)) for c in sorted(parts)]
             self.efx_events = snap + new
 
@@ -10255,6 +10288,40 @@ def selftest_gs(check):
           and _rc < 0.8 and _ild > 1.0,
           "  (tremolo %.2f Hz; pan L/R %.2f; horn %.2f Hz, mics L/R %.2f; 3D L %+.1f dB)"
           % (_mrate(_menv(_xt, 0)), _ap, _hz, _rc, _ild))
+    # THE EFFECT CONTROLLERS, a file's and live: CC16 the Distortion's Drive
+    # source at +100% (Drive 0) -- the file's second note, struck after CC16
+    # went to 127, the brighter (a note takes its drive at its onset, as every
+    # EFX setting in a file); live, CC16 swings the Rotary's Speed to fast
+    _cf = _bfile([_gsx(0x40, 0x00, 0x7F, 0x00, 0x41), _gsx(0x40, 0x03, 0x00, 0x01, 0x11, 0),
+                  _gsx(0x40, 0x03, 0x03, 0x00, 0), _gsx(0x40, 0x03, 0x1B, 0x10, 0), _gsx(0x40, 0x03, 0x1C, 0x7F, 0),
+                  _gsx(0x40, 0x41, 0x22, 0x01, 0), _M("program_change", channel=0, program=80),
+                  _M("control_change", channel=0, control=16, value=0),
+                  _M("note_on", channel=0, note=69, velocity=100),
+                  _M("note_off", channel=0, note=69, velocity=0, time=1400),
+                  _M("control_change", channel=0, control=16, value=127, time=40),
+                  _M("note_on", channel=0, note=69, velocity=100),
+                  _M("note_off", channel=0, note=69, velocity=0, time=1400)])
+    _xc = B.render(_cf)
+    _b1 = _hb2((np.asarray(_xc[0])[int(0.3 * B.SR):int(1.4 * B.SR)],), 2000, 8000, 0)
+    _b2 = _hb2((np.asarray(_xc[0])[int(1.7 * B.SR):int(2.8 * B.SR)],), 2000, 8000, 0)
+    _lc = Live(program=4, rate=48000, frames=128, verbose=False)
+    try:
+        _lc.warm()
+        for _ev in [('type', (0x01, 0x22)), ('part', 0, True), ('ctl', _GSX.CTL_SRC1, 16), ('ctl', _GSX.CTL_DEP1, 0x7F)]:
+            _lc.on_midi(_M("sysex", data=_GSX.message(_ev)))
+        _lc.on_midi(_M("note_on", channel=0, note=60, velocity=100)); _lc.apply(0)
+        for _i in range(40):
+            _lc.callback(None, 128, None, 0)
+        _t1 = _lc.rotor_horn.target
+        _lc.on_midi(_M("control_change", channel=0, control=16, value=127))
+        for _i in range(40):
+            _lc.callback(None, 128, None, 0)
+        _t2 = _lc.rotor_horn.target
+    finally:
+        _lc.shutdown()
+    check("the effect controllers: a file's CC16 drives its Distortion; live, CC16 throws the Rotary to fast",
+          _b2 > _b1 + 3.0 and _t1 < 1.0 and _t2 > 7.0,
+          "  (file 2-8 kHz %+.1f dB at CC16 127 over 0; live horn %.2f -> %.2f Hz)" % (_b2 - _b1, _t1, _t2))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])

@@ -564,6 +564,18 @@ def parse(path):
     # THE INSERTION EFFECT's timeline (gsefx.parse): [(t, event)], a reset an
     # event too -- read at each note's onset in prepare
     efxev = []
+    # ...and the EFX as it stands while parsing, so a controller that is one
+    # of its effect controllers' sources, on a part on it, joins the timeline
+    # as that source's value (gsefx 'cv'): the + and # parameters it moves
+    _efxst, _efxparts = _GSX.fresh_state(), set()
+
+    def _efx_cv(t, ch, src, v):
+        if ch not in _efxparts or src not in (_efxst['ctl'].get(_GSX.CTL_SRC1), _efxst['ctl'].get(_GSX.CTL_SRC2)):
+            return
+        if _efxst['cv'].get(src) != v:
+            _ev = ('cv', src, int(v))
+            _GSX.apply(_efxst, _ev, _efxparts)
+            efxev.append((t, _ev))
     _rxbank = [True]         # Rx.BANK SELECT: GM1 On turns it off
     # MPE (M1-100-UM), as live.py plays it: the zones in force, and their
     # history for prepare. A member channel takes its manager's program and is
@@ -643,6 +655,8 @@ def parse(path):
                 ch_progs.setdefault(msg.channel, []).append(_cur_prog(msg.channel))
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
+            if 1 <= msg.control <= 95:
+                _efx_cv(t, msg.channel, msg.control, msg.value)
             if msg.control == 0:
                 _bmsb[msg.channel] = msg.value
             elif msg.control == 32:
@@ -775,6 +789,7 @@ def parse(path):
                     rpns.setdefault(_c, []).append((t, _kind, _nv, _seq))
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
+            _efx_cv(t, msg.channel, _GSX.SRC_BEND, (msg.pitch + 8192) >> 7)
             _pwseq.setdefault(msg.channel, []).append((t, _seq, msg.pitch))
         elif msg.type == 'sysex':
             _lvl = gm_on_level(msg.data)
@@ -788,6 +803,7 @@ def parse(path):
                 _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear()
                 _rmap.clear()
                 efxev.append((t, ('reset',)))
+                _GSX.apply(_efxst, ('reset',), _efxparts)
                 for _dc in dedit:
                     dedit[_dc].append((t, _seq, None, 'reset', 0))
                 # BACK TO POWER-ON, which this renderer did not do at all while
@@ -823,6 +839,7 @@ def parse(path):
             _gx = _GSX.parse(msg.data)
             if _gx is not None:
                 efxev.append((t, _gx))
+                _GSX.apply(_efxst, _gx, _efxparts)
                 continue
             _ud = parse_gs_user_drum(msg.data)
             if _ud is not None:
@@ -867,6 +884,7 @@ def parse(path):
                     sotas.setdefault(_c + _g16, []).append((t, tuple(_cents)))
         elif msg.type == 'aftertouch':
             ats.setdefault(msg.channel, []).append((t, msg.value))
+            _efx_cv(t, msg.channel, _GSX.SRC_CAF, msg.value)
         elif msg.type == 'polytouch':
             pts.setdefault((msg.channel, msg.note), []).append((t, msg.value))
         elif msg.type in ('pn_pitch', 'pn_bend', 'pn_bend_range', 'pn_mgmt'):

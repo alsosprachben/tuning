@@ -1172,6 +1172,14 @@ class TUI:
                 for n, nm, _rg, d in GSX.params(name):
                     v = eff.get(n, d if d is not None else 0)
                     rows.append((("param", n, nm, v), "%-16s %s" % (nm[:16], GSX.printed_value(name, n, v))))
+                rows.append((None, "-- its controllers (a knob the instrument does not use)"))
+                mk = GSX.marks(name)
+                for which, mark, sa, da in ((1, '+', GSX.CTL_SRC1, GSX.CTL_DEP1), (2, '#', GSX.CTL_SRC2, GSX.CTL_DEP2)):
+                    pn_ = mk.get(mark)
+                    pname = next((nm for n, nm, _r, _d in GSX.params(name) if n == pn_), "-")
+                    so = GSX.source_of(st, which)
+                    desc = ("off" if so is None else "%s, %+d%%" % (self.src_label(so[0]), round(so[1] * 100)))
+                    rows.append((("ctl", which, sa, da, pname), "%s %-13s %s" % (mark, pname[:13], desc)))
                 rows.append((None, "-- sends from the EFX"))
                 for a, nm in ((GSX.SEND_REV, "to reverb"), (GSX.SEND_CHO, "to chorus"), (GSX.SEND_DLY, "to delay")):
                     rows.append((("send", a, nm, st['send'].get(a, 0)), "%-16s %d" % (nm, st['send'].get(a, 0))))
@@ -1191,6 +1199,54 @@ class TUI:
                 self.edit_efx(scr, name, what)
             elif what[0] == "send":
                 self.edit_efx(scr, name, what)
+            elif what[0] == "ctl":
+                self.pick_efx_ctl(scr, *what[1:])
+
+    @staticmethod
+    def src_label(code):
+        return ("off" if not code else "CC%d" % code if code <= 95
+                else "aftertouch" if code == GSX.SRC_CAF else "bend")
+
+    def pick_efx_ctl(self, scr, which, sa, da, pname):
+        """An effect controller: what drives the type's + (or #) parameter --
+        LEARN (move the knob, pedal or wheel), or picked from the list -- and
+        how far (depth). Each a GS message, as a file would carry it."""
+        st = self.live.efx
+        cur = int((st.get('ctl') or {}).get(sa, 0))
+        opts = ["learn: move a knob, pedal or wheel now", "off"] + ["CC%d" % c for c in range(1, 96)] \
+            + ["aftertouch", "bend", "depth: %+d%%" % round(((st.get('ctl') or {}).get(da, 0x40) - 64) / 63.0 * 100)]
+        codes = [None, 0] + list(range(1, 96)) + [GSX.SRC_CAF, GSX.SRC_BEND, "depth"]
+        start = codes.index(cur) if cur in codes else 1
+        got = self.menu(scr, "%s moved by" % pname, opts, start)
+        if got is None:
+            return
+        code = codes[got]
+        if code == "depth":
+            self.edit_efx(scr, "", ("send", da, "depth", (st.get('ctl') or {}).get(da, 0x40)),
+                          as_kind="ctl")
+            return
+        if code is None:                               # learn
+            t0 = time.monotonic()
+            self.say("move the knob, pedal or wheel for %s ..." % pname, secs=5.0)
+            scr.timeout(50)
+            try:
+                while time.monotonic() - t0 < 8.0:
+                    lc = self.live.last_ctl
+                    if lc is not None and lc[1] > t0:
+                        code = lc[0]
+                        break
+                    if scr.getch() == 27:
+                        return
+                    self.draw(scr)
+            finally:
+                scr.timeout(50)                 # the main loop's redraw
+            if code is None:
+                self.say("nothing moved")
+                return
+        self._efx_send(('ctl', sa, code))
+        if code and (st.get('ctl') or {}).get(da, 0x40) == 0x40:
+            self._efx_send(('ctl', da, 0x7F))           # a source with no depth does nothing: +100%
+        self.say("%s moved by %s" % (pname, self.src_label(code)))
 
     def pick_efx_type(self, scr):
         """The type, in Roland's families (gsefx.CATEGORIES): Enter or Right
@@ -1231,17 +1287,20 @@ class TUI:
             self._efx_send(('type', key))
             self.say("EFX: %s" % GSX.TYPES.get(key, "Thru"))
 
-    def edit_efx(self, scr, name, what):
+    def edit_efx(self, scr, name, what, as_kind=None):
         """One parameter (or send), moved with Left/Right (PgUp/PgDn ten at a
         time) or typed as a raw 0-127; each move sent, so it is heard as it
         goes. Enter keeps it, Esc puts back what it was."""
         kind, n, nm, v0 = what
+        kind = as_kind or kind
         rng = GSX.param_range(name, n) if kind == "param" else (0, 127)
         vals = list(rng) if isinstance(rng, list) else list(range(rng[0], rng[1] + 1))
         v = min(vals, key=lambda x: abs(x - v0))
         j = vals.index(v)
-        show = (lambda x: GSX.printed_value(name, n, x)) if kind == "param" else str
-        ev = (lambda x: ('param', n, x)) if kind == "param" else (lambda x: ('send', n, x))
+        show = ((lambda x: GSX.printed_value(name, n, x)) if kind == "param" else
+                (lambda x: "%+d%%" % round((x - 64) / 63.0 * 100)) if kind == "ctl" else str)
+        ev = ((lambda x: ('param', n, x)) if kind == "param" else
+              (lambda x: ('ctl', n, x)) if kind == "ctl" else (lambda x: ('send', n, x)))
         scr.keypad(True)
         while True:
             h, w = scr.getmaxyx()

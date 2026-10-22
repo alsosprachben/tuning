@@ -161,6 +161,11 @@ EQ_Q = (0.5, 1.0, 2.0, 4.0, 9.0)
 # ------------------------------------------------------------------ timeline
 # the EFX's own addresses: 40 03 aa
 SEND_REV, SEND_CHO, SEND_DLY = 0x17, 0x18, 0x19
+# THE EFFECT CONTROLLERS (SC-8850 OM, "EFX C.Src1, 2"): a source each -- Off,
+# CC1-95, channel aftertouch, bend -- and a depth -100..+100 % (40H none), the
+# first moving the parameter each type marks +, the second the one marked #
+CTL_SRC1, CTL_DEP1, CTL_SRC2, CTL_DEP2 = 0x1B, 0x1C, 0x1D, 0x1E
+SRC_CAF, SRC_BEND = 0x60, 0x61
 
 
 def parse(data):
@@ -178,6 +183,8 @@ def parse(data):
             return ('param', a - 0x02, int(d[7]))
         if a in (SEND_REV, SEND_CHO, SEND_DLY):
             return ('send', a, int(d[7]))
+        if CTL_SRC1 <= a <= CTL_DEP2:
+            return ('ctl', a, int(d[7]))
         return None
     if d[4] in (0x40, 0x50) and d[5] >> 4 == 4 and d[6] == 0x22:
         blk = d[5] & 0x0F
@@ -189,7 +196,8 @@ def parse(data):
 def fresh_state():
     """The EFX after a reset (GS Reset, GM System On): Thru, the sends at the
     module's own (reverb 40)."""
-    return dict(type=(0, 0), p={}, send={SEND_REV: 40, SEND_CHO: 0, SEND_DLY: 0})
+    return dict(type=(0, 0), p={}, send={SEND_REV: 40, SEND_CHO: 0, SEND_DLY: 0},
+                ctl={CTL_SRC1: 0, CTL_DEP1: 0x40, CTL_SRC2: 0, CTL_DEP2: 0x40}, cv={})
 
 
 def apply(st, ev, parts=None):
@@ -207,6 +215,10 @@ def apply(st, ev, parts=None):
         st['p'][ev[1]] = ev[2]
     elif ev[0] == 'send':
         st['send'][ev[1]] = ev[2]
+    elif ev[0] == 'ctl':
+        st.setdefault('ctl', {})[ev[1]] = ev[2]
+    elif ev[0] == 'cv':                 # a controller's value: ('cv', source code, 0-127)
+        st.setdefault('cv', {})[ev[1]] = ev[2]
     elif ev[0] == 'part' and parts is not None:
         (parts.add if ev[2] else parts.discard)(ev[1])
     return st
@@ -233,7 +245,7 @@ def message(ev, dev=0x10):
         body = [0x40, 0x03, 0x00, ev[1][0], ev[1][1]]
     elif ev[0] == 'param':
         body = [0x40, 0x03, 0x02 + int(ev[1]), int(ev[2])]
-    elif ev[0] == 'send':
+    elif ev[0] in ('send', 'ctl'):
         body = [0x40, 0x03, int(ev[1]), int(ev[2])]
     elif ev[0] == 'part':
         ch = int(ev[1]) % 16
@@ -323,6 +335,48 @@ def param_range(name, n):
         except ValueError:
             pass
     return (0, 127)
+
+
+def marks(name):
+    """{'+': n, '#': n}: the parameters a type's two effect controllers move."""
+    for _k, (_n, nm) in _P.TYPES.items():
+        if TYPES.get(_k) == name:
+            return {x[5]: n for n, x in _P.PARAMS[nm].items() if x[5] in ('+', '#')}
+    return {}
+
+
+def source_of(st, which):
+    """(source code, depth -1..1) of effect controller `which` (1, 2), or None."""
+    c = st.get('ctl') or {}
+    src = int(c.get(CTL_SRC1 if which == 1 else CTL_SRC2, 0))
+    if not src:
+        return None
+    dep = max(-1.0, min(1.0, (int(c.get(CTL_DEP1 if which == 1 else CTL_DEP2, 0x40)) - 0x40) / 63.0))
+    return src, dep
+
+
+def controlled(name, n, v, st):
+    """Parameter n of type `name` at raw value v, as its effect controller
+    moves it: "setting value + value from controller x depth (%)/100" of the
+    parameter's whole range, clamped (a choice of two, Rotary's Speed, by
+    halves)."""
+    mk = marks(name)
+    for which, m in ((1, '+'), (2, '#')):
+        if mk.get(m) != n:
+            continue
+        so = source_of(st, which)
+        if so is None:
+            continue
+        src, dep = so
+        cv = (st.get('cv') or {}).get(src, 64 if src == SRC_BEND else 0)
+        rg = param_range(name, n)
+        lo, hi = (min(rg), max(rg)) if isinstance(rg, list) else rg
+        x = float(v) + (hi - lo) * (cv / 127.0) * dep
+        x = max(lo, min(hi, x))
+        if isinstance(rg, list):
+            return min(rg, key=lambda r: abs(r - x))
+        return int(round(x))
+    return v
 
 
 _USED = {}       # the last chain()'s parameters as it read them: {n: value}
@@ -798,10 +852,14 @@ def chain(st):
 
     _USED.clear()
 
-    def g(key, d):                     # the file's, the type's, ours
+    _mk = marks(name) if (st.get('ctl') and any(st['ctl'].get(a) for a in (CTL_SRC1, CTL_SRC2))) else {}
+
+    def g(key, d):                     # the file's, the type's, ours -- and its controller's
         n = pn.get(key)
         v = d if n is None else p.get(n, dflt.get(n, d))
         if n is not None:
+            if _mk and n in _mk.values():
+                v = controlled(name, n, v, st)
             _USED[n] = v
         return v
     out = dict(name=name, od_gain=None, cabinet=None, comp=None, eq=None, cf=None, dly=None,
@@ -1221,6 +1279,26 @@ def selftest():
     _nc = [v for k, v in sorted(TYPES.items()) if v != "Thru" and chain(dict(type=k, p={}, send={})) is None]
     check("every type builds a chain at its defaults (Thru none: its parts play dry)",
           not _nc and chain(dict(type=(0, 0), p={}, send={})) is None, "(%s)" % ", ".join(_nc))
+    # THE EFFECT CONTROLLERS (SC-8850 OM p.130-131's examples): CC16 at +100%
+    # moves Overdrive's Drive (its +) from 0 one for one; Rotary's Speed (its +)
+    # is Slow below 64 and Fast from it; at -100% the Drive runs the other way
+    _st = fresh_state(); _st['type'] = next(k for k, v in TYPES.items() if v == "Overdrive")
+    for _e in (('param', 1, 0), ('ctl', CTL_SRC1, 16), ('ctl', CTL_DEP1, 0x7F)):
+        apply(_st, _e)
+    _dr = []
+    for _cv in (0, 64, 127):
+        apply(_st, ('cv', 16, _cv)); _dr.append(in_effect(_st)[1])
+    apply(_st, ('ctl', CTL_DEP1, 0x00)); apply(_st, ('param', 1, 127)); _neg = in_effect(_st)[1]
+    _sr = fresh_state(); _sr['type'] = next(k for k, v in TYPES.items() if v == "Rotary")
+    for _e in (('ctl', CTL_SRC1, 16), ('ctl', CTL_DEP1, 0x7F)):
+        apply(_sr, _e)
+    _sp = []
+    for _cv in (63, 64):
+        apply(_sr, ('cv', 16, _cv)); _sp.append(chain(_sr)['rotary']['fast'])
+    check("the effect controllers move a type's + parameter by Roland's law",
+          _dr == [0, 64, 127] and _neg == 0 and _sp == [False, True]
+          and parse(message(('ctl', CTL_SRC1, 16))) == ('ctl', CTL_SRC1, 16),
+          "(Drive %s; at -100%% %d; Speed %s)" % (_dr, _neg, _sp))
     # the Auto Wah's Sens: its filter opened by the part's notes -- higher
     # just after a loud note's onset than before it and than long after
     _ev = [(0.0, ('type', (0x01, 0x21))), (0.0, ('param', 2, 127)), (0.0, ('param', 6, 0)),

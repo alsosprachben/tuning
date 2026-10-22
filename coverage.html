@@ -1841,7 +1841,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <section>
 <h2>Roland GS SysEx: the address map</h2>
 <p>What the file renderer reads of Roland&rsquo;s GS map (the VE-GS Pro MIDI Implementation; the SC-88Pro manual for the insertion effects). <strong>Yes</strong> read and applied; <strong>Partial</strong> read, with its limit; <strong>No</strong> not read. Live reads the part parameters, the rhythm part, the master settings and the reset, on port A.</p>
-<p>51 rows: 23 read, 8 partly, 20 not.</p>
+<p>51 rows: 24 read, 8 partly, 19 not.</p>
 <h3>System</h3>
 <div class="tscroll"><table><tr><th>Address</th><th>Parameter</th><th></th><th>Notes</th></tr>
 <tr><td class="nm"><code>40 00 7F, 00 00 7F</code></td><td>GS Reset, System Mode Set</td><td class="rt"><span class="chip r4">Yes</span></td><td class="note">back to power-on: banks, programs, controllers, tunings, effects, drum edits, the part settings below</td></tr>
@@ -1865,7 +1865,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="nm"><code>40 03 03-16</code></td><td>Parameters 1-20</td><td class="rt"><span class="chip r2">Partial</span></td><td class="note">each type at Roland&#x27;s own defaults (the data table) until the file sends one; drive and level follow the song, the EQ and chorus/flanger settings are the part&#x27;s first note&#x27;s; Amp Type not read</td></tr>
 <tr><td class="nm"><code>40 03 17, 19</code></td><td>Send to reverb, delay</td><td class="rt"><span class="chip r4">Yes</span></td><td class="note">per note</td></tr>
 <tr><td class="nm"><code>40 03 18</code></td><td>Send to chorus</td><td class="rt"><span class="chip r0">No</span></td><td class="note">parsed, not used</td></tr>
-<tr><td class="nm"><code>40 03 1B-1E</code></td><td>Control sources and depths</td><td class="rt"><span class="chip r0">No</span></td><td class="note"></td></tr>
+<tr><td class="nm"><code>40 03 1B-1E</code></td><td>Control sources and depths</td><td class="rt"><span class="chip r4">Yes</span></td><td class="note">CC1-95, aftertouch or bend onto each type&#x27;s + and # parameter, Roland&#x27;s law (setting + controller x depth of the range); a file&#x27;s at each note&#x27;s onset, live&#x27;s at once; the live panel learns the knob</td></tr>
 <tr><td class="nm"><code>40 4x 22</code></td><td>Part assign</td><td class="rt"><span class="chip r4">Yes</span></td><td class="note">ports A and B</td></tr>
 </table></div>
 <h3>Part (40 1x)</h3>
