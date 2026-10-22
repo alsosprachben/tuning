@@ -1166,7 +1166,7 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | FL -> Delay | **3** | the flanger and a delay tap; heard on our riff (Ben: "sound great") |
 | Cho -> Flanger | **3** | the chorus's copies, then a moving comb (efxfilter) on every row, the copies' too: in its order; heard on strings |
 | Rotary Multi | **3** | the Rotary with its OD (the valve) and EQ before the rotors; heard in its demo (Ben, 2026-10-21: those sound awesome) |
-| GTR Multi 1 | **2** | compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); not yet heard in a file |
+| GTR Multi 1 | **3** | compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); heard in its demo, +20.6 dB over the dry guitar at the defaults (Ben, 2026-10-22: sounds good; louder, but not crazy loud) |
 | GTR Multi 2 | **4** | compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built |
 | GTR Multi 3 | **3** | as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: "Those all sound great") |
 | Clean Gt Multi 1 | **3** | compressor, EQ, chorus/flanger and delay, as the guitar multis'; heard on our riff (Ben: "sound great") |

@@ -1005,7 +1005,7 @@ EFX_TYPES = ("Stereo-EQ", "Spectrum", "Enhancer", "Humanizer", "Overdrive", "Dis
 EFX_RATED = {
     "Overdrive": (3, "the OD a gain stage in front of the part's valve (tubeamp, its gains multiplying), its output makeup, the 1x12 cabinet; low/high gains after it. Amp Type (Small/BltIn/2-/3-Stack) one speaker for all; heard in the OD -> Chorus/Flanger/Delay demos (Ben, 2026-10-21: those sound great)"),
     "Distortion": (3, "as Overdrive, with more gain; heard on storm_pro (kathie, SC-88Pro), its part 8 clean electric guitar at Drive 70 (Ben: sounds good)"),
-    "GTR Multi 1": (2, "compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); not yet heard in a file"),
+    "GTR Multi 1": (3, "compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); heard in its demo, +20.6 dB over the dry guitar at the defaults (Ben, 2026-10-22: sounds good; louder, but not crazy loud)"),
     "GTR Multi 2": (4, "compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built"),
     "GTR Multi 3": (3, "as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: \"Those all sound great\")"),
     "Stereo-EQ": (3, "two shelves at their own corners and two peaking mids (gsefx.eq_gain), every partial; heard on sysex_01 (Ben: \"These all sound great\")"),
