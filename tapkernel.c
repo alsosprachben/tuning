@@ -66,14 +66,14 @@ int tap_expand(int ncol, void** colp, const int* colsz,
                int nsrc, const int64_t* src, const int32_t* set,
                double* om, double* p0, double* p0R, int64_t* non, int64_t* noff,
                float* nf, float* aL, float* aR, float* vd, float* vr, float* vp, float* vdl,
-               float* delL, float* delR, const int32_t* fx, const int32_t* gr, const int32_t* br,
+               float* delL, float* delR, int32_t* fx, int32_t* gr, int32_t* br,
                const int32_t* ts, const double* eq, const int32_t* eqo, const int32_t* nmid,
                const double* dry, const double* al0, const double* ar0,
                const int64_t* tD, const double* tg, const double* tfc, const double* tr,
                const double* thz, const double* tal1, const double* tar1, const double* tdl,
                const double* tvd, const double* tvr, const double* tph,
                const float* re, double floor, int64_t n0, int64_t n1,
-               double beta, double sr, int64_t idle, int64_t dst0, int cap)
+               double beta, double sr, int64_t idle, int64_t dst0, int cap, int identity)
 {
     int m = 0;
     double b2 = beta * beta;
@@ -96,7 +96,9 @@ int tap_expand(int ncol, void** colp, const int* colsz,
     for (int i = 0; i < nsrc; i++) {
         int64_t s = src[i];
         int st = set[i];
-        if (st < 0 || ts[st] + rk >= ts[st + 1] || fx[s] >= 0 || gr[s] >= 0 || br[s] >= 0)
+        /* (an IDENTITY copy -- the bus's: no delay -- reads the Moog's, the
+           gate's and the bend's tables at the same instant, so takes them all) */
+        if (st < 0 || ts[st] + rk >= ts[st + 1] || (!identity && (fx[s] >= 0 || gr[s] >= 0 || br[s] >= 0)))
             continue;
         if (aL[s] == 0.0f && aR[s] == 0.0f)
             continue;
@@ -141,6 +143,10 @@ int tap_expand(int ncol, void** colp, const int* colsz,
             for (int c = 0; c < ncol; c++)
                 memcpy((char*)colp[c] + d * colsz[c], (char*)colp[c] + s * colsz[c], colsz[c]);
             non[d] = on2;
+            /* a delayed copy reads no table by block; an identity copy its original's */
+            fx[d] = identity ? fx[s] : -1;
+            gr[d] = identity ? gr[s] : -1;
+            br[d] = identity ? br[s] : -1;
             noff[d] = noff[s] == idle ? idle : noff[s] + D;
             double om2 = oms * ratio;
             om[d] = om2;

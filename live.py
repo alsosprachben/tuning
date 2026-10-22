@@ -918,6 +918,8 @@ class Slab:
         self.fl_ch = np.zeros(capacity, np.int32)
         self.fl_aL = np.zeros(capacity, np.float32)
         self.fl_aR = np.zeros(capacity, np.float32)
+        self._fl_mo, self._fl_sav = [], None          # the Moog rows' |H| this block (moog_filter_apply)
+        self._shed_mo = []                            # Moog rows faded out, to go when the fade has (shed_tick)
         self.tr_aR = np.zeros(capacity, np.float32)
         self.ls_am = np.zeros(capacity, np.float32)     # the lobe's floor
         self.ls_sharp = np.ones(capacity, np.float32)
@@ -1176,22 +1178,44 @@ class Slab:
         if not len(busy):
             return 0
         noff = a["noff"][busy]
-        ok = (a["fx"][busy] < 0) & (a["non"][busy] <= n) & ((noff == IDLE) | (noff > n))
+        ok = (a["non"][busy] <= n) & ((noff == IDLE) | (noff > n))
         idx = busy[ok]
         k = int(frac * len(idx))
         if k < 1:
             return 0
         f = a["nf"][idx]
         q = idx[np.argpartition(-f, k)[:k]]
-        a["noff"][q] = np.minimum(a["noff"][q], n)
-        a["re"][q] = np.minimum(a["re"][q], np.float32(self.SHED_FADE * B.SR))
+        mo = a["fx"][q] >= 0
+        qn = q[~mo]
+        a["noff"][qn] = np.minimum(a["noff"][qn], n)
+        a["re"][qn] = np.minimum(a["re"][qn], np.float32(self.SHED_FADE * B.SR))
+        if mo.any():
+            # A MOOG ROW's envelope is its note's (the FT row), not its own, so
+            # it is faded by its level -- every baseline to zero, so no panel
+            # or aftertouch brings it back, the kernel ramping it down over the
+            # next block from where it is -- and taken out of the render once
+            # that has (shed_tick)
+            qm = q[mo]
+            for x in (self.aL0, self.aR0, a["aL"], a["aR"], self.tr_aL, self.tr_aR, self.ls_aL, self.ls_aR,
+                      self.cv_aL, self.cv_aR, self.fl_aL, self.fl_aR, self.mo_uL, self.mo_uR):
+                x[qm] = 0.0
+            self._shed_mo.append((n + 2 * B.BLK, qm))
         return k
+
+    def shed_tick(self, n):
+        """The shed Moog rows whose fade has run: out of the render (their
+        slots go with their notes, as every shed slot)."""
+        if self._shed_mo and self._shed_mo[0][0] <= n:
+            due = [x for x in self._shed_mo if x[0] <= n]
+            self._shed_mo = [x for x in self._shed_mo if x[0] > n]
+            for _, q in due:
+                q = q[self.busy[q]]
+                self.a["non"][q] = IDLE
 
     def filter_arm(self, slots, ch):
         """Put these partials under channel ch's moving filter: their levels
         now are what it filters, every block from here on (filter_swing)."""
         idx = np.asarray(slots, np.intp)
-        idx = idx[self.a["fx"][idx] < 0]          # a Moog row's level is its panel's
         if not len(idx):
             return
         self.fl_aL[idx] = self.a["aL"][idx]
@@ -1210,6 +1234,17 @@ class Slab:
         f = self.a["om"][idx].astype(np.float64) * (B.SR / (2.0 * math.pi))
         hl = np.asarray(H(f), np.float32)
         hr = hl if HR is None else np.asarray(HR(f), np.float32)
+        mo = self.a["fx"][idx] >= 0
+        if mo.any():
+            # A MOOG ROW's level is its panel's (moog_panel_apply, aftertouch):
+            # its |H| goes on just for the render (moog_filter_apply) -- the
+            # kernel ramps each block from where the last ended (aLp), so the
+            # filter moves smoothly and no writer ever sees it
+            self._fl_mo.append((idx[mo], hl[mo], hr[mo]))
+            keep = ~mo
+            idx, hl, hr = idx[keep], hl[keep], hr[keep]
+            if not len(idx):
+                return
         sw = self.tr_on[idx] | self.ls_on[idx]     # rewritten from their own this block
         own = ~sw
         a = self.a
@@ -1221,6 +1256,28 @@ class Slab:
             iw = idx[sw]
             a["aL"][iw] *= hl[sw]
             a["aR"][iw] *= hr[sw]
+
+    def moog_filter_apply(self):
+        """The Moog rows' |H| this block (filter_swing), on their levels for
+        the render only: moog_filter_restore puts the panel's back after it,
+        once knobs_advance has carried the filtered end into aLp."""
+        if not self._fl_mo:
+            self._fl_sav = None
+            return
+        idx = np.concatenate([x[0] for x in self._fl_mo])
+        hl = np.concatenate([x[1] for x in self._fl_mo]); hr = np.concatenate([x[2] for x in self._fl_mo])
+        self._fl_mo = []
+        a = self.a
+        self._fl_sav = (idx, a["aL"][idx].copy(), a["aR"][idx].copy())
+        a["aL"][idx] *= hl
+        a["aR"][idx] *= hr
+
+    def moog_filter_restore(self):
+        sv = self._fl_sav
+        if sv is not None:
+            self.a["aL"][sv[0]] = sv[1]
+            self.a["aR"][sv[0]] = sv[2]
+            self._fl_sav = None
 
     def tremolo_swing(self, phase):
         """Set every modulated partial's level from where the modulator has got
@@ -2073,7 +2130,7 @@ class Slab:
     _TAP_NAMED = ("om", "p0", "p0R", "non", "noff", "nf", "aL", "aR", "vd", "vr", "vp", "vdl",
                   "delL", "delR", "fx", "gr", "br")
 
-    def _expand(self, src, st, tab, dst0, cap, floor, n0, frames):
+    def _expand(self, src, st, tab, dst0, cap, floor, n0, frames, identity=False):
         """tapkernel.c's tap_expand over these source slots and tap sets, into
         the scratch rows from dst0 (cap of them): how many it wrote."""
         import ctypes as C
@@ -2094,7 +2151,7 @@ class Slab:
             P(tab["hz"]), P(tab["al1"]), P(tab["ar1"]), P(tab["dl"]), P(tab["vd"]), P(tab["vr"]),
             P(tab["ph"]), P(a["re"]), C.c_double(floor), C.c_int64(n0), C.c_int64(n0 + frames),
             C.c_double(_PAN_BETA), C.c_double(float(B.SR)), C.c_int64(IDLE),
-            C.c_int64(dst0), C.c_int(cap))
+            C.c_int64(dst0), C.c_int(cap), C.c_int(1 if identity else 0))
 
     def tap_fill(self, n0, frames):
         """THE REFERENCED TAPS, this block (tapkernel.c): every partial with a
@@ -2122,13 +2179,14 @@ class Slab:
         """A PART'S OWN BUS, live (Live._bus): the partials of these channels
         copied into the scratch rows after the taps', for the renderers to
         render apart (bus_rows) -- and the originals, hidden from the main
-        render this block (bus_hide). Moog, organ-gated and bent rows read
-        tables by absolute block and stay where they are."""
+        render this block (bus_hide). An identity copy reads the Moog's, the
+        organ's gate and the bend's tables at the same instant as its
+        original, so those rows go with the rest."""
         prev = getattr(self, "bus_m", 0)
         self.bus_m, self.bus_hide = 0, None
         if chans:
             a = self.a
-            m = self.busy & np.isin(self.slot_ch, list(chans)) & (a["fx"] < 0) & (a["gr"] < 0) & (a["br"] < 0)
+            m = self.busy & np.isin(self.slot_ch, list(chans))
             src = np.flatnonzero(m).astype(np.int64)
             if len(src):
                 if Slab._BUS_TAB is None:
@@ -2139,7 +2197,7 @@ class Slab:
                                          al1=one(1.0), ar1=one(1.0), dl=one(0.0), vd=one(-1.0), vr=one(0.0), ph=one(0.0))
                 d0 = self.cap + self.tap_m
                 self.bus_m = self._expand(src, np.zeros(len(src), np.int32), Slab._BUS_TAB, d0,
-                                          self.tcap - self.tap_m, 0.0, n0, frames)
+                                          self.tcap - self.tap_m, 0.0, n0, frames, identity=True)
                 self.bus_hide = src
         if self.bus_m < prev:
             d0 = self.cap + self.tap_m
@@ -9213,6 +9271,7 @@ class Live:
             if self.efx_parts or self.slab.tap_m:
                 self._efx_rotary_sync()
                 self._filter_block(n0, frame_count)
+                self.slab.moog_filter_apply()
                 self._tap_tables()
                 self.slab.tap_fill(n0, frame_count)
             self._bus_block(n0, frame_count)
@@ -9227,7 +9286,11 @@ class Live:
             self._send_uniform = (_snd[0] if all(v == _snd[0] for v in _snd)
                                   and n0 >= self.slab.odd_until else None)
             self.renderer.send = _room_on and self._send_uniform is None
-            L, R = self.renderer.render(n0, frame_count)
+            try:
+                L, R = self.renderer.render(n0, frame_count)
+            finally:
+                self.slab.moog_filter_restore()
+            self.slab.shed_tick(n0 + frame_count)
         except Exception as e:
             # Last line of defence: emit silence for this block rather than let
             # the exception propagate, which PortAudio answers by stopping.
@@ -10734,6 +10797,39 @@ def selftest_gs(check):
           _pild > 30.0 and _pr(_pd, 0.9, 1.5, 0) > 1e-5 and _ph1 == 0 and _ph2 == 0 and not (_pe1 or _pe2),
           "  (OD1 alone: left %+.0f dB over right; Cho / Delay after the key %.1e; slots held %d, %d)"
           % (_pild, _pr(_pd, 0.9, 1.5, 0), _ph1, _ph2))
+    # THE MOOG's ROWS, LIVE: a Moog lead's partials through the Phaser (its
+    # |H| on their levels for the render only), on Lo-Fi 1's bus (the identity
+    # copy takes the Moog's rows), and shed by the governor (faded by their
+    # levels, then out of the render) -- none of it an error
+    def _mhear(ty, shed=False):
+        _lv = Live(program=80, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            if ty:
+                for _ev in [('type', ty), ('part', 0, True)]:
+                    _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            _lv.on_midi(_M("note_on", channel=0, note=57, velocity=110)); _lv.apply(0)
+            _b, _k = [], 0
+            for _i in range(int(2.0 * 48000 / 128)):
+                if shed and _i == 150:
+                    _k = _lv.slab.shed(_lv.n, 0.3)
+                _b.append(np.frombuffer(_lv.callback(None, 128, None, 0)[0], np.float32))
+            _a = _lv.slab.a
+            _out = int((_lv.slab.busy & (_a["fx"] >= 0) & (_a["non"] == IDLE)).sum())
+            return np.concatenate(_b).reshape(-1, 2).astype(float), _k, _out, _lv.errors
+        finally:
+            _lv.shutdown()
+    _m0, _, _, _me0 = _mhear(None)
+    _mp, _, _, _me1 = _mhear((0x01, 0x20))
+    _ml, _, _, _me2 = _mhear((0x01, 0x72))
+    _ms, _mk, _mo, _me3 = _mhear(None, shed=True)
+    _mtop = lambda x: 10 * np.log10(float((np.abs(np.fft.rfft(x[int(0.2 * 48000):int(1.0 * 48000), 0])) ** 2)[
+        int(8000 * 0.8):int(16000 * 0.8)].sum()) / float((np.abs(np.fft.rfft(x[int(0.2 * 48000):int(1.0 * 48000), 0])) ** 2).sum()) + 1e-30)
+    check("live: a Moog lead's rows -- through the Phaser, on Lo-Fi 1's bus, shed by the governor",
+          _fswing(_mp) > 3.0 * _fswing(_m0) and _mtop(_ml) > _mtop(_m0) + 20.0 and _mk > 0 and _mo == _mk
+          and not (_me0 or _me1 or _me2 or _me3),
+          "  (centroid swing %.0f against Thru's %.0f Hz; Lo-Fi 1's 8-16 kHz %+.0f dB; %d shed, %d out)"
+          % (_fswing(_mp), _fswing(_m0), _mtop(_ml) - _mtop(_m0), _mk, _mo))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
