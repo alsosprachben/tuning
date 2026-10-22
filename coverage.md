@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 150 of the SC-55's 150 are built,
+under a program (SC-55 owner's manual p.68). 151 of the SC-55's 151 are built,
 and 96 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -911,6 +911,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 120.3 | SC-88 | Gt.CutNz. 2 | `SfxGuitarCutDown_sfx48` | **4** | SC-88 map: 120.1's voice |
 | 120.4 | SC-88 | Dist.CutNz. | `SfxGuitarCutDown_sfx48` | **4** | SC-88 map: 120.1's voice |
 | 120.6 | SC-88 | Pick Scrape | `GuitarFretNoise` | **3** | SC-88 map: GM 120 Guitar Fret Noise's voice |
+| 120.12 | SC-55 | Biwa Stroke | `Biwa` | **4** | the SATSUMA BIWA (tonelib.BiwaProperties): a wooden-bodied lute from the shamisen's struck-silk numbers, FITTED to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, CC BY-NC-SA 4.0 data: the fitted numbers derive from it; sources.md): 44 strokes, the decay fast and flat across the harmonics, the body 500 Hz-5 kHz (the cassette's ends not the instrument's). Ben: 'Sounds great' |
 | 121.1 | SC-55 | Fl. Key Click | `SfxKeyClick_sfx51` | **4** | the SFX set's key 51 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
 | 122.1 | SC-55 | Rain | `SfxRain_sfx79` | **4** | the SFX set's key 79 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): RAIN fitted to a Freesound recording (CC0, examples/weather_fit.py): the hiss band by band (1.7 dB rms) and the DROPS as clicks -- each a cluster of sines across 500 Hz-16 kHz at one instant (grains' ninth field), +16 dB over the hiss against the recording's +19, every octave lifted as its drops lift it. Ben: "the rain is good enough drops" |
 | 122.2 | SC-55 | Thunder | `SfxThunder_sfx80` | **4** | the SFX set's key 80 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): THUNDER fitted to a Freesound strike (CC0): its rumble under 250 Hz exact to 2 kHz, the cracks low grains; gated 1 s as GeneralUser GS's |
@@ -1092,11 +1093,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 191 | 191 | 100% | 155 | 36 | 0 | 0 | 0 | 0 |
+| SC-55 | 192 | 192 | 100% | 156 | 36 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 220 | 97% | 173 | 47 | 0 | 0 | 0 | 6 |
 | SC-88 | 418 | 350 | 84% | 233 | 117 | 0 | 0 | 0 | 68 |
-| SC-88Pro | 774 | 363 | 47% | 239 | 124 | 0 | 0 | 0 | 411 (11 another tone) |
-| SC-8850 | 1262 | 361 | 29% | 237 | 124 | 0 | 0 | 0 | 901 (13 another tone) |
+| SC-88Pro | 774 | 364 | 47% | 240 | 124 | 0 | 0 | 0 | 410 (11 another tone) |
+| SC-8850 | 1262 | 362 | 29% | 238 | 124 | 0 | 0 | 0 | 900 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1119,7 +1120,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Effects | 8/8 | 11/11 | 42/42 | 43/76 | 43/122 |
 | Ethnic | 9/9 | 10/10 | 11/22 | 11/37 | 11/44 |
 | Percussive | 12/12 | 13/13 | 22/28 | 23/47 | 23/95 |
-| Sound Effects | 40/40 | 41/41 | 46/49 | 47/73 | 47/144 |
+| Sound Effects | 41/41 | 41/41 | 46/49 | 48/73 | 48/144 |
 
 ### The SC-88 map's 68 still to build, by what they take
 

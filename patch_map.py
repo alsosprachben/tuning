@@ -1507,6 +1507,14 @@ for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
         VARIATIONS[(_p, _b)], _tr = _sc88_class(_how, "sc88_%d_%d" % (_p, _b))
         VARIATION_TRIM_DB.setdefault((_p, _b), _tr)
 
+# BIWA STROKE: the satsuma biwa (tonelib.BiwaProperties), fitted to Hugh de
+# Ferranti's (PARADISEC HDF1-SB33; CC BY-NC-SA 4.0 data: sources.md) -- at the
+# shamisen's trim, the instrument it starts from, not GM 120's fret noise
+from tonelib import BiwaProperties
+VARIATIONS[(120, 12)] = BiwaProperties
+VARIATION_NAMES[(120, 12)] = "Biwa Stroke"
+VARIATION_TRIM_DB[(120, 12)] = PROGRAM_TRIM_DB.get(106, 0.0)
+
 # THE MELLOTRON (tonelib.MellotronMixin): a program's own router, each class
 # it picks on tape -- the run-out, no touch, each key's own tuning, one
 # capstan's wow -- with the tape's colour as settings

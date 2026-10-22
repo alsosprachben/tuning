@@ -19875,6 +19875,50 @@ class ShamisenProperties(PromptDecay, MembraneBodyProperties):
     initial_gain = 0.032913 * 10 ** (6.989 / 20.0)
 
 
+class BiwaProperties(PromptDecay, FormantBody, PluckedStringProperties):
+    """GS 120.12 "Biwa Stroke": the satsuma biwa -- silk strings over a
+    WOODEN pear-shaped body (a koto's kind, not the shamisen's skin), struck
+    with a huge bachi that hits the soundboard with the strings, and frets
+    tall enough that a string grazes them: a sawari of its own.
+
+    FITTED to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, side A,
+    1984-2000; examples/pluck_fit.py --voice=biwa). THAT DATA IS CC BY-NC-SA
+    4.0 under PARADISEC's access conditions: the numbers fitted here derive
+    from it, the recording itself stays on Ben's machine (sources.md). Starts
+    from the shamisen's struck-silk numbers, which the fit then moves."""
+    release_valve_time = 0.554
+    release_fraction_max = None
+    strike_point = 0.18
+    strike_depth = 0.0
+    inharmonicity_coefficient = 1.0e-05
+    strike_fills_with_force = False
+    prompt_dbs = 113.1
+    aftersound_share = 0.1882
+    prompt_max_hz = 6239.0
+    tonal_dampening = 0.45
+    # THE BODY IS ITS FITTED TRIM ALONE (body_trim_db, --fit=body): a flat
+    # floor, no formants, a corner far over the band it is fitted on -- set,
+    # because without a corner harmonic_volume skips the body entirely
+    formant_floor = 1.0
+    bore_corner_hz = 12000.0
+    # fitted 500 Hz-5 kHz only (pluck_fit LOW_HZ/TOP_HZ): under it the take's
+    # 1980s cassette and microphone, 25-32 dB thin, over it the tape's top
+    # gone -- neither the instrument's. Mid-forward, 17-24 dB over 500 Hz from
+    # 640 Hz to 4 kHz: the satsuma's bright, nasal stroke (miss 14.1 -> 12.6
+    # dB with the unfitted ends; +10-20 -> +5-8 dB inside the band)
+    body_trim_db = ((508, 1.8), (640, 17.5), (806, 2.1), (1016, 21.5), (1280, 23.1), (1613, 17.4),
+                    (2032, 10.9), (2560, 15.3), (3225, 24.0), (4064, 22.8))
+    # THE DECAY (--fit=decay, 44 strokes): fast and nearly flat across the
+    # harmonics -- the sawari keeps the top up as long as the fundamental.
+    # The strokes of a lesson are often damped by the next, so the miss
+    # stays wide (27 dB/s)
+    decay_db = 15.54
+    harmonic_decay_db = 0.0233
+    decay_register_slope = 0.6748
+    max_harmonic = 96
+    initial_gain = 0.032913 * 10 ** (6.989 / 20.0)
+
+
 class KotoProperties(FormantBody, PluckedStringProperties):
     """GM 107. Thirteen long silk strings over a long hollow paulownia box.
 

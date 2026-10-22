@@ -64,9 +64,12 @@ VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoPrope
           # on its class through the drone's own program slot (DRONE_PROG)
           "taishodrone": (107, "TaishoDroneProperties", "taishodrone"),
           # GS 24.8 Ukulele on Ben's own (ukulele_ben/, recorded 2026-10-19)
-          "ukulele": (24, "UkuleleProperties", "ukulele")}
+          "ukulele": (24, "UkuleleProperties", "ukulele"),
+          # GS 120.12 Biwa Stroke on Hugh de Ferranti's satsuma biwa (PARADISEC
+          # HDF1-SB33, CC BY-NC-SA 4.0 data, never committed; sources.md)
+          "biwa": (120, "BiwaProperties", "biwa")}
 # the GS bank a voice is (a variation): CC0 before its program change
-BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8}
+BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8, "biwa": 12}
 BANK = 0
 NH = 24
 HOP, WIN = 0.1, 0.2
@@ -95,6 +98,11 @@ VOICE_OPTS = {"mandolin": dict(T_END=3.0),
                                # it share one table (bent to the take's pitch,
                                # the played note left the open strings behind)
                                TUNER="hybrid440:443.92"),
+              # its strokes ring 0.3 s and more before the next, as the shamisen's
+              "biwa": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3, P_SECS=0.3,
+                           PROMPT_X0=(30.0, 0.15, 6000.0),
+                           # its body fitted where the cassette is honest
+                           LOW_HZ=500.0, TOP_HZ=5000.0),
               "shamisen": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3,
                                P_SECS=0.3, PROMPT_X0=(30.0, 0.15, 6000.0),
                                # C#3, its sympathetic_tonic, at the bass string's 142.2 Hz
@@ -244,7 +252,7 @@ def stage_ukulele():
     print("  %d notes staged (of %d played): %s" % (len(got), len(UKE_NOTES), have))
 
 
-def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3):
+def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100, hi=1500, fall_db=None):
     """THE SHAMISEN'S PLUCKS, out of RTB45's live festival take (freesound
     195521, CC BY 4.0; sources.md "Ethnic programs"): every onset (a 12 dB
     rise in 10 ms, over -40 dB) that rings MIN_NEXT s or more before the next,
@@ -264,13 +272,21 @@ def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3):
     for i, j in zip(on[:-1], on[1:]):
         if j - i < min_next * sr:
             continue
-        T = track(x[i:j], sr, 100, 1500)
+        T = track(x[i:j], sr, lo, hi)
         if len(T) < 12:
             continue
         t = T[3:30]
         f = float(np.median(t[:, 0]))
         if (t[:, 1] < 0.2).mean() <= 0.6 or np.std(1200 * np.log2(t[:, 0] / f)) >= 30:
             continue
+        # FALL_DB: a pluck falls -- this many dB from 50 to 300 ms -- where a
+        # sung or spoken note held over it does not (a lesson tape's voice)
+        if fall_db is not None:
+            w = int(0.02 * sr)
+            a = np.sqrt(np.mean(x[i + int(0.05 * sr):i + int(0.05 * sr) + w] ** 2))
+            b = np.sqrt(np.mean(x[i + int(0.28 * sr):i + int(0.28 * sr) + w] ** 2))
+            if 20 * np.log10(a / max(b, 1e-12)) < fall_db:
+                continue
         seg = x[max(0, i - int(0.02 * sr)):j - int(0.02 * sr)]
         # THE TRACKER'S MEDIAN, not a spectral peak: over 0.3 s the peak's
         # bins are 4 Hz wide and it scattered 132-148 Hz around a steady 142
@@ -560,8 +576,9 @@ def fit_body(passes=4):
         if n == passes:
             break
         for k in np.flatnonzero(ok):
-            if CEN[k] > TOP_HZ:
-                continue        # over the top a take's noise, not its harmonics
+            if CEN[k] > TOP_HZ or CEN[k] < LOW_HZ:
+                continue        # over the top a take's noise, not its harmonics;
+                                # under LOW_HZ an old tape's or microphone's
             c = int(round(CEN[k]))
             trim[c] = max(-24.0, min(24.0, trim.get(c, 0.0) + 0.5 * float(d[k])))
         cls.body_trim_db = tuple((c, round(v, 1)) for c, v in sorted(trim.items()))
@@ -776,6 +793,9 @@ def fit_quick(maxfev=50):
 
 TAKE = None     # --take=ma: fit to one take's plucks only
 TOP_HZ = 11500.0   # the body fit's last band: above it one pluck's noise, not harmonics
+# ...and the bottom: a take whose low end is its tape's or microphone's (the
+# biwa's 1980s cassette, 25-32 dB thin under 400 Hz) leaves it to the class
+LOW_HZ = 0.0
 
 
 def main(argv):
@@ -804,7 +824,13 @@ def main(argv):
                 # string, no key down?), so its fundamental is not the note's
                 skip=("Mic_G4_",))
         else:
-            stage_live() if voice == "shamisen" else stage()
+            if voice == "biwa":
+                # side A's first 8:50 (the rest is blank tape); its lowest
+                # string is A2, 110 Hz
+                stage_live("sb", os.path.expanduser(
+                    "~/Documents/refs/paradisec/HDF1-SB33/SB33-A-44k.wav"), lo=80, hi=1500, fall_db=6.0)
+            else:
+                stage_live() if voice == "shamisen" else stage()
         return 0
     if "--fit=decay" in argv:
         # --nh=N: the decay read on h1-hN only (a take whose upper harmonics
