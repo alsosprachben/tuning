@@ -4990,7 +4990,7 @@ class Live:
         # captures (its copies at the end, where the bend is known)
         _efx = self._efx_for(ch) if slots and not part.drums else None
         if _efx is not None:
-            self._efx_direct(_efx, slots)
+            self._efx_direct(_efx, slots, part)
             self.efx_notes[ch].append([n0 / float(self.rate), math.inf, vel, note])
             self._efx_nrev += 1
             if _efx.get('pos3d'):
@@ -5560,11 +5560,21 @@ class Live:
         a = float(ex['cf'][1])
         return a * a / (1.0 + a * a)
 
-    def _efx_direct(self, ex, slots):
+    def _efx_direct(self, ex, slots, part=None):
         a = self.slab.a
         idx = np.fromiter(slots, np.int64, len(slots))
         f = a["om"][idx].astype(np.float64) * self.rate / (2.0 * math.pi)
         g = np.full(len(idx), float(ex['level']))
+        # ITS OD STAGE'S GAIN, in front of the valve (_amp_snapshot): into the
+        # note's level, so the valve is driven harder and comes out louder,
+        # saturating at its ceiling, as a pedal does (blockrender's _EFG)
+        if ex.get('od_gain'):
+            g *= float(ex['od_gain'])
+        # ...and the type's speaker, on a voice with none of its own (a voice
+        # with one was cabineted at build time; offline, the voice's goes first)
+        if ex.get('cabinet') and part is not None and not getattr(part.patch, "cabinet", None):
+            import cabinet as _CB
+            g *= _CB.get(ex['cabinet']).gain(f)
         if ex.get('eq') is not None:
             g *= _GSX.eq_gain(f, ex['eq'])
         if ex.get('cf') is not None and not self._cf_comb(ex):   # the chorus's dry share
@@ -7131,8 +7141,25 @@ class Live:
         whole set -- which is the same rule the offline path states as the
         lifetime of a product being the intersection of its parents'.
         """
-        if part.patch.amp_drive > 0.0:
+        if part.patch.amp_drive > 0.0 or self._efx_od(part) is not None:
             self.amp_dirty.add(part.pid)
+
+    def _efx_od(self, part):
+        """The EFX chain with an OD stage this part plays through, or None:
+        its channel's -- or, for an all-channels part, the first of the EFX's
+        channels it is sounding on."""
+        if not self.efx_parts:
+            return None
+        if part.channel is not None:
+            chs = (part.channel,)
+        else:
+            chs = (sorted({k[1] for k in list(self.slab.live) if k[0] == part.pid and k[1] in self.efx_parts})
+                   or sorted(self.efx_parts))
+        for c in chs:
+            ex = self._efx_for(c)
+            if ex is not None and ex.get('od_gain'):
+                return ex
+        return None
 
     def _amp_key(self, pid):
         # A uniform 4-tuple like every other key, with no channel and no note:
@@ -8165,6 +8192,22 @@ class Live:
         drive = (part.patch.amp_drive if step is None else
                  part.patch.amp_drive * LIVE_DRIVE_RANGE
                  * step / float(LIVE_DRIVE_STEPS))
+        # THE INSERTION EFFECT's OD (gsefx: Overdrive, Distortion, the guitar
+        # multis, the series and parallel OD types): its gain is already in the
+        # notes' level (_efx_direct); the valve it drives is the voice's own,
+        # or -- a voice with none -- one at its edge (gsefx.PEDAL_AMP_DRIVE)
+        # measured against the Strat's level; either reference carries the
+        # type's Level, so its Level is a level and its Drive the drive
+        efx = self._efx_od(part)
+        ref_e = None
+        if efx is not None:
+            if drive <= 0.0:
+                drive = _GSX.PEDAL_AMP_DRIVE
+                ref_e = 0.2289 * __import__("patch_map").program_trim(part.patch.vprogram)
+            else:
+                ref_e = getattr(part.patch, 'amp_reference', None)
+            if ref_e:
+                ref_e *= float(efx['level'])
         slots = [sl for k, ss in self.slab.live.items()
                  if k[0] == pid and k[3] != "amp" for sl in ss]
         if drive <= 0.0 or len(slots) < 2:
@@ -8220,7 +8263,7 @@ class Live:
             return None
         src = int(idx[ok[int(np.argmax(aM[ok]))]])
         return (pid, key, src, f[ok], aM[ok], ph[ok], drive, n0,
-                getattr(part.patch, 'amp_reference', None),
+                ref_e if efx is not None else getattr(part.patch, 'amp_reference', None),
                 getattr(part.patch, 'amp_imbalance', None))
 
     def _amp_place(self, n0, pid, key, src, out):
@@ -8233,6 +8276,13 @@ class Live:
         p = [p[2] for p in out]
         part = next((q for q in self.parts if q.pid == pid), None)
         cab = getattr(part.patch, "cabinet", None) if part else None
+        efx = self._efx_od(part) if part is not None else None
+        if efx is not None:
+            # the type's speaker where the voice has none, and its EQ -- which
+            # is AFTER the valve, so on its products too (gsefx.eq_gain)
+            cab = cab or efx.get('cabinet')
+            if efx.get('eq') is not None:
+                a = (np.asarray(a, float) * _GSX.eq_gain(np.asarray(f, float), efx['eq'])).tolist()
         if cab:
             # THROUGH THE SPEAKER, like everything else this voice makes. The
             # note templates were cabineted at build time; these products were
@@ -10322,6 +10372,34 @@ def selftest_gs(check):
     check("the effect controllers: a file's CC16 drives its Distortion; live, CC16 throws the Rotary to fast",
           _b2 > _b1 + 3.0 and _t1 < 1.0 and _t2 > 7.0,
           "  (file 2-8 kHz %+.1f dB at CC16 127 over 0; live horn %.2f -> %.2f Hz)" % (_b2 - _b1, _t1, _t2))
+    # THE VALVE (Live._efx_od): an EP, which has no amplifier of its own,
+    # through the Overdrive gets one -- its products appear where Thru has
+    # none, and its 2-8 kHz share rises; louder, as a pedal makes it
+    def _vhear(ty):
+        _lv = Live(program=4, rate=48000, frames=128, verbose=False)
+        try:
+            _lv.warm()
+            if ty:
+                for _ev in [('type', ty), ('part', 0, True)]:
+                    _lv.on_midi(_M("sysex", data=_GSX.message(_ev)))
+            for _nn in (52, 59, 64):
+                _lv.on_midi(_M("note_on", channel=0, note=_nn, velocity=100))
+            _lv.apply(0)
+            _b = [np.frombuffer(_lv.callback(None, 128, None, 0)[0], np.float32)
+                  for _i in range(int(1.5 * 48000 / 128))]
+            _np = len(_lv.slab.live.get((_lv.parts[0].pid, -1, -1, "amp"), []))
+            return np.concatenate(_b).reshape(-1, 2)[int(0.3 * 48000):int(1.4 * 48000), 0].astype(float), _np
+        finally:
+            _lv.shutdown()
+    def _vshare(x):
+        _X = np.abs(np.fft.rfft(x)) ** 2; _fq = np.fft.rfftfreq(len(x), 1 / 48000.0)
+        return 10 * np.log10(_X[(_fq > 2000) & (_fq < 8000)].sum() / _X.sum())
+    _v0, _n0 = _vhear(None); _v1, _n1 = _vhear((0x01, 0x10))
+    _vl = 10 * np.log10((_v1 ** 2).sum() / (_v0 ** 2).sum())
+    check("live: an EP through the Overdrive gets a valve -- its products, a brighter, louder sound",
+          _n0 == 0 and _n1 > 50 and _vshare(_v1) - _vshare(_v0) > 6.0 and _vl > 3.0,
+          "  (%d products against Thru's %d; 2-8 kHz share %+.1f dB; level %+.1f dB)"
+          % (_n1, _n0, _vshare(_v1) - _vshare(_v0), _vl))
     _f0 = _fhear(None); _fp = _fhear((0x01, 0x20)); _ff = _fhear((0x01, 0x23))
     _fw = _fhear((0x01, 0x21), prog=7, ex=[('param', 2, 127), ('param', 6, 0)])
     _fc = float(np.corrcoef(_ff[:, 0], _ff[:, 1])[0, 1])
