@@ -2088,8 +2088,9 @@ class TUI:
         bad = s["under"] + s["drop"] + s["err"] + s["miss"]
         self.addstr(scr, y, 52, "under %d  drop %d  err %d  stuck %d  miss %d%s"
                     % (s["under"], s["drop"], s["err"], s["stuck"], s["miss"],
-                       ("  efx %d cut %d" % (s.get("taps", 0), s.get("shed", 0)))
-                       if s.get("taps") or s.get("shed") else ""),
+                       (("  efx %d cut %d" % (s.get("taps", 0), s.get("shed", 0)))
+                        if s.get("taps") or s.get("shed") else "")
+                       + ("  shed %d" % s["pshed"] if s.get("pshed") else "")),
                     C("red") if bad else C("dim"))
         y += 1
 

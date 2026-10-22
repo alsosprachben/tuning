@@ -1095,6 +1095,32 @@ class Slab:
         self.tr_dep[idx] = depth
         self.tr_st[idx] = -1.0 if stereo else 1.0
 
+    SHED_FADE = 0.005           # s: a shed partial's fade
+
+    def shed(self, n, frac):
+        """THE LAST RESORT OF THE BUDGET (Live's governor): end the highest
+        `frac` of the partials still sounding, over SHED_FADE -- the top of
+        each note's spectrum first, where its partials are quietest and the
+        rest mask them (Ben's ordering: one key, no envelope to evaluate on a
+        block already over its time). A shed slot keeps its key and is reaped
+        with its note as any other; only its sound stops. Moog rows keep their
+        panel's. Returns how many."""
+        a = self.a
+        busy = np.flatnonzero(self.busy)
+        if not len(busy):
+            return 0
+        noff = a["noff"][busy]
+        ok = (a["fx"][busy] < 0) & (a["non"][busy] <= n) & ((noff == IDLE) | (noff > n))
+        idx = busy[ok]
+        k = int(frac * len(idx))
+        if k < 1:
+            return 0
+        f = a["nf"][idx]
+        q = idx[np.argpartition(-f, k)[:k]]
+        a["noff"][q] = np.minimum(a["noff"][q], n)
+        a["re"][q] = np.minimum(a["re"][q], np.float32(self.SHED_FADE * B.SR))
+        return k
+
     def filter_arm(self, slots, ch):
         """Put these partials under channel ch's moving filter: their levels
         now are what it filters, every block from here on (filter_swing)."""
@@ -3622,6 +3648,8 @@ class Live:
         self.press_tilt = T.PRESS_TILT
         self.underruns = 0
         self.tap_shed = 0       # blocks the governor cut the effect's copies on
+        self.partials_shed = 0  # ...and partials it ended (Slab.shed)
+        self._ms_hist = collections.deque(maxlen=4)
         self.dropped = 0
         self.errors = 0
         self.last_error = None
@@ -8809,6 +8837,17 @@ class Live:
                 self.tap_shed += 1
             elif self.render_ms < 0.7 * _bud and _sl.tap_cap < _sl.tcap:
                 _sl.tap_cap = min(_sl.tcap, _sl.tap_cap + max(256, _sl.tap_cap // 8))
+        # ...AND THEN THE NOTES' OWN PARTIALS. With no copies left to give,
+        # blocks still over 95% of the slot -- by their median over the last
+        # four, so one chord's strike is not a reason -- shed the quietest
+        # tenth of what is sounding (Slab.shed), until the blocks fit
+        self._ms_hist.append(self.render_ms)
+        if (len(self._ms_hist) == 4 and not _sl.tap_m
+                and sorted(self._ms_hist)[1] > 0.95 * 1000.0 * frame_count / float(self.rate)):
+            _k = _sl.shed(n0 + frame_count, 0.1)
+            if _k:
+                self.partials_shed += _k
+                self._ms_hist.clear()
         # The first blocks after the stream opens cost several times the steady
         # state -- library warm-up and page faults -- so a max that included them
         # would sit permanently over budget and tell you nothing.
@@ -8887,7 +8926,7 @@ class Live:
                     used=self.slab.cap - len(self.slab.free), cap=self.slab.cap,
                     free=len(self.slab.free),
                     under=self.underruns, drop=self.dropped, err=self.errors,
-                    shed=self.tap_shed, taps=self.slab.tap_m,
+                    shed=self.tap_shed, taps=self.slab.tap_m, pshed=self.partials_shed,
                     stuck=self.stuck, miss=self.misses,
                     render_ms=self.render_ms, render_max=self.render_max,
                     threads=self.renderer.K, active=self.renderer.act,
@@ -10022,6 +10061,38 @@ def selftest_gs(check):
             return np.concatenate(_b).reshape(-1, 2).astype(float), _left
         finally:
             _lv.shutdown()
+    # THE BUDGET'S LAST RESORT (Slab.shed): the tenth of a held chord's
+    # partials it ends are its highest; they fall silent over the fade; and
+    # their slots go with their notes at release, none left behind
+    _ls = Live(program=48, rate=48000, frames=128, verbose=False)
+    try:
+        _ls.warm()
+        for _nn in (48, 55, 60, 64):
+            _ls.on_midi(_M("note_on", channel=0, note=_nn, velocity=100))
+        _ls.apply(0)
+        for _i in range(40):
+            _ls.callback(None, 128, None, 0)
+        _sl = _ls.slab
+        _snd = np.flatnonzero(_sl.busy & (_sl.a["noff"] == IDLE))
+        _k = _sl.shed(_ls.n, 0.1)
+        _cut = _snd[_sl.a["noff"][_snd] != IDLE]
+        _kept = _snd[_sl.a["noff"][_snd] == IDLE]
+        _hi = len(_cut) and len(_kept) and float(_sl.a["nf"][_cut].min()) >= float(_sl.a["nf"][_kept].max())
+        for _i in range(10):
+            _ls.callback(None, 128, None, 0)
+        _ix = np.fromiter(_cut, np.int64, len(_cut))
+        _f = _sl.a["noff"][_ix] + _sl.a["re"][_ix] < _ls.n
+        for _nn in (48, 55, 60, 64):
+            _ls.on_midi(_M("note_off", channel=0, note=_nn, velocity=0))
+        for _i in range(int(12 * 48000 / 128)):
+            _ls.callback(None, 128, None, 0)
+        _left = _sl.cap - len(_sl.free)
+        check("live: the budget's last resort sheds a chord's highest partials, which fall silent and go with their notes",
+              _k == len(_cut) and _k >= 0.09 * len(_snd) and _hi and bool(_f.all()) and _left == 0,
+              "  (%d of %d shed, all above the rest; ended within the fade %s; %d slots held after release)"
+              % (_k, len(_snd), bool(_f.all()), _left))
+    finally:
+        _ls.shutdown()
     # THE MOVING FILTERS, LIVE (Live._filter_block): the Phaser sweeps an EP's
     # spectrum where Thru holds still; the Stereo Flanger's two combs part
     # the ears; an Auto Wah on Sens alone opens with the Clav's notes
