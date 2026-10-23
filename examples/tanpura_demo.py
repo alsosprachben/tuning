@@ -1,9 +1,10 @@
 """GS 104.16 Tamboura as a tanpura is played: the four strings in turn, Pa,
 Sa, Sa, low Sa (G#3 C#4 C#4 C#3, sankalp's take 2 tuning), a pluck every
 0.875 s, each string ringing until its next pluck 3.5 s later -- the take's
-own cycle. Writes OUT_DIR/tamboura_drone.wav (and _room.wav, the room's tail).
+own cycle. Writes OUT_DIR/tamboura_drone.wav (and _room.wav, the room's tail);
+--bank=8 plays 104.8 Tambra instead, to OUT_DIR/tambra_drone.wav.
 
-    python3 examples/tanpura_demo.py OUT_DIR [CYCLES]
+    python3 examples/tanpura_demo.py OUT_DIR [CYCLES] [--bank=8]
 """
 import os
 import subprocess
@@ -22,18 +23,18 @@ CYCLE = (56, 61, 61, 49)     # Pa, Sa, Sa, low Sa
 STEP = 0.875
 
 
-def drone_file(cycles):
+def drone_file(cycles, bank=16):
     mf = mido.MidiFile(type=1, ticks_per_beat=480)
     tr = mido.MidiTrack()
     mf.tracks.append(tr)
     tr.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
     tr.append(_sx(0x40, 0x00, 0x7F, 0x00))                      # GS reset
-    tr.append(mido.Message("control_change", channel=0, control=0, value=16))
+    tr.append(mido.Message("control_change", channel=0, control=0, value=bank))
     tr.append(mido.Message("control_change", channel=0, control=32, value=3))
     tr.append(mido.Message("program_change", channel=0, program=104))
     # the two Sa strings are two strings: each its own channel, so the
     # second's pluck does not cut the first's ring
-    tr.append(mido.Message("control_change", channel=1, control=0, value=16))
+    tr.append(mido.Message("control_change", channel=1, control=0, value=bank))
     tr.append(mido.Message("control_change", channel=1, control=32, value=3))
     tr.append(mido.Message("program_change", channel=1, program=104))
     ev = []
@@ -53,13 +54,15 @@ def drone_file(cycles):
 
 
 def main(argv):
+    bank = next((int(a[7:]) for a in argv if a.startswith("--bank=")), 16)
+    argv = [a for a in argv if not a.startswith("--")]
     out = argv[1]
     cycles = int(argv[2]) if len(argv) > 2 else 6
     os.makedirs(out, exist_ok=True)
-    L, R = B.render(drone_file(cycles))[:2]
+    L, R = B.render(drone_file(cycles, bank))[:2]
     pk = max(np.abs(np.asarray(L)).max(), np.abs(np.asarray(R)).max())
     g = 10 ** (-1 / 20.0) / pk
-    f = os.path.join(out, "tamboura_drone.wav")
+    f = os.path.join(out, "%s_drone.wav" % {16: "tamboura", 8: "tambra"}[bank])
     B.write_wav(f, np.asarray(L, float) * g, np.asarray(R, float) * g)
     fr = os.path.splitext(f)[0] + "_room.wav"
     subprocess.run([sys.executable, os.path.join(HERE, "roomtail.py"), f, fr], check=True,

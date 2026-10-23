@@ -1717,6 +1717,13 @@ VARIATIONS[(104, 16)] = TambouraProperties
 VARIATION_NAMES[(104, 16)] = "Tamboura"
 VARIATION_TRIM_DB[(104, 16)] = PROGRAM_TRIM_DB.get(104, 0.0)
 
+# TAMBRA: the same tanpura with its jawari set another way, fitted to its
+# other take (tonelib.TambraProperties, examples/tanpura_fit.py --take=1)
+from tonelib import TambraProperties
+VARIATIONS[(104, 8)] = TambraProperties
+VARIATION_NAMES[(104, 8)] = "Tambra"
+VARIATION_TRIM_DB[(104, 8)] = PROGRAM_TRIM_DB.get(104, 0.0)
+
 # BARAFON: the balafon, fitted to marini24's (CC BY 4.0; tonelib.BalafonProperties,
 # examples/balafon_fit.py) -- at its capital's level, the marimba's (the
 # celesta's trim, whose gain it starts from, left its short bars 23 dB under)

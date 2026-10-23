@@ -10114,6 +10114,38 @@ class TambouraProperties(SitarProperties):
                     (8127, -10.6), (10240, -10.6), (12902, -10.6))
 
 
+class TambraProperties(TambouraProperties):
+    """GS 104.8, "Tambra": Roland's other tanpura (one voice where the
+    Tamboura has two; neither manual says more, and no recording of either
+    tone is here). Ours is the same instrument with its jawari SET ANOTHER
+    WAY: sankalp's take 1 (Freesound pack 9571, CC BY 4.0), whose strings'
+    cells differ from take 2's by 9-13 dB rms -- the same tuning, the thread
+    under the strings moved. Fitted as the Tamboura is (examples/
+    tanpura_fit.py --take=1 --cls=TambraProperties), from its values; take 1
+    is short, 4-5 plucks a string (odd against even 3-3.5 dB)."""
+    # FITTED (11.4 dB rms with the Tamboura's values -> 10.1 over 250 cells):
+    # the BRIGHTER setting -- the top over 5 kHz ~13 dB up, the swirl centred
+    # at 5.4 kHz (the Tamboura's 4.6) and stronger
+    decay_db = 5.158
+    harmonic_decay_db = 0.3439
+    tonal_dampening = 0.5712
+    bloom_gain = 12.52
+    bloom_seconds = 0.283
+    bloom_center_hz = 5370.0
+    bloom_octaves = 1.253
+    bloom_swell = 0.5282
+    bloom_decay_dbs = 22.74
+    prompt_dbs = 55.32
+    aftersound_share = 0.3537
+    prompt_max_hz = 966.2
+    body_trim_db = ((160, -3.9), (202, -3.9), (254, -1.7), (320, 0.3), (403, 2.3), (508, 4.4), (640, 6.4),
+                    (806, 3.2), (1016, -0.3), (1280, -3.4), (1613, -6.5), (2032, 2.1), (2560, 11.1),
+                    (3225, -3.2), (4064, -1.3), (5120, 2.6), (6451, 2.6), (8127, 2.6), (10240, 2.6),
+                    (12902, 2.6))
+    # at its capital's level, the sitar's
+    initial_gain = SitarProperties.initial_gain * 10 ** (-(6.8 + 4.4) / 20.0)
+
+
 class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     """MEASURED: Iowa Guitar.mf, all six strings, 35 notes G2-A#5.
 

@@ -15,6 +15,8 @@ the same way.
     python3 examples/tanpura_fit.py              # the cells, takes and ours
     python3 examples/tanpura_fit.py --fit        # the decay, bloom and prompt fall
     python3 examples/tanpura_fit.py --body       # the colour, by third octave
+    python3 examples/tanpura_fit.py --alt=3      # the two alternated, 3 rounds
+    ... --take=1 --cls=TambraProperties          # GS 104.8, take 1
 """
 import os
 import sys
@@ -28,8 +30,9 @@ from drum_fit import read  # noqa: E402
 # ONE TAKE: within it a string's plucks agree to 2-3.5 dB rms (odd against
 # even), but take 1 and take 2 differ by 9-13 -- two settings of the jawari
 # (or a retune), so an average of them is neither. Take 2: 14 plucks a string
-TAKES = [os.path.expanduser("~/Documents/refs/freesound/tanpura/%s" % f) for f in
-         ("153248__sankalp__acoustic-tanpura-2.wav",)]
+# Take 1 is the other setting: GS 104.8 Tambra (--take=1 --cls=TambraProperties)
+TAKE_FILES = {1: "153247__sankalp__acoustic-tanpura-1.wav", 2: "153248__sankalp__acoustic-tanpura-2.wav"}
+TAKES = [os.path.expanduser("~/Documents/refs/freesound/tanpura/" + TAKE_FILES[2])]
 # each string: its pitch over b, the harmonics that are its alone
 STRINGS = {"pa": (1.5, [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23]),
            "lowsa": (1.0, [1, 5, 7, 11, 13, 17, 19, 23, 25, 29, 31, 35])}
@@ -120,7 +123,7 @@ def targets():
 
 def ours(f0, secs=TS[-1] + 0.3):
     import pluck_fit as P
-    P.PROG, P.CLS, P.BANK = 104, CLS, 16
+    P.PROG, P.CLS, P.BANK = 104, CLS, {"TambouraProperties": 16, "TambraProperties": 8}[CLS]
     y, sr = P.render(f0, secs)
     return y, sr
 
@@ -226,13 +229,49 @@ def body(T, passes=3):
     score(T, ours_cells(T), show=True)
 
 
+def show_class():
+    """The class's fitted values, to write into tonelib."""
+    import tonelib
+    C = getattr(tonelib, CLS)
+    for a in FIT:
+        print("    %s = %.4g" % (a, getattr(C, a)))
+    print("    body_trim_db = %s" % (C.body_trim_db,))
+
+
 def main(argv):
+    global TAKES, CLS
+    for a in argv:
+        if a.startswith("--take="):
+            TAKES = [os.path.expanduser("~/Documents/refs/freesound/tanpura/" + TAKE_FILES[int(a[7:])])]
+        if a.startswith("--cls="):
+            CLS = a[6:]
     T = targets()
     if "--fit" in argv:
         fit(T)
     if "--body" in argv:
         body(T)
+    rounds = next((int(a[6:]) for a in argv if a.startswith("--alt=")), 0)
+    # THE BEST STATE IS KEPT: a body pass re-reads each table against its own
+    # loudest cell, which the trim moves, so a round can end worse than it began
+    import tonelib
+    C = getattr(tonelib, CLS)
+
+    def snap():
+        return {a: getattr(C, a) for a in FIT + ("body_trim_db",)}
+    best = (score(T, ours_cells(T)), snap())
+    for r in range(rounds):
+        body(T, passes=2)
+        s, _ = fit(T, maxfev=120)
+        print("ROUND %d: %.2f dB" % (r, s), flush=True)
+        if s < best[0]:
+            best = (s, snap())
+    if rounds:
+        for a, v in best[1].items():
+            setattr(C, a, v)
+        print("BEST %.2f dB" % best[0])
     score(T, ours_cells(T), show=True)
+    if "--fit" in argv or "--body" in argv or rounds:
+        show_class()
 
 
 if __name__ == "__main__":
