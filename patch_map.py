@@ -1704,6 +1704,19 @@ VARIATIONS[(112, 10)] = GamelanGongProperties
 VARIATION_NAMES[(112, 10)] = "GamelanGong"
 VARIATION_TRIM_DB[(112, 10)] = PROGRAM_TRIM_DB.get(8, 0.0)
 
+# BARAFON: the balafon, fitted to marini24's (CC BY 4.0; tonelib.BalafonProperties,
+# examples/balafon_fit.py) -- at its capital's level, the marimba's (the
+# celesta's trim, whose gain it starts from, left its short bars 23 dB under)
+from tonelib import BalafonProperties
+VARIATIONS[(12, 16)] = BalafonProperties
+VARIATION_NAMES[(12, 16)] = "Barafon"
+VARIATION_TRIM_DB[(12, 16)] = PROGRAM_TRIM_DB.get(8, 0.0) + 23.2
+# BARAFON 2: the same balafon played softer, and drier (tonelib.BalafonSoftProperties)
+from tonelib import BalafonSoftProperties
+VARIATIONS[(12, 17)] = BalafonSoftProperties
+VARIATION_NAMES[(12, 17)] = "Barafon 2"
+VARIATION_TRIM_DB[(12, 17)] = PROGRAM_TRIM_DB.get(8, 0.0) + 23.2
+
 # BONANG: the Javanese kettle gongs, fitted to Casa da Musica's (CC BY 3.0;
 # tonelib.BonangProperties, examples/gender_fit.py --bonang)
 from tonelib import BonangProperties

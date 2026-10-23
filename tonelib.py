@@ -12030,6 +12030,69 @@ class GenderProperties(ModeDecays, StruckBarProperties):
     initial_gain = 0.156004
 
 
+class BalafonProperties(ModeDecays, StruckBarProperties):
+    """GS 12.16 "Barafon": the West African balafon -- hardwood bars, undercut
+    by hand, each over a gourd whose membrane BUZZES as the bar sounds.
+
+    MEASURED (examples/balafon_fit.py) on marini24's balafon (Freesound pack
+    6325, CC BY 4.0; sources.md), 17 single strikes 236 Hz-1.5 kHz:
+      * THE TUNING FALLS UP THE KEYS (mode_ratio): the second mode 4.1 times
+        the fundamental at 236 Hz, 3.5 at 415, down to 2.9 from ~700 Hz; the
+        third 9.0 at 236, not under 7 -- each a line in the octave, to a floor
+        (the hand that undercuts a big bar tunes it further than a small one);
+      * THE LEVELS GO WITH THE KEY, not the Hz (mode_gains_points): the second
+        mode -17 dB at 415 Hz falling 14 an octave up, the third -29 falling 21
+        -- a low bar's third mode at 2 kHz stands level with its fundamental
+        while a high bar's second at 2.5 kHz is 40 dB under; 7-12 dB key to key
+        (struck where the player struck it);
+      * SHORT: the fundamental D 29.5 at 415 Hz (59 dB/s), climbing steeply up
+        the keys (slope 0.89: 35 dB/s at 236 Hz, 230 at 1.5 kHz); the modes D
+        115 and 401;
+      * THE BUZZ, the membranes (strike_noise: a burst between the partials),
+        fitted through the renderer band by band (--buzz; 0.48 dB): flat to
+        1.6 kHz and falling ~10 dB an octave over it, 8.5 dB more an octave
+        down the keys, gone at ~145 dB/s in its bands as the takes'.
+    """
+    inharmonicity_coefficient = 0.0      # the ratios are absolute (mode_ratio)
+    mode_ratios = (1.0, 3.512, 6.674)
+    mode_gains = (1.0, 0.1444, 0.0349)
+    mode_gains_points = ((236.0, (1.0, 0.5451, 0.2457)), (415.0, (1.0, 0.1444, 0.0349)),
+                         (830.0, (1.0, 0.0283, 0.0032)), (1500.0, (1.0, 0.007, 0.0004)))
+    mode_decays = (29.53, 114.89, 401.34)
+    decay_register_slope = 0.891
+    max_harmonic = 3
+    # the ratio laws: (at 415 Hz, per octave, floor), mode 2 and mode 3
+    mode_ratio_laws = ((3.512, -0.716, 2.9), (6.674, -2.834, 7.0))
+    strike_noise_db = ((500, -25.0), (630, -21.4), (794, -23.6), (1000, -26.6), (1260, -23.7), (1587, -22.9),
+                       (2000, -25.4), (2520, -28.9), (3175, -29.4), (4000, -28.8), (5040, -34.5),
+                       (6350, -38.7), (8000, -35.9))
+    strike_noise_octave_db = -8.47
+    strike_noise_dbs = 199.1
+    strike_noise_fade_s = 0.0005
+    strike_noise_len_s = 0.4
+
+    def mode_ratio(self, m):
+        if m == 1:
+            return 1.0
+        if 2 <= m <= 3:
+            a, b, lo = self.mode_ratio_laws[m - 2]
+            oc = _log(self.frequency_x * (2.0 ** self.octave_position) / 415.0) / _log(2.0)
+            return max(lo, a + b * oc)
+        return 0.0
+
+
+class BalafonSoftProperties(BalafonProperties):
+    """GS 12.17 "Barafon 2": the same balafon played SOFTER, and so drier
+    (Ben: "dryer one, or played with softer effort"). A membrane rattles only
+    once its gourd drives it hard enough, so its buzz falls far faster than
+    the note: 12 dB less; and a softer mallet stays on the bar longer, and a
+    longer contact reaches the upper modes less: the second 4 dB under, the
+    third 8. ASSUMED: one balafon recorded, at one effort."""
+    mode_gains_points = tuple((hz, (g[0], g[1] * 10 ** (-4 / 20.0), g[2] * 10 ** (-8 / 20.0)))
+                              for hz, g in BalafonProperties.mode_gains_points)
+    strike_noise_db = tuple((hz, db - 12.0) for hz, db in BalafonProperties.strike_noise_db)
+
+
 class GangsaPairProperties(GenderProperties):
     """The Balinese gangsa as it is played: each key a PAIR, the pengumbang and
     the pengisep, 26 cents apart so every note beats (the ombak; see
