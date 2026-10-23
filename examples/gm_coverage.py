@@ -520,21 +520,99 @@ def _cm32l_rated():
 
 KIT_RATED[127] = _cm32l_rated()
 
+# THE SOUND CANVAS'S DRUM SETS, every map (SC-8850 owner's manual, p.187,
+# "Drum Set List"): (PC, SC-8850 map, SC-88Pro map, SC-88 map, SC-55 map),
+# None where that map has no set at that program. The goal (2026-10-23):
+# every one built (Ben: "let's work on coveraging all of the drum sets")
+GS_DRUM_SETS = (
+    (1, "STANDARD 1", "STANDARD 1", "STANDARD 1", "STANDARD"),
+    (2, "STANDARD 2", "STANDARD 2", "STANDARD 2", None),
+    (3, "STANDARD L/R", "STANDARD 3", None, None),
+    (9, "ROOM", "ROOM", "ROOM", "ROOM"),
+    (10, "HIP HOP", "HIP HOP", None, None),
+    (11, "JUNGLE", "JUNGLE", None, None),
+    (12, "TECHNO", "TECHNO", None, None),
+    (13, "ROOM L/R", None, None, None),
+    (14, "HOUSE", None, None, None),
+    (17, "POWER", "POWER", "POWER", "POWER"),
+    (25, "ELECTRONIC", "ELECTRONIC", "ELECTRONIC", "ELECTRONIC"),
+    (26, "TR-808", "TR-808", "TR-808/909", "TR-808"),
+    (27, "DANCE", "DANCE", "DANCE", None),
+    (28, "CR-78", "CR-78", None, None),
+    (29, "TR-606", "TR-606", None, None),
+    (30, "TR-707", "TR-707", None, None),
+    (31, "TR-909", "TR-909", None, None),
+    (33, "JAZZ", "JAZZ", "JAZZ", "JAZZ"),
+    (34, "JAZZ L/R", None, None, None),
+    (41, "BRUSH", "BRUSH", "BRUSH", "BRUSH"),
+    (42, "BRUSH 2", None, None, None),
+    (43, "BRUSH 2 L/R", None, None, None),
+    (49, "ORCHESTRA", "ORCHESTRA", "ORCHESTRA", "ORCHESTRA"),
+    (50, "ETHNIC", "ETHNIC", "ETHNIC", None),
+    (51, "KICK & SNARE", "KICK & SNARE", "KICK & SNARE", None),
+    (52, "KICK & SNARE 2", None, None, None),
+    (53, "ASIA", "ASIA", None, None),
+    (54, "CYMBAL&CLAPS", "CYMBAL&CLAPS", None, None),
+    (55, "GAMELAN 1", None, None, None),
+    (56, "GAMELAN 2", None, None, None),
+    (57, "SFX", "SFX", "SFX", "SFX"),
+    (58, "RHYTHM FX", "RHYTHM FX", "RHYTHM FX", None),
+    (59, "RHYTHM FX 2", "RHYTHM FX 2", None, None),
+    (60, "RHYTHM FX 3", None, None, None),
+    (61, "SFX 2", None, None, None),
+    (62, "VOICE", None, None, None),
+    (63, "CYM&CLAPS 2", None, None, None),
+    (128, None, None, None, "CM-64/32L"),
+)
+# sets that ARE Standard by design here (the SC-55 map's Jazz: Standard's
+# notes; its kick and snare a shade apart, not built)
+STANDARD_BY_DESIGN = {33}
+
+
+def _set_status(pc):
+    """(status, keys rated, median rating) for the set at program pc (1-based)."""
+    import percussion_map as PM
+    k = pc - 1
+    if k == 0:
+        rated = [r for r, _ in PERC_RATED.values()]
+        return "built: the note map above", len(rated), sorted(rated)[len(rated) // 2]
+    if k in PM.KITS:
+        rated = [r for r, _ in KIT_RATED.get(k, {}).values()]
+        med = sorted(rated)[len(rated) // 2] if rated else None
+        return "built: %d keys of its own" % len(PM.KITS[k]), len(rated), med
+    if pc in STANDARD_BY_DESIGN:
+        return "Standard, by design", 0, None
+    return "not built: plays Standard", 0, None
+
+
 def drum_set_table():
     """The drum sets, by the program that selects them."""
     import percussion_map as PM
     L = ["## Drum sets: the program on a drum channel\n"]
-    L.append("The program on a drum channel is the drum SET (SC-55 owner's manual")
-    L.append("p.21), and a set changes only some notes -- every blank in the manual's")
-    L.append("table is \"same as Standard\". The SC-55 has ten; a set not built here")
-    L.append("plays Standard, as does any program that is not a set.\n")
-    L.append("| program | set | built |")
-    L.append("|---|---|---|")
-    for k in sorted(PM.DRUM_SETS):
-        built = ("the note map above" if k == 0 else "yes" if k in PM.KITS else
-                 "= Standard on the SC-55" if PM.DRUM_SETS[k] in ("Standard", "Jazz")
-                 else "no -- plays Standard")
-        L.append("| %d | %s | %s |" % (k, PM.DRUM_SETS[k], built))
+    L.append("The program on a drum channel is the drum SET, and a set changes only")
+    L.append("some notes -- every blank in Roland's table is \"same as Standard\". The")
+    L.append("Sound Canvas's sets on every map (SC-8850 owner's manual p.187): the")
+    L.append("SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the")
+    L.append("SC-88Pro map 25, the SC-8850 map 37. A set not built here plays")
+    L.append("Standard. THE GOAL: every one built.\n")
+    maps = ((1, "SC-8850"), (2, "SC-88Pro"), (3, "SC-88"), (4, "SC-55"))
+    tot = {}
+    for row in GS_DRUM_SETS:
+        st = _set_status(row[0])[0]
+        for col, nm in maps:
+            if row[col]:
+                t = tot.setdefault(nm, [0, 0])
+                t[1] += 1
+                t[0] += st.startswith("built") or st.startswith("Standard, by")
+    L.append("**Where it stands:** " + ", ".join("%s map %d of %d" % (nm, tot[nm][0], tot[nm][1])
+                                              for _, nm in maps) + ".\n")
+    L.append("| PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |")
+    L.append("|---|---|---|---|---|---|---|---|")
+    for row in GS_DRUM_SETS:
+        st, n, med = _set_status(row[0])
+        L.append("| %d | %s | %s | %s | %s | %s | %s | %s |" % (
+            row[0], *(c or "--" for c in row[1:]), ("**%s**" % st) if st.startswith("not") else st,
+            n or "", ("**%d**" % med) if med is not None else ""))
     L.append("")
     for k in sorted(KIT_RATED):
         L.append("### %d %s\n" % (k, PM.DRUM_SETS[k]))

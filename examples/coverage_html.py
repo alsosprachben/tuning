@@ -304,17 +304,29 @@ def percussion_notes():
 
 
 def drum_sets():
-    """The drum sets, by the program that selects them, and each built set's
-    notes -- coverage.md's drum_set_table."""
+    """The Sound Canvas's drum sets on every map, what plays each here, and
+    each built set's notes -- coverage.md's drum_set_table (gm_coverage
+    GS_DRUM_SETS, _set_status)."""
+    maps = ((1, "SC-8850"), (2, "SC-88Pro"), (3, "SC-88"), (4, "SC-55"))
+    tot = {}
     sets = []
-    for k in sorted(PM.DRUM_SETS):
-        built = ("the note map above" if k == 0 else "yes" if k in PM.KITS else
-                 "= Standard on the SC-55" if PM.DRUM_SETS[k] in ("Standard", "Jazz")
-                 else "no &mdash; plays Standard")
-        sets.append('<tr><td class="num">%d</td><td class="nm">%s</td><td class="note">%s</td></tr>'
-                    % (k, e(PM.DRUM_SETS[k]), built))
-    out = ['<div class="tscroll"><table><tr><th>Program</th><th>Set</th><th>Built</th></tr>\n%s\n'
-           '</table></div>' % "\n".join(sets)]
+    for row in C.GS_DRUM_SETS:
+        st, n, med = C._set_status(row[0])
+        for col, nm in maps:
+            if row[col]:
+                t = tot.setdefault(nm, [0, 0])
+                t[1] += 1
+                t[0] += st.startswith("built") or st.startswith("Standard, by")
+        sets.append('<tr><td class="num">%d</td>%s<td class="note">%s</td><td class="num">%s</td>'
+                    '<td class="rt">%s</td></tr>'
+                    % (row[0], "".join('<td class="nm">%s</td>' % (e(c) if c else "&ndash;") for c in row[1:]),
+                       ("<strong>%s</strong>" % e(st)) if st.startswith("not") else e(st), n or "",
+                       '<span class="chip r%d">%d</span>' % (med, med) if med is not None else ""))
+    out = ['<p><strong>Where it stands:</strong> %s.</p>' % ", ".join(
+               "%s map %d of %d" % (nm, tot[nm][0], tot[nm][1]) for _, nm in maps),
+           '<div class="tscroll"><table><tr><th>PC</th><th>SC-8850</th><th>SC-88Pro</th><th>SC-88</th>'
+           '<th>SC-55</th><th>Here</th><th>Keys rated</th><th>Median</th></tr>\n%s\n</table></div>'
+           % "\n".join(sets)]
     for k in sorted(C.KIT_RATED):
         pips = "\n".join('<span class="pip r%d"></span>' % C.KIT_RATED[k][n][0] for n in sorted(C.KIT_RATED[k]))
         rows = [(n, PM.KITS[k][n][0], PM.KITS[k][n][1].__name__) + tuple(C.KIT_RATED[k][n])
@@ -565,7 +577,7 @@ TEMPLATE = """<title>GM Patch Coverage</title>
 
 <section>
 <h2>Drum sets: the program on a drum channel</h2>
-<p>The program on a drum channel is the drum <em>set</em> (SC-55 owner&rsquo;s manual p.21), and a set changes only some notes &mdash; every blank in the manual&rsquo;s table is &ldquo;same as Standard&rdquo;. The SC-55 has ten; a set not built here plays Standard, as does any program that is not a set. Each built set lists only the notes it changes.</p>
+<p>The program on a drum channel is the drum <em>set</em>, and a set changes only some notes &mdash; every blank in Roland&rsquo;s table is &ldquo;same as Standard&rdquo;. The Sound Canvas&rsquo;s sets on every map (SC-8850 owner&rsquo;s manual p.187): the SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the SC-88Pro map 25, the SC-8850 map 37. A set not built here plays Standard. <strong>The goal: every one built.</strong> Each built set lists the notes it changes.</p>
 %(drumsets)s
 </section>
 

@@ -126,24 +126,55 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 ## Drum sets: the program on a drum channel
 
-The program on a drum channel is the drum SET (SC-55 owner's manual
-p.21), and a set changes only some notes -- every blank in the manual's
-table is "same as Standard". The SC-55 has ten; a set not built here
-plays Standard, as does any program that is not a set.
+The program on a drum channel is the drum SET, and a set changes only
+some notes -- every blank in Roland's table is "same as Standard". The
+Sound Canvas's sets on every map (SC-8850 owner's manual p.187): the
+SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the
+SC-88Pro map 25, the SC-8850 map 37. A set not built here plays
+Standard. THE GOAL: every one built.
 
-| program | set | built |
-|---|---|---|
-| 0 | Standard | the note map above |
-| 8 | Room | yes |
-| 16 | Power | yes |
-| 24 | Electronic | yes |
-| 25 | TR-808 | yes |
-| 32 | Jazz | = Standard on the SC-55 |
-| 40 | Brush | yes |
-| 48 | Orchestra | yes |
-| 52 | Asia | yes |
-| 56 | SFX | yes |
-| 127 | CM-64/32L | yes |
+**Where it stands:** SC-8850 map 10 of 37, SC-88Pro map 10 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
+
+| PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
+|---|---|---|---|---|---|---|---|
+| 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 59 | **4** |
+| 2 | STANDARD 2 | STANDARD 2 | STANDARD 2 | -- | **not built: plays Standard** |  |  |
+| 3 | STANDARD L/R | STANDARD 3 | -- | -- | **not built: plays Standard** |  |  |
+| 9 | ROOM | ROOM | ROOM | ROOM | built: 6 keys of its own | 6 | **4** |
+| 10 | HIP HOP | HIP HOP | -- | -- | **not built: plays Standard** |  |  |
+| 11 | JUNGLE | JUNGLE | -- | -- | **not built: plays Standard** |  |  |
+| 12 | TECHNO | TECHNO | -- | -- | **not built: plays Standard** |  |  |
+| 13 | ROOM L/R | -- | -- | -- | **not built: plays Standard** |  |  |
+| 14 | HOUSE | -- | -- | -- | **not built: plays Standard** |  |  |
+| 17 | POWER | POWER | POWER | POWER | built: 8 keys of its own | 8 | **4** |
+| 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 10 keys of its own | 10 | **4** |
+| 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | built: 19 keys of its own | 19 | **4** |
+| 27 | DANCE | DANCE | DANCE | -- | **not built: plays Standard** |  |  |
+| 28 | CR-78 | CR-78 | -- | -- | **not built: plays Standard** |  |  |
+| 29 | TR-606 | TR-606 | -- | -- | **not built: plays Standard** |  |  |
+| 30 | TR-707 | TR-707 | -- | -- | **not built: plays Standard** |  |  |
+| 31 | TR-909 | TR-909 | -- | -- | **not built: plays Standard** |  |  |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | Standard, by design |  |  |
+| 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
+| 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 3 keys of its own | 3 | **4** |
+| 42 | BRUSH 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 43 | BRUSH 2 L/R | -- | -- | -- | **not built: plays Standard** |  |  |
+| 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | built: 25 keys of its own | 25 | **4** |
+| 50 | ETHNIC | ETHNIC | ETHNIC | -- | **not built: plays Standard** |  |  |
+| 51 | KICK & SNARE | KICK & SNARE | KICK & SNARE | -- | **not built: plays Standard** |  |  |
+| 52 | KICK & SNARE 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 53 | ASIA | ASIA | -- | -- | built: 4 keys of its own |  |  |
+| 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | **not built: plays Standard** |  |  |
+| 55 | GAMELAN 1 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 56 | GAMELAN 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 57 | SFX | SFX | SFX | SFX | built: 48 keys of its own | 48 | **4** |
+| 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | **not built: plays Standard** |  |  |
+| 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | **not built: plays Standard** |  |  |
+| 60 | RHYTHM FX 3 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 61 | SFX 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 62 | VOICE | -- | -- | -- | **not built: plays Standard** |  |  |
+| 63 | CYM&CLAPS 2 | -- | -- | -- | **not built: plays Standard** |  |  |
+| 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
 
 ### 8 Room
 
