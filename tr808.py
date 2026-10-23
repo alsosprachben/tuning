@@ -84,6 +84,9 @@ PANEL = {
                                 # first cycle is the jump's, the ring resumes after it
     "bend_oct": 0.0,            # the sigh / the diodes: octaves above at the strike
     "bend_ms": 20.0,            # ...its time constant
+    "sweep": "log",             # the bend's law: "log", falling evenly in pitch (an 808's
+                                # exponential control voltage); "linear", in Hz (a 909's
+                                # VCO, its current decaying into an integrator)
     "diodes": False,            # the toms' and congas' D80/D81: they conduct with the ring,
                                 # so the bend's time IS the ring's (bend_ms ignored), and
                                 # the harmonics they make die k times as fast as it
@@ -120,6 +123,13 @@ PANEL = {
     "noise_bp": False,          # a METAL patch's noise follows its bands instead
     "noise_decay_s": 0.2,       # its envelope to -60 dB,
     "noise_rise_ms": 1.0,       # and its rise (the maracas' swells)
+    "noise2_db": -99.0,         # a second noise layer, its own filter and envelope (a 909
+    "noise2_tilt": 0.0,         # cymbal's bright bloom beside its early wash)
+    "noise2_hp_hz": 20.0,
+    "noise2_lp_hz": 20000.0,
+    "noise2_decay_s": 0.2,
+    "noise2_rise_ms": 1.0,
+    "noise2_len_ms": None,
     # ---- the click (both)
     "click_db": -99.0,
     "click_hp_hz": 20.0,
@@ -350,7 +360,7 @@ def base_hz(patch):
 def voice_attrs(patch):
     """What a tonelib class needs to play this patch."""
     p = panel_of(patch)
-    attrs = {"tension_log": True, "tension_bend_slope": 0.0, "chiff_volume": 0.0,
+    attrs = {"tension_log": p["sweep"] == "log", "tension_bend_slope": 0.0, "chiff_volume": 0.0,
              # the attack: a resonator rung up over the trigger pulse, the
              # metal at once (tonelib.TR808Properties)
              "chiff_max_valve_time": (p["attack_ms"] / 1000.0 if p["attack_ms"] is not None
@@ -394,6 +404,12 @@ def voice_attrs(patch):
                    p["noise_rise_ms"] / 1000.0, round(dbs(p["noise_decay_s"]), 2),
                    (p["noise_len_ms"] / 1000.0 if p["noise_len_ms"] is not None
                     else 2.0 * p["noise_decay_s"])),)
+    if p["noise2_db"] > -90.0:
+        q = dict(p, noise_tilt=p["noise2_tilt"], noise_order=2, noise_hp2_hz=0.0)
+        layers += ((_noise_table(q, p["noise2_hp_hz"], p["noise2_lp_hz"], p["noise2_db"], extra),
+                    p["noise2_rise_ms"] / 1000.0, round(dbs(p["noise2_decay_s"]), 2),
+                    (p["noise2_len_ms"] / 1000.0 if p["noise2_len_ms"] is not None
+                     else 2.0 * p["noise2_decay_s"])),)
     attrs["strike_noise_layers"] = layers
     if p["click_db"] > -90.0:
         attrs["strike_noise_db"] = _noise_table(dict(p, noise_tilt=p["click_tilt"], noise_order=2,

@@ -417,6 +417,27 @@ KIT_RATED = {
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
     },
+    30: {
+        36: (4, "909 KICK 1: a VCO swept in Hz (a current into an integrator: tr808.py's linear "
+             "sweep) from 5.6x down onto 49.8 Hz, tau 30.5 ms, its ATTACK click beside it; TUNE, "
+             "ATTACK, DECAY full. Fitted to Jason Baker's real 909 (BTAAADA): score 8.7. Ben: "
+             "sounds great"),
+        35: (4, "909 KICK 2: the panel's middle, no attack (BT7A0D7). Score 8.0"),
+        37: (4, "909 RIM: a short ring and its click (RIM127). Score 16.3"),
+        38: (4, "909 SNARE 1: two swept oscillators 1.44 apart over SNAPPY's noise; ST0T3S3, the "
+             "take GeneralUser GS's own sample is. Score 9.6"),
+        40: (4, "909 SNARE 2: TUNE, TONE, SNAPPY full (STATASA, GeneralUser's other). Score 11.6"),
+        41: (4, "909 LOW TOM 2: a swept VCO and a second at 2/3 of it (LT3D7). Score 9.2"),
+        43: (4, "909 LOW TOM 1: TUNE full (LTAD7). Score 9.4"),
+        45: (4, "909 MID TOM 2 (MT3D7). Score 10.7"), 47: (4, "909 MID TOM 1 (MTAD7). Score 10.2"),
+        48: (4, "909 HI TOM 2 (HT3D7). Score 6.8"), 50: (4, "909 HI TOM 1 (HTAD7). Score 6.4"),
+        46: (4, "909 OPEN HAT: the 909's 6-bit hat as third-octave noise, held then let go "
+             "(HHOD4). Score 10.4"),
+        49: (4, "909 CRASH: an early wash and a bright bloom, two noise layers (CSHD4). Score 8.1"),
+        51: (4, "909 RIDE: the crash's two layers, less bloom (RIDED4). Score 10.3"),
+        56: (4, "the 808's cowbell, as Roland's set borrows it"),
+        70: (4, "the 808's maracas"), 75: (4, "the 808's claves"),
+    },
     8: {
         41: (4, "ROOM LOW TOM 2: Standard's floor tom in a small LIVE ROOM of its own (tonelib.LiveRoom: ~3.5 x 3.9 x 2.8 m, hard walls, reflections to the third order, the drum 1.5 m away facing the listener), fitted (examples/roomset_fit.py) to what GeneralUser GS's Room toms carry over its Standard toms: early reflections +4.5 dB against +5.4, top +3.0 against +2.2. The hall's drum moved further back gave +1 dB, aimed at the back wall 6-7 dB darker: the live room's hard walls make it roomier AND brighter. Ben: sounds great"),
         43: (4, "as 41"), 45: (4, "ROOM MID TOM 2: Standard's rack tom in the live room (as 41)"),

@@ -133,7 +133,7 @@ SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the
 SC-88Pro map 25, the SC-8850 map 37. A set not built here plays
 Standard. THE GOAL: every one built.
 
-**Where it stands:** SC-8850 map 10 of 37, SC-88Pro map 10 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
+**Where it stands:** SC-8850 map 11 of 37, SC-88Pro map 11 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
 
 | PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
 |---|---|---|---|---|---|---|---|
@@ -153,7 +153,7 @@ Standard. THE GOAL: every one built.
 | 28 | CR-78 | CR-78 | -- | -- | **not built: plays Standard** |  |  |
 | 29 | TR-606 | TR-606 | -- | -- | **not built: plays Standard** |  |  |
 | 30 | TR-707 | TR-707 | -- | -- | **not built: plays Standard** |  |  |
-| 31 | TR-909 | TR-909 | -- | -- | **not built: plays Standard** |  |  |
+| 31 | TR-909 | TR-909 | -- | -- | built: 17 keys of its own | 17 | **4** |
 | 33 | JAZZ | JAZZ | JAZZ | JAZZ | Standard, by design |  |  |
 | 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 3 keys of its own | 3 | **4** |
@@ -238,6 +238,28 @@ Standard. THE GOAL: every one built.
 | 64 | 808 Low Conga | `TR808Conga` | **4** | the LOW CONGA. Score 2.9 (LC25) |
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
 | 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
+
+### 30 TR-909
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | 909 Kick 2 | `TR909Kick2` | **4** | 909 KICK 2: the panel's middle, no attack (BT7A0D7). Score 8.0 |
+| 36 | 909 Kick 1 | `TR909Kick` | **4** | 909 KICK 1: a VCO swept in Hz (a current into an integrator: tr808.py's linear sweep) from 5.6x down onto 49.8 Hz, tau 30.5 ms, its ATTACK click beside it; TUNE, ATTACK, DECAY full. Fitted to Jason Baker's real 909 (BTAAADA): score 8.7. Ben: sounds great |
+| 37 | 909 Rim | `TR909Rim` | **4** | 909 RIM: a short ring and its click (RIM127). Score 16.3 |
+| 38 | 909 Snare 1 | `TR909Snare` | **4** | 909 SNARE 1: two swept oscillators 1.44 apart over SNAPPY's noise; ST0T3S3, the take GeneralUser GS's own sample is. Score 9.6 |
+| 40 | 909 Snare 2 | `TR909Snare2` | **4** | 909 SNARE 2: TUNE, TONE, SNAPPY full (STATASA, GeneralUser's other). Score 11.6 |
+| 41 | 909 Low Tom 2 | `TR909Tom` | **4** | 909 LOW TOM 2: a swept VCO and a second at 2/3 of it (LT3D7). Score 9.2 |
+| 43 | 909 Low Tom 1 | `TR909LowTom1` | **4** | 909 LOW TOM 1: TUNE full (LTAD7). Score 9.4 |
+| 45 | 909 Mid Tom 2 | `TR909MidTom` | **4** | 909 MID TOM 2 (MT3D7). Score 10.7 |
+| 46 | 909 OHH | `TR909OpenHat` | **4** | 909 OPEN HAT: the 909's 6-bit hat as third-octave noise, held then let go (HHOD4). Score 10.4 |
+| 47 | 909 Mid Tom 1 | `TR909MidTom1` | **4** | 909 MID TOM 1 (MTAD7). Score 10.2 |
+| 48 | 909 Hi Tom 2 | `TR909HiTom` | **4** | 909 HI TOM 2 (HT3D7). Score 6.8 |
+| 49 | 909 Crash | `TR909Crash` | **4** | 909 CRASH: an early wash and a bright bloom, two noise layers (CSHD4). Score 8.1 |
+| 50 | 909 Hi Tom 1 | `TR909HiTom1` | **4** | 909 HI TOM 1 (HTAD7). Score 6.4 |
+| 51 | 909 Ride | `TR909Ride` | **4** | 909 RIDE: the crash's two layers, less bloom (RIDED4). Score 10.3 |
+| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the 808's cowbell, as Roland's set borrows it |
+| 70 | 808 Maracas | `TR808Maracas` | **4** | the 808's maracas |
+| 75 | 808 Claves | `TR808Claves` | **4** | the 808's claves |
 
 ### 40 Brush
 
@@ -1403,7 +1425,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-365 classes.
+380 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1549,21 +1571,36 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `TR808` [ModeDecays]
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
-            - `TR808Claves` -- set 25 75 808 Claves (4)
+            - `TR808Claves` -- set 25 75 808 Claves (4), set 30 75 808 Claves (4)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4)
             - `TR808Conga` -- set 25 64 808 Low Conga (4)
               - `TR808HiConga` -- set 25 62 808 High Conga (4)
               - `TR808MidConga` -- set 25 63 808 Mid Conga (4)
-            - `TR808Cowbell` -- set 25 56 808 Cowbell (4)
+            - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
             - `TR808Cymbal` -- set 25 49 808 Cymbal (4)
             - `TR808Kick` -- set 25 36 808 Bass Drum (4)
-            - `TR808Maracas` -- set 25 70 808 Maracas (4)
+            - `TR808Maracas` -- set 25 70 808 Maracas (4), set 30 70 808 Maracas (4)
             - `TR808RimShot` -- set 25 37 808 Rim Shot (4)
             - `TR808Snare` -- set 25 38 808 Snare Drum (4)
             - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4)
               - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4)
               - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4)
+            - `TR909`
+              - `TR909Crash` -- set 30 49 909 Crash (4)
+                - `TR909Ride` -- set 30 51 909 Ride (4)
+              - `TR909Kick` -- set 30 36 909 Kick 1 (4)
+                - `TR909Kick2` -- set 30 35 909 Kick 2 (4)
+              - `TR909OpenHat` -- set 30 46 909 OHH (4)
+              - `TR909Rim` -- set 30 37 909 Rim (4)
+              - `TR909Snare` -- set 30 38 909 Snare 1 (4)
+                - `TR909Snare2` -- set 30 40 909 Snare 2 (4)
+              - `TR909Tom` -- set 30 41 909 Low Tom 2 (4)
+                - `TR909HiTom` -- set 30 48 909 Hi Tom 2 (4)
+                  - `TR909HiTom1` -- set 30 50 909 Hi Tom 1 (4)
+                - `TR909LowTom1` -- set 30 43 909 Low Tom 1 (4)
+                - `TR909MidTom` -- set 30 45 909 Mid Tom 2 (4)
+                  - `TR909MidTom1` -- set 30 47 909 Mid Tom 1 (4)
         - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)

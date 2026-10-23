@@ -430,17 +430,17 @@ def report(d, notes=None):
     print("mean %.1f" % np.mean(tot))
 
 
-def write_wavs(out, d):
+def write_wavs(out, d, tag="808"):
     from scipy.io import wavfile
     os.makedirs(out, exist_ok=True)
     for n in sorted(VOICE):
         y, sr = hit(HITS[n])
         x, _ = ours(n, d)
-        for tag, z in (("808", y), ("ours", x)):
+        for name, z in ((tag, y), ("ours", x)):
             z = np.asarray(z, float)
             z = z[max(0, onset(z) - 200):][:int(1.6 * sr)]
             z = 0.5 * z / (np.abs(z).max() + 1e-12)
-            wavfile.write(os.path.join(out, "%d_%s.wav" % (n, tag)), sr, (z * 32767).astype(np.int16))
+            wavfile.write(os.path.join(out, "%d_%s.wav" % (n, name)), sr, (z * 32767).astype(np.int16))
 
 
 def osc(d):

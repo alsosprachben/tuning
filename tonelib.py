@@ -18548,6 +18548,137 @@ class TR808CymbalProperties(TR808Properties):
              "noise_decay_s": 0.8983}
 
 
+# THE TR-909 SET (program 30 on the drum channel; SC-8850 p.188). The 909's
+# drums are analog, as the 808's are, but VCOs, not ringing networks: a
+# triangle-core oscillator (its waveshaper rounds it toward a sine, leaving
+# h2 and h3) whose frequency an envelope sweeps -- a CURRENT into an
+# integrator, so the sweep falls in Hz, not in pitch (tr808.py's "linear"
+# sweep): the kick from ~5x its tuning onto it, tau ~31 ms at full TUNE, its
+# ATTACK a click beside it; the snare two oscillators ~1.44 apart over
+# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. The hats and
+# cymbals are 6-bit samples of real cymbals, here noise in third octaves on
+# two envelopes. FITTED to a real 909 (Jason Baker's 1995 set, every knob at
+# four positions; sources.md) by examples/tr909_fit.py; the closed hats (42,
+# 44) are the TR-707's and the clap (39) Standard's, as Roland's set has them.
+class TR909Properties(TR808Properties):
+    """A ROLAND TR-909 VOICE: a tr808.py patch on the 909's sweep law."""
+    tr808 = {"sweep": "linear"}
+
+
+class TR909KickProperties(TR909Properties):
+    """909 Kick 1: a VCO swept from ~5x its tuning down onto ~50 Hz, its
+    attack's click beside it."""
+    tr808 = {"tune_hz": 49.8, "decay_s": 0.6868, "h2_db": -29.2696, "h3_db": -19.7478,
+             "bend_oct": 2.4952, "bend_ms": 30.5253, "click_db": -32.5839,
+             "click_dbs": 1732.5751, "click_tilt": -2.5276}
+
+
+class TR909Kick2Properties(TR909KickProperties):
+    """909 Kick 2: another setting of the same circuit."""
+    tr808 = {"bend_ms": 19.1728, "decay_s": 0.4792, "tune_hz": 49.6, "h2_db": -30.3129,
+             "h3_db": -18.2145, "bend_oct": 2.6572, "click_db": -35.2801,
+             "click_dbs": 1342.8248, "click_tilt": -2.754}
+
+
+class TR909SnareProperties(TR909Properties):
+    """909 Snare 1: two swept oscillators ~1.44 apart (TONE), SNAPPY's
+    noise on its own envelope."""
+    tr808 = {"tune_hz": 119.9, "decay_s": 0.1861, "h2_db": -6.2735, "h3_db": -20.5689,
+             "res": ((1.4433, -4.4671, 0.1411),), "bend_oct": 0.345, "bend_ms": 10.955,
+             "noise_db": -14.9883, "noise_hp_hz": 3944.0653, "noise_lp_hz": 8579.078,
+             "noise_decay_s": 0.4718, "click_db": -24.4036, "click_dbs": 1988.8372,
+             "click_tilt": -2.5831}
+
+
+class TR909Snare2Properties(TR909SnareProperties):
+    """909 Snare 2: another setting of the same circuit."""
+    tr808 = {"noise_db": -0.0972, "tune_hz": 233.8, "decay_s": 0.1935, "h2_db": -8.8631,
+             "h3_db": -15.5345, "res": ((1.4365, -4.6771, 0.1193),), "bend_oct": 0.397,
+             "bend_ms": 11.0543, "noise_hp_hz": 6197.2688, "noise_lp_hz": 7154.6225,
+             "noise_decay_s": 0.9506, "click_db": -22.6125, "click_dbs": 513.8219,
+             "click_tilt": -0.7811}
+
+
+class TR909TomProperties(TR909Properties):
+    """909 Low Tom: a swept VCO and a second at ~2/3 of it, a little noise."""
+    tr808 = {"tune_hz": 77.0, "decay_s": 0.7645, "h2_db": -19.7241, "h3_db": -6.2981,
+             "res": ((0.6788, -8.7631, 0.9206),), "bend_oct": 0.5259, "bend_ms": 44.0726,
+             "noise_db": -32.6353, "noise_hp_hz": 100.0, "noise_lp_hz": 2000.0,
+             "noise_decay_s": 0.4333, "click_db": -30.7545, "click_dbs": 187.5823,
+             "click_tilt": -2.3789}
+
+
+class TR909LowTom1Properties(TR909TomProperties):
+    """909 Low Tom 1: its TUNE turned up."""
+    tr808 = {"tune_hz": 121.6, "decay_s": 0.7643, "h2_db": -18.1953, "h3_db": -12.8609,
+             "res": ((0.6855, -7.2979, 0.856),), "bend_oct": 0.4015, "bend_ms": 45.4816,
+             "noise_db": -31.8166, "noise_decay_s": 0.484, "click_db": -30.0809,
+             "click_dbs": 249.946, "click_tilt": -1.6978}
+
+
+class TR909MidTomProperties(TR909TomProperties):
+    """909 Mid Tom 2."""
+    tr808 = {"tune_hz": 96.2, "decay_s": 0.6004, "h2_db": -18.8669, "h3_db": -9.1747,
+             "res": ((0.6911, -14.4004, 1.075),), "bend_oct": 0.5808, "bend_ms": 43.6208,
+             "noise_db": -35.7184, "noise_decay_s": 0.5433, "click_db": -21.3583,
+             "click_dbs": 233.434, "click_tilt": -3.3142}
+
+
+class TR909MidTom1Properties(TR909MidTomProperties):
+    """909 Mid Tom 1."""
+    tr808 = {"tune_hz": 150.7, "decay_s": 0.5513, "h2_db": -15.8655, "h3_db": -13.3072,
+             "res": ((0.6795, -13.9023, 1.0175),), "bend_oct": 0.4885, "bend_ms": 30.2136,
+             "noise_db": -37.416, "noise_decay_s": 0.9987, "click_db": -29.6561,
+             "click_dbs": 342.5006, "click_tilt": -2.0894}
+
+
+class TR909HiTomProperties(TR909TomProperties):
+    """909 High Tom 2."""
+    tr808 = {"tune_hz": 114.1, "decay_s": 0.6418, "h2_db": -18.8444, "h3_db": -10.9676,
+             "res": ((0.6996, -9.1152, 0.898),), "bend_oct": 0.5079, "bend_ms": 50.7365,
+             "noise_db": -33.571, "noise_decay_s": 0.4741, "click_db": -30.3183,
+             "click_dbs": 299.1813, "click_tilt": -2.9841}
+
+
+class TR909HiTom1Properties(TR909HiTomProperties):
+    """909 High Tom 1."""
+    tr808 = {"tune_hz": 173.8, "decay_s": 0.6363, "h2_db": -17.6609, "h3_db": -14.979,
+             "res": ((0.6946, -7.6196, 0.6437),), "bend_oct": 0.5284, "bend_ms": 32.2761,
+             "noise_db": -27.9783, "noise_decay_s": 0.438, "click_db": -31.1595,
+             "click_dbs": 521.1526, "click_tilt": -1.1741}
+
+
+class TR909RimProperties(TR909Properties):
+    """909 Rim: a short ring and its click."""
+    tr808 = {"tune_hz": 220.4, "decay_s": 0.0738, "h2_db": -21.1418, "h3_db": -32.6418,
+             "res": ((2.3676, 3.0255, 0.0271),), "click_db": -20.0435,
+             "click_dbs": 2533.1794, "click_tilt": -1.0761}
+
+
+class TR909OpenHatProperties(TR909Properties):
+    """909 Open Hi-Hat: a sampled hat, its wash held, then let go."""
+    tr808 = {"tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": 0.0,
+             "noise_hp_hz": 9313.056, "noise_lp_hz": 9459.4005, "noise_decay_s": 0.51,
+             "noise_rise_ms": 2.4527, "noise_len_ms": 335.138, "noise_tilt": -4.3927}
+
+
+class TR909CrashProperties(TR909Properties):
+    """909 Crash Cymbal: an early wash and a bright bloom over it."""
+    tr808 = {"tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": -18.7966,
+             "noise_hp_hz": 510.1664, "noise_lp_hz": 6426.33, "noise_decay_s": 1.3368,
+             "noise_rise_ms": 9.0705, "noise2_db": 0.0, "noise2_hp_hz": 6782.6572,
+             "noise2_lp_hz": 6560.008, "noise2_decay_s": 2.1368, "noise2_rise_ms": 49.7529,
+             "noise2_tilt": 0.8469}
+
+
+class TR909RideProperties(TR909CrashProperties):
+    """909 Ride Cymbal: the same two washes, its bloom less."""
+    tr808 = {"noise_db": -8.8265, "noise_hp_hz": 806.4709, "noise2_rise_ms": 39.9982,
+             "noise2_decay_s": 1.5471, "noise_lp_hz": 8080.1978, "noise_decay_s": 1.2682,
+             "noise_rise_ms": 7.1675, "noise2_hp_hz": 11587.0234,
+             "noise2_lp_hz": 8908.2753, "noise2_tilt": 3.675}
+
+
 class ConcertBassDrumProperties(KickDrumProperties):
     """The ORCHESTRA set's CONCERT BD 1 and 2 (program 48, notes 36 and 35,
     SC-55 manual p.70): a gran cassa, not a kit kick. VCSL's "Bass Drum 1"

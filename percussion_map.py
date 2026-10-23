@@ -140,6 +140,20 @@ from tonelib import (
     TR808ClosedHatProperties,
     TR808OpenHatProperties,
     TR808CymbalProperties,
+    TR909KickProperties,
+    TR909Kick2Properties,
+    TR909SnareProperties,
+    TR909Snare2Properties,
+    TR909TomProperties,
+    TR909LowTom1Properties,
+    TR909MidTomProperties,
+    TR909MidTom1Properties,
+    TR909HiTomProperties,
+    TR909HiTom1Properties,
+    TR909RimProperties,
+    TR909OpenHatProperties,
+    TR909CrashProperties,
+    TR909RideProperties,
     ElectronicSnareProperties,
     GatedSnareProperties,
     BrushTapProperties,
@@ -373,15 +387,16 @@ def kit_pan(note, kit=0):
 #
 # Jazz (32) shares Standard's column on the SC-55, so it IS Standard there.
 DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
-             25: "TR-808", 32: "Jazz", 40: "Brush", 48: "Orchestra",
+             25: "TR-808", 30: "TR-909", 32: "Jazz", 40: "Brush", 48: "Orchestra",
              52: "Asia", 56: "SFX", 127: "CM-64/32L"}
 
 # THE SETS THAT ARE BUILT: {program: {note: (name, class, base Hz)}}, holding
 # only the notes that differ. A set named above but not here plays Standard,
 # as it always has; a program that is no set at all does too. The manual does
 # not say what the SC-55 does with a number that is not a set, so nothing is
-# guessed: 1, 20, 29, 30, 35, 47, 49 and 60 -- all sent to channel 10 by files
-# in the corpus -- play Standard, which is what they did before sets existed.
+# guessed: 1, 20, 29, 35, 47, 49 and 60 -- all sent to channel 10 by files in
+# the corpus -- play Standard, which is what they did before sets existed. (30
+# was among them until the Pro map's TR-909 was built: bwx17 plays it now.)
 #
 # ELECTRONIC, p.70. A Simmons-era kit: the six toms are synth toms, which
 # SynthDrumProperties (GM 118) already is; the reverse cymbal is GM 119. Only
@@ -431,6 +446,32 @@ KITS = {
         62: ("808 High Conga",   TR808HiCongaProperties, TR808HiCongaProperties.tr808_base_hz),
         63: ("808 Mid Conga",    TR808MidCongaProperties, TR808MidCongaProperties.tr808_base_hz),
         64: ("808 Low Conga",    TR808CongaProperties, TR808CongaProperties.tr808_base_hz),
+        70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
+        75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),
+    },
+    # TR-909 (SC-8850 p.188; the Pro's): the 909's own drums, toms, open hat
+    # and cymbals, every one a patch on tr808.py FITTED to a real 909 (Jason
+    # Baker's set; examples/tr909_fit.py). Roland's set borrows the rest: the
+    # 808's cowbell, maracas and claves (ours), the TR-707's closed hats, the
+    # CR-78 guiro, the TR-626 shaker and Standard 2's tambourine, ride edge,
+    # hoos and triangles (Standard's until those are built); its clap (39) is
+    # Standard's.
+    30: {
+        35: ("909 Kick 2",       TR909Kick2Properties, TR909Kick2Properties.tr808_base_hz),
+        36: ("909 Kick 1",       TR909KickProperties, TR909KickProperties.tr808_base_hz),
+        37: ("909 Rim",          TR909RimProperties, TR909RimProperties.tr808_base_hz),
+        38: ("909 Snare 1",      TR909SnareProperties, TR909SnareProperties.tr808_base_hz),
+        40: ("909 Snare 2",      TR909Snare2Properties, TR909Snare2Properties.tr808_base_hz),
+        41: ("909 Low Tom 2",    TR909TomProperties, TR909TomProperties.tr808_base_hz),
+        43: ("909 Low Tom 1",    TR909LowTom1Properties, TR909LowTom1Properties.tr808_base_hz),
+        45: ("909 Mid Tom 2",    TR909MidTomProperties, TR909MidTomProperties.tr808_base_hz),
+        46: ("909 OHH",          TR909OpenHatProperties, TR909OpenHatProperties.tr808_base_hz),
+        47: ("909 Mid Tom 1",    TR909MidTom1Properties, TR909MidTom1Properties.tr808_base_hz),
+        48: ("909 Hi Tom 2",     TR909HiTomProperties, TR909HiTomProperties.tr808_base_hz),
+        49: ("909 Crash",        TR909CrashProperties, TR909CrashProperties.tr808_base_hz),
+        50: ("909 Hi Tom 1",     TR909HiTom1Properties, TR909HiTom1Properties.tr808_base_hz),
+        51: ("909 Ride",         TR909RideProperties, TR909RideProperties.tr808_base_hz),
+        56: ("808 Cowbell",      TR808CowbellProperties, TR808CowbellProperties.tr808_base_hz),
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
         75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),
     },
