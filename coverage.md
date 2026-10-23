@@ -133,7 +133,7 @@ SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the
 SC-88Pro map 25, the SC-8850 map 37. A set not built here plays
 Standard. THE GOAL: every one built.
 
-**Where it stands:** SC-8850 map 12 of 37, SC-88Pro map 12 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
+**Where it stands:** SC-8850 map 13 of 37, SC-88Pro map 13 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
 
 | PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
 |---|---|---|---|---|---|---|---|
@@ -151,7 +151,7 @@ Standard. THE GOAL: every one built.
 | 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | built: 19 keys of its own | 19 | **4** |
 | 27 | DANCE | DANCE | DANCE | -- | **not built: plays Standard** |  |  |
 | 28 | CR-78 | CR-78 | -- | -- | **not built: plays Standard** |  |  |
-| 29 | TR-606 | TR-606 | -- | -- | **not built: plays Standard** |  |  |
+| 29 | TR-606 | TR-606 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 30 | TR-707 | TR-707 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 33 | JAZZ | JAZZ | JAZZ | JAZZ | Standard, by design |  |  |
@@ -239,6 +239,30 @@ Standard. THE GOAL: every one built.
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
 | 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
 
+### 28 TR-606
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 36 | 606 Kick 1 | `TR606Kick` | **4** | 606 KICK: a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). Score 7.3. Ben: sounds great |
+| 38 | 606 Snare 1 | `TR606Snare` | **4** | 606 SNARE 1: a bridged-T at 207 Hz and its snappy noise. Score 8.1 |
+| 39 | 707 Hand Clap | `TR707Clap` | **4** | the 707's clap |
+| 40 | 606 Snare 2 | `TR606Snare2` | **4** | 606 SNARE 2: the snare ACCENTED (bdu's CC0 take). Score 9.1 |
+| 41 | 606 Low Tom 2 | `TR606Tom` | **4** | 606 LOW TOM: a bridged-T whose pitch falls as it rings (diodes). Score 9.1 |
+| 42 | 606 CHH | `TR606ClosedHat` | **4** | 606 CLOSED HAT: six square oscillators (read off its cymbal: 203.2, 211.2, 222.1, 251.2, 333.1, 351.9 Hz) through a high band, a short VCA; the trigger's thump under 250 Hz. Score 11.8 |
+| 43 | 606 Low Tom 1 | `TR606Tom` | **4** | as 41, 1.75 semitones up (the 606's two toms over six keys, evenly) |
+| 44 | 606 CHH | `TR606ClosedHat` | **4** | as 42 |
+| 45 | 606 Mid Tom 2 | `TR606Tom` | **4** | as 41, 3.5 semitones up |
+| 46 | 606 OHH | `TR606OpenHat` | **4** | 606 OPEN HAT: the same band, a longer VCA. Score 10.6 |
+| 47 | 606 Mid Tom 1 | `TR606HiTom` | **4** | as 48, 1.75 semitones down |
+| 48 | 606 Hi Tom 2 | `TR606HiTom` | **4** | 606 HIGH TOM. Score 10.2 |
+| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the 808's cymbal |
+| 50 | 606 Hi Tom 1 | `TR606HiTom` | **4** | as 48, 1.75 semitones up |
+| 51 | 606 Ride Cymbal | `TR606Cymbal` | **4** | 606 CYMBAL (Roland's 'Ride'): the oscillators through three bands, each its own VCA, and a tail ringing on (after_db), scored on its 50 ms envelope too (Ben: 'more ring to it than ours'): within 2 dB of the take from 0.25 s to 0.9 |
+| 57 | 909 Crash | `TR909Crash` | **4** | the 909's crash |
+| 62 | 808 High Conga | `TR808HiConga` | **4** | the 808's high conga |
+| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the 808's mid conga |
+| 64 | 808 Low Conga | `TR808Conga` | **4** | the 808's low conga |
+
 ### 29 TR-707
 
 | # | note | class | | notes |
@@ -250,11 +274,11 @@ Standard. THE GOAL: every one built.
 | 39 | 707 Hand Clap | `TR707Clap` | **4** | 707 HAND CLAP: four bursts at the take's 0, 10, 20, 31 ms (click_bursts: a machine's flam, the same every note) and a tail. Score 14.5 |
 | 40 | 707 Snare 2 | `TR707Snare2` | **4** | 707 SNARE 2: the wires louder. Score 10.8 |
 | 41 | 707 Low Tom 2 | `TR707Tom` | **4** | 707 LOW TOM 2: a membrane gliding down from ~140 Hz to ~100, its modes beside it. Score 9.7 |
-| 42 | 707 CHH | `TR707ClosedHat` | **4** | 707 CLOSED HAT: third-octave noise, gated. Score 15.0 |
+| 42 | 707 CHH | `TR707ClosedHat` | **4** | 707 CLOSED HAT: a real hat in ROM, so OUR closed hat fitted to it (examples/rom_cymbal_fit.py), the ROM's grit on top: 4.58 -> 1.67 dB |
 | 43 | 707 Low Tom 1 | `TR707Tom` | **4** | as 41, two semitones up (the 707 has three toms; the six evenly spaced) |
 | 44 | 707 CHH | `TR707ClosedHat` | **4** | as 42 |
 | 45 | 707 Mid Tom 2 | `TR707MidTom` | **4** | 707 MID TOM 2. Score 8.2 |
-| 46 | 707 OHH | `TR707OpenHat` | **4** | 707 OPEN HAT: the same, let ring to 0.33 s. Score 14.9 |
+| 46 | 707 OHH | `TR707OpenHat` | **4** | 707 OPEN HAT: our open hat fitted to the ROM's: 2.29 -> 1.99 dB |
 | 47 | 707 Mid Tom 1 | `TR707MidTom` | **4** | as 45, two semitones up |
 | 48 | 707 Hi Tom 2 | `TR707HiTom` | **4** | 707 HI TOM 2. Score 9.9 |
 | 49 | 909 Crash | `TR909Crash` | **4** | the 909's crash, as Roland's set has it |
@@ -277,12 +301,12 @@ Standard. THE GOAL: every one built.
 | 43 | 909 Low Tom 1 | `TR909LowTom1` | **4** | 909 LOW TOM 1: TUNE full (LTAD7). Score 9.4 |
 | 44 | 707 CHH | `TR707ClosedHat` | **4** | as 42 |
 | 45 | 909 Mid Tom 2 | `TR909MidTom` | **4** | 909 MID TOM 2 (MT3D7). Score 10.7 |
-| 46 | 909 OHH | `TR909OpenHat` | **4** | 909 OPEN HAT: the 909's 6-bit hat as third-octave noise, held then let go (HHOD4). Score 10.4 |
+| 46 | 909 OHH | `TR909OpenHat` | **4** | 909 OPEN HAT: a real hat in the 909's ROM, so OUR open hat fitted to it (examples/rom_cymbal_fit.py: crash_fit's grid, HHOD4), the ROM's 6-bit grit a noise layer on top: 4.60 -> 1.75 dB |
 | 47 | 909 Mid Tom 1 | `TR909MidTom1` | **4** | 909 MID TOM 1 (MTAD7). Score 10.2 |
 | 48 | 909 Hi Tom 2 | `TR909HiTom` | **4** | 909 HI TOM 2 (HT3D7). Score 6.8 |
-| 49 | 909 Crash | `TR909Crash` | **4** | 909 CRASH: an early wash and a bright bloom, two noise layers (CSHD4). Score 8.1 |
+| 49 | 909 Crash | `TR909Crash` | **4** | 909 CRASH: our crash (modes, the hard hit's swell) fitted to the 909's ROM take (CSHD4), its grit on top: 3.08 -> 2.58 dB. Ben: the samples 'sound almost real'; ours 'a little more open-ended because we aren't a sample, but that is fine' |
 | 50 | 909 Hi Tom 1 | `TR909HiTom1` | **4** | 909 HI TOM 1 (HTAD7). Score 6.4 |
-| 51 | 909 Ride | `TR909Ride` | **4** | 909 RIDE: the crash's two layers, less bloom (RIDED4). Score 10.3 |
+| 51 | 909 Ride | `TR909Ride` | **4** | 909 RIDE: our ride fitted to the ROM's (RIDED4): 6.11 -> 1.74 dB |
 | 56 | 808 Cowbell | `TR808Cowbell` | **4** | the 808's cowbell, as Roland's set borrows it |
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the 808's maracas |
 | 75 | 808 Claves | `TR808Claves` | **4** | the 808's claves |
@@ -1451,7 +1475,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-392 classes.
+401 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1520,15 +1544,20 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4)
+          - `TR909Crash` [RomMetalMixin] -- set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
           - `ConcertCymbal2` -- set 48 57 Concert Cymbal 2 (4)
         - `CrashRide` -- 59 Ride Cymbal 2 (4)
         - `HiHat`
           - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
+            - `TR707ClosedHat` [RomMetalMixin] -- set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4)
           - `OpenHiHat` -- 46 Open Hi-Hat (4), set 48 29 Open Hi-Hat (4), set 127 44 Open High Hat 2 (4), set 127 46 Open High Hat 1 (4)
+            - `TR707OpenHat` [RomMetalMixin] -- set 29 46 707 OHH (4)
+            - `TR909OpenHat` [RomMetalMixin] -- set 30 46 909 OHH (4)
           - `PedalHiHat` -- 44 Pedal Hi-Hat (4), set 48 28 Pedal Hi-Hat (4)
         - `RideBell` -- 53 Ride Bell (4)
         - `RideCymbal` -- 51 Ride Cymbal 1 (4), set 48 30 Ride Cymbal (4), set 127 51 Ride Cymbal (4)
+          - `TR909Ride` [RomMetalMixin] -- set 29 51 909 Ride (4), set 30 51 909 Ride (4)
         - `SplashCymbal` -- 55 Splash Cymbal (4)
       - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4), set 56 72 Gun Shot (4), set 127 96 Pistol (4)
         - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
@@ -1597,10 +1626,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `TR808` [ModeDecays]
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
+            - `TR606`
+              - `TR606ClosedHat` -- set 28 42 606 CHH (4), set 28 44 606 CHH (4)
+                - `TR606OpenHat` -- set 28 46 606 OHH (4)
+              - `TR606Cymbal` -- set 28 51 606 Ride Cymbal (4)
+              - `TR606Kick` -- set 28 36 606 Kick 1 (4)
+              - `TR606Snare` -- set 28 38 606 Snare 1 (4)
+                - `TR606Snare2` -- set 28 40 606 Snare 2 (4)
+              - `TR606Tom` -- set 28 41 606 Low Tom 2 (4), set 28 43 606 Low Tom 1 (4), set 28 45 606 Mid Tom 2 (4)
+                - `TR606HiTom` -- set 28 47 606 Mid Tom 1 (4), set 28 48 606 Hi Tom 2 (4), set 28 50 606 Hi Tom 1 (4)
             - `TR707`
-              - `TR707Clap` -- set 29 39 707 Hand Clap (4)
-              - `TR707ClosedHat` -- set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4)
-                - `TR707OpenHat` -- set 29 46 707 OHH (4)
+              - `TR707Clap` -- set 28 39 707 Hand Clap (4), set 29 39 707 Hand Clap (4)
               - `TR707Kick` -- set 29 36 707 Kick 1 (4)
                 - `TR707Kick2` -- set 29 35 707 Kick 2 (4)
               - `TR707Rim` -- set 29 37 707 Rim Shot (4)
@@ -1612,11 +1648,11 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `TR808Claves` -- set 25 75 808 Claves (4), set 30 75 808 Claves (4)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4)
-            - `TR808Conga` -- set 25 64 808 Low Conga (4)
-              - `TR808HiConga` -- set 25 62 808 High Conga (4)
-              - `TR808MidConga` -- set 25 63 808 Mid Conga (4)
+            - `TR808Conga` -- set 25 64 808 Low Conga (4), set 28 64 808 Low Conga (4)
+              - `TR808HiConga` -- set 25 62 808 High Conga (4), set 28 62 808 High Conga (4)
+              - `TR808MidConga` -- set 25 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4)
             - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
-            - `TR808Cymbal` -- set 25 49 808 Cymbal (4)
+            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 28 49 808 Cymbal (4)
             - `TR808Kick` -- set 25 36 808 Bass Drum (4)
             - `TR808Maracas` -- set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4)
             - `TR808RimShot` -- set 25 37 808 Rim Shot (4)
@@ -1625,11 +1661,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4)
               - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4)
             - `TR909`
-              - `TR909Crash` -- set 29 49 909 Crash (4), set 30 49 909 Crash (4)
-                - `TR909Ride` -- set 29 51 909 Ride (4), set 30 51 909 Ride (4)
               - `TR909Kick` -- set 30 36 909 Kick 1 (4)
                 - `TR909Kick2` -- set 30 35 909 Kick 2 (4)
-              - `TR909OpenHat` -- set 30 46 909 OHH (4)
               - `TR909Rim` -- set 30 37 909 Rim (4)
               - `TR909Snare` -- set 30 38 909 Snare 1 (4)
                 - `TR909Snare2` -- set 30 40 909 Snare 2 (4)

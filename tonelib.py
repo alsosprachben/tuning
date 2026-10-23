@@ -18555,9 +18555,9 @@ class TR808CymbalProperties(TR808Properties):
 # integrator, so the sweep falls in Hz, not in pitch (tr808.py's "linear"
 # sweep): the kick from ~5x its tuning onto it, tau ~31 ms at full TUNE, its
 # ATTACK a click beside it; the snare two oscillators ~1.44 apart over
-# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. The hats and
-# cymbals are 6-bit samples of real cymbals, here noise in third octaves on
-# two envelopes. FITTED to a real 909 (Jason Baker's 1995 set, every knob at
+# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. The open hat,
+# crash and ride are 6-bit samples of real cymbals: our own cymbals FITTED to
+# them (below the ride, examples/rom_cymbal_fit.py). FITTED to a real 909 (Jason Baker's 1995 set, every knob at
 # four positions; sources.md) by examples/tr909_fit.py; the closed hats (42,
 # 44) are the TR-707's and the clap (39) Standard's, as Roland's set has them.
 class TR909Properties(TR808Properties):
@@ -18655,28 +18655,82 @@ class TR909RimProperties(TR909Properties):
              "click_dbs": 2533.1794, "click_tilt": -1.0761}
 
 
-class TR909OpenHatProperties(TR909Properties):
-    """909 Open Hi-Hat: a sampled hat, its wash held, then let go."""
-    tr808 = {"tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": 0.0,
-             "noise_hp_hz": 9313.056, "noise_lp_hz": 9459.4005, "noise_decay_s": 0.51,
-             "noise_rise_ms": 2.4527, "noise_len_ms": 335.138, "noise_tilt": -4.3927}
+class TR606Properties(TR808Properties):
+    """A ROLAND TR-606 VOICE: a tr808.py patch."""
+    tr808 = {}
 
 
-class TR909CrashProperties(TR909Properties):
-    """909 Crash Cymbal: an early wash and a bright bloom over it."""
-    tr808 = {"tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": -18.7966,
-             "noise_hp_hz": 510.1664, "noise_lp_hz": 6426.33, "noise_decay_s": 1.3368,
-             "noise_rise_ms": 9.0705, "noise2_db": 0.0, "noise2_hp_hz": 6782.6572,
-             "noise2_lp_hz": 6560.008, "noise2_decay_s": 2.1368, "noise2_rise_ms": 49.7529,
-             "noise2_tilt": 0.8469}
+class TR606KickProperties(TR606Properties):
+    """606 Kick: a bridged-T at ~57 Hz."""
+    tr808 = {"tune_hz": 57.7, "decay_s": 0.3012, "h2_db": -41.7367, "h3_db": -64.3223,
+             "jump_ratio": 3.0, "jump_db": -16.0, "jump_ms": 3.0, "bend_oct": 0.1029,
+             "bend_ms": 37.275, "click_db": -21.0839, "click_dbs": 4768.9274,
+             "click_tilt": -2.6804}
 
 
-class TR909RideProperties(TR909CrashProperties):
-    """909 Ride Cymbal: the same two washes, its bloom less."""
-    tr808 = {"noise_db": -8.8265, "noise_hp_hz": 806.4709, "noise2_rise_ms": 39.9982,
-             "noise2_decay_s": 1.5471, "noise_lp_hz": 8080.1978, "noise_decay_s": 1.2682,
-             "noise_rise_ms": 7.1675, "noise2_hp_hz": 11587.0234,
-             "noise2_lp_hz": 8908.2753, "noise2_tilt": 3.675}
+class TR606SnareProperties(TR606Properties):
+    """606 Snare 1: a bridged-T at ~208 Hz and its snappy noise."""
+    tr808 = {"tune_hz": 206.9, "decay_s": 0.1489, "res": ((1.5717, 3.5463, 0.0414),),
+             "jump_ratio": 1.4, "jump_db": -6.0, "jump_ms": 3.0, "noise_db": -9.0585,
+             "noise_hp_hz": 3063.3548, "noise_lp_hz": 7128.4204, "noise_decay_s": 0.2441,
+             "click_db": -31.7902, "click_dbs": 1337.6782, "h2_db": -89.8086,
+             "h3_db": -109.8878, "bend_oct": 0.094, "bend_ms": 22.5998,
+             "click_tilt": -1.7548}
+
+
+class TR606Snare2Properties(TR606SnareProperties):
+    """606 Snare 2: the snare ACCENTED, its noise up."""
+    tr808 = {"noise_db": 6.983, "tune_hz": 203.9, "decay_s": 0.1439, "h2_db": -98.7119,
+             "h3_db": -109.7918, "res": ((1.5864, -0.4006, 0.0338),), "bend_oct": 0.1258,
+             "bend_ms": 25.2416, "noise_hp_hz": 3653.3908, "noise_lp_hz": 7139.865,
+             "noise_decay_s": 0.1752, "click_db": -27.3186, "click_dbs": 1364.3161,
+             "click_tilt": 0.4436}
+
+
+class TR606TomProperties(TR606Properties):
+    """606 Low Tom: a bridged-T whose pitch falls as it rings."""
+    tr808 = {"tune_hz": 137.1, "decay_s": 0.4388, "diodes": True, "bend_oct": 0.1552,
+             "h3_db": -45.5464, "jump_ratio": 3.1346, "jump_db": -20.5314,
+             "jump_ms": 0.4546, "noise_db": -45.9495, "noise_tilt": -3.0,
+             "noise_hp_hz": 150.0, "noise_lp_hz": 600.0, "noise_order": 1,
+             "noise_decay_s": 1.2154, "click_db": -5.0681, "click_dbs": 14245.1755,
+             "jump_phase": -4.3657, "click_tilt": -1.8071}
+
+
+class TR606HiTomProperties(TR606TomProperties):
+    """606 High Tom."""
+    tr808 = {"tune_hz": 209.1, "decay_s": 0.2204, "jump_ratio": 3.6288,
+             "jump_db": -15.9878, "jump_ms": 0.4869, "bend_oct": 0.1031,
+             "noise_db": -46.8654, "noise_decay_s": 1.137, "h3_db": -38.4347,
+             "jump_phase": -3.7987, "click_db": -4.3534, "click_dbs": 17215.969,
+             "click_tilt": -2.2616}
+
+
+class TR606ClosedHatProperties(TR606Properties):
+    """606 Closed Hi-Hat: the oscillators through a high band, a short VCA."""
+    tr808 = {"click_db": -39.7037, "click_lp_hz": 314.7896, "click_dbs": 614.028,
+             "circuit": 'metal', "osc_hz": (203.2, 211.2, 222.1, 251.2, 333.1, 351.9),
+             "osc_duty": 0.5352, "bands": ((8623.7865, 0.9801, 0.0, 0.1906),),
+             "hp_hz": 3998.9919, "hp_q": 1.1812, "noise_db": -31.2567, "noise_bp": True,
+             "noise_decay_s": 0.187}
+
+
+class TR606OpenHatProperties(TR606ClosedHatProperties):
+    """606 Open Hi-Hat: the same band, a longer VCA."""
+    tr808 = {"click_db": -25.718, "click_lp_hz": 188.3793, "click_dbs": 267.5324,
+             "bands": ((9554.547, 1.2827, 0.0, 1.2317),), "noise_decay_s": 1.5939,
+             "osc_duty": 0.455, "hp_hz": 6757.8951, "hp_q": 2.4888, "noise_db": -48.9822}
+
+
+class TR606CymbalProperties(TR606Properties):
+    """606 Cymbal (Roland's "TR-606 Ride Cymbal"): the oscillators through a
+    low and a high band, each its own decay."""
+    tr808 = {"after_db": -20.6495, "after_s": 2.3037, "circuit": 'metal',
+             "osc_hz": (203.2, 211.2, 222.1, 251.2, 333.1, 351.9), "osc_duty": 0.2607,
+             "bands": ((3935.9257, 0.804, -10.1761, 0.2858), (6132.9641, 2.4538, 7.3467, 0.585), (5589.9086, 0.9728, 2.8183, 0.0766)),
+             "hp_hz": 6715.9097, "noise_db": -25.3699, "noise_bp": True,
+             "noise_decay_s": 0.3748, "click_db": -31.1519, "click_lp_hz": 116.6004,
+             "click_dbs": 511.7972}
 
 
 # THE TR-707 SET (program 29 on the drum channel; SC-8850 p.188). The 707 is
@@ -18685,8 +18739,10 @@ class TR909RideProperties(TR909CrashProperties):
 # hats'. So each is a patch FITTED to what its take holds (examples/
 # tr707_fit.py; hyperreal's set, sources.md): the kicks a sweep onto ~55 Hz,
 # the toms a membrane gliding down with its modes (x1.78, x2.75) beside it,
-# the hats and clap noise -- the clap's four bursts where its sample puts them
-# (click_bursts). Its crash and ride are the 909's, as Roland's set has them.
+# the clap noise -- its four bursts where its sample puts them
+# (click_bursts). Its hats are real hats in ROM, our own fitted to them (below
+# the ride, examples/rom_cymbal_fit.py). Its crash and ride are the 909's, as
+# Roland's set has them.
 class TR707Properties(TR808Properties):
     """A ROLAND TR-707 VOICE: a tr808.py patch fitted to the voice's ROM take."""
     tr808 = {"sweep": "linear"}
@@ -18772,20 +18828,6 @@ class TR707ClapProperties(TR707Properties):
              "click_bursts": ((0.0, -1.0), (0.01, 0.0), (0.02, 0.0), (0.031, 0.5)),
              "noise_db": -15.9921, "noise_hp_hz": 1194.0899, "noise_lp_hz": 2503.6435,
              "noise_decay_s": 0.7868, "noise_rise_ms": 11.0215, "click_tilt": -3.0244}
-
-
-class TR707ClosedHatProperties(TR707Properties):
-    """707 Closed Hi-Hat: a sampled hat, short."""
-    tr808 = {"gate_ms": 118.7695, "tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05,
-             "noise_db": 0.0, "noise_hp_hz": 26361.5329, "noise_lp_hz": 27470.993,
-             "noise_decay_s": 0.1371, "noise_rise_ms": 0.0596, "noise_tilt": -9.31}
-
-
-class TR707OpenHatProperties(TR707ClosedHatProperties):
-    """707 Open Hi-Hat: the hat let ring."""
-    tr808 = {"gate_ms": 343.6394, "noise_decay_s": 0.6853, "noise_len_ms": 499.2363,
-             "noise_hp_hz": 29595.4347, "noise_lp_hz": 12173.4315, "noise_tilt": -7.547,
-             "noise_rise_ms": 0.0533}
 
 
 class ConcertBassDrumProperties(KickDrumProperties):
@@ -20179,6 +20221,141 @@ class RideCymbalProperties(CymbalProperties):
     # while the kit stops crowding the bass. Ben, on a drum-and-bass track:
     # "The bass is now too quiet, so I think the whole kit needs to go lower."
     initial_gain = (0.094449) * 2.6607   # +8.5 dB: K-weighted to the string reference
+
+# THE DRUM MACHINES' SAMPLED METAL. The 909's crash, ride and open hat and the
+# 707's hats are recordings of real cymbals in ROM, 6-bit, played once through
+# a VCA -- no circuit. A circuit patch on them scored well and sounded
+# synthetic (Ben: the 909's "sound almost real" on the high end), so each is
+# OUR cymbal or hat -- the modes, the hard hit's swell, the bands' decays --
+# FITTED to the machine's one take (examples/rom_cymbal_fit.py: crash_fit's
+# grid). THE ROM ON TOP: its 6-bit steps are a noise of fixed size under a
+# ring that decays in the data, so the grit rises through the tail: a flat
+# noise layer at rom_db re the plate, falling rom_dbs; the clock's capped top
+# is the band trim's.
+class RomMetalMixin:
+    """A sampled machine's cymbal or hat: the ROM's grit on our plate."""
+    rom_db = -40.0
+    rom_dbs = 20.0
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if cls.rom_db > -90.0:
+            hz = tuple(round(100.0 * 2 ** (k / 3.0)) for k in range(22))
+            cls.strike_noise_layers = ((tuple((h, round(cls.rom_db, 2)) for h in hz),
+                                        0.0005, cls.rom_dbs, 2.0),)
+
+
+class TR909CrashProperties(RomMetalMixin, CrashCymbal1Properties):
+    """909 Crash Cymbal: a real crash in ROM (TUNE at its middle)."""
+    # FITTED (examples/rom_cymbal_fit.py)
+    ring_peak_hz = 3531.07
+    ring_decay_floor = 21.0524
+    ring_decay_below = 10.8179
+    ring_decay_above = 10.4297
+    aftersound_fraction = 0.183073
+    aftersound_dbs = 12.3718
+    bloom_gain = 4.66804
+    bloom_seconds = 0.0462339
+    bloom_center_hz = 9479.7
+    bloom_octaves = 1.3786
+    bloom_swell = 1.14961
+    bloom_gain_slope = 0.876469
+    chiff_volume = 1.34388
+    chiff_width = 0.252559
+    rom_db = -39.5041
+    rom_dbs = 20.3394
+    band_trim_db = ((354, -0.4), (707, 9.1), (1414, -2.6), (2828, -2.1), (5657, 0.6), (11314, -4.6))
+    # /FITTED
+
+
+class TR909RideProperties(RomMetalMixin, RideCymbalProperties):
+    """909 Ride Cymbal: a real ride in ROM (TUNE at its middle)."""
+    # FITTED (examples/rom_cymbal_fit.py)
+    ring_peak_hz = 2446.46
+    ring_decay_floor = 7.4919
+    ring_decay_below = 6.49433
+    ring_decay_above = 6.16776
+    aftersound_fraction = 0.0828374
+    aftersound_dbs = 11.0276
+    bloom_gain = 0.0316041
+    bloom_seconds = 0.00661342
+    bloom_center_hz = 3234.48
+    bloom_octaves = 0.909799
+    bloom_swell = 0.553155
+    bloom_gain_slope = 0.131382
+    chiff_volume = 2.13387
+    chiff_width = 0.51837
+    rom_db = -43.1417
+    rom_dbs = 23.3366
+    band_trim_db = ((354, -6.4), (707, -6.3), (1414, 4.9), (2828, -6.6), (5657, 6.2), (11314, 8.1))
+    # /FITTED
+
+
+class TR909OpenHatProperties(RomMetalMixin, OpenHiHatProperties):
+    """909 Open Hi-Hat: a real hat in ROM, its DECAY at the middle."""
+    # FITTED (examples/rom_cymbal_fit.py)
+    ring_peak_hz = 1958.2
+    ring_decay_floor = 47.7339
+    ring_decay_below = 2.81253
+    ring_decay_above = 3.84673
+    aftersound_fraction = 0.193874
+    aftersound_dbs = 32.4534
+    bloom_gain = 0.0582779
+    bloom_seconds = 0.00313749
+    bloom_center_hz = 2247.78
+    bloom_octaves = 1.09647
+    bloom_swell = 1.01675
+    bloom_gain_slope = 0.0689044
+    chiff_volume = 172.683
+    rom_db = -45.2095
+    rom_dbs = 19.164
+    band_trim_db = ((354, -8.6), (707, -3.1), (1414, 5.1), (2828, 4.8), (5657, 2.7), (11314, -1.0))
+    # /FITTED
+
+
+class TR707ClosedHatProperties(RomMetalMixin, ClosedHiHatProperties):
+    """707 Closed Hi-Hat: a real hat in ROM."""
+    # FITTED (examples/rom_cymbal_fit.py)
+    ring_peak_hz = 2839.38
+    ring_decay_floor = 128.482
+    ring_decay_below = 8.51957
+    ring_decay_above = 19.4118
+    aftersound_fraction = 0.0128695
+    aftersound_dbs = 12.7085
+    bloom_gain = 0.116424
+    bloom_seconds = 0.00462444
+    bloom_center_hz = 1702.12
+    bloom_octaves = 0.267343
+    bloom_swell = 0.428416
+    bloom_gain_slope = 0.068709
+    chiff_volume = 51.452
+    rom_db = -37.9343
+    rom_dbs = 18.2605
+    band_trim_db = ((354, -0.4), (707, 1.7), (1414, 4.7), (2828, 0.7), (5657, -1.1), (11314, -5.7))
+    # /FITTED
+
+
+class TR707OpenHatProperties(RomMetalMixin, OpenHiHatProperties):
+    """707 Open Hi-Hat: a real hat in ROM."""
+    # FITTED (examples/rom_cymbal_fit.py)
+    ring_peak_hz = 2533.48
+    ring_decay_floor = 21.0791
+    ring_decay_below = 8.50175
+    ring_decay_above = 18.3464
+    aftersound_fraction = 0.375645
+    aftersound_dbs = 11.4619
+    bloom_gain = 0.0340369
+    bloom_seconds = 0.00335885
+    bloom_center_hz = 3378.06
+    bloom_octaves = 1.35705
+    bloom_swell = 0.827044
+    bloom_gain_slope = 0.0972256
+    chiff_volume = 91.5688
+    rom_db = -39.6436
+    rom_dbs = 18.7363
+    band_trim_db = ((354, -4.3), (707, -3.5), (1414, 2.3), (2828, 3.7), (5657, 2.4), (11314, -0.5))
+    # /FITTED
+
 
 class CrashRideProperties(CymbalProperties):
     """GM 59, Ride Cymbal 2: the 20" crash played as a ride.

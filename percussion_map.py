@@ -140,6 +140,14 @@ from tonelib import (
     TR808ClosedHatProperties,
     TR808OpenHatProperties,
     TR808CymbalProperties,
+    TR606KickProperties,
+    TR606SnareProperties,
+    TR606Snare2Properties,
+    TR606TomProperties,
+    TR606HiTomProperties,
+    TR606ClosedHatProperties,
+    TR606OpenHatProperties,
+    TR606CymbalProperties,
     TR707KickProperties,
     TR707Kick2Properties,
     TR707SnareProperties,
@@ -398,7 +406,7 @@ def kit_pan(note, kit=0):
 #
 # Jazz (32) shares Standard's column on the SC-55, so it IS Standard there.
 DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
-             25: "TR-808", 29: "TR-707", 30: "TR-909", 32: "Jazz", 40: "Brush", 48: "Orchestra",
+             25: "TR-808", 28: "TR-606", 29: "TR-707", 30: "TR-909", 32: "Jazz", 40: "Brush", 48: "Orchestra",
              52: "Asia", 56: "SFX", 127: "CM-64/32L"}
 
 # THE SETS THAT ARE BUILT: {program: {note: (name, class, base Hz)}}, holding
@@ -406,8 +414,8 @@ DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
 # as it always has; a program that is no set at all does too. The manual does
 # not say what the SC-55 does with a number that is not a set, so nothing is
 # guessed: 1, 20, 35, 47, 49 and 60 -- all sent to channel 10 by files in
-# the corpus -- play Standard, which is what they did before sets existed. (29
-# and 30 were among them until the Pro map's TR-707 and TR-909 were built.)
+# the corpus -- play Standard, which is what they did before sets existed. (28,
+# 29 and 30 had no set until the Pro map's TR-606, TR-707 and TR-909 were built.)
 #
 # ELECTRONIC, p.70. A Simmons-era kit: the six toms are synth toms, which
 # SynthDrumProperties (GM 118) already is; the reverse cymbal is GM 119. Only
@@ -460,6 +468,36 @@ KITS = {
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
         75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),
     },
+    # TR-606 (SC-8850 p.188; the Pro's): the 606's own kick, snare (and the
+    # snare accented as Snare 2), toms, hats and cymbal (Roland's "Ride"),
+    # patches on tr808.py FITTED to real 606s (examples/tr606_fit.py). The
+    # 606 has two toms, so the set's six play them at even steps (1.75
+    # semitones): 41, 48 at the takes' pitches, 43, 45 the low one up, 47,
+    # 50 the high one down and up. The 707's clap, the 808's cymbal and
+    # congas and the 909's crash are ours; the CR-78's kick 2, rim,
+    # tambourine, cowbell, bongos, maracas, guiro, claves and metallic beats
+    # are Standard's until the CR-78 is built.
+    28: {
+        36: ("606 Kick 1",       TR606KickProperties, TR606KickProperties.tr808_base_hz),
+        38: ("606 Snare 1",      TR606SnareProperties, TR606SnareProperties.tr808_base_hz),
+        39: ("707 Hand Clap",    TR707ClapProperties, TR707ClapProperties.tr808_base_hz),
+        40: ("606 Snare 2",      TR606Snare2Properties, TR606Snare2Properties.tr808_base_hz),
+        41: ("606 Low Tom 2",    TR606TomProperties, TR606TomProperties.tr808_base_hz),
+        42: ("606 CHH",          TR606ClosedHatProperties, TR606ClosedHatProperties.tr808_base_hz),
+        43: ("606 Low Tom 1",    TR606TomProperties, TR606TomProperties.tr808_base_hz * 2 ** (1.75 / 12.0)),
+        44: ("606 CHH",          TR606ClosedHatProperties, TR606ClosedHatProperties.tr808_base_hz),
+        45: ("606 Mid Tom 2",    TR606TomProperties, TR606TomProperties.tr808_base_hz * 2 ** (3.5 / 12.0)),
+        46: ("606 OHH",          TR606OpenHatProperties, TR606OpenHatProperties.tr808_base_hz),
+        47: ("606 Mid Tom 1",    TR606HiTomProperties, TR606HiTomProperties.tr808_base_hz * 2 ** (-1.75 / 12.0)),
+        48: ("606 Hi Tom 2",     TR606HiTomProperties, TR606HiTomProperties.tr808_base_hz),
+        49: ("808 Cymbal",       TR808CymbalProperties, TR808CymbalProperties.tr808_base_hz),
+        50: ("606 Hi Tom 1",     TR606HiTomProperties, TR606HiTomProperties.tr808_base_hz * 2 ** (1.75 / 12.0)),
+        51: ("606 Ride Cymbal",  TR606CymbalProperties, TR606CymbalProperties.tr808_base_hz),
+        57: ("909 Crash",        TR909CrashProperties, 288.3),
+        62: ("808 High Conga",   TR808HiCongaProperties, TR808HiCongaProperties.tr808_base_hz),
+        63: ("808 Mid Conga",    TR808MidCongaProperties, TR808MidCongaProperties.tr808_base_hz),
+        64: ("808 Low Conga",    TR808CongaProperties, TR808CongaProperties.tr808_base_hz),
+    },
     # TR-707 (SC-8850 p.188; the Pro's): the 707's own kicks, snares, rim,
     # clap, toms and hats, each a patch FITTED to its ROM take (hyperreal's
     # set; examples/tr707_fit.py). The 707 has three toms, so the set's six
@@ -476,16 +514,16 @@ KITS = {
         39: ("707 Hand Clap",    TR707ClapProperties, TR707ClapProperties.tr808_base_hz),
         40: ("707 Snare 2",      TR707Snare2Properties, TR707Snare2Properties.tr808_base_hz),
         41: ("707 Low Tom 2",    TR707TomProperties, TR707TomProperties.tr808_base_hz),
-        42: ("707 CHH",          TR707ClosedHatProperties, TR707ClosedHatProperties.tr808_base_hz),
+        42: ("707 CHH",          TR707ClosedHatProperties, 248.4),
         43: ("707 Low Tom 1",    TR707TomProperties, TR707TomProperties.tr808_base_hz * 2 ** (2 / 12.0)),
-        44: ("707 CHH",          TR707ClosedHatProperties, TR707ClosedHatProperties.tr808_base_hz),
+        44: ("707 CHH",          TR707ClosedHatProperties, 248.4),
         45: ("707 Mid Tom 2",    TR707MidTomProperties, TR707MidTomProperties.tr808_base_hz),
-        46: ("707 OHH",          TR707OpenHatProperties, TR707OpenHatProperties.tr808_base_hz),
+        46: ("707 OHH",          TR707OpenHatProperties, 248.4),
         47: ("707 Mid Tom 1",    TR707MidTomProperties, TR707MidTomProperties.tr808_base_hz * 2 ** (2 / 12.0)),
         48: ("707 Hi Tom 2",     TR707HiTomProperties, TR707HiTomProperties.tr808_base_hz),
-        49: ("909 Crash",        TR909CrashProperties, TR909CrashProperties.tr808_base_hz),
+        49: ("909 Crash",        TR909CrashProperties, 288.3),
         50: ("707 Hi Tom 1",     TR707HiTomProperties, TR707HiTomProperties.tr808_base_hz * 2 ** (2 / 12.0)),
-        51: ("909 Ride",         TR909RideProperties, TR909RideProperties.tr808_base_hz),
+        51: ("909 Ride",         TR909RideProperties, 147.5),
         56: ("808 Cowbell",      TR808CowbellProperties, TR808CowbellProperties.tr808_base_hz),
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
     },
@@ -505,14 +543,14 @@ KITS = {
         41: ("909 Low Tom 2",    TR909TomProperties, TR909TomProperties.tr808_base_hz),
         43: ("909 Low Tom 1",    TR909LowTom1Properties, TR909LowTom1Properties.tr808_base_hz),
         45: ("909 Mid Tom 2",    TR909MidTomProperties, TR909MidTomProperties.tr808_base_hz),
-        42: ("707 CHH",          TR707ClosedHatProperties, TR707ClosedHatProperties.tr808_base_hz),
-        44: ("707 CHH",          TR707ClosedHatProperties, TR707ClosedHatProperties.tr808_base_hz),
-        46: ("909 OHH",          TR909OpenHatProperties, TR909OpenHatProperties.tr808_base_hz),
+        42: ("707 CHH",          TR707ClosedHatProperties, 248.4),
+        44: ("707 CHH",          TR707ClosedHatProperties, 248.4),
+        46: ("909 OHH",          TR909OpenHatProperties, 248.4),
         47: ("909 Mid Tom 1",    TR909MidTom1Properties, TR909MidTom1Properties.tr808_base_hz),
         48: ("909 Hi Tom 2",     TR909HiTomProperties, TR909HiTomProperties.tr808_base_hz),
-        49: ("909 Crash",        TR909CrashProperties, TR909CrashProperties.tr808_base_hz),
+        49: ("909 Crash",        TR909CrashProperties, 288.3),
         50: ("909 Hi Tom 1",     TR909HiTom1Properties, TR909HiTom1Properties.tr808_base_hz),
-        51: ("909 Ride",         TR909RideProperties, TR909RideProperties.tr808_base_hz),
+        51: ("909 Ride",         TR909RideProperties, 147.5),
         56: ("808 Cowbell",      TR808CowbellProperties, TR808CowbellProperties.tr808_base_hz),
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
         75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),

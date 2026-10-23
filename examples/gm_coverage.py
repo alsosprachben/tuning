@@ -417,6 +417,26 @@ KIT_RATED = {
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
     },
+    28: {
+        36: (4, "606 KICK: a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). "
+             "Score 7.3. Ben: sounds great"),
+        38: (4, "606 SNARE 1: a bridged-T at 207 Hz and its snappy noise. Score 8.1"),
+        40: (4, "606 SNARE 2: the snare ACCENTED (bdu's CC0 take). Score 9.1"),
+        41: (4, "606 LOW TOM: a bridged-T whose pitch falls as it rings (diodes). Score 9.1"),
+        43: (4, "as 41, 1.75 semitones up (the 606's two toms over six keys, evenly)"),
+        45: (4, "as 41, 3.5 semitones up"), 47: (4, "as 48, 1.75 semitones down"),
+        48: (4, "606 HIGH TOM. Score 10.2"), 50: (4, "as 48, 1.75 semitones up"),
+        42: (4, "606 CLOSED HAT: six square oscillators (read off its cymbal: 203.2, 211.2, "
+             "222.1, 251.2, 333.1, 351.9 Hz) through a high band, a short VCA; the trigger's "
+             "thump under 250 Hz. Score 11.8"),
+        44: (4, "as 42"),
+        46: (4, "606 OPEN HAT: the same band, a longer VCA. Score 10.6"),
+        51: (4, "606 CYMBAL (Roland's 'Ride'): the oscillators through three bands, each its "
+             "own VCA, and a tail ringing on (after_db), scored on its 50 ms envelope too (Ben: "
+             "'more ring to it than ours'): within 2 dB of the take from 0.25 s to 0.9"),
+        39: (4, "the 707's clap"), 49: (4, "the 808's cymbal"), 57: (4, "the 909's crash"),
+        62: (4, "the 808's high conga"), 63: (4, "the 808's mid conga"), 64: (4, "the 808's low conga"),
+    },
     29: {
         36: (4, "707 KICK 1: the ROM's kick swept from ~300 Hz onto 55 (zero crossings: a 20 ms "
              "frame cannot read 55 Hz), held, then its VCA closing at 58 ms (gate_ms); its "
@@ -434,9 +454,10 @@ KIT_RATED = {
         43: (4, "as 41, two semitones up (the 707 has three toms; the six evenly spaced)"),
         45: (4, "707 MID TOM 2. Score 8.2"), 47: (4, "as 45, two semitones up"),
         48: (4, "707 HI TOM 2. Score 9.9"), 50: (4, "as 48, two semitones up"),
-        42: (4, "707 CLOSED HAT: third-octave noise, gated. Score 15.0"),
+        42: (4, "707 CLOSED HAT: a real hat in ROM, so OUR closed hat fitted to it "
+             "(examples/rom_cymbal_fit.py), the ROM's grit on top: 4.58 -> 1.67 dB"),
         44: (4, "as 42"),
-        46: (4, "707 OPEN HAT: the same, let ring to 0.33 s. Score 14.9"),
+        46: (4, "707 OPEN HAT: our open hat fitted to the ROM's: 2.29 -> 1.99 dB"),
         49: (4, "the 909's crash, as Roland's set has it"), 51: (4, "the 909's ride"),
         56: (4, "the 808's cowbell"), 70: (4, "the 808's maracas"),
     },
@@ -454,10 +475,13 @@ KIT_RATED = {
         43: (4, "909 LOW TOM 1: TUNE full (LTAD7). Score 9.4"),
         45: (4, "909 MID TOM 2 (MT3D7). Score 10.7"), 47: (4, "909 MID TOM 1 (MTAD7). Score 10.2"),
         48: (4, "909 HI TOM 2 (HT3D7). Score 6.8"), 50: (4, "909 HI TOM 1 (HTAD7). Score 6.4"),
-        46: (4, "909 OPEN HAT: the 909's 6-bit hat as third-octave noise, held then let go "
-             "(HHOD4). Score 10.4"),
-        49: (4, "909 CRASH: an early wash and a bright bloom, two noise layers (CSHD4). Score 8.1"),
-        51: (4, "909 RIDE: the crash's two layers, less bloom (RIDED4). Score 10.3"),
+        46: (4, "909 OPEN HAT: a real hat in the 909's ROM, so OUR open hat fitted to it "
+             "(examples/rom_cymbal_fit.py: crash_fit's grid, HHOD4), the ROM's 6-bit grit a "
+             "noise layer on top: 4.60 -> 1.75 dB"),
+        49: (4, "909 CRASH: our crash (modes, the hard hit's swell) fitted to the 909's ROM take "
+             "(CSHD4), its grit on top: 3.08 -> 2.58 dB. Ben: the samples 'sound almost real'; "
+             "ours 'a little more open-ended because we aren't a sample, but that is fine'"),
+        51: (4, "909 RIDE: our ride fitted to the ROM's (RIDED4): 6.11 -> 1.74 dB"),
         42: (4, "the 707's closed hat, as Roland's set borrows it"), 44: (4, "as 42"),
         56: (4, "the 808's cowbell, as Roland's set borrows it"),
         70: (4, "the 808's maracas"), 75: (4, "the 808's claves"),
