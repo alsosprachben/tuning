@@ -1542,6 +1542,19 @@ SC88_CHEAP = {
     # traverso_fit.py: miss 17.3 -> 4.35 dB): far purer, h2 some 20 dB under
     # the modern flute's at D4. The bore corner under the lowest note is a
     # slope, not a roll-off. Ben, on its part: sounds great (sysex_01, 274)
+    # THE BRASS'S DYNAMICS: Iowa's pp, ff and vibrato runs against the mf
+    # takes GM's voices are fitted to, each note against itself
+    # (examples/brass_dyn_fit.py): above a knee the dynamic's change runs in
+    # dB per kHz to a cap (tonelib, blare_db_per_khz). Bright Tp. takes the
+    # trombone's ff law: Iowa's trumpet ff is its mf (+0.3 dB, +0.6 dB/kHz)
+    (56, 1): ("Trumpet 2", ("set", 56, dict(blare_db_per_khz=-0.9, blare_knee_hz=192, blare_cap_db=15.2,
+                                           exp_vibrato_cents=5.4, solo_vibrato_hz=4.83))),
+    (56, 24): ("Bright Tp.", ("set", 56, dict(blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9))),
+    (56, 25): ("Warm Tp.", ("set", 56, dict(blare_db_per_khz=-6.6, blare_knee_hz=160, blare_cap_db=34.8))),
+    (57, 1): ("Trombone 2", ("set", 57, dict(blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9))),
+    (58, 1): ("Tuba 2", ("set", 58, dict(blare_db_per_khz=30.1, blare_knee_hz=116, blare_cap_db=24.7))),
+    (60, 1): ("Fr.Horn 2", ("set", 60, dict(blare_db_per_khz=-14.0, blare_knee_hz=162, blare_cap_db=10.3))),
+    (60, 8): ("Fr.HornSolo", ("set", 60, dict(blare_db_per_khz=9.9, blare_knee_hz=588, blare_cap_db=29.1))),
     (73, 3): ("Flt Travelso", ("set", 73, dict(tonal_dampening=1.513, bore_corner_hz=104.3,
                                                even_harmonic_db=-8.253))),
 }

@@ -1756,14 +1756,25 @@ class SynthProperties:
     # right answer for a synth lead and makes the mod wheel a tempo control.
     solo_vibrato_hz = 5.5           # rate the mod wheel vibrates at
     solo_vibrato_spread = 0.035     # +/- fraction of it; 0 = every note locked
+    # A PLAYED VIBRATO, without the wheel: its depth, +- cents (AltoSax Exp.,
+    # the vibrato trumpet). 0: none, the wheel's alone.
+    exp_vibrato_cents = 0.0
 
     def voice_vibrato(self, frequency, index):
         """(depth_fraction, rate_hz, phase_rad) for one player, or None.
 
         index 0 is the main voice; 1..n-1 are the extras from unison_voices().
         A section overrides this with real depth (see SectionMixin); one body
-        gets rate and phase only, at zero depth.
+        gets rate and phase only, at zero depth -- or exp_vibrato_cents, a
+        player's own.
         """
+        if self.exp_vibrato_cents:
+            got = self._solo_vibrato(frequency, index)
+            rate, phase = (got[1], got[2]) if got else (self.solo_vibrato_hz, 0.0)
+            return (2.0 ** (self.exp_vibrato_cents / 1200.0) - 1.0, rate, phase)
+        return self._solo_vibrato(frequency, index)
+
+    def _solo_vibrato(self, frequency, index):
         if not self.solo_vibrato_spread:
             return None
         midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
@@ -2916,7 +2927,43 @@ class SynthProperties:
         # mode_ratio, not `harmonic`: with a measured mode set the partial does
         # NOT sit at f0*m, and the bore filter has to be evaluated where the
         # partial actually is. Identity for every harmonic voice.
-        return v * self.bore_gain(f0 * self.mode_ratio(harmonic)) * self._bore_norm()
+        v = v * self.bore_gain(f0 * self.mode_ratio(harmonic)) * self._bore_norm()
+        if self.blare_db_per_khz:
+            v *= self._blare(f0 * self.mode_ratio(harmonic)) * self._blare_norm()
+        return v
+
+    # BLARE: A DYNAMIC'S CHANGE ABOVE A KNEE, IN HZ. Iowa's brass played ff
+    # against mf (examples/brass_dyn_fit.py), each note against itself: the
+    # harmonics carrying the note do not move, and above ~0.6 kHz the rest
+    # rise ~10-12 dB per kHz -- the same line in every register, which is the
+    # bore's nonlinear steepening (a wave's distortion grows with frequency).
+    # A pp falls the same way. Neither a tilt (a power of the harmonic
+    # number, from h2 up) nor the bore's corner makes that knee. dB per kHz
+    # over blare_knee_hz, held at +-blare_cap_db; a colour, not a level (the
+    # series' power kept). 0: off.
+    blare_db_per_khz = 0.0
+    blare_knee_hz = 600.0
+    blare_cap_db = 30.0
+    _blare_norm_cache = None
+
+    def _blare(self, hz):
+        d = self.blare_db_per_khz * max(0.0, hz - self.blare_knee_hz) / 1000.0
+        d = max(-self.blare_cap_db, min(self.blare_cap_db, d))
+        return 10.0 ** (d / 20.0)
+
+    def _blare_norm(self):
+        if self._blare_norm_cache is None:
+            f0 = self.frequency_x * (2.0 ** self.octave_position)
+            ref = shaped = 0.0
+            for h in range(1, (self.max_harmonic or 64) + 1):
+                a = self.series_volume(h)
+                if a == 0.0:
+                    continue
+                a *= self.bore_gain(f0 * self.mode_ratio(h))
+                ref += a * a
+                shaped += (a * self._blare(f0 * self.mode_ratio(h))) ** 2
+            self._blare_norm_cache = (ref / shaped) ** 0.5 if shaped > 0.0 else 1.0
+        return self._blare_norm_cache
 
     def _bore_norm(self):
         # THE BORE IS A COLOUR, NOT A VOLUME CONTROL. A fixed roll-off applied to a
@@ -22621,11 +22668,6 @@ class AltoSaxExpProperties(SaxophoneProperties):
     formant_floor = 0.676
     exp_vibrato_cents = 8.1
     solo_vibrato_hz = 4.85
-
-    def voice_vibrato(self, frequency, index):
-        got = super().voice_vibrato(frequency, index)
-        rate, phase = (got[1], got[2]) if got else (self.solo_vibrato_hz, 0.0)
-        return (2.0 ** (self.exp_vibrato_cents / 1200.0) - 1.0, rate, phase)
 
 
 class ClarinetProperties(CylindricalReedProperties):

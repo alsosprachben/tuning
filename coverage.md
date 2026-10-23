@@ -694,7 +694,7 @@ Controls are the rest of the console that are not stops.
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
 under a program (SC-55 owner's manual p.68). 157 of the SC-55's 157 are built,
-and 132 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+and 139 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -828,7 +828,14 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 55.10 | SC-88 | Double Hit | `OrchestraHit_sc88_55_10` | **4** | SC-88 map: layered: GM 55 + GM 55 +12 st -6 dB |
 | 55.16 | SC-55 | Lo Fi Rave | `Sc88_55_16` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with a_attack, a_decay, a_release, a_sustain, cutoff, f_attack, noise_level, osc1_wave, osc2_freq, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 55.19 | SC-88 | Bam Hit | `OrchestraHit_sc88_55_19` | **3** | SC-88 map: layered: GM 55 + set 48's key 36 -20 st +10 dB + GM 61 with one_shot=True, gate_time=0.12 +16 dB |
+| 56.1 | SC-88 | Trumpet 2 | `Trumpet_sc88_56_1` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-0.9, blare_knee_hz=192, blare_cap_db=15.2, exp_vibrato_cents=5.4, solo_vibrato_hz=4.83 |
+| 56.24 | SC-88 | Bright Tp. | `Trumpet_sc88_56_24` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
+| 56.25 | SC-88 | Warm Tp. | `Trumpet_sc88_56_25` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-6.6, blare_knee_hz=160, blare_cap_db=34.8 |
+| 57.1 | SC-88 | Trombone 2 | `Trombone_sc88_57_1` | **4** | SC-88 map: GM 57 Trombone with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
+| 58.1 | SC-88 | Tuba 2 | `ConicalBrass_sc88_58_1` | **4** | SC-88 map: GM 58 Tuba with blare_db_per_khz=30.1, blare_knee_hz=116, blare_cap_db=24.7 |
+| 60.1 | SC-88 | Fr.Horn 2 | `Horn_sc88_60_1` | **4** | SC-88 map: GM 60 French Horn with blare_db_per_khz=-14.0, blare_knee_hz=162, blare_cap_db=10.3 |
 | 60.3 | SC-88 | Wide FreHrns | `Horn_sc88_60_3` | **4** | SC-88 map: GM 60 French Horn with key_pan_spread=0.5 |
+| 60.8 | SC-88 | Fr.HornSolo | `Horn_sc88_60_8` | **4** | SC-88 map: GM 60 French Horn with blare_db_per_khz=9.9, blare_knee_hz=588, blare_cap_db=29.1 |
 | 60.16 | SC-88 | Horn Orch | `Horn_sc88_60_16` | **4** | SC-88 map: GM 60 French Horn with detuned_pair=(-5.0, 5.0) |
 | 61.8 | SC-55 | Brass 2 | `TromboneToTrumpet50Section_brass2` | **3** | the brass section's router (tuba, trombones, trumpets by register), every register a detuned pair, +-4 cents half left and right -- MuseScore's 61.8, its section twice, panned apart; the spread asserted |
 | 61.16 | SC-88 | Brass Fall | `TromboneToTrumpet50Section_sc88_61_16` | **3** | SC-88 map: GM 61 Brass Section with fall_cents=900.0 |
@@ -1136,10 +1143,10 @@ A later map can put another tone under a number we built; that one is not counte
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
 | SC-55 | 196 | 196 | 100% | 160 | 36 | 0 | 0 | 0 | 0 |
-| SC-55mkII | 226 | 224 | 99% | 176 | 48 | 0 | 0 | 0 | 2 |
-| SC-88 | 418 | 388 | 93% | 264 | 124 | 0 | 0 | 0 | 30 |
-| SC-88Pro | 774 | 406 | 52% | 273 | 133 | 0 | 0 | 0 | 368 (11 another tone) |
-| SC-8850 | 1262 | 404 | 32% | 271 | 133 | 0 | 0 | 0 | 858 (13 another tone) |
+| SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
+| SC-88 | 418 | 395 | 94% | 271 | 124 | 0 | 0 | 0 | 23 |
+| SC-88Pro | 774 | 413 | 53% | 280 | 133 | 0 | 0 | 0 | 361 (11 another tone) |
+| SC-8850 | 1262 | 411 | 33% | 278 | 133 | 0 | 0 | 0 | 851 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1154,7 +1161,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Bass | 10/10 | 12/12 | 29/31 | 31/76 | 31/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 12/29 |
 | Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
-| Brass | 11/11 | 13/15 | 19/27 | 16/51 | 16/84 |
+| Brass | 11/11 | 15/15 | 26/27 | 23/51 | 23/84 |
 | Reed | 10/10 | 8/8 | 10/11 | 10/20 | 10/23 |
 | Pipe | 9/9 | 8/8 | 8/9 | 12/22 | 12/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
@@ -1164,9 +1171,9 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Percussive | 13/13 | 13/13 | 23/28 | 24/47 | 24/95 |
 | Sound Effects | 42/42 | 41/41 | 46/49 | 50/73 | 50/144 |
 
-### The SC-88 map's 30 still to build, by what they take
+### The SC-88 map's 23 still to build, by what they take
 
-**refit** (11: an articulation of one we have, wanting a fit to a reference): 35.2 FretlessBs3, 35.3 FretlessBs4, 56.1 Trumpet 2, 56.24 Bright Tp., 56.25 Warm Tp., 57.1 Trombone 2, 58.1 Tuba 2, 60.1 Fr.Horn 2, 60.8 Fr.HornSolo, 66.8 BreathyTnr., 120.5 Bass Slide
+**refit** (4: an articulation of one we have, wanting a fit to a reference): 35.2 FretlessBs3, 35.3 FretlessBs4, 66.8 BreathyTnr., 120.5 Bass Slide
 
 **new** (19: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
