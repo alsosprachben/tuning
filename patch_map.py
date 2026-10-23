@@ -1678,6 +1678,20 @@ VARIATION_NAMES[(65, 8)] = "AltoSax Exp."
 # under GM 71 it plays only the notes below D3
 VARIATIONS[(71, 8)] = BassClarinetProperties
 VARIATION_NAMES[(71, 8)] = "Bs Clarinet"
+# GENDER: the gamelan's metallophone, fitted to UNT's Balinese gangsa
+# (tonelib.GenderProperties, examples/gender_fit.py; cpolcyn's pack, CC0) --
+# at the celesta's trim, the bar whose gain it starts from
+from tonelib import GenderProperties
+VARIATIONS[(112, 9)] = GenderProperties
+VARIATION_NAMES[(112, 9)] = "Gender"
+VARIATION_TRIM_DB[(112, 9)] = PROGRAM_TRIM_DB.get(8, 0.0)
+
+# GAMELAN GONG: the gong ageng, fitted to the same gamelan's big gong
+# (tonelib.GamelanGongProperties, examples/gender_fit.py --gong)
+from tonelib import GamelanGongProperties
+VARIATIONS[(112, 10)] = GamelanGongProperties
+VARIATION_NAMES[(112, 10)] = "GamelanGong"
+VARIATION_TRIM_DB[(112, 10)] = PROGRAM_TRIM_DB.get(8, 0.0)
 VARIATION_TRIM_DB[(35, 2)] = PROGRAM_TRIM_DB.get(35, 0.0) + 5.8
 VARIATION_TRIM_DB[(35, 3)] = PROGRAM_TRIM_DB.get(35, 0.0) + 9.5
 

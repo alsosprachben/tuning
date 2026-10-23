@@ -11961,6 +11961,56 @@ class MusicBoxProperties(ModeDecays, StruckBarProperties):
     strike_noise_tail = (-19.01, 249.1)
     strike_noise_len_s = 0.25
 
+class GenderProperties(ModeDecays, StruckBarProperties):
+    """GS 112.9 "Gender": the gamelan's metallophone -- bronze bars over bamboo
+    resonators, struck with a hard wooden mallet (the panggul), played in
+    PAIRS tuned apart so that every note beats: the Balinese ombak.
+
+    MEASURED (examples/gender_fit.py) on the gangsa of the University of North
+    Texas' gong kebyar Bwana Kumala (cpolcyn's pack, CC0; sources.md):
+    kantilan, pemade and ugal, 42 keys, 300 Hz-2.2 kHz.
+      * a FREE BAR, not undercut: 1 : 2.70 : 5.27 (median; hand-tuned, so the
+        ratios wander key to key, 2.3-2.9 and 4.7-5.6);
+      * the THIRD MODE carries the strike: as loud as the fundamental, or
+        over it, where it lands under ~4 kHz (a low key's, +6 dB at 2-3.5
+        kHz), and gone above (-37 dB past 7 kHz) -- one contact roll-off in
+        Hz, the mallet's (bore_corner_hz, steep: order 5.8). The second mode
+        is erratic (12-17 dB key to key: where each was struck) and set at
+        its typical -12 dB;
+      * the fundamental rings: D 1.87 at 415 Hz (T60 ~16 s), shorter up the
+        register (slope 0.78); the modes a few hundred ms (D 12, 17);
+      * THE PAIR: each Balinese key is on two instruments, the pengumbang and
+        the pengisep, 26 cents apart (median of 25 pairs, quartiles 23-36) --
+        9 Hz of beating at 600 Hz, 20 at 1.3 kHz. NOT HERE: the name is the
+        JAVANESE gender's, and Casa da Musica's (examples/gender_fit.py
+        --ab-java) has no partner within 40-55 dB on its clean keys -- Ben,
+        against it: "I hear it less tuned, but not too bright". The pair is
+        GangsaPairProperties'.
+    A player damps each key by hand as the next is struck: key-up damps it,
+    as the celesta's felt does.
+    """
+    one_shot = False
+    damper_pedal = True
+    release_valve_time = 0.25
+    release_fraction_max = None
+    inharmonicity_coefficient = 0.0      # the ratios are absolute
+    mode_ratios = (1.0, 2.701, 5.273)
+    mode_gains = (1.0, 0.2512, 2.0639)
+    mode_decays = (1.87, 12.19, 17.14)
+    decay_register_slope = 0.775
+    max_harmonic = 3
+    bore_corner_hz = 3969.0
+    bore_order = 5.83
+    initial_gain = 0.156004
+
+
+class GangsaPairProperties(GenderProperties):
+    """The Balinese gangsa as it is played: each key a PAIR, the pengumbang and
+    the pengisep, 26 cents apart so every note beats (the ombak; see
+    GenderProperties) -- half each way."""
+    detuned_pair = (-13.0, 13.0)
+
+
 class TunedBarProperties(MalletProperties):
     """A bar undercut so its overtones land on WHOLE-NUMBER ratios.
 
@@ -15456,6 +15506,35 @@ class MetalPercussionProperties(PercussionProperties):
     decay_db = 4.0
     harmonic_decay_db = 1.5
     harmonic_decay_dampening = 0.1
+
+
+class GamelanGongProperties(ModeDecays, MetalPercussionProperties):
+    """GS 112.10 "Gamelan Gong": the gong ageng, the big bossed gong that
+    closes each cycle of the music -- a soft, deep hum that beats as it rings.
+
+    MEASURED (examples/gender_fit.py --gong) on the Balinese gong of UNT's
+    Bwana Kumala (cpolcyn's pack, CC0; sources.md), three single strikes left
+    to ring, all at 69.3 Hz:
+      * the boss tunes its modes: the OCTAVE pair, 2.00 and 2.08, as strong as
+        the fundamental (-1 dB); then 1.65 (-21), 1.47 (-27), 2.59 (-22),
+        2.80 (-34) -- and nothing above 500 Hz within 40 dB of the
+        fundamental: a padded beater, a deep plate;
+      * THE BEAT: the fundamental's envelope swells and dips 2 dB at 0.61 Hz,
+        a partner mode 0.61 Hz above it ~19 dB down (two near-degenerate
+        modes of the boss);
+      * the fundamental peaks 0.1-0.16 s after the strike (the beater's felt);
+      * it rings: 3.0 dB/s at 69 Hz, a T60 of ~20 s (read as the beat is,
+        the fundamental's envelope; a first take at the band's 3.6 rendered
+        3.56); the octave pair twice as fast. Up the register by the pack's own small gong, the kempli at 413
+        Hz (12.9 dB/s): slope 0.73, as the gangsa's bars' 0.78.
+    """
+    inharmonicity_coefficient = 0.0      # the ratios are absolute
+    mode_ratios = (1.0, 1.0088, 1.471, 1.65, 2.0, 2.076, 2.594, 2.8)
+    mode_gains = (1.0, 0.115, 0.0447, 0.0891, 0.891, 0.891, 0.0794, 0.02)
+    mode_decays = (5.61, 5.61, 6.46, 8.12, 13.66, 17.17, 12.74, 17.73)
+    decay_register_slope = 0.73
+    max_harmonic = 8
+    attack_time = 0.1
 
 
 class CuicaProperties(SynthProperties):
