@@ -20325,6 +20325,71 @@ class RababProperties(BanjoProperties):
     sympathetic_gain = 0.014
     sympathetic_max = 8
 
+
+class GopichantProperties(BanjoProperties):
+    """GS 105.16, "Gopichant": the gopichand or ektara of Bengal's Bauls --
+    ONE string from a skin-covered gourd up a split bamboo neck, plucked with
+    a finger, the drone under a sung song. Squeezing the neck's two halves
+    slackens the string, so the note SCOOPS: the "boing" that is the
+    instrument. Fitted to Rajobrata's Shantiniketan ektara (Pianobook, "The
+    Ektara": C3-A3, three strokes and three round-robins, plain and bent;
+    sources.md): the plain takes for the string and the skin
+    (examples/pluck_fit.py --voice=gopichant), the bent ones for the scoop.
+
+    THE SCOOP (all 45 bent takes): the pluck starts BELOW its note -- 236
+    cents the median (135-274), deeper the harder the stroke (soft 151,
+    loud 276) -- and is within 15 cents of it by 0.15 s, evenly in pitch:
+    the tension bend from below, every pluck.
+    """
+    # THE SQUEEZE: 236 cents under 30-50 ms into a medium stroke and 15 by
+    # 0.15 s -- an exponential in pitch through those two, time constant 0.04
+    # s, from ~640 cents under at the pluck (the deepest takes read 558 at 40
+    # ms). The stroke scales it (soft 151, loud 276 at 40 ms: the square root
+    # of the stroke); set so velocity 90 (attack ~0.45) is the medium take's
+    tension_bend = -0.46
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.5
+    tension_bend_max = 0.5
+    tension_log = True
+    tension_settle_time = 0.04
+    tension_settle_cutoff = 0.6
+    # THE STRING (pluck_fit.py --voice=gopichant --fit=decay, the 15 plain
+    # medium takes: 7.1 dB/s rms over h1-h12)
+    decay_db = 5.763
+    harmonic_decay_db = 1.927
+    decay_register_slope = 0.4965
+    # ...AND ITS TOP: the takes' harmonics stand to 14 kHz and over (a steel
+    # string on a skin, plucked hard), ~h110 of a C3
+    max_harmonic = 130
+    # A LONG THIN STEEL STRING, NEARLY HARMONIC: the takes' partials sit +11
+    # cents at h40 and +37 at h60 (B ~1e-5); the banjo's 8e-5 put ours +100
+    # and +214, out of the bands the takes' harmonics sound in -- the "missing
+    # top" Ben heard on the high notes, which the colour fit then trimmed
+    # around
+    inharmonicity_coefficient = 1.0e-05
+    # ...its series falling gently by harmonic number (the banjo's 0.8 left
+    # the top 10-24 dB short however the colour was trimmed)
+    tonal_dampening = 0.3
+    bore_corner_hz = 14000.0
+    # PLUCKED A THIRD OF THE WAY ALONG (Ben: "a formant up higher ... the
+    # higher notes seem to be missing something up high"): the banjo's
+    # asserted 0.12 put its deep notches on h17 -- 3.3-3.8 kHz on G3-A3 --
+    # and h58-h67, 13 kHz, so the high notes lost both where the low notes'
+    # notches fell between; the pooled colour fit could not see it. The
+    # takes' ladders (h2-h20, every note) choose 0.33 and a shallower notch:
+    # 8.25 -> 7.3 dB rms
+    strike_point = 0.33
+    strike_depth = 0.6
+    # ITS COLOUR (pluck_fit.py --voice=gopichant --fit=body: 2.6 dB rms over
+    # third octaves, the takes' 0.15 s ladder): a hollow at 500-800 Hz, the
+    # skin's ring at 200-320, and a top standing to 10 kHz
+    body_trim_db = ((160, -1.3), (202, -10.7), (254, 11.1), (320, 17.8), (403, -5.2), (508, -14.4), (640, -13.2),
+                    (806, -24.0), (1016, -8.6), (1280, 2.5), (1613, -10.9), (2032, -2.3), (2560, -6.6),
+                    (3225, -12.2), (4064, 5.0), (5120, -0.5), (6451, 14.7), (8127, 22.5), (10240, 5.7),
+                    (12902, 21.7))
+    # at the banjo's level
+    initial_gain = BanjoProperties.initial_gain * 10 ** ((1.3 - 7.7) / 20.0)
+
 class ShamisenProperties(PromptDecay, MembraneBodyProperties):
     """GM 106. Silk over a skin, struck with a bachi -- and a SAWARI buzz.
 

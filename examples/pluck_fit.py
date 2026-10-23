@@ -73,10 +73,13 @@ VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoPrope
           "kanun": (107, "KanunProperties", "kanun"),
           # GS 105.24 Oud on Andy R. Jordan's (Wikimedia Commons, CC BY-SA 3.0):
           # the notes left to ring in his three takes, and hammondman's (CC0)
-          "oud": (105, "OudProperties", "oud")}
+          "oud": (105, "OudProperties", "oud"),
+          # GS 105.16 Gopichant on Rajobrata's ektara (Pianobook, "The Ektara"):
+          # its plain takes, the medium stroke, three round-robins of C3-A3
+          "gopichant": (105, "GopichantProperties", "gopichant")}
 # the GS bank a voice is (a variation): CC0 before its program change
 BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8, "biwa": 12, "kanun": 16,
-         "oud": 24}
+         "oud": 24, "gopichant": 16}
 BANK = 0
 NH = 24
 HOP, WIN = 0.1, 0.2
@@ -107,6 +110,9 @@ VOICE_OPTS = {"mandolin": dict(T_END=3.0),
                                TUNER="hybrid440:443.92"),
               # its notes ~2.4 s apart: read to 2 s
               "kanun": dict(T_END=2.0, NH=16),
+              # its steel string rings past 13 kHz on a skin: the top band is
+              # harmonics, not the take's noise (Ben heard it missing)
+              "gopichant": dict(TOP_HZ=15000.0),
               # its strokes ring 0.3 s and more before the next, as the shamisen's
               "biwa": dict(HOP=0.02, WIN=0.06, T_DECAY=0.05, T_END=0.3, P_SECS=0.3,
                            PROMPT_X0=(30.0, 0.15, 6000.0),
@@ -340,6 +346,30 @@ def stage_oud():
     # the stager reads their second harmonic
     stage_files("hm", os.path.expanduser("~/Documents/refs/freesound/oud_hammondman/*.wav"), lo=70, hi=140,
                 clear=False)
+
+
+def stage_gopichant():
+    """THE EKTARA'S PLAIN TAKES, medium stroke (the bent ones are the scoop,
+    measured apart): named by their own octave, unlike stage_files' packs,
+    the pitch read near the name's"""
+    import shutil
+    os.makedirs(STAGED, exist_ok=True)
+    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+        os.remove(f)
+    d = os.path.expanduser("~/Documents/refs/ektara_pianobook/unz/The Ektara - Decent Samples Patch/"
+                           "The Ektara/Processed/Normal")
+    names = {"C": 0, "D": 2, "E": 4, "G": 7, "A": 9}
+    n = 0
+    for p in sorted(glob.glob(os.path.join(d, "*Medium*.wav"))):
+        m = re.search(r"A?([A-G])(\d)\s+\d+\s+RR", os.path.basename(p))
+        nom = 440.0 * 2 ** ((names[m.group(1)] + 12 * (int(m.group(2)) + 1) - 69) / 12.0)
+        x, sr = read(p)
+        a = int(np.flatnonzero(np.abs(x) > 0.1 * np.abs(x).max())[0])
+        f0 = f0_of(x[a + int(0.1 * sr):a + int(1.1 * sr)], sr, nom * 0.96, nom * 1.04)
+        name = "pb_%d_f0_%.2f.wav" % (n, f0)
+        shutil.copy(p, os.path.join(STAGED, name))
+        print("  %s -> %s" % (os.path.basename(p), name))
+        n += 1
 
 
 def plucks():
@@ -853,6 +883,8 @@ def main(argv):
                     min_next=0.8, lo=80, hi=2600)
             elif voice == "oud":
                 stage_oud()
+            elif voice == "gopichant":
+                stage_gopichant()
             elif voice == "biwa":
                 # side A's first 8:50 (the rest is blank tape); its lowest
                 # string is A2, 110 Hz

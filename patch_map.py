@@ -1724,6 +1724,13 @@ VARIATIONS[(105, 8)] = RababProperties
 VARIATION_NAMES[(105, 8)] = "Rabab"
 VARIATION_TRIM_DB[(105, 8)] = PROGRAM_TRIM_DB.get(105, 0.0)
 
+# GOPICHANT: the ektara, its scoop (tonelib.GopichantProperties,
+# examples/pluck_fit.py --voice=gopichant)
+from tonelib import GopichantProperties
+VARIATIONS[(105, 16)] = GopichantProperties
+VARIATION_NAMES[(105, 16)] = "Gopichant"
+VARIATION_TRIM_DB[(105, 16)] = PROGRAM_TRIM_DB.get(105, 0.0)
+
 # TAMBOURA: the tanpura, fitted to sankalp's drone takes (CC BY 4.0;
 # tonelib.TambouraProperties, examples/tanpura_fit.py)
 from tonelib import TambouraProperties
