@@ -133,7 +133,7 @@ SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the
 SC-88Pro map 25, the SC-8850 map 37. A set not built here plays
 Standard. THE GOAL: every one built.
 
-**Where it stands:** SC-8850 map 11 of 37, SC-88Pro map 11 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
+**Where it stands:** SC-8850 map 12 of 37, SC-88Pro map 12 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
 
 | PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
 |---|---|---|---|---|---|---|---|
@@ -152,8 +152,8 @@ Standard. THE GOAL: every one built.
 | 27 | DANCE | DANCE | DANCE | -- | **not built: plays Standard** |  |  |
 | 28 | CR-78 | CR-78 | -- | -- | **not built: plays Standard** |  |  |
 | 29 | TR-606 | TR-606 | -- | -- | **not built: plays Standard** |  |  |
-| 30 | TR-707 | TR-707 | -- | -- | **not built: plays Standard** |  |  |
-| 31 | TR-909 | TR-909 | -- | -- | built: 17 keys of its own | 17 | **4** |
+| 30 | TR-707 | TR-707 | -- | -- | built: 19 keys of its own | 19 | **4** |
+| 31 | TR-909 | TR-909 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 33 | JAZZ | JAZZ | JAZZ | JAZZ | Standard, by design |  |  |
 | 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 3 keys of its own | 3 | **4** |
@@ -239,6 +239,30 @@ Standard. THE GOAL: every one built.
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
 | 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
 
+### 29 TR-707
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | 707 Kick 2 | `TR707Kick2` | **4** | 707 KICK 2: the same drum, its click softer, gated at 55 ms. Score 14.3 |
+| 36 | 707 Kick 1 | `TR707Kick` | **4** | 707 KICK 1: the ROM's kick swept from ~300 Hz onto 55 (zero crossings: a 20 ms frame cannot read 55 Hz), held, then its VCA closing at 58 ms (gate_ms); its beater's click a band at 0.8-1.4 kHz. Fitted to hyperreal's 707 take: score 12.3. Ben: sounds great |
+| 37 | 707 Rim Shot | `TR707Rim` | **4** | 707 RIM SHOT: a ring at 897 Hz and two more, gated. Score 17.4 |
+| 38 | 707 Snare 1 | `TR707Snare` | **4** | 707 SNARE 1: a 161 Hz shell, its modes at x1.73 and x2.31, its wires' noise, gated. Score 11.2 |
+| 39 | 707 Hand Clap | `TR707Clap` | **4** | 707 HAND CLAP: four bursts at the take's 0, 10, 20, 31 ms (click_bursts: a machine's flam, the same every note) and a tail. Score 14.5 |
+| 40 | 707 Snare 2 | `TR707Snare2` | **4** | 707 SNARE 2: the wires louder. Score 10.8 |
+| 41 | 707 Low Tom 2 | `TR707Tom` | **4** | 707 LOW TOM 2: a membrane gliding down from ~140 Hz to ~100, its modes beside it. Score 9.7 |
+| 42 | 707 CHH | `TR707ClosedHat` | **4** | 707 CLOSED HAT: third-octave noise, gated. Score 15.0 |
+| 43 | 707 Low Tom 1 | `TR707Tom` | **4** | as 41, two semitones up (the 707 has three toms; the six evenly spaced) |
+| 44 | 707 CHH | `TR707ClosedHat` | **4** | as 42 |
+| 45 | 707 Mid Tom 2 | `TR707MidTom` | **4** | 707 MID TOM 2. Score 8.2 |
+| 46 | 707 OHH | `TR707OpenHat` | **4** | 707 OPEN HAT: the same, let ring to 0.33 s. Score 14.9 |
+| 47 | 707 Mid Tom 1 | `TR707MidTom` | **4** | as 45, two semitones up |
+| 48 | 707 Hi Tom 2 | `TR707HiTom` | **4** | 707 HI TOM 2. Score 9.9 |
+| 49 | 909 Crash | `TR909Crash` | **4** | the 909's crash, as Roland's set has it |
+| 50 | 707 Hi Tom 1 | `TR707HiTom` | **4** | as 48, two semitones up |
+| 51 | 909 Ride | `TR909Ride` | **4** | the 909's ride |
+| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the 808's cowbell |
+| 70 | 808 Maracas | `TR808Maracas` | **4** | the 808's maracas |
+
 ### 30 TR-909
 
 | # | note | class | | notes |
@@ -249,7 +273,9 @@ Standard. THE GOAL: every one built.
 | 38 | 909 Snare 1 | `TR909Snare` | **4** | 909 SNARE 1: two swept oscillators 1.44 apart over SNAPPY's noise; ST0T3S3, the take GeneralUser GS's own sample is. Score 9.6 |
 | 40 | 909 Snare 2 | `TR909Snare2` | **4** | 909 SNARE 2: TUNE, TONE, SNAPPY full (STATASA, GeneralUser's other). Score 11.6 |
 | 41 | 909 Low Tom 2 | `TR909Tom` | **4** | 909 LOW TOM 2: a swept VCO and a second at 2/3 of it (LT3D7). Score 9.2 |
+| 42 | 707 CHH | `TR707ClosedHat` | **4** | the 707's closed hat, as Roland's set borrows it |
 | 43 | 909 Low Tom 1 | `TR909LowTom1` | **4** | 909 LOW TOM 1: TUNE full (LTAD7). Score 9.4 |
+| 44 | 707 CHH | `TR707ClosedHat` | **4** | as 42 |
 | 45 | 909 Mid Tom 2 | `TR909MidTom` | **4** | 909 MID TOM 2 (MT3D7). Score 10.7 |
 | 46 | 909 OHH | `TR909OpenHat` | **4** | 909 OPEN HAT: the 909's 6-bit hat as third-octave noise, held then let go (HHOD4). Score 10.4 |
 | 47 | 909 Mid Tom 1 | `TR909MidTom1` | **4** | 909 MID TOM 1 (MTAD7). Score 10.2 |
@@ -1425,7 +1451,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-380 classes.
+392 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1571,24 +1597,36 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `TR808` [ModeDecays]
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
+            - `TR707`
+              - `TR707Clap` -- set 29 39 707 Hand Clap (4)
+              - `TR707ClosedHat` -- set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4)
+                - `TR707OpenHat` -- set 29 46 707 OHH (4)
+              - `TR707Kick` -- set 29 36 707 Kick 1 (4)
+                - `TR707Kick2` -- set 29 35 707 Kick 2 (4)
+              - `TR707Rim` -- set 29 37 707 Rim Shot (4)
+              - `TR707Snare` -- set 29 38 707 Snare 1 (4)
+                - `TR707Snare2` -- set 29 40 707 Snare 2 (4)
+              - `TR707Tom` -- set 29 41 707 Low Tom 2 (4), set 29 43 707 Low Tom 1 (4)
+                - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
+                - `TR707MidTom` -- set 29 45 707 Mid Tom 2 (4), set 29 47 707 Mid Tom 1 (4)
             - `TR808Claves` -- set 25 75 808 Claves (4), set 30 75 808 Claves (4)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4)
             - `TR808Conga` -- set 25 64 808 Low Conga (4)
               - `TR808HiConga` -- set 25 62 808 High Conga (4)
               - `TR808MidConga` -- set 25 63 808 Mid Conga (4)
-            - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
+            - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
             - `TR808Cymbal` -- set 25 49 808 Cymbal (4)
             - `TR808Kick` -- set 25 36 808 Bass Drum (4)
-            - `TR808Maracas` -- set 25 70 808 Maracas (4), set 30 70 808 Maracas (4)
+            - `TR808Maracas` -- set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4)
             - `TR808RimShot` -- set 25 37 808 Rim Shot (4)
             - `TR808Snare` -- set 25 38 808 Snare Drum (4)
             - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4)
               - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4)
               - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4)
             - `TR909`
-              - `TR909Crash` -- set 30 49 909 Crash (4)
-                - `TR909Ride` -- set 30 51 909 Ride (4)
+              - `TR909Crash` -- set 29 49 909 Crash (4), set 30 49 909 Crash (4)
+                - `TR909Ride` -- set 29 51 909 Ride (4), set 30 51 909 Ride (4)
               - `TR909Kick` -- set 30 36 909 Kick 1 (4)
                 - `TR909Kick2` -- set 30 35 909 Kick 2 (4)
               - `TR909OpenHat` -- set 30 46 909 OHH (4)

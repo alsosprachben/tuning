@@ -18679,6 +18679,115 @@ class TR909RideProperties(TR909CrashProperties):
              "noise2_lp_hz": 8908.2753, "noise2_tilt": 3.675}
 
 
+# THE TR-707 SET (program 29 on the drum channel; SC-8850 p.188). The 707 is
+# no circuit: each voice is a short recording in ROM (sampled acoustic and
+# electronic drums), played once through a VCA -- no TUNE, no DECAY but the
+# hats'. So each is a patch FITTED to what its take holds (examples/
+# tr707_fit.py; hyperreal's set, sources.md): the kicks a sweep onto ~55 Hz,
+# the toms a membrane gliding down with its modes (x1.78, x2.75) beside it,
+# the hats and clap noise -- the clap's four bursts where its sample puts them
+# (click_bursts). Its crash and ride are the 909's, as Roland's set has them.
+class TR707Properties(TR808Properties):
+    """A ROLAND TR-707 VOICE: a tr808.py patch fitted to the voice's ROM take."""
+    tr808 = {"sweep": "linear"}
+
+
+class TR707KickProperties(TR707Properties):
+    """707 Kick 1: a kick swept from ~300 Hz onto ~55, gone in 0.1 s."""
+    tr808 = {"tune_hz": 54.9, "decay_s": 0.4319, "h2_db": -13.4503, "h3_db": -30.9125,
+             "bend_oct": 2.6804, "bend_ms": 8.5115, "gate_ms": 57.7607,
+             "click_hp_hz": 789.0543, "click_lp_hz": 1366.2074, "click_db": -7.487,
+             "click_dbs": 1804.2564, "click_tilt": -1.6086}
+
+
+class TR707Kick2Properties(TR707KickProperties):
+    """707 Kick 2: the same drum, its beater's click softer."""
+    tr808 = {"click_db": -21.4324, "tune_hz": 55.1, "decay_s": 1.781, "h2_db": -8.9423,
+             "h3_db": -39.9895, "bend_oct": 2.6655, "bend_ms": 9.1007,
+             "click_dbs": 877.8596, "click_tilt": -2.8502, "gate_ms": 54.8182,
+             "click_hp_hz": 697.8783, "click_lp_hz": 2042.1958}
+
+
+class TR707SnareProperties(TR707Properties):
+    """707 Snare 1: a ~150 Hz shell and its wires' noise."""
+    tr808 = {"gate_ms": 165.0604, "tune_hz": 161.0, "decay_s": 0.1836, "h2_db": -15.4022,
+             "h3_db": -20.0315,
+             "res": ((1.6744, -6.6117, 0.1373), (2.3188, -9.8211, 0.1253)),
+             "bend_oct": 0.2124, "bend_ms": 3.3408, "noise_db": -8.734,
+             "noise_hp_hz": 4199.1501, "noise_lp_hz": 5648.3372, "noise_decay_s": 0.2754,
+             "click_db": -33.1537, "click_dbs": 3732.6873, "click_tilt": 1.5436}
+
+
+class TR707Snare2Properties(TR707SnareProperties):
+    """707 Snare 2: a second take, its wires louder."""
+    tr808 = {"noise_db": -3.659, "tune_hz": 154.4, "decay_s": 0.1475, "h2_db": -17.3926,
+             "h3_db": -15.3791,
+             "res": ((1.7214, -7.0256, 0.137), (2.3577, -4.406, 0.0851)),
+             "bend_oct": 0.1058, "bend_ms": 14.5467, "noise_hp_hz": 4516.5925,
+             "noise_lp_hz": 2912.2372, "noise_decay_s": 0.2837, "click_db": -36.7234,
+             "click_dbs": 6340.1567, "click_tilt": -0.2593, "gate_ms": 163.9299}
+
+
+class TR707TomProperties(TR707Properties):
+    """707 Low Tom: a membrane gliding down from ~140 Hz to ~100, its modes
+    beside it."""
+    tr808 = {"tune_hz": 97.9, "decay_s": 1.116, "h2_db": -33.511, "h3_db": -41.3925,
+             "res": ((1.6374, -7.447, 0.1229), (2.8255, -6.1621, 0.0627)),
+             "bend_oct": 0.7307, "bend_ms": 63.3742, "noise_db": -17.0104,
+             "noise_hp_hz": 200.0, "noise_lp_hz": 4000.0, "noise_decay_s": 0.3268,
+             "click_db": -25.0307, "click_dbs": 1462.9172, "click_tilt": -2.9423}
+
+
+class TR707MidTomProperties(TR707TomProperties):
+    """707 Mid Tom."""
+    tr808 = {"tune_hz": 121.1, "decay_s": 1.2621, "h2_db": -26.7499, "h3_db": -37.5268,
+             "res": ((1.7239, -15.104, 0.1586), (2.8333, 2.5921, 0.0835)),
+             "bend_oct": 0.5451, "bend_ms": 75.2066, "noise_db": -14.504,
+             "noise_decay_s": 0.2715, "click_db": -41.843, "click_dbs": 989.5287,
+             "click_tilt": 0.3412}
+
+
+class TR707HiTomProperties(TR707TomProperties):
+    """707 High Tom."""
+    tr808 = {"tune_hz": 155.6, "decay_s": 1.0385, "h2_db": -28.8739, "h3_db": -42.1072,
+             "res": ((1.6856, -4.973, 0.1673), (2.773, -3.8155, 0.0657)),
+             "bend_oct": 0.6108, "bend_ms": 61.659, "noise_db": -16.0144,
+             "noise_decay_s": 0.2486, "click_db": -26.6246, "click_dbs": 1741.4126,
+             "click_tilt": -3.5416}
+
+
+class TR707RimProperties(TR707Properties):
+    """707 Rim Shot: a ring near 900 Hz and its click."""
+    tr808 = {"gate_ms": 49.4988, "tune_hz": 897.2, "decay_s": 0.062, "h2_db": -33.7639,
+             "h3_db": -0.6511,
+             "res": ((0.5989, -19.8819, 0.0519), (1.6488, -3.3797, 0.0603)),
+             "click_db": -20.5257, "click_dbs": 654.6437, "click_tilt": 1.36}
+
+
+class TR707ClapProperties(TR707Properties):
+    """707 Hand Clap: four bursts, ~10 ms apart, and a tail after them."""
+    tr808 = {"gate_ms": 164.5496, "tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.05,
+             "click_db": 0.0, "click_hp_hz": 1442.1292, "click_lp_hz": 44031.5919,
+             "click_dbs": 1723.5908,
+             "click_bursts": ((0.0, -1.0), (0.01, 0.0), (0.02, 0.0), (0.031, 0.5)),
+             "noise_db": -15.9921, "noise_hp_hz": 1194.0899, "noise_lp_hz": 2503.6435,
+             "noise_decay_s": 0.7868, "noise_rise_ms": 11.0215, "click_tilt": -3.0244}
+
+
+class TR707ClosedHatProperties(TR707Properties):
+    """707 Closed Hi-Hat: a sampled hat, short."""
+    tr808 = {"gate_ms": 118.7695, "tune_hz": 5000.0, "tone_db": -100.0, "decay_s": 0.05,
+             "noise_db": 0.0, "noise_hp_hz": 26361.5329, "noise_lp_hz": 27470.993,
+             "noise_decay_s": 0.1371, "noise_rise_ms": 0.0596, "noise_tilt": -9.31}
+
+
+class TR707OpenHatProperties(TR707ClosedHatProperties):
+    """707 Open Hi-Hat: the hat let ring."""
+    tr808 = {"gate_ms": 343.6394, "noise_decay_s": 0.6853, "noise_len_ms": 499.2363,
+             "noise_hp_hz": 29595.4347, "noise_lp_hz": 12173.4315, "noise_tilt": -7.547,
+             "noise_rise_ms": 0.0533}
+
+
 class ConcertBassDrumProperties(KickDrumProperties):
     """The ORCHESTRA set's CONCERT BD 1 and 2 (program 48, notes 36 and 35,
     SC-55 manual p.70): a gran cassa, not a kit kick. VCSL's "Bass Drum 1"

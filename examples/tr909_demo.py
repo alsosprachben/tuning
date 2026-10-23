@@ -22,12 +22,12 @@ TEMPO = 125.0
 VOICES = (36, 35, 37, 38, 40, 41, 43, 45, 47, 48, 50, 46, 49, 51)
 
 
-def _mid(events, beats):
+def _mid(events, beats, program=30):
     mf = mido.MidiFile(type=1, ticks_per_beat=480)
     tr = mido.MidiTrack()
     mf.tracks.append(tr)
     tr.append(mido.MetaMessage("set_tempo", tempo=int(60e6 / TEMPO), time=0))
-    tr.append(mido.Message("program_change", channel=9, program=30, time=0))
+    tr.append(mido.Message("program_change", channel=9, program=program, time=0))
     ev = []
     for beat, note, vel in events:
         t = int(round(beat * 480))

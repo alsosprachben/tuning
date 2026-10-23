@@ -5582,6 +5582,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         _bursts.append((_ct - _a0, _cl)); _fbal.append(_cb)
                 if not _bursts:
                     _bursts, _fbal = [(0.0, -200.0)], [0.25 * math.pi]
+            elif getattr(props, 'strike_flam_times', None):
+                # ...OR A MACHINE'S (strike_flam_times: (s, dB) a burst): a
+                # drum machine's clap is one sample, its bursts where its
+                # envelope generator put them, the same on every note
+                _bursts = [(float(_ft), float(_fd)) for _ft, _fd in props.strike_flam_times]
             elif _nfl > 1:
                 _frng = random.Random(int(round(on * 1e6)) * 131 + note * 7 + ch)
                 _fexp = getattr(props, 'strike_flam_exp_db', 0.0) or 0.0

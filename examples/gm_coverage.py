@@ -417,6 +417,29 @@ KIT_RATED = {
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
     },
+    29: {
+        36: (4, "707 KICK 1: the ROM's kick swept from ~300 Hz onto 55 (zero crossings: a 20 ms "
+             "frame cannot read 55 Hz), held, then its VCA closing at 58 ms (gate_ms); its "
+             "beater's click a band at 0.8-1.4 kHz. Fitted to hyperreal's 707 take: score 12.3. "
+             "Ben: sounds great"),
+        35: (4, "707 KICK 2: the same drum, its click softer, gated at 55 ms. Score 14.3"),
+        37: (4, "707 RIM SHOT: a ring at 897 Hz and two more, gated. Score 17.4"),
+        38: (4, "707 SNARE 1: a 161 Hz shell, its modes at x1.73 and x2.31, its wires' noise, "
+             "gated. Score 11.2"),
+        40: (4, "707 SNARE 2: the wires louder. Score 10.8"),
+        39: (4, "707 HAND CLAP: four bursts at the take's 0, 10, 20, 31 ms (click_bursts: a "
+             "machine's flam, the same every note) and a tail. Score 14.5"),
+        41: (4, "707 LOW TOM 2: a membrane gliding down from ~140 Hz to ~100, its modes beside "
+             "it. Score 9.7"),
+        43: (4, "as 41, two semitones up (the 707 has three toms; the six evenly spaced)"),
+        45: (4, "707 MID TOM 2. Score 8.2"), 47: (4, "as 45, two semitones up"),
+        48: (4, "707 HI TOM 2. Score 9.9"), 50: (4, "as 48, two semitones up"),
+        42: (4, "707 CLOSED HAT: third-octave noise, gated. Score 15.0"),
+        44: (4, "as 42"),
+        46: (4, "707 OPEN HAT: the same, let ring to 0.33 s. Score 14.9"),
+        49: (4, "the 909's crash, as Roland's set has it"), 51: (4, "the 909's ride"),
+        56: (4, "the 808's cowbell"), 70: (4, "the 808's maracas"),
+    },
     30: {
         36: (4, "909 KICK 1: a VCO swept in Hz (a current into an integrator: tr808.py's linear "
              "sweep) from 5.6x down onto 49.8 Hz, tau 30.5 ms, its ATTACK click beside it; TUNE, "
@@ -435,6 +458,7 @@ KIT_RATED = {
              "(HHOD4). Score 10.4"),
         49: (4, "909 CRASH: an early wash and a bright bloom, two noise layers (CSHD4). Score 8.1"),
         51: (4, "909 RIDE: the crash's two layers, less bloom (RIDED4). Score 10.3"),
+        42: (4, "the 707's closed hat, as Roland's set borrows it"), 44: (4, "as 42"),
         56: (4, "the 808's cowbell, as Roland's set borrows it"),
         70: (4, "the 808's maracas"), 75: (4, "the 808's claves"),
     },

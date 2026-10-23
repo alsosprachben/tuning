@@ -69,6 +69,8 @@ import math
 PANEL = {
     "circuit": "resonator",     # "resonator" or "metal"
     "attack_ms": None,          # the onset's ramp; None: the circuit's (1.7 ms, 0.3 metal)
+    "gate_ms": None,            # the VCA closing here, whatever still rings (a 707's ROM
+    "gate_release_ms": 15.0,    # take ending); None: every partial rings out. ...its close
     # ---- resonators
     "tune_hz": 56.0,            # the first bridged-T: the voice's pitch
     "tone_db": 0.0,             # ...its level (-100: a noise voice, the maracas)
@@ -135,6 +137,8 @@ PANEL = {
     "click_hp_hz": 20.0,
     "click_lp_hz": 20000.0,
     "click_dbs": 400.0,         # amplitude dB/s
+    "click_bursts": (),         # ((s, dB), ...): the click fired at each, a clap's
+                                # bursts where its envelope generator puts them
     "click_tilt": 0.0,          # dB per octave (-6: the trigger pulse leaking through,
                                 # its sinc's envelope -- the drums' skirt over ~1 kHz)
 }
@@ -396,6 +400,9 @@ def voice_attrs(patch):
             tension_settle_time=bend_s,
             tension_settle_cutoff=max(1.0, 2.0 * p["decay_s"]))
         extra = None
+    if p["gate_ms"] is not None:
+        attrs["gate_time"] = p["gate_ms"] / 1000.0
+        attrs["release_valve_time"] = p["gate_release_ms"] / 1000.0
     attrs["max_harmonic"] = len(attrs["mode_ratios"])
     attrs["decay_db"] = attrs["mode_decays"][0] if attrs["mode_decays"] else 30.0
     layers = ()
@@ -418,5 +425,7 @@ def voice_attrs(patch):
     else:
         attrs["strike_noise_db"] = tuple((round(hz), -120.0) for hz in BANDS)
     attrs["strike_noise_dbs"] = p["click_dbs"]
+    if p["click_bursts"]:
+        attrs["strike_flam_times"] = tuple((float(t), float(db)) for t, db in p["click_bursts"])
     attrs["strike_noise_len_s"] = 0.25
     return attrs
