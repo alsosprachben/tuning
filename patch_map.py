@@ -1182,13 +1182,18 @@ def layer_class(program, note):
     """The class of one layer of a layered variation at (its own) note."""
     spec = LAYERED[(int(program) & 0x7F, program.variation)][program.layer]
     # a layer is a program's voice, ("kit", key, set): a kit's key played from
-    # the keyboard (melodic_sfx), C4 at its kit pitch, or ("set", program,
-    # {attrs}): the program's voice with those settings, as a "set" tone
+    # the keyboard (melodic_sfx), C4 at its kit pitch, ("set", program,
+    # {attrs}): the program's voice with those settings, as a "set" tone, or
+    # ("class", cls): a voice class itself
     src, attrs = spec[0], {}
     if isinstance(src, tuple) and src[0] == "set":
         src, attrs = src[1], dict(src[2])
-    base = (melodic_sfx(src[1], kit=src[2]) if isinstance(src, tuple)
-            else property_class_for_note(src, note))
+    # ...or ("class", cls): a voice no program routes to (St.Gamelan's gangsa pair)
+    if isinstance(src, tuple) and src[0] == "class":
+        base = src[1]
+    else:
+        base = (melodic_sfx(src[1], kit=src[2]) if isinstance(src, tuple)
+                else property_class_for_note(src, note))
     db = float(spec[2])
     if not db and not attrs:
         return base
@@ -1699,6 +1704,16 @@ from tonelib import BonangProperties
 VARIATIONS[(112, 8)] = BonangProperties
 VARIATION_NAMES[(112, 8)] = "Bonang"
 VARIATION_TRIM_DB[(112, 8)] = PROGRAM_TRIM_DB.get(8, 0.0)
+
+# ST.GAMELAN: the gamelan in stereo -- the Balinese gangsa as it is played, a
+# PAIR beating 26 cents apart, its two instruments left and right
+# (tonelib.GangsaPairProperties), and the bonang an octave over it, softer,
+# as the panerus doubles the melody
+from tonelib import GangsaPairProperties
+LAYERED[(112, 11)] = ((("class", GangsaPairProperties), 0, 0.0), (("class", BonangProperties), 12, -6.0))
+VARIATIONS[(112, 11)] = GangsaPairProperties
+VARIATION_NAMES[(112, 11)] = "St.Gamelan"
+VARIATION_TRIM_DB[(112, 11)] = PROGRAM_TRIM_DB.get(8, 0.0)
 VARIATION_TRIM_DB[(35, 2)] = PROGRAM_TRIM_DB.get(35, 0.0) + 5.8
 VARIATION_TRIM_DB[(35, 3)] = PROGRAM_TRIM_DB.get(35, 0.0) + 9.5
 

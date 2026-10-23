@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 160 of the SC-55's 160 are built,
+under a program (SC-55 owner's manual p.68). 161 of the SC-55's 161 are built,
 and 141 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -942,6 +942,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 112.8 | SC-55 | Bonang | `Bonang` | **4** | the Javanese kettle gongs, fitted to Casa da Musica's bonang barung and panerus (CC BY 3.0; examples/gender_fit.py --bonang): 33 kettles 338-1382 Hz, the kettle's partner at 1.55 (-22 dB), a quiet octave, a broad mode near 3, a 7 s ring with no register law; the mallet's own strike (--mallet: a burst between the modes, 0.6-0.9 kHz, 945 dB/s; 3.9 dB by band over the first 15 ms). Ben: the tone good, 'what it is missing is the sound of the reaction of the mallet itself' -> 'Sounds good now' |
 | 112.9 | SC-55 | Gender | `Gender` | **4** | the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0; examples/gender_fit.py): a free bar 1 : 2.70 : 5.27, the third mode carrying the strike under ~4 kHz (the panggul's roll-off, steep), the fundamental ringing (D 1.87 at 415 Hz), 42 keys; the Balinese pair (26 cents, GangsaPairProperties) taken off against Casa da Musica's Javanese gender, which has none. Ben: 'I hear it less tuned, but not too bright' -> 'Sounds good' |
 | 112.10 | SC-55 | GamelanGong | `GamelanGong` | **4** | the gong ageng, fitted to UNT's big gong (CC0; examples/gender_fit.py --gong): 69.3 Hz, the octave pair 2.00/2.08 at -1 dB, the beat 0.61 Hz at 2.2 dB p-p (recorded 1.4-2.4), the felt's onset 0.18 s (0.10-0.16), 3.0 dB/s (2.9-3.1); shorter up the register by the same gamelan's kempli (slope 0.73). Ben: 'Sounds good' |
+| 112.11 | SC-55 | St.Gamelan | `GangsaPair` | **2** | the gamelan in stereo, BY ITS NAME: no recording of Roland's tone and neither GS SoundFont has one (both hold only 112.0), and no GS file here uses it. Composed of fitted voices: the Balinese gangsa as played, a pair 26 cents apart left and right (GangsaPairProperties), and the bonang an octave over it at -6 dB, as the panerus doubles the melody. Ben: 'It sounds good, but I don't know what it is supposed to sound like' |
 | 112.16 | SC-55 | RAMA Cymbal | `CengCeng` | **4** | the Balinese CENG-CENG (tonelib.CengCengProperties): a plate from the crash FITTED to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0; examples/rama_fit.py: multi-strike files rejected, 4.8 dB on the grid), with each strike's chatter of the stand's plates (14-17 sub-hits in 120 ms) as strike_flam bursts at +10 dB by Ben's ear |
 | 115.8 | SC-55 | Castanets | `Castanets_sfx85` | **4** | set 0's key 85 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: Iowa castanets |
 | 116.8 | SC-55 | Concert BD | `ConcertBassDrum_sfx36` | **4** | set 48's key 36 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: CONCERT BD 1, FITTED BY TWO LEVELS (examples/orch_fit.py): GeneralUser GS's Orchestra bass drum picks VCSL's "Bass Drum 1" (CC0), and the drum is fitted to its hit -- 73 modes read settled to -45 dB AND early to 3 kHz (a big head's upper modes are gone before a kick's are read), per-octave trims and rates: 10.7 dB. Balanced as GeneralUser's set (examples/elkit_balance.py --kit=48). Ben: sounds good |
@@ -1147,11 +1148,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 199 | 199 | 100% | 163 | 36 | 0 | 0 | 0 | 0 |
+| SC-55 | 200 | 200 | 100% | 163 | 36 | 1 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 400 | 96% | 276 | 124 | 0 | 0 | 0 | 18 |
-| SC-88Pro | 774 | 418 | 54% | 285 | 133 | 0 | 0 | 0 | 356 (11 another tone) |
-| SC-8850 | 1262 | 416 | 33% | 283 | 133 | 0 | 0 | 0 | 846 (13 another tone) |
+| SC-88 | 418 | 401 | 96% | 276 | 124 | 1 | 0 | 0 | 17 |
+| SC-88Pro | 774 | 419 | 54% | 285 | 133 | 1 | 0 | 0 | 355 (11 another tone) |
+| SC-8850 | 1262 | 417 | 33% | 283 | 133 | 1 | 0 | 0 | 845 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1173,14 +1174,14 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
 | Ethnic | 10/10 | 10/10 | 15/22 | 15/37 | 15/44 |
-| Percussive | 16/16 | 13/13 | 26/28 | 27/47 | 27/95 |
+| Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
 | Sound Effects | 42/42 | 41/41 | 46/49 | 50/73 | 50/144 |
 
-### The SC-88 map's 18 still to build, by what they take
+### The SC-88 map's 17 still to build, by what they take
 
 **refit** (2: an articulation of one we have, wanting a fit to a reference): 66.8 BreathyTnr., 120.5 Bass Slide
 
-**new** (16: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (15: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's
