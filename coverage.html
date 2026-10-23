@@ -1501,7 +1501,7 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 
 <section>
 <h2>Variations: the GS banks</h2>
-<p>A GS bank select (CC0 = bank, then the program) picks a <em>variation</em> tone under a program (SC-55 owner&rsquo;s manual p.68). 296 of GS&rsquo;s 296 are built; one not built plays its capital tone, as a Sound Canvas does.</p>
+<p>A GS bank select (CC0 = bank, then the program) picks a <em>variation</em> tone under a program (SC-55 owner&rsquo;s manual p.68). 298 of GS&rsquo;s 298 are built; one not built plays its capital tone, as a Sound Canvas does.</p>
 <div class="tscroll"><table><tr><th>Program.bank</th><th>GS name</th><th>Class</th><th></th><th>Notes</th></tr>
 <tr><td class="num">0.8</td><td class="nm">Piano 1w</td><td class="note">GrandPiano_sc88_0_8</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 0 Acoustic Grand Piano with key_pan_spread=0.5</td></tr>
 <tr><td class="num">0.16</td><td class="nm">Piano 1d</td><td class="note">GrandPiano_sc88_0_16</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 0 Acoustic Grand Piano with hammer_corner_hz=2125.218</td></tr>
@@ -1584,6 +1584,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="num">34.1</td><td class="nm">Picked Bass2</td><td class="note">PickedBass_sc88_34_1</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 34 Electric Bass (pick) with amp_drive=1.0</td></tr>
 <tr><td class="num">34.8</td><td class="nm">MutePickBs.</td><td class="note">PickedBass_sc88_34_8</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 34 Electric Bass (pick) with decay_db=20.0, tonal_dampening=2.4</td></tr>
 <tr><td class="num">35.1</td><td class="nm">Fretless Bs2</td><td class="note">FretlessBass_sc88_35_1</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315</td></tr>
+<tr><td class="num">35.2</td><td class="nm">FretlessBs3</td><td class="note">FretlessBass_sc88_35_2</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 35 Fretless Bass with pickup_points=(0.1893,), pickup_width=0.006505, tonal_dampening=2.556, lowpass_hz=462.4, lowpass_order=3.224</td></tr>
+<tr><td class="num">35.3</td><td class="nm">FretlessBs4</td><td class="note">FretlessBass_sc88_35_3</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 35 Fretless Bass with pickup_points=(0.07274,), pickup_width=0.03394, tonal_dampening=2.309, lowpass_hz=735.6, lowpass_order=3.673</td></tr>
 <tr><td class="num">35.4</td><td class="nm">SynFretless</td><td class="note">Sc88_35_4</td><td class="rt"><span class="chip r3">3</span></td><td class="note">SC-88 map: a Moog panel, the SynthBass1&#x27;s with a_attack, cutoff, eg_amount, glide, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben&#x27;s Messenger</td></tr>
 <tr><td class="num">35.5</td><td class="nm">Mr.Smooth</td><td class="note">FretlessBass_sc88_35_5</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315</td></tr>
 <tr><td class="num">36.8</td><td class="nm">Reso Slap</td><td class="note">SlapBass_sc88_36_8</td><td class="rt"><span class="chip r4">4</span></td><td class="note">SC-88 map: GM 36 Slap Bass 1 with tonal_dampening=1.4</td></tr>
@@ -1807,16 +1809,16 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <p>Each Sound Canvas&rsquo;s map of tones &mdash; the SC-55&rsquo;s own (owner&rsquo;s manual p.68), and the SC-55mkII, SC-88 and SC-88Pro maps from the SC-88Pro manual&rsquo;s instrument list &mdash; against ours: a tone is built when we play it, as a program or a variation, and rated as the tables above rate it. A later map can put another tone under a number we built (the SC-88&rsquo;s 4.8 is &ldquo;St.Soft EP&rdquo;, not our detuned pair); that one is not counted.</p>
 <div class="scmap"><div class="nm">SC-55<br><span class="rng">196 of 196</span></div><div class="bar"><span class="r4" style="flex:160" title="rated 4: 160">160</span><span class="r3" style="flex:36" title="rated 3: 36">36</span></div>
 <div class="nm">SC-55mkII<br><span class="rng">226 of 226</span></div><div class="bar"><span class="r4" style="flex:178" title="rated 4: 178">178</span><span class="r3" style="flex:48" title="rated 3: 48">48</span></div>
-<div class="nm">SC-88<br><span class="rng">395 of 418</span></div><div class="bar"><span class="r4" style="flex:271" title="rated 4: 271">271</span><span class="r3" style="flex:124" title="rated 3: 124">124</span><span class="todo" style="flex:23" title="to do">23 to do</span></div>
-<div class="nm">SC-88Pro<br><span class="rng">413 of 774</span></div><div class="bar"><span class="r4" style="flex:280" title="rated 4: 280">280</span><span class="r3" style="flex:133" title="rated 3: 133">133</span><span class="todo" style="flex:361" title="to do, 11 another tone under a number we built">361 to do</span></div>
-<div class="nm">SC-8850<br><span class="rng">411 of 1262</span></div><div class="bar"><span class="r4" style="flex:278" title="rated 4: 278">278</span><span class="r3" style="flex:133" title="rated 3: 133">133</span><span class="todo" style="flex:851" title="to do, 13 another tone under a number we built">851 to do</span></div></div>
+<div class="nm">SC-88<br><span class="rng">397 of 418</span></div><div class="bar"><span class="r4" style="flex:273" title="rated 4: 273">273</span><span class="r3" style="flex:124" title="rated 3: 124">124</span><span class="todo" style="flex:21" title="to do">21 to do</span></div>
+<div class="nm">SC-88Pro<br><span class="rng">415 of 774</span></div><div class="bar"><span class="r4" style="flex:282" title="rated 4: 282">282</span><span class="r3" style="flex:133" title="rated 3: 133">133</span><span class="todo" style="flex:359" title="to do, 11 another tone under a number we built">359 to do</span></div>
+<div class="nm">SC-8850<br><span class="rng">413 of 1262</span></div><div class="bar"><span class="r4" style="flex:280" title="rated 4: 280">280</span><span class="r3" style="flex:133" title="rated 3: 133">133</span><span class="todo" style="flex:849" title="to do, 13 another tone under a number we built">849 to do</span></div></div>
 <h3>By family: built of each map&rsquo;s tones</h3>
 <div class="tscroll"><table><tr><th>Family</th><th>SC-55</th><th>SC-55mkII</th><th>SC-88</th><th>SC-88Pro</th><th>SC-8850</th></tr>
 <tr><td class="nm">Piano</td><td class="num">11/11</td><td class="num">21/21</td><td class="num">26/26</td><td class="num">25/39</td><td class="num">23/61</td></tr>
 <tr><td class="nm">Chromatic Percussion</td><td class="num">9/9</td><td class="num">12/12</td><td class="num">15/18</td><td class="num">15/23</td><td class="num">15/29</td></tr>
 <tr><td class="nm">Organ</td><td class="num">12/12</td><td class="num">16/16</td><td class="num">30/30</td><td class="num">25/49</td><td class="num">25/71</td></tr>
 <tr><td class="nm">Guitar</td><td class="num">16/16</td><td class="num">19/19</td><td class="num">34/34</td><td class="num">36/55</td><td class="num">36/72</td></tr>
-<tr><td class="nm">Bass</td><td class="num">10/10</td><td class="num">12/12</td><td class="num">29/31</td><td class="num">31/76</td><td class="num">31/113</td></tr>
+<tr><td class="nm">Bass</td><td class="num">10/10</td><td class="num">12/12</td><td class="num">31/31</td><td class="num">33/76</td><td class="num">33/113</td></tr>
 <tr><td class="nm">Strings</td><td class="num">8/8</td><td class="num">9/9</td><td class="num">11/11</td><td class="num">12/20</td><td class="num">12/29</td></tr>
 <tr><td class="nm">Ensemble</td><td class="num">11/11</td><td class="num">11/11</td><td class="num">29/29</td><td class="num">34/63</td><td class="num">34/134</td></tr>
 <tr><td class="nm">Brass</td><td class="num">11/11</td><td class="num">15/15</td><td class="num">26/27</td><td class="num">23/51</td><td class="num">23/84</td></tr>
@@ -1829,8 +1831,8 @@ code{font-family:"IBM Plex Mono",monospace; font-size:.92em; color:var(--accent)
 <tr><td class="nm">Percussive</td><td class="num">13/13</td><td class="num">13/13</td><td class="num">23/28</td><td class="num">24/47</td><td class="num">24/95</td></tr>
 <tr><td class="nm">Sound Effects</td><td class="num">42/42</td><td class="num">41/41</td><td class="num">46/49</td><td class="num">50/73</td><td class="num">50/144</td></tr>
 </table></div>
-<h3>The SC-88 map&rsquo;s 23 still to build, by what they take</h3>
-<p><strong>refit</strong> (4, an articulation of one we have, wanting a fit to a reference): 35.2 FretlessBs3, 35.3 FretlessBs4, 66.8 BreathyTnr., 120.5 Bass Slide</p>
+<h3>The SC-88 map&rsquo;s 21 still to build, by what they take</h3>
+<p><strong>refit</strong> (2, an articulation of one we have, wanting a fit to a reference): 66.8 BreathyTnr., 120.5 Bass Slide</p>
 <p><strong>new</strong> (19, an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl</p>
 </section>
 

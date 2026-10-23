@@ -694,7 +694,7 @@ Controls are the rest of the console that are not stops.
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
 under a program (SC-55 owner's manual p.68). 157 of the SC-55's 157 are built,
-and 139 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+and 141 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -780,6 +780,8 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 34.1 | SC-88 | Picked Bass2 | `PickedBass_sc88_34_1` | **4** | SC-88 map: GM 34 Electric Bass (pick) with amp_drive=1.0 |
 | 34.8 | SC-88 | MutePickBs. | `PickedBass_sc88_34_8` | **4** | SC-88 map: GM 34 Electric Bass (pick) with decay_db=20.0, tonal_dampening=2.4 |
 | 35.1 | SC-88 | Fretless Bs2 | `FretlessBass_sc88_35_1` | **4** | SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315 |
+| 35.2 | SC-88 | FretlessBs3 | `FretlessBass_sc88_35_2` | **4** | SC-88 map: GM 35 Fretless Bass with pickup_points=(0.1893,), pickup_width=0.006505, tonal_dampening=2.556, lowpass_hz=462.4, lowpass_order=3.224 |
+| 35.3 | SC-88 | FretlessBs4 | `FretlessBass_sc88_35_3` | **4** | SC-88 map: GM 35 Fretless Bass with pickup_points=(0.07274,), pickup_width=0.03394, tonal_dampening=2.309, lowpass_hz=735.6, lowpass_order=3.673 |
 | 35.4 | SC-55 | SynFretless | `Sc88_35_4` | **3** | SC-88 map: a Moog panel, the SynthBass1's with a_attack, cutoff, eg_amount, glide, osc1_wave, osc2_level, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 35.5 | SC-88 | Mr.Smooth | `FretlessBass_sc88_35_5` | **4** | SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315 |
 | 36.8 | SC-88 | Reso Slap | `SlapBass_sc88_36_8` | **4** | SC-88 map: GM 36 Slap Bass 1 with tonal_dampening=1.4 |
@@ -1144,9 +1146,9 @@ A later map can put another tone under a number we built; that one is not counte
 |---|---|---|---|---|---|---|---|---|---|
 | SC-55 | 196 | 196 | 100% | 160 | 36 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 395 | 94% | 271 | 124 | 0 | 0 | 0 | 23 |
-| SC-88Pro | 774 | 413 | 53% | 280 | 133 | 0 | 0 | 0 | 361 (11 another tone) |
-| SC-8850 | 1262 | 411 | 33% | 278 | 133 | 0 | 0 | 0 | 851 (13 another tone) |
+| SC-88 | 418 | 397 | 95% | 273 | 124 | 0 | 0 | 0 | 21 |
+| SC-88Pro | 774 | 415 | 54% | 282 | 133 | 0 | 0 | 0 | 359 (11 another tone) |
+| SC-8850 | 1262 | 413 | 33% | 280 | 133 | 0 | 0 | 0 | 849 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1158,7 +1160,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Chromatic Percussion | 9/9 | 12/12 | 15/18 | 15/23 | 15/29 |
 | Organ | 12/12 | 16/16 | 30/30 | 25/49 | 25/71 |
 | Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 36/72 |
-| Bass | 10/10 | 12/12 | 29/31 | 31/76 | 31/113 |
+| Bass | 10/10 | 12/12 | 31/31 | 33/76 | 33/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 12/29 |
 | Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
 | Brass | 11/11 | 15/15 | 26/27 | 23/51 | 23/84 |
@@ -1171,9 +1173,9 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Percussive | 13/13 | 13/13 | 23/28 | 24/47 | 24/95 |
 | Sound Effects | 42/42 | 41/41 | 46/49 | 50/73 | 50/144 |
 
-### The SC-88 map's 23 still to build, by what they take
+### The SC-88 map's 21 still to build, by what they take
 
-**refit** (4: an articulation of one we have, wanting a fit to a reference): 35.2 FretlessBs3, 35.3 FretlessBs4, 66.8 BreathyTnr., 120.5 Bass Slide
+**refit** (2: an articulation of one we have, wanting a fit to a reference): 66.8 BreathyTnr., 120.5 Bass Slide
 
 **new** (19: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.9 Gender, 112.10 GamelanGong, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 

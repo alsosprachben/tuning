@@ -1535,6 +1535,18 @@ SC88_CHEAP = {
     # used in soul music" (SENSATIO, 1055)
     (35, 1): ("Fretless Bs2", ("set", 35, dict(lowpass_hz=455.7, lowpass_order=3.605,
                                                tonal_dampening=2.315))),
+    # FRETLESSBS3, FRETLESSBS4: THE SAME BASS ON ONE COIL -- mrforfs' neck and
+    # bridge takes (examples/fretless_pickup_fit.py: the low harmonics and the
+    # top together). Neck: the coil at 0.189, rounder (ladder 10.3 -> 7.2,
+    # envelope 3.2 -> 2.7 dB against Bs2's top); bridge: at 0.073, a wider
+    # coil, the fundamental down and h5-h7 up (9.4 -> 5.1, 2.2 -> 1.5). One
+    # coil reads less than two: trimmed to GM 35's level (+5.8, +9.5 dB)
+    (35, 2): ("FretlessBs3", ("set", 35, dict(pickup_points=(0.1893,), pickup_width=0.006505,
+                                              tonal_dampening=2.556, lowpass_hz=462.4,
+                                              lowpass_order=3.224))),
+    (35, 3): ("FretlessBs4", ("set", 35, dict(pickup_points=(0.07274,), pickup_width=0.03394,
+                                              tonal_dampening=2.309, lowpass_hz=735.6,
+                                              lowpass_order=3.673))),
     # FLT TRAVELSO: THE TRAVERSO, the baroque wooden flute -- GM 73 refitted as
     # a difference, Alex Murray's late-1700s Goulding flute (Bach's Sarabande,
     # BWV 1013; Commons, CC BY-SA 2.0; sources.md) against the Iowa takes GM 73
@@ -1666,6 +1678,8 @@ VARIATION_NAMES[(65, 8)] = "AltoSax Exp."
 # under GM 71 it plays only the notes below D3
 VARIATIONS[(71, 8)] = BassClarinetProperties
 VARIATION_NAMES[(71, 8)] = "Bs Clarinet"
+VARIATION_TRIM_DB[(35, 2)] = PROGRAM_TRIM_DB.get(35, 0.0) + 5.8
+VARIATION_TRIM_DB[(35, 3)] = PROGRAM_TRIM_DB.get(35, 0.0) + 9.5
 
 # THE MAP SWITCH: BANK SELECT LSB (CC32) picks a Sound Canvas's map, as an
 # SC-88 does -- 1 the SC-55 map (the SC-55mkII's, as a later module has it),
