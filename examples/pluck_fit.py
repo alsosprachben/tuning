@@ -70,9 +70,13 @@ VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoPrope
           "biwa": (120, "BiwaProperties", "biwa"),
           # GS 107.16 Kanoon on Baris Bozkurt's kanun (Freesound 211133, CC0):
           # isolated notes across its chromatic range, one take
-          "kanun": (107, "KanunProperties", "kanun")}
+          "kanun": (107, "KanunProperties", "kanun"),
+          # GS 105.24 Oud on Andy R. Jordan's (Wikimedia Commons, CC BY-SA 3.0):
+          # the notes left to ring in his three takes, and hammondman's (CC0)
+          "oud": (105, "OudProperties", "oud")}
 # the GS bank a voice is (a variation): CC0 before its program change
-BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8, "biwa": 12, "kanun": 16}
+BANKS = {"lapsteel": 8, "mandolin": 16, "taisho": 8, "taishodrone": 9, "ukulele": 8, "biwa": 12, "kanun": 16,
+         "oud": 24}
 BANK = 0
 NH = 24
 HOP, WIN = 0.1, 0.2
@@ -153,12 +157,12 @@ TAKES = {"ma": ("sitar/42192__*.flac", (150, 190), 5.0),
          "chinpen": ("sitar/42268__*.wav", (270, 310), 2.5)}
 
 
-def stage_files(label, pat, lo=60.0, hi=1500.0, skip=(), div=1):
+def stage_files(label, pat, lo=60.0, hi=1500.0, skip=(), div=1, clear=True):
     """A pack's single notes, one pluck a file (the lap steel's open strings):
     each staged as it is, its f0 measured over its first second's harmonics."""
     import shutil
     os.makedirs(STAGED, exist_ok=True)
-    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+    for f in glob.glob(os.path.join(STAGED, "*.wav")) if clear else ():
         os.remove(f)
     names = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8,
              "A": 9, "A#": 10, "B": 11}
@@ -257,7 +261,7 @@ def stage_ukulele():
     print("  %d notes staged (of %d played): %s" % (len(got), len(UKE_NOTES), have))
 
 
-def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100, hi=1500, fall_db=None):
+def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100, hi=1500, fall_db=None, clear=True):
     """THE SHAMISEN'S PLUCKS, out of RTB45's live festival take (freesound
     195521, CC BY 4.0; sources.md "Ethnic programs"): every onset (a 12 dB
     rise in 10 ms, over -40 dB) that rings MIN_NEXT s or more before the next,
@@ -269,7 +273,7 @@ def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100,
     sys.path.insert(0, os.path.join(HERE, "examples"))
     from freesound_slice import onsets as fs_onsets, track
     os.makedirs(STAGED, exist_ok=True)
-    for f in glob.glob(os.path.join(STAGED, "*.wav")):
+    for f in glob.glob(os.path.join(STAGED, "*.wav")) if clear else ():
         os.remove(f)
     x, sr = read(glob.glob(os.path.join(REFS, pat))[0])
     on = fs_onsets(x, sr, rise_db=12.0, top_db=-40.0, gap=0.08) + [len(x)]
@@ -322,6 +326,20 @@ def stage():
                           (seg / max(np.abs(seg).max(), 1e-9) * 0.9 * 32767).astype(np.int16))
             print("  %-28s %.2f s" % (name, len(seg) / sr))
             n += 1
+
+
+def stage_oud():
+    """THE OUD: the notes left to ring 0.3 s or more in Andy R. Jordan's three
+    takes (Wikimedia Commons, CC BY-SA 3.0), the open strings' take, and
+    hammondman's three notes (Freesound, CC0); its compass ~E2-C5."""
+    # (the "1V2 short" take opens as the long one does: the same notes)
+    for i, f in enumerate(("Oud_music_by_Andy_R._Jordan_1V2_long.wav", "Oud_music_by_Andy_R._Jordan_2v2.wav")):
+        stage_live("aj" + "ab"[i], os.path.expanduser("~/Documents/refs/commons/oud/" + f),
+                   min_next=0.3, lo=70, hi=900, fall_db=3.0, clear=(i == 0))
+    # hammondman's G2, A2, C3 (97-132 Hz): the pitch searched under 140 Hz, or
+    # the stager reads their second harmonic
+    stage_files("hm", os.path.expanduser("~/Documents/refs/freesound/oud_hammondman/*.wav"), lo=70, hi=140,
+                clear=False)
 
 
 def plucks():
@@ -833,6 +851,8 @@ def main(argv):
                 stage_live("bz", os.path.expanduser(
                     "~/Documents/refs/freesound/kanun/211133__barisbozkurt__kanun_moderate_chromatic_moreisolated.mp3"),
                     min_next=0.8, lo=80, hi=2600)
+            elif voice == "oud":
+                stage_oud()
             elif voice == "biwa":
                 # side A's first 8:50 (the rest is blank tape); its lowest
                 # string is A2, 110 Hz

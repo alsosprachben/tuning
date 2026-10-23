@@ -20320,6 +20320,78 @@ class KanunProperties(FormantBody, PluckedStringProperties):
         return [(1.0, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, 0.0) for c in cs]
 
 
+class OudProperties(FormantBody, PluckedStringProperties):
+    """GS 105.24 "Oud": the Arabic short-necked lute -- fretless, its gut or
+    nylon strings in DOUBLE courses, plucked near the bridge with a long
+    plectrum (the risha) over a deep staved bowl. Bright where a classical
+    guitar is soft: measured against the takes, the nylon guitar's voicing
+    (a fingertip over the soundhole) left the upper harmonics 30-60 dB short.
+    So the kanun's structure -- a plain plucked string struck near its end,
+    the body open -- its courses the kanun's way (two strings a few cents
+    apart, each course its own), fitted to the oud's own recordings
+    (examples/pluck_fit.py --voice=oud): Andy R. Jordan's (Wikimedia Commons,
+    CC BY-SA 3.0) and hammondman's notes (Freesound, CC0); sources.md."""
+    formant_floor = 1.0
+    # THE BOWL, by absolute frequency (pluck_fit --fit=body: 5.6 -> 2.5 dB rms
+    # over third octaves): a lift near 200 and 320 Hz, the plain string's 2.5-4
+    # kHz taken down 8-13 dB, a lift at 5 kHz
+    body_trim_db = ((160, -7.9), (202, 7.1), (254, 0.8), (320, 7.9), (403, -5.0), (508, 2.0), (640, 0.3),
+                    (806, 0.5), (1016, 0.3), (1280, -0.2), (1613, 4.4), (2032, -3.2), (2560, -7.8),
+                    (3225, -13.2), (4064, -12.3), (5120, 7.6), (6451, 3.6), (8127, -6.1), (10240, -6.6))
+    bore_corner_hz = 12000.0
+    bore_order = 2.0
+    strike_point = 0.1
+    strike_depth = 0.0
+    strike_fills_with_force = False
+    inharmonicity_coefficient = 1.0e-04
+    inharmonicity_dynamic = False
+    # pluck_fit --fit=decay (15 dB/s rms over h1-h12: Jordan's notes ring a
+    # half second before the next, so hammondman's three carry it)
+    decay_db = 7.701
+    harmonic_decay_db = 2.107
+    harmonic_decay_dampening = 0.0
+    decay_register_slope = 0.2758
+    tonal_dampening = 0.6
+    octave_dampening = 0.0
+    # to ~13 kHz at its bottom string: the risha's pluck reaches it, and 64 of
+    # a 100 Hz note stopped at 6.4
+    max_harmonic = 160
+    initial_gain = 0.0411004 / 3 ** 0.5 * (2.0 / (1.0 + 0.55 ** 2)) ** 0.5
+    attack_time = 0.002
+    # THE COURSE'S SECOND STRING (examples/oud_sympathy.py, hammondman's three
+    # notes, each harmonic's envelope): beating 4-9 cents apart (median 6) and
+    # 8-12 dB peak to peak, so the partner ~5 dB under the string plucked, not
+    # its equal; each course its own split and sign
+    course_cents = (4.0, 8.0)
+    course_partner_gain = 0.55
+    # ITS OTHER OPEN COURSES ANSWER, KICKED THROUGH THE BRIDGE as the
+    # shamisen's are (contact over a fixed set): the Arab tuning, C2 F2 A2 D3
+    # G3 C4. Measured, they ring at their OWN harmonics, not where the note's
+    # land: under a G2 the A course's 1st-3rd 26-28 dB under the note, under
+    # an A2 the D course's 2nd 32 under (the D ~12 cents sharp), under a C3 the
+    # A and D 37-42 under. (The loud peaks beside the note's harmonics, 6-9 dB
+    # under, are its own course's second string, resolved.)
+    sympathetic_mode = 'contact'
+    sympathetic_strings = (0, 5, 9, 14, 19, 24)
+    sympathetic_tonic = 36
+    sympathetic_string_cents = (0.0, 0.0, 0.0, 12.0, 0.0, 0.0)
+    # Only the A and D courses show; the outer four never above -45 dB, where
+    # all at one level put them at -20 to -35 (examples/oud_sympathy.py). The
+    # A and D: right under the G2, 9-15 dB loud under the A2 and C3 -- the
+    # level splits them
+    sympathetic_string_db = (-15.0, -15.0, 0.0, 0.0, -12.0, -12.0)
+    sympathetic_gain = 0.014
+    sympathetic_max = 6
+    sympathetic_floor = 0.0
+
+    def unison_voices(self, frequency, harmonic, harmonic_decay):
+        midi = int(round(69 + 12 * _log(float(frequency) / 440.0) / _log(2)))
+        rng = _random.Random(0x0D0D0 + midi)
+        lo, hi = self.course_cents
+        c = rng.uniform(lo, hi) * (1.0 if rng.random() < 0.5 else -1.0)
+        return [(self.course_partner_gain, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, 0.0)]
+
+
 class KotoProperties(FormantBody, PluckedStringProperties):
     """GM 107. Thirteen long silk strings over a long hollow paulownia box.
 

@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 164 of the SC-55's 164 are built,
+under a program (SC-55 owner's manual p.68). 165 of the SC-55's 165 are built,
 and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -938,6 +938,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 104.1 | SC-88 | Sitar 2 | `Sitar_sc88_104_1` | **4** | SC-88 map: GM 104 Sitar with tonal_dampening=0.4125 |
 | 104.2 | SC-88 | DetuneSitar | `Sitar_sc88_104_2` | **4** | SC-88 map: GM 104 Sitar with detuned_pair=(-8.0, 8.0) |
 | 105.1 | SC-88 | Muted Banjo | `Banjo_sc88_105_1` | **4** | SC-88 map: GM 105 Banjo with decay_db=30.0, tonal_dampening=1.2 |
+| 105.24 | SC-55 | Oud | `Oud` | **4** | the Arabic oud, fitted to Andy R. Jordan's notes (Commons, CC BY-SA 3.0) and hammondman's (Freesound, CC0; examples/pluck_fit.py --voice=oud): a plain plucked string struck near its end (the risha), the kanun's structure where the nylon guitar was 30-60 dB short up top, its bowl as a third-octave trim (5.6 -> 2.5 dB rms), its decay from hammondman's long notes; its DOUBLE COURSES measured from each harmonic's beating (examples/oud_sympathy.py: 4-9 cents, the second string ~5 dB under), and its other open courses KICKED through the bridge (contact, the Arab tuning C2 F2 A2 D3 G3 C4: the A and D courses 26-42 dB under the note, the D ~12 cents sharp, the outer four under -45). Ben: 'Sounds good' |
 | 106.1 | SC-88 | Tsugaru | `Shamisen_sc88_106_1` | **3** | SC-88 map: GM 106 Shamisen with tonal_dampening=0.35, decay_db=3.0 |
 | 107.8 | SC-55 | Taisho Koto | `TaishoKoto` | **4** | the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great' |
 | 107.16 | SC-55 | Kanoon | `Kanun` | **4** | the KANUN (tonelib.KanunProperties): courses of three strings over a wooden box, FITTED to Baris Bozkurt's isolated notes (Freesound 211133, CC0; examples/pluck_fit.py --voice=kanun, 28 notes): its inharmonicity measured (B 7.9e-5, 13x the koto's -- Ben: 'looser ... like a guitar'), its decay set on the whole note's level curve, its body within ~3 dB 250 Hz-13 kHz. Ben: 'Sounds great now' |
@@ -1152,11 +1153,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 203 | 203 | 100% | 165 | 36 | 2 | 0 | 0 | 0 |
+| SC-55 | 204 | 204 | 100% | 166 | 36 | 2 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 405 | 97% | 278 | 125 | 2 | 0 | 0 | 13 |
-| SC-88Pro | 774 | 423 | 55% | 287 | 134 | 2 | 0 | 0 | 351 (11 another tone) |
-| SC-8850 | 1262 | 421 | 33% | 285 | 134 | 2 | 0 | 0 | 841 (13 another tone) |
+| SC-88 | 418 | 406 | 97% | 279 | 125 | 2 | 0 | 0 | 12 |
+| SC-88Pro | 774 | 424 | 55% | 288 | 134 | 2 | 0 | 0 | 350 (11 another tone) |
+| SC-8850 | 1262 | 422 | 33% | 286 | 134 | 2 | 0 | 0 | 840 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1177,13 +1178,13 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
-| Ethnic | 10/10 | 10/10 | 15/22 | 15/37 | 15/44 |
+| Ethnic | 11/11 | 10/10 | 16/22 | 16/37 | 16/44 |
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
 | Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
 
-### The SC-88 map's 13 still to build, by what they take
+### The SC-88 map's 12 still to build, by what they take
 
-**new** (13: an instrument we have not modelled, wanting references): 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (12: an instrument we have not modelled, wanting references): 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 111.8 Pungi, 111.16 Hichiriki, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's

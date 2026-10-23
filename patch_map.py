@@ -1704,6 +1704,12 @@ VARIATIONS[(112, 10)] = GamelanGongProperties
 VARIATION_NAMES[(112, 10)] = "GamelanGong"
 VARIATION_TRIM_DB[(112, 10)] = PROGRAM_TRIM_DB.get(8, 0.0)
 
+# OUD: the Arabic lute (tonelib.OudProperties, examples/pluck_fit.py --voice=oud)
+from tonelib import OudProperties
+VARIATIONS[(105, 24)] = OudProperties
+VARIATION_NAMES[(105, 24)] = "Oud"
+VARIATION_TRIM_DB[(105, 24)] = PROGRAM_TRIM_DB.get(24, 0.0)
+
 # BARAFON: the balafon, fitted to marini24's (CC BY 4.0; tonelib.BalafonProperties,
 # examples/balafon_fit.py) -- at its capital's level, the marimba's (the
 # celesta's trim, whose gain it starts from, left its short bars 23 dB under)
