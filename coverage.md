@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 171 of the SC-55's 171 are built,
+under a program (SC-55 owner's manual p.68). 172 of the SC-55's 172 are built,
 and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -948,6 +948,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 107.8 | SC-55 | Taisho Koto | `TaishoKoto` | **4** | the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great' |
 | 107.16 | SC-55 | Kanoon | `Kanun` | **4** | the KANUN (tonelib.KanunProperties): courses of three strings over a wooden box, FITTED to Baris Bozkurt's isolated notes (Freesound 211133, CC0; examples/pluck_fit.py --voice=kanun, 28 notes): its inharmonicity measured (B 7.9e-5, 13x the koto's -- Ben: 'looser ... like a guitar'), its decay set on the whole note's level curve, its body within ~3 dB 250 Hz-13 kHz. Ben: 'Sounds great now' |
 | 111.1 | SC-88 | Shanai 2 | `Shanai_sc88_111_1` | **3** | SC-88 map: GM 111 Shanai with sound_bias={'vib_depth': 0.5} |
+| 111.8 | SC-55 | Pungi | `Pungi` | **3** | the snake charmer's pungi, its melody pipe fitted to Nick Mariette's snake charmers in Bhaktapur (Wikimedia Commons, CC BY 2.5; examples/pungi_fit.py): a street, so its 32 held notes A4-D#5 tracked by their harmonics over the crowd -- bright and buzzy, h2-h5 within 4 dB, h4 the strongest, a series table on the shanai's reed (0.0 dB rms h1-h12); the hiss assumed (the hichiriki's: between the harmonics the take is the street). THE DRONE PIPE, a note of the part held under each phrase, its series from the take's drone (0.0 dB h2-h8, 2.4 dB over the melody's h2); THE WHEEL CHOOSES ITS NOTE (Ben), C3-B3 in twelve steps, F3 with none -- files read the first CC1, live follows the wheel. At the shanai's level. Ben: 'Sounds great' |
 | 111.16 | SC-55 | Hichiriki | `Hichiriki` | **4** | gagaku's double reed, fitted to gaijinbuzz's shrine wedding (Freesound 680565, CC0; examples/wind_fit.py --voice=hichiriki), the only open recording found: nine held notes D5-E5 over the sho. The whole series, the fundamental the strongest (a table to h24 over the shanai's reed: 34.2 -> 0.0 dB rms; the hiss 0.5 dB, the shrine's floor under the fundamental left out). THE ENBAI: a phrase's first note lipped up from 230 cents under (the take's 145-290), ~0.15 s in log frequency, no slur repeating it (tension_bend_slurs, new). At the shanai's level. Ben: 'Sounds great' |
 | 112.8 | SC-55 | Bonang | `Bonang` | **4** | the Javanese kettle gongs, fitted to Casa da Musica's bonang barung and panerus (CC BY 3.0; examples/gender_fit.py --bonang): 33 kettles 338-1382 Hz, the kettle's partner at 1.55 (-22 dB), a quiet octave, a broad mode near 3, a 7 s ring with no register law; the mallet's own strike (--mallet: a burst between the modes, 0.6-0.9 kHz, 945 dB/s; 3.9 dB by band over the first 15 ms). Ben: the tone good, 'what it is missing is the sound of the reaction of the mallet itself' -> 'Sounds good now' |
 | 112.9 | SC-55 | Gender | `Gender` | **4** | the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0; examples/gender_fit.py): a free bar 1 : 2.70 : 5.27, the third mode carrying the strike under ~4 kHz (the panggul's roll-off, steep), the fundamental ringing (D 1.87 at 415 Hz), 42 keys; the Balinese pair (26 cents, GangsaPairProperties) taken off against Casa da Musica's Javanese gender, which has none. Ben: 'I hear it less tuned, but not too bright' -> 'Sounds good' |
@@ -1159,11 +1160,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 210 | 210 | 100% | 170 | 38 | 2 | 0 | 0 | 0 |
+| SC-55 | 211 | 211 | 100% | 170 | 39 | 2 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 412 | 99% | 283 | 127 | 2 | 0 | 0 | 6 |
-| SC-88Pro | 774 | 430 | 56% | 292 | 136 | 2 | 0 | 0 | 344 (11 another tone) |
-| SC-8850 | 1262 | 428 | 34% | 290 | 136 | 2 | 0 | 0 | 834 (13 another tone) |
+| SC-88 | 418 | 413 | 99% | 283 | 128 | 2 | 0 | 0 | 5 |
+| SC-88Pro | 774 | 431 | 56% | 292 | 137 | 2 | 0 | 0 | 343 (11 another tone) |
+| SC-8850 | 1262 | 429 | 34% | 290 | 137 | 2 | 0 | 0 | 833 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1184,13 +1185,13 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
-| Ethnic | 16/16 | 10/10 | 21/22 | 21/37 | 21/44 |
+| Ethnic | 17/17 | 10/10 | 22/22 | 22/37 | 22/44 |
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
 | Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
 
-### The SC-88 map's 6 still to build, by what they take
+### The SC-88 map's 5 still to build, by what they take
 
-**new** (6: an instrument we have not modelled, wanting references): 56.8 Flugel Horn, 75.8 Kawala, 111.8 Pungi, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (5: an instrument we have not modelled, wanting references): 56.8 Flugel Horn, 75.8 Kawala, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's
