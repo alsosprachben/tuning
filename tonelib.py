@@ -8671,6 +8671,35 @@ class TrumpetProperties(CylindricalBrassProperties):
     octave_dampening = -0.1
 
 
+class FlugelhornProperties(TrumpetProperties):
+    """GS 56.8, "Flugel Horn": the flugelhorn -- a trumpet player's
+    mouthpiece and lips on a CONICAL, wider bore and a bigger bell, so the
+    trumpet's source with a darker horn around it. Fitted to Chris Cook's
+    "Dusty Flugelhorn" (Pianobook: a Yamaha 6310z, every note E3-A#5 at one
+    soft dynamic; sources.md) by examples/flugel_fit.py: the trumpet's five
+    colour knobs (the bell's cutoff and order, the bore's corner, the
+    source's roll-off and its register law) refitted to the takes' ladders.
+    """
+    # FITTED (flugel_fit.py --fit, h1-h16 over every third note; 21.2 -> 4.7
+    # dB rms over all 31): a lower bell (the bigger flare) and a source rolling
+    # off faster (the cone). THE TAKES ARE SOFT, so ours is read through the
+    # trumpet's own soft law while fitting (56.25 Warm Tp., Iowa's pp against
+    # its mf) and this is the flugelhorn at our mf; fitted plain, the soft
+    # dynamic's darkness had gone into the colour
+    bell_cutoff_hz = 1216.0
+    bell_order = 4.582
+    bore_corner_hz = 4531.0
+    tonal_dampening = 4.019
+    octave_dampening = -0.2451
+    # (THE OTHER READING, one player's flugelhorn against his trumpet on the
+    # same tune -- Wikimedia Commons, flugel_fit.py --fit=commons -- fits its
+    # own difference to 2.2 dB but misses these takes by 12.4, a few dB darker
+    # than a trumpet where this is twice that; Ben, A/B: "the Pianobook one
+    # sounds more properly like a Flugelhorn")
+    # at its capital's level, the trumpet's
+    initial_gain = TrumpetProperties.initial_gain * 10 ** (-0.9 / 20.0)
+
+
 class MutedTrumpetProperties(TrumpetProperties):
     """GM 59: the trumpet in a HARMON mute, stem out -- the Miles Davis sound,
     and what "muted trumpet" means when nobody says which.

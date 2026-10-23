@@ -1731,6 +1731,13 @@ VARIATIONS[(105, 16)] = GopichantProperties
 VARIATION_NAMES[(105, 16)] = "Gopichant"
 VARIATION_TRIM_DB[(105, 16)] = PROGRAM_TRIM_DB.get(105, 0.0)
 
+# FLUGEL HORN: the trumpet's source on a conical bore (tonelib.FlugelhornProperties,
+# examples/flugel_fit.py)
+from tonelib import FlugelhornProperties
+VARIATIONS[(56, 8)] = FlugelhornProperties
+VARIATION_NAMES[(56, 8)] = "Flugel Horn"
+VARIATION_TRIM_DB[(56, 8)] = PROGRAM_TRIM_DB.get(56, 0.0)
+
 # TAMBOURA: the tanpura, fitted to sankalp's drone takes (CC BY 4.0;
 # tonelib.TambouraProperties, examples/tanpura_fit.py)
 from tonelib import TambouraProperties

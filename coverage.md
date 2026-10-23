@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 172 of the SC-55's 172 are built,
+under a program (SC-55 owner's manual p.68). 173 of the SC-55's 173 are built,
 and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -834,6 +834,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 55.16 | SC-55 | Lo Fi Rave | `Sc88_55_16` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with a_attack, a_decay, a_release, a_sustain, cutoff, f_attack, noise_level, osc1_wave, osc2_freq, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 55.19 | SC-88 | Bam Hit | `OrchestraHit_sc88_55_19` | **3** | SC-88 map: layered: GM 55 + set 48's key 36 -20 st +10 dB + GM 61 with one_shot=True, gate_time=0.12 +16 dB |
 | 56.1 | SC-88 | Trumpet 2 | `Trumpet_sc88_56_1` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-0.9, blare_knee_hz=192, blare_cap_db=15.2, exp_vibrato_cents=5.4, solo_vibrato_hz=4.83 |
+| 56.8 | SC-55 | Flugel Horn | `Flugelhorn` | **4** | the flugelhorn: our trumpet's source on a conical bore, its five colour knobs (bell cutoff and order, bore corner, roll-off, register law) refitted to Chris Cook's 'Dusty Flugelhorn' (Pianobook, a Yamaha 6310z, E3-A#5 at one soft dynamic; examples/flugel_fit.py): 21.2 -> 4.7 dB rms over 31 notes, ours read through the trumpet's own soft law while fitting (Warm Tp., Iowa's pp against its mf) so the class is the flugelhorn at mf; its attack the takes' (9-18 ms). A lower bell (1.2 kHz), the cone's faster roll-off. One player's Commons flugelhorn/trumpet pair read a lighter horn (--fit=commons); Ben chose this one by ear. At the trumpet's level. Ben: 'sounds more properly like a Flugelhorn' |
 | 56.24 | SC-88 | Bright Tp. | `Trumpet_sc88_56_24` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
 | 56.25 | SC-88 | Warm Tp. | `Trumpet_sc88_56_25` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-6.6, blare_knee_hz=160, blare_cap_db=34.8 |
 | 57.1 | SC-88 | Trombone 2 | `Trombone_sc88_57_1` | **4** | SC-88 map: GM 57 Trombone with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
@@ -1160,11 +1161,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 211 | 211 | 100% | 170 | 39 | 2 | 0 | 0 | 0 |
+| SC-55 | 212 | 212 | 100% | 171 | 39 | 2 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 413 | 99% | 283 | 128 | 2 | 0 | 0 | 5 |
-| SC-88Pro | 774 | 431 | 56% | 292 | 137 | 2 | 0 | 0 | 343 (11 another tone) |
-| SC-8850 | 1262 | 429 | 34% | 290 | 137 | 2 | 0 | 0 | 833 (13 another tone) |
+| SC-88 | 418 | 414 | 99% | 284 | 128 | 2 | 0 | 0 | 4 |
+| SC-88Pro | 774 | 432 | 56% | 293 | 137 | 2 | 0 | 0 | 342 (11 another tone) |
+| SC-8850 | 1262 | 430 | 34% | 291 | 137 | 2 | 0 | 0 | 832 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1179,7 +1180,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Bass | 10/10 | 12/12 | 31/31 | 33/76 | 33/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 12/29 |
 | Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
-| Brass | 11/11 | 15/15 | 26/27 | 23/51 | 23/84 |
+| Brass | 12/12 | 15/15 | 27/27 | 24/51 | 24/84 |
 | Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
 | Pipe | 9/9 | 8/8 | 8/9 | 12/22 | 12/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
@@ -1189,9 +1190,9 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
 | Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
 
-### The SC-88 map's 5 still to build, by what they take
+### The SC-88 map's 4 still to build, by what they take
 
-**new** (5: an instrument we have not modelled, wanting references): 56.8 Flugel Horn, 75.8 Kawala, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (4: an instrument we have not modelled, wanting references): 75.8 Kawala, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's
