@@ -323,13 +323,28 @@ static long xdec_samples(long ns, long ne, long n0, long bs0, float xr, float fd
 __attribute__((noinline))
 static long xdec_block(int ok, long a, long bs0, long blk, float dL, float dR, float fade,
                        float invf, float invr, long off, float lr,
-                       long ns, long ne, long n0, float aL, float aR,
+                       long cs, long ns, long ne, long n0, float aL, float aR,
                        float zrL, float ziL, float zrR, float ziR, float rr, float ri,
                        float nf, float cbw, float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
                        float* outL, float* outR, float* outSL, float* outSR, float swp){
     xdecs X=xdec_decide(ok, a, bs0, blk, dL, dR, fade, invf, invr, off, lr);
     if(X.xr==0.f || ns>=ne) return ns;
-    return xdec_samples(ns, ne, n0, bs0, X.xr, fade, X.gL, X.gR, X.kL, X.kR, aL, aR,
+    // FROM THE ONSET, NOT FROM ns: a strike's line starts with a step halfway
+    // up its fade (voice_block.inc moves ns there), and drawn from that sample
+    // the burst's own smooth rise began at half its level -- a step under a
+    // millisecond's click, flat to the top of the spectrum (the reed's crackle
+    // 25-30 dB over its table at 6-16 kHz). Its rise is its own here
+    long s0=bs0>cs?bs0:cs, on=a+(long)ceilf(dL<dR?dL:dR);
+    if(on>s0) s0=on;
+    if(s0>ns) s0=ns;
+    if(s0<ns){
+        // the carrier (given at ns) wound back to s0, as the descriptor's is
+        double back=atan2((double)ri,(double)rr)*(double)(ns-s0), c=cos(back), sn=sin(back);
+        float tL=zrL, tR=zrR;
+        zrL=(float)(tL*c+ziL*sn); ziL=(float)(ziL*c-tL*sn);
+        zrR=(float)(tR*c+ziR*sn); ziR=(float)(ziR*c-tR*sn);
+    }
+    return xdec_samples(s0, ne, n0, bs0, X.xr, fade, X.gL, X.gR, X.kL, X.kR, aL, aR,
                         zrL, ziL, zrR, ziR, rr, ri, cbw<0.f, a, nf, cbw,
                         jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
 }
@@ -1140,7 +1155,18 @@ int voice_block(long n0, int BLK, int nblk, int P,
             xdecs X=xdec_decide(!ftr && chBW[p]<0.f && !BLrow && !Grow && sl<=0.f && af<=0.f,
                                 a, bs0, (long)BLK, dL, dR, fadeS[p], invf, invr, off, lr);
             d->xr=X.xr;
-            if(X.xr!=0.f){ d->mL0=X.gL; d->mR0=X.gR; d->mL1=X.kL; d->mR1=X.kR; }
+            if(X.xr!=0.f){ d->mL0=X.gL; d->mR0=X.gR; d->mL1=X.kL; d->mR1=X.kR;
+                // from the onset, not the strike's step (xdec_block): the
+                // carrier wound back to the new start, and the V_SUB anchors
+                // below counted from it
+                long on=a+(long)ceilf(dL<dR?dL:dR), s0=on>bn0?on:bn0;
+                if(s0<ns){
+                    double back=(double)winst*(double)(ns-s0);
+                    phL-=back; phR-=back; ns=s0;
+                    d->zLr=(float)cos(phL); d->zLi=(float)sin(phL);
+                    d->zRr=(float)cos(phR); d->zRi=(float)sin(phR);
+                    d->ns=(int)(ns-bn0);
+                } }
         }
         d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
         d->jfa=jfa; d->cc=cc; d->swp=swp;

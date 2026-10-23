@@ -21364,6 +21364,9 @@ class OpenPipeProperties(StoppedPipeProperties):
     max_harmonic 32 -> 49: h32 is only 4.2 kHz on the bass flute's low C, where
     the recording still carries 24 harmonics clear of its noise floor.
     """
+    # A SLUR: the player never stopped blowing, so the breath takes the
+    # legato attack too (breath_noise_slur), as BreathyTnr.'s does
+    breath_noise_slur = True
     # CC71-78: the flutes: breath has an onset, a release and a vibrato.
     sound_controls = frozenset(('attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
     legato_attack_s = 0.012   # a slurred flute: the embouchure holds, the fingering changes
@@ -22242,6 +22245,9 @@ class ShanaiProperties(ConicalReedProperties):
     seeded from the conical reed this bank has already fitted -- the Highland
     chanter's (BagpipeProperties) -- and fitted from there.
     """
+    # A SLUR: the player never stopped blowing, so the breath takes the
+    # legato attack too (breath_noise_slur), as BreathyTnr.'s does
+    breath_noise_slur = True
     # an Indian instrument: a secondary tuning (ragas.py) tunes it, when set
     tuning_family = 'indian'
     # A shehnai player CAN tongue, so this is a slur they elect -- the clarinet's
@@ -22358,6 +22364,9 @@ class BagpipeProperties(ConicalReedProperties):
     than 440, but the drones are tuned to the chanter rather than to a fork, so
     what matters here is the interval and not the reference.)
     """
+    # A SLUR: the player never stopped blowing, so the breath takes the
+    # legato attack too (breath_noise_slur), as BreathyTnr.'s does
+    breath_noise_slur = True
     # CC71-78: NOTHING: the bag is at the pressure the arm holds, the chanter
     # has no dynamics, and a piper does not vibrate.
     sound_controls = frozenset()
@@ -23220,6 +23229,9 @@ class _VocalBody:
 
 class ChoirAahsProperties(_VocalBody, VocalProperties):
     """GM 52. An open "ah": the first formant high and the tract wide open."""
+    # A SLUR: the singer never stopped singing, so the breath takes the
+    # legato attack too (breath_noise_slur)
+    breath_noise_slur = True
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 1.75 s (2.40, 1.80, 1.70, 1.20), to our smoothstep's -40 dB at the same
@@ -23268,6 +23280,9 @@ class VoiceOohsProperties(_VocalBody, VocalProperties):
     """GM 53. A rounded "oo": lips narrowed, so F1 and F2 drop a long way and
     the vowel goes dark. The single biggest audible difference between vowels
     is F2, and it moves by more than an octave between these two."""
+    # A SLUR: the singer never stopped singing, so the breath takes the
+    # legato attack too (breath_noise_slur)
+    breath_noise_slur = True
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.90 s (0.96, 0.83, 1.02, 0.83), to our smoothstep's -40 dB at the same
