@@ -20356,14 +20356,16 @@ class OudProperties(FormantBody, PluckedStringProperties):
     # to ~13 kHz at its bottom string: the risha's pluck reaches it, and 64 of
     # a 100 Hz note stopped at 6.4
     max_harmonic = 160
-    initial_gain = 0.0411004 / 3 ** 0.5 * (2.0 / (1.0 + 0.55 ** 2)) ** 0.5
+    initial_gain = 0.0411004 / 3 ** 0.5 * (2.0 / (1.0 + 0.50 ** 2)) ** 0.5
     attack_time = 0.002
     # THE COURSE'S SECOND STRING (examples/course_sympathy.py, hammondman's three
     # notes, each harmonic's envelope): beating 4-9 cents apart (median 6) and
-    # 8-12 dB peak to peak, so the partner ~5 dB under the string plucked, not
-    # its equal; each course its own split and sign
+    # 8-12 dB peak to peak, so the partner ~6 dB under the string plucked, not
+    # its equal -- ours at 0.50 reads as the takes do (-6.3 dB median; the
+    # measure reads a shallow beat ~0.3 dB deep, a deep one 1.9); each course
+    # its own split and sign
     course_cents = (4.0, 8.0)
-    course_partner_gain = 0.55
+    course_partner_gain = 0.50
     # ITS OTHER OPEN COURSES ANSWER, KICKED THROUGH THE BRIDGE as the
     # shamisen's are (contact over a fixed set): the Arab tuning, C2 F2 A2 D3
     # G3 C4. Measured, they ring at their OWN harmonics, not where the note's
@@ -25733,13 +25735,14 @@ class MandolinProperties(Plectrum, SteelGuitarProperties):
     which sounds from D3: an old instrument tuned low. Each note's course is a
     pair, a voice on every harmonic 5.5 cents off (its doublets 2-13 cents,
     median ~5.5)."""
-    # THE PARTNER ~5 dB UNDER (examples/course_sympathy.py --voice=mandolin,
-    # each harmonic's beating over the 13 notes: 5.4 cents, -7.2 dB by the
-    # measure, which reads ours at 0.9 1.9 dB deep): 0.9 before, from the
-    # doublets' peaks. The level held where the 0.9 pair put it
-    unison_partner_gain = 0.55
+    # THE PARTNER ~7 dB UNDER (examples/course_sympathy.py --voice=mandolin,
+    # each harmonic's beating over the 13 notes: 5.4 cents, -7.2 dB median,
+    # which ours at 0.45 reads as -- the measure reads a shallow beat ~0.3 dB
+    # deep, a deep one 1.9): 0.9 before, from the doublets' peaks. The level
+    # held where the 0.9 pair put it
+    unison_partner_gain = 0.45
     unison_partner_cents = 5.5
-    initial_gain = SteelGuitarProperties.initial_gain * ((1.0 + 0.9 ** 2) / (1.0 + 0.55 ** 2)) ** 0.5
+    initial_gain = SteelGuitarProperties.initial_gain * ((1.0 + 0.9 ** 2) / (1.0 + 0.45 ** 2)) ** 0.5
     # ITS OTHER OPEN COURSES ANSWER, KICKED THROUGH THE BRIDGE as the oud's
     # are (contact over a fixed set): tuned a fourth low, D3 A3 E4 B4. The
     # D course rings at its own harmonics under 10 of the 13 notes, 29-44 dB
