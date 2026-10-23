@@ -1494,6 +1494,9 @@ class SynthProperties:
     # DRSKit's crashes (examples/crash_fit.py), 2-8 kHz swells 10-15 dB over
     # the strike on a hard hit and stays flat on a soft one. 0 = fixed.
     bloom_gain_slope = 0.0
+    # AND HOW FAST THE LATE COPY FALLS, dB/s: 0 = the partial's own law, so a
+    # swell that stays; a rate makes it a burst in its band (a tanpura's swirl)
+    bloom_decay_dbs = 0.0
     # AND ONLY IN ITS BAND. False gives every partial the late copy at
     # bloom_gain, its DELAY alone shaped by the band -- so a copy big enough to
     # swell the top also raised the bass and the strike, everywhere at once.
@@ -10054,6 +10057,61 @@ class SitarProperties(PromptDecay, FormantBody, PluckedStringProperties):
     sympathetic_gain = 0.12
     sympathetic_max = 13
     sympathetic_floor = 0.005
+
+
+class TambouraProperties(SitarProperties):
+    """GS 104.16, "Tamboura": the tanpura, the drone behind Indian classical
+    music -- four long strings over the sitar's wide curved bridge (the
+    jawari, a cotton thread under each string setting where it grazes it),
+    no frets and no taraf, plucked open with the pad of a finger, one string
+    after another for as long as the music lasts. A key is one string.
+
+    Fitted to sankalp's drone takes (Freesound pack 9571, CC BY 4.0; sources.md;
+    examples/tanpura_fit.py). Nothing in them rings alone: the four strings
+    are re-plucked every 3-3.5 s, each over the others. What separates them
+    is the tuning -- Pa 206 Hz under Sa 275 and a low Sa 138 -- whose partials
+    nest on one comb, but not all of them: Pa's ODD harmonics fall where no
+    Sa string has a partial, and the low Sa's 1st, 5th, 7th, 11th ... (not
+    multiples of 2 or 3) are its alone. Each string, through those, from each
+    of its plucks to the next, averaged over the plucks: the fit's cells.
+    """
+    # NO TARAF: a tanpura's four strings are all played
+    sympathetic_gain = 0.0
+    # NO MEEND: an open string, never pulled
+    bend_detents = False
+    # THE FINGER'S PAD, NOT THE MIZRAB: a broad soft exciter
+    strike_depth = 0.0
+    # FITTED (examples/tanpura_fit.py, take 2: 12.2 -> 9.6 dB rms over 241
+    # cells, the body and these alternated). THE SWIRL: a band ~1.5-4.5 kHz
+    # rises 10-20 dB to a peak 0.3-0.85 s after the pluck and is gone within a
+    # second while the string rings on -- the late copy, falling at its own
+    # bloom_decay_dbs. The low partials fall promptly at first under it. THE
+    # REGISTER SLOPE is not fitted: two pitches 0.58 octave apart ran it to 2.5
+    # (two octaves up 32x faster); their fundamentals' own rates, Pa 9.6 dB/s
+    # and the low Sa 6.0, give 1.16
+    decay_db = 4.66
+    harmonic_decay_db = 0.3763
+    decay_register_slope = 1.16
+    tonal_dampening = 0.7402
+    bloom_gain = 10.6
+    bloom_seconds = 0.2871
+    bloom_center_hz = 4642.0
+    bloom_octaves = 1.125
+    bloom_swell = 0.5985
+    bloom_decay_dbs = 21.08
+    prompt_dbs = 52.53
+    aftersound_share = 0.367
+    prompt_max_hz = 826.1
+    # at its capital's level, the sitar's (the swirl's late copy added 6.8 dB)
+    initial_gain = SitarProperties.initial_gain * 10 ** (-6.8 / 20.0)
+    # ITS COLOUR, by third octave (tanpura_fit.py --body, from flat: the
+    # sitar's gourd is not this one). Bands swing +-10-16 dB: one take, two or
+    # three of a string's own harmonics a band -- its jawari's own peaks
+    formant_floor = 1.0
+    body_trim_db = ((160, -10.4), (202, -10.4), (254, -6.7), (320, -3.1), (403, 0.5), (508, 4.2),
+                    (640, 7.8), (806, 1.2), (1016, -5.6), (1280, 0.9), (1613, 7.5), (2032, -12.1),
+                    (2560, 15.8), (3225, -10.2), (4064, 1.0), (5120, -10.6), (6451, -10.6),
+                    (8127, -10.6), (10240, -10.6), (12902, -10.6))
 
 
 class NylonGuitarProperties(FormantBody, PluckedStringProperties):

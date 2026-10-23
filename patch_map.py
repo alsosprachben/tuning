@@ -1710,6 +1710,13 @@ VARIATIONS[(105, 24)] = OudProperties
 VARIATION_NAMES[(105, 24)] = "Oud"
 VARIATION_TRIM_DB[(105, 24)] = PROGRAM_TRIM_DB.get(24, 0.0)
 
+# TAMBOURA: the tanpura, fitted to sankalp's drone takes (CC BY 4.0;
+# tonelib.TambouraProperties, examples/tanpura_fit.py)
+from tonelib import TambouraProperties
+VARIATIONS[(104, 16)] = TambouraProperties
+VARIATION_NAMES[(104, 16)] = "Tamboura"
+VARIATION_TRIM_DB[(104, 16)] = PROGRAM_TRIM_DB.get(104, 0.0)
+
 # BARAFON: the balafon, fitted to marini24's (CC BY 4.0; tonelib.BalafonProperties,
 # examples/balafon_fit.py) -- at its capital's level, the marimba's (the
 # celesta's trim, whose gain it starts from, left its short bars 23 dB under)

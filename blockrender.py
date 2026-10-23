@@ -6320,9 +6320,20 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         pd = pdelay*(1.0 - sc + 2.0*sc*random.random()) if sc > 0.0 else pdelay
                         bfade = max(1e-4, min(props.bloom_swell*pd/SR, 0.45*dur))*SR
                         _LATE[0] = True
-                        emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, gM*bg, hf, non_m+pd, noff,
-                                     bfade, rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level,
-                                     cvp, cc_r, crl, sjit, csc, gr, cr)
+                        # ...AND FALLS AT ITS OWN RATE where the voice sets one
+                        # (bloom_decay_dbs: a tanpura's jawari swirl is a burst
+                        # in its band, risen and gone within a second while the
+                        # string rings on), as the feedback copy below does
+                        _bdb = getattr(props, 'bloom_decay_dbs', 0.0)
+                        if _bdb > 0.0:
+                            _blr = math.log(T.db_ratio(_bdb))
+                            emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, gM*bg, hf, non_m+pd, noff,
+                                         bfade, rel_r, chiff_r, _blr, _blr, 0.0, 0.0,
+                                         cvp, cc_r, crl, sjit, csc, gr, cr)
+                        else:
+                            emit_partial(2*math.pi*hf/SR, gL*bg, gR*bg, gM*bg, hf, non_m+pd, noff,
+                                         bfade, rel_r, chiff_r, logr, logrA, aftL, rp.sustain_level,
+                                         cvp, cc_r, crl, sjit, csc, gr, cr)
                         _LATE[0] = False
                     # FEEDBACK (tonelib.Feedback: GS 30.8, 31.8): the loop's
                     # partial and its own series, a late copy swelling in at the
