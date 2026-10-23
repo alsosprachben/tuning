@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 169 of the SC-55's 169 are built,
+under a program (SC-55 owner's manual p.68). 170 of the SC-55's 170 are built,
 and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -941,6 +941,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 104.8 | SC-55 | Tambra | `Tambra` | **3** | Roland's other tanpura (one voice to the Tamboura's two; no manual says more, no recording of either tone here): ours is the same tanpura with its jawari SET ANOTHER WAY, fitted to sankalp's take 1 (CC BY 4.0; examples/tanpura_fit.py --take=1 --cls=TambraProperties), whose cells differ from take 2's by 9-13 dB -- the brighter setting, the top over 5 kHz ~13 dB up, the swirl centred at 5.4 kHz and stronger; 10.1 dB rms over 250 cells (4-5 plucks a string). At the sitar's level. Ben: 'Sounds good' |
 | 104.16 | SC-55 | Tamboura | `Tamboura` | **4** | the tanpura, fitted to sankalp's drone takes (Freesound pack 9571, CC BY 4.0; examples/tanpura_fit.py): no string rings alone in them, so each is read through the partials that are its alone -- Pa's odd harmonics, the low Sa's 1st, 5th, 7th, 11th ... -- from each pluck to its next, ~14 plucks a string. The jawari's SWIRL as a burst in its band (bloom_decay_dbs, new): ~1.5-4.5 kHz rising 10-20 dB to a peak 0.3-0.85 s in and falling at 21 dB/s, a fundamental 15-20 dB under it, the decay's register slope from the two strings' own rates (9.6 and 6.0 dB/s); 9.6 dB rms over 241 cells (one take: the two disagree by 9-13 dB, two settings of the thread). The sitar's jawari model without its taraf; at the sitar's level. Ben: 'Sounds great' |
 | 105.1 | SC-88 | Muted Banjo | `Banjo_sc88_105_1` | **4** | SC-88 map: GM 105 Banjo with decay_db=30.0, tonal_dampening=1.2 |
+| 105.8 | SC-55 | Rabab | `Rabab` | **3** | the Afghan rubab on the banjo's drumhead, gut on goatskin, fitted thinly: the only open rubab found is the 2 s solo opening belamalta10's '3 continents' (Freesound 513846, CC0 as uploaded -- GarageBand's loop, so measure only; examples/rabab_fit.py). Its seven notes give the colour (the fundamental weak, h2-h7 15-30 dB over it, the top falling from 2.5 kHz; 0.8 dB rms over 12 bands), the decay (24 dB/s, the banjo's 19) and the STOP: the plectrum damps each string before the next pluck (1.3-4.4 dB in the 20-35 ms before it, then ~100 dB/s; Ben heard it), so the note-off stops it. The sympathetic strings ASSUMED (the oud's contact model, eight on C's natural scale). At the banjo's level. Ben: 'Sounds good' |
 | 105.24 | SC-55 | Oud | `Oud` | **4** | the Arabic oud, fitted to Andy R. Jordan's notes (Commons, CC BY-SA 3.0) and hammondman's (Freesound, CC0; examples/pluck_fit.py --voice=oud): a plain plucked string struck near its end (the risha), the kanun's structure where the nylon guitar was 30-60 dB short up top, its bowl as a third-octave trim (5.6 -> 2.5 dB rms), its decay from hammondman's long notes; its DOUBLE COURSES measured from each harmonic's beating (examples/course_sympathy.py: 4-9 cents, the second string ~6 dB under), and its other open courses KICKED through the bridge (contact, the Arab tuning C2 F2 A2 D3 G3 C4: the A and D courses 26-42 dB under the note, the D ~12 cents sharp, the outer four under -45). Ben: 'Sounds good' |
 | 106.1 | SC-88 | Tsugaru | `Shamisen_sc88_106_1` | **3** | SC-88 map: GM 106 Shamisen with tonal_dampening=0.35, decay_db=3.0 |
 | 107.8 | SC-55 | Taisho Koto | `TaishoKoto` | **4** | the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great' |
@@ -1157,11 +1158,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 208 | 208 | 100% | 169 | 37 | 2 | 0 | 0 | 0 |
+| SC-55 | 209 | 209 | 100% | 169 | 38 | 2 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 410 | 98% | 282 | 126 | 2 | 0 | 0 | 8 |
-| SC-88Pro | 774 | 428 | 55% | 291 | 135 | 2 | 0 | 0 | 346 (11 another tone) |
-| SC-8850 | 1262 | 426 | 34% | 289 | 135 | 2 | 0 | 0 | 836 (13 another tone) |
+| SC-88 | 418 | 411 | 98% | 282 | 127 | 2 | 0 | 0 | 7 |
+| SC-88Pro | 774 | 429 | 55% | 291 | 136 | 2 | 0 | 0 | 345 (11 another tone) |
+| SC-8850 | 1262 | 427 | 34% | 289 | 136 | 2 | 0 | 0 | 835 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1182,13 +1183,13 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
-| Ethnic | 14/14 | 10/10 | 19/22 | 19/37 | 19/44 |
+| Ethnic | 15/15 | 10/10 | 20/22 | 20/37 | 20/44 |
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
 | Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
 
-### The SC-88 map's 8 still to build, by what they take
+### The SC-88 map's 7 still to build, by what they take
 
-**new** (8: an instrument we have not modelled, wanting references): 56.8 Flugel Horn, 75.8 Kawala, 105.8 Rabab, 105.16 Gopichant, 111.8 Pungi, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (7: an instrument we have not modelled, wanting references): 56.8 Flugel Horn, 75.8 Kawala, 105.16 Gopichant, 111.8 Pungi, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's

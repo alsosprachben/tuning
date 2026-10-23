@@ -20279,6 +20279,52 @@ class BanjoProperties(MembraneBodyProperties):
     attack_time = 0.002
 
 
+
+class RababProperties(BanjoProperties):
+    """GS 105.8, "Rabab": the Afghan rubab -- a short neck over a deep
+    mulberry bowl with a GOATSKIN belly, three gut or nylon melody strings
+    plucked with a plectrum, and under them a set of SYMPATHETIC strings no
+    one touches. So the banjo's drumhead with gut on it, and a halo.
+
+    MEASURED THINLY: the only open rubab found is the solo before the drums
+    come in, in belamalta10's "3 continents" (Freesound 513846, CC0 -- a
+    rubab loop from GarageBand's library under a pandeiro; sources.md):
+    seven notes, 232-277 Hz, 0.12-0.4 s each. They give the colour and
+    nothing else (examples/rabab_fit.py): the fundamental weak, h2-h7 15-30
+    dB over it, little over ~3 kHz. Their decay and the sympathy are too
+    short to read; both ASSUMED.
+    """
+    # ITS COLOUR (rabab_fit.py --fit: the seven notes' harmonics by third
+    # octave, 0.8 dB rms over 12 bands): the fundamental's band 15 dB under
+    # the banjo's, a lift at 640 Hz, the top falling from 2.5 kHz -- gut on
+    # skin. (A GarageBand loop: whatever EQ Apple's engineer gave it is in it)
+    body_trim_db = ((160, -15.1), (202, -15.1), (254, -15.1), (320, -15.1), (403, 1.1), (508, 1.1),
+                    (640, 9.9), (806, 2.0), (1016, -4.5), (1280, 6.2), (1613, 3.0), (2032, 7.6),
+                    (2560, -6.8), (3225, -4.7), (4064, -1.4), (5120, 0.2))
+    # THE PLECTRUM STOPS THE STRING BEFORE IT PLUCKS AGAIN (Ben: "is the
+    # plucking finger stopping the current string before re-plucking?"):
+    # in the take each note's own harmonics dip 1.3-4.4 dB in the 20-35 ms
+    # before the next pluck, and where the next is another pitch (277 ->
+    # 262 Hz) keep falling after it, -3 dB at 20 ms and -8 at 50 -- ~100
+    # dB/s, stopped, not ringing on. So the note-off is a stop, not the
+    # banjo's damping hand: 40 dB in ~0.4 s (0.443 R)
+    release_valve_time = 0.18
+    # ...AND IT DECAYS FASTER THAN THE BANJO (Ben): the two longest notes'
+    # h2-h7 fall 23-25 dB/s where ours fell 19
+    decay_db = BanjoProperties.decay_db * 1.3
+    # (at the banjo's level: the faster decay had left it 1 dB under)
+    initial_gain = BanjoProperties.initial_gain * 10 ** (1.0 / 20.0)
+    # GUT, NOT STEEL: the banjo's steel stiffness down to a gut string's
+    inharmonicity_coefficient = 2.0e-05
+    # THE HALO (contact over a fixed set, as the oud's): ASSUMED -- a rubab's
+    # sympathetic strings are tuned to the raga's scale on its tonic; here C,
+    # the natural scale over an octave, at the oud's measured level
+    sympathetic_mode = 'contact'
+    sympathetic_strings = (0, 2, 4, 5, 7, 9, 11, 12)
+    sympathetic_tonic = 60
+    sympathetic_gain = 0.014
+    sympathetic_max = 8
+
 class ShamisenProperties(PromptDecay, MembraneBodyProperties):
     """GM 106. Silk over a skin, struck with a bachi -- and a SAWARI buzz.
 

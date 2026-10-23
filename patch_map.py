@@ -1717,6 +1717,13 @@ VARIATIONS[(12, 24)] = LogDrumProperties
 VARIATION_NAMES[(12, 24)] = "Log Drum"
 VARIATION_TRIM_DB[(12, 24)] = PROGRAM_TRIM_DB.get(12, 0.0)
 
+# RABAB: the Afghan rubab on the banjo's drumhead (tonelib.RababProperties,
+# examples/rabab_fit.py)
+from tonelib import RababProperties
+VARIATIONS[(105, 8)] = RababProperties
+VARIATION_NAMES[(105, 8)] = "Rabab"
+VARIATION_TRIM_DB[(105, 8)] = PROGRAM_TRIM_DB.get(105, 0.0)
+
 # TAMBOURA: the tanpura, fitted to sankalp's drone takes (CC BY 4.0;
 # tonelib.TambouraProperties, examples/tanpura_fit.py)
 from tonelib import TambouraProperties
