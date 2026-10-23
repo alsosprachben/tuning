@@ -1362,6 +1362,11 @@ class SynthProperties:
     # exponentially from the same start (f = f0 (1 + b)^{e^{-t/tau}}) -- quick
     # through the top, lingering near the note (synthkernel.c tbend_integral).
     tension_log = False
+    # ...AND WHETHER A SLURRED NOTE TAKES IT. True: every note (a struck string
+    # is struck each time). False: only a note from silence -- a hichiriki's
+    # enbai, the reed lipped up into the first note of a phrase, which a slur
+    # inside the phrase does not repeat
+    tension_bend_slurs = True
 
     def tension_stroke(self):
         av = self.attack_volume
@@ -22530,6 +22535,60 @@ class ShanaiProperties(ConicalReedProperties):
     # second at velocity 100): the brighter cone had it 10.6 dB over
     initial_gain = 0.000174797 * 10 ** (-10.778 / 20.0)
 
+
+
+class HichirikiProperties(ShanaiProperties):
+    """GS 111.16, "Hichiriki": gagaku's double reed -- a short lacquered
+    bamboo pipe, seven holes and two thumb holes, driven by a reed as wide
+    as the pipe itself, loud and nasal over the sho's chord. Fitted to
+    gaijinbuzz's shrine wedding (Freesound 680565, CC0; sources.md), the
+    only open recording found: 33 s of hichiriki over sho, its held notes
+    470-690 Hz (examples/freesound_slice.py pipes hichiriki; examples/
+    wind_fit.py --voice=hichiriki).
+
+    THE WHOLE SERIES, THE FUNDAMENTAL THE STRONGEST: odd and even harmonics
+    alike (h1-h12 mean -14.5 against -15.4 dB), so a cone's series as the
+    shanai's -- but where the zurna's fundamental is its weakest, the
+    hichiriki's leads, -10 dB by h3-h6, -28 by h9, -45 by h17.
+
+    THE ENBAI: every phrase starts BELOW its note and is lipped up -- 145-290
+    cents under (230 the mean), in about 0.2 s, the pitch rising evenly in
+    log frequency -- and no slur inside the phrase repeats it. The tension
+    bend, from below, on a note from silence only (tension_bend_slurs).
+    """
+    # a Japanese instrument: no raga
+    tuning_family = None
+    # THE ENBAI (the four phrases' starts: -205, -265, -145, -290 cents, each
+    # settled in 0.45-0.85 s, a time constant ~0.15 s in log frequency)
+    tension_bend = 2.0 ** (-230.0 / 1200.0) - 1.0
+    tension_bend_slope = 0.0
+    tension_bend_power = 0.0
+    tension_bend_max = 0.5
+    tension_log = True
+    tension_settle_time = 0.15
+    tension_settle_cutoff = 1.5
+    tension_bend_slurs = False
+    # THE SERIES, MEASURED (wind_fit.py --fit=tables --nh=24, the nine held
+    # notes D5-E5, their median: h2-h24 34.2 -> 0.0 dB rms), as a table: two
+    # pitches a semitone or two apart cannot tell a series from a body, and the
+    # instrument's own compass is little wider. Over the shanai's bore and
+    # formants, which it absorbs
+    mode_gains = (1.00000, 0.12865, 0.09978, 0.20143, 0.11774, 0.15608, 0.06653, 0.08147, 0.04431,
+                  0.03250, 0.04787, 0.14685, 0.60713, 0.31017, 0.20956, 0.25172, 0.26125, 0.22904,
+                  0.38130, 0.60948, 0.47097, 0.43631, 0.32238, 0.68878)
+    # (the table is re its fundamental, where the shanai's series puts its
+    # fundamental ~500x over the gain: the level from there, then at its
+    # capital's, the shanai's -- 9.2 dB more, its energy in the upper series)
+    initial_gain = ShanaiProperties.initial_gain * 498.5 * 10 ** (9.2 / 20.0)
+    # THE REED'S HISS between the harmonics (the same fit, 51.6 -> 0.5 dB over
+    # 18 bands): ~-54 dB re the fundamental at 1-2.5 kHz, falling above 8 kHz.
+    # Under the fundamental (160-404 Hz) the take's floor is the shrine --
+    # voices, footsteps on gravel -- at -41 dB: taken down 15 dB, to the
+    # hiss's own level above it, not copied into the reed
+    breath_noise_db = ((160, -39.5), (202, -36.1), (255, -36.8), (321, -41.0), (404, -38.0), (509, -35.4),
+                       (641, -50.2), (808, -28.2), (1018, -29.6), (1283, -23.5), (1616, -27.0),
+                       (2036, -28.1), (2566, -23.0), (3233, -24.1), (4073, -26.0), (5132, -28.8),
+                       (6465, -28.2), (8146, -30.0), (10263, -41.3), (12931, -43.4))
 
 class BagpipeProperties(ConicalReedProperties):
     """GM 109. A chanter, and the DRONES -- which are the instrument.

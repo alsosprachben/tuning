@@ -69,6 +69,7 @@ VOICES = {
     # shehnai found), its stable notes staged by examples/freesound_slice.py
     # pipes shanai -- G4 and a flat E5, eight notes in all
     "shanai": (111, "ShanaiProperties", "shanai", "*_cdrk_*.wav"),
+    "hichiriki": (111, "HichirikiProperties", "hichiriki", "*_gaijin_*.wav"),
     # GM 20: donyaquick's harmonium, its 32 keys G2-D5 held 7-12 s (CC0),
     # staged by examples/freesound_slice.py harmonium
     "reedorgan": (20, "ReedOrganFreeProperties", "reedorgan", "*_donya_*.wav"),
@@ -109,6 +110,8 @@ VOICE_OPTS = {
                       tonic_cents=10.5),
     # the zurna's notes are short: its E5s hold 0.4 s, its G4s 0.85
     "shanai": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.1, t1=0.38),
+    # the hichiriki's held notes, 2-4 s (the sho under it, steady, between)
+    "hichiriki": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.3, t1=1.8),
     "bagpipe": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.5, t1=3.5,
                     tonic_cents=176.7, cc1=0),
 }

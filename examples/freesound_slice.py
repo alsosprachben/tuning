@@ -173,6 +173,10 @@ PIPES = {
     # GM 111 by proxy: cdrk's Turkish zurna, four shots of a held G4 rising to
     # a short E5 (a little flat of it, 636-658 Hz) -- the same conical shawm
     "shanai": [("zurna/18661__*.flac", "cdrk", 150, 1500, 0.3)],
+    # GS 111.16: gaijinbuzz's hichiriki over sho (CC0), its held notes
+    # 470-690 Hz; tracked 400-800 so the sho's lines (0.87 kHz up) cannot
+    # take it
+    "hichiriki": [("hichiriki_gaijinbuzz/680565__*.mp3", "gaijin", 400, 800, 1.0)],
 }
 
 

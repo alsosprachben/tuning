@@ -5265,6 +5265,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _CBW[0] = getattr(props,'chiff_bandwidth',None) or RAND_GRAN
         _CBW[1] = getattr(props,'chiff_bandwidth_hz',None) or 0.0
         _TB[0] = getattr(props,'tension_bend',0.0) * props.tension_stroke()
+        # ...NOT ON A SLUR where the voice says so (tonelib tension_bend_slurs:
+        # a hichiriki's enbai lips up only the note a phrase starts on)
+        if _slurred and not getattr(props, 'tension_bend_slurs', True):
+            _TB[0] = 0.0
         _TB[1] = getattr(props,'tension_settle_time',0.28) or 0.28
         _TB[2] = getattr(props,'tension_settle_cutoff',1.8)
         # A DRUM MACHINE'S SWEEP (tonelib tension_log): the same start, 1 +

@@ -1724,6 +1724,13 @@ VARIATIONS[(104, 8)] = TambraProperties
 VARIATION_NAMES[(104, 8)] = "Tambra"
 VARIATION_TRIM_DB[(104, 8)] = PROGRAM_TRIM_DB.get(104, 0.0)
 
+# HICHIRIKI: gagaku's double reed, fitted to gaijinbuzz's shrine take (CC0;
+# tonelib.HichirikiProperties, examples/wind_fit.py --voice=hichiriki)
+from tonelib import HichirikiProperties
+VARIATIONS[(111, 16)] = HichirikiProperties
+VARIATION_NAMES[(111, 16)] = "Hichiriki"
+VARIATION_TRIM_DB[(111, 16)] = PROGRAM_TRIM_DB.get(111, 0.0)
+
 # BARAFON: the balafon, fitted to marini24's (CC BY 4.0; tonelib.BalafonProperties,
 # examples/balafon_fit.py) -- at its capital's level, the marimba's (the
 # celesta's trim, whose gain it starts from, left its short bars 23 dB under)
