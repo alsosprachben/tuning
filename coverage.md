@@ -695,7 +695,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 173 of the SC-55's 173 are built,
+under a program (SC-55 owner's manual p.68). 175 of the SC-55's 175 are built,
 and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -862,6 +862,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 73.1 | SC-88 | Flute 2 : | `OpenPipe` | **4** | SC-88 map: GM 73 Flute's voice |
 | 73.3 | SC-88 | Flt Travelso | `OpenPipe_sc88_73_3` | **4** | SC-88 map: GM 73 Flute with tonal_dampening=1.513, bore_corner_hz=104.3, even_harmonic_db=-8.253 |
 | 73.16 | SC-55 | Tron Flute | `OpenPipe_tron` | **3** | the MELLOTRON's flute tape (tonelib.MellotronMixin): our flute under the tape's cut fitted on its violins (the flute notes found were 0.135 s, too short to fit), the capstan's wow in place of a vibrato of its own. Ben: 'Sounds incredible' |
+| 75.8 | SC-55 | Kawala | `Kawala` | **3** | the Egyptian kawala, an EDUCATED GUESS (Ben: 'make educated guesses for the last two'): no kawala under an open licence, so fitted to its end-blown family -- EKVelika's Balkan kaval and aliaref's Turkish ney (both CC0; examples/freesound_slice.py pipes kawala, 22 held notes G#3-E5) -- on the shakuhachi, its series and breath as one table each (wind_fit.py --voice=kawala --fit=tables --nh=16: 0.7 and 0.9 dB rms): the octave over the fundamental (+4 dB), a breath ~30 dB under it. At the pan flute's level. |
 | 80.1 | SC-55 | Square | `Sc88_80_1` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, eg_amount, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.2 | SC-55 | Hollow Mini | `Sc88_80_2` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, osc1_wave, osc2_level, osc2_octave, osc2_wave, resonance, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 80.3 | SC-55 | Mellow FM | `Sc88_80_3` | **3** | SC-88 map: a Moog panel, the SquareLead's with cutoff, mod_amount, mod_dest, osc1_level, osc1_wave, osc2_level, osc2_wave, sub_level changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
@@ -958,6 +959,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 112.10 | SC-55 | GamelanGong | `GamelanGong` | **4** | the gong ageng, fitted to UNT's big gong (CC0; examples/gender_fit.py --gong): 69.3 Hz, the octave pair 2.00/2.08 at -1 dB, the beat 0.61 Hz at 2.2 dB p-p (recorded 1.4-2.4), the felt's onset 0.18 s (0.10-0.16), 3.0 dB/s (2.9-3.1); shorter up the register by the same gamelan's kempli (slope 0.73). Ben: 'Sounds good' |
 | 112.11 | SC-55 | St.Gamelan | `GangsaPair` | **2** | the gamelan in stereo, BY ITS NAME: no recording of Roland's tone and neither GS SoundFont has one (both hold only 112.0), and no GS file here uses it. Composed of fitted voices: the Balinese gangsa as played, a pair 26 cents apart left and right (GangsaPairProperties), and the bonang an octave over it at -6 dB, as the panerus doubles the melody. Ben: 'It sounds good, but I don't know what it is supposed to sound like' |
 | 112.16 | SC-55 | RAMA Cymbal | `CengCeng` | **4** | the Balinese CENG-CENG (tonelib.CengCengProperties): a plate from the crash FITTED to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0; examples/rama_fit.py: multi-strike files rejected, 4.8 dB on the grid), with each strike's chatter of the stand's plates (14-17 sub-hits in 120 ms) as strike_flam bursts at +10 dB by Ben's ear |
+| 113.8 | SC-55 | Atarigane | `Atarigane` | **2** | the festival hand gong, an EDUCATED GUESS (Ben's word): no recording found, so the bonang's MEASURED bronze kettle (its partner at 1.55, octave, mode near 3, mallet burst) with what differs reasoned -- a hard deer-horn mallet (the upper modes 12-18 dB up, a mode near 4.2), a small thick hand-held gong (~1.5 s ring, not 7), the horn's click brighter and quicker. At the agogo's level; examples/atarigane_demo.py plays a festival figure at C6. |
 | 115.8 | SC-55 | Castanets | `Castanets_sfx85` | **4** | set 0's key 85 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: Iowa castanets |
 | 116.8 | SC-55 | Concert BD | `ConcertBassDrum_sfx36` | **4** | set 48's key 36 played from the keyboard (patch_map.melodic_sfx), C4 at its kit pitch, transposed whole -- at C4 its key's spectrum within 0.05-0.33 dB: CONCERT BD 1, FITTED BY TWO LEVELS (examples/orch_fit.py): GeneralUser GS's Orchestra bass drum picks VCSL's "Bass Drum 1" (CC0), and the drum is fitted to its hit -- 73 modes read settled to -45 dB AND early to 3 kHz (a big head's upper modes are gone before a kick's are read), per-octave trims and rates: 10.7 dB. Balanced as GeneralUser's set (examples/elkit_balance.py --kit=48). Ben: sounds good |
 | 117.1 | SC-88 | Real Tom | `TomTom_sfx45` | **4** | SC-88 map: set 0's key 45 from the keyboard |
@@ -1163,11 +1165,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 212 | 212 | 100% | 171 | 39 | 2 | 0 | 0 | 0 |
+| SC-55 | 214 | 214 | 100% | 171 | 40 | 3 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 416 | 100% | 285 | 129 | 2 | 0 | 0 | 2 |
-| SC-88Pro | 774 | 434 | 56% | 294 | 138 | 2 | 0 | 0 | 340 (11 another tone) |
-| SC-8850 | 1262 | 432 | 34% | 292 | 138 | 2 | 0 | 0 | 830 (13 another tone) |
+| SC-88 | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 | 0 |
+| SC-88Pro | 774 | 436 | 56% | 294 | 139 | 3 | 0 | 0 | 338 (11 another tone) |
+| SC-8850 | 1262 | 434 | 34% | 292 | 139 | 3 | 0 | 0 | 828 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1184,17 +1186,15 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
 | Brass | 12/12 | 15/15 | 27/27 | 24/51 | 24/84 |
 | Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
-| Pipe | 9/9 | 8/8 | 8/9 | 12/22 | 12/27 |
+| Pipe | 10/10 | 8/8 | 9/9 | 13/22 | 13/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
 | Ethnic | 17/17 | 10/10 | 22/22 | 22/37 | 22/44 |
-| Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
+| Percussive | 18/18 | 13/13 | 28/28 | 29/47 | 29/95 |
 | Sound Effects | 42/42 | 41/41 | 49/49 | 53/73 | 53/144 |
 
-### The SC-88 map's 2 still to build, by what they take
-
-**new** (2: an instrument we have not modelled, wanting references): 75.8 Kawala, 113.8 Atarigane
+### The SC-88 map's 0 still to build, by what they take
 
 
 ## Effects: the Sound Canvas's

@@ -15857,6 +15857,34 @@ class BonangProperties(ModeDecays, MetalPercussionProperties):
     strike_noise_len_s = 0.1
 
 
+
+class AtariganeProperties(BonangProperties):
+    """GS 113.8, "Atarigane": the small hand gong of Japanese festival and
+    folk music (matsuri bayashi) -- a thick, shallow bronze bowl ~12 cm
+    across, held in the hand or hung, struck on its INSIDE with a deer-horn
+    mallet (the shumoku): a bright, hard "chan", often damped short by the
+    holding hand.
+
+    AN EDUCATED GUESS (Ben: "make educated guesses for the last two"): no
+    recording of one under an open licence was found (sources.md). So the
+    nearest MEASURED bronze -- the bonang's kettle (its partner mode at 1.55,
+    an octave, a mode near 3, its mallet's burst) -- with what is different
+    about this one reasoned, not measured:
+      * A HARD MALLET (horn, where the bonang's sticks are padded) reaches the
+        upper modes: the partner -10 dB (the bonang's -22), the octave -18
+        (-36), the mode near 3 -14 (-31), and a mode near 4.2 at -16;
+      * A SMALL THICK GONG, HAND-HELD: a ring of ~1.5 s, not seven -- the
+        modes four times faster;
+      * the horn on bronze a CLICK: the bonang's mallet burst brighter (+10 dB
+        over 2 kHz) and quicker (2000 dB/s).
+    """
+    mode_ratios = (1.0, 1.55, 1.999, 3.008, 4.21)
+    mode_gains = (1.0, 0.316, 0.126, 0.2, 0.158)
+    mode_decays = (16.6, 27.5, 50.4, 157.4, 220.0)
+    max_harmonic = 5
+    strike_noise_db = tuple((hz, db + (10.0 if hz > 2000 else 0.0)) for hz, db in BonangProperties.strike_noise_db)
+    strike_noise_dbs = 2000.0
+
 class CuicaProperties(SynthProperties):
     """GM 78/79. A FRICTION drum -- the only one in the set, and it was a
     struck membrane, which is the wrong mechanism rather than the wrong size.
@@ -22513,6 +22541,37 @@ class ShakuhachiProperties(OpenPipeProperties):
     # HELD at its level before the fit (-44.93 dB, the mean of A3-C5's first
     # second at velocity 100), again after the flutter and the tables' refit
     initial_gain = 6.68141e-05 * 10 ** (57.931 / 20.0)
+
+
+
+class KawalaProperties(ShakuhachiProperties):
+    """GS 75.8, "Kawala": the Egyptian kawala -- an end-blown cane flute, open
+    at both ends, its sharpened rim blown across at an angle, six holes and a
+    breathy, plaintive voice. AN EDUCATED GUESS (Ben: "make educated guesses
+    for the last two"): no kawala under an open licence was found, so it is
+    fitted to its family -- EKVelika's Balkan kaval and aliaref's Turkish ney
+    (both end-blown rim flutes, CC0; sources.md) -- on the shakuhachi, our
+    end-blown flute: its series and its breath as tables (examples/wind_fit.py
+    --voice=kawala --fit=tables), 22 held notes G#3-E5."""
+    # ONE REGISTER: the shakuhachi's split (two tables blended 311-392 Hz) sat
+    # on the kaval's notes, and fitting one table under the other's blend ran
+    # away; one series table and one breath for the whole of it
+    mode_gains_low = None
+    breath_noise_low_db = ()
+    # FITTED (wind_fit.py --voice=kawala --fit=tables --nh=16, all 22 notes:
+    # series 29.9 -> 0.7 dB rms h2-h16, breath 19.3 -> 0.9 dB over 20 bands):
+    # the octave over the fundamental (h2 +4 dB) and a breath ~30 dB under it
+    # through the middle -- brighter and breathier than the shakuhachi
+    # at its capital's level, the pan flute's
+    initial_gain = ShakuhachiProperties.initial_gain * 10 ** (-3.9 / 20.0)
+    max_harmonic = 16
+    mode_gains = (1.00000, 1.58034, 0.05637, 0.12543, 0.02358, 0.03000, 0.00430, 0.00814, 0.00138, 0.00520,
+                  0.00056, 0.00751, 0.00120, 0.00058, 0.00046, 0.00074)
+    breath_noise_db = ((160, -47.4), (202, -50.0), (255, -40.2), (321, -58.2), (404, -50.3), (509, -34.3),
+                       (641, -32.9), (808, -34.4), (1018, -28.5), (1283, -32.3), (1616, -31.2), (2036, -31.1),
+                       (2566, -29.6), (3233, -30.4), (4073, -26.2), (5132, -30.6), (6465, -32.5), (8146, -43.5),
+                       (10263, -55.5), (12931, -57.0))
+
 
 
 class WhistleProperties(VesselFluteProperties):

@@ -181,6 +181,11 @@ PIPES = {
     # CC BY 2.5), a street: the melody pipe ~460-700 Hz over a 174 Hz drone
     # and a crowd under 700 Hz
     "pungi": [("../commons/pungi/*.ogg", "bk", 430, 800, 0.25)],
+    # GS 75.8 Kawala, by its family: no Egyptian kawala under an open licence,
+    # so its end-blown cousins (both CC0) -- EKVelika's Balkan kaval solo and
+    # aliaref's Turkish ney
+    "kawala": [("kawala/325111__*.wav", "kaval", 180, 1500, 0.25),
+               ("kawala/580759__*.wav", "ney", 180, 1500, 0.25)],
 }
 
 

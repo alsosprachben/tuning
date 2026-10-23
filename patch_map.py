@@ -1739,6 +1739,20 @@ VARIATIONS[(56, 8)] = FlugelhornProperties
 VARIATION_NAMES[(56, 8)] = "Flugel Horn"
 VARIATION_TRIM_DB[(56, 8)] = PROGRAM_TRIM_DB.get(56, 0.0)
 
+# KAWALA: an end-blown cane flute, fitted to its family (the kaval, the ney;
+# tonelib.KawalaProperties, examples/wind_fit.py --voice=kawala)
+from tonelib import KawalaProperties
+VARIATIONS[(75, 8)] = KawalaProperties
+VARIATION_NAMES[(75, 8)] = "Kawala"
+VARIATION_TRIM_DB[(75, 8)] = PROGRAM_TRIM_DB.get(75, 0.0)
+
+# ATARIGANE: the festival hand gong, an educated guess on the bonang's measured
+# bronze (tonelib.AtariganeProperties)
+from tonelib import AtariganeProperties
+VARIATIONS[(113, 8)] = AtariganeProperties
+VARIATION_NAMES[(113, 8)] = "Atarigane"
+VARIATION_TRIM_DB[(113, 8)] = PROGRAM_TRIM_DB.get(113, 0.0)
+
 # TAMBOURA: the tanpura, fitted to sankalp's drone takes (CC BY 4.0;
 # tonelib.TambouraProperties, examples/tanpura_fit.py)
 from tonelib import TambouraProperties

@@ -71,6 +71,7 @@ VOICES = {
     "shanai": (111, "ShanaiProperties", "shanai", "*_cdrk_*.wav"),
     "hichiriki": (111, "HichirikiProperties", "hichiriki", "*_gaijin_*.wav"),
     "pungi": (111, "PungiProperties", "pungi", "*_bk_*.wav"),
+    "kawala": (75, "KawalaProperties", "kawala", "*.wav"),
     # GM 20: donyaquick's harmonium, its 32 keys G2-D5 held 7-12 s (CC0),
     # staged by examples/freesound_slice.py harmonium
     "reedorgan": (20, "ReedOrganFreeProperties", "reedorgan", "*_donya_*.wav"),
@@ -90,6 +91,8 @@ VOICE_OPTS = {
     "panflute": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.15, t1=0.6),
     "bottle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.4, t1=1.9),
     "shakuhachi": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.15, t1=0.7),
+    # the kaval's and the ney's held notes, 0.25 s and more: read early
+    "kawala": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.05, t1=0.25),
     "whistle": dict(refs="~/Documents/refs/freesound/staged", octave=0, t0=0.08, t1=0.25),
     # THE CHANTER IS AT ITS OWN PITCH: Low A 487.27 Hz, 176.7 cents over A=440.
     # Its files are named by the note that plays each degree, and ours are
