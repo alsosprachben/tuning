@@ -22771,6 +22771,77 @@ class HichirikiProperties(ShanaiProperties):
                        (2036, -28.1), (2566, -23.0), (3233, -24.1), (4073, -26.0), (5132, -28.8),
                        (6465, -28.2), (8146, -30.0), (10263, -41.3), (12931, -43.4))
 
+
+class PungiProperties(ShanaiProperties):
+    """GS 111.8, "Pungi": the snake charmer's pungi or been -- a gourd wind
+    chest feeding two cane pipes, each with a single reed cut into its own
+    wall, one fingered for the melody and one holding the drone, the player's
+    breath circular and unbroken. Fitted to the melody pipe of Nick Mariette's
+    snake charmers in Bhaktapur (Wikimedia Commons, CC BY 2.5; sources.md;
+    examples/pungi_fit.py), a street: its 32 held notes A4-D#5, 0.25-0.56 s
+    each, read through the harmonics over the crowd (h2-h12; the
+    fundamental under it, so less sure).
+
+    BRIGHT AND BUZZY, THE WHOLE SERIES: h2-h5 within 4 dB of each other, h4
+    the strongest, falling to ~-12 by h7-h9 and steeply from h10 (~5 kHz).
+    THE DRONE PIPE, UNDER THE WHOLE PART: a note of the PART, not of the note,
+    as the bagpipe's drones are -- held under each phrase the channel plays,
+    from its first note-on to its last note-off (blockrender, drone_classes;
+    live, Live._drone_note, which holds it through a rest of part_break_s).
+    THE WHEEL CHOOSES ITS NOTE (Ben: "make the mod wheel select which drone
+    note"): CC1 in twelve even steps, C3 to B3 -- a pungi's drone pipe is cut
+    to the tonic of what it plays. With no CC1, F3, where the take's sounds
+    (173.6 Hz, a twelfth under the melody's C5). A file reads its first CC1;
+    live follows the wheel, the drone moved to the new note as it turns. The
+    wheel is the drone's, so not a vibrato.
+    """
+    wheel_vibrato = False
+    drone_note_wheel = True
+    drone_note_choices = tuple(range(48, 60))
+    drone_note_default = 53
+    # the drone's own templates in live: its class on a bank of its own
+    drone_note_variation = 9
+    # THE REED'S HISS, ASSUMED: between the harmonics the take is the street,
+    # and the shanai's table (the zurna's, up to +22 dB at 4-6 kHz) buried the
+    # pungi's top -- the series fit could not move h7-h12 at all. The
+    # hichiriki's measured reed instead, a far quieter hiss
+    breath_noise_db = HichirikiProperties.breath_noise_db
+    # THE SERIES, MEASURED (pungi_fit.py --fit: the 32 notes' median ladder,
+    # h1-h12, through the renderer -- the shanai's bore and formants under it
+    # -- 0.0 dB rms; past h12 continued at the fall's slope), as the
+    # hichiriki's: a table, re its fundamental
+    mode_gains = (1.0, 0.63357, 0.2334, 2.24019, 1.33744, 0.47999, 0.30048, 0.42374, 0.34911, 0.05811,
+                  0.071, 0.11344, 0.07157, 0.05066, 0.03586, 0.02541)
+    # (the table is re its fundamental, as the hichiriki's: ~500x the gain,
+    # then at its capital's level, the shanai's)
+    initial_gain = ShanaiProperties.initial_gain * 498.5 * 10 ** (4.9 / 20.0)
+
+
+class PungiDroneProperties(PungiProperties):
+    """The pungi's DRONE PIPE: the same cane and reed, unfingered, under the
+    melody as a note of the part (PungiProperties.drone_classes). Its series
+    from the take's long-term spectrum (173.6 Hz over all 3 minutes, h1-h8
+    standing 2-9 dB over the street; examples/pungi_fit.py --drone): DARKER
+    than the melody pipe, its fundamental the strongest, h2-h3 9 dB under,
+    h4-h8 13-19 under; past h8 the melody's harmonics land on its own, so the
+    fall continued."""
+    registerable = False
+    # the drone itself has no drone (its patch would build its own, forever)
+    drone_note_wheel = False
+    drone_classes = ()
+    touch_sensitive = False
+    pitch_bendable = False
+    # 2.4 dB over the melody's h2 in the take (its fundamental, the 32 notes'
+    # median); 6.4 at the melody's gain, 4.0 at 4 dB under
+    initial_gain = PungiProperties.initial_gain * 10 ** (-5.6 / 20.0)
+    # (pungi_fit.py --drone: through the renderer, 11.0 -> 0.0 dB rms h2-h8)
+    mode_gains = (1.0, 0.28436, 0.20983, 0.08601, 0.06733, 0.04994, 0.03853, 0.01391, 0.00783, 0.00554,
+                  0.00392, 0.00278)
+
+
+# the drone a pungi part sounds (its note the wheel's: drone_note_choices)
+PungiProperties.drone_classes = ((53, PungiDroneProperties),)
+
 class BagpipeProperties(ConicalReedProperties):
     """GM 109. A chanter, and the DRONES -- which are the instrument.
 

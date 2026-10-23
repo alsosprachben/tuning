@@ -1745,6 +1745,17 @@ VARIATIONS[(104, 8)] = TambraProperties
 VARIATION_NAMES[(104, 8)] = "Tambra"
 VARIATION_TRIM_DB[(104, 8)] = PROGRAM_TRIM_DB.get(104, 0.0)
 
+# PUNGI: the snake charmer's pipe, fitted to a Bhaktapur street (CC BY 2.5;
+# tonelib.PungiProperties, examples/pungi_fit.py)
+from tonelib import PungiProperties
+VARIATIONS[(111, 8)] = PungiProperties
+VARIATION_NAMES[(111, 8)] = "Pungi"
+VARIATION_TRIM_DB[(111, 8)] = PROGRAM_TRIM_DB.get(111, 0.0)
+# ...and its drone pipe, alone on a bank of its own (live builds the drone's
+# templates there, as the taishogoto's drone string; 111.9 is no SC-88 tone)
+from tonelib import PungiDroneProperties
+VARIATIONS[(111, 9)] = PungiDroneProperties
+
 # HICHIRIKI: gagaku's double reed, fitted to gaijinbuzz's shrine take (CC0;
 # tonelib.HichirikiProperties, examples/wind_fit.py --voice=hichiriki)
 from tonelib import HichirikiProperties

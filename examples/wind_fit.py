@@ -70,6 +70,7 @@ VOICES = {
     # pipes shanai -- G4 and a flat E5, eight notes in all
     "shanai": (111, "ShanaiProperties", "shanai", "*_cdrk_*.wav"),
     "hichiriki": (111, "HichirikiProperties", "hichiriki", "*_gaijin_*.wav"),
+    "pungi": (111, "PungiProperties", "pungi", "*_bk_*.wav"),
     # GM 20: donyaquick's harmonium, its 32 keys G2-D5 held 7-12 s (CC0),
     # staged by examples/freesound_slice.py harmonium
     "reedorgan": (20, "ReedOrganFreeProperties", "reedorgan", "*_donya_*.wav"),

@@ -2845,6 +2845,18 @@ class Patch:
         self.drone_strike = ((int(pc.drone_strike_note), float(pc.drone_strike_db),
                               int(pc.drone_strike_variation)) if self.drone_stops else None)
         self.drone_patch = None
+        # THE PUNGI'S DRONE NOTE ON THE WHEEL (tonelib.PungiProperties): one
+        # drone, its note chosen from drone_note_choices in even steps of the
+        # wheel, voiced by its own class (its own bank, warmed beside this
+        # patch for the choices' range)
+        self.drone_note_wheel = (not drums) and bool(getattr(pc, "drone_note_wheel", False))
+        self.drone_note_choices = (tuple(getattr(pc, "drone_note_choices", ()))
+                                   if self.drone_note_wheel else ())
+        self.drone_note_default = (int(getattr(pc, "drone_note_default", 0))
+                                   if self.drone_note_wheel else 0)
+        self.drone_note_var = (int(getattr(pc, "drone_note_variation", 0))
+                               if self.drone_note_wheel else 0)
+        self.drone_note_patch = None
         self.scale_tonic_note = getattr(pc, "scale_tonic_note", None) if pc else None
         self.part_break_s = float(getattr(pc, "part_break_s", 2.0)) if pc else 2.0
         self.detune_wheel = (not drums) and bool(getattr(pc, "detune_wheel", False))
@@ -3019,6 +3031,12 @@ class Patch:
             # line would stack them a set at a time. Live sounds the drones as
             # their own held voices instead; this template is the chanter.
             fast = 0
+        if self.drone_note_wheel:
+            # THE PUNGI'S DRONE IS LIVE'S OWN VOICE (_drone_note), so the
+            # template is the melody pipe alone: blockrender reads this marker
+            # and inserts no part drone (B.NO_PART_DRONES). CC1 cannot cork it,
+            # as the bagpipe's does -- on a pungi the wheel chooses the note
+            tr.append(mido.MetaMessage("marker", text=B.NO_PART_DRONES, time=0))
         if fast is not None:
             # CC1 is the half-moon switch on a tonewheel voice; blockrender
             # reads it through leslie.zone() and gives every partial the
@@ -3338,6 +3356,10 @@ class Patch:
             _dp = Patch(self.program, False, self.tuner, _dv)
             _dp.range = (_dn, _dn)
             self.drone_patch = _dp.warm()
+        if self.drone_note_wheel and self.drone_note_patch is None:
+            _np = Patch(self.program, False, self.tuner, self.drone_note_var)
+            _np.range = (min(self.drone_note_choices), max(self.drone_note_choices))
+            self.drone_note_patch = _np.warm()
         lo, hi = self.range
         done = 0
         total = (hi - lo + 1) * self.nbuckets * len(self.speeds)
@@ -3893,6 +3915,8 @@ class Live:
         self.drone_stop = {}    # pid -> the taishogoto's drone stop (Patch.drone_stops)
         self.drone_turn = {}    # pid -> which of two keys its last drone stroke is on
         self.drone_quiet = {}   # pid -> the sample the chanter went silent at
+        self.drone_sel = {}     # pid -> the pungi's drone note step (Patch.drone_note_choices)
+        self.drone_at = {}      # pid -> the note its drone is sounding
         self.held_tmpl = {}     # (pid, ch, note) -> (template, scale): its key-up event
         # TUNING_CLIPLOG: a loud block's rows, named (_clip_snap, _clip_write)
         self._clip_at = -(1 << 62)
@@ -4694,6 +4718,15 @@ class Live:
                 clavs = [p for p in here if 'tone' in roles[p.pid]]
                 detuners = [p for p in here if 'detune' in roles[p.pid]]
                 dronists = [p for p in here if 'drones' in roles[p.pid]]
+                for p in [p for p in here if 'drone note' in roles[p.pid]]:
+                    # even steps over the choices, as blockrender reads a
+                    # file's first CC1 -- live, the drone moved as it turns
+                    _ns = len(p.patch.drone_note_choices)
+                    _st = min(_ns - 1, msg.value * _ns // 128)
+                    if self.drone_sel.get(p.pid) != _st:
+                        self.drone_sel[p.pid] = _st
+                        if self._chanting(p, ch):
+                            self._drone_note(p, ch, n0)
                 for p in [p for p in here if 'drone stop' in roles[p.pid]]:
                     # even shares of the wheel, as blockrender reads a file's
                     # first CC1 -- live under the wheel, as the bagpipe's corks
@@ -5358,6 +5391,9 @@ class Live:
         if part.patch.drone_wheel:
             self.drone_quiet.pop(part.pid, None)
             self._drones(part, ch, n0)
+        elif part.patch.drone_note_wheel:
+            self.drone_quiet.pop(part.pid, None)
+            self._drone_note(part, ch, n0)
         if self.chorus.get(ch, 0.0) > _CHR.FLOOR:
             self._chorus(part, ch, note, vel, key, slots, n0)
         # THE CHANNEL'S TUNING IS PER PITCH CLASS, so it multiplies the
@@ -6848,6 +6884,7 @@ class Live:
                      'tremolo': 'tremolo depth', 'tone': 'tone rockers',
                      'detune': 'detuning', 'drones': 'drones (0: the chanter alone)',
                      'drone stop': 'the drone (up: struck)',
+                     'drone note': "the drone's note (C3 to B3)",
                      'vibrato': 'vibrato', 'swell': 'swell pedal',
                      'crank': 'crank: the upper disc turned (at the top the 12-row fundamental cancels)'}
 
@@ -6895,6 +6932,8 @@ class Live:
             r.append('drones')
         if pt.drone_stops:
             r.append('drone stop')
+        if pt.drone_note_wheel:
+            r.append('drone note')
         # AND WHERE THE INSTRUMENT CANNOT BEND AFTER ITS ATTACK -- a hammer,
         # a mallet, a stick, a noise (tonelib Synth.wheel_vibrato) -- NOTHING:
         # the vibrato default had given a piano, a glockenspiel and a gunshot
@@ -7333,6 +7372,37 @@ class Live:
             elif i >= want and on:
                 self.slab.release(key, n0)
 
+    def _drone_note(self, part, ch, n0):
+        """The pungi's drone (Patch.drone_note_wheel): one note of the part,
+        sounding the wheel's choice. Stamped once and held across the line, as
+        the bagpipe's drones; if the wheel has moved to another note, the old
+        one is let go and the new one stamped on the other of two keys, so its
+        release is not cut by the stamp. _drone_reap lets it down after
+        part_break_s of silence."""
+        dp = part.patch.drone_note_patch
+        if dp is None:
+            return
+        chs = part.patch.drone_note_choices
+        st = self.drone_sel.get(part.pid)
+        note = chs[st] if st is not None else part.patch.drone_note_default
+        k = self.drone_at.get((part.pid, 'k'), -200)
+        cur = (part.pid, ch, k, self.DRONE_SLOT)
+        if cur in self.slab.live:
+            if self.drone_at.get(part.pid) == note:
+                return
+            self.slab.release(cur, n0)
+            k = -401 - k                      # -200 <-> -201
+        tmpl = dp.get(note, 100, dp.leslie_default)
+        if tmpl is None:
+            self.misses += 1
+            return
+        if not self.slab.stamp(tmpl, (part.pid, ch, k, self.DRONE_SLOT), n0,
+                               part.gain() * self._chan_gain(ch)):
+            self.dropped += 1
+            return
+        self.drone_at[part.pid] = note
+        self.drone_at[(part.pid, 'k')] = k
+
     def _drone_strike(self, part, ch, vel, n0):
         """The taishogoto's open drone string struck with this stroke (its
         last stop): one string, so the last stroke on it is let go as this one
@@ -7401,7 +7471,7 @@ class Live:
             _sst["drive_end"] = max(n0, self.tex_on.pop((part.pid, ch, note), n0))
             self.tex_gen.pop((part.pid, ch, note), None)
             return
-        if part.patch.drone_wheel:
+        if part.patch.drone_wheel or part.patch.drone_note_wheel:
             # Arm the hold rather than release: this key may be the middle of a
             # phrase. _drone_reap decides, part_break_s later.
             self.slab.release((part.pid, ch, note, None), n0)
@@ -8551,7 +8621,8 @@ class Live:
         # does not wait on MIDI)
         self.messenger_sync(part)
         for d in (self.drive_step, self.trem_depth, self.clav_step,
-                  self.detune_step, self.drone_count, self.drone_quiet):
+                  self.detune_step, self.drone_count, self.drone_quiet,
+                  self.drone_sel, self.drone_at):
             d.pop(part.pid, None)
         self.amp_dirty.discard(part.pid)
         self._amp_touch(part)
@@ -15083,6 +15154,45 @@ def selftest(only=""):
           "  (3 drones at note-off, 3 still at 0.5 s, none at %.0f s)"
           % _bpb.part_break_s)
     lvbp.renderer.close()
+    # THE PUNGI'S WHEEL CHOOSES ITS DRONE'S NOTE (tonelib.PungiProperties):
+    # one drone under the line, F3 with no CC1, moved as the wheel turns
+    # (C3 at the bottom, B3 at the top), on the other of two keys so the old
+    # note's release is not cut -- and let down after the rest, as the bag
+    lvpg = Live(program=111, rate=48000, frames=128, verbose=False)
+    lvpg.set_parts([Part(patch_for(111, False, "hybrid", variation=8))])
+    _pgp = lvpg.parts[0]
+
+    def _pg_drones():
+        return sorted(k[2] for k in lvpg.slab.live if k[3] == lvpg.DRONE_SLOT)
+    lvpg.on_midi(mido.Message("note_on", channel=0, note=72, velocity=100))
+    lvpg.apply(0)
+    _pg = [(_pg_drones(), lvpg.drone_at.get(_pgp.pid))]
+    for _i, _v in enumerate((0, 127)):
+        lvpg.on_midi(mido.Message("control_change", channel=0, control=1, value=_v))
+        lvpg.apply(4800 * (_i + 1))
+        _pg.append((_pg_drones(), lvpg.drone_at.get(_pgp.pid)))
+    lvpg.on_midi(mido.Message("note_off", channel=0, note=72, velocity=0))
+    lvpg.apply(14400)
+    lvpg._drone_reap(14400 + int(3.0 * lvpg.rate))
+    lvpg.slab.reap(14400 + int(7.0 * lvpg.rate))
+    _pg.append((_pg_drones(), None))
+    # ...AND ITS NOTE TEMPLATES ARE THE MELODY PIPE ALONE: a one-note
+    # template is its own phrase, and blockrender had baked the part's drone
+    # into every note, under live's -- two drones (Ben). B.NO_PART_DRONES
+    _pgt = _pgp.patch.get(72, 100, _pgp.patch.leslie_default)
+    _pgnf = np.asarray(_pgt["nf"])[:_pgt["P"]]
+    _pgF = _pgp.patch.freqs()
+    _pgd = sorted({_k for _x in _pgnf for _k in range(48, 60)
+                   if abs(_x - _pgF[_k]) < 1.5 or abs(_x - 2 * _pgF[_k]) < 1.5})
+    check("...and its note's template carries no drone of its own",
+          not _pgd, "  (a C5 template: no partial on a drone note C3-B3 or its octave)"
+          if not _pgd else "  (drone partials at keys %s)" % _pgd)
+    check("the pungi's wheel chooses its drone's note, live as offline",
+          lvpg.wheel_roles(_pgp) == ['drone note']
+          and [n for _, n in _pg[:3]] == [53, 48, 59]
+          and all(len(d) == 1 for d, _ in _pg[:3]) and _pg[3][0] == [],
+          "  (notes %s, one drone each, none after the rest)" % [n for _, n in _pg[:3]])
+    lvpg.renderer.close()
     # A CONE PASSES THE WHOLE SERIES. The shanai had been on the bagpipe's
     # class, which is ReedOrganProperties underneath and suppresses the evens.
     _sh = _eth[111](261.63, 0.0, 1.0, 1.0)

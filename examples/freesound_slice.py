@@ -177,6 +177,10 @@ PIPES = {
     # 470-690 Hz; tracked 400-800 so the sho's lines (0.87 kHz up) cannot
     # take it
     "hichiriki": [("hichiriki_gaijinbuzz/680565__*.mp3", "gaijin", 400, 800, 1.0)],
+    # GS 111.8: Nick Mariette's snake charmers in Bhaktapur (Wikimedia Commons,
+    # CC BY 2.5), a street: the melody pipe ~460-700 Hz over a 174 Hz drone
+    # and a crowd under 700 Hz
+    "pungi": [("../commons/pungi/*.ogg", "bk", 430, 800, 0.25)],
 }
 
 

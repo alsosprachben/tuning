@@ -981,6 +981,23 @@ def parse(path):
 _MPE_NOT_FANNED = frozenset((0, 6, 32, 38, 74, 96, 97, 98, 99, 100, 101, 126, 127))
 
 
+# LIVE'S TEMPLATES CARRY NO PART DRONE: a one-note template is its own whole
+# phrase, so a note-wheel drone (the pungi's) would be baked into every note,
+# under live's own wheel-chosen one -- two drones (Ben: "another G drone plays
+# as a hold down a key"). live marks its template files with this marker; the
+# bagpipe's are corked by its own CC1 = 0 instead, as before
+NO_PART_DRONES = "tuning:no-part-drones"
+
+
+def _no_part_drones(path):
+    """Does the file say its part drones are someone else's (live's)?"""
+    try:
+        mid = _open_midi(path)
+        return any(m.type == 'marker' and getattr(m, 'text', '') == NO_PART_DRONES for m in mid)
+    except Exception:
+        return False
+
+
 def _open_midi(path):
     """A path, a mido.MidiFile, or a MIDI 2.0 file (Clip File or raw UMP),
     which ump.UmpMidi presents in mido's shape -- see ump.py."""
@@ -3920,14 +3937,38 @@ def _prepare(path, tuner='hybrid440', sink=None):
         for _p in {_e[6] for _e in notes if _e[0] == _c}:
             if getattr(property_class_for_program(_p), 'drone_classes', None):
                 _bpc = property_class_for_program(_p)
+        # ...OR A VARIATION'S (the pungi, 111.8: the program's class is the
+        # shanai's), where the program's own has none
+        # (one look a program: a melodic variation's class is the same at
+        # every key)
+        if _bpc is None:
+            for _p, _k in {_e[6]: _e[1] for _e in notes if _e[0] == _c}.items():
+                if not is_drum(_p):
+                    _vc = property_class_for_note(_p, _k)
+                    if getattr(_vc, 'drone_classes', None):
+                        _bpc = _vc
+                        break
         if _bpc is None or is_drum(next(_e[6] for _e in notes if _e[0] == _c)):
             continue
         _c1 = [v for t, cc, v in in_order(ccs.get(_c, [])) if cc == 1]
-        _nd = int(round(_c1[0] / 127.0 * 3.0)) if _c1 else len(_bpc.drone_classes)
+        if getattr(_bpc, 'drone_note_wheel', False):
+            if _no_part_drones(path):
+                continue          # live's template: live sounds the drone itself
+            # THE WHEEL CHOOSES THE DRONE'S NOTE (a pungi): even steps over its
+            # choices, its default with no CC1 -- one drone, never corked
+            _chs = _bpc.drone_note_choices
+            _dsel = (_chs[min(len(_chs) - 1, int(_c1[0]) * len(_chs) // 128)] if _c1
+                     else int(_bpc.drone_note_default))
+            _dlist = [(_dsel, _bpc.drone_classes[0][1])]
+        else:
+            # the wheel corks them, in even steps over the drones the class has
+            _nd = (int(round(_c1[0] / 127.0 * len(_bpc.drone_classes))) if _c1
+                   else len(_bpc.drone_classes))
+            _dlist = list(_bpc.drone_classes[:_nd])
         for _a, _b in _ph:
             _first = min((_e for _e in notes if _e[0] == _c and _a <= _e[2] <= _b),
                          key=lambda _e: _e[2])
-            for _i, (_dn, _dcls) in enumerate(_bpc.drone_classes[:_nd]):
+            for _i, (_dn, _dcls) in enumerate(_dlist):
                 _don = _a + 1e-6 * _i
                 _dnew.append((_c, _dn, _don, _b, _first[4], _first[5], _first[6]))
                 _DRONE_PC[(_c, _dn, _don)] = _dcls
