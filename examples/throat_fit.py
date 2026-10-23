@@ -51,6 +51,16 @@ VOICES = {
     "laugh": ("SfxLaughProperties", "hohoho/110641__canucklovingbrit__santa-ho-ho-ho-1.wav", 20,
               (0.06, 0.09, 0.51, 0.54, 0.90, 0.93, 1.27, 1.30, 1.62, 1.70, 1.80, 1.95), 0.03,
               ((420, 620), (700, 1000), (1100, 2000), (2350, 2700), (2800, 3100), (3200, 6000))),
+    # GS 123.4 Kitty: peridactyloptrix's five meows (CC0), ~640 Hz, clean --
+    # frames through each meow's body (its first 0.1 s and last 0.15 s left out)
+    "cat": ("SfxKittyProperties", "cat/214759__peridactyloptrix__cat-meowing-x5.wav", 20,
+            (1.62, 1.80, 1.98, 5.82, 6.00, 6.18, 8.62, 8.80, 8.98, 10.90, 11.08, 11.26, 14.23, 14.41, 14.59),
+            0.03, ((500, 900), (900, 1700), (1700, 2300), (2300, 2900), (2900, 3700), (3700, 5000))),
+    # GS 123.5 Growl: qubodup's dog growling (CC0; its FLAC as WAV beside it),
+    # ~130 Hz and rough -- frames in its loudest bursts
+    "growl": ("SfxGrowlProperties", "growl/122183__qubodup__dog-growling-snarling-grumbling.wav", 22,
+              (4.55, 4.70, 5.55, 5.70, 6.95, 7.10, 8.15, 8.35, 8.55, 9.95, 10.15, 10.55, 12.0, 15.5, 16.0),
+              0.04, ((150, 450), (450, 900), (900, 1400), (1400, 2000), (2000, 2800), (2800, 3800))),
 }
 
 
@@ -168,9 +178,12 @@ EDGES = (300, 1000, 2000, 4000, 8000)
 TAKES = {"dog": ((("dog", "277058_*.wav"), (0.01,)), (("dog", "449490_*.wav"), (0.33, 1.44, 2.75)),
                  (("dog", "630648_*.mp3"), (0.79,)), (("dog", "100032_*.wav"), (0.02,)),
                  (("dog", "372528_*.wav"), (0.09,))),
-         "laugh": ((("hohoho", "110641_*.wav"), (0.03, 0.48, 0.87, 1.24, 1.56)),)}
-SPAN = {"dog": 0.12, "laugh": 0.15}
-KEY = {"dog": 76, "laugh": 52}
+         "laugh": ((("hohoho", "110641_*.wav"), (0.03, 0.48, 0.87, 1.24, 1.56)),),
+         # the five meows' starts; the growl's six loudest bursts (its formant frames')
+         "cat": ((("cat", "214759_*.wav"), (1.50, 5.70, 8.50, 10.78, 14.11)),),
+         "growl": ((("growl", "122183_*.wav"), (4.44, 5.41, 6.84, 8.02, 9.85, 10.45)),)}
+SPAN = {"dog": 0.12, "laugh": 0.15, "cat": 0.6, "growl": 0.4}
+KEY = {"dog": 76, "laugh": 52, "cat": 85, "growl": 86}
 
 
 def band_power(x, sr):

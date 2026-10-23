@@ -3378,6 +3378,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     inner_ridge = set()          # ridges after the first, which must not choke each other
     stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
     stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
+    stroke_mouth = {}            # (note, t) -> a throat's formant scale: the mouth's opening
     _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
     _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
     for ev in notes:
@@ -3425,6 +3426,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 stroke_pitch[(note, t0)] = st[3]
             if len(st) > 4:
                 stroke_tilt[(note, t0)] = st[4]
+            if len(st) > 5:
+                stroke_mouth[(note, t0)] = st[5]
             expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
             _stroked.add((ch, note, t0))
             if k: inner_ridge.add((note, t0))
@@ -4716,6 +4719,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # a voice's pulse, darker or brighter as its syllable goes on
             # (percussion_map._voiced; tonelib.SfxThroatProperties)
             props.stroke_tilt_db = _tilt
+        if drum is not None or _xf:
+            # ...and its MOUTH, opening and closing: its formants moved
+            # (tonelib.SfxThroatProperties.stroke_formant_scale)
+            _mouth = stroke_mouth.get((note, on))
+            if _mouth is not None:
+                props.stroke_formant_scale = _mouth
         if _press:
             # ...and the LEVEL half of it. `gain` is read lazily inside
             # harmonic_volume, long after construction, so this needs no change

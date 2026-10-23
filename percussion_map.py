@@ -113,7 +113,7 @@ from tonelib import (
     SfxKeyClickProperties,
     SfxDoorProperties,
     SfxWindchimeProperties,
-    SfxPunchProperties, SfxHeartbeatProperties, SfxFootstepProperties, SfxDogProperties, SfxHoofProperties,
+    SfxPunchProperties, SfxHeartbeatProperties, SfxFootstepProperties, SfxDogProperties, SfxKittyProperties, SfxGrowlProperties, SfxHoofProperties,
     SfxLaughProperties, SfxScreamProperties,
     GunshotProperties,
     RoomTomProperties,
@@ -529,6 +529,10 @@ KITS = {
         56: ("Footsteps1",          SfxFootstepProperties, 621.0),
         57: ("Footsteps2",          SfxFootstepProperties, 658.0),
         76: ("Dog",                 SfxDogProperties, 1000.0),
+        # ...AND TWO VOICES PAST THE SET'S 39-84, for GS 123.4 Kitty and 123.5
+        # Growl (patch_map.SFX_VARIATIONS): played as the bark is, as throats
+        85: ("Kitty",               SfxKittyProperties, 1000.0),
+        86: ("Growl",               SfxGrowlProperties, 1000.0),
         77: ("Horse-Gallop",        SfxHoofProperties, 1900.0),
         52: ("Laughing",            SfxLaughProperties, 1000.0),
         53: ("Screaming",           SfxScreamProperties, 1243.0),
@@ -1195,7 +1199,37 @@ KIT_STROKES = {
                    52: (((0.0, 0.0, 6.3), (0.45, 0.0, 5.2), (0.84, 0.0, 0.1), (1.21, 0.0, -0.35),
                          (1.53, -2.0, -2.8, ((0.0, -1.8), (0.06, 0.0), (0.2, -3.0), (0.42, -10.0), (0.5, -12.2)),
                           0.5)),
-                        250.0, ((0.0, -2.0), (0.05, 1.2), (0.1, 0.0)), 0.11, 0.01, 10.0, 0.005, 0.5)},
+                        250.0, ((0.0, -2.0), (0.05, 1.2), (0.1, 0.0)), 0.11, 0.01, 10.0, 0.005, 0.5),
+                   # THE MEOW, peridactyloptrix's five (CC0): one syllable,
+                   # 0.67-0.8 s near 640 Hz, near level then falling 70-150
+                   # cents at its end, clean (0.5-1.7% jitter)
+                   85: (((0.0, 0.0, 0.0),), 640.0,
+                        ((0.0, 0.3), (0.2, 0.2), (0.45, 0.0), (0.62, -0.7), (0.75, -1.2)),
+                        0.75, 0.04, 6.0, 0.008, 0.5),
+                   # THE GROWL, qubodup's (CC0): ~130 Hz and rough, its bursts
+                   # 0.25-0.75 s. ONE EXPRESSION A NOTE (Ben: "too much like a
+                   # musical phrase than a single expression with a
+                   # lifecycle"): a single 0.75 s growl, its longest burst's
+                   # length, where two bursts with silence between had read as
+                   # two notes. ITS ROUGHNESS MEASURED (Ben: "missing some
+                   # tonality"): the take's bursts 39% voiced to YIN, median
+                   # aperiodicity 0.41 -- 4.5% jitter makes ours 35% and 0.39
+                   86: (((0.0, 0.0, 0.0),), 130.0,
+                        ((0.0, -0.5), (0.1, 0.0), (0.75, -1.0)),
+                        0.75, 0.03, 0.0, 0.045, 2.0, None,
+                        # ITS MOUTH OPENING AND CLOSING (Ben: "it doesn't sound
+                        # like a mouth is opening and closing. It should"): the
+                        # jaw read as 300-1000 Hz over 80-300 Hz in 50 ms steps,
+                        # the take's bursts' median -9.7 -> -6.2 dB by 0.1 s
+                        # (opening), -12 at their end (closing); the formants
+                        # scaled so, fitted to it to 0.84 dB rms -- held open
+                        # through the longer body, closing over its release
+                        ((0.0, 0.87), (0.1, 1.07), (0.45, 1.05), (0.6, 0.92), (0.75, 0.63)),
+                        # ITS LIFE, the take's bursts' level in 25 ms steps: up
+                        # within 25-50 ms, a body wandering 2-5 dB and sagging,
+                        # a release fading -10 to -28 over its last ~0.15 s
+                        # (its shimmer 2 dB, where 4 had jumped it 5-10)
+                        ((0.0, -30.0), (0.03, 0.0), (0.5, -4.0), (0.6, -9.0), (0.68, -18.0), (0.75, -28.0)))},
     },
 }
 
@@ -1250,6 +1284,8 @@ def _cm32l():
             if v is not None:
                 d[note] = v
     for src, (name, cls, f0) in KITS[56].items():
+        if src > 84:
+            continue        # the GS set's own 39-84: our keys past it (85 Kitty, 86 Growl) are not the CM-32L's
         if src < 52:
             continue                    # the GS set's own (39-51): not the CM-32L's
         note = src + CM32L_SFX
@@ -1275,7 +1311,8 @@ KIT_CHOKE[127] = [{42, 46}]
 del _k, _r, _l, _g, _s
 
 
-def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None):
+def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None,
+            mouth=None, level=None):
     """(start, end, level, pitch) for a KIT_STROKES voiced note: each
     syllable a train of glottal pulses, one stroke each, spaced at the
     pitch's period as it moves, jitter on each period (a voice is never a
@@ -1288,7 +1325,11 @@ def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shi
     BRIGHT, ((s, dB), ...) the same way: each pulse's TILT, its throat's
     formants over 1 kHz moved this much at 4 kHz (half a dB an octave per
     dB) and its breath with them -- a fifth field on the stroke
-    (tonelib.SfxThroatProperties.stroke_tilt_db)."""
+    (tonelib.SfxThroatProperties.stroke_tilt_db). MOUTH, ((s, ratio), ...)
+    the same way: each pulse's formants scaled -- a jaw opening and closing
+    -- a sixth field (stroke_formant_scale). LEVEL, ((s, dB), ...), the
+    syllable's envelope as a contour in place of rise and fall_db: an onset,
+    a body and a release, a single expression's life."""
     import math
     import random
     rng = random.Random(note * 7919 + int(round(on * 1e4)))
@@ -1314,11 +1355,17 @@ def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shi
         t = 0.0
         while t < dn:
             f = f0 * 2.0 ** (semis / 12.0 + moved(t, sh))
-            env = 20.0 * math.log10(max(t / rise, 0.03)) if t < rise else -fall_db * (t - rise) / max(dn - rise, 1e-6)
+            if level:
+                env = along(level, t)
+            else:
+                env = 20.0 * math.log10(max(t / rise, 0.03)) if t < rise else -fall_db * (t - rise) / max(dn - rise, 1e-6)
             per = max(0.3, rng.gauss(1.0, jitter)) / f
             lvl = db + env + (rng.gauss(0.0, shimmer_db) if shimmer_db else 0.0)
             st = (on + ts + t, on + ts + t + per, 10.0 ** (lvl / 40.0), 1.0)
-            out.append(st + (along(bright, t),) if bright else st)
+            if mouth:
+                out.append(st + (along(bright, t) if bright else 0.0, along(mouth, t)))
+            else:
+                out.append(st + (along(bright, t),) if bright else st)
             t += per
     return out
 

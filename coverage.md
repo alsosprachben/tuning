@@ -296,6 +296,8 @@ plays Standard, as does any program that is not a set.
 | 82 | Sea Shore | `SfxSeashore` | **3** | GM 122's seashore, a one-shot gated 2.3 s -- by proxy, fitted to an ocean drum, not the sea |
 | 83 | Stream | `SfxStream` | **4** | STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 84 | Bubble | `SfxBubble` | **4** | BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
+| 85 | Kitty | `SfxKitty` | **4** | KITTY (past the set, GS 123.4): a cat's meow as a throat (examples/throat_fit.py cat): peridactyloptrix's five meows (Freesound 214759, CC0), one 0.75 s syllable at 640 Hz, clean, near level then falling ~a semitone; LPC formants (on its harmonics, floored wide) with its fundamental and 4.5-5 kHz added, balanced to the meows (0.0 dB in every band). Ben: 'Kitty sounds good' |
+| 86 | Growl | `SfxGrowl` | **3** | GROWL (past the set, GS 123.5): a dog's growl as a throat (throat_fit.py growl): qubodup's (Freesound 122183, CC0), one 0.75 s expression at ~130 Hz, its roughness measured (4.5% jitter: 35% voiced, the take's 39%), its MOUTH opening and closing (formants scaled per pulse, new: fitted to the jaw's path, 300-1000 over 80-300 Hz, 0.9 dB rms), its LIFE a level contour (new: up in 30 ms, a sagging body, a 0.15 s release), balanced to the bursts (0.0 dB). Ben: 'good enough' -- a player's pitch bend gives it its character |
 
 ### 127 CM-64/32L
 
@@ -1163,9 +1165,9 @@ A later map can put another tone under a number we built; that one is not counte
 |---|---|---|---|---|---|---|---|---|---|
 | SC-55 | 212 | 212 | 100% | 171 | 39 | 2 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 414 | 99% | 284 | 128 | 2 | 0 | 0 | 4 |
-| SC-88Pro | 774 | 432 | 56% | 293 | 137 | 2 | 0 | 0 | 342 (11 another tone) |
-| SC-8850 | 1262 | 430 | 34% | 291 | 137 | 2 | 0 | 0 | 832 (13 another tone) |
+| SC-88 | 418 | 416 | 100% | 285 | 129 | 2 | 0 | 0 | 2 |
+| SC-88Pro | 774 | 434 | 56% | 294 | 138 | 2 | 0 | 0 | 340 (11 another tone) |
+| SC-8850 | 1262 | 432 | 34% | 292 | 138 | 2 | 0 | 0 | 830 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1188,11 +1190,11 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
 | Ethnic | 17/17 | 10/10 | 22/22 | 22/37 | 22/44 |
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
-| Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
+| Sound Effects | 42/42 | 41/41 | 49/49 | 53/73 | 53/144 |
 
-### The SC-88 map's 4 still to build, by what they take
+### The SC-88 map's 2 still to build, by what they take
 
-**new** (4: an instrument we have not modelled, wanting references): 75.8 Kawala, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (2: an instrument we have not modelled, wanting references): 75.8 Kawala, 113.8 Atarigane
 
 
 ## Effects: the Sound Canvas's
@@ -1370,7 +1372,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-363 classes.
+365 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1485,6 +1487,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `SfxSticks` -- 31 Sticks (4), set 56 43 Sticks (4)
             - `SfxThroat`
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
+              - `SfxGrowl` -- set 56 86 Growl (3)
+              - `SfxKitty` -- set 56 85 Kitty (4)
               - `SfxLaugh` -- set 56 52 Laughing (4), set 127 76 Laughing (4)
             - `SfxWindchime` -- set 56 62 Windchime (3), set 127 86 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4)

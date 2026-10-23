@@ -26881,6 +26881,16 @@ class SfxThroatProperties(MeasuredStrokeProperties):
     # of it an octave -- and its breath with them. A bark is brightest ~30 ms
     # in and darkens after.
     stroke_tilt_db = 0.0
+    # AND ITS MOUTH (percussion_map._voiced, a sixth field on the stroke): its
+    # formants' frequencies scaled -- a jaw opening raises them, closing lowers
+    # them. 1 = the formants as fitted
+    stroke_formant_scale = 1.0
+
+    def mode_ratio(self, m):
+        r = super().mode_ratio(m)
+        if self.stroke_formant_scale != 1.0 and 1 <= m <= len(self.DRUM_MODES):
+            return r * self.stroke_formant_scale
+        return r
 
     @property
     def chiff_volume(self):
@@ -26952,6 +26962,43 @@ class SfxLaughProperties(SfxThroatProperties):
     DRUM_MODES = ((0.4978, 0.0, 4094.0), (0.8383, -5.8, 6603.0), (2.5117, -15.9, 5136.0), (2.945, -16.3, 5200.0), (5.7268, -30.5, 4858.0))
     # a trace of breath on each pulse: his voice is clean
     breath_volume = 0.05
+
+
+class SfxKittyProperties(SfxThroatProperties):
+    """GS 123.4, "Kitty": a cat's meow -- a throat (SfxThroatProperties)
+    pulsed as peridactyloptrix's five meows (Freesound 214759, CC0;
+    KIT_STROKES "voiced", key 85 of the SFX kit): each 0.67-0.8 s near 640
+    Hz, CLEAN (0.5-1.7% jitter), the pitch near level then falling 70-150
+    cents at its end. Its formants by LPC of the meows (examples/
+    throat_fit.py cat): a high clean voice puts the poles on its harmonics,
+    floored to 150 Hz wide, as the bark's."""
+    # at the bark's level (SfxDogProperties: the loudest 50 ms on key 60)
+    initial_gain = SfxThroatProperties.initial_gain * 10 ** (-19.5 / 20.0)
+    breath_volume = 0.03
+    # its fundamental a mode of its own (the LPC frames' poles all sat on its
+    # harmonics over it; ~15 dB under the 3rd in the takes), its 7th and 8th
+    # (4.5, 5.1 kHz: the 4-8 kHz band had stood 12 dB short), the rest by LPC
+    DRUM_MODES = ((0.64, -15.0, 4094.0), (1.2693, 11.0, 4094.0), (1.9122, 14.4, 4094.0), (2.5978, 5.9, 4094.0), (3.2079, 2.8, 4094.0), (3.9286, -7.4, 15065.0), (4.48, -16.3, 4094.0), (5.12, -18.3, 4094.0))
+
+
+class SfxGrowlProperties(SfxThroatProperties):
+    """GS 123.5, "Growl": a dog growling -- a throat pulsed as qubodup's
+    growl (Freesound 122183, CC0; KIT_STROKES "voiced", key 86): ROUGH and
+    low, ~130 Hz, its bursts 39% voiced to YIN (median aperiodicity 0.41),
+    0.25-0.75 s each: one growl a note, its life and its mouth the bursts'
+    (percussion_map KIT_STROKES "voiced" 86) -- 4.5% jitter, shimmer and a
+    breath on each pulse, measured to it.
+    Its formants by LPC of its loudest bursts (throat_fit.py growl)."""
+    # at the bark's level (SfxDogProperties: the loudest 50 ms on key 60)
+    initial_gain = SfxThroatProperties.initial_gain * 10 ** ((6.8 - 11.8 + 1.7) / 20.0)
+    # (with the period's 4.5% jitter, its roughness the take's: 0.8 with 20%
+    # had buried the tone -- Ben: "missing some tonality")
+    breath_volume = 0.4
+    # ...and one at ~5 kHz the LPC frames show (4.8-5.7 kHz) that no window took
+    # (its lowest formant up: the take's 80-300 Hz stands ~7 dB over its
+    # 300 Hz-1 kHz, which the balance's bands, from 300 Hz, did not see -- set
+    # with the mouth's contour, to the jaw's path, percussion_map 86)
+    DRUM_MODES = ((0.1906, 13.7, 6207.0), (0.5751, -3.2, 13982.0), (1.1107, -3.3, 13779.0), (1.614, -5.8, 10226.0), (2.4881, -4.0, 9795.0), (3.0432, -9.5, 12864.0), (5.1, -10.1, 15000.0))
 
 
 # THE SFX SET'S ELECTRONIC CLICKS (39, 44): Roland's own synthesized sounds,
