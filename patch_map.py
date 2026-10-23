@@ -1692,6 +1692,13 @@ from tonelib import GamelanGongProperties
 VARIATIONS[(112, 10)] = GamelanGongProperties
 VARIATION_NAMES[(112, 10)] = "GamelanGong"
 VARIATION_TRIM_DB[(112, 10)] = PROGRAM_TRIM_DB.get(8, 0.0)
+
+# BONANG: the Javanese kettle gongs, fitted to Casa da Musica's (CC BY 3.0;
+# tonelib.BonangProperties, examples/gender_fit.py --bonang)
+from tonelib import BonangProperties
+VARIATIONS[(112, 8)] = BonangProperties
+VARIATION_NAMES[(112, 8)] = "Bonang"
+VARIATION_TRIM_DB[(112, 8)] = PROGRAM_TRIM_DB.get(8, 0.0)
 VARIATION_TRIM_DB[(35, 2)] = PROGRAM_TRIM_DB.get(35, 0.0) + 5.8
 VARIATION_TRIM_DB[(35, 3)] = PROGRAM_TRIM_DB.get(35, 0.0) + 9.5
 

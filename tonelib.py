@@ -15537,6 +15537,43 @@ class GamelanGongProperties(ModeDecays, MetalPercussionProperties):
     attack_time = 0.1
 
 
+class BonangProperties(ModeDecays, MetalPercussionProperties):
+    """GS 112.8 "Bonang": the Javanese gamelan's row of small bossed kettle
+    gongs, laid mouth-down on cords in a frame and struck on the boss with
+    padded sticks -- the melody's quick figuration.
+
+    MEASURED (examples/gender_fit.py --bonang) on Casa da Musica's kettles
+    (CC BY 3.0; sources.md): the bonang barung and panerus, pelog and
+    slendro, 33 of 52 kettles 338-1382 Hz (the others with a neighbour, or a
+    misread pitch, within 15 dB under the note):
+      * the fundamental, and the KETTLE'S PARTNER at 1.55 (each kettle tuned
+        by hand: 1.47-1.61) at -22 dB -- what makes it a gong and not a bar;
+        an exact octave, quiet (-36), and a broad mode near 3 (-31);
+      * a ring of ~7 s (8.3 dB/s), the modes faster (14, 25, 79), and NO
+        register law (slope 0.04): small and large kettles ring alike;
+      * one instrument -- a partner within 12 dB on 2 of 33 kettles.
+    """
+    inharmonicity_coefficient = 0.0      # the ratios are absolute
+    mode_ratios = (1.0, 1.55, 1.999, 3.008)
+    mode_gains = (1.0, 0.0802, 0.0155, 0.028)
+    mode_decays = (4.15, 6.88, 12.6, 39.34)
+    decay_register_slope = 0.0
+    max_harmonic = 4
+    # THE MALLET'S OWN SOUND: the padded stick meeting the boss, a burst
+    # between the kettle's modes (Ben: the tone good, "what it is missing is
+    # the sound of the reaction of the mallet itself"). Fitted through the
+    # renderer on the 33 kettles' first 15 ms (examples/gender_fit.py
+    # --mallet; 3.9 dB by band): around the fundamental's level at 0.6-0.9
+    # kHz, ~15 dB under it above 1.4 kHz, gone at 945 dB/s -- no slower tail
+    # (what lay under the takes' modes after 15 ms was the room and the other
+    # kettles)
+    strike_noise_db = ((281, -12.2), (354, -9.5), (445, -5.3), (561, -2.1), (707, -1.2), (891, -1.9), (1122, -4.3), (1414, -4.9), (1782, -14.3), (2245, -14.1), (2828, -14.5), (3564, -19.1), (4490, -15.7), (5657, -24.7), (7127, -31.5), (8980, -37.0), (11314, -47.9))
+    strike_noise_octave_db = -0.430
+    strike_noise_dbs = 945.0
+    strike_noise_fade_s = 0.0005
+    strike_noise_len_s = 0.1
+
+
 class CuicaProperties(SynthProperties):
     """GM 78/79. A FRICTION drum -- the only one in the set, and it was a
     struck membrane, which is the wrong mechanism rather than the wrong size.

@@ -10,6 +10,9 @@ ombak).
     python3 examples/gender_fit.py --gong      GS 112.10 "Gamelan Gong": the big gong's modes and beat
     python3 examples/gender_fit.py --demo OUT.wav   the gong at the recording's pitch (C#2) and two above
     python3 examples/gender_fit.py --ab OUT.wav     each take, then ours at its pitch (gangsa keys, the gong)
+    python3 examples/gender_fit.py --bonang    GS 112.8 "Bonang": Casa da Musica's kettles, fitted
+    python3 examples/gender_fit.py --mallet    the bonang's MALLET: its burst between the modes, fitted
+    python3 examples/gender_fit.py --ab-bonang OUT.wav  four of its kettles, each then ours
     python3 examples/gender_fit.py --ab-java OUT.wav    the same against Casa da Musica's JAVANESE gender
                                                     barung (CC BY 3.0; sources.md), four keys of its pelog
 
@@ -75,13 +78,25 @@ def band_decay(x, sr, k, fm):
     return -np.polyfit(np.arange(a, b) * 0.01, e[a:b], 1)[0] if b - a >= 4 else np.nan
 
 
-def key(path):
+LATE = (0.2, 0.4)
+
+
+def late_level(x, sr, k, f0, fm):
+    """A mode's level re the fundamental's, LATE (0.2-0.4 s): after the
+    mallet. Read at the strike a kettle's level holds the mallet's transient
+    too, which falls ~400 dB/s and is no mode of it."""
+    f, S = spectrum(x, sr, k + int(LATE[0] * sr), k + int(LATE[1] * sr))
+    a0 = S[(f > f0 * 0.99) & (f < f0 * 1.01)].max()
+    return float(S[(f > fm * 0.995) & (f < fm * 1.005)].max() - a0)
+
+
+def key(path, windows=WINDOWS, f0_band=(250.0, 2600.0)):
     x, sr = load(path)
     k = int(np.argmax(np.abs(x)))
     if len(x) - k < int(0.8 * sr):
         return None
     f, S = spectrum(x, sr, k + int(0.6 * sr), k + int(0.7 * sr))
-    ok = (f > 250) & (f < 2600)
+    ok = (f > f0_band[0]) & (f < f0_band[1])
     f0 = float(f[ok][np.argmax(S[ok])])
     # THE PAIR over 2 s (a 0.1 s window's peak is ~20 Hz wide: its skirt
     # read as a partner 15 cents off on every key): the strongest LOCAL
@@ -96,15 +111,17 @@ def key(path):
     fe, Se = spectrum(x, sr, k + int(0.01 * sr), k + int(0.11 * sr))
     a0 = Se[(fe > f0 * 0.99) & (fe < f0 * 1.01)].max()
     modes = []
-    for lo, hi in WINDOWS:
+    for lo, hi in windows:
         m = (fe > f0 * lo) & (fe < f0 * hi) & (fe < 0.45 * sr)
         if not m.any():
-            modes.append((np.nan, np.nan, np.nan))
+            modes.append((np.nan, np.nan, np.nan, np.nan))
             continue
         i = np.argmax(Se[m])
         fm = float(fe[m][i])
-        modes.append((fm / f0, float(Se[m][i] - a0), band_decay(x, sr, k, fm)))
-    return dict(f0=f0, pair_cents=1200 * np.log2(fp / f0), pair_hz=fp - f0, pair_db=pair_db,
+        modes.append((fm / f0, float(Se[m][i] - a0), band_decay(x, sr, k, fm), late_level(x, sr, k, f0, fm)))
+    below = (fe > f0 * 0.4) & (fe < f0 * 0.95)
+    sub_db = float(Se[below].max() - a0) if below.any() else -99.0
+    return dict(f0=f0, pair_cents=1200 * np.log2(fp / f0), pair_hz=fp - f0, pair_db=pair_db, sub_db=sub_db,
                 d1=band_decay(x, sr, k, f0), modes=modes)
 
 
@@ -287,12 +304,13 @@ def _ours_at(program, bank, hz, secs):
 
 CDM = os.path.expanduser("~/Documents/refs/freesound/gamelan_cdm")
 JAVA_KEYS = ("gender_gbpl3", "gender_gbpl2h", "gender_gbpl6h", "gender_gbpl2hh")
+BONANG_KEYS = ("bonang_bbpl2h", "bonang_bbsl3h", "bonang_bbpl5h", "bonang_bpsl2")
 
 
 def ab_pairs(jobs, out):
     """Each take from 50 ms before its loudest sample, then ours at its pitch
-    (the strongest peak 0.3-2.3 s in, between LO and HI Hz), both
-    peak-normalised, a second between. JOBS: (path, program, bank, secs, lo, hi)."""
+    (the strongest peak 0.3-2.3 s in, between LO and HI Hz), both at one
+    level over their bodies (0.2-1 s), a second between. JOBS: (path, program, bank, secs, lo, hi)."""
     from scipy.io import wavfile
     parts = []
     for p, prog, bank, secs, lo, hi in jobs:
@@ -304,8 +322,13 @@ def ab_pairs(jobs, out):
         hz = float(f[ok][np.argmax(S[ok])])
         ours, sr2 = _ours_at(prog, bank, hz, secs)
         assert sr2 == sr
-        for y in (rec, ours):
-            parts += [y / max(np.abs(y).max(), 1e-9) * 0.7, np.zeros(sr)]
+        # LEVELLED ON THE BODY, 0.2-1 s: by the peak, a take's mallet click
+        # set its level and its ring played quieter than ours, which has none
+        body = [np.sqrt(np.mean(y[int(0.2 * sr):int(1.0 * sr)] ** 2)) for y in (rec, ours)]
+        g = [0.1 / max(b, 1e-12) for b in body]
+        pk = max(np.abs(rec).max() * g[0], np.abs(ours).max() * g[1])
+        for y, gi in zip((rec, ours), g):
+            parts += [y * gi * 0.7 / pk, np.zeros(sr)]
         print("  %s: %.1f Hz" % (os.path.basename(p), hz))
     y = np.concatenate(parts)
     wavfile.write(out, sr, (y * 32767).astype(np.int16))
@@ -329,7 +352,152 @@ def ab_java(out):
     ab_pairs(jobs, out)
 
 
+# THE BONANG: Casa da Musica's kettles (bonang barung and panerus, pelog and
+# slendro). Its modes, read as the gender's: a bossed kettle's partner at
+# ~1.5-1.65 and the weaker ones near 2 and 2.8-3.8
+BONANG_WINDOWS = ((1.42, 1.72), (1.9, 2.12), (2.6, 3.9))
+
+
+def bonang():
+    """Every kettle read as key() reads a bar (pitch 0.6-0.7 s in, 200-1400
+    Hz); kept where nothing under the fundamental stands within 15 dB of it at
+    the strike (a neighbour ringing, or a pitch misread). The modes' median
+    ratios and levels at the strike (late_level's after the mallet shown); the decays as medians (tonelib's D, half the band's
+    dB/s): they do not climb the register."""
+    rows = []
+    for p in sorted(glob.glob(os.path.join(CDM, "*__bonang_*.wav"))):
+        r = key(p, BONANG_WINDOWS, (200.0, 1400.0))
+        if r:
+            r["name"] = os.path.basename(p).split("__")[-1][:-4]
+            rows.append(r)
+    rs = [r for r in rows if r["sub_db"] < -15]
+    print("  %d kettles, %d kept" % (len(rows), len(rs)))
+    f0 = np.array([r["f0"] for r in rs])
+    d1 = np.array([r["d1"] for r in rs])
+    ok = np.isfinite(d1) & (d1 > 0.3)
+    slope, c = np.polyfit(np.log2(f0[ok] / 415.0), np.log2(d1[ok] / 2.0), 1)
+    # NO REGISTER LAW (slope ~0.04): every decay a MEDIAN, the fundamental's
+    # over the strikes under 15 dB/s (7 of 33 were damped by the player,
+    # 22-32 dB/s, and a regression through them bent the level)
+    ratios, gains, decs = [1.0], [1.0], [float(np.median(d1[ok & (d1 < 15)]) / 2.0)]
+    for j, (lo, hi) in enumerate(BONANG_WINDOWS):
+        R = np.array([r["modes"][j][0] for r in rs])
+        L = np.array([r["modes"][j][1] for r in rs])
+        D = np.array([r["modes"][j][2] for r in rs])
+        okl = np.isfinite(L) & (L > -45)
+        okd = okl & np.isfinite(D) & (D > 0.5) & (L > -35)
+        # the level AFTER THE MALLET too, for comparison: carried back along a
+        # mode's decay it lands at nonsense for the broad mode near 3 (-7 dB
+        # against -31 at the strike) -- its "decay" is the mallet's, so the
+        # strike's reading stays
+        LL = np.array([r["modes"][j][3] for r in rs])
+        okll = np.isfinite(LL) & (LL > -50)
+        print("   window %.2f-%.2f: after the mallet (0.2-0.4 s) %+.1f dB (%d)" % (lo, hi, np.median(LL[okll]), okll.sum()))
+        ratios.append(round(float(np.median(R[okl])), 3))
+        gains.append(round(float(10 ** (np.median(L[okl]) / 20)), 4))
+        decs.append(round(float(np.median(D[okd]) / 2.0), 2))
+        print("   window %.2f-%.2f: ratio %.3f (IQR %.3f-%.3f), level %+.1f dB (IQR %.1f), %d of %d"
+              % (lo, hi, ratios[-1], *np.percentile(R[okl], [25, 75]), np.median(L[okl]),
+                 np.subtract(*np.percentile(L[okl], [75, 25])), okl.sum(), len(rs)))
+    print("  f0 %.0f-%.0f Hz" % (f0.min(), f0.max()))
+    print("  mode_ratios = %s" % (tuple(ratios),))
+    print("  mode_gains = %s" % (tuple(gains),))
+    print("  mode_decays = %s  (the register slope %.3f: none)" % (tuple(round(d, 2) for d in decs), slope))
+    pd = np.array([r["pair_db"] for r in rs])
+    print("  a partner within 12 dB on %d of %d kettles" % ((pd > -12).sum(), len(rs)))
+
+
+def bonang_takes():
+    """[(path, f0)]: the kettles bonang() keeps."""
+    out = []
+    for p in sorted(glob.glob(os.path.join(CDM, "*__bonang_*.wav"))):
+        r = key(p, BONANG_WINDOWS, (200.0, 1400.0))
+        if r and r["sub_db"] < -15:
+            out.append((p, r["f0"]))
+    return out
+
+
+def mallet(passes=5):
+    """THE MALLET'S OWN SOUND (Ben: "what it is missing is the sound of the
+    reaction of the mallet itself"): the padded stick meeting the boss, a
+    burst between the kettle's modes. steelbar_fit's pluck, on the kettles:
+    the noise between the partials (noise_profile: third octaves over 0-5 and
+    5-15 ms, re the fundamental), take against ours through the renderer at
+    each kettle's pitch; tonelib's strike_noise rows moved by the median
+    difference -- the table from the first 5 ms, its octave slope over the
+    kettles, its rate from 5-15 ms. NO TAIL: a first fit took a slower tail
+    from 15-60 ms and it was the room's floor and the other kettles (it ran
+    to its slowest bound, and ours 10-24 dB over the takes below 1.4 kHz).
+    The best pass by the two windows' mean miss. Prints the class values."""
+    import steelbar_fit as SB
+    import tonelib as T
+    cls = T.BonangProperties
+    modes = (1.0,) + tuple(cls.mode_ratios[1:])
+    takes = bonang_takes()
+    rec, f0s = [], []
+    for p, f0 in takes:
+        x, sr = load(p)
+        rec.append(SB.noise_profile(x, sr, f0, modes)[:2])
+        f0s.append(f0)
+    rec = np.array(rec)
+    reg = np.log2(np.array(f0s) / 440.0)
+    if not getattr(cls, "strike_noise_db", ()):
+        cls.strike_noise_db = tuple((int(round(c)), -30.0) for c in SB.A3C)
+        cls.strike_noise_octave_db = 0.0
+        cls.strike_noise_dbs = 1000.0
+        cls.strike_noise_fade_s = 0.0005
+        cls.strike_noise_len_s = 0.1
+    best = None
+    for it in range(passes + 1):
+        ours = []
+        for f0 in f0s:
+            y, sr2 = _ours_at(112, 8, f0, 0.5)
+            ours.append(SB.noise_profile(y, sr2, f0, modes)[:2])
+        D = rec - np.array(ours)
+        w = [float(np.nanmedian(D[:, j])) for j in range(2)]
+        miss = float(np.nanmean(np.abs(np.nanmedian(D, 0))))
+        print("  pass %d: take - ours, 0-5 ms %+.1f, 5-15 ms %+.1f (median); by band %.2f dB"
+              % (it, w[0], w[1], miss), flush=True)
+        if best is None or miss < best[0]:
+            best = (miss, cls.strike_noise_db, cls.strike_noise_octave_db, cls.strike_noise_dbs, D)
+        if it == passes:
+            break
+        band = np.nanmedian(D[:, 0], 0)
+        km = np.nanmedian(D[:, 0] - band, 1)
+        cls.strike_noise_octave_db += 0.5 * float(np.polyfit(reg, np.nan_to_num(km), 1)[0])
+        old = dict(cls.strike_noise_db)
+        cls.strike_noise_db = tuple(
+            (int(round(c)), round(float(np.interp(np.log(c), np.log(list(old)), list(old.values()))
+                                        + 0.6 * np.clip(np.nan_to_num(b), -12, 12)), 1))
+            for c, b in zip(SB.A3C, band))
+        cls.strike_noise_dbs = round(max(150.0, cls.strike_noise_dbs - 0.6 * (w[1] - w[0]) / 0.0075), 1)
+    miss, cls.strike_noise_db, cls.strike_noise_octave_db, cls.strike_noise_dbs, D = best
+    print("  best: by band %.2f dB" % miss)
+    print("    strike_noise_db = %s" % (cls.strike_noise_db,))
+    print("    strike_noise_octave_db = %.3f" % cls.strike_noise_octave_db)
+    print("    strike_noise_dbs = %.1f" % cls.strike_noise_dbs)
+    print("  residual take - ours by band, per window:")
+    print("  Hz      " + " ".join("%5.1f" % (c / 1000) for c in SB.A3C))
+    for j, (a, b) in enumerate(SB.PLUCK_WINDOWS[:2]):
+        print("  %3.0f-%3.0f " % (a * 1e3, b * 1e3) + " ".join("%5.0f" % v for v in np.nanmedian(D[:, j], 0)))
+
+
+def ab_bonang(out):
+    """Four of Casa da Musica's kettles (3 s), each then ours (112.8)."""
+    jobs = [(glob.glob(os.path.join(CDM, "*__%s.wav" % n))[0], 112, 8, 3.0, 200, 1400) for n in BONANG_KEYS]
+    ab_pairs(jobs, out)
+
+
 def main(argv):
+    if "--mallet" in argv:
+        mallet()
+        return 0
+    if "--ab-bonang" in argv:
+        ab_bonang(argv[argv.index("--ab-bonang") + 1])
+        return 0
+    if "--bonang" in argv:
+        bonang()
+        return 0
     if "--ab-java" in argv:
         ab_java(argv[argv.index("--ab-java") + 1])
         return 0

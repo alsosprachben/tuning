@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 159 of the SC-55's 159 are built,
+under a program (SC-55 owner's manual p.68). 160 of the SC-55's 160 are built,
 and 141 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -939,6 +939,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 107.8 | SC-55 | Taisho Koto | `TaishoKoto` | **4** | the TAISHOGOTO, fitted to Arthur Chanson's soprano (Pianobook; examples/pluck_fit.py --voice=taisho): each key a course, a low string and three an octave up a few cents apart; the small box barely radiating the low fundamental (its corner 600 Hz: E5's 3rd 11 dB over its 1st); decay on h1-h6; the 12-string's plectrum; THE PICK'S SWEEP across the course timed on all 81 takes (half together, half the trio 15-50 ms late); its open G2 DRONE a stop on the wheel (low: ringing in sympathy; high: struck with every stroke, TaishoDroneProperties fitted to its 24 strokes). Ben: 'The fit is otherwise great', 'Sounds great' |
 | 107.16 | SC-55 | Kanoon | `Kanun` | **4** | the KANUN (tonelib.KanunProperties): courses of three strings over a wooden box, FITTED to Baris Bozkurt's isolated notes (Freesound 211133, CC0; examples/pluck_fit.py --voice=kanun, 28 notes): its inharmonicity measured (B 7.9e-5, 13x the koto's -- Ben: 'looser ... like a guitar'), its decay set on the whole note's level curve, its body within ~3 dB 250 Hz-13 kHz. Ben: 'Sounds great now' |
 | 111.1 | SC-88 | Shanai 2 | `Shanai_sc88_111_1` | **3** | SC-88 map: GM 111 Shanai with sound_bias={'vib_depth': 0.5} |
+| 112.8 | SC-55 | Bonang | `Bonang` | **4** | the Javanese kettle gongs, fitted to Casa da Musica's bonang barung and panerus (CC BY 3.0; examples/gender_fit.py --bonang): 33 kettles 338-1382 Hz, the kettle's partner at 1.55 (-22 dB), a quiet octave, a broad mode near 3, a 7 s ring with no register law; the mallet's own strike (--mallet: a burst between the modes, 0.6-0.9 kHz, 945 dB/s; 3.9 dB by band over the first 15 ms). Ben: the tone good, 'what it is missing is the sound of the reaction of the mallet itself' -> 'Sounds good now' |
 | 112.9 | SC-55 | Gender | `Gender` | **4** | the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0; examples/gender_fit.py): a free bar 1 : 2.70 : 5.27, the third mode carrying the strike under ~4 kHz (the panggul's roll-off, steep), the fundamental ringing (D 1.87 at 415 Hz), 42 keys; the Balinese pair (26 cents, GangsaPairProperties) taken off against Casa da Musica's Javanese gender, which has none. Ben: 'I hear it less tuned, but not too bright' -> 'Sounds good' |
 | 112.10 | SC-55 | GamelanGong | `GamelanGong` | **4** | the gong ageng, fitted to UNT's big gong (CC0; examples/gender_fit.py --gong): 69.3 Hz, the octave pair 2.00/2.08 at -1 dB, the beat 0.61 Hz at 2.2 dB p-p (recorded 1.4-2.4), the felt's onset 0.18 s (0.10-0.16), 3.0 dB/s (2.9-3.1); shorter up the register by the same gamelan's kempli (slope 0.73). Ben: 'Sounds good' |
 | 112.16 | SC-55 | RAMA Cymbal | `CengCeng` | **4** | the Balinese CENG-CENG (tonelib.CengCengProperties): a plate from the crash FITTED to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0; examples/rama_fit.py: multi-strike files rejected, 4.8 dB on the grid), with each strike's chatter of the stand's plates (14-17 sub-hits in 120 ms) as strike_flam bursts at +10 dB by Ben's ear |
@@ -1146,11 +1147,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 198 | 198 | 100% | 162 | 36 | 0 | 0 | 0 | 0 |
+| SC-55 | 199 | 199 | 100% | 163 | 36 | 0 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 399 | 95% | 275 | 124 | 0 | 0 | 0 | 19 |
-| SC-88Pro | 774 | 417 | 54% | 284 | 133 | 0 | 0 | 0 | 357 (11 another tone) |
-| SC-8850 | 1262 | 415 | 33% | 282 | 133 | 0 | 0 | 0 | 847 (13 another tone) |
+| SC-88 | 418 | 400 | 96% | 276 | 124 | 0 | 0 | 0 | 18 |
+| SC-88Pro | 774 | 418 | 54% | 285 | 133 | 0 | 0 | 0 | 356 (11 another tone) |
+| SC-8850 | 1262 | 416 | 33% | 283 | 133 | 0 | 0 | 0 | 846 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1172,14 +1173,14 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
 | Ethnic | 10/10 | 10/10 | 15/22 | 15/37 | 15/44 |
-| Percussive | 15/15 | 13/13 | 25/28 | 26/47 | 26/95 |
+| Percussive | 16/16 | 13/13 | 26/28 | 27/47 | 27/95 |
 | Sound Effects | 42/42 | 41/41 | 46/49 | 50/73 | 50/144 |
 
-### The SC-88 map's 19 still to build, by what they take
+### The SC-88 map's 18 still to build, by what they take
 
 **refit** (2: an articulation of one we have, wanting a fit to a reference): 66.8 BreathyTnr., 120.5 Bass Slide
 
-**new** (17: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.8 Bonang, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (16: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 112.11 St.Gamelan, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's
