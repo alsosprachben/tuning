@@ -11976,12 +11976,15 @@ class MusicBoxProperties(ModeDecays, StruckBarProperties):
     # (19 dB down, ~250 dB/s) to 60 ms -- "most of the attacks have more on
     # the high end" (Ben). Ours had the partials alone. The fitted table,
     # smoothed a quarter-half-quarter across its bands (the partials leave
-    # some bands few bins between them); quieter up the comb, -4 dB an octave.
-    strike_noise_db = ((281, -64.0), (354, -47.0), (445, -26.6), (561, -19.7), (707, -25.4), (891, -25.7), (1122, -15.7), (1414, -13.0), (1782, -16.5), (2245, -11.1), (2828, -4.8), (3564, -1.4), (4490, 2.2), (5657, 2.0), (7127, -3.1), (8980, -6.5), (11314, -3.5))
-    strike_noise_octave_db = -4.026
-    strike_noise_dbs = 4921.0
+    # some bands few bins between them); quieter up the comb, -4.6 dB an octave.
+    # REFITTED (2026-10-22) once the kernel drew a burst faster than a block as
+    # it decays (synth_voice_xdec): fitted on the old line, the snap's first 5
+    # ms came 2.7 dB under the takes; now within 0.4 dB in every window
+    strike_noise_db = ((281, -107.0), (354, -67.0), (445, -24.1), (561, -12.0), (707, -27.4), (891, -31.4), (1122, -4.9), (1414, -1.1), (1782, -24.4), (2245, -4.9), (2828, -5.4), (3564, 1.1), (4490, 8.6), (5657, 6.7), (7127, 3.0), (8980, -3.0), (11314, 2.2))
+    strike_noise_octave_db = -4.606
+    strike_noise_dbs = 5119.2
     strike_noise_fade_s = 0.0005
-    strike_noise_tail = (-19.01, 249.1)
+    strike_noise_tail = (-22.0, 236.9)
     strike_noise_len_s = 0.25
 
 class GenderProperties(ModeDecays, StruckBarProperties):
@@ -23706,7 +23709,7 @@ class PhonoNoiseProperties(ApplauseProperties):
     chiff_max_valve_time = 0.04
     chiff_release = 0.3
     breath_noise_db = ((63, -17.0), (80, -19.3), (101, -23.3), (127, -23.1), (160, -27.7), (202, -23.8), (250, -26.7), (315, -30.1), (397, -30.3), (500, -31.6), (630, -31.3), (794, -30.9), (1000, -30.0), (1260, -29.1), (1587, -28.9), (2000, -28.2), (2520, -28.0), (3175, -28.0), (4000, -28.4), (5040, -28.6), (6350, -29.0), (8000, -28.7), (10079, -28.1), (12699, -29.4), (16000, -34.8))
-    strike_noise_db = ((101, 12.2), (127, 12.2), (160, 12.2), (202, 12.2), (254, 12.2), (320, 12.2), (404, 12.9), (509, 12.7), (641, 11.3), (808, 11.3), (1018, 12.2), (1282, 12.0), (1616, 12.8), (2036, 13.5), (2565, 13.6), (3232, 13.3), (4072, 12.8), (5131, 11.9), (6465, 11.2), (8145, 11.1), (10263, 10.9), (12930, 9.0))
+    strike_noise_db = ((101, 18.2), (127, 18.2), (160, 18.2), (202, 18.2), (254, 18.2), (320, 18.2), (404, 18.9), (509, 18.7), (641, 17.3), (808, 17.3), (1018, 18.2), (1282, 18.0), (1616, 18.8), (2036, 19.5), (2565, 19.6), (3232, 19.3), (4072, 18.8), (5131, 17.9), (6465, 17.2), (8145, 17.1), (10263, 16.9), (12930, 15.0))
     strike_noise_dbs = 29000.0
     strike_noise_fade_s = 0.0001
     strike_noise_octave_db = 0.0
@@ -23718,9 +23721,12 @@ class PhonoNoiseProperties(ApplauseProperties):
     strike_flam_recur = (1.8, 0.115)
     strike_flam_record = True
     # THE CLICKS' LEVEL OVER THE BED fitted (phono_fit.py --ours, a held note
-    # measured as the take): 34 a second over 12 dB (the take's 36.7), 11.2
-    # over 20 (10.9), 0.5 over 30 (0.8); their quantiles 13.1-30.6 dB (the
-    # take's 12.7-32.3). AT A TONE'S LEVEL, as a Sound Canvas sample is: the
+    # measured as the take): 31 a second over 12 dB (the take's 36.7), 9.7
+    # over 20 (10.9), 0.8 over 30 (0.8); their quantiles 12.9-31.9 dB (the
+    # take's 12.7-32.3). +6 dB on the table (2026-10-22) once the kernel drew
+    # each 0.3 ms click as it decays (synth_voice_xdec): fitted on a block's
+    # line, which had held every click up for milliseconds, they had fallen to
+    # 14 a second over 12 dB. AT A TONE'S LEVEL, as a Sound Canvas sample is: the
     # applause's rms over a held note -- the file sets it under the music
     # itself (River: velocity 52, CC7 110)
     initial_gain = ApplauseProperties.initial_gain * 10 ** (15.5 / 20.0)
