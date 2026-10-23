@@ -1085,6 +1085,9 @@ class SynthProperties:
     # noise, with its own colour, not a skirt on any partial. () = none.
     breath_noise_db = ()
     breath_noise_fade_s = 0.03
+    # ...and on a SLURRED note, the legato attack instead (slur_attack): the
+    # breath never stopped. False keeps every note's own swell.
+    breath_noise_slur = False
     # A LOW REGISTER OF ITS OWN: a second measured series and breath, for the
     # notes under register_low_hz[0]; over register_low_hz[1] the tables
     # above; between, the two blended in dB along log frequency. A player's
@@ -1120,6 +1123,10 @@ class SynthProperties:
     # ...or, strike_flam_rate > 0, that many strikes a SECOND scattered
     # through the whole held note (an audience: every hand its own clap)
     strike_flam_rate = 0.0
+    # ...their levels uniform over strike_flam_db, or, strike_flam_exp_db > 0,
+    # EXPONENTIAL in dB under the loudest at that scale (many small, few large:
+    # a reed's crackle), held within strike_flam_db
+    strike_flam_exp_db = 0.0
     # A LATE STRIKE: the strike (strike_noise_db) fired strike_noise_at seconds
     # after the onset rather than at it, its table moved strike_noise_cal_db.
     # A muted surdo's hand: the beater is the note's own strike, and the hand
@@ -3183,7 +3190,23 @@ class SynthProperties:
 
     def breath_noise_at(self, frequency):
         """breath_noise_db for a note at FREQUENCY: with a low register, its
-        table blended in by band (the two tables share their bands)."""
+        table blended in by band (the two tables share their bands); and with
+        breath_noise_octave_db, moved that many dB an octave from
+        breath_noise_ref_hz."""
+        rows = self._breath_noise_rows(frequency)
+        if not self.breath_noise_octave_db:
+            return rows
+        d = self.breath_noise_octave_db * _log(float(frequency) / self.breath_noise_ref_hz) / _log(2.0)
+        return tuple((hz, db + d) for hz, db in rows)
+
+    # THE BREATH ACROSS THE REGISTER: dB an octave up from breath_noise_ref_hz
+    # (a subtone tenor's breath is a low-register thing: BreathyTnr. -5, an
+    # assumption, Ben's -- no recording here holds an airy sax at more than
+    # one register). 0: the table as it is, everywhere.
+    breath_noise_octave_db = 0.0
+    breath_noise_ref_hz = 440.0
+
+    def _breath_noise_rows(self, frequency):
         if not self.breath_noise_low_db:
             return self.breath_noise_db
         w = self.register_low_share(frequency)
@@ -23701,6 +23724,56 @@ class PhonoNoiseProperties(ApplauseProperties):
     # applause's rms over a held note -- the file sets it under the music
     # itself (River: velocity 52, CC7 110)
     initial_gain = ApplauseProperties.initial_gain * 10 ** (15.5 / 20.0)
+
+
+class ReedCrackleProperties(PhonoNoiseProperties):
+    """The crackle of a wet reed barely closing: GS 66.8 "BreathyTnr."'s, a
+    layer under the airy tenor (Ben: "The breathy is missing crackles like
+    the record player"). The record's clicks without its hiss and on each
+    note's own timeline, at the airy take's rate (examples/breathy_fit.py
+    --crackle), each a burst SHAPED BY THE INSTRUMENT (--crackle-spectrum:
+    what each click adds over the sax, band by band, take against ours):
+    nothing under ~1 kHz, where the bore resonates at the note's own
+    harmonics and a disturbance at the reed feeds the note instead of
+    radiating (Ben: "the lower parts of the reed are phase-locking out the
+    bottom end of the clicks ... the clicks are perhaps moded by the
+    instrument") -- the tone-hole lattice's cutoff; above it the bore no
+    longer resonates and the click comes through as noise, strongest at
+    1.6-2.5 kHz and falling either side. READ BETWEEN THE HARMONICS (Ben:
+    "are you picking up the tone in the crackle fit?" -- in 2 ms windows the
+    note's own 3rd and 4th, wavering, read as click; in 8 ms ones, masked
+    a quarter of f0 round each harmonic, ours had been 8-9 dB too full at
+    0.8-1.3 kHz and ~3 dB too loud). The table and the layer's level fitted
+    together on the crackle's SHARE (--crackle-share: no detector, the
+    impulsive excess over the steady breath in 8 ms frames between the
+    harmonics), 1-5 kHz within ~1.5 dB a band. NOT MATCHED: over ~10 kHz
+    the rows' noise skirts hold a floor ~33 dB under the click's peak
+    whatever the table says there (nor does hf_corner_hz reach a strike),
+    standing over an airy sax's near-silent top. A first table
+    flat 0.8-6.4 kHz added 12-19 dB too much under 1 kHz; one before it, a
+    narrow peak at 2-2.5 kHz, rang (its mean click 1.93 ms to a tenth of its
+    peak against the take's 1.27). MANY SMALL ONES (Ben: "There are more, smaller crackles than
+    you picked up"): over the sax's own bed the take holds 52 a second over 5
+    dB, 33 over 6, 20 over 7, 10 over 8, 4 over 9 -- each dB down ~1.6x as
+    many, an exponential spread of levels (scale 1.6 dB), where a first fit
+    counted only those over 9 dB, uniform."""
+    breath_noise_db = ()
+    strike_flam_record = False
+    strike_flam_recur = None
+    strike_flam_rate = 100.0
+    strike_flam_exp_db = 1.6
+    strike_flam_db = 20.0
+    # IN OVER 1 MS AND FALLING 15000 dB/s, now that a burst falls as it is told
+    # to (synthkernel.c xdec_samples: a block's line had held every click up
+    # for milliseconds): a 0.3 ms rise under a 29000 dB/s fall is an impulse,
+    # its top 6-12 dB over the take's at 4-14 kHz; this one's 99th percentile
+    # over 1 ms stands as the take's against 2-4 kHz, -13 dB at 4-8 kHz (the
+    # take -13), still ~7 over it at 8-14 (the rise's kink into the fall)
+    strike_noise_fade_s = 0.001
+    strike_noise_dbs = 15000.0
+    strike_noise_db = ((404, -87.0), (509, -47.0), (641, -30.7), (808, -20.0), (1018, 9.0), (1282, 14.2),
+                       (1616, 10.9), (2036, 18.2), (2565, 22.2), (3232, 7.7), (4072, 10.4), (5131, 6.4),
+                       (6465, -27.8), (8145, -36.4), (10263, -57.3), (12930, -61.8))
 
 
 class OrchestraApplauseProperties(ApplauseProperties):

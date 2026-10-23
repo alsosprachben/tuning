@@ -1496,6 +1496,12 @@ SC88_CHEAP = {
     (120, 3): ("Gt.CutNz. 2", ("var", (120, 1))),
     (120, 4): ("Dist.CutNz.", ("var", (120, 1))),
     (120, 6): ("Pick Scrape", ("alias", 120)),
+    # BASS SLIDE: GM 120's fingertip on a BASS string. The squeak is hand speed
+    # over winding pitch (tonelib.GuitarFretNoiseProperties), and a round-wound
+    # bass's outer wrap is ~0.6 mm to a guitar's ~0.35: the band down by that,
+    # 1700 -> 990 Hz, and its floor, 650 -> 380. No recording found (rated 2)
+    (120, 5): ("Bass Slide", ("set", 120, dict(formants=((990.0, 1170.0, 1.0),), bore_corner_hz=2040.0,
+                                               bell_cutoff_hz=380.0))),
     (123, 3): ("Bird 2", ("kit", 78, 56)),
     (124, 7): ("Scratch 2", ("var", (124, 4))),
     (126, 6): ("Applause 2", ("kit", 58, 56)),
@@ -1714,6 +1720,34 @@ LAYERED[(112, 11)] = ((("class", GangsaPairProperties), 0, 0.0), (("class", Bona
 VARIATIONS[(112, 11)] = GangsaPairProperties
 VARIATION_NAMES[(112, 11)] = "St.Gamelan"
 VARIATION_TRIM_DB[(112, 11)] = PROGRAM_TRIM_DB.get(8, 0.0)
+
+# BREATHYTNR.: the tenor played airy -- fitted on GM 66 to cemorse100's "soft,
+# airy" C5 (CC0; examples/breathy_fit.py): the ladder darker (h2 -18 dB where
+# ours is -8; miss 9.8 -> 2.3 dB) and the air through the reed, a breath table
+# through the renderer (1.45 dB by band; 635 Hz is the fundamental's skirt and
+# does not move); and under it the wet reed's CRACKLE (tonelib.ReedCrackleProperties)
+# ...and it SPEAKS SOFTLY (Ben: "The breath itself should probably fade in"):
+# the take's tone 18 dB under its level at the start, -8 at 50 ms, there by
+# ~100 ms; its breath 8 dB under at once and creeping up over ~0.4 s. A SLUR
+# speaks at once (Ben: "might want to have different logic for legato"): the
+# tone takes the sax's legato attack (slur_attack, 12 ms) and so does the
+# breath (breath_noise_slur) -- the air never stopped. ITS BREATH IS A LOW
+# REGISTER'S: 5 dB more an octave down from the take's C5, 5 less up -- assumed
+# (Ben's -5; rockwehrmann's CC0 alto subtones are all at its bottom, D-flat3-D3,
+# 6-12 dB breathier than the same horn straight, and no airy sax was found
+# recorded at more than one register)
+BREATHY_TENOR = dict(attack_time=0.12, breath_noise_fade_s=0.1, breath_noise_slur=True,
+                     breath_noise_octave_db=-5.0, breath_noise_ref_hz=528.2,
+                     tonal_dampening=2.047, formant_floor=0.999, breath_noise_db=(
+    (160, -13.0), (202, -13.0), (255, -13.0), (321, -13.0), (400, -13.0), (504, -38.0), (635, -58.9),
+    (800, 27.4), (1008, 30.2), (1270, 33.4), (1600, 32.9), (2016, 40.3), (2540, 38.3), (3200, 29.8),
+    (4032, 28.0), (5080, 24.4), (6400, 13.2), (8063, 12.5), (10159, 9.4), (12800, -4.4)))
+BREATHY_CRACKLE_DB = -8.0       # 2 dB under the clicks' 99th percentile match at 2-4 kHz (Ben: "a little too loud")
+from tonelib import ReedCrackleProperties
+LAYERED[(66, 8)] = ((("set", 66, BREATHY_TENOR), 0, 0.0), (("class", ReedCrackleProperties), 0, BREATHY_CRACKLE_DB))
+VARIATIONS[(66, 8)] = routed_variation(66, "breathy", **BREATHY_TENOR)
+VARIATION_NAMES[(66, 8)] = "BreathyTnr."
+VARIATION_TRIM_DB[(66, 8)] = PROGRAM_TRIM_DB.get(66, 0.0)
 VARIATION_TRIM_DB[(35, 2)] = PROGRAM_TRIM_DB.get(35, 0.0) + 5.8
 VARIATION_TRIM_DB[(35, 3)] = PROGRAM_TRIM_DB.get(35, 0.0) + 9.5
 

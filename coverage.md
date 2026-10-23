@@ -693,8 +693,8 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 161 of the SC-55's 161 are built,
-and 141 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+under a program (SC-55 owner's manual p.68). 162 of the SC-55's 162 are built,
+and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -850,6 +850,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 63.16 | SC-88 | VeloBrass 1 | `MoogSynthBrass2_sc88_63_16` | **4** | SC-88 map: layered: GM 63 vel 0-90 + GM 62 vel 91-127 |
 | 63.17 | SC-88 | VeloBrass 2 | `MoogSynthBrass2_sc88_63_17` | **3** | SC-88 map: layered: GM 63 vel 0-90 + GM 61 vel 91-127 |
 | 65.8 | SC-55 | AltoSax Exp. | `AltoSaxExp` | **4** | the alto PLAYED OUT, fitted as a difference from GM 65 to Iowa's AltoSax.Vib.ff (examples/sax_exp_fit.py; 32 notes matched by pitch against the NoVib.mf takes GM 65 is fitted to): its own vibrato, 4.85 Hz at +-8.1 cents where the mf takes play straight (rendered 4.98 Hz, 8.9 cents), the ladder 1-2 dB up above h3 (miss 1.34 -> 0.66 dB). Ben: 'Sounds good' |
+| 66.8 | SC-55 | BreathyTnr. | `Saxophone_breathy` | **4** | the tenor played airy, fitted on GM 66 to cemorse100's 'soft, airy' C5 (CC0; examples/breathy_fit.py): the ladder darker (9.8 -> 2.3 dB), a breath table through the renderer (1.45 dB by band); the wet reed's CRACKLE as a layer (ReedCrackleProperties: exponential levels, fitted between the harmonics, shaped by the bore -- nothing under ~1 kHz; drawn as true exponentials by the kernel's synth_voice_xdec); a soft onset (tone 0.12 s, breath 0.1 s, as the take's); a slur carries tone and breath (breath_noise_slur); the breath -5 dB an octave up from C5 (ASSUMED, Ben's: no airy sax recorded at more than one register). Ben, through ten rounds: 'Sounds good' |
 | 71.8 | SC-55 | Bs Clarinet | `BassClarinet` | **4** | the bass clarinet over its whole compass (tonelib.BassClarinetProperties, fitted to Iowa's mf runs; GM 71 plays it only below D3), its effort law fitted on Iowa's pp and ff matched note for note (examples/bsclar_fit.py): 0.97 dB of tilt per dB from pp to mf, 0.41 above (effort_tilt_up); G3's centroid pp 209 Hz against Iowa's 202. Ben: 'Sounds great' |
 | 72.1 | SC-88 | Piccolo : | `OpenPipe` | **4** | SC-88 map: GM 72 Piccolo's voice |
 | 73.1 | SC-88 | Flute 2 : | `OpenPipe` | **4** | SC-88 map: GM 73 Flute's voice |
@@ -963,6 +964,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 120.2 | SC-55 | String Slap | `SfxBassSlap_sfx50` | **3** | the SFX set's key 50 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): STRING SLAP OF DOUBLE BASS: a hand slapping an upright's strings (Freesound, CC0), judged from 31 Hz: 9.7 dB -- the take's three onsets (the rattle) one strike here |
 | 120.3 | SC-88 | Gt.CutNz. 2 | `SfxGuitarCutDown_sfx48` | **4** | SC-88 map: 120.1's voice |
 | 120.4 | SC-88 | Dist.CutNz. | `SfxGuitarCutDown_sfx48` | **4** | SC-88 map: 120.1's voice |
+| 120.5 | SC-88 | Bass Slide | `GuitarFretNoise_sc88_120_5` | **3** | SC-88 map: GM 120 Guitar Fret Noise with formants=((990.0, 1170.0, 1.0),), bore_corner_hz=2040.0, bell_cutoff_hz=380.0 |
 | 120.6 | SC-88 | Pick Scrape | `GuitarFretNoise` | **3** | SC-88 map: GM 120 Guitar Fret Noise's voice |
 | 120.12 | SC-55 | Biwa Stroke | `Biwa` | **4** | the SATSUMA BIWA (tonelib.BiwaProperties): a wooden-bodied lute from the shamisen's struck-silk numbers, FITTED to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, CC BY-NC-SA 4.0 data: the fitted numbers derive from it; sources.md): 44 strokes, the decay fast and flat across the harmonics, the body 500 Hz-5 kHz (the cassette's ends not the instrument's). Ben: 'Sounds great' |
 | 121.1 | SC-55 | Fl. Key Click | `SfxKeyClick_sfx51` | **4** | the SFX set's key 51 played from the keyboard, C4 at its kit pitch (its gate, ring and level the kit's): KEY CLICK: a woodwind key struck, not blown -- a saxophone's (Freesound, CC0; no CC0 flute key clicks exist): 5.9 dB |
@@ -1148,11 +1150,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 200 | 200 | 100% | 163 | 36 | 1 | 0 | 0 | 0 |
+| SC-55 | 201 | 201 | 100% | 164 | 36 | 1 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 401 | 96% | 276 | 124 | 1 | 0 | 0 | 17 |
-| SC-88Pro | 774 | 419 | 54% | 285 | 133 | 1 | 0 | 0 | 355 (11 another tone) |
-| SC-8850 | 1262 | 417 | 33% | 283 | 133 | 1 | 0 | 0 | 845 (13 another tone) |
+| SC-88 | 418 | 403 | 96% | 277 | 125 | 1 | 0 | 0 | 15 |
+| SC-88Pro | 774 | 421 | 54% | 286 | 134 | 1 | 0 | 0 | 353 (11 another tone) |
+| SC-8850 | 1262 | 419 | 33% | 284 | 134 | 1 | 0 | 0 | 843 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1168,18 +1170,16 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 12/29 |
 | Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
 | Brass | 11/11 | 15/15 | 26/27 | 23/51 | 23/84 |
-| Reed | 10/10 | 8/8 | 10/11 | 10/20 | 10/23 |
+| Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
 | Pipe | 9/9 | 8/8 | 8/9 | 12/22 | 12/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
 | Synth Pad | 8/8 | 8/8 | 21/21 | 23/43 | 23/83 |
 | Synth Effects | 8/8 | 11/11 | 42/42 | 44/76 | 44/122 |
 | Ethnic | 10/10 | 10/10 | 15/22 | 15/37 | 15/44 |
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
-| Sound Effects | 42/42 | 41/41 | 46/49 | 50/73 | 50/144 |
+| Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
 
-### The SC-88 map's 17 still to build, by what they take
-
-**refit** (2: an articulation of one we have, wanting a fit to a reference): 66.8 BreathyTnr., 120.5 Bass Slide
+### The SC-88 map's 15 still to build, by what they take
 
 **new** (15: an instrument we have not modelled, wanting references): 12.16 Barafon, 12.17 Barafon 2, 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 104.8 Tambra, 104.16 Tamboura, 105.8 Rabab, 105.16 Gopichant, 105.24 Oud, 111.8 Pungi, 111.16 Hichiriki, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 

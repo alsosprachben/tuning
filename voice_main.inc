@@ -68,6 +68,15 @@
                     ns=ke;
                 }
                 if(!ftr && chBW[p]<0.f){
+#ifdef XDEC_PASS
+                // A FAST EXPONENTIAL (xdec_block), in synth_voice_xdec only: the
+                // block drawn from each ear's anchor and the loop below left
+                // nothing -- or nothing drawn, and the loop draws it
+                ns=xdec_block(lr*(float)BLK>XDEC_NEPERS*SRATE_F && sl<=0.f && af<=0.f && !BLrow && !Grow,
+                              a, bs0, (long)BLK, dL, dR, fadeS[p], invf, invr, off, lr,
+                              ns, ne, n0, aL, aR, zrL, ziL, zrR, ziR, rr, ri, (float)nf, chBW[p],
+                              jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
+#endif
                 #include "voice_noise.inc"
                 } else if(!ftr){
                 for(long n=ns;n<ne;n++){

@@ -26,6 +26,7 @@ typedef ulong u64; typedef int i32; typedef long i64;
 #define VGLOBAL __global
 #define VCOS cos
 #define VSIN sin
+#define VEXP exp
 #define VFLOOR floor
 static inline u64 v_mulhi(u64 a, u64 b){ return mul_hi(a, b); }
 #else
@@ -35,6 +36,7 @@ typedef uint64_t u64; typedef int32_t i32; typedef int64_t i64;
 #define VGLOBAL
 #define VCOS cosf
 #define VSIN sinf
+#define VEXP expf
 #define VFLOOR floorf
 static inline u64 v_mulhi(u64 a, u64 b){ return (u64)(((unsigned __int128)a * b) >> 64); }
 #endif
@@ -63,7 +65,8 @@ typedef struct {
     // did not -- found on the GS flanger's copies, whose ears' delays differ
     // and put the earlier ear's onset in the block before. kpad: alignment.
     i32 ka, knR, kaR, kpad;      // ...and the right ear's (knR, kaR): kn/ka the left's
-                                 // -- each ear its own onset (voice_block.inc)
+                                 // -- each ear its own onset (voice_block.inc); kpad
+                                 // a fast exponential's onset fade (xr), else 0
     float zLr, zLi, zRr, zRi;    // the carrier at ns, each ear
     float winst;                 // its step, radians a sample
     float mL0, mL1, mR0, mR1;    // kind 1: the amplitude at the block's edges
@@ -71,7 +74,9 @@ typedef struct {
     float jfa, cc, swp;          // the chiff's level, its cycle, the send weight
     float kgL, kgR;              // kind 1: the amplitude at the knee (voice_block.inc), each ear
     float za[12];                // the carrier again at ns+128, +256, +384 (zLr zLi zRr zRi each)
-    float lg[VD_LG], lpad;       // VD_LESLIE: the lobe at the block's grid points
+    float lg[VD_LG];             // VD_LESLIE: the lobe at the block's grid points
+    float xr;                    // kind 1: a fast exponential's rate a sample (0: the line);
+                                 // mL0/mR0 its anchors' levels, mL1/mR1 their samples
 } vdesc;
 
 // THE CARRIER IS RE-ANCHORED EVERY V_SUB SAMPLES. A file renders in 512-sample
@@ -97,6 +102,9 @@ typedef struct {
 // ONE FM SIDEBAND in one cell: its gain at the cell's ends (as start and
 // change), its phasor at s0 and its step
 typedef struct { float g0r, g0i, dgr, dgi, pzr, pzi, th, pad; } vsb;
+
+// synthkernel.c's sstep: a smoothstep, 0 under 0 and 1 over 1
+static inline float v_sstep(float x){ if(x<=0.f) return 0.f; if(x>=1.f) return 1.f; return x*x*(3.f-2.f*x); }
 
 // synthkernel.c's hash01, in integers and a float: the 53-bit value rounds to
 // a float exactly as (float)hash01 does
@@ -153,6 +161,13 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
     float tb=(float)k*invb, mL, mR, sL, sR;
     if(d->kind==1){
         mL=(d->mL0+(d->mL1-d->mL0)*tb)*d->aL; mR=(d->mR0+(d->mR1-d->mR0)*tb)*d->aR;
+        if(d->xr!=0.f){
+            // A FAST EXPONENTIAL (synthkernel.c xdec_samples): from each
+            // ear's anchor, its onset's fade (kpad samples) before it
+            float kf=(float)k, fd=(float)d->kpad;
+            mL = (kf<d->mL1 ? d->mL0*v_sstep((kf-(d->mL1-fd))/fd) : d->mL0*VEXP(d->xr*(kf-d->mL1)))*d->aL;
+            mR = (kf<d->mR1 ? d->mR0*v_sstep((kf-(d->mR1-fd))/fd) : d->mR0*VEXP(d->xr*(kf-d->mR1)))*d->aR;
+        }
         if(d->kn==d->knR && d->ka==d->kaR){
             if(k<d->kn){
                 // the attack's ramp, up to its knee (voice_block.inc)

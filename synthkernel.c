@@ -230,6 +230,112 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
    voice_block.inc, so file, live and GPU take it alike. Out of line, after
    the midpoint lines, which stay as they were: voices whose bursts span
    blocks never reach it (kernel-edits rule; bitident). */
+#if defined(XDEC_KERNEL) || defined(VOICE_BLOCK)
+/* A FAST EXPONENTIAL (synth_voice_xdec; the GPU's voice_block). The level is a line
+   across each block (512 samples, 11.6 ms), right for anything that changes
+   slowly against that; a row that falls tens of dB inside one -- a click, a
+   pin's snap, a mallet's knock -- was drawn as a line from its strike to the
+   block's end, held up for milliseconds whatever its decay (Ben: the reed's
+   crackles "quieter and shorter than our model", and heard on other bursts
+   before). Such a row, a pure exponential (no sustain floor, no second
+   stage) falling more than XDEC_NEPERS in a block, is drawn sample by sample
+   from each ear's ANCHOR: its exact level (AMP) at the block's start, or at
+   the end of its onset's fade in the block it starts in, times e^(xr k) --
+   and before it the onset's own fade (fd samples, the smoothstep AMP draws):
+   a hard step there, under a decay this fast, is an impulse, flat to the top
+   of the spectrum, 6-12 dB over the take's clicks at 4-14 kHz. Anchored afresh each block, so where a click falls in
+   its block does not change its shape. xdec_decide returns the anchors (the
+   descriptor carries them in mL0/mR0, levels, and mL1/mR1, samples from the
+   block's start). NOT IN synth_voice: any statement added to its block loop
+   -- a call out of line, behind a branch, inside the noise branch -- moved
+   109 of 167 corpus files (-ffast-math rebuilt the noise loop: the kernel-
+   edits rule), so blockrender sends such rows to synth_voice_xdec, the same
+   text with XDEC_PASS, and every other row through synth_voice untouched. */
+#define XDEC_NEPERS 2.302585f      /* 20 dB in a block */
+typedef struct { float xr, gL, gR, kL, kR; } xdecs;
+/* ...the decision: OK the row's kind (a plain noise row, no gate, no
+   sustain, no second stage); the level AMP draws, for such a row -- the
+   onset's and the release's smoothsteps times e^(-t lr) -- at each ear's
+   anchor. xr 0: the line, as before. */
+__attribute__((noinline))
+static xdecs xdec_decide(int ok, long a, long bs0, long blk, float dL, float dR, float fade,
+                         float invf, float invr, long off, float lr){
+    xdecs X={0.f,0.f,0.f,0.f,0.f};
+    long bs1=bs0+blk;
+    if(!ok || !(lr*(float)blk>XDEC_NEPERS*SRATE_F)) return X;
+    long oL=a+(long)ceilf(dL)+(long)fade, oR=a+(long)ceilf(dR)+(long)fade;
+    if(oL>=bs1 || oR>=bs1) return X;
+    long kL=oL>bs0?oL:bs0, kR=oR>bs0?oR:bs0;
+    float tL=(float)(kL-a)-dL, tR=(float)(kR-a)-dR;
+    X.gL=sstep(tL*invf)*(1.f-sstep(((float)(kL-off)-dL)*invr))*expf(-tL/SRATE_F*lr);
+    X.gR=sstep(tR*invf)*(1.f-sstep(((float)(kR-off)-dR)*invr))*expf(-tR/SRATE_F*lr);
+    X.kL=(float)(kL-bs0); X.kR=(float)(kR-bs0);
+    X.xr=-lr/SRATE_F;
+    return X;
+}
+__attribute__((noinline))
+static long xdec_samples(long ns, long ne, long n0, long bs0, float xr, float fd,
+                         float gL, float gR, float kL, float kR, float aL, float aR,
+                         float zrL, float ziL, float zrR, float ziR, float rr, float ri,
+                         int noise, long a, float nf, float cbw,
+                         float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
+                         float* outL, float* outR, float* outSL, float* outSR, float swp){
+    uint64_t nk_hi=0, nk_lo=0, nseed=0;
+    long long nui=-1; double nh0=0.0, ndh=0.0;
+    if(noise){
+        double nrate=(double)nf*(double)(-cbw);
+        nseed=(uint64_t)a*0x9E3779B97F4A7C15ULL + (uint64_t)(long long)((double)nf*1000.0);
+        chiff_step(nrate/SRATE_D, &nk_hi, &nk_lo);
+    }
+    for(long n=ns;n<ne;n++){
+        float k=(float)(n-bs0);
+        float mL = (k<kL ? gL*sstep((k-(kL-fd))/fd) : gL*expf(xr*(k-kL)))*aL;
+        float mR = (k<kR ? gR*sstep((k-(kR-fd))/fd) : gR*expf(xr*(k-kR)))*aR;
+        float sL=zrL, sR=zrR;
+        if(noise){
+            uint64_t ui=chiff_index(n, nk_hi, nk_lo);
+            double uf=(double)((uint64_t)n*nk_lo)*(1.0/18446744073709551616.0);
+            if((long long)ui!=nui){
+                nui=(long long)ui; nh0=hash01(nseed+ui);
+                double h1=hash01(nseed+ui+1);
+                ndh=h1-nh0; ndh-=floor(ndh+0.5);
+            }
+            float jn=6.2831853f*(float)(nh0+ndh*uf);
+            float cn=cosf(jn), sn=sinf(jn);
+            sL=zrL*cn-ziL*sn; sR=zrR*cn-ziR*sn;
+        } else if(jfa>0.f){
+            float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
+            float cj=cosf(jit),sj2=sinf(jit);
+            sL += (zrL*cj - ziL*sj2)*jfa;
+            sR += (zrR*cj - ziR*sj2)*jfa;
+        }
+        outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+        if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
+        float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
+        tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+    }
+    return ne;
+}
+
+/* ...both, for synth_voice (voice_main.inc): the block drawn and its end
+   returned, or NS returned and nothing drawn. One call and no branch where
+   it stands, the only way the loops after it keep their code. */
+__attribute__((noinline))
+static long xdec_block(int ok, long a, long bs0, long blk, float dL, float dR, float fade,
+                       float invf, float invr, long off, float lr,
+                       long ns, long ne, long n0, float aL, float aR,
+                       float zrL, float ziL, float zrR, float ziR, float rr, float ri,
+                       float nf, float cbw, float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
+                       float* outL, float* outR, float* outSL, float* outSR, float swp){
+    xdecs X=xdec_decide(ok, a, bs0, blk, dL, dR, fade, invf, invr, off, lr);
+    if(X.xr==0.f || ns>=ne) return ns;
+    return xdec_samples(ns, ne, n0, bs0, X.xr, fade, X.gL, X.gR, X.kL, X.kR, aL, aR,
+                        zrL, ziL, zrR, ziR, rr, ri, cbw<0.f, a, nf, cbw,
+                        jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
+}
+
+#endif
+
 /* EACH EAR ITS OWN ONSET, the CPU's attack: from ns to the later of the two
    knees, each ear its own ramp (from its origin kA to its knee kN; equal:
    silent before it) or, past its knee, the block's line -- as the loop after
@@ -887,6 +993,41 @@ void synth_voice(
 }
 
 
+#ifdef XDEC_KERNEL
+// ---------------------------------------------------------------------------
+// ONLY IN THE XDEC BUILD (-DXDEC_KERNEL, libsynthxdec_<rate>.so): synth_voice
+// with its noise rows that fall faster than a block drawn as exponentials
+// (xdec_block), for the rows blockrender.synth_partials sends it. Every other
+// row renders through synth_voice itself, spelled as it was.
+void synth_voice_xdec(
+    float* outL, float* outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double* omega, const double* ph0L, const double* ph0R,
+    const float* ampL, const float* ampR, const float* nomfreq,
+    const long* non, const long* noff, const float* fadeS, const float* relS, const float* chiffS,
+    const float* logr, const float* logrA, const float* aftL, const float* susL,
+    const float* chVol, const float* chCyc, const float* chRel, const float* susJit, const float* chScale,
+    const float* chBW,
+    const float* tbav, const float* tau, const float* tcut,
+    const float* gbav, const float* gtau, const float* gcut,
+    const float* vdep, const float* vrate, const float* vph, const float* vdl,
+    const float* delL, const float* delR,
+    const int* grow, const int* crow, const float* G, const float* S,
+    const int* brow, const float* BR, const double* BC, const float* BL,
+    const int* fxr, const float* FT, const float* KN, long knk, long kb0,
+    const float* ampLp, const float* ampRp, const int* mkr,
+    const int* MPI, const double* MPC, const float* MPR,
+    const int* MKI, const float* MPK,
+    const double* fmw, const double* fmp, const double* fmpR,
+    float sfloor, float spow, float shmax, float shref, long CHUNK,
+    const float* sendW, float* outSL, float* outSR)
+{
+#define XDEC_PASS
+#include "voice_main.inc"
+#undef XDEC_PASS
+}
+#endif
+
+
 #ifdef LESLIE_KERNEL
 // ---------------------------------------------------------------------------
 // ONLY IN THE LESLIE'S BUILD (-DLESLIE_KERNEL, libsynthlobe_<rate>.so):
@@ -994,6 +1135,13 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->ns=(int)(ns-bn0); d->ne=(int)(ne-bn0);
         d->zLr=zrL; d->zLi=ziL; d->zRr=zrR; d->zRi=ziR; d->winst=winst;
         d->mL0=mL0; d->mL1=mL1; d->mR0=mR0; d->mR1=mR1;
+        // A FAST EXPONENTIAL (xdec_decide): its rate, and its anchors in the line's place
+        {
+            xdecs X=xdec_decide(!ftr && chBW[p]<0.f && !BLrow && !Grow && sl<=0.f && af<=0.f,
+                                a, bs0, (long)BLK, dL, dR, fadeS[p], invf, invr, off, lr);
+            d->xr=X.xr;
+            if(X.xr!=0.f){ d->mL0=X.gL; d->mR0=X.gR; d->mL1=X.kL; d->mR1=X.kR; }
+        }
         d->aL=aL; d->aR=aR; d->aLp=aLp; d->aRp=aRp;
         d->jfa=jfa; d->cc=cc; d->swp=swp;
         // the knee: its sample from the block's start (0, none), its gains
@@ -1001,6 +1149,8 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->ka=kNl>ns ? (int)(kAl-bn0) : 0;
         d->knR=kNr>ns ? (int)(kNr-bn0) : 0;
         d->kaR=kNr>ns ? (int)(kAr-bn0) : 0; d->kpad=0;
+        // a fast exponential's onset fade, in samples (voicedesc.h)
+        if(d->xr!=0.f) d->kpad=(int)fadeS[p];
         // the carrier at each V_SUB samples into the block, in double, as the
         // phasor's own steps of winst place it (voicedesc.h)
         for(int j=1;j<4;j++){

@@ -255,6 +255,35 @@ def ensure_gpu_lib():
 
 
 
+def ensure_xdec_lib():
+    """The kernel built with synth_voice_xdec (-DXDEC_KERNEL): synth_voice with
+    its fast noise rows drawn as exponentials (synthkernel.c xdec_block), for
+    the rows synth_partials sends it. A library of its own because any line of
+    it inside synth_voice moved 109 of 167 corpus files (-ffast-math)."""
+    src = os.path.join(HERE, "synthkernel.c")
+    return _build(src, "libsynthxdec_%d.so" % SR, ["-DXDEC_KERNEL"], ["synth_voice_xdec"])
+
+
+# A ROW FASTER THAN A BLOCK (synthkernel.c xdec_block): a noise row with a plain
+# decay (no sustain, no second stage), no gate, no Moog, falling more than
+# 20 dB in a block -- every strike's burst whose decay is quick. Such rows
+# render through synth_voice_xdec; a table without one makes the one call it
+# always made.
+XDEC_NEPERS = 2.302585
+
+
+def _xdec_rows(a, i0, i1):
+    """The indices in [i0, i1) of rows synth_voice_xdec draws; empty: none."""
+    cbw = a['cbw'][i0:i1]
+    m = (cbw < 0) & (a['sus'][i0:i1] <= 0) & (a['aft'][i0:i1] <= 0) \
+        & (a['logr'][i0:i1] * BLK > XDEC_NEPERS * SR) & (a['gr'][i0:i1] < 0)
+    if a.get('BL') is not None:
+        m &= a['br'][i0:i1] < 0
+    if a.get('FT') is not None and 'fx' in a:
+        m &= a['fx'][i0:i1] < 0
+    return np.flatnonzero(m) + i0
+
+
 def ensure_lobe_lib():
     """The kernel built with synth_voice_lobe (-DLESLIE_KERNEL): synth_voice
     with the Leslie's lobe on its rotor rows (leslie.KERNEL_LOBE), for a table
@@ -4765,7 +4794,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # an exciter that can carry declare legato_attack_s; see tonelib.
         # The arithmetic is tonelib's (slur_attack), shared with live, which
         # applies the same slur after stamping a template.
-        if (ch, note, _occ.get((ch, note), 0)) in legato:
+        _slurred = (ch, note, _occ.get((ch, note), 0)) in legato
+        if _slurred:
             at = T.slur_attack(at, props)
         # A GUITAR'S LEGATO IS THE FRETTING HAND (hammer_legato: Roland's ":"
         # guitars). A note over the one before is hammered or pulled, not
@@ -4797,6 +4827,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # It could not have: these notes did not exist when the file was parsed.
         if (ch, note, on) in _GLISS or (ch, note, on) in _MONO_SLUR:
             at = T.slur_attack(at, props)
+            _slurred = True
         # ...AND A NOTE FROM SILENCE IS A PUSH OF THE BELLOWS (_push_finish); a
         # slurred one is not -- the bellows is already moving
         if getattr(props, 'bellows_push_gain', 0.0) and getattr(props, 'bellows_push_every_note', False):
@@ -5499,9 +5530,23 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     _bursts, _fbal = [(0.0, -200.0)], [0.25 * math.pi]
             elif _nfl > 1:
                 _frng = random.Random(int(round(on * 1e6)) * 131 + note * 7 + ch)
-                _bursts = [(_frng.uniform(0.0, _fspan), -_frng.uniform(0.0, props.strike_flam_db))
-                           for _ in range(_nfl)]
+                _fexp = getattr(props, 'strike_flam_exp_db', 0.0) or 0.0
+                if _fexp:
+                    # ...ITS LEVELS EXPONENTIAL in dB under the loudest (a reed's
+                    # crackle: each dB down ~1.6x as many), held within
+                    # strike_flam_db
+                    _bursts = [(_frng.uniform(0.0, _fspan),
+                                -min(_frng.expovariate(1.0 / _fexp), props.strike_flam_db))
+                               for _ in range(_nfl)]
+                else:
+                    _bursts = [(_frng.uniform(0.0, _fspan), -_frng.uniform(0.0, props.strike_flam_db))
+                               for _ in range(_nfl)]
                 _t0 = min(b[0] for b in _bursts); _l0 = max(b[1] for b in _bursts)
+                # ...the first at the onset (a crowd's first clap is the cue);
+                # a reed's crackle (strike_flam_exp_db) keeps its draw's times,
+                # not a click on every note's start
+                if _fexp:
+                    _t0 = 0.0
                 _bursts = [(t - _t0, l - _l0) for t, l in _bursts]
             # ...AND A LATE ONE (strike_noise_at: a surdo's hand), its table
             # moved strike_noise_cal_db
@@ -5649,6 +5694,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _PL[0] = 0
             _VB[0], _VB[1], _VB[2] = 0.0, 5.5, 0.0
             _bfade = max(1.0, props.breath_noise_fade_s * SR)
+            # ...and on a SLUR the player never stopped blowing: where the voice
+            # says so (breath_noise_slur), the breath takes the legato attack,
+            # not its swell from silence
+            if _slurred and getattr(props, 'breath_noise_slur', False):
+                _bfade = max(1.0, T.slur_attack(props.breath_noise_fade_s, props) * SR)
             # ...wavering on its own gate row (breath_noise_wobble_db), if the
             # channel has one
             _bkeep = _BR[0]
@@ -6911,6 +6961,14 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
     whole table in one call and is unaffected."""
     a=prep; lib=a['lib']; CHUNK=_chunk()
     fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    # ROWS FASTER THAN A BLOCK (_xdec_rows) render through synth_voice_xdec, the
+    # rest as they always did; a table with none makes the one call below
+    xr = _xdec_rows(a, i0, i1)
+    if len(xr):
+        keep = np.setdiff1d(np.arange(i0, i1), xr)
+        _synth_rows(a, keep, n0, winlen, L, R, SndL, SndR, None)
+        _synth_rows(a, xr, n0, winlen, L, R, SndL, SndR, ensure_xdec_lib().synth_voice_xdec)
+        return
     if i0 or i1 != a['P']:
         sl = lambda k: a[k][i0:i1]
     else:
@@ -6922,6 +6980,24 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     *_voice_args(a, sl, i1-i0, lobe),
                     ctypes.c_long(CHUNK),
                     # the live room's send bus: NULL unless asked for (see synthkernel.c)
+                    fp(sl('sw')) if SndL is not None else None,
+                    fp(SndL) if SndL is not None else None,
+                    fp(SndR) if SndL is not None else None)
+
+
+def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn):
+    """Rows `rows` of the table (an index array) through FN, or through the
+    table's own function (synth_voice, or the Leslie's) when FN is None."""
+    if not len(rows):
+        return
+    fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
+    sl = lambda k: np.ascontiguousarray(a[k][rows])
+    lobe = fn is None and a.get('LANG') is not None
+    if fn is None:
+        fn = ensure_lobe_lib().synth_voice_lobe if lobe else a['lib'].synth_voice
+    fn(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
+                    *_voice_args(a, sl, len(rows), lobe),
+                    ctypes.c_long(_chunk()),
                     fp(sl('sw')) if SndL is not None else None,
                     fp(SndL) if SndL is not None else None,
                     fp(SndR) if SndL is not None else None)
