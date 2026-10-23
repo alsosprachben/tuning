@@ -20358,7 +20358,7 @@ class OudProperties(FormantBody, PluckedStringProperties):
     max_harmonic = 160
     initial_gain = 0.0411004 / 3 ** 0.5 * (2.0 / (1.0 + 0.55 ** 2)) ** 0.5
     attack_time = 0.002
-    # THE COURSE'S SECOND STRING (examples/oud_sympathy.py, hammondman's three
+    # THE COURSE'S SECOND STRING (examples/course_sympathy.py, hammondman's three
     # notes, each harmonic's envelope): beating 4-9 cents apart (median 6) and
     # 8-12 dB peak to peak, so the partner ~5 dB under the string plucked, not
     # its equal; each course its own split and sign
@@ -20376,7 +20376,7 @@ class OudProperties(FormantBody, PluckedStringProperties):
     sympathetic_tonic = 36
     sympathetic_string_cents = (0.0, 0.0, 0.0, 12.0, 0.0, 0.0)
     # Only the A and D courses show; the outer four never above -45 dB, where
-    # all at one level put them at -20 to -35 (examples/oud_sympathy.py). The
+    # all at one level put them at -20 to -35 (examples/course_sympathy.py). The
     # A and D: right under the G2, 9-15 dB loud under the A2 and C3 -- the
     # level splits them
     sympathetic_string_db = (-15.0, -15.0, 0.0, 0.0, -12.0, -12.0)
@@ -25731,10 +25731,28 @@ class MandolinProperties(Plectrum, SteelGuitarProperties):
     body -- fitted to Joshua Meltzer's late-1800s mandolin (Pianobook, Eclectic
     Mandolin, carved from its monolith; examples/pluck_fit.py --voice=mandolin),
     which sounds from D3: an old instrument tuned low. Each note's course is a
-    pair, a voice on every harmonic 5.5 cents off at 0.9 (its doublets 2-13
-    cents, median ~5.5, the partner within a few dB)."""
-    unison_partner_gain = 0.9
+    pair, a voice on every harmonic 5.5 cents off (its doublets 2-13 cents,
+    median ~5.5)."""
+    # THE PARTNER ~5 dB UNDER (examples/course_sympathy.py --voice=mandolin,
+    # each harmonic's beating over the 13 notes: 5.4 cents, -7.2 dB by the
+    # measure, which reads ours at 0.9 1.9 dB deep): 0.9 before, from the
+    # doublets' peaks. The level held where the 0.9 pair put it
+    unison_partner_gain = 0.55
     unison_partner_cents = 5.5
+    initial_gain = SteelGuitarProperties.initial_gain * ((1.0 + 0.9 ** 2) / (1.0 + 0.55 ** 2)) ** 0.5
+    # ITS OTHER OPEN COURSES ANSWER, KICKED THROUGH THE BRIDGE as the oud's
+    # are (contact over a fixed set): tuned a fourth low, D3 A3 E4 B4. The
+    # D course rings at its own harmonics under 10 of the 13 notes, 29-44 dB
+    # under (its 146.8 Hz under A3, B3, D#4 and B4, where nothing of the note
+    # lands), the A course seldom (35-42 under), the E and B hardly at all
+    sympathetic_mode = 'contact'
+    sympathetic_strings = (0, 7, 14, 21)
+    sympathetic_tonic = 50
+    sympathetic_string_db = (0.0, -10.0, -25.0, -25.0)
+    # (fitted to the 19 peaks: mean -0.8 dB, rms 6.9)
+    sympathetic_gain = 0.025
+    sympathetic_max = 4
+    sympathetic_floor = 0.0
     # THE PICK (examples/plectrum_fit.py, on flatness and how fast the top
     # falls -- not its level: the take is re-amped dark): a scrape at the
     # note's level to 5.5 kHz gone at 700 dB/s, and the top partials struck
