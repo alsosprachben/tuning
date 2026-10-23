@@ -12188,6 +12188,76 @@ class BalafonSoftProperties(BalafonProperties):
     strike_noise_db = tuple((hz, db - 12.0) for hz, db in BalafonProperties.strike_noise_db)
 
 
+class LogDrumProperties(ModeDecays, StruckBarProperties):
+    """GS 12.24 "Log Drum": a slit drum -- a log hollowed through a slot,
+    the lips either side cut into TONGUES of different lengths, struck with
+    mallets. Fitted to VSCO 2's log drum (Versilian Studios, CC0; sources.md;
+    examples/logdrum_fit.py): two tongues, 108 and 155 Hz, three strokes and
+    two round-robins each, ringing 1.1-1.5 s.
+
+    TWO THINGS SOUND, AND ONLY ONE IS THE NOTE:
+      * THE TONGUE, its fundamental nearly alone and its 2nd and 3rd
+        harmonics under it (13-27 dB on the big tongue, 31-45 on the small);
+      * THE LOG, the same three modes under either tongue -- ~183, ~505 and
+        ~660 Hz -- answering every stroke at their own pitch and gone in a
+        fraction of a second: fixed in Hz, whatever key is played (mode_ratio
+        is the body's Hz over the note's).
+    Harder strokes are brighter: the upper modes ~0.4 dB an octave per dB of
+    stroke (mode_stroke_tilt). The other tongue's sympathy (17-43 dB under)
+    is not modelled.
+    """
+    inharmonicity_coefficient = 0.0      # the ratios are absolute (mode_ratio)
+    # the log's own modes, Hz
+    body_modes_hz = (183.0, 505.0, 660.0)
+    mode_ratios = (1.0, 2.0, 3.0, 1.7, 4.7, 6.1, 1.7)    # (at 108 Hz; mode_ratio rules)
+    # ...AND ITS 183 HZ TWICE: a THUMP and a ring. Under the big tongue it
+    # stands 7 dB over the note in the first 50 ms and 13 under it by 100 --
+    # the log's air answering the knock -- then rings on at ~100 dB/s; one
+    # decay could not say both. Mode 7 is the thump, at 183 Hz, falling 400
+    # dB/s; mode 4 the ring under it. Set from the take's own cells, not
+    # fitted: thump and ring each spill into the other's windows, and a fit
+    # moving one by its window pulled the other off (6.4 -> 8.1 dB)
+    mode_gains = (1.0, 0.68866, 0.21924, 0.66, 0.15884, 0.04589, 10.3)
+    mode_gains_points = ((108.0, (1.0, 0.68866, 0.21924, 0.66, 0.15884, 0.04589, 10.3)),
+                         (155.0, (1.0, 0.03007, 0.05775, 0.104, 0.10148, 0.01054, 0.63)))
+    mode_decays = (29.6, 66.2, 53.8, 59.4, 69.2, 66.9, 400.0)
+    decay_register_slope = 0.0
+    max_harmonic = 7
+    mode_stroke_tilt = 0.4
+    # THE MALLET'S KNOCK on the log (strike_noise: noise between the modes):
+    # in the first 30 ms the big tongue's floor sits 11-15 dB under its
+    # fundamental below 450 Hz, sloping to -40 by 3.5 kHz, gone 30 dB by
+    # 100-200 ms; the small tongue's 15-20 dB weaker. Fitted band by band
+    # (logdrum_fit.py --knock); its key slope held to the two tongues' span
+    strike_noise_db = ((63, -112.0), (79, -94.7), (100, -94.7), (126, -94.7), (159, -94.7), (200, -88.0),
+                       (252, -88.0), (317, -88.0), (400, -88.0), (504, -88.0), (635, -91.5), (800, -94.9),
+                       (1008, -78.5), (1270, -80.3), (1600, -87.1), (2016, -88.6), (2540, -93.6),
+                       (3200, -96.4), (4032, -96.8), (5080, -100.2), (6400, -103.0), (8064, -109.4))
+    # (dB re the note's gain at A4: the slope's -37.5 dB an octave -- the
+    # small tongue's knock ~20 dB under the big one's half an octave down --
+    # puts the numbers two octaves' worth under the keys they sound on; the
+    # bands among the tongues and the log's 183 Hz, which no gap between the
+    # modes reaches, take the nearest band's level; and 635 Hz its
+    # neighbours' -- the gap the fit read there held the log's 626 Hz mode)
+    strike_noise_octave_db = -37.53
+    strike_noise_span_hz = (108.0, 155.0)
+    strike_noise_dbs = 397.1
+    strike_noise_fade_s = 0.0005
+    strike_noise_len_s = 0.3
+    # at its capital's level, the marimba's
+    initial_gain = StruckBarProperties.initial_gain * 10 ** (19.6 / 20.0)
+    mode_stroke_ref_db = -3.0
+
+    def mode_ratio(self, m):
+        if 1 <= m <= 3:
+            return float(m)
+        if 4 <= m <= 6:
+            return self.body_modes_hz[m - 4] / (self.frequency_x * (2.0 ** self.octave_position))
+        if m == 7:
+            return self.body_modes_hz[0] / (self.frequency_x * (2.0 ** self.octave_position))
+        return 0.0
+
+
 class GangsaPairProperties(GenderProperties):
     """The Balinese gangsa as it is played: each key a PAIR, the pengumbang and
     the pengisep, 26 cents apart so every note beats (the ombak; see

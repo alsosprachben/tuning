@@ -693,7 +693,7 @@ Controls are the rest of the console that are not stops.
 ## Variations: the GS banks (CC0)
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
-under a program (SC-55 owner's manual p.68). 168 of the SC-55's 168 are built,
+under a program (SC-55 owner's manual p.68). 169 of the SC-55's 169 are built,
 and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
@@ -723,6 +723,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 12.8 | SC-88 | Marimba w | `Marimba_sc88_12_8` | **4** | SC-88 map: GM 12 Marimba with key_pan_spread=0.5 |
 | 12.16 | SC-55 | Barafon | `Balafon` | **4** | the West African balafon, fitted to marini24's 17 strikes (CC BY 4.0; examples/balafon_fit.py): undercut wooden bars whose tuning falls up the keys (the second mode 4.1x at 236 Hz to 2.9x from ~700 Hz, the third 9x to a floor of 7), their levels by the key (a big bar rings its upper modes, a small one not), short and shorter up (35 dB/s at 236 Hz, 230 at 1.5 kHz), and the gourds' membranes BUZZING between the partials, fitted through the renderer (0.48 dB by band). Ben: 'Sounds great' |
 | 12.17 | SC-55 | Barafon 2 | `BalafonSoft` | **2** | the same balafon played SOFTER and so drier (Ben's choice): its buzz 12 dB under (a membrane rattles only when driven hard), the upper modes 4 and 8 dB under (a soft mallet's longer contact) -- ASSUMED, one effort recorded. Ben: 'Sounds good' |
+| 12.24 | SC-55 | Log Drum | `LogDrum` | **4** | a slit drum, fitted to VSCO 2's log drum (CC0; examples/logdrum_fit.py): two tongues, 108 and 155 Hz, three strokes each. The TONGUE -- its fundamental, its 2nd and 3rd (13-27 dB under on the big tongue, 31-45 on the small) -- and the LOG's own modes at 183, 505 and 660 Hz, fixed in Hz whatever key, the 183 a thump and a ring; the mallet's KNOCK between the modes (strike noise, band by band, 0.3 dB; falling 397 dB/s, the small tongue's ~20 dB under); harder strokes brighter (0.4 dB an octave per dB). 6.2 dB rms over 46 cells. At the marimba's level. Ben: 'Sounds great' |
 | 14.8 | SC-55 | Church Bell | `ChurchBell` | **4** | St. Kathrin's church bell, Gelting (Pianobook, Zoom H5): its 19 modes fitted window by window to their level at the strike and decay -- the strike note an octave under the nominal (649.6 Hz), the flat hum (0.438) and the 1.125 ringing seconds, the superquint a doublet 3 Hz apart, the clang 4.2-13.7 gone in a second; within ~6 dB of the recording, mode by mode against the nominal, to 2.5 s (its noise beyond). Ben: "Sounds amazing" |
 | 14.9 | SC-88 | Carillon | `ChurchBell` | **4** | SC-88 map: 14.8's voice |
 | 15.1 | SC-88 | Santur 2 | `HammeredDulcimer_sc88_15_1` | **4** | SC-88 map: GM 15 Dulcimer with detuned_pair=(-6.0, 6.0) |
@@ -1156,11 +1157,11 @@ A later map can put another tone under a number we built; that one is not counte
 
 | map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |
 |---|---|---|---|---|---|---|---|---|---|
-| SC-55 | 207 | 207 | 100% | 168 | 37 | 2 | 0 | 0 | 0 |
+| SC-55 | 208 | 208 | 100% | 169 | 37 | 2 | 0 | 0 | 0 |
 | SC-55mkII | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 | 0 |
-| SC-88 | 418 | 409 | 98% | 281 | 126 | 2 | 0 | 0 | 9 |
-| SC-88Pro | 774 | 427 | 55% | 290 | 135 | 2 | 0 | 0 | 347 (11 another tone) |
-| SC-8850 | 1262 | 425 | 34% | 288 | 135 | 2 | 0 | 0 | 837 (13 another tone) |
+| SC-88 | 418 | 410 | 98% | 282 | 126 | 2 | 0 | 0 | 8 |
+| SC-88Pro | 774 | 428 | 55% | 291 | 135 | 2 | 0 | 0 | 346 (11 another tone) |
+| SC-8850 | 1262 | 426 | 34% | 289 | 135 | 2 | 0 | 0 | 836 (13 another tone) |
 
 A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
 
@@ -1169,7 +1170,7 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | family | SC-55 | SC-55mkII | SC-88 | SC-88Pro | SC-8850 |
 |---|---|---|---|---|---|
 | Piano | 11/11 | 21/21 | 26/26 | 25/39 | 23/61 |
-| Chromatic Percussion | 11/11 | 12/12 | 17/18 | 17/23 | 17/29 |
+| Chromatic Percussion | 12/12 | 12/12 | 18/18 | 18/23 | 18/29 |
 | Organ | 12/12 | 16/16 | 30/30 | 25/49 | 25/71 |
 | Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 36/72 |
 | Bass | 10/10 | 12/12 | 31/31 | 33/76 | 33/113 |
@@ -1185,9 +1186,9 @@ A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4
 | Percussive | 17/17 | 13/13 | 27/28 | 28/47 | 28/95 |
 | Sound Effects | 42/42 | 41/41 | 47/49 | 51/73 | 51/144 |
 
-### The SC-88 map's 9 still to build, by what they take
+### The SC-88 map's 8 still to build, by what they take
 
-**new** (9: an instrument we have not modelled, wanting references): 12.24 Log drum, 56.8 Flugel Horn, 75.8 Kawala, 105.8 Rabab, 105.16 Gopichant, 111.8 Pungi, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
+**new** (8: an instrument we have not modelled, wanting references): 56.8 Flugel Horn, 75.8 Kawala, 105.8 Rabab, 105.16 Gopichant, 111.8 Pungi, 113.8 Atarigane, 123.4 Kitty, 123.5 Growl
 
 
 ## Effects: the Sound Canvas's

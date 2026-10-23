@@ -1710,6 +1710,13 @@ VARIATIONS[(105, 24)] = OudProperties
 VARIATION_NAMES[(105, 24)] = "Oud"
 VARIATION_TRIM_DB[(105, 24)] = PROGRAM_TRIM_DB.get(24, 0.0)
 
+# LOG DRUM: a slit drum, fitted to VSCO 2's (CC0; tonelib.LogDrumProperties,
+# examples/logdrum_fit.py)
+from tonelib import LogDrumProperties
+VARIATIONS[(12, 24)] = LogDrumProperties
+VARIATION_NAMES[(12, 24)] = "Log Drum"
+VARIATION_TRIM_DB[(12, 24)] = PROGRAM_TRIM_DB.get(12, 0.0)
+
 # TAMBOURA: the tanpura, fitted to sankalp's drone takes (CC BY 4.0;
 # tonelib.TambouraProperties, examples/tanpura_fit.py)
 from tonelib import TambouraProperties
