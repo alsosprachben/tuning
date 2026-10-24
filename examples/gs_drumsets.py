@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""The Sound Canvas's drum sets, every key, from the SC-88 Pro owner's manual's
+text layer ("Native Drum set (1-7)", "SC-88 Drum set (1-3)", "SC-55 Drum
+set": printed pp.163-176).
+
+    python3 -I examples/gs_drumsets.py parse MANUAL.txt OUT.tsv   (pdftotext -layout)
+    python3 -I examples/gs_drumsets.py diff OUT.tsv [SET ...]     each set's keys unlike Standard 1
+
+Each page sets its sets side by side, one fixed-width column each, under a
+"PC1 PC2 ..." line and a line of names; one text row per key, in key order,
+its number at the left -- or, for some rows, on a line of its own after it,
+which is skipped (the key counts on). "←" is "same as Standard 1" (that map's),
+"---" no sound; "[EXCn]" (exclusive class), "*" (two voices), "[88]"/"[55]"
+(an older map's sound) are kept in a column of their own.
+"""
+import re
+import sys
+
+PAGE = re.compile(r"^\s+(Native|SC-88|SC-55) Drum set(?: \((\d)\))?\s*$")
+PCROW = re.compile(r"PC\s?\d+")
+
+
+def parse(path):
+    lines = open(path, encoding="utf-8", errors="replace").read().split("\n")
+    out = []          # (map, pc, set name, key, name, flags)
+    i = 0
+    while i < len(lines):
+        m = PAGE.match(lines[i])
+        if not m:
+            i += 1
+            continue
+        mp = {"Native": "native", "SC-88": "sc88", "SC-55": "sc55"}[m.group(1)]
+        j = i + 1
+        # the PC line, then the names
+        while j < len(lines) and not PCROW.search(lines[j]):
+            j += 1
+        pcl = lines[j]
+        cols = [(mm.start(), int(re.sub(r"\D", "", mm.group(0)))) for mm in PCROW.finditer(pcl)]
+        names = lines[j + 1]
+        sets = []
+        for k, (c0, pc) in enumerate(cols):
+            c1 = cols[k + 1][0] if k + 1 < len(cols) else None
+            sets.append((pc, names[c0:c1].strip() if c1 else names[c0:].strip(), c0, c1))
+        if "Notes 0-19" in " ".join(lines[i:j]):
+            i = j + 2                            # page 7: the 0-19, 97-127 keys, sets grouped
+            continue
+        key = None
+        kcol = cols[0][0]                        # key numbers live left of the first set
+        for line in lines[j + 2:]:
+            if "PC    : Program Number" in line or PAGE.match(line):
+                break
+            km = re.match(r"^\s*(?:C\d+\s+|C-1\s+)?(\d{1,3})\b", line[:kcol])
+            body = line
+            if km and line[km.end():].strip() == "":
+                continue                         # a key number alone on its line
+            if km:
+                key = int(km.group(1))
+            elif key is not None:
+                key += 1
+            else:
+                continue
+            if not any(line[c0:c1 or None].strip() for _pc, _n, c0, c1 in sets):
+                continue
+            for pc, sname, c0, c1 in sets:
+                cell = body[c0:c1].strip() if c1 else body[c0:].strip()
+                flags = " ".join(re.findall(r"\[EXC\d\]|\[RND\]|\[88\]|\[55\]|\*", cell))
+                name = re.sub(r"\[EXC\d\]|\[88\]|\[55\]|\*", "", cell).strip()
+                name = re.sub(r"\s{2,}", " ", name)
+                out.append((mp, pc, sname, key, name or "---", flags))
+        i = j + 2
+    return out
+
+
+def write(rows, path):
+    with open(path, "w") as f:
+        f.write("map\tpc\tset\tkey\tname\tflags\n")
+        for r in rows:
+            f.write("\t".join(str(x) for x in r) + "\n")
+
+
+def read(path):
+    rows = []
+    for line in open(path).read().split("\n")[1:]:
+        if line:
+            mp, pc, sname, key, name, flags = line.split("\t")
+            rows.append((mp, int(pc), sname, int(key), name, flags))
+    return rows
+
+
+def diff(rows, want=()):
+    """{(map, pc, set): {key: name}} -- each set's keys that are not "←"."""
+    sets = {}
+    for mp, pc, sname, key, name, flags in rows:
+        if pc == 1:
+            continue
+        if want and sname not in want and str(pc) not in want:
+            continue
+        if name not in ("←", "<-", "<–"):
+            sets.setdefault((mp, pc, sname), {})[key] = (name, flags)
+    return sets
+
+
+def main(argv):
+    if argv[1] == "parse":
+        rows = parse(argv[2])
+        write(rows, argv[3])
+        n = {}
+        for r in rows:
+            n.setdefault((r[0], r[1], r[2]), set()).add(r[3])
+        for k in sorted(n):
+            ks = sorted(n[k])
+            print("  %-6s PC%-3d %-16s keys %d-%d (%d)" % (k[0], k[1], k[2], ks[0], ks[-1], len(ks)))
+        return 0
+    if argv[1] == "diff":
+        for (mp, pc, sname), ks in sorted(diff(read(argv[2]), argv[3:]).items()):
+            print("== %s PC%d %s: %d keys its own" % (mp, pc, sname, len(ks)))
+            for key in sorted(ks):
+                print("   %3d  %s %s" % (key, ks[key][0], ks[key][1]))
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

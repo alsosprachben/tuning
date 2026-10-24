@@ -1844,13 +1844,21 @@ SC88PRO_EXTRA_KEYS = {
     115: ("Electric Snare 2", 24, 40), 116: ("Electric Snare", 24, 38), 117: ("Electric Snare 3", 24, 40),
     118: ("TR-707 Snare 1", 29, 38), 119: ("TR-808 Snare 1", 25, 38), 120: ("TR-808 Snare 2", 25, 40),
     121: ("TR-909 Snare 1", 30, 38), 122: ("TR-909 Snare 2", 30, 40),
-    # the Rap Snare: a 1990s hip-hop snare, an 808's kin (River plays it)
-    123: ("Rap Snare", 25, 38),
+    # the Rap Snare: the Hip-Hop set's (9, built at the end: _build_gs_sets),
+    # a break's snare through a 12-bit sampler (tonelib.RapSnareProperties).
+    # River plays it; the 808's snare until Ben chose this one (2026-10-24)
+    123: ("Rap Snare", 9, 38),
 }
 
 
-def _sc88pro_extra():
+def _sc88pro_extra(keys=None):
     for key, (name, kit, src) in SC88PRO_EXTRA_KEYS.items():
+        if keys is not None and key not in keys:
+            continue
+        if keys is not None:
+            # again, over the first pass's borrowing: its ring and level go too
+            PERCUSSION_RING.pop(key, None); PERCUSSION_LEVEL.pop(key, None)
+            KIT_GATE.get(0, {}).pop(key, None)
         own = KITS.get(kit, {}).get(src) if kit else None
         _nm, cls, f0 = own if own is not None else PERCUSSION[src]
         PERCUSSION[key] = (name, cls, f0)
@@ -1923,3 +1931,73 @@ SC88_TR808_909 = _map_set(2, 25, 25, "TR-808/909", {
     35: (30, 36, "909 Bass Drum"),
     40: (30, 38, "909 Snare 1"),
 })
+
+
+# THE SETS THAT REARRANGE VOICES WE HAVE (percussion_gs: Standard 2, Ethnic,
+# Kick & Snare, Rhythm FX, the SC-88 map's Dance): each key the voice that is
+# Roland's name for it -- with that voice's ring, level, gate, pan and
+# strokes -- played backwards where the name says so, or left out where we
+# have none yet.
+import percussion_gs as _GSET   # noqa: E402
+
+_STD_STROKES = {"rasp": PERCUSSION_RASP, "train": PERCUSSION_TRAIN, "rattle": PERCUSSION_RATTLE,
+                "cascade": PERCUSSION_CASCADE, "roll": PERCUSSION_ROLL}
+REVERSE_MAX_S = 2.0      # a reversed voice's swell at most: Roland's are short samples
+
+
+def _source(sk, src):
+    """(entry, ring, level, gate, pan, strokes) of set sk's key src."""
+    own = KITS.get(sk, {}).get(src) if sk else None
+    if own is not None:
+        strokes = {t: v[src] for t, v in KIT_STROKES.get(sk, {}).items() if src in v}
+        return (own, KIT_RING.get(sk, {}).get(src), KIT_LEVEL.get(sk, {}).get(src),
+                KIT_GATE.get(sk, {}).get(src), KIT_PAN.get(sk, {}).get(src, DEFAULT_PAN.get(src, 0.0)), strokes)
+    strokes = {t: v[src] for t, v in _STD_STROKES.items() if src in v}
+    return (PERCUSSION[src], PERCUSSION_RING.get(src), PERCUSSION_LEVEL.get(src),
+            KIT_GATE.get(0, {}).get(src), DEFAULT_PAN.get(src, 0.0), strokes)
+
+
+def _build_gs_sets():
+    import tonelib as _TL
+    _rev, _rnd = {}, {}
+    for which, keys in _GSET.SETS.items():
+        k = _GSET.SET_KIT[which]
+        KITS[k] = {}
+        for key, name in keys.items():
+            spec = _GSET.VOICE.get(name)
+            if spec is None:
+                continue
+            if spec[0] == 'c':
+                KITS[k][key] = (name, getattr(_TL, spec[1]), float(spec[2]))
+                continue
+            (nm, cls, f0), ring, level, gate, pan, strokes = _source(spec[1], spec[2])
+            if spec[0] == 'r':
+                # BACKWARDS: the voice swelling to its hit, gated to its own
+                # ring (so its note-off, where a reversed note ends, is the hit)
+                rk = (cls, ring)
+                if rk not in _rev:
+                    _rev[rk] = type("Reverse" + cls.__name__, (cls,),
+                                    dict(played_backwards=True, one_shot=True))
+                cls = _rev[rk]
+                gate = min(REVERSE_MAX_S, ring or 1.0)
+                ring, strokes = None, {}
+            elif spec[0] == 'n':
+                # [RND]: the voice, each strike varied (tonelib.RandomStrike)
+                if cls not in _rnd:
+                    _rnd[cls] = type("Rnd" + cls.__name__, (_TL.RandomStrike, cls), {})
+                cls = _rnd[cls]
+            KITS[k][key] = (name, cls, f0)
+            for tab, v in ((KIT_RING, ring), (KIT_LEVEL, level), (KIT_GATE, gate)):
+                if v is not None:
+                    tab.setdefault(k, {})[key] = v
+            KIT_PAN.setdefault(k, {})[key] = pan
+            for t, v in strokes.items():
+                KIT_STROKES.setdefault(k, {}).setdefault(t, {})[key] = v
+        DRUM_SETS[k] = _GSET.SET_NAME[k]
+        if k in _GSET.SET_ALONE:
+            KIT_ONLY.add(k)
+
+
+_build_gs_sets()
+# ...and the Standard keys that borrow from a set only built just now
+_sc88pro_extra({k for k, v in SC88PRO_EXTRA_KEYS.items() if v[1] in _GSET.SET_NAME})

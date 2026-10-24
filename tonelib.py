@@ -11657,6 +11657,35 @@ class SurdoProperties(ShelledDrumProperties):
     max_harmonic = 10
 
 
+# [RND]: A STRIKE THAT IS NEVER THE SAME TWICE. Roland's Standard 3 (and the
+# SC-8850's L/R sets) mark their kit voices "RND": "sounds which will change
+# randomly with each note played (these changes affect the timbre and timing)
+# ... so the performance sounds less mechanical" (SC-88Pro owner's manual,
+# drum set notes). Mixed in ahead of a voice: each strike a little louder or
+# softer, brighter or darker (effort, in dB), a few cents off and a few ms
+# late. The amounts are ours -- Roland prints none -- set to be felt rather
+# than heard as a change. Drawn from a stream of their own (RND_STREAM,
+# reseeded with each render), so no other note's draw moves.
+RND_STREAM = _random.Random(0)
+
+
+class RandomStrike:
+    rnd_level_db = 1.0           # sd of the strike's level
+    rnd_effort_db = 2.0          # sd of its effort: the brightness of a harder or softer hit
+    rnd_cents = 4.0              # sd of its pitch
+    rnd_timing_s = 0.004         # 0 .. this late
+
+    def __init__(self, frequency=256.0, channel_pan=0.0, attack_volume=1.0, channel_volume=1.0,
+                 effort=0.0, *a, **kw):
+        r = RND_STREAM
+        dl, de = r.gauss(0.0, self.rnd_level_db), r.gauss(0.0, self.rnd_effort_db)
+        dc, dt = r.gauss(0.0, self.rnd_cents), r.uniform(0.0, self.rnd_timing_s)
+        super().__init__(frequency, channel_pan, attack_volume * 10.0 ** (dl / 20.0),
+                         channel_volume, effort + de, *a, **kw)
+        self.pitch_jitter = (1.0 + self.pitch_jitter) * 2.0 ** (dc / 1200.0) - 1.0
+        self.attack_jitter = self.attack_jitter + dt
+
+
 class KitDrumProperties(MembraneDrumProperties):
     """A kit drum MEASURED: DrumGizmo's DRSKit (CC-BY 4.0), on its close
     microphones, ~30 strokes a drum (examples/drum_fit.py).
@@ -18724,6 +18753,42 @@ class TR909Snare2Properties(TR909SnareProperties):
              "click_tilt": -0.7811}
 
 
+# THE TECHNO SET's own (SC-88 Pro PC 12, "Techno Kick 1/2", "Techno Snare
+# 1/2"): no recording of these names to fit, so what they MEAN -- a 1990s
+# techno track's drums, a 909's run hot into the desk or a distortion until
+# they clip -- a fixed sound, so driven once through our own valve
+# (tr808.drive on tubeamp.curve: its harmonics riding the sweep, the decay held up). Kick 1 long and low, Kick 2 short and hard; Snare 1 the
+# 909's, Snare 2 its noisier setting. Amounts are educated guesses, for Ben's ear.
+def _driven(base, drive, **knobs):
+    import tr808 as _TR
+    p = dict(base.tr808_patch)
+    p.update(knobs)
+    out = dict(knobs)
+    out.update(_TR.drive(p, drive))
+    return out
+
+
+class TechnoKick1Properties(TR909KickProperties):
+    """Techno Kick 1: the 909's kick two semitones down, its decay opened
+    half again, through our valve at 2.5 (a clip)."""
+    tr808 = _driven(TR909KickProperties, 2.5, tune_hz=44.4, decay_s=1.03)
+
+
+class TechnoKick2Properties(TR909Kick2Properties):
+    """Techno Kick 2: the 909's shorter kick through our valve at 4 (hard), its click 4 dB hotter."""
+    tr808 = _driven(TR909Kick2Properties, 4.0, click_db=-31.28)
+
+
+class TechnoSnare1Properties(TR909SnareProperties):
+    """Techno Snare 1: the 909's snare through our valve at 1.8."""
+    tr808 = _driven(TR909SnareProperties, 1.8)
+
+
+class TechnoSnare2Properties(TR909Snare2Properties):
+    """Techno Snare 2: the 909's noisier snare setting through our valve at 2.5."""
+    tr808 = _driven(TR909Snare2Properties, 2.5)
+
+
 class TR909TomProperties(TR909Properties):
     """909 Low Tom: a swept VCO and a second at ~2/3 of it, a little noise."""
     tr808 = {"tune_hz": 77.0, "decay_s": 0.7645, "h2_db": -19.7241, "h3_db": -6.2981,
@@ -19311,6 +19376,83 @@ class MondoKickProperties(LiveRoom, KickDrumProperties):
     GeneralUser GS's Power kick is another drum besides -- tuned higher (73 Hz
     where its Standard kick settles at 35) and undamped; ours keeps Standard's
     drum, for Ben's ear."""
+
+
+# A BREAK, SAMPLED (the Hip-Hop set's "Hip-Hop Kick", "Rap Snare"): no
+# recording of these names to fit, so what the names MEAN -- a 1990s boom-bap
+# drum, lifted off a 1970s break record into a 12-bit sampler (the SP-1200,
+# 26.04 kHz) and played slower than it was taken, the producer's way of making
+# it fat. Played slower, every frequency falls and every decay stretches by
+# the same factor; the sampler's NYQUIST falls with them, a wall and not a
+# slope (Ben: "just use a Nyquist frequency to simulate low sampling rate");
+# and a 12-bit word on a decaying drum leaves grit that follows it down.
+# Ours: the drum's modes, click and trims moved by sample_semitones, nothing
+# sounding above the moved Nyquist, a grit layer grit_db under the note.
+# Amounts are educated guesses, for Ben's ear.
+class SampledBreak:
+    sample_semitones = -3.0
+    sampler_rate_hz = 26040.0
+    grit_db = -42.0
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        r = 2.0 ** (cls.sample_semitones / 12.0)
+        if '_break_done' in vars(cls):
+            return
+        cls._break_done = True
+        top = cls._nyquist = 0.5 * cls.sampler_rate_hz * r
+        cls.DRUM_MODES = tuple((m[0], m[1], m[2] * r) + tuple(m[3:]) for m in cls.DRUM_MODES)
+        for a in ('click_dbs', 'fund_dbs', 'head_dbs', 'slow_dbs'):
+            if getattr(cls, a, None):
+                setattr(cls, a, getattr(cls, a) * r)
+        cls.CLICK_HZ0 = cls.CLICK_HZ0 * r
+        nb = sum(1 for b in range(len(cls.CLICK_DB)) if cls.CLICK_HZ0 * 2.0 ** (b / 3.0) < top)
+        cls.CLICK_DB = tuple(cls.CLICK_DB[:nb])
+        if getattr(cls, 'band_trim_db', None):
+            cls.band_trim_db = tuple((round(h * r), d) for h, d in cls.band_trim_db)
+        if getattr(cls, 'tension_settle_time', None):
+            cls.tension_settle_time = cls.tension_settle_time / r
+        # the grit: flat to the band edge, falling as the drum's first mode does
+        hz = tuple(round(100.0 * 2 ** (k / 3.0)) for k in range(22) if 100.0 * 2 ** (k / 3.0) < top)
+        cls.strike_noise_layers = tuple(cls.strike_noise_layers) + (
+            (tuple((h, cls.grit_db) for h in hz), 0.0005, cls.DRUM_MODES[0][2], 1.5),)
+        n = len(cls.DRUM_MODES) + cls.click_per_band * len(cls.CLICK_DB)
+        cls.mode_ratios = tuple(m[0] for m in cls.DRUM_MODES) + (0.0,) * (n - len(cls.DRUM_MODES))
+        cls.mode_gains = (1.0,) * n
+        cls.max_harmonic = n
+
+    def harmonic_volume(self, harmonic):
+        v = super().harmonic_volume(harmonic)
+        return v if self._f0() * self.mode_ratio(harmonic) < self._nyquist else 0.0
+
+    def chiff_harmonic_gain(self, harmonic):
+        # the wires' noise: handed a ratio already (NoisyPercussionMixin)
+        g = super().chiff_harmonic_gain(harmonic)
+        return g if self._f0() * harmonic < self._nyquist else 0.0
+
+
+class HipHopKick1Properties(SampledBreak, KickDrumProperties):
+    """Hip-Hop Kick 1: Standard's damped studio kick -- a 1970s pillowed kick,
+    the break's -- sampled and played three semitones down (SampledBreak)."""
+    sample_semitones = -3.0
+
+
+class HipHopKick2Properties(SampledBreak, JazzKickProperties):
+    """Hip-Hop Kick 2: the Jazz set's open, round kick played four semitones
+    down -- the boom of boom-bap (SampledBreak)."""
+    sample_semitones = -4.0
+
+
+class RapSnareProperties(SampledBreak, LiveRoom, AcousticSnareProperties):
+    """Rap Snare: Standard's snare in the break's live room, sampled and
+    played two semitones down: the crack kept, the body fatter (SampledBreak)."""
+    sample_semitones = -2.0
+
+
+class HipHopSnare2Properties(SampledBreak, LiveRoom, JazzSnareProperties):
+    """Hip-Hop Snare 2: the Jazz set's snare in the live room, four semitones
+    down -- darker and fatter than the Rap Snare (SampledBreak)."""
+    sample_semitones = -4.0
 
 
 class BrushTapProperties(SnareDrum2Properties):

@@ -2112,6 +2112,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     full window) and play.py (streamed windows)."""
     lib = ensure_lib(); lib.synth_voice.restype = None
     import random; random.seed(0)   # per-note pitch/timing jitter, deterministic (as the reference seeds)
+    T.RND_STREAM.seed(0)            # ...and the [RND] drum strikes' (tonelib.RandomStrike)
     FREQ = tuning_table(tuner)
     # A SECONDARY TUNING for the Eastern instruments (ragas.py): the classes that
     # declare tuning_family = 'indian' play this table, the rest the render's.

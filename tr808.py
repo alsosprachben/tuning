@@ -429,3 +429,72 @@ def voice_attrs(patch):
         attrs["strike_flam_times"] = tuple((float(t), float(db)) for t, db in p["click_bursts"])
     attrs["strike_noise_len_s"] = 0.25
     return attrs
+
+
+# ---- DRIVE: a voice pushed into a desk or a distortion (the Techno set)
+#
+# A 1990s techno kick is a machine's kick driven until it clips: the mixing
+# desk's channel, or a distortion box, run hot. A one-shot is a FIXED sound,
+# so the driving is done once, here, through OUR valve (tubeamp.curve: the
+# push-pull pair the organ and the guitars play through, drive in units of its
+# grid bias -- 1 its edge of breakup, 2 a clip, 4 hard -- and a single-ended
+# stage's even orders from its imbalance) -- and written as the voice's own
+# partials. Its harmonics come strong while the drum is loud and die faster
+# than it as it falls under the knee, and its own peak is held up while it
+# clips: compression. Written as the circuit's partials, they ride the voice's
+# sweep as real distortion does. The rest -- the second network, the noise --
+# is held up by the same compression and not otherwise shaped: a guess, for
+# the ear.
+
+DRIVE_HARMONICS = (2, 3, 4, 5, 6, 7, 9, 11)
+DRIVE_IMBALANCE = 0.3       # a desk channel's or a distortion box's single-ended stage
+
+
+def _valve_harmonics(drive, a, ks, imbalance, n=1024):
+    """|b_k| of the valve driven by a sine of amplitude a * drive (grid-bias
+    units), for k in ks, re the stage's clean gain."""
+    import numpy as np
+    import tubeamp as _TA
+    th = 2.0 * np.pi * (np.arange(n) + 0.5) / n
+    y = _TA.curve(drive * a * np.sin(th), imbalance=imbalance) / (_TA.small_signal(imbalance=imbalance) * drive)
+    # complex: an unbalanced stage's even orders land on the cosines
+    return [abs(2.0 / n * complex(np.dot(y, np.exp(-1j * k * th)))) for k in ks]
+
+
+def _fit_decay(ts, dbs_):
+    """-60 dB time of a least-squares line through (t, dB)."""
+    n = len(ts)
+    mt, md = sum(ts) / n, sum(dbs_) / n
+    s = sum((t - mt) * (d - md) for t, d in zip(ts, dbs_)) / max(sum((t - mt) ** 2 for t in ts), 1e-12)
+    return 60.0 / max(-s, 1e-3)
+
+
+def drive(patch, drive_, imbalance=DRIVE_IMBALANCE, steps=48):
+    """The knobs that put `patch` (a resonator voice) through the valve at
+    drive_: its decay held up by the compression, its harmonics -- even and
+    odd -- as partials, each with its own fall, its other networks and noise
+    held up as its tone is."""
+    p = panel_of(patch)
+    d = p["decay_s"]
+    ks = (1,) + DRIVE_HARMONICS
+    ts = [d * i / steps for i in range(steps + 1)]
+    lv = [_valve_harmonics(drive_, 10 ** (-3.0 * t / d), ks, imbalance) for t in ts]
+    ref = lv[0][0]
+    db = [[20.0 * math.log10(max(v[j] / ref, 1e-9)) for v in lv] for j in range(len(ks))]
+    # each partial over its first 40 dB down: the knee's hold, then its fall
+    dec = []
+    for j in range(len(ks)):
+        use = [(t, x) for t, x in zip(ts, db[j]) if x > db[j][0] - 40.0]
+        dec.append(_fit_decay([t for t, _ in use], [x for _, x in use]) if len(use) > 2 else d / ks[j])
+    hold = dec[0] / d
+    out = {"decay_s": round(dec[0], 4)}
+    res = [(r, x, round(dd * hold, 4)) for r, x, dd in p["res"]]
+    # beside the circuit's own h2 and h3 (its output stage's, which the drive
+    # does not take away), held up as its tone is
+    for j, k in enumerate(DRIVE_HARMONICS, start=1):
+        if db[j][0] > -60.0:
+            res.append((float(k), round(db[j][0], 2), round(dec[j], 4)))
+    out["res"] = tuple(res)
+    if p["noise_db"] > -90.0:
+        out["noise_decay_s"] = round(p["noise_decay_s"] * hold, 4)
+    return out

@@ -104,6 +104,7 @@ def raw_scan(path):
 def main(argv):
     path = argv[1]
     G.variations()                 # fills VAR_RATED in its own order
+    G._gs_sets_rated()             # ...and the sets percussion_gs rearranges
     parsed = B.parse(path)
     notes = parsed[2]
     drum_keys = collections.defaultdict(collections.Counter)

@@ -630,6 +630,48 @@ def _cm32l_rated():
 
 KIT_RATED[127] = _cm32l_rated()
 
+def _gs_sets_rated():
+    """THE SETS THAT REARRANGE OUR VOICES (percussion_gs): each key its source's
+    rating -- at most 2 where the voice is the nearest we have (APPROX) --
+    a class its program's or variation's; a name with no voice yet, unrated."""
+    import percussion_gs as _G
+    cls_rating = {'TaikoProperties': (lambda: RATED[116][0]), 'AtariganeProperties': (lambda: VAR_RATED[(113, 8)][0]),
+                  'CengCengProperties': (lambda: VAR_RATED[(112, 16)][0]),
+                  'GamelanGongProperties': (lambda: VAR_RATED[(112, 10)][0]),
+                  # the Hip-Hop drums (tonelib.SampledBreak): what the names mean --
+                  # a break through a 12-bit sampler at its Nyquist, played slower.
+                  # Ben, on examples/hiphop_demo.py: "Sounds great."
+                  'HipHopKick1Properties': (lambda: 4), 'HipHopKick2Properties': (lambda: 4),
+                  'RapSnareProperties': (lambda: 4), 'HipHopSnare2Properties': (lambda: 4),
+                  # the Techno drums (tonelib.TechnoKick1Properties ...): the 909s
+                  # driven once through our own valve (tr808.drive on tubeamp.curve).
+                  # Ben, on examples/techno_demo.py: "It actually sounds really cool."
+                  'TechnoKick1Properties': (lambda: 4), 'TechnoKick2Properties': (lambda: 4),
+                  'TechnoSnare1Properties': (lambda: 4), 'TechnoSnare2Properties': (lambda: 4)}
+    for which, keys in _G.SETS.items():
+        k = _G.SET_KIT[which]
+        KIT_RATED[k] = {}
+        for key, name in keys.items():
+            spec = _G.VOICE.get(name)
+            if spec is None:
+                continue
+            approx = len(spec) > 3 and spec[3] == _G.APPROX
+            if spec[0] == 'c':
+                r = cls_rating[spec[1]]()
+                note = "%s, the %s at %.0f Hz" % (name, spec[1].replace("Properties", ""), spec[2])
+            else:
+                src = (KIT_RATED.get(spec[1], {}).get(spec[2]) if spec[1] else None) or PERC_RATED.get(spec[2])
+                r = src[0]
+                note = "%s: %s%s" % (name, ("set %d's key %d" % spec[1:3]) if spec[1] else "Standard's key %d" % spec[2],
+                                     ", played backwards" if spec[0] == 'r' else
+                                     ", each strike varied ([RND]: level, brightness, pitch, a few ms; "
+                                     "tonelib.RandomStrike). Ben, on examples/standard3_demo.py: pass 2 (these amounts) was good"
+                                     if spec[0] == 'n' else "")
+            if approx:
+                r, note = min(r, 2), note + " -- the nearest we have, not the sound"
+            KIT_RATED[k][key] = (r, note)
+
+
 # THE SC-88 MAP'S TR-808/909 (percussion_map.SC88_TR808_909): the TR-808 set's
 # ratings, and the 909's kick and snare on 35 and 40
 KIT_RATED[2 * 128 + 25] = dict(KIT_RATED[25])
@@ -729,6 +771,72 @@ def _set_status(pc, lsb=0):
     return "not built: plays Standard", 0, None
 
 
+DRUM_MAPS = ((1, "SC-8850"), (2, "SC-88Pro"), (3, "SC-88"), (4, "SC-55"))
+DRUM_LSB = {1: 0, 2: 3, 3: 2, 4: 1}
+
+
+def drum_set_totals():
+    """{map name: [sets built, sets]} -- a map's set by another name than the
+    native's is its own: built only where that map's set is (the SC-88's
+    TR-808/909 on 26)."""
+    import percussion_map as PM
+    tot = {}
+    for row in GS_DRUM_SETS:
+        for col, nm in DRUM_MAPS:
+            if row[col]:
+                own = row[col] not in (row[1], row[2])
+                st = (_set_status(row[0], DRUM_LSB[col])[0]
+                      if not own or 128 * DRUM_LSB[col] + row[0] - 1 in PM.KITS else "not built")
+                t = tot.setdefault(nm, [0, 0])
+                t[1] += 1
+                t[0] += st.startswith("built") or st.startswith("Standard, by")
+    return tot
+
+
+def summary_md(hist, wrong):
+    """THE NUMBERS FIRST (Ben: summaries before details): GM 1's programs and
+    percussion keys, GM 2's sound set and drum sets, each Sound Canvas map's
+    tones and drum sets -- every one counted from the tables below."""
+    import percussion_map as PM
+    L = ["## Summary\n"]
+    gmk = [n for n in range(35, 82)]
+    built = [PERC_RATED[n][0] for n in gmk if n in PERC_RATED]
+    L.append("| set | of | built | | 4 | 3 | 2 | 1 | 0 |")
+    L.append("|---|---|---|---|---|---|---|---|---|")
+
+    def row(name, n, rs):
+        h = {k: rs.count(k) for k in range(5)}
+        b = sum(r is not None for r in rs)
+        L.append("| %s | %d | %d | %d%% | %s |" % (name, n, b, round(100 * b / n) if n else 0,
+                                                   " | ".join(str(h[k]) for k in (4, 3, 2, 1, 0))))
+    row("GM 1 programs", 128, [k for k in range(5) for _ in range(hist[k])])
+    row("GM 1 percussion keys (35-81)", len(gmk), built)
+    g = gm2()
+    if g is not None:
+        row("GM 2 tones (MSB 121)", len(g), [r for *_x, r in g])
+    kr = []
+    for k in GM2_KITS:
+        st, n, med = _set_status(k + 1)
+        kr.append(med if st.startswith("built") else None)
+    row("GM 2 drum sets", len(GM2_KITS), kr)
+    sc = sound_canvas()
+    tot = drum_set_totals()
+    dmap = {"SC-55": "SC-55", "SC-55mkII": "SC-55", "SC-88": "SC-88", "SC-88Pro": "SC-88Pro",
+            "SC-8850": "SC-8850"}
+    if sc is not None:
+        for name, n, nb, other, h in sc[0]:
+            row("%s tones" % name, n, [r for r in (4, 3, 2, 1, 0) for _ in range(h[r])] + [None] * (n - nb))
+            d = tot.get(dmap[name])
+            if d and name != "SC-55mkII":
+                L.append("| %s drum sets | %d | %d | %d%% | | | | | |"
+                         % (dmap[name], d[1], d[0], round(100 * d[0] / d[1])))
+    L.append("")
+    L.append("A drum set is counted by the program that selects it on a drum channel, in that map; "
+             "a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.\n")
+    L.append(wrong + "\n")
+    return "\n".join(L)
+
+
 def drum_set_table():
     """The drum sets, by the program that selects them."""
     import percussion_map as PM
@@ -739,29 +847,21 @@ def drum_set_table():
     L.append("SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the")
     L.append("SC-88Pro map 25, the SC-8850 map 37. A set not built here plays")
     L.append("Standard. THE GOAL: every one built.\n")
-    maps = ((1, "SC-8850"), (2, "SC-88Pro"), (3, "SC-88"), (4, "SC-55"))
-    LSB = {1: 0, 2: 3, 3: 2, 4: 1}
-    tot = {}
-    for row in GS_DRUM_SETS:
-        for col, nm in maps:
-            if row[col]:
-                # a map's set by another name than the native's is its own: built
-                # only where that map's set is (the SC-88's TR-808/909 on 26)
-                own = row[col] not in (row[1], row[2])
-                st = (_set_status(row[0], LSB[col])[0]
-                      if not own or 128 * LSB[col] + row[0] - 1 in __import__("percussion_map").KITS
-                      else "not built")
-                t = tot.setdefault(nm, [0, 0])
-                t[1] += 1
-                t[0] += st.startswith("built") or st.startswith("Standard, by")
-    L.append("**Where it stands:** " + ", ".join("%s map %d of %d" % (nm, tot[nm][0], tot[nm][1])
-                                              for _, nm in maps) + ".\n")
+    maps, LSB = DRUM_MAPS, DRUM_LSB
     L.append("| PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |")
     L.append("|---|---|---|---|---|---|---|---|")
     for row in GS_DRUM_SETS:
         st, n, med = _set_status(row[0])
+        if st.startswith("not"):
+            # a map's own set built where the native's is not (the SC-88's Dance)
+            for col, nm in maps:
+                k = 128 * LSB[col] + row[0] - 1
+                if LSB[col] and row[col] and k in PM.KITS:
+                    mst, n, med = _set_status(row[0], LSB[col])
+                    st = "%s (the %s map's); native not built" % (mst, nm)
+                    break
         L.append("| %d | %s | %s | %s | %s | %s | %s | %s |" % (
-            row[0], *(c or "--" for c in row[1:]), ("**%s**" % st) if st.startswith("not") else st,
+            row[0], *(c or "--" for c in row[1:]), ("**%s**" % st) if "not built" in st else st,
             n or "", ("**%d**" % med) if med is not None else ""))
     L.append("")
     for k in sorted(KIT_RATED):
@@ -1135,6 +1235,48 @@ SC_MAPS = (("sc55o", "SC-55"), ("sc55", "SC-55mkII"), ("sc88", "SC-88"), ("nativ
            ("sc8850", "SC-8850"))
 
 
+def map_rating(col, k):
+    """WHAT A MAP PLAYS for (program, bank) (patch_map.map_bank, as a file's
+    CC32 selects it): its own tone's rating, ours, or None -- not built, the
+    capital plays."""
+    if k[1] == 0:
+        return RATED[k[0]][0]
+    v = patch_map.map_bank(k[0], k[1], SC_COL_MAP.get(col, 0))
+    if not v or (k[0], v) not in patch_map.VARIATIONS or (k[0], v) not in VAR_RATED:
+        return None
+    return VAR_RATED[(k[0], v)][0]
+
+
+GM2_TSV = os.path.expanduser("~/Documents/refs/roland/gm2_instruments.tsv")
+# GM 2's drum sets (SC-8850 owner's manual p.215): its program -> ours
+GM2_KITS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic", 25: "Analog (TR-808)",
+            32: "Jazz", 40: "Brush", 48: "Orchestra", 56: "SFX"}
+
+
+def gm2():
+    """GM 2's sound set (examples/gm2_list.py): [(program, LSB, name, the
+    Sound Canvas tone it is -- (map column, bank) -- and its rating or None)].
+    Every GM 2 tone is a Sound Canvas tone under its own name: matched by
+    program and name on the SC-8850's list, then the earlier maps'."""
+    import csv
+    import re
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gs_maps
+    if not (os.path.exists(GM2_TSV) and os.path.exists(gs_maps.TSV8850)):
+        return None
+    variations()
+    norm = lambda t: re.sub(r"[\s.\-]", "", t).lower()
+    by = {}
+    for r in list(csv.reader(open(gs_maps.TSV8850), delimiter="\t"))[1:]:
+        for i, col in ((2, "sc8850"), (3, "native"), (4, "sc88"), (5, "sc55")):
+            by.setdefault((int(r[0]), norm(r[i])), (col, int(r[1])))
+    out = []
+    for p, b, nm in list(csv.reader(open(GM2_TSV), delimiter="\t"))[1:]:
+        hit = by.get((int(p), norm(nm)))
+        out.append((int(p), int(b), nm, hit, map_rating(hit[0], (int(p), hit[1])) if hit else None))
+    return out
+
+
 def sound_canvas():
     """([(map name, tones, built, other tone, {rating: n})],
     [(family, [(built, tones) per map])], the SC-88 map's missing [(p, b, name, kind)])
@@ -1165,15 +1307,7 @@ def sound_canvas():
     else:
         tones["sc8850"] = []
 
-    def rating(col, k):
-        # WHAT THAT MAP PLAYS for the number (patch_map.map_bank, as a file's
-        # CC32 selects it): its own tone, ours, or -- not built -- the capital
-        if k[1] == 0:
-            return RATED[k[0]][0]
-        v = patch_map.map_bank(k[0], k[1], SC_COL_MAP.get(col, 0))
-        if not v or (k[0], v) not in patch_map.VARIATIONS or (k[0], v) not in VAR_RATED:
-            return None
-        return VAR_RATED[(k[0], v)][0]
+    rating = map_rating
     maps, fams = [], []
     for col, name in SC_MAPS:
         rs = [rating(col, k) for k in tones[col]]
@@ -1207,12 +1341,10 @@ def sound_canvas_md():
          "Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55mkII,",
          "SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built",
          "when we play it, as a program or a variation, and rated as the tables above rate it.",
-         "A later map can put another tone under a number we built; that one is not counted.\n",
-         "| map | tones | built | | 4 | 3 | 2 | 1 | 0 | to do |", "|---|---|---|---|---|---|---|---|---|---|"]
-    for name, n, nb, other, h in maps:
-        L.append("| %s | %d | %d | %d%% | %s | %d%s |"
-                 % (name, n, nb, round(100 * nb / n), " | ".join(str(h[r]) for r in (4, 3, 2, 1, 0)),
-                    n - nb, (" (%d another tone)" % other) if other else ""))
+         "A later map can put another tone under a number we built; that one is not counted.",
+         "The maps' totals are in the Summary at the top; still to build: " + ", ".join(
+             "%s %d%s" % (name, n - nb, (" (%d another tone)" % other) if other else "")
+             for name, n, nb, other, h in maps) + ".\n"]
     own = sorted((v >> 7, p, v & 0x7F, nm) for (p, v), nm in patch_map.VARIATION_NAMES.items()
                  if v >> 7 in patch_map.MAP_LABELS and (p, v) in patch_map.VARIATIONS)
     if own:
@@ -1579,6 +1711,8 @@ def class_tree_md():
 
 
 def main(argv):
+    _gs_sets_rated()            # after VAR_RATED, whose classes it rates by
+    _sc88pro_extra_rated()      # ...and the Standard keys that borrow from those sets
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')
     fams = dict(FAMILY)
@@ -1592,6 +1726,7 @@ def main(argv):
     for k in range(5):
         L.append("| **%d** | %s |" % (k, LEVEL[k]))
     L.append("")
+    L.append("__SUMMARY__")
     L.append("3 means validated SEMANTICALLY BY EAR: it does what the instrument does, judged")
     L.append("by listening, whether or not by the same mechanism. 4 means validated against a")
     L.append("TARGET -- a recording of the instrument is one (fitted against it, or against a")
@@ -1616,24 +1751,18 @@ def main(argv):
     hist = {k: 0 for k in range(5)}
     for p in range(128):
         hist[RATED[p][0]] += 1
-    L.append("## Where it stands\n")
-    L.append("| rating | patches | share |")
-    L.append("|---|---|---|")
-    for k in range(5):
-        L.append("| %d %s | %d | %d%% |" % (k, LEVEL[k], hist[k], round(100 * hist[k] / 128)))
-    L.append("")
     cat = [p for p in range(128) if "CATEGORY ERROR" in RATED[p][1]]
     if cat:
-        L.append("**%d patches are played by a voice of the wrong physical kind** "
-                 "(marked CATEGORY ERROR below): %s.\n"
-                 % (len(cat), ", ".join("%d %s" % (p, GM[p]) for p in cat)))
+        wrong = ("**%d patches are played by a voice of the wrong physical kind** "
+                 "(marked CATEGORY ERROR below): %s." % (len(cat), ", ".join("%d %s" % (p, GM[p]) for p in cat)))
     else:
         # It read "0 patches ... : ." once the list emptied, which is the kind of
         # sentence that only ever gets written when the count cannot reach zero.
-        L.append("**No patch is played by a voice of the wrong physical kind.** "
+        wrong = ("**No patch is played by a voice of the wrong physical kind.** "
                  "The last three to be were 123 Bird Tweet, 124 Telephone Ring "
                  "and 125 Helicopter, which are not recordings of the world but "
-                 "a chirp, a struck bell and a blade passing frequency.\n")
+                 "a chirp, a struck bell and a blade passing frequency.")
+    L[L.index("__SUMMARY__")] = summary_md(hist, wrong)
     L.append(percussion_table())
     L.append(drum_set_table())
     for start, name in FAMILY:
