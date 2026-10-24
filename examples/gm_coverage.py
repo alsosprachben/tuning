@@ -417,8 +417,37 @@ KIT_RATED = {
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
     },
+    27: {
+        36: (4, "CR-78 KICK 1: a bridged-T at 59 Hz, fitted to Bjornmossa's real CR-78 (CC BY; "
+             "examples/cr78_fit.py). Score 4.3. Ben: sounds good"),
+        35: (4, "CR-78 KICK 2: the kick, its first cycles' third harmonic (~178 Hz) up. Score 14.2"),
+        37: (4, "CR-78 RIM SHOT: a ring at 1.43 kHz, gone in 5 ms (his 'clave_2'). Score 16.0"),
+        38: (4, "CR-78 SNARE 1: a bridged-T at 307 Hz and its noise above 3.9 kHz. Score 11.7"),
+        40: (4, "CR-78 SNARE 2: a second take, its noise lower. Score 11.9"),
+        41: (4, "the CR-78's one tom (176 Hz) six semitones down: its six toms are it at six "
+             "pitches, two apart"),
+        43: (4, "as 47, four semitones down"), 45: (4, "as 47, two semitones down"),
+        47: (4, "CR-78 TOM: a bridged-T at 176.6 Hz, its pitch falling as it rings. Score 11.4"),
+        48: (4, "as 47, two semitones up"), 50: (4, "as 47, four semitones up"),
+        42: (4, "CR-78 CLOSED HAT: noise in a band at ~6-8 kHz, short, the trigger's thump "
+             "under it. Score 13.3"),
+        46: (4, "CR-78 OPEN HAT: the same, held. Score 16.1"),
+        54: (4, "CR-78 TAMBOURINE: noise in a band at ~6 kHz, its jingle's ripple. Score 18.4"),
+        60: (4, "CR-78 HIGH BONGO: a bridged-T at 601 Hz (wikter's CC0 take). Score 7.8"),
+        61: (4, "CR-78 LOW BONGO: at 408 Hz. Score 7.3"),
+        70: (4, "CR-78 MARACAS: a gated burst of high noise, ~30 ms. Score 18.9"),
+        74: (4, "CR-78 GUIRO: a ratchet of 28 noise bursts 17.8 ms apart (click_bursts, the "
+             "take's), every third 2 dB down; the set's own stroke, not Standard's scrape "
+             "(percussion_map.rasp_strokes). Score 26.6"),
+        75: (4, "CR-78 CLAVES: a bridged-T at 2.56 kHz. Score 10.9"),
+        80: (4, "CR-78 METALLIC BEAT 1: two tones (~610, ~840 Hz), short. Score 14.7"),
+        81: (4, "CR-78 METALLIC BEAT 2: a bright ping, noise in a band at ~5 kHz. Score 18.5"),
+        39: (4, "the 707's clap"), 44: (4, "the 606's closed hat"), 49: (4, "the 808's cymbal"),
+        51: (4, "the 606's cymbal"), 57: (4, "the 909's crash"),
+        62: (4, "the 808's high conga"), 63: (4, "the 808's mid conga"), 64: (4, "the 808's low conga"),
+    },
     28: {
-        36: (4, "606 KICK: a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). "
+        36: (4, "606 KICK:a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). "
              "Score 7.3. Ben: sounds great"),
         38: (4, "606 SNARE 1: a bridged-T at 207 Hz and its snappy noise. Score 8.1"),
         40: (4, "606 SNARE 2: the snare ACCENTED (bdu's CC0 take). Score 9.1"),

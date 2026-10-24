@@ -18555,11 +18555,12 @@ class TR808CymbalProperties(TR808Properties):
 # integrator, so the sweep falls in Hz, not in pitch (tr808.py's "linear"
 # sweep): the kick from ~5x its tuning onto it, tau ~31 ms at full TUNE, its
 # ATTACK a click beside it; the snare two oscillators ~1.44 apart over
-# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. The open hat,
-# crash and ride are 6-bit samples of real cymbals: our own cymbals FITTED to
-# them (below the ride, examples/rom_cymbal_fit.py). FITTED to a real 909 (Jason Baker's 1995 set, every knob at
-# four positions; sources.md) by examples/tr909_fit.py; the closed hats (42,
-# 44) are the TR-707's and the clap (39) Standard's, as Roland's set has them.
+# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. FITTED to a
+# real 909 (Jason Baker's 1995 set, every knob at four positions; sources.md)
+# by examples/tr909_fit.py. The open hat, crash and ride are 6-bit samples of
+# real cymbals: our own cymbals fitted to them (below the ride, examples/
+# rom_cymbal_fit.py). The closed hats (42, 44) are the TR-707's and the clap
+# (39) Standard's, as Roland's set has them.
 class TR909Properties(TR808Properties):
     """A ROLAND TR-909 VOICE: a tr808.py patch on the 909's sweep law."""
     tr808 = {"sweep": "linear"}
@@ -18653,6 +18654,160 @@ class TR909RimProperties(TR909Properties):
     tr808 = {"tune_hz": 220.4, "decay_s": 0.0738, "h2_db": -21.1418, "h3_db": -32.6418,
              "res": ((2.3676, 3.0255, 0.0271),), "click_db": -20.0435,
              "click_dbs": 2533.1794, "click_tilt": -1.0761}
+
+
+# THE CR-78 SET (program 27 on the drum channel; SC-8850 p.188). The
+# CompuRhythm (1978) is the 808's parent: bridged-T rings for its kick,
+# snare, rim, tom, bongos and claves, and FILTERED NOISE -- not oscillators
+# -- for its hats, maracas and tambourine, each on its own envelope; its
+# guiro a ratchet of noise bursts (every 17.8 ms for half a second), its
+# metallic beats a short pair of tones (610 and 840 Hz) and a bright ping.
+# Patches on tr808.py FITTED to two real units (examples/cr78_fit.py:
+# wikter's CC0 takes and Bjornmossa's CC BY ones, sources.md). Roland's set
+# makes six toms of its one tom circuit, and borrows the rest: the 707's
+# clap, the 606's closed hat 2 and ride, the 808's cymbal and congas, the
+# 909's crash 2.
+class CR78Properties(TR808Properties):
+    """A ROLAND CR-78 VOICE: a tr808.py patch."""
+    tr808 = {}
+
+
+class CR78KickProperties(CR78Properties):
+    """CR-78 Kick 1: a bridged-T at ~59 Hz."""
+    tr808 = {"tune_hz": 59.0, "decay_s": 0.6471, "h2_db": -42.6376, "h3_db": -52.934,
+             "jump_ratio": 3.2939, "jump_db": -25.0475, "jump_ms": 2.9556,
+             "bend_oct": 0.2207, "bend_ms": 20.63, "click_db": -53.6352,
+             "click_dbs": 5226.176, "click_tilt": -2.3535, "tone_delay_ms": 0.7746,
+             "jump_phase": 0.8419}
+
+
+class CR78Kick2Properties(CR78KickProperties):
+    """CR-78 Kick 2: the kick with its first cycles' harmonic (~178 Hz) up."""
+    tr808 = {"h3_db": -10.8634, "tune_hz": 59.0, "decay_s": 0.4793, "h2_db": -40.4468,
+             "jump_ratio": 3.0591, "jump_db": -22.0308, "jump_ms": 3.3782,
+             "bend_oct": 0.2079, "bend_ms": 23.4505, "tone_delay_ms": -0.4088,
+             "jump_phase": 1.1451, "click_db": -51.5175, "click_dbs": 4017.8612,
+             "click_tilt": -0.7362}
+
+
+class CR78SnareProperties(CR78Properties):
+    """CR-78 Snare 1: a bridged-T at ~312 Hz and its noise."""
+    tr808 = {"tune_hz": 306.8, "decay_s": 0.0383, "noise_db": -9.9219,
+             "noise_hp_hz": 3904.5301, "noise_lp_hz": 39371.7184, "noise_decay_s": 0.1521,
+             "click_db": -58.0294, "click_dbs": 61.7593, "h2_db": -122.6468,
+             "h3_db": -38.0339, "click_tilt": 3.4903}
+
+
+class CR78Snare2Properties(CR78SnareProperties):
+    """CR-78 Snare 2: a second take."""
+    tr808 = {"tune_hz": 309.4, "decay_s": 0.0279, "h2_db": -108.315, "h3_db": -79.9703,
+             "click_db": -77.7287, "click_dbs": 6810.9719, "click_tilt": 8.3411,
+             "noise_db": -21.1613, "noise_hp_hz": 3292.5141, "noise_lp_hz": 71397.3927,
+             "noise_decay_s": 0.2744}
+
+
+class CR78RimProperties(CR78Properties):
+    """CR-78 Rim Shot: a ring near 1.4 kHz, gone in 5 ms."""
+    tr808 = {"tune_hz": 1426.4, "decay_s": 0.0145, "res": ((0.5359, -22.4263, 0.0084),),
+             "click_db": -65.9381, "click_dbs": 14644.8127, "h2_db": -27.1049,
+             "h3_db": -88.2862, "click_tilt": 5.5676}
+
+
+class CR78TomProperties(CR78Properties):
+    """CR-78 Tom: a bridged-T at ~176 Hz (Roland's six toms are it at six
+    pitches)."""
+    tr808 = {"tune_hz": 176.6, "decay_s": 0.3301, "diodes": True, "bend_oct": 0.0282,
+             "h3_db": -43.4937, "click_db": -41.1868, "click_dbs": 4999.4216,
+             "jump_ratio": 2.3539, "jump_db": -96.1227, "jump_ms": 2.6316,
+             "noise_db": -97.081, "noise_decay_s": 0.2532, "jump_phase": 1.1622,
+             "click_tilt": -2.2928}
+
+
+class CR78HiBongoProperties(CR78Properties):
+    """CR-78 High Bongo: a bridged-T at ~600 Hz."""
+    tr808 = {"tune_hz": 601.1, "decay_s": 0.0486, "h2_db": -102.2273, "h3_db": -301.0924,
+             "click_db": -38.2976, "click_dbs": 10372.5297, "click_tilt": -2.6844}
+
+
+class CR78LowBongoProperties(CR78HiBongoProperties):
+    """CR-78 Low Bongo: at ~406 Hz."""
+    tr808 = {"tune_hz": 407.8, "decay_s": 0.0581, "h2_db": -128.1681, "h3_db": -249.5065,
+             "click_db": -78.624, "click_dbs": 17437.7431, "click_tilt": -13.2108}
+
+
+class CR78ClavesProperties(CR78Properties):
+    """CR-78 Claves: a bridged-T at ~2.55 kHz."""
+    tr808 = {"tune_hz": 2559.3, "decay_s": 0.0538, "click_db": -428.9166,
+             "click_dbs": 27743014372.3035, "h2_db": -55.6592, "h3_db": -48.8662,
+             "click_tilt": 61.3653}
+
+
+class CR78ClosedHatProperties(CR78Properties):
+    """CR-78 Closed Hi-Hat: noise through a band at ~8 kHz, short."""
+    tr808 = {"tune_hz": 8000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": 0.0,
+             "noise_hp_hz": 60740.9018, "noise_lp_hz": 5767.5865, "noise_decay_s": 0.1862,
+             "noise_rise_ms": 1.4961, "click_db": -64.503, "click_lp_hz": 1361.8282,
+             "click_dbs": 68.106, "noise_tilt": 8.2472}
+
+
+class CR78OpenHatProperties(CR78ClosedHatProperties):
+    """CR-78 Open Hi-Hat: the same, held longer."""
+    tr808 = {"noise_decay_s": 0.7331, "noise_hp_hz": 81348.7704, "noise_lp_hz": 6540.6748,
+             "noise_tilt": 7.0389, "noise_rise_ms": 2.2386, "click_db": -50.7973,
+             "click_lp_hz": 283.7208, "click_dbs": 117.5924}
+
+
+class CR78MaracasProperties(CR78Properties):
+    """CR-78 Maracas: a gated burst of high noise, ~30 ms."""
+    tr808 = {"tune_hz": 8000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": 0.0,
+             "noise_hp_hz": 11491.5929, "noise_lp_hz": 23887.1073, "noise_decay_s": 0.2949,
+             "noise_rise_ms": 4.4185, "noise_len_ms": 17.8716, "noise_tilt": 5.4294,
+             "click_db": -98.7631, "click_lp_hz": 20235.5304, "click_dbs": 590.268}
+
+
+class CR78TambourineProperties(CR78Properties):
+    """CR-78 Tambourine: noise in a band at ~4 kHz, its jingle's ripple."""
+    tr808 = {"tune_hz": 4000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": 0.0,
+             "noise_hp_hz": 6324.9085, "noise_lp_hz": 5612.2274, "noise_decay_s": 0.3234,
+             "noise_rise_ms": 0.6824, "click_db": -8.8812, "click_lp_hz": 56.6517,
+             "click_dbs": 449.5841, "noise_tilt": 7.5519}
+
+
+class CR78GuiroProperties(CR78Properties):
+    """CR-78 Guiro: a ratchet of noise bursts every 17.8 ms for half a
+    second (click_bursts)."""
+    tr808 = {"tune_hz": 4000.0, "tone_db": -100.0, "decay_s": 0.05, "click_db": 0.0,
+             "click_hp_hz": 5325.5609, "click_lp_hz": 5371.6208, "click_dbs": 3142.5342,
+             "click_bursts": ((0.0, -0.0), (0.0178, -0.0), (0.0356, -2.0), (0.0534, -0.0), (0.0712, -0.0), (0.089, -2.0), (0.1068, -0.0), (0.1246, -0.0), (0.1424, -2.0), (0.1602, -0.0), (0.178, -0.0), (0.1958, -2.0), (0.2136, -0.0), (0.2314, -0.0), (0.2492, -2.0), (0.267, -0.0), (0.2848, -0.0), (0.3026, -2.0), (0.3204, -0.0), (0.3382, -0.0), (0.356, -2.0), (0.3738, -0.0), (0.3916, -0.0), (0.4094, -2.0), (0.4272, -0.0), (0.445, -0.0), (0.4628, -2.0), (0.4806, -0.0)),
+             "click_tilt": 6.8074}
+
+
+class CR78MetalBeatProperties(CR78Properties):
+    """CR-78 Metallic Beat 1: two tones (~610 and ~840 Hz), short."""
+    tr808 = {"tune_hz": 839.3, "decay_s": 0.1841,
+             "res": ((1.3814, -13.6714, 0.0932), (2.0, -16.0, 0.1)), "click_db": -37.4163,
+             "click_dbs": 1722.7515, "h2_db": -79.413, "h3_db": -77.9736,
+             "click_tilt": -3.673}
+
+
+class CR78MetalBeat2Properties(CR78Properties):
+    """CR-78 Metallic Beat 2: a bright ping, noise in a band at ~6 kHz."""
+    tr808 = {"tune_hz": 6000.0, "tone_db": -100.0, "decay_s": 0.05, "noise_db": 0.0,
+             "noise_hp_hz": 4869.4413, "noise_lp_hz": 5320.2483, "noise_decay_s": 0.0804,
+             "noise_rise_ms": 0.7586, "noise_tilt": 8.7316, "click_db": -95.7806,
+             "click_lp_hz": 23687.242, "click_dbs": 594.3855}
+
+
+# THE TR-606 SET (program 28 on the drum channel; SC-8850 p.188). The
+# Drumatix is the 808's younger circuit: bridged-T kick, snare and two toms
+# (the toms' pitch falling as they ring, as the 808's diodes make it) and a
+# metal section -- square oscillators through band-passes -- for its hats
+# and cymbal (Roland's "TR-606 Ride Cymbal"), whose oscillators are read off
+# its cymbal (TR606_OSC_HZ). FITTED to Ed Vargo's 1995 takes and, for the
+# accented snare, bdu's (examples/tr606_fit.py; sources.md). Roland's set
+# borrows the rest from the CR-78, the 707 (clap), the 808 (cymbal, congas)
+# and the 909 (crash 2).
+TR606_OSC_HZ = (203.2, 211.2, 222.1, 251.2, 333.1, 351.9)
 
 
 class TR606Properties(TR808Properties):

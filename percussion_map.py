@@ -140,6 +140,22 @@ from tonelib import (
     TR808ClosedHatProperties,
     TR808OpenHatProperties,
     TR808CymbalProperties,
+    CR78KickProperties,
+    CR78Kick2Properties,
+    CR78SnareProperties,
+    CR78Snare2Properties,
+    CR78RimProperties,
+    CR78TomProperties,
+    CR78HiBongoProperties,
+    CR78LowBongoProperties,
+    CR78ClavesProperties,
+    CR78ClosedHatProperties,
+    CR78OpenHatProperties,
+    CR78MaracasProperties,
+    CR78TambourineProperties,
+    CR78GuiroProperties,
+    CR78MetalBeatProperties,
+    CR78MetalBeat2Properties,
     TR606KickProperties,
     TR606SnareProperties,
     TR606Snare2Properties,
@@ -406,7 +422,7 @@ def kit_pan(note, kit=0):
 #
 # Jazz (32) shares Standard's column on the SC-55, so it IS Standard there.
 DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
-             25: "TR-808", 28: "TR-606", 29: "TR-707", 30: "TR-909", 32: "Jazz", 40: "Brush", 48: "Orchestra",
+             25: "TR-808", 27: "CR-78", 28: "TR-606", 29: "TR-707", 30: "TR-909", 32: "Jazz", 40: "Brush", 48: "Orchestra",
              52: "Asia", 56: "SFX", 127: "CM-64/32L"}
 
 # THE SETS THAT ARE BUILT: {program: {note: (name, class, base Hz)}}, holding
@@ -414,8 +430,8 @@ DRUM_SETS = {0: "Standard", 8: "Room", 16: "Power", 24: "Electronic",
 # as it always has; a program that is no set at all does too. The manual does
 # not say what the SC-55 does with a number that is not a set, so nothing is
 # guessed: 1, 20, 35, 47, 49 and 60 -- all sent to channel 10 by files in
-# the corpus -- play Standard, which is what they did before sets existed. (28,
-# 29 and 30 had no set until the Pro map's TR-606, TR-707 and TR-909 were built.)
+# the corpus -- play Standard, which is what they did before sets existed. (27-30
+# had no set until the Pro map's CR-78, TR-606, TR-707 and TR-909 were built.)
 #
 # ELECTRONIC, p.70. A Simmons-era kit: the six toms are synth toms, which
 # SynthDrumProperties (GM 118) already is; the reverse cymbal is GM 119. Only
@@ -467,6 +483,45 @@ KITS = {
         64: ("808 Low Conga",    TR808CongaProperties, TR808CongaProperties.tr808_base_hz),
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
         75: ("808 Claves",       TR808ClavesProperties, TR808ClavesProperties.tr808_base_hz),
+    },
+    # CR-78 (SC-8850 p.188; the Pro's): the CR-78's own kicks, snares, rim,
+    # hats, tambourine, bongos, maracas, guiro, claves and metallic beats,
+    # patches on tr808.py FITTED to two real units (examples/cr78_fit.py). Its
+    # one tom circuit plays Roland's six toms two semitones apart, 47 at the
+    # take's own pitch. The 707's clap, the 606's closed hat (44) and ride, the
+    # 808's cymbal and congas and the 909's crash are borrowed as Roland's set
+    # has them; its cowbell (56; no recording found), Ride Cymbal Edge, the
+    # hoos, TR-626 shaker and Small Club are Standard's until built.
+    27: {
+        35: ("CR-78 Kick 2",     CR78Kick2Properties, CR78Kick2Properties.tr808_base_hz),
+        36: ("CR-78 Kick 1",     CR78KickProperties, CR78KickProperties.tr808_base_hz),
+        37: ("CR-78 Rim Shot",   CR78RimProperties, CR78RimProperties.tr808_base_hz),
+        38: ("CR-78 Snare 1",    CR78SnareProperties, CR78SnareProperties.tr808_base_hz),
+        39: ("707 Hand Clap",    TR707ClapProperties, TR707ClapProperties.tr808_base_hz),
+        40: ("CR-78 Snare 2",    CR78Snare2Properties, CR78Snare2Properties.tr808_base_hz),
+        41: ("CR-78 Low Tom 2",   CR78TomProperties, CR78TomProperties.tr808_base_hz * 2 ** (-6 / 12.0)),
+        42: ("CR-78 CHH",        CR78ClosedHatProperties, CR78ClosedHatProperties.tr808_base_hz),
+        43: ("CR-78 Low Tom 1",   CR78TomProperties, CR78TomProperties.tr808_base_hz * 2 ** (-4 / 12.0)),
+        44: ("606 CHH",          TR606ClosedHatProperties, TR606ClosedHatProperties.tr808_base_hz),
+        45: ("CR-78 Mid Tom 2",   CR78TomProperties, CR78TomProperties.tr808_base_hz * 2 ** (-2 / 12.0)),
+        46: ("CR-78 OHH",        CR78OpenHatProperties, CR78OpenHatProperties.tr808_base_hz),
+        47: ("CR-78 Mid Tom 1",   CR78TomProperties, CR78TomProperties.tr808_base_hz * 2 ** (0 / 12.0)),
+        48: ("CR-78 High Tom 2",  CR78TomProperties, CR78TomProperties.tr808_base_hz * 2 ** (2 / 12.0)),
+        49: ("808 Cymbal",       TR808CymbalProperties, TR808CymbalProperties.tr808_base_hz),
+        50: ("CR-78 High Tom 1",  CR78TomProperties, CR78TomProperties.tr808_base_hz * 2 ** (4 / 12.0)),
+        51: ("606 Ride Cymbal",  TR606CymbalProperties, TR606CymbalProperties.tr808_base_hz),
+        54: ("CR-78 Tambourine", CR78TambourineProperties, CR78TambourineProperties.tr808_base_hz),
+        57: ("909 Crash",        TR909CrashProperties, 288.3),
+        60: ("CR-78 High Bongo", CR78HiBongoProperties, CR78HiBongoProperties.tr808_base_hz),
+        61: ("CR-78 Low Bongo",  CR78LowBongoProperties, CR78LowBongoProperties.tr808_base_hz),
+        62: ("808 High Conga",   TR808HiCongaProperties, TR808HiCongaProperties.tr808_base_hz),
+        63: ("808 Mid Conga",    TR808MidCongaProperties, TR808MidCongaProperties.tr808_base_hz),
+        64: ("808 Low Conga",    TR808CongaProperties, TR808CongaProperties.tr808_base_hz),
+        70: ("CR-78 Maracas",    CR78MaracasProperties, CR78MaracasProperties.tr808_base_hz),
+        74: ("CR-78 Guiro",      CR78GuiroProperties, CR78GuiroProperties.tr808_base_hz),
+        75: ("CR-78 Claves",     CR78ClavesProperties, CR78ClavesProperties.tr808_base_hz),
+        80: ("CR-78 Metal Beat 1", CR78MetalBeatProperties, CR78MetalBeatProperties.tr808_base_hz),
+        81: ("CR-78 Metal Beat 2", CR78MetalBeat2Properties, CR78MetalBeat2Properties.tr808_base_hz),
     },
     # TR-606 (SC-8850 p.188; the Pro's): the 606's own kick, snare (and the
     # snare accented as Snare 2), toms, hats and cymbal (Roland's "Ride"),
@@ -1536,6 +1591,11 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
     # machine gun (73) as the guiro's 30 ridges. Its bubble keeps the bell
     # tree's cascade on purpose: it is what Ben approved (a run of bubbles)
     tabs = KIT_STROKES.get(kit, {}) if kit in KIT_ONLY else None
+    # ...AND SO DOES A SET'S OWN VOICE ON A KEY: Standard's gesture there is
+    # Standard's instrument's. The CR-78's guiro (74) is its circuit's ratchet
+    # (click_bursts), and Standard's long guiro had scraped it 30 times over
+    if tabs is None and note in KITS.get(kit, {}):
+        tabs = KIT_STROKES.get(kit, {})
 
     def table(name, std):
         return tabs.get(name, {}).get(note) if tabs is not None else std.get(note)

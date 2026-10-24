@@ -133,7 +133,7 @@ SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the
 SC-88Pro map 25, the SC-8850 map 37. A set not built here plays
 Standard. THE GOAL: every one built.
 
-**Where it stands:** SC-8850 map 13 of 37, SC-88Pro map 13 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
+**Where it stands:** SC-8850 map 14 of 37, SC-88Pro map 14 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
 
 | PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
 |---|---|---|---|---|---|---|---|
@@ -150,7 +150,7 @@ Standard. THE GOAL: every one built.
 | 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 10 keys of its own | 10 | **4** |
 | 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | built: 19 keys of its own | 19 | **4** |
 | 27 | DANCE | DANCE | DANCE | -- | **not built: plays Standard** |  |  |
-| 28 | CR-78 | CR-78 | -- | -- | **not built: plays Standard** |  |  |
+| 28 | CR-78 | CR-78 | -- | -- | built: 29 keys of its own | 29 | **4** |
 | 29 | TR-606 | TR-606 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 30 | TR-707 | TR-707 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 19 keys of its own | 19 | **4** |
@@ -239,11 +239,45 @@ Standard. THE GOAL: every one built.
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
 | 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
 
+### 27 CR-78
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | CR-78 Kick 2 | `CR78Kick2` | **4** | CR-78 KICK 2: the kick, its first cycles' third harmonic (~178 Hz) up. Score 14.2 |
+| 36 | CR-78 Kick 1 | `CR78Kick` | **4** | CR-78 KICK 1: a bridged-T at 59 Hz, fitted to Bjornmossa's real CR-78 (CC BY; examples/cr78_fit.py). Score 4.3. Ben: sounds good |
+| 37 | CR-78 Rim Shot | `CR78Rim` | **4** | CR-78 RIM SHOT: a ring at 1.43 kHz, gone in 5 ms (his 'clave_2'). Score 16.0 |
+| 38 | CR-78 Snare 1 | `CR78Snare` | **4** | CR-78 SNARE 1: a bridged-T at 307 Hz and its noise above 3.9 kHz. Score 11.7 |
+| 39 | 707 Hand Clap | `TR707Clap` | **4** | the 707's clap |
+| 40 | CR-78 Snare 2 | `CR78Snare2` | **4** | CR-78 SNARE 2: a second take, its noise lower. Score 11.9 |
+| 41 | CR-78 Low Tom 2 | `CR78Tom` | **4** | the CR-78's one tom (176 Hz) six semitones down: its six toms are it at six pitches, two apart |
+| 42 | CR-78 CHH | `CR78ClosedHat` | **4** | CR-78 CLOSED HAT: noise in a band at ~6-8 kHz, short, the trigger's thump under it. Score 13.3 |
+| 43 | CR-78 Low Tom 1 | `CR78Tom` | **4** | as 47, four semitones down |
+| 44 | 606 CHH | `TR606ClosedHat` | **4** | the 606's closed hat |
+| 45 | CR-78 Mid Tom 2 | `CR78Tom` | **4** | as 47, two semitones down |
+| 46 | CR-78 OHH | `CR78OpenHat` | **4** | CR-78 OPEN HAT: the same, held. Score 16.1 |
+| 47 | CR-78 Mid Tom 1 | `CR78Tom` | **4** | CR-78 TOM: a bridged-T at 176.6 Hz, its pitch falling as it rings. Score 11.4 |
+| 48 | CR-78 High Tom 2 | `CR78Tom` | **4** | as 47, two semitones up |
+| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the 808's cymbal |
+| 50 | CR-78 High Tom 1 | `CR78Tom` | **4** | as 47, four semitones up |
+| 51 | 606 Ride Cymbal | `TR606Cymbal` | **4** | the 606's cymbal |
+| 54 | CR-78 Tambourine | `CR78Tambourine` | **4** | CR-78 TAMBOURINE: noise in a band at ~6 kHz, its jingle's ripple. Score 18.4 |
+| 57 | 909 Crash | `TR909Crash` | **4** | the 909's crash |
+| 60 | CR-78 High Bongo | `CR78HiBongo` | **4** | CR-78 HIGH BONGO: a bridged-T at 601 Hz (wikter's CC0 take). Score 7.8 |
+| 61 | CR-78 Low Bongo | `CR78LowBongo` | **4** | CR-78 LOW BONGO: at 408 Hz. Score 7.3 |
+| 62 | 808 High Conga | `TR808HiConga` | **4** | the 808's high conga |
+| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the 808's mid conga |
+| 64 | 808 Low Conga | `TR808Conga` | **4** | the 808's low conga |
+| 70 | CR-78 Maracas | `CR78Maracas` | **4** | CR-78 MARACAS: a gated burst of high noise, ~30 ms. Score 18.9 |
+| 74 | CR-78 Guiro | `CR78Guiro` | **4** | CR-78 GUIRO: a ratchet of 28 noise bursts 17.8 ms apart (click_bursts, the take's), every third 2 dB down; the set's own stroke, not Standard's scrape (percussion_map.rasp_strokes). Score 26.6 |
+| 75 | CR-78 Claves | `CR78Claves` | **4** | CR-78 CLAVES: a bridged-T at 2.56 kHz. Score 10.9 |
+| 80 | CR-78 Metal Beat 1 | `CR78MetalBeat` | **4** | CR-78 METALLIC BEAT 1: two tones (~610, ~840 Hz), short. Score 14.7 |
+| 81 | CR-78 Metal Beat 2 | `CR78MetalBeat2` | **4** | CR-78 METALLIC BEAT 2: a bright ping, noise in a band at ~5 kHz. Score 18.5 |
+
 ### 28 TR-606
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 36 | 606 Kick 1 | `TR606Kick` | **4** | 606 KICK: a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). Score 7.3. Ben: sounds great |
+| 36 | 606 Kick 1 | `TR606Kick` | **4** | 606 KICK:a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). Score 7.3. Ben: sounds great |
 | 38 | 606 Snare 1 | `TR606Snare` | **4** | 606 SNARE 1: a bridged-T at 207 Hz and its snappy noise. Score 8.1 |
 | 39 | 707 Hand Clap | `TR707Clap` | **4** | the 707's clap |
 | 40 | 606 Snare 2 | `TR606Snare2` | **4** | 606 SNARE 2: the snare ACCENTED (bdu's CC0 take). Score 9.1 |
@@ -1475,7 +1509,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-401 classes.
+418 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1544,7 +1578,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `CrashCymbal1` -- 49 Crash Cymbal 1 (4), set 127 49 Crash Cymbal (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4)
-          - `TR909Crash` [RomMetalMixin] -- set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4)
+          - `TR909Crash` [RomMetalMixin] -- set 27 57 909 Crash (4), set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
           - `ConcertCymbal2` -- set 48 57 Concert Cymbal 2 (4)
         - `CrashRide` -- 59 Ride Cymbal 2 (4)
@@ -1624,19 +1658,36 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ElectronicTom50` -- set 24 50 Elec Hi Tom 1 (4)
             - `SimmonsSnare` -- set 24 38 Elec SD (4), set 127 40 Electronic Snare Drum (4)
           - `TR808` [ModeDecays]
+            - `CR78`
+              - `CR78Claves` -- set 27 75 CR-78 Claves (4)
+              - `CR78ClosedHat` -- set 27 42 CR-78 CHH (4)
+                - `CR78OpenHat` -- set 27 46 CR-78 OHH (4)
+              - `CR78Guiro` -- set 27 74 CR-78 Guiro (4)
+              - `CR78HiBongo` -- set 27 60 CR-78 High Bongo (4)
+                - `CR78LowBongo` -- set 27 61 CR-78 Low Bongo (4)
+              - `CR78Kick` -- set 27 36 CR-78 Kick 1 (4)
+                - `CR78Kick2` -- set 27 35 CR-78 Kick 2 (4)
+              - `CR78Maracas` -- set 27 70 CR-78 Maracas (4)
+              - `CR78MetalBeat2` -- set 27 81 CR-78 Metal Beat 2 (4)
+              - `CR78MetalBeat` -- set 27 80 CR-78 Metal Beat 1 (4)
+              - `CR78Rim` -- set 27 37 CR-78 Rim Shot (4)
+              - `CR78Snare` -- set 27 38 CR-78 Snare 1 (4)
+                - `CR78Snare2` -- set 27 40 CR-78 Snare 2 (4)
+              - `CR78Tambourine` -- set 27 54 CR-78 Tambourine (4)
+              - `CR78Tom` -- set 27 41 CR-78 Low Tom 2 (4), set 27 43 CR-78 Low Tom 1 (4), set 27 45 CR-78 Mid Tom 2 (4), set 27 47 CR-78 Mid Tom 1 (4), set 27 48 CR-78 High Tom 2 (4), set 27 50 CR-78 High Tom 1 (4)
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
             - `TR606`
-              - `TR606ClosedHat` -- set 28 42 606 CHH (4), set 28 44 606 CHH (4)
+              - `TR606ClosedHat` -- set 27 44 606 CHH (4), set 28 42 606 CHH (4), set 28 44 606 CHH (4)
                 - `TR606OpenHat` -- set 28 46 606 OHH (4)
-              - `TR606Cymbal` -- set 28 51 606 Ride Cymbal (4)
+              - `TR606Cymbal` -- set 27 51 606 Ride Cymbal (4), set 28 51 606 Ride Cymbal (4)
               - `TR606Kick` -- set 28 36 606 Kick 1 (4)
               - `TR606Snare` -- set 28 38 606 Snare 1 (4)
                 - `TR606Snare2` -- set 28 40 606 Snare 2 (4)
               - `TR606Tom` -- set 28 41 606 Low Tom 2 (4), set 28 43 606 Low Tom 1 (4), set 28 45 606 Mid Tom 2 (4)
                 - `TR606HiTom` -- set 28 47 606 Mid Tom 1 (4), set 28 48 606 Hi Tom 2 (4), set 28 50 606 Hi Tom 1 (4)
             - `TR707`
-              - `TR707Clap` -- set 28 39 707 Hand Clap (4), set 29 39 707 Hand Clap (4)
+              - `TR707Clap` -- set 27 39 707 Hand Clap (4), set 28 39 707 Hand Clap (4), set 29 39 707 Hand Clap (4)
               - `TR707Kick` -- set 29 36 707 Kick 1 (4)
                 - `TR707Kick2` -- set 29 35 707 Kick 2 (4)
               - `TR707Rim` -- set 29 37 707 Rim Shot (4)
@@ -1648,11 +1699,11 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `TR808Claves` -- set 25 75 808 Claves (4), set 30 75 808 Claves (4)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4)
-            - `TR808Conga` -- set 25 64 808 Low Conga (4), set 28 64 808 Low Conga (4)
-              - `TR808HiConga` -- set 25 62 808 High Conga (4), set 28 62 808 High Conga (4)
-              - `TR808MidConga` -- set 25 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4)
+            - `TR808Conga` -- set 25 64 808 Low Conga (4), set 27 64 808 Low Conga (4), set 28 64 808 Low Conga (4)
+              - `TR808HiConga` -- set 25 62 808 High Conga (4), set 27 62 808 High Conga (4), set 28 62 808 High Conga (4)
+              - `TR808MidConga` -- set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4)
             - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
-            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 28 49 808 Cymbal (4)
+            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4)
             - `TR808Kick` -- set 25 36 808 Bass Drum (4)
             - `TR808Maracas` -- set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4)
             - `TR808RimShot` -- set 25 37 808 Rim Shot (4)
