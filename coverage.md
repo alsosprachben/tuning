@@ -18,17 +18,17 @@ so it cannot drift; the ratings live in that script and can be argued with.
 |---|---|---|---|---|---|---|---|---|
 | GM 1 programs | 128 | 128 | 100% | 119 | 9 | 0 | 0 | 0 |
 | GM 1 percussion keys (35-81) | 47 | 47 | 100% | 47 | 0 | 0 | 0 | 0 |
-| GM 2 tones (MSB 121) | 256 | 219 | 86% | 178 | 41 | 0 | 0 | 0 |
+| GM 2 tones (MSB 121) | 256 | 235 | 92% | 193 | 42 | 0 | 0 | 0 |
 | GM 2 drum sets | 9 | 9 | 100% | 9 | 0 | 0 | 0 | 0 |
 | SC-55 tones | 214 | 214 | 100% | 171 | 40 | 3 | 0 | 0 |
 | SC-55 drum sets | 10 | 8 | 80% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 436 | 56% | 294 | 139 | 3 | 0 | 0 |
-| SC-88Pro drum sets | 25 | 21 | 84% | | | | | |
-| SC-8850 tones | 1262 | 434 | 34% | 292 | 139 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 21 | 57% | | | | | |
+| SC-88Pro tones | 774 | 441 | 57% | 298 | 140 | 3 | 0 | 0 |
+| SC-88Pro drum sets | 25 | 22 | 88% | | | | | |
+| SC-8850 tones | 1262 | 450 | 36% | 307 | 140 | 3 | 0 | 0 |
+| SC-8850 drum sets | 37 | 22 | 59% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -197,7 +197,7 @@ Standard. THE GOAL: every one built.
 | 3 | STANDARD L/R | STANDARD 3 | -- | -- | built: 12 keys of its own | 12 | **4** |
 | 9 | ROOM | ROOM | ROOM | ROOM | built: 6 keys of its own | 6 | **4** |
 | 10 | HIP HOP | HIP HOP | -- | -- | built: 26 keys of its own | 26 | **4** |
-| 11 | JUNGLE | JUNGLE | -- | -- | **not built: plays Standard** |  |  |
+| 11 | JUNGLE | JUNGLE | -- | -- | built: 26 keys of its own | 26 | **4** |
 | 12 | TECHNO | TECHNO | -- | -- | built: 33 keys of its own | 33 | **4** |
 | 13 | ROOM L/R | -- | -- | -- | **not built: plays Standard** |  |  |
 | 14 | HOUSE | -- | -- | -- | **not built: plays Standard** |  |  |
@@ -293,6 +293,37 @@ Standard. THE GOAL: every one built.
 | 47 | TR-909 Mid Tom 1 | `TR909MidTom1` | **4** | TR-909 Mid Tom 1: set 30's key 47 |
 | 48 | TR-909 High Tom 2 | `TR909HiTom` | **4** | TR-909 High Tom 2: set 30's key 48 |
 | 49 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
+| 50 | TR-909 High Tom 1 | `TR909HiTom1` | **4** | TR-909 High Tom 1: set 30's key 50 |
+| 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
+| 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
+| 56 | TR-808 Cowbell | `TR808Cowbell` | **4** | TR-808 Cowbell: set 25's key 56 |
+| 70 | TR-808 Maracas | `TR808Maracas` | **4** | TR-808 Maracas: set 25's key 70 |
+| 74 | CR-78 Guiro | `CR78Guiro` | **4** | CR-78 Guiro: set 27's key 74 |
+| 75 | TR-808 Claves | `TR808Claves` | **4** | TR-808 Claves: set 25's key 75 |
+| 80 | Mute Triangle | `Triangle` | **4** | Mute Triangle: Standard's key 80 |
+| 81 | Open Triangle | `Triangle` | **4** | Open Triangle: Standard's key 81 |
+| 82 | TR-626 Shaker | `Shaker` | **2** | TR-626 Shaker: Standard's key 82 -- the nearest we have, not the sound |
+
+### 10 Jungle
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 29 | Scratch Push 2 | `SfxScratchPush` | **2** | Scratch Push 2: Standard's key 29 -- the nearest we have, not the sound |
+| 30 | Scratch Pull 2 | `SfxScratchPull` | **2** | Scratch Pull 2: Standard's key 30 -- the nearest we have, not the sound |
+| 35 | Jungle Kick 2 | `JungleKick2` | **4** | Jungle Kick 2, the JungleKick2 at 42 Hz |
+| 36 | Jungle Kick 1 | `JungleKick1` | **4** | Jungle Kick 1, the JungleKick1 at 53 Hz |
+| 38 | Jungle Snare 1 | `JungleSnare1` | **4** | Jungle Snare 1, the JungleSnare1 at 246 Hz |
+| 39 | Hand Clap 2 | `HandClap` | **2** | Hand Clap 2: Standard's key 39 -- the nearest we have, not the sound |
+| 40 | Jungle Snare 2 | `JungleSnare2` | **4** | Jungle Snare 2, the JungleSnare2 at 220 Hz |
+| 41 | TR-909 Low Tom 2 | `TR909Tom` | **4** | TR-909 Low Tom 2: set 30's key 41 |
+| 42 | TR-606 Closed Hi-Hat | `TR606ClosedHat` | **4** | TR-606 Closed Hi-Hat: set 28's key 42 |
+| 43 | TR-909 Low Tom 1 | `TR909LowTom1` | **4** | TR-909 Low Tom 1: set 30's key 43 |
+| 44 | Jungle Hi-Hat | `JungleHiHat` | **4** | Jungle Hi-Hat, the JungleHiHat at 313 Hz |
+| 45 | TR-909 Mid Tom 2 | `TR909MidTom` | **4** | TR-909 Mid Tom 2: set 30's key 45 |
+| 46 | TR-606 Open Hi-Hat | `TR606OpenHat` | **4** | TR-606 Open Hi-Hat: set 28's key 46 |
+| 47 | TR-909 Mid Tom 1 | `TR909MidTom1` | **4** | TR-909 Mid Tom 1: set 30's key 47 |
+| 48 | TR-909 High Tom 2 | `TR909HiTom` | **4** | TR-909 High Tom 2: set 30's key 48 |
+| 49 | TR-808 Crash Cymbal | `TR808Cymbal` | **4** | TR-808 Crash Cymbal: set 25's key 49 |
 | 50 | TR-909 High Tom 1 | `TR909HiTom1` | **4** | TR-909 High Tom 1: set 30's key 50 |
 | 52 | Reverse Cymbal | `ReverseCymbal` | **4** | Reverse Cymbal: set 24's key 52 |
 | 54 | Shake Tambourine | `Tambourine` | **2** | Shake Tambourine: Standard's key 54 -- the nearest we have, not the sound |
@@ -613,8 +644,8 @@ Standard. THE GOAL: every one built.
 | 31 | TR-909 Kick 2 | `TR909Kick2` | **4** | TR-909 Kick 2: set 30's key 35 |
 | 32 | Hip-Hop Kick 2 | `HipHopKick2` | **4** | Hip-Hop Kick 2, the HipHopKick2 at 56 Hz |
 | 33 | Hip-Hop Kick 1 | `HipHopKick1` | **4** | Hip-Hop Kick 1, the HipHopKick1 at 37 Hz |
-| 34 | Jungle Kick 2 | `KickDrum` | **2** | Jungle Kick 2: Standard's key 35 -- the nearest we have, not the sound |
-| 35 | Jungle Kick 1 | `KickDrum` | **2** | Jungle Kick 1: Standard's key 36 -- the nearest we have, not the sound |
+| 34 | Jungle Kick 2 | `JungleKick2` | **4** | Jungle Kick 2, the JungleKick2 at 42 Hz |
+| 35 | Jungle Kick 1 | `JungleKick1` | **4** | Jungle Kick 1, the JungleKick1 at 53 Hz |
 | 36 | Techno Kick 2 | `TechnoKick2` | **4** | Techno Kick 2, the TechnoKick2 at 50 Hz |
 | 37 | Techno KicK 1 | `TechnoKick1` | **4** | Techno KicK 1, the TechnoKick1 at 44 Hz |
 | 38 | Standard 1 Kick 2 | `KickDrum` | **4** | Standard 1 Kick 2: Standard's key 35 |
@@ -676,8 +707,8 @@ Standard. THE GOAL: every one built.
 | 94 | Standard 1 Snare 3 | `AcousticSnare` | **4** | Standard 1 Snare 3: Standard's key 38 |
 | 95 | Rap Snare | `RapSnare` | **4** | Rap Snare, the RapSnare at 174 Hz |
 | 96 | Hip-Hop Snare 2 | `HipHopSnare2` | **4** | Hip-Hop Snare 2, the HipHopSnare2 at 131 Hz |
-| 97 | Jungle Snare 1 | `AcousticSnare` | **2** | Jungle Snare 1: Standard's key 38 -- the nearest we have, not the sound |
-| 98 | Jungle Snare 2 | `SnareDrum2` | **2** | Jungle Snare 2: Standard's key 40 -- the nearest we have, not the sound |
+| 97 | Jungle Snare 1 | `JungleSnare1` | **4** | Jungle Snare 1, the JungleSnare1 at 246 Hz |
+| 98 | Jungle Snare 2 | `JungleSnare2` | **4** | Jungle Snare 2, the JungleSnare2 at 220 Hz |
 | 99 | Techno Snare 1 | `TechnoSnare1` | **4** | Techno Snare 1, the TechnoSnare1 at 120 Hz |
 
 ### 56 SFX
@@ -1212,7 +1243,7 @@ Controls are the rest of the console that are not stops.
 
 A GS bank select (CC0 = bank, then the program) picks a variation tone
 under a program (SC-55 owner's manual p.68). 175 of the SC-55's 175 are built,
-and 142 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
+and 153 of the SC-88 map's (Roland's SC-88Pro manual; gs_inventory.md);
 one not built plays its capital tone, as a Sound Canvas does.
 
 | program.bank | map | GS name | class | | notes |
@@ -1266,6 +1297,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 19.16 | SC-88 | ChurchOrg.3 | `FlueOrgan_sc88_19_16` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x93 |
 | 19.24 | SC-88 | Organ Flute | `FlueOrgan_sc88_19_24` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x4040 |
 | 19.32 | SC-88 | Trem.Flute | `FlueOrgan_sc88_19_32` | **4** | SC-88 map: GM 19 Church Organ with default_stops=0x6040 |
+| 20.16 | SC-88 | Puff Organ | `ReedOrganFree_sc8850_20_16` | **4** | SC-8850 map: GM 20 Reed Organ with breath_noise_db=((160, -39.7), (202, -44.0), (255, -34.2), (321, -34.7), (404, -30.5), (509, -28.4), (641, -30.299999999999997), (808, -30.299999999999997), (1018, -29.5), (1283, -32.0), (1616, -34.1), (2036, -34.7), (2566, -35.3), (3233, -33.2), (4073, -34.4), (5132, -37.2), (6465, -41.4), (8146, -46.4), (10263, -51.4), (12931, -51.8)). Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 21.8 | SC-55 | Accordion It | `AccordionItalian` | **3** | the musette: GM 21's accordion with a third middle reed, M-16 / M / M+16 -- the wet reed's tuning measured on the Hohner, mirrored flat (asserted). Both GM sets' 21.8 is their accordion made wetter; no recording of a three-reed musette here (juskiddink's Paolo Soprani take is a dry register). Ben's pick of three |
 | 22.1 | SC-88 | Harmonica 2 | `Harmonica_sc88_22_1` | **4** | SC-88 map: GM 22 Harmonica with reed_edge=0.0128 |
 | 24.8 | SC-55 | Ukulele | `Ukulele` | **4** | BEN'S OWN UKULELE, a Luna, concert size (G C E A, re-entrant, A440), recorded by him through his A6 for it (ukulele_ben/; examples/pluck_fit.py --voice=ukulele): its 52 chromatic notes staged; its strings' stiffness measured (B 2.7e-4, the nylon guitar's was 5x); its fast dark decay (the fundamental 15-45 dB/s); its box (a resonance at 800 Hz, a hollow at 1 kHz; 2.9 dB rms to 5 kHz); the finger's flesh a soft noise burst (the attacks' flatness matched); and ITS PITCH WANDERING 9 cents over a second after the strike's glide, a soft string under a fretting finger (Ben: 'more than the guitar model'). Its first 15 ms ~5-8 dB brighter over 2 kHz than his (a fingertip rounding the pluck, not modelled). Ben: 'Perfect. Sounds great' |
@@ -1277,14 +1309,18 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 25.9 | SC-88 | Nylon+Steel | `NylonGuitar_sc88_25_9` | **4** | SC-88 map: layered: GM 24 -2 dB + GM 25 -2 dB |
 | 25.16 | SC-55 | Mandolin | `Mandolin` | **3** | unison COURSES of steel strings, measured from each harmonic's beating (examples/course_sympathy.py --voice=mandolin: 5.5 cents, the partner 0.45), its decay fitted to the Eclectic Mandolin's takes (examples/pluck_fit.py --voice=mandolin: 14.35 dB/s, steeply by register), and PICKED (tonelib.Plectrum): the scrape at the note's level to 5.5 kHz gone at 700 dB/s, the top partials struck 12 dB an octave over 1.5 kHz and gone at 400 dB/s (the take's top falls 24-42 dB by 0.1 s), the course crossed 14 ms apart. The take is re-amped dark, so its colour is not a target: fitted on flatness and how fast the top falls. Its other open courses KICKED through the bridge (contact, tuned a fourth low, D3 A3 E4 B4): the D course at its own harmonics 29-44 dB under 10 of 13 notes, the A seldom, the E and B hardly. Ben: 'Sounds good' |
 | 25.32 | SC-88 | Steel Gt.2 | `SteelGuitar_sc88_25_32` | **4** | SC-88 map: GM 25 Acoustic Guitar (steel) with tonal_dampening=0.6 |
+| 25.33 | SC-88 | Steel + Body | `SteelGuitar_sc8850_25_33` | **4** | SC-8850 map: GM 25 Acoustic Guitar (steel) with body_trim_db=((126, -9.45), (159, 2.7), (200, 9.149999999999999), (252, 1.0499999999999998), (317, 0.0), (400, -6.75), (504, -2.8499999999999996), (635, -4.050000000000001), (800, -5.4), (1008, -11.100000000000001), (1270, -9.3), (1600, -0.44999999999999996), (2016, 0.15000000000000002), (2540, 0.75), (3200, 9.45), (4032, 8.100000000000001), (5080, 6.0), (6400, 6.0), (8063, 1.0499999999999998), (10159, -0.44999999999999996), (12800, -10.95)). Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 26.1 | SC-88 | Mellow Gt. | `JazzGuitar_sc88_26_1` | **4** | SC-88 map: GM 26 Electric Guitar (jazz) with tonal_dampening=2.6 |
 | 26.8 | SC-55 | Hawaiian Gt. | `HawaiianGuitar` | **4** | a LAP STEEL fitted to David Long's (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel): its six open strings -- the sustain (decay fit 17.4 -> 10.2 dB/s rms, the low harmonics 2-6 dB/s), the tone rolled back on its pickup (resonance 500 Hz, Q 0.5; lapsteel_tone.py), and its OTHER OPEN STRINGS answering through the bridge, each as tuned on that instrument, harmonic by harmonic where it lies near the note's (the E2 string's 2nd under an E3 at -14 dB, the take's -13, beating 1.7 Hz off) -- what Ben heard as 'more inharmonicity, especially lower'. Ben: 'Sounds great' |
 | 27.4 | SC-88 | JC Clean Gt. | `ElectricGuitar_sc88_27_4` | **4** | SC-88 map: GM 27 Electric Guitar (clean) with amp_drive=0.0, cabinet=jc120 |
 | 27.8 | SC-55 | Chorus Gt. | `ChorusGuitar` | **3** | the Stratocaster into a chorus pedal (the swept bucket-brigade chorus CC93 makes), on at half by default -- GeneralUser's 27.8 is its clean guitar with a copy 7 cents up; the pedal's settings asserted |
+| 27.23 | SC-88 | Mid Tone GTR | `ElectricGuitar_sc8850_27_23` | **4** | SC-8850 map: GM 27 Electric Guitar (clean) with pickup_points=(0.155,). Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 28.1 | SC-88 | Muted Dis.Gt | `DistortionGuitar_sc88_30_25` | **4** | SC-88 map: 30.25's voice |
 | 28.8 | SC-55 | Funk Gt. | `FunkGuitar` | **3** | the Stratocaster on position 4: neck (0.247) and middle (0.157) pickups in parallel -- their combs summed, the mean of two coils, the resonance up by sqrt 2 with the halved inductance -- through a cleaner amp (drive 0.3). The physics of the wiring; not fitted to a recording of one |
 | 28.16 | SC-88 | Funk Gt.2 | `FunkGuitar` | **3** | SC-88 map: 28.8's voice |
+| 28.24 | SC-88 | Jazz Man | `JazzGuitar_sc8850_28_24` | **4** | SC-8850 map: GM 26 Electric Guitar (jazz) with decay_db=11.39, harmonic_decay_db=3.626, decay_register_slope=0.55, strike_depth=0.7821, tonal_dampening=2.513. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 29.3 | SC-88 | More Drive | `OverdrivenGuitar` | **4** | SC-88 map: GM 29 Overdriven Guitar's voice |
+| 29.4 | SC-88 | Guitar Pinch | `OverdrivenGuitar_sc8850_29_4` | **4** | SC-8850 map: layered: GM 29 -6 dB + GM 29 +24 st -3 dB. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 30.1 | SC-88 | Dist. Gt2 : | `DistortionGuitar_sc88_30_1` | **4** | SC-88 map: GM 30 Distortion Guitar with hammer_legato=True, slur_cuts_release=True |
 | 30.2 | SC-88 | DazedGuitar | `DistortionGuitar_sc88_30_2` | **4** | SC-88 map: GM 30 Distortion Guitar with detuned_pair=(-12.0, 12.0) |
 | 30.8 | SC-55 | Feedback Gt. | `FeedbackGuitar` | **3** | the distortion guitar HELD INTO FEEDBACK (tonelib.Feedback, examples/feedback_fit.py): a second after the pluck the partial nearest the loop's band (~800 Hz; 600-1100 on the Feedbacker's '69 Strat into a Super Reverb) swells in and holds while the rest dies, the amp distorting it with the note -- GeneralUser's 30.8 has no bloom; ours follows the real thing. Ben: 'They sound great' |
@@ -1294,10 +1330,12 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 30.18 | SC-88 | 5th Dist. | `DistortionGuitar_sc88_30_18` | **4** | SC-88 map: layered: GM 30 + GM 30 +7 st -2 dB |
 | 30.24 | SC-88 | Rock Rhythm | `DistortionGuitar_sc88_30_24` | **4** | SC-88 map: GM 30 Distortion Guitar with decay_db=6.39, harmonic_decay_db=2.499, decay_register_slope=0.412, strike_depth=0.7779, tonal_dampening=2.421 |
 | 30.25 | SC-88 | Rock Rhythm2 | `DistortionGuitar_sc88_30_25` | **4** | SC-88 map: GM 30 Distortion Guitar with decay_db=48.33, harmonic_decay_db=9.202, decay_register_slope=0.8949, strike_depth=0.7927, tonal_dampening=2.742 |
+| 30.26 | SC-88 | Dist Rtm GTR | `DistortionGuitar_sc8850_30_26` | **4** | SC-8850 map: GM 30 Distortion Guitar with decay_db=15.21, harmonic_decay_db=4.369, decay_register_slope=0.6189, strike_depth=0.7843, tonal_dampening=2.559. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 31.8 | SC-55 | Gt. Feedback | `GuitarFeedback` | **4** | FEEDBACK ITSELF on a clean amp (GuitarFeedbackProperties), fitted to the Gretsch's clean G4 (Pianobook, OMS-1): the fundamental 21 dB over the pluck a second in (the take's 23), its odd harmonics -20/-18/-23 dB as the amp saturates (-25/-16/-21), sinking slowly while held -- as GeneralUser's 31.8 swells. Ben: 'They sound great' |
 | 31.16 | SC-88 | Ac.Gt.Harm. | `GuitarHarmonics` | **4** | SC-88 map: GM 31 Guitar Harmonics's voice |
 | 33.1 | SC-88 | FingeredBs2 | `FingeredBass_sc88_33_1` | **4** | SC-88 map: GM 33 Electric Bass (finger) with tonal_dampening=2.9 |
 | 33.2 | SC-88 | Jazz Bass | `FingeredBass_sc88_33_2` | **4** | SC-88 map: GM 33 Electric Bass (finger) with pickup_points=(0.098,), tonal_dampening=2.0 |
+| 33.7 | SC-88 | Finger Slap | `FingeredBass_sc8850_33_7` | **4** | SC-8850 map: layered: GM 33 + GM 36 -6 dB. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 34.1 | SC-88 | Picked Bass2 | `PickedBass_sc88_34_1` | **4** | SC-88 map: GM 34 Electric Bass (pick) with amp_drive=1.0 |
 | 34.8 | SC-88 | MutePickBs. | `PickedBass_sc88_34_8` | **4** | SC-88 map: GM 34 Electric Bass (pick) with decay_db=20.0, tonal_dampening=2.4 |
 | 35.1 | SC-88 | Fretless Bs2 | `FretlessBass_sc88_35_1` | **4** | SC-88 map: GM 35 Fretless Bass with lowpass_hz=455.7, lowpass_order=3.605, tonal_dampening=2.315 |
@@ -1333,6 +1371,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 48.11 | SC-88 | Choir Str. | `Violin_sc88_48_11` | **4** | SC-88 map: layered: GM 48 + GM 52 -4 dB |
 | 48.16 | SC-88 | St.Strings | `Violin_sc88_48_16` | **4** | SC-88 map: GM 48 String Ensemble 1 with key_pan_spread=0.5 |
 | 48.24 | SC-88 | VeloStrings | `ViolinSlow_sc88_48_24` | **4** | SC-88 map: layered: GM 49 vel 0-90 + GM 48 vel 91-127 |
+| 48.40 | SC-88 | 60s Strings | `Violin_sc8850_48_40` | **4** | SC-8850 map: GM 48 String Ensemble 1 with section_players=4, section_width_m=1.2, bore_corner_hz=4500.0. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 49.1 | SC-88 | SlowStrings2 | `ViolinSlow_sc88_49_1` | **4** | SC-88 map: GM 49 String Ensemble 2 with attack_time=1.8, tonal_dampening=2.1 |
 | 49.8 | SC-88 | Legato Str. | `Violin_sc88_49_8` | **4** | SC-88 map: GM 48 String Ensemble 1 with sound_bias={'attack': 0.5} |
 | 49.9 | SC-88 | Warm Strings | `ViolinSlow_sc88_49_9` | **4** | SC-88 map: GM 49 String Ensemble 2 with bore_corner_hz=2200.0 |
@@ -1352,11 +1391,14 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 55.16 | SC-55 | Lo Fi Rave | `Sc88_55_16` | **3** | SC-88 map: a Moog panel, the SynthBrass1's with a_attack, a_decay, a_release, a_sustain, cutoff, f_attack, noise_level, osc1_wave, osc2_freq, osc2_wave, resonance changed (sc88_synth.py); voiced from what the tone is, the engine fitted to Ben's Messenger |
 | 55.19 | SC-88 | Bam Hit | `OrchestraHit_sc88_55_19` | **3** | SC-88 map: layered: GM 55 + set 48's key 36 -20 st +10 dB + GM 61 with one_shot=True, gate_time=0.12 +16 dB |
 | 56.1 | SC-88 | Trumpet 2 | `Trumpet_sc88_56_1` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-0.9, blare_knee_hz=192, blare_cap_db=15.2, exp_vibrato_cents=5.4, solo_vibrato_hz=4.83 |
+| 56.3 | SC-88 | Dark Trumpet | `Trumpet_sc8850_56_3` | **4** | SC-8850 map: GM 56 Trumpet with blare_db_per_khz=-10.0, blare_knee_hz=160, blare_cap_db=34.8. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 56.8 | SC-55 | Flugel Horn | `Flugelhorn` | **4** | the flugelhorn: our trumpet's source on a conical bore, its five colour knobs (bell cutoff and order, bore corner, roll-off, register law) refitted to Chris Cook's 'Dusty Flugelhorn' (Pianobook, a Yamaha 6310z, E3-A#5 at one soft dynamic; examples/flugel_fit.py): 21.2 -> 4.7 dB rms over 31 notes, ours read through the trumpet's own soft law while fitting (Warm Tp., Iowa's pp against its mf) so the class is the flugelhorn at mf; its attack the takes' (9-18 ms). A lower bell (1.2 kHz), the cone's faster roll-off. One player's Commons flugelhorn/trumpet pair read a lighter horn (--fit=commons); Ben chose this one by ear. At the trumpet's level. Ben: 'sounds more properly like a Flugelhorn' |
 | 56.24 | SC-88 | Bright Tp. | `Trumpet_sc88_56_24` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
 | 56.25 | SC-88 | Warm Tp. | `Trumpet_sc88_56_25` | **4** | SC-88 map: GM 56 Trumpet with blare_db_per_khz=-6.6, blare_knee_hz=160, blare_cap_db=34.8 |
 | 57.1 | SC-88 | Trombone 2 | `Trombone_sc88_57_1` | **4** | SC-88 map: GM 57 Trombone with blare_db_per_khz=7.7, blare_knee_hz=754, blare_cap_db=25.9 |
+| 57.4 | SC-88 | Bright Tb | `Trombone_sc88_57_1` | **4** | SC-8850 map: 57.1's voice. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 58.1 | SC-88 | Tuba 2 | `ConicalBrass_sc88_58_1` | **4** | SC-88 map: GM 58 Tuba with blare_db_per_khz=30.1, blare_knee_hz=116, blare_cap_db=24.7 |
+| 59.2 | SC-88 | MuteTrumpet2 | `MutedTrumpet` | **4** | SC-8850 map: GM 59 Muted Trumpet's voice. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 60.1 | SC-88 | Fr.Horn 2 | `Horn_sc88_60_1` | **4** | SC-88 map: GM 60 French Horn with blare_db_per_khz=-14.0, blare_knee_hz=162, blare_cap_db=10.3 |
 | 60.3 | SC-88 | Wide FreHrns | `Horn_sc88_60_3` | **4** | SC-88 map: GM 60 French Horn with key_pan_spread=0.5 |
 | 60.8 | SC-88 | Fr.HornSolo | `Horn_sc88_60_8` | **4** | SC-88 map: GM 60 French Horn with blare_db_per_khz=9.9, blare_knee_hz=588, blare_cap_db=29.1 |
@@ -1672,29 +1714,42 @@ here (patch_map.MT32_SET) at that voice's level, rated as that voice.
 | 126.127 | Water Bell | GM 98 FX 3 (crystal) | **4** |
 | 127.127 | Jungle Tune | GM 108 Kalimba | **4** |
 
+## General MIDI 2: the sound set (MSB 121)
+
+GM 2's 256 tones (SC-8850 owner's manual, "GM 2 Instrument List"; examples/gm2_list.py).
+GM 2 numbers its variations its own way -- its Piano 1w is LSB 1, the Sound Canvas's
+bank 8 -- but every one is a Sound Canvas tone under its own name, so a GM 2 LSB plays
+the tone of that name (patch_map.gm2_bank: the SC-8850 map's, else an earlier map's),
+rated as that tone is; one not built plays the capital. GM 2's nine drum sets are the
+Sound Canvas's (Standard, Room, Power, Electronic, Analog = TR-808, Jazz, Brush,
+Orchestra, SFX), all built.
+
+**Still to build (21):** 5.3 EP Legend, 5.4 EP Phase, 7.1 Pulse Clav, 38.3 Clavi Bass, 38.4 Hammer, 39.3 Attack Pulse, 46.1 Yang Qin, 53.1 Humming, 54.1 Analog Voice, 55.1 Bass Hit, 55.2 6th Hit, 55.3 Euro Hit, 62.1 Pro Brass, 62.3 Jump Brass, 63.1 SynBrass sfz, 81.3 Natural Lead, 81.4 SequencedSaw, 84.1 Wire Lead, 87.1 Delayed Lead, 89.1 Sine Pad, 91.1 Itopia.
+
+
 ## Sound Canvas: the GS maps
 
 Each Sound Canvas's map of tones (the SC-55's own owner's manual p.68; the SC-55mkII,
 SC-88 and SC-88Pro maps from the SC-88Pro manual's list), against ours. A tone is built
 when we play it, as a program or a variation, and rated as the tables above rate it.
 A later map can put another tone under a number we built; that one is not counted.
-The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 338 (11 another tone), SC-8850 828 (13 another tone).
+The maps' totals are in the Summary at the top; still to build: SC-55 0, SC-55mkII 0, SC-88 0, SC-88Pro 333 (6 another tone), SC-8850 812 (8 another tone).
 
 
-A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3).
+A file selects a map with bank select LSB (CC32: 1 SC-55, 2 SC-88, 3 SC-88Pro, 4 SC-8850; none, ours). Where a map holds another tone under a number, it is built as its own: SC-55 3.8 HonkyTonk w (3), SC-55 4.16 E.Piano 1v (4), SC-55 5.16 E.Piano 2v (4), SC-55 62.16 Analog Brs1 (3), SC-55 63.16 Analog Brs2 (3), SC-88 4.8 St.Soft EP (4), SC-88 39.8 Beef FMBass (3), SC-88Pro 0.16 European Pf (4), SC-88Pro 3.8 Honky-tonk 2 (3), SC-88Pro 16.8 Trem. Organ (4), SC-88Pro 16.32 70's E.Organ (4), SC-88Pro 17.32 Perc. Organ (4).
 
 ### By family: built of each map's tones
 
 | family | SC-55 | SC-55mkII | SC-88 | SC-88Pro | SC-8850 |
 |---|---|---|---|---|---|
-| Piano | 11/11 | 21/21 | 26/26 | 25/39 | 23/61 |
+| Piano | 11/11 | 21/21 | 26/26 | 27/39 | 25/61 |
 | Chromatic Percussion | 12/12 | 12/12 | 18/18 | 18/23 | 18/29 |
-| Organ | 12/12 | 16/16 | 30/30 | 25/49 | 25/71 |
-| Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 36/72 |
-| Bass | 10/10 | 12/12 | 31/31 | 33/76 | 33/113 |
+| Organ | 12/12 | 16/16 | 30/30 | 28/49 | 29/71 |
+| Guitar | 16/16 | 19/19 | 34/34 | 36/55 | 41/72 |
+| Bass | 10/10 | 12/12 | 31/31 | 33/76 | 34/113 |
 | Strings | 8/8 | 9/9 | 11/11 | 12/20 | 12/29 |
-| Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 34/134 |
-| Brass | 12/12 | 15/15 | 27/27 | 24/51 | 24/84 |
+| Ensemble | 11/11 | 11/11 | 29/29 | 34/63 | 35/134 |
+| Brass | 12/12 | 15/15 | 27/27 | 24/51 | 27/84 |
 | Reed | 11/11 | 8/8 | 11/11 | 11/20 | 11/23 |
 | Pipe | 10/10 | 8/8 | 9/9 | 13/22 | 13/27 |
 | Synth Lead | 8/8 | 12/12 | 30/30 | 34/80 | 34/131 |
@@ -1883,7 +1938,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-474 classes.
+479 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1954,7 +2009,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `CengCeng` -- set 49 49 Rama Cymbal (4)
           - `ConcertCymbal1` -- set 48 59 Concert Cymbal 1 (4), set 49 31 Concert Cymbal (4)
           - `ReverseCrashCymbal1` -- set 57 50 Reverse Cymbal 1 (4)
-          - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
+          - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
           - `RndCrashCymbal1` [RandomStrike] -- set 2 49 [RND] Crash Cymbal (4)
           - `TR909Crash` [RomMetalMixin] -- set 9 49 TR-909 Crash Cymbal (4), set 11 49 TR-909 Crash Cymbal (4), set 11 57 TR-909 Crash Cymbal (4), set 27 57 909 Crash (4), set 28 57 909 Crash (4), set 29 49 909 Crash (4), set 30 49 909 Crash (4)
         - `CrashCymbal2` -- 57 Crash Cymbal 2 (4)
@@ -1964,6 +2019,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `RndCrashRide` [RandomStrike] -- set 2 59 [RND] Ride Cymbal 2 (4)
         - `HiHat`
           - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 9 42 Room Closed Hi-Hat (2), set 48 27 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
+            - `JungleHiHat` [JungleBreak] -- set 10 44 Jungle Hi-Hat (4)
             - `ReverseClosedHiHat` -- set 57 55 Reverse Closed Hi-Hat (4)
             - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4)
             - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4)
@@ -1991,26 +2047,29 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
-          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (4), set 1 38 Standard 2 Snare 1 (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 68 Room Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 50 97 Jungle Snare 1 (2), set 127 38 Acoustic Snare Drum (4)
+          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (4), set 1 38 Standard 2 Snare 1 (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 68 Room Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
             - `JazzSnare2` -- 106 Jazz Snare 2 (4), set 32 40 Jazz Snare 2 (4), set 50 67 Jazz Snare 2 (4)
             - `JazzSnare` -- 105 Jazz Snare 1 (4), set 32 38 Jazz Snare 1 (4), set 50 66 Jazz Snare 1 (4)
               - `HipHopSnare2` [SampledBreak, LiveRoom] -- set 9 40 Hip-Hop Snare 2 (4), set 50 96 Hip-Hop Snare 2 (4)
+              - `JungleSnare2` [JungleBreak, LiveRoom] -- set 10 40 Jungle Snare 2 (4), set 50 98 Jungle Snare 2 (4)
+            - `JungleSnare1` [JungleBreak, LiveRoom] -- set 10 38 Jungle Snare 1 (4), set 50 97 Jungle Snare 1 (4)
             - `RapSnare` [SampledBreak, LiveRoom] -- 123 Rap Snare (4), set 9 38 Rap Snare (4), set 50 95 Rap Snare (4)
             - `ReverseAcousticSnare` -- set 57 40 Reverse Snare 1 (4), set 57 42 Reverse Standard 1 Snare 1 (4)
             - `RndAcousticSnare` [RandomStrike] -- set 2 38 [RND] Snare (4)
             - `SideStick` -- 37 Side Stick (4), set 127 37 Rim Shot (4)
-            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (4), 110 Power Snare 2 (4), 120 TR-808 Snare 2 (4), set 1 40 Standard 2 Snare 2 (2), set 2 40 Standard 3 Snare 2 (2), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 69 Room Snare 2 (2), set 50 93 Standard 1 Snare 2 (4), set 50 98 Jungle Snare 2 (2)
+            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (4), 110 Power Snare 2 (4), 120 TR-808 Snare 2 (4), set 1 40 Standard 2 Snare 2 (2), set 2 40 Standard 3 Snare 2 (2), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 69 Room Snare 2 (2), set 50 93 Standard 1 Snare 2 (4)
               - `BrushTap` -- set 40 38 Brush Tap (4), set 50 84 Brush Tap 1 (4), set 50 85 Brush Tap 2 (4)
                 - `BrushSlap` -- set 40 39 Brush Slap (4), set 50 86 Brush Slap 1 (4), set 50 87 Brush Slap 2 (4), set 50 88 Brush Slap 3 (4)
               - `ConcertSnare` -- set 48 38 Concert SD (4), set 48 40 Concert SD (4), set 49 30 Concert SD (4), set 50 65 Concert Snare (4)
               - `ReverseSnareDrum2` -- set 57 41 Reverse Snare 2 (4), set 57 43 Reverse Tight Snare (4)
-          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (4), 9 Room Kick 2 (4), 11 Power Kick 2 (4), 12 Electric Kick 2 (4), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 2 35 Standard 3 Kick 2 (2), set 50 34 Jungle Kick 2 (2), set 50 35 Jungle Kick 1 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 50 50 Room Kick 1 (2), set 50 51 Room Kick 2 (2), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
+          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (4), 9 Room Kick 2 (4), 11 Power Kick 2 (4), 12 Electric Kick 2 (4), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 2 35 Standard 3 Kick 2 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 50 50 Room Kick 1 (2), set 50 51 Room Kick 2 (2), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4)
               - `ReverseConcertBassDrum` -- set 57 37 Reverse Concert Bass Drum (4)
             - `HipHopKick1` [SampledBreak] -- set 9 36 Hip-Hop Kick 1 (4), set 50 33 Hip-Hop Kick 1 (4)
             - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 50 48 Jazz Kick 2 (4)
             - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 50 47 Jazz Kick 1 (4)
               - `HipHopKick2` [SampledBreak] -- set 9 35 Hip-Hop Kick 2 (4), set 50 32 Hip-Hop Kick 2 (4)
+            - `JungleKick1` [JungleBreak] -- set 10 36 Jungle Kick 1 (4), set 50 35 Jungle Kick 1 (4)
             - `MondoKick` [LiveRoom] -- 10 Power Kick 1 (4), set 16 36 MONDO Kick (4), set 50 52 Power Kick1 (4), set 50 53 Power Kick2 (2)
               - `ReverseMondoKick` -- set 57 38 Reverse Power Kick1 (4)
             - `ReverseKickDrum` -- set 57 36 Reverse Kick 1 (4)
@@ -2049,7 +2108,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `Taiko` [PlayedAtPitchMixin] -- GM 116 Taiko Drum (4), set 49 36 Wadaiko (4), set 49 38 Shime Taiko (2)
             - `TimbaleHigh` -- 65 High Timbale (4), set 49 68 Timbales Paila (2), set 49 69 Timbales High (4), set 127 65 High Timbale (4)
             - `TimbaleLow` -- 66 Low Timbale (4), set 49 67 Timbales Low (4), set 127 66 Low Timbale (4)
-          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4), set 9 54 Shake Tambourine (2), set 11 54 Shake Tambourine (2), set 49 26 Tambourine (4), set 127 54 Tambourine (4)
+          - `Tambourine` [NoisyPercussionMixin] -- 54 Tambourine (4), set 9 54 Shake Tambourine (2), set 10 54 Shake Tambourine (2), set 11 54 Shake Tambourine (2), set 49 26 Tambourine (4), set 127 54 Tambourine (4)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4), set 127 45 Acoustic Middle Tom (4), set 127 47 Acoustic Middle Tom (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4), set 127 41 Acoustic Low Tom (4), set 127 43 Acoustic Low Tom (4)
               - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
@@ -2077,7 +2136,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `CR78ClosedHat` -- set 11 44 CR-78 Closed Hi-Hat (4), set 27 42 CR-78 CHH (4), set 282 42 CR-78 CHH (4)
                 - `CR78OpenHat` -- set 27 46 CR-78 OHH (4), set 282 46 CR-78 OHH (4)
                   - `ReverseCR78OpenHat` -- set 57 54 Reverse CR-78 Open Hi-Hat (4)
-              - `CR78Guiro` -- set 9 74 CR-78 Guiro (4), set 11 74 CR-78 Guiro (4), set 27 74 CR-78 Guiro (4)
+              - `CR78Guiro` -- set 9 74 CR-78 Guiro (4), set 10 74 CR-78 Guiro (4), set 11 74 CR-78 Guiro (4), set 27 74 CR-78 Guiro (4)
               - `CR78HiBongo` -- set 11 60 CR-78 High Bongo (4), set 27 60 CR-78 High Bongo (4)
                 - `CR78LowBongo` -- set 11 61 CR-78 Low Bongo (4), set 27 61 CR-78 Low Bongo (4)
               - `CR78Kick` -- set 27 36 CR-78 Kick 1 (4), set 50 25 CR-78 Kick 1 (4)
@@ -2094,8 +2153,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ReverseSfxHighQ` -- set 57 69 Reverse Hi Q (3)
             - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
             - `TR606`
-              - `TR606ClosedHat` -- set 27 44 606 CHH (4), set 28 42 606 CHH (4), set 28 44 606 CHH (4)
-                - `TR606OpenHat` -- set 28 46 606 OHH (4)
+              - `TR606ClosedHat` -- set 10 42 TR-606 Closed Hi-Hat (4), set 27 44 606 CHH (4), set 28 42 606 CHH (4), set 28 44 606 CHH (4)
+                - `TR606OpenHat` -- set 10 46 TR-606 Open Hi-Hat (4), set 28 46 606 OHH (4)
               - `TR606Cymbal` -- set 27 51 606 Ride Cymbal (4), set 28 51 606 Ride Cymbal (4)
               - `TR606Kick` -- set 28 36 606 Kick 1 (4), set 50 27 TR-606 Kick (4)
               - `TR606Snare` -- set 28 38 606 Snare 1 (4)
@@ -2112,16 +2171,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR707Tom` -- set 29 41 707 Low Tom 2 (4), set 29 43 707 Low Tom 1 (4)
                 - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
                 - `TR707MidTom` -- set 29 45 707 Mid Tom 2 (4), set 29 47 707 Mid Tom 1 (4)
-            - `TR808Claves` -- set 9 75 TR-808 Claves (4), set 11 75 TR-808 Claves (4), set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
+            - `TR808Claves` -- set 9 75 TR-808 Claves (4), set 10 75 TR-808 Claves (4), set 11 75 TR-808 Claves (4), set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4), set 281 42 808 CHH (4), set 281 44 808 CHH (4), set 282 44 808 CHH (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4), set 281 46 808 OHH (4)
             - `TR808Conga` -- set 11 64 TR-808 Low Conga (4), set 25 64 808 Low Conga (4), set 27 64 808 Low Conga (4), set 28 64 808 Low Conga (4), set 281 64 808 Low Conga (4)
               - `TR808HiConga` -- set 11 62 TR-808 High Conga (4), set 25 62 808 High Conga (4), set 27 62 808 High Conga (4), set 28 62 808 High Conga (4), set 281 62 808 High Conga (4)
               - `TR808MidConga` -- set 11 63 TR-808 Mute Conga (4), set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4), set 281 63 808 Mid Conga (4)
-            - `TR808Cowbell` -- set 9 56 TR-808 Cowbell (4), set 11 56 TR-808 Cowbell (4), set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4), set 281 56 808 Cowbell (4)
-            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4), set 281 49 808 Cymbal (4)
+            - `TR808Cowbell` -- set 9 56 TR-808 Cowbell (4), set 10 56 TR-808 Cowbell (4), set 11 56 TR-808 Cowbell (4), set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4), set 281 56 808 Cowbell (4)
+            - `TR808Cymbal` -- set 10 49 TR-808 Crash Cymbal (4), set 25 49 808 Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4), set 281 49 808 Cymbal (4)
             - `TR808Kick` -- 14 TR-808 Kick (4), set 25 36 808 Bass Drum (4), set 50 29 TR-808 Kick 1 (4), set 50 57 TR-808 Kick (4), set 281 36 808 Bass Drum (4)
-            - `TR808Maracas` -- set 9 70 TR-808 Maracas (4), set 11 70 TR-808 Maracas (4), set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4), set 281 70 808 Maracas (4)
+              - `JungleKick2` -- set 10 35 Jungle Kick 2 (4), set 50 34 Jungle Kick 2 (4)
+            - `TR808Maracas` -- set 9 70 TR-808 Maracas (4), set 10 70 TR-808 Maracas (4), set 11 70 TR-808 Maracas (4), set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4), set 281 70 808 Maracas (4)
             - `TR808RimShot` -- set 9 37 TR-808 Rim Shot (4), set 11 37 TR-808 Rim Shot (4), set 25 37 808 Rim Shot (4), set 281 37 808 Rim Shot (4)
             - `TR808Snare` -- 119 TR-808 Snare 1 (4), set 25 38 808 Snare Drum (4), set 50 80 TR-808 Snare 1 (4), set 50 81 TR-808 Snare 2 (2), set 281 38 808 Snare Drum (4)
               - `ReverseTR808Snare` -- set 57 45 Reverse 808 Snare (4)
@@ -2139,12 +2199,12 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `TR909Snare2` -- 113 Dance Snare 2 (4), 114 Disco Snare (4), 122 TR-909 Snare 2 (4), set 30 40 909 Snare 2 (4), set 50 74 Dance Snare 2 (2), set 50 75 Disco Snare (2), set 50 83 TR-909 Snare 2 (4), set 282 40 Dance Snare 2 (2)
                   - `TechnoSnare2` -- set 11 40 Techno Snare 2 (4)
                 - `TechnoSnare1` -- set 11 38 Techno Snare 1 (4), set 50 99 Techno Snare 1 (4)
-              - `TR909Tom` -- set 9 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
-                - `TR909HiTom` -- set 9 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
-                  - `TR909HiTom1` -- set 9 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
-                - `TR909LowTom1` -- set 9 43 TR-909 Low Tom 1 (4), set 30 43 909 Low Tom 1 (4)
-                - `TR909MidTom` -- set 9 45 TR-909 Mid Tom 2 (4), set 30 45 909 Mid Tom 2 (4)
-                  - `TR909MidTom1` -- set 9 47 TR-909 Mid Tom 1 (4), set 30 47 909 Mid Tom 1 (4)
+              - `TR909Tom` -- set 9 41 TR-909 Low Tom 2 (4), set 10 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
+                - `TR909HiTom` -- set 9 48 TR-909 High Tom 2 (4), set 10 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
+                  - `TR909HiTom1` -- set 9 50 TR-909 High Tom 1 (4), set 10 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
+                - `TR909LowTom1` -- set 9 43 TR-909 Low Tom 1 (4), set 10 43 TR-909 Low Tom 1 (4), set 30 43 909 Low Tom 1 (4)
+                - `TR909MidTom` -- set 9 45 TR-909 Mid Tom 2 (4), set 10 45 TR-909 Mid Tom 2 (4), set 30 45 909 Mid Tom 2 (4)
+                  - `TR909MidTom1` -- set 9 47 TR-909 Mid Tom 1 (4), set 10 47 TR-909 Mid Tom 1 (4), set 30 47 909 Mid Tom 1 (4)
         - `Timpani` -- GM 47 Timpani (4), set 48 41 Timpani F (4), set 48 42 Timpani F# (4), set 48 43 Timpani G (4), set 48 44 Timpani G# (4), set 48 45 Timpani A (4), set 48 46 Timpani A# (4), set 48 47 Timpani B (4), set 48 48 Timpani c (4), set 48 49 Timpani c# (4), set 48 50 Timpani d (4), set 48 51 Timpani d# (4), set 48 52 Timpani e (4), set 48 53 Timpani f (4)
       - `MetalPercussion`
         - `BirdTweet` -- GM 123 Bird Tweet (4)
@@ -2154,9 +2214,9 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `GamelanGong` [ModeDecays] -- set 49 50 Gamelan Gong (4)
         - `SteelPan` -- GM 114 Steel Drums (4)
         - `TelephoneRing` [ModeDecays] -- GM 124 Telephone Ring (4)
-        - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Mute Triangle (4), set 9 81 Open Triangle (4), set 11 80 Mute Triangle (4), set 11 81 Open Triangle (4), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)
+        - `Triangle` -- 80 Mute Triangle (4), 81 Open Triangle (4), set 9 80 Mute Triangle (4), set 9 81 Open Triangle (4), set 10 80 Mute Triangle (4), set 10 81 Open Triangle (4), set 11 80 Mute Triangle (4), set 11 81 Open Triangle (4), set 49 91 Mute Triangle (4), set 49 92 Open Triangle (4), set 282 80 Electric Mute Triangle (2), set 282 81 Electric Open Triangle (2)
       - `NoiseDrum` [NoisyPercussionMixin]
-        - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 127 39 Hand Clap (4)
+        - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 10 39 Hand Clap 2 (2), set 127 39 Hand Clap (4)
           - `RndHandClap` [RandomStrike] -- set 2 39 [RND] Hand Clap (4)
       - `OrchestraHit` -- GM 55 Orchestra Hit (4)
       - `Rattle` [NoisyPercussionMixin]
@@ -2166,7 +2226,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Maracas` -- 70 Maracas (4), set 49 64 Caxixi (2), set 127 70 Maracas (4)
         - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4), set 127 80 Footsteps 1 (4), set 127 81 Footsteps 2 (4)
         - `SfxPunch` -- set 56 54 Punch (4), set 127 78 Punch (4)
-        - `Shaker` -- 82 Shaker (4), set 9 82 TR-626 Shaker (2), set 11 82 TR-626 Shaker (2), set 49 86 Shaker (4)
+        - `Shaker` -- 82 Shaker (4), set 9 82 TR-626 Shaker (2), set 10 82 TR-626 Shaker (2), set 11 82 TR-626 Shaker (2), set 49 86 Shaker (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (4), set 50 89 Brush Swirl 1 (4), set 50 90 Brush Swirl 2 (4), set 50 91 Brush Long Swirl (4)
         - `GatedSnare` -- 109 Power Snare 1 (4), 111 Gated Snare (4), 115 Electric Snare 2 (4), 117 Electric Snare 3 (4), set 16 38 Gated SD (4), set 24 40 Gated SD (4), set 50 70 Power Snare 1 (4), set 50 71 Power Snare 2 (2), set 50 72 Gated Snare (4), set 50 76 Electric Snare 2 (4)
@@ -2287,8 +2347,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxLaser` -- set 56 74 Lasergun (3), set 127 98 Lasergun (3)
             - `ReverseSfxLaser` -- set 57 62 Reverse Laser Gun (3)
           - `SfxRain` -- set 56 79 Rain (4), set 127 103 Rain (4)
-          - `SfxScratchPush` -- 29 Scratch Push (4), set 9 29 Scratch Push 2 (2), set 11 29 Scratch Push 2 (2), set 56 41 Scratch Push (4), set 282 29 Scratch Push2 (2)
-            - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
+          - `SfxScratchPush` -- 29 Scratch Push (4), set 9 29 Scratch Push 2 (2), set 10 29 Scratch Push 2 (2), set 11 29 Scratch Push 2 (2), set 56 41 Scratch Push (4), set 282 29 Scratch Push2 (2)
+            - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 10 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
               - `ReverseSfxScratchPull` -- set 57 61 Reverse Scratch (4)
           - `SfxScream` -- set 56 53 Screaming (4), set 127 77 Screaming (4)
           - `SfxSiren` -- set 56 67 Siren (4), set 127 91 Siren (4)

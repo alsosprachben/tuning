@@ -1297,6 +1297,13 @@ GLISS_ARRIVAL_S = 0.06
 GLISS_ARRIVAL_FRAC = 0.2
 
 
+def organ_family(cls):
+    """The registered instrument a voice belongs to -- the class that defines
+    its stop ranks (the tonewheel, the harmonium, the church organ, the
+    harpsichord): what a channel's registration tables are kept per."""
+    return next((k for k in cls.__mro__ if 'stop_ranks' in vars(k)), cls).__name__
+
+
 def parse_gm_on(data):
     """True for GM System On (7E dd 09 01) or GM 2 System On (7E dd 09 03).
 
@@ -2451,18 +2458,25 @@ def _prepare(path, tuner='hybrid440', sink=None):
              for c, v in _tess.items() if v}
     # organ registration rows
     Grows=[]; Srows=[]; grow_of={}; crow_of={}; rankev_of={}; sh=(0.06,1.6,3.5,1500.0); _laws=[]
+    # KEYED BY (channel, organ): a channel can change program from one
+    # registered instrument to another (a tonewheel, then a harmonium), and
+    # each has its own ranks, stop word and swell -- organ_family. A channel
+    # with one organ is built exactly as it was.
     for ch, _plist in ch_progs.items():
-        prog = next((q for q in dict.fromkeys(_plist)
-                     if getattr(property_class_for_program(q), 'registerable', False)), None)
-        if prog is None: continue
-        pc = property_class_for_program(prog)
-        pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch))
-        rankev_of[ch]=rev
-        crow_of[ch]=len(Srows); Srows.append(s)
-        for r in pr.stop_ranks: k=r[0]; grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
-        if tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11:   # only what swells shapes the swell
-            _laws.append((crow_of[ch], (pr.swell_floor, pr.swell_gain_power,
-                                        pr.swell_hf_max, pr.swell_hf_ref_hz)))
+        for prog in dict.fromkeys(_plist):
+            pc = property_class_for_program(prog)
+            if not getattr(pc, 'registerable', False):
+                continue
+            _orgk = (ch, organ_family(pc))
+            if _orgk in rankev_of:
+                continue
+            pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch))
+            rankev_of[_orgk]=rev
+            crow_of[_orgk]=len(Srows); Srows.append(s)
+            for r in pr.stop_ranks: k=r[0]; grow_of[(_orgk,k)]=len(Grows); Grows.append(g[k])
+            if tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11:   # only what swells shapes the swell
+                _laws.append((crow_of[_orgk], (pr.swell_floor, pr.swell_gain_power,
+                                             pr.swell_hf_max, pr.swell_hf_ref_hz)))
     # ONE SWELL LAW PER RENDER, BUT EVERY ORGAN'S OWN LEVEL. The kernel applies
     # one law (sh) to every swell row, and it used to be whichever organ was
     # processed LAST -- so with a Hammond and a church organ in one file each
@@ -2502,7 +2516,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         pc = property_class_for_program(prog)
         if getattr(pc, 'wind_skirt_db', None) is None or not getattr(pc, 'wind_pitch_exp', 0.0):
             continue                            # not a pipe organ
-        _tr = rankev_of[ch].get('tremulant', ())
+        _wk = (ch, organ_family(pc))
+        _tr = rankev_of[_wk].get('tremulant', ())
         _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
         _wsc = wind_scale_for(pc)
         if not (_wsc or _trem_on):
@@ -2524,7 +2539,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             for r in _ranks:
                 _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
                 _w = sum(_WND.pipe_draw(_f * q) for q in _rat)
-                _dem[_b0:_b1] += _w * Grows[grow_of[(ch, r[0])]][_b0:_b1]
+                _dem[_b0:_b1] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
         _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
         _p = _wd.blocks(_dem[:nblk], _trem)
         _WROWS[ch] = {}
@@ -2547,7 +2562,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     # the channel, built whole here: a stream is the table by construction.
     _BREATH = {}             # ch -> (tone level at edges, noise level at edges, pitch ratio a block)
     for ch, _plist in ch_progs.items():
-        if ch in crow_of:
+        if any(k[0] == ch for k in crow_of):
             continue
         pc = next((c for c in (property_class_for_program(q) for q in dict.fromkeys(_plist))
                    if getattr(c, 'breath_wobble_db', 0.0) > 0.0
@@ -4723,7 +4738,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _so = getattr(pc, 'sounding_octaves', 0.0)
             if _so:
                 f0 *= 2.0 ** _so
-            organ = False; chan_vol = (v7*v11)**2
+            organ = False; _orgk = None; chan_vol = (v7*v11)**2
             if 'level' in _dst:
                 chan_vol *= (_dst['level'] / 100.0) ** 2
             # THE KIT'S SEAT (or the key's own pan) is where the piece sits in
@@ -4739,6 +4754,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             if _kps:
                 _seat = _kps * (note - 60) / 30.0   # within the instrument: a seat
             organ = getattr(pc,'registerable',False)
+            _orgk = (ch, organ_family(pc)) if organ else None   # its registration tables' key
             # An organ's CC7 is its swell shutter and its CC11 half the stop
             # word, so its channel gain is 1 and the swell row does the rest; a
             # voice whose stop word lives elsewhere (the harmonium) keeps the
@@ -5394,15 +5410,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # the bridge -- an undrawn rank's are emitted gated shut -- and the
             # key's other choirs are free while it is down.
             _chs = getattr(props, 'string_choirs', None)
-            if _chs and organ and ch in rankev_of:
+            if _chs and organ and _orgk in rankev_of:
                 _ci = {c[0]: i for i, c in enumerate(_chs)}
                 _drawn = [r[0] for r in props.stop_ranks
-                          if next((v for t, v in reversed(rankev_of[ch][r[0]]) if t <= on), 0.0) >= 0.5]
+                          if next((v for t, v in reversed(rankev_of[_orgk][r[0]]) if t <= on), 0.0) >= 0.5]
                 _REG_OPEN[0]['plucked'] = sorted({_ci[props.rank_choirs.get(k, k)] for k in _drawn})
-                _REG_OPEN[0]['gr'] = [grow_of[(ch, k)] for k in _drawn]
+                _REG_OPEN[0]['gr'] = [grow_of[(_orgk, k)] for k in _drawn]
                 # ...and each drawn rank's choir, by its gate row: which bridge
                 # its partials drive the free strings through
-                _REG_OPEN[0]['grc'] = {grow_of[(ch, k)]: _ci[props.rank_choirs.get(k, k)] for k in _drawn}
+                _REG_OPEN[0]['grc'] = {grow_of[(_orgk, k)]: _ci[props.rank_choirs.get(k, k)] for k in _drawn}
             _REG_CH[_MCH[0]]['strikes'].append(_REG_OPEN[0])
         if getattr(props, 'cabinet', None) and _MCH[0] not in _CAB_CH:
             # TUNING_CABINET=0 takes the speaker out, which is not a setting
@@ -5619,8 +5635,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # is read for loudness -- from the gate events the stop word made. See
         # tonelib above harmonium_expression_gain for all three.
         _hx = None; _hperc = False
-        if organ and 'expression' in rankev_of[ch]:
-            _st = lambda k: T.stop_drawn_at(rankev_of[ch].get(k, ()), on)
+        if organ and 'expression' in rankev_of[_orgk]:
+            _st = lambda k: T.stop_drawn_at(rankev_of[_orgk].get(k, ()), on)
             if _st('expression'):
                 _hx = v11
             _hperc = _st('percussion')
@@ -6188,7 +6204,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # not emitted at all -- gated shut, its rows still moved the voice
             # around them (GM 18 by -28 dB through its driven amplifier)
             if (rest and rest[0] is not None and getattr(rest[0], 'rank_only_when_drawn', False)
-                    and not any(v >= 0.5 for _t, v in rankev_of[ch].get(key, ()))):
+                    and not any(v >= 0.5 for _t, v in rankev_of[_orgk].get(key, ()))):
                 continue
             spec_cls = rest[0] if rest else None   # cross-family stop: borrow this voice's spectrum only
             # the chest's wind (wind.py): this rank's family's row on its channel
@@ -6298,12 +6314,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # The hammer: min(attack, hammer), as a slur is min(attack, legato).
                 fade_r = min(fade_r, max(1e-4, min(props.percussion_attack_s, _afm*dur))*SR)
             rank_B = (spv or props).inharmonicity_coefficient_for_frequency(f0) if dyn else B
-            gr = grow_of[(ch,key)] if organ else -1; cr = crow_of[ch] if organ else 0
+            gr = grow_of[(_orgk,key)] if organ else -1; cr = crow_of[_orgk] if organ else 0
             # A drawn stop speaks (phase + attack fade start) at its draw time, not
             # the note onset -- a fresh pipe, matching the reference. Non-organ voices
             # always speak at note onset.
             if organ:
-                sp = rank_speak_sec(rankev_of[ch][key], on, getattr(props,'attack_jitter',0.0))
+                sp = rank_speak_sec(rankev_of[_orgk][key], on, getattr(props,'attack_jitter',0.0))
                 # A STOP DRAWN AFTER THE KEY LIFTED DOES NOT SPEAK on it: the
                 # pallet is shut, as live stamps a drawn rank on the keys still
                 # down and no others. Its gate opened on the note's release tail
@@ -6312,7 +6328,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # The DRAW is compared, not the speech: the attack jitter would
                 # otherwise push a short note's rank past its own key-up, and a
                 # rank drawn at the onset always speaks.
-                _dr = rank_speak_sec(rankev_of[ch][key], on, 0.0)
+                _dr = rank_speak_sec(rankev_of[_orgk][key], on, 0.0)
                 if _dr is not None and _dr > on and _dr >= _raw_off:
                     continue
                 # ...nor one pushed in before the key-up and drawn again in the
@@ -6321,7 +6337,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # and its release is left exactly as it was.
                 if _dr is not None:
                     _drawn_off = 0.0
-                    for _t, _tg in rankev_of[ch][key]:
+                    for _t, _tg in rankev_of[_orgk][key]:
                         if _t <= _raw_off: _drawn_off = _tg
                         else: break
                     if _drawn_off < 0.5:
@@ -6342,7 +6358,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     _pl_keep = _PL[0]
                     _PL[0] = 0
                     _clr = math.log(10.0) / 20.0 * props.contact_noise_dbs
-                    _cgr = grow_of[(ch, key)] if organ else -1
+                    _cgr = grow_of[(_orgk, key)] if organ else -1
                     # dB re THIS DRAWBAR's own fundamental, as the stop sets it
                     _cref = hv_fn(1) * gain
                     for _hf, _db in props.contact_noise_db:
@@ -6352,7 +6368,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li),
                                      _gM * props.hrtf_gain(_hf, ri), _gM, _hf, non_r, non_r + 0.1 * SR,
                                      1.0, 0.002 * SR, 0.0, _clr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc,
-                                     _cgr, crow_of[ch] if organ else 0)
+                                     _cgr, crow_of[_orgk] if organ else 0)
                     _CBW[0], _CBW[1] = _cbw
                     _NOREFL[0] = False
                     _PL[0] = _pl_keep
@@ -6748,9 +6764,9 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # jack falling back, at its own offset and its own phase -- in phase
             # a few ms apart, identical clicks would comb. Otherwise one click.
             _jacks = [(0.0, None)]
-            if organ and getattr(props, 'string_choirs', None) and ch in rankev_of:
+            if organ and getattr(props, 'string_choirs', None) and _orgk in rankev_of:
                 _jacks = [(T.contact_offset_s(props, r[0], note), r[0]) for r in props.stop_ranks
-                          if next((v for t, v in reversed(rankev_of[ch][r[0]]) if t <= _raw_off), 0.0) >= 0.5]
+                          if next((v for t, v in reversed(rankev_of[_orgk][r[0]]) if t <= _raw_off), 0.0) >= 0.5]
             for _jo, _jr in _jacks:
                 _j0 = len(A['om'])
                 import zlib as _zl

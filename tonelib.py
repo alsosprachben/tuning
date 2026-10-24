@@ -19393,42 +19393,58 @@ class SampledBreak:
     sample_semitones = -3.0
     sampler_rate_hz = 26040.0
     grit_db = -42.0
+    # what a sampler moves besides the modes: places in Hz (a cymbal's ring
+    # peak and bloom), and rates in dB/s (its rings) -- where a voice has them
+    BREAK_HZ = ('ring_peak_hz', 'bloom_center_hz')
+    BREAK_RATES = ('click_dbs', 'fund_dbs', 'head_dbs', 'slow_dbs', 'ring_decay_above',
+                   'ring_decay_below', 'ring_decay_floor', 'aftersound_dbs')
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
         r = 2.0 ** (cls.sample_semitones / 12.0)
-        if '_break_done' in vars(cls):
-            return
+        if '_break_done' in vars(cls) or not hasattr(cls, 'strike_noise_layers'):
+            return                      # done, or a mixin with no voice under it yet
         cls._break_done = True
         top = cls._nyquist = 0.5 * cls.sampler_rate_hz * r
-        cls.DRUM_MODES = tuple((m[0], m[1], m[2] * r) + tuple(m[3:]) for m in cls.DRUM_MODES)
-        for a in ('click_dbs', 'fund_dbs', 'head_dbs', 'slow_dbs'):
+        drum = bool(getattr(cls, 'DRUM_MODES', None))
+        if drum:
+            cls.DRUM_MODES = tuple((m[0], m[1], m[2] * r) + tuple(m[3:]) for m in cls.DRUM_MODES)
+        for a in cls.BREAK_RATES:
             if getattr(cls, a, None):
                 setattr(cls, a, getattr(cls, a) * r)
-        cls.CLICK_HZ0 = cls.CLICK_HZ0 * r
-        nb = sum(1 for b in range(len(cls.CLICK_DB)) if cls.CLICK_HZ0 * 2.0 ** (b / 3.0) < top)
-        cls.CLICK_DB = tuple(cls.CLICK_DB[:nb])
+        for a in cls.BREAK_HZ:
+            if getattr(cls, a, None):
+                setattr(cls, a, getattr(cls, a) * r)
+        if drum:
+            cls.CLICK_HZ0 = cls.CLICK_HZ0 * r
+            nb = sum(1 for b in range(len(cls.CLICK_DB)) if cls.CLICK_HZ0 * 2.0 ** (b / 3.0) < top)
+            cls.CLICK_DB = tuple(cls.CLICK_DB[:nb])
         if getattr(cls, 'band_trim_db', None):
             cls.band_trim_db = tuple((round(h * r), d) for h, d in cls.band_trim_db)
         if getattr(cls, 'tension_settle_time', None):
             cls.tension_settle_time = cls.tension_settle_time / r
         # the grit: flat to the band edge, falling as the drum's first mode does
         hz = tuple(round(100.0 * 2 ** (k / 3.0)) for k in range(22) if 100.0 * 2 ** (k / 3.0) < top)
+        fall = cls.DRUM_MODES[0][2] if drum else (getattr(cls, 'ring_decay_floor', 0.0) or 20.0)
         cls.strike_noise_layers = tuple(cls.strike_noise_layers) + (
-            (tuple((h, cls.grit_db) for h in hz), 0.0005, cls.DRUM_MODES[0][2], 1.5),)
-        n = len(cls.DRUM_MODES) + cls.click_per_band * len(cls.CLICK_DB)
-        cls.mode_ratios = tuple(m[0] for m in cls.DRUM_MODES) + (0.0,) * (n - len(cls.DRUM_MODES))
-        cls.mode_gains = (1.0,) * n
-        cls.max_harmonic = n
+            (tuple((h, cls.grit_db) for h in hz), 0.0005, fall, 1.5),)
+        if drum:
+            n = len(cls.DRUM_MODES) + cls.click_per_band * len(cls.CLICK_DB)
+            cls.mode_ratios = tuple(m[0] for m in cls.DRUM_MODES) + (0.0,) * (n - len(cls.DRUM_MODES))
+            cls.mode_gains = (1.0,) * n
+            cls.max_harmonic = n
+
+    def _break_f0(self):
+        return self.frequency_x * (2.0 ** self.octave_position)
 
     def harmonic_volume(self, harmonic):
         v = super().harmonic_volume(harmonic)
-        return v if self._f0() * self.mode_ratio(harmonic) < self._nyquist else 0.0
+        return v if self._break_f0() * self.mode_ratio(harmonic) < self._nyquist else 0.0
 
     def chiff_harmonic_gain(self, harmonic):
         # the wires' noise: handed a ratio already (NoisyPercussionMixin)
         g = super().chiff_harmonic_gain(harmonic)
-        return g if self._f0() * harmonic < self._nyquist else 0.0
+        return g if self._break_f0() * harmonic < self._nyquist else 0.0
 
 
 class HipHopKick1Properties(SampledBreak, KickDrumProperties):
@@ -19453,6 +19469,44 @@ class HipHopSnare2Properties(SampledBreak, LiveRoom, JazzSnareProperties):
     """Hip-Hop Snare 2: the Jazz set's snare in the live room, four semitones
     down -- darker and fatter than the Rap Snare (SampledBreak)."""
     sample_semitones = -4.0
+
+
+# JUNGLE'S (SC-88 Pro PC 11): the mirror of hip-hop's -- the same 1970s breaks
+# (the "Amen, Brother" above all) in an Akai sampler, played FASTER, pitched up
+# to 160-170 BPM; sampled at 32 kHz to save memory, its Nyquist rising with
+# the pitch. And under them a long sub-bass boom (Jungle Kick 2). Educated
+# guesses, for Ben's ear.
+class JungleBreak(SampledBreak):
+    sampler_rate_hz = 32000.0
+    grit_db = -44.0
+
+
+class JungleKick1Properties(JungleBreak, KickDrumProperties):
+    """Jungle Kick 1: the break's kick sped up three semitones -- short, punchy."""
+    sample_semitones = 3.0
+
+
+class JungleSnare1Properties(JungleBreak, LiveRoom, AcousticSnareProperties):
+    """Jungle Snare 1: the acoustic snare in the break's live room, four
+    semitones up -- crisp, ringing, cutting: the Amen snare's role."""
+    sample_semitones = 4.0
+
+
+class JungleSnare2Properties(JungleBreak, LiveRoom, JazzSnareProperties):
+    """Jungle Snare 2: the Jazz set's snare in the room, five semitones up --
+    tighter and ringier than Snare 1."""
+    sample_semitones = 5.0
+
+
+class JungleHiHatProperties(JungleBreak, ClosedHiHatProperties):
+    """Jungle Hi-Hat: the break's closed hat, four semitones up."""
+    sample_semitones = 4.0
+
+
+class JungleKick2Properties(TR808KickProperties):
+    """Jungle Kick 2: the sub-bass boom under the break -- the 808's kick
+    three semitones down, ringing twice as long."""
+    tr808 = {"tune_hz": 41.7, "decay_s": 1.9}
 
 
 class BrushTapProperties(SnareDrum2Properties):
@@ -22148,7 +22202,8 @@ def resolve_patch(msb, lsb, program, was_drums, rx_bank=True):
     if msb == GM2_DRUM_BANK:
         return True, int(program), 0
     if msb == GM2_MELODIC_BANK:
-        return False, int(program), int(lsb)
+        # GM 2's LSB names a tone (patch_map.gm2_bank), not one of our banks
+        return False, int(program), __import__("patch_map").gm2_bank(program, lsb)
     if was_drums:
         return True, int(program), 0
     # GS: CC32 picks the Sound Canvas MAP the bank is read in (patch_map.map_bank:

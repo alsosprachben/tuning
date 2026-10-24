@@ -1604,14 +1604,52 @@ def _sc88_class(how, tag):
     raise ValueError(kind)
 
 
-for (_p, _b), (_nm, _how) in SC88_CHEAP.items():
-    VARIATION_NAMES[(_p, _b)] = _nm
-    if _how[0] == "layer":
-        LAYERED[(_p, _b)] = _how[1]
-        VARIATIONS[(_p, _b)] = routed_variation(_how[1][0][0], "sc88_%d_%d" % (_p, _b))
-    else:
-        VARIATIONS[(_p, _b)], _tr = _sc88_class(_how, "sc88_%d_%d" % (_p, _b))
-        VARIATION_TRIM_DB.setdefault((_p, _b), _tr)
+import tonelib as _TL
+# THE SC-8850 MAP'S SETTINGS, the GM 2 sound set's (patch_map.gm2_bank finds a
+# GM 2 tone by name, and these are the SC-8850's own, in slots no earlier map
+# used): each a reading of its name on the voice it is a setting of, through
+# the voice's own physical controls, as SC88_CHEAP's are -- for Ben's ear
+SC8850_CHEAP = {
+    # the harmonium pumped breathily: its reeds' breath noise up 8 dB
+    (20, 16): ("Puff Organ", ("set", 20, dict(breath_noise_db=tuple(
+        (h, d + 8.0) for h, d in _TL.ReedOrganFreeProperties.breath_noise_db)))),
+    # the steel-string's body sounding more: its resonances half again
+    (25, 33): ("Steel + Body", ("set", 25, dict(body_trim_db=tuple(
+        (h, 1.5 * d) for h, d in _TL.SteelGuitarProperties.body_trim_db)))),
+    # the Strat's middle pickup, ~100 mm from the bridge (the neck's 160)
+    (27, 23): ("Mid Tone GTR", ("set", 27, dict(pickup_points=(0.155,)))),
+    # a jazz guitar's comping, the hand half on the strings
+    (28, 24): ("Jazz Man", ("set", 26, palm_mute(0.5))),
+    # a pinch harmonic: the thumb catching the string, its harmonic two
+    # octaves up squealing over the note
+    (29, 4): ("Guitar Pinch", ("layer", ((29, 0, -6.0), (29, 24, -3.0)))),
+    # the rhythm guitar between Rock Rhythm's light palm (0.3) and Rock
+    # Rhythm 2's whole mute
+    (30, 26): ("Dist Rtm GTR", ("set", 30, palm_mute(0.6))),
+    # fingered, with the slap's thumb under it
+    (33, 7): ("Finger Slap", ("layer", ((33, 0, 0.0), (36, 0, -6.0)))),
+    # a 1960s pop session's strings: fewer players, close and bright
+    (48, 40): ("60s Strings", ("set", 48, dict(section_players=4, section_width_m=1.2,
+                                               bore_corner_hz=4500.0))),
+    # darker than Warm Tp. (-6.6 dB per kHz): -10 dB per kHz from 160 Hz
+    (56, 3): ("Dark Trumpet", ("set", 56, dict(blare_db_per_khz=-10.0, blare_knee_hz=160,
+                                               blare_cap_db=34.8))),
+    # the trombone's ff law, as Trombone 2's
+    (57, 4): ("Bright Tb", ("var", (57, 1))),
+    # GM 59's own harmon for now (its resonance fields are CC71's handle, not
+    # heard at rest) -- to become the PLUNGER, aftertouch opening it (Ben)
+    (59, 2): ("MuteTrumpet2", ("alias", 59)),
+}
+
+for _cheap, _tag in ((SC88_CHEAP, "sc88"), (SC8850_CHEAP, "sc8850")):
+    for (_p, _b), (_nm, _how) in _cheap.items():
+        VARIATION_NAMES[(_p, _b)] = _nm
+        if _how[0] == "layer":
+            LAYERED[(_p, _b)] = _how[1]
+            VARIATIONS[(_p, _b)] = routed_variation(_how[1][0][0], "%s_%d_%d" % (_tag, _p, _b))
+        else:
+            VARIATIONS[(_p, _b)], _tr = _sc88_class(_how, "%s_%d_%d" % (_tag, _p, _b))
+            VARIATION_TRIM_DB.setdefault((_p, _b), _tr)
 
 # BIWA STROKE: the satsuma biwa (tonelib.BiwaProperties), fitted to Hugh de
 # Ferranti's (PARADISEC HDF1-SB33; CC BY-NC-SA 4.0 data: sources.md) -- at the
@@ -1895,6 +1933,34 @@ def _map_norm(name):
     return "".join(ch for ch in name.lower() if ch.isalnum())
 
 
+# GENERAL MIDI 2's variations (bank select MSB 121, the LSB picking): GM 2
+# numbers them its own way -- its Piano 1w is LSB 1, the Sound Canvas's bank
+# 8 -- but every one IS a Sound Canvas tone under its own name (gm2_names,
+# from the SC-8850 manual's GM 2 list). So a GM 2 LSB is read as the tone of
+# that name: the SC-8850 map's, else an earlier map's, through map_bank as a
+# file's CC32 would select it. Not built: the capital, as a Sound Canvas does.
+from gm2_names import GM2_NAMES
+_GM2_BANK = {}
+
+
+def gm2_bank(program, lsb):
+    """The variation key GM 2's (program, LSB) selects; 0 the capital."""
+    p, lsb = int(program) & 0x7F, int(lsb)
+    if not lsb or (p, lsb) not in GM2_NAMES:
+        return 0
+    if (p, lsb) not in _GM2_BANK:
+        name, key = _map_norm(GM2_NAMES[(p, lsb)]), 0
+        for m in (4, 3, 2, 1):
+            hit = [b for (pp, b), nm in MAP_NAMES[m].items() if pp == p and _map_norm(nm) == name]
+            if hit:
+                key = map_bank(p, hit[0], m)
+                if key and (p, key) in VARIATIONS:
+                    break                   # built: else an earlier map's, else the capital
+                key = 0
+        _GM2_BANK[(p, lsb)] = key
+    return _GM2_BANK[(p, lsb)]
+
+
 def bank_select(v):
     """(CC0, CC32) that select the variation key v (map_bank's inverse)."""
     return v & 0x7F, v >> 7
@@ -1911,6 +1977,18 @@ MAP_TONES = {
     (1, 5, 16): ("E.Piano 2v", ("layer", ((5, 0, 0.0), (5, 12, -9.0, 100, 127)))),
     (2, 4, 8): ("St.Soft EP", ("set", 4, {"key_pan_spread": 0.5,
                                           "sound_bias": {"brightness": -0.35}})),
+    # THE SC-88Pro MAP'S OWN under numbers the SC-88 used (the SC-8850 keeps
+    # them, and GM 2 names them): readings of their names, for Ben's ear.
+    # A European concert grand, warmer than ours: the hammer's corner at 0.8x
+    (3, 0, 16): ("European Pf", ("set", 0, {"hammer_corner_hz": 0.8 * 3542.03})),
+    # the honky-tonk's two extra strings further out: 14-30 cents, not 8-20
+    (3, 3, 8): ("Honky-tonk 2", ("set", 3, {"string_detune_range": (14.0, 30.0)})),
+    # the Leslie's TREMOLO, its fast speed (Leslie names them chorale and tremolo)
+    (3, 16, 8): ("Trem. Organ", ("set", 16, {"leslie_fast": True})),
+    # the 1970s rock organ: 888 through a driven amp (Jon Lord's)
+    (3, 16, 32): ("70's E.Organ", ("set", 16, {"default_stops": 0b111, "amp_drive": 1.5})),
+    # 888 and the B3's third-harmonic percussion: Jimmy Smith's setting
+    (3, 17, 32): ("Perc. Organ", ("set", 17, {"default_stops": 0b100000000111})),
 }
 for (_m, _p, _b), (_nm, _how) in MAP_TONES.items():
     _k = (_p, 128 * _m + _b)

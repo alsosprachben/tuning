@@ -51,6 +51,17 @@ SETS = {
         80: 'Mute Triangle', 81: 'Open Triangle', 82: 'TR-626 Shaker',
         89: '---', 90: '---', 91: '---', 92: '---', 93: '---', 94: '---', 95: '---', 96: '---',
     },
+    ('native', 11): {  # JUNGLE
+        29: 'Scratch Push 2', 30: 'Scratch Pull 2', 35: 'Jungle Kick 2', 36: 'Jungle Kick 1',
+        38: 'Jungle Snare 1', 39: 'Hand Clap 2', 40: 'Jungle Snare 2', 41: 'TR-909 Low Tom 2',
+        42: 'TR-606 Closed Hi-Hat', 43: 'TR-909 Low Tom 1', 44: 'Jungle Hi-Hat', 45: 'TR-909 Mid Tom 2',
+        46: 'TR-606 Open Hi-Hat', 47: 'TR-909 Mid Tom 1', 48: 'TR-909 High Tom 2',
+        49: 'TR-808 Crash Cymbal', 50: 'TR-909 High Tom 1', 52: 'Reverse Cymbal',
+        54: 'Shake Tambourine', 56: 'TR-808 Cowbell', 70: 'TR-808 Maracas', 74: 'CR-78 Guiro',
+        75: 'TR-808 Claves', 78: 'High Hoo', 79: 'Low Hoo', 80: 'Mute Triangle', 81: 'Open Triangle',
+        82: 'TR-626 Shaker', 88: 'Small Club 1',
+        89: '---', 90: '---', 91: '---', 92: '---', 93: '---', 94: '---', 95: '---', 96: '---',
+    },
     ('native', 50): {  # ETHNIC
         25: 'Finger Snap', 26: 'Tambourine', 27: 'Castanets', 28: 'Crash Cymbal 1',
         29: 'Snare Roll', 30: 'Concert SD', 31: 'Concert Cymbal', 32: 'Concert BD 1',
@@ -125,9 +136,9 @@ SETS = {
 # where each set is kept (percussion_map.KITS): the native ones at their
 # program, the SC-88 map's own at 128 x 2 + program (_map_set); and whether
 # it stands alone
-SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 10): 9, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57,
+SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57,
            ('sc88', 27): 2 * 128 + 26}
-SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 2 * 128 + 26: "Dance"}
+SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 2 * 128 + 26: "Dance"}
 SET_ALONE = {49, 50, 57}
 
 APPROX = 'approx'
@@ -164,6 +175,10 @@ VOICE = {
     'TR-808 High Conga': ('k', 25, 62), 'TR-808 Mute Conga': ('k', 25, 63),
     'TR-808 Low Conga': ('k', 25, 64),
     'Techno Snare 2': ('c', 'TechnoSnare2Properties', 233.8),
+    # the Jungle set's (tonelib.JungleBreak: breaks sped up), and its others
+    'Jungle Hi-Hat': ('c', 'JungleHiHatProperties', 312.9),
+    'Hand Clap 2': ('k', 0, 39, APPROX), 'TR-606 Closed Hi-Hat': ('k', 28, 42),
+    'TR-606 Open Hi-Hat': ('k', 28, 46), 'TR-808 Crash Cymbal': ('k', 25, 49),
     'Standard 3 Kick 2': ('k', 0, 35, APPROX), 'Standard 3 Snare 2': ('k', 0, 40, APPROX),
     # Standard 3's [RND] voices: Standard's own, each strike varied (tonelib.RandomStrike)
     '[RND] Kick': ('n', 0, 36), '[RND] Snare': ('n', 0, 38), '[RND] Hand Clap': ('n', 0, 39),
@@ -183,8 +198,8 @@ VOICE = {
     'CR-78 Kick 1': ('k', 27, 36), 'CR-78 Kick 2': ('k', 27, 35),
     'Dance Kick': ('k', 30, 36, APPROX), 'Hip-Hop Kick 1': ('c', 'HipHopKick1Properties', 37.3),
     'Hip-Hop Kick 2': ('c', 'HipHopKick2Properties', 55.6), 'Techno KicK 1': ('c', 'TechnoKick1Properties', 44.4),
-    'Techno Kick 2': ('c', 'TechnoKick2Properties', 49.6), 'Jungle Kick 1': ('k', 0, 36, APPROX),
-    'Jungle Kick 2': ('k', 0, 35, APPROX),
+    'Techno Kick 2': ('c', 'TechnoKick2Properties', 49.6), 'Jungle Kick 1': ('c', 'JungleKick1Properties', 52.8),
+    'Jungle Kick 2': ('c', 'JungleKick2Properties', 41.7),
     # snares
     'Standard 1 Snare 1': ('k', 0, 38), 'Standard 1 Snare 2': ('k', 0, 40), 'Standard 1 Snare 3': ('k', 0, 38),
     'Standard 2 Snare 1': ('k', 0, 38, APPROX), 'Standard 2 Snare 2': ('k', 0, 40, APPROX),
@@ -197,8 +212,8 @@ VOICE = {
     'TR-909 Snare 1': ('k', 30, 38), 'TR-909 Snare 2': ('k', 30, 40),
     'Dance Snare 1': ('k', 30, 38, APPROX), 'Dance Snare 2': ('k', 30, 40, APPROX),
     'Disco Snare': ('k', 30, 40, APPROX), 'House Snare': ('k', 30, 38, APPROX), 'Rap Snare': ('c', 'RapSnareProperties', 173.8),
-    'Hip-Hop Snare 2': ('c', 'HipHopSnare2Properties', 131.0), 'Jungle Snare 1': ('k', 0, 38, APPROX),
-    'Jungle Snare 2': ('k', 0, 40, APPROX), 'Techno Snare 1': ('c', 'TechnoSnare1Properties', 119.9),
+    'Hip-Hop Snare 2': ('c', 'HipHopSnare2Properties', 131.0), 'Jungle Snare 1': ('c', 'JungleSnare1Properties', 245.8),
+    'Jungle Snare 2': ('c', 'JungleSnare2Properties', 220.2), 'Techno Snare 1': ('c', 'TechnoSnare1Properties', 119.9),
     'Brush Tap 1': ('k', 40, 38), 'Brush Tap 2': ('k', 40, 38), 'Brush Slap 1': ('k', 40, 39),
     'Brush Slap 2': ('k', 40, 39), 'Brush Slap 3': ('k', 40, 39), 'Brush Swirl 1': ('k', 40, 40),
     'Brush Swirl 2': ('k', 40, 40), 'Brush Long Swirl': ('k', 40, 40), 'Snare Roll': ('k', 0, 25),

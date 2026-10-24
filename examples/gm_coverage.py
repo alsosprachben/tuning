@@ -647,7 +647,12 @@ def _gs_sets_rated():
                   # driven once through our own valve (tr808.drive on tubeamp.curve).
                   # Ben, on examples/techno_demo.py: "It actually sounds really cool."
                   'TechnoKick1Properties': (lambda: 4), 'TechnoKick2Properties': (lambda: 4),
-                  'TechnoSnare1Properties': (lambda: 4), 'TechnoSnare2Properties': (lambda: 4)}
+                  'TechnoSnare1Properties': (lambda: 4), 'TechnoSnare2Properties': (lambda: 4),
+                  # the Jungle drums (tonelib.JungleBreak: breaks sped up; Kick 2 the
+                  # 808's sub). Ben, on examples/jungle_demo.py: "sound good"
+                  'JungleKick1Properties': (lambda: 4), 'JungleKick2Properties': (lambda: 4),
+                  'JungleSnare1Properties': (lambda: 4), 'JungleSnare2Properties': (lambda: 4),
+                  'JungleHiHatProperties': (lambda: 4)}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
         KIT_RATED[k] = {}
@@ -1105,12 +1110,22 @@ def _mt32_var_rated():
             VAR_RATED[(i, 127)] = (r, "GM %d %s" % (to, names[to]))
 
 
+# GM 2's settings-and-layers tones (patch_map.SC8850_CHEAP and MAP_TONES' map
+# 3), heard as a group in examples/gm2_tones_demo.py
+_GM2_HEARD_KEYS = [(0, 3 * 128 + 16), (3, 3 * 128 + 8), (16, 3 * 128 + 8), (16, 3 * 128 + 32),
+                   (17, 3 * 128 + 32), (20, 16), (25, 33), (27, 23), (28, 24), (29, 4), (30, 26),
+                   (33, 7), (48, 40), (56, 3), (57, 4), (59, 2)]
+GM2_HEARD = {k: 'Ben, on examples/gm2_tones_demo.py: "sound good"' for k in _GM2_HEARD_KEYS}
+
+
 def _sc88_var_rated():
     """THE SC-88 MAP'S CHEAP TONES (patch_map.SC88_CHEAP): each its source
     voice's rating -- the program it aliases or sets, its layers' lowest, the
     kit key it plays -- and what was done to it."""
     names = GM
     tones = [((p, b), how, "SC-88 map: ") for (p, b), (nm, how) in patch_map.SC88_CHEAP.items()]
+    tones += [((p, b), how, "SC-8850 map: ") for (p, b), (nm, how) in
+              getattr(patch_map, "SC8850_CHEAP", {}).items()]
     tones += [((p, 128 * m + b), how, "%s map's own: " % patch_map.MAP_LABELS[m])
               for (m, p, b), (nm, how) in getattr(patch_map, "MAP_TONES", {}).items()]
     for (p, b), how, whose in tones:
@@ -1142,6 +1157,8 @@ def _sc88_var_rated():
                                                        (" %+.0f dB" % l[2]) if l[2] else "",
                                                        (" vel %d-%d" % (l[3], l[4])) if len(l) > 3 else "")
                                             for l in how[1])
+        if (p, b) in GM2_HEARD:
+            note += ". " + GM2_HEARD[(p, b)]
         VAR_RATED[(p, b)] = (r, whose + note)
     # ...AND ITS SYNTH TONES (sc88_synth.SC88_SYNTH): Moog panels, a 3 as the
     # bank-8 synths are -- the engine is fitted to Ben's Messenger, the panel
@@ -1187,7 +1204,7 @@ def variations():
 
 def variations_md():
     rows = variations()
-    sc88 = set(getattr(patch_map, "SC88_CHEAP", {}))
+    sc88 = set(getattr(patch_map, "SC88_CHEAP", {})) | set(getattr(patch_map, "SC8850_CHEAP", {}))
     r55 = [r for r in rows if (r[0], r[1]) not in sc88]
     nb = sum(1 for r in r55 if r[3])
     L = ["## Variations: the GS banks (CC0)\n",
@@ -1272,8 +1289,12 @@ def gm2():
             by.setdefault((int(r[0]), norm(r[i])), (col, int(r[1])))
     out = []
     for p, b, nm in list(csv.reader(open(GM2_TSV), delimiter="\t"))[1:]:
-        hit = by.get((int(p), norm(nm)))
-        out.append((int(p), int(b), nm, hit, map_rating(hit[0], (int(p), hit[1])) if hit else None))
+        p, b = int(p), int(b)
+        hit = by.get((p, norm(nm)))
+        # what the renderer plays for it (patch_map.gm2_bank), rated as that is
+        v = patch_map.gm2_bank(p, b) if b else 0
+        r = RATED[p][0] if not b else (VAR_RATED[(p, v)][0] if v and (p, v) in VAR_RATED else None)
+        out.append((p, b, nm, hit, r))
     return out
 
 
@@ -1287,7 +1308,7 @@ def sound_canvas():
         return None
     variations()                                     # fills VAR_RATED
     R = gs_maps.load()
-    later = set(getattr(patch_map, "SC88_CHEAP", {}))
+    later = set(getattr(patch_map, "SC88_CHEAP", {})) | set(getattr(patch_map, "SC8850_CHEAP", {}))
     try:
         from sc88_synth import SC88_SYNTH
         later |= set(SC88_SYNTH)
@@ -1330,6 +1351,24 @@ SC_KINDS = (("synth", "a Moog panel, voiced by ear"),
             ("refit", "an articulation of one we have, wanting a fit to a reference"),
             ("new", "an instrument we have not modelled, wanting references"),
             ("other", "a different tone under a number we built"))
+
+
+def gm2_md():
+    """GM 2's sound set: how it is read, and what is still to build."""
+    g = gm2()
+    if g is None:
+        return ""
+    todo = [(p, b, nm) for p, b, nm, _h, r in g if r is None]
+    L = ["## General MIDI 2: the sound set (MSB 121)\n",
+         "GM 2's 256 tones (SC-8850 owner's manual, \"GM 2 Instrument List\"; examples/gm2_list.py).",
+         "GM 2 numbers its variations its own way -- its Piano 1w is LSB 1, the Sound Canvas's",
+         "bank 8 -- but every one is a Sound Canvas tone under its own name, so a GM 2 LSB plays",
+         "the tone of that name (patch_map.gm2_bank: the SC-8850 map's, else an earlier map's),",
+         "rated as that tone is; one not built plays the capital. GM 2's nine drum sets are the",
+         "Sound Canvas's (Standard, Room, Power, Electronic, Analog = TR-808, Jazz, Brush,",
+         "Orchestra, SFX), all built.\n",
+         "**Still to build (%d):** %s.\n" % (len(todo), ", ".join("%d.%d %s" % t for t in todo))]
+    return "\n".join(L) + "\n"
 
 
 def sound_canvas_md():
@@ -1778,6 +1817,7 @@ def main(argv):
     L.append(stops_md())
     L.append(variations_md())
     L.append(mt32_md())
+    L.append(gm2_md())
     L.append(sound_canvas_md())
     L.append(effects_md())
     L.append(sysex_md())
