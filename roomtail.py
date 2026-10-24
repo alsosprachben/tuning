@@ -441,6 +441,100 @@ def write_wav(path, data, sr):
     w.close()
 
 
+# A PLATE REVERB (a GS file's Plate macro): an EMT 140 -- a 1 x 2 m steel
+# sheet hung in a frame, a driver and two contact pickups, a damper setting
+# its decay. No room: no early reflections, and its bending waves, dispersive,
+# give it full echo density from the first millisecond -- so the tail is
+# dense noise from the onset, each pickup its own. Its decay is quoted at 500
+# Hz (the unit's panel), the highs always shortest -- ~1.5 s at 10 kHz -- and
+# the lows longest, boomy at long settings (sources.md: plate_reverb).
+PLATE_T500 = 2.5            # s at 500 Hz at GS Plate's own Rev Time (88)
+PLATE_OCTAVES = (63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
+
+
+def plate_t60(f, t500=PLATE_T500):
+    """The plate's T60 at f: t500 at 500 Hz; the lows longer, more so at a
+    long setting; the highs held under the plate's own losses."""
+    def raw(f):
+        low = 1.0 + 0.3 * (t500 / 5.0) * max(0.0, math.log2(500.0 / f))
+        return 1.0 / (1.0 / (t500 * low) + 1.0 / (1.6 * 10000.0 / f))
+    return raw(f) * t500 / raw(500.0)
+
+
+def plate_ir(sr, t500=PLATE_T500, channels=2, seed=0):
+    """Octave bands of noise, each falling at the plate's T60 there."""
+    from scipy.signal import butter, sosfiltfilt
+    rng = np.random.default_rng(seed + 140)
+    n = int(sr * min(10.0, 1.2 * max(plate_t60(f, t500) for f in PLATE_OCTAVES)))
+    t = np.arange(n) / sr
+    ir = np.zeros((n, channels))
+    for f in PLATE_OCTAVES:
+        lo, hi = f / math.sqrt(2.0), min(f * math.sqrt(2.0), 0.45 * sr)
+        if lo >= hi:
+            continue
+        sos = butter(4, [lo, hi], btype='band', fs=sr, output='sos')
+        env = 10.0 ** (-3.0 * t / plate_t60(f, t500))
+        for c in range(channels):
+            ir[:, c] += sosfiltfilt(sos, rng.standard_normal(n)) * env
+    k = max(1, int(0.0005 * sr))
+    ir[:k] *= np.linspace(0.0, 1.0, k)[:, None]
+    return ir
+
+
+# AN ECHO (GS Delay, Panning Delay): the send repeated, each repeat its
+# feedback's share of the last and duller by a pole at 5 kHz -- Panning Delay's
+# alternating ears. The SC-55's are "fixed at about 100ms" (Sound On Sound,
+# 1991; Roland gives no ms), and REV DELAY FB (0-127) the repeats.
+ECHO_S = 0.100
+ECHO_DAMP_HZ = 5000.0
+
+
+def echo_ir(sr, fb, pan, channels=2):
+    from scipy.signal import lfilter
+    g = min(0.95, max(0.0, fb / 127.0))
+    a = math.exp(-2.0 * math.pi * ECHO_DAMP_HZ / sr)
+    d = int(round(ECHO_S * sr))
+    reps = max(1, int(math.ceil(math.log(1e-3) / math.log(g)))) if g > 0.0 else 1
+    ir = np.zeros(((reps + 1) * d + 256, channels))
+    tap = np.zeros(256); tap[0] = 1.0
+    for k in range(1, reps + 1):
+        tap = lfilter([1.0 - a], [1.0, -a], tap)
+        amp = g ** (k - 1)
+        if pan and channels == 2:
+            ir[k * d:k * d + 256, (k - 1) % 2] += tap * amp * math.sqrt(2.0)
+        else:
+            ir[k * d:k * d + 256, :] += (tap * amp)[:, None]
+    return ir
+
+
+def device_ir(kind, room_ir, sr, tail_time, delay_fb, seed):
+    """A GS macro's device in the room's place: the plate's tail (its time
+    the file's Rev Time) or the echo, at the energy the room's tail had."""
+    ch = room_ir.shape[1]
+    if kind == 'plate':
+        ir = plate_ir(sr, PLATE_T500 * tail_time, ch, seed)
+    else:
+        fb = delay_fb if delay_fb is not None else {'delay': 40, 'pan_delay': 32}[kind]
+        ir = echo_ir(sr, fb, kind == 'pan_delay', ch)
+    return ir * math.sqrt(_octave_energy(room_ir, sr) / max(_octave_energy(ir, sr), 1e-30))
+
+
+def _octave_energy(ir, sr):
+    """An IR's energy as music hears it: the mean of its octave bands where
+    music's energy is, 125 Hz-2 kHz -- not its total, which a white noise's
+    top octaves own. Matched in total, the plate (its long lows) came out 4 dB
+    over the studio's tail it stood in for; over all nine octaves, 3."""
+    from scipy.signal import butter, sosfiltfilt
+    x = ir.sum(1)
+    out = []
+    for f in (125, 250, 500, 1000, 2000):
+        lo, hi = f / math.sqrt(2.0), min(f * math.sqrt(2.0), 0.45 * sr)
+        if lo >= hi:
+            continue
+        out.append(np.sum(sosfiltfilt(butter(4, [lo, hi], btype='band', fs=sr, output='sos'), x) ** 2))
+    return float(np.mean(out))
+
+
 def main(argv):
     if len(argv) < 3:
         print(__doc__.strip().splitlines()[-1])
@@ -464,6 +558,18 @@ def main(argv):
         tail_time = float(_d0.get('tail_time', 1.0))
         global T60_SCALE
         T60_SCALE = tail_time
+    # THE TAIL THE ROOM HAS (tonelib room_tail). NONE outdoors: the render's
+    # own first-order images are all the space there is
+    kind = getattr(T.SynthProperties, 'room_tail', 'diffuse')
+    if kind == 'none':
+        print("== %s -> %s\n   %s: no diffuse field, no tail (the render's first-order images)"
+              % (inp, outp, T.ROOM_NAME[0]))
+        write_wav(outp, x, sr)
+        return 0
+    delay_fb = None
+    if os.path.exists(side):
+        import json
+        delay_fb = json.load(open(side)).get('delay_fb')
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
     # Prefer what the render measured over the scalar.
     band_q = None
@@ -479,6 +585,12 @@ def main(argv):
             side_send = float(next(iter(_sd.values())))
     ir, bands, onset = build_ir(props, sr, q=q, seed=seed,
                                 channels=x.shape[1], band_q=band_q)
+    if kind != 'diffuse':
+        # ...or A DEVICE in the room's place (a GS Plate or Delay macro): its
+        # tail, carrying the energy the room's would have
+        ir = device_ir(kind, ir, sr, tail_time, delay_fb, seed)
+        print("   %s in the room's place%s" % (kind, "" if delay_fb is None else
+                                                  " (delay feedback %d)" % delay_fb))
     if tail_gain != 1.0 or tail_time != 1.0:
         # A FILE'S REVERB LEVEL (GS 40 01 33, 64 the module's default): the
         # tail's amplitude, the direct sound untouched
@@ -505,8 +617,8 @@ def main(argv):
     # rings on is part of how long the file has to be.
     q_low = (band_q.get(OCTAVES[0], 1.0) if band_q else 1.0)
     mir, nmodes, fs = modal_ir(props, sr, channels=x.shape[1], q_low=q_low)
-    if '--no-modes' in argv:
-        print("   modes suppressed (--no-modes)")
+    if '--no-modes' in argv or kind != 'diffuse':
+        print("   modes suppressed (%s)" % ("--no-modes" if kind == 'diffuse' else kind))
         nmodes = 0
     use_modes = bool(nmodes) and fs > 25.0
 

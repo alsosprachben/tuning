@@ -1802,17 +1802,22 @@ def _strike_rows(A, r0, r1, cols, grs=None):
 # THE GS REVERB, as a Sound Canvas file sets it (40 01 3x): its MACRO picks
 # one of our physical rooms -- the module has one reverb, as a render has one
 # room -- and its LEVEL and TIME scale the tail roomtail draws from that room.
-# Room 1-3 run small to large, Hall 2 is the longer hall; we have no plate, and
-# the delays' echo is the GS delay's, so those keep the hall.
-# MATCHED BY WHAT IT IS FOR, NOT BY ITS NAME: Hall 1 is the chamber. Roland's
-# Hall 1 is an algorithmic reverb with a flat low end, and a GS arranger
-# reaching for it (Konami's Tokei, at level 90) wants space round an
-# orchestra -- in our hall, whose bass rings 1.6x its top as a real hall's
-# does, that came out boomy (Ben). "More semantically matching than
-# literally matching."
-GS_REVERB_ROOM = {0: 'studio', 1: 'chamber', 2: 'chapel', 3: 'chamber', 4: 'church',
-                  5: 'hall', 6: 'hall', 7: 'hall'}
-_GS_REVERB_PARAM = {0x30: 'reverb_macro', 0x33: 'reverb_level', 0x34: 'reverb_time'}
+# MATCHED BY WHAT IT IS FOR, NOT BY ITS NAME ("more semantically matching than
+# literally matching", Ben), the rooms stepping small to large as Roland's do:
+# Room 1-3 the studio (0.33 s), the chamber (0.8) and a larger chamber (~1.1);
+# Hall 1 our hall, a modern mid-size concert hall (1.3-2.1 s); Hall 2, Roland's
+# "deeper" hall, the grand one (Musikverein-scale, 2.0 s mid, 2.6 in the bass).
+# Not the chapel, which rings longer than our hall and would put a "room" past
+# Hall 1; not the church, wetter than any Roland hall. Plate and the two
+# delays are DEVICES (tonelib: the studio's walls, roomtail the device): a
+# plate reverb (EMT 140), and an echo, plain or panning L-R.
+GS_REVERB_ROOM = {0: 'studio', 1: 'chamber', 2: 'large_chamber', 3: 'hall', 4: 'grand_hall',
+                  5: 'plate', 6: 'delay', 7: 'pan_delay'}
+_GS_REVERB_PARAM = {0x30: 'reverb_macro', 0x33: 'reverb_level', 0x34: 'reverb_time',
+                    0x35: 'reverb_delay_fb'}
+# ...the delays' REV DELAY FB, each macro's own (SC-8850 owner's manual, "About
+# Reverb Type"): how many repeats, 0-127; only Delay and Panning Delay read it
+GS_REVERB_DELAY_FB = {6: 40, 7: 32}
 # ...each macro's own REV TIME (SC-8850 owner's manual, "About Reverb Type"): a
 # file's time is measured from it -- Hall 2's where it set none, as a reset leaves
 GS_REVERB_TIME = {0: 80, 1: 56, 2: 64, 3: 72, 4: 64, 5: 88, 6: 32, 7: 64}
@@ -1975,6 +1980,8 @@ def prepare(path, tuner='hybrid440', sink=None):
     _GS_ROOM.update(room_name=room or prev, tail_gain=fx.get('reverb_level', 64) / 64.0,
                     tail_time=2.0 ** ((fx['reverb_time'] - GS_REVERB_TIME.get(fx.get('reverb_macro', 4), 64))
                                       / 64.0) if 'reverb_time' in fx else 1.0)
+    if fx.get('reverb_macro') in GS_REVERB_DELAY_FB:
+        _GS_ROOM['delay_fb'] = fx.get('reverb_delay_fb', GS_REVERB_DELAY_FB[fx['reverb_macro']])
     return out
 
 

@@ -2074,6 +2074,10 @@ class SynthProperties:
     room_back = 15.0
     room_ceiling = 12.0
     room_floor = 1.2         # ear height above the floor
+    # THE TAIL roomtail draws (ROOM_PRESETS): 'diffuse', every room's, from
+    # its geometry; 'none' outdoors, only the first-order images; 'plate',
+    # 'delay', 'pan_delay' -- a GS reverb macro's device in the room's place
+    room_tail = 'diffuse'
 
     # THE MECHANISM LETTING GO -- off unless a voice has one. A plucked
     # keyboard's jack falls back at note-off and its tongue brushes the string;
@@ -25826,6 +25830,62 @@ ROOM_PRESETS = {
             'floor':   (0.20, 0.25, 0.35, 0.45, 0.50, 0.55),
         },
     ),
+    # A LARGER CHAMBER: a recital room or a great salon, 11 x 16 x 8 m, 1400
+    # m3, furnished as the chamber is and panelled, the panels taking the bass
+    # a bare room would ring in. 0.92-1.11 s, near flat: between the chamber
+    # (0.8 s) and the chapel (1.5-2.4 s) -- GS's Room 3, still a room.
+    'large_chamber': dict(
+        room_left=5.5, room_right=5.5,
+        room_front=4.0, room_back=12.0,
+        room_ceiling=6.8, room_floor=1.2,
+        # r_c 2.14 m; 1.52 m puts the room 3 dB under the direct sound.
+        radiation_distance=1.52,
+        SURFACE_ALPHA={
+            'left':    (0.32, 0.26, 0.19, 0.15, 0.14, 0.14),   # panelling, shelves
+            'right':   (0.32, 0.26, 0.19, 0.15, 0.14, 0.14),
+            'front':   (0.30, 0.24, 0.18, 0.15, 0.14, 0.14),
+            'back':    (0.34, 0.28, 0.23, 0.20, 0.20, 0.20),
+            'ceiling': (0.26, 0.20, 0.14, 0.11, 0.11, 0.11),   # coffered plaster
+            'floor':   (0.15, 0.25, 0.40, 0.55, 0.60, 0.60),   # boards, rugs, seats
+        },
+        SURFACE_SCATTER={
+            'left':    (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'right':   (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'front':   (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'back':    (0.15, 0.20, 0.30, 0.40, 0.50, 0.55),
+            'ceiling': (0.10, 0.15, 0.25, 0.35, 0.45, 0.50),
+            'floor':   (0.20, 0.25, 0.35, 0.45, 0.50, 0.55),
+        },
+    ),
+    # A GRAND CONCERT HALL: the great shoeboxes -- Vienna's Musikverein (15000
+    # m3, ~2.0 s full), Boston's Symphony Hall (18700 m3, 1.9 s) -- where the
+    # default hall is a modern mid-size one. 20 x 48 x 18 m, 17000 m3, plaster
+    # and wood that keep the bass, a coffered ceiling, a full audience the
+    # main absorber: 2.6 s at 63-125 Hz, 2.0 s at 500 Hz-1 kHz, 1.8 s at 4 kHz.
+    # GS's Hall 2, Roland's "deeper" hall.
+    'grand_hall': dict(
+        room_left=10.0, room_right=10.0,
+        room_front=20.0, room_back=28.0,
+        room_ceiling=16.5, room_floor=1.2,
+        # r_c 5.47 m; 3.87 m puts the hall 3 dB under the direct sound.
+        radiation_distance=3.87,
+        SURFACE_ALPHA={
+            'left':    (0.14, 0.11, 0.09, 0.08, 0.08, 0.08),   # plaster on brick, boxes
+            'right':   (0.14, 0.11, 0.09, 0.08, 0.08, 0.08),
+            'front':   (0.18, 0.12, 0.09, 0.08, 0.08, 0.08),   # the platform's wood
+            'back':    (0.16, 0.12, 0.10, 0.09, 0.09, 0.09),   # the balcony's front
+            'ceiling': (0.12, 0.09, 0.07, 0.06, 0.06, 0.06),   # coffered plaster
+            'floor':   (0.48, 0.68, 0.85, 0.92, 0.93, 0.90),   # a full audience
+        },
+        SURFACE_SCATTER={
+            'left':    (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),   # caryatids, boxes, pilasters
+            'right':   (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'front':   (0.10, 0.20, 0.30, 0.40, 0.50, 0.55),
+            'back':    (0.20, 0.30, 0.45, 0.55, 0.65, 0.70),
+            'ceiling': (0.15, 0.25, 0.40, 0.55, 0.65, 0.70),
+            'floor':   (0.35, 0.45, 0.55, 0.65, 0.70, 0.70),
+        },
+    ),
     # The Pieta: a Venetian ospedale chapel, which is what Vivaldi's Op. 8 was
     # written for and played in by the girls of the orphanage. Between the salon
     # and Bach's Leipzig in every dimension -- masonry and plaster, but small,
@@ -25968,7 +26028,50 @@ ROOM_PRESETS = {
             'floor':   (0.10, 0.15, 0.20, 0.25, 0.30, 0.35),
         },
     ),
+    # OUTDOORS: a street or a square, where a bateria plays (Ben: "samba is
+    # often done outside, where there are no/few room reflections"). The ground
+    # is the one surface that matters -- pavement and cobbles, hard, so its
+    # bounce arrives at full strength a few ms behind the direct sound. The sky
+    # takes everything (0.99: Eyring's log cannot take 1), and the square's
+    # edges -- facades, trees, the crowd round the band -- stand 25-30 m off
+    # and mostly absorb, so they return a few faint, late reflections and no
+    # build-up. NO DIFFUSE FIELD: Eyring's tail assumes energy scattered round
+    # a closed room, and here the hard ground fed it back into a 0.7 s tail 17
+    # dB under the direct sound whatever the edges absorbed; outdoors the
+    # ground bounces once (blockrender's first-order image) and what goes up
+    # is gone. So roomtail draws no tail.
+    'outdoors': dict(
+        room_tail='none',
+        room_left=25.0, room_right=28.0,
+        room_front=26.0, room_back=30.0,
+        room_ceiling=15.0, room_floor=1.2,      # the facades' height: sky above
+        # a listener in the crowd, 4 m from the band
+        radiation_distance=4.0,
+        SURFACE_ALPHA={
+            'left':    (0.93, 0.95, 0.96, 0.97, 0.97, 0.97),   # facades, trees, people: open between
+            'right':   (0.93, 0.95, 0.96, 0.97, 0.97, 0.97),
+            'front':   (0.95, 0.96, 0.97, 0.98, 0.98, 0.98),   # the crowd
+            'back':    (0.95, 0.96, 0.97, 0.98, 0.98, 0.98),
+            'ceiling': (0.99, 0.99, 0.99, 0.99, 0.99, 0.99),   # the sky
+            'floor':   (0.02, 0.02, 0.03, 0.03, 0.04, 0.05),   # pavement, cobbles
+        },
+        SURFACE_SCATTER={
+            'left':    (0.30, 0.40, 0.50, 0.60, 0.70, 0.70),
+            'right':   (0.30, 0.40, 0.50, 0.60, 0.70, 0.70),
+            'front':   (0.40, 0.50, 0.60, 0.70, 0.75, 0.75),
+            'back':    (0.40, 0.50, 0.60, 0.70, 0.75, 0.75),
+            'ceiling': (0.10, 0.10, 0.10, 0.10, 0.10, 0.10),
+            'floor':   (0.05, 0.10, 0.20, 0.30, 0.40, 0.45),   # cobbles scatter the top
+        },
+    ),
 }
+
+# A GS REVERB MACRO THAT IS A DEVICE, NOT A ROOM (blockrender.GS_REVERB_ROOM):
+# Plate, Delay, Panning Delay. The band still plays in a room -- the studio's
+# walls, for the render's first-order images -- and roomtail draws the
+# device's tail in the room's place (roomtail.plate_ir, echo_train).
+for _dev in ('plate', 'delay', 'pan_delay'):
+    ROOM_PRESETS[_dev] = dict(ROOM_PRESETS['studio'], room_tail=_dev, room_stagger_as='studio')
 
 
 def critical_distance(props=None, q=1.0):
@@ -26170,8 +26273,13 @@ def set_room(name, stagger=True):
                          % (name, ", ".join(sorted(ROOM_PRESETS))))
     for k, v in preset.items():
         setattr(SynthProperties, k, v)
+    # ...a room's diffuse tail unless the preset names another, so leaving
+    # outdoors or the plate for a room brings the room's back
+    SynthProperties.room_tail = preset.get('room_tail', 'diffuse')
     if stagger:
-        stagger_room(name)
+        # ...its walls staggered as the room it borrows them from (the plate's
+        # and the delays' are the studio's)
+        stagger_room(preset.get('room_stagger_as', name))
     ROOM_NAME[0] = name
     return name
 

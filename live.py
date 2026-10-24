@@ -348,7 +348,10 @@ class Convolver(object):
             self.c = None
 
 
-ROOM_NAMES = ("dry", "booth", "studio", "chamber", "chapel", "hall", "church")
+# small to large, then the open air and the GS macros' devices (tonelib
+# ROOM_PRESETS: room_tail)
+ROOM_NAMES = ("dry", "booth", "studio", "chamber", "large_chamber", "chapel", "hall",
+              "grand_hall", "church", "outdoors", "plate", "delay", "pan_delay")
 ROOM_XFADE_S = 0.15          # a room switch crossfades the tails over this
 
 
@@ -426,8 +429,16 @@ def build_room_tail(rate, frames, band_q=None):
     built as roomtail.main builds them. Off the audio thread: this takes a
     second or two."""
     import roomtail as _RT
+    # ...the tail the room has (tonelib room_tail), as roomtail.main draws it:
+    # none outdoors, a device's (plate, echo) in a GS macro's room
+    kind = getattr(T.SynthProperties, 'room_tail', 'diffuse')
+    if kind == 'none':
+        return None
     props = T.StoppedPipeProperties(261.6, 0, 1, 1)
     ir, _bands, _onset = _RT.build_ir(props, rate, channels=2, band_q=band_q)
+    if kind != 'diffuse':
+        ir = _RT.device_ir(kind, ir, rate, 1.0, None, 0)
+        return RoomTail(ir.astype(np.float32), None, frames)
     q_low = band_q.get(_RT.OCTAVES[0], 1.0) if band_q else 1.0
     mir, nmodes, fs = _RT.modal_ir(props, rate, channels=2, q_low=q_low)
     use_modes = bool(nmodes) and fs > 25.0
@@ -13563,7 +13574,8 @@ def selftest(only=""):
             _tot += _e1; _tgt += _t1
         _rb.append((_room, _cg, _tg, abs(_w * _d * _h / _V0 - 1.0),
                     abs(2 * (_w * _d + _w * _h + _d * _h) / _A0 - 1.0),
-                    _ear.get("early") and _ear.get("spike"),
+                    # (a room with no tail -- outdoors -- has none to be flat)
+                    (_ear.get("early") and _ear.get("spike")) or _S.room_tail == 'none',
                     (max(abs(e - 1.0) for e in _en), abs(_tot / _tgt - 1.0))))
     _T.set_room(os.environ.get("TUNING_ROOM") or "hall")
     check("no three reflections together anywhere on the stage, in any room",
