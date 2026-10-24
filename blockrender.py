@@ -148,7 +148,7 @@ from patch_map import VariationProgram, VARIATIONS, layers_of
 from brass_fingering import cents_offset as brass_cents, INSTRUMENTS as BRASS_KIND
 from percussion_map import (percussion_for_note, choke_group, rasp_strokes,
                             GM_PERCUSSION_CHANNEL, DrumProgram, is_drum, kit_for_program,
-                            key_layers)
+                            key_layers, KITS)
 
 # SR is the engine's sample rate. It used to be hardcoded here AND as six literal
 # 44100s inside the kernel, so it could not actually be changed; the kernel now
@@ -730,6 +730,13 @@ def parse(path):
             _dr, _pr, _var_ = T.resolve_patch(_bmsb.get(msg.channel, 0),
                                              _blsb.get(msg.channel, 0), msg.program,
                                              _is_drums(msg.channel), _rxbank[0])
+            if _dr and _bmsb.get(msg.channel, 0) != T.GM2_DRUM_BANK:
+                # ...a drum set read in the map CC32 names, where that map has
+                # a set of its own there (percussion_map._map_set: the SC-88's
+                # TR-808/909 on 26); else the program, as before
+                _mk = 128 * _blsb.get(msg.channel, 0) + _pr
+                if _blsb.get(msg.channel, 0) and _mk in KITS:
+                    _pr = _mk
             _drums[msg.channel] = _dr
             ch_prog[msg.channel] = _pr
             _var[msg.channel] = 0 if _dr else _var_

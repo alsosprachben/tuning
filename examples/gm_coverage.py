@@ -630,6 +630,12 @@ def _cm32l_rated():
 
 KIT_RATED[127] = _cm32l_rated()
 
+# THE SC-88 MAP'S TR-808/909 (percussion_map.SC88_TR808_909): the TR-808 set's
+# ratings, and the 909's kick and snare on 35 and 40
+KIT_RATED[2 * 128 + 25] = dict(KIT_RATED[25])
+KIT_RATED[2 * 128 + 25][35] = (KIT_RATED[30][36][0], "the 909's kick (its set's 36), as the SC-88 map has it")
+KIT_RATED[2 * 128 + 25][40] = (KIT_RATED[30][38][0], "the 909's snare 1 (its set's 38)")
+
 
 # GS'S OWN KEYS PAST GM'S (SC-55 p.70), as Standard plays them
 PERC_RATED[25] = (4, "the SNARE ROLL, held: the Standard snare at 13.5 strokes a second, each pressed into a "
@@ -703,10 +709,14 @@ GS_DRUM_SETS = (
 STANDARD_BY_DESIGN = {33}
 
 
-def _set_status(pc):
-    """(status, keys rated, median rating) for the set at program pc (1-based)."""
+def _set_status(pc, lsb=0):
+    """(status, keys rated, median rating) for the set at program pc (1-based),
+    in the map CC32 = lsb names (0 the native; 1 SC-55, 2 SC-88, 3 SC-88Pro)
+    where that map has a set of its own there (percussion_map._map_set)."""
     import percussion_map as PM
     k = pc - 1
+    if lsb and 128 * lsb + k in PM.KITS:
+        k = 128 * lsb + k
     if k == 0:
         rated = [r for r, _ in PERC_RATED.values()]
         return "built: the note map above", len(rated), sorted(rated)[len(rated) // 2]
@@ -730,11 +740,17 @@ def drum_set_table():
     L.append("SC-88Pro map 25, the SC-8850 map 37. A set not built here plays")
     L.append("Standard. THE GOAL: every one built.\n")
     maps = ((1, "SC-8850"), (2, "SC-88Pro"), (3, "SC-88"), (4, "SC-55"))
+    LSB = {1: 0, 2: 3, 3: 2, 4: 1}
     tot = {}
     for row in GS_DRUM_SETS:
-        st = _set_status(row[0])[0]
         for col, nm in maps:
             if row[col]:
+                # a map's set by another name than the native's is its own: built
+                # only where that map's set is (the SC-88's TR-808/909 on 26)
+                own = row[col] not in (row[1], row[2])
+                st = (_set_status(row[0], LSB[col])[0]
+                      if not own or 128 * LSB[col] + row[0] - 1 in __import__("percussion_map").KITS
+                      else "not built")
                 t = tot.setdefault(nm, [0, 0])
                 t[1] += 1
                 t[0] += st.startswith("built") or st.startswith("Standard, by")

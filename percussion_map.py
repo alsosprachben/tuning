@@ -1884,3 +1884,42 @@ for _tab in (PERCUSSION_RING, PERCUSSION_LEVEL):
 DEFAULT_PAN[25] = DEFAULT_PAN.get(38, 0.0)
 PERCUSSION[82] = ("Shaker", ShakerProperties, PERCUSSION[70][2])
 DEFAULT_PAN[82] = DEFAULT_PAN.get(70, 0.0)
+
+
+# DRUM SETS BY MAP. A Sound Canvas's CC32 picks the map its programs are read
+# in (1 SC-55, 2 SC-88, 3 SC-88Pro; 0 the native), for drum sets as for tones
+# -- and program 26 is the TR-808 set in every map but the SC-88's, where it
+# is the TR-808/909 (SC-88 Pro owner's manual, "SC-88 Drum set (2)"). A set a
+# map has of its own is kept at 128 x map + program (as patch_map keys a map's
+# own tones); the parse resolves a drum channel's program there where one
+# exists, and to the plain program everywhere else.
+def _map_set(map_, prog, base, name, changes):
+    """KITS[128 x map + prog]: set `base` with `changes` {key: (src_kit, src_key,
+    name)}, every per-set table copied from the base and the changed keys' from
+    their sources."""
+    k = 128 * map_ + prog
+    KITS[k] = dict(KITS[base])
+    for tab in (KIT_RING, KIT_LEVEL, KIT_GATE, KIT_PAN, KIT_LAYER, KIT_STROKES):
+        if base in tab:
+            tab[k] = {kk: vv for kk, vv in tab[base].items()}
+    if base in KIT_CHOKE:
+        KIT_CHOKE[k] = [set(g) for g in KIT_CHOKE[base]]
+    if base in KIT_ONLY:
+        KIT_ONLY.add(k)
+    for key, (sk, src, nm) in changes.items():
+        _n, cls, f0 = KITS[sk][src] if sk else PERCUSSION[src]
+        KITS[k][key] = (nm, cls, f0)
+        for tab in (KIT_RING, KIT_LEVEL, KIT_GATE, KIT_PAN):
+            if src in tab.get(sk, {}):
+                tab.setdefault(k, {})[key] = tab[sk][src]
+    DRUM_SETS[k] = name
+    return k
+
+
+# THE SC-88 MAP'S TR-808/909 (its program 26): the TR-808 set with the
+# 909's kick on 35 and its snare on 40 (the scratches on 29/30, its Push2 and
+# Pull2, are Standard's here)
+SC88_TR808_909 = _map_set(2, 25, 25, "TR-808/909", {
+    35: (30, 36, "909 Bass Drum"),
+    40: (30, 38, "909 Snare 1"),
+})

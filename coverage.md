@@ -180,7 +180,7 @@ SC-55 map has 10 (and the CM-64/32L at 128), the SC-88 map 14, the
 SC-88Pro map 25, the SC-8850 map 37. A set not built here plays
 Standard. THE GOAL: every one built.
 
-**Where it stands:** SC-8850 map 14 of 37, SC-88Pro map 14 of 25, SC-88 map 9 of 14, SC-55 map 10 of 10.
+**Where it stands:** SC-8850 map 14 of 37, SC-88Pro map 14 of 25, SC-88 map 9 of 14, SC-55 map 8 of 10.
 
 | PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
 |---|---|---|---|---|---|---|---|
@@ -563,6 +563,32 @@ Standard. THE GOAL: every one built.
 | 106 | Waves | `SfxSeashore` | **3** | the CM-32L's, as the SFX set's 82: GM 122's seashore, a one-shot gated 2.3 s -- by proxy, fitted to an ocean drum, not the sea |
 | 107 | Stream | `SfxStream` | **4** | the CM-32L's, as the SFX set's 83: STREAM fitted to a Freesound brook (CC0): its hiss (0.2 dB rms), its drops a short ring at 2 kHz under clicks to 16 kHz -- the ring kept short (Ben: "a bit too bouncy ball") |
 | 108 | Bubble | `SfxBubble` | **4** | the CM-32L's, as the SFX set's 84: BUBBLES set from a Freesound recording's own events (CC0): 11 a second at 300 Hz-1.2 kHz, each rising from 0.88 of its pitch (grains' glide), dying at 220 dB/s -- run as the bell tree's cascade, 22 rising (percussion_map.KIT_STROKES), as Ben approved it |
+
+### 281 TR-808/909
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | 909 Bass Drum | `TR909Kick` | **4** | the 909's kick (its set's 36), as the SC-88 map has it |
+| 36 | 808 Bass Drum | `TR808Kick` | **4** | THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- bridged-T resonators, and six square oscillators through band-passes -- every instrument a patch of knobs, read off the service notes' schematic where it fixes them). FITTED BY TWO LEVELS to Michael Fischer's recordings of one 808 (every knob at five positions): the GM set whose sample IS an 808 picks the setting, the patch fits that hit (examples/tr808_fit.py). Balanced within itself as GeneralUser's (examples/elkit_balance.py --kit=25). Ben: sounds incredible. The BASS DRUM: one network at 49.6 Hz, its first cycle at 4x (the time constant halved while the trigger lasts), the pitch sighing 0.5 oct onto it; its spectrum within 1-3 dB of the hit's to 8 kHz. Score 4.5 (BD0050) |
+| 37 | 808 Rim Shot | `TR808RimShot` | **4** | the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one polarity: their harmonics and intermodulation, each product decaying as the networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). Score 15.2 -- the rectifier's sharp 3-12 kHz edge is short |
+| 38 | 808 Snare Drum | `TR808Snare` | **4** | the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on its own envelope. Score 5.2 (SD7575) |
+| 40 | 909 Snare 1 | `TR909Snare` | **4** | the 909's snare 1 (its set's 38) |
+| 41 | 808 Low Tom 2 | `TR808Tom` | **4** | the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it decays and their harmonics die faster; pink noise at 154-402 Hz on its own envelope (the schematic's RCs). Score 5.0 (LT75) |
+| 42 | 808 CHH | `TR808ClosedHat` | **4** | the CLOSED HAT: the six oscillators (this 808's, read off its cymbal: 345.5, 486.2, 558.5, 630.6, 823.9, 852.0 Hz -- pulses, not squares) through the high band, a short VCA and a high-pass. Score 5.8 |
+| 43 | 808 Low Tom 1 | `TR808Tom` | **4** | as 41, played 2.8 semitones higher -- the SC-55's sixth tom where FluidR3 plays it, past the TUNING knob's reach |
+| 44 | 808 CHH | `TR808ClosedHat` | **4** | as 42 (the SC-55's pedal hat is the 808's CHH) |
+| 45 | 808 Mid Tom 2 | `TR808MidTom` | **4** | the MID TOM, its own circuit: noise 219-482 Hz. Score 5.3 (MT50) |
+| 46 | 808 OHH | `TR808OpenHat` | **4** | the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 8.3 (OH75) |
+| 47 | 808 Mid Tom 1 | `TR808MidTom` | **4** | as 45, 2 semitones higher (as 43) |
+| 48 | 808 Hi Tom 2 | `TR808HiTom` | **4** | the HI TOM, its own circuit: noise 268-723 Hz. Score 6.7 (HT75) |
+| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the CYMBAL: the six through three bands at the circuit's centres (Werner's cymbal paper), each its own decay -- the kernel's two-stage decay per partial. Score 7.1 (CY7500) |
+| 50 | 808 Hi Tom 1 | `TR808HiTom` | **4** | as 48, 3.5 semitones higher (as 43) |
+| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. Score 10.7 |
+| 62 | 808 High Conga | `TR808HiConga` | **4** | the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no noise. Score 9.3 (HC50) |
+| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the MID CONGA. Score 2.8 (MC25) |
+| 64 | 808 Low Conga | `TR808Conga` | **4** | the LOW CONGA. Score 2.9 (LC25) |
+| 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
+| 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
 
 ## 0-7 Piano
 
@@ -1757,26 +1783,26 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR707Tom` -- set 29 41 707 Low Tom 2 (4), set 29 43 707 Low Tom 1 (4)
                 - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
                 - `TR707MidTom` -- set 29 45 707 Mid Tom 2 (4), set 29 47 707 Mid Tom 1 (4)
-            - `TR808Claves` -- set 25 75 808 Claves (4), set 30 75 808 Claves (4)
-            - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4)
-              - `TR808OpenHat` -- set 25 46 808 OHH (4)
-            - `TR808Conga` -- set 25 64 808 Low Conga (4), set 27 64 808 Low Conga (4), set 28 64 808 Low Conga (4)
-              - `TR808HiConga` -- set 25 62 808 High Conga (4), set 27 62 808 High Conga (4), set 28 62 808 High Conga (4)
-              - `TR808MidConga` -- set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4)
-            - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
-            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4)
-            - `TR808Kick` -- 14 TR-808 Kick (4), set 25 36 808 Bass Drum (4)
-            - `TR808Maracas` -- set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4)
-            - `TR808RimShot` -- set 25 37 808 Rim Shot (4)
-            - `TR808Snare` -- 119 TR-808 Snare 1 (4), 123 Rap Snare (4), set 25 38 808 Snare Drum (4)
-            - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4)
-              - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4)
-              - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4)
+            - `TR808Claves` -- set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
+            - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4), set 281 42 808 CHH (4), set 281 44 808 CHH (4)
+              - `TR808OpenHat` -- set 25 46 808 OHH (4), set 281 46 808 OHH (4)
+            - `TR808Conga` -- set 25 64 808 Low Conga (4), set 27 64 808 Low Conga (4), set 28 64 808 Low Conga (4), set 281 64 808 Low Conga (4)
+              - `TR808HiConga` -- set 25 62 808 High Conga (4), set 27 62 808 High Conga (4), set 28 62 808 High Conga (4), set 281 62 808 High Conga (4)
+              - `TR808MidConga` -- set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4), set 281 63 808 Mid Conga (4)
+            - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4), set 281 56 808 Cowbell (4)
+            - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4), set 281 49 808 Cymbal (4)
+            - `TR808Kick` -- 14 TR-808 Kick (4), set 25 36 808 Bass Drum (4), set 281 36 808 Bass Drum (4)
+            - `TR808Maracas` -- set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4), set 281 70 808 Maracas (4)
+            - `TR808RimShot` -- set 25 37 808 Rim Shot (4), set 281 37 808 Rim Shot (4)
+            - `TR808Snare` -- 119 TR-808 Snare 1 (4), 123 Rap Snare (4), set 25 38 808 Snare Drum (4), set 281 38 808 Snare Drum (4)
+            - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4), set 281 41 808 Low Tom 2 (4), set 281 43 808 Low Tom 1 (4)
+              - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4), set 281 48 808 Hi Tom 2 (4), set 281 50 808 Hi Tom 1 (4)
+              - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4), set 281 45 808 Mid Tom 2 (4), set 281 47 808 Mid Tom 1 (4)
             - `TR909`
-              - `TR909Kick` -- 15 TR-909 Kick (4), set 30 36 909 Kick 1 (4)
+              - `TR909Kick` -- 15 TR-909 Kick (4), set 30 36 909 Kick 1 (4), set 281 35 909 Bass Drum (4)
                 - `TR909Kick2` -- 16 Dance Kick (4), set 30 35 909 Kick 2 (4)
               - `TR909Rim` -- set 30 37 909 Rim (4)
-              - `TR909Snare` -- 112 Dance Snare 1 (4), 121 TR-909 Snare 1 (4), set 30 38 909 Snare 1 (4)
+              - `TR909Snare` -- 112 Dance Snare 1 (4), 121 TR-909 Snare 1 (4), set 30 38 909 Snare 1 (4), set 281 40 909 Snare 1 (4)
                 - `TR909Snare2` -- 113 Dance Snare 2 (4), 114 Disco Snare (4), 122 TR-909 Snare 2 (4), set 30 40 909 Snare 2 (4)
               - `TR909Tom` -- set 30 41 909 Low Tom 2 (4)
                 - `TR909HiTom` -- set 30 48 909 Hi Tom 2 (4)
