@@ -906,7 +906,7 @@ PERCUSSION_RING = {
     53: 0.34, 55: 0.41,
     # (56, 60-68 carry their measured rings in their classes:
     #  tonelib.MeasuredStrokeProperties, fitted by examples/perc_fit.py)
-    57: 1.69, 58: 0.098, 59: 0.48,
+    57: 1.69, 58: 0.0539, 59: 0.48,
     # (69, 70: shaped noise now, tonelib.ShakenNoiseProperties -- no impacts to ring)
     # (71, 72: blown, not struck -- a held blast of their own length,
     #  tonelib.ShortWhistleProperties / LongWhistleProperties, no ring)
@@ -923,7 +923,7 @@ PERCUSSION_RING = {
     #
     # (0.012 and below overflow db_ratio in tonelib -- 60/ring becomes a decay
     # rate that 10**(db/10) cannot represent. 0.020 is comfortably clear of it.)
-    73: 0.020, 74: 0.020, 75: 0.184, 76: 0.026,
+    73: 0.0163, 74: 0.0163, 75: 0.184, 76: 0.026,
     77: 0.115,
     # the cuicas HOLD and then stop: a stroke of the stick is gated
     # (tonelib.CuicaProperties.gate_time), and under the gate the GM sets
@@ -980,7 +980,8 @@ PERCUSSION_LEVEL = {
     32: 0.4226,  # GS's 32, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
     33: 0.0933,  # GS's 33, balanced to GeneralUser GS (examples/elkit_balance.py --kit=0)
     34: 0.9301,  # GS's 34, TIED to 33 (elkit_balance.TIED: the bell over its tick as Ben's take has it)
-    73: 5.0, 74: 5.0,        # guiro: energy spread across the ridges
+    73: 5.0, 74: 4.10,       # guiro: energy spread across the ridges (74 held at its old -37.1 dB
+                             # when 73's refit level was held with its scrape's shape)
     # ...and the rattles for the same reason: a shake is now a burst of impacts,
     # each ringing 10-12 ms instead of one 250 ms hit, so the energy is spread
     # across dozens of them. The whistles moved from the drum family to the pipe
@@ -1181,9 +1182,29 @@ PERCUSSION_RASP = {
     #
     # The spacing is the instrument and the duration is the gesture, so a long
     # scrape crosses proportionally more of them at the same rate.
-    73: (0.13, 30),      # short guiro: one quick rip, as Iowa recorded it
+    73: (0.19, 44),      # short guiro: one quick rip, as Iowa recorded it (fitted, with its shape below: 10 ms envelope within 4 dB to 180 ms)
     74: (0.42, 98),      # long guiro: the same 4.3 ms spacing, further along
 }
+
+# THE SCRAPE'S LEVEL, MEASURED (examples/guiro_curve.py): the takes' energy in
+# tenths of the scrape, against the law above -- they start 20 dB under the
+# flick and climb to it at 60-70%, where the law began 11 dB under and held
+# within 2 dB from halfway (Ben: louder than the recording). dB on the law at
+# each tenth's middle, interpolated. Standard's short guiro only: the long
+# stroke sounded right as it was.
+PERCUSSION_RASP_SHAPE = {
+    73: (-8.9, -10.4, -3.1, -3.6, -4.7, -5.5, -1.7, -1.7, -4.4, -6.9),
+}
+
+
+def _rasp_shape_db(shape, frac):
+    x = frac * len(shape) - 0.5
+    if x <= 0.0:
+        return shape[0]
+    if x >= len(shape) - 1:
+        return shape[-1]
+    i = int(x)
+    return shape[i] + (shape[i + 1] - shape[i]) * (x - i)
 
 
 # SHAKEN instruments. A rattle is not one hit either, and it is not a scrape:
@@ -1278,22 +1299,37 @@ def _settling_rattle(note, on, span, n, fall, settle_s, settle_db, accent_s=0.0,
 # vibraslap, 31.3 -> 2.6 dB): each strike rings 0.1 s (PERCUSSION_RING), so
 # they overlap into a steady clatter, as smooth as the takes (+-0.35 dB); the
 # early impacts' ring carries the attack, and the first stands only 0.55 over.
+#
+# THE MOMENTUM (Ben: "the roll slows down in the recording"). The rod's swing
+# holds 27.4 Hz to the end -- a spring -- but each swing strikes twice, one
+# side then the other, and folded at the swing (examples/vibraslap_swing.py)
+# every take loses one side as it dies: both sides level early, the far one
+# gone 7-14 dB down. The rod no longer swings far enough to reach it, and the
+# clatter halves, 55 strikes a second to 27. (side dB below the start where
+# the far side starts to go, and dB it falls per dB past that.)
 PERCUSSION_TRAIN = {
-    58: (55.0, 2.58, 10.7, 0.08, 0.35, 0.55),
+    58: (55.0, 2.790, 9.70, 0.08, 0.275, 0.95, 4.86, 3.80),
 }
 
 
-def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0):
+def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0,
+                  side_db=None, side_slope=0.0):
     """(start, end, level, pitch) for a PERCUSSION_TRAIN note: impacts at a
     steady rate, each its own time (within jit of a period), level and
-    pitch, seeded by the note and its time."""
+    pitch, seeded by the note and its time. With side_db, the impacts
+    alternate sides of a swing, and the far side (the odd impacts) is
+    reached only while the swing is within side_db of its start: past it,
+    side_slope dB quieter for each dB further down."""
     import random
     rng = random.Random(note * 1000003 + int(round(on * 1e4)))
     out = []
     n = int(rate * secs)
     for k in range(n):
         t = (k + rng.uniform(-jit, jit)) / rate
-        level = 10.0 ** ((-fall_db * t / secs + rng.uniform(-scatter_db, scatter_db)
+        swing = -fall_db * t / secs
+        far = (max(0.0, -swing - side_db) * side_slope
+               if side_db is not None and k % 2 else 0.0)
+        level = 10.0 ** ((swing - far + rng.uniform(-scatter_db, scatter_db)
                           + (strike_db if k == 0 else 0.0)) / 20.0)
         out.append((on + max(0.0, t), on + max(0.0, t) + 0.9 / rate, level, 2.0 ** rng.uniform(-0.1, 0.1)))
     return out
@@ -1683,6 +1719,7 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
     if spec is None:
         return None
     dur, n = spec
+    shape = PERCUSSION_RASP_SHAPE.get(note) if tabs is None else None
     span = max(dur, (off - on) * 0.5) if off > on else dur
     if n < 2:
         return [(on, on + span, 1.0)]
@@ -1707,6 +1744,11 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
         level = (0.318 + 0.400 * frac) / 0.638
         if frac > 0.80:
             level *= 1.0 - 0.30 * (frac - 0.80) / 0.20
+        if shape is not None:
+            # dB of SOUND: a stroke's level is its velocity, which a drum's
+            # square law doubles (half the dB here; at the full dB the
+            # scrape's end fell 14-24 dB, not its 7-12)
+            level *= 10.0 ** (_rasp_shape_db(shape, frac) / 40.0)
         step = (w[k] if k < n - 1 else w[-1]) * scale
         out.append((t + step * jitter, t + step * 0.9, level))
         t += step

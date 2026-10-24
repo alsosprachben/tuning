@@ -43,6 +43,16 @@
                     continue;
                 }
 #endif
+#ifdef XDEC_PASS
+                // A FAST TONAL ROW HAS NO KNEE: xdec_block below draws its onset's
+                // fade from the onset (each ear's), and the knee's straight ramp
+                // drawn first was its attack twice over, of two shapes
+                if(!ftr && chBW[p]>=0.f && (kNl>0 || kNr>0)
+                   && xdec_decide(sl<=0.f && af<=0.f && !BLrow && !Grow, a, bs0, (long)BLK, dL, dR,
+                                  fadeS[p], invf, invr, off, lr, chBW[p]).xr!=0.f){
+                    kN=kA=kNl=kAl=kNr=kAr=0;
+                }
+#endif
                 if(kAl!=kAr || kNl!=kNr){
                     // EACH EAR ITS OWN ONSET (voice_block.inc): out of line
                     ns=ear_knees(ns, ne, n0, bs0, invb, kAl, kNl, kgL, kAr, kNr, kgR,
@@ -79,6 +89,16 @@
 #endif
                 #include "voice_noise.inc"
                 } else if(!ftr){
+#ifdef XDEC_PASS
+                // ...AND A TONAL ROW AS FAST (a guiro's ridge, a vibraslap's
+                // pin): drawn as the line, its level held up through the block
+                // and stepped at the edge -- a click at every block edge
+                // (examples/perc_fit.py guiro), as the noise rows' were
+                ns=xdec_block(lr*(float)BLK>XDEC_NEPERS*SRATE_F && sl<=0.f && af<=0.f && !BLrow && !Grow,
+                              a, bs0, (long)BLK, dL, dR, fadeS[p], invf, invr, off, lr,
+                              cs, ns, ne, n0, aL, aR, zrL, ziL, zrR, ziR, rr, ri, (float)nf, chBW[p],
+                              jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
+#endif
                 for(long n=ns;n<ne;n++){
                     float t=(float)(n-bs0)*invb; float mL=(mL0+(mL1-mL0)*t)*aL, mR=(mR0+(mR1-mR0)*t)*aR;
                     float sL=zrL, sR=zrR;

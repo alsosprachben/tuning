@@ -201,15 +201,28 @@ def weights(rec):
     return np.where(rec < -100.0, 0.0, w)
 
 
+# A FLOOR (dB re the grid's total; None: none): a take's room and noise
+# under its sound, where ours is truly silent. Unclipped, Iowa's guiro read
+# -67 to -80 dB past its scrape and ours -200, 120 dB of error a cell, and
+# the fit rang each ridge 0.32 s to fill the room's hiss
+CLIP = None
+
+
+def _clip(g):
+    return g if CLIP is None else np.where(g < -100.0, g, np.maximum(g, CLIP))
+
+
 def score(model, recs):
     """(rms dB, trim): the weighted rms over every group's cells after the
     band trim common to all groups is solved for."""
+    if CLIP is not None:
+        recs = [_clip(r) for r in recs]
     trim = np.zeros(len(CENTRES))
     for _ in range(4):
         num = np.zeros(len(CENTRES))
         den = np.zeros(len(CENTRES))
         for m, r in zip(model, recs):
-            mm = norm(m + trim[:, None])
+            mm = np.maximum(norm(m + trim[:, None]), CLIP if CLIP is not None else -1e9)
             w = weights(r)
             num += (w * (mm - r)).sum(1)
             den += w.sum(1)
@@ -219,7 +232,8 @@ def score(model, recs):
     wsum = 0.0
     for m, r in zip(model, recs):
         w = weights(r)
-        err.append((w * (norm(m + trim[:, None]) - r) ** 2).sum())
+        mm = np.maximum(norm(m + trim[:, None]), CLIP if CLIP is not None else -1e9)
+        err.append((w * (mm - r) ** 2).sum())
         wsum += w.sum()
     return float(np.sqrt(sum(err) / wsum)), trim
 

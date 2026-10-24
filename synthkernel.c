@@ -243,7 +243,10 @@ static inline float sstep(float x){ if(x<=0.f)return 0.f; if(x>=1.f)return 1.f; 
    the end of its onset's fade in the block it starts in, times e^(xr k) --
    and before it the onset's own fade (fd samples, the smoothstep AMP draws):
    a hard step there, under a decay this fast, is an impulse, flat to the top
-   of the spectrum, 6-12 dB over the take's clicks at 4-14 kHz. Anchored afresh each block, so where a click falls in
+   of the spectrum, 6-12 dB over the take's clicks at 4-14 kHz. A TONAL row
+   as fast (a guiro's ridge) is drawn the same way: as the line it was held
+   up through its block and stepped at the edge, a click at every block edge
+   20 dB over its ridge. Anchored afresh each block, so where a click falls in
    its block does not change its shape. xdec_decide returns the anchors (the
    descriptor carries them in mL0/mR0, levels, and mL1/mR1, samples from the
    block's start). NOT IN synth_voice: any statement added to its block loop
@@ -259,12 +262,17 @@ typedef struct { float xr, gL, gR, kL, kR; } xdecs;
    anchor. xr 0: the line, as before. */
 __attribute__((noinline))
 static xdecs xdec_decide(int ok, long a, long bs0, long blk, float dL, float dR, float fade,
-                         float invf, float invr, long off, float lr){
+                         float invf, float invr, long off, float lr, float cbw){
     xdecs X={0.f,0.f,0.f,0.f,0.f};
     long bs1=bs0+blk;
     if(!ok || !(lr*(float)blk>XDEC_NEPERS*SRATE_F)) return X;
     long oL=a+(long)ceilf(dL)+(long)fade, oR=a+(long)ceilf(dR)+(long)fade;
-    if(oL>=bs1 || oR>=bs1) return X;
+    /* an onset's fade past the block's end: a noise row's (~0.5 ms, rare)
+       takes the line; a TONAL row's is anchored past the block, at its fade's
+       end, and drawn by its fade up to it -- as the line, a guiro's 6 ms
+       attack crossing a block edge was held up to it and stepped there, its
+       clicks 6-14 dB over the rest */
+    if((oL>=bs1 || oR>=bs1) && cbw<0.f) return X;
     long kL=oL>bs0?oL:bs0, kR=oR>bs0?oR:bs0;
     float tL=(float)(kL-a)-dL, tR=(float)(kR-a)-dR;
     X.gL=sstep(tL*invf)*(1.f-sstep(((float)(kL-off)-dL)*invr))*expf(-tL/SRATE_F*lr);
@@ -327,7 +335,7 @@ static long xdec_block(int ok, long a, long bs0, long blk, float dL, float dR, f
                        float zrL, float ziL, float zrR, float ziR, float rr, float ri,
                        float nf, float cbw, float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
                        float* outL, float* outR, float* outSL, float* outSR, float swp){
-    xdecs X=xdec_decide(ok, a, bs0, blk, dL, dR, fade, invf, invr, off, lr);
+    xdecs X=xdec_decide(ok, a, bs0, blk, dL, dR, fade, invf, invr, off, lr, cbw);
     if(X.xr==0.f || ns>=ne) return ns;
     // FROM THE ONSET, NOT FROM ns: a strike's line starts with a step halfway
     // up its fade (voice_block.inc moves ns there), and drawn from that sample
@@ -1152,10 +1160,13 @@ int voice_block(long n0, int BLK, int nblk, int P,
         d->mL0=mL0; d->mL1=mL1; d->mR0=mR0; d->mR1=mR1;
         // A FAST EXPONENTIAL (xdec_decide): its rate, and its anchors in the line's place
         {
-            xdecs X=xdec_decide(!ftr && chBW[p]<0.f && !BLrow && !Grow && sl<=0.f && af<=0.f,
-                                a, bs0, (long)BLK, dL, dR, fadeS[p], invf, invr, off, lr);
+            xdecs X=xdec_decide(!ftr && !BLrow && !Grow && sl<=0.f && af<=0.f,
+                                a, bs0, (long)BLK, dL, dR, fadeS[p], invf, invr, off, lr, chBW[p]);
             d->xr=X.xr;
             if(X.xr!=0.f){ d->mL0=X.gL; d->mR0=X.gR; d->mL1=X.kL; d->mR1=X.kR;
+                // no knee: its fade drawn from the onset (voice_main.inc's
+                // XDEC_PASS); a noise row never had one
+                kNl=kAl=kNr=kAr=0;
                 // from the onset, not the strike's step (xdec_block): the
                 // carrier wound back to the new start, and the V_SUB anchors
                 // below counted from it

@@ -264,18 +264,18 @@ def ensure_xdec_lib():
     return _build(src, "libsynthxdec_%d.so" % SR, ["-DXDEC_KERNEL"], ["synth_voice_xdec"])
 
 
-# A ROW FASTER THAN A BLOCK (synthkernel.c xdec_block): a noise row with a plain
+# A ROW FASTER THAN A BLOCK (synthkernel.c xdec_block): a row with a plain
 # decay (no sustain, no second stage), no gate, no Moog, falling more than
-# 20 dB in a block -- every strike's burst whose decay is quick. Such rows
-# render through synth_voice_xdec; a table without one makes the one call it
-# always made.
+# 20 dB in a block -- every strike's burst whose decay is quick, noise or
+# tonal (a guiro's ridges, held up as the line and stepped at block edges).
+# Such rows render through synth_voice_xdec; a table without one makes the
+# one call it always made.
 XDEC_NEPERS = 2.302585
 
 
 def _xdec_rows(a, i0, i1):
     """The indices in [i0, i1) of rows synth_voice_xdec draws; empty: none."""
-    cbw = a['cbw'][i0:i1]
-    m = (cbw < 0) & (a['sus'][i0:i1] <= 0) & (a['aft'][i0:i1] <= 0) \
+    m = (a['sus'][i0:i1] <= 0) & (a['aft'][i0:i1] <= 0) \
         & (a['logr'][i0:i1] * BLK > XDEC_NEPERS * SR) & (a['gr'][i0:i1] < 0)
     if a.get('BL') is not None:
         m &= a['br'][i0:i1] < 0

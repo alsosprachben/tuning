@@ -16463,19 +16463,35 @@ class MaracasProperties(ShakenNoiseProperties):
 class VibraslapProperties(RattleProperties):
     """GM 58: one strike of a vibraslap's pins on its box, as
     percussion_map.PERCUSSION_TRAIN repeats it -- fitted (examples/
-    perc_fit.py vibraslap) to VSCO's four takes.
+    perc_fit.py vibraslap) to VSCO's four takes: 2.72 -> 2.37 dB, third
+    octaves within 1 dB from 900 Hz up.
 
-    SOFT STRIKES. 55 onsets a second at the rattle's 1.5 ms attack splattered
-    the partials' energy 15-22 dB over the takes at 250-650 Hz -- no partial
-    sits there; it was the onsets -- and the trim, chasing it, ran to -100 dB
-    without moving it. The pins land softer: 6.3 ms."""
-    decay_db = 14.9021
-    harmonic_decay_db = 2.08158
-    chiff_volume = 0.605633
-    sustain_jitter = 1.0758
-    band_trim_db = ((178, -86.6), (224, -63.0), (283, -66.2), (356, -69.0), (449, -61.1), (566, -52.3), (713, -30.3), (898, 5.1), (1131, -3.7), (1425, -23.2), (1796, -17.2), (2263, -6.0), (2851, 9.8), (3592, 9.8), (4525, 14.1), (5702, 20.5), (7184, 17.8), (9051, 21.3), (11404, 1.3), (14368, -54.7))
-    attack_time = 0.00632758
-    initial_gain = 0.053767      # held at the old vibraslap's level for a long note, -44.4 dB (velocity 100, its loudest 150 ms); a short one now rings the same
+    THE LOW END WAS THE CHIFF. 250-650 Hz read 8-22 dB over the takes, and
+    the first fit slowed the attack to 6.3 ms and ran the trim to -100 dB
+    chasing it: a white chiff spreads every strike's noise to the bottom
+    octaves, where the trim (the partials') cannot reach. Narrowed, the
+    chiff lost the takes' flatness between the partials (0.34 -> 3.0 dB). So
+    the pins' clatter is strike noise -- each strike's own noise rows, a
+    third octave apart, the takes' shape -- and the chiff is off; what is
+    left under 900 Hz (+6 dB, 20-36 dB under the peak) is the skirt of the
+    takes' 20 dB cliff there, as the maracas'. The swing's far side dying
+    is the train's (PERCUSSION_TRAIN, Ben: "the roll slows down")."""
+    decay_db = 8.63991
+    harmonic_decay_db = 3.25158
+    chiff_volume = 0.0
+    sustain_jitter = 1.10286
+    band_trim_db = ((178, -47.7), (224, -22.5), (283, -43.8), (356, -33.5), (449, -37.5), (566, -39.9), (713, -28.2), (898, 10.6), (1131, 9.0), (1425, -12.1), (1796, -2.3), (2263, 6.3), (2851, 9.5), (3592, 7.3), (4525, 2.1), (5702, 1.7), (7184, 1.4), (9051, 1.0), (11404, 1.1), (14368, 2.7))
+    attack_time = 0.00451385
+    # THE PINS' CLATTER AS STRIKE NOISE, not chiff: a white chiff spread each
+    # strike's noise to the bottom octaves, 8-17 dB over the takes under 700
+    # Hz where the trim (the partials') cannot reach. Each strike's own noise
+    # rows, a third octave apart, shaped to the takes (examples/perc_fit.py
+    # vibraslap --trim3, its table)
+    strike_noise_db = ((178, -143.2), (224, -67.3), (283, -105.4), (356, -74.8), (449, -91.1), (566, -108.3), (713, -101.9), (898, -7.5), (1131, -16.6), (1425, -60.7), (1796, -54.1), (2263, -34.5), (2851, 2.6), (3592, 1.2), (4525, 3.2), (5702, 3.4), (7184, -1.8), (9051, -2.1), (11404, -7.1), (14368, -25.5))
+    strike_noise_cal_db = -3.91
+    strike_noise_dbs = 388.831
+    strike_noise_fade_s = 0.001
+    initial_gain = 0.046562      # held at the old vibraslap's level for a long note, -44.4 dB (velocity 100, its loudest 150 ms); a short one now rings the same
 
 
 class WoodPercussionProperties(NoisyPercussionMixin, PercussionProperties):
@@ -16762,12 +16778,22 @@ class GuiroProperties(WoodPercussionProperties):
     # correction in harmonic_decay: the guiro's 19 modes span ratios 1.00-3.40.
     # Band drift 1.53 -> 0.89 dB. The other wood has no mode set and so is not
     # affected, which is why this is set here and not on the parent.
-    harmonic_decay_db = 120.0
+    harmonic_decay_db = 133.581
     # the modes are measured absolutely; nothing left to stretch
     inharmonicity_coefficient = 0.0
     inharmonicity_dynamic = False
-    chiff_volume = 0.20
-    sustain_jitter = 0.30
+    # FITTED (examples/perc_fit.py guiro) to Iowa's two mf scrapes. Each
+    # ridge rings ~12 ms (PERCUSSION_RING: the hand deadens the gourd) and
+    # its noise is strike noise, not chiff: a chiff's level is set a block at
+    # a time, and on a ridge this fast that stepped at the block's edge
+    chiff_volume = 0.0
+    sustain_jitter = 0.0
+    attack_time = 0.00862742
+    strike_noise_db = ((178, -45.4), (224, -50.7), (283, -51.3), (356, -48.2), (449, -28.5), (566, -34.8), (713, -28.4), (898, -30.1), (1131, -7.7), (1425, -44.0), (1796, -0.2), (2263, -20.7), (2851, -2.4), (3592, -7.7), (4525, -11.3), (5702, -13.4), (7184, -8.3), (9051, -17.5), (11404, -37.0), (14368, -43.6))
+    strike_noise_cal_db = -14.77      # the fit's +12.56, held at the old guiro's level (velocity 100, a 0.2 s note, its loudest 150 ms: -40.3 dB)
+    strike_noise_dbs = 1427.52
+    strike_noise_fade_s = 0.001
+    band_trim_db = ((178, -2.0), (224, -4.6), (283, -4.4), (356, 0.1), (449, -3.6), (566, 3.9), (713, -1.4), (898, -10.9), (1131, 6.4), (1425, -17.9), (1796, -3.0), (2263, -2.5), (2851, 1.2), (3592, 1.9), (4525, -0.4), (5702, -5.0), (7184, -7.1), (9051, -0.6), (11404, -9.4), (14368, -12.9))
 
 class CymbalProperties(NoisyPercussionMixin, PercussionProperties):
     """Cymbal (crash, ride, splash, china): a bright broadband noise wash --

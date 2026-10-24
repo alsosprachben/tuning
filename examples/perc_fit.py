@@ -149,11 +149,36 @@ INSTS = {
                       band=(300, 16000), floor=-20, flat=(1000, 12000), hold=0.25,
                       T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25),
                          (0.25, 0.50), (0.50, 1.00), (1.0, 1.6), (1.6, 2.4)),
-                      # attack_time: 55 onsets a second at 1.5 ms splattered the
-                      # partials' energy 15-22 dB over the takes at 250-650 Hz
-                      params=("decay_db", "harmonic_decay_db", "chiff_volume", "sustain_jitter",
+                      # (the chiff stays white: narrowed to 0.04 of each partial it
+                      # took 125-250 Hz, 40-60 dB down, from +10-17 dB to +-3, but
+                      # lost the takes' flatness at 1-12 kHz, 0.34 -> 3.0 dB)
+                      # @train_side(_slope): the far side of the swing dropping out
+                      # (percussion_map.PERCUSSION_TRAIN, examples/vibraslap_swing.py)
+                      # @noise_level, strike_noise_dbs: the pins' clatter as strike
+                      # noise (the chiff off), its table refined by --trim3
+                      trim_attr="strike_noise_db",
+                      params=("decay_db", "harmonic_decay_db", "@noise_level", "strike_noise_dbs",
                               "@impact_ring", "@train_secs", "@train_fall", "@train_scatter",
-                              "@train_strike", "attack_time")),
+                              "@train_strike", "@train_side", "@train_side_slope", "attack_time")),
+    # Iowa's two mf scrapes (sources.md: iowa_guiro), 27 and 33 ridges over
+    # 126 and 151 ms: the short guiro's one rip (PERCUSSION_RASP 73); the long
+    # guiro is the same body and ridges. Its chiff was white, as the
+    # vibraslap's was -- each ridge's noise spread to the bottom octaves.
+    # @rasp_secs: the takes scrape at full level to ~170 ms, then the hand
+    # deadens them (20 dB in ~30 ms); with the scrape held at 0.13 s the fit
+    # rang each ridge 0.32 s to fill the gap, 9-17 dB long after it -- and
+    # past the scrape, the takes' room and hiss at -67 to -80 dB, where ours
+    # is silent: clipped at -60 (crash_fit.CLIP). The note is short (0.2 s)
+    # so the scrape's own length governs
+    "guiro":     dict(note=73, glob=os.path.expanduser("~/Documents/refs/iowa_guiro/guiro.*.mf.wav"),
+                      groups=None, band=(500, 16000), floor=-25, flat=(1000, 12000), hold=0.2,
+                      T=((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.100),
+                         (0.100, 0.150), (0.150, 0.250), (0.25, 0.50)),
+                      clip=-60.0, trim_attr="strike_noise_db",
+                      # its noise as strike noise (@noise_level, strike_noise_dbs),
+                      # the chiff off: see tonelib.GuiroProperties
+                      params=("harmonic_decay_db", "@noise_level", "strike_noise_dbs",
+                              "@impact_ring", "@rasp_secs", "attack_time")),
     "bongo_lo":  dict(note=61, glob=_V1 + "drums/other/Bongos/LowBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
@@ -334,6 +359,10 @@ C.PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs",
             "click_stroke_slope", "chiff_volume", "chiff_width", "chiff_bandwidth",
             "mode_jitter", "sustain_jitter")
 C.FLOOR = {"slow_share": 0.005, "click_stroke_slope": 0.05, "click_cal_db": 1.0}
+# where a class leaves a fitted knob at None (the module's default): a white
+# chiff's bandwidth starts narrow; an attack starts at the valve time a None
+# takes (tonelib: chiff_max_valve_time, 4 ms)
+C.START = {"chiff_bandwidth": 0.05, "attack_time": 0.004}
 
 
 def files(inst):
@@ -486,7 +515,8 @@ def flatness(chs, sr, lo, hi):
     return float(np.exp(np.mean(np.log(P))) / np.mean(P))
 
 
-_TRAIN_SLOT = {"@train_secs": 1, "@train_fall": 2, "@train_scatter": 4, "@train_strike": 5}
+_TRAIN_SLOT = {"@train_secs": 1, "@train_fall": 2, "@train_scatter": 4, "@train_strike": 5,
+               "@train_side": 6, "@train_side_slope": 7}
 _RATTLE_SLOT = {"@settle_s": 3, "@settle_db": 4, "@accent_s": 5, "@accent_db": 6, "@rise_s": 7, "@settle_thin": 8}
 
 
@@ -497,6 +527,10 @@ def _get(cls, note, k):
     if k == "@rattle_rate":
         span, n = PM.PERCUSSION_RATTLE[note][:2]
         return n / span
+    if k == "@rasp_secs":
+        return PM.PERCUSSION_RASP[note][0]
+    if k == "@noise_level":
+        return 10.0 ** (cls.strike_noise_cal_db / 20.0)
     if k == "@impact_ring":
         return PM.PERCUSSION_RING[note]
     if k == "@rattle_fall":
@@ -530,6 +564,11 @@ def _set(cls, note, k, v):
         r = list(PM.PERCUSSION_RATTLE[note])
         r[_RATTLE_SLOT[k]] = float(v)
         PM.PERCUSSION_RATTLE[note] = tuple(r)
+    elif k == "@noise_level":          # the strike's table moved, as a gain (dB can be < 0)
+        cls.strike_noise_cal_db = 20.0 * np.log10(max(float(v), 1e-6))
+    elif k == "@rasp_secs":            # the scrape longer, its ridges as dense
+        secs, n = PM.PERCUSSION_RASP[note]
+        PM.PERCUSSION_RASP[note] = (float(v), max(2, int(round(v * n / secs))))
     elif k == "@impact_ring":
         PM.PERCUSSION_RING[note] = float(v)
         PM._RING_CLASSES.clear()
@@ -590,7 +629,8 @@ def fit(inst, recs, rflat, vels, maxfev):
     cls = inst_class(spec)
     if not spec.get("keep_trim"):
         cls.band_trim_db = ()
-    x0 = [max(float(_get(cls, note, k)), C.FLOOR.get(k, 1e-3)) for k in C.PARAMS]
+    x0 = [max(float(C.START[k] if _get(cls, note, k) is None else _get(cls, note, k)),
+              C.FLOOR.get(k, 1e-3)) for k in C.PARAMS]
     rcrack = max(crackle(sum(load(p)[0]), 44100) for p in files(inst))
     rcon = float(np.mean([contrast(sum(load(p)[0]), 44100) for p in files(inst)])) if spec.get("contrast") else None
     # ...or BY DYNAMIC (attack_groups): each group's contrast and early treble
@@ -751,6 +791,8 @@ def trim3(inst, passes):
     r = np.mean([ltas3(*load(p), edges=E3) for p in files(inst)], 0)
     keep = (C3 >= lo) & (C3 <= 14000)
     attr = "noise_bands" if getattr(cls, "shake_noise", False) else "band_trim_db"
+    # ...or the strike's own noise table, where the noise is what is wrong
+    attr = INSTS[inst].get("trim_attr", attr)
     for it in range(passes + 1):
         m = np.mean([ltas3(*C.render(note, v), edges=E3) for v in (60, 90, 120)], 0)
         d = r - m
@@ -838,6 +880,7 @@ def main(argv):
         spec = dict(spec, contrast=True, attack_groups=True, keep_trim=True)
         INSTS[inst] = spec
         C.PARAMS = tuple(spec.get("params", C.PARAMS)) + ("attack_time",)
+    C.CLIP = spec.get("clip")
     if "T" in spec:
         C.T = spec["T"]
         C.COL_W = np.array([0.3] + [1.0] * (len(C.T) - 1))
