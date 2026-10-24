@@ -15,6 +15,8 @@ drum set, chosen by program change on the drum channel: see KITS.
 import tonelib as _T
 from tonelib import (
     MembraneDrumProperties,
+    ShakerProperties,
+    JazzKickProperties, JazzKick2Properties, JazzSnareProperties, JazzSnare2Properties,
     BongoProperties,
     CongaProperties,
     TimbaleProperties,
@@ -522,6 +524,17 @@ KITS = {
         75: ("CR-78 Claves",     CR78ClavesProperties, CR78ClavesProperties.tr808_base_hz),
         80: ("CR-78 Metal Beat 1", CR78MetalBeatProperties, CR78MetalBeatProperties.tr808_base_hz),
         81: ("CR-78 Metal Beat 2", CR78MetalBeat2Properties, CR78MetalBeat2Properties.tr808_base_hz),
+    },
+    # JAZZ (SC-88 Pro PC 33; the SC-55's 32): Standard 1 but its kicks and
+    # snares, a jazz kit's -- FITTED to soneproject's kit in a jazz bar
+    # (tonelib.JazzKickProperties and kin). Its Hand Clap 2, Closed/Open
+    # Hi-Hat 2, Pedal Hi-Hat and Ride Inner/Edge are the SC-88 Pro's own
+    # variants of Standard's, played here by Standard's.
+    32: {
+        35: ("Jazz Kick 2",      JazzKick2Properties, 46.0),
+        36: ("Jazz Kick 1",      JazzKickProperties, 70.0),
+        38: ("Jazz Snare 1",     JazzSnareProperties, 165.0),
+        40: ("Jazz Snare 2",     JazzSnare2Properties, 174.0),
     },
     # TR-606 (SC-8850 p.188; the Pro's): the 606's own kick, snare (and the
     # snare accented as Snare 2), toms, hats and cymbal (Roland's "Ride"),
@@ -1312,6 +1325,54 @@ PERCUSSION_TRAIN = {
 }
 
 
+# A SNARE ROLL (GS key 25), as long as the key is held: the hands' strokes,
+# each pressed into a BUZZ -- the stick let bounce on the head. MEASURED on
+# two CC0 rolls (sources.md: snare_roll): the envelope pulses at 13.5 strokes
+# a second (lucianodato's 13.5 Hz; annannienann's 6.7, one hand the stronger),
+# the bounces 7-14 ms apart, the level wandering 4.4-4.9 dB in 20 ms. And
+# ACCENTED AT BOTH ENDS, as a roll is played (Ben): lucianodato's first strokes
+# stand ~8 dB over its body in 50 ms windows and its last ~17 dB, a clean stroke
+# as it ends; annannienann's fades in, its last 14.7 dB over. So the note's
+# velocity is the accents', and the body sits under it. (strokes a second,
+# bounces a stroke, s between bounces, dB each bounce falls, dB the weaker hand
+# is under, timing jitter as a fraction of a stroke, bounce level scatter dB,
+# shortest roll s, the body's dB, the first stroke's, the last's -- these three
+# re the note)
+PERCUSSION_ROLL = {
+    25: (13.5, 6, 0.009, 3.0, 1.5, 0.08, 2.0, 0.3, -14.0, -4.0, 0.0),
+}
+
+
+def _snare_roll(note, on, off, rate, bounces, bounce_s, bounce_db, hand_db, jit,
+                scatter_db, min_s, body_db=0.0, first_db=0.0, last_db=0.0):
+    """(start, end, level, pitch) for a held roll: every bounce a stroke of the
+    snare, its level (a velocity, which a drum's square law doubles in dB:
+    half the dB here) falling bounce by bounce, the hands alternating; the
+    first stroke accented, and a last, near-clean one (two bounces) as the
+    roll ends."""
+    import random
+    rng = random.Random(note * 7919 + int(round(on * 1e4)))
+    span = max(min_s, off - on)
+    last_t = span - 0.5 / rate                 # the last stroke lands as it ends
+    out = []
+
+    def stroke(t, base, nb):
+        for b in range(nb):
+            tb = t + b * bounce_s * (1.0 + rng.uniform(-0.15, 0.15))
+            db = base - bounce_db * b + rng.uniform(-scatter_db, scatter_db)
+            out.append((on + tb, on + tb + 0.8 * bounce_s, 10.0 ** (db / 40.0), 1.0))
+    k = 0
+    t = 0.0
+    while t < last_t:
+        hand = -hand_db if k % 2 else 0.0
+        stroke(t, first_db if k == 0 else body_db + hand, bounces)
+        k += 1
+        t = k / rate + rng.uniform(-jit, jit) / rate
+    stroke(max(last_t, 0.0), last_db, 2)
+    out.sort()
+    return out
+
+
 def _impact_train(note, on, rate, secs, fall_db, jit, scatter_db, strike_db=0.0,
                   side_db=None, side_slope=0.0):
     """(start, end, level, pitch) for a PERCUSSION_TRAIN note: impacts at a
@@ -1481,7 +1542,7 @@ CM32L_SFX = 24          # its effects are the SFX set's, this many keys up
 def _cm32l():
     kit, ring, level, gate, strokes = {}, {}, {}, {}, {}
     std_tables = {"rasp": PERCUSSION_RASP, "train": PERCUSSION_TRAIN, "rattle": PERCUSSION_RATTLE,
-                  "cascade": PERCUSSION_CASCADE}
+                  "cascade": PERCUSSION_CASCADE, "roll": PERCUSSION_ROLL}
     for note, (src_kit, src) in CM32L_DRUMS.items():
         name, cls, f0 = KITS[src_kit][src] if src_kit else PERCUSSION[src]
         kit[note] = (CM32L_NAMES.get(note, name), cls, f0)
@@ -1654,6 +1715,9 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
     train = table("train", PERCUSSION_TRAIN)
     if train is not None:
         return _impact_train(note, on, *train)
+    roll = table("roll", PERCUSSION_ROLL)
+    if roll is not None:
+        return _snare_roll(note, on, off, *roll)
 
     voiced = tabs.get("voiced", {}).get(note) if tabs is not None else None
     if voiced is not None:
@@ -1753,3 +1817,70 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
         out.append((t + step * jitter, t + step * 0.9, level))
         t += step
     return out
+
+
+# THE SC-88 PRO'S STANDARD SETS PAST GM'S KEYS (SC-88 Pro owner's manual,
+# "Native Drum set (7)": notes 0-19 and 97-127 of PC 1 STANDARD 1, 2, 3, ROOM
+# and POWER): the other sets' kicks and snares, so a part on Standard can call
+# any of them -- Konami's TOKEI plays its backbeat on key 106, "[88] Jazz
+# Snare 2", 572 notes that were silent here. Each key is the drum we built for
+# what Roland names there, with that drum's ring, level, gate and pan; a set
+# without its own falls to Standard's (Standard 2's kick is Standard's).
+# Voice One-Three (17-19) and the jungle and house snares (124-127) have no
+# voice here, so they stay silent, as before.
+SC88PRO_EXTRA_KEYS = {
+    0: ("Std 1 Kick 1", 0, 36), 1: ("Std 1 Kick 2", 0, 35), 2: ("Std 2 Kick 1", 0, 36),
+    3: ("Std 2 Kick 2", 0, 35), 4: ("Kick Drum 1", 0, 36), 5: ("Kick Drum 2", 0, 35),
+    6: ("Jazz Kick 1", 32, 36), 7: ("Jazz Kick 2", 32, 35), 8: ("Room Kick 1", 8, 36),
+    9: ("Room Kick 2", 8, 35), 10: ("Power Kick 1", 16, 36), 11: ("Power Kick 2", 16, 35),
+    12: ("Electric Kick 2", 24, 35), 13: ("Electric Kick 1", 24, 36), 14: ("TR-808 Kick", 25, 36),
+    15: ("TR-909 Kick", 30, 36), 16: ("Dance Kick", 30, 35),
+    97: ("Std 1 Snare 1", 0, 38), 98: ("Std 1 Snare 2", 0, 40), 99: ("Std 2 Snare 1", 0, 38),
+    100: ("Std 2 Snare 2", 0, 40), 101: ("Snare Drum 2", 0, 40), 102: ("Std 1 Snare 1", 0, 38),
+    103: ("Std 1 Snare 2", 0, 40), 104: ("Std 1 Snare 3", 0, 38), 105: ("Jazz Snare 1", 32, 38),
+    106: ("Jazz Snare 2", 32, 40), 107: ("Room Snare 1", 8, 38), 108: ("Room Snare 2", 8, 40),
+    109: ("Power Snare 1", 16, 38), 110: ("Power Snare 2", 16, 40), 111: ("Gated Snare", 16, 38),
+    112: ("Dance Snare 1", 30, 38), 113: ("Dance Snare 2", 30, 40), 114: ("Disco Snare", 30, 40),
+    115: ("Electric Snare 2", 24, 40), 116: ("Electric Snare", 24, 38), 117: ("Electric Snare 3", 24, 40),
+    118: ("TR-707 Snare 1", 29, 38), 119: ("TR-808 Snare 1", 25, 38), 120: ("TR-808 Snare 2", 25, 40),
+    121: ("TR-909 Snare 1", 30, 38), 122: ("TR-909 Snare 2", 30, 40),
+    # the Rap Snare: a 1990s hip-hop snare, an 808's kin (River plays it)
+    123: ("Rap Snare", 25, 38),
+}
+
+
+def _sc88pro_extra():
+    for key, (name, kit, src) in SC88PRO_EXTRA_KEYS.items():
+        own = KITS.get(kit, {}).get(src) if kit else None
+        _nm, cls, f0 = own if own is not None else PERCUSSION[src]
+        PERCUSSION[key] = (name, cls, f0)
+        if own is not None:
+            ring, level, gate = (KIT_RING.get(kit, {}).get(src), KIT_LEVEL.get(kit, {}).get(src),
+                                 KIT_GATE.get(kit, {}).get(src))
+            pan = KIT_PAN.get(kit, {}).get(src, DEFAULT_PAN.get(src, 0.0))
+        else:
+            ring, level, gate = PERCUSSION_RING.get(src), PERCUSSION_LEVEL.get(src), KIT_GATE.get(0, {}).get(src)
+            pan = DEFAULT_PAN.get(src, 0.0)
+        if ring is not None:
+            PERCUSSION_RING[key] = ring
+        if level is not None:
+            PERCUSSION_LEVEL[key] = level
+        if gate is not None:
+            KIT_GATE.setdefault(0, {})[key] = gate
+        DEFAULT_PAN[key] = pan
+
+
+_sc88pro_extra()
+
+
+# GS's own keys past GM's that we had not built (SC-55 owner's manual p.70):
+# 25 SNARE ROLL -- the Standard snare rolled while the key is held
+# (PERCUSSION_ROLL), its ring and level the snare's -- and 82 SHAKER, its own
+# shaped noise (tonelib.ShakerProperties). SENSATIO plays both.
+PERCUSSION[25] = ("Snare Roll", PERCUSSION[38][1], PERCUSSION[38][2])
+for _tab in (PERCUSSION_RING, PERCUSSION_LEVEL):
+    if 38 in _tab:
+        _tab[25] = _tab[38]
+DEFAULT_PAN[25] = DEFAULT_PAN.get(38, 0.0)
+PERCUSSION[82] = ("Shaker", ShakerProperties, PERCUSSION[70][2])
+DEFAULT_PAN[82] = DEFAULT_PAN.get(70, 0.0)

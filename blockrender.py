@@ -133,6 +133,7 @@ import chorus as _CHR
 import mf104 as _MFD
 import gsdelay as _GSD
 import gsefx as _GSX
+import ctrlmatrix as _CMX
 
 # Mirrors RAND_GRAN in synthkernel.c: the chiff phase is redrawn at this many
 # times the partial's frequency per second, which at 100000 is every sample --
@@ -605,6 +606,62 @@ def parse(path):
             _ev = ('cv', src, int(v))
             _GSX.apply(_efxst, _ev, _efxparts)
             efxev.append((t, _ev))
+    # THE CONTROLLER MATRIX (ctrlmatrix: GS 40 2x, GM2 09 0s): a channel's
+    # routing, made only when a message names it, and what it sets over time
+    # -- the AMPLITUDE gain and the LFO1 AMPLITUDE DEPTH (a tremolo), each a
+    # [(t, value)] for prepare, from the mod wheel, any CC and the channel's
+    # pressure. A channel no matrix message names is untouched.
+    _cmx, _cmx_last, _cat_now, _bend_now, _pat_now = {}, {}, {}, {}, {}
+    cmx = dict(amp={}, tva={}, pitch={}, cutoff={}, tvf={}, rate={}, vib={})
+    # THE MOD WHEEL'S VIBRATO (GS's default cell, 47 cents of LFO1 pitch) is
+    # not a file's here: our bowed and blown voices carry their players' own
+    # vibrato, and a Sound Canvas's on top doubled it (see tremolo_intrinsic).
+    # Other sources' vibrato -- aftertouch, a CC, the bend -- is. TUNING_MOD_
+    # VIBRATO=1 lets the wheel's in too.
+    _modvib = os.environ.get('TUNING_MOD_VIBRATO', '0') not in ('0', 'off', '')
+
+    def _cmx_upd(t, ch):
+        _m = _cmx.get(ch)
+        if _m is None:
+            return
+        _c = ctrl.get(ch, {})
+
+        def _val(src):
+            if src == 'mod':
+                return _c.get(1, 0) / 127.0
+            if src == 'cat':
+                return _cat_now.get(ch, 0) / 127.0
+            if src == 'bend':
+                # signed: GS's bend cells act as far as the bend is pushed
+                return _bend_now.get(ch, 0) / 8192.0
+            if src == 'pat':
+                # the channel's keys' pressure, its highest: per-note
+                # destinations would want per-note rows, which no file here asks
+                _kp = _pat_now.get(ch)
+                return (max(_kp.values()) / 127.0) if _kp else 0.0
+            if isinstance(src, tuple):
+                return _c.get(src[1], 0) / 127.0
+            return 0.0
+        _cl = _m.cells()
+
+        def _sum(dest, skip=()):
+            return sum(d * _val(sr) for (sr, de), d in _cl.items() if de == dest and sr not in skip)
+        _amp = max(0.0, 1.0 + _sum('amp'))
+        _tva = max(0.0, min(1.0, _sum('lfo1_tva') + _sum('lfo2_tva')))
+        # pitch: every source but the bend's own (its range: RPN 0/0, read
+        # where it always was); cutoff, LFO filter depth and LFO rate as they are
+        _nomod = () if _modvib else ('mod',)
+        _now = dict(amp=_amp, tva=_tva, pitch=_sum('pitch', ('bend',)), cutoff=_sum('cutoff'),
+                    tvf=max(0.0, _sum('lfo1_tvf') + _sum('lfo2_tvf')), rate=_sum('lfo1_rate'),
+                    vib=max(0.0, _sum('lfo1_pitch', _nomod) + _sum('lfo2_pitch', _nomod)))
+        _last = _cmx_last.get(ch) or dict(amp=1.0, tva=0.0, pitch=0.0, cutoff=0.0, tvf=0.0, rate=0.0, vib=0.0)
+        for _k, _v in _now.items():
+            if abs(_v - _last[_k]) > 1e-9:
+                cmx[_k].setdefault(ch, []).append((t, _v))
+        _cmx_last[ch] = _now
+
+    def _cmx_ch(b, a):
+        return (9 if b == 0 else (b - 1 if b <= 9 else b)) + (16 if a == 0x50 else 0)
     _rxbank = [True]         # Rx.BANK SELECT: GM1 On turns it off
     # MPE (M1-100-UM), as live.py plays it: the zones in force, and their
     # history for prepare. A member channel takes its manager's program and is
@@ -628,8 +685,11 @@ def parse(path):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
         # tonelib.GM_DEFAULT_VOLUME for why volume starts at 100.
         c = ctrl.get(ch, {})
+        # ...the controller matrix's amplitude, where a matrix routes one: in
+        # the expression, which chan_vol squares (so its square root here)
+        _ag = _cmx_last[ch]['amp'] if ch in _cmx_last else 1.0
         return (c.get(7, T.GM_DEFAULT_VOLUME)/127.0,
-                c.get(11, T.GM_DEFAULT_EXPRESSION)/127.0,
+                c.get(11, T.GM_DEFAULT_EXPRESSION)/127.0 * (_ag ** 0.5 if _ag != 1.0 else 1.0),
                 (c.get(10, T.GM_DEFAULT_PAN)-64)/63.0)
     _seq = 0     # message order, for events that share a tick -- see _pitch_stream
     # Messages the file did not send but MPE implies -- a manager's zone-wide
@@ -691,6 +751,8 @@ def parse(path):
             elif msg.control == 32:
                 _blsb[msg.channel] = msg.value
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
+            if msg.channel in _cmx:
+                _cmx_upd(t, msg.channel)
             _c, _cc, _v = msg.channel, msg.control, msg.value
             if _cc == 121:
                 # RESET ALL CONTROLLERS, which only live answered. Posted as the
@@ -818,11 +880,20 @@ def parse(path):
                     rpns.setdefault(_c, []).append((t, _kind, _nv, _seq))
         elif msg.type == 'pitchwheel':
             pws.setdefault(msg.channel, []).append((t, msg.pitch))
+            _bend_now[msg.channel] = msg.pitch
+            if msg.channel in _cmx:
+                _cmx_upd(t, msg.channel)
             _efx_cv(t, msg.channel, _GSX.SRC_BEND, (msg.pitch + 8192) >> 7)
             _pwseq.setdefault(msg.channel, []).append((t, _seq, msg.pitch))
         elif msg.type == 'sysex':
+            _mx = _CMX.parse(msg.data, _cmx_ch)
+            if _mx is not None:
+                _cmx.setdefault(_mx[0], _CMX.Matrix()).apply(_mx[1], _mx[2])
+                _cmx_upd(t, _mx[0])
             _lvl = gm_on_level(msg.data)
             if _lvl or parse_gs_reset(msg.data):
+                for _mc, _mm in _cmx.items():       # the matrices back to a reset's
+                    _mm.reset()
                 # BANK SELECT goes back to power-on too, and Roland's text says
                 # which way: "Rx.BANK SELECT is set to OFF by Turn General MIDI
                 # System On, and set to ON by GS RESET". GM 2 On turns it on --
@@ -842,6 +913,9 @@ def parse(path):
                 # the time recorded here.
                 gmon.append((t, _seq))
                 ctrl.clear(); _rsel.clear(); _rfmsb.clear(); _rrange.clear()
+                _cat_now.clear(); _bend_now.clear(); _pat_now.clear()
+                for _mc in _cmx:
+                    _cmx_upd(t, _mc)
                 _nsel.clear()
                 _rmod.clear(); _rfine.clear(); _rcoarse.clear()
                 _rtp.clear(); _rtb.clear()
@@ -913,9 +987,15 @@ def parse(path):
                     sotas.setdefault(_c + _g16, []).append((t, tuple(_cents)))
         elif msg.type == 'aftertouch':
             ats.setdefault(msg.channel, []).append((t, msg.value))
+            _cat_now[msg.channel] = msg.value
+            if msg.channel in _cmx:
+                _cmx_upd(t, msg.channel)
             _efx_cv(t, msg.channel, _GSX.SRC_CAF, msg.value)
         elif msg.type == 'polytouch':
             pts.setdefault((msg.channel, msg.note), []).append((t, msg.value))
+            _pat_now.setdefault(msg.channel, {})[msg.note] = msg.value
+            if msg.channel in _cmx:
+                _cmx_upd(t, msg.channel)
         elif msg.type in ('pn_pitch', 'pn_bend', 'pn_bend_range', 'pn_mgmt'):
             _k = (msg.channel, msg.note)
             if msg.type == 'pn_pitch':
@@ -971,7 +1051,7 @@ def parse(path):
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
                                    pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn,
-                                   mpe=mpe_ev, dedit=dedit, uset=uset, efx=efxev)))
+                                   mpe=mpe_ev, dedit=dedit, uset=uset, efx=efxev, cmx=cmx)))
 
 
 # What an MPE manager's control change does NOT copy to its members: the RPN
@@ -1032,6 +1112,15 @@ class _PortMsg(object):
         return _PortMsg(self._m.copy(**kw) if kw else self._m, ch, tm)
 
 
+def _gs_part_block(data):
+    """True for a Roland GS DT1 message (41 dd 42 12) to a PART's block --
+    40/50 1x (part settings), 2x (its controllers), 4x (its tone and EFX) --
+    whose group the receiving port decides."""
+    d = tuple(data)
+    return (len(d) >= 8 and d[0] == 0x41 and d[2] == 0x42 and d[3] == 0x12
+            and d[4] in (0x40, 0x50) and (d[5] & 0xF0) in (0x10, 0x20, 0x40))
+
+
 class PortedMidi(object):
     """A MIDI 1.0 file whose tracks name a MIDI PORT (the FF 21 meta event),
     as a two-port Sound Canvas file does: Konami's SC-88Pro data plays 32
@@ -1068,6 +1157,21 @@ class PortedMidi(object):
                 tempo = m.tempo
             if hasattr(m, "channel") and not m.is_meta:
                 yield _PortMsg(m, m.channel + 16 * port, d)
+            elif port and m.type == "sysex" and _gs_part_block(m.data):
+                # A PART'S EXCLUSIVE AT PORT B. "Exclusive data received at
+                # MIDI IN B is passed to Group B Parts", and 50 00 00 is "the
+                # Parts of the other Group than the MIDI IN that the data was
+                # received at" (SC-88 Pro owner's manual, "Exclusive data
+                # addresses") -- so at port B, 40 is group B and 50 group A.
+                # Read as port A's, SENSATIO's 40 4A-4F 22 put its guitar
+                # multi-effect on A11-A16 (choir, piano, strings) and left
+                # the guitars B11-B16 dry. Swapped here, every reader below
+                # sees the address as port A would have. The system blocks
+                # (40 00-03: master, reverb/chorus, EQ, the EFX) are one set
+                # here, and keep their address.
+                d0 = list(m.data)
+                d0[4] ^= 0x10
+                yield m.copy(data=d0, time=d)
             else:
                 yield m.copy(time=d)
 
@@ -1637,6 +1741,9 @@ def onepole_edges(events, nblk, default):
 # again. Not a cut: a cut is a step and a step is a click. Samplers call this
 # stealing and give it a few milliseconds for exactly this reason.
 RETRIGGER_FADE = 0.004
+# the controller matrix's tremolo rate (GS LFO1, GM2's LFO): the rate a
+# tone's own LFO runs at isn't in the file, so a GM vibrato's
+TREMOLO_MATRIX_HZ = 5.5
 EASTERN = None          # the secondary tuning's spec (ragas.py); eastern= on the command line
 LAST_DRONES = []        # see prepare(): the drone notes it last inserted
 
@@ -1645,7 +1752,7 @@ LAST_DRONES = []        # see prepare(): the drone notes it last inserted
 GM_DEFAULT_REVERB = 40
 
 
-def registration_blocks(ch, prop, ccs, nblk):
+def registration_blocks(ch, prop, ccs, nblk, amp=None):
     ranks = prop.stop_ranks; order = getattr(prop, 'crescendo_order', [r[0] for r in ranks])
     # 14-bit stop word: CC11 (low 7 bits 0..6) | CC43 (high bits 7..13) -- lets a
     # Mixtur and other stops past bit 6 be drawn. CC43=0 -> the old 7-bit behaviour.
@@ -1678,6 +1785,13 @@ def registration_blocks(ch, prop, ccs, nblk):
         else: continue
         emit(t)
     gate = {r[0]: onepole_blocks(rank_ev[r[0]][1:], nblk, rank_ev[r[0]][0][1]) for r in ranks}
+    # ...and a controller matrix's AMPLITUDE (ctrlmatrix), [(t, gain)], on
+    # every rank's gate: the swell is a shutter's position, capped open, so a
+    # gain there did nothing to an organ already open. Not on rank_ev, whose
+    # targets also say when a rank is drawn
+    if amp:
+        ac = onepole_blocks(list(amp), nblk, 1.0)
+        gate = {k: v * ac for k, v in gate.items()}
     swell = onepole_blocks(swell_ev[1:], nblk, swell_ev[0][1])
     return gate, swell, rank_ev   # rank_ev = per-rank [(t, target 0/1)] for draw-time (speak) lookup
 
@@ -2015,6 +2129,18 @@ def _prepare(path, tuner='hybrid440', sink=None):
     ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
     _DEDIT = _sys.get('dedit') or {}
     _EFXEV = (_sys.get('efx') or []) if os.environ.get('TUNING_GS_EFX', '1') not in ('0', 'off', '') else []
+    # THE CONTROLLER MATRIX's timelines (parse: ctrlmatrix) -- amplitude, and
+    # LFO1 amplitude depth -- per channel
+    _CMXEV = _sys.get('cmx') or dict(amp={}, tva={}, pitch={}, cutoff={}, tvf={}, rate={}, vib={})
+
+    def _cmx_at(_k, _c, _t, _d=0.0):
+        """The controller matrix's value _k on channel _c in force at _t."""
+        _v = _d
+        for _et, _ev in _CMXEV[_k].get(_c, ()):
+            if _et > _t + 1e-9:
+                break
+            _v = _ev
+        return _v
     _EFXN = [None]          # this note's insertion-effect chain (gsefx.chain), or None
     _EFX_CH = {}            # channel -> its first EFX chain: what is set once (amp, cabinet, flanger)
     # ...and the parts on a type with a bus of its own (efxbus), each over the
@@ -2116,6 +2242,14 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _st = {}
             else:
                 _st[T.SOUND_CC[_cc]] = T.sound_offset(_v)
+        # ...and the controller matrix's, at this onset (ctrlmatrix): its CUTOFF
+        # as brightness (GS's TVF NRPN spans the same 9600 cents in 64 steps),
+        # its LFO1 rate as the voice's own vibrato rate (x 2^d). (Its LFO1 pitch
+        # depth is a gesture on a sounding note: the pitch stream's, below.)
+        if _c in _CMXEV['cutoff']:
+            _st['brightness'] = max(-1.0, min(1.0, _st.get('brightness', 0.0) + _cmx_at('cutoff', _c, _t) / 9600.0))
+        if _c in _CMXEV['rate']:
+            _st['vib_rate'] = _st.get('vib_rate', 0.0) + math.log2(max(0.1, 1.0 + _cmx_at('rate', _c, _t) / 5.5))
         return {_k: _d for _k, _d in _st.items() if _d}
 
     def _F(_c, _t):
@@ -2314,7 +2448,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                      if getattr(property_class_for_program(q), 'registerable', False)), None)
         if prog is None: continue
         pc = property_class_for_program(prog)
-        pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk)
+        pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch))
         rankev_of[ch]=rev
         crow_of[ch]=len(Srows); Srows.append(s)
         for r in pr.stop_ranks: k=r[0]; grow_of[(ch,k)]=len(Grows); Grows.append(g[k])
@@ -2532,9 +2666,50 @@ def _prepare(path, tuner='hybrid440', sink=None):
         if (_n[0] in _pwseq and not isinstance(_n[6], DrumProgram)
                 and getattr(property_class_for_note(_n[6], _n[1]), 'bend_detents', False)):
             _MEEND_CH.add(_n[0])
-    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set())) - _mchans - _MEEND_CH
+    _pchans = (set(pws) | set(rpns) | (set(_first_on) if master else set()) | set(_CMXEV['pitch'])
+               | set(_CMXEV['vib'])) - _mchans - _MEEND_CH
+    _bdt2 = BLK / float(SR)
     for _c in _pchans:
         _ev = _pitch_stream(_c)
+        if _c in _CMXEV['pitch'] or _c in _CMXEV['vib']:
+            # ...times the controller matrix's PITCH (ctrlmatrix: a source other
+            # than the bend into pitch, in semitones), each change a ratio
+            # event; and its VIBRATO (LFO1 pitch depth from aftertouch, a CC, the
+            # bend: a gesture on a note already sounding) as a sine on the same
+            # stream, a point a block wherever its depth is up -- the bend
+            # row's phase runs on across blocks, so its steps do not click
+            _mev = [(_t, 2.0 ** (_s / 12.0)) for _t, _s in _CMXEV['pitch'].get(_c, ())]
+            if _c in _CMXEV['vib']:
+                _vev = _CMXEV['vib'][_c]
+                _pv = 0.0
+                _vi = 0
+                _psemi = 0.0
+                _pit = _CMXEV['pitch'].get(_c, ())
+                _pj = 0
+                _was = False
+                for _kb in range(nblk):
+                    _tb = (_kb + 0.5) * _bdt2
+                    while _vi < len(_vev) and _vev[_vi][0] <= _tb:
+                        _pv = _vev[_vi][1]; _vi += 1
+                    while _pj < len(_pit) and _pit[_pj][0] <= _tb:
+                        _psemi = _pit[_pj][1]; _pj += 1
+                    if _pv <= 0.0:
+                        if _was:                # back to the plain pitch as it stops
+                            _mev.append((_kb * _bdt2, 2.0 ** (_psemi / 12.0)))
+                        _was = False
+                        continue
+                    _was = True
+                    _hz = max(0.5, TREMOLO_MATRIX_HZ + _cmx_at('rate', _c, _tb))
+                    _mev.append((_kb * _bdt2, 2.0 ** ((_psemi * 100.0 + _pv * math.sin(2.0 * math.pi * _hz * _tb)) / 1200.0)))
+                _mev.sort()
+            _merged, _rb, _rm = [], 1.0, 1.0
+            for _t, _k, _r in sorted([(_t, 0, _r) for _t, _r in (_ev or ())] + [(_t, 1, _r) for _t, _r in _mev]):
+                if _k == 0:
+                    _rb = _r
+                else:
+                    _rm = _r
+                _merged.append((_t, _rb * _rm))
+            _ev = _merged
         _f = _first_on.get(_c)
         if _f is None or not _ev:
             continue                            # tuning a silent channel
@@ -2911,8 +3086,16 @@ def _prepare(path, tuner='hybrid440', sink=None):
     for _c, _sp in _spans.items():
         _v7, _v11, _fev = T.GM_DEFAULT_VOLUME, T.GM_DEFAULT_EXPRESSION, []
         _lv = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
-        for _t, _cc, _val in in_order(ccs.get(_c, [])):
-            if _cc == 7:
+        # ...and the controller matrix's AMPLITUDE (ctrlmatrix), a gain moved
+        # by the mod wheel, a CC or the pressure -- after the CC at its instant,
+        # whose change it follows. A channel with none: the CCs, in their order
+        _ag = 1.0
+        _evs = [(_t, 0, _i, _cc, _val) for _i, (_t, _cc, _val) in enumerate(in_order(ccs.get(_c, [])))]
+        _evs += [(_t, 1, _i, 'amp', _gv) for _i, (_t, _gv) in enumerate(_CMXEV['amp'].get(_c, ()))]
+        for _t, _k, _i, _cc, _val in (sorted(_evs) if len(_evs) and _c in _CMXEV['amp'] else _evs):
+            if _cc == 'amp':
+                _ag = _val
+            elif _cc == 7:
                 _v7 = _val
             elif _cc == 11:
                 _v11 = _val
@@ -2921,6 +3104,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
             else:
                 continue
             _g = ((_v7 / 127.0) * (_v11 / 127.0)) ** 2
+            if _ag != 1.0:
+                _g = _g * _ag
             if _g != _lv and any(_a < _t < _b for _a, _b in _sp):
                 _LROW[_c] = None
             _fev.append((_t, _g))
@@ -2974,6 +3159,29 @@ def _prepare(path, tuner='hybrid440', sink=None):
                         _one = np.ones(nblk + 1, np.float32)
                         _BLrows[_i] = _BLrows.get(_b, _one) * _BLrows.get(_w, _one)
                     wcombo[(_b, _w)] = _i
+    # THE MATRIX'S TREMOLO (ctrlmatrix: LFO1 AMPLITUDE DEPTH, moved by the mod
+    # wheel, a CC or the pressure): the channel's sidebands (tremolo.expand)
+    # at the peak depth, each riding a row of its own -- its parent's ratio
+    # and level times depth(t) / peak, the faders' glide -- so a held note's
+    # tremolo swells with the wheel. A row for each row its notes can ride:
+    # the channel's bend, breath and fader rows, and none (-1).
+    _CMX_TREM = {}
+    for _c, _tv in _CMXEV['tva'].items():
+        _pk = max(_v for _t, _v in _tv)
+        if _pk <= 0.0:
+            continue
+        _cur = onepole_edges([(_t, _v / _pk) for _t, _v in _tv], nblk, 0.0)
+        _map = {}
+        _wpar = [_v for (_wc, _wk), _v in wrow_of.items() if _wc == _c]      # a pipe organ's wind rows
+        for _par in set([brow_of.get(_c), _LROW.get(_c), -1] + list(bbrow_of.get(_c, ())) + _wpar):
+            if _par is None:
+                continue
+            _r = (BRrows[_par] if _par >= 0 else np.ones(nblk, np.float32)).astype(np.float32)
+            _cc = (BCrows[_par] if _par >= 0 else np.zeros(nblk))
+            _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _BLrows[_i] = ((_BLrows[_par] if _par in _BLrows else 1.0) * _cur).astype(np.float32)
+            _map[_par] = _i
+        _CMX_TREM[_c] = (_pk, _map)
     BR = np.ascontiguousarray(np.array(BRrows if BRrows else [[1.0]], np.float32))
     BC = np.ascontiguousarray(np.array(BCrows if BCrows else [[0.0]], np.float64))
     BL = None
@@ -3861,6 +4069,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _CAB_CH = {}
     _EFXEQ_CH = {}      # a part's insertion-effect EQ, after its valve: {ch: eq}
     _TREM_CH = {}
+    # ...the controller matrix's (above): a GM vibrato's rate, its rows' map
+    for _c, (_pk, _map) in _CMX_TREM.items():
+        # ...at the LFO1 rate in force where its depth peaks (a sideband's
+        # offset is fixed for the note: a rate that moved mid-note would move
+        # it, which nothing here does)
+        _tpk = max(_CMXEV['tva'][_c], key=lambda e: e[1])[0]
+        _TREM_CH[_c] = (max(0.5, TREMOLO_MATRIX_HZ + _cmx_at('rate', _c, _tpk)), _pk, False, 0.0, None, _map)
     # The harmonium's Tremolo stop: channel -> (rate, depth, stereo), and the
     # row spans of the notes that sounded with it drawn. Per NOTE, because it
     # is a stop and not a panel knob -- tremolo.expand takes the row mask.

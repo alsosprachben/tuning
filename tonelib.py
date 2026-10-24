@@ -11924,6 +11924,38 @@ class KickDrumProperties(KitDrumProperties):
     initial_gain = 0.308157
 
 
+class JazzKickProperties(KickDrumProperties):
+    """The JAZZ set's Jazz Kick 1 (SC-88 Pro PC 33, key 36): a jazz bass drum,
+    both heads on and open, tuned up to ~70 Hz -- a round boom that sings,
+    not the studio kick's thud. FITTED (examples/perc_fit.py jazz_kick1) to
+    soneproject's kit recorded in a jazz bar (Freesound pack 25895, CC0;
+    sources.md: jazz_kit_soneproject), the ~70 Hz tuning's strokes."""
+    DRUM_MODES = ((0.5768, -11.1, 34), (1.0190, 0.0, 63), (1.5285, -11.7, 87), (2.3264, -26.8, 64), (2.6628, -19.6, 115), (3.0858, -30.6, 97))
+    slow_share = 0.000211464
+    slow_dbs = 0.00250793
+    click_cal_db = 9.59318
+    click_dbs = 251.706
+    click_stroke_slope = 1.4785
+    chiff_volume = 0.00101516
+    chiff_width = 0.0108019
+    chiff_bandwidth = 0.0196259
+    sustain_jitter = 0.00687498
+    band_trim_db = ((44, 0.3), (88, -0.3), (177, 1.5), (354, 8.6), (707, -9.7), (1414, -4.9), (2828, 0.1), (5657, 1.5), (11314, 3.0))
+    initial_gain = 0.370486      # level with Standard's 36 (examples/drumset_check.py 32: loudest 150 ms)
+
+
+class JazzKick2Properties(KickDrumProperties):
+    """The JAZZ set's Jazz Kick 2 (key 35): the same kit's bass drum at its
+    lower tuning, ~47 Hz: its modes measured (examples/perc_fit.py jazz_kick2
+    --modes), its strike the Standard kick's, fitted close-miked. Fitted to
+    the jazz-bar takes the strike ran wild -- the click +53 dB, the trims +31
+    dB under 200 Hz and -25 over 700: a Zoom H1 out in the room, the bar's
+    boom and its air in every take -- so only what the room leaves alone is
+    taken from them: the drum's pitch and modes."""
+    DRUM_MODES = ((0.6583, -29.0, 24), (0.7753, -14.9, 29), (0.8923, -3.4, 34), (1.0240, 0.0, 39), (1.6530, -13.2, 50), (2.0773, -15.1, 57), (2.3845, -19.1, 102), (3.1598, -24.1, 86), (3.9643, -28.3, 100), (4.5202, -31.1, 83))
+    initial_gain = 0.265321      # level with Standard's 35 (examples/drumset_check.py 32: loudest 150 ms)
+
+
 # --- Struck bars and plates (GM 8-15) --------------------------------------
 # All eight of these shared one generic MalletProperties, whose inharmonicity put
 # the second partial at 2.02x the first -- essentially a harmonic series, which is
@@ -13137,6 +13169,47 @@ class SnareDrum2Properties(AcousticSnareProperties):
     # 100): where FluidR3, GeneralUser GS and MuseScore General all keep their
     # 40 against their 38 (examples/kit_levels.py's reading)
     initial_gain = 0.214662
+
+
+class JazzSnareProperties(AcousticSnareProperties):
+    """The JAZZ set's Jazz Snare 1 (SC-88 Pro PC 33, key 38): a jazz snare,
+    tuned up -- its modes ~165, 250, 360, 465, 575 Hz, the 250 on top -- the
+    wires ~15 dB under the body. FITTED (examples/perc_fit.py jazz_snare1) to
+    soneproject's kit in a jazz bar (Freesound pack 25895, CC0)."""
+    DRUM_MODES = ((1.1297, -10.1, 133), (1.5212, 0.0, 111), (1.6802, -17.9, 170), (2.1941, -7.7, 120), (2.6549, -16.4, 212), (2.8262, -10.8, 71), (3.6215, -9.9, 183), (4.2210, -20.6, 155), (4.4371, -21.3, 159), (4.6288, -16.8, 74), (4.9836, -12.9, 119), (5.2120, -20.4, 141), (5.6158, -15.2, 123), (6.2479, -21.3, 138), (7.0228, -21.1, 141), (7.6427, -22.3, 184))
+    slow_share = 0.0227353
+    slow_dbs = 53.5543
+    click_cal_db = 5.43355
+    click_dbs = 135.752
+    click_stroke_slope = 0.0569184
+    chiff_volume = 3.75358
+    chiff_width = 0.0487246
+    chiff_bandwidth = 0.284281
+    sustain_jitter = 0.0516439
+    band_trim_db = ((177, 10.5), (354, -3.1), (707, -10.1), (1414, -3.6), (2828, 0.4), (5657, 3.3), (11314, 2.7))
+    initial_gain = 0.243082      # level with Standard's 38 (examples/drumset_check.py 32: loudest 150 ms)
+
+
+class JazzSnare2Properties(AcousticSnareProperties):
+    """The JAZZ set's Jazz Snare 2 (key 40; on the SC-88 Pro's Standard 1 also
+    key 106, "[88] Jazz Snare 2"): the same snare fatter and darker, its 174
+    Hz mode on top and the wires 7-8 dB further down, as slackened: its modes
+    measured (examples/perc_fit.py jazz_snare2 --modes), its strike Jazz Snare
+    1's with the wires' noise 7.5 dB lower -- the takes' difference (3-10 kHz
+    re 100-600 Hz: -22.7 against -15.2 dB). Fitted whole, it stuck at 12.3
+    dB: the room under its 174 Hz mode."""
+    DRUM_MODES = ((0.9978, 0.0, 119), (1.4270, -10.7, 125), (1.9143, -15.9, 185), (2.0690, -7.3, 105), (2.6723, -9.3, 106), (3.3104, -12.2, 136), (4.0143, -22.0, 113), (4.3855, -18.1, 107), (4.5789, -18.8, 93), (5.2905, -22.0, 98), (5.5148, -26.0, 85), (5.9286, -23.0, 128), (6.5551, -21.3, 121), (7.2203, -25.9, 114), (8.6164, -28.7, 137))
+    slow_share = 0.0227353
+    slow_dbs = 53.5543
+    click_cal_db = 5.43355
+    click_dbs = 135.752
+    click_stroke_slope = 0.0569184
+    chiff_width = 0.0487246
+    chiff_bandwidth = 0.284281
+    sustain_jitter = 0.0516439
+    band_trim_db = ((177, 10.5), (354, -3.1), (707, -10.1), (1414, -3.6), (2828, 0.4), (5657, 3.3), (11314, 2.7))
+    chiff_volume = 1.58287
+    initial_gain = 0.146472      # level with Standard's 40 (examples/drumset_check.py 32: loudest 150 ms)
 
 
 class TambourineProperties(NoisyPercussionMixin, KitDrumProperties):
@@ -16462,6 +16535,27 @@ class MaracasProperties(ShakenNoiseProperties):
     settle_s = 0.2915
     settle_db = 40.17
     initial_gain = 0.077736      # held at the impact maracas's level where it is played, -30.7 dB (velocity 100, a 0.22 s note -- the recorded stroke's -- its loudest 150 ms); a 1.5 s shake now 4.0 dB under it
+
+
+class ShakerProperties(ShakenNoiseProperties):
+    """GS key 82, Shaker (the SC-55's, past GM's keys): a shaker -- seeds or
+    shot in a closed tube, shaken once -- as shaped noise, FITTED
+    (examples/perc_fit.py shaker) to Camo's shaker in VSCO 2 CE (eight single
+    shakes, CC0). Its start the maracas', which it is kin to.
+
+    ONE SHAKE, A FIXED BURST (shake_frac 0): the maracas' shake lasts half
+    its note, but a shaker on a drum key is a single shake -- held for half a
+    0.3 s note it rang flat for 150 ms and then dropped, 12.7 dB off the
+    takes' 10 ms envelope (Ben: "it should fade with a decay, as the
+    recording seems to"); its fitted 32 ms, then the decay, 3.6 dB off."""
+    shake_frac = 0.0
+    shake_min_s = 0.0322
+    noise_bands = ((178, -33.4), (224, -44.3), (283, -39.9), (356, -42.4), (449, -39.6), (566, -42.3), (713, -42.1), (898, -41.7), (1131, -40.5), (1425, -38.9), (1796, -34.1), (2263, -82.0), (2851, -35.2), (3592, -3.0), (4525, -2.9), (5702, -8.1), (7184, -11.2), (9051, -13.3), (11404, -7.5), (14368, -37.2))
+    rise_s = 0.00567709  
+    settle_s = 0.0889877  
+    settle_db = 14.7949  
+    initial_gain = 0.172235      # level with the maracas (velocity 100, a 0.22 s note, its loudest 150 ms: -39.9 dB)
+    band_trim_db = ((177, 3.7), (354, -5.0), (707, -1.8), (1414, -0.7), (2828, -1.7), (5657, 1.0), (11314, 4.5))
 
 
 class VibraslapProperties(RattleProperties):

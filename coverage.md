@@ -49,7 +49,8 @@ so it plays on the Messenger itself.
 
 ## Channel 10: the percussion note map
 
-59 notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and
+105 notes: GM's 35 to 81, GS's 25 and 82-87, and the SC-88 Pro's kicks and snares on 0-16
+and 97-122. Iowa's percussion pages carry cymbals, crotales and
 hand percussion and **no drum kit at all** -- no snare, no bass drum, no
 toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's
 DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and
@@ -59,11 +60,29 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 
 | rating | notes | share |
 |---|---|---|
-| 3 specific, theory + ear | 2 | 3% |
-| 4 specific, validated against a target | 57 | 97% |
+| 3 specific, theory + ear | 2 | 2% |
+| 4 specific, validated against a target | 103 | 98% |
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 0 | Std 1 Kick 1 | `KickDrum` | **4** | SC-88 Pro's Std 1 Kick 1: Standard's key 36 |
+| 1 | Std 1 Kick 2 | `KickDrum` | **4** | SC-88 Pro's Std 1 Kick 2: Standard's key 35 |
+| 2 | Std 2 Kick 1 | `KickDrum` | **4** | SC-88 Pro's Std 2 Kick 1: Standard's key 36 |
+| 3 | Std 2 Kick 2 | `KickDrum` | **4** | SC-88 Pro's Std 2 Kick 2: Standard's key 35 |
+| 4 | Kick Drum 1 | `KickDrum` | **4** | SC-88 Pro's Kick Drum 1: Standard's key 36 |
+| 5 | Kick Drum 2 | `KickDrum` | **4** | SC-88 Pro's Kick Drum 2: Standard's key 35 |
+| 6 | Jazz Kick 1 | `JazzKick` | **4** | SC-88 Pro's Jazz Kick 1: set 32's key 36 |
+| 7 | Jazz Kick 2 | `JazzKick2` | **4** | SC-88 Pro's Jazz Kick 2: set 32's key 35 |
+| 8 | Room Kick 1 | `KickDrum` | **4** | SC-88 Pro's Room Kick 1: set 8's key 36 |
+| 9 | Room Kick 2 | `KickDrum` | **4** | SC-88 Pro's Room Kick 2: set 8's key 35 |
+| 10 | Power Kick 1 | `MondoKick` | **4** | SC-88 Pro's Power Kick 1: set 16's key 36 |
+| 11 | Power Kick 2 | `KickDrum` | **4** | SC-88 Pro's Power Kick 2: set 16's key 35 |
+| 12 | Electric Kick 2 | `KickDrum` | **4** | SC-88 Pro's Electric Kick 2: set 24's key 35 |
+| 13 | Electric Kick 1 | `ElectronicKick` | **4** | SC-88 Pro's Electric Kick 1: set 24's key 36 |
+| 14 | TR-808 Kick | `TR808Kick` | **4** | SC-88 Pro's TR-808 Kick: set 25's key 36 |
+| 15 | TR-909 Kick | `TR909Kick` | **4** | SC-88 Pro's TR-909 Kick: set 30's key 36 |
+| 16 | Dance Kick | `TR909Kick2` | **4** | SC-88 Pro's Dance Kick: set 30's key 35 |
+| 25 | Snare Roll | `AcousticSnare` | **4** | the SNARE ROLL, held: the Standard snare at 13.5 strokes a second, each pressed into a buzz of six bounces (~82 a second), the hands alternating, the first stroke and the last accented -- MEASURED on two CC0 rolls (lucianodato's, annannienann's; percussion_map.PERCUSSION_ROLL). Ben: roll sounds great |
 | 27 | High Q | `SfxHighQ` | **3** | GS's High Q, the SFX set's 39 (SfxHighQ): the 808 engine's resonator snapped down 5 octaves, fitted to GeneralUser GS's own sample's track -- stepped: the renderer holds a pitch a 11.6 ms block, and the sweep falls 4.5 octaves in 45 ms |
 | 28 | Slap | `SfxSlap` | **4** | GS's Slap, the SFX set's 40: a palm slap, fitted to Freesound slaps (CC0, examples/perc_fit.py sfx_slap) |
 | 29 | Scratch Push | `SfxScratchPush` | **4** | GS's Scratch Push, the SFX set's 41: a turntable's groove (Freesound, CC0), its colour bending up a fifth |
@@ -119,10 +138,38 @@ surdo (CC0) and the cuica (reinsamba, CC-BY).
 | 79 | Open Cuica | `Cuica` | **4** | the FRICTION drum, on reinsamba's 13 close, dry takes (freesound pack 1339, CC-BY): rubbed UP into ~355 Hz from ~305, a 0.15 s gesture (gated: a one-tick note sounds), nearly a sine (h2 -14, h3 -27 dB) -- read first off a stairwell's takes, which had smeared it bright; at the GM sets' level against the snare |
 | 80 | Mute Triangle | `Triangle` | **4** | Iowa triangles, 6" and 8" |
 | 81 | Open Triangle | `Triangle` | **4** | as 80, undamped |
+| 82 | Shaker | `Shaker` | **4** | the SHAKER as shaped noise, fitted to Camo's shaker in VSCO 2 CE (eight single shakes, CC0; examples/perc_fit.py shaker, 10.4 -> 2.6 dB): one fixed shake of 32 ms and its decay, 3.6 dB off the takes' envelope, colour within 0.5 dB 224 Hz-11 kHz, level with the maracas. Ben: sounds perfect now |
 | 84 | Belltree | `Crotale` | **4** | the measured crotales, cascaded -- 22 of them over 30 units |
 | 85 | Castanets | `Castanets` | **4** | Iowa castanets |
 | 86 | Mute Surdo | `SurdoMute` | **4** | as 87, the hand: the takes' muted strokes ring as the open ones for 0.2 s, then fall 25-30 dB in 40-60 ms (read in the head's own band) -- the open drum gated; the softer strike fitted, 2.1 dB |
 | 87 | Open Surdo | `SurdoOpen` | **4** | plotzki's samba surdo (freesound 36127, CC0), its open strokes: 21 modes from 66.7 Hz (a 40-49 Hz hump left out), fitted to 0.4 s -- the take's other drum rings past it -- 8.4 -> 3.2 dB |
+| 97 | Std 1 Snare 1 | `AcousticSnare` | **4** | SC-88 Pro's Std 1 Snare 1: Standard's key 38 |
+| 98 | Std 1 Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's Std 1 Snare 2: Standard's key 40 |
+| 99 | Std 2 Snare 1 | `AcousticSnare` | **4** | SC-88 Pro's Std 2 Snare 1: Standard's key 38 |
+| 100 | Std 2 Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's Std 2 Snare 2: Standard's key 40 |
+| 101 | Snare Drum 2 | `SnareDrum2` | **4** | SC-88 Pro's Snare Drum 2: Standard's key 40 |
+| 102 | Std 1 Snare 1 | `AcousticSnare` | **4** | SC-88 Pro's Std 1 Snare 1: Standard's key 38 |
+| 103 | Std 1 Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's Std 1 Snare 2: Standard's key 40 |
+| 104 | Std 1 Snare 3 | `AcousticSnare` | **4** | SC-88 Pro's Std 1 Snare 3: Standard's key 38 |
+| 105 | Jazz Snare 1 | `JazzSnare` | **4** | SC-88 Pro's Jazz Snare 1: set 32's key 38 |
+| 106 | Jazz Snare 2 | `JazzSnare2` | **4** | SC-88 Pro's Jazz Snare 2: set 32's key 40 |
+| 107 | Room Snare 1 | `AcousticSnare` | **4** | SC-88 Pro's Room Snare 1: set 8's key 38 |
+| 108 | Room Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's Room Snare 2: set 8's key 40 |
+| 109 | Power Snare 1 | `GatedSnare` | **4** | SC-88 Pro's Power Snare 1: set 16's key 38 |
+| 110 | Power Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's Power Snare 2: set 16's key 40 |
+| 111 | Gated Snare | `GatedSnare` | **4** | SC-88 Pro's Gated Snare: set 16's key 38 |
+| 112 | Dance Snare 1 | `TR909Snare` | **4** | SC-88 Pro's Dance Snare 1: set 30's key 38 |
+| 113 | Dance Snare 2 | `TR909Snare2` | **4** | SC-88 Pro's Dance Snare 2: set 30's key 40 |
+| 114 | Disco Snare | `TR909Snare2` | **4** | SC-88 Pro's Disco Snare: set 30's key 40 |
+| 115 | Electric Snare 2 | `GatedSnare` | **4** | SC-88 Pro's Electric Snare 2: set 24's key 40 |
+| 116 | Electric Snare | `SimmonsSnare` | **4** | SC-88 Pro's Electric Snare: set 24's key 38 |
+| 117 | Electric Snare 3 | `GatedSnare` | **4** | SC-88 Pro's Electric Snare 3: set 24's key 40 |
+| 118 | TR-707 Snare 1 | `TR707Snare` | **4** | SC-88 Pro's TR-707 Snare 1: set 29's key 38 |
+| 119 | TR-808 Snare 1 | `TR808Snare` | **4** | SC-88 Pro's TR-808 Snare 1: set 25's key 38 |
+| 120 | TR-808 Snare 2 | `SnareDrum2` | **4** | SC-88 Pro's TR-808 Snare 2: set 25's key 40 |
+| 121 | TR-909 Snare 1 | `TR909Snare` | **4** | SC-88 Pro's TR-909 Snare 1: set 30's key 38 |
+| 122 | TR-909 Snare 2 | `TR909Snare2` | **4** | SC-88 Pro's TR-909 Snare 2: set 30's key 40 |
+| 123 | Rap Snare | `TR808Snare` | **4** | SC-88 Pro's Rap Snare: set 25's key 38 |
 
 ## Drum sets: the program on a drum channel
 
@@ -137,7 +184,7 @@ Standard. THE GOAL: every one built.
 
 | PC | SC-8850 | SC-88Pro | SC-88 | SC-55 | here | keys rated | median |
 |---|---|---|---|---|---|---|---|
-| 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 59 | **4** |
+| 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 105 | **4** |
 | 2 | STANDARD 2 | STANDARD 2 | STANDARD 2 | -- | **not built: plays Standard** |  |  |
 | 3 | STANDARD L/R | STANDARD 3 | -- | -- | **not built: plays Standard** |  |  |
 | 9 | ROOM | ROOM | ROOM | ROOM | built: 6 keys of its own | 6 | **4** |
@@ -154,7 +201,7 @@ Standard. THE GOAL: every one built.
 | 29 | TR-606 | TR-606 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 30 | TR-707 | TR-707 | -- | -- | built: 19 keys of its own | 19 | **4** |
 | 31 | TR-909 | TR-909 | -- | -- | built: 19 keys of its own | 19 | **4** |
-| 33 | JAZZ | JAZZ | JAZZ | JAZZ | Standard, by design |  |  |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 4 keys of its own | 4 | **4** |
 | 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
 | 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 3 keys of its own | 3 | **4** |
 | 42 | BRUSH 2 | -- | -- | -- | **not built: plays Standard** |  |  |
@@ -344,6 +391,15 @@ Standard. THE GOAL: every one built.
 | 56 | 808 Cowbell | `TR808Cowbell` | **4** | the 808's cowbell, as Roland's set borrows it |
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the 808's maracas |
 | 75 | 808 Claves | `TR808Claves` | **4** | the 808's claves |
+
+### 32 Jazz
+
+| # | note | class | | notes |
+|---|---|---|---|---|
+| 35 | Jazz Kick 2 | `JazzKick2` | **4** | JAZZ KICK 2: the kit's ~47 Hz tuning: its modes measured, the Standard kick's strike (fitted whole to the room-laden takes, the click ran to +53 dB and the trims to +31/-25) |
+| 36 | Jazz Kick 1 | `JazzKick` | **4** | JAZZ KICK 1: the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0): its modes measured, its strike fitted (examples/perc_fit.py jazz_kick1, 8.4 -> 7.9 dB; the takes a Zoom H1 out in the room, so the score is the room's as much as the drum's). Ben: the Jazz set sounds great |
+| 38 | Jazz Snare 1 | `JazzSnare` | **4** | JAZZ SNARE 1: the kit's bright snare, 251 Hz on top, the wires ~15 dB under the body: modes, strike and noise fitted (7.2 -> 4.3 dB) |
+| 40 | Jazz Snare 2 | `JazzSnare2` | **4** | JAZZ SNARE 2: the same snare darker, 174 Hz on top: its modes measured, Snare 1's strike with the wires 7.5 dB lower (the takes' difference). Also the SC-88 Pro's Standard key 106 |
 
 ### 40 Brush
 
@@ -1340,7 +1396,8 @@ Rated on the voices' scale: 4 validated against a target (a recording of the dev
 
 | effect | | notes |
 |---|---|---|
-| Reverb (system) | **3** | the macro picks one of our physical rooms by what it is for (Room 1-3 studio, chamber, chapel; Hall 1 CHAMBER -- validated against Tokei on the SC-88Pro, a 4 for Hall 1: boomy in our hall, right in the chamber (Ben); Hall 2 church), its level and time scale the tail from the macro's own preset; CC91 a distance. Character, Pre-LPF, pre-delay, the delay macros' echo and a per-drum reverb send not yet |
+| Reverb (system) | **3** | the macro picks one of our physical rooms by what it is for, small to large as Roland's run: Room 1-3 studio, chamber, a larger chamber; Hall 1 our concert hall, Hall 2 a grand one (Musikverein-scale); Plate an EMT 140 plate and Delay / Panning Delay a 100 ms echo, on the studio's walls (roomtail.device_ir) -- heard in examples/gs_reverb_demo.py (Ben: those all sound good). Its level and time scale the tail; CC91 a distance. Tokei was validated in the chamber under Hall 1 (now our hall: Ben chose the studio for it). Character, Pre-LPF, pre-delay and a per-drum reverb send not yet |
+| Controller matrix (GS 40 2x, GM2 09 0s) | **3** | ctrlmatrix.py: GS's six sources (mod, bend, both aftertouches, the assignable CC1/CC2) and GM2's (channel and poly pressure, any CC) into amplitude (the fader's rows; an organ's gates), pitch (the bend row), cutoff (brightness at onset), LFO pitch depth (a sine on the bend row, so a held note's aftertouch vibrato moves), LFO amplitude depth (sidebands on rows of their own) and LFO rate -- measured in examples/ctrlmatrix_demo.py (Ben: phase 1 sounds good). The mod wheel's own vibrato (GS's 47-cent default) held out of files (TUNING_MOD_VIBRATO), LFO filter depth and live not yet |
 | Chorus (system) | **3** | chorus.gs_copies: Roland's eight macros, a line swept by one LFO, read at two outputs in opposite phase, fed back; laws GM 2's (rate, depth, feedback), the delay's chosen (0.2 ms a step); the wet share held as CC93's. To reverb / to delay, per-drum chorus sends, not yet |
 | Delay (system) | **3** | gsdelay.py: Roland's three taps, time table, ten macros, feedback through the center; CC94 (in a GS file) and the drum keys' sends; level laws chosen (linear over 127). Delay to reverb not yet a send of its own |
 | EQ (system) | **2** | the SC-88's two shelves at 200/400 Hz and 3/6 kHz, per part on/off, first-order (the order chosen) |
@@ -1400,7 +1457,7 @@ Read per note at its onset (the files automate the level, the mix, the sends); a
 | Rotary Multi | **3** | the Rotary with its OD (the valve) and EQ before the rotors; heard in its demo (Ben, 2026-10-21: those sound awesome) |
 | GTR Multi 1 | **3** | compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); heard in its demo, +20.6 dB over the dry guitar at the defaults (Ben, 2026-10-22: sounds good; louder, but not crazy loud) |
 | GTR Multi 2 | **4** | compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built |
-| GTR Multi 3 | **3** | as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: "Those all sound great") |
+| GTR Multi 3 | **4** | as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: "Those all sound great"); SENSATIO's six overdriven guitars through it, the wah on CC16 (the file's control source), once port B's exclusive reached their parts (Ben, 2026-10-23: "sounds incredible. The effects are insane in it") |
 | Clean Gt Multi 1 | **3** | compressor, EQ, chorus/flanger and delay, as the guitar multis'; heard on our riff (Ben: "sound great") |
 | Clean Gt Multi 2 | **3** | an auto wah (efxfilter), the EQ, chorus/flanger and its delay; heard on a guitar |
 | Bass Multi | **3** | compressor, OD, EQ, chorus/flanger, the 4x10 bass cabinet; heard on our riff (Ben: "sound great") |
@@ -1509,7 +1566,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-418 classes.
+423 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -1597,15 +1654,19 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
-          - `AcousticSnare` [NoisyPercussionMixin] -- 38 Acoustic Snare (4), set 127 38 Acoustic Snare Drum (4)
+          - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (4), set 127 38 Acoustic Snare Drum (4)
+            - `JazzSnare2` -- 106 Jazz Snare 2 (4), set 32 40 Jazz Snare 2 (4)
+            - `JazzSnare` -- 105 Jazz Snare 1 (4), set 32 38 Jazz Snare 1 (4)
             - `SideStick` -- 37 Side Stick (4), set 127 37 Rim Shot (4)
-            - `SnareDrum2` -- 40 Snare Drum 2 (4)
+            - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (4), 110 Power Snare 2 (4), 120 TR-808 Snare 2 (4)
               - `BrushTap` -- set 40 38 Brush Tap (4)
                 - `BrushSlap` -- set 40 39 Brush Slap (4)
               - `ConcertSnare` -- set 48 38 Concert SD (4), set 48 40 Concert SD (4)
-          - `KickDrum` -- 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
+          - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (4), 9 Room Kick 2 (4), 11 Power Kick 2 (4), 12 Electric Kick 2 (4), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4)
-            - `MondoKick` [LiveRoom] -- set 16 36 MONDO Kick (4)
+            - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4)
+            - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4)
+            - `MondoKick` [LiveRoom] -- 10 Power Kick 1 (4), set 16 36 MONDO Kick (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4), set 127 67 High Agogo (4)
               - `MelodicAgogoHigh` [PlayedAtPitchMixin] -- GM 113 Agogo (4)
@@ -1648,7 +1709,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SynthDrum`
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
           - `Simmons` [ModeDecays]
-            - `ElectronicKick` -- set 24 36 Elec BD (4)
+            - `ElectronicKick` -- 13 Electric Kick 1 (4), set 24 36 Elec BD (4)
             - `ElectronicTom`
               - `ElectronicTom41` -- set 24 41 Elec Low Tom 2 (4)
               - `ElectronicTom43` -- set 24 43 Elec Low Tom 1 (4)
@@ -1656,7 +1717,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ElectronicTom47` -- set 24 47 Elec Mid Tom 1 (4)
               - `ElectronicTom48` -- set 24 48 Elec Hi Tom 2 (4)
               - `ElectronicTom50` -- set 24 50 Elec Hi Tom 1 (4)
-            - `SimmonsSnare` -- set 24 38 Elec SD (4), set 127 40 Electronic Snare Drum (4)
+            - `SimmonsSnare` -- 116 Electric Snare (4), set 24 38 Elec SD (4), set 127 40 Electronic Snare Drum (4)
           - `TR808` [ModeDecays]
             - `CR78`
               - `CR78Claves` -- set 27 75 CR-78 Claves (4)
@@ -1691,7 +1752,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR707Kick` -- set 29 36 707 Kick 1 (4)
                 - `TR707Kick2` -- set 29 35 707 Kick 2 (4)
               - `TR707Rim` -- set 29 37 707 Rim Shot (4)
-              - `TR707Snare` -- set 29 38 707 Snare 1 (4)
+              - `TR707Snare` -- 118 TR-707 Snare 1 (4), set 29 38 707 Snare 1 (4)
                 - `TR707Snare2` -- set 29 40 707 Snare 2 (4)
               - `TR707Tom` -- set 29 41 707 Low Tom 2 (4), set 29 43 707 Low Tom 1 (4)
                 - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
@@ -1704,19 +1765,19 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR808MidConga` -- set 25 63 808 Mid Conga (4), set 27 63 808 Mid Conga (4), set 28 63 808 Mid Conga (4)
             - `TR808Cowbell` -- set 25 56 808 Cowbell (4), set 29 56 808 Cowbell (4), set 30 56 808 Cowbell (4)
             - `TR808Cymbal` -- set 25 49 808 Cymbal (4), set 27 49 808 Cymbal (4), set 28 49 808 Cymbal (4)
-            - `TR808Kick` -- set 25 36 808 Bass Drum (4)
+            - `TR808Kick` -- 14 TR-808 Kick (4), set 25 36 808 Bass Drum (4)
             - `TR808Maracas` -- set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4)
             - `TR808RimShot` -- set 25 37 808 Rim Shot (4)
-            - `TR808Snare` -- set 25 38 808 Snare Drum (4)
+            - `TR808Snare` -- 119 TR-808 Snare 1 (4), 123 Rap Snare (4), set 25 38 808 Snare Drum (4)
             - `TR808Tom` -- set 25 41 808 Low Tom 2 (4), set 25 43 808 Low Tom 1 (4)
               - `TR808HiTom` -- set 25 48 808 Hi Tom 2 (4), set 25 50 808 Hi Tom 1 (4)
               - `TR808MidTom` -- set 25 45 808 Mid Tom 2 (4), set 25 47 808 Mid Tom 1 (4)
             - `TR909`
-              - `TR909Kick` -- set 30 36 909 Kick 1 (4)
-                - `TR909Kick2` -- set 30 35 909 Kick 2 (4)
+              - `TR909Kick` -- 15 TR-909 Kick (4), set 30 36 909 Kick 1 (4)
+                - `TR909Kick2` -- 16 Dance Kick (4), set 30 35 909 Kick 2 (4)
               - `TR909Rim` -- set 30 37 909 Rim (4)
-              - `TR909Snare` -- set 30 38 909 Snare 1 (4)
-                - `TR909Snare2` -- set 30 40 909 Snare 2 (4)
+              - `TR909Snare` -- 112 Dance Snare 1 (4), 121 TR-909 Snare 1 (4), set 30 38 909 Snare 1 (4)
+                - `TR909Snare2` -- 113 Dance Snare 2 (4), 114 Disco Snare (4), 122 TR-909 Snare 2 (4), set 30 40 909 Snare 2 (4)
               - `TR909Tom` -- set 30 41 909 Low Tom 2 (4)
                 - `TR909HiTom` -- set 30 48 909 Hi Tom 2 (4)
                   - `TR909HiTom1` -- set 30 50 909 Hi Tom 1 (4)
@@ -1740,9 +1801,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `Maracas` -- 70 Maracas (4), set 127 70 Maracas (4)
         - `SfxFootstep` -- set 56 56 Footsteps1 (4), set 56 57 Footsteps2 (4), set 127 80 Footsteps 1 (4), set 127 81 Footsteps 2 (4)
         - `SfxPunch` -- set 56 54 Punch (4), set 127 78 Punch (4)
+        - `Shaker` -- 82 Shaker (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (4)
-        - `GatedSnare` -- set 16 38 Gated SD (4), set 24 40 Gated SD (4)
+        - `GatedSnare` -- 109 Power Snare 1 (4), 111 Gated Snare (4), 115 Electric Snare 2 (4), 117 Electric Snare 3 (4), set 16 38 Gated SD (4), set 24 40 Gated SD (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4)
         - `Claves` -- 75 Claves (4), set 127 75 Claves (4)

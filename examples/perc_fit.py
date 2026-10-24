@@ -101,6 +101,9 @@ LOW_RING = (48, 49, 50)
 # Their envelope fitted here, their spectrum by --trim3
 BURST = (54, 56, 76, 77)
 BURST_PARAMS = ("rise_s", "settle_s", "settle_db", "shake_min_s")
+_JAZZ = os.path.expanduser("~/Documents/refs/jazz_kit_soneproject/wav/")
+_OCT31 = (31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
+_JAZZ_T = ((0.000, 0.010), (0.010, 0.030), (0.030, 0.060), (0.060, 0.120), (0.12, 0.25), (0.25, 0.40))
 INSTS = {
     "cowbell":   dict(note=56, glob="Percussion/Cowbell1_Hit_v*_Sum.wav",
                       groups=lambda p: {1: "soft", 2: "mid", 3: "mid", 4: "loud"}[_vtag(p)],
@@ -179,6 +182,30 @@ INSTS = {
                       # the chiff off: see tonelib.GuiroProperties
                       params=("harmonic_decay_db", "@noise_level", "strike_noise_dbs",
                               "@impact_ring", "@rasp_secs", "attack_time")),
+    # THE JAZZ SET (kit 32): soneproject's kit in a jazz bar (Freesound pack
+    # 25895, CC0; sources.md: jazz_kit_soneproject), a Zoom H1 in the room --
+    # so the takes' floor clipped (crash_fit.CLIP) and judged to 0.4 s. Its
+    # files group by their suffix: the kick at two tunings (-6 ~70 Hz, -7 ~46),
+    # the snare bright (-4/-5/-6) and dark (-9: its 174 Hz mode on top, the
+    # wires 7-8 dB further down). The clipped takes left out (exclude)
+    "jazz_kick1": dict(kit=32, exclude=('kick1fg-6', 'kick21a-6'), merge=0.12, max_modes=12, note=36, glob=_JAZZ + "kick*6.wav", groups=None,
+                       band=(40, 3000), floor=-35, flat=(500, 4000), edges=_OCT31, T=_JAZZ_T, clip=-60.0,
+                       params=DRUM_PARAMS),
+    "jazz_kick2": dict(kit=32, exclude=('kick2bg-7', 'kick2ea7'), merge=0.12, max_modes=12, note=35, glob=_JAZZ + "kick*7.wav", groups=None,
+                       band=(30, 3000), floor=-35, flat=(500, 4000), edges=_OCT31, T=_JAZZ_T, clip=-60.0,
+                       params=DRUM_PARAMS),
+    "jazz_snare1": dict(kit=32, exclude=('snare14g5',), merge=0.04, max_modes=16, note=38, glob=_JAZZ + "snare*[456].wav", groups=None,
+                        band=(120, 6000), floor=-30, flat=(1000, 12000), T=_JAZZ_T, clip=-60.0,
+                        params=DRUM_PARAMS),
+    "jazz_snare2": dict(kit=32, merge=0.04, max_modes=16, note=40, glob=_JAZZ + "snare4*9.wav", groups=None,
+                        band=(120, 6000), floor=-30, flat=(1000, 12000), T=_JAZZ_T, clip=-60.0,
+                        params=DRUM_PARAMS),
+    # GS key 82, Shaker: Camo's shaker in VSCO 2 CE, eight single shakes of
+    # 0.16-0.27 s (CC0), shaped noise as the maracas and cabasa (SHAKE_PARAMS,
+    # then --trim3 into its noise_bands)
+    "shaker":    dict(note=82, glob=_V1 + "varWood/Camo's Shaker/shake*.wav", groups=None,
+                      band=(1000, 16000), floor=-20, flat=(1000, 12000),
+                      hold=0.3, params=SHAKE_PARAMS),
     "bongo_lo":  dict(note=61, glob=_V1 + "drums/other/Bongos/LowBongo*.wav", groups=None,
                       band=(120, 6000), floor=-25, flat=(1000, 8000),
                       params=DRUM_PARAMS),
@@ -361,12 +388,16 @@ C.PARAMS = ("slow_share", "slow_dbs", "click_cal_db", "click_dbs",
 C.FLOOR = {"slow_share": 0.005, "click_stroke_slope": 0.05, "click_cal_db": 1.0}
 # where a class leaves a fitted knob at None (the module's default): a white
 # chiff's bandwidth starts narrow; an attack starts at the valve time a None
-# takes (tonelib: chiff_max_valve_time, 4 ms)
-C.START = {"chiff_bandwidth": 0.05, "attack_time": 0.004}
+# takes (tonelib: chiff_max_valve_time, 4 ms); a chiff's width, 10 ms
+C.START = {"chiff_bandwidth": 0.05, "attack_time": 0.004, "chiff_width": 0.01}
 
 
 def files(inst):
-    return sorted(glob.glob(os.path.join(REFS, INSTS[inst]["glob"])))
+    # ...less the takes a spec excludes (clipped ones: their harmonics are the
+    # converter's, and a fit chases them)
+    ex = INSTS[inst].get("exclude", ())
+    return sorted(p for p in glob.glob(os.path.join(REFS, INSTS[inst]["glob"]))
+                  if os.path.basename(p)[:-4] not in ex)
 
 
 def load(p):
@@ -420,6 +451,18 @@ def modes(inst, f0):
     pk = [i for i in b if A[i] >= A[(f > f[i] * 0.985) & (f < f[i] * 1.015)].max()]
     top = max(A[i] for i in pk)
     pk = [i for i in pk if A[i] > top + spec["floor"]]
+    # NEAR-DUPLICATES, merged (spec "merge": a ratio): a mode smeared by the
+    # stroke's glide, or a room's hump, reads as a run of peaks a percent
+    # apart -- the jazz kick's 40-44 Hz came out as seven "modes" -- and two
+    # steady copies of one mode beat. The strongest of each run is kept; then
+    # the strongest max_modes
+    mg = spec.get("merge")
+    if mg:
+        keep = []
+        for i in sorted(pk, key=lambda i: -A[i]):
+            if all(abs(f[i] / f[j] - 1.0) > mg for j in keep):
+                keep.append(i)
+        pk = sorted(keep[:spec.get("max_modes", len(keep))])
     out = []
     for i in pk:
         out.append((float(f[i] / f0), float(A[i] - top), mode_rate(loud, f[i])))
@@ -809,8 +852,7 @@ def trim3(inst, passes):
         setattr(cls, attr, pts)
         PM._RING_CLASSES.clear()
         s = open(path).read()
-        a = s.index("class %s(" % cls.__name__)
-        b = s.index("\n\n\n", a)
+        a, b = _class_block(s, cls.__name__)
         txt = "    %s = (" % attr + ", ".join("(%.0f, %.1f)" % p for p in pts) + ")"
         blk = s[a:b]
         if re.search(r"^    %s = " % attr, blk, re.M):
@@ -821,6 +863,19 @@ def trim3(inst, passes):
     print("model - rec  " + " ".join("%.0f:%+.1f" % (cf, -dd) for cf, dd in zip(C3, d)))
 
 
+def _class_block(src, cls):
+    """(start, end) of class CLS's block in tonelib.py's source: to its first
+    top-level line. Ending it at the next "\n\n\nclass" ran a class followed by
+    a comment banner (the Jazz kick 2, before the struck bars') on into the
+    next class, and its modes were written there."""
+    a = src.index("class %s(" % cls)
+    m = re.search(r"\n(?=[^\s\n])", src[a + 1:])
+    b = a + 1 + m.start() if m else len(src)
+    while src[b - 1] == "\n" and src[b - 2] == "\n":
+        b -= 1
+    return a, b - 1 if src[b - 1] == "\n" else b
+
+
 def write_fit(inst, spec, vals, trim):
     """--write: the fitted class attributes into tonelib.py, each replaced in
     the class's own block or added to it; band_trim_db the solved trim, ADDED
@@ -829,8 +884,7 @@ def write_fit(inst, spec, vals, trim):
     cls = inst_class(spec).__name__
     path = os.path.join(HERE, "tonelib.py")
     src = open(path).read()
-    a = src.index("class %s(" % cls)
-    b = src.index("\n\n\nclass ", a)
+    a, b = _class_block(src, cls)
     blk = src[a:b]
     for k, v in zip(C.PARAMS, vals):
         if k.startswith("@"):
@@ -858,8 +912,7 @@ def write_modes(spec, ms):
     cls = inst_class(spec).__name__
     path = os.path.join(HERE, "tonelib.py")
     src = open(path).read()
-    a = src.index("class %s(" % cls)
-    b = src.index("\n\n\nclass ", a)
+    a, b = _class_block(src, cls)
     blk = src[a:b]
     txt = "    DRUM_MODES = (%s)" % ", ".join("(%.4f, %.1f, %.0f)" % m for m in ms)
     if re.search(r"^    DRUM_MODES = ", blk, re.M):

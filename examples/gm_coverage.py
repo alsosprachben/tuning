@@ -320,8 +320,9 @@ def percussion_table():
     for n in PERC_RATED:
         ph[PERC_RATED[n][0]] += 1
     tot = len(PERC_RATED)
-    L.append("%d notes, 35 to 87. Iowa's percussion pages carry cymbals, crotales and"
+    L.append("%d notes: GM's 35 to 81, GS's 25 and 82-87, and the SC-88 Pro's kicks and snares on 0-16"
              % tot)
+    L.append("and 97-122. Iowa's percussion pages carry cymbals, crotales and")
     L.append("hand percussion and **no drum kit at all** -- no snare, no bass drum, no")
     L.append("toms, which is 9630 of that collection's 12781 percussion notes. DrumGizmo's")
     L.append("DRSKit (CC-BY 4.0), a recorded kit, fills the kick, the snare, the toms and")
@@ -416,6 +417,17 @@ KIT_RATED = {
         70: (4, "the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), "
              "a gate that swells, holds and cuts. Score 10.0"),
         75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
+    },
+    32: {
+        36: (4, "JAZZ KICK 1: the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0): "
+             "its modes measured, its strike fitted (examples/perc_fit.py jazz_kick1, 8.4 -> 7.9 dB; the takes "
+             "a Zoom H1 out in the room, so the score is the room's as much as the drum's). Ben: the Jazz set sounds great"),
+        35: (4, "JAZZ KICK 2: the kit's ~47 Hz tuning: its modes measured, the Standard kick's strike (fitted "
+             "whole to the room-laden takes, the click ran to +53 dB and the trims to +31/-25)"),
+        38: (4, "JAZZ SNARE 1: the kit's bright snare, 251 Hz on top, the wires ~15 dB under the body: "
+             "modes, strike and noise fitted (7.2 -> 4.3 dB)"),
+        40: (4, "JAZZ SNARE 2: the same snare darker, 174 Hz on top: its modes measured, Snare 1's strike with "
+             "the wires 7.5 dB lower (the takes' difference). Also the SC-88 Pro's Standard key 106"),
     },
     27: {
         36: (4, "CR-78 KICK 1: a bridged-T at 59 Hz, fitted to Bjornmossa's real CR-78 (CC BY; "
@@ -617,6 +629,30 @@ def _cm32l_rated():
 
 
 KIT_RATED[127] = _cm32l_rated()
+
+
+# GS'S OWN KEYS PAST GM'S (SC-55 p.70), as Standard plays them
+PERC_RATED[25] = (4, "the SNARE ROLL, held: the Standard snare at 13.5 strokes a second, each pressed into a "
+                     "buzz of six bounces (~82 a second), the hands alternating, the first stroke and the last "
+                     "accented -- MEASURED on two CC0 rolls (lucianodato's, annannienann's; "
+                     "percussion_map.PERCUSSION_ROLL). Ben: roll sounds great")
+PERC_RATED[82] = (4, "the SHAKER as shaped noise, fitted to Camo's shaker in VSCO 2 CE (eight single shakes, CC0; "
+                     "examples/perc_fit.py shaker, 10.4 -> 2.6 dB): one fixed shake of 32 ms and its decay, 3.6 dB "
+                     "off the takes' envelope, colour within 0.5 dB 224 Hz-11 kHz, level with the maracas. "
+                     "Ben: sounds perfect now")
+
+
+def _sc88pro_extra_rated():
+    """THE SC-88 PRO'S STANDARD KEYS PAST GM'S (percussion_map.SC88PRO_EXTRA_KEYS):
+    each the drum it borrows, at that drum's rating."""
+    import percussion_map as _PM
+    for key, (name, kit, src) in _PM.SC88PRO_EXTRA_KEYS.items():
+        r = (KIT_RATED.get(kit, {}).get(src) if kit else None) or PERC_RATED.get(src)
+        PERC_RATED[key] = (r[0], "SC-88 Pro's %s: %s" % (name, ("set %d's key %d" % (kit, src)) if kit
+                                                         else "Standard's key %d" % src))
+
+
+_sc88pro_extra_rated()
 
 # THE SOUND CANVAS'S DRUM SETS, every map (SC-8850 owner's manual, p.187,
 # "Drum Set List"): (PC, SC-8850 map, SC-88Pro map, SC-88 map, SC-55 map),
@@ -1193,11 +1229,19 @@ def sound_canvas_md():
 # physical rooms are how we do that job -- the question is whether the space
 # the arranger asked for is the space we give.
 EFFECTS_RATED = [
-    ("Reverb (system)", 3, "the macro picks one of our physical rooms by what it is for (Room 1-3 "
-     "studio, chamber, chapel; Hall 1 CHAMBER -- validated against Tokei on the SC-88Pro, a 4 "
-     "for Hall 1: boomy in our hall, right in the chamber (Ben); Hall 2 church), its level and "
-     "time scale the tail from the macro's own preset; CC91 a distance. Character, Pre-LPF, "
-     "pre-delay, the delay macros' echo and a per-drum reverb send not yet"),
+    ("Reverb (system)", 3, "the macro picks one of our physical rooms by what it is for, small to large as "
+     "Roland's run: Room 1-3 studio, chamber, a larger chamber; Hall 1 our concert hall, Hall 2 a grand one "
+     "(Musikverein-scale); Plate an EMT 140 plate and Delay / Panning Delay a 100 ms echo, on the studio's "
+     "walls (roomtail.device_ir) -- heard in examples/gs_reverb_demo.py (Ben: those all sound good). Its level "
+     "and time scale the tail; CC91 a distance. Tokei was validated in the chamber under Hall 1 (now our hall: "
+     "Ben chose the studio for it). Character, Pre-LPF, pre-delay and a per-drum reverb send not yet"),
+    ("Controller matrix (GS 40 2x, GM2 09 0s)", 3, "ctrlmatrix.py: GS's six sources (mod, bend, both "
+     "aftertouches, the assignable CC1/CC2) and GM2's (channel and poly pressure, any CC) into amplitude (the "
+     "fader's rows; an organ's gates), pitch (the bend row), cutoff (brightness at onset), LFO pitch depth (a "
+     "sine on the bend row, so a held note's aftertouch vibrato moves), LFO amplitude depth (sidebands on rows "
+     "of their own) and LFO rate -- measured in examples/ctrlmatrix_demo.py (Ben: phase 1 sounds good). The "
+     "mod wheel's own vibrato (GS's 47-cent default) held out of files (TUNING_MOD_VIBRATO), LFO filter depth "
+     "and live not yet"),
     ("Chorus (system)", 3, "chorus.gs_copies: Roland's eight macros, a line swept by one LFO, "
      "read at two outputs in opposite phase, fed back; laws GM 2's (rate, depth, feedback), the "
      "delay's chosen (0.2 ms a step); the wet share held as CC93's. To reverb / to delay, "
@@ -1231,7 +1275,7 @@ EFX_RATED = {
     "Distortion": (3, "as Overdrive, with more gain; heard on storm_pro (kathie, SC-88Pro), its part 8 clean electric guitar at Drive 70 (Ben: sounds good)"),
     "GTR Multi 1": (3, "compressor (decay slowed, its Attack the onset's rise), OD and amp, chorus/flanger (chorus.gs_copies), its delay (gsdelay); every type at Roland's own defaults (gs_efx_params); heard in its demo, +20.6 dB over the dry guitar at the defaults (Ben, 2026-10-22: sounds good; louder, but not crazy loud)"),
     "GTR Multi 2": (4, "compressor, OD and amp, 3-band EQ after the valve, chorus/flanger -- VALIDATED against Tokei on the SC-88Pro for the settings it uses (Ben: Crazy Train's crunch, a little less smashed; the makeup lowered by ear); Amp Type and the compressor's Attack not yet built"),
-    "GTR Multi 3": (3, "as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: \"Those all sound great\")"),
+    "GTR Multi 3": (4, "as GTR Multi 1, with its wah (efxfilter: a resonant LPF/BPF at its pedal, where the file moves it); heard on our guitar riff (Ben: \"Those all sound great\"); SENSATIO's six overdriven guitars through it, the wah on CC16 (the file's control source), once port B's exclusive reached their parts (Ben, 2026-10-23: \"sounds incredible. The effects are insane in it\")"),
     "Stereo-EQ": (3, "two shelves at their own corners and two peaking mids (gsefx.eq_gain), every partial; heard on sysex_01 (Ben: \"These all sound great\")"),
     "Space D": (3, "chorus.gs_copies, two outputs half a turn apart, pre-delay and rate from Roland's tables, Balance the share; heard on SENSATIO"),
     "Stereo Chorus": (3, "as Space D, its Phase and pre-filter (the LPF; its HPF not built); heard in its demo (Ben, 2026-10-21: these all sound great)"),

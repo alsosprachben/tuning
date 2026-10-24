@@ -93,6 +93,10 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
         # ...and an insertion effect's (gsefx: Tremolo, Auto Pan) a waveform:
         # (rate, depth, stereo, scatter, [(harmonic, coefficient, phase)])
         harm = cfg[4] if len(cfg) > 4 else None
+        # ...and a controller matrix's (blockrender: ctrlmatrix) map of the
+        # rows its sidebands ride instead of their parent's: each its depth
+        # over time as its level
+        brmap = cfg[5] if len(cfg) > 5 else None
         if len(cfg) >= 4:
             rate, depth, stereo, scatter = cfg[:4]
         else:
@@ -129,6 +133,8 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
                     extra['aL'][-1] = A['aL'][i] * hh
                     extra['aR'][-1] = A['aR'][i] * (-hh if stereo else hh)
                     extra['aM'][-1] = 0.0 if stereo else A['aM'][i] * hh
+                    if brmap is not None and 'br' in extra:
+                        extra['br'][-1] = brmap.get(int(A['br'][i]), extra['br'][-1])
                     made += 1
             continue
         half = 0.5 * depth
@@ -148,6 +154,8 @@ def expand(A, channels, sr, cols, rows=None, meta=None):
             extra['aR'][-1] = A['aR'][i] * (-half if stereo else half)
             # A pan's mono sum is flat, and that is the effect, not a loss.
             extra['aM'][-1] = 0.0 if stereo else A['aM'][i] * half
+            if brmap is not None and 'br' in extra:
+                extra['br'][-1] = brmap.get(int(A['br'][i]), extra['br'][-1])
             made += 1
     for k in cols:
         A[k].extend(extra[k])
