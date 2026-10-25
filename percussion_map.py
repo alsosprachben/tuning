@@ -56,6 +56,7 @@ from tonelib import (
     BongoHighProperties,
     BongoLowProperties,
     HandClapProperties,
+    FingerSnapProperties,
     WoodPercussionProperties,
     RattleProperties,
     MaracasProperties,
@@ -1892,6 +1893,11 @@ for _tab in (PERCUSSION_RING, PERCUSSION_LEVEL):
 DEFAULT_PAN[25] = DEFAULT_PAN.get(38, 0.0)
 PERCUSSION[82] = ("Shaker", ShakerProperties, PERCUSSION[70][2])
 DEFAULT_PAN[82] = DEFAULT_PAN.get(70, 0.0)
+# ...and 26 FINGER SNAP (the SC-88 Pro's Standard 1 calls it "Finger Snap 2",
+# Standard 2 "Finger Snap"): one hand's clap, fitted to CC0 snaps
+# (tonelib.FingerSnapProperties, examples/snap_fit.py), panned as the clap
+PERCUSSION[26] = ("Finger Snap", FingerSnapProperties, PERCUSSION[39][2])
+DEFAULT_PAN[26] = DEFAULT_PAN.get(39, 0.0)
 
 
 # DRUM SETS BY MAP. A Sound Canvas's CC32 picks the map its programs are read
@@ -1969,6 +1975,15 @@ def _build_gs_sets():
                 continue
             if spec[0] == 'c':
                 KITS[k][key] = (name, getattr(_TL, spec[1]), float(spec[2]))
+                # ...its gesture, if it has one (a throat's pulse train)
+                for t, v in getattr(_GSET, 'STROKES', {}).get(name, {}).items():
+                    KIT_STROKES.setdefault(k, {}).setdefault(t, {})[key] = v
+                if name in getattr(_GSET, 'GATE', {}):
+                    KIT_GATE.setdefault(k, {})[key] = _GSET.GATE[name]
+                if name in getattr(_GSET, 'RING', {}):
+                    KIT_RING.setdefault(k, {})[key] = _GSET.RING[name]
+                if name in getattr(_GSET, 'LEVEL', {}):
+                    KIT_LEVEL.setdefault(k, {})[key] = _GSET.LEVEL[name]
                 continue
             (nm, cls, f0), ring, level, gate, pan, strokes = _source(spec[1], spec[2])
             if spec[0] == 'r':

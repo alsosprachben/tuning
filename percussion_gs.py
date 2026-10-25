@@ -122,6 +122,64 @@ SETS = {
         85: 'Tape Stop 2', 86: 'Missile', 87: 'Space Birds', 88: 'Flying Monster', 89: '---',
         90: '---', 91: '---', 92: '---', 93: '---', 94: '---', 95: '---', 96: '---',
     },
+    ('native', 27): {  # DANCE: the Electronic set's toms, the machines' hats
+        26: 'Finger Snap 2', 29: 'Scratch Push 2', 30: 'Scratch Pull 2', 35: 'TR-909 Comp Kick',
+        36: 'Electric Kick 2', 38: 'House Snare', 40: 'Dance Snare 2', 41: 'Electric Low Tom 2',
+        42: 'CR-78 Closed Hi-Hat', 43: 'Electric Low Tom 1', 44: 'TR-808 Closed Hi-Hat 2',
+        45: 'Electric Mid Tom 2', 46: 'CR-78 Open Hi-Hat', 47: 'Electric Mid Tom 1',
+        48: 'Electric High Tom 2', 49: 'TR-808 Crash Cymbal', 50: 'Electric High Tom 1',
+        51: 'TR-606 Ride Cymbal', 52: 'Reverse Cymbal', 54: 'Shake Tambourine', 56: 'TR-808 Cowbell',
+        78: 'High Hoo', 79: 'Low Hoo', 80: 'Mute Triangle', 81: 'Open Triangle', 82: 'TR-626 Shaker',
+        88: 'Small Club 1', 89: '---', 90: '---', 91: '---', 92: '---', 93: '---', 94: '---',
+        95: '---', 96: '---',
+    },
+    ('native', 59): {  # RHYTHM FX 2: the machines' and the breaks' drums backwards, then
+        # voices and synth effects ("Frog Vpoce", "Reverse bounce" as printed: fixed)
+        21: '---', 22: '---', 23: '---', 24: '---', 25: '---', 26: '---', 27: '---', 28: '---',
+        29: '---', 30: '---', 31: '---', 32: '---', 33: '---', 34: '---', 35: '---',
+        36: 'Reverse TR-707 Kick 1', 37: 'Reverse TR-909 Kick 1', 38: 'Reverse Hip-Hop Kick 1',
+        39: 'Reverse Jungle Kick 2', 40: 'Reverse Techno Kick 2', 41: 'Reverse TR-606 Snare 2',
+        42: 'Reverse CR-78 Snare 1', 43: 'Reverse CR-78 Snare 2', 44: 'Reverse Jungle Snare 2',
+        45: 'Reverse Techno Snare 2', 46: 'Reverse TR-707 Snare', 47: 'Reverse TR-606 Snare 1',
+        48: 'Reverse TR-909 Snare 1', 49: 'Reverse Hip-Hop Snare 2', 50: 'Reverse Jungle Snare 1',
+        51: 'Reverse House Snare', 52: 'Reverse Closed Hi-Hat',
+        53: 'Reverse TR-606 Closed Hi-Hat', 54: 'Reverse TR-707 Closed Hi-Hat',
+        55: 'Reverse TR-808 Closed Hi-Hat', 56: 'Reverse Jungle Hi-Hat',
+        57: 'Reverse Tambourine 2', 58: 'Reverse Shake Tambourine',
+        59: 'Reverse TR-808 Open Hi-Hat', 60: 'Reverse TR-707 Open Hi-Hat',
+        61: 'Reverse Open Hi-Hat', 62: 'Reverse TR-606 Open Hi-Hat', 63: 'Reverse Hu Yin Luo',
+        64: 'Reverse TR-707 Crash Cymbal', 65: 'Voice One', 66: 'Reverse Voice One',
+        67: 'Voice Two', 68: 'Reverse Voice Two', 69: 'Voice Three', 70: 'Reverse Voice Three',
+        71: 'Voice Tah', 72: 'Reverse Voice Tah', 73: 'Voice Ou', 74: 'Voice Au',
+        75: 'Voice Whey', 76: 'Frog Voice', 77: 'Reverse Yyoo Dude', 78: 'Douby',
+        79: 'Reverse Douby', 80: 'Baert High', 81: 'Baert Low', 82: 'Bounce',
+        83: 'Reverse Bounce', 84: 'Distortion Knock', 85: 'Guitar Slide', 86: 'Sub Marine',
+        87: 'Noise Attack', 88: 'Space Worms', 89: 'Emergency !', 90: 'Calculating...',
+        91: 'Saw LFO Saw', 92: '---', 93: '---', 94: '---', 95: '---', 96: '---',
+    },
+    ('native', 54): {  # CYMBAL & CLAPS: every map's hats, cymbals and claps (the [55]/[88]
+        # keys an older map's take of the same sound: our one voice, or a varied strike)
+        32: 'Reverse Open Hi-Hat', 33: 'Reverse Closed Hi-Hat 1', 34: 'Reverse Closed Hi-Hat 2',
+        35: 'Jungle Hi-Hat', 36: 'Closed Hi-Hat', 37: 'Closed Hi-Hat 2', 38: 'Closed Hi-Hat 3',
+        39: 'Closed Hi-Hat 4', 40: 'Closed Hi-Hat', 41: 'TR-707 Closed Hi-Hat',
+        42: 'TR-606 Closed Hi-Hat', 43: 'TR-808 Closed Hi-Hat', 44: 'TR-808 Closed Hi-Hat',
+        45: 'CR-78 Closed Hi-Hat', 46: 'Pedal Hi-Hat', 47: 'Pedal Hi-Hat', 48: 'Pedal Hi-Hat',
+        49: 'Half-Open Hi-Hat 1', 50: 'Half-Open Hi-Hat 2', 51: 'Open Hi Hat',
+        52: 'Open Hi-Hat 2', 53: 'Open Hi-Hat 3', 54: 'Open Hi-Hat 2', 55: 'TR-909 Open Hi-Hat',
+        56: 'TR-707 Open Hi-Hat', 57: 'TR-606 Open Hi-Hat', 58: 'TR-808 Open Hi-Hat',
+        59: 'TR-808 Open Hi-Hat', 60: 'CR-78 Open Hi-Hat', 61: 'Crash Cymbal 1',
+        62: 'Crash Cymbal 2', 63: 'Crash Cymbal 3', 64: 'Brush Crash Cymbal',
+        65: 'Hard Crash Cymbal', 66: 'TR-909 Crash Cymbal', 67: 'TR-808 Crash Cymbal',
+        68: 'Mute Crash Cymbal 1', 69: 'Mute Crash Cymbal 2', 70: 'Reverse Crash Cymbal 1',
+        71: 'Reverse Crash Cymbal 2', 72: 'Reverse Crash Cymbal 3',
+        73: 'Reverse TR-909 Crash Cymbal', 74: 'Splash Cymbal', 75: 'Splash Cymbal',
+        76: 'Ride Bell', 77: 'Brush Ride Bell', 78: 'Ride Cymbal 1', 79: 'Ride Cymbal 2',
+        80: 'Brush Ride Cymbal', 81: 'Ride Cymbal Low Inner', 82: 'Ride Cymbal Mid Inner',
+        83: 'Ride Cymbal High Inner', 84: 'Ride Cymbal Low Edge', 85: 'Ride Cymbal Mid Edge',
+        86: 'Ride Cymbal High Edge', 87: 'TR-606 Ride Cymbal', 88: 'TR-808 Ride Cymbal',
+        89: 'Chinese Cymbal', 90: 'Chinese Cymbal 2', 91: 'Hand Clap', 92: 'Hand Clap 2',
+        93: 'Hand Clap', 94: 'Hand Clap', 95: 'Hand Clap 2', 96: 'TR-707 Hand Clap',
+    },
     ('sc88', 27): {  # DANCE
         29: 'Scratch Push2', 30: 'Scratch Pull2', 35: 'Dance Kick', 36: 'Electric Kick 2',
         38: 'Dance Snare 1', 40: 'Dance Snare 2', 41: 'Electric Low Tom2', 42: 'CR-78 CHH',
@@ -136,10 +194,10 @@ SETS = {
 # where each set is kept (percussion_map.KITS): the native ones at their
 # program, the SC-88 map's own at 128 x 2 + program (_map_set); and whether
 # it stands alone
-SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57,
+SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 27): 26, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57, ('native', 59): 58, ('native', 54): 53,
            ('sc88', 27): 2 * 128 + 26}
-SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 2 * 128 + 26: "Dance"}
-SET_ALONE = {49, 50, 57}
+SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 58: "Rhythm FX 2", 53: "Cymbal & Claps", 26: "Dance", 2 * 128 + 26: "Dance"}
+SET_ALONE = {49, 50, 53, 57, 58}
 
 APPROX = 'approx'
 
@@ -162,7 +220,19 @@ VOICE = {
     'Room Closed Hi-Hat': ('k', 0, 42, APPROX), 'Room Open Hi-Hat': ('k', 0, 46, APPROX),
     'Scratch Push 2': ('k', 0, 29, APPROX), 'Scratch Pull 2': ('k', 0, 30, APPROX),
     'Shake Tambourine': ('k', 0, 54, APPROX), 'TR-626 Shaker': ('k', 0, 82, APPROX),
-    'High Hoo': None, 'Low Hoo': None, 'Small Club 1': None,
+    'High Hoo': ('c', 'HooProperties', 1000.0), 'Low Hoo': ('c', 'HooProperties', 1000.0),
+    'Small Club 1': ('c', 'SmallClubProperties', 440.0),
+    # the native Dance set's: one snap of ours (Standard's 26); the 909 kick
+    # through our valve gently, as a compressor holds it; the Electronic
+    # set's toms by their Pro names; the 808 set's own hat (its key 42 IS
+    # "TR-808 Closed Hi-Hat 2"); the 606's ride
+    'Finger Snap': ('k', 0, 26), 'Finger Snap 2': ('k', 0, 26),
+    'TR-909 Comp Kick': ('c', 'TR909CompKickProperties', 49.8),
+    'Electric Low Tom 2': ('k', 24, 41), 'Electric Low Tom 1': ('k', 24, 43),
+    'Electric Mid Tom 2': ('k', 24, 45), 'Electric Mid Tom 1': ('k', 24, 47),
+    'Electric High Tom 2': ('k', 24, 48), 'Electric High Tom 1': ('k', 24, 50),
+    'CR-78 Open Hi-Hat': ('k', 27, 46), 'TR-808 Closed Hi-Hat 2': ('k', 25, 42),
+    'TR-606 Ride Cymbal': ('k', 28, 51),
     # the Techno set's: the driven 909s (tonelib.TechnoKick1Properties ...), and
     # its machines from their own sets
     'Techno Kick 1': ('c', 'TechnoKick1Properties', 44.4),
@@ -254,8 +324,92 @@ VOICE = {
     'Reverse Gong': ('r', 52, 74), 'Reverse Bell Tree': ('r', 0, 84), 'Reverse Guiro': ('r', 0, 74),
     'Reverse Gun Shot': ('r', 56, 72), 'Reverse Scratch': ('r', 56, 61), 'Reverse Laser Gun': ('r', 56, 74),
     'Reverse Hi Q': ('r', 0, 27),
+    # Rhythm FX 2's: the drum machines' and the breaks' from their own sets
+    # (the 707's crash is the 909's in our 707 set; Tambourine 2 Standard's)
+    'Reverse TR-707 Kick 1': ('r', 29, 36), 'Reverse TR-909 Kick 1': ('r', 30, 36),
+    'Reverse Hip-Hop Kick 1': ('r', 9, 36), 'Reverse Jungle Kick 2': ('r', 10, 35),
+    'Reverse Techno Kick 2': ('r', 11, 35), 'Reverse TR-606 Snare 2': ('r', 28, 40),
+    'Reverse CR-78 Snare 1': ('r', 27, 38), 'Reverse CR-78 Snare 2': ('r', 27, 40),
+    'Reverse Jungle Snare 2': ('r', 10, 40), 'Reverse Techno Snare 2': ('r', 11, 40),
+    'Reverse TR-707 Snare': ('r', 29, 38), 'Reverse TR-606 Snare 1': ('r', 28, 38),
+    'Reverse TR-909 Snare 1': ('r', 30, 38), 'Reverse Hip-Hop Snare 2': ('r', 9, 40),
+    'Reverse Jungle Snare 1': ('r', 10, 38), 'Reverse House Snare': ('r', 30, 38, APPROX),
+    'Reverse TR-606 Closed Hi-Hat': ('r', 28, 42), 'Reverse TR-707 Closed Hi-Hat': ('r', 29, 42),
+    'Reverse TR-808 Closed Hi-Hat': ('r', 25, 42), 'Reverse Jungle Hi-Hat': ('r', 10, 44),
+    'Reverse Tambourine 2': ('r', 0, 54, APPROX), 'Reverse Shake Tambourine': ('r', 0, 54, APPROX),
+    'Reverse TR-808 Open Hi-Hat': ('r', 25, 46), 'Reverse TR-707 Open Hi-Hat': ('r', 29, 46),
+    'Reverse TR-606 Open Hi-Hat': ('r', 28, 46), 'Reverse TR-707 Crash Cymbal': ('r', 29, 49, APPROX),
+    'Reverse Hu Yin Luo': None,
+    # Cymbal & Claps': a second take of a hat or a clap our voice each strike
+    # varied; the old maps' takes our one voice; the 808's ride its cymbal
+    'Reverse Closed Hi-Hat 1': ('r', 0, 42), 'Reverse Closed Hi-Hat 2': ('r', 0, 44, APPROX),
+    'Closed Hi-Hat 2': ('n', 0, 42), 'Closed Hi-Hat 3': ('k', 0, 42, APPROX),
+    'Closed Hi-Hat 4': ('k', 0, 42, APPROX), 'TR-808 Closed Hi-Hat': ('k', 25, 42),
+    'Open Hi Hat': ('k', 0, 46), 'Open Hi-Hat 2': ('n', 0, 46), 'Open Hi-Hat 3': ('k', 0, 46, APPROX),
+    'TR-707 Open Hi-Hat': ('k', 29, 46), 'TR-808 Open Hi-Hat': ('k', 25, 46),
+    'Crash Cymbal 2': ('k', 0, 57), 'Crash Cymbal 3': ('k', 0, 57, APPROX),
+    'Hard Crash Cymbal': ('k', 0, 49, APPROX),
+    # a crash CHOKED -- the hand on the plate (its exclusive class is the
+    # crash's): the crash, cut at GATE
+    'Mute Crash Cymbal 1': ('c', 'CrashCymbal1Properties', 288.3),
+    'Mute Crash Cymbal 2': ('c', 'CrashCymbal2Properties', 333.7),
+    'Reverse Crash Cymbal 1': ('r', 0, 49), 'Reverse Crash Cymbal 2': ('r', 0, 57),
+    'Reverse Crash Cymbal 3': ('r', 0, 57, APPROX), 'Reverse TR-909 Crash Cymbal': ('r', 30, 49),
+    'Splash Cymbal': ('k', 0, 55), 'Ride Bell': ('k', 0, 53), 'Brush Ride Bell': ('k', 0, 53, APPROX),
+    'Ride Cymbal 1': ('k', 0, 51), 'Ride Cymbal 2': ('k', 0, 59), 'Brush Ride Cymbal': ('k', 0, 51, APPROX),
+    'TR-808 Ride Cymbal': ('k', 25, 49, APPROX), 'Chinese Cymbal': ('k', 0, 52),
+    'Chinese Cymbal 2': ('k', 0, 52, APPROX),
+    # HALF-OPEN: the open hat's plate rung shorter (RING, examples/halfhat_fit.py)
+    'Half-Open Hi-Hat 1': ('c', 'OpenHiHatProperties', 248.4),
+    'Half-Open Hi-Hat 2': ('c', 'OpenHiHatProperties', 248.4),
+    'Brush Crash Cymbal': ('c', 'BrushCrashProperties', 288.3),
+    # THE RIDE'S ZONES: inner the tip on the bow (our ride, Iowa's), edge the
+    # shank on the edge (tonelib.RideEdgeProperties); low, mid and high three
+    # rides a minor third apart (Roland's names only: the sizes a guess)
+    'Ride Cymbal Low Inner': ('c', 'RideCymbalProperties', 124.0),
+    'Ride Cymbal Mid Inner': ('c', 'RideCymbalProperties', 147.5),
+    'Ride Cymbal High Inner': ('c', 'RideCymbalProperties', 175.4),
+    'Ride Cymbal Low Edge': ('c', 'RideEdgeProperties', 124.0),
+    'Ride Cymbal Mid Edge': ('c', 'RideEdgeProperties', 147.5),
+    'Ride Cymbal High Edge': ('c', 'RideEdgeProperties', 175.4),
 }
-# not built yet: Finger Snap, Jingle Bell, Wadaiko Rim, Ohkawa, the Kotsuzumi,
+# A CLASS VOICE'S GESTURE, where it has one (percussion_map.KIT_STROKES, in
+# each set it plays in): Roland's name -> {table: entry}.
+# THE HOO, Reitanna's (Freesound 343968, CC0; examples/throat_fit.py hoo):
+# ~480 Hz, level for 0.12 s, then falling an octave by 0.23 s; up within
+# 20 ms, its loudest at the turn, gone with the fall; 2% jitter, a dB of
+# shimmer (a shout, not a clean voice). The LOW HOO a bigger throat: a fifth
+# down, its formants x0.85 (the pair a guess: Roland's names only)
+_HOO_PITCH = ((0.0, -2.1), (0.01, 0.0), (0.1, 0.2), (0.12, -0.4), (0.15, -1.9), (0.17, -6.1),
+              (0.19, -9.1), (0.21, -11.0), (0.23, -12.7))
+_HOO_LEVEL = ((0.0, -12.0), (0.02, -2.0), (0.1, -1.0), (0.12, 0.0), (0.16, -4.0), (0.2, -8.0), (0.23, -20.0))
+STROKES = {
+    'High Hoo': {"voiced": (((0.0, 0.0, 0.0),), 480.0, _HOO_PITCH, 0.23, 0.01, 0.0, 0.02, 1.0, None,
+                            ((0.0, 1.0),), _HOO_LEVEL)},
+    'Low Hoo': {"voiced": (((0.0, 0.0, 0.0),), 320.0, _HOO_PITCH, 0.23, 0.01, 0.0, 0.02, 1.0, None,
+                           ((0.0, 0.85),), _HOO_LEVEL)},
+}
+
+# ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
+# takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
+GATE = {'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
+
+# ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
+# half-open hats', fitted to DRSKit's semi-open hat against its open one
+# (examples/halfhat_fit.py) -- 2 halfway (in log) to the open hat
+RING = {'Half-Open Hi-Hat 1': 0.0721, 'Half-Open Hi-Hat 2': 0.1344}
+# ...the ride's zones Standard's ride's (PERCUSSION_RING[51])
+RING.update({'Ride Cymbal %s %s' % (h, z): 0.5 for h in ('Low', 'Mid', 'High') for z in ('Inner', 'Edge')})
+# ...AND ITS LEVEL TRIM (percussion_map.KIT_LEVEL): the half-open hats the open
+# hat's (PERCUSSION_LEVEL[46])
+LEVEL = {'Half-Open Hi-Hat 1': 0.47, 'Half-Open Hi-Hat 2': 0.47}
+# ...the crashes played by class (choked, brushed) Standard's crashes' ring and
+# trim (PERCUSSION_RING/LEVEL 49, 57), the brushed one 9 dB under
+RING.update({'Mute Crash Cymbal 1': 0.61, 'Mute Crash Cymbal 2': 1.69, 'Brush Crash Cymbal': 0.61})
+LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
+              'Brush Crash Cymbal': round(0.56 * 10 ** (-9 / 20.0), 4)})
+
+# not built yet: Jingle Bell, Wadaiko Rim, Ohkawa, the Kotsuzumi,
 # Ban Gu, Bend Gong, the udu, Bendir, Req, the tabla, the talking drums,
 # Djembe, Conga Slide, Pandiero, Tamborim, High/Low Hoo, Reverse Bendir, and
 # Rhythm FX's synth effects (Techno Thip ... Flying Monster)

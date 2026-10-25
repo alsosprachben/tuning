@@ -652,7 +652,22 @@ def _gs_sets_rated():
                   # 808's sub). Ben, on examples/jungle_demo.py: "sound good"
                   'JungleKick1Properties': (lambda: 4), 'JungleKick2Properties': (lambda: 4),
                   'JungleSnare1Properties': (lambda: 4), 'JungleSnare2Properties': (lambda: 4),
-                  'JungleHiHatProperties': (lambda: 4)}
+                  'JungleHiHatProperties': (lambda: 4),
+                  # the native Dance set's own (2026-10-25): the Hoo a throat
+                  # pulsed as a CC0 shout (Ben: "Hoo sounds good"); Small Club
+                  # twelve people, each their own tempo, place and ringing
+                  # cupped hands (Ben: "The claps sound much better now. Sounds
+                  # good"); the Comp Kick the 909 through our valve gently
+                  # (heard in examples/dance_demo.py, no verdict of its own)
+                  'HooProperties': (lambda: 4), 'SmallClubProperties': (lambda: 4),
+                  'TR909CompKickProperties': (lambda: 3),
+                  # Cymbal & Claps' strokes: the half-open hats, the ride's
+                  # zones, the brushed and the choked crashes -- each a
+                  # difference fitted to DRSKit's strokes, applied to ours (Ben,
+                  # on examples/cymclaps_demo.py: "cymclaps all sound good")
+                  'OpenHiHatProperties': (lambda: 4), 'RideCymbalProperties': (lambda: 4),
+                  'RideEdgeProperties': (lambda: 4), 'BrushCrashProperties': (lambda: 4),
+                  'CrashCymbal1Properties': (lambda: 4), 'CrashCymbal2Properties': (lambda: 4)}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
         KIT_RATED[k] = {}
@@ -689,6 +704,10 @@ PERC_RATED[25] = (4, "the SNARE ROLL, held: the Standard snare at 13.5 strokes a
                      "buzz of six bounces (~82 a second), the hands alternating, the first stroke and the last "
                      "accented -- MEASURED on two CC0 rolls (lucianodato's, annannienann's; "
                      "percussion_map.PERCUSSION_ROLL). Ben: roll sounds great")
+PERC_RATED[26] = (4, "the FINGER SNAP, one hand's clap: the hand clap's strike fired once, fitted to the "
+                     "crisp CC0 snaps (four strikes from two takes, their first 25 ms; a third take's series "
+                     "tires and was left out; examples/snap_fit.py): a hump at 2-5 kHz, falling ~7400 dB/s. "
+                     "Ben: \"Snaps sound great now. Just needed to fit the good ones.\"")
 PERC_RATED[82] = (4, "the SHAKER as shaped noise, fitted to Camo's shaker in VSCO 2 CE (eight single shakes, CC0; "
                      "examples/perc_fit.py shaker, 10.4 -> 2.6 dB): one fixed shake of 32 ms and its decay, 3.6 dB "
                      "off the takes' envelope, colour within 0.5 dB 224 Hz-11 kHz, level with the maracas. "

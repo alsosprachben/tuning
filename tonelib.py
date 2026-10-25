@@ -16856,6 +16856,20 @@ class HandClapProperties(NoiseDrumProperties):
     strike_noise_db = ((101, -18.1), (127, -26.1), (160, -16.5), (202, -21.8), (254, -19.1), (320, -14.4), (404, -9.4), (509, -10.8), (641, -9.9), (808, -3.5), (1018, 4.3), (1282, 0.8), (1616, 6.5), (2036, 6.1), (2565, 5.1), (3232, 7.1), (4072, 8.2), (5131, 3.5), (6465, -2.2), (8145, -3.7), (10263, 0.8), (12930, -2.1))
     initial_gain = 0.069836
 
+class FingerSnapProperties(HandClapProperties):
+    """GS Standard key 26, Finger Snap: ONE hand's clap -- the middle finger
+    slapping the palm, a single burst dying in a few ms. FITTED to
+    Freesound's CC0 snaps (~/Documents/refs/fingersnap, examples/snap_fit.py:
+    four crisp strikes from two takes, each read over its first 25 ms before
+    the room -- a third take's series tires, Ben heard, and was left out): a
+    hump at 2-5 kHz, 30 dB down under 1 kHz; falling ~7400 dB/s (the dry
+    takes' median). The clap's strike fired once."""
+    strike_flam = 1
+    strike_flam_s = 0.0
+    strike_flam_db = 0.0
+    strike_noise_dbs = 7400.0
+    strike_noise_db = ((254, -12.7), (320, -9.8), (404, -19.2), (509, -23.5), (641, -12.5), (808, -18.6), (1018, -40.3), (1282, -1.1), (1616, 1.0), (2036, 16.4), (2565, 18.7), (3232, 15.5), (4072, 15.8), (5131, 17.5), (6465, 11.3), (8145, 18.0), (10263, 25.9), (12930, 24.1))
+
 class GuiroProperties(WoodPercussionProperties):
     """The guiro's body: struck wood, but the NOISIEST wood in the kit.
 
@@ -18789,6 +18803,13 @@ class TechnoSnare2Properties(TR909Snare2Properties):
     tr808 = _driven(TR909Snare2Properties, 2.5)
 
 
+class TR909CompKickProperties(TR909KickProperties):
+    """TR-909 Comp Kick (the SC-88 Pro's Dance set): the 909's kick through a
+    compressor -- its body held up, its click forward -- so through our valve
+    gently (1.4: the Techno kicks clip at 2.5 and 4), which holds the decays
+    up as it compresses (tr808.drive)."""
+    tr808 = _driven(TR909KickProperties, 1.4)
+
 class TR909TomProperties(TR909Properties):
     """909 Low Tom: a swept VCO and a second at ~2/3 of it, a little noise."""
     tr808 = {"tune_hz": 77.0, "decay_s": 0.7645, "h2_db": -19.7241, "h3_db": -6.2981,
@@ -20719,6 +20740,28 @@ class RomMetalMixin:
             cls.strike_noise_layers = ((tuple((h, round(cls.rom_db, 2)) for h in hz),
                                         0.0005, cls.rom_dbs, 2.0),)
 
+
+class RideEdgeProperties(RideCymbalProperties):
+    """The RIDE's EDGE (Cymbal & Claps' Ride Cymbal Low/Mid/High Edge): the
+    stick's shank on the edge, where Ride Cymbal 1 (Iowa's stick on the bow)
+    is the tip on the bow. DRSKit's two strokes (CC-BY 4.0, measured only;
+    examples/stroke_diff_fit.py edge), matched in level, give the difference: the
+    edge more of the whole plate -- +8 dB at 500 Hz, +2.5 at 1 kHz -- and
+    less of the top, -7.5 at 8 kHz; applied to ours as a trim, refitted on
+    our render. (The edge's middle also falls ~1.5x faster and its top ~0.75x
+    as fast: not done.)"""
+    band_trim_db = ((354, -3.3), (707, 10.0), (1414, -2.9), (2828, -6.2), (5657, 5.8), (11314, -6.0))
+
+class BrushCrashProperties(CrashCymbal1Properties):
+    """Cymbal & Claps' BRUSH CRASH: our Crash 1 (fitted to DRSKit's left crash,
+    the stick's shank on the edge) played with brushes -- that very crash's
+    brushed strokes against its shank's, matched in level (CC-BY 4.0,
+    measured only; examples/stroke_diff_fit.py brush): the brush's swish over
+    the plate's shimmer, +12 dB at 8 kHz, -8 at 250 Hz; applied as a trim,
+    refitted on our render. Its loudest some 30 dB under the stick's: a soft
+    gesture, held 9 dB under the crash here (percussion_gs.LEVEL; a sample
+    set's are levelled, so not the whole 30)."""
+    band_trim_db = ((354, 0.9), (707, 7.9), (1414, 3.1), (2828, -16.0), (5657, 15.6), (11314, -1.0))
 
 class TR909CrashProperties(RomMetalMixin, CrashCymbal1Properties):
     """909 Crash Cymbal: a real crash in ROM (TUNE at its middle)."""
@@ -25325,6 +25368,37 @@ class OrchestraApplauseProperties(ApplauseProperties):
     one_shot = True
 
 
+class SmallClubProperties(OrchestraApplauseProperties):
+    """GS Hip-Hop and Dance key 88, Small Club 1 (the SFX set's 91-92, between
+    Telephone and Applause Wave): a small crowd's applause -- PEOPLE
+    (strike_flam_people; Ben: "12 individuals in different positions,
+    clapping at different rates", and different volumes): twelve, each at
+    their own steady 3.6-4.4 claps a second, their own place in the balance
+    and their own distance (6 dB between the nearest and the farthest). NEAR
+    ONE TEMPO: the takes' envelopes pulse 12-15 dB at 3-5 Hz and never fall
+    far between claps (90th over 10th percentile 9-18 dB) -- rates spread
+    3-5 Hz and levels 12 dB had left gaps (20 dB in the studio) and a weaker
+    pulse (10 dB): isolated ticks, rain (Ben).
+    EACH CLAP A HAND CLAP's: the hand clap's sub-clap (HandClapProperties,
+    fitted to VCSL's real claps), its quick fall -- the hall's applause burst,
+    a far crowd's (its colour from takes with their rooms in them, 50 ms
+    tails), had made twelve near people sound like rain (Ben). The room the
+    render's. A one-shot, its length the set's gate (percussion_gs.GATE)."""
+    strike_flam_rate = 0.0
+    strike_flam_people = (12, 3.6, 4.4, 0.04, 6.0)
+    # EACH PERSON'S HANDS: the air cupped between their palms ringing at its
+    # own pitch, somewhere in 1.1-2.2 kHz, Q 8 -- six CC0 takes of one
+    # person clapping (~/Documents/refs/clap_single): Q 7-12 at 1.2-2 kHz,
+    # 20-34 dB over the clap's median; 36 dB over the clap's colour reads
+    # 22-27 on ours (one person, the same measure). One colour for all
+    # twelve was rain,
+    # and a bump on the noise rows (a third of an octave apart) could never
+    # be so narrow (Ben: "the cupping sound needs to be much more")
+    strike_flam_people_peak = (1100.0, 2200.0, 36.0, 8.0)
+    strike_noise_db = HandClapProperties.strike_noise_db
+    strike_noise_dbs = HandClapProperties.strike_noise_dbs
+    strike_noise_len_s = None
+
 N_WAVE_PEAK = 0.6626     # an N-wave of length T peaks in spectrum at this / T
 
 
@@ -25362,6 +25436,7 @@ def pulse_series(T, t0, period, fmax, taper):
            zip(f[keep], (np.abs(X) * w)[keep], np.angle(X)[keep])]
     _PULSE_CACHE[key] = out
     return out
+
 
 class GunshotProperties(NoisyPercussionMixin, PercussionProperties):
     """GM 127. A crack: everything at once and then gone. One-shot, because
@@ -28018,6 +28093,18 @@ class SfxLaughProperties(SfxThroatProperties):
     DRUM_MODES = ((0.4978, 0.0, 4094.0), (0.8383, -5.8, 6603.0), (2.5117, -15.9, 5136.0), (2.945, -16.3, 5200.0), (5.7268, -30.5, 4858.0))
     # a trace of breath on each pulse: his voice is clean
     breath_volume = 0.05
+
+
+class HooProperties(SfxThroatProperties):
+    """GS Hip-Hop and Dance 78-79, High and Low Hoo: a shouted "HOO!" -- a
+    throat (SfxThroatProperties) pulsed as Reitanna's (Freesound 343968,
+    CC0; percussion_gs.STROKES): ~480 Hz level for 0.12 s, then falling an
+    octave over 0.1 s, the shout's drop. Its /u/ by LPC of its level part
+    (examples/throat_fit.py hoo). The low one a bigger throat, lower: the
+    same formants scaled down (Roland's names only; the pair a guess)."""
+    initial_gain = SfxThroatProperties.initial_gain * 10 ** (-19.5 / 20.0)
+    breath_volume = 0.1
+    DRUM_MODES = ((0.5338, 0.0, 4710.0), (1.1004, -3.3, 4344.0), (2.4093, -12.3, 7055.0), (3.8612, -6.2, 4094.0), (6.4934, -20.4, 8320.0))
 
 
 class SfxKittyProperties(SfxThroatProperties):

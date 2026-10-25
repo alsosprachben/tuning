@@ -10,7 +10,7 @@ formants by LPC of the recordings, written as the classes' DRUM_MODES.
                                     the formants' levels against the takes' band balance
                                     (after --write: LPC's levels are only its start)
 
-VOICE is dog (76) or laugh (52, a "ho ho ho").
+VOICE is dog (76), laugh (52, a "ho ho ho"), cat, growl or hoo (GS 78-79).
 
 LPC (order 20-22 at 22.05 kHz, no pre-emphasis: the source's tilt stays in
 the envelope) over 25-30 ms frames where the voice is loud; each pole a
@@ -61,6 +61,12 @@ VOICES = {
     "growl": ("SfxGrowlProperties", "growl/122183__qubodup__dog-growling-snarling-grumbling.wav", 22,
               (4.55, 4.70, 5.55, 5.70, 6.95, 7.10, 8.15, 8.35, 8.55, 9.95, 10.15, 10.55, 12.0, 15.5, 16.0),
               0.04, ((150, 450), (450, 900), (900, 1400), (1400, 2000), (2000, 2800), (2800, 3800))),
+    # GS Hip-Hop / Dance 78-79, High/Low Hoo: Reitanna's "HOO! HA! HEE HA!"
+    # (CC0), its HOO -- ~480 Hz level for 0.12 s, then falling an octave --
+    # frames through its level part; an /u/
+    "hoo": ("HooProperties", "../hoo/raw/343968__reitanna__hoo-ha-hee-ha.wav", 20,
+            (0.09, 0.11, 0.13, 0.15, 0.17), 0.025,
+            ((400, 650), (700, 1300), (2100, 3000), (3400, 4400), (6000, 7000))),
 }
 
 

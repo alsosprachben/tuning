@@ -5817,6 +5817,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _fspan = max(0.0, (noff - non) / SR)
                 _nfl = max(2, int(round(_frate * _fspan)))
             _fbal = None
+            _fpk = None
             if _frate > 0.0 and getattr(props, 'strike_flam_record', False):
                 # A RECORD'S CLICKS (tonelib.PhonoNoiseProperties): ONE timeline,
                 # drawn second by second of the piece from a seed of that
@@ -5838,6 +5839,43 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 # drum machine's clap is one sample, its bursts where its
                 # envelope generator put them, the same on every note
                 _bursts = [(float(_ft), float(_fd)) for _ft, _fd in props.strike_flam_times]
+            elif getattr(props, 'strike_flam_people', None):
+                # ...OR A FEW PEOPLE (strike_flam_people: (n, lowest and
+                # highest claps a second, jitter, dB spread)): each clapping
+                # at their own steady rate, from their own place in the
+                # balance and at their own distance (level) -- coming in
+                # raggedly within 0.2 s and each stopping at their own time in
+                # the note's last third. Ben: "12 individuals in different
+                # positions, clapping at different rates", where claps
+                # scattered at a crowd's rate had read too frequent and too
+                # broad. Drawn from the note, so a render repeats.
+                _pn, _plo, _phi, _pjit, _pdb = props.strike_flam_people
+                _prng = random.Random(int(round(on * 1e6)) * 137 + note * 11 + ch)
+                _pspan = max(0.0, (noff - non) / SR)
+                # ...AND EACH PERSON'S HANDS (strike_flam_people_peak: lowest
+                # and highest Hz, dB, Q): the air cupped between their palms
+                # ringing at its own pitch on every clap (Repp 1987; single
+                # claps measured: Q 7-12 at 1.2-2 kHz, 20-34 dB over the
+                # clap's median) -- one colour for all had sounded as rain
+                _ppk = getattr(props, 'strike_flam_people_peak', None)
+                _bursts, _fbal, _fpk = [], [], []
+                for _p in range(int(_pn)):
+                    _per = 1.0 / _prng.uniform(_plo, _phi)
+                    _plvl = -_prng.uniform(0.0, _pdb)
+                    _pang = _prng.uniform(0.08, 0.92) * 0.5 * math.pi
+                    _phz = _ppk[0] * (_ppk[1] / _ppk[0]) ** _prng.random() if _ppk else None
+                    _pt = _prng.uniform(0.0, 0.2)
+                    _pend = _pspan * _prng.uniform(0.67, 1.0)
+                    while _pt < _pend:
+                        _bursts.append((_pt, _plvl + _prng.gauss(0.0, 1.0)))
+                        _fbal.append(_pang)
+                        _fpk.append(_phz)
+                        _pt += _per * max(0.5, _prng.gauss(1.0, _pjit))
+                if _bursts:
+                    _t0 = min(b[0] for b in _bursts); _l0 = max(b[1] for b in _bursts)
+                    _bursts = [(t - _t0, l - _l0) for t, l in _bursts]
+                else:
+                    _bursts, _fbal, _fpk = [(0.0, 0.0)], [0.25 * math.pi], [None]
             elif _nfl > 1:
                 _frng = random.Random(int(round(on * 1e6)) * 131 + note * 7 + ch)
                 _fexp = getattr(props, 'strike_flam_exp_db', 0.0) or 0.0
@@ -5868,11 +5906,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
             # the comb's own buzz under it lasts tens
             _bal = [(1.0, 1.0)] * len(_bursts) if _fbal is None else \
                 [(math.sqrt(2.0) * math.cos(_c), math.sqrt(2.0) * math.sin(_c)) for _c in _fbal]
-            _bursts = [(b, d, _slr, g) for (b, d), g in zip(_bursts, _bal)]
+            _pks = _fpk if _fpk is not None else [None] * len(_bursts)
+            _bursts = [(b, d, _slr, g, k) for (b, d), g, k in zip(_bursts, _bal, _pks)]
             _stail = getattr(props, 'strike_noise_tail', None)
             if _stail:
-                _bursts += [(b, d + _stail[0], math.log(10.0) / 20.0 * _stail[1], g) for b, d, _, g in _bursts]
-            for _boff, _bdb, _slr, (_bgl, _bgr) in _bursts:
+                _bursts += [(b, d + _stail[0], math.log(10.0) / 20.0 * _stail[1], g, k) for b, d, _, g, k in _bursts]
+            for _boff, _bdb, _slr, (_bgl, _bgr), _bpk in _bursts:
                 _bon = non + _sat + _boff * SR
                 for _hf, _db in props.strike_noise_db:
                     if _hf >= 0.45 * SR:
@@ -5881,6 +5920,18 @@ def _prepare(path, tuner='hybrid440', sink=None):
                     emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, li) * _bgl,
                                  _gM * props.hrtf_gain(_hf, ri) * _bgr, _gM, _hf, _bon, _bon + _slen,
                                  _sfade, 0.01 * SR, chiff, _slr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
+                if _bpk:
+                    # ...the air between the palms RINGING: a decaying sine at
+                    # the person's pitch, _ppk[2] dB over the clap's colour
+                    # there, dying as its Q says (27.3 dB/s a hertz of width)
+                    _tab = props.strike_noise_db
+                    _cdb = float(np.interp(math.log(_bpk), [math.log(_r[0]) for _r in _tab],
+                                           [_r[1] for _r in _tab]))
+                    _gM = props.gain * 10.0 ** ((_cdb + _ppk[2] + _reg + _bdb + _scal) / 20.0)
+                    _plr = math.log(10.0) / 20.0 * 27.29 * _bpk / _ppk[3]
+                    emit_partial(2 * math.pi * _bpk / SR, _gM * props.hrtf_gain(_bpk, li) * _bgl,
+                                 _gM * props.hrtf_gain(_bpk, ri) * _bgr, _gM, _bpk, _bon, _bon + _slen,
+                                 _sfade, 0.01 * SR, chiff, _plr, 0.0, 0.0, 0.0, 0.0, cc, crl, 0.0, csc, -1, 0)
             # ...AND MORE STRUCK THINGS THAN ONE (strike_noise_layers: (table,
             # rise s, dB/s, length s) each): an orchestra hit's bass drum, which
             # BLOOMS -- its boom peaks 50-100 ms in -- and its cymbal, which
