@@ -1114,8 +1114,12 @@ def _mt32_var_rated():
 # 3), heard as a group in examples/gm2_tones_demo.py
 _GM2_HEARD_KEYS = [(0, 3 * 128 + 16), (3, 3 * 128 + 8), (16, 3 * 128 + 8), (16, 3 * 128 + 32),
                    (17, 3 * 128 + 32), (20, 16), (25, 33), (27, 23), (28, 24), (29, 4), (30, 26),
-                   (33, 7), (48, 40), (56, 3), (57, 4), (59, 2)]
+                   (33, 7), (48, 40), (56, 3), (57, 4)]
 GM2_HEARD = {k: 'Ben, on examples/gm2_tones_demo.py: "sound good"' for k in _GM2_HEARD_KEYS}
+# the plunger: no recording to fit, voiced by ear over three takes
+# (examples/plunger_demo.py) -- the curve centre-weighted at Ben's suggestion
+GM2_HEARD[(59, 2)] = ('the plunger, aftertouch opening it (no recording; voiced by ear). '
+                      'Ben, on examples/plunger_demo.py: "fine for now"')
 
 
 def _sc88_var_rated():

@@ -5249,6 +5249,11 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # saw a props and never got a room -- see the reflection pass below.
         if _MCH[0] not in _CONS_SRC:
             _CONS_SRC[_MCH[0]] = (props, _PX[0], _PZ[0], _radius[0])
+        if getattr(props, 'plunger', False) and _MCH[0] not in _FILTER_CH:
+            # A PLUNGER (efxfilter.plunger): the channel's moving filter, the
+            # player's hand on the channel's aftertouch -- the part's, as an
+            # insertion effect's wah is
+            _FILTER_CH[_MCH[0]] = __import__('efxfilter').plunger(ats.get(ch, ()))
         if getattr(props, 'amp_drive', 0.0) and _MCH[0] not in _AMP_CH:
             # TUNING_AMP_DRIVE overrides every voice's drive at once, which is
             # how the stage gets auditioned: the same passage clean, at the

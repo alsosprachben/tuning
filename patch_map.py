@@ -1636,9 +1636,11 @@ SC8850_CHEAP = {
                                                blare_cap_db=34.8))),
     # the trombone's ff law, as Trombone 2's
     (57, 4): ("Bright Tb", ("var", (57, 1))),
-    # GM 59's own harmon for now (its resonance fields are CC71's handle, not
-    # heard at rest) -- to become the PLUNGER, aftertouch opening it (Ben)
-    (59, 2): ("MuteTrumpet2", ("alias", 59)),
+    # THE PLUNGER: the open trumpet with a rubber cup over its bell, the hand
+    # on the channel's aftertouch -- sealed at rest, pressure opening it, the
+    # doo-wah (efxfilter.plunger). GM 59 is the harmon, stem out (measured);
+    # Ben's choice of mute and control for the second
+    (59, 2): ("MuteTrumpet2", ("set", 56, dict(plunger=True))),
 }
 
 for _cheap, _tag in ((SC88_CHEAP, "sc88"), (SC8850_CHEAP, "sc8850")):

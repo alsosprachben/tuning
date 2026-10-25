@@ -19,6 +19,9 @@ Types (the kernel's `ty`):
   4 COMB      |(1 - mix) + mix z / (1 - fb z)|, z = e^{-i 2 pi f tau}: the
               flanger's line at the swept delay tau (stepped, Step Flanger's)
   5 VOWEL     floor + three formants at the swept centres (three rows)
+
+and a voice's own: the trumpet's PLUNGER (plunger(), type 2 driven by the
+channel's aftertouch; blockrender, a voice with `plunger` set).
 """
 import math
 
@@ -134,6 +137,45 @@ def columns(mch, channels):
             out['fmx'][m] = c.fmx
         row += c.rows
     return out
+
+
+# THE PLUNGER (a trumpet's rubber cup over the bell, the hand opening and
+# closing it -- the doo-wah): no measurement of one to fit (the one report
+# that recorded it open and closed did not analyse it), so the acoustics: an
+# EXTERNAL mute takes the highs, which leave along the bell's axis, and the
+# hand works a wide range but plays mostly in its middle -- part-open, the
+# doo-wah between -- reaching the seal and the open bell only at the ends.
+# So the control's middle spans the band about PLUNGER_MID_HZ (near the open
+# horn's own brightness), a share PLUNGER_LINEAR of the octaves each way
+# moving evenly and the rest as the cube, steep toward PLUNGER_CLOSED_HZ
+# sealed and PLUNGER_OPEN_HZ open (Ben: an even log sweep read as a phaser,
+# and the plunge lives in the centre). The moving low-pass (type 2), a mild
+# resonance of PLUNGER_Q -- a swept peak through every harmonic is the phaser
+# -- PLUNGER_MIX of it (the rest the floor the gap leaves). Its control: the
+# channel's AFTERTOUCH, how far the hand lifts -- pressure opens it, as
+# pressure brightens our other brass -- held between messages and gliding at
+# the hand's PLUNGER_GLIDE_S. Chosen, for Ben's ear.
+PLUNGER_CLOSED_HZ = 600.0
+PLUNGER_MID_HZ = 1500.0
+PLUNGER_OPEN_HZ = 9000.0
+PLUNGER_LINEAR = 0.3
+PLUNGER_Q = 1.3
+PLUNGER_MIX = 0.97
+PLUNGER_GLIDE_S = 0.03
+
+
+def plunger(pressure, closed_hz=PLUNGER_CLOSED_HZ, mid_hz=PLUNGER_MID_HZ, open_hz=PLUNGER_OPEN_HZ,
+            linear=PLUNGER_LINEAR, q=PLUNGER_Q, mix=PLUNGER_MIX, glide=PLUNGER_GLIDE_S):
+    """A plunger's moving filter (Channel) from a channel's [(t, aftertouch 0-127)]:
+    sealed at 0, mid_hz at 64, open at 127."""
+    ev = sorted(pressure or ())
+    st = steps([0.0] + [t for t, _v in ev], [0.0] + [float(v) for _t, v in ev], glide=glide)
+
+    def corner(t):
+        u = 2.0 * np.clip(st(t), 0.0, 127.0) / 127.0 - 1.0
+        g = linear * u + (1.0 - linear) * u ** 3
+        return mid_hz * np.where(g < 0.0, closed_hz / mid_hz, open_hz / mid_hz) ** np.abs(g)
+    return Channel(2, q, mix, 0.0, corner)
 
 
 def lfo(rate, phase=0.0):
