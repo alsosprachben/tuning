@@ -3392,9 +3392,16 @@ def _prepare(path, tuner='hybrid440', sink=None):
             start = max(n0, end - span)
             g = w * math.exp(-lr * (end - start) / SR)
             fin = 0.01 * SR if start <= n0 else 0.001 * SR
-            # the forward fade-in, reversed, is a fade-out ENDING at the arrival
+            # the forward fade-in, reversed, is a fade-out ENDING at the arrival.
+            # ITS WASH WITH IT: the chiff's sustained floor (sj x cv, the
+            # partial's own jittered copy) rides the partial's level, so it
+            # swells as the partial does -- a hat or a cymbal is mostly that
+            # wash (sj x cv ~115 x the modes on the closed hat), and without it
+            # a reversed hat was its quiet modes and a 2 ms click. The row's own
+            # attack hump is made a sample wide and its release hump dropped:
+            # the hump is the arrival's, below
             emit_partial(om, ampL * g, ampR * g, ampM * g, nomf, start, max(start + 1.0, end - _out),
-                         fin, _out, ch, -lr, 0.0, 0.0, 0.0, 0.0, cc, crl, sj, csc, gr, cr, _ph(start))
+                         fin, _out, 1.0, -lr, 0.0, 0.0, 0.0, cv, cc, 0.0, sj, csc, gr, cr, _ph(start))
         jp = cv * csc * 0.25                       # the hump's peak, r(1-r) at r = 1/2
         if jp > 0.0 and ch > 0.0:
             _cbw = (_CBW[0], _CBW[1])

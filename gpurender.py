@@ -368,10 +368,15 @@ class FileRenderer:
         sl, af, lr, lrA = g('sus'), g('aft'), g('logr'), g('logrA')
         F = Fr
 
+        # A ROW THAT GROWS (a negative rate: a reversed voice's swell, begun
+        # 100 dB under its arrival) is never silent for good, however far
+        # under the floor it starts: it keeps its nominal end. Retired at its
+        # onset, a reversed hat lost its whole swell and was a click.
         def t_to(c, rate):
             with np.errstate(divide='ignore', invalid='ignore'):
-                return np.where(c <= F, 0.0, np.where(rate > 0.0, np.log(np.maximum(c, F) / F)
-                                                      / np.where(rate > 0.0, rate, 1.0), np.inf))
+                return np.where(rate < 0.0, np.inf,
+                                np.where(c <= F, 0.0, np.where(rate > 0.0, np.log(np.maximum(c, F) / F)
+                                                               / np.where(rate > 0.0, rate, 1.0), np.inf)))
         t = np.maximum(t_to((1.0 - sl) * (1.0 - af) * a, lr), t_to((1.0 - sl) * af * a, lrA))
         t = np.where(sl * a > F, np.inf, t)
         # ...but only where the row's level IS that law: a Moog row's comes

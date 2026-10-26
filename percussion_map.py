@@ -2068,7 +2068,7 @@ def _build_gs_sets():
                                     dict(played_backwards=True, one_shot=True))
                 cls = _rev[rk]
                 gate = min(REVERSE_MAX_S, ring or 1.0)
-                ring, strokes = None, {}
+                strokes = {}
             elif spec[0] == 'n':
                 # [RND]: the voice, each strike varied (tonelib.RandomStrike)
                 if cls not in _rnd:
