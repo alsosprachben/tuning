@@ -15,6 +15,32 @@ nearest we have rather than the sound (rated 2 in coverage).
 # (map, PC): {key: Roland's name} -- '---' no sound; a key not listed is
 # "same as Standard 1"
 SETS = {
+    ('native', 57): {  # SFX: EXTENDING the set built in percussion_map -- the SC-88 Pro's
+        # additions below and above the SC-55's 39-84
+        21: 'MC-500 Beep 1', 22: 'MC-500 Beep 2', 23: 'Guitar Slide', 24: 'Guitar Wah', 25: 'Guitar Slap',
+        26: 'Chord Stroke Down', 27: 'Chord Stroke Up', 28: 'Biwa FX', 29: 'Phonograph Noise',
+        30: 'Tape Rewind', 31: 'Scratch Push 2', 32: 'Scratch Pull 2', 33: 'Cutting Noise 2 Up',
+        34: 'Cutting Noise 2 Down', 35: 'Distortion Guitar Cutting Noise Up',
+        36: 'Distortion Guitar Cutting Noise Down', 37: 'Bass Slide', 38: 'Pick Scrape', 86: 'Bird 2',
+        89: 'Telephone 1', 90: 'Telephone 2', 91: 'Small Club 1', 92: 'Small Club 2', 93: 'Applause Wave',
+        94: 'Eruption', 95: 'Big Shot', 96: 'Percussion Bang'},
+    ('native', 41): {  # BRUSH: EXTENDING the set built in percussion_map -- its brushed
+        # toms and hats, the Jazz set's kicks, the ride's zones, the applause
+        35: 'Jazz Kick 2', 36: 'Jazz Kick 1', 41: 'Brush Low Tom 2', 42: 'Brush Closed Hi-Hat',
+        43: 'Brush Low Tom 1', 45: 'Brush Mid Tom 2', 46: 'Brush Open Hi-Hat', 47: 'Brush Mid Tom 1',
+        48: 'Brush High Tom 2', 49: 'Brush Crash Cymbal', 50: 'Brush High Tom 1', 51: 'Ride Cymbal Inner',
+        59: 'Ride Cymbal Edge', 88: 'Applause'},
+    # THE MACHINE AND KIT SETS' KEYS FROM OTHER SETS (Roland's lists): each
+    # EXTENDING the set built in percussion_map -- the CR-78's sounds on the
+    # 606 and 808, the Kick 2s, the Hoos and Small Club, the ride's zones
+    ('native', 17): {35: 'Power Kick 2', 40: 'Power Snare 2'},
+    ('native', 25): {35: 'Electric Kick 2', 42: 'Closed Hi-Hat 2', 46: 'Open Hi-Hat 2', 88: 'Small Club 1'},
+    ('native', 26): {35: 'TR-808 Kick 2', 40: 'TR-808 Snare 2', 51: 'TR-606 Ride Cymbal', 54: 'CR-78 Tambourine', 57: 'TR-909 Crash Cymbal', 60: 'CR-78 High Bongo', 61: 'CR-78 Low Bongo', 74: 'CR-78 Guiro', 78: 'High Hoo', 79: 'Low Hoo', 88: 'Small Club 1'},
+    ('native', 28): {56: 'CR-78 Cowbell', 59: 'Ride Cymbal Edge', 78: 'High Hoo', 79: 'Low Hoo', 88: 'Small Club 1'},
+    ('native', 29): {35: 'CR-78 Kick 2', 37: 'CR-78 Rim Shot', 54: 'CR-78 Tambourine', 56: 'CR-78 Cowbell', 59: 'Ride Cymbal Edge', 60: 'CR-78 High Bongo', 61: 'CR-78 Low Bongo', 70: 'CR-78 Maracas', 74: 'CR-78 Guiro', 75: 'CR-78 Claves', 78: 'High Hoo', 79: 'Low Hoo', 80: 'CR-78 Metalic Beat 1', 81: 'CR-78 Metalic Beat 2', 88: 'Small Club 1'},
+    ('native', 30): {59: 'Ride Cymbal Edge', 78: 'High Hoo', 79: 'Low Hoo', 88: 'Small Club 1'},
+    ('native', 31): {59: 'Ride Cymbal Edge', 74: 'CR-78 Guiro', 78: 'High Hoo', 79: 'Low Hoo'},
+    ('native', 33): {42: 'Closed Hi-Hat 2', 46: 'Open Hi-Hat 2', 51: 'Ride Cymbal Inner', 59: 'Ride Cymbal Edge', 88: 'Applause'},
     ('native', 53): {  # ASIA: EXTENDING the set Tokei plays (its gongs and crash,
         # percussion_map.KITS[52]); its Chinese opera gongs, the kakegoe -- first,
         # as other sets play its keys backwards
@@ -208,12 +234,12 @@ SETS = {
 # where each set is kept (percussion_map.KITS): the native ones at their
 # program, the SC-88 map's own at 128 x 2 + program (_map_set); and whether
 # it stands alone
-SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 27): 26, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57, ('native', 59): 58, ('native', 54): 53, ('native', 53): 52,
+SET_KIT = {('native', 2): 1, ('native', 3): 2, ('native', 27): 26, ('native', 10): 9, ('native', 11): 10, ('native', 12): 11, ('native', 50): 49, ('native', 51): 50, ('native', 58): 57, ('native', 59): 58, ('native', 54): 53, ('native', 53): 52, ('native', 57): 56, ('native', 41): 40, ('native', 17): 16, ('native', 25): 24, ('native', 26): 25, ('native', 28): 27, ('native', 29): 28, ('native', 30): 29, ('native', 31): 30, ('native', 33): 32,
            ('sc88', 27): 2 * 128 + 26}
-SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 58: "Rhythm FX 2", 53: "Cymbal & Claps", 52: "Asia", 26: "Dance", 2 * 128 + 26: "Dance"}
+SET_NAME = {1: "Standard 2", 2: "Standard 3", 9: "Hip-Hop", 10: "Jungle", 11: "Techno", 49: "Ethnic", 50: "Kick & Snare", 57: "Rhythm FX", 58: "Rhythm FX 2", 53: "Cymbal & Claps", 52: "Asia", 56: "SFX", 26: "Dance", 2 * 128 + 26: "Dance"}
 SET_ALONE = {49, 50, 52, 53, 57, 58}
 # ...and the sets that EXTEND a kit built elsewhere rather than replace it
-SET_EXTEND = {52}
+SET_EXTEND = {40, 52, 56, 16, 24, 25, 27, 28, 29, 30, 32}
 
 APPROX = 'approx'
 
@@ -339,7 +365,7 @@ VOICE = {
     'Reverse CR-78 Open Hi-Hat': ('r', 27, 46), 'Reverse Closed Hi-Hat': ('r', 0, 42),
     'Reverse Gong': ('r', 52, 74), 'Reverse Bell Tree': ('r', 0, 84), 'Reverse Guiro': ('r', 0, 74),
     'Reverse Gun Shot': ('r', 56, 72), 'Reverse Scratch': ('r', 56, 61), 'Reverse Laser Gun': ('r', 56, 74),
-    'Reverse Hi Q': ('r', 0, 27),
+    'Reverse Hi Q': ('r', 0, 27), 'Reverse Bendir': ('r', 49, 54),
     # Rhythm FX 2's: the drum machines' and the breaks' from their own sets
     # (the 707's crash is the 909's in our 707 set; Tambourine 2 Standard's)
     'Reverse TR-707 Kick 1': ('r', 29, 36), 'Reverse TR-909 Kick 1': ('r', 30, 36),
@@ -366,6 +392,55 @@ VOICE = {
     'Hu Yin Luo High': ('c', 'RfxHuYinLuoProperties', 470.0),
     'Hu Yin Luo High 2': ('c', 'RfxHuYinLuoProperties', 500.0),
     'Reverse Hu Yin Luo': ('r', 52, 83),
+    # ...the machine sets' borrowed keys: our CR-78's (its cowbell the 808's,
+    # ours having none), the 808's kick 2 its kick, the ride's zones
+    # Cymbal & Claps' mid ride, Jazz's applause the Orchestra set's
+    'TR-808 Kick 2': ('k', 25, 36, APPROX), 'Power Kick 2': ('k', 16, 36, APPROX),
+    'CR-78 Tambourine': ('k', 27, 54), 'CR-78 Rim Shot': ('k', 27, 37), 'CR-78 Maracas': ('k', 27, 70),
+    'CR-78 Claves': ('k', 27, 75), 'CR-78 Metalic Beat 1': ('k', 27, 80), 'CR-78 Metalic Beat 2': ('k', 27, 81),
+    'CR-78 Cowbell': ('k', 25, 56, APPROX), 'Tambourine 2': ('k', 0, 54, APPROX),
+    'Ride Cymbal Edge': ('c', 'RideEdgeProperties', 147.5), 'Ride Cymbal Inner': ('c', 'RideCymbalProperties', 147.5),
+    'Applause': ('k', 48, 88),
+    # THE SC-88 PRO SFX SET'S ADDITIONS (tonelib.Rfx*: ours where we have the
+    # sound -- the fret slide, the cutting noises (their second takes and the
+    # distorted ones ours: the guitar's amp is a channel's), the record, the
+    # telephone, the crowd, the explosion and the gunshot lower, the orchestra
+    # hit -- the rest guesses from the names)
+    'MC-500 Beep 1': ('c', 'RfxMC500BeepProperties', 2093.0),
+    'MC-500 Beep 2': ('c', 'RfxMC500BeepProperties', 1046.5),
+    'Guitar Wah': ('c', 'RfxGuitarWahProperties', 261.63),
+    'Guitar Slap': ('c', 'SfxBassSlapProperties', 523.25, APPROX),
+    'Chord Stroke Down': ('c', 'RfxStrumProperties', 82.41),
+    'Chord Stroke Up': ('c', 'RfxStrumProperties', 82.41),
+    'Biwa FX': ('c', 'RfxBiwaFxProperties', 196.0, APPROX),
+    'Phonograph Noise': ('c', 'PhonoNoiseProperties', 261.63),
+    'Tape Rewind': ('c', 'RfxTapeRewindProperties', 2500.0),
+    'Cutting Noise 2 Up': ('k', 56, 49, APPROX), 'Cutting Noise 2 Down': ('k', 56, 48, APPROX),
+    'Distortion Guitar Cutting Noise Up': ('k', 56, 49, APPROX),
+    'Distortion Guitar Cutting Noise Down': ('k', 56, 48, APPROX),
+    'Bass Slide': ('c', 'SfxFretSlideProperties', 130.81, APPROX),
+    'Pick Scrape': ('c', 'RfxPickScrapeProperties', 261.63),
+    'Bird 2': ('c', 'SfxBirdsProperties', 3322.4, APPROX),
+    'Telephone 1': ('c', 'TelephoneRingProperties', 523.25),
+    'Telephone 2': ('c', 'RfxSquareToneProperties', 1000.0),
+    'Small Club 2': ('c', 'SmallClubProperties', 440.0),
+    'Applause Wave': ('c', 'RfxApplauseWaveProperties', 440.0),
+    'Eruption': ('c', 'SfxExplosionProperties', 130.81),
+    'Big Shot': ('c', 'GunshotProperties', 98.0),
+    'Percussion Bang': ('c', 'OrchestraHitProperties', 261.63, APPROX),
+    # THE BRUSH SET'S BRUSHED STROKES (tonelib.Brush*: DRSKit's whiskers against
+    # its sticks, applied to Standard's), at Standard's pitches
+    'Brush High Tom 1': ('c', 'BrushTomHighProperties', 175.0),
+    'Brush High Tom 2': ('c', 'BrushTomHighProperties', 150.0),
+    'Brush Mid Tom 1': ('c', 'BrushTomMidProperties', 130.0),
+    'Brush Mid Tom 2': ('c', 'BrushTomMidProperties', 110.0),
+    'Brush Low Tom 1': ('c', 'BrushTomLowProperties', 98.0),
+    'Brush Low Tom 2': ('c', 'BrushTomLowProperties', 87.0),
+    'Brush swish high': ('c', 'BrushSwishProperties', 1000.0),
+    'Brush swish mid': ('c', 'BrushSwishMidProperties', 1000.0),
+    'Brush swish low': ('c', 'BrushSwishProperties', 1000.0),
+    'Brush Closed Hi-Hat': ('c', 'BrushClosedHatProperties', 248.4),
+    'Brush Open Hi-Hat': ('c', 'BrushOpenHatProperties', 248.4),
     # ...and the opera's cymbals and its small drum (the dataset's naobo and
     # bangu; the small cymbals the pair a fifth up)
     'Nao Bo': ('c', 'RfxNaoboProperties', 181.9),
@@ -629,6 +704,16 @@ STROKES = {
                                   ((0.0, 0.8), (0.25, 1.1), (0.5, 0.8), (0.75, 1.1), (1.0, 0.8),
                                    (1.25, 1.05), (1.5, 0.7)),
                                   ((0.0, -24.0), (0.45, 0.0), (1.0, -2.0), (1.5, -26.0)))},
+    # THE STRUM: an open E's six strings 12 ms apart, down low to high, up the
+    # reverse, each a little softer
+    'Chord Stroke Down': {"pattern": tuple((0.012 * i, -0.6 * i, st, 1.5) for i, st in enumerate((0, 7, 12, 16, 19, 24)))},
+    'Chord Stroke Up': {"pattern": tuple((0.012 * i, -0.6 * i, st, 1.5) for i, st in enumerate((24, 19, 16, 12, 7, 0)))},
+    # TAPE REWIND: twenty chirps in 1.2 s, closing up and rising an octave
+    'Tape Rewind': {"pattern": tuple((round(1.2 * (i / 20.0) ** 0.8, 3), -4.0 * (i % 2), round(12.0 * i / 19, 2))
+                                     for i in range(20))},
+    # TELEPHONE 2: an electronic trill, two tones a minor third apart at 20 a
+    # second, for 0.8 s
+    'Telephone 2': {"pattern": tuple((0.025 * i, 0.0, 3.0 * (i % 2), 0.025) for i in range(32))},
     'Bounce': {"pattern": _BOUNCE},
     'Reverse Bounce': {"pattern": _REV_BOUNCE},
 }
@@ -722,7 +807,9 @@ for _w, (_c, _ts) in _CONS.items():
 
 # ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
 # takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
-GATE = {'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
+GATE = {'MC-500 Beep 1': 0.04, 'MC-500 Beep 2': 0.04, 'Guitar Wah': 0.25, 'Biwa FX': 1.2,
+        'Phonograph Noise': 2.0, 'Pick Scrape': 0.8, 'Telephone 1': 1.5, 'Small Club 2': 2.5,
+        'Applause Wave': 3.0, 'Eruption': 2.5, 'Sagat Closed': 0.07, 'Gengari Mute Low': 0.12, 'Gengari Mute High': 0.12, 'Jing Mute': 0.35, 'Tang Gu Mute': 0.12, 'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
         'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15}
 
 # ...AND ITS RING (percussion_map.KIT_RING, PERCUSSION_RING's sense): the
@@ -734,6 +821,9 @@ RING['Nao Bo'] = 0.56
 RING['Xiao Bo'] = 0.62
 # ...the ride's zones Standard's ride's (PERCUSSION_RING[51])
 RING.update({'Ride Cymbal %s %s' % (h, z): 0.5 for h in ('Low', 'Mid', 'High') for z in ('Inner', 'Edge')})
+RING.update({'Ride Cymbal Edge': 0.5, 'Ride Cymbal Inner': 0.5})
+# ...the brushed hats Standard's hats' (PERCUSSION_RING 42, 46)
+RING.update({'Brush Closed Hi-Hat': 1.38, 'Brush Open Hi-Hat': 0.23})
 # ...AND ITS LEVEL TRIM (percussion_map.KIT_LEVEL): the half-open hats the open
 # hat's (PERCUSSION_LEVEL[46])
 LEVEL = {'Half-Open Hi-Hat 1': 0.47, 'Half-Open Hi-Hat 2': 0.47}
@@ -742,11 +832,12 @@ LEVEL = {'Half-Open Hi-Hat 1': 0.47, 'Half-Open Hi-Hat 2': 0.47}
 RING.update({'Mute Crash Cymbal 1': 0.61, 'Mute Crash Cymbal 2': 1.69, 'Brush Crash Cymbal': 0.61})
 # ...the SFX set's voices borrowed whole its trims (KIT_LEVEL[56] 47, 71)
 LEVEL.update({'Guitar Slide': 59.315})
+LEVEL.update({'Brush Closed Hi-Hat': 0.87, 'Brush Open Hi-Hat': 0.47})
 # ...and Standard's voices borrowed whole theirs (PERCUSSION_LEVEL 28, 54)
 LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
 
 # THE CLASS VOICES LEVELLED to the kit (examples/gs_levels.py)
-LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 490.848, 'Voice One': 95.1735, 'Reverse Voice One': 241.4161, 'Voice Two': 94.8676, 'Reverse Voice Two': 233.8809, 'Voice Three': 102.6541, 'Reverse Voice Three': 206.488, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 280.3505, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 247.8117, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604})
+LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 490.848, 'Voice One': 95.1735, 'Reverse Voice One': 241.4161, 'Voice Two': 94.8676, 'Reverse Voice Two': 233.8809, 'Voice Three': 102.6541, 'Reverse Voice Three': 206.488, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 280.3505, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 247.8117, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604, 'MC-500 Beep 1': 3.9281, 'MC-500 Beep 2': 3.1058, 'Guitar Wah': 2.0689, 'Biwa FX': 2.5052, 'Phonograph Noise': 7.212, 'Tape Rewind': 3.3312, 'Bass Slide': 49.3266, 'Pick Scrape': 2.0225, 'Bird 2': 0.6743, 'Telephone 1': 0.0748, 'Telephone 2': 3.0982, 'Eruption': 1.6774, 'Big Shot': 4.2851})
 
 # ...a word's consonant at its word's trim: they were balanced together
 for _w, (_c, _ts) in _CONS.items():
@@ -757,6 +848,12 @@ for _w, (_c, _ts) in _CONS.items():
 # a key below the set's own, struck with it
 LAYER = {'Slappy': ((16, 'Slappy (slap)'),)}
 LAYER.update(_VOICE_LAYER)      # the voices' consonants (above)
+# ...the Brush set's toms' swish (tonelib.BrushSwishProperties), on keys below
+# the set's, its level fitted (examples/stroke_diff_fit.py --swish)
+LAYER.update({'Brush High Tom 1': ((1, 'Brush swish high'),), 'Brush High Tom 2': ((2, 'Brush swish high'),),
+              'Brush Mid Tom 1': ((3, 'Brush swish mid'),), 'Brush Mid Tom 2': ((4, 'Brush swish mid'),),
+              'Brush Low Tom 1': ((5, 'Brush swish low'),), 'Brush Low Tom 2': ((6, 'Brush swish low'),)})
+LEVEL.update({'Brush swish high': 0.0562, 'Brush swish mid': 0.0891, 'Brush swish low': 0.0447})
 # ...the riq's and the pandeiro's jingles (our tambourine, on keys below the
 # Ethnic set's: it has none under 25), 9 dB under the head
 LAYER.update({'Req Dum': ((20, 'Req jingles'),), 'Req Tik': ((21, 'Req jingles'),),
@@ -772,7 +869,6 @@ GATE.update({'Reverse Voice One': round(1 / _ONE['f0'], 4), 'Reverse Voice Two':
 LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
               'Brush Crash Cymbal': round(0.56 * 10 ** (-9 / 20.0), 4)})
 
-# not built yet: Jingle Bell,
-# Ban Gu, Bend Gong, the udu, Bendir, Req, the tabla, the talking drums,
-# Djembe, Conga Slide, Pandiero, Tamborim, High/Low Hoo, Reverse Bendir, and
-# Rhythm FX's synth effects (Techno Thip ... Flying Monster)
+# Every name the SC-88 Pro's sets use has a voice here (2026-10-25); a few
+# are the nearest we have (APPROX), and Standard's Voice One-Three (17-19)
+# stay silent: its keys play no voiced strokes.

@@ -39,6 +39,18 @@ VARIANTS = {
              "RideEdgeProperties", 53, 82, 85),
     "brush": ("drskit/Crash_left_shank/*.wav", "drskit_more/*-Crash_left_whisker.wav", (5, 6), 0.05,
               "BrushCrashProperties", 53, 61, 64),
+    # THE BRUSH SET'S (its 41-50, 42, 46): each against Standard's on the same
+    # key (a ninth field, the stick's set)
+    "tomhi": ("drskit/Tom1/*.wav", "drskit_more/*-Tom1_whisker.wav", (10,), 0.03,
+              "BrushTomHighProperties", 40, 50, 50, 0),
+    "tommid": ("drskit/Tom1/*.wav", "drskit_more/*-Tom1_whisker.wav", (10,), 0.03,
+               "BrushTomMidProperties", 40, 47, 47, 0),
+    "tomlow": ("drskit/Tom3/*.wav", "drskit_more/*-Tom3_whisker.wav", (12,), 0.03,
+               "BrushTomLowProperties", 40, 43, 43, 0),
+    "hatclosed": ("drskit_more/*-Hihat_closed.wav", "drskit_more/*-Hihat_closed_whisker.wav", (2,), 0.02,
+                  "BrushClosedHatProperties", 40, 42, 42, 0),
+    "hatopen": ("drskit_more/*-Hihat_open.wav", "drskit_more/*-Hihat_open_whisker.wav", (2,), 0.03,
+                "BrushOpenHatProperties", 40, 46, 46, 0),
 }
 V = None
 
@@ -83,18 +95,19 @@ def ours():
     import percussion_map as P
     P._RING_CLASSES.clear()
     c = {}
-    for note in (V[6], V[7]):
+    for side, note in enumerate((V[6], V[7])):
+        kit = V[8] if (side == 0 and len(V) > 8) else V[5]
         m = mido.MidiFile(type=1, ticks_per_beat=480)
         t = mido.MidiTrack()
         m.tracks.append(t)
         t.append(mido.MetaMessage("set_tempo", tempo=500000, time=0))
         t.append(mido.Message("sysex", data=[0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41], time=0))
-        t.append(mido.Message("program_change", channel=9, program=V[5], time=0))
+        t.append(mido.Message("program_change", channel=9, program=kit, time=0))
         t.append(mido.Message("note_on", channel=9, note=note, velocity=100, time=240))
         t.append(mido.Message("note_off", channel=9, note=note, velocity=0, time=960))
         L, R = B.render(m)[:2]
-        c[note] = colour(0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64)), B.SR)
-    d = c[V[7]] - c[V[6]]
+        c[side] = colour(0.5 * (np.asarray(L, np.float64) + np.asarray(R, np.float64)), B.SR)
+    d = c[1] - c[0]
     return d - d.mean()
 
 
@@ -118,7 +131,8 @@ def fit(passes=4):
         cur = dict(cls.band_trim_db)
         pts = []
         for hz, e in zip(cen, err):
-            base = np.interp(np.log(hz), np.log([p[0] for p in cls.band_trim_db]), [p[1] for p in cls.band_trim_db])
+            bt = cls.band_trim_db or ()
+            base = np.interp(np.log(hz), np.log([p[0] for p in bt]), [p[1] for p in bt]) if bt else 0.0
             pts.append((int(round(hz)), round(float(base + e), 1)))
         cls.band_trim_db = tuple(pts)
     path = os.path.join(HERE, "tonelib.py")
@@ -130,9 +144,44 @@ def fit(passes=4):
     print("    band_trim_db = %s" % (cls.band_trim_db,))
 
 
+SWISH = {"tomhi": "Brush swish high", "tommid": "Brush swish mid", "tomlow": "Brush swish low"}
+
+
+def fit_swish():
+    """--swish: a brushed tom's swish (its own voice on a key below the set:
+    tonelib.BrushSwishProperties) at the level -- a grid, then finer -- whose
+    difference is nearest DRSKit's. Written into percussion_gs.LEVEL."""
+    import percussion_gs as G
+    import percussion_map as P
+    name = SWISH[sys.argv[1]]
+    want = drskit()
+    show("DRSKit", want)
+    keys = [h for ks in P.KIT_LAYER.get(V[5], {}).values() for h in ks if P.KITS[V[5]].get(h, ("",))[0] == name]
+
+    def err(db):
+        for h in keys:
+            P.KIT_LEVEL.setdefault(V[5], {})[h] = 10 ** (db / 20.0)
+        got = ours()
+        return float(np.sqrt(np.mean((want - got) ** 2))), got
+    best = min((err(d)[0], d) for d in np.arange(-60.0, 41.0, 10.0))
+    for step in (5.0, 2.0, 1.0):
+        best = min([best] + [(err(best[1] + k * step)[0], best[1] + k * step) for k in (-1, 1)])
+    e, got = err(best[1])
+    show("ours", got)
+    lv = round(10 ** (best[1] / 20.0), 4)
+    print("  %s at %.1f dB (trim %s): rms %.1f dB" % (name, best[1], lv, e))
+    path = os.path.join(HERE, "percussion_gs.py")
+    body = open(path).read()
+    body = re.sub(r"'%s': [0-9.e-]+" % re.escape(name), "'%s': %r" % (name, lv), body, count=1)
+    open(path, "w").write(body)
+
+
 def main(argv):
     global V
     V = VARIANTS[argv[1]]
+    if "--swish" in argv:
+        fit_swish()
+        return 0
     if "--fit" in argv:
         fit()
         return 0

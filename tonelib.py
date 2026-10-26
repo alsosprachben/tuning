@@ -20763,6 +20763,51 @@ class BrushCrashProperties(CrashCymbal1Properties):
     set's are levelled, so not the whole 30)."""
     band_trim_db = ((354, 0.9), (707, 7.9), (1414, 3.1), (2828, -16.0), (5657, 15.6), (11314, -1.0))
 
+# THE BRUSH SET'S STROKES (its 41-50): each Standard's drum played with
+# brushes -- DRSKit's whisker strokes against its sticks', matched in level
+# (CC-BY 4.0, measured only; examples/stroke_diff_fit.py): the difference,
+# applied to ours as a trim, refitted on our render.
+
+class BrushTomHighProperties(HighTomProperties):
+    """Brush High Tom 1 and 2: the high toms brushed (DRSKit's rack tom) --
+    the head as struck, the brush's swish its own voice beside it
+    (BrushSwishProperties, percussion_gs.LAYER)."""
+
+
+class BrushTomMidProperties(TomTomProperties):
+    """Brush Mid Tom 1 and 2: the mid toms brushed (DRSKit's rack tom)."""
+
+
+class BrushTomLowProperties(FloorTomProperties):
+    """Brush Low Tom 1 and 2: the floor toms brushed (DRSKit's floor tom)."""
+
+
+class BrushSwishProperties(TR808Properties):
+    """A BRUSH'S SWISH on a tom: noise 1-12 kHz dying over the stroke (0.35 s),
+    struck with each brushed tom (percussion_gs.LAYER), its level fitted so
+    ours brushed against ours struck reads as DRSKit's whisker strokes
+    against its sticks' (examples/stroke_diff_fit.py tomhi, tommid, tomlow
+    --swish). The tom classes take no band trim."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.35, "noise_db": 0.0, "noise_hp_hz": 1000.0,
+             "noise_lp_hz": 12000.0, "noise_decay_s": 0.35, "noise_rise_ms": 4.0}
+
+
+class BrushSwishMidProperties(BrushSwishProperties):
+    """...on the mid toms, darker: its top rolled off at 7 kHz (fitted the same
+    way: the full swish's left the mid toms 6 dB off DRSKit's)."""
+    tr808 = dict(BrushSwishProperties.tr808, noise_hp_hz=1500.0, noise_lp_hz=7000.0)
+
+
+class BrushClosedHatProperties(ClosedHiHatProperties):
+    """Brush Closed Hi-Hat: the closed hats brushed (DRSKit's)."""
+    band_trim_db = ((354, 3.7), (707, -4.7), (1414, -3.2), (2828, -0.5), (5657, -0.0), (11314, 4.7))
+
+
+class BrushOpenHatProperties(OpenHiHatProperties):
+    """Brush Open Hi-Hat: the open hats brushed (DRSKit's)."""
+    band_trim_db = ((354, 3.7), (707, -7.7), (1414, -2.7), (2828, -0.1), (5657, 1.1), (11314, 5.8))
+
+
 class TR909CrashProperties(RomMetalMixin, CrashCymbal1Properties):
     """909 Crash Cymbal: a real crash in ROM (TUNE at its middle)."""
     # FITTED (examples/rom_cymbal_fit.py)
@@ -28138,10 +28183,10 @@ class SfxKittyProperties(SfxThroatProperties):
 
 class SfxGrowlProperties(SfxThroatProperties):
     """GS 123.5, "Growl": a dog growling -- a throat pulsed as qubodup's
-    growl (Freesound 122183, CC0; KIT_STROKES "voiced", key 86): ROUGH and
+    growl (Freesound 122183, CC0; KIT_STROKES "voiced", key 87): ROUGH and
     low, ~130 Hz, its bursts 39% voiced to YIN (median aperiodicity 0.41),
     0.25-0.75 s each: one growl a note, its life and its mouth the bursts'
-    (percussion_map KIT_STROKES "voiced" 86) -- 4.5% jitter, shimmer and a
+    (percussion_map KIT_STROKES "voiced" 87) -- 4.5% jitter, shimmer and a
     breath on each pulse, measured to it.
     Its formants by LPC of its loudest bursts (throat_fit.py growl)."""
     # at the bark's level (SfxDogProperties: the loudest 50 ms on key 60)
@@ -28152,7 +28197,7 @@ class SfxGrowlProperties(SfxThroatProperties):
     # ...and one at ~5 kHz the LPC frames show (4.8-5.7 kHz) that no window took
     # (its lowest formant up: the take's 80-300 Hz stands ~7 dB over its
     # 300 Hz-1 kHz, which the balance's bands, from 300 Hz, did not see -- set
-    # with the mouth's contour, to the jaw's path, percussion_map 86)
+    # with the mouth's contour, to the jaw's path, percussion_map 87)
     DRUM_MODES = ((0.1906, 13.7, 6207.0), (0.5751, -3.2, 13982.0), (1.1107, -3.3, 13779.0), (1.614, -5.8, 10226.0), (2.4881, -4.0, 9795.0), (3.0432, -9.5, 12864.0), (5.1, -10.1, 15000.0))
 
 
@@ -28898,6 +28943,59 @@ class RfxTamborimProperties(TR808Properties):
     tr808 = {"tune_hz": 620.0, "decay_s": 0.14, "res": ((1.6, -6.0, 0.09),), "noise_db": -8.0,
              "noise_hp_hz": 1500.0, "noise_lp_hz": 9000.0, "noise_decay_s": 0.04, "click_db": -4.0,
              "click_dbs": 5000.0}
+
+
+# THE SC-88 PRO SFX SET'S ADDITIONS (its 21-38, 86, 89-96): ours where we have
+# the sound, guesses from the names where not, the TR-808 engine and the
+# weather machinery.
+
+class RfxMC500BeepProperties(TR808Properties):
+    """MC-500 BEEP 1 and 2 (SFX 21-22, Standard 22-23): the Roland MC-500
+    sequencer's metronome -- a short squarish beep, 40 ms; 1 the accent, high,
+    2 the beat, an octave down (percussion_gs's pitches)."""
+    tr808 = {"tune_hz": 2093.0, "decay_s": 0.05, "res": ((3.0, -10.0, 0.05), (5.0, -14.0, 0.05)),
+             "attack_ms": 1.0}
+
+
+class RfxGuitarWahProperties(SfxScratchPushProperties):
+    """GUITAR WAH (SFX 24): a muted strum through a wah -- the scratch's
+    groove noise (its 1-2.5 kHz) swept up an octave and a half, the "wakka"."""
+    tension_bend = -0.65
+    tension_settle_time = 0.08
+
+
+class RfxStrumProperties(SteelGuitarProperties):
+    """CHORD STROKE DOWN and UP (SFX 26-27): an open E chord strummed on our
+    steel-string guitar -- six strings, 12 ms apart, low to high or back
+    (percussion_gs.STROKES), left to ring."""
+    one_shot = True
+
+
+class RfxBiwaFxProperties(ShamisenProperties):
+    """BIWA FX (SFX 28): the biwa's plectrum struck hard across its strings --
+    a guess, on our shamisen (the biwa's own numbers are non-commercial data,
+    kept out of new voices), left to ring."""
+    one_shot = True
+
+
+class RfxTapeRewindProperties(TR808Properties):
+    """TAPE REWIND (SFX 30): a tape spooling back past the heads -- its music
+    a squeaky chatter, rising as it speeds (percussion_gs.STROKES): each chirp
+    a sine rising onto ~2.5 kHz in 20 ms."""
+    tr808 = {"tune_hz": 2500.0, "decay_s": 0.05, "bend_oct": -0.4, "bend_ms": 20.0}
+
+
+class RfxPickScrapeProperties(SfxScratchPullProperties):
+    """PICK SCRAPE (SFX 38): a pick dragged down a wound string -- a rasp
+    falling an octave over most of a second, the scratch's noise riding it."""
+    tension_bend = 1.0
+    tension_settle_time = 0.35
+
+
+class RfxApplauseWaveProperties(SmallClubProperties):
+    """APPLAUSE WAVE (SFX 93): a bigger crowd than Small Club's -- 36 people,
+    9 dB between nearest and farthest -- ~3 s."""
+    strike_flam_people = (36, 3.6, 4.4, 0.04, 9.0)
 
 
 # THE RHYTHM FX SETS' STRUCK AND PROCESSED OBJECTS (Rhythm FX 66, 71-74, 76,

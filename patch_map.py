@@ -1008,7 +1008,7 @@ SFX_VARIATIONS = {
     # a voice's pulses, a train, a cascade -- expanded for a melodic note too
     (122, 5): 84,                                                # Bubble
     (123, 1): 76, (123, 2): 77,                                  # Dog, Horse-Gallop
-    (123, 4): 85, (123, 5): 86,                                  # Kitty, Growl (past the set)
+    (123, 4): 85, (123, 5): 87,                                  # Kitty, Growl (past the set: the SC-88's keys)
     (126, 1): 52, (126, 5): 56,                                  # Laughing, Footstep
     (127, 1): 73,                                                # Machinegun
 }

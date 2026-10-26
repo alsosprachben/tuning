@@ -585,7 +585,7 @@ KIT_RATED = {
         77: (3, "HORSE-GALLOP: horseshoe clicks (Ben's call) in GeneralUser GS's five-fall gallop -- a free bar's modes from 1.9 kHz gone in ~60 ms over a bright strike, set, not fitted (no recording has a shoe's click alone). Levelled to the footsteps: GeneralUser's swells in over 5 s, 20 dB down"),
         71: (3, "STARSHIP: no recording exists, so GeneralUser GS's patch as it means it (examples/starship_ref.py, from its SF2 generators -- timidity plays it as a 4409 Hz whine): a resonant hiss at 3.8 kHz (4.1 dB rms) and a buzz warbling 581 cents at 10.9 Hz. Not modelled: the noise loop's 7 Hz repetition. Levelled to the jet"),
         85: (4, "KITTY (past the set, GS 123.4): a cat's meow as a throat (examples/throat_fit.py cat): peridactyloptrix's five meows (Freesound 214759, CC0), one 0.75 s syllable at 640 Hz, clean, near level then falling ~a semitone; LPC formants (on its harmonics, floored wide) with its fundamental and 4.5-5 kHz added, balanced to the meows (0.0 dB in every band). Ben: 'Kitty sounds good'"),
-        86: (3, "GROWL (past the set, GS 123.5): a dog's growl as a throat (throat_fit.py growl): qubodup's (Freesound 122183, CC0), one 0.75 s expression at ~130 Hz, its roughness measured (4.5% jitter: 35% voiced, the take's 39%), its MOUTH opening and closing (formants scaled per pulse, new: fitted to the jaw's path, 300-1000 over 80-300 Hz, 0.9 dB rms), its LIFE a level contour (new: up in 30 ms, a sagging body, a 0.15 s release), balanced to the bursts (0.0 dB). Ben: 'good enough' -- a player's pitch bend gives it its character"),
+        87: (3, "GROWL (on the SC-88's key 87, GS 123.5): a dog's growl as a throat (throat_fit.py growl): qubodup's (Freesound 122183, CC0), one 0.75 s expression at ~130 Hz, its roughness measured (4.5% jitter: 35% voiced, the take's 39%), its MOUTH opening and closing (formants scaled per pulse, new: fitted to the jaw's path, 300-1000 over 80-300 Hz, 0.9 dB rms), its LIFE a level contour (new: up in 30 ms, a sagging body, a 0.15 s release), balanced to the bursts (0.0 dB). Ben: 'good enough' -- a player's pitch bend gives it its character"),
     },
     48: {
         27: (4, "Standard's closed hi-hat, moved: the set's hats are EXC1 with 42/44/46 -- six keys, one pair of cymbals (percussion_map.KIT_CHOKE)"),
@@ -707,10 +707,26 @@ def _gs_sets_rated():
                       'RfxGenderKeyProperties', 'BonangProperties', 'GamelanGongProperties',
                       'RfxTablaTunProperties', 'RfxTablaNaProperties', 'RfxTablaTeProperties',
                       'RfxTablaGeProperties', 'RfxTablaGeHiProperties', 'RfxReqDumProperties',
-                      'RfxReqTikProperties', 'RfxJingleBellProperties', 'TambourineProperties')}}
+                      'RfxReqTikProperties', 'RfxJingleBellProperties', 'TambourineProperties',
+                      # the Brush set's hats and toms: DRSKit's whisker strokes
+                      # against its sticks (examples/stroke_diff_fit.py)
+                      'BrushClosedHatProperties', 'BrushOpenHatProperties', 'BrushTomHighProperties',
+                      'BrushTomMidProperties', 'BrushTomLowProperties', 'BrushSwishProperties',
+                      'BrushSwishMidProperties',
+                      # ours reused in the SFX set's additions
+                      'PhonoNoiseProperties', 'TelephoneRingProperties', 'SfxExplosionProperties',
+                      'GunshotProperties', 'SfxBassSlapProperties', 'SfxBirdsProperties')},
+                  # the SFX set's additions built from their names, passed by ear
+                  # (examples/rfx_demo.py sfx, Ben: "They all sound great"); the
+                  # biwa on our shamisen and the bang the orchestra hit APPROX
+                  **{_c: (lambda: 3) for _c in (
+                      'RfxMC500BeepProperties', 'RfxGuitarWahProperties', 'RfxStrumProperties',
+                      'RfxBiwaFxProperties', 'RfxTapeRewindProperties', 'RfxPickScrapeProperties',
+                      'RfxApplauseWaveProperties', 'OrchestraHitProperties')}}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
-        KIT_RATED[k] = {}
+        # ...a set that EXTENDS one built elsewhere keeps that one's ratings
+        KIT_RATED[k] = KIT_RATED.get(k, {}) if k in getattr(_G, 'SET_EXTEND', ()) else {}
         for key, name in keys.items():
             spec = _G.VOICE.get(name)
             if spec is None:
@@ -760,6 +776,8 @@ def _sc88pro_extra_rated():
     import percussion_map as _PM
     for key, (name, kit, src) in _PM.SC88PRO_EXTRA_KEYS.items():
         r = (KIT_RATED.get(kit, {}).get(src) if kit else None) or PERC_RATED.get(src)
+        if r is None:
+            continue        # a set rated later (percussion_gs): rated again after it
         PERC_RATED[key] = (r[0], "SC-88 Pro's %s: %s" % (name, ("set %d's key %d" % (kit, src)) if kit
                                                          else "Standard's key %d" % src))
 
@@ -1869,6 +1887,7 @@ def class_tree_md():
 
 def main(argv):
     _gs_sets_rated()            # after VAR_RATED, whose classes it rates by
+    _sc88pro_extra_rated()      # ...and Standard's keys that borrow from those sets
     _sc88pro_extra_rated()      # ...and the Standard keys that borrow from those sets
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')

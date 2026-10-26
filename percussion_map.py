@@ -722,7 +722,9 @@ KITS = {
         # ...AND TWO VOICES PAST THE SET'S 39-84, for GS 123.4 Kitty and 123.5
         # Growl (patch_map.SFX_VARIATIONS): played as the bark is, as throats
         85: ("Kitty",               SfxKittyProperties, 1000.0),
-        86: ("Growl",               SfxGrowlProperties, 1000.0),
+        # 86 is the SC-88's "Bird 2" (percussion_gs), 87 its GROWL: the
+        # SC-88 and SC-88 Pro lists put Kitty, Bird 2, Growl on 85-87
+        87: ("Growl",               SfxGrowlProperties, 1000.0),
         77: ("Horse-Gallop",        SfxHoofProperties, 1900.0),
         52: ("Laughing",            SfxLaughProperties, 1000.0),
         53: ("Screaming",           SfxScreamProperties, 1243.0),
@@ -1488,7 +1490,7 @@ KIT_STROKES = {
                    # two notes. ITS ROUGHNESS MEASURED (Ben: "missing some
                    # tonality"): the take's bursts 39% voiced to YIN, median
                    # aperiodicity 0.41 -- 4.5% jitter makes ours 35% and 0.39
-                   86: (((0.0, 0.0, 0.0),), 130.0,
+                   87: (((0.0, 0.0, 0.0),), 130.0,
                         ((0.0, -0.5), (0.1, 0.0), (0.75, -1.0)),
                         0.75, 0.03, 0.0, 0.045, 2.0, None,
                         # ITS MOUTH OPENING AND CLOSING (Ben: "it doesn't sound
@@ -1836,9 +1838,17 @@ def rasp_strokes(note, on, off, rng=None, kit=0):
 # Snare 2", 572 notes that were silent here. Each key is the drum we built for
 # what Roland names there, with that drum's ring, level, gate and pan; a set
 # without its own falls to Standard's (Standard 2's kick is Standard's).
-# Voice One-Three (17-19) and the jungle and house snares (124-127) have no
-# voice here, so they stay silent, as before.
+# Voice One-Three (17-19) stay silent: Standard's keys play no voiced strokes,
+# and a voice without its pulses is one click. Their others (22-24, 83, 88,
+# 124-127) borrow the SFX set's MC-500 beeps, the Orchestra set's concert
+# snare, the Ethnic set's jingle bell, the SFX set's applause, and the
+# jungle and house snares (the house ones the 909's, as the Dance set has
+# them).
 SC88PRO_EXTRA_KEYS = {
+    22: ("MC-500 Beep 1", 56, 21), 23: ("MC-500 Beep 2", 56, 22), 24: ("Concert SD", 48, 38),
+    83: ("Jingle Bell", 49, 33), 88: ("Applause 2", 56, 58),
+    124: ("Jungle Snare 1", 10, 38), 125: ("House Snare 1", 30, 38), 126: ("[88] House Snare", 30, 38),
+    127: ("House Snare 2", 30, 40),
     0: ("Std 1 Kick 1", 0, 36), 1: ("Std 1 Kick 2", 0, 35), 2: ("Std 2 Kick 1", 0, 36),
     3: ("Std 2 Kick 2", 0, 35), 4: ("Kick Drum 1", 0, 36), 5: ("Kick Drum 2", 0, 35),
     6: ("Jazz Kick 1", 32, 36), 7: ("Jazz Kick 2", 32, 35), 8: ("Room Kick 1", 8, 36),
@@ -1870,6 +1880,8 @@ def _sc88pro_extra(keys=None):
             PERCUSSION_RING.pop(key, None); PERCUSSION_LEVEL.pop(key, None)
             KIT_GATE.get(0, {}).pop(key, None)
         own = KITS.get(kit, {}).get(src) if kit else None
+        if own is None and src not in PERCUSSION:
+            continue        # a set built later (percussion_gs): the second pass takes it
         _nm, cls, f0 = own if own is not None else PERCUSSION[src]
         PERCUSSION[key] = (name, cls, f0)
         if own is not None:
@@ -2024,7 +2036,7 @@ def _build_gs_sets():
             KIT_PAN.setdefault(k, {})[key] = pan
             for t, v in strokes.items():
                 KIT_STROKES.setdefault(k, {}).setdefault(t, {})[key] = v
-        DRUM_SETS[k] = _GSET.SET_NAME[k]
+        DRUM_SETS[k] = _GSET.SET_NAME.get(k, DRUM_SETS.get(k))     # an extended set keeps its name
         if k in _GSET.SET_ALONE:
             KIT_ONLY.add(k)
 
