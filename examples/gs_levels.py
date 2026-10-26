@@ -101,6 +101,17 @@ KIND = {
     **{'Gamelan Gong %d' % (i + 1): 'gong' for i in range(10)},
     **{'Gender %d' % (i + 1): 'drum' for i in range(5)},
     **{'Bonang %d' % (i + 1): 'drum' for i in range(5)},
+    # the SC-8850's SFX 2: its hits, then its effects; Rhythm FX 3's brass
+    **{_n: 'drum' for _n in (
+        'Acoustic Bass Mute Noise', 'Acoustic Bass Touch Noise', 'Stab! 1', 'Stab! 2', 'Thrill Hit',
+        'Glass Stir', 'Ice Ring', 'Crack Bottle', 'Sword Cross',
+        *('Keyboard Typing %d' % (i + 1) for i in range(6)))},
+    **{_n: 'voice' for _n in (
+        'Distortion Guitar Mute Noise', 'Guitar Stroke Noise 5', 'Bounce Hit', 'Bound', 'Car Engine 2', 'SL 2',
+        'Sword Boom!', 'Explosion 2', 'Bear', 'Open CD Tray', 'Boeeeen', 'Pour Bottle', 'Soda', 'Car - Horn',
+        'Railroad Crossing', 'Over Blow', 'Compresser', 'Seal', 'Cricket', 'Reverse Trombone Noise',
+        'Reverse Trumpet Noise',
+        *('Steel Guitar Slide Noise %d' % (i + 1) for i in range(4)), *('Scratch %d' % i for i in range(3, 8)))},
 }
 # ...and a soft stroke's kind 6 dB under its loud one's
 SOFT = {'Gengari p': 6.0, 'Jing p': 6.0}

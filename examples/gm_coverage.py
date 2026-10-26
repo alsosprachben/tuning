@@ -784,7 +784,21 @@ def _gs_sets_rated():
                   **{_c: (lambda: 3) for _c in (
                       'RfxMC500BeepProperties', 'RfxGuitarWahProperties', 'RfxStrumProperties',
                       'RfxBiwaFxProperties', 'RfxTapeRewindProperties', 'RfxPickScrapeProperties',
-                      'RfxApplauseWaveProperties', 'OrchestraHitProperties')}}
+                      'RfxApplauseWaveProperties', 'OrchestraHitProperties')},
+                  # the SFX set's own classes, reused (SFX 2): their key's rating there
+                  **{_c: (lambda _k=_k: KIT_RATED[56][_k][0]) for _c, _k in (
+                      ('SfxBubbleProperties', 84), ('SfxEngineProperties', 63), ('SfxGuitarCutDownProperties', 48),
+                      ('SfxKeyClickProperties', 51), ('SfxScratchPullProperties', 42),
+                      ('SfxScratchPushProperties', 41), ('SfxTrainProperties', 68))},
+                  # the SC-8850's SFX 2 sounds built from their names, and
+                  # Rhythm FX 3's reversed brass (examples/rfx_demo.py sfx2new,
+                  # sfx2kin, rfx3rev; Ben: "Sounds great.")
+                  **{_c: (lambda: 3) for _c in (
+                      'Sfx2CdTrayProperties', 'Sfx2BoingProperties', 'Sfx2GlassStirProperties',
+                      'Sfx2IceRingProperties', 'Sfx2CrackBottleProperties', 'Sfx2SodaProperties',
+                      'Sfx2CarHornProperties', 'Sfx2CrossingProperties', 'Sfx2OverBlowProperties',
+                      'Sfx2SwordCrossProperties', 'Sfx2CompressorProperties', 'Sfx2CricketProperties',
+                      'Sfx2SealProperties', 'Sfx2TrumpetNoiseRevProperties', 'Sfx2TromboneNoiseRevProperties')}}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
         # ...a set that EXTENDS one built elsewhere keeps that one's ratings

@@ -29106,6 +29106,153 @@ class VoiceOohsDrumProperties(VoiceOohsProperties):
     one_shot = True
 
 
+
+# THE SC-8850'S SFX 2 SET (60): guesses from the names, no recordings --
+# each built on the drum machine's engine (tr808.py: tones, bridged-T
+# rings, band noise, clicks) or the throat, its gesture a run of strokes
+# where the thing repeats (percussion_gs.STROKES).
+
+class Sfx2CdTrayProperties(TR808Properties):
+    """SFX 2 44, "Open CD Tray": the tray's motor whining out (a gear's tone
+    near 220 Hz and its harmonics, over a band of rattle) between the latch's
+    click and the tray's clunk home 0.6 s on."""
+    tr808 = {"tune_hz": 220.0, "tone_db": -14.0, "decay_s": 4.0, "h2_db": -6.0, "h3_db": -10.0,
+             "attack_ms": 40.0, "gate_ms": 600.0, "gate_release_ms": 30.0,
+             "noise_db": -40.0, "noise_hp_hz": 800.0, "noise_lp_hz": 3500.0, "noise_rise_ms": 30.0,
+             "noise_decay_s": 3.0, "noise_len_ms": 600.0,
+             "click_db": -6.0, "click_hp_hz": 1500.0, "click_dbs": 900.0, "click_bursts": ((0.0, 0.0), (0.62, 2.0))}
+
+
+class Sfx2BoingProperties(TR808Properties):
+    """SFX 2 57, "Boeeeen": a spring's boing -- a low tone flung up and
+    falling back an octave over a tenth of a second, a spring's inharmonic
+    mode beside it, ringing out."""
+    tr808 = {"tune_hz": 180.0, "decay_s": 1.4, "bend_oct": 1.0, "bend_ms": 90.0, "h2_db": -14.0, "h3_db": -20.0,
+             "res": ((2.76, -14.0, 0.5), (5.4, -24.0, 0.25)), "click_db": -30.0}
+
+
+_GLASS = ((2.32, -6.0, 0.9), (4.25, -14.0, 0.5), (6.63, -22.0, 0.3))
+
+
+class Sfx2GlassStirProperties(TR808Properties):
+    """SFX 2 58, "Glass Stir": a spoon round a glass -- its clinks (a wine
+    glass's modes, 1 : 2.32 : 4.25 : 6.63, near 1.6 kHz) at the spoon's
+    uneven times (percussion_gs.STROKES)."""
+    tr808 = {"tune_hz": 1600.0, "decay_s": 1.2, "res": _GLASS,
+             "click_db": -16.0, "click_hp_hz": 3000.0, "click_dbs": 1500.0}
+
+
+class Sfx2IceRingProperties(TR808Properties):
+    """SFX 2 59, "Ice Ring": ice shaken in a glass -- the glass ringing higher
+    and shorter (2.4 kHz), each knock with the ice's own dull tick."""
+    tr808 = {"tune_hz": 2400.0, "decay_s": 0.7, "res": _GLASS,
+             "noise_db": -30.0, "noise_hp_hz": 1500.0, "noise_lp_hz": 6000.0, "noise_decay_s": 0.04,
+             "click_db": -10.0, "click_hp_hz": 800.0, "click_dbs": 1200.0}
+
+
+def _crackle(seed, n, span, db0=0.0, fall=12.0):
+    import random
+    r = random.Random(seed)
+    ts = sorted(r.uniform(0.0, span) for _ in range(n - 1))
+    return ((0.0, db0),) + tuple((round(t, 4), round(db0 - fall * t / span - r.uniform(0.0, 8.0), 1)) for t in ts)
+
+
+class Sfx2CrackBottleProperties(TR808Properties):
+    """SFX 2 60, "Crack Bottle": a cap twisted off -- the seal's crackle (a
+    run of sharp ticks over 60 ms) and the gas's short gasp."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.4,
+             "noise_db": -36.0, "noise_hp_hz": 2500.0, "noise_lp_hz": 12000.0, "noise_rise_ms": 15.0,
+             "noise_decay_s": 0.5, "noise_len_ms": 220.0,
+             "click_db": 0.0, "click_hp_hz": 1500.0, "click_dbs": 3000.0, "click_bursts": _crackle(60, 9, 0.06)}
+
+
+class Sfx2SodaProperties(TR808Properties):
+    """SFX 2 62, "Soda": fizz -- many tiny bubbles bursting at the surface,
+    random high ticks thinning over a second and a half over a high hiss."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 1.6,
+             "noise_db": -46.0, "noise_hp_hz": 4000.0, "noise_lp_hz": 14000.0, "noise_rise_ms": 10.0,
+             "noise_decay_s": 2.5, "noise_len_ms": 1500.0,
+             "click_db": -6.0, "click_hp_hz": 3500.0, "click_dbs": 4000.0,
+             "click_bursts": _crackle(62, 60, 1.5, -2.0, 20.0)}
+
+
+class Sfx2CarHornProperties(TR808Properties):
+    """SFX 2 64, "Car - Horn": a car's two horns -- vibrating diaphragms, so
+    pulse-like, near 415 and 523 Hz (a major third) -- through their trumpets'
+    resonance, held its length (the set's gate)."""
+    tr808 = {"circuit": 'metal', "osc_hz": (415.0, 523.0), "osc_duty": 0.3,
+             "bands": ((900.0, 0.9, 0.0, 6.0), (2400.0, 1.2, -6.0, 6.0)), "attack_ms": 8.0}
+
+
+class Sfx2CrossingProperties(TR808Properties):
+    """SFX 2 65, "Railroad Crossing": the crossing's bell -- a small bell
+    (near 740 Hz: its partials 1, 2.4, 2.9, 4.2) struck twice a second
+    (percussion_gs.STROKES)."""
+    tr808 = {"tune_hz": 740.0, "decay_s": 0.9, "h2_db": -30.0,
+             "res": ((2.4, -8.0, 0.6), (2.92, -10.0, 0.5), (4.2, -18.0, 0.3)),
+             "click_db": -14.0, "click_hp_hz": 2000.0, "click_dbs": 1500.0}
+
+
+class Sfx2OverBlowProperties(TR808Properties):
+    """SFX 2 68, "Over Blow": blowing across a bottle's mouth -- its
+    Helmholtz tone (near 330 Hz, nearly a sine) swelling in with the breath's
+    air beside it."""
+    tr808 = {"tune_hz": 330.0, "decay_s": 3.0, "h2_db": -28.0, "h3_db": -34.0, "attack_ms": 90.0,
+             "gate_ms": 650.0, "gate_release_ms": 80.0,
+             "noise_db": -34.0, "noise_hp_hz": 300.0, "noise_lp_hz": 3000.0, "noise_rise_ms": 60.0,
+             "noise_decay_s": 2.0, "noise_len_ms": 700.0}
+
+
+class Sfx2SwordCrossProperties(TR808Properties):
+    """SFX 2 70, "Sword Cross": blades meeting -- a steel bar's clang (its
+    inharmonic modes near 1.9 kHz) struck hard, and the edge's scrape."""
+    tr808 = {"tune_hz": 1900.0, "decay_s": 1.4, "res": ((1.58, -4.0, 1.1), (2.31, -8.0, 0.9), (3.17, -12.0, 0.6),
+                                                         (4.41, -16.0, 0.4), (5.9, -22.0, 0.3)),
+             "click_db": 0.0, "click_hp_hz": 1500.0, "click_dbs": 800.0,
+             "noise_db": -30.0, "noise_hp_hz": 2500.0, "noise_lp_hz": 12000.0, "noise_rise_ms": 5.0,
+             "noise_decay_s": 0.35, "noise_len_ms": 250.0}
+
+
+class Sfx2CompressorProperties(TR808Properties):
+    """SFX 2 73, "Compresser": compressed air let go -- a bright hiss (1-12
+    kHz) on at once, falling as the tank empties."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 1.0,
+             "noise_db": -40.0, "noise_hp_hz": 1000.0, "noise_lp_hz": 12000.0, "noise_rise_ms": 8.0,
+             "noise_decay_s": 3.0, "noise_len_ms": 900.0}
+
+
+class Sfx2CricketProperties(TR808Properties):
+    """SFX 2 78, "Cricket": a field cricket -- its wing's file and scraper
+    ringing near 4.5 kHz, each tooth-run a 12 ms pulse, four pulses a chirp,
+    three chirps a second (percussion_gs.STROKES)."""
+    tr808 = {"tune_hz": 4500.0, "decay_s": 0.05, "h2_db": -26.0, "attack_ms": 2.0}
+
+
+class Sfx2TrumpetNoiseRevProperties(TR808Properties):
+    """Rhythm FX 3 38, "Reverse Trumpet Noise": a trumpet's blat -- the lips'
+    buzz (a narrow pulse) through the bell's formant near 1.2 kHz, with
+    breath -- played backwards, swelling to its attack."""
+    tr808 = {"circuit": 'metal', "osc_hz": (233.08,), "osc_duty": 0.18,
+             "bands": ((1200.0, 1.0, 0.0, 0.5), (2800.0, 1.5, -8.0, 0.3)), "attack_ms": 15.0,
+             "noise_bp": True, "noise_db": -20.0, "noise_decay_s": 0.4}
+    played_backwards = True
+    one_shot = True
+
+
+class Sfx2TromboneNoiseRevProperties(Sfx2TrumpetNoiseRevProperties):
+    """Rhythm FX 3 37, "Reverse Trombone Noise": the trombone's, an octave
+    down and darker (its formant near 600 Hz)."""
+    tr808 = dict(Sfx2TrumpetNoiseRevProperties.tr808, osc_hz=(116.54,),
+                 bands=((600.0, 1.0, 0.0, 0.6), (1500.0, 1.5, -8.0, 0.35)))
+
+
+class Sfx2SealProperties(SfxThroatProperties):
+    """SFX 2 76, "Seal": a sea lion's bark -- a rough low throat (near 260 Hz)
+    honked through a long neck, formants lower than a dog's (~450 Hz, 1.0,
+    2.0, 3.2 kHz), three barks (percussion_gs.STROKES)."""
+    breath_volume = 0.35
+    DRUM_MODES = ((0.45, 0.0, 3000.0), (1.0, -4.0, 6000.0), (2.0, -10.0, 9000.0), (3.2, -18.0, 12000.0))
+
 # THE SFX SET'S ELECTRONIC CLICKS (39, 44): Roland's own synthesized sounds,
 # so the reference is GeneralUser GS's sample of each, and the instrument a
 # synth voice -- the TR-808 engine's resonator and click (tr808.py) fit them

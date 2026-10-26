@@ -1014,6 +1014,90 @@ VOICE.update({
     'Voice Oohs Chord Sus4 A': ('c', 'VoiceOohsDrumProperties', 261.63),
     'Voice Oohs Chord Sus4 B': ('c', 'VoiceOohsDrumProperties', 293.66),
 })
+# THE SFX 2 SET'S (SC-8850, 61), BY KIN: the GM SFX set's guitar, bass and
+# key noises, its scratches, engine, train, wind, explosion and growl, the
+# Rhythm FX sets' bounce and knock -- each the nearest we have (APPROX),
+# varied by pitch where Roland numbers several
+VOICE.update({
+    'Acoustic Bass Mute Noise': ('c', 'SfxBassSlapProperties', 55.0, APPROX),
+    'Acoustic Bass Touch Noise': ('c', 'SfxBassSlapProperties', 73.4, APPROX),
+    'Acoustic Bass Attack Noise': ('k', 56, 50, APPROX),
+    'Distortion Guitar Mute Noise': ('c', 'SfxGuitarCutDownProperties', 1300.0, APPROX),
+    **{'Steel Guitar Slide Noise %d' % (_i + 1): ('c', 'SfxFretSlideProperties', _f, APPROX)
+       for _i, _f in enumerate((220.0, 261.63, 329.63, 392.0))},
+    'Guitar Stroke Noise 1': ('k', 56, 26, APPROX), 'Guitar Stroke Noise 2': ('k', 56, 27, APPROX),
+    'Guitar Stroke Noise 3': ('k', 56, 48, APPROX), 'Guitar Stroke Noise 4': ('k', 56, 49, APPROX),
+    'Guitar Stroke Noise 5': ('c', 'RfxStrumProperties', 110.0, APPROX),
+    'Audio Switch': ('k', 56, 44, APPROX),
+    **{'Keyboard Typing %d' % (_i + 1): ('c', 'SfxKeyClickProperties', _f, APPROX)
+       for _i, _f in enumerate((988.0, 1050.0, 930.0, 1110.0, 880.0, 1020.0))},
+    'Clap Hit': ('k', 56, 96, APPROX),
+    'Stab! 1': ('c', 'OrchestraHitProperties', 261.63, APPROX), 'Stab! 2': ('c', 'OrchestraHitProperties', 311.13, APPROX),
+    'Bounce Hit': ('c', 'RfxBounceProperties', 600.0, APPROX), 'Bound': ('c', 'RfxBounceProperties', 450.0, APPROX),
+    'Car Engine 2': ('c', 'SfxEngineProperties', 40.0, APPROX),
+    'SL 1': ('k', 56, 68, APPROX), 'SL 2': ('c', 'SfxTrainProperties', 220.0, APPROX),
+    'Sword Boom!': ('c', 'RfxSwishProperties', 196.0, APPROX),
+    'Industry Hit': ('k', 56, 66, APPROX), 'Drill Hit': ('k', 56, 73, APPROX),
+    'Thrill Hit': ('c', 'OrchestraHitProperties', 233.08, APPROX),
+    'Explosion 2': ('c', 'SfxExplosionProperties', 196.0, APPROX),
+    'Fancy Animal': ('k', 56, 85, APPROX), 'Bear': ('c', 'SfxGrowlProperties', 700.0, APPROX),
+    'Wind 2': ('k', 56, 81, APPROX),
+    'Scratch 3': ('c', 'SfxScratchPushProperties', 220.0, APPROX),
+    'Scratch 4': ('c', 'SfxScratchPullProperties', 220.0, APPROX),
+    'Scratch 5': ('c', 'SfxScratchPushProperties', 330.0, APPROX),
+    'Scratch 6': ('c', 'SfxScratchPullProperties', 330.0, APPROX),
+    'Scratch 7': ('c', 'SfxScratchPushProperties', 392.0, APPROX),
+    'Dist Knock': ('c', 'RfxDistortionKnockProperties', 2421.8),
+})
+STROKES['Bounce Hit'] = STROKES['Bound'] = STROKES['Bounce']
+# ...SFX 2's own (tonelib's Sfx2*: guesses from the names, no recordings)
+VOICE.update({
+    'Open CD Tray': ('c', 'Sfx2CdTrayProperties', 220.0), 'Boeeeen': ('c', 'Sfx2BoingProperties', 180.0),
+    'Glass Stir': ('c', 'Sfx2GlassStirProperties', 1600.0), 'Ice Ring': ('c', 'Sfx2IceRingProperties', 2400.0),
+    'Crack Bottle': ('c', 'Sfx2CrackBottleProperties', 1000.0),
+    'Pour Bottle': ('c', 'SfxBubbleProperties', 261.63, APPROX), 'Soda': ('c', 'Sfx2SodaProperties', 1000.0),
+    'Car - Horn': ('c', 'Sfx2CarHornProperties', 415.0), 'Railroad Crossing': ('c', 'Sfx2CrossingProperties', 740.0),
+    'Over Blow': ('c', 'Sfx2OverBlowProperties', 330.0), 'Sword Cross': ('c', 'Sfx2SwordCrossProperties', 1900.0),
+    'Compresser': ('c', 'Sfx2CompressorProperties', 1000.0), 'Seal': ('c', 'Sfx2SealProperties', 1000.0),
+    'Cricket': ('c', 'Sfx2CricketProperties', 4500.0),
+    # the Room L/R set's toms: the Room set's own ("Room Hi Tom" there)
+    **{'Room %s Tom %d' % (_w, _n): ('k', 8, _k) for _w, _n, _k in (
+        ('Low', 2, 41), ('Low', 1, 43), ('Mid', 2, 45), ('Mid', 1, 47), ('High', 2, 48), ('High', 1, 50))},
+    # RHYTHM FX 3's reversed noises: SFX 2's and the SFX set's, backwards
+    'Reverse Clean Guitar Mute Down': ('r', 56, 48), 'Reverse Clean Guitar Mute Up': ('r', 56, 49),
+    'Reverse Distortion Guitar Cut Noise Down': ('r', 56, 36), 'Reverse Distortion Guitar Cut Noise Up': ('r', 56, 35),
+    'Reverse Distortion Guitar Mute Noise': ('r', 60, 34), 'Reverse Distortion Guitar Stroke Noise': ('r', 56, 26),
+    **{'Reverse Steel Guitar Slide Noise %d' % _n: ('r', 60, 34 + _n) for _n in (1, 2, 3, 4)},
+    'Reverse Steel Guitar Stroke Noise': ('r', 60, 43),
+    'Reverse Steel Guitar Stroke Noise Down 1': ('r', 56, 26), 'Reverse Steel Guitar Stroke Noise Up 1': ('r', 56, 27),
+    'Reverse Steel Guitar Stroke Noise Down 2': ('r', 60, 41), 'Reverse Steel Guitar Stroke Noise Up 2': ('r', 60, 42),
+    'Reverse Trombone Noise': ('c', 'Sfx2TromboneNoiseRevProperties', 116.54),
+    'Reverse Trumpet Noise': ('c', 'Sfx2TrumpetNoiseRevProperties', 233.08),
+    'Reverse Clap Hit': ('r', 60, 53), 'Reverse Boeeeen': ('r', 60, 57),
+})
+STROKES.update({
+    # the spoon's clinks, uneven, round the glass
+    'Glass Stir': {"pattern": ((0.0, 0.0, 0.0), (0.21, -3.0, 0.05), (0.38, -1.5, -0.05), (0.62, -5.0, 0.0),
+                               (0.8, -2.5, 0.05), (1.05, -7.0, 0.0))},
+    # the ice's knocks, quick and ragged
+    'Ice Ring': {"pattern": ((0.0, 0.0, 0.0), (0.05, -6.0, 0.0), (0.09, -3.0, 0.1), (0.16, -8.0, 0.0),
+                             (0.2, -4.0, -0.1), (0.28, -10.0, 0.0), (0.37, -7.0, 0.05))},
+    # the glugs, the bottle's air shrinking (rising) as it fills
+    'Pour Bottle': {"pattern": tuple((round(0.16 * _i, 3), -1.0 * (_i % 2), round(0.8 * _i, 2), 0.12) for _i in range(9))},
+    # the crossing's bell, twice a second
+    'Railroad Crossing': {"pattern": tuple((0.42 * _i, -2.0 * (_i % 2), 0.0) for _i in range(4))},
+    # the cricket: four 12 ms pulses 25 ms apart a chirp, three chirps a second
+    'Cricket': {"pattern": tuple((round(0.33 * _c + 0.025 * _p, 4), -1.0 * _p - 2.0 * (_c % 2), 0.0, 0.012)
+                                 for _c in range(4) for _p in range(4))},
+    # the bear: the SFX set's growl (KIT_STROKES[56] 87) lower and longer, its
+    # jaw working, rougher
+    'Bear': {"voiced": (((0.0, 0.0, 0.0),), 95.0, ((0.0, -0.5), (0.15, 0.0), (1.0, -1.5)), 1.0, 0.03, 0.0, 0.07, 2.5,
+                        None, ((0.0, 0.85), (0.15, 1.07), (0.6, 1.05), (0.8, 0.92), (1.0, 0.63)),
+                        ((0.0, -30.0), (0.05, 0.0), (0.65, -4.0), (0.8, -9.0), (0.9, -18.0), (1.0, -28.0)))},
+    # three barks, rough, each a little lower and softer
+    'Seal': _vo(260.0, 0.18, ((0.0, 1.0), (0.06, 2.0), (0.18, -2.0)), ((0.0, -14.0), (0.02, 0.0), (0.12, -3.0), (0.18, -28.0)),
+                jitter=0.07, shimmer=2.0, syllables=((0.0, 0.0, 0.0), (0.3, -1.0, -1.5), (0.6, -2.0, -3.5))),
+})
 _CHORDS = {'Voice Oohs Chord Maj7 A': (329.63, 392.0, 493.88), 'Voice Oohs Chord Maj7 B': (440.0, 523.25, 659.26),
            'Voice Oohs Chord Sus4 A': (349.23, 392.0), 'Voice Oohs Chord Sus4 B': (392.0, 440.0)}
 _HIDDEN2 = iter(range(97, 128))       # the Voice set's own: its keys end at 96
@@ -1047,6 +1131,9 @@ GATE = {'Rock Snare Dry': 0.25, 'Rock SD Dry': 0.25, 'MC-500 Beep 1': 0.04, 'MC-
         'Guitar Slide': 0.3, 'Small Club 1': 2.5, 'Mute Crash Cymbal 1': 0.15, 'Mute Crash Cymbal 2': 0.15,
         'Standard 1 Mute Crash Cymbal': 0.15, 'Room Mute Crash Cymbal': 0.15, 'Jazz Mute Crash Cymbal': 0.15,
         'Brush Mute Crash Cymbal': 0.15, 'Concert BD 1 Mute': 0.25,
+        # SFX 2's muted bass and guitar noises, and its sword's swish
+        'Acoustic Bass Mute Noise': 0.08, 'Acoustic Bass Touch Noise': 0.05, 'Distortion Guitar Mute Noise': 0.12,
+        'Sword Boom!': 0.45,
         # the Voice set's breaths and oohs: their lengths
         'Flute Breath 1': 0.32, 'Flute Breath 2': 0.47, 'Flute Breath 3': 0.24, 'Voice Breath 1': 0.57,
         'Voice Breath 2': 0.77, 'Reverse Breath Slow': 0.95, 'Reverse Breath Short': 0.33, 'Reverse Breath Strong': 0.66,
@@ -1134,6 +1221,7 @@ VOICE.update({
     'Ceng-Ceng': ('c', 'CengCengProperties', 440.0),
     'Kopyak Open': ('c', 'KopyakProperties', 300.0), 'Kopyak Mute': ('c', 'KopyakProperties', 300.0)})
 GATE.update({'Kajar': 0.15, 'Kajar ET': 0.15, 'Kopyak Mute': 0.08})
+GATE.update({**{'Steel Guitar Slide Noise %d' % _n: 0.3 for _n in (1, 2, 3, 4)}, 'Car - Horn': 0.6, 'Pour Bottle': 1.5, 'Reverse Trombone Noise': 0.35, 'Reverse Trumpet Noise': 0.3})
 # ...their exclusive classes ([EXC1] the kelontuk's three, [EXC2] the kopyak's two)
 SET_CHOKE = {54: [{40, 41, 42}, {46, 47}], 55: [{40, 41, 42}, {46, 47}]}
 
@@ -1148,7 +1236,7 @@ STANDARD_OF = {'Room Kick 1': 36, 'Room Kick 2': 35, 'Room Snare 1': 38, 'Room S
 
 
 # THE CLASS VOICES LEVELLED to the kit (examples/gs_levels.py)
-LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 79.2487, 'Voice One': 95.1735, 'Reverse Voice One': 99.73, 'Voice Two': 94.8676, 'Reverse Voice Two': 95.3533, 'Voice Three': 102.6541, 'Reverse Voice Three': 95.8569, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 132.3066, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 113.1841, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604, 'MC-500 Beep 1': 3.9281, 'MC-500 Beep 2': 3.1058, 'Guitar Wah': 2.0689, 'Biwa FX': 2.5052, 'Phonograph Noise': 7.212, 'Tape Rewind': 3.3312, 'Bass Slide': 49.3266, 'Pick Scrape': 2.0225, 'Bird 2': 0.6743, 'Telephone 1': 0.0748, 'Telephone 2': 3.0982, 'Eruption': 1.6774, 'Big Shot': 4.2851, 'LoFi Snare 2': 0.3231, 'LoFi Snare Rim': 1.5021, 'Hip-Hop Claps': 2.4116, 'HipHop Snare 1': 0.3376, 'HipHop Snare 2': 0.2828, 'R&B Claps': 1.8039, 'Jungle Snare': 0.3995, 'Jungle Snare Rim': 1.658, 'Jungle Crash': 0.8649, 'Jungle Shaker': 1.8687, 'Jungle Snare Roll': 0.3528, 'Techno Snare': 1.5174, 'TR-909 Claps': 1.6031, 'Comp Claps 2': 1.4772, 'Hip-Hop Kick 1': 0.5382, 'Hip-Hop Kick 2': 0.6671, 'Rap Snare': 0.3376, 'Hip-Hop Snare 2': 0.2787, 'Jungle Kick 1': 0.6524, 'Jungle Kick 2': 0.5588, 'Jungle Snare 1': 0.3995, 'Jungle Snare 2': 0.3782, 'Jungle Hi-Hat': 3.0645, 'Techno Snare 1': 1.5017, 'Techno TR-808 Kick': 0.6877, 'Techno TR-606 Snare 2': 0.5233, 'Jazz Mid Tom 1': 1.4206, 'Room Kick 1': 0.3214, 'Room Kick 2': 0.3308, 'Room Snare 1': 0.3542, 'Room Snare 2': 0.3215, 'Room Closed Hi-Hat 3': 0.3422, 'Room Open Hi-Hat 3': 0.3215, 'Room Crash Cymbal': 0.3906, 'Room Ride Cymbal': 0.4399, 'Room Ride Bell': 0.4445, 'Kendang Wadon': 2.9287, 'Kendang Lanang': 1.9952, 'Bebarongan': 3.7648, 'Pelegongan': 0.1544, 'Kelontuk': 2.3579, 'Kelontuk Mute': 11.8211, 'Kelontuk Side': 7.4748, 'Gamelan Gong Wadon': 0.4344, 'Gamelan Gong Wadon ET': 0.4344, 'Gamelan Gong Lanang': 0.4749, 'Gamelan Gong Lanang ET': 0.4749, 'Kempur': 0.6143, 'Kempur ET': 0.6143, 'Kajar': 0.4795, 'Kajar ET': 0.4795, 'Kopyak Open': 0.5287, 'Reyong 1': 0.5185, 'Reyong 1 ET': 0.5185, 'Reyong 2': 0.5185, 'Reyong 2 ET': 0.5185, 'Reyong 3': 0.5185, 'Reyong 3 ET': 0.5185, 'Reyong 4': 0.5185, 'Reyong 4 ET': 0.5185, 'Reyong 5': 0.5185, 'Reyong 5 ET': 0.5185, 'Reyong 6': 0.5185, 'Reyong 6 ET': 0.5185, 'Reyong 7': 0.5185, 'Reyong 7 ET': 0.5185, 'Reyong 8': 0.5185, 'Reyong 8 ET': 0.5185, 'Reyong 9': 0.5185, 'Reyong 9 ET': 0.5185, 'Reyong 10': 0.5185, 'Reyong 10 ET': 0.5185, 'Reyong 11': 0.5185, 'Reyong 11 ET': 0.5185, 'Reyong 12': 0.5185, 'Reyong 12 ET': 0.5185, 'Kopyak Mute': 0.5287})
+LEVEL.update({'High Hoo': 43.9236, 'Low Hoo': 70.5532, 'Hoo': 42.9539, 'Yyoo Dude': 87.9449, 'Reverse Yyoo Dude': 79.2487, 'Voice One': 95.1735, 'Reverse Voice One': 99.73, 'Voice Two': 94.8676, 'Reverse Voice Two': 95.3533, 'Voice Three': 102.6541, 'Reverse Voice Three': 95.8569, 'Voice Tah': 130.6951, 'Reverse Voice Tah': 132.3066, 'Voice Ou': 102.0971, 'Voice Au': 103.6908, 'Voice Whey': 74.2745, 'Frog Voice': 80.4819, 'Douby': 114.649, 'Reverse Douby': 113.1841, 'Baert High': 81.688, 'Baert Low': 122.9863, 'Techno Thip': 4.281, 'Pop Drop': 2.4134, 'Syn. Drops': 3.594, 'Pipe': 1.4294, 'Noise Attack': 0.5112, 'Bounce': 2.2248, 'Reverse Bounce': 2.2902, 'Distortion Knock': 5.3581, 'Swish': 4.1329, 'Velocity Noise FX': 3.5333, 'Spark': 3.0143, 'Space Birds': 2.961, 'Tape Stop 1': 4.6273, 'Tape Stop 2': 6.1098, 'Emergency !': 3.7488, 'Calculating...': 4.5691, 'Saw LFO Saw': 3.0384, 'Woody Slap': 1.5678, 'Ice Block': 2.2633, 'Modulated Bell': 0.5649, 'Alias': 3.6555, 'Stereo Noise Clap': 1.6868, 'Flying Monster': 6.0009, 'Bend Gong': 0.595, 'Hu Yin Luo Low': 0.4998, 'Hu Yin Luo Mid': 0.5653, 'Hu Yin Luo Mid 2': 0.5636, 'Hu Yin Luo High': 0.6186, 'Hu Yin Luo High 2': 0.6435, 'Pai Ban': 1.7533, 'Tang Gu Mute': 1.4555, 'Low Kotsuzumi': 1.4294, 'Wadaiko Rim': 2.1837, 'Small Taiko': 1.5138, 'Buk Rim': 1.9684, 'Gengari p': 0.5949, 'Jang-Gu Rim': 2.083, 'Jing p': 0.2654, 'Jing f': 0.5315, 'Jing Mute': 0.5315, 'Gamelan Gong 1': 0.4601, 'Gamelan Gong 2': 0.4982, 'Gamelan Gong 3': 0.5458, 'Gamelan Gong 4': 0.5881, 'Gamelan Gong 5': 0.6136, 'Gamelan Gong 6': 0.6423, 'Gamelan Gong 7': 0.667, 'Gamelan Gong 8': 0.6863, 'Gamelan Gong 9': 0.6697, 'Gamelan Gong 10': 0.6878, 'Bonang 1': 0.4947, 'Bonang 2': 0.5771, 'Bonang 3': 0.6025, 'Bonang 4': 0.6666, 'Bonang 5': 0.53, 'Bendir': 0.5921, 'Udo Short': 1.9571, 'Udo Slap': 1.5506, 'Talking Drum': 1.483, 'Mute Pandiero': 2.0032, 'Tamborim': 1.5554, 'Tabla Te': 1.6667, 'Tabla Ge': 0.604, 'MC-500 Beep 1': 3.9281, 'MC-500 Beep 2': 3.1058, 'Guitar Wah': 2.0689, 'Biwa FX': 2.5052, 'Phonograph Noise': 7.212, 'Tape Rewind': 3.3312, 'Bass Slide': 49.3266, 'Pick Scrape': 2.0225, 'Bird 2': 0.6743, 'Telephone 1': 0.0748, 'Telephone 2': 3.0982, 'Eruption': 1.6774, 'Big Shot': 4.2851, 'LoFi Snare 2': 0.3231, 'LoFi Snare Rim': 1.5021, 'Hip-Hop Claps': 2.4116, 'HipHop Snare 1': 0.3376, 'HipHop Snare 2': 0.2828, 'R&B Claps': 1.8039, 'Jungle Snare': 0.3995, 'Jungle Snare Rim': 1.658, 'Jungle Crash': 0.8649, 'Jungle Shaker': 1.8687, 'Jungle Snare Roll': 0.3528, 'Techno Snare': 1.5174, 'TR-909 Claps': 1.6031, 'Comp Claps 2': 1.4772, 'Hip-Hop Kick 1': 0.5382, 'Hip-Hop Kick 2': 0.6671, 'Rap Snare': 0.3376, 'Hip-Hop Snare 2': 0.2787, 'Jungle Kick 1': 0.6524, 'Jungle Kick 2': 0.5588, 'Jungle Snare 1': 0.3995, 'Jungle Snare 2': 0.3782, 'Jungle Hi-Hat': 3.0645, 'Techno Snare 1': 1.5017, 'Techno TR-808 Kick': 0.6877, 'Techno TR-606 Snare 2': 0.5233, 'Jazz Mid Tom 1': 1.4206, 'Room Kick 1': 0.3214, 'Room Kick 2': 0.3308, 'Room Snare 1': 0.3542, 'Room Snare 2': 0.3215, 'Room Closed Hi-Hat 3': 0.3422, 'Room Open Hi-Hat 3': 0.3215, 'Room Crash Cymbal': 0.3906, 'Room Ride Cymbal': 0.4399, 'Room Ride Bell': 0.4445, 'Kendang Wadon': 2.9287, 'Kendang Lanang': 1.9952, 'Bebarongan': 3.7648, 'Pelegongan': 0.1544, 'Kelontuk': 2.3579, 'Kelontuk Mute': 11.8211, 'Kelontuk Side': 7.4748, 'Gamelan Gong Wadon': 0.4344, 'Gamelan Gong Wadon ET': 0.4344, 'Gamelan Gong Lanang': 0.4749, 'Gamelan Gong Lanang ET': 0.4749, 'Kempur': 0.6143, 'Kempur ET': 0.6143, 'Kajar': 0.4795, 'Kajar ET': 0.4795, 'Kopyak Open': 0.5287, 'Reyong 1': 0.5185, 'Reyong 1 ET': 0.5185, 'Reyong 2': 0.5185, 'Reyong 2 ET': 0.5185, 'Reyong 3': 0.5185, 'Reyong 3 ET': 0.5185, 'Reyong 4': 0.5185, 'Reyong 4 ET': 0.5185, 'Reyong 5': 0.5185, 'Reyong 5 ET': 0.5185, 'Reyong 6': 0.5185, 'Reyong 6 ET': 0.5185, 'Reyong 7': 0.5185, 'Reyong 7 ET': 0.5185, 'Reyong 8': 0.5185, 'Reyong 8 ET': 0.5185, 'Reyong 9': 0.5185, 'Reyong 9 ET': 0.5185, 'Reyong 10': 0.5185, 'Reyong 10 ET': 0.5185, 'Reyong 11': 0.5185, 'Reyong 11 ET': 0.5185, 'Reyong 12': 0.5185, 'Reyong 12 ET': 0.5185, 'Kopyak Mute': 0.5287, 'Stab! 2': 0.7052, 'Crack Bottle': 2.6638, 'Sword Cross': 0.6019, 'Distortion Guitar Mute Noise': 0.4094, 'Guitar Stroke Noise 5': 2.3533, 'Bounce Hit': 2.3209, 'Bound': 1.7589, 'Car Engine 2': 0.0667, 'SL 2': 2.2219, 'Sword Boom!': 4.8349, 'Explosion 2': 1.6211, 'Bear': 8.693, 'Pour Bottle': 6.9974, 'Soda': 8.0699, 'Car - Horn': 0.2804, 'Compresser': 22.749, 'Seal': 6.3685, 'Cricket': 3.2633, 'Reverse Trombone Noise': 0.5582, 'Reverse Trumpet Noise': 0.6303, 'Steel Guitar Slide Noise 1': 98.0254, 'Steel Guitar Slide Noise 2': 122.2174, 'Steel Guitar Slide Noise 3': 151.5724, 'Steel Guitar Slide Noise 4': 187.7612, 'Scratch 3': 1.6804, 'Scratch 4': 1.9925, 'Scratch 5': 2.0449, 'Scratch 6': 2.061, 'Scratch 7': 2.0738})
 # ...the SC-88 map's names for the Room hats, at the Room hats' levels
 LEVEL['Closed Hi-hat3 C'] = LEVEL['Room Closed Hi-Hat 3']
 LEVEL['Open Hi-hat3'] = LEVEL['Room Open Hi-Hat 3']

@@ -28,7 +28,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | SC-88Pro tones | 774 | 494 | 64% | 298 | 193 | 3 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
 | SC-8850 tones | 1262 | 522 | 41% | 315 | 204 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 35 | 95% | | | | | |
+| SC-8850 drum sets | 37 | 37 | 100% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -210,7 +210,7 @@ Standard. THE GOAL: every one built.
 | 10 | HIP HOP | HIP HOP | -- | -- | built: 39 keys of its own | 39 | **4** |
 | 11 | JUNGLE | JUNGLE | -- | -- | built: 40 keys of its own | 40 | **4** |
 | 12 | TECHNO | TECHNO | -- | -- | built: 45 keys of its own | 45 | **4** |
-| 13 | ROOM L/R | -- | -- | -- | built: 21 keys of its own | 15 | **3** |
+| 13 | ROOM L/R | -- | -- | -- | built: 21 keys of its own | 21 | **3** |
 | 14 | HOUSE | -- | -- | -- | built: 46 keys of its own | 46 | **4** |
 | 17 | POWER | POWER | POWER | POWER | built: 12 keys of its own | 12 | **4** |
 | 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 14 keys of its own | 14 | **4** |
@@ -236,8 +236,8 @@ Standard. THE GOAL: every one built.
 | 57 | SFX | SFX | SFX | SFX | built: 75 keys of its own | 75 | **4** |
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 53 keys of its own | 53 | **4** |
 | 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
-| 60 | RHYTHM FX 3 | -- | -- | -- | partial: 56 of 75 keys (19 silent) | 56 | **3** |
-| 61 | SFX 2 | -- | -- | -- | partial: 4 of 60 keys (56 silent) | 4 | **3** |
+| 60 | RHYTHM FX 3 | -- | -- | -- | built: 75 keys of its own | 75 | **3** |
+| 61 | SFX 2 | -- | -- | -- | built: 60 keys of its own | 60 | **2** |
 | 62 | VOICE | -- | -- | -- | built: 53 keys of its own | 53 | **2** |
 | 63 | CYM&CLAPS 2 | -- | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
@@ -453,10 +453,16 @@ Standard. THE GOAL: every one built.
 | 38 | [RND] Room Snare 1 | `RndRoomSnare` | **3** | [RND] Room Snare 1, the RoomSnare at 195 Hz |
 | 39 | Hand Clap | `HandClap` | **4** | Hand Clap: Standard's key 39 |
 | 40 | [RND] Room Snare 2 | `RndRoomSnare2` | **3** | [RND] Room Snare 2, the RoomSnare2 at 192 Hz |
+| 41 | Room Low Tom 2 | `RoomFloorTom` | **4** | Room Low Tom 2: set 8's key 41 |
 | 42 | [RND] Room Closed Hi-Hat | `RndRoomClosedHat` | **3** | [RND] Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
+| 43 | Room Low Tom 1 | `RoomFloorTom` | **4** | Room Low Tom 1: set 8's key 43 |
 | 44 | Pedal Hi-Hat | `PedalHiHat` | **4** | Pedal Hi-Hat: Standard's key 44 |
+| 45 | Room Mid Tom 2 | `RoomTom` | **4** | Room Mid Tom 2: set 8's key 45 |
 | 46 | [RND] Room Open Hi-Hat | `RndRoomOpenHat` | **3** | [RND] Room Open Hi-Hat, the RoomOpenHat at 248 Hz |
+| 47 | Room Mid Tom 1 | `RoomTom` | **4** | Room Mid Tom 1: set 8's key 47 |
+| 48 | Room High Tom 2 | `RoomHighTom` | **4** | Room High Tom 2: set 8's key 48 |
 | 49 | [RND] Room Crash Cymbal | `RndRoomCrash` | **3** | [RND] Room Crash Cymbal, the RoomCrash at 288 Hz |
+| 50 | Room High Tom 1 | `RoomHighTom` | **4** | Room High Tom 1: set 8's key 50 |
 | 51 | [RND] Room Ride Cymbal | `RndRoomRide` | **3** | [RND] Room Ride Cymbal, the RoomRide at 148 Hz |
 | 53 | [RND] Room Ride Bell | `RndRoomRideBell` | **3** | [RND] Room Ride Bell, the RoomRideBell at 148 Hz |
 | 55 | Splash Cymbal | `SplashCymbal` | **4** | Splash Cymbal: Standard's key 55 |
@@ -1610,6 +1616,23 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 22 | Reverse Clean Guitar Mute Up | `ReverseSfxGuitarCutUp` | **4** | Reverse Clean Guitar Mute Up: set 56's key 49, played backwards |
+| 23 | Reverse Clean Guitar Mute Down | `ReverseSfxGuitarCutDown` | **4** | Reverse Clean Guitar Mute Down: set 56's key 48, played backwards |
+| 24 | Reverse Distortion Guitar Cut Noise Up | `ReverseSfxGuitarCutUp` | **2** | Reverse Distortion Guitar Cut Noise Up: set 56's key 35, played backwards |
+| 25 | Reverse Distortion Guitar Cut Noise Down | `ReverseSfxGuitarCutDown` | **2** | Reverse Distortion Guitar Cut Noise Down: set 56's key 36, played backwards |
+| 26 | Reverse Distortion Guitar Stroke Noise | `ReverseRfxStrum` | **3** | Reverse Distortion Guitar Stroke Noise: set 56's key 26, played backwards |
+| 27 | Reverse Distortion Guitar Mute Noise | `ReverseSfxGuitarCutDown` | **4** | Reverse Distortion Guitar Mute Noise: set 60's key 34, played backwards |
+| 28 | Reverse Steel Guitar Slide Noise 1 | `ReverseSfxFretSlide` | **4** | Reverse Steel Guitar Slide Noise 1: set 60's key 35, played backwards |
+| 29 | Reverse Steel Guitar Slide Noise 2 | `ReverseSfxFretSlide` | **4** | Reverse Steel Guitar Slide Noise 2: set 60's key 36, played backwards |
+| 30 | Reverse Steel Guitar Slide Noise 3 | `ReverseSfxFretSlide` | **4** | Reverse Steel Guitar Slide Noise 3: set 60's key 37, played backwards |
+| 31 | Reverse Steel Guitar Slide Noise 4 | `ReverseSfxFretSlide` | **4** | Reverse Steel Guitar Slide Noise 4: set 60's key 38, played backwards |
+| 32 | Reverse Steel Guitar Stroke Noise | `ReverseRfxStrum` | **4** | Reverse Steel Guitar Stroke Noise: set 60's key 43, played backwards |
+| 33 | Reverse Steel Guitar Stroke Noise Up 1 | `ReverseRfxStrum` | **3** | Reverse Steel Guitar Stroke Noise Up 1: set 56's key 27, played backwards |
+| 34 | Reverse Steel Guitar Stroke Noise Down 1 | `ReverseRfxStrum` | **3** | Reverse Steel Guitar Stroke Noise Down 1: set 56's key 26, played backwards |
+| 35 | Reverse Steel Guitar Stroke Noise Up 2 | `ReverseSfxGuitarCutUp` | **4** | Reverse Steel Guitar Stroke Noise Up 2: set 60's key 42, played backwards |
+| 36 | Reverse Steel Guitar Stroke Noise Down 2 | `ReverseSfxGuitarCutDown` | **4** | Reverse Steel Guitar Stroke Noise Down 2: set 60's key 41, played backwards |
+| 37 | Reverse Trombone Noise | `Sfx2TromboneNoiseRev` | **3** | Reverse Trombone Noise, the Sfx2TromboneNoiseRev at 117 Hz |
+| 38 | Reverse Trumpet Noise | `Sfx2TrumpetNoiseRev` | **3** | Reverse Trumpet Noise, the Sfx2TrumpetNoiseRev at 233 Hz |
 | 39 | Reverse Standard Kick 2 | `ReverseKickDrum` | **4** | Reverse Standard Kick 2: Standard's key 35, played backwards |
 | 40 | Reverse Standard Kick 1 | `ReverseKickDrum` | **4** | Reverse Standard Kick 1: Standard's key 36, played backwards |
 | 41 | Reverse Room Kick 2 | `ReverseMondoKick` | **3** | Reverse Room Kick 2: set 8's key 35, played backwards |
@@ -1666,15 +1689,73 @@ Standard. THE GOAL: every one built.
 | 92 | Reverse Comp Claps 2 | `ReverseCompClaps2` | **3** | Reverse Comp Claps 2: set 26's key 39, played backwards |
 | 93 | Reverse Shaker 2 | `ReverseRndShaker` | **4** | Reverse Shaker 2: set 9's key 82, played backwards |
 | 94 | Reverse Jungle Shaker | `ReverseJungleShaker` | **3** | Reverse Jungle Shaker: set 10's key 82, played backwards |
+| 95 | Reverse Clap Hit | `ReverseOrchestraHit` | **4** | Reverse Clap Hit: set 60's key 53, played backwards |
+| 96 | Reverse Boeeeen | `ReverseSfx2Boing` | **4** | Reverse Boeeeen: set 60's key 57, played backwards |
 
 ### 60 Sfx 2
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 31 | Acoustic Bass Mute Noise | `SfxBassSlap` | **2** | Acoustic Bass Mute Noise, the SfxBassSlap at 55 Hz -- the nearest we have, not the sound |
+| 32 | Acoustic Bass Touch Noise | `SfxBassSlap` | **2** | Acoustic Bass Touch Noise, the SfxBassSlap at 73 Hz -- the nearest we have, not the sound |
+| 33 | Acoustic Bass Attack Noise | `SfxBassSlap` | **2** | Acoustic Bass Attack Noise: set 56's key 50 -- the nearest we have, not the sound |
+| 34 | Distortion Guitar Mute Noise | `SfxGuitarCutDown` | **2** | Distortion Guitar Mute Noise, the SfxGuitarCutDown at 1300 Hz -- the nearest we have, not the sound |
+| 35 | Steel Guitar Slide Noise 1 | `SfxFretSlide` | **2** | Steel Guitar Slide Noise 1, the SfxFretSlide at 220 Hz -- the nearest we have, not the sound |
+| 36 | Steel Guitar Slide Noise 2 | `SfxFretSlide` | **2** | Steel Guitar Slide Noise 2, the SfxFretSlide at 262 Hz -- the nearest we have, not the sound |
+| 37 | Steel Guitar Slide Noise 3 | `SfxFretSlide` | **2** | Steel Guitar Slide Noise 3, the SfxFretSlide at 330 Hz -- the nearest we have, not the sound |
+| 38 | Steel Guitar Slide Noise 4 | `SfxFretSlide` | **2** | Steel Guitar Slide Noise 4, the SfxFretSlide at 392 Hz -- the nearest we have, not the sound |
+| 39 | Guitar Stroke Noise 1 | `RfxStrum` | **2** | Guitar Stroke Noise 1: set 56's key 26 -- the nearest we have, not the sound |
+| 40 | Guitar Stroke Noise 2 | `RfxStrum` | **2** | Guitar Stroke Noise 2: set 56's key 27 -- the nearest we have, not the sound |
+| 41 | Guitar Stroke Noise 3 | `SfxGuitarCutDown` | **2** | Guitar Stroke Noise 3: set 56's key 48 -- the nearest we have, not the sound |
+| 42 | Guitar Stroke Noise 4 | `SfxGuitarCutUp` | **2** | Guitar Stroke Noise 4: set 56's key 49 -- the nearest we have, not the sound |
+| 43 | Guitar Stroke Noise 5 | `RfxStrum` | **2** | Guitar Stroke Noise 5, the RfxStrum at 110 Hz -- the nearest we have, not the sound |
+| 44 | Open CD Tray | `Sfx2CdTray` | **3** | Open CD Tray, the Sfx2CdTray at 220 Hz |
+| 45 | Audio Switch | `SfxSquareClick` | **2** | Audio Switch: set 56's key 44 -- the nearest we have, not the sound |
+| 46 | Keyboard Typing 1 | `SfxKeyClick` | **2** | Keyboard Typing 1, the SfxKeyClick at 988 Hz -- the nearest we have, not the sound |
+| 47 | Keyboard Typing 2 | `SfxKeyClick` | **2** | Keyboard Typing 2, the SfxKeyClick at 1050 Hz -- the nearest we have, not the sound |
+| 48 | Keyboard Typing 3 | `SfxKeyClick` | **2** | Keyboard Typing 3, the SfxKeyClick at 930 Hz -- the nearest we have, not the sound |
+| 49 | Keyboard Typing 4 | `SfxKeyClick` | **2** | Keyboard Typing 4, the SfxKeyClick at 1110 Hz -- the nearest we have, not the sound |
+| 50 | Keyboard Typing 5 | `SfxKeyClick` | **2** | Keyboard Typing 5, the SfxKeyClick at 880 Hz -- the nearest we have, not the sound |
+| 51 | Keyboard Typing 6 | `SfxKeyClick` | **2** | Keyboard Typing 6, the SfxKeyClick at 1020 Hz -- the nearest we have, not the sound |
 | 52 | Baby Laughing | `RfxBabyLaugh` | **2** | Baby Laughing, the RfxBabyLaugh at 1000 Hz |
+| 53 | Clap Hit | `OrchestraHit` | **2** | Clap Hit: set 56's key 96 -- the nearest we have, not the sound |
+| 54 | Stab! 1 | `OrchestraHit` | **2** | Stab! 1, the OrchestraHit at 262 Hz -- the nearest we have, not the sound |
+| 55 | Stab! 2 | `OrchestraHit` | **2** | Stab! 2, the OrchestraHit at 311 Hz -- the nearest we have, not the sound |
+| 56 | Bounce Hit | `RfxBounce` | **2** | Bounce Hit, the RfxBounce at 600 Hz -- the nearest we have, not the sound |
+| 57 | Boeeeen | `Sfx2Boing` | **3** | Boeeeen, the Sfx2Boing at 180 Hz |
+| 58 | Glass Stir | `Sfx2GlassStir` | **3** | Glass Stir, the Sfx2GlassStir at 1600 Hz |
+| 59 | Ice Ring | `Sfx2IceRing` | **3** | Ice Ring, the Sfx2IceRing at 2400 Hz |
+| 60 | Crack Bottle | `Sfx2CrackBottle` | **3** | Crack Bottle, the Sfx2CrackBottle at 1000 Hz |
+| 61 | Pour Bottle | `SfxBubble` | **2** | Pour Bottle, the SfxBubble at 262 Hz -- the nearest we have, not the sound |
+| 62 | Soda | `Sfx2Soda` | **3** | Soda, the Sfx2Soda at 1000 Hz |
+| 63 | Car Engine 2 | `SfxEngine` | **2** | Car Engine 2, the SfxEngine at 40 Hz -- the nearest we have, not the sound |
+| 64 | Car - Horn | `Sfx2CarHorn` | **3** | Car - Horn, the Sfx2CarHorn at 415 Hz |
+| 65 | Railroad Crossing | `Sfx2Crossing` | **3** | Railroad Crossing, the Sfx2Crossing at 740 Hz |
+| 66 | SL 1 | `SfxTrain` | **2** | SL 1: set 56's key 68 -- the nearest we have, not the sound |
+| 67 | SL 2 | `SfxTrain` | **2** | SL 2, the SfxTrain at 220 Hz -- the nearest we have, not the sound |
+| 68 | Over Blow | `Sfx2OverBlow` | **3** | Over Blow, the Sfx2OverBlow at 330 Hz |
+| 69 | Sword Boom! | `RfxSwish` | **2** | Sword Boom!, the RfxSwish at 196 Hz -- the nearest we have, not the sound |
+| 70 | Sword Cross | `Sfx2SwordCross` | **3** | Sword Cross, the Sfx2SwordCross at 1900 Hz |
+| 71 | Industry Hit | `SfxCrash` | **2** | Industry Hit: set 56's key 66 -- the nearest we have, not the sound |
+| 72 | Drill Hit | `SfxMachinegun` | **2** | Drill Hit: set 56's key 73 -- the nearest we have, not the sound |
+| 73 | Compresser | `Sfx2Compressor` | **3** | Compresser, the Sfx2Compressor at 1000 Hz |
+| 74 | Thrill Hit | `OrchestraHit` | **2** | Thrill Hit, the OrchestraHit at 233 Hz -- the nearest we have, not the sound |
+| 75 | Explosion 2 | `SfxExplosion` | **2** | Explosion 2, the SfxExplosion at 196 Hz -- the nearest we have, not the sound |
+| 76 | Seal | `Sfx2Seal` | **3** | Seal, the Sfx2Seal at 1000 Hz |
+| 77 | Fancy Animal | `SfxKitty` | **2** | Fancy Animal: set 56's key 85 -- the nearest we have, not the sound |
+| 78 | Cricket | `Sfx2Cricket` | **3** | Cricket, the Sfx2Cricket at 4500 Hz |
+| 79 | Bear | `SfxGrowl` | **2** | Bear, the SfxGrowl at 700 Hz -- the nearest we have, not the sound |
 | 80 | Frog Voice | `RfxFrog` | **3** | Frog Voice, the RfxFrog at 1000 Hz |
+| 81 | Wind 2 | `SfxWind` | **2** | Wind 2: set 56's key 81 -- the nearest we have, not the sound |
+| 82 | Scratch 3 | `SfxScratchPush` | **2** | Scratch 3, the SfxScratchPush at 220 Hz -- the nearest we have, not the sound |
+| 83 | Scratch 4 | `SfxScratchPull` | **2** | Scratch 4, the SfxScratchPull at 220 Hz -- the nearest we have, not the sound |
+| 84 | Scratch 5 | `SfxScratchPush` | **2** | Scratch 5, the SfxScratchPush at 330 Hz -- the nearest we have, not the sound |
+| 85 | Scratch 6 | `SfxScratchPull` | **2** | Scratch 6, the SfxScratchPull at 330 Hz -- the nearest we have, not the sound |
+| 86 | Scratch 7 | `SfxScratchPush` | **2** | Scratch 7, the SfxScratchPush at 392 Hz -- the nearest we have, not the sound |
 | 87 | Noise Attack | `RfxNoiseAttack` | **3** | Noise Attack, the RfxNoiseAttack at 1000 Hz |
 | 88 | Bounce | `RfxBounce` | **3** | Bounce, the RfxBounce at 600 Hz |
+| 89 | Dist Knock | `RfxDistortionKnock` | **3** | Dist Knock, the RfxDistortionKnock at 2422 Hz |
+| 90 | Bound | `RfxBounce` | **2** | Bound, the RfxBounce at 450 Hz -- the nearest we have, not the sound |
 
 ### 61 Voice
 
@@ -3016,7 +3097,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-742 classes.
+763 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -3049,7 +3130,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Rhodes` -- GM 4 Electric Piano 1 (4)
       - `Wurlitzer` -- GM 5 Electric Piano 2 (4)
     - `GuitarFretNoise` [NoisyPercussionMixin, FormantBody] -- GM 120 Guitar Fret Noise (3)
-      - `SfxFretSlide` -- set 56 23 Guitar Slide (3), set 56 37 Bass Slide (2), set 56 47 Guitar sliding finger (3), set 58 85 Guitar Slide (3)
+      - `SfxFretSlide` -- set 56 23 Guitar Slide (3), set 56 37 Bass Slide (2), set 56 47 Guitar sliding finger (3), set 58 85 Guitar Slide (3), set 60 35 Steel Guitar Slide Noise 1 (2), set 60 36 Steel Guitar Slide Noise 2 (2), set 60 37 Steel Guitar Slide Noise 3 (2), set 60 38 Steel Guitar Slide Noise 4 (2)
+        - `ReverseSfxFretSlide` -- set 59 28 Reverse Steel Guitar Slide Noise 1 (4), set 59 29 Reverse Steel Guitar Slide Noise 2 (4), set 59 30 Reverse Steel Guitar Slide Noise 3 (4), set 59 31 Reverse Steel Guitar Slide Noise 4 (4)
     - `Harp` [FormantBody] -- GM 46 Orchestral Harp (4)
     - `HarpsiBase` [FormantBody]
       - `Harpsichord` -- GM 6 Harpsichord (4)
@@ -3087,7 +3169,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `RfxBiwaFx` -- set 56 28 Biwa FX (2)
     - `NylonGuitar` [FormantBody] -- GM 24 Acoustic Guitar (nylon) (4)
       - `SteelGuitar` -- GM 25 Acoustic Guitar (steel) (4)
-        - `RfxStrum` -- set 56 26 Chord Stroke Down (3), set 56 27 Chord Stroke Up (3)
+        - `RfxStrum` -- set 56 26 Chord Stroke Down (3), set 56 27 Chord Stroke Up (3), set 60 39 Guitar Stroke Noise 1 (2), set 60 40 Guitar Stroke Noise 2 (2), set 60 43 Guitar Stroke Noise 5 (2)
+          - `ReverseRfxStrum` -- set 59 26 Reverse Distortion Guitar Stroke Noise (3), set 59 32 Reverse Steel Guitar Stroke Noise (4), set 59 33 Reverse Steel Guitar Stroke Noise Up 1 (3), set 59 34 Reverse Steel Guitar Stroke Noise Down 1 (3)
     - `Percussion`
       - `Cymbal` [NoisyPercussionMixin]
         - `ChineseCymbal` -- 52 Chinese Cymbal (4), set 53 89 Chinese Cymbal (4), set 53 90 Chinese Cymbal 2 (2), set 62 87 Chinese Cymbal (4), set 62 88 Chinese Cymbal 2 (2)
@@ -3168,7 +3251,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `ReverseTamTam40` -- set 57 56 Reverse Gong (4)
       - `Gunshot` [NoisyPercussionMixin] -- GM 127 Gunshot (4), set 56 72 Gun Shot (4), set 56 95 Big Shot (4), set 127 96 Pistol (4)
         - `ReverseGunshot` -- set 57 60 Reverse Gun Shot (4)
-        - `SfxMachinegun` -- set 56 73 Machinegun (4), set 127 97 Machinegun (4)
+        - `SfxMachinegun` -- set 56 73 Machinegun (4), set 60 72 Drill Hit (2), set 127 97 Machinegun (4)
       - `MembraneDrum`
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (3), set 1 38 Standard 2 Snare 1 (2), set 8 95 Standard 1 Snare 1 (4), set 9 92 Standard 1 Snare 1 (4), set 10 95 Rock Snare Dry (2), set 11 91 Rock Snare Dry (2), set 13 92 Rock Snare Dry (2), set 26 40 Rock SD Dry (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 51 60 Standard 1 Snare 1 (4), set 51 62 Standard 2 Snare 1 (2), set 51 81 Rock Snare Dry (2), set 51 92 Standard 1 Snare 1 (4), set 51 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
@@ -3258,12 +3341,14 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `KendangPelegongan` -- set 54 39 Pelegongan (3), set 55 39 Pelegongan (3)
                 - `KendangWadon` -- set 54 36 Kendang Wadon (3), set 55 36 Kendang Wadon (3)
             - `CowbellStroke` -- 56 Cowbell (4), set 49 70 Cowbell (4), set 127 56 Cowbell (4)
-            - `SfxBassSlap` -- set 56 25 Guitar Slap (2), set 56 50 String slap of double bass (3)
+            - `SfxBassSlap` -- set 56 25 Guitar Slap (2), set 56 50 String slap of double bass (3), set 60 31 Acoustic Bass Mute Noise (2), set 60 32 Acoustic Bass Touch Noise (2), set 60 33 Acoustic Bass Attack Noise (2)
             - `SfxDoor` -- set 56 60 Door (4), set 127 84 Door (4)
-            - `SfxGuitarCutDown` -- set 56 34 Cutting Noise 2 Down (2), set 56 36 Distortion Guitar Cutting Noise Down (2), set 56 48 Guitar cutting noise (down) (4)
-            - `SfxGuitarCutUp` -- set 56 33 Cutting Noise 2 Up (2), set 56 35 Distortion Guitar Cutting Noise Up (2), set 56 49 Guitar cutting noise (up) (4)
+            - `SfxGuitarCutDown` -- set 56 34 Cutting Noise 2 Down (2), set 56 36 Distortion Guitar Cutting Noise Down (2), set 56 48 Guitar cutting noise (down) (4), set 60 34 Distortion Guitar Mute Noise (2), set 60 41 Guitar Stroke Noise 3 (2)
+              - `ReverseSfxGuitarCutDown` -- set 59 23 Reverse Clean Guitar Mute Down (4), set 59 25 Reverse Distortion Guitar Cut Noise Down (2), set 59 27 Reverse Distortion Guitar Mute Noise (4), set 59 36 Reverse Steel Guitar Stroke Noise Down 2 (4)
+            - `SfxGuitarCutUp` -- set 56 33 Cutting Noise 2 Up (2), set 56 35 Distortion Guitar Cutting Noise Up (2), set 56 49 Guitar cutting noise (up) (4), set 60 42 Guitar Stroke Noise 4 (2)
+              - `ReverseSfxGuitarCutUp` -- set 59 22 Reverse Clean Guitar Mute Up (4), set 59 24 Reverse Distortion Guitar Cut Noise Up (2), set 59 35 Reverse Steel Guitar Stroke Noise Up 2 (4)
             - `SfxHoof` -- set 56 77 Horse-Gallop (3), set 127 101 Horse (3)
-            - `SfxKeyClick` -- set 56 51 Key Click (4), set 57 63 Key Click (4)
+            - `SfxKeyClick` -- set 56 51 Key Click (4), set 57 63 Key Click (4), set 60 46 Keyboard Typing 1 (2), set 60 47 Keyboard Typing 2 (2), set 60 48 Keyboard Typing 3 (2), set 60 49 Keyboard Typing 4 (2), set 60 50 Keyboard Typing 5 (2), set 60 51 Keyboard Typing 6 (2)
             - `SfxMetronomeBell` -- 34 Metronome Bell (4), set 56 46 Metronome Bell (4)
             - `SfxMetronomeClick` -- 33 Metronome Click (4), set 56 45 Metronome Click (4)
             - `SfxSlap` -- 28 Slap (4), set 56 40 Slap (4)
@@ -3298,9 +3383,10 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `RfxVoiceThree` -- set 58 69 Voice Three (4), set 58 70 Reverse Voice Three (4), set 61 43 Reverse Voice Three (4), set 61 61 Voice Three (4)
                 - `RfxVoiceTwo` -- set 58 67 Voice Two (4), set 58 68 Reverse Voice Two (4), set 61 42 Reverse Voice Two (4), set 61 60 Voice Two (4)
                 - `RfxVoiceWhey` -- set 58 75 Voice Whey (3)
+              - `Sfx2Seal` -- set 60 76 Seal (3)
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
-              - `SfxGrowl` -- set 56 87 Growl (3), set 57 88 Flying Monster (3)
-              - `SfxKitty` -- set 56 85 Kitty (4)
+              - `SfxGrowl` -- set 56 87 Growl (3), set 57 88 Flying Monster (3), set 60 79 Bear (2)
+              - `SfxKitty` -- set 56 85 Kitty (4), set 60 77 Fancy Animal (2)
               - `SfxLaugh` -- set 56 52 Laughing (4), set 61 69 Laughing (4), set 127 76 Laughing (4)
             - `SfxWindchime` -- set 1 84 Bar Chimes (2), set 49 35 Bar Chimes (2), set 56 62 Windchime (3), set 127 86 Windchime (3)
             - `SurdoOpen` -- 87 Open Surdo (4), set 49 81 Open Surdo (4)
@@ -3322,19 +3408,19 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `JazzTomLow` -- set 9 41 Jazz Low Tom 2 (4), set 9 43 Jazz Low Tom 1 (4), set 32 41 Jazz Low Tom 2 (4), set 32 43 Jazz Low Tom 1 (4)
                 - `RndJazzTomLow` [RandomStrike] -- set 33 41 [RND] Jazz Low Tom 2 (4), set 33 43 [RND] Jazz Low Tom 1 (4)
               - `RndFloorTom` [RandomStrike] -- set 2 41 [RND] Low Tom 2 (4), set 2 43 [RND] Low Tom 1 (4)
-              - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
+              - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 12 41 Room Low Tom 2 (4), set 12 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4), set 127 48 Acoustic High Tom (4), set 127 50 Acoustic High Tom (4)
               - `BrushTomHigh` -- set 40 48 Brush High Tom 2 (4), set 40 50 Brush High Tom 1 (4), set 41 48 Brush High Tom 2 (4), set 41 50 Brush High Tom 1 (4)
                 - `ReverseBrushTomHigh` -- set 59 79 Reverse Brush Tom 1 (2)
                 - `RndBrushTomHigh` [RandomStrike] -- set 42 48 [RND] Brush High Tom 2 (4), set 42 50 [RND] Brush High Tom 1 (4)
               - `ReverseHighTom` -- set 57 46 Reverse Tom 1 (4)
               - `RndHighTom` [RandomStrike] -- set 2 48 [RND] High Tom 2 (4), set 2 50 [RND] High Tom 1 (4)
-              - `RoomHighTom` [LiveRoom] -- set 8 48 Room Hi Tom 2 (4), set 8 50 Room Hi Tom 1 (4), set 16 48 Room Hi Tom 2 (4), set 16 50 Room Hi Tom 1 (4)
+              - `RoomHighTom` [LiveRoom] -- set 8 48 Room Hi Tom 2 (4), set 8 50 Room Hi Tom 1 (4), set 12 48 Room High Tom 2 (4), set 12 50 Room High Tom 1 (4), set 16 48 Room Hi Tom 2 (4), set 16 50 Room Hi Tom 1 (4)
             - `JazzTomHigh` -- set 9 45 Jazz Mid Tom 2 (4), set 9 47 Jazz Mid Tom 1 (4), set 9 48 Jazz High Tom 2 (4), set 9 50 Jazz High Tom 1 (4), set 32 45 Jazz Mid Tom 2 (4), set 32 47 Jazz Mid Tom 1 (4), set 32 48 Jazz High Tom 2 (4), set 32 50 Jazz High Tom 1 (4)
               - `RndJazzTomHigh` [RandomStrike] -- set 33 45 [RND] Jazz Mid Tom 2 (4), set 33 47 [RND] Jazz Mid Tom 1 (4), set 33 48 [RND] Jazz High Tom 2 (4), set 33 50 [RND] Jazz High Tom 1 (4)
             - `ReverseTomTom` -- set 57 47 Reverse Tom 2 (4)
             - `RndTomTom` [RandomStrike] -- set 2 45 [RND] Mid Tom 2 (4), set 2 47 [RND] Mid Tom 1 (4)
-            - `RoomTom` [LiveRoom] -- set 8 45 Room Mid Tom 2 (4), set 8 47 Room Mid Tom 1 (4), set 16 45 Room Mid Tom 2 (4), set 16 47 Room Mid Tom 1 (4)
+            - `RoomTom` [LiveRoom] -- set 8 45 Room Mid Tom 2 (4), set 8 47 Room Mid Tom 1 (4), set 12 45 Room Mid Tom 2 (4), set 12 47 Room Mid Tom 1 (4), set 16 45 Room Mid Tom 2 (4), set 16 47 Room Mid Tom 1 (4)
         - `SynthDrum`
           - `MoogSynthDrum` -- GM 118 Synth Drum (4)
           - `Simmons` [ModeDecays]
@@ -3372,7 +3458,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxBangu` -- set 49 44 Ban Gu (4), set 52 77 Ban Gu (4)
             - `RfxBendir` -- set 49 54 Bendir (3)
               - `ReverseRfxBendir` -- set 57 59 Reverse Bendir (3)
-            - `RfxBounce` -- set 58 82 Bounce (3), set 58 83 Reverse Bounce (3), set 60 88 Bounce (3)
+            - `RfxBounce` -- set 58 82 Bounce (3), set 58 83 Reverse Bounce (3), set 60 56 Bounce Hit (2), set 60 88 Bounce (3), set 60 90 Bound (2)
             - `RfxBreath`
               - `RfxFluteBreath1` -- set 61 54 Flute Breath 1 (2)
               - `RfxFluteBreath2` -- set 61 55 Flute Breath 2 (2)
@@ -3432,9 +3518,24 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxUduSlap` -- set 49 53 Udo Slap (3)
             - `RfxWoodySlap` -- set 57 66 Woody Slap (3)
             - `RfxXiaoluo` -- set 52 80 Shou Luo (4)
+            - `Sfx2Boing` -- set 60 57 Boeeeen (3)
+              - `ReverseSfx2Boing` -- set 59 96 Reverse Boeeeen (4)
+            - `Sfx2CarHorn` -- set 60 64 Car - Horn (3)
+            - `Sfx2CdTray` -- set 60 44 Open CD Tray (3)
+            - `Sfx2Compressor` -- set 60 73 Compresser (3)
+            - `Sfx2CrackBottle` -- set 60 60 Crack Bottle (3)
+            - `Sfx2Cricket` -- set 60 78 Cricket (3)
+            - `Sfx2Crossing` -- set 60 65 Railroad Crossing (3)
+            - `Sfx2GlassStir` -- set 60 58 Glass Stir (3)
+            - `Sfx2IceRing` -- set 60 59 Ice Ring (3)
+            - `Sfx2OverBlow` -- set 60 68 Over Blow (3)
+            - `Sfx2Soda` -- set 60 62 Soda (3)
+            - `Sfx2SwordCross` -- set 60 70 Sword Cross (3)
+            - `Sfx2TrumpetNoiseRev` -- set 59 38 Reverse Trumpet Noise (3)
+              - `Sfx2TromboneNoiseRev` -- set 59 37 Reverse Trombone Noise (3)
             - `SfxHighQ` -- 27 High Q (3), set 56 39 High Q (3)
               - `ReverseSfxHighQ` -- set 57 69 Reverse Hi Q (3)
-            - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3)
+            - `SfxSquareClick` -- 32 Square Click (3), set 56 44 Square Click (3), set 60 45 Audio Switch (2)
             - `TR606`
               - `TR606ClosedHat` -- set 10 42 TR-606 Closed Hi-Hat (4), set 27 44 606 CHH (4), set 28 42 606 CHH (4), set 28 44 606 CHH (4), set 53 42 TR-606 Closed Hi-Hat (4), set 62 41 TR-606 Closed Hi-Hat (4)
                 - `ReverseTR606ClosedHat` -- set 58 53 Reverse TR-606 Closed Hi-Hat (4)
@@ -3467,7 +3568,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
                 - `TR707HiTom` -- set 29 48 707 Hi Tom 2 (4), set 29 50 707 Hi Tom 1 (4)
                 - `TR707MidTom` -- set 29 45 707 Mid Tom 2 (4), set 29 47 707 Mid Tom 1 (4)
             - `TR808Claves` -- set 9 75 TR-808 Claves (4), set 10 75 TR-808 Claves (4), set 11 75 TR-808 Claves (4), set 13 75 TR-808 Claves (4), set 25 75 808 Claves (4), set 30 75 808 Claves (4), set 281 75 808 Claves (4)
-              - `RfxDistortionKnock` -- set 58 84 Distortion Knock (3)
+              - `RfxDistortionKnock` -- set 58 84 Distortion Knock (3), set 60 89 Dist Knock (3)
             - `TR808ClosedHat` -- set 25 42 808 CHH (4), set 25 44 808 CHH (4), set 26 44 TR-808 Closed Hi-Hat 2 (4), set 53 43 TR-808 Closed Hi-Hat (4), set 53 44 TR-808 Closed Hi-Hat (4), set 62 42 TR-808 Closed Hi-Hat (4), set 281 42 808 CHH (4), set 281 44 808 CHH (4), set 282 44 808 CHH (4)
               - `ReverseTR808ClosedHat` -- set 58 55 Reverse TR-808 Closed Hi-Hat (4)
               - `TR808OpenHat` -- set 25 46 808 OHH (4), set 53 58 TR-808 Open Hi-Hat (4), set 53 59 TR-808 Open Hi-Hat (4), set 62 56 TR-808 Open Hi-Hat (4), set 281 46 808 OHH (4)
@@ -3539,7 +3640,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `RnBClaps` -- set 10 39 R&B Claps (3), set 62 91 R&B Claps (3)
             - `ReverseRnBClaps` -- set 59 90 Reverse R&B Claps 1 (3)
           - `RndHandClap` [RandomStrike] -- set 2 39 [RND] Hand Clap (4)
-      - `OrchestraHit` -- GM 55 Orchestra Hit (4), set 56 96 Percussion Bang (2)
+      - `OrchestraHit` -- GM 55 Orchestra Hit (4), set 56 96 Percussion Bang (2), set 60 53 Clap Hit (2), set 60 54 Stab! 1 (2), set 60 55 Stab! 2 (2), set 60 74 Thrill Hit (2)
+        - `ReverseOrchestraHit` -- set 59 95 Reverse Clap Hit (4)
       - `Rattle` [NoisyPercussionMixin]
         - `Vibraslap` -- 58 Vibraslap (4), set 127 73 Quijada (4)
       - `ShakenNoise` [NoisyPercussionMixin]
@@ -3666,12 +3768,12 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `Seashore` -- GM 122 Seashore (3)
         - `SfxSeashore` -- set 56 82 Sea Shore (3), set 127 106 Waves (3)
         - `SfxWeather`
-          - `SfxBubble` -- set 56 84 Bubble (4), set 127 108 Bubble (4)
+          - `SfxBubble` -- set 56 84 Bubble (4), set 60 61 Pour Bottle (2), set 127 108 Bubble (4)
           - `SfxCarPass` -- set 56 65 Car-Pass (4), set 127 89 Car-pass (4)
-          - `SfxCrash` -- set 56 66 Car-Crash (4), set 127 90 Crash (4)
+          - `SfxCrash` -- set 56 66 Car-Crash (4), set 60 71 Industry Hit (2), set 127 90 Crash (4)
           - `SfxDoorCreak` -- set 56 59 Door Creaking (4), set 127 83 Creaking (4)
-          - `SfxEngine` -- set 56 63 Car-Engine (4), set 127 87 Engine (4)
-          - `SfxExplosion` -- set 56 75 Explosion (4), set 56 94 Eruption (4), set 127 99 Explosion (4)
+          - `SfxEngine` -- set 56 63 Car-Engine (4), set 60 63 Car Engine 2 (2), set 127 87 Engine (4)
+          - `SfxExplosion` -- set 56 75 Explosion (4), set 56 94 Eruption (4), set 60 75 Explosion 2 (2), set 127 99 Explosion (4)
           - `SfxHeartbeat` -- set 56 55 Heart Beat (3), set 127 79 Heartbeat (3)
           - `SfxJet` -- set 56 69 Jetplane (4), set 127 93 Jet (4)
           - `SfxLaser` -- set 56 74 Lasergun (3), set 127 98 Lasergun (3)
@@ -3684,11 +3786,11 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxTapeStop` -- set 57 84 Tape Stop 1 (3)
               - `RfxTapeStop2` -- set 57 85 Tape Stop 2 (3)
           - `SfxRain` -- set 56 79 Rain (4), set 127 103 Rain (4)
-          - `SfxScratchPush` -- 29 Scratch Push (4), set 9 29 Scratch Push 2 (2), set 10 29 Scratch Push 2 (2), set 11 29 Scratch Push 2 (2), set 13 29 Scratch Push 2 (2), set 26 29 Scratch Push 2 (2), set 56 31 Scratch Push 2 (2), set 56 41 Scratch Push (4), set 282 29 Scratch Push2 (2)
+          - `SfxScratchPush` -- 29 Scratch Push (4), set 9 29 Scratch Push 2 (2), set 10 29 Scratch Push 2 (2), set 11 29 Scratch Push 2 (2), set 13 29 Scratch Push 2 (2), set 26 29 Scratch Push 2 (2), set 56 31 Scratch Push 2 (2), set 56 41 Scratch Push (4), set 60 82 Scratch 3 (2), set 60 84 Scratch 5 (2), set 60 86 Scratch 7 (2), set 282 29 Scratch Push2 (2)
             - `RfxGuitarWah` -- set 56 24 Guitar Wah (3)
-            - `RfxSwish` -- set 57 79 Swish (3)
+            - `RfxSwish` -- set 57 79 Swish (3), set 60 69 Sword Boom! (2)
               - `RfxVelocityNoise` -- set 57 77 Velocity Noise FX (3)
-            - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 10 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 13 30 Scratch Pull 2 (2), set 26 30 Scratch Pull 2 (2), set 56 32 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
+            - `SfxScratchPull` -- 30 Scratch Pull (4), set 9 30 Scratch Pull 2 (2), set 10 30 Scratch Pull 2 (2), set 11 30 Scratch Pull 2 (2), set 13 30 Scratch Pull 2 (2), set 26 30 Scratch Pull 2 (2), set 56 32 Scratch Pull 2 (2), set 56 42 Scratch Pull (4), set 56 61 Scratch (4), set 60 83 Scratch 4 (2), set 60 85 Scratch 6 (2), set 127 85 Scratch (4), set 282 30 Scratch Pull2 (2)
               - `ReverseSfxScratchPull` -- set 57 61 Reverse Scratch (4)
               - `RfxPickScrape` -- set 56 38 Pick Scrape (3)
           - `SfxScream` -- set 56 53 Screaming (4), set 61 68 Screaming (4), set 127 77 Screaming (4)
@@ -3697,8 +3799,8 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `SfxStarship` -- set 56 71 Starship (3), set 127 95 Starship (3)
           - `SfxStream` -- set 56 83 Stream (4), set 127 107 Stream (4)
           - `SfxThunder` -- set 56 80 Thunder (4), set 127 104 Thunder (4)
-          - `SfxTrain` -- set 56 68 Train (4), set 127 92 Train (4)
-          - `SfxWind` -- set 56 81 Wind (4), set 127 105 Wind (4)
+          - `SfxTrain` -- set 56 68 Train (4), set 60 66 SL 1 (2), set 60 67 SL 2 (2), set 127 92 Train (4)
+          - `SfxWind` -- set 56 81 Wind (4), set 60 81 Wind 2 (2), set 127 105 Wind (4)
     - `OpenPipe` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `AltoFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)
       - `BassFlute` -- GM 72 Piccolo (4), GM 73 Flute (4)

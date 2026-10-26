@@ -17,6 +17,12 @@ Slappy (Rhythm FX 66, 71, 76, 74, 72, 73, 78, 80).
 GROUP gong: the Asia set's opera gongs -- Bend Gong (the daluo), Hu Yin Luo
 Low, Mid, Mid 2, High, High 2, Shou Luo (the xiaoluo); Rhythm FX 2's Reverse
 Hu Yin Luo; then the great gong and the small answering.
+GROUP sfx2new: the SC-8850's SFX 2 (60), its own sounds -- Open CD Tray,
+Boeeeen, Glass Stir, Ice Ring, Crack Bottle, Pour Bottle, Soda, Car - Horn,
+Railroad Crossing, Over Blow, Sword Cross, Compresser, Seal, Cricket.
+GROUP sfx2kin: SFX 2's keys on voices we had (31-43, 45-56, 63-90).
+GROUP rfx3rev: Rhythm FX 3's (59) reversed guitar and brass noises, Reverse
+Clap Hit, Reverse Boeeeen.
 GROUP d: the voices -- One, Two, Three, then each reversed; Tah and reversed;
 Ou, Au, Whey, Frog Voice, Reverse Yyoo Dude, Douby and reversed, Baert High
 and Low (Rhythm FX 2 65-81).
@@ -95,6 +101,21 @@ GROUPS = {
                                                  (41, 0.3), (51, 0.8))] +
                         [(13, k, d) for k, d in ((36, 0.5), (37, 0.4), (38, 0.4), (39, 0.4), (40, 0.4))] +
                         [(26, k, d) for k, d in ((35, 0.6), (36, 0.5), (37, 0.4), (38, 0.4), (39, 0.4), (40, 1.0))]),
+    "sfx2new": tuple((60, k, d) for k, d in ((44, 1.2), (57, 1.6), (58, 1.8), (59, 1.0), (60, 0.8), (61, 1.8),
+                                             (62, 2.0), (64, 1.0), (65, 2.2), (68, 1.2), (70, 1.8), (73, 1.4),
+                                             (76, 1.2), (78, 1.8))),
+    "sfx2kin": tuple((60, k, d) for k, d in ((31, 0.5), (32, 0.5), (33, 0.6), (34, 0.5), (35, 0.6), (36, 0.6),
+                                             (37, 0.6), (38, 0.6), (39, 1.0), (40, 1.0), (41, 0.6), (42, 0.6),
+                                             (43, 1.0), (45, 0.5), (46, 0.25), (47, 0.25), (48, 0.25), (49, 0.25),
+                                             (50, 0.25), (51, 0.5), (52, 1.2), (53, 1.2), (54, 1.2), (55, 1.2),
+                                             (56, 1.4), (63, 1.4), (66, 1.4), (67, 1.4), (69, 1.0), (71, 1.4),
+                                             (72, 1.0), (74, 1.2), (75, 2.4), (77, 1.0), (79, 1.4), (80, 0.8),
+                                             (81, 2.0), (82, 0.6), (83, 0.6), (84, 0.6), (85, 0.6), (86, 0.6),
+                                             (87, 0.8), (88, 1.6), (89, 0.6), (90, 1.6))),
+    "rfx3rev": tuple((59, k, d) for k, d in ((22, 1.4), (23, 1.4), (24, 1.4), (25, 1.4), (26, 1.6), (27, 1.4),
+                                             (28, 1.4), (29, 1.4), (30, 1.4), (31, 1.4), (32, 1.6), (33, 1.6),
+                                             (34, 1.6), (35, 1.4), (36, 1.4), (37, 0.8), (38, 0.8), (95, 1.6),
+                                             (96, 1.8))),
     "yo": ((52, 59, 1.8), (52, 59, 1.8), (58, 77, 1.8), (58, 77, 1.8)),
     "d": ((58, 65, 0.7), (58, 67, 0.7), (58, 69, 1.4), (58, 66, 0.7), (58, 68, 0.7), (58, 70, 1.4),
           (58, 71, 0.6), (58, 72, 1.2), (58, 73, 0.9), (58, 74, 0.9), (58, 75, 1.2), (58, 76, 1.0),

@@ -1999,7 +1999,21 @@ def _source(sk, src):
 def _build_gs_sets():
     import tonelib as _TL
     _rev, _rnd = {}, {}
-    for which, keys in _GSET.SETS.items():
+    # ...an ADDED set another plays BACKWARDS built just before it (Rhythm FX
+    # 3's reversed guitar noises are SFX 2's): _source on a set not yet built
+    # reads Standard. (A revised set stays in its place: Rhythm FX 2's
+    # reversed snares are the SC-88 Pro's, before the SC-8850 moved its keys.)
+    order = list(_GSET.SETS.items())
+    added = set(_GSET.SET_ALONE) - set(_GSET.SET_EXTEND)
+    for w, keys in list(order):
+        for name in keys.values():
+            spec = _GSET.VOICE.get(name)
+            if spec and spec[0] == 'r' and spec[1] in added:
+                at = [i for i, (w2, _k) in enumerate(order) if _GSET.SET_KIT[w2] == spec[1]]
+                me = [i for i, (w2, _k) in enumerate(order) if w2 == w][0]
+                if at and at[0] > me:
+                    order.insert(me, order.pop(at[0]))
+    for which, keys in order:
         k = _GSET.SET_KIT[which]
         # ...an ADDED set on its parent (the SC-8850's L/R sets) starts as a copy of it
         base = getattr(_GSET, 'SET_BASE', {}).get(k)
