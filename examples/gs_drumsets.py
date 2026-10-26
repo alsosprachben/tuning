@@ -19,6 +19,7 @@ import sys
 
 PAGE = re.compile(r"^\s*(Native|SC-88|SC-55|SC-8850) Drum [Ss]et(?: \((\d+)\))?\s*$")
 PCROW = re.compile(r"PC\s?\d+")
+PAIRED = re.compile(r"PC\s?(\d+)(?:\s*/\s*PC\s?(\d+))?")
 
 
 def parse(path):
@@ -36,12 +37,21 @@ def parse(path):
         while j < len(lines) and not PCROW.search(lines[j]):
             j += 1
         pcl = lines[j]
-        cols = [(mm.start(), int(re.sub(r"\D", "", mm.group(0)))) for mm in PCROW.finditer(pcl)]
+        # A COLUMN CAN HOLD TWO SETS: the SC-55 page's "PC 1 / PC 33" over
+        # "STANDARD / JAZZ", its cells "Kick Drum2 / Jazz BD2" where the two
+        # differ and one name where they do not -- one column, both sets
+        cols = []
+        for mm in PAIRED.finditer(pcl):
+            pcs = [int(g) for g in mm.groups() if g]
+            cols.append((mm.start(), pcs))
         names = lines[j + 1]
         sets = []
-        for k, (c0, pc) in enumerate(cols):
+        for k, (c0, pcs) in enumerate(cols):
             c1 = cols[k + 1][0] if k + 1 < len(cols) else None
-            sets.append((pc, names[c0:c1].strip() if c1 else names[c0:].strip(), c0, c1))
+            nm = names[c0:c1].strip() if c1 else names[c0:].strip()
+            nms = [x.strip() for x in nm.split(" / ")] if len(pcs) > 1 else [nm]
+            for q, pc in enumerate(pcs):
+                sets.append((pc, nms[min(q, len(nms) - 1)], c0, c1, q, len(pcs)))
         # pages 7 (the SC-88 Pro's) and the SC-8850's "Notes 0-21 and 95-127 are
         # as follows": their keys jump, so they are not numbered by counting
         if "Notes 0-19" in " ".join(lines[i:j]) or "are as follows" in " ".join(lines[i:j]):
@@ -67,10 +77,13 @@ def parse(path):
                 key += 1
             else:
                 continue
-            if not any(line[c0:c1 or None].strip() for _pc, _n, c0, c1 in sets):
+            if not any(line[c0:c1 or None].strip() for _pc, _n, c0, c1, _q, _m in sets):
                 continue
-            for pc, sname, c0, c1 in sets:
+            for pc, sname, c0, c1, q, npc in sets:
                 cell = body[c0:c1].strip() if c1 else body[c0:].strip()
+                if npc > 1:
+                    parts = [x.strip() for x in cell.split(" / ")]
+                    cell = parts[min(q, len(parts) - 1)]
                 flags = " ".join(re.findall(r"\[EXC\d\]|\[RND\]|\[88\]|\[55\]|\*", cell))
                 name = re.sub(r"\[EXC\d\]|\[88\]|\[55\]|\*", "", cell).strip()
                 name = re.sub(r"\s{2,}", " ", name)

@@ -898,6 +898,14 @@ def roland_own_keys(pc, lsb=0):
                 if name.startswith("-") or name in _SAME or name == "":
                     continue
                 _OWN.setdefault((mp, int(p_)), {})[int(key)] = name
+            # THE SC-55 PAGE PRINTS JAZZ IN STANDARD'S COLUMN ("STANDARD / JAZZ"),
+            # naming every key where the other sets print "same as": a Jazz key
+            # under Standard's own name there IS Standard's
+            std55 = _OWN.get(("sc55", 1), {})
+            for (mp, p_), keys in _OWN.items():
+                if mp == "sc55" and p_ != 1:
+                    for key in [k_ for k_, n_ in keys.items() if std55.get(k_) == n_]:
+                        del keys[key]
         if os.path.exists(DRUMSET8850_TSV):
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from sc8850_sets import ALONE
@@ -966,11 +974,17 @@ def drum_set_totals():
     native's is its own: built only where that map's set is (the SC-88's
     TR-808/909 on 26)."""
     import percussion_map as PM
+
+    def same(a, b):
+        # the SC-55's "STANDARD" is the later maps' "STANDARD 1": they number it
+        return a == b or (a and b and (a + " 1" == b or b + " 1" == a))
     tot = {}
     for row in GS_DRUM_SETS:
         for col, nm in DRUM_MAPS:
             if row[col]:
-                own = row[col] not in (row[1], row[2])
+                # ...and a set no later map has at that program (the SC-55's
+                # CM-64/32L at 128) is no renamed set: it is only this map's
+                own = not any(same(row[col], row[c]) for c in (1, 2)) and (row[1] or row[2])
                 st = (_set_status(row[0], DRUM_LSB[col])[0]
                       if not own or 128 * DRUM_LSB[col] + row[0] - 1 in PM.KITS else "not built")
                 t = tot.setdefault(nm, [0, 0])

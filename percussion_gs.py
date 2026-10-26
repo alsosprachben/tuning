@@ -407,6 +407,38 @@ VOICE = {
     'Reverse Tambourine 2': ('r', 0, 54, APPROX), 'Reverse Shake Tambourine': ('r', 0, 54, APPROX),
     'Reverse TR-808 Open Hi-Hat': ('r', 25, 46), 'Reverse TR-707 Open Hi-Hat': ('r', 29, 46),
     'Reverse TR-606 Open Hi-Hat': ('r', 28, 46), 'Reverse TR-707 Crash Cymbal': ('r', 29, 49, APPROX),
+    # Rhythm FX 3's (SC-8850): each kit's own kick, snare, rim, tom, hat and clap
+    # backwards, from where it is built (Brush's snares and toms by what Brush
+    # has: its tap and swirl, its high, mid and low tom)
+    'Reverse Standard Kick 2': ('r', 0, 35), 'Reverse Standard Kick 1': ('r', 0, 36),
+    'Reverse Room Kick 2': ('r', 8, 35), 'Reverse Room Kick 1': ('r', 8, 36),
+    'Reverse Jazz Kick 2': ('r', 32, 35), 'Reverse Jazz Kick 1': ('r', 32, 36),
+    'Reverse Brush Kick 2': ('r', 41, 35), 'Reverse Brush Kick 1': ('r', 41, 36),
+    'Reverse HipHop Kick 2': ('r', 9, 35), 'Reverse HipHop Kick 1': ('r', 9, 36),
+    'Reverse Jungle Kick 1': ('r', 10, 36), 'Reverse TR-808 Kick': ('r', 25, 36),
+    'Reverse TR-909 Kick 2': ('r', 30, 35), 'Reverse Fat Kick': ('r', 26, 35),
+    'Reverse Dance Kick': ('r', 26, 36),
+    'Reverse Standard Snare 1': ('r', 0, 38), 'Reverse Standard Snare 2': ('r', 0, 40),
+    'Reverse Room Snare 1': ('r', 8, 38), 'Reverse Room Snare 2': ('r', 8, 40),
+    'Reverse Jazz Snare 1': ('r', 32, 38), 'Reverse Jazz Snare 2': ('r', 32, 40),
+    'Reverse Brush Snare 1': ('r', 40, 38, APPROX), 'Reverse Brush Snare 2': ('r', 40, 40, APPROX),
+    'Reverse Lo-Fi Snare 1': ('r', 9, 38), 'Reverse Lo-Fi Snare 2': ('r', 9, 40),
+    'Reverse HipHop Snare 1': ('r', 10, 38), 'Reverse HipHop Snare 2': ('r', 9, 40),
+    'Reverse House Snare 1': ('r', 30, 38, APPROX), 'Reverse Jungle Snare': ('r', 10, 40),
+    'Reverse 606 Snare 2': ('r', 28, 40), 'Reverse Techno Snare': ('r', 10, 93),
+    'Reverse Dance Snare': ('r', 26, 38), 'Reverse Rock Snare Dry': ('r', 10, 95),
+    'Reverse Lo-Fi Snare Rim': ('r', 9, 90), 'Reverse 909 Snare Rim': ('r', 30, 37),
+    'Reverse Jungle Snare Rim': ('r', 10, 37), 'Reverse Dance Snare Rim': ('r', 26, 37),
+    'Reverse House Snare Rim': ('r', 30, 37, APPROX),
+    'Reverse Brush Tom 1': ('r', 40, 50, APPROX), 'Reverse Brush Tom 2': ('r', 40, 47, APPROX),
+    'Reverse Brush Tom 3': ('r', 40, 43, APPROX), 'Reverse 606 Tom': ('r', 28, 47, APPROX),
+    'Reverse Jungle Crash Cymbal': ('r', 10, 49),
+    'Reverse Standard Closed Hi-Hat': ('r', 0, 42), 'Reverse Room Closed Hi-Hat': ('r', 9, 42),
+    'Reverse Jazz Closed Hi-Hat': ('r', 32, 42), 'Reverse Brush Closed Hi-Hat': ('r', 40, 42),
+    'Reverse 707 Claps': ('r', 29, 39), 'Reverse 909 Claps': ('r', 11, 39),
+    'Reverse R&B Claps 1': ('r', 10, 39), 'Reverse HipHop Claps': ('r', 9, 91),
+    'Reverse Comp Claps 2': ('r', 26, 39), 'Reverse Shaker 2': ('r', 9, 82),
+    'Reverse Jungle Shaker': ('r', 10, 82),
     # THE CHINESE OPERA GONGS (tonelib.RfxDaluo, RfxHuYinLuo, RfxXiaoluo):
     # the tiger gongs in three sizes (a "2" a second gong a little higher), the
     # reverse the middle one's

@@ -21,7 +21,7 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | GM 2 tones (MSB 121) | 256 | 256 | 100% | 201 | 55 | 0 | 0 | 0 |
 | GM 2 drum sets | 9 | 9 | 100% | 8 | 1 | 0 | 0 | 0 |
 | SC-55 tones | 225 | 225 | 100% | 171 | 51 | 3 | 0 | 0 |
-| SC-55 drum sets | 10 | 7 | 70% | | | | | |
+| SC-55 drum sets | 10 | 10 | 100% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
@@ -236,10 +236,10 @@ Standard. THE GOAL: every one built.
 | 57 | SFX | SFX | SFX | SFX | built: 75 keys of its own | 75 | **4** |
 | 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 53 keys of its own | 53 | **4** |
 | 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 56 keys of its own | 56 | **4** |
-| 60 | RHYTHM FX 3 | -- | -- | -- | partial: 3 of 75 keys (72 silent) | 3 | **4** |
+| 60 | RHYTHM FX 3 | -- | -- | -- | partial: 56 of 75 keys (19 silent) | 56 | **3** |
 | 61 | SFX 2 | -- | -- | -- | partial: 3 of 60 keys (57 silent) | 3 | **3** |
 | 62 | VOICE | -- | -- | -- | partial: 13 of 53 keys (40 silent) | 13 | **3** |
-| 63 | CYM&CLAPS 2 | -- | -- | -- | partial: 46 of 65 keys (19 silent) | 46 | **4** |
+| 63 | CYM&CLAPS 2 | -- | -- | -- | partial: 50 of 65 keys (15 silent) | 50 | **4** |
 | 128 | -- | -- | -- | CM-64/32L | built: 67 keys of its own | 67 | **4** |
 
 ### 1 Standard 2
@@ -1486,7 +1486,7 @@ Standard. THE GOAL: every one built.
 | 41 | Reverse Snare 2 | `ReverseSnareDrum2` | **4** | Reverse Snare 2: Standard's key 40, played backwards |
 | 42 | Reverse Standard 1 Snare 1 | `ReverseAcousticSnare` | **4** | Reverse Standard 1 Snare 1: Standard's key 38, played backwards |
 | 43 | Reverse Tight Snare | `ReverseSnareDrum2` | **4** | Reverse Tight Snare: Standard's key 40, played backwards |
-| 44 | Reverse Dance Snare | `ReverseTR909Snare` | **4** | Reverse Dance Snare: set 30's key 38, played backwards |
+| 44 | Reverse Dance Snare | `ReverseAcousticSnare` | **4** | Reverse Dance Snare: set 26's key 38, played backwards |
 | 45 | Reverse 808 Snare | `ReverseTR808Snare` | **4** | Reverse 808 Snare: set 25's key 38, played backwards |
 | 46 | Reverse Tom 1 | `ReverseHighTom` | **4** | Reverse Tom 1: Standard's key 48, played backwards |
 | 47 | Reverse Tom 2 | `ReverseTomTom` | **4** | Reverse Tom 2: Standard's key 45, played backwards |
@@ -1597,9 +1597,62 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 39 | Reverse Standard Kick 2 | `ReverseKickDrum` | **4** | Reverse Standard Kick 2: Standard's key 35, played backwards |
+| 40 | Reverse Standard Kick 1 | `ReverseKickDrum` | **4** | Reverse Standard Kick 1: Standard's key 36, played backwards |
+| 41 | Reverse Room Kick 2 | `ReverseMondoKick` | **3** | Reverse Room Kick 2: set 8's key 35, played backwards |
+| 42 | Reverse Room Kick 1 | `ReverseMondoKick` | **3** | Reverse Room Kick 1: set 8's key 36, played backwards |
+| 43 | Reverse Jazz Kick 2 | `ReverseJazzKick2` | **4** | Reverse Jazz Kick 2: set 32's key 35, played backwards |
+| 44 | Reverse Jazz Kick 1 | `ReverseJazzKick` | **4** | Reverse Jazz Kick 1: set 32's key 36, played backwards |
+| 45 | Reverse Brush Kick 2 | `ReverseJazzKick2` | **4** | Reverse Brush Kick 2: set 41's key 35, played backwards |
+| 46 | Reverse Brush Kick 1 | `ReverseJazzKick` | **4** | Reverse Brush Kick 1: set 41's key 36, played backwards |
+| 47 | Reverse HipHop Kick 2 | `ReverseHipHopKick2` | **4** | Reverse HipHop Kick 2: set 9's key 35, played backwards |
+| 48 | Reverse HipHop Kick 1 | `ReverseHipHopKick1` | **4** | Reverse HipHop Kick 1: set 9's key 36, played backwards |
 | 49 | Reverse Jungle Kick 2 | `ReverseJungleKick2` | **4** | Reverse Jungle Kick 2: set 10's key 35, played backwards |
+| 50 | Reverse Jungle Kick 1 | `ReverseJungleKick1` | **4** | Reverse Jungle Kick 1: set 10's key 36, played backwards |
+| 51 | Reverse TR-808 Kick | `ReverseTR808Kick` | **4** | Reverse TR-808 Kick: set 25's key 36, played backwards |
+| 52 | Reverse TR-909 Kick 2 | `ReverseTR909Kick2` | **4** | Reverse TR-909 Kick 2: set 30's key 35, played backwards |
 | 53 | Reverse TR-909 Kick 1 | `ReverseTR909Kick` | **4** | Reverse TR-909 Kick 1: set 30's key 36, played backwards |
-| 72 | Reverse Dance Snare | `ReverseTR909Snare` | **4** | Reverse Dance Snare: set 30's key 38, played backwards |
+| 54 | Reverse Fat Kick | `ReverseFatKick` | **3** | Reverse Fat Kick: set 26's key 35, played backwards |
+| 55 | Reverse Dance Kick | `ReverseTR909Kick` | **2** | Reverse Dance Kick: set 26's key 36, played backwards |
+| 56 | Reverse Standard Snare 1 | `ReverseAcousticSnare` | **4** | Reverse Standard Snare 1: Standard's key 38, played backwards |
+| 57 | Reverse Standard Snare 2 | `ReverseSnareDrum2` | **4** | Reverse Standard Snare 2: Standard's key 40, played backwards |
+| 58 | Reverse Room Snare 1 | `ReverseRoomSnare` | **3** | Reverse Room Snare 1: set 8's key 38, played backwards |
+| 59 | Reverse Room Snare 2 | `ReverseRoomSnare2` | **3** | Reverse Room Snare 2: set 8's key 40, played backwards |
+| 60 | Reverse Jazz Snare 1 | `ReverseJazzSnare` | **4** | Reverse Jazz Snare 1: set 32's key 38, played backwards |
+| 61 | Reverse Jazz Snare 2 | `ReverseJazzSnare2` | **4** | Reverse Jazz Snare 2: set 32's key 40, played backwards |
+| 62 | Reverse Brush Snare 1 | `ReverseBrushTap` | **2** | Reverse Brush Snare 1: set 40's key 38, played backwards -- the nearest we have, not the sound |
+| 63 | Reverse Brush Snare 2 | `ReverseBrushSwirl` | **2** | Reverse Brush Snare 2: set 40's key 40, played backwards -- the nearest we have, not the sound |
+| 64 | Reverse Lo-Fi Snare 1 | `ReverseLoFiSnare1` | **3** | Reverse Lo-Fi Snare 1: set 9's key 38, played backwards |
+| 65 | Reverse Lo-Fi Snare 2 | `ReverseLoFiSnare2` | **3** | Reverse Lo-Fi Snare 2: set 9's key 40, played backwards |
+| 66 | Reverse HipHop Snare 1 | `ReverseRapSnare` | **2** | Reverse HipHop Snare 1: set 10's key 38, played backwards |
+| 67 | Reverse HipHop Snare 2 | `ReverseLoFiSnare2` | **3** | Reverse HipHop Snare 2: set 9's key 40, played backwards |
+| 68 | Reverse House Snare 1 | `ReverseTR909Snare` | **2** | Reverse House Snare 1: set 30's key 38, played backwards -- the nearest we have, not the sound |
+| 69 | Reverse Jungle Snare | `ReverseJungleSnare1` | **2** | Reverse Jungle Snare: set 10's key 40, played backwards |
+| 70 | Reverse 606 Snare 2 | `ReverseTR606Snare2` | **4** | Reverse 606 Snare 2: set 28's key 40, played backwards |
+| 71 | Reverse Techno Snare | `ReverseTechnoSnare1` | **2** | Reverse Techno Snare: set 10's key 93, played backwards |
+| 72 | Reverse Dance Snare | `ReverseTR909Snare` | **2** | Reverse Dance Snare: set 26's key 38, played backwards |
+| 73 | Reverse Rock Snare Dry | `ReverseAcousticSnare` | **2** | Reverse Rock Snare Dry: set 10's key 95, played backwards |
+| 74 | Reverse Lo-Fi Snare Rim | `ReverseLoFiRim` | **3** | Reverse Lo-Fi Snare Rim: set 9's key 90, played backwards |
+| 75 | Reverse 909 Snare Rim | `ReverseTR909Rim` | **4** | Reverse 909 Snare Rim: set 30's key 37, played backwards |
+| 76 | Reverse Jungle Snare Rim | `ReverseJungleRim` | **3** | Reverse Jungle Snare Rim: set 10's key 37, played backwards |
+| 77 | Reverse Dance Snare Rim | `ReverseTR909Rim` | **4** | Reverse Dance Snare Rim: set 26's key 37, played backwards |
+| 78 | Reverse House Snare Rim | `ReverseTR909Rim` | **2** | Reverse House Snare Rim: set 30's key 37, played backwards -- the nearest we have, not the sound |
+| 79 | Reverse Brush Tom 1 | `ReverseBrushTomHigh` | **2** | Reverse Brush Tom 1: set 40's key 50, played backwards -- the nearest we have, not the sound |
+| 80 | Reverse Brush Tom 2 | `ReverseBrushTomMid` | **2** | Reverse Brush Tom 2: set 40's key 47, played backwards -- the nearest we have, not the sound |
+| 81 | Reverse Brush Tom 3 | `ReverseBrushTomLow` | **2** | Reverse Brush Tom 3: set 40's key 43, played backwards -- the nearest we have, not the sound |
+| 82 | Reverse 606 Tom | `ReverseTR606HiTom` | **2** | Reverse 606 Tom: set 28's key 47, played backwards -- the nearest we have, not the sound |
+| 83 | Reverse Jungle Crash Cymbal | `ReverseJungleCrash` | **3** | Reverse Jungle Crash Cymbal: set 10's key 49, played backwards |
+| 84 | Reverse Standard Closed Hi-Hat | `ReverseClosedHiHat` | **4** | Reverse Standard Closed Hi-Hat: Standard's key 42, played backwards |
+| 85 | Reverse Room Closed Hi-Hat | `ReverseRoomClosedHat` | **3** | Reverse Room Closed Hi-Hat: set 9's key 42, played backwards |
+| 86 | Reverse Jazz Closed Hi-Hat | `ReverseRndClosedHiHat` | **4** | Reverse Jazz Closed Hi-Hat: set 32's key 42, played backwards |
+| 87 | Reverse Brush Closed Hi-Hat | `ReverseBrushClosedHat` | **4** | Reverse Brush Closed Hi-Hat: set 40's key 42, played backwards |
+| 88 | Reverse 707 Claps | `ReverseTR707Clap` | **4** | Reverse 707 Claps: set 29's key 39, played backwards |
+| 89 | Reverse 909 Claps | `ReverseTR909Clap` | **3** | Reverse 909 Claps: set 11's key 39, played backwards |
+| 90 | Reverse R&B Claps 1 | `ReverseRnBClaps` | **3** | Reverse R&B Claps 1: set 10's key 39, played backwards |
+| 91 | Reverse HipHop Claps | `ReverseHipHopClaps` | **3** | Reverse HipHop Claps: set 9's key 91, played backwards |
+| 92 | Reverse Comp Claps 2 | `ReverseCompClaps2` | **3** | Reverse Comp Claps 2: set 26's key 39, played backwards |
+| 93 | Reverse Shaker 2 | `ReverseRndShaker` | **4** | Reverse Shaker 2: set 9's key 82, played backwards |
+| 94 | Reverse Jungle Shaker | `ReverseJungleShaker` | **3** | Reverse Jungle Shaker: set 10's key 82, played backwards |
 
 ### 60 Sfx 2
 
@@ -1631,6 +1684,10 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
+| 32 | Reverse Standard Closed Hi-Hat | `ReverseClosedHiHat` | **4** | Reverse Standard Closed Hi-Hat: Standard's key 42, played backwards |
+| 33 | Reverse Room Closed Hi-Hat | `ReverseRoomClosedHat` | **3** | Reverse Room Closed Hi-Hat: set 9's key 42, played backwards |
+| 34 | Reverse Jazz Closed Hi-Hat | `ReverseRndClosedHiHat` | **4** | Reverse Jazz Closed Hi-Hat: set 32's key 42, played backwards |
+| 35 | Reverse Brush Closed Hi-Hat | `ReverseBrushClosedHat` | **4** | Reverse Brush Closed Hi-Hat: set 40's key 42, played backwards |
 | 37 | Room Closed Hi-Hat | `RoomClosedHat` | **3** | Room Closed Hi-Hat, the RoomClosedHat at 248 Hz |
 | 39 | Brush Closed Hi-Hat | `BrushClosedHat` | **4** | Brush Closed Hi-Hat, the BrushClosedHat at 248 Hz |
 | 40 | TR-707 Closed Hi-Hat | `TR707ClosedHat` | **4** | TR-707 Closed Hi-Hat: set 29's key 42 |
@@ -2890,7 +2947,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-681 classes.
+716 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -2975,6 +3032,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
           - `JazzCrash` -- set 32 49 Jazz Crash Cymbal (4), set 62 60 Jazz Crash Cymbal (4)
             - `RndJazzCrash` [RandomStrike] -- set 33 49 [RND] Jazz Crash Cymbal (4)
           - `JungleCrash` [JungleBreak] -- set 10 49 Jungle Crash (3), set 62 64 Jungle Crash Cymbal (3)
+            - `ReverseJungleCrash` -- set 59 83 Reverse Jungle Crash Cymbal (3)
           - `ReverseCrashCymbal1` -- set 53 70 Reverse Crash Cymbal 1 (4), set 57 50 Reverse Cymbal 1 (4)
           - `ReverseCymbal` -- GM 119 Reverse Cymbal (4), set 9 52 Reverse Cymbal (4), set 10 52 Reverse Cymbal (4), set 11 52 Reverse Cymbal (4), set 13 52 Reverse Cymbal (4), set 24 52 Reverse Cymbal (4), set 26 52 Reverse Cymbal (4), set 282 52 Reverse Cymbal (4)
           - `RndCrashCymbal1` [RandomStrike] -- set 2 49 [RND] Crash Cymbal (4)
@@ -2990,12 +3048,15 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `HiHat`
           - `ClosedHiHat` -- 42 Closed Hi-Hat (4), set 1 42 Closed Hi-Hat (4), set 48 27 Closed Hi-Hat (4), set 53 36 Closed Hi-Hat (4), set 53 38 Closed Hi-Hat 3 (2), set 53 39 Closed Hi-Hat 4 (2), set 53 40 Closed Hi-Hat (4), set 127 42 Closed High Hat (4)
             - `BrushClosedHat` -- set 40 42 Brush Closed Hi-Hat (4), set 41 42 Brush Closed Hi-Hat (4), set 62 39 Brush Closed Hi-Hat (4)
+              - `ReverseBrushClosedHat` -- set 59 87 Reverse Brush Closed Hi-Hat (4), set 62 35 Reverse Brush Closed Hi-Hat (4)
               - `RndBrushClosedHat` [RandomStrike] -- set 42 42 [RND] Brush Closed Hi-Hat (4)
             - `JungleHiHat` [JungleBreak] -- set 10 44 Jungle Hi-Hat (4), set 53 35 Jungle Hi-Hat (4)
               - `ReverseJungleHiHat` -- set 58 56 Reverse Jungle Hi-Hat (4)
-            - `ReverseClosedHiHat` -- set 53 33 Reverse Closed Hi-Hat 1 (4), set 57 55 Reverse Closed Hi-Hat (4), set 58 52 Reverse Closed Hi-Hat (4)
+            - `ReverseClosedHiHat` -- set 53 33 Reverse Closed Hi-Hat 1 (4), set 57 55 Reverse Closed Hi-Hat (4), set 58 52 Reverse Closed Hi-Hat (4), set 59 84 Reverse Standard Closed Hi-Hat (4), set 62 32 Reverse Standard Closed Hi-Hat (4)
             - `RndClosedHiHat` [RandomStrike] -- set 2 42 [RND] Closed Hi-Hat (4), set 24 42 Closed Hi-Hat 2 (4), set 32 42 Closed Hi-Hat 2 (4), set 53 37 Closed Hi-Hat 2 (4)
+              - `ReverseRndClosedHiHat` -- set 59 86 Reverse Jazz Closed Hi-Hat (4), set 62 34 Reverse Jazz Closed Hi-Hat (4)
             - `RoomClosedHat` [LiveRoom] -- set 8 42 Room Closed Hi-Hat 3 (3), set 9 42 Room Closed Hi-Hat (3), set 13 42 Room Closed Hi-Hat (3), set 16 42 Closed Hi-hat3 C (3), set 62 37 Room Closed Hi-Hat (3)
+              - `ReverseRoomClosedHat` -- set 59 85 Reverse Room Closed Hi-Hat (3), set 62 33 Reverse Room Closed Hi-Hat (3)
               - `RndRoomClosedHat` [RandomStrike] -- set 12 42 [RND] Room Closed Hi-Hat (3)
             - `TR707ClosedHat` [RomMetalMixin] -- set 11 42 TR-707 Closed Hi-Hat (4), set 29 42 707 CHH (4), set 29 44 707 CHH (4), set 30 42 707 CHH (4), set 30 44 707 CHH (4), set 53 41 TR-707 Closed Hi-Hat (4), set 62 40 TR-707 Closed Hi-Hat (4)
               - `ReverseTR707ClosedHat` -- set 58 54 Reverse TR-707 Closed Hi-Hat (4)
@@ -3040,6 +3101,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `KitDrum`
           - `AcousticSnare` [NoisyPercussionMixin] -- 25 Snare Roll (4), 38 Acoustic Snare (4), 97 Std 1 Snare 1 (4), 99 Std 2 Snare 1 (4), 102 Std 1 Snare 1 (4), 104 Std 1 Snare 3 (4), 107 Room Snare 1 (3), set 1 38 Standard 2 Snare 1 (2), set 8 95 Standard 1 Snare 1 (4), set 9 92 Standard 1 Snare 1 (4), set 10 95 Rock Snare Dry (2), set 11 91 Rock Snare Dry (2), set 13 92 Rock Snare Dry (2), set 26 40 Rock SD Dry (2), set 49 29 Snare Roll (4), set 50 60 Standard 1 Snare 1 (4), set 50 62 Standard 2 Snare 1 (2), set 50 92 Standard 1 Snare 1 (4), set 50 94 Standard 1 Snare 3 (4), set 51 60 Standard 1 Snare 1 (4), set 51 62 Standard 2 Snare 1 (2), set 51 81 Rock Snare Dry (2), set 51 92 Standard 1 Snare 1 (4), set 51 94 Standard 1 Snare 3 (4), set 127 38 Acoustic Snare Drum (4)
             - `JazzSnare2` -- 106 Jazz Snare 2 (4), set 32 40 Jazz Snare 2 (4), set 50 67 Jazz Snare 2 (4), set 51 67 Jazz Snare 2 (4)
+              - `ReverseJazzSnare2` -- set 59 61 Reverse Jazz Snare 2 (4)
               - `RndJazzSnare2` [RandomStrike] -- set 33 40 [RND] Jazz Snare 2 (4)
             - `JazzSnare` -- 105 Jazz Snare 1 (4), set 32 38 Jazz Snare 1 (4), set 50 66 Jazz Snare 1 (4), set 51 66 Jazz Snare 1 (4)
               - `HipHopSnare2` [SampledBreak, LiveRoom] -- set 9 89 Hip-Hop Snare 2 (4), set 11 96 HipHop Snare 2 (4), set 26 96 Hip-Hop Snare 2 (4), set 50 96 Hip-Hop Snare 2 (4), set 51 76 HipHop Snare 2 (4), set 51 96 Hip-Hop Snare 2 (4)
@@ -3047,47 +3109,60 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `JungleSnare2` [JungleBreak, LiveRoom] -- set 50 98 Jungle Snare 2 (4)
                 - `ReverseJungleSnare2` -- set 58 44 Reverse Jungle Snare 2 (4)
               - `LoFiSnare2` [SampledBreak, LiveRoom] -- set 9 40 LoFi Snare 2 (3), set 11 94 LoFi Snare 2 (3), set 13 95 LoFi Snare 2 (3), set 26 94 LoFi Snare 2 (3), set 51 71 LoFi Snare 2 (3)
+                - `ReverseLoFiSnare2` -- set 59 65 Reverse Lo-Fi Snare 2 (3), set 59 67 Reverse HipHop Snare 2 (3)
+              - `ReverseJazzSnare` -- set 59 60 Reverse Jazz Snare 1 (4)
               - `RndJazzSnare` [RandomStrike] -- set 33 38 [RND] Jazz Snare 1 (4)
             - `JungleSnare1` [JungleBreak, LiveRoom] -- set 10 40 Jungle Snare (2), set 10 90 Jungle Snare Roll (4), set 11 92 Jungle Snare (2), set 13 96 Jungle Snare (2), set 26 92 Jungle Snare (2), set 50 97 Jungle Snare 1 (4), set 51 82 Jungle Snare (2), set 51 83 Jungle Snare Roll (4)
-              - `ReverseJungleSnare1` -- set 58 50 Reverse Jungle Snare 1 (4)
+              - `ReverseJungleSnare1` -- set 58 50 Reverse Jungle Snare 1 (4), set 59 69 Reverse Jungle Snare (2)
             - `LoFiSnare1` [SampledBreak] -- 123 Rap Snare (3), set 9 38 LoFi Snare 1 (3), set 10 96 LoFi Snare 1 (3), set 11 93 LoFi Snare 1 (3), set 13 94 LoFi Snare 1 (3), set 26 93 LoFi Snare 1 (3), set 51 70 LoFi Snare 1 (3)
+              - `ReverseLoFiSnare1` -- set 59 64 Reverse Lo-Fi Snare 1 (3)
             - `RapSnare` [SampledBreak, LiveRoom] -- 124 Jungle Snare 1 (2), set 10 38 HipHop Snare 1 (2), set 11 95 HipHop Snare 1 (2), set 13 93 Hip-Hop Snare 1 (2), set 26 95 HipHop Snare 1 (2), set 50 95 Rap Snare (4), set 51 75 HipHop Snare 1 (2), set 51 95 Rap Snare (4)
-            - `ReverseAcousticSnare` -- set 57 40 Reverse Snare 1 (4), set 57 42 Reverse Standard 1 Snare 1 (4)
+              - `ReverseRapSnare` -- set 59 66 Reverse HipHop Snare 1 (2)
+            - `ReverseAcousticSnare` -- set 57 40 Reverse Snare 1 (4), set 57 42 Reverse Standard 1 Snare 1 (4), set 57 44 Reverse Dance Snare (4), set 59 56 Reverse Standard Snare 1 (4), set 59 73 Reverse Rock Snare Dry (2)
             - `RndAcousticSnare` [RandomStrike] -- set 2 38 [RND] Standard Snare 1 (4)
             - `RoomSnare` [LiveRoom] -- set 8 38 Room Snare 1 (3), set 9 94 Room Snare 1 (3), set 50 68 Room Snare 1 (3), set 51 68 Room Snare 1 (3)
+              - `ReverseRoomSnare` -- set 59 58 Reverse Room Snare 1 (3)
               - `RndRoomSnare` [RandomStrike] -- set 12 38 [RND] Room Snare 1 (3)
             - `SideStick` -- 37 Side Stick (4), set 127 37 Rim Shot (4)
               - `JungleRim` [JungleBreak] -- set 10 37 Jungle Snare Rim (3)
+                - `ReverseJungleRim` -- set 59 76 Reverse Jungle Snare Rim (3)
               - `LoFiRim` [SampledBreak] -- set 9 90 LoFi Snare Rim (3), set 51 73 LoFi Snare Rim (3)
+                - `ReverseLoFiRim` -- set 59 74 Reverse Lo-Fi Snare Rim (3)
             - `SnareDrum2` -- 40 Snare Drum 2 (4), 98 Std 1 Snare 2 (4), 100 Std 2 Snare 2 (4), 101 Snare Drum 2 (4), 103 Std 1 Snare 2 (4), 108 Room Snare 2 (3), 110 Power Snare 2 (2), 120 TR-808 Snare 2 (2), set 1 40 Standard 2 Snare 2 (2), set 8 96 Standard 1 Snare 2 (4), set 9 93 Standard 1 Snare 2 (4), set 50 61 Standard 1 Snare 2 (4), set 50 63 Standard 2 Snare 2 (2), set 50 64 Tight Snare (4), set 50 93 Standard 1 Snare 2 (4), set 51 61 Standard 1 Snare 2 (4), set 51 63 Standard 2 Snare 2 (2), set 51 64 Tight Snare (4), set 51 93 Standard 1 Snare 2 (4)
               - `BrushTap` -- set 40 38 Brush Tap (4), set 41 38 Brush Tap 2 (4), set 50 84 Brush Tap 1 (4), set 50 85 Brush Tap 2 (4), set 51 84 Brush Tap 1 (4), set 51 85 Brush Tap 2 (4), set 51 86 Brush Tap 2 (4)
                 - `BrushSlap` -- set 40 39 Brush Slap (4), set 41 39 Brush Slap 2 (4), set 50 86 Brush Slap 1 (4), set 50 87 Brush Slap 2 (4), set 50 88 Brush Slap 3 (4), set 51 87 Brush Slap 2 (4), set 51 88 Brush Slap 3 (4)
                   - `RndBrushSlap` [RandomStrike] -- set 42 39 [RND] Brush Slap 2 (4)
+                - `ReverseBrushTap` -- set 59 62 Reverse Brush Snare 1 (2)
                 - `RndBrushTap` [RandomStrike] -- set 42 38 [RND] Brush Tap 2 (4)
               - `ConcertSnare` -- 24 Concert SD (4), set 48 38 Concert SD (4), set 48 40 Concert SD (4), set 49 30 Concert SD (4), set 50 65 Concert Snare (4), set 51 65 Concert Snare (4)
-              - `ReverseSnareDrum2` -- set 57 41 Reverse Snare 2 (4), set 57 43 Reverse Tight Snare (4)
+              - `ReverseSnareDrum2` -- set 57 41 Reverse Snare 2 (4), set 57 43 Reverse Tight Snare (4), set 59 57 Reverse Standard Snare 2 (4)
               - `RndSnareDrum2` [RandomStrike] -- set 2 40 [RND] Standard Snare 2 (4)
               - `RoomSnare2` [LiveRoom] -- set 8 40 Room Snare 2 (3), set 9 95 Room Snare 2 (3), set 50 69 Room Snare 2 (3), set 51 69 Room Snare 2 (3)
+                - `ReverseRoomSnare2` -- set 59 59 Reverse Room Snare 2 (3)
                 - `RndRoomSnare2` [RandomStrike] -- set 12 40 [RND] Room Snare 2 (3)
           - `KickDrum` -- 0 Std 1 Kick 1 (4), 1 Std 1 Kick 2 (4), 2 Std 2 Kick 1 (4), 3 Std 2 Kick 2 (4), 4 Kick Drum 1 (4), 5 Kick Drum 2 (4), 8 Room Kick 1 (3), 9 Room Kick 2 (3), 11 Power Kick 2 (2), 12 Electric Kick 2 (2), 35 Acoustic Bass Drum (4), 36 Bass Drum 1 (4), set 1 35 Standard 2 Kick 2 (2), set 1 36 Standard 2 Kick 1 (2), set 50 38 Standard 1 Kick 2 (4), set 50 39 Standard 1 Kick 1 (4), set 50 40 Standard 1 Kick 1 (4), set 50 41 Standard 1 Kick 2 (4), set 50 42 Standard 2 Kick 1 (2), set 50 43 Standard 2 Kick 2 (2), set 50 44 Kick Drum1 (4), set 50 45 Kick Drum 2 (4), set 50 46 Soft Kick (2), set 51 38 Standard 1 Kick 2 (4), set 51 39 Standard 1 Kick 1 (4), set 51 40 Standard 1 Kick 2 (4), set 51 41 Standard 1 Kick 1 (4), set 127 35 Acoustic Bass Drum (4), set 127 36 Acoustic Bass Drum (4)
             - `ConcertBassDrum` -- set 48 35 Concert BD 2 (4), set 48 36 Concert BD 1 (4), set 49 32 Concert BD 1 (4), set 50 49 Concert BD 1 (4), set 51 49 Concert BD 1 (4)
               - `ReverseConcertBassDrum` -- set 57 37 Reverse Concert Bass Drum (4)
             - `HipHopKick1` [SampledBreak] -- set 9 36 Hip-Hop Kick 1 (4), set 50 33 Hip-Hop Kick 1 (4), set 51 33 Hip-Hop Kick 1 (4), set 51 47 Hip-Hop Kick 1 (4)
-              - `ReverseHipHopKick1` -- set 58 38 Reverse Hip-Hop Kick 1 (4)
+              - `ReverseHipHopKick1` -- set 58 38 Reverse Hip-Hop Kick 1 (4), set 59 48 Reverse HipHop Kick 1 (4)
             - `JazzKick2` -- 7 Jazz Kick 2 (4), set 32 35 Jazz Kick 2 (4), set 40 35 Jazz Kick 2 (4), set 50 48 Jazz Kick 2 (4), set 51 44 Jazz Kick 2 (4)
               - `LeftJazzKick2` [RandomStrike] -- set 33 95 [L] Jazz Kick 2 (3)
+              - `ReverseJazzKick2` -- set 59 43 Reverse Jazz Kick 2 (4), set 59 45 Reverse Brush Kick 2 (4)
               - `RndJazzKick2` [RandomStrike] -- set 33 35 [RND] Jazz Kick 2 (4)
             - `JazzKick` -- 6 Jazz Kick 1 (4), set 32 36 Jazz Kick 1 (4), set 40 36 Jazz Kick 1 (4), set 50 47 Jazz Kick 1 (4), set 51 45 Jazz Kick 1 (4)
               - `HipHopKick2` [SampledBreak] -- set 9 35 Hip-Hop Kick 2 (4), set 50 32 Hip-Hop Kick 2 (4), set 51 32 Hip-Hop Kick 2 (4), set 51 46 Hip-Hop Kick 2 (4)
+                - `ReverseHipHopKick2` -- set 59 47 Reverse HipHop Kick 2 (4)
               - `LeftJazzKick` [RandomStrike] -- set 33 96 [L] Jazz Kick 1 (3)
+              - `ReverseJazzKick` -- set 59 44 Reverse Jazz Kick 1 (4), set 59 46 Reverse Brush Kick 1 (4)
               - `RndJazzKick` [RandomStrike] -- set 33 36 [RND] Jazz Kick 1 (4)
             - `JungleKick1` [JungleBreak] -- set 10 36 Jungle Kick 1 (4), set 10 89 Jungle Kick Roll (4), set 50 35 Jungle Kick 1 (4), set 51 35 Jungle Kick 1 (4), set 51 53 Jungle Kick 1 (4), set 51 54 Jungle Kick Roll (4)
+              - `ReverseJungleKick1` -- set 59 50 Reverse Jungle Kick 1 (4)
             - `LeftKick` [RandomStrike] -- set 2 95 [L] Standard Kick 2 (3), set 2 96 [L] Standard Kick 1 (3)
             - `MondoKick` [LiveRoom] -- 10 Power Kick 1 (4), set 8 35 Room Kick 2 (3), set 8 36 Room Kick 1 (3), set 16 35 Power Kick 2 (2), set 16 36 MONDO Kick (4), set 50 50 Room Kick 1 (3), set 50 51 Room Kick 2 (3), set 50 52 Power Kick1 (4), set 50 53 Power Kick2 (2), set 51 50 Room Kick 2 (3), set 51 51 Room Kick 1 (3)
               - `LeftRoomKick` [RandomStrike] -- set 12 95 [L] Room Kick 2 (3), set 12 96 [L] Room Kick 1 (3)
-              - `ReverseMondoKick` -- set 57 38 Reverse Power Kick1 (4)
+              - `ReverseMondoKick` -- set 57 38 Reverse Power Kick1 (4), set 59 41 Reverse Room Kick 2 (3), set 59 42 Reverse Room Kick 1 (3)
               - `RndMondoKick` [RandomStrike] -- set 12 35 [RND] Room Kick 2 (3), set 12 36 [RND] Room Kick 1 (3)
-            - `ReverseKickDrum` -- set 57 36 Reverse Kick 1 (4)
+            - `ReverseKickDrum` -- set 57 36 Reverse Kick 1 (4), set 59 39 Reverse Standard Kick 2 (4), set 59 40 Reverse Standard Kick 1 (4)
             - `RndKickDrum` [RandomStrike] -- set 2 35 [RND] Standard Kick 2 (4), set 2 36 [RND] Standard Kick 1 (4)
           - `MeasuredStroke` [NoisyPercussionMixin]
             - `AgogoHigh` -- 67 High Agogo (4), set 49 84 High Agogo (4), set 127 67 High Agogo (4)
@@ -3155,9 +3230,11 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `RfxDigitalTambourine` [SampledBreak] -- set 57 72 Digital Tambourine (3)
           - `TomTom` -- GM 117 Melodic Tom (4), 45 Low Tom (4), 47 Low-Mid Tom (4), set 127 45 Acoustic Middle Tom (4), set 127 47 Acoustic Middle Tom (4)
             - `BrushTomMid` -- set 40 45 Brush Mid Tom 2 (4), set 40 47 Brush Mid Tom 1 (4), set 41 45 Brush Mid Tom 2 (4), set 41 47 Brush Mid Tom 1 (4)
+              - `ReverseBrushTomMid` -- set 59 80 Reverse Brush Tom 2 (2)
               - `RndBrushTomMid` [RandomStrike] -- set 42 45 [RND] Brush Mid Tom 2 (4), set 42 47 [RND] Brush Mid Tom 1 (4)
             - `FloorTom` -- GM 117 Melodic Tom (4), 41 Low Floor Tom (4), 43 High Floor Tom (4), set 127 41 Acoustic Low Tom (4), set 127 43 Acoustic Low Tom (4)
               - `BrushTomLow` -- set 40 41 Brush Low Tom 2 (4), set 40 43 Brush Low Tom 1 (4), set 41 41 Brush Low Tom 2 (4), set 41 43 Brush Low Tom 1 (4)
+                - `ReverseBrushTomLow` -- set 59 81 Reverse Brush Tom 3 (2)
                 - `RndBrushTomLow` [RandomStrike] -- set 42 41 [RND] Brush Low Tom 2 (4), set 42 43 [RND] Brush Low Tom 1 (4)
               - `JazzTomLow` -- set 9 41 Jazz Low Tom 2 (4), set 9 43 Jazz Low Tom 1 (4), set 32 41 Jazz Low Tom 2 (4), set 32 43 Jazz Low Tom 1 (4)
                 - `RndJazzTomLow` [RandomStrike] -- set 33 41 [RND] Jazz Low Tom 2 (4), set 33 43 [RND] Jazz Low Tom 1 (4)
@@ -3165,6 +3242,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `RoomFloorTom` [LiveRoom] -- set 8 41 Room Low Tom 2 (4), set 8 43 Room Low Tom 1 (4), set 16 41 Room Low Tom 2 (4), set 16 43 Room Low Tom 1 (4)
             - `HighTom` -- 48 Hi-Mid Tom (4), 50 High Tom (4), set 127 48 Acoustic High Tom (4), set 127 50 Acoustic High Tom (4)
               - `BrushTomHigh` -- set 40 48 Brush High Tom 2 (4), set 40 50 Brush High Tom 1 (4), set 41 48 Brush High Tom 2 (4), set 41 50 Brush High Tom 1 (4)
+                - `ReverseBrushTomHigh` -- set 59 79 Reverse Brush Tom 1 (2)
                 - `RndBrushTomHigh` [RandomStrike] -- set 42 48 [RND] Brush High Tom 2 (4), set 42 50 [RND] Brush High Tom 1 (4)
               - `ReverseHighTom` -- set 57 46 Reverse Tom 1 (4)
               - `RndHighTom` [RandomStrike] -- set 2 48 [RND] High Tom 2 (4), set 2 50 [RND] High Tom 1 (4)
@@ -3273,14 +3351,17 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `TR606Snare` -- set 28 38 606 Snare 1 (4)
                 - `ReverseTR606Snare` -- set 58 47 Reverse TR-606 Snare 1 (4)
                 - `TR606Snare2` -- set 10 91 TR-606 Snare 2 (4), set 13 89 TR-606 Snare 2 (4), set 26 89 TR-606 Snare 2 (4), set 28 40 606 Snare 2 (4), set 51 78 TR-606 Snare 2 (4)
-                  - `ReverseTR606Snare2` -- set 58 41 Reverse TR-606 Snare 2 (4)
+                  - `ReverseTR606Snare2` -- set 58 41 Reverse TR-606 Snare 2 (4), set 59 70 Reverse 606 Snare 2 (4)
                   - `TechnoTR606Snare` -- set 11 38 Techno TR-606 Snare 2 (4)
               - `TR606Tom` -- set 11 41 TR-606 Low Tom 2 (4), set 11 43 TR-606 Low Tom 1 (4), set 11 45 TR-606 Mid Tom 2 (4), set 28 41 606 Low Tom 2 (4), set 28 43 606 Low Tom 1 (4), set 28 45 606 Mid Tom 2 (4)
                 - `TR606HiTom` -- set 11 47 TR-606 Mid Tom 1 (4), set 11 48 TR-606 High Tom 2 (4), set 11 50 TR-606 High Tom 1 (4), set 28 47 606 Mid Tom 1 (4), set 28 48 606 Hi Tom 2 (4), set 28 50 606 Hi Tom 1 (4)
+                  - `ReverseTR606HiTom` -- set 59 82 Reverse 606 Tom (2)
             - `TR707`
               - `TR707Clap` -- set 9 39 TR-707 Claps (4), set 27 39 707 Hand Clap (4), set 28 39 707 Hand Clap (4), set 29 39 707 Hand Clap (4), set 53 96 TR-707 Hand Clap (4), set 62 89 TR-707 Claps (4), set 62 96 TR-707 Hand Clap (4)
+                - `ReverseTR707Clap` -- set 59 88 Reverse 707 Claps (4)
                 - `RfxStereoClap` -- set 57 78 Stereo Noise Clap (3)
                 - `TR909Clap` -- set 11 39 TR-909 Claps (3), set 13 39 TR-909 Claps (3), set 62 92 TR-909 Claps (3)
+                  - `ReverseTR909Clap` -- set 59 89 Reverse 909 Claps (3)
               - `TR707Kick` -- set 29 36 707 Kick 1 (4), set 50 28 TR-707 Kick (4), set 51 28 TR-707 Kick (4)
                 - `ReverseTR707Kick` -- set 58 36 Reverse TR-707 Kick 1 (4)
                 - `TR707Kick2` -- set 29 35 707 Kick 2 (4)
@@ -3305,6 +3386,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `TR808Kick` -- 14 TR-808 Kick (4), set 25 35 TR-808 Kick 2 (2), set 25 36 808 Bass Drum (4), set 50 29 TR-808 Kick 1 (4), set 50 57 TR-808 Kick (4), set 51 29 TR-808 Kick 1 (4), set 51 57 TR-808 Kick 1 (4), set 281 36 808 Bass Drum (4)
               - `JungleKick2` -- set 10 35 Jungle Kick 2 (4), set 50 34 Jungle Kick 2 (4), set 51 34 Jungle Kick 2 (4), set 51 52 Jungle Kick 2 (4)
                 - `ReverseJungleKick2` -- set 58 39 Reverse Jungle Kick 2 (4), set 59 49 Reverse Jungle Kick 2 (4)
+              - `ReverseTR808Kick` -- set 59 51 Reverse TR-808 Kick (4)
               - `TechnoTR808Kick` -- set 11 35 Techno TR-808 Kick (4)
             - `TR808Maracas` -- set 9 70 TR-808 Maracas (4), set 10 70 TR-808 Maracas (4), set 11 70 TR-808 Maracas (4), set 13 70 TR-808 Maracas (4), set 25 70 808 Maracas (4), set 29 70 808 Maracas (4), set 30 70 808 Maracas (4), set 281 70 808 Maracas (4)
             - `TR808RimShot` -- set 9 37 TR-808 Rim Shot (4), set 25 37 808 Rim Shot (4), set 281 37 808 Rim Shot (4)
@@ -3316,19 +3398,23 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
             - `TR909`
               - `TR909Kick` -- 15 TR-909 Kick (4), set 13 36 TR-909 Kick 1 (4), set 26 36 Dance Kick (2), set 30 36 909 Kick 1 (4), set 50 30 TR-909 Kick 1 (4), set 50 58 TR-909 Kick (4), set 50 59 Dance Kick (2), set 51 30 TR-909 Kick 1 (4), set 51 56 Dance Kick (2), set 51 59 TR-909 Kick 1 (4), set 281 35 909 Bass Drum (4), set 282 35 Dance Kick (2)
                 - `FatKick` -- set 26 35 Fat Kick (3), set 51 55 Fat Kick (3)
-                - `ReverseTR909Kick` -- set 58 37 Reverse TR-909 Kick 1 (4), set 59 53 Reverse TR-909 Kick 1 (4)
+                  - `ReverseFatKick` -- set 59 54 Reverse Fat Kick (3)
+                - `ReverseTR909Kick` -- set 58 37 Reverse TR-909 Kick 1 (4), set 59 53 Reverse TR-909 Kick 1 (4), set 59 55 Reverse Dance Kick (2)
                 - `RfxDistortionKick` -- set 57 67 Distortion Kick (3)
                 - `TR909Kick2` -- 16 Dance Kick (4), set 13 35 TR-909 Kick 2 (4), set 30 35 909 Kick 2 (4), set 50 31 TR-909 Kick 2 (4), set 51 31 TR-909 Kick 2 (4), set 51 58 TR-909 Kick 2 (4)
+                  - `ReverseTR909Kick2` -- set 59 52 Reverse TR-909 Kick 2 (4)
                   - `TechnoKick2` -- set 50 36 Techno Kick 2 (4), set 51 36 Techno Kick 2 (4)
                     - `ReverseTechnoKick2` -- set 58 40 Reverse Techno Kick 2 (4)
                 - `TechnoKick1` -- set 11 36 Techno Kick 1 (4), set 50 37 Techno KicK 1 (4), set 51 37 Techno Kick 1 (4)
               - `TR909Rim` -- set 11 37 TR-909 Snare Rim (4), set 13 37 House Snare Rim (4), set 26 37 Dance Rim Shot (4), set 30 37 909 Rim (4)
+                - `ReverseTR909Rim` -- set 59 75 Reverse 909 Snare Rim (4), set 59 77 Reverse Dance Snare Rim (4), set 59 78 Reverse House Snare Rim (2)
               - `TR909Snare` -- 112 Dance Snare 1 (4), 121 TR-909 Snare 1 (4), 125 House Snare 1 (4), 126 [88] House Snare (4), set 9 96 Dance Snare 1 (2), set 10 92 Dance Snare 1 (2), set 10 94 House Snare (2), set 11 89 Dance Snare 1 (2), set 11 90 House Snare (2), set 13 38 House Snare 1 (4), set 13 90 Dance Snare 1 (2), set 26 38 Dance Snare 1 (2), set 26 91 House Snare (2), set 30 38 909 Snare 1 (4), set 50 73 Dance Snare 1 (2), set 50 77 House Snare (2), set 50 82 TR-909 Snare 1 (4), set 51 77 Dance Snare 1 (2), set 51 80 House Snare (2), set 57 80 Slappy (4), set 281 40 909 Snare 1 (4), set 282 38 Dance Snare 1 (2)
-                - `ReverseTR909Snare` -- set 57 44 Reverse Dance Snare (4), set 58 48 Reverse TR-909 Snare 1 (4), set 58 51 Reverse House Snare (2), set 59 72 Reverse Dance Snare (4)
+                - `ReverseTR909Snare` -- set 58 48 Reverse TR-909 Snare 1 (4), set 58 51 Reverse House Snare (2), set 59 68 Reverse House Snare 1 (2), set 59 72 Reverse Dance Snare (2)
                 - `TR909Snare2` -- 113 Dance Snare 2 (4), 114 Disco Snare (4), 122 TR-909 Snare 2 (4), 127 House Snare 2 (4), set 13 40 House Snare 2 (4), set 30 40 909 Snare 2 (4), set 50 74 Dance Snare 2 (2), set 50 75 Disco Snare (2), set 50 83 TR-909 Snare 2 (4), set 51 74 Dance Snare 2 (2), set 282 40 Dance Snare 2 (2)
                   - `TechnoSnare2`
                     - `ReverseTechnoSnare2` -- set 58 45 Reverse Techno Snare 2 (4)
                 - `TechnoSnare1` -- set 10 93 Techno Snare (2), set 11 40 Techno Snare (2), set 13 91 Techno Snare (2), set 26 90 Techno Snare (2), set 50 99 Techno Snare 1 (4), set 51 79 Techno Snare (2)
+                  - `ReverseTechnoSnare1` -- set 59 71 Reverse Techno Snare (2)
               - `TR909Tom` -- set 10 41 TR-909 Low Tom 2 (4), set 13 41 TR-909 Low Tom 2 (4), set 30 41 909 Low Tom 2 (4)
                 - `TR909HiTom` -- set 10 48 TR-909 High Tom 2 (4), set 13 48 TR-909 High Tom 2 (4), set 30 48 909 Hi Tom 2 (4)
                   - `TR909HiTom1` -- set 10 50 TR-909 High Tom 1 (4), set 13 50 TR-909 High Tom 1 (4), set 30 50 909 Hi Tom 1 (4)
@@ -3351,10 +3437,13 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
       - `NoiseDrum` [NoisyPercussionMixin]
         - `HandClap` -- 39 Hand Clap (4), set 1 39 Hand Clap (4), set 12 39 Hand Clap (4), set 32 39 Hand Clap2 (2), set 33 39 Hand Clap 2 (2), set 53 91 Hand Clap (4), set 53 92 Hand Clap 2 (2), set 53 93 Hand Clap (4), set 53 94 Hand Clap (4), set 53 95 Hand Clap 2 (2), set 62 94 Hand Clap (4), set 62 95 Hand Clap 2 (2), set 127 39 Hand Clap (4)
           - `CompClaps2` -- set 26 39 Comp Claps 2 (3), set 62 93 Comp Claps 2 (3)
+            - `ReverseCompClaps2` -- set 59 92 Reverse Comp Claps 2 (3)
           - `FingerSnap` -- 26 Finger Snap (4), set 1 26 Finger Snap (4), set 12 26 Finger Snap (4), set 26 26 Finger Snap 2 (4), set 33 26 Finger Snap 2 (4), set 41 26 Finger Snap 2 (4), set 42 26 Finger Snap 2 (4), set 49 25 Finger Snap (4)
           - `HipHopClaps` -- set 9 91 Hip-Hop Claps (3), set 62 90 Hip-Hop Claps (3)
+            - `ReverseHipHopClaps` -- set 59 91 Reverse HipHop Claps (3)
           - `RfxSpark` -- set 57 75 Spark (3)
           - `RnBClaps` -- set 10 39 R&B Claps (3), set 62 91 R&B Claps (3)
+            - `ReverseRnBClaps` -- set 59 90 Reverse R&B Claps 1 (3)
           - `RndHandClap` [RandomStrike] -- set 2 39 [RND] Hand Clap (4)
       - `OrchestraHit` -- GM 55 Orchestra Hit (4), set 56 96 Percussion Bang (2)
       - `Rattle` [NoisyPercussionMixin]
@@ -3366,9 +3455,12 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `SfxPunch` -- set 56 54 Punch (4), set 127 78 Punch (4)
         - `Shaker` -- 82 Shaker (4), set 11 82 TR-626 Shaker (2), set 13 82 TR-626 Shaker (2), set 26 82 TR-626 Shaker (2), set 49 86 Shaker (4)
           - `JungleShaker` [JungleBreak] -- set 10 82 Jungle Shaker (3)
+            - `ReverseJungleShaker` -- set 59 94 Reverse Jungle Shaker (3)
           - `RndShaker` [RandomStrike] -- set 9 82 Shaker 2 (4)
+            - `ReverseRndShaker` -- set 59 93 Reverse Shaker 2 (4)
       - `SnareDrum` [NoisyPercussionMixin]
         - `BrushSwirl` -- set 40 40 Brush Swirl (4), set 41 40 Brush Swirl 1 (4), set 42 40 Brush Swirl 1 (4), set 50 89 Brush Swirl 1 (4), set 50 90 Brush Swirl 2 (4), set 50 91 Brush Long Swirl (4), set 51 89 Brush Swirl 1 (4), set 51 90 Brush Swirl 2 (4), set 51 91 Brush Long Swirl (4)
+          - `ReverseBrushSwirl` -- set 59 63 Reverse Brush Snare 2 (2)
         - `GatedSnare` -- 109 Power Snare 1 (4), 111 Gated Snare (4), 115 Electric Snare 2 (4), 117 Electric Snare 3 (4), set 16 38 Gated SD (4), set 16 40 Power Snare 2 (2), set 24 40 Gated SD (4), set 50 70 Power Snare 1 (4), set 50 71 Power Snare 2 (2), set 50 72 Gated Snare (4), set 50 76 Electric Snare 2 (4), set 51 72 Gated Snare (4)
       - `WoodPercussion` [NoisyPercussionMixin] -- GM 115 Woodblock (4)
         - `Castanets` -- 85 Castanets (4), set 48 39 Castanets (4), set 49 27 Castanets (4)
