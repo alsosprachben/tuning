@@ -1586,7 +1586,7 @@ del _k, _r, _l, _g, _s
 
 
 def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shimmer_db=0.0, bright=None,
-            mouth=None, level=None):
+            mouth=None, level=None, morph=None):
     """(start, end, level, pitch) for a KIT_STROKES voiced note: each
     syllable a train of glottal pulses, one stroke each, spaced at the
     pitch's period as it moves, jitter on each period (a voice is never a
@@ -1603,7 +1603,10 @@ def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shi
     the same way: each pulse's formants scaled -- a jaw opening and closing
     -- a sixth field (stroke_formant_scale). LEVEL, ((s, dB), ...), the
     syllable's envelope as a contour in place of rise and fall_db: an onset,
-    a body and a release, a single expression's life."""
+    a body and a release, a single expression's life. MORPH, ((s, 0..1), ...)
+    the same way: each pulse's vowel moving toward its throat's DRUM_MODES_B
+    -- a seventh field (stroke_formant_morph), its mouth then the sixth (1
+    where none)."""
     import math
     import random
     rng = random.Random(note * 7919 + int(round(on * 1e4)))
@@ -1636,7 +1639,10 @@ def _voiced(note, on, syllables, f0, shape, dur, rise, fall_db, jitter=0.01, shi
             per = max(0.3, rng.gauss(1.0, jitter)) / f
             lvl = db + env + (rng.gauss(0.0, shimmer_db) if shimmer_db else 0.0)
             st = (on + ts + t, on + ts + t + per, 10.0 ** (lvl / 40.0), 1.0)
-            if mouth:
+            if morph:
+                out.append(st + (along(bright, t) if bright else 0.0, along(mouth, t) if mouth else 1.0,
+                                 along(morph, t)))
+            elif mouth:
                 out.append(st + (along(bright, t) if bright else 0.0, along(mouth, t)))
             else:
                 out.append(st + (along(bright, t),) if bright else st)
@@ -2024,6 +2030,10 @@ def _build_gs_sets():
 
 
 _build_gs_sets()
+# ...and the Asia set's KAKEGOE (59, "Yyoo Dude"), beside its kotsuzumi:
+# Rhythm FX 2's 77 is it backwards (percussion_gs)
+KITS[52][59] = ("Yyoo Dude", _T.RfxKakegoeProperties, 1000.0)
+KIT_STROKES.setdefault(52, {}).setdefault("voiced", {})[59] = _GSET.STROKES["Yyoo Dude"]["voiced"]
 
 
 

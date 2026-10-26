@@ -353,6 +353,35 @@ VOICE = {
     'Reverse Bounce': ('c', 'RfxBounceProperties', 600.0),
     'Distortion Knock': ('c', 'RfxDistortionKnockProperties', 2421.8),
     'Hoo': ('c', 'HooProperties', 1000.0),
+    # THEIR VOICES (tonelib.RfxVoice* and friends: throats, their gestures and
+    # consonants STROKES and LAYER); reversed, the gesture mirrored
+    'Voice One': ('c', 'RfxVoiceOneProperties', 1000.0),
+    'Reverse Voice One': ('c', 'RfxVoiceOneRevProperties', 1000.0),
+    'Voice Two': ('c', 'RfxVoiceTwoProperties', 1000.0),
+    'Reverse Voice Two': ('c', 'RfxVoiceTwoRevProperties', 1000.0),
+    'Voice Three': ('c', 'RfxVoiceThreeProperties', 1000.0),
+    'Reverse Voice Three': ('c', 'RfxVoiceThreeRevProperties', 1000.0),
+    'Voice Tah': ('c', 'RfxVoiceTahProperties', 1000.0),
+    'Reverse Voice Tah': ('c', 'RfxVoiceTahRevProperties', 1000.0),
+    'Voice Ou': ('c', 'RfxVoiceOuProperties', 1000.0),
+    'Voice Au': ('c', 'RfxVoiceAuProperties', 1000.0),
+    'Voice Whey': ('c', 'RfxVoiceWheyProperties', 1000.0),
+    'Frog Voice': ('c', 'RfxFrogProperties', 1000.0),
+    'Douby': ('c', 'RfxDoubyProperties', 1000.0),
+    'Reverse Douby': ('c', 'RfxDoubyRevProperties', 1000.0),
+    'Baert High': ('c', 'RfxBaertProperties', 1000.0),
+    'Baert Low': ('c', 'RfxBaertProperties', 1000.0),
+    # THE KAKEGOE backwards: "Yyoo" is the call (the SC-8850's "Reverse
+    # Yyooh"; "Dude" who calls -- Ben), and its forward on the Asia set, beside
+    # the kotsuzumi, makes it a noh drummer's long "yo-o"
+    'Reverse Yyoo Dude': ('c', 'RfxKakegoeRevProperties', 1000.0),
+    'Yyoo Dude': ('c', 'RfxKakegoeProperties', 1000.0),
+    # ...and the keys below the set that carry their consonants and Yo Dude's
+    # second word
+    'consonant t': ('c', 'RfxBurstTProperties', 1000.0),
+    'consonant d': ('c', 'RfxBurstDProperties', 1000.0),
+    'consonant th': ('c', 'RfxHissThProperties', 1000.0),
+
     # ...AND THEIR SWEPT AND MOVING EFFECTS (tonelib.Rfx*, the weather and
     # laser machinery; the guitar's slide and the starship the SFX set's)
     'Swish': ('c', 'RfxSwishProperties', 261.63),
@@ -508,6 +537,92 @@ STROKES = {
 }
 STROKES['Hoo'] = STROKES['High Hoo']
 
+
+# THE VOICES' GESTURES: a word's syllable (where it starts, after its
+# consonant), its pitch (semitones re f0), its life (dB) and its vowel's
+# motion (0..1 toward the throat's DRUM_MODES_B), as contours; a consonant's
+# key struck at its moment (a pattern, LAYER); reversed, all mirrored
+def _vo(f0, dur, pitch, level, morph=None, ts=0.0, jitter=0.02, shimmer=1.0, syllables=None, mouth=None):
+    return {"voiced": (syllables or ((ts, 0.0, 0.0),), f0, pitch, dur, 0.01, 0.0, jitter, shimmer, None, mouth,
+                       level, morph)}
+
+
+def _mirror(pts, length):
+    return tuple(sorted((round(length - t, 4), v) for t, v in pts)) if pts else pts
+
+
+def _vo_rev(f0, dur, pitch, level, morph=None, ts=0.0, total=None, mouth=None, **kw):
+    total = total if total is not None else ts + dur
+    return _vo(f0, dur, _mirror(pitch, dur), _mirror(level, dur), _mirror(morph, dur),
+               ts=round(total - (ts + dur), 4), mouth=_mirror(mouth, dur), **kw)
+
+
+_ONE = dict(f0=130.0, dur=0.32, pitch=((0.0, 0.5), (0.32, -1.5)),
+            level=((0.0, -14.0), (0.04, 0.0), (0.22, -2.0), (0.32, -22.0)),
+            morph=((0.0, 0.0), (0.12, 0.0), (0.3, 1.0)))
+_TWO = dict(f0=130.0, dur=0.38, ts=0.04, pitch=((0.0, 0.5), (0.38, -2.0)),
+            level=((0.0, -10.0), (0.03, 0.0), (0.25, -3.0), (0.38, -24.0)),
+            morph=((0.0, 0.0), (0.1, 0.0), (0.36, 1.0)))
+_THREE = dict(f0=130.0, dur=0.42, ts=0.09, pitch=((0.0, 0.0), (0.42, -2.0)),
+              level=((0.0, -16.0), (0.05, 0.0), (0.3, -3.0), (0.42, -24.0)),
+              morph=((0.0, 0.0), (0.08, 0.2), (0.25, 1.0)))
+_TAH = dict(f0=140.0, dur=0.22, ts=0.035, pitch=((0.0, 0.5), (0.22, -1.0)),
+            level=((0.0, -8.0), (0.02, 0.0), (0.12, -3.0), (0.22, -26.0)))
+_DOUBY = dict(f0=150.0, dur=0.32, ts=0.02, pitch=((0.0, 0.0), (0.12, 0.0), (0.15, 2.0), (0.32, 1.0)),
+              level=((0.0, -10.0), (0.02, 0.0), (0.1, -2.0), (0.13, -30.0), (0.15, -30.0), (0.17, 0.0),
+                     (0.28, -3.0), (0.32, -26.0)),
+              morph=((0.0, 0.0), (0.13, 0.0), (0.14, 1.0)))
+# THE KAKEGOE, as it is described: the y into o in 0.1 s; from ~165 Hz up five
+# semitones over 0.45 s and held; swelling to its loudest at 0.8 s, cut short
+# at 1.05 into the stroke; a steady pressed voice (1.5% jitter)
+_YO = dict(f0=165.0, dur=1.05, pitch=((0.0, 0.0), (0.45, 5.0), (1.05, 5.3)),
+           level=((0.0, -16.0), (0.06, -4.0), (0.45, -2.0), (0.8, 0.0), (0.97, -3.0), (1.05, -30.0)),
+           morph=((0.0, 0.0), (0.1, 1.0)), jitter=0.015)
+STROKES.update({
+    'Voice One': _vo(**_ONE), 'Reverse Voice One': _vo_rev(**_ONE),
+    'Voice Two': _vo(**_TWO), 'Reverse Voice Two': _vo_rev(**_TWO),
+    'Voice Three': _vo(**_THREE), 'Reverse Voice Three': _vo_rev(**_THREE),
+    'Voice Tah': _vo(**_TAH), 'Reverse Voice Tah': _vo_rev(**_TAH),
+    'Voice Ou': _vo(150.0, 0.35, ((0.0, 0.0), (0.35, -2.0)),
+                    ((0.0, -18.0), (0.04, 0.0), (0.22, -3.0), (0.35, -26.0)), ((0.0, 0.0), (0.12, 0.0), (0.3, 1.0))),
+    'Voice Au': _vo(150.0, 0.4, ((0.0, 1.0), (0.4, -2.0)),
+                    ((0.0, -18.0), (0.04, 0.0), (0.25, -3.0), (0.4, -26.0)), ((0.0, 0.0), (0.15, 0.0), (0.35, 1.0))),
+    'Voice Whey': _vo(160.0, 0.5, ((0.0, -2.0), (0.15, 3.0), (0.35, 4.0), (0.5, -1.0)),
+                      ((0.0, -18.0), (0.06, -2.0), (0.2, 0.0), (0.38, -3.0), (0.5, -26.0)), ((0.0, 0.0), (0.12, 1.0))),
+    # the croak: two rough pulses' worth, the second higher
+    'Frog Voice': _vo(70.0, 0.1, ((0.0, 0.0), (0.1, -1.0)), ((0.0, -12.0), (0.02, 0.0), (0.08, -4.0), (0.1, -30.0)),
+                      jitter=0.06, shimmer=2.0, syllables=((0.0, 0.0, 0.0), (0.17, -2.0, 2.0))),
+    'Douby': _vo(**_DOUBY), 'Reverse Douby': _vo_rev(**_DOUBY),
+    'Baert High': _vo(220.0, 0.3, ((0.0, 1.0), (0.3, -1.0)), ((0.0, -10.0), (0.02, 0.0), (0.2, -3.0), (0.3, -26.0)),
+                      ((0.0, 0.0), (0.12, 0.0), (0.26, 1.0)), ts=0.015),
+    'Baert Low': _vo(110.0, 0.3, ((0.0, 1.0), (0.3, -1.0)), ((0.0, -10.0), (0.02, 0.0), (0.2, -3.0), (0.3, -26.0)),
+                     ((0.0, 0.0), (0.12, 0.0), (0.26, 1.0)), ts=0.015),
+    'Yyoo Dude': _vo(**_YO), 'Reverse Yyoo Dude': _vo_rev(**_YO),
+})
+
+
+# THE CONSONANTS: each a key below the set, struck at its moment in the word
+# (a pattern of one stroke, or two), reversed at its mirror
+def _at(*ts, db=-4.0):
+    return {"pattern": tuple((round(t, 4), db, 0.0) for t in ts)}
+
+
+_CONS = {   # name: (consonant, its times)
+    'Voice Two': ('t', (0.0,)), 'Reverse Voice Two': ('t', (0.42,)),
+    'Voice Three': ('th', (0.0,)), 'Reverse Voice Three': ('th', (0.41,)),
+    'Voice Tah': ('t', (0.0,)), 'Reverse Voice Tah': ('t', (0.225,)),
+    'Douby': ('d', (0.0, 0.15)), 'Reverse Douby': ('d', (0.19, 0.34)),
+    'Baert High': ('d', (0.0,)), 'Baert Low': ('d', (0.0,)),
+}
+_HIDDEN = iter(range(1, 21))
+_VOICE_LAYER = {}
+for _w, (_c, _ts) in _CONS.items():
+    _k = next(_HIDDEN)
+    _nm = '%s (%s)' % (_w, _c)
+    VOICE[_nm] = VOICE['consonant %s' % _c]
+    STROKES[_nm] = _at(*_ts)
+    _VOICE_LAYER[_w] = _VOICE_LAYER.get(_w, ()) + ((_k, _nm),)
+
 # ...AND ITS LENGTH, a one-shot's (percussion_map.KIT_GATE): Small Club's the
 # takes' main burst, ~2.5 s; a choked crash's the hand's, 0.15 s
 GATE = {'Alias': 0.9, 'Swish': 0.35, 'Velocity Noise FX': 0.4, 'Missile': 1.0, 'Tape Stop 1': 1.0, 'Tape Stop 2': 0.6,
@@ -533,6 +648,13 @@ LEVEL.update({'Slappy (slap)': 0.0771, 'Digital Tambourine': 1.1874})
 # A SOUND OF TWO VOICES (percussion_map._build_gs_sets): its second voice, on
 # a key below the set's own, struck with it
 LAYER = {'Slappy': ((16, 'Slappy (slap)'),)}
+LAYER.update(_VOICE_LAYER)      # the voices' consonants (above)
+# ...a REVERSED voice's pulses each gated to its period (1/f0): a pulse turned
+# round must land somewhere, and ungated a one-shot runs on to its ring
+GATE.update({'Reverse Voice One': round(1 / _ONE['f0'], 4), 'Reverse Voice Two': round(1 / _TWO['f0'], 4),
+             'Reverse Voice Three': round(1 / _THREE['f0'], 4), 'Reverse Voice Tah': round(1 / _TAH['f0'], 4),
+             'Reverse Douby': round(1 / _DOUBY['f0'], 4), 'Reverse Yyoo Dude':
+             round(1 / (_YO['f0'] * 2 ** (5 / 12.0)), 4)})
 LEVEL.update({'Mute Crash Cymbal 1': 0.56, 'Mute Crash Cymbal 2': 0.56,
               'Brush Crash Cymbal': round(0.56 * 10 ** (-9 / 20.0), 4)})
 

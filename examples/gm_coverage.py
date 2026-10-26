@@ -694,7 +694,20 @@ def _gs_sets_rated():
                   'RfxAliasProperties': (lambda: 4), 'RfxWoodySlapProperties': (lambda: 3),
                   'RfxIceBlockProperties': (lambda: 3), 'RfxMetallicPercProperties': (lambda: 3),
                   'RfxModulatedBellProperties': (lambda: 3), 'RfxDigitalTambourineProperties': (lambda: 3),
-                  'RfxStereoClapProperties': (lambda: 3), 'SfxSlapProperties': (lambda: 3)}
+                  'RfxStereoClapProperties': (lambda: 3), 'SfxSlapProperties': (lambda: 3),
+                  # ...group d, the voices: throats, a word's vowel moving
+                  # (DRUM_MODES_B), its consonants on keys below the set --
+                  # the count from a CC0 take, the rest from vowel tables;
+                  # Yyoo Dude the noh drummer's kakegoe, as it is described.
+                  # Ben: "The voices and kakegoe sound good"
+                  **{_c: (lambda: 4) for _c in (
+                      'RfxVoiceOneProperties', 'RfxVoiceOneRevProperties', 'RfxVoiceTwoProperties',
+                      'RfxVoiceTwoRevProperties', 'RfxVoiceThreeProperties', 'RfxVoiceThreeRevProperties',
+                      'RfxVoiceTahProperties', 'RfxVoiceTahRevProperties', 'RfxVoiceOuProperties',
+                      'RfxVoiceAuProperties', 'RfxVoiceWheyProperties', 'RfxFrogProperties',
+                      'RfxDoubyProperties', 'RfxDoubyRevProperties', 'RfxBaertProperties',
+                      'RfxKakegoeProperties', 'RfxKakegoeRevProperties', 'RfxBurstTProperties',
+                      'RfxBurstDProperties', 'RfxHissThProperties')}}
     for which, keys in _G.SETS.items():
         k = _G.SET_KIT[which]
         KIT_RATED[k] = {}
@@ -802,6 +815,32 @@ GS_DRUM_SETS = (
 STANDARD_BY_DESIGN = {33}
 
 
+# ROLAND'S OWN KEYS FOR EACH SET (the SC-88 Pro owner's manual's drum set
+# lists, parsed by examples/gs_drumsets.py): {(map, PC): {key: name}}, a key
+# that sounds and is not "same as Standard 1". A set is BUILT only where every
+# one of them is ours; else PARTIAL -- silent where the set stands alone,
+# Standard's drum where it stands on Standard
+DRUMSET_TSV = os.path.expanduser("~/Documents/refs/roland/sc88pro_drumsets.tsv")
+_OWN = None
+
+
+def roland_own_keys(pc, lsb=0):
+    global _OWN
+    if _OWN is None:
+        _OWN = {}
+        if os.path.exists(DRUMSET_TSV):
+            for line in open(DRUMSET_TSV).read().split("\n")[1:]:
+                f = line.split("\t")
+                if len(f) < 5:
+                    continue
+                mp, p_, _sn, key, name = f[:5]
+                if name.startswith("-") or name in ("\u2190", "<-", ""):
+                    continue
+                _OWN.setdefault((mp, int(p_)), {})[int(key)] = name
+    mp = {0: "native", 1: "sc55", 2: "sc88", 3: "native"}[lsb]
+    return _OWN.get((mp, pc)) or (_OWN.get(("native", pc)) if lsb else None)
+
+
 def _set_status(pc, lsb=0):
     """(status, keys rated, median rating) for the set at program pc (1-based),
     in the map CC32 = lsb names (0 the native; 1 SC-55, 2 SC-88, 3 SC-88Pro)
@@ -814,9 +853,20 @@ def _set_status(pc, lsb=0):
         rated = [r for r, _ in PERC_RATED.values()]
         return "built: the note map above", len(rated), sorted(rated)[len(rated) // 2]
     if k in PM.KITS:
-        rated = [r for r, _ in KIT_RATED.get(k, {}).values()]
+        # ...not counting the keys below a set that only carry a sound's second
+        # voice (percussion_gs.LAYER: a word's consonant, Slappy's slap)
+        hidden = {h for ks in PM.KIT_LAYER.get(k, {}).values() for h in ks}
+        rated = [r for key, (r, _) in KIT_RATED.get(k, {}).items() if key not in hidden]
         med = sorted(rated)[len(rated) // 2] if rated else None
-        return "built: %d keys of its own" % len(PM.KITS[k]), len(rated), med
+        mine = [n for n in PM.KITS[k] if n not in hidden]
+        own = roland_own_keys(pc, lsb)
+        if own:
+            missing = [key for key in own if key not in PM.KITS[k]]
+            if missing:
+                how = "silent" if k in PM.KIT_ONLY else "Standard's drum"
+                return ("partial: %d of %d keys (%d %s)" % (len(own) - len(missing), len(own),
+                                                            len(missing), how), len(rated), med)
+        return "built: %d keys of its own" % len(mine), len(rated), med
     if pc in STANDARD_BY_DESIGN:
         return "Standard, by design", 0, None
     return "not built: plays Standard", 0, None
@@ -868,7 +918,10 @@ def summary_md(hist, wrong):
     kr = []
     for k in GM2_KITS:
         st, n, med = _set_status(k + 1)
-        kr.append(med if st.startswith("built") else None)
+        # GM 2's sets ask less than Roland's own (its Brush differs from
+        # Standard by the brushes on 38-40): a set of ours there counts, partial
+        # by the Sound Canvas's lists or not
+        kr.append(med if st.startswith("built") or st.startswith("partial") else None)
     row("GM 2 drum sets", len(GM2_KITS), kr)
     sc = sound_canvas()
     tot = drum_set_totals()

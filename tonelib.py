@@ -28016,9 +28016,18 @@ class SfxThroatProperties(MeasuredStrokeProperties):
     # formants' frequencies scaled -- a jaw opening raises them, closing lowers
     # them. 1 = the formants as fitted
     stroke_formant_scale = 1.0
+    # AND ITS VOWEL MOVING (percussion_map._voiced, a seventh field: a word's
+    # w -> e -> i, its vowel into an n): each pulse's formants and their
+    # levels this far (0..1) from DRUM_MODES toward DRUM_MODES_B -- in log
+    # frequency and in dB, mode by mode. None = one vowel
+    DRUM_MODES_B = None
+    stroke_formant_morph = 0.0
 
     def mode_ratio(self, m):
         r = super().mode_ratio(m)
+        x = self.stroke_formant_morph
+        if x and self.DRUM_MODES_B and 1 <= m <= len(self.DRUM_MODES):
+            r *= (self.DRUM_MODES_B[m - 1][0] / self.DRUM_MODES[m - 1][0]) ** x
         if self.stroke_formant_scale != 1.0 and 1 <= m <= len(self.DRUM_MODES):
             return r * self.stroke_formant_scale
         return r
@@ -28029,6 +28038,9 @@ class SfxThroatProperties(MeasuredStrokeProperties):
 
     def harmonic_volume(self, harmonic):
         v = super().harmonic_volume(harmonic)
+        x = self.stroke_formant_morph
+        if x and v and self.DRUM_MODES_B and harmonic <= len(self.DRUM_MODES):
+            v *= 10.0 ** (x * (self.DRUM_MODES_B[harmonic - 1][1] - self.DRUM_MODES[harmonic - 1][1]) / 20.0)
         if self.stroke_tilt_db and v and harmonic <= len(self.DRUM_MODES):
             hz = 1000.0 * self.DRUM_MODES[harmonic - 1][0]
             if hz > 1000.0:
@@ -28142,6 +28154,161 @@ class SfxGrowlProperties(SfxThroatProperties):
     # 300 Hz-1 kHz, which the balance's bands, from 300 Hz, did not see -- set
     # with the mouth's contour, to the jaw's path, percussion_map 86)
     DRUM_MODES = ((0.1906, 13.7, 6207.0), (0.5751, -3.2, 13982.0), (1.1107, -3.3, 13779.0), (1.614, -5.8, 10226.0), (2.4881, -4.0, 9795.0), (3.0432, -9.5, 12864.0), (5.1, -10.1, 15000.0))
+
+
+# THE RHYTHM FX SETS' VOICES (Rhythm FX 2 65-81, Rhythm FX 81-82): the hype
+# exclamations Roland files with GS 127's crowd and voice tones (Voice One,
+# Two, Three, Tah, Whey: 126.16-20) -- throats (SfxThroatProperties) pulsed
+# by percussion_gs.STROKES, a word's vowel MOVING from DRUM_MODES to
+# DRUM_MODES_B (stroke_formant_morph), its consonants noise bursts on keys of
+# their own struck with it (percussion_gs.LAYER). The count from a CC0 take
+# (examples/throat_fit.py one, two, three); the rest from the vowels'
+# formants (Peterson & Barney's men, as vowels.VOWELS has them)
+
+def _vowel_modes(f1, f2, f3, db=(0.0, -6.0, -16.0), bw=(150.0, 200.0, 300.0)):
+    """A vowel's three formants as a throat's DRUM_MODES (re 1 kHz, dB, dB/s:
+    27.3 a hertz of width)."""
+    return tuple((round(f / 1000.0, 4), d, round(27.29 * b, 0)) for f, d, b in zip((f1, f2, f3), db, bw))
+
+
+VOWEL_A = _vowel_modes(730, 1090, 2440)
+VOWEL_AE = _vowel_modes(660, 1720, 2410)
+VOWEL_E = _vowel_modes(530, 1840, 2480)
+VOWEL_I = _vowel_modes(270, 2290, 3010)
+VOWEL_O = _vowel_modes(570, 840, 2410)
+VOWEL_U = _vowel_modes(300, 870, 2240)
+VOWEL_ER = _vowel_modes(490, 1350, 1690)
+
+
+class RfxVoiceProperties(SfxThroatProperties):
+    """A shouted voice's throat: the Hoo's level, a breath on each pulse."""
+    initial_gain = SfxThroatProperties.initial_gain * 10 ** (-19.5 / 20.0)
+    breath_volume = 0.08
+
+
+class RfxVoiceOneProperties(RfxVoiceProperties):
+    """Rhythm FX 2 65, "Voice One": "one!" -- the vowel into its n."""
+    DRUM_MODES = ((0.6521, 0.0, 4094.0), (0.937, -3.8, 4094.0), (2.766, -5.2, 4094.0), (3.5683, -21.9, 10784.0))
+    DRUM_MODES_B = ((0.6032, 0.0, 5505.0), (1.5209, -0.5, 6422.0), (2.7075, -4.2, 12256.0), (3.9582, -14.7, 18503.0))
+
+
+class RfxVoiceTwoProperties(RfxVoiceProperties):
+    """Rhythm FX 2 67, "Voice Two": "two!" -- after its t, the oo falling."""
+    DRUM_MODES = ((0.3725, -1.5, 4094.0), (1.6734, 0.0, 4094.0), (2.9343, -6.1, 7922.0))
+    DRUM_MODES_B = ((0.3244, 0.0, 4094.0), (1.0137, -10.4, 11166.0), (2.8728, -25.7, 4767.0))
+
+
+class RfxVoiceThreeProperties(RfxVoiceProperties):
+    """Rhythm FX 2 69, "Voice Three": "three!" -- after its th, the r into
+    the ee."""
+    DRUM_MODES = ((0.3823, 0.0, 4094.0), (1.4143, -6.8, 4094.0), (2.9605, -23.9, 4143.0))
+    DRUM_MODES_B = ((0.2681, 0.0, 4094.0), (2.2007, -6.4, 4094.0), (3.0684, -10.2, 4094.0))
+
+
+class RfxVoiceTahProperties(RfxVoiceProperties):
+    """Rhythm FX 2 71, "Voice Tah": "tah!" -- after its t, an open ah."""
+    DRUM_MODES = VOWEL_A
+
+
+class RfxVoiceOuProperties(RfxVoiceProperties):
+    """Rhythm FX 81 and 2 73, "Voice Ou": "oh-oo", the o closing to oo."""
+    DRUM_MODES = VOWEL_O
+    DRUM_MODES_B = VOWEL_U
+
+
+class RfxVoiceAuProperties(RfxVoiceProperties):
+    """Rhythm FX 82 and 2 74, "Voice Au": "ow!", the ah closing to oo."""
+    DRUM_MODES = VOWEL_A
+    DRUM_MODES_B = VOWEL_U
+
+
+class RfxVoiceWheyProperties(RfxVoiceProperties):
+    """Rhythm FX 2 75, "Voice Whey": the hype shout, "whey!" -- from the w's
+    oo opening to eh, its pitch swooping up and down."""
+    DRUM_MODES = VOWEL_U
+    DRUM_MODES_B = VOWEL_E
+
+
+class RfxDoubyProperties(RfxVoiceProperties):
+    """Rhythm FX 2 78, "Douby" (a guess from the name: scat's "doo-bee"):
+    after its d an oo, a closure, then its b and an ee."""
+    DRUM_MODES = VOWEL_U
+    DRUM_MODES_B = VOWEL_I
+
+
+class RfxBaertProperties(RfxVoiceProperties):
+    """Rhythm FX 2 80-81, "Baert High / Low" (a guess from the name: a
+    blurted "baert!"): after its b an a as in "bat", turning to the r of
+    "bert"."""
+    DRUM_MODES = VOWEL_AE
+    DRUM_MODES_B = VOWEL_ER
+
+
+class RfxKakegoeProperties(RfxVoiceProperties):
+    """"Yyoo Dude" (the Asia set's 59, beside the kotsuzumi; Rhythm FX 2's 77
+    backwards): a noh drummer's KAKEGOE, his call between strokes -- a long
+    "yo-o" in a pressed chest voice (no recording of one to fit: from how it
+    is described), the y opening into an open o, its upper formants strong
+    (the pressed voice) and little breath; its pitch sliding up and held,
+    swelling, cut short into the stroke (percussion_gs.STROKES)."""
+    DRUM_MODES = _vowel_modes(270, 2290, 3010, db=(0.0, -4.0, -8.0)) + ((3.3, -12.0, 8187.0),)
+    DRUM_MODES_B = _vowel_modes(600, 900, 2450, db=(0.0, -3.0, -8.0)) + ((3.3, -10.0, 8187.0),)
+    breath_volume = 0.03
+
+
+class RfxFrogProperties(RfxVoiceProperties):
+    """Rhythm FX 2 76, "Frog Voice" (Roland prints "Frog Vpoce"; two voices): a
+    croak, "rib-bit" -- the growl's throat (SfxGrowlProperties) higher, two
+    rough pulses' worth."""
+    DRUM_MODES = tuple((round(r * 1.5, 4), d, b) for r, d, b in SfxGrowlProperties.DRUM_MODES)
+    breath_volume = 0.3
+
+
+# ...each played BACKWARDS where Rhythm FX 2 reverses it: every pulse turned
+# round (percussion_gs.STROKES mirrors the gesture)
+class RfxVoiceOneRevProperties(RfxVoiceOneProperties):
+    played_backwards = True
+
+
+class RfxVoiceTwoRevProperties(RfxVoiceTwoProperties):
+    played_backwards = True
+
+
+class RfxVoiceThreeRevProperties(RfxVoiceThreeProperties):
+    played_backwards = True
+
+
+class RfxVoiceTahRevProperties(RfxVoiceTahProperties):
+    played_backwards = True
+
+
+class RfxDoubyRevProperties(RfxDoubyProperties):
+    played_backwards = True
+
+
+class RfxKakegoeRevProperties(RfxKakegoeProperties):
+    played_backwards = True
+
+
+# A VOICE'S CONSONANTS: noise bursts (the TR-808 engine's noise alone), at a
+# consonant's level under its vowel (~10-15 dB)
+class RfxBurstTProperties(TR808Properties):
+    """A "t": a puff of high noise (2.5-8 kHz), gone in 30 ms."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.03, "noise_db": -45.0,
+             "noise_hp_hz": 2500.0, "noise_lp_hz": 8000.0, "noise_decay_s": 0.03, "noise_rise_ms": 1.0}
+
+
+class RfxBurstDProperties(TR808Properties):
+    """A "d" or a "b": a softer, lower puff (0.3-4 kHz), 20 ms."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.02, "noise_db": -45.0,
+             "noise_hp_hz": 300.0, "noise_lp_hz": 4000.0, "noise_decay_s": 0.02, "noise_rise_ms": 1.0}
+
+
+class RfxHissThProperties(TR808Properties):
+    """A "th": a hiss (3.5-9 kHz) breathed in over 15 ms, 0.1 s long."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.12, "noise_db": -42.0,
+             "noise_hp_hz": 3500.0, "noise_lp_hz": 9000.0, "noise_decay_s": 0.12, "noise_rise_ms": 15.0,
+             "noise_len_ms": 100.0}
 
 
 # THE SFX SET'S ELECTRONIC CLICKS (39, 44): Roland's own synthesized sounds,

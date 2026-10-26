@@ -14,6 +14,9 @@ Space Birds, Flying Monster, Tape Stop 1 and 2 (Rhythm FX 79, 77, 75, 86-88,
 GROUP c: the struck and processed -- Woody Slap, Ice Block, Metallic
 Percussion, Modulated Bell, Digital Tambourine, Alias, Stereo Noise Clap,
 Slappy (Rhythm FX 66, 71, 76, 74, 72, 73, 78, 80).
+GROUP d: the voices -- One, Two, Three, then each reversed; Tah and reversed;
+Ou, Au, Whey, Frog Voice, Reverse Yyoo Dude, Douby and reversed, Baert High
+and Low (Rhythm FX 2 65-81).
 """
 import os
 import subprocess
@@ -32,6 +35,10 @@ GROUPS = {
     "sonar": ((58, 86, 3.5), (58, 86, 3.5)),
     "missile": ((57, 86, 3.0), (57, 86, 3.0)),
     "alias": ((57, 73, 1.5), (57, 73, 1.5), (57, 73, 1.5)),
+    "yo": ((52, 59, 1.8), (52, 59, 1.8), (58, 77, 1.8), (58, 77, 1.8)),
+    "d": ((58, 65, 0.7), (58, 67, 0.7), (58, 69, 1.4), (58, 66, 0.7), (58, 68, 0.7), (58, 70, 1.4),
+          (58, 71, 0.6), (58, 72, 1.2), (58, 73, 0.9), (58, 74, 0.9), (58, 75, 1.2), (58, 76, 1.0),
+          (58, 77, 1.2), (58, 78, 0.8), (58, 79, 1.2), (58, 80, 0.8), (58, 81, 1.2)),
     "c": ((57, 66, 0.6), (57, 66, 1.0), (57, 71, 0.6), (57, 71, 1.0), (57, 76, 0.8), (57, 76, 1.2),
           (57, 74, 2.2), (57, 72, 0.6), (57, 72, 1.0), (57, 73, 0.7), (57, 73, 1.1), (57, 78, 0.7),
           (57, 78, 1.1), (57, 80, 0.8), (57, 80, 1.2)),

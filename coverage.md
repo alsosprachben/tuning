@@ -21,14 +21,14 @@ so it cannot drift; the ratings live in that script and can be argued with.
 | GM 2 tones (MSB 121) | 256 | 235 | 92% | 193 | 42 | 0 | 0 | 0 |
 | GM 2 drum sets | 9 | 9 | 100% | 9 | 0 | 0 | 0 | 0 |
 | SC-55 tones | 214 | 214 | 100% | 171 | 40 | 3 | 0 | 0 |
-| SC-55 drum sets | 10 | 8 | 80% | | | | | |
+| SC-55 drum sets | 10 | 5 | 50% | | | | | |
 | SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
 | SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
-| SC-88 drum sets | 14 | 14 | 100% | | | | | |
+| SC-88 drum sets | 14 | 5 | 36% | | | | | |
 | SC-88Pro tones | 774 | 442 | 57% | 299 | 140 | 3 | 0 | 0 |
-| SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
+| SC-88Pro drum sets | 25 | 9 | 36% | | | | | |
 | SC-8850 tones | 1262 | 451 | 36% | 308 | 140 | 3 | 0 | 0 |
-| SC-8850 drum sets | 37 | 25 | 68% | | | | | |
+| SC-8850 drum sets | 37 | 9 | 24% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
 
@@ -196,36 +196,36 @@ Standard. THE GOAL: every one built.
 | 1 | STANDARD 1 | STANDARD 1 | STANDARD 1 | STANDARD | built: the note map above | 106 | **4** |
 | 2 | STANDARD 2 | STANDARD 2 | STANDARD 2 | -- | built: 10 keys of its own | 10 | **4** |
 | 3 | STANDARD L/R | STANDARD 3 | -- | -- | built: 12 keys of its own | 12 | **4** |
-| 9 | ROOM | ROOM | ROOM | ROOM | built: 6 keys of its own | 6 | **4** |
+| 9 | ROOM | ROOM | ROOM | ROOM | partial: 6 of 15 keys (9 Standard's drum) | 6 | **4** |
 | 10 | HIP HOP | HIP HOP | -- | -- | built: 29 keys of its own | 29 | **4** |
 | 11 | JUNGLE | JUNGLE | -- | -- | built: 29 keys of its own | 29 | **4** |
 | 12 | TECHNO | TECHNO | -- | -- | built: 35 keys of its own | 35 | **4** |
 | 13 | ROOM L/R | -- | -- | -- | **not built: plays Standard** |  |  |
 | 14 | HOUSE | -- | -- | -- | **not built: plays Standard** |  |  |
-| 17 | POWER | POWER | POWER | POWER | built: 8 keys of its own | 8 | **4** |
-| 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | built: 10 keys of its own | 10 | **4** |
-| 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | built: 19 keys of its own | 19 | **4** |
+| 17 | POWER | POWER | POWER | POWER | partial: 8 of 11 keys (3 Standard's drum) | 8 | **4** |
+| 25 | ELECTRONIC | ELECTRONIC | ELECTRONIC | ELECTRONIC | partial: 10 of 19 keys (9 Standard's drum) | 10 | **4** |
+| 26 | TR-808 | TR-808 | TR-808/909 | TR-808 | partial: 19 of 37 keys (18 Standard's drum) | 19 | **4** |
 | 27 | DANCE | DANCE | DANCE | -- | built: 27 keys of its own | 27 | **4** |
-| 28 | CR-78 | CR-78 | -- | -- | built: 29 keys of its own | 29 | **4** |
-| 29 | TR-606 | TR-606 | -- | -- | built: 19 keys of its own | 19 | **4** |
-| 30 | TR-707 | TR-707 | -- | -- | built: 19 keys of its own | 19 | **4** |
-| 31 | TR-909 | TR-909 | -- | -- | built: 19 keys of its own | 19 | **4** |
-| 33 | JAZZ | JAZZ | JAZZ | JAZZ | built: 4 keys of its own | 4 | **4** |
+| 28 | CR-78 | CR-78 | -- | -- | partial: 29 of 37 keys (8 Standard's drum) | 29 | **4** |
+| 29 | TR-606 | TR-606 | -- | -- | partial: 19 of 37 keys (18 Standard's drum) | 19 | **4** |
+| 30 | TR-707 | TR-707 | -- | -- | partial: 19 of 29 keys (10 Standard's drum) | 19 | **4** |
+| 31 | TR-909 | TR-909 | -- | -- | partial: 19 of 29 keys (10 Standard's drum) | 19 | **4** |
+| 33 | JAZZ | JAZZ | JAZZ | JAZZ | partial: 4 of 12 keys (8 Standard's drum) | 4 | **4** |
 | 34 | JAZZ L/R | -- | -- | -- | **not built: plays Standard** |  |  |
-| 41 | BRUSH | BRUSH | BRUSH | BRUSH | built: 3 keys of its own | 3 | **4** |
+| 41 | BRUSH | BRUSH | BRUSH | BRUSH | partial: 3 of 20 keys (17 Standard's drum) | 3 | **4** |
 | 42 | BRUSH 2 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 43 | BRUSH 2 L/R | -- | -- | -- | **not built: plays Standard** |  |  |
-| 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | built: 25 keys of its own | 25 | **4** |
-| 50 | ETHNIC | ETHNIC | ETHNIC | -- | built: 49 keys of its own | 49 | **4** |
+| 49 | ORCHESTRA | ORCHESTRA | ORCHESTRA | ORCHESTRA | partial: 25 of 26 keys (1 Standard's drum) | 25 | **4** |
+| 50 | ETHNIC | ETHNIC | ETHNIC | -- | partial: 49 of 75 keys (26 silent) | 49 | **4** |
 | 51 | KICK & SNARE | KICK & SNARE | KICK & SNARE | -- | built: 75 keys of its own | 75 | **4** |
 | 52 | KICK & SNARE 2 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 53 | ASIA | ASIA | -- | -- | built: 4 keys of its own |  |  |
+| 53 | ASIA | ASIA | -- | -- | partial: 5 of 64 keys (59 silent) |  |  |
 | 54 | CYMBAL&CLAPS | CYMBAL&CLAPS | -- | -- | built: 65 keys of its own | 65 | **4** |
 | 55 | GAMELAN 1 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 56 | GAMELAN 2 | -- | -- | -- | **not built: plays Standard** |  |  |
-| 57 | SFX | SFX | SFX | SFX | built: 48 keys of its own | 48 | **4** |
-| 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | built: 51 keys of its own | 50 | **4** |
-| 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | built: 38 keys of its own | 38 | **4** |
+| 57 | SFX | SFX | SFX | SFX | partial: 48 of 75 keys (27 silent) | 47 | **4** |
+| 58 | RHYTHM FX | RHYTHM FX | RHYTHM FX | -- | partial: 52 of 53 keys (1 silent) | 52 | **4** |
+| 59 | RHYTHM FX 2 | RHYTHM FX 2 | -- | -- | partial: 55 of 56 keys (1 silent) | 55 | **4** |
 | 60 | RHYTHM FX 3 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 61 | SFX 2 | -- | -- | -- | **not built: plays Standard** |  |  |
 | 62 | VOICE | -- | -- | -- | **not built: plays Standard** |  |  |
@@ -925,6 +925,8 @@ Standard. THE GOAL: every one built.
 | 78 | Stereo Noise Clap | `RfxStereoClap` | **3** | Stereo Noise Clap, the RfxStereoClap at 1000 Hz |
 | 79 | Swish | `RfxSwish` | **3** | Swish, the RfxSwish at 262 Hz |
 | 80 | Slappy | `TR909Snare` | **4** | Slappy: set 30's key 38 |
+| 81 | Voice Ou | `RfxVoiceOu` | **4** | Voice Ou, the RfxVoiceOu at 1000 Hz |
+| 82 | Voice Au | `RfxVoiceAu` | **4** | Voice Au, the RfxVoiceAu at 1000 Hz |
 | 83 | Hoo | `Hoo` | **4** | Hoo, the Hoo at 1000 Hz |
 | 84 | Tape Stop 1 | `RfxTapeStop` | **3** | Tape Stop 1, the RfxTapeStop at 30 Hz |
 | 85 | Tape Stop 2 | `RfxTapeStop2` | **3** | Tape Stop 2, the RfxTapeStop2 at 30 Hz |
@@ -964,6 +966,23 @@ Standard. THE GOAL: every one built.
 | 61 | Reverse Open Hi-Hat | `ReverseOpenHiHat` | **4** | Reverse Open Hi-Hat: Standard's key 46, played backwards |
 | 62 | Reverse TR-606 Open Hi-Hat | `ReverseTR606OpenHat` | **4** | Reverse TR-606 Open Hi-Hat: set 28's key 46, played backwards |
 | 64 | Reverse TR-707 Crash Cymbal | `ReverseTR909Crash` | **2** | Reverse TR-707 Crash Cymbal: set 29's key 49, played backwards -- the nearest we have, not the sound |
+| 65 | Voice One | `RfxVoiceOne` | **4** | Voice One, the RfxVoiceOne at 1000 Hz |
+| 66 | Reverse Voice One | `RfxVoiceOneRev` | **4** | Reverse Voice One, the RfxVoiceOneRev at 1000 Hz |
+| 67 | Voice Two | `RfxVoiceTwo` | **4** | Voice Two, the RfxVoiceTwo at 1000 Hz |
+| 68 | Reverse Voice Two | `RfxVoiceTwoRev` | **4** | Reverse Voice Two, the RfxVoiceTwoRev at 1000 Hz |
+| 69 | Voice Three | `RfxVoiceThree` | **4** | Voice Three, the RfxVoiceThree at 1000 Hz |
+| 70 | Reverse Voice Three | `RfxVoiceThreeRev` | **4** | Reverse Voice Three, the RfxVoiceThreeRev at 1000 Hz |
+| 71 | Voice Tah | `RfxVoiceTah` | **4** | Voice Tah, the RfxVoiceTah at 1000 Hz |
+| 72 | Reverse Voice Tah | `RfxVoiceTahRev` | **4** | Reverse Voice Tah, the RfxVoiceTahRev at 1000 Hz |
+| 73 | Voice Ou | `RfxVoiceOu` | **4** | Voice Ou, the RfxVoiceOu at 1000 Hz |
+| 74 | Voice Au | `RfxVoiceAu` | **4** | Voice Au, the RfxVoiceAu at 1000 Hz |
+| 75 | Voice Whey | `RfxVoiceWhey` | **4** | Voice Whey, the RfxVoiceWhey at 1000 Hz |
+| 76 | Frog Voice | `RfxFrog` | **4** | Frog Voice, the RfxFrog at 1000 Hz |
+| 77 | Reverse Yyoo Dude | `RfxKakegoeRev` | **4** | Reverse Yyoo Dude, the RfxKakegoeRev at 1000 Hz |
+| 78 | Douby | `RfxDouby` | **4** | Douby, the RfxDouby at 1000 Hz |
+| 79 | Reverse Douby | `RfxDoubyRev` | **4** | Reverse Douby, the RfxDoubyRev at 1000 Hz |
+| 80 | Baert High | `RfxBaert` | **4** | Baert High, the RfxBaert at 1000 Hz |
+| 81 | Baert Low | `RfxBaert` | **4** | Baert Low, the RfxBaert at 1000 Hz |
 | 82 | Bounce | `RfxBounce` | **4** | Bounce, the RfxBounce at 600 Hz |
 | 83 | Reverse Bounce | `RfxBounce` | **4** | Reverse Bounce, the RfxBounce at 600 Hz |
 | 84 | Distortion Knock | `RfxDistortionKnock` | **4** | Distortion Knock, the RfxDistortionKnock at 2422 Hz |
@@ -2118,7 +2137,7 @@ What the file renderer reads of Roland's GS map (VE-GS Pro MIDI Implementation; 
 
 ## The class tree
 
-536 classes.
+554 classes.
 
 Every voice class a program or a drum note is routed to, under its physical
 base (the first base that is itself a voice class; mixins in brackets). After
@@ -2290,6 +2309,24 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
               - `ReverseSfxSticks` -- set 57 48 Reverse Sticks (4)
             - `SfxThroat`
               - `Hoo` -- set 9 78 High Hoo (4), set 9 79 Low Hoo (4), set 10 78 High Hoo (4), set 10 79 Low Hoo (4), set 11 78 High Hoo (4), set 11 79 Low Hoo (4), set 26 78 High Hoo (4), set 26 79 Low Hoo (4), set 57 83 Hoo (4), set 282 78 High Hoo (4), set 282 79 Low Hoo (4)
+              - `RfxVoice`
+                - `RfxBaert` -- set 58 80 Baert High (4), set 58 81 Baert Low (4)
+                - `RfxDouby` -- set 58 78 Douby (4)
+                  - `RfxDoubyRev` -- set 58 79 Reverse Douby (4)
+                - `RfxFrog` -- set 58 76 Frog Voice (4)
+                - `RfxKakegoe`
+                  - `RfxKakegoeRev` -- set 58 77 Reverse Yyoo Dude (4)
+                - `RfxVoiceAu` -- set 57 82 Voice Au (4), set 58 74 Voice Au (4)
+                - `RfxVoiceOne` -- set 58 65 Voice One (4)
+                  - `RfxVoiceOneRev` -- set 58 66 Reverse Voice One (4)
+                - `RfxVoiceOu` -- set 57 81 Voice Ou (4), set 58 73 Voice Ou (4)
+                - `RfxVoiceTah` -- set 58 71 Voice Tah (4)
+                  - `RfxVoiceTahRev` -- set 58 72 Reverse Voice Tah (4)
+                - `RfxVoiceThree` -- set 58 69 Voice Three (4)
+                  - `RfxVoiceThreeRev` -- set 58 70 Reverse Voice Three (4)
+                - `RfxVoiceTwo` -- set 58 67 Voice Two (4)
+                  - `RfxVoiceTwoRev` -- set 58 68 Reverse Voice Two (4)
+                - `RfxVoiceWhey` -- set 58 75 Voice Whey (4)
               - `SfxDog` -- set 56 76 Dog (4), set 127 100 Dog (4)
               - `SfxGrowl` -- set 56 86 Growl (3), set 57 88 Flying Monster (3)
               - `SfxKitty` -- set 56 85 Kitty (4)

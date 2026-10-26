@@ -3649,6 +3649,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     stroke_pitch = {}            # (note, t) -> frequency scale, for swept instruments
     stroke_tilt = {}             # (note, t) -> a throat's tilt dB, for a voice's pulses
     stroke_mouth = {}            # (note, t) -> a throat's formant scale: the mouth's opening
+    stroke_morph = {}            # (note, t) -> a throat's vowel moving: toward its DRUM_MODES_B
     _sfx_strokes_of = {}         # (program, note) -> (kit, key) whose strokes a melodic SFX plays
     _stroked = set()             # (ch, note, t) of every stroke: live keeps their own onsets
     for ev in notes:
@@ -3700,6 +3701,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 stroke_tilt[(note, t0)] = st[4]
             if len(st) > 5:
                 stroke_mouth[(note, t0)] = st[5]
+            if len(st) > 6:
+                stroke_morph[(note, t0)] = st[6]
             expanded.append((ch, note, t0, t1, max(1, int(vel * lvl)), rest, pg))
             _stroked.add((ch, note, t0))
             if k: inner_ridge.add((note, t0))
@@ -5005,6 +5008,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _mouth = stroke_mouth.get((note, on))
             if _mouth is not None:
                 props.stroke_formant_scale = _mouth
+            # ...and its VOWEL moving (stroke_formant_morph)
+            _morph = stroke_morph.get((note, on))
+            if _morph is not None:
+                props.stroke_formant_morph = _morph
         if _press:
             # ...and the LEVEL half of it. `gain` is read lazily inside
             # harmonic_volume, long after construction, so this needs no change

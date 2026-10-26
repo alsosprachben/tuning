@@ -67,6 +67,23 @@ VOICES = {
     "hoo": ("HooProperties", "../hoo/raw/343968__reitanna__hoo-ha-hee-ha.wav", 20,
             (0.09, 0.11, 0.13, 0.15, 0.17), 0.025,
             ((400, 650), (700, 1300), (2100, 3000), (3400, 4400), (6000, 7000))),
+    # RHYTHM FX 2 65-70, Voice One / Two / Three: steprock's count (Freesound
+    # 541622, CC0; a deep man's voice, ~130 Hz) -- each word's vowel at its
+    # start ("x") and its end ("x_b", the class's DRUM_MODES_B, a morph):
+    # "one" /wʌn/ F2 940 -> 1520 into the n, "two" /tuː/ F2 1700 -> 1000,
+    # "three" /θriː/ F2 1440 -> 2190 from the r into the ee
+    "one": ("RfxVoiceOneProperties", "../voice_fx/raw/541622__steprock__video-game-count-and-more.wav", 18,
+            (0.64, 0.67, 0.70), 0.025, ((450, 850), (800, 1300), (2300, 3200), (3300, 4300))),
+    "one_b": ("RfxVoiceOneProperties", "../voice_fx/raw/541622__steprock__video-game-count-and-more.wav", 18,
+              (0.82, 0.85, 0.88), 0.025, ((450, 850), (1300, 2000), (2300, 3200), (3300, 4300))),
+    "two": ("RfxVoiceTwoProperties", "../voice_fx/raw/541622__steprock__video-game-count-and-more.wav", 18,
+            (1.90, 1.93, 1.96), 0.025, ((220, 500), (1300, 2100), (2500, 3300), (3300, 4300))),
+    "two_b": ("RfxVoiceTwoProperties", "../voice_fx/raw/541622__steprock__video-game-count-and-more.wav", 18,
+              (2.12, 2.15, 2.18), 0.025, ((220, 500), (800, 1300), (2500, 3300), (3300, 4300))),
+    "three": ("RfxVoiceThreeProperties", "../voice_fx/raw/541622__steprock__video-game-count-and-more.wav", 18,
+              (3.22, 3.25, 3.28), 0.025, ((250, 500), (1100, 1800), (2500, 3300), (3300, 4300))),
+    "three_b": ("RfxVoiceThreeProperties", "../voice_fx/raw/541622__steprock__video-game-count-and-more.wav", 18,
+                (3.46, 3.50, 3.54), 0.025, ((200, 450), (1800, 2600), (2500, 3300), (3300, 4300))),
 }
 
 
@@ -255,12 +272,12 @@ def balance(voice, passes=4):
     return cls.DRUM_MODES
 
 
-def write_modes(cname, m):
+def write_modes(cname, m, field="DRUM_MODES"):
     p = os.path.join(HERE, "tonelib.py")
     s = open(p).read()
     i = s.index("class %s(" % cname)
     j = s.index("\n\n\n", i)
-    b = re.sub(r"    DRUM_MODES = .*\n", "    DRUM_MODES = %r\n" % (m,), s[i:j] + "\n")[:-1]
+    b = re.sub(r"    %s = .*\n" % field, "    %s = %r\n" % (field, m), s[i:j] + "\n")[:-1]
     open(p, "w").write(s[:i] + b + s[j:])
     print("  wrote %s" % cname)
 
@@ -311,9 +328,10 @@ def main(argv):
         cname, fs = formants(v, show=True)
         print("  formants: " + "  ".join("%.0f Hz / %.0f wide / %.0f dB" % q for q in fs))
         m = as_modes(fs)
-        print("  DRUM_MODES = %r" % (m,))
+        field = "DRUM_MODES_B" if v.endswith("_b") else "DRUM_MODES"
+        print("  %s = %r" % (field, m))
         if "--write" in argv:
-            write_modes(cname, m)
+            write_modes(cname, m, field)
     return 0
 
 
