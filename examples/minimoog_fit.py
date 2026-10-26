@@ -95,7 +95,7 @@ def model(panel, f0, n):
 # contour held open (EG AMOUNT at its detent: the cutoff is the knob)
 BASE = dict(moog.PANEL, osc1_octave=8, osc2_octave=4, osc2_freq=0.5, sub_level=0.0, noise_level=0.0,
             osc1_level=0.8, eg_amount=0.5, mode=0, res_bass=False, sync=False, mod_amount=0.5,
-            lfo1_depth=0.0)
+            lfo1_depth=0.5)    # LFO 1 off: its depth is a cube about 0.5
 KEYS = ("osc1_wave", "osc2_wave", "osc2_level", "cutoff", "resonance")
 LO = np.array([0.2, 0.2, 0.0, 0.3, 0.0])
 HI = np.array([1.0, 1.0, 1.0, 1.0, 0.75])
@@ -137,7 +137,7 @@ def fit(meas):
 
 def render(panel, notes, prog=38, held=5.5):
     """The panel through the renderer itself (the kernel, not the model): each
-    note held alone, a second apart; the wav's path."""
+    note (or chord, a tuple) held alone, a second apart; the wav's path."""
     import mido
     d = tempfile.mkdtemp(prefix="minimoog_")
     m = mido.MidiFile(ticks_per_beat=480)
@@ -146,8 +146,11 @@ def render(panel, notes, prog=38, held=5.5):
     t.append(mido.MetaMessage('set_tempo', tempo=500000, time=0))
     t.append(mido.Message('program_change', program=prog, time=0))
     for n in notes:
-        t.append(mido.Message('note_on', note=n, velocity=100, time=480))
-        t.append(mido.Message('note_off', note=n, time=int(held * 960)))
+        ch = n if isinstance(n, tuple) else (n,)        # a tuple is a chord
+        for i, k in enumerate(ch):
+            t.append(mido.Message('note_on', note=k, velocity=100, time=0 if i else 480))
+        for i, k in enumerate(ch):
+            t.append(mido.Message('note_off', note=k, time=0 if i else int(held * 960)))
     mid, out = os.path.join(d, "n.mid"), os.path.join(d, "n.wav")
     m.save(mid)
     env = dict(os.environ, TUNING_MOOG_PANEL=json.dumps(panel), TUNING_REFLECT="0")

@@ -59,6 +59,23 @@ def mg(**changes):
     return dict(MINIMOOG, **changes)
 
 
+# THE OBERHEIM: the panel fitted to an OB-8's held chords (examples/
+# obx_fit.py: Analogist's "jungle pad", CC0, ten four-note chords, 2.25 dB rms):
+# a saw and a second wave just short of one, a little under it, at unison
+# (its partials do not split: under 2 cents); the 2-POLE low-pass, the
+# Oberheim's own (the 4-pole fits 0.9 dB worse), at 665 Hz on middle C and
+# tracking the key (the Dbmaj7 at two octaves says on), a touch of
+# resonance. The SC-88's OB tones are it with what their names change.
+OBERHEIM = {"mode": 1, "osc1_wave": 0.501, "osc2_wave": 0.448, "osc1_level": 0.8, "osc2_level": 0.669,
+            "osc1_octave": 8, "osc2_octave": 8, "osc2_freq": c(1.5), "sub_level": 0.0, "noise_level": 0.0,
+            "cutoff": 0.562, "resonance": 0.071, "kb_track": 1.0, "eg_amount": 0.5, "a_attack": 0.0,
+            "a_sustain": 1.0, "a_release": 0.3}
+
+
+def ob(**changes):
+    return dict(OBERHEIM, **changes)
+
+
 SC88_SYNTH = {
     # --- the Jupiter-8's (JUPITER: fitted on the record) -------------------
     # its clav: a narrow pulse, the filter snapping shut, a short body
@@ -358,6 +375,22 @@ SC88_SYNTH = {
     # unison: the saws wide apart and the sub under them
     (81, 34): ("MG unison", "MoogSawLead",
                mg(osc1_wave=SAW, osc2_wave=SAW, osc2_octave=8, osc2_freq=c(15), sub_level=0.4, cutoff=0.7)),
+    # --- the Oberheim's (OBERHEIM: fitted to an OB-8's held chords) --------
+    # its brass: two saws apart (Analogist's detuned takes split ~15 cents),
+    # the 2-pole ladder swelling open and settling, a soft attack
+    (63, 9): ("OB Brass", "MoogSynthBrass2",
+              ob(osc2_wave=SAW, osc2_freq=c(12), cutoff=0.5, eg_amount=0.7, f_attack=0.15, f_decay=0.5,
+                 f_sustain=0.5, a_attack=0.05)),
+    # two squares, a little apart
+    (80, 17): ("OB Square", "MoogSquareLead", ob(osc1_wave=SQ, osc2_wave=SQ, osc2_freq=c(6), cutoff=0.65)),
+    # its saws: both saws, a few cents apart, the ladder a little more open
+    (81, 26): ("OB Saw 1", "MoogSawLead", ob(osc2_wave=SAW, osc2_freq=c(7), cutoff=0.66)),
+    # ...wider apart, the contour opening the ladder on each note
+    (81, 27): ("OB Saw 2", "MoogSawLead",
+               ob(osc2_wave=SAW, osc2_freq=c(12), cutoff=0.6, eg_amount=0.65, f_decay=0.4, f_sustain=0.5)),
+    # the lead: an edge of resonance (its bass kept: RES BASS) and a glide
+    (81, 32): ("OB Saw Lead", "MoogSawLead",
+               ob(osc2_wave=SAW, osc2_freq=c(9), cutoff=0.68, resonance=0.2, res_bass=True, glide=0.05)),
 }
 
 

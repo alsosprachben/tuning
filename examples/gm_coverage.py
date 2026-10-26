@@ -1378,6 +1378,11 @@ def _sc88_var_rated():
                                         "great\"" % (", ".join(
                                             sorted(k for k in pan if pan[k] != __import__("sc88_synth").MINIMOOG.get(k)))
                                             or "nothing"))
+            if nm in ("OB Brass", "OB Square", "OB Saw 1", "OB Saw 2", "OB Saw Lead"):
+                VAR_RATED[(p, b)] = (3, "SC-88 map: the Oberheim fitted to an OB-8's held chords (sc88_synth."
+                                        "OBERHEIM, examples/obx_fit.py: Analogist's jungle pad, CC0, ten "
+                                        "four-note chords, 3.2 dB rms rendered), with %s changed" % ", ".join(
+                                            sorted(k for k in pan if pan[k] != __import__("sc88_synth").OBERHEIM.get(k))))
             if nm.startswith(("JP", "JPMG")):
                 VAR_RATED[(p, b)] = (3, "SC-88 map: the JUPITER-8 fitted on the record (sc88_synth.JUPITER, "
                                         "examples/sepways_fit.py), one pass, with %s changed. Ben, on "
